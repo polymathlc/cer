@@ -1138,6 +1138,79 @@ every picture by hand, one slot at a time.
     art the admin had just chosen to stop using.
 - Run **`node tools/bundled-art-tests.mjs`** after touching any of it.
 
+## ✂️ What counts as INK, and the sentence above the figure (v1.324.0)
+
+`_inkThreshold` / `INK_RATIO` / `_expandRectToWhitespace` / `_trimEdgeTextLines` /
+`MAXRUN_FRAC` / `RUNS_MIN` / `RULE_FRAC` / `RULE_GROUPS` (in `app.js`, search
+`WHAT COUNTS AS INK`). **`polymathlc/english`, `polymathlc/chinese` and
+`polymathlc/math` carry the same block byte-for-byte — ship a change to all
+four together**; `polymathlc/scan` carries the same statistic under its own
+names (`_mbInkLevel`, `_mbTrimTextRows`).
+
+Both pixel passes asked *"is this pixel darker than 190?"*, and on a SCREENSHOT
+— white at 255 — that is exactly right. **⚡ Rapid add has taken camera
+photographs since v1.290.0**, and a photograph of the same worksheet is grey:
+the paper measures 180–200, the light slopes across the sheet, and 190 reads the
+whole page as ink. Both passes then find one band covering everything and do
+nothing at all — on every photograph, with nothing on screen to say they have
+stopped working, and the crop quietly back to being whatever rectangle the model
+happened to draw.
+
+- **So the line is MEASURED.** `_inkThreshold` takes the paper's own white as
+  the **98th percentile** of the luma over the rectangle being worked on, and
+  ink is `INK_RATIO` of that or darker. The top 2% is given away deliberately:
+  one specular highlight off a glossy sheet is 255 and is not what the page is
+  made of, so the maximum would put the line highest on exactly the photographs
+  that need it lowest. It is measured **locally**, over the crop rather than the
+  sheet, which is also what makes it survive a shadow gradient across the page.
+  On a clean screenshot it lands within a few levels of the old 190, so nothing
+  about the screenshot path changes; a region it cannot read falls back to
+  `INK_DEFAULT`, which IS the old 190.
+- **A band is prose on FIVE counts now, and the last two are what stop a table
+  or a graph being eaten a row at a time.** `MAXRUN_FRAC`: every scanline
+  through print crosses letters, so the longest unbroken run of ink in a line is
+  a few pixels — while an axis, a table border, a leader line or the top of a
+  rectangle lays a run right across the band. **Density alone cannot see that**:
+  a hairline rule across a wide crop is a fraction of a percent of its row's
+  pixels, so the old "not solid" test passed it happily and the top came off the
+  table. `RUNS_MIN`: a line of print breaks into dozens of separate runs, a
+  stroke or a blob into one or two.
+- **A FRAMED TABLE is not trimmed at all.** `RULE_GROUPS` full-width rules in
+  one crop is a ruled table, whose every row is short, wide and full of letters —
+  prose on every count that reads a row on its own, and trimmed row by row it
+  comes back as its own bottom two thirds, which is the one wrong crop that
+  looks completely convincing. **Four rules and not three**: an ordinary boxed
+  diagram is a rule top, a rule bottom and a divider across the middle, and at
+  three this would stand down on half the figures it was written to clean.
+- **A RUN OF CONSECUTIVE LINES goes together.** Two lines of a question sit a few
+  pixels apart, far less than the clear band that separates the wording from the
+  figure — so insisting on clear paper after the FIRST line finds none, stops,
+  and leaves both lines on the picture. The cut is remembered only where a run
+  reached real whitespace, so a band with nothing but figure after it is still
+  never touched.
+- **AND THEN THE BLANK PAPER ITSELF.** Whatever survives, the edges are pulled in
+  to the first and last row with any ink in it. It is the one move here that
+  cannot be wrong — it removes measured empty paper and nothing else — and it is
+  what `_expandRectToWhitespace` structurally cannot do, because that one only
+  ever grows.
+- **`_aiRefineCrop` is unchanged and still runs on top.** These passes are free,
+  instant and deterministic; the AI pass costs a call per figure and catches what
+  pixels cannot. Neither replaces the other.
+
+### 🔢 Picture answer options are ONE picture
+
+`_rectangleRules()` said, flatly, to EXCLUDE the answer options from every
+rectangle — right when the options are words, and the reason a question whose
+four choices are little DRAWINGS came out of Rapid add with its choices missing
+altogether. The rule now has two cases, and the picture case asks for **ONE
+rectangle round all four together** with their (1) (2) (3) (4) labels. Four
+separate rectangles would lose the row they were printed in, come out at four
+different sizes, and stop reading as a set of choices — a student answering
+"(3)" cannot see which one (3) was. It needs nothing downstream: it is one more
+ordinary `image` block, so `_autoFillDiagramsFromBoxes` crops it like any other.
+`polymathlc/scan` sends the same thing as a block wearing `role: 'options'`,
+because its viewer prints a word list underneath and has to know to stop.
+
 ## 🧻 Clean paper — the faint diagonal weave on a printed diagram (v1.299.0)
 
 `PAPER_*` / `_paperWhitePoint` / `_paperCleanPixels` / `_paperCleanDataUrl` /
@@ -2654,6 +2727,18 @@ a third account and a third cap.
   "read what they wrote" into something nobody trusts twice — and an override
   honoured in the row but not in the average is the dashboard quietly
   disagreeing with itself on the one row somebody looked at closely.
+- After touching **the crop's pixel passes** (`_inkThreshold`, `INK_RATIO`,
+  `_expandRectToWhitespace`, `_trimEdgeTextLines`, `MAXRUN_FRAC`, `RUNS_MIN`,
+  `RULE_FRAC`, `RULE_GROUPS`) or **`_rectangleRules()`**, check a crop of a
+  photographed page as well as of a screenshot. Every failure here is silent and
+  the question is still built: a fixed ink level is right on a screenshot and
+  reads a whole PHOTOGRAPH as ink, so both passes find one band and stand down on
+  every phone picture ⚡ Rapid add takes — the crop back to whatever rectangle the
+  model drew, with nothing on screen to say so. In the other direction a trimmer
+  that cannot see a long stroke takes the top row off a table, the axis labels off
+  a graph and the caption off the picture it names, and all three look like a
+  perfectly successful crop. The same block is in `polymathlc/english`,
+  `polymathlc/chinese` and `polymathlc/math` — ship a change to all four together.
 - After touching **🧻 Clean paper** (`PAPER_*`, `_paperWhitePoint`,
   `_paperCleanPixels`, `_paperCleanDataUrl`, `generateCleanEnhancedImage`,
   `annotCleanPaper`), run `node tools/paper-clean-tests.mjs`. Both directions

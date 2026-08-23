@@ -2494,7 +2494,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.323.0';
+const APP_VERSION = 'v1.324.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -11291,6 +11291,7 @@ function _rectangleRules() {
     `  5. Leave a clear band of white space on every side rather than cutting into the figure. When unsure, make the rectangle LARGER, never smaller — a little extra background is fine, a cut-off word is not.\n` +
     `  6. If two sub-figures belong to one reference (e.g. "Diagram 1 and Diagram 2" shown side by side), one rectangle around both is fine; otherwise use one "image" block per figure.\n` +
     `  7. Only if you genuinely cannot locate the figure, omit box_2d.\n` +
+    `- PICTURE ANSWER OPTIONS: rule 3 says to leave the answer options out, and that is right when they are WORDS or numbers — they are held separately and printed under the question. When the options are PICTURES (four little diagrams, four graphs, four shapes, one per choice) they cannot be written out at all, so give them ONE "image" block with ONE rectangle around ALL of them together, including the (1) (2) (3) (4) labels printed with them, placed LAST. NEVER one rectangle per option: four separate pictures lose the row they were printed in, come out at four different sizes, and stop reading as a set of choices — a student answering "(3)" cannot see which one (3) was.\n` +
     `- DATA TABLES: do NOT transcribe a data table into a text block. Treat EVERY data table as its own "image" block, with box_2d drawn around the whole table including its header row and borders — it will be captured as a picture.\n`;
 }
 
@@ -11676,12 +11677,60 @@ function _loadImageEl(src) {
 // an up-scale so the figure stays sharp. Returns a data URL, or null when the
 // box is unusable (missing, malformed, tiny, or basically the whole page) —
 // the caller then falls back to the whole screenshot.
+// ---- WHAT COUNTS AS INK ---------------------------------------------------
+// Both pixel passes below asked "is this pixel darker than 190?", and on a
+// SCREENSHOT — white at 255 — that is exactly right. ⚡ Rapid add takes camera
+// photographs now (v1.290.0), and a photograph of the same worksheet is grey:
+// the paper measures 180–200, the light slopes across the sheet, and 190 reads
+// the whole page as ink. Both passes then find one band covering everything
+// and do nothing at all, on every photograph, with nothing on screen to say
+// they have stopped working — the silent half of the crop going back to being
+// whatever rectangle the model happened to draw.
+//
+// So the line is MEASURED off the picture: the paper's own white is the 98th
+// percentile of the luma over the region being worked on, and ink is
+// INK_RATIO of that or darker. The top 2% is given away deliberately — one
+// specular highlight off a glossy sheet is 255 and is not what the page is
+// made of, so the maximum would put the line highest on exactly the
+// photographs that need it lowest. It is measured LOCALLY, over the crop
+// rather than the sheet, which is also what makes it survive a shadow
+// gradient across the page.
+//
+// On a clean screenshot it lands within a few levels of the old 190, so
+// nothing about the screenshot path changes. `polymathlc/scan` carries the
+// same statistic (`_mbInkLevel`) for the same reason — keep the two in step.
+const INK_RATIO = 0.74;
+const INK_FLOOR = 48;    // never call almost-black-only "ink"
+const INK_CEIL = 205;    // never call the paper itself ink
+const INK_DEFAULT = 190; // the old fixed line — what an unreadable region falls back to
+function _inkThreshold(ctx, W, H, r) {
+  try {
+    const x = Math.max(0, Math.round(r ? r.x : 0)), y = Math.max(0, Math.round(r ? r.y : 0));
+    const w = Math.round(Math.min(r ? r.w : W, W - x)), h = Math.round(Math.min(r ? r.h : H, H - y));
+    if (w < 8 || h < 8) return INK_DEFAULT;
+    const d = ctx.getImageData(x, y, w, h).data;
+    const hist = new Array(256).fill(0);
+    let total = 0;
+    for (let i = 0; i + 3 < d.length; i += 4) {
+      if (d[i + 3] < 60) continue;
+      const l = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+      hist[l < 0 ? 0 : (l > 255 ? 255 : Math.round(l))]++;
+      total++;
+    }
+    if (!total) return INK_DEFAULT;
+    const want = total * 0.98;
+    let seen = 0, white = 255;
+    for (let v = 0; v < 256; v++) { seen += hist[v]; if (seen >= want) { white = v; break; } }
+    return Math.max(INK_FLOOR, Math.min(INK_CEIL, Math.round(white * INK_RATIO)));
+  } catch (e) { return INK_DEFAULT; }   // a tainted canvas is not a reason to stop cropping
+}
 // Safety net for slightly-tight AI rectangles: grow each edge of the crop
 // until it sits in clean whitespace, so a label word the rectangle clipped is
 // pulled back in. Generous sideways (labels stick out left/right of a
 // drawing), conservative vertically (question text usually sits above/below).
 // Only ever grows — never shrinks the AI's selection.
-function _expandRectToWhitespace(ctx, W, H, r) {
+function _expandRectToWhitespace(ctx, W, H, r, thr) {
+  const TH_INK = (thr == null ? INK_DEFAULT : thr);
   const inkFrac = (x, y, w, h) => {
     x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y));
     w = Math.round(Math.min(w, W - x)); h = Math.round(Math.min(h, H - y));
@@ -11689,7 +11738,7 @@ function _expandRectToWhitespace(ctx, W, H, r) {
     const d = ctx.getImageData(x, y, w, h).data;
     let n = 0;
     for (let i = 0; i < d.length; i += 4) {
-      if (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 < 190 && d[i + 3] > 60) n++;
+      if (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 < TH_INK && d[i + 3] > 60) n++;
     }
     return n / (d.length / 4);
   };
@@ -11718,22 +11767,31 @@ function _expandRectToWhitespace(ctx, W, H, r) {
 //   - not solid like a border (max row fill < 60%),
 //   - separated from the remaining content by clear whitespace.
 // Trims at most 3 bands and ~20% of the crop per side, keeps ≥ 50% of it.
-function _trimEdgeTextLines(ctx, W, H, r) {
+const MAXRUN_FRAC = 0.30;  // a run of ink longer than this much of a band is a STROKE
+const RUNS_MIN = 6;        // …and a line of print breaks into at least this many pieces
+const RULE_FRAC = 0.55;    // a row carrying a run this wide is a printed RULE
+const RULE_GROUPS = 4;     // …and this many of them is a framed table: hands off
+function _trimEdgeTextLines(ctx, W, H, r, thr) {
+  const TH_INK = (thr == null ? INK_DEFAULT : thr);
   const x = Math.round(r.x), w = Math.round(r.w);
   const y0 = Math.round(r.y), h = Math.round(Math.min(r.h, H - y0));
   if (w < 40 || h < 60) return r;
   const data = ctx.getImageData(x, y0, w, h).data;
   const rows = new Array(h);
   for (let ry = 0; ry < h; ry++) {
-    let n = 0, minX = -1, maxX = -1;
+    let n = 0, minX = -1, maxX = -1, runs = 0, run = 0, maxRun = 0, prev = 0;
     const base = ry * w * 4;
     for (let rx = 0; rx < w; rx++) {
       const i = base + rx * 4;
-      if (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114 < 190 && data[i + 3] > 60) {
+      const on = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114 < TH_INK && data[i + 3] > 60) ? 1 : 0;
+      if (on) {
         n++; if (minX < 0) minX = rx; maxX = rx;
-      }
+        if (!prev) { runs++; run = 1; } else run++;
+        if (run > maxRun) maxRun = run;
+      } else run = 0;
+      prev = on;
     }
-    rows[ry] = { n, minX, maxX };
+    rows[ry] = { n, minX, maxX, runs, maxRun };
   }
   const inked = ry => rows[ry].n > Math.max(2, w * 0.004);
   const joinGap = Math.max(2, Math.round(H * 0.003));  // gaps inside one band (i-dots, accents)
@@ -11748,35 +11806,85 @@ function _trimEdgeTextLines(ctx, W, H, r) {
     let s = from;
     while (s !== limit && !inked(s)) s += dir;
     if (s === limit) return null;
-    let e = s, gap = 0, minX = w, maxX = 0, maxFrac = 0;
+    let e = s, gap = 0, minX = w, maxX = 0, maxFrac = 0, maxRun = 0;
+    const runList = [];
     for (let ry = s; ry !== limit; ry += dir) {
       if (inked(ry)) {
         e = ry; gap = 0;
         if (rows[ry].minX < minX) minX = rows[ry].minX;
         if (rows[ry].maxX > maxX) maxX = rows[ry].maxX;
         if (rows[ry].n / w > maxFrac) maxFrac = rows[ry].n / w;
+        if (rows[ry].maxRun > maxRun) maxRun = rows[ry].maxRun;
+        runList.push(rows[ry].runs);
       } else if (++gap > joinGap) break;
     }
     let after = 0;
     for (let ry = e + dir; ry !== limit && !inked(ry); ry += dir) after++;
-    return { end: e, size: Math.abs(e - s) + 1, inkW: maxX - minX + 1, maxFrac, after };
+    runList.sort((a, b) => a - b);
+    return { end: e, size: Math.abs(e - s) + 1, inkW: maxX - minX + 1, maxFrac, maxRun,
+             medRuns: runList.length ? runList[runList.length >> 1] : 0, after };
   };
+  // A band is a line of PRINT, not part of the figure, on five counts. The
+  // last two are what stop a table or a graph being eaten a row at a time:
+  //   · NO LONG STROKE in it. Every scanline through print crosses letters, so
+  //     the longest unbroken run of ink is a few pixels. An axis, a table
+  //     border, a leader line, the top of a rectangle — each lays a run right
+  //     across the band. Density alone cannot see that: a hairline rule across
+  //     a wide crop is a fraction of a percent of its row's pixels, so the
+  //     "not solid" test passes it happily and the top comes off the table.
+  //   · MADE OF MANY SHORT PIECES. A line of print breaks into dozens of runs;
+  //     a stroke or a blob is one or two.
+  const isProse = b => !!b && b.size >= minBandH && b.size <= maxBandH
+    && b.inkW >= w * 0.55 && b.maxFrac <= 0.6
+    && b.maxRun <= b.inkW * MAXRUN_FRAC && b.medRuns >= RUNS_MIN;
 
+  // A FRAMED TABLE IS THE FIGURE, and every one of its rows reads as prose on
+  // its own. Trimmed row by row it comes back as its own bottom two thirds —
+  // the one wrong crop that looks completely convincing. Four rules and not
+  // three: an ordinary boxed diagram is a rule top, a rule bottom and a
+  // divider across the middle, and at three this would stand down on half the
+  // figures it was written to clean.
+  let ruleGroups = 0, inRule = 0;
+  for (let ry = 0; ry < h; ry++) {
+    const isRule = rows[ry].maxRun >= w * RULE_FRAC;
+    if (isRule && !inRule) ruleGroups++;
+    inRule = isRule ? 1 : 0;
+  }
+  if (ruleGroups >= RULE_GROUPS) return r;
+
+  // A RUN OF CONSECUTIVE LINES goes together. Two lines of a question sit a
+  // few pixels apart — far less than the clear band that separates the
+  // wording from the figure — so insisting on clear paper after the FIRST
+  // line finds none, stops, and leaves both lines on the picture. The cut is
+  // remembered only where a run reached real whitespace, so a band with
+  // nothing but figure after it is still never touched.
+  const eat = (from, dir, limit) => {
+    let at = from, cut = null;
+    for (let k = 0; k < 3; k++) {
+      const b = band(at, dir, limit);
+      if (!isProse(b)) break;
+      if (b.after >= gapMin) cut = b.end + dir * (1 + Math.min(b.after, gapMin));
+      at = b.end + dir;
+      if (dir > 0 ? at >= limit : at <= limit) break;
+    }
+    return cut;
+  };
   let top = 0, bot = h - 1;
-  for (let k = 0; k < 3; k++) {
-    const b = band(top, 1, bot + 1);
-    if (!b || b.size < minBandH || b.size > maxBandH || b.inkW < w * 0.55 || b.maxFrac > 0.6 || b.after < gapMin) break;
-    const cut = b.end + 1 + Math.min(b.after, gapMin);
-    if (cut > maxTrim || bot - cut + 1 < minKeep) break;
-    top = cut;
-  }
-  for (let k = 0; k < 3; k++) {
-    const b = band(bot, -1, top - 1);
-    if (!b || b.size < minBandH || b.size > maxBandH || b.inkW < w * 0.55 || b.maxFrac > 0.6 || b.after < gapMin) break;
-    const cut = b.end - 1 - Math.min(b.after, gapMin);
-    if ((h - 1 - cut) > maxTrim || cut - top + 1 < minKeep) break;
-    bot = cut;
-  }
+  const t = eat(0, 1, h);
+  if (t !== null && t <= maxTrim && bot - t + 1 >= minKeep) top = t;
+  const b2 = eat(h - 1, -1, top - 1);
+  if (b2 !== null && (h - 1 - b2) <= maxTrim && b2 - top + 1 >= minKeep) bot = b2;
+
+  // AND THEN THE BLANK PAPER ITSELF. Whatever survives, the edges are pulled
+  // in to the first and last row with any ink in it. This is the one move
+  // here that cannot be wrong — it removes measured empty paper and nothing
+  // else — and it is what the whitespace expansion above cannot do, because
+  // that one only ever grows.
+  let f = top, l = bot;
+  while (f < l && !inked(f)) f++;
+  while (l > f && !inked(l)) l--;
+  if (l - f + 1 >= 8) { top = f; bot = l; }
+
   if (top === 0 && bot === h - 1) return r;
   return { x: r.x, y: y0 + top, w: r.w, h: bot - top + 1 };
 }
@@ -11806,9 +11914,14 @@ async function _cropBoxFromScreenshot(fullDataUrl, box) {
     probe.width = W; probe.height = H;
     const pctx = probe.getContext('2d', { willReadFrequently: true });
     pctx.drawImage(img, 0, 0);
-    r = _expandRectToWhitespace(pctx, W, H, r);
+    // What counts as ink is measured on the rectangle itself, not assumed —
+    // see _inkThreshold. On a screenshot it lands on the old 190; on a phone
+    // photograph of the same page it lands far lower, which is the whole
+    // difference between these two passes working and silently doing nothing.
+    const thr = _inkThreshold(pctx, W, H, r);
+    r = _expandRectToWhitespace(pctx, W, H, r, thr);
     // Then cut away any full-width sentence lines the rectangle still holds.
-    r = _trimEdgeTextLines(pctx, W, H, r);
+    r = _trimEdgeTextLines(pctx, W, H, r, thr);
   } catch (e) { console.warn('edge expansion skipped', e); }
   const scale = Math.max(1, Math.min(2, 1600 / Math.max(r.w, r.h))); // upscale small crops (≤2×, ≤~1600px)
   // Guaranteed breathing space: a white frame around the crop, so content
