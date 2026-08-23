@@ -242,7 +242,7 @@ import { getFirestore, doc, getDoc, updateDoc }
 import { getStorage, ref as sRef, uploadString, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
-const APP_VERSION = 'v1.2.0';
+const APP_VERSION = 'v1.3.0';
 document.getElementById('verTag').textContent = APP_VERSION;
 
 /* The one collection this page reads, and the one folder it writes. Named
@@ -475,16 +475,67 @@ async function open() {
    flag holds figures, which is what it defaults to. */
 function isWholeQuestion(it) { return it.shot === 'question' && !!it.img; }
 
+/* THE QUESTION SET OUT AGAIN — the best of the three tiers, and the reason
+   this page exists at all. The Scan app reads the printed question off the
+   photograph into ORDERED BLOCKS — the wording as text, with an "image" block
+   wherever a figure belongs, each figure cut from the page by its own
+   rectangle — the way the Learning Portal's Rapid add builds a question. What
+   comes back is the question TYPESET, with the paper's own diagrams still in
+   it: sharp at any size, and readable on a phone in a way a photograph of 9pt
+   print never is.
+
+   It is re-validated HERE and not trusted from the document. A paper is
+   written by another app, in another repository, at whatever version it
+   happened to be — and a block that would not draw is one the worksheet
+   cannot show, which is a thing to find out now rather than on the printed
+   page. A build with no WORDING in it is refused outright: the tiers below it
+   are better than a question made of pictures with nothing asking anything. */
+function questionBlocks(it) {
+  const raw = Array.isArray(it.blocks) ? it.blocks : [];
+  const usable = raw.filter(b => b && (b.type === 'image'
+    ? !!b.url
+    : !!String(b.text || '').trim()));
+  return usable.some(b => b.type !== 'image') ? usable : [];
+}
+
+/* Which of the three a question is being shown as. ONE place decides it, so
+   the renderer, the cleaner and the note under the buttons can never disagree
+   about what the student is looking at. */
+function tierOf(it) {
+  if (questionBlocks(it).length) return 'built';
+  if (isWholeQuestion(it)) return 'whole';
+  return 'flat';
+}
+
+function figNote(haveClean) {
+  if (mode !== 'clean' || haveClean) return '';
+  return cleaning
+    ? 'cleaning this up…'
+    : 'shown as photographed — this one could not be cleaned up, so your own working is still on it';
+}
+
+function blocksHtml(it, blocks) {
+  return blocks.map((b, i) => {
+    if (b.type !== 'image') return '<div class="qText">' + esc(b.text) + '</div>';
+    const src = (mode === 'clean' && b.cleanImg) ? b.cleanImg : b.url;
+    const note = figNote(!!b.cleanImg);
+    /* A figure that will not load takes itself off the page rather than
+       leaving a broken frame in the middle of the wording — the text around
+       it is still doing the asking, which is exactly what the whole-question
+       crop cannot fall back on. */
+    return '<div class="qFig" id="blk_' + it.n + '_' + i + '">' +
+      '<img src="' + esc(src) + '" alt="Figure for question ' + it.n + '"' +
+      ' onerror="window.__blkFailed(' + it.n + ',' + i + ')">' +
+      (note ? '<div class="figNote">' + esc(note) + '</div>' : '') + '</div>';
+  }).join('');
+}
+
 function figureFor(it) {
   if (!it.img) return '';
   const whole = isWholeQuestion(it);
   const clean = mode === 'clean' && it.cleanImg;
   const src = clean ? it.cleanImg : it.img;
-  const note = mode === 'clean' && !it.cleanImg
-    ? (cleaning
-        ? 'cleaning this up…'
-        : 'shown as photographed — this one could not be cleaned up, so your own working is still on it')
-    : '';
+  const note = figNote(!!it.cleanImg);
   const alt = whole ? 'Question ' + it.n + ' as it was printed' : 'The figure for question ' + it.n;
   /* A whole-question item prints no wording of its own, so a picture that will
      not load — a Storage URL that has expired, a phone with no signal — would
@@ -495,31 +546,53 @@ function figureFor(it) {
     '<img src="' + esc(src) + '" alt="' + alt + '"' + onErr + '>' +
     (note ? '<div class="figNote">' + esc(note) + '</div>' : '') + '</div>';
 }
+function optsHtml(it) {
+  return '<ul class="qOpts">' + (it.options || []).map(o =>
+    '<li>(' + esc(o.label) + ')&nbsp; ' + esc(o.text) + '</li>').join('') + '</ul>';
+}
 function questionHtml(it) {
-  const whole = isWholeQuestion(it);
+  const tier = tierOf(it);
   const mcq = (it.options || []).length > 0;
-  /* The picture already carries the wording and the options, so printing them
-     again would be the same question twice down one sheet. The transcription
-     does not go to waste — it is still what the marking was done against, and
-     it is still what fills the answer key at the back. */
-  const body = whole
-    ? '<div class="qText qFallback" id="qfb_' + it.n + '" hidden>' + esc(it.question) + '</div>'
-    : '<div class="qText">' + esc(it.question) + '</div>';
-  const opts = (!whole && mcq)
-    ? '<ul class="qOpts">' + it.options.map(o =>
-        '<li>(' + esc(o.label) + ')&nbsp; ' + esc(o.text) + '</li>').join('') + '</ul>'
-    : '';
-  /* Room to answer. A whole-question picture usually brings the paper's own
-     ruled space with it, so it gets the SHORT box rather than a second full
-     one — but never none: a box that was cropped tight would leave nowhere to
-     write, and blank paper is the cheaper mistake of the two. */
-  const room = mcq
-    ? '<div class="qLine">Answer: <b>&nbsp;</b></div>'
-    : '<div class="qWork' + (whole ? ' short' : '') + '"></div><div class="qLine">Answer: <b>&nbsp;</b></div>';
+  let body, opts, room;
+  if (tier === 'built') {
+    /* The wording is typeset and the figures sit where they belong, so the
+       options are printed underneath as usual — the Scan app deliberately
+       leaves them OUT of the blocks, because it already holds them and a
+       second copy inside the wording would be the choices offered twice. A
+       typeset question brings none of the paper's own ruled space with it, so
+       it gets the full working box. */
+    body = blocksHtml(it, questionBlocks(it));
+    opts = mcq ? optsHtml(it) : '';
+    room = mcq
+      ? '<div class="qLine">Answer: <b>&nbsp;</b></div>'
+      : '<div class="qWork"></div><div class="qLine">Answer: <b>&nbsp;</b></div>';
+  } else if (tier === 'whole') {
+    /* The picture already carries the wording and the options, so printing
+       them again would be the same question twice down one sheet. The
+       transcription does not go to waste — it is still what the marking was
+       done against, it is still what fills the answer key at the back, and it
+       steps forward if the picture will not load. */
+    body = '<div class="qText qFallback" id="qfb_' + it.n + '" hidden>' + esc(it.question) + '</div>';
+    opts = '';
+    /* Room to answer. A whole-question picture usually brings the paper's own
+       ruled space with it, so it gets the SHORT box rather than a second full
+       one — but never none: a box that was cropped tight would leave nowhere
+       to write, and blank paper is the cheaper mistake of the two. */
+    room = mcq
+      ? '<div class="qLine">Answer: <b>&nbsp;</b></div>'
+      : '<div class="qWork short"></div><div class="qLine">Answer: <b>&nbsp;</b></div>';
+  } else {
+    body = '<div class="qText">' + esc(it.question) + '</div>';
+    opts = mcq ? optsHtml(it) : '';
+    room = mcq
+      ? '<div class="qLine">Answer: <b>&nbsp;</b></div>'
+      : '<div class="qWork"></div><div class="qLine">Answer: <b>&nbsp;</b></div>';
+  }
+  const fig = tier === 'built' ? '' : figureFor(it);
   return '<div class="q">' +
     '<div class="qHead"><span class="qNum">' + it.n + '.</span>' +
       (it.number ? '<span class="qMeta">was question ' + esc(it.number) + '</span>' : '') + '</div>' +
-    body + figureFor(it) + opts + room +
+    body + fig + opts + room +
   '</div>';
 }
 function keyHtml(it) {
@@ -539,19 +612,35 @@ function render() {
     ' you got wrong, to try again. The answers are on the last page.';
   $('modeClean').classList.toggle('on', mode === 'clean');
   $('modeOriginal').classList.toggle('on', mode === 'original');
-  const wholes = items.filter(isWholeQuestion).length;
+  /* The note has to describe what is actually on the sheet, and the sheet can
+     hold all three tiers at once — one question set out again from the page,
+     the next cut whole out of the photograph, a third with only its figure.
+     Saying "these are cut out of your photographs" over a page of typeset
+     questions is the kind of small untruth that makes a student stop reading
+     the note at all, so it is built from the tiers really used. */
+  const tiers = items.map(tierOf);
+  const built = tiers.filter(t => t === 'built').length;
+  const wholes = tiers.filter(t => t === 'whole').length;
+  const lines = [];
+  if (built) {
+    lines.push('Your questions have been set out again from the photographs of your paper: the wording typed ' +
+      'out and the paper\u2019s own diagrams cut out and cleaned up, so nothing you wrote last time is still on them.');
+  }
+  if (wholes) {
+    lines.push((built ? 'Some are shown as the whole question cut out of your photograph and cleaned up' : 'These are your own questions, cut out of the photographs of your paper and cleaned up') +
+      ': your working rubbed out, the printing sharpened, and everything round the edges — a hand, the desk, ' +
+      'a shadow — whitened away.');
+  }
+  if (!built && !wholes) {
+    lines.push('The printing has been sharpened and your own working rubbed out, so the question is blank again. ' +
+      'The wording is exactly what was read off your paper — only the pictures are redrawn.');
+  }
+  lines.push('Nothing printed has been moved or reworded, so answer them exactly as they stand; if a question ' +
+    'ever looks wrong, switch to the original above and check it against the photograph.');
   $('modeNote').textContent = mode === 'clean'
-    ? (wholes
-        ? 'These are your own questions, cut out of the photographs of your paper and cleaned up: your working ' +
-          'rubbed out, the printing sharpened, and everything round the edges — a hand, the desk, a shadow — ' +
-          'whitened away. Nothing printed has been moved or reworded, so answer them exactly as they stand; if a ' +
-          'question ever looks wrong, switch to the original above and check it against the photograph.'
-        : 'The printing has been sharpened and your own working rubbed out, so the question is blank again. ' +
-          'The wording is exactly what was read off your paper — only the pictures are redrawn, so check a figure ' +
-          'against the original if anything looks odd.')
+    ? lines.join(' ')
     : 'Every picture exactly as it was photographed, your own working and all.';
 
-  const withFigs = items.filter(i => i.img).length;
   $('sheet').innerHTML =
     '<div class="sheet">' +
       '<div class="shHead">' +
@@ -568,7 +657,6 @@ function render() {
       '<div class="shOrg">' + esc(paper.title || '') + '</div></div>' +
       '<div style="margin-top:14px">' + items.map(keyHtml).join('') + '</div>' +
     '</div>';
-  if (!withFigs) { /* nothing to clean — the mode still changes nothing else */ }
 }
 
 /* ---- Cleaning them, once ----
@@ -579,9 +667,42 @@ function render() {
 
    One at a time on purpose: these are big calls, they are being made on a
    student's phone, and a row of them in parallel is how a page stalls. */
+/* WHICH PICTURES ARE ACTUALLY SHOWN — and therefore which are worth an AI
+   call. A question set out in blocks does not show its whole-question crop at
+   all, so cleaning that crop would be an image call, a Storage write and a
+   student's data spent on something nobody will ever see. `pictureSlots` is
+   the ONE place that is decided, and the renderer decides it the same way
+   (`tierOf`), so the two cannot drift into cleaning one picture and printing
+   another.
+
+   A slot is just "here is a picture, and here is where its cleaned copy is
+   kept" — the object is the block for a built question and the item itself for
+   a crop, which is what lets one loop clean both. The storage key for a crop
+   is unchanged, so a paper cleaned before blocks existed still finds its
+   pictures rather than paying for them twice. */
+function pictureSlots(it) {
+  const out = [];
+  if (tierOf(it) === 'built') {
+    questionBlocks(it).forEach((b, i) => {
+      if (b.type === 'image' && b.url) {
+        out.push({ obj: b, src: b.url, kind: 'figure', tag: it.n + '_b' + i, n: it.n });
+      }
+    });
+  } else if (it.img) {
+    out.push({ obj: it, src: it.img, kind: it.shot === 'question' ? 'question' : 'figure',
+               tag: String(it.n), n: it.n });
+  }
+  return out;
+}
+function paperPictures() {
+  const out = [];
+  (paper && paper.items || []).forEach(it => { pictureSlots(it).forEach(sl => out.push(sl)); });
+  return out;
+}
+
 async function cleanAll() {
   if (cleaning || !paper) return;
-  const todo = (paper.items || []).filter(i => i.img && !i.cleanImg);
+  const todo = paperPictures().filter(sl => !sl.obj.cleanImg);
   if (!todo.length) return;
   if (!imageAiReady()) {
     cleanFail = todo.length;
@@ -597,24 +718,24 @@ async function cleanAll() {
     $('progText').textContent = 'Cleaning up picture ' + Math.min(done + 1, todo.length) + ' of ' + todo.length + '…';
   };
   step();
-  for (const it of todo) {
+  for (const sl of todo) {
     try {
-      const src = await urlToDataUrl(it.img);
-      const out = await cleanFigure(src, it.shot);
+      const src = await urlToDataUrl(sl.src);
+      const out = await cleanFigure(src, sl.kind);
       let url = out;
       // Keep it, so this is paid for once. A Storage or rules refusal is not
       // a failure of the clean-up — the picture is already in hand and is
       // shown; it will simply be made again on the next visit.
       try {
-        const ref = sRef(storage, IMG_PATH + '/' + paper.owner + '/clean_' + paperId + '_' + it.n + '.png');
+        const ref = sRef(storage, IMG_PATH + '/' + paper.owner + '/clean_' + paperId + '_' + sl.tag + '.png');
         await uploadString(ref, out, 'data_url');
         url = await getDownloadURL(ref);
       } catch (e) { console.warn('cleaned picture could not be kept', e); }
-      it.cleanImg = url;
+      sl.obj.cleanImg = url;
       try { await updateDoc(doc(db, PAPER_COL, paperId), { items: paper.items }); }
       catch (e) { console.warn('paper could not be updated', e); }
     } catch (e) {
-      console.warn('figure ' + it.n + ' could not be cleaned', e);
+      console.warn('picture ' + sl.tag + ' could not be cleaned', e);
       failed++;
     }
     done++;
@@ -646,6 +767,14 @@ window.__figFailed = (n) => {
   const fig = $('fig_' + n), fb = $('qfb_' + n);
   if (fig) fig.hidden = true;
   if (fb) fb.hidden = false;
+};
+
+/* A figure inside a question that has been set out again is the other way
+   round: the wording is typeset above and below it, so a picture that will not
+   load takes itself off the page and the question still reads. */
+window.__blkFailed = (n, i) => {
+  const el = $('blk_' + n + '_' + i);
+  if (el) el.hidden = true;
 };
 
 window.__signIn = () => {
