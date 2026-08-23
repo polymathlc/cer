@@ -429,10 +429,17 @@ test('both engines are offered when both are available', () => {
   eq(M.engines().map(e => e.id), ['openai', 'gemini'], 'the engines');
 });
 
-test('a missing ChatGPT key leaves Gemini running alone rather than nothing', () => {
+/* A missing DEVICE key no longer costs the second opinion: `askChatGpt` goes
+   through the server's key first, so the ChatGPT column exists on a machine
+   nobody has ever set up — which is the whole reason this report is worth
+   running on anything but the teacher's own laptop. A route that is not there
+   fails its row honestly; what must never happen is the column silently
+   disappearing and the run reading as a clean bill of health from one
+   engine. */
+test('the ChatGPT column survives a device with no key of its own', () => {
   const M = mk();
   M.noOpenAiKey();
-  eq(M.engines().map(e => e.id), ['gemini'], 'the engines');
+  eq(M.engines().map(e => e.id), ['openai', 'gemini'], 'the engines');
 });
 
 // ── the "past N hours" window ───────────────────────────────────────────────
@@ -481,10 +488,13 @@ test('the Gemini call really is Gemini', () => {
 });
 
 test('askGeminiVision actually honours skipOpenAi', () => {
-  // The flag above is worth nothing if the function ignores it.
+  // The flag above is worth nothing if the function ignores it. Since the
+  // three-route rebuild, honouring it means building an order of Gemini and
+  // NOTHING else — a ChatGPT route left in it would answer the Gemini column.
   const block = cut('async function askGeminiVision', '\n// Convert text with', 'askGeminiVision');
   ok(/skipOpenAi = false/.test(block), 'askGeminiVision does not accept skipOpenAi');
-  ok(/if \(!skipOpenAi && openAiActive\(\)\)/.test(block), 'askGeminiVision does not honour skipOpenAi');
+  ok(/skipOpenAi \? \['gemini'\] : aiEngineOrder\(\)/.test(block),
+     'askGeminiVision does not cut the ChatGPT routes out when skipOpenAi is set');
 });
 
 test('the ChatGPT key lives in the slots the OTHER portals read', () => {

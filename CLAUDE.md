@@ -2098,7 +2098,92 @@ ordinary pending question with one extra field.
   QUESTION, its options, its answer and why.
 - Run **`node tools/scanned-question-tests.mjs`** after touching any of it.
 
+## ⚙️ Choosing the AI engine — three routes, and the key is on the SERVER
+
+`AI_DOWN_MS` / `_aiDown` / `_aiWhy` / `aiEngineOrder` / `askOpenAiServer` /
+`askChatGpt` / `_aiRun` / `_aiAsk` / `askGeminiDirect` / `aiRouteReport` /
+`renderAiEngineStatus` / `aiEngineChoicePreview` (in `app.js`, search
+`THREE ROUTES`), plus `#aiEngineStatus` in the AI Engine chooser. **All the
+portals carry this same block — keep them in step.**
+
+All the apps answer through Gemini on the shared `mathgen--app` project, so
+when that project's billing cap is hit they **all die at once and
+identically** — `[429] Your billing account has exceeded its monthly spending
+cap`, on every call, on every device, until the month turns over.
+
+- **THE ORDER IS THE DESIGN**: Gemini, then **ChatGPT on the SERVER**, then
+  ChatGPT on a key pasted into this browser. The chooser reverses it. That is
+  what choosing an engine now means: **which is tried FIRST, never which is
+  available.**
+- **The failover used to go ONE WAY, which is why it never helped.** The old
+  code fell from ChatGPT to Gemini and never the other way — so the failure
+  that actually happens, a capped Gemini, had nothing behind it at all.
+- **THE SERVER ROUTE IS WHAT MAKES THE CHOICE REAL.** `askOpenAiServer` calls
+  the `askOpenAi` Cloud Function in `polymathlc/math/functions`, which holds
+  the key as a Firebase secret and enforces the sign-in, the model, the size
+  caps and a daily quota. Before it existed, choosing ChatGPT needed a key
+  pasted into every device separately — so it worked on the teacher's laptop
+  and **no student's phone**, which is the half of the school that matters. A
+  key cannot be shipped in `app.js` instead: this is a public static site
+  served to every student's browser.
+  - **It needs one deploy**: `firebase functions:secrets:set OPENAI_API_KEY`
+    and a functions deploy in the Maths repo. Until then the call returns
+    `failed-precondition` and the chooser says **in those words** that the
+    server key is not switched on yet — a deploy step and a rejected key are
+    different problems, and an app that reported both as *AI error* would send
+    the teacher looking in the wrong place.
+- **A key in `localStorage` is the THIRD route, not the first.** It is what
+  keeps ChatGPT working before the function is deployed, or if it ever stops
+  answering, and it is still shared with the other portals. The chooser says
+  so rather than presenting it as the fix, and **no longer refuses to save a
+  ChatGPT choice without one**.
+- **`openai` is ALWAYS in the order.** Whether the function is deployed is not
+  something a page can know without asking; one refused call marks it down for
+  `AI_DOWN_MS` rather than being paid for again on every page of a bulk
+  import. `__aiReady()` is therefore simply `true` — an app that asked "is
+  Gemini up" would refuse every AI button on a capped project that can in fact
+  answer.
+- **A refused route goes to the BACK of the list, never off it**: a cap is
+  lifted eventually, and refusing on a stale note is worse than spending one
+  call finding out. A success clears the mark.
+- **When every route refuses, the FIRST error is thrown.** It names the real
+  problem; the last is usually "no key on this device".
+- **`askGeminiDirect` is the raw Gemini call, written once.** Both doors used
+  to carry their own copy of it, and both carried their own copy of the
+  one-way ChatGPT fallback too.
+- **The chooser SAYS what is actually happening** (`renderAiEngineStatus`),
+  because an app quietly running on its second route looks exactly like one
+  running on its first, and an app with nothing behind its first looks like
+  both. It reports only what it knows: the routes in the order they will be
+  tried, and what each said the last time it refused.
+  `aiEngineChoicePreview` shows the order a radio would produce **without
+  committing it** — a preview that saved would make Cancel a lie.
+- Run **`node tools/ai-routes-tests.mjs`** after touching any of it.
+- **`skipOpenAi: true` still means Gemini and nothing else**, and it is still
+  load-bearing: it is what forces the Gemini column of 🔍 Answer key
+  cross-check to really be Gemini. Without it both columns can be the same
+  model and the report reads as a clean bill of health. The ChatGPT column now
+  goes through `askChatGpt`, so the second opinion exists on a device with no
+  key of its own — which is the whole reason that report is worth running, and
+  `akcEngines` therefore offers it whether or not a key is saved.
+
 ## House rules
+- After touching **the AI routes** (`aiEngineOrder`, `askOpenAiServer`,
+  `askChatGpt`, `_aiRun`, `_aiAsk`, `askGeminiDirect`, `AI_DOWN_MS`, `_aiWhy`,
+  `aiRouteReport`, `renderAiEngineStatus`, `aiEngineChoicePreview`, or
+  `askGemini` / `askGeminiVision`'s wrappers) — **or the `askOpenAi` function
+  in `polymathlc/math/functions`, which is the other half of it** — run
+  `node tools/ai-routes-tests.mjs`. Every failure is silent and the app looks
+  exactly as it did the morning the spending cap was hit. The server route
+  dropping out of the order is the whole feature reverting: a key in
+  localStorage rescues the teacher's laptop and no student's phone, so it
+  looks healthy to the one person who would notice and to nobody else. A
+  one-way fallback leaves the failure that actually happens with nothing
+  behind it. A "down" note that never clears makes the second route
+  permanent, and one that takes a route OFF the list leaves the app dead once
+  the cap has been lifted. And the second error reported instead of the first
+  tells the teacher "no key on this device" about a paper that hit a billing
+  cap.
 - After touching **📷 a question that came off a photograph** (`SCANNED_SOURCE`,
   `_vetIsScanned`, `SCANNED_CARD_BORDER`, `SCANNED_CARD_BADGE`, or the
   `restBorder` ranking in `renderVettingList`), run

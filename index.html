@@ -10372,18 +10372,23 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 <div class="confirm-overlay" id="aiEngineOverlay">
   <div class="confirm-dialog" style="max-width:560px;text-align:left;max-height:88vh;overflow-y:auto;">
     <h3 style="margin-bottom:4px;">AI Engine</h3>
-    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Choose which AI powers every mode in this app — <strong>Create Question's AI answer &amp; explanation, Build from screenshot / PDF, Rapid add</strong>, plus marking and explanations. Switch to ChatGPT gpt-5.6-sol for heavy-duty question building, and back to Gemini for everyday use. Your choice is saved on this device and stays until you change it. If ChatGPT ever fails, the app falls back to Gemini automatically.</p>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Choose which AI powers every mode in this app — <strong>Create Question's AI answer &amp; explanation, Build from screenshot / PDF, Rapid add</strong>, plus marking and explanations. Switch to ChatGPT gpt-5.6-sol for heavy-duty question building, and back to Gemini for everyday use. Your choice is saved on this device and stays until you change it. It picks which is tried <strong>first</strong>, never which is available: whichever one you choose, the other takes over the moment it refuses — a spending cap, a quota, a connection that drops — so a run never comes back empty because one of them was down.</p>
     <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:16px;line-height:1.6;">🔗 <strong>One key covers all four subjects.</strong> Science, Maths, English and Chinese share this browser's storage, so a key saved here is saved for all of them — and 🔍 <strong>Check answer keys</strong> can put ChatGPT and Gemini side by side in whichever app you are in.</p>
+
+    <div class="form-group">
+      <label class="form-label">Right now</label>
+      <div id="aiEngineStatus" style="font-size:0.84rem;line-height:1.6;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-subtle,transparent);"></div>
+    </div>
 
     <div class="form-group">
       <label class="form-label">Engine</label>
       <label style="display:flex;align-items:center;gap:10px;font-size:0.9rem;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">
-        <input type="radio" name="aiEngineChoice" value="gemini" checked>
+        <input type="radio" name="aiEngineChoice" value="gemini" checked onchange="aiEngineChoicePreview('gemini')">
         <span><strong>Gemini 3.7 Flash</strong> <span style="color:var(--text-muted);">— Firebase AI Logic &middot; default &middot; no key needed</span></span>
       </label>
       <label style="display:flex;align-items:center;gap:10px;font-size:0.9rem;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;">
-        <input type="radio" name="aiEngineChoice" value="openai">
-        <span><strong>ChatGPT</strong> <span style="color:var(--text-muted);">— OpenAI API &middot; your own key required</span></span>
+        <input type="radio" name="aiEngineChoice" value="openai" onchange="aiEngineChoicePreview('openai')">
+        <span><strong>ChatGPT</strong> <span style="color:var(--text-muted);">— gpt-5.6-sol &middot; key held on the server &middot; nothing to set up</span></span>
       </label>
     </div>
 
@@ -10407,9 +10412,9 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     </div>
 
     <div class="form-group">
-      <label class="form-label">OpenAI API key</label>
+      <label class="form-label">OpenAI API key <span style="color:var(--text-muted);font-weight:400;">— optional</span></label>
       <input type="password" id="aiEngineKey" class="form-input" placeholder="sk-..." autocomplete="off" spellcheck="false">
-      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;">The key is saved only in this browser (localStorage) on this device — it is never uploaded, synced or committed anywhere. Anyone with access to this device's developer tools could read it, so paste it only on machines you control. Devices without a key simply keep using Gemini.</p>
+      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;"><strong>You should not normally need this.</strong> ChatGPT's real key lives on the <strong>server</strong>, as a Firebase secret behind the <code>askOpenAi</code> Cloud Function, which is what lets a student's phone use it with nothing set up on it. A key typed here is only a <strong>fallback for this browser</strong> — useful before the function is deployed, or if it ever stops answering. It is saved in this browser alone (localStorage), never uploaded, synced or committed, and anyone with this device's developer tools could read it.</p>
     </div>
 
     <div class="btn-group" style="justify-content:flex-end;">
