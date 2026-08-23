@@ -150,6 +150,11 @@
   .qText { font-size: 0.94rem; line-height: 1.75; white-space: pre-wrap; }
   .qFig { margin: 16px 0; text-align: center; }
   .qFig img { max-width: 100%; max-height: 340px; border: 1px solid var(--line); border-radius: 6px; }
+  /* A whole question is READ, not glanced at. The figure cap would put a
+     paragraph of 9pt print through a shrink it cannot survive, so a question
+     picture takes the column's full width and whatever height it needs. */
+  .qFig.whole { margin: 4px 0 0; text-align: left; }
+  .qFig.whole img { width: 100%; max-height: none; border-color: transparent; border-radius: 0; }
   .qFig .figNote { font-size: 0.72rem; color: var(--ink-faint); margin-top: 6px; }
   .qOpts { list-style: none; margin: 12px 0 0; display: flex; flex-direction: column; gap: 6px; }
   .qOpts li { font-size: 0.9rem; padding: 5px 0; }
@@ -180,6 +185,7 @@
     .sheet { border: 0; box-shadow: none; border-radius: 0; padding: 0 0 12mm; margin: 0; }
     .q, .keyRow { break-inside: avoid; }
     .qFig img { max-height: 260px; }
+    .qFig.whole img { max-height: none; }
   }
   @page { size: A4; margin: 14mm; }
 </style>
@@ -236,7 +242,7 @@ import { getFirestore, doc, getDoc, updateDoc }
 import { getStorage, ref as sRef, uploadString, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.2.0';
 document.getElementById('verTag').textContent = APP_VERSION;
 
 /* The one collection this page reads, and the one folder it writes. Named
@@ -296,12 +302,51 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
    image, a project with no image model at all — each of them leaves the
    ORIGINAL photograph on the page with a line saying so.
    ===================================================================== */
-const CLEAN_PROMPT =
-  'SOURCE: this is a photograph or scan of one figure cut out of a printed school worksheet or exam paper, and a ' +
-  'student has written on the page in pen or pencil. Expect faint or broken printed lines, a grey or unevenly lit ' +
+/* WHAT THE PICTURE IS decides two lines of the prompt and nothing else. A
+   FIGURE sits beside wording that is doing the asking; a QUESTION picture IS
+   the question — its number, its wording, its options and the space left for
+   the answer — cut out of the student's own photograph rather than retyped,
+   because a maths or science question is its layout as much as its words and
+   a transcription is only ever as good as the OCR.
+
+   The whole-question crop brings one problem the figure crop never had: it is
+   a rectangle off a photograph taken on a desk, so its edges can hold a
+   thumb, a shadow, the corner of the next question. That is what the extra
+   paragraph is for — and it says WHITE rather than "remove", because a model
+   told to remove something removes it and then draws something else there. */
+const CLEAN_SOURCE = {
+  figure:
+    'SOURCE: this is a photograph or scan of one figure cut out of a printed school worksheet or exam paper, and a ' +
+    'student has written on the page in pen or pencil.',
+  question:
+    'SOURCE: this is a photograph or scan of ONE WHOLE QUESTION cut out of a printed school worksheet or exam ' +
+    'paper — its number, its wording, any options, any figure or table, and the space left for the answer — and a ' +
+    'student has written on it in pen or pencil.'
+};
+const CLEAN_TASK = {
+  figure:
+    'TASK: redraw this as a clean BLACK-AND-WHITE line figure — crisp black line-work and text on a plain white ' +
+    'background, the way it looked when it was freshly printed, before anybody wrote on it.',
+  question:
+    'TASK: redraw this as the clean BLACK-AND-WHITE printed question it was — crisp black text and line-work on a ' +
+    'plain white background, laid out exactly as it is here, the way it looked on the day it was printed and ' +
+    'before anybody wrote on it. Someone is going to answer it again on this very picture, so the printed ' +
+    'question must survive whole and the space for the answer must come back EMPTY.'
+};
+/* Only the whole-question crop needs this: a figure was cut from inside the
+   page and has no outside to tidy. */
+const CLEAN_EDGES =
+  'THE EDGES: anything in this picture that is not the printed question itself must become plain white — a hand ' +
+  'or finger holding the page, the desk, the table edge, a shadow falling across the paper, the dark border ' +
+  'beyond the sheet, a staple or a punched hole, and any sliver of the question above or below that has crept ' +
+  'into the frame. Make those areas white; do not draw anything in their place, do not crop, do not move the ' +
+  'question and do not resize it — it must stay exactly where it is in the frame.\n';
+function cleanPrompt(kind) {
+  const k = kind === 'question' ? 'question' : 'figure';
+  return CLEAN_SOURCE[k] + ' Expect faint or broken printed lines, a grey or unevenly lit ' +
   'background, speckle and dirt, show-through from the back of the sheet, shadows, slight skew and blur.\n' +
-  'TASK: redraw this as a clean BLACK-AND-WHITE line figure — crisp black line-work and text on a plain white ' +
-  'background, the way it looked when it was freshly printed, before anybody wrote on it.\n' +
+  CLEAN_TASK[k] + '\n' +
+  (k === 'question' ? CLEAN_EDGES : '') +
   'REMOVE, because they are not part of the question: every handwritten mark — pencil and pen working, numbers ' +
   'the student has written in, arrows and jottings they have added, circled or ticked answers, crossings-out, ' +
   'underlining they have drawn, and any marking in red. Remove the scanning damage too: speckle, dirt, shadows, ' +
@@ -313,6 +358,7 @@ const CLEAN_PROMPT =
   'plausible one — reproduce what is printed. If you cannot tell a printed mark from a handwritten one, KEEP it.\n' +
   'Do not add shading, colour, gradients, texture, a border, a caption or a new style, and do not rearrange ' +
   'anything. Output only the image, at the same aspect ratio.';
+}
 
 function inlineImageOf(result) {
   const parts = result?.response?.inlineDataParts ? result.response.inlineDataParts() : [];
@@ -330,10 +376,10 @@ function inlineImageOf(result) {
   }
   return null;
 }
-async function cleanFigure(dataUrl) {
+async function cleanFigure(dataUrl, kind) {
   if (!imageAiReady()) throw new Error('no image model');
   const mime = (/^data:([^;,]+)/.exec(dataUrl) || [])[1] || 'image/jpeg';
-  const parts = [CLEAN_PROMPT, { inlineData: { mimeType: mime, data: dataUrl.split(',')[1] || '' } }];
+  const parts = [cleanPrompt(kind), { inlineData: { mimeType: mime, data: dataUrl.split(',')[1] || '' } }];
   let last = null;
   for (const model of imageModels) {
     try {
@@ -421,29 +467,59 @@ async function open() {
    are identical, and only the picture is chosen by the mode. Two renderers
    would be two things to keep in step, and the version a student is looking
    at would eventually stop being the version they chose. */
+/* IS THE PICTURE THE QUESTION, OR A FIGURE BELONGING TO ONE? The scan says so
+   (`shot`), and it can never be guessed here: printed the wrong way round, a
+   question picture has its own wording typed out above it as well — the
+   question asked twice — and a figure has no wording at all, which is a
+   diagram with nothing asking anything. A paper made before the scan sent the
+   flag holds figures, which is what it defaults to. */
+function isWholeQuestion(it) { return it.shot === 'question' && !!it.img; }
+
 function figureFor(it) {
   if (!it.img) return '';
+  const whole = isWholeQuestion(it);
   const clean = mode === 'clean' && it.cleanImg;
   const src = clean ? it.cleanImg : it.img;
   const note = mode === 'clean' && !it.cleanImg
-    ? (cleaning ? 'cleaning this up…' : 'shown as photographed — this one could not be cleaned up')
+    ? (cleaning
+        ? 'cleaning this up…'
+        : 'shown as photographed — this one could not be cleaned up, so your own working is still on it')
     : '';
-  return '<div class="qFig"><img src="' + esc(src) + '" alt="The figure for question ' + it.n + '">' +
+  const alt = whole ? 'Question ' + it.n + ' as it was printed' : 'The figure for question ' + it.n;
+  /* A whole-question item prints no wording of its own, so a picture that will
+     not load — a Storage URL that has expired, a phone with no signal — would
+     leave a numbered question with nothing in it at all. The transcription is
+     still on the item; it simply steps forward when the picture fails. */
+  const onErr = whole ? ' onerror="window.__figFailed(' + it.n + ')"' : '';
+  return '<div class="qFig' + (whole ? ' whole' : '') + '" id="fig_' + it.n + '">' +
+    '<img src="' + esc(src) + '" alt="' + alt + '"' + onErr + '>' +
     (note ? '<div class="figNote">' + esc(note) + '</div>' : '') + '</div>';
 }
 function questionHtml(it) {
-  const opts = (it.options || []).length
+  const whole = isWholeQuestion(it);
+  const mcq = (it.options || []).length > 0;
+  /* The picture already carries the wording and the options, so printing them
+     again would be the same question twice down one sheet. The transcription
+     does not go to waste — it is still what the marking was done against, and
+     it is still what fills the answer key at the back. */
+  const body = whole
+    ? '<div class="qText qFallback" id="qfb_' + it.n + '" hidden>' + esc(it.question) + '</div>'
+    : '<div class="qText">' + esc(it.question) + '</div>';
+  const opts = (!whole && mcq)
     ? '<ul class="qOpts">' + it.options.map(o =>
         '<li>(' + esc(o.label) + ')&nbsp; ' + esc(o.text) + '</li>').join('') + '</ul>'
     : '';
-  const mcq = (it.options || []).length > 0;
+  /* Room to answer. A whole-question picture usually brings the paper's own
+     ruled space with it, so it gets the SHORT box rather than a second full
+     one — but never none: a box that was cropped tight would leave nowhere to
+     write, and blank paper is the cheaper mistake of the two. */
+  const room = mcq
+    ? '<div class="qLine">Answer: <b>&nbsp;</b></div>'
+    : '<div class="qWork' + (whole ? ' short' : '') + '"></div><div class="qLine">Answer: <b>&nbsp;</b></div>';
   return '<div class="q">' +
     '<div class="qHead"><span class="qNum">' + it.n + '.</span>' +
       (it.number ? '<span class="qMeta">was question ' + esc(it.number) + '</span>' : '') + '</div>' +
-    '<div class="qText">' + esc(it.question) + '</div>' +
-    figureFor(it) + opts +
-    (mcq ? '<div class="qLine">Answer: <b>&nbsp;</b></div>'
-         : '<div class="qWork"></div><div class="qLine">Answer: <b>&nbsp;</b></div>') +
+    body + figureFor(it) + opts + room +
   '</div>';
 }
 function keyHtml(it) {
@@ -463,10 +539,16 @@ function render() {
     ' you got wrong, to try again. The answers are on the last page.';
   $('modeClean').classList.toggle('on', mode === 'clean');
   $('modeOriginal').classList.toggle('on', mode === 'original');
+  const wholes = items.filter(isWholeQuestion).length;
   $('modeNote').textContent = mode === 'clean'
-    ? 'The printing has been sharpened and your own working rubbed out, so the question is blank again. ' +
-      'The wording is exactly what was read off your paper — only the pictures are redrawn, so check a figure ' +
-      'against the original if anything looks odd.'
+    ? (wholes
+        ? 'These are your own questions, cut out of the photographs of your paper and cleaned up: your working ' +
+          'rubbed out, the printing sharpened, and everything round the edges — a hand, the desk, a shadow — ' +
+          'whitened away. Nothing printed has been moved or reworded, so answer them exactly as they stand; if a ' +
+          'question ever looks wrong, switch to the original above and check it against the photograph.'
+        : 'The printing has been sharpened and your own working rubbed out, so the question is blank again. ' +
+          'The wording is exactly what was read off your paper — only the pictures are redrawn, so check a figure ' +
+          'against the original if anything looks odd.')
     : 'Every picture exactly as it was photographed, your own working and all.';
 
   const withFigs = items.filter(i => i.img).length;
@@ -518,7 +600,7 @@ async function cleanAll() {
   for (const it of todo) {
     try {
       const src = await urlToDataUrl(it.img);
-      const out = await cleanFigure(src);
+      const out = await cleanFigure(src, it.shot);
       let url = out;
       // Keep it, so this is paid for once. A Storage or rules refusal is not
       // a failure of the clean-up — the picture is already in hand and is
@@ -556,6 +638,15 @@ $('modeOriginal').addEventListener('click', () => { mode = 'original'; render();
 $('printBtn').addEventListener('click', () => window.print());
 $('signInBtn').addEventListener('click', () => window.__signIn());
 $('signOutBtn').addEventListener('click', () => signOut(auth));
+
+/* The picture is the question, so if it will not load the wording has to take
+   over — a numbered question with nothing under it is the one thing a sheet
+   like this must never print. */
+window.__figFailed = (n) => {
+  const fig = $('fig_' + n), fb = $('qfb_' + n);
+  if (fig) fig.hidden = true;
+  if (fb) fb.hidden = false;
+};
 
 window.__signIn = () => {
   const provider = new GoogleAuthProvider();
