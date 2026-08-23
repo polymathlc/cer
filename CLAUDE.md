@@ -2159,6 +2159,50 @@ cap`, on every call, on every device, until the month turns over.
   `aiEngineChoicePreview` shows the order a radio would produce **without
   committing it** — a preview that saved would make Cancel a lie.
 - Run **`node tools/ai-routes-tests.mjs`** after touching any of it.
+
+### The engine choice belongs to the CENTRE, not to a browser
+
+`aiPreferredEngine` / `aiEngineLoadShared` / `aiEngineSetShared` /
+`_aiSharedEngine` / `AI_SHARED_TTL`, and the `aiEngineConfig` callable in
+`polymathlc/math/functions`.
+
+A device-local engine choice was the bug wearing a feature's clothes: the
+teacher switched to ChatGPT on their own laptop, watched it work, and **every
+student stayed on the capped Gemini** — with the screen on the machine they
+set it on looking exactly as it should. So the admin sets it once and every
+signed-in device follows until they set it back.
+
+- **It is a CALLABLE, not a Firestore document the clients read.** The shared
+  `firestore.rules` in the Maths repo does not contain the Science app's own
+  rules — it carries a placeholder telling you to paste them in from the
+  console first — so **any** rules deploy from there is a manual assembly job
+  with the whole project's access as the blast radius. A new world-readable
+  document would need exactly that. The function writes through the Admin SDK,
+  which bypasses rules, so the shared setting costs no rules change at all:
+  the deploy that switches ChatGPT on switches this on with it.
+- **Reading is open to any signed-in user; WRITING is the admin's alone**, and
+  it is checked in the function — the dialog's own gate is not a lock.
+- **`_aiSharedEngine` is null until the callable answers**, and the device
+  preference stands in until then. A project where the function has never been
+  deployed behaves exactly as it always did, rather than waiting on a call
+  that is never coming.
+- **A write that FAILED is reported.** A teacher told nothing would believe
+  the whole centre had moved. The message names the missing deploy when that
+  is what it is.
+- **The page says WHOSE setting is in force** — centre-wide, or this device's
+  own because the shared one could not be read.
+
+### When nothing answers, say what everything said
+
+`AI_ROUTE_LABEL` and the tail of `_aiAsk`. The first error is kept as `cause`,
+but the message names **every** route: `Gemini: … · ChatGPT (server key): …`.
+
+Reporting only the first hides the rest. A card reading *"Gemini: your billing
+account has exceeded its monthly spending cap"* and nothing else sends the
+teacher to the Google console — when what actually needs doing is deploying
+the ChatGPT function. That is a real hour lost, and it is exactly what
+happened.
+
 - **`skipOpenAi: true` still means Gemini and nothing else**, and it is still
   load-bearing: it is what forces the Gemini column of 🔍 Answer key
   cross-check to really be Gemini. Without it both columns can be the same

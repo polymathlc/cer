@@ -173,5 +173,37 @@ ok('the chooser says the choice is an ORDER, not a switch',
    /never which is available/.test(html));
 ok('the key field says it is optional and why', /You should not normally need this/.test(html));
 
+/* ---------- the choice is the CENTRE's, not this browser's ---------- */
+/* A device-local engine choice is the bug wearing a feature's clothes: the
+   teacher switches to ChatGPT on their laptop, watches it work, and every
+   student stays on the capped Gemini with the screen looking exactly right. */
+ok('the order follows the shared choice', /const have = aiPreferredEngine\(\) === 'openai'/.test(src));
+ok('…falling back to this device until the server answers',
+   /function aiPreferredEngine\(\) \{\s*\n\s*return _aiSharedEngine \|\| getAiEngine\(\);/.test(src));
+ok('the shared setting is read through the callable', /httpsCallable\(_aiFns, 'aiEngineConfig'/.test(src));
+ok('…at sign-in, from the one function every role comes through',
+   /function configureSidebarForRole\(role\) \{[\s\S]{0,400}aiEngineInit\(\);/.test(src));
+ok('…and refreshed when the chooser opens', /aiEngineLoadShared\(true\)\.then\(renderAiEngineStatus\)/.test(src));
+/* A setting that cannot be READ must never stop the app choosing at all, and
+   one that cannot be WRITTEN must never let the teacher believe it moved. */
+ok('a shared setting that cannot be read leaves the device preference running',
+   /_aiWhy\.shared = String\(/.test(src));
+ok('only the admin writes it', /if \(_isAdmin\(\)\) \{\s*\n\s*try \{\s*\n\s*await aiEngineSetShared/.test(src));
+ok('…and a failed write says so, naming the missing deploy',
+   /aiEngineConfig function is not deployed yet/.test(src));
+ok('the report says WHOSE setting is in force',
+   /This order is the centre-wide setting/.test(src) && /This order is THIS BROWSER/.test(src));
+ok('the dialog says the choice covers every device', /every signed-in device/.test(html));
+
+/* ---------- when nothing answers, say what everything said ---------- */
+/* Reporting one route hides the rest: a card reading "Gemini: billing cap"
+   and nothing else sends the teacher to the Google console when the job is to
+   deploy a function. */
+ok('every route is named when none of them answered',
+   /const why = order\.map\(e => AI_ROUTE_LABEL\[e\] \+ ': ' \+ \(_aiWhy\[e\] \|\| 'refused'\)\)\.join\(' · '\);/.test(src));
+ok('…and the first error is kept as the cause rather than discarded', /err\.cause = first;/.test(src));
+ok('one label table serves the error and the report',
+   (src.match(/const AI_ROUTE_LABEL = /g) || []).length === 1 && /const label = AI_ROUTE_LABEL;/.test(src));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
