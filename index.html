@@ -10390,6 +10390,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         <input type="radio" name="aiEngineChoice" value="openai" onchange="aiEngineChoicePreview('openai')">
         <span><strong>ChatGPT</strong> <span style="color:var(--text-muted);">— gpt-5.6-sol &middot; key held on the server &middot; nothing to set up</span></span>
       </label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:0.9rem;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-top:8px;">
+        <input type="radio" name="aiEngineChoice" value="kimi" onchange="aiEngineChoicePreview('kimi')">
+        <span><strong>Kimi</strong> <span style="color:var(--text-muted);">— Moonshot AI &middot; a third supplier, on its own bill and its own cap</span></span>
+      </label>
     </div>
 
     <div class="form-group">
@@ -10415,6 +10419,22 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <label class="form-label">OpenAI API key <span style="color:var(--text-muted);font-weight:400;">— optional</span></label>
       <input type="password" id="aiEngineKey" class="form-input" placeholder="sk-..." autocomplete="off" spellcheck="false">
       <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;"><strong>You should not normally need this.</strong> ChatGPT's real key lives on the <strong>server</strong>, as a Firebase secret behind the <code>askOpenAi</code> Cloud Function, which is what lets a student's phone use it with nothing set up on it. A key typed here is only a <strong>fallback for this browser</strong> — useful before the function is deployed, or if it ever stops answering. It is saved in this browser alone (localStorage), never uploaded, synced or committed, and anyone with this device's developer tools could read it.</p>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Kimi model</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="aiEngineKimiModel" class="form-input" list="aiEngineKimiModels" placeholder="kimi-k3" autocomplete="off" spellcheck="false" style="flex:1;">
+        <button type="button" class="btn btn-outline" id="aiEngineKimiLoad" onclick="kimiLoadModelList()">🔄 Load models</button>
+      </div>
+      <datalist id="aiEngineKimiModels"></datalist>
+      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;">Moonshot renames its flagship with every release, so this is a <strong>box, not a fixed list</strong>: <strong>🔄 Load models</strong> asks your own Kimi account which ids it will answer to and offers them here. If Kimi ever starts refusing every call, an out-of-date id is the first thing to check — the panel above says so when that is what happened.</p>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Kimi API key <span style="color:var(--text-muted);font-weight:400;">— optional</span></label>
+      <input type="password" id="aiEngineKimiKey" class="form-input" placeholder="sk-..." autocomplete="off" spellcheck="false">
+      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;"><strong>You should not normally need this.</strong> Kimi's real key lives on the <strong>server</strong>, as a Firebase secret behind the <code>askKimi</code> Cloud Function, which is what lets a student's phone use it with nothing set up on it. A key typed here is only a <strong>fallback for this browser</strong> — useful before the function is deployed, and it is what <strong>🔄 Load models</strong> reads the model list with. It is saved in this browser alone (localStorage), never uploaded, synced or committed.</p>
     </div>
 
     <div class="btn-group" style="justify-content:flex-end;">
