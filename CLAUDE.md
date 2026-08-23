@@ -245,11 +245,29 @@ Guidance for Claude when working in this repo.
     appear anywhere in this app's own content. The Scan app's collections are namespaced away from
     this one's (`scanMistakes`, never `mistakes`, which is THIS app's own log under the same uid),
     and this page keeps that contract from the other side.
+  - **THE PICTURE IS USUALLY THE QUESTION ITSELF** (scan v1.17.0, this file v1.2.0). A question
+    rebuilt from a transcription is only as good as the OCR, and a maths or science question is its
+    LAYOUT as much as its words. So the Scan app now crops the WHOLE printed question — number,
+    wording, options, figure, answer space — out of the student's own photograph, and that is what
+    is printed to answer on. `shot` says which of the two a picture is (`'question'` or `'figure'`)
+    and it is never guessed: printed the wrong way round, a question picture has its wording typed
+    out above it as well — the question asked twice — and a figure has no wording at all, which is
+    a diagram with nothing asking anything. **A paper made before that flag existed holds figures**,
+    which is what it defaults to, and those render exactly as they always did.
+  - **A whole-question picture prints NO wording of its own**, so `__figFailed` is not optional:
+    a Storage URL that has expired or a phone with no signal would otherwise leave a numbered
+    question with nothing under it at all. The transcription is still on the item and steps forward
+    when the picture will not load.
   - **TWO VERSIONS, and the WORDING IS THE SAME IN BOTH.** Only the picture differs: *cleaned up*
-    (the default — the figure redrawn in black and white with the student's own pencil rubbed out,
-    so the question is blank again) or *the original photograph*. The wording, the options and the
-    answers are the transcription the Scan app made and the teacher already marked against, so an
-    image model never gets to rewrite a number in a question — only to redraw the diagram beside it.
+    (the default — redrawn in black and white with the student's own pencil rubbed out, so the
+    question is blank again) or *the original photograph*. Nothing printed is ever reworded: the
+    answers and the key are the transcription the Scan app made and the teacher already marked
+    against, so an image model never gets to rewrite a number in a question — only to redraw it.
+  - **`cleanPrompt(kind)` is ONE body and two subjects.** A figure was cut from inside the page and
+    has no outside to tidy; a whole question is a rectangle off a photograph taken on a desk, so its
+    edges can hold a thumb, a shadow, the corner of the next question. `CLEAN_EDGES` is that extra
+    paragraph, and it says **WHITE** rather than "remove" — a model told to remove something removes
+    it and then draws something else in its place.
   - **`CLEAN_PROMPT` pulls in two directions on purpose**: remove every handwritten mark, and change
     nothing that was printed. It says so in both directions, and it says that a mark it cannot
     classify is KEPT. A model that quietly redrew a printed axis value would be worse than a grey
