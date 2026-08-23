@@ -47,6 +47,15 @@ function getFunctions() { return {}; }
 function httpsCallable() { return async () => ({ data: { text: 'server said so' } }); }
 async function askOpenAI() { return 'device key said so'; }
 var console = { warn: function () {} };
+var CONFIG_COL = 'config';
+var db = {}, currentUser = { email: 'admin@example.com' };
+function doc() { return { __ref: true }; }
+function getDoc() { return Promise.resolve({ exists: () => false, data: () => ({}) }); }
+function setDoc() { return Promise.resolve(); }
+function onSnapshot() { return function () {}; }
+function renderAiEngineStatus() {}
+var document = { getElementById: () => null };
+var window = {};
 ` + block + `
 return {
   set pref(v) { _pref = v; },
@@ -180,7 +189,26 @@ ok('the key field says it is optional and why', /You should not normally need th
 ok('the order follows the shared choice', /const have = aiPreferredEngine\(\) === 'openai'/.test(src));
 ok('…falling back to this device until the server answers',
    /function aiPreferredEngine\(\) \{\s*\n\s*return _aiSharedEngine \|\| getAiEngine\(\);/.test(src));
-ok('the shared setting is read through the callable', /httpsCallable\(_aiFns, 'aiEngineConfig'/.test(src));
+/* IT LIVES ON A DOCUMENT EVERY SIGNED-IN DEVICE ALREADY READS — this app's
+   own admin pointer — so it needs no rules change and no deploy. A brand-new
+   document would have been tidier and would have needed a rules deploy from a
+   file that does not even contain this app's own rules. */
+ok('the shared setting rides the existing admin pointer',
+   /function _aiCfgRef\(\) \{ return doc\(db, (?:'config'|CONFIG_COL), 'admin'\); \}/.test(src));
+ok('…written with MERGE, or it takes the bank pointer off with it',
+   /await setDoc\(_aiCfgRef\(\), \{[\s\S]{0,220}\}, \{ merge: true \}\);/.test(src));
+/* The admin sign-in write would otherwise wipe the field every morning: the
+   toggle would appear to work and be gone by the next day. */
+ok('the sign-in write is a merge too',
+   /\{ uid: user\.uid, email: user\.email \}, \{ merge: true \}/.test(src));
+ok('the callable is still there as the fallback', /httpsCallable\(_aiFns, 'aiEngineConfig'/.test(src));
+/* LIVE, not polled: the teacher toggles and a device with the app open
+   follows within seconds, which is what "app-wide" has to mean. */
+ok('it is a live listener', /_aiCfgStop = onSnapshot\(_aiCfgRef\(\)/.test(src));
+ok('…that comes down with the account, or one account governs the next',
+   /async function handleLogout\(\) \{[\s\S]{0,220}aiEngineStopShared\(\);/.test(src));
+ok('…and an unset field means Gemini, so a centre that never touches it is unaffected',
+   /\(eng === 'gemini' \|\| eng === 'openai'\) \? eng : 'gemini'/.test(src));
 ok('…at sign-in, from the one function every role comes through',
    /function configureSidebarForRole\(role\) \{[\s\S]{0,400}aiEngineInit\(\);/.test(src));
 ok('…and refreshed when the chooser opens', /aiEngineLoadShared\(true\)\.then\(renderAiEngineStatus\)/.test(src));
@@ -189,8 +217,8 @@ ok('…and refreshed when the chooser opens', /aiEngineLoadShared\(true\)\.then\
 ok('a shared setting that cannot be read leaves the device preference running',
    /_aiWhy\.shared = String\(/.test(src));
 ok('only the admin writes it', /if \(_isAdmin\(\)\) \{\s*\n\s*try \{\s*\n\s*await aiEngineSetShared/.test(src));
-ok('…and a failed write says so, naming the missing deploy',
-   /aiEngineConfig function is not deployed yet/.test(src));
+ok('…and a failed write says so rather than letting them believe it moved',
+   /the centre-wide setting could not be written/.test(src));
 ok('the report says WHOSE setting is in force',
    /This order is the centre-wide setting/.test(src) && /This order is THIS BROWSER/.test(src));
 ok('the dialog says the choice covers every device', /every signed-in device/.test(html));

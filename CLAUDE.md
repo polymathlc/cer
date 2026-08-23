@@ -2192,6 +2192,34 @@ signed-in device follows until they set it back.
 - **The page says WHOSE setting is in force** — centre-wide, or this device's
   own because the shared one could not be read.
 
+### Where the shared setting lives — and why it is not a new document
+
+`_aiCfgRef` / `aiEngineWatchShared` / `aiEngineStopShared` (v1.321.0). The
+engine is a **field on this app's own admin-pointer document** — the one every
+signed-in device already reads to find out whose question bank to load, and
+that only the admin can write.
+
+- **So it needs NO rules change and NO deploy.** Both the read and the write
+  are paths this app has exercised in production since it shipped. A brand-new
+  document would have been tidier and would have needed a rules deploy — from
+  a file that does not even contain this app's own rules — so tidier was not
+  worth it.
+- **The write is a MERGE, always**, and so is the admin sign-in write that
+  puts `uid`/`email` on the same document. A plain set on either would take
+  the other's field off: the bank pointer, or the engine setting the teacher
+  set that morning. The sign-in one was a plain set until v1.321.0, and it
+  would have wiped the toggle every day.
+- **It is a LIVE listener, not a poll**, so a device with the app open follows
+  the teacher within seconds. That is what app-wide has to mean.
+- **It comes down on sign-out**, or one account's engine setting goes on
+  governing the next person to sign in on the device — the same rule the
+  teaching-notes listener carries.
+- **An unset field means Gemini**, the default every app already had, so a
+  centre that never touches this is unaffected.
+- **The `aiEngineConfig` callable is kept as the FALLBACK** for the case where
+  the direct read or write is ever denied: it goes through the Admin SDK,
+  which bypasses rules.
+
 ### When nothing answers, say what everything said
 
 `AI_ROUTE_LABEL` and the tail of `_aiAsk`. The first error is kept as `cause`,
