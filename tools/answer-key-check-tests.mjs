@@ -89,6 +89,10 @@ const AI_MODEL = "gemini-3.7-flash";
 let openAiKey = "sk-test", openAiModel = "gpt-5.6-sol";
 function getOpenAiKey() { return openAiKey; }
 function getOpenAiModel() { return openAiModel; }
+// The centre-wide key/model layer (see THE KEY IS THE CENTRE'S TOO in app.js):
+// every ChatGPT call, this report's engine list included, reads through it.
+function aiChatKey() { return getOpenAiKey(); }
+function aiChatModel() { return getOpenAiModel(); }
 let bankShown = [];
 function _bankFilteredQuestions() { return bankShown; }
 function _questionRecency(x) {

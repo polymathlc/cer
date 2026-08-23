@@ -140,10 +140,14 @@ const OPENAI_DEFAULT_MODEL = 'gpt-5.6-sol';
 function getAiEngine() { try { return localStorage.getItem(AI_ENGINE_STORE.engine) || 'gemini'; } catch (e) { return 'gemini'; } }
 function getOpenAiKey() { try { return (localStorage.getItem(AI_ENGINE_STORE.key) || '').trim(); } catch (e) { return ''; } }
 function getOpenAiModel() { try { return localStorage.getItem(AI_ENGINE_STORE.model) || OPENAI_DEFAULT_MODEL; } catch (e) { return OPENAI_DEFAULT_MODEL; } }
-function openAiActive() { return getAiEngine() === 'openai' && !!getOpenAiKey(); }
+/* …but this browser's slot is no longer the only place a key can come from.
+   `aiChatKey()` / `aiChatModel()` / `aiChatImageModel()` are what every ChatGPT
+   call actually reads — the CENTRE's setting first, this browser's second. See
+   THE KEY IS THE CENTRE'S TOO, below. */
+function openAiActive() { return aiPreferredEngine() === 'openai' && !!aiChatKey(); }
 
 async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, json = false } = {}) {
-  const model = getOpenAiModel();
+  const model = aiChatModel();
   const content = [{ type: 'text', text: prompt }];
   (media || []).forEach((m, i) => {
     if (/^image\//.test(m.mimeType || '')) content.push({ type: 'image_url', image_url: { url: 'data:' + m.mimeType + ';base64,' + m.data, detail: 'high' } });
@@ -155,7 +159,7 @@ async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, js
   if (temperature !== undefined && !/^gpt-5/.test(model)) body.temperature = temperature;
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getOpenAiKey() },
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + aiChatKey() },
     body: JSON.stringify(body)
   });
   if (!res.ok) {
@@ -208,7 +212,7 @@ async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, js
      problems with three different fixes.
    ===================================================================== */
 const AI_DOWN_MS = 10 * 60 * 1000;
-const AI_ROUTE_LABEL = { gemini: 'Gemini', openai: 'ChatGPT (server key)', openaiKey: 'ChatGPT (key in this browser)' };
+const AI_ROUTE_LABEL = { gemini: 'Gemini', openai: 'ChatGPT (server key)', openaiKey: 'ChatGPT (saved key)' };
 const _aiDown = { gemini: 0, openai: 0, openaiKey: 0 };
 const _aiWhy = { gemini: '', openai: '', openaiKey: '', shared: '' };
 let aiLastCall = { engine: '', fellBack: false, error: '' };
@@ -234,6 +238,47 @@ function aiPreferredEngine() {
   return _aiSharedEngine || getAiEngine();
 }
 
+/* THE KEY IS THE CENTRE'S TOO, and that is what makes the toggle mean anything.
+
+   Choosing ChatGPT for everybody was already app-wide — and on every device but
+   the teacher's own it chose an engine that could not answer. The server route
+   is not deployed here yet, and the third route reads a key out of THIS
+   browser's localStorage, so a student's phone had no key at all: the toggle
+   was set, the chooser said so, every device fell straight back to the capped
+   Gemini, and nothing on any screen said why.
+
+   So the key rides the same document the engine does, and `aiChatKey()` is the
+   ONE resolver every ChatGPT call reads — exactly the shape `aiPreferredEngine`
+   already has: the centre's setting first, this browser's own second. The
+   browser's key is what stands in before one has been shared, and if the read
+   is ever denied.
+
+   WHO CAN READ IT: `config/admin` is readable by every signed-in account, so a
+   key put here is a key every signed-in student's browser can see — the same
+   exposure as any key in a page that calls OpenAI from the browser at all. That
+   is stated in as many words in the chooser, because it is the admin's call to
+   make and not something to discover later. Only the admin can WRITE it (the
+   rule on that document), and the model to use travels with it so a student's
+   phone is not left on a model nobody chose.
+
+   IT IS NEVER MIRRORED INTO `localStorage` on a student's device. That slot is
+   shared with the Maths, English and Chinese portals (see ONE KEY, ALL FOUR
+   PORTALS), so writing the centre's key there would plant it in three other
+   apps' storage on every phone in the school and leave it there after the
+   teacher had cleared it. It lives in memory for the session and comes down
+   with the listener at sign-out. */
+let _aiSharedKey = '';
+let _aiSharedModel = '';
+let _aiSharedImageModel = '';
+
+function aiChatKey() { return _aiSharedKey || getOpenAiKey(); }
+function aiChatModel() { return _aiSharedModel || getOpenAiModel(); }
+function aiChatImageModel() { return _aiSharedImageModel || getOpenAiImageModel(); }
+/* Which of the two answered, for the chooser — an app running on the centre's
+   key and one running on a key somebody pasted into this laptop look identical
+   from the outside, and only one of them is working for the whole school. */
+function aiKeySource() { return _aiSharedKey ? 'shared' : (getOpenAiKey() ? 'device' : ''); }
+
 /* WHERE THE SHARED SETTING LIVES, and why it is not a new document.
 
    It is a field on the app's OWN admin-pointer document — the one every
@@ -254,18 +299,26 @@ function aiPreferredEngine() {
    where this read is ever denied. */
 function _aiCfgRef() { return doc(db, 'config', 'admin'); }
 
+/* ONE reader for the whole centre-wide block, so the live listener and the
+   one-shot read can never disagree about what a field means. */
+function _aiApplySharedCfg(d) {
+  const eng = d ? d.aiEngine : null;
+  // An unset field means nobody has chosen, which is Gemini — the default
+  // every app already had, so a centre that never touches this is unaffected.
+  _aiSharedEngine = (eng === 'gemini' || eng === 'openai') ? eng : 'gemini';
+  _aiSharedKey = String((d && d.openAiKey) || '').trim();
+  _aiSharedModel = String((d && d.openAiModel) || '').trim();
+  _aiSharedImageModel = String((d && d.openAiImageModel) || '').trim();
+  _aiSharedAt = Date.now();
+  _aiWhy.shared = '';
+}
+
 let _aiCfgStop = null;
 function aiEngineWatchShared() {
   if (_aiCfgStop) return;
   try {
     _aiCfgStop = onSnapshot(_aiCfgRef(), snap => {
-      const eng = snap.exists() && snap.data() ? snap.data().aiEngine : null;
-      // An unset field means nobody has chosen, which is Gemini — the default
-      // every app already had, so a centre that never touches this is
-      // unaffected.
-      _aiSharedEngine = (eng === 'gemini' || eng === 'openai') ? eng : 'gemini';
-      _aiSharedAt = Date.now();
-      _aiWhy.shared = '';
+      _aiApplySharedCfg(snap.exists() ? snap.data() : null);
       const ov = document.getElementById('aiEngineOverlay');
       if (ov && ov.classList.contains('active')) renderAiEngineStatus();
     }, err => {
@@ -277,17 +330,22 @@ function aiEngineWatchShared() {
     });
   } catch (e) { _aiWhy.shared = String((e && e.message) || e || ''); }
 }
-function aiEngineStopShared() { if (_aiCfgStop) { try { _aiCfgStop(); } catch (e) { /* already gone */ } _aiCfgStop = null; } }
+/* Sign-out takes the KEY down with the listener, not just the listener. It is
+   the centre's key rather than this account's, but nothing should go on
+   holding it once nobody is signed in — the same rule the teaching-notes
+   listener carries. */
+function aiEngineStopShared() {
+  if (_aiCfgStop) { try { _aiCfgStop(); } catch (e) { /* already gone */ } _aiCfgStop = null; }
+  _aiSharedEngine = null; _aiSharedKey = ''; _aiSharedModel = ''; _aiSharedImageModel = '';
+  _aiSharedAt = 0;
+}
 
 async function aiEngineLoadShared(force) {
   if (!force && _aiSharedEngine && Date.now() - _aiSharedAt < AI_SHARED_TTL) return _aiSharedEngine;
   aiEngineWatchShared();
   try {
     const snap = await getDoc(_aiCfgRef());
-    const eng = snap.exists() && snap.data() ? snap.data().aiEngine : null;
-    _aiSharedEngine = (eng === 'gemini' || eng === 'openai') ? eng : 'gemini';
-    _aiSharedAt = Date.now();
-    _aiWhy.shared = '';
+    _aiApplySharedCfg(snap.exists() ? snap.data() : null);
     return _aiSharedEngine;
   } catch (e) {
     _aiWhy.shared = String((e && e.message) || e || '');
@@ -306,25 +364,38 @@ async function aiEngineLoadShared(force) {
 }
 
 /* MERGE, always. This document is the bank pointer as well, and a plain set
-   would take `uid` off it — which is how every student loses the bank. */
-async function aiEngineSetShared(engine) {
+   would take `uid` off it — which is how every student loses the bank.
+
+   `extra` carries the KEY and the two models when the admin has typed one, so
+   the toggle and the thing that makes it work are ONE write: a centre switched
+   to ChatGPT with no key anywhere is every device falling back to the engine
+   it was switched off. Clearing the field sends `deleteField()`, so "forget
+   it" really forgets — everywhere, not just here. */
+async function aiEngineSetShared(engine, extra) {
   try {
     await setDoc(_aiCfgRef(), {
       aiEngine: engine,
       aiEngineAt: new Date().toISOString(),
-      aiEngineBy: (currentUser && currentUser.email) || ''
+      aiEngineBy: (currentUser && currentUser.email) || '',
+      ...(extra || {})
     }, { merge: true });
     _aiSharedEngine = engine;
     _aiSharedAt = Date.now();
     return engine;
   } catch (e) {
     // Denied or offline. The callable is the second way in — it writes
-    // through the Admin SDK, so it works where a direct write does not.
+    // through the Admin SDK, so it works where a direct write does not. It
+    // carries the ENGINE and nothing else, so a key typed in the same breath
+    // did not travel: that is thrown rather than swallowed, or the teacher is
+    // told the centre moved to an engine no device out there has a key for.
     if (!_aiFns) _aiFns = getFunctions(app);
     const res = await httpsCallable(_aiFns, 'aiEngineConfig', { timeout: 20000 })({ set: engine });
     const eng = res && res.data && res.data.engine;
     _aiSharedEngine = (eng === 'gemini' || eng === 'openai') ? eng : engine;
     _aiSharedAt = Date.now();
+    if (extra && Object.keys(extra).length) {
+      throw new Error('the engine moved, but the key could not be shared: ' + String((e && e.message) || e || ''));
+    }
     return _aiSharedEngine;
   }
 }
@@ -335,7 +406,9 @@ async function aiEngineSetShared(engine) {
    the chooser's order survives underneath the down-marking. */
 function aiEngineOrder() {
   const chat = ['openai'];
-  if (getOpenAiKey()) chat.push('openaiKey');
+  // `aiChatKey`, not `getOpenAiKey` — the centre's key is what puts this route
+  // on a student's phone, which is the whole point of sharing it.
+  if (aiChatKey()) chat.push('openaiKey');
   const have = aiPreferredEngine() === 'openai'
     ? chat.concat(geminiModel ? ['gemini'] : [])
     : (geminiModel ? ['gemini'] : []).concat(chat);
@@ -427,13 +500,24 @@ function aiRouteReport() {
     : (_aiWhy.shared
       ? 'This order is THIS BROWSER\'s own setting: the centre-wide one could not be read, so other devices keep theirs. (' + _aiWhy.shared + ')'
       : 'Reading the centre-wide setting…'));
+  /* WHOSE key is in hand. An app running on the centre's key and one running on
+     a key somebody pasted into this laptop look identical from here, and only
+     one of them is working on a student's phone. */
+  const ks = aiKeySource();
+  if (ks === 'shared') {
+    notes.push('ChatGPT\'s key is the centre-wide one, so every signed-in device has it — including phones nobody has ever typed a key into.');
+  } else if (ks === 'device') {
+    notes.push('The only ChatGPT key is the one saved in THIS browser. No other device has it, so ChatGPT is not reaching your students — share it from the key box below.');
+  } else {
+    notes.push('No ChatGPT key is saved anywhere. ChatGPT can only answer through the server route, which needs its Cloud Function deployed.');
+  }
   if (aiEngineIsDown('openai') && _aiWhy.openai) {
     notes.push(/not-?found|failed-?precondition|not configured|internal error/i.test(_aiWhy.openai)
       ? 'The server key is not switched on yet — OPENAI_API_KEY has not been set, or the functions have not been deployed. Until then ChatGPT needs a key in this browser. (' + _aiWhy.openai + ')'
       : 'The server route refused a moment ago and is being skipped for a few minutes: ' + _aiWhy.openai);
   }
   if (aiEngineIsDown('gemini') && _aiWhy.gemini) notes.push('Gemini refused a moment ago and is being skipped for a few minutes: ' + _aiWhy.gemini);
-  if (aiEngineIsDown('openaiKey') && _aiWhy.openaiKey) notes.push('The key in this browser was refused: ' + _aiWhy.openaiKey);
+  if (aiEngineIsDown('openaiKey') && _aiWhy.openaiKey) notes.push('The saved key was refused: ' + _aiWhy.openaiKey);
   if (aiLastCall.engine) {
     notes.push('The last answer came from ' + (label[aiLastCall.engine] || aiLastCall.engine) +
       (aiLastCall.fellBack ? ', after an earlier route refused.' : '.'));
@@ -461,7 +545,7 @@ function _dataUrlToBlob(dataUrl) {
 async function _openAiImageRequest(path, body, isForm) {
   const res = await fetch('https://api.openai.com/v1/images/' + path, {
     method: 'POST',
-    headers: Object.assign({ 'Authorization': 'Bearer ' + getOpenAiKey() }, isForm ? {} : { 'Content-Type': 'application/json' }),
+    headers: Object.assign({ 'Authorization': 'Bearer ' + aiChatKey() }, isForm ? {} : { 'Content-Type': 'application/json' }),
     body: isForm ? body : JSON.stringify(body)
   });
   if (!res.ok) {
@@ -486,8 +570,8 @@ function _isUnsupportedImageParam(e) {
 }
 
 async function openAiGenerateImageDataUrl(prompt, { size = '1024x1024', transparent = false, refDataUrl = null, quality = 'high' } = {}) {
-  if (!getOpenAiKey()) throw new Error('No OpenAI API key saved on this device');
-  const model = getOpenAiImageModel();
+  if (!aiChatKey()) throw new Error('No OpenAI API key — set one under ⚙️ AI Engine');
+  const model = aiChatImageModel();
   if (refDataUrl) {
     const buildForm = (extras) => {
       const fd = new FormData();
@@ -643,10 +727,16 @@ function aiEngineChoicePreview(v) {
   const el = document.getElementById('aiEngineStatus');
   if (!el) return;
   const was = getAiEngine();
+  // BOTH have to be stood aside, or the preview shows no change at all: the
+  // order is read from the CENTRE's choice first, and this browser's slot only
+  // decides it before that has been read.
+  const wasShared = _aiSharedEngine;
   try {
     localStorage.setItem(AI_ENGINE_STORE.engine, v === 'openai' ? 'openai' : 'gemini');
+    _aiSharedEngine = v === 'openai' ? 'openai' : 'gemini';
     renderAiEngineStatus();
   } finally {
+    _aiSharedEngine = wasShared;
     try { localStorage.setItem(AI_ENGINE_STORE.engine, was); } catch (e) { /* nothing to put back */ }
   }
 }
@@ -663,14 +753,19 @@ function aiEngineInit() {
 }
 
 function openAiEngineSettings() {
+  // The nav item is admin-only; this is the lock behind it, because the box
+  // below now shows the key the whole centre is using.
+  if (!_isAdmin()) return;
   const eng = aiPreferredEngine();
   document.querySelectorAll('input[name="aiEngineChoice"]').forEach(r => { r.checked = r.value === eng; });
   const modelSel = document.getElementById('aiEngineModel');
-  modelSel.value = getOpenAiModel();
+  modelSel.value = aiChatModel();
   if (!modelSel.value) modelSel.value = OPENAI_DEFAULT_MODEL;   // stored model no longer offered
   const imgSel = document.getElementById('aiEngineImageModel');
-  if (imgSel) { imgSel.value = getOpenAiImageModel(); if (!imgSel.value) imgSel.value = OPENAI_IMAGE_DEFAULT_MODEL; }
-  document.getElementById('aiEngineKey').value = getOpenAiKey();
+  if (imgSel) { imgSel.value = aiChatImageModel(); if (!imgSel.value) imgSel.value = OPENAI_IMAGE_DEFAULT_MODEL; }
+  // The key in force, not just this browser's — the box is what the admin
+  // edits and clears, so it has to show what everybody is actually running on.
+  document.getElementById('aiEngineKey').value = aiChatKey();
   renderAiEngineStatus();
   document.getElementById('aiEngineOverlay').classList.add('active');
   aiEngineLoadShared(true).then(renderAiEngineStatus).catch(() => {});
@@ -697,28 +792,40 @@ function closeAiEngineSettings() {
 async function saveAiEngineSettings() {
   const picked = document.querySelector('input[name="aiEngineChoice"]:checked');
   const eng = picked ? picked.value : 'gemini';
-  /* The engine is a setting for the WHOLE centre, so it goes to the server —
-     and only the admin may write it. Everything else in this dialog (the
-     model, the fallback key) stays device-local, because that is what those
-     things honestly are. A shared write that FAILS must not silently leave
-     the teacher believing every student has moved: it is reported, and the
-     device preference is still saved so this browser at least does what the
-     dialog says. */
+  const key = (document.getElementById('aiEngineKey').value || '').trim();
+  const model = document.getElementById('aiEngineModel').value || OPENAI_DEFAULT_MODEL;
+  const imgSelEl = document.getElementById('aiEngineImageModel');
+  const imageModel = (imgSelEl && imgSelEl.value) || OPENAI_IMAGE_DEFAULT_MODEL;
+  /* The engine is a setting for the WHOLE centre, and so is the KEY — a
+     centre switched to ChatGPT with the key on one laptop is a centre that
+     switched nothing. Both go up in ONE write, and only the admin may make it.
+     A shared write that FAILS must not silently leave the teacher believing
+     every student has moved: it is reported, and the device preference is
+     still saved so this browser at least does what the dialog says. */
   if (_isAdmin()) {
     try {
-      await aiEngineSetShared(eng);
-      showToast(eng === 'openai'
+      await aiEngineSetShared(eng, {
+        // Clearing the box clears it for the centre too, or "forget it" only
+        // forgets here and every other device carries on using it.
+        openAiKey: key || deleteField(),
+        openAiModel: model,
+        openAiImageModel: imageModel
+      });
+      const where = key
+        ? ' Every signed-in device now has the key, so ChatGPT answers on a student\'s phone too.'
+        : ' No key is shared, so ChatGPT can only answer through the server route.';
+      showToast((eng === 'openai'
         ? 'ChatGPT is now the first engine for everyone.'
-        : 'Gemini is now the first engine for everyone.', 'success');
+        : 'Gemini is now the first engine for everyone.') + where, 'success');
     } catch (e) {
       const msg = String((e && e.message) || e || '');
       showToast('Saved on this device only — the centre-wide setting could not be written: ' + msg, 'error');
     }
   }
-  const key = (document.getElementById('aiEngineKey').value || '').trim();
-  const model = document.getElementById('aiEngineModel').value || OPENAI_DEFAULT_MODEL;
-  const imgSelEl = document.getElementById('aiEngineImageModel');
-  const imageModel = (imgSelEl && imgSelEl.value) || OPENAI_IMAGE_DEFAULT_MODEL;
+  /* The localStorage copy stays, and it is not a leftover: the Maths, English
+     and Chinese portals share these four slots and have no centre-wide key of
+     their own, so writing it here is still what saves the admin pasting it
+     into three more apps. Only the admin ever reaches this function. */
   try {
     localStorage.setItem(AI_ENGINE_STORE.engine, eng);
     localStorage.setItem(AI_ENGINE_STORE.model, model);
@@ -729,7 +836,7 @@ async function saveAiEngineSettings() {
   closeAiEngineSettings();
   // Saying "all four subjects" is what tells the admin they do NOT have to go
   // and do this again in Maths, English and Chinese.
-  showToast(eng === 'openai' ? 'AI engine set to ChatGPT (' + model + ') — saved on this device, for all four subjects' : 'AI engine set to Gemini — for all four subjects', 'success');
+  showToast(eng === 'openai' ? 'AI engine set to ChatGPT (' + model + ') — also saved on this device, for all four subjects' : 'AI engine set to Gemini — for all four subjects', 'success');
 }
 
 function openMarkingSettings() {
@@ -2319,7 +2426,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.321.0';
+const APP_VERSION = 'v1.322.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5450,7 +5557,7 @@ function _widgetSrcdocAttr(html) {
 function renderWidgetBlockEditor(block) {
   const busy = !!_widgetBusy[block.id];
   const eff = WIDGET_EFFORTS[block.effort] ? block.effort : 'high';
-  const hasKey = !!getOpenAiKey();
+  const hasKey = !!aiChatKey();
   const has = !!(block.html || '').trim();
   const engineSel = `
     <select class="form-input" style="width:auto;min-width:130px;" ${busy ? 'disabled' : ''}
@@ -5555,9 +5662,9 @@ function _widgetSpecPrompt(block) {
 async function _widgetAskAI(engine, effortKey, prompt) {
   const eff = WIDGET_EFFORTS[effortKey] || WIDGET_EFFORTS.high;
   if (engine === 'openai') {
-    const key = getOpenAiKey();
+    const key = aiChatKey();
     if (!key) throw new Error('No ChatGPT key — add one under AI Engine in the sidebar, or switch to Gemini');
-    const model = getOpenAiModel();
+    const model = aiChatModel();
     const body = { model, messages: [{ role: 'user', content: prompt }] };
     if (eff.oa.maxTokens) body.max_completion_tokens = eff.oa.maxTokens;
     // Reasoning models take an effort knob; older chat models 400 on it.
@@ -32493,7 +32600,10 @@ function akcEngines() {
   // exist on a machine nobody has ever set up. A route that is not there
   // fails the row honestly rather than silently making the report one column
   // that reads as a clean bill of health.
-  out.push({ id: 'openai', label: 'ChatGPT', model: getOpenAiModel() });
+  // The model NAMED here has to be the one that will answer, so it reads the
+  // centre's setting first like every other ChatGPT call — a report headed
+  // with a model nobody is running is a report about the wrong thing.
+  out.push({ id: 'openai', label: 'ChatGPT', model: aiChatModel() });
   if (geminiModel) out.push({ id: 'gemini', label: 'Gemini', model: AI_MODEL });
   return out;
 }
@@ -42743,7 +42853,7 @@ let _tcgGenBusy = false;   // a generation (single slot or batch) is running
 let _tcgGenStop = false;   // batch cancel flag
 
 function _tcgSlotKey(slotId) { return slotId.replace(/:/g, '-'); }   // 'c001:av' / 'fx:cosmic:3' → safe element ids
-function _tcgArtEngineLabel() { return openAiActive() ? 'ChatGPT · ' + getOpenAiImageModel() : 'Gemini image model'; }
+function _tcgArtEngineLabel() { return openAiActive() ? 'ChatGPT · ' + aiChatImageModel() : 'Gemini image model'; }
 // Re-download the saved card art so it can be handed to the model as the
 // avatar's reference.
 async function _tcgCardArtDataUrl(card) {

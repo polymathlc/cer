@@ -40,6 +40,8 @@ const api = new Function(`
 var _pref = 'gemini', _key = '', _gemini = true;
 function getAiEngine() { return _pref; }
 function getOpenAiKey() { return _key; }
+function getOpenAiModel() { return 'device-model'; }
+function getOpenAiImageModel() { return 'device-image-model'; }
 var geminiModel = { generateContent: () => ({ response: { text: () => 'gemini said so' } }) };
 Object.defineProperty(globalThis, 'x', { value: 1, configurable: true });
 var app = {}, AI_THINK_MIN = 'low';
@@ -62,7 +64,10 @@ return {
   set key(v) { _key = v; },
   set gemini(v) { geminiModel = v ? { generateContent: () => ({ response: { text: () => 'gemini said so' } }) } : null; },
   get last() { return aiLastCall; },
-  AI_DOWN_MS, aiEngineOrder, aiEngineIsDown, _aiAsk, _aiRun, askChatGpt, askOpenAiServer
+  applyCfg: (d) => _aiApplySharedCfg(d),
+  stopShared: () => aiEngineStopShared(),
+  AI_DOWN_MS, aiEngineOrder, aiEngineIsDown, _aiAsk, _aiRun, askChatGpt, askOpenAiServer,
+  aiChatKey, aiChatModel, aiChatImageModel, aiKeySource, aiPreferredEngine
 };
 `)();
 
@@ -93,6 +98,55 @@ api.pref = 'gemini'; api.gemini = false;
 ok('a Firebase project that would not start still has routes',
    api.aiEngineOrder().join() === 'openai', api.aiEngineOrder().join());
 api.gemini = true;
+
+/* ---------- the KEY is the centre's too ---------- */
+/* Choosing ChatGPT for everybody while the key sits in one laptop's
+   localStorage is a toggle that switches nobody: every other device has no key
+   for the engine it has just been moved to, falls straight back to the capped
+   Gemini, and says nothing about it. */
+api.pref = 'gemini'; api.key = ''; api.gemini = true;
+api.applyCfg(null);
+ok('nothing shared and nothing local is no ChatGPT-key route at all',
+   api.aiEngineOrder().join() === 'gemini,openai', api.aiEngineOrder().join());
+ok('…and the chooser says there is no key anywhere', api.aiKeySource() === '');
+
+api.applyCfg({ aiEngine: 'openai', openAiKey: 'sk-centre', openAiModel: 'gpt-centre', openAiImageModel: 'img-centre' });
+ok('the CENTRE\'s key puts the ChatGPT route on a device nobody typed a key into',
+   api.aiEngineOrder().join() === 'openai,openaiKey,gemini', api.aiEngineOrder().join());
+ok('…and it is the key the calls use', api.aiChatKey() === 'sk-centre');
+ok('…and the model travels with it, or a phone runs a model nobody chose',
+   api.aiChatModel() === 'gpt-centre' && api.aiChatImageModel() === 'img-centre');
+ok('…and the chooser can say WHOSE key is in hand', api.aiKeySource() === 'shared');
+
+/* This browser's own key is what stands in before one has been shared, or if
+   the read is ever denied — never the other way round. */
+api.key = 'sk-this-laptop';
+ok('the centre\'s key beats a key pasted into this browser', api.aiChatKey() === 'sk-centre');
+api.applyCfg({ aiEngine: 'openai' });
+ok('…and with none shared, this browser\'s own is used', api.aiChatKey() === 'sk-this-laptop');
+ok('…and the chooser says so, because only one of those reaches a student',
+   api.aiKeySource() === 'device');
+
+/* Clearing the box has to clear it everywhere — "forget it" that only forgets
+   here leaves every other device spending against a key the teacher believes
+   is gone. */
+api.key = '';
+api.applyCfg({ aiEngine: 'openai', openAiKey: '' });
+ok('a cleared shared key really is gone',
+   api.aiChatKey() === '' && api.aiEngineOrder().join() === 'openai,gemini', api.aiEngineOrder().join());
+
+/* Sign-out takes the centre's key down with the listener. */
+api.applyCfg({ aiEngine: 'openai', openAiKey: 'sk-centre' });
+api.stopShared();
+ok('sign-out drops the shared key', api.aiChatKey() === '');
+ok('…and the engine preference with it', api.aiPreferredEngine() === 'gemini');
+
+/* An unset field still means Gemini, so a centre that never touches any of
+   this is completely unaffected. */
+api.applyCfg({ uid: 'someone', email: 'a@b.c' });
+ok('a bank-pointer document with no AI fields is the old behaviour exactly',
+   api.aiPreferredEngine() === 'gemini' && api.aiChatKey() === '' && api.aiChatModel() === 'device-model');
+api.stopShared();   // back to "nothing read yet", the state the cases below assume
 
 /* ---------- the failover ---------- */
 function runner(script) {
@@ -202,6 +256,48 @@ ok('…written with MERGE, or it takes the bank pointer off with it',
 ok('the sign-in write is a merge too',
    /\{ uid: user\.uid, email: user\.email \}, \{ merge: true \}/.test(src));
 ok('the callable is still there as the fallback', /httpsCallable\(_aiFns, 'aiEngineConfig'/.test(src));
+/* THE KEY RIDES THE SAME DOCUMENT, or the toggle moves the whole centre onto
+   an engine only the teacher's laptop has a key for. */
+ok('the key and the models are read off the shared document',
+   /_aiSharedKey = String\(\(d && d\.openAiKey\) \|\| ''\)\.trim\(\)/.test(src) &&
+   /_aiSharedModel = String\(\(d && d\.openAiModel\)/.test(src) &&
+   /_aiSharedImageModel = String\(\(d && d\.openAiImageModel\)/.test(src));
+ok('…through ONE reader, so the listener and the one-shot read cannot disagree',
+   (src.match(/function _aiApplySharedCfg\(/g) || []).length === 1 &&
+   (src.match(/_aiApplySharedCfg\(snap\.exists\(\) \? snap\.data\(\) : null\)/g) || []).length === 2);
+ok('…and ONE resolver every ChatGPT call reads',
+   /function aiChatKey\(\) \{ return _aiSharedKey \|\| getOpenAiKey\(\); \}/.test(src) &&
+   !/Bearer ' \+ getOpenAiKey\(\)/.test(src));
+ok('…which is what puts the route on a phone nobody typed a key into',
+   /if \(aiChatKey\(\)\) chat\.push\('openaiKey'\);/.test(src));
+ok('the engine and the key go up in ONE write, so neither can move without the other',
+   /await aiEngineSetShared\(eng, \{[\s\S]{0,400}openAiKey: key \|\| deleteField\(\)/.test(src));
+/* The centre's key must never be written into the localStorage slot the other
+   three portals share, or it is planted on every phone in the school and left
+   there after the teacher has cleared it. */
+ok('the shared key is never mirrored into this browser\'s slot',
+   !/AI_ENGINE_STORE\.key, _aiSharedKey/.test(src) && !/setItem\(AI_ENGINE_STORE\.key, aiChatKey/.test(src));
+ok('…and it comes down at sign-out with the listener',
+   /function aiEngineStopShared\(\) \{[\s\S]{0,400}_aiSharedKey = ''/.test(src));
+/* Only the admin may write it, and the dialog that shows it is locked rather
+   than merely hidden. */
+ok('the chooser itself is admin-only, not just its nav item',
+   /function openAiEngineSettings\(\) \{[\s\S]{0,240}if \(!_isAdmin\(\)\) return;/.test(src));
+/* An admin who shares a key is told what that means, in the dialog, before
+   they save one. */
+ok('the dialog says the key reaches every signed-in device',
+   /shared with every signed-in device/.test(html));
+ok('…and that a signed-in student could read it', /read this key from their developer tools/.test(html));
+/* The report has to say WHOSE key answered: an app on the centre's key and one
+   on a key pasted into this laptop look identical, and only one of them is
+   working for the school. */
+ok('the report names the source of the key',
+   /ChatGPT\\?'s key is the centre-wide one/.test(src) && /The only ChatGPT key is the one saved in THIS browser/.test(src));
+/* The preview has to stand BOTH choices aside, or it shows no change at all
+   once the centre-wide setting has been read — which is every ordinary load. */
+ok('the preview overrides the shared choice as well as this browser\'s',
+   /_aiSharedEngine = v === 'openai' \? 'openai' : 'gemini';/.test(src) &&
+   /_aiSharedEngine = wasShared;/.test(src));
 /* LIVE, not polled: the teacher toggles and a device with the app open
    follows within seconds, which is what "app-wide" has to mean. */
 ok('it is a live listener', /_aiCfgStop = onSnapshot\(_aiCfgRef\(\)/.test(src));

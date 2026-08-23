@@ -2220,6 +2220,72 @@ that only the admin can write.
   the direct read or write is ever denied: it goes through the Admin SDK,
   which bypasses rules.
 
+### …and so is the KEY, or the toggle switches nobody (v1.322.0)
+
+`_aiSharedKey` / `aiChatKey` / `aiChatModel` / `aiChatImageModel` /
+`aiKeySource` / `_aiApplySharedCfg` (search `THE KEY IS THE CENTRE'S TOO`).
+**Taken from the Ans Key annotator (`polymathlc/anskey`), which has kept its
+OpenAI key in Firestore since v1.66 so it survives an iPad clearing its
+storage.** What differs here is WHO reads it: Ans Key files it in the admin's
+own `adminSettings/{uid}` record, so it reaches the teacher's other devices and
+nobody else's. That is the right answer for an app only the teacher uses, and
+the wrong one here — a student's phone is exactly the device that has to be
+able to answer.
+
+Making the engine app-wide (above) moved every device onto ChatGPT and left the
+key where it was: in ONE browser's localStorage. So on a student's phone the
+server route is not deployed, the third route has no key, and the app falls
+straight back to the capped Gemini — with the chooser on the teacher's laptop
+saying ChatGPT, correctly, because on that laptop it is true.
+
+- **The key rides the SAME document the engine does** (`config/admin`), read by
+  the same live listener and written by the same `aiEngineSetShared` in ONE
+  write. A toggle and the thing that makes it work cannot move separately: a
+  centre switched to ChatGPT with no key anywhere is a centre switched to an
+  engine that cannot answer.
+- **`aiChatKey()` is the ONE resolver every ChatGPT call reads**, and it has
+  `aiPreferredEngine`'s shape exactly — the centre's first, this browser's
+  second. `getOpenAiKey()` still means *this browser's slot* and nothing else;
+  a `Bearer ' + getOpenAiKey()` left anywhere is a call that works on the
+  teacher's laptop and on no phone, which is the whole bug wearing its own fix.
+  `aiChatModel` / `aiChatImageModel` travel with it, or a student's phone runs
+  a model nobody chose.
+- **`_aiApplySharedCfg` is the ONE reader** of that document's AI fields, so
+  the live listener and the one-shot `getDoc` cannot drift into disagreeing
+  about what a field means.
+- **IT IS NEVER MIRRORED INTO `localStorage` on a student's device.** That slot
+  is shared with the Maths, English and Chinese portals (see **ONE KEY, ALL
+  FOUR PORTALS**), so writing the centre's key there would plant it in three
+  other apps' storage on every phone in the school and leave it there after the
+  teacher had cleared it. It lives in memory and **comes down at sign-out**
+  with the listener. The admin's own save still writes the localStorage copy,
+  and that is not a leftover: it is what saves them pasting the key into the
+  other three apps.
+- **KNOW WHAT SHARING IT COSTS, and the dialog says so before anything is
+  saved.** `config/admin` is readable by every signed-in account, so a key put
+  there is one any signed-in student can read out of their developer tools and
+  spend against. Only the admin can write it, and clearing the box sends
+  `deleteField()` so "forget it" forgets everywhere — but while it is set,
+  treat it as a key the school has a copy of. **The server route is still the
+  right answer** (`OPENAI_API_KEY` as a Firebase secret behind the `askOpenAi`
+  Cloud Function in the Maths repo, which hands a browser nothing); this is
+  what makes the toggle real until that is deployed.
+- **The chooser says WHOSE key answered** (`aiKeySource`). An app running on
+  the centre's key and one running on a key pasted into this laptop look
+  identical from the chooser, and only one of them is working on a phone.
+- **The dialog itself is now gated on `_isAdmin()`**, not merely hidden by its
+  `admin-only` nav item — the key box shows what the whole centre is running
+  on.
+- **A denied direct write THROWS when a key was in the same save.** The
+  `aiEngineConfig` callable is the fallback and carries the ENGINE only, so
+  swallowing that would tell the teacher the centre had moved to an engine no
+  device out there has a key for.
+- **`aiEngineChoicePreview` had to stand BOTH choices aside** — it was writing
+  only the localStorage slot, which `aiPreferredEngine` ignores the moment the
+  centre-wide setting has been read, so on every ordinary load the preview
+  showed no change at all.
+- Run **`node tools/ai-routes-tests.mjs`** after touching any of it.
+
 ### When nothing answers, say what everything said
 
 `AI_ROUTE_LABEL` and the tail of `_aiAsk`. The first error is kept as `cause`,
@@ -2255,7 +2321,14 @@ happened.
   permanent, and one that takes a route OFF the list leaves the app dead once
   the cap has been lifted. And the second error reported instead of the first
   tells the teacher "no key on this device" about a paper that hit a billing
-  cap.
+  cap. The **shared key** is in the same harness and fails the same way: a
+  `Bearer ' + getOpenAiKey()` left anywhere, or `aiEngineOrder` asking
+  `getOpenAiKey` instead of `aiChatKey`, is ChatGPT working on the teacher's
+  laptop and on no student's phone — which looks perfect to the one person who
+  would notice. The other direction is worse and just as quiet: the centre's
+  key written into `AI_ENGINE_STORE.key` plants it in the Maths, English and
+  Chinese portals' storage on every phone in the school, and leaves it there
+  after the teacher has cleared it.
 - After touching **📷 a question that came off a photograph** (`SCANNED_SOURCE`,
   `_vetIsScanned`, `SCANNED_CARD_BORDER`, `SCANNED_CARD_BADGE`, or the
   `restBorder` ranking in `renderVettingList`), run
