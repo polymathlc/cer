@@ -242,7 +242,7 @@ import { getFirestore, doc, getDoc, updateDoc }
 import { getStorage, ref as sRef, uploadString, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
-const APP_VERSION = 'v1.3.0';
+const APP_VERSION = 'v1.4.0';
 document.getElementById('verTag').textContent = APP_VERSION;
 
 /* The one collection this page reads, and the one folder it writes. Named
@@ -550,6 +550,24 @@ function optsHtml(it) {
   return '<ul class="qOpts">' + (it.options || []).map(o =>
     '<li>(' + esc(o.label) + ')&nbsp; ' + esc(o.text) + '</li>').join('') + '</ul>';
 }
+/* 🔢 THE CHOICES ARE A PICTURE.
+   A multiple-choice question whose four options are little drawings has no
+   options that can be written out — the Scan app holds four empty strings for
+   it — so it sends the four of them as ONE cropped picture, marked
+   `role: 'options'`, and the word list under the question must then not be
+   printed as well. Printed anyway it is four empty brackets under the picture
+   that already carries the choices, which reads as a fault in the sheet.
+
+   IT IS AN ORDINARY `image` BLOCK WEARING A ROLE, so a version of this page
+   that has never heard of picture options still draws it — the block is not
+   dropped, the question is still answerable, and only the tidying is lost.
+   That is why the flag is a field on a known type rather than a type of its
+   own, and it is the whole contract with `polymathlc/scan`: rename the word
+   there or here and the picture still prints, with four empty brackets back
+   underneath it and nothing anywhere to say why. */
+function hasPictureOptions(blocks) {
+  return (blocks || []).some(b => b && b.type === 'image' && b.role === 'options' && b.url);
+}
 function questionHtml(it) {
   const tier = tierOf(it);
   const mcq = (it.options || []).length > 0;
@@ -561,8 +579,9 @@ function questionHtml(it) {
        second copy inside the wording would be the choices offered twice. A
        typeset question brings none of the paper's own ruled space with it, so
        it gets the full working box. */
-    body = blocksHtml(it, questionBlocks(it));
-    opts = mcq ? optsHtml(it) : '';
+    const built = questionBlocks(it);
+    body = blocksHtml(it, built);
+    opts = (mcq && !hasPictureOptions(built)) ? optsHtml(it) : '';
     room = mcq
       ? '<div class="qLine">Answer: <b>&nbsp;</b></div>'
       : '<div class="qWork"></div><div class="qLine">Answer: <b>&nbsp;</b></div>';
