@@ -135,7 +135,7 @@ const imageAiReady = () => geminiImageModels.length > 0;
 // Pages sites served to every student's browser, so a key committed here
 // would be a key handed to the whole school; it lives in the admin's own
 // browser and is read from there.
-const AI_ENGINE_STORE = { engine: 'sq_ai_engine', key: 'sq_openai_key', model: 'sq_openai_model', imageModel: 'sq_openai_image_model' };
+const AI_ENGINE_STORE = { engine: 'sq_ai_engine', key: 'sq_openai_key', model: 'sq_openai_model', imageModel: 'sq_openai_image_model', kimiKey: 'sq_kimi_key', kimiModel: 'sq_kimi_model' };
 const OPENAI_DEFAULT_MODEL = 'gpt-5.6-sol';
 function getAiEngine() { try { return localStorage.getItem(AI_ENGINE_STORE.engine) || 'gemini'; } catch (e) { return 'gemini'; } }
 function getOpenAiKey() { try { return (localStorage.getItem(AI_ENGINE_STORE.key) || '').trim(); } catch (e) { return ''; } }
@@ -208,9 +208,15 @@ async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, js
      problems with three different fixes.
    ===================================================================== */
 const AI_DOWN_MS = 10 * 60 * 1000;
-const AI_ROUTE_LABEL = { gemini: 'Gemini', openai: 'ChatGPT (server key)', openaiKey: 'ChatGPT (key in this browser)' };
-const _aiDown = { gemini: 0, openai: 0, openaiKey: 0 };
-const _aiWhy = { gemini: '', openai: '', openaiKey: '', shared: '' };
+const AI_ROUTE_LABEL = { gemini: 'Gemini', openai: 'ChatGPT (server key)', openaiKey: 'ChatGPT (key in this browser)', kimi: 'Kimi (server key)', kimiKey: 'Kimi (key in this browser)' };
+/* The three ENGINES a teacher chooses between. Each is one or two ROUTES —
+   the server's key and, behind it, a key pasted into this browser. Choosing
+   an engine picks which is tried FIRST; the other two stay behind it, which
+   is what makes a capped supplier survivable rather than fatal. */
+const AI_ENGINES = ['gemini', 'openai', 'kimi'];
+const AI_ENGINE_NAME = { gemini: 'Gemini', openai: 'ChatGPT', kimi: 'Kimi' };
+const _aiDown = { gemini: 0, openai: 0, openaiKey: 0, kimi: 0, kimiKey: 0 };
+const _aiWhy = { gemini: '', openai: '', openaiKey: '', kimi: '', kimiKey: '', shared: '' };
 let aiLastCall = { engine: '', fellBack: false, error: '' };
 function aiEngineIsDown(e) { return (_aiDown[e] || 0) > Date.now(); }
 function _aiMarkDown(e, why) { _aiDown[e] = Date.now() + AI_DOWN_MS; _aiWhy[e] = why || ''; }
@@ -263,7 +269,7 @@ function aiEngineWatchShared() {
       // An unset field means nobody has chosen, which is Gemini — the default
       // every app already had, so a centre that never touches this is
       // unaffected.
-      _aiSharedEngine = (eng === 'gemini' || eng === 'openai') ? eng : 'gemini';
+      _aiSharedEngine = AI_ENGINES.includes(eng) ? eng : 'gemini';
       _aiSharedAt = Date.now();
       _aiWhy.shared = '';
       const ov = document.getElementById('aiEngineOverlay');
@@ -285,7 +291,7 @@ async function aiEngineLoadShared(force) {
   try {
     const snap = await getDoc(_aiCfgRef());
     const eng = snap.exists() && snap.data() ? snap.data().aiEngine : null;
-    _aiSharedEngine = (eng === 'gemini' || eng === 'openai') ? eng : 'gemini';
+    _aiSharedEngine = AI_ENGINES.includes(eng) ? eng : 'gemini';
     _aiSharedAt = Date.now();
     _aiWhy.shared = '';
     return _aiSharedEngine;
@@ -298,7 +304,7 @@ async function aiEngineLoadShared(force) {
     if (!_aiFns) _aiFns = getFunctions(app);
     const res = await httpsCallable(_aiFns, 'aiEngineConfig', { timeout: 20000 })({});
     const eng = res && res.data && res.data.engine;
-    if (eng === 'gemini' || eng === 'openai') {
+    if (AI_ENGINES.includes(eng)) {
       _aiSharedEngine = eng; _aiSharedAt = Date.now(); _aiWhy.shared = '';
     }
   } catch (e2) { /* the device preference carries on, and the chooser says so */ }
@@ -323,7 +329,7 @@ async function aiEngineSetShared(engine) {
     if (!_aiFns) _aiFns = getFunctions(app);
     const res = await httpsCallable(_aiFns, 'aiEngineConfig', { timeout: 20000 })({ set: engine });
     const eng = res && res.data && res.data.engine;
-    _aiSharedEngine = (eng === 'gemini' || eng === 'openai') ? eng : engine;
+    _aiSharedEngine = AI_ENGINES.includes(eng) ? eng : engine;
     _aiSharedAt = Date.now();
     return _aiSharedEngine;
   }
@@ -333,12 +339,18 @@ async function aiEngineSetShared(engine) {
    not something a page can know without asking, and one refused call marks it
    down rather than being paid for again on every batch. `sort` is stable, so
    the chooser's order survives underneath the down-marking. */
+function _aiRoutesFor(engine) {
+  if (engine === 'gemini') return geminiModel ? ['gemini'] : [];
+  if (engine === 'openai') return getOpenAiKey() ? ['openai', 'openaiKey'] : ['openai'];
+  if (engine === 'kimi') return getKimiKey() ? ['kimi', 'kimiKey'] : ['kimi'];
+  return [];
+}
 function aiEngineOrder() {
-  const chat = ['openai'];
-  if (getOpenAiKey()) chat.push('openaiKey');
-  const have = aiPreferredEngine() === 'openai'
-    ? chat.concat(geminiModel ? ['gemini'] : [])
-    : (geminiModel ? ['gemini'] : []).concat(chat);
+  const first = aiPreferredEngine();
+  const engines = AI_ENGINES.includes(first)
+    ? [first].concat(AI_ENGINES.filter(e => e !== first))
+    : AI_ENGINES.slice();
+  const have = engines.reduce((all, e) => all.concat(_aiRoutesFor(e)), []);
   return have.sort((a, b) => (aiEngineIsDown(a) ? 1 : 0) - (aiEngineIsDown(b) ? 1 : 0));
 }
 
@@ -361,9 +373,129 @@ async function askOpenAiServer(prompt, media, { maxOutputTokens = 512, temperatu
   return text.trim();
 }
 
+/* ── 🌙 KIMI (Moonshot AI) — THE THIRD ENGINE ─────────────────────────────
+   Gemini and ChatGPT are two suppliers, so "whichever will answer" has never
+   been more than one deep. Kimi is a third account, on a third bill, with its
+   own cap and its own outage — which is the whole point of it: the morning
+   the Gemini project is capped AND the OpenAI account is out of credit is a
+   morning that happens, and until now it left every app in the family dead at
+   once.
+
+   It speaks the OpenAI chat-completions dialect, so the request is ChatGPT's
+   with a different host and a different key. What is NOT the same is what it
+   will take: a PDF is an OpenAI `file` part and Moonshot has no such part, so
+   a PDF is REFUSED HERE, by name, rather than being quietly dropped from the
+   request and answered about fluently. The route then falls to the next one
+   in the order, which is what the loop is for.
+
+   THE MODEL IS A FIELD, NOT A CONSTANT, and 🔄 Load models fills it from the
+   account's own /v1/models. Moonshot renames its flagship with every release
+   (kimi-k2-…, kimi-k3-…), so an id hard-coded on the day this shipped is a
+   404 on every call a few months later — with nothing on screen to say the id
+   is merely out of date. `_kimiModelNote` is what says it. */
+const KIMI_API_BASE = 'https://api.moonshot.ai/v1';
+const KIMI_DEFAULT_MODEL = 'kimi-k3';
+function getKimiKey() { try { return (localStorage.getItem(AI_ENGINE_STORE.kimiKey) || '').trim(); } catch (e) { return ''; } }
+function getKimiModel() { try { return (localStorage.getItem(AI_ENGINE_STORE.kimiModel) || '').trim() || KIMI_DEFAULT_MODEL; } catch (e) { return KIMI_DEFAULT_MODEL; } }
+
+/* A key saved in THIS browser — the fallback route, exactly as ChatGPT's is.
+   The real key belongs on the server (below), because a key pasted per device
+   rescues the teacher's laptop and no student's phone. */
+async function askKimiDirect(prompt, media, { maxOutputTokens = 512, temperature, json = false } = {}) {
+  const key = getKimiKey();
+  if (!key) throw new Error('No Kimi key is saved in this browser.');
+  const model = getKimiModel();
+  const text = String(prompt == null ? '' : prompt);
+  const content = [{ type: 'text', text }];
+  (media || []).forEach(m => {
+    if (!m || !m.data) return;
+    // Named, never dropped: a request that silently lost its pages comes back
+    // fluent and about nothing at all.
+    if (!/^image\//.test(m.mimeType || '')) throw new Error('Kimi cannot read a ' + (m.mimeType || 'file') + ' attachment — that one needs Gemini or ChatGPT.');
+    content.push({ type: 'image_url', image_url: { url: 'data:' + m.mimeType + ';base64,' + m.data } });
+  });
+  const body = { model, messages: [{ role: 'user', content }], max_tokens: Math.max(1024, maxOutputTokens) };
+  if (json) {
+    body.response_format = { type: 'json_object' };
+    // Strict JSON mode is refused unless the word appears in the messages, so
+    // a prompt that never says it would 400 rather than answer.
+    if (!/json/i.test(text)) content.push({ type: 'text', text: 'Reply with JSON only.' });
+  }
+  if (temperature !== undefined) body.temperature = temperature;
+  const res = await fetch(KIMI_API_BASE + '/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    let detail = '';
+    try { const ej = await res.json(); detail = ej && ej.error ? (ej.error.message || '') : ''; } catch (e) { /* non-JSON error body */ }
+    throw new Error('Kimi API error ' + res.status + (detail ? ': ' + detail : ''));
+  }
+  const data = await res.json();
+  const out = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  if (typeof out !== 'string' || !out.trim()) throw new Error('Kimi returned an unexpected response shape.');
+  return out.trim();
+}
+
+/* The SERVER route — the one that answers on a device nobody has ever typed a
+   key into. `askKimi` is the callable in `polymathlc/math/functions`, which
+   holds MOONSHOT_API_KEY as a Firebase secret and enforces the sign-in, the
+   size caps and a daily quota.
+
+   It is handed the model id, which `askOpenAi` deliberately does not allow —
+   because Moonshot's flagship is renamed every release and a teacher cannot
+   redeploy a Cloud Function to follow it. The function only accepts a
+   Moonshot-shaped id, so this is not a client naming somebody else's
+   expensive model; it is a client naming which Kimi. */
+async function askKimiServer(prompt, media, { maxOutputTokens = 512, temperature, json = false } = {}) {
+  if (!_aiFns) _aiFns = getFunctions(app);
+  const call = httpsCallable(_aiFns, 'askKimi', { timeout: 240000 });
+  const res = await call({
+    prompt: String(prompt == null ? '' : prompt),
+    media: (media || []).filter(m => m && m.data).map(m => ({ mimeType: m.mimeType || 'image/jpeg', data: m.data })),
+    json: !!json,
+    maxOutputTokens,
+    temperature,
+    model: getKimiModel()
+  });
+  const text = res && res.data && res.data.text;
+  if (typeof text !== 'string' || !text.trim()) throw new Error('The Kimi server route returned an unexpected response shape.');
+  return text.trim();
+}
+
+/* What the account itself says it will answer to. One call, admin-only, and
+   it is the honest answer to "which id is the newest one" — far better than a
+   list of guesses typed into this file that goes stale on Moonshot's
+   schedule rather than ours. */
+async function kimiListModels(key) {
+  const k = (key || getKimiKey() || '').trim();
+  if (!k) throw new Error('Paste a Kimi key first — the list is read from the account it belongs to.');
+  const res = await fetch(KIMI_API_BASE + '/models', { headers: { 'Authorization': 'Bearer ' + k } });
+  if (!res.ok) {
+    let detail = '';
+    try { const ej = await res.json(); detail = ej && ej.error ? (ej.error.message || '') : ''; } catch (e) { /* non-JSON error body */ }
+    throw new Error('Kimi API error ' + res.status + (detail ? ': ' + detail : ''));
+  }
+  const data = await res.json();
+  const ids = (((data && data.data) || []).map(m => m && m.id).filter(Boolean)).sort();
+  if (!ids.length) throw new Error('That account listed no models.');
+  return ids;
+}
+
+/* The commonest way this route dies is the dullest: the id in the box is a
+   release behind. Unsaid, it reads as "Kimi is broken". */
+function _kimiModelNote(why) {
+  return /model|not_?found|404/i.test(String(why || ''))
+    ? ' The model id "' + getKimiModel() + '" may simply be out of date — open the AI Engine dialog and press 🔄 Load models.'
+    : '';
+}
+
 function _aiRun(engine, prompt, media, opts) {
   if (engine === 'openai') return askOpenAiServer(prompt, media, opts);
   if (engine === 'openaiKey') return askOpenAI(prompt, media, opts);
+  if (engine === 'kimi') return askKimiServer(prompt, media, opts);
+  if (engine === 'kimiKey') return askKimiDirect(prompt, media, opts);
   return askGeminiDirect(prompt, media, opts);
 }
 
@@ -399,7 +531,15 @@ async function _aiAsk(prompt, media, opts, order) {
    key saved in this browser. Never Gemini, so a caller that means "the other
    engine" really gets the other engine. */
 async function askChatGpt(prompt, media, opts) {
-  return _aiAsk(prompt, media, opts, aiEngineOrder().filter(e => e !== 'gemini'));
+  return _aiAsk(prompt, media, opts, aiEngineOrder().filter(e => e === 'openai' || e === 'openaiKey'));
+}
+
+/* …and the same for Kimi. Both are filtered to their OWN routes rather than
+   to "not Gemini", because the answer-key cross-check asks for a named second
+   opinion: a ChatGPT column quietly answered by Kimi is two engines agreeing
+   in the report and one engine agreeing with itself in fact. */
+async function askKimi(prompt, media, opts) {
+  return _aiAsk(prompt, media, opts, aiEngineOrder().filter(e => e === 'kimi' || e === 'kimiKey'));
 }
 
 /* The raw Gemini call, factored out so the loop above has one thing to run.
@@ -432,8 +572,14 @@ function aiRouteReport() {
       ? 'The server key is not switched on yet — OPENAI_API_KEY has not been set, or the functions have not been deployed. Until then ChatGPT needs a key in this browser. (' + _aiWhy.openai + ')'
       : 'The server route refused a moment ago and is being skipped for a few minutes: ' + _aiWhy.openai);
   }
+  if (aiEngineIsDown('kimi') && _aiWhy.kimi) {
+    notes.push(/not-?found|failed-?precondition|not configured|internal error/i.test(_aiWhy.kimi)
+      ? 'Kimi\'s server key is not switched on yet — MOONSHOT_API_KEY has not been set, or the functions have not been deployed. Until then Kimi needs a key in this browser. (' + _aiWhy.kimi + ')'
+      : 'The Kimi server route refused a moment ago and is being skipped for a few minutes: ' + _aiWhy.kimi + _kimiModelNote(_aiWhy.kimi));
+  }
   if (aiEngineIsDown('gemini') && _aiWhy.gemini) notes.push('Gemini refused a moment ago and is being skipped for a few minutes: ' + _aiWhy.gemini);
-  if (aiEngineIsDown('openaiKey') && _aiWhy.openaiKey) notes.push('The key in this browser was refused: ' + _aiWhy.openaiKey);
+  if (aiEngineIsDown('openaiKey') && _aiWhy.openaiKey) notes.push('The ChatGPT key in this browser was refused: ' + _aiWhy.openaiKey);
+  if (aiEngineIsDown('kimiKey') && _aiWhy.kimiKey) notes.push('The Kimi key in this browser was refused: ' + _aiWhy.kimiKey + _kimiModelNote(_aiWhy.kimiKey));
   if (aiLastCall.engine) {
     notes.push('The last answer came from ' + (label[aiLastCall.engine] || aiLastCall.engine) +
       (aiLastCall.fellBack ? ', after an earlier route refused.' : '.'));
@@ -644,7 +790,7 @@ function aiEngineChoicePreview(v) {
   if (!el) return;
   const was = getAiEngine();
   try {
-    localStorage.setItem(AI_ENGINE_STORE.engine, v === 'openai' ? 'openai' : 'gemini');
+    localStorage.setItem(AI_ENGINE_STORE.engine, AI_ENGINES.includes(v) ? v : 'gemini');
     renderAiEngineStatus();
   } finally {
     try { localStorage.setItem(AI_ENGINE_STORE.engine, was); } catch (e) { /* nothing to put back */ }
@@ -671,6 +817,10 @@ function openAiEngineSettings() {
   const imgSel = document.getElementById('aiEngineImageModel');
   if (imgSel) { imgSel.value = getOpenAiImageModel(); if (!imgSel.value) imgSel.value = OPENAI_IMAGE_DEFAULT_MODEL; }
   document.getElementById('aiEngineKey').value = getOpenAiKey();
+  const kModelEl = document.getElementById('aiEngineKimiModel');
+  if (kModelEl) kModelEl.value = getKimiModel();
+  const kKeyEl = document.getElementById('aiEngineKimiKey');
+  if (kKeyEl) kKeyEl.value = getKimiKey();
   renderAiEngineStatus();
   document.getElementById('aiEngineOverlay').classList.add('active');
   aiEngineLoadShared(true).then(renderAiEngineStatus).catch(() => {});
@@ -690,6 +840,25 @@ function renderAiEngineStatus() {
   el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">Tried in this order</div>${order}${notes}`;
 }
 
+/* The account's own list, in one call. A hard-coded list of ids in this file
+   goes stale on Moonshot's release schedule rather than ours, and a stale id
+   is a 404 on every call with nothing on screen to say why. */
+async function kimiLoadModelList() {
+  const btn = document.getElementById('aiEngineKimiLoad');
+  const dl = document.getElementById('aiEngineKimiModels');
+  const keyEl = document.getElementById('aiEngineKimiKey');
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+  try {
+    const ids = await kimiListModels((keyEl && keyEl.value) || '');
+    if (dl) dl.innerHTML = ids.map(id => '<option value="' + escapeHtml(id) + '"></option>').join('');
+    showToast(ids.length + ' Kimi models loaded — open the model box and pick one', 'success');
+  } catch (e) {
+    showToast('Could not read Kimi\'s model list: ' + ((e && e.message) || e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Load models'; }
+  }
+}
+
 function closeAiEngineSettings() {
   document.getElementById('aiEngineOverlay').classList.remove('active');
 }
@@ -707,9 +876,7 @@ async function saveAiEngineSettings() {
   if (_isAdmin()) {
     try {
       await aiEngineSetShared(eng);
-      showToast(eng === 'openai'
-        ? 'ChatGPT is now the first engine for everyone.'
-        : 'Gemini is now the first engine for everyone.', 'success');
+      showToast((AI_ENGINE_NAME[eng] || 'Gemini') + ' is now the first engine for everyone.', 'success');
     } catch (e) {
       const msg = String((e && e.message) || e || '');
       showToast('Saved on this device only — the centre-wide setting could not be written: ' + msg, 'error');
@@ -719,17 +886,25 @@ async function saveAiEngineSettings() {
   const model = document.getElementById('aiEngineModel').value || OPENAI_DEFAULT_MODEL;
   const imgSelEl = document.getElementById('aiEngineImageModel');
   const imageModel = (imgSelEl && imgSelEl.value) || OPENAI_IMAGE_DEFAULT_MODEL;
+  const kimiKeyEl = document.getElementById('aiEngineKimiKey');
+  const kimiModelEl = document.getElementById('aiEngineKimiModel');
+  const kimiKey = ((kimiKeyEl && kimiKeyEl.value) || '').trim();
+  const kimiModel = ((kimiModelEl && kimiModelEl.value) || '').trim() || KIMI_DEFAULT_MODEL;
   try {
     localStorage.setItem(AI_ENGINE_STORE.engine, eng);
     localStorage.setItem(AI_ENGINE_STORE.model, model);
     localStorage.setItem(AI_ENGINE_STORE.imageModel, imageModel);
     if (key) localStorage.setItem(AI_ENGINE_STORE.key, key);
     else localStorage.removeItem(AI_ENGINE_STORE.key);
+    localStorage.setItem(AI_ENGINE_STORE.kimiModel, kimiModel);
+    if (kimiKey) localStorage.setItem(AI_ENGINE_STORE.kimiKey, kimiKey);
+    else localStorage.removeItem(AI_ENGINE_STORE.kimiKey);
   } catch (e) { showToast('Could not save: ' + (e && e.message ? e.message : e), 'error'); return; }
   closeAiEngineSettings();
   // Saying "all four subjects" is what tells the admin they do NOT have to go
   // and do this again in Maths, English and Chinese.
-  showToast(eng === 'openai' ? 'AI engine set to ChatGPT (' + model + ') — saved on this device, for all four subjects' : 'AI engine set to Gemini — for all four subjects', 'success');
+  const what = eng === 'openai' ? 'ChatGPT (' + model + ')' : eng === 'kimi' ? 'Kimi (' + kimiModel + ')' : 'Gemini';
+  showToast('AI engine set to ' + what + ' — for all four subjects', 'success');
 }
 
 function openMarkingSettings() {
@@ -2319,7 +2494,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.321.0';
+const APP_VERSION = 'v1.322.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -61761,6 +61936,7 @@ window.closeAiEngineSettings = closeAiEngineSettings;
 window.aiEngineChoicePreview = aiEngineChoicePreview;
 window.aiEngineStopShared = aiEngineStopShared;
 window.saveAiEngineSettings = saveAiEngineSettings;
+window.kimiLoadModelList = kimiLoadModelList;
 window.closeMarkingSettings = closeMarkingSettings;
 window.saveMarkingSettings = saveMarkingSettings;
 window.openGenSettings = openGenSettings;

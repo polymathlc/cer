@@ -37,14 +37,24 @@ function section(from, to) {
 const block = section('const AI_DOWN_MS =', 'function aiRouteReport(');
 
 const api = new Function(`
-var _pref = 'gemini', _key = '', _gemini = true;
+var _pref = 'gemini', _key = '', _gemini = true, _kimiKey = '', _kimiOk = true;
 function getAiEngine() { return _pref; }
 function getOpenAiKey() { return _key; }
+var localStorage = {
+  getItem: function (k) { return /kimi_key/.test(k) ? _kimiKey : ''; },
+  setItem: function () {}, removeItem: function () {}
+};
+var AI_ENGINE_STORE = { engine: 'x_ai_engine', key: 'x_openai_key', kimiKey: 'x_kimi_key', kimiModel: 'x_kimi_model' };
+async function fetch(url) {
+  if (!_kimiOk) return { ok: false, status: 404, json: async () => ({ error: { message: 'model not found' } }) };
+  if (String(url).indexOf('/models') >= 0) return { ok: true, json: async () => ({ data: [{ id: 'kimi-k3' }, { id: 'kimi-k2-thinking' }] }) };
+  return { ok: true, json: async () => ({ choices: [{ message: { content: 'kimi browser said so' } }] }) };
+}
 var geminiModel = { generateContent: () => ({ response: { text: () => 'gemini said so' } }) };
 Object.defineProperty(globalThis, 'x', { value: 1, configurable: true });
 var app = {}, AI_THINK_MIN = 'low';
 function getFunctions() { return {}; }
-function httpsCallable() { return async () => ({ data: { text: 'server said so' } }); }
+function httpsCallable(_f, name) { return async () => ({ data: { text: name === 'askKimi' ? 'kimi server said so' : 'server said so' } }); }
 async function askOpenAI() { return 'device key said so'; }
 var console = { warn: function () {} };
 var CONFIG_COL = 'config';
@@ -60,9 +70,12 @@ var window = {};
 return {
   set pref(v) { _pref = v; },
   set key(v) { _key = v; },
+  set kimiKey(v) { _kimiKey = v; },
+  set kimiOk(v) { _kimiOk = v; },
   set gemini(v) { geminiModel = v ? { generateContent: () => ({ response: { text: () => 'gemini said so' } }) } : null; },
   get last() { return aiLastCall; },
-  AI_DOWN_MS, aiEngineOrder, aiEngineIsDown, _aiAsk, _aiRun, askChatGpt, askOpenAiServer
+  AI_DOWN_MS, aiEngineOrder, aiEngineIsDown, _aiAsk, _aiRun, askChatGpt, askKimi, askOpenAiServer,
+  askKimiDirect, askKimiServer, kimiListModels, getKimiModel, KIMI_DEFAULT_MODEL
 };
 `)();
 
@@ -74,24 +87,44 @@ function ok(name, cond, extra) {
 }
 
 /* ---------- the order ---------- */
-api.pref = 'gemini'; api.key = ''; api.gemini = true;
-ok('the server route is offered with no device key at all',
-   api.aiEngineOrder().join() === 'gemini,openai', api.aiEngineOrder().join());
+api.pref = 'gemini'; api.key = ''; api.kimiKey = ''; api.gemini = true;
+ok('every server route is offered with no device key at all',
+   api.aiEngineOrder().join() === 'gemini,openai,kimi', api.aiEngineOrder().join());
 api.key = 'sk-x';
 ok('a device key sits BEHIND the server, never in front of it',
-   api.aiEngineOrder().join() === 'gemini,openai,openaiKey', api.aiEngineOrder().join());
+   api.aiEngineOrder().join() === 'gemini,openai,openaiKey,kimi', api.aiEngineOrder().join());
+api.kimiKey = 'sk-k';
+ok('…and the same for Kimi',
+   api.aiEngineOrder().join() === 'gemini,openai,openaiKey,kimi,kimiKey', api.aiEngineOrder().join());
+api.kimiKey = '';
 
 /* Choosing an engine picks which is tried FIRST. It has never meant, and must
    not mean, that the other becomes unavailable. */
 api.pref = 'openai';
-ok('choosing ChatGPT puts it first and keeps Gemini behind it',
-   api.aiEngineOrder().join() === 'openai,openaiKey,gemini', api.aiEngineOrder().join());
+ok('choosing ChatGPT puts it first and keeps the others behind it',
+   api.aiEngineOrder().join() === 'openai,openaiKey,gemini,kimi', api.aiEngineOrder().join());
 api.key = '';
 ok('choosing ChatGPT with no device key still works — the server has one',
-   api.aiEngineOrder().join() === 'openai,gemini', api.aiEngineOrder().join());
+   api.aiEngineOrder().join() === 'openai,gemini,kimi', api.aiEngineOrder().join());
+
+/* THE THIRD ENGINE IS THE POINT OF IT. Gemini and ChatGPT are two suppliers
+   on two bills; the morning BOTH are out is the morning this exists for, so
+   Kimi has to be reachable as a first choice and reachable as a last resort. */
+api.pref = 'kimi'; api.kimiKey = 'sk-k';
+ok('choosing Kimi puts it first and keeps the others behind it',
+   api.aiEngineOrder().join() === 'kimi,kimiKey,gemini,openai', api.aiEngineOrder().join());
+api.kimiKey = '';
+ok('choosing Kimi with no device key still works — the server has one',
+   api.aiEngineOrder().join() === 'kimi,gemini,openai', api.aiEngineOrder().join());
+/* An engine nobody has heard of must not empty the list: a stale word in the
+   shared setting would otherwise take the AI off every device at once. */
+api.pref = 'nosuchengine';
+ok('an unknown preference still leaves every route on the list',
+   api.aiEngineOrder().join() === 'gemini,openai,kimi', api.aiEngineOrder().join());
+
 api.pref = 'gemini'; api.gemini = false;
 ok('a Firebase project that would not start still has routes',
-   api.aiEngineOrder().join() === 'openai', api.aiEngineOrder().join());
+   api.aiEngineOrder().join() === 'openai,kimi', api.aiEngineOrder().join());
 api.gemini = true;
 
 /* ---------- the failover ---------- */
@@ -111,6 +144,26 @@ async function run() {
      (await api._aiRun('openaiKey', 'p', null, {})) === 'device key said so');
   ok('…and anything else to Gemini',
      (await api._aiRun('gemini', 'p', null, {})) === 'gemini said so');
+  api.kimiKey = 'sk-k';
+  ok('…`kimi` to the SERVER',
+     (await api._aiRun('kimi', 'p', null, {})) === 'kimi server said so');
+  ok('…and `kimiKey` to the Kimi key in this browser',
+     (await api._aiRun('kimiKey', 'p', null, {})) === 'kimi browser said so');
+
+  /* A PDF is an OpenAI `file` part and Moonshot has no such part. It has to
+     be REFUSED by name: a request that silently lost its pages comes back
+     fluent and about nothing at all, which is the one failure here that
+     reads as a working answer. */
+  let pdfErr = null;
+  try { await api.askKimiDirect('p', [{ mimeType: 'application/pdf', data: 'x' }], {}); } catch (e) { pdfErr = e; }
+  ok('Kimi refuses a PDF by name rather than dropping it', pdfErr && /cannot read/i.test(String(pdfErr.message)));
+  ok('…and an image goes through',
+     (await api.askKimiDirect('p', [{ mimeType: 'image/png', data: 'x' }], {})) === 'kimi browser said so');
+  api.kimiKey = '';
+  let noKey = null;
+  try { await api.askKimiDirect('p', null, {}); } catch (e) { noKey = e; }
+  ok('…and no key at all refuses rather than calling with an empty one', !!noKey);
+  api.kimiKey = 'sk-k';
 
   /* A capped Gemini must fall FORWARD to ChatGPT. This is the direction the
      old code did not have, and it is the one that actually fails. */
@@ -126,7 +179,7 @@ async function run() {
      app that refuses on a stale note is worse than one that spends a call. */
   api.gemini = true; api.pref = 'gemini';
   ok('a refused route stays on the list, at the back',
-     api.aiEngineOrder().join() === 'openai,openaiKey,gemini', api.aiEngineOrder().join());
+     api.aiEngineOrder().join() === 'openai,openaiKey,kimi,kimiKey,gemini', api.aiEngineOrder().join());
 
   out = await api._aiAsk('p', null, {}, ['gemini']);
   ok('an answer clears the mark', out === 'gemini said so' && !api.aiEngineIsDown('gemini'));
@@ -147,17 +200,45 @@ async function run() {
 
   /* askChatGpt means the OTHER engine, so a caller asking for a second
      opinion cannot be handed the same one twice. */
-  api.gemini = true; api.pref = 'gemini'; api.key = 'sk-x';
+  api.gemini = true; api.pref = 'gemini'; api.key = 'sk-x'; api.kimiKey = 'sk-k';
   ok('askChatGpt never falls back to Gemini',
-     !api.aiEngineOrder().filter(e => e !== 'gemini').includes('gemini'));
+     !api.aiEngineOrder().filter(e => e === 'openai' || e === 'openaiKey').includes('gemini'));
   ok('…and it still has both ChatGPT routes',
-     api.aiEngineOrder().filter(e => e !== 'gemini').join() === 'openai,openaiKey');
+     api.aiEngineOrder().filter(e => e === 'openai' || e === 'openaiKey').join() === 'openai,openaiKey');
+  /* …and it must not reach KIMI either. `filter(e => e !== 'gemini')` was
+     right while there were two engines and is silently wrong with three: the
+     answer-key cross-check asks for a NAMED second opinion, so a ChatGPT
+     column answered by Kimi is two engines agreeing in the report and one
+     engine agreeing with itself in fact. */
+  ok('…and never Kimi, which would make the cross-check compare the wrong pair',
+     !api.aiEngineOrder().filter(e => e === 'openai' || e === 'openaiKey').some(e => /^kimi/.test(e)));
+  ok('askKimi is the mirror of it — Kimi\'s own routes and nothing else',
+     api.aiEngineOrder().filter(e => e === 'kimi' || e === 'kimiKey').join() === 'kimi,kimiKey');
+
+  /* The account's own model list, so "which id is current" is answered by
+     Moonshot rather than by a constant in this file that goes stale. */
+  ok('the model list is read from the account', (await api.kimiListModels('sk-k')).join() === 'kimi-k2-thinking,kimi-k3');
+  let listErr = null;
+  api.kimiKey = '';
+  try { await api.kimiListModels(''); } catch (e) { listErr = e; }
+  api.kimiKey = 'sk-k';
+  ok('…and it says a key is needed rather than calling with none', listErr && /key/i.test(String(listErr.message)));
 }
 
 await run();
 
 /* ---------- the wiring, in source ---------- */
 ok('the callable is the function the Maths repo deploys', /httpsCallable\(_aiFns, 'askOpenAi'/.test(src));
+ok('…and Kimi has one of its own', /httpsCallable\(_aiFns, 'askKimi'/.test(src));
+/* Moonshot renames its flagship with every release, so the id is a FIELD and
+   the account's own list fills it. An id hard-coded here is a 404 on every
+   call a few months from now, with nothing on screen to say it is merely out
+   of date — which is what `_kimiModelNote` is for. */
+ok('the Kimi model is a field, not a constant nobody can change', /function getKimiModel\(/.test(src) && /id="aiEngineKimiModel"/.test(html));
+ok('…filled from the account itself', /function kimiListModels\(/.test(src) && /kimiLoadModelList\(\)/.test(html));
+ok('…and a stale id is NAMED rather than read as "Kimi is broken"', /function _kimiModelNote\(/.test(src) && /may simply be out of date/.test(src));
+ok('a Kimi server key that is not set up yet says exactly that', /MOONSHOT_API_KEY has not been set/.test(src));
+ok('the third engine is offered in the dialog', /value="kimi"/.test(html) && /aiEngineChoicePreview\('kimi'\)/.test(html));
 ok('the pages travel with it — a route that dropped them would answer about nothing',
    /media: \(media \|\| \[\]\)\.filter\(m => m && m\.data\)/.test(src));
 ok('both doors go through the one loop',
@@ -168,7 +249,7 @@ ok('choosing ChatGPT no longer demands a key',
 ok('the app is ready because a route always exists', /window\.__aiReady = \(\) => true;/.test(src));
 /* The key is never in the repo: these are public static sites served to every
    student's browser. */
-ok('no OpenAI key is anywhere in the source', !/\bsk-[A-Za-z0-9_-]{20,}/.test(src + html));
+ok('no API key of any kind is anywhere in the source', !/\bsk-[A-Za-z0-9_-]{20,}/.test(src + html));
 
 /* The chooser has to SAY what is happening — an app quietly running on its
    second route looks exactly like one running on its first. */
@@ -186,7 +267,11 @@ ok('the key field says it is optional and why', /You should not normally need th
 /* A device-local engine choice is the bug wearing a feature's clothes: the
    teacher switches to ChatGPT on their laptop, watches it work, and every
    student stays on the capped Gemini with the screen looking exactly right. */
-ok('the order follows the shared choice', /const have = aiPreferredEngine\(\) === 'openai'/.test(src));
+ok('the order follows the shared choice', /const first = aiPreferredEngine\(\);/.test(src));
+/* An engine nobody has heard of must never empty the list — a stale word in
+   the shared setting would take the AI off every device at once. */
+ok('…and an unknown one still leaves every route on it',
+   /AI_ENGINES\.includes\(first\)\s*\n?\s*\? \[first\]\.concat/.test(src));
 ok('…falling back to this device until the server answers',
    /function aiPreferredEngine\(\) \{\s*\n\s*return _aiSharedEngine \|\| getAiEngine\(\);/.test(src));
 /* IT LIVES ON A DOCUMENT EVERY SIGNED-IN DEVICE ALREADY READS — this app's
@@ -208,7 +293,9 @@ ok('it is a live listener', /_aiCfgStop = onSnapshot\(_aiCfgRef\(\)/.test(src));
 ok('…that comes down with the account, or one account governs the next',
    /async function handleLogout\(\) \{[\s\S]{0,220}aiEngineStopShared\(\);/.test(src));
 ok('…and an unset field means Gemini, so a centre that never touches it is unaffected',
-   /\(eng === 'gemini' \|\| eng === 'openai'\) \? eng : 'gemini'/.test(src));
+   /AI_ENGINES\.includes\(eng\) \? eng : 'gemini'/.test(src));
+ok('…and the shared setting knows all three engines',
+   /const AI_ENGINES = \['gemini', 'openai', 'kimi'\];/.test(src));
 ok('…at sign-in, from the one function every role comes through',
    /function configureSidebarForRole\(role\) \{[\s\S]{0,400}aiEngineInit\(\);/.test(src));
 ok('…and refreshed when the chooser opens', /aiEngineLoadShared\(true\)\.then\(renderAiEngineStatus\)/.test(src));

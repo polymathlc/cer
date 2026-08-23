@@ -2239,6 +2239,69 @@ happened.
   key of its own — which is the whole reason that report is worth running, and
   `akcEngines` therefore offers it whether or not a key is saved.
 
+### 🌙 Kimi — the THIRD engine, and why two was not enough
+
+`AI_ENGINES` / `_aiRoutesFor` / `askKimiDirect` / `askKimiServer` / `askKimi` /
+`kimiListModels` / `_kimiModelNote` / `KIMI_DEFAULT_MODEL` (in `app.js`, search
+`KIMI (Moonshot AI)`), plus the third radio, the model box and the key box in
+the AI Engine dialog. **All the portals carry the same block — keep them in
+step.**
+
+Gemini and ChatGPT are two suppliers on two bills, so "whichever will answer"
+has never been more than one deep. The morning the Firebase project is capped
+**and** the OpenAI account is out of credit is a morning that happens, and it
+used to leave every app in the family dead at once. Kimi is a third company,
+a third account and a third cap.
+
+- **An ENGINE is one or two ROUTES, and that shape is now the whole order.**
+  `AI_ENGINES` is the three a teacher chooses between; `_aiRoutesFor` turns
+  each into the routes it actually has — the server's key, and behind it a key
+  pasted into this browser. The chosen engine's routes go first and **the other
+  two stay behind them**, which is what makes a capped supplier survivable
+  rather than fatal. An engine name nobody recognises still yields every route
+  rather than an empty list: a stale word in the shared setting would otherwise
+  take the AI off every device at once.
+- **`askChatGpt` had to stop meaning "not Gemini".** It was
+  `filter(e => e !== 'gemini')`, which was right with two engines and is
+  silently wrong with three — 🔍 Answer key cross-check asks for a **named**
+  second opinion, so a ChatGPT column quietly answered by Kimi is two engines
+  agreeing in the report and one engine agreeing with itself in fact. Both
+  `askChatGpt` and `askKimi` are filtered to their OWN routes now.
+- **A PDF is REFUSED BY NAME, never dropped.** A PDF is an OpenAI `file` part
+  and Moonshot has no such part, so `askKimiDirect` throws rather than sending
+  a request without its pages — which would come back fluent and about nothing
+  at all. The loop then falls to a route that can read it, which is the whole
+  point of the loop.
+- **THE MODEL IS A FIELD, NOT A CONSTANT**, and this is the failure mode to
+  design for: Moonshot renames its flagship with every release (`kimi-k2-…`,
+  `kimi-k3-…`), so an id hard-coded on the day this shipped is a 404 on every
+  call a few months later — and a 404 on every call reads as "Kimi is broken"
+  rather than "the id is a release out of date". 🔄 **Load models**
+  (`kimiListModels`) asks the account itself, and **`_kimiModelNote` says it in
+  words** in the chooser's status panel. `KIMI_DEFAULT_MODEL` is only what an
+  admin who has never opened the box gets.
+- **The server route is what makes the choice real**, exactly as it is for
+  ChatGPT: `askKimi` is a callable in `polymathlc/math/functions` holding
+  `MOONSHOT_API_KEY` as a Firebase secret, so a student's phone uses it with
+  nothing set up on it. **It needs one deploy** —
+  `firebase functions:secrets:set MOONSHOT_API_KEY` and a functions deploy —
+  and until then it returns `failed-precondition` and the chooser says *the
+  server key is not switched on yet* rather than *AI error*.
+  - It is the ONE callable in that file that takes the **model** from the
+    client, because a teacher cannot redeploy a Cloud Function to follow
+    Moonshot's renames. `KIMI_MODEL_RE` is what keeps that from becoming "a
+    client naming an expensive model on the centre's bill": it can only ever
+    be a Moonshot id, and anything else falls back to the server's own.
+  - Its throttle counts on **its own fields** (`kimiDay` / `kimiCount` /
+    `lastKimiAt`). Sharing ChatGPT's would mean a capped ChatGPT day silently
+    closing Kimi too — on exactly the day Kimi is the one engine still
+    answering.
+- **The key is NEVER in the repo.** These are public static sites served to
+  every student's browser. The harness fails on an `sk-`-shaped string in the
+  source, and that check now covers every engine's key rather than OpenAI's.
+- Run **`node tools/ai-routes-tests.mjs`** after touching any of it.
+
+
 ## House rules
 - After touching **the AI routes** (`aiEngineOrder`, `askOpenAiServer`,
   `askChatGpt`, `_aiRun`, `_aiAsk`, `askGeminiDirect`, `AI_DOWN_MS`, `_aiWhy`,
@@ -2255,7 +2318,9 @@ happened.
   permanent, and one that takes a route OFF the list leaves the app dead once
   the cap has been lifted. And the second error reported instead of the first
   tells the teacher "no key on this device" about a paper that hit a billing
-  cap.
+  cap. And `askChatGpt` filtered to "not Gemini" rather than to ChatGPT's own
+  routes puts Kimi in the cross-check's ChatGPT column, which reads as two
+  engines agreeing and is one engine agreeing with itself.
 - After touching **📷 a question that came off a photograph** (`SCANNED_SOURCE`,
   `_vetIsScanned`, `SCANNED_CARD_BORDER`, `SCANNED_CARD_BADGE`, or the
   `restBorder` ranking in `renderVettingList`), run
