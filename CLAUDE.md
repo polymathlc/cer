@@ -245,6 +245,34 @@ Guidance for Claude when working in this repo.
     appear anywhere in this app's own content. The Scan app's collections are namespaced away from
     this one's (`scanMistakes`, never `mistakes`, which is THIS app's own log under the same uid),
     and this page keeps that contract from the other side.
+  - **BEST OF THREE TIERS, and `tierOf(it)` is the ONE place a question's is decided** (scan
+    v1.18.0, this file v1.3.0): the question **set out again in blocks**, then the **whole-question
+    crop**, then the flat transcription. The Scan app now reads the printed question off the
+    photograph into ordered blocks — the wording as text with an `image` block wherever a figure
+    belongs, each figure cropped from the page — the way this app's own ⚡ Rapid add builds a
+    question, so it comes back TYPESET with the paper's own diagrams still in it: sharp at any size,
+    and readable on a phone in a way a photograph of 9pt print never is.
+    - **The blocks are RE-VALIDATED here, never trusted from the document** (`questionBlocks`). The
+      paper is written by another app, in another repository, at whatever version it happened to
+      be, and a block that will not draw is a thing to find out now rather than on the printed
+      page. A build with **no wording in it** is refused outright — a question made of pictures
+      asking nothing is worse than the two tiers under it.
+    - **A built question prints its MCQ options as usual**, because the Scan app deliberately
+      leaves them out of the blocks: it already holds them, and a second copy inside the wording is
+      the choices offered twice. It also gets the FULL working box — a typeset question brings none
+      of the paper's own ruled space with it, which is exactly why the whole-question crop gets the
+      short one.
+    - **A block figure that will not load takes itself off the page** (`__blkFailed`), the opposite
+      of `__figFailed` below: the wording is typeset above and below it and still does the asking.
+    - **`pictureSlots` decides WHICH pictures are cleaned, and it asks `tierOf` too.** A question
+      shown in blocks never shows its whole-question crop, so cleaning that crop would be an image
+      call, a Storage write and a student's data spent on something nobody will ever see. The
+      renderer and the cleaner reading the same function is what stops the page cleaning one
+      picture and printing another. The storage key for a crop is unchanged, so a paper cleaned
+      before blocks existed finds its pictures rather than paying for them twice.
+    - **The note under the buttons is built from the tiers really used.** One sheet can hold all
+      three at once, and "these are cut out of your photographs" printed over a page of typeset
+      questions is the kind of small untruth that makes a student stop reading the note at all.
   - **THE PICTURE IS USUALLY THE QUESTION ITSELF** (scan v1.17.0, this file v1.2.0). A question
     rebuilt from a transcription is only as good as the OCR, and a maths or science question is its
     LAYOUT as much as its words. So the Scan app now crops the WHOLE printed question — number,
