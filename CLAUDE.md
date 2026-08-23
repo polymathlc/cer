@@ -820,6 +820,76 @@ on in it?* A list that can only be scrolled is a list nobody reads.
 - It is **READ-ONLY**. Nothing in the block writes anything anywhere.
 - Run **`node tools/usage-tracker-tests.mjs`** after touching any of it.
 
+### 📖 What they wrote, and the teacher's own mark (v1.323.0)
+
+`_attemptAnswers` / `SUT_ANS_CHARS` / `SUT_ANS_PARTS` (beside `_setPartResult`),
+and `sutOverrideOf` / `sutAnswerRowsHtml` / `sutOverrideHtml` / `sutToggleRow` /
+`sutSaveOverride` / `sutClearOverride` in the tracker. Click any row in the log.
+
+The tracker could say a child got **2 out of 3** and could never say what they
+put. So every mark was unarguable: a teacher who thought the AI had it wrong had
+nothing to look at, and a child saying *"but I wrote the right thing"* could not
+be checked. An attempt stored a score and an `answerHash` — a 32-bit
+fingerprint, one-way, and there only to stop the same answer being re-submitted
+for the monthly tally.
+
+- **`_openPartResults` already held it.** It is what the running score, the
+  per-part feedback and the revision flashcards are all built from, so nothing
+  new is computed at marking time — `_attemptAnswers` reads it out and writes it
+  down. All THREE marked writers carry it (the whole-question mark, the per-part
+  finalisation and the annotation path); they had to be changed together, and a
+  fourth added later must be too.
+- **The label is DERIVED FROM THE KEY**, never passed in. `_setPartResult` has
+  six call sites across three marking paths, and a seventh argument threaded
+  through all of them is six chances to forget one — a part logged with no name
+  reads on the panel as an answer to a question nobody can identify.
+- **Both caps matter.** An attempt is a document, a document dies at 1 MB, and a
+  child pasting an essay into one blank must not be able to make their own
+  attempt unwritable: a lost attempt is a lost mark.
+- **The panel has THREE states and telling them apart is the whole job**: an
+  attempt from before this shipped says the wording cannot be recovered; a GAME
+  says it logs whether the answer was right and never what it was; everything
+  else shows every part. An empty panel with no explanation reads as a broken
+  feature, and a teacher who reads it that way stops opening it.
+- **The answer is ESCAPED.** It is text a child typed, rendered into the
+  teacher's page.
+
+**The override is the TEACHER'S RECORD, not the student's points.** It changes
+what this dashboard, its averages, its filters and its export say — which is what
+a teacher marks and reports from. It deliberately does not reach back into XP,
+gold or leaderboard standing: those were awarded on the student's own device at
+the time, an admin **cannot write another account's hero doc at all** (that is
+what the broadcast-marker pattern exists for), and minting points weeks later
+would leave two boards disagreeing with nothing to say which is right. The panel
+says so in as many words rather than leaving it to be assumed.
+
+- **`sutCredit` is the ONE place the override is honoured**, so the row, the
+  result filter, the by-mode breakdown, the summary cards and the CSV all follow
+  from one line. A second reading of `override` elsewhere is how a row shows
+  *Correct* while the average still counts it wrong.
+- **A score that will not parse is NOT an override** (`sutOverrideOf`). A stray
+  field must never silently rewrite a mark, and a row reading "overridden" with
+  the AI's number under it is worse than one nobody touched.
+- **The doc id must survive the read.** `showStudentDetail` keeps `d.id` now —
+  a row that has forgotten which document it came from cannot be corrected.
+- **Which rows are expanded is state (`_sut.open`), not a class on a `<tr>`** —
+  the table is rebuilt on every filter change and after every override, so a
+  panel opened by hand would snap shut under the teacher reading it. It is
+  cleared on every fresh open, or rows left expanded from the LAST student would
+  open different questions under the same ids.
+- **A denied write is NAMED**: "this account is not allowed to update the
+  attempt log" is a one-line rules fix, and *AI error* would send the teacher
+  anywhere but the console.
+
+⚠️ **`questionAttempts` is readable by any signed-in account** in the sibling
+app's rules, and this app's rules live only in the Firebase console. These rows
+now carry a child's own words, so that read rule is worth tightening to
+`allow read: if isAdmin() || resource.data.uid == request.auth.uid;` — which
+still serves both readers (the admin's unfiltered sweep, and a student's own
+`where('uid','==',uid)` query for My Report).
+
+- Run **`node tools/usage-tracker-tests.mjs`** after touching any of it.
+
 ### Every mode must actually log (v1.297.0)
 
 The tracker is only as good as the weakest game: a mode that pays points and
@@ -2524,14 +2594,20 @@ a third account and a third cap.
   monster while looking exactly like a successful recovery.
 - After touching **the Student Usage Tracker** (`USAGE_MODES`, `usageMode`,
   `sutCredit`, `sutVerdict`, `sutQuestionMeta`, `sutVisible`, `sutByMode`,
-  `sutExportCsv`) or **`logGameAttempt` / `SD_GAME_MODES`**, run
+  `sutExportCsv`, `sutOverrideOf`, `sutAnswerRowsHtml`, `sutOverrideHtml`,
+  `sutSaveOverride`, `_attemptAnswers`) or **`logGameAttempt` / `SD_GAME_MODES`**, run
   `node tools/usage-tracker-tests.mjs`. Every failure here is silent and a
   teacher acts on it: a mode that falls out of the log is a child's work made
   invisible, a verdict threshold that drifts from the app-wide 0.95 makes the
   tracker and the progress counters disagree about the same answer with nothing
   to say which is lying, and an export that reads a different window from the
   table it came from sends a parent a report of work in a mode the teacher had
-  filtered away.
+  filtered away. The answer panel is the only place a teacher can check the
+  AI's marking, so a part shown against the wrong label, the expected answer
+  printed as the student's, or an empty panel with no explanation each turn
+  "read what they wrote" into something nobody trusts twice — and an override
+  honoured in the row but not in the average is the dashboard quietly
+  disagreeing with itself on the one row somebody looked at closely.
 - After touching **🧻 Clean paper** (`PAPER_*`, `_paperWhitePoint`,
   `_paperCleanPixels`, `_paperCleanDataUrl`, `generateCleanEnhancedImage`,
   `annotCleanPaper`), run `node tools/paper-clean-tests.mjs`. Both directions
