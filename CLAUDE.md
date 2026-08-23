@@ -230,6 +230,41 @@ Guidance for Claude when working in this repo.
   - Bundled assets live under `assets/science-quest/avatar-v2/`: two neutral base characters plus one transparent WebP for every weapon, shield, armour, helmet, accessory and pet. `asset-manifest.json` is the source-of-truth coverage list and `tools/rpg-avatar-art-tests.mjs` pins all 145 assets, the beta gate and shared renderer wiring.
   - `rpgAvatarSvg` is the one paper-doll compositor used by the profile, question battles, Dungeon, leaderboards and arena ghosts. Generated characters MUST remain a base layer inside this SVG; do not restore the old early return from `rpgCharacterArtUrl`, because it hides every equipped item. Layer order is back accessory → character → armour → helmet → front accessory → pet → shield/animated weapon.
   - Admin `_rpgArt` uploads always win over bundled beta art. `rpgItemImageUrl` / `rpgCharacterArtUrl` then fall back to the bundle only when the beta is enabled; otherwise the existing drawn SVG art remains the student-safe fallback. Leaderboard rows publish `gender` with `equipment`, and remote avatar calls must pass that gender so a rival is not rendered as the viewer.
+- `mistakes.html` — **"Try again"**, the worksheet a student's own mistakes come back as. Standalone,
+  like `bar-model.html` and `fps.html`: it does NOT load `app.js` and it is not a page inside the
+  portal. The Scan app (`polymathlc/scan`) keeps every question a student got wrong on a photographed
+  paper, and when they choose some it writes ONE document to **`scanPapers/{id}`** and emails a link
+  to this page.
+  - **It lives here because this repo already owns the two things it needs** — the printed-worksheet
+    look, and an image model that can clean a photographed figure up. That app keeps the
+    photographs, so it does the cropping; this does the rendering and the clean-up.
+  - **IT MUST NEVER DISTURB THIS APP, and that is the whole reason it is a separate file.** It reads
+    and writes exactly two things: the `scanPapers` document named in `?p=`, and pictures under
+    **`scan-mistakes/`** in Storage. It never touches the question bank, the vetting list, the
+    teaching notes, a hero, a leaderboard or a student's progress — a scanned question must not
+    appear anywhere in this app's own content. The Scan app's collections are namespaced away from
+    this one's (`scanMistakes`, never `mistakes`, which is THIS app's own log under the same uid),
+    and this page keeps that contract from the other side.
+  - **TWO VERSIONS, and the WORDING IS THE SAME IN BOTH.** Only the picture differs: *cleaned up*
+    (the default — the figure redrawn in black and white with the student's own pencil rubbed out,
+    so the question is blank again) or *the original photograph*. The wording, the options and the
+    answers are the transcription the Scan app made and the teacher already marked against, so an
+    image model never gets to rewrite a number in a question — only to redraw the diagram beside it.
+  - **`CLEAN_PROMPT` pulls in two directions on purpose**: remove every handwritten mark, and change
+    nothing that was printed. It says so in both directions, and it says that a mark it cannot
+    classify is KEPT. A model that quietly redrew a printed axis value would be worse than a grey
+    photograph.
+  - **The clean-up is LAZY and cached.** It runs on first view, one figure at a time (these are big
+    calls on a student's phone), and the result is written back onto the paper so every later visit
+    — the teacher's included — is instant. A Storage refusal is not a failure of the clean-up: the
+    picture is already in hand and is shown; it is simply made again next time.
+  - **Every failure shows the ORIGINAL and says so.** No image model in the project, a model that
+    refuses, a fetch that fails — a blank space where a diagram should be is a question nobody can
+    answer.
+  - **The link alone is not enough.** It is a child's marked work, so opening it requires signing in
+    and only the owner or an admin can read it; a paper expires (a year) and the page refuses to
+    render an expired one.
+  - Version badge (`APP_VERSION` in the module) is hard-coded — bump on every change to this file.
 - `science-worksheet.html`, `math-worksheet.html`, `math.html` — worksheet builder apps.
 - `fps.html` — "Science Strike" roguelite first-person shooter: pure-canvas open-world FPS — infinite procedural Minecraft-style overworld (blocky grass, dashed road grid, solid trees/rocks, mountain ridges, sun/clouds), infinite scaling enemy waves (Warden boss every 5th), rotating minimap radar with rim-clamped enemy blips, CS-style expanding crosshair + recoil + vertical aim with small ×2 headshot crit zones, 3 classes (Soldier/Sniper/Engineer) each with a 100-node 10-tier prerequisite skill tree (I key, pauses the run, purchases apply instantly; F class actives: Bullet Time/Snare Trap/Auto-Turret), grenades on Q (frag/fire/ice/shock/shrapnel), 12 weapon archetypes (3 scoped ARs + DMR + 4.5× sniper rail with right-click ADS zoom, crossbow, laser beam, plasma) drawn by one drawGunModel() for both the first-person viewmodel and full ground-drop models, real travelling bullets with tracer trails (only tree trunks block shots), 25 enemy types (5 hand-drawn + 20 procedural body-plan variants) each with a per-type headshot crit box, cores banked+saved instantly on earn, Borderlands-style rarity loot drops (Common→Mythic, elemental effects, Mythic specials), and a science MCQ from the shared bank every 15s — correct streaks raise loot luck, milestones guarantee minimum rarities. Shares index.html's Firebase project, Google sign-in, App Check and question bank (`users/{adminUid}/questions`). Leaderboard (ranked by correct answers, top-3 $10 voucher): fps.html PUBLISHES ONLY — it has no board UI of its own. Stats live in a `fps` field on the SAME `scienceGameLeaderboard/{uid}` doc the RPG publishes — index.html's `rpgPublishLeaderboard` MUST keep `{ merge: true }` or it wipes the fps stats (and fps.html's `fpsPublish` likewise). The board renders only inside index.html's Leaderboard page as the "🔫 Strike" tab (`rpgBoardTab === "fps"`, all-time correct answers, `rpgPrizeBadge`/`rpgRowClass` give top 3 the $10 voucher badge); fps.html's menu just links to `index.html#leaderboard`. Release: FULLY RELEASED — no beta gate, no `fpsConfig` flag, no locked screen; every signed-in user gets in and `navFps` shows for everyone (`fpsApplyNavVisibility` still respects the RPG "Hide game" toggle). Release announcement banner in index.html (`#fpsAnnounce`, dismissible via localStorage) plus a built-in pinned community-feed post (`_commFpsAnnouncePost`). Version badge in fps.html (`#versionBadge`) is admin-only and hard-coded — bump on every change to this file.
 - `bar-model.html` — "Bar Model Studio" PSLE maths app: students get a generated (or typed/dictated/photographed) word problem, draw a bar model on an SVG canvas, and submit it for AI marking. Uses the SAME AI marking stack as `index.html`: Firebase AI Logic on the shared `mathgen--app` project, App Check (reCAPTCHA v3), `gemini-3.7-flash` with `thinkingConfig: { thinkingLevel: AI_THINK_MIN }` + JSON response mode, and the tolerant `_parseAIJson`/`_repairAIJson` parser (keep these in sync with `app.js`). Optional admin-only ChatGPT engine (key in localStorage) falls back to Gemini on failure. Its version badge (`#versionBadge`, admin-only) is hard-coded in the HTML — bump it on every change to this file.
