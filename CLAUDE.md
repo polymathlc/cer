@@ -264,6 +264,20 @@ Guidance for Claude when working in this repo.
   - **The link alone is not enough.** It is a child's marked work, so opening it requires signing in
     and only the owner or an admin can read it; a paper expires (a year) and the page refuses to
     render an expired one.
+  - **THE SHEET IS GROUPED BY SUBJECT, and it may not claim one it is not** (v1.2.0,
+    `paperSubjects` / `subjectRunsHtml`). A worksheet headed *"P6 Science corrections"* over a page
+    of maths is what this fixed, and it is silent — the sheet prints, it looks right, and the child
+    is told they are bad at the wrong subject. The Scan app writes the questions **subject by
+    subject** and titles the paper with a subject only where every question agrees, so a run here is
+    a run of consecutive items and this only has to notice where one ends. A heading is printed
+    **only on a paper that holds more than one subject** — one over the whole of a maths sheet is
+    noise, and the title already says it — and the count is the RUN's, not the subject's total,
+    because a paper written before that ordering existed can still come back interleaved.
+  - **A subject is never guessed here.** The label comes off the item, and an item that carries none
+    is headed *Other questions* rather than being filed by its wording — a heading nobody chose is
+    the very thing this section exists to stop. `SUBJECT_LABEL` is this page's own copy of the Scan
+    app's `SUBJECTS`, because it loads no `app.js`; a value it does not know is printed as it stands
+    rather than dropped, since a question under no heading reads as a printing fault.
   - **The printed sheet says to PHOTOGRAPH IT BACK IN** (`.shHow`, and it prints). That is how the
     Scan app's mistake book empties itself — a question got right twice in a row leaves it — and the
     loop only closes if the student knows to close it. The instruction is on the paper rather than

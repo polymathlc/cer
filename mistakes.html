@@ -142,6 +142,15 @@
     padding: 10px 14px; border-radius: 8px; background: var(--bg-soft); border: 1px solid var(--line);
   }
 
+  /* One heading per subject, and only on a paper that really holds more than
+     one. A sheet that is all maths says so once, in its title. */
+  .shSubj {
+    margin: 22px 0 -4px; padding-bottom: 6px; border-bottom: 1px solid var(--ink);
+    font-size: 0.92rem; font-weight: 700; break-after: avoid; page-break-after: avoid;
+  }
+  .shSubj:first-of-type { margin-top: 6px; }
+  .shSubjSub { font-weight: 400; color: var(--ink-soft); font-size: 0.78rem; }
+
   .q { padding: 20px 0; border-bottom: 1px solid var(--line); break-inside: avoid; }
   .q:last-child { border-bottom: 0; }
   .qHead { display: flex; gap: 10px; align-items: baseline; margin-bottom: 10px; }
@@ -236,12 +245,19 @@ import { getFirestore, doc, getDoc, updateDoc }
 import { getStorage, ref as sRef, uploadString, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.2.0';
 document.getElementById('verTag').textContent = APP_VERSION;
 
 /* The one collection this page reads, and the one folder it writes. Named
    here, once, so nothing below can quietly reach into this app's own data —
    which is the whole contract with the Scan app. */
+/* The four subjects, spelled the way the Scan app spells them (`SUBJECTS`
+   there). This page loads no app.js, so it carries its own map — a value it
+   does not know is printed as it stands rather than dropped, because a
+   question under no heading at all reads as a printing fault. */
+const SUBJECT_LABEL = { science: 'Science', math: 'Mathematics', english: 'English', chinese: 'Chinese' };
+function subjectLabel(v) { return SUBJECT_LABEL[v] || (v || ''); }
+
 const PAPER_COL = 'scanPapers';
 const IMG_PATH = 'scan-mistakes';
 const ADMIN_EMAILS = ['chungzhikai@gmail.com'];
@@ -455,12 +471,52 @@ function keyHtml(it) {
       (it.feedback ? ' — ' + esc(it.feedback) : '') + '</div>' : '') +
   '</div>';
 }
+/* ---- One run per subject ----
+   The Scan app writes the questions subject by subject, so a run is a run of
+   consecutive items and this only has to notice where one ends. It heads them
+   ONLY on a paper that holds more than one: a heading over the whole of a
+   maths sheet is noise, and the title already says what it is.
+
+   A question whose subject was never read is not given one here. Guessing it
+   from the wording would put a heading on the page that nobody chose, which
+   is exactly what "P6 Science corrections" over a maths question already
+   cost. Its run is headed "Other questions" instead. */
+function paperSubjects(items) {
+  const seen = [];
+  (items || []).forEach(i => { const v = i.subject || ''; if (seen.indexOf(v) === -1) seen.push(v); });
+  return seen;
+}
+function subjectRunsHtml(items, rowHtml) {
+  const list = items || [];
+  const many = paperSubjects(list).length > 1;
+  let out = '', last = null;
+  list.forEach((it, i) => {
+    const subj = it.subject || '';
+    if (many && subj !== last) {
+      /* The RUN, counted from here — not every question of that subject on
+         the sheet. A paper written before the Scan app ordered them can come
+         back interleaved, and "Mathematics · 4 questions" over a run of one
+         is a heading that contradicts the page under it. */
+      let run = 0;
+      while (i + run < list.length && ((list[i + run].subject || '') === subj)) run++;
+      out += '<div class="shSubj">' + esc(subjectLabel(subj) || 'Other questions') +
+        ' <span class="shSubjSub">· ' + run + ' question' + (run === 1 ? '' : 's') + '</span></div>';
+      last = subj;
+    }
+    out += rowHtml(it);
+  });
+  return out;
+}
+
 function render() {
   if (!paper) return;
   const items = paper.items || [];
   $('pTitle').textContent = paper.title || 'Try again';
+  const subs = paperSubjects(items).filter(Boolean);
   $('pSub').textContent = items.length + ' question' + (items.length === 1 ? '' : 's') +
-    ' you got wrong, to try again. The answers are on the last page.';
+    ' you got wrong, to try again' +
+    (subs.length > 1 ? ' — ' + subs.map(subjectLabel).join(' and ') : '') +
+    '. The answers are on the last page.';
   $('modeClean').classList.toggle('on', mode === 'clean');
   $('modeOriginal').classList.toggle('on', mode === 'original');
   $('modeNote').textContent = mode === 'clean'
@@ -479,12 +535,12 @@ function render() {
       '<div class="shName"><span>Name:&nbsp;</span><span>Date:&nbsp;</span></div>' +
       '<div class="shHow">When you have finished, <b>photograph this back into the Scan app</b> to have it ' +
         'marked. Get a question right <b>twice in a row</b> and it comes out of your mistake book.</div>' +
-      items.map(questionHtml).join('') +
+      subjectRunsHtml(items, questionHtml) +
     '</div>' +
     '<div class="sheet keyPage">' +
       '<div class="shHead"><div class="shTitle">Answers</div>' +
       '<div class="shOrg">' + esc(paper.title || '') + '</div></div>' +
-      '<div style="margin-top:14px">' + items.map(keyHtml).join('') + '</div>' +
+      '<div style="margin-top:14px">' + subjectRunsHtml(items, keyHtml) + '</div>' +
     '</div>';
   if (!withFigs) { /* nothing to clean — the mode still changes nothing else */ }
 }
