@@ -2985,12 +2985,23 @@ option {
     padding-left: 26pt;
     min-height: 17.6pt;
   }
+  /* The label's WIDTH is written inline beside the block's padding-left, from
+     printPartBlockHtml, so the two are always the same number and the text can
+     never start inside the label. box-sizing + the padding-right here are what
+     keep a clear gap: "(b)(iii)" is three times the width of "(a)", and a flat
+     reserve printed a sub-part straight over the first words of its question.
+     overflow-wrap, because a label pinned at PRINT_PART_PAD_MAX must wrap
+     inside its own box rather than run on into the sentence. */
   .print-text-block.print-has-part .print-part-label {
     position: absolute;
     left: 0;
     top: 0;
+    box-sizing: border-box;
+    padding-right: 6pt;
     font-weight: 700;
     font-size: 11pt;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
   }
 
   /* Blank lines */

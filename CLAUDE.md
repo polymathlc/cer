@@ -2491,7 +2491,52 @@ a third account and a third cap.
 - Run **`node tools/ai-routes-tests.mjs`** after touching any of it.
 
 
+## The printed part label reserves its OWN width (v1.324.1)
+
+`PRINT_PART_PAD_MIN` / `PRINT_PART_PAD_PER_CH` / `PRINT_PART_PAD_GAP` /
+`PRINT_PART_PAD_MAX` / `printPartPadPt` / `printPartBlockHtml` (in `app.js`,
+search `THE PRINTED PART LABEL RESERVES ITS OWN WIDTH`), plus the
+`.print-text-block.print-has-part .print-part-label` rule in `index.html`.
+
+A block that OPENS a part hangs its label in the margin, and the label is
+positioned **out of the flow** — so the block has to RESERVE the room with
+`padding-left`. That reserve was a flat **26pt**, which is exactly the room
+`(a)` needs and nothing like the room `(b)(iii)` — a roman sub-part — needs. A wider label printed
+**straight over the first words of its own question**, on every surface that
+uses the print CSS at once: both print builders and the live A4 preview.
+
+- **The reserve is MEASURED FROM THE LABEL**, and `printPartBlockHtml` is the
+  ONE place a printed part label and the block carrying it are built. It
+  writes the same number into both — the padding the text starts at, and the
+  width of the label's own box — so **they can never disagree**. Two
+  expressions computing that width separately is exactly how they drift back
+  apart, and the symptom is a label sitting on top of a sentence on paper,
+  which nobody sees until a class is in front of it.
+- **`(a)` is unchanged, byte for byte.** `PRINT_PART_PAD_MIN` IS the old 26pt,
+  so the overwhelming majority of the bank prints exactly as it always did —
+  and the print planner, which measures the finished page, re-plans around the
+  wider blocks for free.
+- **`PRINT_PART_PAD_MAX` bounds it.** A label allowed to grow without limit
+  would eat the column rather than the question; past the cap it wraps inside
+  its own box instead, which is what `overflow-wrap` in the CSS is for.
+- **`box-sizing: border-box` on the label is load-bearing.** Its width is the
+  same number as the block's padding, so without it the padding-right would
+  push the label's box past where the text begins and put the overlap back.
+- **`min-height: 17.6pt` on the block stays.** The label is out of the flow, so
+  a block that carries a part and no text of its own measured zero tall — the
+  marker painted over whatever came next and contributed nothing to the
+  planner's chunk height.
+
 ## House rules
+- After touching **the printed part label** (`PRINT_PART_PAD_*`,
+  `printPartPadPt`, `printPartBlockHtml`, or the
+  `.print-text-block.print-has-part` rules), print a question with parts and
+  LOOK at the page. Both directions are silent and nothing throws: too little
+  reserve and the marker prints on top of the first words of its own question,
+  too much and the label eats the column the question is set in. And the two
+  numbers — the block's `padding-left` and the label's `width` — must keep
+  coming from the one call, or they drift apart and the overlap comes back on
+  whichever surface was not looked at.
 - After touching **the AI routes** (`aiEngineOrder`, `askOpenAiServer`,
   `askChatGpt`, `_aiRun`, `_aiAsk`, `askGeminiDirect`, `AI_DOWN_MS`, `_aiWhy`,
   `aiRouteReport`, `renderAiEngineStatus`, `aiEngineChoicePreview`, or
