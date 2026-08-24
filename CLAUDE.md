@@ -2577,7 +2577,123 @@ uses the print CSS at once: both print builders and the live A4 preview.
   marker painted over whatever came next and contributed nothing to the
   planner's chunk height.
 
+## ✏️ Editing mode — the whole worksheet, condensed, in one scroll (v1.326.0)
+
+`em*` (in `app.js`, search `EDITING MODE`), plus `#emOverlay` and the `.em-*`
+CSS in `index.html`, the ✏️ **Editing mode** button in the A4 preview bar, the
+✏️ **Edit questions** button on a 📄 My Worksheets card and ✏️ **Edit all** beside
+👁 Preview on every 📄 Past Papers year and concept.
+
+👁 Preview shows the sheet as it will PRINT and fixes one question at a time;
+✎ Questions edits which questions are ON the sheet. Neither is any use to
+somebody who has just read a whole paper through and wants to correct a wrong
+option here, a missing part letter there, an answer that reads badly on question
+14 — because the way to do that was to open the full block editor once per
+question, and the full block editor spends most of its height on things that are
+not the question: a paste pad, a URL box, a print size and its paragraph of
+explanation, a toolbar, an answer-key panel.
+
+Editing mode is that same editor with the furniture folded away. **Every question
+on the sheet is loaded at once**, one after another; each block is a thin strip —
+the content, and a vertical rail of tiny icons down its left edge carrying every
+control. Scroll from the first question to the last, fix what you find, press
+💾 **Save all changes** once. Gated on `_canAuthor()`.
+
+- **IT IS THE SAME EDITOR, NOT A SECOND ONE.** `#blocksList` is **MOVED** into
+  the overlay — the very node the create page uses — so `renderBlocks()`, every
+  inline `onclick`, every `data-` handler and every `blocks.find(...)` lookup
+  work byte-for-byte as they always did, and a block type added next month is
+  condensed without being told about. A second block editor written for this
+  view would be a second editor to fix every bug in, and it would drift from the
+  first the week after it shipped. `_em.home` is where it came from and it is put
+  back there on close; `_em.prev` is the create page's own editor state, handed
+  back untouched.
+- **THE GLOBAL `blocks` HOLDS EVERY QUESTION AT ONCE**, so a walk of the whole
+  array is a walk of the whole paper. `_em.owner` says which question each block
+  belongs to and **`emScope(blockId)` is the ONE place that is resolved** —
+  outside editing mode it hands back `blocks` itself, unchanged. Anything that
+  reads the question AROUND a block goes through it: **`qPartMap` above all**,
+  which inherits FORWARD, so without it part (c) of question 3 is inherited by
+  every block of question 4 and the answer key files them under it. The four
+  readers are `qPartPickerHtml`, `aiGenerateBlockAnswer`,
+  `aiGenerateBlockExplanation` and `_widgetQuestionContext`; a fifth added later
+  needs the same treatment, and the symptom of forgetting is an AI answer that is
+  fluent, confident and about a different question.
+- **…and the same for the TITLE and TOPIC an AI call is grounded on.**
+  `emTitleFor` / `emTopicFor` read the OWNING question; the create page's own
+  `#questionTitle` and `#topicSelect` still hold whatever was open there, and
+  reading them grounds the call on a question that is not even on screen.
+- **A BLOCK ID IS UNIQUE ACROSS THE WHOLE SHEET.** Two questions duplicated from
+  each other carry the same block ids, and every handler in this editor finds its
+  block BY ID — so a collision is typing into question 7 and watching question 2
+  change. A repeat is re-keyed on the way in, and its **keyword and blank entries
+  are carried across with it** or they are left pointing at an id nothing uses.
+- **A QUESTION MAY NEVER BE EMPTIED.** `qPartMap` and the owner map are both
+  positional, so a question with no blocks left has nowhere to draw its heading
+  and nothing to own a newly inserted block. `emMayRemove` refuses the last one
+  and the toast says to take the question off the sheet with ✎ Questions instead.
+- **A NEW BLOCK JOINS THE QUESTION ABOVE IT** (`emAdoptOwners`), which is where
+  the insert bar that made it was drawn — falling back to the one below when it
+  is the very first block on the sheet. Duplicating a block gives it a fresh id
+  and no owner, and it adopts the same way.
+- **NOTHING IS WRITTEN UNTIL SAVE, AND ONLY WHAT CHANGED IS WRITTEN.** Every
+  question is deep-copied in and compared against the signature taken the moment
+  the sheet finished rendering, so a paper of forty questions where two were
+  touched is two writes. The baseline is taken **AFTER** the first render and its
+  `syncEditorDomToBlocks()`, or the browser's own re-serialising of the markup
+  reports every question as changed on the very first save. It writes through
+  `saveQuestion`, mutating the bank question in place like `akeSave` — so every
+  field the editor does not own is preserved without `carryOverQuestionMeta`.
+- **THE RAIL IS THE SAME BUTTONS, MOVED.** A hoisted control is the original DOM
+  node with its handler intact, never a copy that calls the same function — which
+  is how the two come to disagree. It is safe because the action buttons are
+  driven by `data-` attributes and delegated listeners (`.improve-btn`,
+  `data-enhance`, `data-crop-open`, `data-annot-open`), so their position in the
+  card means nothing. **What cannot be moved is named**: a `.mic-btn` with no
+  `data-mic-block` finds the box it dictates into by walking up to
+  `[data-mic-wrap]`, so lifting it onto the rail lifts it away from that box.
+- **`EM_PRIMARY` says which half of a block STAYS.** Everything else folds into
+  `.em-extras` — hidden, never removed, and the ⚙ on the rail brings the whole
+  ordinary editor straight back. **A block type that is not in that table is left
+  exactly as it is**: `mcq`, `table`, `fillblank` and the widget builder are
+  controls the whole way down, so there is no "content" half to keep and hiding
+  the rest would hide the question. That default is what makes the feature safe
+  to extend.
+- **The 🖼 picture tools arrive a frame LATE.** `renderImgEnhanceBar` fills its
+  bar after `renderBlocks` has returned, so ✂️ Crop, ✏️ Touch up and ✨ Enhance are
+  lifted onto the rail by their own hook (`emCondenseEnhanceBar`) — and an
+  enhanced picture, whose single preview is replaced by a side-by-side
+  comparison living in the folded half, **opens the block** rather than showing
+  no picture at all.
+- **`body.em-editing` lifts every dialog editing mode can OPEN.** The touch-up
+  editor, the crop tool, the answer-key cross-check and the confirm cards are all
+  `.overlay` (z-index 300) — *below* this overlay (440) — so pressing ✏️ Touch up
+  would open an editor nobody can see. The class raises them for exactly as long
+  as editing mode is up, and never otherwise.
+- 👁 Preview, ✏️ Edit and 🖨 Print on the past-papers page all go through
+  **`_ppGo(go)`** and take the identical `(items, missing, title, opts)`, so the
+  three collect their questions with exactly the same code — an edit assembled
+  its own way is an edit of a different paper.
+- Run **`node tools/editing-mode-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **✏️ editing mode** (`emScope`, `emOwnerQuestion`,
+  `emTitleFor`/`emTopicFor`, `emAdoptOwners`, `emSigOf`, `emChangedEntries`,
+  `emKwFor`/`emBlanksFor`, `emMayRemove`, `emCondenseCard`, `emIconify`,
+  `emHoistInto`, `EM_PRIMARY`, `_ppGo`, or `renderBlocks`'s `emAfterRender`
+  hook), run `node tools/editing-mode-tests.mjs`. Editing mode puts EVERY
+  question of a sheet into the one block editor at once, which is what makes it
+  useful and also what makes every failure here silent — the editor still
+  renders, still types and still saves, and is quietly working on the wrong
+  question. `emScope` handing back the whole array makes `qPartMap` inherit part
+  (c) of question 3 into every block of question 4 and sends the 🤖 AI answer
+  button the entire paper as one question; a block id repeated across two
+  questions is typing into question 7 and watching question 2 change; a
+  signature that reports everything as changed turns one edit into forty writes
+  and one that reports nothing turns Save into a button that does nothing; and a
+  question allowed to empty itself has nowhere to draw its heading and nothing
+  to own the next block inserted into it. The one failure that DOES show is the
+  rail: a button lifted out of its `[data-mic-wrap]` dictates into nothing.
 - After touching **↩️ back to the preview you came from** (`_wsPreviewSnapshot`,
   `_wsQeReopenPreview`, `wsQuickEditOpenFull`, `_wsQeReturn`,
   `_afterEditNavigate`, `_syncBackToPapersBtn`, or `ppPreview`'s `quiet`), run

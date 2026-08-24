@@ -2494,7 +2494,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.325.0';
+const APP_VERSION = 'v1.326.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -4213,6 +4213,8 @@ function addBlockAt(type, index) {
 }
 
 function removeBlock(id) {
+  // ✏️ Editing mode: the last block of a question may not go — see emMayRemove.
+  if (typeof emMayRemove === 'function' && !emMayRemove(id)) return;
   blocks = blocks.filter(b => b.id !== id);
   if (selectedBlanks[id]) delete selectedBlanks[id];
   // …and the keywords marked on it. A CER block keeps three keys, so the whole
@@ -5580,6 +5582,11 @@ function renderBlocks() {
   // A final bar so you can insert at the very end too.
   container.appendChild(makeBlockInsertBar(blocks.length));
 
+  // ✏️ Editing mode holds every question on the sheet in this one list, so the
+  // headings and the condensed cards are added here — renderBlocks() rebuilds
+  // the whole list, so there is nowhere else they could survive a render.
+  if (emActive()) { try { emAfterRender(); } catch (e) { console.warn('editing mode render', e); } return; }
+
   // Anything that rewrites the blocks — the passage builder, an AI build, a
   // paste — lands here and fires no `input` event of its own, so the watch
   // would never see it. Coalesced, so a burst of renders is still one check.
@@ -5696,13 +5703,15 @@ function renderWidgetBlockEditor(block) {
 }
 
 // The question as it stands in the editor, summarised for the builder prompt.
-function _widgetQuestionContext() {
+function _widgetQuestionContext(blockId) {
   const lines = [];
-  const title = (document.getElementById('questionTitle')?.value || '').trim();
-  const topic = document.getElementById('topicSelect')?.value || '';
+  // emScope / emTitleFor, never the whole array and never the create page's own
+  // fields: ✏️ editing mode holds every question on the sheet at once.
+  const title = String(emTitleFor(blockId) || '').trim();
+  const topic = emTopicFor(blockId) || '';
   if (title) lines.push('Title: ' + title);
   if (topic) lines.push('Topic: ' + topic);
-  (blocks || []).forEach(b => {
+  (emScope(blockId) || []).forEach(b => {
     if (!b) return;
     if (b.type === 'text' || b.type === 'part') { const t = stripHtml(b.content || '').trim(); if (t) lines.push('Question: ' + _fcClip(t)); }
     else if (b.type === 'mcq') {
@@ -5736,7 +5745,7 @@ function _widgetSpecPrompt(block) {
     '- Do NOT repeat the question text or reveal marking — the student has already answered; this is for understanding the concept.',
     '',
     'THE QUESTION IT ATTACHES TO:',
-    _widgetQuestionContext() || '(no question text yet — build from the teacher\'s notes below)',
+    _widgetQuestionContext(block && block.id) || '(no question text yet — build from the teacher\'s notes below)',
     '',
     (block.comments || '').trim() ? 'TEACHER\'S NOTES (follow these):\n' + block.comments.trim() : 'TEACHER\'S NOTES: none — choose the most illuminating interaction for this concept yourself.',
   ].join('\n');
@@ -5990,8 +5999,11 @@ async function aiGenerateBlockAnswer(blockId, btn) {
     else if (b.type === 'mcq') ctxBits.push('[multiple-choice options] ' + (b.options || []).map((o, i) => (i + 1) + ') ' + stripHtml(o.text || '')).join(' '));
     else if (b.type === 'answer' || b.type === 'plainanswer') { ansN++; ctxBits.push(b.id === blockId ? `>>> ANSWER BOX ${ansN} — WRITE THIS ONE <<<` : `[answer box ${ansN} — belongs to another part, do not answer it]`); }
   }
-  const topic = (document.getElementById('topicSelect') && document.getElementById('topicSelect').value) || '';
-  const title = (document.getElementById('questionTitle') && document.getElementById('questionTitle').value) || '';
+  // The question this box belongs to — in ✏️ editing mode the create page's own
+  // title and topic fields still hold whatever was open THERE, and grounding
+  // the call on those would ground it on a question that is not on screen.
+  const topic = emTopicFor(blockId);
+  const title = emTitleFor(blockId);
   const notesDb = _notesAnswerBlock(topic);
   const prompt =
     `You are a Singapore primary-school (PSLE) science teacher writing the MODEL ANSWER for one answer box of the question below.\n` +
@@ -6065,7 +6077,9 @@ async function aiGenerateBlockExplanation(blockId, btn) {
   // explanation per part, and an explanation under (a) that summarises (b) and
   // (c) is simply wrong — so the box is written for the part it sits in, and
   // the other parts go along only as background, clearly marked as such.
-  const pmap = qPartMap(blocks);
+  // emScope, never `blocks` — see the note on aiGenerateBlockAnswer.
+  const scope = emScope(blockId);
+  const pmap = qPartMap(scope);
   const target = qPartOf(pmap, block);
   const scoped = !!target && !qPartUnfiled(block);
 
@@ -6075,7 +6089,7 @@ async function aiGenerateBlockExplanation(blockId, btn) {
   const ctxBits = [];
   const media = [];
   let mark = '';
-  for (const b of blocks) {
+  for (const b of scope) {
     if (scoped) {
       const p = qPartOf(pmap, b);
       const line = _aiPartScopeLine(p, target, mark);
@@ -6095,8 +6109,11 @@ async function aiGenerateBlockExplanation(blockId, btn) {
     else if (b.type === 'plainanswer') ctxBits.push('[model answer] ' + stripHtml(b.content || ''));
     else if (b.type === 'explanation') ctxBits.push(b.id === blockId ? '>>> THE EXPLANATION BOX TO WRITE <<<' : '[another explanation box — leave it alone]');
   }
-  const topic = (document.getElementById('topicSelect') && document.getElementById('topicSelect').value) || '';
-  const title = (document.getElementById('questionTitle') && document.getElementById('questionTitle').value) || '';
+  // The question this box belongs to — in ✏️ editing mode the create page's own
+  // title and topic fields still hold whatever was open THERE, and grounding
+  // the call on those would ground it on a question that is not on screen.
+  const topic = emTopicFor(blockId);
+  const title = emTitleFor(blockId);
   const notesDb = _notesAnswerBlock(topic);
   const prompt =
     `You are a Singapore primary-school (PSLE) science teacher writing the EXPLANATION box of the practice question below — 2-4 sentences for a P3-P6 student explaining WHY the correct answer is correct.\n` +
@@ -7911,6 +7928,9 @@ function renderImgEnhanceBar(blockId) {
       <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-enhance="${blockId}" data-colour="0">✨ Enhance image</button>
       <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-enhance="${blockId}" data-colour="1">🎨 Enhance with colour</button>
     </div>`;
+  // ✏️ Editing mode: this bar is filled a frame after the card was
+  // condensed, so its tools have to be lifted onto that card's rail here.
+  try { if (typeof emCondenseEnhanceBar === 'function') emCondenseEnhanceBar(blockId); } catch (e) { console.warn('editing mode: picture tools', e); }
 }
 
 // Delegated handler so the enhance buttons work regardless of inline-handler
@@ -15907,7 +15927,10 @@ const QPART_OPENER_TYPES = ['text'];
 // obvious at a glance where each answer box will be filed on the answer key.
 function qPartPickerHtml(block) {
   if (!block || block.type === 'part' || block.type === 'pageBreak') return '';
-  const map = qPartMap(blocks);
+  // emScope, not `blocks`: in editing mode the editor holds the whole sheet at
+  // once and qPartMap inherits FORWARD, so part (c) of one question would be
+  // inherited by every block of the next.
+  const map = qPartMap(emScope(block.id));
   const inherited = qPartOf(map, block);
   const own = qPartNormalize(block.part);
   // An explanation is the one block that is often written about the WHOLE
@@ -25378,6 +25401,7 @@ function renderSavedWorksheets() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="14" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="17.5" y1="15.5" x2="17.5" y2="21.5"/><line x1="14.5" y1="18.5" x2="20.5" y2="18.5"/></svg>
           Questions
         </button>
+        ${_canAuthor() ? `<button class="btn btn-outline" onclick="emOpenSaved('${ws.id}')" title="Editing mode — every question on this worksheet in one scroll, each block condensed to a strip with its controls as icons down the left. Fix what you find, then Save once.">✏️ Edit questions</button>` : ''}
         ${_canAuthor() ? `<button class="btn btn-outline" onclick="akcCheckWorksheet('${ws.id}')" title="ChatGPT and Gemini each answer every question on this sheet from scratch, at the same time, and the report compares their answers with your own answer key.">🔍 Check answer keys</button>` : ''}
         <button class="btn btn-outline" onclick="reprintWorksheet('${ws.id}')" title="Print">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -26741,6 +26765,10 @@ function _wsShowPreviewOverlay() {
   // driven by the tick boxes on the page behind it.
   const editBtn = document.getElementById('wsPreviewEditBtn');
   if (editBtn) editBtn.style.display = _wsPreviewSaved ? '' : 'none';
+  // ✏️ Editing mode works on either — a saved worksheet or a past paper. Both
+  // are just an ordered list of bank questions.
+  const emBtn = document.getElementById('wsPreviewEmBtn');
+  if (emBtn) emBtn.style.display = ((_wsPreviewSaved || _wsPreviewPaper) && _canAuthor()) ? '' : 'none';
   // A past paper always prints its explanations, so there is nothing to switch.
   const explBox = document.getElementById('wsPreviewExplWrap');
   if (explBox) explBox.style.display = _wsPreviewPaper ? 'none' : '';
@@ -27517,6 +27545,593 @@ async function akeSave() {
   const ok = await saveQuestion(q);
   if (ok) showToast('Answer key updated ✓', 'success');
 }
+
+// =====================================================================
+// ✏️ EDITING MODE — the whole worksheet, condensed, in one scroll (`em*`)
+// =====================================================================
+// 👁 Preview shows the sheet as it will PRINT and lets one question be fixed at
+// a time; ✎ Questions edits which questions are ON the sheet. Neither is any
+// use to somebody who has just read the whole paper through and wants to
+// correct a wrong option here, a missing part letter there, an answer that
+// reads badly on question 14 — because the way to do that was to open the full
+// block editor once per question, and the full block editor spends most of its
+// height on things that are not the question: a paste pad, a URL box, a print
+// size and its paragraph of explanation, a toolbar, an answer-key panel.
+//
+// EDITING MODE is that same editor with the furniture folded away. Every
+// question on the sheet is loaded at once, one after another, and each block is
+// a thin strip: the content, and a vertical rail of tiny icons down its left
+// edge carrying the controls. Scroll from the first question to the last, fix
+// whatever you find, press 💾 Save all changes once.
+//
+// SIX RULES HOLD IT TOGETHER, and each is a way it would fail quietly:
+//
+//  • IT IS THE SAME EDITOR, NOT A SECOND ONE. `#blocksList` is MOVED into the
+//    overlay — the very node the create page uses — so `renderBlocks()`, every
+//    inline `onclick`, every `data-` handler and every `blocks.find(...)`
+//    lookup work byte-for-byte as they always did. A second block editor
+//    written for this view would be a second editor to fix every bug in, and it
+//    would drift from the first the week after it shipped. It is put back where
+//    it came from on close (`_em.home`).
+//
+//  • THE GLOBAL `blocks` HOLDS EVERY QUESTION AT ONCE, so a walk of the whole
+//    array is a walk of the whole paper. `_em.owner` says which question each
+//    block belongs to and **`emScope(blockId)` is the ONE place that is
+//    resolved** — outside editing mode it hands back `blocks` itself, unchanged.
+//    Anything that reads the question AROUND a block has to go through it:
+//    `qPartMap` above all, which inherits forward, so without it part (c) of
+//    question 3 is inherited by every block of question 4.
+//
+//  • A BLOCK ID IS UNIQUE ACROSS THE WHOLE SHEET. Two questions duplicated from
+//    each other carry the same block ids, and every handler here finds a block
+//    BY ID — so a collision means typing into question 7 and watching question 2
+//    change. A repeat is re-keyed on the way in, and its keyword and blank
+//    entries are carried across with it or they would be left pointing at an id
+//    nothing uses any more.
+//
+//  • A QUESTION MAY NEVER BE EMPTIED. `qPartMap` and the owner map are both
+//    positional, so a question with no blocks left has nowhere to draw its
+//    heading and nothing to own a newly inserted block. Deleting the last block
+//    of a question is refused, and the toast says to take the question off the
+//    sheet instead — which is what ✎ Questions is for.
+//
+//  • NOTHING IS WRITTEN UNTIL SAVE, AND ONLY WHAT CHANGED IS WRITTEN. Every
+//    question is deep-copied in, and on save each is compared against the
+//    signature taken the moment the sheet finished rendering — so a paper of
+//    forty questions where two were touched is two writes, not forty. The
+//    baseline is taken AFTER the first render and its `syncEditorDomToBlocks()`,
+//    or the browser's own re-serialising of the markup would report every
+//    question as changed.
+//
+//  • THE RAIL IS THE SAME BUTTONS, MOVED. A hoisted control is the original
+//    DOM node with its handler intact — never a copy that calls the same
+//    function, which is how the two come to disagree. What cannot be moved is
+//    named: a mic button with no target of its own finds its box by walking up
+//    to `[data-mic-wrap]`, so moving it out of that wrap is moving it away from
+//    the box it dictates into.
+//
+// Run `node tools/editing-mode-tests.mjs` after touching any of it.
+
+var _em = {
+  on: false,
+  ctx: null,      // { kind:'saved'|'paper', id, title }
+  qs: [],         // [{ id, key, n, title, label, sig }] in sheet order
+  owner: {},      // blockId -> question id
+  home: null,     // { parent, next } — where #blocksList came from
+  prev: null,     // the create page's own editor state, put back on close
+  busy: false,
+};
+var _emKeySeq = 0;
+// Hoisted function declaration on purpose: `renderBlocks()` sits far above this
+// section and can run during module evaluation, when `_em` is still undefined.
+function emActive() { return !!(typeof _em !== 'undefined' && _em && _em.on); }
+
+// The keyword/blank keys a block can carry. `content` and `text` both collapse
+// to the bare block id in kwFieldKey, which is why the list is walked rather
+// than the map: the id is the key, and the id is what changes when one is
+// re-keyed.
+const EM_KW_FIELDS = ['content', 'text', 'claim', 'evidence', 'reasoning'];
+
+// ── The one place a block's question is resolved ─────────────────────────────
+function emScope(blockId) {
+  if (!emActive()) return blocks;
+  const own = _em.owner[String(blockId)];
+  if (!own) return blocks;
+  return blocks.filter(b => b && _em.owner[String(b.id)] === own);
+}
+function emOwnerQuestion(blockId) {
+  if (!emActive()) return null;
+  const own = _em.owner[String(blockId)];
+  if (!own) return null;
+  return questionBank.find(x => String(x.id) === own) || null;
+}
+// The title/topic an AI prompt should be grounded on. In editing mode the
+// create page's own fields still hold whatever question was open there, so
+// reading them would ground the call on a question that is not on screen.
+function emTitleFor(blockId) {
+  const q = emOwnerQuestion(blockId);
+  if (q) {
+    const e = _em.qs.find(x => x.id === String(q.id));
+    return (e && e.title) || q.title || '';
+  }
+  const el = document.getElementById('questionTitle');
+  return (el && el.value) || '';
+}
+function emTopicFor(blockId) {
+  const q = emOwnerQuestion(blockId);
+  if (q) return q.topic || '';
+  const el = document.getElementById('topicSelect');
+  return (el && el.value) || '';
+}
+
+// ── Opening ─────────────────────────────────────────────────────────────────
+function emOpenQuestions(ctx, entries) {
+  if (!_canAuthor()) { showToast('Only an author can edit questions', 'error'); return; }
+  if (_em.on) { showToast('Editing mode is already open', 'info'); return; }
+  const list = (entries || []).filter(e => e && e.q && e.q.id != null);
+  if (!list.length) { showToast('Nothing to edit — none of these questions is in the bank', 'error'); return; }
+  const host = document.getElementById('emWrap');
+  const blocksList = document.getElementById('blocksList');
+  if (!host || !blocksList) { showToast('Editing mode could not open on this page', 'error'); return; }
+
+  // The create page's editor is holding whatever question was last opened
+  // there. It is handed back untouched on close.
+  _em.prev = { blocks: blocks, keywords: editorKeywords, blanks: selectedBlanks };
+  blocks = [];
+  editorKeywords = {};
+  selectedBlanks = {};
+  _em.owner = {};
+  _em.qs = [];
+  _em.ctx = ctx || { kind: 'saved', id: '', title: 'Worksheet' };
+
+  const used = new Set();
+  list.forEach(en => {
+    const q = en.q;
+    const bs = JSON.parse(JSON.stringify(q.blocks || []));
+    const kw = JSON.parse(JSON.stringify(q.answerKeywords || {}));
+    const bl = JSON.parse(JSON.stringify(q.blanks || {}));
+    bs.forEach(b => {
+      if (!b) return;
+      const oldId = String(b.id == null ? '' : b.id);
+      let id = oldId;
+      if (!id || used.has(id)) {
+        id = generateBlockId();
+        if (oldId) {
+          EM_KW_FIELDS.forEach(f => {
+            const from = kwFieldKey(oldId, f), to = kwFieldKey(id, f);
+            if (kw[from] !== undefined) { kw[to] = kw[from]; delete kw[from]; }
+          });
+          if (bl[oldId] !== undefined) { bl[id] = bl[oldId]; delete bl[oldId]; }
+        }
+        b.id = id;
+      }
+      used.add(id);
+      _em.owner[id] = String(q.id);
+    });
+    blocks = blocks.concat(bs.filter(Boolean));
+    Object.assign(editorKeywords, kw);
+    Object.assign(selectedBlanks, bl);
+    _em.qs.push({
+      id: String(q.id),
+      key: 'k' + (++_emKeySeq),
+      n: _em.qs.length + 1,
+      title: q.title || '',
+      label: en.label || '',
+      sig: '',
+    });
+  });
+
+  _em.home = { parent: blocksList.parentNode, next: blocksList.nextSibling };
+  host.appendChild(blocksList);
+  blocksList.classList.add('em-on');
+  _em.on = true;
+
+  const t = document.getElementById('emTitle');
+  if (t) t.textContent = _em.ctx.title || 'Worksheet';
+  const s = document.getElementById('emSub');
+  if (s) s.textContent = (_em.ctx.kind === 'paper' ? 'Past paper' : 'Saved worksheet')
+    + ' · ' + _em.qs.length + ' question' + (_em.qs.length === 1 ? '' : 's')
+    + ' · every change is written back to the question bank when you press Save';
+  const ov = document.getElementById('emOverlay');
+  if (ov) ov.classList.add('show');
+  // The touch-up editor, the crop tool and the confirm cards all sit at a
+  // z-index BELOW this overlay. The class lifts them for as long as it is open.
+  document.body.classList.add('em-editing');
+
+  renderBlocks();
+  // The baseline is taken here, not above: the first render is what puts the
+  // markup through the browser's own serialiser, and a baseline taken before it
+  // would report every question as changed on the very first save.
+  syncEditorDomToBlocks();
+  _em.qs.forEach(e => { e.sig = emSigOf(e); });
+  emRenderStatus();
+  const body = document.getElementById('emBody');
+  if (body) body.scrollTop = 0;
+}
+
+function emOpenSaved(id) {
+  const ws = savedWorksheets.find(w => String(w.id) === String(id));
+  if (!ws) { showToast('That worksheet is no longer here', 'error'); return; }
+  const qs = _wsSavedQuestions(ws);
+  if (!qs.length) { showToast(_wsEmptyMsg(ws), 'error'); return; }
+  emOpenQuestions({ kind: 'saved', id: String(ws.id), title: ws.title || 'Worksheet' },
+    qs.map(q => ({ q: q, label: '' })));
+}
+
+// Takes the SAME arguments ppPreview / ppDoPrint do, so the three past-paper
+// buttons dispatch to it without collecting their questions a different way.
+function emOpenPaper(items, missing, title, opts) {
+  const entries = (items || []).map(it => ({ q: it.bq, label: (it.refs || []).join(' / ') }));
+  emOpenQuestions({ kind: 'paper', id: '', title: title || 'Past paper' }, entries);
+  if (_em.on && missing && missing.length) {
+    showToast('Skipped ' + missing.length + ' with no attached question', 'info');
+  }
+}
+
+function emOpenFromPreview() {
+  if (_wsPreviewPaper) { const p = _wsPreviewPaper; emOpenPaper(p.items, p.missing, p.title, { quiet: true }); return; }
+  if (_wsPreviewSaved) { emOpenSaved(_wsPreviewSaved.id); return; }
+  showToast('Open a saved worksheet or a past paper first', 'info');
+}
+
+// ── Closing ─────────────────────────────────────────────────────────────────
+function emClose(force) {
+  if (!_em.on) return;
+  if (_em.busy) { showToast('Still saving — one moment', 'info'); return; }
+  if (!force) {
+    const n = emChangedEntries().length;
+    if (n && !confirm(n + ' question' + (n === 1 ? ' has' : 's have') + ' changes that have not been saved.\n\nClose editing mode and throw them away?')) return;
+  }
+  const blocksList = document.getElementById('blocksList');
+  _em.on = false;
+  if (blocksList) {
+    blocksList.classList.remove('em-on');
+    if (_em.home && _em.home.parent) _em.home.parent.insertBefore(blocksList, _em.home.next);
+  }
+  blocks = (_em.prev && _em.prev.blocks) || [];
+  editorKeywords = (_em.prev && _em.prev.keywords) || {};
+  selectedBlanks = (_em.prev && _em.prev.blanks) || {};
+  _em.prev = null; _em.home = null; _em.owner = {}; _em.qs = []; _em.ctx = null;
+  const ov = document.getElementById('emOverlay');
+  if (ov) ov.classList.remove('show');
+  document.body.classList.remove('em-editing');
+  try { renderBlocks(); } catch (e) { console.warn('editing mode: restoring the editor', e); }
+}
+
+// ── Which questions really changed ──────────────────────────────────────────
+function emBlocksOf(qid) { return blocks.filter(b => b && _em.owner[String(b.id)] === String(qid)); }
+function emKwFor(bs) {
+  const out = {};
+  (bs || []).forEach(b => EM_KW_FIELDS.forEach(f => {
+    const k = kwFieldKey(b.id, f);
+    if (editorKeywords[k] !== undefined) out[k] = editorKeywords[k];
+  }));
+  return out;
+}
+function emBlanksFor(bs) {
+  const out = {};
+  (bs || []).forEach(b => { if (selectedBlanks[b.id] !== undefined) out[b.id] = selectedBlanks[b.id]; });
+  return out;
+}
+function emSigOf(e) {
+  const bs = emBlocksOf(e.id);
+  return JSON.stringify({ t: e.title || '', b: bs, k: emKwFor(bs), n: emBlanksFor(bs) });
+}
+function emChangedEntries() {
+  if (!_em.on) return [];
+  try { syncEditorDomToBlocks(); } catch (err) { console.warn('editing mode: reading the boxes', err); }
+  return _em.qs.map(e => ({ e: e, sig: emSigOf(e) })).filter(x => x.sig !== x.e.sig);
+}
+
+// ── Saving ──────────────────────────────────────────────────────────────────
+async function emSaveAll() {
+  if (!_em.on || _em.busy) return;
+  const changed = emChangedEntries();
+  if (!changed.length) { showToast('Nothing has changed yet', 'info'); return; }
+  _em.busy = true;
+  emRenderStatus('Saving ' + changed.length + ' question' + (changed.length === 1 ? '' : 's') + '…');
+  let ok = 0; const failed = [], written = [];
+  for (const c of changed) {
+    const e = c.e;
+    const q = questionBank.find(x => String(x.id) === e.id);
+    if (!q) { failed.push('Q' + e.n + ' — no longer in the bank'); continue; }
+    const bs = emBlocksOf(e.id);
+    if (!bs.length) { failed.push('Q' + e.n + ' — every block was deleted'); continue; }
+    q.blocks = JSON.parse(JSON.stringify(bs));
+    q.answerKeywords = JSON.parse(JSON.stringify(emKwFor(bs)));
+    q.blanks = JSON.parse(JSON.stringify(emBlanksFor(bs)));
+    if ((e.title || '').trim()) q.title = e.title.trim();
+    let saved = false;
+    try { saved = await saveQuestion(q); } catch (err) { console.error('editing mode save', err); }
+    if (saved) { ok++; e.sig = c.sig; written.push(e); } else { failed.push('Q' + e.n + ' — ' + (q.title || 'Untitled')); }
+  }
+  _em.busy = false;
+  try { renderQuestionBank(); } catch (err) { /* bank not on screen — fine */ }
+  try { renderSavedWorksheets(); } catch (err) { /* not on that page — fine */ }
+  const pv = document.getElementById('wsPreviewOverlay');
+  if (pv && pv.classList.contains('show')) { try { renderWsPreview(); } catch (err) {} }
+  emRenderStatus();
+  emPaintSaved(written);
+  if (failed.length) {
+    showToast('Saved ' + ok + ' — ' + failed.length + ' would not save: ' + failed.slice(0, 3).join('; '), 'error');
+  } else {
+    showToast('Saved ' + ok + ' question' + (ok === 1 ? '' : 's') + ' to the bank ✓', 'success');
+  }
+}
+
+// Only the questions that really went get the tick — a ✓ on a question nobody
+// touched reads as a write that never happened.
+function emPaintSaved(list) {
+  (list || []).forEach(e => {
+    const el = document.getElementById('emDirty_' + e.key);
+    if (!el) return;
+    el.textContent = 'saved ✓';
+    el.className = 'em-qdirty ok';
+    setTimeout(() => { if (el.textContent === 'saved ✓') { el.textContent = ''; el.className = 'em-qdirty'; } }, 4000);
+  });
+}
+
+function emRenderStatus(msg) {
+  const el = document.getElementById('emStatus');
+  if (!el) return;
+  if (msg) { el.textContent = msg; return; }
+  el.textContent = _em.qs.length + ' question' + (_em.qs.length === 1 ? '' : 's')
+    + ' · ' + blocks.length + ' block' + (blocks.length === 1 ? '' : 's');
+}
+
+function emTitleInput(key, value) {
+  const e = _em.qs.find(x => x.key === key);
+  if (e) e.title = value;
+}
+
+async function emOpenFull(key) {
+  const e = _em.qs.find(x => x.key === key);
+  if (!e) return;
+  const changed = emChangedEntries();
+  if (changed.length) {
+    if (!confirm(changed.length + ' question' + (changed.length === 1 ? ' has' : 's have') + ' unsaved changes.\n\nSave them all before opening this one in the full editor?')) return;
+    await emSaveAll();
+    if (emChangedEntries().length) return;   // a save failed — stay put
+  }
+  const id = e.id;
+  emClose(true);
+  try { closeWorksheetPreview(); } catch (err) {}
+  editQuestion(id);
+}
+
+// ── The never-ending scroll: headings, and the condensed cards ──────────────
+// Called at the very end of renderBlocks(), which rebuilds the whole list, so
+// everything here is done fresh on every render.
+function emAfterRender() {
+  const list = document.getElementById('blocksList');
+  if (!list) return;
+  emAdoptOwners();
+  const seen = new Set();
+  Array.from(list.children).forEach(node => {
+    if (!node.classList || !node.classList.contains('block-card')) return;
+    const block = blocks.find(b => b && String(b.id) === String(node.dataset.id));
+    const own = block ? _em.owner[String(block.id)] : null;
+    if (own && !seen.has(own)) {
+      seen.add(own);
+      const e = _em.qs.find(x => x.id === own);
+      if (e) list.insertBefore(emQuestionHeadEl(e), node);
+    }
+    emCondenseCard(node, block);
+  });
+  // A question with no blocks left cannot happen (emMayRemove refuses it), but
+  // it must never vanish silently if it ever does — a question that is not on
+  // screen is a question nobody knows they still have to fix.
+  _em.qs.forEach(e => { if (!seen.has(e.id)) list.appendChild(emQuestionHeadEl(e, true)); });
+  emRenderStatus();
+}
+
+// A block with no owner is one that has just been inserted or duplicated. It
+// belongs to the question ABOVE it — which is where the insert bar that made it
+// was drawn — falling back to the one below when it is the very first block.
+function emAdoptOwners() {
+  let last = null;
+  blocks.forEach((b, i) => {
+    if (!b) return;
+    const id = String(b.id);
+    if (!_em.owner[id]) {
+      let own = last;
+      if (!own) {
+        for (let j = i + 1; j < blocks.length; j++) {
+          const nx = blocks[j] && _em.owner[String(blocks[j].id)];
+          if (nx) { own = nx; break; }
+        }
+      }
+      _em.owner[id] = own || (_em.qs[0] && _em.qs[0].id) || '';
+    }
+    last = _em.owner[id];
+  });
+}
+
+function emQuestionHeadEl(e, empty) {
+  const el = document.createElement('div');
+  el.className = 'em-qhead' + (empty ? ' empty' : '');
+  const q = questionBank.find(x => String(x.id) === e.id);
+  const meta = q ? [q.topic, q.category].filter(Boolean).join(' · ') : 'no longer in the bank';
+  el.innerHTML =
+    `<span class="em-qn">${e.n}</span>` +
+    (e.label ? `<span class="em-qref">${escapeHtml(e.label)}</span>` : '') +
+    `<input class="em-qtitle" id="emTitle_${e.key}" type="text" value="${escapeHtml(e.title || '')}"
+            placeholder="Untitled question" title="This question's title in the bank"
+            oninput="emTitleInput('${e.key}', this.value)">` +
+    `<span class="em-qmeta">${escapeHtml(meta)}</span>` +
+    `<span class="em-qdirty" id="emDirty_${e.key}"></span>` +
+    (empty ? `<span class="em-qempty">every block was deleted — this question cannot be saved</span>` : '') +
+    `<button type="button" class="em-qbtn" title="Open this one question on its own in the full editor" onclick="emOpenFull('${e.key}')">↗ Full editor</button>`;
+  return el;
+}
+
+// Which part of a block's body is the CONTENT — the half that stays on screen.
+// Everything else in the body folds away behind the ⚙, with its buttons lifted
+// out onto the rail first so nothing becomes unreachable. A block type that is
+// not named here is left exactly as it is: mcq, table, fill-in-the-blanks and
+// the widget builder are all controls the whole way down, so there is no
+// "content" half to keep and hiding the rest would hide the question.
+const EM_PRIMARY = {
+  text: '.content-editable',
+  explanation: '.content-editable',
+  plainanswer: '.content-editable',
+  answer: '.cer-section',
+  image: '.image-preview',
+  video: '.image-url-input',
+};
+// Buttons that are already tiny and belong where they are: the rich-text
+// toolbar (B / I / U / lists) and the insert-a-block menus.
+const EM_NO_HOIST = '.toolbar-btn, .block-insert-btn, .block-insert-toggle, .em-ico';
+
+const EM_ICON_WORDS = [
+  [/improve/i, '✨'], [/shorten/i, '✂️'], [/complete/i, '✍️'], [/keyword/i, '🔑'],
+  [/crop|reposition/i, '⛶'], [/touch up/i, '🖌'], [/colour|color/i, '🎨'],
+  [/enhance/i, '✨'], [/original/i, '↩'], [/clean/i, '🧻'], [/diagram|picture|image/i, '🖼'],
+  [/answer/i, '🤖'], [/explain|explanation/i, '💡'], [/^auto$/i, '⤢'],
+  [/delete|discard|remove/i, '🗑'], [/number/i, '＃'], [/add/i, '＋'],
+];
+function emIconFor(label) {
+  const s = String(label || '').trim();
+  let m = null;
+  try { m = s.match(/^(\p{Extended_Pictographic}\uFE0F?(?:\u200D\p{Extended_Pictographic}\uFE0F?)*)/u); } catch (e) { m = null; }
+  if (m) return m[1];
+  for (const [re, ic] of EM_ICON_WORDS) if (re.test(s)) return ic;
+  return s.length <= 2 ? (s || '•') : s.slice(0, 1).toUpperCase();
+}
+// The SAME button, shrunk — never a copy that calls the same function. An
+// icon-only button with no title is a button nobody can identify, so the words
+// it used to show become the tooltip.
+function emIconify(btn) {
+  if (!btn || btn.dataset.emIco === '1') return;
+  btn.dataset.emIco = '1';
+  btn.classList.add('em-ico');
+  const words = (btn.textContent || '').replace(/\s+/g, ' ').trim();
+  // The label WITHOUT its emoji, so "✨ Improve" is not prefixed onto a tooltip
+  // that already opens "Improve grammar, phrasing…" — a tooltip that says the
+  // same thing twice is a tooltip nobody finishes reading.
+  const plain = words.replace(/[^0-9A-Za-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const tip = btn.getAttribute('title') || '';
+  if (plain && tip.toLowerCase().indexOf(plain.toLowerCase()) < 0) btn.setAttribute('title', words + (tip ? ' — ' + tip : ''));
+  else if (!tip && words) btn.setAttribute('title', words);
+  // An SVG button is already an icon; replacing its contents would leave a
+  // letter where a picture was.
+  if (btn.querySelector('svg')) return;
+  const disp = btn.style ? btn.style.display : '';
+  btn.removeAttribute('style');
+  if (disp) btn.style.display = disp;
+  btn.textContent = emIconFor(words || tip);
+}
+function emHoistInto(scope, rail, before) {
+  if (!scope || !rail) return;
+  Array.from(scope.querySelectorAll('button')).forEach(btn => {
+    if (btn.matches(EM_NO_HOIST)) return;
+    // A mic button that names no target of its own finds the box it dictates
+    // into by walking up to [data-mic-wrap]. Lifting it onto the rail lifts it
+    // out of that wrap, and it would then dictate into nothing.
+    if (btn.classList.contains('mic-btn') && !btn.getAttribute('data-mic-block')) return;
+    emIconify(btn);
+    if (before && before.parentNode === rail) rail.insertBefore(btn, before);
+    else rail.appendChild(btn);
+  });
+}
+
+function emCondenseCard(card, block) {
+  if (!card || card.dataset.emDone === '1') return;
+  card.dataset.emDone = '1';
+  card.classList.add('em-card');
+
+  const main = document.createElement('div');
+  main.className = 'em-main';
+  while (card.firstChild) main.appendChild(card.firstChild);
+  const rail = document.createElement('div');
+  rail.className = 'em-rail';
+  card.appendChild(rail);
+  card.appendChild(main);
+
+  const head = main.querySelector('.block-header');
+  const grip = head && head.querySelector('.drag-handle');
+  if (grip) rail.appendChild(grip);
+  const acts = head && head.querySelector('.block-actions');
+  if (acts) {
+    Array.from(acts.children).forEach(b => { emIconify(b); rail.appendChild(b); });
+    acts.remove();
+  }
+
+  let extras = null;
+  const sel = block && EM_PRIMARY[block.type];
+  if (sel) {
+    const host = main.querySelector('.block-body') || main;
+    const fold = [];
+    Array.from(host.children).forEach(ch => {
+      if (ch === head || (ch.classList && ch.classList.contains('block-header'))) return;
+      if (ch.matches(sel) || ch.querySelector(sel)) return;   // this is the content
+      fold.push(ch);
+    });
+    if (fold.length) {
+      extras = document.createElement('div');
+      extras.className = 'em-extras';
+      fold.forEach(ch => extras.appendChild(ch));
+      host.appendChild(extras);
+      emHoistInto(extras, rail);
+    }
+  }
+  // Whatever AI buttons are still in the visible half — the ✨ ✂️ ✍️ on each of
+  // a CER answer's three labels — shrink where they are, so it stays obvious
+  // which of the three boxes each one belongs to.
+  main.querySelectorAll('.improve-btn').forEach(emIconify);
+
+  if (extras) {
+    const gear = document.createElement('button');
+    gear.type = 'button';
+    gear.className = 'em-ico em-gear';
+    gear.title = 'Show every control on this block — the toolbar, the picture tools, the print settings, the answer-key panel';
+    gear.textContent = '⚙';
+    gear.addEventListener('click', () => card.classList.toggle('em-open'));
+    rail.appendChild(gear);
+  }
+  emRailFit(rail);
+}
+
+// A rail taller than the block it sits beside is a rail that makes the block
+// taller — which is the opposite of the point — so a long one runs in two
+// columns, and a very long one in three. Six deep is about as far as a rail can
+// go before it is the tallest thing on the card.
+function emRailFit(rail) {
+  if (!rail) return;
+  const n = rail.children.length;
+  rail.classList.toggle('two', n > 6 && n <= 12);
+  rail.classList.toggle('three', n > 12);
+}
+
+// The 🖼 picture tools are rendered a frame AFTER renderBlocks (the bar is
+// filled by its own function), so they arrive on the card once the rail already
+// exists and have to be lifted onto it separately.
+function emCondenseEnhanceBar(blockId) {
+  if (!emActive()) return;
+  const bar = document.getElementById('imgEnhance_' + blockId);
+  if (!bar) return;
+  const card = bar.closest('.block-card');
+  const rail = card && card.querySelector('.em-rail');
+  if (!rail) return;
+  emHoistInto(bar, rail, rail.querySelector('.em-gear'));
+  emRailFit(rail);
+  // An enhanced picture replaces the single preview with a side-by-side
+  // comparison, which lives in the folded half — so the block would show no
+  // picture at all until somebody pressed ⚙. Open it instead.
+  if (bar.querySelector('img')) card.classList.add('em-open');
+}
+
+// A question with no blocks has nowhere to draw its heading and nothing to own
+// the next block inserted into it, so the last one may not be deleted.
+function emMayRemove(id) {
+  if (!emActive()) return true;
+  const own = _em.owner[String(id)];
+  if (!own) return true;
+  if (emBlocksOf(own).length > 1) return true;
+  showToast('A question must keep at least one block — take the whole question off the sheet with ✎ Questions instead', 'error');
+  return false;
+}
+
 
 // =====================================================================
 // QUICK PRACTICE MODE — level-ordered practice for students
@@ -57553,7 +58168,7 @@ function ppRenderBody(){
     const attached = hits.filter(id => ppBankQ(id)).length;
     const tools = edit
       ? `<span class="pp-tools"><button class="pp-mini" title="Edit concept" onclick="ppEditConcept('${c.id}')">&#9998; Edit</button><button class="pp-mini del" title="Delete concept" onclick="ppDeleteConcept('${c.id}')">&times; Delete</button></span>`
-      : `<span class="pp-tools"><button class="pp-mini" title="Live A4 preview — check the sheet and fix any answer or explanation on the key before it goes to the printer" onclick="ppPrintConcept('${c.id}','preview')">👁 Preview</button><button class="pp-mini" title="Print this concept's ${attached} attached question${attached === 1 ? '' : 's'} as a worksheet — answer key on the last pages" onclick="ppPrintConcept('${c.id}')">🖨 Print</button><label class="pp-print-check" title="Tick to include this concept in “Print selected” at the top"><input type="checkbox" ${_ppPrintSel.has(c.id) ? 'checked' : ''} onchange="ppTogglePrintSel('${c.id}', this.checked)"></label></span>`;
+      : `<span class="pp-tools"><button class="pp-mini" title="Live A4 preview — check the sheet and fix any answer or explanation on the key before it goes to the printer" onclick="ppPrintConcept('${c.id}','preview')">👁 Preview</button>${admin ? `<button class="pp-mini" title="Editing mode \u2014 every question on this paper in one scroll, each block condensed to a strip with its controls as icons down the left. Fix what you find, then Save once." onclick="ppPrintConcept('${c.id}','edit')">✏️ Edit all</button>` : ''}<button class="pp-mini" title="Print this concept's ${attached} attached question${attached === 1 ? '' : 's'} as a worksheet — answer key on the last pages" onclick="ppPrintConcept('${c.id}')">🖨 Print</button><label class="pp-print-check" title="Tick to include this concept in “Print selected” at the top"><input type="checkbox" ${_ppPrintSel.has(c.id) ? 'checked' : ''} onchange="ppTogglePrintSel('${c.id}', this.checked)"></label></span>`;
     return `<div class="pp-rec">
       <div class="pp-rec-head"><span class="pp-rec-count">${hits.length}&times;</span><span class="pp-rec-title">${escapeHtml(c.concept || 'Untitled concept')}</span>${tools}</div>
       <div class="pp-rec-topic">${escapeHtml(c.topic || '')}${span ? ' &middot; ' + span : ''}${mk ? ' &middot; ~' + mk + ' marks across the papers' : ''}</div>
@@ -57569,7 +58184,7 @@ function ppRenderBody(){
   // silently undone before the teacher presses print.
   const whyOn = !!document.getElementById('ppIncludeWhy')?.checked;
   const whyBox = !edit ? `<label class="pp-whybox" title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment."><input type="checkbox" id="ppIncludeWhy" ${whyOn ? 'checked' : ''}> \u24d8 Why the other options are wrong</label>` : '';
-  const printSelBtn = !edit ? `<button class="pp-add" id="ppPrintSelPrevBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Live A4 preview of the ticked concepts — check the sheet and fix any answer or explanation on the key before printing" onclick="ppPrintSelected('preview')">👁 Preview selected</button><button class="pp-add" id="ppPrintSelBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Print every attached question from the concepts you ticked below as ONE worksheet — questions first, the full answer key on the last pages. Tick concepts with the checkbox at their top-right corner." onclick="ppPrintSelected()">🖨 Print selected${_ppPrintSel.size ? ' (' + _ppPrintSel.size + ')' : ''}</button>` : '';
+  const printSelBtn = !edit ? `<button class="pp-add" id="ppPrintSelPrevBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Live A4 preview of the ticked concepts — check the sheet and fix any answer or explanation on the key before printing" onclick="ppPrintSelected('preview')">👁 Preview selected</button><button class="pp-add" id="ppEditSelBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Editing mode \u2014 every question on this paper in one scroll, each block condensed to a strip with its controls as icons down the left. Fix what you find, then Save once." onclick="ppPrintSelected('edit')">✏️ Edit selected</button><button class="pp-add" id="ppPrintSelBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Print every attached question from the concepts you ticked below as ONE worksheet — questions first, the full answer key on the last pages. Tick concepts with the checkbox at their top-right corner." onclick="ppPrintSelected()">🖨 Print selected${_ppPrintSel.size ? ' (' + _ppPrintSel.size + ')' : ''}</button>` : '';
 
   // --- question map ---
   const yearGroups = years.map(y => {
@@ -57578,7 +58193,7 @@ function ppRenderBody(){
     const chips = yq.map(q => edit ? ppChipEdit(q) : ppChip(q)).join('') || '<span style="color:var(--text-muted);font-size:0.8rem;">No questions</span>';
     const addBtn = edit ? `<button class="pp-add sm" onclick="ppAddQuestion('${y}')">+ Add question</button>` : '';
     const practiceBtn = (!edit && yAssigned) ? `<button class="pp-mini" title="Practise all ${yAssigned} attached question${yAssigned === 1 ? '' : 's'} from the ${escapeHtml(y)} paper on the system" onclick="ppPracticeYear('${escapeHtml(y)}')">▶ Practice now</button>` : '';
-    const previewBtn = (!edit && (admin || yAssigned)) ? `<button class="pp-mini" title="Live A4 preview of the whole ${escapeHtml(y)} paper — check the sheet and fix any answer or explanation on the key before it goes to the printer" onclick="ppPrintYear('${escapeHtml(y)}','preview')">👁 Preview</button>` : '';
+    const previewBtn = (!edit && (admin || yAssigned)) ? `<button class="pp-mini" title="Live A4 preview of the whole ${escapeHtml(y)} paper — check the sheet and fix any answer or explanation on the key before it goes to the printer" onclick="ppPrintYear('${escapeHtml(y)}','preview')">👁 Preview</button>` + (admin ? `<button class="pp-mini" title="Editing mode \u2014 every question on this paper in one scroll, each block condensed to a strip with its controls as icons down the left. Fix what you find, then Save once." onclick="ppPrintYear('${escapeHtml(y)}','edit')">✏️ Edit all</button>` : '') : '';
     const printBtn = (!edit && (admin || yAssigned)) ? `<button class="pp-mini" title="Print the whole ${escapeHtml(y)} paper — all ${yAssigned} attached question${yAssigned === 1 ? '' : 's'} in question order, answer key on the last pages" onclick="ppPrintYear('${escapeHtml(y)}')">🖨 Print year</button>` : '';
     // Whole-paper editor: every question in this year on ONE screen, no
     // question-by-question clicking.
@@ -57631,6 +58246,7 @@ function ppRenderBody(){
         <button class="pp-add" ${r.avail ? '' : 'disabled'} title="Practise ${r.y ? 'the ' + escapeHtml(r.y) + ' paper' : 'every attached past-paper question'} on the system — MCQ and open-ended, marked as usual" onclick="ppPracticeYear('${escapeHtml(r.y)}')">▶ ${r.y ? 'Practice now' : 'Practice all'}</button>
         <button class="pp-add pp-gamebtn" ${r.avail ? '' : 'disabled'} title="Load ${r.y ? 'the ' + escapeHtml(r.y) + ' paper' : 'all past-paper questions'} into a mini-game — every question answered there counts ×2 on the leaderboards" onclick="ppGameMenuOpen(event,'${escapeHtml(r.y)}')">🎮 Practice in a game <span style="font-size:0.72em;">▾</span></button>
         ${r.y ? `<button class="pp-add" ${r.avail ? '' : 'disabled'} title="Live A4 preview of the whole ${escapeHtml(r.y)} paper — fix any answer or explanation on the key before printing" onclick="ppPrintYear('${escapeHtml(r.y)}','preview')">👁 Preview</button>` : ''}
+        ${r.y && _canAuthor() ? `<button class="pp-add" ${r.avail ? '' : 'disabled'} title="Editing mode \u2014 every question on this paper in one scroll, each block condensed to a strip with its controls as icons down the left. Fix what you find, then Save once." onclick="ppPrintYear('${escapeHtml(r.y)}','edit')">✏️ Edit all questions</button>` : ''}
         ${r.y ? `<button class="pp-add" ${r.avail ? '' : 'disabled'} title="Print the whole ${escapeHtml(r.y)} paper as a worksheet — answer key on the last pages" onclick="ppPrintYear('${escapeHtml(r.y)}')">🖨 Print paper</button>` : ''}
       </div>
     </div>`).join('');
@@ -58124,16 +58740,24 @@ async function ppDoPrint(items, missing, title, opts){
 // whichever of the two the button asked for, so the sheet previewed and the
 // sheet printed are collected by exactly the same code — a preview assembled
 // its own way is a preview of a different paper.
+// 👁 Preview, ✏️ Edit and 🖨 Print all take the same (items, missing, title,
+// opts), so the three buttons collect their questions with exactly the same
+// code — a preview or an edit assembled its own way is a different paper.
+function _ppGo(go){
+  if (go === 'preview') return ppPreview;
+  if (go === 'edit') return emOpenPaper;
+  return ppDoPrint;
+}
 function ppPrintConcept(id, go){
   const c = ppRecurring().find(x => x.id === id); if (!c) return;
   const { items, missing } = ppCollectPrintable(c.hits);
-  (go === 'preview' ? ppPreview : ppDoPrint)(items, missing, c.concept || 'Recurring concept');
+  _ppGo(go)(items, missing, c.concept || 'Recurring concept');
 }
 function ppPrintYear(y, go){
   const hitIds = ppQuestions().filter(q => String(q.year) === String(y))
     .sort((a,b) => (Number(a.n)||0) - (Number(b.n)||0)).map(q => q.id);
   const { items, missing } = ppCollectPrintable(hitIds);
-  (go === 'preview' ? ppPreview : ppDoPrint)(items, missing, 'PSLE Science ' + y, { coverTitle: 'PSLE ' + y + ' Science Paper' });
+  _ppGo(go)(items, missing, 'PSLE Science ' + y, { coverTitle: 'PSLE ' + y + ' Science Paper' });
 }
 function ppPrintSelected(go){
   const chosen = ppRecurring().filter(c => _ppPrintSel.has(c.id));
@@ -58142,7 +58766,7 @@ function ppPrintSelected(go){
   chosen.forEach(c => (c.hits || []).forEach(h => allHits.push(h)));
   const { items, missing } = ppCollectPrintable(allHits);
   const title = chosen.length === 1 ? (chosen[0].concept || 'Recurring concept') : 'Recurring Concepts — ' + chosen.length + ' concepts';
-  (go === 'preview' ? ppPreview : ppDoPrint)(items, missing, title);
+  _ppGo(go)(items, missing, title);
 }
 function ppTogglePrintSel(id, checked){
   if (checked) _ppPrintSel.add(id); else _ppPrintSel.delete(id);
@@ -62301,6 +62925,14 @@ window.practiceSavedWorksheet = practiceSavedWorksheet;
 window.akeOpen = akeOpen;
 window.closeAke = closeAke;
 window.akeSave = akeSave;
+// ✏️ Editing mode — the whole worksheet, condensed, in one scroll.
+window.emOpenSaved = emOpenSaved;
+window.emOpenPaper = emOpenPaper;
+window.emOpenFromPreview = emOpenFromPreview;
+window.emClose = emClose;
+window.emSaveAll = emSaveAll;
+window.emOpenFull = emOpenFull;
+window.emTitleInput = emTitleInput;
 window.akeAddExplanation = akeAddExplanation;
 window.akeRemoveExplanation = akeRemoveExplanation;
 window.akeAddAnswerKey = akeAddAnswerKey;

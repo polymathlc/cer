@@ -4609,6 +4609,210 @@ option {
 .ake-note { font-size: 0.79rem; line-height: 1.6; color: var(--text-muted); padding: 11px 14px; border: 1px dashed var(--border); border-radius: 10px; margin-bottom: 16px; }
 .ake-note-warn { border-style: solid; border-color: var(--accent-orange, #b8791f); background: rgba(184, 121, 31, 0.07); color: var(--text); }
 
+
+/* ── ✏️ Editing mode — the whole sheet, condensed, in one scroll ───────────
+   Every question of a worksheet or a past paper is loaded into the block
+   editor at once and each block folds down to a strip: the content, and a
+   vertical rail of tiny icons down its left edge carrying every control.
+   The rail holds the ORIGINAL buttons, moved — see `em*` in app.js.
+   Sits above the live preview (400), the quick-edit drawer (410) and the
+   ✎ Questions drawer (420), because it can be opened from any of them. */
+.em-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 440;
+  background: var(--bg);
+  flex-direction: column;
+}
+.em-overlay.show { display: flex; }
+/* Every dialog editing mode can OPEN sits at its ordinary z-index, which is
+   below this overlay — the touch-up editor and the crop tool most of all. They
+   are lifted for as long as it is open, and only then. */
+body.em-editing .overlay,
+body.em-editing .confirm-overlay,
+body.em-editing #printProgress { z-index: 470; }
+.em-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.em-head-text { flex: 1; min-width: 220px; }
+.em-head h3 { font-size: 1.05rem; font-weight: 700; line-height: 1.35; }
+.em-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 5px; line-height: 1.55; }
+.em-status {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.em-body { flex: 1; overflow-y: auto; padding: 22px 20px 80px; }
+.em-wrap { max-width: 1040px; margin: 0 auto; }
+.em-foot {
+  max-width: 1040px;
+  margin: 26px auto 0;
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border);
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* One question's heading in the never-ending scroll. */
+.em-qhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 30px 0 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--surface-alt);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+.em-qhead:first-child { margin-top: 0; }
+.em-qhead.empty { border-color: var(--accent-red); }
+.em-qn {
+  flex: 0 0 auto;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.em-qref {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--accent-blue-light);
+  color: var(--accent-blue);
+  font-family: 'Space Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.em-qtitle {
+  flex: 1 1 240px;
+  min-width: 160px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.em-qtitle:focus { outline: none; border-color: var(--primary); }
+.em-qmeta { font-size: 0.74rem; color: var(--text-muted); }
+.em-qdirty { font-size: 0.74rem; color: var(--text-muted); }
+.em-qdirty.ok { color: var(--primary); font-weight: 700; }
+.em-qempty { font-size: 0.74rem; color: var(--accent-red); font-weight: 600; }
+.em-qbtn {
+  flex: 0 0 auto;
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.em-qbtn:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ── The condensed block card ───────────────────────────────────────────── */
+#blocksList.em-on { gap: 7px; }
+#blocksList.em-on .block-card.em-card {
+  display: flex;
+  align-items: stretch;
+  border-radius: var(--radius-sm);
+}
+#blocksList.em-on .em-rail {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 28px;
+  grid-auto-rows: 26px;
+  align-content: start;
+  gap: 2px;
+  padding: 6px 4px;
+  border-right: 1px solid var(--border);
+  background: var(--surface-alt);
+}
+#blocksList.em-on .em-rail.two { grid-template-columns: 28px 28px; }
+#blocksList.em-on .em-rail.three { grid-template-columns: 28px 28px 28px; }
+#blocksList.em-on .em-main { flex: 1; min-width: 0; }
+#blocksList.em-on .block-header {
+  padding: 4px 10px;
+  background: transparent;
+  border-bottom: 1px dashed var(--border);
+  gap: 8px;
+}
+#blocksList.em-on .block-type-badge {
+  font-size: 0.6rem;
+  padding: 2px 7px;
+  letter-spacing: 0.06em;
+}
+#blocksList.em-on .block-body { padding: 8px 10px; }
+#blocksList.em-on .content-editable { min-height: 40px; padding: 7px 9px; }
+#blocksList.em-on .cer-section { margin-bottom: 7px; }
+#blocksList.em-on .image-preview { margin: 0; }
+#blocksList.em-on .image-preview img { max-height: 260px; }
+#blocksList.em-on .drag-handle { padding: 0; justify-content: center; align-items: center; }
+/* Nothing pulls the header wide any more — the four block actions have gone
+   to the rail — so the marks box must not grow into the space they left. */
+#blocksList.em-on .block-header > div:first-child { flex: 0 1 auto; }
+#blocksList.em-on .block-header { justify-content: flex-start; }
+#blocksList.em-on .qmarks-input { max-width: 54px; }
+#blocksList.em-on .qmarks-wrap { flex: 0 0 auto; }
+
+/* Every control that folds away. It is hidden, never removed — the ⚙ on the
+   rail brings the whole of the ordinary editor straight back. */
+#blocksList.em-on .em-extras { display: none; }
+#blocksList.em-on .block-card.em-open .em-extras { display: block; padding-top: 8px; }
+#blocksList.em-on .block-card.em-open .em-gear { background: var(--primary-light); color: var(--primary); }
+
+/* A tiny icon on the rail, or an AI button shrunk where it stands. */
+#blocksList.em-on .em-ico {
+  width: 26px; height: 26px;
+  min-width: 26px;
+  padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1;
+  cursor: pointer;
+  overflow: hidden;
+}
+#blocksList.em-on .em-ico:hover { background: var(--surface); border-color: var(--border); color: var(--text); }
+#blocksList.em-on .em-ico svg { width: 14px; height: 14px; }
+#blocksList.em-on .em-ico.delete:hover { background: var(--accent-red-light); color: var(--accent-red); }
+#blocksList.em-on .cer-label .em-ico,
+#blocksList.em-on .text-toolbar .em-ico { width: 24px; height: 24px; min-width: 24px; }
+
+/* The insert bars keep working — they are simply thinner. */
+#blocksList.em-on .block-insert-bar { min-height: 10px; }
+
+@media print { .em-overlay { display: none !important; } }
+
 /* ── Saved worksheet — add / remove its questions ─────────────────────────
    A saved worksheet is an ORDERED list of bank ids, so editing one is editing
    that list: what is on the sheet on the left, the bank to draw from on the
@@ -10854,6 +11058,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <input type="checkbox" id="wsPreviewExpl" onchange="akeSetExplPrint(this.checked)">
       &#128161; Explanations on key
     </label>
+    <button class="btn btn-outline" type="button" id="wsPreviewEmBtn" style="display:none;" onclick="emOpenFromPreview()" title="Editing mode — every question on this sheet in one scroll, each block condensed to a strip with its controls as tiny icons down the left. Fix what you find, then Save once.">✏️ Editing mode</button>
     <button class="btn btn-outline" type="button" id="wsPreviewEditBtn" style="display:none;" onclick="wseOpenFromPreview()" title="Add or remove questions on this saved worksheet">✎ Questions</button>
     <button class="btn btn-primary" type="button" onclick="printFromPreview()">🖨️ Print / Save PDF</button>
   </div>
@@ -10904,6 +11109,28 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <button class="btn btn-outline" type="button" onclick="closeAke()">Cancel</button>
       <button class="btn btn-primary" type="button" onclick="akeSave()">Save to bank</button>
     </div>
+  </div>
+</div>
+
+<!-- ==================== ✏️ EDITING MODE — the whole sheet, condensed ==================== -->
+<!-- The block editor's own #blocksList is MOVED in here while this is open and
+     put back when it closes, so every question on the sheet is edited by the
+     very same editor the create page uses. See `em*` in app.js. -->
+<div class="em-overlay" id="emOverlay">
+  <div class="em-head">
+    <div class="em-head-text">
+      <h3 id="emTitle">Editing mode</h3>
+      <div class="em-sub" id="emSub"></div>
+    </div>
+    <span class="em-status" id="emStatus"></span>
+    <button class="btn btn-outline" type="button" onclick="emClose()">Close</button>
+    <button class="btn btn-primary" type="button" onclick="emSaveAll()" title="Write every question you have changed back to the question bank. Questions you did not touch are left alone.">💾 Save all changes</button>
+  </div>
+  <div class="em-body" id="emBody">
+    <div class="em-wrap" id="emWrap">
+      <!-- #blocksList is moved in here -->
+    </div>
+    <div class="em-foot">That is the last question on the sheet. Press <b>💾 Save all changes</b> at the top when you are done.</div>
   </div>
 </div>
 
