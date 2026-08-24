@@ -2494,7 +2494,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.324.1';
+const APP_VERSION = 'v1.325.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -3024,21 +3024,39 @@ let _ppReturnFocus = null;
 // scroll position to restore, _vetReturnFocus the card to flash.
 let _vetReturnScroll = 0;
 let _vetReturnFocus = null;
+// The PREVIEW to reopen after a trip to the full editor — see
+// _wsPreviewSnapshot(). It lives up here beside the other return state, and
+// NOT beside the quick-edit drawer that sets it, because `_syncBackToPapersBtn`
+// reads it and is reached from setEditMode(false) inside navigateTo — which
+// runs during module evaluation. Declared a thousand lines lower it would be
+// in its temporal dead zone there and take the whole app down on load, which
+// is the same trap `var editorLos` carries.
+let _wsQeReturn = null;
 function editQuestionFromPapers(bankId, ppItemId) { editQuestion(bankId); _editReturnPage = 'papers'; _ppReturnFocus = ppItemId || null; _syncBackToPapersBtn(); }
 function _afterEditNavigate() {
   const dest = _editReturnPage || 'bank';
   _editReturnPage = null;
   navigateTo(dest);
   if (dest === 'vetting') _vetFocusScroll();
-  // An edit launched from a worksheet preview reopens that preview, so the
-  // teacher lands back on the sheet they were checking rather than a page list.
-  if (dest === 'myworksheets') _wsQeReopenPreview();
+  // An edit launched from a preview reopens that PREVIEW, so the teacher lands
+  // back on the sheet they were checking rather than on the page list behind
+  // it. It is the SNAPSHOT that decides and never the destination page: a PSLE
+  // paper preview returns to `papers`, which is also where the Past Papers
+  // assign panel returns to — and that one has no preview to reopen.
+  if (_wsQeReturn) _wsQeReopenPreview();
   else if (dest === 'worksheet' && wsSelectedIds.size) openWorksheetPreview();
 }
 function _syncBackToPapersBtn() {
   const b = document.getElementById('backToPapersBtn');
   if (!b) return;
-  if (_editReturnPage === 'papers') {
+  // A PSLE PAPER PREVIEW returns to `papers` too, so the destination alone
+  // cannot name it — and a button promising the page while delivering the
+  // preview is the kind of small lie that makes nobody trust the button.
+  if (_wsQeReturn && _wsQeReturn.kind === 'paper') {
+    b.style.display = '';
+    b.innerHTML = '&larr; Back to the paper preview';
+    b.title = 'Return to the PSLE paper preview you were checking';
+  } else if (_editReturnPage === 'papers') {
     b.style.display = '';
     b.innerHTML = '&larr; Back to PSLE Papers';
     b.title = 'Return to the PSLE Papers page, right where you left off';
@@ -13166,7 +13184,8 @@ async function _saveEditToBankConfirmed(q, id) {
 }
 
 function cancelEdit() {
-  const backDest = _editReturnPage === 'papers' ? 'PSLE Papers'
+  const backDest = (_wsQeReturn && _wsQeReturn.kind === 'paper') ? 'the paper preview'
+    : _editReturnPage === 'papers' ? 'PSLE Papers'
     : _editReturnPage === 'vetting' ? 'the vetting list'
     : (_editReturnPage === 'myworksheets' || _editReturnPage === 'worksheet') ? 'the worksheet preview'
     : _editReturnPage === 'checkq' ? 'the check queue'
@@ -13953,6 +13972,11 @@ function editQuestion(id) {
   if (!q) return;
   _editReturnPage = null;   // default: return to the Bank (callers may override after)
   _ppReturnFocus = null;
+  // …and so does the preview to come back to. Without this an edit started
+  // anywhere else would bounce to whatever preview was last left set, which is
+  // the one way a return-to-where-you-were can send somebody somewhere they
+  // have never been.
+  _wsQeReturn = null;
   _vetReturnFocus = null;
   _vetReturnScroll = 0;
   // A vetting question goes back to the Vetting List afterwards, restoring the
@@ -26690,7 +26714,9 @@ function ppPreview(items, missing, title, opts) {
     selected: _ppPrintQuestions(items)
   };
   _wsShowPreviewOverlay();
-  if (missing.length) showToast('Skipped ' + missing.length + ' with no attached question', 'info');
+  // News the first time; noise every time the preview is REOPENED after an
+  // edit, which is the same paper and the same skipped questions again.
+  if (missing.length && !(opts && opts.quiet)) showToast('Skipped ' + missing.length + ' with no attached question', 'info');
 }
 
 // Preview a SAVED worksheet — the same A4 preview the builder uses, opened from
@@ -26957,7 +26983,6 @@ function _wsPreviewPack(doc) {
 // =====================================================================
 let _wsQeQid = null;      // id of the question in the drawer
 let _wsQeDraft = null;    // working copy; discarded unless Save is pressed
-let _wsQeReturn = null;   // preview to reopen after a trip to the full editor
 
 function wsQuickEdit(qid) {
   if (!_canAuthor()) return;
@@ -27105,29 +27130,74 @@ async function saveWsQuickEdit() {
   if (ok) showToast('Question updated ✓', 'success');
 }
 
+// GOING BACK TO THE PREVIEW YOU CAME FROM
+//
+// THREE different things can be behind the ✏️ edit button, and the third is
+// the reason this is a snapshot rather than an id: the worksheet BUILDER's own
+// preview (driven by the tick boxes on the page behind it), a SAVED worksheet
+// (a stored list of ids), and a PSLE PAST PAPER — which is neither. A paper
+// has no stored list to reopen it from, only the arguments it was previewed
+// with, so those are what is kept.
+//
+// The paper is also the one this exists for. Getting back to it by hand is the
+// Past Papers page, then the year or the concept, then Preview — every single
+// time one question is fixed, which is how a wrong answer noticed on the sheet
+// ends up not being fixed at all.
+//
+// `page` is where `_afterEditNavigate` lands FIRST; the preview is reopened on
+// top of it, so the thing behind the overlay is the page it belongs to.
+function _wsPreviewSnapshot() {
+  if (_wsPreviewPaper) {
+    const p = _wsPreviewPaper;
+    return { kind: 'paper', page: 'papers', items: p.items, missing: p.missing || [],
+             title: p.title, coverTitle: p.coverTitle };
+  }
+  if (_wsPreviewSaved) {
+    return { kind: 'saved', page: 'myworksheets', id: _wsPreviewSaved.id, title: _wsPreviewSaved.title };
+  }
+  if (wsSelectedIds.size) return { kind: 'builder', page: 'worksheet' };
+  return null;
+}
+
 // Escape hatch for anything the drawer cannot change. Remembers the preview so
 // the full editor drops you back here — sheet open, same place — when it closes.
 function wsQuickEditOpenFull() {
   const qid = _wsQeQid;
   if (!qid) return;
-  const back = _wsPreviewSaved ? Object.assign({}, _wsPreviewSaved) : null;
+  // Taken BEFORE the overlay closes: closeWorksheetPreview() clears both slots.
+  const back = _wsPreviewSnapshot();
   closeWsQuickEdit();
   closeWorksheetPreview();
   editQuestion(qid);
-  // editQuestion() resets the return page, so set ours after it and refresh the
-  // "← Back" affordance — otherwise it keeps whatever the last edit left there.
-  _editReturnPage = back ? 'myworksheets' : 'worksheet';
+  // editQuestion() resets the return page and the snapshot, so set ours after
+  // it and refresh the "← Back" affordance — otherwise it keeps whatever the
+  // last edit left there.
+  _editReturnPage = back ? back.page : null;
   _wsQeReturn = back;
   _syncBackToPapersBtn();
 }
 
 // Called after the full editor closes (save or cancel) — reopens the preview
-// the edit was launched from.
+// the edit was launched from. ONE function, because a paper and a saved
+// worksheet are reopened completely differently and two call sites deciding
+// that is two chances to send somebody to the wrong sheet.
 function _wsQeReopenPreview() {
   const back = _wsQeReturn;
   _wsQeReturn = null;
   if (!back) return;
-  setTimeout(() => { if (savedWorksheets.some(w => w.id === back.id)) previewSavedWorksheet(back.id); }, 60);
+  // A beat, so the page it is landing on has rendered underneath the overlay.
+  setTimeout(() => {
+    if (back.kind === 'paper') {
+      // Rebuilt from the ARGUMENTS, and the bank questions are re-resolved by
+      // ppPreview — so the sheet shows the edit that was just saved rather
+      // than the copy it was previewed with.
+      ppPreview(back.items || [], back.missing || [], back.title, { coverTitle: back.coverTitle, quiet: true });
+    } else if (back.kind === 'saved') {
+      if (savedWorksheets.some(w => w.id === back.id)) previewSavedWorksheet(back.id);
+    } else if (wsSelectedIds.size) {
+      openWorksheetPreview();
+    }
+  }, 60);
 }
 
 // =====================================================================
