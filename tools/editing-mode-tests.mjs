@@ -28,6 +28,15 @@
 //  • emMayRemove is what stops a question being emptied — a question with no
 //    blocks has nowhere to draw its heading and nothing to own the next block
 //    inserted into it.
+//  • emStays decides what folds behind the ⚙, and a panel a RAIL ICON OPENS
+//    must never be one of them. 🔑 Assign keywords renders its chip panel as a
+//    sibling of the answer box, so the fold hid it behind the very ⚙ the author
+//    had not pressed: the button lit up and nothing appeared — the whole
+//    keyword feature dead in editing mode and perfect everywhere else.
+//  • emHoistable decides what reaches the rail. A self-contained panel's own
+//    buttons act on what is IN it, not on the block, so on the rail they read
+//    as block actions: the answer screenshot's "× Remove" beside the block's
+//    own 🗑 is a second, differently-meaning bin.
 import fs from 'fs';
 
 const APP = new URL('../app.js', import.meta.url).pathname;
@@ -77,7 +86,8 @@ const TAIL = `
 return {
   em: _em, emActive, emScope, emOwnerQuestion, emTitleFor, emTopicFor,
   emBlocksOf, emKwFor, emBlanksFor, emSigOf, emChangedEntries,
-  emAdoptOwners, emIconFor, emMayRemove,
+  emAdoptOwners, emIconFor, emMayRemove, emStays, emHoistable,
+  EM_PRIMARY, EM_KEEP,
   state: {
     set blocks(v) { blocks = v; }, get blocks() { return blocks; },
     set editorKeywords(v) { editorKeywords = v; }, get editorKeywords() { return editorKeywords; },
@@ -253,6 +263,77 @@ test('a button with no emoji is read from its words, never sliced mid-label', ()
 test('a label nobody has a rule for still yields something to click', () => {
   const ic = M.emIconFor('Wobble the thing');
   ok(ic && ic.length && ic.length <= 2, 'one glyph: ' + JSON.stringify(ic));
+});
+
+// ── what stays on screen, and what folds behind the ⚙ ──────────────────────
+// Fake elements: every selector in play is a plain class selector or a
+// comma-separated list of them, which is all these need to answer.
+function fake(cls, kids, attrs) {
+  const e = {
+    _cls: String(cls || '').split(/\s+/).filter(Boolean),
+    children: kids || [],
+    parent: null,
+    attrs: attrs || {},
+  };
+  e.classList = { contains: c => e._cls.indexOf(c) >= 0 };
+  e.matches = sel => String(sel).split(',').map(x => x.trim()).filter(Boolean)
+    .some(x => x[0] === '.' && e._cls.indexOf(x.slice(1)) >= 0);
+  e.querySelector = sel => {
+    for (const k of e.children) { if (k.matches(sel)) return k; const d = k.querySelector(sel); if (d) return d; }
+    return null;
+  };
+  e.closest = sel => { let n = e; while (n) { if (n.matches(sel)) return n; n = n.parent; } return null; };
+  e.getAttribute = n => (e.attrs[n] === undefined ? null : e.attrs[n]);
+  e.children.forEach(k => { k.parent = e; });
+  return e;
+}
+
+test('the 🔑 keyword panel NEVER folds — on a plain answer or on a CER answer', () => {
+  ok(M.emStays(fake('kw-panel'), M.EM_PRIMARY.plainanswer), 'plain answer');
+  ok(M.emStays(fake('kw-panel'), M.EM_PRIMARY.answer), 'CER answer');
+  ok(M.emStays(fake('kw-panel'), M.EM_PRIMARY.image), 'and on any other type it ever lands on');
+});
+
+test('the block\'s own content stays, and the furniture folds', () => {
+  ok(M.emStays(fake('content-editable'), M.EM_PRIMARY.text), 'the text box stays');
+  ok(M.emStays(fake('image-preview'), M.EM_PRIMARY.image), 'the picture stays');
+  ok(M.emStays(fake('cer-section'), M.EM_PRIMARY.answer), 'each CER box stays');
+  ok(!M.emStays(fake('text-toolbar'), M.EM_PRIMARY.text), 'the toolbar folds');
+  ok(!M.emStays(fake('image-paste-zone'), M.EM_PRIMARY.image), 'the paste pad folds');
+  ok(!M.emStays(fake('annot-ans'), M.EM_PRIMARY.image), 'the answer-screenshot panel folds');
+});
+
+test('a wrapper holding the content stays with it', () => {
+  ok(M.emStays(fake('wrap', [fake('content-editable')]), M.EM_PRIMARY.text), 'contains the content');
+  ok(M.emStays(fake('wrap', [fake('inner', [fake('kw-panel')])]), M.EM_PRIMARY.text), 'contains the panel');
+});
+
+test('the header is never folded — it carries the part and marks pickers', () => {
+  ok(M.emStays(fake('block-header'), M.EM_PRIMARY.text), 'header');
+});
+
+// ── what reaches the rail ───────────────────────────────────────────────────
+test('an AI button is lifted onto the rail', () => {
+  ok(M.emHoistable(fake('improve-btn', [], { 'data-improve-block': 'b1' })), 'improve');
+  ok(M.emHoistable(fake('btn btn-outline', [], { 'data-crop-open': 'b1' })), 'crop');
+});
+
+test('a self-contained panel keeps its own buttons', () => {
+  const panel = fake('kw-panel', [fake('improve-btn kw-btn')]);
+  ok(!M.emHoistable(panel.children[0]), 'Clear all / Done stay in the 🔑 panel');
+  const annot = fake('annot-ans', [fake('annot-ans-tools', [fake('btn btn-ghost')])]);
+  ok(!M.emHoistable(annot.children[0].children[0]), '× Remove stays with the answer screenshot');
+});
+
+test('the rich-text toolbar buttons stay where they are', () => {
+  ok(!M.emHoistable(fake('toolbar-btn')), 'B / I / U');
+  ok(!M.emHoistable(fake('block-insert-btn')), 'the insert menu');
+  ok(!M.emHoistable(fake('em-ico')), 'and nothing is lifted twice');
+});
+
+test('a mic with no target of its own is left inside its wrap', () => {
+  ok(M.emHoistable(fake('mic-btn', [], { 'data-mic-block': 'b1' })), 'a mic that names its box');
+  ok(!M.emHoistable(fake('mic-btn', [], { 'data-mic': '' })), 'a mic that finds it by walking up');
 });
 
 // ── run ─────────────────────────────────────────────────────────────────────
