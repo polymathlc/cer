@@ -2659,6 +2659,28 @@ control. Scroll from the first question to the last, fix what you find, press
   controls the whole way down, so there is no "content" half to keep and hiding
   the rest would hide the question. That default is what makes the feature safe
   to extend.
+- **…but a panel a RAIL ICON OPENS folds for nobody** (`EM_KEEP`, v1.326.1).
+  🔑 Assign keywords renders its chip panel as a SIBLING of the answer box, so
+  the fold put it behind the very ⚙ the author had not pressed: the button lit
+  up and **nothing appeared** — the whole keyword feature dead in editing mode
+  and working perfectly everywhere else. `emStays(el, sel)` is the ONE place
+  that is decided, and anything a rail button REVEALS belongs in `EM_KEEP`
+  whatever block type it sits on.
+- **A SELF-CONTAINED PANEL keeps its own buttons, spelled out** (`EM_NO_HOIST_IN`).
+  Its controls act on what is IN the panel, not on the block, so on the rail
+  they read as block actions — the answer screenshot's *× Remove* beside the
+  block's own 🗑 is a second, differently-meaning bin, and 🔑 Keywords' own
+  *Clear all* / *Done* came out as a bare **C** and **D**, which is the panel
+  gutted as well as hidden. `emHoistable(btn)` is the ONE place a button's fate
+  is decided; the `.improve-btn` shrink sweep asks the same list, because those
+  two buttons wear that very class.
+- **The scroller is held across a render** (`emStashScroll` / `emRestoreScroll`).
+  Every edit that touches the block LIST — opening the 🔑 panel, adding, moving
+  or deleting a block, adding an MCQ option — goes through `renderBlocks`, which
+  empties `#blocksList`; an emptied list clamps its scroller to the top, so
+  opening a panel at question 30 threw the author back to question 1. `var`, not
+  `let`: `renderBlocks` sits far above this section and can run during module
+  evaluation.
 - **The 🖼 picture tools arrive a frame LATE.** `renderImgEnhanceBar` fills its
   bar after `renderBlocks` has returned, so ✂️ Crop, ✏️ Touch up and ✨ Enhance are
   lifted onto the rail by their own hook (`emCondenseEnhanceBar`) — and an
@@ -2685,7 +2707,10 @@ control. Scroll from the first question to the last, fix what you find, press
   question of a sheet into the one block editor at once, which is what makes it
   useful and also what makes every failure here silent — the editor still
   renders, still types and still saves, and is quietly working on the wrong
-  question. `emScope` handing back the whole array makes `qPartMap` inherit part
+  question. A panel that folds when a rail icon opens it — the 🔑 keyword
+  chips — is a button that lights up and does nothing, and a self-contained
+  panel's buttons lifted onto the rail are that panel gutted and a second 🗑
+  beside the block's own. `emScope` handing back the whole array makes `qPartMap` inherit part
   (c) of question 3 into every block of question 4 and sends the 🤖 AI answer
   button the entire paper as one question; a block id repeated across two
   questions is typing into question 7 and watching question 2 change; a

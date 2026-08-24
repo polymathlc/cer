@@ -2494,7 +2494,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.326.0';
+const APP_VERSION = 'v1.326.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5258,6 +5258,10 @@ function renderAdvancedTableBlock(block) {
 // =====================================================================
 function renderBlocks() {
   const container = document.getElementById('blocksList');
+  // ✏️ Editing mode rebuilds the WHOLE sheet on every render, and an emptied
+  // list clamps its scroller to the top — so opening a keyword panel at
+  // question 30 would throw the author back to question 1.
+  if (emActive()) emStashScroll();
   container.innerHTML = '';
 
   blocks.forEach((block, index) => {
@@ -27734,6 +27738,7 @@ function emOpenQuestions(ctx, entries) {
     + ' · every change is written back to the question bank when you press Save';
   const ov = document.getElementById('emOverlay');
   if (ov) ov.classList.add('show');
+  _emScroll = 0;   // a fresh sheet opens at the top, not where the last one was
   // The touch-up editor, the crop tool and the confirm cards all sit at a
   // z-index BELOW this overlay. The class lifts them for as long as it is open.
   document.body.classList.add('em-editing');
@@ -27923,6 +27928,18 @@ function emAfterRender() {
   // screen is a question nobody knows they still have to fix.
   _em.qs.forEach(e => { if (!seen.has(e.id)) list.appendChild(emQuestionHeadEl(e, true)); });
   emRenderStatus();
+  emRestoreScroll();
+}
+
+// Where the author was reading, kept across a render. Every edit that touches
+// the block LIST — opening the 🔑 panel, adding, moving or deleting a block,
+// adding an MCQ option — goes through renderBlocks, which rebuilds all of it.
+var _emScroll = 0;   // `var`, not `let`: renderBlocks sits far above this
+                     // section and can run during module evaluation.
+function emStashScroll() { const b = document.getElementById('emBody'); if (b) _emScroll = b.scrollTop; }
+function emRestoreScroll() {
+  const b = document.getElementById('emBody');
+  if (b && _emScroll) b.scrollTop = _emScroll;
 }
 
 // A block with no owner is one that has just been inserted or duplicated. It
@@ -27979,9 +27996,44 @@ const EM_PRIMARY = {
   image: '.image-preview',
   video: '.image-url-input',
 };
+// PANELS A RAIL ICON OPENS, and they fold for nobody.
+// 🔑 Assign keywords renders its chip panel as a SIBLING of the answer box, so
+// the fold put it behind the very ⚙ the author had not pressed: the button lit
+// up and nothing appeared — the whole keyword feature, dead in editing mode and
+// working perfectly everywhere else. Anything a rail button REVEALS belongs
+// here, whatever block type it is sitting on.
+const EM_KEEP = '.kw-panel';
 // Buttons that are already tiny and belong where they are: the rich-text
 // toolbar (B / I / U / lists) and the insert-a-block menus.
 const EM_NO_HOIST = '.toolbar-btn, .block-insert-btn, .block-insert-toggle, .em-ico';
+// …and every button inside a SELF-CONTAINED panel. Those act on what is in the
+// panel, not on the block, so on the rail they read as block actions — the
+// answer screenshot's "× Remove" would sit beside the block's own 🗑 as a
+// second, differently-meaning bin. The keyword panel's own Clear all / Done are
+// the same case, and it is what gutted the panel as well as hiding it.
+const EM_NO_HOIST_IN = '.kw-panel, .annot-ans';
+
+// Does this child of a block's body stay on screen, or fold behind the ⚙?
+// Its own function so the rule can be tested without a browser: both halves are
+// silent when wrong — too greedy and a panel the author opened never appears,
+// too shy and the strip is not condensed at all.
+function emStays(el, sel) {
+  if (!el) return true;
+  if (el.classList && el.classList.contains('block-header')) return true;
+  const keep = (sel ? sel + ', ' : '') + EM_KEEP;
+  return !!(el.matches(keep) || el.querySelector(keep));
+}
+// May this button be lifted onto the rail?
+function emHoistable(btn) {
+  if (!btn) return false;
+  if (btn.matches(EM_NO_HOIST)) return false;
+  if (btn.closest && btn.closest(EM_NO_HOIST_IN)) return false;
+  // A mic button that names no target of its own finds the box it dictates
+  // into by walking up to [data-mic-wrap]. Lifting it onto the rail lifts it
+  // out of that wrap, and it would then dictate into nothing.
+  if (btn.classList && btn.classList.contains('mic-btn') && !btn.getAttribute('data-mic-block')) return false;
+  return true;
+}
 
 const EM_ICON_WORDS = [
   [/improve/i, '✨'], [/shorten/i, '✂️'], [/complete/i, '✍️'], [/keyword/i, '🔑'],
@@ -28024,11 +28076,7 @@ function emIconify(btn) {
 function emHoistInto(scope, rail, before) {
   if (!scope || !rail) return;
   Array.from(scope.querySelectorAll('button')).forEach(btn => {
-    if (btn.matches(EM_NO_HOIST)) return;
-    // A mic button that names no target of its own finds the box it dictates
-    // into by walking up to [data-mic-wrap]. Lifting it onto the rail lifts it
-    // out of that wrap, and it would then dictate into nothing.
-    if (btn.classList.contains('mic-btn') && !btn.getAttribute('data-mic-block')) return;
+    if (!emHoistable(btn)) return;
     emIconify(btn);
     if (before && before.parentNode === rail) rail.insertBefore(btn, before);
     else rail.appendChild(btn);
@@ -28063,8 +28111,8 @@ function emCondenseCard(card, block) {
     const host = main.querySelector('.block-body') || main;
     const fold = [];
     Array.from(host.children).forEach(ch => {
-      if (ch === head || (ch.classList && ch.classList.contains('block-header'))) return;
-      if (ch.matches(sel) || ch.querySelector(sel)) return;   // this is the content
+      if (ch === head) return;
+      if (emStays(ch, sel)) return;   // the content, or a panel the rail opens
       fold.push(ch);
     });
     if (fold.length) {
@@ -28077,8 +28125,10 @@ function emCondenseCard(card, block) {
   }
   // Whatever AI buttons are still in the visible half — the ✨ ✂️ ✍️ on each of
   // a CER answer's three labels — shrink where they are, so it stays obvious
-  // which of the three boxes each one belongs to.
-  main.querySelectorAll('.improve-btn').forEach(emIconify);
+  // which of the three boxes each one belongs to. A self-contained panel keeps
+  // its own controls spelled out: 🔑 Keywords' "Clear all" and "Done" wear the
+  // same class and would come out as a bare "C" and "D".
+  main.querySelectorAll('.improve-btn').forEach(b => { if (!b.closest(EM_NO_HOIST_IN)) emIconify(b); });
 
   if (extras) {
     const gear = document.createElement('button');
