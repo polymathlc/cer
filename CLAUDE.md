@@ -2130,6 +2130,56 @@ the wording by hand.
   survives, which is the exam convention and exactly what a paper shows.
 - Run **`node tools/question-marks-tests.mjs`** after touching any of it.
 
+## ↩️ Back to the preview you came from (v1.325.0)
+
+`_wsPreviewSnapshot` / `_wsQeReopenPreview` / `wsQuickEditOpenFull` /
+`_afterEditNavigate` / `_syncBackToPapersBtn` / `_wsQeReturn` (search
+`GOING BACK TO THE PREVIEW YOU CAME FROM`).
+
+Every preview carries ✏️ **edit question**, and the drawer's **Full editor**
+button leaves for the real editor. Saving used to drop the teacher on the
+Question Bank — so fixing one question on a PSLE paper meant walking back
+through **📄 Past Papers → the year or the concept → 👁 Preview**, every single
+time. That is how a wrong answer noticed on a sheet ends up not being fixed at
+all.
+
+- **THREE things can be behind that button, and the third is why this is a
+  SNAPSHOT rather than an id**: the worksheet BUILDER's preview (driven by the
+  tick boxes on the page behind it), a SAVED worksheet (a stored list of ids),
+  and a **PSLE PAST PAPER** — which is neither. A paper has no stored list to
+  reopen it from, only the arguments it was previewed with, so those are what
+  is kept. That is the same reason `_wsPreviewPaper` is its own slot beside
+  `_wsPreviewSaved` rather than being squeezed into it.
+- **THE SNAPSHOT IS TAKEN BEFORE THE OVERLAY CLOSES.**
+  `closeWorksheetPreview()` clears both preview slots, so one taken after it is
+  always null — and the return silently stops working while everything else
+  about the edit behaves perfectly. It is stored AFTER `editQuestion`, which
+  resets it.
+- **`editQuestion` clears it**, beside `_editReturnPage` and `_ppReturnFocus`.
+  Without that one line an edit started anywhere else would bounce to whatever
+  preview was last left set — a sheet the teacher has never opened, which is
+  the one way "return to where you were" can be worse than not returning.
+- **`_wsQeReturn` lives at the TOP, with the other return state, not beside the
+  drawer that sets it.** `_syncBackToPapersBtn` reads it and is reached from
+  `setEditMode(false)` inside `navigateTo` — which runs during module
+  evaluation. Declared a thousand lines lower it would be in its temporal dead
+  zone there and take the whole app down on load: the same trap `var editorLos`
+  carries.
+- **The SNAPSHOT decides where to go back to, never the destination page.** A
+  paper preview returns to `papers`, and so does the Past Papers assign panel's
+  own edit (`editQuestionFromPapers`) — which has no preview to reopen. For the
+  same reason the **← Back** button asks the snapshot first: a button promising
+  the page while delivering the preview is a button nobody trusts twice.
+- **A paper is rebuilt from its ARGUMENTS and its questions re-resolved** by
+  `ppPreview`, so the sheet shows the edit that was just saved rather than the
+  copy it was previewed with. It reopens **`quiet`**: the skipped-questions
+  toast is news the first time and noise on every return, and that flag is the
+  only thing `ppPreview` gained.
+- **The reopen is deferred a beat**, so the page it is landing on has rendered
+  underneath the overlay, and the snapshot is **spent on use** so it cannot
+  fire twice.
+- Run **`node tools/preview-return-tests.mjs`** after touching any of it.
+
 ## 📄 The answer key is PAGINATED, and previewable from the past papers (v1.315.0)
 
 `_packAkRows` / `_akPageTitle` / `_printAkPageEl` / `_printPlanAkPages` (in
@@ -2528,6 +2578,17 @@ uses the print CSS at once: both print builders and the live A4 preview.
   planner's chunk height.
 
 ## House rules
+- After touching **↩️ back to the preview you came from** (`_wsPreviewSnapshot`,
+  `_wsQeReopenPreview`, `wsQuickEditOpenFull`, `_wsQeReturn`,
+  `_afterEditNavigate`, `_syncBackToPapersBtn`, or `ppPreview`'s `quiet`), run
+  `node tools/preview-return-tests.mjs`. Every failure is silent — the question
+  saves, the toast says so, and the teacher simply ends up somewhere they did
+  not ask to be. A snapshot taken after `closeWorksheetPreview()` is always
+  null, so the return quietly stops working while the edit itself behaves
+  perfectly; a snapshot `editQuestion` forgets to clear sends a later,
+  unrelated edit to a sheet nobody opened; and reopening on the DESTINATION
+  rather than the snapshot's kind confuses the paper preview with the Past
+  Papers page, which both land on `papers`.
 - After touching **the printed part label** (`PRINT_PART_PAD_*`,
   `printPartPadPt`, `printPartBlockHtml`, or the
   `.print-text-block.print-has-part` rules), print a question with parts and
