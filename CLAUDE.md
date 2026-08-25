@@ -228,8 +228,27 @@ Guidance for Claude when working in this repo.
   - **Realm of Embers rulebook** — the 📘 How to Play tab (`tcgGuideHtml`) is meant to document EVERY mechanic. It reads its numbers out of the game's own constants (`TCG_PACKS`, `TCG_SKILLS`, `TCG_AFFINITY`, `TCG_ARTIFACTS`, `TCG_LVL_STEP`, `TCG_MERGE_GAIN`, `GAME_Q_POINTS*`, `EMS_*`) instead of hard-coding them, so tuning a pack or a skill updates the guide too — keep it that way, and add a section whenever you add a mechanic.
 - **Science Quest generated avatar art (v1.312.0) is an ADMIN BETA, not released.** `RPG_ART_BETA_RELEASED` must stay `false` until the owner accepts the complete set. While false, `rpgArtBetaEnabled()` returns false for students and defaults on only for admins; the hero page gives admins a session-only old/new comparison switch and an unlock-all control for the 143-item test catalogue. The latter affects only that admin hero save and does not grant student inventory.
   - Bundled assets live under `assets/science-quest/avatar-v2/`: two neutral base characters plus one transparent WebP for every weapon, shield, armour, helmet, accessory and pet. `asset-manifest.json` is the source-of-truth coverage list and `tools/rpg-avatar-art-tests.mjs` pins all 145 assets, the beta gate and shared renderer wiring.
-  - `rpgAvatarSvg` is the one paper-doll compositor used by the profile, question battles, Dungeon, leaderboards and arena ghosts. Generated characters MUST remain a base layer inside this SVG; do not restore the old early return from `rpgCharacterArtUrl`, because it hides every equipped item. Layer order is back accessory → character → armour → helmet → front accessory → pet → shield/animated weapon.
-  - Admin `_rpgArt` uploads always win over bundled beta art. `rpgItemImageUrl` / `rpgCharacterArtUrl` then fall back to the bundle only when the beta is enabled; otherwise the existing drawn SVG art remains the student-safe fallback. Leaderboard rows publish `gender` with `equipment`, and remote avatar calls must pass that gender so a rival is not rendered as the viewer.
+  - **THE HERO IS DRAWN; ONLY HIS KIT IS GENERATED** (v1.326.2). The generated
+    character stands in a different pose and at different proportions from the
+    slot boxes every piece of equipment is placed by, so a breastplate landed on
+    his belly, a helm sat across his eyes and his shoulders stayed bare — the
+    armour was right and the body under it was not. **`rpgCharacterArtUrl` no
+    longer serves `characters/*.webp`**: the SVG paper doll is the body those
+    boxes were drawn around, and the generated ITEM art
+    (`rpgBundledItemArtUrl`) stays exactly as it is, which is the half worth
+    having. The two `.webp` characters are still bundled, and an admin who wants
+    one can still put it on by uploading it as a `_character` override.
+  - **A piece of kit goes on its OWN slot box, whoever drew the picture in it**
+    (`rpgItemAvatarBox`). Two overrides used to move the bundled helmet and the
+    bundled front accessory somewhere else, because the generated character's
+    head sat higher — with the hero drawn again those are the thing that would
+    put a piece out of place, so they are gone. One box per slot.
+  - **The beta switch decides the ITEM art, not the body.** With it off — which
+    is every student — nothing here changed at all: `rpgBundledItemArtUrl`
+    returns `""`, so no bundled src ever reached either function.
+  - `rpgAvatarSvg` is the one paper-doll compositor used by the profile, question battles, Dungeon, leaderboards and arena ghosts. **It keeps BOTH branches**: an uploaded character PNG as a base layer, and the drawn hero. Every slot must be layered in both, or an admin who uploads a character loses every piece of equipment — which is the old `rpgCharacterArtUrl` early-return bug wearing a new hat. Layer order is back accessory → character → armour → helmet → front accessory → pet → shield/animated weapon.
+  - Admin `_rpgArt` uploads always win over bundled beta art, as they always have — a picture somebody chose deliberately is not the renderer's to refuse. `rpgItemImageUrl` falls back to the bundle only when the beta is enabled; otherwise the existing drawn SVG art remains the student-safe fallback. Leaderboard rows publish `gender` with `equipment`, and remote avatar calls must pass that gender so a rival is not rendered as the viewer.
+  - Run **`node tools/rpg-avatar-art-tests.mjs`** after touching any of it. Every failure is silent: put the bundled character back and every piece is out of place again on a screen that still renders perfectly, and put the box overrides back and the helmet and the amulet alone go wrong while the armour looks right.
 - `mistakes.html` — **"Try again"**, the worksheet a student's own mistakes come back as. Standalone,
   like `bar-model.html` and `fps.html`: it does NOT load `app.js` and it is not a page inside the
   portal. The Scan app (`polymathlc/scan`) keeps every question a student got wrong on a photographed

@@ -2494,7 +2494,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.326.1';
+const APP_VERSION = 'v1.326.2';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -35961,15 +35961,19 @@ function rpgItemImageAspect(src) {
   // Keep uploaded overrides on their historical aspect-preserving behaviour.
   return String(src || "").includes(`${RPG_ART_BETA_ROOT}/`) ? "none" : "xMidYMid meet";
 }
-function rpgItemAvatarBox(it, src) {
-  const bundled = String(src || "").includes(`${RPG_ART_BETA_ROOT}/`);
-  if (bundled && it.slot === "helmet") return "60 8 80 78";
-  if (bundled && it.slot === "accessory" && it.layer !== "back") return "74 112 52 70";
+// WHERE A PIECE OF KIT LANDS ON THE HERO — its own box, always.
+// A slot's box was drawn to fit the SVG hero below: the armour box is his
+// torso, the helmet box is his head. There used to be two overrides here that
+// moved the bundled helmet and accessory somewhere else, because the generated
+// character PNG had different proportions — and the hero is drawn again now
+// (see rpgCharacterArtUrl), so those overrides are what would put a piece out
+// of place. One box per slot, whoever drew the picture in it.
+function rpgItemAvatarBox(it) {
   return it.box || RPG_SLOT_META[it.slot].box;
 }
 function rpgItemArtImage(it, src) {
   const imageUrl = src || rpgItemImageUrl(it);
-  const [bx, by, bw, bh] = rpgItemAvatarBox(it, imageUrl).split(" ").map(Number);
+  const [bx, by, bw, bh] = rpgItemAvatarBox(it).split(" ").map(Number);
   return `<image href="${escapeHtml(imageUrl)}" x="${bx}" y="${by}" width="${bw}" height="${bh}" preserveAspectRatio="${rpgItemImageAspect(imageUrl)}" style="image-rendering:auto;"/>`;
 }
 function rpgItemArt(slot, eq) {
@@ -35989,16 +35993,25 @@ function rpgItemArt(slot, eq) {
   if (!it.art) return "";
   return it.art();
 }
-// Which hero PNG to show: the student's chosen male/female sprite, falling back
-// to the generic _character override (and vice-versa) so partial setups still work.
+// THE HERO HIMSELF IS DRAWN, NOT GENERATED — and the kit he wears is not.
+// The generated character PNG stands in a different pose and at different
+// proportions from the slot boxes every piece of equipment is placed by, so a
+// breastplate landed on his belly, a helm across his eyes and his shoulders
+// stayed bare: the armour was right, the body under it was not. The bundled
+// characters/*.webp are therefore NOT served here — the SVG paper doll below
+// is, which is the body those boxes were drawn around — while the generated
+// ITEM art stays exactly as it is (rpgBundledItemArtUrl), because that is the
+// half that was worth having.
+//
+// An admin's own upload still wins, as every _rpgArt override always has: a
+// character PNG somebody chose deliberately is not this function's to refuse.
+// Which one — the student's male/female sprite, falling back to the generic
+// _character (and vice-versa) so a partial setup still works.
 function rpgCharacterArtUrl(gender) {
   const g = gender !== undefined ? gender : ((rpgState && rpgState.gender) || null);
-  let custom = null;
-  if (g === "female") custom = _rpgArt._character_female || _rpgArt._character || null;
-  else if (g === "male") custom = _rpgArt._character_male || _rpgArt._character || null;
-  else custom = _rpgArt._character || _rpgArt._character_male || _rpgArt._character_female || null;
-  if (custom || !rpgArtBetaEnabled()) return custom;
-  return `${RPG_ART_BETA_ROOT}/characters/${g === "female" ? "female" : "male"}.webp?${encodeURIComponent(APP_VERSION)}`;
+  if (g === "female") return _rpgArt._character_female || _rpgArt._character || null;
+  if (g === "male") return _rpgArt._character_male || _rpgArt._character || null;
+  return _rpgArt._character || _rpgArt._character_male || _rpgArt._character_female || null;
 }
 function rpgAvatarSvg(equipment, gender) {
   const eq = equipment || (rpgState && rpgState.equipment) || {};
