@@ -246,9 +246,33 @@ Guidance for Claude when working in this repo.
   - **The beta switch decides the ITEM art, not the body.** With it off — which
     is every student — nothing here changed at all: `rpgBundledItemArtUrl`
     returns `""`, so no bundled src ever reached either function.
+  - **The drawn hero is `rpgHeroLower` / `rpgHeroArms` / `rpgHeroHead`** (v1.326.3),
+    redrawn to look like the two generated characters bundled beside him: the
+    charcoal bodysuit, the chunky cuffed boots, the swept brown hair with its
+    highlight, the big dark eyes with catchlights — and a real **female**
+    variant with a ponytail, which the old drawing never had (it showed every
+    girl the male body). `RPG_HERO` holds the palette, sampled from those two
+    pictures.
+    - **THE LANDMARKS MAY NEVER MOVE.** He is the body every slot box was
+      measured against: the head is the circle at **(100,78) r34** the helmet
+      box was drawn around, the torso sits inside the armour box, and the hands
+      at **(58,158)** and **(142,158)** ARE the points the shield and the
+      weapon's swing group are translated to. Move one and every piece is out
+      of place again on a screen that still renders perfectly.
+    - **The layer order is the drawing**: suit → armour → sleeves → head →
+      helmet. The sleeves go OVER the armour on purpose, so a breastplate reads
+      as worn on the chest with the suit outside it.
+    - **`rpgEnsureSvgDefs` renders BOTH heroes.** `rpgGrad` registers a gradient
+      the first time it is asked for and those defs are installed exactly once,
+      so a colour reached down only one of the two branches would resolve to a
+      `url(#…)` that is not in the document — and the shape wearing it would
+      come out as nothing at all.
+    - `rpgHeroGender` resolves male/female the way `rpgCharacterArtUrl` does:
+      an explicit argument (a leaderboard row's owner) first, then this hero's
+      own choice, then male — which is what an unset hero has always shown.
   - `rpgAvatarSvg` is the one paper-doll compositor used by the profile, question battles, Dungeon, leaderboards and arena ghosts. **It keeps BOTH branches**: an uploaded character PNG as a base layer, and the drawn hero. Every slot must be layered in both, or an admin who uploads a character loses every piece of equipment — which is the old `rpgCharacterArtUrl` early-return bug wearing a new hat. Layer order is back accessory → character → armour → helmet → front accessory → pet → shield/animated weapon.
   - Admin `_rpgArt` uploads always win over bundled beta art, as they always have — a picture somebody chose deliberately is not the renderer's to refuse. `rpgItemImageUrl` falls back to the bundle only when the beta is enabled; otherwise the existing drawn SVG art remains the student-safe fallback. Leaderboard rows publish `gender` with `equipment`, and remote avatar calls must pass that gender so a rival is not rendered as the viewer.
-  - Run **`node tools/rpg-avatar-art-tests.mjs`** after touching any of it. Every failure is silent: put the bundled character back and every piece is out of place again on a screen that still renders perfectly, and put the box overrides back and the helmet and the amulet alone go wrong while the armour looks right.
+  - Run **`node tools/rpg-avatar-art-tests.mjs`** after touching any of it. Every failure is silent: put the bundled character back and every piece is out of place again on a screen that still renders perfectly, put the box overrides back and the helmet and the amulet alone go wrong while the armour looks right, and move one of the drawn hero's landmarks and the whole wardrobe drifts off him.
 - `mistakes.html` — **"Try again"**, the worksheet a student's own mistakes come back as. Standalone,
   like `bar-model.html` and `fps.html`: it does NOT load `app.js` and it is not a page inside the
   portal. The Scan app (`polymathlc/scan`) keeps every question a student got wrong on a photographed
