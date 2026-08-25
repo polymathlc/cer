@@ -2494,7 +2494,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.326.2';
+const APP_VERSION = 'v1.326.3';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -34612,7 +34612,13 @@ function rpgEnsureSvgDefs() {
   if (rpgDefsInstalled || !document.body || !document.body.appendChild) return;
   try {
     RPG_ITEMS.forEach(it => { try { it.art(); } catch (_) {} });
-    rpgAvatarSvg({});
+    // BOTH heroes. rpgGrad registers a gradient the first time it is asked
+    // for and these defs are installed exactly once, so every variant has to
+    // be rendered at least once here — a colour reached down only one of the
+    // two branches would resolve to a url(#…) that is not in the document, and
+    // the shape wearing it would come out as nothing at all.
+    rpgAvatarSvg({}, "male");
+    rpgAvatarSvg({}, "female");
     const host = document.createElement("div");
     host.innerHTML = `<svg width="0" height="0" style="position:absolute;pointer-events:none;" aria-hidden="true">${rpgSvgDefsHtml()}</svg>`;
     if (host.firstChild) document.body.appendChild(host.firstChild);
@@ -36013,6 +36019,101 @@ function rpgCharacterArtUrl(gender) {
   if (g === "male") return _rpgArt._character_male || _rpgArt._character || null;
   return _rpgArt._character || _rpgArt._character_male || _rpgArt._character_female || null;
 }
+// ---- The drawn hero ---------------------------------------------------------
+// He is the body every equipment slot box was measured against, so the
+// landmarks below are load-bearing and none of them may drift: the head is a
+// circle at (100,78) r34 under the helmet box, the torso sits inside the armour
+// box, and the hands are at (58,158) and (142,158) — the shield and the
+// weapon's swing group are translated to exactly those two points.
+//
+// He was redrawn to look like the generated characters bundled beside him
+// (assets/science-quest/avatar-v2/characters): the charcoal bodysuit, the
+// chunky boots, the layered brown hair, the big friendly eyes — and a real
+// female variant, which the old drawing never had. Colours are sampled from
+// those two pictures. What changed is paint; nothing an item hangs off moved.
+const RPG_HERO = {
+  skin: "#fbd8b4", skinLo: "#f0b98d",
+  suit: "#4a4849", suitLo: "#343233",
+  boot: "#1f1c1d", bootLo: "#121011",
+  hair: "#6b4527", hairLo: "#43260f", hairHi: "#96683e",
+  eye: "#241b14", blush: "#f39c7d"
+};
+// male / female, resolved the same way rpgCharacterArtUrl resolves it: an
+// explicit argument first (a leaderboard row's owner), then this hero's own
+// choice, and male when nobody has chosen — which is what the avatar has
+// always shown for an unset hero.
+function rpgHeroGender(gender) {
+  const g = gender !== undefined ? gender : (rpgState && rpgState.gender);
+  return g === "female" ? "female" : "male";
+}
+// Legs, boots and the bodysuit — everything drawn UNDER the armour layer.
+function rpgHeroLower() {
+  const suit = rpgGrad(RPG_HERO.suit, "h"), suitLo = rpgGrad(RPG_HERO.suitLo, "h");
+  const boot = rpgGrad(RPG_HERO.boot), bootLo = rpgGrad(RPG_HERO.bootLo, "h");
+  return `
+    <rect x="84" y="148" width="12" height="42" rx="5.5" fill="${suitLo}" ${RPG_O_THIN}/>
+    <rect x="104" y="148" width="12" height="42" rx="5.5" fill="${suitLo}" ${RPG_O_THIN}/>
+    <path d="M78 194 q0 -3 3 -3 h15 q3 0 3 3 v13 q0 6 -6 6 h-9 q-6 0 -6 -6 z" fill="${boot}" ${RPG_O_THIN}/>
+    <path d="M101 194 q0 -3 3 -3 h15 q3 0 3 3 v13 q0 6 -6 6 h-9 q-6 0 -6 -6 z" fill="${boot}" ${RPG_O_THIN}/>
+    <rect x="80" y="180" width="17" height="13" rx="5.5" fill="${bootLo}" ${RPG_O_THIN}/>
+    <rect x="103" y="180" width="17" height="13" rx="5.5" fill="${bootLo}" ${RPG_O_THIN}/>
+    <path d="M80 116 Q100 107 120 116 L122 141 Q121 152 118 162 Q100 169 82 162 Q79 152 78 141 Z" fill="${suit}" ${RPG_O}/>
+    <path d="M89 118 Q100 113 111 118 L112 158 Q100 163 88 158 Z" fill="rgba(255,255,255,0.08)"/>
+    <path d="M81 117 Q100 109 119 117 L120 128 Q100 121 80 128 Z" fill="rgba(255,255,255,0.10)"/>
+    <path d="M79 148 Q100 155 121 148" stroke="rgba(0,0,0,0.24)" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    <path d="M89 111 Q100 120 111 111" stroke="rgba(0,0,0,0.28)" stroke-width="2.2" fill="none" stroke-linecap="round"/>`;
+}
+// Sleeves and hands — drawn OVER the armour, as they always were, so a
+// breastplate reads as worn on the chest with the suit's sleeves outside it.
+function rpgHeroArms() {
+  const suit = RPG_HERO.suit, skin = rpgGrad(RPG_HERO.skin, "r");
+  return `
+    <path d="M81 123 Q67 133 60 152" stroke="${RPG_OUT}" stroke-width="13.5" fill="none" stroke-linecap="round" opacity="0.85"/>
+    <path d="M119 123 Q133 133 140 152" stroke="${RPG_OUT}" stroke-width="13.5" fill="none" stroke-linecap="round" opacity="0.85"/>
+    <path d="M81 123 Q67 133 60 152" stroke="${suit}" stroke-width="10.5" fill="none" stroke-linecap="round"/>
+    <path d="M119 123 Q133 133 140 152" stroke="${suit}" stroke-width="10.5" fill="none" stroke-linecap="round"/>
+    <path d="M80 126 Q69 135 64 150" stroke="rgba(255,255,255,0.14)" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M120 126 Q131 135 136 150" stroke="rgba(255,255,255,0.14)" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <circle cx="58" cy="158" r="8" fill="${skin}" ${RPG_O_THIN}/>
+    <circle cx="142" cy="158" r="8" fill="${skin}" ${RPG_O_THIN}/>`;
+}
+// Neck, head, hair and face — drawn UNDER the helmet layer.
+function rpgHeroHead(gender) {
+  const g = rpgHeroGender(gender);
+  const skin = rpgGrad(RPG_HERO.skin, "r"), skinLo = rpgGrad(RPG_HERO.skinLo, "h");
+  const hair = rpgGrad(RPG_HERO.hair, "v"), hairLo = rpgGrad(RPG_HERO.hairLo, "v");
+  const eye = RPG_HERO.eye;
+  // Long hair goes BEHIND the head, so it has to be laid down before it.
+  const behind = g === "female"
+    ? `<path d="M124 60 Q151 68 153 94 Q155 117 141 128 Q141 106 130 93 Q123 78 124 60 Z" fill="${hairLo}" ${RPG_O_THIN}/>
+       <path d="M64 68 Q59 96 68 116 Q78 105 73 78 Z" fill="${hairLo}" ${RPG_O_THIN}/>
+       <path d="M136 68 Q141 96 132 116 Q122 105 127 78 Z" fill="${hairLo}" ${RPG_O_THIN}/>`
+    : "";
+  const fringe = g === "female"
+    ? `<path d="M63 78 Q58 40 100 36 Q142 40 137 78 Q134 62 127 57 Q112 78 100 73 Q88 78 73 57 Q66 62 63 78 Z" fill="${hair}" ${RPG_O_THIN}/>`
+    : `<path d="M63 78 Q58 40 100 36 Q142 40 137 78 Q135 64 129 59 Q114 76 92 70 Q77 68 70 59 Q64 64 63 78 Z" fill="${hair}" ${RPG_O_THIN}/>`;
+  const lashes = g === "female"
+    ? `<path d="M81 76 Q85 73 90 75" stroke="${eye}" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+       <path d="M119 76 Q115 73 110 75" stroke="${eye}" stroke-width="1.9" fill="none" stroke-linecap="round"/>`
+    : "";
+  return `
+    <rect x="92" y="100" width="16" height="19" rx="7" fill="${skinLo}"/>
+    ${behind}
+    <ellipse cx="66" cy="88" rx="6" ry="7.5" fill="${skin}" ${RPG_O_THIN}/>
+    <ellipse cx="134" cy="88" rx="6" ry="7.5" fill="${skin}" ${RPG_O_THIN}/>
+    <circle cx="100" cy="78" r="34" fill="${skin}" ${RPG_O}/>
+    ${fringe}
+    <path d="M74 52 Q90 40 110 43 Q120 45 126 52" stroke="${RPG_HERO.hairHi}" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.55"/>
+    <path d="M97 38 Q106 48 101 60" stroke="${RPG_HERO.hairLo}" stroke-width="2.2" fill="none" stroke-linecap="round" opacity="0.35"/>
+    <ellipse cx="88" cy="84" rx="5" ry="6.4" fill="${eye}"/>
+    <ellipse cx="112" cy="84" rx="5" ry="6.4" fill="${eye}"/>
+    <circle cx="86.1" cy="81.2" r="1.9" fill="#fff" opacity="0.92"/>
+    <circle cx="110.1" cy="81.2" r="1.9" fill="#fff" opacity="0.92"/>
+    ${lashes}
+    <path d="M93 95 Q100 101.5 107 95" stroke="${eye}" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    <ellipse cx="79" cy="93" rx="5.6" ry="3.6" fill="${RPG_HERO.blush}" opacity="0.38"/>
+    <ellipse cx="121" cy="93" rx="5.6" ry="3.6" fill="${RPG_HERO.blush}" opacity="0.38"/>`;
+}
 function rpgAvatarSvg(equipment, gender) {
   const eq = equipment || (rpgState && rpgState.equipment) || {};
   const acc = RPG_ITEMS_BY_ID[eq.accessory];
@@ -36036,34 +36137,15 @@ function rpgAvatarSvg(equipment, gender) {
     <ellipse cx="100" cy="222" rx="46" ry="9" fill="rgba(0,0,0,0.10)"/>
     ${rpgState && rpgState.auraGold ? `<ellipse cx="100" cy="130" rx="78" ry="96" fill="#ffd76a" opacity="0.16">${svgPulse(0.1, 0.22)}</ellipse>` : ""}
     ${capeArt}
-    <rect x="84" y="180" width="11" height="30" rx="5" fill="${rpgGrad("#4b4339", "h")}" ${RPG_O_THIN}/>
-    <rect x="105" y="180" width="11" height="30" rx="5" fill="${rpgGrad("#4b4339", "h")}" ${RPG_O_THIN}/>
-    <ellipse cx="88" cy="212" rx="11" ry="6" fill="${rpgGrad("#14161a")}" ${RPG_O_THIN}/>
-    <ellipse cx="112" cy="212" rx="11" ry="6" fill="${rpgGrad("#14161a")}" ${RPG_O_THIN}/>
-    <path d="M77 118 Q100 110 123 118 L129 178 Q100 188 71 178 Z" fill="${rpgGrad("#0b6b4f")}" ${RPG_O}/>
-    <path d="M77 118 Q100 110 123 118 L121 130 Q100 124 79 130 Z" fill="rgba(0,0,0,0.12)"/>
-    <rect x="73" y="166" width="54" height="8" rx="4" fill="${rpgGrad("#5b4632")}" ${RPG_O_THIN}/>
-    <rect x="95" y="166" width="10" height="8" rx="2" fill="${rpgGrad("#d4b106")}" ${RPG_O_THIN}/>
+    ${rpgHeroLower()}
     ${rpgItemArt("armor", eq)}
-    <path d="M80 124 Q66 134 60 152" stroke="${RPG_OUT}" stroke-width="14" fill="none" stroke-linecap="round" opacity="0.85"/>
-    <path d="M120 124 Q134 134 140 152" stroke="${RPG_OUT}" stroke-width="14" fill="none" stroke-linecap="round" opacity="0.85"/>
-    <path d="M80 124 Q66 134 60 152" stroke="#0b6b4f" stroke-width="10.5" fill="none" stroke-linecap="round"/>
-    <path d="M120 124 Q134 134 140 152" stroke="#0b6b4f" stroke-width="10.5" fill="none" stroke-linecap="round"/>
-    <circle cx="58" cy="158" r="7" fill="${rpgGrad("#f5cfa8", "r")}" ${RPG_O_THIN}/>
-    <circle cx="142" cy="158" r="7" fill="${rpgGrad("#f5cfa8", "r")}" ${RPG_O_THIN}/>
-    <rect x="93" y="104" width="14" height="12" rx="5" fill="#f5cfa8"/>
-    <circle cx="100" cy="78" r="34" fill="${rpgGrad("#f5cfa8", "r")}" ${RPG_O}/>
-    <path d="M64 76 Q66 40 100 40 Q134 40 136 76 Q120 58 100 60 Q80 58 64 76 Z" fill="${rpgGrad("#5b4632")}" ${RPG_O_THIN}/>
-    <circle cx="88" cy="84" r="3.4" fill="#14161a"/>
-    <circle cx="112" cy="84" r="3.4" fill="#14161a"/>
-    <path d="M91 95 Q100 102 109 95" stroke="#14161a" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-    <circle cx="80" cy="92" r="4" fill="#f3a683" opacity="0.45"/>
-    <circle cx="120" cy="92" r="4" fill="#f3a683" opacity="0.45"/>
+    ${rpgHeroArms()}
+    ${rpgHeroHead(gender)}
     ${rpgItemArt("helmet", eq)}
     ${frontAccArt}
     ${rpgItemArt("pet", eq)}
     <g transform="translate(58,158)">${rpgItemArt("shield", eq)}</g>
-    <g transform="translate(142,158)"><g class="av-swing" transform="rotate(14)"><animateTransform class="av-anim-slash" attributeName="transform" type="rotate" values="14;-44;112;78;14" keyTimes="0;0.26;0.52;0.66;1" dur="0.62s" begin="indefinite"/><animateTransform class="av-anim-chop" attributeName="transform" type="rotate" values="14;-78;122;14" keyTimes="0;0.36;0.6;1" dur="0.74s" begin="indefinite"/><animateTransform class="av-anim-raise" attributeName="transform" type="rotate" values="14;-30;-30;14" keyTimes="0;0.3;0.72;1" dur="0.8s" begin="indefinite"/>${rpgItemArt("weapon", eq)}<circle r="7" fill="#f5cfa8" stroke="#2a2d3a" stroke-width="1.6"/></g></g>
+    <g transform="translate(142,158)"><g class="av-swing" transform="rotate(14)"><animateTransform class="av-anim-slash" attributeName="transform" type="rotate" values="14;-44;112;78;14" keyTimes="0;0.26;0.52;0.66;1" dur="0.62s" begin="indefinite"/><animateTransform class="av-anim-chop" attributeName="transform" type="rotate" values="14;-78;122;14" keyTimes="0;0.36;0.6;1" dur="0.74s" begin="indefinite"/><animateTransform class="av-anim-raise" attributeName="transform" type="rotate" values="14;-30;-30;14" keyTimes="0;0.3;0.72;1" dur="0.8s" begin="indefinite"/>${rpgItemArt("weapon", eq)}<circle r="8" fill="${rpgGrad(RPG_HERO.skin, "r")}" stroke="#2a2d3a" stroke-width="1.6"/></g></g>
   </svg>`;
 }
 function rpgItemIconSvg(it) {
