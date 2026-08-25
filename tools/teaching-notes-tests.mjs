@@ -36,7 +36,9 @@ const api = new Function(`
   return {
     set notes(v) { teachingNotes = v; },
     _noteSuitsThisApp, _notesFor, _noteSourceLabel, notesCardHtml,
-    _notesGuidanceBlock, _notesMarkingBlock, _notesGenBlock, _notesAnswerBlock
+    _notesGuidanceBlock, _notesMarkingBlock, _notesGenBlock, _notesAnswerBlock,
+    aiGrounding, notesLedgerFor, notesLedgerCounts, _notesFairShare,
+    NOTES_GUIDE_MIN_EACH, NOTES_TRIM_MARK
   };
 `)();
 
@@ -106,9 +108,88 @@ ok('a guidance-only notebook still grounds a model answer', api._notesAnswerBloc
 api.notes = [guideNote, { id: 'g2', guidance: 'Units on every numerical answer.', topics: [] }];
 const both = api._notesGuidanceBlock();
 ok('every standing note is carried', both.includes(GUIDE) && both.includes('Units on every'));
-api.notes = [{ id: 'g3', guidance: 'x'.repeat(4000), topics: [] }];
-ok('the guidance budget is capped', api._notesGuidanceBlock().length < 1900,
-   'length ' + api._notesGuidanceBlock().length);
+
+/* ---- NO NOTE IS EVER SILENTLY DROPPED ----
+   This is the bug the teacher reported. The budget used to be a `.slice()`
+   over the JOINED guidance, so with two long standing instructions the first
+   lost most of itself and the SECOND reached no prompt at all — while sitting
+   on the Teaching Notes page looking obeyed. It is a POT now, shared out. */
+const many = [];
+for (let i = 0; i < 12; i++) many.push({ id: 'many' + i, topics: [], guidance: 'RULE-SENTINEL-' + i + ' ' + 'w'.repeat(900) });
+api.notes = many;
+for (const kind of ['mark', 'answer', 'gen', 'teach', 'check']) {
+  const dig = api.aiGrounding(kind);
+  const missing = many.filter(n => !dig.includes('RULE-SENTINEL-' + n.id.slice(4)));
+  ok('every standing instruction reaches a "' + kind + '" prompt', missing.length === 0,
+     missing.length + ' of 12 notes were dropped entirely');
+}
+
+/* ---- Over-long is TRIMMED, not vanished ---- */
+api.notes = [{ id: 'g3', topics: [], guidance: 'OPENING-SENTINEL ' + 'x'.repeat(9000) }];
+const big = api._notesGuidanceBlock();
+ok('an over-long note keeps its opening', big.includes('OPENING-SENTINEL'));
+ok('an over-long note is marked as trimmed', big.includes(api.NOTES_TRIM_MARK));
+ok('an over-long note does not go in whole', big.length < 9000, 'length ' + big.length);
+
+/* ---- A SHORT note is never trimmed at all ---- */
+api.notes = [guideNote, { id: 'g4', topics: [], guidance: 'Units on every numerical answer.' }];
+ok('a short note goes in word for word', api._notesGuidanceBlock().includes('Units on every numerical answer.'));
+
+/* ---- The ledger tells the truth, in both directions ---- */
+api.notes = [guideNote];
+api.aiGrounding('answer');
+ok('a note that fits is not reported as trimmed', api.notesLedgerFor('g1') === null);
+ok('nothing is reported when nothing was cut', api.notesLedgerCounts().trimmed === 0 && api.notesLedgerCounts().dropped === 0);
+api.notes = many;
+api.aiGrounding('answer');
+ok('a trimmed note IS reported', api.notesLedgerCounts().trimmed > 0);
+const rep0 = api.notesLedgerFor('many0');
+ok('the report names the note and its real numbers', !!rep0 && rep0.wanted > rep0.kept, JSON.stringify(rep0));
+ok('the card says so', api.notesCardHtml(many[0]).includes('Trimmed'));
+api.notes = [guideNote];
+api.aiGrounding('answer');
+ok('the card is clean again once it fits', !api.notesCardHtml(guideNote).includes('Trimmed'));
+
+/* ---- The same rule typed in two apps is ONE rule ---- */
+api.notes = [{ id: 'd1', topics: [], guidance: GUIDE }, { id: 'd2', topics: [], guidance: GUIDE + '  ' }];
+ok('a duplicated rule is not sent twice',
+   api._notesGuidanceBlock().split(GUIDE).length - 1 === 1);
+
+/* ---- 'mark' NEVER gets the key facts, however tight the budget ----
+   A marker handed the answer stops marking against the paper. The plausible
+   regression is a "just send everything" fallback when the water-filler runs
+   out, so it is checked with the notebook well over budget too. */
+const secret = { id: 's1', topics: ['Heat'], keywords: [], markingStandards: 'State the direction.', keyFacts: 'THE-ANSWER-IS-42' };
+api.notes = [secret];
+ok('marking never sees the key facts', !api.aiGrounding('mark', 'Heat').includes('THE-ANSWER-IS-42'));
+ok('an answer digest DOES see the key facts', api.aiGrounding('answer', 'Heat').includes('THE-ANSWER-IS-42'));
+api.notes = many.concat([secret]);
+ok('marking never sees the key facts even over budget', !api.aiGrounding('mark', 'Heat').includes('THE-ANSWER-IS-42'));
+
+/* ---- An unknown kind degrades to MARKING, not to ANSWER ----
+   'mark' is the kind that leaks least, so a typo must not be the thing that
+   hands a marker the answer. */
+api.notes = [secret];
+ok('an unknown kind is grounded as marking', !api.aiGrounding('marks', 'Heat').includes('THE-ANSWER-IS-42'));
+
+/* ---- 'check' is a REFERENCE, never a standard to rewrite to ----
+   A checker told to base the wording on the notes starts flagging correct
+   answers as wrong for using different words, and the report then reads as a
+   clean bill of health inverted. */
+api.notes = [heatNote];
+const chk = api.aiGrounding('check', 'Heat');
+ok('a check digest carries the notes', chk.includes('gains heat'));
+ok('a check digest says the notes are a reference', chk.includes('NOT AS A STANDARD TO REWRITE TO'));
+ok('a check digest never licenses a rewrite', !chk.includes('base the science and the wording on this database FIRST'));
+
+/* ---- The fair-share rule itself ---- */
+{
+  const share = api._notesFairShare(
+    [{ id: 'a', text: 'short' }, { id: 'b', text: 'y'.repeat(5000) }], 600, 120);
+  ok('the short note survives whole beside a huge one', share.texts[0] === 'short');
+  ok('the huge note is trimmed rather than the short one dropped', share.texts.length === 2);
+  ok('nothing is dropped when the floor fits', share.dropped.length === 0);
+}
 
 /* ---- No regression in what was already there ----
    The topic filter, the keyword lists and the authority order all have to
@@ -247,6 +328,111 @@ ok('a marking call obeys it too — guidance is the one field that reaches marki
 ok('the corrected answer reaches an ANSWER, never the marker',
    api._notesAnswerBlock('').includes('They grow larger.') &&
    !api._notesMarkingBlock('').includes('They grow larger.'));
+
+
+/* ==================================================================
+   THE CENSUS — the test that fails when a new AI call site is added
+   ungrounded.
+
+   "Every AI function checks the teaching notes first" is a promise that
+   cannot be kept by remembering: a call site added next month is grounded
+   or it is not, and nothing on any screen says which — the AI answers
+   fluently in its own voice instead of the teacher's. So the file itself is
+   read: every model call is found, the function it sits in is resolved, and
+   anything that is neither grounded nor deliberately exempt is a FAILURE
+   naming the function and its line.
+
+   The exemption list is the point of it. Adding a call that should not be
+   grounded means typing a sentence here saying why — which is a decision
+   somebody made, rather than one nobody noticed.
+   ================================================================== */
+const UNGROUNDED_BY_DESIGN = {
+  // ---- transport: they carry a prompt somebody else built ----
+  _aiRun: 'the dispatcher — it is handed a finished prompt',
+  _aiAsk: 'the failover loop — it is handed a finished prompt',
+  askGemini: 'the door every text call goes through; the prompt arrives built',
+  askGeminiDirect: 'the raw Gemini call',
+  askGeminiCached: 'a cache in front of askGemini',
+  askGeminiVision: 'the door every vision call goes through',
+  askChatGpt: 'a named-engine wrapper round the same door',
+  askKimi: 'a named-engine wrapper round the same door',
+  askKimiDirect: 'the raw Moonshot call',
+  askOpenAiServer: 'the Cloud Function transport',
+  _widgetAskAI: 'the widget builder’s own transport — _widgetSpecPrompt is what is grounded',
+  akcAskEngine: 'the cross-check transport — akcPrompt is what is grounded',
+
+  // ---- reading the notes themselves ----
+  notesHandleFiles: 'this is what READS the notes; grounding it is a feedback loop',
+
+  // ---- transcription: a transcriber told what the answer should say writes
+  //      that down instead of what is on the page ----
+  _finishVoice: 'transcribes dictation',
+  epReadKey: 'transcribes a marking scheme off a photograph',
+  _mpReadScript: 'transcribes a student’s handwriting — it is told never to mark',
+  _mpReadKey: 'transcribes a marking scheme off a photograph',
+
+  // ---- pictures: no science words come back ----
+  _aiRefineCrop: 'returns a rectangle, not words',
+  tcgArtRescueIdentify: 'names which card a picture shows',
+  generateCleanEnhancedImage: 'redraws a diagram',
+
+  // ---- metadata ABOUT questions, not science said to anybody ----
+  aiSuggestTags: 'proposes tags for a question',
+  runBankAiSearch: 'turns a search box into a filter',
+  qpAiRecommend: 'picks which questions to serve',
+  _classifyLOsWithAI: 'files questions under syllabus objectives',
+  loAiFind: 'files questions under syllabus objectives',
+  loSuggestLos: 'files one question under syllabus objectives',
+  _ainsteinSearchYoutube: 'writes a YouTube search query',
+  _ainsteinParseWorksheetSpec: 'parses a request into a worksheet spec',
+  snapFindAndMark: 'MATCHES a photographed question to one in the bank; the marking itself goes through markOpenAnswersIn, which is grounded',
+  runOeqCompare: 'compares the app’s answer against the OFFICIAL PSLE key — that key is the authority there, not the notes',
+};
+
+{
+  const lines = src.split('\n');
+  const fns = [];
+  lines.forEach((l, i) => {
+    const m = l.match(/^(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/);
+    if (m) fns.push({ name: m[1], line: i });
+  });
+  const bodyOf = {};
+  fns.forEach((f, k) => {
+    const end = k + 1 < fns.length ? fns[k + 1].line : lines.length;
+    bodyOf[f.name] = lines.slice(f.line, end).join('\n');
+  });
+  const groundedBody = n => /aiGrounding\s*\(|_markingPreamble\s*\(|_genPreamble\s*\(/.test(bodyOf[n] || '');
+  // ONE HOP: a call site whose prompt is built by another top-level function
+  // is grounded when THAT function is. Any deeper and the rule stops being
+  // checkable by reading.
+  const grounded = n => {
+    if (groundedBody(n)) return true;
+    const body = bodyOf[n] || '';
+    return fns.some(f => f.name !== n && groundedBody(f.name) &&
+      new RegExp('\\b' + f.name.replace(/\$/g, '\\$') + '\\s*\\(').test(body));
+  };
+  const owner = i => { let best = null; for (const f of fns) { if (f.line <= i) best = f; else break; } return best; };
+  const callRe = /\baskGemini(?:Vision|Cached|Direct)?\s*\(|geminiModel\.generateContent\s*\(/;
+  const seen = new Map();
+  lines.forEach((l, i) => {
+    if (!callRe.test(l)) return;
+    const o = owner(i);
+    if (!o) return;
+    if (!seen.has(o.name)) seen.set(o.name, i + 1);
+  });
+  ok('the census found the model call sites at all', seen.size > 20, seen.size + ' found');
+  const loose = [];
+  for (const [name, line] of seen) {
+    if (grounded(name)) continue;
+    if (Object.prototype.hasOwnProperty.call(UNGROUNDED_BY_DESIGN, name)) continue;
+    loose.push(name + ' (app.js:' + line + ')');
+  }
+  ok('every AI call site is grounded in the teaching notes, or exempt on purpose', loose.length === 0,
+     loose.length ? 'UNGROUNDED:\n        ' + loose.join('\n        ') : '');
+  // A stale exemption is how a RENAMED function slips back through.
+  const stale = Object.keys(UNGROUNDED_BY_DESIGN).filter(n => !bodyOf[n]);
+  ok('no exemption names a function that no longer exists', stale.length === 0, stale.join(', '));
+}
 
 console.log((fails ? '✗ ' : '✓ ') + (ran - fails) + '/' + ran + ' checks passed');
 process.exit(fails ? 1 : 0);

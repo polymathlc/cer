@@ -102,6 +102,11 @@ async function _urlToDataUrlRobust() { throw new Error("no images in these tests
 function _parseImageDataUrl() { return null; }
 async function askOpenAI() { throw new Error("not used in these tests"); }
 async function askGeminiVision() { throw new Error("not used in these tests"); }
+// The cross-check prompt is grounded in the teaching notes like every other
+// AI call in the app (see tools/teaching-notes-tests.mjs). An empty notebook
+// grounds nothing, which is what these tests want: they are about the prompt's
+// own wording, not about the notes.
+function aiGrounding() { return ""; }
 `;
 
 const compareBlock = cut('const AKC_PAR = 3;', '// ---- running a batch', 'cross-check comparison block');

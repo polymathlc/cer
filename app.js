@@ -955,7 +955,7 @@ function _markingPreamble(questionGuide, topic) {
     parts.push(`Marking guide specific to THIS question: ${questionGuide}`);
   }
   try {
-    const notes = _notesMarkingBlock(topic);
+    const notes = aiGrounding('mark', topic);
     if (notes) parts.push(notes);
   } catch (e) {}
   return parts.join(' ');
@@ -996,7 +996,7 @@ async function saveGenSettings() {
 function _genPreamble() {
   const parts = [];
   if (aiGenSettings.instructions) parts.push(`IMPORTANT teacher instructions for creating this question — follow them closely: ${aiGenSettings.instructions}\n`);
-  const notes = _notesGenBlock();
+  const notes = aiGrounding('gen');
   if (notes) parts.push(notes);
   return parts.join('');
 }
@@ -1155,27 +1155,156 @@ function _notesFor(topic) {
 // notes matching the question in front of us would not be a house rule — and
 // it reaches every kind of call, marking included. It goes in verbatim:
 // nothing is extracted, nothing is summarised, and it LEADS the digest.
-const NOTES_GUIDE_CHARS = 1600;
+//
+// ---- NO NOTE IS EVER SILENTLY DROPPED ----
+// These numbers used to be a `.slice()` over the JOINED text of every note,
+// which is the bug the teacher reported: with two standing instructions of
+// 1,600 characters each, the first lost most of itself and **the second
+// reached no prompt at all** — while sitting on the Teaching Notes page
+// looking obeyed. They are POTS now, shared out by `_notesFairShare`: every
+// note is guaranteed its own floor, a long note is TRIMMED rather than the
+// next note vanishing, and anything that still would not fit is named on the
+// page (`_notesLedger`). Read them as budgets to divide, never as a length to
+// cut to — restoring the `.slice()` restores the bug.
+const NOTES_GUIDE_CHARS = 3000;      // the guidance pot — its own, unraidable
+const NOTES_GUIDE_MIN_EACH = 200;    // every standing rule is worth at least this
+const NOTES_HARD_CHARS = 12000;      // the ONLY ceiling a note can be lost to
+const NOTES_FIELD_MIN_EACH = 120;    // per-note floor for standards / key facts
+const NOTES_STD_CHARS = 2400;
+const NOTES_FACT_CHARS = 4000;
+const NOTES_COMMENT_CHARS = 600;
+const NOTES_KW_MAX = 120;
+const NOTES_TRIM_MARK = '…[trimmed]';
+
+// What the LAST digest could not fit. Rebuilt on every `aiGrounding` call and
+// read by the Teaching Notes page, because a note quietly left out of every
+// prompt is exactly what this whole section exists to stop happening again.
+let _notesLedger = { kind: '', trimmed: {}, dropped: {} };
+function _notesLedgerReset(kind) { _notesLedger = { kind: kind || '', trimmed: {}, dropped: {} }; }
+function notesLedgerFor(id) {
+  const k = String(id || '');
+  if (_notesLedger.dropped[k]) return { dropped: true };
+  if (_notesLedger.trimmed[k]) return _notesLedger.trimmed[k];
+  return null;
+}
+function notesLedgerCounts() {
+  return { trimmed: Object.keys(_notesLedger.trimmed).length, dropped: Object.keys(_notesLedger.dropped).length };
+}
+
+// Cut on a word boundary and SAY it was cut. A silent truncation reads to the
+// model as a sentence the teacher wrote that way.
+function _notesTrimTo(text, n) {
+  const s = String(text || '');
+  if (s.length <= n) return s;
+  const room = Math.max(1, n - NOTES_TRIM_MARK.length);
+  let cut = s.slice(0, room);
+  const sp = cut.lastIndexOf(' ');
+  if (sp > room * 0.6) cut = cut.slice(0, sp);
+  return cut.replace(/\s+$/, '') + NOTES_TRIM_MARK;
+}
+
+// The same rule typed in this app and in Ans Key is ONE rule. Left in twice it
+// eats the pot twice and reads to the model as emphasis the teacher never
+// wrote.
+function _notesDedupe(items) {
+  const seen = new Set();
+  const out = [];
+  items.forEach(it => {
+    const key = String(it.text || '').toLowerCase().replace(/\s+/g, ' ').replace(/[.;,]+$/, '').trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(it);
+  });
+  return out;
+}
+
+// ---- Every note gets a GUARANTEED share of the budget ----
+// Water-fill: everybody takes their floor first, then the remainder is handed
+// round to whoever still wants more, until it runs out. Two consequences, and
+// both are the point: a SHORT note is never trimmed at all, and a long note is
+// trimmed rather than the next note disappearing.
+//
+// **The budget yields to the notes, not the other way round.** When there are
+// more notes than the pot can floor, the pot GROWS to `n * minEach` — a house
+// rule the teacher typed outranks a token. `NOTES_HARD_CHARS` bounds that, and
+// it is the only path on which a note is dropped; when it is, the note is named
+// in the ledger and the prompt says the list is incomplete.
+function _notesFairShare(items, budget, minEach) {
+  const out = { texts: [], parts: [], dropped: [] };
+  const list = _notesDedupe((items || []).filter(it => it && String(it.text || '').trim()));
+  if (!list.length) return out;
+  const n = list.length;
+  const cap = Math.max(budget, Math.min(n * minEach, NOTES_HARD_CHARS));
+  let keepN = n;
+  if (n * minEach > cap) {
+    keepN = Math.max(1, Math.floor(cap / minEach));
+    for (let i = keepN; i < n; i++) out.dropped.push(list[i]);
+  }
+  const use = list.slice(0, keepN);
+  const want = use.map(it => String(it.text).trim().length);
+  const share = use.map(() => 0);
+  let left = cap;
+  for (let i = 0; i < use.length; i++) { const g = Math.min(want[i], minEach); share[i] = g; left -= g; }
+  while (left > 0) {
+    const hungry = [];
+    for (let i = 0; i < use.length; i++) if (share[i] < want[i]) hungry.push(i);
+    if (!hungry.length) break;
+    const before = left;
+    const each = Math.max(1, Math.floor(left / hungry.length));
+    for (const i of hungry) {
+      if (left <= 0) break;
+      const g = Math.min(each, want[i] - share[i], left);
+      share[i] += g; left -= g;
+    }
+    if (left === before) break;   // nothing moved: stop rather than spin
+  }
+  use.forEach((it, i) => {
+    const text = String(it.text).trim();
+    const kept = share[i] >= text.length ? text : _notesTrimTo(text, share[i]);
+    out.texts.push(kept);
+    out.parts.push({ id: it.id, title: it.title, kept: kept.length, wanted: text.length });
+  });
+  return out;
+}
+
+// Fair-share a field across notes AND file what would not fit.
+function _notesField(rel, pick, budget, minEach) {
+  const items = rel.map(n => ({ id: n.id, title: n.title || n.name || '', text: String(pick(n) || '').trim() }));
+  const res = _notesFairShare(items, budget, minEach);
+  res.parts.forEach(p => {
+    if (p.wanted > p.kept) _notesLedger.trimmed[String(p.id)] = { kept: p.kept, wanted: p.wanted };
+  });
+  res.dropped.forEach(d => { _notesLedger.dropped[String(d.id)] = true; });
+  return res.texts;
+}
+
 function _notesGuidanceBlock() {
   if (!teachingNotes.length) return '';
-  const guide = teachingNotes.filter(_noteSuitsThisApp)
-    .map(n => String(n.guidance || '').trim())
-    .filter(Boolean).join('\n').slice(0, NOTES_GUIDE_CHARS);
-  if (!guide) return '';
-  return `THE TEACHER'S GENERAL GUIDANCE (standing instructions they typed themselves — house rules, obey them on every question):\n${guide}\n`;
+  const rel = teachingNotes.filter(_noteSuitsThisApp);
+  const texts = _notesField(rel, n => n.guidance, NOTES_GUIDE_CHARS, NOTES_GUIDE_MIN_EACH);
+  if (!texts.length) return '';
+  const short = Object.keys(_notesLedger.dropped).length;
+  // Only ever said when something really was left out, and said at the END so
+  // the rules themselves lead. An unconditional prefix would also break the
+  // harness assertion that a marking digest opens "TEACHER'S REFERENCE NOTES".
+  const more = short
+    ? `\n(${short} further standing instruction${short === 1 ? ' was' : 's were'} too long to include — do not treat the list above as complete.)`
+    : '';
+  return `THE TEACHER'S GENERAL GUIDANCE (standing instructions they typed themselves — house rules, obey them on every question):\n${texts.join('\n')}${more}\n`;
 }
 
 // Compact digest for MARKING prompts: keywords + marking standards from the
-// notes covering this question's topic (general/untagged notes as fallback),
-// with the standing instructions ahead of them.
-// Kept tight so every marking call stays cheap.
+// notes covering this question's topic (general/untagged notes always after
+// them), with the standing instructions ahead of everything.
+// It gets the standards and DELIBERATELY not the key facts or exemplar
+// answers: a marker handed the answer stops marking against the paper.
 function _notesMarkingBlock(topic) {
   if (!teachingNotes.length) return '';
   const guide = _notesGuidanceBlock();
   const rel = _notesFor(topic);
-  const kw = [...new Set(rel.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 40);
-  const std = rel.map(n => String(n.markingStandards || '').trim()).filter(Boolean).join(' ').slice(0, 900);
-  const com = rel.map(n => String(n.comment || '').trim()).filter(Boolean).join(' ').slice(0, 300);
+  const kw = [...new Set(rel.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, NOTES_KW_MAX);
+  const std = _notesField(rel, n => n.markingStandards, NOTES_STD_CHARS, NOTES_FIELD_MIN_EACH).join(' ');
+  const com = _notesField(rel, n => n.comment, NOTES_COMMENT_CHARS, NOTES_FIELD_MIN_EACH).join(' ');
   const bits = [];
   if (kw.length) bits.push(`Preferred science keywords from the teacher's own notes — expect and accept these exact terms in a full-mark answer: ${kw.join(', ')}.`);
   if (std) bits.push(`The teacher's marking standards from those notes: ${std}`);
@@ -1198,8 +1327,8 @@ function _notesGenBlock() {
   if (!teachingNotes.length) return '';
   const guide = _notesGuidanceBlock();
   const all = teachingNotes.filter(_noteSuitsThisApp);
-  const kw = [...new Set(all.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 60);
-  const facts = all.map(n => String(n.keyFacts || '').trim()).filter(Boolean).join('\n').slice(0, 1200);
+  const kw = [...new Set(all.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, NOTES_KW_MAX);
+  const facts = _notesField(all, n => n.keyFacts, NOTES_FACT_CHARS, NOTES_FIELD_MIN_EACH).join('\n');
   const bits = [];
   if (kw.length) bits.push(`TEACHER'S NOTES DATABASE — preferred science vocabulary: ${kw.join(', ')}.`);
   if (facts) bits.push(`Key facts from the teacher's notes:\n${facts}`);
@@ -1220,15 +1349,62 @@ function _notesAnswerBlock(topic) {
   // whole (usable) database stands in rather than writing an answer against
   // nothing at all.
   if (!rel.length) rel = teachingNotes.filter(_noteSuitsThisApp);
-  const kw = [...new Set(rel.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 40);
-  const std = rel.map(n => String(n.markingStandards || '').trim()).filter(Boolean).join(' ').slice(0, 800);
-  const facts = rel.map(n => String(n.keyFacts || '').trim()).filter(Boolean).join('\n').slice(0, 1800);
+  const kw = [...new Set(rel.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, NOTES_KW_MAX);
+  const std = _notesField(rel, n => n.markingStandards, NOTES_STD_CHARS, NOTES_FIELD_MIN_EACH).join(' ');
+  const facts = _notesField(rel, n => n.keyFacts, NOTES_FACT_CHARS, NOTES_FIELD_MIN_EACH).join('\n');
   const bits = [];
   if (kw.length) bits.push(`Preferred keywords: ${kw.join(', ')}.`);
   if (std) bits.push(`Answer standards: ${std}`);
   if (facts) bits.push(`Key facts:\n${facts}`);
   if (!bits.length) return guide;
   return guide + `TEACHER'S NOTES DATABASE (the primary source for the science and wording — use only what is relevant to this question):\n${bits.join('\n')}`;
+}
+
+// A digest written for a SECOND READER — ✅ Check Questions, 🔍 Answer key
+// cross-check, the OEQ comparison, auto-vet. It carries the same material as
+// an answer digest and a different authority order, because "base the science
+// and the wording on this database FIRST" turns a checker into a rewriter: it
+// starts flagging a correct answer as wrong for using different words, and the
+// report then reads as a clean bill of health inverted.
+function _notesCheckBlock(topic) {
+  const body = _notesAnswerBlock(topic);
+  if (!body) return '';
+  return body +
+    `\nUSE THESE NOTES AS A REFERENCE, NOT AS A STANDARD TO REWRITE TO: they tell you what this teacher expects, so lean on them when deciding whether something is WRONG. An answer that is correct but worded differently from these notes is still correct — never flag it for wording alone.\n`;
+}
+
+// A digest written for TEACHING — an explanation, a hint, a flashcard, a
+// report, the tutor chat. Same material as an answer digest; the authority
+// order differs because there is no source document in front of the model, and
+// pointing it at one that was never attached is an invented obligation.
+function _notesTeachBlock(topic) {
+  const body = _notesAnswerBlock(topic);
+  if (!body) return '';
+  return body +
+    `\nWhen you EXPLAIN anything, use this teacher's own vocabulary and standards; the answer already recorded for the question always wins over these notes.\n`;
+}
+
+// ---- THE ONE DOOR ----
+// Every AI call in this app that says anything about science reaches the
+// teaching notes through here. Grounding one call site and not another is how
+// the AI ends up answering in the teacher's voice on one button and in its own
+// on the next, with nothing on any screen to say which — so add a call here,
+// never a fourth digest builder.
+//   'mark'   marking a student — standards, NEVER the key facts or exemplars
+//   'answer' writing a model answer / an answer key
+//   'gen'    authoring a question from a document (the document still wins)
+//   'teach'  explaining, hinting, flashcards, reports, the tutor
+//   'check'  a second reader — a reference for spotting a wrong answer only
+function aiGrounding(kind, topic) {
+  _notesLedgerReset(kind);
+  if (kind === 'gen') return _notesGenBlock();
+  if (kind === 'answer') return _notesAnswerBlock(topic || '');
+  if (kind === 'teach') return _notesTeachBlock(topic || '');
+  if (kind === 'check') return _notesCheckBlock(topic || '');
+  // An unknown kind degrades to MARKING, which is the kind that leaks least:
+  // a typo'd 'marks' must never be the thing that hands a marker the answer.
+  if (kind !== 'mark') console.error('aiGrounding: unknown kind "' + kind + '" — grounding as marking, which is the safe default');
+  return _notesMarkingBlock(topic || '');
 }
 
 // ---- Teaching Notes page (admin only) ----
@@ -1277,6 +1453,13 @@ function notesCardHtml(n) {
   // teacher reads a note on the page and assumes the AI is following it.
   const unused = _noteSuitsThisApp(n) ? '' :
     `<div class="tn-row"><div class="tn-label">Not used here</div><div class="tn-text tn-comment">Tagged for ${escapeHtml((n.subjects || []).join(', '))} only, so it never reaches a science prompt in this app. Change its subjects in the Ans Key app to use it here.</div></div>`;
+  // …and a note the BUDGET could not fit says so too. A note quietly cut down
+  // to a third of itself reads on this page exactly like one being obeyed in
+  // full, which is the bug this whole section exists to stop happening again.
+  const led = notesLedgerFor(n.id);
+  const short = !led ? '' : led.dropped
+    ? `<div class="tn-row"><div class="tn-label" style="color:var(--accent-red);">Not sent to the AI</div><div class="tn-text tn-comment">There were too many notes to fit the last prompt and this one did not make it. Shorten your notes, or split this one up.</div></div>`
+    : `<div class="tn-row"><div class="tn-label" style="color:var(--accent-orange);">Trimmed</div><div class="tn-text tn-comment">${led.kept.toLocaleString()} of ${led.wanted.toLocaleString()} characters reached the AI on the last prompt. Shorten it, or split it into two notes.</div></div>`;
   return `<div class="tn-card"${unused ? ' style="opacity:0.72;"' : ''}>
       <div class="tn-head">
         <div>
@@ -1289,6 +1472,7 @@ function notesCardHtml(n) {
         </div>
       </div>
       ${unused}
+      ${short}
       ${guide ? `<div class="tn-row"><div class="tn-label">General guidance</div><div class="tn-text">${escapeHtml(guide)}</div></div>` : ''}
       ${askedAbout ? `<div class="tn-row"><div class="tn-label">Written against</div><div class="tn-text tn-comment">${escapeHtml(askedAbout)}</div></div>` : ''}
       ${guide ? '' : `<div class="tn-row"><div class="tn-label">Topics</div><div class="tn-chips">${topics}</div></div>`}
@@ -1302,6 +1486,14 @@ function notesCardHtml(n) {
 function notesRenderBody() {
   const body = document.getElementById('notesBody');
   if (!body || !currentUser || currentUser.role !== 'admin') return;
+  // Build the FULLEST digest once so the page can say what really happens to
+  // each note in a prompt. A warning that only appeared after some other
+  // screen had made an AI call would be a warning nobody ever sees.
+  try { aiGrounding('answer'); } catch (e) {}
+  const _lc = notesLedgerCounts();
+  const fitWarn = (_lc.trimmed || _lc.dropped)
+    ? `<div class="tn-fitwarn">⚠️ ${_lc.dropped ? `${_lc.dropped} of your notes ${_lc.dropped === 1 ? 'does' : 'do'} not fit an AI prompt` : ''}${_lc.dropped && _lc.trimmed ? ' and ' : ''}${_lc.trimmed ? `${_lc.trimmed} ${_lc.trimmed === 1 ? 'is' : 'are'} trimmed to fit` : ''}. Every note below says which — shorten or split the ones marked, so nothing you wrote goes unread.</div>`
+    : '';
   // A hand-typed house rule and an uploaded document are read very
   // differently — one is obeyed word for word, the other is a source of
   // keywords — so they are listed apart rather than mixed into one pile.
@@ -1336,9 +1528,11 @@ function notesRenderBody() {
     .tn-facts summary { font-size:0.8rem; font-weight:600; color:var(--text-muted); cursor:pointer; }
     .tn-facts .tn-text { margin-top:8px; }
     .tn-empty { color:var(--text-muted); text-align:center; padding:36px 16px; border:1px dashed var(--border); border-radius:16px; }
+    .tn-fitwarn { background:#fdf4e3; border:1px solid #c08a2e; color:#7a5410; border-radius:14px; padding:14px 18px; margin-bottom:18px; font-size:0.86rem; line-height:1.6; }
     @media (max-width:560px){ .tn-row { flex-direction:column; gap:4px; } .tn-label { width:auto; } }
   </style>
   <div class="tn-wrap">
+    ${fitWarn}
     <div class="tn-upload">
       <h3>📌 General guidance</h3>
       <p class="tn-sub">House rules in your own words. They apply to <b>every</b> question and go into the prompt exactly as you typed them — nothing is extracted, nothing is summarised — so the AI follows them whenever it builds a question, writes a model answer, explains something <b>or marks a student</b>. This is the quickest way in: type it and it is live. Shared with your <b>Ans Key</b> annotator and the <b>Scan &amp; Answer</b> app — including the rules you type on an answer card there when a scanned answer was not good enough, which arrive with the question they were written against.</p>
@@ -2494,7 +2688,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.326.3';
+const APP_VERSION = 'v1.327.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5737,6 +5931,7 @@ function _widgetQuestionContext(blockId) {
 function _widgetSpecPrompt(block) {
   return [
     'You are building ONE interactive HTML widget for a Singapore primary-school science app (students aged 9-12).',
+    aiGrounding('teach', emTopicFor(block && block.id)) || '',
     'It is an INSERT attached to one question, shown in a small embedded window AFTER the student has answered — its job is to let them PLAY with the concept until it clicks. Think interactive graph, simulator, drag-and-drop model, cause-and-effect toy.',
     '',
     'HARD REQUIREMENTS:',
@@ -6008,7 +6203,7 @@ async function aiGenerateBlockAnswer(blockId, btn) {
   // the call on those would ground it on a question that is not on screen.
   const topic = emTopicFor(blockId);
   const title = emTitleFor(blockId);
-  const notesDb = _notesAnswerBlock(topic);
+  const notesDb = aiGrounding('answer', topic);
   const prompt =
     `You are a Singapore primary-school (PSLE) science teacher writing the MODEL ANSWER for one answer box of the question below.\n` +
     (notesDb ? notesDb + `\nBase the science and the wording on this database FIRST; fall back to standard PSLE syllabus knowledge only where the database does not cover it.\n` : '') +
@@ -6118,7 +6313,7 @@ async function aiGenerateBlockExplanation(blockId, btn) {
   // the call on those would ground it on a question that is not on screen.
   const topic = emTopicFor(blockId);
   const title = emTitleFor(blockId);
-  const notesDb = _notesAnswerBlock(topic);
+  const notesDb = aiGrounding('teach', topic);
   const prompt =
     `You are a Singapore primary-school (PSLE) science teacher writing the EXPLANATION box of the practice question below — 2-4 sentences for a P3-P6 student explaining WHY the correct answer is correct.\n` +
     (notesDb ? notesDb + `\nBase the science and the wording on this database FIRST; fall back to standard PSLE syllabus knowledge only where the database does not cover it.\n` : '') +
@@ -6264,6 +6459,7 @@ document.addEventListener('click', async function (e) {
   try {
     const prompt =
       'Shorten the text below. It comes from a Singapore primary-school (PSLE) science question, model answer or teacher explanation.\n' +
+      (aiGrounding('answer') || '') +
       'RULES — follow every one:\n' +
       '1. Keep the EXACT same meaning. Do not add, remove or change any science fact, idea, conclusion or cause-and-effect link.\n' +
       '2. Keep ALL the important science keywords and key phrases exactly as written (e.g. "water vapour", "evaporation", "gains heat", "dispersal", "kinetic energy") — these are what the answer is marked on. Never swap a keyword for a simpler word.\n' +
@@ -6377,6 +6573,7 @@ function _aicWords(t) { return (String(t == null ? '' : t).trim().match(/\S+/g) 
 function _aicPrompt(text) {
   return [
     'Carry on writing the text below. It comes from a Singapore primary-school (PSLE) science question, model answer or teacher explanation.',
+    aiGrounding('answer') || '',
     'RULES - follow every one:',
     '1. Return ONLY the NEW text that continues it. Do NOT repeat, quote or restate any part of the text given - not even its last few words.',
     '2. Do NOT rewrite, correct, re-order or comment on what is already there. It stays exactly as it is and your text is added straight after it.',
@@ -7365,6 +7562,7 @@ async function annotAnsWriteKey(id) {
     const prompt =
       'You are a Singapore primary-school (PSLE) science teacher writing the ANSWER KEY for an annotation question — '
       + 'one where the student draws and labels on a diagram.\n'
+      + (aiGrounding('answer') || '')
       + (ctx ? 'The question says: "' + ctx + '"\n' : '')
       + 'The attached picture is the diagram WITH the correct annotations already on it. '
       + 'Describe exactly what a student must draw and label to earn the marks: name each arrow, line, shading or label and say where it goes. '
@@ -11103,7 +11301,7 @@ async function aiAnswerAndExplain() {
     if (mcqBlock) wants.push('"mcqCorrectIndex":<0-based index of the correct option listed above>');
     wants.push('"explanation":"a clear teacher explanation (2-4 sentences) of WHY the answer is correct, for a P3-P6 student"');
     const mg = ((document.getElementById('questionMarkingGuide') || {}).value || '').trim();
-    const notesDb = _notesAnswerBlock((topicEl && topicEl.value) || '');
+    const notesDb = aiGrounding('answer', (topicEl && topicEl.value) || '');
     const prompt =
       `You are a Singapore primary-school science teacher. Read this WHOLE question` + (media.length ? ' (diagrams are attached — study them)' : '') + ` and work out the correct answer and an explanation for a P3–P6 student.\n` +
       (notesDb ? notesDb + `\nBase the science and the wording on this database FIRST; fall back to standard PSLE syllabus knowledge only where the database does not cover it.\n` : '') +
@@ -14695,7 +14893,7 @@ function _vetBuildPrompt(q, slots, mcq) {
   const slotLines = slots.map((s, i) => `  ${i}. [${labelFor(s.kind)}] current: ${s.current ? JSON.stringify(s.current) : '(empty)'}`).join('\n');
   const mcqLines = mcq ? 'MULTIPLE-CHOICE OPTIONS:\n' + mcq.options.map((o, i) => `  ${i}. ${stripHtml(o.text || '')}`).join('\n') + '\n' : '';
   return `You are helping a Singapore primary-school science teacher vet a practice question before it goes into the question bank.
-
+${aiGrounding('answer', q && q.topic) || ''}
 QUESTION TITLE: ${q.title || '(untitled)'}
 CURRENT TOPIC: ${q.topic || '(none)'}
 CURRENT CATEGORY: ${q.category || '(none)'}
@@ -19079,6 +19277,7 @@ function _mpReportPrompt() {
   ).join('\n');
   const t = _mpTotals();
   return `You are a Singapore primary-school science teacher writing the report that goes back with a marked script.${_mpWho()}\n` +
+    (aiGrounding('mark') || '') +
     `The student scored ${t.awarded} out of ${t.marks} (${t.pct}%) over ${_mpItems.length} question${_mpItems.length === 1 ? '' : 's'}.\n` +
     `Every question, with what they wrote where they went wrong:\n${lines}\n\n` +
     `Return ONLY JSON: {"summary":"","strengths":[],"weaknesses":[],"next":[]}\n` +
@@ -21846,6 +22045,7 @@ async function _adminAnsRegen(toolEl, btn) {
     const cer = it.label && it.label !== 'Answer' ? `This is the "${it.label}" portion of a Claim–Evidence–Reasoning answer; write only that portion. ` : '';
     const prompt =
       `You are a science teacher writing the ideal model answer for ONE part of an exam question. ` +
+      (aiGrounding('answer', q && q.topic) || '') +
       `Question: "${q.title || ''}" (topic: ${q.topic || 'Science'}). Full context: "${ctx}". ` +
       `The specific part to answer is: "${partText || it.label || 'the question'}". ` + cer +
       `Write the concise, scientifically correct answer a student should give for THIS part only — the actual answer itself, not advice or instructions. Keep it to 1–3 sentences. Return ONLY the answer text.`;
@@ -23715,7 +23915,9 @@ function _wnyNormItems(parsed, opts) {
 function _wnyPrompt(q, opts) {
   const printed = opts.map(o => `(${o.letter}) ${o.text || '(blank)'}`).join('\n');
   const correct = opts.find(o => o.correct) || opts[0];
+  const ground = aiGrounding('teach', q && q.topic);
   return `You are a patient Singapore primary-school science teacher (PSLE). A student has just answered the multiple-choice question below and has been told which option was right. They are now going through the options one at a time asking "why is that one wrong?".\n\n` +
+    (ground ? ground + '\n' : '') +
     `THE QUESTION EXACTLY AS IT IS PRINTED:\n${_cqRepr(q)}\n\n` +
     `THE OPTIONS:\n${printed}\n\n` +
     `Option (${correct.letter}) is the correct one.\n\n` +
@@ -24453,6 +24655,7 @@ async function _genAndShowExplanation(containerSel, q, results, scoreElId) {
       }).join('\n');
       const prompt =
         `You are a science teacher giving feedback to a Singapore primary-school student on the question they just answered. ` +
+        (aiGrounding('teach', q && q.topic) || '') +
         `Write a clear EXPLANATION (2-4 sentences) addressed to "you" that says WHY the correct answer is correct and, where the student was wrong, names the likely misconception and what to remember. Be specific to this question; do not merely restate the model answer.\n` +
         `Question: "${ctx}".\nItems:\n${lines}\n` +
         `Return ONLY the explanation text — no JSON, no preamble, no headings.`;
@@ -24610,6 +24813,7 @@ async function hintQuestionPart(containerSel, kind, pid, btn) {
   try {
     const prompt =
       `You are a science teacher. A student is stuck on ONE part of a question and asked for a hint.\n` +
+      (aiGrounding('teach', q && q.topic) || '') +
       `Question context: "${ctx}".\n${partDesc}\n` +
       `Give ONE short hint (1-2 sentences, max 35 words) addressed to "you" that nudges the student toward the answer — point at the science concept to think about or where in the question to look. ` +
       `Do NOT state the answer, the model answer's wording, or the correct option number. Return ONLY the hint text — no preamble.`;
@@ -24899,6 +25103,7 @@ async function _snapWriteSummary(items) {
   }).filter(Boolean).join('\n');
   const prompt =
     `You are a science teacher writing a short end-of-session report for a primary school student who just photographed and had ${items.filter(Boolean).length} questions marked.\n` +
+    (aiGrounding('teach') || '') +
     `Per-question results:\n${lines}\n\n` +
     `Write 3-6 sentences addressed to "you": overall how they did, what they clearly understand (name the topics), the common weaknesses or misconceptions you can see in their mistakes, and ONE concrete thing to revise or practise next. ` +
     `Be encouraging but honest and specific — refer to the actual topics and mistakes above. Return ONLY the report text, no headings, no JSON.`;
@@ -29125,6 +29330,7 @@ async function generatePracticeFeedback(boxId, results, totalCorrect, totalBlank
 
   const prompt =
     `You are an encouraging primary-school science tutor giving end-of-practice feedback to a student.\n` +
+    (aiGrounding('teach') || '') +
     `Overall score: ${_fmtScore(totalCorrect)}/${totalBlanks} (${pct}%).\n` +
     `Per-question results (expected→student shows their mistakes):\n${lines}\n\n` +
     `Write feedback addressed directly to the student ("you"). Be specific to the topics and mistakes above, warm and constructive.\n` +
@@ -29924,6 +30130,7 @@ function _fcGapEvidence(gap, limit) {
 }
 
 function _fcDeckPrompt(gaps) {
+  const ground = aiGrounding('teach');
   const payload = gaps.map(g => ({
     gap: g.label,
     howOften: g.wrong + ' wrong attempt' + (g.wrong === 1 ? '' : 's') + ' out of ' + g.attempts,
@@ -29935,6 +30142,7 @@ function _fcDeckPrompt(gaps) {
   return [
     'You are making revision flashcards for one Singapore primary-school science student (P3-P6).',
     '',
+    ground || '',
     'These are the gaps in THEIR knowledge, worked out from the questions they have actually got wrong — how often, and how recently. For each gap you are given the questions they failed, the model answer, the teacher\'s explanation, and where we have it, the exact words the student wrote instead.',
     '',
     JSON.stringify(payload, null, 1),
@@ -30422,6 +30630,7 @@ async function generateReportNarrative(p, topics) {
     const recent = (p.recent || []).slice(-12).map(r => `${r.topic} ${r.pct}%`).join(', ');
     const prompt =
       `You are an encouraging Singapore primary-school science tutor writing a brief progress report for a student. ` +
+      (aiGrounding('teach') || '') +
       `Overall performance score ${p.score100}/100 across ${p.attempts} practice questions. ` +
       `Per-topic accuracy: ${topicLine || 'n/a'}. Recent results: ${recent || 'n/a'}. ` +
       `Write warm, specific, actionable feedback addressed to "you". ` +
@@ -32963,6 +33172,7 @@ async function _docAiBatch(items, startNum, instruction) {
   const lines = items.map((q, i) => _docAiRepr(q, startNum + i)).join('\n');
   const prompt =
     `You are a meticulous science-quiz editor reviewing a teacher's question bank for problems. ` +
+    (aiGrounding('check') || '') +
     `The teacher is specifically looking for: ${instruction}\n` +
     `Only report REAL, clear problems — never invent issues; if a question is fine, say nothing about it. ` +
     `IMPORTANT: the question text may be ABBREVIATED (shown with a trailing …) and you CANNOT see any images. ` +
@@ -33419,6 +33629,7 @@ async function _cqAiCheck(q) {
   const media = await _cqMedia(q);
   const prompt =
     `You are a meticulous Singapore primary-school science question editor. A colleague has just written the question below and you are giving it a second read before it is used with a class.\n\n` +
+    (aiGrounding('check', q && q.topic) || '') +
     `CHECK THIS FIRST — options that repeat the picture.\n` +
     `If the question's TABLE, DIAGRAM or PICTURE already sets out the choices — for example its rows or parts are labelled 1, 2, 3, 4 — and the multiple-choice options underneath simply repeat in words what the picture already shows, that is the problem to report. Those options should read just "(1)", "(2)", "(3)", "(4)" and let the picture do the work. Report it with "fix":"numberOptions".\n` +
     `Do NOT report it when the options carry information that is NOT already in the picture or table, and do NOT report it when the options are already bare numbers.\n\n` +
@@ -34023,6 +34234,7 @@ function akcPrompt(q, imageNote) {
     : '';
   const topics = [q.topic, qSecondaryTopic(q)].map(t => String(t || '').trim()).filter(Boolean).join(', ');
   return 'You are a meticulous Singapore primary-school science teacher checking a colleague\'s answer key.\n'
+    + (aiGrounding('check', q && q.topic) || '')
     + 'FIRST work the question out completely on your own, from scratch, as if no answer had been given. Only THEN look at the stated answer below and say whether it is right.\n'
     + 'Do not talk yourself into the stated answer: if your own answer differs, say so plainly.\n'
     + imageNote
@@ -61824,6 +62036,8 @@ function _ainsteinBuildPrompt(question, shotImages) {
   const lines = [];
   lines.push('You are Ai-nstein, a friendly primary-school science study buddy inside the Polymath Learning Centre app. You are talking to a Singapore primary-school student (P3-P6).');
   lines.push('');
+  const _aiGround = aiGrounding('teach');
+  if (_aiGround) { lines.push(_aiGround); lines.push(''); }
   if (mayAnswer) {
     lines.push('ANSWERS ARE UNLOCKED FOR THIS REPLY. ' + (isStudent
       ? 'This question has already been marked, so the correct answer is on the screen in front of them. There is nothing left to protect and holding back would just be annoying.'

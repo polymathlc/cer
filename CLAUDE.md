@@ -848,6 +848,100 @@ this app's prompts, and both were silent.
   note sitting in the list reads as a note being followed.
 - Run **`node tools/teaching-notes-tests.mjs`** after touching any of it.
 
+## 🧠 ONE DOOR, and no note left unread (v1.327.0)
+
+`aiGrounding(kind, topic)` / `_notesFairShare` / `_notesField` / `_notesDedupe` /
+`_notesTrimTo` / `_notesLedger` / `notesLedgerFor` / `notesLedgerCounts` (in
+`app.js`, search `THE ONE DOOR` and `NO NOTE IS EVER SILENTLY DROPPED`), plus
+the ⚠️ fit warning at the top of the 🎯 Teaching Notes page and the **Trimmed** /
+**Not sent to the AI** row on a note's card. **`polymathlc/anskey` carries the
+same block — ship a change to both together.**
+
+Two things were reported as one: *"the notes don't seem to permanently learn my
+inputs"*, and *"make sure every AI function checks the teaching notes first"*.
+They turned out to be two separate silent faults.
+
+### The budgets were a `.slice()` over the JOINED notes
+
+`NOTES_GUIDE_CHARS` was **1600 characters of every standing instruction run
+together**. So with two hand-typed rules of that length, the first lost most of
+itself and **the second reached no prompt at all** — while sitting on the
+Teaching Notes page looking obeyed. Ten uploaded notes fared worse: about 12% of
+the key facts and 7% of the marking standards actually reached a prompt.
+
+- **They are POTS now, shared out.** `_notesFairShare` water-fills: every note
+  takes its floor first, then the remainder is handed round to whoever still
+  wants more. Two consequences and both are the point — a **SHORT note is never
+  trimmed at all**, and a long note is **TRIMMED rather than the next note
+  disappearing**. Read these constants as budgets to divide, never as a length
+  to cut to: restoring the `.slice()` restores the bug.
+- **THE BUDGET YIELDS TO THE NOTES, not the other way round.** When there are
+  more notes than the pot can floor, the pot GROWS to `n × minEach` — a house
+  rule the teacher typed outranks a token. `NOTES_HARD_CHARS` bounds that, and
+  it is **the only path on which a note is dropped**; when one is, it is named
+  in the ledger and the prompt says the list is incomplete.
+- **A trim SAYS it was trimmed** (`NOTES_TRIM_MARK`) and cuts on a word
+  boundary. A silent truncation reads to the model as a sentence the teacher
+  wrote that way.
+- **The same rule typed in two apps is ONE rule** (`_notesDedupe`). Left in
+  twice it eats the pot twice and reads to the model as emphasis nobody wrote.
+- **`_notesLedger` is what makes the remaining loss visible.** It is rebuilt on
+  every `aiGrounding` call, and `notesRenderBody` builds the fullest digest once
+  on open so the page says what really happens rather than what happened after
+  some other screen made a call. A note quietly cut to a third of itself reads
+  on that page exactly like one being obeyed in full — which is the whole bug.
+
+### 🚪 `aiGrounding(kind, topic)` — the one door
+
+There were ~70 model call sites in this file and **five** touched a notes
+digest. Everything else — the tutor, the hints, the explanations, the
+flashcards, the reports, ✂️ Shorten, ✍️ AI complete, ✅ Check Questions, the
+Question Doctor, 🔍 Answer key cross-check, auto-vet, Mark Paper's report, the
+annotation answer key, the widget builder — wrote science in **nobody's voice**.
+
+- **Five kinds, and the split is the safety story.** `'mark'` gets the standards
+  and **NEVER the key facts or the exemplar answers** — a marker handed the
+  answer stops marking against the paper. `'answer'` writes a model answer;
+  `'gen'` authors a question (the source document still wins); `'teach'`
+  explains, hints, drills and tutors (the recorded answer wins, and there is no
+  source document to point at); `'check'` is a second reader and says in as many
+  words that **the notes are a reference, not a standard to rewrite to** —
+  handed the answer digest's *"base the science and the wording on this database
+  FIRST"*, a checker starts flagging correct answers as wrong for using
+  different words, and the report then reads as a clean bill of health inverted.
+- **An unknown kind degrades to `'mark'`, and that is deliberate**: `'mark'` is
+  the kind that leaks least, so a typo'd `'marks'` must never be the thing that
+  hands a marker the answer. It also `console.error`s.
+- **`_markingPreamble` and `_genPreamble` are kept** — they are the SETTINGS
+  wrapper (strictness, the generation guide) around the door, not competing
+  doors, and they already fan out to nine call sites for free.
+- **A prompt builder is grounded ONE HOP up** — `_wnyPrompt`, `_fcDeckPrompt`,
+  `_aicPrompt`, `_mpReportPrompt`, `_vetBuildPrompt`, `akcPrompt`,
+  `_ainsteinBuildPrompt`, `_widgetSpecPrompt` and the four `_genPreamble`
+  builders. The block is spliced after the ROLE line and before the question and
+  the `Return ONLY JSON` tail: a grounding block put after the format
+  instruction is grounded and broken.
+
+### The census — the test that fails when a new call site is added ungrounded
+
+"Every AI function checks the teaching notes first" is a promise nobody can keep
+by remembering. `tools/teaching-notes-tests.mjs` reads `app.js` itself: it finds
+every `askGemini*` / `geminiModel.generateContent` call, resolves the function it
+sits in, allows one hop to a prompt builder, and **FAILS naming any function that
+is neither grounded nor in `UNGROUNDED_BY_DESIGN`** — a literal in the test file
+mapping a name to a one-sentence written reason. A **stale** exemption fails too,
+because that is how a renamed function slips back through.
+
+The exemptions are transport (`askGemini`, `_aiRun`, `_widgetAskAI`,
+`akcAskEngine`, …), the notes reader itself, **transcription** (a transcriber
+told what the answer should say writes that down instead of what is on the
+page), pictures, **metadata about questions** rather than science said to
+anybody, `snapFindAndMark` (it MATCHES; the marking goes through
+`markOpenAnswersIn`, which is grounded) and `runOeqCompare` (the official PSLE
+key is the authority there, not the notes).
+
+- Run **`node tools/teaching-notes-tests.mjs`** after touching any of it.
+
 ## Versioning convention — applies to EVERY change (do this every time)
 1. **Bump the version.** In `index.html`, update `const APP_VERSION = 'vX.Y.Z'` (search `APP_VERSION`). Patch bump for fixes/small tweaks, minor bump for new features.
 2. **Keep it visible.** The version renders in the sidebar footer for admins only (`#appVersionBadge`, class `admin-only`). This is how the user confirms the latest build is actually deployed.
@@ -2874,6 +2968,22 @@ control. Scroll from the first question to the last, fix what you find, press
   returns an empty string rather than null takes the answer box off the question
   and puts nothing in its place: a question that renders perfectly and cannot be
   answered.
+- After touching **the grounding one door, the note budgets or the census**
+  (`aiGrounding`, `_notesFairShare`, `_notesField`, `_notesDedupe`,
+  `_notesTrimTo`, `_notesLedger` / `notesLedgerFor` / `notesLedgerCounts`,
+  `NOTES_GUIDE_CHARS` and the other pots, `_notesCheckBlock`,
+  `_notesTeachBlock`, or `UNGROUNDED_BY_DESIGN` in the harness), run
+  `node tools/teaching-notes-tests.mjs`. Every failure is silent and the app
+  answers fluently either way. Turn a pot back into a `.slice()` over the
+  joined notes and the teacher's SECOND standing instruction reaches no prompt
+  at all while sitting on the page looking obeyed — the reported bug, exactly.
+  Let `'mark'` see the key facts and the marker has been handed the answer.
+  Degrade an unknown kind to `'answer'` rather than `'mark'` and one typo does
+  the same. Let `'check'` carry the answer digest's "base the wording on this
+  database FIRST" and the cross-check starts condemning correct answers for
+  their wording, which reads as a clean bill of health inverted. And a call
+  site added without grounding is the whole feature quietly reverting on one
+  screen — which is what the census exists to make loud.
 - After touching **the teaching-notes digests or the live notebook** (`_notesGuidanceBlock`,
   `_notesMarkingBlock`, `_notesGenBlock`, `_notesAnswerBlock`, `_notesFor`, `_noteSuitsThisApp`,
   `loadTeachingNotes`, `_notesDetach`, `stopTeachingNotes`, `NOTES_GUIDE_CHARS`, `quickNoteSave`,
