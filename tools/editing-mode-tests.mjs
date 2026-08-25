@@ -456,6 +456,107 @@ test('removing the last question closes editing mode rather than leaving a blank
   M.em.on = true;
 });
 
+// ── THE CENSUS: a per-block function may not read the WHOLE SHEET ───────────
+// This is the one rule nothing else can enforce by remembering. In ✏️ editing
+// mode the global `blocks` is EVERY question on the paper, so a function that
+// takes a blockId and walks that array is walking the whole paper — and when it
+// is building an AI prompt the result is a fluent, confident model answer to a
+// DIFFERENT question, written into this box with nothing on screen saying so.
+//
+// That is exactly what `aiGenerateBlockAnswer` did until v1.329.0: `qPartMap`
+// over the sheet made `target` whatever part was last opened anywhere, the
+// answer boxes were numbered across the paper, and the 3500-character clip took
+// the ">>> WRITE THIS ONE <<<" marker off the end — so a question late in a PSLE
+// paper was answered from whichever question happened to be at the top of it.
+//
+// A name here must go through `emScope(blockId)` or be listed below with a
+// written reason. A STALE exemption fails too — that is how a renamed function
+// slips back through.
+const BLOCKS_GLOBAL_BY_DESIGN = {
+  emScope: 'it IS the resolver — outside editing mode it hands back `blocks` unchanged',
+  _akdEditorQuestion: 'takes an OPTIONAL blockId: the answer-key panel on the create page has no block, and that branch is the create page’s own editor',
+};
+
+test('CENSUS: every per-block function resolves its question through emScope', () => {
+  const noBlock = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map(l => l.replace(/(^|[^:"'`\\])\/\/.*$/, (m, a) => a))
+    .join('\n');
+  const lines = noBlock.split('\n');
+  const starts = [];
+  lines.forEach((l, i) => {
+    const m = /^(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(([^)]*)\)/.exec(l);
+    if (m) starts.push({ i, name: m[1], args: m[2] });
+  });
+  starts.push({ i: lines.length, name: '<eof>', args: '' });
+
+  const offenders = [], seen = new Set();
+  for (let k = 0; k < starts.length - 1; k++) {
+    const { i: a, name, args } = starts[k];
+    const b = starts[k + 1].i;
+    if (!/\bblockId\b/.test(args)) continue;
+    const body = lines.slice(a, b).join('\n');
+    if (/\b(const|let|var)\s+blocks\s*=/.test(body)) continue;   // a local shadow
+    const bad = [];
+    for (let j = a; j < b; j++) {
+      const line = lines[j];
+      if (!/(?<![.\w])blocks(?![\w])/.test(line)) continue;
+      if (/blocks\.(find|findIndex|some|indexOf)\s*\(/.test(line)) continue;  // a lookup by unique id
+      bad.push(j + 1);
+    }
+    if (!bad.length) continue;
+    seen.add(name);
+    if (!BLOCKS_GLOBAL_BY_DESIGN[name]) offenders.push(name + ' (app.js:' + bad[0] + ')');
+  }
+  ok(!offenders.length,
+    'these read the whole sheet for one block — go through emScope(blockId), or add a written reason to\n' +
+    '           BLOCKS_GLOBAL_BY_DESIGN in this file:\n             ' + offenders.join('\n             '));
+
+  const stale = Object.keys(BLOCKS_GLOBAL_BY_DESIGN).filter(n => !seen.has(n));
+  ok(!stale.length, 'stale exemption — these no longer read the global array, so drop them from\n' +
+    '           BLOCKS_GLOBAL_BY_DESIGN before the name is reused: ' + stale.join(', '));
+});
+
+// The same census one level up: a per-block function that BUILDS AN AI PROMPT
+// is where reading the wrong question actually costs something.
+test('CENSUS: a per-block AI call is grounded on its own question', () => {
+  const noBlock = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map(l => l.replace(/(^|[^:"'`\\])\/\/.*$/, (m, a) => a))
+    .join('\n');
+  const lines = noBlock.split('\n');
+  const starts = [];
+  lines.forEach((l, i) => {
+    const m = /^(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(([^)]*)\)/.exec(l);
+    if (m) starts.push({ i, name: m[1], args: m[2] });
+  });
+  starts.push({ i: lines.length, name: '<eof>', args: '' });
+  const AI = /\baskGemini\w*\s*\(|geminiModel\.generateContent|generateImageDataUrl\w*\s*\(/;
+
+  const offenders = [];
+  for (let k = 0; k < starts.length - 1; k++) {
+    const { i: a, name, args } = starts[k];
+    const b = starts[k + 1].i;
+    if (!/\bblockId\b|\bid\b/.test(args)) continue;
+    const body = lines.slice(a, b).join('\n');
+    if (!AI.test(body)) continue;
+    if (/\b(const|let|var)\s+blocks\s*=/.test(body)) continue;
+    for (let j = a; j < b; j++) {
+      const line = lines[j];
+      if (!/(?<![.\w])blocks(?![\w])/.test(line)) continue;
+      if (/blocks\.(find|findIndex|some|indexOf)\s*\(/.test(line)) continue;
+      offenders.push(name + ' (app.js:' + (j + 1) + ')');
+      break;
+    }
+  }
+  ok(!offenders.length,
+    'these build an AI prompt for ONE block out of the WHOLE sheet — in editing mode that\n' +
+    '           is the entire paper, and the answer comes back about a different question:\n             ' +
+    offenders.join('\n             '));
+});
+
 // ── run ─────────────────────────────────────────────────────────────────────
 const only = process.argv[2];
 let pass = 0, fail = 0;

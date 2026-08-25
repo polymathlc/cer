@@ -2751,11 +2751,13 @@ control. Scroll from the first question to the last, fix what you find, press
   outside editing mode it hands back `blocks` itself, unchanged. Anything that
   reads the question AROUND a block goes through it: **`qPartMap` above all**,
   which inherits FORWARD, so without it part (c) of question 3 is inherited by
-  every block of question 4 and the answer key files them under it. The four
-  readers are `qPartPickerHtml`, `aiGenerateBlockAnswer`,
-  `aiGenerateBlockExplanation` and `_widgetQuestionContext`; a fifth added later
-  needs the same treatment, and the symptom of forgetting is an AI answer that is
-  fluent, confident and about a different question.
+  every block of question 4 and the answer key files them under it. The readers
+  are `qPartPickerHtml`, `aiGenerateBlockAnswer`, `aiGenerateBlockExplanation`,
+  `_widgetQuestionContext`, `annotAnsWriteKey` and `_akdEditorQuestion`; the
+  symptom of forgetting is an AI answer that is fluent, confident and about a
+  different question — **so a CENSUS in the harness fails on the next one that
+  is added without it**, rather than anyone having to remember. See
+  **🤖 An AI answer is written for ONE question** below.
 - **…and the same for the TITLE and TOPIC an AI call is grounded on.**
   `emTitleFor` / `emTopicFor` read the OWNING question; the create page's own
   `#questionTitle` and `#topicSelect` still hold whatever was open there, and
@@ -2804,6 +2806,39 @@ control. Scroll from the first question to the last, fix what you find, press
     refused write leaves the sheet and the screen disagreeing about a question
     that has gone rather than about one still on screen. Removing the last
     question closes editing mode rather than leaving a blank scroll.
+- **🤖 AN AI ANSWER IS WRITTEN FOR ONE QUESTION** (v1.329.0). This is the rule
+  above, and it had already been broken by the very button most likely to break
+  it: **`aiGenerateBlockAnswer` walked the global `blocks`** while its own
+  comment said it did not, and `aiGenerateBlockExplanation`'s comment pointed at
+  it as the example to follow. The whole paper went to the model as one
+  question, in three separate ways, every one of them silent:
+  - `qPartMap` over the sheet made `target` whatever part had last been opened
+    ANYWHERE, so `_aiPartScopeLine` marked `>>>` around every other question's
+    part (a) as well as this one's;
+  - the answer boxes were numbered ACROSS the paper, so "answer box 1" meant
+    the first box of question 1 rather than of this question;
+  - `ctxBits` is clipped to 3500 characters **from the front**, so on any
+    question past the first few the `>>> WRITE THIS ONE <<<` marker was cut off
+    entirely and the model answered whichever question it could still see.
+
+  The symptom is the one that makes it worth a census: a fluent, correct-looking
+  model answer to a DIFFERENT question on the same paper, written into the box —
+  a transport-in-plants answer under *"which temperature did fish F prefer"* —
+  with nothing on any screen saying anything went wrong. **`annotAnsWriteKey`
+  and `_akdEditorQuestion` had the same fault**: the first joined every text
+  block on the sheet and clipped to 600 characters from the front, the second
+  handed the whole array to the diagram generator along with the CREATE PAGE's
+  own `#questionTitle` / `#topicSelect` — a picture drawn for a question that
+  is not even on screen.
+- **TWO CENSUSES in `tools/editing-mode-tests.mjs` are what stop the next one.**
+  They read `app.js` itself: any function taking a `blockId` that reads the
+  global `blocks` for anything but a by-id lookup FAILS unless it is named in
+  `BLOCKS_GLOBAL_BY_DESIGN` with a written reason, and the second census does
+  the same for any per-block function that reaches an AI call. A **stale**
+  exemption fails too, because that is how a renamed function slips back
+  through. Both are noise-free today: the only two names on the list are
+  `emScope` (it IS the resolver) and `_akdEditorQuestion` (its blockId is
+  optional — the create page's answer-key panel has no block).
 - **A NEW BLOCK JOINS THE QUESTION ABOVE IT** (`emAdoptOwners`), which is where
   the insert bar that made it was drawn — falling back to the one below when it
   is the very first block on the sheet. Duplicating a block gives it a fresh id
@@ -2876,7 +2911,10 @@ control. Scroll from the first question to the last, fix what you find, press
   `emKwFor`/`emBlanksFor`, `emMayRemove`, `emRemoveQuestion`, `emDropQuestion`,
   `emDropIsSaved`/`emDropLabel`/`emDropTip`, `emRailDelete`, `emCondenseCard`,
   `emIconify`, `emHoistInto`, `EM_PRIMARY`, `_ppGo`, or `renderBlocks`'s
-  `emAfterRender` hook), run `node tools/editing-mode-tests.mjs`. Editing mode puts EVERY
+  `emAfterRender` hook) — **or ANY per-block AI button**
+  (`aiGenerateBlockAnswer`, `aiGenerateBlockExplanation`, `annotAnsWriteKey`,
+  `_akdEditorQuestion`, `_widgetQuestionContext`, or a new one) — run
+  `node tools/editing-mode-tests.mjs`. Editing mode puts EVERY
   question of a sheet into the one block editor at once, which is what makes it
   useful and also what makes every failure here silent — the editor still
   renders, still types and still saves, and is quietly working on the wrong
@@ -2896,7 +2934,12 @@ control. Scroll from the first question to the last, fix what you find, press
   the worksheet is a removal the teacher watched happen and that never happened,
   one that persists on a PAST PAPER writes to a list the paper does not have,
   and either of them leaving stray blocks, owner entries or keywords behind
-  poisons the next block given one of those ids.
+  poisons the next block given one of those ids. And a per-block AI button that
+  reads the global `blocks` sends the model the WHOLE PAPER — which is the one
+  failure here that reaches a printed answer key: the box fills with a fluent,
+  well-written model answer to a completely different question, and nothing
+  anywhere says so. That is what the two CENSUSES at the end of that harness
+  exist to catch on the next button, not the last one.
 - After touching **↩️ back to the preview you came from** (`_wsPreviewSnapshot`,
   `_wsQeReopenPreview`, `wsQuickEditOpenFull`, `_wsQeReturn`,
   `_afterEditNavigate`, `_syncBackToPapersBtn`, or `ppPreview`'s `quiet`), run

@@ -2688,7 +2688,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.328.0';
+const APP_VERSION = 'v1.329.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -6180,13 +6180,29 @@ async function aiGenerateBlockAnswer(blockId, btn) {
   // The question in block order, with THIS answer box marked and every part
   // labelled, so the AI answers the sub-question printed directly above the box
   // rather than the whole question. Diagrams go along as images (best effort).
-  const pmap = qPartMap(blocks);
+  //
+  // emScope(blockId), NEVER the global `blocks`. In ✏️ editing mode that array
+  // holds EVERY question on the sheet at once, and reading it here was the
+  // whole paper going to the model as one question — with three separate ways
+  // of being wrong, all of them silent:
+  //   • qPartMap inherits FORWARD, so `target` was whatever part had last been
+  //     opened anywhere on the sheet, and _aiPartScopeLine then marked ">>>"
+  //     around every OTHER question's part (a) as well as this one's;
+  //   • the ANSWER BOX numbering ran across the paper, so "answer box 1" meant
+  //     the first box of question 1, not of this question;
+  //   • ctxBits is clipped to 3500 characters from the FRONT, so on any
+  //     question past the first few the ">>> WRITE THIS ONE <<<" marker was cut
+  //     off entirely and the model answered whichever question it could see.
+  // The symptom was a fluent, confident model answer to a different question on
+  // the same paper, written into this box with nothing anywhere saying so.
+  const scope = emScope(blockId);
+  const pmap = qPartMap(scope);
   const target = qPartOf(pmap, block);
   const ctxBits = [];
   const media = [];
   let ansN = 0;
   let mark = '';
-  for (const b of blocks) {
+  for (const b of scope) {
     if (target) {
       const line = _aiPartScopeLine(qPartOf(pmap, b), target, mark);
       if (line !== null) { mark = line.tag; if (line.text) ctxBits.push(line.text); }
@@ -7146,14 +7162,24 @@ const AKD_PRINT_RULES =
 
 // The question as it stands in the EDITOR, not as it was last saved — the
 // author is very often typing the answer and pressing this in the same breath.
-function _akdEditorQuestion() {
+// The question a diagram is being drawn for. `blockId` is the 🖼 on a 🔑
+// answer-key BLOCK; the answer-key panel on the create page has no block and
+// passes nothing.
+//
+// With a block id it goes through emScope / emTitleFor / emTopicFor, because in
+// ✏️ editing mode the global `blocks` is the whole sheet AND the create page's
+// own #questionTitle / #topicSelect still hold whatever question was last open
+// THERE — so the picture was drawn for a question that is not even on screen.
+function _akdEditorQuestion(blockId) {
   try { syncEditorDomToBlocks(); } catch (e) {}
+  const scoped = blockId != null && typeof emActive === 'function' && emActive();
+  const own = scoped ? emOwnerQuestion(blockId) : null;
   return {
-    id: currentEditingQuestion || null,
-    title: (document.getElementById('questionTitle')?.value || ''),
-    topic: (document.getElementById('topicSelect')?.value || ''),
-    category: (document.getElementById('categorySelect')?.value || ''),
-    blocks: Array.isArray(blocks) ? blocks : []
+    id: (own && own.id) || currentEditingQuestion || null,
+    title: scoped ? (emTitleFor(blockId) || '') : (document.getElementById('questionTitle')?.value || ''),
+    topic: scoped ? (emTopicFor(blockId) || '') : (document.getElementById('topicSelect')?.value || ''),
+    category: (own && own.category) || (document.getElementById('categorySelect')?.value || ''),
+    blocks: blockId != null ? (emScope(blockId) || []) : (Array.isArray(blocks) ? blocks : [])
   };
 }
 function _akdClipNote(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, AKD_NOTE_MAX); }
@@ -7305,7 +7331,7 @@ async function _akdGoBlock(blockId, btn, regen) {
   if (!block) return;
   const cur = String(block.url || '').trim();
   if (!imageAiReady()) { showToast('Image AI is not available in this project', 'error'); return; }
-  const q = _akdEditorQuestion();
+  const q = _akdEditorQuestion(blockId);
   _akdBusy(btn, true, regen ? '🔄 Redrawing…' : '🖼 Drawing…');
   try {
     const url = await _akdMake(q, _akdAnswerText(q, stripHtml(block.text || '')), _akdClipNote(block.diagramNote), cur, regen);
@@ -7557,7 +7583,11 @@ async function annotAnsWriteKey(id) {
   try {
     const media = await _annotImgToMedia(b.answerImg);
     if (!media) throw new Error('Could not read that picture');
-    const ctx = (blocks || []).filter(x => x.type === 'text')
+    // emScope(id), never the global `blocks` — in ✏️ editing mode that array is
+    // every question on the sheet, and this clips to 600 characters from the
+    // FRONT, so the key for a pad on question 20 was written against the
+    // wording of questions 1 and 2.
+    const ctx = (emScope(id) || []).filter(x => x.type === 'text')
       .map(x => stripHtml(x.content || '')).join(' ').replace(/\s+/g, ' ').trim().slice(0, 600);
     const prompt =
       'You are a Singapore primary-school (PSLE) science teacher writing the ANSWER KEY for an annotation question — '
