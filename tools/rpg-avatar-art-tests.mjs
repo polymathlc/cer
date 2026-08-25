@@ -36,6 +36,39 @@ for (const slot of ["armor", "helmet", "pet", "shield", "weapon"]) {
 }
 assert.match(avatar, /const accArt = acc \? rpgItemArt\("accessory"/, "accessories should use the shared image-aware layer");
 assert.ok(avatar.indexOf("const eq =") < avatar.indexOf("if (charUrl) return"), "equipment must resolve before generated character composition");
+for (const slot of ["armor", "helmet", "pet", "shield", "weapon"]) {
+  const n = avatar.split(`rpgItemArt("${slot}"`).length - 1;
+  assert.equal(n, 2, `${slot} should layer into BOTH avatar branches — the drawn hero and an uploaded character`);
+}
+
+// ── THE HERO IS DRAWN; ONLY HIS KIT IS GENERATED ─────────────────────────────
+// The generated character PNG stands in a different pose and at different
+// proportions from the slot boxes every piece of equipment is placed by, so a
+// breastplate landed on his belly, a helm across his eyes and his shoulders
+// stayed bare. Both halves of the fix are silent when undone: put the bundled
+// character back and every piece is out of place again on a screen that still
+// renders perfectly, and put the two bundled box overrides back and the helmet
+// and the amulet alone go wrong while the armour looks right.
+const charStart = app.indexOf("function rpgCharacterArtUrl(");
+const charEnd = app.indexOf("function rpgAvatarSvg(", charStart);
+assert.ok(charStart >= 0 && charEnd > charStart, "rpgCharacterArtUrl should be readable");
+const charFn = app.slice(charStart, charEnd);
+assert.ok(!charFn.includes("RPG_ART_BETA_ROOT"), "the hero must NOT fall back to a generated character sprite");
+assert.ok(!charFn.includes("rpgArtBetaEnabled"), "the beta switch decides the item art, not the body");
+assert.match(charFn, /_rpgArt\._character_male/, "an admin's own character upload must still win");
+assert.match(charFn, /_rpgArt\._character_female/, "…for either gender");
+
+const boxStart = app.indexOf("function rpgItemAvatarBox(");
+const boxEnd = app.indexOf("function rpgItemArtImage(", boxStart);
+assert.ok(boxStart >= 0 && boxEnd > boxStart, "rpgItemAvatarBox should be readable");
+const boxFn = app.slice(boxStart, boxEnd);
+assert.ok(!boxFn.includes("RPG_ART_BETA_ROOT"), "every item goes on its OWN slot box, generated or drawn");
+assert.match(boxFn, /return it\.box \|\| RPG_SLOT_META\[it\.slot\]\.box;/, "the slot box is the one place a piece is placed");
+
+// …and the generated ITEM art — the half worth keeping — is still served.
+assert.match(app, /function rpgBundledItemArtUrl\(it\)/, "generated item art should still be bundled in");
+assert.match(app, /\$\{RPG_ART_BETA_ROOT\}\/items\//, "items should still resolve to the bundled sprites");
+
 assert.match(app, /rpgAvatarSvg\(r\.equipment \|\| \{\}, r\.gender\)/, "leaderboards should render the owner's gender");
 assert.match(app, /rpgAvatarSvg\(row\.equipment \|\| \{\}, row\.gender\)/, "arena ghosts should render the owner's gender");
 assert.match(app, /gender: rpgState\.gender \|\| null/, "leaderboard payload should publish gender");
