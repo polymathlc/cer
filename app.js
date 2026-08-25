@@ -2688,7 +2688,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.327.0';
+const APP_VERSION = 'v1.328.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -28183,6 +28183,7 @@ function emQuestionHeadEl(e, empty) {
     `<span class="em-qmeta">${escapeHtml(meta)}</span>` +
     `<span class="em-qdirty" id="emDirty_${e.key}"></span>` +
     (empty ? `<span class="em-qempty">every block was deleted — this question cannot be saved</span>` : '') +
+    `<button type="button" class="em-qbtn danger" title="${escapeHtml(emDropTip())}" onclick="emRemoveQuestion('${e.key}')">${escapeHtml(emDropLabel())}</button>` +
     `<button type="button" class="em-qbtn" title="Open this one question on its own in the full editor" onclick="emOpenFull('${e.key}')">↗ Full editor</button>`;
   return el;
 }
@@ -28304,9 +28305,16 @@ function emCondenseCard(card, block) {
   const head = main.querySelector('.block-header');
   const grip = head && head.querySelector('.drag-handle');
   if (grip) rail.appendChild(grip);
+  // 🗑 Delete is held back from the run of icons and given its own place at the
+  // FOOT of the rail — see emRailDelete. Everything else keeps its order.
   const acts = head && head.querySelector('.block-actions');
+  let del = null;
   if (acts) {
-    Array.from(acts.children).forEach(b => { emIconify(b); rail.appendChild(b); });
+    Array.from(acts.children).forEach(b => {
+      emIconify(b);
+      if (!del && b.classList && b.classList.contains('delete')) { del = b; return; }
+      rail.appendChild(b);
+    });
     acts.remove();
   }
 
@@ -28344,7 +28352,30 @@ function emCondenseCard(card, block) {
     gear.addEventListener('click', () => card.classList.toggle('em-open'));
     rail.appendChild(gear);
   }
+  emRailDelete(rail, del);
   emRailFit(rail);
+}
+
+// 🗑 Delete this block. It is the SAME button the ordinary editor draws — moved,
+// never a copy that calls the same function — and the only thing that changes
+// is where it sits and what it looks like.
+//
+// It used to go onto the rail in its turn, which put one 14px grey outline
+// among ten identical grey outlines somewhere in the middle of a two-column
+// grid, with nothing but a hover to tell it from ✂️ Shorten. That is a delete
+// button that is on the screen and cannot be found, which reads — correctly —
+// as a delete button that is not there at all. It now sits ALONE at the foot of
+// every rail, across its full width, in red: one fixed place on every block of
+// every question, so it is looked for once and never hunted for again.
+//
+// The tooltip says what it costs, because nothing here is written until Save:
+// a block deleted by mistake comes back by closing editing mode without saving,
+// and a block deleted and saved does not.
+function emRailDelete(rail, del) {
+  if (!rail || !del) return;
+  del.classList.add('em-del');
+  del.setAttribute('title', 'Delete this block — nothing is written until you press Save, so closing without saving brings it back');
+  rail.appendChild(del);
 }
 
 // A rail taller than the block it sits beside is a rail that makes the block
@@ -28368,7 +28399,9 @@ function emCondenseEnhanceBar(blockId) {
   const card = bar.closest('.block-card');
   const rail = card && card.querySelector('.em-rail');
   if (!rail) return;
-  emHoistInto(bar, rail, rail.querySelector('.em-gear'));
+  // Before the ⚙ — or before 🗑 when this block has no folded half at all, so
+  // the picture tools can never land underneath the bin at the foot of the rail.
+  emHoistInto(bar, rail, rail.querySelector('.em-gear') || rail.querySelector('.em-del'));
   emRailFit(rail);
   // An enhanced picture replaces the single preview with a side-by-side
   // comparison, which lives in the folded half — so the block would show no
@@ -28383,8 +28416,94 @@ function emMayRemove(id) {
   const own = _em.owner[String(id)];
   if (!own) return true;
   if (emBlocksOf(own).length > 1) return true;
-  showToast('A question must keep at least one block — take the whole question off the sheet with ✎ Questions instead', 'error');
+  showToast('A question must keep at least one block — take the whole question off the sheet with ✕ on its heading instead', 'error');
   return false;
+}
+
+// ── Taking a whole QUESTION off ─────────────────────────────────────────────
+// The 🗑 at the foot of a rail removes one BLOCK. This removes the question,
+// heading and all — the control the sheet had no way of offering, so a question
+// that did not belong on the paper meant leaving editing mode, finding the
+// sheet again and coming back.
+//
+// WHAT IT MEANS DEPENDS ON WHERE THE SHEET CAME FROM, and the button says
+// which rather than wearing one word over two different acts:
+//
+//  • A SAVED WORKSHEET is nothing but an ORDERED LIST OF BANK IDS, so the
+//    question really does come off it — and it is written back through
+//    `wseRemoveFrom`, the very function the ✎ Questions drawer and the
+//    preview's own ✕ already use. A second removal path written here would be
+//    free to forget what that one remembers: the `wsManualBreaks` / `wsMergeUp`
+//    overrides are keyed by question id, so a break left behind would sit on
+//    whatever came after it.
+//
+//  • A PAST PAPER is generated from its own year or concept and has NO list to
+//    edit, so there is nothing honest to persist: the question is dropped from
+//    THIS scroll and the paper is untouched. The confirm says so in as many
+//    words — a button that quietly did less than its label claimed would be
+//    worse than no button.
+//
+// NEITHER deletes the question from the bank. That is the bank's own 🗑, and a
+// question taken off one sheet is still on every other sheet using it — so the
+// confirm says that too.
+function emDropIsSaved() { return !!(_em.ctx && _em.ctx.kind === 'saved'); }
+function emDropLabel() { return emDropIsSaved() ? '✕ Remove from sheet' : '✕ Drop from this edit'; }
+function emDropTip() {
+  return emDropIsSaved()
+    ? 'Take this question off this worksheet. It stays in the question bank and on every other worksheet using it.'
+    : 'Take this question out of this scroll. The paper itself does not change and nothing is deleted from the bank.';
+}
+
+// The blocks, the keywords, the blanks, the owner entries and the heading all
+// go together. Anything left behind points at an id nothing uses any more —
+// and a keyword orphan comes back on the next block that happens to be given
+// the same id, which is exactly why removeBlock calls kwForgetBlock too.
+function emDropQuestion(e) {
+  if (!e) return;
+  const ids = emBlocksOf(e.id).map(b => String(b.id));
+  const gone = new Set(ids);
+  blocks = blocks.filter(b => !(b && gone.has(String(b.id))));
+  ids.forEach(id => {
+    delete _em.owner[id];
+    if (selectedBlanks[id] !== undefined) delete selectedBlanks[id];
+    try { kwForgetBlock(id); } catch (err) { console.warn('editing mode: forgetting keywords', err); }
+  });
+  _em.qs = _em.qs.filter(x => x !== e);
+  // The numbers down the left are POSITIONS on the sheet, not names — a gap in
+  // them reads as a question that failed to load, and `emSaveAll` reports a
+  // failure by that same number.
+  _em.qs.forEach((x, i) => { x.n = i + 1; });
+}
+
+function emRemoveQuestion(key) {
+  if (!_em.on) return;
+  if (_em.busy) { showToast('Still saving — one moment', 'info'); return; }
+  const e = _em.qs.find(x => x.key === key);
+  if (!e) return;
+  const saved = emDropIsSaved();
+  const name = (e.title || '').trim() || 'this question';
+  let dirty = false;
+  try { dirty = emSigOf(e) !== e.sig; } catch (err) { console.warn('editing mode: reading the boxes', err); }
+  const ask = (saved
+    ? 'Take “' + name + '” off this worksheet?\n\nIt stays in the question bank and on every other worksheet using it.'
+    : 'Drop “' + name + '” from this edit?\n\nThe paper itself does not change — the question is simply taken out of this scroll, and nothing is deleted from the bank.')
+    + (dirty ? '\n\nThe changes you have made to it here have not been saved and will be thrown away.' : '');
+  if (!confirm(ask)) return;
+
+  emDropQuestion(e);
+  // The worksheet write comes AFTER the question has left the scroll, so a
+  // refused write leaves the sheet and this screen disagreeing about one
+  // question rather than about a question that is still on screen.
+  if (saved && _em.ctx.id) { try { wseRemoveFrom(_em.ctx.id, e.id); } catch (err) { console.error('editing mode: worksheet write', err); } }
+
+  if (!_em.qs.length) {
+    showToast(saved ? 'That was the last question — the sheet is now empty' : 'Nothing left to edit', 'info');
+    emClose(true);
+    return;
+  }
+  renderBlocks();
+  emRenderStatus();
+  if (!saved) showToast('Dropped from this edit — the paper itself is unchanged', 'info');
 }
 
 
@@ -63292,6 +63411,7 @@ window.emClose = emClose;
 window.emSaveAll = emSaveAll;
 window.emOpenFull = emOpenFull;
 window.emTitleInput = emTitleInput;
+window.emRemoveQuestion = emRemoveQuestion;
 window.akeAddExplanation = akeAddExplanation;
 window.akeRemoveExplanation = akeRemoveExplanation;
 window.akeAddAnswerKey = akeAddAnswerKey;

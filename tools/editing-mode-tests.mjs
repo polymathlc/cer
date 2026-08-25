@@ -51,7 +51,7 @@ const cut = (from, to, what) => {
 };
 
 const section = cut('var _em = {', '\n// A question with no blocks has nowhere', 'editing mode')
-  + cut('function emMayRemove(id) {', '\n}\n', 'emMayRemove') + '\n}\n';
+  + cut('function emMayRemove(id) {', '\n// =====================================================================\n// QUICK PRACTICE MODE', 'emMayRemove + emRemoveQuestion');
 
 const PRELUDE = `
 let blocks = [];
@@ -78,6 +78,18 @@ function _canAuthor() { return true; }
 function _wsSavedQuestions() { return []; }
 function _wsEmptyMsg() { return 'empty'; }
 async function saveQuestion() { return true; }
+const KW_CER_FIELDS = [{ field: 'claim' }, { field: 'evidence' }, { field: 'reasoning' }];
+const _kwOpen = new Set();
+function kwForgetBlock(blockId) {
+  ['content', 'text'].concat(KW_CER_FIELDS.map(f => f.field))
+    .forEach(field => { delete editorKeywords[kwFieldKey(blockId, field)]; });
+  _kwOpen.delete(blockId);
+}
+const wsRemoved = [];
+function wseRemoveFrom(wsId, qid) { wsRemoved.push([String(wsId), String(qid)]); }
+let confirmAnswer = true;
+function confirm(msg) { confirms.push(String(msg)); return confirmAnswer; }
+const confirms = [];
 let _wsPreviewPaper = null, _wsPreviewSaved = null;
 const document = { getElementById: () => null, body: { classList: { add(){}, remove(){}, toggle(){} } } };
 `;
@@ -87,13 +99,15 @@ return {
   em: _em, emActive, emScope, emOwnerQuestion, emTitleFor, emTopicFor,
   emBlocksOf, emKwFor, emBlanksFor, emSigOf, emChangedEntries,
   emAdoptOwners, emIconFor, emMayRemove, emStays, emHoistable,
+  emRemoveQuestion, emDropQuestion, emDropIsSaved, emDropLabel, emDropTip,
   EM_PRIMARY, EM_KEEP,
   state: {
     set blocks(v) { blocks = v; }, get blocks() { return blocks; },
     set editorKeywords(v) { editorKeywords = v; }, get editorKeywords() { return editorKeywords; },
     set selectedBlanks(v) { selectedBlanks = v; }, get selectedBlanks() { return selectedBlanks; },
     set questionBank(v) { questionBank = v; }, get questionBank() { return questionBank; },
-    toasts,
+    set confirmAnswer(v) { confirmAnswer = v; }, get confirmAnswer() { return confirmAnswer; },
+    toasts, wsRemoved, confirms,
   },
 };`;
 
@@ -334,6 +348,112 @@ test('the rich-text toolbar buttons stay where they are', () => {
 test('a mic with no target of its own is left inside its wrap', () => {
   ok(M.emHoistable(fake('mic-btn', [], { 'data-mic-block': 'b1' })), 'a mic that names its box');
   ok(!M.emHoistable(fake('mic-btn', [], { 'data-mic': '' })), 'a mic that finds it by walking up');
+});
+
+// ── ✕ taking a whole question off ───────────────────────────────────────────
+// The delete the sheet had no way of offering. Every failure here is silent:
+// a question that leaves the scroll and not the worksheet is a removal the
+// teacher watched happen and that never happened, and one that leaves stray
+// blocks, owner entries or keywords behind poisons the next block to be given
+// one of those ids.
+function ctx(kind, id) { M.em.ctx = { kind, id: id || '', title: 'Sheet' }; }
+
+test('removing a question takes its blocks, owners, keywords and blanks with it', () => {
+  sheet([
+    { id: 'qa', blocks: [tb('a1'), tb('a2')] },
+    { id: 'qb', blocks: [tb('b1')] },
+  ]);
+  ctx('paper');
+  M.state.editorKeywords = { a1: { 0: true }, a2_claim: { 1: true }, b1: { 0: true } };
+  M.state.selectedBlanks = { a1: [1], b1: [2] };
+  M.emDropQuestion(M.em.qs[0]);
+  eq(M.state.blocks.map(b => b.id), ['b1'], 'only question B is left');
+  eq(Object.keys(M.em.owner).sort(), ['b1'], 'no owner entry outlives its block');
+  eq(Object.keys(M.state.editorKeywords).sort(), ['b1'], 'the CER keys go too, not just the bare id');
+  eq(Object.keys(M.state.selectedBlanks).sort(), ['b1'], 'blanks');
+  eq(M.em.qs.map(x => x.id), ['qb'], 'the heading goes with it');
+});
+
+test('the questions left behind are RENUMBERED — a gap reads as one that failed to load', () => {
+  sheet([
+    { id: 'qa', blocks: [tb('a1')] },
+    { id: 'qb', blocks: [tb('b1')] },
+    { id: 'qc', blocks: [tb('c1')] },
+  ]);
+  ctx('paper');
+  M.emDropQuestion(M.em.qs[1]);
+  eq(M.em.qs.map(x => x.n), [1, 2], 'numbers close up');
+  eq(M.em.qs.map(x => x.id), ['qa', 'qc'], 'in sheet order');
+});
+
+test('a question dropped from the scroll does not make the OTHERS look changed', () => {
+  sheet([
+    { id: 'qa', blocks: [tb('a1', 'one')] },
+    { id: 'qb', blocks: [tb('b1', 'two')] },
+  ]);
+  ctx('paper');
+  M.emDropQuestion(M.em.qs[0]);
+  eq(M.emChangedEntries().length, 0, 'nothing else is reported as edited');
+});
+
+test('a SAVED worksheet is written back; a PAST PAPER is not', () => {
+  M.state.wsRemoved.length = 0;
+  M.state.confirms.length = 0;
+  M.state.confirmAnswer = true;
+
+  sheet([{ id: 'qa', blocks: [tb('a1')] }, { id: 'qb', blocks: [tb('b1')] }]);
+  ctx('saved', 'ws7');
+  M.emRemoveQuestion(M.em.qs[0].key);
+  eq(M.state.wsRemoved, [['ws7', 'qa']], 'the worksheet really loses the question');
+
+  M.state.wsRemoved.length = 0;
+  sheet([{ id: 'qa', blocks: [tb('a1')] }, { id: 'qb', blocks: [tb('b1')] }]);
+  ctx('paper');
+  M.emRemoveQuestion(M.em.qs[0].key);
+  eq(M.state.wsRemoved, [], 'a paper has no list to edit and nothing is persisted');
+  eq(M.em.qs.map(x => x.id), ['qb'], 'it still leaves the scroll');
+});
+
+test('the button SAYS which of the two it is about to do', () => {
+  ctx('saved', 'ws7');
+  ok(M.emDropIsSaved(), 'saved worksheet');
+  ok(/worksheet|sheet/i.test(M.emDropLabel()), 'the label names the sheet: ' + M.emDropLabel());
+  ok(/bank/i.test(M.emDropTip()), 'and says the bank keeps it');
+  ctx('paper');
+  ok(!M.emDropIsSaved(), 'past paper');
+  ok(!/worksheet/i.test(M.emDropLabel()), 'the label does not claim a sheet: ' + M.emDropLabel());
+  ok(/paper itself does not change/i.test(M.emDropTip()), 'and says the paper is untouched');
+});
+
+test('answering No to the confirm changes nothing at all', () => {
+  M.state.wsRemoved.length = 0;
+  sheet([{ id: 'qa', blocks: [tb('a1')] }, { id: 'qb', blocks: [tb('b1')] }]);
+  ctx('saved', 'ws7');
+  M.state.confirmAnswer = false;
+  M.emRemoveQuestion(M.em.qs[0].key);
+  M.state.confirmAnswer = true;
+  eq(M.em.qs.map(x => x.id), ['qa', 'qb'], 'both questions stay');
+  eq(M.state.blocks.map(b => b.id), ['a1', 'b1'], 'both blocks stay');
+  eq(M.state.wsRemoved, [], 'and nothing was written');
+});
+
+test('the confirm WARNS when that question has unsaved changes', () => {
+  sheet([{ id: 'qa', blocks: [tb('a1', 'one')] }, { id: 'qb', blocks: [tb('b1')] }]);
+  ctx('paper');
+  M.state.blocks[0].content = 'edited since it was opened';
+  M.state.confirms.length = 0;
+  M.state.confirmAnswer = false;
+  M.emRemoveQuestion(M.em.qs[0].key);
+  M.state.confirmAnswer = true;
+  ok(/thrown away/i.test(M.state.confirms.join(' ')), 'the wording warns: ' + M.state.confirms.join(' '));
+});
+
+test('removing the last question closes editing mode rather than leaving a blank scroll', () => {
+  sheet([{ id: 'qa', blocks: [tb('a1')] }]);
+  ctx('paper');
+  M.emRemoveQuestion(M.em.qs[0].key);
+  ok(!M.emActive(), 'editing mode is closed');
+  M.em.on = true;
 });
 
 // ── run ─────────────────────────────────────────────────────────────────────

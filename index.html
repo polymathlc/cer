@@ -4735,6 +4735,11 @@ body.em-editing #printProgress { z-index: 470; }
   cursor: pointer;
 }
 .em-qbtn:hover { border-color: var(--primary); color: var(--primary); }
+/* ✕ Take the whole question off. It is the one control on the heading that
+   removes something, so it is the one that is coloured — a heading of
+   identical grey buttons is a heading nobody reads twice. */
+.em-qbtn.danger { color: var(--accent-red); border-color: var(--accent-red-light); }
+.em-qbtn.danger:hover { border-color: var(--accent-red); color: var(--accent-red); background: var(--accent-red-light); }
 
 /* ── The condensed block card ───────────────────────────────────────────── */
 #blocksList.em-on { gap: 7px; }
@@ -4805,6 +4810,25 @@ body.em-editing #printProgress { z-index: 470; }
 #blocksList.em-on .em-ico:hover { background: var(--surface); border-color: var(--border); color: var(--text); }
 #blocksList.em-on .em-ico svg { width: 14px; height: 14px; }
 #blocksList.em-on .em-ico.delete:hover { background: var(--accent-red-light); color: var(--accent-red); }
+/* 🗑 Delete the block, alone at the FOOT of the rail and across its full width.
+   In the run of icons it was one 14px grey outline among ten identical grey
+   outlines, told apart only by hovering each in turn — a delete button that is
+   on the screen and cannot be found, which reads as one that is not there. Red
+   before it is hovered, not after: the colour is what makes it findable. */
+#blocksList.em-on .em-rail .em-ico.em-del {
+  grid-column: 1 / -1;
+  width: auto;
+  min-width: 0;
+  margin-top: 6px;
+  color: var(--accent-red);
+  background: var(--accent-red-light);
+  border-color: transparent;
+}
+#blocksList.em-on .em-rail .em-ico.em-del:hover {
+  background: var(--accent-red);
+  border-color: transparent;
+  color: #fff;
+}
 #blocksList.em-on .cer-label .em-ico,
 #blocksList.em-on .text-toolbar .em-ico { width: 24px; height: 24px; min-width: 24px; }
 
