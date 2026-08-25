@@ -2768,7 +2768,42 @@ control. Scroll from the first question to the last, fix what you find, press
 - **A QUESTION MAY NEVER BE EMPTIED.** `qPartMap` and the owner map are both
   positional, so a question with no blocks left has nowhere to draw its heading
   and nothing to own a newly inserted block. `emMayRemove` refuses the last one
-  and the toast says to take the question off the sheet with ✎ Questions instead.
+  and the toast points at the ✕ on the question's own heading instead.
+- **THERE ARE TWO DELETES, AND THEY ARE DIFFERENT SIZES** (v1.328.0).
+  🗑 at the foot of a rail removes one BLOCK; ✕ on a question's heading removes
+  the whole QUESTION. Neither touches the question bank — that is the bank's own
+  🗑, and a question taken off one sheet is still on every other sheet using it.
+  - **The block 🗑 is held out of the run of icons and given the FOOT of the
+    rail** (`emRailDelete`), across its full width, in red before it is hovered.
+    It went onto the rail in its turn until v1.328.0, which put one 14px grey
+    outline among ten identical grey outlines in the middle of a two-column
+    grid, told apart only by hovering each in turn: **a delete button that is on
+    the screen and cannot be found reads — correctly — as one that is not
+    there**, which is exactly how it was reported. It is the SAME button moved,
+    never a copy. `emCondenseEnhanceBar` anchors before the ⚙ **or the 🗑**, so
+    the picture tools can never land underneath it.
+  - **✕ MEANS DIFFERENT THINGS ON THE TWO KINDS OF SHEET, and the label says
+    which.** A SAVED worksheet is an ordered list of bank ids, so the question
+    really comes off it — written back through **`wseRemoveFrom`**, the very
+    function the ✎ Questions drawer and the preview's own ✕ already use, because
+    a second removal path here would be free to forget what that one remembers
+    (`wsManualBreaks` / `wsMergeUp` are keyed by question id, so a break left
+    behind would sit on whatever came after it). A PAST PAPER is generated from
+    its own year or concept and has **no list to edit**, so there is nothing
+    honest to persist: it is dropped from THIS scroll and the paper is untouched
+    — and the confirm says so in as many words, rather than leaving a button
+    that quietly did less than its label claimed.
+  - **`emDropQuestion` takes the blocks, the owner entries, the keywords and the
+    blanks together.** Anything left behind points at an id nothing uses any
+    more, and a keyword orphan comes back on the next block given that id —
+    which is why `removeBlock` calls `kwForgetBlock` too. It then **renumbers**
+    `_em.qs`: those numbers are POSITIONS on the sheet, a gap in them reads as a
+    question that failed to load, and `emSaveAll` reports a failure by that same
+    number.
+  - **The scroll loses the question BEFORE the worksheet write goes out**, so a
+    refused write leaves the sheet and the screen disagreeing about a question
+    that has gone rather than about one still on screen. Removing the last
+    question closes editing mode rather than leaving a blank scroll.
 - **A NEW BLOCK JOINS THE QUESTION ABOVE IT** (`emAdoptOwners`), which is where
   the insert bar that made it was drawn — falling back to the one below when it
   is the very first block on the sheet. Duplicating a block gives it a fresh id
@@ -2838,9 +2873,10 @@ control. Scroll from the first question to the last, fix what you find, press
 ## House rules
 - After touching **✏️ editing mode** (`emScope`, `emOwnerQuestion`,
   `emTitleFor`/`emTopicFor`, `emAdoptOwners`, `emSigOf`, `emChangedEntries`,
-  `emKwFor`/`emBlanksFor`, `emMayRemove`, `emCondenseCard`, `emIconify`,
-  `emHoistInto`, `EM_PRIMARY`, `_ppGo`, or `renderBlocks`'s `emAfterRender`
-  hook), run `node tools/editing-mode-tests.mjs`. Editing mode puts EVERY
+  `emKwFor`/`emBlanksFor`, `emMayRemove`, `emRemoveQuestion`, `emDropQuestion`,
+  `emDropIsSaved`/`emDropLabel`/`emDropTip`, `emRailDelete`, `emCondenseCard`,
+  `emIconify`, `emHoistInto`, `EM_PRIMARY`, `_ppGo`, or `renderBlocks`'s
+  `emAfterRender` hook), run `node tools/editing-mode-tests.mjs`. Editing mode puts EVERY
   question of a sheet into the one block editor at once, which is what makes it
   useful and also what makes every failure here silent — the editor still
   renders, still types and still saves, and is quietly working on the wrong
@@ -2855,7 +2891,12 @@ control. Scroll from the first question to the last, fix what you find, press
   and one that reports nothing turns Save into a button that does nothing; and a
   question allowed to empty itself has nowhere to draw its heading and nothing
   to own the next block inserted into it. The one failure that DOES show is the
-  rail: a button lifted out of its `[data-mic-wrap]` dictates into nothing.
+  rail: a button lifted out of its `[data-mic-wrap]` dictates into nothing. The
+  two deletes fail quietly in their own ways: a ✕ that leaves the scroll and not
+  the worksheet is a removal the teacher watched happen and that never happened,
+  one that persists on a PAST PAPER writes to a list the paper does not have,
+  and either of them leaving stray blocks, owner entries or keywords behind
+  poisons the next block given one of those ids.
 - After touching **↩️ back to the preview you came from** (`_wsPreviewSnapshot`,
   `_wsQeReopenPreview`, `wsQuickEditOpenFull`, `_wsQeReturn`,
   `_afterEditNavigate`, `_syncBackToPapersBtn`, or `ppPreview`'s `quiet`), run
