@@ -2688,7 +2688,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.330.1';
+const APP_VERSION = 'v1.331.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -6167,6 +6167,76 @@ function _aiPartScopeLine(p, target, mark) {
   return { tag, text: '' };
 }
 
+// =====================================================================
+// 📝 AN EXPLANATION IS NOT THE ANSWER AGAIN
+//
+// The answer block already holds the answer, and on the printed key the two
+// are set one under the other — so an explanation that restates it prints the
+// same words twice and the teacher reads a key that says nothing new.
+//
+// It is worst on a question that ASKS the student to explain ("… Explain your
+// answer."): there the model answer IS an explanation, so "write the answer"
+// and "explain why the answer is correct" are the same instruction, and the
+// model dutifully returns the answer a second time. Nothing errors, the key
+// prints beautifully, and the second half of it is dead paper.
+//
+// So once an answer is already written the box is told what it is FOR: the
+// teaching commentary that goes BEYOND it. `_explDepthRules` is the ONE place
+// that is said — the 🤖 AI explanation button and every build prompt (through
+// `_partsPromptRules`) read it, so the two cannot drift.
+// =====================================================================
+
+// Does this wording ask the student for the REASONING? One expression for all
+// three portals, so a 华文 or English paper is read the same way a science one
+// is. The CJK alternatives sit outside the \b group on purpose — a word
+// boundary means nothing between two 汉字.
+const EXPL_ASKS_RE = /\b(explain|explains|explaining|explanation|why|reason|reasons|justify|account for)\b|为什么|为何|原因|解释|说明/i;
+function _aiAsksToExplain(text) { return EXPL_ASKS_RE.test(String(text || '')); }
+
+// What the explanation box is sitting on: does its own part ALREADY carry a
+// written model answer, and does its own part ask the student to explain?
+// Pure — it takes the block list and the part map rather than reading the
+// editor — so the harness can pin it without a DOM.
+function _explAnswerContext(list, pmap, target, scoped) {
+  let hasAnswer = false, asksExplain = false;
+  (list || []).forEach(b => {
+    if (!b) return;
+    const p = qPartOf(pmap, b);
+    const mine = !scoped || p === target;
+    // An ANSWER counts only when it is THIS part's. Another part's answer is
+    // not what this box would be repeating.
+    if (mine && (b.type === 'answer' || b.type === 'plainanswer')) {
+      const t = b.type === 'answer'
+        ? [b.claim, b.evidence, b.reasoning].map(v => stripHtml(v || '')).join(' ')
+        : stripHtml(b.content || '');
+      if (t.trim()) hasAnswer = true;
+    }
+    // The instruction to explain is usually in the part's own wording, but a
+    // paper often prints it once in the shared stem — so the stem counts, and
+    // another PART's wording never does.
+    if ((mine || !p) && (b.type === 'text' || b.type === 'part')
+        && _aiAsksToExplain(stripHtml(b.content || ''))) asksExplain = true;
+  });
+  return { hasAnswer, asksExplain };
+}
+
+// The rule itself. NOTHING at all when there is no answer yet — an MCQ-only
+// question's explanation is the one thing this box was always right about, and
+// its prompt must stay byte-for-byte what it was.
+function _explDepthRules(hasAnswer, asksExplain) {
+  if (!hasAnswer) return '';
+  return `THE MODEL ANSWER IS ALREADY WRITTEN and is printed above. Saying it again is not your job: do NOT restate it, do NOT paraphrase it, and do NOT open by announcing what the answer is. The answer key prints the answer and this box one under the other, so a box that repeats the answer prints the same words twice.\n` +
+    (asksExplain
+      ? `THE QUESTION ITSELF ASKS THE STUDENT TO EXPLAIN, so that model answer is ALREADY an explanation — and an explanation of an explanation that says the same thing teaches nobody anything. Go further than it does: say what the model answer had to leave out to stay short enough for a student to write in the time allowed.\n`
+      : '') +
+    `Write what a teacher says AFTER the answer has been read out. Cover these, in this order, and only where each genuinely applies:\n` +
+    `  1. the principle or rule the answer rests on — NAME it, and state it generally rather than only about this question;\n` +
+    `  2. the step of reasoning the model answer compresses or takes for granted — spell out why the evidence actually leads to that conclusion;\n` +
+    `  3. the answer a student is most likely to give instead, and exactly what is wrong with it;\n` +
+    `  4. what a marker is looking for — the idea or the words that earn the mark, and what loses it.\n` +
+    `It must be longer and more detailed than the model answer, and every sentence must add something the model answer does not already say.\n`;
+}
+
 async function aiGenerateBlockAnswer(blockId, btn) {
   const block = blocks.find(b => b.id === blockId);
   if (!block || (block.type !== 'answer' && block.type !== 'plainanswer')) return;
@@ -6330,8 +6400,12 @@ async function aiGenerateBlockExplanation(blockId, btn) {
   const topic = emTopicFor(blockId);
   const title = emTitleFor(blockId);
   const notesDb = aiGrounding('teach', topic);
+  // Is there already a written answer to this part, and does the question
+  // itself ask the student to explain? See 📝 AN EXPLANATION IS NOT THE ANSWER
+  // AGAIN — a box written over an answer has to go beyond it, not repeat it.
+  const depth = _explAnswerContext(scope, pmap, target, scoped);
   const prompt =
-    `You are a Singapore primary-school (PSLE) science teacher writing the EXPLANATION box of the practice question below — 2-4 sentences for a P3-P6 student explaining WHY the correct answer is correct.\n` +
+    `You are a Singapore primary-school (PSLE) science teacher writing the EXPLANATION box of the practice question below — ${depth.hasAnswer ? '4-8 sentences of teaching commentary that goes BEYOND the model answer already written above' : '2-4 sentences'} for a P3-P6 student explaining WHY the correct answer is correct.\n` +
     (notesDb ? notesDb + `\nBase the science and the wording on this database FIRST; fall back to standard PSLE syllabus knowledge only where the database does not cover it.\n` : '') +
     (title || topic ? `Question: "${title}"${topic ? ' — topic: ' + topic : ''}.\n` : '') +
     `THE QUESTION, in order${media.length ? ' (diagrams attached as images)' : ''}:\n${ctxBits.join('\n').slice(0, 3500)}\n` +
@@ -6339,14 +6413,15 @@ async function aiGenerateBlockExplanation(blockId, btn) {
       ? `This question has several lettered parts. Explain ONLY part (${target}) — the sub-question marked ">>>" above, which is the one printed directly above this explanation box — and its answer. The other parts are shown only so you understand the context; do NOT explain them, do NOT summarise the whole question, and do not mention a part other than (${target}) unless part (${target}) genuinely depends on it.\n`
       : '') +
     `If a correct answer / model answer is shown above, your explanation MUST justify THAT answer (never contradict it); if none is shown, work the correct answer out yourself first.\n` +
+    _explDepthRules(depth.hasAnswer, depth.asksExplain) +
     `Return ONLY JSON: {"explanation":"..."}\n` +
     `Rules: clear teacher voice a P3-P6 student understands; plain text only, no markdown, no [[brackets]].`;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '🤖 Writing…'; }
   try {
     const raw = media.length
-      ? await askGeminiVision(prompt, media, { maxOutputTokens: 700, json: true })
-      : await askGemini(prompt, { maxOutputTokens: 700, temperature: 0.25, json: true });
+      ? await askGeminiVision(prompt, media, { maxOutputTokens: depth.hasAnswer ? 1300 : 700, json: true })
+      : await askGemini(prompt, { maxOutputTokens: depth.hasAnswer ? 1300 : 700, temperature: 0.25, json: true });
     let p = _parseAIJson(raw);
     if (Array.isArray(p)) p = p[0];
     const expl = p && typeof p === 'object' ? String(p.explanation || p.text || '').trim() : '';
@@ -11547,7 +11622,8 @@ function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint) {
 function _partsPromptRules() {
   return `- LETTERED PARTS: if the question has sub-parts (a), (b), (c), give EACH part its own text block, starting with its own marker written exactly as "(a) " / "(b) " — one marker per block, never two parts in the same block.\n` +
     `- Give EACH part its own answer block ("answer" or "plainanswer") directly under the text block that asks it, so every part has its own model answer.\n` +
-    `- EXPLANATIONS follow the parts: a question with NO parts finishes with ONE "explanation" block; a question WITH parts gets ONE explanation block PER PART, placed directly after that part's own answer block and explaining ONLY that part's question and answer. Never write one explanation covering several parts, and never put an explanation about part (b) underneath part (a).\n`;
+    `- EXPLANATIONS follow the parts: a question with NO parts finishes with ONE "explanation" block; a question WITH parts gets ONE explanation block PER PART, placed directly after that part's own answer block and explaining ONLY that part's question and answer. Never write one explanation covering several parts, and never put an explanation about part (b) underneath part (a).\n` +
+    `- AN EXPLANATION IS NOT THE ANSWER AGAIN. The answer block already holds the answer and the two print one under the other on the answer key, so an explanation that restates or paraphrases it prints the same words twice. Write the teaching commentary that goes BEYOND it: the principle it rests on, named and stated generally; the step of reasoning the answer compresses; the answer a student is most likely to give instead and what is wrong with it; and what earns the mark. This matters most where the question itself says "explain", "why" or "give a reason" — there the model answer is ALREADY an explanation, so the explanation block has to go further than it rather than say it again.\n`;
 }
 
 // The rectangle-selection (box_2d) rules, shared by the single-question build
