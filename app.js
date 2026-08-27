@@ -2688,7 +2688,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.329.0';
+const APP_VERSION = 'v1.330.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -14213,7 +14213,7 @@ function getQuestionPreview(q) {
       return clean('Multiple choice: ' + (block.options || []).map(o => o.text).join(' / ')).substring(0, 150);
     }
     if (block.type === 'fillblank' && (block.text || '').trim()) {
-      return clean('Fill in the blanks: ' + _fbParse(block.text).map(p => p.type === 'blank' ? '____' : p.text).join('')).substring(0, 150);
+      return clean('Fill in the blanks: ' + _fbSegments(block.text).map(p => p.type === 'blank' ? '____' : p.text).join('')).substring(0, 150);
     }
   }
   return 'No text content';
@@ -22231,17 +22231,19 @@ function buildOpenBody(q, containerSel, markCfg) {
         addAnswer(_openSection(items, '', stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }, pLab));
         break;
       case 'fillblank': {
-        const parts = _fbParse(block.text || '');
+        const parts = _fbSegments(block.text || '');
         const hasBlank = parts.some(p => p.type === 'blank');
         if (!hasBlank) { add(`<div class="fb-sentence" style="line-height:2;margin:8px 0;">${parts.map(p => escapeHtml(p.text)).join('')}</div>`); break; }
         const oidxs = [], answers = [];
         let sentence = '';
+        // ONE width for every box, taken from the longest answer — see
+        // _fbSlotChars. A box sized from its own answer measures it.
+        const w = Math.max(6, Math.min(22, _fbSlotChars(parts) + 3));
         parts.forEach(p => {
           if (p.type === 'text') { sentence += escapeHtml(p.text); return; }
           const oidx = items.length;
           items.push({ label: [pOf(block), 'Blank ' + (oidxs.length + 1)].filter(Boolean).join(' '), model: p.answer, block, field: 'text' });
           oidxs.push(oidx); answers.push(p.answer);
-          const w = Math.max(6, Math.min(22, (p.answer || '').length + 3));
           sentence += `<input class="fb-input" data-oidx="${oidx}" type="text" autocomplete="off" spellcheck="false" aria-label="blank" style="width:${w}ch;">`;
         });
         fbBlocks.push({ blockId: block.id, oidxs, answers });
@@ -23365,6 +23367,61 @@ function _fbParse(text) {
 }
 function _fbHasBlanks(block) { return !!(block && block.type === 'fillblank' && /\[\[[\s\S]+?\]\]/.test(block.text || '')); }
 
+// A RUN OF ADJACENT BLANKS IS ONE BLANK. `_fbSegments` is what every
+// fill-in-the-blank surface reads; `_fbParse` stays the raw parser.
+//
+// An author blanks one word at a time, so a two-word answer is two clicks and
+// `[[carbon]] [[dioxide]]` in the text. Printed as two rules that says THE
+// ANSWER IS TWO WORDS — and beside a one-rule blank whose answer is "oxygen",
+// the class has been handed "carbon dioxide" without a word of it being
+// written. So a run of blanks separated by nothing but whitespace becomes ONE
+// blank whose answer is those words joined: one rule on paper, one box on
+// screen, one row on the key, one answer to mark.
+//
+// ONLY WHITESPACE MAY JOIN THEM. `[[carbon]], [[dioxide]]` is punctuated into
+// two real answers and is left as two, because the comma is the author saying
+// so.
+//
+// It is deliberately NOT inside `_fbParse`: the language portals share that
+// parser with the word-bank cloze, the open cloze and the editing passage,
+// where two adjacent blanks ARE two separate answers — and an editing item is
+// `[[wrong>>right]]`, so welding a pair of them together would graft one
+// item's correction onto the next one's misspelling.
+function _fbMergeBlankRuns(parts) {
+  const out = [];
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (p.type !== 'blank') { out.push(p); continue; }
+    let answer = p.answer || '';
+    for (;;) {
+      const nxt = parts[i + 1];
+      // `[[a]][[b]]` — nothing at all between them, so nothing goes between
+      // the words either; the sentence never had a space there.
+      if (nxt && nxt.type === 'blank') { answer += (nxt.answer || ''); i += 1; continue; }
+      if (nxt && nxt.type === 'text' && nxt.text.length && !nxt.text.trim()
+          && parts[i + 2] && parts[i + 2].type === 'blank') {
+        answer += ' ' + (parts[i + 2].answer || ''); i += 2; continue;
+      }
+      break;
+    }
+    out.push({ type: 'blank', answer: answer.trim() });
+  }
+  return out;
+}
+function _fbSegments(text) { return _fbMergeBlankRuns(_fbParse(text)); }
+
+// EVERY BLANK IN A BLOCK IS THE SAME WIDTH, and it is the width the LONGEST
+// answer needs. A rule sized from its own answer MEASURES that answer: set
+// "oxygen" and "carbon dioxide" one under the other and the short rule and the
+// long one say which is which before either is written. Sizing every blank
+// from the longest keeps the room to write in and takes the comparison away —
+// the rule the open cloze's `_coSlotWidth` already follows.
+function _fbSlotChars(parts) {
+  let n = 0;
+  (parts || []).forEach(p => { if (p.type === 'blank') n = Math.max(n, (p.answer || '').length); });
+  return n;
+}
+
 // ---- fill-in-the-blank on PAPER --------------------------------------------
 // The print builders used to fall through to renderImportedBlockStudent, whose
 // `fillblank` case is _fbReadonlyHtml — a REVIEW rendering that prints each
@@ -23372,17 +23429,18 @@ function _fbHasBlanks(block) { return !!(block && block.type === 'fillblank' && 
 // printer with the answers already filled in, which makes the worksheet
 // useless. On paper a blank has to be blank; the answers belong on the key.
 function _fbPrintHtml(block) {
-  const parts = _fbParse(block.text || '');
+  const parts = _fbSegments(block.text || '');
   if (!parts.length) return '';
-  // The rule width follows the answer's length, so a one-word blank does not
-  // get the same run of paper as a six-word one.
+  // ONE width for every rule on this question, taken from the longest answer —
+  // see _fbSlotChars. A rule sized from its own answer measures it.
+  const w = Math.max(70, Math.min(240, _fbSlotChars(parts) * 7 + 40));
   const body = parts.map(p => p.type === 'blank'
-    ? `<span class="print-blank" style="min-width:${Math.max(70, Math.min(240, (p.answer || '').length * 7 + 40))}pt;">&nbsp;</span>`
+    ? `<span class="print-blank" style="min-width:${w}pt;">&nbsp;</span>`
     : escapeHtml(p.text)).join('');
   return `<div class="print-text-block" style="line-height:2.4;">${body}</div>`;
 }
 function _fbAnswerKeyText(block) {
-  const answers = _fbParse(block.text || '').filter(p => p.type === 'blank').map(p => p.answer || '');
+  const answers = _fbSegments(block.text || '').filter(p => p.type === 'blank').map(p => p.answer || '');
   if (!answers.length) return '';
   return answers.map((a, i) => `${i + 1}. ${a}`).join('   ');
 }
@@ -23398,10 +23456,13 @@ function _fbChipsHtml(id, text) {
   }).join(' ');
 }
 function _fbPreviewHtml(text) {
-  const parts = _fbParse(text);
+  const parts = _fbSegments(text);
   if (!parts.length) return '<span style="color:var(--text-muted);font-size:0.82rem;">—</span>';
+  // The author's "what a student sees", so it shows the student's slot: one per
+  // run of blanks, all the same width.
+  const w = Math.max(6, _fbSlotChars(parts) + 2);
   return parts.map(p => p.type === 'blank'
-    ? `<span class="fb-blank-slot" title="${escapeHtml(p.answer)}">${'&nbsp;'.repeat(Math.max(6, (p.answer || '').length + 2))}</span>`
+    ? `<span class="fb-blank-slot" title="${escapeHtml(p.answer)}">${'&nbsp;'.repeat(w)}</span>`
     : escapeHtml(p.text)).join('');
 }
 function fbSyncChips(id) {
@@ -23424,7 +23485,7 @@ function fbToggleToken(id, idx) {
 
 // ---- read-only render (previews, student view, print) ----
 function _fbReadonlyHtml(block) {
-  const parts = _fbParse(block.text || '');
+  const parts = _fbSegments(block.text || '');
   if (!parts.length) return '';
   const body = parts.map(p => p.type === 'blank'
     ? `<span class="fb-blank-slot" style="color:var(--primary);border-bottom:1.5px solid var(--primary);">${escapeHtml(p.answer)}</span>`
@@ -33233,7 +33294,7 @@ function _docQParts(q) {
     else if (b.type === 'mcq') p.mcq = b;
     else if (b.type === 'answer') { p.answers.push({ kind: 'cer', claim: stripHtml(b.claim || ''), evidence: stripHtml(b.evidence || ''), reasoning: stripHtml(b.reasoning || '') }); scanInline(b.claim); scanInline(b.evidence); scanInline(b.reasoning); }
     else if (b.type === 'plainanswer') { p.answers.push({ kind: 'plain', text: stripHtml(b.content || '') }); scanInline(b.content); }
-    else if (b.type === 'fillblank') { const fp = _fbParse(b.text || ''); p.text += ' ' + fp.map(x => x.type === 'blank' ? x.answer : x.text).join(''); const ans = fp.filter(x => x.type === 'blank').map(x => x.answer).join('; '); if (ans) p.answers.push({ kind: 'plain', text: ans }); }
+    else if (b.type === 'fillblank') { const fp = _fbSegments(b.text || ''); p.text += ' ' + fp.map(x => x.type === 'blank' ? x.answer : x.text).join(''); const ans = fp.filter(x => x.type === 'blank').map(x => x.answer).join('; '); if (ans) p.answers.push({ kind: 'plain', text: ans }); }
     else if (b.type === 'explanation') scanInline(b.content);
   });
   p.text = p.text.replace(/\s+/g, ' ').trim();
