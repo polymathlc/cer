@@ -53,6 +53,9 @@ function escapeHtml(str) {
 `;
 
 const M = new Function(SHIM +
+  // The practice mode's boxes are the fill-in-the-blank block's ONE standard
+  // width — cut in rather than copied, so the two cannot drift.
+  cut('const FB_PRINT_SLOT_PT', '\n// ---- fill-in-the-blank on PAPER', 'fb slot constants') +
   cut('function _markedToBlanks(marked) {', '\n// Turn an AI question object', 'markedToBlanks') +
   cut('const KW_WORD_RE', '// ---- 🔲 the practice mode itself', 'keyword core') +
   cut('// ---- 🔲 the practice mode itself', '// =====================================================================\n// 🔑 ASSIGN KEYWORDS', 'fib renderer') + `

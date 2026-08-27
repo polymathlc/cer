@@ -23,7 +23,7 @@ Guidance for Claude when working in this repo.
     - **The measuring iframe must get the real fonts.** Both font `<link>`s in `index.html` are `media="print"`; the iframe is a SCREEN medium, so copying them verbatim measures every stem in fallback metrics while the printer uses DM Sans (wider → more lines → ~100px+ per page of unbudgeted growth). `_printFontLinksHtml` forces `media="all"` on the COPIES. Use it — never copy `link.outerHTML` directly.
     - **No box may be taller than a sheet.** `PRINT_LINES_MANUAL_MAX` (24) caps the author's "Printed lines" override and `_wsBlockLines` / `WS_BLOCK_LINES_MAX` (30) cap the raw pixel heights `openLines` / `workingSpace` write. An unbreakable box bigger than the paper jumps a whole sheet and still does not fit. The tall pages release their inner boxes in CSS (`.print-chunk-tall`/`.print-page-tall` → `.print-open-answer-box`, `.print-open-cer-box`, `.print-cer-section`, `.print-ak-question`).
   - **`.print-text-block img` must not set `max-height`.** Every printed picture is wrapped in a `.print-text-block`, and that selector has the SAME specificity (0,1,1) as the `.print-question-page img` 92mm cap while sitting later in the file. A `max-height` there wins, which puts the one flat 170mm cap back on every Auto picture, makes `print-img-lg` (140mm) *smaller* than Auto and makes `print-img-full` a no-op. The ladder must read 60 / 92 / 140 / 170mm — check it if you touch either rule.
-  - **Fill-in-the-blank must print BLANK.** `renderImportedBlockStudent`'s `fillblank` branch is `_fbReadonlyHtml`, a REVIEW rendering that puts each answer inside its slot — so a print path that falls through to it hands the class a worksheet with the answers already filled in. Both print builders carry an explicit `case 'fillblank'` that uses `_fbPrintHtml` (empty rules, all one width — see 🔲 A printed blank must not measure its own answer) and pushes `_fbAnswerKeyText` onto the key instead. Do not delete either case.
+  - **Fill-in-the-blank must print BLANK.** `renderImportedBlockStudent`'s `fillblank` branch is `_fbReadonlyHtml`, a REVIEW rendering that puts each answer inside its slot — so a print path that falls through to it hands the class a worksheet with the answers already filled in. Both print builders carry an explicit `case 'fillblank'` that uses `_fbPrintHtml` (empty rules, all one standard width — see 🔲 A printed blank must not measure its own answer) and pushes `_fbAnswerKeyText` onto the key instead. Do not delete either case.
   - **EVERY question gets an answer on the printed key** (`_pushBlockAnswerKey` / `_qFallbackKeySection` / `_akQuestionSections`, v1.284.0). Most answers live in an `answer` / `plainanswer` box and were always keyed; the rest do not, and were silently dropped — an **MCQ**'s correct option, an **`answerLine`**'s answer, a 🔑 **`answerKey`** block. A key that omits a question prints perfectly and looks tidy, so the teacher only finds out in front of the class.
     - **`answerKeyExtras` gates EXPLANATIONS ONLY.** It used to gate the MCQ answer and the `answerKey` block too, and only the two past-paper call sites pass it — so every ordinary worksheet printed a key listing its handful of open-ended questions and nothing else, which is exactly the bug. An answer is never optional; an explanation is teaching commentary and stays behind the flag.
     - **`_pushBlockAnswerKey(sections, block, part)` is the ONE pusher both print paths call** — `doPrintWorksheetOpen` and `buildWorksheetHtml` had drifted apart (path A keyed MCQs, path B did not), and a shared function is the only thing that stops that happening again. Adding an answer-bearing block type means adding a case there, not in two switches.
@@ -2905,11 +2905,11 @@ control. Scroll from the first question to the last, fix what you find, press
   its own way is an edit of a different paper.
 - Run **`node tools/editing-mode-tests.mjs`** after touching any of it.
 
-## 🔲 A printed blank must not measure its own answer (v1.330.0)
+## 🔲 A printed blank must not measure its own answer (v1.330.1)
 
-`_fbMergeBlankRuns` / `_fbSegments` / `_fbSlotChars` (in `app.js`, search
-`A RUN OF ADJACENT BLANKS IS ONE BLANK`), and the widths in `_fbPrintHtml`,
-`_fbPreviewHtml` and `buildOpenBody`'s `fillblank` case. **All three portals
+`_fbMergeBlankRuns` / `_fbSegments` / `FB_PRINT_SLOT_PT` / `FB_SLOT_CH` (in
+`app.js`, search `A RUN OF ADJACENT BLANKS IS ONE BLANK`), and the widths in
+`_fbPrintHtml`, `_fbPreviewHtml` and `buildOpenBody`'s `fillblank` case. **All three portals
 carry the same block byte-for-byte — ship a change to all of them together.**
 
 A worksheet asked *Name the two gases* and printed **one** rule for gas R and
@@ -2933,12 +2933,20 @@ answerable, and the class has been handed the answer.
     nothing anywhere to say it had gone.
   - **Directly adjacent blanks join with NO space** — `[[car]][[bon]]` is
     "carbon", because the sentence never had a space there either.
-- **THE WIDTH.** A rule sized from its own answer MEASURES that answer.
-  `_fbSlotChars` takes the LONGEST answer in the block and **every** blank in it
-  is given that width, so the long answer keeps its room to write in and no two
-  rules can be compared. It is the rule the open cloze's `_coSlotWidth` has
-  always followed. The floor and the cap stay: under the floor there is nowhere
-  to write, over the cap a rule runs off the sheet.
+- **THE WIDTH.** The length of a rule is a clue on its own, so **no rule is
+  measured from anything**. `FB_PRINT_SLOT_PT` (180pt, ~63mm — several
+  handwritten words) is one standard rule on paper and `FB_SLOT_CH` (22) one
+  standard box on screen, and every blank in the app gets them: the answer is
+  never read.
+  - **Sizing from the LONGEST answer in the block was the first attempt and
+    still leaks** — it just leaks per question instead of per blank. A question
+    whose answers are all short prints short rules, and the sheet becomes a page
+    of hints in the margins.
+  - **There is no formula left to get wrong**, which is the point: a class that
+    finds the rules too long or too short is one number to change.
+  - **The 🔑 keyword practice mode reads the same two constants** — its boxes
+    used to be the width of the word they hide, which spells the answer out as
+    plainly as printing it would.
 
 **`_fbSegments` is what every fill-in-the-blank surface reads; `_fbParse` stays
 the raw parser and MUST NOT merge.** The two language portals share `_fbParse`
@@ -2955,15 +2963,18 @@ and the key then numbers answers the page does not have.
 
 ## House rules
 - After touching **🔲 the printed blank** (`_fbMergeBlankRuns`, `_fbSegments`,
-  `_fbSlotChars`, `_fbPrintHtml`, `_fbAnswerKeyText`, `_fbPreviewHtml`,
-  `_fbReadonlyHtml`, or `buildOpenBody`'s `fillblank` case), run
-  `node tools/fill-blank-tests.mjs`. Every failure is silent and the sheet
+  `FB_PRINT_SLOT_PT`, `FB_SLOT_CH`, `_fbPrintHtml`, `_fbAnswerKeyText`,
+  `_fbPreviewHtml`, `_fbReadonlyHtml`, or `buildOpenBody`'s `fillblank` case),
+  run `node tools/fill-blank-tests.mjs` **and
+  `node tools/keyword-blank-tests.mjs`**, which cuts the two width constants
+  straight out of `app.js` so the 🔑 practice mode's boxes cannot drift from
+  the block's. Every failure is silent and the sheet
   still prints: stop merging a run of blanks and two rules in a row tell the
   class the answer is two words, start merging across a comma and a whole
   answer disappears off the paper and off the key at once, and let a rule size
-  itself from its own answer again and "oxygen" beside "carbon dioxide" is
-  legible before either is written. `_fbParse` merging is the worst of them —
-  in the language portals it welds one editing item's correction onto the next
+  itself from an answer again — its own, or the longest in its block — and
+  "oxygen" beside "carbon dioxide" is legible before either is written.
+  `_fbParse` merging is the worst of them — in the language portals it welds one editing item's correction onto the next
   one's misspelling, on a passage that still reads perfectly.
 - After touching **✏️ editing mode** (`emScope`, `emOwnerQuestion`,
   `emTitleFor`/`emTopicFor`, `emAdoptOwners`, `emSigOf`, `emChangedEntries`,

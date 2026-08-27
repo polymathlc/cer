@@ -4,7 +4,7 @@
 //     node tools/fill-blank-tests.mjs <name>     one case
 //
 // It loads the REAL `_fbParse` / `_fbMergeBlankRuns` / `_fbSegments` /
-// `_fbSlotChars` / `_fbPrintHtml` / `_fbAnswerKeyText` out of app.js.
+// `_fbPrintHtml` / `_fbAnswerKeyText` out of app.js.
 //
 // Every failure here is SILENT: the worksheet prints, the question is
 // answerable, and the answer has been handed to the class anyway.
@@ -16,9 +16,12 @@
 //  • THE PUNCTUATION GUARD, the other direction. `[[carbon]], [[dioxide]]` is
 //    two real answers the author separated on purpose; merged, one of them is
 //    gone from the paper AND from the key, and nothing anywhere says so.
-//  • THE WIDTH. A rule sized from its own answer measures that answer. Every
-//    blank in a block takes the width of the LONGEST answer, so there is room
-//    to write and nothing to compare.
+//  • THE WIDTH. The length of a rule is a clue on its own, so no rule is
+//    measured from anything: every blank in the app is ONE standard length,
+//    the same on a question whose answer is "gas" as on one whose answer is
+//    "carbon dioxide". Sizing from the longest answer in the block was the
+//    first attempt and still leaks — it just leaks per question instead of per
+//    blank.
 //  • THE KEY AND THE PAPER MUST AGREE. The key numbers the rules on the page,
 //    so a key counting two answers against one printed rule mis-numbers every
 //    row after it.
@@ -51,9 +54,9 @@ const F = new Function(SHIM +
   cut('// Split text into tokens, keeping', '// ---- editor: clickable word chips', 'fill-blank core') +
   cut('function _fbPreviewHtml(text) {', '\nfunction fbSyncChips', 'fb preview') + `
 return { parse: _fbParse, merge: _fbMergeBlankRuns, segments: _fbSegments,
-         slotChars: _fbSlotChars, printHtml: _fbPrintHtml,
-         keyText: _fbAnswerKeyText, previewHtml: _fbPreviewHtml,
-         hasBlanks: _fbHasBlanks };
+         printHtml: _fbPrintHtml, keyText: _fbAnswerKeyText,
+         previewHtml: _fbPreviewHtml, hasBlanks: _fbHasBlanks,
+         SLOT_PT: FB_PRINT_SLOT_PT, SLOT_CH: FB_SLOT_CH };
 `)();
 
 // ---------------------------------------------------------------------------
@@ -93,8 +96,8 @@ test('a merged run prints ONE rule, like the paper', () => {
 test('the reported bug: one rule each for gas R and gas S', () => {
   const html = F.printHtml({ text: 'Gas R : [[oxygen]]\nGas S : [[carbon]] [[dioxide]]' });
   eq(rules(html), 2, 'one rule per gas');
-  const w = widths(html);
-  eq(w[0], w[1], 'the two rules must be the same length or the longer one is the answer');
+  eq(widths(html), [F.SLOT_PT, F.SLOT_PT],
+     'the two rules must be the same length or the longer one is the answer');
 });
 
 test('a newline between two blanks still joins them with one space', () => {
@@ -130,33 +133,36 @@ test('a full stop between two blanks keeps them apart', () => {
   eq(blanks('It is [[oxygen]]. It is [[nitrogen]]'), ['oxygen', 'nitrogen']);
 });
 
-console.log('\nTHE WIDTH — no blank may measure its own answer');
+console.log('\nTHE WIDTH — one standard length, measured from nothing');
 
 test('every rule in a block is the same width', () => {
   const w = widths(F.printHtml({ text: '[[a]] and [[photosynthesis]] and [[hi]]' }));
   eq(w.length, 3);
-  ok(w.every(x => x === w[0]), 'a rule sized from its own answer measures the answer');
+  ok(w.every(x => x === F.SLOT_PT), 'a rule sized from its own answer measures it: ' + w);
 });
 
-test('the width comes from the LONGEST answer, so there is room to write', () => {
-  const short = widths(F.printHtml({ text: '[[a]] and [[b]]' }))[0];
-  const long = widths(F.printHtml({ text: '[[a]] and [[carbon dioxide gas]]' }))[0];
-  ok(long > short, 'the longest answer must still get its room');
+test('the width does not change with the answer, block to block', () => {
+  const tiny = widths(F.printHtml({ text: '[[a]] and [[b]]' }));
+  const huge = widths(F.printHtml({ text: '[[photosynthesis]] and [[carbon dioxide gas]]' }));
+  eq(tiny.concat(huge), [F.SLOT_PT, F.SLOT_PT, F.SLOT_PT, F.SLOT_PT],
+     'sizing from the longest answer in the block still measures THAT block');
 });
 
-test('the width is bounded — no rule runs off the sheet', () => {
-  const w = widths(F.printHtml({ text: '[[' + 'x'.repeat(400) + ']]' }))[0];
-  ok(w <= 240, 'over the cap a rule wraps the page: ' + w);
-  const tiny = widths(F.printHtml({ text: '[[x]]' }))[0];
-  ok(tiny >= 70, 'under the floor there is nowhere to write: ' + tiny);
+test('an absurd answer does not stretch the rule off the sheet', () => {
+  eq(widths(F.printHtml({ text: '[[' + 'x'.repeat(400) + ']]' })), [F.SLOT_PT]);
 });
 
-test('the student boxes are one width too', () => {
+test('the standard rule is long enough for several handwritten words', () => {
+  ok(F.SLOT_PT >= 140, 'too short to write more than a word in: ' + F.SLOT_PT + 'pt');
+  ok(F.SLOT_PT <= 260, 'wider than a sheet has room for: ' + F.SLOT_PT + 'pt');
+  ok(F.SLOT_CH >= 16, 'the on-screen box is too small to type an answer in: ' + F.SLOT_CH);
+});
+
+test('the student boxes are one standard width too', () => {
   // _fbPreviewHtml is the author-facing twin of the student rendering.
   const html = F.previewHtml('[[a]] and [[photosynthesis]]');
   const slots = html.split('fb-blank-slot').slice(1).map(s => (s.match(/&nbsp;/g) || []).length);
-  eq(slots.length, 2);
-  ok(slots[0] === slots[1], 'a box sized from its own answer measures the answer');
+  eq(slots, [F.SLOT_CH, F.SLOT_CH], 'a box sized from its own answer measures the answer');
 });
 
 console.log('\nTHE KEY AGREES WITH THE PAPER');
