@@ -23,7 +23,7 @@ Guidance for Claude when working in this repo.
     - **The measuring iframe must get the real fonts.** Both font `<link>`s in `index.html` are `media="print"`; the iframe is a SCREEN medium, so copying them verbatim measures every stem in fallback metrics while the printer uses DM Sans (wider → more lines → ~100px+ per page of unbudgeted growth). `_printFontLinksHtml` forces `media="all"` on the COPIES. Use it — never copy `link.outerHTML` directly.
     - **No box may be taller than a sheet.** `PRINT_LINES_MANUAL_MAX` (24) caps the author's "Printed lines" override and `_wsBlockLines` / `WS_BLOCK_LINES_MAX` (30) cap the raw pixel heights `openLines` / `workingSpace` write. An unbreakable box bigger than the paper jumps a whole sheet and still does not fit. The tall pages release their inner boxes in CSS (`.print-chunk-tall`/`.print-page-tall` → `.print-open-answer-box`, `.print-open-cer-box`, `.print-cer-section`, `.print-ak-question`).
   - **`.print-text-block img` must not set `max-height`.** Every printed picture is wrapped in a `.print-text-block`, and that selector has the SAME specificity (0,1,1) as the `.print-question-page img` 92mm cap while sitting later in the file. A `max-height` there wins, which puts the one flat 170mm cap back on every Auto picture, makes `print-img-lg` (140mm) *smaller* than Auto and makes `print-img-full` a no-op. The ladder must read 60 / 92 / 140 / 170mm — check it if you touch either rule.
-  - **Fill-in-the-blank must print BLANK.** `renderImportedBlockStudent`'s `fillblank` branch is `_fbReadonlyHtml`, a REVIEW rendering that puts each answer inside its slot — so a print path that falls through to it hands the class a worksheet with the answers already filled in. Both print builders carry an explicit `case 'fillblank'` that uses `_fbPrintHtml` (empty rules, width scaled to the answer) and pushes `_fbAnswerKeyText` onto the key instead. Do not delete either case.
+  - **Fill-in-the-blank must print BLANK.** `renderImportedBlockStudent`'s `fillblank` branch is `_fbReadonlyHtml`, a REVIEW rendering that puts each answer inside its slot — so a print path that falls through to it hands the class a worksheet with the answers already filled in. Both print builders carry an explicit `case 'fillblank'` that uses `_fbPrintHtml` (empty rules, all one width — see 🔲 A printed blank must not measure its own answer) and pushes `_fbAnswerKeyText` onto the key instead. Do not delete either case.
   - **EVERY question gets an answer on the printed key** (`_pushBlockAnswerKey` / `_qFallbackKeySection` / `_akQuestionSections`, v1.284.0). Most answers live in an `answer` / `plainanswer` box and were always keyed; the rest do not, and were silently dropped — an **MCQ**'s correct option, an **`answerLine`**'s answer, a 🔑 **`answerKey`** block. A key that omits a question prints perfectly and looks tidy, so the teacher only finds out in front of the class.
     - **`answerKeyExtras` gates EXPLANATIONS ONLY.** It used to gate the MCQ answer and the `answerKey` block too, and only the two past-paper call sites pass it — so every ordinary worksheet printed a key listing its handful of open-ended questions and nothing else, which is exactly the bug. An answer is never optional; an explanation is teaching commentary and stays behind the flag.
     - **`_pushBlockAnswerKey(sections, block, part)` is the ONE pusher both print paths call** — `doPrintWorksheetOpen` and `buildWorksheetHtml` had drifted apart (path A keyed MCQs, path B did not), and a shared function is the only thing that stops that happening again. Adding an answer-bearing block type means adding a case there, not in two switches.
@@ -2905,7 +2905,66 @@ control. Scroll from the first question to the last, fix what you find, press
   its own way is an edit of a different paper.
 - Run **`node tools/editing-mode-tests.mjs`** after touching any of it.
 
+## 🔲 A printed blank must not measure its own answer (v1.330.0)
+
+`_fbMergeBlankRuns` / `_fbSegments` / `_fbSlotChars` (in `app.js`, search
+`A RUN OF ADJACENT BLANKS IS ONE BLANK`), and the widths in `_fbPrintHtml`,
+`_fbPreviewHtml` and `buildOpenBody`'s `fillblank` case. **All three portals
+carry the same block byte-for-byte — ship a change to all of them together.**
+
+A worksheet asked *Name the two gases* and printed **one** rule for gas R and
+**two** rules side by side for gas S. Nothing was wrong on the page; the answer
+was simply on it. Two rules say *the answer is two words*, and next to a
+one-rule blank answered "oxygen" every child in the room can read off "carbon
+dioxide" without writing a word. The paper the question came from prints one
+blank of one length for each.
+
+Two things leaked, and both are silent — the sheet prints, the question is
+answerable, and the class has been handed the answer.
+
+- **THE COUNT.** An author blanks one word at a time (`fbToggleToken` works on
+  one token), so a two-word answer is two clicks and `[[carbon]] [[dioxide]]` in
+  the text. **`_fbMergeBlankRuns` folds a run of blanks separated by nothing but
+  whitespace into ONE blank** whose answer is those words joined — one rule on
+  paper, one box on screen, one row on the key, one answer to mark.
+  - **ONLY WHITESPACE MAY JOIN THEM.** `[[carbon]], [[dioxide]]` is punctuated
+    into two real answers and stays two: the comma is the author saying so.
+    Merging those would take an answer off the paper *and* off the key with
+    nothing anywhere to say it had gone.
+  - **Directly adjacent blanks join with NO space** — `[[car]][[bon]]` is
+    "carbon", because the sentence never had a space there either.
+- **THE WIDTH.** A rule sized from its own answer MEASURES that answer.
+  `_fbSlotChars` takes the LONGEST answer in the block and **every** blank in it
+  is given that width, so the long answer keeps its room to write in and no two
+  rules can be compared. It is the rule the open cloze's `_coSlotWidth` has
+  always followed. The floor and the cap stay: under the floor there is nowhere
+  to write, over the cap a rule runs off the sheet.
+
+**`_fbSegments` is what every fill-in-the-blank surface reads; `_fbParse` stays
+the raw parser and MUST NOT merge.** The two language portals share `_fbParse`
+with the word-bank cloze, the open cloze and the editing passage, where two
+adjacent blanks are two separate answers — and an editing item is
+`[[wrong>>right]]`, so merging a pair of them would graft one item's correction
+onto the next one's misspelling. Every fillblank consumer goes through
+`_fbSegments`: the print builders, the student render, the answer key, the
+editor preview, the read-only render, the bank summary line. A consumer left on
+`_fbParse` is one surface still printing two rules while the others print one —
+and the key then numbers answers the page does not have.
+
+- Run **`node tools/fill-blank-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🔲 the printed blank** (`_fbMergeBlankRuns`, `_fbSegments`,
+  `_fbSlotChars`, `_fbPrintHtml`, `_fbAnswerKeyText`, `_fbPreviewHtml`,
+  `_fbReadonlyHtml`, or `buildOpenBody`'s `fillblank` case), run
+  `node tools/fill-blank-tests.mjs`. Every failure is silent and the sheet
+  still prints: stop merging a run of blanks and two rules in a row tell the
+  class the answer is two words, start merging across a comma and a whole
+  answer disappears off the paper and off the key at once, and let a rule size
+  itself from its own answer again and "oxygen" beside "carbon dioxide" is
+  legible before either is written. `_fbParse` merging is the worst of them —
+  in the language portals it welds one editing item's correction onto the next
+  one's misspelling, on a passage that still reads perfectly.
 - After touching **✏️ editing mode** (`emScope`, `emOwnerQuestion`,
   `emTitleFor`/`emTopicFor`, `emAdoptOwners`, `emSigOf`, `emChangedEntries`,
   `emKwFor`/`emBlanksFor`, `emMayRemove`, `emRemoveQuestion`, `emDropQuestion`,
