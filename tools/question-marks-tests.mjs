@@ -46,6 +46,9 @@ function escapeHtml(str) {
 
 const M = new Function(SHIM +
   cut('const QPART_LETTERS', 'function qPartsUsed', 'part core + marks') +
+  // _keepParagraphGaps is what keeps the author's blank lines; cut in rather
+  // than re-written, so this harness cannot drift from the real one.
+  cut('function _keepParagraphGaps(lines) {', '\nfunction escapeHtmlKeepLines', 'para gaps') + '\n' +
   cut('function escapeHtmlKeepLines(content) {', '\n// A repeated message stacks', 'print text') + `
 return { marksOf: qMarksOf, label: qMarksLabel, strip: qStripTailMarks,
          append: qMarksAppendHtml, body: qPartBodyHtml, printText: escapeHtmlKeepLines,
