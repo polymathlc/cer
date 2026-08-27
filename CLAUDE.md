@@ -2961,7 +2961,72 @@ and the key then numbers answers the page does not have.
 
 - Run **`node tools/fill-blank-tests.mjs`** after touching any of it.
 
+## 📝 An explanation is not the answer again (v1.331.0)
+
+`EXPL_ASKS_RE` / `_aiAsksToExplain` / `_explAnswerContext` / `_explDepthRules`
+(in `app.js`, search `AN EXPLANATION IS NOT THE ANSWER AGAIN`), read by the
+🤖 **AI explanation** button and — through `_partsPromptRules()` — by every
+build prompt. **All three portals carry the same block — ship a change to all
+of them together.**
+
+The explanation box was told to write *"2-4 sentences explaining WHY the
+correct answer is correct"*. On an MCQ that is a real job: the answer is "(3)"
+and the explanation is everything else. On a question that ASKS the student to
+explain — *"… would the amount of gas R be higher, the same or lower? **Explain
+your answer.**"* — the model answer already IS the explanation, so "write the
+answer" and "explain why the answer is correct" are one instruction and the box
+came back as the answer a second time. Nothing errored; the answer key printed
+beautifully with its second half dead paper.
+
+- **`_explDepthRules(hasAnswer, asksExplain)` is the ONE place the rule is
+  said**, and both doors read it. A copy written into either prompt is a copy
+  that drifts, and the drift is invisible — one path keeps writing duplicates
+  while the other stops.
+- **NO answer yet returns the EMPTY STRING**, so an MCQ's prompt is
+  byte-for-byte what it always was. That case was never wrong, and telling a
+  model not to repeat an answer that does not exist is how an explanation comes
+  back refusing to say what the answer is.
+- **Two strengths, and the second one is the reported bug.** With an answer
+  written, the box is told not to restate or paraphrase it and to write what a
+  teacher says AFTER the answer has been read out: the principle it rests on
+  NAMED and stated generally, the step of reasoning the answer compresses, the
+  answer a student is most likely to give instead and what is wrong with it,
+  and what earns the mark. When the question ITSELF asks for an explanation it
+  also says so in as many words — the model answer is *already* an explanation,
+  so this one has to go further rather than agree with it.
+- **It never licenses contradicting the answer.** The existing *"your
+  explanation MUST justify THAT answer (never contradict it)"* line stays and
+  comes first; going beyond an answer is not disagreeing with it.
+- **The room to do it in moves with the rule**: 4-8 sentences instead of 2-4,
+  and `maxOutputTokens` 1300 instead of 700. A prompt that asks for more detail
+  inside a budget that truncates it produces a half-written explanation, which
+  is worse than the duplicate.
+- **`_explAnswerContext` reads THIS part and no other.** Only this part's answer
+  is the one this box would be repeating, so another part's answer never counts
+  — but the instruction to explain is often printed ONCE in the shared stem, so
+  the stem does count while another PART's wording does not.
+- **The build prompts carry it too**, and that is where most of the duplicated
+  explanations in the bank came from: ⚡ Rapid add, 📄 Exam Paper and the bulk
+  import write the answer and its explanation in ONE call, so `_partsPromptRules()`
+  states the rule and all four build prompts get it without being told twice.
+- Run **`node tools/explanation-depth-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **📝 the explanation depth rule** (`EXPL_ASKS_RE`,
+  `_aiAsksToExplain`, `_explAnswerContext`, `_explDepthRules`,
+  `aiGenerateBlockExplanation`'s `depth` / token budget, or the
+  `AN EXPLANATION IS NOT THE ANSWER AGAIN` line in `_partsPromptRules()`), run
+  `node tools/explanation-depth-tests.mjs`. Every failure is silent and the
+  block still fills: lose the rule and a question that says "Explain your
+  answer" gets its own model answer written into the explanation box, so the
+  printed key says the same thing twice and the teacher only finds out reading
+  it. Fire it when there is NO answer yet and the box comes back refusing to
+  say what the answer is, because it has been told not to repeat one that was
+  never written. Count another PART's answer or another part's "Explain your
+  answer" and the strongest wording lands on a box that had nothing to repeat.
+  And leave it out of `_partsPromptRules()` and ⚡ Rapid add goes on writing
+  duplicates by the pageful while the editor button quietly does the right
+  thing.
 - After touching **🔲 the printed blank** (`_fbMergeBlankRuns`, `_fbSegments`,
   `FB_PRINT_SLOT_PT`, `FB_SLOT_CH`, `_fbPrintHtml`, `_fbAnswerKeyText`,
   `_fbPreviewHtml`, `_fbReadonlyHtml`, or `buildOpenBody`'s `fillblank` case),
