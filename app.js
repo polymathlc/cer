@@ -2688,7 +2688,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.330.0';
+const APP_VERSION = 'v1.330.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -22236,15 +22236,12 @@ function buildOpenBody(q, containerSel, markCfg) {
         if (!hasBlank) { add(`<div class="fb-sentence" style="line-height:2;margin:8px 0;">${parts.map(p => escapeHtml(p.text)).join('')}</div>`); break; }
         const oidxs = [], answers = [];
         let sentence = '';
-        // ONE width for every box, taken from the longest answer — see
-        // _fbSlotChars. A box sized from its own answer measures it.
-        const w = Math.max(6, Math.min(22, _fbSlotChars(parts) + 3));
         parts.forEach(p => {
           if (p.type === 'text') { sentence += escapeHtml(p.text); return; }
           const oidx = items.length;
           items.push({ label: [pOf(block), 'Blank ' + (oidxs.length + 1)].filter(Boolean).join(' '), model: p.answer, block, field: 'text' });
           oidxs.push(oidx); answers.push(p.answer);
-          sentence += `<input class="fb-input" data-oidx="${oidx}" type="text" autocomplete="off" spellcheck="false" aria-label="blank" style="width:${w}ch;">`;
+          sentence += `<input class="fb-input" data-oidx="${oidx}" type="text" autocomplete="off" spellcheck="false" aria-label="blank" style="width:${FB_SLOT_CH}ch;">`;
         });
         fbBlocks.push({ blockId: block.id, oidxs, answers });
         addAnswer(
@@ -23162,7 +23159,7 @@ function kwPreviewFieldHtml(block, field, idxs) {
     const w = parsed.words[i];
     if (!w) return;
     out += escapeHtml(parsed.plain.slice(last, w.pa)) +
-      `<span class="fb-blank-slot" title="${escapeHtml(w.w)}">${'&nbsp;'.repeat(Math.max(6, w.w.length + 2))}</span>`;
+      `<span class="fb-blank-slot" title="${escapeHtml(w.w)}">${'&nbsp;'.repeat(FB_SLOT_CH)}</span>`;
     last = w.pb;
   });
   return out + escapeHtml(parsed.plain.slice(last));
@@ -23203,8 +23200,9 @@ function _kwFibBlockHtml(q, block, items, fbBlocks, containerSel, partLabel) {
         model: word, block, field
       });
       oidxs.push(oidx); answers.push(word);
-      const w = Math.max(6, Math.min(22, word.length + 3));
-      return `<input class="fb-input" data-oidx="${oidx}" type="text" autocomplete="off" spellcheck="false" aria-label="missing word" style="width:${w}ch;">`;
+      // One standard box — see FB_SLOT_CH. A box the width of the word it hides
+      // spells the answer out just as plainly as printing it would.
+      return `<input class="fb-input" data-oidx="${oidx}" type="text" autocomplete="off" spellcheck="false" aria-label="missing word" style="width:${FB_SLOT_CH}ch;">`;
     });
     if (sentence == null) return;
     const col = KW_FIB_COLORS[label];
@@ -23410,17 +23408,19 @@ function _fbMergeBlankRuns(parts) {
 }
 function _fbSegments(text) { return _fbMergeBlankRuns(_fbParse(text)); }
 
-// EVERY BLANK IN A BLOCK IS THE SAME WIDTH, and it is the width the LONGEST
-// answer needs. A rule sized from its own answer MEASURES that answer: set
-// "oxygen" and "carbon dioxide" one under the other and the short rule and the
-// long one say which is which before either is written. Sizing every blank
-// from the longest keeps the room to write in and takes the comparison away —
-// the rule the open cloze's `_coSlotWidth` already follows.
-function _fbSlotChars(parts) {
-  let n = 0;
-  (parts || []).forEach(p => { if (p.type === 'blank') n = Math.max(n, (p.answer || '').length); });
-  return n;
-}
+// EVERY BLANK IS ONE STANDARD LENGTH, and NOTHING about it is read off the
+// answer. The length of a rule is a clue on its own: sized from its own answer
+// it measures that answer, and sized from the longest answer in its block it
+// still measures THAT — a question whose answers are all short prints short
+// rules, and the sheet is a page of hints in the margins.
+//
+// So there is no calculation left to get wrong. `FB_PRINT_SLOT_PT` is one
+// standard rule on paper and `FB_SLOT_CH` one standard box on screen, both
+// deliberately longer than nearly any answer needs, so a blank says only "an
+// answer goes here". A class that finds them too long or too short is one
+// number to change, not a formula.
+const FB_PRINT_SLOT_PT = 180;   // ~63mm — several handwritten words
+const FB_SLOT_CH = 22;          // the old ceiling, now the only width there is
 
 // ---- fill-in-the-blank on PAPER --------------------------------------------
 // The print builders used to fall through to renderImportedBlockStudent, whose
@@ -23431,11 +23431,10 @@ function _fbSlotChars(parts) {
 function _fbPrintHtml(block) {
   const parts = _fbSegments(block.text || '');
   if (!parts.length) return '';
-  // ONE width for every rule on this question, taken from the longest answer —
-  // see _fbSlotChars. A rule sized from its own answer measures it.
-  const w = Math.max(70, Math.min(240, _fbSlotChars(parts) * 7 + 40));
+  // One standard rule, the same on every blank in the app — see
+  // FB_PRINT_SLOT_PT. Nothing here reads the answer.
   const body = parts.map(p => p.type === 'blank'
-    ? `<span class="print-blank" style="min-width:${w}pt;">&nbsp;</span>`
+    ? `<span class="print-blank" style="min-width:${FB_PRINT_SLOT_PT}pt;">&nbsp;</span>`
     : escapeHtml(p.text)).join('');
   return `<div class="print-text-block" style="line-height:2.4;">${body}</div>`;
 }
@@ -23459,10 +23458,9 @@ function _fbPreviewHtml(text) {
   const parts = _fbSegments(text);
   if (!parts.length) return '<span style="color:var(--text-muted);font-size:0.82rem;">—</span>';
   // The author's "what a student sees", so it shows the student's slot: one per
-  // run of blanks, all the same width.
-  const w = Math.max(6, _fbSlotChars(parts) + 2);
+  // run of blanks, all the one standard width.
   return parts.map(p => p.type === 'blank'
-    ? `<span class="fb-blank-slot" title="${escapeHtml(p.answer)}">${'&nbsp;'.repeat(w)}</span>`
+    ? `<span class="fb-blank-slot" title="${escapeHtml(p.answer)}">${'&nbsp;'.repeat(FB_SLOT_CH)}</span>`
     : escapeHtml(p.text)).join('');
 }
 function fbSyncChips(id) {
