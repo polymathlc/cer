@@ -15,9 +15,14 @@
 //    "write the answer" are one instruction and the box comes back as the
 //    answer again. The teacher then prints a key whose second half is dead
 //    paper, and nothing anywhere says so.
+//  • THE DEFAULT MUST STAY SHORT. Every box got the full four-point lecture at
+//    first, and a printed key of thirty questions became unreadable. 🤖 is the
+//    button pressed on nearly every question and writes the 2-4 sentence note;
+//    📖 and 📚 are the author saying THIS question is worth teaching from.
+//    Nothing reaches those two by itself, and no build path reaches them at all.
 //  • THE OTHER DIRECTION. With NO answer written yet — an MCQ, or a box the
 //    author filled before writing the answer — the old prompt was right, and
-//    `_explDepthRules` must return the EMPTY STRING so that prompt is
+//    `_explDepthRules('')` must return the EMPTY STRING so that prompt is
 //    byte-for-byte what it always was. Telling a model not to repeat an answer
 //    that does not exist is how an explanation comes back refusing to say what
 //    the answer is.
@@ -59,7 +64,7 @@ const SHIM = [
 const F = new Function([
   SHIM,
   cut('const EXPL_ASKS_RE', '\nasync function aiGenerateBlockAnswer', 'explanation depth'),
-  'return { asks: _aiAsksToExplain, context: _explAnswerContext, rules: _explDepthRules };',
+  'return { asks: _aiAsksToExplain, context: _explAnswerContext, rules: _explDepthRules, tokens: EXPL_TOKENS };',
 ].join('\n'))();
 
 // ---------------------------------------------------------------------------
@@ -158,56 +163,127 @@ test('an unscoped question reads the whole thing', () => {
   eq(ctx(list, '', false), { hasAnswer: true, asksExplain: true });
 });
 
-console.log('\nTHE RULE ITSELF');
+console.log('\nTHE RULE ITSELF — three depths, and only one of them is the default');
 
-test('NO answer yet means NO rule at all — the old prompt is untouched', () => {
-  eq(F.rules(false, false), '');
-  eq(F.rules(false, true), '', 'a question that asks to explain but has no answer yet still gets nothing');
+test('NO answer yet, DEFAULT button: no rule at all — the old prompt is untouched', () => {
+  eq(F.rules(false, false, ''), '');
+  eq(F.rules(false, true, ''), '', 'a question that asks to explain but has no answer yet still gets nothing');
 });
 
-test('an answer brings the do-not-repeat rule', () => {
-  const r = F.rules(true, false);
+test('the DEFAULT stays a NOTE — one added idea, never the four-point lecture', () => {
+  const r = F.rules(true, false, '');
   ok(/do NOT restate it/.test(r), 'the rule must forbid restating the answer');
   ok(/do NOT paraphrase it/.test(r), 'paraphrasing is the same fault in different words');
-  ok(/longer and more detailed/i.test(r), 'it has to say what to do, not only what not to do');
+  ok(/2-4 sentences/.test(r), 'the default is the note it has always been');
+  ok(/NOT all of them/.test(r), 'pick the one that fits — a lecture is what 📖 and 📚 are for');
+  ok(!/  1\. /.test(r), 'the numbered four points belong to the expanded tiers only');
 });
 
-test('the four things a teacher adds are all asked for', () => {
-  const r = F.rules(true, true);
-  ['principle', 'reasoning', 'most likely to give instead', 'marker is looking for']
-    .forEach(s => ok(r.includes(s), 'missing: ' + s));
+test('📖 concise asks for the four points, ONE SENTENCE EACH', () => {
+  const r = F.rules(true, false, 'more');
+  ok(/  1\. /.test(r) && /  4\. /.test(r), 'the four points are what "expanded" means');
+  ok(/at most one sentence for each/.test(r), 'concise is the whole point of this tier');
+  ok(!/step the reasoning out/.test(r), 'that is the long tier');
+});
+
+test('📚 long works them through, and is the only tier that says so', () => {
+  const r = F.rules(true, false, 'full');
+  ok(/  1\. /.test(r) && /  4\. /.test(r));
+  ok(/step the reasoning out/.test(r));
+  ok(!/at most one sentence for each/.test(r), 'the long tier must not be told to keep it tight');
+});
+
+test('the three depths really are three different prompts', () => {
+  const a = F.rules(true, true, ''), b = F.rules(true, true, 'more'), c = F.rules(true, true, 'full');
+  ok(a !== b && b !== c && a !== c, 'a button that produces the same prompt is a button that does nothing');
+  ok(c.length > b.length && b.length > a.length, 'they must get longer in order');
+});
+
+test('an unknown depth falls back to the DEFAULT, never to the lecture', () => {
+  eq(F.rules(true, false, 'LONG'), F.rules(true, false, ''),
+     'a typo in the level must not put every box back on the four-point lecture');
+});
+
+test('NO answer yet but 📖/📚 pressed: an explicit ask for more IS answered', () => {
+  ok(F.rules(false, false, 'more').length > 0, 'pressing the button and getting nothing is a dead button');
+  ok(F.rules(false, false, 'full').length > 0);
+  ok(!/MODEL ANSWER IS ALREADY WRITTEN/.test(F.rules(false, false, 'full')),
+     'there is no answer to avoid repeating');
+});
+
+test('the four things a teacher adds are all asked for, at both expanded tiers', () => {
+  ['more', 'full'].forEach(lvl => {
+    const r = F.rules(true, true, lvl);
+    ['principle', 'reasoning', 'most likely to give instead', 'marker is looking for']
+      .forEach(sx => ok(r.includes(sx), lvl + ' missing: ' + sx));
+  });
 });
 
 test('the STRONG line fires only when the question itself asks to explain', () => {
-  ok(/ALREADY an explanation/.test(F.rules(true, true)),
+  ok(/ALREADY an explanation/.test(F.rules(true, true, '')),
      'this is the reported bug: the answer is already the explanation');
-  ok(!/ALREADY an explanation/.test(F.rules(true, false)),
+  ok(/ALREADY an explanation/.test(F.rules(true, true, 'full')));
+  ok(!/ALREADY an explanation/.test(F.rules(true, false, '')),
      'a "Name the two gases" answer is not an explanation, so do not say it is');
+  ok(!/ALREADY an explanation/.test(F.rules(true, false, 'full')));
 });
 
 test('the rule never contradicts the answer it is written over', () => {
-  const r = F.rules(true, true);
-  ok(!/contradict|disagree|correct the answer/i.test(r),
-     'an explanation that argues with the model answer is worse than one that repeats it');
+  ['', 'more', 'full'].forEach(lvl => {
+    ok(!/contradict|disagree|correct the answer/i.test(F.rules(true, true, lvl)),
+       'an explanation that argues with the model answer is worse than one that repeats it');
+  });
+});
+
+test('the token budget rises with the depth, and the default is untouched', () => {
+  eq(F.tokens(''), 700, 'the default budget must stay what it always was');
+  eq(F.tokens(undefined), 700);
+  ok(F.tokens('more') > F.tokens(''), 'asking for more inside the old ceiling truncates it');
+  ok(F.tokens('full') > F.tokens('more'));
 });
 
 console.log('\nTHE BUILD PATHS CARRY IT TOO');
 
-test('_partsPromptRules() states the rule', () => {
+test('_partsPromptRules() states the rule, and asks for the SHORT note', () => {
   const frag = cut('function _partsPromptRules() {', '\n}', 'parts fragment');
   ok(/AN EXPLANATION IS NOT THE ANSWER AGAIN/.test(frag),
      '⚡ Rapid add and 📄 Exam Paper write the answer and the explanation in ONE call — ' +
      'without this line they go on writing the same paragraph twice');
-  ok(/goes BEYOND it/.test(frag));
+  ok(/2-4 sentences/.test(frag),
+     'a build path writes forty explanations at once; the lecture belongs behind a button');
+  ok(!/  1\. /.test(frag), 'the four-point lecture must not be in the build prompts');
 });
 
 test('the button reads the rule through the one function', () => {
   const fn = cut('async function aiGenerateBlockExplanation', '\n}\n', 'explanation button');
-  ok(/_explDepthRules\(depth\.hasAnswer, depth\.asksExplain\)/.test(fn),
+  ok(/_explDepthRules\(depth\.hasAnswer, depth\.asksExplain, level\)/.test(fn),
      'a second copy of the rule written here is a copy that drifts');
   ok(/_explAnswerContext\(/.test(fn));
-  ok(/depth\.hasAnswer \? 1300 : 700/.test(fn),
-     'going beyond the answer needs room to do it in');
+  ok(/EXPL_TOKENS\(level\)/.test(fn), 'the budget has to move with the depth');
+});
+
+test('there are THREE buttons, on three different attributes', () => {
+  const btn = cut('function aiExplainBtnHtml(blockId) {', '\n}\n', 'explain buttons');
+  ['data-aiexplain=', 'data-aiexplain-more=', 'data-aiexplain-full=']
+    .forEach(a => ok(btn.includes(a), 'missing button: ' + a));
+});
+
+test('each button is wired to its own depth', () => {
+  ok(src.includes("aiGenerateBlockExplanation(btn.getAttribute('data-aiexplain'), btn);"),
+     'the default must pass NO level, or it stops being the default');
+  ok(src.includes("aiGenerateBlockExplanation(btn.getAttribute('data-aiexplain-more'), btn, 'more');"));
+  ok(src.includes("aiGenerateBlockExplanation(btn.getAttribute('data-aiexplain-full'), btn, 'full');"));
+});
+
+test('a build path can never reach an expanded tier', () => {
+  // The only callers are the three listeners. ⚡ Rapid add and 📄 Exam Paper
+  // write their explanations through _partsPromptRules, which asks for the
+  // short note — a paper of forty long explanations is the fault this undoes.
+  const calls = src.split('\n')
+    .filter(l => l.includes('aiGenerateBlockExplanation(') && !l.includes('async function'));
+  eq(calls.length, 3, 'the three listeners are the only callers there are');
+  eq(calls.filter(l => /'more'|'full'/.test(l)).length, 2,
+     'only the two expanded buttons may ask for a deeper explanation');
 });
 
 console.log('\n' + (fail ? '✗ ' + fail + ' failed, ' : '✓ ') + pass + ' passed\n');
