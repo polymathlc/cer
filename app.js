@@ -2688,7 +2688,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.331.0';
+const APP_VERSION = 'v1.332.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -6220,21 +6220,58 @@ function _explAnswerContext(list, pmap, target, scoped) {
   return { hasAnswer, asksExplain };
 }
 
-// The rule itself. NOTHING at all when there is no answer yet — an MCQ-only
-// question's explanation is the one thing this box was always right about, and
-// its prompt must stay byte-for-byte what it was.
-function _explDepthRules(hasAnswer, asksExplain) {
-  if (!hasAnswer) return '';
-  return `THE MODEL ANSWER IS ALREADY WRITTEN and is printed above. Saying it again is not your job: do NOT restate it, do NOT paraphrase it, and do NOT open by announcing what the answer is. The answer key prints the answer and this box one under the other, so a box that repeats the answer prints the same words twice.\n` +
+// The rule itself, at THREE depths, because they are three different jobs and
+// only one of them is the everyday one.
+//
+//   ''      🤖 AI explanation — THE DEFAULT, and the note it has always been:
+//           2-4 sentences under the answer. All it is told is not to say the
+//           answer over again, and to spend those sentences on the ONE thing
+//           the answer leaves out. The first cut of this handed every box the
+//           whole four-point lecture, and a printed key of thirty questions
+//           became unreadable — which is the fault this tier exists to undo.
+//   'more'  📖 Expanded (concise) — the four teacher's points, one sentence
+//           each. A fuller note, still a note.
+//   'full'  📚 Expanded (long) — the same four worked through properly, with
+//           the reasoning stepped out and an example where one helps.
+//
+// The two expanded tiers are BUTTONS AN AUTHOR PRESSES, on the handful of
+// questions that earn it. Nothing reaches them by default, and nothing that
+// builds a whole paper reaches them at all.
+//
+// NOTHING AT ALL when there is no answer yet and the default was used: an
+// MCQ-only question's explanation is the one thing this box was always right
+// about, and its prompt must stay byte-for-byte what it was. Pressing 📖 or 📚
+// is an explicit ask for more, so those DO get a rule.
+const EXPL_POINTS =
+  `Cover these, in this order, and only where each genuinely applies:\n` +
+  `  1. the principle or rule the answer rests on — NAME it, and state it generally rather than only about this question;\n` +
+  `  2. the step of reasoning the answer compresses or takes for granted — spell out why the evidence actually leads to that conclusion;\n` +
+  `  3. the answer a student is most likely to give instead, and exactly what is wrong with it;\n` +
+  `  4. what a marker is looking for — the idea or the words that earn the mark, and what loses it.\n`;
+const EXPL_TAIL_MORE =
+  `Keep it TIGHT — at most one sentence for each, no examples and no working the numbers through. This is a fuller note, not a lesson.\n`;
+const EXPL_TAIL_FULL =
+  `Take the room to do each of them properly: step the reasoning out in order, and add one concrete example or familiar comparison where it makes the idea land.\n`;
+function EXPL_TOKENS(level) { return level === 'full' ? 2200 : level === 'more' ? 1200 : 700; }
+function _explDepthRules(hasAnswer, asksExplain, level) {
+  const more = level === 'more', full = level === 'full';
+  const points = `Write what a teacher says after the answer has been read out. ` + EXPL_POINTS +
+    (full ? EXPL_TAIL_FULL : EXPL_TAIL_MORE);
+  if (!hasAnswer) return (more || full) ? points : '';
+  const noRepeat = `THE MODEL ANSWER IS ALREADY WRITTEN and is printed above. Saying it again is not your job: do NOT restate it, do NOT paraphrase it, and do NOT open by announcing what the answer is. The answer key prints the answer and this box one under the other, so a box that repeats the answer prints the same words twice.\n`;
+  if (!more && !full) {
+    return noRepeat +
+      (asksExplain
+        ? `THE QUESTION ITSELF ASKS THE STUDENT TO EXPLAIN, so that model answer is ALREADY an explanation. Yours has to say something it does not.\n`
+        : '') +
+      `Spend your 2-4 sentences on the ONE thing the answer leaves out — whichever of these fits this question best, NOT all of them: the principle or rule the answer rests on, NAMED; the step of reasoning it takes for granted; or the answer a student is most likely to give instead and why it is wrong. This is the note printed under the answer, not a lesson.\n`;
+  }
+  return noRepeat +
     (asksExplain
       ? `THE QUESTION ITSELF ASKS THE STUDENT TO EXPLAIN, so that model answer is ALREADY an explanation — and an explanation of an explanation that says the same thing teaches nobody anything. Go further than it does: say what the model answer had to leave out to stay short enough for a student to write in the time allowed.\n`
       : '') +
-    `Write what a teacher says AFTER the answer has been read out. Cover these, in this order, and only where each genuinely applies:\n` +
-    `  1. the principle or rule the answer rests on — NAME it, and state it generally rather than only about this question;\n` +
-    `  2. the step of reasoning the model answer compresses or takes for granted — spell out why the evidence actually leads to that conclusion;\n` +
-    `  3. the answer a student is most likely to give instead, and exactly what is wrong with it;\n` +
-    `  4. what a marker is looking for — the idea or the words that earn the mark, and what loses it.\n` +
-    `It must be longer and more detailed than the model answer, and every sentence must add something the model answer does not already say.\n`;
+    points +
+    `Every sentence must add something the model answer does not already say.\n`;
 }
 
 async function aiGenerateBlockAnswer(blockId, btn) {
@@ -6349,14 +6386,24 @@ document.addEventListener('click', function (e) {
 // whole question: an explanation under (a) that explains (b) and (c) is wrong
 // wherever it came from.
 function aiExplainBtnHtml(blockId) {
-  return `<button type="button" class="improve-btn" data-aiexplain="${blockId}" title="Write this explanation with AI — it reads the question directly above this box (its answer and diagrams too) and bases the science on your Teaching Notes database">🤖 AI explanation</button>`;
+  // THREE buttons, because they are three different jobs. 🤖 writes the
+  // ordinary 2-4 sentence note that goes under the answer and is the one
+  // pressed on nearly every question; 📖 and 📚 are the author saying THIS
+  // question is worth teaching from. The default has to stay the short one —
+  // a printed key of thirty long explanations is a key nobody reads.
+  return `<button type="button" class="improve-btn" data-aiexplain="${blockId}" title="Write this explanation with AI — it reads the question directly above this box (its answer and diagrams too) and bases the science on your Teaching Notes database">🤖 AI explanation</button>` +
+    ` <button type="button" class="improve-btn" data-aiexplain-more="${blockId}" title="Expanded, kept concise — the principle behind the answer, the reasoning it takes for granted, the mistake students make and what earns the mark, one sentence each.">📖 Expanded (concise)</button>` +
+    ` <button type="button" class="improve-btn" data-aiexplain-full="${blockId}" title="Expanded in full — the same four, worked through properly, with the reasoning stepped out and an example where it helps. For the questions you teach from.">📚 Expanded (long)</button>`;
 }
-async function aiGenerateBlockExplanation(blockId, btn) {
+async function aiGenerateBlockExplanation(blockId, btn, level) {
+  const more = level === 'more', full = level === 'full', deep = more || full;
   const block = blocks.find(b => b.id === blockId);
   if (!block || block.type !== 'explanation') return;
   if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
   syncEditorDomToBlocks();   // explain the question exactly as it stands in the editor
-  if (stripHtml(block.content || '').trim() && !confirm('Replace the current explanation with an AI-written one?')) return;
+  if (stripHtml(block.content || '').trim() && !confirm(deep
+    ? 'Replace the current explanation with a longer, more detailed one?'
+    : 'Replace the current explanation with an AI-written one?')) return;
 
   // WHICH question this box explains. A multi-part question has one
   // explanation per part, and an explanation under (a) that summarises (b) and
@@ -6405,7 +6452,7 @@ async function aiGenerateBlockExplanation(blockId, btn) {
   // AGAIN — a box written over an answer has to go beyond it, not repeat it.
   const depth = _explAnswerContext(scope, pmap, target, scoped);
   const prompt =
-    `You are a Singapore primary-school (PSLE) science teacher writing the EXPLANATION box of the practice question below — ${depth.hasAnswer ? '4-8 sentences of teaching commentary that goes BEYOND the model answer already written above' : '2-4 sentences'} for a P3-P6 student explaining WHY the correct answer is correct.\n` +
+    `You are a Singapore primary-school (PSLE) science teacher writing the EXPLANATION box of the practice question below — ${full ? '8-14 sentences' : more ? '4-6 sentences' : '2-4 sentences'}${deep && depth.hasAnswer ? ' of teaching commentary that goes BEYOND the model answer already written above' : ''} for a P3-P6 student explaining WHY the correct answer is correct.\n` +
     (notesDb ? notesDb + `\nBase the science and the wording on this database FIRST; fall back to standard PSLE syllabus knowledge only where the database does not cover it.\n` : '') +
     (title || topic ? `Question: "${title}"${topic ? ' — topic: ' + topic : ''}.\n` : '') +
     `THE QUESTION, in order${media.length ? ' (diagrams attached as images)' : ''}:\n${ctxBits.join('\n').slice(0, 3500)}\n` +
@@ -6413,33 +6460,49 @@ async function aiGenerateBlockExplanation(blockId, btn) {
       ? `This question has several lettered parts. Explain ONLY part (${target}) — the sub-question marked ">>>" above, which is the one printed directly above this explanation box — and its answer. The other parts are shown only so you understand the context; do NOT explain them, do NOT summarise the whole question, and do not mention a part other than (${target}) unless part (${target}) genuinely depends on it.\n`
       : '') +
     `If a correct answer / model answer is shown above, your explanation MUST justify THAT answer (never contradict it); if none is shown, work the correct answer out yourself first.\n` +
-    _explDepthRules(depth.hasAnswer, depth.asksExplain) +
+    _explDepthRules(depth.hasAnswer, depth.asksExplain, level) +
     `Return ONLY JSON: {"explanation":"..."}\n` +
     `Rules: clear teacher voice a P3-P6 student understands; plain text only, no markdown, no [[brackets]].`;
   const orig = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = '🤖 Writing…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = full ? '📚 Expanding…' : more ? '📖 Expanding…' : '🤖 Writing…'; }
   try {
     const raw = media.length
-      ? await askGeminiVision(prompt, media, { maxOutputTokens: depth.hasAnswer ? 1300 : 700, json: true })
-      : await askGemini(prompt, { maxOutputTokens: depth.hasAnswer ? 1300 : 700, temperature: 0.25, json: true });
+      ? await askGeminiVision(prompt, media, { maxOutputTokens: EXPL_TOKENS(level), json: true })
+      : await askGemini(prompt, { maxOutputTokens: EXPL_TOKENS(level), temperature: 0.25, json: true });
     let p = _parseAIJson(raw);
     if (Array.isArray(p)) p = p[0];
     const expl = p && typeof p === 'object' ? String(p.explanation || p.text || '').trim() : '';
     if (!expl) throw new Error('the AI returned an empty explanation — please try again');
     block.content = escapeHtml(expl).replace(/\n+/g, '<br>');
     renderBlocks();
-    showToast(notesDb ? '🤖 Explanation written from your Teaching Notes database — review it before saving' : '🤖 Explanation written — no Teaching Notes matched, so standard PSLE knowledge was used. Review it before saving', 'success');
+    const lead = full ? '📚 Long explanation written' : more ? '📖 Expanded explanation written' : '🤖 Explanation written';
+    showToast(notesDb ? lead + ' from your Teaching Notes database — review it before saving' : lead + ' — no Teaching Notes matched, so standard PSLE knowledge was used. Review it before saving', 'success');
   } catch (e) {
     console.error('AI explanation failed', e);
-    showToast('Could not write the explanation: ' + (e && e.message ? e.message : e), 'error');
+    showToast('Could not write the ' + (deep ? 'expanded ' : '') + 'explanation: ' + (e && e.message ? e.message : e), 'error');
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
 }
+// One listener per depth. `[data-aiexplain]` does not match
+// `data-aiexplain-more` or `-full` — they are different ATTRIBUTES, not values
+// — so no two of these can fire on one press.
 document.addEventListener('click', function (e) {
   const btn = e.target.closest && e.target.closest('[data-aiexplain]');
   if (!btn || btn.disabled) return;
   e.preventDefault();
   aiGenerateBlockExplanation(btn.getAttribute('data-aiexplain'), btn);
+});
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest && e.target.closest('[data-aiexplain-more]');
+  if (!btn || btn.disabled) return;
+  e.preventDefault();
+  aiGenerateBlockExplanation(btn.getAttribute('data-aiexplain-more'), btn, 'more');
+});
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest && e.target.closest('[data-aiexplain-full]');
+  if (!btn || btn.disabled) return;
+  e.preventDefault();
+  aiGenerateBlockExplanation(btn.getAttribute('data-aiexplain-full'), btn, 'full');
 });
 (function injectEditorToolStyles() {
   const css = `
@@ -11623,7 +11686,7 @@ function _partsPromptRules() {
   return `- LETTERED PARTS: if the question has sub-parts (a), (b), (c), give EACH part its own text block, starting with its own marker written exactly as "(a) " / "(b) " — one marker per block, never two parts in the same block.\n` +
     `- Give EACH part its own answer block ("answer" or "plainanswer") directly under the text block that asks it, so every part has its own model answer.\n` +
     `- EXPLANATIONS follow the parts: a question with NO parts finishes with ONE "explanation" block; a question WITH parts gets ONE explanation block PER PART, placed directly after that part's own answer block and explaining ONLY that part's question and answer. Never write one explanation covering several parts, and never put an explanation about part (b) underneath part (a).\n` +
-    `- AN EXPLANATION IS NOT THE ANSWER AGAIN. The answer block already holds the answer and the two print one under the other on the answer key, so an explanation that restates or paraphrases it prints the same words twice. Write the teaching commentary that goes BEYOND it: the principle it rests on, named and stated generally; the step of reasoning the answer compresses; the answer a student is most likely to give instead and what is wrong with it; and what earns the mark. This matters most where the question itself says "explain", "why" or "give a reason" — there the model answer is ALREADY an explanation, so the explanation block has to go further than it rather than say it again.\n`;
+    `- AN EXPLANATION IS NOT THE ANSWER AGAIN. The answer block already holds the answer and the two print one under the other on the answer key, so an explanation that restates or paraphrases it prints the same words twice. Keep it to the 2-4 sentences an explanation has always been, and spend them on what the answer does NOT say — the principle it rests on, named; the step of reasoning it takes for granted; or the answer a student is most likely to give instead and why it is wrong. Pick the one that fits, not all of them. This matters most where the question itself says "explain", "why" or "give a reason", because there the model answer is ALREADY an explanation.\n`;
 }
 
 // The rectangle-selection (box_2d) rules, shared by the single-question build

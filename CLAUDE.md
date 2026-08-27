@@ -2961,13 +2961,13 @@ and the key then numbers answers the page does not have.
 
 - Run **`node tools/fill-blank-tests.mjs`** after touching any of it.
 
-## 📝 An explanation is not the answer again (v1.331.0)
+## 📝 An explanation is not the answer again (v1.332.0)
 
 `EXPL_ASKS_RE` / `_aiAsksToExplain` / `_explAnswerContext` / `_explDepthRules`
-(in `app.js`, search `AN EXPLANATION IS NOT THE ANSWER AGAIN`), read by the
-🤖 **AI explanation** button and — through `_partsPromptRules()` — by every
-build prompt. **All three portals carry the same block — ship a change to all
-of them together.**
+/ `EXPL_TOKENS` (in `app.js`, search `AN EXPLANATION IS NOT THE ANSWER AGAIN`),
+read by the three explanation buttons and — through `_partsPromptRules()` — by
+every build prompt. **All three portals carry the same block — ship a change to
+all of them together.**
 
 The explanation box was told to write *"2-4 sentences explaining WHY the
 correct answer is correct"*. On an MCQ that is a real job: the answer is "(3)"
@@ -2978,29 +2978,59 @@ answer" and "explain why the answer is correct" are one instruction and the box
 came back as the answer a second time. Nothing errored; the answer key printed
 beautifully with its second half dead paper.
 
-- **`_explDepthRules(hasAnswer, asksExplain)` is the ONE place the rule is
-  said**, and both doors read it. A copy written into either prompt is a copy
+- **`_explDepthRules(hasAnswer, asksExplain, level)` is the ONE place the rule
+  is said**, and every door reads it. A copy written into a prompt is a copy
   that drifts, and the drift is invisible — one path keeps writing duplicates
   while the other stops.
-- **NO answer yet returns the EMPTY STRING**, so an MCQ's prompt is
-  byte-for-byte what it always was. That case was never wrong, and telling a
-  model not to repeat an answer that does not exist is how an explanation comes
-  back refusing to say what the answer is.
-- **Two strengths, and the second one is the reported bug.** With an answer
-  written, the box is told not to restate or paraphrase it and to write what a
-  teacher says AFTER the answer has been read out: the principle it rests on
-  NAMED and stated generally, the step of reasoning the answer compresses, the
-  answer a student is most likely to give instead and what is wrong with it,
-  and what earns the mark. When the question ITSELF asks for an explanation it
-  also says so in as many words — the model answer is *already* an explanation,
-  so this one has to go further rather than agree with it.
+
+### THREE DEPTHS, and only one of them is the default
+
+The first cut of this handed EVERY explanation box the full four-point
+teacher's commentary, and a printed key of thirty questions became unreadable —
+the fix for one fault straight into another. The depth is a decision the author
+makes per question now, on the two or three that are worth teaching from.
+
+| `level` | button | length | what it is |
+| --- | --- | --- | --- |
+| `''` | 🤖 **AI explanation** | 2-4 sentences | the note under the answer — the ONE thing the answer leaves out |
+| `'more'` | 📖 **Expanded (concise)** | 4-6 sentences | the four teacher's points, **one sentence each** |
+| `'full'` | 📚 **Expanded (long)** | 8-14 sentences | the same four worked through, reasoning stepped out, an example where it helps |
+
+- **The DEFAULT must stay the note.** It is the button pressed on nearly every
+  question, and it is the one that reaches the printed answer key en masse. The
+  numbered four-point list is deliberately absent from it — it names the three
+  candidates and says *pick the one that fits, NOT all of them*.
+- **`EXPL_POINTS` is written ONCE** and both expanded tiers share it; what
+  separates them is the tail (`EXPL_TAIL_MORE` says *at most one sentence for
+  each*, `EXPL_TAIL_FULL` says *step the reasoning out*). Two copies of the four
+  points would drift into two different lectures.
+- **An unknown `level` falls back to the DEFAULT**, never to the lecture — a
+  typo must not put every box back on the long one.
+- **NO answer yet returns the EMPTY STRING at the default depth**, so an MCQ's
+  prompt is byte-for-byte what it always was. That case was never wrong, and
+  telling a model not to repeat an answer that does not exist is how an
+  explanation comes back refusing to say what the answer is. Pressing 📖 or 📚
+  IS an explicit ask for more, so those do get a rule even with no answer —
+  minus the do-not-repeat lines, since there is nothing to repeat.
+- **Three attributes, not three values of one.** `data-aiexplain` /
+  `data-aiexplain-more` / `data-aiexplain-full`, so `closest('[data-aiexplain]')`
+  cannot match the other two and no two listeners can fire on one press.
+- **NO BUILD PATH MAY REACH AN EXPANDED TIER.** ⚡ Rapid add, 📄 Exam Paper and
+  the bulk import write forty explanations in one run; the three listeners are
+  the only callers that pass a level at all, and the harness counts them.
+
+### …and the rule the depths share
+
+- **With an answer written**, the box is told not to restate or paraphrase it —
+  at every depth. When the question ITSELF asks for an explanation it also says
+  so in as many words: the model answer is *already* an explanation, so this one
+  has to say something it does not.
 - **It never licenses contradicting the answer.** The existing *"your
   explanation MUST justify THAT answer (never contradict it)"* line stays and
   comes first; going beyond an answer is not disagreeing with it.
-- **The room to do it in moves with the rule**: 4-8 sentences instead of 2-4,
-  and `maxOutputTokens` 1300 instead of 700. A prompt that asks for more detail
-  inside a budget that truncates it produces a half-written explanation, which
-  is worse than the duplicate.
+- **The budget moves with the depth** (`EXPL_TOKENS`: 700 / 1200 / 2200). A
+  prompt that asks for 8-14 sentences inside the 700-token ceiling returns a
+  half-written explanation, which is worse than a short one.
 - **`_explAnswerContext` reads THIS part and no other.** Only this part's answer
   is the one this box would be repeating, so another part's answer never counts
   — but the instruction to explain is often printed ONCE in the shared stem, so
@@ -3009,18 +3039,25 @@ beautifully with its second half dead paper.
   explanations in the bank came from: ⚡ Rapid add, 📄 Exam Paper and the bulk
   import write the answer and its explanation in ONE call, so `_partsPromptRules()`
   states the rule and all four build prompts get it without being told twice.
+  What it asks them for is the **2-4 sentence note** — a paper of forty long
+  explanations is exactly the fault the three depths exist to prevent.
 - Run **`node tools/explanation-depth-tests.mjs`** after touching any of it.
 
 ## House rules
 - After touching **📝 the explanation depth rule** (`EXPL_ASKS_RE`,
   `_aiAsksToExplain`, `_explAnswerContext`, `_explDepthRules`,
-  `aiGenerateBlockExplanation`'s `depth` / token budget, or the
+  `EXPL_POINTS` / `EXPL_TAIL_MORE` / `EXPL_TAIL_FULL` / `EXPL_TOKENS`,
+  `aiExplainBtnHtml`'s three buttons and their three listeners,
+  `aiGenerateBlockExplanation`'s `level`, or the
   `AN EXPLANATION IS NOT THE ANSWER AGAIN` line in `_partsPromptRules()`), run
   `node tools/explanation-depth-tests.mjs`. Every failure is silent and the
   block still fills: lose the rule and a question that says "Explain your
   answer" gets its own model answer written into the explanation box, so the
   printed key says the same thing twice and the teacher only finds out reading
-  it. Fire it when there is NO answer yet and the box comes back refusing to
+  it. Let the DEFAULT reach the four-point lecture — a stray level, a build path
+  passing one, an unknown level falling through to it — and every question on
+  the sheet gets a page of commentary instead of a note, which is the fault the
+  three depths were added to undo. Fire it when there is NO answer yet and the box comes back refusing to
   say what the answer is, because it has been told not to repeat one that was
   never written. Count another PART's answer or another part's "Explain your
   answer" and the strongest wording lands on a box that had nothing to repeat.
