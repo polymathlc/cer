@@ -3043,7 +3043,76 @@ makes per question now, on the two or three that are worth teaching from.
   explanations is exactly the fault the three depths exist to prevent.
 - Run **`node tools/explanation-depth-tests.mjs`** after touching any of it.
 
+## 📄 A paragraph break is a blank line, everywhere (v1.333.0)
+
+`_nlToBrHtml` / `_keepParagraphGaps` / `escapeHtmlKeepLines` (in `app.js`,
+search `A PARAGRAPH BREAK IS A BLANK LINE`), plus the
+**AUTHORED PARAGRAPHS KEEP THEIR SPACING** rules in `index.html` — one block on
+screen and one inside `@media print`. **All three portals carry the same block
+— ship a change to all of them together.**
+
+An author separates two paragraphs in the editor and sees the gap. The printed
+worksheet, the answer key and the student's own screen ran them together — so
+the app and the paper disagreed about the shape of the question, and only the
+shape was lost, which is why nobody notices until a sheet is in front of a
+class.
+
+**Three things did it, and each is silent on its own.**
+
+- **`* { margin: 0 }`** at the top of `index.html` zeroes every margin, `<p>`
+  included. That reset is deliberate and stays; what was missing was giving the
+  paragraphs back **on the containers that render AUTHORED html, and only
+  those** — `.content-editable`, `.qp-qtext`, `.preview-block`,
+  `.post-explanation`, `.ak-fullcontent`, and their printed twins. A bare
+  `p { … }` would move every card, banner and dialog in the app instead.
+  `.preview-content p` had carried its own `margin-bottom` for years, which is
+  exactly why the read-only preview showed the gap and nothing else did.
+- **`escapeHtmlKeepLines`** — what both print builders flatten a text block
+  with — turned `</p>` into ONE newline and then **dropped every blank line**
+  (`.filter(l => l.length)`), so a paragraph break could not survive to paper
+  even in principle.
+  - **A `<br>` is a line break INSIDE a paragraph; a closing BLOCK tag ends
+    one.** That is the distinction the editor's own Enter / Shift+Enter already
+    makes, so honouring it is what makes the page match what was typed. `</p>`,
+    `</div>` and `</h1-6>` are worth a blank line; **`</li>` and `</tr>` are
+    one line each** — a gap between every option of an inline list is a
+    question that no longer reads as a list.
+  - **`_keepParagraphGaps` is the ONE place the blank lines are kept**: a RUN
+    of them is one gap (markup very often ends a paragraph AND carries a typed
+    newline), and the ones at either end are the markup's own trailing break
+    rather than spacing anybody put there — a trailing one pads the bottom of
+    every text block on the sheet.
+  - **One paragraph is byte-for-byte unchanged**, which is the overwhelming
+    majority of the bank.
+- **The AI writers collapsed `\n+` into a single `<br>`**, so an explanation
+  the model wrote as two paragraphs arrived as one block of text.
+  **`_nlToBrHtml` is the ONE door** for escaped-text-with-line-breaks, and all
+  three writers (the answer, the explanation, ✨ Improve / ✂️ Shorten's setter)
+  go through it. The harness fails on a surviving `\n+` collapse anywhere in
+  the file, because one path left behind is one path that quietly still flattens
+  what the model wrote.
+
+The print rule sits **inside `@media print`** on purpose: the planner and the
+live A4 preview copy the stylesheet and UNWRAP that block, so a rule left
+outside it would be measured differently from how it prints. The extra height
+re-paginates for free — the planner MEASURES the finished page.
+
+- Run **`node tools/paragraph-spacing-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **📄 paragraph spacing** (`_nlToBrHtml`, `_keepParagraphGaps`,
+  `escapeHtmlKeepLines`, or the **AUTHORED PARAGRAPHS KEEP THEIR SPACING**
+  rules in `index.html`), run `node tools/paragraph-spacing-tests.mjs`. Every
+  failure is silent and the question still reads — only the shape the author
+  gave it is gone, and screen and paper go back to disagreeing about it. Drop
+  the blank lines again and a two-paragraph explanation prints as one block;
+  treat `<br>` and `</p>` alike and either every line break becomes a paragraph
+  or every paragraph becomes a line break; let `</li>` open a gap and an inline
+  option list stops reading as a list; keep the markup's own trailing break and
+  every text block on the sheet is padded at the bottom. The CSS half is
+  quieter still: it is scoped to the containers that render authored html, so a
+  container added later is the one that silently keeps running its paragraphs
+  together.
 - After touching **📝 the explanation depth rule** (`EXPL_ASKS_RE`,
   `_aiAsksToExplain`, `_explAnswerContext`, `_explDepthRules`,
   `EXPL_POINTS` / `EXPL_TAIL_MORE` / `EXPL_TAIL_FULL` / `EXPL_TOKENS`,

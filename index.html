@@ -1442,6 +1442,24 @@ option {
   font-size: 0.95rem;
 }
 .preview-content p { margin-bottom: 14px; }
+/* 📄 AUTHORED PARAGRAPHS KEEP THEIR SPACING.
+   `* { margin: 0 }` at the top of this file zeroes every margin, `<p>`
+   included — so two paragraphs an author separated in the editor rendered as
+   two tight consecutive lines on every surface that shows the question, while
+   the editor itself and .preview-content (above) showed the gap. Screen and
+   paper disagreeing about the shape of a question is the fault this fixes.
+   These are the containers that render AUTHORED html, and only those: a bare
+   `p { … }` would move every card, banner and dialog in the app instead. */
+.content-editable p,
+.qp-qtext p,
+.preview-block p,
+.post-explanation p,
+.ak-fullcontent p { margin: 0 0 0.7em; }
+.content-editable p:last-child,
+.qp-qtext p:last-child,
+.preview-block p:last-child,
+.post-explanation p:last-child,
+.ak-fullcontent p:last-child { margin-bottom: 0; }
 .preview-content img {
   max-width: 100%;
   border-radius: var(--radius-sm);
@@ -2973,6 +2991,15 @@ option {
   .print-text-block img {
     max-width: 100%;
   }
+  /* 📄 …and the same on paper — see AUTHORED PARAGRAPHS KEEP THEIR SPACING.
+     A text block is flattened to <br>-joined lines by escapeHtmlKeepLines and
+     carries no <p> at all; the answer key keeps the author's own markup, and
+     these are what give it its paragraphs back. The print planner MEASURES the
+     finished page, so the extra height re-paginates for free. */
+  .print-text-block p,
+  .print-ak-fulltext .ak-fullcontent p { margin: 0 0 6pt; }
+  .print-text-block p:last-child,
+  .print-ak-fulltext .ak-fullcontent p:last-child { margin-bottom: 0; }
   /* A block that OPENS a part hangs its (a) in the margin, so the parts line up
      down the left edge instead of the label being buried in the sentence. */
   /* min-height, because the label is positioned OUT of the flow: a block that

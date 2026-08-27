@@ -2688,7 +2688,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.332.0';
+const APP_VERSION = 'v1.333.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -6351,7 +6351,7 @@ async function aiGenerateBlockAnswer(blockId, btn) {
     if (!p || typeof p !== 'object') throw new Error('the AI returned an unexpected format — please try again');
     // Strip any [[keyword]] marks the AI adds despite the prompt — the teacher
     // should see clean answer text, never the double-bracket markers.
-    const toHtml = t => escapeHtml(String(t || '').replace(/\[\[|\]\]/g, '').trim()).replace(/\n+/g, '<br>');
+    const toHtml = t => _nlToBrHtml(String(t || '').replace(/\[\[|\]\]/g, '').trim());
     if (block.type === 'answer') {
       if (!String(p.claim || p.evidence || p.reasoning || '').trim()) throw new Error('the AI returned an empty answer — please try again');
       block.claim = toHtml(p.claim);
@@ -6473,7 +6473,7 @@ async function aiGenerateBlockExplanation(blockId, btn, level) {
     if (Array.isArray(p)) p = p[0];
     const expl = p && typeof p === 'object' ? String(p.explanation || p.text || '').trim() : '';
     if (!expl) throw new Error('the AI returned an empty explanation — please try again');
-    block.content = escapeHtml(expl).replace(/\n+/g, '<br>');
+    block.content = _nlToBrHtml(expl);
     renderBlocks();
     const lead = full ? '📚 Long explanation written' : more ? '📖 Expanded explanation written' : '🤖 Explanation written';
     showToast(notesDb ? lead + ' from your Teaching Notes database — review it before saving' : lead + ' — no Teaching Notes matched, so standard PSLE knowledge was used. Review it before saving', 'success');
@@ -6536,7 +6536,7 @@ document.addEventListener('click', async function (e) {
     const el = document.querySelector('.content-editable[data-block-id="' + blockId + '"][data-field="' + field + '"]');
     if (!el) return;
     getText = () => stripHtml(el.innerHTML || '');
-    setText = (t) => { el.innerHTML = escapeHtml(t).replace(/\n+/g, '<br>'); saveBlockContent(blockId, field, el.innerHTML); };
+    setText = (t) => { el.innerHTML = _nlToBrHtml(t); saveBlockContent(blockId, field, el.innerHTML); };
   } else if (elId) {
     const el = document.getElementById(elId);
     if (!el) return;
@@ -21490,17 +21490,64 @@ function escapeHtml(str) {
 // Escape a text block's HTML for print while KEEPING its line breaks (so
 // inline option lists like "A: …<br>B: …" don't collapse onto one line).
 // <br> and block-level closings become newlines; other tags are stripped.
+// =====================================================================
+// 📄 A PARAGRAPH BREAK IS A BLANK LINE, EVERYWHERE
+//
+// An author separates two paragraphs in the editor and sees the gap; the
+// printed worksheet, the answer key and the student's own screen ran them
+// together. Two things did it, and both are silent — the sheet prints, the
+// question reads, and only the shape is gone:
+//
+//   • `* { margin: 0 }` at the top of index.html zeroes every margin, `<p>`
+//     included. The CSS half of this fix restores it on the containers that
+//     render AUTHORED html, and only those.
+//   • `escapeHtmlKeepLines` — what both print builders flatten a text block
+//     with — turned `</p>` into ONE newline and then dropped every blank line
+//     outright, so the paragraph break could not survive even in principle.
+//
+// A `<br>` is a line break INSIDE a paragraph and a closing block tag ENDS
+// one. That is the distinction the editor's own Enter / Shift+Enter already
+// makes, so honouring it is what makes the page match what was typed.
+// =====================================================================
+
+// Escaped text with its line breaks kept — and a BLANK LINE kept as a blank
+// line. `\n+` collapsed to a single <br>, which is what the AI writers used to
+// do, turns every paragraph break the model wrote into an ordinary line break:
+// an explanation written as two paragraphs arrived as one block of text.
+function _nlToBrHtml(text) {
+  return escapeHtml(String(text == null ? '' : text))
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n{2,}/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+}
+
+// Keep the author's blank lines and nothing else. A RUN of them is ONE blank
+// line — markup very often ends a paragraph AND carries a typed newline, so
+// two or three in a row are one gap, not three — and the ones at either end
+// are the markup's own trailing break rather than spacing anybody put there.
+function _keepParagraphGaps(lines) {
+  const out = [];
+  (lines || []).forEach(l => {
+    if (l.length) { out.push(l); return; }
+    if (out.length && out[out.length - 1].length) out.push('');
+  });
+  while (out.length && !out[out.length - 1].length) out.pop();
+  return out;
+}
 function escapeHtmlKeepLines(content) {
   if (!content) return '';
   const withBreaks = String(content)
     .replace(/<\s*br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|li|tr|h[1-6])\s*>/gi, '\n');
-  const lines = withBreaks
+    // A closing BLOCK tag ENDS A PARAGRAPH, and a paragraph break is a BLANK
+    // LINE — see 📄 A PARAGRAPH BREAK IS A BLANK LINE above. A list item or a
+    // table row is one line of its own, never a paragraph.
+    .replace(/<\/(p|div|h[1-6])\s*>/gi, '\n\n')
+    .replace(/<\/(li|tr)\s*>/gi, '\n');
+  const lines = _keepParagraphGaps(withBreaks
     .replace(/<[^>]*>/g, '')
     .replace(/&nbsp;/g, ' ')
     .split('\n')
-    .map(l => l.replace(/[ \t]+/g, ' ').trim())
-    .filter(l => l.length);
+    .map(l => l.replace(/[ \t]+/g, ' ').trim()));
   return lines.map(escapeHtml).join('<br>');
 }
 
