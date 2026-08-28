@@ -367,6 +367,7 @@ const UNGROUNDED_BY_DESIGN = {
   // ---- transcription: a transcriber told what the answer should say writes
   //      that down instead of what is on the page ----
   _finishVoice: 'transcribes dictation',
+  transcribeAudio: 'THE one transcription door — gemini-3.5-transcribe, with the ordinary model behind it. It is handed audio and asked for the words that were said, so grounding it in the marking standards would be a transcriber told what the answer ought to say, which is how a recording comes back as the answer somebody wanted rather than the one they spoke',
   epReadKey: 'transcribes a marking scheme off a photograph',
   _mpReadScript: 'transcribes a student’s handwriting — it is told never to mark',
   _mpReadKey: 'transcribes a marking scheme off a photograph',

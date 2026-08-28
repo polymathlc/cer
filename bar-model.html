@@ -1769,7 +1769,7 @@ input, button, select, textarea { font-family: inherit; }
   </div>
 </div>
 
-<div class="version-badge" id="versionBadge">Bar Model Studio v1.7</div>
+<div class="version-badge" id="versionBadge">Bar Model Studio v1.8</div>
 
 <!-- ══════════════════════════════════════════════════════════════════
      FIREBASE AI LOGIC (Gemini) — module script
@@ -1833,6 +1833,63 @@ input, button, select, textarea { font-family: inherit; }
     console.warn("Firebase AI init failed (AI marking disabled):", e);
   }
   window.__aiReady = () => !!geminiModel;
+
+  /* ── 🎙️ Transcription: its own model, exposed as one door ────────
+     Speech is its own job, so `gemini-3.5-transcribe` reads the mic here
+     exactly as it does in the portals. THE MODEL IS A ROUTE, NOT A
+     PROMISE: an id that has been renamed under us is a 400 on every
+     recording, which reads as "the mic is broken" rather than "that id is
+     a release out of date" — so it is tried first with AI_MODEL behind
+     it, and a refusal is remembered for a few minutes rather than paid
+     for on every recording. No thinkingConfig is sent: a speech model has
+     no reason to know the chat models' scale, and a level it does not
+     know is a 400 rather than a worse answer. */
+  const AI_TRANSCRIBE_MODEL = "gemini-3.5-transcribe";
+  const AI_TRANSCRIBE_DOWN_MS = 10 * 60 * 1000;
+  const TRANSCRIBE_PROMPT =
+    "Transcribe the spoken audio to text exactly and accurately. Return ONLY the transcription as plain text " +
+    "with correct spelling, capitalisation and punctuation. Do not translate, summarise, answer, add quotes, " +
+    "labels or commentary. If there is no clear speech, return an empty string.";
+  let transcribeModel = null;
+  let transcribeDownUntil = 0;
+  function transcribeModelGet() {
+    if (transcribeModel) return transcribeModel;
+    try {
+      const inst = getAI(firebaseApp, { backend: new GoogleAIBackend() });
+      transcribeModel = getGenerativeModel(inst, { model: AI_TRANSCRIBE_MODEL });
+    } catch (e) { console.warn("transcribe model init failed:", e); return null; }
+    return transcribeModel;
+  }
+  function transcribeClean(text) {
+    let s = String(text || "").trim();
+    s = s.replace(/^(?:transcription|transcript)\s*[:\-—]\s*/i, "").trim();
+    if (s.length > 1 && /^["'“”]/.test(s) && /["'“”]$/.test(s)) s = s.slice(1, -1).trim();
+    return s;
+  }
+  window.__transcribeReady = () => !!(geminiModel || transcribeModelGet());
+  window.transcribeAudio = async function (base64, mimeType) {
+    const media = { inlineData: { mimeType: mimeType || "audio/webm", data: base64 } };
+    const model = Date.now() >= transcribeDownUntil ? transcribeModelGet() : null;
+    if (model) {
+      try {
+        const res = await model.generateContent({
+          contents: [{ role: "user", parts: [{ text: TRANSCRIBE_PROMPT }, media] }],
+          generationConfig: { maxOutputTokens: 1024, temperature: 0 }
+        });
+        transcribeDownUntil = 0;
+        return transcribeClean(res.response.text() || "");
+      } catch (e) {
+        transcribeDownUntil = Date.now() + AI_TRANSCRIBE_DOWN_MS;
+        console.warn("The " + AI_TRANSCRIBE_MODEL + " route refused — falling back to " + AI_MODEL + ":", e);
+      }
+    }
+    if (!geminiModel) throw new Error("AI is not configured yet");
+    const res = await geminiModel.generateContent({
+      contents: [{ role: "user", parts: [{ text: TRANSCRIBE_PROMPT }, media] }],
+      generationConfig: { maxOutputTokens: 1024, temperature: 0 }
+    });
+    return transcribeClean(res.response.text() || "");
+  };
 
   /**
    * askGeminiVision(promptText, imageBase64, mimeType, options) → Promise<string>
@@ -4440,16 +4497,124 @@ function applyCustomScenario(text) {
   closeCustomComposer();
 }
 
-/* ── Route 2: dictation via the Web Speech API ───────────────────── */
+/* ── Route 2: dictation ──────────────────────────────────────────
+   THE MIC GOES THROUGH THE SAME SPEECH MODEL AS THE REST OF POLYMATH.
+   This used to be the browser's own Web Speech API, which is free and
+   instant and is also the reason a dictated question came out in a
+   different voice from every other mic in the centre: no punctuation
+   worth the name, no Singapore place names, and nothing at all on an
+   iPad in Lockdown Mode or a browser that never shipped it.
 
-var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-var recognition = null;
+   So the recording is now sent to `gemini-3.5-transcribe` through
+   window.transcribeAudio, the one door the Firebase module defines —
+   and Web Speech is kept as the FALLBACK for a browser with no
+   MediaRecorder, because a mic that does something worse is better than
+   a mic that does nothing. `dictateSupported()` is the one place that
+   choice is made. */
+
+var VOICE_MAX_MS = 60000;
 var isDictating = false;
 var dictationBaseText = '';
 
-function startDictation() {
+/* -- the recorder route -- */
+var dictRecorder = null, dictStream = null, dictChunks = [], dictMime = '';
+var dictHardStop = null, dictCancelled = false;
+
+function dictateSupported() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia &&
+            window.MediaRecorder && window.transcribeAudio);
+}
+function dictPickMime() {
+  var types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4'];
+  for (var i = 0; i < types.length; i++) {
+    try { if (MediaRecorder.isTypeSupported(types[i])) return types[i]; } catch (ignored) {}
+  }
+  return '';
+}
+function dictBlobToBase64(blob) {
+  return new Promise(function (resolve, reject) {
+    var r = new FileReader();
+    r.onload = function () {
+      var s = String(r.result || '');
+      var c = s.indexOf(',');
+      resolve(c >= 0 ? s.slice(c + 1) : s);
+    };
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+function setMicUi(recording) {
+  micBtn.classList.toggle('recording', !!recording);
+  micBtnLabel.textContent = recording ? 'Stop' : 'Speak';
+}
+
+function startRecordDictation() {
+  dictationBaseText = composerTextarea.value.trim();
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+    var mime = dictPickMime();
+    var rec;
+    try { rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
+    catch (error) {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+      setComposerStatus('Recording is not supported here — you can type the question instead.', true);
+      return;
+    }
+    dictChunks = [];
+    dictCancelled = false;
+    dictMime = rec.mimeType || mime || 'audio/webm';
+    rec.ondataavailable = function (ev) { if (ev.data && ev.data.size) dictChunks.push(ev.data); };
+    rec.onstop = finishRecordDictation;
+    rec.start();
+    dictRecorder = rec;
+    dictStream = stream;
+    isDictating = true;
+    setMicUi(true);
+    /* A mic left open sends a huge blob to the model for what is meant to
+       be one spoken question, so it stops itself at the cap and
+       transcribes what it has rather than recording for ever. */
+    dictHardStop = setTimeout(function () { if (isDictating) stopDictation(); }, VOICE_MAX_MS);
+    setComposerStatus('Listening… speak the whole question, then press Stop.');
+  }).catch(function () {
+    setComposerStatus('Microphone access was blocked — allow it in the browser and try again.', true);
+    stopDictation();
+  });
+}
+
+function finishRecordDictation() {
+  var stream = dictStream, mime = dictMime, cancelled = dictCancelled;
+  var blob = new Blob(dictChunks, { type: mime });
+  if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+  dictRecorder = null; dictStream = null; dictChunks = [];
+  if (cancelled) return;
+  if (!blob.size) {
+    setComposerStatus('Did not catch any speech — press Speak and try again.', true);
+    return;
+  }
+  setComposerStatus('Writing down what you said…');
+  dictBlobToBase64(blob).then(function (b64) {
+    return window.transcribeAudio(b64, String(mime || 'audio/webm').split(';')[0]);
+  }).then(function (text) {
+    var clean = String(text || '').trim();
+    if (!clean) {
+      setComposerStatus('Did not catch any speech — press Speak and try again.', true);
+      return;
+    }
+    var joiner = dictationBaseText ? ' ' : '';
+    composerTextarea.value = (dictationBaseText + joiner + clean).replace(/\s+/g, ' ');
+    setComposerStatus('Written down — check it, edit if needed, then press "Use This Question".');
+  }).catch(function (error) {
+    console.warn('transcription failed', error);
+    setComposerStatus('That did not come through — press Speak to try again, or type it instead.', true);
+  });
+}
+
+/* -- the Web Speech fallback, for a browser with no MediaRecorder -- */
+var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+var recognition = null;
+
+function startSpeechDictation() {
   if (!SpeechRecognitionCtor) {
-    setComposerStatus('Dictation is not supported in this browser — try Chrome, Edge, or Safari.', true);
+    setComposerStatus('Dictation is not supported in this browser — type the question instead.', true);
     return;
   }
   recognition = new SpeechRecognitionCtor();
@@ -4459,8 +4624,7 @@ function startDictation() {
 
   dictationBaseText = composerTextarea.value.trim();
   isDictating = true;
-  micBtn.classList.add('recording');
-  micBtnLabel.textContent = 'Stop';
+  setMicUi(true);
   setComposerStatus('Listening… speak the whole question, then press Stop.');
 
   recognition.onresult = function (event) {
@@ -4496,10 +4660,18 @@ function startDictation() {
   }
 }
 
+function startDictation() {
+  if (dictateSupported()) { startRecordDictation(); }
+  else { startSpeechDictation(); }
+}
+
 function stopDictation() {
   isDictating = false;
-  micBtn.classList.remove('recording');
-  micBtnLabel.textContent = 'Speak';
+  setMicUi(false);
+  if (dictHardStop) { clearTimeout(dictHardStop); dictHardStop = null; }
+  if (dictRecorder) {
+    try { dictRecorder.stop(); } catch (ignored) { /* already stopped */ }
+  }
   if (recognition) {
     try { recognition.stop(); } catch (ignored) { /* already stopped */ }
     recognition = null;
