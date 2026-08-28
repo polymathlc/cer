@@ -112,6 +112,92 @@ try {
 } catch (e) { console.warn("Firebase image AI init failed:", e); }
 const imageAiReady = () => geminiImageModels.length > 0;
 
+// =====================================================================
+// 🎙️ TRANSCRIPTION — ONE MODEL, ONE DOOR
+// ---------------------------------------------------------------------
+// Speech is its own job and it now has its own model. `gemini-3.5-transcribe`
+// is asked for every piece of audio this app turns into text — the mic on a
+// marking guide, the mic on an open answer, the mic in Ai-nstein's chat —
+// through `transcribeAudio`, which is the ONE door. A call site that reaches
+// past it to `askGeminiVision` is a surface still transcribing on the general
+// model, and nothing on any screen would say so: the words come back either
+// way, a little worse.
+//
+// THE MODEL IS A ROUTE, NOT A PROMISE. A model id is a thing that gets
+// renamed, withdrawn and rolled out region by region — and an id this project
+// cannot reach is a 400/404 on every dictation, which reads as "the mic is
+// broken" rather than "that id is a release out of date". So the transcribe
+// model is TRIED FIRST and the ordinary model stands behind it: a refusal is
+// remembered for AI_TRANSCRIBE_DOWN_MS and the fallback carries the mic in
+// the meantime, rather than every recording paying for the same refusal.
+// A success clears the mark, so the day the id starts answering the app
+// starts using it without anybody redeploying anything.
+//
+// NO THINKING LEVEL IS SENT. Every other call in this app carries
+// `thinkingConfig`, and a level a model does not know is a 400 — not a worse
+// answer, no answer at all. A speech model has no reason to know the chat
+// models' scale, so the one call that could break it is deliberately not
+// made. Transcription is a reading job, not a reasoning one.
+const AI_TRANSCRIBE_MODEL = 'gemini-3.5-transcribe';
+const AI_TRANSCRIBE_DOWN_MS = 10 * 60 * 1000;
+// One wording, shared by every mic: two prompts drift, and the drift shows up
+// as one surface punctuating and another not.
+const TRANSCRIBE_PROMPT =
+  'Transcribe the spoken audio to text exactly and accurately. Return ONLY the transcription as plain text ' +
+  'with correct spelling, capitalisation and punctuation. Do not translate, summarise, answer, add quotes, ' +
+  'labels or commentary. If there is no clear speech, return an empty string.';
+let _transcribeModel = null;
+let _transcribeDownUntil = 0;
+let _transcribeWhy = '';
+function _transcribeModelGet() {
+  if (_transcribeModel) return _transcribeModel;
+  if (!_aiInstance) return null;
+  try { _transcribeModel = getGenerativeModel(_aiInstance, { model: AI_TRANSCRIBE_MODEL }); }
+  catch (e) { _transcribeWhy = String((e && e.message) || e); return null; }
+  return _transcribeModel;
+}
+// A model asked for "only the transcription" still hands back a quoted string
+// or a "Transcription:" label often enough to be worth taking off here rather
+// than leaving in the student's answer box.
+function _transcribeClean(text) {
+  let s = String(text || '').trim();
+  s = s.replace(/^(?:transcription|transcript)\s*[:\-—]\s*/i, '').trim();
+  if (s.length > 1 && /^["'“”]/.test(s) && /["'“”]$/.test(s)) s = s.slice(1, -1).trim();
+  return s;
+}
+// THE ONE DOOR. `media` is [{ mimeType, data }] exactly as askGeminiVision
+// takes it, so a call site swaps one function name for another.
+async function transcribeAudio(media, { maxOutputTokens = 1024 } = {}) {
+  const parts = [{ text: TRANSCRIBE_PROMPT }];
+  (media || []).forEach(m => parts.push({ inlineData: { mimeType: m.mimeType, data: m.data } }));
+  const model = Date.now() >= _transcribeDownUntil ? _transcribeModelGet() : null;
+  if (model) {
+    try {
+      const res = await model.generateContent({
+        contents: [{ role: 'user', parts }],
+        generationConfig: { maxOutputTokens, temperature: 0 }
+      });
+      _transcribeDownUntil = 0; _transcribeWhy = '';
+      return _transcribeClean(res.response.text() || '');
+    } catch (e) {
+      _transcribeDownUntil = Date.now() + AI_TRANSCRIBE_DOWN_MS;
+      _transcribeWhy = String((e && e.message) || e);
+      console.warn('The ' + AI_TRANSCRIBE_MODEL + ' route refused — falling back to ' + AI_MODEL + ':', e);
+    }
+  }
+  return _transcribeClean(await askGeminiVision(TRANSCRIBE_PROMPT, media, { maxOutputTokens, json: false }));
+}
+// What the AI Engine panel prints about the mic. It reports only what it
+// knows: which model the last recording really went to, and what the
+// dedicated one said the last time it refused.
+function transcribeRouteNote() {
+  if (Date.now() < _transcribeDownUntil) {
+    return 'Speech is going through ' + AI_MODEL + ' for a few minutes: ' + AI_TRANSCRIBE_MODEL +
+           ' refused a moment ago' + (_transcribeWhy ? ' (' + _transcribeWhy + ')' : '') + '.';
+  }
+  return 'Speech is transcribed by ' + AI_TRANSCRIBE_MODEL + ', with ' + AI_MODEL + ' behind it.';
+}
+
 // ── Optional ChatGPT (OpenAI) engine ─────────────────────────────────
 // Admin-only toggle (sidebar → AI Engine). The choice, model and key live in
 // localStorage on this device only — same pattern as bar-model.html. When
@@ -837,7 +923,11 @@ function renderAiEngineStatus() {
   const r = aiRouteReport();
   const order = r.order.map((n, i) => `<div>${i + 1}. ${escapeHtml(n)}</div>`).join('');
   const notes = r.notes.map(n => `<div style="margin-top:8px;color:var(--text-muted);">${escapeHtml(n)}</div>`).join('');
-  el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">Tried in this order</div>${order}${notes}`;
+  // The mic is its own model and its own failure, so it gets its own line:
+  // an app quietly transcribing on the general model looks exactly like one
+  // transcribing on the speech model, only a little worse.
+  const mic = `<div style="margin-top:12px;color:var(--text-muted);">🎙️ ${escapeHtml(transcribeRouteNote())}</div>`;
+  el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">Tried in this order</div>${order}${notes}${mic}`;
 }
 
 /* The account's own list, in one call. A hard-coded list of ids in this file
@@ -2688,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.333.0';
+const APP_VERSION = 'v1.334.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -8474,9 +8564,9 @@ async function _finishVoice() {
     if (!blob.size) throw new Error('no audio captured');
     const b64 = await _blobToB64(blob);
     const cleanMime = (mime || 'audio/webm').split(';')[0];
-    const prompt = 'Transcribe the spoken audio to text exactly and accurately. Return ONLY the transcription as plain text with correct spelling, capitalisation and punctuation. Do not translate, summarise, add quotes, labels or commentary. If there is no clear speech, return an empty string.';
-    const text = await askGeminiVision(prompt, [{ mimeType: cleanMime, data: b64 }], { maxOutputTokens: 1024, json: false });
-    const clean = (text || '').trim();
+    // Through the ONE transcription door, so this mic and every other one in
+    // the app are the same model saying the same thing.
+    const clean = await transcribeAudio([{ mimeType: cleanMime, data: b64 }], { maxOutputTokens: 1024 });
     if (clean) { _insertTranscript(target, clean); showToast('Transcribed ✓', 'success'); note = 'Transcribed ✓ — read it through, edit if needed, then send.'; }
     else { showToast('Did not catch any speech — try again', 'error'); note = 'I didn\'t catch any speech — tap 🎤 and try again.'; }
   } catch (e) {

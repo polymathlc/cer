@@ -3099,7 +3099,58 @@ re-paginates for free — the planner MEASURES the finished page.
 
 - Run **`node tools/paragraph-spacing-tests.mjs`** after touching any of it.
 
+## 🎙️ Transcription — ONE MODEL, ONE DOOR (v1.334.0)
+
+`AI_TRANSCRIBE_MODEL` / `AI_TRANSCRIBE_DOWN_MS` / `TRANSCRIBE_PROMPT` /
+`_transcribeModelGet` / `_transcribeClean` / **`transcribeAudio`** /
+`transcribeRouteNote` (search `TRANSCRIPTION — ONE MODEL, ONE DOOR`).
+**Every Polymath app that turns speech into text carries this same block —
+ship a change to all of them together.**
+
+Speech is its own job and it now has its own model. `gemini-3.5-transcribe`
+reads every recording this app turns into text — the mic on a marking guide,
+the mic on an open answer, the mic in Ai-nstein's chat — through
+`transcribeAudio`, which is **the ONE door**. A call site that reaches past it
+to `askGeminiVision` is a surface still transcribing on the general chat
+model, and **nothing on any screen would say so**: the words come back either
+way, a little worse.
+
+- **THE MODEL IS A ROUTE, NOT A PROMISE.** A model id is a thing that gets
+  renamed, withdrawn and rolled out region by region, and an id this project
+  cannot reach is a 400/404 on **every** dictation — which reads as "the mic
+  is broken" rather than "that id is a release out of date". So the transcribe
+  model is tried FIRST with the ordinary model behind it, a refusal is
+  remembered for `AI_TRANSCRIBE_DOWN_MS` rather than paid for again on the
+  next recording, and a success clears the mark — so the day the id starts
+  answering, the app starts using it with nothing redeployed and nobody told.
+- **NO THINKING LEVEL IS SENT.** Every other call in this app carries
+  `thinkingConfig`, and a level a model does not know is a 400 — no answer at
+  all, not a worse one. A speech model has no reason to know the chat models'
+  scale, so the one call that could break it is deliberately not made.
+  Transcription is reading, not reasoning.
+- **The transcription is NOT grounded in the teaching notes**, and that is a
+  decision rather than an oversight: a transcriber told what the answer ought
+  to say writes that down instead of what was actually said. It is exempted by
+  name in the census, with that reason written beside it.
+- **The page SAYS which model answered.** `transcribeRouteNote()` is printed
+  in the AI Engine panel, because an app quietly dictating on the chat model
+  looks exactly like one using the speech model, only a little worse.
+
 ## House rules
+- After touching **🎙️ transcription** (`AI_TRANSCRIBE_MODEL`,
+  `transcribeAudio`, `_transcribeModelGet`, `_transcribeClean`,
+  `TRANSCRIBE_PROMPT`, `transcribeRouteNote`, or any mic call site), record
+  something and check it comes back. Every failure here is silent in the one
+  direction that matters: a call site that goes back to `askGeminiVision`
+  still transcribes, so the mic keeps working and quietly stops using the
+  speech model — the words are simply a little worse, and nothing anywhere
+  says which model wrote them. Lose the fallback and a model id renamed under
+  us is a 400 on every recording, which reads as "the mic is broken"; lose the
+  down-mark and every recording pays for the same refusal; and send a
+  `thinkingConfig` to a speech model and it is a 400 rather than a worse
+  answer. The census exemption is the other half: a transcriber grounded in
+  the marking standards writes down the answer somebody wanted rather than
+  the one that was spoken.
 - After touching **📄 paragraph spacing** (`_nlToBrHtml`, `_keepParagraphGaps`,
   `escapeHtmlKeepLines`, or the **AUTHORED PARAGRAPHS KEEP THEIR SPACING**
   rules in `index.html`), run `node tools/paragraph-spacing-tests.mjs`. Every
