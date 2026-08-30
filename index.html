@@ -8550,7 +8550,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <div class="subtitle" id="createPageSubtitle">Build a question with blocks. Answers and blanks are optional — every question is marked by AI.</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-          <button class="btn btn-outline" id="regenInlineBtn" onclick="openRegenerateModal()" style="display:none;" title="Make a NEW copy of this question with AI. The picture stays the same, you give instructions on what to change, and the original is never overwritten.">
+          <button class="btn btn-outline" id="regenInlineBtn" onclick="openRegenerateModal()" style="display:none;" title="Make a NEW copy of this question with AI. You give instructions on what to change, the picture is redrawn from the picture already on it when it needs to be, and the original is never overwritten.">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
             🔄 Regenerate
           </button>
@@ -8579,6 +8579,35 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         </div>
         <!-- Possible-duplicate warning: shown when a built question looks like one already in the bank -->
         <div id="dupWarnBanner" style="display:none;align-items:center;gap:14px;flex-wrap:wrap;background:#fffbeb;border:1px solid #e0b768;border-radius:12px;padding:12px 16px;margin-bottom:18px;"></div>
+        <!-- 🪄 TELL THE AI WHAT TO CHANGE — see THE COMMAND BOX IN THE QUESTION
+             CREATOR in app.js. Reads the question open in this editor, follows
+             the instructions typed here, and redraws the picture from the
+             picture already on it. Nothing is saved until Save is pressed. -->
+        <style>
+          .qcmd-panel { background: var(--surface, #fff); border: 1px solid var(--border, #d0d5dd); border-left: 4px solid var(--primary, #0b6b4f);
+                        border-radius: 14px; padding: 20px 22px; margin-bottom: 22px; max-width: 880px; }
+          .qcmd-panel h4 { margin: 0 0 8px; font-size: 1rem; font-weight: 700; color: var(--text, #1f2933); }
+          .qcmd-panel .qcmd-intro { margin: 0 0 16px; font-size: 0.86rem; line-height: 1.65; color: var(--text-muted, #667085); }
+          .qcmd-panel textarea { width: 100%; box-sizing: border-box; padding: 12px 14px; border: 1px solid var(--border, #d0d5dd);
+                                 border-radius: 10px; font-family: inherit; font-size: 0.92rem; line-height: 1.6; resize: vertical; }
+          .qcmd-panel textarea:disabled { background: var(--bg, #f6f7f9); color: var(--text-muted, #667085); }
+          .qcmd-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
+          .qcmd-status { font-size: 0.83rem; color: var(--text-muted, #667085); min-height: 18px; }
+        </style>
+        <div class="qcmd-panel" id="qcmdPanel">
+          <h4>🪄 Tell the AI what to change</h4>
+          <p class="qcmd-intro">
+            Makes a <strong>new question</strong> out of the one open in this editor. What you type decides how the wording
+            changes — and where the new wording no longer fits the figure, the picture is <strong>redrawn from the picture
+            already on this question</strong>. The original is never touched, and nothing is saved until you press Save.
+          </p>
+          <textarea id="qcmdInput" rows="3" maxlength="600"
+                    placeholder="e.g. Change the beaker to a test tube and make the water 60 °C · Swap the context to a bicycle journey and change every number · Make it one step harder · Redraw the graph with four bars instead of three"></textarea>
+          <div class="qcmd-row">
+            <button class="btn btn-primary" id="qcmdRunBtn" onclick="qcmdRun()">🪄 Make the new question</button>
+            <span class="qcmd-status" id="qcmdStatus" role="status" aria-live="polite"></span>
+          </div>
+        </div>
         <!-- Meta Fields -->
         <div class="form-row-3">
           <div class="form-group">
@@ -11585,7 +11614,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
   <div class="confirm-dialog" style="max-width:560px;width:96%;text-align:left;">
     <h3 style="margin-bottom:6px;">Regenerate question</h3>
     <p style="color:var(--text-muted);font-size:0.86rem;margin-bottom:14px;">
-      This makes a <strong>new copy</strong> of the question. The picture stays exactly the same and the original is never changed. Tell the AI how you want the new copy to differ.
+      This makes a <strong>new copy</strong> of the question in the bank. The original is never changed, and the picture is <strong>redrawn from the picture already on it</strong> when your instructions mean the figure no longer fits. Tell the AI how you want the new copy to differ.
     </p>
     <label for="regenRemark" style="display:block;font-weight:600;font-size:0.85rem;margin-bottom:6px;">Instructions for the AI</label>
     <textarea id="regenRemark" rows="5" placeholder="e.g. Change the numbers and keep the same idea, make the wording simpler, swap the context to a different animal, increase the difficulty…" style="width:100%;padding:10px 12px;border:1px solid var(--border,#d0d5dd);border-radius:8px;font-family:inherit;font-size:0.9rem;resize:vertical;box-sizing:border-box;"></textarea>
