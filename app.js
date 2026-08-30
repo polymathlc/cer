@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.335.0';
+const APP_VERSION = 'v1.336.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -11237,6 +11237,39 @@ function _aiSuggestedTags(data) {
   return out.slice(0, 6);     // a suggestion, not a keyword-stuffing exercise
 }
 
+// A page can hold SEVERAL questions. This is the ONE place a build reply
+// becomes the list of questions it describes, so every path that reads one —
+// ⚡ Rapid add and 🤖 Build from screenshot — agrees on how many are on the
+// page. It matters most for a PDF, where a rendered page is a whole SHEET of a
+// paper rather than the one question somebody screenshotted.
+//
+// The single-question shape is still accepted and is what a reply from before
+// this shipped looks like; `questions` is the array form. Each entry INHERITS
+// the top-level title / topic / category / tags it does not carry itself,
+// because a model told to write them per entry reliably writes them once at the
+// top and then stops — and a question landing in vetting with no topic is one
+// an author has to open and fix by hand.
+//
+// An empty or unusable `questions` array falls back to the whole reply rather
+// than returning nothing: a page that produced blocks must produce a question.
+function _aiQuestionPayloads(parsed) {
+  if (!parsed || typeof parsed !== 'object') return [];
+  const list = Array.isArray(parsed.questions) ? parsed.questions : null;
+  if (!list) return [parsed];
+  const kept = list.filter(x => x && typeof x === 'object' && Array.isArray(x.blocks) && x.blocks.length);
+  if (!kept.length) return Array.isArray(parsed.blocks) && parsed.blocks.length ? [parsed] : [];
+  const pick = (a, b) => (a == null || a === '' ? b : a);
+  return kept.map(x => ({
+    title: pick(x.title, parsed.title),
+    topic: pick(x.topic, parsed.topic),
+    category: pick(x.category, parsed.category),
+    tags: (Array.isArray(x.tags) && x.tags.length) ? x.tags : parsed.tags,
+    questionType: pick(x.questionType, parsed.questionType),
+    topicConfidence: pick(x.topicConfidence, parsed.topicConfidence),
+    blocks: x.blocks
+  }));
+}
+
 function buildQuestionFromAi(data) {
   const built = buildBlocksFromAi(data || {});
   return applyMcqCategory({
@@ -11314,8 +11347,32 @@ function _loadPdfJs() {
   return _pdfjsP;
 }
 
-// Render every page of a PDF to a JPEG (≤2000px long side — sharp enough to
-// crop figures from, small enough to send to the AI). Returns [{mimeType,data}].
+// ≤PDF_PAGE_MAX_SIDE px on the long side — sharp enough to crop figures out of,
+// small enough to send to the AI.
+const PDF_PAGE_MAX_SIDE = 2000;
+
+// Render ONE already-opened pdf.js page to a JPEG. This is the ONE renderer:
+// the bulk import walks a whole file through it and ⚡ Rapid add pulls a page
+// at a time out of it, so the two can never drift into producing a different
+// picture from the same PDF — and a crop measured on one is measured on the
+// picture the other sent.
+async function _pdfRenderPage(page, maxSide) {
+  let vp = page.getViewport({ scale: 1 });
+  const scale = Math.min(4, Math.max(1, (maxSide || PDF_PAGE_MAX_SIDE) / Math.max(vp.width, vp.height)));
+  vp = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(vp.width);
+  canvas.height = Math.round(vp.height);
+  const ctx = canvas.getContext('2d');
+  // Painted white FIRST: a PDF page is transparent where nothing is drawn, and
+  // a JPEG has no alpha — so the paper would come out black.
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  return { mimeType: 'image/jpeg', data: canvas.toDataURL('image/jpeg', 0.9).split(',')[1] || '' };
+}
+
+// Render every page of a PDF to a JPEG. Returns [{mimeType,data}].
 async function _pdfToPageImages(file, onPage) {
   const pdfjs = await _loadPdfJs();
   const buf = await file.arrayBuffer();
@@ -11325,17 +11382,7 @@ async function _pdfToPageImages(file, onPage) {
     for (let p = 1; p <= doc.numPages; p++) {
       if (onPage) onPage(p, doc.numPages);
       const page = await doc.getPage(p);
-      let vp = page.getViewport({ scale: 1 });
-      const scale = Math.min(4, Math.max(1, 2000 / Math.max(vp.width, vp.height)));
-      vp = page.getViewport({ scale });
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(vp.width);
-      canvas.height = Math.round(vp.height);
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvasContext: ctx, viewport: vp }).promise;
-      pages.push({ mimeType: 'image/jpeg', data: canvas.toDataURL('image/jpeg', 0.9).split(',')[1] || '' });
+      pages.push(await _pdfRenderPage(page, PDF_PAGE_MAX_SIDE));
       page.cleanup();
     }
   } finally { try { doc.destroy(); } catch (_) {} }
@@ -11736,9 +11783,20 @@ function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint) {
     SCAN_READING_NOTE +
     _genPreamble() +
     (multi ? `IMPORTANT: the ${n} attached images are CONSECUTIVE screenshots of ONE AND THE SAME question, already in reading order (image 1 first). Read them as one continuous question — do NOT treat them as separate questions and do NOT drop content from any of the images.\n` : '') +
-    `FIRST decide the question type: "mcq" if the question gives a set of answer options to choose from (e.g. (1)(2)(3)(4) or A/B/C/D), otherwise "open".\n` +
+    (multi ? '' :
+      `FIRST decide HOW MANY QUESTIONS this source holds. This decision comes before everything else:\n` +
+      `  • Several NUMBERED questions that do NOT share a passage, picture, table or instruction line — 4, 5, 6, 7, each standing entirely on its own — are SEPARATE questions. Return ONE entry per number. Never merge them into one question with parts (a), (b), (c): they are unrelated to each other, a student is served one at a time, and each is marked on its own.\n` +
+      `  • A diagram, table, graph, experimental set-up or instruction line followed by numbered questions ABOUT it is ONE question, however many numbers it carries — those questions cannot be read without it. Return a SINGLE entry and letter its sub-questions (a), (b), (c).\n` +
+      `  • The test: if you deleted every other question on the page, would this one still make complete sense on its own? If yes they are separate questions; if no they belong together as one.\n` +
+      `  • A cover page, an instruction page, a blank page or an answer key with no question wording holds NO questions — return {"questions":[]} for it.\n`) +
+    `${multi ? 'FIRST' : 'Then'} decide each question's type: "mcq" if it gives a set of answer options to choose from (e.g. (1)(2)(3)(4) or A/B/C/D), otherwise "open".\n` +
     `Then return ONLY JSON with this exact shape:\n` +
-    `{"title":"short title","topic":"<closest topic>","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n` +
+    (multi
+      ? `{"title":"short title","topic":"<closest topic>","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n`
+      : `{"questions":[ ...one entry per question you found, in the order they appear... ]}\n` +
+        `Each entry is: {"title":"short title","topic":"<closest topic>","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n` +
+        `A source holding ONE question returns an array of ONE entry. Give EVERY entry its own title, topic, category and tags — never leave them off the later entries.\n` +
+        `- THE PAPER'S QUESTION NUMBER IS ONLY THE SIGNAL that they are separate questions. Do NOT keep it anywhere: no "part" field, and never write "24" or "24." into the text of any block. A bank question stands on its own, and one that opens at question 24 reads as though twenty-three are missing.\n`) +
     `Each item in "blocks" is ONE of these objects:\n` +
     (multi
       ? `  {"type":"image","page":<which attached image, 1-based>,"box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — "page" says which attached image it is on, and box_2d is the rectangle you draw around it on THAT image)\n`
@@ -12142,12 +12200,23 @@ async function handleAiBuildFiles(files) {
     const prompt = _aiBuildQuestionPrompt(isPdf, pages.length);
     const raw = await askGeminiVision(prompt, pages.map(p => ({ mimeType: p.mimeType, data: p.data })), { maxOutputTokens: 4096, json: true });
     const parsed = _parseAIJson(raw);
-    _populateEditorFromAi(parsed);
+    // A page of 4, 5, 6, 7 is several questions and the editor holds ONE. Load
+    // the first and SAY SO — silently building only the first of five, with
+    // nothing on screen to say the other four existed, is how they get lost.
+    const payloads = _aiQuestionPayloads(parsed);
+    const first = payloads[0] || parsed;
+    _populateEditorFromAi(first);
     checkEditorDuplicate();   // warn if this looks like a question already in the bank
     const hasImageBlock = blocks.some(b => b.type === 'image');
+    if (payloads.length > 1) {
+      showToast(`📄 That page holds ${payloads.length} SEPARATE questions — the editor has loaded the first. Use ⚡ Rapid add to get all ${payloads.length} into vetting at once.`, 'info');
+    }
     if (!isPdf && hasImageBlock) {
       showToast('Question built ✓ — cropping the AI-selected pictures next…', 'success');
-      _autoFillDiagramsFromBoxes(parsed, pages); // async: crops each AI-drawn rectangle from its own screenshot; the whole screenshot is the backup
+      // THIS question's own rectangles, never the whole reply: on a page of
+      // five, the reply's other entries would put another question's figures
+      // into the one that is open.
+      _autoFillDiagramsFromBoxes(first, pages); // async: crops each AI-drawn rectangle from its own screenshot; the whole screenshot is the backup
     } else {
       showToast('Question built — review it' + (hasImageBlock ? ', paste the diagram,' : '') + ' then Save', 'success');
     }
@@ -12785,42 +12854,34 @@ function rapidPickFiles(input) {
   // event for the same photo picked twice, so the second tap does nothing at
   // all and reads as a broken button.
   if (input) input.value = '';
-  let found = 0;
-  for (const file of files) {
-    if (file.type && (file.type.startsWith('image/') || file.type === 'application/pdf')) { startRapidJob(file); found++; }
-  }
-  if (found) _setRapidStatus(`Queued ${found} photo${found > 1 ? 's' : ''} — add the next one whenever you like…`);
-  else if (files.length) showToast('Please choose an image or a PDF', 'error');
+  rapidAddFiles(files, 'pick');
 }
 function rapidPaste(e) {
+  // A PDF copied in Explorer or Finder arrives on the clipboard as a FILE, so
+  // the paste route reads `kind === 'file'` rather than an image mime type —
+  // "paste a pile of PDFs" is otherwise a paste that silently does nothing.
   const items = (e.clipboardData && e.clipboardData.items) || [];
-  let found = 0;
+  const files = [];
   for (const it of items) {
-    if (it.type && it.type.startsWith('image/')) {
-      e.preventDefault();
-      const file = it.getAsFile();
-      if (file) { startRapidJob(file); found++; }
-    }
+    if (!it || it.kind !== 'file') continue;
+    const type = it.type || '';
+    if (!type.startsWith('image/') && type !== 'application/pdf') continue;
+    const file = it.getAsFile();
+    if (file) files.push(file);
   }
-  if (found) {
-    _setRapidStatus(`Queued ${found} screenshot${found > 1 ? 's' : ''} — paste the next one…`);
+  if (files.length) e.preventDefault();
+  if (rapidAddFiles(files, 'paste')) {
     const zone = document.getElementById('rapidPasteZone');
     if (zone) setTimeout(() => zone.focus(), 30); // stay armed for the next paste
-  } else {
-    _setRapidStatus('That paste had no image — copy a screenshot and try again.');
   }
 }
 function rapidDrop(e) {
   e.preventDefault();
   const zone = document.getElementById('rapidPasteZone');
   if (zone) zone.classList.remove('dragover');
-  const files = (e.dataTransfer && e.dataTransfer.files) || [];
-  let found = 0;
-  for (const file of files) {
-    if (file.type && (file.type.startsWith('image/') || file.type === 'application/pdf')) { startRapidJob(file); found++; }
+  if (rapidAddFiles((e.dataTransfer && e.dataTransfer.files) || [], 'drop') && zone) {
+    setTimeout(() => zone.focus(), 30);
   }
-  if (!found) showToast('Please drop an image or a PDF', 'error');
-  else if (zone) setTimeout(() => zone.focus(), 30);
 }
 
 // A screenshot is a few hundred KB; a phone camera photo is 12 megapixels and
@@ -12862,99 +12923,327 @@ async function _rapidPrepFile(file) {
   }
 }
 
-function startRapidJob(file) {
-  const jobId = 'rapid_' + (++_rapidSeq);
-  // The batch level is captured HERE, synchronously, as the file is queued —
-  // not read inside the job. _rapidPrepFile re-encodes a phone photo, which
-  // takes real time, and the pad stays open the whole while: an author who
-  // queues a P3 paper and switches the picker to P4 for the next one must not
-  // have the first paper land at P4 because its prep finished second.
+// =====================================================================
+// A PDF IS EXPLODED INTO PAGES, NEVER SENT WHOLE
+// =====================================================================
+// Drop, paste or pick a pile of PDFs on the pad and every question in every one
+// of them lands in Vetting. Each PDF is rendered to page images by pdf.js and
+// EACH PAGE IS QUEUED AS AN ORDINARY RAPID JOB — which is exactly what a pasted
+// screenshot is — so the reader, the box_2d crop, the batch level, the
+// duplicate warning, the vetting card and the failure card all follow for free.
+//
+// Handing the model a PDF WHOLE instead (which is what the pad did before)
+// fails in two ways and BOTH are silent. There is no single page to measure a
+// rectangle on, so every figure in the paper is quietly lost; and a whole paper
+// asked for in one reply runs out of room, which does not error — it TRUNCATES,
+// and `_repairAIJson` then hands back a perfectly valid-looking reply with the
+// last questions simply not in it.
+//
+//  • `rapidAddFiles` is the ONE DOOR every route hands its files to — paste,
+//    drop, the picker and the camera — so no route can grow a pipeline of its
+//    own and a PDF behaves the same however it arrived.
+//  • `startRapidJob` stays the ONE queue entry point, per page, and it is where
+//    a PDF is turned away from the model, so a caller added later cannot
+//    reintroduce the whole-file read by accident.
+//  • THE BATCH LEVEL IS CAPTURED WHEN THE FILE IS QUEUED and carried to every
+//    page of it. Rendering a forty-page paper takes real time and the pad stays
+//    open the whole while, so a level read inside the loop would file the back
+//    half of a P3 paper at P4 the moment the author moved the picker on.
+//  • ONE PDF IS RENDERED AT A TIME (`_rapidPdfQueue`). Ten papers at once is a
+//    canvas per page held in memory on a school Chromebook.
+//  • AT MOST `RAPID_PDF_PAR` PAGES ARE IN FLIGHT. A page is an AI call, and
+//    forty of them at once is a rate limit rather than a fast import — the
+//    render loop waits on them, which is also what keeps the questions arriving
+//    in the paper's own order.
+//  • A PAGE WITH NO QUESTIONS ON IT IS NOT A FAILURE. Cover sheets, instruction
+//    pages and blank backs are most of what the front of a paper holds, and a
+//    red card for each of them is noise nobody reads — so a page that comes
+//    back empty is counted and named in the summary instead (`blankOk`).
+const RAPID_PDF_MAX_PAGES = 60;   // a whole exam paper, and a guard against a 400-page book
+const RAPID_PDF_PAR = 2;          // page reads in flight at once
+let _rapidPdfQueue = [];
+let _rapidPdfBusy = false;
+
+// THE ONE DOOR. Paste, drop, the picker and the camera all hand their files
+// here, so "what may be added" is decided in one place and a PDF is exploded
+// however it arrived. `how` only words the status line back.
+function rapidAddFiles(files, how) {
+  const list = Array.from(files || []).filter(Boolean);
+  // Captured ONCE, synchronously, for everything in this drop — see above.
   const level = rapidLevel();
-  rapidJobs.unshift({ id: jobId, status: 'processing', title: 'Reading screenshot…', sub: 'AI is reading the question…', level });
+  let imgs = 0, pdfs = 0, other = 0;
+  for (const file of list) {
+    const type = (file && file.type) || '';
+    if (type === 'application/pdf') { startRapidJob(file, level); pdfs++; }
+    else if (type.startsWith('image/')) { startRapidJob(file, level); imgs++; }
+    else other++;
+  }
+  if (!imgs && !pdfs) {
+    if (other || list.length) showToast('Please use an image or a PDF', 'error');
+    else if (how === 'paste') _setRapidStatus('That paste had no image or PDF in it — copy a screenshot and try again.');
+    return 0;
+  }
+  const bits = [];
+  if (imgs) bits.push(imgs + (how === 'paste' ? ' screenshot' : ' image') + (imgs === 1 ? '' : 's'));
+  if (pdfs) bits.push(pdfs + ' PDF' + (pdfs === 1 ? '' : 's') + ' — every page is read as its own screenshot');
+  const at = level ? ' at ' + level : '';
+  _setRapidStatus('Queued ' + bits.join(' and ') + at + ' — add the next one whenever you like…');
+  if (other) showToast(other + ' file' + (other === 1 ? ' was' : 's were') + ' not an image or a PDF and ' + (other === 1 ? 'was' : 'were') + ' skipped', 'info');
+  return imgs + pdfs;
+}
+
+function _rapidQueuePdf(file, level) {
+  _rapidPdfQueue.push({ file, level });
+  _rapidPdfPump();
+}
+// One PDF at a time. The pump is re-entrant-safe: every queue push calls it and
+// only the first call is doing anything.
+async function _rapidPdfPump() {
+  if (_rapidPdfBusy) return;
+  _rapidPdfBusy = true;
+  try {
+    while (_rapidPdfQueue.length) {
+      const next = _rapidPdfQueue.shift();
+      await _rapidExpandPdf(next.file, next.level);
+    }
+  } finally { _rapidPdfBusy = false; }
+}
+
+// One page image, wrapped as a File so it enters the queue as any screenshot
+// does. The NAME carries the paper and the page, which is what a red card in
+// vetting needs to be able to say.
+function _rapidPageFile(img, name, pageNo) {
+  const base = String(name || 'paper').replace(/\.pdf$/i, '');
+  const blob = _dataUrlToBlob('data:' + img.mimeType + ';base64,' + img.data);
+  try { return new File([blob], base + ' — page ' + pageNo + '.jpg', { type: img.mimeType }); }
+  catch (e) { return blob; }   // a Blob carries .size and .type, which is all the job reads
+}
+
+// Render a PDF page by page and feed each page into the ordinary queue.
+async function _rapidExpandPdf(file, level) {
+  const name = file.name || 'PDF';
+  const jobId = 'rapid_' + (++_rapidSeq);
+  rapidJobs.unshift({ id: jobId, status: 'processing', title: '📄 ' + name, sub: 'Opening the PDF…', level, source: name });
+  _updateRapidCounts();
+  renderVettingList();
+  let added = 0, blank = 0, failed = 0, pages = 0;
+  try {
+    const pdfjs = await _loadPdfJs();
+    const doc = await pdfjs.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false }).promise;
+    try {
+      const total = doc.numPages || 0;
+      if (!total) throw new Error('that PDF has no pages in it');
+      const take = Math.min(total, RAPID_PDF_MAX_PAGES);
+      const inflight = [];
+      // A page job never rejects — it files its own card — so an undefined
+      // result is the only thing a failed page looks like from out here.
+      const settle = async () => {
+        const r = await inflight.shift();
+        if (!r) failed++;
+        else if (r.blank) blank++;
+        else added += (r.added || 0);
+      };
+      for (let p = 1; p <= take; p++) {
+        _setRapidJobState(jobId, { sub: 'Rendering page ' + p + ' of ' + take + '…' + (added ? ' (' + added + ' question' + (added === 1 ? '' : 's') + ' so far)' : '') });
+        renderVettingList();
+        const page = await doc.getPage(p);
+        let img;
+        try { img = await _pdfRenderPage(page, PDF_PAGE_MAX_SIDE); }
+        finally { try { page.cleanup(); } catch (_) {} }
+        pages++;
+        inflight.push(startRapidJob(_rapidPageFile(img, name, p), level, { source: name + ' — page ' + p + ' of ' + take, blankOk: true }));
+        if (inflight.length >= RAPID_PDF_PAR) await settle();
+      }
+      while (inflight.length) await settle();
+      if (total > take) {
+        showToast('“' + name + '” has ' + total + ' pages — the first ' + take + ' were read. Split it and drop the rest.', 'info');
+      }
+    } finally { try { doc.destroy(); } catch (_) {} }
+    _removeRapidJob(jobId);
+    _updateRapidCounts();
+    renderVettingList();
+    const at = level ? ' at ' + level : '';
+    const bits = [added + ' question' + (added === 1 ? '' : 's') + at + ' from ' + pages + ' page' + (pages === 1 ? '' : 's') + ' of “' + name + '”'];
+    if (blank) bits.push(blank + ' page' + (blank === 1 ? '' : 's') + ' had no questions on ' + (blank === 1 ? 'it' : 'them'));
+    if (failed) bits.push(failed + ' page' + (failed === 1 ? '' : 's') + ' could not be read — see the red card' + (failed === 1 ? '' : 's') + ' in vetting');
+    _setRapidStatus((added ? '✓ ' : '⚠ ') + bits.join(' · ') + '.');
+    showToast((added ? 'Added ' : 'No questions found — ') + bits.join(' · '), added ? 'success' : 'error');
+  } catch (err) {
+    _failRapidJob(jobId, err);
+  }
+}
+
+function startRapidJob(file, level, opts) {
+  const o = opts || {};
+  // A PDF is never sent to the model whole. Turned away HERE rather than only
+  // in the door above, so a caller added later cannot bring the whole-file read
+  // back by accident — see the block above for why that read is not survivable.
+  if (file && file.type === 'application/pdf') {
+    _rapidQueuePdf(file, level === undefined || level === null ? rapidLevel() : level);
+    return Promise.resolve({ queued: true });
+  }
+  const jobId = 'rapid_' + (++_rapidSeq);
+  // The batch level is captured by the ONE DOOR, synchronously, as the file is
+  // queued — not read inside the job. _rapidPrepFile re-encodes a phone photo
+  // and a PDF takes seconds a page to render, and the pad stays open the whole
+  // while: an author who queues a P3 paper and switches the picker to P4 for
+  // the next one must not have the first paper land at P4 because its prep
+  // finished second. A caller that passes none still gets today's behaviour.
+  const lv = (level === undefined || level === null) ? rapidLevel() : level;
+  rapidJobs.unshift({
+    id: jobId,
+    status: 'processing',
+    title: o.source ? '📄 ' + o.source : 'Reading screenshot…',
+    sub: 'AI is reading the question…',
+    level: lv,
+    source: o.source || ''
+  });
   _updateRapidCounts();
   renderVettingList(); // show the loading card immediately
   // The size guard runs AFTER the shrink, or a phone's own photo is refused for
   // being a phone's own photo. processRapidJob never rejects — it files its own
   // red card — so this catch only ever sees a prep or size failure.
-  _rapidPrepFile(file)
+  return _rapidPrepFile(file)
     .then(f => {
       if (f.size > RAPID_MAX_BYTES) throw new Error('that file is too large (max ~18 MB)');
-      return processRapidJob(jobId, f, level); // fire-and-forget; runs in the background
+      return processRapidJob(jobId, f, lv, o); // runs in the background; awaited only by the PDF feeder
     })
-    .catch(err => _failRapidJob(jobId, err));
+    .catch(err => { _failRapidJob(jobId, err); });
 }
 
-async function processRapidJob(jobId, file, batchLevel) {
+// `opts` is what a PDF PAGE carries in: `source` names the paper and the page
+// (so the job card and any red card say which page could not be read), and
+// `blankOk` says an empty page is an ordinary outcome rather than a failure.
+// A pasted screenshot passes neither and behaves as it always did.
+async function processRapidJob(jobId, file, batchLevel, opts) {
+  const o = opts || {};
   try {
     const isPdf = file.type === 'application/pdf';
     const isImg = file.type && file.type.startsWith('image/');
     if (!isPdf && !isImg) throw new Error('not an image or PDF');
 
-    // 1) Read the question into blocks (same prompt as Build from screenshot).
+    // 1) Read the page into blocks (same prompt as Build from screenshot).
+    //
+    // A PAGE can hold SEVERAL questions — a rendered PDF page nearly always
+    // does — and 4, 5, 6, 7 sharing nothing are four questions, not one
+    // question with four parts: a student is served one at a time and each is
+    // marked on its own. `_aiQuestionPayloads` is the ONE place that decision
+    // is read out of the reply.
     const b64 = await _fileToBase64(file);
-    const raw = await askGeminiVision(_aiBuildQuestionPrompt(isPdf, 1, batchLevel), [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 4096, json: true });
+    // The budget scales with what a page can hold. One question fits 4096; a
+    // whole sheet of them does not — and running out does not fail, it
+    // TRUNCATES, and _repairAIJson then hands back a valid-looking reply
+    // missing its last questions entirely.
+    const raw = await askGeminiVision(_aiBuildQuestionPrompt(isPdf, 1, batchLevel), [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 8192, json: true });
     const parsed = _parseAIJson(raw);
-    const q = buildQuestionFromAi(parsed);
-    // The batch's level. The prompt already narrowed the topic list; this is
-    // the guard for a reply that chose outside it, and it marks what it had to
-    // guess so the vetting card says so.
-    _rapidApplyLevel(q, batchLevel);
-
-    // 2) Crop each AI-drawn rectangle (box_2d) out of the screenshot into its
-    //    image block. If the selection failed everywhere, fall back to the old
-    //    flow: enhance the WHOLE picture and attach it to the first image block.
-    if (isImg) {
-      const imgBlocks = q.blocks.filter(b => b.type === 'image');
-      if (imgBlocks.length) {
-        _setRapidJobState(jobId, { title: q.title || 'Question', sub: 'Cropping the AI-selected pictures…' });
+    const payloads = _aiQuestionPayloads(parsed);
+    if (!payloads.length) {
+      // A cover sheet, an instruction page or a blank back is a page with
+      // nothing on it, not a page that failed — and a paper has several. A red
+      // card for each is noise, and noise is what makes the real red card get
+      // clicked past.
+      if (o.blankOk) {
+        _removeRapidJob(jobId);
+        _updateRapidCounts();
         renderVettingList();
-        const boxes = ((parsed && parsed.blocks) || [])
-          .filter(b => String((b && b.type) || '').toLowerCase() === 'image')
-          .map(b => (b && (b.box_2d || b.box)) || null);
-        let filled = 0;
-        try {
-          filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, file.type, b64, m => { _setRapidJobState(jobId, { sub: m }); renderVettingList(); });
-        } catch (e) { console.warn('rapid AI rectangle flow failed', e); }
-        if (!filled) {
-          // BACKUP — whole screenshot, enhanced to black & white.
-          const imgBlock = imgBlocks[0];
-          _setRapidJobState(jobId, { sub: 'Enhancing the whole image (black & white)…' });
+        return { blank: true };
+      }
+      throw new Error('the AI returned nothing readable');
+    }
+    const many = payloads.length > 1;
+
+    const added = [];
+    for (let pi = 0; pi < payloads.length; pi++) {
+      const payload = payloads[pi];
+      const q = buildQuestionFromAi(payload);
+      // The batch's level, applied to EVERY question the page held — a page of
+      // five is five questions at that level, not one. The prompt already
+      // narrowed the topic list; this is the guard for a reply that chose
+      // outside it, and it marks what it had to guess so the card says so.
+      _rapidApplyLevel(q, batchLevel);
+      // The paper's number is the signal that these are separate questions, not
+      // part of any of them. The model is told not to keep it; this is the
+      // guard for when it does, and it is the exam paper builder's own stripper.
+      if (many) { try { _epStripNumbering(q); } catch (e) { console.warn('rapid numbering strip', e); } }
+
+      // 2) Crop each AI-drawn rectangle (box_2d) out of the screenshot into its
+      //    image block — from THIS question's own blocks, or five questions
+      //    would share the first one's pictures. If the selection failed
+      //    everywhere, fall back: enhance the WHOLE picture into the first
+      //    image block. That backup is for a single-question page only; on a
+      //    page of five it would give every one of them the same whole-page
+      //    picture, which is worse than no picture at all.
+      if (isImg) {
+        const imgBlocks = q.blocks.filter(b => b.type === 'image');
+        if (imgBlocks.length) {
+          _setRapidJobState(jobId, {
+            title: q.title || 'Question',
+            sub: (many ? `Question ${pi + 1} of ${payloads.length} — ` : '') + 'cropping the AI-selected pictures…'
+          });
           renderVettingList();
-          const original = 'data:' + file.type + ';base64,' + b64;
+          const boxes = ((payload && payload.blocks) || [])
+            .filter(b => String((b && b.type) || '').toLowerCase() === 'image')
+            .map(b => (b && (b.box_2d || b.box)) || null);
+          let filled = 0;
           try {
-            const dataUrl = imageAiReady()
-              ? await generateCleanEnhancedImage(_BW_ENHANCE_PROMPT, [{ mimeType: file.type, data: b64 }])
-              : original;
-            imgBlock.url = await uploadImageDataUrl(dataUrl);
-            // Seed in-session image state so Crop / Touch up / Enhance work when this
-            // question is opened in the editor (mirrors Build-from-screenshot).
-            _imgEnhanceState[imgBlock.id] = { originalDataUrl: dataUrl, originalUrl: imgBlock.url, currentDataUrl: dataUrl };
-          } catch (imgErr) {
-            console.warn('rapid B&W enhance failed; attaching original screenshot', imgErr);
+            filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, file.type, b64, m => { _setRapidJobState(jobId, { sub: m }); renderVettingList(); });
+          } catch (e) { console.warn('rapid AI rectangle flow failed', e); }
+          if (!filled && !many) {
+            // BACKUP — whole screenshot, enhanced to black & white.
+            const imgBlock = imgBlocks[0];
+            _setRapidJobState(jobId, { sub: 'Enhancing the whole image (black & white)…' });
+            renderVettingList();
+            const original = 'data:' + file.type + ';base64,' + b64;
             try {
-              imgBlock.url = await uploadImageDataUrl(original);
-              _imgEnhanceState[imgBlock.id] = { originalDataUrl: original, originalUrl: imgBlock.url, currentDataUrl: original };
-            } catch (e2) { /* leave url empty; paste manually later */ }
+              const dataUrl = imageAiReady()
+                ? await generateCleanEnhancedImage(_BW_ENHANCE_PROMPT, [{ mimeType: file.type, data: b64 }])
+                : original;
+              imgBlock.url = await uploadImageDataUrl(dataUrl);
+              // Seed in-session image state so Crop / Touch up / Enhance work when this
+              // question is opened in the editor (mirrors Build-from-screenshot).
+              _imgEnhanceState[imgBlock.id] = { originalDataUrl: dataUrl, originalUrl: imgBlock.url, currentDataUrl: dataUrl };
+            } catch (imgErr) {
+              console.warn('rapid B&W enhance failed; attaching original screenshot', imgErr);
+              try {
+                imgBlock.url = await uploadImageDataUrl(original);
+                _imgEnhanceState[imgBlock.id] = { originalDataUrl: original, originalUrl: imgBlock.url, currentDataUrl: original };
+              } catch (e2) { /* leave url empty; paste manually later */ }
+            }
           }
         }
       }
+
+      // 3) Promote to a real Vetting question and persist. Done per question
+      //    rather than in a batch at the end, so a failure on question 4 cannot
+      //    lose the three that already read perfectly.
+      _tagDuplicate(q);   // flag if it looks like a question already in the bank
+      vettingList.unshift(q);
+      _rapidJustAdded.add(q.id);
+      _rapidAddedCount++;
+      added.push(q);
+      updateCounts();
+      _updateRapidCounts();
+      renderVettingList();
+      saveVettingQuestion(q); // async, non-blocking
     }
 
-    // 3) Promote to a real Vetting question (newest first) and persist.
-    _tagDuplicate(q);   // flag if it looks like a question already in the bank
     _removeRapidJob(jobId);
-    vettingList.unshift(q);
-    _rapidJustAdded.add(q.id);
-    _rapidAddedCount++;
-    updateCounts();
     _updateRapidCounts();
     renderVettingList();
-    saveVettingQuestion(q); // async, non-blocking
+    const what = many
+      ? `${added.length} separate questions`
+      : '"' + (added[0].title || 'question') + '"';
     // The level is named back to the author. Filing at a level they chose and
     // never confirming it is how a whole pile ends up at the wrong one.
     const at = batchLevel ? ' at ' + batchLevel : '';
-    _setRapidStatus('✓ Added "' + (q.title || 'question') + '"' + at + ' to vetting.');
-    showToast('Added "' + (q.title || 'question') + '"' + at + ' to vetting ✓', 'success');
+    // A PDF page says nothing on its own: forty pages is forty toasts, and the
+    // paper's own summary lands when the last page is in. The questions are
+    // already visible as vetting cards either way.
+    if (!o.source) {
+      _setRapidStatus('✓ Added ' + what + at + ' to vetting.');
+      showToast('Added ' + what + at + ' to vetting ✓', 'success');
+    }
+    return { added: added.length };
   } catch (err) {
     _failRapidJob(jobId, err);
   }
@@ -12966,11 +13255,14 @@ async function processRapidJob(jobId, file, batchLevel) {
 function _failRapidJob(jobId, err) {
   console.error('rapid job failed:', err);
   const job = rapidJobs.find(j => j.id === jobId);
-  if (job) { job.status = 'error'; job.title = "Couldn't read this screenshot"; job.error = (err && err.message) ? err.message : String(err); }
+  // A page out of a PDF says WHICH page. "Couldn't read this screenshot" on a
+  // forty-page paper leaves the author with nothing to go back to.
+  const what = (job && job.source) ? '“' + job.source + '”' : 'this screenshot';
+  if (job) { job.status = 'error'; job.title = "Couldn't read " + what; job.error = (err && err.message) ? err.message : String(err); }
   _updateRapidCounts();
   renderVettingList();
-  _setRapidStatus('⚠ One screenshot could not be read — see the red card in vetting.');
-  showToast('A screenshot could not be read — see the red card in vetting', 'error');
+  _setRapidStatus('⚠ ' + (job && job.source ? what : 'One screenshot') + ' could not be read — see the red card in vetting.');
+  showToast('Could not read ' + what + ' — see the red card in vetting', 'error');
 }
 
 function _setRapidJobState(jobId, patch) {

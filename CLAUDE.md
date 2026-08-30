@@ -366,6 +366,105 @@ Guidance for Claude when working in this repo.
   - `wsMeta.slot` is the only thing left of that link: the free-form class string ("P5 Science — Wednesday 5pm–6.45pm") that the Ans Key Reward window pins a worksheet to. Nothing here edits it; `performSave` just writes back whatever was loaded so the pin survives a save made from this app.
   - Version badge (`#versionTag`, `APP_VERSION`) is hard-coded — bump on every change to this file.
 
+## 📄 A whole PDF in ⚡ Rapid add — every page read as its own screenshot (v1.336.0)
+
+`RAPID_PDF_MAX_PAGES` / `RAPID_PDF_PAR` / `rapidAddFiles` / `_rapidQueuePdf` /
+`_rapidPdfPump` / `_rapidExpandPdf` / `_rapidPageFile` / `_pdfRenderPage`
+(in `app.js`, search `A PDF IS EXPLODED INTO PAGES`), plus `startRapidJob`'s
+turn-away, `processRapidJob`'s `blankOk`, and `_aiQuestionPayloads`.
+**All four portals carry the same block — ship a change to all of them
+together.**
+
+Paste, drop or pick a pile of PDFs on the ⚡ Rapid add pad and every question in
+every one of them lands in Vetting. Each PDF is rendered to page images by
+pdf.js and **each page is queued as an ordinary rapid job** — which is exactly
+what a pasted screenshot is — so the reader, the `box_2d` crop, the pixel
+passes, the batch level, the duplicate warning, the vetting card and the red
+failure card all follow for free.
+
+- **A PDF IS NEVER SENT TO THE MODEL WHOLE**, and both halves of that failure
+  are silent. There is no single page to measure a rectangle on, so **every
+  figure in the paper is quietly lost**; and a whole paper asked for in one
+  reply runs out of room, which does not error — it TRUNCATES, and
+  `_repairAIJson` hands back a perfectly valid-looking reply with the last
+  questions simply not in it. The turn-away lives **inside `startRapidJob`**,
+  not only in the door, so a caller added later cannot bring that read back.
+- **This is NOT the bulk import, and the two must not be merged.**
+  `handleBulkAiFile` is a modal that takes ONE paper at a time and holds the
+  admin in front of a progress card until it is done; this is the pad, which
+  takes a pile of files at once, reads them in the background, and lets the
+  author close the window and carry on. What they share is `_pdfRenderPage`.
+- **`rapidAddFiles` is the ONE DOOR** every route hands its files to — paste,
+  drop, the picker and the camera. A route with a pipeline of its own is a
+  route that drifts, and the drift shows up as "PDFs work when I drop them and
+  not when I paste them".
+- **A PDF copied in Explorer or Finder arrives on the clipboard as a FILE**, so
+  `rapidPaste` reads `kind === 'file'` rather than an image mime type. Matching
+  on `image/` alone makes "paste a pile of PDFs" a paste that silently does
+  nothing at all.
+- **THE BATCH LEVEL IS CAPTURED WHEN THE FILE IS QUEUED** and carried to every
+  page of it. Rendering a forty-page paper takes real time and the pad stays
+  open the whole while, so a level read inside the render loop files the back
+  half of a P3 paper at P4 the moment the author moves the picker on — and both
+  halves look perfectly right on their cards.
+- **ONE PDF IS RENDERED AT A TIME** (`_rapidPdfQueue` / `_rapidPdfPump`): ten
+  papers at once is a canvas per page of all of them, held in memory, on a
+  school Chromebook. **At most `RAPID_PDF_PAR` pages are in flight**, because a
+  page is an AI call and forty at once is a rate limit rather than a fast
+  import — the render loop waits on them, which is also what keeps the
+  questions arriving in the paper's own order.
+- **A PAGE WITH NO QUESTIONS ON IT IS NOT A FAILURE** (`blankOk`). Cover sheets,
+  instruction pages and blank backs are most of what the front of a paper
+  holds, and a red card for each of them is a wall of red that makes the one
+  real red card get clicked past. An empty page is counted and named in the
+  paper's summary instead. **A page that DID fail names its paper and its page**
+  (`job.source`) — "Couldn't read this screenshot" on a forty-page paper leaves
+  the author with nothing to go back to.
+- **`_pdfRenderPage` is the ONE renderer**, shared with the bulk import's
+  `_pdfToPageImages`, so the two cannot drift into producing a different
+  picture from the same PDF. It paints the canvas white first: a PDF page is
+  transparent where nothing is drawn and a JPEG has no alpha, so the paper
+  would otherwise come out black.
+- Run **`node tools/rapid-pdf-tests.mjs`** after touching any of it.
+
+### …and a PAGE holds several questions (v1.336.0)
+
+`_aiQuestionPayloads` — the ONE place a build reply becomes the list of
+questions it describes — plus the "HOW MANY QUESTIONS" clause at the top of
+`_aiBuildQuestionPrompt` and the loop in `processRapidJob`. Ported from
+`polymathlc/english`, which is this app's own fork and had it first.
+
+The pad read exactly ONE question out of whatever it was given, which is right
+for a screenshot somebody took of one question and **wrong for a rendered PDF
+page**: a sheet of a paper carries four or five, and four of the five were
+silently thrown away on a page that produced a perfectly good vetting card.
+
+- **The rule is the shared stimulus, not the numbering.** Numbered questions
+  that share nothing are SEPARATE; a diagram, table or instruction line
+  followed by numbered questions about it is still ONE question with lettered
+  parts, because those questions cannot be read without it. The prompt gives
+  the model the test in one line: *if you deleted every other question on the
+  page, would this one still make complete sense?*
+- **The paper's own number is never kept** — no `part`, and not in any block's
+  text. `_epStripNumbering` runs as the guard on a multi-question page.
+- **An entry INHERITS the title / topic / category / tags it does not repeat.**
+  A model told to write them per entry writes them once at the top and stops,
+  and a question landing in vetting untopiced is one an author must open by hand.
+- **Each question is saved as it is built**, not batched at the end: a failure
+  on question 4 must not lose the three that already read perfectly. Each crops
+  from its OWN entry's rectangles, or five questions share the first one's
+  pictures.
+- **The whole-screenshot backup is single-question only.** On a page of five it
+  would give every one of them the same whole-page picture, which is worse than
+  no picture at all.
+- 🤖 **Build from screenshot loads the FIRST and says so** — the editor holds
+  one question, and silently building one of five with nothing on screen to say
+  the other four existed is how they get lost. It hands **that entry**, never
+  the whole reply, to `_autoFillDiagramsFromBoxes`.
+- **A single-question reply is still accepted** (`_aiQuestionPayloads` falls
+  back to the whole object), so a page that really does hold one question comes
+  out exactly as it always did.
+
 ## The subject switcher — four apps, one student (v1.291.0)
 
 `SUBJECT_APPS` / `subject*` (in `app.js`, search `THE SUBJECT SWITCHER`), plus
@@ -3201,6 +3300,21 @@ THE PICTURE ALREADY ON THE QUESTION** rather than invented from nothing.
 
 
 ## House rules
+- After touching **📄 whole-PDF rapid add** (`RAPID_PDF_MAX_PAGES`,
+  `RAPID_PDF_PAR`, `rapidAddFiles`, `_rapidQueuePdf`, `_rapidPdfPump`,
+  `_rapidExpandPdf`, `_rapidPageFile`, `_pdfRenderPage`, `startRapidJob`'s PDF
+  turn-away, `processRapidJob`'s `blankOk`, or `_aiQuestionPayloads`), run
+  `node tools/rapid-pdf-tests.mjs`. Every failure is silent and questions still
+  land in vetting: send a PDF whole again and the paper comes back with every
+  figure missing and its last questions quietly truncated away; read the batch
+  level inside the render loop and the back half of a P3 paper is filed at P4
+  the moment the author moves the picker on; treat a blank page as a failure
+  and every cover sheet in the paper leaves a red card, which is what makes the
+  one real red card get clicked past; let every page fire at once and a
+  forty-page paper is forty simultaneous AI calls, whose rate-limit failures
+  read as "that PDF could not be read"; and stop reading `questions` out of the
+  reply and four of the five questions on every page are thrown away, on a page
+  that still produces one perfectly good vetting card.
 - After touching **🪄 the command box in the question creator** (`QCMD_MAX_CHARS`,
   `QCMD_NO_CHANGE_RE`, `qcmdNeedsRedraw`, `qcmdChangesFor`, `QCMD_DIAGRAM_RULES`,
   `qcmdDiagramPrompt`, `qcmdDiagramPromptRules`, `qcmdSummary`,
