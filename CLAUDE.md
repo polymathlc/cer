@@ -3136,7 +3136,85 @@ way, a little worse.
   in the AI Engine panel, because an app quietly dictating on the chat model
   looks exactly like one using the speech model, only a little worse.
 
+## 🪄 Tell the AI what to change — the command box in the question creator (v1.335.0)
+
+`QCMD_*` / `qcmdNeedsRedraw` / `qcmdChangesFor` / `qcmdDiagramPrompt` /
+`qcmdDiagramPromptRules` / `qcmdSummary` / **`qcmdRedrawDiagram`** / `qcmdRun`
+(search `TELL THE AI WHAT TO CHANGE`), plus the `#qcmdPanel` box at the top of
+the question editor. **All four portals carry the same block — ship a change to
+all of them together; the image door here is
+`generateCleanEnhancedImage`, so a redrawn figure takes the paper-clean pass
+like every other diagram re-render in this app.**
+
+A box in the creator: say what you want different, and the question open in
+front of you comes back as a NEW one. What is typed decides the wording — and
+where the new wording no longer fits the figure, **the picture is REDRAWN FROM
+THE PICTURE ALREADY ON THE QUESTION** rather than invented from nothing.
+
+- **THE ORIGINAL IS NEVER TOUCHED.** The variant is loaded back into the editor
+  as a new question (the editing id is cleared), so Save adds one rather than
+  overwriting the question it came from, and nothing reaches the bank until the
+  author presses Save. That is the whole reason this is a box in the creator
+  rather than a button that writes a copy behind the author's back — a wrong
+  instruction costs one glance, not a question.
+- **THE PICTURE IS AN EDIT, NEVER A NEW DRAWING.** The existing figure is the
+  reference image on every image call and `QCMD_DIAGRAM_RULES` pins everything
+  the change does not name: the layout, the drawing style and line weight, the
+  lettering, the labels, the proportions and the aspect ratio. A figure drawn
+  from scratch comes back as a fresh picture of roughly the same thing, in a
+  different style and at a different size — which is exactly what an author
+  holding a scanned exam figure does not want. `qcmdRedrawDiagram` is the ONE
+  door a picture is redrawn through.
+- **WHICH PICTURE a change belongs to is POSITIONAL.** `diagramChanges` carries
+  one entry per picture, in order, and `qcmdChangesFor` pads a short reply on
+  the RIGHT and cuts a long one — so a model that answers about picture 2 alone
+  can never have that change applied to picture 1. The wrong figure redrawn is
+  the mistake nothing on screen would reveal: both pictures still look like
+  perfectly good pictures.
+- **A NON-ANSWER IS NOT AN INSTRUCTION.** Asked what must change, a model says
+  "none", "-", "N/A" and "no change" at least as often as it returns an empty
+  string, and any of those handed to the image model is a word painted into the
+  figure — plus an image call spent redrawing a picture that was already right.
+  `QCMD_NO_CHANGE_RE` knows them all, and `qcmdNeedsRedraw` refuses anything
+  that is not a STRING: `String()`-ing a number or an object would send "12" or
+  "[object Object]" to be drawn.
+- **A PICTURE THAT COULD NOT BE REDRAWN IS KEPT, AND SAID SO IN WORDS**
+  (`qcmdSummary`). A question whose new wording talks about a figure still
+  showing the old numbers prints perfectly and is only found in front of a
+  class, so a refused or failed redraw is reported rather than swallowed. It is
+  never dropped either — a question with no figure at all is worse than one
+  with the old figure.
+- **An EMPTY box is refused.** This box exists so the author says what they
+  want; a silent default is a question nobody asked for.
+- **`_regenPrompt` asks for `diagramChanges` only when the question HAS
+  pictures**, so an ordinary text-only regenerate keeps asking for exactly what
+  it always asked for.
+- **`qcmdBuildVariant` is the ONE builder**, and 🔄 Regenerate on a saved
+  question goes through it too — so the bank-side copy gained the redrawn
+  figures without a second copy of any of this. It re-attaches the ORIGINAL
+  pictures BEFORE anything is redrawn: a redraw is an edit of the picture that
+  was there, so the picture has to be there first.
+- **The keywords a person marked are cleared** on the way into the editor: they
+  are word POSITIONS in the old wording and point at different words in the new
+  one. So is the answer-key picture, which was drawn for the old figure.
+- Run **`node tools/ai-command-tests.mjs`** after touching any of it.
+
+
 ## House rules
+- After touching **🪄 the command box in the question creator** (`QCMD_MAX_CHARS`,
+  `QCMD_NO_CHANGE_RE`, `qcmdNeedsRedraw`, `qcmdChangesFor`, `QCMD_DIAGRAM_RULES`,
+  `qcmdDiagramPrompt`, `qcmdDiagramPromptRules`, `qcmdSummary`,
+  `qcmdRedrawDiagram`, `qcmdRun`, `qcmdBuildVariant`, `qcmdLoadIntoEditor`, or
+  `_regenPrompt`'s `opts.images`), run
+  `node tools/ai-command-tests.mjs`. Every failure here is silent and the
+  question still comes back, renders and prints: line a change up against the
+  wrong picture and a figure nobody asked about is redrawn while the one that
+  had to change still shows the old numbers; read "none" or "N/A" as an
+  instruction and that word is painted into the figure; lose the reference
+  picture or the keep-it-the-same rules and the reply is a fresh drawing of
+  roughly the same thing in a different style; and let a failed redraw go quiet
+  and the question's wording and its figure disagree with nothing on any screen
+  to say so.
 - After touching **🎙️ transcription** (`AI_TRANSCRIBE_MODEL`,
   `transcribeAudio`, `_transcribeModelGet`, `_transcribeClean`,
   `TRANSCRIBE_PROMPT`, `transcribeRouteNote`, or any mic call site), record
