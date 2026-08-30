@@ -11024,8 +11024,8 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 <div class="confirm-overlay" id="rapidAddOverlay">
   <div class="confirm-dialog" style="max-width:560px;text-align:left;">
     <h3 style="margin-bottom:4px;">⚡ Rapid add to vetting</h3>
-    <p class="rapid-desk" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste a screenshot (Ctrl/⌘+V). AI reads it, enhances the whole picture to black &amp; white, and drops the question straight into your <b>Vetting</b> list — no editor stop. Keep pasting to add more; they all process in the background. <span style="color:var(--text-muted);opacity:0.85;">Tip: open this from anywhere with <b>Ctrl/⌘+Shift+V</b>.</span></p>
-    <p class="rapid-touch" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Photograph a question, or pick one from your gallery. AI reads it and drops the question straight into your <b>Vetting</b> list — no editor stop. Add as many as you like; they all read in the background, so you can keep going or close this window.</p>
+    <p class="rapid-desk" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste, drop or choose screenshots <b>and whole PDFs</b> (Ctrl/⌘+V). AI reads each one, enhances the picture to black &amp; white, and drops the question straight into your <b>Vetting</b> list — no editor stop. <b>A PDF is read page by page</b>, exactly as if you had screenshotted every page of it, so a whole paper — or a pile of papers at once — comes in on its own. Keep going; they all process in the background. <span style="color:var(--text-muted);opacity:0.85;">Tip: open this from anywhere with <b>Ctrl/⌘+Shift+V</b>.</span></p>
+    <p class="rapid-touch" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Photograph a question, or pick one from your gallery. AI reads it and drops the question straight into your <b>Vetting</b> list — no editor stop. You can pick <b>PDFs</b> here too: each one is read page by page, as if you had photographed every page. Add as many as you like; they all read in the background, so you can keep going or close this window.</p>
     <!-- The level everything queued after it is filed at. It sits ABOVE the pad
          on purpose: it applies to the whole batch, and an author who notices it
          only after pasting forty screenshots has filed forty questions at the
@@ -11044,8 +11044,8 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
          ondragover="event.preventDefault(); this.classList.add('dragover')"
          ondragleave="this.classList.remove('dragover')"
          ondrop="rapidDrop(event)">
-      <span class="rapid-desk">📋 Paste your screenshot here (Ctrl/⌘+V)<br>— then paste the next one, and the next…</span>
-      <span class="rapid-touch">📷 Tap here to add photos<br>— or use the buttons below.</span>
+      <span class="rapid-desk">📋 Paste or drop screenshots <b>or PDFs</b> here (Ctrl/⌘+V)<br>— then paste the next one, and the next…</span>
+      <span class="rapid-touch">📷 Tap here to add photos or PDFs<br>— or use the buttons below.</span>
     </div>
     <!-- The phone route. A touch screen has no Ctrl/⌘+V and nothing on its
          clipboard to paste, so the camera and the gallery are the way in — and
