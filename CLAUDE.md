@@ -425,6 +425,26 @@ failure card all follow for free.
   picture from the same PDF. It paints the canvas white first: a PDF page is
   transparent where nothing is drawn and a JPEG has no alpha, so the paper
   would otherwise come out black.
+- **EVERY QUESTION ENDS UP WITH A PICTURE, and the page is prepared ONCE**
+  (v1.337.0). A rendered page carries several questions, and a figure printed
+  above two of them belongs to both — so the prompt says in as many words that
+  an entry needing a shared figure repeats the SAME `box_2d` rather than
+  leaving it to the first one. When a question's rectangles all come back
+  unusable it falls back to the WHOLE PAGE, which is one ✂️ crop away from being
+  right; an EMPTY picture block is not an outcome — the question reaches
+  Vetting wearing *Diagram missing* and the only way back is the paper itself.
+  - The first cut of this held the backup off a multi-question page, reasoning
+    that five identical whole-sheet pictures were worse than none. **They are
+    not**, and that is what the reported bug was: a shared chart above Q7(a)
+    and Q7(b) left both with nothing.
+  - The page is cleaned and uploaded **on the first question that needs it**
+    and the URL handed to the rest (`wholePage`, memoised on `_pageBackup`).
+    Five clean-ups of one sheet is five image-model calls for one picture, and
+    five uploads is five copies of it in Storage. On a MULTI-question page it
+    is not cleaned at all — the author is going to crop it anyway.
+  - **`q.diagramWhole` marks it and the vetting card SAYS so.** A whole page in
+    a picture slot looks exactly like a figure somebody has already cropped,
+    which reads as finished work and is approved into the bank uncropped.
 - Run **`node tools/rapid-pdf-tests.mjs`** after touching any of it.
 
 ### …and a PAGE holds several questions (v1.336.0)
@@ -3312,9 +3332,12 @@ THE PICTURE ALREADY ON THE QUESTION** rather than invented from nothing.
   and every cover sheet in the paper leaves a red card, which is what makes the
   one real red card get clicked past; let every page fire at once and a
   forty-page paper is forty simultaneous AI calls, whose rate-limit failures
-  read as "that PDF could not be read"; and stop reading `questions` out of the
+  read as "that PDF could not be read"; stop reading `questions` out of the
   reply and four of the five questions on every page are thrown away, on a page
-  that still produces one perfectly good vetting card.
+  that still produces one perfectly good vetting card; and hold the whole-page
+  backup off a multi-question page and every question whose rectangle came back
+  unusable lands with an EMPTY picture slot — which is exactly the "Diagram
+  missing" this was reported for.
 - After touching **🪄 the command box in the question creator** (`QCMD_MAX_CHARS`,
   `QCMD_NO_CHANGE_RE`, `qcmdNeedsRedraw`, `qcmdChangesFor`, `QCMD_DIAGRAM_RULES`,
   `qcmdDiagramPrompt`, `qcmdDiagramPromptRules`, `qcmdSummary`,

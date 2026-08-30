@@ -179,6 +179,18 @@ test('a blank page is an outcome, not a failure', () => {
   ok(/return \{ added: added\.length \}/.test(body), 'processRapidJob does not report how many questions it added');
 });
 
+test('every question on a page ends up with a PICTURE, not an empty slot', () => {
+  // A question whose rectangles all came back unusable used to get nothing at
+  // all on a multi-question page — it reached Vetting wearing "Diagram
+  // missing", and the only way back was to go and find the paper again. A
+  // whole page in the slot is one ✂️ crop away from being right.
+  const body = cut('async function processRapidJob(jobId, file, batchLevel, opts)', '\n// A failure must always leave', 'processRapidJob');
+  ok(/if \(!filled\) \{/.test(body), 'the whole-page backup is still held back on a multi-question page');
+  ok(/wholePage\(\)/.test(body), 'the backup does not go through the shared page');
+  ok(/_pageBackup !== undefined/.test(body), 'the page is not prepared ONCE — five questions would each clean and upload the same sheet');
+  ok(/diagramWhole/.test(body), 'a question wearing the whole page is not marked, so its card reads as finished work');
+});
+
 // ── the door ────────────────────────────────────────────────────────────────
 
 test('the door captures the batch level ONCE for the whole drop', async () => {
