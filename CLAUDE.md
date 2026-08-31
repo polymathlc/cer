@@ -3319,7 +3319,7 @@ THE PICTURE ALREADY ON THE QUESTION** rather than invented from nothing.
 - Run **`node tools/ai-command-tests.mjs`** after touching any of it.
 
 
-## 🎓 The LEVEL LADDER — P3 → P6 → S1 (v1.338.0)
+## 🎓 The LEVEL LADDER — P3 → P6 → S1, and secondary is OPT-IN (v1.339.0)
 
 `TOPIC_LEVELS` / `LEVEL_ORDER` / `LEVEL_CODE_RE` / `LEVEL_MIN` / `LEVEL_MAX` /
 `isLevelCode` / `isSecondaryLevel` / `levelFromNumber` / `levelOptionsHtml` /
@@ -3341,13 +3341,44 @@ school. So the order lives in ONE map and every comparison goes through
   recommended level. Each one it survives is a screen where a Sec 1 assignment
   is silently thrown away and the account falls back to the default, which
   renders perfectly and says nothing.
-- **`LEVEL_MAX` is what an unassigned student is capped at, i.e. NO
-  restriction**, so it follows the top of the ladder. Left pinned at `'P6'` it
-  would hide every Sec 1 question from the whole school until an admin went
-  round assigning levels one child at a time. `fps.html`'s `LEVEL_CAP_MAX` is
-  the same number for the same reason — but its *unknown-topic* fallback stays
-  at **P6**, matching `getTopicLevel`, or a question filed under a topic nobody
+- **SECONDARY IS OPT-IN, and `studentCapLevel` is the ONE gate** (v1.339.0).
+  Every serving surface asks it through `qWithinStudentLevel` / `studentCapNum`,
+  so the two rules below hold everywhere at once rather than in whichever call
+  sites somebody remembered:
+  1. **An unassigned student is capped at `LEVEL_DEFAULT_CAP`** — the top of
+     PRIMARY, derived from the ladder, never `LEVEL_MAX`. The whole P3–P6
+     roster has no level set and nobody is going to go round and set them all;
+     capping at the top of the ladder opened the Sec 1 bank to every one of
+     them the moment the first S1 question was saved.
+  2. **A secondary cap is the TEACHER's to grant**: `currentUser.level` may
+     carry S1 only when `currentUser.adminLevel` — the level assigned on the
+     Usage page — is secondary too. `currentUser.level` is also fed by the
+     FAMILY profile, whose dropdown a parent fills in themselves, and by a
+     `servingLevel` this app wrote in an earlier session; without that line,
+     picking "S1" from their own dropdown is a P6 child helping themselves to
+     the Sec 1 bank.
+  Both **fail CLOSED**: a refused profile read leaves `adminLevel` empty and the
+  student on primary. That costs a real Sec 1 student some questions until the
+  read succeeds; the other direction serves Secondary 1 science to a
+  nine-year-old.
+- **`LEVEL_MAX` is the top of the LADDER** — what `levelFromNumber` clamps to,
+  and the cap for anyone who is not a student (an admin sees every question).
+  It is not the unassigned cap; keeping the two apart is the whole opt-in rule.
+- **`fps.html` has its own copy of the cap and needs BOTH rules**, or it is the
+  way round the gate: it reads the bank directly. `LEVEL_CAP_DEFAULT` is set
+  before the profile read so every failure leaves a student on primary, and only
+  `d.level` may raise the cap past it. Its *unknown-topic* fallback stays at
+  **P6**, matching `getTopicLevel`, or a question filed under a topic nobody
   recognises would vanish from every P6 student's run.
+- **`rosterEffectiveCap` states the same rule for the ADMIN's roster.** A
+  dashboard reporting a child as being on Sec 1 while the app quietly serves
+  them primary is unfalsifiable from that page. It also killed a display bug of
+  its own: `'P' + Math.min(parseInt(level.slice(1)))` reported a Secondary 1
+  child as serving **"P1"**, because `'S1'.slice(1)` is `"1"`.
+- **`getQuestionsForLevel` and Snap & Mark were the two uncapped surfaces.** The
+  first read only `q.topic`, so a Sec 1 SECONDARY topic rode into a P4 session
+  behind a primary one; the second matched a student's photograph against the
+  whole bank with no level cap at all.
 - **`levelOptionsHtml` is the ONE builder every level dropdown goes through.**
   Six `<select>`s used to write out P3…P6 by hand, so a level added to the
   ladder would appear in whichever ones somebody remembered. The blank "—" row
@@ -3389,7 +3420,12 @@ school. So the order lives in ONE map and every comparison goes through
   hidden from the whole school until somebody assigns levels one child at a
   time; and let a prompt go on saying "primary-school" for an S1 question and
   the AI writes P3 science into a question filed perfectly correctly at
-  Secondary 1.
+  Secondary 1. The one that reaches a CHILD is the opt-in gate: cap an
+  unassigned student at `LEVEL_MAX` instead of `LEVEL_DEFAULT_CAP`, or let a
+  family-declared / stale `servingLevel` secondary level through without the
+  teacher's own assignment behind it, and Secondary 1 science is served to a
+  nine-year-old on every surface at once — `fps.html` included, which reads the
+  bank directly and carries its own copy of the rule.
 - After touching **📄 whole-PDF rapid add** (`RAPID_PDF_MAX_PAGES`,
   `RAPID_PDF_PAR`, `rapidAddFiles`, `_rapidQueuePdf`, `_rapidPdfPump`,
   `_rapidExpandPdf`, `_rapidPageFile`, `_pdfRenderPage`, `startRapidJob`'s PDF

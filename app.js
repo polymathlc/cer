@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.338.0';
+const APP_VERSION = 'v1.339.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -22290,9 +22290,8 @@ const topicLevelMap = {
 const TOPIC_LEVELS = ['P3', 'P4', 'P5', 'P6', 'S1'];
 const LEVEL_ORDER = { P3: 3, P4: 4, P5: 5, P6: 6, S1: 7 };
 const LEVEL_CODE_RE = /^(?:P[3-6]|S1)$/;
-// The top of the ladder — what an unassigned student is capped at, i.e. no
-// restriction. It must FOLLOW the ladder: pinning it to 'P6' would hide every
-// Sec 1 question from every student until an admin assigned them a level.
+// The top of the ladder. Used to CLAMP a rung, and as the cap for anyone who
+// is not a student at all (an admin sees every question there is).
 const LEVEL_MAX = TOPIC_LEVELS[TOPIC_LEVELS.length - 1];
 const LEVEL_MIN = TOPIC_LEVELS[0];
 function isLevelCode(v) { return LEVEL_CODE_RE.test(String(v || '')); }
@@ -22311,6 +22310,14 @@ function audienceFor(level) {
 }
 // "primary-school" / "lower-secondary" for the teacher ROLE line of a prompt.
 function schoolFor(level) { return isSecondaryLevel(level) ? 'lower-secondary' : 'primary-school'; }
+// ── SECONDARY IS OPT-IN ───────────────────────────────────────────────────────
+// What a student is capped at when nobody has assigned them a level: the top of
+// PRIMARY, never the top of the ladder. A Sec 1 question reaches a student ONLY
+// once an admin has assigned them a secondary level BY NAME on the Usage page —
+// so the whole P3–P6 roster, and every account created from here on, is outside
+// the Sec 1 bank without anybody having to go round and set them all to P6.
+// Derived from the ladder rather than typed, so adding S2 needs nothing here.
+const LEVEL_DEFAULT_CAP = TOPIC_LEVELS.filter(lv => !isSecondaryLevel(lv)).pop() || LEVEL_MAX;
 // Number → code, clamped to the ladder. The inverse of getLevelNumber.
 function levelFromNumber(n) {
   const num = Math.max(LEVEL_ORDER[LEVEL_MIN], Math.min(LEVEL_ORDER[LEVEL_MAX], Number(n) || 0));
@@ -22738,8 +22745,10 @@ function getQuestionsForLevel(level) {
     if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
     // Only include questions with something the AI can mark
     if (!questionHasMarkableAnswer(q)) return false;
-    const qLevel = getLevelNumber(getTopicLevel(q.topic));
-    return qLevel <= maxLevel;
+    // qLevelNum, not getTopicLevel(q.topic): the level is the HIGHEST of the
+    // question's two topics, so a Sec 1 SECONDARY topic cannot ride into a P4
+    // session behind a primary one.
+    return qLevelNum(q) <= maxLevel;
   });
 }
 
@@ -26095,7 +26104,9 @@ function snapShowSuggestions(questionText, photoIdx) {
   const aSet = _snapTokens(questionText);
   // Retired topics are PSLE-papers-only, so Snap & Mark must not match one
   // either — it is a student surface, and matching would serve the question.
-  const ranked = questionBank.filter(qInSyllabus).map(q => ({ q, s: _snapSim(aSet, q) }))
+  // The level cap is there for the same reason: matching a photo to a Sec 1
+  // question would put that question in front of a P5 child.
+  const ranked = questionBank.filter(q => qInSyllabus(q) && qWithinStudentLevel(q)).map(q => ({ q, s: _snapSim(aSet, q) }))
     .sort((a, b) => b.s - a.s).filter(x => x.s > 0.12).slice(0, 3);
   if (!ranked.length) {
     host.innerHTML = `<div class="practice-card"><div class="practice-card-body">${label}
@@ -29507,11 +29518,29 @@ function qpMarkServed(qid) {
 // the admin (Usage page).
 // Students are NEVER served questions whose topic sits above their level, in
 // any mode: quick practice, topical practice, quests and the mini-games.
-// Unassigned students default to LEVEL_MAX — the top of the ladder, i.e. no
-// restriction — so nothing breaks until the admin sets levels.
+//
+// THIS IS THE ONE GATE. Every surface asks it through qWithinStudentLevel /
+// studentCapNum, so the two rules below hold everywhere at once rather than in
+// whichever call sites somebody remembered:
+//
+//  1. An UNASSIGNED student is capped at LEVEL_DEFAULT_CAP — the top of
+//     PRIMARY. So P3–P6 children never reach a Secondary 1 question, whether or
+//     not anyone has got round to setting their level.
+//  2. A SECONDARY cap is the TEACHER's to grant: currentUser.level can carry S1
+//     only when currentUser.adminLevel — the level assigned on the Usage page —
+//     is secondary too. currentUser.level is also fed by the FAMILY profile,
+//     which a parent types in themselves, and by a servingLevel this app wrote
+//     in an earlier session; without this line either of those would let a P6
+//     child into the Sec 1 bank by picking "S1" from their own dropdown.
+//
+// Both fail CLOSED: a profile read that fails leaves adminLevel empty and the
+// student on primary, which costs a real Sec 1 student some questions until the
+// read succeeds — the other direction serves Sec 1 science to a nine-year-old.
 function studentCapLevel() {
-  if (currentUser && currentUser.role === 'student' && isLevelCode(currentUser.level || '')) return currentUser.level;
-  return LEVEL_MAX;   // unassigned = no restriction, so it follows the top of the ladder
+  if (!currentUser || currentUser.role !== 'student') return LEVEL_MAX;
+  const lvl = isLevelCode(currentUser.level || '') ? currentUser.level : LEVEL_DEFAULT_CAP;
+  if (isSecondaryLevel(lvl) && !isSecondaryLevel(currentUser.adminLevel || '')) return LEVEL_DEFAULT_CAP;
+  return lvl;
 }
 function studentCapNum() { return getLevelNumber(studentCapLevel()); }
 // A question's level is the HIGHEST level of any topic it is filed under —
@@ -29554,7 +29583,8 @@ function applyStudentLevelCaps() {
 // Load the signed-in student's assigned level. Primary source: their own
 // userProfiles doc (set by the admin). Fallback: the admin's shared
 // settings/studentLevels map — covers rule setups where students can't read
-// userProfiles. Both failing leaves the P6 default (no restriction).
+// userProfiles. Both failing leaves LEVEL_DEFAULT_CAP: all of primary, and no
+// Secondary 1 (see studentCapLevel — secondary is the teacher's to grant).
 async function loadStudentLevel() {
   if (!currentUser || currentUser.role !== 'student') return;
   let lvl = '', served = '';
@@ -29602,7 +29632,7 @@ async function famLoadProfile() {
       familyProfile.students = Array.isArray(d.students)
         ? d.students.filter(x => x && typeof x.name === 'string' && x.name.trim()).map(x => ({
             name: x.name.trim(),
-            level: isLevelCode(x.level || '') ? x.level : 'P6',
+            level: isLevelCode(x.level || '') ? x.level : LEVEL_DEFAULT_CAP,
             edits: Math.max(0, Number(x.edits) || 0)
           }))
         : [];
@@ -32372,12 +32402,13 @@ async function loadUsageDashboard() {
         const declared = (s.declaredLevels || []).length
           ? levelFromNumber(Math.min.apply(null, s.declaredLevels.map(getLevelNumber)))
           : '';
-        const effective = s.servingLevel || (s.level && declared
-          ? ('P' + Math.min(parseInt(s.level.slice(1), 10), parseInt(declared.slice(1), 10)))
-          : (s.level || declared));
-        const capNote = (effective && effective !== s.level)
-          ? `<div style="font-size:0.68rem;color:var(--text-muted);margin-top:3px;line-height:1.3;" title="${s.servingLevel ? 'The level this account was last served at' : 'Declared by the family when they set up their students'}">serving <b>${escapeHtml(effective)}</b>${s.servingName ? ' · ' + escapeHtml(s.servingName) : ''}</div>`
-          : (!effective ? `<div style="font-size:0.68rem;color:var(--accent-orange);margin-top:3px;line-height:1.3;" title="No level assigned and none declared — this account is served every level, up to P6">no level → P6</div>` : '');
+        const effective = rosterEffectiveCap(s.level, declared, s.servingLevel);
+        const anySet = isLevelCode(s.level) || isLevelCode(declared) || isLevelCode(s.servingLevel);
+        const capNote = !anySet
+          ? `<div style="font-size:0.68rem;color:var(--accent-orange);margin-top:3px;line-height:1.3;" title="No level assigned and none declared — this account is served every PRIMARY level up to ${escapeHtml(LEVEL_DEFAULT_CAP)}. Secondary questions need a secondary level assigned here.">no level → ${escapeHtml(LEVEL_DEFAULT_CAP)}</div>`
+          : (effective !== s.level
+            ? `<div style="font-size:0.68rem;color:var(--text-muted);margin-top:3px;line-height:1.3;" title="${isSecondaryLevel(s.level) ? 'The family has not declared this student at a secondary level, so the app is serving primary' : s.servingLevel ? 'The level this account was last served at' : 'Declared by the family when they set up their students'}">serving <b>${escapeHtml(effective)}</b>${s.servingName ? ' · ' + escapeHtml(s.servingName) : ''}</div>`
+            : '');
         // Terms of access — the "not enrolled" route is a $150/month billing
         // commitment, so it gets its own colour rather than a quiet tick.
         const ag = s.agreement;
@@ -32391,7 +32422,7 @@ async function loadUsageDashboard() {
           <td style="font-weight:600;">${escapeHtml(s.name)}<div style="font-weight:400;margin-top:4px;">${agHtml}</div>${s.famStudents ? `<div style="font-weight:400;font-size:0.74rem;color:var(--text-muted);margin-top:2px;">👧 ${escapeHtml(s.famStudents)}</div>` : ''}${s.famAddress ? `<div style="font-weight:400;font-size:0.72rem;color:var(--text-muted);margin-top:1px;">📍 ${escapeHtml(s.famAddress)}</div>` : ''}</td>
           <td style="color:var(--text-muted);font-size:0.82rem;">${escapeHtml(s.email)}</td>
           <td style="text-align:center;" onclick="event.stopPropagation()">
-            <select onchange="setStudentLevel('${escapeHtml(s.uid)}', this.value)" title="Assigned level — the student is never served questions above this" style="padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:0.8rem;">${levelOpts}</select>${capNote}
+            <select onchange="setStudentLevel('${escapeHtml(s.uid)}', this.value)" title="Assigned level — the student is never served questions above this. A secondary level (S1) must be assigned HERE: a student with no level, or one their family declared themselves, only ever gets primary." style="padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:0.8rem;">${levelOpts}</select>${capNote}
           </td>
           <td style="font-size:0.82rem;">${lastLoginStr}</td>
           <td style="text-align:center;"><span style="background:var(--accent-blue-light);color:var(--accent-blue);padding:2px 10px;border-radius:10px;font-family:'Space Mono',monospace;font-size:0.75rem;font-weight:600;">${s.loginCount}</span></td>
@@ -32443,6 +32474,22 @@ async function loadUsageDashboard() {
   }
 }
 
+// What studentCapLevel would ACTUALLY serve this account, worked out from the
+// admin's roster row. It has to state the same two rules — the lower of the
+// assigned and the declared level wins, and a secondary cap needs the teacher's
+// own assignment — or the dashboard reports a child as being on Sec 1 while the
+// app is quietly serving them primary, which is unfalsifiable from this page.
+function rosterEffectiveCap(assigned, declared, serving) {
+  const a = isLevelCode(assigned) ? assigned : '';
+  const d = isLevelCode(declared) ? declared : '';
+  const sv = isLevelCode(serving) ? serving : '';
+  // levelFromNumber, never 'P' + parseInt(level.slice(1)): 'S1'.slice(1) is
+  // "1", so that arithmetic reported a Secondary 1 child as serving "P1".
+  const lvl = sv || ((a && d) ? levelFromNumber(Math.min(getLevelNumber(a), getLevelNumber(d))) : (a || d || ''));
+  if (!lvl) return LEVEL_DEFAULT_CAP;
+  return (isSecondaryLevel(lvl) && !isSecondaryLevel(a)) ? LEVEL_DEFAULT_CAP : lvl;
+}
+
 // Admin: assign a student's level (any rung on the ladder, or '' to clear). Written to the
 // student's profile AND mirrored into the admin's shared studentLevels map so
 // the student can read it regardless of how userProfiles is locked down.
@@ -32455,7 +32502,9 @@ async function setStudentLevel(uid, level) {
       { levels: { [uid]: lvl } }, { merge: true });
     if (_usageStudentStats[uid]) _usageStudentStats[uid].level = lvl;
     const who = (_usageStudentStats[uid] && _usageStudentStats[uid].name) || 'Student';
-    showToast(lvl ? `${who} set to ${lvl} — they'll only get ${lvl}-and-below questions` : `${who}'s level cleared (no restriction)`, 'success');
+    showToast(lvl
+      ? `${who} set to ${lvl} — they'll only get ${lvl}-and-below questions`
+      : `${who}'s level cleared — every ${LEVEL_DEFAULT_CAP}-and-below question, and no secondary ones`, 'success');
   } catch (e) {
     console.error('setStudentLevel failed', e);
     showToast('Could not save the level — check your connection', 'error');
