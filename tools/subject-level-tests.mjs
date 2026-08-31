@@ -58,6 +58,8 @@ function currentTopics() {
   return TOPIC_LEVELS.reduce((a, lv) => a.concat(b[lv]), []);
 }
 let currentUser = null;                      // the gate reads it; tests set it
+let removedTopics = [];
+let customTopics = {};
 function qSecondaryTopic2(q) { return (q && typeof q.topic2 === 'string') ? q.topic2.trim() : ''; }
 function qTopicList(q) {
   const out = [];
@@ -93,13 +95,18 @@ const section = [
   // student may touch a Sec 1 question" is either true or silently not.
   cut('// ── Student level cap', '\n// Load the signed-in student', 'student level cap'),
   cut('// What studentCapLevel would ACTUALLY serve', '\n// Admin: assign a student', 'roster cap'),
+  // The REAL bucket builder, renamed so the FIXTURE's stub can go on serving
+  // the prompt-narrowing tests. It is cut because stubbing it is exactly why
+  // the harness sailed past the S1 bucket that did not exist.
+  cut('// EVERY rung gets a bucket', '\nfunction currentTopics()', 'real topics by level')
+    .replace('function currentTopicsByLevel()', 'function realTopicsByLevel()'),
   cut('function _rapidApplyLevel(q, level)', '\nfunction openRapidAdd()', 'level snap'),
   cut('function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint)', '\n// The lettered-parts rules', 'build prompt'),
   FIXTURE
 ].join('\n');
 
 const M = new Function(section +
-  '\nreturn { SUBJECT_KEY, SUBJECT_APPS, subjectCurrent, _rapidApplyLevel, _aiBuildQuestionPrompt, currentTopicsByLevel,\n  TOPIC_LEVELS, LEVEL_ORDER, LEVEL_MAX, LEVEL_MIN, isLevelCode, isSecondaryLevel, getLevelNumber, levelFromNumber, audienceFor, schoolFor, levelOptionsHtml,\n  topicLevelMap, topicsByLevel, levelColors, topicEmojis,\n  LEVEL_DEFAULT_CAP, studentCapLevel, studentCapNum, qLevelNum, qWithinStudentLevel, clampToStudentLevel, rosterEffectiveCap,\n  setUser: u => { currentUser = u; } };')();
+  '\nreturn { SUBJECT_KEY, SUBJECT_APPS, subjectCurrent, _rapidApplyLevel, _aiBuildQuestionPrompt, currentTopicsByLevel,\n  TOPIC_LEVELS, LEVEL_ORDER, LEVEL_MAX, LEVEL_MIN, isLevelCode, isSecondaryLevel, getLevelNumber, levelFromNumber, audienceFor, schoolFor, levelOptionsHtml,\n  topicLevelMap, topicsByLevel, levelColors, topicEmojis,\n  LEVEL_DEFAULT_CAP, _emptyLevelBuckets, levelGroupLabel, realTopicsByLevel, studentCapLevel, studentCapNum, qLevelNum, qWithinStudentLevel, clampToStudentLevel, rosterEffectiveCap,\n  setUser: u => { currentUser = u; } };')();
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -281,6 +288,53 @@ test('the practice grid and the level map name the SAME topics', () => {
     ok((M.topicsByLevel[lv] || []).indexOf(t) >= 0,
       t + ' is filed at ' + lv + ' but never appears in the topical-practice grid');
   });
+});
+
+// ── EVERY RUNG NEEDS A BUCKET ───────────────────────────────────────────────
+// This is the one that actually broke a paper. currentTopicsByLevel built a
+// literal { P3, P4, P5, P6 }, so the moment a topic was filed at S1 it pushed
+// onto `undefined` — a TypeError inside the ONE function every authoring
+// prompt calls. ⚡ Rapid add then failed EVERY page of EVERY paper with
+// "Cannot read properties of undefined (reading 'push')", and 🤖 Build from
+// screenshot with it, which reads as a PDF the app could not open.
+//
+// The harness had passed the whole time, because the FIXTURE stubbed the
+// function that crashed. It runs the real one now.
+
+test('every rung on the ladder gets a bucket', () => {
+  const b = M._emptyLevelBuckets();
+  M.TOPIC_LEVELS.forEach(lv => {
+    ok(Array.isArray(b[lv]), lv + ' has no bucket — anything filed there pushes onto undefined');
+  });
+});
+
+test('the REAL topic grouper never pushes onto undefined', () => {
+  const byLevel = M.realTopicsByLevel();          // the live topicLevelMap
+  M.TOPIC_LEVELS.forEach(lv => ok(Array.isArray(byLevel[lv]), lv + ' has no bucket'));
+  // …and every topic really lands in its own level's bucket, not in P6's.
+  Object.keys(M.topicLevelMap).forEach(t => {
+    const lv = M.topicLevelMap[t];
+    ok((byLevel[lv] || []).indexOf(t) >= 0, t + ' is filed at ' + lv + ' but is not in that bucket');
+  });
+  ok((byLevel.S1 || []).length, 'the S1 bucket came back empty');
+});
+
+test('a topic filed at a level that is NOT on the ladder is skipped, never thrown on', () => {
+  // A custom topic left behind by a level that was removed, or a hand-edited
+  // settings doc. It cannot be offered, but it must not take the authoring
+  // page down either — which is the failure this whole section is about.
+  const byLevel = M._emptyLevelBuckets();
+  ok(!byLevel.P2, 'P2 must not have a bucket');
+  // The real function guards with `byLevel[lv] &&`; prove it by the shape it
+  // relies on rather than by mutating the app's own topic map.
+  eq(typeof byLevel.P2, 'undefined', 'an off-ladder level resolves to undefined, so the guard is load-bearing');
+});
+
+test('a level heading says Primary or Secondary, never "Primary 1"', () => {
+  // `'Primary ' + lv.slice(1)` reads "Primary 1" for S1.
+  eq(M.levelGroupLabel('P3'), 'Primary 3', 'P3 heading');
+  eq(M.levelGroupLabel('P6'), 'Primary 6', 'P6 heading');
+  eq(M.levelGroupLabel('S1'), 'Secondary 1', 'S1 heading');
 });
 
 // ── SECONDARY IS OPT-IN: only a Sec 1 student may touch a Sec 1 question ────

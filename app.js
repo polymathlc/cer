@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.339.0';
+const APP_VERSION = 'v1.339.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -21981,17 +21981,17 @@ function populateTopicFilter() {
   // A ticked topic whose last question was deleted or retagged stops existing.
   Array.from(bankTopicSel).forEach(t => { if (!counts.has(t)) bankTopicSel.delete(t); });
 
-  const byLevel = { P3: [], P4: [], P5: [], P6: [] };
+  const byLevel = _emptyLevelBuckets();
   Array.from(counts.keys()).sort((a, b) => a.localeCompare(b))
-    .forEach(t => { const lv = getTopicLevel(t); (byLevel[lv] || byLevel.P6).push(t); });
+    .forEach(t => { const lv = getTopicLevel(t); (byLevel[lv] || byLevel[LEVEL_DEFAULT_CAP]).push(t); });
 
   let html = '';
   TOPIC_LEVELS.forEach(lv => {
-    const topics = byLevel[lv];
+    const topics = byLevel[lv] || [];
     if (!topics.length) return;
     html += `<div class="ms-level" data-level="${lv}">
       <div class="ms-group" onclick="toggleBankTopicLevel('${lv}', event)">
-        <span>Primary ${lv.slice(1)}</span>
+        <span>${escapeHtml(levelGroupLabel(lv))}</span>
         <input type="checkbox" onclick="toggleBankTopicLevel('${lv}', event)" aria-label="All ${lv} topics">
       </div>`;
     topics.forEach(t => {
@@ -22318,6 +22318,19 @@ function schoolFor(level) { return isSecondaryLevel(level) ? 'lower-secondary' :
 // the Sec 1 bank without anybody having to go round and set them all to P6.
 // Derived from the ladder rather than typed, so adding S2 needs nothing here.
 const LEVEL_DEFAULT_CAP = TOPIC_LEVELS.filter(lv => !isSecondaryLevel(lv)).pop() || LEVEL_MAX;
+// One empty list per rung. Anything grouping topics by level starts here rather
+// than writing the levels out, or a rung added to the ladder is a bucket that
+// does not exist — and pushing onto it is a TypeError, not a missing section.
+function _emptyLevelBuckets() {
+  const out = {};
+  TOPIC_LEVELS.forEach(lv => { out[lv] = []; });
+  return out;
+}
+// "Primary 3" / "Secondary 1" — the heading a level wears where it is spelled
+// out. `'Primary ' + lv.slice(1)` reads "Primary 1" for S1.
+function levelGroupLabel(lv) {
+  return (isSecondaryLevel(lv) ? 'Secondary ' : 'Primary ') + String(lv || '').slice(1);
+}
 // Number → code, clamped to the ladder. The inverse of getLevelNumber.
 function levelFromNumber(n) {
   const num = Math.max(LEVEL_ORDER[LEVEL_MIN], Math.min(LEVEL_ORDER[LEVEL_MAX], Number(n) || 0));
@@ -22353,9 +22366,20 @@ function publishTopicsForStudents() {
     { custom: customTopics, removed: removedTopics }, { merge: false })
     .catch(e => console.warn('topics publish', e));
 }
+// EVERY rung gets a bucket, built from TOPIC_LEVELS — never a literal.
+// A literal {P3,P4,P5,P6} left a topic filed at S1 pushing onto `undefined`,
+// which is a TypeError inside the ONE function every authoring prompt calls:
+// ⚡ Rapid add then failed every page of every paper with "Cannot read
+// properties of undefined (reading 'push')", which reads as a PDF it could not
+// open rather than as a missing bucket. A topic whose level is not on the
+// ladder at all is skipped rather than thrown on — it cannot be offered, but it
+// must not take the authoring page down either.
 function currentTopicsByLevel() {
-  const byLevel = { P3: [], P4: [], P5: [], P6: [] };
-  Object.keys(topicLevelMap).forEach(t => { if (!removedTopics.includes(t)) byLevel[topicLevelMap[t]].push(t); });
+  const byLevel = _emptyLevelBuckets();
+  Object.keys(topicLevelMap).forEach(t => {
+    const lv = topicLevelMap[t];
+    if (byLevel[lv] && !removedTopics.includes(t)) byLevel[lv].push(t);
+  });
   Object.keys(customTopics).forEach(t => { const lv = customTopics[t]; if (byLevel[lv] && !byLevel[lv].includes(t)) byLevel[lv].push(t); });
   return byLevel;
 }

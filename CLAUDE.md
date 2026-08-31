@@ -3319,7 +3319,7 @@ THE PICTURE ALREADY ON THE QUESTION** rather than invented from nothing.
 - Run **`node tools/ai-command-tests.mjs`** after touching any of it.
 
 
-## 🎓 The LEVEL LADDER — P3 → P6 → S1, and secondary is OPT-IN (v1.339.0)
+## 🎓 The LEVEL LADDER — P3 → P6 → S1, and secondary is OPT-IN (v1.339.1)
 
 `TOPIC_LEVELS` / `LEVEL_ORDER` / `LEVEL_CODE_RE` / `LEVEL_MIN` / `LEVEL_MAX` /
 `isLevelCode` / `isSecondaryLevel` / `levelFromNumber` / `levelOptionsHtml` /
@@ -3379,6 +3379,21 @@ school. So the order lives in ONE map and every comparison goes through
   first read only `q.topic`, so a Sec 1 SECONDARY topic rode into a P4 session
   behind a primary one; the second matched a student's photograph against the
   whole bank with no level cap at all.
+- **EVERY RUNG NEEDS A BUCKET — `_emptyLevelBuckets`** (v1.339.1). This is the
+  one that actually broke a paper. `currentTopicsByLevel` built a literal
+  `{ P3, P4, P5, P6 }`, so the moment a topic was filed at S1 it pushed onto
+  **`undefined`** — a TypeError inside the ONE function every authoring prompt
+  calls. ⚡ Rapid add then failed EVERY page of EVERY paper with *"Cannot read
+  properties of undefined (reading 'push')"*, and 🤖 Build from screenshot with
+  it, which reads as a PDF the app could not open rather than as a missing
+  bucket. Anything grouping topics by level starts from `_emptyLevelBuckets()`,
+  never from a literal, and skips a level that is not on the ladder rather than
+  throwing on it. The bank's own topic filter carried the same literal and threw
+  on `byLevel[lv].length` a moment later, filing every S1 topic under P6 on the
+  way. **The harness had passed the whole time, because its fixture STUBBED the
+  function that crashed** — it cuts the real one now.
+- **`levelGroupLabel`** spells a level out: `'Primary ' + lv.slice(1)` reads
+  "Primary 1" for S1.
 - **`levelOptionsHtml` is the ONE builder every level dropdown goes through.**
   Six `<select>`s used to write out P3…P6 by hand, so a level added to the
   ladder would appear in whichever ones somebody remembered. The blank "—" row
@@ -3425,7 +3440,10 @@ school. So the order lives in ONE map and every comparison goes through
   family-declared / stale `servingLevel` secondary level through without the
   teacher's own assignment behind it, and Secondary 1 science is served to a
   nine-year-old on every surface at once — `fps.html` included, which reads the
-  bank directly and carries its own copy of the rule.
+  bank directly and carries its own copy of the rule. And build a level bucket
+  from a LITERAL rather than from `_emptyLevelBuckets()` and the authoring
+  prompt throws on the first S1 topic it meets, which surfaces to the author as
+  every page of their PDF failing to be read.
 - After touching **📄 whole-PDF rapid add** (`RAPID_PDF_MAX_PAGES`,
   `RAPID_PDF_PAR`, `rapidAddFiles`, `_rapidQueuePdf`, `_rapidPdfPump`,
   `_rapidExpandPdf`, `_rapidPageFile`, `_pdfRenderPage`, `startRapidJob`'s PDF
