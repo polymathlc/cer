@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.339.1';
+const APP_VERSION = 'v1.340.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -22318,6 +22318,32 @@ function schoolFor(level) { return isSecondaryLevel(level) ? 'lower-secondary' :
 // the Sec 1 bank without anybody having to go round and set them all to P6.
 // Derived from the ladder rather than typed, so adding S2 needs nothing here.
 const LEVEL_DEFAULT_CAP = TOPIC_LEVELS.filter(lv => !isSecondaryLevel(lv)).pop() || LEVEL_MAX;
+// ── A CAP IS A CEILING FOR PRIMARY, A BAND FOR SECONDARY ─────────────────────
+// P3–P6 build on each other, so a P6 child revising P4 work is the point: their
+// band opens at the bottom of the ladder. Secondary is a DIFFERENT syllabus,
+// not more of the same one — serving a Sec 1 student P4 questions is not
+// revision, it is the wrong school entirely — so a secondary cap is a band of
+// secondary levels ONLY. levelBandMin is the ONE place that is decided; every
+// surface that compares a level asks it, or a Sec 1 student meets primary
+// questions on whichever screen was forgotten.
+const LEVEL_SECONDARY_MIN = TOPIC_LEVELS.find(isSecondaryLevel) || LEVEL_MAX;
+function levelBandMin(level) {
+  return getLevelNumber(isSecondaryLevel(level) ? LEVEL_SECONDARY_MIN : LEVEL_MIN);
+}
+// Is this question inside the band a given cap is served from?
+function qInLevelBand(q, capLevel) {
+  const n = qLevelNum(q);
+  return n <= getLevelNumber(capLevel) && n >= levelBandMin(capLevel);
+}
+// The rungs a student holding this cap may be OFFERED — their own half of the
+// ladder, up to and including the cap, plus the ones above it that they can
+// still see as locked. A primary student is never shown a secondary level and
+// a secondary student is never shown a primary one: neither is a rung the
+// other unlocks by choosing a higher level, so "Locked" would be a lie.
+function levelsInBand(capLevel) {
+  const secondary = isSecondaryLevel(capLevel);
+  return TOPIC_LEVELS.filter(lv => isSecondaryLevel(lv) === secondary);
+}
 // One empty list per rung. Anything grouping topics by level starts here rather
 // than writing the levels out, or a rung added to the ladder is a bucket that
 // does not exist — and pushing onto it is a TypeError, not a missing section.
@@ -22764,15 +22790,16 @@ function qInSyllabus(q) {
 }
 
 function getQuestionsForLevel(level) {
-  const maxLevel = getLevelNumber(level);
   return questionBank.filter(q => {
     if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
     // Only include questions with something the AI can mark
     if (!questionHasMarkableAnswer(q)) return false;
-    // qLevelNum, not getTopicLevel(q.topic): the level is the HIGHEST of the
-    // question's two topics, so a Sec 1 SECONDARY topic cannot ride into a P4
-    // session behind a primary one.
-    return qLevelNum(q) <= maxLevel;
+    // qInLevelBand, not `qLevelNum(q) <= maxLevel`: the level is the HIGHEST of
+    // the question's two topics (so a Sec 1 SECONDARY topic cannot ride into a
+    // P4 session behind a primary one), and a SECONDARY level is a band — this
+    // page takes a level rather than reading currentUser, so it states the same
+    // rule from that end.
+    return qInLevelBand(q, level);
   });
 }
 
@@ -29578,11 +29605,22 @@ function qLevelNum(q) {
   return ts.reduce((n, t) => Math.max(n, getLevelNumber(getTopicLevel(t))), 0);
 }
 function qWithinStudentLevel(q) {
-  return qLevelNum(q) <= studentCapNum();
+  // Not a student → no cap at all. This has to be explicit now: studentCapLevel
+  // returns LEVEL_MAX for an admin, and LEVEL_MAX is SECONDARY, so running an
+  // admin through the band would show them Sec 1 questions and nothing else.
+  if (!currentUser || currentUser.role !== 'student') return true;
+  return qInLevelBand(q, studentCapLevel());
+}
+// The bottom of the band THIS student is served from.
+function studentBandMinNum() {
+  if (!currentUser || currentUser.role !== 'student') return getLevelNumber(LEVEL_MIN);
+  return levelBandMin(studentCapLevel());
 }
 // Clamp a P-level string to the student's cap (admins pass through unchanged).
 function clampToStudentLevel(level) {
-  return levelFromNumber(Math.min(getLevelNumber(level), studentCapNum()));
+  // Both ends: a Sec 1 student asking for "P4" is asking for a level they are
+  // not served, so it comes back as the bottom of THEIR band, not P4.
+  return levelFromNumber(Math.max(studentBandMinNum(), Math.min(getLevelNumber(level), studentCapNum())));
 }
 // Rebuild the student-facing level dropdowns up to the student's cap so they
 // can't select a level above their own, and preselect their level. Rebuilt
@@ -29596,7 +29634,7 @@ function applyStudentLevelCaps() {
     if (!sel) return;
     const cur = sel.value;
     sel.innerHTML = '';
-    TOPIC_LEVELS.filter(lv => getLevelNumber(lv) <= capNum).forEach(lv => {
+    levelsInBand(studentCapLevel()).filter(lv => getLevelNumber(lv) <= capNum).forEach(lv => {
       const o = document.createElement('option');
       o.value = lv; o.textContent = lv;
       sel.appendChild(o);
@@ -30170,9 +30208,9 @@ async function qpAiRecommend() {
         `Accuracy by skill category (weakest first): ${catAcc.length ? catAcc.map(c => c.name + ' ' + c.acc + '%').join(', ') : 'none yet'}.\n` +
         `Accuracy by question type: ${typeAcc.length ? typeAcc.map(t => (t.name === 'open' ? 'open-ended' : 'MCQ') + ' ' + t.acc + '%').join(', ') : 'none yet'}.\n\n` +
         `Pick the ONE topic the student should practise next — prefer a weak topic (low accuracy) or an important untried one, keeping their weak skill categories in mind. ` +
-        `Choose a difficulty level ${LEVEL_MIN}–${studentCapLevel()} (never above ${studentCapLevel()}, the student's own level): easier when struggling, harder when doing well. ` +
+        `Choose a difficulty level ${levelFromNumber(studentBandMinNum())}–${studentCapLevel()} — never outside that range, which is the levels this student is taught: easier when struggling, harder when doing well. ` +
         `Also choose a question "type": "mcq", "written" (open-ended) or "all" — target the student's weaker type when there is a clear gap, otherwise "all". ` +
-        `Return ONLY JSON: {"topic":"<exact topic from the list>","level":"${TOPIC_LEVELS.join('|')}","type":"mcq|written|all","reason":"one short sentence to the student starting with 'Let's'"}`;
+        `Return ONLY JSON: {"topic":"<exact topic from the list>","level":"${levelsInBand(studentCapLevel()).join('|')}","type":"mcq|written|all","reason":"one short sentence to the student starting with 'Let's'"}`;
       try {
         const raw = await askGemini(prompt, { maxOutputTokens: 220, temperature: 0.3, json: true });
         const parsed = _parseAIJson(raw);
@@ -30305,7 +30343,9 @@ function buildQpQueue(level) {
     if (qpFibOn() && !qHasKeywords(q)) return false;
     if (!qpMatchesType(q, type)) return false;
     if (topic) { const ts = qTopicList(q); if (!(ts.length ? ts.includes(topic) : topic === 'General')) return false; }
-    return qLevelNum(q) <= levelNum;   // primary AND secondary topic, highest wins
+    // The dropdown's own ceiling, and then the student's BAND — a Sec 1 student
+    // is served secondary questions only, whatever the dropdown says.
+    return qLevelNum(q) <= levelNum && qWithinStudentLevel(q);
   });
 
   // Serving order: questions this student has NEVER attempted (in any mode, on
@@ -31952,18 +31992,26 @@ function tpRenderTopics() {
     }
   });
 
-  // Remove selected topics that are no longer accessible at this level
+  // Remove selected topics that are no longer accessible at this level —
+  // BOTH ends of the band, or a topic ticked before the teacher moved a student
+  // into Secondary 1 is still on the Practice button afterwards.
+  const bandMin = studentBandMinNum();
   tpSelectedTopics.forEach(t => {
-    const tLevel = getTopicLevel(t);
-    if (getLevelNumber(tLevel) > studentLevelNum) tpSelectedTopics.delete(t);
+    const n = getLevelNumber(getTopicLevel(t));
+    if (n > studentLevelNum || n < bandMin) tpSelectedTopics.delete(t);
   });
 
   let html = '';
-  const levels = TOPIC_LEVELS;
+  // A student is shown their OWN half of the ladder. A Sec 1 student is not
+  // "P3 locked, unlock later" — primary is not a level they will ever unlock,
+  // and six greyed-out sections above their one would read as the app being
+  // broken. The same the other way: S1 is granted by the teacher, never by
+  // picking a higher level, so "Locked — select a higher level" would be a lie.
+  const levels = levelsInBand(studentCapLevel());
 
   levels.forEach(level => {
     const levelNum = getLevelNumber(level);
-    const isAccessible = levelNum <= studentLevelNum;
+    const isAccessible = levelNum <= studentLevelNum && levelNum >= bandMin;
     const topics = topicsByLevel[level] || [];
     const colors = levelColors[level];
 

@@ -3319,7 +3319,7 @@ THE PICTURE ALREADY ON THE QUESTION** rather than invented from nothing.
 - Run **`node tools/ai-command-tests.mjs`** after touching any of it.
 
 
-## 🎓 The LEVEL LADDER — P3 → P6 → S1, and secondary is OPT-IN (v1.339.1)
+## 🎓 The LEVEL LADDER — P3 → P6 → S1, and secondary is its own BAND (v1.340.0)
 
 `TOPIC_LEVELS` / `LEVEL_ORDER` / `LEVEL_CODE_RE` / `LEVEL_MIN` / `LEVEL_MAX` /
 `isLevelCode` / `isSecondaryLevel` / `levelFromNumber` / `levelOptionsHtml` /
@@ -3361,6 +3361,28 @@ school. So the order lives in ONE map and every comparison goes through
   student on primary. That costs a real Sec 1 student some questions until the
   read succeeds; the other direction serves Secondary 1 science to a
   nine-year-old.
+- **A CAP IS A CEILING FOR PRIMARY AND A BAND FOR SECONDARY** — `levelBandMin`
+  / `qInLevelBand` / `levelsInBand` / `studentBandMinNum` (v1.340.0). P3–P6
+  build on each other, so a P6 child revising P4 work is the point and their
+  band opens at the bottom of the ladder. **Secondary is a different syllabus,
+  not more of the same one**: a Sec 1 student served P4 questions is not
+  revising, they are in the wrong school year — so a secondary cap is a band of
+  secondary levels ONLY. `levelBandMin` is the ONE place that is decided, and
+  every surface that compares a level asks it: `qWithinStudentLevel`,
+  `clampToStudentLevel`, `buildQpQueue`, `getQuestionsForLevel` (which takes a
+  level rather than reading `currentUser`, so it states the rule from that end),
+  `applyStudentLevelCaps`, the topical-practice grid and both Ai-nstein
+  recommendation prompts.
+  - **`qWithinStudentLevel` must return early for a NON-STUDENT.**
+    `studentCapLevel` returns `LEVEL_MAX` for an admin and **`LEVEL_MAX` is
+    secondary**, so running an admin through the band shows them Sec 1 questions
+    and nothing else — the whole primary bank gone from the app at a stroke.
+  - **`levelsInBand` gives a student their OWN half of the ladder.** Primary is
+    not a level a Sec 1 student unlocks by picking a higher one, and S1 is
+    granted by the teacher rather than chosen, so "Locked — select a higher
+    level to unlock" is a lie in both directions; six greyed-out primary
+    sections above a Sec 1 student's single S1 one reads as the app being
+    broken. `fps.html` carries the same rule as `studentLevelFloor`.
 - **`LEVEL_MAX` is the top of the LADDER** — what `levelFromNumber` clamps to,
   and the cap for anyone who is not a student (an admin sees every question).
   It is not the unassigned cap; keeping the two apart is the whole opt-in rule.
@@ -3440,7 +3462,10 @@ school. So the order lives in ONE map and every comparison goes through
   family-declared / stale `servingLevel` secondary level through without the
   teacher's own assignment behind it, and Secondary 1 science is served to a
   nine-year-old on every surface at once — `fps.html` included, which reads the
-  bank directly and carries its own copy of the rule. And build a level bucket
+  bank directly and carries its own copy of the rule. Run an ADMIN through the
+  band — `qWithinStudentLevel` without its non-student early return — and the
+  entire primary bank disappears from the app, because `LEVEL_MAX` is secondary.
+  And build a level bucket
   from a LITERAL rather than from `_emptyLevelBuckets()` and the authoring
   prompt throws on the first S1 topic it meets, which surfaces to the author as
   every page of their PDF failing to be read.

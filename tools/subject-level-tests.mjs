@@ -106,7 +106,7 @@ const section = [
 ].join('\n');
 
 const M = new Function(section +
-  '\nreturn { SUBJECT_KEY, SUBJECT_APPS, subjectCurrent, _rapidApplyLevel, _aiBuildQuestionPrompt, currentTopicsByLevel,\n  TOPIC_LEVELS, LEVEL_ORDER, LEVEL_MAX, LEVEL_MIN, isLevelCode, isSecondaryLevel, getLevelNumber, levelFromNumber, audienceFor, schoolFor, levelOptionsHtml,\n  topicLevelMap, topicsByLevel, levelColors, topicEmojis,\n  LEVEL_DEFAULT_CAP, _emptyLevelBuckets, levelGroupLabel, realTopicsByLevel, studentCapLevel, studentCapNum, qLevelNum, qWithinStudentLevel, clampToStudentLevel, rosterEffectiveCap,\n  setUser: u => { currentUser = u; } };')();
+  '\nreturn { SUBJECT_KEY, SUBJECT_APPS, subjectCurrent, _rapidApplyLevel, _aiBuildQuestionPrompt, currentTopicsByLevel,\n  TOPIC_LEVELS, LEVEL_ORDER, LEVEL_MAX, LEVEL_MIN, isLevelCode, isSecondaryLevel, getLevelNumber, levelFromNumber, audienceFor, schoolFor, levelOptionsHtml,\n  topicLevelMap, topicsByLevel, levelColors, topicEmojis,\n  LEVEL_DEFAULT_CAP, LEVEL_SECONDARY_MIN, levelBandMin, qInLevelBand, levelsInBand, studentBandMinNum,\n  _emptyLevelBuckets, levelGroupLabel, realTopicsByLevel, studentCapLevel, studentCapNum, qLevelNum, qWithinStudentLevel, clampToStudentLevel, rosterEffectiveCap,\n  setUser: u => { currentUser = u; } };')();
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -367,11 +367,14 @@ test('a P3–P6 student can never touch a Sec 1 question', () => {
   });
 });
 
-test('an S1 student the TEACHER assigned gets Sec 1 — and primary too', () => {
+test('an S1 student the TEACHER assigned gets Sec 1 — and ONLY Sec 1', () => {
+  // Sec 1 is a different syllabus, not more of the same one: a Sec 1 student
+  // served P4 questions is not revising, they are in the wrong school year.
+  // See "A CAP IS A CEILING FOR PRIMARY, A BAND FOR SECONDARY" below.
   asStudent('S1', 'S1');
   eq(M.studentCapLevel(), 'S1', 'an assigned S1 student is not on S1');
   eq(M.qWithinStudentLevel(S1Q), true, 'the S1 student cannot reach their own questions');
-  eq(M.qWithinStudentLevel(P4Q), true, 'an S1 student lost the primary bank');
+  eq(M.qWithinStudentLevel(P4Q), false, 'an S1 student was served a P4 question');
 });
 
 test('a level a FAMILY declared can never carry an account into secondary', () => {
@@ -443,6 +446,93 @@ test("the admin's roster shows what is really being served", () => {
   ['P3', 'P4', 'P5', 'P6'].forEach(lv =>
     eq(M.rosterEffectiveCap(lv, '', ''), lv, 'a plain assignment is shown as itself: ' + lv));
   eq(M.rosterEffectiveCap('P6', 'P4', ''), 'P4', 'the declared level lowers the cap');
+});
+
+// ── A CAP IS A CEILING FOR PRIMARY, A BAND FOR SECONDARY ────────────────────
+// Sec 1 is a different syllabus, not more of the same one, so a Sec 1 student
+// is served Sec 1 questions ONLY — and a primary student's band still opens at
+// the bottom of the ladder, because P6 revising P4 work is the whole point.
+// Every failure here is silent: the wrong school-year's questions, served to a
+// child, on a screen that renders perfectly.
+
+test('a SECONDARY cap is a band; a PRIMARY cap is a ceiling', () => {
+  eq(M.levelBandMin('S1'), M.getLevelNumber(M.LEVEL_SECONDARY_MIN), 'a secondary band does not start at secondary');
+  ['P3', 'P4', 'P5', 'P6'].forEach(lv =>
+    eq(M.levelBandMin(lv), M.getLevelNumber(M.LEVEL_MIN), lv + ' band does not open at the bottom of the ladder'));
+});
+
+test('a Sec 1 student is served Sec 1 ONLY', () => {
+  asStudent('S1', 'S1');
+  eq(M.qWithinStudentLevel(S1Q), true, 'the S1 student cannot reach their own questions');
+  ['Heat', 'Forces', 'Magnets', 'Electrical Systems'].forEach(topic =>
+    eq(M.qWithinStudentLevel({ topic }), false, 'a Sec 1 student was served the primary topic ' + topic));
+});
+
+test('…and a primary student still gets EVERYTHING below them', () => {
+  asStudent('P6');
+  ['Magnets', 'Heat', 'Electrical Systems', 'Forces'].forEach(topic =>
+    eq(M.qWithinStudentLevel({ topic }), true, 'a P6 student lost the lower level topic ' + topic));
+  eq(M.qWithinStudentLevel(S1Q), false, 'a P6 student reached Sec 1');
+  asStudent('P4');
+  eq(M.qWithinStudentLevel({ topic: 'Magnets' }), true, 'a P4 student lost P3');
+  eq(M.qWithinStudentLevel({ topic: 'Forces' }), false, 'a P4 student reached P6');
+});
+
+test('the BAND is applied to the second topic too', () => {
+  // A question filed "Separation Techniques" (S1) + "Heat" (P4) is an S1
+  // question — qLevelNum takes the MAX — so a P4 student must not get it and
+  // an S1 student must.
+  asStudent('P4');
+  eq(M.qWithinStudentLevel({ topic: 'Heat', topic2: 'Separation Techniques' }), false, 'a P4 student reached it');
+  asStudent('S1', 'S1');
+  eq(M.qWithinStudentLevel({ topic: 'Heat', topic2: 'Separation Techniques' }), true, 'the S1 student lost it');
+});
+
+test('an admin is never banded — LEVEL_MAX is SECONDARY', () => {
+  // studentCapLevel returns LEVEL_MAX for anyone who is not a student, and
+  // LEVEL_MAX is 'S1'. Running an admin through the band would show them Sec 1
+  // questions and NOTHING ELSE — the whole primary bank gone from the app.
+  M.setUser({ role: 'admin' });
+  eq(M.qWithinStudentLevel({ topic: 'Heat' }), true, 'an admin lost the primary bank');
+  eq(M.qWithinStudentLevel(S1Q), true, 'an admin lost the Sec 1 bank');
+  M.setUser({ role: 'employee' });
+  eq(M.qWithinStudentLevel({ topic: 'Heat' }), true, 'an employee lost the primary bank');
+  M.setUser(null);
+  eq(M.qWithinStudentLevel({ topic: 'Heat' }), true, 'a signed-out visitor was banded');
+});
+
+test('a student is only ever OFFERED their own half of the ladder', () => {
+  // Primary is not a level a Sec 1 student unlocks by picking a higher one, so
+  // six greyed-out sections above their single S1 one would read as a fault.
+  eq(M.levelsInBand('S1'), ['S1'], 'the S1 grid is not S1 alone');
+  eq(M.levelsInBand('P4'), ['P3', 'P4', 'P5', 'P6'], 'a primary grid is not the primary ladder');
+  eq(M.levelsInBand(''), ['P3', 'P4', 'P5', 'P6'], 'no level offers a primary grid');
+});
+
+test('clampToStudentLevel clamps BOTH ends', () => {
+  asStudent('S1', 'S1');
+  eq(M.clampToStudentLevel('P4'), 'S1', 'a Sec 1 student was recommended P4 work');
+  eq(M.clampToStudentLevel('S1'), 'S1', 'a Sec 1 student was moved off their own level');
+  asStudent('P5');
+  eq(M.clampToStudentLevel('P3'), 'P3', 'a primary student lost easier revision');
+  eq(M.clampToStudentLevel('S1'), 'P5', 'a primary student was recommended Sec 1');
+});
+
+test('studentBandMinNum follows the cap, and never bands a non-student', () => {
+  asStudent('S1', 'S1');
+  eq(M.studentBandMinNum(), M.getLevelNumber('S1'), 'a Sec 1 student has no floor');
+  asStudent('');
+  eq(M.studentBandMinNum(), M.getLevelNumber('P3'), 'an unassigned student was floored above P3');
+  M.setUser({ role: 'admin' });
+  eq(M.studentBandMinNum(), M.getLevelNumber('P3'), 'an admin was floored');
+});
+
+test('a self-declared S1 is refused BOTH ways', () => {
+  // The gate caps them to primary, so they must keep the whole primary bank
+  // rather than being banded into a Sec 1 they were never granted.
+  asStudent('S1', '');
+  eq(M.qWithinStudentLevel(S1Q), false, 'a self-declared S1 reached Sec 1');
+  eq(M.qWithinStudentLevel({ topic: 'Heat' }), true, 'a self-declared S1 lost the primary bank as well');
 });
 
 // ── the batch level: narrowing the topics is the whole mechanism ────────────
