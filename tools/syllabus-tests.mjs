@@ -54,7 +54,15 @@ test('no live topic is swept up with it', () => {
     'Water and its 3 States', 'Plant Reproduction', 'Human Reproduction',
     'Human and Plant Respiration', 'Human and Plant Transport', 'Electrical Systems',
     'Forces', 'Energy in Food', 'Energy Conversion', 'Living Together',
-    'Food Chains and Webs', 'Humans and the Environment'
+    'Food Chains and Webs', 'Humans and the Environment',
+    // Secondary 1. 'Cells — The Basic Unit of Life' is the one to watch: it is
+    // a live S1 topic whose name contains "Cell", and a retired-topic rule that
+    // widened to the WORD would take the whole of Sec 1 biology out of every
+    // practice mode and every game with no error anywhere.
+    'The Scientific Endeavour', 'Measurement and Lab Skills',
+    'Diversity of Matter — Physical Properties', 'Diversity of Matter — Chemical Composition',
+    'Separation Techniques', 'Particulate Nature of Matter', 'Atoms and Molecules',
+    'Cells — The Basic Unit of Life', 'Ray Model of Light', 'Forces and Their Effects'
   ];
   live.forEach(topic => {
     ok(!M.qRetiredTopic({ topic }), 'must stay live: ' + topic);

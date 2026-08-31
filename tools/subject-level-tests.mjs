@@ -41,7 +41,6 @@ const cut = (from, to, what) => {
 // the point is the SHAPE of the narrowing, and a fixture keeps the harness
 // from failing every time a teacher adds a topic.
 const FIXTURE = `
-const TOPIC_LEVELS = ['P3', 'P4', 'P5', 'P6'];
 const QRETIRED_TOPIC_RE = /cell\\s*systems?/i;
 function currentTopicsByLevel() {
   return {
@@ -50,13 +49,15 @@ function currentTopicsByLevel() {
     // 'Cell Systems' is the RETIRED topic, still reachable as a custom topic an
     // admin added years ago — it must never be a snap target.
     P5: ['Cell Systems', 'Electrical Systems', 'Water and its 3 States'],
-    P6: []                                   // a level whose topics were all removed
+    P6: [],                                  // a level whose topics were all removed
+    S1: ['Separation Techniques', 'Atoms and Molecules']
   };
 }
 function currentTopics() {
   const b = currentTopicsByLevel();
   return TOPIC_LEVELS.reduce((a, lv) => a.concat(b[lv]), []);
 }
+function escapeHtml(x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function qSecondaryTopic(q) { return (q && typeof q.topic2 === 'string') ? q.topic2.trim() : ''; }
 function _genPreamble() { return ''; }
 function _aiTagsPromptLine() { return ''; }
@@ -67,13 +68,25 @@ const SCAN_READING_NOTE = '';
 
 const section = [
   cut('const SUBJECT_KEY =', '\n// The menu is BUILT from SUBJECT_APPS', 'subject table'),
+  // The REAL level ladder, not a stub: the whole point of S1 is that it is a
+  // RUNG rather than a number sliced out of the string, and a fixture copy
+  // could hold the right answer while app.js held the wrong one.
+  cut('// ── THE LEVEL LADDER', '\nlet customTopics = {}', 'level ladder'),
+  cut('function getLevelNumber(level) {', '\nfunction openStudentSetup()', 'level number'),
+  // The REAL topic tables. A topic listed in the practice grid but missing
+  // from topicLevelMap resolves to the P6 default, so it appears under S1 on
+  // screen and is served to P6 children — right-looking on both surfaces.
+  cut('const topicLevelMap = {', '\n// ── Custom topic management', 'topic level map'),
+  cut('const topicsByLevel = {', '\nconst levelColors', 'topics by level'),
+  cut('const levelColors = {', '\nconst topicEmojis', 'level colours'),
+  cut('const topicEmojis = {', '\nlet tpQueue', 'topic emojis'),
   cut('function _rapidApplyLevel(q, level)', '\nfunction openRapidAdd()', 'level snap'),
   cut('function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint)', '\n// The lettered-parts rules', 'build prompt'),
   FIXTURE
 ].join('\n');
 
 const M = new Function(section +
-  '\nreturn { SUBJECT_KEY, SUBJECT_APPS, subjectCurrent, _rapidApplyLevel, _aiBuildQuestionPrompt, currentTopicsByLevel };')();
+  '\nreturn { SUBJECT_KEY, SUBJECT_APPS, subjectCurrent, _rapidApplyLevel, _aiBuildQuestionPrompt, currentTopicsByLevel,\n  TOPIC_LEVELS, LEVEL_ORDER, LEVEL_MAX, LEVEL_MIN, isLevelCode, isSecondaryLevel, getLevelNumber, levelFromNumber, audienceFor, schoolFor, levelOptionsHtml,\n  topicLevelMap, topicsByLevel, levelColors, topicEmojis };')();
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -134,6 +147,123 @@ test('every url is RELATIVE — no host is baked into the app', () => {
     ok(!/^\/\//.test(s.url), s.key + ': "' + s.url + '" is protocol-relative, which still pins the host');
     ok(s.url.startsWith('../'), s.key + ': "' + s.url + '" is not a sibling-folder hop');
     ok(s.url.endsWith('/'), s.key + ': "' + s.url + '" should end in / so the folder index is served');
+  });
+});
+
+// ── the level LADDER: P3 → P6 → S1 ─────────────────────────────────────────
+// Every failure here is silent and the app renders perfectly either way. Read
+// 'S1' as a number and Secondary 1 sorts BELOW P3, so every Sec 1 question is
+// served to the youngest child in the school; reject 'S1' as a level code and
+// a Sec 1 student's assignment is thrown away and they are quietly capped at
+// the default instead. Neither throws, and neither shows on any screen.
+
+test('S1 is the TOP rung, not the number 1', () => {
+  // parseInt('S1'.replace('P','')) is 1. That is the bug this pins.
+  ok(M.getLevelNumber('S1') > M.getLevelNumber('P6'), 'S1 must outrank P6');
+  eq(M.getLevelNumber('S1'), 7, 'S1 rung');
+  ['P3', 'P4', 'P5', 'P6'].forEach(lv => {
+    ok(M.getLevelNumber('S1') > M.getLevelNumber(lv), 'S1 must outrank ' + lv);
+  });
+});
+
+test('the ladder is in order and has no gaps', () => {
+  const nums = M.TOPIC_LEVELS.map(M.getLevelNumber);
+  nums.forEach((n, i) => {
+    if (i) ok(n === nums[i - 1] + 1, 'the ladder skips a rung at ' + M.TOPIC_LEVELS[i]);
+  });
+  eq(M.LEVEL_MIN, M.TOPIC_LEVELS[0], 'LEVEL_MIN is not the bottom of the ladder');
+  eq(M.LEVEL_MAX, M.TOPIC_LEVELS[M.TOPIC_LEVELS.length - 1], 'LEVEL_MAX is not the top');
+  // LEVEL_MAX is what an UNASSIGNED student is capped at, i.e. no restriction.
+  // Pinned to 'P6' it would hide every Sec 1 question from the whole school
+  // until an admin went round assigning levels one child at a time.
+  eq(M.LEVEL_MAX, 'S1', 'the top of the ladder');
+});
+
+test('every rung is a valid level code, and nothing else is', () => {
+  M.TOPIC_LEVELS.forEach(lv => ok(M.isLevelCode(lv), lv + ' is not accepted as a level'));
+  ['', 'P2', 'P7', 'S2', 's1', 'Sec 1', '1', 'P', null, undefined, 'P6 ']
+    .forEach(v => ok(!M.isLevelCode(v), JSON.stringify(v) + ' must not pass as a level'));
+});
+
+test('levelFromNumber is the inverse, and clamps to the ladder', () => {
+  M.TOPIC_LEVELS.forEach(lv => eq(M.levelFromNumber(M.getLevelNumber(lv)), lv, 'round trip ' + lv));
+  // Off the ends. clampToStudentLevel eases a level DOWN by one, so 2 is
+  // reachable and must land on the bottom rung rather than on 'P2'.
+  eq(M.levelFromNumber(2), 'P3', 'below the ladder');
+  eq(M.levelFromNumber(0), 'P3', 'zero');
+  eq(M.levelFromNumber(99), 'S1', 'above the ladder');
+  eq(M.levelFromNumber('nonsense'), 'P3', 'junk');
+});
+
+test('an unknown level is still the BOTTOM rung, as it always was', () => {
+  // getLevelNumber has always answered for junk rather than throwing, and
+  // callers rely on that — a level read off a half-written profile must not
+  // take a page down.
+  eq(M.getLevelNumber(''), 3, 'empty');
+  eq(M.getLevelNumber('banana'), 3, 'junk');
+  eq(M.getLevelNumber('p5'), 5, 'lower case still resolves');
+});
+
+test('only S1 is secondary', () => {
+  ok(M.isSecondaryLevel('S1'), 'S1 is secondary');
+  ['P3', 'P4', 'P5', 'P6', '', 'junk'].forEach(lv =>
+    ok(!M.isSecondaryLevel(lv), lv + ' must not read as secondary'));
+});
+
+test('a prompt never tells the model a Sec 1 question is primary', () => {
+  // The one way adding S1 could look like it worked and not have: the level
+  // is filed correctly and the AI writes P3 science into the question.
+  eq(M.schoolFor('S1'), 'lower-secondary', 'S1 role line');
+  eq(M.schoolFor('P5'), 'primary-school', 'P5 role line');
+  eq(M.schoolFor(''), 'primary-school', 'no level = the old wording');
+  ok(/Secondary 1/.test(M.audienceFor('S1')), 'the S1 audience must say Secondary 1');
+  ok(!/primary/.test(M.audienceFor('S1')), 'the S1 audience must not say primary');
+  ok(/P5/.test(M.audienceFor('P5')), 'a known primary level names the year');
+  // With NO level in hand it must name the whole ladder — a prompt that says
+  // "primary" is the default for every ungrounded call in the app.
+  ok(/Secondary 1/.test(M.audienceFor('')), 'the unknown-level audience must include Secondary 1');
+});
+
+test('every level dropdown is built from the ladder', () => {
+  const html = M.levelOptionsHtml('S1');
+  M.TOPIC_LEVELS.forEach(lv => ok(html.indexOf('value="' + lv + '"') >= 0, lv + ' is missing from the dropdown'));
+  ok(/value="S1" selected/.test(html), 'the chosen level is not selected');
+  // The blank row is opt-in: a level picker that quietly offers "no level"
+  // where none was asked for lets a student be saved with no cap at all.
+  ok(M.levelOptionsHtml('P5').indexOf('value=""') < 0, 'an unasked-for blank option');
+  ok(M.levelOptionsHtml('', '—').indexOf('value="" selected') >= 0, 'the blank option is not selected when nothing is set');
+});
+
+test('the S1 topics really are filed at S1', () => {
+  // The narrowing is by TOPIC — there is no q.level field in this app — so a
+  // Sec 1 topic filed at P6 is a Sec 1 question served to P6 children.
+  const s1 = M.topicsByLevel.S1 || [];
+  ok(s1.length, 'S1 has no topics — nothing could be filed there at all');
+  s1.forEach(t => eq(M.topicLevelMap[t], 'S1', t + ' is in the S1 grid but topicLevelMap files it elsewhere'));
+});
+
+test('every level has topics, a colour and an emoji per topic', () => {
+  // A level with no colour throws when the topical-practice grid draws its
+  // badge (`colors.bg`); a topic with no emoji falls back to 📘, which is only
+  // untidy — so the colour is the one pinned hard.
+  M.TOPIC_LEVELS.forEach(lv => {
+    ok((M.topicsByLevel[lv] || []).length, lv + ' has no topics in the practice grid');
+    ok(M.levelColors[lv] && M.levelColors[lv].bg && M.levelColors[lv].fg,
+      lv + ' has no colour — the topical-practice grid throws drawing its badge');
+    (M.topicsByLevel[lv] || []).forEach(t =>
+      ok(M.topicEmojis[t], t + ' has no emoji'));
+  });
+});
+
+test('the practice grid and the level map name the SAME topics', () => {
+  Object.keys(M.topicsByLevel).forEach(lv => {
+    (M.topicsByLevel[lv] || []).forEach(t =>
+      eq(M.topicLevelMap[t], lv, t + ' is shown under ' + lv + ' but filed under ' + M.topicLevelMap[t]));
+  });
+  Object.keys(M.topicLevelMap).forEach(t => {
+    const lv = M.topicLevelMap[t];
+    ok((M.topicsByLevel[lv] || []).indexOf(t) >= 0,
+      t + ' is filed at ' + lv + ' but never appears in the topical-practice grid');
   });
 });
 
