@@ -545,7 +545,13 @@ const LEVEL_CAP_MAX = 7;         // top of the ladder — an admin, who sees eve
 // secondary. Without both rules this page is the way round the gate: it reads
 // the bank directly and has its own copy of the cap.
 const LEVEL_CAP_DEFAULT = LEVEL_ORDER.P6;
+// A CAP IS A CEILING FOR PRIMARY AND A BAND FOR SECONDARY — index.html's
+// levelBandMin, stated again here because this page reads the bank itself.
+// Secondary is a different syllabus, so a Sec 1 student is served Sec 1
+// questions only; a primary student's band still opens at the bottom.
+const LEVEL_SECONDARY_MIN = LEVEL_ORDER.S1;
 let studentLevelCap = LEVEL_CAP_MAX;
+let studentLevelFloor = 0;       // 0 = no floor (a primary student, or an admin)
 
 function levelNum(l) { return LEVEL_ORDER[String(l || '').trim().toUpperCase()] || 0; }
 function levelLabel(n) { return Object.keys(LEVEL_ORDER).find(k => LEVEL_ORDER[k] === n) || 'S1'; }
@@ -567,6 +573,7 @@ function qLevelNumOf(q) {
 // family's declared level, LOWER wins — the same rule index.html applies.
 async function loadStudentLevelCap() {
   studentLevelCap = LEVEL_CAP_MAX;
+  studentLevelFloor = 0;
   if (!currentUser || isAdmin()) return;
   // A student starts on primary and is raised from there, so every failure
   // below — a refused read, a missing profile, a thrown parse — leaves them on
@@ -585,6 +592,8 @@ async function loadStudentLevelCap() {
       // Secondary is the TEACHER's to grant: only d.level (the level assigned
       // on the Usage page) may take this account past primary.
       if (studentLevelCap > LEVEL_CAP_DEFAULT && assigned <= LEVEL_CAP_DEFAULT) studentLevelCap = LEVEL_CAP_DEFAULT;
+      // …and once the cap really is secondary, primary questions drop out.
+      studentLevelFloor = studentLevelCap >= LEVEL_SECONDARY_MIN ? LEVEL_SECONDARY_MIN : 0;
       if (d.servingName) currentUser.name = d.servingName;   // the child practising, not the parent's account
     }
   } catch (e) { console.warn('student level read', e); }
@@ -718,7 +727,8 @@ async function loadQuestions() {
           // Never above the pupil's level — index.html's qWithinStudentLevel rule.
           // Both topics count, highest wins: a question filed under a P3 primary
           // topic and a P6 secondary one is P6 material (index.html's qLevelNum).
-          if (qLevelNumOf(q) > studentLevelCap) return;
+          const qn = qLevelNumOf(q);
+          if (qn > studentLevelCap || qn < studentLevelFloor) return;
           seen.add(q.id);
           const m = extractMcq(q);
           if (m) pool.push(m);
@@ -727,7 +737,7 @@ async function loadQuestions() {
     }
     for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
     questions = pool; qCursor = 0;
-    console.log('Science Strike: loaded', pool.length, 'MCQs from the bank (level cap ' + levelLabel(studentLevelCap) + ')');
+    console.log('Science Strike: loaded', pool.length, 'MCQs from the bank (levels ' + (studentLevelFloor ? levelLabel(studentLevelFloor) + '–' : 'up to ') + levelLabel(studentLevelCap) + ')');
     // Cross-device memory: fold the student's Firestore attempt history into
     // the local rotation map, so a new device / cleared browser doesn't
     // restart the no-repeat rotation from scratch.
