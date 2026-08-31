@@ -3319,7 +3319,77 @@ THE PICTURE ALREADY ON THE QUESTION** rather than invented from nothing.
 - Run **`node tools/ai-command-tests.mjs`** after touching any of it.
 
 
+## 🎓 The LEVEL LADDER — P3 → P6 → S1 (v1.338.0)
+
+`TOPIC_LEVELS` / `LEVEL_ORDER` / `LEVEL_CODE_RE` / `LEVEL_MIN` / `LEVEL_MAX` /
+`isLevelCode` / `isSecondaryLevel` / `levelFromNumber` / `levelOptionsHtml` /
+`audienceFor` / `schoolFor` / `getLevelNumber` (in `app.js`, search
+`THE LEVEL LADDER`), plus the S1 rows in `topicLevelMap`, `topicsByLevel`,
+`levelColors` and `topicEmojis`, the `S1` options in `index.html`, and
+`LEVEL_ORDER` in **`fps.html`**, which reads the bank directly and applies its
+own copy of the cap.
+
+Secondary 1 is a level like any other. **A level is a RUNG, not a number sliced
+out of the string** — `parseInt('S1'.replace('P',''))` is **1**, which files
+every Secondary 1 question BELOW P3 and serves it to the youngest child in the
+school. So the order lives in ONE map and every comparison goes through
+`getLevelNumber` / `levelFromNumber`.
+
+- **`isLevelCode` replaced every `/^P[3-6]$/` typed out at a call site.** That
+  regex rejects `'S1'`, and there were fifteen of them — a student's assigned
+  level, a family's declared level, the admin's roster picker, the AI's
+  recommended level. Each one it survives is a screen where a Sec 1 assignment
+  is silently thrown away and the account falls back to the default, which
+  renders perfectly and says nothing.
+- **`LEVEL_MAX` is what an unassigned student is capped at, i.e. NO
+  restriction**, so it follows the top of the ladder. Left pinned at `'P6'` it
+  would hide every Sec 1 question from the whole school until an admin went
+  round assigning levels one child at a time. `fps.html`'s `LEVEL_CAP_MAX` is
+  the same number for the same reason — but its *unknown-topic* fallback stays
+  at **P6**, matching `getTopicLevel`, or a question filed under a topic nobody
+  recognises would vanish from every P6 student's run.
+- **`levelOptionsHtml` is the ONE builder every level dropdown goes through.**
+  Six `<select>`s used to write out P3…P6 by hand, so a level added to the
+  ladder would appear in whichever ones somebody remembered. The blank "—" row
+  is opt-in (`blankLabel`): a picker that quietly offers "no level" where none
+  was asked for lets a student be saved with no cap at all.
+- **THERE IS NO `q.level` FIELD.** A question's level is read off its TOPIC
+  (`getTopicLevel` → `qLevelNum`, which takes the MAX over `topic` and
+  `topic2`), so filing a question at S1 means giving it an S1 TOPIC — which is
+  exactly what ⚡ Rapid add's batch level does by narrowing the topics the AI
+  may choose from. Ten Sec 1 topics ship; anything a school teaches differently
+  is one line in ⚙ Manage topics, which files a custom topic under S1 like any
+  other level.
+- **A prompt must never tell the model a Sec 1 question is primary**
+  (`audienceFor` / `schoolFor`). This is the one way adding S1 could look like
+  it worked and not have: the question is filed at the right level and the AI
+  writes P3 science into it. Where the level is already in hand the prompt names
+  the year outright — the 🤖 answer and 📝 explanation buttons (off the
+  question's topic), the vetting builder (off `q.topic`) and every ⚡ Rapid add /
+  🤖 build-from-screenshot call (off `levelHint`); everywhere else the audience
+  line names the whole ladder rather than just primary.
+- **`LO_LEVELS` is `TOPIC_LEVELS`**, so a Sec 1 🎯 objective can be written.
+  Nothing is seeded for S1 — `SYLLABUS_LO_TOPICS` is the *Primary* syllabus's
+  own outcomes — so the level starts empty and is filled in by hand.
+- Run **`node tools/subject-level-tests.mjs`** and
+  **`node tools/syllabus-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **the level ladder** (`TOPIC_LEVELS`, `LEVEL_ORDER`,
+  `LEVEL_CODE_RE`, `LEVEL_MIN`/`LEVEL_MAX`, `isLevelCode`, `isSecondaryLevel`,
+  `getLevelNumber`, `levelFromNumber`, `levelOptionsHtml`, `audienceFor`,
+  `schoolFor`, the S1 rows in `topicLevelMap`/`topicsByLevel`/`levelColors`/
+  `topicEmojis`, or `fps.html`'s `LEVEL_ORDER`), run
+  `node tools/subject-level-tests.mjs` and `node tools/syllabus-tests.mjs`.
+  Every failure here is silent and the app renders perfectly either way: read
+  `'S1'` as a number and Secondary 1 sorts BELOW P3, so every Sec 1 question is
+  served to the youngest child in the school; put a `/^P[3-6]$/` back at a call
+  site and a Sec 1 student's assigned level is thrown away and they are quietly
+  capped at the default; pin `LEVEL_MAX` to `'P6'` and every Sec 1 question is
+  hidden from the whole school until somebody assigns levels one child at a
+  time; and let a prompt go on saying "primary-school" for an S1 question and
+  the AI writes P3 science into a question filed perfectly correctly at
+  Secondary 1.
 - After touching **📄 whole-PDF rapid add** (`RAPID_PDF_MAX_PAGES`,
   `RAPID_PDF_PAR`, `rapidAddFiles`, `_rapidQueuePdf`, `_rapidPdfPump`,
   `_rapidExpandPdf`, `_rapidPageFile`, `_pdfRenderPage`, `startRapidJob`'s PDF

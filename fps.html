@@ -523,15 +523,28 @@ const TOPIC_LEVEL_MAP = {
   'Water and its 3 States': 'P5', 'Plant Reproduction': 'P5', 'Human Reproduction': 'P5',
   'Human and Plant Respiration': 'P5', 'Human and Plant Transport': 'P5', 'Electrical Systems': 'P5',
   'Forces': 'P6', 'Energy in Food': 'P6', 'Energy Conversion': 'P6',
-  'Living Together': 'P6', 'Food Chains and Webs': 'P6', 'Humans and the Environment': 'P6'
+  'Living Together': 'P6', 'Food Chains and Webs': 'P6', 'Humans and the Environment': 'P6',
+  'The Scientific Endeavour': 'S1', 'Measurement and Lab Skills': 'S1',
+  'Diversity of Matter — Physical Properties': 'S1',
+  'Diversity of Matter — Chemical Composition': 'S1',
+  'Separation Techniques': 'S1', 'Particulate Nature of Matter': 'S1',
+  'Atoms and Molecules': 'S1', 'Cells — The Basic Unit of Life': 'S1',
+  'Ray Model of Light': 'S1', 'Forces and Their Effects': 'S1'
 };
 let customTopicLevels = {};      // admin's custom topics → level
-let studentLevelCap = 6;         // 3–6; 6 = everything (admins, or no level known)
+// The ladder is P3..P6 then S1 — mirrors index.html's LEVEL_ORDER. A level is a
+// RUNG, never a number sliced out of the string: parseInt('S1'.replace('P','')) is
+// 1, which would rank every Secondary 1 question BELOW P3 and feed it to the
+// youngest child on the page.
+const LEVEL_ORDER = { P3: 3, P4: 4, P5: 5, P6: 6, S1: 7 };
+const LEVEL_CAP_MAX = 7;         // top of the ladder = everything (admins, or no level known)
+let studentLevelCap = LEVEL_CAP_MAX;
 
-function levelNum(l) { const n = parseInt(String(l || '').replace('P', ''), 10); return (n >= 3 && n <= 6) ? n : 0; }
+function levelNum(l) { return LEVEL_ORDER[String(l || '').trim().toUpperCase()] || 0; }
+function levelLabel(n) { return Object.keys(LEVEL_ORDER).find(k => LEVEL_ORDER[k] === n) || 'S1'; }
 function topicLevelNum(topic) {
   const l = customTopicLevels[topic] || TOPIC_LEVEL_MAP[topic] || 'P6';   // unknown topic = P6, as in index.html
-  return levelNum(l) || 6;
+  return levelNum(l) || LEVEL_ORDER.P6;   // unknown/malformed = P6, as in index.html
 }
 // A question's level = the highest level of any topic it is filed under,
 // primary or secondary (q.topic2) — mirrors index.html's qLevelNum.
@@ -546,7 +559,7 @@ function qLevelNumOf(q) {
 // The cap in force for this account: the teacher's assigned level and the
 // family's declared level, LOWER wins — the same rule index.html applies.
 async function loadStudentLevelCap() {
-  studentLevelCap = 6;
+  studentLevelCap = LEVEL_CAP_MAX;
   if (!currentUser || isAdmin()) return;
   try {
     const s = await getDoc(doc(db, 'userProfiles', currentUser.uid));
@@ -700,7 +713,7 @@ async function loadQuestions() {
     }
     for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
     questions = pool; qCursor = 0;
-    console.log('Science Strike: loaded', pool.length, 'MCQs from the bank (level cap P' + studentLevelCap + ')');
+    console.log('Science Strike: loaded', pool.length, 'MCQs from the bank (level cap ' + levelLabel(studentLevelCap) + ')');
     // Cross-device memory: fold the student's Firestore attempt history into
     // the local rotation map, so a new device / cleared browser doesn't
     // restart the no-repeat rotation from scratch.

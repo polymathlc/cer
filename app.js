@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.337.0';
+const APP_VERSION = 'v1.338.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -3609,7 +3609,7 @@ async function aiSuggestTags(q) {
   if (already.length) facts.tagsItAlreadyHas = already;
 
   const prompt = [
-    'You are tagging one question in a Singapore primary-school science question bank (P3-P6).',
+    'You are tagging one question in a Singapore school science question bank (P3-P6 primary and Secondary 1).',
     '',
     'A tag names the exact idea the question TESTS, the way a teacher says it out loud: "elastic spring force", "water displacement", "shadow size", "heat conduction", "air resistance". It is finer-grained than the syllabus topic and it is not the question title.',
     '',
@@ -6541,8 +6541,11 @@ async function aiGenerateBlockExplanation(blockId, btn, level) {
   // itself ask the student to explain? See 📝 AN EXPLANATION IS NOT THE ANSWER
   // AGAIN — a box written over an answer has to go beyond it, not repeat it.
   const depth = _explAnswerContext(scope, pmap, target, scoped);
+  // The year this question is taught at, read off its topic — so a Secondary 1
+  // explanation is not written down to a P3 reading level (see audienceFor).
+  const qLv = getTopicLevel(topic || '');
   const prompt =
-    `You are a Singapore primary-school (PSLE) science teacher writing the EXPLANATION box of the practice question below — ${full ? '8-14 sentences' : more ? '4-6 sentences' : '2-4 sentences'}${deep && depth.hasAnswer ? ' of teaching commentary that goes BEYOND the model answer already written above' : ''} for a P3-P6 student explaining WHY the correct answer is correct.\n` +
+    `You are a Singapore ${schoolFor(qLv)} science teacher writing the EXPLANATION box of the practice question below — ${full ? '8-14 sentences' : more ? '4-6 sentences' : '2-4 sentences'}${deep && depth.hasAnswer ? ' of teaching commentary that goes BEYOND the model answer already written above' : ''} for ${audienceFor(qLv)} student explaining WHY the correct answer is correct.\n` +
     (notesDb ? notesDb + `\nBase the science and the wording on this database FIRST; fall back to standard PSLE syllabus knowledge only where the database does not cover it.\n` : '') +
     (title || topic ? `Question: "${title}"${topic ? ' — topic: ' + topic : ''}.\n` : '') +
     `THE QUESTION, in order${media.length ? ' (diagrams attached as images)' : ''}:\n${ctxBits.join('\n').slice(0, 3500)}\n` +
@@ -6552,7 +6555,7 @@ async function aiGenerateBlockExplanation(blockId, btn, level) {
     `If a correct answer / model answer is shown above, your explanation MUST justify THAT answer (never contradict it); if none is shown, work the correct answer out yourself first.\n` +
     _explDepthRules(depth.hasAnswer, depth.asksExplain, level) +
     `Return ONLY JSON: {"explanation":"..."}\n` +
-    `Rules: clear teacher voice a P3-P6 student understands; plain text only, no markdown, no [[brackets]].`;
+    `Rules: clear teacher voice ${audienceFor(qLv)} student understands; plain text only, no markdown, no [[brackets]].`;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = full ? '📚 Expanding…' : more ? '📖 Expanding…' : '🤖 Writing…'; }
   try {
@@ -7825,7 +7828,7 @@ async function annotAnsWriteKey(id) {
       + 'The attached picture is the diagram WITH the correct annotations already on it. '
       + 'Describe exactly what a student must draw and label to earn the marks: name each arrow, line, shading or label and say where it goes. '
       + 'Be specific about position and direction, because a marker will compare a student\'s drawing against your words. '
-      + '2–4 sentences, plain English for a P3–P6 marker. Return ONLY the answer key text, no preamble.';
+      + '2–4 sentences, plain English for a P3–P6 or Secondary 1 marker. Return ONLY the answer key text, no preamble.';
     const out = await askGeminiVision(prompt, [media], { maxOutputTokens: 400 });
     const text = String(out || '').trim();
     if (!text) throw new Error('The AI had nothing to say about that picture');
@@ -11414,7 +11417,7 @@ function _bulkPagePrompt(pageNo, pageCount) {
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
     `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, and set "correctIndex" to the 0-based correct option (work the correct answer out yourself if the paper shows no answer key); no "answer"/"plainanswer".\n` +
     `- open question: include an answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing the model answer yourself if the paper does not show one. One answer block for a question with no parts, one per part for a question with parts.\n` +
-    `- EVERY question (mcq AND open) must have an "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct. Write it yourself — papers almost never print one, so do NOT skip it just because it is not shown.\n` +
+    `- EVERY question (mcq AND open) must have an "explanation" block: 2-4 sentences a teacher would give a P3-P6 or Secondary 1 student explaining WHY the correct answer is correct. Write it yourself — papers almost never print one, so do NOT skip it just because it is not shown.\n` +
     _partsPromptRules() +
     `- "title": a short label including the question number if present (e.g. "Q1 — Heat").\n` +
     `- "topicConfidence": how sure you are the chosen topic is right — "high" (clearly this topic), "medium" (likely), "low" (a guess).\n` +
@@ -11583,6 +11586,9 @@ async function aiAnswerAndExplain() {
     const topicEl = document.getElementById('topicSelect');
     if (titleEl && titleEl.value.trim()) parts.push('Title: ' + titleEl.value.trim());
     if (topicEl && topicEl.value) parts.push('Topic: ' + topicEl.value);
+    // The year this question is taught at, read off its topic — a Secondary 1
+    // answer must not be written down to a P3 reading level (see audienceFor).
+    const aeLv = getTopicLevel((topicEl && topicEl.value) || '');
     let mcqBlock = null;
     const media = [];
     for (const b of blocks) {
@@ -11604,11 +11610,11 @@ async function aiAnswerAndExplain() {
     if (hasCER) wants.push('"claim":"...","evidence":"...","reasoning":"..."');
     if (hasPlain || (!hasCER && !mcqBlock)) wants.push('"answer":"the full model answer, 1-3 sentences"');
     if (mcqBlock) wants.push('"mcqCorrectIndex":<0-based index of the correct option listed above>');
-    wants.push('"explanation":"a clear teacher explanation (2-4 sentences) of WHY the answer is correct, for a P3-P6 student"');
+    wants.push(`"explanation":"a clear teacher explanation (2-4 sentences) of WHY the answer is correct, for ${audienceFor(aeLv)} student"`);
     const mg = ((document.getElementById('questionMarkingGuide') || {}).value || '').trim();
     const notesDb = aiGrounding('answer', (topicEl && topicEl.value) || '');
     const prompt =
-      `You are a Singapore primary-school science teacher. Read this WHOLE question` + (media.length ? ' (diagrams are attached — study them)' : '') + ` and work out the correct answer and an explanation for a P3–P6 student.\n` +
+      `You are a Singapore ${schoolFor(aeLv)} science teacher. Read this WHOLE question` + (media.length ? ' (diagrams are attached — study them)' : '') + ` and work out the correct answer and an explanation for ${audienceFor(aeLv)} student.\n` +
       (notesDb ? notesDb + `\nBase the science and the wording on this database FIRST; fall back to standard PSLE syllabus knowledge only where the database does not cover it.\n` : '') +
       (mg ? `Teacher marking guide (follow it): ${mg}\n` : '') +
       `QUESTION:\n${context}\n\n` +
@@ -11779,7 +11785,7 @@ function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint) {
   // with nothing to choose and it would invent one.
   const topics = levelTopics.length ? levelTopics : currentTopics();
   const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
-  return `You are helping a Singapore primary-school science teacher turn an exam question (${multi ? `spread across the ${n} attached images` : `in the attached ${isPdf ? 'PDF' : 'image'}`}) into a practice question.\n` +
+  return `You are helping a Singapore ${schoolFor(levelHint)} science teacher turn an exam question (${multi ? `spread across the ${n} attached images` : `in the attached ${isPdf ? 'PDF' : 'image'}`}) into a practice question.\n` +
     SCAN_READING_NOTE +
     _genPreamble() +
     (multi ? `IMPORTANT: the ${n} attached images are CONSECUTIVE screenshots of ONE AND THE SAME question, already in reading order (image 1 first). Read them as one continuous question — do NOT treat them as separate questions and do NOT drop content from any of the images.\n` : '') +
@@ -11814,7 +11820,7 @@ function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint) {
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
     `- If questionType is "mcq": include exactly ONE "mcq" block. Copy each answer option verbatim into "options" WITHOUT its leading number/letter, and set "correctIndex" to the 0-based index of the correct option. Do NOT include "answer" or "plainanswer" blocks.\n` +
     `- If questionType is "open": include an answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer — one for a question with no parts, one per part for a question with parts. Write the answer as plain prose: no brackets, marks or markup of any kind around individual words.\n` +
-    `- An "explanation" block is 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct — write it yourself if the source shows none, and never leave the question without one.\n` +
+    `- An "explanation" block is 2-4 sentences a teacher would give ${audienceFor(levelHint)} student explaining WHY the correct answer is correct — write it yourself if the source shows none, and never leave the question without one.\n` +
     _partsPromptRules() +
     _aiTagsPromptLine() +
     `- Choose topic from EXACTLY this list: ${topics.join('; ')}.\n` +
@@ -15693,7 +15699,7 @@ function _vetBuildPrompt(q, slots, mcq) {
   const labelFor = k => k === 'claim' ? 'Claim' : k === 'evidence' ? 'Evidence' : k === 'reasoning' ? 'Reasoning' : k === 'explanation' ? 'Explanation' : 'Answer';
   const slotLines = slots.map((s, i) => `  ${i}. [${labelFor(s.kind)}] current: ${s.current ? JSON.stringify(s.current) : '(empty)'}`).join('\n');
   const mcqLines = mcq ? 'MULTIPLE-CHOICE OPTIONS:\n' + mcq.options.map((o, i) => `  ${i}. ${stripHtml(o.text || '')}`).join('\n') + '\n' : '';
-  return `You are helping a Singapore primary-school science teacher vet a practice question before it goes into the question bank.
+  return `You are helping a Singapore ${schoolFor(getTopicLevel((q && q.topic) || ''))} science teacher vet a practice question before it goes into the question bank.
 ${aiGrounding('answer', q && q.topic) || ''}
 QUESTION TITLE: ${q.title || '(untitled)'}
 CURRENT TOPIC: ${q.topic || '(none)'}
@@ -15708,7 +15714,7 @@ Return ONLY JSON with this exact shape:
   "category": "<the single closest category from the list>",
   "markingGuide": "<one or two sentences telling the AI marker what a full-mark answer must contain, including accepted alternative wording>",
   "needsIntro": <true ONLY if QUESTION CONTENT above is empty/missing, otherwise false>,
-  "introText": "<if needsIntro: a short, clear question prompt a P3-P6 student would read; otherwise an empty string>",
+  "introText": "<if needsIntro: a short, clear question prompt ${audienceFor(getTopicLevel((q && q.topic) || ''))} student would read; otherwise an empty string>",
   "answers": [<one model-answer string per slot, in the same order; for a Claim/Evidence/Reasoning slot write only that portion; 1-3 sentences each>],
   "mcqCorrectIndex": <0-based index of the correct option above, or -1 if there is no multiple-choice block>
 }
@@ -18965,7 +18971,7 @@ function _epQuestionPrompt(n, from, total) {
     `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, and set "correctIndex" to the 0-based correct option (work it out yourself); no "answer"/"plainanswer".\n` +
     `- open question: include an answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing your best model answer. One answer block for a question with no parts, one per part for a question with parts.\n` +
     `- The answer you write is a PLACEHOLDER: the paper's official marking scheme is read separately and will replace it. Write it anyway — some questions never get an official answer.\n` +
-    `- An "explanation" block is 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct.\n` +
+    `- An "explanation" block is 2-4 sentences a teacher would give a P3-P6 or Secondary 1 student explaining WHY the correct answer is correct.\n` +
     _partsPromptRules() +
     `- "title": a short label saying what the question is ABOUT (e.g. "Melting ice in warm water"). Do NOT put the question number in it.\n` +
     `- "topicConfidence": "high", "medium" or "low".\n` +
@@ -22255,13 +22261,69 @@ const topicLevelMap = {
   'Water and its 3 States': 'P5', 'Plant Reproduction': 'P5', 'Human Reproduction': 'P5',
   'Human and Plant Respiration': 'P5', 'Human and Plant Transport': 'P5', 'Electrical Systems': 'P5',
   'Forces': 'P6', 'Energy in Food': 'P6', 'Energy Conversion': 'P6',
-  'Living Together': 'P6', 'Food Chains and Webs': 'P6', 'Humans and the Environment': 'P6'
+  'Living Together': 'P6', 'Food Chains and Webs': 'P6', 'Humans and the Environment': 'P6',
+  // ── Secondary 1 (Lower Secondary Science) ──────────────────────────────────
+  // S1 sits ABOVE P6 in the level ladder, so a P6 student is never served one
+  // of these and an S1 student is served everything. Schools split the Lower
+  // Sec syllabus slightly differently — anything missing is one line in
+  // ⚙ Manage topics, which files a custom topic under S1 like any other level.
+  'The Scientific Endeavour': 'S1', 'Measurement and Lab Skills': 'S1',
+  'Diversity of Matter — Physical Properties': 'S1',
+  'Diversity of Matter — Chemical Composition': 'S1',
+  'Separation Techniques': 'S1', 'Particulate Nature of Matter': 'S1',
+  'Atoms and Molecules': 'S1', 'Cells — The Basic Unit of Life': 'S1',
+  'Ray Model of Light': 'S1', 'Forces and Their Effects': 'S1'
 };
 
 // ── Custom topic management — the authoring dropdown is the defaults above plus
 // the admin's custom topics, minus any they removed; persisted per user. ──────
-const TOPIC_LEVELS = ['P3', 'P4', 'P5', 'P6'];
-let customTopics = {};   // { 'Topic name': 'P3'|'P4'|'P5'|'P6' }
+// ── THE LEVEL LADDER ──────────────────────────────────────────────────────────
+// P3 → P6 → S1. A level is a RUNG, not a number sliced out of the string:
+// `parseInt('S1'.replace('P',''))` is 1, which would file every Secondary 1
+// question BELOW P3 and serve it to the youngest child in the school. So the
+// order lives in ONE map (`LEVEL_ORDER`) and every comparison goes through
+// `getLevelNumber` / `levelFromNumber`; every validity check goes through
+// `isLevelCode`, never a `/^P[3-6]$/` typed out at the call site — that regex
+// rejects 'S1', and each place it survives is a screen where a Sec 1 student
+// or a Sec 1 question silently falls back to the P6 default.
+// Adding a level (S2, S3…) is a rung here plus its topics, colour and emojis.
+const TOPIC_LEVELS = ['P3', 'P4', 'P5', 'P6', 'S1'];
+const LEVEL_ORDER = { P3: 3, P4: 4, P5: 5, P6: 6, S1: 7 };
+const LEVEL_CODE_RE = /^(?:P[3-6]|S1)$/;
+// The top of the ladder — what an unassigned student is capped at, i.e. no
+// restriction. It must FOLLOW the ladder: pinning it to 'P6' would hide every
+// Sec 1 question from every student until an admin assigned them a level.
+const LEVEL_MAX = TOPIC_LEVELS[TOPIC_LEVELS.length - 1];
+const LEVEL_MIN = TOPIC_LEVELS[0];
+function isLevelCode(v) { return LEVEL_CODE_RE.test(String(v || '')); }
+// Is this level secondary rather than primary? The AI prompts read it: a prompt
+// that says "primary-school" writes primary-school science into a Secondary 1
+// question, which is the one way adding S1 could look like it worked and not
+// have. Nothing throws — the question is simply pitched at the wrong year.
+function isSecondaryLevel(v) { return getLevelNumber(v) >= LEVEL_ORDER.S1 && isLevelCode(v); }
+// The audience line a teaching prompt carries. With a level in hand it names
+// the year outright; without one it names the whole ladder, never just primary.
+function audienceFor(level) {
+  if (!isLevelCode(level)) return 'a Singapore P3–P6 primary or Secondary 1 science';
+  return isSecondaryLevel(level)
+    ? 'a Singapore Secondary 1 (lower secondary) science'
+    : `a Singapore ${level} primary science`;
+}
+// "primary-school" / "lower-secondary" for the teacher ROLE line of a prompt.
+function schoolFor(level) { return isSecondaryLevel(level) ? 'lower-secondary' : 'primary-school'; }
+// Number → code, clamped to the ladder. The inverse of getLevelNumber.
+function levelFromNumber(n) {
+  const num = Math.max(LEVEL_ORDER[LEVEL_MIN], Math.min(LEVEL_ORDER[LEVEL_MAX], Number(n) || 0));
+  return TOPIC_LEVELS.find(lv => LEVEL_ORDER[lv] === num) || LEVEL_MAX;
+}
+// The <option> list every level dropdown is built from, so a level added above
+// appears in all of them rather than in whichever ones somebody remembered.
+function levelOptionsHtml(selected, blankLabel) {
+  const head = blankLabel == null ? '' : `<option value=""${selected ? '' : ' selected'}>${escapeHtml(blankLabel)}</option>`;
+  return head + TOPIC_LEVELS.map(lv =>
+    `<option value="${lv}"${lv === selected ? ' selected' : ''}>${lv}</option>`).join('');
+}
+let customTopics = {};   // { 'Topic name': 'P3'|'P4'|'P5'|'P6'|'S1' }
 let removedTopics = [];  // default topic names hidden from the dropdown
 function _topicsStoreKey() { return 'cerTopics:' + (currentUser ? currentUser.uid : 'anon'); }
 function loadCustomTopics() {
@@ -22505,8 +22567,13 @@ function removeCustomCategory(name) {
   });
 }
 
+// A level's rung on the ladder. Reads LEVEL_ORDER — never slices the string,
+// which is what put 'S1' below 'P3'. An unknown code is the bottom rung, as it
+// always was, so nothing that passes junk in starts throwing.
 function getLevelNumber(level) {
-  return parseInt(level.replace('P', '')) || 3;
+  const code = String(level || '').trim().toUpperCase();
+  if (LEVEL_ORDER[code]) return LEVEL_ORDER[code];
+  return parseInt(code.replace('P', ''), 10) || LEVEL_ORDER[LEVEL_MIN];
 }
 
 function openStudentSetup() {
@@ -22527,12 +22594,7 @@ function addStudentRow(name, level) {
   row.className = 'student-setup-row';
   row.innerHTML = `
     <input type="text" placeholder="Student name" value="${escapeHtml(name || '')}" class="student-name-input">
-    <select class="student-level-select">
-      <option value="P3"${level === 'P3' ? ' selected' : ''}>P3</option>
-      <option value="P4"${level === 'P4' ? ' selected' : ''}>P4</option>
-      <option value="P5"${level === 'P5' ? ' selected' : ''}>P5</option>
-      <option value="P6"${level === 'P6' ? ' selected' : ''}>P6</option>
-    </select>
+    <select class="student-level-select">${levelOptionsHtml(level || '')}</select>
     <button class="remove-student-btn" onclick="this.parentElement.remove()" title="Remove">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
@@ -29441,14 +29503,15 @@ function qpMarkServed(qid) {
 }
 
 // ── Student level cap ─────────────────────────────────────────────────────────
-// Each student account can be assigned a P3–P6 level by the admin (Usage page).
+// Each student account can be assigned a level on the ladder (P3–P6, S1) by
+// the admin (Usage page).
 // Students are NEVER served questions whose topic sits above their level, in
 // any mode: quick practice, topical practice, quests and the mini-games.
-// Unassigned students default to P6 (no restriction) so nothing breaks until
-// the admin sets levels.
+// Unassigned students default to LEVEL_MAX — the top of the ladder, i.e. no
+// restriction — so nothing breaks until the admin sets levels.
 function studentCapLevel() {
-  if (currentUser && currentUser.role === 'student' && /^P[3-6]$/.test(currentUser.level || '')) return currentUser.level;
-  return 'P6';
+  if (currentUser && currentUser.role === 'student' && isLevelCode(currentUser.level || '')) return currentUser.level;
+  return LEVEL_MAX;   // unassigned = no restriction, so it follows the top of the ladder
 }
 function studentCapNum() { return getLevelNumber(studentCapLevel()); }
 // A question's level is the HIGHEST level of any topic it is filed under —
@@ -29466,8 +29529,7 @@ function qWithinStudentLevel(q) {
 }
 // Clamp a P-level string to the student's cap (admins pass through unchanged).
 function clampToStudentLevel(level) {
-  const n = Math.min(getLevelNumber(level), studentCapNum());
-  return 'P' + Math.max(3, n);
+  return levelFromNumber(Math.min(getLevelNumber(level), studentCapNum()));
 }
 // Rebuild the student-facing level dropdowns up to the student's cap so they
 // can't select a level above their own, and preselect their level. Rebuilt
@@ -29481,12 +29543,12 @@ function applyStudentLevelCaps() {
     if (!sel) return;
     const cur = sel.value;
     sel.innerHTML = '';
-    for (let n = 3; n <= capNum; n++) {
+    TOPIC_LEVELS.filter(lv => getLevelNumber(lv) <= capNum).forEach(lv => {
       const o = document.createElement('option');
-      o.value = 'P' + n; o.textContent = 'P' + n;
+      o.value = lv; o.textContent = lv;
       sel.appendChild(o);
-    }
-    sel.value = (/^P[3-6]$/.test(cur) && getLevelNumber(cur) <= capNum) ? cur : studentCapLevel();
+    });
+    sel.value = (isLevelCode(cur) && getLevelNumber(cur) <= capNum) ? cur : studentCapLevel();
   });
 }
 // Load the signed-in student's assigned level. Primary source: their own
@@ -29500,18 +29562,18 @@ async function loadStudentLevel() {
     const s = await getDoc(doc(db, 'userProfiles', currentUser.uid));
     if (s.exists()) {
       const d = s.data();
-      if (/^P[3-6]$/.test(d.level || '')) lvl = d.level;
+      if (isLevelCode(d.level || '')) lvl = d.level;
       // What we served last time. Used only as a stand-in until the family
       // profile loads a few lines later and recomputes it properly — but that
       // gap is exactly where an uncapped P6 used to slip through.
-      if (/^P[3-6]$/.test(d.servingLevel || '')) served = d.servingLevel;
+      if (isLevelCode(d.servingLevel || '')) served = d.servingLevel;
     }
   } catch (e) { console.warn('own profile level read', e); }
   if (!lvl && adminUid) {
     try {
       const s = await getDoc(doc(db, 'users', adminUid, 'settings', 'studentLevels'));
       const map = s.exists() ? (s.data().levels || {}) : {};
-      if (/^P[3-6]$/.test(map[currentUser.uid] || '')) lvl = map[currentUser.uid];
+      if (isLevelCode(map[currentUser.uid] || '')) lvl = map[currentUser.uid];
     } catch (e) { console.warn('shared level map read', e); }
   }
   currentUser.adminLevel = lvl || ''; // the teacher's assigned cap for this account
@@ -29540,7 +29602,7 @@ async function famLoadProfile() {
       familyProfile.students = Array.isArray(d.students)
         ? d.students.filter(x => x && typeof x.name === 'string' && x.name.trim()).map(x => ({
             name: x.name.trim(),
-            level: /^P[3-6]$/.test(x.level || '') ? x.level : 'P6',
+            level: isLevelCode(x.level || '') ? x.level : 'P6',
             edits: Math.max(0, Number(x.edits) || 0)
           }))
         : [];
@@ -29564,7 +29626,7 @@ function famSaveProfile() {
 // "lower of the two wins" rule below still has two separate numbers to compare.
 function _famPersistServingLevel() {
   if (!currentUser || !db || currentUser.role !== 'student') return;
-  const lvl = /^P[3-6]$/.test(currentUser.level || '') ? currentUser.level : '';
+  const lvl = isLevelCode(currentUser.level || '') ? currentUser.level : '';
   const name = currentUser.name || '';
   if (_famServingWritten === lvl + '|' + name) return;    // nothing changed
   _famServingWritten = lvl + '|' + name;
@@ -29579,8 +29641,8 @@ let _famServingWritten = '';
 // two wins, so neither a typo nor an eager student can raise it.
 function famApplyActiveStudent() {
   const s = famActive();
-  const kid = (s && /^P[3-6]$/.test(s.level || '')) ? s.level : '';
-  const admin = /^P[3-6]$/.test(currentUser.adminLevel || '') ? currentUser.adminLevel : '';
+  const kid = (s && isLevelCode(s.level || '')) ? s.level : '';
+  const admin = isLevelCode(currentUser.adminLevel || '') ? currentUser.adminLevel : '';
   currentUser.level = (kid && admin)
     ? (getLevelNumber(kid) < getLevelNumber(admin) ? kid : admin)
     : (kid || admin || '');
@@ -29753,7 +29815,7 @@ function famAddSetupRow(name, level) {
   row.innerHTML = `
     <input type="text" class="form-input fam-name" placeholder="Student name" value="${escapeHtml(name || '')}" style="flex:1;">
     <select class="form-select fam-level" style="max-width:90px;">
-      ${['P3', 'P4', 'P5', 'P6'].map(lv => `<option value="${lv}"${lv === (level || 'P4') ? ' selected' : ''}>${lv}</option>`).join('')}
+      ${levelOptionsHtml(level || 'P4')}
     </select>
     <button class="block-action-btn delete" title="Remove" onclick="this.parentElement.remove()">✕</button>`;
   wrap.appendChild(row);
@@ -29839,7 +29901,7 @@ function famRenderSettings() {
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <input type="text" id="famSetName${i}" class="form-input" value="${escapeHtml(s.name)}" style="flex:1;min-width:150px;" ${locked ? 'disabled' : ''}>
         <select id="famSetLevel${i}" class="form-select" style="max-width:90px;" ${locked ? 'disabled' : ''}>
-          ${['P3', 'P4', 'P5', 'P6'].map(lv => `<option value="${lv}"${lv === s.level ? ' selected' : ''}>${lv}</option>`).join('')}
+          ${levelOptionsHtml(s.level)}
         </select>
         <button class="btn btn-primary" onclick="famSaveStudentEdit(${i})" ${locked ? 'disabled' : ''}>Save</button>
       </div>
@@ -29870,7 +29932,7 @@ async function famSaveStudentEdit(i) {
   if (name === s.name && level === s.level) { showToast('Nothing changed', 'info'); return; }
   if ((s.edits || 0) >= FAM_EDIT_LIMIT) { showToast('No edits left for this student — ask your teacher.', 'error'); return; }
   s.name = name;
-  s.level = /^P[3-6]$/.test(level) ? level : s.level;
+  s.level = isLevelCode(level) ? level : s.level;
   s.edits = (s.edits || 0) + 1;
   await famSaveProfile();
   if (i === familyProfile.activeStudent) famApplyActiveStudent();
@@ -30054,14 +30116,14 @@ async function qpAiRecommend() {
         `Accuracy by skill category (weakest first): ${catAcc.length ? catAcc.map(c => c.name + ' ' + c.acc + '%').join(', ') : 'none yet'}.\n` +
         `Accuracy by question type: ${typeAcc.length ? typeAcc.map(t => (t.name === 'open' ? 'open-ended' : 'MCQ') + ' ' + t.acc + '%').join(', ') : 'none yet'}.\n\n` +
         `Pick the ONE topic the student should practise next — prefer a weak topic (low accuracy) or an important untried one, keeping their weak skill categories in mind. ` +
-        `Choose a difficulty level P3–${studentCapLevel()} (never above ${studentCapLevel()}, the student's own level): easier when struggling, harder when doing well. ` +
+        `Choose a difficulty level ${LEVEL_MIN}–${studentCapLevel()} (never above ${studentCapLevel()}, the student's own level): easier when struggling, harder when doing well. ` +
         `Also choose a question "type": "mcq", "written" (open-ended) or "all" — target the student's weaker type when there is a clear gap, otherwise "all". ` +
-        `Return ONLY JSON: {"topic":"<exact topic from the list>","level":"P3|P4|P5|P6","type":"mcq|written|all","reason":"one short sentence to the student starting with 'Let's'"}`;
+        `Return ONLY JSON: {"topic":"<exact topic from the list>","level":"${TOPIC_LEVELS.join('|')}","type":"mcq|written|all","reason":"one short sentence to the student starting with 'Let's'"}`;
       try {
         const raw = await askGemini(prompt, { maxOutputTokens: 220, temperature: 0.3, json: true });
         const parsed = _parseAIJson(raw);
         if (parsed && parsed.topic && counts[parsed.topic]) {
-          const lvl = clampToStudentLevel(/^P[3-6]$/.test(parsed.level) ? parsed.level : getTopicLevel(parsed.topic));
+          const lvl = clampToStudentLevel(isLevelCode(parsed.level) ? parsed.level : getTopicLevel(parsed.topic));
           const ty = /^(mcq|written|all)$/.test(parsed.type) ? parsed.type : 'all';
           pick = { topic: parsed.topic, level: lvl, type: ty, reason: parsed.reason || '' };
         }
@@ -30078,10 +30140,10 @@ async function qpAiRecommend() {
       const top = scored[0];
       const lvl = clampToStudentLevel(getTopicLevel(top.topic));
       // Ease off by one level if they have been scoring low on it.
-      const easedNum = top.acc >= 0 && top.acc < 50 ? Math.max(3, getLevelNumber(lvl) - 1) : getLevelNumber(lvl);
+      const easedNum = top.acc >= 0 && top.acc < 50 ? getLevelNumber(lvl) - 1 : getLevelNumber(lvl);
       pick = {
         topic: top.topic,
-        level: 'P' + easedNum,
+        level: levelFromNumber(easedNum),
         type: 'all',
         reason: top.acc < 0
           ? `Let's try ${top.topic} — you haven't practised it yet!`
@@ -30642,14 +30704,16 @@ const topicsByLevel = {
   'P3': ['Living and non-living things', 'Materials', 'Life Cycles', 'Magnets'],
   'P4': ['Plant Systems', 'Human Body Systems', 'Matter and its 3 States', 'Light', 'Heat'],
   'P5': ['Water and its 3 States', 'Plant Reproduction', 'Human Reproduction', 'Human and Plant Respiration', 'Human and Plant Transport', 'Electrical Systems'],
-  'P6': ['Forces', 'Energy in Food', 'Energy Conversion', 'Living Together', 'Food Chains and Webs', 'Humans and the Environment']
+  'P6': ['Forces', 'Energy in Food', 'Energy Conversion', 'Living Together', 'Food Chains and Webs', 'Humans and the Environment'],
+  'S1': ['The Scientific Endeavour', 'Measurement and Lab Skills', 'Diversity of Matter — Physical Properties', 'Diversity of Matter — Chemical Composition', 'Separation Techniques', 'Particulate Nature of Matter', 'Atoms and Molecules', 'Cells — The Basic Unit of Life', 'Ray Model of Light', 'Forces and Their Effects']
 };
 
 const levelColors = {
   'P3': { bg: 'var(--accent-teal-light)', fg: 'var(--accent-teal)' },
   'P4': { bg: 'var(--accent-blue-light)', fg: 'var(--accent-blue)' },
   'P5': { bg: 'var(--accent-orange-light)', fg: 'var(--accent-orange)' },
-  'P6': { bg: 'var(--accent-purple-light)', fg: 'var(--accent-purple)' }
+  'P6': { bg: 'var(--accent-purple-light)', fg: 'var(--accent-purple)' },
+  'S1': { bg: 'var(--accent-red-light)', fg: 'var(--accent-red)' }
 };
 
 const topicEmojis = {
@@ -30677,7 +30741,18 @@ const topicEmojis = {
   'Energy Conversion': '🔋',
   'Living Together': '🤝',
   'Food Chains and Webs': '🕸️',
-  'Humans and the Environment': '🌍'
+  'Humans and the Environment': '🌍',
+  // S1
+  'The Scientific Endeavour': '🔬',
+  'Measurement and Lab Skills': '📏',
+  'Diversity of Matter — Physical Properties': '🪨',
+  'Diversity of Matter — Chemical Composition': '⚗️',
+  'Separation Techniques': '🧪',
+  'Particulate Nature of Matter': '🫧',
+  'Atoms and Molecules': '⚛️',
+  'Cells — The Basic Unit of Life': '🦠',
+  'Ray Model of Light': '🔦',
+  'Forces and Their Effects': '🧗'
 };
 
 let tpQueue = [];
@@ -31166,7 +31241,7 @@ function _fcDeckPrompt(gaps) {
     whatTheyActuallyWrote: _fcGapEvidence(g, 5),
   }));
   return [
-    'You are making revision flashcards for one Singapore primary-school science student (P3-P6).',
+    'You are making revision flashcards for one Singapore school science student (P3-P6 primary or Secondary 1).',
     '',
     ground || '',
     'These are the gaps in THEIR knowledge, worked out from the questions they have actually got wrong — how often, and how recently. For each gap you are given the questions they failed, the model answer, the teacher\'s explanation, and where we have it, the exact words the student wrote instead.',
@@ -31180,7 +31255,7 @@ function _fcDeckPrompt(gaps) {
     '- Every card must target the specific thing THIS student got wrong. Where you are told what they wrote, aim the card straight at that error — if they said a heavier mass makes a spring "heavier" instead of "stretch more", the card asks what happens to the extension and why.',
     '- Use ONLY the science in the data above: the model answers, the correct options and the teacher explanations are your source of truth. Do not add facts from your own knowledge, and never contradict a model answer even if you would have phrased it differently.',
     '- "front" is a question, never a topic heading. "What happens to the spring\'s extension when the mass is doubled?" — not "Elastic spring force".',
-    '- "back" is the full mark-worthy answer in one or two short sentences, in the plain wording a P3-P6 child would be expected to write. Include the BECAUSE — the reasoning is where the marks are.',
+    '- "back" is the full mark-worthy answer in one or two short sentences, in the plain wording a P3-P6 or Secondary 1 child would be expected to write. Include the BECAUSE — the reasoning is where the marks are.',
     '- Never write a card whose answer is just "yes" or "no". Ask for the reason instead.',
     '- Do not copy a question from the data word for word. Change the numbers, the object or the situation so they have to think rather than remember the page.',
     '- Vary what you ask for across a gap\'s cards: a definition, a cause-and-effect, a "why is the wrong answer wrong", a real-life example.',
@@ -31830,7 +31905,7 @@ function tpRenderTopics() {
   });
 
   let html = '';
-  const levels = ['P3', 'P4', 'P5', 'P6'];
+  const levels = TOPIC_LEVELS;
 
   levels.forEach(level => {
     const levelNum = getLevelNumber(level);
@@ -32171,15 +32246,15 @@ async function loadUsageDashboard() {
         uid: p.uid,
         email: p.email || '',
         name: p.displayName || p.email || 'Unknown',
-        level: /^P[3-6]$/.test(p.level || '') ? p.level : '',
+        level: isLevelCode(p.level || '') ? p.level : '',
         // What the app is actually serving them at. A family that declared
         // "Aiken is P4" writes that into students[], never into level — so the
         // assigned-level column showed "—" for a child with a perfectly clear
         // level, and nothing on this page revealed the real cap.
-        servingLevel: /^P[3-6]$/.test(p.servingLevel || '') ? p.servingLevel : '',
+        servingLevel: isLevelCode(p.servingLevel || '') ? p.servingLevel : '',
         servingName: typeof p.servingName === 'string' ? p.servingName : '',
         declaredLevels: Array.isArray(p.students)
-          ? p.students.filter(x => x && /^P[3-6]$/.test(x.level || '')).map(x => x.level) : [],
+          ? p.students.filter(x => x && isLevelCode(x.level || '')).map(x => x.level) : [],
         famStudents: Array.isArray(p.students) ? p.students.filter(x => x && x.name).map(x => `${x.name} (${x.level || '?'})`).join(', ') : '',
         famAddress: typeof p.address === 'string' ? p.address : '',
         // Terms of access: null until they accept, and stale once
@@ -32290,13 +32365,12 @@ async function loadUsageDashboard() {
       tbody.innerHTML = studentList.map(s => {
         const lastLoginStr = s.lastLogin ? formatDateTimeSGT(s.lastLogin) : 'Never';
         const avgScore = s.totalBlanks > 0 ? Math.round((s.totalScore / s.totalBlanks) * 100) + '%' : '--';
-        const levelOpts = ['', 'P3', 'P4', 'P5', 'P6'].map(lv =>
-          `<option value="${lv}"${(s.level || '') === lv ? ' selected' : ''}>${lv || '—'}</option>`).join('');
+        const levelOpts = levelOptionsHtml(s.level || '', '—');
         // The cap actually in force = the lower of what you assigned and what
         // the family declared. Shown under the drop-down whenever it isn't just
         // your assignment, so "—" never again hides a real level.
         const declared = (s.declaredLevels || []).length
-          ? 'P' + Math.min.apply(null, s.declaredLevels.map(l => parseInt(l.slice(1), 10)))
+          ? levelFromNumber(Math.min.apply(null, s.declaredLevels.map(getLevelNumber)))
           : '';
         const effective = s.servingLevel || (s.level && declared
           ? ('P' + Math.min(parseInt(s.level.slice(1), 10), parseInt(declared.slice(1), 10)))
@@ -32369,12 +32443,12 @@ async function loadUsageDashboard() {
   }
 }
 
-// Admin: assign a student's level (P3–P6, or '' to clear). Written to the
+// Admin: assign a student's level (any rung on the ladder, or '' to clear). Written to the
 // student's profile AND mirrored into the admin's shared studentLevels map so
 // the student can read it regardless of how userProfiles is locked down.
 async function setStudentLevel(uid, level) {
   if (!currentUser || currentUser.role !== 'admin' || !uid) return;
-  const lvl = /^P[3-6]$/.test(level || '') ? level : '';
+  const lvl = isLevelCode(level || '') ? level : '';
   try {
     await setDoc(doc(db, 'userProfiles', uid), { level: lvl }, { merge: true });
     await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'studentLevels'),
@@ -35788,14 +35862,18 @@ function rpgUnlockAllBetaItems() {
 }
 function rpgHomePage() { return rpgCanPreview() ? "create" : "home"; }
 function rpgPracticePage() { return rpgCanPreview() ? "practice" : "quickpractice"; }
-// Question difficulty rating from the question's level (P3-P6, derived from
-// its topic when the question has no level field) — used to scale rewards.
+// Question difficulty rating from the question's level (P3 → P6 → S1, derived
+// from its topic when the question has no level field) — used to scale rewards.
+// It goes through getLevelNumber like every other comparison: matching /P(\d)/
+// on the string found no rung for 'S1' and fell through to the 1000 default,
+// which rates a Secondary 1 question EASIER than a P6 one.
 function rpgQuestionDifficulty(q) {
-  let s = String((q && q.level) || "").toUpperCase();
-  if (!/P\s*[1-6]/.test(s) && q && q.topic) {
+  let s = String((q && q.level) || "").trim().toUpperCase();
+  if (!isLevelCode(s) && q && q.topic) {
     try { s = String(getTopicLevel(q.topic) || "").toUpperCase(); } catch (_) {}
   }
-  const m = s.match(/P\s*([1-6])\b/);
+  if (isLevelCode(s)) return 600 + (getLevelNumber(s) - 1) * 100;   // P3 800 … P6 1100, S1 1200
+  const m = s.match(/P\s*([1-6])\b/);      // a legacy q.level like "P 5"
   if (m) return 600 + (Number(m[1]) - 1) * 100;
   return 1000;
 }
@@ -62167,7 +62245,7 @@ function _ainsteinTitleMatches(title, concept) {
 // Model-suggested videos, filtered down to ones YouTube confirms.
 async function _ainsteinSearchYoutube(concept, extra) {
   const prompt = [
-    'You are helping a Singapore primary-school science student (P3-P6) who is stuck on this concept: "' + concept + '"' +
+    'You are helping a Singapore school science student (P3-P6 primary or Secondary 1) who is stuck on this concept: "' + concept + '"' +
       (extra ? ' (related words: ' + extra + ')' : '') + '.',
     'List up to 4 REAL YouTube videos that explain this concept clearly to a child of that age. Prefer well-known science-education channels that have been on YouTube for years and are safe for children.',
     'Only list videos you are genuinely confident exist with that exact video id. Never invent an id.',
@@ -63060,7 +63138,7 @@ function _ainsteinBuildPrompt(question, shotImages) {
   const mayAnswer = _ainsteinMayAnswer();
   const isStudent = !!(currentUser && currentUser.role === 'student');
   const lines = [];
-  lines.push('You are Ai-nstein, a friendly primary-school science study buddy inside the Polymath Learning Centre app. You are talking to a Singapore primary-school student (P3-P6).');
+  lines.push('You are Ai-nstein, a friendly school science study buddy inside the Polymath Learning Centre app. You are talking to a Singapore student in P3-P6 or Secondary 1' + (currentUser && isLevelCode(currentUser.level) ? ' — this one is ' + currentUser.level : '') + '.');
   lines.push('');
   const _aiGround = aiGrounding('teach');
   if (_aiGround) { lines.push(_aiGround); lines.push(''); }
@@ -63132,7 +63210,7 @@ function _ainsteinBuildPrompt(question, shotImages) {
   lines.push('ABOUT "video" — the app can put a YouTube explainer in the chat for the student to watch. Set "wanted" to true when EITHER of these is true, otherwise false:');
   lines.push('- They asked for one: "show me a video", "is there a video", "can I watch something on this".');
   lines.push('- They are not just stuck on this question, they do not understand the IDEA itself: "I still don\'t get it", "I don\'t understand this topic at all", "explain it from the start", or they have asked you about the same idea again after your last clue.');
-  lines.push('"query" is what you would type into YouTube for a P3-P6 child on that concept. Do not mention the video in your clue — the app decides whether one is available and adds it under your reply.');
+  lines.push('"query" is what you would type into YouTube for a P3-P6 or Secondary 1 child on that concept. Do not mention the video in your clue — the app decides whether one is available and adds it under your reply.');
   lines.push('');
   lines.push('ABOUT "guide" — this app has a big menu and plenty of students have no idea what most of it is for. The app can put a short card of REAL, tappable buttons under your reply that take them straight to the right place. There are exactly three kinds:');
   lines.push('- "tour" — they are asking how to USE the app or the system: "how do I use this", "what can this app do", "I\'m new here", "what are the most important things in here", "what should I click", "where do I find X", "show me around". Also use this when they are plainly confused about the app itself rather than about any science.');
@@ -64554,7 +64632,11 @@ let _loAiRows = [];             // [{ qid, why, on }] awaiting the admin's tick
 let _loAiBusy = false;
 let _loPickSel = new Set();   // question ids ticked in the picker
 
-const LO_LEVELS = ['P3', 'P4', 'P5', 'P6'];
+// The 🎯 objective list follows the SAME ladder, so a Sec 1 objective can be
+// written and filed. Nothing is seeded for S1 — SYLLABUS_LO_TOPICS is the
+// Primary syllabus's own outcomes — so the level starts empty and is filled
+// in by hand, which is what the ＋ New objective button is for.
+const LO_LEVELS = TOPIC_LEVELS;
 const LO_THEMES = ['Diversity', 'Cycles', 'Systems', 'Interactions', 'Energy'];
 
 function loIsAdmin() { return !!(currentUser && currentUser.role === 'admin'); }
