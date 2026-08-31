@@ -57,6 +57,17 @@ function currentTopics() {
   const b = currentTopicsByLevel();
   return TOPIC_LEVELS.reduce((a, lv) => a.concat(b[lv]), []);
 }
+let currentUser = null;                      // the gate reads it; tests set it
+let removedTopics = [];
+let customTopics = {};
+function qSecondaryTopic2(q) { return (q && typeof q.topic2 === 'string') ? q.topic2.trim() : ''; }
+function qTopicList(q) {
+  const out = [];
+  [((q && q.topic) || ''), qSecondaryTopic2(q)].forEach(t => { t = (t || '').trim(); if (t && !out.includes(t)) out.push(t); });
+  return out;
+}
+function getTopicLevel(topic) { return topicLevelMap[topic] || 'P6'; }
+const questionBank = [];
 function escapeHtml(x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function qSecondaryTopic(q) { return (q && typeof q.topic2 === 'string') ? q.topic2.trim() : ''; }
 function _genPreamble() { return ''; }
@@ -80,13 +91,22 @@ const section = [
   cut('const topicsByLevel = {', '\nconst levelColors', 'topics by level'),
   cut('const levelColors = {', '\nconst topicEmojis', 'level colours'),
   cut('const topicEmojis = {', '\nlet tpQueue', 'topic emojis'),
+  // The ONE gate. Every serving surface asks it, so this is where "only a Sec 1
+  // student may touch a Sec 1 question" is either true or silently not.
+  cut('// ── Student level cap', '\n// Load the signed-in student', 'student level cap'),
+  cut('// What studentCapLevel would ACTUALLY serve', '\n// Admin: assign a student', 'roster cap'),
+  // The REAL bucket builder, renamed so the FIXTURE's stub can go on serving
+  // the prompt-narrowing tests. It is cut because stubbing it is exactly why
+  // the harness sailed past the S1 bucket that did not exist.
+  cut('// EVERY rung gets a bucket', '\nfunction currentTopics()', 'real topics by level')
+    .replace('function currentTopicsByLevel()', 'function realTopicsByLevel()'),
   cut('function _rapidApplyLevel(q, level)', '\nfunction openRapidAdd()', 'level snap'),
   cut('function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint)', '\n// The lettered-parts rules', 'build prompt'),
   FIXTURE
 ].join('\n');
 
 const M = new Function(section +
-  '\nreturn { SUBJECT_KEY, SUBJECT_APPS, subjectCurrent, _rapidApplyLevel, _aiBuildQuestionPrompt, currentTopicsByLevel,\n  TOPIC_LEVELS, LEVEL_ORDER, LEVEL_MAX, LEVEL_MIN, isLevelCode, isSecondaryLevel, getLevelNumber, levelFromNumber, audienceFor, schoolFor, levelOptionsHtml,\n  topicLevelMap, topicsByLevel, levelColors, topicEmojis };')();
+  '\nreturn { SUBJECT_KEY, SUBJECT_APPS, subjectCurrent, _rapidApplyLevel, _aiBuildQuestionPrompt, currentTopicsByLevel,\n  TOPIC_LEVELS, LEVEL_ORDER, LEVEL_MAX, LEVEL_MIN, isLevelCode, isSecondaryLevel, getLevelNumber, levelFromNumber, audienceFor, schoolFor, levelOptionsHtml,\n  topicLevelMap, topicsByLevel, levelColors, topicEmojis,\n  LEVEL_DEFAULT_CAP, _emptyLevelBuckets, levelGroupLabel, realTopicsByLevel, studentCapLevel, studentCapNum, qLevelNum, qWithinStudentLevel, clampToStudentLevel, rosterEffectiveCap,\n  setUser: u => { currentUser = u; } };')();
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -173,10 +193,13 @@ test('the ladder is in order and has no gaps', () => {
   });
   eq(M.LEVEL_MIN, M.TOPIC_LEVELS[0], 'LEVEL_MIN is not the bottom of the ladder');
   eq(M.LEVEL_MAX, M.TOPIC_LEVELS[M.TOPIC_LEVELS.length - 1], 'LEVEL_MAX is not the top');
-  // LEVEL_MAX is what an UNASSIGNED student is capped at, i.e. no restriction.
-  // Pinned to 'P6' it would hide every Sec 1 question from the whole school
-  // until an admin went round assigning levels one child at a time.
+  // LEVEL_MAX is the top of the ladder — what CLAMPS a rung, and the cap for
+  // anyone who is not a student. It is NOT what an unassigned student gets:
+  // that is LEVEL_DEFAULT_CAP, and the difference between the two is the whole
+  // "secondary is opt-in" rule (pinned below).
   eq(M.LEVEL_MAX, 'S1', 'the top of the ladder');
+  ok(M.getLevelNumber(M.LEVEL_DEFAULT_CAP) < M.getLevelNumber(M.LEVEL_MAX),
+    'the default cap is the top of the ladder — every student would get secondary');
 });
 
 test('every rung is a valid level code, and nothing else is', () => {
@@ -265,6 +288,161 @@ test('the practice grid and the level map name the SAME topics', () => {
     ok((M.topicsByLevel[lv] || []).indexOf(t) >= 0,
       t + ' is filed at ' + lv + ' but never appears in the topical-practice grid');
   });
+});
+
+// ── EVERY RUNG NEEDS A BUCKET ───────────────────────────────────────────────
+// This is the one that actually broke a paper. currentTopicsByLevel built a
+// literal { P3, P4, P5, P6 }, so the moment a topic was filed at S1 it pushed
+// onto `undefined` — a TypeError inside the ONE function every authoring
+// prompt calls. ⚡ Rapid add then failed EVERY page of EVERY paper with
+// "Cannot read properties of undefined (reading 'push')", and 🤖 Build from
+// screenshot with it, which reads as a PDF the app could not open.
+//
+// The harness had passed the whole time, because the FIXTURE stubbed the
+// function that crashed. It runs the real one now.
+
+test('every rung on the ladder gets a bucket', () => {
+  const b = M._emptyLevelBuckets();
+  M.TOPIC_LEVELS.forEach(lv => {
+    ok(Array.isArray(b[lv]), lv + ' has no bucket — anything filed there pushes onto undefined');
+  });
+});
+
+test('the REAL topic grouper never pushes onto undefined', () => {
+  const byLevel = M.realTopicsByLevel();          // the live topicLevelMap
+  M.TOPIC_LEVELS.forEach(lv => ok(Array.isArray(byLevel[lv]), lv + ' has no bucket'));
+  // …and every topic really lands in its own level's bucket, not in P6's.
+  Object.keys(M.topicLevelMap).forEach(t => {
+    const lv = M.topicLevelMap[t];
+    ok((byLevel[lv] || []).indexOf(t) >= 0, t + ' is filed at ' + lv + ' but is not in that bucket');
+  });
+  ok((byLevel.S1 || []).length, 'the S1 bucket came back empty');
+});
+
+test('a topic filed at a level that is NOT on the ladder is skipped, never thrown on', () => {
+  // A custom topic left behind by a level that was removed, or a hand-edited
+  // settings doc. It cannot be offered, but it must not take the authoring
+  // page down either — which is the failure this whole section is about.
+  const byLevel = M._emptyLevelBuckets();
+  ok(!byLevel.P2, 'P2 must not have a bucket');
+  // The real function guards with `byLevel[lv] &&`; prove it by the shape it
+  // relies on rather than by mutating the app's own topic map.
+  eq(typeof byLevel.P2, 'undefined', 'an off-ladder level resolves to undefined, so the guard is load-bearing');
+});
+
+test('a level heading says Primary or Secondary, never "Primary 1"', () => {
+  // `'Primary ' + lv.slice(1)` reads "Primary 1" for S1.
+  eq(M.levelGroupLabel('P3'), 'Primary 3', 'P3 heading');
+  eq(M.levelGroupLabel('P6'), 'Primary 6', 'P6 heading');
+  eq(M.levelGroupLabel('S1'), 'Secondary 1', 'S1 heading');
+});
+
+// ── SECONDARY IS OPT-IN: only a Sec 1 student may touch a Sec 1 question ────
+// studentCapLevel is the ONE gate — qWithinStudentLevel, studentCapNum,
+// clampToStudentLevel and the practice dropdowns all ask it, so every failure
+// here leaks Secondary 1 science to a nine-year-old on every surface at once,
+// with nothing on any screen saying so.
+
+const asStudent = (level, adminLevel) =>
+  M.setUser({ role: 'student', level: level || '', adminLevel: adminLevel === undefined ? level || '' : adminLevel });
+const S1Q = { topic: 'Separation Techniques' };          // an S1 question
+const P4Q = { topic: 'Heat' };                           // a P4 question
+const P6Q = { topic: 'Forces' };
+
+test('an UNASSIGNED student is capped at the top of PRIMARY', () => {
+  // The whole P3–P6 roster has no level set, and nobody is going to go round
+  // and set them all. Capping at LEVEL_MAX instead would open the Sec 1 bank
+  // to every one of them the moment the first S1 question was saved.
+  eq(M.LEVEL_DEFAULT_CAP, 'P6', 'the default cap is not the top of primary');
+  asStudent('');
+  eq(M.studentCapLevel(), 'P6', 'an unassigned student is not capped at P6');
+  eq(M.qWithinStudentLevel(S1Q), false, 'an unassigned student reached a Sec 1 question');
+  eq(M.qWithinStudentLevel(P6Q), true, 'an unassigned student lost P6');
+});
+
+test('a P3–P6 student can never touch a Sec 1 question', () => {
+  ['P3', 'P4', 'P5', 'P6'].forEach(lv => {
+    asStudent(lv);
+    eq(M.qWithinStudentLevel(S1Q), false, lv + ' reached a Sec 1 question');
+  });
+});
+
+test('an S1 student the TEACHER assigned gets Sec 1 — and primary too', () => {
+  asStudent('S1', 'S1');
+  eq(M.studentCapLevel(), 'S1', 'an assigned S1 student is not on S1');
+  eq(M.qWithinStudentLevel(S1Q), true, 'the S1 student cannot reach their own questions');
+  eq(M.qWithinStudentLevel(P4Q), true, 'an S1 student lost the primary bank');
+});
+
+test('a level a FAMILY declared can never carry an account into secondary', () => {
+  // currentUser.level is fed by the family profile, whose dropdown a parent
+  // fills in themselves. Without the gate, picking "S1" there is a P6 child
+  // helping themselves to the Sec 1 bank.
+  asStudent('S1', '');            // serving S1, but the teacher assigned nothing
+  eq(M.studentCapLevel(), 'P6', 'a self-declared S1 was honoured');
+  eq(M.qWithinStudentLevel(S1Q), false, 'a self-declared S1 reached a Sec 1 question');
+  asStudent('S1', 'P6');          // the teacher assigned P6
+  eq(M.studentCapLevel(), 'P6', 'a self-declared S1 beat the teacher\'s P6');
+});
+
+test('a stale servingLevel cannot keep an account in secondary', () => {
+  // studentCapLevel reads currentUser.level, which loadStudentLevel fills from
+  // the profile's servingLevel when no level is assigned. Clearing the
+  // assignment must drop the student back to primary.
+  asStudent('S1', '');
+  eq(M.studentCapLevel(), 'P6', 'a stale serving level outlived the assignment');
+});
+
+test('the gate FAILS CLOSED', () => {
+  // A refused profile read leaves adminLevel empty. Costing a real S1 student
+  // some questions is the right way round: the other direction serves
+  // Secondary 1 science to a nine-year-old.
+  asStudent('S1', undefined); M.setUser({ role: 'student', level: 'S1' });   // adminLevel absent
+  eq(M.studentCapLevel(), 'P6', 'a missing adminLevel granted secondary');
+  M.setUser({ role: 'student', level: 'nonsense', adminLevel: 'nonsense' });
+  eq(M.studentCapLevel(), 'P6', 'junk did not fall back to the default cap');
+});
+
+test('an admin, an employee and a signed-out visitor are not capped', () => {
+  M.setUser({ role: 'admin' });
+  eq(M.studentCapLevel(), M.LEVEL_MAX, 'an admin was capped');
+  eq(M.qWithinStudentLevel(S1Q), true, 'an admin cannot see a Sec 1 question');
+  M.setUser({ role: 'employee' });
+  eq(M.qWithinStudentLevel(S1Q), true, 'an employee cannot author against Sec 1');
+  M.setUser(null);
+  eq(M.studentCapLevel(), M.LEVEL_MAX, 'no user was capped');
+});
+
+test('a SECONDARY secondary topic cannot ride in behind a primary one', () => {
+  // qLevelNum takes the MAX over both topics. Reading only q.topic would let a
+  // question filed "Heat" + "Atoms and Molecules" reach a P4 child.
+  asStudent('P4');
+  eq(M.qLevelNum({ topic: 'Heat', topic2: 'Atoms and Molecules' }), 7, 'the pair does not read as S1');
+  eq(M.qWithinStudentLevel({ topic: 'Heat', topic2: 'Atoms and Molecules' }), false,
+    'a Sec 1 secondary topic rode in behind a P4 primary one');
+});
+
+test('clampToStudentLevel never hands a student a secondary level', () => {
+  asStudent('P4');
+  eq(M.clampToStudentLevel('S1'), 'P4', 'the AI recommending S1 was honoured for a P4 student');
+  asStudent('');
+  eq(M.clampToStudentLevel('S1'), 'P6', 'an unassigned student was clamped to secondary');
+  asStudent('S1', 'S1');
+  eq(M.clampToStudentLevel('S1'), 'S1', 'a real S1 student was clamped down');
+});
+
+test("the admin's roster shows what is really being served", () => {
+  // A dashboard that reports a child as being on Sec 1 while the app serves
+  // them primary is unfalsifiable from that page.
+  eq(M.rosterEffectiveCap('S1', '', ''), 'S1', 'an assigned S1 is not shown as S1');
+  eq(M.rosterEffectiveCap('', 'S1', ''), 'P6', 'a family-declared S1 is shown as granted');
+  eq(M.rosterEffectiveCap('', '', 'S1'), 'P6', 'a stale serving S1 is shown as granted');
+  eq(M.rosterEffectiveCap('', '', ''), 'P6', 'nothing set is not the default cap');
+  // 'S1'.slice(1) is "1", so the old arithmetic reported an S1 child as "P1".
+  eq(M.rosterEffectiveCap('S1', 'P6', ''), 'P6', 'lower wins');
+  ['P3', 'P4', 'P5', 'P6'].forEach(lv =>
+    eq(M.rosterEffectiveCap(lv, '', ''), lv, 'a plain assignment is shown as itself: ' + lv));
+  eq(M.rosterEffectiveCap('P6', 'P4', ''), 'P4', 'the declared level lowers the cap');
 });
 
 // ── the batch level: narrowing the topics is the whole mechanism ────────────

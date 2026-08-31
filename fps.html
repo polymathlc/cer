@@ -537,7 +537,14 @@ let customTopicLevels = {};      // admin's custom topics → level
 // 1, which would rank every Secondary 1 question BELOW P3 and feed it to the
 // youngest child on the page.
 const LEVEL_ORDER = { P3: 3, P4: 4, P5: 5, P6: 6, S1: 7 };
-const LEVEL_CAP_MAX = 7;         // top of the ladder = everything (admins, or no level known)
+const LEVEL_CAP_MAX = 7;         // top of the ladder — an admin, who sees everything
+// SECONDARY IS OPT-IN, exactly as in index.html's studentCapLevel: a student
+// with no level assigned is capped at the top of PRIMARY, and a secondary cap
+// needs the TEACHER's own assignment (userProfiles.level) — a level a family
+// typed into their own profile can lower the cap but never carry it into
+// secondary. Without both rules this page is the way round the gate: it reads
+// the bank directly and has its own copy of the cap.
+const LEVEL_CAP_DEFAULT = LEVEL_ORDER.P6;
 let studentLevelCap = LEVEL_CAP_MAX;
 
 function levelNum(l) { return LEVEL_ORDER[String(l || '').trim().toUpperCase()] || 0; }
@@ -561,6 +568,10 @@ function qLevelNumOf(q) {
 async function loadStudentLevelCap() {
   studentLevelCap = LEVEL_CAP_MAX;
   if (!currentUser || isAdmin()) return;
+  // A student starts on primary and is raised from there, so every failure
+  // below — a refused read, a missing profile, a thrown parse — leaves them on
+  // primary rather than on everything.
+  studentLevelCap = LEVEL_CAP_DEFAULT;
   try {
     const s = await getDoc(doc(db, 'userProfiles', currentUser.uid));
     if (s.exists()) {
@@ -571,6 +582,9 @@ async function loadStudentLevelCap() {
         ? d.students.map(x => levelNum(x && x.level)).filter(Boolean) : [];
       const candidates = [assigned, serving].concat(declared).filter(Boolean);
       if (candidates.length) studentLevelCap = Math.min.apply(null, candidates);
+      // Secondary is the TEACHER's to grant: only d.level (the level assigned
+      // on the Usage page) may take this account past primary.
+      if (studentLevelCap > LEVEL_CAP_DEFAULT && assigned <= LEVEL_CAP_DEFAULT) studentLevelCap = LEVEL_CAP_DEFAULT;
       if (d.servingName) currentUser.name = d.servingName;   // the child practising, not the parent's account
     }
   } catch (e) { console.warn('student level read', e); }
