@@ -29,11 +29,14 @@ const section = [
   // escapeHtml goes through the DOM in the app; the shim is the same contract.
   "function escapeHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }",
   'function transformImageUrl(u) { return String(u || \'\'); }',
+  // The explanation as it reaches the key — its words plus the 🖼 diagram
+  // drawn from them. Both print paths and the fallback section go through it.
+  cut('function _explKeyContentHtml(block) {', '\n}\n', 'explanation key content') + '\n}\n',
   cut('function _pushAnnotAnswerKey', '// How many ruled lines a printed answer box gets', 'answer-key pushers')
 ].join('\n');
 
 const M = new Function(section + '\nreturn { _pushBlockAnswerKey, _pushAnswerKeySection, _pushAnnotAnswerKey,'
-  + ' _qFallbackKeySection, _akQuestionSections, _akSectionsHtml, AK_NO_ANSWER, sanitizeAnswerKeyHtml };')();
+  + ' _qFallbackKeySection, _akQuestionSections, _akSectionsHtml, AK_NO_ANSWER, sanitizeAnswerKeyHtml, _explKeyContentHtml };')();
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });

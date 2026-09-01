@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.341.0';
+const APP_VERSION = 'v1.342.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -6397,6 +6397,7 @@ function renderBlocks() {
                data-block-id="${block.id}" data-field="content"
                onpaste="handleRichImagePaste('${block.id}', 'content', event)"
                oninput="saveBlockContent('${block.id}', 'content', this.innerHTML)">${block.content || ''}</div>
+          ${xdBarHtml(block)}
         `;
         break;
 
@@ -8064,11 +8065,15 @@ async function _akdQuestionFigure(q) {
   catch (e) { console.warn('auto diagram: could not read the question figure', e); return null; }
 }
 
-// The ONE generator. Both surfaces — the question's answer-key panel and the
-// 🔑 answer-key block — call it, so a diagram drawn from either is drawn the
-// same way and there is one prompt to improve rather than two to keep in step.
-// Returns the uploaded URL.
-async function _akdMake(q, answerText, note, currentUrl, regen) {
+// THE ONE DRAWING CORE. Every teaching diagram in the app is made here — the
+// question's answer-key panel, the 🔑 answer-key block and the 💡 explanation
+// block — so which picture is used as the REFERENCE, the paper clean-up and
+// the upload cannot drift between them, and there is one place to improve all
+// three. Only the PROMPT differs, and each surface passes its own builder:
+// `buildPrompt(refKind)` is handed 'current' (🔄 Regenerate — edit the picture
+// that is there), 'question' (the question's own figure, so the apparatus
+// matches what the pupil was looking at) or 'none'. Returns the uploaded URL.
+async function _diagramDraw(q, buildPrompt, currentUrl, regen) {
   if (!imageAiReady()) throw new Error('image AI is not available in this project');
   let ref = null, kind = 'none';
   if (regen && currentUrl) {
@@ -8076,7 +8081,7 @@ async function _akdMake(q, answerText, note, currentUrl, regen) {
     catch (e) { console.warn('auto diagram: could not read the current diagram, drawing fresh', e); }
   }
   if (!ref) { ref = await _akdQuestionFigure(q); kind = ref ? 'question' : 'none'; }
-  const dataUrl = await generateImageDataUrlGemini(_akdPrompt(q, answerText, note, kind), ref);
+  const dataUrl = await generateImageDataUrlGemini(buildPrompt(kind), ref);
   // Straight through the shared paper cleaner, exactly as an enhanced scan is:
   // an image model has no flat white, so it leaves the faint weave that prints
   // as a grey wash. A refusal there hands the picture back untouched.
@@ -8084,6 +8089,12 @@ async function _akdMake(q, answerText, note, currentUrl, regen) {
   try { const res = await _paperCleanDataUrl(dataUrl); if (res && res.url) cleaned = res.url; }
   catch (e) { console.warn('auto diagram: paper clean skipped', e); }
   return await uploadImageDataUrl(cleaned);
+}
+// The answer-key diagram. Both answer-key surfaces — the question's own panel
+// and the 🔑 answer-key block — call it, so a diagram drawn from either is
+// drawn the same way and there is one prompt to improve rather than two.
+async function _akdMake(q, answerText, note, currentUrl, regen) {
+  return await _diagramDraw(q, kind => _akdPrompt(q, answerText, note, kind), currentUrl, regen);
 }
 function _akdBusy(btn, on, label) {
   if (!btn) return;
@@ -8193,6 +8204,192 @@ function akdBarHtml(blockId, note, hasPic) {
       <input class="akd-note" type="text" placeholder="Instructions for the diagram — e.g. side view, label the anther, arrows in red"
              maxlength="${AKD_NOTE_MAX}" value="${escapeHtml(note || '')}" oninput="setAkdBlockNote('${blockId}', this.value)">
     </div>`;
+}
+
+
+// =====================================================================
+// 🖼 DRAW THE EXPLANATION — a picture of exactly what the explanation says
+// (v1.342.0)
+//
+// An explanation is words about something that is nearly always a PICTURE:
+// where the heat went, which way the light bent, what the plant did with the
+// water. A pupil reading "the water vapour cooled on the cold surface and
+// condensed" has to build that picture in their head before the sentence means
+// anything, and the ones who cannot are exactly the ones the note was written
+// for. So every 💡 explanation box gets a button that draws it.
+//
+//  • IT DRAWS THE EXPLANATION, NOT THE ANSWER. 🖼 Auto diagram on a 🔑
+//    answer-key block draws what the ANSWER is; this draws what the
+//    EXPLANATION SAYS — the mechanism, the stages, the arrows — and the prompt
+//    is written round that one difference. `XD_FIDELITY` is where it is said:
+//    every element named in the explanation appears, nothing that is not named
+//    is invented, and the picture claims nothing the sentence does not.
+//  • THE EXPLANATION IS THE BRIEF, so an EMPTY box is refused outright. A
+//    picture drawn from nothing is a picture of nothing, and "exactly what the
+//    explanation says" is not a promise that can be kept without one.
+//  • IT SHARES EVERYTHING ELSE. `_diagramDraw` is the one core (reference
+//    picture, paper clean-up, upload), `AKD_PRINT_RULES` is the one style —
+//    these print on the same answer key beside each other, and two houses of
+//    diagram on one sheet reads as a mistake.
+//  • THE PICTURE LIVES ON THE BLOCK, in `block.url`, exactly where the 🔑
+//    answer-key block keeps its own. So it saves with the question, ✏️ Touch up
+//    reaches it through the SAME `akBlockId` branch of applyAnnotTool — no
+//    second editor and no second destination — and the printed key renders it
+//    through the same shared helper both print paths call.
+//  • IT IS SHOWN ONLY AFTER MARKING, like every other answer-key picture:
+//    `renderImportedBlockStudent` still renders an explanation block as
+//    NOTHING inside the question, so a diagram of the answer can never appear
+//    above the question it gives away.
+//  • THE LABELS ARE THE PART TO CHECK. An image model letters a perfect beaker
+//    "watr vapuor", which is why ✏️ Touch up sits on the same row and every
+//    toast says so.
+// =====================================================================
+
+// Said once, and it is the whole difference from the answer-key diagram: this
+// picture is a rendering OF a sentence, so it is bound to that sentence.
+const XD_FIDELITY =
+  ' WHAT TO DRAW — this is the whole job:\n' +
+  '- Draw EXACTLY what the explanation above says, and nothing else. It is not a picture "about the topic": it is that sentence, drawn.\n' +
+  '- Every thing the explanation NAMES must appear in the picture and be labelled with the explanation\'s own word for it. Use the wording of the explanation, not a synonym.\n' +
+  '- Every process the explanation describes must be visible as a process — an arrow for a movement or a transfer, two panels for a before and an after, a labelled change for a change.\n' +
+  '- Do NOT add an object, a step, a cause or a claim the explanation does not make, and do NOT leave one out because it is hard to draw. A pupil must be able to read the explanation and point at every part of it on the picture.\n' +
+  '- Do not draw the question, the options, the answer lines or any exam paper furniture, and do not write the explanation out as a sentence in the picture. Draw the SCIENCE it describes.';
+
+// The prompt. The question goes along as context — a diagram of "it cools and
+// condenses" has to show the apparatus that was actually printed — but the
+// EXPLANATION is what is being drawn, and the prompt says so twice, because a
+// model handed both will otherwise draw the question.
+function _xdPrompt(q, explText, note, refKind) {
+  const ref =
+    refKind === 'current'
+      ? '\nThe picture attached to this message is the CURRENT diagram. Redraw it with the change asked for below, keeping everything else about it the same.\n'
+      : refKind === 'question'
+        ? '\nThe picture attached to this message is the FIGURE PRINTED IN THE QUESTION. It is there so your apparatus, layout and shapes match what the pupil was looking at — reuse them. It is NOT the thing to draw and it is NOT to be handed back unchanged: draw the EXPLANATION.\n'
+        : '\n';
+  return 'Draw ONE diagram that shows EXACTLY what the EXPLANATION below says, for the answer key of the Singapore science question below it. ' +
+    'It is the picture a teacher would draw on the whiteboard while reading that explanation out: a pupil who could not follow the words should be able to follow the picture.\n\n' +
+    'THE EXPLANATION TO DRAW — this is the subject of the picture:\n' + explText + '\n\n' +
+    'THE QUESTION IT BELONGS TO, for context only:\n' + _cqRepr(q) + '\n' +
+    ref +
+    (note ? '\nWHAT THE TEACHER ASKED FOR — this outranks anything below it:\n' + note + '\n' : '') +
+    '\n' + XD_FIDELITY +
+    '\n' + AKD_PRINT_RULES;
+}
+
+// The explanation this block holds, as plain text. It IS the brief, so an empty
+// one is refused by the caller rather than drawn from the question instead.
+function _xdExplText(block) {
+  return _docClip(stripHtml((block && block.content) || '').replace(/\s+/g, ' ').trim(), 1600);
+}
+
+function xdRunBlock(blockId, btn, regen) {
+  if (!_canAuthor()) return;
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || block.type !== 'explanation') return;
+  try { syncEditorDomToBlocks(); } catch (e) {}
+  const live = blocks.find(b => b.id === blockId) || block;
+  if (!_xdExplText(live)) {
+    showToast('Write the explanation first — the picture is drawn from what it says', 'info');
+    return;
+  }
+  const cur = String(live.url || '').trim();
+  if (regen && !cur) { showToast('Draw a diagram first, then 🔄 Regenerate changes it', 'info'); return; }
+  // 🖼 starts again from the explanation, so a picture already there is
+  // replaced and it asks first. 🔄 is a redraw OF that picture, which is what
+  // the confirm would be offering anyway, so it never asks.
+  if (!regen && cur) { showConfirm('Replace this explanation picture?', 'This explanation already has a diagram. Drawing a new one will replace it.', () => _xdGoBlock(blockId, btn, regen)); return; }
+  _xdGoBlock(blockId, btn, regen);
+}
+async function _xdGoBlock(blockId, btn, regen) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const cur = String(block.url || '').trim();
+  if (!imageAiReady()) { showToast('Image AI is not available in this project', 'error'); return; }
+  // emScope through _akdEditorQuestion: in ✏️ editing mode the global `blocks`
+  // is the whole sheet, and a picture drawn from that is a picture of a
+  // different question.
+  const q = _akdEditorQuestion(blockId);
+  const explText = _xdExplText(block);
+  _akdBusy(btn, true, regen ? '🔄 Redrawing…' : '🖼 Drawing…');
+  try {
+    const url = await _diagramDraw(q, kind => _xdPrompt(q, explText, _akdClipNote(block.diagramNote), kind), cur, regen);
+    const live = blocks.find(b => b.id === blockId);   // renderBlocks may have replaced it while the AI drew
+    if (!live) return;
+    live.url = url;
+    renderBlocks();
+    showToast(XD_DONE, 'success');
+  } catch (e) {
+    console.warn('explanation diagram failed', e);
+    showToast('Could not draw the diagram: ' + (e && e.message ? e.message : e), 'error');
+  } finally { _akdBusy(btn, false); }
+}
+const XD_DONE = 'Diagram drawn ✓ — check it says what your explanation says and the labels are spelled right, then ✏️ Touch up to fix anything';
+// The SAME editor and the SAME destination as the 🔑 answer-key block: that
+// branch of applyAnnotTool writes `b.url` on the block it is given, which is
+// where this picture lives too.
+function xdTouchUpBlock(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || !String(block.url || '').trim()) { showToast('Draw a picture on this explanation first', 'info'); return; }
+  _annotOpenSrc(_urlToDataUrlRobust(transformImageUrl(block.url)), { akBlockId: blockId }, '✏️ Touch up the explanation diagram');
+}
+function xdRemoveBlockPic(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || !String(block.url || '').trim()) return;
+  showConfirm('Remove this explanation picture?', 'The explanation keeps its words; only the diagram goes.', () => {
+    const live = blocks.find(b => b.id === blockId);
+    if (!live) return;
+    live.url = '';
+    renderBlocks();
+    showToast('Picture removed', 'success');
+  });
+}
+// The steering note lives ON the block, so it is saved with the question and a
+// regeneration a week later still knows what was asked for. Same field name as
+// the 🔑 block's, because it means the same thing.
+function setXdBlockNote(blockId, v) {
+  const b = blocks.find(x => x.id === blockId);
+  if (b) b.diagramNote = _akdClipNote(v);
+}
+// The bar under every explanation box, plus the picture once there is one.
+function xdBarHtml(block) {
+  const id = block.id;
+  const url = String(block.url || '').trim();
+  const has = !!url;
+  return `
+    <div class="akd-bar">
+      <button type="button" class="akd-btn" onclick="xdRunBlock('${id}', this, false)" title="Let the AI draw a clean, simple science diagram of EXACTLY what this explanation says — the mechanism, the stages, the arrows. It is a teaching picture on the answer key: the pupil sees it only after their answer is marked.">🖼 Draw this explanation</button>
+      <button type="button" class="akd-btn"${has ? '' : ' style="display:none;"'} onclick="xdRunBlock('${id}', this, true)" title="Redraw the diagram that is there now, with the instructions below applied to it">🔄 Regenerate</button>
+      <button type="button" class="akd-btn"${has ? '' : ' style="display:none;"'} onclick="xdTouchUpBlock('${id}')" title="Open the diagram in the touch-up editor — fix a label, move an arrow, erase anything wrong">✏️ Touch up</button>
+      <button type="button" class="akd-btn"${has ? '' : ' style="display:none;"'} onclick="xdRemoveBlockPic('${id}')" title="Take the picture off this explanation — the words stay">✕ Remove</button>
+      <input class="akd-note" type="text" placeholder="Instructions for the diagram — e.g. side view, two panels, label the condensation"
+             maxlength="${AKD_NOTE_MAX}" value="${escapeHtml(block.diagramNote || '')}" oninput="setXdBlockNote('${id}', this.value)">
+    </div>` +
+    (has ? `<div class="xd-preview"><img src="${escapeHtml(transformImageUrl(url))}" alt="Diagram of this explanation" onerror="handleImgError(this)" loading="lazy" decoding="async"></div>` : '');
+}
+
+// The explanation as it reaches an ANSWER KEY: the words, and the picture under
+// them. BOTH print paths call it — they had already drifted over the MCQ answer
+// once, and a key that carries the picture from one print button and not the
+// other is that same fault wearing a new hat.
+function _explKeyContentHtml(block) {
+  const words = sanitizeAnswerKeyHtml((block && block.content) || '');
+  const url = String((block && block.url) || '').trim();
+  if (!url) return words;
+  return words + `<div><img src="${escapeHtml(transformImageUrl(url))}" style="max-width:100%;max-height:180pt;"></div>`;
+}
+// The explanation diagrams a question carries, for the post-marking card. Its
+// own reader, kept apart from `_qAnswerDiagrams`: that one answers "what
+// picture explains the ANSWER" and this one "what picture draws the
+// EXPLANATION", and one function answering both is one that will be asked the
+// wrong question.
+function _qExplanationDiagrams(q) {
+  const out = [];
+  ((q && q.blocks) || []).forEach(b => {
+    if (!b || b.type !== 'explanation') return;
+    const t = String(b.url || '').trim();
+    if (t && out.indexOf(t) < 0) out.push(t);
+  });
+  return out;
 }
 
 // =====================================================================
@@ -12437,6 +12634,7 @@ function _partsPromptRules() {
   return `- LETTERED PARTS: if the question has sub-parts (a), (b), (c), give EACH part its own text block, starting with its own marker written exactly as "(a) " / "(b) " — one marker per block, never two parts in the same block.\n` +
     `- Give EACH part its own answer block ("answer" or "plainanswer") directly under the text block that asks it, so every part has its own model answer.\n` +
     `- EXPLANATIONS follow the parts: a question with NO parts finishes with ONE "explanation" block; a question WITH parts gets ONE explanation block PER PART, placed directly after that part's own answer block and explaining ONLY that part's question and answer. Never write one explanation covering several parts, and never put an explanation about part (b) underneath part (a).\n` +
+    `- EVERY PART GETS ONE, WITHOUT EXCEPTION. Count the parts before you answer and return exactly that many "explanation" blocks: three parts means THREE explanation blocks, one after each part's answer. A part left without its own explanation box is a part the answer key has nothing to say about, so never skip one because a part looks obvious, looks short, or has already been covered by the part above it.\n` +
     `- AN EXPLANATION IS NOT THE ANSWER AGAIN. The answer block already holds the answer and the two print one under the other on the answer key, so an explanation that restates or paraphrases it prints the same words twice. Keep it to the 2-4 sentences an explanation has always been, and spend them on what the answer does NOT say — the principle it rests on, named; the step of reasoning it takes for granted; or the answer a student is most likely to give instead and why it is wrong. Pick the one that fits, not all of them. This matters most where the question itself says "explain", "why" or "give a reason", because there the model answer is ALREADY an explanation.\n`;
 }
 
@@ -12772,6 +12970,30 @@ function _dupGateSave(q, proceed) {
   );
 }
 
+// 🤖 Build from screenshot fills the editor and then tops the parts up. It
+// works on the editor's own `blocks` — the question is the one on screen and
+// there is only ever one of them here — and re-renders only when something was
+// actually written, so a reply that already had every part costs no repaint.
+// It never throws: the question is already built and is worth more than a note.
+async function _aiBuildFillPartExplanations(pages) {
+  try {
+    if (!qHasParts(blocks)) return [];
+    const q = {
+      title: document.getElementById('questionTitle')?.value || '',
+      topic: document.getElementById('topicSelect')?.value || '',
+      blocks
+    };
+    const media = (pages || []).map(p => ({ mimeType: p.mimeType, data: p.data }));
+    const done = await aiWritePartExplanations(q, { media });
+    if (done.length) {
+      renderBlocks();
+      showToast('📝 Wrote an explanation for part' + (done.length > 1 ? 's ' : ' ')
+        + done.map(p => '(' + p + ')').join(', ') + ' — review them before saving', 'info');
+    }
+    return done;
+  } catch (e) { console.warn('build from screenshot: per-part explanations skipped', e); return []; }
+}
+
 async function handleAiBuildFile(file) { return handleAiBuildFiles(file ? [file] : []); }
 
 // Build ONE question from one file (image or PDF), or from SEVERAL screenshots
@@ -12810,6 +13032,11 @@ async function handleAiBuildFiles(files) {
     const first = payloads[0] || parsed;
     _populateEditorFromAi(first);
     checkEditorDuplicate();   // warn if this looks like a question already in the bank
+    // EVERY PART GETS ITS OWN EXPLANATION. The editor holds the question the
+    // moment it lands, so this fills in what the reply came back short of
+    // before the author has read it — the pages go along, so the note is
+    // written from the figure and not from the transcription alone.
+    await _aiBuildFillPartExplanations(pages);
     const hasImageBlock = blocks.some(b => b.type === 'image');
     if (payloads.length > 1) {
       showToast(`📄 That page holds ${payloads.length} SEPARATE questions — the editor has loaded the first. Use ⚡ Rapid add to get all ${payloads.length} into vetting at once.`, 'info');
@@ -13837,6 +14064,25 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
             }
           }
         }
+      }
+
+      // 2b) EVERY PART GETS ITS OWN EXPLANATION. The build prompt asks for one
+      //    per part and a model still skips one now and then — most often on a
+      //    page holding several questions, which is exactly where it economises.
+      //    The structural repair is free; anything still bare is written by ONE
+      //    call for the whole question, with the page itself attached so the
+      //    note is written from the figure and not from the transcription alone.
+      //    A failure here changes nothing: the question goes to vetting with
+      //    the notes it already had.
+      if (qHasParts(q.blocks)) {
+        try {
+          _setRapidJobState(jobId, {
+            title: q.title || 'Question',
+            sub: (many ? `Question ${pi + 1} of ${payloads.length} — ` : '') + 'writing an explanation for each part…'
+          });
+          renderVettingList();
+          await aiWritePartExplanations(q, { media: [{ mimeType: file.type, data: b64 }] });
+        } catch (e) { console.warn('rapid per-part explanations skipped', e); }
       }
 
       // 3) Promote to a real Vetting question and persist. Done per question
@@ -17492,6 +17738,212 @@ function qApplyAiParts(blocks) {
   qScopeExplanations(out);
   return out;
 }
+
+// =====================================================================
+// 📝 EVERY PART GETS ITS OWN EXPLANATION — ⚡ Rapid add, 📄 whole PDFs and
+// 🤖 Build from screenshot (v1.342.0)
+//
+// A question with (a), (b), (c) is THREE questions on the answer key: each is
+// printed under its own heading, each is marked on its own, and each is what a
+// pupil is looking at when they read the note underneath it. So each one needs
+// its own explanation, and until now a part very often had none:
+//
+//  • THE PROMPT ASKS, AND A MODEL STILL SKIPS. `_partsPromptRules()` has asked
+//    for one explanation per part since v1.246.0. It is obeyed most of the
+//    time and not all of the time — and a page of five questions read in one
+//    reply is exactly where a model economises.
+//  • AND THE REPAIR ONLY COVERED ONE SHAPE. `qScopeExplanations` fixes the
+//    single-explanation case, by splitting it per part where the model
+//    labelled it and otherwise filing it under NO part. Two explanations for
+//    three parts fell straight through its `exs.length !== 1` guard, and part
+//    (c) was simply left bare.
+//
+// The gap is SILENT in the worst way: the question builds, reads and prints
+// perfectly, and the missing note is only met by whoever is standing in front
+// of a class holding the key. So it is closed twice over — structurally first,
+// because that is free and deterministic, then by ONE AI call per question
+// that is still short.
+//
+//  • THE STRUCTURAL PASS IS ALWAYS FIRST. `qSplitMultiPartExplanations` takes
+//    an explanation that holds "(a) … (b) …" in one box and makes it the notes
+//    it already is. It is idempotent — after the split no box holds two
+//    markers — and it costs nothing, so it runs on every build whether or not
+//    the AI filler is available.
+//  • THE AI PASS WRITES ONLY WHAT IS MISSING. `qPartsWithoutExplanation` is
+//    the ONE place that set is decided, and it is re-read at APPLY time as
+//    well as before the call: a part that gained a note while the call was in
+//    flight keeps the one it has. Nothing already written is ever replaced —
+//    an author's own words, and the model's own note for another part, are not
+//    this pass's to rewrite.
+//  • ONE CALL PER QUESTION, NEVER ONE PER PART. A three-part question short of
+//    all three is one call, or a forty-page paper is a hundred and twenty.
+//  • IT IS THE DEFAULT DEPTH, ALWAYS. The rule comes from the shared
+//    `_explDepthRules(hasAnswer, asksExplain, '')` — the same function the 🤖
+//    button reads — so the note is the 2-4 sentences it has always been. A
+//    build path may never reach 📖 or 📚: a paper of forty lectures is the
+//    fault the three depths exist to undo.
+//  • A FAILURE COSTS NOTHING. It is wrapped at every call site and the
+//    question goes to vetting exactly as it would have. An explanation that
+//    could not be written is the state we were already in; a question lost
+//    because writing one threw is not.
+// =====================================================================
+
+// The parts of a question that have no explanation of their own. A note filed
+// under QPART_NONE — the one about the WHOLE question — deliberately does not
+// count for any of them: it is not what a pupil reads under part (b).
+function qPartsWithoutExplanation(blocks) {
+  const bs = Array.isArray(blocks) ? blocks : [];
+  return qPartsUsed(bs).filter(letter =>
+    !qPartFind(bs, letter, b => b.type === 'explanation' && stripHtml(b.content || '').trim()));
+}
+
+// "(a) … <br> (b) …" written into ONE explanation box is the per-part notes
+// already written, in one box. `qScopeExplanations` does this for a question
+// whose ONLY explanation is that box; this covers the rest — two boxes for
+// three parts, a whole-question note among per-part ones — and is a no-op once
+// no box holds two markers, so the two never fight.
+function qSplitMultiPartExplanations(blocks) {
+  const bs = Array.isArray(blocks) ? blocks : [];
+  const parts = qPartsUsed(bs);
+  if (parts.length < 2) return false;
+  let did = false;
+  bs.slice().forEach(ex => {
+    if (!ex || ex.type !== 'explanation' || !String(ex.content || '').trim()) return;
+    const frags = qPartSplitHtml(ex.content);
+    if (!frags) return;
+    const hits = frags.map(f => qPartDetect(f)).filter(h => h && parts.indexOf(h.letter) >= 0);
+    if (hits.length < 2) return;
+    const at = bs.indexOf(ex);
+    if (at >= 0) bs.splice(at, 1);        // out of the way before anything is placed
+    hits.forEach(h => qPlacePartExplanation(bs, h.letter, h.html.trim()));
+    // Anything written before the first marker belongs to no part in
+    // particular, so it is kept as a closing note rather than dropped.
+    const lead = frags.filter(f => !qPartDetect(f)).join('<br>').trim();
+    if (lead) bs.push({ id: generateBlockId(), type: 'explanation', content: lead, part: QPART_NONE });
+    did = true;
+  });
+  return did;
+}
+
+// The free half: split what can be split, then say which parts are still bare.
+// Callers that cannot reach the AI still get this, which is most of the fix on
+// the questions where the model wrote the notes and only mis-boxed them.
+function qEnsurePartExplanations(blocks) {
+  qSplitMultiPartExplanations(blocks);
+  return qPartsWithoutExplanation(blocks);
+}
+
+// How much of one part reaches the prompt. A whole question is already clipped
+// at _questionContext's own budget; this is per part, so a long stem cannot
+// crowd the other parts out of the call.
+const PART_EXPL_CTX_CHARS = 900;
+// One call is asked for at most this many parts. A question with more lettered
+// parts than this is not a question, it is a paper that failed to split.
+const PART_EXPL_MAX = 8;
+
+// What the model is told about ONE part: the wording that asks it, the model
+// answer already written for it, and — for the parts that are NOT missing —
+// nothing but a note that they are somebody else's. `_explAnswerContext` is
+// reused rather than re-derived, so "does this part already have an answer"
+// and "does this part ask the pupil to explain" mean here exactly what they
+// mean on the 🤖 button.
+function _partExplSection(blocks, pmap, letter) {
+  const bits = [];
+  (blocks || []).forEach(b => {
+    if (!b || !qPartKeyIn(qPartOf(pmap, b), letter)) return;
+    if (b.type === 'text' && stripHtml(b.content || '').trim()) bits.push(stripHtml(b.content).trim());
+    else if (b.type === 'part' && ((b.label || '') + stripHtml(b.content || '')).trim()) bits.push(((b.label || '') + ' ' + stripHtml(b.content || '')).trim());
+    else if (b.type === 'image' && b.url) bits.push('[a diagram is printed here' + (b.caption ? ': ' + stripHtml(b.caption) : '') + ']');
+    else if (b.type === 'table') { try { bits.push('[table] ' + (b.data || []).map(r => (r || []).map(c => stripHtml(String(c || ''))).join(' | ')).join(' ; ')); } catch (e) {} }
+    else if (b.type === 'mcq') {
+      const opts = b.options || [];
+      const ci = opts.findIndex(o => o && o.id === b.correctId);
+      bits.push('[options] ' + opts.map((o, i) => (i + 1) + ') ' + stripHtml(o.text || '') + (i === ci ? ' <-- CORRECT' : '')).join('  '));
+    }
+    else if (b.type === 'answer') bits.push('[model answer] Claim: ' + stripHtml(b.claim || '') + ' | Evidence: ' + stripHtml(b.evidence || '') + ' | Reasoning: ' + stripHtml(b.reasoning || ''));
+    else if (b.type === 'plainanswer') bits.push('[model answer] ' + stripHtml(b.content || ''));
+    else if (b.type === 'answerLine') bits.push('[model answer] ' + stripHtml(b.answer || ''));
+  });
+  return _docClip(bits.join('\n'), PART_EXPL_CTX_CHARS);
+}
+
+// The prompt. Grounded here, one hop from the caller, so the teaching-notes
+// census reads it: an explanation is science said to a pupil, so it is
+// `aiGrounding('teach', …)` — the same kind the 🤖 button uses.
+function _partExplPrompt(q, missing, blocks, pmap, hasMedia) {
+  const topic = (q && q.topic) || '';
+  const notesDb = aiGrounding('teach', topic);
+  const qLv = getTopicLevel(topic || '');
+  const parts = qPartsUsed(blocks);
+  // Every part goes in — the ones being written, and the ones that already
+  // have a note, because a part explanation must not repeat what the part
+  // before it already said.
+  const body = parts.map(p => {
+    const want = missing.indexOf(p) >= 0;
+    return `--- PART (${p})${want ? '  <<< WRITE AN EXPLANATION FOR THIS ONE' : '  [already has its explanation — context only, do not write one]'}\n`
+      + (_partExplSection(blocks, pmap, p) || '(nothing was transcribed for this part)');
+  }).join('\n\n');
+  // The shared stem — anything printed above the first part. It is what the
+  // parts are all about, so a part read without it explains nothing.
+  const stem = _partExplSection(blocks, pmap, '');
+  // The depth rule, from the ONE function the 🤖 button reads. Always the
+  // DEFAULT tier: a build path may never reach the expanded ones.
+  const flags = missing.map(p => _explAnswerContext(blocks, pmap, p, true));
+  const rule = _explDepthRules(flags.some(f => f.hasAnswer), flags.some(f => f.asksExplain), '');
+  return `You are a Singapore ${schoolFor(qLv)} science teacher writing the EXPLANATION that goes under EACH lettered part of the question below, on the answer key.\n` +
+    (notesDb ? notesDb + `\nBase the science and the wording on this database FIRST; fall back to standard syllabus knowledge only where the database does not cover it.\n` : '') +
+    ((q && q.title) || topic ? `Question: "${(q && q.title) || ''}"${topic ? ' — topic: ' + topic : ''}.\n` : '') +
+    (stem ? `SHARED WORDING, printed above every part${hasMedia ? ' (the page itself is attached as an image)' : ''}:\n${stem}\n\n` : '') +
+    `THE PARTS:\n${body}\n\n` +
+    `Write ONE explanation for EACH part flagged above — ${missing.map(p => '(' + p + ')').join(', ')} — and for no other part.\n` +
+    `Each explanation is 2-4 sentences and explains ONLY its own part: the sub-question printed under that letter and the answer to it. Do NOT summarise the whole question, do NOT explain a part you were not asked for, and do NOT refer to another part unless this one genuinely depends on it.\n` +
+    `If a model answer is shown for a part, your explanation MUST justify THAT answer and never contradict it; if none is shown, work the correct answer out yourself first.\n` +
+    rule +
+    `Return ONLY JSON, keyed by the part letter, with an entry for every part asked for: {"explanations":{${missing.map(p => `"${p}":"..."`).join(',')}}}\n` +
+    `Rules: clear teacher voice ${audienceFor(qLv)} student understands; plain text only, no markdown, no [[brackets]], no "(a)" marker inside the text — the letter is the key.`;
+}
+
+// Fill in the parts that came back without an explanation. Returns the letters
+// actually written. NEVER throws: every call site is a question on its way to
+// vetting, and a question is worth more than a note.
+async function aiWritePartExplanations(q, opts) {
+  const o = opts || {};
+  const blocks = (q && q.blocks) || [];
+  const missing = qEnsurePartExplanations(blocks).slice(0, PART_EXPL_MAX);
+  if (!missing.length) return [];
+  if (!window.__aiReady || !window.__aiReady()) return [];
+  const pmap = qPartMap(blocks);
+  const media = Array.isArray(o.media) ? o.media.slice(0, 3) : [];
+  const prompt = _partExplPrompt(q, missing, blocks, pmap, !!media.length);
+  let parsed;
+  try {
+    const raw = media.length
+      ? await askGeminiVision(prompt, media, { maxOutputTokens: 2400, json: true })
+      : await askGemini(prompt, { maxOutputTokens: 2400, temperature: 0.25, json: true });
+    parsed = _parseAIJson(raw);
+  } catch (e) {
+    console.warn('per-part explanations: the AI call failed — the question keeps the notes it has', e);
+    return [];
+  }
+  if (Array.isArray(parsed)) parsed = parsed[0];
+  const map = (parsed && typeof parsed === 'object' && parsed.explanations && typeof parsed.explanations === 'object')
+    ? parsed.explanations : null;
+  if (!map) return [];
+  // Re-read what is missing: a part that gained a note while the call was in
+  // flight keeps the one it has. Nothing already written is ever replaced.
+  const still = qPartsWithoutExplanation(blocks);
+  const done = [];
+  still.forEach(p => {
+    const text = String(map[p] == null ? '' : map[p]).replace(/\[\[|\]\]/g, '').trim();
+    if (!text) return;
+    // The letter is the key, so a marker typed into the text as well is the
+    // same label twice — the rule qStripOwnPartMarker enforces everywhere else.
+    const cleaned = _nlToBrHtml(text);
+    const nb = qPlacePartExplanation(blocks, p, cleaned);
+    if (nb) { qStripOwnPartMarker(nb); done.push(p); }
+  });
+  return done;
+}
 function qPartOf(map, block) { return (map && block && map.get(block)) || ''; }
 // Which part a block OPENS, or '' if it just belongs to the current one.
 // Two authoring styles feed this: the `part` FIELD added in v1.234.0, and the
@@ -17926,7 +18378,7 @@ function _pushBlockAnswerKey(sections, block, part, why) {
 // still prints explanations in full.
 function _qFallbackKeySection(q) {
   const ex = ((q && q.blocks) || []).find(b => b && b.type === 'explanation' && stripHtml(b.content));
-  return ex ? { label: 'Explanation', kind: 'explanation', content: sanitizeAnswerKeyHtml(ex.content) } : null;
+  return ex ? { label: 'Explanation', kind: 'explanation', content: _explKeyContentHtml(ex) } : null;
 }
 // Placeholder for a question that yielded nothing. It is NEVER what makes the
 // key page appear (see the `hasAny` guards) — a bank with no model answers at
@@ -18152,8 +18604,10 @@ function doPrintWorksheetOpen(whyNotes) {
         // printed from here and one printed from a worksheet cannot differ.
         // Both had already drifted over the MCQ answer once.
         case 'explanation': {
-          if (akxPrintOn('bank') && stripHtml(block.content)) {
-            qSections.push({ label: 'Explanation', kind: 'explanation', content: sanitizeAnswerKeyHtml(block.content), part: qPartNormalize(bPart) });
+          // Through the shared `_explKeyContentHtml`, so the 🖼 diagram drawn
+          // FROM this explanation prints beside its words on both print paths.
+          if (akxPrintOn('bank') && (stripHtml(block.content) || String(block.url || '').trim())) {
+            qSections.push({ label: 'Explanation', kind: 'explanation', content: _explKeyContentHtml(block), part: qPartNormalize(bPart) });
           }
           break;
         }
@@ -27853,7 +28307,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             // the preview: without it the key prints (b)'s explanation under
             // whichever part happened to come before it. `qPartMap` resolves a
             // QPART_NONE block to '', so a whole-question note stays unlabelled.
-            if (akExtras && stripHtml(block.content)) qSections.push({ label: 'Explanation', kind: 'explanation', content: sanitizeAnswerKeyHtml(block.content), part: qPartNormalize(bPart) });
+            if (akExtras && (stripHtml(block.content) || String(block.url || '').trim())) qSections.push({ label: 'Explanation', kind: 'explanation', content: _explKeyContentHtml(block), part: qPartNormalize(bPart) });
             break;
           }
           // Explicit, so it does NOT fall through to
@@ -29835,7 +30289,11 @@ const EM_PRIMARY = {
 // up and nothing appeared — the whole keyword feature, dead in editing mode and
 // working perfectly everywhere else. Anything a rail button REVEALS belongs
 // here, whatever block type it is sitting on.
-const EM_KEEP = '.kw-panel';
+// …and the DIAGRAM a rail button draws. 🖼 Draw this explanation puts a picture
+// under the explanation box; folded away, pressing the rail icon and watching
+// nothing appear is the same dead button the keyword panel was, and a picture
+// already drawn reads as one that has been lost.
+const EM_KEEP = '.kw-panel, .xd-preview';
 // Buttons that are already tiny and belong where they are: the rich-text
 // toolbar (B / I / U / lists) and the insert-a-block menus.
 const EM_NO_HOIST = '.toolbar-btn, .block-insert-btn, .block-insert-toggle, .em-ico';
@@ -32533,6 +32991,20 @@ function showExplanation(containerSel, q, aiText, scoreElId, modelAnswer) {
       `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#eaf1f8);border-radius:10px;">
         <div style="font-weight:700;color:var(--accent-blue);margin-bottom:8px;">🖼 Answer diagram</div>` +
       diagrams.map(u => `<img src="${escapeHtml(transformImageUrl(u))}" alt="Diagram explaining the answer" onerror="handleImgError(this)" loading="lazy" decoding="async" style="display:block;max-width:100%;margin:0 auto 6px;border-radius:8px;border:1px solid var(--border);background:#fff;">`).join('') +
+      `</div>`;
+  }
+  // The picture drawn FROM the explanation — its own card, because it is its
+  // own thing: the answer diagram says what the answer IS, this one draws what
+  // the explanation SAYS. Shown here for the same reason and under the same
+  // rule — only once the answer has been marked. It is shown whether or not the
+  // authored explanation card above it was: an A.I. explanation replaces the
+  // WORDS, and this picture is still a picture of the same science.
+  const explDiagrams = _qExplanationDiagrams(q);
+  if (explDiagrams.length) {
+    cards +=
+      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#eaf1f8);border-radius:10px;">
+        <div style="font-weight:700;color:var(--accent-blue);margin-bottom:8px;">🖼 Picture it</div>` +
+      explDiagrams.map(u => `<img src="${escapeHtml(transformImageUrl(u))}" alt="Diagram of the explanation" onerror="handleImgError(this)" loading="lazy" decoding="async" style="display:block;max-width:100%;margin:0 auto 6px;border-radius:8px;border:1px solid var(--border);background:#fff;">`).join('') +
       `</div>`;
   }
   // Interactive widget(s) authored on the question: revealed only here, after
@@ -64928,6 +65400,11 @@ window.akdTouchUpQuestion = akdTouchUpQuestion;
 window.akdRunBlock = akdRunBlock;
 window.akdTouchUpBlock = akdTouchUpBlock;
 window.setAkdBlockNote = setAkdBlockNote;
+// 🖼 Draw this explanation — the buttons under every 💡 explanation box.
+window.xdRunBlock = xdRunBlock;
+window.xdTouchUpBlock = xdTouchUpBlock;
+window.xdRemoveBlockPic = xdRemoveBlockPic;
+window.setXdBlockNote = setXdBlockNote;
 // 🎨 Photo Editor
 window.pePickFiles = pePickFiles;
 window.peDrop = peDrop;

@@ -12975,6 +12975,20 @@ body.lore-reading { overflow: hidden; }
 }
 .akd-note:focus{ outline:none; border-color:var(--primary,#0b6b4f); }
 
+/* ── 🖼 Draw this explanation — the picture under a 💡 explanation box ───── */
+/* Given room to breathe and capped in height: the author is reading the words
+   above it, and a full-height diagram pushes the next block off the screen. */
+.xd-preview{
+  margin-top:12px; padding:12px;
+  border:1px solid var(--border); border-radius:12px;
+  background:var(--surface-alt,#f7f8f8);
+  display:flex; justify-content:center;
+}
+.xd-preview img{
+  display:block; max-width:100%; max-height:280px;
+  border-radius:8px; background:#fff;
+}
+
 /* ── 🎨 Photo Editor — the landing zone ─────────────────────────────────── */
 .pe-zone{
   border:2px dashed var(--border); border-radius:16px;

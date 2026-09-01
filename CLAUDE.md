@@ -366,6 +366,124 @@ Guidance for Claude when working in this repo.
   - `wsMeta.slot` is the only thing left of that link: the free-form class string ("P5 Science — Wednesday 5pm–6.45pm") that the Ans Key Reward window pins a worksheet to. Nothing here edits it; `performSave` just writes back whatever was loaded so the pin survives a save made from this app.
   - Version badge (`#versionTag`, `APP_VERSION`) is hard-coded — bump on every change to this file.
 
+## 📝 Every part gets its OWN explanation, by default (v1.342.0)
+
+`qPartsWithoutExplanation` / `qSplitMultiPartExplanations` /
+`qEnsurePartExplanations` / `_partExplSection` / `_partExplPrompt` /
+`aiWritePartExplanations` / `PART_EXPL_MAX` (in `app.js`, search
+`EVERY PART GETS ITS OWN EXPLANATION`), plus `_aiBuildFillPartExplanations`,
+the step **2b** in `processRapidJob`, and the `EVERY PART GETS ONE, WITHOUT
+EXCEPTION` clause in `_partsPromptRules()`.
+
+A question with (a), (b), (c) is **THREE questions on the answer key**: each is
+printed under its own heading, each is marked on its own, and each is what a
+pupil is looking at when they read the note underneath it. So each needs its own
+explanation — and a part very often had none.
+
+- **THE PROMPT ASKS, AND A MODEL STILL SKIPS.** `_partsPromptRules()` has asked
+  for one explanation per part since v1.246.0, and it is obeyed most of the time
+  rather than all of it. A page of five questions read in ONE reply — which is
+  every page of a PDF — is exactly where a model economises.
+- **AND THE REPAIR ONLY COVERED ONE SHAPE.** `qScopeExplanations` fixes the
+  single-explanation case: it splits the note per part where the model labelled
+  it and otherwise files it under NO part. **Two explanations for three parts
+  fell straight through its `exs.length !== 1` guard** and part (c) was left
+  bare. The gap is silent in the worst way — the question builds, reads and
+  prints perfectly, and the missing note is met by whoever is standing in front
+  of a class holding the key.
+- **IT IS CLOSED TWICE, AND THE FREE HALF IS ALWAYS FIRST.**
+  `qSplitMultiPartExplanations` takes an explanation holding "(a) … `<br>` (b) …"
+  and makes it the notes it already is. It is **idempotent** (after the split no
+  box holds two markers, so it and `qScopeExplanations` never fight) and it
+  costs nothing, so it runs whether or not the AI is reachable.
+- **`qPartsWithoutExplanation` is the ONE place "missing" is decided**, and it
+  is re-read at APPLY time as well as before the call: a part that gained a note
+  while the call was in flight keeps the one it has. **Nothing already written
+  is ever replaced** — an author's own words, and the model's note for another
+  part, are not this pass's to rewrite. A note filed under `QPART_NONE` counts
+  for **no** part: it is the note about the whole question, and it is not what a
+  pupil reads under (b).
+- **ONE CALL PER QUESTION, NEVER ONE PER PART.** A three-part question short of
+  all three is one call, or a forty-page paper is a hundred and twenty.
+  `PART_EXPL_MAX` caps it: more lettered parts than that is not a question, it
+  is a paper that failed to split.
+- **IT IS THE DEFAULT DEPTH, ALWAYS.** The rule comes from the shared
+  `_explDepthRules(hasAnswer, asksExplain, '')` — the same function the 🤖
+  button reads — so the note is the 2-4 sentences it has always been. **A build
+  path may never reach 📖 or 📚**: a paper of forty lectures is the fault the
+  three depths exist to undo (see 📝 AN EXPLANATION IS NOT THE ANSWER AGAIN).
+- **THE PAGE GOES ALONG.** Both call sites hand over the screenshot / rendered
+  PDF page, so the note is written from the FIGURE rather than from the
+  transcription alone — which is the whole reason the build call was a vision
+  call in the first place.
+- **A FAILURE COSTS NOTHING.** Wrapped at every call site: the question reaches
+  vetting exactly as it would have. An explanation that could not be written is
+  the state we were already in; a question lost because writing one threw is not.
+- Grounded through `aiGrounding('teach', topic)` like every other explanation —
+  the census in `tools/teaching-notes-tests.mjs` reads `_partExplPrompt` one hop
+  from the caller.
+- Run **`node tools/part-explanation-tests.mjs`** after touching any of it.
+
+## 🖼 Draw this explanation — a picture of exactly what it says (v1.342.0)
+
+`XD_FIDELITY` / `_xdPrompt` / `_xdExplText` / `xdRunBlock` / `_xdGoBlock` /
+`xdTouchUpBlock` / `xdRemoveBlockPic` / `setXdBlockNote` / `xdBarHtml` /
+`_explKeyContentHtml` / `_qExplanationDiagrams` (search `DRAW THE EXPLANATION`),
+plus `_diagramDraw`, the `.xd-preview` CSS in `index.html` and the bar under
+every 💡 explanation box.
+
+An explanation is words about something that is nearly always a **picture**:
+where the heat went, which way the light bent, what the plant did with the
+water. A pupil reading *"the water vapour cooled on the cold surface and
+condensed"* has to build that picture in their head before the sentence means
+anything, and the ones who cannot are exactly the ones the note was written for.
+🖼 **Draw this explanation** draws it.
+
+- **IT DRAWS THE EXPLANATION, NOT THE ANSWER.** 🖼 Auto diagram on a 🔑
+  answer-key block draws what the ANSWER is; this draws what the EXPLANATION
+  SAYS — the mechanism, the stages, the arrows. **`XD_FIDELITY` is where that
+  difference is stated**: everything the explanation NAMES appears and is
+  labelled with the explanation's own word for it, every process it describes is
+  visible as a process, and nothing it does not say is invented. Lose it and the
+  button draws a generic picture "about heat" beside a note about something
+  else — which looks like a working feature and teaches the wrong thing.
+- **THE EXPLANATION IS THE BRIEF, so an EMPTY box is refused** before a call is
+  made. A picture drawn from nothing is a picture of nothing, and *exactly what
+  the explanation says* is not a promise that can be kept without one.
+- **`_diagramDraw` IS THE ONE DRAWING CORE.** Every teaching diagram in the app
+  is made there — the answer-key panel, the 🔑 block and this — so the reference
+  picture, the paper clean-up (`_paperCleanDataUrl`) and the upload cannot drift
+  between them. Only the PROMPT differs, and each surface passes its own builder.
+  `AKD_PRINT_RULES` is likewise the ONE style: these print on the same answer key
+  beside each other, and two houses of diagram on one sheet reads as a mistake.
+- **THE PICTURE LIVES IN `block.url`**, exactly where the 🔑 answer-key block
+  keeps its own — so it saves with the question, and ✏️ **Touch up** reaches it
+  through the **SAME `akBlockId` branch** of `applyAnnotTool`. No second editor
+  and no second destination; that branch is "a BLOCK's own picture, by id".
+- **IT IS SHOWN ONLY AFTER MARKING.** `renderImportedBlockStudent` still renders
+  an explanation block as NOTHING inside the question, so a diagram of the
+  answer can never appear above the question that gives it away. The 🖼 **Picture
+  it** card is built in `showExplanation`, the ONE post-marking builder, and
+  **`_qExplanationDiagrams` is its own reader** — kept apart from
+  `_qAnswerDiagrams`, which answers a different question ("what picture explains
+  the ANSWER"). One function answering both is one that will be asked the wrong
+  one.
+- **`_explKeyContentHtml` is the ONE way an explanation reaches a printed key** —
+  its words, and the picture under them — and BOTH print paths plus
+  `_qFallbackKeySection` call it. Those two switches had already drifted over the
+  MCQ answer once; a key carrying the picture from one print button and not the
+  other is that same fault wearing a new hat. The section is pushed on content
+  **OR** url, so an explanation whose whole point is the diagram is not dropped
+  for having few words.
+- **`.xd-preview` is in `EM_KEEP`.** In ✏️ editing mode everything but
+  `.content-editable` folds behind the ⚙, and a picture the author has just
+  drawn disappearing reads as one that has been lost — the same dead-button
+  failure the 🔑 keyword panel had.
+- **THE LABELS ARE THE PART TO CHECK.** An image model letters a perfect beaker
+  "watr vapuor", which is why ✏️ Touch up sits on the same row and every toast
+  says so.
+- Run **`node tools/part-explanation-tests.mjs`** after touching any of it.
+
 ## 📄 A whole PDF in ⚡ Rapid add — every page read as its own screenshot (v1.336.0)
 
 `RAPID_PDF_MAX_PAGES` / `RAPID_PDF_PAR` / `rapidAddFiles` / `_rapidQueuePdf` /
@@ -3542,6 +3660,29 @@ grid — cells, merged headings, alignment — and fills the block in.
 - Run **`node tools/table-editor-tests.mjs`** after touching any of it.
 
 ## House rules
+- After touching **📝 the per-part explanations** (`qPartsWithoutExplanation`,
+  `qSplitMultiPartExplanations`, `qEnsurePartExplanations`, `_partExplSection`,
+  `_partExplPrompt`, `aiWritePartExplanations`, `PART_EXPL_MAX`,
+  `_aiBuildFillPartExplanations`, step 2b in `processRapidJob`, or the
+  `EVERY PART GETS ONE` clause in `_partsPromptRules()`) — or **🖼 Draw this
+  explanation** (`XD_FIDELITY`, `_xdPrompt`, `_xdExplText`, `xdRunBlock`,
+  `_xdGoBlock`, `xdTouchUpBlock`, `_diagramDraw`, `_explKeyContentHtml`,
+  `_qExplanationDiagrams`) — run `node tools/part-explanation-tests.mjs`
+  **and `node tools/auto-diagram-tests.mjs`**, which pins the shared drawing
+  core the two diagrams now share. Every failure here is silent and the
+  question still builds, saves and prints. Let the filler overwrite instead of
+  fill and an author's own note — or the model's note for another part — is
+  quietly rewritten by the feature that exists to fill a hole. Let it reach 📖
+  or 📚 and a forty-question paper becomes forty lectures, which is the exact
+  fault the three depths undo. Fire it once per part and one paper is hundreds
+  of calls. Drop the free split and a call is paid for to write notes the model
+  had already written into one box. And on the picture side: lose `XD_FIDELITY`
+  and the button draws a generic picture "about heat" beside a note about
+  something else — which looks like a working feature and teaches the wrong
+  thing; draw from an EMPTY box and it is a picture of nothing; leave one print
+  path on the raw content and the key carries the diagram from one print button
+  and not the other; and render it anywhere but the post-marking card and a
+  diagram of the answer prints above the question that gives it away.
 - After touching **the table block** (`_tblInsertRow`, `_tblDeleteRow`,
   `_tblInsertCol`, `_tblDeleteCol`, `_tblRemapCellKeys`, `_tblRemapRowKeys`,
   `_tblCellCss`, `TABLE_STYLE_PRESETS`, `TABLE_FONTS`, `tableApplyStyle`,
