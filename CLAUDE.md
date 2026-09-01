@@ -3659,7 +3659,113 @@ grid — cells, merged headings, alignment — and fills the block in.
   merges laid over a 6×5 one read as formatting nobody chose.
 - Run **`node tools/table-editor-tests.mjs`** after touching any of it.
 
+## 🚦 The traffic light — one question's health at a glance (v1.343.0)
+
+`tl*` / `TL_*` (in `app.js`, search `THE TRAFFIC LIGHT`), plus the `.tl-*` CSS
+and `#tlOverlay` in `index.html`, the lamp on every Question Bank row and
+picture tile, the lamp on every question heading in ✏️ editing mode, and
+🚦 **Check all questions** in editing mode's own bar.
+
+✅ Check Questions serves questions back ONE at a time, newest first, and is
+worked through like a queue. That is the right shape for reading the day's new
+questions and the wrong shape for the two things a teacher actually asks in
+front of a list: *is THIS question all right?* and *is anything wrong anywhere
+on this sheet?* Answering either meant opening the queue and hoping the
+question came round. A lamp answers both at a glance — 🔴 something is wrong,
+🟡 worth a look, 🟢 nothing was flagged.
+
+- **IT IS THE SAME CHECKER, NOT A SECOND ONE.** `tlRun` calls
+  `_cqLocalFindings` and `_cqAiCheck` — ✅ Check Questions' own two layers — so
+  the lamp and the queue can never disagree about the same question, and the
+  headline check (options that repeat the picture) is made here for free. A
+  prompt written for this feature would be a second prompt to improve, and the
+  two would drift the week after they shipped. The harness fails on an
+  `askGemini` anywhere in the block.
+- **AN UNLIT LAMP IS NOT A GREEN ONE, and this is the only failure that
+  matters.** The lamp is read at a glance, on a list of forty questions, by
+  somebody about to print them. So a question nobody has checked is a hollow
+  grey ring that says *not checked yet*; only a check that really ran and
+  really found nothing turns green. Drawing "not checked" the same as "checked
+  and clean" is the whole feature quietly inverted.
+- **A LAMP GOES OUT WHEN THE QUESTION CHANGES.** `tlSig` signs everything the
+  check reads — title, topic, category, the annotation flag and the blocks —
+  at the moment the verdict was formed; a verdict that no longer matches is
+  reported as `stale`, drawn as the SAME grey ring, and says the question has
+  been edited since. In editing mode the author is typing into the very
+  question the lamp is about, so without it a green lamp sits above wording
+  that has since been rewritten. **And it signs nothing else**: a lamp that
+  went out every time a question was re-tagged or marked read is a lamp nobody
+  would bother with. It does **not** keep the whole question — one signature
+  per question lives as long as the page does, and a question carrying a
+  pasted picture is a data URL megabytes long — so it is the length, a hash of
+  every character and a verbatim head. A plain truncation would be the silent
+  version of that saving: an edit past the cut would leave the lamp green.
+  Typing fires no render, so one debounced `input` listener
+  (`tlEmWatchInit`, bound ONCE on the document — the sheet's DOM is rebuilt
+  continuously) syncs and repaints.
+- **THE VERDICT IS PLAIN CODE.** `tlVerdict` maps findings to a colour and
+  never asks a model: high → 🔴, anything else → 🟡, nothing → 🟢. The same
+  findings must always give the same lamp, and a colour a model chose could
+  disagree with the list printed under it. A **low** finding is still amber —
+  *No topic set* is a real thing to fix, and a green lamp with a finding
+  printed under it is the lamp contradicting its own panel.
+- **THE STRUCTURAL HALF IS FREE, SO IT ALWAYS RUNS**, and an AI failure is its
+  own state (⚠, never green) carrying whatever the instant checks found. "The
+  check could not run" and "the check found nothing" are opposite things, and
+  AI being off on the device is one of the two.
+- **`tlRepaint` IS THE ONE PAINTER.** Every lamp carries `data-tl-id` and
+  `data-tl-scope`, so it finds them by attribute rather than being told where
+  they are — the bank's rows, its tiles and editing mode's headings are all
+  repainted by one call, and a surface added later gets it for free. Both
+  renderers call it at the end, because the cache outlives the render.
+- **`tlQuestionFor` decides WHAT a lamp is about, and the `em` scope reads what
+  is ON SCREEN.** In editing mode the wording lives in contenteditable boxes
+  and the unsaved edits are the paper in front of the teacher, so
+  `tlEmQuestion` builds the question from `emBlocksOf` and the heading's own
+  title over the bank copy's meta; checking the saved version would light a
+  question nobody is looking at. Every entry point syncs the boxes first
+  (`tlEmSync`).
+- **🚦 CHECK ALL IS ONE CALL PER QUESTION, `TL_PAR` AT A TIME.** A whole paper
+  asked for in one reply truncates — and worse, comes back as findings that
+  cannot be attributed to the question they belong to. So "check them all
+  together" means checking each of them at once, the same shape 🔍 Answer key
+  cross-check uses. A verdict that already stands is not paid for twice,
+  `TL_MANY_MAX` bounds one press, and ⏹ Stop is honoured between questions.
+- **The summary bar counts the lamps standing NOW, not the run's own tally**, so
+  a question fixed after the run drops out of the count instead of sitting
+  there red. It must set `display: 'flex'` and never `''` — `.em-tlbar` is
+  `display: none` in the stylesheet, so clearing the inline style leaves a bar
+  that never appears on a run that otherwise worked perfectly.
+- **The panel is ONE dialog** (`#tlOverlay`) opened from any lamp anywhere, and
+  it renders its findings through `_cqFindingHtml` — the same rows ✅ Check
+  Questions draws, so a finding reads the same wherever it is met, and its
+  ＃ one-tap fix comes along. It sits at `z-index: 480`, above ✏️ editing mode
+  (440), which is what opens it.
+- **It READS ONLY.** Nothing in the block writes a question; ✏️ **Fix this
+  question** opens the editor, or scrolls to the question when the sheet is
+  already on screen.
+- Run **`node tools/traffic-light-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🚦 the traffic light** (`tlVerdict`, `tlSig`, `tlStateOf`,
+  `tlRun`, `tlCheckMany`, `tlLightHtml`, `tlRepaint`, `tlQuestionFor` /
+  `tlEmQuestion`, `tlEmSync`, `tlRenderEmBar`, `tlCheckSheet`, `TL_LOOKS`,
+  `TL_PAR`, `TL_MANY_MAX`, or either renderer's `tlRepaint()` call), run
+  `node tools/traffic-light-tests.mjs`. There is only ONE failure here that
+  matters and every case in that harness is a way of producing it: **a green
+  lamp that lies**. It is read at a glance, on a list of forty questions, by
+  somebody about to print them — so drawing "not checked" the same as "checked
+  and clean" inverts the whole feature; letting a failed or switched-off AI
+  call end green says a question was read when nothing read it; and a verdict
+  that does not go stale leaves a green lamp above wording that has been
+  rewritten since, which in editing mode is the ordinary case rather than an
+  edge one. In the other direction a signature that takes in a re-tag puts
+  every lamp out for nothing, which is a lamp nobody bothers with. And on the
+  sheet: ask for the whole paper in one reply and it truncates into findings
+  that cannot be attributed to the question they belong to, re-read questions
+  whose verdict already stands and one press is forty calls instead of two,
+  and clear the bar's inline display instead of naming one and the summary
+  never appears at all on a run that otherwise worked perfectly.
 - After touching **📝 the per-part explanations** (`qPartsWithoutExplanation`,
   `qSplitMultiPartExplanations`, `qEnsurePartExplanations`, `_partExplSection`,
   `_partExplPrompt`, `aiWritePartExplanations`, `PART_EXPL_MAX`,

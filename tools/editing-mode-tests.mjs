@@ -91,6 +91,16 @@ let confirmAnswer = true;
 function confirm(msg) { confirms.push(String(msg)); return confirmAnswer; }
 const confirms = [];
 let _wsPreviewPaper = null, _wsPreviewSaved = null;
+// 🚦 The traffic light rides every question heading in editing mode and is
+// reset when a sheet is opened or closed. It has its own harness
+// (tools/traffic-light-tests.mjs); here it only has to exist.
+function tlEmReset() {}
+function tlEmWatchInit() {}
+function tlRepaint() {}
+function tlClosePanel() {}
+function tlRenderEmBar() {}
+function tlLightHtml() { return ''; }
+function tlEmQuestion(id) { return questionBank.find(q => String(q.id) === String(id)) || null; }
 const document = { getElementById: () => null, body: { classList: { add(){}, remove(){}, toggle(){} } } };
 `;
 
