@@ -4960,6 +4960,152 @@ body.em-editing #printProgress { z-index: 470; }
 
 @media print { .em-overlay { display: none !important; } }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   🚦 THE TRAFFIC LIGHT — one question's health at a glance (`tl*` in app.js)
+
+   The lamp rides every list a question appears in: the bank's rows and its
+   picture tiles, and every question heading in ✏️ editing mode. Grey is the
+   ONE thing that must never be mistaken for green — an unchecked question and
+   a clean one look nothing alike, which is why the unlit lamp is a hollow ring
+   rather than a pale disc.
+   ══════════════════════════════════════════════════════════════════════════ */
+.tl-light {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-light);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform var(--transition), border-color var(--transition), background var(--transition);
+}
+.tl-light:hover { transform: scale(1.08); border-color: var(--primary); }
+.tl-light.sm { width: 26px; height: 26px; font-size: 0.78rem; }
+.tl-light.lg { width: 40px; height: 40px; font-size: 1.25rem; }
+.tl-light.idle { color: var(--text-light); }
+.tl-light.running { color: var(--accent-blue); border-color: var(--accent-blue); animation: tlPulse 1.1s ease-in-out infinite; }
+.tl-light.error { color: var(--accent-orange); border-color: var(--accent-orange); background: var(--accent-orange-light); }
+.tl-light.red { color: var(--accent-red); border-color: var(--accent-red); background: var(--accent-red-light); }
+.tl-light.amber { color: var(--accent-orange); border-color: var(--accent-orange); background: var(--accent-orange-light); }
+.tl-light.green { color: var(--accent-green); border-color: var(--accent-green); background: var(--accent-green-light); }
+@keyframes tlPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) { .tl-light.running { animation: none; } }
+
+/* On a picture tile it takes the one free corner — the ✓ pick badge holds the
+   top left and the ✎ pencil the top right — and unlike the pencil it is ALWAYS
+   visible: a light you have to hover to find is a light nobody reads. */
+.qb-tile .tl-light {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  z-index: 2;
+}
+
+/* The panel behind a lamp. */
+.tl-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 480;                    /* above ✏️ editing mode (440), which opens it */
+  background: rgba(20, 24, 22, 0.5);
+  align-items: center;
+  justify-content: center;
+  padding: 28px 22px;
+}
+.tl-overlay.show { display: flex; }
+.tl-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 100%);
+  max-height: 100%;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.tl-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.tl-panel-head h3 { font-size: 1.02rem; font-weight: 700; line-height: 1.4; }
+.tl-panel-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 6px; }
+.tl-panel-body { flex: 1; overflow-y: auto; padding: 20px 26px; }
+.tl-panel-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 16px 26px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.tl-verdict {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  margin-bottom: 18px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--surface-alt);
+}
+.tl-verdict.red { border-color: var(--accent-red); background: var(--accent-red-light); }
+.tl-verdict.amber { border-color: var(--accent-orange); background: var(--accent-orange-light); }
+.tl-verdict.green { border-color: var(--accent-green); background: var(--accent-green-light); }
+.tl-verdict .tl-light { cursor: default; }
+.tl-verdict .tl-light:hover { transform: none; }
+.tl-verdict-t { font-size: 0.94rem; font-weight: 700; line-height: 1.4; }
+.tl-verdict-d { font-size: 0.8rem; color: var(--text-muted); margin-top: 5px; line-height: 1.6; }
+.tl-note {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border);
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.65;
+}
+/* The panel reuses ✅ Check Questions' own finding rows — one renderer, so a
+   finding reads the same wherever it is met. */
+.tl-panel-body .cq-find-row { margin-bottom: 10px; }
+
+/* The 🚦 Check all summary, in editing mode's bar. */
+.em-tlbar {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 10px 2px 0;
+}
+.tl-count {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  font-family: 'Space Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.tl-count.red { color: var(--accent-red); border-color: var(--accent-red-light); background: var(--accent-red-light); }
+.tl-count.amber { color: var(--accent-orange); border-color: var(--accent-orange-light); background: var(--accent-orange-light); }
+.tl-count.green { color: var(--accent-green); border-color: var(--accent-green-light); background: var(--accent-green-light); }
+.tl-count.err { color: var(--accent-orange); }
+@media print { .tl-overlay { display: none !important; } }
+
 /* ── Saved worksheet — add / remove its questions ─────────────────────────
    A saved worksheet is an ORDERED list of bank ids, so editing one is editing
    that list: what is on the sheet on the left, the bank to draw from on the
@@ -11317,14 +11463,39 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="em-sub" id="emSub"></div>
     </div>
     <span class="em-status" id="emStatus"></span>
+    <!-- 🚦 The whole sheet at once. It reads what is ON SCREEN, unsaved edits
+         and all, one AI call per question — see `tlCheckSheet` in app.js. -->
+    <button class="btn btn-outline" type="button" onclick="tlCheckSheet()" title="Ask the AI to read every question on this sheet and light each one 🔴 🟡 🟢. It checks what is on screen, including changes you have not saved.">🚦 Check all questions</button>
     <button class="btn btn-outline" type="button" onclick="emClose()">Close</button>
     <button class="btn btn-primary" type="button" onclick="emSaveAll()" title="Write every question you have changed back to the question bank. Questions you did not touch are left alone.">💾 Save all changes</button>
+    <div class="em-tlbar" id="emTlBar"></div>
   </div>
   <div class="em-body" id="emBody">
     <div class="em-wrap" id="emWrap">
       <!-- #blocksList is moved in here -->
     </div>
     <div class="em-foot">That is the last question on the sheet. Press <b>💾 Save all changes</b> at the top when you are done.</div>
+  </div>
+</div>
+
+<!-- ==================== 🚦 THE TRAFFIC LIGHT — what a lamp is about ==================== -->
+<!-- ONE panel, opened from any traffic light anywhere: the bank's rows, its
+     picture tiles and every question heading in editing mode. See `tl*`. -->
+<div class="tl-overlay" id="tlOverlay" onclick="if(event.target===this)tlClosePanel()">
+  <div class="tl-panel" role="dialog" aria-label="AI check for this question">
+    <div class="tl-panel-head">
+      <div>
+        <h3 id="tlPanelTitle">Question</h3>
+        <div class="tl-panel-sub" id="tlPanelSub"></div>
+      </div>
+      <button class="wse-close" type="button" onclick="tlClosePanel()" aria-label="Close">✕</button>
+    </div>
+    <div class="tl-panel-body" id="tlPanelBody"></div>
+    <div class="tl-panel-foot">
+      <button class="btn btn-outline" type="button" onclick="tlRecheck()" title="Read this question again from scratch">🔄 Check again</button>
+      <button class="btn btn-outline" type="button" onclick="tlPanelEdit()" title="Open this question so it can be fixed">✏️ Fix this question</button>
+      <button class="btn btn-primary" type="button" style="margin-left:auto;" onclick="tlClosePanel()">Done</button>
+    </div>
   </div>
 </div>
 

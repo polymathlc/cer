@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.342.0';
+const APP_VERSION = 'v1.343.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -15417,7 +15417,7 @@ function renderQuestionBank() {
     return;
   }
 
-  if (bankView === 'grid') { container.innerHTML = filtered.map(bankTileHtml).join(''); return; }
+  if (bankView === 'grid') { container.innerHTML = filtered.map(bankTileHtml).join(''); tlRepaint(); return; }
 
   container.innerHTML = filtered.map(q => {
     const preview = getQuestionPreview(q);
@@ -15443,6 +15443,7 @@ function renderQuestionBank() {
             </div>
           </div>
           <div class="qb-card-actions">
+            ${tlLightHtml(q, 'bank')}
             <button class="qb-action-btn" title="Edit" onclick="event.stopPropagation();editQuestion('${q.id}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </button>
@@ -15457,6 +15458,9 @@ function renderQuestionBank() {
         <div class="qb-card-preview">${escapeHtml(preview)}</div>
       </div>`;
   }).join('');
+  // Every light on the page is painted from the cache in ONE place, so a
+  // verdict formed before this render is still on the card after it.
+  tlRepaint();
 }
 
 // ── Grid view: one question as a picture tile ────────────────────────────────
@@ -15482,6 +15486,7 @@ function bankTileHtml(q) {
           ? `<img src="${escapeHtml(transformImageUrl(thumb))}" alt="" loading="lazy" decoding="async" onerror="this.closest('.qb-tile-thumb').classList.add('no-img')">`
           : `<div class="qb-tile-text">${escapeHtml(preview)}</div>`}
         <span class="qb-tile-check" aria-hidden="true">✓</span>
+        ${tlLightHtml(q, 'bank', { small: true })}
         <button class="qb-tile-edit" title="Edit this question" onclick="event.stopPropagation();editQuestion('${q.id}')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
@@ -30029,6 +30034,8 @@ function emOpenQuestions(ctx, entries) {
   // z-index BELOW this overlay. The class lifts them for as long as it is open.
   document.body.classList.add('em-editing');
 
+  tlEmReset();
+  tlEmWatchInit();
   renderBlocks();
   // The baseline is taken here, not above: the first render is what puts the
   // markup through the browser's own serialiser, and a baseline taken before it
@@ -30086,6 +30093,8 @@ function emClose(force) {
   const ov = document.getElementById('emOverlay');
   if (ov) ov.classList.remove('show');
   document.body.classList.remove('em-editing');
+  tlEmReset();
+  try { tlClosePanel(); tlRenderEmBar(); } catch (err) {}
   try { renderBlocks(); } catch (e) { console.warn('editing mode: restoring the editor', e); }
 }
 
@@ -30214,6 +30223,10 @@ function emAfterRender() {
   // screen is a question nobody knows they still have to fix.
   _em.qs.forEach(e => { if (!seen.has(e.id)) list.appendChild(emQuestionHeadEl(e, true)); });
   emRenderStatus();
+  // The heads are rebuilt on every render, so their lights are painted from
+  // the cache here — and a light goes out by itself when the block under it
+  // was edited, because tlSig no longer matches.
+  try { tlRepaint(); } catch (err) { console.warn('traffic light: painting the sheet', err); }
   emRestoreScroll();
 }
 
@@ -30257,6 +30270,7 @@ function emQuestionHeadEl(e, empty) {
   const meta = q ? [q.topic, q.category].filter(Boolean).join(' · ') : 'no longer in the bank';
   el.innerHTML =
     `<span class="em-qn">${e.n}</span>` +
+    tlLightHtml(tlEmQuestion(e.id), 'em') +
     (e.label ? `<span class="em-qref">${escapeHtml(e.label)}</span>` : '') +
     `<input class="em-qtitle" id="emTitle_${e.key}" type="text" value="${escapeHtml(e.title || '')}"
             placeholder="Untitled question" title="This question's title in the bank"
@@ -36229,6 +36243,480 @@ function _cqUpdateBadge() {
   const n = _canAuthor() ? _cqRecentUncheckedCount() : 0;
   if (n) { badge.style.display = ''; badge.textContent = n > 999 ? '999+' : String(n); }
   else badge.style.display = 'none';
+}
+
+// =====================================================================
+// 🚦 THE TRAFFIC LIGHT — one question's health at a glance (`tl*`)
+// =====================================================================
+// ✅ Check Questions serves questions back ONE at a time, newest first, and is
+// worked through like a queue. That is the right shape for reading the day's
+// new questions and the wrong shape for the two things a teacher actually asks
+// in front of a list: *is THIS question all right?* and *is anything wrong
+// anywhere on this sheet?* Answering either meant opening the queue and hoping
+// the question came round.
+//
+// A traffic light answers both at a glance. 🔴 something is wrong, 🟡 worth a
+// look, 🟢 nothing was flagged — on every question in the bank, on every
+// question in ✏️ editing mode, and over a whole worksheet at once from the
+// 🚦 Check all button in editing mode's bar.
+//
+// SIX RULES HOLD IT TOGETHER, and every one of them is a way a green light
+// could lie — which is the only failure that matters here, because a light
+// nobody can trust is worse than no light at all:
+//
+//  • IT IS THE SAME CHECKER, NOT A SECOND ONE. `tlRun` calls
+//    `_cqLocalFindings` and `_cqAiCheck` — ✅ Check Questions' own two layers
+//    — so the light and the queue can never disagree about the same question.
+//    A second prompt written for this feature would be a second prompt to
+//    improve, and the two would drift the week after they shipped.
+//
+//  • AN UNLIT LIGHT IS NOT A GREEN ONE. A question nobody has checked is grey
+//    with a "?" on it and says so; only a check that really ran and really
+//    found nothing turns green. Drawing "not checked" the same as "checked and
+//    clean" is the whole feature quietly inverted.
+//
+//  • A LIGHT GOES OUT WHEN THE QUESTION CHANGES. `tlSig` is a signature of
+//    everything the check reads, taken at the moment the verdict was formed;
+//    a stale verdict is shown as unlit and SAYS the question has been edited
+//    since. In editing mode the author is typing into the very question the
+//    light is about, so without this a green light sits above wording that has
+//    since been rewritten.
+//
+//  • THE VERDICT IS PLAIN CODE. `tlVerdict` maps findings to a colour and
+//    never asks a model — the same findings must always give the same light,
+//    and a colour a model chose could disagree with the list printed under it.
+//
+//  • THE STRUCTURAL HALF IS FREE, SO IT ALWAYS RUNS. With AI off, or after an
+//    AI call that failed, the instant checks still light the question — a red
+//    from "no correct option is marked" needs no model. An AI failure is its
+//    own state (⚠, never green), because "the check could not run" and "the
+//    check found nothing" are opposite things.
+//
+//  • ONE QUESTION PER CALL, `TL_PAR` AT A TIME. A whole paper asked for in one
+//    reply truncates — and worse, comes back as findings that cannot be
+//    attributed to the question they belong to. Checking all of them together
+//    means checking each of them at once, which is what `tlCheckMany` does.
+//
+// Run `node tools/traffic-light-tests.mjs` after touching any of it.
+
+const TL_PAR = 3;             // questions being checked at the same time
+const TL_MANY_MAX = 120;      // most a single 🚦 Check all will read
+const TL_SIG_HEAD = 4000;     // how much of a question a signature keeps verbatim
+
+// state -> what the light looks like. `idle` and `stale` are deliberately the
+// SAME grey lamp: both mean "no verdict stands for the question as it is now".
+const TL_LOOKS = {
+  idle:    { dot: '○', cls: 'idle',    label: 'Not checked yet' },
+  stale:   { dot: '○', cls: 'idle',    label: 'Edited since it was checked' },
+  running: { dot: '◍', cls: 'running', label: 'Checking…' },
+  error:   { dot: '⚠', cls: 'error',   label: 'The AI check could not run' },
+  red:     { dot: '●', cls: 'red',     label: 'Something is wrong' },
+  amber:   { dot: '●', cls: 'amber',   label: 'Worth a look' },
+  green:   { dot: '●', cls: 'green',   label: 'Nothing flagged' },
+};
+
+// id -> { sig, state:'running'|'done'|'error', findings, verdict, error, at }
+const _tlCache = new Map();
+let _tlStop = false;                       // ⏹ on a running 🚦 Check all
+let _tlMany = null;                        // { total, done, red, amber, green, error, running }
+let _tlPanelId = '';                       // the question the 🚦 panel is showing
+
+// ── The verdict: PLAIN CODE, never a model ──────────────────────────────────
+// high        -> 🔴 there is something wrong with this question
+// med / low   -> 🟡 worth a look
+// nothing     -> 🟢
+function tlVerdict(findings) {
+  const list = Array.isArray(findings) ? findings.filter(Boolean) : [];
+  if (list.some(f => f.severity === 'high')) return 'red';
+  if (list.length) return 'amber';
+  return 'green';
+}
+
+// ── The signature: what makes a verdict go stale ────────────────────────────
+// Everything `_cqRepr` and `_cqLocalFindings` read, and nothing else — a light
+// must not go out because a question was re-tagged, and it MUST go out when a
+// word of the question changed.
+function tlSig(q) {
+  if (!q) return '';
+  try {
+    const raw = JSON.stringify({
+      t: q.title || '',
+      p: q.topic || '',
+      c: q.category || '',
+      a: !!q.annotation,
+      b: q.blocks || [],
+    });
+    // A question carrying a pasted picture is a data URL megabytes long, and
+    // one signature per question is held for as long as the page lives — so
+    // the whole thing is not kept. A plain truncation would be the silent
+    // version of that saving: an edit PAST the cut would leave the lamp green.
+    // Length and a hash of every character close that; the verbatim head is
+    // what keeps a hash collision from being the only thing standing between
+    // an edited question and a green lamp.
+    return raw.length + ':' + _aiHash(raw) + ':' + raw.slice(0, TL_SIG_HEAD);
+  } catch (e) {
+    // A question that cannot be serialised is one whose light must never
+    // settle: an empty signature never matches the one on a cached verdict.
+    console.warn('traffic light: could not sign this question', e);
+    return '';
+  }
+}
+
+// ── Reading the cache ───────────────────────────────────────────────────────
+// The ONE place a question becomes a light. A cached verdict formed on a
+// DIFFERENT signature is reported as `stale`, never as the colour it was.
+function tlStateOf(q) {
+  if (!q || !q.id) return { state: 'idle', findings: [], stale: false };
+  const rec = _tlCache.get(String(q.id));
+  if (!rec) return { state: 'idle', findings: [], stale: false };
+  if (rec.state === 'running') return { state: 'running', findings: [], stale: false };
+  const stale = rec.sig !== tlSig(q);
+  if (stale) return { state: 'stale', findings: rec.findings || [], stale: true, error: rec.error || '' };
+  if (rec.state === 'error') return { state: 'error', findings: rec.findings || [], stale: false, error: rec.error || '' };
+  return { state: rec.verdict || 'green', findings: rec.findings || [], stale: false, at: rec.at || 0 };
+}
+function tlFresh(q) {
+  const s = tlStateOf(q);
+  return s.state === 'red' || s.state === 'amber' || s.state === 'green';
+}
+
+// ── Running a check on ONE question ─────────────────────────────────────────
+// The structural half is instant and free, so it runs whatever happens to the
+// AI half. An AI call that FAILED is its own state and never a green light.
+async function tlRun(q) {
+  if (!q || !q.id) return null;
+  const id = String(q.id);
+  const sig = tlSig(q);
+  const prev = _tlCache.get(id);
+  if (prev && prev.state === 'running') return prev;
+  _tlCache.set(id, { sig, state: 'running', findings: [], verdict: '', at: 0 });
+  tlRepaint(id);
+  if (_tlPanelId === id) tlRenderPanel();
+
+  let ai = [], err = '', ran = false;
+  if (window.__aiReady && window.__aiReady()) {
+    try { ai = await _cqAiCheck(q); ran = true; }
+    catch (e) {
+      console.warn('traffic light: the AI pass failed', e);
+      err = (e && e.message) || 'AI error';
+    }
+  } else {
+    err = 'AI is off on this device, so only the instant checks ran';
+  }
+  let local = [];
+  try { local = _cqLocalFindings(q, ran); }
+  catch (e) { console.warn('traffic light: the instant checks failed', e); }
+
+  const findings = local.concat(ai).sort((a, b) => _sevRank(a.severity) - _sevRank(b.severity));
+  const rec = {
+    sig,
+    state: err ? 'error' : 'done',
+    findings,
+    verdict: tlVerdict(findings),
+    error: err,
+    at: Date.now(),
+  };
+  _tlCache.set(id, rec);
+  tlRepaint(id);
+  if (_tlPanelId === id) tlRenderPanel();
+  return rec;
+}
+
+// ── Running a check on a WHOLE sheet ────────────────────────────────────────
+// One call per question, TL_PAR at a time. `pick` is called for each entry so
+// editing mode can hand over what is ON SCREEN rather than what is in the bank.
+async function tlCheckMany(entries, opts) {
+  const o = opts || {};
+  const list = (entries || []).slice(0, TL_MANY_MAX);
+  if (!list.length) return null;
+  _tlStop = false;
+  _tlMany = { total: list.length, done: 0, red: 0, amber: 0, green: 0, error: 0, running: true };
+  if (o.onProgress) o.onProgress(_tlMany);
+  let next = 0;
+  const worker = async () => {
+    while (!_tlStop) {
+      const i = next++;
+      if (i >= list.length) return;
+      let q = null;
+      try { q = o.pick ? o.pick(list[i]) : list[i]; } catch (e) { console.warn('traffic light: reading a question', e); }
+      let rec = null;
+      if (q && q.id) {
+        // A verdict that already stands for this exact question is not paid
+        // for twice — pressing 🚦 Check all after fixing two questions is two
+        // calls, not forty.
+        rec = tlFresh(q) ? _tlCache.get(String(q.id)) : await tlRun(q);
+      }
+      _tlMany.done++;
+      const v = rec && rec.state === 'error' ? 'error' : (rec && rec.verdict) || 'error';
+      if (_tlMany[v] != null) _tlMany[v]++;
+      if (o.onProgress) o.onProgress(_tlMany);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(TL_PAR, list.length) }, worker));
+  _tlMany.running = false;
+  if (o.onProgress) o.onProgress(_tlMany);
+  return _tlMany;
+}
+function tlStopMany() {
+  if (_tlMany && _tlMany.running) { _tlStop = true; showToast('Stopping after the checks already in flight…', 'info'); }
+}
+
+// ── The lamp ────────────────────────────────────────────────────────────────
+// Every light on every surface carries `data-tl-id`, which is what lets
+// `tlRepaint` be the ONE painter: a surface added later is repainted without
+// being told about. `scope` says who to ask for the question when it is
+// clicked — the bank, or the sheet open in editing mode.
+function tlLightHtml(q, scope, opts) {
+  if (!q || !q.id) return '';
+  const o = opts || {};
+  const id = escapeHtml(String(q.id));
+  const sc = escapeHtml(String(scope || 'bank'));
+  return `<button type="button" class="tl-light ${tlLookFor(q).cls}${o.small ? ' sm' : ''}"
+      data-tl-id="${id}" data-tl-scope="${sc}"
+      title="${escapeHtml(tlTipFor(q))}"
+      aria-label="${escapeHtml('AI check: ' + tlTipFor(q))}"
+      onclick="event.stopPropagation();tlClick('${sc}','${id}')">${tlLookFor(q).dot}</button>`;
+}
+function tlLookFor(q) { return TL_LOOKS[tlStateOf(q).state] || TL_LOOKS.idle; }
+function tlTipFor(q) {
+  const s = tlStateOf(q);
+  const look = TL_LOOKS[s.state] || TL_LOOKS.idle;
+  const n = (s.findings || []).length;
+  if (s.state === 'idle') return 'Not checked yet — click to run the AI check';
+  if (s.state === 'stale') return 'This question has been edited since it was checked — click to check it again';
+  if (s.state === 'running') return 'The AI is reading this question…';
+  if (s.state === 'error') return (s.error || look.label) + ' — click to see what the instant checks found';
+  if (s.state === 'green') return 'Nothing flagged — click to see the check';
+  return look.label + ' · ' + n + ' thing' + (n === 1 ? '' : 's') + ' to look at — click to read them';
+}
+// THE ONE PAINTER. With no id it repaints every light on screen, which is what
+// a fresh render of the bank or of editing mode needs.
+function tlRepaint(id) {
+  const sel = id ? `[data-tl-id="${String(id).replace(/"/g, '\\"')}"]` : '[data-tl-id]';
+  let nodes = [];
+  try { nodes = Array.from(document.querySelectorAll(sel)); } catch (e) { return; }
+  nodes.forEach(el => {
+    const q = tlQuestionFor(el.dataset.tlScope, el.dataset.tlId);
+    const look = q ? tlLookFor(q) : TL_LOOKS.idle;
+    el.className = 'tl-light ' + look.cls + (el.classList.contains('sm') ? ' sm' : '');
+    el.textContent = look.dot;
+    if (q) {
+      el.title = tlTipFor(q);
+      el.setAttribute('aria-label', 'AI check: ' + tlTipFor(q));
+    }
+  });
+  tlRenderEmBar();
+}
+
+// ── Which question a light is about ─────────────────────────────────────────
+// `em` reads what is ON SCREEN, never the saved copy: in editing mode the
+// author is typing into the very question the light is about, so checking the
+// bank's version would light a question nobody is looking at.
+function tlQuestionFor(scope, id) {
+  if (scope === 'em') return tlEmQuestion(id);
+  return _docQById(String(id)) || null;
+}
+function tlEmQuestion(id) {
+  if (typeof emActive !== 'function' || !emActive()) return _docQById(String(id)) || null;
+  const e = _em.qs.find(x => x.id === String(id));
+  if (!e) return _docQById(String(id)) || null;
+  const bank = _docQById(String(id)) || {};
+  let bs = [];
+  try { bs = emBlocksOf(e.id); } catch (err) { bs = []; }
+  return Object.assign({}, bank, { id: String(id), title: e.title || bank.title || '', blocks: bs });
+}
+// Editing mode holds its wording in contenteditable boxes, so what is on
+// screen only reaches the blocks when they are read back. Every entry point
+// that is about to CHECK does this first, or the light describes the question
+// as it was when it was last rendered.
+function tlEmSync() {
+  if (typeof emActive === 'function' && emActive()) {
+    try { syncEditorDomToBlocks(); } catch (e) { console.warn('traffic light: reading the boxes', e); }
+  }
+}
+
+// ── Clicking a light ────────────────────────────────────────────────────────
+async function tlClick(scope, id) {
+  if (!_canAuthor()) { showToast('Only an author can check questions', 'error'); return; }
+  tlEmSync();
+  const q = tlQuestionFor(scope, id);
+  if (!q) { showToast('That question is no longer here', 'error'); return; }
+  tlOpenPanel(scope, String(id));
+  if (!tlFresh(q) && tlStateOf(q).state !== 'running') await tlRun(q);
+}
+
+// ── The panel: what the light is about ──────────────────────────────────────
+function tlOpenPanel(scope, id) {
+  _tlPanelId = String(id);
+  _tlPanelScope = scope || 'bank';
+  const ov = document.getElementById('tlOverlay');
+  if (ov) ov.classList.add('show');
+  tlRenderPanel();
+}
+var _tlPanelScope = 'bank';
+function tlClosePanel() {
+  _tlPanelId = '';
+  const ov = document.getElementById('tlOverlay');
+  if (ov) ov.classList.remove('show');
+}
+function tlRecheck() {
+  const q = tlQuestionFor(_tlPanelScope, _tlPanelId);
+  if (!q) { showToast('That question is no longer here', 'error'); return; }
+  tlEmSync();
+  _tlCache.delete(String(q.id));
+  tlRepaint(q.id);
+  tlRun(tlQuestionFor(_tlPanelScope, _tlPanelId));
+}
+function tlPanelEdit() {
+  const id = _tlPanelId;
+  if (!id) return;
+  tlClosePanel();
+  if (_tlPanelScope === 'em') {
+    // In editing mode the question is already on screen — take the author to
+    // it rather than closing the sheet they are working through.
+    tlScrollToQuestion(id);
+    return;
+  }
+  editQuestion(id);
+}
+function tlScrollToQuestion(id) {
+  const e = (_em.qs || []).find(x => x.id === String(id));
+  if (!e) return;
+  const el = document.getElementById('emTitle_' + e.key);
+  const head = el && el.closest('.em-qhead');
+  if (head && head.scrollIntoView) head.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  if (el && el.focus) try { el.focus({ preventScroll: true }); } catch (err) {}
+}
+function tlRenderPanel() {
+  const host = document.getElementById('tlPanelBody');
+  if (!host) return;
+  const q = tlQuestionFor(_tlPanelScope, _tlPanelId);
+  const title = document.getElementById('tlPanelTitle');
+  const sub = document.getElementById('tlPanelSub');
+  if (!q) {
+    if (title) title.textContent = 'Question';
+    if (sub) sub.textContent = '';
+    host.innerHTML = `<div class="tl-note">That question is no longer here.</div>`;
+    return;
+  }
+  const s = tlStateOf(q);
+  const look = TL_LOOKS[s.state] || TL_LOOKS.idle;
+  if (title) title.textContent = q.title || 'Untitled question';
+  if (sub) sub.textContent = [q.topic || 'no topic', q.category ? normalizeCategoryValue(q.category) : ''].filter(Boolean).join(' · ');
+  const head = `<div class="tl-verdict ${look.cls}"><span class="tl-light ${look.cls} lg">${look.dot}</span>
+      <div><div class="tl-verdict-t">${escapeHtml(tlHeadline(s))}</div>
+      <div class="tl-verdict-d">${escapeHtml(tlSubline(s))}</div></div></div>`;
+  const list = (s.findings || []).slice().sort((a, b) => _sevRank(a.severity) - _sevRank(b.severity));
+  const body = s.state === 'running'
+    ? `<div class="tl-note">🤖 The AI is reading this question and its diagrams…</div>`
+    : list.length
+      ? list.map(f => _cqFindingHtml(f, q.id)).join('')
+      : (s.state === 'green'
+        ? `<div class="tl-note">✅ Neither the instant checks nor the AI found anything to report.</div>`
+        : `<div class="tl-note">Nothing has been checked yet — press 🔄 Check again.</div>`);
+  host.innerHTML = head + body;
+}
+function tlHeadline(s) {
+  if (s.state === 'red') return '🔴 Something here is wrong';
+  if (s.state === 'amber') return '🟡 Worth a look';
+  if (s.state === 'green') return '🟢 Nothing flagged';
+  if (s.state === 'running') return 'Checking…';
+  if (s.state === 'error') return '⚠ The check could not finish';
+  if (s.state === 'stale') return '○ Edited since it was checked';
+  return '○ Not checked yet';
+}
+function tlSubline(s) {
+  const n = (s.findings || []).length;
+  if (s.state === 'red' || s.state === 'amber') return n + ' thing' + (n === 1 ? '' : 's') + ' to look at, worst first.';
+  if (s.state === 'green') return 'The instant checks and the AI both read this question and reported nothing.';
+  if (s.state === 'error') return (s.error || 'The AI check could not run') + ' — anything below came from the instant checks, which always run.';
+  if (s.state === 'stale') return 'The question has changed since that verdict was formed, so it no longer stands. Press 🔄 Check again.';
+  if (s.state === 'running') return 'One question, one call — this takes a few seconds.';
+  return 'Press 🔄 Check again to read this question.';
+}
+
+// ── 🚦 Check all, in ✏️ editing mode ────────────────────────────────────────
+// The whole sheet at once, which is the question a teacher who has just read a
+// paper through actually has. It checks what is ON SCREEN — unsaved edits and
+// all — because that is the paper in front of them.
+async function tlCheckSheet() {
+  if (!_canAuthor()) { showToast('Only an author can check questions', 'error'); return; }
+  if (typeof emActive !== 'function' || !emActive()) { showToast('Open a worksheet in editing mode first', 'info'); return; }
+  if (_tlMany && _tlMany.running) { showToast('Already checking this sheet', 'info'); return; }
+  const entries = (_em.qs || []).slice();
+  if (!entries.length) { showToast('There is nothing on this sheet to check', 'info'); return; }
+  tlEmSync();
+  await tlCheckMany(entries, {
+    pick: e => tlEmQuestion(e.id),
+    onProgress: () => { tlRepaint(); },
+  });
+  const m = _tlMany || {};
+  if (_tlStop) showToast('Stopped — ' + (m.done || 0) + ' of ' + (m.total || 0) + ' checked', 'info');
+  else if ((m.red || 0) + (m.amber || 0) === 0) showToast('Nothing flagged on any of the ' + (m.total || 0) + ' questions ✓', 'success');
+  else showToast((m.red || 0) + ' with a problem, ' + (m.amber || 0) + ' worth a look — press a 🚦 to read them', m.red ? 'error' : 'info');
+}
+// The summary bar. It counts the lights that are ACTUALLY standing right now
+// rather than the run's own tally, so a question fixed after the run drops out
+// of the count instead of sitting there red until somebody presses 🚦 again.
+function tlRenderEmBar() {
+  const bar = document.getElementById('emTlBar');
+  if (!bar) return;
+  if (typeof emActive !== 'function' || !emActive() || !(_em.qs || []).length) { bar.style.display = 'none'; return; }
+  const tally = { red: 0, amber: 0, green: 0, error: 0, running: 0, idle: 0 };
+  (_em.qs || []).forEach(e => {
+    const st = tlStateOf(tlEmQuestion(e.id)).state;
+    tally[st === 'stale' ? 'idle' : st] = (tally[st === 'stale' ? 'idle' : st] || 0) + 1;
+  });
+  const checked = tally.red + tally.amber + tally.green + tally.error;
+  if (!checked && !tally.running) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const running = _tlMany && _tlMany.running;
+  bar.innerHTML =
+    `<span class="tl-count red">🔴 ${tally.red}</span>` +
+    `<span class="tl-count amber">🟡 ${tally.amber}</span>` +
+    `<span class="tl-count green">🟢 ${tally.green}</span>` +
+    (tally.error ? `<span class="tl-count err">⚠ ${tally.error}</span>` : '') +
+    (tally.idle ? `<span class="tl-count idle">○ ${tally.idle} not checked</span>` : '') +
+    (running ? `<span class="tl-count idle">checking ${_tlMany.done}/${_tlMany.total}…</span>
+        <button type="button" class="em-qbtn" onclick="tlStopMany()">⏹ Stop</button>`
+      : ((tally.red + tally.amber) ? `<button type="button" class="em-qbtn" onclick="tlJumpToProblem()">⤓ Jump to the first problem</button>` : ''));
+}
+// The first question on the sheet whose light is not green — in SHEET order,
+// so pressing it again walks down the paper the way it is read.
+function tlJumpToProblem() {
+  const from = _tlJumpAt;
+  const list = _em.qs || [];
+  for (let i = 0; i < list.length; i++) {
+    const idx = (from + i) % list.length;
+    const st = tlStateOf(tlEmQuestion(list[idx].id)).state;
+    if (st === 'red' || st === 'amber') {
+      _tlJumpAt = idx + 1;
+      tlScrollToQuestion(list[idx].id);
+      tlOpenPanel('em', list[idx].id);
+      return;
+    }
+  }
+  showToast('Nothing is flagged on this sheet', 'info');
+}
+var _tlJumpAt = 0;
+// Editing mode is opened and closed repeatedly in one sitting; the cache is
+// keyed by question id and signature, so it is deliberately NOT cleared —
+// a verdict formed a minute ago still stands for the same question.
+function tlEmReset() { _tlJumpAt = 0; _tlMany = null; _tlStop = false; }
+var _tlEmWatchBound = false;
+var _tlEmWatchTimer = null;
+function tlEmWatchInit() {
+  if (_tlEmWatchBound) return;
+  _tlEmWatchBound = true;
+  document.addEventListener('input', ev => {
+    if (typeof emActive !== 'function' || !emActive()) return;
+    const body = document.getElementById('emBody');
+    if (!body || !ev.target || !body.contains(ev.target)) return;
+    clearTimeout(_tlEmWatchTimer);
+    _tlEmWatchTimer = setTimeout(() => {
+      if (typeof emActive === 'function' && emActive()) { tlEmSync(); tlRepaint(); }
+    }, 700);
+  }, true);
 }
 
 // =====================================================================
@@ -65607,6 +66095,15 @@ window.emSaveAll = emSaveAll;
 window.emOpenFull = emOpenFull;
 window.emTitleInput = emTitleInput;
 window.emRemoveQuestion = emRemoveQuestion;
+// 🚦 The traffic light — every lamp and the panel it opens are reached from
+// inline handlers, so they have to be on window: the module has its own scope.
+window.tlClick = tlClick;
+window.tlClosePanel = tlClosePanel;
+window.tlRecheck = tlRecheck;
+window.tlPanelEdit = tlPanelEdit;
+window.tlCheckSheet = tlCheckSheet;
+window.tlStopMany = tlStopMany;
+window.tlJumpToProblem = tlJumpToProblem;
 window.akeAddExplanation = akeAddExplanation;
 window.akeRemoveExplanation = akeRemoveExplanation;
 window.akeAddAnswerKey = akeAddAnswerKey;
