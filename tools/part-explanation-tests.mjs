@@ -72,6 +72,14 @@ const SHIM = [
   cut('const AKD_PRINT_RULES =', ";\n", 'print rules') + ';',
   "function _cqRepr(q) { return 'QUESTION: ' + ((q && q.blocks) || []).map(b => (b && b.content) || '').join(' '); }",
   cut('const EXPL_ASKS_RE', '\nasync function aiGenerateBlockAnswer', 'explanation depth'),
+  // The picture-sizing helpers, cut in for the same reason as the print rules:
+  // the explanation diagram's size is the picture block's OWN `block.scale`,
+  // read through the very same imgHasScale / imgScale, so a harness that
+  // stubbed them could pass while the two had drifted apart.
+  cut('const IMG_SCALE_MIN = 20;', '// ---- How TALL a picture may print', 'image scale core'),
+  cut('function _imgRenderedPct(containerId, fallback) {', '// Back to Auto:', 'the shared + / - stepper'),
+  "let blocks = [];",
+  "var document = { getElementById: () => null, querySelector: () => null };",
 ].join('\n');
 
 const M = new Function([
@@ -87,6 +95,10 @@ const M = new Function([
             map: qPartMap, partOf: qPartOf, hasParts: qHasParts, place: qPlacePartExplanation,
             xdPrompt: _xdPrompt, xdText: _xdExplText, keyHtml: _explKeyContentHtml,
             explDiagrams: _qExplanationDiagrams, FIDELITY: XD_FIDELITY,
+            xdImgStyle, xdSizeAuto, xdSizeStep, XD_PRINT_MAX_PT,
+            imgScaleStep, imgHasScale, imgScale,
+            IMG_SCALE_MIN, IMG_SCALE_MAX, IMG_SCALE_STEP,
+            setBlocks: v => { blocks = v; }, getBlocks: () => blocks,
             reply: v => { _reply = v; }, calls: () => _calls, resetCalls: () => { _calls = []; },
             grounded: () => _grounded };`,
 ].join('\n'))();
@@ -465,13 +477,119 @@ test('a picture with no words still reaches the key', () => {
   eq(bothPaths.length, 2, 'both print paths must test the picture as well as the words');
 });
 
+// ── 📐 How big the picture is drawn ────────────────────────────────────────
+// One number on the block, read by all three surfaces. Every failure below is
+// silent: the picture still draws, the key still prints, and the size the
+// author chose is simply not the size anybody gets.
+test('no size chosen renders BYTE FOR BYTE what it always did', () => {
+  // That is every explanation diagram already in the bank. A control nobody
+  // has touched must not resize a single one of them.
+  eq(M.xdImgStyle({}, false), 'max-width:100%;', 'on screen');
+  eq(M.xdImgStyle({}, true), 'max-width:100%;max-height:' + M.XD_PRINT_MAX_PT + 'pt;', 'on paper');
+  eq(M.keyHtml({ content: '<p>Note.</p>', url: 'd.png' }),
+     '<p>Note.</p><div><img src="d.png" style="max-width:100%;max-height:180pt;"></div>',
+     'the printed key, unchanged');
+});
+
+test('a chosen size reaches the SCREEN and the PAPER, and the height cap comes with it', () => {
+  eq(M.xdImgStyle({ scale: 0.4 }, false), 'width:40%;max-width:100%;', 'on screen');
+  // Half the size has to be half the HEIGHT too, or a tall diagram is half as
+  // wide and exactly as tall — which is not what anybody means by half.
+  eq(M.xdImgStyle({ scale: 0.5 }, true),
+     'width:50%;max-width:100%;max-height:' + Math.round(M.XD_PRINT_MAX_PT / 2) + 'pt;', 'on paper');
+  ok(/width:60%/.test(M.keyHtml({ content: 'x', url: 'd.png', scale: 0.6 })),
+     'the printed key reads the same number');
+});
+
+test('the printed picture can never be made TALLER than the key already allowed', () => {
+  // Which is what makes the control safe to hand out: it can only ever come
+  // DOWN from the cap, so a resized picture is never the thing that breaks a
+  // sheet the print planner had already measured.
+  [0.2, 0.35, 0.5, 0.75, 1, 5, -3].forEach(v => {
+    const cap = Number((M.xdImgStyle({ scale: v }, true).match(/max-height:(\d+)pt/) || [])[1]);
+    ok(cap > 0 && cap <= M.XD_PRINT_MAX_PT, 'scale ' + v + ' gave a cap of ' + cap);
+  });
+});
+
+test('the size is CLAMPED, and it is the picture block\'s own clamp', () => {
+  const pct = b => Number((M.xdImgStyle(b, false).match(/width:(\d+)%/) || [])[1]);
+  eq(pct({ scale: 9 }), M.IMG_SCALE_MAX, 'nothing wider than the column');
+  eq(pct({ scale: 0.01 }), M.IMG_SCALE_MIN, 'nothing smaller than the floor');
+});
+
+test('Auto DELETES the field — it is never a size of 0', () => {
+  // `imgHasScale` asks whether the field is there at all, so a 0 left behind
+  // would read as "no size chosen" on one line and as a real number on the
+  // next, depending on who was asking.
+  const b = { id: 'x1', type: 'explanation', url: 'd.png', scale: 0.5 };
+  M.setBlocks([b]);
+  M.xdSizeAuto('x1');
+  ok(!('scale' in b), 'the field is gone, not zeroed');
+  ok(!M.imgHasScale(b), 'and it reads as Auto again');
+  eq(M.xdImgStyle(b, false), 'max-width:100%;', 'so it renders as it always did');
+});
+
+test('+ and − step by the picture block\'s own step, and stop at its own limits', () => {
+  const b = { id: 'x2', type: 'explanation', url: 'd.png', scale: 0.5 };
+  M.setBlocks([b]);
+  M.xdSizeStep('x2', -1);
+  eq(Math.round(b.scale * 100), 50 - M.IMG_SCALE_STEP, 'one press smaller');
+  M.xdSizeStep('x2', 1);
+  eq(Math.round(b.scale * 100), 50, 'and back');
+  b.scale = M.IMG_SCALE_MAX / 100;
+  M.xdSizeStep('x2', 1);
+  eq(Math.round(b.scale * 100), M.IMG_SCALE_MAX, 'the top is the column itself');
+  b.scale = M.IMG_SCALE_MIN / 100;
+  M.xdSizeStep('x2', -1);
+  eq(Math.round(b.scale * 100), M.IMG_SCALE_MIN, 'and the floor holds');
+});
+
+test('a block with no picture is not resized', () => {
+  const b = { id: 'x3', type: 'explanation', url: '' };
+  M.setBlocks([b]);
+  M.xdSizeStep('x3', 1);
+  ok(!('scale' in b), 'there is nothing there to make bigger');
+});
+
+test('imgScaleStep is the ONE stepper both size controls read', () => {
+  // Written a second time, + means 5% on a picture block and something else on
+  // the explanation diagram beside it.
+  eq(M.imgScaleStep({ scale: 0.5 }, 1, 'nope'), 50 + M.IMG_SCALE_STEP, 'from the size that is set');
+  const adjust = src.slice(src.indexOf('function adjustImgScale'), src.indexOf('// Back to Auto:'));
+  ok(/imgScaleStep\(/.test(adjust), 'the picture block goes through it');
+  const xd = src.slice(src.indexOf('function xdSizeStep'), src.indexOf('function xdSizeAuto'));
+  ok(/imgScaleStep\(/.test(xd), 'and so does the explanation diagram');
+});
+
+test('ALL THREE surfaces read the size through the ONE helper', () => {
+  // A surface that read it its own way — or did not read it at all — is the
+  // author sizing the picture in the editor and the key printing the old size,
+  // with nothing on any screen saying so.
+  const bar = src.slice(src.indexOf('function xdBarHtml'), src.indexOf('// The explanation as it reaches an ANSWER KEY'));
+  ok(/xdImgStyle\(block, false\)/.test(bar), 'the editor preview');
+  const key = src.slice(src.indexOf('function _explKeyContentHtml'), src.indexOf('function _qExplanationDiagrams'));
+  ok(/xdImgStyle\(block, true\)/.test(key), 'the printed answer key');
+  const card = src.slice(src.indexOf('const explDiagrams = _qExplanationDiagrams'), src.indexOf('// Interactive widget'));
+  ok(/d\.style/.test(card), "the pupil's 🖼 Picture it card");
+  // …and the size row must survive ✏️ editing mode's fold, or it is a control
+  // hidden behind the very ⚙ nobody pressed.
+  ok(/EM_KEEP = '[^']*\.xd-size/.test(src), '.xd-size is in EM_KEEP');
+  ok(/EM_NO_HOIST_IN = '[^']*\.xd-size/.test(src), "…and its own buttons stay in it");
+});
+
 test('the student sees it only AFTER marking, and it is its own reader', () => {
+  // It hands back the SIZE with the url — the card is one of the three
+  // surfaces that draws this picture, and a reader returning bare urls would
+  // leave it the one place that silently ignores the author's size control.
   deep(M.explDiagrams({ blocks: [
     { type: 'explanation', url: 'a.png' },
     { type: 'explanation', url: '' },
     { type: 'answerKey', url: 'k.png' },
     { type: 'explanation', url: 'a.png' },
-  ] }), ['a.png'], 'deduped, and an answer-key picture is not one of these');
+  ] }), [{ url: 'a.png', style: 'max-width:100%;' }],
+    'deduped, and an answer-key picture is not one of these');
+  deep(M.explDiagrams({ blocks: [{ type: 'explanation', url: 'b.png', scale: 0.5 }] }),
+    [{ url: 'b.png', style: 'width:50%;max-width:100%;' }], 'the size travels with the url');
   // The card is built in showExplanation — the ONE post-marking builder — and
   // renderImportedBlockStudent still renders an explanation block as NOTHING
   // inside the question, so it can never appear above the answer.

@@ -13159,6 +13159,22 @@ body.lore-reading { overflow: hidden; }
   display:block; max-width:100%; max-height:280px;
   border-radius:8px; background:#fff;
 }
+/* How big the picture is drawn. The number is what reaches the pupil's card
+   and the printed key; the 280px above is the EDITOR's own viewing cap, so a
+   tall diagram cannot push this row off the screen. */
+.xd-size{
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  margin-top:10px;
+}
+.xd-size-l{ font-size:0.8rem; color:var(--text-muted); }
+.xd-size-n{
+  font-family:'Space Mono', monospace; font-size:0.8rem;
+  min-width:52px; text-align:center; color:var(--text);
+}
+.xd-size-h{
+  flex:1 1 220px; min-width:180px;
+  font-size:0.76rem; color:var(--text-muted); line-height:1.55;
+}
 
 /* ── 🎨 Photo Editor — the landing zone ─────────────────────────────────── */
 .pe-zone{

@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.343.0';
+const APP_VERSION = 'v1.344.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -7844,13 +7844,24 @@ function _imgRenderedPct(containerId, fallback) {
 function imgSizeLabelText(block) {
   return imgHasScale(block) ? Math.round(imgScale(block) * 100) + '%' : 'Auto';
 }
+// The arithmetic of ONE press of + or −, and the ONE place it lives. Two size
+// controls now read it — the picture block's, and the 🖼 explanation diagram's
+// — and a stepper written a second time is a + that means 5% on one picture
+// and something else on the next.
+//
+// From the size that is SET, or from the size the picture is actually rendered
+// at when none is, so the first press moves from what is on screen instead of
+// jumping to a notional default.
+function imgScaleStep(block, dir, containerId) {
+  const base = imgHasScale(block) ? Math.round(imgScale(block) * 100)
+                                  : _imgRenderedPct(containerId, IMG_SCALE_MAX);
+  return Math.max(IMG_SCALE_MIN, Math.min(IMG_SCALE_MAX, base + dir * IMG_SCALE_STEP));
+}
 // + / - handler for the image size control in the question editor.
 function adjustImgScale(blockId, dir) {
   const block = blocks.find(b => b.id === blockId);
   if (!block) return;
-  const base = imgHasScale(block) ? Math.round(imgScale(block) * 100)
-                                  : _imgRenderedPct('imgPreview_' + blockId, IMG_SCALE_MAX);
-  const next = Math.max(IMG_SCALE_MIN, Math.min(IMG_SCALE_MAX, base + dir * IMG_SCALE_STEP));
+  const next = imgScaleStep(block, dir, 'imgPreview_' + blockId);
   block.scale = next / 100;
   const label = document.getElementById('imgSizeLabel_' + blockId);
   if (label) label.textContent = next + '%';
@@ -8343,6 +8354,59 @@ function xdRemoveBlockPic(blockId) {
     showToast('Picture removed', 'success');
   });
 }
+// ── HOW BIG THE PICTURE IS DRAWN ────────────────────────────────────────────
+// An explanation diagram is one picture on one block, so its size is ONE
+// number on that block: `block.scale`, the SAME field and the same meaning a
+// picture block's own +/− control writes. A separate `diagramScale` would be a
+// second word for the same thing, and `imgHasScale` / `imgScale` already say
+// what "no size chosen" means and already clamp the range.
+//
+// THREE SURFACES DRAW THIS PICTURE and every one of them reads that number
+// through `xdImgStyle`: the preview in the editor, the 🖼 Picture it card a
+// pupil sees after marking, and the printed answer key. A surface that read it
+// its own way — or did not read it at all — is the fault the shared print
+// helpers exist to prevent: the author sizes the picture in the editor, the
+// key prints it at the old size, and nothing on any screen says so.
+//
+// NO SIZE CHOSEN IS BYTE-FOR-BYTE WHAT IT ALWAYS WAS, on all three. That is
+// every explanation diagram already in the bank, and a control nobody has
+// touched must not resize them.
+const XD_PRINT_MAX_PT = 180;   // the answer key's own height cap for one picture
+function xdImgStyle(block, forPrint) {
+  const has = imgHasScale(block);
+  const pct = has ? Math.round(imgScale(block) * 100) : 0;
+  if (!forPrint) return (has ? `width:${pct}%;` : '') + 'max-width:100%;';
+  // On paper the chosen share scales the HEIGHT CAP with it, or "half the
+  // size" would be half the width and the same height on a tall diagram —
+  // which is not what anybody means by half. It can only ever come DOWN from
+  // the cap the key already allowed, so a resized picture can never be the
+  // thing that breaks a sheet.
+  const cap = has ? Math.max(24, Math.round(XD_PRINT_MAX_PT * pct / 100)) : XD_PRINT_MAX_PT;
+  return (has ? `width:${pct}%;` : '') + `max-width:100%;max-height:${cap}pt;`;
+}
+// The control. It patches the preview in place rather than re-rendering: in
+// ✏️ editing mode a render rebuilds the whole sheet, and the size is nudged
+// several times in a row.
+function xdSizeStep(blockId, dir) {
+  const b = blocks.find(x => x.id === blockId);
+  if (!b || !String(b.url || '').trim()) return;
+  b.scale = imgScaleStep(b, dir, 'xdPreview_' + blockId) / 100;
+  _xdPaintSize(blockId, b);
+}
+function xdSizeAuto(blockId) {
+  const b = blocks.find(x => x.id === blockId);
+  if (!b) return;
+  delete b.scale;   // deleted, never set to 0 — `imgHasScale` asks whether the
+                    // field is there at all, and that is what "Auto" means
+  _xdPaintSize(blockId, b);
+}
+function _xdPaintSize(blockId, b) {
+  const label = document.getElementById('xdSizeLabel_' + blockId);
+  if (label) label.textContent = imgSizeLabelText(b);
+  const img = document.querySelector('#xdPreview_' + blockId + ' img');
+  if (img) img.setAttribute('style', xdImgStyle(b, false));
+}
+
 // The steering note lives ON the block, so it is saved with the question and a
 // regeneration a week later still knows what was asked for. Same field name as
 // the 🔑 block's, because it means the same thing.
@@ -8364,7 +8428,15 @@ function xdBarHtml(block) {
       <input class="akd-note" type="text" placeholder="Instructions for the diagram — e.g. side view, two panels, label the condensation"
              maxlength="${AKD_NOTE_MAX}" value="${escapeHtml(block.diagramNote || '')}" oninput="setXdBlockNote('${id}', this.value)">
     </div>` +
-    (has ? `<div class="xd-preview"><img src="${escapeHtml(transformImageUrl(url))}" alt="Diagram of this explanation" onerror="handleImgError(this)" loading="lazy" decoding="async"></div>` : '');
+    (has ? `<div class="xd-preview" id="xdPreview_${id}"><img src="${escapeHtml(transformImageUrl(url))}" alt="Diagram of this explanation" onerror="handleImgError(this)" loading="lazy" decoding="async" style="${xdImgStyle(block, false)}"></div>
+    <div class="xd-size">
+      <span class="xd-size-l">Size</span>
+      <button type="button" class="akd-btn" onclick="xdSizeStep('${id}',-1)" title="Smaller — ${IMG_SCALE_STEP}% at a time, down to ${IMG_SCALE_MIN}% of the width">−</button>
+      <span class="xd-size-n" id="xdSizeLabel_${id}">${escapeHtml(imgSizeLabelText(block))}</span>
+      <button type="button" class="akd-btn" onclick="xdSizeStep('${id}',1)" title="Larger — ${IMG_SCALE_STEP}% at a time, up to ${IMG_SCALE_MAX}% (the full width)">+</button>
+      <button type="button" class="akd-btn" onclick="xdSizeAuto('${id}')" title="Auto: the picture sizes itself, without being stretched past its own resolution">Auto</button>
+      <span class="xd-size-h">How wide this picture is drawn — on the pupil's <b>🖼 Picture it</b> card and on the printed answer key.</span>
+    </div>` : '');
 }
 
 // The explanation as it reaches an ANSWER KEY: the words, and the picture under
@@ -8375,19 +8447,25 @@ function _explKeyContentHtml(block) {
   const words = sanitizeAnswerKeyHtml((block && block.content) || '');
   const url = String((block && block.url) || '').trim();
   if (!url) return words;
-  return words + `<div><img src="${escapeHtml(transformImageUrl(url))}" style="max-width:100%;max-height:180pt;"></div>`;
+  return words + `<div><img src="${escapeHtml(transformImageUrl(url))}" style="${xdImgStyle(block, true)}"></div>`;
 }
 // The explanation diagrams a question carries, for the post-marking card. Its
 // own reader, kept apart from `_qAnswerDiagrams`: that one answers "what
 // picture explains the ANSWER" and this one "what picture draws the
 // EXPLANATION", and one function answering both is one that will be asked the
 // wrong question.
+// It hands back the SIZE with the url, because the author's chosen size is a
+// property of the picture and the card is one of the three surfaces that draws
+// it. A reader that returned bare urls would leave the card the one place that
+// silently ignores the control.
 function _qExplanationDiagrams(q) {
-  const out = [];
+  const out = [], seen = new Set();
   ((q && q.blocks) || []).forEach(b => {
     if (!b || b.type !== 'explanation') return;
     const t = String(b.url || '').trim();
-    if (t && out.indexOf(t) < 0) out.push(t);
+    if (!t || seen.has(t)) return;
+    seen.add(t);
+    out.push({ url: t, style: xdImgStyle(b, false) });
   });
   return out;
 }
@@ -30307,7 +30385,7 @@ const EM_PRIMARY = {
 // under the explanation box; folded away, pressing the rail icon and watching
 // nothing appear is the same dead button the keyword panel was, and a picture
 // already drawn reads as one that has been lost.
-const EM_KEEP = '.kw-panel, .xd-preview';
+const EM_KEEP = '.kw-panel, .xd-preview, .xd-size';
 // Buttons that are already tiny and belong where they are: the rich-text
 // toolbar (B / I / U / lists) and the insert-a-block menus.
 const EM_NO_HOIST = '.toolbar-btn, .block-insert-btn, .block-insert-toggle, .em-ico';
@@ -30316,7 +30394,7 @@ const EM_NO_HOIST = '.toolbar-btn, .block-insert-btn, .block-insert-toggle, .em-
 // answer screenshot's "× Remove" would sit beside the block's own 🗑 as a
 // second, differently-meaning bin. The keyword panel's own Clear all / Done are
 // the same case, and it is what gutted the panel as well as hiding it.
-const EM_NO_HOIST_IN = '.kw-panel, .annot-ans';
+const EM_NO_HOIST_IN = '.kw-panel, .annot-ans, .xd-size';
 
 // Does this child of a block's body stay on screen, or fold behind the ⚙?
 // Its own function so the rule can be tested without a browser: both halves are
@@ -33018,7 +33096,7 @@ function showExplanation(containerSel, q, aiText, scoreElId, modelAnswer) {
     cards +=
       `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#eaf1f8);border-radius:10px;">
         <div style="font-weight:700;color:var(--accent-blue);margin-bottom:8px;">🖼 Picture it</div>` +
-      explDiagrams.map(u => `<img src="${escapeHtml(transformImageUrl(u))}" alt="Diagram of the explanation" onerror="handleImgError(this)" loading="lazy" decoding="async" style="display:block;max-width:100%;margin:0 auto 6px;border-radius:8px;border:1px solid var(--border);background:#fff;">`).join('') +
+      explDiagrams.map(d => `<img src="${escapeHtml(transformImageUrl(d.url))}" alt="Diagram of the explanation" onerror="handleImgError(this)" loading="lazy" decoding="async" style="display:block;margin:0 auto 6px;border-radius:8px;border:1px solid var(--border);background:#fff;${d.style}">`).join('') +
       `</div>`;
   }
   // Interactive widget(s) authored on the question: revealed only here, after
@@ -65893,6 +65971,8 @@ window.xdRunBlock = xdRunBlock;
 window.xdTouchUpBlock = xdTouchUpBlock;
 window.xdRemoveBlockPic = xdRemoveBlockPic;
 window.setXdBlockNote = setXdBlockNote;
+window.xdSizeStep = xdSizeStep;
+window.xdSizeAuto = xdSizeAuto;
 // 🎨 Photo Editor
 window.pePickFiles = pePickFiles;
 window.peDrop = peDrop;
