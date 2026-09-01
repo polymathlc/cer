@@ -482,6 +482,53 @@ anything, and the ones who cannot are exactly the ones the note was written for.
 - **THE LABELS ARE THE PART TO CHECK.** An image model letters a perfect beaker
   "watr vapuor", which is why ✏️ Touch up sits on the same row and every toast
   says so.
+
+### 📐 How big the picture is drawn (v1.344.0)
+
+`XD_PRINT_MAX_PT` / `xdImgStyle` / `xdSizeStep` / `xdSizeAuto` / `_xdPaintSize`,
+the − / number / + / **Auto** row under the preview, and the shared
+`imgScaleStep` split out of `adjustImgScale`.
+
+An explanation diagram is one picture on one block, so its size is ONE number
+on that block: **`block.scale`** — the SAME field and the same meaning a
+picture block's own +/− control writes. A separate `diagramScale` would be a
+second word for the same thing, and `imgHasScale` / `imgScale` already say what
+"no size chosen" means and already clamp the range.
+
+- **THREE SURFACES DRAW THIS PICTURE and every one of them reads that number
+  through `xdImgStyle`**: the preview in the editor, the 🖼 Picture it card a
+  pupil sees after marking, and the printed answer key. A surface that read it
+  its own way — or did not read it at all — is the fault the shared print
+  helpers exist to prevent: the author sizes the picture in the editor, the key
+  prints it at the old size, and nothing on any screen says so. That is why
+  `_qExplanationDiagrams` hands back `{ url, style }` rather than a bare url.
+- **NO SIZE CHOSEN IS BYTE-FOR-BYTE WHAT IT ALWAYS WAS, on all three.** That is
+  every explanation diagram already in the bank, and a control nobody has
+  touched must not resize a single one of them.
+- **On paper the chosen share scales the HEIGHT CAP with it.** Half the size has
+  to be half the height too, or a tall diagram comes out half as wide and
+  exactly as tall — which is not what anybody means by half. It can only ever
+  come DOWN from `XD_PRINT_MAX_PT`, the cap the key already allowed, so a
+  resized picture is never the thing that breaks a sheet the planner had
+  already measured.
+- **Auto DELETES the field, never sets it to 0.** `imgHasScale` asks whether the
+  field is there at all, so a zero left behind reads as "no size chosen" to one
+  caller and as a real number to the next.
+- **`imgScaleStep` is the ONE stepper**, shared with the picture block's own
+  +/−: written a second time, `+` means 5% on one picture and something else on
+  the next. It steps from the size that is SET, or from what is on screen when
+  none is.
+- **The control patches the preview in place** rather than re-rendering — in
+  ✏️ editing mode a render rebuilds the whole sheet, and a size is nudged
+  several times in a row.
+- **`.xd-size` is in `EM_KEEP` and in `EM_NO_HOIST_IN`.** It is a SIBLING of
+  `.xd-preview`, so without the first it folds behind the very ⚙ nobody
+  pressed; and its − / + / Auto act on what is in the row rather than on the
+  block, so on the rail they read as block actions with the number they change
+  left behind in the folded half.
+- The 280px cap in `.xd-preview img` is the EDITOR's own viewing cap, so a tall
+  diagram cannot push the size row off the screen. It is not what reaches the
+  card or the key.
 - Run **`node tools/part-explanation-tests.mjs`** after touching any of it.
 
 ## 📄 A whole PDF in ⚡ Rapid add — every page read as its own screenshot (v1.336.0)
@@ -3788,7 +3835,17 @@ question came round. A lamp answers both at a glance — 🔴 something is wrong
   thing; draw from an EMPTY box and it is a picture of nothing; leave one print
   path on the raw content and the key carries the diagram from one print button
   and not the other; and render it anywhere but the post-marking card and a
-  diagram of the answer prints above the question that gives it away.
+  diagram of the answer prints above the question that gives it away. The SIZE
+  (`XD_PRINT_MAX_PT`, `xdImgStyle`, `xdSizeStep`, `xdSizeAuto`, `imgScaleStep`,
+  `_qExplanationDiagrams`'s `{ url, style }`, and `.xd-size` in `EM_KEEP` /
+  `EM_NO_HOIST_IN`) fails the same way: let one of the three surfaces stop
+  reading the number and the author sizes the picture in the editor while the
+  key prints it at the old size; let a block with NO size render as anything
+  but what it always did and every diagram in the bank changes at once; let
+  Auto write a 0 instead of deleting the field and "no size chosen" means two
+  different things depending on who is asking; and let the print cap grow past
+  `XD_PRINT_MAX_PT` and a resized picture is the thing that breaks a sheet the
+  planner had already measured.
 - After touching **the table block** (`_tblInsertRow`, `_tblDeleteRow`,
   `_tblInsertCol`, `_tblDeleteCol`, `_tblRemapCellKeys`, `_tblRemapRowKeys`,
   `_tblCellCss`, `TABLE_STYLE_PRESETS`, `TABLE_FONTS`, `tableApplyStyle`,
