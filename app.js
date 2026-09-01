@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.344.0';
+const APP_VERSION = 'v1.345.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -61400,6 +61400,7 @@ function ppRenderBody(){
   // silently undone before the teacher presses print.
   const whyOn = !!document.getElementById('ppIncludeWhy')?.checked;
   const whyBox = !edit ? `<label class="pp-whybox" title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment."><input type="checkbox" id="ppIncludeWhy" ${whyOn ? 'checked' : ''}> \u24d8 Why the other options are wrong</label>` : '';
+  const formatAllBtn = (!edit && admin) ? `<button class="pp-add pp-format" title="Check every attached question on EVERY paper for the three things a paper needs: an explanation for every part, keywords assigned, and marks on every part. Instant, no AI — and each row takes you straight to the question." onclick="pfCheckAll()">📋 Format check — all papers</button>` : '';
   const printSelBtn = !edit ? `<button class="pp-add" id="ppPrintSelPrevBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Live A4 preview of the ticked concepts — check the sheet and fix any answer or explanation on the key before printing" onclick="ppPrintSelected('preview')">👁 Preview selected</button><button class="pp-add" id="ppEditSelBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Editing mode \u2014 every question on this paper in one scroll, each block condensed to a strip with its controls as icons down the left. Fix what you find, then Save once." onclick="ppPrintSelected('edit')">✏️ Edit selected</button><button class="pp-add" id="ppPrintSelBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Print every attached question from the concepts you ticked below as ONE worksheet — questions first, the full answer key on the last pages. Tick concepts with the checkbox at their top-right corner." onclick="ppPrintSelected()">🖨 Print selected${_ppPrintSel.size ? ' (' + _ppPrintSel.size + ')' : ''}</button>` : '';
 
   // --- question map ---
@@ -61414,7 +61415,8 @@ function ppRenderBody(){
     // Whole-paper editor: every question in this year on ONE screen, no
     // question-by-question clicking.
     const bulkEditBtn = admin ? `<button class="pp-mini pp-bulkedit" title="Open the whole ${escapeHtml(y)} paper in one editor — change every question's number, marks, topic, skill, difficulty, title, analysis and answer, then save once" onclick="ppOpenPaperEdit('${escapeHtml(y)}')">🗂 Edit whole paper</button>` : '';
-    const yearTools = (bulkEditBtn || practiceBtn || previewBtn || printBtn) ? `<span class="pp-tools">${bulkEditBtn}${practiceBtn}${previewBtn}${printBtn}</span>` : '';
+    const formatBtn = (!edit && admin && yAssigned) ? `<button class="pp-mini pp-format" title="Check every attached question on the ${escapeHtml(y)} paper for the three things a paper needs: an explanation for every part, keywords assigned, and marks on every part. Instant, no AI — and each row takes you straight to the question." onclick="pfCheckYear('${escapeHtml(y)}')">📋 Format check</button>` : '';
+    const yearTools = (bulkEditBtn || practiceBtn || previewBtn || printBtn || formatBtn) ? `<span class="pp-tools">${bulkEditBtn}${practiceBtn}${previewBtn}${formatBtn}${printBtn}</span>` : '';
     return `<div class="pp-year">
       <div class="pp-year-head"><strong>${escapeHtml(y)}</strong> <span class="pp-year-sub">${yq.length} questions &middot; ${yAssigned}/${yq.length} attached</span> ${addBtn}${yearTools}</div>
       <div class="pp-chip-row">${chips}</div>
@@ -61495,7 +61497,7 @@ function ppRenderBody(){
     <div class="pp-note">${roleLine}</div>
     ${practiceCard}
     <div class="pp-card">
-      <h3 class="pp-h">The concepts that keep coming back ${addConcept}${printSelBtn}${whyBox}</h3>
+      <h3 class="pp-h">The concepts that keep coming back ${addConcept}${printSelBtn}${formatAllBtn}${whyBox}</h3>
       <p class="pp-sub">Patterns that recur across the papers — the highest-yield things to master, ordered by how many questions touched each.</p>
       ${recCards}
     </div>
@@ -61994,6 +61996,217 @@ function ppTogglePrintSel(id, checked){
   }
   const prev = document.getElementById('ppPrintSelPrevBtn');
   if (prev) prev.disabled = !n;   // its twin, or Preview stays live on an empty selection
+}
+
+// =====================================================================
+// 📋 FORMAT CHECK — is every past-paper question dressed the way a paper
+// needs it? (`pf*`)
+// =====================================================================
+// A PSLE paper is printed with its answer key and marked from it, so every
+// question on it has to carry three things a question in the ordinary bank
+// can do without:
+//
+//   1. AN EXPLANATION FOR EVERY PART. Each part is printed under its own
+//      heading on the key and is what a pupil reads under (b) — a part with
+//      no note is a part the key has nothing to say about.
+//   2. KEYWORDS ASSIGNED. The words worth recalling, marked by a person on
+//      the 🔑 panel: they are what the key prints bold and what the
+//      fill-in-the-blanks drill punches out.
+//   3. MARKS ON EVERY PART — on the part's own opening text, or on a text
+//      block under it. A paper prints [2] at the end of what it asks, and a
+//      part with no number is one a pupil cannot budget for.
+//
+// Each of those is silent when missing: the question builds, renders and
+// prints perfectly, and the gap is found by whoever is standing in front of a
+// class holding the key. So this is one button per paper that says which
+// questions are missing which — and takes the author straight to them.
+//
+//  • IT IS PLAIN CODE, INSTANT, AND READS ONLY. Every check is a fact about
+//    the question's blocks, so no AI is asked and nothing is written. The
+//    🚦 traffic light is what reads a question for SENSE; this reads it for
+//    SHAPE, and the two must not be merged — a lamp that went amber on a
+//    missing mark would be a lamp nobody could read at a glance.
+//  • IT READS THE SAME HELPERS THE KEY IS BUILT FROM. `qPartsWithoutExplanation`
+//    is the filler's own definition of "a part with no note";
+//    `qHasKeywords` is the gate 🔲 Fill-in-the-blanks mode serves on;
+//    `qMarksOf` is the number the printed [2] comes from. A second reading of
+//    any of them would drift, and the report would then name a gap the key
+//    does not have — or miss one it does.
+//  • "MARKS ON A PART" MEANS ITSELF OR A TEXT BLOCK BELOW IT. `qPartFind`
+//    walks every block filed under the letter — the opener, the texts under
+//    it, and its (i)/(ii) sub-parts — so a mark anywhere in the part counts.
+//    An answer box never counts: it is not a question and has no marks.
+//  • A CHECK THAT CANNOT BE ACTED ON IS NOT RAISED. A multiple-choice question
+//    with no written-answer box has nowhere for a keyword to go, so
+//    "no keywords" is not a finding on it — a row nobody can clear is the row
+//    that makes the real ones get clicked past. The report says it skipped.
+//  • A QUESTION WITH NOTHING ATTACHED IS NAMED, NEVER SKIPPED. It cannot be
+//    checked, and a report that quietly leaves it out reads as a clean paper.
+//  • EVERY ROW LEADS SOMEWHERE. ✏️ opens that one question in the full editor
+//    and comes back to its chip (the same `editQuestionFromPapers` return the
+//    page already has); ✏️ Fix them all opens every flagged question in
+//    ✏️ editing mode — the same `emOpenPaper` door the year's own button uses.
+//
+// Run `node tools/paper-format-tests.mjs` after touching any of it.
+
+const PF_KINDS = [
+  { kind: 'explanation', icon: '💡', label: 'Explanation', tip: 'An explanation block for every part (or one for the whole question when it has no parts)' },
+  { kind: 'keywords',    icon: '🔑', label: 'Keywords',    tip: 'Keywords assigned on the 🔑 panel of a written-answer box' },
+  { kind: 'marks',       icon: '[2]', label: 'Marks',      tip: 'Marks on every part — on the part\'s own text, or on a text block under it' },
+];
+
+// The parts whose marks are nowhere: not on the opener, not on a text block
+// under it. A question with NO parts is one "part", and any text block with
+// marks satisfies it.
+function pfPartsWithoutMarks(blocks) {
+  const bs = Array.isArray(blocks) ? blocks : [];
+  const marked = b => b && b.type === 'text' && qMarksOf(b) > 0;
+  const parts = qPartsUsed(bs);
+  if (!parts.length) return bs.some(marked) ? [] : [''];
+  return parts.filter(letter => !qPartFind(bs, letter, marked));
+}
+// The parts with no explanation. `qPartsWithoutExplanation` is the filler's
+// own definition; a question with no parts needs one note about the whole.
+function pfPartsWithoutExplanation(blocks) {
+  const bs = Array.isArray(blocks) ? blocks : [];
+  if (!qPartsUsed(bs).length) {
+    return bs.some(b => b && b.type === 'explanation' && stripHtml(b.content || '').trim()) ? [] : [''];
+  }
+  return qPartsWithoutExplanation(bs);
+}
+// Can a keyword be assigned on this question at all?
+function pfTakesKeywords(q) {
+  return ((q && q.blocks) || []).some(b => kwBlockTakesKeywords(b));
+}
+function pfPartsText(parts) {
+  const named = (parts || []).filter(Boolean).map(qPartLabel);
+  return named.length ? named.join(' ') : 'whole question';
+}
+
+// ONE question → its findings. `issues` is empty when the question is fully
+// dressed; `skipped` names a check that could not apply.
+function pfCheckQuestion(q) {
+  const bs = (q && q.blocks) || [];
+  const issues = [], skipped = [];
+  const ex = pfPartsWithoutExplanation(bs);
+  if (ex.length) issues.push({ kind: 'explanation', parts: ex, text: 'No explanation for ' + pfPartsText(ex) });
+  if (pfTakesKeywords(q)) {
+    if (!qHasKeywords(q)) issues.push({ kind: 'keywords', parts: [], text: 'No keywords assigned' });
+  } else {
+    skipped.push({ kind: 'keywords', text: 'No written-answer box, so there is nowhere to assign a keyword' });
+  }
+  const mk = pfPartsWithoutMarks(bs);
+  if (mk.length) issues.push({ kind: 'marks', parts: mk, text: 'No marks on ' + pfPartsText(mk) });
+  return { issues, skipped, ok: !issues.length };
+}
+
+// The rows of a report: one per past-paper question, in paper order.
+function pfCheckItems(ppItems) {
+  return (ppItems || []).map(pp => {
+    const bq = ppBankQ(pp.id);
+    const label = 'PSLE ' + pp.year + ' Q' + pp.n;
+    if (!bq) return { pp, bq: null, label, attached: false, issues: [], skipped: [], ok: false };
+    const r = pfCheckQuestion(bq);
+    return { pp, bq, label, attached: true, issues: r.issues, skipped: r.skipped, ok: r.ok };
+  });
+}
+function pfSummary(rows) {
+  const s = { total: rows.length, attached: 0, ok: 0, flagged: 0, unattached: 0, explanation: 0, keywords: 0, marks: 0 };
+  rows.forEach(r => {
+    if (!r.attached) { s.unattached++; return; }
+    s.attached++;
+    if (r.ok) { s.ok++; return; }
+    s.flagged++;
+    r.issues.forEach(i => { if (s[i.kind] != null) s[i.kind]++; });
+  });
+  return s;
+}
+
+// ── Entry points ────────────────────────────────────────────────────────────
+let _pfRows = [];
+let _pfTitle = '';
+function pfCheckYear(y) {
+  const items = ppQuestions().filter(q => String(q.year) === String(y))
+    .sort((a, b) => (Number(a.n) || 0) - (Number(b.n) || 0));
+  pfRunOn(items, 'PSLE ' + y);
+}
+function pfCheckAll() {
+  const items = ppQuestions().slice().sort((a, b) =>
+    String(a.year).localeCompare(String(b.year)) || ((Number(a.n) || 0) - (Number(b.n) || 0)));
+  pfRunOn(items, 'Every paper');
+}
+function pfRunOn(items, title) {
+  if (!ppIsAdmin()) { showToast('Only admins can check the papers', 'error'); return; }
+  if (!items.length) { showToast('There are no questions on that paper yet', 'info'); return; }
+  ppHoverHide();
+  _pfRows = pfCheckItems(items);
+  _pfTitle = title;
+  pfRender();
+  const ov = document.getElementById('pfOverlay');
+  if (ov) ov.classList.add('active');
+}
+function pfClose() {
+  const ov = document.getElementById('pfOverlay');
+  if (ov) ov.classList.remove('active');
+}
+// ✏️ on a row: the full editor on that one question, returning to its chip.
+function pfEditOne(bankId, ppId) {
+  if (!_docQById(bankId)) { showToast('That question is no longer in the bank', 'error'); return; }
+  pfClose();
+  editQuestionFromPapers(bankId, ppId);
+}
+// ✏️ Fix them all: every flagged question, in one scroll.
+function pfEditFlagged() {
+  const items = _pfRows.filter(r => r.attached && !r.ok).map(r => ({ bq: r.bq, refs: [r.label] }));
+  if (!items.length) { showToast('Nothing is flagged — there is nothing to fix', 'info'); return; }
+  pfClose();
+  emOpenPaper(items, [], _pfTitle + ' — format fixes');
+}
+
+// ── The report ──────────────────────────────────────────────────────────────
+function pfRender() {
+  const body = document.getElementById('pfBody');
+  const t = document.getElementById('pfTitle');
+  const sub = document.getElementById('pfSub');
+  if (!body) return;
+  const s = pfSummary(_pfRows);
+  if (t) t.textContent = '📋 Format check — ' + _pfTitle;
+  if (sub) sub.textContent = s.attached + ' attached question' + (s.attached === 1 ? '' : 's') + ' checked'
+    + (s.unattached ? ' · ' + s.unattached + ' with no question attached yet' : '')
+    + ' · every part needs an explanation and marks, and every written answer needs keywords';
+  const fixAll = document.getElementById('pfFixAllBtn');
+  if (fixAll) { fixAll.disabled = !s.flagged; fixAll.textContent = '✏️ Fix them all in editing mode' + (s.flagged ? ' (' + s.flagged + ')' : ''); }
+
+  const tally = `<div class="pf-sum">
+      <span class="pf-pill ${s.flagged ? 'bad' : 'good'}">${s.flagged ? s.flagged + ' question' + (s.flagged === 1 ? '' : 's') + ' missing something' : (s.attached ? 'Every attached question is complete ✓' : 'Nothing to check')}</span>
+      <span class="pf-pill">💡 ${s.explanation} without an explanation</span>
+      <span class="pf-pill">🔑 ${s.keywords} without keywords</span>
+      <span class="pf-pill">[2] ${s.marks} without marks</span>
+      ${s.ok ? `<span class="pf-pill good">✓ ${s.ok} complete</span>` : ''}
+    </div>`;
+
+  const flagged = _pfRows.filter(r => r.attached && !r.ok);
+  const unattached = _pfRows.filter(r => !r.attached);
+  const clean = _pfRows.filter(r => r.attached && r.ok);
+  const rowHtml = r => {
+    const cells = PF_KINDS.map(k => {
+      const issue = r.issues.find(i => i.kind === k.kind);
+      const skip = r.skipped.find(i => i.kind === k.kind);
+      if (issue) return `<span class="pf-cell bad" title="${escapeHtml(issue.text)}">✗ ${escapeHtml(k.label)}${issue.parts.filter(Boolean).length ? ' <small>' + escapeHtml(issue.parts.map(qPartLabel).join(' ')) + '</small>' : ''}</span>`;
+      if (skip) return `<span class="pf-cell na" title="${escapeHtml(skip.text)}">— ${escapeHtml(k.label)}</span>`;
+      return `<span class="pf-cell ok" title="${escapeHtml(k.tip)}">✓ ${escapeHtml(k.label)}</span>`;
+    }).join('');
+    return `<div class="pf-row ${r.ok ? 'ok' : 'bad'}">
+        <span class="pf-ref">${escapeHtml(r.label)}</span>
+        <span class="pf-title">${escapeHtml(r.bq.title || 'Untitled question')}</span>
+        <span class="pf-cells">${cells}</span>
+        <button type="button" class="pp-mini" title="Open this question in the full editor — Save brings you back to its chip on this page" onclick="pfEditOne('${escapeHtml(String(r.bq.id))}','${escapeHtml(String(r.pp.id))}')">✏️ Edit</button>
+      </div>`;
+  };
+  body.innerHTML = tally
+    + (flagged.length ? `<h4 class="pf-h">Missing something</h4>` + flagged.map(rowHtml).join('') : '')
+    + (unattached.length ? `<h4 class="pf-h">No question attached yet</h4><div class="pf-note">These cannot be checked until a bank question is attached: ${escapeHtml(unattached.map(r => r.label).join(', '))}.</div>` : '')
+    + (clean.length ? `<h4 class="pf-h">Complete</h4>` + clean.map(rowHtml).join('') : '');
 }
 
 // -------- topic drill-down (marks-by-topic graph) --------
@@ -62882,6 +63095,27 @@ function ppStyles(){
   .pp-form-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px 12px; margin-bottom:6px; }
   .pp-form-grid .full { grid-column:1 / -1; }
   .pp-mini.pp-bulkedit { background:var(--primary-light,#eaf3ef); border-color:var(--primary,#0b6b4f); color:var(--primary-dark,#064834); font-weight:600; }
+  /* 📋 Format check — the report. Its rows reuse the paper editor's dialog
+     shell, so the two read as one family of tools on this page. */
+  .pf-sum { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
+  .pf-pill { padding:6px 12px; border-radius:999px; border:1px solid var(--border); background:var(--surface-alt,#fafbfa); font-size:0.8rem; color:var(--text-muted); }
+  .pf-pill.bad { color:var(--accent-red,#b23b36); border-color:var(--accent-red-light,#fbeceb); background:var(--accent-red-light,#fbeceb); font-weight:700; }
+  .pf-pill.good { color:var(--accent-green,#0f7a5a); border-color:var(--accent-green-light,#e4f1ec); background:var(--accent-green-light,#e4f1ec); font-weight:700; }
+  .pf-h { margin:14px 0 4px; font-size:0.82rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; }
+  .pf-note { font-size:0.82rem; color:var(--text-muted); line-height:1.6; padding:10px 14px; border:1px dashed var(--border); border-radius:10px; }
+  .pf-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:11px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface); }
+  .pf-row.bad { border-left:4px solid var(--accent-red,#b23b36); }
+  .pf-row.ok { border-left:4px solid var(--accent-green,#0f7a5a); opacity:0.85; }
+  .pf-ref { flex:0 0 auto; font-family:'Space Mono',monospace; font-size:0.74rem; font-weight:700; color:var(--primary,#0b6b4f); }
+  .pf-title { flex:1 1 200px; min-width:140px; font-size:0.86rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pf-cells { display:flex; gap:6px; flex-wrap:wrap; }
+  .pf-cell { padding:3px 9px; border-radius:999px; font-size:0.74rem; border:1px solid var(--border); white-space:nowrap; }
+  .pf-cell small { font-family:'Space Mono',monospace; font-size:0.68rem; }
+  .pf-cell.ok { color:var(--accent-green,#0f7a5a); background:var(--accent-green-light,#e4f1ec); border-color:var(--accent-green-light,#e4f1ec); }
+  .pf-cell.bad { color:var(--accent-red,#b23b36); background:var(--accent-red-light,#fbeceb); border-color:var(--accent-red-light,#fbeceb); font-weight:700; }
+  .pf-cell.na { color:var(--text-light,#7f868b); background:var(--surface-alt,#fafbfa); }
+  .pp-mini.pp-format, .pp-add.pp-format { background:var(--accent-blue-light,#eaf1f8); border-color:var(--accent-blue,#2d6ca8); color:var(--accent-blue,#2d6ca8); font-weight:600; }
+  .pp-mini.pp-format:hover, .pp-add.pp-format:hover { background:var(--accent-blue,#2d6ca8); color:#fff; }
   .pp-mini.pp-bulkedit:hover { background:var(--primary,#0b6b4f); color:#fff; }
   /* ---- whole-paper editor ---- */
   .pp-pe-dialog { max-width:1040px; width:min(1040px, 96vw); text-align:left; max-height:92vh; display:flex; flex-direction:column; padding:0; overflow:hidden; }
@@ -63029,6 +63263,12 @@ window.saveAnswerKeyFor = saveAnswerKeyFor;
 window.ppAddQuestion = ppAddQuestion;
 window.ppEditQuestion = ppEditQuestion;
 window.ppOpenPaperEdit = ppOpenPaperEdit;
+// 📋 Format check — every past-paper question dressed for the paper.
+window.pfCheckYear = pfCheckYear;
+window.pfCheckAll = pfCheckAll;
+window.pfClose = pfClose;
+window.pfEditOne = pfEditOne;
+window.pfEditFlagged = pfEditFlagged;
 window.ppClosePaperEdit = ppClosePaperEdit;
 window.ppSavePaperEdit = ppSavePaperEdit;
 window.ppPeSet = ppPeSet;
