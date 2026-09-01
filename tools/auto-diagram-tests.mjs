@@ -185,10 +185,26 @@ test('both surfaces go through the ONE generator', () => {
   // Two generators would be two prompts to improve and two to keep in step.
   eq((src.match(/_akdMake\(/g) || []).length, 3, '_akdMake: its definition and one call from each surface');
   ok(/async function _akdMake\(q, answerText, note, currentUrl, regen\)/.test(src), 'the generator signature moved');
+  // …and it draws through the shared core rather than carrying its own copy of
+  // the reference / clean-up / upload steps. A second copy is a second place
+  // for the paper cleaner to be forgotten.
+  const i = src.indexOf('async function _akdMake');
+  const body = src.slice(i, src.indexOf('\n}\n', i));
+  ok(/_diagramDraw\(/.test(body), '_akdMake must go through _diagramDraw');
+});
+
+test('every teaching diagram is drawn by the ONE core', () => {
+  // Three surfaces draw a teaching diagram — the answer-key panel, the 🔑
+  // block and the 💡 explanation box — and every one of them goes through
+  // _diagramDraw. A surface with its own copy is a surface where the reference
+  // picture, the paper clean-up or the upload quietly differs.
+  const calls = src.split('\n').filter(l => /_diagramDraw\(/.test(l) && !/^async function _diagramDraw/.test(l.trim()));
+  ok(calls.length >= 2, 'both makers must call the core: ' + calls.length + ' found');
+  ok(/async function _diagramDraw\(q, buildPrompt, currentUrl, regen\)/.test(src), 'the core signature moved');
 });
 
 test('regenerating reads the current picture, drawing fresh reads the question\'s', () => {
-  const i = src.indexOf('async function _akdMake');
+  const i = src.indexOf('async function _diagramDraw');
   const body = src.slice(i, src.indexOf('\n}\n', i));
   ok(/if \(regen && currentUrl\)/.test(body), 'the current diagram is only used when regenerating');
   ok(/kind = 'current'/.test(body) && /kind = ref \? 'question' : 'none'/.test(body), 'both reference kinds must be set');
@@ -197,7 +213,7 @@ test('regenerating reads the current picture, drawing fresh reads the question\'
 });
 
 test('the generated picture goes through the shared paper cleaner', () => {
-  const i = src.indexOf('async function _akdMake');
+  const i = src.indexOf('async function _diagramDraw');
   const body = src.slice(i, src.indexOf('\n}\n', i));
   ok(/_paperCleanDataUrl\(/.test(body), 'an image model leaves the weave that prints as a grey wash');
   ok(/res && res\.url/.test(body), '_paperCleanDataUrl returns { url, report } — not a bare url');
