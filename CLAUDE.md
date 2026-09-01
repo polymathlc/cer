@@ -3793,7 +3793,69 @@ question came round. A lamp answers both at a glance — 🔴 something is wrong
   already on screen.
 - Run **`node tools/traffic-light-tests.mjs`** after touching any of it.
 
+## 📋 Format check — every past-paper question dressed for the paper (v1.345.0)
+
+`pf*` / `PF_KINDS` (in `app.js`, search `FORMAT CHECK`), plus `#pfOverlay` in
+`index.html`, the `.pf-*` CSS in `ppStyles()`, the 📋 **Format check** button
+beside 👁 / ✏️ / 🖨 on every year of 📄 Past Papers, and 📋 **Format check —
+all papers** at the top of the concepts card.
+
+A PSLE paper is printed with its answer key and marked from it, so every
+question on it has to carry three things a question in the ordinary bank can
+do without: **an explanation for every part**, **keywords assigned**, and
+**marks on every part**. Each is silent when missing — the question builds,
+renders and prints perfectly — so one button per paper says which questions
+are missing which, and takes the author straight to them.
+
+- **IT IS PLAIN CODE, INSTANT, AND READS ONLY.** Every check is a fact about the
+  question's blocks: no AI is asked and nothing is written. The 🚦 traffic
+  light reads a question for SENSE; this reads it for SHAPE, and the two must
+  not be merged — a lamp that went amber on a missing mark would be a lamp
+  nobody could read at a glance.
+- **IT READS THE SAME HELPERS THE KEY IS BUILT FROM.** `qPartsWithoutExplanation`
+  is the per-part filler's own definition of "a part with no note";
+  `qHasKeywords` is the gate 🔲 Fill-in-the-blanks mode serves on; `qMarksOf`
+  is the number the printed `[2]` comes from. A second reading of any of them
+  would drift, and the report would then name a gap the key does not have —
+  or miss one it does.
+- **"MARKS ON A PART" MEANS ITSELF OR A TEXT BLOCK BELOW IT** (`pfPartsWithoutMarks`).
+  `qPartFind` walks every block filed under the letter — the opener, the texts
+  under it and its (i)/(ii) sub-parts — so a mark anywhere in the part counts.
+  **Only a TEXT block counts**: an answer box is not a question and has no
+  marks of its own. A question with no parts is one part, and any marked text
+  satisfies it.
+- **A CHECK THAT CANNOT BE ACTED ON IS NOT RAISED.** A multiple-choice question
+  with no written-answer box has nowhere for a keyword to go, so "no keywords"
+  is not a finding on it — a row nobody can clear is the row that makes the
+  real ones get clicked past. It is reported as **skipped**, with the reason,
+  so the report still says why.
+- **A QUESTION WITH NOTHING ATTACHED IS NAMED, NEVER DROPPED.** It cannot be
+  checked, and a report that quietly left it out would read as a clean paper.
+- **EVERY ROW LEADS SOMEWHERE.** ✏️ on a row opens that one question in the
+  full editor through `editQuestionFromPapers`, the page's own door, so Save
+  brings the author back to that chip. ✏️ **Fix them all in editing mode**
+  opens every flagged question — and only those — through `emOpenPaper`, the
+  same door the year's own ✏️ Edit all uses.
+- The year button is drawn only when the year has something attached; the
+  report reuses the whole-paper editor's dialog shell (`.pp-pe-*`) so the two
+  read as one family of tools.
+- Run **`node tools/paper-format-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **📋 the format check** (`PF_KINDS`, `pfPartsWithoutMarks`,
+  `pfPartsWithoutExplanation`, `pfTakesKeywords`, `pfCheckQuestion`,
+  `pfCheckItems`, `pfSummary`, `pfRunOn`, `pfEditOne`, `pfEditFlagged`, or the
+  `formatBtn` / `formatAllBtn` on the papers page), run
+  `node tools/paper-format-tests.mjs`. Every failure is silent and the paper
+  still prints: too timid and a part with no note, no number or no keywords is
+  reported complete and met in front of a class; too eager and it flags "no
+  keywords" on a multiple-choice question with nowhere to put one, which is
+  the row that gets the real ones clicked past. Count an answer box's marks
+  and a part with no number on the paper reads as marked; stop walking the
+  sub-parts and a mark on (b)(i) no longer covers (b); drop an unattached
+  question from the rows and the report reads as a clean paper; and let ✏️ Fix
+  them all open anything but the FLAGGED questions and the author is scrolling
+  a paper looking for gaps the report had already found.
 - After touching **🚦 the traffic light** (`tlVerdict`, `tlSig`, `tlStateOf`,
   `tlRun`, `tlCheckMany`, `tlLightHtml`, `tlRepaint`, `tlQuestionFor` /
   `tlEmQuestion`, `tlEmSync`, `tlRenderEmBar`, `tlCheckSheet`, `TL_LOOKS`,

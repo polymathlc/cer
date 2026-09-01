@@ -11758,6 +11758,26 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 </div>
 
 <!-- ==================== PAST PAPER — EDIT A WHOLE PAPER IN ONE GO ==================== -->
+<!-- ==================== 📋 FORMAT CHECK — every past-paper question dressed for the paper ==================== -->
+<!-- The report `pf*` in app.js builds. Same dialog shell as the whole-paper
+     editor below it, so the two read as one family of tools. -->
+<div class="confirm-overlay" id="pfOverlay">
+  <div class="confirm-dialog pp-pe-dialog" role="dialog" aria-label="Format check">
+    <div class="pp-pe-head">
+      <div class="pp-pe-headtext">
+        <h3 id="pfTitle">📋 Format check</h3>
+        <p class="pp-pe-sub" id="pfSub"></p>
+      </div>
+      <button class="wse-close" type="button" onclick="pfClose()" aria-label="Close">✕</button>
+    </div>
+    <div class="pp-pe-body" id="pfBody"></div>
+    <div class="pp-pe-foot">
+      <button class="btn btn-primary" type="button" id="pfFixAllBtn" onclick="pfEditFlagged()" title="Open every flagged question in ✏️ editing mode — one scroll, fix what is missing, Save once">✏️ Fix them all in editing mode</button>
+      <button class="btn btn-outline" type="button" style="margin-left:auto;" onclick="pfClose()">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="confirm-overlay" id="ppPaperEditOverlay">
   <div class="confirm-dialog pp-pe-dialog">
     <div class="pp-pe-head">
