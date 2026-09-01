@@ -3442,7 +3442,125 @@ school. So the order lives in ONE map and every comparison goes through
 - Run **`node tools/subject-level-tests.mjs`** and
   **`node tools/syllabus-tests.mjs`** after touching any of it.
 
+## ▦ The table block — PowerPoint's own set, and a table read off a screenshot (v1.341.0)
+
+`_tblInsertRow` / `_tblDeleteRow` / `_tblInsertCol` / `_tblDeleteCol` /
+`_tblRemapCellKeys` / `_tblCellCss` / `TABLE_STYLE_PRESETS` / `TABLE_FONTS` /
+`_tblFromAi` / `tblBuildFromShot` (in `app.js`, search
+`A ROW OR COLUMN IS INSERTED, NOT JUST APPENDED` and
+`A TABLE READ OFF A SCREENSHOT`), plus the `.tbl-grip-*` / `.tbl-shot-*` CSS in
+`index.html` and the grips inside the editor table.
+
+The table block already had merges, fills, text colours, padding, borders and
+drag-to-resize. What it did **not** have was the two things an author actually
+does: put a row in the MIDDLE of a table, and get a printed table into the app
+without typing it out.
+
+### A row or column is INSERTED, not just appended
+
+- **Everything about a table except its text is keyed BY POSITION** —
+  `cellStyles["2_3"]`, `cellPadding["2_3"]`, `rowHeights[2]`, `colWidths[3]` and
+  every merge rectangle `{sr,sc,er,ec}`. So a row put in at the top of a
+  five-row table has to carry four rows' worth of colour, padding, height and
+  merges down with it. Miss that and **the table still renders perfectly** — the
+  author's shading is simply one row out, which is only ever found by reading it.
+- **The four `_tbl*` functions are the ONE place that remapping happens**, and
+  every button goes through them: ↥ Above, ↧ Below, ↤ Left, ↦ Right, 🗑 Row,
+  🗑 Col, and `+ Row` / `+ Col`, which are now "insert at the end". Two of them
+  written separately is how "insert above" and "add row" come to disagree.
+- **A merge the new row lands INSIDE grows; one below it moves down.** Shifting
+  every merge unconditionally tears a merged heading off the cells it covers.
+  On a delete, a merge left covering a single cell is **dropped** — `isCellMerged`
+  would otherwise hide real cells behind a rectangle that is no longer a merge.
+- **Rows are deleted from the BOTTOM up.** Deleting row 0 first renumbers
+  everything under it, so the second index in the list then names a different row.
+- **The last row and the last column are never deleted.** A table with no cells
+  renders perfectly and cannot be edited.
+
+### Colouring a ROW or a COLUMN is one click
+
+- **The grips are the feature.** A `<thead>` row of `A B C …` above the columns
+  and a leading `1 2 3 …` cell down the rows; clicking one takes the whole
+  column or row (Shift/Ctrl-click adds another). Selecting a cell and then
+  pressing "Row" still works — this is the same selection set, reached faster.
+- **A grip lights up only when EVERY cell of its row is selected.** A half-lit
+  grip would say the row is taken when colouring it would miss two cells.
+- **The grips are in the EDITOR table only.** The read-only and printed tables
+  are built by `renderTableReadonly`, a different function, which never sees them.
+- **The grip column is colgroup's `col` 0 and is NOT one of the table's own
+  columns**, so `initTableResizeHandles` and `tableSetColWidth` both drop it
+  before mapping a `<col>` back to `block.colWidths`. Leave it in and every
+  resize handle drags the column to the LEFT of the one it is sitting on.
+
+### One serialiser for a cell's look
+
+**`_tblCellCss` is what the editor table and the printed table BOTH call.** They
+are two different functions, and a property rendered by one and not the other is
+the quiet failure this prevents: the author sets a font face on screen, the
+worksheet prints without it, and nothing anywhere says so. `fontFamily` (the new
+👤 Font ▸ Face picker) and `fontWeight` (the cell-level **B▪**, which is a bolded
+CELL rather than a bolded word) reach print because of it. A cell nobody has
+styled still serialises to the empty string, so the overwhelming majority of the
+bank renders byte for byte as it always did.
+
+### Table styles are REAL cell colours
+
+`TABLE_STYLE_PRESETS` writes into `cellStyles` rather than setting a flag each
+renderer would have to interpret, so **a preset prints exactly as it looks**. It
+touches only the two things a table style owns — the background and the weight —
+so an alignment or a colour the author set by hand survives it. ⌫ Format is the
+opposite and clears formatting on the selection while **leaving the text**: an
+author who loses a column of typing to it will not press it twice.
+
+### 📸 A table read off a screenshot
+
+Paste a screenshot of a printed table onto the block and the model reads the
+grid — cells, merged headings, alignment — and fills the block in.
+
+- **It is a TRANSCRIPTION, which is why it is not grounded in the teaching
+  notes** (it is exempt by name in `tools/teaching-notes-tests.mjs`). A reader
+  told what the table OUGHT to say writes that down instead of what is printed,
+  and that is the one failure here that looks exactly like success. The prompt
+  says so in as many words, twice: transcribe, do not improve; never fill a
+  blank cell in.
+- **NOTHING IS WRITTEN UNTIL THE QUESTION IS SAVED.** The reply lands in the
+  block in front of the author, who can fix a cell or press undo; no path here
+  goes near the bank. The pad says out loud that a transcription can be wrong.
+- **`_tblFromAi` clamps and PADS.** Every row is padded to exactly `cols`
+  strings and cut at it: the renderer walks `block.cols`, so a ragged
+  `block.data` silently drops cells rather than raising anything. A reply with
+  no table at all is an **error**, never an empty table — an empty table reads
+  as a screenshot that worked.
+- **A cell is HTML, so it is filtered to `<b> <i> <u> <sup> <sub> <br>` with
+  every attribute stripped.** That string is written into a contenteditable and
+  printed onto a worksheet. Superscripts and subscripts are kept because a
+  science table is full of `cm³` and `H₂O`.
+- **A merge outside the grid, a one-cell "merge", and the second of two
+  overlapping merges are all dropped** rather than pushed in.
+- **The block is REPLACED, not merged into**: a 3×3 table's leftover colours and
+  merges laid over a 6×5 one read as formatting nobody chose.
+- Run **`node tools/table-editor-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **the table block** (`_tblInsertRow`, `_tblDeleteRow`,
+  `_tblInsertCol`, `_tblDeleteCol`, `_tblRemapCellKeys`, `_tblRemapRowKeys`,
+  `_tblCellCss`, `TABLE_STYLE_PRESETS`, `TABLE_FONTS`, `tableApplyStyle`,
+  `tableClearFormatting`, `tableDistribute`, the grips, or `_tblFromAi` /
+  `_tblAiCleanCell` / `tblBuildFromShot`), run
+  `node tools/table-editor-tests.mjs`. Every failure here is silent and the
+  table still renders: a remapper that forgets one of the four position-keyed
+  structures leaves the author's shading, padding, heights or merges one row
+  out on a screen that looks completely right; a merge shifted when it should
+  have GROWN tears a merged heading off the cells it covers; deleting rows from
+  the top down renumbers the list under itself and takes the wrong ones; and
+  letting the grip column into the colgroup mapping makes every resize handle
+  drag the column to its LEFT. On the reading side a spec that is not padded to
+  `cols` drops cells the renderer never asks for, an unfiltered cell string is
+  arbitrary HTML written into a contenteditable and printed onto a worksheet,
+  and a reply with no table returned as an empty table reads as a screenshot
+  that worked. `_tblCellCss` is the one both renderers share — a property added
+  to the editor's copy alone is a font the author sets on screen and the
+  worksheet prints without.
 - After touching **the level ladder** (`TOPIC_LEVELS`, `LEVEL_ORDER`,
   `LEVEL_CODE_RE`, `LEVEL_MIN`/`LEVEL_MAX`, `isLevelCode`, `isSecondaryLevel`,
   `getLevelNumber`, `levelFromNumber`, `levelOptionsHtml`, `audienceFor`,
