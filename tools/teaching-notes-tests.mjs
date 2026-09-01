@@ -371,6 +371,7 @@ const UNGROUNDED_BY_DESIGN = {
   epReadKey: 'transcribes a marking scheme off a photograph',
   _mpReadScript: 'transcribes a student’s handwriting — it is told never to mark',
   _mpReadKey: 'transcribes a marking scheme off a photograph',
+  tblBuildFromShot: 'transcribes a TABLE off a screenshot — a reader told what the table ought to say writes that down instead of what is printed, which is the one failure here that looks exactly like success',
 
   // ---- pictures: no science words come back ----
   _aiRefineCrop: 'returns a rectangle, not words',

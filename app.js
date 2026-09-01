@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.340.0';
+const APP_VERSION = 'v1.341.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -4721,6 +4721,7 @@ function updateTableCellSelection(blockId) {
   if (!table) return;
 
   table.querySelectorAll('th, td').forEach(cell => {
+    if (cell.dataset.grip) return;   // the grips carry their own state, below
     const key = cell.dataset.row + '_' + cell.dataset.col;
     if (selected.has(key)) {
       cell.classList.add('table-cell-selected');
@@ -4728,6 +4729,32 @@ function updateTableCellSelection(blockId) {
       cell.classList.remove('table-cell-selected');
     }
   });
+
+  // A grip lights up only when EVERY cell of its row or column is in the
+  // selection — a half-lit row grip would say the row is selected when
+  // colouring it would miss two cells.
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  table.querySelectorAll('[data-grip="row"]').forEach(g => {
+    const r = parseInt(g.dataset.grow, 10);
+    let whole = block.cols > 0;
+    for (let c = 0; c < block.cols; c++) if (!selected.has(r + '_' + c)) { whole = false; break; }
+    g.classList.toggle('grip-on', whole);
+  });
+  table.querySelectorAll('[data-grip="col"]').forEach(g => {
+    const c = parseInt(g.dataset.gcol, 10);
+    let whole = block.rows > 0;
+    for (let r = 0; r < block.rows; r++) if (!selected.has(r + '_' + c)) { whole = false; break; }
+    g.classList.toggle('grip-on', whole);
+  });
+}
+
+// Column grips read A, B, C … the way a spreadsheet names them, so an
+// author can say which column they mean out loud.
+function _tblColName(i) {
+  let s = '', n = i;
+  do { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; } while (n >= 0);
+  return s;
 }
 
 function tableSelectRow(blockId) {
@@ -5053,9 +5080,11 @@ function tableSetColWidth(blockId, width) {
   if (table) {
     const colgroup = table.querySelector('colgroup');
     if (colgroup) {
-      colgroup.querySelectorAll('col').forEach((col, i) => {
-        col.style.width = block.colWidths[i] ? block.colWidths[i] + 'px' : '';
-      });
+      Array.from(colgroup.querySelectorAll('col'))
+        .filter(col => !col.classList.contains('tbl-grip-col'))
+        .forEach((col, i) => {
+          col.style.width = block.colWidths[i] ? block.colWidths[i] + 'px' : '';
+        });
     }
   }
   requestAnimationFrame(() => initTableResizeHandles(blockId));
@@ -5085,8 +5114,11 @@ function initTableResizeHandles(blockId) {
   wrapper.querySelectorAll('.table-col-resize-handle, .table-row-resize-handle').forEach(h => h.remove());
 
   // Column resize handles
-  const cols = table.querySelectorAll('colgroup col');
-  const headerCells = table.querySelectorAll('tbody tr:first-child td');
+  // The grip column is colgroup's col 0 and is not one of the table's own
+  // columns, so it is dropped here — leave it in and every handle drags the
+  // column to the LEFT of the one it is sitting on.
+  const cols = Array.from(table.querySelectorAll('colgroup col')).filter(c => !c.classList.contains('tbl-grip-col'));
+  const headerCells = table.querySelectorAll('tbody tr:first-child td[data-col]');
   if (headerCells.length === 0) return;
 
   for (let c = 0; c < cols.length; c++) {
@@ -5211,57 +5243,599 @@ function tableToggleColorPicker(blockId, type, pickerEl) {
   picker.classList.toggle('active');
 }
 
+// =====================================================================
+// A ROW OR COLUMN IS INSERTED, NOT JUST APPENDED
+// ---------------------------------------------------------------------
+// Everything about a table except its text is keyed BY POSITION —
+// cellStyles["2_3"], cellPadding["2_3"], rowHeights[2], colWidths[3] and
+// every merge rectangle {sr,sc,er,ec}. So a row inserted at the TOP of a
+// five-row table has to carry four rows' worth of colour, padding, height
+// and merges down with it. Miss that and the table still renders
+// perfectly — the author's shading is simply one row out, on a screen
+// that looks completely right until somebody reads it.
+//
+// _tblInsertRow / _tblDeleteRow / _tblInsertCol / _tblDeleteCol are the
+// ONE place that remapping happens, and every button on the toolbar goes
+// through them (+ Row appends by inserting at `block.rows`). Two of them
+// written separately is how "insert above" and "add row" come to disagree.
+// =====================================================================
+
+// Move every "r_c" key of a cell-keyed map through `fn(r, c)`. Returning
+// null DROPS that cell — which is what a deleted row or column means.
+function _tblRemapCellKeys(map, fn) {
+  const out = {};
+  Object.keys(map || {}).forEach(key => {
+    const parts = key.split('_');
+    const moved = fn(parseInt(parts[0], 10), parseInt(parts[1], 10));
+    if (moved) out[moved[0] + '_' + moved[1]] = map[key];
+  });
+  return out;
+}
+// The same for a row-keyed map (rowHeights).
+function _tblRemapRowKeys(map, fn) {
+  const out = {};
+  Object.keys(map || {}).forEach(key => {
+    const moved = fn(parseInt(key, 10));
+    if (moved !== null && moved !== undefined) out[moved] = map[key];
+  });
+  return out;
+}
+
+function _tblNormalise(block) {
+  if (!block.data) block.data = [];
+  if (!block.merges) block.merges = [];
+  if (!block.cellStyles) block.cellStyles = {};
+  if (!block.cellPadding) block.cellPadding = {};
+  if (!block.rowHeights) block.rowHeights = {};
+  if (!Array.isArray(block.colWidths)) block.colWidths = Array(block.cols || 0).fill(null);
+  return block;
+}
+
+function _tblInsertRow(block, at) {
+  _tblNormalise(block);
+  const pos = Math.max(0, Math.min(at, block.rows));
+  block.data.splice(pos, 0, Array.from({ length: block.cols }, () => ''));
+  block.rows++;
+  block.cellStyles  = _tblRemapCellKeys(block.cellStyles,  (r, c) => [r >= pos ? r + 1 : r, c]);
+  block.cellPadding = _tblRemapCellKeys(block.cellPadding, (r, c) => [r >= pos ? r + 1 : r, c]);
+  block.rowHeights  = _tblRemapRowKeys(block.rowHeights,   r => (r >= pos ? r + 1 : r));
+  // A merge the new row lands INSIDE grows to keep covering what it covered;
+  // one entirely below it moves down; one entirely above is untouched.
+  block.merges = block.merges.map(m => {
+    if (m.sr >= pos) return { sr: m.sr + 1, sc: m.sc, er: m.er + 1, ec: m.ec };
+    if (m.er >= pos) return { sr: m.sr, sc: m.sc, er: m.er + 1, ec: m.ec };
+    return m;
+  });
+}
+
+function _tblDeleteRow(block, at) {
+  _tblNormalise(block);
+  if (block.rows <= 1) return false;
+  const pos = Math.max(0, Math.min(at, block.rows - 1));
+  block.data.splice(pos, 1);
+  block.rows--;
+  block.cellStyles  = _tblRemapCellKeys(block.cellStyles,  (r, c) => (r === pos ? null : [r > pos ? r - 1 : r, c]));
+  block.cellPadding = _tblRemapCellKeys(block.cellPadding, (r, c) => (r === pos ? null : [r > pos ? r - 1 : r, c]));
+  block.rowHeights  = _tblRemapRowKeys(block.rowHeights,   r => (r === pos ? null : (r > pos ? r - 1 : r)));
+  block.merges = block.merges.map(m => {
+    if (m.sr > pos) return { sr: m.sr - 1, sc: m.sc, er: m.er - 1, ec: m.ec };
+    if (m.er >= pos) return { sr: m.sr, sc: m.sc, er: m.er - 1, ec: m.ec };
+    return m;
+  }).filter(m => m.er >= m.sr && (m.er > m.sr || m.ec > m.sc));
+  return true;
+}
+
+function _tblInsertCol(block, at) {
+  _tblNormalise(block);
+  const pos = Math.max(0, Math.min(at, block.cols));
+  block.data.forEach(row => row.splice(pos, 0, ''));
+  block.colWidths.splice(pos, 0, null);
+  block.cols++;
+  block.cellStyles  = _tblRemapCellKeys(block.cellStyles,  (r, c) => [r, c >= pos ? c + 1 : c]);
+  block.cellPadding = _tblRemapCellKeys(block.cellPadding, (r, c) => [r, c >= pos ? c + 1 : c]);
+  block.merges = block.merges.map(m => {
+    if (m.sc >= pos) return { sr: m.sr, sc: m.sc + 1, er: m.er, ec: m.ec + 1 };
+    if (m.ec >= pos) return { sr: m.sr, sc: m.sc, er: m.er, ec: m.ec + 1 };
+    return m;
+  });
+}
+
+function _tblDeleteCol(block, at) {
+  _tblNormalise(block);
+  if (block.cols <= 1) return false;
+  const pos = Math.max(0, Math.min(at, block.cols - 1));
+  block.data.forEach(row => row.splice(pos, 1));
+  block.colWidths.splice(pos, 1);
+  block.cols--;
+  block.cellStyles  = _tblRemapCellKeys(block.cellStyles,  (r, c) => (c === pos ? null : [r, c > pos ? c - 1 : c]));
+  block.cellPadding = _tblRemapCellKeys(block.cellPadding, (r, c) => (c === pos ? null : [r, c > pos ? c - 1 : c]));
+  block.merges = block.merges.map(m => {
+    if (m.sc > pos) return { sr: m.sr, sc: m.sc - 1, er: m.er, ec: m.ec - 1 };
+    if (m.ec >= pos) return { sr: m.sr, sc: m.sc, er: m.er, ec: m.ec - 1 };
+    return m;
+  }).filter(m => m.ec >= m.sc && (m.er > m.sr || m.ec > m.sc));
+  return true;
+}
+
+// ── which rows / columns the author is pointing at ───────────────────
+// Every row and column operation works on the SELECTION, falling back to
+// the last row / column so a table with nothing selected still behaves
+// the way "+ Row" always did.
+function _tblSelRows(blockId) {
+  const rows = new Set();
+  getTableSelectedCells(blockId).forEach(k => rows.add(parseInt(k.split('_')[0], 10)));
+  return Array.from(rows).filter(n => Number.isFinite(n)).sort((a, b) => a - b);
+}
+function _tblSelCols(blockId) {
+  const cols = new Set();
+  getTableSelectedCells(blockId).forEach(k => cols.add(parseInt(k.split('_')[1], 10)));
+  return Array.from(cols).filter(n => Number.isFinite(n)).sort((a, b) => a - b);
+}
+
+function tableInsertRow(blockId, where) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const sel = _tblSelRows(blockId);
+  const at = where === 'above'
+    ? (sel.length ? sel[0] : 0)
+    : (sel.length ? sel[sel.length - 1] + 1 : block.rows);
+  _tblInsertRow(block, at);
+  tableClearSelection(blockId);
+  renderBlocks();
+  showToast(`Row inserted ${where === 'above' ? 'above' : 'below'}`, 'success');
+}
+
+function tableInsertCol(blockId, where) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const sel = _tblSelCols(blockId);
+  const at = where === 'left'
+    ? (sel.length ? sel[0] : 0)
+    : (sel.length ? sel[sel.length - 1] + 1 : block.cols);
+  _tblInsertCol(block, at);
+  tableClearSelection(blockId);
+  renderBlocks();
+  showToast(`Column inserted ${where === 'left' ? 'left' : 'right'}`, 'success');
+}
+
+function tableDeleteRows(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const sel = _tblSelRows(blockId);
+  const rows = sel.length ? sel : [block.rows - 1];
+  // Highest first: deleting the top row would renumber everything under it.
+  let gone = 0;
+  rows.slice().sort((a, b) => b - a).forEach(r => { if (_tblDeleteRow(block, r)) gone++; });
+  tableClearSelection(blockId);
+  renderBlocks();
+  if (!gone) showToast('A table must keep at least one row', 'error');
+  else showToast(gone === 1 ? 'Row deleted' : gone + ' rows deleted', 'success');
+}
+
+function tableDeleteCols(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const sel = _tblSelCols(blockId);
+  const cols = sel.length ? sel : [block.cols - 1];
+  let gone = 0;
+  cols.slice().sort((a, b) => b - a).forEach(c => { if (_tblDeleteCol(block, c)) gone++; });
+  tableClearSelection(blockId);
+  renderBlocks();
+  if (!gone) showToast('A table must keep at least one column', 'error');
+  else showToast(gone === 1 ? 'Column deleted' : gone + ' columns deleted', 'success');
+}
+
 function tableAddRow(blockId) {
   const block = blocks.find(b => b.id === blockId);
   if (!block) return;
-  block.data.push(Array.from({ length: block.cols }, () => ''));
-  block.rows++;
+  _tblInsertRow(block, block.rows);
   renderBlocks();
 }
 
 function tableRemoveRow(blockId) {
   const block = blocks.find(b => b.id === blockId);
-  if (!block || block.rows <= 1) return;
-  block.data.pop();
-  block.rows--;
-  // Remove merges that reference deleted rows
-  if (block.merges) {
-    block.merges = block.merges.filter(m => m.er < block.rows);
-  }
-  // Clean up cell styles for removed row
-  if (block.cellStyles) {
-    Object.keys(block.cellStyles).forEach(key => {
-      const r = parseInt(key.split('_')[0]);
-      if (r >= block.rows) delete block.cellStyles[key];
-    });
-  }
+  if (!block) return;
+  if (!_tblDeleteRow(block, block.rows - 1)) return;
   renderBlocks();
 }
 
 function tableAddCol(blockId) {
   const block = blocks.find(b => b.id === blockId);
   if (!block) return;
-  block.data.forEach(row => row.push(''));
-  block.cols++;
+  _tblInsertCol(block, block.cols);
   renderBlocks();
 }
 
 function tableRemoveCol(blockId) {
   const block = blocks.find(b => b.id === blockId);
-  if (!block || block.cols <= 1) return;
-  block.data.forEach(row => row.pop());
-  block.cols--;
-  // Remove merges that reference deleted cols
-  if (block.merges) {
-    block.merges = block.merges.filter(m => m.ec < block.cols);
-  }
-  if (block.cellStyles) {
-    Object.keys(block.cellStyles).forEach(key => {
-      const c = parseInt(key.split('_')[1]);
-      if (c >= block.cols) delete block.cellStyles[key];
-    });
+  if (!block) return;
+  if (!_tblDeleteCol(block, block.cols - 1)) return;
+  renderBlocks();
+}
+
+// ── PowerPoint's "Distribute rows / columns evenly" ──────────────────
+// Clearing the widths IS distributing them: the editor lays a column with
+// no width of its own out at 100/cols%, so dropping the hand-set numbers
+// puts every column back on an equal share.
+function tableDistribute(blockId, what) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  _tblNormalise(block);
+  if (what === 'cols') block.colWidths = Array(block.cols).fill(null);
+  else block.rowHeights = {};
+  renderBlocks();
+  showToast(what === 'cols' ? 'Columns distributed evenly' : 'Rows distributed evenly', 'success');
+}
+
+// Take the formatting off the selected cells (the whole table when nothing
+// is selected) and leave the TEXT alone — this is Clear Formatting, not a
+// delete, and an author who loses a column of typing to it will not press
+// it twice.
+function tableClearFormatting(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  _tblNormalise(block);
+  const selected = getTableSelectedCells(blockId);
+  if (selected.size === 0) {
+    block.cellStyles = {};
+    block.cellPadding = {};
+  } else {
+    selected.forEach(key => { delete block.cellStyles[key]; delete block.cellPadding[key]; });
   }
   renderBlocks();
+  showToast('Formatting cleared', 'success');
+}
+
+// ── Table styles ─────────────────────────────────────────────────────
+// PowerPoint's table styles, written as REAL cell styles rather than as a
+// flag the renderers would each have to interpret: a preset applied here
+// prints exactly as it looks, because the printed table reads the very
+// same cellStyles map.
+const TABLE_STYLE_PRESETS = {
+  plain:  { label: 'Plain',        head: null,                                        band: null },
+  header: { label: 'Header row',   head: { backgroundColor: '#e7f5ff', fontWeight: '700' }, band: null },
+  banded: { label: 'Banded rows',  head: { backgroundColor: '#dbe4ff', fontWeight: '700' }, band: '#f1f3f5' },
+  grid:   { label: 'Header + tint',head: { backgroundColor: '#d3f9d8', fontWeight: '700' }, band: '#f8f9fa' },
+};
+
+function tableApplyStyle(blockId, preset) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  _tblNormalise(block);
+  const style = TABLE_STYLE_PRESETS[preset] || TABLE_STYLE_PRESETS.plain;
+  for (let r = 0; r < block.rows; r++) {
+    for (let c = 0; c < block.cols; c++) {
+      const key = r + '_' + c;
+      const cur = block.cellStyles[key] || {};
+      // Only the two things a table style owns are touched; a colour or an
+      // alignment the author set by hand is theirs and survives the preset.
+      delete cur.backgroundColor;
+      delete cur.fontWeight;
+      if (r === 0 && style.head) Object.assign(cur, style.head);
+      else if (style.band && r % 2 === 0) cur.backgroundColor = style.band;
+      if (Object.keys(cur).length) block.cellStyles[key] = cur;
+      else delete block.cellStyles[key];
+    }
+  }
+  block.tableStyle = preset;
+  renderBlocks();
+  showToast(style.label + ' applied', 'success');
+}
+
+// Bold / not-bold on the selection, stored as a cell STYLE so it reaches
+// the printed table. (The B button writes <b> inside the cell's own HTML,
+// which is a different thing: that bolds a word, this bolds a cell.)
+function tableSetFontWeight(blockId, weight) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  _tblNormalise(block);
+  getTableSelectedCells(blockId).forEach(key => {
+    if (!block.cellStyles[key]) block.cellStyles[key] = {};
+    if (weight) block.cellStyles[key].fontWeight = weight;
+    else delete block.cellStyles[key].fontWeight;
+  });
+  renderBlocks();
+}
+
+// The font FACE of the selected cells. Stored on the cell and rendered by
+// the shared serialiser, so the editor, the worksheet preview and the
+// printed sheet cannot disagree about it.
+function tableSetFontFamily(blockId, family) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  _tblNormalise(block);
+  const selected = getTableSelectedCells(blockId);
+  if (selected.size === 0) { showToast('Select some cells first', 'info'); return; }
+  selected.forEach(key => {
+    if (!block.cellStyles[key]) block.cellStyles[key] = {};
+    if (family) block.cellStyles[key].fontFamily = family;
+    else delete block.cellStyles[key].fontFamily;
+    const [r, c] = key.split('_');
+    const cell = document.querySelector(`[data-table-block="${blockId}"] [data-row="${r}"][data-col="${c}"]`);
+    if (cell) cell.style.fontFamily = family || '';
+  });
+}
+
+// Click the grip above a column or beside a row to select the whole of it —
+// which is what makes "colour a row" one action instead of four.
+function tableSelectWholeRow(blockId, row, event) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const selected = getTableSelectedCells(blockId);
+  activeTableBlockId = blockId;
+  const additive = event && (event.shiftKey || event.ctrlKey || event.metaKey);
+  const already = selected.has(row + '_0');
+  if (!additive) selected.clear();
+  for (let c = 0; c < block.cols; c++) {
+    if (additive && already) selected.delete(row + '_' + c);
+    else selected.add(row + '_' + c);
+  }
+  updateTableCellSelection(blockId);
+}
+
+function tableSelectWholeCol(blockId, col, event) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const selected = getTableSelectedCells(blockId);
+  activeTableBlockId = blockId;
+  const additive = event && (event.shiftKey || event.ctrlKey || event.metaKey);
+  const already = selected.has('0_' + col);
+  if (!additive) selected.clear();
+  for (let r = 0; r < block.rows; r++) {
+    if (additive && already) selected.delete(r + '_' + col);
+    else selected.add(r + '_' + col);
+  }
+  updateTableCellSelection(blockId);
+}
+
+// The font faces offered for a table cell. Web-safe stacks only — a
+// worksheet is printed on whatever machine is in the room, and a face
+// nobody has falls back to something the author never saw. `Space Mono`
+// and the app's own body face are already loaded (see the ONE font
+// request in index.html); do not add a face that needs a second one.
+const TABLE_FONTS = [
+  ["'DM Sans', system-ui, sans-serif", 'Sans (default)'],
+  ["Georgia, 'Times New Roman', serif", 'Serif'],
+  ["'Space Mono', ui-monospace, monospace", 'Mono'],
+  ["Arial, Helvetica, sans-serif", 'Arial'],
+  ["'Times New Roman', Times, serif", 'Times'],
+  ["'Courier New', Courier, monospace", 'Courier'],
+  ["Verdana, Geneva, sans-serif", 'Verdana'],
+  ["'Trebuchet MS', sans-serif", 'Trebuchet'],
+  ["'Comic Sans MS', 'Chalkboard SE', cursive", 'Comic Sans'],
+];
+
+// The paste pad that turns a screenshot into this table. It sits UNDER the
+// toolbar and ABOVE the grid, because that is the order the author works
+// in: read the picture first, then tidy what came back.
+function _tblShotZoneHtml(bid) {
+  return `
+    <div class="tbl-shot-wrap">
+      <div class="tbl-shot-zone" id="tblShot_${bid}" tabindex="0"
+           onclick="this.focus()"
+           onpaste="tblShotPaste('${bid}', event)"
+           ondragover="event.preventDefault(); this.classList.add('dragover')"
+           ondragleave="this.classList.remove('dragover')"
+           ondrop="tblShotDrop('${bid}', event)">
+        📸 <b>Table from a screenshot</b> — click here and paste (Ctrl/⌘+V), or drop a picture in.
+        The A.I. reads the grid and fills this table in. <b>Check it against the picture</b>: it transcribes, and a transcription can be wrong.
+      </div>
+      <label class="tbl-shot-pick">
+        Choose a picture…
+        <input type="file" accept="image/*" style="display:none" onchange="tblShotPick('${bid}', this)">
+      </label>
+      <div class="tbl-shot-status" id="tblShotStatus_${bid}"></div>
+    </div>`;
+}
+
+// =====================================================================
+// 📸 A TABLE READ OFF A SCREENSHOT
+// ---------------------------------------------------------------------
+// Typing a 6x5 results table out of a past paper by hand is ten minutes
+// and four transcription errors. Paste the screenshot onto the table
+// block instead and the model reads the grid — the cells, the merged
+// heading, the alignment — and fills the block in.
+//
+// It is a TRANSCRIPTION, and that is why it is not grounded in the
+// teaching notes (see UNGROUNDED_BY_DESIGN in tools/teaching-notes-tests.mjs):
+// a reader told what the table OUGHT to say writes that down instead of
+// what is printed on the page, which is the one failure here that looks
+// exactly like success.
+//
+// NOTHING IS WRITTEN UNTIL THE QUESTION IS SAVED. The reply lands in the
+// block in front of the author, who can fix a cell, add a row or press
+// undo — it never goes near the bank on its own.
+// =====================================================================
+const TBL_AI_MAX_SIDE = 1600;   // a screenshot is downscaled before it is sent
+const TBL_AI_MAX_ROWS = 40;
+const TBL_AI_MAX_COLS = 20;
+// Cell text arrives as HTML, so it is filtered down to the handful of tags a
+// science table actually needs. Everything else — a <script>, a style, an
+// onclick — is stripped: this string is written into a contenteditable cell
+// and printed onto a worksheet.
+const TBL_AI_TAGS = /^(b|i|u|sup|sub|br|em|strong)$/i;
+
+function _tblAiPrompt() {
+  return `You are reading ONE table out of a screenshot of a science worksheet or exam paper.
+
+Return ONLY JSON, no prose, in exactly this shape:
+{
+  "rows": <number of rows, including the heading row>,
+  "cols": <number of columns>,
+  "headerRow": <true if the first row is a heading row, else false>,
+  "data": [["cell", "cell", ...], ...],
+  "merges": [{"sr":0,"sc":0,"er":0,"ec":1}],
+  "align": [["left"|"center"|"right", ...], ...]
+}
+
+RULES
+- TRANSCRIBE, do not improve. Copy the numbers, the units and the wording exactly as printed, including capitalisation. Never correct what looks like a mistake and never fill a blank cell in from what you think it should be.
+- "data" must be EXACTLY "rows" arrays of EXACTLY "cols" strings. A cell that is blank on the page is "".
+- A cell covered by a merge (one that is not the merge's top-left) is "" in "data"; the text goes in the top-left cell and the rectangle goes in "merges". Leave "merges" as [] when nothing is merged.
+- Formatting inside a cell may use ONLY <b>, <i>, <u>, <sup>, <sub> and <br>. Write a unit like cm³ as cm<sup>3</sup> and a formula like H2O as H<sub>2</sub>O. No other tags, no styles, no attributes.
+- "align" mirrors "data" cell for cell and says how each cell is aligned on the page. Omit it if you cannot tell.
+- Read ONLY the table. Ignore the question wording around it, the question number and any diagram.
+- If the picture holds no table at all, return {"rows":0,"cols":0,"data":[]}.`;
+}
+
+// Keep only the tags above, and drop every attribute — an attribute is where
+// a style, an event handler or a remote image would ride in.
+function _tblAiCleanCell(html) {
+  let s = String(html == null ? '' : html);
+  s = s.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, (m, tag) => {
+    if (!TBL_AI_TAGS.test(tag)) return '';
+    return m[1] === '/' ? '</' + tag.toLowerCase() + '>'
+                        : (tag.toLowerCase() === 'br' ? '<br>' : '<' + tag.toLowerCase() + '>');
+  });
+  return s.replace(/<!--[\s\S]*?-->/g, '').trim();
+}
+
+// Turn whatever came back into the four fields a table block is made of, or
+// throw. Every number is clamped and every row is padded to the declared
+// width: a short row would leave block.data ragged, and the renderer reads
+// block.cols — so the table would come out with cells missing rather than
+// with an error anybody could act on.
+function _tblFromAi(spec) {
+  if (!spec || typeof spec !== 'object') throw new Error('The reply was not a table');
+  const raw = Array.isArray(spec.data) ? spec.data : [];
+  const rows = Math.max(0, Math.min(parseInt(spec.rows, 10) || raw.length, TBL_AI_MAX_ROWS));
+  let cols = parseInt(spec.cols, 10) || 0;
+  if (!cols) cols = raw.reduce((n, r) => Math.max(n, Array.isArray(r) ? r.length : 0), 0);
+  cols = Math.max(0, Math.min(cols, TBL_AI_MAX_COLS));
+  if (!rows || !cols) throw new Error('No table was found in that screenshot');
+
+  const data = Array.from({ length: rows }, (_, r) => {
+    const row = Array.isArray(raw[r]) ? raw[r] : [];
+    return Array.from({ length: cols }, (_, c) => _tblAiCleanCell(row[c]));
+  });
+
+  // A merge outside the grid, or one that is a single cell, is dropped rather
+  // than pushed in: `isCellMerged` would hide real cells behind it.
+  const merges = (Array.isArray(spec.merges) ? spec.merges : []).map(m => ({
+    sr: parseInt(m && m.sr, 10), sc: parseInt(m && m.sc, 10),
+    er: parseInt(m && m.er, 10), ec: parseInt(m && m.ec, 10)
+  })).filter(m =>
+    [m.sr, m.sc, m.er, m.ec].every(Number.isFinite) &&
+    m.sr >= 0 && m.sc >= 0 && m.er < rows && m.ec < cols &&
+    m.er >= m.sr && m.ec >= m.sc && (m.er > m.sr || m.ec > m.sc)
+  );
+  // Two merges that overlap cannot both be honoured — keep the first.
+  const kept = [];
+  merges.forEach(m => {
+    if (kept.some(k => m.sr <= k.er && m.er >= k.sr && m.sc <= k.ec && m.ec >= k.sc)) return;
+    kept.push(m);
+  });
+
+  const cellStyles = {};
+  const align = Array.isArray(spec.align) ? spec.align : [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const a = align[r] && align[r][c];
+      if (a === 'center' || a === 'right') cellStyles[r + '_' + c] = { textAlign: a };
+    }
+  }
+  // A heading row is what a reader looks for first, so it is given the same
+  // look the "Header row" style preset gives it — one map, one appearance.
+  if (spec.headerRow) {
+    for (let c = 0; c < cols; c++) {
+      const k = '0_' + c;
+      cellStyles[k] = Object.assign({}, cellStyles[k], TABLE_STYLE_PRESETS.header.head);
+    }
+  }
+  return { rows, cols, data, merges: kept, cellStyles };
+}
+
+function tblShotPaste(blockId, e) {
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of items) {
+    if (it.type && it.type.startsWith('image/')) {
+      e.preventDefault();
+      tblBuildFromShot(blockId, it.getAsFile());
+      return;
+    }
+  }
+}
+function tblShotDrop(blockId, e) {
+  e.preventDefault();
+  const zone = document.getElementById('tblShot_' + blockId);
+  if (zone) zone.classList.remove('dragover');
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file && file.type && file.type.startsWith('image/')) tblBuildFromShot(blockId, file);
+}
+function tblShotPick(blockId, input) {
+  const file = input && input.files && input.files[0];
+  // Cleared BEFORE the read: an <input type=file> still holding the same photo
+  // fires no `change` the second time, so the button would look broken.
+  if (input) input.value = '';
+  if (file) tblBuildFromShot(blockId, file);
+}
+
+function _tblShotStatus(blockId, text, kind) {
+  const el = document.getElementById('tblShotStatus_' + blockId);
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.color = kind === 'error' ? 'var(--accent-red, #e03131)' : 'var(--text-muted)';
+}
+
+async function tblBuildFromShot(blockId, file) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || !file) return;
+  const zone = document.getElementById('tblShot_' + blockId);
+  if (zone) zone.classList.add('uploading');
+  _tblShotStatus(blockId, '⏳ Reading the table…');
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => reject(new Error('That file could not be read'));
+      fr.readAsDataURL(file);
+    });
+    const small = await _scaleDownDataUrl(dataUrl, TBL_AI_MAX_SIDE);
+    const mime = (String(small).match(/^data:([^;]+);/) || [])[1] || 'image/png';
+    const raw = await askGeminiVision(_tblAiPrompt(),
+      [{ mimeType: mime, data: String(small).split(',')[1] || '' }],
+      { maxOutputTokens: 4096, json: true });
+    const built = _tblFromAi(_parseAIJson(raw));
+
+    // The block is REPLACED, not merged into: a 3x3 table's leftover colours
+    // and merges laid over a 6x5 one read as formatting nobody chose.
+    Object.assign(block, built);
+    block.cellPadding = {};
+    block.rowHeights = {};
+    block.colWidths = Array(built.cols).fill(null);
+    tableClearSelection(blockId);
+    renderBlocks();
+    showToast(`Table read — ${built.rows} × ${built.cols}. Check it against the picture.`, 'success');
+  } catch (err) {
+    console.error('table from screenshot:', err);
+    _tblShotStatus(blockId, '⚠️ ' + (err && err.message ? err.message : String(err)), 'error');
+    showToast('Could not read that screenshot', 'error');
+    return;
+  } finally {
+    if (zone) zone.classList.remove('uploading');
+  }
+  _tblShotStatus(blockId, '');
+}
+
+// ── ONE serialiser for a cell's look ─────────────────────────────────
+// The editor table and the printed/read-only table are built by two
+// different functions, and a style rendered by one and not the other is
+// the quiet failure this prevents: the author sets a font on screen, the
+// worksheet prints without it, and nothing anywhere says so. Both call
+// this, so a property added here reaches both at once.
+function _tblCellCss(styles, pad, rowHeight) {
+  const s = styles || {};
+  let css = '';
+  if (s.textAlign)       css += 'text-align:' + s.textAlign + ';';
+  if (s.verticalAlign)   css += 'vertical-align:' + s.verticalAlign + ';';
+  if (s.backgroundColor) css += 'background-color:' + s.backgroundColor + ';';
+  if (s.color)           css += 'color:' + s.color + ';';
+  if (s.fontSize)        css += 'font-size:' + s.fontSize + ';';
+  if (s.fontWeight)      css += 'font-weight:' + s.fontWeight + ';';
+  if (s.fontFamily)      css += 'font-family:' + s.fontFamily + ';';
+  if (pad)               css += `padding:${pad.top ?? 6}px ${pad.right ?? 10}px ${pad.bottom ?? 6}px ${pad.left ?? 10}px;`;
+  if (rowHeight)         css += 'height:' + rowHeight + 'px;';
+  return css;
 }
 
 function renderTableReadonly(block, tableClass) {
@@ -5301,15 +5875,8 @@ function renderTableReadonly(block, tableClass) {
       const s = cellStyles[sk] || {};
       const pad = cellPadding[sk];
       let st = 'border:1px solid #ccc;';
-      if (s.textAlign) st += 'text-align:' + s.textAlign + ';';
-      if (s.verticalAlign) st += 'vertical-align:' + s.verticalAlign + ';';
-      if (s.backgroundColor) st += 'background-color:' + s.backgroundColor + ';';
-      if (s.color) st += 'color:' + s.color + ';';
-      if (s.fontSize) st += 'font-size:' + s.fontSize + ';';
-      if (s.fontWeight) st += 'font-weight:' + s.fontWeight + ';';
-      if (pad) st += `padding:${pad.top??6}px ${pad.right??10}px ${pad.bottom??6}px ${pad.left??10}px;`;
-      else st += 'padding:6px 10px;';
-      if (rowHeights[r]) st += 'height:' + rowHeights[r] + 'px;';
+      if (!pad) st += 'padding:6px 10px;';
+      st += _tblCellCss(s, pad, rowHeights[r]);
 
       let spanAttr = '';
       if (mergeInfo) {
@@ -5403,11 +5970,18 @@ function renderAdvancedTableBlock(block) {
       </div>
       <span class="table-toolbar-divider"></span>
       <div class="table-toolbar-group">
-        <span class="table-toolbar-label">Font&nbsp;pt:</span>
+        <span class="table-toolbar-label">Font:</span>
+        <select class="table-toolbar-select" title="Font face for the selected cells"
+                onchange="tableSetFontFamily('${bid}', this.value); this.selectedIndex=0;">
+          <option value="">Face…</option>
+          ${TABLE_FONTS.map(([css, label]) => `<option value="${escapeHtml(css)}" style="font-family:${css}">${escapeHtml(label)}</option>`).join('')}
+        </select>
         <input type="number" class="table-toolbar-input" placeholder="pt" min="6" max="72" step="1"
-               title="Font size in pt"
+               title="Font size in pt for the selected cells"
                onchange="tableSetFontSize('${bid}', this.value)"
                style="width:46px;">
+        <button class="table-toolbar-btn" title="Bold the whole cell (prints bold too)" onmousedown="event.preventDefault();tableSetFontWeight('${bid}','700')"><b>B</b>▪</button>
+        <button class="table-toolbar-btn" title="Un-bold the cell" onmousedown="event.preventDefault();tableSetFontWeight('${bid}','')">▫</button>
       </div>
       <span class="table-toolbar-divider"></span>
       <div class="table-toolbar-group">
@@ -5482,26 +6056,55 @@ function renderAdvancedTableBlock(block) {
       </div>
       <span class="table-toolbar-divider"></span>
       <div class="table-toolbar-group">
-        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableAddRow('${bid}')">+ Row</button>
-        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableRemoveRow('${bid}')">- Row</button>
-        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableAddCol('${bid}')">+ Col</button>
-        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableRemoveCol('${bid}')">- Col</button>
+        <span class="table-toolbar-label">Rows:</span>
+        <button class="table-toolbar-btn" title="Insert a row above the selected one" onmousedown="event.preventDefault();tableInsertRow('${bid}','above')">↥ Above</button>
+        <button class="table-toolbar-btn" title="Insert a row below the selected one" onmousedown="event.preventDefault();tableInsertRow('${bid}','below')">↧ Below</button>
+        <button class="table-toolbar-btn" title="Delete the selected rows" onmousedown="event.preventDefault();tableDeleteRows('${bid}')">🗑 Row</button>
+        <button class="table-toolbar-btn" title="Give every row the same height" onmousedown="event.preventDefault();tableDistribute('${bid}','rows')">≡ Even</button>
       </div>
-      <div class="table-hint">Click to select · Shift/Ctrl+Click for multi-select · Merge selected cells</div>
+      <span class="table-toolbar-divider"></span>
+      <div class="table-toolbar-group">
+        <span class="table-toolbar-label">Cols:</span>
+        <button class="table-toolbar-btn" title="Insert a column to the left of the selected one" onmousedown="event.preventDefault();tableInsertCol('${bid}','left')">↤ Left</button>
+        <button class="table-toolbar-btn" title="Insert a column to the right of the selected one" onmousedown="event.preventDefault();tableInsertCol('${bid}','right')">↦ Right</button>
+        <button class="table-toolbar-btn" title="Delete the selected columns" onmousedown="event.preventDefault();tableDeleteCols('${bid}')">🗑 Col</button>
+        <button class="table-toolbar-btn" title="Give every column the same width" onmousedown="event.preventDefault();tableDistribute('${bid}','cols')">≡ Even</button>
+      </div>
+      <span class="table-toolbar-divider"></span>
+      <div class="table-toolbar-group">
+        <span class="table-toolbar-label">Style:</span>
+        <select class="table-toolbar-select" title="Table style — writes real cell colours, so it prints exactly as it looks"
+                onchange="tableApplyStyle('${bid}', this.value); this.selectedIndex=0;">
+          <option value="">Style…</option>
+          ${Object.keys(TABLE_STYLE_PRESETS).map(k => `<option value="${k}">${escapeHtml(TABLE_STYLE_PRESETS[k].label)}</option>`).join('')}
+        </select>
+        <button class="table-toolbar-btn" title="Clear the formatting on the selected cells — the text stays" onmousedown="event.preventDefault();tableClearFormatting('${bid}')">⌫ Format</button>
+      </div>
+      <div class="table-hint">Click a cell to select · <b>Shift/Ctrl+Click</b> for several · click the <b>A B C</b> and <b>1 2 3</b> grips to take a whole column or row · drag a border to resize</div>
     </div>
+    ${_tblShotZoneHtml(bid)}
     <div class="block-body" style="overflow-x:auto;">
-      <table class="editable-table" data-table-block="${bid}" style="table-layout:fixed;"${block.tableBorder ? ` data-border="${block.tableBorder}"` : ''}>
-        <colgroup>`;
+      <table class="editable-table has-grips" data-table-block="${bid}" style="table-layout:fixed;"${block.tableBorder ? ` data-border="${block.tableBorder}"` : ''}>
+        <colgroup><col class="tbl-grip-col">`;
 
+  // The grip column is col 0 of the colgroup and is NOT one of the table's
+  // own columns — everything that maps a colgroup <col> back to
+  // block.colWidths has to skip it (see initTableResizeHandles).
   const defaultColPct = (100 / block.cols).toFixed(4) + '%';
   for (let c = 0; c < block.cols; c++) {
     const w = block.colWidths[c] ? block.colWidths[c] + 'px' : defaultColPct;
     html += `<col style="width:${w}">`;
   }
-  html += `</colgroup><tbody>`;
+  html += `</colgroup><thead><tr class="tbl-grip-row"><td class="tbl-grip tbl-grip-all" data-grip="all" title="Select the whole table" onclick="tableSelectAll('${bid}')">◪</td>`;
+  for (let c = 0; c < block.cols; c++) {
+    html += `<td class="tbl-grip tbl-grip-c" data-grip="col" data-gcol="${c}" title="Select column ${c + 1} — Shift-click to add another"
+                 onclick="tableSelectWholeCol('${bid}', ${c}, event)">${_tblColName(c)}</td>`;
+  }
+  html += `</tr></thead><tbody>`;
 
   for (let r = 0; r < block.rows; r++) {
-    html += '<tr>';
+    html += `<tr><td class="tbl-grip tbl-grip-r" data-grip="row" data-grow="${r}" title="Select row ${r + 1} — Shift-click to add another"
+                     onclick="tableSelectWholeRow('${bid}', ${r}, event)">${r + 1}</td>`;
     for (let c = 0; c < block.cols; c++) {
       const merge = isCellMerged(block, r, c);
       if (merge && !(merge.sr === r && merge.sc === c)) continue;
@@ -5509,14 +6112,7 @@ function renderAdvancedTableBlock(block) {
       const styleKey = r + '_' + c;
       const styles = block.cellStyles?.[styleKey] || {};
       const pad = block.cellPadding?.[styleKey];
-      let styleStr = '';
-      if (styles.textAlign) styleStr += 'text-align:' + styles.textAlign + ';';
-      if (styles.verticalAlign) styleStr += 'vertical-align:' + styles.verticalAlign + ';';
-      if (styles.backgroundColor) styleStr += 'background-color:' + styles.backgroundColor + ';';
-      if (styles.color) styleStr += 'color:' + styles.color + ';';
-      if (styles.fontSize) styleStr += 'font-size:' + styles.fontSize + ';';
-      if (pad) styleStr += `padding:${pad.top??6}px ${pad.right??10}px ${pad.bottom??6}px ${pad.left??10}px;`;
-      if (block.rowHeights[r]) styleStr += 'height:' + block.rowHeights[r] + 'px;';
+      const styleStr = _tblCellCss(styles, pad, block.rowHeights[r]);
 
       let spanAttr = '';
       if (merge) {
@@ -64454,6 +65050,21 @@ window.tableAddRow = tableAddRow;
 window.tableRemoveRow = tableRemoveRow;
 window.tableAddCol = tableAddCol;
 window.tableRemoveCol = tableRemoveCol;
+window.tableInsertRow = tableInsertRow;
+window.tableInsertCol = tableInsertCol;
+window.tableDeleteRows = tableDeleteRows;
+window.tableDeleteCols = tableDeleteCols;
+window.tableDistribute = tableDistribute;
+window.tableClearFormatting = tableClearFormatting;
+window.tableApplyStyle = tableApplyStyle;
+window.tableSetFontFamily = tableSetFontFamily;
+window.tableSetFontWeight = tableSetFontWeight;
+window.tableSelectWholeRow = tableSelectWholeRow;
+window.tableSelectWholeCol = tableSelectWholeCol;
+window.tblShotPaste = tblShotPaste;
+window.tblShotDrop = tblShotDrop;
+window.tblShotPick = tblShotPick;
+window.tblBuildFromShot = tblBuildFromShot;
 window.saveQuestion = saveQuestion;
 window.saveVettingQuestion = saveVettingQuestion;
 window.deleteQuestionDoc = deleteQuestionDoc;
