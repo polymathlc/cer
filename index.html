@@ -4997,6 +4997,26 @@ body.em-editing #printProgress { z-index: 470; }
 @keyframes tlPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 @media (prefers-reduced-motion: reduce) { .tl-light.running { animation: none; } }
 
+/* On the create page the lamp IS the button, and it wears its own verdict in
+   words: it stands in a row of four labelled actions, where a bare coloured
+   circle is a control nobody presses — and there is only ONE question there,
+   so there is room to say what the colour means. */
+.tl-create { display: inline-flex; }
+.tl-light.wide {
+  width: auto;
+  height: auto;
+  gap: 8px;
+  padding: 11px 18px;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tl-light.wide:hover { transform: none; border-color: var(--primary); }
+.tl-light.wide .tl-dot { font-size: 1rem; line-height: 1; }
+.tl-light.wide.idle { color: var(--text-muted); }
+
 /* On a picture tile it takes the one free corner — the ✓ pick badge holds the
    top left and the ✎ pencil the top right — and unlike the pencil it is ALWAYS
    visible: a light you have to hover to find is a light nobody reads. */
@@ -8792,6 +8812,11 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <div class="subtitle" id="createPageSubtitle">Build a question with blocks. Answers and blanks are optional — every question is marked by AI.</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+          <!-- 🚦 The traffic light, on the ONE question in this editor. The
+               same checker ✅ Check Questions and 🚦 Check all use, reading
+               what is on screen rather than the saved copy — see `tl*` and
+               `tlCreateQuestion` in app.js. Filled in by tlRenderCreateBar(). -->
+          <div class="tl-create" id="tlCreateBar" style="display:none;"></div>
           <button class="btn btn-outline" id="regenInlineBtn" onclick="openRegenerateModal()" style="display:none;" title="Make a NEW copy of this question with AI. You give instructions on what to change, the picture is redrawn from the picture already on it when it needs to be, and the original is never overwritten.">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
             🔄 Regenerate

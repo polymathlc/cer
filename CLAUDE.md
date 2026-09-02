@@ -3791,6 +3791,64 @@ question came round. A lamp answers both at a glance — 🔴 something is wrong
 - **It READS ONLY.** Nothing in the block writes a question; ✏️ **Fix this
   question** opens the editor, or scrolls to the question when the sheet is
   already on screen.
+
+### …and on the CREATE page, the ONE question in the editor (v1.346.0)
+
+`tlCreateActive` / `tlCreateQuestion` / `tlCreateSync` / `tlSyncScreen` /
+`tlRenderCreateBar` / `tlCreateWatchInit` / `tlFixCreateOptions` / `tlDraftId` /
+`tlWordFor`, plus `#tlCreateBar` in the create page's header and the
+`.tl-light.wide` pill.
+
+A question is checked at the moment it is written, not only once it is in a
+list — so the same lamp sits in the create page's header, on whatever question
+is open in that editor. It is the SAME `tlRun`, the same panel and the same
+findings; nothing here is a second checker.
+
+- **IT MUST STAND DOWN IN ✏️ EDITING MODE**, and this is the failure to design
+  for. That is the trap `_akdEditorQuestion` documents: with the sheet open the
+  global `blocks` is the WHOLE PAPER and the create page's own `#questionTitle`
+  / `#topicSelect` still hold whatever question was last open THERE. A lamp
+  drawn from that describes no question that exists — and it looks perfectly
+  healthy. `tlCreateActive()` is the ONE place that is decided.
+- **A DRAFT HAS NO ID, and a verdict is keyed by one.** An unsaved draft is
+  checked under one fixed id (`tlDraftId()`), and it needs **no reset hook**:
+  the SIGNATURE is what decides whether a verdict still stands, and clearing
+  the editor changes every word of it. Hooking the eight paths that reset the
+  editor would be eight chances to forget one, and the one forgotten leaves the
+  last draft's green lamp standing over the next question.
+- **A question opened FROM the bank keeps its real id**, so checking it in the
+  editor and pressing Save leaves the bank row already lit — and while the
+  edits are unsaved the bank row reads *stale*, which is honest: that verdict
+  describes the draft, not the saved copy.
+- **AN EMPTY EDITOR IS NEVER CHECKED.** `_cqLocalFindings` finds nothing wrong
+  with a question that has nothing in it, so a blank page would light **green**
+  — the whole feature inverted by pressing the button. `tlClick` refuses and
+  says why.
+- **`tlCreateQuestion` reads exactly the five fields the check reads** — title,
+  topic, category, annotation, blocks — which is exactly what `tlSig` signs. No
+  more, or the lamp goes out over something the check never read.
+- **THE ＃ ONE-TAP FIX IS ROUTED BY SCOPE** (`_cqFindingHtml(f, qid, scope)`).
+  `cqNumberOptions` writes STRAIGHT TO THE BANK, which is the wrong thing
+  entirely here: a draft that has never been saved is not there at all, and one
+  that has must not be rewritten behind an author who has not pressed Save.
+  `tlFixCreateOptions` writes the editor's own blocks and nothing else.
+- **✏️ Fix this question must handle the create scope BEFORE `editQuestion`.**
+  That call would load the SAVED copy over the very edits the check was run on.
+- **THE PAINTER SWAPS THE STATE CLASS, it does not rewrite `className`.** A
+  lamp carries layout classes of its own — `sm` on a bank row, `lg` in the
+  panel, `wide` here — and rebuilding the list from the state alone leaves the
+  lamp its colour and takes its shape away. A labelled lamp keeps its dot in
+  `.tl-dot` and its words in `.tl-txt` for the same reason: writing the
+  element's whole `textContent` rubs the label out.
+- **Typing fires no render**, so one delegated `input`/`change` pair on
+  `#page-create` (`tlCreateWatchInit`, bound beside `dupWatchBind`) syncs and
+  repaints — the same shape the duplicate watch uses, and for the same reason.
+  `setEditMode` is the other hook: it is the one function every route into and
+  out of the editor goes through.
+- **`tlRenderCreateBar` is wrapped in try/catch** because `navigateTo` and
+  `setEditMode` both run during module evaluation, when the consts it reads are
+  still in their temporal dead zone. A lamp that is not there yet is not worth
+  taking the app down for.
 - Run **`node tools/traffic-light-tests.mjs`** after touching any of it.
 
 ## 📋 Format check — every past-paper question dressed for the paper (v1.345.0)
@@ -3857,10 +3915,12 @@ are missing which, and takes the author straight to them.
   them all open anything but the FLAGGED questions and the author is scrolling
   a paper looking for gaps the report had already found.
 - After touching **🚦 the traffic light** (`tlVerdict`, `tlSig`, `tlStateOf`,
-  `tlRun`, `tlCheckMany`, `tlLightHtml`, `tlRepaint`, `tlQuestionFor` /
-  `tlEmQuestion`, `tlEmSync`, `tlRenderEmBar`, `tlCheckSheet`, `TL_LOOKS`,
-  `TL_PAR`, `TL_MANY_MAX`, or either renderer's `tlRepaint()` call), run
-  `node tools/traffic-light-tests.mjs`. There is only ONE failure here that
+  `tlRun`, `tlCheckMany`, `tlLightHtml`, `tlWordFor`, `tlRepaint`,
+  `tlQuestionFor` / `tlEmQuestion` / `tlCreateQuestion`, `tlCreateActive`,
+  `tlSyncScreen` / `tlEmSync` / `tlCreateSync`, `tlRenderEmBar`,
+  `tlRenderCreateBar`, `tlFixCreateOptions`, `tlCheckSheet`, `_cqFindingHtml`'s
+  `scope`, `TL_LOOKS`, `TL_PAR`, `TL_MANY_MAX`, or any renderer's `tlRepaint()`
+  call), run `node tools/traffic-light-tests.mjs`. There is only ONE failure here that
   matters and every case in that harness is a way of producing it: **a green
   lamp that lies**. It is read at a glance, on a list of forty questions, by
   somebody about to print them — so drawing "not checked" the same as "checked
@@ -3874,7 +3934,15 @@ are missing which, and takes the author straight to them.
   that cannot be attributed to the question they belong to, re-read questions
   whose verdict already stands and one press is forty calls instead of two,
   and clear the bar's inline display instead of naming one and the summary
-  never appears at all on a run that otherwise worked perfectly.
+  never appears at all on a run that otherwise worked perfectly. On the CREATE
+  page the same one failure has three more doors: let it read the editor's
+  fields while ✏️ editing mode has the whole paper in `blocks` and the lamp is
+  about no question that exists; check an EMPTY editor and it lights green,
+  because nothing is wrong with a question that has nothing in it; and let the
+  ＃ fix keep calling `cqNumberOptions` and it rewrites the bank behind an
+  author who has not pressed Save — or, on a draft, silently does nothing at
+  all. Rewrite `className` in the painter instead of swapping the state class
+  and every lamp keeps its colour and loses its shape.
 - After touching **📝 the per-part explanations** (`qPartsWithoutExplanation`,
   `qSplitMultiPartExplanations`, `qEnsurePartExplanations`, `_partExplSection`,
   `_partExplPrompt`, `aiWritePartExplanations`, `PART_EXPL_MAX`,
