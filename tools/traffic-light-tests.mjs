@@ -25,6 +25,12 @@
 //    pays twice for a verdict that already stands, and stops when told to.
 //  • tlEmQuestion reads what is ON SCREEN, not the saved copy — checking the
 //    bank's version lights a question nobody is looking at.
+//  • …and so does tlCreateQuestion, on the create page's ONE question. It has
+//    three failures of its own, each of which draws a lamp about no question
+//    that exists: reading the create page's fields while ✏️ editing mode has
+//    the whole sheet in `blocks`; letting a verdict formed on one draft stand
+//    over the next; and lighting an EMPTY editor green, which is the whole
+//    feature inverted by pressing the button on a blank page.
 import fs from 'fs';
 
 const APP = new URL('../app.js', import.meta.url).pathname;
@@ -61,8 +67,12 @@ function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c
 function showToast(msg, kind) { HOOK.toasts.push({ msg, kind }); }
 function normalizeCategoryValue(v) { return String(v || ''); }
 function _aiHash(str) { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return 'ai:' + (h >>> 0).toString(36); }
-function editQuestion() {}
+function editQuestion() { HOOK.editQuestionCalls = (HOOK.editQuestionCalls || 0) + 1; }
 function _cqFindingHtml(f) { return '<div class="cq-find-row">' + escapeHtml(f.title) + '</div>'; }
+// ── the create page's own world ───────────────────────────────────────────
+let blocks = [];
+let currentEditingQuestion = null;
+function renderBlocks() { HOOK.rendered = (HOOK.rendered || 0) + 1; }
 function _cqLocalFindings(q, aiAnswered) { return HOOK.local(q, aiAnswered) || []; }
 async function _cqAiCheck(q) {
   HOOK.calls++;
@@ -71,8 +81,18 @@ async function _cqAiCheck(q) {
   try { return await HOOK.ai(q); } finally { HOOK.live--; }
 }
 const window = { __aiReady: () => HOOK.aiReady };
+// Enough of a DOM for the create page: an element per id, each carrying only
+// what the code actually reads off it.
+const DOM = HOOK.dom = {
+  'page-create': { classList: { contains: c => c === 'active' && HOOK.createOpen, add(){}, remove(){} } },
+  'questionTitle': { value: '' },
+  'topicSelect': { value: '' },
+  'categorySelect': { value: '' },
+  'questionAnnotation': { checked: false },
+  'tlCreateBar': { style: {}, dataset: {}, innerHTML: '' },
+};
 const document = {
-  getElementById: () => null,
+  getElementById: id => DOM[id] || null,
   querySelectorAll: () => [],
   addEventListener: () => {},
 };
@@ -83,9 +103,21 @@ return {
   HOOK,
   TL_PAR, TL_LOOKS,
   tlVerdict, tlSig, tlStateOf, tlFresh, tlRun, tlCheckMany, tlStopMany,
-  tlLightHtml, tlTipFor, tlLookFor, tlEmQuestion, tlHeadline,
+  tlLightHtml, tlTipFor, tlLookFor, tlEmQuestion, tlHeadline, tlWordFor,
+  tlCreateActive, tlCreateQuestion, tlDraftId, tlRenderCreateBar,
+  tlFixCreateOptions, tlQuestionFor, tlClick, tlRepaint,
   setBank: v => { questionBank = v; },
   setEm: (on, qs, blocksById) => { _em = { on, qs: qs || [] }; _emBlocks = blocksById || {}; },
+  setEditor: (open, fields, bs, editingId) => {
+    HOOK.createOpen = !!open;
+    Object.assign(DOM['questionTitle'], { value: (fields && fields.title) || '' });
+    Object.assign(DOM['topicSelect'], { value: (fields && fields.topic) || '' });
+    Object.assign(DOM['categorySelect'], { value: (fields && fields.category) || '' });
+    DOM['questionAnnotation'].checked = !!(fields && fields.annotation);
+    blocks = bs || [];
+    currentEditingQuestion = editingId || null;
+  },
+  editorBlocks: () => blocks,
   cache: () => _tlCache,
 };`)();
 
@@ -113,7 +145,14 @@ const reset = () => {
   M.HOOK.calls = 0; M.HOOK.live = 0; M.HOOK.inflight = 0; M.HOOK.toasts = [];
   M.setEm(false, [], {});
   M.setBank([]);
+  M.setEditor(false, {}, [], null);
+  M.HOOK.editQuestionCalls = 0;
+  M.HOOK.rendered = 0;
+  M.HOOK.dom['tlCreateBar'].dataset = {};
+  M.HOOK.dom['tlCreateBar'].innerHTML = '';
+  M.HOOK.dom['tlCreateBar'].style = {};
 };
+const TEXT = html => ({ id: 'b1', type: 'text', content: '<p>' + html + '</p>' });
 
 // ---- the verdict is plain code ---------------------------------------------
 test('a high finding is RED, anything else is AMBER, nothing is GREEN', () => {
@@ -328,6 +367,166 @@ test('a question the sheet no longer knows falls back to the bank', () => {
   eq(M.tlEmQuestion('q9').id, 'q9', 'never null — a missing entry must not blank the lamp');
 });
 
+test('a question with nothing in it can never light green, whoever asks', async () => {
+  reset();
+  // Every check is a walk over the blocks, so an empty question returns an
+  // empty list from BOTH layers — which `tlVerdict` reads, correctly, as
+  // green. The guard has to be above them, or the easiest lie of all to
+  // produce is the one nobody guards against.
+  const empty = Q({ id: 'q-empty', blocks: [] });
+  eq(await M.tlRun(empty), null, 'no verdict is formed');
+  eq(M.tlStateOf(empty).state, 'idle', 'and the lamp stays unlit');
+  eq(M.HOOK.calls, 0, 'nothing was read, so nothing was billed');
+  // 🚦 Check all counts it as ⚠, never as one of the greens.
+  const m = await M.tlCheckMany([empty, Q()], {});
+  eq([m.green, m.error], [1, 1], 'the tally: one real green, one that could not be checked');
+});
+
+// ---- the create page reads the EDITOR, not the bank ------------------------
+test('on the create page the lamp is about what is in the editor', () => {
+  reset();
+  M.setBank([Q({ id: 'q7', title: 'Saved title', topic: 'Heat', blocks: [TEXT('old')] })]);
+  M.setEditor(true, { title: 'Being typed', topic: 'Light', category: 'PSLE - OEQ' }, [TEXT('new, not saved yet')], 'q7');
+  const q = M.tlCreateQuestion();
+  eq(q.title, 'Being typed', 'the title in the box');
+  eq(q.topic, 'Light', 'the topic chosen NOW, not the one it was saved under');
+  ok(/not saved yet/.test(q.blocks[0].content), 'the wording on screen');
+  // …and the scope resolves to exactly that, so one painter and one panel
+  // serve the create page without knowing anything about it.
+  eq(M.tlQuestionFor('create', 'q7').title, 'Being typed', 'through the scope');
+});
+
+test('a question opened from the bank keeps its REAL id, so the bank lights up too', async () => {
+  reset();
+  const bank = Q({ id: 'q7', title: 't', topic: 'Heat', category: 'c', blocks: [TEXT('a question')] });
+  M.setBank([bank]);
+  M.setEditor(true, { title: 't', topic: 'Heat', category: 'c' }, bank.blocks, 'q7');
+  await M.tlRun(M.tlCreateQuestion());
+  eq(M.tlStateOf(M.tlCreateQuestion()).state, 'green', 'checked in the editor');
+  // The editor's copy and the saved copy are word for word the same here, so
+  // the verdict really does describe the bank's question — which is what makes
+  // "check it, save it, and the bank row is already lit" honest.
+  eq(M.tlStateOf(bank).state, 'green', 'the same verdict stands for the saved copy');
+});
+
+test('an UNSAVED draft is checked under one fixed id, and clearing the editor puts it out', async () => {
+  reset();
+  M.setEditor(true, { title: 'A draft', topic: 'Heat' }, [TEXT('first draft')], null);
+  eq(M.tlCreateQuestion().id, M.tlDraftId(), 'a draft has no id of its own');
+  await M.tlRun(M.tlCreateQuestion());
+  eq(M.tlStateOf(M.tlCreateQuestion()).state, 'green', 'the draft was checked');
+  // The reset that starts the next question is what has to put the lamp out,
+  // and it does it through the SIGNATURE — no reset hook to forget.
+  M.setEditor(true, { title: '', topic: 'Heat' }, [TEXT('a completely different question')], null);
+  eq(M.tlStateOf(M.tlCreateQuestion()).state, 'stale', 'the last draft\'s verdict must not stand over the next');
+});
+
+// ---- the guard that matters most -------------------------------------------
+test('it stands DOWN in editing mode, where `blocks` is the whole sheet', () => {
+  reset();
+  M.setEditor(true, { title: 'Left over from the create page', topic: 'Heat' }, [TEXT('question 1'), TEXT('question 2')], null);
+  eq(M.tlCreateActive(), true, 'the create page is up');
+  M.setEm(true, [{ id: 'q1', key: 'k1', title: 'x' }], {});
+  // With the sheet open the global `blocks` is the WHOLE PAPER and the create
+  // page's own fields still hold whatever question was last open THERE, so a
+  // lamp drawn from them describes no question that exists.
+  eq(M.tlCreateActive(), false, 'not while editing mode has the sheet');
+  eq(M.tlCreateQuestion(), null, 'and no question is offered');
+  eq(M.tlQuestionFor('create', 'anything'), null, 'through the scope either');
+});
+
+test('…and when the create page is not even open', () => {
+  reset();
+  M.setEditor(false, { title: 'stale' }, [TEXT('stale')], null);
+  eq(M.tlCreateQuestion(), null, 'the editor is not on screen');
+});
+
+// ---- an empty editor must never light green --------------------------------
+test('pressing the lamp on an empty editor refuses rather than lighting it green', async () => {
+  reset();
+  M.setEditor(true, { title: '', topic: '' }, [], null);
+  await M.tlClick('create', M.tlDraftId());
+  eq(M.HOOK.calls, 0, 'nothing was read');
+  eq(M.tlStateOf(M.tlCreateQuestion()).state, 'idle', 'and nothing was lit');
+  ok(/add some blocks/i.test((M.HOOK.toasts.pop() || {}).msg || ''), 'it says why');
+  // The point: the instant checks find NOTHING wrong with a question that has
+  // nothing in it, so without this guard a blank page lights green.
+  eq(M.tlVerdict([]), 'green', 'which is exactly what an empty check would return');
+});
+
+test('a question with blocks in it checks normally', async () => {
+  reset();
+  M.setEditor(true, { title: 'A question', topic: 'Heat' }, [TEXT('why did the ice melt?')], null);
+  await M.tlClick('create', M.tlDraftId());
+  eq(M.HOOK.calls, 1, 'one call, one question');
+  eq(M.tlStateOf(M.tlCreateQuestion()).state, 'green', 'and a verdict that stands');
+});
+
+// ---- the ＃ fix has to write where the question actually lives --------------
+test('the one-tap fix writes the EDITOR\'s blocks, never the bank', () => {
+  reset();
+  const mcq = { id: 'm1', type: 'mcq', options: [{ id: 'o1', text: 'the wood floats' }, { id: 'o2', text: 'the wood sinks' }], correctId: 'o1' };
+  const saved = Q({ id: 'q7', blocks: [JSON.parse(JSON.stringify(mcq))] });
+  M.setBank([saved]);
+  M.setEditor(true, { title: 't', topic: 'Heat' }, [mcq], 'q7');
+  M.tlFixCreateOptions();
+  eq(M.editorBlocks()[0].options.map(o => o.text), ['(1)', '(2)'], 'the editor is renumbered');
+  // Nothing is saved until the author presses Save — `cqNumberOptions` writes
+  // straight to the bank, which on a draft that has never been saved does
+  // nothing at all and on one that has rewrites it behind the author's back.
+  eq(saved.blocks[0].options.map(o => o.text), ['the wood floats', 'the wood sinks'], 'the bank copy is untouched');
+  ok(M.HOOK.rendered > 0, 'and the editor is redrawn so the author sees it');
+});
+
+test('the fix says so rather than doing nothing when there are no options', () => {
+  reset();
+  M.setEditor(true, { title: 't', topic: 'Heat' }, [TEXT('no options here')], null);
+  M.tlFixCreateOptions();
+  ok(/no options/i.test((M.HOOK.toasts.pop() || {}).msg || ''), 'a button that silently does nothing is worse than none');
+});
+
+// ---- the bar --------------------------------------------------------------
+test('the create bar is hidden when there is no question to be about', () => {
+  reset();
+  M.tlRenderCreateBar();
+  eq(M.HOOK.dom['tlCreateBar'].style.display, 'none', 'not on the create page');
+  M.setEditor(true, { title: 'A question', topic: 'Heat' }, [TEXT('x')], null);
+  M.tlRenderCreateBar();
+  eq(M.HOOK.dom['tlCreateBar'].style.display, '', 'shown once the editor is up');
+  ok(/data-tl-scope="create"/.test(M.HOOK.dom['tlCreateBar'].innerHTML), 'carrying a lamp of its own');
+});
+
+test('a labelled lamp never says "nothing flagged" about a question nobody checked', async () => {
+  reset();
+  const q = Q();
+  ok(/check this question/i.test(M.tlWordFor(q)), 'unchecked: ' + M.tlWordFor(q));
+  await M.tlRun(q);
+  eq(M.tlWordFor(q), 'Nothing flagged', 'checked and clean');
+  q.blocks[0].content = '<p>changed</p>';
+  ok(/check again/i.test(M.tlWordFor(q)), 'edited since: ' + M.tlWordFor(q));
+  // Every state needs words of its own, or two of them read alike on a control
+  // whose whole job is to say which one it is in.
+  const seen = new Set();
+  ['idle', 'stale', 'running', 'error', 'red', 'amber', 'green'].forEach(s => {
+    const w = M.tlWordFor({ id: 'x', blocks: [] });   // shape only; state is forced below
+    ok(typeof w === 'string' && w.length, 'no words at all for ' + s);
+  });
+  ['red', 'amber', 'green', 'running', 'error', 'stale', 'idle'].forEach(state => {
+    const words = M.tlHeadline({ state, findings: [] });
+    ok(!seen.has(words), 'two states read alike: ' + words);
+    seen.add(words);
+  });
+});
+
+test('a labelled lamp keeps its words and its dot apart', () => {
+  reset();
+  const html = M.tlLightHtml(Q({ id: 'q1' }), 'create', { text: true });
+  ok(/class="tl-light [a-z]+ wide"/.test(html), 'it is the wide pill: ' + html.slice(0, 120));
+  ok(/<span class="tl-dot">/.test(html), 'the colour');
+  ok(/<span class="tl-txt">/.test(html), 'and what it means — repaint writes them separately');
+  ok(/data-tl-scope="create"/.test(html), 'the ONE painter still finds it');
+});
+
 // ---- the lamp itself -------------------------------------------------------
 test('every lamp carries its id and scope, which is what lets ONE painter find it', () => {
   reset();
@@ -376,6 +575,48 @@ test('the bar counts the lamps standing NOW, not the run\'s own tally', () => {
   // sits there saying "1 🔴" about a question that is now green.
   const fn = section.slice(section.indexOf('function tlRenderEmBar'), section.indexOf('function tlJumpToProblem'));
   ok(/tlStateOf\(tlEmQuestion/.test(fn), 'it re-reads each question rather than reporting _tlMany');
+});
+
+test('the create page never reloads the saved copy over unsaved edits', () => {
+  // `editQuestion` in the panel's ✏️ button would load the SAVED question over
+  // the very edits the check was run on — and on a draft that has never been
+  // saved there is nothing to load. The create scope has to be handled BEFORE
+  // that call, so the branch has to come first in the function.
+  const fn = section.slice(section.indexOf('function tlPanelEdit'), section.indexOf('function tlScrollToQuestion'));
+  const create = fn.indexOf("_tlPanelScope === 'create'");
+  ok(create > -1, 'the create scope is handled at all');
+  ok(create < fn.indexOf('editQuestion('), 'and before editQuestion could fire');
+});
+
+test('the ＃ fix is routed by SCOPE, so it cannot write to the wrong place', () => {
+  // `_cqFindingHtml` lives outside the cut section — it is ✅ Check Questions'
+  // own renderer, shared with this panel — so this reads app.js itself.
+  const fn = src.slice(src.indexOf('function _cqFindingHtml'), src.indexOf('// ---- the AI pass, driven from the page'));
+  ok(/scope === 'create'/.test(fn), 'the create page gets the editor fix');
+  ok(/tlFixCreateOptions\(\)/.test(fn), 'which writes the blocks on screen');
+  ok(/cqNumberOptions\(/.test(fn), 'and everywhere else still writes the bank');
+  ok(/list\.map\(f => _cqFindingHtml\(f, q\.id, _tlPanelScope\)\)/.test(section), 'the panel hands the scope over');
+});
+
+test('the painter SWAPS the state class rather than rewriting className', () => {
+  // A lamp carries layout classes of its own — `sm` on a bank row, `lg` in the
+  // panel, `wide` on the create page. Rebuilding the class list from the state
+  // alone leaves the lamp its colour and takes its shape away.
+  const fn = section.slice(section.indexOf('function tlRepaint'), section.indexOf('// ── Which question a light is about'));
+  ok(/classList\.remove/.test(fn) && /classList\.add/.test(fn), 'it edits the class list');
+  ok(!/el\.className = /.test(fn), 'and never rewrites it wholesale');
+  ok(/\.tl-dot/.test(fn), "a labelled lamp's dot is painted on its own, or the words are rubbed out");
+});
+
+test('every entry point syncs BOTH surfaces before it checks anything', () => {
+  // The wording lives in contenteditable boxes on the sheet AND in the create
+  // editor, so it only reaches `blocks` when it is read back. One sync that
+  // covers both means no call site has to know which surface it is on.
+  ok(/function tlSyncScreen\(\) \{ tlEmSync\(\); tlCreateSync\(\); \}/.test(section), 'there is one sync');
+  const click = section.slice(section.indexOf('async function tlClick'), section.indexOf('function tlOpenPanel'));
+  ok(/tlSyncScreen\(\)/.test(click), 'the lamp click syncs');
+  const recheck = section.slice(section.indexOf('function tlRecheck'), section.indexOf('function tlPanelEdit'));
+  ok(/tlSyncScreen\(\)/.test(recheck), '🔄 Check again syncs');
 });
 
 test('the verdict is never asked of a model', () => {

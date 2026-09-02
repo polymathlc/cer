@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.345.0';
+const APP_VERSION = 'v1.346.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -4196,6 +4196,7 @@ function navigateTo(page) {
   ensureMobileToggles();
   if (page === 'create') {
     dupWatchBind();          // idempotent; the listener outlives every reset
+    tlCreateWatchInit();     // …and so does the 🚦 lamp's, for the same reason
     if (_skipCreateReset) {
       // Coming from editQuestion — switch to edit mode
       setEditMode(!!currentEditingQuestion);
@@ -14775,6 +14776,10 @@ function setEditMode(isEditing) {
     if (regenBtn) regenBtn.style.display = 'none';
     const b = document.getElementById('backToPapersBtn'); if (b) b.style.display = 'none';
   }
+  // The 🚦 lamp is about whatever question is in the editor NOW, and this is
+  // the one function every route into and out of it goes through — opening a
+  // question, saving one, and the reset that follows.
+  tlRenderCreateBar();
 }
 
 function addToBank() {
@@ -36147,15 +36152,21 @@ function _cqRenderFindings() {
   }
   host.innerHTML = head + list.map(f => _cqFindingHtml(f, q.id)).join('');
 }
-function _cqFindingHtml(f, qid) {
+// `scope` says WHERE the question being reported on lives, and therefore where
+// the ＃ one-tap fix has to write. Everywhere but the create page that is the
+// bank (`cqNumberOptions`); on the create page it is the editor's own blocks,
+// because the question there may never have been saved and one that has must
+// not be rewritten behind an author who has not pressed Save.
+function _cqFindingHtml(f, qid, scope) {
   const color = f.severity === 'high' ? '#dc2626' : f.severity === 'med' ? '#d97706' : '#6b7280';
   const bg = f.severity === 'high' ? '#fef2f2' : f.severity === 'med' ? '#fffbeb' : '#f3f4f6';
+  const fixCall = scope === 'create' ? 'tlFixCreateOptions()' : `cqNumberOptions('${escapeHtml(qid)}')`;
   return `<div class="cq-find-row" style="border-left:4px solid ${color};">
       <span class="cq-badge" style="background:${bg};color:${color};">${escapeHtml(f.type)}${f.ai ? ' · AI' : ''}</span>
       <div style="flex:1;min-width:0;">
         <div class="cq-find-title">${escapeHtml(f.title)}</div>
         ${f.detail ? `<div class="cq-find-detail">${escapeHtml(f.detail)}</div>` : ''}
-        ${f.fix === 'numberOptions' ? `<div class="cq-find-fix"><button class="btn btn-outline" style="font-size:0.8rem;padding:6px 12px;" onclick="cqNumberOptions('${escapeHtml(qid)}')">＃ Make options (1)(2)(3)(4)</button></div>` : ''}
+        ${f.fix === 'numberOptions' ? `<div class="cq-find-fix"><button class="btn btn-outline" style="font-size:0.8rem;padding:6px 12px;" onclick="${fixCall}">＃ Make options (1)(2)(3)(4)</button></div>` : ''}
       </div>
     </div>`;
 }
@@ -36464,6 +36475,19 @@ function tlFresh(q) {
 async function tlRun(q) {
   if (!q || !q.id) return null;
   const id = String(q.id);
+  // NOTHING TO CHECK IS NOT A CLEAN BILL OF HEALTH. Every check below is a
+  // walk over the question's blocks, so a question with none returns an empty
+  // list from both layers and the lamp goes GREEN — the one failure this whole
+  // feature exists to prevent, and the easiest of all to produce. There is no
+  // verdict to be formed about an empty question, so none is formed: the lamp
+  // stays unlit. `tlClick` says so in words; this is the backstop for every
+  // other caller, 🚦 Check all included, which counts it as ⚠ rather than 🟢.
+  if (!((q.blocks || []).length)) {
+    _tlCache.delete(id);
+    tlRepaint(id);
+    if (_tlPanelId === id) tlRenderPanel();
+    return null;
+  }
   const sig = tlSig(q);
   const prev = _tlCache.get(id);
   if (prev && prev.state === 'running') return prev;
@@ -36549,13 +36573,35 @@ function tlLightHtml(q, scope, opts) {
   const o = opts || {};
   const id = escapeHtml(String(q.id));
   const sc = escapeHtml(String(scope || 'bank'));
-  return `<button type="button" class="tl-light ${tlLookFor(q).cls}${o.small ? ' sm' : ''}"
+  const look = tlLookFor(q);
+  // `text` makes the lamp a labelled pill instead of a bare circle. It is the
+  // create page's shape: among four labelled buttons in that header a naked
+  // coloured dot is a control nobody presses, and there is only ONE question
+  // there so there is room to say what the colour means. The dot and the words
+  // are their own spans because `tlRepaint` paints them separately — writing
+  // the element's whole textContent would rub the label out.
+  const inner = o.text
+    ? `<span class="tl-dot">${look.dot}</span><span class="tl-txt">${escapeHtml(tlWordFor(q))}</span>`
+    : look.dot;
+  return `<button type="button" class="tl-light ${look.cls}${o.small ? ' sm' : ''}${o.text ? ' wide' : ''}"
       data-tl-id="${id}" data-tl-scope="${sc}"
       title="${escapeHtml(tlTipFor(q))}"
       aria-label="${escapeHtml('AI check: ' + tlTipFor(q))}"
-      onclick="event.stopPropagation();tlClick('${sc}','${id}')">${tlLookFor(q).dot}</button>`;
+      onclick="event.stopPropagation();tlClick('${sc}','${id}')">${inner}</button>`;
 }
 function tlLookFor(q) { return TL_LOOKS[tlStateOf(q).state] || TL_LOOKS.idle; }
+// The few words a labelled lamp wears. Short on purpose — it sits in a row of
+// buttons — and it never says "nothing wrong" for a question nobody checked.
+function tlWordFor(q) {
+  const s = tlStateOf(q);
+  if (s.state === 'red') return 'Something is wrong';
+  if (s.state === 'amber') return 'Worth a look';
+  if (s.state === 'green') return 'Nothing flagged';
+  if (s.state === 'running') return 'Checking\u2026';
+  if (s.state === 'error') return 'Check could not run';
+  if (s.state === 'stale') return 'Edited \u2014 check again';
+  return 'Check this question';
+}
 function tlTipFor(q) {
   const s = tlStateOf(q);
   const look = TL_LOOKS[s.state] || TL_LOOKS.idle;
@@ -36576,14 +36622,26 @@ function tlRepaint(id) {
   nodes.forEach(el => {
     const q = tlQuestionFor(el.dataset.tlScope, el.dataset.tlId);
     const look = q ? tlLookFor(q) : TL_LOOKS.idle;
-    el.className = 'tl-light ' + look.cls + (el.classList.contains('sm') ? ' sm' : '');
-    el.textContent = look.dot;
+    // SWAP the state class; never rewrite the whole className. A lamp carries
+    // layout classes of its own — `sm` on a bank row, `lg` in the panel, the
+    // create page's labelled `wide` pill — and rebuilding the list from the
+    // state alone silently strips them, so the lamp keeps its colour and
+    // loses its shape.
+    Object.keys(TL_LOOKS).forEach(k => el.classList.remove(TL_LOOKS[k].cls));
+    el.classList.add('tl-light', look.cls);
+    // A labelled lamp keeps its words in their own span, so the dot is painted
+    // on its own — `el.textContent = dot` would rub the label out.
+    const dot = el.querySelector && el.querySelector('.tl-dot');
+    if (dot) dot.textContent = look.dot; else el.textContent = look.dot;
     if (q) {
+      const txt = el.querySelector && el.querySelector('.tl-txt');
+      if (txt) txt.textContent = tlWordFor(q);
       el.title = tlTipFor(q);
       el.setAttribute('aria-label', 'AI check: ' + tlTipFor(q));
     }
   });
   tlRenderEmBar();
+  tlRenderCreateBar();
 }
 
 // ── Which question a light is about ─────────────────────────────────────────
@@ -36592,6 +36650,10 @@ function tlRepaint(id) {
 // bank's version would light a question nobody is looking at.
 function tlQuestionFor(scope, id) {
   if (scope === 'em') return tlEmQuestion(id);
+  // The create page holds exactly ONE question, so the id is not what finds
+  // it — the editor is. Reading the bank here would light the SAVED copy of a
+  // question whose unsaved edits are the whole reason anybody is checking it.
+  if (scope === 'create') return tlCreateQuestion();
   return _docQById(String(id)) || null;
 }
 function tlEmQuestion(id) {
@@ -36616,10 +36678,14 @@ function tlEmSync() {
 // ── Clicking a light ────────────────────────────────────────────────────────
 async function tlClick(scope, id) {
   if (!_canAuthor()) { showToast('Only an author can check questions', 'error'); return; }
-  tlEmSync();
+  tlSyncScreen();
   const q = tlQuestionFor(scope, id);
   if (!q) { showToast('That question is no longer here', 'error'); return; }
-  tlOpenPanel(scope, String(id));
+  // An empty editor has nothing wrong with it, so it would light GREEN — the
+  // one failure the whole feature exists to prevent, produced by pressing the
+  // button on a blank page.
+  if (!(q.blocks || []).length) { showToast('Add some blocks to the question before checking it', 'info'); return; }
+  tlOpenPanel(scope, String(q.id));
   if (!tlFresh(q) && tlStateOf(q).state !== 'running') await tlRun(q);
 }
 
@@ -36640,7 +36706,7 @@ function tlClosePanel() {
 function tlRecheck() {
   const q = tlQuestionFor(_tlPanelScope, _tlPanelId);
   if (!q) { showToast('That question is no longer here', 'error'); return; }
-  tlEmSync();
+  tlSyncScreen();
   _tlCache.delete(String(q.id));
   tlRepaint(q.id);
   tlRun(tlQuestionFor(_tlPanelScope, _tlPanelId));
@@ -36649,6 +36715,14 @@ function tlPanelEdit() {
   const id = _tlPanelId;
   if (!id) return;
   tlClosePanel();
+  if (_tlPanelScope === 'create') {
+    // The question is ALREADY in the editor behind this panel. `editQuestion`
+    // here would load the SAVED copy over the very edits the check was run on
+    // — and on a draft that has never been saved there is nothing to load.
+    const host = document.getElementById('blocksList');
+    if (host && host.scrollIntoView) host.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    return;
+  }
   if (_tlPanelScope === 'em') {
     // In editing mode the question is already on screen — take the author to
     // it rather than closing the sheet they are working through.
@@ -36688,7 +36762,7 @@ function tlRenderPanel() {
   const body = s.state === 'running'
     ? `<div class="tl-note">🤖 The AI is reading this question and its diagrams…</div>`
     : list.length
-      ? list.map(f => _cqFindingHtml(f, q.id)).join('')
+      ? list.map(f => _cqFindingHtml(f, q.id, _tlPanelScope)).join('')
       : (s.state === 'green'
         ? `<div class="tl-note">✅ Neither the instant checks nor the AI found anything to report.</div>`
         : `<div class="tl-note">Nothing has been checked yet — press 🔄 Check again.</div>`);
@@ -36711,6 +36785,133 @@ function tlSubline(s) {
   if (s.state === 'stale') return 'The question has changed since that verdict was formed, so it no longer stands. Press 🔄 Check again.';
   if (s.state === 'running') return 'One question, one call — this takes a few seconds.';
   return 'Press 🔄 Check again to read this question.';
+}
+
+// ── 🚦 On the CREATE page: the ONE question in the editor ───────────────────
+// ✏️ Editing mode reads what is ON SCREEN rather than the saved copy, because
+// the author is typing into the very question the lamp is about. The create
+// page is that same case with one question in it — a question that very often
+// has never been saved at all — so it reads the editor for exactly the same
+// reason, and it is the SAME `tlRun` behind it: one checker, one panel, one
+// set of findings, wherever a question is met.
+//
+// THREE THINGS ARE SPECIFIC TO THIS SURFACE, and each is a way a lamp here
+// could say something untrue:
+//
+//  • IT MUST STAND DOWN IN EDITING MODE. That is the trap `_akdEditorQuestion`
+//    documents: with the sheet open the global `blocks` is the WHOLE PAPER and
+//    the create page's own #questionTitle / #topicSelect still hold whatever
+//    question was last open THERE. A lamp drawn from that describes no
+//    question that exists.
+//
+//  • A DRAFT HAS NO ID, and a verdict is keyed by one. An unsaved draft is
+//    therefore checked under one fixed id — and it needs no reset hook, because
+//    the SIGNATURE is what decides whether a verdict still stands and clearing
+//    the editor changes every word of it. A draft opened FROM the bank keeps
+//    its real id instead, so a question checked in the editor and then saved
+//    is already lit when the bank comes back.
+//
+//  • AN EMPTY EDITOR IS NEVER CHECKED. `_cqLocalFindings` finds nothing wrong
+//    with a question that has nothing in it, so a blank editor would light
+//    GREEN — the one failure this whole feature exists to prevent, produced by
+//    pressing the button on an empty page.
+function tlDraftId() { return '__tl_draft__'; }
+function tlCreateActive() {
+  if (typeof emActive === 'function' && emActive()) return false;
+  const page = document.getElementById('page-create');
+  return !!(page && page.classList.contains('active'));
+}
+// The question in the editor, in the shape the check reads it. These five
+// fields are exactly what `tlSig` signs and exactly what `_cqRepr`,
+// `_cqLocalFindings` and `_cqAiCheck` look at — no more, so the lamp does not
+// go out over something the check never read.
+function tlCreateQuestion() {
+  if (!tlCreateActive()) return null;
+  const val = id => { const el = document.getElementById(id); return (el && el.value) || ''; };
+  const on = id => { const el = document.getElementById(id); return !!(el && el.checked); };
+  return {
+    id: currentEditingQuestion ? String(currentEditingQuestion) : tlDraftId(),
+    title: val('questionTitle'),
+    topic: val('topicSelect'),
+    category: val('categorySelect'),
+    annotation: on('questionAnnotation'),
+    blocks: Array.isArray(blocks) ? blocks : [],
+  };
+}
+// The wording lives in contenteditable boxes here too, so it only reaches
+// `blocks` when it is read back.
+function tlCreateSync() {
+  if (!tlCreateActive()) return;
+  try { syncEditorDomToBlocks(); } catch (e) { console.warn('traffic light: reading the editor', e); }
+}
+// The ONE sync every entry point calls. Each half is a no-op unless its own
+// surface is up, so no call site has to know which of the two it is on.
+function tlSyncScreen() { tlEmSync(); tlCreateSync(); }
+
+// The bar in the create page's header. It re-renders rather than repainting,
+// because the labelled lamp's `data-tl-id` changes the moment a different
+// question is opened into the editor — and `data-tl-id` is what the ONE
+// painter finds a lamp by.
+function tlRenderCreateBar() {
+  const host = document.getElementById('tlCreateBar');
+  if (!host) return;
+  // `navigateTo` and `setEditMode` both run during module evaluation, and the
+  // consts this reads are in their temporal dead zone until the file has
+  // finished. A lamp that is not there yet is not worth taking the app down
+  // for — the next render draws it.
+  try {
+    const q = _canAuthor() ? tlCreateQuestion() : null;
+    if (!q) { host.style.display = 'none'; host.innerHTML = ''; host.dataset.tlSig = ''; return; }
+    const sig = String(q.id) + ':' + tlStateOf(q).state + ':' + ((q.blocks || []).length ? '1' : '0');
+    host.style.display = '';
+    if (host.dataset.tlSig === sig) return;
+    host.dataset.tlSig = sig;
+    host.innerHTML = tlLightHtml(q, 'create', { text: true });
+  } catch (e) { /* the module is still evaluating, or the editor is not up yet */ }
+}
+// Typing fires no render at all, so the lamp is kept in step by one delegated
+// pair on #page-create — the same shape the duplicate watch uses, and for the
+// same reason: this editor rebuilds its own DOM continuously, so anything
+// bound per element covers the boxes that existed when it ran and silently
+// misses every one made afterwards.
+var _tlCreateWatchBound = false;
+var _tlCreateWatchTimer = null;
+function tlCreateWatchInit() {
+  const page = document.getElementById('page-create');
+  if (!page || _tlCreateWatchBound) return;
+  _tlCreateWatchBound = true;
+  const kick = () => {
+    clearTimeout(_tlCreateWatchTimer);
+    _tlCreateWatchTimer = setTimeout(() => {
+      if (!tlCreateActive()) return;
+      tlCreateSync();
+      tlRepaint();
+    }, 700);
+  };
+  page.addEventListener('input', kick, true);
+  page.addEventListener('change', kick, true);
+}
+// The ＃ one-tap fix, on the create page. `cqNumberOptions` writes STRAIGHT TO
+// THE BANK, which is the wrong thing entirely here: the question in the editor
+// may never have been saved, and one that has must not be rewritten behind an
+// author who has not pressed Save. This writes the editor's own blocks and
+// nothing else — the same thing the block editor's own ＃ button writes, so a
+// question fixed from the panel and one fixed by hand come out identical.
+function tlFixCreateOptions() {
+  if (!tlCreateActive()) { showToast('Open the question in the editor first', 'error'); return; }
+  tlCreateSync();
+  const b = (Array.isArray(blocks) ? blocks : []).find(x => x && x.type === 'mcq' && Array.isArray(x.options) && x.options.length);
+  if (!b) { showToast('There are no options here to renumber', 'error'); return; }
+  b.options.forEach((o, i) => { o.text = `(${i + 1})`; });
+  renderBlocks();
+  // The finding is answered. Dropping it beats binning the whole verdict,
+  // which would spend another AI call re-reading a question just fixed — and
+  // the question has changed, so the lamp goes out and says to check again.
+  const rec = _tlCache.get(String(tlCreateQuestion().id));
+  if (rec) rec.findings = (rec.findings || []).filter(f => f.fix !== 'numberOptions');
+  tlRepaint();
+  tlRenderPanel();
+  showToast('Options are now (1) (2) (3) (4) — nothing is saved until you press Save', 'success');
 }
 
 // ── 🚦 Check all, in ✏️ editing mode ────────────────────────────────────────
@@ -66422,6 +66623,7 @@ window.tlClosePanel = tlClosePanel;
 window.tlRecheck = tlRecheck;
 window.tlPanelEdit = tlPanelEdit;
 window.tlCheckSheet = tlCheckSheet;
+window.tlFixCreateOptions = tlFixCreateOptions;
 window.tlStopMany = tlStopMany;
 window.tlJumpToProblem = tlJumpToProblem;
 window.akeAddExplanation = akeAddExplanation;
