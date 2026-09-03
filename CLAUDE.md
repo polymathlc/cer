@@ -898,19 +898,23 @@ and a vetting list nobody clears is one nobody reads either.
   bank, where deleting *is* a move to the bin.
 - Run **`node tools/vetting-bulk-delete-tests.mjs`** after touching any of it.
 
-## 🔗 Merging two questions that are really one (v1.347.0)
+## 🔗 Merging two questions that are really one (v1.347.0, the bank v1.352.0)
 
 `QMERGE_MAX` / `qMergeUniqueIds` / `qMergeOpenerLetters` / `qMergeLettersOk` /
 `qMergeFixParts` / `qMergeLetterSources` / **`qMergeQuestions`** /
 `qMergePartPreview` (beside the part vocabulary in `app.js`, search
-`TWO QUESTIONS THAT ARE REALLY ONE`), `_vetApplyMerge` and the `qm*` dialog
-(search `MERGE — two vetting questions`), plus `#qmOverlay` and the `.qm-*` CSS
-in `index.html` and **🔗 Merge selected** in the vetting bulk bar.
+`TWO QUESTIONS THAT ARE REALLY ONE`), `_vetApplyMerge` / `_bankApplyMerge` /
+`_bankMergeRepointWorksheets` / `deleteQuestionDocAwait` and the `qm*` dialog
+with its `_qmScope` (search `MERGE — two vetting questions`), plus `#qmOverlay`
+and the `.qm-*` CSS in `index.html`, **🔗 Merge selected** in the vetting bulk
+bar and **🔗 Merge these** on the question bank's picked bar.
 
-- **ONE MERGE, TWO CALLERS.** The PDF importer's page-break stitch and the
-  author's own 🔗 Merge both go through `qMergeQuestions`. A second
-  implementation for the manual button is a second implementation to get the
-  part order wrong in — and the automatic one is the one nobody watches.
+- **ONE MERGE, THREE CALLERS.** The PDF importer's page-break stitch, 🔗 Merge
+  selected in the vetting list and 🔗 Merge these on the QUESTION BANK all go
+  through `qMergeQuestions`, and the two manual ones share the one `qm*`
+  dialog. A second implementation for a button is a second implementation to
+  get the part order wrong in — and the automatic one is the one nobody
+  watches.
 - **THE ORDER IS THE CALLER'S, and it is never guessed.** Blocks are
   concatenated in the order the sources are given. The dialog sorts them
   **oldest first** — which for a paper read page by page is page order —
@@ -951,7 +955,9 @@ in `index.html` and **🔗 Merge selected** in the vetting bulk bar.
   (`qMergePartPreview`). "The parts in the correct order" is a promise nobody
   can check afterwards without opening the question, and the merge cannot be
   undone — the other halves are gone.
-- **THE MERGED QUESTION IS WRITTEN BEFORE ANYTHING IS DELETED.** The other
+- **THE MERGED QUESTION IS WRITTEN BEFORE ANYTHING IS DELETED**, in
+  `_vetApplyMerge` and in `_bankApplyMerge` alike — it is the one thing that
+  may never differ between them, and the harness pins it in BOTH. The other
   order loses work outright: a delete that succeeds followed by a save that
   fails takes both halves away for good. `saveVettingQuestion` now returns
   whether the document really went (the way `saveQuestion` does — every
@@ -961,6 +967,28 @@ in `index.html` and **🔗 Merge selected** in the vetting bulk bar.
 - **THE HOST KEEPS ITS ID**, so the merged question replaces source 1 in place
   rather than jumping to the top of the list as a new card — and the write is
   to a document that already exists.
+- **ON THE BANK A SOURCE IS DELETED FOR GOOD, and the dialog says so.** A
+  vetting card is a draft; a bank question is live, and **this app has no bin**
+  — `deleteQuestionDoc` is final. So the bank scope re-words the intro rather
+  than reusing the vetting one, and `bankMergeSelected` refuses a student **in
+  the handler**: it both writes to the bank and deletes from it, and a hidden
+  button is never the lock.
+- **A MERGE SAYS THESE QUESTIONS ARE ONE, so the lists holding their ids follow**
+  (`_bankMergeRepointWorksheets`). A saved worksheet left pointing at a removed
+  source draws its "no longer in the bank" row — a sheet quietly broken by a
+  tidy-up that was never made on it. The host takes the EARLIEST position any
+  of them held (so the teacher's order survives) and the page-break overrides,
+  keyed by question id, move onto the host rather than being left on an id
+  nothing renders. It reaches **this account's own** worksheets and no further,
+  which is why the toast says how many really moved rather than implying every
+  sheet in the centre did. The 🎯 objective side needs nothing: `loQuestions`
+  drops a dead id already, and `qMergeQuestions` unions `los` onto the merged
+  question, so it appears under every objective its halves were filed under.
+- **The bank merge takes the WHOLE selection, not just the visible part.** That
+  is the opposite of 🗑 Delete all's rule and deliberately so: the pick bar's
+  own count is the whole selection, and this dialog then LISTS every question
+  by name with ✕ to drop any — so what is about to happen is on screen, which
+  is the thing a filter-scoped set exists to guarantee.
 - **The meta resolves the CAUTIOUS way**: `topicConfidence` is the least
   confident of the halves (the ⚠ check topic badge survives), tags and 🎯
   objectives are unioned, `diagramWhole` / `notInSyllabus` / `annotation`
@@ -4422,8 +4450,10 @@ are missing which, and takes the author straight to them.
   `qMergeUniqueIds`, `qMergeLettersOk`, `qMergeLetterSources`,
   `qMergePartPreview`, `QMERGE_MAX`, `_vetApplyMerge`, the `qm*` dialog, the
   `continuation` clause in `_aiBuildQuestionPrompt`, `_aiQuestionPayloads`'s
-  `continuation`, `processRapidJob`'s return shape and its awaited writes, or
-  `_rapidExpandPdf`'s `settle()`), run `node tools/question-merge-tests.mjs`.
+  `continuation`, `processRapidJob`'s return shape and its awaited writes,
+  `_rapidExpandPdf`'s `settle()`, `_bankApplyMerge`, `bankMergeSelected`,
+  `_bankMergeRepointWorksheets`, `deleteQuestionDocAwait` or the `qm*` dialog's
+  `_qmScope`), run `node tools/question-merge-tests.mjs`.
   Every failure here is silent — the merged question renders, saves and prints
   perfectly however badly it was stitched. Concatenate in the wrong order and
   page 2 is printed above page 1; let two colliding block ids through and one
@@ -4436,7 +4466,14 @@ are missing which, and takes the author straight to them.
   pages are read in parallel; forget to clear the carry on a failed or blank
   page and two unrelated questions are grafted together; and stop awaiting the
   page's writes and the half that was merged away comes back on the next
-  sign-in, because the delete landed before the write did.
+  sign-in, because the delete landed before the write did. On the BANK the same
+  fault costs more, because there is no bin to get it back from: let the delete
+  run before the save lands and both halves are gone for good; skip the
+  worksheet repoint and every saved sheet that used a merged-away question
+  silently reads "no longer in the bank", a sheet broken by a tidy-up that was
+  never made on it; and gate the student in the BUTTON rather than the handler
+  and the one page that both writes to the bank and deletes from it has no lock
+  at all.
 - After touching **📄 whole-PDF rapid add** (`RAPID_PDF_MAX_PAGES`,
   `RAPID_PDF_PAR`, `rapidAddFiles`, `_rapidQueuePdf`, `_rapidPdfPump`,
   `_rapidExpandPdf`, `_rapidPageFile`, `_pdfRenderPage`, `startRapidJob`'s PDF
