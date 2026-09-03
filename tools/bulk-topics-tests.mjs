@@ -46,6 +46,10 @@ const cut = (from, to, what) => {
 };
 
 const section = cut('const QBULK_MAX = 200;', '\n// 🔍 ANSWER KEY CROSS-CHECK', 'bulk tools');
+// The preview OPENERS, so 🖨 Preview exported can be run for real rather than
+// only read. `previewEditorPrint` builds a question out of the editor, and the
+// three ways that goes wrong are all silent.
+const openers = cut('function openWorksheetPreview() {', '\nfunction _wsShowPreviewOverlay', 'preview openers');
 
 // The world it runs in. The AI reply, the DOM and the writes are stubs; the
 // routing, the scoping and the book-keeping are the app's own.
@@ -121,15 +125,49 @@ async function saveQuestion(q, opts) { HOOK.quiet = !!(opts && opts.quiet); retu
 async function saveVettingQuestion(q) { return _write(q, 'vetting'); }
 const window = { __aiReady: () => HOOK.aiReady };
 const localStorage = { getItem: () => null, setItem: () => {} };
-const document = { getElementById: id => (id === 'qbtFixed' ? { value: HOOK.fixedTopic } : null) };
+// The question EDITOR's own world, for 🖨 Preview exported.
+let blocks = [];
+let currentEditingQuestion = null;
+let editorKeywords = {}, selectedBlanks = {};
+let EDITOR_FIELDS = {};
+let EM_ON = false;
+let savedWorksheets = [];
+function emActive() { return EM_ON; }
+function syncEditorDomToBlocks() { HOOK.synced = (HOOK.synced || 0) + 1; }
+function _wsShowPreviewOverlay() { HOOK.opened = (HOOK.opened || 0) + 1; }
+function _ppPrintQuestions(items) { return items || []; }
+function _ppCoverHtml() { return ''; }
+function _wsSavedQuestions() { return []; }
+function _wsEmptyMsg() { return 'empty'; }
+let _wsPreviewSaved = null, _wsPreviewPaper = null, _wsPreviewAdhoc = null;
+const document = {
+  getElementById: id => {
+    if (id === 'qbtFixed') return { value: HOOK.fixedTopic };
+    if (Object.prototype.hasOwnProperty.call(EDITOR_FIELDS, id)) return EDITOR_FIELDS[id];
+    return null;
+  }
+};
 `;
 
-const M = new Function(preamble + section + `
+const M = new Function(preamble + section + openers + `
 return {
   HOOK,
   QBULK_MAX, QBT_CONFIRM_OVER,
   list: qbulkList, owned: qbulkOwned, choices: qbulkTopicChoices, unlit: qbulkUnlit,
   secondOk: qbulkSecondOk, isProcess: qProcessTopic,
+  previewEditor: previewEditorPrint,
+  adhoc: () => _wsPreviewAdhoc,
+  setEditor: (state) => {
+    EM_ON = !!state.em;
+    blocks = state.blocks || [];
+    currentEditingQuestion = state.editing || null;
+    editorKeywords = state.keywords || {};
+    selectedBlanks = state.blanks || {};
+    EDITOR_FIELDS = {};
+    Object.keys(state.fields || {}).forEach(k => { EDITOR_FIELDS[k] = { value: state.fields[k] }; });
+    _wsPreviewAdhoc = null; _wsPreviewSaved = null; _wsPreviewPaper = null;
+    HOOK.opened = 0; HOOK.synced = 0;
+  },
   recency: qbulkRecency, scopeLabel: qbulkScopeLabel, lightPasses: qbulkLightPasses,
   setScope: (w, s) => { _qbulk[w].scope = s; },
   setWindow: (w, h) => { _qbulk[w].hours = h; },
@@ -665,6 +703,94 @@ test('✏️ Editing mode is offered on a BANK set and never on a vetting one', 
   // quietly move it into the bank.
   const body = src.slice(src.indexOf('function _wsShowPreviewOverlay'), src.indexOf('function closeWorksheetPreview'));
   ok(/_wsPreviewAdhoc\.source === 'bank'/.test(body), 'the source decides it');
+});
+
+// ── 🖨 Preview exported, from the question editor ───────────────────────────
+const EDITOR = (extra) => Object.assign({
+  em: false,
+  blocks: [{ id: 'b1', type: 'text', content: '<p>How would it affect bulb X?</p>' }],
+  fields: { questionTitle: 'Bulb X', categorySelect: 'PSLE - OEQ', topicSelect: 'Electricity' },
+}, extra || {});
+
+test('it previews the question in the EDITOR, unsaved edits and all', () => {
+  reset();
+  M.setEditor(EDITOR());
+  M.previewEditor();
+  const a = M.adhoc();
+  ok(a, 'a preview opened');
+  eq(a.source, 'editor', 'its own source');
+  eq(a.questions.length, 1, 'one question');
+  eq(a.questions[0].title, 'Bulb X', 'the title being typed');
+  eq(a.questions[0].topic, 'Electricity', 'the topic chosen NOW');
+  ok(/bulb X/.test(a.questions[0].blocks[0].content), 'and the wording on screen');
+  ok(M.HOOK.synced > 0, 'the contenteditable boxes are read back FIRST, or the preview is a render behind');
+});
+
+test('the blocks are DEEP-COPIED — the preview must not be the editor\'s own array', () => {
+  reset();
+  const state = EDITOR();
+  M.setEditor(state);
+  M.previewEditor();
+  const copy = M.adhoc().questions[0].blocks;
+  ok(copy !== state.blocks, 'a different array');
+  ok(copy[0] !== state.blocks[0], 'and different blocks');
+  copy[0].content = '<p>changed in the preview</p>';
+  ok(/bulb X/i.test(state.blocks[0].content), 'so the editor is untouched by anything the preview does');
+});
+
+test('an UNSAVED draft still gets an id, and a saved one keeps its own', () => {
+  reset();
+  M.setEditor(EDITOR());
+  M.previewEditor();
+  ok(M.adhoc().questions[0].id, 'a draft is given one — the planner keys page breaks by it');
+  M.setEditor(EDITOR({ editing: 'q7' }));
+  M.previewEditor();
+  eq(M.adhoc().questions[0].id, 'q7', 'a question opened from the bank keeps its own');
+});
+
+test('it stands DOWN in ✏️ editing mode, where `blocks` is the whole sheet', () => {
+  reset();
+  M.setEditor(EDITOR({ em: true }));
+  M.previewEditor();
+  eq(M.adhoc(), null, 'nothing opened');
+  ok(/editing mode/i.test((M.HOOK.toasts.pop() || {}).msg || ''), 'and it says why');
+});
+
+test('an EMPTY editor previews nothing', () => {
+  reset();
+  M.setEditor(EDITOR({ blocks: [] }));
+  M.previewEditor();
+  eq(M.adhoc(), null, 'a sheet of nothing is not worth opening');
+  ok(/add some blocks/i.test((M.HOOK.toasts.pop() || {}).msg || ''), 'and it says so');
+});
+
+test('a DRAFT is offered no tool that reaches into the bank', () => {
+  // ✏️ edit question, ✏️ edit answer and ✏️ Editing mode all open a question in
+  // the BANK. This one may never have been saved — and its author is already
+  // standing in the editor.
+  ok(/function _wsPreviewIsDraft\(\) \{ return !!\(_wsPreviewAdhoc && _wsPreviewAdhoc\.source === 'editor'\); \}/.test(src),
+     'there is one predicate');
+  const pack = src.slice(src.indexOf('function _wsPreviewPack'), src.indexOf('// ====================\n// WORKSHEET QUICK EDIT'));
+  ok((pack.match(/_wsPreviewIsDraft\(\)/g) || []).length >= 2, 'the question tool AND the answer-key tool both ask it');
+  const show = src.slice(src.indexOf('function _wsShowPreviewOverlay'), src.indexOf('function closeWorksheetPreview'));
+  ok(/source === 'bank'/.test(show), '…and ✏️ Editing mode is bank-only, so a draft never gets it');
+});
+
+test('a draft has no come-back-here snapshot', () => {
+  const snap = src.slice(src.indexOf('function _wsPreviewSnapshot'), src.indexOf('// Escape hatch for anything'));
+  ok(/a\.source === 'editor'\) return null/.test(snap), 'it is not in any list to re-resolve from');
+});
+
+test('🖨 Preview Exported sits beside 🎓 Preview as Student in BOTH action rows', () => {
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url).pathname, 'utf8');
+  // Create mode and edit mode are two separate rows; a button added to one of
+  // them is a button that is simply not there half the time.
+  eq((html.match(/previewEditorPrint\(\)/g) || []).length, 2, 'one in each row');
+  const rows = html.split('previewAsStudent()');
+  eq(rows.length, 3, 'two student-preview buttons, as before');
+  [1, 2].forEach(i => {
+    ok(rows[i].slice(0, 400).indexOf('previewEditorPrint()') >= 0, 'row ' + i + ': the exported preview does not follow it');
+  });
 });
 
 // ── the source itself ───────────────────────────────────────────────────────

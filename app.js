@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.349.0';
+const APP_VERSION = 'v1.350.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -29575,8 +29575,16 @@ let _wsPreviewPaper = null;
 //    `emSaveAll` writes through `saveQuestion`, which would move a vetting
 //    question into the bank behind the author's back.
 //  • ✎ Questions is hidden: there is no stored list to add to or remove from.
-// { questions, title, source:'bank'|'vetting' } of an ad-hoc set on show.
+// { questions, title, source:'bank'|'vetting'|'editor' } of an ad-hoc set on
+// show. `editor` is the DRAFT in the question editor — it may never have been
+// saved, so no per-question tool that reaches into the bank is offered.
 let _wsPreviewAdhoc = null;
+
+// Is the sheet on show a DRAFT out of the question editor? Everything that
+// reaches into the bank — ✏️ edit question, ✏️ edit answer, ✏️ Editing mode, the
+// come-back-here snapshot — has to stand down for it: the question may never
+// have been saved, and its author is already standing in the editor.
+function _wsPreviewIsDraft() { return !!(_wsPreviewAdhoc && _wsPreviewAdhoc.source === 'editor'); }
 
 function _wsPreviewCtx() {
   if (_wsPreviewPaper) {
@@ -29644,9 +29652,57 @@ function previewQuestionsPrint(questions, title, source) {
   if (!list.length) { showToast('There is nothing to preview', 'error'); return; }
   _wsPreviewSaved = null;
   _wsPreviewPaper = null;
-  _wsPreviewAdhoc = { questions: list, title: title || 'Preview', source: source === 'vetting' ? 'vetting' : 'bank' };
+  _wsPreviewAdhoc = { questions: list, title: title || 'Preview',
+                      source: source === 'vetting' || source === 'editor' ? source : 'bank' };
   _wsShowPreviewOverlay();
 }
+// 🖨 PREVIEW EXPORTED — the question open in the EDITOR, as it prints.
+//
+// 🎓 Preview as Student shows the question the way a child answers it: tap an
+// option, type in a box, press Check. The exported PDF is a different rendering
+// entirely — the picture capped in millimetres, the answer box sized in ruled
+// lines from the model answer, a fill-in-the-blank printed BLANK, an MCQ with
+// an answer bracket, the lot measured and paginated onto A4 — and until now the
+// only way to see it was to save the question and go and find it.
+//
+// It is the SAME ad-hoc preview the bank and the vetting list use, so it is the
+// same builder, the same planner and the same printer a saved worksheet's PDF
+// goes through. Three things are specific to a DRAFT:
+//
+//  • IT READS THE EDITOR, NOT THE BANK. The whole point is to see the question
+//    as it is being written, unsaved edits and all — so the blocks are the
+//    editor's own, read back out of the contenteditable boxes first.
+//  • IT MUST STAND DOWN IN ✏️ EDITING MODE, the trap `_akdEditorQuestion`
+//    documents: with the sheet open the global `blocks` is the WHOLE PAPER and
+//    the create page's own fields still hold whatever was last open there.
+//  • `source: 'editor'` HIDES THE PER-QUESTION TOOLS. ✏️ edit question and
+//    ✏️ edit answer both take you to a question in the bank — and this one may
+//    never have been saved, while its author is already standing in the editor.
+function previewEditorPrint() {
+  if (typeof emActive === 'function' && emActive()) { showToast('Close editing mode first', 'info'); return; }
+  if (!Array.isArray(blocks) || !blocks.length) { showToast('Add some blocks first before previewing', 'error'); return; }
+  try { syncEditorDomToBlocks(); } catch (e) { console.warn('preview exported: reading the editor', e); }
+  const val = id => { const el = document.getElementById(id); return (el && el.value) || ''; };
+  const on = id => { const el = document.getElementById(id); return !!(el && el.checked); };
+  // The LIVE blocks, deep-cloned — never `collectQuestionData()`'s output: that
+  // converts a table's rows into a Firestore-safe object on the way OUT, and
+  // the print path reads the editor's own array-of-arrays shape.
+  const q = {
+    id: currentEditingQuestion ? String(currentEditingQuestion) : '__editor_draft__',
+    title: val('questionTitle') || 'Untitled question',
+    category: normalizeCategoryValue(val('categorySelect')),
+    topic: val('topicSelect'),
+    annotation: on('questionAnnotation'),
+    markingGuide: (val('questionMarkingGuide') || '').trim(),
+    answerKeyNote: (val('questionAnswerKeyNote') || '').trim(),
+    answerKeyImage: (val('questionAnswerKeyImage') || '').trim(),
+    answerKeywords: JSON.parse(JSON.stringify(typeof editorKeywords !== 'undefined' ? (editorKeywords || {}) : {})),
+    blanks: JSON.parse(JSON.stringify(typeof selectedBlanks !== 'undefined' ? (selectedBlanks || {}) : {})),
+    blocks: JSON.parse(JSON.stringify(blocks)),
+  };
+  previewQuestionsPrint([q], q.title, 'editor');
+}
+
 // One question, from its own 🖨 button on a bank row, a bank tile or a vetting
 // card. `where` is what tells the preview which list to look in — a vetting
 // question is not in the bank and `_docQById` would come back empty.
@@ -29720,7 +29776,11 @@ function _wsShowPreviewOverlay() {
   const explBox = document.getElementById('wsPreviewExplWrap');
   if (explBox) explBox.style.display = _wsPreviewPaper ? 'none' : '';
   const t = document.querySelector('#wsPreviewOverlay .wspv-title');
-  if (t) t.firstChild.nodeValue = _wsPreviewAdhoc ? 'Printed preview ' : 'Worksheet preview ';
+  if (t) t.firstChild.nodeValue = _wsPreviewIsDraft() ? 'Exported preview '
+    : _wsPreviewAdhoc ? 'Printed preview ' : 'Worksheet preview ';
+  // The per-question ⬆ ⤓ ✏️ ✕ hint describes tools a draft is not offered.
+  const hint = document.querySelector('#wsPreviewOverlay .wspv-hint');
+  if (hint) hint.style.display = _wsPreviewIsDraft() ? 'none' : '';
   akeSyncExplToggle();   // the builder and My Worksheets have their own checkbox
   renderWsPreview();
 }
@@ -29902,7 +29962,7 @@ function _wsPreviewPack(doc) {
       // spotting the diagram that printed too small, and the fix used to mean
       // leaving the page for the bank and finding your way back. Admins only:
       // this writes to the shared question bank.
-      if (qid && qid.indexOf('__lo__') !== 0 && _canAuthor()) {
+      if (qid && qid.indexOf('__lo__') !== 0 && _canAuthor() && !_wsPreviewIsDraft()) {
         const eb = doc.createElement('button');
         eb.type = 'button';
         eb.className = 'wspv-brk edit';
@@ -29933,7 +29993,7 @@ function _wsPreviewPack(doc) {
   // as anyone could get. Added AFTER planning, exactly as the question tools
   // are, and `.wspv-tools` is absolutely positioned, so nothing here changes a
   // measured height and the preview still shows the pagination that will print.
-  if (_canAuthor()) {
+  if (_canAuthor() && !_wsPreviewIsDraft()) {
     answerKeys.forEach(ak => {
       Array.from(ak.querySelectorAll('.print-ak-question')).forEach(row => {
         const qid = row.dataset.qid;
@@ -30148,6 +30208,9 @@ function _wsPreviewSnapshot() {
   // and the preview would reopen showing exactly what was just fixed.
   if (_wsPreviewAdhoc) {
     const a = _wsPreviewAdhoc;
+    // A DRAFT out of the editor has nothing to come back to: it is not in any
+    // list to re-resolve from, and the author never left the editor.
+    if (a.source === 'editor') return null;
     return { kind: 'adhoc', page: a.source === 'vetting' ? 'vetting' : 'bank',
              ids: a.questions.map(q => q.id), title: a.title, source: a.source };
   }
@@ -67879,6 +67942,7 @@ window.qbulkTopicsUndo = qbulkTopicsUndo;
 window.qbulkPreviewPrint = qbulkPreviewPrint;
 window.previewQuestionsPrint = previewQuestionsPrint;
 window.previewOneQuestionPrint = previewOneQuestionPrint;
+window.previewEditorPrint = previewEditorPrint;
 window.tlStopMany = tlStopMany;
 window.tlJumpToProblem = tlJumpToProblem;
 window.akeAddExplanation = akeAddExplanation;

@@ -1156,6 +1156,44 @@ thing is measured and paginated onto A4.
 - **Every opener clears all three slots.** One left set is a preview showing the
   last thing that was open — the paper from an hour ago, under the button just
   pressed.
+
+### 🖨 …and the question open in the EDITOR (v1.350.0)
+
+`previewEditorPrint` / `_wsPreviewIsDraft` and the `source: 'editor'` branch,
+plus the 🖨 **Preview Exported** button beside 🎓 Preview as Student in BOTH
+action rows of the question editor.
+
+🎓 Preview as Student shows the question the way a child answers it — tap an
+option, type in a box, press Check. The **exported PDF is a different rendering
+entirely**: the picture capped in millimetres, the answer box sized in ruled
+lines from the model answer, a fill-in-the-blank printed BLANK, an MCQ with an
+answer bracket, the lot measured and paginated onto A4. Seeing it used to mean
+saving the question and going to find it.
+
+- **It is the SAME ad-hoc preview**, so it is the same builder, planner and
+  printer a saved worksheet's PDF goes through, and 🖨 Print / Save PDF works
+  from it. Nothing here is a second renderer.
+- **IT READS THE EDITOR, NOT THE BANK** — the whole point is the question as it
+  is being written — so `syncEditorDomToBlocks()` runs FIRST or the preview is a
+  keystroke behind, and the blocks are **deep-copied**: the preview must not be
+  able to write back into the editor's own array.
+- **The LIVE blocks, never `collectQuestionData()`'s output.** That converts a
+  table's rows into a Firestore-safe object on the way out, and the print path
+  reads the editor's own array-of-arrays shape.
+- **IT MUST STAND DOWN IN ✏️ EDITING MODE** — the trap `_akdEditorQuestion`
+  documents: with the sheet open the global `blocks` is the WHOLE PAPER and the
+  create page's own fields still hold whatever was last open there.
+- **`source: 'editor'` HIDES EVERY TOOL THAT REACHES INTO THE BANK.**
+  `_wsPreviewIsDraft()` is the ONE predicate: ✏️ edit question, ✏️ edit answer
+  and ✏️ Editing mode all open a question in the bank, and this one may never
+  have been saved while its author is already standing in the editor. For the
+  same reason `_wsPreviewSnapshot` returns **null** for it — there is no list to
+  re-resolve from.
+- **An unsaved draft still gets an id** (`__editor_draft__`): the planner keys
+  its manual page breaks by it. A question opened from the bank keeps its own.
+- **The button is in BOTH action rows** — create mode and edit mode are separate
+  rows in `index.html`, so one added to a single row is a button that is simply
+  not there half the time. The harness counts them.
 - Run **`node tools/bulk-topics-tests.mjs`** and
   **`node tools/preview-return-tests.mjs`** after touching any of it.
 
@@ -4373,7 +4411,13 @@ are missing which, and takes the author straight to them.
   not in the bank); carry the SNAPSHOT as objects and reopening after an edit
   shows the copy that was just fixed; offer ✏️ Editing mode on a vetting set and
   saving moves those questions into the bank; and leave one preview slot
-  uncleared and the button opens whatever was last previewed.
+  uncleared and the button opens whatever was last previewed. From the EDITOR
+  (`previewEditorPrint`, `_wsPreviewIsDraft`, the `editor` source): skip the
+  sync and the preview is a keystroke behind; hand it `collectQuestionData()`'s
+  output and every table comes out empty; forget the deep copy and the preview
+  can write back into the question being edited; let it run in ✏️ editing mode
+  and it renders the whole paper as one question; and leave the ✏️ tools on and
+  a draft offers buttons that open a question the bank has never heard of.
 - After touching **🔗 the merge** (`qMergeQuestions`, `qMergeFixParts`,
   `qMergeUniqueIds`, `qMergeLettersOk`, `qMergeLetterSources`,
   `qMergePartPreview`, `QMERGE_MAX`, `_vetApplyMerge`, the `qm*` dialog, the

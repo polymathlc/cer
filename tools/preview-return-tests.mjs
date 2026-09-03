@@ -326,6 +326,14 @@ test('a set whose questions have all gone reopens nothing', async () => {
   ok(!M.log.some(x => x.preview), 'an empty sheet is not worth opening');
 });
 
+test('a DRAFT out of the editor has nowhere to come back to', () => {
+  // It is in no list to re-resolve from, and its author never left the editor —
+  // so a snapshot would send them to the bank looking for a question that may
+  // never have been saved.
+  M.set({ adhoc: { questions: [{ id: '__editor_draft__' }], title: 'Bulb X', source: 'editor' } });
+  eq(M.snapshot(), null, 'no snapshot at all');
+});
+
 // ── run ─────────────────────────────────────────────────────────────────────
 const only = process.argv[2];
 let pass = 0, fail = 0;
