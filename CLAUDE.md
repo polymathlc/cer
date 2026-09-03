@@ -612,6 +612,54 @@ failure card all follow for free.
     which reads as finished work and is approved into the bank uncropped.
 - Run **`node tools/rapid-pdf-tests.mjs`** after touching any of it.
 
+### …and a QUESTION does not stop at the bottom of a page (v1.347.0)
+
+The `continuation` clause in `_aiBuildQuestionPrompt` (opt-in via
+`opts.continuation`), the flag carried through `_aiQuestionPayloads`, the
+`{ added, questions, continuation }` `processRapidJob` now returns, and the
+stitch inside `_rapidExpandPdf`'s `settle()`.
+
+A PSLE question is printed with its stem and its figure on one page and parts
+(b) and (c) over the leaf. Read page by page that came out as **two questions,
+neither of them answerable**: the first missing its last parts, the second with
+no stem and no diagram at all — and both looking like perfectly ordinary
+vetting cards.
+
+- **THE READER IS ASKED, using the SAME flag and the same wording the bulk
+  import has always used.** A page that opens part-way through — before any new
+  question number, with no stem and no figure of its own — comes back as the
+  FIRST entry with `continuation: true`.
+- **IT IS OPT-IN, and page 1 is never asked.** A pasted screenshot and the
+  first page of a paper have no page before them, so asking whether they
+  continue something is asking about a thing that does not exist — and a model
+  asked an impossible question answers it anyway.
+- **A PAGE HOLDING ONLY A TAIL IS NOT AN EMPTY PAGE.** The prompt says so in as
+  many words: the blank-page rule and the continuation rule read straight at
+  each other, and the wrong resolution silently drops those parts.
+- **`continuation` IS PER ENTRY, never inherited from the reply.**
+  `_aiQuestionPayloads` inherits title, topic and category from the whole
+  object on purpose; a whole-reply continuation flag would mark every question
+  on the page as continuing the page before it.
+- **THE STITCH HAPPENS AT SETTLE TIME AND NOWHERE ELSE.** Pages are read
+  `RAPID_PDF_PAR` at a time, so a later page can finish first — `settle()` is
+  the one place that runs strictly in page order, which is what makes "the page
+  before this one" a question that has an answer. A page that FAILED or held
+  nothing clears the carry: neither leaves a question the next page could be
+  carrying on from, and attaching to the page before THAT one grafts two
+  unrelated questions together.
+- **A third page carries on from the MERGED question** (`qs[0] = merged`), or
+  page 3 would be stitched onto the half that has just been merged away.
+- **A PAGE'S WRITES ARE DURABLE BEFORE THE FEEDER CAN DELETE ONE OF THEM.**
+  `processRapidJob` used to fire `saveVettingQuestion` and move on; the stitch
+  deletes the half it merged away, and a write still in flight when that delete
+  lands puts the half straight back on the next sign-in. The writes are started
+  as each question is built (the cards are on screen either way) and awaited
+  before the job resolves. Nothing else awaits that job, so a pasted screenshot
+  is unaffected.
+- The paper's summary line says how many were **🔗 joined back up**, and the
+  count of questions is decremented — two halves are one question.
+- Run **`node tools/question-merge-tests.mjs`** after touching any of it.
+
 ### …and a PAGE holds several questions (v1.336.0)
 
 `_aiQuestionPayloads` — the ONE place a build reply becomes the list of
@@ -849,6 +897,77 @@ and a vetting list nobody clears is one nobody reads either.
   so in as many words. A vetting draft that should be kept is approved into the
   bank, where deleting *is* a move to the bin.
 - Run **`node tools/vetting-bulk-delete-tests.mjs`** after touching any of it.
+
+## 🔗 Merging two questions that are really one (v1.347.0)
+
+`QMERGE_MAX` / `qMergeUniqueIds` / `qMergeOpenerLetters` / `qMergeLettersOk` /
+`qMergeFixParts` / `qMergeLetterSources` / **`qMergeQuestions`** /
+`qMergePartPreview` (beside the part vocabulary in `app.js`, search
+`TWO QUESTIONS THAT ARE REALLY ONE`), `_vetApplyMerge` and the `qm*` dialog
+(search `MERGE — two vetting questions`), plus `#qmOverlay` and the `.qm-*` CSS
+in `index.html` and **🔗 Merge selected** in the vetting bulk bar.
+
+- **ONE MERGE, TWO CALLERS.** The PDF importer's page-break stitch and the
+  author's own 🔗 Merge both go through `qMergeQuestions`. A second
+  implementation for the manual button is a second implementation to get the
+  part order wrong in — and the automatic one is the one nobody watches.
+- **THE ORDER IS THE CALLER'S, and it is never guessed.** Blocks are
+  concatenated in the order the sources are given. The dialog sorts them
+  **oldest first** — which for a paper read page by page is page order —
+  because the vetting list itself is NEWEST first, so taking the order off the
+  screen would put page 2 above page 1 every single time. ▲▼ reorders and ✕
+  drops one out.
+- **BLOCK IDS MUST NOT COLLIDE.** Two questions built in the same millisecond
+  can carry the same ids, and `answerKeywords` and `blanks` are both keyed by
+  one — so a collision silently hands one block another's blanks. Re-keyed on
+  the way in, carrying both maps with it, exactly as ✏️ editing mode does when
+  it loads a sheet (`QMERGE_KW_FIELDS` is `EM_KW_FIELDS` for the same reason:
+  `content` and `text` collapse to the bare id in `kwFieldKey`, so the fields
+  are walked rather than the map).
+- **THE PART LETTERS ARE FIXED ONLY WHEN THEY ARE BROKEN.** (a)(b) + (c)(d)
+  already reads in order and is left **byte for byte** alone. (a)(b) + (a)(b)
+  is not: `qPartMap` opens a second span keyed (a), so the answer key prints
+  two "(a)" headings and anything keyed by part silently keeps one of them.
+  That case, and only that case, is re-lettered in document order — and it is
+  **all or nothing**, because half a re-lettering is a question whose paper and
+  whose answer key disagree.
+- **A RE-LETTERED BLOCK IS STRIPPED FIRST.** A block that opens part (b) may
+  still carry "(b)" in its wording, which `qPartBodyHtml` hides only while it
+  matches its own part. Re-letter it to (c) without stripping and the paper
+  reads "(c) (b) Explain why…". `qStripOwnPartMarker` runs while the OLD letter
+  is still on the block, which is the only moment it can.
+- **THE EXPLANATIONS ARE SCOPED AGAIN.** The parts of a question split over a
+  page break are only all known once both halves are together, so a note
+  written for "the whole question" on page 1 is re-read against all of them —
+  the same call the bulk import makes after appending a continuation.
+- **`opts.letter` is the other intention, and it is OFF by default.** Plain
+  merge means *the second is the REST of the first*, which is the page-break
+  case and must not invent parts. `letter` gives each source its own part, for
+  sub-questions that belong under one stem. A source with no block that may
+  open a part (`QPART_OPENER_TYPES` is text and nothing else) is left to
+  inherit rather than having a picture open a part — that would print a heading
+  on the answer key with nothing marking it on the paper.
+- **THE DIALOG PRINTS THE PART ORDER BEFORE ANYTHING IS WRITTEN**
+  (`qMergePartPreview`). "The parts in the correct order" is a promise nobody
+  can check afterwards without opening the question, and the merge cannot be
+  undone — the other halves are gone.
+- **THE MERGED QUESTION IS WRITTEN BEFORE ANYTHING IS DELETED.** The other
+  order loses work outright: a delete that succeeds followed by a save that
+  fails takes both halves away for good. `saveVettingQuestion` now returns
+  whether the document really went (the way `saveQuestion` does — every
+  existing caller ignores it), and **a save that did not land deletes nothing**.
+  The worst case is a leftover card whose content is also in the merged
+  question: visible, and one 🗑 from tidy.
+- **THE HOST KEEPS ITS ID**, so the merged question replaces source 1 in place
+  rather than jumping to the top of the list as a new card — and the write is
+  to a document that already exists.
+- **The meta resolves the CAUTIOUS way**: `topicConfidence` is the least
+  confident of the halves (the ⚠ check topic badge survives), tags and 🎯
+  objectives are unioned, `diagramWhole` / `notInSyllabus` / `annotation`
+  survive if any half had them, two marking guides are joined rather than one
+  thrown away, and `_dupOf` is dropped and re-asked — the suspicion was about a
+  question that no longer exists in this shape.
+- Run **`node tools/question-merge-tests.mjs`** after touching any of it.
 
 ## "You may already have this one" — the duplicate warning (v1.293.0)
 
@@ -4021,6 +4140,25 @@ are missing which, and takes the author straight to them.
   from a LITERAL rather than from `_emptyLevelBuckets()` and the authoring
   prompt throws on the first S1 topic it meets, which surfaces to the author as
   every page of their PDF failing to be read.
+- After touching **🔗 the merge** (`qMergeQuestions`, `qMergeFixParts`,
+  `qMergeUniqueIds`, `qMergeLettersOk`, `qMergeLetterSources`,
+  `qMergePartPreview`, `QMERGE_MAX`, `_vetApplyMerge`, the `qm*` dialog, the
+  `continuation` clause in `_aiBuildQuestionPrompt`, `_aiQuestionPayloads`'s
+  `continuation`, `processRapidJob`'s return shape and its awaited writes, or
+  `_rapidExpandPdf`'s `settle()`), run `node tools/question-merge-tests.mjs`.
+  Every failure here is silent — the merged question renders, saves and prints
+  perfectly however badly it was stitched. Concatenate in the wrong order and
+  page 2 is printed above page 1; let two colliding block ids through and one
+  block silently wears the other's blanks and keywords; re-letter a sequence
+  that was already fine and every part of a question changes name for nothing;
+  fail to re-letter (a)(b)+(a)(b) and the answer key prints two "(a)" headings
+  with one of them silently keeping both answers; re-letter without stripping
+  first and the paper reads "(c) (b) Explain why…". On the PDF side: stitch
+  anywhere but `settle()` and "the page before this one" has no answer, because
+  pages are read in parallel; forget to clear the carry on a failed or blank
+  page and two unrelated questions are grafted together; and stop awaiting the
+  page's writes and the half that was merged away comes back on the next
+  sign-in, because the delete landed before the write did.
 - After touching **📄 whole-PDF rapid add** (`RAPID_PDF_MAX_PAGES`,
   `RAPID_PDF_PAR`, `rapidAddFiles`, `_rapidQueuePdf`, `_rapidPdfPump`,
   `_rapidExpandPdf`, `_rapidPageFile`, `_pdfRenderPage`, `startRapidJob`'s PDF
