@@ -85,7 +85,7 @@ function _parseAIJson(s) { return JSON.parse(s); }
 const localStorage = { getItem: () => null, setItem: () => {} };
 const document = { getElementById: () => null };
 let geminiModel = {};
-const AI_MODEL = "gemini-3.7-flash";
+const AI_MODEL = "gemini-3.8-flash";
 let openAiKey = "sk-test", openAiModel = "gpt-5.6-sol";
 function getOpenAiKey() { return openAiKey; }
 function getOpenAiModel() { return openAiModel; }
