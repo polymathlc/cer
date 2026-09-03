@@ -58,6 +58,10 @@ const document = {
 function parseSearchTokens(s) {
   return String(s || '').toLowerCase().split(/\\s+/).filter(Boolean);
 }
+// The visible set now also asks the 🚦 light filter — the tally chips on the
+// tools bar are a filter as well as a count. With no light chosen it lets
+// everything through, which is the state every case below is about.
+function qbulkLightPasses() { return true; }
 function extractQuestionSearchText(q) {
   return String((q && q.title) || '').toLowerCase();
 }

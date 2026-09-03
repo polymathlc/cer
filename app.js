@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.347.0';
+const APP_VERSION = 'v1.348.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -15504,6 +15504,9 @@ function _bankFilteredQuestions() {
       const haystack = extractQuestionSearchText(q);
       if (!searchTokens.every(token => haystack.includes(token))) return false;
     }
+    // 🚦 The light chips in the tools bar are a filter as well as a tally —
+    // three reds in five hundred questions are unfindable by eye.
+    if (!qbulkLightPasses('bank', q)) return false;
     return true;
   });
 
@@ -15548,8 +15551,10 @@ function renderQuestionBank() {
   _syncBankViewChrome();
   _renderBankPickBar(filtered);
   // The 🔍 bar counts what is VISIBLE, so it has to be recounted whenever the
-  // filters change — which is every call to this function.
+  // filters change — which is every call to this function. The 🧰 tools bar
+  // counts the same way and for the same reason.
   _akcSyncBankBar();
+  qbulkRenderBar('bank');
   container.classList.toggle('as-tiles', bankView === 'grid');
 
   if (filtered.length === 0) {
@@ -15560,9 +15565,9 @@ function renderQuestionBank() {
         <p>AI found no questions for that instruction — try rephrasing it, or clear the AI search</p>
       </div>` : `
       <div class="empty-state">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-        <h3>No questions yet</h3>
-        <p>Create your first question to get started</p>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/></svg>
+        <h3>${_qbulkState('bank').light ? 'Nothing with that light' : 'No questions yet'}</h3>
+        <p>${_qbulkState('bank').light ? 'The 🚦 filter above is hiding the rest — click the chip again to show them all' : 'Create your first question to get started'}</p>
       </div>`;
     return;
   }
@@ -16342,6 +16347,7 @@ function renderVettingList() {
 
   if (vettingList.length === 0 && rapidJobs.length === 0) {
     _vetRenderBulkBar([]);
+    qbulkRenderBar('vetting');
     container.innerHTML = `
       <div class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -16356,6 +16362,7 @@ function renderVettingList() {
 
   if (ordered.length === 0 && searchTokens.length > 0) {
     _vetRenderBulkBar([]);
+    qbulkRenderBar('vetting');
     container.innerHTML = jobCards + `
       <div class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -16364,8 +16371,21 @@ function renderVettingList() {
       </div>`;
     return;
   }
+  // A 🚦 light chip can empty the list on its own, with nothing typed in the
+  // search box. Falling through to "Vetting list is empty" would read as the
+  // list having been cleared, which is the one thing it must not say.
+  if (ordered.length === 0) {
+    container.innerHTML = jobCards + `
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/></svg>
+        <h3>Nothing with that light</h3>
+        <p>The 🚦 filter above is hiding the rest — click the chip again to show them all</p>
+      </div>`;
+    return;
+  }
 
   _vetRenderBulkBar(ordered.map(q => q.id));
+  qbulkRenderBar('vetting');
 
   const qCards = ordered.map(q => {
     const statusClass = q.status || 'pending';
@@ -16406,6 +16426,7 @@ function renderVettingList() {
             </div>
           </div>
           <div class="qb-card-actions">
+            ${tlLightHtml(q, 'vet')}
             <label class="vet-pick-wrap" title="Tick this question, then use 🔗 Merge selected or 🗑 Delete selected">
               <input type="checkbox" class="vet-pick" ${picked ? 'checked' : ''} onchange="vetSelToggle('${q.id}', this.checked)">
             </label>
@@ -16537,10 +16558,12 @@ function _vetSearchTokens() {
 // must appear somewhere in the title, tags or block content.
 function _vetVisibleQuestions() {
   const searchTokens = _vetSearchTokens();
-  const visible = searchTokens.length === 0 ? vettingList : vettingList.filter(q => {
+  const matched = searchTokens.length === 0 ? vettingList : vettingList.filter(q => {
     const haystack = extractQuestionSearchText(q);
     return searchTokens.every(token => haystack.includes(token));
   });
+  // …and the same 🚦 light filter the bank has, for the same reason.
+  const visible = matched.filter(q => qbulkLightPasses('vetting', q));
   return visible
     .map((q, i) => ({ q, i }))
     .sort((a, b) => {
@@ -36611,14 +36634,18 @@ function _cqRenderFindings() {
   host.innerHTML = head + list.map(f => _cqFindingHtml(f, q.id)).join('');
 }
 // `scope` says WHERE the question being reported on lives, and therefore where
-// the ＃ one-tap fix has to write. Everywhere but the create page that is the
-// bank (`cqNumberOptions`); on the create page it is the editor's own blocks,
-// because the question there may never have been saved and one that has must
-// not be rewritten behind an author who has not pressed Save.
+// the ＃ one-tap fix has to write: the bank (`cqNumberOptions`), the VETTING
+// list (`tlFixVetOptions` — a vetting question is in a different collection and
+// `cqNumberOptions` cannot even find it, so it would report "no options here"
+// about a question that plainly has four), or, on the create page, the editor's
+// own blocks, because the question there may never have been saved and one that
+// has must not be rewritten behind an author who has not pressed Save.
 function _cqFindingHtml(f, qid, scope) {
   const color = f.severity === 'high' ? '#dc2626' : f.severity === 'med' ? '#d97706' : '#6b7280';
   const bg = f.severity === 'high' ? '#fef2f2' : f.severity === 'med' ? '#fffbeb' : '#f3f4f6';
-  const fixCall = scope === 'create' ? 'tlFixCreateOptions()' : `cqNumberOptions('${escapeHtml(qid)}')`;
+  const fixCall = scope === 'create' ? 'tlFixCreateOptions()'
+    : scope === 'vet' ? `tlFixVetOptions('${escapeHtml(qid)}')`
+    : `cqNumberOptions('${escapeHtml(qid)}')`;
   return `<div class="cq-find-row" style="border-left:4px solid ${color};">
       <span class="cq-badge" style="background:${bg};color:${color};">${escapeHtml(f.type)}${f.ai ? ' · AI' : ''}</span>
       <div style="flex:1;min-width:0;">
@@ -37112,6 +37139,10 @@ function tlQuestionFor(scope, id) {
   // it — the editor is. Reading the bank here would light the SAVED copy of a
   // question whose unsaved edits are the whole reason anybody is checking it.
   if (scope === 'create') return tlCreateQuestion();
+  // A vetting question is NOT in the bank — `_docQById` reads `questionBank`
+  // and nothing else, so without this every lamp on the vetting list would be
+  // about a question that could not be found and would sit grey for ever.
+  if (scope === 'vet') return (vettingList || []).find(q => q && String(q.id) === String(id)) || null;
   return _docQById(String(id)) || null;
 }
 function tlEmQuestion(id) {
@@ -37376,6 +37407,26 @@ function tlFixCreateOptions() {
 // The whole sheet at once, which is the question a teacher who has just read a
 // paper through actually has. It checks what is ON SCREEN — unsaved edits and
 // all — because that is the paper in front of them.
+// The same one-tap fix for a question that is still in VETTING. It is a
+// different collection and a different writer — `cqNumberOptions` looks the
+// question up with `_docQById`, which reads the bank alone, so on a vetting
+// question it reports "there are no options here to renumber" about a question
+// that plainly has four.
+async function tlFixVetOptions(id) {
+  const q = (vettingList || []).find(x => x && String(x.id) === String(id));
+  const mcq = q && _cqMcqFixable(q);
+  if (!mcq) { showToast('There are no options here to renumber', 'error'); return; }
+  const before = mcq.options.map(o => o.text);
+  mcq.options.forEach((o, i) => { o.text = `(${i + 1})`; });
+  const ok = await saveVettingQuestion(q);
+  if (!ok) { mcq.options.forEach((o, i) => { o.text = before[i]; }); return; }
+  const rec = _tlCache.get(String(q.id));
+  if (rec) rec.findings = (rec.findings || []).filter(f => f.fix !== 'numberOptions');
+  renderVettingList();
+  tlRenderPanel();
+  showToast('Options are now (1) (2) (3) (4) — the picture shows the choices', 'success');
+}
+
 async function tlCheckSheet() {
   if (!_canAuthor()) { showToast('Only an author can check questions', 'error'); return; }
   if (typeof emActive !== 'function' || !emActive()) { showToast('Open a worksheet in editing mode first', 'info'); return; }
@@ -37454,6 +37505,545 @@ function tlEmWatchInit() {
       if (typeof emActive === 'function' && emActive()) { tlEmSync(); tlRepaint(); }
     }, 700);
   }, true);
+}
+
+// =====================================================================
+// 🧰 ACTING ON MANY QUESTIONS AT ONCE — the bank and the vetting list
+// =====================================================================
+// Two jobs that are really one: 🎯 RE-FILE TOPICS and 🚦 CHECK QUESTIONS both
+// need the same answer first — WHICH questions? — and getting that answer wrong
+// is the same fault either way: something happens to questions the author
+// cannot see and did not mean to touch. So the set is worked out in ONE place
+// and both tools read it.
+//
+//  • THREE SCOPES, and every one of them is narrowed to what the page is
+//    SHOWING. The ticked ones, the ones added inside a window, or everything
+//    shown. A search box or a filter is the author saying "these are the ones
+//    I am looking at"; acting on a question hidden behind one is the single
+//    outcome nobody could have predicted from the button they pressed. It is
+//    the rule 🗑 Delete selected already follows, stated once for everybody.
+//
+//  • THE COUNT IS ALWAYS ON THE BUTTON, and it is recounted on every render —
+//    the filters change it on every keystroke. A tool that says "Re-file" with
+//    no number is a tool nobody can check before pressing.
+//
+//  • ONLY WHAT THIS ACCOUNT OWNS is written. Another admin's documents are not
+//    ours to write and Firestore rejects every one of them, so they are
+//    counted out in front of the author rather than failing forty times.
+//
+// The window reuses `AKC_WINDOWS` rather than listing the same hours again —
+// two lists of windows is two lists to keep in step, and read at CALL time, so
+// the const below it is never touched at module-evaluation time.
+const QBULK_MAX = 200;             // one press's ceiling
+const QBULK_PAR = 3;               // AI calls in flight while re-filing
+const QBULK_WINDOW_STORE = 'sq_qbulk_window';
+const QBULK_DEFAULT_HOURS = 24;
+
+// Per surface, because the bank and the vetting list are looked at for
+// different reasons and a scope set on one has nothing to say about the other.
+var _qbulk = {
+  bank:    { scope: 'window', hours: QBULK_DEFAULT_HOURS, light: '' },
+  vetting: { scope: 'window', hours: QBULK_DEFAULT_HOURS, light: '' },
+};
+function _qbulkState(where) { return _qbulk[where === 'vetting' ? 'vetting' : 'bank']; }
+function qbulkWhere(where) { return where === 'vetting' ? 'vetting' : 'bank'; }
+
+// ── Which questions ─────────────────────────────────────────────────────────
+// The page's OWN visible set — the same function each page renders from, so the
+// tools and the cards can never disagree about what is on screen.
+function qbulkVisible(where) {
+  return qbulkWhere(where) === 'vetting' ? _vetVisibleQuestions() : _bankFilteredQuestions();
+}
+function qbulkPicked(where) {
+  return qbulkWhere(where) === 'vetting' ? _vetSelected : wsSelectedIds;
+}
+// When a question was added. A vetting question is stamped `vettedAt` on its
+// way in and that is the date its card shows, so the window has to read the
+// same one or "added in the past hour" means two different things on two pages.
+// `_questionRecency` is the fallback for both, and it can read the millisecond
+// stamp out of a question's own id when it carries no date at all.
+function qbulkRecency(where, q) {
+  if (qbulkWhere(where) === 'vetting') {
+    const t = Date.parse(_vetAddedAt(q));
+    if (!isNaN(t)) return t;
+  }
+  return _questionRecency(q);
+}
+// `shown` is the page's visible set when the caller already has it — running
+// the page's whole filter three times per render is three times the work on a
+// bank of two thousand.
+function qbulkList(where, shown) {
+  const w = qbulkWhere(where);
+  const st = _qbulkState(w);
+  shown = shown || qbulkVisible(w);
+  if (st.scope === 'picked') {
+    const picked = qbulkPicked(w);
+    return shown.filter(q => picked.has(q.id));
+  }
+  if (st.scope === 'window') {
+    if (!st.hours) return shown;
+    const cut = Date.now() - st.hours * 3600000;
+    return shown.filter(q => qbulkRecency(w, q) >= cut);
+  }
+  return shown;
+}
+// Split by who may WRITE them. Another admin's questions are not ours to write
+// and Firestore would refuse every one, so they are named rather than tried.
+function qbulkOwned(where, list) {
+  const uid = currentUser && currentUser.uid;
+  const w = qbulkWhere(where);
+  const mine = [], foreign = [];
+  (list || []).forEach(q => {
+    if (!q || q.id == null) return;
+    const owner = w === 'vetting' ? _vOwner(q.id) : _qOwner(q.id);
+    (owner === uid ? mine : foreign).push(q);
+  });
+  return { mine, foreign };
+}
+function qbulkScopeLabel(where) {
+  const st = _qbulkState(where);
+  if (st.scope === 'picked') return 'ticked';
+  if (st.scope === 'shown') return 'shown here';
+  if (!st.hours) return 'shown here';
+  const w = AKC_WINDOWS.find(x => x.hours === st.hours);
+  return 'added in the past ' + (w ? w.text : st.hours + ' hours');
+}
+
+// ── The bar, on both pages ──────────────────────────────────────────────────
+// ONE renderer for both, so a change lands on both at once. `where` is the only
+// thing that differs.
+function qbulkSetScope(where, scope) {
+  _qbulkState(where).scope = scope;
+  qbulkRepaint(where);
+}
+function qbulkSetWindow(where, hours) {
+  _qbulkState(where).hours = Number(hours) || 0;
+  try { localStorage.setItem(QBULK_WINDOW_STORE, String(_qbulkState(where).hours)); } catch (e) {}
+  qbulkRepaint(where);
+}
+// The 🔴 🟡 🟢 chips are FILTERS as well as a tally: on a bank of five hundred
+// questions, three reds are unfindable by eye, and the whole point of running
+// the check over a set is being able to act on what it found.
+function qbulkSetLight(where, light) {
+  const st = _qbulkState(where);
+  st.light = st.light === light ? '' : light;
+  qbulkRepaint(where);
+}
+function qbulkRepaint(where) {
+  if (qbulkWhere(where) === 'vetting') renderVettingList(); else renderQuestionBank();
+}
+// The light filter, applied by each page's own filter function. A question with
+// no verdict standing counts as `idle`, which is what makes "○ not checked" a
+// filter you can actually work through.
+//
+// `_bankFilteredQuestions` and `_vetVisibleQuestions` sit FAR above this block
+// and can run while the module is still evaluating, when `_qbulk` is still
+// undefined — the same trap `emActive` guards against, and the same guard: no
+// filter can be on before there is anything to set one with.
+function qbulkLightPasses(where, q) {
+  if (typeof _qbulk === 'undefined' || !_qbulk) return true;
+  const want = _qbulkState(where).light;
+  if (!want) return true;
+  const s = tlStateOf(q).state;
+  return (s === 'stale' ? 'idle' : s) === want;
+}
+// Everything the page is showing BEFORE the 🚦 chip narrowed it. The chip is
+// applied inside each page's own filter function — which is what makes the grid
+// itself narrow — so the tally has to ask with it lifted, or clicking 🔴 leaves
+// a bar reading "🔴 3" and nothing else and there is no way back to the others.
+function qbulkUnlit(where) {
+  const st = _qbulkState(where);
+  const keep = st.light;
+  st.light = '';
+  try { return qbulkVisible(where); } finally { st.light = keep; }
+}
+function qbulkRenderBar(where) {
+  const w = qbulkWhere(where);
+  const bar = document.getElementById(w === 'vetting' ? 'vetToolsBar' : 'qbToolsBar');
+  if (!bar) return;
+  // `renderQuestionBank` can run before this file has finished evaluating, and
+  // the consts above are in their temporal dead zone until it has. A bar that
+  // is not there yet is not worth taking the app down for.
+  try {
+    if (!_canAuthor()) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+    const st = _qbulkState(w);
+    // ONE pass of the page's own filter, then a cheap re-filter for the chip.
+    const unlit = qbulkUnlit(w);
+    const shown = unlit.filter(q => qbulkLightPasses(w, q));
+    const list = qbulkList(w, shown);
+    const n = list.length;
+    const running = !!(_tlMany && _tlMany.running);
+    const pickedN = qbulkPicked(w).size;
+    bar.style.display = '';
+    const chip = (id, text, title) =>
+      `<button type="button" class="qbulk-chip${st.scope === id ? ' on' : ''}" title="${escapeHtml(title)}"
+         onclick="qbulkSetScope('${w}','${id}')">${escapeHtml(text)}</button>`;
+    const win = st.scope === 'window'
+      ? `<select class="qbulk-win" title="Only questions added inside this window" onchange="qbulkSetWindow('${w}', this.value)">${
+          AKC_WINDOWS.map(o => `<option value="${o.hours}"${o.hours === st.hours ? ' selected' : ''}>${escapeHtml(o.text)}</option>`).join('')
+        }</select>`
+      : '';
+    bar.innerHTML =
+      `<div class="qbulk-row">
+         <span class="qbulk-lead">🧰 Work on</span>
+         ${chip('picked', pickedN ? 'the ' + pickedN + ' I ticked' : 'the ones I tick', 'Only the questions ticked on this page')}
+         ${chip('window', 'added recently', 'Only questions added inside the window')}
+         ${chip('shown', 'everything shown', 'Every question this page is showing right now')}
+         ${win}
+         <span class="qbulk-count">${n} question${n === 1 ? '' : 's'}</span>
+         <span style="flex:1;"></span>
+         <button class="btn btn-outline btn-sm" onclick="qbulkTopicsOpen('${w}')" ${n ? '' : 'disabled'}
+           title="Re-file these questions under the right topic — the level a question is served at is read off its TOPIC, so this is how a paper filed at the wrong level is put right.">🎯 Re-file topics</button>
+         <button class="btn btn-outline btn-sm" onclick="qbulkCheck('${w}')" ${n && !running ? '' : 'disabled'}
+           title="Ask the AI to read each of these questions and light it 🔴 🟡 🟢 — the same check ✅ Check Questions runs, one call per question.">🚦 Check ${n ? n : ''}</button>
+       </div>` + qbulkTallyHtml(w, unlit, running);
+  } catch (e) { /* the module is still evaluating */ }
+}
+// The tallies COUNT THE LIGHTS STANDING NOW rather than the run's own totals,
+// so a question fixed after the run drops out of the count instead of sitting
+// there red — the same rule editing mode's bar follows.
+function qbulkTallyHtml(where, unlit, running) {
+  const st = _qbulkState(where);
+  const tally = { red: 0, amber: 0, green: 0, error: 0, running: 0, idle: 0 };
+  // Over the WHOLE visible page, not the scoped set: a light filter narrows the
+  // set, so counting the scoped set would make the numbers change as they are
+  // clicked and there would be no way back to the others.
+  (unlit || qbulkUnlit(where)).forEach(q => {
+    const s = tlStateOf(q).state;
+    const k = s === 'stale' ? 'idle' : s;
+    tally[k] = (tally[k] || 0) + 1;
+  });
+  const checked = tally.red + tally.amber + tally.green + tally.error;
+  if (!checked && !running) return '';
+  const chip = (k, dot, label) => tally[k]
+    ? `<button type="button" class="tl-count ${k === 'error' ? 'err' : k}${st.light === k ? ' on' : ''}"
+         title="${escapeHtml(st.light === k ? 'Showing only these — click to show them all again' : 'Show only these ' + label)}"
+         onclick="qbulkSetLight('${where}','${k}')">${dot} ${tally[k]}</button>`
+    : '';
+  return `<div class="qbulk-tally">` +
+    chip('red', '🔴', 'questions with something wrong') +
+    chip('amber', '🟡', 'questions worth a look') +
+    chip('green', '🟢', 'questions nothing was flagged on') +
+    chip('error', '⚠', 'questions the check could not finish') +
+    chip('idle', '○', 'questions nobody has checked') +
+    (running
+      ? `<span class="tl-count idle">checking ${_tlMany.done}/${_tlMany.total}…</span>
+         <button type="button" class="btn btn-outline btn-sm" onclick="tlStopMany()">⏹ Stop</button>`
+      : '') +
+    `</div>`;
+}
+
+// ── 🚦 Check a whole set ────────────────────────────────────────────────────
+// `tlCheckMany` is the SAME runner ✏️ editing mode's 🚦 Check all uses — one AI
+// call per question, TL_PAR at a time, never paying twice for a verdict that
+// already stands. A whole paper asked for in one reply truncates, and worse,
+// comes back as findings that cannot be attributed to the question they belong
+// to; that is why there is no batch version of this and never will be.
+async function qbulkCheck(where) {
+  const w = qbulkWhere(where);
+  if (!_canAuthor()) { showToast('Only an author can check questions', 'error'); return; }
+  if (_tlMany && _tlMany.running) { showToast('A check is already running', 'info'); return; }
+  const list = qbulkList(w).slice(0, QBULK_MAX);
+  if (!list.length) { showToast('There is nothing in that set to check', 'info'); return; }
+  const unread = list.filter(q => !tlFresh(q)).length;
+  if (unread > 20 && !confirm('Check ' + unread + ' question' + (unread === 1 ? '' : 's') + ' with AI?\n\n'
+      + 'That is ' + unread + ' AI call' + (unread === 1 ? '' : 's') + ' — one per question, a few at a time. '
+      + (list.length - unread ? (list.length - unread) + ' already have a verdict and are not read again. ' : '')
+      + 'You can stop at any point and everything already checked is kept.')) return;
+  await tlCheckMany(list, { onProgress: () => { tlRepaint(); } });
+  const m = _tlMany || {};
+  if ((m.red || 0) + (m.amber || 0) === 0) showToast('Nothing flagged on any of the ' + (m.total || 0) + ' ✓', 'success');
+  else showToast((m.red || 0) + ' with a problem, ' + (m.amber || 0) + ' worth a look — press a 🚦 to read them, or a chip to list them', m.red ? 'error' : 'info');
+  qbulkRepaint(w);
+}
+
+// =====================================================================
+// 🎯 RE-FILING TOPICS — putting a paper filed at the wrong level right
+// =====================================================================
+// A pile of P6 questions imported at P3 is not a small mistake: THIS APP HAS NO
+// `q.level` FIELD. A question's level is read off its TOPIC (`getTopicLevel`),
+// and every surface that matters reads it that way — the bank's level filter,
+// the student-level gate, the topical grid, the games. So a wrongly filed paper
+// is not "labelled wrong", it is SERVED to the wrong children, and the only way
+// to put it right is to change the topics.
+//
+// Which is why re-filing is a TOPIC operation with a LEVEL as its constraint,
+// never a stamp on a field. Choose the level, and the AI picks the closest topic
+// from that level's list for each question — the same narrowing ⚡ Rapid add's
+// batch level does at authoring time, applied after the fact.
+//
+// FIVE THINGS, and each is silent:
+//
+//  • A RETIRED TOPIC IS NEVER A TARGET. Cell Systems has left the syllabus and
+//    `qInSyllabus` keeps it out of every practice mode and every game, so filing
+//    a question into it writes one no student can ever be served — worse than an
+//    off-level topic, and just as invisible.
+//
+//  • THE SECOND TOPIC COUNTS TOO. `qLevelNum` takes the MAX over `topic` and
+//    `topic2`, so a P6 secondary topic left behind keeps the whole question at
+//    P6 while the primary topic looks perfectly right.
+//
+//  • NOTHING IS WRITTEN UNTIL THE AUTHOR PRESSES THE BUTTON, and the dialog
+//    lists every question with its current topic beside the proposed one.
+//
+//  • IT CAN BE UNDONE. This is the fix FOR a mistake, and the fix can be a
+//    mistake too — so the previous topic of every question is kept and ↩ Undo
+//    puts them all back.
+//
+//  • THE WRITES ARE QUIET. Re-filing forty questions is housekeeping, not forty
+//    questions authored, so it must not land in anybody's work-session log.
+//
+// Run `node tools/bulk-topics-tests.mjs` after touching any of it.
+const QBT_CONFIRM_OVER = 20;
+var _qbt = null;        // { where, list, level, mode, plan:Map, run, done }
+var _qbtUndo = null;    // [{ where, id, topic, topic2, topicConfidence }]
+
+// The topics a question may be re-filed INTO. A level narrows it; a retired
+// topic is never in it, whichever level was asked for.
+function qbulkTopicChoices(level) {
+  const all = level ? (currentTopicsByLevel()[level] || []) : currentTopics();
+  const live = all.filter(t => t && !QRETIRED_TOPIC_RE.test(t));
+  // A level whose topics have all been removed would leave the model nothing to
+  // choose from, and a model with an empty list invents one.
+  return live.length ? live : currentTopics().filter(t => t && !QRETIRED_TOPIC_RE.test(t));
+}
+
+// One question, one call. It is metadata about a question rather than science
+// said to anybody, which is why it is exempt from the grounding census in
+// tools/teaching-notes-tests.mjs — the same footing as `aiSuggestTags` and the
+// 🎯 objective classifiers.
+async function aiPickTopic(q, level) {
+  if (!window.__aiReady || !window.__aiReady()) throw new Error('the AI is not ready yet');
+  const choices = qbulkTopicChoices(level);
+  const facts = {
+    title: _fcClip(q.title || ''),
+    currentTopic: q.topic || '',
+    category: normalizeCategoryValue(q.category),
+    question: _fcClip(_questionContext(q) || ''),
+  };
+  const prompt = [
+    'You are filing ONE question into a Singapore school science question bank.',
+    level
+      ? 'This question belongs to ' + level + '. Choose the closest topic from the ' + level + ' list below, even if a topic you know from another year would fit better — the year is not in question here, only which topic within it.'
+      : 'Choose the closest topic from the list below.',
+    '',
+    'THE QUESTION:',
+    JSON.stringify(facts, null, 1),
+    '',
+    'CHOOSE EXACTLY ONE OF THESE TOPICS, spelled exactly as written:',
+    choices.join('; '),
+    '',
+    'Reply with ONLY this JSON: {"topic":"<one topic, copied exactly>","confidence":"high|medium|low"}',
+    '- "high" means the question is plainly about that topic.',
+    '- "low" means nothing in the list really fits and you picked the least bad one. Say low when that is true — a person checks every low.',
+    '- Never invent a topic that is not in the list, and never return more than one.',
+  ].join('\n');
+  const raw = await askGemini(prompt, { maxOutputTokens: 120, temperature: 0.1, json: true });
+  const parsed = _parseAIJson(raw) || {};
+  const want = String(parsed.topic || '').trim();
+  // A topic that is not on the list is not an answer. Rather than dropping the
+  // question, it is filed into the level's first topic and marked LOW, which is
+  // exactly what ⚡ Rapid add's own guard does — the author asked for a level
+  // and gets one, and the thing that had to be guessed is flagged for a glance.
+  const hit = choices.find(t => t === want) || choices.find(t => t.toLowerCase() === want.toLowerCase());
+  return {
+    topic: hit || choices[0],
+    confidence: hit && /^(high|medium|low)$/.test(parsed.confidence) ? parsed.confidence : 'low',
+  };
+}
+
+function qbulkTopicsOpen(where) {
+  if (!_canAuthor()) { showToast('Only an author can re-file questions', 'error'); return; }
+  const w = qbulkWhere(where);
+  const { mine, foreign } = qbulkOwned(w, qbulkList(w));
+  const list = mine.slice(0, QBULK_MAX);
+  if (!list.length) {
+    // The draft is cleared even though nothing opens: a dialog that did not
+    // open must not leave the LAST set sitting in memory for the next render
+    // to draw.
+    _qbt = null;
+    showToast(foreign ? 'Those questions belong to another account' : 'There is nothing in that set', 'info');
+    return;
+  }
+  _qbt = { where: w, list, level: '', foreign: foreign.length, plan: new Map(), run: null };
+  const ov = document.getElementById('qbtOverlay');
+  if (ov) ov.classList.add('show');
+  qbulkTopicsRender();
+}
+function qbulkTopicsClose() {
+  // Mid-run, Close means STOP — closing under a running pass would leave it
+  // writing invisibly.
+  if (_qbt && _qbt.run && !_qbt.run.stop) { qbulkTopicsStop(); return; }
+  _qbt = null;
+  const ov = document.getElementById('qbtOverlay');
+  if (ov) ov.classList.remove('show');
+}
+function qbulkTopicsStop() { if (_qbt && _qbt.run) { _qbt.run.stop = true; qbulkTopicsRender(); } }
+function qbulkTopicsLevel(level) {
+  if (!_qbt) return;
+  _qbt.level = level || '';
+  _qbt.plan = new Map();   // the level decides the choices, so an old plan no longer stands
+  qbulkTopicsRender();
+}
+function qbulkTopicsRender() {
+  const host = document.getElementById('qbtBody');
+  if (!host || !_qbt) return;
+  const { list, level, plan, run } = _qbt;
+  const choices = qbulkTopicChoices(level);
+  const rows = list.slice(0, 60).map(q => {
+    const to = plan.get(q.id);
+    const cur = q.topic || '(no topic)';
+    const curLevel = getTopicLevel(q.topic || '') || '—';
+    return `<div class="qbt-row">
+        <div class="qbt-main">
+          <div class="qbt-title">${escapeHtml(q.title || 'Untitled question')}</div>
+          <div class="qbt-move">
+            <span class="qbt-from">${escapeHtml(curLevel)} · ${escapeHtml(cur)}</span>
+            ${to ? `<span class="qbt-arrow">→</span><span class="qbt-to${to.confidence === 'low' ? ' low' : ''}">${escapeHtml(getTopicLevel(to.topic) || '—')} · ${escapeHtml(to.topic)}${to.confidence === 'low' ? ' ⚠' : ''}</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+  const more = list.length > 60 ? `<div class="qbt-more">…and ${list.length - 60} more</div>` : '';
+  const planned = plan.size;
+  host.innerHTML = `
+    <p class="qbt-intro">
+      This app has <b>no level field</b> — a question is served at the level of its <b>topic</b>.
+      So re-filing the topic IS how a paper added at the wrong level is put right.
+      Nothing is written until you press a button below, and it can be undone.
+    </p>
+    <div class="qbt-controls">
+      <label class="qbt-lab">Level
+        <select class="qbt-sel" onchange="qbulkTopicsLevel(this.value)">
+          <option value=""${level ? '' : ' selected'}>— any level —</option>
+          ${TOPIC_LEVELS.map(l => `<option value="${escapeHtml(l)}"${l === level ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('')}
+        </select>
+      </label>
+      <button class="btn btn-primary btn-sm" onclick="qbulkTopicsRun()" ${run ? 'disabled' : ''}
+        title="One AI call per question: it reads the question and picks the closest topic${level ? ' from ' + level : ''}.">🤖 Re-file ${list.length} with AI</button>
+      <span class="qbt-or">or</span>
+      <label class="qbt-lab">Set them all to
+        <select class="qbt-sel" id="qbtFixed">
+          ${choices.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
+        </select>
+      </label>
+      <button class="btn btn-outline btn-sm" onclick="qbulkTopicsRun('fixed')" ${run ? 'disabled' : ''}
+        title="No AI — every question in the set gets exactly this topic.">📌 Set all</button>
+    </div>
+    ${_qbt.foreign ? `<div class="qbt-note">${_qbt.foreign} question${_qbt.foreign === 1 ? '' : 's'} in that set belong${_qbt.foreign === 1 ? 's' : ''} to another account and cannot be written from here — they are left out.</div>` : ''}
+    ${run ? `<div class="qbt-note">${run.stop ? 'Stopping…' : 'Working…'} ${run.done} of ${run.total} · ${run.moved} re-filed${run.same ? ' · ' + run.same + ' already right' : ''}${run.failed ? ' · ' + run.failed + ' failed' : ''}</div>` : ''}
+    ${planned ? `<div class="qbt-note ok">✅ ${planned} question${planned === 1 ? '' : 's'} re-filed. Check the list, and press ↩ Undo if it is not what you wanted.</div>` : ''}
+    <div class="qbt-list">${rows}${more}</div>`;
+  const sub = document.getElementById('qbtSub');
+  if (sub) sub.textContent = list.length + ' question' + (list.length === 1 ? '' : 's') + ' · ' + qbulkScopeLabel(_qbt.where);
+  const undo = document.getElementById('qbtUndoBtn');
+  if (undo) undo.style.display = (_qbtUndo && _qbtUndo.length) ? '' : 'none';
+}
+
+// Write one question's new topic. The staleness guard is `_bulkTagWrite`'s and
+// it is not optional: this run holds references across awaits, and the editor's
+// save REPLACES the bank slot with a rebuilt object — writing a held object that
+// is no longer the live one resurrects the pre-edit question.
+async function _qbtWrite(where, q, topic, confidence) {
+  const w = qbulkWhere(where);
+  const pool = w === 'vetting' ? vettingList : questionBank;
+  const live = (Array.isArray(pool) ? pool : []).find(x => x && x.id === q.id);
+  if (live !== q) return false;
+  const before = { where: w, id: q.id, topic: q.topic, topic2: q.topic2, topicConfidence: q.topicConfidence };
+  q.topic = topic;
+  // A SECOND topic from another level keeps the whole question at that level —
+  // qLevelNum takes the MAX over both — so one left behind silently undoes the
+  // re-file while the primary topic looks perfectly right.
+  const choices = qbulkTopicChoices(_qbt ? _qbt.level : '');
+  if (q.topic2 && _qbt && _qbt.level && choices.indexOf(q.topic2) < 0) q.topic2 = '';
+  if (confidence) q.topicConfidence = confidence;
+  const ok = w === 'vetting' ? await saveVettingQuestion(q) : await saveQuestion(q, { quiet: true });
+  if (!ok) {
+    q.topic = before.topic; q.topic2 = before.topic2; q.topicConfidence = before.topicConfidence;
+    return false;
+  }
+  (_qbtUndo = _qbtUndo || []).push(before);
+  return true;
+}
+
+async function qbulkTopicsRun(mode) {
+  if (!_qbt || _qbt.run) return;
+  const fixed = mode === 'fixed';
+  const { where, list, level } = _qbt;
+  const target = list.slice(0, QBULK_MAX);
+  const fixedTopic = fixed ? (document.getElementById('qbtFixed') || {}).value : '';
+  if (fixed && !fixedTopic) { showToast('Choose a topic first', 'info'); return; }
+  if (!fixed && (!window.__aiReady || !window.__aiReady())) { showToast('AI is not ready yet — try again in a moment', 'info'); return; }
+  const what = fixed
+    ? 'File ' + target.length + ' question' + (target.length === 1 ? '' : 's') + ' under “' + fixedTopic + '”?'
+    : 'Re-file ' + target.length + ' question' + (target.length === 1 ? '' : 's') + ' with AI' + (level ? ' inside ' + level : '') + '?\n\nThat is ' + target.length + ' AI call' + (target.length === 1 ? '' : 's') + '.';
+  if (target.length >= QBT_CONFIRM_OVER && !confirm(what + '\n\nYou can undo the whole run afterwards.')) return;
+
+  _qbtUndo = [];   // a new run replaces the last one's undo — two stacked would put the wrong topics back
+  const run = _qbt.run = { total: target.length, done: 0, moved: 0, same: 0, failed: 0, stop: false };
+  // Housekeeping, not authoring: forty re-filed topics must not land in anybody's
+  // work-session log as forty questions written.
+  _wkSuppress++;
+  qbulkTopicsRender();
+  try {
+    let next = 0;
+    const worker = async () => {
+      while (!run.stop && next < target.length) {
+        const q = target[next++];
+        try {
+          let topic = fixedTopic, conf = '';
+          if (!fixed) { const r = await aiPickTopic(q, level); topic = r.topic; conf = r.confidence; }
+          if (!topic || topic === q.topic) run.same++;
+          else if (await _qbtWrite(where, q, topic, conf)) { run.moved++; _qbt.plan.set(q.id, { topic, confidence: conf }); }
+          else run.failed++;
+        } catch (e) {
+          console.warn('re-file topic', q && q.id, e);
+          run.failed++;
+        }
+        run.done++;
+        qbulkTopicsRender();
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(fixed ? 1 : QBULK_PAR, target.length) }, worker));
+  } finally { _wkSuppress--; }
+  _qbt.run = null;
+  qbulkTopicsRender();
+  qbulkRepaint(where);
+  updateCounts();
+  const bits = [run.moved + ' re-filed'];
+  if (run.same) bits.push(run.same + ' already right');
+  if (run.failed) bits.push(run.failed + ' failed');
+  showToast((run.stop ? 'Stopped — ' : '🎯 ') + bits.join(' · '), run.failed ? 'error' : 'success');
+}
+
+// ↩ Undo. This is the fix FOR a mistake and the fix can be a mistake too, so
+// every question's previous topic is kept and put back in one press.
+async function qbulkTopicsUndo() {
+  const stack = _qbtUndo || [];
+  if (!stack.length) { showToast('There is nothing to undo', 'info'); return; }
+  if (!confirm('Put the previous topic back on ' + stack.length + ' question' + (stack.length === 1 ? '' : 's') + '?')) return;
+  _wkSuppress++;
+  let ok = 0, failed = 0;
+  try {
+    for (const b of stack) {
+      const pool = b.where === 'vetting' ? vettingList : questionBank;
+      const q = (Array.isArray(pool) ? pool : []).find(x => x && x.id === b.id);
+      if (!q) { failed++; continue; }
+      const cur = { topic: q.topic, topic2: q.topic2, topicConfidence: q.topicConfidence };
+      q.topic = b.topic;
+      q.topic2 = b.topic2;
+      q.topicConfidence = b.topicConfidence;
+      const wrote = b.where === 'vetting' ? await saveVettingQuestion(q) : await saveQuestion(q, { quiet: true });
+      if (wrote) ok++;
+      else { q.topic = cur.topic; q.topic2 = cur.topic2; q.topicConfidence = cur.topicConfidence; failed++; }
+    }
+  } finally { _wkSuppress--; }
+  _qbtUndo = null;
+  if (_qbt) { _qbt.plan = new Map(); qbulkTopicsRender(); }
+  renderQuestionBank();
+  renderVettingList();
+  updateCounts();
+  showToast('↩ ' + ok + ' put back' + (failed ? ' · ' + failed + ' failed' : ''), failed ? 'error' : 'success');
 }
 
 // =====================================================================
@@ -67088,6 +67678,16 @@ window.tlRecheck = tlRecheck;
 window.tlPanelEdit = tlPanelEdit;
 window.tlCheckSheet = tlCheckSheet;
 window.tlFixCreateOptions = tlFixCreateOptions;
+window.tlFixVetOptions = tlFixVetOptions;
+window.qbulkSetScope = qbulkSetScope;
+window.qbulkSetWindow = qbulkSetWindow;
+window.qbulkSetLight = qbulkSetLight;
+window.qbulkCheck = qbulkCheck;
+window.qbulkTopicsOpen = qbulkTopicsOpen;
+window.qbulkTopicsClose = qbulkTopicsClose;
+window.qbulkTopicsLevel = qbulkTopicsLevel;
+window.qbulkTopicsRun = qbulkTopicsRun;
+window.qbulkTopicsUndo = qbulkTopicsUndo;
 window.tlStopMany = tlStopMany;
 window.tlJumpToProblem = tlJumpToProblem;
 window.akeAddExplanation = akeAddExplanation;

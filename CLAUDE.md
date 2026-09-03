@@ -969,6 +969,112 @@ in `index.html` and **🔗 Merge selected** in the vetting bulk bar.
   question that no longer exists in this shape.
 - Run **`node tools/question-merge-tests.mjs`** after touching any of it.
 
+## 🧰 Acting on many questions at once (v1.348.0)
+
+`QBULK_*` / `qbulkList` / `qbulkVisible` / `qbulkUnlit` / `qbulkOwned` /
+`qbulkRecency` / `qbulkLightPasses` / `qbulkRenderBar` / `qbulkTallyHtml` /
+`qbulkCheck`, and the 🎯 half — `qbulkTopicChoices` / **`aiPickTopic`** /
+`qbulkTopicsOpen` / `qbulkTopicsRun` / `_qbtWrite` / `qbulkTopicsUndo` (search
+`ACTING ON MANY QUESTIONS AT ONCE`), plus `#qbToolsBar`, `#vetToolsBar`,
+`#qbtOverlay` and the `.qbulk-*` / `.qbt-*` CSS.
+
+Two jobs on the **Question Bank** and the **Vetting List** that are really one:
+🎯 **Re-file topics** and 🚦 **Check questions**. Both have to answer *which
+questions?* first, and getting that wrong is the same fault either way —
+something happens to questions the author cannot see and did not mean to touch.
+
+- **THREE SCOPES, AND EVERY ONE IS NARROWED TO WHAT THE PAGE IS SHOWING**: the
+  ticked ones, the ones added inside a window, everything shown. A search box or
+  a filter is the author saying *these are the ones I am looking at*; acting on
+  a question hidden behind one is the single outcome nobody could have predicted
+  from the button they pressed. It is the rule 🗑 Delete selected already
+  follows, stated once in `qbulkList` for everybody.
+- **The window reuses `AKC_WINDOWS`** rather than listing the same hours again,
+  and is read at CALL time — that const is declared *below* this block.
+- **A VETTING QUESTION IS DATED BY `vettedAt`** (`qbulkRecency`), because that
+  is what its card says. Reading `createdAt` on both pages would make "added in
+  the past hour" mean two different things on two pages that look the same.
+- **The count is on the button and recounted on every render** — the filters
+  change it on every keystroke.
+- **Only what this account OWNS is written** (`qbulkOwned`). Another admin's
+  documents are not ours and Firestore refuses every one, so they are named in
+  front of the author rather than failing forty times.
+- **ONE bar renderer serves both pages.** Two is two places for a change to land
+  on one page and not the other, on surfaces meant to behave alike. It is
+  wrapped in try/catch: `renderQuestionBank` can run while the module is still
+  evaluating, and the consts are in their temporal dead zone until it has
+  finished. `qbulkLightPasses` carries the same guard for the same reason — the
+  two page filters sit far above this block.
+
+### 🚦 The check over a set
+
+- **`tlCheckMany` is the SAME runner** ✏️ editing mode's 🚦 Check all uses: one
+  AI call per question, `TL_PAR` at a time, never paying twice for a verdict
+  that already stands. There is no batch version and never will be — a whole set
+  asked for in one reply truncates, and comes back as findings that cannot be
+  attributed to the question they belong to.
+- **The confirm counts the UNREAD ones**, not the set, so it names what the
+  press will really spend.
+- **The 🔴 🟡 🟢 chips are a FILTER as well as a tally.** Three reds in five
+  hundred questions are unfindable by eye, and being able to act on what the
+  check found is the whole point of running it over a set. `stale` lists under
+  `○ not checked`, because they are the same grey lamp.
+- **THE TALLY COUNTS BEFORE THE CHIP** (`qbulkUnlit`). The chip narrows the page
+  from inside each page's own filter function — that is what makes the grid
+  itself narrow — so a tally that asked after it would leave the bar reading
+  "🔴 3" and nothing else, with no way back to the others.
+- **The vetting list gained lamps of its own**, and with them a `'vet'` scope in
+  `tlQuestionFor` (`_docQById` reads the bank alone, so without it every lamp
+  there would be about a question that cannot be found) and `tlFixVetOptions`
+  for the ＃ one-tap fix — `cqNumberOptions` writes the BANK, and on a vetting
+  question it cannot even find it, so it reports "no options here" about a
+  question that plainly has four.
+- **Both pages need a "hidden by the light" empty state.** Falling through to
+  "Vetting list is empty" reads as the list having been cleared.
+
+### 🎯 Re-filing topics
+
+A pile of P6 questions imported at P3 is not a labelling mistake: **this app has
+no `q.level` field**. A question's level is read off its TOPIC
+(`getTopicLevel`), and every serving surface reads it that way — so a wrongly
+filed paper is *served to the wrong children*, and changing the topics is the
+only thing that puts it right. Re-filing is therefore a TOPIC operation with a
+LEVEL as its constraint, never a stamp on a field: choose the level, and the AI
+picks the closest topic from that level's list for each question — the same
+narrowing ⚡ Rapid add's batch level does at authoring time, applied afterwards.
+
+- **A RETIRED TOPIC IS NEVER A TARGET** (`qbulkTopicChoices`), at any level.
+  `qInSyllabus` keeps Cell Systems out of every practice mode and every game, so
+  filing a question into it writes one no student can ever be served — worse
+  than an off-level topic and just as invisible. A level with nothing live left
+  falls back to the full list rather than handing the model an empty one.
+- **THE SECOND TOPIC COUNTS.** `qLevelNum` takes the MAX over `topic` and
+  `topic2`, so a P6 secondary topic left behind keeps the whole question at P6
+  while the primary looks perfectly right — the re-file silently undone by the
+  field nobody looked at. `_qbtWrite` clears one that is outside the level.
+- **A TOPIC OFF THE LIST IS NOT AN ANSWER.** `aiPickTopic` snaps it into the
+  level and marks it **low**, which draws the ⚠ check topic badge a person
+  already reads — the author asked for a level and gets one, and the thing that
+  had to be guessed is flagged. Same guard `_rapidApplyLevel` uses.
+- **NOTHING IS WRITTEN UNTIL A BUTTON IS PRESSED**, and every row shows where
+  its question is going before it goes.
+- **IT CAN BE UNDONE.** This is the fix FOR a mistake and the fix can be one
+  too, so every question's previous topic, `topic2` and confidence are kept and
+  ↩ Undo puts them all back. A new run REPLACES the last one's stack — two
+  stacked would put the wrong topic back.
+- **A WRITE THAT DID NOT LAND MOVES NOTHING IN MEMORY** (`_bulkTagWrite`'s rule,
+  plus its staleness guard: the run holds references across awaits and the
+  editor's save replaces the bank slot with a rebuilt object).
+- **THE WRITES ARE QUIET** and the run is wrapped in `_wkSuppress` — re-filing
+  forty topics is housekeeping, not forty questions authored, and it must not
+  land in anybody's work-session log. The guard is released in a `finally`.
+- **📌 Set all is the blunt tool and makes NO AI call** — sometimes "all forty of
+  these are Heat" is simply true.
+- **`aiPickTopic` is exempt from the grounding census** by name, on the same
+  footing as `aiSuggestTags` and the 🎯 objective classifiers: it is metadata
+  about a question, not science said to anybody.
+- Run **`node tools/bulk-topics-tests.mjs`** after touching any of it.
+
 ## "You may already have this one" — the duplicate warning (v1.293.0)
 
 `findDuplicateCandidate` / `checkEditorDuplicate` / `dupWatchKick` /
@@ -4140,6 +4246,30 @@ are missing which, and takes the author straight to them.
   from a LITERAL rather than from `_emptyLevelBuckets()` and the authoring
   prompt throws on the first S1 topic it meets, which surfaces to the author as
   every page of their PDF failing to be read.
+- After touching **🧰 the bulk tools** (`qbulkList`, `qbulkVisible`,
+  `qbulkUnlit`, `qbulkOwned`, `qbulkRecency`, `qbulkLightPasses`,
+  `qbulkRenderBar`, `qbulkTallyHtml`, `qbulkCheck`, `qbulkTopicChoices`,
+  `aiPickTopic`, `qbulkTopicsOpen/Run/Undo`, `_qbtWrite`, `QBULK_*`, the light
+  filter in `_bankFilteredQuestions` / `_vetVisibleQuestions`, the `'vet'`
+  traffic-light scope or `tlFixVetOptions`), run
+  `node tools/bulk-topics-tests.mjs`. Everything here acts on a whole BATCH, so
+  every failure is silent and multiplied by forty. A scope that is not narrowed
+  to what the page is showing re-files questions the author never saw; a window
+  that reads `createdAt` on the vetting list means something different from what
+  the card beside it says; a retired topic left in the choices files questions
+  where no student can ever be served them; a `topic2` left behind keeps the
+  whole question at the old level while the primary topic looks perfectly right,
+  which is the re-file undone by the field nobody looked at; a model's invented
+  topic written as-is is a question filed under something that does not exist;
+  and a write that failed but moved the in-memory copy leaves the screen and the
+  database disagreeing. Drop `_wkSuppress` and forty housekeeping writes land in
+  somebody's work-session log as forty questions authored; leave the guard up
+  (no `finally`) and every later save in the session is silenced. On the 🚦 half:
+  count the tally AFTER the light chip and pressing 🔴 leaves a bar reading
+  "🔴 3" with no way back; give the vetting list a lamp without the `'vet'`
+  scope and every one of them sits grey for ever; and leave the ＃ fix on
+  `cqNumberOptions` and it reports "no options here" about a vetting question
+  that plainly has four.
 - After touching **🔗 the merge** (`qMergeQuestions`, `qMergeFixParts`,
   `qMergeUniqueIds`, `qMergeLettersOk`, `qMergeLetterSources`,
   `qMergePartPreview`, `QMERGE_MAX`, `_vetApplyMerge`, the `qm*` dialog, the

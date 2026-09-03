@@ -5240,6 +5240,150 @@ body.em-editing #printProgress { z-index: 470; }
 }
 @media print { .qm-overlay { display: none !important; } }
 
+/* ── 🧰 The bulk-tools bar, on the Question Bank and the Vetting List ─────
+   Same markup on both pages from one renderer. The scope chips read left to
+   right as a sentence — "work on … the ones I ticked" — because the one thing
+   an author must be certain of before pressing either button is WHICH
+   questions are about to be touched. */
+.qbulk-bar {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 14px 18px;
+  margin-bottom: 16px;
+}
+.qbulk-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.qbulk-lead { font-size: 0.85rem; font-weight: 700; color: var(--text); white-space: nowrap; }
+.qbulk-chip {
+  padding: 6px 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.79rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition);
+}
+.qbulk-chip:hover { border-color: var(--primary); color: var(--primary); }
+.qbulk-chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.qbulk-win {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.79rem;
+}
+.qbulk-count {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.qbulk-tally { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+/* The tally chips are buttons — a filter as well as a count. */
+.qbulk-tally .tl-count { cursor: pointer; font-family: 'Space Mono', monospace; }
+.qbulk-tally button.tl-count:hover { border-color: var(--primary); }
+.qbulk-tally .tl-count.on { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+/* ── 🎯 Re-file topics ────────────────────────────────────────────────── */
+.qbt-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 320;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 20px;
+}
+.qbt-overlay.show { display: flex; }
+.qbt-panel {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  width: min(760px, 100%);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.qbt-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.qbt-head h3 { font-size: 1.05rem; font-weight: 700; }
+.qbt-headsub { font-size: 0.8rem; color: var(--text-muted); margin-top: 5px; }
+.qbt-bodywrap { padding: 20px 26px; overflow-y: auto; }
+.qbt-intro { font-size: 0.85rem; line-height: 1.7; color: var(--text-muted); margin-bottom: 18px; }
+.qbt-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+}
+.qbt-lab { display: inline-flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); }
+.qbt-sel {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.82rem;
+  max-width: 260px;
+}
+.qbt-or { font-size: 0.78rem; color: var(--text-light); }
+.qbt-note {
+  margin-top: 14px;
+  padding: 12px 15px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  font-size: 0.81rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.qbt-note.ok { border-color: var(--primary); background: var(--primary-light, #eaf3ef); color: var(--primary-dark, #064834); font-weight: 600; }
+.qbt-list { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+.qbt-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.qbt-main { flex: 1; min-width: 0; }
+.qbt-title { font-size: 0.86rem; font-weight: 700; line-height: 1.4; }
+.qbt-move { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 0.75rem; font-family: 'Space Mono', monospace; }
+.qbt-from { color: var(--text-muted); }
+.qbt-arrow { color: var(--text-light); }
+.qbt-to { color: var(--primary); font-weight: 700; }
+.qbt-to.low { color: var(--accent-orange); }
+.qbt-more { font-size: 0.78rem; color: var(--text-muted); padding: 8px 2px; }
+.qbt-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 26px 22px;
+  border-top: 1px solid var(--border);
+}
+@media print { .qbt-overlay, .qbulk-bar { display: none !important; } }
+
 /* ── Saved worksheet — add / remove its questions ─────────────────────────
    A saved worksheet is an ORDERED list of bank ids, so editing one is editing
    that list: what is on the sheet on the left, the bank to draw from on the
@@ -9459,6 +9603,11 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           </label>
           <button class="btn btn-primary" id="akcBankBtn" onclick="akcCheckRecent()">🔍 Check</button>
         </div>
+        <!-- 🧰 Act on many questions at once: 🎯 re-file their topics, or 🚦
+             run the AI check over the lot. The scope — ticked / added recently /
+             everything shown — is worked out in ONE place for both, and is
+             always narrowed to what this page is showing. See `qbulk*`. -->
+        <div class="qbulk-bar" id="qbToolsBar" style="display:none;"></div>
         <div class="bank-pick-bar" id="bankPickBar" style="display:none;"></div>
         <div class="question-bank-grid" id="questionBankGrid"></div>
       </div>
@@ -9486,6 +9635,9 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             <input id="vettingSearch" placeholder="Search words or \"phrases\" in title/content..." oninput="renderVettingList()">
           </div>
         </div>
+        <!-- 🧰 The same tools bar the Question Bank carries — one renderer, so a
+             change lands on both pages at once. -->
+        <div class="qbulk-bar" id="vetToolsBar" style="display:none;"></div>
         <!-- Bulk-delete bar: how many are ticked, and the buttons that act on them.
              Built by _vetRenderBulkBar so it can never disagree with the cards. -->
         <div class="vet-bulk" id="vetBulkBar" style="display:none;"></div>
@@ -11634,6 +11786,30 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <button class="btn btn-outline" type="button" onclick="tlRecheck()" title="Read this question again from scratch">🔄 Check again</button>
       <button class="btn btn-outline" type="button" onclick="tlPanelEdit()" title="Open this question so it can be fixed">✏️ Fix this question</button>
       <button class="btn btn-primary" type="button" style="margin-left:auto;" onclick="tlClosePanel()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 🎯 RE-FILE TOPICS ON MANY QUESTIONS ==================== -->
+<!-- This app has no level field: a question is served at the level of its
+     TOPIC. So re-filing topics is how a paper added at the wrong level is put
+     right. Nothing is written until a button here is pressed, every row shows
+     where the question is going, and the whole run can be undone.
+     See `qbulkTopics*` and `aiPickTopic` in app.js. -->
+<div class="qbt-overlay" id="qbtOverlay" onclick="if(event.target===this)qbulkTopicsClose()">
+  <div class="qbt-panel" role="dialog" aria-label="Re-file topics">
+    <div class="qbt-head">
+      <div>
+        <h3>🎯 Re-file topics</h3>
+        <div class="qbt-headsub" id="qbtSub"></div>
+      </div>
+      <button class="wse-close" type="button" onclick="qbulkTopicsClose()" aria-label="Close">✕</button>
+    </div>
+    <div class="qbt-bodywrap" id="qbtBody"></div>
+    <div class="qbt-foot">
+      <button class="btn btn-outline" type="button" id="qbtUndoBtn" style="display:none;" onclick="qbulkTopicsUndo()"
+              title="Put the previous topic back on every question the last run moved">↩ Undo the last run</button>
+      <button class="btn btn-primary" type="button" style="margin-left:auto;" onclick="qbulkTopicsClose()">Done</button>
     </div>
   </div>
 </div>

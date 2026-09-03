@@ -382,6 +382,7 @@ const UNGROUNDED_BY_DESIGN = {
   aiSuggestTags: 'proposes tags for a question',
   runBankAiSearch: 'turns a search box into a filter',
   qpAiRecommend: 'picks which questions to serve',
+  aiPickTopic: 'files ONE question under a syllabus topic — metadata about the question, the same footing as aiSuggestTags. Grounding it would hand a filing call the marking standards and the exemplar answers, which is a great deal of prompt for a decision that is "which of these thirty names fits"',
   _classifyLOsWithAI: 'files questions under syllabus objectives',
   loAiFind: 'files questions under syllabus objectives',
   loSuggestLos: 'files one question under syllabus objectives',
