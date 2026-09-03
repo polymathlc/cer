@@ -1475,6 +1475,159 @@ function _notesTeachBlock(topic) {
     `\nWhen you EXPLAIN anything, use this teacher's own vocabulary and standards; the answer already recorded for the question always wins over these notes.\n`;
 }
 
+
+// =====================================================================
+// 🧠 LEARNING FROM THE TEACHER'S OWN CORRECTIONS
+// =====================================================================
+// The teacher presses 🤖 AI answer, reads what comes back, and changes it.
+// That change is the most direct statement there is of what this app got
+// wrong about them — and until now it was thrown away the moment the question
+// was saved. It is now the thing the next answer is written from.
+//
+// FOUR STEPS, and each is small:
+//   ① `styleNoteGenerated` records what the AI wrote, per answer box.
+//   ② `styleHarvestQuestion` runs on the SAVE — the one door every committed
+//      question already goes through — compares what is in that box NOW
+//      against what the AI put there, and keeps the pair when it is a real
+//      rewrite rather than a tidy-up.
+//   ③ `styleWriteNotes` asks the model, one correction at a time, for the ONE
+//      lesson that would have made it write the teacher's version first time.
+//   ④ `styleBlock` puts those lessons — and the most recent corrections
+//      themselves — into the next answer's prompt, through `aiGrounding`.
+//
+// WHICH PROMPTS SEE IT IS THE WHOLE SAFETY STORY. A correction is an ANSWER,
+// so it reaches 'answer' and 'teach' and NOWHERE ELSE:
+//   • 'mark' would be a marker handed the answer, and would start marking a
+//     child on whether they had used the teacher's wording.
+//   • 'check' is a SECOND READER. Told what phrasing the teacher prefers it
+//     flags correct answers for wording, and the report then reads as a clean
+//     bill of health inverted — the very failure `_notesCheckBlock` already
+//     carries a caveat against.
+//   • 'gen' is authoring from a document, where the document wins and a note
+//     about answer wording has no business at all.
+// `styleBlock` returns '' for all three, and the harness pins it.
+//
+// Run `node tools/answer-learning-tests.mjs` after touching any of it.
+
+// ITS OWN DOCUMENT, NOT THE ANS KEY APP'S. The teaching notes are deliberately
+// one notebook shared by four apps; this corpus is deliberately not. Ans Key
+// teaches maths as well as science and keeps its corrections in
+// `aiTraining/answerStyle` under this same uid — sharing that document would
+// put a maths correction into a science answer, which is exactly what
+// `_noteSuitsThisApp` exists to prevent from the other direction.
+// `users/{adminUid}/settings/answerStyle` is the same shape the learning
+// objectives already use: the admin writes, everybody reads.
+const STYLE_DOC = 'answerStyle';
+const STYLE_EDITS_MAX = 120;      // corrections kept; it is ONE Firestore document
+const STYLE_EDIT_CHARS = 420;
+const STYLE_Q_CHARS = 220;
+const STYLE_NOTE_CHARS = 200;     // one lesson, one sentence
+const STYLE_LESSONS_MAX = 8;      // …served in a prompt
+const STYLE_PAIRS_MAX = 3;        // …and the raw corrections behind them
+const STYLE_EDIT_TRIVIAL = 0.04;  // below this a "rewrite" is a tidy-up
+const STYLE_EDIT_WORDS_MAX = 200; // the distance is word-level; cap the work
+const STYLE_NOTE_PAR = 3;         // lessons written at once, in the background
+
+// The corpus, and what the AI wrote in THIS session. `styleGen` is deliberately
+// not persisted: a generation the author never saved is not a correction, and
+// an unsaved page reloaded is a change nobody could attribute anyway.
+let aiStyle = null;
+let _styleWriting = false;
+const styleGen = Object.create(null);
+
+function styleEnsure() {
+  if (!aiStyle || typeof aiStyle !== 'object') aiStyle = {};
+  if (!Array.isArray(aiStyle.edits)) aiStyle.edits = [];
+  return aiStyle;
+}
+function styleEdits() { return (aiStyle && Array.isArray(aiStyle.edits)) ? aiStyle.edits : []; }
+function styleTrim(s, cap) {
+  const t = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+  return t.length > cap ? t.slice(0, cap) : t;
+}
+
+// Cheap word overlap, so the corrections served are the ones about questions
+// like this one. Deliberately not an AI call: it runs on every answer.
+function _styleTokens(s) {
+  return new Set(String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 2));
+}
+function _styleOverlap(a, b) {
+  const A = _styleTokens(a), B = _styleTokens(b);
+  if (!A.size || !B.size) return 0;
+  let n = 0;
+  A.forEach(w => { if (B.has(w)) n++; });
+  return n / Math.min(A.size, B.size);
+}
+
+// The lessons, best first: this topic's, then everything else's. A lesson with
+// no topic on it was learned before topics were recorded, or on a question
+// that had none — it still applies.
+function styleLessons(topic) {
+  const all = styleEdits().filter(e => e && String(e.note || '').trim());
+  if (!all.length) return [];
+  const t = String(topic || '').trim().toLowerCase();
+  const mine = t ? all.filter(e => String(e.topic || '').trim().toLowerCase() === t) : [];
+  const rest = all.filter(e => mine.indexOf(e) < 0);
+  // Topic first, and NEWEST first inside each. Reversing the concatenation
+  // instead reverses the two groups as well, which quietly serves another
+  // topic's lessons ahead of this one's.
+  const out = [];
+  const seen = new Set();
+  mine.slice().reverse().concat(rest.slice().reverse()).forEach(e => {
+    const s = styleTrim(e.note, STYLE_NOTE_CHARS);
+    const k = s.toLowerCase();
+    if (!s || seen.has(k)) return;
+    seen.add(k);
+    out.push(s);
+  });
+  return out.slice(0, STYLE_LESSONS_MAX);
+}
+
+// …and the corrections themselves, which need no lesson written to take
+// effect. A teacher who has just rewritten an answer is watching the very next
+// one, so the pair goes in raw as well — retrieved for the question in hand.
+function styleRecentEdits(q, cap) {
+  const all = styleEdits().filter(e => e && e.wrote && e.a);
+  if (!all.length) return [];
+  const n = cap || STYLE_PAIRS_MAX;
+  if (q) {
+    const scored = all
+      .map((e, i) => ({ e, v: _styleOverlap(q, (e.q || '') + ' ' + (e.a || '')), i }))
+      .filter(x => x.v > 0)
+      .sort((x, y) => (y.v - x.v) || (y.i - x.i))
+      .slice(0, n)
+      .map(x => x.e);
+    if (scored.length) return scored;
+  }
+  return all.slice(-n).reverse();
+}
+
+// The corrections, in prompt form. `kind` decides whether there is anything to
+// say at all — see the safety note at the top of this section.
+function styleBlock(kind, topic, q) {
+  if (kind !== 'answer' && kind !== 'teach') return '';
+  const lessons = styleLessons(topic);
+  const pairs = styleRecentEdits(q);
+  if (!lessons.length && !pairs.length) return '';
+  const bits = [];
+  if (lessons.length) {
+    bits.push('What this teacher has corrected in answers this app wrote — do not make these mistakes again:\n' +
+      lessons.map(s => '• ' + s).join('\n'));
+  }
+  // LAST, so it is the nearest instruction to the question: the rawest and
+  // most current thing we know, and the one that needed no lesson written.
+  if (pairs.length) {
+    bits.push('WHAT THIS TEACHER CHANGED, the last time this app answered for them — answer their way from the start:\n' +
+      pairs.map(e =>
+        (e.q ? '• Question: ' + styleTrim(e.q, STYLE_Q_CHARS) + '\n  ' : '• ') +
+        'this app wrote: ' + styleTrim(e.wrote, STYLE_EDIT_CHARS) +
+        '\n  the teacher rewrote it as: ' + styleTrim(e.a, STYLE_EDIT_CHARS)
+      ).join('\n'));
+  }
+  return '\nTHE TEACHER\'S OWN CORRECTIONS (learned from ' + styleEdits().length +
+    ' answer' + (styleEdits().length === 1 ? '' : 's') + ' they rewrote):\n' + bits.join('\n') + '\n';
+}
+
 // ---- THE ONE DOOR ----
 // Every AI call in this app that says anything about science reaches the
 // teaching notes through here. Grounding one call site and not another is how
@@ -1486,16 +1639,283 @@ function _notesTeachBlock(topic) {
 //   'gen'    authoring a question from a document (the document still wins)
 //   'teach'  explaining, hinting, flashcards, reports, the tutor
 //   'check'  a second reader — a reference for spotting a wrong answer only
-function aiGrounding(kind, topic) {
+function aiGrounding(kind, topic, q) {
   _notesLedgerReset(kind);
-  if (kind === 'gen') return _notesGenBlock();
-  if (kind === 'answer') return _notesAnswerBlock(topic || '');
-  if (kind === 'teach') return _notesTeachBlock(topic || '');
-  if (kind === 'check') return _notesCheckBlock(topic || '');
+  // What the teacher has taught this app by REWRITING it. Appended here
+  // rather than woven into a digest, so a teacher with no uploaded notes at
+  // all still gets their own corrections back — and `styleBlock` is the ONE
+  // place the kinds that may never see them are refused (see its section).
+  const style = styleBlock(kind, topic, q);
+  if (kind === 'gen') return _notesGenBlock() + style;
+  if (kind === 'answer') return _notesAnswerBlock(topic || '') + style;
+  if (kind === 'teach') return _notesTeachBlock(topic || '') + style;
+  if (kind === 'check') return _notesCheckBlock(topic || '') + style;
   // An unknown kind degrades to MARKING, which is the kind that leaks least:
   // a typo'd 'marks' must never be the thing that hands a marker the answer.
   if (kind !== 'mark') console.error('aiGrounding: unknown kind "' + kind + '" — grounding as marking, which is the safe default');
-  return _notesMarkingBlock(topic || '');
+  return _notesMarkingBlock(topic || '') + style;
+}
+
+
+// ---- ①  WHAT THE AI WROTE ------------------------------------------------
+// Recorded per (block, field) the moment an AI button fills a box, so the
+// SAVE has something to compare against. It is deliberately in memory only:
+// a generation the author never saved is not a correction, and a page
+// reloaded mid-edit is a change nobody could honestly attribute.
+function styleGenKey(blockId, field) { return String(blockId) + '|' + String(field || 'content'); }
+function styleNoteGenerated(blockId, field, question, text) {
+  if (!_isAdmin()) return;
+  const t = styleTrim(stripHtml(text || ''), STYLE_EDIT_CHARS);
+  if (!blockId || !t) return;
+  styleGen[styleGenKey(blockId, field)] = {
+    q: styleTrim(stripHtml(question || ''), STYLE_Q_CHARS),
+    wrote: t,
+    at: Date.now()
+  };
+}
+
+// ---- ②  WHAT THE TEACHER LEFT IN THE BOX ---------------------------------
+// Word-level Levenshtein, normalised. WORDS rather than characters because a
+// reworded answer and a respelled one are different things to a style, and
+// because it has to be cheap enough to run on every save.
+//
+// PUNCTUATION AT A WORD'S EDGE IS NOT A REWRITE. Dropping the full stop off a
+// seven-word answer is one word in seven — 14%, far over the line below which
+// an edit is ignored — so without this a teacher tidying punctuation is
+// recorded as having rewritten the answer, and the note writer is handed a
+// "correction" with no lesson in it.
+function _styleWords(s) {
+  return String(s || '').toLowerCase().split(/\s+/)
+    .map(w => w.replace(/^[^\w]+|[^\w]+$/g, ''))
+    .filter(Boolean);
+}
+function _styleEditRatio(x, y) {
+  const A = _styleWords(x).slice(0, STYLE_EDIT_WORDS_MAX);
+  const B = _styleWords(y).slice(0, STYLE_EDIT_WORDS_MAX);
+  if (!A.length && !B.length) return 0;
+  if (!A.length || !B.length) return 1;
+  let prev = [], cur = [];
+  for (let j = 0; j <= B.length; j++) prev[j] = j;
+  for (let i = 1; i <= A.length; i++) {
+    cur[0] = i;
+    for (let j = 1; j <= B.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (A[i - 1] === B[j - 1] ? 0 : 1));
+    }
+    for (let j = 0; j <= B.length; j++) prev[j] = cur[j];
+  }
+  return Math.min(1, prev[B.length] / Math.max(A.length, B.length));
+}
+
+// The fields an AI button can fill, per block type. Anything not listed here
+// is not an answer the app wrote, so it is not a correction when it changes.
+const STYLE_FIELDS = {
+  answer: ['claim', 'evidence', 'reasoning'],
+  plainanswer: ['content'],
+  explanation: ['content']
+};
+
+// Called from the SAVE — `saveQuestion` and `saveVettingQuestion`, the two
+// doors every committed question already goes through, so no authoring path
+// can be forgotten and one added later is covered without being told.
+//
+// It compares against the question BEING SAVED rather than the live editor:
+// that object has already been through `syncEditorDomToBlocks`, so it is what
+// the teacher really left in the box, and it is the same for every save path.
+function styleHarvestQuestion(qq) {
+  if (!_isAdmin() || !qq || !Array.isArray(qq.blocks)) return 0;
+  const st = styleEnsure();
+  let found = 0;
+  qq.blocks.forEach(b => {
+    if (!b) return;
+    (STYLE_FIELDS[b.type] || []).forEach(field => {
+      const key = styleGenKey(b.id, field);
+      const gen = styleGen[key];
+      if (!gen || !gen.wrote) return;
+      const kept = styleTrim(stripHtml(b[field] || ''), STYLE_EDIT_CHARS);
+      if (!kept) return;
+      // A comparison already made costs nothing to make again. A question is
+      // saved repeatedly while it is being worked on, and the distance is a
+      // word-level Levenshtein over every generation still on the page.
+      if (gen.seen === kept) return;
+      gen.seen = kept;
+      const dist = _styleEditRatio(gen.wrote, kept);
+      // THE SLOT IS THE GENERATION, so a second pass at the same box
+      // SUPERSEDES the first rather than filing a halfway version beside it.
+      // The last thing the teacher left in the box is the one that counts.
+      const slot = String(qq.id || '') + ':' + key;
+      const at = st.edits.findIndex(e => e && e.slot === slot);
+      if (dist <= STYLE_EDIT_TRIVIAL) {
+        // Edited back to what the app wrote after all. The correction recorded
+        // a moment ago is no longer one, and leaving it would teach a lesson
+        // the teacher has just withdrawn.
+        if (at >= 0) st.edits.splice(at, 1);
+        return;
+      }
+      const rec = {
+        slot,
+        q: gen.q,
+        wrote: gen.wrote,
+        a: kept,
+        dist,
+        topic: styleTrim(qq.topic || '', 80),
+        note: '',
+        at: new Date().toISOString()
+      };
+      if (at >= 0) st.edits.splice(at, 1);
+      st.edits.push(rec);
+      if (st.edits.length > STYLE_EDITS_MAX) st.edits.splice(0, st.edits.length - STYLE_EDITS_MAX);
+      found++;
+    });
+  });
+  if (!found) return 0;
+  // Nothing here may hold up a save, and a corpus that could not be written is
+  // not a reason to lose the question.
+  styleSave()
+    .then(ok => { if (ok) styleWriteNotes(); })
+    .catch(e => console.warn('answer style save', e));
+  return found;
+}
+
+// ---- ③  THE LESSON ---------------------------------------------------------
+// ONE CALL PER CORRECTION, never a batch. A batch is cheaper and brings the
+// one failure this feature can produce silently: a lesson attributed to the
+// wrong correction reads perfectly and teaches the app something the teacher
+// never said. Corrections are rare — a handful in a sitting — so the cost of
+// one call each is small and the attribution is free.
+const STYLE_NOTE_SYS =
+  'A teacher has corrected an answer that an AI wrote for them. Write the ONE lesson that would have made the AI write the teacher\'s version first time.\n' +
+  'Rules:\n' +
+  '• ONE sentence, at most 25 words, written as an instruction to whoever writes the next answer — "State the direction of heat flow", never "the teacher added the direction".\n' +
+  '• About HOW to answer: the science that must be named, the wording expected, the length, what has to be stated. Never about this one question\'s facts.\n' +
+  '• If the change is only cosmetic — punctuation, a synonym, tidier grammar, a shorter sentence saying the same thing — there is NO lesson. Return an empty string.\n' +
+  'Return ONLY JSON: {"lesson":"..."}';
+
+// Runs in the background after a save. Never awaited by anything: a lesson is
+// worth having and worth nothing at all compared with the question itself.
+async function styleWriteNotes() {
+  if (_styleWriting || !_isAdmin()) return;
+  const st = styleEnsure();
+  const todo = st.edits.filter(e => e && !String(e.note || '').trim() && !e.noteTried);
+  if (!todo.length) return;
+  _styleWriting = true;
+  try {
+    const batch = todo.slice(0, STYLE_NOTE_PAR);
+    await Promise.all(batch.map(async e => {
+      // Marked BEFORE the call, so a correction the model has nothing to say
+      // about is not re-asked on every save for the rest of the account's life.
+      e.noteTried = true;
+      try {
+        const prompt = STYLE_NOTE_SYS +
+          (e.q ? '\n\nThe question: ' + e.q : '') +
+          '\n\nWhat the AI wrote:\n' + e.wrote +
+          '\n\nWhat the teacher changed it to:\n' + e.a;
+        const raw = await askGemini(prompt, { maxOutputTokens: 220, temperature: 0.2, json: true });
+        let p = _parseAIJson(raw);
+        if (Array.isArray(p)) p = p[0];
+        e.note = styleTrim((p && p.lesson) || '', STYLE_NOTE_CHARS);
+      } catch (err) {
+        console.warn('answer style: lesson not written', err);
+      }
+    }));
+    await styleSave();
+    try { if (typeof notesRenderBody === 'function' && currentUser && currentUser.role === 'admin') _styleRepaint(); } catch (err) {}
+  } finally {
+    _styleWriting = false;
+  }
+  // More waiting: keep going, a batch at a time, rather than in one burst.
+  if (styleEnsure().edits.some(e => e && !String(e.note || '').trim() && !e.noteTried)) {
+    setTimeout(() => { styleWriteNotes(); }, 1200);
+  }
+}
+
+// ---- ④  THE STORE ---------------------------------------------------------
+function _styleOwnerUid() {
+  if (!currentUser) return '';
+  return currentUser.role === 'admin' ? currentUser.uid : (adminUid || '');
+}
+async function loadAnswerStyle() {
+  aiStyle = { edits: [] };
+  const uid = _styleOwnerUid();
+  if (!uid || !db) return aiStyle;
+  try {
+    const snap = await getDoc(doc(db, 'users', uid, 'settings', STYLE_DOC));
+    if (snap.exists() && snap.data() && Array.isArray(snap.data().edits)) {
+      aiStyle.edits = snap.data().edits.filter(e => e && e.wrote && e.a);
+    }
+  } catch (e) {
+    // A student whose rules do not allow it, or an offline device: the AI
+    // carries on ungrounded exactly as it did before any of this existed.
+    // Never an error worth showing — the same rule the teaching notes follow.
+    console.warn('answer style load', e);
+  }
+  return aiStyle;
+}
+function stopAnswerStyle() {
+  aiStyle = null;
+  Object.keys(styleGen).forEach(k => { delete styleGen[k]; });
+}
+async function styleSave() {
+  if (!_isAdmin() || !db) return false;
+  try {
+    await setDoc(doc(db, 'users', currentUser.uid, 'settings', STYLE_DOC),
+      { edits: styleEnsure().edits, updatedAt: new Date().toISOString() }, { merge: false });
+    return true;
+  } catch (e) {
+    // NAMED rather than swallowed. "Permission denied" here is a one-line
+    // Firestore rules fix on users/{uid}/settings/answerStyle, and reported as
+    // a generic failure it reads as the feature not working at all.
+    console.warn('answer style save', e);
+    showToast('Could not save what was learned from that edit — ' +
+      (e && e.code === 'permission-denied' ? 'this account is not allowed to write the answer-style record' : 'check your connection'), 'error');
+    return false;
+  }
+}
+
+function styleForget(slot) {
+  const st = styleEnsure();
+  const at = st.edits.findIndex(e => e && e.slot === slot);
+  if (at < 0) return;
+  st.edits.splice(at, 1);
+  styleSave();
+  _styleRepaint();
+}
+function styleForgetAll() {
+  showConfirm('Forget every correction',
+    'The ' + styleEdits().length + ' correction' + (styleEdits().length === 1 ? '' : 's') +
+    ' this app has learned from your edits will be deleted. Your teaching notes are not affected.',
+    () => { styleEnsure().edits = []; styleSave(); _styleRepaint(); });
+}
+function _styleRepaint() {
+  try { if (document.getElementById('notesBody') && currentUser && currentUser.role === 'admin') notesRenderBody(); }
+  catch (e) { console.warn('answer style repaint', e); }
+}
+
+// The panel on the 🎯 Teaching Notes page. A costly, invisible thing happening
+// by itself is a thing nobody trusts: the teacher can read every lesson the
+// app has drawn from their edits, see the edit it came from, and delete one
+// that is wrong.
+function styleLearnedHtml() {
+  const edits = styleEdits().slice().reverse();
+  const withNote = edits.filter(e => String(e.note || '').trim()).length;
+  const rows = edits.slice(0, 40).map(e => {
+    const note = styleTrim(e.note || '', STYLE_NOTE_CHARS);
+    return `<div class="tn-learn-row">
+      <div class="tn-learn-note">${note ? '💡 ' + escapeHtml(note) : '<span class="tn-none">No lesson drawn from this one — the change was too small to teach anything</span>'}</div>
+      <div class="tn-learn-pair">
+        <div><b>This app wrote:</b> ${escapeHtml(styleTrim(e.wrote, 220))}</div>
+        <div><b>You changed it to:</b> ${escapeHtml(styleTrim(e.a, 220))}</div>
+      </div>
+      <button class="tn-learn-x" type="button" onclick="styleForget('${escapeHtml(e.slot)}')" title="Forget this correction">✕</button>
+    </div>`;
+  }).join('');
+  return `<div class="tn-learn">
+    <h3>🧠 What your edits have taught this app</h3>
+    <p class="tn-sub">Every time you rewrite an answer the AI wrote, this app keeps the before and the after, and asks the AI what lesson it should have known. Those lessons go into the next answer it writes for you — and into its explanations. They are never used to mark a student.</p>
+    ${edits.length
+      ? `<div class="tn-learn-count">${edits.length} correction${edits.length === 1 ? '' : 's'} learned · ${withNote} turned into a lesson</div>${rows}
+         <button class="btn btn-outline btn-sm" type="button" onclick="styleForgetAll()">Forget everything learned</button>`
+      : `<div class="tn-empty">Nothing learned yet. Press 🤖 AI answer on a question, change what it writes, and save — the difference is what it learns from.</div>`}
+  </div>`;
 }
 
 // ---- Teaching Notes page (admin only) ----
@@ -1595,6 +2015,15 @@ function notesRenderBody() {
   body.innerHTML = `<style>
     .tn-wrap { max-width:880px; margin:0 auto; }
     .tn-upload { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:22px 24px; margin-bottom:20px; }
+    .tn-learn { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:22px 24px; margin-top:28px; }
+    .tn-learn h3 { margin:0 0 6px; font-size:1.02rem; }
+    .tn-learn .tn-sub { margin:0 0 18px; }
+    .tn-learn-count { font-size:0.82rem; color:var(--text-muted); margin-bottom:14px; }
+    .tn-learn-row { position:relative; border:1px solid var(--border); border-radius:12px; padding:16px 44px 16px 18px; margin-bottom:12px; }
+    .tn-learn-note { font-size:0.9rem; line-height:1.6; margin-bottom:10px; }
+    .tn-learn-pair { font-size:0.8rem; color:var(--text-muted); line-height:1.65; display:grid; gap:4px; }
+    .tn-learn-x { position:absolute; top:12px; right:12px; border:none; background:none; cursor:pointer; color:var(--text-muted); font-size:0.95rem; line-height:1; padding:4px; }
+    .tn-learn-x:hover { color:#c0392b; }
     .tn-upload h3 { margin:0 0 4px; font-size:1.05rem; }
     .tn-upload .tn-sub { margin:0 0 16px; font-size:0.88rem; color:var(--text-muted); line-height:1.55; }
     .tn-upload textarea { width:100%; }
@@ -1651,6 +2080,7 @@ function notesRenderBody() {
       <span style="font-size:0.8rem;color:var(--text-muted);">marking uses the notes matching each question's topic; question-building uses the keywords from all notes</span>
     </div>
     ${cards}
+    ${styleLearnedHtml()}
   </div>`;
 }
 
@@ -2652,6 +3082,7 @@ async function enterApp(user) {
     loadMarkingSettings();
     loadGenSettings();
     loadTeachingNotes(); // grounds AI generation & marking on the uploaded notes
+    loadAnswerStyle();   // …and on what the teacher's own edits have taught it
     loadSampleData();
     // Saved worksheets were only ever loaded on the student branch, so an admin
     // who pressed "Save Worksheet" could never find it again — the page was
@@ -2692,6 +3123,7 @@ async function enterApp(user) {
     loadMarkingSettings();
     loadGenSettings();
     loadTeachingNotes();               // grounds AI question building on the uploaded notes
+    loadAnswerStyle();
     renderBlocks();
     loadSavedWorksheets().then(renderSavedWorksheets).catch(e => console.warn('saved worksheets', e));
     populateWsTopicFilter();
@@ -2779,7 +3211,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.352.0';
+const APP_VERSION = 'v1.353.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -3242,6 +3674,7 @@ async function loadAdminQuestions() {
     populateWsTopicFilter();
     loadMarkingSettings(); // pick up the teacher's rubric for student practice
     loadTeachingNotes();   // teacher's notes ground the AI marking on this device too
+    loadAnswerStyle();
   } catch (err) {
     console.error('loadAdminQuestions failed:', err);
     showToast('Could not load questions - check your connection', 'error');
@@ -3258,6 +3691,9 @@ onAuthStateChanged(auth, (user) => {
     // running would go on feeding one account's notes to the next person to
     // sign in on the same device.
     try { stopTeachingNotes(); } catch (e) {}
+    // …or one account's corrections go on grounding the next person to sign in
+    // on this device, which is the rule the notes listener already follows.
+    try { stopAnswerStyle(); } catch (e) {}
     students = [];
     studentSetupSeen = false;
     // A revision deck and a mistake log belong to one account — never let a
@@ -7051,6 +7487,10 @@ async function aiGenerateBlockAnswer(blockId, btn) {
       if (!ans) throw new Error('the AI returned an empty answer — please try again');
       block.content = toHtml(ans);
     }
+    // Remember what was written, so a rewrite of it on the way to the save is
+    // a correction this app can learn from rather than a change nobody saw.
+    const askedAbout = (title ? title + ' — ' : '') + ctxBits.join(' ');
+    (STYLE_FIELDS[block.type] || []).forEach(f => styleNoteGenerated(block.id, f, askedAbout, block[f]));
     renderBlocks();
     showToast(notesDb ? '🤖 Answer crafted from your Teaching Notes database — review it before saving' : '🤖 Answer crafted — no Teaching Notes matched, so standard PSLE knowledge was used. Review it before saving', 'success');
   } catch (e) {
@@ -7166,6 +7606,7 @@ async function aiGenerateBlockExplanation(blockId, btn, level) {
     const expl = p && typeof p === 'object' ? String(p.explanation || p.text || '').trim() : '';
     if (!expl) throw new Error('the AI returned an empty explanation — please try again');
     block.content = _nlToBrHtml(expl);
+    styleNoteGenerated(block.id, 'content', (title ? title + ' — ' : '') + ctxBits.join(' '), block.content);
     renderBlocks();
     const lead = full ? '📚 Long explanation written' : more ? '📖 Expanded explanation written' : '🤖 Explanation written';
     showToast(notesDb ? lead + ' from your Teaching Notes database — review it before saving' : lead + ' — no Teaching Notes matched, so standard PSLE knowledge was used. Review it before saving', 'success');
@@ -23352,6 +23793,9 @@ async function saveQuestion(q, opts) {
       // bookkeeping (the usage backfill, auto-tagging, the part converter) —
       // machine housekeeping is not work the author did.
       if (wkLog) _wkLogQuestion(q, 'bank');
+      // What the teacher changed about an answer this app wrote. Fire and
+      // forget: a lesson is worth having and worth nothing beside the question.
+      try { styleHarvestQuestion(q); } catch (e) { console.warn('answer style harvest', e); }
       // Every other window folds this question into its own bank, so nothing
       // added in one tab is invisible (or duplicated) in the next.
       if (!quiet) _xtAnnounceQuestion(q.id, 'bank', 'save');
@@ -23393,6 +23837,7 @@ async function saveVettingQuestion(q) {
     try {
       await setDoc(_vRef(q.id), q);
       if (wkLog) _wkLogQuestion(q, 'vetting');
+      try { styleHarvestQuestion(q); } catch (e) { console.warn('answer style harvest', e); }
       _xtAnnounceQuestion(q.id, 'vetting', 'save');
       _inflightOps--;
       if (_inflightOps === 0) _setSaveStatus('saved');
@@ -67868,6 +68313,8 @@ window.vetSelAllVisible = vetSelAllVisible;
 window.vetSelClear = vetSelClear;
 window.vetDeleteSelected = vetDeleteSelected;
 window.vetMergeSelected = vetMergeSelected;
+window.styleForget = styleForget;
+window.styleForgetAll = styleForgetAll;
 window.bankMergeSelected = bankMergeSelected;
 window.qmClose = qmClose;
 window.qmMove = qmMove;

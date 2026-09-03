@@ -363,6 +363,7 @@ const UNGROUNDED_BY_DESIGN = {
 
   // ---- reading the notes themselves ----
   notesHandleFiles: 'this is what READS the notes; grounding it is a feedback loop',
+  styleWriteNotes: 'this is what WRITES a lesson out of the teacher’s own correction — it is handed the before and the after and asked what the app should have known. Grounding it in the notes is the same feedback loop: it would come back agreeing with what the app already believed rather than with what the teacher actually changed',
 
   // ---- transcription: a transcriber told what the answer should say writes
   //      that down instead of what is on the page ----

@@ -1471,6 +1471,83 @@ nowhere to put it. So it went unsaid, and every question, answer and mark was wr
   whole question in every prompt would drown the rule it was written to carry.
 - Run **`node tools/teaching-notes-tests.mjs`** after touching any of it.
 
+## 🧠 Learning from the teacher's own corrections (v1.353.0)
+
+`STYLE_DOC` / `styleEnsure` / `styleEdits` / `styleLessons` / `styleRecentEdits`
+/ **`styleBlock`** (beside `aiGrounding`, search `LEARNING FROM THE TEACHER'S
+OWN CORRECTIONS`), and the loop itself — `styleNoteGenerated` /
+`_styleEditRatio` / `STYLE_FIELDS` / **`styleHarvestQuestion`** /
+`STYLE_NOTE_SYS` / **`styleWriteNotes`** / `loadAnswerStyle` / `stopAnswerStyle`
+/ `styleSave` / `styleLearnedHtml` (search `① WHAT THE AI WROTE`), plus the
+🧠 panel at the foot of the 🎯 Teaching Notes page. **`polymathlc/anskey`
+carries the same loop over its own annotations — ship a change to both.**
+
+The teacher presses 🤖 AI answer, reads what comes back, and changes it. That
+change is the most direct statement there is of what this app got wrong about
+them, and it was thrown away the moment the question was saved.
+
+- **FOUR STEPS.** `styleNoteGenerated` records what the AI wrote, per answer
+  box; `styleHarvestQuestion` runs on the SAVE and compares it with what the
+  teacher left there; `styleWriteNotes` asks the model for the ONE lesson that
+  would have made it write the teacher's version first time; `styleBlock` puts
+  those lessons — and the most recent corrections themselves — into the next
+  answer's prompt.
+- **WHICH PROMPTS SEE IT IS THE WHOLE SAFETY STORY, and `styleBlock` is the ONE
+  place it is decided.** A correction is an ANSWER, so it reaches `'answer'`
+  and `'teach'` and nowhere else. **`'mark'`** would be a marker handed the
+  answer, and would start marking a child on whether they used the teacher's
+  wording. **`'check'`** is a second reader: told what phrasing the teacher
+  prefers it flags correct answers for wording, and the report then reads as a
+  clean bill of health inverted — the very failure `_notesCheckBlock` already
+  carries a caveat against. **`'gen'`** is authoring from a document, where the
+  document wins. `aiGrounding` appends the block on every branch and lets
+  `styleBlock` refuse; a gate written into `aiGrounding` instead is a gate the
+  next branch added there forgets.
+- **ONE AI CALL PER CORRECTION, never a batch.** A batch is cheaper and brings
+  the one failure this can produce silently: a lesson attributed to the wrong
+  correction reads perfectly and teaches the app something the teacher never
+  said. Corrections are rare — a handful in a sitting — so the attribution is
+  free.
+- **A COSMETIC CHANGE IS NOT A CORRECTION.** `_styleEditRatio` is a word-level
+  Levenshtein and `_styleWords` trims punctuation off each word's edges:
+  dropping a full stop from a seven-word answer is one word in seven, well over
+  `STYLE_EDIT_TRIVIAL`, so without that trim a teacher tidying punctuation is
+  recorded as having rewritten the answer and the note writer is handed a
+  "correction" with no lesson in it. A model that finds no lesson is recorded
+  as having been ASKED (`noteTried`), or every save pays for the same empty
+  answer for the rest of the account's life.
+- **THE SLOT IS THE GENERATION, so a second pass at the same box SUPERSEDES the
+  first** rather than filing a halfway version beside it — the last thing the
+  teacher left in the box is the one that counts. Edited back to what the app
+  wrote, the correction is WITHDRAWN: leaving it teaches a lesson they have
+  just taken back.
+- **THE HARVEST RUNS ON BOTH SAVE DOORS** — `saveQuestion` and
+  `saveVettingQuestion`, the two functions every committed question already
+  goes through, so an authoring path added later is covered without being told.
+  It reads the question BEING SAVED, which has already been through
+  `syncEditorDomToBlocks`, so it is what the teacher really left in the box and
+  it is the same for every path. It never blocks a save: a lesson is worth
+  having and worth nothing beside the question.
+- **ONLY THE ADMIN TEACHES THE APP.** An employee is hired to write questions
+  into the teacher's bank; how the AI answers for the whole centre is not
+  theirs to rewrite — and the write would be denied anyway, failing closed.
+- **THE CORPUS IS THIS APP'S OWN DOCUMENT**, `users/{adminUid}/settings/answerStyle`
+  — the same shape the learning objectives already use, so it needs no rules
+  change. It is deliberately NOT the Ans Key app's `aiTraining/answerStyle`
+  under the same uid: that app teaches maths as well as science, and sharing the
+  document would put a maths correction into a science answer — exactly what
+  `_noteSuitsThisApp` exists to prevent from the other direction.
+- **`styleGen` is NOT persisted.** A generation the author never saved is not a
+  correction, and a page reloaded mid-edit is a change nobody could honestly
+  attribute. It comes down on sign-out with the corpus, or one account's
+  corrections go on grounding the next person to sign in on the device.
+- **A denied write is NAMED.** "Could not save" reads as the feature not
+  working; `permission-denied` here is a one-line rules fix on that path.
+- The panel is not decoration: a costly, invisible thing happening by itself is
+  a thing nobody trusts, so every lesson is shown beside the edit it came from
+  and one that is wrong can be deleted.
+- Run **`node tools/answer-learning-tests.mjs`** after touching any of it.
+
 ## 🔄 The notebook is LIVE, and it is shared (v1.310.0)
 
 `loadTeachingNotes` / `_notesApplySnap` / `_notesDetach` / `stopTeachingNotes` /
@@ -4713,6 +4790,24 @@ are missing which, and takes the author straight to them.
   returns an empty string rather than null takes the answer box off the question
   and puts nothing in its place: a question that renders perfectly and cannot be
   answered.
+- After touching **🧠 the corrections loop** (`styleBlock`, `styleLessons`,
+  `styleRecentEdits`, `styleHarvestQuestion`, `styleNoteGenerated`,
+  `_styleEditRatio`, `STYLE_FIELDS`, `STYLE_NOTE_SYS`, `styleWriteNotes`,
+  `styleSave`, `loadAnswerStyle` / `stopAnswerStyle`, `styleLearnedHtml`, or
+  `aiGrounding`'s `+ style`), run `node tools/answer-learning-tests.mjs`. The
+  failures here are of two kinds and both are silent. The loop quietly not
+  running is the complaint this feature answers arriving through its own fix: a
+  correction reaches no prompt, so the app makes the same mistake on the very
+  next answer while the panel says it was learned. The other is worse — a
+  correction reaching a prompt that must never see one: MARKING handed the
+  answer starts marking a child on whether they used the teacher's wording, the
+  CHECKER told what phrasing is preferred flags correct answers for wording,
+  and question AUTHORING is where the source document wins. Let a punctuation
+  tidy-up count as a rewrite and the corpus fills with lessons that have none in
+  them; stop superseding the same box and it keeps the halfway version for ever;
+  batch the lesson calls and one lands on the wrong correction, reading
+  perfectly and teaching something nobody said; and let an employee harvest and
+  the whole centre's answers are rewritten by somebody hired to type questions.
 - After touching **the grounding one door, the note budgets or the census**
   (`aiGrounding`, `_notesFairShare`, `_notesField`, `_notesDedupe`,
   `_notesTrimTo`, `_notesLedger` / `notesLedgerFor` / `notesLedgerCounts`,
