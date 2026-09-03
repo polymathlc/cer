@@ -348,7 +348,7 @@ test('the PDF stitch and the manual merge are the SAME merge', () => {
   // Two implementations is two chances to order the parts differently, and
   // the automatic one is the one nobody watches.
   ok(/_vetApplyMerge\(\[lastQ, qs\[0\]\]\)/.test(src), 'the PDF feeder stitches with the shared worker');
-  const worker = cut('async function _vetApplyMerge(sources, opts) {', '\n// ── The dialog', 'apply worker');
+  const worker = cut('async function _vetApplyMerge(sources, opts) {', '\n// ── …and the same thing', 'apply worker');
   ok(/qMergeQuestions\(list, opts\)/.test(worker), 'and the worker builds it with the shared merge');
   const dialog = cut('async function qmConfirm()', '\n// ====', 'confirm');
   ok(/_vetApplyMerge\(sources/.test(dialog), '…and so does 🔗 Merge');
@@ -356,13 +356,72 @@ test('the PDF stitch and the manual merge are the SAME merge', () => {
 
 test('the merged question is WRITTEN before anything is deleted', () => {
   // The other order loses work outright: a delete that succeeds followed by a
-  // save that fails takes both halves away for good.
-  const worker = cut('async function _vetApplyMerge(sources, opts) {', '\n// ── The dialog', 'apply worker');
-  const save = worker.indexOf('saveVettingQuestion(merged)');
-  const del = worker.indexOf('deleteVettingDocAwait');
-  ok(save > -1 && del > -1, 'both steps are there');
-  ok(save < del, 'the save comes first');
-  ok(/if \(!wrote\)/.test(worker), 'and a save that did not land deletes NOTHING');
+  // save that fails takes both halves away for good. BOTH workers are pinned:
+  // they sit apart in the file and this is the one thing that may never differ
+  // between them.
+  [
+    ['vetting', cut('async function _vetApplyMerge(sources, opts) {', '\n// ── …and the same thing', 'vetting worker'),
+      'saveVettingQuestion(merged)', 'deleteVettingDocAwait'],
+    ['bank', cut('async function _bankApplyMerge(sources, opts) {', '\n// A merge says these questions', 'bank worker'),
+      'saveQuestion(merged)', 'deleteQuestionDocAwait'],
+  ].forEach(([where, worker, saveCall, delCall]) => {
+    const save = worker.indexOf(saveCall);
+    const del = worker.indexOf(delCall);
+    ok(save > -1 && del > -1, where + ': both steps are there');
+    ok(save < del, where + ': the save comes first');
+    ok(/if \(!wrote\)/.test(worker), where + ': a save that did not land deletes NOTHING');
+    ok(/qMergeQuestions\(list, opts\)/.test(worker), where + ': and it builds with the shared merge');
+  });
+});
+
+test('🔗 Merge on the QUESTION BANK is the same merge and the same dialog', () => {
+  // A second dialog for the bank would be a second place to get the part order
+  // wrong in — on the surface whose whole job is showing that order before
+  // anything is written.
+  const open = cut('function bankMergeSelected() {', '\nfunction qmClose', 'bank opener');
+  ok(/_qmDraft = \{ ids: order, letter: false, scope: 'bank' \}/.test(open), 'it opens the shared qm dialog in bank scope');
+  ok(/qmRender\(\)/.test(open), 'and renders it');
+  ok(/if \(!_canAuthor\(\)\) return;/.test(open), 'a student is refused in the HANDLER, not merely by a hidden button');
+  ok(/QMERGE_MAX/.test(open), 'and the same cap applies');
+  // Oldest first: the bank is shown newest-first, so taking the order off the
+  // screen would put the second half of a question above the first every time.
+  ok(/_questionRecency\(qa\) - _questionRecency\(qb\)/.test(open), 'the sources go in oldest first');
+  const confirm = cut('async function qmConfirm()', '\n// ====', 'confirm');
+  ok(/_bankApplyMerge\(sources/.test(confirm) && /_vetApplyMerge\(sources/.test(confirm),
+     'and Confirm hands to the worker for the list it was opened on');
+  ok(/_qmScope\(\) === 'bank'/.test(confirm), 'chosen by the draft’s own scope');
+  // The bank worker deletes for good — this app has no bin — so the dialog has
+  // to say so rather than reading like the vetting one.
+  const render = cut('function qmRender() {', '\nfunction _qmSnippet', 'dialog render');
+  ok(/deleted from the question bank/.test(render), 'the bank wording says the others are deleted');
+  ok(/this app has no bin/.test(render), 'and that it is permanent');
+  ok(/removed from the vetting list/.test(render), 'while the vetting wording is left as it was');
+});
+
+test('the bank merge repoints the worksheets that held a removed question', () => {
+  // A merge says these questions are ONE now. A saved worksheet left pointing
+  // at a source draws its "no longer in the bank" row — a sheet quietly broken
+  // by a tidy-up that was never made on it.
+  const fn = cut('function _bankMergeRepointWorksheets(hostId, goneIds) {', '\n// ── The dialog', 'repoint');
+  ok(/ws\.questionIds = out/.test(fn), 'the list is rewritten');
+  ok(/_wsPersistWorksheet\(ws\)/.test(fn), 'and persisted');
+  ok(/if \(out\.indexOf\(to\) < 0\) out\.push\(to\)/.test(fn),
+     'a sheet holding BOTH halves keeps the host once, at the earlier position');
+  // The overrides are keyed by question id, so one left on a removed id would
+  // sit on whatever question happened to follow it.
+  ok(/wsManualBreaks\.delete\(id\)\) wsManualBreaks\.add\(host\)/.test(fn), 'a manual page break moves to the host');
+  ok(/wsMergeUp\.delete\(id\)\) wsMergeUp\.add\(host\)/.test(fn), 'and so does a merge-up');
+  const worker = cut('async function _bankApplyMerge(sources, opts) {', '\n// A merge says these questions', 'bank worker');
+  ok(/_bankMergeRepointWorksheets\(hostId, gone\)/.test(worker), 'and only the sources that REALLY went are repointed');
+});
+
+test('a bank source that would not delete is kept on screen', () => {
+  // Its content is inside the merged question either way, so a card taken off
+  // a list the database still holds it in is the one state nobody can see.
+  const worker = cut('async function _bankApplyMerge(sources, opts) {', '\n// A merge says these questions', 'bank worker');
+  ok(/if \(await deleteQuestionDocAwait\(id\)\) \{/.test(worker), 'the delete is awaited and its answer read');
+  ok(/else failed\.push\(id\)/.test(worker), 'a refusal is collected');
+  ok(/could not be deleted from the bank/.test(worker), 'and said out loud');
 });
 
 test('a page is only asked about continuation when it HAS a page before it', () => {

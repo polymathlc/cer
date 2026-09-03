@@ -2779,7 +2779,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.351.0';
+const APP_VERSION = 'v1.352.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -15760,6 +15760,7 @@ function _renderBankPickBar(filtered) {
     <button class="btn btn-outline btn-sm" onclick="clearBankPicks()">Clear</button>
     <span style="flex:1;"></span>
     ${_canAuthor() ? `<button class="btn btn-outline btn-sm" onclick="openBulkTags('picked')" title="Add or remove tags on all ${n} at once, or have the AI tag each one">🏷 Tag these</button>` : ''}
+    ${_canAuthor() ? `<button class="btn btn-outline btn-sm" onclick="bankMergeSelected()" ${n >= 2 ? '' : 'disabled'} title="${n >= 2 ? 'Join the ticked questions into ONE question, in the order you choose — for a question that reached the bank as two' : 'Tick at least two questions to merge them into one'}">🔗 Merge these</button>` : ''}
     <button class="btn btn-outline btn-sm" onclick="bankPicksToPractice()">✏️ Practice these</button>
     <button class="btn btn-primary btn-sm" onclick="bankPicksToWorksheet()">📄 Build worksheet</button>`;
 }
@@ -16741,12 +16742,131 @@ async function _vetApplyMerge(sources, opts) {
   return merged;
 }
 
+// ── …and the same thing in the QUESTION BANK ────────────────────────────────
+// Two questions in the bank that are really one: a stem and its parts approved
+// as two, a paper imported twice and half-tidied, a question somebody split by
+// hand. The MERGE is `qMergeQuestions`, exactly as above — this is only where
+// the result is written.
+//
+// THE ORDER IS THE SAME GUARANTEE and it is the one thing that must never
+// drift from `_vetApplyMerge`: the merged question is WRITTEN first, and a
+// save that did not land deletes NOTHING. `tools/question-merge-tests.mjs`
+// pins that in BOTH, because the two are far enough apart to drift quietly.
+//
+// WHAT IS DIFFERENT is what a removed source costs. A vetting card is a draft;
+// a bank question is live, and THIS APP HAS NO BIN — `deleteQuestionDoc` is
+// final. So the dialog says so in as many words, and the one thing that would
+// otherwise break silently is repaired rather than left: see
+// `_bankMergeRepointWorksheets`.
+async function _bankApplyMerge(sources, opts) {
+  const list = (sources || []).filter(Boolean);
+  if (list.length < 2) return null;
+  // The button is hidden for a student, and hiding a button is never the lock:
+  // this one writes to the bank AND deletes from it.
+  if (!_canAuthor()) return null;
+  const merged = qMergeQuestions(list, opts);
+  if (!merged) return null;
+  _tagDuplicate(merged);
+  const hostId = merged.id;
+  const idx = questionBank.findIndex(q => q.id === hostId);
+  const was = idx >= 0 ? questionBank[idx] : null;
+  if (idx >= 0) questionBank[idx] = merged; else questionBank.unshift(merged);
+  let wrote = false;
+  try { wrote = await saveQuestion(merged); }
+  catch (e) { console.warn('merge: the merged question could not be saved', e); }
+  if (!wrote) {
+    // NOTHING is deleted after a save that did not land. The bank goes back to
+    // what it was, every question is still there, and the author can try again.
+    if (idx >= 0) questionBank[idx] = was; else questionBank = questionBank.filter(q => q.id !== hostId);
+    showToast('The merged question could not be saved — nothing was changed', 'error');
+    renderQuestionBank();
+    return null;
+  }
+  const gone = [], failed = [];
+  for (let i = 1; i < list.length; i++) {
+    const id = list[i].id;
+    if (await deleteQuestionDocAwait(id)) {
+      questionBank = questionBank.filter(q => q.id !== id);
+      wsSelectedIds.delete(id);
+      gone.push(id);
+    } else failed.push(id);
+  }
+  wsSelectedIds.delete(hostId);
+  const sheets = _bankMergeRepointWorksheets(hostId, gone);
+  updateCounts();
+  renderQuestionBank();
+  try { updateWsCount(); } catch (e) { console.warn('ws count', e); }
+  if (failed.length) {
+    showToast(failed.length + ' of the merged question' + (failed.length === 1 ? '' : 's')
+      + ' could not be deleted from the bank — its content is in the merged question, so delete it by hand', 'error');
+  } else if (sheets) {
+    showToast(sheets + ' saved worksheet' + (sheets === 1 ? '' : 's') + ' now point'
+      + (sheets === 1 ? 's' : '') + ' at the merged question', 'info');
+  }
+  return merged;
+}
+
+// A merge says these questions are ONE now, so a stored list of their ids
+// should hold the one. `ws.questionIds` is exactly such a list, and a
+// worksheet left pointing at a source draws its "no longer in the bank" row —
+// a sheet quietly broken by a tidy-up that was never made on it.
+//
+// It reaches THIS account's own worksheets and no further (`_wsRef` is
+// users/{uid}/worksheets), so a student's own saved sheet is not repointed and
+// still shows that row. That is the honest outcome for a document this account
+// cannot open, and the toast says how many really moved rather than implying
+// every sheet in the centre did.
+//
+// The host takes the EARLIEST position any of the merged questions held, so a
+// sheet keeps the order the teacher put it in; and the page-break overrides,
+// which are keyed by question id, move onto the host rather than being left on
+// an id nothing renders any more.
+function _bankMergeRepointWorksheets(hostId, goneIds) {
+  const gone = new Set((goneIds || []).map(String));
+  if (!gone.size) return 0;
+  const host = String(hostId);
+  let touched = 0;
+  (savedWorksheets || []).forEach(ws => {
+    const ids = (Array.isArray(ws.questionIds) ? ws.questionIds : []).map(String);
+    if (!ids.some(id => gone.has(id))) return;
+    const out = [];
+    ids.forEach(id => {
+      const to = gone.has(id) ? host : id;
+      if (out.indexOf(to) < 0) out.push(to);
+    });
+    ws.questionIds = out;
+    touched++;
+    _wsPersistWorksheet(ws);
+  });
+  gone.forEach(id => {
+    if (wsManualBreaks.delete(id)) wsManualBreaks.add(host);
+    if (wsMergeUp.delete(id)) wsMergeUp.add(host);
+  });
+  if (touched) { try { renderSavedWorksheets(); } catch (e) { console.warn('saved worksheets render', e); } }
+  return touched;
+}
+
 // ── The dialog ──────────────────────────────────────────────────────────────
 // The order is the whole point, so the dialog is a LIST that can be reordered
 // and it prints the part labels the merged question will actually read. A
 // merge cannot be undone from here — the sources are gone — so the author sees
 // the result before it is written rather than after.
-let _qmDraft = null;   // { ids: [], letter: bool }
+//
+// ONE DIALOG, TWO LISTS. `scope` says which — 'vetting' or 'bank' — and it is
+// the only thing that differs: the questions are resolved from that list, the
+// wording tells the truth about what is being destroyed there, and Confirm
+// hands over to that list's apply worker. A second dialog for the bank would
+// be a second place to get the part order wrong in, on the surface whose whole
+// job is showing the author that order before anything is written.
+let _qmDraft = null;   // { ids: [], letter: bool, scope: 'vetting' | 'bank' }
+// Anything with no scope on it is the vetting list, which is what every path
+// that predates the bank merge means.
+function _qmScope() { return (_qmDraft && _qmDraft.scope === 'bank') ? 'bank' : 'vetting'; }
+function _qmQById(id) {
+  return _qmScope() === 'bank'
+    ? (questionBank.find(q => q.id === id) || null)
+    : _vetQById(id);
+}
 
 function vetMergeSelected() {
   if (_vetBulkBusy) return;
@@ -16760,12 +16880,36 @@ function vetMergeSelected() {
     const qa = _vetQById(a), qb = _vetQById(b);
     return (Date.parse(_vetAddedAt(qa)) || 0) - (Date.parse(_vetAddedAt(qb)) || 0);
   });
-  _qmDraft = { ids: order, letter: false };
+  _qmDraft = { ids: order, letter: false, scope: 'vetting' };
   const ov = document.getElementById('qmOverlay');
   if (ov) ov.classList.add('show');
   qmRender();
 }
 function _vetQById(id) { return vettingList.find(q => q.id === id) || null; }
+
+// 🔗 Merge these, on the question bank's picked bar. It takes the WHOLE
+// selection rather than only the part the current filter is showing: the bar's
+// own count is the whole selection, and unlike a bulk delete this dialog then
+// LISTS every question by name, with ✕ to drop any of them — so what is about
+// to happen is on screen either way, which is the thing a filter-scoped set
+// exists to guarantee.
+function bankMergeSelected() {
+  if (!_canAuthor()) return;
+  const ids = questionBank.filter(q => wsSelectedIds.has(q.id)).map(q => q.id);
+  if (ids.length < 2) { showToast('Tick at least two questions to merge', 'info'); return; }
+  if (ids.length > QMERGE_MAX) { showToast('Merge at most ' + QMERGE_MAX + ' questions at a time', 'error'); return; }
+  // OLDEST FIRST, for the vetting dialog's reason: the bank is shown newest
+  // first by default, so taking the order off the screen would put the second
+  // half of a question above the first every single time.
+  const order = ids.slice().sort((a, b) => {
+    const qa = questionBank.find(q => q.id === a), qb = questionBank.find(q => q.id === b);
+    return _questionRecency(qa) - _questionRecency(qb);
+  });
+  _qmDraft = { ids: order, letter: false, scope: 'bank' };
+  const ov = document.getElementById('qmOverlay');
+  if (ov) ov.classList.add('show');
+  qmRender();
+}
 function qmClose() {
   _qmDraft = null;
   const ov = document.getElementById('qmOverlay');
@@ -16792,7 +16936,16 @@ function qmSetLetter(on) {
 }
 function _qmSources() {
   if (!_qmDraft) return [];
-  return _qmDraft.ids.map(_vetQById).filter(Boolean);
+  return _qmDraft.ids.map(_qmQById).filter(Boolean);
+}
+// How many of THIS account's saved worksheets hold one of the questions that
+// is about to be removed. Said before the merge, not after: a sheet silently
+// repointed is a sheet the teacher did not know had changed.
+function _qmWorksheetsAffected(sources) {
+  if (!sources || sources.length < 2) return 0;
+  const gone = new Set(sources.slice(1).map(q => String(q.id)));
+  return (savedWorksheets || []).filter(ws =>
+    (Array.isArray(ws.questionIds) ? ws.questionIds : []).some(id => gone.has(String(id)))).length;
 }
 function qmRender() {
   const host = document.getElementById('qmBody');
@@ -16826,15 +16979,21 @@ function qmRender() {
   const preview = labels.length
     ? 'The merged question will read as ' + labels.map(k => qPartLabel(k)).join(' ') + '.'
     : 'The merged question will have no lettered parts — it reads straight through.';
+  const bank = _qmScope() === 'bank';
+  const sheets = bank ? _qmWorksheetsAffected(sources) : 0;
+  const intro = bank
+    ? `The questions are joined <b>in this order</b>, top to bottom, into the first one. The others are then <b>deleted from the question bank</b> — this app has no bin, so that is permanent.`
+      + (sheets ? ` ${sheets} saved worksheet${sheets === 1 ? '' : 's'} of yours ${sheets === 1 ? 'uses' : 'use'} one of them, and will be pointed at the merged question instead.` : '')
+    : 'The questions are joined <b>in this order</b>, top to bottom, into the first one. Everything else — the other cards — is removed from the vetting list. This cannot be undone.';
   host.innerHTML = `
-    <p class="qm-intro">The questions are joined <b>in this order</b>, top to bottom, into the first one. Everything else — the other cards — is removed from the vetting list. This cannot be undone.</p>
+    <p class="qm-intro">${intro}</p>
     <div class="qm-list">${rows}</div>
     <label class="qm-opt"><input type="checkbox" class="qm-check" ${_qmDraft.letter ? 'checked' : ''} onchange="qmSetLetter(this.checked)">
       <span><b>Letter each one as its own part (a) (b) (c)</b><br>
       Leave this off when the second card is the <i>rest</i> of the first — a question whose parts ran over a page break. Turn it on when they are separate sub-questions that belong under one stem.</span></label>
     <div class="qm-preview">🔤 ${escapeHtml(preview)}</div>`;
   const sub = document.getElementById('qmSub');
-  if (sub) sub.textContent = sources.length + ' questions → 1';
+  if (sub) sub.textContent = sources.length + ' questions → 1 · ' + (bank ? 'question bank' : 'vetting list');
 }
 function _qmSnippet(q) {
   const t = (q.blocks || [])
@@ -16850,9 +17009,12 @@ async function qmConfirm() {
   const sources = _qmSources();
   if (sources.length < 2) { qmClose(); return; }
   const letter = _qmDraft.letter;
+  const bank = _qmScope() === 'bank';
   const btn = document.getElementById('qmGoBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Merging…'; }
-  const merged = await _vetApplyMerge(sources, { letter });
+  const merged = bank
+    ? await _bankApplyMerge(sources, { letter })
+    : await _vetApplyMerge(sources, { letter });
   if (btn) { btn.disabled = false; btn.textContent = '🔗 Merge'; }
   qmClose();
   if (merged) showToast(sources.length + ' questions merged into “' + (merged.title || 'question') + '” ✓', 'success');
@@ -23256,6 +23418,22 @@ function deleteQuestionDoc(id) {
   deleteDoc(_qRef(id))
     .then(() => _xtAnnounceQuestion(id, 'bank', 'del'))
     .catch(err => console.warn('deleteQuestionDoc:', err));
+}
+
+// The AWAITED twin, for 🔗 Merge. A single card's 🗑 has nothing waiting on
+// it, but a merge has to know which of the sources really went: the ones that
+// did not are left on screen rather than being taken off a list the database
+// still holds them in. Same shape as deleteVettingDocAwait below.
+async function deleteQuestionDocAwait(id) {
+  if (!currentUser) return false;
+  try {
+    await deleteDoc(_qRef(id));
+    _xtAnnounceQuestion(id, 'bank', 'del');
+    return true;
+  } catch (err) {
+    console.warn('deleteQuestionDocAwait:', err);
+    return false;
+  }
 }
 
 // Delete one vetting doc (fire-and-forget)
@@ -67690,6 +67868,7 @@ window.vetSelAllVisible = vetSelAllVisible;
 window.vetSelClear = vetSelClear;
 window.vetDeleteSelected = vetDeleteSelected;
 window.vetMergeSelected = vetMergeSelected;
+window.bankMergeSelected = bankMergeSelected;
 window.qmClose = qmClose;
 window.qmMove = qmMove;
 window.qmDrop = qmDrop;
