@@ -50,6 +50,10 @@ let _wsQeReturn = null;
 let _wsQeQid = null;
 let _wsPreviewPaper = null;
 let _wsPreviewSaved = null;
+// 🖨 An ad-hoc set of bank / vetting questions previewed as it prints — the
+// third preview context, and the third slot every clear has to cover.
+let _wsPreviewAdhoc = null;
+let questionBank = [], vettingList = [];
 let wsSelectedIds = new Set();
 let savedWorksheets = [];
 let btn = { style: {}, innerHTML: '', title: '' };
@@ -59,10 +63,11 @@ function _vetFocusScroll() { log.push({ vetScroll: true }); }
 function ppPreview(items, missing, title, opts) { log.push({ preview: 'paper', items, missing, title, opts }); }
 function previewSavedWorksheet(id) { log.push({ preview: 'saved', id }); }
 function openWorksheetPreview() { log.push({ preview: 'builder' }); }
+function previewQuestionsPrint(list, title, source) { log.push({ preview: 'adhoc', ids: list.map(q => q.id), title, source }); }
 function closeWsQuickEdit() { log.push({ closed: 'drawer' }); }
 function closeWorksheetPreview() {
   log.push({ closed: 'preview' });
-  _wsPreviewPaper = null; _wsPreviewSaved = null;   // exactly what the real one does
+  _wsPreviewPaper = null; _wsPreviewSaved = null; _wsPreviewAdhoc = null;   // exactly what the real one does
 }
 function editQuestion(id) {
   log.push({ edit: id });
@@ -85,6 +90,9 @@ return {
   set(state) {
     _wsPreviewPaper = state.paper || null;
     _wsPreviewSaved = state.saved || null;
+    _wsPreviewAdhoc = state.adhoc || null;
+    questionBank = state.bank || [];
+    vettingList = state.vetting || [];
     wsSelectedIds = new Set(state.selected || []);
     savedWorksheets = state.sheets || [];
     _wsQeQid = state.qid || null;
@@ -278,6 +286,44 @@ test('a worksheet edit still says worksheet, and a plain bank edit hides it', ()
   M.set({});
   M.syncBtn();
   eq(M.btn.style.display, 'none', 'hidden with nowhere to go back to');
+});
+
+// ── 🖨 the printed preview of an ad-hoc set ─────────────────────────────────
+test('an ad-hoc printed preview snapshots by ID, not by object', () => {
+  M.set({ adhoc: { questions: [{ id: 'q1', title: 'One' }], title: 'Two questions', source: 'bank' } });
+  const snap = M.snapshot();
+  eq(snap.kind, 'adhoc', 'its own kind');
+  eq(snap.page, 'bank', 'and the page behind it');
+  eq(JSON.stringify(snap.ids), '["q1"]', 'ids — an edit rebuilds the bank entry, so a held object would be the PRE-edit copy');
+  ok(!('questions' in snap), 'the objects are deliberately not carried');
+});
+
+test('…and a vetting one comes back to the vetting list', () => {
+  M.set({ adhoc: { questions: [{ id: 'v1' }], title: 'x', source: 'vetting' } });
+  eq(M.snapshot().page, 'vetting', 'not the bank');
+});
+
+test('it reopens RE-RESOLVED from the list, so the edit that was just saved shows', async () => {
+  M.set({ bank: [{ id: 'q1', title: 'After the edit' }],
+          ret: { kind: 'adhoc', page: 'bank', ids: ['q1'], title: 'One', source: 'bank' } });
+  M.reopen(); await flush();
+  const hit = M.log.find(x => x.preview === 'adhoc');
+  ok(hit, 'the preview reopened');
+  eq(JSON.stringify(hit.ids), '["q1"]', 'by id, resolved against the live list');
+  eq(M.ret(), null, 'and the snapshot is spent');
+});
+
+test('a vetting set reopens from the VETTING list, which the bank never holds', async () => {
+  M.set({ bank: [], vetting: [{ id: 'v1', title: 'Waiting' }],
+          ret: { kind: 'adhoc', page: 'vetting', ids: ['v1'], title: 'x', source: 'vetting' } });
+  M.reopen(); await flush();
+  ok(M.log.some(x => x.preview === 'adhoc'), 'reopened — reading the bank would have found nothing');
+});
+
+test('a set whose questions have all gone reopens nothing', async () => {
+  M.set({ bank: [], ret: { kind: 'adhoc', page: 'bank', ids: ['gone'], title: 'x', source: 'bank' } });
+  M.reopen(); await flush();
+  ok(!M.log.some(x => x.preview), 'an empty sheet is not worth opening');
 });
 
 // ── run ─────────────────────────────────────────────────────────────────────

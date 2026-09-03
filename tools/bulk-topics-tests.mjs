@@ -54,7 +54,14 @@ const HOOK = {
   ai: () => ({ topic: 'Heat', confidence: 'high' }),
   aiReady: true, calls: 0, live: 0, inflight: 0,
   writes: [], refuse: new Set(), toasts: [], confirms: [], wkMax: 0,
-  levels: { P3: ['Materials', 'Magnets'], P5: ['Heat', 'Electricity', 'Cell Systems'], P6: ['Energy', 'Forces'] },
+  levels: {
+    P3: ['Materials', 'Magnets'],
+    P5: ['Heat', 'Electricity', 'Cell Systems'],
+    P6: ['Energy', 'Forces'],
+    // The reported case: a topic that names the PROCESS of science rather than
+    // a body of it.
+    S1: ['The Scientific Endeavour', 'Measurement and Lab Skills', 'Ray Model of Light'],
+  },
   fixedTopic: 'Energy',
 };
 let questionBank = [], vettingList = [];
@@ -65,6 +72,8 @@ let currentUser = { uid: 'me' };
 const TOPIC_LEVELS = ['P3', 'P4', 'P5', 'P6', 'S1'];
 const AKC_WINDOWS = [{ hours: 1, text: 'hour' }, { hours: 24, text: '24 hours' }, { hours: 0, text: '— any time —' }];
 const QRETIRED_TOPIC_RE = /cell\\s*systems/i;
+const LEVEL_ORDER = { P3: 3, P4: 4, P5: 5, P6: 6, S1: 7 };
+function getLevelNumber(l) { return LEVEL_ORDER[String(l || '').trim().toUpperCase()] || 3; }
 let SHOWN_BANK = null, SHOWN_VET = null;   // null = "everything", so the page's own filter is the default
 function _bankFilteredQuestions() { return (SHOWN_BANK || questionBank.slice()).filter(q => qbulkLightPasses('bank', q)); }
 function _vetVisibleQuestions() { return (SHOWN_VET || vettingList.slice()).filter(q => qbulkLightPasses('vetting', q)); }
@@ -74,6 +83,7 @@ function _questionRecency(x) {
   const m = /^q_(\\d{10,})/.exec(String((x && x.id) || ''));
   return m ? Number(m[1]) : 0;
 }
+function qSecondaryTopic(q) { return (q && typeof q.topic2 === 'string') ? q.topic2.trim() : ''; }
 function _qOwner(id) { return (questionBank.find(q => q.id === id) || {}).owner || 'me'; }
 function _vOwner(id) { return (vettingList.find(q => q.id === id) || {}).owner || 'me'; }
 function currentTopicsByLevel() { return HOOK.levels; }
@@ -119,6 +129,7 @@ return {
   HOOK,
   QBULK_MAX, QBT_CONFIRM_OVER,
   list: qbulkList, owned: qbulkOwned, choices: qbulkTopicChoices, unlit: qbulkUnlit,
+  secondOk: qbulkSecondOk, isProcess: qProcessTopic,
   recency: qbulkRecency, scopeLabel: qbulkScopeLabel, lightPasses: qbulkLightPasses,
   setScope: (w, s) => { _qbulk[w].scope = s; },
   setWindow: (w, h) => { _qbulk[w].hours = h; },
@@ -244,7 +255,14 @@ test('a level with nothing live in it falls back rather than offering none', () 
   // choose from, and a model with nothing to choose invents a topic.
   ok(M.choices('P3').length > 0, 'never empty');
   ok(M.choices('P3').indexOf('Cell Systems') < 0, 'and still never the retired one');
-  M.HOOK.levels = { P3: ['Materials', 'Magnets'], P5: ['Heat', 'Electricity', 'Cell Systems'], P6: ['Energy', 'Forces'] };
+  M.HOOK.levels = {
+    P3: ['Materials', 'Magnets'],
+    P5: ['Heat', 'Electricity', 'Cell Systems'],
+    P6: ['Energy', 'Forces'],
+    // The reported case: a topic that names the PROCESS of science rather than
+    // a body of it.
+    S1: ['The Scientific Endeavour', 'Measurement and Lab Skills', 'Ray Model of Light'],
+  };
 });
 
 // ── the AI pick ─────────────────────────────────────────────────────────────
@@ -267,7 +285,7 @@ test('an invented topic is snapped and flagged, never written as-is', async () =
 test('a topic that IS on the list keeps the confidence the model reported', async () => {
   reset();
   M.HOOK.ai = () => ({ topic: 'Forces', confidence: 'high' });
-  eq(await M.pickTopic(Q(), 'P6'), { topic: 'Forces', confidence: 'high' }, 'taken at its word');
+  eq(await M.pickTopic(Q(), 'P6'), { topic: 'Forces', topic2: '', confidence: 'high' }, 'taken at its word');
   M.HOOK.ai = () => ({ topic: 'Forces', confidence: 'low' });
   eq((await M.pickTopic(Q(), 'P6')).confidence, 'low', '…including when it says it is unsure');
 });
@@ -316,7 +334,7 @@ test('↩ Undo puts every one of them back', async () => {
   eq(M.undoStack(), null, 'the stack is spent');
 });
 
-test('a SECOND topic from another level is cleared, or the re-file is undone by it', async () => {
+test('a SECOND topic from a HIGHER level is cleared, or the re-file is undone by it', async () => {
   reset();
   // qLevelNum takes the MAX over topic and topic2, so a P6 secondary topic left
   // behind keeps the whole question at P6 while the primary looks right.
@@ -331,16 +349,105 @@ test('a SECOND topic from another level is cleared, or the re-file is undone by 
   eq(q.topic2, '', 'the P6 secondary topic is gone');
 });
 
-test('…but a second topic INSIDE the level is left alone', async () => {
+test('...but one at or BELOW the primary level is left alone', async () => {
   reset();
   const q = Q({ topic: 'Materials', topic2: 'Magnets' });
   M.setBank([q]);
   M.setScope('bank', 'shown');
-  M.HOOK.ai = () => ({ topic: 'Materials', confidence: 'high' });
+  M.HOOK.ai = () => ({ topic: 'Materials', topic2: 'Magnets', confidence: 'high' });
   M.open('bank');
   M.level('P3');
   await M.run();
-  eq(q.topic2, 'Magnets', 'it is already at the right level, so it stays');
+  eq(q.topic2, 'Magnets', 'it cannot raise the level, so it stays');
+});
+
+// -- the second topic: an experiment is an experiment ABOUT something --------
+test('a SKILL topic gets the science it is really about as a second topic', async () => {
+  reset();
+  // "The Scientific Endeavour" says HOW the question is being asked and nothing
+  // about WHAT it asks, so the heat in the question is nowhere in its filing
+  // and it never turns up under Heat.
+  const q = Q({ topic: 'Materials' });
+  M.setBank([q]);
+  M.setScope('bank', 'shown');
+  M.HOOK.ai = () => ({ topic: 'The Scientific Endeavour', topic2: 'Heat', confidence: 'high' });
+  M.open('bank');
+  M.level('S1');
+  await M.run();
+  eq(q.topic, 'The Scientific Endeavour', 'the skill it tests');
+  eq(q.topic2, 'Heat', 'and the science it is about -- a P5 topic under an S1 primary');
+});
+
+test('a second topic must never RAISE the level, whoever proposed it', async () => {
+  reset();
+  // The one way this feature could break the fix it ships beside: a topic2 from
+  // a later year silently puts the whole question above the level the author
+  // just asked for.
+  ok(!M.secondOk('Materials', 'Forces'), 'P3 primary must not take a P6 second');
+  ok(M.secondOk('Forces', 'Materials'), 'a P6 primary may take a P3 second');
+  ok(M.secondOk('Forces', 'Energy'), 'and one at the same level');
+  const q = Q({ topic: 'Materials' });
+  M.setBank([q]);
+  M.setScope('bank', 'shown');
+  M.HOOK.ai = () => ({ topic: 'Magnets', topic2: 'Forces', confidence: 'high' });
+  M.open('bank');
+  M.level('P3');
+  await M.run();
+  ok(!q.topic2, 'the P6 proposal was refused, got ' + JSON.stringify(q.topic2));
+});
+
+test('a second topic is never another skill topic, or invented, or the same one', () => {
+  reset();
+  // A second PROCESS topic says nothing the first one did not -- the point of
+  // the second is the science the experiment is about.
+  ok(M.isProcess('The Scientific Endeavour') && M.isProcess('Measurement and Lab Skills'), 'both skill topics are known');
+  ok(!M.secondOk('The Scientific Endeavour', 'Measurement and Lab Skills'), 'not a second skill topic');
+  ok(!M.secondOk('Forces', 'Something Nobody Teaches'), 'not an invented one -- nothing could ever find it');
+  ok(!M.secondOk('Forces', 'Cell Systems'), 'not a retired one -- no student could ever be served it');
+  ok(!M.secondOk('Forces', 'Forces'), 'and not the same topic twice');
+  ok(!M.secondOk('Forces', ''), 'an empty second topic is no second topic');
+});
+
+test('a question already on the right topic still GAINS a second one', async () => {
+  reset();
+  // The reported case is exactly this: the primary was right all along and the
+  // science was nowhere in the filing. Counting it as "already right" would
+  // leave every one of them exactly as it was.
+  const q = Q({ topic: 'The Scientific Endeavour' });
+  M.setBank([q]);
+  M.setScope('bank', 'shown');
+  M.HOOK.ai = () => ({ topic: 'The Scientific Endeavour', topic2: 'Heat', confidence: 'high' });
+  M.open('bank');
+  M.level('S1');
+  await M.run();
+  eq(q.topic2, 'Heat', 'the second topic was still written');
+  eq(M.HOOK.writes.length, 1, 'and it really was a write');
+});
+
+test('...but one that is right in BOTH is left completely alone', async () => {
+  reset();
+  const q = Q({ topic: 'The Scientific Endeavour', topic2: 'Heat' });
+  M.setBank([q]);
+  M.setScope('bank', 'shown');
+  M.HOOK.ai = () => ({ topic: 'The Scientific Endeavour', topic2: 'Heat', confidence: 'high' });
+  M.open('bank');
+  M.level('S1');
+  await M.run();
+  eq(M.HOOK.writes.length, 0, 'nothing to write');
+});
+
+test('Undo puts the second topic back too', async () => {
+  reset();
+  const q = Q({ topic: 'Materials', topic2: '' });
+  M.setBank([q]);
+  M.setScope('bank', 'shown');
+  M.HOOK.ai = () => ({ topic: 'The Scientific Endeavour', topic2: 'Heat', confidence: 'high' });
+  M.open('bank');
+  M.level('S1');
+  await M.run();
+  eq([q.topic, q.topic2], ['The Scientific Endeavour', 'Heat'], 'both moved');
+  await M.undo();
+  eq([q.topic, q.topic2], ['Materials', ''], 'and both went back');
 });
 
 test('a write Firestore REFUSED does not move the in-memory copy', async () => {
@@ -523,6 +630,41 @@ test('the light filter is applied by BOTH pages, not just one', () => {
   ok(/qbulkLightPasses\('bank'/.test(bank), 'the bank asks it');
   const vet = src.slice(src.indexOf('function _vetVisibleQuestions'), src.indexOf('function _vetPruneSelection'));
   ok(/qbulkLightPasses\('vetting'/.test(vet), 'and so does the vetting list');
+});
+
+// ── 🖨 preview printed ──────────────────────────────────────────────────────
+test('the printed preview is the SAME preview and the SAME printer', () => {
+  // "exactly like the PDF" is only true if it IS the PDF's own path. A preview
+  // of its own would be free to drift, and it would drift in the direction
+  // nobody checks — the printed sheet, in front of a class.
+  const ctx = src.slice(src.indexOf('function _wsPreviewCtx()'), src.indexOf('function openWorksheetPreview'));
+  ok(/_wsPreviewAdhoc/.test(ctx), 'an ad-hoc set is a third CONTEXT, not a second renderer');
+  const at = src.indexOf('async function printQuestionsDirect');
+  const printer = src.slice(at, at + 700);
+  ok(/doPrintStudentWorksheet\(/.test(printer), 'and it prints through the worksheet printer itself');
+  // …and the render path is untouched: one builder, one planner.
+  const render = src.slice(src.indexOf('async function renderWsPreview'), src.indexOf('function _wsPreviewWhenReady'));
+  ok(/buildWorksheetHtml\(selected, title/.test(render), 'the preview still builds the sheet the one way');
+});
+
+test('every opener clears all THREE preview slots', () => {
+  // A slot left set is a preview showing the last thing that was open — the
+  // paper you previewed an hour ago, under the button you just pressed.
+  const win = src.slice(src.indexOf('function openWorksheetPreview'), src.indexOf('function _wsShowPreviewOverlay'));
+  ['openWorksheetPreview', 'previewQuestionsPrint', 'ppPreview', 'previewSavedWorksheet'].forEach(fn => {
+    const body = src.slice(src.indexOf('function ' + fn), src.indexOf('function ' + fn) + 900);
+    ok(/_wsPreviewAdhoc/.test(body), fn + ' does not clear or set the ad-hoc slot');
+  });
+  const close = src.slice(src.indexOf('function closeWorksheetPreview'), src.indexOf('function wsBreakBefore'));
+  ok(/_wsPreviewAdhoc = null/.test(close), 'and closing clears it');
+  void win;
+});
+
+test('✏️ Editing mode is offered on a BANK set and never on a vetting one', () => {
+  // emSaveAll writes through saveQuestion — on a vetting question that would
+  // quietly move it into the bank.
+  const body = src.slice(src.indexOf('function _wsShowPreviewOverlay'), src.indexOf('function closeWorksheetPreview'));
+  ok(/_wsPreviewAdhoc\.source === 'bank'/.test(body), 'the source decides it');
 });
 
 // ── the source itself ───────────────────────────────────────────────────────
