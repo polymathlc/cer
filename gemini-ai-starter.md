@@ -28,8 +28,8 @@ const firebaseConfig = {
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
 
 // Model used app-wide (text + vision)
-const AI_MODEL = "gemini-3.7-flash";
-// The floor of the thinking scale — 3.7 Flash rejects the "minimal" level
+const AI_MODEL = "gemini-3.8-flash";
+// The floor of the thinking scale — 3.8 Flash rejects the "minimal" level
 // 3.6 took, with a 400, so "low" is the cheapest level it will accept.
 const AI_THINK_MIN = "low";
 ```
@@ -52,8 +52,8 @@ import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.
 
 const firebaseConfig = { /* …from section 1… */ };
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
-const AI_MODEL = "gemini-3.7-flash";
-// The floor of the thinking scale — 3.7 Flash rejects the "minimal" level
+const AI_MODEL = "gemini-3.8-flash";
+// The floor of the thinking scale — 3.8 Flash rejects the "minimal" level
 // 3.6 took, with a 400, so "low" is the cheapest level it will accept.
 const AI_THINK_MIN = "low";
 
@@ -86,7 +86,7 @@ const aiReady = () => !!geminiModel;
 budget goes to the answer (faster + cheaper for short tasks). Gemini 3.x rejects
 the older numeric `thinkingBudget` with 400 INVALID_ARGUMENT.
 
-**On 3.7 Flash the valid levels are `"low"`, `"medium"` (the default) and
+**On 3.8 Flash the valid levels are `"low"`, `"medium"` (the default) and
 `"high"`.** The `"minimal"` level 3.6 accepted was dropped and now comes back
 400 — so keep the floor in one constant (`AI_THINK_MIN`) rather than writing the
 string at each call site, and a future model change is one edit rather than a
