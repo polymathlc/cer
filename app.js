@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.346.0';
+const APP_VERSION = 'v1.347.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -12141,6 +12141,10 @@ function _aiQuestionPayloads(parsed) {
     tags: (Array.isArray(x.tags) && x.tags.length) ? x.tags : parsed.tags,
     questionType: pick(x.questionType, parsed.questionType),
     topicConfidence: pick(x.topicConfidence, parsed.topicConfidence),
+    // Only ever true on the FIRST entry of a page — see the PDF importer. It
+    // is carried, never inherited from `parsed`: a whole-reply flag would mark
+    // every question on the page as continuing the page before it.
+    continuation: x.continuation === true,
     blocks: x.blocks
   }));
 }
@@ -12648,7 +12652,12 @@ function aiBuildFilesChosen(files) {
 // topics the model may choose from — there is no level field to ask it for.
 // Blank (every other caller) leaves the prompt exactly as it was: the whole
 // topic list, chosen from freely.
-function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint) {
+// `opts.continuation` is passed ONLY by a page of a multi-page PDF. A pasted
+// screenshot has no previous page, so asking it whether it opens mid-question
+// is asking about something that does not exist — and a model asked an
+// impossible question answers it anyway.
+function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint, opts) {
+  const wantCont = !!(opts && opts.continuation);
   const multi = !isPdf && (Number(imageCount) || 1) > 1;
   const n = Number(imageCount) || 1;
   const levelTopics = levelHint ? (currentTopicsByLevel()[levelHint] || []) : [];
@@ -12672,8 +12681,13 @@ function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint) {
     (multi
       ? `{"title":"short title","topic":"<closest topic>","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n`
       : `{"questions":[ ...one entry per question you found, in the order they appear... ]}\n` +
-        `Each entry is: {"title":"short title","topic":"<closest topic>","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n` +
+        `Each entry is: {${wantCont ? '"continuation":false,' : ''}"title":"short title","topic":"<closest topic>","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n` +
         `A source holding ONE question returns an array of ONE entry. Give EVERY entry its own title, topic, category and tags — never leave them off the later entries.\n` +
+        (wantCont
+          ? `- CONTINUATION — THIS PAGE IS ONE PAGE OF A LONGER PAPER. A question does not stop at the bottom of a page: the stem and its diagram are printed on one page and parts (b) and (c) carry on over the leaf. If the TOP of this page carries on a question that began BEFORE it — it opens part-way through, before any new question number, with no stem and no figure of its own — return that leftover as the FIRST entry with "continuation":true and put ONLY the leftover wording, answers and explanations in its "blocks". Every other entry on the page has "continuation":false.\n` +
+            `  The test: does the first thing on this page make complete sense to a student who has not seen the previous page? If it does, it is a NEW question and "continuation" is false. A page that opens with a question number, a fresh stem or its own diagram is never a continuation.\n` +
+            `  A page holding ONLY the tail of a question — parts, answer lines and nothing that stands on its own — is NOT an empty page: return that one continuation entry for it. Reporting it as empty loses those parts entirely.\n`
+          : '') +
         `- THE PAPER'S QUESTION NUMBER IS ONLY THE SIGNAL that they are separate questions. Do NOT keep it anywhere: no "part" field, and never write "24" or "24." into the text of any block. A bank question stands on its own, and one that opens at question 24 reads as though twenty-three are missing.\n` +
         `- A FIGURE BELONGS TO EVERY QUESTION THAT NEEDS IT. A diagram, table, graph, chart or experimental set-up is printed on the PAGE, not on a question, so one figure sitting above several questions belongs to each of them: give EVERY entry that refers to it its own "image" block with the SAME box_2d. Never leave it out of the second question because the first one already has it — a question whose figure is missing cannot be answered at all.\n`) +
     `Each item in "blocks" is ONE of these objects:\n` +
@@ -13868,6 +13882,20 @@ async function _rapidPrepFile(file) {
 //    pages and blank backs are most of what the front of a paper holds, and a
 //    red card for each of them is noise nobody reads — so a page that comes
 //    back empty is counted and named in the summary instead (`blankOk`).
+//  • A QUESTION DOES NOT STOP AT THE BOTTOM OF A PAGE. The stem and the figure
+//    are printed on one page and parts (b) and (c) carry on over the leaf, so
+//    reading pages independently produced TWO questions, neither of them
+//    answerable: the first missing its last parts, the second with no stem and
+//    no diagram at all. The reader is now asked whether a page opens part-way
+//    through (`continuation`, the same flag and the same wording the bulk
+//    import has always used), and the feeder STITCHES the two halves with
+//    `qMergeQuestions` — the very function 🔗 Merge in the vetting list uses,
+//    so the automatic stitch and the manual one can never order the parts
+//    differently.
+//    The stitch happens at SETTLE time and nowhere else. Pages are read in
+//    parallel, so a later page can finish first; `settle()` is the one place
+//    that runs strictly in page order, which is what makes "the page before
+//    this one" a question that has an answer.
 const RAPID_PDF_MAX_PAGES = 60;   // a whole exam paper, and a guard against a 400-page book
 const RAPID_PDF_PAR = 2;          // page reads in flight at once
 let _rapidPdfQueue = [];
@@ -13935,7 +13963,7 @@ async function _rapidExpandPdf(file, level) {
   rapidJobs.unshift({ id: jobId, status: 'processing', title: '📄 ' + name, sub: 'Opening the PDF…', level, source: name });
   _updateRapidCounts();
   renderVettingList();
-  let added = 0, blank = 0, failed = 0, pages = 0;
+  let added = 0, blank = 0, failed = 0, pages = 0, stitched = 0;
   try {
     const pdfjs = await _loadPdfJs();
     const doc = await pdfjs.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false }).promise;
@@ -13944,13 +13972,29 @@ async function _rapidExpandPdf(file, level) {
       if (!total) throw new Error('that PDF has no pages in it');
       const take = Math.min(total, RAPID_PDF_MAX_PAGES);
       const inflight = [];
+      // The last question of the page that settled most recently — what a
+      // continuation on the NEXT page is stitched onto. Cleared by a page that
+      // failed or held nothing, because neither leaves a question the page
+      // after it could be carrying on from: attaching to the page before THAT
+      // one would silently graft two unrelated questions together.
+      let lastQ = null;
       // A page job never rejects — it files its own card — so an undefined
       // result is the only thing a failed page looks like from out here.
       const settle = async () => {
         const r = await inflight.shift();
-        if (!r) failed++;
-        else if (r.blank) blank++;
-        else added += (r.added || 0);
+        if (!r) { failed++; lastQ = null; return; }
+        if (r.blank) { blank++; lastQ = null; return; }
+        added += (r.added || 0);
+        const qs = r.questions || [];
+        if (r.continuation && lastQ && qs.length) {
+          const merged = await _vetApplyMerge([lastQ, qs[0]]);
+          if (merged) {
+            stitched++;
+            added--;                       // the two halves are one question
+            qs[0] = merged;                // …and a third page carries on from it
+          }
+        }
+        lastQ = qs.length ? qs[qs.length - 1] : lastQ;
       };
       for (let p = 1; p <= take; p++) {
         _setRapidJobState(jobId, { sub: 'Rendering page ' + p + ' of ' + take + '…' + (added ? ' (' + added + ' question' + (added === 1 ? '' : 's') + ' so far)' : '') });
@@ -13960,7 +14004,14 @@ async function _rapidExpandPdf(file, level) {
         try { img = await _pdfRenderPage(page, PDF_PAGE_MAX_SIDE); }
         finally { try { page.cleanup(); } catch (_) {} }
         pages++;
-        inflight.push(startRapidJob(_rapidPageFile(img, name, p), level, { source: name + ' — page ' + p + ' of ' + take, blankOk: true }));
+        inflight.push(startRapidJob(_rapidPageFile(img, name, p), level, {
+          source: name + ' — page ' + p + ' of ' + take,
+          blankOk: true,
+          // Page 1 has nothing before it, so it is never asked whether it
+          // continues something — a model asked an impossible question
+          // answers it anyway.
+          continuation: p > 1,
+        }));
         if (inflight.length >= RAPID_PDF_PAR) await settle();
       }
       while (inflight.length) await settle();
@@ -13973,6 +14024,7 @@ async function _rapidExpandPdf(file, level) {
     renderVettingList();
     const at = level ? ' at ' + level : '';
     const bits = [added + ' question' + (added === 1 ? '' : 's') + at + ' from ' + pages + ' page' + (pages === 1 ? '' : 's') + ' of “' + name + '”'];
+    if (stitched) bits.push('🔗 ' + stitched + ' question' + (stitched === 1 ? '' : 's') + ' carried over a page break and ' + (stitched === 1 ? 'was' : 'were') + ' joined back up');
     if (blank) bits.push(blank + ' page' + (blank === 1 ? '' : 's') + ' had no questions on ' + (blank === 1 ? 'it' : 'them'));
     if (failed) bits.push(failed + ' page' + (failed === 1 ? '' : 's') + ' could not be read — see the red card' + (failed === 1 ? '' : 's') + ' in vetting');
     _setRapidStatus((added ? '✓ ' : '⚠ ') + bits.join(' · ') + '.');
@@ -14021,9 +14073,11 @@ function startRapidJob(file, level, opts) {
 }
 
 // `opts` is what a PDF PAGE carries in: `source` names the paper and the page
-// (so the job card and any red card say which page could not be read), and
-// `blankOk` says an empty page is an ordinary outcome rather than a failure.
-// A pasted screenshot passes neither and behaves as it always did.
+// (so the job card and any red card say which page could not be read),
+// `blankOk` says an empty page is an ordinary outcome rather than a failure,
+// and `continuation` says this page has a page BEFORE it, so the reader may be
+// asked whether it opens part-way through a question. A pasted screenshot
+// passes none of them and behaves exactly as it always did.
 async function processRapidJob(jobId, file, batchLevel, opts) {
   const o = opts || {};
   try {
@@ -14043,7 +14097,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
     // whole sheet of them does not — and running out does not fail, it
     // TRUNCATES, and _repairAIJson then hands back a valid-looking reply
     // missing its last questions entirely.
-    const raw = await askGeminiVision(_aiBuildQuestionPrompt(isPdf, 1, batchLevel), [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 8192, json: true });
+    const raw = await askGeminiVision(_aiBuildQuestionPrompt(isPdf, 1, batchLevel, { continuation: !!o.continuation }), [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 8192, json: true });
     const parsed = _parseAIJson(raw);
     const payloads = _aiQuestionPayloads(parsed);
     if (!payloads.length) {
@@ -14084,6 +14138,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
     };
 
     const added = [];
+    const saves = [];
     for (let pi = 0; pi < payloads.length; pi++) {
       const payload = payloads[pi];
       const q = buildQuestionFromAi(payload);
@@ -14175,8 +14230,15 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       updateCounts();
       _updateRapidCounts();
       renderVettingList();
-      saveVettingQuestion(q); // async, non-blocking
+      saves.push(saveVettingQuestion(q)); // fired now, waited for at the end
     }
+    // The writes are STARTED as each question is built — the cards are on
+    // screen either way — and waited for HERE, before this job resolves. That
+    // is what makes the page-break stitch safe: it deletes the half it merged
+    // away, and a write still in flight when that delete lands would put the
+    // half straight back on the next sign-in. Nothing else awaits this job, so
+    // a pasted screenshot is unaffected.
+    try { await Promise.all(saves); } catch (e) { console.warn('rapid: waiting on the vetting writes', e); }
 
     _removeRapidJob(jobId);
     _updateRapidCounts();
@@ -14194,7 +14256,12 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       _setRapidStatus('✓ Added ' + what + at + ' to vetting.');
       showToast('Added ' + what + at + ' to vetting ✓', 'success');
     }
-    return { added: added.length };
+    // The QUESTIONS themselves, in page order, and whether the first of them
+    // opened part-way through a question that began on the page before. The
+    // PDF feeder settles these strictly in page order and stitches there —
+    // it cannot be done here, because with pages in flight at once this job
+    // may well finish before the page it continues.
+    return { added: added.length, questions: added, continuation: payloads[0].continuation === true };
   } catch (err) {
     _failRapidJob(jobId, err);
   }
@@ -16339,7 +16406,7 @@ function renderVettingList() {
             </div>
           </div>
           <div class="qb-card-actions">
-            <label class="vet-pick-wrap" title="Tick this question, then use 🗑 Delete selected">
+            <label class="vet-pick-wrap" title="Tick this question, then use 🔗 Merge selected or 🗑 Delete selected">
               <input type="checkbox" class="vet-pick" ${picked ? 'checked' : ''} onchange="vetSelToggle('${q.id}', this.checked)">
             </label>
             <button class="qb-action-btn" title="Approve & Add to Bank" onclick="approveVetting('${q.id}')" style="color:var(--primary);">
@@ -16510,6 +16577,7 @@ function _vetRenderBulkBar(visibleIds) {
       <span>Select all ${visibleIds.length}</span>
     </label>
     <span class="vet-bulk-count">${picked ? picked + ' selected' : 'Nothing selected'}</span>
+    <button class="btn btn-outline" onclick="vetMergeSelected()" ${picked >= 2 ? '' : 'disabled'} title="Join the ticked questions into ONE question, in the order you choose — for a question whose parts were read as two because they ran over a page break.">🔗 Merge selected</button>
     <button class="btn btn-outline vet-danger-btn" onclick="vetDeleteSelected()" ${picked ? '' : 'disabled'}>🗑 Delete selected</button>
     ${picked ? '<button class="btn btn-outline" onclick="vetSelClear()">Clear</button>' : ''}`;
 }
@@ -16580,6 +16648,181 @@ function vetDeleteAllVisible() {
       : `Delete all ${list.length} question${list.length === 1 ? '' : 's'} waiting in the vetting list? This cannot be undone.`,
     () => { _vetDeleteMany(list.map(q => q.id)); }
   );
+}
+
+// =====================================================================
+// 🔗 MERGE — two vetting questions that are really one
+// =====================================================================
+// `qMergeQuestions` (up beside the part vocabulary) decides what the merged
+// question IS. This is what writing it costs: one document rewritten, the
+// others removed, and a vetting list that never disagrees with the database.
+//
+//  • THE MERGED QUESTION IS WRITTEN BEFORE ANYTHING IS DELETED. The other
+//    order loses work: a delete that succeeds followed by a save that fails
+//    takes both halves away for good. This way the worst case is a leftover
+//    card whose content is also inside the merged question — visible, and one
+//    press of 🗑 from being tidy.
+//  • THE HOST KEEPS ITS ID, so the merged question replaces source 1 IN PLACE
+//    rather than jumping to the top of the list as a new card.
+//  • ONE WORKER, TWO CALLERS. The PDF importer's page-break stitch and the
+//    author's own 🔗 Merge both come here, so they cannot drift into writing
+//    the same merge two different ways.
+async function _vetApplyMerge(sources, opts) {
+  const list = (sources || []).filter(Boolean);
+  if (list.length < 2) return null;
+  const merged = qMergeQuestions(list, opts);
+  if (!merged) return null;
+  _tagDuplicate(merged);
+  const hostId = merged.id;
+  const idx = vettingList.findIndex(q => q.id === hostId);
+  if (idx >= 0) vettingList[idx] = merged; else vettingList.unshift(merged);
+  let wrote = false;
+  try { wrote = await saveVettingQuestion(merged); }
+  catch (e) { console.warn('merge: the merged question could not be saved', e); }
+  if (!wrote) {
+    // NOTHING is deleted after a save that did not land. The list goes back to
+    // what it was, both halves are still there, and the author can try again.
+    if (idx >= 0) vettingList[idx] = list[0]; else vettingList = vettingList.filter(q => q.id !== hostId);
+    showToast('The merged question could not be saved — nothing was changed', 'error');
+    renderVettingList();
+    return null;
+  }
+  const failed = [];
+  for (let i = 1; i < list.length; i++) {
+    const id = list[i].id;
+    const gone = await deleteVettingDocAwait(id);
+    if (gone) {
+      vettingList = vettingList.filter(q => q.id !== id);
+      _vetSelected.delete(id);
+      _rapidJustAdded.delete(id);
+    } else failed.push(id);
+  }
+  _vetSelected.delete(hostId);
+  _rapidJustAdded.add(hostId);   // it is a question that has just changed — say so
+  updateCounts();
+  renderVettingList();
+  if (failed.length) {
+    showToast(failed.length + ' of the merged question' + (failed.length === 1 ? '' : 's')
+      + ' could not be removed from the list — its content is in the merged question, so delete it by hand', 'error');
+  }
+  return merged;
+}
+
+// ── The dialog ──────────────────────────────────────────────────────────────
+// The order is the whole point, so the dialog is a LIST that can be reordered
+// and it prints the part labels the merged question will actually read. A
+// merge cannot be undone from here — the sources are gone — so the author sees
+// the result before it is written rather than after.
+let _qmDraft = null;   // { ids: [], letter: bool }
+
+function vetMergeSelected() {
+  if (_vetBulkBusy) return;
+  const ids = _vetVisibleQuestions().map(q => q.id).filter(id => _vetSelected.has(id));
+  if (ids.length < 2) { showToast('Tick at least two questions to merge', 'info'); return; }
+  if (ids.length > QMERGE_MAX) { showToast('Merge at most ' + QMERGE_MAX + ' questions at a time', 'error'); return; }
+  // OLDEST FIRST, which for a paper read page by page is page order. The
+  // vetting list itself is NEWEST first, so taking the order off the screen
+  // would put page 2 above page 1 every single time.
+  const order = ids.slice().sort((a, b) => {
+    const qa = _vetQById(a), qb = _vetQById(b);
+    return (Date.parse(_vetAddedAt(qa)) || 0) - (Date.parse(_vetAddedAt(qb)) || 0);
+  });
+  _qmDraft = { ids: order, letter: false };
+  const ov = document.getElementById('qmOverlay');
+  if (ov) ov.classList.add('show');
+  qmRender();
+}
+function _vetQById(id) { return vettingList.find(q => q.id === id) || null; }
+function qmClose() {
+  _qmDraft = null;
+  const ov = document.getElementById('qmOverlay');
+  if (ov) ov.classList.remove('show');
+}
+function qmMove(i, dir) {
+  if (!_qmDraft) return;
+  const j = i + dir;
+  const ids = _qmDraft.ids;
+  if (j < 0 || j >= ids.length) return;
+  const t = ids[i]; ids[i] = ids[j]; ids[j] = t;
+  qmRender();
+}
+function qmDrop(id) {
+  if (!_qmDraft) return;
+  _qmDraft.ids = _qmDraft.ids.filter(x => x !== id);
+  if (_qmDraft.ids.length < 2) { qmClose(); showToast('A merge needs at least two questions', 'info'); return; }
+  qmRender();
+}
+function qmSetLetter(on) {
+  if (!_qmDraft) return;
+  _qmDraft.letter = !!on;
+  qmRender();
+}
+function _qmSources() {
+  if (!_qmDraft) return [];
+  return _qmDraft.ids.map(_vetQById).filter(Boolean);
+}
+function qmRender() {
+  const host = document.getElementById('qmBody');
+  if (!host || !_qmDraft) return;
+  const sources = _qmSources();
+  if (sources.length < 2) { qmClose(); return; }
+  const rows = sources.map((q, i) => {
+    const parts = qPartsUsed(q.blocks || []);
+    const pics = (q.blocks || []).filter(b => b && b.type === 'image' && b.url).length;
+    const bits = [
+      (q.blocks || []).length + ' block' + ((q.blocks || []).length === 1 ? '' : 's'),
+      parts.length ? 'parts ' + parts.map(p => '(' + p + ')').join(' ') : 'no parts',
+    ];
+    if (pics) bits.push(pics + ' picture' + (pics === 1 ? '' : 's'));
+    return `<div class="qm-row">
+        <span class="qm-n">${i + 1}</span>
+        <div class="qm-main">
+          <div class="qm-title">${escapeHtml(q.title || 'Untitled question')}</div>
+          <div class="qm-sub">${escapeHtml(bits.join(' · '))}</div>
+          <div class="qm-prev">${escapeHtml(_qmSnippet(q))}</div>
+        </div>
+        <div class="qm-tools">
+          <button type="button" class="qm-btn" title="Move up" onclick="qmMove(${i},-1)" ${i === 0 ? 'disabled' : ''}>▲</button>
+          <button type="button" class="qm-btn" title="Move down" onclick="qmMove(${i},1)" ${i === sources.length - 1 ? 'disabled' : ''}>▼</button>
+          <button type="button" class="qm-btn qm-x" title="Leave this one out of the merge" onclick="qmDrop('${escapeHtml(q.id)}')">✕</button>
+        </div>
+      </div>`;
+  }).join('');
+  let labels = [];
+  try { labels = qMergePartPreview(sources, { letter: _qmDraft.letter }); } catch (e) { console.warn('merge preview', e); }
+  const preview = labels.length
+    ? 'The merged question will read as ' + labels.map(k => qPartLabel(k)).join(' ') + '.'
+    : 'The merged question will have no lettered parts — it reads straight through.';
+  host.innerHTML = `
+    <p class="qm-intro">The questions are joined <b>in this order</b>, top to bottom, into the first one. Everything else — the other cards — is removed from the vetting list. This cannot be undone.</p>
+    <div class="qm-list">${rows}</div>
+    <label class="qm-opt"><input type="checkbox" class="qm-check" ${_qmDraft.letter ? 'checked' : ''} onchange="qmSetLetter(this.checked)">
+      <span><b>Letter each one as its own part (a) (b) (c)</b><br>
+      Leave this off when the second card is the <i>rest</i> of the first — a question whose parts ran over a page break. Turn it on when they are separate sub-questions that belong under one stem.</span></label>
+    <div class="qm-preview">🔤 ${escapeHtml(preview)}</div>`;
+  const sub = document.getElementById('qmSub');
+  if (sub) sub.textContent = sources.length + ' questions → 1';
+}
+function _qmSnippet(q) {
+  const t = (q.blocks || [])
+    .filter(b => b && (b.type === 'text' || b.type === 'part'))
+    .map(b => stripHtml(b.content || ''))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return t.length > 150 ? t.slice(0, 150) + '…' : (t || '(no wording)');
+}
+async function qmConfirm() {
+  if (!_qmDraft || _vetBulkBusy) return;
+  const sources = _qmSources();
+  if (sources.length < 2) { qmClose(); return; }
+  const letter = _qmDraft.letter;
+  const btn = document.getElementById('qmGoBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Merging…'; }
+  const merged = await _vetApplyMerge(sources, { letter });
+  if (btn) { btn.disabled = false; btn.textContent = '🔗 Merge'; }
+  qmClose();
+  if (merged) showToast(sources.length + ' questions merged into “' + (merged.title || 'question') + '” ✓', 'success');
 }
 
 // =====================================================================
@@ -18067,6 +18310,216 @@ function qPartNext(blocks) {
 // label from the text block, so allowing a picture to open a part would put
 // "(b)" on the answer key with nothing marking it on the paper.
 const QPART_OPENER_TYPES = ['text'];
+
+// =====================================================================
+// 🔗 TWO QUESTIONS THAT ARE REALLY ONE — the merge
+// =====================================================================
+// A question printed across a page break comes out of ⚡ Rapid add as TWO
+// questions: the stem, the figure and parts (a) and (b) from one page, part
+// (c) from the next. Neither half can be answered on its own — the second has
+// no diagram and often no stem at all — so both are useless, and the only way
+// back used to be to find the paper again and re-do it by hand.
+//
+// `qMergeQuestions` is the ONE merge, and it has TWO callers on purpose: the
+// PDF importer stitches a page break with it automatically, and 🔗 Merge in
+// the vetting list is the author doing the same thing by hand for whatever the
+// importer missed. A second implementation for the manual button is a second
+// implementation to get the part order wrong in.
+//
+// FIVE THINGS IT HAS TO GET RIGHT, and every one of them is silent — a merged
+// question renders, saves and prints perfectly however badly it is stitched:
+//
+//  • THE ORDER IS THE CALLER'S, and it is never guessed. The blocks are
+//    concatenated in the order the sources are given, so page 1 then page 2.
+//    The vetting dialog puts them oldest-first and offers ▲▼, because the
+//    vetting list itself is NEWEST first — merging in the order the cards
+//    happen to be shown would put page 2 above page 1 every time.
+//
+//  • BLOCK IDS MUST NOT COLLIDE. Two questions built in the same millisecond
+//    can carry the same ids, and every keyword and every fill-in-the-blank map
+//    is keyed by one — so a collision silently gives one block another's
+//    blanks. Re-keyed on the way in, carrying `answerKeywords` and `blanks`
+//    with it, exactly as ✏️ editing mode does when it loads a sheet.
+//
+//  • THE PART LETTERS ARE FIXED ONLY WHEN THEY ARE BROKEN. (a)(b) + (c)(d)
+//    already reads in order and is left BYTE FOR BYTE alone. (a)(b) + (a)(b)
+//    does not — `qPartMap` would open a second span keyed (a), so the answer
+//    key prints two "(a)" headings and the second silently replaces the first
+//    in anything keyed by part. That case, and only that case, is re-lettered
+//    in document order.
+//
+//  • A RE-LETTERED BLOCK IS STRIPPED FIRST. A block that opens part (b) may
+//    still carry "(b)" in its wording, which `qPartBodyHtml` hides only while
+//    it matches. Re-letter it to (c) without stripping and the paper reads
+//    "(c) (b) Explain why…". `qStripOwnPartMarker` runs while the old letter
+//    is still on the block, which is the only moment it can.
+//
+//  • THE EXPLANATIONS ARE SCOPED AGAIN. The parts of a question split over a
+//    page break are only all known once both halves are together, so a note
+//    written for "the question" on page 1 is re-read against the whole of it.
+//    Same call the bulk import makes after appending a continuation.
+//
+// Run `node tools/question-merge-tests.mjs` after touching any of it.
+
+// More than this is not a question split over a page break, it is somebody
+// ticking half the vetting list.
+const QMERGE_MAX = 8;
+// The keyword/blank keys one block can carry. `content` and `text` both
+// collapse to the bare block id in kwFieldKey, so the fields are walked rather
+// than the map — the id IS the key, and the id is what changes on a re-key.
+const QMERGE_KW_FIELDS = ['content', 'text', 'claim', 'evidence', 'reasoning'];
+
+// Re-key any block id already used, carrying that block's keywords and blanks
+// across with it. Mutates `blocks`/`kw`/`blanks` and adds to `used`.
+function qMergeUniqueIds(blocks, kw, blanks, used) {
+  (blocks || []).forEach(b => {
+    if (!b) return;
+    const oldId = String(b.id == null ? '' : b.id);
+    if (oldId && !used.has(oldId)) { used.add(oldId); return; }
+    const id = generateBlockId();
+    if (oldId) {
+      QMERGE_KW_FIELDS.forEach(f => {
+        const from = kwFieldKey(oldId, f), to = kwFieldKey(id, f);
+        if (kw && kw[from] !== undefined) { kw[to] = kw[from]; delete kw[from]; }
+      });
+      if (blanks && blanks[oldId] !== undefined) { blanks[id] = blanks[oldId]; delete blanks[oldId]; }
+    }
+    b.id = id;
+    used.add(id);
+  });
+}
+
+// The letters the merged question's parts open with, in document order.
+function qMergeOpenerLetters(blocks) {
+  return (blocks || []).map(b => qBlockOpensPart(b)).filter(Boolean);
+}
+// Do those letters already read as a part sequence — strictly increasing, no
+// repeats? Anything that does is left completely alone.
+function qMergeLettersOk(letters) {
+  for (let i = 1; i < letters.length; i++) {
+    if (QPART_ASSIGN.indexOf(letters[i]) <= QPART_ASSIGN.indexOf(letters[i - 1])) return false;
+  }
+  return true;
+}
+// Re-issue the part letters in document order. Returns true if anything moved.
+// It is all-or-nothing: a question with more parts than there are letters is
+// left as it was, because half a re-lettering is worse than none.
+function qMergeFixParts(blocks) {
+  const bs = (blocks || []).filter(Boolean);
+  const openers = bs.filter(b => qBlockOpensPart(b));
+  if (openers.length < 2) return false;
+  if (qMergeLettersOk(openers.map(b => qBlockOpensPart(b)))) return false;
+  if (openers.length > QPART_ASSIGN.length) return false;
+  openers.forEach((b, i) => {
+    // While the OLD letter is still on the block — the only moment a marker
+    // that merely repeats it can be recognised and taken out of the wording.
+    try { qStripOwnPartMarker(b); } catch (e) { console.warn('merge: stripping a part marker', e); }
+    const letter = QPART_ASSIGN[i];
+    if (b.type === 'part') b.label = '(' + letter + ')';
+    else b.part = letter;
+  });
+  return true;
+}
+
+// The `letter` option: each SOURCE becomes its own part. A source that already
+// uses parts keeps its own; one that does not has its first eligible block
+// stamped, so two whole questions merged read as (a) and (b) instead of the
+// second inheriting the first's last part. A source with nothing that may open
+// a part (QPART_OPENER_TYPES is text and nothing else) is left to inherit —
+// there is nowhere honest to put a label, and a picture opening a part would
+// print a heading on the answer key with nothing marking it on the paper.
+function qMergeLetterSources(lists) {
+  let next = 0;
+  (lists || []).forEach(bs => {
+    const has = qHasParts(bs);
+    if (has) { next = Math.max(next, qMergeOpenerLetters(bs).length); return; }
+    const opener = (bs || []).find(b => b && QPART_OPENER_TYPES.indexOf(b.type) >= 0);
+    if (!opener) return;
+    opener.part = QPART_ASSIGN[Math.min(next, QPART_ASSIGN.length - 1)];
+    next++;
+  });
+}
+
+// THE ONE MERGE. `sources` are whole questions in the order they should read;
+// the FIRST is the host and keeps its id, so the merge is one write to a
+// document that already exists rather than a create and two deletes.
+// `opts.letter` files each source under its own part (see above).
+function qMergeQuestions(sources, opts) {
+  const list = (sources || []).filter(s => s && Array.isArray(s.blocks));
+  if (list.length < 2) return null;
+  const o = opts || {};
+  const host = list[0];
+  const merged = JSON.parse(JSON.stringify(host));
+  merged.blocks = [];
+  merged.answerKeywords = JSON.parse(JSON.stringify(host.answerKeywords || {}));
+  merged.blanks = JSON.parse(JSON.stringify(host.blanks || {}));
+
+  const used = new Set();
+  const lists = list.map(q => JSON.parse(JSON.stringify(q.blocks || [])).filter(Boolean));
+  if (o.letter) qMergeLetterSources(lists);
+
+  lists.forEach((bs, i) => {
+    const q = list[i];
+    const kw = i === 0 ? merged.answerKeywords : JSON.parse(JSON.stringify(q.answerKeywords || {}));
+    const bl = i === 0 ? merged.blanks : JSON.parse(JSON.stringify(q.blanks || {}));
+    qMergeUniqueIds(bs, kw, bl, used);
+    merged.blocks = merged.blocks.concat(bs);
+    if (i > 0) { Object.assign(merged.answerKeywords, kw); Object.assign(merged.blanks, bl); }
+  });
+
+  qMergeFixParts(merged.blocks);
+  // Both halves are together now, so a note written for "the whole question"
+  // on page 1 is re-read against all of the parts rather than the two it could
+  // see at the time.
+  try { qScopeExplanations(merged.blocks); } catch (e) { console.warn('merge: scoping explanations', e); }
+
+  // ── The meta. Anything the sources disagree about resolves the CAUTIOUS way:
+  // a merged question is filed no more confidently than its least confident
+  // half, and every flag that asks a human to look at it survives.
+  const tags = [];
+  list.forEach(q => (Array.isArray(q.tags) ? q.tags : []).forEach(t => { if (t && tags.indexOf(t) < 0) tags.push(t); }));
+  merged.tags = tags;
+  const los = [];
+  list.forEach(q => (Array.isArray(q.los) ? q.los : []).forEach(t => { if (t && los.indexOf(t) < 0) los.push(t); }));
+  if (los.length) merged.los = los; else delete merged.los;
+  const rank = { low: 0, medium: 1, high: 2 };
+  const conf = list.map(q => q.topicConfidence).filter(c => rank[c] !== undefined);
+  merged.topicConfidence = conf.length ? conf.reduce((a, b) => (rank[a] <= rank[b] ? a : b)) : (host.topicConfidence || '');
+  merged.annotation = list.some(q => !!q.annotation);
+  merged.notInSyllabus = list.some(q => !!q.notInSyllabus);
+  if (list.some(q => q.diagramWhole)) merged.diagramWhole = true;
+  // Two guides or two key notes are two people's words about one question —
+  // joined, never one silently thrown away.
+  ['markingGuide', 'answerKeyNote'].forEach(f => {
+    const bits = list.map(q => String(q[f] || '').trim()).filter(Boolean);
+    const uniq = bits.filter((b, i) => bits.indexOf(b) === i);
+    if (uniq.length) merged[f] = uniq.join('\n\n');
+  });
+  if (!merged.answerKeyImage) {
+    const img = list.map(q => q.answerKeyImage).find(Boolean);
+    if (img) merged.answerKeyImage = img;
+  }
+  // The suspicion was raised about a question that no longer exists in this
+  // shape, so it is re-asked rather than carried over.
+  delete merged._dupOf;
+  return merged;
+}
+
+// What the merged question's parts will read as — shown in the dialog BEFORE
+// anything is written, because "the parts in the correct order" is a promise
+// nobody can check after the fact without opening the question.
+function qMergePartPreview(sources, opts) {
+  const merged = qMergeQuestions(sources, opts);
+  if (!merged) return [];
+  const map = qPartMap(merged.blocks);
+  const seen = [];
+  merged.blocks.forEach(b => {
+    const k = qBlockOpensKey(b, map);
+    if (k && seen.indexOf(k) < 0) seen.push(k);
+  });
+  return seen;
+}
+
 // The compact "Part" control in a block's header. Shown on opener blocks; on
 // everything else the header shows which part the block INHERITS, so it is
 // obvious at a glance where each answer box will be filed on the answer key.
@@ -22731,8 +23184,12 @@ async function saveQuestion(q, opts) {
 let _saveQuestionLastError = '';
 
 // Write one vetting doc with auto-retry
+// Returns whether the document really went, the way `saveQuestion` does. Every
+// existing caller ignores it and behaves exactly as before; 🔗 Merge is the one
+// that cannot — it deletes the other halves next, and doing that after a save
+// that quietly failed would take the question away for good.
 async function saveVettingQuestion(q) {
-  if (!currentUser) return;
+  if (!currentUser) return false;
   const wkLog = _wkSuppress === 0;   // see saveQuestion — decided before the await
   _inflightOps++;
   _setSaveStatus('saving');
@@ -22744,7 +23201,7 @@ async function saveVettingQuestion(q) {
       _xtAnnounceQuestion(q.id, 'vetting', 'save');
       _inflightOps--;
       if (_inflightOps === 0) _setSaveStatus('saved');
-      return;
+      return true;
     } catch (err) {
       attempts++;
       if (attempts >= 3) {
@@ -22752,11 +23209,12 @@ async function saveVettingQuestion(q) {
         if (_inflightOps === 0) _setSaveStatus('error');
         console.error('saveVettingQuestion failed after 3 attempts:', err);
         showToast('⚠ Could not save question — check your connection', 'error');
-        return;
+        return false;
       }
       await new Promise(r => setTimeout(r, 800 * attempts));
     }
   }
+  return false;
 }
 
 // Delete one question doc (fire-and-forget; failure is non-critical)
@@ -66389,6 +66847,12 @@ window.vetSelToggle = vetSelToggle;
 window.vetSelAllVisible = vetSelAllVisible;
 window.vetSelClear = vetSelClear;
 window.vetDeleteSelected = vetDeleteSelected;
+window.vetMergeSelected = vetMergeSelected;
+window.qmClose = qmClose;
+window.qmMove = qmMove;
+window.qmDrop = qmDrop;
+window.qmSetLetter = qmSetLetter;
+window.qmConfirm = qmConfirm;
 window.vetDeleteAllVisible = vetDeleteAllVisible;
 window.aiAutoVetAll = aiAutoVetAll;
 window.closeAutoVet = closeAutoVet;

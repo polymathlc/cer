@@ -176,7 +176,12 @@ test('a blank page is an outcome, not a failure', () => {
   const body = cut('async function processRapidJob(jobId, file, batchLevel, opts)', '\n// A failure must always leave', 'processRapidJob');
   ok(/o\.blankOk/.test(body), 'processRapidJob does not honour blankOk — every cover page becomes a red card');
   ok(/blank: true/.test(body), 'processRapidJob does not report a blank page back to the PDF feeder');
-  ok(/return \{ added: added\.length \}/.test(body), 'processRapidJob does not report how many questions it added');
+  ok(/return \{ added: added\.length/.test(body), 'processRapidJob does not report how many questions it added');
+  // …and the QUESTIONS themselves, plus whether the first opened part-way
+  // through a question that began on the page before. The PDF feeder stitches
+  // page breaks from exactly this — see tools/question-merge-tests.mjs.
+  ok(/questions: added/.test(body), 'processRapidJob does not hand its questions back, so a page break cannot be stitched');
+  ok(/continuation: payloads\[0\]\.continuation === true/.test(body), 'processRapidJob does not report a continuation');
 });
 
 test('every question on a page ends up with a PICTURE, not an empty slot', () => {

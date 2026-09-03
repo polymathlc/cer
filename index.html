@@ -5126,6 +5126,120 @@ body.em-editing #printProgress { z-index: 470; }
 .tl-count.err { color: var(--accent-orange); }
 @media print { .tl-overlay { display: none !important; } }
 
+/* ── 🔗 Merge two vetting questions into one ──────────────────────────────
+   The ORDER is the whole point of this dialog, so it is a list that reads top
+   to bottom with the join order spelled out, not a pair of dropdowns. */
+.qm-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 320;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 20px;
+}
+.qm-overlay.show { display: flex; }
+.qm-panel {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  width: min(720px, 100%);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.qm-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.qm-head h3 { font-size: 1.05rem; font-weight: 700; }
+.qm-headsub { font-size: 0.8rem; color: var(--text-muted); margin-top: 5px; }
+.qm-bodywrap { padding: 20px 26px; overflow-y: auto; }
+.qm-intro { font-size: 0.85rem; line-height: 1.65; color: var(--text-muted); margin-bottom: 18px; }
+.qm-list { display: flex; flex-direction: column; gap: 10px; }
+.qm-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+}
+.qm-n {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+.qm-main { flex: 1; min-width: 0; }
+.qm-title { font-size: 0.9rem; font-weight: 700; line-height: 1.4; }
+.qm-sub { font-size: 0.74rem; color: var(--text-muted); margin-top: 4px; font-family: 'Space Mono', monospace; }
+.qm-prev { font-size: 0.79rem; color: var(--text-muted); margin-top: 8px; line-height: 1.6; }
+.qm-tools { display: flex; flex-direction: column; gap: 5px; }
+.qm-btn {
+  width: 28px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.qm-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.qm-btn:disabled { opacity: 0.35; cursor: default; }
+.qm-btn.qm-x:hover { border-color: var(--accent-red); color: var(--accent-red); }
+.qm-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.81rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+/* Tailwind's preflight sets appearance:none on form controls, which renders a
+   bare checkbox as an invisible white square. */
+.qm-check { appearance: auto; -webkit-appearance: auto; width: 16px; height: 16px; margin-top: 2px; flex: 0 0 auto; accent-color: var(--primary); }
+.qm-preview {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-light, #eaf3ef);
+  border: 1px solid var(--primary);
+  color: var(--primary-dark, #064834);
+  font-size: 0.83rem;
+  line-height: 1.6;
+  font-weight: 600;
+}
+.qm-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 26px 22px;
+  border-top: 1px solid var(--border);
+}
+@media print { .qm-overlay { display: none !important; } }
+
 /* ── Saved worksheet — add / remove its questions ─────────────────────────
    A saved worksheet is an ORDERED list of bank ids, so editing one is editing
    that list: what is on the sheet on the left, the bank to draw from on the
@@ -11520,6 +11634,29 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <button class="btn btn-outline" type="button" onclick="tlRecheck()" title="Read this question again from scratch">🔄 Check again</button>
       <button class="btn btn-outline" type="button" onclick="tlPanelEdit()" title="Open this question so it can be fixed">✏️ Fix this question</button>
       <button class="btn btn-primary" type="button" style="margin-left:auto;" onclick="tlClosePanel()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 🔗 MERGE TWO VETTING QUESTIONS INTO ONE ==================== -->
+<!-- A question printed across a page break is read as two. This joins them
+     back up, IN THE ORDER SET HERE, and prints the part labels the merged
+     question will actually read before anything is written. See `qMerge*` and
+     `_vetApplyMerge` in app.js — the same merge the PDF importer's automatic
+     page-break stitch uses. -->
+<div class="qm-overlay" id="qmOverlay" onclick="if(event.target===this)qmClose()">
+  <div class="qm-panel" role="dialog" aria-label="Merge questions into one">
+    <div class="qm-head">
+      <div>
+        <h3>🔗 Merge into one question</h3>
+        <div class="qm-headsub" id="qmSub"></div>
+      </div>
+      <button class="wse-close" type="button" onclick="qmClose()" aria-label="Close">✕</button>
+    </div>
+    <div class="qm-bodywrap" id="qmBody"></div>
+    <div class="qm-foot">
+      <button class="btn btn-outline" type="button" onclick="qmClose()">Cancel</button>
+      <button class="btn btn-primary" type="button" id="qmGoBtn" style="margin-left:auto;" onclick="qmConfirm()">🔗 Merge</button>
     </div>
   </div>
 </div>

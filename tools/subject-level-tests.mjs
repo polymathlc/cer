@@ -101,7 +101,7 @@ const section = [
   cut('// EVERY rung gets a bucket', '\nfunction currentTopics()', 'real topics by level')
     .replace('function currentTopicsByLevel()', 'function realTopicsByLevel()'),
   cut('function _rapidApplyLevel(q, level)', '\nfunction openRapidAdd()', 'level snap'),
-  cut('function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint)', '\n// The lettered-parts rules', 'build prompt'),
+  cut('function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint, opts)', '\n// The lettered-parts rules', 'build prompt'),
   FIXTURE
 ].join('\n');
 
