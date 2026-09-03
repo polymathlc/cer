@@ -44,7 +44,7 @@ const cut = (from, to, what) => {
   return src.slice(a, b);
 };
 
-const section = cut('const TL_PAR = 3;', '// 🔍 ANSWER KEY CROSS-CHECK', 'traffic light');
+const section = cut('const TL_PAR = 3;', '// 🧰 ACTING ON MANY QUESTIONS AT ONCE', 'traffic light');
 
 // ---- the world the section runs in -----------------------------------------
 // Everything it borrows, stubbed, plus the hooks a case needs to steer:
@@ -55,6 +55,7 @@ const section = cut('const TL_PAR = 3;', '// 🔍 ANSWER KEY CROSS-CHECK', 'traf
 const preamble = `
 const HOOK = { aiReady: true, ai: () => [], local: () => [], calls: 0, live: 0, inflight: 0, toasts: [] };
 let questionBank = [];
+let vettingList = [];
 let _em = { on: false, qs: [] };
 let _emBlocks = {};
 function emActive() { return !!_em.on; }
@@ -74,6 +75,10 @@ let blocks = [];
 let currentEditingQuestion = null;
 function renderBlocks() { HOOK.rendered = (HOOK.rendered || 0) + 1; }
 function _cqLocalFindings(q, aiAnswered) { return HOOK.local(q, aiAnswered) || []; }
+function _cqMcqFixable() { return null; }
+async function saveVettingQuestion() { return true; }
+function renderVettingList() {}
+function qbulkRenderBar() {}
 async function _cqAiCheck(q) {
   HOOK.calls++;
   HOOK.live++;
@@ -107,6 +112,7 @@ return {
   tlCreateActive, tlCreateQuestion, tlDraftId, tlRenderCreateBar,
   tlFixCreateOptions, tlQuestionFor, tlClick, tlRepaint,
   setBank: v => { questionBank = v; },
+  setVetting: v => { vettingList = v; },
   setEm: (on, qs, blocksById) => { _em = { on, qs: qs || [] }; _emBlocks = blocksById || {}; },
   setEditor: (open, fields, bs, editingId) => {
     HOOK.createOpen = !!open;
@@ -145,6 +151,7 @@ const reset = () => {
   M.HOOK.calls = 0; M.HOOK.live = 0; M.HOOK.inflight = 0; M.HOOK.toasts = [];
   M.setEm(false, [], {});
   M.setBank([]);
+  M.setVetting([]);
   M.setEditor(false, {}, [], null);
   M.HOOK.editQuestionCalls = 0;
   M.HOOK.rendered = 0;
@@ -380,6 +387,17 @@ test('a question with nothing in it can never light green, whoever asks', async 
   // 🚦 Check all counts it as ⚠, never as one of the greens.
   const m = await M.tlCheckMany([empty, Q()], {});
   eq([m.green, m.error], [1, 1], 'the tally: one real green, one that could not be checked');
+});
+
+test('a VETTING question is found in the vetting list, never in the bank', () => {
+  reset();
+  // `_docQById` reads `questionBank` and nothing else, so without its own scope
+  // every lamp on the vetting list is about a question that cannot be found —
+  // and sits grey for ever on a page where nothing looks broken.
+  const v = Q({ id: 'v1', title: 'Waiting to be vetted' });
+  M.setVetting([v]);
+  eq(M.tlQuestionFor('vet', 'v1').title, 'Waiting to be vetted', 'through the scope');
+  eq(M.tlQuestionFor('bank', 'v1'), null, 'and it really is not in the bank');
 });
 
 // ---- the create page reads the EDITOR, not the bank ------------------------
