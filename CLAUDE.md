@@ -1070,10 +1070,94 @@ narrowing ⚡ Rapid add's batch level does at authoring time, applied afterwards
   land in anybody's work-session log. The guard is released in a `finally`.
 - **📌 Set all is the blunt tool and makes NO AI call** — sometimes "all forty of
   these are Heat" is simply true.
+
+#### 🔬 …and the SECOND topic, when the primary names a skill (v1.349.0)
+
+`QPROCESS_TOPIC_RE` / `qProcessTopic` / `qbulkSecondOk`, the `topic2` clause in
+`aiPickTopic`'s prompt and reply, and `_qbtWrite`'s third argument.
+
+An experiment question is an experiment **about** something. *The Scientific
+Endeavour* and *Measurement and Lab Skills* name the PROCESS of science, not a
+body of it — so a question filed under one of them says how it is being asked
+and nothing at all about what it asks. The heat is in the question and nowhere
+in its filing, so it never turns up under Heat.
+
+- **`topic2` is where that goes, and it already exists.** `qTopicList` reads
+  both, so a second topic makes the question findable, filterable and servable
+  under the science it is really about. Nothing new had to be stored.
+- **THE ONE THING IT MUST NOT DO IS RAISE THE LEVEL.** `qLevelNum` takes the
+  MAX over both topics, so a second topic from a HIGHER year silently puts the
+  question above the level the author just asked for — the re-file undone by
+  the field nobody looked at, from the other direction. A LOWER one is harmless
+  and is exactly the case this is for: an S1 investigation about P4 heat is
+  still an S1 question.
+- **That is why `_qbtWrite`'s clear rule changed** from *"not in the chosen
+  level"* to *"ABOVE the chosen level"*. Strictly more correct, and required —
+  the content topic is very often taught in an earlier year, which is why the
+  second topic is chosen from the WHOLE live list rather than the level's.
+- **`qbulkSecondOk` is the ONE gate** and it asks four things: real and live
+  (an invented topic is filed where nothing can find it, a retired one where no
+  student can be served), not the same as the primary, **not another process
+  topic** (a second skill topic says nothing the first did not), and not above
+  the primary's level.
+- **A QUESTION ALREADY ON THE RIGHT TOPIC STILL GAINS A SECOND ONE.** The
+  reported case is exactly that — the primary was right all along and the
+  science was nowhere in the filing — so counting it as "already right" would
+  leave every one of them untouched. `same` compares both fields.
+- **`_qbtWrite` decides everything BEFORE it mutates.** A throw part-way
+  through would leave the in-memory question changed with nothing written — the
+  screen saying it moved and the database saying it did not, which is the one
+  state that whole write path exists to make impossible.
 - **`aiPickTopic` is exempt from the grounding census** by name, on the same
   footing as `aiSuggestTags` and the 🎯 objective classifiers: it is metadata
   about a question, not science said to anybody.
 - Run **`node tools/bulk-topics-tests.mjs`** after touching any of it.
+
+## 🖨 Preview printed — a bank or vetting question exactly as it prints (v1.349.0)
+
+`_wsPreviewAdhoc` and its branch in **`_wsPreviewCtx`** / `_wsShowPreviewOverlay`
+/ `printFromPreview` / `_wsPreviewSnapshot` / `_wsQeReopenPreview`, plus
+`previewQuestionsPrint` / `previewOneQuestionPrint` / `qbulkPreviewPrint` /
+`printQuestionsDirect` (search `PREVIEW PRINTED`), the 🖨 button on every bank
+row, bank tile and vetting card, and 🖨 **Preview printed** on the 🧰 tools bar.
+
+"How will this look when it prints?" was answerable only for a worksheet. A
+question in the bank or waiting in vetting could be read on screen and printed
+blind — and the printed sheet is a **different rendering entirely**: the picture
+is capped in millimetres, the answer boxes are sized from the model answer, a
+fill-in-the-blank prints BLANK, an MCQ grows an answer bracket, and the whole
+thing is measured and paginated onto A4.
+
+- **IT IS THE SAME PREVIEW, NOT A SECOND ONE**, and that is the whole promise.
+  It is a third **context** on `_wsPreviewCtx`, so `renderWsPreview` →
+  `buildWorksheetHtml` → the print planner is byte-for-byte the path a saved
+  worksheet takes. A preview of its own would be free to drift from the PDF —
+  and it would drift in the direction nobody checks, which is the printed sheet
+  in front of a class.
+- **THE PRINT IS THE SAME CALL TOO.** `printFromPreview` hands an ad-hoc set to
+  `printQuestionsDirect` → `doPrintStudentWorksheet`, the very function
+  `reprintWorksheet` and `printStudentWorksheet` end at.
+- **THE SET IS CARRIED AS QUESTIONS, NOT AS IDS**, because a VETTING question is
+  not in the bank: `_wsSavedQuestions` and every other id-based reader looks in
+  `questionBank` and would come back empty for the whole sheet.
+- **…but the SNAPSHOT is carried as ids** (`_wsPreviewSnapshot`), for the reason
+  a paper is rebuilt from its arguments: an edit replaces the bank's entry, so
+  reopening on the held objects would show exactly the copy that was just fixed.
+  `_wsQeReopenPreview` re-resolves against the list the `source` names.
+- **✏️ Editing mode is offered on a BANK set and never a vetting one.**
+  `emSaveAll` writes through `saveQuestion`, which would quietly move a vetting
+  question into the bank. ✎ Questions is hidden for both — there is no stored
+  list to add to or remove from.
+- **It uses the `bank` surface of `WNY_SWITCHES` / `AKX_SWITCHES`** — the 🖨
+  print picker's own switches — rather than inventing a second pair of
+  checkboxes for the same two options.
+- **No cover and no name/date/class strip**: this is a proof of one question or
+  a handful, not a worksheet being handed out.
+- **Every opener clears all three slots.** One left set is a preview showing the
+  last thing that was open — the paper from an hour ago, under the button just
+  pressed.
+- Run **`node tools/bulk-topics-tests.mjs`** and
+  **`node tools/preview-return-tests.mjs`** after touching any of it.
 
 ## "You may already have this one" — the duplicate warning (v1.293.0)
 
@@ -4269,7 +4353,27 @@ are missing which, and takes the author straight to them.
   "🔴 3" with no way back; give the vetting list a lamp without the `'vet'`
   scope and every one of them sits grey for ever; and leave the ＃ fix on
   `cqNumberOptions` and it reports "no options here" about a vetting question
-  that plainly has four.
+  that plainly has four. On the SECOND TOPIC: let one from a HIGHER year
+  through and it silently puts the whole question above the level the author
+  just asked for — the same fault the re-file exists to fix, arriving through
+  the field that fixes it; let another skill topic, an invented one or a
+  retired one through and the question is filed where nothing can find it; and
+  count a question whose primary was already right as "already right" and every
+  experiment question keeps its science nowhere in its filing, which is the
+  reported bug untouched.
+- After touching **🖨 Preview printed** (`_wsPreviewAdhoc` and its branches in
+  `_wsPreviewCtx` / `_wsShowPreviewOverlay` / `printFromPreview` /
+  `_wsPreviewSnapshot` / `_wsQeReopenPreview`, `previewQuestionsPrint`,
+  `previewOneQuestionPrint`, `qbulkPreviewPrint` or `printQuestionsDirect`), run
+  `node tools/bulk-topics-tests.mjs` and `node tools/preview-return-tests.mjs`.
+  The promise is that it is EXACTLY the PDF, so anything that forks the path
+  breaks it quietly: a renderer of its own drifts in the direction nobody
+  checks, and a printer of its own prints a different sheet from the one that
+  was previewed. Carry the set as ids and a vetting preview is empty (they are
+  not in the bank); carry the SNAPSHOT as objects and reopening after an edit
+  shows the copy that was just fixed; offer ✏️ Editing mode on a vetting set and
+  saving moves those questions into the bank; and leave one preview slot
+  uncleared and the button opens whatever was last previewed.
 - After touching **🔗 the merge** (`qMergeQuestions`, `qMergeFixParts`,
   `qMergeUniqueIds`, `qMergeLettersOk`, `qMergeLetterSources`,
   `qMergePartPreview`, `QMERGE_MAX`, `_vetApplyMerge`, the `qm*` dialog, the

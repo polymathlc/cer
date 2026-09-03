@@ -2778,7 +2778,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.348.0';
+const APP_VERSION = 'v1.349.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -15599,6 +15599,9 @@ function renderQuestionBank() {
           </div>
           <div class="qb-card-actions">
             ${tlLightHtml(q, 'bank')}
+            <button class="qb-action-btn" title="Preview printed — exactly the PDF this question becomes on a worksheet" onclick="event.stopPropagation();previewOneQuestionPrint('${q.id}','bank')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            </button>
             <button class="qb-action-btn" title="Edit" onclick="event.stopPropagation();editQuestion('${q.id}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </button>
@@ -15644,6 +15647,9 @@ function bankTileHtml(q) {
         ${tlLightHtml(q, 'bank', { small: true })}
         <button class="qb-tile-edit" title="Edit this question" onclick="event.stopPropagation();editQuestion('${q.id}')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="qb-tile-edit qb-tile-print" title="Preview printed — exactly the PDF this question becomes on a worksheet" onclick="event.stopPropagation();previewOneQuestionPrint('${q.id}','bank')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         </button>
       </div>
       <div class="qb-tile-body">
@@ -16430,6 +16436,9 @@ function renderVettingList() {
             <label class="vet-pick-wrap" title="Tick this question, then use 🔗 Merge selected or 🗑 Delete selected">
               <input type="checkbox" class="vet-pick" ${picked ? 'checked' : ''} onchange="vetSelToggle('${q.id}', this.checked)">
             </label>
+            <button class="qb-action-btn" title="Preview printed — exactly the PDF this question becomes on a worksheet" onclick="previewOneQuestionPrint('${q.id}','vetting')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            </button>
             <button class="qb-action-btn" title="Approve & Add to Bank" onclick="approveVetting('${q.id}')" style="color:var(--primary);">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
             </button>
@@ -29539,6 +29548,35 @@ let _wsPreviewSaved = null;   // { id, title } of the saved worksheet on show
 // A past paper is not a saved worksheet — there is no stored list of ids to
 // edit — so it gets its own slot rather than being squeezed into that one.
 let _wsPreviewPaper = null;
+// =====================================================================
+// 🖨 PREVIEW PRINTED — one question, or a set, from the bank or vetting
+// =====================================================================
+// "How will this look when it prints?" was answerable only for a worksheet.
+// A question in the bank or waiting in vetting could be read on screen and
+// printed blind — and the printed sheet is a different rendering entirely:
+// the picture is capped in millimetres, the answer boxes are sized from the
+// model answer, a fill-in-the-blank prints BLANK, an MCQ grows an answer
+// bracket, and the whole thing is measured and paginated onto A4.
+//
+// IT IS THE SAME PREVIEW, NOT A SECOND ONE, and that is the whole promise:
+// this is a third CONTEXT on `_wsPreviewCtx`, so `renderWsPreview` →
+// `buildWorksheetHtml` → the print planner is byte-for-byte the path a saved
+// worksheet takes. A preview of its own would be free to drift from the PDF,
+// and it would drift in the direction nobody checks.
+//
+//  • THE PRINT IS THE SAME CALL TOO. `printFromPreview` hands an ad-hoc set to
+//    `doPrintStudentWorksheet` — the very function `reprintWorksheet` uses —
+//    so what is previewed and what comes out of the printer are assembled from
+//    one builder with one set of options.
+//  • A VETTING QUESTION IS NOT IN THE BANK, so the set is carried as QUESTIONS
+//    rather than as ids: `_wsSavedQuestions` and every other id-based reader
+//    looks in `questionBank` and would come back empty for the whole sheet.
+//  • …and for the same reason ✏️ Editing mode is offered only for a BANK set.
+//    `emSaveAll` writes through `saveQuestion`, which would move a vetting
+//    question into the bank behind the author's back.
+//  • ✎ Questions is hidden: there is no stored list to add to or remove from.
+// { questions, title, source:'bank'|'vetting' } of an ad-hoc set on show.
+let _wsPreviewAdhoc = null;
 
 function _wsPreviewCtx() {
   if (_wsPreviewPaper) {
@@ -29551,6 +29589,21 @@ function _wsPreviewCtx() {
       // not a worksheet — so there is no checkbox and nothing to read.
       akExtras: true,
       frontHtml: _ppCoverHtml(_wsPreviewPaper.coverTitle || _wsPreviewPaper.title || 'Past paper')
+    };
+  }
+  if (_wsPreviewAdhoc) {
+    return {
+      saved: false, adhoc: true,
+      selected: _wsPreviewAdhoc.questions || [],
+      title: _wsPreviewAdhoc.title || 'Preview',
+      // No cover and no name/date/class strip: this is a proof of one question
+      // or a handful, not a worksheet being handed out.
+      cover: false, noFields: true,
+      // `bank` is an existing surface in WNY_SWITCHES / AKX_SWITCHES — the 🖨
+      // print picker's own switches — so the preview obeys whatever is set
+      // there rather than inventing a second pair of checkboxes.
+      where: 'bank',
+      akExtras: akxPrintOn('bank')
     };
   }
   if (_wsPreviewSaved) {
@@ -29580,7 +29633,35 @@ function openWorksheetPreview() {
   if (!wsSelectedIds.size) { showToast('Select at least one question first', 'error'); return; }
   _wsPreviewSaved = null;
   _wsPreviewPaper = null;
+  _wsPreviewAdhoc = null;
   _wsShowPreviewOverlay();
+}
+
+// 🖨 Preview printed — a set of questions straight from the bank or the vetting
+// list, rendered by the SAME builder a saved worksheet's PDF goes through.
+function previewQuestionsPrint(questions, title, source) {
+  const list = (questions || []).filter(Boolean);
+  if (!list.length) { showToast('There is nothing to preview', 'error'); return; }
+  _wsPreviewSaved = null;
+  _wsPreviewPaper = null;
+  _wsPreviewAdhoc = { questions: list, title: title || 'Preview', source: source === 'vetting' ? 'vetting' : 'bank' };
+  _wsShowPreviewOverlay();
+}
+// One question, from its own 🖨 button on a bank row, a bank tile or a vetting
+// card. `where` is what tells the preview which list to look in — a vetting
+// question is not in the bank and `_docQById` would come back empty.
+function previewOneQuestionPrint(id, where) {
+  const pool = where === 'vetting' ? vettingList : questionBank;
+  const q = (Array.isArray(pool) ? pool : []).find(x => x && String(x.id) === String(id));
+  if (!q) { showToast('That question is no longer here', 'error'); return; }
+  previewQuestionsPrint([q], q.title || 'Question', where);
+}
+// 🖨 the whole scoped set, from the 🧰 tools bar on either page.
+function qbulkPreviewPrint(where) {
+  const w = qbulkWhere(where);
+  const list = qbulkList(w).slice(0, QBULK_MAX);
+  if (!list.length) { showToast('There is nothing in that set to preview', 'info'); return; }
+  previewQuestionsPrint(list, (w === 'vetting' ? 'Vetting' : 'Question bank') + ' — ' + list.length + ' question' + (list.length === 1 ? '' : 's'), w);
 }
 
 // 👁 Preview a PSLE / past paper — the same A4 preview, so the sheet can be
@@ -29591,6 +29672,7 @@ function openWorksheetPreview() {
 function ppPreview(items, missing, title, opts) {
   if (!items.length) { showToast('Nothing to preview — none of these questions have a bank question attached yet', 'error'); return; }
   _wsPreviewSaved = null;
+  _wsPreviewAdhoc = null;
   _wsPreviewPaper = {
     items, missing, title,
     coverTitle: (opts && opts.coverTitle) || title,
@@ -29614,6 +29696,7 @@ function previewSavedWorksheet(id) {
   }
   _wsPreviewSaved = { id: ws.id, title: ws.title };
   _wsPreviewPaper = null;
+  _wsPreviewAdhoc = null;
   _wsShowPreviewOverlay();
 }
 
@@ -29626,11 +29709,18 @@ function _wsShowPreviewOverlay() {
   if (editBtn) editBtn.style.display = _wsPreviewSaved ? '' : 'none';
   // ✏️ Editing mode works on either — a saved worksheet or a past paper. Both
   // are just an ordered list of bank questions.
+  // ✏️ Editing mode works on either — a saved worksheet or a past paper — and on
+  // an ad-hoc set drawn from the BANK. Never on one drawn from VETTING:
+  // `emSaveAll` writes through `saveQuestion`, which would quietly move a
+  // vetting question into the bank.
   const emBtn = document.getElementById('wsPreviewEmBtn');
-  if (emBtn) emBtn.style.display = ((_wsPreviewSaved || _wsPreviewPaper) && _canAuthor()) ? '' : 'none';
+  const emOk = _wsPreviewSaved || _wsPreviewPaper || (_wsPreviewAdhoc && _wsPreviewAdhoc.source === 'bank');
+  if (emBtn) emBtn.style.display = (emOk && _canAuthor()) ? '' : 'none';
   // A past paper always prints its explanations, so there is nothing to switch.
   const explBox = document.getElementById('wsPreviewExplWrap');
   if (explBox) explBox.style.display = _wsPreviewPaper ? 'none' : '';
+  const t = document.querySelector('#wsPreviewOverlay .wspv-title');
+  if (t) t.firstChild.nodeValue = _wsPreviewAdhoc ? 'Printed preview ' : 'Worksheet preview ';
   akeSyncExplToggle();   // the builder and My Worksheets have their own checkbox
   renderWsPreview();
 }
@@ -29642,6 +29732,7 @@ function closeWorksheetPreview() {
   closeAke();
   _wsPreviewSaved = null;
   _wsPreviewPaper = null;
+  _wsPreviewAdhoc = null;
 }
 function wsBreakBefore(qid) { // push this question onto a new page
   if (!qid) return;
@@ -29662,8 +29753,18 @@ function printFromPreview() {
     ppDoPrint(p.items, p.missing, p.title, { coverTitle: p.coverTitle });
     return;
   }
+  if (_wsPreviewAdhoc) { const a = _wsPreviewAdhoc; closeWorksheetPreview(); printQuestionsDirect(a.questions, a.title); return; }
   if (_wsPreviewSaved) { reprintWorksheet(_wsPreviewSaved.id); return; }
   printStudentWorksheet();
+}
+// The printer for an ad-hoc set. `doPrintStudentWorksheet` is the very function
+// `reprintWorksheet` and `printStudentWorksheet` end at, so this really is the
+// PDF a saved worksheet produces — same builder, same options, same planner.
+async function printQuestionsDirect(questions, title) {
+  const list = (questions || []).filter(Boolean);
+  if (!list.length) { showToast('There is nothing to print', 'error'); return; }
+  const why = await _wnyRunPrepare(list, wnyPrintOn('bank'));
+  await doPrintStudentWorksheet(list, title || 'Questions', '', true, why, akxPrintOn('bank'));
 }
 
 async function renderWsPreview() {
@@ -30042,6 +30143,14 @@ function _wsPreviewSnapshot() {
   if (_wsPreviewSaved) {
     return { kind: 'saved', page: 'myworksheets', id: _wsPreviewSaved.id, title: _wsPreviewSaved.title };
   }
+  // An ad-hoc set is carried back as IDS, not as the question objects: an edit
+  // rebuilds the bank's entry, so the held object would be the pre-edit copy
+  // and the preview would reopen showing exactly what was just fixed.
+  if (_wsPreviewAdhoc) {
+    const a = _wsPreviewAdhoc;
+    return { kind: 'adhoc', page: a.source === 'vetting' ? 'vetting' : 'bank',
+             ids: a.questions.map(q => q.id), title: a.title, source: a.source };
+  }
   if (wsSelectedIds.size) return { kind: 'builder', page: 'worksheet' };
   return null;
 }
@@ -30081,6 +30190,14 @@ function _wsQeReopenPreview() {
       ppPreview(back.items || [], back.missing || [], back.title, { coverTitle: back.coverTitle, quiet: true });
     } else if (back.kind === 'saved') {
       if (savedWorksheets.some(w => w.id === back.id)) previewSavedWorksheet(back.id);
+    } else if (back.kind === 'adhoc') {
+      // Re-RESOLVED from the ids, for the same reason a paper is rebuilt from
+      // its arguments: the edit replaced the bank's entry, and reopening on the
+      // held objects would show exactly the copy that was just fixed.
+      const pool = back.source === 'vetting' ? vettingList : questionBank;
+      const byId = new Map((Array.isArray(pool) ? pool : []).map(q => [String(q.id), q]));
+      const list = (back.ids || []).map(id => byId.get(String(id))).filter(Boolean);
+      if (list.length) previewQuestionsPrint(list, back.title, back.source);
     } else if (wsSelectedIds.size) {
       openWorksheetPreview();
     }
@@ -37696,6 +37813,8 @@ function qbulkRenderBar(where) {
            title="Re-file these questions under the right topic — the level a question is served at is read off its TOPIC, so this is how a paper filed at the wrong level is put right.">🎯 Re-file topics</button>
          <button class="btn btn-outline btn-sm" onclick="qbulkCheck('${w}')" ${n && !running ? '' : 'disabled'}
            title="Ask the AI to read each of these questions and light it 🔴 🟡 🟢 — the same check ✅ Check Questions runs, one call per question.">🚦 Check ${n ? n : ''}</button>
+         <button class="btn btn-outline btn-sm" onclick="qbulkPreviewPrint('${w}')" ${n ? '' : 'disabled'}
+           title="See these questions exactly as they print — the same A4 preview, the same builder and the same PDF a saved worksheet produces.">🖨 Preview printed</button>
        </div>` + qbulkTallyHtml(w, unlit, running);
   } catch (e) { /* the module is still evaluating */ }
 }
@@ -37798,6 +37917,40 @@ const QBT_CONFIRM_OVER = 20;
 var _qbt = null;        // { where, list, level, mode, plan:Map, run, done }
 var _qbtUndo = null;    // [{ where, id, topic, topic2, topicConfidence }]
 
+// ── The SECOND topic on a re-file ───────────────────────────────────────────
+// An experiment question is an experiment ABOUT something. "The Scientific
+// Endeavour" and "Measurement and Lab Skills" name the PROCESS of science, not
+// a body of it — so a question filed under one of them says how it is being
+// asked and nothing at all about what it is asking. The heat is in the
+// question and nowhere in its filing, so it never turns up under Heat.
+//
+// `topic2` is where that goes, and it already exists: `qTopicList` reads both,
+// so a second topic makes the question findable, filterable and servable under
+// the science it is really about.
+//
+// THE ONE THING IT MUST NOT DO IS RAISE THE LEVEL. `qLevelNum` takes the MAX
+// over both topics, so a second topic from a HIGHER year silently puts the
+// whole question above the level the author just asked for — the re-file
+// undone by the field nobody looked at, from the other direction. A LOWER one
+// is harmless and is exactly the case this is for: an S1 investigation about
+// P4 heat is still an S1 question.
+const QPROCESS_TOPIC_RE = /scientific\s+endeavour|measurement\s+and\s+lab\s+skills|experimental\s+skills?|scientific\s+(investigation|inquiry|method)/i;
+function qProcessTopic(t) { return QPROCESS_TOPIC_RE.test(String(t || '')); }
+// Is `second` a second topic this question may actually carry alongside `main`?
+function qbulkSecondOk(main, second) {
+  const s = String(second || '').trim();
+  if (!s || s === String(main || '').trim()) return false;
+  // It has to be a real, live topic — a made-up one is filed where nothing can
+  // find it, and a retired one is filed where no student can be served.
+  const live = currentTopics().filter(t => t && !QRETIRED_TOPIC_RE.test(t));
+  if (live.indexOf(s) < 0) return false;
+  // A second PROCESS topic says nothing the first one did not: the point of the
+  // second is the science the experiment is about.
+  if (qProcessTopic(s)) return false;
+  // …and never above the primary's level. This is the whole safety story.
+  return getLevelNumber(getTopicLevel(s)) <= getLevelNumber(getTopicLevel(main));
+}
+
 // The topics a question may be re-filed INTO. A level narrows it; a retired
 // topic is never in it, whichever level was asked for.
 function qbulkTopicChoices(level) {
@@ -37821,6 +37974,10 @@ async function aiPickTopic(q, level) {
     category: normalizeCategoryValue(q.category),
     question: _fcClip(_questionContext(q) || ''),
   };
+  // The SECOND topic is chosen from the WHOLE live list, not the level's: the
+  // science an experiment is about is very often taught in an earlier year, and
+  // that is precisely the case this exists for.
+  const liveAll = currentTopics().filter(t => t && !QRETIRED_TOPIC_RE.test(t));
   const prompt = [
     'You are filing ONE question into a Singapore school science question bank.',
     level
@@ -37833,10 +37990,17 @@ async function aiPickTopic(q, level) {
     'CHOOSE EXACTLY ONE OF THESE TOPICS, spelled exactly as written:',
     choices.join('; '),
     '',
-    'Reply with ONLY this JSON: {"topic":"<one topic, copied exactly>","confidence":"high|medium|low"}',
+    'You may also give a SECOND topic — the science the question is really about.',
+    'It must be one of these, spelled exactly, or an empty string:',
+    liveAll.join('; '),
+    '',
+    'Reply with ONLY this JSON: {"topic":"<one topic, copied exactly>","topic2":"<a second topic, or an empty string>","confidence":"high|medium|low"}',
     '- "high" means the question is plainly about that topic.',
     '- "low" means nothing in the list really fits and you picked the least bad one. Say low when that is true — a person checks every low.',
-    '- Never invent a topic that is not in the list, and never return more than one.',
+    '- Never invent a topic that is not in the list, and never return more than one in "topic".',
+    '- WHEN "topic" NAMES A SKILL RATHER THAN A SUBJECT — planning a fair test, measuring, the scientific endeavour, experimental technique — "topic2" IS REQUIRED. Such a topic says how the question is being asked and nothing about what it asks: an experiment is always an experiment ABOUT something, and that something (heat, light, plants, magnets, forces…) is what goes in "topic2".',
+    '- Otherwise give "topic2" only when the question genuinely sits in two topics at once. An empty string is the right answer far more often than a stretch.',
+    '- "topic2" must never be a skill topic, and never from a HIGHER year than "topic".',
   ].join('\n');
   const raw = await askGemini(prompt, { maxOutputTokens: 120, temperature: 0.1, json: true });
   const parsed = _parseAIJson(raw) || {};
@@ -37846,8 +38010,14 @@ async function aiPickTopic(q, level) {
   // exactly what ⚡ Rapid add's own guard does — the author asked for a level
   // and gets one, and the thing that had to be guessed is flagged for a glance.
   const hit = choices.find(t => t === want) || choices.find(t => t.toLowerCase() === want.toLowerCase());
+  const topic = hit || choices[0];
+  // The second topic is checked against the same three rules every time: real
+  // and live, not another skill topic, and never above the primary's level.
+  const want2 = String(parsed.topic2 || '').trim();
+  const hit2 = liveAll.find(t => t === want2) || liveAll.find(t => t.toLowerCase() === want2.toLowerCase()) || '';
   return {
-    topic: hit || choices[0],
+    topic,
+    topic2: qbulkSecondOk(topic, hit2) ? hit2 : '',
     confidence: hit && /^(high|medium|low)$/.test(parsed.confidence) ? parsed.confidence : 'low',
   };
 }
@@ -37898,8 +38068,9 @@ function qbulkTopicsRender() {
         <div class="qbt-main">
           <div class="qbt-title">${escapeHtml(q.title || 'Untitled question')}</div>
           <div class="qbt-move">
-            <span class="qbt-from">${escapeHtml(curLevel)} · ${escapeHtml(cur)}</span>
+            <span class="qbt-from">${escapeHtml(curLevel)} · ${escapeHtml(cur)}${qSecondaryTopic(q) ? ' + ' + escapeHtml(qSecondaryTopic(q)) : ''}</span>
             ${to ? `<span class="qbt-arrow">→</span><span class="qbt-to${to.confidence === 'low' ? ' low' : ''}">${escapeHtml(getTopicLevel(to.topic) || '—')} · ${escapeHtml(to.topic)}${to.confidence === 'low' ? ' ⚠' : ''}</span>` : ''}
+            ${to && to.topic2 ? `<span class="qbt-also" title="The science this question is really about — a second topic, so it is findable under that too">+ ${escapeHtml(to.topic2)}</span>` : ''}
           </div>
         </div>
       </div>`;
@@ -37944,18 +38115,31 @@ function qbulkTopicsRender() {
 // it is not optional: this run holds references across awaits, and the editor's
 // save REPLACES the bank slot with a rebuilt object — writing a held object that
 // is no longer the live one resurrects the pre-edit question.
-async function _qbtWrite(where, q, topic, confidence) {
+async function _qbtWrite(where, q, topic, confidence, topic2) {
   const w = qbulkWhere(where);
   const pool = w === 'vetting' ? vettingList : questionBank;
   const live = (Array.isArray(pool) ? pool : []).find(x => x && x.id === q.id);
   if (live !== q) return false;
   const before = { where: w, id: q.id, topic: q.topic, topic2: q.topic2, topicConfidence: q.topicConfidence };
+  // DECIDED BEFORE ANYTHING IS MUTATED. A throw part-way through would leave
+  // the in-memory question changed with nothing written — the screen saying it
+  // moved and the database saying it did not, which is the one state this
+  // whole write path exists to make impossible.
+  //
+  // THE SECOND TOPIC IS ONLY EVER A PROBLEM WHEN IT IS HIGHER. `qLevelNum`
+  // takes the MAX over both, so a topic2 from a LATER year silently keeps the
+  // question above the level the author just asked for — the re-file undone by
+  // the field nobody looked at. One from an EARLIER year changes nothing about
+  // the level and is exactly what an experiment question needs: an S1
+  // investigation about P4 heat is still an S1 question, and now it is findable
+  // under Heat as well.
+  let next2 = q.topic2;
+  try {
+    if (topic2 && qbulkSecondOk(topic, topic2)) next2 = topic2;
+    else if (q.topic2 && !qbulkSecondOk(topic, q.topic2)) next2 = '';
+  } catch (e) { console.warn('re-file: reading the second topic', e); }
   q.topic = topic;
-  // A SECOND topic from another level keeps the whole question at that level —
-  // qLevelNum takes the MAX over both — so one left behind silently undoes the
-  // re-file while the primary topic looks perfectly right.
-  const choices = qbulkTopicChoices(_qbt ? _qbt.level : '');
-  if (q.topic2 && _qbt && _qbt.level && choices.indexOf(q.topic2) < 0) q.topic2 = '';
+  q.topic2 = next2;
   if (confidence) q.topicConfidence = confidence;
   const ok = w === 'vetting' ? await saveVettingQuestion(q) : await saveQuestion(q, { quiet: true });
   if (!ok) {
@@ -37991,10 +38175,14 @@ async function qbulkTopicsRun(mode) {
       while (!run.stop && next < target.length) {
         const q = target[next++];
         try {
-          let topic = fixedTopic, conf = '';
-          if (!fixed) { const r = await aiPickTopic(q, level); topic = r.topic; conf = r.confidence; }
-          if (!topic || topic === q.topic) run.same++;
-          else if (await _qbtWrite(where, q, topic, conf)) { run.moved++; _qbt.plan.set(q.id, { topic, confidence: conf }); }
+          let topic = fixedTopic, conf = '', topic2 = '';
+          if (!fixed) { const r = await aiPickTopic(q, level); topic = r.topic; conf = r.confidence; topic2 = r.topic2 || ''; }
+          // A question already on the right topic still gains a second one — the
+          // whole point here is the experiment question whose PRIMARY topic was
+          // right all along and whose science was nowhere in its filing.
+          const same = topic === q.topic && (!topic2 || topic2 === qSecondaryTopic(q));
+          if (!topic || same) run.same++;
+          else if (await _qbtWrite(where, q, topic, conf, topic2)) { run.moved++; _qbt.plan.set(q.id, { topic, topic2, confidence: conf }); }
           else run.failed++;
         } catch (e) {
           console.warn('re-file topic', q && q.id, e);
@@ -67688,6 +67876,9 @@ window.qbulkTopicsClose = qbulkTopicsClose;
 window.qbulkTopicsLevel = qbulkTopicsLevel;
 window.qbulkTopicsRun = qbulkTopicsRun;
 window.qbulkTopicsUndo = qbulkTopicsUndo;
+window.qbulkPreviewPrint = qbulkPreviewPrint;
+window.previewQuestionsPrint = previewQuestionsPrint;
+window.previewOneQuestionPrint = previewOneQuestionPrint;
 window.tlStopMany = tlStopMany;
 window.tlJumpToProblem = tlJumpToProblem;
 window.akeAddExplanation = akeAddExplanation;

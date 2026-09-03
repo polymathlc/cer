@@ -1814,6 +1814,9 @@ option {
 }
 .qb-tile-edit svg { width: 14px; height: 14px; }
 .qb-tile:hover .qb-tile-edit { opacity: 1; }
+/* 🖨 Preview printed, beside the pencil. The other three corners are taken —
+   ✓ pick top-left, 🚦 the lamp bottom-left — so it shares this one. */
+.qb-tile-print { right: 44px; }
 .qb-tile-edit:hover { color: var(--primary); border-color: var(--primary); }
 
 .qb-tile-body { padding: 14px 16px 16px; }
@@ -5374,6 +5377,14 @@ body.em-editing #printProgress { z-index: 470; }
 .qbt-arrow { color: var(--text-light); }
 .qbt-to { color: var(--primary); font-weight: 700; }
 .qbt-to.low { color: var(--accent-orange); }
+/* The SECOND topic — the science an experiment question is really about. */
+.qbt-also {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-teal-light, #e6f4f1);
+  color: var(--accent-teal, #0f766e);
+  font-weight: 700;
+}
 .qbt-more { font-size: 0.78rem; color: var(--text-muted); padding: 8px 2px; }
 .qbt-foot {
   display: flex;
