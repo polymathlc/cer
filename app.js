@@ -3211,7 +3211,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.353.0';
+const APP_VERSION = 'v1.354.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -4710,7 +4710,10 @@ function navigateTo(page) {
   if (page === 'myreport') loadMyReport();
   if (page === 'flashcards') renderFlashcardsPage();
   if (page === 'familysettings') famRenderSettings();
-  if (page === 'scheduled') loadScheduledQuestions();
+  // Wrapped for the usual reason: navigateTo can run while the module is still
+  // evaluating, and the release consts sit far below this line — in their
+  // temporal dead zone there, a page nobody has opened would take the app down.
+  if (page === 'scheduled') { loadScheduledQuestions(); try { renderBankScheduled(); } catch (e) { console.warn('renderBankScheduled', e); } }
   if (page === 'flagged') loadFlaggedQuestions();
   if (page === 'doctor') renderDoctorPage();
   if (page === 'character') rpgRenderCharacterPage();
@@ -14172,6 +14175,88 @@ function _rapidApplyLevel(q, level) {
   return q;
 }
 
+// ---- 📅 The RELEASE DATE this batch is scheduled for ----------------------
+// The other half of "these are all from one paper": a teacher very often adds
+// next term's paper now, and does not want a word of it reaching a student
+// until the week they teach it. Saying "release all of these on 12 January"
+// once, before the first screenshot, is the whole feature — every question the
+// batch produces is stamped with that day and no practice mode, quest or game
+// serves it until then. See `qReleased` beside `qInSyllabus` for what the stamp
+// actually does; this half is only about putting it on.
+//
+// IT IS ONE FIELD ON THE QUESTION, and that is what makes it survive
+// everything else the question goes through. It rides the vetting document,
+// it is carried into the bank by `approveVetting` (which moves the object
+// whole), and it survives an EDIT for free — the editor has no control for it,
+// so it is not in EDITOR_OWNED_QUESTION_FIELDS and `carryOverQuestionMeta`
+// restores it. Adding an editor field for it later would mean adding the name
+// to that Set in the same commit, or an edit would put a cleared date back.
+//
+// IT LIVES IN sessionStorage, exactly like the batch level and for exactly the
+// same reason: a batch is one sitting, so the date survives a reload mid-pile
+// and the pad being closed and reopened, and is back to "release immediately"
+// in a new tab or tomorrow. A release date that persisted for a week is the
+// one an author set last Tuesday and never noticed again — and every question
+// they added afterwards would sit invisible to the whole school with nothing
+// on any screen to say why.
+const RAPID_RELEASE_KEY = 'sqRapidRelease';
+// A date that has come round is not a schedule any more, so the reader drops
+// it rather than handing back a day in the past. That matters here more than
+// anywhere: a pad left open overnight would otherwise go on stamping yesterday
+// onto every question in the morning's batch.
+function rapidRelease() {
+  try {
+    const v = sessionStorage.getItem(RAPID_RELEASE_KEY) || '';
+    return (RELEASE_DAY_RE.test(v) && v > releaseToday()) ? v : '';
+  } catch (e) { return ''; }
+}
+function setRapidRelease(v) {
+  const iso = (RELEASE_DAY_RE.test(String(v || '')) && String(v) > releaseToday()) ? String(v) : '';
+  try { sessionStorage.setItem(RAPID_RELEASE_KEY, iso); }
+  catch (e) { /* private mode — the picker still works for this pad */ }
+  if (String(v || '') && !iso) showToast('Pick a date after today — a release date in the past releases the question immediately', 'info');
+  _rapidReleasePaint();
+}
+// The picker's floor is TOMORROW in Singapore, so "today" is never offered:
+// a question released today is a question with no schedule, and offering it as
+// though it were one is how an author believes a batch is being held back when
+// it is already out. Set at OPEN time — the pad can be reopened days later.
+function _rapidReleaseSetup() {
+  const inp = document.getElementById('rapidRelease');
+  if (!inp) return;
+  inp.min = releaseDayFromNow(1);
+  inp.value = rapidRelease();
+}
+function _rapidReleasePaint() {
+  const iso = rapidRelease();
+  const wrap = document.getElementById('rapidReleaseWrap');
+  const note = document.getElementById('rapidReleaseNote');
+  const inp = document.getElementById('rapidRelease');
+  const clr = document.getElementById('rapidReleaseClear');
+  if (inp && inp.value !== iso) inp.value = iso;
+  if (wrap) wrap.classList.toggle('on', !!iso);
+  if (clr) clr.style.display = iso ? '' : 'none';
+  if (note) {
+    note.textContent = iso
+      ? 'Every question added from here goes into Vetting as usual and keeps this date when you approve it — no student is served it in any practice mode or game until ' + qReleaseLabel(iso) + ' (' + qReleaseWhen(iso) + ').'
+      : 'Every question is available to students as soon as it is approved, as now.';
+  }
+}
+
+// The guard, and the one writer of `q.releaseOn`. It is deliberately strict in
+// BOTH directions: a value that is not a day key is never written (the field
+// would then read as no schedule at all, so writing one is worse than writing
+// none), and a day that is not in the FUTURE is not written either — that is a
+// question which is already released, and a bank full of stale ⏳ badges
+// pointing at last month is a badge nobody reads any more.
+function _rapidApplyRelease(q, iso) {
+  if (!q) return q;
+  const on = String(iso || '');
+  if (!RELEASE_DAY_RE.test(on) || on <= releaseToday()) return q;
+  q.releaseOn = on;
+  return q;
+}
+
 function openRapidAdd() {
   if (!window.__aiReady || !window.__aiReady()) {
     showToast("AI isn't set up yet — add your reCAPTCHA site key in the code", 'info');
@@ -14183,6 +14268,10 @@ function openRapidAdd() {
   // admin's own custom topics, which are loaded at sign-in.
   _rapidLevelOptions();
   _rapidLevelPaint();
+  // Built at OPEN time for the same reason the level list is: the pad can be
+  // reopened days after it was last used, and "tomorrow" has moved on.
+  _rapidReleaseSetup();
+  _rapidReleasePaint();
   _updateRapidCounts();
   const zone = document.getElementById('rapidPasteZone');
   // On a phone, focusing the pad pops the on-screen keyboard over the very
@@ -14349,12 +14438,17 @@ let _rapidPdfBusy = false;
 function rapidAddFiles(files, how) {
   const list = Array.from(files || []).filter(Boolean);
   // Captured ONCE, synchronously, for everything in this drop — see above.
+  // BOTH batch settings are read here and nowhere else downstream: the pad
+  // stays open the whole time a forty-page paper is rendering, so a release
+  // date read inside the job would stamp the back half of a paper with
+  // whatever the picker had been changed to by the time it got there.
   const level = rapidLevel();
+  const release = rapidRelease();
   let imgs = 0, pdfs = 0, other = 0;
   for (const file of list) {
     const type = (file && file.type) || '';
-    if (type === 'application/pdf') { startRapidJob(file, level); pdfs++; }
-    else if (type.startsWith('image/')) { startRapidJob(file, level); imgs++; }
+    if (type === 'application/pdf') { startRapidJob(file, level, { release }); pdfs++; }
+    else if (type.startsWith('image/')) { startRapidJob(file, level, { release }); imgs++; }
     else other++;
   }
   if (!imgs && !pdfs) {
@@ -14366,13 +14460,18 @@ function rapidAddFiles(files, how) {
   if (imgs) bits.push(imgs + (how === 'paste' ? ' screenshot' : ' image') + (imgs === 1 ? '' : 's'));
   if (pdfs) bits.push(pdfs + ' PDF' + (pdfs === 1 ? '' : 's') + ' — every page is read as its own screenshot');
   const at = level ? ' at ' + level : '';
-  _setRapidStatus('Queued ' + bits.join(' and ') + at + ' — add the next one whenever you like…');
+  // The release date is named back the moment something is queued. A batch
+  // being held back and never saying so is how an author adds forty questions,
+  // sees them all land in vetting, approves them, and cannot work out why the
+  // class is not getting them.
+  const on = release ? ' · ⏳ released ' + qReleaseLabel(release) : '';
+  _setRapidStatus('Queued ' + bits.join(' and ') + at + on + ' — add the next one whenever you like…');
   if (other) showToast(other + ' file' + (other === 1 ? ' was' : 's were') + ' not an image or a PDF and ' + (other === 1 ? 'was' : 'were') + ' skipped', 'info');
   return imgs + pdfs;
 }
 
-function _rapidQueuePdf(file, level) {
-  _rapidPdfQueue.push({ file, level });
+function _rapidQueuePdf(file, level, release) {
+  _rapidPdfQueue.push({ file, level, release });
   _rapidPdfPump();
 }
 // One PDF at a time. The pump is re-entrant-safe: every queue push calls it and
@@ -14383,7 +14482,7 @@ async function _rapidPdfPump() {
   try {
     while (_rapidPdfQueue.length) {
       const next = _rapidPdfQueue.shift();
-      await _rapidExpandPdf(next.file, next.level);
+      await _rapidExpandPdf(next.file, next.level, next.release);
     }
   } finally { _rapidPdfBusy = false; }
 }
@@ -14399,10 +14498,10 @@ function _rapidPageFile(img, name, pageNo) {
 }
 
 // Render a PDF page by page and feed each page into the ordinary queue.
-async function _rapidExpandPdf(file, level) {
+async function _rapidExpandPdf(file, level, release) {
   const name = file.name || 'PDF';
   const jobId = 'rapid_' + (++_rapidSeq);
-  rapidJobs.unshift({ id: jobId, status: 'processing', title: '📄 ' + name, sub: 'Opening the PDF…', level, source: name });
+  rapidJobs.unshift({ id: jobId, status: 'processing', title: '📄 ' + name, sub: 'Opening the PDF…', level, release, source: name });
   _updateRapidCounts();
   renderVettingList();
   let added = 0, blank = 0, failed = 0, pages = 0, stitched = 0;
@@ -14447,6 +14546,10 @@ async function _rapidExpandPdf(file, level) {
         finally { try { page.cleanup(); } catch (_) {} }
         pages++;
         inflight.push(startRapidJob(_rapidPageFile(img, name, p), level, {
+          // Carried from the moment the PDF was DROPPED, never re-read: a
+          // forty-page paper takes minutes to render and the picker is live
+          // the whole time.
+          release,
           source: name + ' — page ' + p + ' of ' + take,
           blankOk: true,
           // Page 1 has nothing before it, so it is never asked whether it
@@ -14464,7 +14567,7 @@ async function _rapidExpandPdf(file, level) {
     _removeRapidJob(jobId);
     _updateRapidCounts();
     renderVettingList();
-    const at = level ? ' at ' + level : '';
+    const at = (level ? ' at ' + level : '') + (release ? ' · ⏳ released ' + qReleaseLabel(release) : '');
     const bits = [added + ' question' + (added === 1 ? '' : 's') + at + ' from ' + pages + ' page' + (pages === 1 ? '' : 's') + ' of “' + name + '”'];
     if (stitched) bits.push('🔗 ' + stitched + ' question' + (stitched === 1 ? '' : 's') + ' carried over a page break and ' + (stitched === 1 ? 'was' : 'were') + ' joined back up');
     if (blank) bits.push(blank + ' page' + (blank === 1 ? '' : 's') + ' had no questions on ' + (blank === 1 ? 'it' : 'them'));
@@ -14482,7 +14585,9 @@ function startRapidJob(file, level, opts) {
   // in the door above, so a caller added later cannot bring the whole-file read
   // back by accident — see the block above for why that read is not survivable.
   if (file && file.type === 'application/pdf') {
-    _rapidQueuePdf(file, level === undefined || level === null ? rapidLevel() : level);
+    _rapidQueuePdf(file,
+      level === undefined || level === null ? rapidLevel() : level,
+      o.release === undefined || o.release === null ? rapidRelease() : o.release);
     return Promise.resolve({ queued: true });
   }
   const jobId = 'rapid_' + (++_rapidSeq);
@@ -14493,12 +14598,17 @@ function startRapidJob(file, level, opts) {
   // the next one must not have the first paper land at P4 because its prep
   // finished second. A caller that passes none still gets today's behaviour.
   const lv = (level === undefined || level === null) ? rapidLevel() : level;
+  // The release date is captured on exactly the same footing, so a caller that
+  // passes neither still gets today's behaviour and one that passes both gets
+  // the batch it was queued with rather than the pad's live state.
+  const rel = (o.release === undefined || o.release === null) ? rapidRelease() : o.release;
   rapidJobs.unshift({
     id: jobId,
     status: 'processing',
     title: o.source ? '📄 ' + o.source : 'Reading screenshot…',
     sub: 'AI is reading the question…',
     level: lv,
+    release: rel,
     source: o.source || ''
   });
   _updateRapidCounts();
@@ -14509,7 +14619,9 @@ function startRapidJob(file, level, opts) {
   return _rapidPrepFile(file)
     .then(f => {
       if (f.size > RAPID_MAX_BYTES) throw new Error('that file is too large (max ~18 MB)');
-      return processRapidJob(jobId, f, lv, o); // runs in the background; awaited only by the PDF feeder
+      // `rel` is put BACK on the opts bag rather than read again inside the
+      // job: the job may not start for minutes behind a queue of pages.
+      return processRapidJob(jobId, f, lv, Object.assign({}, o, { release: rel })); // runs in the background; awaited only by the PDF feeder
     })
     .catch(err => { _failRapidJob(jobId, err); });
 }
@@ -14589,6 +14701,13 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       // narrowed the topic list; this is the guard for a reply that chose
       // outside it, and it marks what it had to guess so the card says so.
       _rapidApplyLevel(q, batchLevel);
+      // …and the batch's RELEASE DATE, on every question the page held, for
+      // the same reason: a page of five is five questions held back to the
+      // same morning, not one. `_rapidApplyRelease` refuses anything that is
+      // not a day key in the future, so a batch with no date set — which is
+      // every batch until somebody picks one — writes no field at all and the
+      // question behaves exactly as it always has.
+      _rapidApplyRelease(q, o.release);
       // The paper's number is the signal that these are separate questions, not
       // part of any of them. The model is told not to keep it; this is the
       // guard for when it does, and it is the exam paper builder's own stripper.
@@ -14690,7 +14809,8 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       : '"' + (added[0].title || 'question') + '"';
     // The level is named back to the author. Filing at a level they chose and
     // never confirming it is how a whole pile ends up at the wrong one.
-    const at = batchLevel ? ' at ' + batchLevel : '';
+    const at = (batchLevel ? ' at ' + batchLevel : '')
+      + (qReleaseOn(added[0]) ? ' · ⏳ released ' + qReleaseLabel(qReleaseOn(added[0])) : '');
     // A PDF page says nothing on its own: forty pages is forty toasts, and the
     // paper's own summary lands when the last page is in. The questions are
     // already visible as vetting cards either way.
@@ -14772,7 +14892,7 @@ function _rapidJobCardHtml(job) {
       <div class="qb-card-header">
         <div>
           <div class="qb-card-title" style="display:flex;align-items:center;gap:8px;"><span class="spinner" style="border-color:rgba(74,124,89,.3);border-top-color:var(--primary);"></span>${escapeHtml(job.title || 'Processing…')}</div>
-          <div class="qb-card-meta"><span class="vetting-badge" style="background:var(--primary-light);color:var(--primary);">Processing…</span>${job.level ? `<span class="vetting-badge" style="background:var(--accent-blue-light);color:var(--accent-blue);" title="The level this batch is being filed at">📚 ${escapeHtml(job.level)}</span>` : ''}</div>
+          <div class="qb-card-meta"><span class="vetting-badge" style="background:var(--primary-light);color:var(--primary);">Processing…</span>${job.level ? `<span class="vetting-badge" style="background:var(--accent-blue-light);color:var(--accent-blue);" title="The level this batch is being filed at">📚 ${escapeHtml(job.level)}</span>` : ''}${job.release ? `<span class="vetting-badge" style="background:#eef2ff;color:#4338ca;" title="Every question from this batch is held back from students until this date">⏳ ${escapeHtml(qReleaseLabel(job.release))}</span>` : ''}</div>
         </div>
       </div>
       <div class="qb-card-preview" style="color:var(--text-muted);">${escapeHtml(job.sub || 'AI is reading the question and enhancing the image…')}</div>
@@ -16035,6 +16155,7 @@ function renderQuestionBank() {
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
               ${usageBadgeHtml(q)}
               ${!qInSyllabus(q) ? `<span class="qb-tag" style="background:#fdf4e3;color:#7a5410;border:1px solid #e0b768;" title="${q.notInSyllabus ? 'Hidden everywhere except the PSLE Papers page' : 'Retired topic — hidden everywhere except the PSLE Papers page'}">🚫 ${q.notInSyllabus ? 'Not in syllabus' : 'Retired topic'}</span>` : ''}
+              ${qReleaseChipHtml(q)}
               ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
               ${qTagChipsHtml(q)}
             </div>
@@ -16101,6 +16222,7 @@ function bankTileHtml(q) {
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
           <span class="qb-tag">${escapeHtml(qLevel)}</span>
           ${usageBadgeHtml(q)}
+          ${qReleaseChipHtml(q)}
         </div>
       </div>
     </div>`;
@@ -16866,6 +16988,7 @@ function renderVettingList() {
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               ${dup ? `<span class="qb-tag" style="background:#fdf4e3;color:#7a5410;border:1px solid #e0b768;" title="Looks ${dup.pct}% similar to “${escapeHtml(dup.title)}” already in the bank">🟡 Possible duplicate</span>` : ''}
               ${scanned ? SCANNED_CARD_BADGE : ''}
+              ${qReleaseChipHtml(q)}
               ${q.diagramWhole ? '<span class="qb-tag" style="background:#fdf4e3;color:#b45309;" title="No rectangle came back for this question\'s figure, so the WHOLE page is in the picture slot. Open it and use ✂️ Crop.">🖼 Whole page — crop it</span>' : ''}
               ${isNew ? '<span class="qb-tag" style="background:var(--accent-orange-light);color:var(--accent-orange);" title="Just added by Rapid add — review and approve">⚡ Just added</span>' : ''}
               ${q.topicConfidence === 'low' ? '<span class="qb-tag" style="background:#fee2e2;color:#dc2626;" title="AI was unsure of this topic — please check it">⚠ check topic</span>' : q.topicConfidence === 'medium' ? '<span class="qb-tag" style="background:#fdf4e3;color:#b45309;" title="AI was fairly sure of this topic — worth a glance">~ topic?</span>' : ''}
@@ -25041,9 +25164,132 @@ function qInSyllabus(q) {
   return true;
 }
 
+// ---- Scheduled release — a question that is IN the bank and not yet due -----
+// ⚡ Rapid add can file a whole batch with a RELEASE DATE on it. The questions
+// go into Vetting exactly as they always did and are approved into the bank
+// exactly as they always were — they are simply not SERVED to anybody until
+// that morning. `q.releaseOn` is that date: a plain 'YYYY-MM-DD' day key in
+// Singapore time, stamped on the question itself.
+//
+// IT IS NOT THE 🗓 SCHEDULED QUESTIONS PAGE, AND THE TWO MUST NOT BE MERGED.
+// That page keeps a whole COPY of the question OUT of the bank, in its own
+// `scheduledQuestions` collection, and writes it in on release day — so until
+// then the bank does not know the question exists and nothing can be tagged,
+// checked, printed or put on a worksheet in advance. This is the opposite, and
+// it is what was asked for: the question is in the bank from the moment it is
+// approved, wearing a date.
+//
+// SO THERE IS NOTHING TO RUN. A release is not an event here: no cron, no
+// Cloud Function, no second write, nothing to miss while every tab is closed.
+// The question becomes servable because the comparison below starts coming out
+// the other way — which is also why a date can be changed or cleared at any
+// time and takes effect on the very next render.
+//
+// `qReleased(q)` IS THE ONE PREDICATE, and every student-facing pool asks it
+// beside `qInSyllabus` / `qWithinStudentLevel`. The census in
+// tools/scheduled-release-tests.mjs fails on a pool that forgets, because a
+// pool left behind is a question served weeks early on a screen that looks
+// perfectly right — and there is nothing anywhere to say it happened.
+//
+// IT READS NO ROLE, deliberately. `qWithinStudentLevel` has to ask who is
+// looking; this does not, which removes the whole class of "an admin
+// previewing as a student saw it anyway" holes. What separates the two
+// audiences is WHICH SURFACES ASK: the serving pools do, and the management
+// surfaces — the bank list, the vetting list, the worksheet builder, the print
+// picker — deliberately do not, and badge it instead. That is exactly the rule
+// an out-of-syllabus question already follows, and it is what lets a teacher
+// build next term's worksheet today.
+//
+// A VALUE THAT IS NOT A DAY KEY IS NOT A SCHEDULE. `qReleaseOn` returns '' for
+// anything that is not exactly 'YYYY-MM-DD', so a stray field, a Date object or
+// an ISO timestamp leaves the question behaving precisely as an unscheduled one
+// — served, and wearing no badge. It fails OPEN on purpose: a question served a
+// few days early is an embarrassment a person can see, while a question
+// withheld from every mode for ever by a value nobody can read is the silent
+// disappearance most of the guards in this file exist to prevent. The only
+// writer is `_rapidApplyRelease`, and it writes that shape and nothing else.
+const RELEASE_TZ = 'Asia/Singapore';
+const RELEASE_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+// Today in Singapore, as the same 'YYYY-MM-DD' the old scheduler has always
+// used. en-CA is ISO order, and the timeZone is what makes 11pm on the 31st
+// still the 31st for a teacher in Singapore and for a student on holiday in
+// London alike — a release day that drifted with the device would let a paper
+// out a day early on half the class's phones.
+function releaseDayKey(d) {
+  const x = d || new Date();
+  try { return x.toLocaleDateString('en-CA', { timeZone: RELEASE_TZ }); }
+  catch (e) { return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }
+}
+function releaseToday() { return releaseDayKey(new Date()); }
+// `n` days from now, in Singapore — what the pad's date picker uses for its
+// `min`, so a batch can never be scheduled into the past by accident.
+function releaseDayFromNow(n) {
+  const d = new Date();
+  d.setTime(d.getTime() + (n || 0) * 86400000);
+  return releaseDayKey(d);
+}
+// THE ONE READER of the field. The gate, every badge, the schedule page and
+// the harness all go through it, so "is this question scheduled" has exactly
+// one answer wherever it is asked.
+function qReleaseOn(q) {
+  const v = q && q.releaseOn;
+  return (typeof v === 'string' && RELEASE_DAY_RE.test(v)) ? v : '';
+}
+// Scheduled AND still to come. A date that has PASSED is not a schedule any
+// more — it is a question that was released — so nothing is badged for it and
+// nothing is withheld. That is what makes the field self-clearing: an old date
+// left on a question costs nothing and needs no sweep.
+function qScheduled(q, today) {
+  const on = qReleaseOn(q);
+  return !!on && on > (today || releaseToday());
+}
+function qReleased(q, today) { return !qScheduled(q, today); }
+// "12 Jan 2027", in the same timezone the comparison uses. The +08:00 is what
+// stops a date typed in Singapore rendering as the day before on a browser
+// running west of it.
+function qReleaseLabel(on) {
+  const iso = String(on || '');
+  if (!RELEASE_DAY_RE.test(iso)) return '';
+  try {
+    return new Date(iso + 'T00:00:00+08:00')
+      .toLocaleDateString('en-SG', { timeZone: RELEASE_TZ, day: 'numeric', month: 'short', year: 'numeric' });
+  } catch (e) { return iso; }
+}
+// How many whole days away, for the wording ("tomorrow", "in 12 days").
+function qReleaseDaysAway(on, today) {
+  const iso = String(on || '');
+  if (!RELEASE_DAY_RE.test(iso)) return null;
+  const a = Date.parse(iso + 'T00:00:00+08:00');
+  const b = Date.parse((today || releaseToday()) + 'T00:00:00+08:00');
+  if (!isFinite(a) || !isFinite(b)) return null;
+  return Math.round((a - b) / 86400000);
+}
+function qReleaseWhen(on, today) {
+  const d = qReleaseDaysAway(on, today);
+  if (d == null) return '';
+  if (d <= 0) return 'today';
+  if (d === 1) return 'tomorrow';
+  return 'in ' + d + ' days';
+}
+// The badge every management surface wears — the vetting card, both bank
+// views, the worksheet builder. It is deliberately the SAME chip everywhere:
+// a scheduled question that looked like an ordinary one on any one of those
+// screens is a question somebody prints for Monday and cannot understand why
+// no student can see.
+function qReleaseChipHtml(q) {
+  const on = qReleaseOn(q);
+  if (!on || !qScheduled(q)) return '';
+  return '<span class="qb-tag" style="background:#eef2ff;color:#4338ca;border:1px solid #a5b4fc;"' +
+    ' title="Scheduled by ⚡ Rapid add. It is in the bank and can be edited, printed and put on a worksheet,' +
+    ' but no student is served it in any practice mode or game until ' + escapeHtml(qReleaseLabel(on)) +
+    ' (12:00 AM Singapore time). Clear the date on the 🗓 Scheduled Questions page to release it now.">' +
+    '⏳ Releases ' + escapeHtml(qReleaseLabel(on)) + '</span>';
+}
+
 function getQuestionsForLevel(level) {
   return questionBank.filter(q => {
     if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
+    if (!qReleased(q)) return false;               // scheduled for a future date → not yet served
     // Only include questions with something the AI can mark
     if (!questionHasMarkableAnswer(q)) return false;
     // qInLevelBand, not `qLevelNum(q) <= maxLevel`: the level is the HIGHEST of
@@ -28409,7 +28655,7 @@ function snapShowSuggestions(questionText, photoIdx) {
   // either — it is a student surface, and matching would serve the question.
   // The level cap is there for the same reason: matching a photo to a Sec 1
   // question would put that question in front of a P5 child.
-  const ranked = questionBank.filter(q => qInSyllabus(q) && qWithinStudentLevel(q)).map(q => ({ q, s: _snapSim(aSet, q) }))
+  const ranked = questionBank.filter(q => qInSyllabus(q) && qReleased(q) && qWithinStudentLevel(q)).map(q => ({ q, s: _snapSim(aSet, q) }))
     .sort((a, b) => b.s - a.s).filter(x => x.s > 0.12).slice(0, 3);
   if (!ranked.length) {
     host.innerHTML = `<div class="practice-card"><div class="practice-card-body">${label}
@@ -28614,6 +28860,7 @@ function renderWsQuestions() {
             ${qSecondaryTagsHtml(q)}
             <span class="qb-tag">${escapeHtml(qLevel)}</span>
             ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
+            ${qReleaseChipHtml(q)}
           </div>
         </div>
         <button class="ws-q-expand-btn" onclick="event.stopPropagation();toggleWsPreview('${q.id}', this)" title="Preview question">
@@ -28999,7 +29246,11 @@ function _wsPersistWorksheet(ws) {
 // past-papers archive.
 function _wseBank() {
   const live = questionBank.filter(qInSyllabus);
-  return _canAuthor() ? live : live.filter(qWithinStudentLevel);
+  // An AUTHOR still sees a scheduled question here — this is the surface a
+  // teacher builds next term's sheet on. A STUDENT editing their own Ai-nstein
+  // worksheet must not be able to add one, which is the same split `_canAuthor`
+  // already makes for the level cap.
+  return _canAuthor() ? live : live.filter(q => qReleased(q) && qWithinStudentLevel(q));
 }
 
 // Everything that shows this worksheet, brought back into step after a change:
@@ -32741,6 +32992,7 @@ function qpAvailableTopics(typeFilter) {
   const counts = {};
   questionBank.forEach(q => {
     if (!qInSyllabus(q)) return;          // not in syllabus → never offered in practice
+    if (!qReleased(q)) return;            // scheduled for later → not counted, or the topic offers questions it never serves
     if (qpFibOn() && !qHasKeywords(q)) return;   // nothing to blank out → not a fill-in-the-blanks question
     if (!qpMatchesType(q, typeFilter)) return;
     if (!qWithinStudentLevel(q)) return; // topics above the student's level never show
@@ -32773,6 +33025,7 @@ function buildQpQueue(level) {
   const { type, topic } = qpFilters();
   const pool = questionBank.filter(q => {
     if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
+    if (!qReleased(q)) return false;               // scheduled for a future date → not yet served
     // 🔲 Fill-in-the-blanks serves ONLY questions with keywords marked on their
     // model answer. A question with none would arrive with nothing blanked out
     // — an ordinary question wearing the mode's banner, which reads as a bug.
@@ -33365,7 +33618,7 @@ function _homeReviewPool() {
   const stats = _qAttemptStats || {};
   const pool = (questionBank || []).filter(q => {
     if (!q || q.id == null) return false;
-    if (!questionHasMarkableAnswer(q) || !qInSyllabus(q) || !qWithinStudentLevel(q)) return false;
+    if (!questionHasMarkableAnswer(q) || !qInSyllabus(q) || !qReleased(q) || !qWithinStudentLevel(q)) return false;
     const r = stats[String(q.id)];
     return !!(r && r.n > 0 && (r.best || 0) < 1);
   });
@@ -33650,7 +33903,7 @@ function _fcWrongPool() {
   const out = [];
   (Array.isArray(questionBank) ? questionBank : []).forEach(q => {
     if (!q || q.id == null) return;
-    if (!qInSyllabus(q) || !qWithinStudentLevel(q)) return;
+    if (!qInSyllabus(q) || !qReleased(q) || !qWithinStudentLevel(q)) return;
     const r = stats[String(q.id)];
     if (!r || !r.n) return;
     const wrong = Math.max(0, (r.n || 0) - (r.correct || 0));   // attempts that were not full marks
@@ -34437,7 +34690,7 @@ function tpRenderTopics() {
   // Count questions per topic (only those the AI can mark, and in-syllabus)
   const topicCounts = {};
   questionBank.forEach(q => {
-    if (questionHasMarkableAnswer(q) && qInSyllabus(q)) {
+    if (questionHasMarkableAnswer(q) && qInSyllabus(q) && qReleased(q)) {
       qTopicList(q).forEach(t => { topicCounts[t] = (topicCounts[t] || 0) + 1; });
     }
   });
@@ -34560,7 +34813,7 @@ async function tpStartPractice() {
   const questionsByTopic = {};
   const tpServed = new Set(qpLoadSeen());   // same served memory as quick practice
   tpActiveTopics.forEach(topic => {
-    const markable = questionBank.filter(q => questionHasMarkableAnswer(q) && qInSyllabus(q) && qMatchesTopic(q, topic) && qWithinStudentLevel(q));
+    const markable = questionBank.filter(q => questionHasMarkableAnswer(q) && qInSyllabus(q) && qReleased(q) && qMatchesTopic(q, topic) && qWithinStudentLevel(q));
     const ordered = orderByAttemptPriority(markable);
     // Demote questions served recently in any practice session so abandoned
     // sessions don't lead with the same questions every time.
@@ -36162,6 +36415,9 @@ async function checkAndReleaseScheduledQuestions() {
 }
 
 function renderScheduledQuestions() {
+  // The ⚡ batch-date list is painted from here too, so the page is whole
+  // however it was reached — including after the scheduler releases something.
+  try { renderBankScheduled(); } catch (e) { console.warn('renderBankScheduled', e); }
   const container = document.getElementById('scheduledQuestionsContainer');
   if (!container) return;
 
@@ -36215,6 +36471,168 @@ function renderScheduledQuestions() {
       </div>
     </div>`;
   }).join('');
+}
+
+// =====================================================================
+// ⏳ SCHEDULED BY ⚡ RAPID ADD — the questions already IN the bank
+//
+// The list above holds the OTHER kind of schedule: a copy of a question kept
+// out of the bank until its day. This one is the batch release date ⚡ Rapid
+// add stamps on `q.releaseOn` — the question is in the bank (or still in
+// vetting) and simply is not served yet. See `qReleased` beside qInSyllabus.
+//
+// It is here because a date nobody can find is a date nobody can undo. A
+// batch filed at the wrong month, a paper brought forward, a question that
+// turns out to be needed on Monday — all of them are one press from here, and
+// the alternative is a teacher who cannot work out why thirty questions they
+// approved are reaching nobody.
+//
+// It lists BOTH lists on purpose. A batch is very often still sitting in
+// vetting when the teacher comes looking, and a page that showed only the
+// approved half would say "nothing is scheduled" about forty questions that
+// are.
+// =====================================================================
+function _bankScheduledRows() {
+  const today = releaseToday();
+  const rows = [];
+  const take = (list, where) => (Array.isArray(list) ? list : []).forEach(q => {
+    if (q && qScheduled(q, today)) rows.push({ q, where });
+  });
+  take(questionBank, 'bank');
+  take(vettingList, 'vetting');
+  // Soonest first — the one about to come out is the one worth checking.
+  rows.sort((a, b) => (qReleaseOn(a.q) || '').localeCompare(qReleaseOn(b.q) || '')
+    || String(a.q.title || '').localeCompare(String(b.q.title || '')));
+  return rows;
+}
+
+// Grouped by DATE, because a batch is one date: forty separate rows saying
+// "12 Jan" is a list nobody reads, and 🚀 Release the whole batch is the
+// button an author who scheduled it by accident actually wants.
+function renderBankScheduled() {
+  const host = document.getElementById('bankScheduledContainer');
+  if (!host) return;
+  const rows = _bankScheduledRows();
+  if (!rows.length) { host.innerHTML = ''; return; }
+  const byDate = new Map();
+  rows.forEach(r => {
+    const on = qReleaseOn(r.q);
+    if (!byDate.has(on)) byDate.set(on, []);
+    byDate.get(on).push(r);
+  });
+  const groups = Array.from(byDate.entries()).map(([on, list]) => {
+    const inVet = list.filter(r => r.where === 'vetting').length;
+    const items = list.slice(0, BANK_SCHED_LIST_MAX).map(r => `
+      <div class="bsq-row">
+        <div class="bsq-title">${escapeHtml(r.q.title || 'Untitled')}</div>
+        <div class="bsq-meta">
+          <span class="qb-tag topic">${escapeHtml(r.q.topic || '—')}</span>
+          ${r.where === 'vetting'
+            ? '<span class="qb-tag" style="background:#fef3c7;color:#92400e;" title="Still waiting in the vetting list. It keeps this date when you approve it.">📋 In vetting</span>'
+            : '<span class="qb-tag" style="background:#e0f2fe;color:#075985;" title="Approved into the question bank, and held back from students until the release date.">📚 In the bank</span>'}
+        </div>
+        <button class="btn btn-outline bsq-btn" title="Clear this question's release date — it becomes available to students immediately" onclick="bankReleaseNow('${escapeHtml(String(r.q.id))}')">Release now</button>
+      </div>`).join('');
+    const more = list.length > BANK_SCHED_LIST_MAX
+      ? `<div class="bsq-more">…and ${list.length - BANK_SCHED_LIST_MAX} more on this date</div>` : '';
+    return `
+      <div class="bsq-group">
+        <div class="bsq-head">
+          <div>
+            <div class="bsq-date">⏳ ${escapeHtml(qReleaseLabel(on))} <span class="bsq-when">(${escapeHtml(qReleaseWhen(on))})</span></div>
+            <div class="bsq-count">${list.length} question${list.length === 1 ? '' : 's'}${inVet ? ' · ' + inVet + ' still in vetting' : ''} — no student is served ${list.length === 1 ? 'it' : 'them'} until this date</div>
+          </div>
+          <div class="bsq-head-actions">
+            <label class="bsq-move" title="Move every question on this date to another day">
+              Move to
+              <input type="date" min="${escapeHtml(releaseDayFromNow(1))}" value="${escapeHtml(on)}" onchange="bankMoveRelease('${escapeHtml(on)}', this.value)">
+            </label>
+            <button class="btn btn-outline bsq-btn" onclick="bankReleaseBatchNow('${escapeHtml(on)}')">🚀 Release all now</button>
+          </div>
+        </div>
+        <div class="bsq-list">${items}${more}</div>
+      </div>`;
+  }).join('');
+  host.innerHTML = `
+    <div class="bsq-wrap">
+      <div class="bsq-intro">
+        <b>⏳ Held back by a ⚡ Rapid add batch date</b>
+        <span>These questions are already here — you can edit, print and put them on a worksheet — but no practice mode, quest or game serves them to a student until the date on them. Clearing a date releases it immediately.</span>
+      </div>
+      ${groups}
+    </div>`;
+}
+const BANK_SCHED_LIST_MAX = 12;   // a batch is forty screenshots; a list of forty is not read
+
+// ONE writer, for one question, wherever it lives. The in-memory copy is only
+// changed once the document really went — the order every other move in this
+// app uses, and for the same reason: a page that has released a question the
+// database still holds back looks perfectly right until the next sign-in.
+async function _bankSetRelease(id, iso) {
+  const on = String(iso || '');
+  const inBank = questionBank.find(q => String(q.id) === String(id));
+  const q = inBank || vettingList.find(v => String(v.id) === String(id));
+  if (!q) return false;
+  const prev = q.releaseOn;
+  if (on && RELEASE_DAY_RE.test(on) && on > releaseToday()) q.releaseOn = on;
+  else delete q.releaseOn;
+  let ok = false;
+  try {
+    // QUIET: moving a release date is housekeeping, not a question authored,
+    // and it must not land in anybody's work-session log.
+    // One shape in all four portals: a vetting writer that reports its own
+    // failure and returns nothing is read as "it went" rather than rolled back
+    // on a value it never gives.
+    ok = inBank ? await saveQuestion(q, { quiet: true }) : (await saveVettingQuestion(q)) !== false;
+  } catch (e) { console.warn('release date write failed', e); ok = false; }
+  if (!ok) {
+    if (prev === undefined) delete q.releaseOn; else q.releaseOn = prev;
+    return false;
+  }
+  return true;
+}
+
+async function bankReleaseNow(id) {
+  const ok = await _bankSetRelease(id, '');
+  renderBankScheduled();
+  renderQuestionBank();
+  renderVettingList();
+  updateCounts();
+  showToast(ok ? 'Released ✓ — students can be served this question now' : 'Could not save — check your connection and try again', ok ? 'success' : 'error');
+}
+
+async function bankReleaseBatchNow(on) {
+  const rows = _bankScheduledRows().filter(r => qReleaseOn(r.q) === String(on));
+  if (!rows.length) return;
+  showConfirm('Release ' + rows.length + ' question' + (rows.length === 1 ? '' : 's') + '?',
+    'They are held back until ' + qReleaseLabel(on) + '. Releasing them now makes every one of them available to students straight away — including any still waiting in vetting, which stay in vetting but lose their date.',
+    async () => {
+      let done = 0, failed = 0;
+      // One document at a time and AWAITED, so the count reported is the count
+      // that really went — a batch has to be able to say four of forty did not.
+      for (const r of rows) { if (await _bankSetRelease(r.q.id, '')) done++; else failed++; }
+      renderBankScheduled();
+      renderQuestionBank();
+      renderVettingList();
+      updateCounts();
+      showToast('Released ' + done + ' question' + (done === 1 ? '' : 's') + (failed ? ' · ' + failed + ' could not be saved' : ' ✓'), failed ? 'error' : 'success');
+    });
+}
+
+async function bankMoveRelease(from, to) {
+  const iso = String(to || '');
+  if (!RELEASE_DAY_RE.test(iso) || iso <= releaseToday()) {
+    showToast('Pick a date after today — to release these now, use 🚀 Release all now', 'info');
+    renderBankScheduled();
+    return;
+  }
+  const rows = _bankScheduledRows().filter(r => qReleaseOn(r.q) === String(from));
+  let done = 0, failed = 0;
+  for (const r of rows) { if (await _bankSetRelease(r.q.id, iso)) done++; else failed++; }
+  renderBankScheduled();
+  renderQuestionBank();
+  renderVettingList();
+  showToast('Moved ' + done + ' question' + (done === 1 ? '' : 's') + ' to ' + qReleaseLabel(iso) + (failed ? ' · ' + failed + ' could not be saved' : ' ✓'), failed ? 'error' : 'success');
 }
 
 function openScheduleQuestionDialog() {
@@ -43811,6 +44229,7 @@ function commRenderQuestPicker() {
   const filtered = (questionBank || []).filter(q => {
     if (!q || q.id == null) return false;
     if (!qInSyllabus(q)) return false;             // retired topics: PSLE papers only
+    if (!qReleased(q)) return false;               // scheduled for a future date → not yet quested
     if (topicFilter && !qMatchesTopic(q, topicFilter)) return false;
     if (catFilter && !qMatchesCategory(q, catFilter)) return false;
     if (sourceFilter && questionSource(q) !== sourceFilter) return false;
@@ -44046,6 +44465,7 @@ async function commStartAutoQuest(questId) {
   const pool = (Array.isArray(questionBank) ? questionBank : []).filter(q => {
     if (!q || q.id == null) return false;
     if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
+    if (!qReleased(q)) return false;               // scheduled for a future date → not yet quested
     if (format === 'mcq' ? !qpHasMcq(q) : !qpHasWritten(q)) return false;
     if (topic && String(q.topic || '').toLowerCase() !== topic) return false;
     return qWithinStudentLevel(q); // never quest a student above their level
@@ -45892,6 +46312,7 @@ function buildDefenderQuestions() {
   return (questionBank || [])
     .filter(q => q && q.status !== 'pending' && q.status !== 'flagged')
     .filter(qInSyllabus)         // retired topics (e.g. Cell Systems) never reach the games
+    .filter(q => qReleased(q))   // a scheduled question is not in a game either — it is not out yet
     .filter(qWithinStudentLevel) // games never serve questions above the student's level
     .map(_sdExtractMcq)
     .filter(Boolean);
@@ -53233,6 +53654,7 @@ function _tcgBankQuestions() {
     (typeof questionBank !== 'undefined' && Array.isArray(questionBank) ? questionBank : []).forEach(q => {
       if (!q || (q.status && q.status !== 'approved') || !Array.isArray(q.blocks)) return;
       if (!qInSyllabus(q)) return;   // retired topics never reach the Realm of Embers TCG quiz
+      if (!qReleased(q)) return;     // …and neither does one scheduled for a future date
       // Never above the pupil's level. This one pool feeds the monster trainer,
       // Ember Siege AND Ember Legends, so leaving it uncapped served P5/P6
       // questions to P3/P4 students in all three modes at once.
@@ -64474,7 +64896,9 @@ function _ppExtractOeq(q, pool){
   harvest(shuffle(pool || []));
   // Decoys are read by the student too, so they obey the same level cap as the
   // stem — a P4 pupil must not be shown a P6 model answer as a wrong option.
-  if (decoys.length < 3) harvest(shuffle((questionBank || []).filter(x => x && x.status !== 'pending' && x.status !== 'flagged' && qWithinStudentLevel(x))));
+  // A DECOY is read by the student too, so an unreleased question's model
+  // answer is as much of a leak here as its stem would be anywhere else.
+  if (decoys.length < 3) harvest(shuffle((questionBank || []).filter(x => x && x.status !== 'pending' && x.status !== 'flagged' && qReleased(x) && qWithinStudentLevel(x))));
   if (!decoys.length) return null; // a self-check needs at least one decoy
   const options = shuffle([correct].concat(decoys));
   const answer = options.indexOf(correct);
@@ -64496,6 +64920,7 @@ function ppGamePool(year){
   const bqs = ppAttachedBankQs(year)
     .filter(q => q && q.status !== 'pending' && q.status !== 'flagged')
     .filter(qInSyllabus)
+    .filter(q => qReleased(q))
     .filter(qWithinStudentLevel);
   const out = [];
   bqs.forEach(q => { const m = _sdExtractMcq(q) || _ppExtractOeq(q, bqs); if (m) out.push(m); });
@@ -65906,6 +66331,7 @@ function _ainsteinFindSimilar(concept, extra, want, excludeIds) {
   questionBank.forEach(q => {
     if (!q || q.id == null || skip.has(String(q.id))) return;
     if (!qInSyllabus(q)) return;                     // excluded from practice
+    if (!qReleased(q)) return;                       // scheduled for later → not out yet
     if (!qWithinStudentLevel(q)) return;             // never above the student's level
     if (q.annotation) return;                        // drawing pads need the full page, not a panel
     const mcq = qpHasMcq(q), written = qpHasWritten(q);
@@ -65949,7 +66375,7 @@ function _ainsteinFindNamed(description, limit) {
   const pool = [];
   questionBank.forEach(q => {
     if (!q || q.id == null) return;
-    if (!qInSyllabus(q) || !qWithinStudentLevel(q)) return;
+    if (!qInSyllabus(q) || !qReleased(q) || !qWithinStudentLevel(q)) return;
     if (q.annotation) return;                       // drawing pads need the full page
     if (!qpHasMcq(q) && !qpHasWritten(q)) return;   // nothing to practise on
     // Tags sit in the "head" beside the title: a teacher-written label for what the
@@ -66325,7 +66751,7 @@ function _ainsteinBankVideo(concept, extra) {
   let best = null;
   questionBank.forEach(q => {
     if (!q || !Array.isArray(q.blocks)) return;
-    if (!qInSyllabus(q) || !qWithinStudentLevel(q)) return;
+    if (!qInSyllabus(q) || !qReleased(q) || !qWithinStudentLevel(q)) return;
     const vb = q.blocks.find(b => b && b.type === 'video' && _ainsteinYtId(b.url));
     if (!vb) return;
     const score = _ainsteinConceptScore(q, concept, terms);
@@ -66594,7 +67020,7 @@ function _ainsteinWsPool(name, fmt, isTopic, difficulty) {
   const out = [];
   (Array.isArray(questionBank) ? questionBank : []).forEach(q => {
     if (!q || q.id == null) return;
-    if (!qInSyllabus(q) || !qWithinStudentLevel(q)) return;
+    if (!qInSyllabus(q) || !qReleased(q) || !qWithinStudentLevel(q)) return;
     if (fmt === 'mcq' ? !qpHasMcq(q) : !qpHasWritten(q)) return;
     if (isTopic) {
       // A question with no topic at all is counted under "General" by
@@ -66832,7 +67258,7 @@ const AINSTEIN_GUIDE_ASKS = {
 function _ainsteinTopicCounts() {
   const counts = {};
   (Array.isArray(questionBank) ? questionBank : []).forEach(q => {
-    if (!q || !questionHasMarkableAnswer(q) || !qInSyllabus(q) || !qWithinStudentLevel(q)) return;
+    if (!q || !questionHasMarkableAnswer(q) || !qInSyllabus(q) || !qReleased(q) || !qWithinStudentLevel(q)) return;
     qTopicList(q).forEach(t => { if (t) counts[t] = (counts[t] || 0) + 1; });
   });
   return counts;
@@ -68689,6 +69115,11 @@ window.rapidDrop = rapidDrop;
 window.rapidZoneClick = rapidZoneClick;
 window.rapidPickFiles = rapidPickFiles;
 window.setRapidLevel = setRapidLevel;
+window.setRapidRelease = setRapidRelease;
+window.bankReleaseNow = bankReleaseNow;
+window.bankReleaseBatchNow = bankReleaseBatchNow;
+window.bankMoveRelease = bankMoveRelease;
+window.renderBankScheduled = renderBankScheduled;
 // The subject switcher — its button is an inline onclick, so it needs the
 // module's function on window like every other handler in index.html.
 window.subjectToggle = subjectToggle;

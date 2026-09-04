@@ -442,7 +442,7 @@ test('the continuation flag is per ENTRY, never inherited from the reply', () =>
 });
 
 test('the stitch happens at SETTLE time, which is the one place that is in page order', () => {
-  const fn = cut('async function _rapidExpandPdf(file, level) {', '\nfunction startRapidJob', 'pdf feeder');
+  const fn = cut('async function _rapidExpandPdf(file, level, release) {', '\nfunction startRapidJob', 'pdf feeder');
   const settle = fn.slice(fn.indexOf('const settle'), fn.indexOf('for (let p = 1'));
   ok(/_vetApplyMerge/.test(settle), 'the stitch is inside settle()');
   // A page that failed or held nothing leaves no question the page after it
