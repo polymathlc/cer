@@ -66,12 +66,18 @@ const shim = `
     setItem: (k, v) => { __store[k] = String(v); },
   };
   const document = { getElementById: () => null };
+  // 🔒 The lock is the ONE helper here that asks who is looking. The harness
+  // drives it directly, so both audiences can be tested from one build.
+  let __author = false;
+  const _canAuthor = () => __author;
 `;
 const api = new Function('__store', shim + core + pad + `
   return { RELEASE_TZ, RELEASE_DAY_RE, releaseDayKey, releaseToday, releaseDayFromNow,
            qReleaseOn, qScheduled, qReleased, qReleaseLabel, qReleaseDaysAway, qReleaseWhen,
            qReleaseChipHtml, RAPID_RELEASE_KEY, rapidRelease, setRapidRelease,
-           _rapidApplyRelease, toasts };
+           _rapidApplyRelease, toasts,
+           qLockedFrom, qLockSplit, qLockSoonest, qLockNote,
+           setAuthor: v => { __author = !!v; } };
 `)(store);
 
 const TODAY = '2026-06-15';
@@ -230,6 +236,104 @@ ok('it looks in the vetting list too', /vettingList\.find/.test(undo),
 const rows = cut('function _bankScheduledRows() {', 'function renderBankScheduled', '_bankScheduledRows');
 ok('the page lists both lists', /take\(questionBank, 'bank'\);/.test(rows) && /take\(vettingList, 'vetting'\);/.test(rows));
 ok('soonest first', /localeCompare/.test(rows));
+
+/* ------------------------------------------------------------------ *
+ * 🔒 THE LOCKED ROW — a scheduled question on a worksheet.            *
+ *                                                                     *
+ * An admin builds next term's sheet TODAY; a student handed that same *
+ * sheet must not read the question before its date. Both halves fail  *
+ * silently and in opposite directions:                                *
+ *                                                                     *
+ *  • The lock not applying serves next term's paper this week, on a   *
+ *    sheet that prints and practises perfectly.                       *
+ *  • The lock applying to the AUTHOR takes the question off the very  *
+ *    surface it was scheduled to be built on, which reads as a save   *
+ *    that failed.                                                     *
+ *  • And a question SILENTLY dropped leaves a numbered sheet with a   *
+ *    hole in it — which is what the note exists to prevent.           *
+ * ------------------------------------------------------------------ */
+{
+  const shut = { id: 'a', releaseOn: api.releaseDayFromNow(3) };
+  const shutLater = { id: 'b', releaseOn: api.releaseDayFromNow(30) };
+  const open1 = { id: 'c' };
+  const open2 = { id: 'd', releaseOn: api.releaseDayFromNow(-5) };
+
+  api.setAuthor(true);
+  ok('an AUTHOR is never locked out of a scheduled question',
+     api.qLockedFrom(shut) === false,
+     'the worksheet builder is the surface next term\'s sheet is built on');
+  ok('an author\'s split keeps every question',
+     api.qLockSplit([shut, open1, shutLater]).ready.length === 3 &&
+     api.qLockSplit([shut, open1, shutLater]).locked.length === 0);
+
+  api.setAuthor(false);
+  ok('a STUDENT is locked out of a scheduled question', api.qLockedFrom(shut) === true);
+  ok('…and never out of an ordinary one',
+     api.qLockedFrom(open1) === false && api.qLockedFrom(open2) === false);
+  ok('an unreadable date does not lock a student out',
+     api.qLockedFrom({ releaseOn: new Date() }) === false,
+     'the fail-OPEN rule has to hold here too, or a bad value hides a question for ever');
+
+  const sp = api.qLockSplit([open1, shut, open2, shutLater]);
+  ok('the split keeps the sheet\'s own ORDER in the ready half',
+     sp.ready.map(q => q.id).join('') === 'cd');
+  ok('…and every locked one is accounted for, never dropped',
+     sp.locked.map(q => q.id).join('') === 'ab',
+     'a question that is neither served nor reported is a hole in the numbering');
+  ok('a hole in the list is skipped rather than thrown on',
+     api.qLockSplit([open1, null, undefined, shut]).ready.length === 1);
+  ok('nothing at all splits into nothing', api.qLockSplit(null).ready.length === 0);
+
+  ok('the SOONEST date is the one named',
+     api.qLockSoonest([shutLater, shut]) === shut.releaseOn,
+     'naming the last of them sends a student away for a month when half opens on Monday');
+  ok('nothing locked names no date', api.qLockSoonest([open1]) === '');
+
+  const note = api.qLockNote([shut, shutLater]);
+  ok('the note counts them', /2 questions/.test(note));
+  ok('the note names WHEN, not just that something is missing',
+     note.indexOf(api.qReleaseLabel(shut.releaseOn)) > 0,
+     'a student told a question is missing and not told when it comes back has half the truth');
+  ok('one locked question is not called "1 questions"',
+     /1 question on this worksheet is/.test(api.qLockNote([shut])));
+  ok('nothing locked says nothing at all', api.qLockNote([]) === '' && api.qLockNote(null) === '');
+  api.setAuthor(false);
+}
+
+/* ---- …and the surfaces that have to ask it ---- */
+{
+  const resolver = cut('function _wsResolve(ws) {', 'function _wseCommit(', 'ws resolver');
+  ok('the saved-worksheet resolver applies the lock',
+     /qLockSplit\(/.test(resolver),
+     'the preview, the print and the practice queue all read this one function');
+  ok('_wsSavedQuestions serves the READY half',
+     /function _wsSavedQuestions\(ws\) \{ return _wsResolve\(ws\)\.ready; \}/.test(resolver));
+  ok('_wsLockedQuestions is its companion, never the deleted ones',
+     /function _wsLockedQuestions\(ws\) \{ return _wsResolve\(ws\)\.locked; \}/.test(resolver));
+
+  const empty = cut('function _wsEmptyMsg(ws) {', '\n}', 'empty message');
+  ok('a wholly-locked sheet is not reported as deleted questions',
+     /_wsLockedQuestions/.test(empty) && /qLockNote/.test(empty),
+     '"no longer in the bank" sends somebody to rebuild a sheet that is perfectly fine and early');
+
+  const launch = cut('function launchWorksheetPractice(questions, mode) {', '\n  // Shuffle', 'launch');
+  ok('the ONE practice door splits the queue', /qLockSplit\(questions/.test(launch),
+     'the builder\'s selection, a past paper and Ai-nstein all come through here');
+  ok('…and SAYS what it is holding back', /qLockNote\(/.test(launch));
+  ok('…and refuses rather than starting an empty session',
+     /if \(!_lock\.ready\.length\)/.test(launch));
+  ok('the mode is not switched on a refused launch',
+     launch.indexOf('_lock.ready.length') < launch.indexOf('qpSetMode('),
+     'a launch that never happens must not leave Quick Practice in fill-in-the-blanks');
+
+  ok('the saved worksheet hands the WHOLE sheet to that one door',
+     /launchWorksheetPractice\(r\.ready\.concat\(r\.locked\), mode\)/.test(src),
+     'passing only the ready half means the lock is never reported');
+  ok('the ✎ Questions editor keeps a locked row rather than hiding it',
+     /wse-row-locked/.test(src) && /🔒 Not open yet/.test(src));
+  ok('the My Worksheets card counts them', /not open yet<\/span>/.test(src));
+  ok('printing a saved sheet says what it left off', /printing the other/.test(src));
+}
 
 /* ------------------------------------------------------------------ *
  * CENSUS — the test that fails on the NEXT pool, not the last one.    *

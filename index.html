@@ -5583,6 +5583,11 @@ body.em-editing #printProgress { z-index: 470; }
   border-radius: var(--radius-md);
 }
 .wse-row-missing { border-color: var(--accent-orange); background: var(--accent-orange-light); }
+/* 🔒 A question on the sheet whose release date has not come. It is not an
+   error and must not look like one — the orange "deleted" row above says
+   something is broken, this one says come back on the day. */
+.wse-row-locked { border-color: #a5b4fc; background: #eef2ff; }
+.wse-row-locked .wse-row-title { color: #4338ca; }
 .wse-num {
   flex: 0 0 auto;
   min-width: 22px;

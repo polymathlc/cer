@@ -4395,11 +4395,11 @@ to a student until that morning.
   print picker — deliberately do not, and **badge it** instead. That is exactly
   the rule an out-of-syllabus question already follows, and it is what lets a
   teacher build next term's worksheet today.
-  - The one thing that follows from it: a teacher who deliberately puts a
-    scheduled question on a worksheet and hands the sheet out **has handed it
-    out**. An explicit act beats a schedule, the ⏳ chip is on the card they
-    picked it from, and silently dropping a question off a sheet somebody built
-    by hand would be the worse of the two.
+  - **A worksheet is the one surface both audiences reach, so it gets a THIRD
+    answer** — see 🔒 …and the same sheet, handed to a STUDENT below. The
+    teacher keeps the question on the sheet and prints it; the student gets a
+    **locked row** saying the day it opens. (Until v1.355.0 the rule here was
+    "an explicit act beats a schedule" and the student was simply served it.)
 - **A VALUE THAT IS NOT A DAY KEY IS NOT A SCHEDULE, and it FAILS OPEN.**
   `qReleaseOn` returns `''` for anything that is not exactly `YYYY-MM-DD` — a
   `Date`, an ISO timestamp, a number, a word — so the question behaves precisely
@@ -4452,6 +4452,52 @@ to a student until that morning.
   perfectly right until the next sign-in.
 - Run **`node tools/scheduled-release-tests.mjs`** after touching any of it.
 
+### 🔒 …and the same sheet, handed to a STUDENT (v1.355.0)
+
+`qLockedFrom` / `qLockSplit` / `qLockSoonest` / `qLockNote` (beside
+`qReleaseChipHtml` — search `THE LOCKED ROW`), `_wsResolve` /
+`_wsSavedQuestions` / `_wsLockedQuestions` / `_wsEmptyMsg`, the gate at the top
+of **`launchWorksheetPractice`**, the 🔒 row in `wseRenderIn`, the count on the
+📄 My Worksheets card, and `.wse-row-locked` in `index.html`.
+
+An admin BUILDS next term's sheet today — that is the whole point of the rule
+above, and none of those surfaces asks `qReleased`. A STUDENT handed that same
+sheet must not be able to read the question before its date. So the sheet
+withholds it from them, and SAYS SO.
+
+- **THE THIRD ANSWER IS THE ONLY HONEST ONE.** Serving it early defeats the
+  schedule; dropping it silently leaves a NUMBERED sheet with a hole in it,
+  which reads as a printing fault and sends a child hunting for a question
+  nobody can find. A **LOCKED ROW** is neither: the worksheet still holds the
+  question and the student is told the day it opens. That replaces the older
+  wording — *"an explicit act beats a schedule"* — which settled for the second.
+- **`qLockedFrom(q)` READS THE ROLE, which every other release helper
+  deliberately does not.** Those are asked by pools whose whole audience is
+  students; this one is asked by surfaces BOTH audiences reach. ONE predicate,
+  so the row, the count, the toast and the practice queue can never disagree
+  about which questions are locked — two tests drift into a sheet that prints a
+  question its own card says is not open yet.
+- **`_wsResolve` is the ONE resolver and it SPLITS rather than filters.**
+  `_wsSavedQuestions` is its `ready` half (the preview, the print and the
+  practice queue), `_wsLockedQuestions` its `locked` half (every surface that
+  has to explain the gap). An author's split is always the whole sheet.
+- **`launchWorksheetPractice` is the gate for every OTHER worksheet-driven
+  queue** — the builder's own selection, a past paper, Ai-nstein's set — because
+  it is the ONE door they all come through, so a caller added next month is
+  gated without being told. `practiceSavedWorksheet` therefore hands it the
+  WHOLE sheet, locked questions included: passing only the ready half means the
+  lock is never reported at all. The mode is deliberately **not** switched on a
+  refused launch.
+- **A wholly-locked sheet must not say "no longer in the bank"** (`_wsEmptyMsg`).
+  That sentence is flatly untrue, and it is the one that sends somebody off to
+  rebuild a sheet which is perfectly fine and simply early.
+- **The locked row is not an ERROR row.** `.wse-row-locked` is indigo where
+  `.wse-row-missing` is orange: one says something is broken, the other says
+  come back on the day.
+- **The SOONEST date is the one named** (`qLockSoonest`) — naming the last of
+  them sends a student away for a month when half the sheet opens on Monday.
+- Run **`node tools/scheduled-release-tests.mjs`** after touching any of it.
+
 ## House rules
 - After touching **⏳ the batch release date** (`qReleaseOn`, `qScheduled`,
   `qReleased`, `qReleaseChipHtml`, `releaseDayKey`, `rapidRelease` /
@@ -4472,7 +4518,14 @@ to a student until that morning.
   class's phones. Read the picker inside the job rather than at the door and the
   back half of a forty-page paper is filed on whatever date the author moved to
   next. And put `releaseOn` into `EDITOR_OWNED_QUESTION_FIELDS` without giving
-  the editor a control for it and every edit silently releases the question.
+  the editor a control for it and every edit silently releases the question. And drop the LOCK
+  (`qLockedFrom`, `qLockSplit`, `qLockNote`, `_wsResolve`, or
+  `launchWorksheetPractice`'s gate) and next term's paper is practised,
+  previewed and printed by a student off a worksheet the teacher built weeks in
+  advance — while applying that lock to the AUTHOR takes the question off the
+  very surface it was scheduled to be built on, which reads as a save that
+  failed. A locked question SILENTLY dropped is the third way: a numbered sheet
+  with a hole in it, which reads as a printing fault.
 - After touching **📋 the format check** (`PF_KINDS`, `pfPartsWithoutMarks`,
   `pfPartsWithoutExplanation`, `pfTakesKeywords`, `pfCheckQuestion`,
   `pfCheckItems`, `pfSummary`, `pfRunOn`, `pfEditOne`, `pfEditFlagged`, or the

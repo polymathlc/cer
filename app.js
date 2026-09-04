@@ -3211,7 +3211,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.354.0';
+const APP_VERSION = 'v1.355.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -25286,6 +25286,66 @@ function qReleaseChipHtml(q) {
     '⏳ Releases ' + escapeHtml(qReleaseLabel(on)) + '</span>';
 }
 
+// =====================================================================
+// 🔒 A SCHEDULED QUESTION ON A WORKSHEET — THE LOCKED ROW
+//
+// An admin BUILDS next term's sheet today. The builder, the picker, the
+// preview and the print all keep a scheduled question and badge it, because
+// that is the whole point of being able to schedule one — and none of them
+// asks `qReleased`, deliberately, exactly as none of them asks the level cap.
+// A STUDENT handed that same sheet must not be able to read the question
+// before its date. So the sheet withholds it from them, and SAYS SO.
+//
+// THE THIRD ANSWER IS THE ONLY HONEST ONE, and it is why this exists at all.
+// Serving it early defeats the schedule. Dropping it silently leaves a
+// NUMBERED sheet with a hole in it, which reads as a printing fault and sends
+// a child hunting for a question nobody can find — and it is precisely what
+// the older wording ("an explicit act beats a schedule") settled for. A LOCKED
+// ROW is neither: the worksheet still holds the question, and the student is
+// told the day it opens.
+//
+// `qLockedFrom(q)` READS THE ROLE, which every other release helper
+// deliberately does not. Those are asked by pools whose whole audience is
+// students; this one is asked by surfaces BOTH audiences reach. It is ONE
+// predicate so the row, the count, the toast and the practice queue can never
+// disagree with each other about which questions are locked — two tests would
+// drift into a sheet that prints a question its own card says is not open yet.
+// =====================================================================
+function qLockedFrom(q) { return !_canAuthor() && qScheduled(q); }
+
+// Split a list of questions into what this viewer may work on NOW and what is
+// still held back. The ONE splitter: the practice queue, the preview, the
+// print, the card and the ✎ Questions editor all read it.
+function qLockSplit(list) {
+  const ready = [], locked = [];
+  (Array.isArray(list) ? list : []).forEach(q => {
+    if (!q) return;
+    (qLockedFrom(q) ? locked : ready).push(q);
+  });
+  return { ready, locked };
+}
+
+// The SOONEST date anything in a pile of locked questions opens on. That is
+// the one worth naming: it is the first day the student can usefully come
+// back, and a note naming the LAST of them would send them away for a month
+// when half the sheet opens on Monday.
+function qLockSoonest(list) {
+  return (Array.isArray(list) ? list : [])
+    .map(qReleaseOn).filter(Boolean).sort()[0] || '';
+}
+
+// One sentence, and every surface that has to explain a lock uses it. A
+// student who is told a question is missing and not told when it comes back
+// has been told the useless half of the truth.
+function qLockNote(locked) {
+  const n = (locked || []).length;
+  if (!n) return '';
+  const on = qLockSoonest(locked);
+  const what = n === 1 ? '1 question on this worksheet is' : n + ' questions on this worksheet are';
+  return '🔒 ' + what + ' not open yet' +
+    (on ? ' — the first unlocks ' + qReleaseWhen(on) + ' (' + qReleaseLabel(on) + ')' : '');
+}
+
 function getQuestionsForLevel(level) {
   return questionBank.filter(q => {
     if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
@@ -29126,10 +29186,15 @@ function renderSavedWorksheets() {
     if (!ws || !ws.id) return '';
     const ids = Array.isArray(ws.questionIds) ? ws.questionIds : [];
     const date = ws.createdAt ? new Date(ws.createdAt).toLocaleDateString() : '';
+    // 🔒 How many of them this viewer cannot open yet. An author sees none of
+    // this; a student who presses Practice and gets fewer questions than the
+    // count above it deserves to have been told why before they pressed.
+    const shut = _wsLockedQuestions(ws);
+    const shutOn = qLockSoonest(shut);
     return `<div class="ws-saved-card">
       <div class="ws-saved-info">
         <h4>${escapeHtml(ws.title || 'Untitled worksheet')}</h4>
-        <p>${ids.length} question${ids.length !== 1 ? 's' : ''}${date ? ' &middot; ' + date : ''}</p>
+        <p>${ids.length} question${ids.length !== 1 ? 's' : ''}${shut.length ? ` &middot; <span style="color:#4338ca;" title="Held back until ${escapeHtml(qReleaseLabel(shutOn))}. They stay on this worksheet and appear by themselves on the day.">🔒 ${shut.length} not open yet</span>` : ''}${date ? ' &middot; ' + date : ''}</p>
       </div>
       <div class="ws-saved-actions">
         <button class="btn btn-outline" onclick="previewSavedWorksheet('${ws.id}')" title="Preview the printed pages — and edit any question from there">
@@ -29180,6 +29245,12 @@ async function reprintWorksheet(id) {
     showToast(_wsEmptyMsg(ws), 'error');
     return;
   }
+  // 🔒 A student printing their own sheet gets the questions that are open and
+  // is told about the rest. Printing them would put the whole question on paper
+  // — the one thing the schedule exists to prevent — and printing NOTHING and
+  // saying nothing leaves a gap in the numbering that reads as a fault here.
+  const shut = _wsLockedQuestions(ws);
+  if (shut.length) showToast(qLockNote(shut) + ' — printing the other ' + selected.length + '.', 'info');
   const noFields = !_wsStudentFieldsOn('saved');
   const wantCover = !!document.getElementById('mwIncludeCover')?.checked;
   const why = await _wnyRunPrepare(selected, wnyPrintOn('saved'));
@@ -29190,20 +29261,35 @@ async function reprintWorksheet(id) {
 // are stored in that order, so "Question 1" is the same question every reprint.
 // (questionBank.filter() would have returned them in bank order instead.)
 // Shared by reprint, preview and practice so all three show the same sheet.
-function _wsSavedQuestions(ws) {
+//
+// It also applies the 🔒 LOCK (see qLockedFrom): an admin gets every question
+// on the sheet, a student gets only the ones whose release date has come. This
+// is the ONE place that split is made for a saved worksheet, so the preview,
+// the print and the practice queue cannot disagree about what is on the paper.
+function _wsResolve(ws) {
   const byId = new Map(questionBank.map(q => [String(q.id), q]));
-  return (ws && Array.isArray(ws.questionIds) ? ws.questionIds : [])
+  const found = (ws && Array.isArray(ws.questionIds) ? ws.questionIds : [])
     .map(qid => byId.get(String(qid))).filter(Boolean);
+  return qLockSplit(found);
 }
+function _wsSavedQuestions(ws) { return _wsResolve(ws).ready; }
+// The questions this viewer is not being given YET — never the ones that have
+// been deleted, which are a different thing and get their own row.
+function _wsLockedQuestions(ws) { return _wsResolve(ws).locked; }
 
 // Why a saved worksheet has nothing to show. Since its questions can be removed
 // (below), "no longer available" is no longer the only answer — an emptied sheet
 // needs to be told where to fill itself back up.
 function _wsEmptyMsg(ws) {
   const n = (ws && Array.isArray(ws.questionIds) ? ws.questionIds : []).length;
-  return n === 0
-    ? 'This worksheet has no questions — add some with ✎ Questions'
-    : 'Those questions are no longer in the bank — fix the list with ✎ Questions';
+  if (n === 0) return 'This worksheet has no questions — add some with ✎ Questions';
+  // This function is only ever asked when NOTHING resolved, so any lock at all
+  // is the honest headline. "No longer in the bank" would be flatly untrue —
+  // and it is the sentence that sends somebody off to rebuild a sheet that is
+  // perfectly fine and simply early.
+  const locked = _wsLockedQuestions(ws);
+  if (locked.length) return qLockNote(locked) + '. Come back then — nothing here needs fixing.';
+  return 'Those questions are no longer in the bank — fix the list with ✎ Questions';
 }
 
 // =====================================================================
@@ -29394,6 +29480,21 @@ function wseRenderIn() {
       <button type="button" class="wse-act" onclick="wseMove('${esc}',1)" title="Move down"${i === ids.length - 1 ? ' disabled' : ''}>▼</button>
       <button type="button" class="wse-act wse-act-del" onclick="wseRemove('${esc}')" title="Take this question off the worksheet">✕</button>
     </div>`;
+    // 🔒 Held back until its release date. The ROW STAYS — the question really
+    // is on this worksheet — but a student is shown the date instead of the
+    // wording, which is the whole point of having scheduled it. An author never
+    // reaches this branch and sees the question exactly as they always did.
+    if (q && qLockedFrom(q)) {
+      const on = qReleaseOn(q);
+      return `<div class="wse-row wse-row-locked">
+        <span class="wse-num">${i + 1}</span>
+        <div class="wse-row-main">
+          <div class="wse-row-title">🔒 Not open yet</div>
+          <div class="wse-row-prev">This question unlocks ${escapeHtml(qReleaseWhen(on))} (${escapeHtml(qReleaseLabel(on))}). It stays on the worksheet and appears by itself on the day — there is nothing to fix.</div>
+        </div>
+        ${acts}
+      </div>`;
+    }
     // A question deleted from the bank since the sheet was saved. It already
     // prints as nothing — say so, and offer the one useful action.
     if (!q) {
@@ -29492,13 +29593,17 @@ function practiceCurrentWorksheet(mode) {
 function practiceSavedWorksheet(id, mode) {
   const ws = savedWorksheets.find(w => w.id === id);
   if (!ws) return;
-  const ids = Array.isArray(ws.questionIds) ? ws.questionIds.map(String) : [];
-  const selected = questionBank.filter(q => ids.includes(String(q.id)));
-  if (selected.length === 0) {
+  // The sheet's own resolver rather than a second filter over questionBank —
+  // that one returned them in BANK order rather than sheet order, and knew
+  // nothing about the 🔒 lock. The WHOLE resolved sheet is handed over, locked
+  // questions included, because `launchWorksheetPractice` is the one door that
+  // splits them and it is the one place that says so out loud.
+  const r = _wsResolve(ws);
+  if (!r.ready.length && !r.locked.length) {
     showToast(_wsEmptyMsg(ws), 'error');
     return;
   }
-  launchWorksheetPractice(selected, mode);
+  launchWorksheetPractice(r.ready.concat(r.locked), mode);
 }
 
 // `mode` is 'fillblanks' to start this worksheet straight in 🔲 Fill-in-the-
@@ -29506,12 +29611,32 @@ function practiceSavedWorksheet(id, mode) {
 // built and before navigateTo, because navigating to Quick Practice repaints
 // its controls and the dropdown has to end up agreeing with the flag.
 function launchWorksheetPractice(questions, mode) {
+  // 🔒 THE GATE FOR EVERY WORKSHEET-DRIVEN QUEUE, and the reason it lives here
+  // rather than at the call sites: this is the ONE door the builder's own
+  // selection, a saved worksheet, a past paper and Ai-nstein's set all come
+  // through, so a caller added next month is gated without being told. An
+  // author is never held back — `qLockedFrom` asks the role — so this changes
+  // nothing at all for the person who scheduled the questions.
+  //
+  // The mode is deliberately NOT set before the refusal: a launch that never
+  // happens must not leave Quick Practice switched into fill-in-the-blanks.
+  const _lock = qLockSplit(questions || []);
+  if (!_lock.ready.length) {
+    showToast(_lock.locked.length
+      ? qLockNote(_lock.locked) + '. Come back then — nothing here needs fixing.'
+      : 'No questions available to practice', 'error');
+    return;
+  }
+  if (_lock.locked.length) {
+    showToast(qLockNote(_lock.locked) + ' — practising the other ' +
+      _lock.ready.length + ' now.', 'info');
+  }
   qpSetMode(mode === 'fillblanks' ? 'fillblanks' : 'normal');
   // In fill-in-the-blanks the sheet's questions are filtered the same way the
   // Quick Practice queue is: one with no keywords marked would arrive with
   // nothing blanked out. The whole sheet being filtered away is said out loud
   // rather than silently starting an empty session.
-  let pool = questions || [];
+  let pool = _lock.ready;
   if (qpFibOn()) {
     const withKw = pool.filter(qHasKeywords);
     if (!withKw.length) {
@@ -30629,6 +30754,11 @@ function previewSavedWorksheet(id) {
   _wsPreviewPaper = null;
   _wsPreviewAdhoc = null;
   _wsShowPreviewOverlay();
+  // The preview is built from `_wsSavedQuestions`, so a locked question is
+  // already absent from the pages — say why, or the sheet reads as one that has
+  // lost questions rather than one that has not opened them yet.
+  const shut = _wsLockedQuestions(ws);
+  if (shut.length) showToast(qLockNote(shut) + ' — they are not on these pages yet.', 'info');
 }
 
 function _wsShowPreviewOverlay() {
