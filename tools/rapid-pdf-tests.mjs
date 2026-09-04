@@ -46,6 +46,11 @@ const PDF_PAGE_MAX_SIDE = 2000;
 const LOG = { toasts: [], status: [], read: [] };
 let LEVEL = '';
 function rapidLevel() { return LEVEL; }
+// 📅 The batch's RELEASE DATE rides the same rails as its level — captured at
+// the door, carried to every page — so the expander cannot be run without it.
+let RELEASE = '';
+function rapidRelease() { return RELEASE; }
+function qReleaseLabel(on) { return String(on || ''); }
 function showToast(m, k) { LOG.toasts.push({ m, k }); }
 function _setRapidStatus(m) { LOG.status.push(m); }
 function _updateRapidCounts() {}
@@ -73,7 +78,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
   LIVE--;
   const m = /page (\\d+) of/.exec(o.source || '');
   const p = m ? Number(m[1]) : 0;
-  LOG.read.push({ page: p, level: batchLevel, source: o.source || '', blankOk: !!o.blankOk, name: file && file.name });
+  LOG.read.push({ page: p, level: batchLevel, release: o.release || '', source: o.source || '', blankOk: !!o.blankOk, name: file && file.name });
   const answer = PAGES[p] === undefined ? 1 : PAGES[p];
   if (answer === 'throw') { _failRapidJob(jobId, new Error('unreadable')); return undefined; }
   if (answer === 0) {
@@ -108,7 +113,7 @@ function pdfFile(name, bytes) {
 function imgFile(name) { return new File([new Uint8Array(4)], name, { type: 'image/png' }); }
 function reset() {
   rapidJobs = []; _rapidSeq = 0; LOG.toasts = []; LOG.status = []; LOG.read = [];
-  PAGES = {}; NUMPAGES = 3; RENDERED.length = 0; DESTROYED = 0; LEVEL = ''; LIVE = 0; PEAK = 0;
+  PAGES = {}; NUMPAGES = 3; RENDERED.length = 0; DESTROYED = 0; LEVEL = ''; RELEASE = ''; LIVE = 0; PEAK = 0;
   _rapidPdfQueue = []; _rapidPdfBusy = false;
 }
 `;
@@ -124,6 +129,7 @@ return {
   RAPID_PDF_MAX_PAGES, RAPID_PDF_PAR,
   LOG, RENDERED, reset,
   setLevel: v => { LEVEL = v; },
+  setRelease: v => { RELEASE = v; },
   setPages: v => { PAGES = v; },
   setNumPages: n => { NUMPAGES = n; },
   jobs: () => rapidJobs,
@@ -238,9 +244,44 @@ test('every page of the PDF is queued, in the paper\'s own order', async () => {
 test('the batch level is carried to EVERY page', async () => {
   M.reset();
   M.setNumPages(4);
-  await M._rapidExpandPdf(M.pdfFile('paper.pdf'), 'P5');
+  await M._rapidExpandPdf(M.pdfFile('paper.pdf'), 'P5', '');
   await settle();
   eq(M.LOG.read.map(r => r.level), ['P5', 'P5', 'P5', 'P5'], 'a page landed at a different level from the rest of its paper');
+});
+
+// 📅 The batch's release date is the level's twin: read once at the door, and
+// carried the whole way down. A forty-page paper takes minutes to render with
+// the pad open the whole time, so a page that re-read the picker would land at
+// whatever the author had changed it to by then — and both halves of the paper
+// would look perfectly right on their own cards.
+test('the batch RELEASE DATE is carried to EVERY page', async () => {
+  M.reset();
+  M.setNumPages(4);
+  await M._rapidExpandPdf(M.pdfFile('paper.pdf'), '', '2030-01-12');
+  await settle();
+  eq(M.LOG.read.map(r => r.release), ['2030-01-12', '2030-01-12', '2030-01-12', '2030-01-12'],
+     'a page of the paper was not held back with the rest of it');
+});
+
+test('a PDF dropped on the pad carries the date it was dropped with', async () => {
+  M.reset();
+  M.setNumPages(2);
+  M.setRelease('2030-02-02');
+  M.rapidAddFiles([M.pdfFile('paper.pdf')], 'drop');
+  // The picker is moved WHILE the paper renders — the exact race the capture
+  // at the door exists for.
+  M.setRelease('2031-09-09');
+  await settle();
+  eq(M.LOG.read.map(r => r.release), ['2030-02-02', '2030-02-02'],
+     'the paper picked up a date set after it was queued');
+});
+
+test('a paper dropped with NO date behaves byte-for-byte as it always did', async () => {
+  M.reset();
+  M.setNumPages(2);
+  M.rapidAddFiles([M.pdfFile('paper.pdf')], 'drop');
+  await settle();
+  eq(M.LOG.read.map(r => r.release), ['', ''], 'an unscheduled paper picked up a date from somewhere');
 });
 
 test('every page is told a blank page is allowed', async () => {
