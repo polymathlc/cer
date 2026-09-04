@@ -36580,7 +36580,10 @@ async function _bankSetRelease(id, iso) {
   try {
     // QUIET: moving a release date is housekeeping, not a question authored,
     // and it must not land in anybody's work-session log.
-    ok = inBank ? await saveQuestion(q, { quiet: true }) : await saveVettingQuestion(q);
+    // One shape in all four portals: a vetting writer that reports its own
+    // failure and returns nothing is read as "it went" rather than rolled back
+    // on a value it never gives.
+    ok = inBank ? await saveQuestion(q, { quiet: true }) : (await saveVettingQuestion(q)) !== false;
   } catch (e) { console.warn('release date write failed', e); ok = false; }
   if (!ok) {
     if (prev === undefined) delete q.releaseOn; else q.releaseOn = prev;
