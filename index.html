@@ -757,6 +757,14 @@ option {
    questions invisible to the whole school, so it says so in its own colour
    rather than borrowing the level picker's. */
 .rapid-level.rapid-release.on { border-color: #6366f1; background: #eef2ff; }
+/* 🚦 The auto-check switch. A bare checkbox renders as an invisible
+   white box — Tailwind's preflight sets `appearance: none` on form controls —
+   so it has to ask for its own back, the same trap `.vet-pick` carries. */
+.rapid-autochk-switch { display: flex; align-items: center; gap: 9px; font-size: 0.84rem; color: var(--text); cursor: pointer; }
+.rapid-autochk-switch input[type="checkbox"] {
+  appearance: auto; -webkit-appearance: checkbox;
+  width: 17px; height: 17px; margin: 0; cursor: pointer; accent-color: var(--primary);
+}
 
 /* ⏳ Held back by a ⚡ Rapid add batch date — the Scheduled Questions page. */
 .bsq-wrap { margin-bottom: 22px; }
@@ -11707,6 +11715,25 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="rapid-release-row">
         <input type="date" id="rapidRelease" onchange="setRapidRelease(this.value)">
         <button type="button" class="btn btn-outline" id="rapidReleaseClear" style="display:none;" onclick="setRapidRelease('')">Clear — release immediately</button>
+      </div>
+    </div>
+    <!-- 🚦 The auto-check. It is a preference about how the pad WORKS
+         rather than a fact about this pile of screenshots, so unlike the level
+         and the release date above it is remembered in localStorage and
+         survives the tab. It says what it costs, because it is one extra AI
+         call per question and up to three more on a question that needs
+         fixing — an author who cannot see that is an author surprised by a
+         bill. -->
+    <div class="rapid-level rapid-autochk" id="rapidAutoChkWrap">
+      <label for="rapidAutoChk">
+        <b>🚦 Check every question as it is added</b>
+        <span id="rapidAutoChkNote">Every question is read back by the AI before it lands.</span>
+      </label>
+      <div class="rapid-release-row">
+        <label class="rapid-autochk-switch">
+          <input type="checkbox" id="rapidAutoChk" checked onchange="toggleAutoChk(this.checked)">
+          <span>Read it back, and fix what the checker finds (up to 3 tries)</span>
+        </label>
       </div>
     </div>
     <div class="image-paste-zone" id="rapidPasteZone" tabindex="0" style="padding:40px 16px;"

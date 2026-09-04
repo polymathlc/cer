@@ -4498,7 +4498,184 @@ withholds it from them, and SAYS SO.
   them sends a student away for a month when half the sheet opens on Monday.
 - Run **`node tools/scheduled-release-tests.mjs`** after touching any of it.
 
+## 🚦 The auto-check — a question checks itself before it reaches Vetting (v1.356.0)
+
+`AUTOCHK_TRIES` / `AUTOCHK_KEEP_FINDINGS` / `autoChkOn` / `autoChkRead` /
+`autoChkState` / `autoChkBetter` / **`autoChkRun`** / `_autoChkRepairPrompt` /
+`_autoChkApply` / `autoChkStamp` / `autoChkCardHtml` / `autoChkTally` /
+`autoChkBatchNote` (in `app.js`, search `THE AUTO-CHECK`), the step **2c** in
+`processRapidJob`, `_tlFromStamp` inside `tlStateOf`, and the
+`#rapidAutoChkWrap` switch on the ⚡ Rapid add pad.
+
+⚡ Rapid add read a page, cropped its figures, wrote the answers, lettered the
+parts and filed the lot in Vetting — and whether any of it was RIGHT was
+somebody's job to find out afterwards, one card at a time. A paper of forty
+questions was forty questions to read.
+
+`autoChkRun` closes that loop. Every question built by the pad is checked, and
+one that comes back 🟡 or 🔴 is handed the checker's own findings and asked to
+fix itself, up to `AUTOCHK_TRIES` (3) times. Green ones reach Vetting clean;
+anything still amber or red reaches Vetting **wearing its lamp and its
+findings**, so the author's attention goes to the handful that need it.
+
+- **IT IS THE SAME CHECKER, NOT A SECOND ONE.** `_cqLocalFindings` and
+  `_cqAiCheck` are ✅ Check Questions' own two layers and `tlVerdict` is 🚦 the
+  traffic light's own plain-code colour, so the lamp on the card and the queue
+  can never disagree about the same question. `autoChkRead` is deliberately a
+  copy of `tlRun`'s BODY rather than a call to it — `tlRun` writes into
+  `_tlCache` and repaints every lamp on the page, and a question that has not
+  been saved yet has no card to repaint and no business in that cache until it
+  does. The repair is allowed a prompt of its own (it is a different job); the
+  CHECK may never be, and the harness fails on an `askGemini` inside
+  `autoChkRead`.
+- **THE CHECK SEES THE PICTURES, and that is why it runs at step 2c rather than
+  earlier.** `_cqAiCheck` → `_cqMedia` reads the image blocks' own URLs, and by
+  that point the cropped — and, where a rectangle failed, the whole-page —
+  figures are uploaded and attached. So the question is read as a WHOLE,
+  exactly as a student will meet it, options against diagram. Check it before
+  the crop and *every* question reads as one whose wording refers to a figure
+  that is not there.
+- **A FAILED CHECK IS ITS OWN STATE AND IS NEVER GREEN.** "The check could not
+  run" and "the check found nothing" are opposite things, and the AI being off
+  on the device is one of the two. An `error` also **stops the loop**: a repair
+  is another AI call down the same road, so retrying it three times is three
+  more failures and three more delays for a question that reaches Vetting
+  either way.
+- **NOTHING IS EVER WITHHELD.** The question reaches Vetting whatever the lamp
+  says — green ones simply arrive clean. A question quietly held back because a
+  model disliked it is one its author never finds out about, which is far worse
+  than an amber card, and it is the opposite of what this pad is for.
+- **A REPAIR THAT CAME BACK WORSE IS THROWN AWAY.** `autoChkRun` keeps the
+  blocks that earned the BEST verdict it saw and finishes on those, so a red
+  repaired to amber and then back to red files the amber question. `autoChkBetter`
+  compares READS rather than bare states, because at the same colour the one
+  with **fewer findings** is the better question and colour alone cannot see
+  that.
+- **THE PICTURES ARE RE-ATTACHED POSITIONALLY** (`_autoChkApply`), never
+  re-fetched and never re-cropped: the model returns an EMPTY `image`
+  placeholder, so without this every repair strips the question's figures and
+  leaves a card wearing *Diagram missing* — indistinguishable from a page whose
+  rectangles failed, and the single worst thing this loop could do. A reply with
+  FEWER image blocks gets the leftovers appended (a figure in the wrong place is
+  one drag from right; no figure cannot be answered), one with MORE has the
+  extras dropped (an empty picture block prints as a blank space), and
+  `_imgEnhanceState` travels with the picture because it is keyed by BLOCK id
+  and the repair mints new ones.
+- **AN EMPTY REPLY IS REFUSED.** A truncated or refused repair would otherwise
+  replace a whole question with nothing — destroying work the checker only
+  wanted tidied.
+- **THE BATCH LEVEL IS RE-APPLIED AFTER EVERY REPAIR.** A repair may move the
+  topic, and in this app the level is READ OFF the topic — so a re-file
+  silently undoes the level the author set for the whole pile. The release date
+  needs nothing: `_autoChkApply` replaces blocks and meta only, so `releaseOn`
+  survives on its own.
+- **THE VERDICT IS RECORDED TWICE, and both are wanted.** `q.autoCheck` is
+  durable (saved with the question, and deliberately absent from
+  `EDITOR_OWNED_QUESTION_FIELDS` so `carryOverQuestionMeta` keeps it across an
+  edit); seeding `_tlCache` lights the lamp the vetting card ALREADY draws,
+  with the findings the 🚦 panel already renders. Inventing a second lamp would
+  be a second lamp to keep in step with the first.
+  - **`_tlFromStamp` is what makes it survive the tab.** `_tlCache` is a
+    session's memory, so without it a card opened the next morning wears a 🔴
+    badge over a grey lamp with nothing behind it — a verdict the author is
+    told about and cannot read. `tlStateOf` adopts the stamp only when there is
+    no live record (a check somebody pressed is later, and outranks a
+    remembered one) and only while `autoCheck.sig` still matches, so an edit
+    since reports **stale** exactly as it does anywhere else.
+  - `AUTOCHK_KEEP_FINDINGS` caps what travels: an attempt is a document and a
+    document dies at 1 MB. `found` is the honest count and is what the badge
+    reports, so a capped list never understates what was wrong.
+- **A MERGED QUESTION LOSES ITS VERDICT** (`qMergeQuestions` deletes
+  `autoCheck`). The two halves were each checked ALONE — the first missing its
+  last parts, the second with no stem — so neither describes what now exists,
+  and a green badge on it would say it had been read when nothing has.
+- **The switch is a preference, so it is in `localStorage`** — unlike the batch
+  level and the batch release date, which are one sitting each and live in
+  `sessionStorage`. It defaults ON, and the pad says what it costs: one extra
+  AI call per question, and up to three more on a question that needs fixing.
+- **A costly, invisible thing is a thing nobody trusts**, so the toast and the
+  paper's own summary carry `autoChkBatchNote` — `2 🟢 1 🔴` — and each card
+  carries its badge. An author who cannot tell a checked question from an
+  unchecked one reads every card anyway, which is the work this removes.
+- Run **`node tools/auto-check-tests.mjs`** after touching any of it.
+
+### [2] — the marks come off the paper (v1.356.0)
+
+`AI_MARKS_MAX_LIFT` / `_aiMarksSane` / **`_aiLiftMarks`** (beside
+`_partsPromptRules`), the `MARKS` clause in `_partsPromptRules()`, the `marks`
+field in all four build prompts' block shape, and the text branch of
+`buildBlocksFromAi`.
+
+`block.marks` has existed since v1.314.0 with a picker in the editor and a
+printed `[2]` on the sheet, and **no AI path ever wrote one** — so every
+question imported off a paper arrived worth nothing, and the number the paper
+plainly printed had to be typed back in by hand, question by question.
+
+- **`buildBlocksFromAi` is where the lift happens**, because it is the ONE
+  function every AI authoring path goes through: 🤖 Build from screenshot,
+  ⚡ Rapid add, the bulk PDF import, 🔄 Regenerate copy and 📄 the exam paper
+  builder gained it at once rather than one at a time.
+- **A NUMBER THE MODEL DID NOT GIVE IS STILL READ OFF THE WORDING.** The prompt
+  asks for `marks`, and a model transcribing a page writes `[2]` into the text
+  at least as often as it fills the field in. Lifting it is not a guess: the
+  paper printed it, at the end of the question, in the convention this app
+  already prints it back in.
+- **THE FIELD IS THE ONE PLACE THE NUMBER LIVES**, so a marker still sitting in
+  the wording is the same number twice. `qPartBodyHtml` already strips a
+  trailing marker when the field is set and this strips it at the other end —
+  the same both-ends rule the doubled part marker follows, and the reason an
+  author opening the question sees clean wording rather than a bracket the
+  renderer is quietly hiding.
+- **…BUT ONLY A PLAUSIBLE ONE.** `AI_MARKS_MAX_LIFT` (20) is far below
+  `QMARKS_MAX` (99): a bracketed number bigger than that at the end of a
+  question is a citation, a year or a figure reference, not what one part of one
+  question is worth. Refusing it costs a marks field an author can fill in;
+  accepting it prints `[1998]` on a worksheet.
+- **IT FAILS OPEN.** Nothing lifted means the block is byte-for-byte what it
+  always was — wording untouched, no `marks` field, and the bracket still
+  printed exactly where the paper had it. A bracket in the MIDDLE of a question
+  is prose and is never touched.
+- **A regenerated copy keeps the marks** — `_serializeQuestionForRegen` tags
+  each text line with them, or a variation of a 2-mark question comes back worth
+  nothing and the teacher types the number in again.
+- Run **`node tools/auto-check-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🚦 the auto-check** (`AUTOCHK_TRIES`, `AUTOCHK_KEEP_FINDINGS`,
+  `autoChkOn`, `autoChkRead`, `autoChkState`, `autoChkBetter`, `autoChkRun`,
+  `_autoChkRepairPrompt`, `_autoChkApply`, `autoChkStamp`, `autoChkCardHtml`,
+  `autoChkTally` / `autoChkBatchNote`, `_tlFromStamp`, step 2c in
+  `processRapidJob`, or the `autoCheck` delete in `qMergeQuestions`) — or
+  **[2] the marks lift** (`AI_MARKS_MAX_LIFT`, `_aiMarksSane`, `_aiLiftMarks`,
+  the MARKS clause in `_partsPromptRules()`, the `marks` field in the four build
+  prompts, or the text branch of `buildBlocksFromAi`) — run
+  `node tools/auto-check-tests.mjs` **and** `node tools/traffic-light-tests.mjs`.
+  This loop reads every question the pad builds and then REWRITES the ones it
+  does not like, so it can damage a question no human has looked at yet, and
+  every way it goes wrong is silent. **A green lamp that lies is the worst of
+  them**: let a failed or switched-off AI call end green and a question nothing
+  ever read is approved unread. **A question withheld is the second** — one
+  quietly held back because a model disliked it is one its author never finds
+  out about, which is far worse than an amber card. Keep whatever the LAST try
+  produced instead of the best one and three AI calls are spent handing back
+  something worse than what went in. Drop the positional picture re-attach and
+  every repaired question lands wearing *Diagram missing*, indistinguishable
+  from a page whose rectangles failed; let a short reply lose a leftover figure
+  and the question cannot be answered at all; let a long one add a placeholder
+  and it prints as a blank space. Accept an EMPTY reply and a truncated repair
+  replaces a whole question with nothing. Skip the level re-apply and a repair
+  that moved the topic silently re-files the question, because in this app the
+  level is read off the topic. Ask a model for the verdict instead of
+  `tlVerdict`, or write a second checking prompt, and the card's lamp and
+  ✅ Check Questions start disagreeing about the same question. And drop
+  `_tlFromStamp` — or its `sig` — and a card opened the next morning wears a 🔴
+  badge over a grey lamp with nothing behind it, or worse, yesterday's colour
+  over wording that has been rewritten since. On the MARKS half both directions
+  are silent and land on a printed sheet: lift too eagerly and `[1998]` is
+  printed as a mark allocation, lift a number the paper never showed and a class
+  is offered marks they can never earn, forget to strip the marker and the sheet
+  reads "… at point A. [2] [2]", and let a block with no marks render as
+  anything but what it always did and the whole bank changes at once.
 - After touching **⏳ the batch release date** (`qReleaseOn`, `qScheduled`,
   `qReleased`, `qReleaseChipHtml`, `releaseDayKey`, `rapidRelease` /
   `setRapidRelease`, `_rapidApplyRelease`, the `release` carried through
