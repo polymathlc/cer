@@ -3211,7 +3211,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.355.0';
+const APP_VERSION = 'v1.356.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -12503,7 +12503,17 @@ function buildBlocksFromAi(data) {
       const t = String((b && b.type) || '').toLowerCase();
       if (t === 'text') {
         const txt = _separateOptionLines(stripBrackets(b.text || b.content));
-        if (txt) blocks.push({ id: generateBlockId(), type: 'text', content: txt });
+        // [2] — the marks come off the paper. `_aiLiftMarks` is the ONE place
+        // that happens, and it is here because `buildBlocksFromAi` is the ONE
+        // function every AI authoring path goes through: Build from screenshot,
+        // ⚡ Rapid add, the bulk PDF import, 🔄 Regenerate copy and the exam
+        // paper builder all gained it at once rather than one at a time.
+        if (txt) {
+          const mk = _aiLiftMarks(txt, b && b.marks);
+          const blk = { id: generateBlockId(), type: 'text', content: mk.content };
+          if (mk.marks) blk.marks = mk.marks;
+          blocks.push(blk);
+        }
       } else if (t === 'image') {
         blocks.push({ id: generateBlockId(), type: 'image', url: '', caption: stripBrackets(b.caption) });
       } else if (t === 'mcq') {
@@ -12725,7 +12735,7 @@ function _bulkPagePrompt(pageNo, pageCount) {
     `Split THIS PAGE into its separate questions (by question number or clear boundaries) and return EACH as its own entry, in page order.\n` +
     `Return ONLY JSON: {"questions":[ {"continuation":false,"title":"short title","topic":"<closest topic>","topicConfidence":"high|medium|low","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}, ... ]}\n` +
     `Each item in "blocks" is ONE of:\n` +
-    `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
+    `  {"type":"text","text":"a part of the question wording, plain text","marks":2}   (include "marks" ONLY when the page prints a mark allocation for that question or part, and leave the printed "[2]" out of "text")\n` +
     `  {"type":"image","box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — box_2d is the rectangle you draw around it on the page)\n` +
     `  {"type":"mcq","options":["option 1 text","option 2 text","option 3 text","option 4 text"],"correctIndex":0}\n` +
     `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
@@ -13139,7 +13149,7 @@ function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint, opts) {
     (multi
       ? `  {"type":"image","page":<which attached image, 1-based>,"box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — "page" says which attached image it is on, and box_2d is the rectangle you draw around it on THAT image)\n`
       : `  {"type":"image","box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — box_2d is the rectangle you draw around it on the page)\n`) +
-    `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
+    `  {"type":"text","text":"a part of the question wording, plain text","marks":2}   (include "marks" ONLY when the page prints a mark allocation for that question or part, and leave the printed "[2]" out of "text")\n` +
     `  {"type":"mcq","options":["option 1 text","option 2 text","option 3 text","option 4 text"],"correctIndex":0}\n` +
     `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
     `  {"type":"plainanswer","text":"..."}\n` +
@@ -13173,7 +13183,53 @@ function _partsPromptRules() {
     `- Give EACH part its own answer block ("answer" or "plainanswer") directly under the text block that asks it, so every part has its own model answer.\n` +
     `- EXPLANATIONS follow the parts: a question with NO parts finishes with ONE "explanation" block; a question WITH parts gets ONE explanation block PER PART, placed directly after that part's own answer block and explaining ONLY that part's question and answer. Never write one explanation covering several parts, and never put an explanation about part (b) underneath part (a).\n` +
     `- EVERY PART GETS ONE, WITHOUT EXCEPTION. Count the parts before you answer and return exactly that many "explanation" blocks: three parts means THREE explanation blocks, one after each part's answer. A part left without its own explanation box is a part the answer key has nothing to say about, so never skip one because a part looks obvious, looks short, or has already been covered by the part above it.\n` +
+    `- MARKS: an exam paper prints how much a question is worth at the very end of the question it belongs to \u2014 "… Explain why the bulb lit up. [2]". Where the page shows one, put it on THAT text block as "marks": 2 (a plain whole number) and leave the "[2]" out of the wording: the app prints the number itself from the field, so a marker left in the text as well prints it twice. A question with lettered parts prints one figure per PART, so put each one on that part's own text block. NEVER invent a number the page does not show \u2014 a mark allocation nobody wrote is a mark a class can never earn.\n` +
     `- AN EXPLANATION IS NOT THE ANSWER AGAIN. The answer block already holds the answer and the two print one under the other on the answer key, so an explanation that restates or paraphrases it prints the same words twice. Keep it to the 2-4 sentences an explanation has always been, and spend them on what the answer does NOT say — the principle it rests on, named; the step of reasoning it takes for granted; or the answer a student is most likely to give instead and why it is wrong. Pick the one that fits, not all of them. This matters most where the question itself says "explain", "why" or "give a reason", because there the model answer is ALREADY an explanation.\n`;
+}
+
+// =====================================================================
+// [2] — THE MARKS COME OFF THE PAPER (v1.356.0)
+// =====================================================================
+// `block.marks` has existed since v1.314.0 with a picker in the editor and a
+// printed "[2]" on the sheet, and NO AI path ever wrote one — so every
+// question imported off a paper arrived worth nothing, and the number the
+// paper plainly printed had to be typed back in by hand, question by question.
+//
+//  • THE FIELD IS THE ONE PLACE THE NUMBER LIVES, so a marker still sitting
+//    in the wording is the same number twice. `qPartBodyHtml` already strips a
+//    trailing marker when the field is set, and this strips it at the other
+//    end — the same both-ends rule the doubled part marker follows, and the
+//    reason an author opening the question sees clean wording rather than a
+//    bracket the renderer is quietly hiding.
+//  • A NUMBER THE MODEL DID NOT GIVE IS STILL READ OFF THE WORDING. The
+//    prompt asks for `marks`, and a model transcribing a page writes "[2]"
+//    into the text at least as often as it fills the field in. Lifting it is
+//    not a guess: the paper printed it, at the end of the question, in the
+//    convention this app already prints it back in.
+//  • …BUT ONLY A PLAUSIBLE ONE. `AI_MARKS_MAX_LIFT` is far below
+//    `QMARKS_MAX`: a bracketed number bigger than that at the end of a
+//    question is a citation, a year or a figure reference, not what one part
+//    of one question is worth. Refusing it costs a marks field an author can
+//    fill in; accepting it prints "[1998]" on a worksheet.
+//  • IT FAILS OPEN. Nothing lifted means the block is byte-for-byte what it
+//    always was — wording untouched, no `marks` field, and the bracket still
+//    printed exactly where the paper had it.
+const AI_MARKS_MAX_LIFT = 20;
+function _aiMarksSane(n) {
+  const v = parseInt(n, 10);
+  return (isFinite(v) && v > 0 && v <= AI_MARKS_MAX_LIFT) ? v : 0;
+}
+// `given` is whatever the model put in the block's own "marks" field. Returns
+// the wording to store and the number to file beside it.
+function _aiLiftMarks(html, given) {
+  const text = String(html == null ? '' : html);
+  const m = text.match(QMARKS_TAIL_RE);
+  // The field wins when the model filled it in; the printed marker is the
+  // fallback. Either way the marker comes OUT of the wording, or the block
+  // carries the number twice.
+  const marks = _aiMarksSane(given) || (m ? _aiMarksSane(String(m[0]).replace(/[^0-9]/g, '')) : 0);
+  if (!marks) return { content: text, marks: 0 };
+  return { content: m ? qStripTailMarks(text) : text, marks };
 }
 
 // The rectangle-selection (box_2d) rules, shared by the single-question build
@@ -14272,6 +14328,9 @@ function openRapidAdd() {
   // reopened days after it was last used, and "tomorrow" has moved on.
   _rapidReleaseSetup();
   _rapidReleasePaint();
+  // The auto-check switch is remembered across tabs, so the pad has to show
+  // what it is really set to rather than whatever the markup's default says.
+  _autoChkSetup();
   _updateRapidCounts();
   const zone = document.getElementById('rapidPasteZone');
   // On a phone, focusing the pad pops the on-screen keyboard over the very
@@ -14505,6 +14564,10 @@ async function _rapidExpandPdf(file, level, release) {
   _updateRapidCounts();
   renderVettingList();
   let added = 0, blank = 0, failed = 0, pages = 0, stitched = 0;
+  // Every question this paper produced, so the summary at the end can tally
+  // the 🚦 auto-check over the WHOLE paper. Declared out here because the
+  // summary is built after the try block that fills it.
+  const allQs = [];
   try {
     const pdfjs = await _loadPdfJs();
     const doc = await pdfjs.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false }).promise;
@@ -14527,12 +14590,19 @@ async function _rapidExpandPdf(file, level, release) {
         if (r.blank) { blank++; lastQ = null; return; }
         added += (r.added || 0);
         const qs = r.questions || [];
+        // Kept so the paper's own summary can say how the AUTO-CHECK came out
+        // over the whole paper, which is the number an author acts on: forty
+        // questions of which three are flagged is three cards to read.
+        qs.forEach(x => { if (x) allQs.push(x); });
         if (r.continuation && lastQ && qs.length) {
           const merged = await _vetApplyMerge([lastQ, qs[0]]);
           if (merged) {
             stitched++;
             added--;                       // the two halves are one question
             qs[0] = merged;                // …and a third page carries on from it
+            // Neither half's verdict describes what now exists, so the whole
+            // question is read for the first time here.
+            await autoChkAfterMerge(merged, level);
           }
         }
         lastQ = qs.length ? qs[qs.length - 1] : lastQ;
@@ -14568,7 +14638,7 @@ async function _rapidExpandPdf(file, level, release) {
     _updateRapidCounts();
     renderVettingList();
     const at = (level ? ' at ' + level : '') + (release ? ' · ⏳ released ' + qReleaseLabel(release) : '');
-    const bits = [added + ' question' + (added === 1 ? '' : 's') + at + ' from ' + pages + ' page' + (pages === 1 ? '' : 's') + ' of “' + name + '”'];
+    const bits = [added + ' question' + (added === 1 ? '' : 's') + at + autoChkBatchNote(allQs) + ' from ' + pages + ' page' + (pages === 1 ? '' : 's') + ' of “' + name + '”'];
     if (stitched) bits.push('🔗 ' + stitched + ' question' + (stitched === 1 ? '' : 's') + ' carried over a page break and ' + (stitched === 1 ? 'was' : 'were') + ' joined back up');
     if (blank) bits.push(blank + ' page' + (blank === 1 ? '' : 's') + ' had no questions on ' + (blank === 1 ? 'it' : 'them'));
     if (failed) bits.push(failed + ' page' + (failed === 1 ? '' : 's') + ' could not be read — see the red card' + (failed === 1 ? '' : 's') + ' in vetting');
@@ -14632,6 +14702,441 @@ function startRapidJob(file, level, opts) {
 // and `continuation` says this page has a page BEFORE it, so the reader may be
 // asked whether it opens part-way through a question. A pasted screenshot
 // passes none of them and behaves exactly as it always did.
+// =====================================================================
+// 🚦 THE AUTO-CHECK — a question checks itself BEFORE it reaches Vetting
+// =====================================================================
+// ⚡ Rapid add read a page, cropped its figures, wrote the answers, lettered
+// the parts and filed the lot in Vetting — and whether any of it was RIGHT was
+// somebody's job to find out afterwards, one card at a time. So a paper of
+// forty questions was forty questions to read.
+//
+// `autoChkRun` closes that loop: every question built here is checked, and one
+// that comes back 🟡 or 🔴 is handed the checker's own findings and asked to
+// fix itself, up to `AUTOCHK_TRIES` times. Green ones reach Vetting clean;
+// anything still amber or red reaches Vetting WEARING ITS LAMP AND ITS
+// FINDINGS, so the author's attention goes to the handful that need it.
+//
+//  • IT IS THE SAME CHECKER, NOT A SECOND ONE. `_cqLocalFindings` and
+//    `_cqAiCheck` are ✅ Check Questions' own two layers, and `tlVerdict` is
+//    the 🚦 traffic light's own plain-code colour. A prompt written for this
+//    feature would be a second prompt to improve and the two would disagree
+//    about the same question the week after they shipped — an author fixing a
+//    red card here and finding the lamp still red is exactly that fault.
+//  • THE CHECK SEES THE PICTURES, and that is why it runs HERE rather than
+//    before the crop. `_cqAiCheck` → `_cqMedia` reads the image blocks' own
+//    URLs, and by this point in `processRapidJob` the cropped (and, where a
+//    rectangle failed, the whole-page) figures are uploaded and attached — so
+//    the question is checked as a WHOLE, exactly as a student will meet it,
+//    options against diagram. Check it before the crop and every question
+//    reads as one whose wording refers to a figure that is not there.
+//  • A FAILED CHECK IS ITS OWN STATE AND IS NEVER GREEN. "The check could not
+//    run" and "the check found nothing" are opposite things, and the AI being
+//    off on the device is one of the two. An `error` also STOPS the loop: a
+//    repair is another AI call down the same road, so retrying it three times
+//    is three more failures and three more delays for a question that would
+//    have reached Vetting anyway.
+//  • NOTHING IS EVER DROPPED. The question reaches Vetting whatever the lamp
+//    says — green ones simply arrive clean. A question quietly withheld
+//    because a model disliked it is a question its author never finds out
+//    about, and that is a far worse outcome than an amber card.
+//  • A REPAIR THAT CAME BACK WORSE IS THROWN AWAY. The verdict of every try is
+//    kept and `autoChkRun` finishes on the BEST one it saw — a red repaired to
+//    amber and then back to red files the amber question, not the red one. A
+//    loop that simply kept whatever the last try produced could hand back a
+//    question worse than the one it was given.
+// =====================================================================
+
+// Three tries, as asked for: enough to fix a wrong option list or a blank
+// answer, and few enough that a bad question cannot spend a paper's budget.
+const AUTOCHK_TRIES = 3;
+// The switch is a preference about how the pad WORKS, not a fact about this
+// pile of screenshots — so it lives in localStorage, unlike the batch level and
+// the batch release date, which are one sitting each and live in sessionStorage.
+const AUTOCHK_KEY = 'sq_rapid_autocheck';
+// How much of the question's own wording the repair prompt carries. The
+// serialiser is shared with 🔄 Regenerate copy, which has no cap of its own
+// because it is one question at a time; here it is one per page of a paper.
+const AUTOCHK_CTX_CHARS = 6000;
+// A repair is asked to rewrite the question, so it needs room to return the
+// whole thing. Running out does not fail — it TRUNCATES — and a truncated
+// repair is a question missing its last blocks, which is a worse question than
+// the one that went in. `_autoChkApply` refuses a reply with no blocks at all.
+const AUTOCHK_TOKENS = 4096;
+// How many of the findings travel WITH the question. `_tlCache` is a
+// session's memory; this is what a card still knows the next morning, and it
+// is what the 🚦 panel reads back. More than this is not a question anybody
+// should be repairing — it is one to rewrite.
+const AUTOCHK_KEEP_FINDINGS = 12;
+
+function autoChkOn() {
+  try { return localStorage.getItem(AUTOCHK_KEY) !== '0'; } catch (e) { return true; }
+}
+function setAutoChkOn(on) {
+  try { localStorage.setItem(AUTOCHK_KEY, on ? '1' : '0'); } catch (e) { /* private window */ }
+  _autoChkPaint();
+}
+function _autoChkPaint() {
+  const box = document.getElementById('rapidAutoChk');
+  if (box) box.checked = autoChkOn();
+  const note = document.getElementById('rapidAutoChkNote');
+  if (note) {
+    note.textContent = autoChkOn()
+      ? 'Every question is read back by the AI before it lands. Green ones arrive clean; the rest arrive with their lamp lit and the findings on the card.'
+      : 'Questions land unchecked — press 🚦 on a card, or use 🚦 Check questions on the vetting list, to read them.';
+  }
+}
+function _autoChkSetup() { _autoChkPaint(); }
+function toggleAutoChk(on) { setAutoChkOn(!!on); }
+
+// ---- reading a verdict ---------------------------------------------------
+// The SAME two layers ✅ Check Questions and 🚦 the traffic light run, in the
+// same order, sorted by the same severity rank. This is deliberately a copy of
+// `tlRun`'s BODY rather than a call to it: `tlRun` writes into `_tlCache` and
+// repaints every lamp on the page, and a question that has not been saved yet
+// has no card to repaint and no business in that cache until it does.
+async function autoChkRead(q) {
+  let ai = [], ran = false, error = '';
+  if (window.__aiReady && window.__aiReady()) {
+    try { ai = await _cqAiCheck(q); ran = true; }
+    catch (e) {
+      console.warn('auto-check: the AI pass failed', e);
+      error = (e && e.message) || 'AI error';
+    }
+  } else {
+    error = 'AI is off on this device, so only the instant checks ran';
+  }
+  let local = [];
+  try { local = _cqLocalFindings(q, ran); }
+  catch (e) { console.warn('auto-check: the instant checks failed', e); }
+  const findings = local.concat(ai).sort((a, b) => _sevRank(a.severity) - _sevRank(b.severity));
+  return { findings, verdict: tlVerdict(findings), error, ran };
+}
+// 'error' is its own state and outranks the colour: a check that could not run
+// has not cleared anything, whatever the free structural half happened to find.
+function autoChkState(read) {
+  if (!read) return 'error';
+  return read.error ? 'error' : read.verdict;
+}
+// Which of two READS to keep. Green beats amber beats red beats a check that
+// could not run, and at the SAME colour the one with fewer findings wins — a
+// repair that cleared two of a question's three problems is a better question
+// than the one that went in, and colour alone cannot see that.
+//
+// It compares reads rather than bare states because that tiebreak needs the
+// findings, and because `autoChkRun` finishes on the BEST question it saw
+// rather than the last one produced: without this a red repaired to amber and
+// then back to red would file the red one.
+const AUTOCHK_RANK = { green: 0, amber: 1, red: 2, error: 3 };
+function _autoChkRank(state) {
+  const r = AUTOCHK_RANK[state];
+  return r == null ? 3 : r;
+}
+function autoChkBetter(a, b) {
+  if (!b) return true;
+  if (!a) return false;
+  const ra = _autoChkRank(a.state), rb = _autoChkRank(b.state);
+  if (ra !== rb) return ra < rb;
+  return ((a.findings || []).length) < ((b.findings || []).length);
+}
+
+// ---- the repair ----------------------------------------------------------
+// The findings as the model will read them: what the checker said, in its own
+// words, worst first. `detail` carries the fix, which is the half that makes a
+// finding actionable — a summary alone is a complaint.
+function autoChkFindingsText(findings) {
+  return (findings || []).map((f, i) =>
+    `${i + 1}. [${String(f.severity || 'med').toUpperCase()}] ${f.type ? f.type + ' — ' : ''}${f.title || ''}` +
+    (f.detail ? `\n   ${f.detail}` : '')
+  ).join('\n');
+}
+function _autoChkRepairPrompt(q, findings, levelHint) {
+  const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
+  const topics = (levelHint && typeof currentTopicsByLevel === 'function' && (currentTopicsByLevel()[levelHint] || []).length)
+    ? currentTopicsByLevel()[levelHint]
+    : currentTopics();
+  const imgs = ((q && q.blocks) || []).filter(b => b && b.type === 'image').length;
+  return `You are a meticulous Singapore primary-school science question editor. A colleague has just built the question below from an exam paper, a second reader has checked it, and you are making the corrections that reader asked for.\n\n` +
+    (aiGrounding('gen', q && q.topic) || '') +
+    `WHAT THE CHECKER FOUND — fix every one of these:\n${autoChkFindingsText(findings)}\n\n` +
+    `THE QUESTION AS IT STANDS:\n------------------\n${_docClip(_serializeQuestionForRegen(q), AUTOCHK_CTX_CHARS)}\n------------------\n\n` +
+    (imgs
+      ? `${imgs} picture${imgs === 1 ? ' is' : 's are'} attached, in the order they appear in this question. They are the figures a student will see, so check the wording and the options against them.\n\n`
+      : `This question has no picture attached.\n\n`) +
+    `HOW TO CORRECT IT:\n` +
+    `- Fix ONLY what the checker listed. Everything it did not mention is the teacher's wording off a real exam paper: return it word for word.\n` +
+    `- This is a CORRECTION, not a new question. Do not change what the question is about, do not change its numbers or its data, and do not rewrite wording that is already correct.\n` +
+    `- Keep the SAME block types in the SAME order, the same lettered parts, and the SAME number of "image" placeholders in the same positions — the pictures already attached are put back automatically, so never add or remove one.\n` +
+    `- If a finding asks for options that only repeat the picture or the table to be numbered, write them as exactly "(1)", "(2)", "(3)", "(4)" and let the picture do the work.\n` +
+    `- If a finding says an answer is blank, wrong or does not match the question, write the correct answer from the question and its figures.\n` +
+    `- If you believe a finding is mistaken, leave that part of the question exactly as it is rather than changing it to satisfy the report.\n\n` +
+    `Return ONLY JSON with this exact shape:\n` +
+    `{"title":"short title","topic":"<closest topic>","category":"<closest category>","blocks":[ ...ordered blocks... ]}\n` +
+    `Each item in "blocks" is ONE of these objects:\n` +
+    `  {"type":"text","text":"a part of the question wording, plain text","marks":2}   (include "marks" ONLY when the question or part is worth a stated number of marks, and leave the printed "[2]" out of "text")\n` +
+    `  {"type":"image"}   (a placeholder marking where a picture goes — keep one for EVERY picture the question already has, in the same position)\n` +
+    `  {"type":"mcq","options":["option 1","option 2","option 3","option 4"],"correctIndex":0}\n` +
+    `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
+    `  {"type":"plainanswer","text":"..."}\n` +
+    `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
+    `Rules:\n` +
+    _partsPromptRules() +
+    `- If a text block lists labelled items or options inline, put EACH on its own line separated by a real line break ("\\n").\n` +
+    `- Write every answer as plain prose: no brackets or markup of any kind around individual words.\n` +
+    `- Choose topic from EXACTLY this list: ${topics.join('; ')}.\n` +
+    `- Choose category from EXACTLY this list: ${categories.join('; ')}.\n` +
+    `- Use plain text only, no markdown.`;
+}
+
+// Put a repaired set of blocks onto the question IN PLACE, keeping everything
+// the model was never shown and can never give back.
+//
+//  • THE PICTURES ARE RE-ATTACHED POSITIONALLY, never re-fetched and never
+//    re-cropped: the model returns an EMPTY "image" placeholder, so without
+//    this every repair strips the question's figures and leaves a card wearing
+//    "Diagram missing" — which is the single worst thing this loop could do,
+//    because it looks exactly like a page whose rectangles failed.
+//  • A PICTURE IS NEVER LOST TO A SHORT REPLY. A model that returns fewer
+//    image blocks than the question has gets the leftovers appended rather
+//    than dropped: a question with a figure in the wrong place is one drag
+//    from right, and a question with no figure cannot be answered at all.
+//  • …AND NEVER GAINED FROM A LONG ONE. An extra placeholder with nothing to
+//    put in it is an EMPTY picture block, which the checker itself flags and
+//    which prints as a blank space on a worksheet.
+//  • `_imgEnhanceState` TRAVELS WITH THE PICTURE. It is keyed by BLOCK id and
+//    the repair mints new ids, so without this ✂️ Crop, ✏️ Touch up and
+//    ✨ Enhance all open with no original to work from on a question that
+//    plainly has a picture.
+function _autoChkApply(q, payload) {
+  if (!q || !payload) return false;
+  let built;
+  try { built = buildBlocksFromAi(payload); }
+  catch (e) { console.warn('auto-check: could not rebuild the repaired question', e); return false; }
+  const nb = (built && built.blocks) || [];
+  // A reply with nothing in it is a truncated or refused repair, and replacing
+  // a whole question with it would destroy work the checker only wanted tidied.
+  if (!nb.length) return false;
+
+  const oldImgs = ((q.blocks) || []).filter(b => b && b.type === 'image');
+  const newImgs = nb.filter(b => b && b.type === 'image');
+  const carry = (from, to) => {
+    if (!from || !to) return;
+    to.url = from.url || '';
+    if (!String(to.caption || '').trim() && from.caption) to.caption = from.caption;
+    ['printImg', 'scale', 'annotate', 'answerImg', 'answerKey'].forEach(k => {
+      if (from[k] !== undefined) to[k] = from[k];
+    });
+    try {
+      if (_imgEnhanceState && _imgEnhanceState[from.id]) _imgEnhanceState[to.id] = _imgEnhanceState[from.id];
+    } catch (e) { /* the editor's in-session image state is a convenience, never a requirement */ }
+  };
+  const n = Math.min(oldImgs.length, newImgs.length);
+  for (let i = 0; i < n; i++) carry(oldImgs[i], newImgs[i]);
+  // More placeholders than pictures: the extras would render as blank spaces.
+  for (let i = n; i < newImgs.length; i++) {
+    const idx = nb.indexOf(newImgs[i]);
+    if (idx >= 0) nb.splice(idx, 1);
+  }
+  // More pictures than placeholders: the leftovers go back on the end rather
+  // than being thrown away.
+  for (let i = n; i < oldImgs.length; i++) nb.push(oldImgs[i]);
+
+  q.blocks = nb;
+  q.blanks = (built && built.selectedBlanks) || {};
+  if (payload.title) q.title = payload.title;
+  if (payload.topic) q.topic = payload.topic;
+  if (payload.category) q.category = normalizeCategoryValue(payload.category);
+  try { applyMcqCategory(q); } catch (e) { /* category inference is cosmetic */ }
+  // The parts may have moved, so the free structural repair runs again — it
+  // costs nothing and it is what keeps an explanation filed under the part it
+  // explains rather than the one printed above it.
+  try { qEnsurePartExplanations(q.blocks); } catch (e) { console.warn('auto-check: part explanations', e); }
+  return true;
+}
+
+// ---- the loop ------------------------------------------------------------
+// Read → repair → read again, at most `AUTOCHK_TRIES` times, stopping the
+// moment it is green. `onStep` is how the Rapid add card says what is
+// happening: a question sitting for three AI calls with nothing on screen
+// reads as one that has hung.
+async function autoChkRun(q, opts) {
+  const o = opts || {};
+  const tries = Math.max(1, o.tries || AUTOCHK_TRIES);
+  const say = typeof o.onStep === 'function' ? o.onStep : () => {};
+  let best = null, bestBlocks = null, used = 0;
+
+  for (let attempt = 1; attempt <= tries; attempt++) {
+    used = attempt;
+    say(attempt === 1 ? 'checking the question…' : `checking the question again (try ${attempt} of ${tries})…`);
+    const read = await autoChkRead(q);
+    const state = autoChkState(read);
+    const now = { state, findings: read.findings, error: read.error };
+    if (autoChkBetter(now, best)) {
+      best = now;
+      // A repair that came back WORSE is thrown away, so the blocks that
+      // earned the best verdict have to be kept alongside it.
+      try { bestBlocks = JSON.parse(JSON.stringify({ blocks: q.blocks, blanks: q.blanks, title: q.title, topic: q.topic, category: q.category })); }
+      catch (e) { bestBlocks = null; }
+    }
+    if (state === 'green') break;
+    // A check that could not run has nothing to repair against, and the repair
+    // is another AI call down the same road.
+    if (state === 'error') break;
+    if (attempt >= tries) break;
+
+    say(`fixing ${read.findings.length} thing${read.findings.length === 1 ? '' : 's'} the checker found (try ${attempt} of ${tries})…`);
+    let payload = null;
+    try {
+      const media = await _cqMedia(q);
+      const prompt = _autoChkRepairPrompt(q, read.findings, o.level);
+      const raw = media.length
+        ? await askGeminiVision(prompt, media, { maxOutputTokens: AUTOCHK_TOKENS, json: true })
+        : await askGemini(prompt, { maxOutputTokens: AUTOCHK_TOKENS, temperature: 0.2, json: true });
+      payload = _parseAIJson(raw);
+    } catch (e) {
+      console.warn('auto-check: the repair call failed', e);
+      break;   // the question keeps the verdict it has and goes to vetting with it
+    }
+    if (!_autoChkApply(q, payload)) break;
+    // The batch's level is applied AGAIN, because a repair may have moved the
+    // topic — and the level in this app is read off the topic, so a repair that
+    // quietly re-filed the question would undo the batch level the author set.
+    // The release date is never touched: `_autoChkApply` replaces blocks and
+    // meta only, so `releaseOn` survives on its own.
+    try { _rapidApplyLevel(q, o.level); } catch (e) { console.warn('auto-check: re-applying the batch level', e); }
+  }
+
+  // Finish on the BEST question seen, not the last one produced.
+  if (best && bestBlocks && best.state !== 'green') {
+    try {
+      q.blocks = bestBlocks.blocks;
+      q.blanks = bestBlocks.blanks;
+      q.title = bestBlocks.title;
+      q.topic = bestBlocks.topic;
+      q.category = bestBlocks.category;
+    } catch (e) { console.warn('auto-check: keeping the best version', e); }
+  }
+  return { state: (best && best.state) || 'error', tries: used, findings: (best && best.findings) || [], error: (best && best.error) || '' };
+}
+
+// ---- what the author sees -----------------------------------------------
+// Two records of the same verdict, and both are wanted.
+//
+//  • `q.autoCheck` is DURABLE — it is saved with the question, so a card
+//    reloaded tomorrow still says it was read and how many tries it took. It
+//    is deliberately absent from `EDITOR_OWNED_QUESTION_FIELDS`, so
+//    `carryOverQuestionMeta` keeps it across an edit.
+//  • `_tlCache` is the 🚦 traffic light's own store, so seeding it lights the
+//    lamp the vetting card ALREADY draws, with the findings the panel already
+//    renders. Inventing a second lamp here would be a second lamp to keep in
+//    step with the first — and the check really did run, so pretending it had
+//    not until somebody pressed the light would be a lie in the other
+//    direction. A signature is taken from the finished question, so an edit
+//    puts the lamp out exactly as it does anywhere else.
+function autoChkStamp(q, res) {
+  if (!q || !res) return;
+  const list = (res.findings || []).slice(0, AUTOCHK_KEEP_FINDINGS).map(f => ({
+    type: String(f.type || 'Check').slice(0, 18),
+    severity: String(f.severity || 'med'),
+    title: String(f.title || '').slice(0, 160),
+    detail: String(f.detail || '').slice(0, 400),
+    fix: String(f.fix || ''),
+    ai: !!f.ai,
+  }));
+  q.autoCheck = {
+    state: res.state,
+    tries: res.tries || 1,
+    found: (res.findings || []).length,
+    // WHAT WAS FOUND, not just how many. `_tlCache` dies with the tab, so
+    // without this a card read the next morning wears a red badge over a grey
+    // lamp with nothing behind it — a verdict the author is told about and
+    // cannot read. It is capped because an attempt is a document and a
+    // document dies at 1 MB.
+    findings: list,
+    // …and WHAT IT WAS A VERDICT ON. `tlStateOf` adopts a stamp only while
+    // this still matches, so an edited question reports stale exactly as it
+    // does anywhere else rather than showing yesterday's colour.
+    sig: (typeof tlSig === 'function') ? tlSig(q) : '',
+    at: new Date().toISOString(),
+  };
+  if (res.error) q.autoCheck.error = String(res.error).slice(0, 160);
+  try {
+    if (typeof _tlCache !== 'undefined' && _tlCache && typeof tlSig === 'function') {
+      _tlCache.set(String(q.id), {
+        sig: tlSig(q),
+        state: res.state === 'error' ? 'error' : 'done',
+        findings: res.findings || [],
+        verdict: res.state === 'error' ? '' : res.state,
+        error: res.error || '',
+        at: Date.now(),
+      });
+    }
+  } catch (e) { console.warn('auto-check: could not light the lamp', e); }
+}
+const AUTOCHK_CARD_LOOK = {
+  green: { bg: '#dcfce7', fg: '#15803d', bd: '#86efac', dot: '🟢', word: 'checked — nothing flagged' },
+  amber: { bg: '#fef3c7', fg: '#b45309', bd: '#fcd34d', dot: '🟡', word: 'checked — worth a look' },
+  red:   { bg: '#fee2e2', fg: '#dc2626', bd: '#fca5a5', dot: '🔴', word: 'checked — something is wrong' },
+  error: { bg: '#f1f5f9', fg: '#475569', bd: '#cbd5e1', dot: '⚠', word: 'the check could not run' },
+};
+function autoChkCardHtml(q) {
+  const a = q && q.autoCheck;
+  if (!a || !a.state) return '';
+  const look = AUTOCHK_CARD_LOOK[a.state] || AUTOCHK_CARD_LOOK.error;
+  const fixed = (a.tries || 1) > 1 ? ` · fixed ${(a.tries || 1) - 1}×` : '';
+  const found = (a.found != null) ? a.found : ((a.findings || []).length || 0);
+  const tip = a.state === 'green'
+    ? 'The AI read this question back — with its pictures — before it landed here, and found nothing wrong.'
+    : a.state === 'error'
+      ? 'The AI could not read this question back' + (a.error ? ' (' + a.error + ')' : '') + ' — press 🚦 to try again.'
+      : `The AI read this question back and still found ${found} thing${found === 1 ? '' : 's'} after ${a.tries || 1} tr${(a.tries || 1) === 1 ? 'y' : 'ies'}. Press 🚦 to read them.`;
+  return `<span class="qb-tag" style="background:${look.bg};color:${look.fg};border:1px solid ${look.bd};" title="${escapeHtml(tip)}">${look.dot} Auto${fixed}</span>`;
+}
+
+// 🔗 A STITCHED QUESTION IS A QUESTION NOBODY HAS CHECKED. Each half was read
+// ALONE — the first missing its last parts, the second with no stem and no
+// figure of its own — so `qMergeQuestions` drops both verdicts, and the moment
+// the two are joined is the FIRST moment the whole question exists to be read.
+// Checking it here is what keeps the promise the pad makes: every question that
+// reaches Vetting has been read as a student will meet it.
+//
+// The merge has already written this question, so the verdict is a second,
+// small write on the same document — and a refused one costs the badge and
+// nothing else, because the question is in the list either way.
+async function autoChkAfterMerge(q, level) {
+  if (!q || !autoChkOn()) return;
+  try {
+    const res = await autoChkRun(q, { level });
+    autoChkStamp(q, res);
+    await saveVettingQuestion(q);
+  } catch (e) { console.warn('auto-check after a page-break stitch skipped', e); }
+  try { renderVettingList(); } catch (e) { /* the card is on screen either way */ }
+}
+
+// How a batch came out, in one clause on the toast the pad already shows.
+// `autoChkTally` is the ONE counter and both the per-file toast and the
+// whole-paper summary read it, so the two can never disagree about the same
+// pile of questions.
+function autoChkTally(list) {
+  const t = { green: 0, amber: 0, red: 0, error: 0, checked: 0 };
+  (list || []).forEach(q => {
+    const s = q && q.autoCheck && q.autoCheck.state;
+    if (!s) return;
+    t.checked++;
+    if (t[s] != null) t[s]++;
+  });
+  return t;
+}
+function autoChkBatchNote(list) {
+  const t = autoChkTally(list);
+  if (!t.checked) return '';
+  const bits = [];
+  if (t.green) bits.push(t.green + ' 🟢');
+  if (t.amber) bits.push(t.amber + ' 🟡');
+  if (t.red) bits.push(t.red + ' 🔴');
+  if (t.error) bits.push(t.error + ' ⚠');
+  return bits.length ? ' · 🚦 ' + bits.join(' ') : '';
+}
+
 async function processRapidJob(jobId, file, batchLevel, opts) {
   const o = opts || {};
   try {
@@ -14780,6 +15285,35 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
         } catch (e) { console.warn('rapid per-part explanations skipped', e); }
       }
 
+      // 2c) 🚦 THE AUTO-CHECK. The question is now WHOLE — its figures
+      //    cropped, uploaded and attached, its parts lettered, its answers and
+      //    explanations written — so this is the first moment it can honestly
+      //    be read as a student will meet it. `autoChkRun` puts it through
+      //    ✅ Check Questions' own two layers, hands the findings back to
+      //    the model to fix, and reads it again, up to AUTOCHK_TRIES times.
+      //
+      //    IT NEVER WITHHOLDS A QUESTION. Green ones reach Vetting clean;
+      //    amber and red reach Vetting with their lamp already lit and their
+      //    findings already in the panel, which is what turns "read forty
+      //    cards" into "read the four that are flagged". A question quietly
+      //    held back because a model disliked it is one its author never finds
+      //    out about, and the whole point of this pad is that nothing is lost.
+      if (autoChkOn()) {
+        try {
+          const res = await autoChkRun(q, {
+            level: batchLevel,
+            onStep: msg => {
+              _setRapidJobState(jobId, {
+                title: q.title || 'Question',
+                sub: (many ? `Question ${pi + 1} of ${payloads.length} — ` : '') + '🚦 ' + msg
+              });
+              renderVettingList();
+            }
+          });
+          autoChkStamp(q, res);
+        } catch (e) { console.warn('rapid auto-check skipped', e); }
+      }
+
       // 3) Promote to a real Vetting question and persist. Done per question
       //    rather than in a batch at the end, so a failure on question 4 cannot
       //    lose the three that already read perfectly.
@@ -14810,7 +15344,12 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
     // The level is named back to the author. Filing at a level they chose and
     // never confirming it is how a whole pile ends up at the wrong one.
     const at = (batchLevel ? ' at ' + batchLevel : '')
-      + (qReleaseOn(added[0]) ? ' · ⏳ released ' + qReleaseLabel(qReleaseOn(added[0])) : '');
+      + (qReleaseOn(added[0]) ? ' · ⏳ released ' + qReleaseLabel(qReleaseOn(added[0])) : '')
+      // …and how the auto-check came out. A costly, invisible thing happening
+      // by itself is a thing nobody trusts: an author who cannot tell a checked
+      // question from an unchecked one reads every card anyway, which is the
+      // work this was added to remove.
+      + autoChkBatchNote(added);
     // A PDF page says nothing on its own: forty pages is forty toasts, and the
     // paper's own summary lands when the last page is in. The questions are
     // already visible as vetting cards either way.
@@ -16503,7 +17042,10 @@ function _serializeQuestionForRegen(q) {
     const n = i + 1;
     const p = qPartOf(pmap, b);
     const tag = p ? ` [part ${qPartLabel(p)}]` : (qPartUnfiled(b) ? ' [no part — about the whole question]' : '');
-    if (b.type === 'text') lines.push(`${n}. TEXT${tag}: ${stripHtml(b.content || '')}`);
+    // The marks go across too, or a variation of a 2-mark question comes back
+    // worth nothing and the teacher types the number in again.
+    const mk = qMarksOf(b) ? ` [${qMarksOf(b)} marks]` : '';
+    if (b.type === 'text') lines.push(`${n}. TEXT${tag}${mk}: ${stripHtml(b.content || '')}`);
     else if (b.type === 'part') lines.push(`${n}. TEXT: ${((b.label || '') + ' ' + stripHtml(b.content || '')).trim()}`);
     else if (b.type === 'image') lines.push(`${n}. IMAGE PLACEHOLDER${b.caption ? ' (caption: ' + stripHtml(b.caption) + ')' : ''}`);
     else if (b.type === 'mcq') {
@@ -16535,7 +17077,7 @@ function _regenPrompt(q, remark, opts) {
     (imgs ? `,"diagramChanges":[${new Array(imgs).fill('""').join(',')}]` : '') +
     `,"blocks":[ ...ordered blocks... ]}\n` +
     `Each item in "blocks" is ONE of these objects:\n` +
-    `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
+    `  {"type":"text","text":"a part of the question wording, plain text","marks":2}   (include "marks" ONLY when the page prints a mark allocation for that question or part, and leave the printed "[2]" out of "text")\n` +
     `  {"type":"image"}   (a placeholder marking where the diagram/picture goes — keep one for EVERY image placeholder the original had, in the same position; the teacher's original picture is reused automatically)\n` +
     `  {"type":"mcq","options":["option 1","option 2","option 3","option 4"],"correctIndex":0}\n` +
     `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
@@ -16988,6 +17530,7 @@ function renderVettingList() {
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               ${dup ? `<span class="qb-tag" style="background:#fdf4e3;color:#7a5410;border:1px solid #e0b768;" title="Looks ${dup.pct}% similar to “${escapeHtml(dup.title)}” already in the bank">🟡 Possible duplicate</span>` : ''}
               ${scanned ? SCANNED_CARD_BADGE : ''}
+              ${autoChkCardHtml(q)}
               ${qReleaseChipHtml(q)}
               ${q.diagramWhole ? '<span class="qb-tag" style="background:#fdf4e3;color:#b45309;" title="No rectangle came back for this question\'s figure, so the WHOLE page is in the picture slot. Open it and use ✂️ Crop.">🖼 Whole page — crop it</span>' : ''}
               ${isNew ? '<span class="qb-tag" style="background:var(--accent-orange-light);color:var(--accent-orange);" title="Just added by Rapid add — review and approve">⚡ Just added</span>' : ''}
@@ -19261,6 +19804,14 @@ function qMergeQuestions(sources, opts) {
   // The suspicion was raised about a question that no longer exists in this
   // shape, so it is re-asked rather than carried over.
   delete merged._dupOf;
+  // …and so was the 🚦 auto-check verdict. A merged question is two halves
+  // that were each checked ALONE — the first missing its last parts, the
+  // second with no stem — so neither verdict describes the question that now
+  // exists, and a green badge on it would say it had been read when nothing
+  // has read this. The lamp goes back to grey and says "not checked yet",
+  // which is the truth. (The traffic light would report it STALE on its own,
+  // because `tlSig` signs the blocks; the badge on the card would not.)
+  delete merged.autoCheck;
   return merged;
 }
 
@@ -21300,7 +21851,7 @@ function _epQuestionPrompt(n, from, total) {
       : '') +
     `Return ONLY JSON: {"questions":[ {"continuation":false,"number":"1","title":"short title","topic":"<closest topic>","topicConfidence":"high|medium|low","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}, ... ]}\n` +
     `Each item in "blocks" is ONE of:\n` +
-    `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
+    `  {"type":"text","text":"a part of the question wording, plain text","marks":2}   (include "marks" ONLY when the page prints a mark allocation for that question or part, and leave the printed "[2]" out of "text")\n` +
     (multi
       ? `  {"type":"image","page":<which attached image, 1-based>,"box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — "page" says which attached image it is on, and box_2d is the rectangle you draw around it on THAT image)\n`
       : `  {"type":"image","box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table)\n`) +
@@ -38291,10 +38842,31 @@ function tlSig(q) {
 // ── Reading the cache ───────────────────────────────────────────────────────
 // The ONE place a question becomes a light. A cached verdict formed on a
 // DIFFERENT signature is reported as `stale`, never as the colour it was.
+// A verdict the AUTO-CHECK formed as the question was built, read back off the
+// question itself. `_tlCache` is a session's memory and dies with the tab, so
+// without this a card opened the next morning wears its 🔴 badge over a grey
+// lamp with nothing behind it — the author is told a verdict exists and cannot
+// read it, which is worse than never having been told.
+//
+// It is not a second opinion: `autoChkStamp` wrote what THIS checker found,
+// through `tlVerdict`, so adopting it is remembering rather than guessing. And
+// it is adopted only while `sig` still matches the question in hand — an edit
+// since puts it out exactly as it puts a live verdict out.
+function _tlFromStamp(q) {
+  const a = q && q.autoCheck;
+  if (!a || !a.state || !a.sig) return null;
+  const findings = Array.isArray(a.findings) ? a.findings : [];
+  const stale = a.sig !== tlSig(q);
+  if (stale) return { state: 'stale', findings, stale: true, error: a.error || '' };
+  if (a.state === 'error') return { state: 'error', findings, stale: false, error: a.error || '' };
+  return { state: a.state, findings, stale: false, at: Date.parse(a.at || '') || 0 };
+}
 function tlStateOf(q) {
   if (!q || !q.id) return { state: 'idle', findings: [], stale: false };
   const rec = _tlCache.get(String(q.id));
-  if (!rec) return { state: 'idle', findings: [], stale: false };
+  // A live check always outranks a remembered one: it was run later, on this
+  // question, by somebody who pressed the button.
+  if (!rec) return _tlFromStamp(q) || { state: 'idle', findings: [], stale: false };
   if (rec.state === 'running') return { state: 'running', findings: [], stale: false };
   const stale = rec.sig !== tlSig(q);
   if (stale) return { state: 'stale', findings: rec.findings || [], stale: true, error: rec.error || '' };
@@ -69246,6 +69818,7 @@ window.rapidZoneClick = rapidZoneClick;
 window.rapidPickFiles = rapidPickFiles;
 window.setRapidLevel = setRapidLevel;
 window.setRapidRelease = setRapidRelease;
+window.toggleAutoChk = toggleAutoChk;
 window.bankReleaseNow = bankReleaseNow;
 window.bankReleaseBatchNow = bankReleaseBatchNow;
 window.bankMoveRelease = bankMoveRelease;
