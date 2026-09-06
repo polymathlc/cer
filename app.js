@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.360.1';
+const APP_VERSION = 'v1.361.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -14457,10 +14457,10 @@ function _rapidApplyLevel(q, level) {
 // IT IS ONE FIELD ON THE QUESTION, and that is what makes it survive
 // everything else the question goes through. It rides the vetting document,
 // it is carried into the bank by `approveVetting` (which moves the object
-// whole), and it survives an EDIT for free — the editor has no control for it,
-// so it is not in EDITOR_OWNED_QUESTION_FIELDS and `carryOverQuestionMeta`
-// restores it. Adding an editor field for it later would mean adding the name
-// to that Set in the same commit, or an edit would put a cleared date back.
+// whole), and ordinary editor saves preserve it through `carryOverQuestionMeta`.
+// Schedule release is a separate save command that sets its date AFTER that
+// carry-over, not a collectQuestionData field. A future clearable form field
+// would need to join EDITOR_OWNED_QUESTION_FIELDS in the same change.
 //
 // IT LIVES IN sessionStorage, exactly like the batch level and for exactly the
 // same reason: a batch is one sitting, so the date survives a reload mid-pile
@@ -15912,34 +15912,122 @@ function closeStudentPreview() {
   document.getElementById('studentPreviewOverlay').classList.remove('active');
 }
 
-// Schedule question from create page (saves to bank then opens schedule dialog)
-function openScheduleFromCreate() {
-  if (blocks.length === 0) {
-    showToast('Add some blocks first', 'error');
-    return;
-  }
+// Schedule release from either editor action row. Nothing is written until
+// the date is confirmed, and the FIRST bank write already carries releaseOn.
+// This is a separate save command, not a collectQuestionData form field:
+// ordinary saves continue to preserve releaseOn through carryOverQuestionMeta.
+var _editorReleaseDraft = null;
+var _editorReleaseSaving = false;
+var _editorReleaseFocus = null;
 
-  // Collect and save the question to bank first
+function openScheduleFromCreate() { openEditorRelease(); }
+
+function openEditorRelease() {
+  if (!_canAuthor() || _editorReleaseSaving) return;
+  if (!blocks.length) { showToast('Add some blocks before scheduling', 'error'); return; }
+  const editingId = currentEditingQuestion;
   const q = collectQuestionData();
-  questionBank.push(q);
-  saveQuestion(q);
-  updateCounts();
-  renderQuestionBank();
+  if (editingId) { q.id = editingId; carryOverQuestionMeta(q); }
+  const focus = document.activeElement;
+  _dupGateSave(q, () => {
+    _editorReleaseDraft = { q, editingId };
+    _editorReleaseFocus = focus;
+    const input = document.getElementById('editorReleaseDate');
+    input.min = releaseDayFromNow(1);
+    input.value = qScheduled(q) ? qReleaseOn(q) : input.min;
+    document.getElementById('editorReleaseQuestion').textContent = q.title;
+    document.getElementById('editorReleaseError').textContent = '';
+    document.getElementById('editorReleaseOverlay').classList.add('active');
+    input.focus();
+  });
+}
 
-  // Now open the schedule dialog with this question pre-selected
-  openScheduleQuestionDialog();
+function closeEditorRelease() {
+  if (_editorReleaseSaving) return;
+  document.getElementById('editorReleaseOverlay').classList.remove('active');
+  _editorReleaseDraft = null;
+  if (_editorReleaseFocus && _editorReleaseFocus.isConnected) _editorReleaseFocus.focus();
+}
 
-  // Auto-select this question in the schedule dialog after a brief delay
-  setTimeout(() => {
-    selectedScheduleQuestionId = q.id;
-    const infoEl = document.getElementById('scheduleSelectedInfo');
-    const cardEl = document.getElementById('scheduleSelectedCard');
-    if (infoEl) infoEl.style.display = '';
-    if (cardEl) cardEl.innerHTML = `<strong>${escapeHtml(q.title)}</strong><br><span style="font-size:0.8rem;color:var(--text-muted);">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</span>`;
-  }, 200);
+function editorReleaseKeydown(event) {
+  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeEditorRelease(); }
+  if (event.key !== 'Tab') return;
+  const items = Array.from(document.getElementById('editorReleaseOverlay')
+    .querySelectorAll('input:not(:disabled), button:not(:disabled)'));
+  const first = items[0], last = items[items.length - 1];
+  if (!first) { event.preventDefault(); return; }
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+}
 
-  clearForm();
-  showToast('Question added to bank. Now set the scheduled release date.', 'info');
+function editorReleaseValid(on) {
+  if (!RELEASE_DAY_RE.test(on) || on <= releaseToday()) return false;
+  const day = new Date(on + 'T00:00:00Z');
+  return Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === on;
+}
+
+async function saveEditorRelease() {
+  if (_editorReleaseSaving || !_editorReleaseDraft || !_canAuthor()) return false;
+  const { q: draft, editingId } = _editorReleaseDraft;
+  const error = document.getElementById('editorReleaseError');
+  if (currentEditingQuestion !== editingId) {
+    error.textContent = 'The question being edited has changed. Cancel and open Schedule release again.';
+    return false;
+  }
+  const on = document.getElementById('editorReleaseDate').value;
+  if (!editorReleaseValid(on)) {
+    error.textContent = 'Choose a valid date after today (Singapore time).';
+    document.getElementById('editorReleaseDate').focus();
+    return false;
+  }
+  const q = { ...draft, releaseOn: on, status: 'approved' };
+  const wasVetting = vettingList.some(v => v.id === q.id);
+  const previousOwner = _ownerUidByQuestionId[q.id];
+  if (wasVetting && _ownerUidByVettingId[q.id]) _ownerUidByQuestionId[q.id] = _ownerUidByVettingId[q.id];
+  const controls = Array.from(document.getElementById('editorReleaseOverlay').querySelectorAll('input, button'));
+  _editorReleaseSaving = true;
+  controls.forEach(el => { el.disabled = true; });
+  const button = document.getElementById('editorReleaseSave');
+  button.textContent = 'Saving…';
+  error.textContent = '';
+  let saved = false;
+  try {
+    // Approval and removal from Vetting are ONE atomic write. A failed save
+    // leaves the original question and all the author's edits available.
+    saved = await saveQuestion(q, { fromVetting: wasVetting });
+    if (!saved) {
+      error.textContent = 'Could not save. Your edits are still here. Check your connection or permissions, then try again.';
+      return false;
+    }
+    const i = questionBank.findIndex(item => item.id === q.id);
+    if (i < 0) questionBank.push(q); else questionBank[i] = q;
+    if (wasVetting) vettingList = vettingList.filter(v => v.id !== q.id);
+    _rapidJustAdded.delete(q.id);
+    _editorReleaseSaving = false;
+    closeEditorRelease();
+    currentEditingQuestion = null;
+    setEditMode(false);
+    blocks = []; selectedBlanks = {}; editorKeywords = {};
+    renderBlocks(); updateCounts(); renderQuestionBank(); renderVettingList();
+    showToast('Saved to question bank — releases ' + qReleaseLabel(on) + ' at 12:00 AM Singapore time', 'success');
+    if (editingId) _afterEditNavigate();
+    else if (window.ppHasPendingAttach && window.ppHasPendingAttach()) ppConsumePendingAttach(q, false);
+    else navigateTo('bank');
+    return true;
+  } catch (e) {
+    console.warn('schedule release:', e);
+    error.textContent = 'Could not finish saving. Your edits are still here. Please try again.';
+    return false;
+  } finally {
+    if (!saved) {
+      if (previousOwner === undefined) delete _ownerUidByQuestionId[q.id];
+      else _ownerUidByQuestionId[q.id] = previousOwner;
+    }
+    _editorReleaseSaving = false;
+    controls.forEach(el => { el.disabled = false; });
+    button.textContent = 'Save and schedule';
+    if (!saved) button.focus();
+  }
 }
 
 function getYouTubeEmbedUrl(url) {
@@ -24805,7 +24893,14 @@ async function saveQuestion(q, opts) {
   let attempts = 0;
   while (attempts < tries) {
     try {
-      await setDoc(_qRef(q.id), payload);
+      if (opts && opts.fromVetting) {
+        const batch = writeBatch(db);
+        batch.set(_qRef(q.id), payload);
+        batch.delete(_vRef(q.id));
+        await batch.commit();
+      } else {
+        await setDoc(_qRef(q.id), payload);
+      }
       // A running work session logs the question. `quiet` writes are background
       // bookkeeping (the usage backfill, auto-tagging, the part converter) —
       // machine housekeeping is not work the author did.
@@ -24815,7 +24910,10 @@ async function saveQuestion(q, opts) {
       try { styleHarvestQuestion(q); } catch (e) { console.warn('answer style harvest', e); }
       // Every other window folds this question into its own bank, so nothing
       // added in one tab is invisible (or duplicated) in the next.
-      if (!quiet) _xtAnnounceQuestion(q.id, 'bank', 'save');
+      if (!quiet) {
+        _xtAnnounceQuestion(q.id, 'bank', 'save');
+        if (opts && opts.fromVetting) _xtAnnounceQuestion(q.id, 'vetting', 'del');
+      }
       return done(true);
     } catch (err) {
       attempts++;
@@ -26081,20 +26179,17 @@ function qInSyllabus(q) {
 // the other way — which is also why a date can be changed or cleared at any
 // time and takes effect on the very next render.
 //
-// `qReleased(q)` IS THE ONE PREDICATE, and every student-facing pool asks it
+// `qAvailableToViewer(q)` IS THE SERVING PREDICATE; every student-facing pool asks it
 // beside `qInSyllabus` / `qWithinStudentLevel`. The census in
 // tools/scheduled-release-tests.mjs fails on a pool that forgets, because a
 // pool left behind is a question served weeks early on a screen that looks
 // perfectly right — and there is nothing anywhere to say it happened.
 //
-// IT READS NO ROLE, deliberately. `qWithinStudentLevel` has to ask who is
-// looking; this does not, which removes the whole class of "an admin
-// previewing as a student saw it anyway" holes. What separates the two
-// audiences is WHICH SURFACES ASK: the serving pools do, and the management
-// surfaces — the bank list, the vetting list, the worksheet builder, the print
-// picker — deliberately do not, and badge it instead. That is exactly the rule
-// an out-of-syllabus question already follows, and it is what lets a teacher
-// build next term's worksheet today.
+// `qReleased` reports the date alone. `qAvailableToViewer` is the serving
+// gate: authors may prepare and practise early, students wait for the date.
+// Practise-as-student changes currentUser.role, so it honours the student's
+// release restriction even while the real signed-in account is a teacher.
+// Management surfaces badge future dates; shared worksheets show locked rows.
 //
 // A VALUE THAT IS NOT A DAY KEY IS NOT A SCHEDULE. `qReleaseOn` returns '' for
 // anything that is not exactly 'YYYY-MM-DD', so a stray field, a Date object or
@@ -26103,7 +26198,7 @@ function qInSyllabus(q) {
 // few days early is an embarrassment a person can see, while a question
 // withheld from every mode for ever by a value nobody can read is the silent
 // disappearance most of the guards in this file exist to prevent. The only
-// writer is `_rapidApplyRelease`, and it writes that shape and nothing else.
+// writers validate the day before saving; the editor also rejects impossible dates.
 const RELEASE_TZ = 'Asia/Singapore';
 const RELEASE_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 // Today in Singapore, as the same 'YYYY-MM-DD' the old scheduler has always
@@ -26140,6 +26235,9 @@ function qScheduled(q, today) {
   return !!on && on > (today || releaseToday());
 }
 function qReleased(q, today) { return !qScheduled(q, today); }
+// Teachers can prepare and practise in advance. "Practise as student" sets
+// currentUser.role to student, so it gets the same release gate as that child.
+function qAvailableToViewer(q, today) { return _canAuthor() || qReleased(q, today); }
 // "12 Jan 2027", in the same timezone the comparison uses. The +08:00 is what
 // stops a date typed in Singapore rendering as the day before on a browser
 // running west of it.
@@ -26176,7 +26274,7 @@ function qReleaseChipHtml(q) {
   const on = qReleaseOn(q);
   if (!on || !qScheduled(q)) return '';
   return '<span class="qb-tag" style="background:#eef2ff;color:#4338ca;border:1px solid #a5b4fc;"' +
-    ' title="Scheduled by ⚡ Rapid add. It is in the bank and can be edited, printed and put on a worksheet,' +
+    ' title="Scheduled for release. It is in the bank and teachers can edit, practise, print and put it on a worksheet,' +
     ' but no student is served it in any practice mode or game until ' + escapeHtml(qReleaseLabel(on)) +
     ' (12:00 AM Singapore time). Clear the date on the 🗓 Scheduled Questions page to release it now.">' +
     '⏳ Releases ' + escapeHtml(qReleaseLabel(on)) + '</span>';
@@ -26187,8 +26285,8 @@ function qReleaseChipHtml(q) {
 //
 // An admin BUILDS next term's sheet today. The builder, the picker, the
 // preview and the print all keep a scheduled question and badge it, because
-// that is the whole point of being able to schedule one — and none of them
-// asks `qReleased`, deliberately, exactly as none of them asks the level cap.
+// that is the whole point of being able to schedule one. The shared viewer
+// gate permits authors here, exactly as the level cap does.
 // A STUDENT handed that same sheet must not be able to read the question
 // before its date. So the sheet withholds it from them, and SAYS SO.
 //
@@ -26200,14 +26298,12 @@ function qReleaseChipHtml(q) {
 // ROW is neither: the worksheet still holds the question, and the student is
 // told the day it opens.
 //
-// `qLockedFrom(q)` READS THE ROLE, which every other release helper
-// deliberately does not. Those are asked by pools whose whole audience is
-// students; this one is asked by surfaces BOTH audiences reach. It is ONE
-// predicate so the row, the count, the toast and the practice queue can never
+// `qLockedFrom(q)` shares qAvailableToViewer with the practice pools. It is
+// asked by surfaces BOTH audiences reach, so the row, count and queue can never
 // disagree with each other about which questions are locked — two tests would
 // drift into a sheet that prints a question its own card says is not open yet.
 // =====================================================================
-function qLockedFrom(q) { return !_canAuthor() && qScheduled(q); }
+function qLockedFrom(q) { return !qAvailableToViewer(q); }
 
 // Split a list of questions into what this viewer may work on NOW and what is
 // still held back. The ONE splitter: the practice queue, the preview, the
@@ -26245,7 +26341,7 @@ function qLockNote(locked) {
 function getQuestionsForLevel(level) {
   return questionBank.filter(q => {
     if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
-    if (!qReleased(q)) return false;               // scheduled for a future date → not yet served
+    if (!qAvailableToViewer(q)) return false;               // scheduled for a future date → not yet served
     // Only include questions with something the AI can mark
     if (!questionHasMarkableAnswer(q)) return false;
     // qInLevelBand, not `qLevelNum(q) <= maxLevel`: the level is the HIGHEST of
@@ -29611,7 +29707,7 @@ function snapShowSuggestions(questionText, photoIdx) {
   // either — it is a student surface, and matching would serve the question.
   // The level cap is there for the same reason: matching a photo to a Sec 1
   // question would put that question in front of a P5 child.
-  const ranked = questionBank.filter(q => qInSyllabus(q) && qReleased(q) && qWithinStudentLevel(q)).map(q => ({ q, s: _snapSim(aSet, q) }))
+  const ranked = questionBank.filter(q => qInSyllabus(q) && qAvailableToViewer(q) && qWithinStudentLevel(q)).map(q => ({ q, s: _snapSim(aSet, q) }))
     .sort((a, b) => b.s - a.s).filter(x => x.s > 0.12).slice(0, 3);
   if (!ranked.length) {
     host.innerHTML = `<div class="practice-card"><div class="practice-card-body">${label}
@@ -30232,7 +30328,7 @@ function _wseBank() {
   // teacher builds next term's sheet on. A STUDENT editing their own Ai-nstein
   // worksheet must not be able to add one, which is the same split `_canAuthor`
   // already makes for the level cap.
-  return _canAuthor() ? live : live.filter(q => qReleased(q) && qWithinStudentLevel(q));
+  return _canAuthor() ? live : live.filter(q => qAvailableToViewer(q) && qWithinStudentLevel(q));
 }
 
 // Everything that shows this worksheet, brought back into step after a change:
@@ -34018,7 +34114,7 @@ function qpAvailableTopics(typeFilter) {
   const counts = {};
   questionBank.forEach(q => {
     if (!qInSyllabus(q)) return;          // not in syllabus → never offered in practice
-    if (!qReleased(q)) return;            // scheduled for later → not counted, or the topic offers questions it never serves
+    if (!qAvailableToViewer(q)) return;            // scheduled for later → not counted, or the topic offers questions it never serves
     if (qpFibOn() && !qHasKeywords(q)) return;   // nothing to blank out → not a fill-in-the-blanks question
     if (!qpMatchesType(q, typeFilter)) return;
     if (!qWithinStudentLevel(q)) return; // topics above the student's level never show
@@ -34051,7 +34147,7 @@ function buildQpQueue(level) {
   const { type, topic } = qpFilters();
   const pool = questionBank.filter(q => {
     if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
-    if (!qReleased(q)) return false;               // scheduled for a future date → not yet served
+    if (!qAvailableToViewer(q)) return false;               // scheduled for a future date → not yet served
     // 🔲 Fill-in-the-blanks serves ONLY questions with keywords marked on their
     // model answer. A question with none would arrive with nothing blanked out
     // — an ordinary question wearing the mode's banner, which reads as a bug.
@@ -34644,7 +34740,7 @@ function _homeReviewPool() {
   const stats = _qAttemptStats || {};
   const pool = (questionBank || []).filter(q => {
     if (!q || q.id == null) return false;
-    if (!questionHasMarkableAnswer(q) || !qInSyllabus(q) || !qReleased(q) || !qWithinStudentLevel(q)) return false;
+    if (!questionHasMarkableAnswer(q) || !qInSyllabus(q) || !qAvailableToViewer(q) || !qWithinStudentLevel(q)) return false;
     const r = stats[String(q.id)];
     return !!(r && r.n > 0 && (r.best || 0) < 1);
   });
@@ -34929,7 +35025,7 @@ function _fcWrongPool() {
   const out = [];
   (Array.isArray(questionBank) ? questionBank : []).forEach(q => {
     if (!q || q.id == null) return;
-    if (!qInSyllabus(q) || !qReleased(q) || !qWithinStudentLevel(q)) return;
+    if (!qInSyllabus(q) || !qAvailableToViewer(q) || !qWithinStudentLevel(q)) return;
     const r = stats[String(q.id)];
     if (!r || !r.n) return;
     const wrong = Math.max(0, (r.n || 0) - (r.correct || 0));   // attempts that were not full marks
@@ -35716,7 +35812,7 @@ function tpRenderTopics() {
   // Count questions per topic (only those the AI can mark, and in-syllabus)
   const topicCounts = {};
   questionBank.forEach(q => {
-    if (questionHasMarkableAnswer(q) && qInSyllabus(q) && qReleased(q)) {
+    if (questionHasMarkableAnswer(q) && qInSyllabus(q) && qAvailableToViewer(q)) {
       qTopicList(q).forEach(t => { topicCounts[t] = (topicCounts[t] || 0) + 1; });
     }
   });
@@ -35839,7 +35935,7 @@ async function tpStartPractice() {
   const questionsByTopic = {};
   const tpServed = new Set(qpLoadSeen());   // same served memory as quick practice
   tpActiveTopics.forEach(topic => {
-    const markable = questionBank.filter(q => questionHasMarkableAnswer(q) && qInSyllabus(q) && qReleased(q) && qMatchesTopic(q, topic) && qWithinStudentLevel(q));
+    const markable = questionBank.filter(q => questionHasMarkableAnswer(q) && qInSyllabus(q) && qAvailableToViewer(q) && qMatchesTopic(q, topic) && qWithinStudentLevel(q));
     const ordered = orderByAttemptPriority(markable);
     // Demote questions served recently in any practice session so abandoned
     // sessions don't lead with the same questions every time.
@@ -37582,7 +37678,7 @@ function renderBankScheduled() {
   host.innerHTML = `
     <div class="bsq-wrap">
       <div class="bsq-intro">
-        <b>⏳ Held back by a ⚡ Rapid add batch date</b>
+        <b>⏳ Scheduled for student release</b>
         <span>These questions are already here — you can edit, print and put them on a worksheet — but no practice mode, quest or game serves them to a student until the date on them. Clearing a date releases it immediately.</span>
       </div>
       ${groups}
@@ -45276,7 +45372,7 @@ function commRenderQuestPicker() {
   const filtered = (questionBank || []).filter(q => {
     if (!q || q.id == null) return false;
     if (!qInSyllabus(q)) return false;             // retired topics: PSLE papers only
-    if (!qReleased(q)) return false;               // scheduled for a future date → not yet quested
+    if (!qAvailableToViewer(q)) return false;               // scheduled for a future date → not yet quested
     if (topicFilter && !qMatchesTopic(q, topicFilter)) return false;
     if (catFilter && !qMatchesCategory(q, catFilter)) return false;
     if (sourceFilter && questionSource(q) !== sourceFilter) return false;
@@ -45512,7 +45608,7 @@ async function commStartAutoQuest(questId) {
   const pool = (Array.isArray(questionBank) ? questionBank : []).filter(q => {
     if (!q || q.id == null) return false;
     if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
-    if (!qReleased(q)) return false;               // scheduled for a future date → not yet quested
+    if (!qAvailableToViewer(q)) return false;               // scheduled for a future date → not yet quested
     if (format === 'mcq' ? !qpHasMcq(q) : !qpHasWritten(q)) return false;
     if (topic && String(q.topic || '').toLowerCase() !== topic) return false;
     return qWithinStudentLevel(q); // never quest a student above their level
@@ -47359,7 +47455,7 @@ function buildDefenderQuestions() {
   return (questionBank || [])
     .filter(q => q && q.status !== 'pending' && q.status !== 'flagged')
     .filter(qInSyllabus)         // retired topics (e.g. Cell Systems) never reach the games
-    .filter(q => qReleased(q))   // a scheduled question is not in a game either — it is not out yet
+    .filter(q => qAvailableToViewer(q))   // a scheduled question is not in a game either — it is not out yet
     .filter(qWithinStudentLevel) // games never serve questions above the student's level
     .map(_sdExtractMcq)
     .filter(Boolean);
@@ -54701,7 +54797,7 @@ function _tcgBankQuestions() {
     (typeof questionBank !== 'undefined' && Array.isArray(questionBank) ? questionBank : []).forEach(q => {
       if (!q || (q.status && q.status !== 'approved') || !Array.isArray(q.blocks)) return;
       if (!qInSyllabus(q)) return;   // retired topics never reach the Realm of Embers TCG quiz
-      if (!qReleased(q)) return;     // …and neither does one scheduled for a future date
+      if (!qAvailableToViewer(q)) return;     // …and neither does one scheduled for a future date
       // Never above the pupil's level. This one pool feeds the monster trainer,
       // Ember Siege AND Ember Legends, so leaving it uncapped served P5/P6
       // questions to P3/P4 students in all three modes at once.
@@ -65945,7 +66041,7 @@ function _ppExtractOeq(q, pool){
   // stem — a P4 pupil must not be shown a P6 model answer as a wrong option.
   // A DECOY is read by the student too, so an unreleased question's model
   // answer is as much of a leak here as its stem would be anywhere else.
-  if (decoys.length < 3) harvest(shuffle((questionBank || []).filter(x => x && x.status !== 'pending' && x.status !== 'flagged' && qReleased(x) && qWithinStudentLevel(x))));
+  if (decoys.length < 3) harvest(shuffle((questionBank || []).filter(x => x && x.status !== 'pending' && x.status !== 'flagged' && qAvailableToViewer(x) && qWithinStudentLevel(x))));
   if (!decoys.length) return null; // a self-check needs at least one decoy
   const options = shuffle([correct].concat(decoys));
   const answer = options.indexOf(correct);
@@ -65967,7 +66063,7 @@ function ppGamePool(year){
   const bqs = ppAttachedBankQs(year)
     .filter(q => q && q.status !== 'pending' && q.status !== 'flagged')
     .filter(qInSyllabus)
-    .filter(q => qReleased(q))
+    .filter(q => qAvailableToViewer(q))
     .filter(qWithinStudentLevel);
   const out = [];
   bqs.forEach(q => { const m = _sdExtractMcq(q) || _ppExtractOeq(q, bqs); if (m) out.push(m); });
@@ -67378,7 +67474,7 @@ function _ainsteinFindSimilar(concept, extra, want, excludeIds) {
   questionBank.forEach(q => {
     if (!q || q.id == null || skip.has(String(q.id))) return;
     if (!qInSyllabus(q)) return;                     // excluded from practice
-    if (!qReleased(q)) return;                       // scheduled for later → not out yet
+    if (!qAvailableToViewer(q)) return;                       // scheduled for later → not out yet
     if (!qWithinStudentLevel(q)) return;             // never above the student's level
     if (q.annotation) return;                        // drawing pads need the full page, not a panel
     const mcq = qpHasMcq(q), written = qpHasWritten(q);
@@ -67422,7 +67518,7 @@ function _ainsteinFindNamed(description, limit) {
   const pool = [];
   questionBank.forEach(q => {
     if (!q || q.id == null) return;
-    if (!qInSyllabus(q) || !qReleased(q) || !qWithinStudentLevel(q)) return;
+    if (!qInSyllabus(q) || !qAvailableToViewer(q) || !qWithinStudentLevel(q)) return;
     if (q.annotation) return;                       // drawing pads need the full page
     if (!qpHasMcq(q) && !qpHasWritten(q)) return;   // nothing to practise on
     // Tags sit in the "head" beside the title: a teacher-written label for what the
@@ -67798,7 +67894,7 @@ function _ainsteinBankVideo(concept, extra) {
   let best = null;
   questionBank.forEach(q => {
     if (!q || !Array.isArray(q.blocks)) return;
-    if (!qInSyllabus(q) || !qReleased(q) || !qWithinStudentLevel(q)) return;
+    if (!qInSyllabus(q) || !qAvailableToViewer(q) || !qWithinStudentLevel(q)) return;
     const vb = q.blocks.find(b => b && b.type === 'video' && _ainsteinYtId(b.url));
     if (!vb) return;
     const score = _ainsteinConceptScore(q, concept, terms);
@@ -68067,7 +68163,7 @@ function _ainsteinWsPool(name, fmt, isTopic, difficulty) {
   const out = [];
   (Array.isArray(questionBank) ? questionBank : []).forEach(q => {
     if (!q || q.id == null) return;
-    if (!qInSyllabus(q) || !qReleased(q) || !qWithinStudentLevel(q)) return;
+    if (!qInSyllabus(q) || !qAvailableToViewer(q) || !qWithinStudentLevel(q)) return;
     if (fmt === 'mcq' ? !qpHasMcq(q) : !qpHasWritten(q)) return;
     if (isTopic) {
       // A question with no topic at all is counted under "General" by
@@ -68305,7 +68401,7 @@ const AINSTEIN_GUIDE_ASKS = {
 function _ainsteinTopicCounts() {
   const counts = {};
   (Array.isArray(questionBank) ? questionBank : []).forEach(q => {
-    if (!q || !questionHasMarkableAnswer(q) || !qInSyllabus(q) || !qReleased(q) || !qWithinStudentLevel(q)) return;
+    if (!q || !questionHasMarkableAnswer(q) || !qInSyllabus(q) || !qAvailableToViewer(q) || !qWithinStudentLevel(q)) return;
     qTopicList(q).forEach(t => { if (t) counts[t] = (counts[t] || 0) + 1; });
   });
   return counts;
@@ -69761,6 +69857,10 @@ window.previewAsStudent = previewAsStudent;
 window.closeStudentPreview = closeStudentPreview;
 window.resetStudentViewAnswers = resetStudentViewAnswers;
 window.openScheduleFromCreate = openScheduleFromCreate;
+window.openEditorRelease = openEditorRelease;
+window.closeEditorRelease = closeEditorRelease;
+window.editorReleaseKeydown = editorReleaseKeydown;
+window.saveEditorRelease = saveEditorRelease;
 window.addToBank = addToBank;
 window.saveEditedQuestion = saveEditedQuestion;
 window.saveEditToBank = saveEditToBank;

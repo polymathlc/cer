@@ -73,7 +73,7 @@ const shim = `
 `;
 const api = new Function('__store', shim + core + pad + `
   return { RELEASE_TZ, RELEASE_DAY_RE, releaseDayKey, releaseToday, releaseDayFromNow,
-           qReleaseOn, qScheduled, qReleased, qReleaseLabel, qReleaseDaysAway, qReleaseWhen,
+           qReleaseOn, qScheduled, qReleased, qAvailableToViewer, qReleaseLabel, qReleaseDaysAway, qReleaseWhen,
            qReleaseChipHtml, RAPID_RELEASE_KEY, rapidRelease, setRapidRelease,
            _rapidApplyRelease, toasts,
            qLockedFrom, qLockSplit, qLockSoonest, qLockNote,
@@ -210,7 +210,7 @@ ok('the stamp happens beside the level, inside the per-question loop',
 /* ---------------- It survives an edit ---------------- */
 const owned = cut('const EDITOR_OWNED_QUESTION_FIELDS = new Set([', ']);', 'EDITOR_OWNED_QUESTION_FIELDS');
 ok("'releaseOn' is NOT an editor-owned field", !/releaseOn/.test(owned),
-   'the editor has no control for it, so carryOverQuestionMeta is what keeps a scheduled question scheduled across an edit');
+   'ordinary form saves do not own it; Schedule release stamps it after carry-over, so carryOverQuestionMeta is what keeps a scheduled question scheduled across an edit');
 
 /* ---------------- The badge is on every management surface ---------------- */
 const vet = cut('function renderVettingList() {', '\nfunction _vetFocusScroll', 'renderVettingList');
@@ -380,13 +380,13 @@ const NO_RELEASE_GATE_BY_DESIGN = {};
     if (!caps && !listed) continue;
     if (name === 'qWithinStudentLevel' || name === 'qReleased' || name === 'qScheduled') continue;
     if (listed) covered.add(name);
-    if (/\bqReleased\b/.test(body)) continue;
+    if (/\bqAvailableToViewer\s*\(/.test(body)) continue;
     seen.add(name);
     if (!NO_RELEASE_GATE_BY_DESIGN[name]) offenders.push(name + ' (app.js:' + (a + 1) + ')');
   }
-  ok('CENSUS: every pool that caps by level also asks qReleased',
+  ok('CENSUS: every pool that caps by level also asks qAvailableToViewer',
      !offenders.length,
-     'these serve students and would serve a scheduled question early — add `qReleased(q)`\n' +
+     'these serve students and would serve a scheduled question early — add `qAvailableToViewer(q)`\n' +
      '           beside the level check, or a written reason to NO_RELEASE_GATE_BY_DESIGN in this file:\n             ' +
      offenders.join('\n             '));
   ok('CENSUS: every hand-named student pool still exists',
