@@ -7321,12 +7321,35 @@ body.practising-as .page-body { padding-bottom: 64px; }
 .cpb-tool:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
 .cpb-tool:disabled { opacity: 0.35; cursor: default; }
 .cpb-tool-x:hover:not(:disabled) { border-color: var(--accent-red); color: var(--accent-red); }
+.cpb-tool-edit { font-weight: 600; }
+/* Coming back from the block editor: the row the teacher went off to fix is
+   scrolled under them and lit for a moment, so a paper is worked through top
+   to bottom rather than found again after every edit. */
+.cpb-row-flash { animation: cpbRowFlash 2.2s ease-out; border-radius: 10px; }
+@keyframes cpbRowFlash {
+  0%, 45% { background: #dbeafe; box-shadow: 0 0 0 3px #bfdbfe; }
+  100% { background: transparent; box-shadow: 0 0 0 0 rgba(191, 219, 254, 0); }
+}
+/* 📁 The shelf. */
+.cpb-lib { display: flex; flex-direction: column; margin-top: 16px; }
+.cpb-lib-row { display: flex; align-items: center; gap: 14px; padding: 13px 4px; border-bottom: 1px solid var(--border); }
+.cpb-lib-row:last-child { border-bottom: none; }
+.cpb-lib-on { background: var(--surface-alt); border-radius: 10px; padding-left: 12px; padding-right: 12px; }
+.cpb-lib-main { flex: 1 1 auto; min-width: 0; }
+.cpb-lib-name { font-size: 0.88rem; font-weight: 600; line-height: 1.45; }
+.cpb-lib-badge { font-size: 0.68rem; font-weight: 700; color: var(--primary); background: #eff6ff; border-radius: 999px; padding: 2px 8px; margin-left: 6px; vertical-align: middle; }
+.cpb-lib-meta { font-size: 0.74rem; color: var(--text-muted); margin-top: 3px; line-height: 1.5; }
+.cpb-lib-tools { flex: 0 0 auto; display: flex; gap: 6px; align-items: center; }
+/* The one line in the editor that says whose question this is. */
+.cpb-edit-note { align-self: center; font-size: 0.78rem; color: var(--text-muted); line-height: 1.5; }
 @media (max-width: 640px) {
   .cpb-card { padding: 20px 16px; }
   .cpb-shots { grid-template-columns: 1fr; }
   .cpb-status { display: none; }
   .cpb-row { flex-wrap: wrap; }
   .cpb-row-tools { width: 100%; justify-content: flex-end; }
+  .cpb-lib-row { flex-wrap: wrap; }
+  .cpb-lib-tools { width: 100%; justify-content: flex-end; }
 }
 
 /* ==================== MARK PAPER ====================
@@ -9739,6 +9762,26 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <button class="btn btn-outline" type="button" onclick="openEditorRelease()" title="Save to the bank now for teachers; release to students on your chosen date.">
             &#x1F4C5; Schedule release
           </button>
+        </div>
+        <!-- Action Buttons (a 🗂️ Custom Paper question). The question is NOT in
+             the bank — nothing on that page is until Send — so a save here has
+             exactly ONE meaning: back onto the paper. The ordinary edit row's
+             buttons would every one of them break that contract, so this row
+             replaces it rather than sitting beside it. -->
+        <div class="action-row" id="cpbEditActions" style="display:none;">
+          <button class="btn btn-secondary" onclick="cancelEdit()" style="background:#6b7280;color:#fff;">
+            &#x274C; Cancel
+          </button>
+          <button class="btn" onclick="previewAsStudent()" style="background:#8b5cf6;color:#fff;">
+            &#x1F393; Preview as Student
+          </button>
+          <button class="btn" onclick="previewEditorPrint()" style="background:#0f766e;color:#fff;" title="See this question exactly as it comes out of the PDF export.">
+            &#x1F5A8;&#xFE0F; Preview Exported
+          </button>
+          <button class="btn btn-primary" onclick="cpbEditSave()" style="background:#10b981;" title="Put this question back on the paper, in the same place. Nothing goes to the question bank until you send the paper.">
+            &#x1F4BE; Save back to the paper
+          </button>
+          <span class="cpb-edit-note">&#x1F512; This question belongs to a paper and is not in the question bank yet.</span>
         </div>
       </div>
     </div>

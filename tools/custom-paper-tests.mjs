@@ -637,5 +637,161 @@ ok('an ordinary worksheet is unchanged: "Question N" headings',
   (plain.match(/print-q-header-plain/g)||[]).length === 4 && !/print-q-paper/.test(plain));
 ok('…and its MCQs keep their bracket', (plain.match(/print-mcq-answer/g)||[]).length === 2);
 
+
+/* ------------------------------------------------------------------ *
+ * 🖼 THE FIGURES — cropped, and REDRAWN in clean black and white.      *
+ *                                                                     *
+ * "Auto enhanced black and white and clean" is one image-model call    *
+ * per picture, so it is the CALLER's decision and the default is off:  *
+ * the exam paper builder and the bulk import would spend dozens of     *
+ * them on an imported paper. Both directions are silent — no budget    *
+ * and every figure on this page stays a grey photograph of print, one  *
+ * that is per-CALL rather than per-RUN and a forty-question paper has  *
+ * no cap at all.                                                       *
+ * ------------------------------------------------------------------ */
+const fill = cut('async function _fillBlocksFromAiBoxes(', '// Editor flow: crop the AI-selected', '_fillBlocksFromAiBoxes');
+ok('each re-render is reported, so a caller can hold a budget across calls',
+  /if \(onEnhance\) onEnhance\(\);/.test(fill));
+ok('…and onEnhance fires INSIDE the enhancement branch, never per crop',
+  fill.indexOf('if (onEnhance) onEnhance();') > fill.indexOf('enhanced < maxEnhance'));
+ok('the default is still 3, so no existing caller moved',
+  /Number\.isFinite\(opts\.maxEnhance\)\) \? opts\.maxEnhance : 3/.test(fill));
+
+const cropInto = cut('async function _epCropInto(', '// ---- Reading the question screenshots', '_epCropInto');
+ok('_epCropInto takes a budget rather than a hard 0', /_epCropInto\(imgBlocks, qd, shots, onStatus, budget\)/.test(cropInto));
+ok('…and defaults to NO enhancement when it is not given',
+  /Number\.isFinite\(budget\.left\)\) \? Math\.max\(0, budget\.left\) : 0/.test(cropInto));
+ok('…and decrements the SHARED object, not a local copy',
+  /onEnhance: \(\) => \{ if \(budget\) budget\.left = Math\.max\(0, \(budget\.left \|\| 0\) - 1\); \}/.test(cropInto));
+
+const run = cut('async function readQuestionRun(', '\nasync function _epRunBuild(', 'readQuestionRun');
+ok('ONE budget for the whole run', /const enhance = \{ left: Math\.max\(0, Number\(opt\.enhance\) \|\| 0\) \};/.test(run));
+ok('…and it reaches BOTH crop calls — the question and the continuation',
+  (run.match(/enhance\);/g) || []).length === 2);
+
+const epRun = cut('async function _epRunBuild(', '\nasync function epReadKey(', '_epRunBuild');
+ok('the exam paper builder still asks for none — an imported paper is dozens of calls',
+  !/enhance:/.test(epRun));
+
+const cpbRun = cut('async function _cpbRunBuild(', '\n// ---- The list: order, booklet', '_cpbRunBuild');
+ok('Custom Paper asks for the run-wide budget', /enhance: _cpbMetaGet\('enhance'\) \? CPB_ENHANCE_MAX : 0/.test(cpbRun));
+ok('…and the switch is ON by default — the figures are the paper',
+  /\n  enhance: true,/.test(cut('const CPB_META_DEFAULTS = {', '};', 'CPB_META_DEFAULTS')));
+ok('…and the setup card offers it', /cpbSetMeta\('enhance', this\.checked\)/.test(src));
+
+// The crop's own promise: no question wording on the figure, and no label off it.
+const refine = cut('async function _aiRefineCrop(', '\n// Fill a question\'s image blocks', '_aiRefineCrop');
+ok('the refine pass KEEPS everything belonging to the figure',
+  /INCLUDE everything that belongs to the figure/.test(refine) && /axis titles/.test(refine));
+ok('…and cuts the question sentences that came with it',
+  /EXCLUDE full sentences \/ paragraphs of question/.test(refine));
+ok('…and never cuts through one of the figure\'s own words',
+  /Never cut through a word that belongs to the figure/.test(refine));
+
+/* ------------------------------------------------------------------ *
+ * ✏️ EDIT ONE QUESTION — the SAME editor, and back to the same place.  *
+ *                                                                     *
+ * A paper question is in NEITHER `questionBank` nor `vettingList`, so  *
+ * every ordinary save in that editor is wrong for it: `editQuestion`   *
+ * would find nothing at all, and a save would file one question into   *
+ * the bank early — leaving the paper and the bank each holding half    *
+ * the truth, with nothing on any screen reporting it.                  *
+ * ------------------------------------------------------------------ */
+const loader = cut('function _editorLoadQuestion(q) {', '\nfunction duplicateQuestion(', '_editorLoadQuestion');
+ok('the loader takes the OBJECT, so a question outside the bank can be opened',
+  /function _editorLoadQuestion\(q\) \{/.test(loader));
+ok('…and never looks one up itself', !/questionBank\.find|vettingList\.find/.test(loader));
+const eq_ = cut('function editQuestion(id) {', '\n// PUT ONE QUESTION INTO THE BLOCK EDITOR', 'editQuestion');
+ok('editQuestion is the lookup and calls that ONE loader', /_editorLoadQuestion\(q\);/.test(eq_));
+ok('…and clears the paper question, or a bank edit would be written into a paper',
+  /_cpbEdit = null;/.test(eq_));
+
+const edit = cut('function cpbEditQuestion(id) {', '\n// =====================================================================\n// 📁 SAVED PAPERS', 'cpbEditQuestion');
+ok('the paper edit comes back to this page', /_editReturnPage = 'custompaper';/.test(edit));
+ok('…on the same question', /_cpbEditFocus = q\.id;/.test(edit));
+ok('…and it opens the shared editor rather than one of its own', /_editorLoadQuestion\(q\)/.test(edit));
+ok('the save writes into the PAPER and nowhere else',
+  /_cpbQuestions\[at\] = q;/.test(edit) && !/saveQuestion\(/.test(edit));
+ok('a question that has since left the paper is SAID, not silently appended',
+  /no longer on the paper/.test(edit));
+ok('the carry-over reads the SAME allowlist carryOverQuestionMeta reads',
+  /EDITOR_OWNED_QUESTION_FIELDS\.has\(k\)/.test(edit));
+ok('…so the teacher\'s own ⇄ booklet override survives an edit',
+  !/_cpbBook/.test(cut('function _cpbCarryOver(', '\nfunction cpbEditSave', '_cpbCarryOver')));
+
+// Every bank-writing door refuses while a paper question is open.
+['function saveEditedQuestion() {', 'function saveEditToBank() {', 'function moveEditToVetting() {'].forEach(fn => {
+  const head = src.slice(src.indexOf(fn), src.indexOf(fn) + 700);
+  ok(fn.replace(/function | \{/g, '') + ' routes a paper question back to the paper',
+    /_cpbEditActive\(\)\) \{ cpbEditSave\(\); return; \}/.test(head));
+});
+ok('📅 Schedule release refuses outright — there is nothing in the bank to date',
+  /_cpbEditActive\(\)\) \{ showToast\('Send the paper to the bank first/.test(src));
+ok('…and its save path refuses too',
+  /async function saveEditorRelease\(\) \{\n  if \(_cpbEditActive\(\)\) return false;/.test(src));
+
+// Leaving the editor by ANY route ends the paper edit.
+const sem = cut('function setEditMode(isEditing) {', '\nfunction addToBank()', 'setEditMode');
+ok('setEditMode(false) clears the paper question — the one route out they all take',
+  /_cpbEdit = null;\n  \}/.test(sem));
+ok('…and the ordinary edit row is swapped for the paper one', /cpbEditActions/.test(sem));
+ok('the paper row exists in the markup', /id="cpbEditActions"/.test(html));
+ok('…and it offers exactly one save, back to the paper', /onclick="cpbEditSave\(\)"/.test(html));
+ok('…and never a bank one', (() => {
+  const at = html.indexOf('id="cpbEditActions"');
+  const row = html.slice(at, html.indexOf('</div>', html.indexOf('cpb-edit-note', at)));
+  return !/saveEditToBank|addToBank|moveEditToVetting|openEditorRelease/.test(row);
+})());
+
+ok('the row is put back under the teacher on return', /_cpbFocusScroll\(\);/.test(cut('function cpbRender() {', '\nfunction _cpbLibHtml(', 'cpbRender')));
+ok('…and the row carries the id to find it by', /data-qid="\$\{escapeHtml\(String\(q\.id\)\)\}"/.test(src));
+ok('…spent on use, so a later render does not drag the page about',
+  /_cpbEditFocus = '';/.test(cut('function _cpbFocusScroll() {', '\n// =====================================================================\n// 📁 SAVED PAPERS', '_cpbFocusScroll')));
+
+/* ------------------------------------------------------------------ *
+ * 📁 SAVED PAPERS — a paper is a thing you come back to.               *
+ *                                                                     *
+ * The per-tab IndexedDB draft is a CRASH NET, not a library: keyed by  *
+ * tab, one paper per window, gone the moment the next one starts.      *
+ * ------------------------------------------------------------------ */
+const lib = cut('const CPB_LIB_MAX = 60;', '\nfunction cpbSetMeta(', 'library');
+ok('a paper is saved under the bank OWNER, like every other authored thing',
+  /collection\(db, 'users', _bankOwnerUid\(\), 'customPapers'\)/.test(lib));
+ok('the SCREENSHOTS are not saved — a document dies at 1 MB and they are megabytes',
+  !/questions: _cpbQuestions,[\s\S]{0,200}shots/.test(lib) && /questions: _cpbQuestions,/.test(lib));
+ok('…and a paper too big is refused BEFORE the write, naming the size',
+  /bytes > CPB_LIB_MAX_BYTES/.test(lib) && /Math\.round\(bytes \/ 1024\)/.test(lib));
+ok('a paper with no name is refused — the name is what it is listed under',
+  /Give the paper a name/.test(lib));
+ok('opening REPLACES the page, so it asks first',
+  /showConfirm\('Open /.test(lib) && /It replaces the paper on this page/.test(lib));
+ok('…and says outright when what is on the page has never been saved',
+  /has never been saved/.test(lib));
+ok('an opened paper is NOT dirty — there are no screenshots for it to be out of step with',
+  /_cpbDirty = false;/.test(lib));
+ok('deleting the paper does not touch the questions already in the bank',
+  /stays there<\/b> — this is the paper, not the questions/.test(lib));
+ok('a failed load does not have every render trying again',
+  /_cpbLibLoaded = true;\n  try \{/.test(lib));
+ok('a denied write is NAMED — it is a one-line rules fix',
+  /permission-denied/.test(lib));
+ok('✚ New paper lets GO of the saved one rather than deleting it',
+  /_cpbLibId = '';/.test(cut('function cpbNewPaper() {', '\nfunction cpbSetMeta(', 'cpbNewPaper')));
+
+const commit = cut('async function _cpbCommit() {', '\nfunction cpbRender(', '_cpbCommit');
+ok('a SAVED paper is not cleared by a send — the shelf was for coming back to it',
+  /if \(_cpbLibId\) _cpbLibMarkSent\(\)/.test(commit));
+ok('…and an unsaved one still clears, exactly as before', /else \{\n      _cpbQuestions = \[\];/.test(commit));
+ok('the send warns when the paper is about to be cleared unsaved',
+  /This paper is not saved\./.test(src));
+ok('the sent stamp is best effort — the questions really are in the bank either way',
+  /a toast saying the send failed would be untrue/.test(src));
+
+// Every handler the page's own markup calls has to be on window.
+['cpbEditQuestion','cpbEditSave','cpbSavePaper','cpbLibOpen','cpbLibDelete','cpbNewPaper'].forEach(fn => {
+  ok('window.' + fn + ' is exported — the page is inline on* handlers',
+    new RegExp('window\\.' + fn + ' = ').test(src));
+});
+
 console.log((fails ? '✗ ' : '✓ ') + (ran - fails) + '/' + ran + ' checks passed');
 process.exit(fails ? 1 : 0);

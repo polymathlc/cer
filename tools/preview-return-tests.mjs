@@ -168,8 +168,10 @@ test('editQuestion clears a stale snapshot, so an unrelated edit stays put', () 
   const fn = src.slice(src.indexOf('function editQuestion(id) {'));
   const body = fn.slice(0, fn.indexOf('\n}\n'));
   ok(/_wsQeReturn = null;/.test(body), 'editQuestion() clears _wsQeReturn');
-  ok(body.indexOf('_wsQeReturn = null;') < body.indexOf('currentEditingQuestion = q.id'),
-     'and clears it up front, where the other return state is cleared');
+  ok(body.indexOf('_wsQeReturn = null;') < body.indexOf('_editorLoadQuestion(q)'),
+     'and clears it up front, BEFORE the question is loaded, where the other return state is cleared');
+  ok(/_cpbEdit = null;/.test(body),
+     '…and the paper question too, or a bank edit saved after one would be written back into a paper');
 
   // And the reopen spends it, so it can never fire a second time.
   M.set({ ret: { kind: 'builder', page: 'worksheet' }, selected: ['q1'] });

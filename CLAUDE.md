@@ -4984,7 +4984,159 @@ the first, which reads as a printing fault.
   unioned with the teacher's own manual ones — a preview that paginates
   differently from the PDF is the one thing a preview must never do.
 
+### ✏️ Edit one question of the paper, and come straight back (v1.365.0)
+
+`_editorLoadQuestion` (split out of `editQuestion`), `_cpbEdit` /
+`_cpbEditActive` / `_cpbEditFocus` (up top with the other return state),
+`cpbEditQuestion` / `_cpbCarryOver` / `cpbEditSave` / `_cpbFocusScroll`, the
+`custompaper` branch of `_syncBackToPapersBtn`, and `#cpbEditActions` in
+`index.html`.
+
+**A Custom Paper question IS a bank question in every respect but one: it has
+not been saved anywhere.** It is built by `buildQuestionFromAi` →
+`buildBlocksFromAi` → `qApplyAiParts`, exactly as ⚡ Rapid add's questions are,
+so its blocks, parts, marks, topic and answers are the shape the block editor
+already knows — which is what makes opening it there possible at all, rather
+than this page needing an editor of its own.
+
+- **`_editorLoadQuestion(q)` TAKES THE OBJECT, never an id**, and never reads
+  `questionBank`. That is the whole reason it is split out: `editQuestion` looks
+  a question up in the bank or the vetting list, and a paper question is in
+  NEITHER — so it would find nothing and silently do nothing at all.
+- **EVERY SAVE HERE MEANS ONE THING: back onto the paper.** The page's contract
+  is that nothing reaches the bank until Send, so a save that filed one question
+  early would leave the paper and the bank each holding half the truth, with
+  nothing on any screen reporting it. `#cpbEditActions` REPLACES the ordinary
+  edit row rather than sitting beside it, and `saveEditedQuestion`,
+  `saveEditToBank` and `moveEditToVetting` each route back to `cpbEditSave` as
+  well — a hidden button is never the lock. 📅 Schedule release refuses
+  outright: there is nothing in the bank to date, and this page holds the whole
+  paper back rather than dating one question out of it.
+- **`_cpbCarryOver` reads the SAME `EDITOR_OWNED_QUESTION_FIELDS` allowlist**
+  `carryOverQuestionMeta` reads. A second list would be a second list to forget
+  a field from, and the symptom is the teacher's own ⇄ booklet override
+  (`_cpbBook`) silently thrown away by opening the question and pressing Save.
+- **THE POSITION IS THE POINT.** `_editReturnPage = 'custompaper'` brings the
+  trip back to the page and `_cpbEditFocus` scrolls the row back under the
+  teacher and flashes it, so a paper is worked through top to bottom rather than
+  found again after every fix. It is **spent on use**, or a later render drags
+  the page about.
+- **`_cpbEdit` is declared UP TOP with the other return state**, for the reason
+  `_wsQeReturn` is: `setEditMode` clears it and is reached during module
+  evaluation, so declared down beside the page it would be in its temporal dead
+  zone there and take the whole app down on load.
+- **`setEditMode(false)` is where it is cleared** — the one function every route
+  out of the editor goes through (Save, Cancel, or a fresh create started from
+  the sidebar). `editQuestion` clears it too, or a bank edit saved after a paper
+  edit would be written into a paper instead of into the bank.
+- A question that has LEFT the paper while the editor was open (cleared, sent,
+  re-read) is **said**, not silently appended back on.
+
+### 🖼 The figures are redrawn, because the figures ARE the paper (v1.365.0)
+
+`CPB_ENHANCE_MAX`, the `enhance` switch in `CPB_META_DEFAULTS`, `o.enhance` on
+`readQuestionRun`, the `budget` argument to `_epCropInto`, and `opts.onEnhance`
+on `_fillBlocksFromAiBoxes`.
+
+A figure cropped off a screenshot is a photograph of print — grey, and often a
+photograph of a photocopy. `_fillBlocksFromAiBoxes` can re-render it as clean
+black-and-white line work (`_BW_ENHANCE_PROMPT`, then `_paperCleanDataUrl`),
+and `_epCropInto` passed a flat **`maxEnhance: 0`**, so 🗂️ Custom Paper's
+figures were cropped and never cleaned.
+
+- **IT IS THE CALLER'S DECISION AND THE DEFAULT IS OFF.** An imported paper of
+  forty questions is dozens of slow image-model calls, which is why the exam
+  paper builder and the bulk import pass none and keep the sharp raw crops.
+  Custom Paper passes a budget, because there the figures are the paper.
+- **ONE BUDGET FOR THE WHOLE RUN.** `maxEnhance` inside
+  `_fillBlocksFromAiBoxes` is per CALL, and `_epCropInto` is called once per
+  screenshot group of every question — so a per-call cap is no cap at all on a
+  forty-question paper. `readQuestionRun` makes ONE `{ left }` object and every
+  crop shares it.
+- **`opts.onEnhance` is why the budget can be held across calls.** The return
+  value counts crops that LANDED, not re-renders that RAN, and a caller
+  decrementing by that spends its budget on pictures it never enhanced.
+- **`CPB_ENHANCE_MAX` is a runaway guard, not a budget to spend.** A real paper
+  has thirty-odd figures; anything past it is a pile of screenshots that was
+  never a paper.
+- **Cropping tight is NOT part of the switch and never was.** `_aiRefineCrop`
+  runs on every crop, on every path: it keeps everything belonging to the figure
+  (labels, pointer lines, axis titles, units, "Diagram 1") and cuts the question
+  sentences that came with it, and it is told never to cut through one of the
+  figure's own words. The switch's label says so, or a teacher turning it off to
+  save time would think they were turning the cropping off too.
+
+### 📁 Saved papers — a paper is a thing you come back to (v1.365.0)
+
+`CPB_LIB_MAX` / `CPB_LIB_MAX_BYTES` / `_cpbLib` / `_cpbLibId` / `cpbLibLoad` /
+**`cpbSavePaper`** / `_cpbLibOpenNow` / `cpbLibOpen` / `_cpbLibMarkSent` /
+`cpbLibDelete` / `cpbNewPaper` / `_cpbLibHtml`, filed under
+`users/{adminUid}/customPapers/{id}`.
+
+The per-tab IndexedDB draft (`_cpbDraft*`) is a **CRASH NET**: keyed by tab, it
+holds the screenshots, and it exists so a reload does not lose an afternoon. It
+is not a library — one window holds one paper, and last term's prelim is gone
+the moment this one starts. A saved paper is the other thing entirely: NAMED,
+listed, and reopened whenever.
+
+- **WHAT IS SAVED IS THE PAPER, NOT THE SCREENSHOTS**, and the card says so.
+  Once the questions are read out of them the screenshots are worth nothing to
+  a paper being edited, and they are megabytes apiece against a Firestore
+  document that **dies at 1 MB**. The pictures inside the questions are Storage
+  URLs and travel for free. A payload over `CPB_LIB_MAX_BYTES` is refused
+  **before** the write, naming the size, rather than failing inside Firestore
+  with an error nobody can act on.
+- **An opened paper is NOT dirty.** `_cpbDirty` means "the screenshots changed
+  since they were read"; set true on open it would nag to re-read a paper whose
+  screenshots do not exist any more, and 🔁 Read again would wipe the questions.
+- **Opening REPLACES the page, so it asks first** — and says outright when what
+  is on the page has never been saved. ✚ New paper **lets go** of the saved
+  paper rather than deleting it, so the next 💾 Save makes a new entry instead of
+  writing over last term's.
+- **A SAVED paper is not cleared by a send.** It is on the shelf, so clearing
+  the page would take away the very thing the shelf was for — the paper to
+  reprint and carry on editing — and put nothing in its place. It is stamped
+  `sentAt` instead, best effort: the questions really are in the bank whatever
+  that write does, so a toast saying the send failed would be untrue. An UNSAVED
+  paper still clears exactly as before, and the send confirm says so.
+- **Deleting a saved paper does not touch the questions**, which are in the bank
+  held back; the confirm says that in as many words.
+- `cpbLibLoad` marks itself loaded BEFORE the read, so a refused or failed one
+  does not have every render trying again behind a teacher who is working, and a
+  denied write is NAMED — it is a one-line rules fix on `customPapers`.
+
 ## House rules
+- After touching **✏️ the Custom Paper edit round-trip** (`_editorLoadQuestion`,
+  `_cpbEdit` / `_cpbEditActive` / `_cpbEditFocus`, `cpbEditQuestion`,
+  `_cpbCarryOver`, `cpbEditSave`, `_cpbFocusScroll`, the `_cpbEditActive()`
+  guards on `saveEditedQuestion` / `saveEditToBank` / `moveEditToVetting` /
+  `openEditorRelease` / `saveEditorRelease`, or `#cpbEditActions`), **🖼 the
+  figure enhancement** (`CPB_ENHANCE_MAX`, the `enhance` switch, `o.enhance`,
+  `_epCropInto`'s `budget`, `opts.onEnhance`) or **📁 saved papers**
+  (`CPB_LIB_*`, `cpbLibLoad`, `cpbSavePaper`, `_cpbLibOpenNow`, `cpbLibOpen`,
+  `_cpbLibMarkSent`, `cpbLibDelete`, `cpbNewPaper`), run
+  `node tools/custom-paper-tests.mjs`, `node tools/editor-release-tests.mjs`
+  and `node tools/preview-return-tests.mjs`. Every failure here is silent and
+  the page carries on working. **A save that reaches the bank is the worst of
+  them**: the paper and the bank then each hold half the question, with nothing
+  on any screen reporting it — which is why the hidden row is not the lock and
+  all four bank doors carry a guard. Let `_editorLoadQuestion` look a question
+  up and ✏️ Edit silently does nothing at all, because a paper question is in
+  neither list. Write a second carry-over list instead of reading
+  `EDITOR_OWNED_QUESTION_FIELDS` and the teacher's own ⇄ booklet override is
+  thrown away by opening the question and pressing Save. Declare `_cpbEdit`
+  down beside the page and `setEditMode` reaches it during module evaluation
+  and takes the whole app down on load. Lose `_cpbEditFocus` and the teacher is
+  put back at the top of a forty-question paper after every fix, which is
+  exactly the hunt this removed. On the FIGURES: hold the budget per CALL
+  rather than per RUN and a forty-question paper has no cap at all; decrement
+  it by the return value and it is spent on pictures that were never enhanced;
+  pass one from the exam paper builder and an imported paper costs dozens of
+  image calls nobody asked for. And on the SHELF: save the screenshots and the
+  document dies at 1 MB with the paper unsaved; mark an opened paper dirty and
+  the page nags to re-read screenshots it no longer has, one press from wiping
+  the questions; clear a SAVED paper on send and the shelf loses the very thing
+  it was for.
 - After touching **🗂️ Custom Paper** (`cpb*` / `CPB_*`, `qIsMcqOnly`,
   `readQuestionRun` and its two callers, the `paper` option in
   `buildWorksheetHtml`, `_printFrontAnchor` / `_printFrontRestarts` /

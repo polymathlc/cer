@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.364.0';
+const APP_VERSION = 'v1.365.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -3884,6 +3884,16 @@ let _vetReturnFocus = null;
 // in its temporal dead zone there and take the whole app down on load, which
 // is the same trap `var editorLos` carries.
 let _wsQeReturn = null;
+// 🗂️ THE PAPER QUESTION OPEN IN THE BLOCK EDITOR — { id }, or null.
+// A Custom Paper question is NOT in the bank (nothing is, until Send), so
+// every save while this is set writes back into the paper and NOTHING reaches
+// the bank. It lives up here with the other return state for the reason
+// `_wsQeReturn` does: `setEditMode` clears it and is reached during module
+// evaluation, so declared down beside the Custom Paper page it would be in its
+// temporal dead zone there and take the whole app down on load.
+let _cpbEdit = null;
+let _cpbEditFocus = '';   // the row to scroll back to and flash on return
+function _cpbEditActive() { return !!(_cpbEdit && currentEditingQuestion === _cpbEdit.id); }
 function editQuestionFromPapers(bankId, ppItemId) { editQuestion(bankId); _editReturnPage = 'papers'; _ppReturnFocus = ppItemId || null; _syncBackToPapersBtn(); }
 function _afterEditNavigate() {
   const dest = _editReturnPage || 'bank';
@@ -3924,6 +3934,10 @@ function _syncBackToPapersBtn() {
     b.style.display = '';
     b.innerHTML = '&larr; Back to Check Questions';
     b.title = 'Return to the check queue, on the same question';
+  } else if (_editReturnPage === 'custompaper') {
+    b.style.display = '';
+    b.innerHTML = '&larr; Back to the paper';
+    b.title = 'Return to Custom Paper, on the same question';
   } else {
     b.style.display = 'none';
   }
@@ -14214,8 +14228,13 @@ async function _aiRefineCrop(dataUrl) {
 // 0 = selection failed everywhere → caller falls back to the old flow.
 // opts.maxEnhance caps the slow image-model B&W re-renders (default 3;
 // bulk import passes 0 and keeps the sharp raw crops instead).
+// opts.onEnhance fires ONCE for each re-render actually started. It is how a
+// caller holds a budget across MANY calls — the return value counts crops that
+// landed, not re-renders that ran, and a caller decrementing by that would
+// spend its budget on pictures it never enhanced.
 async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus, opts) {
   const maxEnhance = (opts && Number.isFinite(opts.maxEnhance)) ? opts.maxEnhance : 3;
+  const onEnhance = (opts && typeof opts.onEnhance === 'function') ? opts.onEnhance : null;
   const fullDataUrl = 'data:' + mimeType + ';base64,' + b64;
   const crops = [];
   for (let i = 0; i < imgBlocks.length; i++) {
@@ -14240,6 +14259,7 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
     let dataUrl = crops[i];
     if (imageAiReady() && enhanced < maxEnhance) {
       enhanced++;
+      if (onEnhance) onEnhance();
       if (onStatus) onStatus(`Enhancing picture ${filled + 1} (black & white)…`);
       try { dataUrl = await generateCleanEnhancedImage(_BW_ENHANCE_PROMPT, [{ mimeType: 'image/png', data: crops[i].split(',')[1] || '' }]); }
       catch (e) { console.warn('crop enhance failed — keeping the sharp crop', e); dataUrl = crops[i]; }
@@ -15932,6 +15952,10 @@ var _editorReleaseFocus = null;
 function openScheduleFromCreate() { openEditorRelease(); }
 
 function openEditorRelease() {
+  // Scheduling a release means writing to the bank, which a 🗂️ Custom Paper
+  // question has not reached yet — and this page holds one back rather than
+  // dating it. See saveEditedQuestion.
+  if (_cpbEditActive()) { showToast('Send the paper to the bank first — then release it on the 🗓 Scheduled Questions page', 'info'); return; }
   if (!_canAuthor() || _editorReleaseSaving) return;
   if (!blocks.length) { showToast('Add some blocks before scheduling', 'error'); return; }
   const editingId = currentEditingQuestion;
@@ -15976,6 +16000,7 @@ function editorReleaseValid(on) {
 }
 
 async function saveEditorRelease() {
+  if (_cpbEditActive()) return false;   // not in the bank yet — see saveEditedQuestion
   if (_editorReleaseSaving || !_editorReleaseDraft || !_canAuthor()) return false;
   const { q: draft, editingId } = _editorReleaseDraft;
   const error = document.getElementById('editorReleaseError');
@@ -16381,6 +16406,20 @@ function setEditMode(isEditing) {
     editActions.style.display = 'none';
     if (regenBtn) regenBtn.style.display = 'none';
     const b = document.getElementById('backToPapersBtn'); if (b) b.style.display = 'none';
+    // Leaving the editor by ANY route ends a paper edit — Save, Cancel, or a
+    // fresh create started from the sidebar. Left set, the next question saved
+    // here would be written into a paper the author is no longer editing.
+    _cpbEdit = null;
+  }
+  // A Custom Paper question is not in the bank, so the ordinary edit row —
+  // 💾 Save Question, ✅ Save to Question Bank, 📤 Move to Vetting, 📅 Schedule
+  // release — would every one of them break the page's own contract. It gets
+  // its own row instead, with ONE meaning: save it back into the paper.
+  const cpbActions = document.getElementById('cpbEditActions');
+  if (cpbActions) {
+    const onPaper = isEditing && _cpbEditActive();
+    cpbActions.style.display = onPaper ? '' : 'none';
+    if (onPaper) editActions.style.display = 'none';
   }
   // The 🚦 lamp is about whatever question is in the editor NOW, and this is
   // the one function every route into and out of it goes through — opening a
@@ -16437,6 +16476,12 @@ function carryOverQuestionMeta(q) {
 }
 
 function saveEditedQuestion() {
+  // A 🗂️ Custom Paper question is not in the bank, and this page's whole
+  // contract is that nothing reaches it until Send. The button is hidden while
+  // one is open, but the guard is here as well: a save that quietly filed one
+  // question into the bank would leave the paper and the bank each holding
+  // half the truth, which nothing on any screen would report.
+  if (_cpbEditActive()) { cpbEditSave(); return; }
   if (blocks.length === 0) {
     showToast('Add some blocks before saving', 'error');
     return;
@@ -16480,6 +16525,7 @@ function _saveEditedQuestionConfirmed(q) {
 // database students see). If the question is in the vetting list, it's approved
 // out of vetting in the same step — no separate trip back to approve it.
 function saveEditToBank() {
+  if (_cpbEditActive()) { cpbEditSave(); return; }   // see saveEditedQuestion
   if (blocks.length === 0) { showToast('Add some blocks before saving', 'error'); return; }
   if (!currentEditingQuestion) { showToast('No question being edited', 'error'); return; }
   const id = currentEditingQuestion;
@@ -16518,7 +16564,8 @@ async function _saveEditToBankConfirmed(q, id) {
 }
 
 function cancelEdit() {
-  const backDest = (_wsQeReturn && _wsQeReturn.kind === 'paper') ? 'the paper preview'
+  const backDest = _cpbEditActive() ? 'the paper'
+    : (_wsQeReturn && _wsQeReturn.kind === 'paper') ? 'the paper preview'
     : _editReturnPage === 'papers' ? 'PSLE Papers'
     : _editReturnPage === 'vetting' ? 'the vetting list'
     : (_editReturnPage === 'myworksheets' || _editReturnPage === 'worksheet') ? 'the worksheet preview'
@@ -17330,6 +17377,9 @@ function editQuestion(id) {
   // the one way a return-to-where-you-were can send somebody somewhere they
   // have never been.
   _wsQeReturn = null;
+  // …and so does the paper question, or a bank edit saved afterwards would be
+  // written back into a paper instead of into the bank.
+  _cpbEdit = null;
   _vetReturnFocus = null;
   _vetReturnScroll = 0;
   // A vetting question goes back to the Vetting List afterwards, restoring the
@@ -17340,6 +17390,17 @@ function editQuestion(id) {
     const vetPage = document.getElementById('page-vetting');
     if (vetPage && vetPage.classList.contains('active')) _vetReturnScroll = window.scrollY || 0;
   }
+  _editorLoadQuestion(q);
+  showToast('Editing: ' + q.title, 'info');
+}
+
+// PUT ONE QUESTION INTO THE BLOCK EDITOR. Split out of `editQuestion` so a
+// question that is NOT in the bank can be opened in the very same editor —
+// 🗂️ Custom Paper's questions have not been sent anywhere yet, and a second
+// loader written for them would drift from this one field by field. It takes
+// the OBJECT, never an id, and never reads `questionBank`; the caller decides
+// where the trip comes back to (`_editReturnPage`).
+function _editorLoadQuestion(q) {
   _hideDupBanner();
   currentEditingQuestion = q.id;
   document.getElementById('questionTitle').value = q.title;
@@ -17415,7 +17476,6 @@ function editQuestion(id) {
   if (window.ppCancelPendingAttach) window.ppCancelPendingAttach();
   _skipCreateReset = true;
   navigateTo('create');
-  showToast('Editing: ' + q.title, 'info');
 }
 
 function duplicateQuestion(id) {
@@ -22540,10 +22600,16 @@ function _epStripNumbering(q) {
 // are grouped by the "page" the model named and each group is cropped from its
 // own screenshot. rawImgs and imgBlocks are index-aligned — buildBlocksFromAi
 // emits exactly one image block per image entry, in order.
-// maxEnhance 0, as in the bulk import: a whole paper would otherwise need
-// dozens of slow image-model calls, and any single picture can be enhanced
-// later by hand.
-async function _epCropInto(imgBlocks, qd, shots, onStatus) {
+// ENHANCEMENT IS THE CALLER'S DECISION, and the default is off. Re-rendering
+// a figure into clean black-and-white is a slow image-model call apiece, so an
+// imported paper of forty questions would spend dozens of them on pictures the
+// teacher is about to check anyway — the exam paper builder therefore passes
+// nothing and keeps the sharp raw crops, exactly as the bulk import does.
+// 🗂️ Custom Paper passes a budget, because there the figures are the paper.
+// `budget` is ONE object for the whole run ({ left }): the cap inside
+// _fillBlocksFromAiBoxes is per CALL, and this is called once per group of a
+// question and once per question, so a per-call cap would be no cap at all.
+async function _epCropInto(imgBlocks, qd, shots, onStatus, budget) {
   const rawImgs = (Array.isArray(qd && qd.blocks) ? qd.blocks : [])
     .filter(b => String((b && b.type) || '').toLowerCase() === 'image');
   const groups = new Map();
@@ -22561,7 +22627,11 @@ async function _epCropInto(imgBlocks, qd, shots, onStatus) {
     const shot = shots[pg];
     if (!shot) continue;
     let n = 0;
-    try { n = await _fillBlocksFromAiBoxes(g.blks, g.boxes, shot.mimeType, shot.data, onStatus, { maxEnhance: 0 }); }
+    const left = (budget && Number.isFinite(budget.left)) ? Math.max(0, budget.left) : 0;
+    try {
+      n = await _fillBlocksFromAiBoxes(g.blks, g.boxes, shot.mimeType, shot.data, onStatus,
+        { maxEnhance: left, onEnhance: () => { if (budget) budget.left = Math.max(0, (budget.left || 0) - 1); } });
+    }
     catch (err) { console.warn('exam paper: crop failed', err); }
     filled += n;
     if (n) continue;
@@ -22634,6 +22704,10 @@ function epBuildQuestions() {
 //   o.onDone   (q) — the same question, cropped and finished
 //   o.onExtend (q) — a question a later batch continued, after its crop
 //   o.stopped  () => true to stop between questions
+//   o.enhance  how many figures in the WHOLE run may be re-rendered into clean
+//              black-and-white (default 0 — the sharp raw crop is kept). One
+//              budget for the run, because a per-question cap is no cap at all
+//              on a forty-question paper.
 // Returns { questions, failed, stopped }.
 async function readQuestionRun(shots, o) {
   const opt = o || {};
@@ -22647,6 +22721,8 @@ async function readQuestionRun(shots, o) {
   let failed = 0;
   let last = null;   // the question a following batch may continue
   let quit = false;
+  // ONE budget object, shared by every _epCropInto call this run makes.
+  const enhance = { left: Math.max(0, Number(opt.enhance) || 0) };
 
   for (let start = 0; start < total; start += size) {
     if (stopped()) { quit = true; break; }
@@ -22686,7 +22762,7 @@ async function readQuestionRun(shots, o) {
           last.blanks = Object.assign({}, last.blanks, built.selectedBlanks);
           if (newImgs.length) {
             note(`${span}: cropping ${newImgs.length} picture${newImgs.length === 1 ? '' : 's'} continuing “${last.title || 'question'}”…`);
-            await _epCropInto(newImgs, qd, batch, m => note(`${span} — ${m}`));
+            await _epCropInto(newImgs, qd, batch, m => note(`${span} — ${m}`), enhance);
           }
           if (opt.onExtend) opt.onExtend(last);
           continue;
@@ -22697,7 +22773,7 @@ async function readQuestionRun(shots, o) {
         const imgBlocks = q.blocks.filter(b => b.type === 'image');
         if (imgBlocks.length) {
           note(`${span}: “${q.title || 'question'}” — cropping ${imgBlocks.length} picture${imgBlocks.length === 1 ? '' : 's'}…`);
-          await _epCropInto(imgBlocks, qd, batch, m => note(`${span} — ${m}`));
+          await _epCropInto(imgBlocks, qd, batch, m => note(`${span} — ${m}`), enhance);
         }
         questions.push(q);
         last = q;
@@ -23368,6 +23444,16 @@ const CPB_BATCH = 4;                       // images per AI call — see readQue
 const CPB_MCQ_MARKS = 2;
 const CPB_OPEN_DEFAULT_MARKS = 2;
 
+// 🖼 HOW MANY FIGURES ARE RE-RENDERED IN BLACK AND WHITE.
+// A figure cropped off a screenshot is a photograph of print: grey, and often
+// a photograph of a photocopy. On this page the figures ARE the paper, so they
+// are re-rendered clean (`_BW_ENHANCE_PROMPT`, then `_paperCleanDataUrl`) —
+// which is one image-model call apiece, and is why the exam paper builder and
+// the bulk import pass none. The number is a RUNAWAY GUARD, not a budget to
+// spend: a real paper has thirty-odd figures, and anything past this is a pile
+// of screenshots that was never a paper.
+const CPB_ENHANCE_MAX = 80;
+
 // =====================================================================
 // 🎯 THE SHAPE A PAPER IS BUILT TO
 //
@@ -23420,6 +23506,11 @@ const CPB_META_DEFAULTS = {
   qLevel: '',          // the syllabus level its topics are filed at
   mcqOnPaper: false,   // print an answer bracket in Booklet A (no separate answer sheet)
   answerSheet: true,   // print an answer grid for Booklet A at the end
+  // Re-render every cropped figure as clean black-and-white line work. ON by
+  // default — the figures are the paper — and turnable off, because it is a
+  // slow image-model call per picture and a teacher in a hurry with clean
+  // source scans does not need it.
+  enhance: true,
   // The shape this paper is being built to — see CPB_TARGET_MCQ above. Stored
   // per paper, so a shorter topical paper can set its own or turn them off.
   targetMcq: CPB_TARGET_MCQ,
@@ -23831,6 +23922,8 @@ async function _cpbRunBuild() {
     batch: CPB_BATCH,
     prompt: (n, from, total) => _cpbQuestionPrompt(n, from, total),
     stopped: () => _cpbCancel,
+    // ONE budget for the whole run — see CPB_ENHANCE_MAX.
+    enhance: _cpbMetaGet('enhance') ? CPB_ENHANCE_MAX : 0,
     onNote: _cpbNote,
     onBatch: (batch, status, err, span, made) => {
       batch.forEach(s => {
@@ -23895,6 +23988,319 @@ function cpbDropQuestion(id) {
     '“' + (q.title || 'Untitled question') + '” is removed from the paper. Nothing has been saved anywhere yet, so it is simply gone from the list.',
     () => { _cpbQuestions = _cpbQuestions.filter(x => x.id !== id); cpbRender(); });
 }
+// =====================================================================
+// ✏️ EDIT ONE QUESTION OF THE PAPER — the SAME block editor, and back again
+//
+// A question on this page is an ORDINARY BANK QUESTION in every respect but
+// one: it has not been saved anywhere. It was built by `buildQuestionFromAi`
+// through `qApplyAiParts`, exactly as ⚡ Rapid add's are, so its blocks, its
+// parts, its marks and its answers are the shape the block editor already
+// knows — which is what makes opening it there possible at all, rather than
+// this page needing an editor of its own.
+//
+// TWO RULES, and both are why this is not simply `editQuestion(id)`:
+//   1. `editQuestion` looks the question up in `questionBank` / `vettingList`.
+//      A paper question is in NEITHER, so it would find nothing and silently
+//      do nothing. `_editorLoadQuestion` takes the OBJECT instead.
+//   2. Every save in that editor writes to the bank. Here the ONLY meaning a
+//      save may have is "back into the paper" — the page's whole contract is
+//      that nothing reaches the bank until Send, and a question that quietly
+//      went early would leave the paper and the bank each holding half of it.
+//
+// AND THE POSITION IS KEPT: `_editReturnPage` brings the trip back to this
+// page and `_cpbEditFocus` scrolls the row back under the teacher and flashes
+// it, so a paper is worked through top to bottom rather than found again after
+// every fix.
+function cpbEditQuestion(id) {
+  if (!_canAuthor()) { showToast('Only question authors can edit a question', 'error'); return; }
+  if (_cpbBusy) { showToast('Wait for the paper to finish first', 'info'); return; }
+  const q = _cpbQuestions.find(x => x.id === id);
+  if (!q) return;
+  // The other return destinations are cleared for the reason `editQuestion`
+  // clears them: an edit started here must not bounce to whatever preview or
+  // paper was last left set.
+  _editReturnPage = 'custompaper';
+  _ppReturnFocus = null;
+  _wsQeReturn = null;
+  _vetReturnFocus = null;
+  _vetReturnScroll = 0;
+  _cpbEdit = { id: q.id };
+  _cpbEditFocus = q.id;
+  _editorLoadQuestion(q);
+  showToast('Editing “' + (q.title || 'Untitled question') + '” — saving puts it back on the paper, not in the bank', 'info');
+}
+
+// Everything the editor does NOT own, carried across from the copy on the
+// paper. It reads the SAME `EDITOR_OWNED_QUESTION_FIELDS` allowlist
+// `carryOverQuestionMeta` reads — a second list here would be a second list to
+// forget a field from, and the symptom is the teacher's own ⇄ booklet override
+// silently thrown away by opening the question and pressing Save.
+function _cpbCarryOver(q, prev) {
+  if (!prev) return;
+  Object.keys(prev).forEach(k => {
+    if (EDITOR_OWNED_QUESTION_FIELDS.has(k)) return;
+    if (q[k] === undefined) q[k] = prev[k];
+  });
+  if (prev.createdAt) q.createdAt = prev.createdAt;   // the editor stamps a fresh one
+}
+
+function cpbEditSave() {
+  if (!_cpbEditActive()) return;
+  if (!blocks.length) { showToast('Add some blocks before saving', 'error'); return; }
+  const id = _cpbEdit.id;
+  const at = _cpbQuestions.findIndex(x => x.id === id);
+  if (at < 0) {
+    // The paper was cleared, sent or re-read while the editor was open. Say so
+    // rather than silently dropping the edits, or appending a question to a
+    // paper the teacher has moved on from.
+    showToast('That question is no longer on the paper — your edits were not saved anywhere', 'error');
+    _cpbEdit = null;
+    currentEditingQuestion = null;
+    setEditMode(false);
+    blocks = []; selectedBlanks = {}; editorKeywords = {};
+    renderBlocks();
+    _afterEditNavigate();
+    return;
+  }
+  const q = collectQuestionData();
+  q.id = id;
+  _cpbCarryOver(q, _cpbQuestions[at]);
+  _cpbQuestions[at] = q;
+  _cpbEdit = null;
+  _cpbEditFocus = id;
+  currentEditingQuestion = null;
+  setEditMode(false);
+  blocks = []; selectedBlanks = {}; editorKeywords = {};
+  renderBlocks();
+  showToast('Saved back into the paper 📝 — nothing has gone to the bank yet', 'success');
+  _afterEditNavigate();
+}
+
+// Put the row back under the teacher after a trip to the editor. Spent on use,
+// so it fires once and a later render does not drag the page about.
+function _cpbFocusScroll() {
+  if (!_cpbEditFocus) return;
+  const id = _cpbEditFocus;
+  _cpbEditFocus = '';
+  setTimeout(() => {
+    const el = document.querySelector('.cpb-row[data-qid="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+    if (!el) return;
+    try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { el.scrollIntoView(); }
+    el.classList.add('cpb-row-flash');
+    setTimeout(() => el.classList.remove('cpb-row-flash'), 2200);
+  }, 60);
+}
+
+// =====================================================================
+// 📁 SAVED PAPERS — a paper is a thing you come back to
+//
+// The per-tab draft below is a CRASH NET: it is keyed by tab, it holds the
+// screenshots, and it exists so a reload does not lose an afternoon. It is not
+// a library — one window holds one paper, and last week's prelim is gone the
+// moment this one starts.
+//
+// A saved paper is the other thing entirely: NAMED, listed, and reopened
+// whenever. It is the teacher's own shelf — three mock papers on the go, one
+// per class, printed again next term.
+//
+// WHAT IS SAVED IS THE PAPER, NOT THE SCREENSHOTS, and the page says so. The
+// screenshots are the raw input: once the questions are read out of them they
+// are worth nothing to a paper being edited, and they are megabytes apiece
+// against a Firestore document that dies at 1 MB. The pictures inside the
+// questions are Storage URLs and travel for free.
+const CPB_LIB_MAX = 60;                    // papers on the shelf
+const CPB_LIB_MAX_BYTES = 900 * 1024;      // a Firestore document dies at 1 MB
+let _cpbLib = [];          // [{ id, name, at, nA, nB, marks, sentAt }] — newest first
+let _cpbLibId = '';        // the saved paper this page is editing, if any
+let _cpbLibLoaded = false;
+let _cpbLibBusy = false;
+
+function _cpbLibCol() { return collection(db, 'users', _bankOwnerUid(), 'customPapers'); }
+function _cpbLibDoc(id) { return doc(db, 'users', _bankOwnerUid(), 'customPapers', id); }
+function _cpbLibRow(r) {
+  return { id: r.id, name: r.name || '', at: Number(r.at) || 0, sentAt: Number(r.sentAt) || 0,
+    nA: Number(r.nA) || 0, nB: Number(r.nB) || 0, marks: Number(r.marks) || 0 };
+}
+function _cpbLibSort() { _cpbLib.sort((a, b) => (b.at || 0) - (a.at || 0)); }
+
+async function cpbLibLoad(force) {
+  if (!currentUser || !_canAuthor()) return;
+  if (_cpbLibLoaded && !force) return;
+  // Marked loaded BEFORE the read, so a refused or failed one does not have
+  // every render trying again — the shelf is empty and the page says nothing
+  // rather than hammering Firestore behind a teacher who is working.
+  _cpbLibLoaded = true;
+  try {
+    const snap = await getDocs(_cpbLibCol());
+    _cpbLib = [];
+    snap.forEach(d => {
+      const v = d.data() || {};
+      _cpbLib.push(_cpbLibRow({ id: d.id, name: v.name, at: v.at, sentAt: v.sentAt,
+        nA: v.nA, nB: v.nB, marks: v.marks }));
+    });
+    _cpbLibSort();
+  } catch (err) { console.warn('custom paper library:', err); }
+  cpbRender();
+}
+
+// 💾 Save this paper onto the shelf. Overwrites the one it was opened from, or
+// makes a new one — which is what the name is for, so the button says which.
+async function cpbSavePaper() {
+  if (!_canAuthor()) { showToast('Only question authors can save a paper', 'error'); return; }
+  if (_cpbLibBusy) return;
+  if (!_cpbQuestions.length) { showToast('Read the screenshots first — there is no paper to save yet', 'info'); return; }
+  const name = String(_cpbMetaGet('name') || '').trim();
+  if (!name) {
+    showToast('Give the paper a name in ① The paper first — that is what it is listed under', 'error');
+    return;
+  }
+  const m = cpbMarks();
+  const id = _cpbLibId || _cpbId();
+  const payload = {
+    name, at: Date.now(),
+    nA: m.nA, nB: m.nB, marks: m.total,
+    meta: Object.assign({}, _cpbMeta),
+    questions: _cpbQuestions,
+    savedBy: (currentUser && currentUser.uid) || '',
+  };
+  // A document that will not fit is refused BEFORE the write, naming the size,
+  // rather than failing inside Firestore with an error nobody can act on.
+  let bytes = 0;
+  try { bytes = JSON.stringify(payload).length; } catch (err) { bytes = 0; }
+  if (bytes > CPB_LIB_MAX_BYTES) {
+    showToast('This paper is too big to save in one piece (' + Math.round(bytes / 1024) + ' KB). '
+      + 'A picture pasted straight into a question rather than cropped from a screenshot is the usual cause.', 'error');
+    return;
+  }
+  if (!_cpbLibId && _cpbLib.length >= CPB_LIB_MAX) {
+    showToast('The shelf is full at ' + CPB_LIB_MAX + ' papers — delete one you have finished with first', 'error');
+    return;
+  }
+  _cpbLibBusy = true;
+  cpbRender();
+  try {
+    await setDoc(_cpbLibDoc(id), payload);
+    _cpbLibId = id;
+    const at = _cpbLib.findIndex(r => r.id === id);
+    const row = _cpbLibRow({ id, name, at: payload.at, nA: m.nA, nB: m.nB, marks: m.total,
+      sentAt: at >= 0 ? _cpbLib[at].sentAt : 0 });
+    if (at >= 0) _cpbLib[at] = row; else _cpbLib.push(row);
+    _cpbLibSort();
+    showToast('📁 Saved as “' + name + '” — reopen it any time from 📁 Saved papers', 'success');
+  } catch (err) {
+    console.warn('custom paper save:', err);
+    showToast(String((err && err.code) || '') === 'permission-denied'
+      ? 'This account is not allowed to save papers — the customPapers collection needs a rule'
+      : 'Could not save the paper — check your connection and try again', 'error');
+  }
+  _cpbLibBusy = false;
+  cpbRender();
+}
+
+async function _cpbLibOpenNow(id) {
+  _cpbLibBusy = true;
+  cpbRender();
+  try {
+    const snap = await getDoc(_cpbLibDoc(id));
+    if (!snap.exists()) {
+      _cpbLib = _cpbLib.filter(r => r.id !== id);
+      showToast('That paper is no longer there', 'error');
+    } else {
+      const v = snap.data() || {};
+      // The screenshots were never saved, so the page opens with none — and
+      // `_cpbDirty` stays FALSE, because the questions are not out of step
+      // with an empty pad. Set true it would nag to re-read a paper it cannot.
+      _cpbShots = [];
+      _cpbQuestions = Array.isArray(v.questions) ? v.questions : [];
+      _cpbMeta = Object.assign({}, CPB_META_DEFAULTS, v.meta || {});
+      _cpbDirty = false;
+      _cpbLibId = id;
+      _cpbDraftSig = '';
+      showToast('📁 Opened “' + (v.name || 'paper') + '” — ' + _cpbQuestions.length
+        + ' question' + (_cpbQuestions.length === 1 ? '' : 's') + '. The screenshots are not kept; the questions are.', 'success');
+    }
+  } catch (err) {
+    console.warn('custom paper open:', err);
+    showToast('Could not open that paper — check your connection and try again', 'error');
+  }
+  _cpbLibBusy = false;
+  cpbRender();
+}
+
+function cpbLibOpen(id) {
+  if (!_canAuthor() || _cpbLibBusy || _cpbBusy) return;
+  const row = _cpbLib.find(r => r.id === id);
+  if (!row) return;
+  if (_cpbEmpty()) { _cpbLibOpenNow(id).catch(err => console.warn('custom paper open:', err)); return; }
+  // Opening REPLACES what is on the page. Nothing on the page has been saved
+  // anywhere unless the teacher put it there, so this asks rather than being
+  // the button that quietly threw an afternoon away.
+  showConfirm('Open “' + (row.name || 'this paper') + '”',
+    'It replaces the paper on this page — '
+      + (_cpbQuestions.length ? _cpbQuestions.length + ' question' + (_cpbQuestions.length === 1 ? '' : 's') : 'no questions')
+      + (_cpbShots.length ? ' and ' + _cpbShots.length + ' screenshot' + (_cpbShots.length === 1 ? '' : 's') : '')
+      + '.'
+      + (_cpbLibId ? ' The paper you are on is saved; anything changed since is not.'
+                   : ' <b>The paper you are on has never been saved.</b> Save it first if you want it back.'),
+    () => { _cpbLibOpenNow(id).catch(err => console.warn('custom paper open:', err)); });
+}
+
+// A sent paper says so on the shelf. Best effort: the questions really are in
+// the bank whatever this write does, so a failure is logged and nothing else —
+// a toast saying the send failed would be untrue.
+async function _cpbLibMarkSent() {
+  if (!_cpbLibId) return;
+  const at = Date.now();
+  try { await setDoc(_cpbLibDoc(_cpbLibId), { sentAt: at }, { merge: true }); }
+  catch (err) { console.warn('custom paper sent stamp:', err); return; }
+  const i = _cpbLib.findIndex(r => r.id === _cpbLibId);
+  if (i >= 0) _cpbLib[i].sentAt = at;
+  cpbRender();
+}
+
+function cpbLibDelete(id) {
+  if (!_canAuthor() || _cpbLibBusy) return;
+  const row = _cpbLib.find(r => r.id === id);
+  if (!row) return;
+  showConfirm('Delete “' + (row.name || 'this paper') + '”',
+    'The saved paper is deleted. <b>Any question already sent to the bank stays there</b> — this is the paper, not the questions. '
+      + 'This cannot be undone.',
+    async () => {
+      try {
+        await deleteDoc(_cpbLibDoc(id));
+        _cpbLib = _cpbLib.filter(r => r.id !== id);
+        if (_cpbLibId === id) _cpbLibId = '';
+        showToast('Paper deleted', 'success');
+      } catch (err) {
+        console.warn('custom paper delete:', err);
+        showToast('Could not delete that paper — check your connection and try again', 'error');
+      }
+      cpbRender();
+    });
+}
+
+// Start a fresh paper. It does NOT delete the saved one — it lets go of it, so
+// the next 💾 Save makes a new entry rather than writing over last term's.
+function cpbNewPaper() {
+  if (!_canAuthor() || _cpbBusy) return;
+  const go = () => {
+    _cpbShots = [];
+    _cpbQuestions = [];
+    _cpbMeta = Object.assign({}, CPB_META_DEFAULTS);
+    _cpbDirty = false;
+    _cpbLibId = '';
+    _cpbDraftDrop().catch(err => console.warn('custom paper draft:', err));
+    cpbRender();
+    showToast('Started a new paper', 'success');
+  };
+  if (_cpbEmpty()) { go(); return; }
+  showConfirm('Start a new paper',
+    'The paper on this page is cleared.'
+      + (_cpbLibId ? ' It is saved on the shelf — anything changed since is not.'
+                   : ' <b>It has never been saved</b>, so it is gone.'),
+    go);
+}
+
 function cpbSetMeta(k, v) {
   if (!(k in CPB_META_DEFAULTS)) return;
   const def = CPB_META_DEFAULTS[k];
@@ -24188,7 +24594,9 @@ function cpbSend() {
   showConfirm('Send ' + n + ' question' + (n === 1 ? '' : 's') + ' to the bank',
     `${a.length} multiple choice and ${b.length} open-ended go into the question bank <b>held back from students</b> — you can edit, check, print and put them on a worksheet, and no practice mode, quest or game will serve one to a child until you release them.`
     + `<br><br>Release them later on the 🗓 <b>Scheduled Questions</b> page, which lists them under this paper's name.`
-    + (_cpbMetaGet('name') ? '' : '<br><br><b>This paper has no name yet.</b> The name is what groups them on that page — without one they are listed as “Unnamed paper”.'),
+    + (_cpbMetaGet('name') ? '' : '<br><br><b>This paper has no name yet.</b> The name is what groups them on that page — without one they are listed as “Unnamed paper”.')
+    + (_cpbLibId ? '<br><br>This paper is on your 📁 shelf, so it stays here to reprint and edit.'
+                 : '<br><br><b>This paper is not saved.</b> The questions go to the bank, but the paper itself — its booklets, its order, its covers — is cleared from this page. Press 💾 <b>Save this paper</b> first if you want to print it again.'),
     () => _cpbCommit());
 }
 
@@ -24235,11 +24643,19 @@ async function _cpbCommit() {
   // Only what really went is cleared. A part-failed send leaves the paper on
   // the page so the rest can be tried again, rather than losing the questions
   // that could not be saved.
+  //
+  // A SAVED paper is NOT cleared. It is on the shelf, so clearing the page
+  // would take away the very thing the shelf was for — the paper to reprint
+  // and carry on editing — and put nothing in its place. It is stamped as sent
+  // instead, so the list says which papers have been.
   if (done && !failed) {
-    _cpbQuestions = [];
-    _cpbShots = [];
-    _cpbDirty = false;
-    _cpbDraftDrop().catch(err => console.warn('custom paper draft:', err));
+    if (_cpbLibId) _cpbLibMarkSent().catch(err => console.warn('custom paper library:', err));
+    else {
+      _cpbQuestions = [];
+      _cpbShots = [];
+      _cpbDirty = false;
+      _cpbDraftDrop().catch(err => console.warn('custom paper draft:', err));
+    }
   }
   cpbRender();
   updateCounts();
@@ -24247,6 +24663,7 @@ async function _cpbCommit() {
   try { renderBankScheduled(); } catch (err) {}
   showToast(done
     ? `${done} question${done === 1 ? '' : 's'} sent to the bank, held back from students 🔒${failed ? ` · ${failed} could not be saved` : ''}`
+      + (done && !failed && _cpbLibId ? ' · the paper is still here' : '')
     : 'Nothing could be saved — check your connection and try again', failed ? 'error' : 'success');
 }
 
@@ -24258,10 +24675,51 @@ function cpbRender() {
     el.innerHTML = '<div class="cpb-card"><p class="cpb-empty">Only question authors can build a paper.</p></div>';
     return;
   }
-  el.innerHTML = _cpbIntroHtml() + _cpbDraftOfferHtml() + _cpbSetupHtml() + _cpbZoneHtml() + _cpbPaperCardHtml();
+  el.innerHTML = _cpbIntroHtml() + _cpbDraftOfferHtml() + _cpbLibHtml() + _cpbSetupHtml()
+    + _cpbZoneHtml() + _cpbPaperCardHtml();
   // Every mutation on this page ends in a render, so mirroring the draft from
   // here is the one hook that cannot be forgotten.
   _cpbDraftSave();
+  // …and so is putting the teacher back on the row they went off to edit.
+  _cpbFocusScroll();
+}
+
+// 📁 The shelf. Deliberately ABOVE the paper's own fields: it is where a
+// session starts — carry on with last week's, or start a new one — and a list
+// of saved papers at the bottom of a long page is a list nobody finds.
+function _cpbLibHtml() {
+  const open = _cpbLibId ? _cpbLib.find(r => r.id === _cpbLibId) : null;
+  const rows = _cpbLib.map(r => {
+    const on = r.id === _cpbLibId;
+    const bits = [];
+    if (r.nA || r.nB) bits.push(r.nA + ' + ' + r.nB + ' question' + (r.nA + r.nB === 1 ? '' : 's'));
+    if (r.marks) bits.push(r.marks + ' marks');
+    bits.push('saved ' + (_wkWhen(r.at) || 'earlier'));
+    if (r.sentAt) bits.push('sent to the bank 🔒');
+    return `<div class="cpb-lib-row${on ? ' cpb-lib-on' : ''}">
+      <div class="cpb-lib-main">
+        <div class="cpb-lib-name">${escapeHtml(r.name || 'Untitled paper')}${on ? ' <span class="cpb-lib-badge">open now</span>' : ''}</div>
+        <div class="cpb-lib-meta">${escapeHtml(bits.join(' · '))}</div>
+      </div>
+      <div class="cpb-lib-tools">
+        <button type="button" class="btn btn-outline btn-sm" onclick="cpbLibOpen('${r.id}')" ${(_cpbLibBusy || _cpbBusy || on) ? 'disabled' : ''}>${on ? 'Open' : '📂 Open'}</button>
+        <button type="button" class="cpb-tool cpb-tool-x" onclick="cpbLibDelete('${r.id}')" title="Delete this saved paper" ${_cpbLibBusy ? 'disabled' : ''}>✕</button>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="cpb-card">
+    <div class="cpb-head">
+      <h3 class="cpb-h3">📁 Saved papers ${_cpbLib.length ? `<span class="cpb-pill">${_cpbLib.length}</span>` : ''}</h3>
+      <div class="cpb-head-tools">
+        <button class="btn btn-outline btn-sm" onclick="cpbNewPaper()" ${_cpbBusy ? 'disabled' : ''}>✚ New paper</button>
+        <button class="btn btn-primary btn-sm" onclick="cpbSavePaper()" ${(_cpbLibBusy || _cpbBusy || !_cpbQuestions.length) ? 'disabled' : ''}>
+          ${_cpbLibBusy ? 'Saving…' : (open ? '💾 Save “' + escapeHtml(open.name || 'paper') + '”' : '💾 Save this paper')}
+        </button>
+      </div>
+    </div>
+    <p class="cpb-lead">Papers you can come back to and carry on with. <b>The questions are saved, the screenshots are not</b> — once they have been read the pictures inside each question are what the paper is made of, and they travel with it.${open ? '' : (_cpbQuestions.length ? ' This paper has not been saved yet.' : '')}</p>
+    ${rows ? `<div class="cpb-lib">${rows}</div>` : '<p class="cpb-empty">Nothing saved yet. Build a paper, give it a name in ① below, and press 💾 Save this paper.</p>'}
+  </div>`;
 }
 
 function _cpbIntroHtml() {
@@ -24315,6 +24773,7 @@ function _cpbSetupHtml() {
   const lv = _cpbMetaGet('qLevel');
   const onPaper = !!_cpbMetaGet('mcqOnPaper');
   const sheet = !!_cpbMetaGet('answerSheet');
+  const enhance = !!_cpbMetaGet('enhance');
   return `<div class="cpb-card">
     <div class="cpb-head"><h3 class="cpb-h3">① The paper</h3></div>
     <p class="cpb-lead">These print on the two covers. They are yours to fill in — nothing here is prefilled with an examination board's name, because this is your centre's paper and a cover that passes for an official one is not one to hand a class.</p>
@@ -24345,6 +24804,10 @@ function _cpbSetupHtml() {
       <label class="cpb-switch${onPaper ? ' cpb-switch-off' : ''}">
         <input type="checkbox" ${sheet ? 'checked' : ''} ${onPaper ? 'disabled' : ''} onchange="cpbSetMeta('answerSheet', this.checked)">
         <span>Print a <b>Booklet A answer sheet</b> as the last page${onPaper ? ' <span class="cpb-dim">— not needed, the answers are on the paper</span>' : ''}</span>
+      </label>
+      <label class="cpb-switch">
+        <input type="checkbox" ${enhance ? 'checked' : ''} onchange="cpbSetMeta('enhance', this.checked)">
+        <span>Redraw every figure as <b>clean black and white</b> <span class="cpb-dim">— sharp line work off a grey photograph of print. Slower: one image call per picture. Cropping tight to the figure, with the question wording off it and its own labels kept, happens either way.</span></span>
       </label>
     </div>
   </div>`;
@@ -24412,7 +24875,7 @@ function _cpbRowHtml(q, num, book, first, last) {
   const overridden = (q._cpbBook === 'a' || q._cpbBook === 'b') && q._cpbBook !== auto;
   const marks = book === 'a' ? CPB_MCQ_MARKS : cpbQuestionMarks(q);
   const parts = qPartsUsed(q.blocks || []);
-  return `<div class="cpb-row${overridden ? ' cpb-row-moved' : ''}">
+  return `<div class="cpb-row${overridden ? ' cpb-row-moved' : ''}" data-qid="${escapeHtml(String(q.id))}">
     <span class="cpb-row-n">${escapeHtml(num)}</span>
     <div class="cpb-row-main">
       <div class="cpb-row-title">${escapeHtml(q.title || 'Untitled question')}</div>
@@ -24428,6 +24891,7 @@ function _cpbRowHtml(q, num, book, first, last) {
       <button type="button" class="cpb-tool" onclick="cpbMove('${q.id}',-1)" title="Move up within this booklet" ${first ? 'disabled' : ''}>▲</button>
       <button type="button" class="cpb-tool" onclick="cpbMove('${q.id}',1)" title="Move down within this booklet" ${last ? 'disabled' : ''}>▼</button>
       <button type="button" class="cpb-tool" onclick="cpbSetBook('${q.id}','${book === 'a' ? 'b' : 'a'}')" title="${book === 'a' ? 'Move to Booklet B — the child writes the answer' : 'Move to Booklet A — the child chooses an option'}">⇄ ${book === 'a' ? 'B' : 'A'}</button>
+      <button type="button" class="cpb-tool cpb-tool-edit" onclick="cpbEditQuestion('${q.id}')" title="Open this question in the block editor — the same one the question bank uses. Saving puts it back on the paper, right here, and nothing goes to the bank." ${_cpbBusy ? 'disabled' : ''}>✏️ Edit</button>
       <button type="button" class="cpb-tool cpb-tool-x" onclick="cpbDropQuestion('${q.id}')" title="Take this question off the paper">✕</button>
     </div>
   </div>`;
@@ -24495,6 +24959,7 @@ function _cpbPaperCardHtml() {
 function cpbInit() {
   _cpbBindPaste();
   if (!_cpbDraftReady) _cpbDraftScan().catch(err => console.warn('custom paper draft:', err));
+  cpbLibLoad().catch(err => console.warn('custom paper library:', err));
   cpbRender();
 }
 
@@ -39711,6 +40176,7 @@ function deleteScheduledQuestion(docId) {
 // MOVE EDITED QUESTION TO VETTING (Admin)
 // =====================================================================
 function moveEditToVetting() {
+  if (_cpbEditActive()) { cpbEditSave(); return; }   // see saveEditedQuestion
   if (blocks.length === 0) {
     showToast('Add some blocks before saving', 'error');
     return;
@@ -71549,6 +72015,12 @@ window.cpbPrint = cpbPrint;
 window.cpbSend = cpbSend;
 window.cpbDraftTake = tab => { cpbDraftTake(tab).catch(err => console.warn('custom paper draft restore:', err)); };
 window.cpbDraftDiscard = cpbDraftDiscard;
+window.cpbEditQuestion = cpbEditQuestion;
+window.cpbEditSave = cpbEditSave;
+window.cpbSavePaper = () => { cpbSavePaper().catch(err => console.warn('custom paper save:', err)); };
+window.cpbLibOpen = cpbLibOpen;
+window.cpbLibDelete = cpbLibDelete;
+window.cpbNewPaper = cpbNewPaper;
 // Work sessions — the bar and the page are built from inline on* handlers.
 window.wkStart = wkStart;
 window.wkTogglePause = wkTogglePause;
