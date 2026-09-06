@@ -3467,6 +3467,39 @@ option {
     height: 20pt;
     width: 100%;
   }
+
+  /* 🎯 THE LEARNING-OBJECTIVES BOX — a blank rounded rectangle a pupil writes
+     their own objectives in. Deliberately NOT styled like
+     .print-open-answer-box: a bordered box on this sheet already means "write
+     your answer here", and a class that mistook this for the answer box would
+     put the answer to the question in the wrong place. So it is a lighter,
+     rounder, dashed rectangle with its purpose spelled out along the top.
+     `break-inside: avoid` keeps it with the question it belongs to — a box
+     stranded at the top of the next sheet belongs to nothing. */
+  .print-objectives-box {
+    border: 1pt dashed #9aa4ae;
+    border-radius: 8pt;
+    margin: 8pt 0 10pt 0;
+    padding: 7pt 9pt 8pt 9pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .print-objectives-label {
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6b7280;
+    margin-bottom: 5pt;
+  }
+  .print-objectives-lines {
+    width: 100%;
+  }
+  .print-objectives-line {
+    border-bottom: 1pt dotted #c7cdd4;
+    height: 20pt;
+    width: 100%;
+  }
   /* The MCQ answer box — where the student writes the option they chose.
      A printed MCQ used to end at its last option, so the answer went in the
      margin, in a different place on every script. Right-aligned and one line
@@ -3779,9 +3812,11 @@ option {
   .print-chunk-tall .print-open-answer-box,
   .print-chunk-tall .print-open-cer-box,
   .print-chunk-tall .print-cer-section,
+  .print-chunk-tall .print-objectives-box,
   .print-page-tall .print-open-answer-box,
   .print-page-tall .print-open-cer-box,
   .print-page-tall .print-cer-section,
+  .print-page-tall .print-objectives-box,
   .print-page-tall .print-ak-question {
     page-break-inside: auto !important;
     break-inside: auto !important;
@@ -10347,6 +10382,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             <input type="checkbox" id="printIncludeExpl" style="width:16px;height:16px;accent-color:var(--primary);">
             &#128161; Explanations on the answer key
           </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print a blank rounded box at the foot of every question for the student to write their own learning objectives in. A question that already has a 🎯 Learning Objectives block keeps its own box instead.">
+            <input type="checkbox" id="printIncludeObjBox" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#127919; Learning-objectives box on every question
+          </label>
           <span class="selected-count" id="printSelectedCount">0 selected</span>
           <button class="btn btn-primary" onclick="printWorksheet()" id="printBtn" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -10458,6 +10497,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             <input type="checkbox" id="wsIncludeExpl" style="width:16px;height:16px;accent-color:var(--primary);">
             &#128161; Explanations on the answer key
           </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print a blank rounded box at the foot of every question for the student to write their own learning objectives in. A question that already has a 🎯 Learning Objectives block keeps its own box instead.">
+            <input type="checkbox" id="wsIncludeObjBox" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#127919; Learning-objectives box on every question
+          </label>
         </div>
 
         <div class="ws-actions-bar">
@@ -10519,6 +10562,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <label title="Print each question's explanation on the answer key, under its answer. Write and edit them from the preview with ✏️ edit answer.">
             <input type="checkbox" id="mwIncludeExpl" style="width:16px;height:16px;accent-color:var(--primary);">
             &#128161; Explanations on the answer key
+          </label>
+          <label title="Print a blank rounded box at the foot of every question for the student to write their own learning objectives in. A question that already has a 🎯 Learning Objectives block keeps its own box instead.">
+            <input type="checkbox" id="mwIncludeObjBox" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#127919; Learning-objectives box on every question
           </label>
         </div>
         <div class="ws-saved-grid" id="savedWsGrid"></div>
@@ -13818,6 +13865,13 @@ body.lore-reading { overflow: hidden; }
 .fb-preview{ padding:10px 12px; border:1px dashed var(--border); border-radius:10px; background:#fff; font-size:0.92rem; line-height:2; }
 .fb-blank-slot{ display:inline-block; min-width:44px; border-bottom:1.5px solid #9aa0a6; margin:0 2px; text-align:center; white-space:nowrap; }
 .fb-sentence{ font-size:0.98rem; }
+
+/* 🎯 The learning-objectives box on SCREEN. The box itself is inline-styled by
+   objBoxScreenHtml — these blocks are rendered into half a dozen surfaces that
+   share no stylesheet — but the ruled lines are one rule rather than one style
+   attribute per line on a box that can hold twenty of them. */
+.ws-objectives-line{ border-bottom:1.5px dotted #cfd4da; height:26px; }
+.ws-objectives-line:last-child{ margin-bottom:2px; }
 .fb-input{ display:inline-block; padding:3px 8px; margin:0 3px; border:1px solid var(--border); border-bottom:2px solid var(--accent-blue,#2d6ca8); border-radius:6px; font-family:inherit; font-size:0.95rem; background:#fff; color:var(--on-surface,#14161a); min-width:70px; vertical-align:baseline; }
 .fb-input:focus{ outline:none; border-color:var(--accent-blue,#2d6ca8); box-shadow:0 0 0 2px rgba(59,130,246,0.15); }
 /* 🔑 Assign keywords — the panel under an answer block in the editor, and the

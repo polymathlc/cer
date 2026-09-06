@@ -633,6 +633,9 @@ const bwhStubs = `
   const _printMcqBlockHtml = (b) => renderImportedBlockStudent(b) + '<div class="print-mcq-answer">BRACKET</div>';
   const _pushBlockAnswerKey = (s, b) => { if (b.type === 'mcq') { const c = (b.options||[]).find(o=>o.id===b.correctId); if (c) s.push({ label: 'Answer', content: escapeHtml(c.text) }); } };
   const qMarksOf = () => 0;
+  // 🎯 The learning-objectives box. Off unless the print asked for it, which no
+  // Custom Paper print does — a mock exam paper is not where a pupil reflects.
+  const objBoxAutoHtml = (q, on) => on ? '<div class="print-objectives-box"></div>' : '';
   ${shapeFn}
   ${bwh}
   return buildWorksheetHtml;
