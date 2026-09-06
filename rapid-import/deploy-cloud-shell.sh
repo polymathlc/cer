@@ -8,6 +8,14 @@ readonly RAPID_REGION='us-central1'
 readonly RAPID_FIREBASE_VERSION='15.29.0'
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
+rapid_runtime=''
+rapid_probe=''
+rapid_cleanup() {
+  if [[ -n "$rapid_probe" ]]; then rm -f -- "$rapid_probe"; fi
+  if [[ -n "$rapid_runtime" ]]; then rm -rf -- "$rapid_runtime"; fi
+}
+trap rapid_cleanup EXIT
+
 fail() { echo "$*" >&2; exit 1; }
 for rapid_command in gcloud npm node python3 curl; do
   command -v "$rapid_command" >/dev/null || fail "Missing $rapid_command. Run this script in Google Cloud Shell."
@@ -27,9 +35,17 @@ for rapid_secret in GEMINI_API_KEY OPENAI_API_KEY; do
   [[ "$rapid_state" == ENABLED ]] || fail "$rapid_secret needs an enabled latest version in Secret Manager."
 done
 
-# Match the deployed runtime without changing the user's global Node installation.
+# Select Node in this process. Re-executing through npm can preserve an older
+# Node in Cloud Shell and restart setup indefinitely without reaching deployment.
 if [[ "$(node -p 'process.versions.node.split(".")[0]')" != 22 ]]; then
-  exec npm exec --yes --package=node@22 -- bash "$PWD/deploy-cloud-shell.sh"
+  echo 'Preparing a temporary Node 22 runtime...'
+  rapid_runtime=$(mktemp -d)
+  npm install --prefix "$rapid_runtime" --no-save --package-lock=false --no-audit --no-fund node@22
+  rapid_node_dir="$rapid_runtime/node_modules/node/bin"
+  [[ -x "$rapid_node_dir/node" ]] || fail 'Node 22 installation did not provide an executable. Resolve the installation error and rerun setup.'
+  export PATH="$rapid_node_dir:$PATH"
+  hash -r
+  [[ "$(node -p 'process.versions.node.split(".")[0]')" == 22 ]] || fail 'Could not activate Node 22. Setup stopped without restarting; check your Node installation before retrying.'
 fi
 rapid_firebase() { npx --yes "firebase-tools@$RAPID_FIREBASE_VERSION" "$@"; }
 if ! rapid_firebase functions:list --project "$RAPID_PROJECT" --json >/dev/null; then
@@ -68,7 +84,6 @@ rapid_queue_state=$(gcloud tasks queues describe rapidImportPage --location="$RA
 
 # Read-only check of the deployed callable's authentication gate. No PDFs/jobs created.
 rapid_probe=$(mktemp)
-trap 'rm -f -- "$rapid_probe"' EXIT
 rapid_http=$(curl --silent --show-error --max-time 60 --output "$rapid_probe" --write-out '%{http_code}' \
   --header 'Content-Type: application/json' --data '{"data":{}}' \
   "https://$RAPID_REGION-$RAPID_PROJECT.cloudfunctions.net/rapidImportStatus")

@@ -32,6 +32,11 @@ missing login, the script gives its standard browser sign-in command.
 The helper checks project access, existing billing and enabled secret versions
 (metadata only). It uses Node 22 and Firebase CLI 15.29.0, runs worker tests,
 deploys only `cer-rapid-import`, and discovers the deployed dispatcher identity.
+When the current Node version is not 22, it installs Node 22 into a temporary
+directory and selects it for this run. It does not restart itself or change
+the global Node installation, and removes the temporary runtime on exit.
+If an older setup repeatedly prints `Checking Google access`, press Ctrl+C,
+run `git pull --ff-only origin main` from the cloned repository, and rerun setup.
 It grants enqueue permission on the Rapid Add queue, service-account-user on
 that identity itself, and Cloud Run invoker on the Rapid Add worker service.
 It does not grant project-wide IAM roles, change billing, replace live rules,

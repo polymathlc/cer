@@ -27,6 +27,11 @@ Keep this setup terminal open until the command finishes. If it stops, resolve
 the displayed error and rerun the same command. You can send the error text
 back to chat, with credentials excluded.
 
+If an older script keeps repeating `Checking Google access`, press Ctrl+C to
+stop it. Run `git pull --ff-only origin main` from the cloned repository, then
+run setup again. The updated script selects Node 22 once and stops with an
+error if selection fails, instead of restarting itself.
+
 ## Verify two PDFs
 
 Open [the Science Learning Portal](https://polymathlc.github.io/cer/) and sign
