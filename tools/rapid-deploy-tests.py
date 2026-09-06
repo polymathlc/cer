@@ -15,11 +15,32 @@ scenario = os.environ['RAPID_TEST_SCENARIO']
 with open(os.environ['RAPID_TEST_LOG'], 'a') as log:
     log.write(json.dumps([tool, *args]) + '\n')
 if tool == 'node':
-    print('22')
+    installed = 'node_modules/node/bin' in str(pathlib.Path(sys.argv[0]).parent)
+    old_node = (scenario.startswith('node-') and not installed) or scenario == 'node-wrong-version'
+    print('20' if old_node else '22')
 elif tool == 'npm':
+    if args[0] == 'exec':
+        # Reproduce a shell that keeps selecting the old Node after npm exec.
+        # Bound the old script's recursion so a failing regression cannot hang.
+        attempts = int(os.environ.get('RAPID_TEST_RESTARTS', '0'))
+        if attempts >= 2: sys.exit('Repeated setup restart')
+        os.environ['RAPID_TEST_RESTARTS'] = str(attempts + 1)
+        os.execvp('bash', ['bash', args[-1]])
+    if args[0] == 'install':
+        if scenario == 'node-install-fail': sys.exit(1)
+        if scenario != 'node-missing-binary':
+            target = pathlib.Path(args[args.index('--prefix') + 1]) / 'node_modules/node/bin/node'
+            target.parent.mkdir(parents=True)
+            target.write_text(pathlib.Path(sys.argv[0]).read_text())
+            target.chmod(0o755)
+    if args[0] in ['ci', 'test']:
+        import shutil
+        selected = shutil.which('node')
+        with open(os.environ['RAPID_TEST_LOG'], 'a') as log:
+            log.write(json.dumps(['selected-node', selected]) + '\n')
     if scenario == 'tests-fail' and args[0] == 'test': sys.exit(1)
 elif tool == 'npx':
-    if scenario == 'deploy-fail' and 'deploy' in args: sys.exit(1)
+    if scenario in ['deploy-fail', 'node-deploy-fail'] and 'deploy' in args: sys.exit(1)
 elif tool == 'gcloud':
     if args[:2] == ['auth', 'list']:
         print('' if scenario == 'no-auth' else 'owner@example.com')
@@ -66,6 +87,40 @@ class DeployTests(unittest.TestCase):
             commands = [json.loads(line) for line in log.read_text().splitlines()]
             return result, commands
 
+    def test_old_node_is_replaced_once_without_restarting_setup(self):
+        result, commands = self.run_setup('node-old')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.count('Checking Google access'), 1)
+        installs = [c for c in commands if c[:2] == ['npm', 'install']]
+        self.assertEqual(len(installs), 1)
+        self.assertIn('node@22', installs[0])
+        runtime = Path(installs[0][installs[0].index('--prefix') + 1])
+        selected = [c[1] for c in commands if c[0] == 'selected-node']
+        self.assertEqual(selected, [str(runtime / 'node_modules/node/bin/node')] * 2)
+        self.assertFalse(runtime.exists(), 'Temporary Node installation was not cleaned up')
+        self.assertEqual(sum(c[0] == 'npx' and 'deploy' in c for c in commands), 1)
+
+    def test_node_selection_failures_stop_without_cloud_mutations(self):
+        for scenario in ['node-install-fail', 'node-missing-binary', 'node-wrong-version']:
+            with self.subTest(scenario=scenario):
+                result, commands = self.run_setup(scenario)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout.count('Checking Google access'), 1)
+                self.assertFalse(any('deploy' in c or 'enable' in c or 'add-iam-policy-binding' in c for c in commands))
+                self.assertNotIn('Deployment checks passed', result.stdout)
+                installs = [c for c in commands if c[:2] == ['npm', 'install']]
+                self.assertEqual(len(installs), 1)
+                self.assertFalse(Path(installs[0][installs[0].index('--prefix') + 1]).exists())
+
+    def test_temporary_runtime_is_cleaned_up_after_deploy_failure(self):
+        result, commands = self.run_setup('node-deploy-fail')
+        self.assertNotEqual(result.returncode, 0)
+        installs = [c for c in commands if c[:2] == ['npm', 'install']]
+        self.assertEqual(len(installs), 1)
+        self.assertFalse(Path(installs[0][installs[0].index('--prefix') + 1]).exists())
+        self.assertFalse(any('add-iam-policy-binding' in c for c in commands))
+        self.assertNotIn('Deployment checks passed', result.stdout)
+
     def test_prerequisites_fail_before_cloud_mutations(self):
         for scenario in ['no-auth', 'no-billing', 'disabled-secret', 'tests-fail']:
             with self.subTest(scenario=scenario):
@@ -92,6 +147,7 @@ class DeployTests(unittest.TestCase):
     def test_success_is_scoped_and_still_requires_live_acceptance(self):
         result, commands = self.run_setup('success')
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(any(c[:2] == ['npm', 'install'] for c in commands))
         deploys = [c for c in commands if c[0] == 'npx' and 'deploy' in c]
         self.assertEqual(len(deploys), 1)
         self.assertIn('functions:cer-rapid-import', deploys[0])
