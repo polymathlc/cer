@@ -7246,6 +7246,18 @@ body.practising-as .page-body { padding-bottom: 64px; }
 .cpb-lead { margin: 12px 0 0; font-size: 0.86rem; line-height: 1.65; color: var(--text-muted); }
 .cpb-lead.cpb-lock { margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
 .cpb-dim { color: var(--text-muted); font-weight: 400; }
+/* 🅰 The two modes. A segmented pair of real buttons rather than a dropdown:
+   what the page is about to build is the first decision on it, and a chooser
+   that has to be opened to be read is one nobody reads. */
+.cpb-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 18px; }
+.cpb-mode { display: flex; align-items: flex-start; gap: 12px; text-align: left; padding: 14px 16px; border: 1.5px solid var(--border); border-radius: 12px; background: var(--surface); cursor: pointer; font: inherit; color: inherit; transition: border-color 0.15s, background 0.15s, box-shadow 0.15s; }
+.cpb-mode:hover:not(:disabled) { border-color: var(--primary); }
+.cpb-mode:disabled { opacity: 0.5; cursor: default; }
+.cpb-mode-on { border-color: var(--primary); background: #eff6ff; box-shadow: 0 0 0 1px var(--primary) inset; }
+.cpb-mode-ico { font-size: 1.35rem; line-height: 1.2; flex: 0 0 auto; }
+.cpb-mode-txt { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cpb-mode-txt b { font-size: 0.9rem; }
+.cpb-mode-txt span { font-size: 0.78rem; line-height: 1.55; color: var(--text-muted); }
 .cpb-empty { margin: 14px 0 0; font-size: 0.86rem; color: var(--text-muted); line-height: 1.6; }
 .cpb-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .cpb-head-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
@@ -9186,7 +9198,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         Custom Worksheet
       </div>
       <div class="nav-section-label admin-only">Manage</div>
-      <div class="nav-item admin-only" data-page="custompaper" onclick="navigateTo('custompaper')" title="Custom Paper — build a mock paper from scratch. Paste the question screenshots in and they are read as one run, sorted into Booklet A (multiple choice) and Booklet B (open-ended), numbered straight through and printed with a cover for each booklet. Everything sent to the bank is held back from students until you release it.">
+      <div class="nav-item admin-only" data-page="custompaper" onclick="navigateTo('custompaper')" title="Custom Paper — build a mock exam paper OR an ordinary worksheet from scratch. Paste the question screenshots in and they are read as one run. In paper mode they are sorted into Booklet A (multiple choice) and Booklet B (open-ended), numbered straight through and printed with a cover for each booklet; in worksheet mode they print as one numbered list on an ordinary worksheet. Everything sent to the bank is held back from students until you release it.">
         <span class="ico">🗂️</span> Custom Paper
       </div>
       <div class="nav-item admin-only" data-page="exampaper" onclick="navigateTo('exampaper')" title="Exam Paper — add a whole paper from screenshots one question at a time, add the marking scheme separately, and the paper's own answers are slotted into the questions by question number.">
@@ -9797,10 +9809,12 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     </div>
 
     <!-- ==================== CUSTOM PAPER ==========================
-         A mock paper built from scratch: screenshots in, questions read as
-         one run, sorted into Booklet A (multiple choice) and Booklet B
-         (open-ended), and printed with a cover for each. Everything inside
-         #cpbBody is built by cpbRender() in app.js. -->
+         A mock paper OR an ordinary worksheet, built from scratch:
+         screenshots in, questions read as one run, and printed in whichever
+         of the two formats the 🅰 mode chooser is set to — a paper with
+         Booklet A, Booklet B and a cover for each, or one numbered list on a
+         worksheet. Everything inside #cpbBody is built by cpbRender() in
+         app.js; both modes hold every question back from students. -->
     <div class="page" id="page-custompaper">
       <div class="page-header">
         <div>
@@ -9808,7 +9822,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2>Custom Paper</h2>
           </div>
-          <div class="subtitle">Paste the questions in and get a whole mock paper — Booklet A, Booklet B, covers and an answer key.</div>
+          <div class="subtitle">Paste the questions in and get a whole mock paper — Booklet A, Booklet B, covers and an answer key — or an ordinary worksheet.</div>
         </div>
         <div class="cpb-status" id="cpbStatus"></div>
       </div>

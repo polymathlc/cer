@@ -4918,6 +4918,76 @@ sheet and an answer key. Admin only.
   changing if that were ever revisited.
 - Run **`node tools/custom-paper-tests.mjs`** after touching any of it.
 
+### 🅰 TWO MODES — an exam paper, or an ordinary worksheet (v1.368.0)
+
+`CPB_MODES` / **`cpbMode`** / `cpbIsWorksheet` / `cpbModeDef` / `cpbThing` /
+`cpbSetMode`, **`cpbLayout`** (with `cpbBooklets` as its paper-mode name),
+`cpbDefaultMarks`, `CPB_TARGET_QUESTIONS`, `_cpbWsLeadHtml` /
+**`_cpbWorksheetOpts`** / **`_cpbOutputOpts`**, `_cpbWorksheetSetupHtml` /
+`_cpbLevelFieldHtml` / `_cpbEnhanceSwitchHtml`, `_cpbWorksheetListHtml`, the
+`mode` / `targetQuestions` / `wsIntro` / `wsFields` fields on
+`CPB_META_DEFAULTS`, and the `.cpb-mode*` CSS.
+
+The same pile of screenshots is two different things depending on what the
+teacher is making, and **the difference is the FORMAT and nothing else**:
+📄 **paper** is Booklet A, Booklet B, a cover for each and an answer sheet;
+📝 **worksheet** is one numbered list on an ordinary worksheet — this app's own
+header, the Name / Class / Date strip, and every answer written on the sheet.
+
+- **EVERYTHING ELSE IS IDENTICAL, deliberately.** The same screenshot pad, the
+  same shared `readQuestionRun`, the same ✏️ editor round-trip, the same 📁
+  shelf, the same 👁 preview — and **the same 🔒 HOLD BACK**, for the same
+  reason: the teacher has to be able to print, edit and check the sheet, and no
+  child may meet a question off it before they have sat it. `_cpbCommit` has
+  **no mode branch at all**, and the harness pins that: one branch there is a
+  mode whose questions quietly reach students.
+- **`cpbMode()` IS THE ONE PLACE THE MODE IS DECIDED, and it FAILS TO
+  `'paper'`.** Every paper saved before this existed carries no `mode` field
+  and is a paper; a stray value is a paper too, because that is the mode with
+  the covers ON — the worst it can do is print two sheets nobody wanted, where
+  failing the other way silently strips the covers, the booklet split and the
+  answer sheet off a mock exam somebody is about to sit.
+- **`cpbLayout()` IS THE ONE PLACE THE PRINTED ORDER AND THE PRINTED NUMBERS
+  ARE DECIDED**, in both modes, because the number on the sheet, the number on
+  the answer key and the number in the ③ list all have to be the SAME number.
+  A paper is two booklets numbered as one run; **a worksheet is the single list
+  the teacher arranged, numbered 1…n and never re-ordered** — hoisting its MCQs
+  to the front would throw away the order that was the whole point of
+  arranging it. `cpbBooklets()` is kept as its paper-mode name so no existing
+  caller moved, and in worksheet mode `a` is empty and `b` is everything, which
+  is what lets the totals read the same fields either way.
+- **A WORKSHEET PASSES NO `paper` OPTION AT ALL**, and that is what makes it
+  the app's ORDINARY worksheet: `buildWorksheetHtml` then goes down
+  byte-for-byte the path every other worksheet print takes — a "Question N"
+  heading, an answer bracket under every MCQ, the worksheet header, no cover,
+  no mid-document sheet and no answer sheet. **There is no rendering here that
+  is this mode's own**, which is also what stops it becoming a second renderer
+  to keep in step with the first.
+- **`_cpbOutputOpts()` is the ONE door** the printer, the preview and 🖨 from
+  inside the preview all go through. Asked separately, the preview and the PDF
+  would drift — and a preview of a different sheet is the one thing a preview
+  must never be.
+- **SWITCHING COSTS NOTHING, which is why it is one tap with no confirm.** The
+  questions, their order, every ⇄ booklet moved by hand and every field typed
+  on either side all stay: the worksheet's fields sit on the SAME meta object
+  as the paper's rather than in a nested one, so switching and switching back
+  loses nothing a teacher has typed.
+- **A WORKSHEET HAS NO STANDARD LENGTH**, so `CPB_TARGET_QUESTIONS` is **0** —
+  which in this file means *do not measure me*. A teacher who wants twenty
+  questions types 20 and gets the same gap chip the paper's two targets give;
+  one who does not is never nagged for building a short sheet.
+- **`cpbDefaultMarks(q)` decides what an unmarked question is worth by its
+  KIND.** The two numbers being equal today is not a reason for one caller to
+  assume the other. A question printing nothing still counts as its default and
+  is REPORTED as assumed — a total that silently understates the sheet is worse
+  than one that says what it had to guess.
+- **A worksheet row has no ⇄ button.** A button that moves a question into a
+  booklet nothing is printing is a button that appears to do nothing.
+- The 📁 shelf stores `mode` at the TOP level as well as inside `meta`, so a row
+  can be badged without reading the whole document back; a row written before
+  this existed carries none and is a paper.
+- Run **`node tools/custom-paper-tests.mjs`** after touching any of it.
+
 ### 🔒 Held back — in the bank, and not for students yet (v1.363.0)
 
 `qHeldBack` folded into **`qReleased`**, the chip in `qReleaseChipHtml`, and
@@ -5282,6 +5352,23 @@ every booklet they had moved by hand went with it.
   the page nags to re-read screenshots it no longer has, one press from wiping
   the questions; clear a SAVED paper on send and the shelf loses the very thing
   it was for.
+- After touching **🅰 the two modes** (`CPB_MODES`, `cpbMode`,
+  `cpbIsWorksheet`, `cpbThing`, `cpbSetMode`, `cpbLayout`, `cpbDefaultMarks`,
+  `CPB_TARGET_QUESTIONS`, `_cpbWorksheetOpts`, `_cpbOutputOpts`,
+  `_cpbWorksheetSetupHtml`, `_cpbWorksheetListHtml`, or the `mode` /
+  `targetQuestions` / `wsIntro` / `wsFields` meta fields), run
+  `node tools/custom-paper-tests.mjs`. The mode decides the FORMAT and nothing
+  else, so every failure prints perfectly in the wrong shape. **Fail the
+  fallback the other way** — read a missing or stray `mode` as a worksheet —
+  and a mock exam comes off the printer with its covers, its booklet split and
+  its answer sheet gone, on the morning a class sits it. Number a worksheet
+  through the booklet model and its MCQs are hoisted to the front of a sheet
+  whose order was the whole point of arranging it. Pass a `paper` option in
+  worksheet mode and it quietly grows an exam paper's gutter numbers and loses
+  the bracket its MCQs are answered in. Branch `_cpbCommit` on the mode and you
+  have a mode whose questions reach students — the one failure this page must
+  never have. And let switching modes throw away a ⇄ override or a typed field
+  and it becomes a switch nobody dares press.
 - After touching **🗂️ Custom Paper** (`cpb*` / `CPB_*`, `qIsMcqOnly`,
   `readQuestionRun` and its two callers, the `paper` option in
   `buildWorksheetHtml`, `_printFrontAnchor` / `_printFrontRestarts` /
