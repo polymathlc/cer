@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.363.0';
+const APP_VERSION = 'v1.364.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -23361,12 +23361,38 @@ function _epMatchRowHtml(q, opts) {
 const CPB_MAX_SHOTS = 160;                 // screenshots held in memory at once
 const CPB_MAX_BYTES = 14 * 1024 * 1024;
 const CPB_BATCH = 4;                       // images per AI call — see readQuestionRun
-// PSLE prints 2 marks for every Booklet A question, and an open-ended part
-// carries its own printed [n]. A B question the reader found no marks on is
-// counted as this rather than as nothing, so the cover's total is never
-// silently short — and the page says how many were counted that way.
+// A multiple-choice question is worth 2 marks, and an open-ended part carries
+// its own printed [n]. A B question the reader found no marks on is counted as
+// the default rather than as nothing, so the cover's total is never silently
+// short — and the page says how many were counted that way.
 const CPB_MCQ_MARKS = 2;
 const CPB_OPEN_DEFAULT_MARKS = 2;
+
+// =====================================================================
+// 🎯 THE SHAPE A PAPER IS BUILT TO
+//
+// The current syllabus is 30 multiple choice at 2 marks each — 60 marks of
+// Booklet A — and 40 marks of open-ended in Booklet B, 100 in all. (The paper
+// was 28 and 44 before it changed, which is why these are NOT read off any
+// past paper and are not assumed anywhere: they are stated here, once, and
+// they are editable per paper.)
+//
+// IT IS A TARGET, NEVER A TOTAL. Nothing printed on a cover comes from here —
+// the covers state what the paper ACTUALLY adds up to, always, because a
+// cover claiming 60 marks over 25 questions is a lie a class discovers in the
+// exam hall. What the target does is tell the teacher how far off they are
+// while they are still building, which is the whole reason assembling a mock
+// paper is slow: 24 of 30, and Booklet B eight marks short.
+const CPB_TARGET_MCQ = 30;          // questions in Booklet A
+const CPB_TARGET_OPEN_MARKS = 40;   // marks in Booklet B
+// A target of 0 means "no target" — a short topical paper is a real thing to
+// build, and a page nagging that it is 22 questions short of a PSLE paper is
+// a page whose warnings get ignored.
+function _cpbTargetNum(v, fallback) {
+  const n = parseInt(v, 10);
+  if (!isFinite(n) || n < 0) return fallback;
+  return Math.min(n, 999);
+}
 const CPB_DRAFT_MAX_BYTES = 40 * 1024 * 1024;
 
 let _cpbShots = [];        // [{ id, mimeType, data, name, status, err, group, n }]
@@ -23394,6 +23420,10 @@ const CPB_META_DEFAULTS = {
   qLevel: '',          // the syllabus level its topics are filed at
   mcqOnPaper: false,   // print an answer bracket in Booklet A (no separate answer sheet)
   answerSheet: true,   // print an answer grid for Booklet A at the end
+  // The shape this paper is being built to — see CPB_TARGET_MCQ above. Stored
+  // per paper, so a shorter topical paper can set its own or turn them off.
+  targetMcq: CPB_TARGET_MCQ,
+  targetOpen: CPB_TARGET_OPEN_MARKS,
 };
 let _cpbMeta = Object.assign({}, CPB_META_DEFAULTS);
 
@@ -23456,7 +23486,44 @@ function cpbMarks() {
     if (m) bm += m;
     else { bm += CPB_OPEN_DEFAULT_MARKS; guessed++; }
   });
-  return { a: a.length * CPB_MCQ_MARKS, b: bm, total: a.length * CPB_MCQ_MARKS + bm, guessed };
+  const am = a.length * CPB_MCQ_MARKS;
+  // What the paper is being built TO, beside what it actually adds up to.
+  // Both numbers are here so no caller has to work one of them out for itself
+  // and get the arithmetic subtly different from the bar next to it.
+  const wantMcq = _cpbTargetNum(_cpbMetaGet('targetMcq'), CPB_TARGET_MCQ);
+  const wantOpen = _cpbTargetNum(_cpbMetaGet('targetOpen'), CPB_TARGET_OPEN_MARKS);
+  return {
+    a: am, b: bm, total: am + bm, guessed,
+    nA: a.length, nB: b.length,
+    wantMcq, wantOpen,
+    wantA: wantMcq * CPB_MCQ_MARKS,
+    wantTotal: wantMcq * CPB_MCQ_MARKS + wantOpen,
+    // Positive = still to find, negative = over. Null when there is no target,
+    // which is how a short topical paper says "do not measure me".
+    needMcq: wantMcq ? wantMcq - a.length : null,
+    needOpen: wantOpen ? wantOpen - bm : null,
+  };
+}
+
+// "8 questions to go" / "3 marks over" / "✓" — written once, because it is
+// said about Booklet A's questions, about Booklet B's marks and about the
+// whole paper, and three spellings of the same thing read as three states.
+//
+// THE UNIT IS NOT OPTIONAL. Booklet A is measured in QUESTIONS and Booklet B
+// in MARKS, and the two chips sit side by side: a bare "26 to go" on each is
+// two different quantities wearing the same words, which is worse than not
+// saying it at all.
+function cpbGapLabel(need, unit) {
+  if (need == null) return '';
+  const n = Math.abs(need);
+  const u = unit ? ' ' + unit + (n === 1 ? '' : 's') : '';
+  if (need > 0) return n + u + ' to go';
+  if (need < 0) return n + u + ' over';
+  return '✓';
+}
+function cpbGapClass(need) {
+  if (need == null) return '';
+  return need === 0 ? ' cpb-on-target' : (need < 0 ? ' cpb-over' : ' cpb-under');
 }
 
 // ---- The draft survives the window ---------------------------------------
@@ -23830,10 +23897,15 @@ function cpbDropQuestion(id) {
 }
 function cpbSetMeta(k, v) {
   if (!(k in CPB_META_DEFAULTS)) return;
-  _cpbMeta[k] = typeof CPB_META_DEFAULTS[k] === 'boolean' ? !!v : String(v == null ? '' : v).slice(0, 120);
-  // The text fields must not re-render — the caret would jump to the top on
-  // every keystroke. Only the switches, which change what the page SAYS, do.
-  if (typeof CPB_META_DEFAULTS[k] === 'boolean' || k === 'qLevel') cpbRender();
+  const def = CPB_META_DEFAULTS[k];
+  if (typeof def === 'boolean') _cpbMeta[k] = !!v;
+  else if (typeof def === 'number') _cpbMeta[k] = _cpbTargetNum(v, 0);
+  else _cpbMeta[k] = String(v == null ? '' : v).slice(0, 120);
+  // The TEXT fields must not re-render — the caret would jump to the top on
+  // every keystroke. The switches and the level do, because they change what
+  // the page says; so do the targets, and their inputs fire on `change`
+  // (blur/Enter) rather than on every keystroke for exactly that reason.
+  if (typeof def === 'boolean' || typeof def === 'number' || k === 'qLevel') cpbRender();
   else _cpbDraftSave();
 }
 
@@ -24219,6 +24291,18 @@ function _cpbDraftOfferHtml() {
   }).join('');
 }
 
+// The two targets. `change` rather than `input`, so the page redraws when the
+// number is FINISHED rather than on every keystroke — typing "30" over "3"
+// would otherwise re-render at "3" and take the caret with it.
+function _cpbNumField(k, label, hint) {
+  return `<label class="cpb-field">
+    <span class="cpb-field-label">${escapeHtml(label)}${hint ? ` <span class="cpb-dim">${escapeHtml(hint)}</span>` : ''}</span>
+    <input class="form-input" type="number" min="0" max="999" step="1"
+           value="${escapeHtml(String(_cpbMetaGet(k)))}"
+           onchange="cpbSetMeta('${k}', this.value)" autocomplete="off">
+  </label>`;
+}
+
 function _cpbField(k, label, ph, hint) {
   return `<label class="cpb-field">
     <span class="cpb-field-label">${escapeHtml(label)}${hint ? ` <span class="cpb-dim">${escapeHtml(hint)}</span>` : ''}</span>
@@ -24243,6 +24327,8 @@ function _cpbSetupHtml() {
       ${_cpbField('year', 'Year')}
       ${_cpbField('code', 'Paper code', 'e.g. 0009/2', '— optional')}
       ${_cpbField('duration', 'Total time', 'e.g. 1 h 45 min')}
+      ${_cpbNumField('targetMcq', 'Booklet A target', '— questions; 0 turns the target off')}
+      ${_cpbNumField('targetOpen', 'Booklet B target', '— marks; 0 turns the target off')}
       <label class="cpb-field">
         <span class="cpb-field-label">File the questions at <span class="cpb-dim">— narrows the topics the AI may choose from</span></span>
         <select class="form-input" onchange="cpbSetMeta('qLevel', this.value)">
@@ -24385,11 +24471,21 @@ function _cpbPaperCardHtml() {
       </div>
     </div>
     <div class="cpb-totals">
-      <span><b>${m.total}</b> marks in total</span>
-      <span>Booklet A <b>${m.a}</b></span>
-      <span>Booklet B <b>${m.b}</b></span>
+      <span class="cpb-total-big${m.wantTotal ? cpbGapClass(m.wantTotal - m.total) : ''}">
+        <b>${m.total}</b>${m.wantTotal ? ' of ' + m.wantTotal : ''} marks in total${m.wantTotal ? ' <span class="cpb-gap">' + escapeHtml(cpbGapLabel(m.wantTotal - m.total, 'mark')) + '</span>' : ''}
+      </span>
+      <span class="${(m.needMcq == null ? '' : cpbGapClass(m.needMcq)).trim()}"
+            title="Booklet A is ${CPB_MCQ_MARKS} marks a question, so the questions and the marks move together.">
+        Booklet A <b>${m.nA}</b>${m.wantMcq ? ' of ' + m.wantMcq : ''} question${m.nA === 1 ? '' : 's'} ·
+        <b>${m.a}</b>${m.wantA ? ' of ' + m.wantA : ''} marks${m.needMcq ? ' <span class="cpb-gap">' + escapeHtml(cpbGapLabel(m.needMcq, 'question')) + '</span>' : ''}
+      </span>
+      <span class="${(m.needOpen == null ? '' : cpbGapClass(m.needOpen)).trim()}">
+        Booklet B <b>${m.nB}</b> question${m.nB === 1 ? '' : 's'} ·
+        <b>${m.b}</b>${m.wantOpen ? ' of ' + m.wantOpen : ''} marks${m.needOpen ? ' <span class="cpb-gap">' + escapeHtml(cpbGapLabel(m.needOpen, 'mark')) + '</span>' : ''}
+      </span>
       ${m.guessed ? `<span class="cpb-warn-inline" title="These questions had no printed mark allocation for the reader to find, so each is counted as ${CPB_OPEN_DEFAULT_MARKS}. Open one in the editor to set its marks properly.">⚠ ${m.guessed} counted as ${CPB_OPEN_DEFAULT_MARKS}</span>` : ''}
     </div>
+    ${(m.needMcq || m.needOpen) ? `<p class="cpb-target-note">🎯 Building to <b>${m.wantMcq || '—'}</b> multiple choice${m.wantMcq ? ` (${m.wantA} marks)` : ''} and <b>${m.wantOpen || '—'}</b> marks of open-ended — <b>${m.wantTotal}</b> in all. Change the two targets in ① The paper, or set either to 0 for a shorter paper. Nothing printed on a cover comes from here: the covers always state what the paper really adds up to.</p>` : ''}
     ${_cpbBookletHtml('a', a, numbers, m.a)}
     ${_cpbBookletHtml('b', b, numbers, m.b)}
   </div>`;

@@ -60,17 +60,31 @@ const model = cut(
   '\n// ---- The draft survives the window',
   'booklet model');
 
+// The REAL target block too, so the arithmetic the progress bar shows is the
+// arithmetic that is tested rather than a stub that cannot disagree with it.
+const target = cut(
+  '// 🎯 THE SHAPE A PAPER IS BUILT TO',
+  '\nlet _cpbShots = [];',
+  'paper target');
+
 const shim = `
   const CPB_MCQ_MARKS = 2, CPB_OPEN_DEFAULT_MARKS = 2, QMARKS_MAX = 99;
   let _cpbQuestions = [];
+  let _cpbMeta = {};
   const cpbRender = () => {};
+  ${target}
+  const CPB_META_DEFAULTS = { targetMcq: CPB_TARGET_MCQ, targetOpen: CPB_TARGET_OPEN_MARKS };
+  function _cpbMetaGet(k) { const v = _cpbMeta[k]; return v === undefined || v === null ? CPB_META_DEFAULTS[k] : v; }
   ${marks}
   ${shape}
   ${model}
   return {
     qIsMcqOnly, cpbBookOf, cpbSetBook, cpbBooklets, cpbMarks, cpbQuestionMarks,
+    cpbGapLabel, cpbGapClass, _cpbTargetNum,
+    CPB_TARGET_MCQ, CPB_TARGET_OPEN_MARKS,
     set: qs => { _cpbQuestions = qs; },
     get: () => _cpbQuestions,
+    setMeta: m => { _cpbMeta = m || {}; },
   };
 `;
 let api;
@@ -160,6 +174,89 @@ ok('qIsMcqOnly takes a QUESTION as well as a block list — both call sites pass
 {
   api.set([mcq('a1')]);
   eq('a paper with no open questions guesses nothing', api.cpbMarks().guessed, 0);
+}
+
+/* ---------- ⑤ the shape the paper is built to ---------- */
+{
+  // The current syllabus: 30 multiple choice at 2 marks each and 40 marks of
+  // open-ended, 100 in all. It was 28 and 44 before it changed, which is why
+  // these are stated once rather than read off a past paper.
+  eq('the Booklet A target is 30 questions', api.CPB_TARGET_MCQ, 30);
+  eq('…which is 60 marks at 2 a question', api.CPB_TARGET_MCQ * 2, 60);
+  eq('the Booklet B target is 40 marks', api.CPB_TARGET_OPEN_MARKS, 40);
+
+  api.setMeta({});
+  api.set([]);
+  const empty = api.cpbMarks();
+  eq('an empty paper knows what it is aiming at', empty.wantTotal, 100);
+  eq('…and how far off it is', empty.needMcq, 30);
+  eq('…on both counts', empty.needOpen, 40);
+
+  // A full paper: 30 MCQs and 40 marks of open-ended.
+  const full = [];
+  for (let i = 1; i <= 30; i++) full.push(mcq('m' + i));
+  for (let i = 1; i <= 10; i++) full.push(open('o' + i, 4));
+  api.set(full);
+  const m = api.cpbMarks();
+  eq('30 multiple choice is 60 marks', m.a, 60);
+  eq('…and the target is met', m.needMcq, 0);
+  eq('40 marks of open-ended meets Booklet B', m.b, 40);
+  eq('…and its target too', m.needOpen, 0);
+  eq('the paper is 100 marks', m.total, 100);
+  eq('…which is what it was built to', m.wantTotal, 100);
+  eq('the question counts are reported beside the marks', m.nA + '/' + m.nB, '30/10');
+
+  // Short of the target — the ordinary state while a paper is being built.
+  api.set(full.slice(0, 24).concat(open('ox', 6)));
+  const short = api.cpbMarks();
+  eq('24 of 30 multiple choice is 6 to go', short.needMcq, 6);
+  ok('…and it is SAID, not just coloured', api.cpbGapLabel(short.needMcq, 'question') === '6 questions to go');
+  // Booklet A is measured in QUESTIONS and Booklet B in MARKS, and the two
+  // chips sit side by side — a bare "26 to go" on each is two different
+  // quantities wearing the same words.
+  ok('…and it names its unit', api.cpbGapLabel(6, 'mark') === '6 marks to go');
+  ok('…which is singular when it is one', api.cpbGapLabel(1, 'question') === '1 question to go');
+  ok('…and a gap with no unit still reads', api.cpbGapLabel(6) === '6 to go');
+  ok('…and marked as under', api.cpbGapClass(short.needMcq) === ' cpb-under');
+
+  // Over the target, which is just as wrong and must not read as "done".
+  const over = [];
+  for (let i = 1; i <= 33; i++) over.push(mcq('x' + i));
+  api.set(over);
+  const o = api.cpbMarks();
+  eq('33 multiple choice is 3 over', o.needMcq, -3);
+  ok('…and says so', api.cpbGapLabel(o.needMcq, 'question') === '3 questions over');
+  ok('…in its own colour, never the same one as under',
+     api.cpbGapClass(o.needMcq) === ' cpb-over' && api.cpbGapClass(-1) !== api.cpbGapClass(1));
+  ok('on target is its own state again', api.cpbGapLabel(0, 'mark') === '✓' && api.cpbGapClass(0) === ' cpb-on-target');
+
+  // A TARGET OF 0 IS NO TARGET. A short topical paper is a real thing to
+  // build, and a page nagging that it is 22 questions short of a PSLE paper
+  // is a page whose warnings stop being read.
+  api.setMeta({ targetMcq: 0, targetOpen: 0 });
+  api.set([mcq('a1'), open('b1', 3)]);
+  const none = api.cpbMarks();
+  ok('a target of 0 measures nothing', none.needMcq === null && none.needOpen === null);
+  eq('…and the totals are still counted', none.total, 2 + 3);
+  eq('…and no total is claimed', none.wantTotal, 0);
+  ok('nothing is said about a gap that does not exist', api.cpbGapLabel(null) === '');
+
+  // A paper can be built to its own shape.
+  api.setMeta({ targetMcq: 12, targetOpen: 20 });
+  api.set([mcq('a1'), mcq('a2')]);
+  const custom = api.cpbMarks();
+  eq('a custom target is honoured', custom.wantMcq, 12);
+  eq('…in marks as well as questions', custom.wantA, 24);
+  eq('…and in the whole-paper total', custom.wantTotal, 44);
+  eq('…and the gap is measured against it', custom.needMcq, 10);
+
+  // Junk in the field must never make the page unusable.
+  eq('a blank target falls back to the syllabus shape', api._cpbTargetNum('', 30), 30);
+  eq('…and so does a word', api._cpbTargetNum('thirty', 30), 30);
+  eq('…and a negative number', api._cpbTargetNum(-5, 30), 30);
+  eq('a real 0 is kept, because 0 means no target', api._cpbTargetNum(0, 30), 0);
+  eq('…and an absurd one is capped rather than believed', api._cpbTargetNum(99999, 30), 999);
+  api.setMeta({});
 }
 
 /* ------------------------------------------------------------------ *

@@ -7289,7 +7289,17 @@ body.practising-as .page-body { padding-bottom: 64px; }
 /* The paper: two booklets, numbered straight through. */
 .cpb-totals { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; margin-top: 18px; padding: 12px 16px; border-radius: 10px; background: var(--surface-alt); border: 1px solid var(--border); font-size: 0.82rem; }
 .cpb-totals b { font-size: 0.95rem; }
+.cpb-totals > span { display: inline-flex; align-items: baseline; gap: 5px; flex-wrap: wrap; }
+.cpb-total-big b { font-size: 1.15rem; }
 .cpb-warn-inline { color: #92400e; }
+/* How far off the target the paper is. Three states, told apart by colour AND
+   by the words in .cpb-gap — a teacher scanning the bar should not have to
+   work out which side of the target they are on from a shade of green. */
+.cpb-gap { font-size: 0.72rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.cpb-under .cpb-gap { background: #fef3c7; color: #92400e; }
+.cpb-over .cpb-gap { background: #fee2e2; color: #b91c1c; }
+.cpb-on-target .cpb-gap { background: #dcfce7; color: #166534; }
+.cpb-target-note { margin: 12px 0 0; font-size: 0.78rem; line-height: 1.6; color: var(--text-muted); }
 .cpb-booklet { margin-top: 22px; }
 .cpb-booklet-head { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 2px solid var(--border); }
 .cpb-booklet-head h4 { margin: 0; font-size: 0.92rem; font-weight: 700; }
