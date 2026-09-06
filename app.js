@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.366.0';
+const APP_VERSION = 'v1.367.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -24716,6 +24716,32 @@ function cpbPreview() {
   _wsShowPreviewOverlay();
 }
 
+// 👁 ONE QUESTION OFF THE PAPER, exactly as it prints.
+//
+// The eye on every row. Hovering it opens the shared exported hover (see 👁
+// EXPORTED HOVER); clicking it opens the ordinary full-page preview — the SAME
+// ad-hoc preview the bank, the vetting list and the question editor use, so it
+// is the same builder, the same planner and the same printer the paper's own
+// PDF goes through. No second renderer, so a proof of one question cannot
+// disagree with the sheet it comes out on.
+//
+//  • IT CARRIES THE QUESTION, NOT AN ID. A paper question is in neither
+//    `questionBank` nor `vettingList` until the paper is SENT, so every
+//    id-based opener comes back empty for it.
+//  • IT IS DEEP-COPIED. `_cpbQuestions` IS the paper; the preview must not be
+//    able to write back into it — the same rule `previewEditorPrint` follows.
+//  • `cpbq`, NEVER `custompaper`. That other source means the whole paper and
+//    is what sends 🖨 back to `cpbPrint()`. Both are drafts, so ✏️ edit
+//    question, ✏️ edit answer, ✏️ Editing mode and the come-back-here snapshot
+//    all stand down for either.
+function cpbPreviewQuestion(id) {
+  if (!_canAuthor()) return;
+  const q = _cpbQuestions.find(x => x && String(x.id) === String(id));
+  if (!q) { showToast('That question is no longer on this paper', 'error'); return; }
+  const copy = JSON.parse(JSON.stringify(q));
+  previewQuestionsPrint([copy], q.title || 'Question', 'cpbq');
+}
+
 // ---- Sending the paper to the bank ---------------------------------------
 // HELD BACK, always — that is the whole contract of this page. The questions
 // have to be in the bank for the teacher to edit, check, print and reuse them;
@@ -24808,6 +24834,9 @@ async function _cpbCommit() {
 function cpbRender() {
   const el = document.getElementById('cpbBody');
   if (!el) return;
+  // The rows are rebuilt wholesale below, so an open 👁 peek is about to be
+  // pinned to an anchor that no longer exists. Same rule the vetting list has.
+  vetPrintPeekHide();
   if (!_canAuthor()) {
     el.innerHTML = '<div class="cpb-card"><p class="cpb-empty">Only question authors can build a paper.</p></div>';
     return;
@@ -25034,6 +25063,7 @@ function _cpbRowHtml(q, num, book, first, last) {
       <button type="button" class="cpb-tool" onclick="cpbMove('${q.id}',-1)" title="Move up within this booklet" ${first ? 'disabled' : ''}>▲</button>
       <button type="button" class="cpb-tool" onclick="cpbMove('${q.id}',1)" title="Move down within this booklet" ${last ? 'disabled' : ''}>▼</button>
       <button type="button" class="cpb-tool" onclick="cpbSetBook('${q.id}','${book === 'a' ? 'b' : 'a'}')" title="${book === 'a' ? 'Move to Booklet B — the child writes the answer' : 'Move to Booklet A — the child chooses an option'}">⇄ ${book === 'a' ? 'B' : 'A'}</button>
+      ${vetPrintPeekButton(q, 'cpb')}
       <button type="button" class="cpb-tool cpb-tool-edit" onclick="cpbEditQuestion('${q.id}')" title="Open this question in the block editor — the same one the question bank uses. Saving puts it back on the paper, right here, and nothing goes to the bank." ${_cpbBusy ? 'disabled' : ''}>✏️ Edit</button>
       <button type="button" class="cpb-tool cpb-tool-x" onclick="cpbDropQuestion('${q.id}')" title="Take this question off the paper">✕</button>
     </div>
@@ -33619,10 +33649,11 @@ let _wsPreviewAdhoc = null;
 // have been saved, and its author is already standing in the editor.
 function _wsPreviewIsDraft() {
   const src = _wsPreviewAdhoc && _wsPreviewAdhoc.source;
-  // 'custompaper' for exactly the same reason as 'editor': a paper that has
-  // not been sent is not in the bank at all, so ✏️ edit question would open a
-  // question the bank has never heard of.
-  return src === 'editor' || src === 'custompaper';
+  // 'custompaper' (the whole paper) and 'cpbq' (one question off it) for
+  // exactly the same reason as 'editor': a paper that has not been sent is not
+  // in the bank at all, so ✏️ edit question would open a question the bank has
+  // never heard of.
+  return src === 'editor' || src === 'custompaper' || src === 'cpbq';
 }
 
 function _wsPreviewCtx() {
@@ -33692,13 +33723,18 @@ function openWorksheetPreview() {
 
 // 🖨 Preview printed — a set of questions straight from the bank or the vetting
 // list, rendered by the SAME builder a saved worksheet's PDF goes through.
+//
+// `cpbq` is ONE question off an unsent 🗂️ Custom Paper. It is deliberately NOT
+// `custompaper`, which means the WHOLE paper and is what `printFromPreview`
+// sends back to `cpbPrint()` — collapse the two and pressing 🖨 on a proof of
+// question 7 prints all forty, covers and all.
 function previewQuestionsPrint(questions, title, source) {
   const list = (questions || []).filter(Boolean);
   if (!list.length) { showToast('There is nothing to preview', 'error'); return; }
   _wsPreviewSaved = null;
   _wsPreviewPaper = null;
   _wsPreviewAdhoc = { questions: list, title: title || 'Preview',
-                      source: source === 'vetting' || source === 'editor' ? source : 'bank' };
+                      source: source === 'vetting' || source === 'editor' || source === 'cpbq' ? source : 'bank' };
   _wsShowPreviewOverlay();
 }
 // 🖨 PREVIEW EXPORTED — the question open in the EDITOR, as it prints.
@@ -33758,21 +33794,42 @@ function previewOneQuestionPrint(id, where) {
   previewQuestionsPrint([q], q.title || 'Question', where);
 }
 
-// 👁 VETTING EXPORTED HOVER — one lazy iframe, using the PDF's own renderer.
-// Resolve against Vetting each time: these questions are not in the bank, and
+// 👁 EXPORTED HOVER — one lazy iframe, using the PDF's own renderer.
+// Resolve against the list each time: these questions are not in the bank, and
 // holding an old object would show yesterday's version after an edit.
+//
+// TWO POOLS, ONE PEEK. `scope` says which list the eye's question is in — the
+// Vetting list (`vetting`, the default and what the whole block was written
+// for) or the 🗂️ Custom Paper being built (`cpb`, whose questions are in
+// NEITHER `questionBank` NOR `vettingList` and exist only in memory until the
+// paper is sent). Everything else about it — the open/close timers, the
+// placement, the iframe scaling, the teardown, the Escape key, the outside
+// click — is one implementation on purpose: a second copy of it would be a
+// second copy to fix every positioning and teardown bug in, and the drift
+// would read as "the eye works on one page and misbehaves on the other".
 var _vetPrintPeek = null;
 var _vetPrintPeekOpenTimer = null;
 var _vetPrintPeekCloseTimer = null;
 var _vetPrintPeekSerial = 0;
 var _vetPrintPeekBound = false;
 
-function vetPrintPeekButton(q) {
-  return `<button type="button" class="qb-action-btn vet-print-eye" data-qid="${escapeHtml(String(q.id))}"
+// The ONE resolver. An unknown scope falls back to Vetting, which is the pool
+// the eye has always read — a typo must not make the eye silently dead.
+function _vetPeekQuestion(id, scope) {
+  const pool = scope === 'cpb' ? _cpbQuestions : vettingList;
+  return (Array.isArray(pool) ? pool : []).find(x => x && String(x.id) === String(id)) || null;
+}
+
+function vetPrintPeekButton(q, scope) {
+  const s = scope === 'cpb' ? 'cpb' : 'vetting';
+  // `vet-print-eye` on both — it carries the focus ring and the SVG sizing —
+  // over whichever row style the button is standing in.
+  const cls = s === 'cpb' ? 'cpb-tool cpb-tool-eye vet-print-eye' : 'qb-action-btn vet-print-eye';
+  return `<button type="button" class="${cls}" data-qid="${escapeHtml(String(q.id))}" data-scope="${s}"
     aria-label="Preview exported question: ${escapeHtml(q.title || 'Untitled')}" aria-haspopup="dialog" aria-expanded="false"
     onpointerenter="vetPrintPeekShow(this,event)" onpointerleave="vetPrintPeekLeave()"
     onfocus="vetPrintPeekShow(this)" onblur="vetPrintPeekLeave()"
-    onclick="event.stopPropagation();vetPrintPeekFull(this.dataset.qid)">
+    onclick="event.stopPropagation();vetPrintPeekFull(this.dataset.qid,this.dataset.scope)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
   </button>`;
 }
@@ -33798,9 +33855,12 @@ function vetPrintPeekHide() {
   _vetPrintPeek = null;
 }
 
-function vetPrintPeekFull(id) {
+function vetPrintPeekFull(id, scope) {
   if (!_canAuthor()) return;
   vetPrintPeekHide();
+  // A paper question is in neither list, so the id-based opener would come back
+  // empty for it — it is opened on the object the paper is holding instead.
+  if (scope === 'cpb') { cpbPreviewQuestion(id); return; }
   previewOneQuestionPrint(id, 'vetting');
 }
 
@@ -33811,9 +33871,13 @@ function vetPrintPeekDismiss() {
   clearTimeout(_vetPrintPeekOpenTimer); // focus must not reopen a dismissed peek
 }
 
-function vetPrintPeekEdit(id) {
+function vetPrintPeekEdit(id, scope) {
   if (!_canAuthor()) return;
   vetPrintPeekHide();
+  // …and `editQuestion` would find nothing for it either. `cpbEditQuestion` is
+  // the paper's own door: it loads the question OBJECT into the block editor
+  // and brings the teacher back to this row.
+  if (scope === 'cpb') { cpbEditQuestion(id); return; }
   editQuestion(id);
 }
 
@@ -33826,7 +33890,8 @@ function vetPrintPeekShow(anchor, event) {
   const serial = _vetPrintPeekSerial;
   _vetPrintPeekOpenTimer = setTimeout(() => {
     if (serial !== _vetPrintPeekSerial || !anchor.isConnected || !_canAuthor()) return;
-    const q = vettingList.find(item => String(item.id) === anchor.dataset.qid);
+    const scope = anchor.dataset.scope === 'cpb' ? 'cpb' : 'vetting';
+    const q = _vetPeekQuestion(anchor.dataset.qid, scope);
     if (!q) return;
     const host = document.createElement('section');
     host.className = 'vet-print-peek';
@@ -33839,8 +33904,8 @@ function vetPrintPeekShow(anchor, event) {
     host.querySelector('strong').textContent = q.title || 'Untitled question';
     const buttons = host.querySelectorAll('button');
     buttons[0].onclick = vetPrintPeekDismiss;
-    buttons[1].onclick = () => vetPrintPeekFull(q.id);
-    buttons[2].onclick = () => vetPrintPeekEdit(q.id);
+    buttons[1].onclick = () => vetPrintPeekFull(q.id, scope);
+    buttons[2].onclick = () => vetPrintPeekEdit(q.id, scope);
     host.addEventListener('pointerenter', vetPrintPeekKeep);
     host.addEventListener('pointerleave', vetPrintPeekLeave);
     host.addEventListener('focusin', vetPrintPeekKeep);
@@ -34010,7 +34075,9 @@ function printFromPreview() {
     const a = _wsPreviewAdhoc;
     closeWorksheetPreview();
     // A paper prints through its OWN builder — sent to printQuestionsDirect it
-    // would come out as a plain worksheet with both covers gone.
+    // would come out as a plain worksheet with both covers gone. The test is on
+    // the WHOLE-paper source alone: 'cpbq' is one question off that paper and
+    // must fall through, or its 🖨 prints the entire booklet set instead.
     if (a.source === 'custompaper') { cpbPrint(); return; }
     printQuestionsDirect(a.questions, a.title);
     return;
@@ -34447,7 +34514,7 @@ function _wsPreviewSnapshot() {
     // list to re-resolve from, and the author never left the editor. An unsent
     // 📝 Custom Paper is the same case — its questions are not in the bank at
     // all, so there are no ids to re-resolve.
-    if (a.source === 'editor' || a.source === 'custompaper') return null;
+    if (a.source === 'editor' || a.source === 'custompaper' || a.source === 'cpbq') return null;
     return { kind: 'adhoc', page: a.source === 'vetting' ? 'vetting' : 'bank',
              ids: a.questions.map(q => q.id), title: a.title, source: a.source };
   }
@@ -72160,6 +72227,7 @@ window.cpbSend = cpbSend;
 window.cpbDraftTake = tab => { cpbDraftTake(tab).catch(err => console.warn('custom paper draft restore:', err)); };
 window.cpbDraftDiscard = cpbDraftDiscard;
 window.cpbEditQuestion = cpbEditQuestion;
+window.cpbPreviewQuestion = cpbPreviewQuestion;
 window.cpbEditSave = cpbEditSave;
 window.cpbSavePaper = () => { cpbSavePaper().catch(err => console.warn('custom paper save:', err)); };
 window.cpbLibOpen = cpbLibOpen;

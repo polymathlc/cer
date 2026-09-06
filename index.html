@@ -7328,6 +7328,10 @@ body.practising-as .page-body { padding-bottom: 64px; }
 .cpb-tool:disabled { opacity: 0.35; cursor: default; }
 .cpb-tool-x:hover:not(:disabled) { border-color: var(--accent-red); color: var(--accent-red); }
 .cpb-tool-edit { font-weight: 600; }
+/* 👁 the eye on a paper row — the shared exported hover, wearing the row's own
+   tool shape. `.vet-print-eye` still carries its focus ring. */
+.cpb-tool-eye { display: inline-flex; align-items: center; justify-content: center; padding: 4px 7px; }
+.cpb-tool-eye svg { width: 15px; height: 15px; display: block; }
 /* Coming back from the block editor: the row the teacher went off to fix is
    scrolled under them and lit for a moment, so a paper is worked through top
    to bottom rather than found again after every edit. */

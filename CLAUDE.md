@@ -5105,6 +5105,57 @@ listed, and reopened whenever.
   does not have every render trying again behind a teacher who is working, and a
   denied write is NAMED — it is a one-line rules fix on `customPapers`.
 
+### 👁 Preview one question of the paper (v1.367.0)
+
+`cpbPreviewQuestion` and the `'cpbq'` preview source, plus the SCOPED exported
+hover — `_vetPeekQuestion` / `vetPrintPeekButton(q, scope)` /
+`vetPrintPeekFull(id, scope)` / `vetPrintPeekEdit(id, scope)` — the 👁 on every
+row of `_cpbRowHtml`, and `vetPrintPeekHide()` at the top of `cpbRender`.
+
+The row said a question's title, its topic and its marks. **What it never
+showed was the question** — so checking that screenshot 12 really came out as a
+question, with its figure in the right place and its options under it, meant
+previewing the whole forty-question paper and scrolling to find it.
+
+- **IT IS THE SAME PREVIEW, NOT A SECOND ONE.** Hovering the eye opens the
+  shared exported hover; clicking it opens the ordinary ad-hoc preview — the
+  same builder, the same planner and the same printer the paper's own PDF goes
+  through. A proof of one question therefore cannot disagree with the sheet it
+  comes out on.
+- **TWO POOLS, ONE PEEK.** The 👁 was written for the Vetting list and resolved
+  `vettingList` by id inside `vetPrintPeekShow`. It now takes a **`scope`**, and
+  `_vetPeekQuestion(id, scope)` is the ONE resolver — `'cpb'` reads
+  `_cpbQuestions`, anything else reads `vettingList`, so a typo'd scope falls
+  back to the pool the eye has always read rather than making it silently dead.
+  Everything else — the open/close timers, the placement, the iframe scaling,
+  the teardown, Escape, the outside click — stays one implementation: a second
+  copy is a second copy to fix every positioning bug in, and the drift reads as
+  "the eye works on one page and misbehaves on the other".
+- **`'cpbq'`, NEVER `'custompaper'`, and collapsing the two is the one silent
+  failure here.** That other source means the WHOLE paper and is what
+  `printFromPreview` sends back to `cpbPrint()` — matched by a prefix, or reused
+  for a single question, pressing 🖨 on a proof of question 7 prints all forty
+  with both covers. The branch is an exact equality on `'custompaper'` and the
+  harness pins that there is no `=== 'cpbq'` and no `startsWith` beside it.
+- **Both are DRAFTS.** `_wsPreviewIsDraft()` and `_wsPreviewSnapshot` name
+  `'cpbq'` alongside `'custompaper'` and `'editor'`, so ✏️ edit question,
+  ✏️ edit answer, ✏️ Editing mode and the come-back-here snapshot all stand
+  down: an unsent paper's question is not in the bank at all, and `emSaveAll`
+  writes through `saveQuestion`.
+- **IT CARRIES THE QUESTION, NOT AN ID** — `previewOneQuestionPrint` looks in
+  `questionBank` or `vettingList` and would come back empty for every question
+  on the paper — and it is **deep-copied**, because `_cpbQuestions` IS the
+  paper and the preview must not be able to write back into it. The peek's
+  ✏️ **Edit question** goes to `cpbEditQuestion` for the same reason:
+  `editQuestion` would find nothing, so the button would do nothing at all.
+- **`cpbRender` hides the peek**, the rule `renderVettingList` already follows:
+  the rows are rebuilt wholesale on every mutation, so an open peek is pinned
+  to an anchor that is about to be destroyed.
+- The button wears `cpb-tool cpb-tool-eye` over `vet-print-eye` — the row's own
+  tool shape, keeping the shared focus ring and SVG sizing.
+- Run **`node tools/custom-paper-tests.mjs`** and
+  **`node tools/vetting-export-hover-tests.mjs`** after touching any of it.
+
 ### 📸 Only the screenshots that have not been read (v1.366.0)
 
 `_cpbUnread` / `_cpbUnreadIsTail` / **`_cpbSeedQuestion`** / `_cpbLastRead`,
@@ -5163,6 +5214,26 @@ every booklet they had moved by hand went with it.
 - Run **`node tools/custom-paper-tests.mjs`** after touching any of it.
 
 ## House rules
+- After touching **👁 the one-question preview** (`cpbPreviewQuestion`, the
+  `'cpbq'` source in `previewQuestionsPrint` / `_wsPreviewIsDraft` /
+  `_wsPreviewSnapshot`, the `custompaper` branch of `printFromPreview`,
+  `_vetPeekQuestion`, `vetPrintPeekButton`'s `scope`, `vetPrintPeekFull` /
+  `vetPrintPeekEdit`'s `scope`, the eye in `_cpbRowHtml`, or
+  `vetPrintPeekHide()` in `cpbRender`), run
+  `node tools/custom-paper-tests.mjs` **and**
+  `node tools/vetting-export-hover-tests.mjs`. Every failure is quiet and the
+  page carries on working. **Collapsing `'cpbq'` into `'custompaper'` is the
+  worst of them**: pressing 🖨 on a proof of one question prints the entire
+  booklet set, covers and all, which is minutes of layout and a wasted ream.
+  Let `'cpbq'` fall through to `bank` and ✏️ Editing mode is offered on a
+  question the bank has never heard of — `emSaveAll` then writes it there
+  behind the teacher's back. Resolve a paper row's id against `vettingList`
+  and the eye shows a DIFFERENT question that happens to share an id, which
+  looks like a perfectly ordinary preview. Hold the question rather than
+  deep-copying it and the preview can write back into the paper. Route the
+  peek's ✏️ Edit question to `editQuestion` and it finds nothing, so the
+  button silently does nothing. And drop `vetPrintPeekHide()` from
+  `cpbRender` and the peek is left floating over a row that no longer exists.
 - After touching **📸 the incremental read** (`_cpbUnread`, `_cpbUnreadIsTail`,
   `_cpbSeedQuestion`, `_cpbLastRead`, `o.seed` on `readQuestionRun`,
   `cpbBuild` / `cpbRebuild` / `_cpbRunBuild`'s `mode`, or the `_cpbDirty` rule
