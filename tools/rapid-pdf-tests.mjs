@@ -39,6 +39,7 @@ const cut = (from, to, what) => {
 // and the BOOK-KEEPING, so the AI read, the DOM and pdf.js itself are stubs —
 // but `startRapidJob` and the expander are the app's own.
 const FIXTURE = `
+function _rapidCloudEnabled() { return false; }
 let rapidJobs = [];
 let _rapidSeq = 0;
 const RAPID_MAX_BYTES = 18 * 1024 * 1024;

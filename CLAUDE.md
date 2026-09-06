@@ -5593,3 +5593,21 @@ plainly printed had to be typed back in by hand, question by question.
   - **A `<button>` does not inherit `color`** the way a div does — it falls back to the browser's own button text, which is near-black. Any card-shaped button (`.tcg-arti` was the one that bit, v1.258.0) must set `color: var(--text)` itself, or its unstyled child text is invisible the moment the surface goes dark. The children that happened to set a colour of their own looked fine, which is what made it hard to spot.
 - `.rpg-tabs` must keep `flex-wrap: wrap` and `.rpg-tab` its `flex: 0 0 auto; white-space: nowrap`. Without them eleven leaderboard tabs get squeezed until each label breaks over three lines, the pill goes square, `border-radius: 999px` renders it as a circle, and the emoji on the first line sits outside the curve.
 - Commit messages and pushed artifacts must not contain the model identifier.
+
+## Durable Rapid Add PDFs (v1.360.0, CER only)
+
+`rapid-import/` is an isolated Firebase Functions codebase. Read its README
+before deployment. `_rapidCloudRefresh` discovers availability; never enable
+the close-tab promise merely because the frontend was merged. Uploads need the
+tab until `rapidImportFinish` acknowledges durable storage. The Firestore
+outbox, Cloud Tasks page/publish phases, immutable checkpoints and atomic
+question/progress transaction carry on without it. The last question stays
+private until the following page resolves its continuation. Retry generation,
+phase and cursor checks prevent duplicate or late publication. Source pages
+stay attached to the single question and are linked from its vetting card.
+
+The existing browser PDF importer remains available when the worker is absent
+or online mode is unchecked. Desktop now has an explicit multiple-file picker.
+This change is scoped to CER; no sibling portal or Maths deployment is included.
+Run both existing PDF/merge regression suites and the tests in
+`rapid-import/functions` when changing this flow. Bump `APP_VERSION` in app.js.
