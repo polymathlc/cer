@@ -4886,6 +4886,27 @@ sheet and an answer key. Admin only.
   reader found no marks on counts as `CPB_OPEN_DEFAULT_MARKS` rather than as
   nothing, and **the page says how many did**: a cover that silently understates
   the paper is worse than one that admits what it assumed.
+- **…and they are measured against the shape the paper is being built to**
+  (`CPB_TARGET_MCQ` = 30 questions, `CPB_TARGET_OPEN_MARKS` = 40 marks — the
+  current syllabus, 60 + 40 = 100; it was 28 and 44 before it changed, which is
+  why the numbers are stated once here rather than read off a past paper).
+  - **IT IS A TARGET, NEVER A TOTAL.** Nothing printed on a cover comes from it:
+    the covers state what the paper ACTUALLY adds up to, always, because a cover
+    claiming 60 marks over 25 questions is a lie a class discovers in the exam
+    hall. What the target does is say how far off the paper is while it is still
+    being built, which is the whole reason assembling one is slow.
+  - **Both targets are editable per paper, and `0` means NO target.** A short
+    topical paper is a real thing to build, and a page nagging that it is 22
+    questions short of a PSLE paper is a page whose warnings stop being read.
+    `_cpbTargetNum` is the ONE reader: junk falls back to the syllabus shape, a
+    real 0 is kept, and an absurd number is capped rather than believed.
+  - **`cpbGapLabel(need, unit)` MUST name its unit.** Booklet A is measured in
+    QUESTIONS and Booklet B in MARKS, and the two chips sit side by side — a
+    bare "26 to go" on each is two different quantities wearing the same words.
+  - Over the target is its own state, in its own colour, and never reads as
+    done: a 33-question Booklet A is as wrong as a 24-question one.
+  - The target inputs fire on `change` (blur/Enter), not `input` — typing "30"
+    over "3" would otherwise re-render at "3" and take the caret with it.
 - **The draft is mirrored to IndexedDB**, keyed by TAB like the exam paper's and
   through the SAME `_epdTx` helper — the fiddly, already-proven half is shared
   and only the keys differ. Forty screenshots is an afternoon, and nothing is
@@ -4990,7 +5011,11 @@ the first, which reads as a printing fault.
   class sitting it — put `holdBack` into `EDITOR_OWNED_QUESTION_FIELDS` and an
   ordinary edit releases the whole paper at once. And prefill a cover with a
   real examination board's name and the centre is handing out something that
-  passes for an official paper.
+  passes for an official paper. On the TARGETS: let one reach a cover and the
+  paper claims a mark total it does not have; drop the unit from `cpbGapLabel`
+  and Booklet A's chip and Booklet B's read identically while counting
+  different things; and stop treating 0 as "no target" and every short topical
+  paper is nagged for being 22 questions short of a PSLE paper.
 - After touching **🚦 the auto-check** (`AUTOCHK_TRIES`, `AUTOCHK_KEEP_FINDINGS`,
   `autoChkOn`, `autoChkRead`, `autoChkState`, `autoChkBetter`, `autoChkRun`,
   `_autoChkRepairPrompt`, `_autoChkApply`, `autoChkStamp`, `autoChkCardHtml`,
