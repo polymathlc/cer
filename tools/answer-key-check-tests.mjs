@@ -498,7 +498,11 @@ test('askGeminiVision actually honours skipOpenAi', () => {
   // NOTHING else — a ChatGPT route left in it would answer the Gemini column.
   const block = cut('async function askGeminiVision', '\n// Convert text with', 'askGeminiVision');
   ok(/skipOpenAi = false/.test(block), 'askGeminiVision does not accept skipOpenAi');
-  ok(/skipOpenAi \? \['gemini'\] : aiEngineOrder\(\)/.test(block),
+  // `authoring` picks WHICH order is built (question building leads with
+  // ChatGPT); skipOpenAi decides whether an order is built at all, so it has
+  // to be read FIRST or the cross-check's Gemini column is answered by the
+  // very engine it exists to compare against.
+  ok(/skipOpenAi \? \['gemini'\] : aiEngineOrder\(authoring \? 'author' : ''\)/.test(block),
      'askGeminiVision does not cut the ChatGPT routes out when skipOpenAi is set');
 });
 

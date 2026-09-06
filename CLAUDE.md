@@ -3291,6 +3291,63 @@ cap`, on every call, on every device, until the month turns over.
   committing it** — a preview that saved would make Cancel a lie.
 - Run **`node tools/ai-routes-tests.mjs`** after touching any of it.
 
+### ⚡ …and QUESTION ADDING leads with ChatGPT (v1.358.0)
+
+`AI_AUTHOR_DEFAULT` / `AI_AUTHOR_FOLLOW` / `getAiAuthorEngine` /
+**`aiAuthorSetting`** / **`aiAuthorEngine`** / `_aiAuthorFromDoc` /
+`aiEngineOrder(task)` / `aiEngineAuthorPreview`, the `authoring` option on
+`askGemini` and `askGeminiVision`, the `aiAuthorEngine` field on
+`config/admin`, and the **Adding a question uses** picker in the AI Engine
+dialog.
+
+**The complaint this answers was a BILL.** ChatGPT was switched on, every
+screen said so, and the OpenAI account barely moved while Gemini's did.
+Nothing was broken: `aiEngineOrder` puts the CHOSEN engine first and the
+others *behind* it, the shared default is Gemini, Gemini answers, and the
+second route is therefore reached **only when the first refuses**. That is
+the design and it is right — but it means "ChatGPT is on" and "ChatGPT has
+never been called" are the same screen.
+
+- **AUTHORING IS THE ONE PLACE WORTH PAYING FOR, and that is why this is a
+  SECOND setting rather than a new default for everything.** Reading a paper,
+  lettering its parts, writing the answer and arguing the explanation is the
+  hardest reasoning this app asks for, it is checked by a person before
+  anybody sees it, and it is a handful of the TEACHER's calls. Marking thirty
+  students is the opposite trade on every count. Moving the whole app would
+  have been a bill nobody asked for.
+- **`aiEngineOrder(task)` is the ONE place the two orders are built**, and
+  everything under it is unchanged: the chosen engine's routes lead and the
+  other two stay behind them, so a capped or empty OpenAI account still falls
+  through to Gemini rather than taking question building down with it.
+- **`skipOpenAi` OUTRANKS `authoring`.** 🔍 Answer key cross-check names the
+  engine it wants; a Gemini column quietly answered by ChatGPT is two columns
+  of the same model reading as a clean bill of health.
+- **`'follow'` is a real answer, not an absence** — it is how an admin says
+  "one engine for everything" and has it stay said, which is why this is a
+  four-value picker rather than a tick box. An **unset** shared field is the
+  DEFAULT (ChatGPT), so a centre that has never opened the dialog gets Astra
+  on its question building; a value from a later build falls back to the
+  default rather than to null.
+- **THE CHOOSER SAYS BOTH ORDERS** (`aiRouteReport`'s `authorOrder` /
+  `authorSame`, printed by `renderAiEngineStatus`). An app whose question
+  building runs on a different engine from its marking looks, from every
+  screen, exactly like one that does not — which is the whole reason this was
+  invisible for a month.
+- **The setting is the CENTRE's**, on the same `config/admin` document and the
+  same MERGE write as the main engine. **The `aiEngineConfig` callable
+  fallback carries the main engine and nothing else** — it is another
+  repository's function and widening it is a functions deploy — so on that
+  path `_aiSharedAuthor` is released back to the device's own value rather
+  than being masked by a stale shared one.
+- **THE CENSUS IN `tools/ai-routes-tests.mjs` IS THE HALF THAT MATTERS.** It
+  names the ten question-building functions and fails if any of their AI calls
+  stops passing `authoring: true` — a path that forgets it silently goes back
+  to the centre-wide engine while the dialog still promises ChatGPT — **and it
+  fails the other way too**, on any function NOT on that list that starts
+  passing it: every student-facing call on the paid engine is a bill nobody
+  asked for. Adding a build path means adding its name there with a reason.
+- Run **`node tools/ai-routes-tests.mjs`** after touching any of it.
+
 ### The engine choice belongs to the CENTRE, not to a browser
 
 `aiPreferredEngine` / `aiEngineLoadShared` / `aiEngineSetShared` /
@@ -5068,6 +5125,20 @@ plainly printed had to be typed back in by hand, question by question.
   numbers — the block's `padding-left` and the label's `width` — must keep
   coming from the one call, or they drift apart and the overlap comes back on
   whichever surface was not looked at.
+- After touching **⚡ the authoring engine** (`AI_AUTHOR_DEFAULT`,
+  `AI_AUTHOR_FOLLOW`, `aiAuthorSetting`, `aiAuthorEngine`, `_aiAuthorFromDoc`,
+  `aiEngineOrder`'s `task`, the `authoring` option on `askGemini` /
+  `askGeminiVision`, `aiEngineAuthorPreview`, or any call site that passes
+  it), run `node tools/ai-routes-tests.mjs`. Both directions are silent and
+  cost real money in opposite ways: a build path that stops passing the flag
+  goes back to the centre-wide engine while the dialog still promises ChatGPT
+  — which is the reported fault, a bill that does not move — and the flag
+  spreading to a marking, hint or report call puts thirty students on the paid
+  engine with nothing on any screen to say it happened. That is what the
+  census at the foot of that harness exists to catch on the NEXT call site
+  rather than the last one. And `skipOpenAi` must keep OUTRANKING it, or the
+  cross-check's Gemini column is answered by the engine it exists to compare
+  against.
 - After touching **the AI routes** (`aiEngineOrder`, `askOpenAiServer`,
   `askChatGpt`, `_aiRun`, `_aiAsk`, `askGeminiDirect`, `AI_DOWN_MS`, `_aiWhy`,
   `aiRouteReport`, `renderAiEngineStatus`, `aiEngineChoicePreview`, or
