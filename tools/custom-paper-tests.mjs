@@ -66,22 +66,31 @@ const target = cut(
   '// 🎯 THE SHAPE A PAPER IS BUILT TO',
   '\nlet _cpbShots = [];',
   'paper target');
+// …and the REAL mode block, because which of the two formats is being built
+// is what every function below branches on.
+const modes = cut(
+  '// 🅰 TWO MODES — an exam paper, or an ordinary worksheet',
+  '// 🎯 THE SHAPE A PAPER IS BUILT TO',
+  'modes');
 
 const shim = `
   const CPB_MCQ_MARKS = 2, CPB_OPEN_DEFAULT_MARKS = 2, QMARKS_MAX = 99;
   let _cpbQuestions = [];
   let _cpbMeta = {};
   const cpbRender = () => {};
+  ${modes}
   ${target}
-  const CPB_META_DEFAULTS = { targetMcq: CPB_TARGET_MCQ, targetOpen: CPB_TARGET_OPEN_MARKS };
+  const CPB_META_DEFAULTS = { mode: 'paper', targetMcq: CPB_TARGET_MCQ, targetOpen: CPB_TARGET_OPEN_MARKS,
+    targetQuestions: CPB_TARGET_QUESTIONS, wsIntro: '', wsFields: true };
   function _cpbMetaGet(k) { const v = _cpbMeta[k]; return v === undefined || v === null ? CPB_META_DEFAULTS[k] : v; }
   ${marks}
   ${shape}
   ${model}
   return {
-    qIsMcqOnly, cpbBookOf, cpbSetBook, cpbBooklets, cpbMarks, cpbQuestionMarks,
-    cpbGapLabel, cpbGapClass, _cpbTargetNum,
-    CPB_TARGET_MCQ, CPB_TARGET_OPEN_MARKS,
+    qIsMcqOnly, cpbBookOf, cpbSetBook, cpbBooklets, cpbLayout, cpbMarks, cpbQuestionMarks,
+    cpbGapLabel, cpbGapClass, _cpbTargetNum, cpbDefaultMarks,
+    cpbMode, cpbIsWorksheet, cpbThing, CPB_MODES,
+    CPB_TARGET_MCQ, CPB_TARGET_OPEN_MARKS, CPB_TARGET_QUESTIONS,
     set: qs => { _cpbQuestions = qs; },
     get: () => _cpbQuestions,
     setMeta: m => { _cpbMeta = m || {}; },
@@ -405,8 +414,14 @@ ok('qIsMcqOnly takes a QUESTION as well as a block list — both call sites pass
      'an undecoded picture is measured as a line of text and the page overflows');
 
   const order = cut('function _cpbPrintOrder() {', 'function _cpbPaperTitle', 'print order');
-  ok('the paper prints Booklet A then Booklet B, whatever order the list is in',
-     /return a\.concat\(b\)/.test(order));
+  ok('the print order is taken from the ONE layout function, never worked out again',
+     /return cpbLayout\(\)\.list;/.test(order),
+     'a second reading of it is a sheet whose printed numbers do not match its own order');
+  ok('the printer and the preview go through ONE door, so they cannot disagree',
+     /function _cpbOutputOpts\(\) \{ return cpbIsWorksheet\(\) \? _cpbWorksheetOpts\(\) : _cpbPaperOpts\(\); \}/.test(src)
+     && /const o = _cpbOutputOpts\(\);/.test(cut('async function cpbPrint() {', 'function cpbPreview', 'printer'))
+     && /const o = _cpbOutputOpts\(\);/.test(cut('function cpbPreview() {', '\n// 👁 ONE QUESTION', 'preview door')),
+     'a preview of a different sheet is the one thing a preview must never be');
 
   const prompt = cut('function _cpbQuestionPrompt(n, from, total) {', '\nfunction cpbBuild()', 'the prompt');
   ok('the reader is asked which kind each question is', /"questionType"/.test(prompt));
@@ -822,8 +837,8 @@ const commit = cut('async function _cpbCommit() {', '\nfunction cpbRender(', '_c
 ok('a SAVED paper is not cleared by a send — the shelf was for coming back to it',
   /if \(_cpbLibId\) _cpbLibMarkSent\(\)/.test(commit));
 ok('…and an unsaved one still clears, exactly as before', /else \{\n      _cpbQuestions = \[\];/.test(commit));
-ok('the send warns when the paper is about to be cleared unsaved',
-  /This paper is not saved\./.test(src));
+ok('the send warns when the sheet is about to be cleared unsaved',
+  /This \$\{thing\} is not saved\./.test(src));
 ok('the sent stamp is best effort — the questions really are in the bank either way',
   /a toast saying the send failed would be untrue/.test(src));
 
@@ -966,12 +981,171 @@ ok('…and is disabled when there is nothing unread', /\$\{n && unread \? '' : '
 ok('the two lines are different states, never both', /!_cpbDirty && built && unread/.test(zoneFn),
    'the amber warning and the blue "more to read" note say opposite things');
 ok('the warning now names the REMOVAL, which is the only thing it still means',
-   /A screenshot the paper was built from has been removed/.test(zoneFn));
+   /A screenshot the \$\{cpbThing\(\)\} was built from has been removed/.test(zoneFn));
 ok('the blue note is styled apart from the amber one',
    /\.cpb-new-line \{[^}]*#eff6ff/.test(html) && /\.cpb-pill-new \{/.test(html),
    'read as the same thing, a teacher presses the button that throws their paper away');
 ok('window.cpbRebuild is exported — the page is inline on* handlers',
    /window\.cpbRebuild = cpbRebuild;/.test(src));
+
+/* ------------------------------------------------------------------ *
+ * 🅰 TWO MODES — an exam paper, or an ordinary worksheet.              *
+ *                                                                     *
+ * The mode decides the FORMAT and nothing else, so every failure here  *
+ * is a sheet that prints perfectly in the wrong shape:                 *
+ *                                                                     *
+ *  • THE FALLBACK. Every paper saved before this mode existed carries  *
+ *    no `mode` field at all and IS a paper. Fail the other way and a   *
+ *    mock exam somebody is about to sit comes off the printer with     *
+ *    its two covers, its booklet split and its answer sheet gone.      *
+ *  • THE NUMBERING. A worksheet is ONE list numbered 1…n in the order  *
+ *    the teacher arranged it. Numbered through the booklet model       *
+ *    instead, the MCQs are silently hoisted to the front of a sheet    *
+ *    whose order was the whole point of arranging it.                  *
+ *  • THE RENDERING. Worksheet mode passes NO `paper` option, which is  *
+ *    what makes it the app's ordinary worksheet — "Question N"         *
+ *    headings, an answer bracket under every MCQ, the header with its  *
+ *    Name / Class / Date strip, no cover and no answer sheet. Pass one *
+ *    and a worksheet quietly grows an exam paper's gutter numbers and  *
+ *    loses the bracket its MCQs are answered in.                       *
+ *  • THE HOLD-BACK, which is the same promise in both modes and the    *
+ *    only reason the page is safe to use on a live bank at all.        *
+ * ------------------------------------------------------------------ */
+{
+  /* ---------- the fallback ---------- */
+  api.setMeta({});
+  ok('no mode field at all is a PAPER — which is what every paper saved before this is',
+     api.cpbMode() === 'paper' && api.cpbIsWorksheet() === false);
+  api.setMeta({ mode: 'nonsense' });
+  ok('…and so is a value nobody recognises', api.cpbMode() === 'paper',
+     'failing to worksheet strips the covers off a mock exam somebody is about to sit');
+  api.setMeta({ mode: 'worksheet' });
+  ok('only the word itself is a worksheet', api.cpbMode() === 'worksheet' && api.cpbIsWorksheet() === true);
+  ok('the word for what is being built comes from ONE place', api.cpbThing() === 'worksheet');
+  api.setMeta({});
+  ok('…and says paper in the other mode', api.cpbThing() === 'paper');
+  ok('both modes are described to the teacher, not just named',
+     ['paper', 'worksheet'].every(k => api.CPB_MODES[k] && api.CPB_MODES[k].label && api.CPB_MODES[k].blurb && api.CPB_MODES[k].icon));
+
+  /* ---------- the numbering ---------- */
+  // Interleaved exactly as they come off a pile of screenshots. A PAPER
+  // hoists every MCQ into Booklet A; a WORKSHEET must not touch the order.
+  const mixed = [mcq('a1'), open('b1', 2), mcq('a2'), open('b2', 3)];
+  api.set(mixed);
+  api.setMeta({});
+  const asPaper = api.cpbLayout();
+  eq('a PAPER re-orders into its two booklets',
+     asPaper.list.map(q => q.id).join(','), 'a1,a2,b1,b2');
+  eq('…numbered as one run', ['a1', 'a2', 'b1', 'b2'].map(id => asPaper.numbers[id]).join(','), '1,2,3,4');
+
+  api.setMeta({ mode: 'worksheet' });
+  const asSheet = api.cpbLayout();
+  ok('a WORKSHEET is one list, in the order the teacher arranged it',
+     asSheet.worksheet === true && asSheet.list.map(q => q.id).join(',') === 'a1,b1,a2,b2',
+     're-ordered, the MCQs jump to the front of a sheet whose order was the point of arranging it');
+  eq('…numbered 1…n down that order',
+     ['a1', 'b1', 'a2', 'b2'].map(id => asSheet.numbers[id]).join(','), '1,2,3,4');
+  ok('…and it has no booklets at all', asSheet.a.length === 0 && asSheet.b.length === 4,
+     '`b` is everything so the totals below read the same fields in either mode');
+  ok('every question on a worksheet still has a number',
+     Object.keys(asSheet.numbers).length === 4);
+
+  /* ---------- the marks ---------- */
+  // A worksheet counts what each question prints, and a question printing
+  // nothing counts as the default FOR ITS KIND — never as nothing, which is a
+  // total that silently understates the sheet.
+  api.set([mcq('m1'), open('o1', 5), open('o2', 0)]);
+  const wm = api.cpbMarks();
+  ok('a worksheet reports itself as one', wm.worksheet === true);
+  eq('…counts the marks each question prints, defaulting the ones that print none',
+     wm.total, 2 + 5 + 2);
+  eq('…and says how many it had to assume', wm.guessed, 2);
+  eq('…and counts the questions', wm.n, 3);
+  ok('…and measures nothing against a booklet target that does not exist',
+     wm.needMcq === null && wm.needOpen === null,
+     'a chip about Booklet A on a worksheet is a chip about a thing the sheet does not have');
+  eq('an MCQ with no printed marks is worth an MCQ’s marks', api.cpbDefaultMarks(mcq('x')), 2);
+  eq('…and an open one an open question’s', api.cpbDefaultMarks(open('y', 0)), 2);
+
+  /* ---------- the questions target ---------- */
+  eq('a worksheet has NO length target by default — it has no standard length',
+     api.CPB_TARGET_QUESTIONS, 0);
+  ok('…so nothing is measured and nothing is nagged about',
+     wm.needQuestions === null && api.cpbGapLabel(wm.needQuestions) === '');
+  api.setMeta({ mode: 'worksheet', targetQuestions: 12 });
+  api.set([mcq('m1'), mcq('m2')]);
+  const wt = api.cpbMarks();
+  eq('a target the teacher set is honoured', wt.wantQuestions, 12);
+  eq('…and the gap measured against it', wt.needQuestions, 10);
+  ok('…and named with its own unit', api.cpbGapLabel(wt.needQuestions, 'question') === '10 questions to go');
+  api.setMeta({});
+
+  /* ---------- nothing is thrown away by switching ---------- */
+  api.set([mcq('q1')]);
+  api.cpbSetBook('q1', 'b');
+  api.setMeta({ mode: 'worksheet' });
+  ok('a ⇄ booklet override survives a trip through worksheet mode',
+     api.get()[0]._cpbBook === 'b');
+  api.setMeta({});
+  ok('…and is back in force the moment the paper is', api.cpbBookOf(api.get()[0]) === 'b',
+     'switching mode must cost nothing, or it is a switch nobody dares press');
+  api.set([]);
+}
+
+/* ---------- the worksheet’s wiring, read off the source ---------- */
+{
+  const wsOpts = cut('function _cpbWorksheetOpts() {', '\n// THE ONE DOOR', 'worksheet options');
+  ok('a worksheet passes NO `paper` option at all — it IS the ordinary worksheet render',
+     !/\bpaper:/.test(wsOpts),
+     'passing one gives a worksheet an exam paper’s gutter numbers and takes the answer bracket off its MCQs');
+  ok('…and no cover', /frontHtml: '',/.test(wsOpts));
+  ok('…and no forced page break, so its instruction shares a sheet with question 1',
+     /forcedBreakIds: new Set\(\),/.test(wsOpts));
+  ok('…and it prints the Name / Class / Date strip unless the teacher turned it off',
+     /noStudentFields: !_cpbMetaGet\('wsFields'\)/.test(wsOpts));
+  ok('…and it still puts every answer on the key', /answerKeyExtras: true/.test(wsOpts));
+
+  const title = cut('function _cpbPaperTitle() {', '\nfunction _cpbReady', 'title');
+  ok('an unnamed worksheet is named for what it is, not for an examination that is not happening',
+     /cpbIsWorksheet\(\)\) return \[_cpbMetaGet\('subject'\), 'Worksheet'\]/.test(title));
+
+  const send = cut('function cpbSend() {', '\nasync function _cpbCommit', 'send');
+  ok('the HOLD-BACK is promised in the same words in BOTH modes',
+     /held back from students/.test(send) && !/cpbIsWorksheet\(\)[\s\S]{0,200}held back/.test(send),
+     'a worksheet whose questions reached students early is the one failure this page must never have');
+  ok('…and the send reads the ONE layout function', /const \{ a, b \} = cpbLayout\(\);/.test(send));
+
+  const commit = cut('async function _cpbCommit() {', '\n// ---- Rendering', 'commit');
+  ok('a worksheet’s questions are held back exactly as a paper’s are',
+     /clean\.holdBack = true/.test(commit) && !/cpbIsWorksheet/.test(commit),
+     'one branch here is a mode whose questions quietly reach students');
+
+  const mv = cut('function cpbMove(id, dir) {', '\nfunction cpbDropQuestion', 'move');
+  ok('on a worksheet up means up — there is no booklet to stay inside',
+     /if \(!cpbIsWorksheet\(\)\) \{/.test(mv));
+
+  const row = cut('function _cpbRowHtml(q, num, book, first, last) {', 'function _cpbBookletHtml(', 'row');
+  ok('a worksheet row has no ⇄ button', /\$\{ws \? '' : `<button[^`]*cpbSetBook/.test(row),
+     'a button that moves a question into a booklet nothing prints is a button that appears to do nothing');
+  ok('…and it still carries the eye and the editor', /vetPrintPeekButton\(q, 'cpb'\)/.test(row) && /cpbEditQuestion/.test(row));
+
+  const setMode = cut('function cpbSetMode(mode) {', '\n// =====', 'cpbSetMode');
+  ok('an unknown mode is refused rather than stored', /if \(!CPB_MODES\[mode\] \|\| mode === cpbMode\(\)\) return;/.test(setMode));
+  ok('…and the switch says outright that it costs nothing', /nothing is lost/.test(setMode));
+  ok('switching mode re-renders the page', /k === 'mode'/.test(cut('function cpbSetMeta(k, v) {', '\n// 🅰 SWITCHING', 'setMeta')),
+     'without it the page still says Booklet A after the teacher has chosen a worksheet');
+  ok('window.cpbSetMode is exported — the chooser is an inline handler',
+     /window\.cpbSetMode = cpbSetMode;/.test(src));
+
+  const lib = cut('function _cpbLibRow(r) {', 'function _cpbLibSort', 'lib row');
+  ok('the shelf remembers which of the two each saved sheet is',
+     /mode: r\.mode === 'worksheet' \? 'worksheet' : 'paper'/.test(lib),
+     'a row written before the second mode existed carries none, and is a paper');
+  ok('…and the mode is stored at the top level so the shelf need not read the whole document',
+     /at: Date\.now\(\), mode: cpbMode\(\)/.test(src));
+
+  ok('the mode chooser has its own styles', /\.cpb-mode-on \{/.test(html) && /\.cpb-modes \{/.test(html));
+}
 
 console.log((fails ? '✗ ' : '✓ ') + (ran - fails) + '/' + ran + ' checks passed');
 process.exit(fails ? 1 : 0);

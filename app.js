@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.367.0';
+const APP_VERSION = 'v1.368.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -23463,6 +23463,52 @@ const CPB_OPEN_DEFAULT_MARKS = 2;
 const CPB_ENHANCE_MAX = 80;
 
 // =====================================================================
+// 🅰 TWO MODES — an exam paper, or an ordinary worksheet
+//
+// The same pile of screenshots is two different things depending on what the
+// teacher is making, and the difference is the FORMAT and nothing else:
+//
+//   📄 PAPER      the format the children sit — Booklet A of multiple choice
+//                 and Booklet B of open-ended, a cover for each, numbered
+//                 straight through, with an answer sheet to shade.
+//   📝 WORKSHEET  one numbered list on an ordinary worksheet: this app's own
+//                 worksheet header, the Name / Class / Date strip, and every
+//                 answer written on the sheet itself. No booklets, no covers,
+//                 no answer sheet — a worksheet is not an exam paper and must
+//                 not be dressed as one.
+//
+// EVERYTHING ELSE IS IDENTICAL, deliberately: the same screenshot pad, the
+// same shared reader, the same ✏️ editor, the same 📁 shelf, the same 👁
+// preview — and, the rule that matters, the same 🔒 HOLD BACK. A worksheet
+// built here goes into the bank held back from students exactly as a paper
+// does, for exactly the same reason: the teacher has to be able to print,
+// edit and check it, and no child may meet a question off it before they have
+// sat it.
+//
+// `cpbMode()` IS THE ONE PLACE THE MODE IS DECIDED, and it FAILS TO 'paper'.
+// Every paper saved before this mode existed carries no `mode` field at all
+// and is a paper; a stray value is a paper too, because that is the mode with
+// the covers on — the worst it can do is print two sheets nobody wanted,
+// where failing the other way would silently strip the covers off a mock exam
+// somebody is about to sit.
+const CPB_MODES = {
+  paper: {
+    key: 'paper', icon: '📄', label: 'Exam paper',
+    blurb: 'The format the children sit — Booklet A of multiple choice and Booklet B of open-ended, a cover for each, numbered straight through, with an answer sheet.',
+  },
+  worksheet: {
+    key: 'worksheet', icon: '📝', label: 'Worksheet',
+    blurb: 'One numbered list on an ordinary worksheet — the usual header, a Name / Class / Date strip, and every answer written on the sheet.',
+  },
+};
+function cpbMode() { return _cpbMetaGet('mode') === 'worksheet' ? 'worksheet' : 'paper'; }
+function cpbIsWorksheet() { return cpbMode() === 'worksheet'; }
+function cpbModeDef() { return CPB_MODES[cpbMode()]; }
+// The word for what is being built, so no caller writes it out twice and the
+// two halves of a sentence cannot disagree about which mode they are in.
+function cpbThing() { return cpbIsWorksheet() ? 'worksheet' : 'paper'; }
+
+// =====================================================================
 // 🎯 THE SHAPE A PAPER IS BUILT TO
 //
 // The current syllabus is 30 multiple choice at 2 marks each — 60 marks of
@@ -23479,6 +23525,12 @@ const CPB_ENHANCE_MAX = 80;
 // paper is slow: 24 of 30, and Booklet B eight marks short.
 const CPB_TARGET_MCQ = 30;          // questions in Booklet A
 const CPB_TARGET_OPEN_MARKS = 40;   // marks in Booklet B
+// A WORKSHEET HAS NO STANDARD LENGTH, so its target starts at 0 — which in
+// this file means "do not measure me". A teacher who does want twenty
+// questions this week types 20 into the field and gets the same gap chip the
+// paper's own two targets give; a teacher who does not is never nagged for
+// building a short one, which is the whole reason 0 means what it means.
+const CPB_TARGET_QUESTIONS = 0;     // questions on a worksheet
 // A target of 0 means "no target" — a short topical paper is a real thing to
 // build, and a page nagging that it is 22 questions short of a PSLE paper is
 // a page whose warnings get ignored.
@@ -23509,6 +23561,7 @@ let _cpbPasteOn = false;   // the pad has been clicked, so Ctrl-V lands in it
 // one is not something to hand a class. The LAYOUT is the part worth copying
 // exactly — it is what makes the paper feel like the real thing to sit.
 const CPB_META_DEFAULTS = {
+  mode: 'paper',       // 'paper' | 'worksheet' — see 🅰 TWO MODES above
   org: 'POLYMATH LEARNING CENTRE',
   exam: 'PRELIMINARY EXAMINATION',
   subject: 'SCIENCE',
@@ -23529,6 +23582,13 @@ const CPB_META_DEFAULTS = {
   // per paper, so a shorter topical paper can set its own or turn them off.
   targetMcq: CPB_TARGET_MCQ,
   targetOpen: CPB_TARGET_OPEN_MARKS,
+  // 📝 WORKSHEET MODE ONLY. They sit on the SAME object as the paper's own
+  // fields rather than in a nested one of their own, so switching mode and
+  // switching back keeps every setting on both sides — nothing a teacher has
+  // typed is thrown away by pressing the other button.
+  targetQuestions: CPB_TARGET_QUESTIONS,
+  wsIntro: '',         // one instruction line printed above question 1
+  wsFields: true,      // print the Name / Class / Date strip
 };
 let _cpbMeta = Object.assign({}, CPB_META_DEFAULTS);
 
@@ -23601,18 +23661,38 @@ function cpbSetBook(id, book) {
   q._cpbBook = book;
   cpbRender();
 }
-// The two booklets, in print order, and the number each question carries.
-// Booklet A runs 1…n and Booklet B carries straight on from it, exactly as a
-// paper in two booklets is numbered — so the numbers are worked out over BOTH
-// lists at once and never from a question's position in its own.
-function cpbBooklets() {
+// THE ONE PLACE the printed ORDER and the printed NUMBERS are decided, in
+// both modes — and it is one function rather than two because the number on
+// the sheet, the number on the answer key and the number in the ③ list all
+// have to be the SAME number. Two of them working it out separately is an
+// answer key marked against the wrong question, which is found in front of a
+// class and nowhere earlier.
+//
+//   📄 PAPER      two booklets numbered as ONE run: A is 1…n and B carries
+//                 straight on from it, exactly as a paper in two booklets is
+//                 numbered. So the numbers are worked out over BOTH lists at
+//                 once and never from a question's position in its own.
+//   📝 WORKSHEET  the single list the teacher arranged, numbered 1…n. There
+//                 are no booklets, so `a` is empty and `b` is everything —
+//                 which is what lets the totals below read the same fields
+//                 whichever mode they are asked in.
+function cpbLayout() {
+  if (cpbIsWorksheet()) {
+    const list = _cpbQuestions.slice();
+    const numbers = {};
+    list.forEach((q, i) => { numbers[q.id] = String(i + 1); });
+    return { worksheet: true, list, a: [], b: list, numbers };
+  }
   const a = [], b = [];
   _cpbQuestions.forEach(q => (cpbBookOf(q) === 'a' ? a : b).push(q));
   const numbers = {};
   a.forEach((q, i) => { numbers[q.id] = String(i + 1); });
   b.forEach((q, i) => { numbers[q.id] = String(a.length + i + 1); });
-  return { a, b, numbers };
+  return { worksheet: false, list: a.concat(b), a, b, numbers };
 }
+// The name every caller had before the second mode existed. In paper mode it
+// is byte-for-byte what it always returned.
+function cpbBooklets() { return cpbLayout(); }
 // The marks a Booklet B question is worth: everything printed on it. A
 // question the reader found no marks on is NOT worth nothing — it is a
 // question whose marks were not printed, or not read — so it counts as the
@@ -23622,8 +23702,41 @@ function cpbQuestionMarks(q) {
   ((q && q.blocks) || []).forEach(b => { n += qMarksOf(b); });
   return n;
 }
+// What a question is worth when the page it came off printed no allocation
+// for it. It is the KIND that decides — an MCQ is worth an MCQ's marks — and
+// the two numbers happening to be equal today is not a reason to have one
+// caller assume the other.
+function cpbDefaultMarks(q) {
+  return qIsMcqOnly(q && q.blocks) ? CPB_MCQ_MARKS : CPB_OPEN_DEFAULT_MARKS;
+}
 function cpbMarks() {
-  const { a, b } = cpbBooklets();
+  const lay = cpbLayout();
+  // 📝 WORKSHEET — one list, and every question is worth what it prints. A
+  // question with no printed allocation counts as the default FOR ITS KIND
+  // rather than as nothing, exactly as Booklet B's do below: a total that
+  // silently understates the sheet is worse than one that says how many it
+  // had to assume. There are no booklet targets in this mode, so the two
+  // fields that drive those chips are `null` — which is what tells
+  // `cpbGapLabel` to say nothing at all.
+  if (lay.worksheet) {
+    let total = 0, guessed = 0;
+    lay.list.forEach(q => {
+      const m = cpbQuestionMarks(q);
+      if (m) total += m;
+      else { total += cpbDefaultMarks(q); guessed++; }
+    });
+    const wantQ = _cpbTargetNum(_cpbMetaGet('targetQuestions'), CPB_TARGET_QUESTIONS);
+    return {
+      worksheet: true,
+      a: 0, b: total, total, guessed,
+      nA: 0, nB: lay.list.length, n: lay.list.length,
+      wantMcq: 0, wantOpen: 0, wantA: 0, wantTotal: 0,
+      needMcq: null, needOpen: null,
+      wantQuestions: wantQ,
+      needQuestions: wantQ ? wantQ - lay.list.length : null,
+    };
+  }
+  const { a, b } = lay;
   let bm = 0, guessed = 0;
   b.forEach(q => {
     const m = cpbQuestionMarks(q);
@@ -23637,8 +23750,10 @@ function cpbMarks() {
   const wantMcq = _cpbTargetNum(_cpbMetaGet('targetMcq'), CPB_TARGET_MCQ);
   const wantOpen = _cpbTargetNum(_cpbMetaGet('targetOpen'), CPB_TARGET_OPEN_MARKS);
   return {
+    worksheet: false,
     a: am, b: bm, total: am + bm, guessed,
-    nA: a.length, nB: b.length,
+    nA: a.length, nB: b.length, n: a.length + b.length,
+    wantQuestions: 0, needQuestions: null,
     wantMcq, wantOpen,
     wantA: wantMcq * CPB_MCQ_MARKS,
     wantTotal: wantMcq * CPB_MCQ_MARKS + wantOpen,
@@ -24096,12 +24211,15 @@ function cpbCancel() {
 function cpbMove(id, dir) {
   const i = _cpbQuestions.findIndex(q => q.id === id);
   if (i < 0) return;
-  // Reorder WITHIN the booklet the question is in: the two booklets are
-  // numbered as one run, so moving a Booklet B question up past the whole of
-  // Booklet A would renumber the entire paper for one nudge.
-  const book = cpbBookOf(_cpbQuestions[i]);
   let j = i + (dir < 0 ? -1 : 1);
-  while (j >= 0 && j < _cpbQuestions.length && cpbBookOf(_cpbQuestions[j]) !== book) j += (dir < 0 ? -1 : 1);
+  // 📄 PAPER: reorder WITHIN the booklet the question is in. The two booklets
+  // are numbered as one run, so moving a Booklet B question up past the whole
+  // of Booklet A would renumber the entire paper for one nudge.
+  // 📝 WORKSHEET: one list, so up means up — there is no booklet to stay in.
+  if (!cpbIsWorksheet()) {
+    const book = cpbBookOf(_cpbQuestions[i]);
+    while (j >= 0 && j < _cpbQuestions.length && cpbBookOf(_cpbQuestions[j]) !== book) j += (dir < 0 ? -1 : 1);
+  }
   if (j < 0 || j >= _cpbQuestions.length) return;
   const t = _cpbQuestions[i]; _cpbQuestions[i] = _cpbQuestions[j]; _cpbQuestions[j] = t;
   cpbRender();
@@ -24249,7 +24367,11 @@ let _cpbLibBusy = false;
 function _cpbLibCol() { return collection(db, 'users', _bankOwnerUid(), 'customPapers'); }
 function _cpbLibDoc(id) { return doc(db, 'users', _bankOwnerUid(), 'customPapers', id); }
 function _cpbLibRow(r) {
+  // `mode` is stored at the TOP level as well as inside `meta`, so the shelf
+  // can badge a row without reading the whole document back. A row written
+  // before the second mode existed carries none, and is a paper.
   return { id: r.id, name: r.name || '', at: Number(r.at) || 0, sentAt: Number(r.sentAt) || 0,
+    mode: r.mode === 'worksheet' ? 'worksheet' : 'paper',
     nA: Number(r.nA) || 0, nB: Number(r.nB) || 0, marks: Number(r.marks) || 0 };
 }
 function _cpbLibSort() { _cpbLib.sort((a, b) => (b.at || 0) - (a.at || 0)); }
@@ -24266,7 +24388,7 @@ async function cpbLibLoad(force) {
     _cpbLib = [];
     snap.forEach(d => {
       const v = d.data() || {};
-      _cpbLib.push(_cpbLibRow({ id: d.id, name: v.name, at: v.at, sentAt: v.sentAt,
+      _cpbLib.push(_cpbLibRow({ id: d.id, name: v.name, at: v.at, sentAt: v.sentAt, mode: v.mode,
         nA: v.nA, nB: v.nB, marks: v.marks }));
     });
     _cpbLibSort();
@@ -24288,7 +24410,7 @@ async function cpbSavePaper() {
   const m = cpbMarks();
   const id = _cpbLibId || _cpbId();
   const payload = {
-    name, at: Date.now(),
+    name, at: Date.now(), mode: cpbMode(),
     nA: m.nA, nB: m.nB, marks: m.total,
     meta: Object.assign({}, _cpbMeta),
     questions: _cpbQuestions,
@@ -24313,7 +24435,7 @@ async function cpbSavePaper() {
     await setDoc(_cpbLibDoc(id), payload);
     _cpbLibId = id;
     const at = _cpbLib.findIndex(r => r.id === id);
-    const row = _cpbLibRow({ id, name, at: payload.at, nA: m.nA, nB: m.nB, marks: m.total,
+    const row = _cpbLibRow({ id, name, at: payload.at, mode: payload.mode, nA: m.nA, nB: m.nB, marks: m.total,
       sentAt: at >= 0 ? _cpbLib[at].sentAt : 0 });
     if (at >= 0) _cpbLib[at] = row; else _cpbLib.push(row);
     _cpbLibSort();
@@ -24447,8 +24569,23 @@ function cpbSetMeta(k, v) {
   // every keystroke. The switches and the level do, because they change what
   // the page says; so do the targets, and their inputs fire on `change`
   // (blur/Enter) rather than on every keystroke for exactly that reason.
-  if (typeof def === 'boolean' || typeof def === 'number' || k === 'qLevel') cpbRender();
+  if (typeof def === 'boolean' || typeof def === 'number' || k === 'qLevel' || k === 'mode') cpbRender();
   else _cpbDraftSave();
+}
+
+// 🅰 SWITCHING BETWEEN THE TWO MODES.
+//
+// It throws NOTHING away, and that is the whole reason it can be a single
+// tap with no confirm behind it: the questions, their order, every ⇄ booklet
+// moved by hand and every field typed on either side all stay exactly where
+// they are. Only the FORMAT changes — which booklets are drawn, which cover
+// prints, which fields the ① card offers — so a teacher can look at the same
+// pile of questions as a paper and as a worksheet and pick.
+function cpbSetMode(mode) {
+  if (!CPB_MODES[mode] || mode === cpbMode()) return;
+  cpbSetMeta('mode', mode);
+  showToast(CPB_MODES[mode].icon + ' ' + CPB_MODES[mode].label
+    + ' — nothing is lost, the questions and their order stay exactly as they are', 'info');
 }
 
 // =====================================================================
@@ -24646,7 +24783,7 @@ function _cpbPaperOpts() {
   const wantSheet = a.length && !onPaper && !!_cpbMetaGet('answerSheet');
   if (wantSheet) forced.add(CPB_ANSWER_SHEET_QID);
   return {
-    a, b, numbers, marks,
+    a, b, list: a.concat(b), numbers, marks,
     frontHtml: a.length || b.length ? _cpbCoverA(marks.a, a.length) : '',
     forcedBreakIds: forced,
     buildOpts: {
@@ -24666,29 +24803,83 @@ function _cpbPaperOpts() {
   };
 }
 
-// The questions in print order: Booklet A first, then Booklet B, whatever
-// order they happen to sit in on the page.
-function _cpbPrintOrder() {
-  const { a, b } = cpbBooklets();
-  return a.concat(b);
+// =====================================================================
+// 📝 THE WORKSHEET
+//
+// Deliberately the app's ORDINARY worksheet rendering and nothing else: NO
+// `paper` option is passed at all, so it goes down byte-for-byte the path
+// every other worksheet print in this app goes down — a "Question N" heading
+// above each question, an answer bracket under every MCQ, the worksheet
+// header with its Name / Class / Date strip, no cover and no answer sheet.
+//
+// That is what "not an exam paper" has to MEAN, and it is also the thing that
+// stops this mode becoming a second renderer to keep in step with the first:
+// there is no rendering here that is this mode's own.
+// =====================================================================
+
+// The line a worksheet opens with, when the teacher wrote one. Same shape and
+// the same print CSS as a booklet's lead line, so an instruction reads as the
+// same thing on either kind of sheet.
+function _cpbWsLeadHtml(text, marks) {
+  return `<div class="cpb-lead"><p>${escapeHtml(text)}</p>`
+    + (marks ? `<div class="cpb-lead-marks">(${escapeHtml(String(marks))} marks)</div>` : '')
+    + `</div>`;
 }
 
+function _cpbWorksheetOpts() {
+  const lay = cpbLayout();
+  const marks = cpbMarks();
+  const sectionHtmlById = {};
+  const intro = String(_cpbMetaGet('wsIntro') || '').trim();
+  // The instruction line rides the same `sectionHtmlById` hook a booklet's
+  // lead line does — and is deliberately NOT forced onto a page of its own,
+  // because a worksheet opens with its instruction and question 1 together.
+  if (lay.list.length && intro) sectionHtmlById[lay.list[0].id] = _cpbWsLeadHtml(intro, marks.total);
+  return {
+    a: lay.a, b: lay.b, list: lay.list, numbers: lay.numbers, marks,
+    frontHtml: '',
+    forcedBreakIds: new Set(),
+    buildOpts: {
+      plainNumbers: true,
+      noStudentFields: !_cpbMetaGet('wsFields'),
+      answerKeyExtras: true,
+      sectionHtmlById,
+    },
+  };
+}
+
+// THE ONE DOOR the printer, the preview and 🖨 from inside the preview all go
+// through. Which of the two modes builds the arguments is decided here and
+// nowhere else — asked separately, the preview and the PDF would drift, and a
+// preview of a different sheet is the one thing a preview must never be.
+function _cpbOutputOpts() { return cpbIsWorksheet() ? _cpbWorksheetOpts() : _cpbPaperOpts(); }
+
+// The questions in print order. 📄 Booklet A first, then Booklet B, whatever
+// order they sit in on the page; 📝 the single list as the teacher arranged
+// it. `cpbLayout` is the one place that is decided, so this cannot disagree
+// with the numbers printed beside them.
+function _cpbPrintOrder() { return cpbLayout().list; }
+
 function _cpbPaperTitle() {
-  return _cpbMetaGet('name')
-    || [_cpbMetaGet('org'), _cpbMetaGet('exam'), _cpbMetaGet('year'), _cpbMetaGet('subject')].filter(Boolean).join(' · ');
+  const name = _cpbMetaGet('name');
+  if (name) return name;
+  // A worksheet has no cover to take a title off, so an unnamed one is named
+  // for what it is rather than for an examination that is not happening.
+  if (cpbIsWorksheet()) return [_cpbMetaGet('subject'), 'Worksheet'].filter(Boolean).join(' ').trim() || 'Worksheet';
+  return [_cpbMetaGet('org'), _cpbMetaGet('exam'), _cpbMetaGet('year'), _cpbMetaGet('subject')].filter(Boolean).join(' · ');
 }
 
 function _cpbReady() {
-  if (!_cpbQuestions.length) { showToast('Build the questions first — there is no paper yet', 'info'); return false; }
+  if (!_cpbQuestions.length) { showToast('Build the questions first — there is no ' + cpbThing() + ' yet', 'info'); return false; }
   return true;
 }
 
 async function cpbPrint() {
   if (!_cpbReady()) return;
-  const o = _cpbPaperOpts();
+  const o = _cpbOutputOpts();
   const selected = _cpbPrintOrder();
   const output = document.getElementById('printOutput');
-  _printProgressShow('Preparing the paper…', 'Starting…');
+  _printProgressShow('Preparing the ' + cpbThing() + '…', 'Starting…');
   const urls = [];
   selected.forEach(q => {
     if (q.answerKeyImage) urls.push(transformImageUrl(q.answerKeyImage));
@@ -24702,7 +24893,7 @@ async function cpbPrint() {
 
 function cpbPreview() {
   if (!_cpbReady()) return;
-  const o = _cpbPaperOpts();
+  const o = _cpbOutputOpts();
   _wsPreviewAdhoc = {
     questions: _cpbPrintOrder(),
     title: _cpbPaperTitle(),
@@ -24751,14 +24942,24 @@ function cpbPreviewQuestion(id) {
 function cpbSend() {
   if (!_canAuthor()) { showToast('Only question authors can save questions', 'error'); return; }
   if (!_cpbQuestions.length) { showToast('Nothing to send yet', 'error'); return; }
-  const { a, b } = cpbBooklets();
+  const { a, b } = cpbLayout();
+  const ws = cpbIsWorksheet();
+  const thing = cpbThing();
   const n = _cpbQuestions.length;
+  // The HOLD-BACK is the same promise in both modes, and it is the reason the
+  // page can be used on a live bank at all — so it is said in the same words
+  // whichever of the two is being sent.
+  const what = ws
+    ? `${n} question${n === 1 ? '' : 's'} go`
+    : `${a.length} multiple choice and ${b.length} open-ended go`;
   showConfirm('Send ' + n + ' question' + (n === 1 ? '' : 's') + ' to the bank',
-    `${a.length} multiple choice and ${b.length} open-ended go into the question bank <b>held back from students</b> — you can edit, check, print and put them on a worksheet, and no practice mode, quest or game will serve one to a child until you release them.`
-    + `<br><br>Release them later on the 🗓 <b>Scheduled Questions</b> page, which lists them under this paper's name.`
-    + (_cpbMetaGet('name') ? '' : '<br><br><b>This paper has no name yet.</b> The name is what groups them on that page — without one they are listed as “Unnamed paper”.')
-    + (_cpbLibId ? '<br><br>This paper is on your 📁 shelf, so it stays here to reprint and edit.'
-                 : '<br><br><b>This paper is not saved.</b> The questions go to the bank, but the paper itself — its booklets, its order, its covers — is cleared from this page. Press 💾 <b>Save this paper</b> first if you want to print it again.'),
+    `${what} into the question bank <b>held back from students</b> — you can edit, check, print and put them on a worksheet, and no practice mode, quest or game will serve one to a child until you release them.`
+    + `<br><br>Release them later on the 🗓 <b>Scheduled Questions</b> page, which lists them under this ${thing}'s name.`
+    + (_cpbMetaGet('name') ? '' : `<br><br><b>This ${thing} has no name yet.</b> The name is what groups them on that page — without one they are listed as “Unnamed paper”.`)
+    + (_cpbLibId ? `<br><br>This ${thing} is on your 📁 shelf, so it stays here to reprint and edit.`
+                 : `<br><br><b>This ${thing} is not saved.</b> The questions go to the bank, but the ${thing} itself — its order`
+                   + (ws ? ' and its header' : ', its booklets and its covers')
+                   + ` — is cleared from this page. Press 💾 <b>Save this ${thing}</b> first if you want to print it again.`),
     () => _cpbCommit());
 }
 
@@ -24826,7 +25027,7 @@ async function _cpbCommit() {
   try { renderBankScheduled(); } catch (err) {}
   showToast(done
     ? `${done} question${done === 1 ? '' : 's'} sent to the bank, held back from students 🔒${failed ? ` · ${failed} could not be saved` : ''}`
-      + (done && !failed && _cpbLibId ? ' · the paper is still here' : '')
+      + (done && !failed && _cpbLibId ? ' · the ' + cpbThing() + ' is still here' : '')
     : 'Nothing could be saved — check your connection and try again', failed ? 'error' : 'success');
 }
 
@@ -24857,14 +25058,19 @@ function _cpbLibHtml() {
   const open = _cpbLibId ? _cpbLib.find(r => r.id === _cpbLibId) : null;
   const rows = _cpbLib.map(r => {
     const on = r.id === _cpbLibId;
+    const def = CPB_MODES[r.mode] || CPB_MODES.paper;
     const bits = [];
-    if (r.nA || r.nB) bits.push(r.nA + ' + ' + r.nB + ' question' + (r.nA + r.nB === 1 ? '' : 's'));
+    // A worksheet has no booklets, so "0 + 12" would be arithmetic about a
+    // thing it does not have.
+    if (r.nA || r.nB) bits.push(r.mode === 'worksheet'
+      ? (r.nA + r.nB) + ' question' + (r.nA + r.nB === 1 ? '' : 's')
+      : r.nA + ' + ' + r.nB + ' question' + (r.nA + r.nB === 1 ? '' : 's'));
     if (r.marks) bits.push(r.marks + ' marks');
     bits.push('saved ' + (_wkWhen(r.at) || 'earlier'));
     if (r.sentAt) bits.push('sent to the bank 🔒');
     return `<div class="cpb-lib-row${on ? ' cpb-lib-on' : ''}">
       <div class="cpb-lib-main">
-        <div class="cpb-lib-name">${escapeHtml(r.name || 'Untitled paper')}${on ? ' <span class="cpb-lib-badge">open now</span>' : ''}</div>
+        <div class="cpb-lib-name">${escapeHtml(def.icon + ' ' + (r.name || 'Untitled ' + def.label.toLowerCase()))}${on ? ' <span class="cpb-lib-badge">open now</span>' : ''}</div>
         <div class="cpb-lib-meta">${escapeHtml(bits.join(' · '))}</div>
       </div>
       <div class="cpb-lib-tools">
@@ -24875,24 +25081,39 @@ function _cpbLibHtml() {
   }).join('');
   return `<div class="cpb-card">
     <div class="cpb-head">
-      <h3 class="cpb-h3">📁 Saved papers ${_cpbLib.length ? `<span class="cpb-pill">${_cpbLib.length}</span>` : ''}</h3>
+      <h3 class="cpb-h3">📁 Saved papers &amp; worksheets ${_cpbLib.length ? `<span class="cpb-pill">${_cpbLib.length}</span>` : ''}</h3>
       <div class="cpb-head-tools">
-        <button class="btn btn-outline btn-sm" onclick="cpbNewPaper()" ${_cpbBusy ? 'disabled' : ''}>✚ New paper</button>
+        <button class="btn btn-outline btn-sm" onclick="cpbNewPaper()" ${_cpbBusy ? 'disabled' : ''}>✚ New ${cpbThing()}</button>
         <button class="btn btn-primary btn-sm" onclick="cpbSavePaper()" ${(_cpbLibBusy || _cpbBusy || !_cpbQuestions.length) ? 'disabled' : ''}>
-          ${_cpbLibBusy ? 'Saving…' : (open ? '💾 Save “' + escapeHtml(open.name || 'paper') + '”' : '💾 Save this paper')}
+          ${_cpbLibBusy ? 'Saving…' : (open ? '💾 Save “' + escapeHtml(open.name || cpbThing()) + '”' : '💾 Save this ' + cpbThing())}
         </button>
       </div>
     </div>
-    <p class="cpb-lead">Papers you can come back to and carry on with. <b>The questions are saved, the screenshots are not</b> — once they have been read the pictures inside each question are what the paper is made of, and they travel with it.${open ? '' : (_cpbQuestions.length ? ' This paper has not been saved yet.' : '')}</p>
-    ${rows ? `<div class="cpb-lib">${rows}</div>` : '<p class="cpb-empty">Nothing saved yet. Build a paper, give it a name in ① below, and press 💾 Save this paper.</p>'}
+    <p class="cpb-lead">Papers and worksheets you can come back to and carry on with. <b>The questions are saved, the screenshots are not</b> — once they have been read the pictures inside each question are what the sheet is made of, and they travel with it. Opening one puts the page back into the mode it was built in.${open ? '' : (_cpbQuestions.length ? ' This ' + cpbThing() + ' has not been saved yet.' : '')}</p>
+    ${rows ? `<div class="cpb-lib">${rows}</div>` : '<p class="cpb-empty">Nothing saved yet. Build one, give it a name in ① below, and press 💾 Save.</p>'}
   </div>`;
 }
 
 function _cpbIntroHtml() {
+  const ws = cpbIsWorksheet();
+  const modes = Object.keys(CPB_MODES).map(k => {
+    const d = CPB_MODES[k];
+    const on = k === cpbMode();
+    return `<button type="button" class="cpb-mode${on ? ' cpb-mode-on' : ''}"
+      onclick="cpbSetMode('${k}')" ${_cpbBusy ? 'disabled' : ''} aria-pressed="${on ? 'true' : 'false'}">
+      <span class="cpb-mode-ico">${d.icon}</span>
+      <span class="cpb-mode-txt"><b>${escapeHtml(d.label)}</b><span>${escapeHtml(d.blurb)}</span></span>
+    </button>`;
+  }).join('');
   return `<div class="cpb-card cpb-intro">
-    <h3 class="cpb-h3">📝 Build a mock paper from screenshots</h3>
-    <p class="cpb-lead">Paste the questions in — a page of last year's prelim, a figure out of a textbook, one you wrote yourself. They are read <b>as one run</b>, ${CPB_BATCH} at a time, so a question spread over two or three screenshots comes out as one question and a screenshot holding three comes out as three. Multiple-choice questions go into <b>Booklet A</b> and open-ended ones into <b>Booklet B</b>, each with its own cover, numbered straight through.</p>
-    <p class="cpb-lead cpb-lock">🔒 Everything sent from here goes into the bank <b>held back from students</b> — yours to print, edit and reuse, and served to nobody until you release it.</p>
+    <h3 class="cpb-h3">📝 Build a ${ws ? 'worksheet' : 'mock paper'} from screenshots</h3>
+    <p class="cpb-lead">Paste the questions in — a page of last year's prelim, a figure out of a textbook, one you wrote yourself. They are read <b>as one run</b>, ${CPB_BATCH} at a time, so a question spread over two or three screenshots comes out as one question and a screenshot holding three comes out as three.</p>
+    <div class="cpb-modes">${modes}</div>
+    <p class="cpb-lead">${ws
+      ? 'Every question goes on <b>one numbered list</b>, in the order you put them in, on an ordinary worksheet — the usual header, a Name / Class / Date strip, and the answer written on the sheet itself.'
+      : 'Multiple-choice questions go into <b>Booklet A</b> and open-ended ones into <b>Booklet B</b>, each with its own cover, numbered straight through.'}
+      Switching between the two throws nothing away.</p>
+    <p class="cpb-lead cpb-lock">🔒 Everything sent from here goes into the bank <b>held back from students</b> — yours to print, edit and reuse, and served to nobody until you release it. That is the same in both modes.</p>
   </div>`;
 }
 
@@ -24935,11 +25156,57 @@ function _cpbField(k, label, ph, hint) {
   </label>`;
 }
 
-function _cpbSetupHtml() {
+// The level picker and the 🖼 figure switch belong to BOTH modes — the level
+// narrows the topics the AI may choose from and the figures are the sheet
+// either way — so they are written once here rather than in both branches.
+function _cpbLevelFieldHtml() {
   const lv = _cpbMetaGet('qLevel');
+  return `<label class="cpb-field">
+    <span class="cpb-field-label">File the questions at <span class="cpb-dim">— narrows the topics the AI may choose from</span></span>
+    <select class="form-input" onchange="cpbSetMeta('qLevel', this.value)">
+      <option value="">Any level — let the AI choose the topic</option>
+      ${TOPIC_LEVELS.map(l => `<option value="${escapeHtml(l)}"${l === lv ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('')}
+    </select>
+  </label>`;
+}
+function _cpbEnhanceSwitchHtml() {
+  const enhance = !!_cpbMetaGet('enhance');
+  return `<label class="cpb-switch">
+    <input type="checkbox" ${enhance ? 'checked' : ''} onchange="cpbSetMeta('enhance', this.checked)">
+    <span>Redraw every figure as <b>clean black and white</b> <span class="cpb-dim">— sharp line work off a grey photograph of print. Slower: one image call per picture. Cropping tight to the figure, with the question wording off it and its own labels kept, happens either way.</span></span>
+  </label>`;
+}
+
+// 📝 THE WORKSHEET'S OWN FIELDS. A worksheet has no cover, so it has no
+// examination, no paper code and no duration to print — offering those here
+// would be four fields that change nothing on the sheet, which is worse than
+// not offering them.
+function _cpbWorksheetSetupHtml() {
+  const fields = !!_cpbMetaGet('wsFields');
+  return `<div class="cpb-card">
+    <div class="cpb-head"><h3 class="cpb-h3">① The worksheet</h3></div>
+    <p class="cpb-lead">A worksheet prints with this app's own header — the title, the centre's name, and a Name / Class / Date strip — and nothing else. No cover, no booklets and no answer sheet: every answer is written on the sheet itself.</p>
+    <div class="cpb-fields">
+      ${_cpbField('name', 'Worksheet name', 'e.g. P5 Heat — practice 3', '— printed as the title, stored on every question as its source, and what groups them for release')}
+      ${_cpbField('subject', 'Subject', 'e.g. SCIENCE', '— used only when the worksheet has no name of its own')}
+      ${_cpbField('wsIntro', 'Instruction line', 'e.g. Answer all questions in the spaces provided.', '— optional; printed once above question 1')}
+      ${_cpbNumField('targetQuestions', 'Questions target', '— 0 turns the target off')}
+      ${_cpbLevelFieldHtml()}
+    </div>
+    <div class="cpb-switches">
+      <label class="cpb-switch">
+        <input type="checkbox" ${fields ? 'checked' : ''} onchange="cpbSetMeta('wsFields', this.checked)">
+        <span>Print the <b>Name / Class / Date</b> strip at the top</span>
+      </label>
+      ${_cpbEnhanceSwitchHtml()}
+    </div>
+  </div>`;
+}
+
+function _cpbSetupHtml() {
+  if (cpbIsWorksheet()) return _cpbWorksheetSetupHtml();
   const onPaper = !!_cpbMetaGet('mcqOnPaper');
   const sheet = !!_cpbMetaGet('answerSheet');
-  const enhance = !!_cpbMetaGet('enhance');
   return `<div class="cpb-card">
     <div class="cpb-head"><h3 class="cpb-h3">① The paper</h3></div>
     <p class="cpb-lead">These print on the two covers. They are yours to fill in — nothing here is prefilled with an examination board's name, because this is your centre's paper and a cover that passes for an official one is not one to hand a class.</p>
@@ -24954,13 +25221,7 @@ function _cpbSetupHtml() {
       ${_cpbField('duration', 'Total time', 'e.g. 1 h 45 min')}
       ${_cpbNumField('targetMcq', 'Booklet A target', '— questions; 0 turns the target off')}
       ${_cpbNumField('targetOpen', 'Booklet B target', '— marks; 0 turns the target off')}
-      <label class="cpb-field">
-        <span class="cpb-field-label">File the questions at <span class="cpb-dim">— narrows the topics the AI may choose from</span></span>
-        <select class="form-input" onchange="cpbSetMeta('qLevel', this.value)">
-          <option value="">Any level — let the AI choose the topic</option>
-          ${TOPIC_LEVELS.map(l => `<option value="${escapeHtml(l)}"${l === lv ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('')}
-        </select>
-      </label>
+      ${_cpbLevelFieldHtml()}
     </div>
     <div class="cpb-switches">
       <label class="cpb-switch">
@@ -24971,10 +25232,7 @@ function _cpbSetupHtml() {
         <input type="checkbox" ${sheet ? 'checked' : ''} ${onPaper ? 'disabled' : ''} onchange="cpbSetMeta('answerSheet', this.checked)">
         <span>Print a <b>Booklet A answer sheet</b> as the last page${onPaper ? ' <span class="cpb-dim">— not needed, the answers are on the paper</span>' : ''}</span>
       </label>
-      <label class="cpb-switch">
-        <input type="checkbox" ${enhance ? 'checked' : ''} onchange="cpbSetMeta('enhance', this.checked)">
-        <span>Redraw every figure as <b>clean black and white</b> <span class="cpb-dim">— sharp line work off a grey photograph of print. Slower: one image call per picture. Cropping tight to the figure, with the question wording off it and its own labels kept, happens either way.</span></span>
-      </label>
+      ${_cpbEnhanceSwitchHtml()}
     </div>
   </div>`;
 }
@@ -25022,8 +25280,8 @@ function _cpbZoneHtml() {
              <button class="btn btn-primary btn-sm" onclick="cpbBuild()" ${n && unread ? '' : 'disabled'} title="${built ? 'Read only the screenshots that have not been read, and add their questions to the paper. Nothing already here is touched.' : 'Read the screenshots and build the paper.'}">${readLabel}</button>`}
       </div>
     </div>
-    <p class="cpb-lead">Add them in the order you want them read — paste with <b>Ctrl/⌘ V</b>, drop them in, or pick files. You do not have to line them up one question per screenshot.${built ? ' <b>Only the unread ones are read</b>, so paste more in whenever you find them and the paper grows.' : ''}</p>
-    ${_cpbDirty && built ? '<p class="cpb-warn-line">⚠ A screenshot the paper was built from has been removed, so a question below may no longer match anything you can look at. Press <b>🔁 Read everything again</b> to rebuild — it replaces the questions, including the order and any booklet you changed by hand.</p>' : ''}
+    <p class="cpb-lead">Add them in the order you want them read — paste with <b>Ctrl/⌘ V</b>, drop them in, or pick files. You do not have to line them up one question per screenshot.${built ? ' <b>Only the unread ones are read</b>, so paste more in whenever you find them and the ' + cpbThing() + ' grows.' : ''}</p>
+    ${_cpbDirty && built ? `<p class="cpb-warn-line">⚠ A screenshot the ${cpbThing()} was built from has been removed, so a question below may no longer match anything you can look at. Press <b>🔁 Read everything again</b> to rebuild — it replaces the questions, including the order${cpbIsWorksheet() ? '' : ' and any booklet you changed by hand'}.</p>` : ''}
     ${!_cpbDirty && built && unread ? `<p class="cpb-new-line">📸 ${unread} screenshot${unread === 1 ? '' : 's'} not read yet — press <b>${escapeHtml(readLabel)}</b> and ${unread === 1 ? 'its' : 'their'} questions are added to the end of the paper.${_cpbSeedQuestion() ? ' A question that carries on from the last one read is joined to it 🔗.' : ''}</p>` : ''}
     <div class="cpb-zone${_cpbPasteOn ? ' cpb-zone-on' : ''}" onclick="cpbFocusZone()"
          ondragover="cpbDragOver(event)" ondrop="cpbDropFiles(event)">
@@ -25042,10 +25300,16 @@ function _cpbZoneHtml() {
 
 // One row of the paper. The number it will carry, what it is, and the three
 // things a teacher does to it: move it, swap its booklet, take it off.
+// One row of the paper — or of the worksheet. `book` is 'a' / 'b' on a paper
+// and '' on a worksheet, where there are no booklets: the ⇄ button is then
+// not drawn at all, because a button that moves a question into a booklet
+// that is not being printed is a button that appears to do nothing.
 function _cpbRowHtml(q, num, book, first, last) {
+  const ws = !book;
   const auto = qIsMcqOnly(q.blocks) ? 'a' : 'b';
-  const overridden = (q._cpbBook === 'a' || q._cpbBook === 'b') && q._cpbBook !== auto;
-  const marks = book === 'a' ? CPB_MCQ_MARKS : cpbQuestionMarks(q);
+  const overridden = !ws && (q._cpbBook === 'a' || q._cpbBook === 'b') && q._cpbBook !== auto;
+  const own = cpbQuestionMarks(q);
+  const marks = ws ? (own || cpbDefaultMarks(q)) : (book === 'a' ? CPB_MCQ_MARKS : own);
   const parts = qPartsUsed(q.blocks || []);
   return `<div class="cpb-row${overridden ? ' cpb-row-moved' : ''}" data-qid="${escapeHtml(String(q.id))}">
     <span class="cpb-row-n">${escapeHtml(num)}</span>
@@ -25054,15 +25318,17 @@ function _cpbRowHtml(q, num, book, first, last) {
       <div class="cpb-row-meta">
         ${escapeHtml([q.topic, q.category].filter(Boolean).join(' · '))}
         ${parts.length ? ' · ' + escapeHtml(parts.length + ' part' + (parts.length === 1 ? '' : 's')) : ''}
-        · ${book === 'a' ? escapeHtml(String(CPB_MCQ_MARKS) + ' marks') : (marks ? escapeHtml(marks + ' mark' + (marks === 1 ? '' : 's')) : '<span class="cpb-nomarks">no marks printed</span>')}
+        · ${ws
+          ? (own ? escapeHtml(own + ' mark' + (own === 1 ? '' : 's')) : `<span class="cpb-nomarks">no marks printed — counted as ${marks}</span>`)
+          : (book === 'a' ? escapeHtml(String(CPB_MCQ_MARKS) + ' marks') : (marks ? escapeHtml(marks + ' mark' + (marks === 1 ? '' : 's')) : '<span class="cpb-nomarks">no marks printed</span>'))}
         ${q._dupOf ? ' · <span class="cpb-dup">possible duplicate</span>' : ''}
         ${overridden ? ' · <span class="cpb-moved">moved here by hand</span>' : ''}
       </div>
     </div>
     <div class="cpb-row-tools">
-      <button type="button" class="cpb-tool" onclick="cpbMove('${q.id}',-1)" title="Move up within this booklet" ${first ? 'disabled' : ''}>▲</button>
-      <button type="button" class="cpb-tool" onclick="cpbMove('${q.id}',1)" title="Move down within this booklet" ${last ? 'disabled' : ''}>▼</button>
-      <button type="button" class="cpb-tool" onclick="cpbSetBook('${q.id}','${book === 'a' ? 'b' : 'a'}')" title="${book === 'a' ? 'Move to Booklet B — the child writes the answer' : 'Move to Booklet A — the child chooses an option'}">⇄ ${book === 'a' ? 'B' : 'A'}</button>
+      <button type="button" class="cpb-tool" onclick="cpbMove('${q.id}',-1)" title="Move up${ws ? '' : ' within this booklet'}" ${first ? 'disabled' : ''}>▲</button>
+      <button type="button" class="cpb-tool" onclick="cpbMove('${q.id}',1)" title="Move down${ws ? '' : ' within this booklet'}" ${last ? 'disabled' : ''}>▼</button>
+      ${ws ? '' : `<button type="button" class="cpb-tool" onclick="cpbSetBook('${q.id}','${book === 'a' ? 'b' : 'a'}')" title="${book === 'a' ? 'Move to Booklet B — the child writes the answer' : 'Move to Booklet A — the child chooses an option'}">⇄ ${book === 'a' ? 'B' : 'A'}</button>`}
       ${vetPrintPeekButton(q, 'cpb')}
       <button type="button" class="cpb-tool cpb-tool-edit" onclick="cpbEditQuestion('${q.id}')" title="Open this question in the block editor — the same one the question bank uses. Saving puts it back on the paper, right here, and nothing goes to the bank." ${_cpbBusy ? 'disabled' : ''}>✏️ Edit</button>
       <button type="button" class="cpb-tool cpb-tool-x" onclick="cpbDropQuestion('${q.id}')" title="Take this question off the paper">✕</button>
@@ -25089,18 +25355,50 @@ function _cpbBookletHtml(book, list, numbers, marks) {
   </div>`;
 }
 
+// The one flat list a worksheet is. No booklet headings, because there are no
+// booklets — a "Booklet A (empty)" panel on a worksheet is a heading about a
+// thing the sheet does not have.
+function _cpbWorksheetListHtml(list, numbers) {
+  return `<div class="cpb-booklet">
+    <div class="cpb-booklet-head">
+      <h4>📝 The questions</h4>
+      <span class="cpb-booklet-sum">${list.length} question${list.length === 1 ? '' : 's'}, numbered in this order</span>
+    </div>
+    <div class="cpb-rows">${list.map((q, i) => _cpbRowHtml(q, numbers[q.id], '', i === 0, i === list.length - 1)).join('')}</div>
+  </div>`;
+}
+
 function _cpbPaperCardHtml() {
-  const { a, b, numbers } = cpbBooklets();
+  const ws = cpbIsWorksheet();
+  const lay = cpbLayout();
+  const { a, b, numbers } = lay;
   if (!_cpbQuestions.length) {
     return `<div class="cpb-card">
-      <h3 class="cpb-h3">③ The paper</h3>
-      <p class="cpb-empty">Read the screenshots and every question shows up here, sorted into its booklet and numbered.</p>
+      <h3 class="cpb-h3">③ The ${ws ? 'worksheet' : 'paper'}</h3>
+      <p class="cpb-empty">Read the screenshots and every question shows up here, ${ws ? 'in the order you put them in and numbered.' : 'sorted into its booklet and numbered.'}</p>
     </div>`;
   }
   const m = cpbMarks();
+  const totals = ws
+    ? `<span class="cpb-total-big${m.needQuestions == null ? '' : cpbGapClass(m.needQuestions)}">
+         <b>${m.n}</b>${m.wantQuestions ? ' of ' + m.wantQuestions : ''} question${m.n === 1 ? '' : 's'}${m.needQuestions ? ' <span class="cpb-gap">' + escapeHtml(cpbGapLabel(m.needQuestions, 'question')) + '</span>' : ''}
+       </span>
+       <span><b>${m.total}</b> mark${m.total === 1 ? '' : 's'} in total</span>`
+    : `<span class="cpb-total-big${m.wantTotal ? cpbGapClass(m.wantTotal - m.total) : ''}">
+         <b>${m.total}</b>${m.wantTotal ? ' of ' + m.wantTotal : ''} marks in total${m.wantTotal ? ' <span class="cpb-gap">' + escapeHtml(cpbGapLabel(m.wantTotal - m.total, 'mark')) + '</span>' : ''}
+       </span>
+       <span class="${(m.needMcq == null ? '' : cpbGapClass(m.needMcq)).trim()}"
+             title="Booklet A is ${CPB_MCQ_MARKS} marks a question, so the questions and the marks move together.">
+         Booklet A <b>${m.nA}</b>${m.wantMcq ? ' of ' + m.wantMcq : ''} question${m.nA === 1 ? '' : 's'} ·
+         <b>${m.a}</b>${m.wantA ? ' of ' + m.wantA : ''} marks${m.needMcq ? ' <span class="cpb-gap">' + escapeHtml(cpbGapLabel(m.needMcq, 'question')) + '</span>' : ''}
+       </span>
+       <span class="${(m.needOpen == null ? '' : cpbGapClass(m.needOpen)).trim()}">
+         Booklet B <b>${m.nB}</b> question${m.nB === 1 ? '' : 's'} ·
+         <b>${m.b}</b>${m.wantOpen ? ' of ' + m.wantOpen : ''} marks${m.needOpen ? ' <span class="cpb-gap">' + escapeHtml(cpbGapLabel(m.needOpen, 'mark')) + '</span>' : ''}
+       </span>`;
   return `<div class="cpb-card">
     <div class="cpb-head">
-      <h3 class="cpb-h3">③ The paper <span class="cpb-pill">${_cpbQuestions.length}</span></h3>
+      <h3 class="cpb-h3">③ The ${ws ? 'worksheet' : 'paper'} <span class="cpb-pill">${_cpbQuestions.length}</span></h3>
       <div class="cpb-head-tools">
         <button class="btn btn-outline btn-sm" onclick="cpbPreview()" ${_cpbBusy ? 'disabled' : ''}>👁 Preview</button>
         <button class="btn btn-outline btn-sm" onclick="cpbPrint()" ${_cpbBusy ? 'disabled' : ''}>🖨 Print / Save PDF</button>
@@ -25108,23 +25406,15 @@ function _cpbPaperCardHtml() {
       </div>
     </div>
     <div class="cpb-totals">
-      <span class="cpb-total-big${m.wantTotal ? cpbGapClass(m.wantTotal - m.total) : ''}">
-        <b>${m.total}</b>${m.wantTotal ? ' of ' + m.wantTotal : ''} marks in total${m.wantTotal ? ' <span class="cpb-gap">' + escapeHtml(cpbGapLabel(m.wantTotal - m.total, 'mark')) + '</span>' : ''}
-      </span>
-      <span class="${(m.needMcq == null ? '' : cpbGapClass(m.needMcq)).trim()}"
-            title="Booklet A is ${CPB_MCQ_MARKS} marks a question, so the questions and the marks move together.">
-        Booklet A <b>${m.nA}</b>${m.wantMcq ? ' of ' + m.wantMcq : ''} question${m.nA === 1 ? '' : 's'} ·
-        <b>${m.a}</b>${m.wantA ? ' of ' + m.wantA : ''} marks${m.needMcq ? ' <span class="cpb-gap">' + escapeHtml(cpbGapLabel(m.needMcq, 'question')) + '</span>' : ''}
-      </span>
-      <span class="${(m.needOpen == null ? '' : cpbGapClass(m.needOpen)).trim()}">
-        Booklet B <b>${m.nB}</b> question${m.nB === 1 ? '' : 's'} ·
-        <b>${m.b}</b>${m.wantOpen ? ' of ' + m.wantOpen : ''} marks${m.needOpen ? ' <span class="cpb-gap">' + escapeHtml(cpbGapLabel(m.needOpen, 'mark')) + '</span>' : ''}
-      </span>
-      ${m.guessed ? `<span class="cpb-warn-inline" title="These questions had no printed mark allocation for the reader to find, so each is counted as ${CPB_OPEN_DEFAULT_MARKS}. Open one in the editor to set its marks properly.">⚠ ${m.guessed} counted as ${CPB_OPEN_DEFAULT_MARKS}</span>` : ''}
+      ${totals}
+      ${m.guessed ? `<span class="cpb-warn-inline" title="These questions had no printed mark allocation for the reader to find, so each is counted as the default for its kind. Open one in the editor to set its marks properly.">⚠ ${m.guessed} with no printed marks</span>` : ''}
     </div>
-    ${(m.needMcq || m.needOpen) ? `<p class="cpb-target-note">🎯 Building to <b>${m.wantMcq || '—'}</b> multiple choice${m.wantMcq ? ` (${m.wantA} marks)` : ''} and <b>${m.wantOpen || '—'}</b> marks of open-ended — <b>${m.wantTotal}</b> in all. Change the two targets in ① The paper, or set either to 0 for a shorter paper. Nothing printed on a cover comes from here: the covers always state what the paper really adds up to.</p>` : ''}
-    ${_cpbBookletHtml('a', a, numbers, m.a)}
-    ${_cpbBookletHtml('b', b, numbers, m.b)}
+    ${ws
+      ? (m.needQuestions ? `<p class="cpb-target-note">🎯 Building to <b>${m.wantQuestions}</b> question${m.wantQuestions === 1 ? '' : 's'}. Change the target in ① The worksheet, or set it to 0 to stop measuring — a worksheet has no standard length.</p>` : '')
+      : ((m.needMcq || m.needOpen) ? `<p class="cpb-target-note">🎯 Building to <b>${m.wantMcq || '—'}</b> multiple choice${m.wantMcq ? ` (${m.wantA} marks)` : ''} and <b>${m.wantOpen || '—'}</b> marks of open-ended — <b>${m.wantTotal}</b> in all. Change the two targets in ① The paper, or set either to 0 for a shorter paper. Nothing printed on a cover comes from here: the covers always state what the paper really adds up to.</p>` : '')}
+    ${ws
+      ? _cpbWorksheetListHtml(lay.list, numbers)
+      : _cpbBookletHtml('a', a, numbers, m.a) + _cpbBookletHtml('b', b, numbers, m.b)}
   </div>`;
 }
 
@@ -72221,6 +72511,7 @@ window.cpbMove = cpbMove;
 window.cpbSetBook = cpbSetBook;
 window.cpbDropQuestion = cpbDropQuestion;
 window.cpbSetMeta = cpbSetMeta;
+window.cpbSetMode = cpbSetMode;
 window.cpbPreview = cpbPreview;
 window.cpbPrint = cpbPrint;
 window.cpbSend = cpbSend;
