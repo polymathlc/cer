@@ -4576,6 +4576,29 @@ to a student until that morning.
   perfectly right until the next sign-in.
 - Run **`node tools/scheduled-release-tests.mjs`** after touching any of it.
 
+### 📅 Schedule release in the question editor (v1.361.0)
+
+- `openEditorRelease` / `saveEditorRelease` and `#editorReleaseOverlay` serve
+  both Create and Edit, beside the bank save action. A valid future day releases
+  at Singapore midnight. Cancel writes nothing; confirmation saves current edits
+  and `releaseOn` together, retaining the question id, provenance and keywords.
+- This supersedes the role-independent serving rule above: **`qReleased` stays
+  a pure date predicate; `qAvailableToViewer` gates all practice pools** using
+  `_canAuthor() || qReleased(q)`. Teacher/employee accounts can practise early.
+  Practise-as-student switches `currentUser.role` to student, so never use the
+  real teacher email or `_realUser` to bypass this restriction. Worksheet locks
+  read the same viewer gate. The student-pool census requires that gate.
+- Schedule release is a separate SAVE COMMAND, not a field collected with the
+  question form: it overwrites `releaseOn` AFTER `carryOverQuestionMeta`, so
+  `releaseOn` deliberately remains outside `EDITOR_OWNED_QUESTION_FIELDS`.
+  Ordinary saves preserve dates, and Scheduled Questions can change/clear them.
+- `saveQuestion(q, {fromVetting:true})` commits the bank write and vetting removal
+  in one Firestore batch. The editor resets only after success; failed writes
+  retain the draft, bank/vetting records and owner mapping. Never publish an
+  undated question first or remove vetting before its bank write succeeds.
+- Run `node tools/editor-release-tests.mjs`, `node tools/scheduled-release-tests.mjs`
+  and `node tools/rapid-pdf-tests.mjs` when changing this flow or the viewer gate.
+
 ### 🔒 …and the same sheet, handed to a STUDENT (v1.355.0)
 
 `qLockedFrom` / `qLockSplit` / `qLockSoonest` / `qLockNote` (beside
