@@ -13,6 +13,38 @@ Until then, the multi-file picker and browser importer work, with an explicit
 keep-the-tab-open notice. Do not advertise background processing as live until
 the deployment and the live acceptance check below pass.
 
+### Guided Google Cloud Shell setup
+
+[Open Rapid Add setup in Google Cloud Shell](https://shell.cloud.google.com/?cloudshell_git_repo=https://github.com/polymathlc/cer.git&cloudshell_git_branch=main&cloudshell_tutorial=rapid-import/cloud-shell-tutorial.md&show=terminal)
+
+Sign in with the Google account that manages `mathgen--app`, authorise the
+shell if asked, and run from the cloned repository:
+
+```sh
+bash rapid-import/deploy-cloud-shell.sh
+```
+
+For this non-Google repository, Cloud Shell may open without credentials. In
+that case the script asks you to run `gcloud auth login --update-adc` there.
+Never paste credentials or API keys into chat. If Firebase separately reports
+missing login, the script gives its standard browser sign-in command.
+
+The helper checks project access, existing billing and enabled secret versions
+(metadata only). It uses Node 22 and Firebase CLI 15.29.0, runs worker tests,
+deploys only `cer-rapid-import`, and discovers the deployed dispatcher identity.
+It grants enqueue permission on the Rapid Add queue, service-account-user on
+that identity itself, and Cloud Run invoker on the Rapid Add worker service.
+It does not grant project-wide IAM roles, change billing, replace live rules,
+or create service-account keys. Existing Firestore/Storage permissions and AI
+provider access still need to pass the live acceptance check below.
+
+Success requires all seven functions to be ACTIVE, the queue to be RUNNING,
+and an unauthenticated status probe to return Firebase's UNAUTHENTICATED error.
+These deployment checks do not submit PDFs or establish end-to-end processing.
+Keep the setup terminal open until it finishes; then run the live check below.
+
+### Manual deployment
+
 From an authorised Firebase/Google Cloud terminal with Node 22:
 
 ```sh
@@ -84,6 +116,7 @@ rules over the project's live rules.
 
 ```sh
 node --check app.js
+python3 tools/rapid-deploy-tests.py
 node tools/rapid-cloud-tests.mjs
 node tools/rapid-pdf-tests.mjs
 node tools/question-merge-tests.mjs
