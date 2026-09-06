@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.358.0';
+const APP_VERSION = 'v1.359.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -13998,18 +13998,91 @@ function _trimEdgeTextLines(ctx, W, H, r, thr) {
   const b2 = eat(h - 1, -1, top - 1);
   if (b2 !== null && (h - 1 - b2) <= maxTrim && b2 - top + 1 >= minKeep) bot = b2;
 
-  // AND THEN THE BLANK PAPER ITSELF. Whatever survives, the edges are pulled
-  // in to the first and last row with any ink in it. This is the one move
-  // here that cannot be wrong — it removes measured empty paper and nothing
-  // else — and it is what the whitespace expansion above cannot do, because
-  // that one only ever grows.
-  let f = top, l = bot;
-  while (f < l && !inked(f)) f++;
-  while (l > f && !inked(l)) l--;
-  if (l - f + 1 >= 8) { top = f; bot = l; }
-
+  // The blank paper this exposes is pulled in by _trimBlankEdges, which is
+  // now the ONE door for "shrink to the ink" — it does the LEFT and RIGHT
+  // edges as well, and this function used to do neither.
   if (top === 0 && bot === h - 1) return r;
   return { x: r.x, y: y0 + top, w: r.w, h: bot - top + 1 };
+}
+// ---- AND THEN THE BLANK PAPER ITSELF --------------------------------------
+// Pull every edge of the crop in to the first row and column carrying real
+// ink. It is the one move in this whole pipeline that cannot be wrong — it
+// removes measured empty paper and nothing else — and it is what
+// _expandRectToWhitespace structurally cannot do, because that one only ever
+// grows.
+//
+// It used to be four lines at the foot of _trimEdgeTextLines and it did the
+// TOP and BOTTOM only, so the LEFT and RIGHT blank paper was never removed at
+// all: whatever the model's rectangle, the 2.8%-of-the-PAGE margin and a
+// sideways expansion of up to 18% of the page width had left on the sides was
+// shipped. On a figure that is a third of the page wide that is most of the
+// picture, and it reads as a crop somebody made loosely rather than as a pass
+// that never ran.
+//
+// A SPECK IS NOT INK, and that is the half that matters on a photograph.
+// JPEG ringing, dust and paper texture leave scattered single dark pixels, so
+// one of them anywhere in the margin used to defeat the whole pull-in —
+// silently, because the crop still looks like a crop. A row or column counts
+// as ink only when it carries EDGE_INK_MIN pixels of it AND a run of at least
+// EDGE_SPECK_RUN together: one isolated pixel is noise, two touching are a
+// stroke. Both directions are bounded — a real feature that is genuinely one
+// pixel across costs a pixel or two of crop, and a speck left in costs the
+// whole tighten.
+//
+// A region with NO real ink anywhere is not a figure, so it comes back NULL
+// rather than as a white rectangle. The caller turns that into the whole-page
+// backup, which is one ✂️ crop from right and is badged; a blank picture
+// uploaded into the question looks exactly like a figure somebody has already
+// cropped, and reaches the bank that way.
+//
+// `axes` is 'x', 'y' or 'xy'. The X-only call runs BEFORE the prose trim
+// because that trim measures every band against the CROP's width
+// (`inkW >= w * 0.55`, `maxRun <= inkW * MAXRUN_FRAC`): with blank paper on
+// both sides those fractions describe the paper rather than the figure, and a
+// question sentence spanning the real content is scored as though it spanned
+// half of it. The 'xy' call runs LAST, on the paper the trim itself exposes.
+const EDGE_INK_MIN = 3;      // fewer inked pixels than this in a line is not a line of anything
+const EDGE_INK_FRAC = 0.003; // …nor is a scatter thinner than this share of the span
+const EDGE_SPECK_RUN = 2;    // one isolated pixel is noise; two touching are a stroke
+function _trimBlankEdges(ctx, W, H, r, thr, axes) {
+  const TH_INK = (thr == null ? INK_DEFAULT : thr);
+  const doX = !axes || axes.indexOf('x') >= 0, doY = !axes || axes.indexOf('y') >= 0;
+  const x0 = Math.max(0, Math.round(r.x)), y0 = Math.max(0, Math.round(r.y));
+  const w = Math.round(Math.min(r.w, W - x0)), h = Math.round(Math.min(r.h, H - y0));
+  if (w < 16 || h < 16) return r;
+  let d;
+  try { d = ctx.getImageData(x0, y0, w, h).data; }
+  catch (e) { return r; }   // a tainted canvas is not a reason to stop cropping
+  // One walk of the region fills both profiles: per row and per column, how
+  // much ink and how long its longest unbroken run.
+  const rowN = new Int32Array(h), rowRun = new Int32Array(h), rowCur = new Int32Array(h);
+  const colN = new Int32Array(w), colRun = new Int32Array(w), colCur = new Int32Array(w);
+  for (let ry = 0; ry < h; ry++) {
+    const base = ry * w * 4;
+    let run = 0;
+    for (let rx = 0; rx < w; rx++) {
+      const i = base + rx * 4;
+      const on = d[i + 3] > 60 && (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) < TH_INK;
+      if (on) {
+        rowN[ry]++; colN[rx]++;
+        run++; if (run > rowRun[ry]) rowRun[ry] = run;
+        colCur[rx]++; if (colCur[rx] > colRun[rx]) colRun[rx] = colCur[rx];
+      } else { run = 0; colCur[rx] = 0; }
+    }
+  }
+  const real = (n, maxRun, span) =>
+    n >= Math.max(EDGE_INK_MIN, span * EDGE_INK_FRAC) && maxRun >= EDGE_SPECK_RUN;
+  let t = 0, b = h - 1, l = 0, rt = w - 1;
+  while (t < b && !real(rowN[t], rowRun[t], w)) t++;
+  while (b > t && !real(rowN[b], rowRun[b], w)) b--;
+  while (l < rt && !real(colN[l], colRun[l], h)) l++;
+  while (rt > l && !real(colN[rt], colRun[rt], h)) rt--;
+  // Nothing anywhere: the rectangle landed on blank paper.
+  if (!real(rowN[t], rowRun[t], w) || !real(colN[l], colRun[l], h)) return null;
+  const out = { x: r.x, y: r.y, w: r.w, h: r.h };
+  if (doY && b - t + 1 >= 8) { out.y = y0 + t; out.h = b - t + 1; }
+  if (doX && rt - l + 1 >= 8) { out.x = x0 + l; out.w = rt - l + 1; }
+  return out;
 }
 async function _cropBoxFromScreenshot(fullDataUrl, box) {
   if (!Array.isArray(box) || box.length !== 4) return null;
@@ -14043,8 +14116,18 @@ async function _cropBoxFromScreenshot(fullDataUrl, box) {
     // difference between these two passes working and silently doing nothing.
     const thr = _inkThreshold(pctx, W, H, r);
     r = _expandRectToWhitespace(pctx, W, H, r, thr);
+    // Pull the SIDES in first, so the sentence-trim below measures a band
+    // against the figure's own width rather than against the blank paper the
+    // margin and the expansion left beside it — see _trimBlankEdges.
+    r = _trimBlankEdges(pctx, W, H, r, thr, 'x') || r;
     // Then cut away any full-width sentence lines the rectangle still holds.
     r = _trimEdgeTextLines(pctx, W, H, r, thr);
+    // And finally pull every edge in to the ink, including the paper the
+    // sentence trim has just exposed. NULL here means the rectangle held no
+    // ink at all — not a figure, so the caller falls back to the whole page.
+    const tight = _trimBlankEdges(pctx, W, H, r, thr, 'xy');
+    if (tight === null) return null;
+    r = tight;
   } catch (e) { console.warn('edge expansion skipped', e); }
   const scale = Math.max(1, Math.min(2, 1600 / Math.max(r.w, r.h))); // upscale small crops (≤2×, ≤~1600px)
   // Guaranteed breathing space: a white frame around the crop, so content

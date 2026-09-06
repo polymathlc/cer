@@ -2011,9 +2011,10 @@ every picture by hand, one slot at a time.
     art the admin had just chosen to stop using.
 - Run **`node tools/bundled-art-tests.mjs`** after touching any of it.
 
-## ✂️ What counts as INK, and the sentence above the figure (v1.324.0)
+## ✂️ What counts as INK, and the sentence above the figure (v1.324.0, tightened v1.359.0)
 
 `_inkThreshold` / `INK_RATIO` / `_expandRectToWhitespace` / `_trimEdgeTextLines` /
+**`_trimBlankEdges`** / `EDGE_INK_MIN` / `EDGE_INK_FRAC` / `EDGE_SPECK_RUN` /
 `MAXRUN_FRAC` / `RUNS_MIN` / `RULE_FRAC` / `RULE_GROUPS` (in `app.js`, search
 `WHAT COUNTS AS INK`). **`polymathlc/english`, `polymathlc/chinese` and
 `polymathlc/math` carry the same block byte-for-byte — ship a change to all
@@ -2061,14 +2062,61 @@ happened to draw.
   and leaves both lines on the picture. The cut is remembered only where a run
   reached real whitespace, so a band with nothing but figure after it is still
   never touched.
-- **AND THEN THE BLANK PAPER ITSELF.** Whatever survives, the edges are pulled in
-  to the first and last row with any ink in it. It is the one move here that
-  cannot be wrong — it removes measured empty paper and nothing else — and it is
-  what `_expandRectToWhitespace` structurally cannot do, because that one only
-  ever grows.
+- **AND THEN THE BLANK PAPER ITSELF** — `_trimBlankEdges`, below, which is the
+  ONE place that pull-in happens now. `_trimEdgeTextLines` used to carry a
+  vertical-only copy of it at its foot; that is gone, so a sentence trimmed off
+  the top and the empty paper it exposes are removed by two functions that
+  cannot disagree about what ink is.
 - **`_aiRefineCrop` is unchanged and still runs on top.** These passes are free,
   instant and deterministic; the AI pass costs a call per figure and catches what
   pixels cannot. Neither replaces the other.
+
+### 📐 …and the LEFT and RIGHT edges, which were never pulled in at all (v1.359.0)
+
+`_trimBlankEdges(ctx, W, H, r, thr, axes)` / `EDGE_INK_MIN` / `EDGE_INK_FRAC` /
+`EDGE_SPECK_RUN`, and the `'x'` → `_trimEdgeTextLines` → `'xy'` order inside
+`_cropBoxFromScreenshot`.
+
+**The pull-in was vertical only**, buried at the foot of `_trimEdgeTextLines`,
+so `r.x` and `r.w` were never touched by any pixel pass. What reached the
+question was therefore the model's own rectangle plus a 2.8%-of-page margin
+plus however far `_expandRectToWhitespace` had grown it sideways — a figure
+sitting in the middle of a band of paper on every crop in the app, and nothing
+on any screen to say the passes had only done half their job.
+
+- **IT IS THE ONE MOVE HERE THAT CANNOT BE WRONG**, which is why it is allowed
+  all four edges: it removes measured empty paper and nothing else. It is also
+  what `_expandRectToWhitespace` structurally cannot do, because that one only
+  ever GROWS.
+- **A SPECK IS NOT INK, and this is the guard that makes it work at all.** JPEG
+  ringing, a dust mote and a scanner's edge noise put one or two dark pixels in
+  an otherwise empty row — and a single-pixel test then finds ink on the very
+  first row it looks at and the whole pull-in silently does nothing, on exactly
+  the photographs it was written for. A row is real when it holds
+  `EDGE_INK_MIN` (or `EDGE_INK_FRAC` of its span, whichever is larger) inked
+  pixels **AND** a run of at least `EDGE_SPECK_RUN` touching. **Both halves are
+  needed and they do different jobs**: three scattered pixels are noise however
+  many there are, and two touching pixels are a stroke however few.
+  `EDGE_SPECK_RUN` is 2 rather than 3 because a 1px hairline rule is real ink
+  and must survive.
+- **A REGION WITH NO INK ANYWHERE COMES BACK `null`, never a white rectangle.**
+  The rectangle landed on blank paper — it is not a figure, so the caller
+  returns null and falls back to the whole page, which is one ✂️ crop away from
+  right. Cropping the paper instead would file a blank picture that looks
+  exactly like a figure nobody has got round to cropping.
+- **THE SIDES ARE PULLED IN FIRST, BEFORE THE SENTENCE TRIM** (`axes: 'x'`),
+  and that ordering is the reason the argument exists at all. Every fraction
+  `_trimEdgeTextLines` measures — `MAXRUN_FRAC`, `RULE_FRAC`, the density and
+  the solidity gate — is *of the crop's width*, so a band measured against the
+  blank paper beside the figure reads as thinner and sparser than it is, and a
+  line of question wording slips under the prose test. With the sides in first
+  those fractions describe the FIGURE. Then the trim runs, then `'xy'` takes
+  every edge including the paper the trim has just exposed.
+- **It never eats into the figure**: ink on an edge stops the walk there, and a
+  result under 8px on an axis is refused rather than collapsing the crop.
+- **A tainted canvas, or a box under 16px, is handed back UNCHANGED.**
+  `getImageData` throwing is not a reason to stop cropping.
+- Run **`node tools/crop-tighten-tests.mjs`** after touching any of it.
 
 ### 🔢 Picture answer options are ONE picture
 
@@ -5409,8 +5457,11 @@ plainly printed had to be typed back in by hand, question by question.
   honoured in the row but not in the average is the dashboard quietly
   disagreeing with itself on the one row somebody looked at closely.
 - After touching **the crop's pixel passes** (`_inkThreshold`, `INK_RATIO`,
-  `_expandRectToWhitespace`, `_trimEdgeTextLines`, `MAXRUN_FRAC`, `RUNS_MIN`,
-  `RULE_FRAC`, `RULE_GROUPS`) or **`_rectangleRules()`**, check a crop of a
+  `_expandRectToWhitespace`, `_trimEdgeTextLines`, **`_trimBlankEdges`**,
+  `EDGE_INK_MIN` / `EDGE_INK_FRAC` / `EDGE_SPECK_RUN`, `MAXRUN_FRAC`,
+  `RUNS_MIN`, `RULE_FRAC`, `RULE_GROUPS`, or the pass ORDER in
+  `_cropBoxFromScreenshot`) or **`_rectangleRules()`**, run
+  **`node tools/crop-tighten-tests.mjs`** and check a crop of a
   photographed page as well as of a screenshot. Every failure here is silent and
   the question is still built: a fixed ink level is right on a screenshot and
   reads a whole PHOTOGRAPH as ink, so both passes find one band and stand down on
@@ -5418,7 +5469,16 @@ plainly printed had to be typed back in by hand, question by question.
   model drew, with nothing on screen to say so. In the other direction a trimmer
   that cannot see a long stroke takes the top row off a table, the axis labels off
   a graph and the caption off the picture it names, and all three look like a
-  perfectly successful crop. The same block is in `polymathlc/english`,
+  perfectly successful crop. Take the pull-in back to VERTICAL only — or put a
+  second copy of it back at the foot of `_trimEdgeTextLines` — and every figure
+  in the app sits in a band of blank paper again, which is the fault this
+  version fixed and which nothing on any screen reports; run the sentence trim
+  BEFORE the sides are in and its width fractions describe the paper rather than
+  the figure, so a line of question wording rides along on the picture; drop the
+  speck guard and one dust mote or one JPEG ring stops the pull-in dead on
+  exactly the photographs it exists for; and crop blank paper instead of
+  returning `null` and a white rectangle is filed looking exactly like a figure
+  nobody has cropped yet. The same block is in `polymathlc/english`,
   `polymathlc/chinese` and `polymathlc/math` — ship a change to all four together.
 - After touching **🧻 Clean paper** (`PAPER_*`, `_paperWhitePoint`,
   `_paperCleanPixels`, `_paperCleanDataUrl`, `generateCleanEnhancedImage`,
