@@ -5105,7 +5105,81 @@ listed, and reopened whenever.
   does not have every render trying again behind a teacher who is working, and a
   denied write is NAMED — it is a one-line rules fix on `customPapers`.
 
+### 📸 Only the screenshots that have not been read (v1.366.0)
+
+`_cpbUnread` / `_cpbUnreadIsTail` / **`_cpbSeedQuestion`** / `_cpbLastRead`,
+`o.seed` on `readQuestionRun`, `cpbBuild` (append) beside **`cpbRebuild`**
+(the whole pile), `_cpbRunBuild(mode)`, and the `.cpb-pill-new` /
+`.cpb-new-line` states on the ② card.
+
+A mock paper is assembled over an afternoon: read what you have, find three
+more questions, paste them in. Re-reading the whole pile for those three was an
+AI call per batch of everything already done, minutes of waiting — and worse,
+it **REPLACED** the questions, so the order the teacher had put them in and
+every booklet they had moved by hand went with it.
+
+- **THE ORDINARY PRESS APPENDS.** 🤖 **Read the N new** reads only the unread
+  screenshots and adds their questions to the end. It asks nothing and destroys
+  nothing. 🔁 **Read everything again** is a separate button, still confirms,
+  and still does exactly what it always did — and its confirm points at the
+  other one, so nobody presses the destructive button to add three questions.
+- **THE ONE THING AN APPEND CAN GET WRONG IS THE JOIN**: a question whose stem
+  is on the last screenshot already read and whose parts are on the one just
+  pasted in. That is the `continuation` case the reader has always handled
+  INSIDE a run; **`o.seed` is what carries it ACROSS runs**. Without it, the
+  added screenshot becomes a second question with no stem and no figure —
+  exactly the failure the PDF importer's page-break stitch exists to prevent,
+  arriving by a different door.
+- **THE SEED IS ONLY HONEST WHEN THE UNREAD SCREENSHOTS ARE THE END OF THE
+  PILE** (`_cpbUnreadIsTail`). A failure in the middle, retried after the ones
+  after it were read, is **not adjacent** to the question the last run finished
+  on — joining them would graft two unrelated questions together, and the
+  result reads as a perfectly ordinary question. That is the one silent
+  failure this feature can produce, so the tail test refuses rather than guesses.
+- **`_cpbLastRead` IS AN ID, never the object.** The list is reordered, edited
+  and rebuilt continuously, so a held reference goes stale in a way nothing on
+  screen would report. It is cleared wherever the paper changes underneath it:
+  a question taken off, a saved paper opened (its screenshots did not come
+  with it, so there is no pile to carry on from), ✚ New paper, and a full send.
+  A stale id simply seeds nothing — the entry becomes its own question, which
+  is the safe direction.
+- **A FAILED screenshot counts as UNREAD**, so the same button retries it
+  rather than needing a whole re-read; an `empty` one is read (it held nothing)
+  and is not offered again.
+- **THE JOIN IS A FACT THE RUN REPORTS, not arithmetic.** An extended question
+  is never added to the list, so counting the totals before and after can never
+  see one — `onExtend` sets the flag by identity against the seed.
+- **ADDING A SCREENSHOT NO LONGER SETS `_cpbDirty`.** That warning now means
+  one thing only: *a screenshot the paper was built from has been REMOVED*, so
+  a question on the page may no longer match anything anybody can look at, and
+  🔁 is the fix. Nagging on an add would send the teacher to the destructive
+  button for the ordinary case. The two lines are mutually exclusive and
+  coloured apart — amber for "out of step", blue for "more to read".
+- **The seed is read BEFORE the run resets any status**, or `_cpbUnreadIsTail`
+  is asked about a pile that has just been wiped and always answers no.
+- The read/unread state lives on each screenshot's own `status` and the join
+  point rides the draft record, so a reload picks the pile up exactly where it
+  was.
+- Run **`node tools/custom-paper-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **📸 the incremental read** (`_cpbUnread`, `_cpbUnreadIsTail`,
+  `_cpbSeedQuestion`, `_cpbLastRead`, `o.seed` on `readQuestionRun`,
+  `cpbBuild` / `cpbRebuild` / `_cpbRunBuild`'s `mode`, or the `_cpbDirty` rule
+  in `_cpbAddFiles` / `cpbRemove` / `cpbClearShots`), run
+  `node tools/custom-paper-tests.mjs`. Both directions are silent and the page
+  reads perfectly either way. Make the ordinary button re-read the whole pile
+  again and it is minutes of AI calls for three questions **and** the teacher's
+  own order and booklet moves thrown away — which is the fault this fixed.
+  Drop `o.seed` and a question pasted in as two screenshots comes out as a
+  second question with no stem and no figure. Seed when the unread screenshots
+  are NOT the tail and a retried failure from the middle of the pile is
+  grafted onto a question from the end, reading as one perfectly ordinary
+  question. Hold the seed as an object rather than an id and it goes stale the
+  moment the list is reordered or a question is edited. Read the seed after the
+  run has reset the statuses and the tail test always says no, so the join
+  never happens at all. And put `_cpbDirty = true` back on an ADD and the page
+  nags for a full re-read on the one action that is now the ordinary flow.
 - After touching **✏️ the Custom Paper edit round-trip** (`_editorLoadQuestion`,
   `_cpbEdit` / `_cpbEditActive` / `_cpbEditFocus`, `cpbEditQuestion`,
   `_cpbCarryOver`, `cpbEditSave`, `_cpbFocusScroll`, the `_cpbEditActive()`

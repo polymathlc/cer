@@ -423,8 +423,8 @@ ok('qIsMcqOnly takes a QUESTION as well as a block list — both call sites pass
      'this paper numbers itself, so a number read off the old one is printed twice');
   ok('the marks a page prints are read off it', /include "marks" ONLY when/.test(prompt));
 
-  const run = cut('async function _cpbRunBuild() {', '\nfunction cpbCancel', 'the read');
-  ok('the page uses the ONE shared screenshot-run reader', /readQuestionRun\(_cpbShots/.test(run),
+  const run = cut('async function _cpbRunBuild(mode) {', '\nfunction cpbCancel', 'the read');
+  ok('the page uses the ONE shared screenshot-run reader', /readQuestionRun\(shots, \{/.test(run),
      'forked, it stops joining the screenshots that are one question and the other page keeps doing it');
   ok('the source paper’s numbering is stripped BEFORE the crop', /_epStripNumbering\(q\)/.test(run));
   ok('the batch level narrows the topics and is applied as a guard',
@@ -673,7 +673,7 @@ const epRun = cut('async function _epRunBuild(', '\nasync function epReadKey(', 
 ok('the exam paper builder still asks for none — an imported paper is dozens of calls',
   !/enhance:/.test(epRun));
 
-const cpbRun = cut('async function _cpbRunBuild(', '\n// ---- The list: order, booklet', '_cpbRunBuild');
+const cpbRun = cut('async function _cpbRunBuild(mode) {', '\n// ---- The list: order, booklet', '_cpbRunBuild');
 ok('Custom Paper asks for the run-wide budget', /enhance: _cpbMetaGet\('enhance'\) \? CPB_ENHANCE_MAX : 0/.test(cpbRun));
 ok('…and the switch is ON by default — the figures are the paper',
   /\n  enhance: true,/.test(cut('const CPB_META_DEFAULTS = {', '};', 'CPB_META_DEFAULTS')));
@@ -792,6 +792,146 @@ ok('the sent stamp is best effort — the questions really are in the bank eithe
   ok('window.' + fn + ' is exported — the page is inline on* handlers',
     new RegExp('window\\.' + fn + ' = ').test(src));
 });
+
+
+/* ------------------------------------------------------------------ *
+ * 📸 READING ONLY WHAT HAS NOT BEEN READ.                             *
+ *                                                                     *
+ * A paper is assembled over an afternoon, so the ordinary press must   *
+ * read the screenshots just pasted in and APPEND. Every failure here   *
+ * is silent in one direction or the other: the append re-reading the   *
+ * whole pile is minutes of AI calls and the teacher's own order and    *
+ * booklet moves thrown away, while a JOIN made where the screenshots   *
+ * are not adjacent grafts two unrelated questions into one.            *
+ * ------------------------------------------------------------------ */
+const unreadFns = cut(
+  '// 📸 READING ONLY THE SCREENSHOTS THAT HAVE NOT BEEN READ',
+  '\nfunction _cpbId()',
+  'unread helpers');
+
+const inc = new Function(`
+  let _cpbShots = [], _cpbQuestions = [], _cpbLastRead = '';
+  ${unreadFns}
+  return {
+    _cpbUnread, _cpbUnreadIsTail, _cpbSeedQuestion,
+    set: (shots, qs, last) => { _cpbShots = shots; _cpbQuestions = qs || []; _cpbLastRead = last || ''; },
+  };
+`)();
+
+const shot = (id, status) => ({ id, status: status || 'new' });
+const done = id => shot(id, 'done');
+
+// ---- which screenshots count as unread
+inc.set([done('s1'), done('s2'), shot('s3'), shot('s4')], [], '');
+eq('the unread set is the ones never read', inc._cpbUnread().map(s => s.id).join(','), 's3,s4');
+inc.set([done('s1'), shot('s2', 'empty')], [], '');
+eq('a screenshot that held nothing is READ, not unread', inc._cpbUnread().length, 0);
+inc.set([done('s1'), shot('s2', 'error')], [], '');
+eq('…but one that FAILED is unread, so the same button retries it',
+   inc._cpbUnread().map(s => s.id).join(','), 's2');
+
+// ---- the seed, and the one case it must refuse
+const q1 = { id: 'q1' }, q2 = { id: 'q2' };
+inc.set([done('s1'), done('s2'), shot('s3')], [q1, q2], 'q2');
+ok('the unread screenshots at the END of the pile are a tail', inc._cpbUnreadIsTail());
+ok('…so the run carries on from the question the last read finished on',
+   inc._cpbSeedQuestion() === q2);
+inc.set([done('s1'), shot('s2'), done('s3')], [q1, q2], 'q2');
+ok('an unread screenshot in the MIDDLE is not a tail', !inc._cpbUnreadIsTail());
+ok('…so nothing is joined — those pages are not adjacent to the last question read',
+   inc._cpbSeedQuestion() === null,
+   'joined anyway, a retried failure from the middle is grafted onto a question from the end');
+inc.set([shot('s1'), shot('s2')], [], '');
+ok('a pile where NOTHING has been read is not a tail either — there is nothing before it',
+   !inc._cpbUnreadIsTail() && inc._cpbSeedQuestion() === null);
+inc.set([done('s1'), done('s2')], [q1, q2], 'q2');
+ok('a pile with nothing unread offers no seed', inc._cpbSeedQuestion() === null);
+inc.set([done('s1'), shot('s2')], [q1, q2], 'gone');
+ok('a join point whose question has since been removed seeds nothing',
+   inc._cpbSeedQuestion() === null,
+   'a stale id must fall back to filing the entry as its own question, never throw');
+inc.set([done('s1'), shot('s2')], [q1, q2], '');
+ok('…and so does a paper that has never been read', inc._cpbSeedQuestion() === null);
+
+// ---- the reader carries a seed across two runs
+const readerSrc = cut('async function readQuestionRun(shots, o) {', '\nasync function _epRunBuild', 'seeded reader');
+ok('`last` starts as the caller\'s seed, so an appended run can continue a question',
+   /let last = opt\.seed \|\| null;/.test(readerSrc));
+ok('…and the seed is never pushed into the run\'s own questions',
+   readerSrc.indexOf('opt.onExtend(last)') < readerSrc.indexOf('questions.push(q)'),
+   'pushed, an extended question is added to the paper a second time');
+
+// ---- the two buttons
+const buildFn = cut('function cpbBuild() {', '\nfunction cpbRebuild()', 'cpbBuild');
+ok('the ordinary press appends', /_cpbRunBuild\('append'\)/.test(buildFn));
+ok('…asks nothing, because it destroys nothing', !/showConfirm/.test(buildFn));
+ok('…and says so rather than doing nothing when everything has been read',
+   /Every screenshot has been read/.test(buildFn));
+const rebuildFn = cut('function cpbRebuild() {', '\n// mode \'append\' reads', 'cpbRebuild');
+ok('🔁 Read everything again is a SEPARATE button', /_cpbRunBuild\('all'\)/.test(rebuildFn));
+ok('…and it asks first, because it replaces the paper', /showConfirm\(/.test(rebuildFn));
+ok('…and points at the other button, so nobody presses this one to add three questions',
+   /Read<\/b> instead/.test(rebuildFn));
+
+const runFn = cut('async function _cpbRunBuild(mode) {', '\nfunction cpbCancel', 'the run');
+ok('an APPEND reads only the unread screenshots', /const shots = append \? _cpbUnread\(\) : _cpbShots;/.test(runFn));
+ok('…and keeps every question already on the paper',
+   /if \(!append\) \{\n    _cpbQuestions = \[\];/.test(runFn),
+   'clearing them is the teacher\'s order and booklet moves thrown away by the ordinary button');
+ok('an append with NO questions yet is just an ordinary read',
+   /mode === 'append' && _cpbQuestions\.length > 0/.test(runFn));
+ok('the seed is taken BEFORE the run resets any status',
+   runFn.indexOf('_cpbSeedQuestion()') < runFn.indexOf('_cpbBusy = true'),
+   'read after, `_cpbUnreadIsTail` is asked about a pile that has just been wiped');
+ok('a retried failure starts clean, or its red card outlives the retry',
+   /shots\.forEach\(s => \{ s\.status = 'new'; s\.err = ''/.test(runFn));
+ok('the join point is recorded on every question the run finishes',
+   /_cpbLastRead = q\.id/.test(runFn));
+ok('…and a full re-read clears it first', /_cpbLastRead = '';/.test(runFn));
+ok('the JOIN is a fact the run reports, not arithmetic',
+   /if \(seed && q === seed\) joined = true;/.test(runFn),
+   'an extended question is never added, so counting the totals can never see it');
+ok('an append does NOT clear the removed-screenshot warning',
+   /if \(!append && !_cpbCancel && !res\.failed\) _cpbDirty = false;/.test(runFn),
+   'it adds questions and answers nothing about a screenshot that was removed after being read');
+
+// ---- the dirty rule moved: ADDING is ordinary, REMOVING is the warning
+const addFn = cut('async function _cpbAddFiles(files) {', '\nfunction cpbPick()', '_cpbAddFiles');
+ok('adding a screenshot no longer nags for a full re-read', !/_cpbDirty = true/.test(addFn),
+   'it arrives unread and the ordinary button reads it — nagging sends the teacher to the destructive one');
+const rmFn = cut('function cpbRemove(id) {', '\nfunction cpbClearShots()', 'cpbRemove');
+ok('removing an UNREAD screenshot changes nothing about the paper',
+   /gone\.status !== 'new' && _cpbQuestions\.length/.test(rmFn));
+ok('…and removing a READ one raises the warning', /_cpbDirty = true/.test(rmFn));
+const clearFn = cut('function cpbClearShots() {', '\n// Bound ONCE on the document', 'cpbClearShots');
+ok('clearing raises it only when a READ screenshot went',
+   /const anyRead = _cpbShots\.some\(s => s && s\.status !== 'new'\);/.test(clearFn));
+
+// ---- the join point is cleared wherever the paper changes underneath it
+ok('a question taken off the paper stops being the join point',
+   /if \(_cpbLastRead === id\) _cpbLastRead = '';/.test(src));
+ok('opening a saved paper clears it — its screenshots are not here',
+   /_cpbDirty = false;\n      \/\/ No screenshots came with it/.test(src));
+ok('a full send clears it with the paper', /_cpbDirty = false;\n      _cpbLastRead = '';/.test(src));
+ok('✚ New paper clears it', /_cpbDirty = false;\n    _cpbLastRead = '';/.test(src));
+ok('the draft carries it, so a reload picks the pile up where it was',
+   /lastRead: _cpbLastRead, questions: _cpbQuestions/.test(src)
+   && /_cpbLastRead = String\(\(work && work\.lastRead\) \|\| ''\);/.test(src));
+
+// ---- the card says which of the two states it is in
+const zoneFn = cut('function _cpbZoneHtml() {', '\n// One row of the paper', 'the screenshot card');
+ok('the unread count is on the heading', /cpb-pill-new/.test(zoneFn));
+ok('the button names how many it will read', /Read the \$\{unread\} new/.test(zoneFn));
+ok('…and is disabled when there is nothing unread', /\$\{n && unread \? '' : 'disabled'\}/.test(zoneFn));
+ok('the two lines are different states, never both', /!_cpbDirty && built && unread/.test(zoneFn),
+   'the amber warning and the blue "more to read" note say opposite things');
+ok('the warning now names the REMOVAL, which is the only thing it still means',
+   /A screenshot the paper was built from has been removed/.test(zoneFn));
+ok('the blue note is styled apart from the amber one',
+   /\.cpb-new-line \{[^}]*#eff6ff/.test(html) && /\.cpb-pill-new \{/.test(html),
+   'read as the same thing, a teacher presses the button that throws their paper away');
+ok('window.cpbRebuild is exported — the page is inline on* handlers',
+   /window\.cpbRebuild = cpbRebuild;/.test(src));
 
 console.log((fails ? '✗ ' : '✓ ') + (ran - fails) + '/' + ran + ' checks passed');
 process.exit(fails ? 1 : 0);
