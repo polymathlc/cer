@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.361.0';
+const APP_VERSION = 'v1.362.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -4719,6 +4719,7 @@ function applyMcqCategory(q) {
 // NAVIGATION
 // =====================================================================
 function navigateTo(page) {
+  vetPrintPeekHide();
   // Employees may only reach the pages they were hired to use. Hiding the nav
   // items is not enough on its own — a bookmark, a deep link (#usage) or any
   // navigateTo() call from shared code would otherwise walk straight in.
@@ -17882,6 +17883,7 @@ const SCANNED_CARD_BADGE =
   ' Check the wording, attach the diagram and set the topic before you approve it.">📷 From the Scan app</span>';
 
 function renderVettingList() {
+  vetPrintPeekHide();
   const container = document.getElementById('vettingListGrid');
   // Live "processing" / "failed" placeholders from Rapid add, shown on top.
   const jobCards = rapidJobs.map(_rapidJobCardHtml).join('');
@@ -17970,6 +17972,7 @@ function renderVettingList() {
             </div>
           </div>
           <div class="qb-card-actions">
+            ${vetPrintPeekButton(q)}
             ${tlLightHtml(q, 'vet')}
             <label class="vet-pick-wrap" title="Tick this question, then use 🔗 Merge selected or 🗑 Delete selected">
               <input type="checkbox" class="vet-pick" ${picked ? 'checked' : ''} onchange="vetSelToggle('${q.id}', this.checked)">
@@ -31704,6 +31707,149 @@ function previewOneQuestionPrint(id, where) {
   if (!q) { showToast('That question is no longer here', 'error'); return; }
   previewQuestionsPrint([q], q.title || 'Question', where);
 }
+
+// 👁 VETTING EXPORTED HOVER — one lazy iframe, using the PDF's own renderer.
+// Resolve against Vetting each time: these questions are not in the bank, and
+// holding an old object would show yesterday's version after an edit.
+var _vetPrintPeek = null;
+var _vetPrintPeekOpenTimer = null;
+var _vetPrintPeekCloseTimer = null;
+var _vetPrintPeekSerial = 0;
+var _vetPrintPeekBound = false;
+
+function vetPrintPeekButton(q) {
+  return `<button type="button" class="qb-action-btn vet-print-eye" data-qid="${escapeHtml(String(q.id))}"
+    aria-label="Preview exported question: ${escapeHtml(q.title || 'Untitled')}" aria-haspopup="dialog" aria-expanded="false"
+    onpointerenter="vetPrintPeekShow(this,event)" onpointerleave="vetPrintPeekLeave()"
+    onfocus="vetPrintPeekShow(this)" onblur="vetPrintPeekLeave()"
+    onclick="event.stopPropagation();vetPrintPeekFull(this.dataset.qid)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+  </button>`;
+}
+
+function vetPrintPeekKeep() { clearTimeout(_vetPrintPeekCloseTimer); }
+
+function vetPrintPeekLeave() {
+  clearTimeout(_vetPrintPeekOpenTimer);
+  vetPrintPeekKeep();
+  _vetPrintPeekCloseTimer = setTimeout(() => {
+    if (_vetPrintPeek && (_vetPrintPeek.host.contains(document.activeElement) || document.activeElement === _vetPrintPeek.anchor)) return;
+    vetPrintPeekHide();
+  }, 240); // time to move from the eye into the scrollable preview
+}
+
+function vetPrintPeekHide() {
+  clearTimeout(_vetPrintPeekOpenTimer);
+  clearTimeout(_vetPrintPeekCloseTimer);
+  _vetPrintPeekSerial++;
+  if (!_vetPrintPeek) return;
+  _vetPrintPeek.anchor.setAttribute('aria-expanded', 'false');
+  _vetPrintPeek.host.remove(); // discard old document and image loads
+  _vetPrintPeek = null;
+}
+
+function vetPrintPeekFull(id) {
+  if (!_canAuthor()) return;
+  vetPrintPeekHide();
+  previewOneQuestionPrint(id, 'vetting');
+}
+
+function vetPrintPeekDismiss() {
+  const anchor = _vetPrintPeek && _vetPrintPeek.anchor;
+  vetPrintPeekHide();
+  if (anchor && anchor.isConnected) anchor.focus();
+  clearTimeout(_vetPrintPeekOpenTimer); // focus must not reopen a dismissed peek
+}
+
+function vetPrintPeekEdit(id) {
+  if (!_canAuthor()) return;
+  vetPrintPeekHide();
+  editQuestion(id);
+}
+
+function vetPrintPeekShow(anchor, event) {
+  if (!_canAuthor() || (event && event.pointerType === 'touch')) return;
+  vetPrintPeekBind();
+  vetPrintPeekKeep();
+  if (_vetPrintPeek && _vetPrintPeek.anchor === anchor) return;
+  vetPrintPeekHide();
+  const serial = _vetPrintPeekSerial;
+  _vetPrintPeekOpenTimer = setTimeout(() => {
+    if (serial !== _vetPrintPeekSerial || !anchor.isConnected || !_canAuthor()) return;
+    const q = vettingList.find(item => String(item.id) === anchor.dataset.qid);
+    if (!q) return;
+    const host = document.createElement('section');
+    host.className = 'vet-print-peek';
+    host.setAttribute('role', 'dialog');
+    host.setAttribute('aria-label', 'Exported preview: ' + (q.title || 'Untitled'));
+    host.innerHTML = `<div class="vet-print-peek-head"><strong></strong><button type="button" class="qb-action-btn" aria-label="Close exported preview">×</button></div>
+      <div class="vet-print-peek-status" role="status">Preparing exported preview…</div>
+      <div class="vet-print-peek-stage"><iframe title="Exported question and answer pages"></iframe></div>
+      <div class="vet-print-peek-foot"><span>Scroll to see all pages</span><button type="button" class="btn btn-outline">Open full preview</button><button type="button" class="btn btn-primary">Edit question</button></div>`;
+    host.querySelector('strong').textContent = q.title || 'Untitled question';
+    const buttons = host.querySelectorAll('button');
+    buttons[0].onclick = vetPrintPeekDismiss;
+    buttons[1].onclick = () => vetPrintPeekFull(q.id);
+    buttons[2].onclick = () => vetPrintPeekEdit(q.id);
+    host.addEventListener('pointerenter', vetPrintPeekKeep);
+    host.addEventListener('pointerleave', vetPrintPeekLeave);
+    host.addEventListener('focusin', vetPrintPeekKeep);
+    host.addEventListener('focusout', vetPrintPeekLeave);
+    document.body.appendChild(host);
+    anchor.setAttribute('aria-expanded', 'true');
+    _vetPrintPeek = { host, anchor };
+    const rect = anchor.getBoundingClientRect();
+    const width = host.offsetWidth, height = host.offsetHeight;
+    const left = rect.left >= width + 20 ? rect.left - width - 10 : Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
+    const top = Math.max(12, Math.min(rect.top, window.innerHeight - height - 12));
+    host.style.left = left + 'px'; host.style.top = top + 'px';
+    const stage = host.querySelector('.vet-print-peek-stage');
+    const frame = host.querySelector('iframe');
+    // Scale the FRAME, not the measured document: A4 geometry and pagination
+    // stay identical to the full export, including on a narrow viewport.
+    const scale = Math.min(1, stage.clientWidth / 850);
+    frame.style.width = '850px';
+    frame.style.height = Math.ceil(stage.clientHeight / scale) + 'px';
+    frame.style.transform = 'scale(' + scale + ')';
+    try {
+      const copy = JSON.parse(JSON.stringify(q));
+      const html = buildWorksheetHtml([copy], q.title || 'Question', {
+        frontHtml: '', plainNumbers: true, noStudentFields: true,
+        whyNotes: _wnyCachedNotes([copy], wnyPrintOn('bank')),
+        answerKeyExtras: akxPrintOn('bank')
+      });
+      _wsWritePreview(frame, html, { readOnly: true,
+        isCurrent: () => serial === _vetPrintPeekSerial && host.isConnected,
+        onReady: () => { host.querySelector('.vet-print-peek-status').hidden = true; },
+        onError: () => { host.querySelector('.vet-print-peek-status').textContent = 'Preview could not load. Try Open full preview.'; }
+      });
+      frame.contentDocument.addEventListener('keydown', vetPrintPeekKeydown);
+    } catch (e) {
+      console.warn('exported hover preview:', e);
+      host.querySelector('.vet-print-peek-status').textContent = 'Preview could not load. Try Open full preview.';
+    }
+  }, event ? 180 : 0);
+}
+
+function vetPrintPeekKeydown(event) {
+  if (event.key !== 'Escape' || !_vetPrintPeek) return;
+  event.preventDefault(); event.stopPropagation();
+  vetPrintPeekDismiss();
+}
+
+function vetPrintPeekBind() {
+  if (_vetPrintPeekBound) return;
+  _vetPrintPeekBound = true;
+  document.addEventListener('keydown', vetPrintPeekKeydown);
+  document.addEventListener('pointerdown', event => {
+    if (_vetPrintPeek && !_vetPrintPeek.host.contains(event.target) && !_vetPrintPeek.anchor.contains(event.target)) vetPrintPeekHide();
+  }, true);
+  window.addEventListener('resize', vetPrintPeekHide);
+  window.addEventListener('scroll', event => {
+    if (_vetPrintPeek && !_vetPrintPeek.host.contains(event.target)) vetPrintPeekHide();
+  }, true);
+}
+
 // 🖨 the whole scoped set, from the 🧰 tools bar on either page.
 function qbulkPreviewPrint(where) {
   const w = qbulkWhere(where);
@@ -31838,9 +31984,17 @@ async function renderWsPreview() {
     whyNotes: _wnyCachedNotes(selected, wnyPrintOn(ctx.where)),
     answerKeyExtras: !!ctx.akExtras
   });   // exactly what will print
+  _wsWritePreview(frame, html);
+}
+
+// Shared by the full exported view and the Vetting eye. The hover supplies an
+// isolated read-only context, so it cannot change the open worksheet's tools,
+// page count or manual breaks. Late image/font callbacks must not revive it.
+function _wsWritePreview(frame, html, opts) {
+  const options = opts || {};
   const fontLinks = _printFontLinksHtml();
   const doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
-  if (!doc) return;
+  if (!doc) { if (options.onError) options.onError(); return; }
   doc.open();
   doc.write('<!DOCTYPE html><html><head><meta charset="utf-8">' + fontLinks +
     '<style>' + _wsAppCssForPreview() + WS_PREVIEW_CSS + '</style></head><body>' +
@@ -31851,7 +32005,18 @@ async function renderWsPreview() {
   // sheet will not reproduce — and the whole point of the preview is that the
   // two agree.
   _printStampImgDims(doc);
-  _wsPreviewWhenReady(doc, () => { _printStampImgDims(doc); _wsPreviewPack(doc); });
+  _wsPreviewWhenReady(doc, () => {
+    if (options.isCurrent && !options.isCurrent()) return;
+    try {
+      _printStampImgDims(doc);
+      const ok = _wsPreviewPack(doc, options);
+      if (ok === false) { if (options.onError) options.onError(); }
+      else if (options.onReady) options.onReady();
+    } catch (e) {
+      console.warn('exported preview:', e);
+      if (options.onError) options.onError();
+    }
+  });
 }
 
 function _wsPreviewWhenReady(doc, cb) {
@@ -31879,22 +32044,23 @@ function _wsPreviewWhenReady(doc, cb) {
   } catch (e) { setTimeout(go, 300); }
 }
 
-function _wsPreviewPack(doc) {
+function _wsPreviewPack(doc, opts) {
+  const readOnly = !!(opts && opts.readOnly);
   const measure = doc.getElementById('wsMeasure');
   const pagesEl = doc.getElementById('wsPages');
-  if (!measure || !pagesEl) return;
+  if (!measure || !pagesEl) return false;
   const chunks = Array.from(measure.querySelectorAll('.print-question-chunk'));
   const answerKeys = Array.from(measure.querySelectorAll('.print-answer-key-page'));
   const fronts = Array.from(measure.querySelectorAll('.print-front-page'));
   pagesEl.innerHTML = '';
-  if (!chunks.length) { measure.style.display = 'none'; return; }
+  if (!chunks.length) { measure.style.display = 'none'; return false; }
   // The preview runs the SAME planner the printer runs, on the same assembled
   // pages, so what the teacher sees here is what comes out of the PDF —
   // including the re-flow that moves an over-full page's last question on.
   let plan;
   try {
-    plan = _printPlanIn(doc, measure, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp });
-  } catch (e) { console.warn('preview plan', e); measure.style.display = 'none'; return; }
+    plan = _printPlanIn(doc, measure, { forcedBreakIds: readOnly ? new Set() : wsManualBreaks, mergeUpIds: readOnly ? new Set() : wsMergeUp });
+  } catch (e) { console.warn('preview plan', e); measure.style.display = 'none'; return false; }
   const heights = plan.heights;
   const footerH = plan.footerH;
   const separatorH = plan.sepH;
@@ -31939,7 +32105,7 @@ function _wsPreviewPack(doc) {
       const qid = chunk.dataset.qid;
       const tools = doc.createElement('div');
       tools.className = 'wspv-tools';
-      if (idx !== 0) { // nothing precedes the very first question
+      if (!readOnly && idx !== 0) { // nothing precedes the very first question
         const btn = doc.createElement('button');
         btn.type = 'button';
         if (pos === 0) { // this question starts a page — offer to pull it onto the previous one
@@ -31959,7 +32125,7 @@ function _wsPreviewPack(doc) {
       // spotting the diagram that printed too small, and the fix used to mean
       // leaving the page for the bank and finding your way back. Admins only:
       // this writes to the shared question bank.
-      if (qid && qid.indexOf('__lo__') !== 0 && _canAuthor() && !_wsPreviewIsDraft()) {
+      if (!readOnly && qid && qid.indexOf('__lo__') !== 0 && _canAuthor() && !_wsPreviewIsDraft()) {
         const eb = doc.createElement('button');
         eb.type = 'button';
         eb.className = 'wspv-brk edit';
@@ -31971,7 +32137,7 @@ function _wsPreviewPack(doc) {
       // Take the question OFF the sheet — the preview is where you notice that
       // it does not belong. Saved worksheets only: the builder's selection is
       // the tick boxes on the page behind the preview, not a stored list.
-      if (qid && qid.indexOf('__lo__') !== 0 && _wsPreviewSaved) {
+      if (!readOnly && qid && qid.indexOf('__lo__') !== 0 && _wsPreviewSaved) {
         const rb = doc.createElement('button');
         rb.type = 'button';
         rb.className = 'wspv-brk del';
@@ -31990,7 +32156,7 @@ function _wsPreviewPack(doc) {
   // as anyone could get. Added AFTER planning, exactly as the question tools
   // are, and `.wspv-tools` is absolutely positioned, so nothing here changes a
   // measured height and the preview still shows the pagination that will print.
-  if (_canAuthor() && !_wsPreviewIsDraft()) {
+  if (!readOnly && _canAuthor() && !_wsPreviewIsDraft()) {
     answerKeys.forEach(ak => {
       Array.from(ak.querySelectorAll('.print-ak-question')).forEach(row => {
         const qid = row.dataset.qid;
@@ -32014,8 +32180,9 @@ function _wsPreviewPack(doc) {
   akSheets.forEach((sh, si) => addSheet(akSpans[si],
     content => content.appendChild(_printAkPageEl(sh.ak, akRows[sh.ai], sh.p.rows, sh.gi, doc)),
     sh.p.zoom));
-  const cnt = document.getElementById('wsPreviewPageCount');
+  const cnt = readOnly ? null : document.getElementById('wsPreviewPageCount');
   if (cnt) cnt.textContent = '· ' + totalPages + ' page' + (totalPages === 1 ? '' : 's');
+  return true;
 }
 
 // =====================================================================
@@ -70143,6 +70310,9 @@ window.qbulkPreviewPrint = qbulkPreviewPrint;
 window.previewQuestionsPrint = previewQuestionsPrint;
 window.previewOneQuestionPrint = previewOneQuestionPrint;
 window.previewEditorPrint = previewEditorPrint;
+window.vetPrintPeekShow = vetPrintPeekShow;
+window.vetPrintPeekLeave = vetPrintPeekLeave;
+window.vetPrintPeekFull = vetPrintPeekFull;
 window.tlStopMany = tlStopMany;
 window.tlJumpToProblem = tlJumpToProblem;
 window.akeAddExplanation = akeAddExplanation;

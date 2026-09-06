@@ -1185,6 +1185,27 @@ thing is measured and paginated onto A4.
   last thing that was open — the paper from an hour ago, under the button just
   pressed.
 
+### 👁 Exported hover preview in Vetting (v1.362.0)
+
+`vetPrintPeek*` adds an eye immediately before each Vetting card's AI traffic
+light. Hover or keyboard focus opens a scrollable exported proof; click/tap
+opens the existing full preview. The panel also offers Edit question.
+
+- Build lazily after a short dwell, from a fresh Vetting lookup and a deep copy.
+  No AI requests, database writes, approvals or editor-state changes on hover.
+- Use `buildWorksheetHtml` and the shared `_wsWritePreview` / `_wsPreviewPack`
+  path, including print CSS, image dimensions, fonts and answer-key pagination.
+  Scale the iframe externally, retaining its A4 layout for measurement.
+- The hover passes `readOnly:true`: no page-break/edit/delete tools, no changes
+  to worksheet preview contexts, global manual breaks or the full view's count.
+  Ordinary full previews retain their tools and settings.
+- Serial checks discard late image/font work after a different eye is opened.
+  Keep the panel open while the pointer or focus is inside; Escape, outside
+  clicks, navigation, list refresh and viewport changes dismiss it. Restoring
+  focus on dismissal must not immediately reopen the preview.
+- Run `node tools/vetting-export-hover-tests.mjs`, `node tools/bulk-topics-tests.mjs`,
+  `node tools/preview-return-tests.mjs` and `node tools/answer-key-pagination-tests.mjs`.
+
 ### 🖨 …and the question open in the EDITOR (v1.350.0)
 
 `previewEditorPrint` / `_wsPreviewIsDraft` and the `source: 'editor'` branch,
