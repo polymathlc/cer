@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.359.0';
+const APP_VERSION = 'v1.360.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -13271,7 +13271,7 @@ function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint, opts) {
         `A source holding ONE question returns an array of ONE entry. Give EVERY entry its own title, topic, category and tags — never leave them off the later entries.\n` +
         (wantCont
           ? `- CONTINUATION — THIS PAGE IS ONE PAGE OF A LONGER PAPER. A question does not stop at the bottom of a page: the stem and its diagram are printed on one page and parts (b) and (c) carry on over the leaf. If the TOP of this page carries on a question that began BEFORE it — it opens part-way through, before any new question number, with no stem and no figure of its own — return that leftover as the FIRST entry with "continuation":true and put ONLY the leftover wording, answers and explanations in its "blocks". Every other entry on the page has "continuation":false.\n` +
-            `  The test: does the first thing on this page make complete sense to a student who has not seen the previous page? If it does, it is a NEW question and "continuation" is false. A page that opens with a question number, a fresh stem or its own diagram is never a continuation.\n` +
+            `  The test: does the first thing on this page make complete sense to a student who has not seen the previous page? If it does, it is a NEW question and "continuation" is false. A repeated question number with “continued”, a diagram belonging to an existing question, or later lettered parts can be a continuation. A genuinely new question number with an independent stem starts a new question. Do not restart or renumber the parts of a continuation.\n` +
             `  A page holding ONLY the tail of a question — parts, answer lines and nothing that stands on its own — is NOT an empty page: return that one continuation entry for it. Reporting it as empty loses those parts entirely.\n`
           : '') +
         `- THE PAPER'S QUESTION NUMBER IS ONLY THE SIGNAL that they are separate questions. Do NOT keep it anywhere: no "part" field, and never write "24" or "24." into the text of any block. A bank question stands on its own, and one that opens at question 24 reads as though twenty-three are missing.\n` +
@@ -14545,6 +14545,7 @@ function openRapidAdd() {
   // The auto-check switch is remembered across tabs, so the pad has to show
   // what it is really set to rather than whatever the markup's default says.
   _autoChkSetup();
+  _rapidCloudRefresh();
   _updateRapidCounts();
   const zone = document.getElementById('rapidPasteZone');
   // On a phone, focusing the pad pops the on-screen keyboard over the very
@@ -14700,6 +14701,131 @@ async function _rapidPrepFile(file) {
 //    parallel, so a later page can finish first; `settle()` is the one place
 //    that runs strictly in page order, which is what makes "the page before
 //    this one" a question that has an answer.
+// Durable PDF imports. Uploads need this tab; acknowledged jobs do not.
+let _rapidCloudReady = false;
+let _rapidCloudOwner = null;
+let _rapidCloudTimer = null;
+let _rapidCloudUploading = 0;
+let _rapidCloudJobs = [];
+let _rapidCloudUnsub = null;
+let _rapidCloudWatchUid = null;
+let _rapidCloudUploadTail = Promise.resolve();
+function _rapidCloudEnabled() {
+  return _rapidCloudReady && _rapidCloudOwner === currentUser?.uid && !!document.getElementById('rapidCloudMode')?.checked;
+}
+async function _rapidCloudCall(name, data = {}) {
+  const result = await httpsCallable(getFunctions(app), name, {timeout:120000})(data);
+  return result.data;
+}
+function _rapidCloudPaint() {
+  const el = document.getElementById('rapidCloudJobs');
+  if (!el) return;
+  el.innerHTML = _rapidCloudJobs.map(j => '<div style="padding:10px 0;border-top:1px solid var(--border);line-height:1.6;">'
+    + '<b>' + escapeHtml(j.name) + '</b><br>'
+    + escapeHtml(j.status === 'completed' ? 'Complete · ' + j.added + ' questions added to vetting'
+      : j.status === 'uploading' ? 'Upload incomplete — select this PDF again; keep the tab open until upload finishes.'
+      : j.status === 'failed' ? 'Stopped on page ' + (j.page + 1)
+      : 'Stored online · processed ' + j.page + (j.total ? ' / ' + j.total : '') + ' pages · ' + j.added + ' questions saved')
+    + (j.error ? '<br><span style="color:var(--accent-orange);">' + escapeHtml(j.error) + '</span>' : '')
+    + (j.status === 'failed' ? '<br><button type="button" class="btn btn-outline" data-rapid-retry="' + escapeHtml(j.id) + '">Retry remaining pages</button>' : '')
+    + '</div>').join('');
+  el.querySelectorAll('[data-rapid-retry]').forEach(button => button.addEventListener('click', async () => {
+    button.disabled = true;
+    try { await _rapidCloudCall('rapidImportRetry', {id:button.dataset.rapidRetry}); await _rapidCloudRefresh(); }
+    catch(e) { showToast('Could not retry: ' + e.message, 'error'); button.disabled = false; }
+  }));
+}
+async function _rapidCloudRefresh() {
+  clearTimeout(_rapidCloudTimer);
+  const uid = currentUser?.uid;
+  const note = document.getElementById('rapidCloudNote'), box = document.getElementById('rapidCloudMode');
+  if (!uid || !_isAdmin()) {
+    _rapidCloudReady=false;
+    if(box){box.checked=false;box.disabled=true;}
+    if(note) note.textContent='Online PDF processing requires an administrator account. Browser mode needs this tab to stay open.';
+    return;
+  }
+  try {
+    const r = await _rapidCloudCall('rapidImportStatus');
+    if(currentUser?.uid!==uid) return;
+    const first=!_rapidCloudReady || _rapidCloudOwner!==uid;
+    _rapidCloudReady=r.available===true; _rapidCloudOwner=uid; _rapidCloudJobs=r.jobs||[];
+    if(box){box.disabled=!_rapidCloudReady;if(first) box.checked=_rapidCloudReady;}
+    if(note) note.textContent='PDFs: keep the tab open during upload. After “Stored online — safe to close”, processing continues even with your browser closed. Screenshots still need an open tab.';
+    _rapidCloudPaint();
+    if (_rapidCloudWatchUid !== uid) {
+      if (_rapidCloudUnsub) _rapidCloudUnsub();
+      _rapidCloudWatchUid=uid;
+      _rapidCloudUnsub=onSnapshot(_vCol(), snapshot => {
+        if(currentUser?.uid!==uid) return;
+        let changed=false;
+        snapshot.docChanges().forEach(change=>{
+          const q=change.doc.data();
+          if(!q.rapidImportId) return;
+          const i=vettingList.findIndex(x=>x.id===q.id);
+          if(change.type==='removed'){if(i>=0){vettingList.splice(i,1);changed=true;}}
+          else if(i<0){vettingList.unshift(normalizeLoadedQuestion(q));_rapidJustAdded.add(q.id);changed=true;}
+        });
+        if(changed){updateCounts();renderVettingList();}
+      },()=>{_rapidCloudWatchUid=null;});
+    }
+  } catch(e) {
+    _rapidCloudReady=false;
+    if(box){box.disabled=true;box.checked=false;}
+    if(note) note.textContent='Online PDF worker unavailable. Browser mode still works, but you must keep this tab open. Server deployment or connection needs attention.';
+  }
+  if(document.getElementById('rapidAddOverlay')?.classList.contains('active')) _rapidCloudTimer=setTimeout(_rapidCloudRefresh,10000);
+}
+function _rapidUploadPdf(file, level, release) {
+  // Capture all authoring settings before waiting behind another upload.
+  const uid=currentUser?.uid;
+  const resumeKey='sq_rapid_upload_'+uid+'_'+file.name+'_'+file.size+'_'+file.lastModified;
+  let id=crypto.randomUUID();
+  try {id=localStorage.getItem(resumeKey)||id;localStorage.setItem(resumeKey,id);} catch(e) {}
+  const topics=level ? currentTopicsByLevel()[level]||currentTopics() : currentTopics();
+  const settings={id,name:file.name||'PDF',size:file.size,level,release,topics,
+    engineOrder:aiEngineOrder('author').filter(e=>e==='openai'||e==='gemini'),
+    prompt:_aiBuildQuestionPrompt(false,1,level,{continuation:true}),grounding:aiGrounding('check','')||'',autoCheck:autoChkOn()};
+  const jobId='rapid_upload_'+id;
+  const previous=rapidJobs.find(j=>j.id===jobId);
+  if(previous?.status==='processing') return _rapidCloudUploadTail;
+  if(previous) _removeRapidJob(jobId);
+  rapidJobs.unshift({id:jobId,status:'processing',title:'📤 '+settings.name,sub:'Waiting to upload — keep this tab open.'});
+  _rapidCloudUploading++;
+  _updateRapidCounts();renderVettingList();
+  const upload = async () => {
+    try {
+      if(currentUser?.uid!==uid) throw new Error('Account changed before upload. Select the PDF again after signing in.');
+      if(file.size>40*1024*1024) throw new Error('PDF limit: 40 MB per file.');
+      await _rapidCloudCall('rapidImportBegin',settings);
+      const chunkSize=3*1024*1024;
+      for(let offset=0,index=0;offset<file.size;offset+=chunkSize,index++) {
+        if(currentUser?.uid!==uid) throw new Error('Account changed during upload.');
+        const data=await _fileToBase64(file.slice(offset,offset+chunkSize));
+        let error;
+        for(let attempt=0;attempt<3;attempt++) {
+          try {await _rapidCloudCall('rapidImportChunk',{id,index,data});error=null;break;}
+          catch(e){error=e;if(attempt<2) await new Promise(r=>setTimeout(r,1000*(attempt+1)));}
+        }
+        if(error) throw error;
+        const percent=Math.round(Math.min(offset+chunkSize,file.size)/file.size*100);
+        _setRapidJobState(jobId,{sub:'Uploading '+percent+'% — keep this tab open.'});
+        _setRapidStatus('Uploading “'+settings.name+'” — '+percent+'%. Keep this tab open.');
+        renderVettingList();
+      }
+      _setRapidJobState(jobId,{sub:'Confirming online storage — keep this tab open.'});
+      await _rapidCloudCall('rapidImportFinish',{id});
+      try {localStorage.removeItem(resumeKey);} catch(e) {}
+      _removeRapidJob(jobId);
+      _setRapidStatus('✓ “'+settings.name+'” stored online.' + (_rapidCloudUploading>1?' Other PDFs are still uploading — keep this tab open.':' Safe to close the tab for this PDF; questions will continue arriving in vetting.'));
+      await _rapidCloudRefresh();
+    } catch(e) { _failRapidJob(jobId,e); }
+    finally {_rapidCloudUploading--;_updateRapidCounts();renderVettingList();}
+  };
+  _rapidCloudUploadTail=_rapidCloudUploadTail.then(upload,upload);
+  return _rapidCloudUploadTail;
+}
+
 const RAPID_PDF_MAX_PAGES = 60;   // a whole exam paper, and a guard against a 400-page book
 const RAPID_PDF_PAR = 2;          // page reads in flight at once
 let _rapidPdfQueue = [];
@@ -14720,7 +14846,7 @@ function rapidAddFiles(files, how) {
   let imgs = 0, pdfs = 0, other = 0;
   for (const file of list) {
     const type = (file && file.type) || '';
-    if (type === 'application/pdf') { startRapidJob(file, level, { release }); pdfs++; }
+    if (type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) { startRapidJob(file, level, { release }); pdfs++; }
     else if (type.startsWith('image/')) { startRapidJob(file, level, { release }); imgs++; }
     else other++;
   }
@@ -14744,6 +14870,7 @@ function rapidAddFiles(files, how) {
 }
 
 function _rapidQueuePdf(file, level, release) {
+  if (_rapidCloudEnabled()) return _rapidUploadPdf(file, level, release);
   _rapidPdfQueue.push({ file, level, release });
   _rapidPdfPump();
 }
@@ -14868,7 +14995,7 @@ function startRapidJob(file, level, opts) {
   // A PDF is never sent to the model whole. Turned away HERE rather than only
   // in the door above, so a caller added later cannot bring the whole-file read
   // back by accident — see the block above for why that read is not survivable.
-  if (file && file.type === 'application/pdf') {
+  if (file && (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || ''))) {
     _rapidQueuePdf(file,
       level === undefined || level === null ? rapidLevel() : level,
       o.release === undefined || o.release === null ? rapidRelease() : o.release);
@@ -17774,6 +17901,8 @@ function renderVettingList() {
           </div>
         </div>
         <div class="qb-card-preview">${escapeHtml(preview)}</div>
+        ${q.sourcePages?.length ? '<details style="margin-top:10px;line-height:1.8;"><summary>📄 ' + escapeHtml(q.sourcePdf || 'Source PDF') + ' · ' + q.sourcePages.length + ' source page(s)</summary>' + q.sourcePages.filter(p => /^https:\/\/firebasestorage\.googleapis\.com\//.test(p.url || '')).map(p => '<a href="' + escapeHtml(p.url) + '" target="_blank" rel="noopener" style="margin-right:14px;">Page ' + escapeHtml(p.page) + '</a>').join('') + '</details>' : ''}
+        ${q.importWarning ? '<div class="vetting-flag-note">⚠ ' + escapeHtml(q.importWarning) + '</div>' : ''}
         ${dup ? `<div class="vetting-flag-note" style="background:#fffbeb;border-color:#e0b768;color:#7a5410;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">🟡 <b>Possible duplicate</b> of “${escapeHtml(dup.title)}” (${dup.pct}% match). ${_dupSeeOriginalBtn(dup, 'font-size:0.76rem;padding:4px 10px;border-color:#e0b768;color:#7a5410;', q.id)}</div>` : ''}
         ${q.status === 'flagged' && q._flag ? `<div class="vetting-flag-note">🚩 <b>Flagged by ${escapeHtml(q._flag.by || 'a student')}</b>${q._flag.when ? ' · ' + escapeHtml(q._flag.when) : ''}${q._flag.comment ? `<div class="vfn-comment">“${escapeHtml(q._flag.comment)}”</div>` : ''}</div>` : ''}
         ${isNew ? `<div style="margin-top:10px;"><button class="btn btn-outline" style="font-size:0.78rem;padding:5px 12px;" onclick="editQuestion('${q.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;vertical-align:-2px;margin-right:4px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Open in editor</button></div>` : ''}
@@ -24967,6 +25096,8 @@ async function _xtFlushQuestions() {
 // document is still being written, or while the AI is still reading it, and
 // nothing ever reaches Firestore. Everything else survives a closed window.
 function _xtWorkInFlight() {
+  if (_rapidCloudUploading > 0) return true;
+  if (_rapidPdfBusy || _rapidPdfQueue.length) return true;
   if (_inflightOps > 0) return true;
   try { if (rapidJobs.some(j => j && j.status === 'processing')) return true; } catch (e) {}
   try { if (_epBusy) return true; } catch (e) {}

@@ -11698,10 +11698,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 
 <!-- ==================== RAPID ADD (paste → vetting, background) DIALOG ==================== -->
 <div class="confirm-overlay" id="rapidAddOverlay">
-  <div class="confirm-dialog" style="max-width:560px;text-align:left;">
+  <div class="confirm-dialog" style="max-width:560px;text-align:left;max-height:90vh;overflow-y:auto;">
     <h3 style="margin-bottom:4px;">⚡ Rapid add to vetting</h3>
-    <p class="rapid-desk" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste, drop or choose screenshots <b>and whole PDFs</b> (Ctrl/⌘+V). AI reads each one, enhances the picture to black &amp; white, and drops the question straight into your <b>Vetting</b> list — no editor stop. <b>A PDF is read page by page</b>, exactly as if you had screenshotted every page of it, so a whole paper — or a pile of papers at once — comes in on its own. Keep going; they all process in the background. <span style="color:var(--text-muted);opacity:0.85;">Tip: open this from anywhere with <b>Ctrl/⌘+Shift+V</b>.</span></p>
-    <p class="rapid-touch" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Photograph a question, or pick one from your gallery. AI reads it and drops the question straight into your <b>Vetting</b> list — no editor stop. You can pick <b>PDFs</b> here too: each one is read page by page, as if you had photographed every page. Add as many as you like; they all read in the background, so you can keep going or close this window.</p>
+    <p class="rapid-desk" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste, drop or choose screenshots <b>and whole PDFs</b> (Ctrl/⌘+V). AI reads each one, enhances the picture to black &amp; white, and drops the question straight into your <b>Vetting</b> list — no editor stop. <b>A PDF is read page by page</b>, exactly as if you had screenshotted every page of it, so a whole paper — or a pile of papers at once — comes in on its own. Select multiple PDFs together using the button below. Browser mode requires this tab to stay open; online mode can continue after upload. <span style="color:var(--text-muted);opacity:0.85;">Tip: open this from anywhere with <b>Ctrl/⌘+Shift+V</b>.</span></p>
+    <p class="rapid-touch" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Photograph a question, or pick one from your gallery. AI reads it and drops the question straight into your <b>Vetting</b> list — no editor stop. You can pick <b>PDFs</b> here too: each one is read page by page, as if you had photographed every page. Select multiple PDFs together. Keep the tab open until online mode confirms that the files are stored.</p>
     <!-- The level everything queued after it is filed at. It sits ABOVE the pad
          on purpose: it applies to the whole batch, and an author who notices it
          only after pasting forty screenshots has filed forty questions at the
@@ -11763,15 +11763,23 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
          both hand their files to the same queue a paste does. They are hidden
          on a mouse (see `.rapid-touch` in the CSS), so the desktop pad is
          exactly the box it always was. -->
-    <div class="rapid-touch rapid-upload-row">
-      <button class="btn btn-primary" onclick="document.getElementById('rapidCam').click()">
+    <div class="rapid-upload-row">
+      <button class="btn btn-primary rapid-touch" onclick="document.getElementById('rapidCam').click()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         Take photo
       </button>
-      <button class="btn btn-outline" onclick="document.getElementById('rapidFile').click()">🖼️ Choose photos / PDF</button>
+      <button class="btn btn-outline" onclick="document.getElementById('rapidFile').click()">📄 Choose multiple PDFs / images</button>
     </div>
     <input type="file" accept="image/*" capture="environment" hidden id="rapidCam" onchange="rapidPickFiles(this)">
     <input type="file" accept="image/*,application/pdf" multiple hidden id="rapidFile" onchange="rapidPickFiles(this)">
+    <div class="rapid-level" style="margin-top:16px;display:block;">
+      <label style="display:flex;gap:8px;align-items:center;" for="rapidCloudMode">
+        <input type="checkbox" id="rapidCloudMode" disabled>
+        <b>Process PDFs online after I close the tab</b>
+      </label>
+      <p id="rapidCloudNote" style="margin:8px 0;line-height:1.6;font-size:0.84rem;" role="status">Checking online processing availability…</p>
+      <details><summary>Online PDF jobs</summary><div id="rapidCloudJobs" style="max-height:220px;overflow:auto;" aria-live="polite"></div></details>
+    </div>
     <div id="rapidStatus" style="margin-top:12px;font-size:0.84rem;color:var(--text-muted);min-height:1.2em;">Click the box above, then paste.</div>
     <div class="btn-group" style="justify-content:space-between;align-items:center;margin-top:14px;">
       <span style="font-size:0.82rem;color:var(--text-muted);">Added <b id="rapidAddedCount" style="color:var(--primary);">0</b> · Processing <b id="rapidProcCount" style="color:var(--accent-orange);">0</b></span>
