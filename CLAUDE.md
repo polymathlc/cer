@@ -4808,7 +4808,189 @@ plainly printed had to be typed back in by hand, question by question.
   nothing and the teacher types the number in again.
 - Run **`node tools/auto-check-tests.mjs`** after touching any of it.
 
+## 🗂️ Custom Paper — a whole mock paper, built from screenshots (v1.363.0)
+
+`cpb*` / `CPB_*` in `app.js` (search `CUSTOM PAPER — a whole mock paper`), the
+`.cpb-*` CSS and `#page-custompaper` in `index.html`, plus `readQuestionRun`,
+`qIsMcqOnly`, `qHeldBack` and the anchored front sheet — the four pieces it
+shares with the rest of the app rather than forking.
+
+Paste the questions in — a page of last year's prelim, a figure out of a
+textbook, one you wrote yourself — and get back a paper laid out the way the
+children sit one: **Booklet A** of multiple choice and **Booklet B** of
+open-ended, each with its own cover, numbered straight through, with an answer
+sheet and an answer key. Admin only.
+
+- **IT IS NOT THE 📄 EXAM PAPER BUILDER, and the two must not be merged.** That
+  page imports a paper that ALREADY EXISTS, with its own marking scheme, and
+  what comes out is bank questions — there is no paper at the end of it,
+  because the paper was the input. This one has no marking scheme to read (the
+  questions are being gathered from everywhere) and the PAPER is the output.
+  Nor is it ⚡ Rapid add, which fires each screenshot off as its own job and so
+  structurally cannot join the three screenshots that are one question.
+- **`readQuestionRun` IS THE ONE READER**, and the extraction is the point: the
+  batching, the `continuation` stitch across a batch boundary and the
+  `_epCropInto` crop are now called by both pages, so a question spread over
+  three screenshots is joined here for exactly the reason it is joined there.
+  Forked, the drift reads as *"the other page joins my screenshots and this one
+  does not"*. It is transport — it is HANDED a prompt — which is why it is
+  exempt by name in the grounding census and named in `AUTHORING_FUNCTIONS`.
+- **`qIsMcqOnly(blocks)` DECIDES THE BOOKLET, and it is the ONE test** the print
+  packer and the printed MCQ's answer bracket already read. It is a fact about
+  the BLOCKS, never the model's own `questionType`: the booklet decides whether
+  a child is given ruled lines to write on, and a question in the wrong one is
+  answerable in the wrong place — found in the exam hall. **"and nothing else"
+  is the load-bearing half**: an MCQ that ALSO carries a writing box is
+  open-ended, which is the safe direction, because its worst case is ruled lines
+  nobody uses. `cpbSetBook` is the teacher's override on top, because the reader
+  is very good and not perfect.
+- **THE TWO BOOKLETS ARE NUMBERED AS ONE RUN** (`cpbBooklets`) — A is 1…n and B
+  carries straight on — so the numbers are worked out over BOTH lists at once
+  and never from a question's position in its own. `cpbMove` reorders WITHIN a
+  booklet for the same reason: nudging a Booklet B question up past the whole of
+  Booklet A would renumber the entire paper.
+- **NOTHING IS WRITTEN UNTIL SEND, and what is written is HELD BACK.** See
+  🔒 below. `_cpbCommit` awaits each `saveQuestion` one at a time and only pushes
+  into `questionBank` once the document really went — a bank holding a question
+  Firestore does not looks perfectly right until the next sign-in.
+- **THE PAPER GOES THROUGH `buildWorksheetHtml` AND `autoscaleAndPrint`**, the
+  one builder and the one planner every other print in this app uses. A renderer
+  of its own would drift, and it would drift in the direction nobody checks —
+  the sheet a class is sitting. The `paper` option is what it adds:
+  - `numbers` puts the paper's own number in the LEFT GUTTER beside the first
+    line (`.print-q-paper` / `.print-q-paper-num`, the shape `.print-has-part`
+    already uses) instead of a "Question N" heading. **Nesting the two is what
+    gives a paper its two columns** — the number in the first, (a)/(b)/(c) in
+    the second — for free.
+  - `pageHtmlById` emits a whole SHEET before a question, for the cover that
+    opens Booklet B.
+  - `noBracketIds` drops the MCQ answer bracket, because Booklet A is answered
+    on the answer sheet and a bracket nobody writes in is a mark a child looks
+    for and cannot find. The KEY is pushed either way — an answer is never
+    optional.
+  - `tailHtml` is the answer sheet, appended after the last question and before
+    the key.
+  **With no `paper` option every other print in this app is byte-for-byte what
+  it was**, and the harness pins exactly that.
+- **THE COVER LAYOUT IS COPIED EXACTLY; WHOSE PAPER IT IS IS NOT.** The ruled
+  identity box, the index-number grid, the instructions box and the booklet
+  structure are what make a mock paper feel like the real thing to sit, and they
+  are reproduced. Every line of the heading is a FIELD the teacher fills in, and
+  **nothing is prefilled with the name of a real examination board** — a tuition
+  centre's mock paper that passes for an official one is not something to hand a
+  class. `_cpbCoverFootHtml` deliberately prints no "this booklet consists of N
+  printed pages": the count is only known after the planner has paginated, and a
+  cover stating the wrong one is worse than one stating none.
+- **The mark totals are COMPUTED** (`cpbMarks`) — Booklet A at `CPB_MCQ_MARKS`
+  a question, Booklet B from each question's own printed `[n]`. A B question the
+  reader found no marks on counts as `CPB_OPEN_DEFAULT_MARKS` rather than as
+  nothing, and **the page says how many did**: a cover that silently understates
+  the paper is worse than one that admits what it assumed.
+- **The draft is mirrored to IndexedDB**, keyed by TAB like the exam paper's and
+  through the SAME `_epdTx` helper — the fiddly, already-proven half is shared
+  and only the keys differ. Forty screenshots is an afternoon, and nothing is
+  written until Send.
+- The page is **admin-only in two places**: the nav item carries `admin-only`,
+  `custompaper` is deliberately not on `EMPLOYEE_PAGES`, and `navigateTo`
+  rewrites it — hiding a nav item is never on its own what keeps a page shut.
+  `cpbRender` gates on `_canAuthor()`, which is the line that would need nothing
+  changing if that were ever revisited.
+- Run **`node tools/custom-paper-tests.mjs`** after touching any of it.
+
+### 🔒 Held back — in the bank, and not for students yet (v1.363.0)
+
+`qHeldBack` folded into **`qReleased`**, the chip in `qReleaseChipHtml`, and
+`_bankHeldRows` / `_bankHeldSectionHtml` / `_bankSetHold` / `bankUnholdNow` /
+`bankUnholdPaper` on the 🗓 Scheduled Questions page.
+
+A release DATE answers *"not until Monday"*. It cannot answer *"not until I say
+so"*, which is what a teacher building next term's mock paper actually wants:
+the questions have to be in the bank NOW so the paper can be printed, edited,
+checked and put on a worksheet, and no child may meet one until it has been sat.
+
+- **IT IS FOLDED INTO `qReleased` RATHER THAN BOLTED BESIDE IT**, and that is the
+  whole safety story: every student-facing pool already asks that ONE predicate,
+  so all of them gained the gate without being told, and the CENSUS in
+  `tools/scheduled-release-tests.mjs` still guards the next pool somebody
+  writes. A gate of its own is one that pool forgets to ask.
+- **IT IS STRICTLY `=== true`**, and unlike `qReleaseOn` that is NOT a fail-open
+  rule but an exact one: the field has exactly two writers (📝 Custom Paper's
+  send, and the 🔓 release button), neither of which can produce a
+  truthy-but-not-true value, so there is no third state to be lenient about.
+- **`holdBack` is deliberately OUTSIDE `EDITOR_OWNED_QUESTION_FIELDS`**, exactly
+  as `releaseOn` is, so `carryOverQuestionMeta` keeps a question held back across
+  an edit. **Giving the editor a control for it later means adding the name to
+  that Set in the same commit**, or an ordinary edit would release the paper.
+- **A question nobody can find is one nobody can release**, so it wears the
+  🔒 badge on every management surface through the same `qReleaseChipHtml` door
+  the ⏳ chip uses (held back beats a date — saying "releases 3 Nov" about a
+  question that will not is worse than saying nothing), and the 🗓 page lists
+  them **grouped by paper** (`q.source`) with one 🚀 Release all now. Forty
+  separate buttons is a list nobody works through.
+- `_bankSetHold` is the ONE writer: a QUIET write (releasing a paper is
+  housekeeping, not a question authored, and must not land in a work-session
+  log) that is rolled back when the document did not go.
+- The teacher still sees everything, because `qAvailableToViewer` is
+  `_canAuthor() || qReleased(q)` — and a student handed a worksheet carrying one
+  gets the 🔒 LOCKED ROW, since `qLockedFrom` reads the same gate.
+
+### 📑 A front sheet that is not at the front (v1.363.0)
+
+`_printFrontAnchor` / `_printFrontRestarts` / **`_printFrontPlacement`**, read by
+`doScaleAndPrint`, `_printFlowFallback`, `_wsPreviewPack` and
+`_printApplyPageNumbers`.
+
+Every `.print-front-page` there has ever been leads the document — it is lifted
+out before pagination and put back at the top, which is exactly right for a
+cover. **A paper in two booklets needs one that is not**: Booklet B's cover
+belongs where Booklet B starts, and hoisted it becomes a second cover on top of
+the first, which reads as a printing fault.
+
+- A front sheet may name the question it goes immediately before —
+  `data-front-before="<qid>"` — and `data-front-restart` on the same sheet
+  restarts the page numbering behind it, because each booklet is numbered from 1.
+- **No existing front page carries the attribute**, so every sheet this app
+  printed before still prints byte-for-byte the same.
+- **An anchor naming a question that is not on the sheet leads the document**
+  rather than being dropped: visible and wrong-looking beats silently gone,
+  which is the failure nobody would ever notice. (In practice it cannot fire —
+  the builder only emits Booklet B's cover when Booklet B has a question.)
+- **The anchor is the chunk that STARTS the page**, which for a booklet is its
+  instruction line (`__lo__<qid>`, forced onto a new page) and not the question:
+  anchored to the question, the cover would land between the instruction line
+  and question 1 if the packer ever split the two.
+- **The live preview places them the same way**, and its forced breaks are
+  unioned with the teacher's own manual ones — a preview that paginates
+  differently from the PDF is the one thing a preview must never do.
+
 ## House rules
+- After touching **🗂️ Custom Paper** (`cpb*` / `CPB_*`, `qIsMcqOnly`,
+  `readQuestionRun` and its two callers, the `paper` option in
+  `buildWorksheetHtml`, `_printFrontAnchor` / `_printFrontRestarts` /
+  `_printFrontPlacement`, `qHeldBack` inside `qReleased`, or
+  `_bankSetHold` / `bankUnholdPaper`), run
+  `node tools/custom-paper-tests.mjs` **and**
+  `node tools/scheduled-release-tests.mjs`. This page prints the sheet a class
+  actually sits, so every failure is met in an exam hall rather than at a
+  keyboard, and none of them throws. Read the booklet from the model's own
+  `questionType` instead of from the blocks — or drop the "and nothing else"
+  half of `qIsMcqOnly` — and a question that needs somewhere to write is
+  printed in Booklet A, answerable in the wrong place. Number each booklet from
+  1 instead of running them together and every answer on the key is against the
+  wrong question; number by position in the LIST rather than within the booklet
+  and an interleaved paper comes out numbered at random, printing perfectly
+  either way. Let Booklet B's cover lose its anchor and it is hoisted on top of
+  Booklet A's; anchor it to the QUESTION rather than to the instruction chunk
+  that starts the page and it lands between the two; and drop the anchor
+  entirely and every worksheet cover in the app is still fine, which is what
+  makes it easy to miss. Fork `readQuestionRun` and this page silently stops
+  joining the three screenshots that are one question while the exam paper
+  builder carries on doing it. Lift `qHeldBack` out of `qReleased` into a gate
+  of its own and the next pool somebody writes serves next week's paper to the
+  class sitting it — put `holdBack` into `EDITOR_OWNED_QUESTION_FIELDS` and an
+  ordinary edit releases the whole paper at once. And prefill a cover with a
+  real examination board's name and the centre is handing out something that
+  passes for an official paper.
 - After touching **🚦 the auto-check** (`AUTOCHK_TRIES`, `AUTOCHK_KEEP_FINDINGS`,
   `autoChkOn`, `autoChkRead`, `autoChkState`, `autoChkBetter`, `autoChkRun`,
   `_autoChkRepairPrompt`, `_autoChkApply`, `autoChkStamp`, `autoChkCardHtml`,

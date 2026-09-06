@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.362.0';
+const APP_VERSION = 'v1.363.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -4730,6 +4730,13 @@ function navigateTo(page) {
   // the same shape the Realm of Embers release gate uses. Hiding a nav item is
   // never on its own what keeps a page shut.
   if (page === 'photoedit' && !_isAdmin()) page = rpgHomePage();
+  // 📝 Custom Paper builds the centre's own mock paper and decides, through
+  // `holdBack`, what the whole school is served. That is a teacher's call, so
+  // the page is the admin's — the nav item carries `admin-only`, `custompaper`
+  // is deliberately not on EMPLOYEE_PAGES, and this is the guard for arriving
+  // any other way. `cpbRender` gates on `_canAuthor()` instead, which is the
+  // line that would need nothing changing if that were ever revisited.
+  if (page === 'custompaper' && !_isAdmin()) page = rpgHomePage();
   // Science Quest game pages: respect the "Hide game" toggle, and leaving
   // the dungeon abandons the current run (rewards are kept).
   if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'arcade' || page === 'defenders' || page === 'raiders' || page === 'spire' || page === 'legends' || page === 'slayers' || page === 'tcg') && rpgGameHidden()) page = rpgHomePage();
@@ -4833,6 +4840,7 @@ function navigateTo(page) {
     // by a window that is no longer open. Runs once per sign-in.
     if (!_epDraftReady) _epDraftScan().catch(err => console.warn('exam paper drafts:', err));
   }
+  if (page === 'custompaper') cpbInit();
   if (page === 'markpaper') { _mpBindPaste(); mpRender(); }
   if (page === 'quickpractice') { populateQpControls(); updateQpProgress(); }
   if (page === 'snapmark') snapInit();
@@ -19449,6 +19457,30 @@ function qMarksOf(b) {
 // changing how a mark total is printed is one edit rather than four.
 function qMarksBracket(n) { return '[' + n + ']'; }
 function qMarksLabel(b) { const n = qMarksOf(b); return n ? qMarksBracket(n) : ''; }
+
+// =====================================================================
+// 🅐 IS THIS QUESTION MULTIPLE CHOICE, AND NOTHING ELSE?
+//
+// THE ONE PLACE THE QUESTION IS ASKED, because three different things now
+// turn on the answer and they must never disagree about the same question:
+// the print packer pairs two compact MCQs onto one sheet, the printed MCQ
+// gets its answer bracket, and 📝 Custom Paper files it into BOOKLET A.
+// Written out a second time it drifts, and the drift is silent — a question
+// printed in Booklet A whose answer the key files under Booklet B.
+//
+// It is a fact about the BLOCKS, never the model's own `questionType`: a
+// reader that mislabels one question puts it in the wrong booklet, and the
+// booklet is what decides whether the child is given ruled lines to write on.
+//
+// "and nothing else" is the load-bearing half. A question carrying an MCQ
+// *and* a written-answer box is not a Booklet A question — it needs somewhere
+// to write — so it fails this test and is treated as open-ended, which is the
+// safe direction: the worst case is ruled lines nobody uses.
+function qIsMcqOnly(blocks) {
+  const bs = Array.isArray(blocks) ? blocks : ((blocks && blocks.blocks) || []);
+  return bs.some(b => b && b.type === 'mcq')
+    && !bs.some(b => b && (b.type === 'answer' || b.type === 'plainanswer' || b.type === 'fillblank'));
+}
 // Take a printed marks marker back out of the wording. Never touches the block.
 function qStripTailMarks(html) {
   return String(html == null ? '' : html).replace(QMARKS_TAIL_RE, '');
@@ -20800,7 +20832,7 @@ function doPrintWorksheetOpen(whyNotes) {
   const answerKeyData = []; // { title, sections: [{ label?, content }] }
 
   selected.forEach((q, qIndex) => {
-    const isMcq = q.blocks.some(b => b.type === 'mcq') && !q.blocks.some(b => b.type === 'answer' || b.type === 'plainanswer');
+    const isMcq = qIsMcqOnly(q.blocks);
     const bigImgs = imgQuestionNeedsBig(q);   // the picture IS the options → print it tall
     let qHtml = `<div class="print-question-chunk" data-qid="${escapeHtml(q.id)}"${isMcq ? ' data-mcq="1"' : ''}>`;
 
@@ -21175,7 +21207,12 @@ function _printApplyPageNumbers(output) {
   let n = 1;
   Array.from(output.children).forEach(page => {
     if (!page.classList) return;
-    if (page.classList.contains('print-front-page') || page.classList.contains('print-blank-sheet')) return;
+    if (page.classList.contains('print-front-page') || page.classList.contains('print-blank-sheet')) {
+      // Each booklet of a paper is numbered from 1, so the sheet that opens
+      // one says so and the count starts again behind it.
+      if (_printFrontRestarts(page)) n = 1;
+      return;
+    }
     // Never stamp twice — but still ADVANCE the counter past a page that is
     // already numbered. Returning early left `n` frozen, so every page after an
     // already-stamped one repeated its number.
@@ -21544,6 +21581,60 @@ function _printPlanAkPages(doc, stage, ak, ctx) {
   return out;
 }
 
+// =====================================================================
+// 📑 A FRONT SHEET THAT IS NOT AT THE FRONT
+//
+// Every `.print-front-page` there has ever been leads the document: the
+// worksheet cover, the cheat sheet. They are lifted out before pagination and
+// put back at the very top, which is exactly right for a cover.
+//
+// A PAPER IN TWO BOOKLETS needs one that is not. Booklet B has a cover of its
+// own and it belongs where Booklet B starts — hoisted to the front it becomes
+// a second cover on top of the first, which reads as a printing fault.
+//
+// So a front sheet may name the question it goes immediately BEFORE:
+//
+//     <div class="print-front-page" data-front-before="<qid>">
+//
+// No existing front page carries the attribute, so every sheet this app
+// printed before still prints byte-for-byte the same. An anchor naming a
+// question that is not on the sheet falls back to leading the document —
+// visible and wrong-looking rather than silently dropped, which is the failure
+// nobody would ever notice.
+//
+// `data-front-restart` on the same sheet restarts the page numbering after it,
+// because each booklet of a paper is numbered from 1.
+function _printFrontAnchor(f) {
+  try { return String((f && f.getAttribute && f.getAttribute('data-front-before')) || ''); }
+  catch (e) { return ''; }
+}
+function _printFrontRestarts(f) {
+  try { return !!(f && f.getAttribute && f.getAttribute('data-front-restart')); }
+  catch (e) { return false; }
+}
+// Sort the front sheets into the ones that lead the document and the ones that
+// belong before a particular page. `groups` is the packer's own output and
+// `chunks` the elements it indexes, so the answer is derived from the layout
+// that was actually planned rather than from document order.
+function _printFrontPlacement(fronts, groups, chunks) {
+  const leading = [];
+  const before = new Map();    // group index → [front, …]
+  const groupOf = new Map();   // qid → the FIRST group that carries it
+  (groups || []).forEach((g, gi) => (g || []).forEach(idx => {
+    const c = chunks[idx];
+    const qid = (c && c.dataset) ? c.dataset.qid : '';
+    if (qid && !groupOf.has(qid)) groupOf.set(qid, gi);
+  }));
+  (fronts || []).forEach(f => {
+    const qid = _printFrontAnchor(f);
+    const gi = qid ? groupOf.get(qid) : undefined;
+    if (gi === undefined) { leading.push(f); return; }
+    if (!before.has(gi)) before.set(gi, []);
+    before.get(gi).push(f);
+  });
+  return { leading, before };
+}
+
 function _printPlanIn(doc, root, opts) {
   const chunks = Array.from(root.querySelectorAll('.print-question-chunk'));
   const answerKeys = Array.from(root.querySelectorAll('.print-answer-key-page'));
@@ -21819,7 +21910,13 @@ function _printAndRestore(output) {
 // than the planned layout and the footer only lands on the final sheet, but
 // it can never emit a blank or a clipped page.
 function _printFlowFallback(output) {
-  const fronts = Array.from(output.querySelectorAll('.print-front-page'));
+  // An ANCHORED front sheet is left exactly where it is in the body: there is
+  // no plan here to place it against, and the CSS already gives every
+  // `.print-front-page` its own sheet, so leaving it in the flow puts the
+  // booklet cover in front of its own booklet. Hoisting it would put a second
+  // cover on top of the first — the one thing the anchor exists to prevent.
+  const fronts = Array.from(output.querySelectorAll('.print-front-page'))
+    .filter(f => !_printFrontAnchor(f));
   const answerKeys = Array.from(output.querySelectorAll('.print-answer-key-page'));
   fronts.forEach(f => f.remove());
   answerKeys.forEach(ak => ak.remove());
@@ -21877,7 +21974,12 @@ function doScaleAndPrint(output, opts) {
       fronts.forEach(f => f.remove());
       output.innerHTML = '';
 
+      // Which front sheets lead, and which belong before a page in the middle.
+      // Worked out from the plan the packer produced, not from document order.
+      const frontPlace = _printFrontPlacement(fronts, plan.groups, chunks);
+
       plan.groups.forEach((group, gi) => {
+        (frontPlace.before.get(gi) || []).forEach(f => output.appendChild(f));
         const page = document.createElement('div');
         page.className = 'print-question-page';
         if (plan.pageTall[gi]) page.classList.add('print-page-tall');
@@ -21913,8 +22015,10 @@ function doScaleAndPrint(output, opts) {
         });
       });
 
-      // Front matter goes back in FIRST (cover, then cheat sheet), before Q1.
-      fronts.slice().reverse().forEach(f => output.insertBefore(f, output.firstChild));
+      // Front matter goes back in FIRST (cover, then cheat sheet), before Q1 —
+      // all of it, unless a sheet named the question it goes before, in which
+      // case it was already placed there in the loop above.
+      frontPlace.leading.slice().reverse().forEach(f => output.insertBefore(f, output.firstChild));
 
       _printApplyPageNumbers(output);   // while it is still laid out and measurable
       output.style.cssText = 'display:none;';
@@ -22498,40 +22602,78 @@ function epBuildQuestions() {
   _epRunBuild();
 }
 
-async function _epRunBuild() {
-  _epBusy = true; _epCancel = false;
-  _epQuestions = [];
-  const total = _epShots.length;
-  _epShots.forEach(s => { s.status = 'new'; s.err = ''; s.group = ''; s.n = 0; });
-  epRender();
+// =====================================================================
+// 📸 READING A RUN OF SCREENSHOTS — THE ONE READER
+//
+// Two pages take a pile of screenshots and turn them into questions: the
+// 📄 Exam Paper builder (a real paper, imported with its marking scheme) and
+// 📝 Custom Paper (a paper the teacher is assembling from scratch). What they
+// do with the questions afterwards is completely different; how the
+// screenshots are READ must not be, because that reading is where the two
+// hard problems live and neither of them is visible when it goes wrong:
+//
+//   • ONE QUESTION IS OFTEN SEVERAL SCREENSHOTS — its wording on one, its
+//     diagram on the next, its parts after that — so they are read as a RUN,
+//     `batch` at a time, and the model decides where each question starts and
+//     ends. A question that happens to straddle a batch boundary is stitched
+//     back by the `continuation` entry.
+//   • ONE SCREENSHOT IS OFTEN SEVERAL QUESTIONS, which is the same problem
+//     from the other side and has the same answer.
+//
+// Forked, the two pages would drift, and the drift would read as "the exam
+// paper builder joins my screenshots and the custom paper does not".
+//
+// Every hook is optional and the reader owns no page state, so a caller adds
+// its own bookkeeping without this function learning about it.
+//   shots      [{ id, mimeType, data }] in reading order
+//   o.batch    images per AI call
+//   o.prompt   (n, from, total) => the prompt for one batch
+//   o.onBatch  (batchShots, status, err) — 'reading' | 'done' | 'empty' | 'error'
+//   o.onNote   (msg) — a line of progress for the page's status area
+//   o.onBuilt  (q, qd) — a question, before its pictures are cropped
+//   o.onDone   (q) — the same question, cropped and finished
+//   o.onExtend (q) — a question a later batch continued, after its crop
+//   o.stopped  () => true to stop between questions
+// Returns { questions, failed, stopped }.
+async function readQuestionRun(shots, o) {
+  const opt = o || {};
+  const list = Array.isArray(shots) ? shots : [];
+  const size = Math.max(1, opt.batch || EP_BATCH);
+  const note = opt.onNote || function () {};
+  const mark = opt.onBatch || function () {};
+  const stopped = opt.stopped || function () { return false; };
+  const total = list.length;
+  const questions = [];
   let failed = 0;
   let last = null;   // the question a following batch may continue
-  for (let start = 0; start < total; start += EP_BATCH) {
-    if (_epCancel) break;
-    const batch = _epShots.slice(start, start + EP_BATCH);
-    const span = batch.length > 1 ? `screenshots ${start + 1}–${start + batch.length}` : `screenshot ${start + 1}`;
-    batch.forEach(s => { s.status = 'reading'; s.group = span; });
-    epRender();
-    _epNote(`Reading ${span} of ${total}…`);
+  let quit = false;
+
+  for (let start = 0; start < total; start += size) {
+    if (stopped()) { quit = true; break; }
+    const batch = list.slice(start, start + size);
+    const span = batch.length > 1
+      ? `screenshots ${start + 1}–${start + batch.length}`
+      : `screenshot ${start + 1}`;
+    mark(batch, 'reading', '', span);
+    note(`Reading ${span} of ${total}…`);
     let entries;
     try {
       const raw = await askGeminiVision(
-        _epQuestionPrompt(batch.length, start + 1, total),
+        opt.prompt(batch.length, start + 1, total),
         batch.map(s => ({ mimeType: s.mimeType, data: s.data })),
         { maxOutputTokens: 16384, json: true, authoring: true });
       const parsed = _parseAIJson(raw);
       entries = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.questions) ? parsed.questions : []);
     } catch (err) {
-      console.warn('exam paper: batch read failed', err);
+      console.warn('paper run: batch read failed', err);
       // One unreadable group must not sink the rest of the paper.
-      batch.forEach(s => { s.status = 'error'; s.err = (err && err.message) || 'could not be read'; });
+      mark(batch, 'error', (err && err.message) || 'could not be read', span);
       failed += batch.length;
-      epRender();
       continue;
     }
     let made = 0;
     for (let i = 0; i < entries.length; i++) {
-      if (_epCancel) break;
+      if (stopped()) { quit = true; break; }
       const qd = entries[i] || {};
       try {
         if (i === 0 && qd.continuation === true && last) {
@@ -22543,37 +22685,63 @@ async function _epRunBuild() {
           last.blocks = last.blocks.concat(built.blocks);
           last.blanks = Object.assign({}, last.blanks, built.selectedBlanks);
           if (newImgs.length) {
-            _epNote(`${span}: cropping ${newImgs.length} picture${newImgs.length === 1 ? '' : 's'} continuing “${last.title || 'question'}”…`);
-            await _epCropInto(newImgs, qd, batch, m => _epNote(`${span} — ${m}`));
+            note(`${span}: cropping ${newImgs.length} picture${newImgs.length === 1 ? '' : 's'} continuing “${last.title || 'question'}”…`);
+            await _epCropInto(newImgs, qd, batch, m => note(`${span} — ${m}`));
           }
-          _epStripNumbering(last);
-          _tagDuplicate(last);
-          epRender();
+          if (opt.onExtend) opt.onExtend(last);
           continue;
         }
         const q = buildQuestionFromAi(qd);
         if (!q.blocks.length) continue;
-        q._epNum = String((qd && qd.number) || '').trim();
-        q._epAns = '';
-        // 44(a) becomes a question with no 44 and an official part (a). Runs
-        // BEFORE the crop so the wording is settled by the time it is shown.
-        _epStripNumbering(q);
-        if (_epPaperName) q.source = _epPaperName;
+        if (opt.onBuilt) opt.onBuilt(q, qd);
         const imgBlocks = q.blocks.filter(b => b.type === 'image');
         if (imgBlocks.length) {
-          _epNote(`${span}: “${q.title || 'question'}” — cropping ${imgBlocks.length} picture${imgBlocks.length === 1 ? '' : 's'}…`);
-          await _epCropInto(imgBlocks, qd, batch, m => _epNote(`${span} — ${m}`));
+          note(`${span}: “${q.title || 'question'}” — cropping ${imgBlocks.length} picture${imgBlocks.length === 1 ? '' : 's'}…`);
+          await _epCropInto(imgBlocks, qd, batch, m => note(`${span} — ${m}`));
         }
-        _tagDuplicate(q);
-        _epQuestions.push(q);
+        questions.push(q);
         last = q;
         made++;
-        epRender();
-      } catch (err) { console.warn('exam paper: question build failed', err); }
+        if (opt.onDone) opt.onDone(q);
+      } catch (err) { console.warn('paper run: question build failed', err); }
     }
-    batch.forEach(s => { s.n = made; if (s.status === 'reading') s.status = made ? 'done' : 'empty'; });
-    epRender();
+    mark(batch, made ? 'done' : 'empty', '', span, made);
+    if (quit) break;
   }
+  return { questions, failed, stopped: quit };
+}
+
+async function _epRunBuild() {
+  _epBusy = true; _epCancel = false;
+  _epQuestions = [];
+  _epShots.forEach(s => { s.status = 'new'; s.err = ''; s.group = ''; s.n = 0; });
+  epRender();
+  const res = await readQuestionRun(_epShots, {
+    batch: EP_BATCH,
+    prompt: (n, from, total) => _epQuestionPrompt(n, from, total),
+    stopped: () => _epCancel,
+    onNote: _epNote,
+    onBatch: (batch, status, err, span, made) => {
+      batch.forEach(s => {
+        s.group = span;
+        if (status === 'error') { s.status = 'error'; s.err = err; }
+        else if (status === 'reading') { s.status = 'reading'; }
+        else { s.n = made || 0; if (s.status === 'reading') s.status = status; }
+      });
+      epRender();
+    },
+    onBuilt: (q, qd) => {
+      q._epNum = String((qd && qd.number) || '').trim();
+      q._epAns = '';
+      // 44(a) becomes a question with no 44 and an official part (a). Runs
+      // BEFORE the crop so the wording is settled by the time it is shown.
+      _epStripNumbering(q);
+      if (_epPaperName) q.source = _epPaperName;
+    },
+    onDone: (q) => { _tagDuplicate(q); _epQuestions.push(q); epRender(); },
+    onExtend: (q) => { _epStripNumbering(q); _tagDuplicate(q); epRender(); },
+  });
+  const failed = res.failed;
   _epBusy = false;
   _epNote('');
   if (!_epCancel && !failed) _epDirty = false;
@@ -23154,6 +23322,1084 @@ function _epMatchRowHtml(q, opts) {
     ${sel}
     ${partRow}
   </div>`;
+}
+
+// =====================================================================
+// 📝 CUSTOM PAPER — a whole mock paper, built from screenshots
+//
+// A teacher assembling a mock paper has the questions in front of them as
+// SCREENSHOTS — a page of last year's prelim, a figure out of a textbook, one
+// they wrote themselves — and needs three things out of them that no other
+// page in this app does at once:
+//
+//   ① the questions read and filed, MCQ told apart from open-ended;
+//   ② a paper laid out in the format the children sit — Booklet A of
+//     multiple choice, Booklet B of open-ended, each with its own cover;
+//   ③ none of it reaching a student until the paper has been sat.
+//
+// IT IS NOT THE 📄 EXAM PAPER BUILDER, and the two must not be merged. That
+// page imports a paper that ALREADY EXISTS, with its own marking scheme, and
+// what comes out is bank questions — there is no paper at the end of it,
+// because the paper was the input. This one has no marking scheme to read (the
+// questions are being gathered from everywhere) and the PAPER is the output.
+// Nor is it ⚡ Rapid add, which fires each screenshot off as its own job and
+// so cannot join the three screenshots that are one question.
+//
+// WHAT IT SHARES is the reading, and deliberately all of it: `readQuestionRun`
+// is the one reader both this and the exam paper builder call, so a question
+// spread over three screenshots is joined here for exactly the reason it is
+// joined there. Forking that would have read as "the other page joins my
+// screenshots and this one does not".
+//
+// NOTHING IS WRITTEN UNTIL SEND, and what IS written is HELD BACK: every
+// question goes into the bank with `holdBack`, so the teacher can print it,
+// edit it, check it and put it on a worksheet while no child can be served it
+// in any practice mode or game. Releasing the paper afterwards is one button
+// on the 🗓 Scheduled Questions page. That is the whole point of building a
+// mock paper in the app the children also practise in.
+// =====================================================================
+const CPB_MAX_SHOTS = 160;                 // screenshots held in memory at once
+const CPB_MAX_BYTES = 14 * 1024 * 1024;
+const CPB_BATCH = 4;                       // images per AI call — see readQuestionRun
+// PSLE prints 2 marks for every Booklet A question, and an open-ended part
+// carries its own printed [n]. A B question the reader found no marks on is
+// counted as this rather than as nothing, so the cover's total is never
+// silently short — and the page says how many were counted that way.
+const CPB_MCQ_MARKS = 2;
+const CPB_OPEN_DEFAULT_MARKS = 2;
+const CPB_DRAFT_MAX_BYTES = 40 * 1024 * 1024;
+
+let _cpbShots = [];        // [{ id, mimeType, data, name, status, err, group, n }]
+let _cpbQuestions = [];    // built questions, in the order they will be printed
+let _cpbBusy = false;
+let _cpbCancel = false;
+let _cpbDirty = false;     // screenshots changed since the last read
+let _cpbPasteBound = false;
+let _cpbPasteOn = false;   // the pad has been clicked, so Ctrl-V lands in it
+
+// The paper's own front matter. Every one of these is EDITABLE, and none of
+// them is prefilled with the name of a real examination board: this app prints
+// a tuition centre's own mock paper, and a cover that passes for an official
+// one is not something to hand a class. The LAYOUT is the part worth copying
+// exactly — it is what makes the paper feel like the real thing to sit.
+const CPB_META_DEFAULTS = {
+  org: 'POLYMATH LEARNING CENTRE',
+  exam: 'PRELIMINARY EXAMINATION',
+  subject: 'SCIENCE',
+  code: '',
+  year: String(new Date().getFullYear()),
+  level: 'PRIMARY 6',
+  duration: '1 h 45 min',
+  name: '',            // the paper's name in the bank, stamped on every question as its source
+  qLevel: '',          // the syllabus level its topics are filed at
+  mcqOnPaper: false,   // print an answer bracket in Booklet A (no separate answer sheet)
+  answerSheet: true,   // print an answer grid for Booklet A at the end
+};
+let _cpbMeta = Object.assign({}, CPB_META_DEFAULTS);
+
+function _cpbId() { return 'cpb_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function _cpbDataUrl(s) { return 'data:' + s.mimeType + ';base64,' + s.data; }
+function _cpbNote(msg) { const el = document.getElementById('cpbStatus'); if (el) el.textContent = msg || ''; }
+function _cpbEmpty() { return !_cpbShots.length && !_cpbQuestions.length; }
+function _cpbMetaGet(k) {
+  const v = _cpbMeta[k];
+  return v === undefined || v === null ? CPB_META_DEFAULTS[k] : v;
+}
+
+// ---- Which booklet a question belongs in ---------------------------------
+// Structural by default (`qIsMcqOnly` — the ONE test the printer also uses to
+// decide whether an MCQ gets an answer bracket), and OVERRIDABLE by hand.
+//
+// The override is not a nicety. The reader is very good and not perfect, and
+// the booklet is what decides whether a child is given ruled lines to write
+// on: a question that lands in the wrong one is answerable in the wrong place,
+// which is found in the exam hall. `_cpbBook` is what the teacher's own eye is
+// for, and it survives a re-read of the screenshots only in the sense that a
+// re-read replaces the questions outright — which the page warns about.
+function cpbBookOf(q) {
+  if (!q) return 'b';
+  if (q._cpbBook === 'a' || q._cpbBook === 'b') return q._cpbBook;
+  return qIsMcqOnly(q.blocks) ? 'a' : 'b';
+}
+function cpbSetBook(id, book) {
+  const q = _cpbQuestions.find(x => x.id === id);
+  if (!q || (book !== 'a' && book !== 'b')) return;
+  q._cpbBook = book;
+  cpbRender();
+}
+// The two booklets, in print order, and the number each question carries.
+// Booklet A runs 1…n and Booklet B carries straight on from it, exactly as a
+// paper in two booklets is numbered — so the numbers are worked out over BOTH
+// lists at once and never from a question's position in its own.
+function cpbBooklets() {
+  const a = [], b = [];
+  _cpbQuestions.forEach(q => (cpbBookOf(q) === 'a' ? a : b).push(q));
+  const numbers = {};
+  a.forEach((q, i) => { numbers[q.id] = String(i + 1); });
+  b.forEach((q, i) => { numbers[q.id] = String(a.length + i + 1); });
+  return { a, b, numbers };
+}
+// The marks a Booklet B question is worth: everything printed on it. A
+// question the reader found no marks on is NOT worth nothing — it is a
+// question whose marks were not printed, or not read — so it counts as the
+// default and the page says how many did.
+function cpbQuestionMarks(q) {
+  let n = 0;
+  ((q && q.blocks) || []).forEach(b => { n += qMarksOf(b); });
+  return n;
+}
+function cpbMarks() {
+  const { a, b } = cpbBooklets();
+  let bm = 0, guessed = 0;
+  b.forEach(q => {
+    const m = cpbQuestionMarks(q);
+    if (m) bm += m;
+    else { bm += CPB_OPEN_DEFAULT_MARKS; guessed++; }
+  });
+  return { a: a.length * CPB_MCQ_MARKS, b: bm, total: a.length * CPB_MCQ_MARKS + bm, guessed };
+}
+
+// ---- The draft survives the window ---------------------------------------
+// Forty screenshots is an afternoon's work, and nothing is written until Send
+// — so a reload, a crashed tab or a closed laptop would take the lot. The
+// unsent paper is mirrored into the SAME IndexedDB store the exam paper
+// builder uses, through the SAME `_epdTx` helper, under its own keys: the
+// fiddly, already-proven half is shared and only the keys differ, so the two
+// pages can each have a paper open without claiming each other's work.
+//
+// Keyed by TAB, never by user, exactly as the exam paper's is — two windows
+// may each be building a paper — with the uid in the key so a shared machine
+// cannot hand one account's draft to the next person to sign in.
+let _cpbDraftTimer = null;
+let _cpbDraftSig = '';        // which screenshots the stored copy holds
+let _cpbDraftReady = false;   // this tab's own draft has been looked for
+let _cpbDraftOffers = [];     // recoverable papers from windows that are gone
+let _cpbDraftBig = false;     // the screenshots were too large to mirror
+const _cpbLiveTabs = new Set();
+
+function _cpbMetaKey(tab, uid) { return 'cpbmeta:' + (uid || _epUid()) + ':' + (tab || _xtTabId()); }
+function _cpbWorkKey(tab, uid) { return 'cpbwork:' + (uid || _epUid()) + ':' + (tab || _xtTabId()); }
+function _cpbShotKey(tab, uid) { return 'cpbshot:' + (uid || _epUid()) + ':' + (tab || _xtTabId()); }
+function _cpbShotsSig() { return _cpbShots.map(s => s.id).join(','); }
+function _cpbB64Bytes() {
+  let n = 0;
+  _cpbShots.forEach(s => { n += (s && s.data && s.data.length) || 0; });
+  return n;
+}
+
+// Every mutation on this page ends in a render, so hanging the mirror off
+// `cpbRender` is the one hook that cannot be forgotten.
+function _cpbDraftSave() {
+  if (!_cpbDraftReady) return;        // don't write over a draft we have not looked at yet
+  clearTimeout(_cpbDraftTimer);
+  _cpbDraftTimer = setTimeout(() => { _cpbDraftFlush().catch(err => console.warn('custom paper draft:', err)); }, EPD_SAVE_MS);
+}
+
+async function _cpbDraftFlush() {
+  if (!currentUser || !_canAuthor()) return;
+  if (_cpbEmpty()) { await _cpbDraftDrop(); return; }
+  // Past the cap the screenshots are not mirrored at all — the questions
+  // already read out of them are worth far more than the pictures, and a
+  // quota error would lose both.
+  const big = _cpbB64Bytes() > EPD_MAX_B64;
+  _cpbDraftBig = big;
+  const sig = big ? '' : _cpbShotsSig();
+  const at = Date.now();
+  try {
+    await _epdTx('readwrite', st => {
+      st.put({ key: _cpbMetaKey(), uid: _epUid(), tab: _xtTabId(), at, paper: _cpbMetaGet('name'),
+        nShots: _cpbShots.length, nQuestions: _cpbQuestions.length, trimmed: big });
+      return st.put({ key: _cpbWorkKey(), uid: _epUid(), tab: _xtTabId(), at,
+        meta: _cpbMeta, dirty: _cpbDirty, questions: _cpbQuestions });
+    });
+    if (sig !== _cpbDraftSig) {
+      await _epdTx('readwrite', st => st.put({ key: _cpbShotKey(), uid: _epUid(), tab: _xtTabId(), at,
+        shots: big ? [] : _cpbShots }));
+      // Only remembered if it landed — otherwise the next change tries again
+      // instead of trusting a write that never happened.
+      if (!_epdFailed) _cpbDraftSig = sig;
+    }
+  } catch (err) { console.warn('custom paper draft save:', err); }
+}
+
+async function _cpbDraftDrop(tab, uid) {
+  if ((!tab || tab === _xtTabId()) && !uid) _cpbDraftSig = '';
+  await _epdTx('readwrite', st => {
+    st.delete(_cpbMetaKey(tab, uid));
+    st.delete(_cpbWorkKey(tab, uid));
+    return st.delete(_cpbShotKey(tab, uid));
+  });
+}
+
+// Which drafts belong to windows that are no longer open? Every live tab
+// answers the ping; anything left is offered back rather than claimed.
+async function _cpbDraftScan() {
+  if (!currentUser || !_canAuthor()) return;
+  const metas = await _epdTx('readonly', st => st.getAll(IDBKeyRange.bound('cpbmeta:', 'cpbmeta:￿')));
+  if (!Array.isArray(metas)) { _cpbDraftReady = true; return; }
+  const mineTab = _xtTabId();
+  const now = Date.now();
+  const others = [];
+  let own = null;
+  metas.forEach(r => {
+    if (!r || !r.tab) return;
+    if (now - (r.at || 0) > EPD_TTL) { _cpbDraftDrop(r.tab, r.uid).catch(() => {}); return; }
+    if (r.uid !== _epUid()) return;
+    if (r.tab === mineTab) own = r; else others.push(r);
+  });
+  // This tab's own draft — a reload, so take it straight back. Only into an
+  // EMPTY page: the scan is asynchronous, and a screenshot pasted while it ran
+  // must not be thrown away by the restore.
+  let restored = false;
+  if (own && _cpbEmpty()) restored = await _cpbDraftLoad(mineTab);
+  _cpbDraftReady = true;
+  if (restored) { cpbRender(); showToast('📝 Your unsent paper was restored', 'success'); }
+  if (!others.length) { if (!restored) cpbRender(); return; }
+  _cpbLiveTabs.clear();
+  _xtPost({ type: 'cpb-ping' });
+  await new Promise(r => setTimeout(r, XT_PING_MS));
+  _cpbDraftOffers = others.filter(r => !_cpbLiveTabs.has(r.tab)).sort((a, b) => (b.at || 0) - (a.at || 0));
+  cpbRender();
+}
+
+// Pull a tab's draft into the page. Returns false if there was nothing in it.
+async function _cpbDraftLoad(tab) {
+  const [work, shot] = await Promise.all([
+    _epdTx('readonly', st => st.get(_cpbWorkKey(tab))),
+    _epdTx('readonly', st => st.get(_cpbShotKey(tab))),
+  ]);
+  if (!work && !shot) return false;
+  try {
+    _cpbShots = (shot && Array.isArray(shot.shots)) ? shot.shots : [];
+    _cpbQuestions = (work && Array.isArray(work.questions)) ? work.questions : [];
+    _cpbMeta = Object.assign({}, CPB_META_DEFAULTS, (work && work.meta) || {});
+    _cpbDirty = !!(work && work.dirty);
+    _cpbDraftSig = _cpbShotsSig();
+    return !_cpbEmpty();
+  } catch (err) { console.warn('custom paper draft restore:', err); return false; }
+}
+
+async function cpbDraftTake(tab) {
+  if (!_cpbEmpty()) { showToast('Send or clear the paper you are building first', 'error'); return; }
+  if (!_cpbDraftOffers.some(r => r.tab === tab)) return;
+  const ok = await _cpbDraftLoad(tab);
+  _cpbDraftOffers = _cpbDraftOffers.filter(r => r.tab !== tab);
+  if (!ok) { showToast('That draft was empty', 'info'); cpbRender(); return; }
+  await _cpbDraftDrop(tab);           // it lives under this tab's key from now on
+  _cpbDraftSig = '';                  // …so the screenshots are written once, here
+  await _cpbDraftFlush();
+  cpbRender();
+  showToast('📝 Paper restored — ' + _cpbShots.length + ' screenshot' + (_cpbShots.length === 1 ? '' : 's')
+    + (_cpbQuestions.length ? ' · ' + _cpbQuestions.length + ' question' + (_cpbQuestions.length === 1 ? '' : 's') : ''), 'success');
+}
+
+function cpbDraftDiscard(tab) {
+  const rec = _cpbDraftOffers.find(r => r.tab === tab);
+  if (!rec) return;
+  const n = rec.nShots || 0;
+  showConfirm('Discard this unsent paper',
+    'Throw away the ' + n + ' screenshot' + (n === 1 ? '' : 's')
+      + ' saved from that window? This cannot be undone.',
+    () => {
+      _cpbDraftOffers = _cpbDraftOffers.filter(r => r.tab !== tab);
+      _cpbDraftDrop(tab).catch(err => console.warn('custom paper draft:', err));
+      cpbRender();
+    });
+}
+
+// ---- The screenshot pad ---------------------------------------------------
+async function _cpbAddFiles(files) {
+  const list = Array.from(files || []);
+  if (!list.length) return;
+  let added = 0, skipped = 0;
+  for (const raw of list) {
+    if (!raw || !raw.type || !raw.type.startsWith('image/')) { skipped++; continue; }
+    if (_cpbShots.length >= CPB_MAX_SHOTS) { skipped++; continue; }
+    try {
+      // A camera photo of a page is several times the guard, so it is SHRUNK
+      // rather than refused — the same door ⚡ Rapid add uses, so a teacher
+      // photographing a textbook page gets the same treatment here.
+      const f = await _rapidPrepFile(raw);
+      if (!f || f.size > CPB_MAX_BYTES) { skipped++; continue; }
+      _cpbShots.push({
+        id: _cpbId(), mimeType: f.type, data: await _fileToBase64(f),
+        name: f.name || 'screenshot', status: 'new', err: '', group: '', n: 0,
+      });
+      added++;
+    } catch (err) { console.warn('custom paper: could not read file', err); skipped++; }
+  }
+  // Adding or removing a screenshot changes where every question starts and
+  // ends, so the questions already built no longer describe what is here.
+  if (added && _cpbQuestions.length) _cpbDirty = true;
+  cpbRender();
+  if (added) showToast(added + ' screenshot' + (added === 1 ? '' : 's') + ' added' + (skipped ? ' · ' + skipped + ' skipped' : ''), skipped ? 'info' : 'success');
+  else if (skipped) showToast('Nothing added — images only, up to ' + CPB_MAX_SHOTS + ' of them', 'error');
+}
+
+function cpbPick() { const el = document.getElementById('cpbFile'); if (el) { el.value = ''; el.click(); } }
+function cpbFiles(input) { if (input && input.files && input.files.length) _cpbAddFiles(input.files); }
+function cpbDragOver(e) { e.preventDefault(); _cpbPasteOn = true; }
+function cpbDropFiles(e) {
+  e.preventDefault();
+  _cpbPasteOn = true;
+  const dt = e.dataTransfer;
+  if (dt && dt.files && dt.files.length) _cpbAddFiles(dt.files);
+}
+function cpbFocusZone() { _cpbPasteOn = true; cpbRender(); }
+function cpbRemove(id) {
+  const before = _cpbShots.length;
+  _cpbShots = _cpbShots.filter(s => s.id !== id);
+  if (_cpbShots.length !== before && _cpbQuestions.length) _cpbDirty = true;
+  cpbRender();
+}
+function cpbClearShots() {
+  if (!_cpbShots.length) return;
+  showConfirm('Remove every screenshot',
+    'The ' + _cpbShots.length + ' screenshot' + (_cpbShots.length === 1 ? '' : 's') + ' go, and any question already read from them stays. Remove them?',
+    () => { _cpbShots = []; if (_cpbQuestions.length) _cpbDirty = true; cpbRender(); });
+}
+
+// Bound ONCE on the document, in capture, like every other paste target in
+// this app: the page's DOM is rebuilt on every render, so anything bound per
+// element covers what existed when it ran and silently misses the rest.
+function _cpbBindPaste() {
+  if (_cpbPasteBound) return;
+  _cpbPasteBound = true;
+  document.addEventListener('paste', e => {
+    const page = document.getElementById('page-custompaper');
+    if (!page || !page.classList.contains('active') || !_cpbPasteOn) return;
+    // A label being typed keeps its own paste — pasting words into a text box
+    // is the other honest meaning of Ctrl-V here.
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    const files = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i] && items[i].kind === 'file') { const f = items[i].getAsFile(); if (f) files.push(f); }
+    }
+    if (!files.length) return;
+    e.preventDefault();
+    _cpbAddFiles(files);
+  });
+}
+
+// ---- Reading the screenshots ---------------------------------------------
+// The same shape as the exam paper's prompt, minus everything about a marking
+// scheme (there is none — the questions are being gathered from everywhere)
+// and plus the one thing this page turns on: whether each question is
+// MULTIPLE CHOICE or OPEN-ENDED, which is what decides its booklet.
+function _cpbQuestionPrompt(n, from, total) {
+  const level = _cpbMetaGet('qLevel');
+  const byLevel = currentTopicsByLevel();
+  const inLevel = level ? (byLevel[level] || []).filter(t => !QRETIRED_TOPIC_RE.test(t)) : [];
+  const topics = inLevel.length ? inLevel : currentTopics();
+  const paper = _cpbMetaGet('name') ? `The paper is being put together as "${_cpbMetaGet('name')}". ` : '';
+  const multi = n > 1;
+  const span = multi ? `screenshots ${from}–${from + n - 1} of ${total}` : `screenshot ${from} of ${total}`;
+  return `You are reading questions off screenshots so a teacher can assemble a Singapore primary-school science mock exam paper. ${paper}The attached ${multi ? `${n} images are ${span}` : `image is ${span}`}, in the order the teacher added them.\n` +
+    SCAN_READING_NOTE +
+    _genPreamble() +
+    (multi
+      ? `IMPORTANT — read all ${n} images AS ONE CONTINUOUS RUN, not as ${n} separate questions. ONE question is very often spread across two or three of these images (its wording on one, its diagram on the next, its parts after that), and ONE image may hold several questions. Decide where each question starts and ends from the wording and the numbering, NEVER from where one image ends and the next begins. Do not drop content from any image, and do not split one question into two entries just because it crosses an image boundary.\n`
+      : '') +
+    `Return ONLY JSON: {"questions":[ {"continuation":false,"questionType":"mcq","title":"short title","topic":"<closest topic>","topicConfidence":"high|medium|low","category":"<closest category>","tags":["..."],"blocks":[ ...ordered blocks... ]}, ... ]}\n` +
+    `Each item in "blocks" is ONE of:\n` +
+    `  {"type":"text","text":"a part of the question wording, plain text","marks":2}   (include "marks" ONLY when the page prints a mark allocation for that question or part, and leave the printed "[2]" out of "text")\n` +
+    (multi
+      ? `  {"type":"image","page":<which attached image, 1-based>,"box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — "page" says which attached image it is on, and box_2d is the rectangle you draw around it on THAT image)\n`
+      : `  {"type":"image","box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table)\n`) +
+    `  {"type":"mcq","options":["option 1 text","option 2 text","option 3 text","option 4 text"],"correctIndex":0}\n` +
+    `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
+    `  {"type":"plainanswer","text":"..."}\n` +
+    `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
+    `Rules:\n` +
+    (multi ? `- "page" on every "image" block: the 1-based index of the attached image the figure is on (1 = the first attached image). box_2d is measured on THAT image: 0,0 is its top-left corner, 1000,1000 its bottom-right corner.\n` : '') +
+    `- "questionType" is the MOST IMPORTANT field on this job. "mcq" means the question offers a fixed set of numbered or lettered answer options to choose from, and nothing is written out. "open" means the child writes the answer — a sentence, a number, a table to fill in, a diagram to draw or label. A question that offers options AND asks for written working is "open".\n` +
+    `- A "mcq" question has exactly ONE "mcq" block and NO "answer"/"plainanswer" block. An "open" question has NO "mcq" block and at least one answer block. Never both.\n` +
+    `- CONTINUATION: if the FIRST attached image opens in the middle of a question that started BEFORE it — it carries on mid-question, before any new question — return that leftover part as the FIRST entry with "continuation":true and just the leftover content in its "blocks". Every other entry has "continuation":false.\n` +
+    `- NEVER write a question number inside a block, and never in the title. The teacher is assembling a NEW paper, so it is numbered afresh: a text block starts with the question's own wording — "Explain why the ice melted", not "44. Explain why the ice melted".\n` +
+    `- SUB-PARTS: if the question has lettered parts, start EACH part's own text block with its own marker written exactly as "(a) " / "(b) " — one marker per block, never two in the same block. They are lifted out into proper part markers.\n` +
+    `- ONE entry per question. Put an "image" block exactly where each diagram/picture/graph/figure/table belongs, interleaved with the text blocks.\n` +
+    _rectangleRules() +
+    `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n").\n` +
+    `- mcq question: copy each option verbatim WITHOUT its leading number/letter, and set "correctIndex" to the 0-based correct option (work it out yourself).\n` +
+    `- open question: write your best model answer in an "answer" (Claim-Evidence-Reasoning) or "plainanswer" block — one for a question with no parts, one per part for a question with parts. There is no marking scheme to read here, so this answer is what the teacher marks from: make it right.\n` +
+    `- An "explanation" block is 2-4 sentences a teacher would give a P3-P6 or Secondary 1 student explaining WHY the correct answer is correct.\n` +
+    _partsPromptRules() +
+    `- "title": a short label saying what the question is ABOUT (e.g. "Melting ice in warm water").\n` +
+    `- "topicConfidence": "high", "medium" or "low".\n` +
+    _aiTagsPromptLine() +
+    `- topic from EXACTLY: ${topics.join('; ')}.\n` +
+    `- category from EXACTLY: ${EP_CATEGORIES.join('; ')}.\n` +
+    `- If a screenshot has no question on it at all, leave it out — return {"questions":[]} only if NONE of the attached images holds a question.\n` +
+    `- Plain text only, no markdown.`;
+}
+
+function cpbBuild() {
+  if (!_canAuthor()) { showToast('Only question authors can build a paper', 'error'); return; }
+  if (_cpbBusy) return;
+  if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't ready yet — try again in a moment", 'error'); return; }
+  if (!_cpbShots.length) { showToast('Add some screenshots first', 'info'); return; }
+  // Reading is always a read of the WHOLE set — a question can span
+  // screenshots added at different times, so there is no honest way to read
+  // "only the new ones" and still get the boundaries right. Everything the
+  // teacher did by hand to the list goes with it, which is why this asks.
+  if (_cpbQuestions.length) {
+    showConfirm('Read the screenshots again',
+      `All ${_cpbShots.length} screenshot${_cpbShots.length === 1 ? '' : 's'} are read together, so this replaces the ${_cpbQuestions.length} question${_cpbQuestions.length === 1 ? '' : 's'} built so far — including the order you put them in and any booklet you changed by hand. Read again?`,
+      () => { _cpbRunBuild(); });
+    return;
+  }
+  _cpbRunBuild();
+}
+
+async function _cpbRunBuild() {
+  _cpbBusy = true; _cpbCancel = false;
+  _cpbQuestions = [];
+  _cpbShots.forEach(s => { s.status = 'new'; s.err = ''; s.group = ''; s.n = 0; });
+  cpbRender();
+  const level = _cpbMetaGet('qLevel');
+  const source = _cpbMetaGet('name');
+  const res = await readQuestionRun(_cpbShots, {
+    batch: CPB_BATCH,
+    prompt: (n, from, total) => _cpbQuestionPrompt(n, from, total),
+    stopped: () => _cpbCancel,
+    onNote: _cpbNote,
+    onBatch: (batch, status, err, span, made) => {
+      batch.forEach(s => {
+        s.group = span;
+        if (status === 'error') { s.status = 'error'; s.err = err; }
+        else if (status === 'reading') { s.status = 'reading'; }
+        else { s.n = made || 0; if (s.status === 'reading') s.status = status; }
+      });
+      cpbRender();
+    },
+    onBuilt: (q, qd) => {
+      // The teacher's own reading of the question, kept beside the structural
+      // one: `cpbBookOf` prefers the blocks, and this is what the ⇄ button
+      // starts from when the two disagree.
+      q._cpbSaid = String((qd && qd.questionType) || '').toLowerCase() === 'mcq' ? 'a' : 'b';
+      // Whatever number the source paper printed on it is dropped — this paper
+      // numbers itself. Runs BEFORE the crop so the wording is settled by the
+      // time the question is shown.
+      _epStripNumbering(q);
+      if (source) q.source = source;
+      if (level) _rapidApplyLevel(q, level);
+    },
+    onDone: (q) => { _tagDuplicate(q); _cpbQuestions.push(q); cpbRender(); },
+    onExtend: (q) => { _epStripNumbering(q); _tagDuplicate(q); cpbRender(); },
+  });
+  _cpbBusy = false;
+  _cpbNote('');
+  if (!_cpbCancel && !res.failed) _cpbDirty = false;
+  cpbRender();
+  const built = _cpbQuestions.length;
+  const bk = cpbBooklets();
+  showToast(built
+    ? `Built ${built} question${built === 1 ? '' : 's'} — ${bk.a.length} multiple choice, ${bk.b.length} open-ended`
+      + `${_cpbCancel ? ' (stopped early)' : ''}${res.failed ? ` · ${res.failed} screenshot${res.failed === 1 ? '' : 's'} could not be read` : ''}`
+    : 'No questions could be read from those screenshots', built ? 'success' : 'error');
+}
+
+function cpbCancel() {
+  if (!_cpbBusy) return;
+  _cpbCancel = true;
+  _cpbNote('Stopping — keeping everything read so far…');
+}
+
+// ---- The list: order, booklet, removal ------------------------------------
+function cpbMove(id, dir) {
+  const i = _cpbQuestions.findIndex(q => q.id === id);
+  if (i < 0) return;
+  // Reorder WITHIN the booklet the question is in: the two booklets are
+  // numbered as one run, so moving a Booklet B question up past the whole of
+  // Booklet A would renumber the entire paper for one nudge.
+  const book = cpbBookOf(_cpbQuestions[i]);
+  let j = i + (dir < 0 ? -1 : 1);
+  while (j >= 0 && j < _cpbQuestions.length && cpbBookOf(_cpbQuestions[j]) !== book) j += (dir < 0 ? -1 : 1);
+  if (j < 0 || j >= _cpbQuestions.length) return;
+  const t = _cpbQuestions[i]; _cpbQuestions[i] = _cpbQuestions[j]; _cpbQuestions[j] = t;
+  cpbRender();
+}
+function cpbDropQuestion(id) {
+  const q = _cpbQuestions.find(x => x.id === id);
+  if (!q) return;
+  showConfirm('Take this question off the paper',
+    '“' + (q.title || 'Untitled question') + '” is removed from the paper. Nothing has been saved anywhere yet, so it is simply gone from the list.',
+    () => { _cpbQuestions = _cpbQuestions.filter(x => x.id !== id); cpbRender(); });
+}
+function cpbSetMeta(k, v) {
+  if (!(k in CPB_META_DEFAULTS)) return;
+  _cpbMeta[k] = typeof CPB_META_DEFAULTS[k] === 'boolean' ? !!v : String(v == null ? '' : v).slice(0, 120);
+  // The text fields must not re-render — the caret would jump to the top on
+  // every keystroke. Only the switches, which change what the page SAYS, do.
+  if (typeof CPB_META_DEFAULTS[k] === 'boolean' || k === 'qLevel') cpbRender();
+  else _cpbDraftSave();
+}
+
+// =====================================================================
+// 🖨 THE PAPER ITSELF
+//
+// Two booklets, each opening on its own cover, laid out the way the children
+// will sit them: the index-number grid at the top right, the paper's identity
+// in a ruled box, the instructions to candidates in a second one, and the
+// booklet's page count at the foot.
+//
+// THE LAYOUT IS THE PART THAT MATTERS and the part that is copied exactly —
+// it is what makes a mock paper feel like the real thing rather than like a
+// worksheet. WHOSE PAPER IT IS is not copied: every line of the heading is a
+// field the teacher fills in, and nothing here is prefilled with the name of a
+// real examination board. A tuition centre's mock paper that passes for an
+// official one is not something to hand a class.
+// =====================================================================
+function _cpbIndexGridHtml() {
+  return `<div class="cpb-cv-index">
+    <span class="cpb-cv-index-label">Index<br>No.</span>
+    <span class="cpb-cv-box"></span><span class="cpb-cv-box"></span><span class="cpb-cv-box"></span>
+    <span class="cpb-cv-box"></span><span class="cpb-cv-box"></span>
+    <span class="cpb-cv-dash">&ndash;</span><span class="cpb-cv-box"></span>
+  </div>`;
+}
+
+// The ruled identity box both covers open with.
+function _cpbCoverHeadHtml(booklet) {
+  const code = _cpbMetaGet('code');
+  const year = _cpbMetaGet('year');
+  return `<div class="cpb-cv-head">
+    <div class="cpb-cv-org">${escapeHtml(_cpbMetaGet('org'))}</div>
+    <div class="cpb-cv-exam">${escapeHtml(_cpbMetaGet('exam'))}</div>
+    <div class="cpb-cv-row">
+      <span class="cpb-cv-code">${escapeHtml(code ? code + ' (' + booklet + ')' : '')}</span>
+      <span class="cpb-cv-level">${escapeHtml(_cpbMetaGet('level'))}<br><span class="cpb-cv-year">${escapeHtml(year)}</span></span>
+    </div>
+    <div class="cpb-cv-subject">${escapeHtml(_cpbMetaGet('subject'))}</div>
+    <div class="cpb-cv-booklet">(BOOKLET ${escapeHtml(booklet)})</div>
+  </div>`;
+}
+
+// The seal at the foot of a cover. It deliberately does NOT print "this
+// booklet consists of N printed pages": the count is only known after the
+// planner has paginated, and a cover that states the wrong one is worse than a
+// cover that states none.
+function _cpbCoverFootHtml() {
+  return `<div class="cpb-cv-foot">
+    <div class="cpb-cv-seal">${escapeHtml(_cpbMetaGet('org'))}</div>
+  </div>`;
+}
+
+// Booklet A — multiple choice, answered on the answer sheet unless the teacher
+// asked for brackets on the paper itself.
+function _cpbCoverA(marks, nA) {
+  const onPaper = !!_cpbMetaGet('mcqOnPaper');
+  const extra = onPaper
+    ? 'Additional Materials: Nil'
+    : 'Additional Materials: Answer Sheet';
+  const ins = [
+    'Write your Index No. in the boxes at the top right hand corner.',
+    'Do not turn over this page until you are told to do so.',
+    'Follow all instructions carefully.',
+    'Answer all questions.',
+    onPaper
+      ? 'Write your answer in the bracket provided at the end of each question.'
+      : 'Use a 2B pencil to shade your answers on the Answer Sheet.',
+  ];
+  return `<div class="print-front-page print-cover-page cpb-cover">
+    ${_cpbIndexGridHtml()}
+    ${_cpbCoverHeadHtml('A')}
+    <div class="cpb-cv-time">
+      <span>${escapeHtml(extra)}</span>
+      <span><b>Total Time for Booklets A and B : ${escapeHtml(_cpbMetaGet('duration'))}</b></span>
+    </div>
+    <div class="cpb-cv-ins">
+      <div class="cpb-cv-ins-h">INSTRUCTIONS TO CANDIDATES</div>
+      <ol class="cpb-cv-ins-list">${ins.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ol>
+      <div class="cpb-cv-ins-note">Questions 1 to ${escapeHtml(String(nA))} carry ${CPB_MCQ_MARKS} marks each. Booklet A is worth ${escapeHtml(String(marks))} marks.</div>
+    </div>
+    ${_cpbCoverFootHtml()}
+  </div>`;
+}
+
+// Booklet B — written answers in the booklet. `anchor` is the chunk this sheet
+// must be printed immediately before; without it the printer would hoist it to
+// the very front and it would land on top of Booklet A's cover.
+function _cpbCoverB(marks, from, to, anchor) {
+  const ins = [
+    'Write your Index No. in the boxes at the top right hand corner.',
+    'Do not turn over this page until you are told to do so.',
+    'Follow all instructions carefully.',
+    'Answer all questions.',
+    'Use a dark blue or black ballpoint pen to write your answers and use a pencil for drawings, diagrams or graphs.',
+    'Do not use correction fluid/tape.',
+    'Do not use highlighter on any part of your answers.',
+  ];
+  return `<div class="print-front-page print-cover-page cpb-cover" data-front-before="${escapeHtml(String(anchor || ''))}" data-front-restart="1">
+    ${_cpbIndexGridHtml()}
+    ${_cpbCoverHeadHtml('B')}
+    <div class="cpb-cv-time">
+      <span>Additional Materials: Nil</span>
+      <span><b>Total Time for Booklets A and B : ${escapeHtml(_cpbMetaGet('duration'))}</b></span>
+    </div>
+    <div class="cpb-cv-ins">
+      <div class="cpb-cv-ins-h">INSTRUCTIONS TO CANDIDATES</div>
+      <ol class="cpb-cv-ins-list">${ins.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ol>
+      <div class="cpb-cv-ins-note">Questions ${escapeHtml(String(from))} to ${escapeHtml(String(to))} are worth ${escapeHtml(String(marks))} marks in total.</div>
+    </div>
+    <div class="cpb-cv-total">
+      <span>For Examiner's Use</span>
+      <span class="cpb-cv-total-box"></span>
+      <span>/ ${escapeHtml(String(marks))}</span>
+    </div>
+    ${_cpbCoverFootHtml()}
+  </div>`;
+}
+
+// The line that opens each booklet — the one a child reads before question 1,
+// with the booklet's mark total on the right. It is emitted as its own chunk
+// (through `sectionHtmlById`) and forced onto a new page, so it always sits at
+// the top of the booklet's first sheet rather than at the foot of the one
+// before it.
+function _cpbBookletLeadHtml(book, marks, from, to) {
+  const txt = book === 'a'
+    ? `For each question from ${from} to ${to}, four options are given. One of them is the correct answer. Make your choice (1, 2, 3 or 4) and ${_cpbMetaGet('mcqOnPaper') ? 'write it in the bracket provided' : 'shade your answer on the Answer Sheet'}.`
+    : `For questions ${from} to ${to}, write your answers in this booklet. The number of marks available is shown in brackets [ ] at the end of each question or part question.`;
+  return `<div class="cpb-lead"><p>${escapeHtml(txt)}</p><div class="cpb-lead-marks">(${escapeHtml(String(marks))} marks)</div></div>`;
+}
+
+// An answer sheet for Booklet A — a numbered grid of (1)(2)(3)(4) to shade,
+// printed as the LAST sheet of the paper so it can be detached and collected.
+// Only when Booklet A is answered off the paper, because that is the only case
+// in which there is anywhere else to put the answer.
+//
+// It is a CHUNK rather than a `.print-front-page`, and that is not a detail:
+// front matter is lifted out and re-inserted at the top of the document, so an
+// answer sheet built as one would print in front of the cover. As a chunk it
+// is paginated, footed and numbered like every other sheet, and the forced
+// break on its own qid is what keeps it on a sheet of its own.
+const CPB_ANSWER_SHEET_QID = '__cpb_answersheet__';
+function _cpbAnswerSheetHtml(nA) {
+  if (!nA) return '';
+  // Two columns, numbered DOWN each one — 1…14 on the left and 15…28 on the
+  // right, the way an answer sheet is read. Laid out across instead, a child
+  // shading question 7 is hunting for it on alternate rows.
+  const half = Math.ceil(nA / 2);
+  const cell = i => (i > nA ? '<div class="cpb-as-row cpb-as-blank"></div>'
+    : `<div class="cpb-as-row"><span class="cpb-as-n">${i}</span>`
+      + [1, 2, 3, 4].map(o => `<span class="cpb-as-o">${o}</span>`).join('')
+      + `</div>`);
+  let rows = '';
+  for (let i = 1; i <= half; i++) rows += cell(i) + cell(i + half);
+  return `<div class="print-question-chunk cpb-answersheet" data-qid="${CPB_ANSWER_SHEET_QID}">
+    ${_cpbIndexGridHtml()}
+    <div class="cpb-as-head">
+      <div class="cpb-as-title">${escapeHtml(_cpbMetaGet('subject'))} &mdash; BOOKLET A ANSWER SHEET</div>
+      <div class="cpb-as-sub">${escapeHtml(_cpbMetaGet('org'))} &middot; ${escapeHtml(_cpbMetaGet('exam'))} ${escapeHtml(_cpbMetaGet('year'))}</div>
+    </div>
+    <p class="cpb-as-ins">Shade the box for the option you have chosen. Use a 2B pencil. Rub out completely any answer you wish to change.</p>
+    <div class="cpb-as-grid">${rows}</div>
+  </div>`;
+}
+
+// ---- Assembling the paper -------------------------------------------------
+// Everything below hands the ORDINARY worksheet builder its arguments and gets
+// out of the way. `buildWorksheetHtml` is the one place a question becomes
+// printed HTML — the block switch, the answer boxes, the ruled lines, the
+// answer key — so a paper assembled any other way would be a second renderer
+// to keep in step with the first, and the sheet a class sits would drift from
+// the sheet the app prints everywhere else.
+function _cpbPaperOpts() {
+  const { a, b, numbers } = cpbBooklets();
+  const marks = cpbMarks();
+  const onPaper = !!_cpbMetaGet('mcqOnPaper');
+  const sectionHtmlById = {};
+  const pageHtmlById = {};
+  const forced = new Set();
+  // Booklet A's lead line, forced to the top of its own page.
+  if (a.length) {
+    sectionHtmlById[a[0].id] = _cpbBookletLeadHtml('a', marks.a, 1, a.length);
+    forced.add('__lo__' + a[0].id);
+  }
+  if (b.length) {
+    const from = a.length + 1, to = a.length + b.length;
+    sectionHtmlById[b[0].id] = _cpbBookletLeadHtml('b', marks.b, from, to);
+    forced.add('__lo__' + b[0].id);
+    // Booklet B's cover goes immediately before that lead line's page. It is
+    // anchored to the LEAD chunk rather than to the question, because the lead
+    // is the chunk that is forced to start the page — anchoring to the
+    // question would drop the cover between the instruction line and the first
+    // question if the packer ever split the two.
+    pageHtmlById[b[0].id] = _cpbCoverB(marks.b, from, to, '__lo__' + b[0].id);
+  }
+  const wantSheet = a.length && !onPaper && !!_cpbMetaGet('answerSheet');
+  if (wantSheet) forced.add(CPB_ANSWER_SHEET_QID);
+  return {
+    a, b, numbers, marks,
+    frontHtml: a.length || b.length ? _cpbCoverA(marks.a, a.length) : '',
+    forcedBreakIds: forced,
+    buildOpts: {
+      plainNumbers: true,
+      noStudentFields: true,
+      answerKeyExtras: true,
+      sectionHtmlById,
+      paper: {
+        numbers,
+        pageHtmlById,
+        // Booklet A carries no bracket when it is answered on the answer
+        // sheet. Booklet B's questions are open-ended and have none anyway.
+        noBracketIds: onPaper ? null : new Set(a.map(q => q.id)),
+        tailHtml: wantSheet ? _cpbAnswerSheetHtml(a.length) : '',
+      },
+    },
+  };
+}
+
+// The questions in print order: Booklet A first, then Booklet B, whatever
+// order they happen to sit in on the page.
+function _cpbPrintOrder() {
+  const { a, b } = cpbBooklets();
+  return a.concat(b);
+}
+
+function _cpbPaperTitle() {
+  return _cpbMetaGet('name')
+    || [_cpbMetaGet('org'), _cpbMetaGet('exam'), _cpbMetaGet('year'), _cpbMetaGet('subject')].filter(Boolean).join(' · ');
+}
+
+function _cpbReady() {
+  if (!_cpbQuestions.length) { showToast('Build the questions first — there is no paper yet', 'info'); return false; }
+  return true;
+}
+
+async function cpbPrint() {
+  if (!_cpbReady()) return;
+  const o = _cpbPaperOpts();
+  const selected = _cpbPrintOrder();
+  const output = document.getElementById('printOutput');
+  _printProgressShow('Preparing the paper…', 'Starting…');
+  const urls = [];
+  selected.forEach(q => {
+    if (q.answerKeyImage) urls.push(transformImageUrl(q.answerKeyImage));
+    (q.blocks || []).forEach(b => { if (b && b.url && (b.type === 'image' || b.type === 'answerKey')) urls.push(transformImageUrl(b.url)); });
+  });
+  await _preloadImageUrls(urls, (done, tot) => _printProgressUpdate('Loading question images…', 0.05 + 0.75 * (done / tot), done + '/' + tot + ' images'));
+  _printProgressUpdate('Laying out pages…', 0.85, 'Measuring each question at print size');
+  output.innerHTML = buildWorksheetHtml(selected, _cpbPaperTitle(), Object.assign({ frontHtml: o.frontHtml }, o.buildOpts));
+  autoscaleAndPrint(output, { forcedBreakIds: o.forcedBreakIds });
+}
+
+function cpbPreview() {
+  if (!_cpbReady()) return;
+  const o = _cpbPaperOpts();
+  _wsPreviewAdhoc = {
+    questions: _cpbPrintOrder(),
+    title: _cpbPaperTitle(),
+    source: 'custompaper',
+    frontHtml: o.frontHtml,
+    buildOpts: o.buildOpts,
+    forcedBreakIds: o.forcedBreakIds,
+  };
+  _wsPreviewSaved = null;
+  _wsPreviewPaper = null;
+  _wsShowPreviewOverlay();
+}
+
+// ---- Sending the paper to the bank ---------------------------------------
+// HELD BACK, always — that is the whole contract of this page. The questions
+// have to be in the bank for the teacher to edit, check, print and reuse them;
+// no child may meet one until the paper has been sat. `holdBack` is the field,
+// `qReleased` is what reads it, and the 🗓 Scheduled Questions page is where it
+// comes off again.
+function cpbSend() {
+  if (!_canAuthor()) { showToast('Only question authors can save questions', 'error'); return; }
+  if (!_cpbQuestions.length) { showToast('Nothing to send yet', 'error'); return; }
+  const { a, b } = cpbBooklets();
+  const n = _cpbQuestions.length;
+  showConfirm('Send ' + n + ' question' + (n === 1 ? '' : 's') + ' to the bank',
+    `${a.length} multiple choice and ${b.length} open-ended go into the question bank <b>held back from students</b> — you can edit, check, print and put them on a worksheet, and no practice mode, quest or game will serve one to a child until you release them.`
+    + `<br><br>Release them later on the 🗓 <b>Scheduled Questions</b> page, which lists them under this paper's name.`
+    + (_cpbMetaGet('name') ? '' : '<br><br><b>This paper has no name yet.</b> The name is what groups them on that page — without one they are listed as “Unnamed paper”.'),
+    () => _cpbCommit());
+}
+
+async function _cpbCommit() {
+  if (_cpbBusy) return;
+  const order = _cpbPrintOrder();
+  const source = _cpbMetaGet('name');
+  let done = 0, failed = 0;
+  // Forty awaited writes is a real wait, so the page says where it is and the
+  // buttons are out of reach while it runs — pressed twice, this would file the
+  // whole paper into the bank a second time.
+  _cpbBusy = true;
+  cpbRender();
+  for (const q of order) {
+    _cpbNote('Saving ' + (done + failed + 1) + ' of ' + order.length + '…');
+    const clean = Object.assign({}, q);
+    // Page-local bookkeeping never reaches the bank.
+    delete clean._cpbBook; delete clean._cpbSaid;
+    delete clean._epNum; delete clean._epAns;
+    clean.status = 'approved';
+    // THE POINT OF THE PAGE. Written here and nowhere else on this path.
+    clean.holdBack = true;
+    if (source) clean.source = source;
+    // AWAITED, one document at a time, so the count reported is the count that
+    // really went — and a question only joins the in-memory bank once its
+    // document landed. A bank that holds a question Firestore does not looks
+    // perfectly right until the next sign-in.
+    let ok = false;
+    try { ok = (await saveQuestion(clean)) !== false; }
+    catch (err) { console.warn('custom paper: save failed', err); ok = false; }
+    // REPLACE rather than push. A part-failed send leaves the whole paper on
+    // the page so the rest can be tried again, and the questions that DID go
+    // are sent a second time — the document id is stable so Firestore just
+    // overwrites, but a blind push would put a second copy of the same
+    // question into the in-memory bank.
+    if (ok) {
+      const at = questionBank.findIndex(x => String(x.id) === String(clean.id));
+      if (at >= 0) questionBank[at] = clean; else questionBank.push(clean);
+      done++;
+    } else failed++;
+  }
+  _cpbBusy = false;
+  _cpbNote('');
+  // Only what really went is cleared. A part-failed send leaves the paper on
+  // the page so the rest can be tried again, rather than losing the questions
+  // that could not be saved.
+  if (done && !failed) {
+    _cpbQuestions = [];
+    _cpbShots = [];
+    _cpbDirty = false;
+    _cpbDraftDrop().catch(err => console.warn('custom paper draft:', err));
+  }
+  cpbRender();
+  updateCounts();
+  try { renderQuestionBank(); } catch (err) {}
+  try { renderBankScheduled(); } catch (err) {}
+  showToast(done
+    ? `${done} question${done === 1 ? '' : 's'} sent to the bank, held back from students 🔒${failed ? ` · ${failed} could not be saved` : ''}`
+    : 'Nothing could be saved — check your connection and try again', failed ? 'error' : 'success');
+}
+
+// ---- Rendering ------------------------------------------------------------
+function cpbRender() {
+  const el = document.getElementById('cpbBody');
+  if (!el) return;
+  if (!_canAuthor()) {
+    el.innerHTML = '<div class="cpb-card"><p class="cpb-empty">Only question authors can build a paper.</p></div>';
+    return;
+  }
+  el.innerHTML = _cpbIntroHtml() + _cpbDraftOfferHtml() + _cpbSetupHtml() + _cpbZoneHtml() + _cpbPaperCardHtml();
+  // Every mutation on this page ends in a render, so mirroring the draft from
+  // here is the one hook that cannot be forgotten.
+  _cpbDraftSave();
+}
+
+function _cpbIntroHtml() {
+  return `<div class="cpb-card cpb-intro">
+    <h3 class="cpb-h3">📝 Build a mock paper from screenshots</h3>
+    <p class="cpb-lead">Paste the questions in — a page of last year's prelim, a figure out of a textbook, one you wrote yourself. They are read <b>as one run</b>, ${CPB_BATCH} at a time, so a question spread over two or three screenshots comes out as one question and a screenshot holding three comes out as three. Multiple-choice questions go into <b>Booklet A</b> and open-ended ones into <b>Booklet B</b>, each with its own cover, numbered straight through.</p>
+    <p class="cpb-lead cpb-lock">🔒 Everything sent from here goes into the bank <b>held back from students</b> — yours to print, edit and reuse, and served to nobody until you release it.</p>
+  </div>`;
+}
+
+function _cpbDraftOfferHtml() {
+  if (!_cpbDraftOffers.length) return '';
+  return _cpbDraftOffers.map(r => {
+    const bits = [];
+    if (r.nShots) bits.push(r.nShots + ' screenshot' + (r.nShots === 1 ? '' : 's'));
+    if (r.nQuestions) bits.push(r.nQuestions + ' question' + (r.nQuestions === 1 ? '' : 's'));
+    if (r.paper) bits.push('“' + r.paper + '”');
+    const tab = escapeHtml(String(r.tab || '')).replace(/'/g, '&#39;');
+    return `<div class="cpb-card cpb-recover">
+      <h3 class="cpb-h3">📝 An unsent paper is waiting</h3>
+      <p class="cpb-lead">Left in another window on ${escapeHtml(_wkWhen(r.at) || 'an earlier visit')}${bits.length ? ' — ' + escapeHtml(bits.join(' · ')) : ''}. Nothing was sent to the bank.${r.trimmed ? ' <b>The screenshots were too large to keep</b> — the questions already read from them are here.' : ''}</p>
+      <div class="cpb-head-tools">
+        <button class="btn btn-primary btn-sm" onclick="cpbDraftTake('${tab}')">Restore it</button>
+        <button class="btn btn-outline btn-sm" onclick="cpbDraftDiscard('${tab}')">Discard</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _cpbField(k, label, ph, hint) {
+  return `<label class="cpb-field">
+    <span class="cpb-field-label">${escapeHtml(label)}${hint ? ` <span class="cpb-dim">${escapeHtml(hint)}</span>` : ''}</span>
+    <input class="form-input" type="text" value="${escapeHtml(String(_cpbMetaGet(k)))}" placeholder="${escapeHtml(ph || '')}"
+           oninput="cpbSetMeta('${k}', this.value)" autocomplete="off">
+  </label>`;
+}
+
+function _cpbSetupHtml() {
+  const lv = _cpbMetaGet('qLevel');
+  const onPaper = !!_cpbMetaGet('mcqOnPaper');
+  const sheet = !!_cpbMetaGet('answerSheet');
+  return `<div class="cpb-card">
+    <div class="cpb-head"><h3 class="cpb-h3">① The paper</h3></div>
+    <p class="cpb-lead">These print on the two covers. They are yours to fill in — nothing here is prefilled with an examination board's name, because this is your centre's paper and a cover that passes for an official one is not one to hand a class.</p>
+    <div class="cpb-fields">
+      ${_cpbField('name', 'Paper name', 'e.g. 2026 P6 Science Prelim Mock 1', '— stored on every question as its source, and what groups them for release')}
+      ${_cpbField('org', 'Centre / school')}
+      ${_cpbField('exam', 'Examination')}
+      ${_cpbField('subject', 'Subject')}
+      ${_cpbField('level', 'Level line', 'e.g. PRIMARY 6')}
+      ${_cpbField('year', 'Year')}
+      ${_cpbField('code', 'Paper code', 'e.g. 0009/2', '— optional')}
+      ${_cpbField('duration', 'Total time', 'e.g. 1 h 45 min')}
+      <label class="cpb-field">
+        <span class="cpb-field-label">File the questions at <span class="cpb-dim">— narrows the topics the AI may choose from</span></span>
+        <select class="form-input" onchange="cpbSetMeta('qLevel', this.value)">
+          <option value="">Any level — let the AI choose the topic</option>
+          ${TOPIC_LEVELS.map(l => `<option value="${escapeHtml(l)}"${l === lv ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('')}
+        </select>
+      </label>
+    </div>
+    <div class="cpb-switches">
+      <label class="cpb-switch">
+        <input type="checkbox" ${onPaper ? 'checked' : ''} onchange="cpbSetMeta('mcqOnPaper', this.checked)">
+        <span>Booklet A is answered <b>on the paper</b> — print an answer bracket after each question</span>
+      </label>
+      <label class="cpb-switch${onPaper ? ' cpb-switch-off' : ''}">
+        <input type="checkbox" ${sheet ? 'checked' : ''} ${onPaper ? 'disabled' : ''} onchange="cpbSetMeta('answerSheet', this.checked)">
+        <span>Print a <b>Booklet A answer sheet</b> as the last page${onPaper ? ' <span class="cpb-dim">— not needed, the answers are on the paper</span>' : ''}</span>
+      </label>
+    </div>
+  </div>`;
+}
+
+const CPB_STATUS = {
+  new: { label: 'Not read yet', cls: 'cpb-s-new' },
+  reading: { label: 'Reading…', cls: 'cpb-s-busy' },
+  cropping: { label: 'Cropping pictures…', cls: 'cpb-s-busy' },
+  done: { label: 'Read ✓', cls: 'cpb-s-ok' },
+  empty: { label: 'Nothing found', cls: 'cpb-s-warn' },
+  error: { label: 'Failed', cls: 'cpb-s-bad' },
+};
+
+function _cpbShotHtml(s) {
+  const st = CPB_STATUS[s.status] || CPB_STATUS.new;
+  // A question can span screenshots, so a question count belongs to the GROUP
+  // that was read together, never to one screenshot on its own.
+  const detail = (s.status === 'done' && s.group) ? `${s.n} question${s.n === 1 ? '' : 's'} from ${s.group}` : '';
+  return `<div class="cpb-shot ${st.cls}">
+    <img src="${_cpbDataUrl(s)}" alt="${escapeHtml(s.name)}" loading="lazy">
+    <div class="cpb-shot-body">
+      <span class="cpb-shot-status">${st.label}</span>
+      ${detail ? `<span class="cpb-shot-detail">${escapeHtml(detail)}</span>` : ''}
+      ${s.err ? `<span class="cpb-shot-err">${escapeHtml(s.err)}</span>` : ''}
+    </div>
+    <button type="button" class="cpb-shot-x" onclick="cpbRemove('${s.id}')" title="Remove this screenshot" ${_cpbBusy ? 'disabled' : ''}>✕</button>
+  </div>`;
+}
+
+function _cpbZoneHtml() {
+  const n = _cpbShots.length;
+  const again = _cpbQuestions.length;
+  return `<div class="cpb-card">
+    <div class="cpb-head">
+      <h3 class="cpb-h3">② Screenshots ${n ? `<span class="cpb-pill">${n}</span>` : ''}</h3>
+      <div class="cpb-head-tools">
+        ${n ? `<button class="btn btn-outline btn-sm" onclick="cpbClearShots()" ${_cpbBusy ? 'disabled' : ''}>Clear all</button>` : ''}
+        ${_cpbBusy
+          ? '<button class="btn btn-outline btn-sm" onclick="cpbCancel()">✋ Stop</button>'
+          : `<button class="btn btn-primary btn-sm" onclick="cpbBuild()" ${n ? '' : 'disabled'}>${again ? '🔁 Read again' : '🤖 Read the questions'}</button>`}
+      </div>
+    </div>
+    <p class="cpb-lead">Add them in the order you want them read — paste with <b>Ctrl/⌘ V</b>, drop them in, or pick files. You do not have to line them up one question per screenshot.</p>
+    ${_cpbDirty && _cpbQuestions.length ? '<p class="cpb-warn-line">⚠ The screenshots changed since they were last read — press <b>Read again</b> so the paper matches what is here now. It replaces the questions below, including the order and any booklet you changed by hand.</p>' : ''}
+    <div class="cpb-zone${_cpbPasteOn ? ' cpb-zone-on' : ''}" onclick="cpbFocusZone()"
+         ondragover="cpbDragOver(event)" ondrop="cpbDropFiles(event)">
+      <div class="cpb-zone-main">
+        <span class="cpb-zone-ico">🖼️</span>
+        <div>
+          <b>${_cpbPasteOn ? 'Paste here now (Ctrl/⌘ V)' : 'Click here, then paste (Ctrl/⌘ V)'}</b>
+          <span class="cpb-dim">…or drop images in, or <button type="button" class="cpb-link" onclick="event.stopPropagation();cpbPick()">choose files</button></span>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="cpbFile" accept="image/*" multiple style="display:none;" onchange="cpbFiles(this)">
+    ${n ? `<div class="cpb-shots">${_cpbShots.map(_cpbShotHtml).join('')}</div>` : ''}
+  </div>`;
+}
+
+// One row of the paper. The number it will carry, what it is, and the three
+// things a teacher does to it: move it, swap its booklet, take it off.
+function _cpbRowHtml(q, num, book, first, last) {
+  const auto = qIsMcqOnly(q.blocks) ? 'a' : 'b';
+  const overridden = (q._cpbBook === 'a' || q._cpbBook === 'b') && q._cpbBook !== auto;
+  const marks = book === 'a' ? CPB_MCQ_MARKS : cpbQuestionMarks(q);
+  const parts = qPartsUsed(q.blocks || []);
+  return `<div class="cpb-row${overridden ? ' cpb-row-moved' : ''}">
+    <span class="cpb-row-n">${escapeHtml(num)}</span>
+    <div class="cpb-row-main">
+      <div class="cpb-row-title">${escapeHtml(q.title || 'Untitled question')}</div>
+      <div class="cpb-row-meta">
+        ${escapeHtml([q.topic, q.category].filter(Boolean).join(' · '))}
+        ${parts.length ? ' · ' + escapeHtml(parts.length + ' part' + (parts.length === 1 ? '' : 's')) : ''}
+        · ${book === 'a' ? escapeHtml(String(CPB_MCQ_MARKS) + ' marks') : (marks ? escapeHtml(marks + ' mark' + (marks === 1 ? '' : 's')) : '<span class="cpb-nomarks">no marks printed</span>')}
+        ${q._dupOf ? ' · <span class="cpb-dup">possible duplicate</span>' : ''}
+        ${overridden ? ' · <span class="cpb-moved">moved here by hand</span>' : ''}
+      </div>
+    </div>
+    <div class="cpb-row-tools">
+      <button type="button" class="cpb-tool" onclick="cpbMove('${q.id}',-1)" title="Move up within this booklet" ${first ? 'disabled' : ''}>▲</button>
+      <button type="button" class="cpb-tool" onclick="cpbMove('${q.id}',1)" title="Move down within this booklet" ${last ? 'disabled' : ''}>▼</button>
+      <button type="button" class="cpb-tool" onclick="cpbSetBook('${q.id}','${book === 'a' ? 'b' : 'a'}')" title="${book === 'a' ? 'Move to Booklet B — the child writes the answer' : 'Move to Booklet A — the child chooses an option'}">⇄ ${book === 'a' ? 'B' : 'A'}</button>
+      <button type="button" class="cpb-tool cpb-tool-x" onclick="cpbDropQuestion('${q.id}')" title="Take this question off the paper">✕</button>
+    </div>
+  </div>`;
+}
+
+function _cpbBookletHtml(book, list, numbers, marks) {
+  const title = book === 'a' ? '📗 Booklet A — multiple choice' : '📘 Booklet B — open-ended';
+  if (!list.length) {
+    return `<div class="cpb-booklet">
+      <div class="cpb-booklet-head"><h4>${title}</h4><span class="cpb-booklet-sum">empty</span></div>
+      <p class="cpb-empty cpb-booklet-empty">${book === 'a'
+        ? 'No multiple-choice questions yet. Any question whose answer is chosen from a fixed set of options lands here.'
+        : 'No open-ended questions yet. Any question the child writes an answer to lands here.'} You can also move one across with ⇄.</p>
+    </div>`;
+  }
+  return `<div class="cpb-booklet">
+    <div class="cpb-booklet-head">
+      <h4>${title}</h4>
+      <span class="cpb-booklet-sum">${list.length} question${list.length === 1 ? '' : 's'} · ${marks} marks</span>
+    </div>
+    <div class="cpb-rows">${list.map((q, i) => _cpbRowHtml(q, numbers[q.id], book, i === 0, i === list.length - 1)).join('')}</div>
+  </div>`;
+}
+
+function _cpbPaperCardHtml() {
+  const { a, b, numbers } = cpbBooklets();
+  if (!_cpbQuestions.length) {
+    return `<div class="cpb-card">
+      <h3 class="cpb-h3">③ The paper</h3>
+      <p class="cpb-empty">Read the screenshots and every question shows up here, sorted into its booklet and numbered.</p>
+    </div>`;
+  }
+  const m = cpbMarks();
+  return `<div class="cpb-card">
+    <div class="cpb-head">
+      <h3 class="cpb-h3">③ The paper <span class="cpb-pill">${_cpbQuestions.length}</span></h3>
+      <div class="cpb-head-tools">
+        <button class="btn btn-outline btn-sm" onclick="cpbPreview()" ${_cpbBusy ? 'disabled' : ''}>👁 Preview</button>
+        <button class="btn btn-outline btn-sm" onclick="cpbPrint()" ${_cpbBusy ? 'disabled' : ''}>🖨 Print / Save PDF</button>
+        <button class="btn btn-primary btn-sm" onclick="cpbSend()" ${_cpbBusy ? 'disabled' : ''}>📤 Send to bank 🔒</button>
+      </div>
+    </div>
+    <div class="cpb-totals">
+      <span><b>${m.total}</b> marks in total</span>
+      <span>Booklet A <b>${m.a}</b></span>
+      <span>Booklet B <b>${m.b}</b></span>
+      ${m.guessed ? `<span class="cpb-warn-inline" title="These questions had no printed mark allocation for the reader to find, so each is counted as ${CPB_OPEN_DEFAULT_MARKS}. Open one in the editor to set its marks properly.">⚠ ${m.guessed} counted as ${CPB_OPEN_DEFAULT_MARKS}</span>` : ''}
+    </div>
+    ${_cpbBookletHtml('a', a, numbers, m.a)}
+    ${_cpbBookletHtml('b', b, numbers, m.b)}
+  </div>`;
+}
+
+// Opening the page: bind the paste target, and look for a draft left behind.
+function cpbInit() {
+  _cpbBindPaste();
+  if (!_cpbDraftReady) _cpbDraftScan().catch(err => console.warn('custom paper draft:', err));
+  cpbRender();
 }
 
 // =====================================================================
@@ -25092,6 +26338,8 @@ function xtInit() {
   _xtOn('q', _xtQueueQuestion);
   _xtOn('ep-ping', env => _xtPost({ type: 'ep-pong', to: env.tab }));
   _xtOn('ep-pong', env => { _epLiveTabs.add(env.tab); });
+  _xtOn('cpb-ping', env => _xtPost({ type: 'cpb-pong', to: env.tab }));
+  _xtOn('cpb-pong', env => { _cpbLiveTabs.add(env.tab); });
 }
 
 function _xtPost(msg) {
@@ -26237,7 +27485,37 @@ function qScheduled(q, today) {
   const on = qReleaseOn(q);
   return !!on && on > (today || releaseToday());
 }
-function qReleased(q, today) { return !qScheduled(q, today); }
+// =====================================================================
+// 🔒 HELD BACK — in the bank, and not for students yet
+//
+// A release DATE answers "not until Monday". It cannot answer "not until I
+// say so", which is what a teacher building next term's mock paper actually
+// wants: the questions have to be in the bank NOW so the paper can be
+// printed, edited, checked and put on a worksheet, and no child may meet one
+// of them until the paper has been sat.
+//
+// So it is a SECOND state on the same field family, and it is folded into
+// `qReleased` — the ONE predicate every student-facing pool already asks —
+// rather than being a gate of its own. That is the whole reason it is safe:
+// every pool, every game, every quest and every worksheet gained it without
+// being told, and the CENSUS in tools/scheduled-release-tests.mjs still
+// guards the next pool somebody writes.
+//
+// IT IS STRICTLY `=== true`, and unlike `qReleaseOn` that is NOT a fail-open
+// rule — it is an exact one. The field has exactly two writers (📝 Custom
+// Paper's send, and the 🔓 release button), neither of which can produce a
+// truthy-but-not-true value, so there is no third state to be lenient about.
+// Anything else in the field means the question is ordinary and is served.
+//
+// `holdBack` is deliberately OUTSIDE `EDITOR_OWNED_QUESTION_FIELDS`, exactly
+// as `releaseOn` is: the block editor has no control for it, so
+// `carryOverQuestionMeta` is what keeps a question held back across an edit.
+// GIVING THE EDITOR A CONTROL FOR IT LATER MEANS ADDING THE NAME TO THAT SET
+// IN THE SAME COMMIT, or an ordinary edit would release the whole paper.
+function qHeldBack(q) { return !!q && q.holdBack === true; }
+// Held back OR still waiting for its date. One question, one answer, asked
+// everywhere.
+function qReleased(q, today) { return !qHeldBack(q) && !qScheduled(q, today); }
 // Teachers can prepare and practise in advance. "Practise as student" sets
 // currentUser.role to student, so it gets the same release gate as that child.
 function qAvailableToViewer(q, today) { return _canAuthor() || qReleased(q, today); }
@@ -26274,6 +27552,15 @@ function qReleaseWhen(on, today) {
 // screens is a question somebody prints for Monday and cannot understand why
 // no student can see.
 function qReleaseChipHtml(q) {
+  // Held back beats a date: a question that is both is held back, and saying
+  // "releases 3 Nov" about one that will not come out on 3 Nov is worse than
+  // saying nothing.
+  if (qHeldBack(q)) {
+    return '<span class="qb-tag" style="background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5;"' +
+      ' title="Held back from students. It is in the bank and teachers can edit, practise, print and put it on a worksheet,' +
+      ' but no student is served it in any practice mode or game until you release it on the \u{1F5D3} Scheduled Questions page.">' +
+      '\u{1F512} Not released</span>';
+  }
   const on = qReleaseOn(q);
   if (!on || !qScheduled(q)) return '';
   return '<span class="qb-tag" style="background:#eef2ff;color:#4338ca;border:1px solid #a5b4fc;"' +
@@ -30800,6 +32087,20 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   // packer can key a forced page break on it (data-qid "__lo__<qid>") — used by
   // the syllabus-grouped PDF.
   const sectionById = (opts && opts.sectionHtmlById) || null;
+  // paper: 📝 Custom Paper's exam-paper rendering — the number in the left
+  // gutter beside the first line instead of a "Question N" heading, a booklet
+  // cover placed mid-document, and no answer bracket under a Booklet A MCQ
+  // (its answer goes on the answer sheet). Absent — every other print in the
+  // app — nothing here behaves differently by so much as a character.
+  //   numbers       { qid: '29' }   the number PRINTED on the paper
+  //   pageHtmlById  { qid: html }   raw HTML emitted immediately before that
+  //                                 question, for a `.print-front-page` that
+  //                                 must not be hoisted to the front
+  //   noBracketIds  Set of qids whose MCQ prints no answer bracket
+  const paper = (opts && opts.paper) || null;
+  const paperNums = (paper && paper.numbers) || null;
+  const pageHtmlById = (paper && paper.pageHtmlById) || null;
+  const noBracketIds = (paper && paper.noBracketIds) || null;
   const frontHtml = (opts && opts.frontHtml) ? opts.frontHtml : '';
   // noStudentFields: print no blank Name / Date / Class lines at all — for a
   // worksheet that is going straight into a file, or one the class writes on
@@ -30812,6 +32113,11 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   const answerKeyData = [];
 
   selected.forEach((q, qIndex) => {
+    // A whole SHEET that belongs immediately before this question — the cover
+    // that opens a booklet. Emitted verbatim, outside every chunk, so the
+    // packer never measures it and `_printFrontPlacement` puts it back exactly
+    // here rather than at the top of the document with the other front matter.
+    if (pageHtmlById && pageHtmlById[q.id]) allHtml += pageHtmlById[q.id];
     const secHtml = sectionById ? (sectionById[q.id] || '') : '';
     if (secHtml) {
       allHtml += `<div class="print-question-chunk print-lo-chunk" data-qid="__lo__${escapeHtml(String(q.id || ''))}">` +
@@ -30819,20 +32125,30 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     }
     // MCQ-style questions (no writing boxes) are flagged so the packer can
     // pair two compact ones onto a single page.
-    const isMcq = q.blocks.some(b => b.type === 'mcq') && !q.blocks.some(b => b.type === 'answer' || b.type === 'plainanswer');
+    const isMcq = qIsMcqOnly(q.blocks);
     const bigImgs = imgQuestionNeedsBig(q);   // the picture IS the options → print it tall
-    let qHtml = `<div class="print-question-chunk" data-qid="${escapeHtml(String(q.id || ''))}"${isMcq ? ' data-mcq="1"' : ''}>`;
+    // The paper's own printed number — "1" in Booklet A, "29" in Booklet B —
+    // which is NOT the position in the list: the two booklets are numbered as
+    // one run, and the teacher can reorder either of them.
+    const paperNum = paperNums ? String(paperNums[q.id] || '') : '';
+    let qHtml = `<div class="print-question-chunk${paperNum ? ' print-q-paper' : ''}" data-qid="${escapeHtml(String(q.id || ''))}"${isMcq ? ' data-mcq="1"' : ''}>`;
 
     if (qIndex === 0 && !secHtml) {
       qHtml += _wsHeaderHtml(worksheetTitle, hasCover, noFields);
     }
 
-    qHtml += plainNums
-      ? `<div class="print-q-header print-q-header-plain"><h2>Question ${qIndex + 1}</h2></div>`
-      : `<div class="print-q-header">
+    // On a paper the number sits in the left gutter BESIDE the first line, the
+    // way every exam paper prints it — not as a heading above the question.
+    // The part letters keep their own gutter inside it, so a question with
+    // parts falls into the two columns an exam paper has.
+    qHtml += paperNum
+      ? `<span class="print-q-paper-num">${escapeHtml(paperNum)}</span>`
+      : (plainNums
+        ? `<div class="print-q-header print-q-header-plain"><h2>Question ${qIndex + 1}</h2></div>`
+        : `<div class="print-q-header">
       <h2>${escapeHtml(q.title)}</h2>
       <div class="print-q-meta">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</div>
-    </div>`;
+    </div>`);
 
     // Open ended writing boxes
     {
@@ -30901,7 +32217,12 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
           // identical case is in `doPrintWorksheetOpen` and both build the
           // block through `_printMcqBlockHtml`, so the two sheets cannot drift.
           case 'mcq': {
-            qHtml += _printMcqBlockHtml(block, bPart);
+            // Booklet A is answered on a separate answer sheet, so a bracket
+            // under the options is a box nobody writes in. The KEY is pushed
+            // either way — the answer is never optional.
+            qHtml += (noBracketIds && noBracketIds.has(q.id))
+              ? renderImportedBlockStudent(block)
+              : _printMcqBlockHtml(block, bPart);
             _pushBlockAnswerKey(qSections, block, bPart, qWhy);
             break;
           }
@@ -30925,10 +32246,23 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
         const _fb = _qFallbackKeySection(q);
         if (_fb) qSections.push(_fb);
       }
-      answerKeyData.push({ qid: q.id, title: plainNums ? ('Question ' + (qIndex + 1)) : q.title, type: 'open', sections: qSections });
+      // The key is marked from, so its rows carry the number PRINTED on the
+      // paper. Numbering them by position would put "Question 1" beside the
+      // answer to Booklet B's question 29.
+      answerKeyData.push({
+        qid: q.id,
+        title: paperNum ? ('Question ' + paperNum) : (plainNums ? ('Question ' + (qIndex + 1)) : q.title),
+        type: 'open',
+        sections: qSections,
+      });
     }
   });
 
+
+  // Anything that belongs AFTER the last question but before the answer key —
+  // 📝 Custom Paper's Booklet A answer sheet. Emitted verbatim as its own
+  // chunk, so it is paginated, footed and numbered like every other sheet.
+  if (paper && paper.tailHtml) allHtml += paper.tailHtml;
 
   // Answer Key Page
   {
@@ -31579,7 +32913,13 @@ let _wsPreviewAdhoc = null;
 // reaches into the bank — ✏️ edit question, ✏️ edit answer, ✏️ Editing mode, the
 // come-back-here snapshot — has to stand down for it: the question may never
 // have been saved, and its author is already standing in the editor.
-function _wsPreviewIsDraft() { return !!(_wsPreviewAdhoc && _wsPreviewAdhoc.source === 'editor'); }
+function _wsPreviewIsDraft() {
+  const src = _wsPreviewAdhoc && _wsPreviewAdhoc.source;
+  // 'custompaper' for exactly the same reason as 'editor': a paper that has
+  // not been sent is not in the bank at all, so ✏️ edit question would open a
+  // question the bank has never heard of.
+  return src === 'editor' || src === 'custompaper';
+}
 
 function _wsPreviewCtx() {
   if (_wsPreviewPaper) {
@@ -31606,7 +32946,13 @@ function _wsPreviewCtx() {
       // print picker's own switches — so the preview obeys whatever is set
       // there rather than inventing a second pair of checkboxes.
       where: 'bank',
-      akExtras: akxPrintOn('bank')
+      akExtras: akxPrintOn('bank'),
+      // 📝 Custom Paper hands the preview the SAME arguments its printer uses
+      // — its covers, its gutter numbers, its forced breaks — so the sheet on
+      // screen is the sheet that comes out of the PDF.
+      frontHtml: _wsPreviewAdhoc.frontHtml != null ? _wsPreviewAdhoc.frontHtml : null,
+      buildOpts: _wsPreviewAdhoc.buildOpts || null,
+      forcedBreakIds: _wsPreviewAdhoc.forcedBreakIds || null
     };
   }
   if (_wsPreviewSaved) {
@@ -31956,7 +33302,15 @@ function printFromPreview() {
     ppDoPrint(p.items, p.missing, p.title, { coverTitle: p.coverTitle });
     return;
   }
-  if (_wsPreviewAdhoc) { const a = _wsPreviewAdhoc; closeWorksheetPreview(); printQuestionsDirect(a.questions, a.title); return; }
+  if (_wsPreviewAdhoc) {
+    const a = _wsPreviewAdhoc;
+    closeWorksheetPreview();
+    // A paper prints through its OWN builder — sent to printQuestionsDirect it
+    // would come out as a plain worksheet with both covers gone.
+    if (a.source === 'custompaper') { cpbPrint(); return; }
+    printQuestionsDirect(a.questions, a.title);
+    return;
+  }
   if (_wsPreviewSaved) { reprintWorksheet(_wsPreviewSaved.id); return; }
   printStudentWorksheet();
 }
@@ -31979,12 +33333,12 @@ async function renderWsPreview() {
   // A past paper brings its own cover; a worksheet's is the checkbox's.
   const frontHtml = ctx.frontHtml != null ? ctx.frontHtml
     : (ctx.cover ? _wsCoverHtml(title, undefined, undefined, ctx.noFields) : '');
-  const html = buildWorksheetHtml(selected, title, {
+  const html = buildWorksheetHtml(selected, title, Object.assign({
     frontHtml, plainNumbers: true, noStudentFields: ctx.noFields,
     whyNotes: _wnyCachedNotes(selected, wnyPrintOn(ctx.where)),
     answerKeyExtras: !!ctx.akExtras
-  });   // exactly what will print
-  _wsWritePreview(frame, html);
+  }, ctx.buildOpts || {}));   // exactly what will print
+  _wsWritePreview(frame, html, { ctxBreaks: ctx.forcedBreakIds || null });
 }
 
 // Shared by the full exported view and the Vetting eye. The hover supplies an
@@ -32059,7 +33413,13 @@ function _wsPreviewPack(doc, opts) {
   // including the re-flow that moves an over-full page's last question on.
   let plan;
   try {
-    plan = _printPlanIn(doc, measure, { forcedBreakIds: readOnly ? new Set() : wsManualBreaks, mergeUpIds: readOnly ? new Set() : wsMergeUp });
+    // A paper's own breaks (the sheet that opens a booklet) are part of the
+    // layout, not a teacher's manual override, so they apply in the read-only
+    // hover preview too — otherwise it shows a pagination the PDF will not
+    // reproduce, which is the one thing a preview must never do.
+    const ctxBreaks = (opts && opts.ctxBreaks) || null;
+    const breaks = readOnly ? new Set(ctxBreaks || []) : new Set([...wsManualBreaks, ...(ctxBreaks || [])]);
+    plan = _printPlanIn(doc, measure, { forcedBreakIds: breaks, mergeUpIds: readOnly ? new Set() : wsMergeUp });
   } catch (e) { console.warn('preview plan', e); measure.style.display = 'none'; return false; }
   const heights = plan.heights;
   const footerH = plan.footerH;
@@ -32097,8 +33457,14 @@ function _wsPreviewPack(doc, opts) {
     if (span > 1) return;  // flows across sheets when printed — shown full-length here, never shrunk
     if (zoom) content.style.zoom = zoom;  // exactly what the printer will apply
   };
-  fronts.forEach((f, fi) => addSheet(frontSpans[fi], content => content.appendChild(f), 0));
-  pageGroups.forEach((group, gi) => addSheet(groupSpans[gi], content => {
+  // The same placement the printer uses, so the preview shows where the
+  // booklet cover really lands rather than a second cover at the front.
+  const pvFront = _printFrontPlacement(fronts, pageGroups, chunks);
+  const frontSpanOf = f => frontSpans[fronts.indexOf(f)] || 1;
+  pvFront.leading.forEach(f => addSheet(frontSpanOf(f), content => content.appendChild(f), 0));
+  pageGroups.forEach((group, gi) => {
+    (pvFront.before.get(gi) || []).forEach(f => addSheet(frontSpanOf(f), content => content.appendChild(f), 0));
+    addSheet(groupSpans[gi], content => {
     group.forEach((idx, pos) => {
       if (pos > 0) { const sep = doc.createElement('div'); sep.className = 'print-question-separator'; content.appendChild(sep); }
       const chunk = chunks[idx];
@@ -32149,7 +33515,8 @@ function _wsPreviewPack(doc, opts) {
       if (tools.children.length) chunk.appendChild(tools);
       content.appendChild(chunk);
     });
-  }, plan.pageZoom[gi]));
+    }, plan.pageZoom[gi]);
+  });
   // ✏️ Every row of the printed answer key gets an edit button. The key is the
   // page a teacher MARKS from, so the preview is where a wrong answer or a
   // missing explanation is actually noticed — and noticing it used to be as far
@@ -32373,8 +33740,10 @@ function _wsPreviewSnapshot() {
   if (_wsPreviewAdhoc) {
     const a = _wsPreviewAdhoc;
     // A DRAFT out of the editor has nothing to come back to: it is not in any
-    // list to re-resolve from, and the author never left the editor.
-    if (a.source === 'editor') return null;
+    // list to re-resolve from, and the author never left the editor. An unsent
+    // 📝 Custom Paper is the same case — its questions are not in the bank at
+    // all, so there are no ids to re-resolve.
+    if (a.source === 'editor' || a.source === 'custompaper') return null;
     return { kind: 'adhoc', page: a.source === 'vetting' ? 'vetting' : 'bank',
              ids: a.questions.map(q => q.id), title: a.title, source: a.source };
   }
@@ -37801,8 +39170,9 @@ function _bankScheduledRows() {
 function renderBankScheduled() {
   const host = document.getElementById('bankScheduledContainer');
   if (!host) return;
+  const held = _bankHeldSectionHtml();
   const rows = _bankScheduledRows();
-  if (!rows.length) { host.innerHTML = ''; return; }
+  if (!rows.length) { host.innerHTML = held ? `<div class="bsq-wrap">${held}</div>` : ''; return; }
   const byDate = new Map();
   rows.forEach(r => {
     const on = qReleaseOn(r.q);
@@ -37844,6 +39214,7 @@ function renderBankScheduled() {
   }).join('');
   host.innerHTML = `
     <div class="bsq-wrap">
+      ${held}
       <div class="bsq-intro">
         <b>⏳ Scheduled for student release</b>
         <span>These questions are already here — you can edit, print and put them on a worksheet — but no practice mode, quest or game serves them to a student until the date on them. Clearing a date releases it immediately.</span>
@@ -37852,6 +39223,124 @@ function renderBankScheduled() {
     </div>`;
 }
 const BANK_SCHED_LIST_MAX = 12;   // a batch is forty screenshots; a list of forty is not read
+
+// =====================================================================
+// 🔒 THE HELD-BACK PAPERS — where a mock paper is released
+//
+// A question held back with no date has to be findable, or it is a paper the
+// teacher put in the bank and can never let out. It is listed here beside the
+// scheduled ones and grouped BY PAPER (`q.source`, which 📝 Custom Paper
+// stamps on every question it sends), because a paper is released as a paper:
+// forty separate "Release now" buttons is a list nobody works through.
+function _bankHeldRows() {
+  const rows = [];
+  const take = (list, where) => (Array.isArray(list) ? list : []).forEach(q => {
+    if (q && qHeldBack(q)) rows.push({ q, where });
+  });
+  take(questionBank, 'bank');
+  take(vettingList, 'vetting');
+  rows.sort((a, b) => String(a.q.source || '').localeCompare(String(b.q.source || ''))
+    || String(a.q.title || '').localeCompare(String(b.q.title || '')));
+  return rows;
+}
+const BANK_HELD_UNNAMED = 'Unnamed paper';
+function _bankHeldGroupKey(q) { return String((q && q.source) || '').trim() || BANK_HELD_UNNAMED; }
+
+// ONE writer, for one question, wherever it lives — the same shape (and the
+// same reasons) as `_bankSetRelease` above: a QUIET write, because releasing a
+// paper is housekeeping rather than a question authored, and the in-memory
+// copy is only changed once the document really went.
+async function _bankSetHold(id, held) {
+  const inBank = questionBank.find(q => String(q.id) === String(id));
+  const q = inBank || vettingList.find(v => String(v.id) === String(id));
+  if (!q) return false;
+  const prev = q.holdBack;
+  if (held) q.holdBack = true; else delete q.holdBack;
+  let ok = false;
+  try {
+    ok = inBank ? await saveQuestion(q, { quiet: true }) : (await saveVettingQuestion(q)) !== false;
+  } catch (e) { console.warn('hold-back write failed', e); ok = false; }
+  if (!ok) {
+    if (prev === undefined) delete q.holdBack; else q.holdBack = prev;
+    return false;
+  }
+  return true;
+}
+
+async function bankUnholdNow(id) {
+  const ok = await _bankSetHold(id, false);
+  renderBankScheduled();
+  renderQuestionBank();
+  renderVettingList();
+  updateCounts();
+  showToast(ok ? 'Released ✓ — students can be served this question now' : 'Could not save — check your connection and try again', ok ? 'success' : 'error');
+}
+
+async function bankUnholdPaper(key) {
+  const rows = _bankHeldRows().filter(r => _bankHeldGroupKey(r.q) === String(key));
+  if (!rows.length) return;
+  const name = String(key) === BANK_HELD_UNNAMED ? 'these questions' : '“' + key + '”';
+  showConfirm('Release ' + rows.length + ' question' + (rows.length === 1 ? '' : 's') + '?',
+    'Every question in ' + name + ' becomes available to students straight away — in practice, in quests and in the games. '
+    + 'Do this once the paper has been sat.',
+    async () => {
+      let done = 0, failed = 0;
+      // One document at a time and AWAITED, so the count reported is the count
+      // that really went.
+      for (const r of rows) { if (await _bankSetHold(r.q.id, false)) done++; else failed++; }
+      renderBankScheduled();
+      renderQuestionBank();
+      renderVettingList();
+      updateCounts();
+      showToast('Released ' + done + ' question' + (done === 1 ? '' : 's') + (failed ? ' · ' + failed + ' could not be saved' : ' ✓'), failed ? 'error' : 'success');
+    });
+}
+
+function _bankHeldSectionHtml() {
+  const rows = _bankHeldRows();
+  if (!rows.length) return '';
+  const byPaper = new Map();
+  rows.forEach(r => {
+    const k = _bankHeldGroupKey(r.q);
+    if (!byPaper.has(k)) byPaper.set(k, []);
+    byPaper.get(k).push(r);
+  });
+  const groups = Array.from(byPaper.entries()).map(([key, list]) => {
+    const inVet = list.filter(r => r.where === 'vetting').length;
+    const items = list.slice(0, BANK_SCHED_LIST_MAX).map(r => `
+      <div class="bsq-row">
+        <div class="bsq-title">${escapeHtml(r.q.title || 'Untitled')}</div>
+        <div class="bsq-meta">
+          <span class="qb-tag topic">${escapeHtml(r.q.topic || '—')}</span>
+          ${r.where === 'vetting'
+            ? '<span class="qb-tag" style="background:#fef3c7;color:#92400e;" title="Still waiting in the vetting list. It stays held back when you approve it.">📋 In vetting</span>'
+            : '<span class="qb-tag" style="background:#e0f2fe;color:#075985;" title="Approved into the question bank, and held back from students.">📚 In the bank</span>'}
+        </div>
+        <button class="btn btn-outline bsq-btn" title="Release this question — students can be served it immediately" onclick="bankUnholdNow('${escapeHtml(String(r.q.id))}')">Release now</button>
+      </div>`).join('');
+    const more = list.length > BANK_SCHED_LIST_MAX
+      ? `<div class="bsq-more">…and ${list.length - BANK_SCHED_LIST_MAX} more in this paper</div>` : '';
+    return `
+      <div class="bsq-group">
+        <div class="bsq-head">
+          <div>
+            <div class="bsq-date">🔒 ${escapeHtml(key)}</div>
+            <div class="bsq-count">${list.length} question${list.length === 1 ? '' : 's'}${inVet ? ' · ' + inVet + ' still in vetting' : ''} — held back until you release ${list.length === 1 ? 'it' : 'them'}</div>
+          </div>
+          <div class="bsq-head-actions">
+            <button class="btn btn-outline bsq-btn" onclick="bankUnholdPaper('${escapeHtml(String(key)).replace(/'/g, '&#39;')}')">🚀 Release all now</button>
+          </div>
+        </div>
+        <div class="bsq-list">${items}${more}</div>
+      </div>`;
+  }).join('');
+  return `
+    <div class="bsq-intro">
+      <b>🔒 Held back from students</b>
+      <span>Papers built on the 🗂️ Custom Paper page. They are in the bank — you can edit, print and put them on a worksheet — and no practice mode, quest or game serves one to a student until you release the paper. Do that once the class has sat it.</span>
+    </div>
+    ${groups}`;
+}
 
 // ONE writer, for one question, wherever it lives. The in-memory copy is only
 // changed once the document really went — the order every other move in this
@@ -69943,6 +71432,27 @@ window.mpPrintReport = mpPrintReport;
 // the rejection unhandled.
 window.epDraftTake = tab => { epDraftTake(tab).catch(err => console.warn('exam paper draft restore:', err)); };
 window.epDraftDiscard = epDraftDiscard;
+
+// 📝 Custom Paper — every function reached from an inline handler on the page.
+// The module has its own scope, so anything an `onclick` names has to be here.
+window.cpbPick = cpbPick;
+window.cpbFiles = cpbFiles;
+window.cpbDragOver = cpbDragOver;
+window.cpbDropFiles = cpbDropFiles;
+window.cpbFocusZone = cpbFocusZone;
+window.cpbRemove = cpbRemove;
+window.cpbClearShots = cpbClearShots;
+window.cpbBuild = cpbBuild;
+window.cpbCancel = cpbCancel;
+window.cpbMove = cpbMove;
+window.cpbSetBook = cpbSetBook;
+window.cpbDropQuestion = cpbDropQuestion;
+window.cpbSetMeta = cpbSetMeta;
+window.cpbPreview = cpbPreview;
+window.cpbPrint = cpbPrint;
+window.cpbSend = cpbSend;
+window.cpbDraftTake = tab => { cpbDraftTake(tab).catch(err => console.warn('custom paper draft restore:', err)); };
+window.cpbDraftDiscard = cpbDraftDiscard;
 // Work sessions — the bar and the page are built from inline on* handlers.
 window.wkStart = wkStart;
 window.wkTogglePause = wkTogglePause;
@@ -70438,6 +71948,8 @@ window.toggleAutoChk = toggleAutoChk;
 window.bankReleaseNow = bankReleaseNow;
 window.bankReleaseBatchNow = bankReleaseBatchNow;
 window.bankMoveRelease = bankMoveRelease;
+window.bankUnholdNow = id => { bankUnholdNow(id).catch(err => console.warn('release held question:', err)); };
+window.bankUnholdPaper = bankUnholdPaper;
 window.renderBankScheduled = renderBankScheduled;
 // The subject switcher — its button is an inline onclick, so it needs the
 // module's function on window like every other handler in index.html.
