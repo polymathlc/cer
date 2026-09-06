@@ -427,7 +427,9 @@ const AUTHORING_FUNCTIONS = [
   'processRapidJob',          // ⚡ Rapid add
   'handleAiBuildFiles',       // 🤖 Build from screenshot / PDF
   'handleBulkAiFile',         // the bulk PDF import
-  '_epRunBuild',              // 📄 Exam Paper — the questions
+  'readQuestionRun',          // 📄 Exam Paper AND 🗂️ Custom Paper — the ONE
+                              // screenshot-run reader both pages call, so the
+                              // flag is checked once for both of them
   'epReadKey',                // 📄 Exam Paper — the marking scheme
   'qcmdBuildVariant',         // 🔄 Regenerate / 🪄 the command box
   'aiGenerateBlockAnswer',    // 🤖 AI answer

@@ -360,6 +360,7 @@ const UNGROUNDED_BY_DESIGN = {
   askOpenAiServer: 'the Cloud Function transport',
   _widgetAskAI: 'the widget builder’s own transport — _widgetSpecPrompt is what is grounded',
   akcAskEngine: 'the cross-check transport — akcPrompt is what is grounded',
+  readQuestionRun: 'the ONE screenshot-run reader — it is HANDED a finished prompt by whichever page is calling it, and both of those (_epQuestionPrompt and _cpbQuestionPrompt) are grounded through _genPreamble. It is transport, the same footing as _widgetAskAI',
 
   // ---- reading the notes themselves ----
   notesHandleFiles: 'this is what READS the notes; grounding it is a feedback loop',

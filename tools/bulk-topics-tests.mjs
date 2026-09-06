@@ -768,8 +768,12 @@ test('a DRAFT is offered no tool that reaches into the bank', () => {
   // ✏️ edit question, ✏️ edit answer and ✏️ Editing mode all open a question in
   // the BANK. This one may never have been saved — and its author is already
   // standing in the editor.
-  ok(/function _wsPreviewIsDraft\(\) \{ return !!\(_wsPreviewAdhoc && _wsPreviewAdhoc\.source === 'editor'\); \}/.test(src),
-     'there is one predicate');
+  // ONE predicate, and it covers both sources that are not in the bank: a
+  // question still open in the editor, and an unsent 🗂️ Custom Paper.
+  const pred = src.slice(src.indexOf('function _wsPreviewIsDraft'), src.indexOf('function _wsPreviewCtx'));
+  ok(/_wsPreviewAdhoc && _wsPreviewAdhoc\.source/.test(pred), 'there is one predicate');
+  ok(/'editor'/.test(pred) && /'custompaper'/.test(pred),
+     'both draft sources — an editor question and an unsent custom paper are equally not in the bank');
   const pack = src.slice(src.indexOf('function _wsPreviewPack'), src.indexOf('// ====================\n// WORKSHEET QUICK EDIT'));
   ok((pack.match(/_wsPreviewIsDraft\(\)/g) || []).length >= 2, 'the question tool AND the answer-key tool both ask it');
   const show = src.slice(src.indexOf('function _wsShowPreviewOverlay'), src.indexOf('function closeWorksheetPreview'));
@@ -778,7 +782,9 @@ test('a DRAFT is offered no tool that reaches into the bank', () => {
 
 test('a draft has no come-back-here snapshot', () => {
   const snap = src.slice(src.indexOf('function _wsPreviewSnapshot'), src.indexOf('// Escape hatch for anything'));
-  ok(/a\.source === 'editor'\) return null/.test(snap), 'it is not in any list to re-resolve from');
+  ok(/a\.source === 'editor'[\s\S]{0,60}return null/.test(snap), 'it is not in any list to re-resolve from');
+  ok(/a\.source === 'custompaper'[\s\S]{0,60}return null/.test(snap),
+     '…and neither is an unsent paper — its questions have no bank ids yet');
 });
 
 test('🖨 Preview Exported sits beside 🎓 Preview as Student in BOTH action rows', () => {

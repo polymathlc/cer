@@ -470,8 +470,8 @@ test('every build prompt asks for the marks, and the shared parts fragment says 
   // that one is cut away before the four BUILD prompts are counted.
   const block = cut('const AUTOCHK_TRIES = 3;', '\nasync function processRapidJob', 'auto-check core');
   const builds = src.replace(block, '');
-  eq((builds.match(/include "marks" ONLY when/g) || []).length, 4,
-    'Build from screenshot, ⚡ Rapid add / the bulk import, 🔄 Regenerate and the exam paper builder');
+  eq((builds.match(/include "marks" ONLY when/g) || []).length, 5,
+    'Build from screenshot, ⚡ Rapid add / the bulk import, 🔄 Regenerate, the exam paper builder and 🗂️ Custom Paper');
   const rules = cut('function _partsPromptRules() {', '\n// The rectangle-selection', 'parts rules');
   ok(/- MARKS:/.test(rules), 'stated ONCE, in the fragment all four carry');
   ok(/NEVER invent a number the page does not show/.test(rules), 'a mark allocation nobody wrote is one a class can never earn');

@@ -163,6 +163,11 @@ function packHarness(readOnly) {
   const pack=new Function('document','_printPlanIn','_printAkPageEl','wsManualBreaks','wsMergeUp', `
     const PRINT_PAGE_PX=1000, _canAuthor=()=>true, _wsPreviewIsDraft=()=>false;
     const _wsPreviewSaved={id:'existing-worksheet'};
+    // The REAL front-sheet placement, so the hover preview is exercised with
+    // the same rule the printer uses rather than a stub that cannot disagree
+    // with it. Every front page here is unanchored, which is every front page
+    // this app printed before booklets existed.
+    ${cut('function _printFrontAnchor(f) {', 'function _printPlanIn(')}
     ${cut('function _wsPreviewPack(', '// WORKSHEET QUICK EDIT')}
     return _wsPreviewPack;
   `)({getElementById:()=>count},(d,m,opts)=>{seen.push(opts);return {
@@ -178,6 +183,12 @@ test('read-only pack uses the same pages and answer key without worksheet tools 
   assert.equal(peek.pages.querySelectorAll('button').length,0);
   assert.ok(full.pages.querySelectorAll('button').length>0);
   assert.equal(peek.count.textContent,undefined);assert.match(full.count.textContent,/3 pages/);
+  // The hover carries NO stored break, and the stored set is left untouched.
   assert.deepEqual([...peek.seen[0].forcedBreakIds],[]);assert.deepEqual([...peek.forced],['stored-break']);
-  assert.equal(full.seen[0].forcedBreakIds,full.forced);assert.equal(full.seen[0].mergeUpIds,full.merged);
+  // The full preview carries them. It is a COPY now rather than the live Set —
+  // a paper's own breaks are unioned into it — so what matters is the contents,
+  // and that the stored set was not mutated on the way through.
+  assert.deepEqual([...full.seen[0].forcedBreakIds],['stored-break']);
+  assert.deepEqual([...full.forced],['stored-break']);
+  assert.equal(full.seen[0].mergeUpIds,full.merged);
 });
