@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.365.0';
+const APP_VERSION = 'v1.366.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -22708,6 +22708,11 @@ function epBuildQuestions() {
 //              black-and-white (default 0 — the sharp raw crop is kept). One
 //              budget for the run, because a per-question cap is no cap at all
 //              on a forty-question paper.
+//   o.seed     a question read by an EARLIER run that this run's first entry
+//              may be the rest of. It is extended in place through onExtend and
+//              is NEVER pushed into `questions` — it is already on the caller's
+//              list. Without it, an added screenshot that opens mid-question
+//              becomes a second, stem-less question of its own.
 // Returns { questions, failed, stopped }.
 async function readQuestionRun(shots, o) {
   const opt = o || {};
@@ -22719,7 +22724,10 @@ async function readQuestionRun(shots, o) {
   const total = list.length;
   const questions = [];
   let failed = 0;
-  let last = null;   // the question a following batch may continue
+  // The question a following batch may continue. It starts as the caller's
+  // seed, so the FIRST batch of an appended run can carry on from where the
+  // last run stopped — inside a run it is simply the question just built.
+  let last = opt.seed || null;
   let quit = false;
   // ONE budget object, shared by every _epCropInto call this run makes.
   const enhance = { left: Math.max(0, Number(opt.enhance) || 0) };
@@ -23485,7 +23493,13 @@ let _cpbShots = [];        // [{ id, mimeType, data, name, status, err, group, n
 let _cpbQuestions = [];    // built questions, in the order they will be printed
 let _cpbBusy = false;
 let _cpbCancel = false;
-let _cpbDirty = false;     // screenshots changed since the last read
+let _cpbDirty = false;     // a screenshot that HAD been read was removed
+// The id of the question the last read finished on. It is what an APPENDED run
+// carries on from, so a question whose stem is on the last screenshot already
+// read and whose parts are on the one just added comes out as ONE question.
+// It is an ID and never the object: the list is reordered, edited and rebuilt,
+// so a held reference goes stale in a way nothing on screen would report.
+let _cpbLastRead = '';
 let _cpbPasteBound = false;
 let _cpbPasteOn = false;   // the pad has been clicked, so Ctrl-V lands in it
 
@@ -23517,6 +23531,45 @@ const CPB_META_DEFAULTS = {
   targetOpen: CPB_TARGET_OPEN_MARKS,
 };
 let _cpbMeta = Object.assign({}, CPB_META_DEFAULTS);
+
+// =====================================================================
+// 📸 READING ONLY THE SCREENSHOTS THAT HAVE NOT BEEN READ
+//
+// A paper is assembled over an afternoon: read what you have, find three more
+// questions, paste them in. Re-reading the whole pile for those three is an AI
+// call per batch of everything already done, several minutes of waiting, and —
+// worse — it REPLACES the questions, so the order the teacher put them in and
+// every booklet they moved by hand is thrown away.
+//
+// So the ordinary press reads the UNREAD screenshots and APPENDS. 🔁 Read
+// everything again is still there, unchanged, for when the pile itself has
+// changed underneath the questions.
+//
+// THE ONE THING AN APPEND CAN GET WRONG is the JOIN: a question whose stem is
+// on the last screenshot already read and whose parts are on the one just
+// added. That is exactly what `continuation` handles inside a run, and
+// `o.seed` is what extends it ACROSS runs — the first entry of the appended
+// run attaches to the question the last run finished on, instead of becoming a
+// second question with no stem and no figure.
+//
+// A FAILED screenshot counts as unread, so one that could not be read is
+// retried by the same button rather than needing a whole re-read.
+function _cpbUnread() {
+  return _cpbShots.filter(s => s && (s.status === 'new' || s.status === 'error'));
+}
+// The seed is only honest when the unread screenshots are the END of the pile.
+// Unread shots scattered through it (a failure in the middle, re-read after
+// the ones after it) are NOT adjacent to the question the last run finished
+// on, so joining them to it would graft two unrelated questions together.
+function _cpbUnreadIsTail() {
+  const n = _cpbUnread().length;
+  if (!n || n === _cpbShots.length) return false;
+  return _cpbShots.slice(-n).every(s => s && (s.status === 'new' || s.status === 'error'));
+}
+function _cpbSeedQuestion() {
+  if (!_cpbLastRead || !_cpbUnreadIsTail()) return null;
+  return _cpbQuestions.find(q => q && q.id === _cpbLastRead) || null;
+}
 
 function _cpbId() { return 'cpb_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function _cpbDataUrl(s) { return 'data:' + s.mimeType + ';base64,' + s.data; }
@@ -23668,7 +23721,7 @@ async function _cpbDraftFlush() {
       st.put({ key: _cpbMetaKey(), uid: _epUid(), tab: _xtTabId(), at, paper: _cpbMetaGet('name'),
         nShots: _cpbShots.length, nQuestions: _cpbQuestions.length, trimmed: big });
       return st.put({ key: _cpbWorkKey(), uid: _epUid(), tab: _xtTabId(), at,
-        meta: _cpbMeta, dirty: _cpbDirty, questions: _cpbQuestions });
+        meta: _cpbMeta, dirty: _cpbDirty, lastRead: _cpbLastRead, questions: _cpbQuestions });
     });
     if (sig !== _cpbDraftSig) {
       await _epdTx('readwrite', st => st.put({ key: _cpbShotKey(), uid: _epUid(), tab: _xtTabId(), at,
@@ -23732,6 +23785,10 @@ async function _cpbDraftLoad(tab) {
     _cpbQuestions = (work && Array.isArray(work.questions)) ? work.questions : [];
     _cpbMeta = Object.assign({}, CPB_META_DEFAULTS, (work && work.meta) || {});
     _cpbDirty = !!(work && work.dirty);
+    // The screenshots keep their own read/unread status in the same record, so
+    // a reload picks the pile up exactly where it was — including which
+    // question an appended read carries on from.
+    _cpbLastRead = String((work && work.lastRead) || '');
     _cpbDraftSig = _cpbShotsSig();
     return !_cpbEmpty();
   } catch (err) { console.warn('custom paper draft restore:', err); return false; }
@@ -23786,11 +23843,13 @@ async function _cpbAddFiles(files) {
       added++;
     } catch (err) { console.warn('custom paper: could not read file', err); skipped++; }
   }
-  // Adding or removing a screenshot changes where every question starts and
-  // ends, so the questions already built no longer describe what is here.
-  if (added && _cpbQuestions.length) _cpbDirty = true;
+  // ADDING is the ordinary flow now and sets nothing: the screenshot arrives
+  // unread, the button offers to read it, and the questions already built are
+  // untouched. Only a REMOVAL can invalidate them — see cpbRemove.
   cpbRender();
-  if (added) showToast(added + ' screenshot' + (added === 1 ? '' : 's') + ' added' + (skipped ? ' · ' + skipped + ' skipped' : ''), skipped ? 'info' : 'success');
+  if (added) showToast(added + ' screenshot' + (added === 1 ? '' : 's') + ' added'
+    + (_cpbQuestions.length ? ' — press 🤖 Read to add its questions to the paper' : '')
+    + (skipped ? ' · ' + skipped + ' skipped' : ''), skipped ? 'info' : 'success');
   else if (skipped) showToast('Nothing added — images only, up to ' + CPB_MAX_SHOTS + ' of them', 'error');
 }
 
@@ -23805,16 +23864,26 @@ function cpbDropFiles(e) {
 }
 function cpbFocusZone() { _cpbPasteOn = true; cpbRender(); }
 function cpbRemove(id) {
-  const before = _cpbShots.length;
+  const gone = _cpbShots.find(s => s && s.id === id);
+  if (!gone) return;
   _cpbShots = _cpbShots.filter(s => s.id !== id);
-  if (_cpbShots.length !== before && _cpbQuestions.length) _cpbDirty = true;
+  // Removing an UNREAD screenshot changes nothing about the paper — it was
+  // never read. Removing one that HAS been read leaves questions on the page
+  // that came off a screenshot nobody can look at any more, which is what the
+  // warning line and 🔁 Read everything again are for.
+  if (gone.status !== 'new' && _cpbQuestions.length) _cpbDirty = true;
   cpbRender();
 }
 function cpbClearShots() {
   if (!_cpbShots.length) return;
   showConfirm('Remove every screenshot',
     'The ' + _cpbShots.length + ' screenshot' + (_cpbShots.length === 1 ? '' : 's') + ' go, and any question already read from them stays. Remove them?',
-    () => { _cpbShots = []; if (_cpbQuestions.length) _cpbDirty = true; cpbRender(); });
+    () => {
+      const anyRead = _cpbShots.some(s => s && s.status !== 'new');
+      _cpbShots = [];
+      if (anyRead && _cpbQuestions.length) _cpbDirty = true;
+      cpbRender();
+    });
 }
 
 // Bound ONCE on the document, in capture, like every other paste target in
@@ -23893,33 +23962,74 @@ function _cpbQuestionPrompt(n, from, total) {
     `- Plain text only, no markdown.`;
 }
 
-function cpbBuild() {
-  if (!_canAuthor()) { showToast('Only question authors can build a paper', 'error'); return; }
-  if (_cpbBusy) return;
-  if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't ready yet — try again in a moment", 'error'); return; }
-  if (!_cpbShots.length) { showToast('Add some screenshots first', 'info'); return; }
-  // Reading is always a read of the WHOLE set — a question can span
-  // screenshots added at different times, so there is no honest way to read
-  // "only the new ones" and still get the boundaries right. Everything the
-  // teacher did by hand to the list goes with it, which is why this asks.
-  if (_cpbQuestions.length) {
-    showConfirm('Read the screenshots again',
-      `All ${_cpbShots.length} screenshot${_cpbShots.length === 1 ? '' : 's'} are read together, so this replaces the ${_cpbQuestions.length} question${_cpbQuestions.length === 1 ? '' : 's'} built so far — including the order you put them in and any booklet you changed by hand. Read again?`,
-      () => { _cpbRunBuild(); });
-    return;
-  }
-  _cpbRunBuild();
+function _cpbCanRead() {
+  if (!_canAuthor()) { showToast('Only question authors can build a paper', 'error'); return false; }
+  if (_cpbBusy) return false;
+  if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't ready yet — try again in a moment", 'error'); return false; }
+  if (!_cpbShots.length) { showToast('Add some screenshots first', 'info'); return false; }
+  return true;
 }
 
-async function _cpbRunBuild() {
+// THE ORDINARY PRESS. Reads only what has not been read and APPENDS, so a
+// paper is assembled over an afternoon rather than re-read from the start
+// every time three more questions turn up. It asks nothing and destroys
+// nothing: the questions already on the page, the order they are in and every
+// booklet moved by hand are all untouched.
+function cpbBuild() {
+  if (!_cpbCanRead()) return;
+  if (!_cpbUnread().length) {
+    showToast('Every screenshot has been read — add more, or press 🔁 Read everything again', 'info');
+    return;
+  }
+  _cpbRunBuild('append');
+}
+
+// THE WHOLE PILE, from the start. This is the one that throws work away, so it
+// is a separate button and it asks first.
+function cpbRebuild() {
+  if (!_cpbCanRead()) return;
+  if (_cpbQuestions.length) {
+    showConfirm('Read every screenshot again',
+      `All ${_cpbShots.length} screenshot${_cpbShots.length === 1 ? '' : 's'} are read together from the start, so this <b>replaces</b> the ${_cpbQuestions.length} question${_cpbQuestions.length === 1 ? '' : 's'} built so far — including the order you put them in and any booklet you changed by hand.`
+      + `<br><br>To add the questions from screenshots you have just pasted in, use 🤖 <b>Read</b> instead: it reads only those and leaves this paper alone.`,
+      () => { _cpbRunBuild('all'); });
+    return;
+  }
+  _cpbRunBuild('all');
+}
+
+// mode 'append' reads the UNREAD screenshots and adds their questions;
+// 'all' resets every screenshot and rebuilds the paper from nothing.
+async function _cpbRunBuild(mode) {
+  const append = mode === 'append' && _cpbQuestions.length > 0;
+  const shots = append ? _cpbUnread() : _cpbShots;
+  if (!shots.length) return;
+  // The seed is read BEFORE the run marks anything, or `_cpbUnreadIsTail`
+  // would be asked about a pile whose statuses have already been reset.
+  const seed = append ? _cpbSeedQuestion() : null;
+  const had = append ? _cpbQuestions.length : 0;
+  // Set by onExtend when the question the run carried on from is the SEED —
+  // the join across two reads. Counting it from the question totals cannot
+  // work: an extended question was never added, so the arithmetic is silent.
+  let joined = false;
   _cpbBusy = true; _cpbCancel = false;
-  _cpbQuestions = [];
-  _cpbShots.forEach(s => { s.status = 'new'; s.err = ''; s.group = ''; s.n = 0; });
+  if (!append) {
+    _cpbQuestions = [];
+    _cpbLastRead = '';
+    _cpbShots.forEach(s => { s.status = 'new'; s.err = ''; s.group = ''; s.n = 0; });
+  } else {
+    // A retried failure starts clean, or its old red card outlives the retry.
+    shots.forEach(s => { s.status = 'new'; s.err = ''; s.group = ''; s.n = 0; });
+  }
   cpbRender();
   const level = _cpbMetaGet('qLevel');
   const source = _cpbMetaGet('name');
-  const res = await readQuestionRun(_cpbShots, {
+  const res = await readQuestionRun(shots, {
     batch: CPB_BATCH,
+    // Only ever set on an APPEND, and only when the unread screenshots are the
+    // end of the pile: the first entry may be the REST of the question the
+    // last read finished on.
+    seed,
     prompt: (n, from, total) => _cpbQuestionPrompt(n, from, total),
     stopped: () => _cpbCancel,
     // ONE budget for the whole run — see CPB_ENHANCE_MAX.
@@ -23946,19 +24056,34 @@ async function _cpbRunBuild() {
       if (source) q.source = source;
       if (level) _rapidApplyLevel(q, level);
     },
-    onDone: (q) => { _tagDuplicate(q); _cpbQuestions.push(q); cpbRender(); },
-    onExtend: (q) => { _epStripNumbering(q); _tagDuplicate(q); cpbRender(); },
+    onDone: (q) => { _tagDuplicate(q); _cpbQuestions.push(q); _cpbLastRead = q.id; cpbRender(); },
+    onExtend: (q) => {
+      if (seed && q === seed) joined = true;
+      _epStripNumbering(q); _tagDuplicate(q); _cpbLastRead = q.id; cpbRender();
+    },
   });
   _cpbBusy = false;
   _cpbNote('');
-  if (!_cpbCancel && !res.failed) _cpbDirty = false;
+  // A full re-read is what puts the paper back in step with the pile, so only
+  // that clears the warning. An append adds questions and answers nothing
+  // about a screenshot that was removed after being read.
+  if (!append && !_cpbCancel && !res.failed) _cpbDirty = false;
   cpbRender();
-  const built = _cpbQuestions.length;
+  const total = _cpbQuestions.length;
+  const added = total - had;
   const bk = cpbBooklets();
-  showToast(built
-    ? `Built ${built} question${built === 1 ? '' : 's'} — ${bk.a.length} multiple choice, ${bk.b.length} open-ended`
-      + `${_cpbCancel ? ' (stopped early)' : ''}${res.failed ? ` · ${res.failed} screenshot${res.failed === 1 ? '' : 's'} could not be read` : ''}`
-    : 'No questions could be read from those screenshots', built ? 'success' : 'error');
+  const tail = `${_cpbCancel ? ' (stopped early)' : ''}${res.failed ? ` · ${res.failed} screenshot${res.failed === 1 ? '' : 's'} could not be read` : ''}`;
+  if (append) {
+    showToast(added
+      ? `Added ${added} question${added === 1 ? '' : 's'} — the paper is now ${total}, ${bk.a.length} multiple choice and ${bk.b.length} open-ended`
+        + `${joined ? ' · 🔗 one carried on from the question before it' : ''}${tail}`
+      : `No new questions were read${joined ? ' — what was on them carried on from the question before 🔗' : ''}${tail}`,
+      added || joined ? 'success' : 'error');
+    return;
+  }
+  showToast(total
+    ? `Built ${total} question${total === 1 ? '' : 's'} — ${bk.a.length} multiple choice, ${bk.b.length} open-ended${tail}`
+    : 'No questions could be read from those screenshots', total ? 'success' : 'error');
 }
 
 function cpbCancel() {
@@ -23986,7 +24111,13 @@ function cpbDropQuestion(id) {
   if (!q) return;
   showConfirm('Take this question off the paper',
     '“' + (q.title || 'Untitled question') + '” is removed from the paper. Nothing has been saved anywhere yet, so it is simply gone from the list.',
-    () => { _cpbQuestions = _cpbQuestions.filter(x => x.id !== id); cpbRender(); });
+    () => {
+      _cpbQuestions = _cpbQuestions.filter(x => x.id !== id);
+      // It can no longer be carried on from — `_cpbSeedQuestion` would find
+      // nothing, but leaving a dead id here is one more thing to reason about.
+      if (_cpbLastRead === id) _cpbLastRead = '';
+      cpbRender();
+    });
 }
 // =====================================================================
 // ✏️ EDIT ONE QUESTION OF THE PAPER — the SAME block editor, and back again
@@ -24214,6 +24345,10 @@ async function _cpbLibOpenNow(id) {
       _cpbQuestions = Array.isArray(v.questions) ? v.questions : [];
       _cpbMeta = Object.assign({}, CPB_META_DEFAULTS, v.meta || {});
       _cpbDirty = false;
+      // No screenshots came with it, so there is no pile for a later one to
+      // carry on from — a seed here would join a new screenshot to a question
+      // read on a screenshot that is not here.
+      _cpbLastRead = '';
       _cpbLibId = id;
       _cpbDraftSig = '';
       showToast('📁 Opened “' + (v.name || 'paper') + '” — ' + _cpbQuestions.length
@@ -24288,6 +24423,7 @@ function cpbNewPaper() {
     _cpbQuestions = [];
     _cpbMeta = Object.assign({}, CPB_META_DEFAULTS);
     _cpbDirty = false;
+    _cpbLastRead = '';
     _cpbLibId = '';
     _cpbDraftDrop().catch(err => console.warn('custom paper draft:', err));
     cpbRender();
@@ -24654,6 +24790,7 @@ async function _cpbCommit() {
       _cpbQuestions = [];
       _cpbShots = [];
       _cpbDirty = false;
+      _cpbLastRead = '';
       _cpbDraftDrop().catch(err => console.warn('custom paper draft:', err));
     }
   }
@@ -24840,19 +24977,25 @@ function _cpbShotHtml(s) {
 
 function _cpbZoneHtml() {
   const n = _cpbShots.length;
-  const again = _cpbQuestions.length;
+  const built = _cpbQuestions.length;
+  const unread = _cpbUnread().length;
+  const readLabel = built
+    ? (unread ? `🤖 Read the ${unread} new` : '🤖 Read')
+    : '🤖 Read the questions';
   return `<div class="cpb-card">
     <div class="cpb-head">
-      <h3 class="cpb-h3">② Screenshots ${n ? `<span class="cpb-pill">${n}</span>` : ''}</h3>
+      <h3 class="cpb-h3">② Screenshots ${n ? `<span class="cpb-pill">${n}</span>` : ''}${unread && built ? ` <span class="cpb-pill cpb-pill-new">${unread} unread</span>` : ''}</h3>
       <div class="cpb-head-tools">
         ${n ? `<button class="btn btn-outline btn-sm" onclick="cpbClearShots()" ${_cpbBusy ? 'disabled' : ''}>Clear all</button>` : ''}
         ${_cpbBusy
           ? '<button class="btn btn-outline btn-sm" onclick="cpbCancel()">✋ Stop</button>'
-          : `<button class="btn btn-primary btn-sm" onclick="cpbBuild()" ${n ? '' : 'disabled'}>${again ? '🔁 Read again' : '🤖 Read the questions'}</button>`}
+          : `${built ? `<button class="btn btn-outline btn-sm" onclick="cpbRebuild()" title="Throw the paper away and read all ${n} screenshot${n === 1 ? '' : 's'} from the start. You only need this if you have removed a screenshot the paper was built from.">🔁 Read everything again</button>` : ''}
+             <button class="btn btn-primary btn-sm" onclick="cpbBuild()" ${n && unread ? '' : 'disabled'} title="${built ? 'Read only the screenshots that have not been read, and add their questions to the paper. Nothing already here is touched.' : 'Read the screenshots and build the paper.'}">${readLabel}</button>`}
       </div>
     </div>
-    <p class="cpb-lead">Add them in the order you want them read — paste with <b>Ctrl/⌘ V</b>, drop them in, or pick files. You do not have to line them up one question per screenshot.</p>
-    ${_cpbDirty && _cpbQuestions.length ? '<p class="cpb-warn-line">⚠ The screenshots changed since they were last read — press <b>Read again</b> so the paper matches what is here now. It replaces the questions below, including the order and any booklet you changed by hand.</p>' : ''}
+    <p class="cpb-lead">Add them in the order you want them read — paste with <b>Ctrl/⌘ V</b>, drop them in, or pick files. You do not have to line them up one question per screenshot.${built ? ' <b>Only the unread ones are read</b>, so paste more in whenever you find them and the paper grows.' : ''}</p>
+    ${_cpbDirty && built ? '<p class="cpb-warn-line">⚠ A screenshot the paper was built from has been removed, so a question below may no longer match anything you can look at. Press <b>🔁 Read everything again</b> to rebuild — it replaces the questions, including the order and any booklet you changed by hand.</p>' : ''}
+    ${!_cpbDirty && built && unread ? `<p class="cpb-new-line">📸 ${unread} screenshot${unread === 1 ? '' : 's'} not read yet — press <b>${escapeHtml(readLabel)}</b> and ${unread === 1 ? 'its' : 'their'} questions are added to the end of the paper.${_cpbSeedQuestion() ? ' A question that carries on from the last one read is joined to it 🔗.' : ''}</p>` : ''}
     <div class="cpb-zone${_cpbPasteOn ? ' cpb-zone-on' : ''}" onclick="cpbFocusZone()"
          ondragover="cpbDragOver(event)" ondrop="cpbDropFiles(event)">
       <div class="cpb-zone-main">
@@ -72005,6 +72148,7 @@ window.cpbFocusZone = cpbFocusZone;
 window.cpbRemove = cpbRemove;
 window.cpbClearShots = cpbClearShots;
 window.cpbBuild = cpbBuild;
+window.cpbRebuild = cpbRebuild;
 window.cpbCancel = cpbCancel;
 window.cpbMove = cpbMove;
 window.cpbSetBook = cpbSetBook;
