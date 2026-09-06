@@ -5283,7 +5283,110 @@ every booklet they had moved by hand went with it.
   was.
 - Run **`node tools/custom-paper-tests.mjs`** after touching any of it.
 
+## 🎯 A blank box the PUPIL writes their objectives in (v1.369.0)
+
+`OBJBOX_*` / `objBoxLines` / `objBoxLabel` / **`objBoxPrintHtml`** /
+`objBoxScreenHtml` / `objBoxPreviewHtml` / **`objBoxAutoHtml`** /
+`OBJBOX_SWITCHES` / `objBoxPrintOn` (in `app.js`, search
+`🎯 LEARNING OBJECTIVES BOX`), the `objectivesBox` block type, the
+`.print-objectives-*` / `.ws-objectives-line` CSS, and the 🎯
+**Learning-objectives box on every question** switch on all three printing
+surfaces.
+
+An element block: a blank rounded rectangle, **two ruled lines by default and
+any number from one upwards**, that an author drops into a question — or that
+the printing options put at the foot of EVERY question at once. It is where a
+pupil writes, in their own words, what they were learning.
+
+- **IT IS NOT THE 🎯 LEARNING OBJECTIVES PAGE, and confusing the two is the
+  whole reason it is not called `lo*`.** That system (`lo*`, `q.los`,
+  `loQuestions`, `loSuggestLos`) is the ADMIN's filing — which MOE syllabus
+  outcome a question is tagged under, chosen by a teacher, never a box on a
+  sheet. This is the opposite end: an empty rectangle with nothing stored in it
+  and nothing to mark. Sharing a prefix between them is how a filing helper ends
+  up called from a print path, so this one is `objBox*` / `OBJBOX_*` throughout.
+- **NOTHING ABOUT IT REACHES THE ANSWER KEY.** There is no right answer to
+  "what did you learn", so `_pushBlockAnswerKey` has no case for it and both
+  explicit print cases deliberately push nothing. A key row against a reflection
+  box is a row a teacher cannot mark, and it reads as a printing fault. That is
+  also why the harness pins it from both directions.
+- **`objBoxLines` is the ONE place a stored number becomes ruled lines, and it
+  FAILS TO THE DEFAULT.** Junk, an absent field, zero or a negative all give two
+  lines — a box with no lines in it is a box a pupil cannot write in, and it
+  renders perfectly. `OBJBOX_LINES_MAX` (20) caps it: a taller box is a page.
+- **`objBoxLabel` must NOT fall back on an EMPTY label.** `|| OBJBOX_LABEL`
+  would put the heading back on a box the author had just cleared — and "blank"
+  is what was asked for. Only an ABSENT field takes the default, which is what
+  makes a block written before this existed still carry a heading.
+- **ONE VISUAL, TWO SKINS, and both read the same two helpers.**
+  `objBoxPrintHtml` is styled by `.print-objectives-*` in the print CSS;
+  `objBoxScreenHtml` is inline-styled for the reason `ws-open-lines` is (these
+  blocks render into half a dozen surfaces that share no stylesheet). Neither is
+  free to decide the size for itself, or the A4 preview stops being a preview.
+- **`renderImportedBlockStudent` is the screen case** — the default branch of
+  every practice render switch — so practice, quick practice and topical all get
+  it from one case. `renderQuestionBodyPreviewHtml` DRAWS the box rather than
+  describing it: that preview sits beside the printed sheet in the duplicate
+  comparison and the ✎ Questions drawer.
+- **BOTH print builders carry an explicit case through `objBoxPrintHtml`**, the
+  rule `_printMcqBlockHtml` already exists for. `doPrintWorksheetOpen` and
+  `buildWorksheetHtml` had drifted over the MCQ answer once; a box that appears
+  on a worksheet printed from the bank and not on the same worksheet printed
+  from 📄 My Worksheets is that fault wearing a new hat.
+
+### 🎯 …and one box in EVERY question, from the printing options
+
+- **`objBoxAutoHtml(q, on)` is the ONE injector** and both builders call it at
+  the same point — after the block loop, INSIDE the question chunk. Emitted
+  after the chunk's closing `</div>` the box belongs to no question at all and
+  the planner measures it against the wrong page.
+- **It is `on` AND the question has no box already.** The switch promises ONE
+  box per question; a question the author already gave a box would otherwise
+  print two, the second at a size they never chose.
+- **NOTHING IS WRITTEN TO ANY QUESTION.** It is a rendering option, so ticking
+  it changes no document anywhere and unticking it takes every automatic box off
+  again. What it makes is a DEFAULT box.
+- **`OBJBOX_SWITCHES` names a checkbox per surface and an unknown surface
+  returns FALSE**, the shape `WNY_SWITCHES` / `AKX_SWITCHES` already use: a
+  default falling through to another page's checkbox would put a box on every
+  question of a print started from here because of a switch set somewhere else,
+  with nothing on the screen able to explain it. **`paper` is deliberately
+  absent** — a past paper is a reproduction of somebody else's sheet.
+- **The LIVE A4 preview reads the same switches** (`_wsPreviewCtx` →
+  `objectivesBoxAll`), or the preview is a preview of a different sheet. The
+  past-paper branch is explicitly `objBoxAll: false` rather than merely absent.
+- The height needs no reservation: the CER planner MEASURES the finished page
+  in a print-CSS iframe, so an extra box re-paginates for free. What it does
+  need is the `.print-chunk-tall` / `.print-page-tall` release — a box that
+  keeps `break-inside: avoid` on a page that is already flowing does not flow,
+  it overflows onto the next question.
+- **A question carrying a box is not "MCQ only"** (`qIsMcqOnly`): a box is
+  somewhere a pupil WRITES, and on 🗂️ Custom Paper that decides the booklet —
+  Booklet A is answered on a separate answer sheet, where there is nowhere to
+  write it.
+- **`polymathlc/math` carries the same block** — same block type, same helper
+  names, same two switches. Ship a change to both together.
+- Run **`node tools/objectives-box-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🎯 the learning-objectives box** (`OBJBOX_*`, `objBoxLines`,
+  `objBoxLabel`, `objBoxPrintHtml`, `objBoxScreenHtml`, `objBoxPreviewHtml`,
+  `objBoxAutoHtml`, `OBJBOX_SWITCHES` / `objBoxPrintOn`, either print builder's
+  `case 'objectivesBox'`, the `_wsPreviewCtx` branches, or the
+  `.print-objectives-*` CSS), run `node tools/objectives-box-tests.mjs`. Every
+  failure here is silent and the sheet still prints. **The two print builders
+  drifting apart is the worst of them**: the box appears on a worksheet printed
+  from the bank and not on the same worksheet printed from 📄 My Worksheets,
+  which is the fault those two had already had once over the MCQ answer. Let
+  anything about the box reach the ANSWER KEY and a teacher is handed a row
+  they cannot mark against a question that has no answer. Drop the
+  already-has-a-box test and the switch that promises ONE box prints two.
+  Let `objBoxLabel` fall back on an EMPTY label and the heading comes back on
+  the box an author had just cleared — which is the half of "blank" that is
+  easiest to undo by accident. Let `objBoxLines` return zero and the box
+  renders perfectly with nothing to write on. And emit the automatic box after
+  the chunk's closing `</div>` and it belongs to no question at all, measured
+  against the wrong page.
 - After touching **👁 the one-question preview** (`cpbPreviewQuestion`, the
   `'cpbq'` source in `previewQuestionsPrint` / `_wsPreviewIsDraft` /
   `_wsPreviewSnapshot`, the `custompaper` branch of `printFromPreview`,

@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.368.0';
+const APP_VERSION = 'v1.369.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -4981,6 +4981,51 @@ function generateBlockId() {
   return 'block_' + (++blockIdCounter) + '_' + Date.now();
 }
 
+// =====================================================================
+// 🎯 LEARNING OBJECTIVES BOX — a blank rounded rectangle the STUDENT writes
+// their own learning objectives in.
+//
+// It is NOT the 🎯 Learning Objectives PAGE, and the two must never be
+// confused. That one (`lo*`, `q.los`, `loQuestions`) is the ADMIN's filing:
+// which MOE syllabus outcome a question is tagged under, chosen by a teacher
+// and never seen as a writing box. This is the opposite end — an empty box on
+// the paper, with nothing stored in it and nothing to mark, where a pupil
+// writes what they think they were learning. Sharing the `lo*` prefix between
+// the two is how a filing helper ends up called from a print path; so this one
+// is `objBox*` / `OBJBOX_*` throughout and the block type is `objectivesBox`.
+//
+// The box is BLANK BY DESIGN. Nothing about it reaches the answer key: there is
+// no right answer to "what did you learn", so `_pushBlockAnswerKey` has no case
+// for it and the explicit print cases deliberately push nothing — a key row
+// saying "no answer recorded" against a reflection box would read as a fault.
+const OBJBOX_DEFAULT_LINES = 2;   // "default two lines", the whole point of the block
+const OBJBOX_LINES_MIN = 1;       // "…but can be changed to one or more lines"
+// A box taller than this is a page, not a box. The print planner MEASURES, so
+// an over-tall box does not corrupt a sheet — it just wastes one, and 20 ruled
+// lines (20pt each) is already more than half of A4.
+const OBJBOX_LINES_MAX = 20;
+const OBJBOX_LABEL = 'Learning objectives';
+
+// The ONE place a stored line count becomes a number of ruled lines. Absent,
+// junk or out of range falls back to the default rather than to zero — a box
+// with no lines in it is a box a pupil cannot write in, and it renders
+// perfectly.
+function objBoxLines(block) {
+  const n = Math.round(Number(block && block.lines));
+  if (!isFinite(n) || n < OBJBOX_LINES_MIN) return OBJBOX_DEFAULT_LINES;
+  return Math.min(OBJBOX_LINES_MAX, n);
+}
+// The heading printed on the box. An author who clears it gets a truly blank
+// rectangle, so this must NOT fall back to the default label — `|| LABEL` would
+// put a heading back on the box they had just emptied. Only an ABSENT field
+// (a block made before this existed, or one built by an AI path) takes the
+// default.
+function objBoxLabel(block) {
+  const raw = block && block.label;
+  if (raw == null) return OBJBOX_LABEL;
+  return String(raw).trim();
+}
+
 function createBlock(type) {
   const id = generateBlockId();
   const block = { id, type };
@@ -5049,6 +5094,12 @@ function createBlock(type) {
       break;
     case 'openLines':
       block.lines = 4;
+      break;
+    // 🎯 A blank rounded box the STUDENT writes their own learning objectives
+    // in. Two ruled lines by default — see OBJBOX_DEFAULT_LINES.
+    case 'objectivesBox':
+      block.lines = OBJBOX_DEFAULT_LINES;
+      block.label = OBJBOX_LABEL;
       break;
     case 'fillblank':
       // Paragraph text; blanked answers are wrapped in [[double brackets]].
@@ -6805,6 +6856,7 @@ function renderBlocks() {
       case 'openLines':   badgeClass = 'plainanswer-badge'; badgeIcon = '✍️'; badgeLabel = 'Open-Ended Answer'; break;
       case 'fillblank':   badgeClass = 'plainanswer-badge'; badgeIcon = '🔲'; badgeLabel = 'Fill in the Blanks'; break;
       case 'workingSpace':badgeClass = 'plainanswer-badge'; badgeIcon = block.annotate ? '✍️' : '🧮'; badgeLabel = block.annotate ? 'Annotation Working Area' : 'Working Space'; break;
+      case 'objectivesBox':badgeClass = 'plainanswer-badge'; badgeIcon = '🎯'; badgeLabel = 'Learning Objectives'; break;
       case 'commonMistake':badgeClass = 'explanation-badge'; badgeIcon = '⚠️'; badgeLabel = 'Common Mistake'; break;
       case 'studentAnswer':badgeClass = 'explanation-badge'; badgeIcon = '🧑‍🎓'; badgeLabel = 'Student Answer'; break;
       case 'answerKey':   badgeClass = 'explanation-badge'; badgeIcon = '🔑'; badgeLabel = 'Answer Key'; break;
@@ -7096,6 +7148,7 @@ function makeBlockInsertBar(index) {
       <button type="button" class="block-insert-btn" onclick="addBlockAt('openLines', ${index})">✍️ Open-Ended Answer</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('fillblank', ${index})">🔲 Fill-in-the-Blanks</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('workingSpace', ${index})">🧮 Working Space</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('objectivesBox', ${index})">🎯 Learning Objectives</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('commonMistake', ${index})">⚠️ Common Mistake</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('studentAnswer', ${index})">🧑‍🎓 Student Answer</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('answerKey', ${index})">🔑 Answer Key</button>
@@ -8196,6 +8249,28 @@ function renderImportedBlockEditorBody(block) {
           <div style="font-size:0.78rem;color:var(--text-muted);margin:12px 0 4px;">Student preview:</div>
           <div id="fbPrev_${id}" class="fb-preview">${_fbPreviewHtml(block.text || '')}</div>
         </div>`;
+    case 'objectivesBox': {
+      const n = objBoxLines(block);
+      const lab = objBoxLabel(block);
+      return `
+        <div class="block-body">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+            <label style="font-size:0.85rem;font-weight:600;">🎯 Lines in the box
+              <input class="form-input" type="number" min="${OBJBOX_LINES_MIN}" max="${OBJBOX_LINES_MAX}" style="width:80px;margin-left:8px;"
+                     value="${n}" oninput="saveBlockNum('${id}','lines',this.value,${OBJBOX_LINES_MIN},${OBJBOX_LINES_MAX})"></label>
+            <label style="font-size:0.85rem;font-weight:600;flex:1;min-width:200px;">Heading
+              <input class="form-input" type="text" style="width:100%;margin-top:4px;" placeholder="Leave empty for a completely blank box"
+                     value="${escapeHtml(lab)}" oninput="saveBlockField('${id}','label',this.value)"></label>
+          </div>
+          <div style="font-size:0.78rem;color:var(--text-muted);line-height:1.6;margin-bottom:10px;">
+            A blank rounded box for the student to write <b>their own</b> learning objectives in — what they were learning from this question.
+            It is never marked and never appears on the answer key. Clear the heading for a completely blank box.
+            You can also tick <b>🎯 Learning-objectives box on every question</b> when you print, instead of adding one here.
+          </div>
+          <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;">Preview:</div>
+          ${objBoxPreviewHtml(block)}
+        </div>`;
+    }
     case 'workingSpace':
       return `
         <div class="block-body">
@@ -8275,6 +8350,65 @@ function _wsBlockLines(lines, fallback) {
   return Math.min(WS_BLOCK_LINES_MAX, Math.round(n));
 }
 
+// ---- 🎯 the learning-objectives box, drawn ----------------------------------
+// ONE visual, two skins. Screen and paper have to show the same box or the A4
+// preview stops being a preview, so both go through `objBoxLines` /
+// `objBoxLabel` and neither is free to decide the size for itself.
+const OBJBOX_SCREEN_LINE_PX = 26;   // the row height every imported block uses
+
+// The ruled writing lines inside the box.
+function _objBoxLinesHtml(n, cls) {
+  let h = '';
+  for (let i = 0; i < n; i++) h += `<div class="${cls}"></div>`;
+  return h;
+}
+
+// PRINT — the sheet a class actually writes on. Styled by `.print-objectives-*`
+// in the print CSS rather than inline, so the planner measures it in the same
+// units it measures every other box.
+function objBoxPrintHtml(block) {
+  const lab = objBoxLabel(block);
+  return `<div class="print-objectives-box">` +
+    (lab ? `<div class="print-objectives-label">${escapeHtml(lab)}</div>` : '') +
+    `<div class="print-objectives-lines">${_objBoxLinesHtml(objBoxLines(block), 'print-objectives-line')}</div>` +
+    `</div>`;
+}
+
+// SCREEN — practice, the block-editor preview, the worksheet preview card.
+// Inline styles for the same reason `ws-open-lines` and `ws-working` use them:
+// these blocks are rendered into half a dozen surfaces that share no stylesheet
+// of their own.
+function objBoxScreenHtml(block) {
+  const lab = objBoxLabel(block);
+  const rows = objBoxLines(block);
+  return `<div class="ws-objectives" style="margin:10px 0;border:1.5px solid var(--border,#cfcfcf);border-radius:10px;padding:10px 12px;background:var(--surface-alt,#fafbfa);">` +
+    (lab ? `<div style="font-size:0.78rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--text-muted,#6b7280);margin-bottom:6px;">${escapeHtml(lab)}</div>` : '') +
+    _objBoxLinesHtml(rows, 'ws-objectives-line') +
+    `</div>`;
+}
+
+// The editor card's own preview is the screen box — an author sizing the box
+// must be looking at the box, not at a description of it.
+function objBoxPreviewHtml(block) {
+  return objBoxScreenHtml(block);
+}
+
+// 🎯 ONE BOX IN EVERY QUESTION, from the printing options. Returns the HTML to
+// append to a question, or ''.
+//
+// It is `on` AND the question does not already carry one: the switch promises
+// ONE box per question, and a question the author already gave a box would
+// otherwise print two — the second of them at a size they did not choose.
+// Both print builders call this at the same point, which is the only thing
+// that stops them drifting apart (they had already drifted over the MCQ answer
+// once). The box it makes is a DEFAULT box — nothing is written to the
+// question, so ticking the switch changes no document anywhere.
+function objBoxAutoHtml(q, on) {
+  if (!on) return '';
+  if (((q && q.blocks) || []).some(b => b && b.type === 'objectivesBox')) return '';
+  return objBoxPrintHtml({ lines: OBJBOX_DEFAULT_LINES, label: OBJBOX_LABEL });
+}
+
 // Used as the `default` branch of every practice/quick/topical render switch.
 function renderImportedBlockStudent(block, q) {
   switch (block.type) {
@@ -8308,6 +8442,11 @@ function renderImportedBlockStudent(block, q) {
       return `<div class="ws-open-lines" style="margin:10px 0;height:${_wsBlockLines(block.lines, 4) * 26}px;"></div>`;
     case 'workingSpace':
       return `<div class="ws-working" style="margin:10px 0;border:1px dashed #c4c4c4;border-radius:8px;height:${_wsBlockLines(block.lines, 6) * 26}px;"></div>`;
+    // 🎯 The screen skin. Both print builders carry an EXPLICIT case that uses
+    // the print skin instead, so this is what practice, the block preview and
+    // the worksheet card show — the same box, in the same shape.
+    case 'objectivesBox':
+      return objBoxScreenHtml(block);
     case 'fillblank':
       return _fbHasBlanks(block) ? `<div style="margin:10px 0;">${_fbReadonlyHtml(block)}</div>` : `<div class="fb-sentence" style="line-height:2;margin:10px 0;">${escapeHtml(block.text || '')}</div>`;
     case 'commonMistake': {
@@ -19538,8 +19677,11 @@ function qMarksLabel(b) { const n = qMarksOf(b); return n ? qMarksBracket(n) : '
 // safe direction: the worst case is ruled lines nobody uses.
 function qIsMcqOnly(blocks) {
   const bs = Array.isArray(blocks) ? blocks : ((blocks && blocks.blocks) || []);
+  // 🎯 An objectives box is somewhere the pupil WRITES, so a question carrying
+  // one needs the sheet — on 🗂️ Custom Paper that is Booklet B, not the
+  // answer-sheet booklet where there is nowhere to write it.
   return bs.some(b => b && b.type === 'mcq')
-    && !bs.some(b => b && (b.type === 'answer' || b.type === 'plainanswer' || b.type === 'fillblank'));
+    && !bs.some(b => b && (b.type === 'answer' || b.type === 'plainanswer' || b.type === 'fillblank' || b.type === 'objectivesBox'));
 }
 // Take a printed marks marker back out of the wording. Never touches the block.
 function qStripTailMarks(html) {
@@ -20886,6 +21028,9 @@ function _printMcqAnswerBoxHtml(part) {
 // `whyNotes` is the ⓘ reasons for the printed key, keyed by question id — see
 // `wnyPrepare`. Null (the ordinary case) prints exactly the key it always did.
 function doPrintWorksheetOpen(whyNotes) {
+  // 🎯 "a box in every question" — this IS the `bank` surface, so it reads its
+  // own checkbox rather than being handed the answer.
+  const objBoxAll = objBoxPrintOn('bank');
   const selected = questionBank.filter(q => printSelectedIds.has(q.id));
   const output = document.getElementById('printOutput');
   let allHtml = '';
@@ -21009,6 +21154,16 @@ function doPrintWorksheetOpen(whyNotes) {
           }
           break;
         }
+        // 🎯 Explicit, for the reason `mcq` and `fillblank` are: the shared
+        // student rendering is the SCREEN skin, and a printed sheet wants the
+        // print one. `buildWorksheetHtml` carries the identical case — keep the
+        // two in step, which is what `objBoxPrintHtml` is for. Nothing is
+        // pushed onto the answer key: there is no right answer to "what did you
+        // learn", and a key row against a reflection box reads as a fault.
+        case 'objectivesBox': {
+          qHtml += objBoxPrintHtml(block);
+          break;
+        }
         // Explicit, so it does NOT fall through to the shared default: a
         // printed MCQ carries an answer box the on-screen one has no need of.
         // `buildWorksheetHtml` carries the identical case — keep the two in
@@ -21030,6 +21185,11 @@ function doPrintWorksheetOpen(whyNotes) {
         }
       }
     });
+
+    // 🎯 One box at the END of the question — where a pupil reflects, after
+    // they have done it. Skipped when the question already carries a box of its
+    // own, so the switch really does mean ONE per question.
+    qHtml += objBoxAutoHtml(q, objBoxAll);
 
     qHtml += `</div>`;
     allHtml += qHtml;
@@ -31085,6 +31245,22 @@ function akxPrintOn(where) {
   const el = document.getElementById(id);
   return !!(el && el.checked);
 }
+
+// 🎯 A LEARNING-OBJECTIVES BOX ON EVERY QUESTION. Same shape as the two above,
+// and for the same reason: an unknown surface returns FALSE rather than falling
+// through to another page's checkbox, which would put a box on every question
+// of a print started from here because of a switch set somewhere else — with
+// nothing on this screen able to explain it.
+//
+// `paper` is deliberately absent. A past paper is a reproduction of somebody
+// else's sheet; a reflection box printed into one is not part of that paper.
+const OBJBOX_SWITCHES = { builder: 'wsIncludeObjBox', saved: 'mwIncludeObjBox', bank: 'printIncludeObjBox' };
+function objBoxPrintOn(where) {
+  const id = OBJBOX_SWITCHES[where];
+  if (!id) return false;
+  const el = document.getElementById(id);
+  return !!(el && el.checked);
+}
 // Every MCQ block on the sheet that can be explained at all.
 function _wnyPrintJobs(selected) {
   const jobs = [];
@@ -32313,6 +32489,12 @@ function renderQuestionBodyPreviewHtml(q) {
         }
         html += `<div style="margin:8px 0;padding:8px 12px;border:1px dashed var(--border);border-radius:8px;background:var(--surface-alt,#fafbfa);font-size:0.82rem;color:var(--text-muted);">✍️ Open-ended answer space (${Number(block.lines) || (block.type === 'openLines' ? 4 : 6)} lines)</div>`;
         break;
+      // 🎯 Drawn as the real box rather than described — this preview sits
+      // beside the printed sheet in the duplicate comparison and the ✎ Questions
+      // drawer, and a sentence where a box will be is not a preview of it.
+      case 'objectivesBox':
+        html += objBoxScreenHtml(block);
+        break;
       case 'explanation':
         break;
       default:
@@ -32560,7 +32742,7 @@ async function reprintWorksheet(id) {
   const noFields = !_wsStudentFieldsOn('saved');
   const wantCover = !!document.getElementById('mwIncludeCover')?.checked;
   const why = await _wnyRunPrepare(selected, wnyPrintOn('saved'));
-  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields) : '', noFields, why, akxPrintOn('saved'));
+  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields) : '', noFields, why, akxPrintOn('saved'), objBoxPrintOn('saved'));
 }
 
 // The questions of a saved worksheet, in the order they were chosen — the ids
@@ -33059,7 +33241,7 @@ async function printStudentWorksheet() {
   const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
   const frontHtml = await _wsFrontHtml(selected, title);
   const why = await _wnyRunPrepare(selected, wnyPrintOn('builder'));
-  await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why, akxPrintOn('builder'));
+  await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why, akxPrintOn('builder'), objBoxPrintOn('builder'));
 }
 
 // Worksheet title banner + name/date/class strip printed at the top of page 1.
@@ -33130,6 +33312,10 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   // worksheet that is going straight into a file, or one the class writes on
   // separate paper for.
   const noFields = !!(opts && opts.noStudentFields);
+  // objectivesBoxAll: 🎯 put a blank learning-objectives box at the foot of
+  // EVERY question that has not got one already. It is a RENDERING option and
+  // writes nothing to any question, so ticking it changes no document.
+  const objBoxAll = !!(opts && opts.objectivesBoxAll);
   // A cover sheet already carries the logo, the title and the name/date
   // fields, so page 1's banner drops to just the student strip.
   const hasCover = frontHtml.indexOf('print-cover-page') >= 0;
@@ -33236,6 +33422,16 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             }
             break;
           }
+          // 🎯 Explicit, for the reason `mcq` and `fillblank` are: the shared
+          // student rendering is the SCREEN skin, and a printed sheet wants the
+          // print one. `buildWorksheetHtml` carries the identical case — keep the
+          // two in step, which is what `objBoxPrintHtml` is for. Nothing is
+          // pushed onto the answer key: there is no right answer to "what did you
+          // learn", and a key row against a reflection box reads as a fault.
+          case 'objectivesBox': {
+            qHtml += objBoxPrintHtml(block);
+            break;
+          }
           // Explicit, for the reason `fillblank` is: the shared student
           // rendering has no answer box, and a printed MCQ needs one. The
           // identical case is in `doPrintWorksheetOpen` and both build the
@@ -33262,6 +33458,12 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
           }
         }
       });
+
+      // 🎯 One box at the END of the question, exactly as doPrintWorksheetOpen
+      // appends it — the two builders had already drifted over the answer key
+      // once, so both call the one helper at the one point.
+      qHtml += objBoxAutoHtml(q, objBoxAll);
+
       qHtml += `</div>`;
       allHtml += qHtml;
       const _akExtra = _qAnswerKeyExtraSection(q);
@@ -33324,12 +33526,12 @@ async function _wnyRunPrepare(selected, on) {
   return notes;
 }
 
-async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes, akExtras) {
+async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes, akExtras, objBoxAll) {
   const output = document.getElementById('printOutput');
   // plainNumbers: a worksheet is numbered "Question 1, 2, 3…" for the student.
   // The bank's own title and its category/topic line are internal filing —
   // useful in the admin's bank, meaningless (and a giveaway) on a printed sheet.
-  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields, whyNotes: whyNotes || null, answerKeyExtras: !!akExtras });
+  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields, whyNotes: whyNotes || null, answerKeyExtras: !!akExtras, objectivesBoxAll: !!objBoxAll });
   autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp });
 }
 
@@ -33956,6 +34158,9 @@ function _wsPreviewCtx() {
       // A past paper always prints its explanations — it is a marking scheme,
       // not a worksheet — so there is no checkbox and nothing to read.
       akExtras: true,
+      // 🎯 A past paper is a reproduction of somebody else's sheet, so it never
+      // gets the reflection box — there is no checkbox for `paper` either.
+      objBoxAll: false,
       frontHtml: _ppCoverHtml(_wsPreviewPaper.coverTitle || _wsPreviewPaper.title || 'Past paper')
     };
   }
@@ -33972,6 +34177,7 @@ function _wsPreviewCtx() {
       // there rather than inventing a second pair of checkboxes.
       where: 'bank',
       akExtras: akxPrintOn('bank'),
+      objBoxAll: objBoxPrintOn('bank'),
       // 📝 Custom Paper hands the preview the SAME arguments its printer uses
       // — its covers, its gutter numbers, its forced breaks — so the sheet on
       // screen is the sheet that comes out of the PDF.
@@ -33989,7 +34195,8 @@ function _wsPreviewCtx() {
       cover: !!document.getElementById('mwIncludeCover')?.checked,
       noFields: !_wsStudentFieldsOn('saved'),
       where: 'saved',
-      akExtras: akxPrintOn('saved')
+      akExtras: akxPrintOn('saved'),
+      objBoxAll: objBoxPrintOn('saved')
     };
   }
   return {
@@ -33999,7 +34206,8 @@ function _wsPreviewCtx() {
     cover: !!document.getElementById('wsIncludeCover')?.checked,
     noFields: !_wsStudentFieldsOn('builder'),
     where: 'builder',
-    akExtras: akxPrintOn('builder')
+    akExtras: akxPrintOn('builder'),
+    objBoxAll: objBoxPrintOn('builder')
   };
 }
 
@@ -34382,7 +34590,7 @@ async function printQuestionsDirect(questions, title) {
   const list = (questions || []).filter(Boolean);
   if (!list.length) { showToast('There is nothing to print', 'error'); return; }
   const why = await _wnyRunPrepare(list, wnyPrintOn('bank'));
-  await doPrintStudentWorksheet(list, title || 'Questions', '', true, why, akxPrintOn('bank'));
+  await doPrintStudentWorksheet(list, title || 'Questions', '', true, why, akxPrintOn('bank'), objBoxPrintOn('bank'));
 }
 
 async function renderWsPreview() {
@@ -34397,7 +34605,8 @@ async function renderWsPreview() {
   const html = buildWorksheetHtml(selected, title, Object.assign({
     frontHtml, plainNumbers: true, noStudentFields: ctx.noFields,
     whyNotes: _wnyCachedNotes(selected, wnyPrintOn(ctx.where)),
-    answerKeyExtras: !!ctx.akExtras
+    answerKeyExtras: !!ctx.akExtras,
+    objectivesBoxAll: !!ctx.objBoxAll
   }, ctx.buildOpts || {}));   // exactly what will print
   _wsWritePreview(frame, html, { ctxBreaks: ctx.forcedBreakIds || null });
 }
@@ -34655,6 +34864,7 @@ function _wsQeBlockSummary(b) {
       + (printAnswerLines(b, b.content) === 1 ? '' : 's');
     case 'openLines': return (Number(b.lines) || 4) + ' blank lines';
     case 'workingSpace': return 'Working space';
+    case 'objectivesBox': return 'Learning-objectives box · ' + objBoxLines(b) + ' line' + (objBoxLines(b) === 1 ? '' : 's');
     case 'answerLine': return 'Answer line';
     case 'fillblank': return 'Fill in the blanks';
     case 'explanation': return 'Explanation (answer key)';
