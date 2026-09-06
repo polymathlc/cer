@@ -11361,7 +11361,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 <div class="confirm-overlay" id="aiEngineOverlay">
   <div class="confirm-dialog" style="max-width:560px;text-align:left;max-height:88vh;overflow-y:auto;">
     <h3 style="margin-bottom:4px;">AI Engine</h3>
-    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Choose which AI powers every mode in this app — <strong>Create Question's AI answer &amp; explanation, Build from screenshot / PDF, Rapid add</strong>, plus marking and explanations. Switch to ChatGPT gpt-5.6-sol for heavy-duty question building, and back to Gemini for everyday use. Your choice applies to <strong>every signed-in device</strong> — set it once and every student follows until you change it back. It picks which is tried <strong>first</strong>, never which is available: whichever one you choose, the other takes over the moment it refuses — a spending cap, a quota, a connection that drops — so a run never comes back empty because one of them was down.</p>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Choose which AI powers every mode in this app — <strong>Create Question's AI answer &amp; explanation, Build from screenshot / PDF, Rapid add</strong>, plus marking and explanations. Switch to ChatGPT gpt-6-astra for heavy-duty question building, and back to Gemini for everyday use. Your choice applies to <strong>every signed-in device</strong> — set it once and every student follows until you change it back. It picks which is tried <strong>first</strong>, never which is available: whichever one you choose, the other takes over the moment it refuses — a spending cap, a quota, a connection that drops — so a run never comes back empty because one of them was down.</p>
     <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:16px;line-height:1.6;">🔗 <strong>One key covers all four subjects.</strong> Science, Maths, English and Chinese share this browser's storage, so a key saved here is saved for all of them — and 🔍 <strong>Check answer keys</strong> can put ChatGPT and Gemini side by side in whichever app you are in.</p>
 
     <div class="form-group">
@@ -11377,7 +11377,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       </label>
       <label style="display:flex;align-items:center;gap:10px;font-size:0.9rem;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;">
         <input type="radio" name="aiEngineChoice" value="openai" onchange="aiEngineChoicePreview('openai')">
-        <span><strong>ChatGPT</strong> <span style="color:var(--text-muted);">— gpt-5.6-sol &middot; key held on the server &middot; nothing to set up</span></span>
+        <span><strong>ChatGPT</strong> <span style="color:var(--text-muted);">— gpt-6-astra &middot; key held on the server &middot; nothing to set up</span></span>
       </label>
       <label style="display:flex;align-items:center;gap:10px;font-size:0.9rem;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-top:8px;">
         <input type="radio" name="aiEngineChoice" value="kimi" onchange="aiEngineChoicePreview('kimi')">
@@ -11388,7 +11388,9 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     <div class="form-group">
       <label class="form-label">ChatGPT model</label>
       <select id="aiEngineModel" class="form-input">
-        <option value="gpt-5.6-sol" selected>gpt-5.6-sol &mdash; newest (recommended)</option>
+        <option value="gpt-6-astra" selected>gpt-6-astra &mdash; newest (recommended)</option>
+        <option value="gpt-6-astra-fast">gpt-6-astra-fast &mdash; same model, quicker, less thinking</option>
+        <option value="gpt-5.6-sol">gpt-5.6-sol &mdash; the previous flagship</option>
         <option value="gpt-4o-mini">gpt-4o-mini &mdash; fast &amp; cheap</option>
         <option value="gpt-4o">gpt-4o</option>
         <option value="gpt-4.1">gpt-4.1</option>

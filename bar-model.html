@@ -1744,7 +1744,9 @@ input, button, select, textarea { font-family: inherit; }
       <div class="admin-field">
         <label for="openaiModelSelect">ChatGPT model</label>
         <select id="openaiModelSelect">
-          <option value="gpt-5.6-sol" selected>gpt-5.6-sol &mdash; newest (recommended)</option>
+          <option value="gpt-6-astra" selected>gpt-6-astra &mdash; newest (recommended)</option>
+          <option value="gpt-6-astra-fast">gpt-6-astra-fast &mdash; same model, quicker</option>
+          <option value="gpt-5.6-sol">gpt-5.6-sol &mdash; the previous flagship</option>
           <option value="gpt-4o-mini">gpt-4o-mini &mdash; fast &amp; cheap</option>
           <option value="gpt-4o">gpt-4o &mdash; strongest vision marking</option>
           <option value="gpt-4.1-mini">gpt-4.1-mini</option>
@@ -1769,7 +1771,7 @@ input, button, select, textarea { font-family: inherit; }
   </div>
 </div>
 
-<div class="version-badge" id="versionBadge">Bar Model Studio v1.9</div>
+<div class="version-badge" id="versionBadge">Bar Model Studio v1.10</div>
 
 <!-- ══════════════════════════════════════════════════════════════════
      FIREBASE AI LOGIC (Gemini) — module script
@@ -4147,8 +4149,8 @@ function getStoredOpenAiKey() {
 }
 
 function getStoredOpenAiModel() {
-  try { return localStorage.getItem(STORAGE_KEYS.openaiModel) || 'gpt-5.6-sol'; }
-  catch (e) { return 'gpt-5.6-sol'; }
+  try { return localStorage.getItem(STORAGE_KEYS.openaiModel) || 'gpt-6-astra'; }
+  catch (e) { return 'gpt-6-astra'; }
 }
 
 function getStoredMarkingEngine() {
@@ -4160,7 +4162,10 @@ function getStoredMarkingEngine() {
 
 async function askOpenAiVision(promptText, pngBase64, apiKey) {
   var model = getStoredOpenAiModel();
-  var isGpt5 = /^gpt-5/.test(model);
+  // A REASONING MODEL IS A FAMILY, NOT ONE ID: gpt-5.x and gpt-6-astra both
+  // take max_completion_tokens and both refuse a temperature, so a test that
+  // named only gpt-5 would send the newer model a request it 400s on.
+  var isReasoning = /^(gpt-[5-9]|o[1-9])/.test(model);
   var body = {
     model: model,
     response_format: { type: 'json_object' },
@@ -4180,9 +4185,9 @@ async function askOpenAiVision(promptText, pngBase64, apiKey) {
       }
     ]
   };
-  // gpt-5.x models reject max_tokens and non-default temperature — they take
-  // max_completion_tokens and always run at their own default temperature
-  if (isGpt5) { body.max_completion_tokens = 1200; }
+  // A reasoning model rejects max_tokens and a non-default temperature — it
+  // takes max_completion_tokens and always runs at its own default temperature
+  if (isReasoning) { body.max_completion_tokens = 1200; }
   else { body.max_tokens = 900; body.temperature = 0.2; }
 
   var response = await fetch('https://api.openai.com/v1/chat/completions', {
