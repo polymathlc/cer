@@ -787,15 +787,24 @@ test('a draft has no come-back-here snapshot', () => {
      '…and neither is an unsent paper — its questions have no bank ids yet');
 });
 
-test('🖨 Preview Exported sits beside 🎓 Preview as Student in BOTH action rows', () => {
+test('🖨 Preview Exported sits beside 🎓 Preview as Student in EVERY action row', () => {
   const html = fs.readFileSync(new URL('../index.html', import.meta.url).pathname, 'utf8');
-  // Create mode and edit mode are two separate rows; a button added to one of
-  // them is a button that is simply not there half the time.
-  eq((html.match(/previewEditorPrint\(\)/g) || []).length, 2, 'one in each row');
-  const rows = html.split('previewAsStudent()');
-  eq(rows.length, 3, 'two student-preview buttons, as before');
-  [1, 2].forEach(i => {
-    ok(rows[i].slice(0, 400).indexOf('previewEditorPrint()') >= 0, 'row ' + i + ': the exported preview does not follow it');
+  // Create mode, edit mode and a 🗂️ Custom Paper question are three separate
+  // rows; a button added to one of them is a button that is simply not there
+  // two thirds of the time. Counted per ROW rather than over the file, so a
+  // fourth row added later fails here instead of passing on a total.
+  const rows = ['createModeActions', 'editModeActions', 'cpbEditActions'];
+  rows.forEach(id => {
+    const at = html.indexOf('id="' + id + '"');
+    ok(at > 0, id + ' exists');
+    const row = html.slice(at, html.indexOf('</div>\n        <', at) + 1);
+    ok(/previewEditorPrint\(\)/.test(row), '🖨 Preview Exported is in ' + id);
+  });
+  eq((html.match(/previewEditorPrint\(\)/g) || []).length, rows.length, 'one in each row and nowhere else');
+  const after = html.split('previewAsStudent()');
+  eq(after.length, rows.length + 1, 'a student-preview button in every row too');
+  after.slice(1).forEach((chunk, i) => {
+    ok(chunk.slice(0, 500).indexOf('previewEditorPrint()') >= 0, 'row ' + i + ': the exported preview follows it');
   });
 });
 

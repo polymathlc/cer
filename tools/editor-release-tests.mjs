@@ -16,11 +16,16 @@ const editor = cut('var _editorReleaseDraft = null;', 'function getYouTubeEmbedU
 const collector = cut('function collectQuestionData()', 'function setEditMode(');
 const metadata = cut('const EDITOR_OWNED_QUESTION_FIELDS', 'function saveEditedQuestion(');
 const roles = cut('function _isAdmin()', 'function _navAllowed(');
+// The real predicate, not a stub: 📅 Schedule release writes to the BANK, and a
+// 🗂️ Custom Paper question has not reached it — so the refusal is part of what
+// this file guards.
+const cpbGate = cut('function _cpbEditActive()', 'function editQuestionFromPapers(');
 const queue = cut('function buildQpQueue(', '// Student shortcut:');
 function harness() {
   return new Function(`
     let currentUser = {role:'admin', email:'chungzhikai@gmail.com'};
     let currentEditingQuestion = null, blocks = [{id:'b', type:'text', content:'Edited question'}];
+    let _cpbEdit = null;
     let selectedBlanks = {}, editorKeywords = {b:['energy']}, editorLos = [];
     let questionBank = [], vettingList = [], saved = [], events = [], saveImpl = async () => true;
     let duplicateAllowed = true;
@@ -48,13 +53,14 @@ function harness() {
     const qInSyllabus = ()=>true, qpFibOn = ()=>false, qpMatchesType = ()=>true;
     const qLevelNum = ()=>4, qWithinStudentLevel = ()=>true, _qAttemptStats = {};
     const orderByAttemptPriority = q=>q, qpLoadSeen = ()=>[];
-    ${roles + core + collector + metadata + editor + queue}
+    ${roles + cpbGate + core + collector + metadata + editor + queue}
     return {
       openEditorRelease, closeEditorRelease, saveEditorRelease, editorReleaseKeydown,
       editorReleaseValid, qReleased, qAvailableToViewer, qLockSplit, buildQpQueue,
       releaseToday, releaseDayFromNow, collectQuestionData, carryOverQuestionMeta,
       elements, document, active, saved, events, owners:_ownerUidByQuestionId,
       vetOwners:_ownerUidByVettingId,
+      set paperEdit(x){_cpbEdit=x},
       set user(x){currentUser=x}, set editing(x){currentEditingQuestion=x},
       get editing(){return currentEditingQuestion}, get blocks(){return blocks},
       set bank(x){questionBank=x}, get bank(){return questionBank},
@@ -200,4 +206,25 @@ test('atomic approval never removes Vetting on failure and announces both change
 test('ordinary bank writes still use the existing save path', async () => {
   const w=writerHarness(); assert.equal(await w.saveQuestion({id:'other'}),true);
   assert.equal(w.records.has('vetting/id'),true); assert.equal(w.records.has('bank/other'),true);
+});
+
+// 🗂️ A CUSTOM PAPER QUESTION IS NOT IN THE BANK. Scheduling a release writes to
+// it, so the dialog must not open on one — and the page holds the whole paper
+// back rather than dating one question out of it.
+test('a Custom Paper question cannot be scheduled — it is not in the bank yet', () => {
+  const M = harness();
+  M.user = {role:'admin'};
+  M.editing = 'cpb_1';
+  M.paperEdit = {id:'cpb_1'};
+  M.openEditorRelease();
+  assert.equal(M.saved.length, 0, 'nothing was written');
+  assert.ok(M.events.some(([, msg]) => /Send the paper to the bank first/.test(String(msg))),
+    'and it says what to do instead');
+  // …and the save path refuses too, so a stale dialog cannot get through it.
+  M.paperEdit = {id:'cpb_1'};
+  M.editing = 'cpb_1';
+  return M.saveEditorRelease().then(r => {
+    assert.equal(r, false, 'saveEditorRelease() refuses');
+    assert.equal(M.saved.length, 0, 'still nothing written');
+  });
 });
