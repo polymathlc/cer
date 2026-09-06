@@ -481,6 +481,46 @@ ok('qIsMcqOnly takes a QUESTION as well as a block list — both call sites pass
      /a\.source === 'custompaper'.*cpbPrint\(\)/s.test(fromPrev),
      'sent to printQuestionsDirect it comes out as a plain worksheet with both covers gone');
 
+  /* ---------- 👁 ONE question off the paper ---------- */
+  // The eye on every row. It is the SAME ad-hoc preview the bank, the vetting
+  // list and the editor use — and the ONE thing that can go wrong quietly is
+  // the two Custom Paper sources being collapsed into one, which turns a proof
+  // of question 7 into a print of all forty.
+  const one = cut('function cpbPreviewQuestion(id) {', '\n// ---- Sending the paper', 'one-question preview');
+  ok('👁 carries the QUESTION, never an id',
+     /_cpbQuestions\.find/.test(one) && /previewQuestionsPrint\(\[copy\]/.test(one),
+     'a paper question is in neither the bank nor the vetting list, so every id-based opener comes back empty');
+  ok('…deep-copied, so the preview cannot write back into the paper',
+     /JSON\.parse\(JSON\.stringify\(q\)\)/.test(one));
+  ok('…and it is opened under its OWN source', /'cpbq'/.test(one),
+     "'custompaper' means the WHOLE paper and is what sends 🖨 back to cpbPrint()");
+  ok('a question that has left the paper is SAID, not silently previewed empty',
+     /no longer on this paper/.test(one));
+  ok('…and a non-author gets nothing', /_canAuthor\(\)/.test(one));
+
+  ok('🖨 on a one-question proof prints THAT question, not the paper',
+     !/source === 'cpbq'/.test(fromPrev) && !/source\.startsWith/.test(fromPrev)
+     && /a\.source === 'custompaper'/.test(fromPrev),
+     "matching both Custom Paper sources here prints the whole booklet set off a proof of one question");
+
+  const isDraft = cut('function _wsPreviewIsDraft() {', 'function _wsPreviewCtx(', 'draft test');
+  ok('a one-question proof is a DRAFT like the paper it came off', /'cpbq'/.test(isDraft),
+     '✏️ edit question would otherwise open a question the bank has never heard of');
+  const snap = cut('  if (_wsPreviewAdhoc) {', '  if (wsSelectedIds.size)', 'snapshot');
+  ok('…and there is nothing to come back to', /a\.source === 'cpbq'[\s\S]{0,30}return null/.test(snap),
+     'its questions are not in any list to re-resolve from');
+  const allowed = cut('function previewQuestionsPrint(questions, title, source) {', '\n// 🖨 PREVIEW EXPORTED', 'sources');
+  ok('the source really reaches the preview', /source === 'cpbq'/.test(allowed),
+     'an unrecognised source falls back to bank, which would offer ✏️ Editing mode on a question the bank does not have');
+
+  const row = cut('function _cpbRowHtml(q, num, book, first, last) {', 'function _cpbBookletHtml(', 'row');
+  ok('every row carries the eye', /vetPrintPeekButton\(q, 'cpb'\)/.test(row));
+  const rend = cut('function cpbRender() {', 'function _cpbLibHtml(', 'render');
+  ok('…and a render tears an open peek down', /vetPrintPeekHide\(\)/.test(rend),
+     'the rows are rebuilt wholesale, so the peek is left pinned to an anchor that no longer exists');
+  ok('the opener is on window', /window\.cpbPreviewQuestion = cpbPreviewQuestion;/.test(src),
+     'the row uses it through an inline handler, and the module has its own scope');
+
   const held = cut('function _bankHeldSectionHtml() {', '\n// ONE writer, for one question', 'held section');
   ok('a held-back paper is listed where it can be released', /bankUnholdPaper/.test(held));
   ok('…grouped by the paper it belongs to', /_bankHeldGroupKey/.test(held),

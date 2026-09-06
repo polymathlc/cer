@@ -52,21 +52,24 @@ function harness() {
   };
   const window = {innerWidth:1200,innerHeight:800,addEventListener:(k,cb)=>{listeners[k]=cb;}};
   const factory = new Function('document','window','setTimeout','clearTimeout','_canAuthor','buildWorksheetHtml','_wsWritePreview','actions', `
-    let vettingList=[];
+    let vettingList=[], _cpbQuestions=[];
     const escapeHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;');
     const _wnyCachedNotes=()=>({cached:true}), wnyPrintOn=()=>false, akxPrintOn=()=>true;
     const previewOneQuestionPrint=(id,where)=>actions.push(['full',id,where]);
     const editQuestion=id=>actions.push(['edit',id]);
+    const cpbPreviewQuestion=id=>actions.push(['cpb-full',id]);
+    const cpbEditQuestion=id=>actions.push(['cpb-edit',id]);
     ${hover}
     return {show:vetPrintPeekShow,leave:vetPrintPeekLeave,keep:vetPrintPeekKeep,hide:vetPrintPeekHide,
       dismiss:vetPrintPeekDismiss,key:vetPrintPeekKeydown,button:vetPrintPeekButton,
-      full:vetPrintPeekFull,edit:vetPrintPeekEdit,get state(){return _vetPrintPeek},set list(x){vettingList=x}};
+      full:vetPrintPeekFull,edit:vetPrintPeekEdit,resolve:_vetPeekQuestion,
+      get state(){return _vetPrintPeek},set list(x){vettingList=x},set paper(x){_cpbQuestions=x}};
   `);
   const api = factory(document, window, (cb,ms)=>{const id=++timerSeq;timers.set(id,{cb,ms});return id;}, id=>timers.delete(id), ()=>author,
     (qs,title,opts)=>{rendered.push({qs,title,opts});return '<p>exported</p>';},
     (frame,html,opts)=>written.push({frame,html,opts}), actions);
-  function anchor(id) {
-    const a=new El('button'); a.dataset.qid=id;
+  function anchor(id, scope) {
+    const a=new El('button'); a.dataset.qid=id; if (scope) a.dataset.scope=scope;
     a.getBoundingClientRect=()=>({left:1000,right:1030,top:300});
     a.focus=()=>{document.activeElement=a;api.show(a);};
     return a;
@@ -84,6 +87,43 @@ test('eye precedes the Vetting traffic light and supports keyboard and touch', (
   for(const name of ['onpointerenter','onfocus','onclick','aria-label','aria-haspopup']) assert.ok(html.includes(name));
   assert.match(css,/\.vet-print-eye:focus-visible/);
   for(const name of ['vetPrintPeekShow','vetPrintPeekLeave','vetPrintPeekFull']) assert.ok(src.includes(`window.${name} = ${name};`));
+});
+
+// 🗂️ The SAME peek, on a 🗂️ Custom Paper row. Its questions are in NEITHER
+// `questionBank` NOR `vettingList` until the paper is sent, so every failure
+// here is one pool's eye silently opening nothing — or, worse, resolving an id
+// against the wrong list and showing a different question entirely.
+test('the Custom Paper eye reads the paper, and routes to the paper\'s own doors', () => {
+  const h=harness(), paper=Q('p1'), vet={...Q('p1'), title:'A DIFFERENT question'};
+  h.api.list=[vet]; h.api.paper=[paper];
+  // the row emits the scope, and wears the row's own tool shape
+  const row=cut('function _cpbRowHtml(q, num, book, first, last)', 'function _cpbBookletHtml(');
+  assert.match(row,/\$\{vetPrintPeekButton\(q, 'cpb'\)\}/);
+  const html=h.button(paper,'cpb');
+  assert.match(html,/data-scope="cpb"/);
+  assert.match(html,/class="cpb-tool cpb-tool-eye vet-print-eye"/);
+  assert.match(html,/vetPrintPeekFull\(this\.dataset\.qid,this\.dataset\.scope\)/);
+  assert.match(css,/\.cpb-tool-eye svg/);
+  // …and the default is byte-for-byte the Vetting button it has always been
+  assert.match(h.button(paper),/class="qb-action-btn vet-print-eye"/);
+  assert.match(h.button(paper),/data-scope="vetting"/);
+  // ONE resolver, and an unknown scope falls back to Vetting rather than dying
+  assert.equal(h.resolve('p1','cpb').title,'Question p1');
+  assert.equal(h.resolve('p1','vetting').title,'A DIFFERENT question');
+  assert.equal(h.resolve('p1','nonsense').title,'A DIFFERENT question');
+  assert.equal(h.resolve('nope','cpb'),null);
+  // hovering renders the PAPER's copy, not the same id out of Vetting
+  const a=h.anchor('p1','cpb'); h.show(a,{pointerType:'mouse'}); h.flush();
+  assert.equal(h.rendered.length,1);
+  assert.equal(h.rendered[0].title,'Question p1');
+  // both foot buttons go to the paper's doors, never the bank's
+  h.api.state.host.children.filter(c=>c.tag==='button')[1].onclick();
+  h.show(h.anchor('p1','cpb'),{pointerType:'mouse'}); h.flush();
+  h.api.state.host.children.filter(c=>c.tag==='button')[2].onclick();
+  assert.deepEqual(h.actions,[['cpb-full','p1'],['cpb-edit','p1']]);
+  // and the rows are rebuilt wholesale, so the render tears an open peek down
+  assert.match(cut('function cpbRender()', 'function _cpbLibHtml('),/vetPrintPeekHide\(\)/);
+  assert.ok(src.includes('window.cpbPreviewQuestion = cpbPreviewQuestion;'));
 });
 
 test('passing over an eye and leaving avoids all rendering work', () => {
