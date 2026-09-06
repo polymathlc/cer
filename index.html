@@ -11386,6 +11386,17 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     </div>
 
     <div class="form-group">
+      <label class="form-label">Adding a question uses</label>
+      <select id="aiEngineAuthor" class="form-input" onchange="aiEngineAuthorPreview(this.value)">
+        <option value="openai">ChatGPT &mdash; gpt-6-astra (recommended for question building)</option>
+        <option value="gemini">Gemini</option>
+        <option value="kimi">Kimi</option>
+        <option value="follow">Whatever the engine above is</option>
+      </select>
+      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;">Reading a paper, lettering its parts, writing the answer and arguing the explanation is the hardest thinking this app asks for &mdash; and it is a handful of <strong>your</strong> calls, checked by you before anybody sees them. Marking thirty students is the opposite trade, so it keeps the engine above. This covers <strong>&#9889; Rapid add, &#129302; Build from screenshot / PDF, &#128196; Exam Paper, &#128260; Regenerate, the &#129302; AI answer and &#128221; explanation buttons and the auto-check</strong>. Whichever you choose, the others still take over the moment it refuses.</p>
+    </div>
+
+    <div class="form-group">
       <label class="form-label">ChatGPT model</label>
       <select id="aiEngineModel" class="form-input">
         <option value="gpt-6-astra" selected>gpt-6-astra &mdash; newest (recommended)</option>

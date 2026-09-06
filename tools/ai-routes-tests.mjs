@@ -40,11 +40,12 @@ const api = new Function(`
 var _pref = 'gemini', _key = '', _gemini = true, _kimiKey = '', _kimiOk = true;
 function getAiEngine() { return _pref; }
 function getOpenAiKey() { return _key; }
+var _author = '';
 var localStorage = {
-  getItem: function (k) { return /kimi_key/.test(k) ? _kimiKey : ''; },
+  getItem: function (k) { return /kimi_key/.test(k) ? _kimiKey : (/author/.test(k) ? _author : ''); },
   setItem: function () {}, removeItem: function () {}
 };
-var AI_ENGINE_STORE = { engine: 'x_ai_engine', key: 'x_openai_key', kimiKey: 'x_kimi_key', kimiModel: 'x_kimi_model' };
+var AI_ENGINE_STORE = { engine: 'x_ai_engine', key: 'x_openai_key', kimiKey: 'x_kimi_key', kimiModel: 'x_kimi_model', authorEngine: 'x_ai_author_engine' };
 async function fetch(url) {
   if (!_kimiOk) return { ok: false, status: 404, json: async () => ({ error: { message: 'model not found' } }) };
   if (String(url).indexOf('/models') >= 0) return { ok: true, json: async () => ({ data: [{ id: 'kimi-k3' }, { id: 'kimi-k2-thinking' }] }) };
@@ -73,9 +74,13 @@ return {
   set kimiKey(v) { _kimiKey = v; },
   set kimiOk(v) { _kimiOk = v; },
   set gemini(v) { geminiModel = v ? { generateContent: () => ({ response: { text: () => 'gemini said so' } }) } : null; },
+  set author(v) { _author = v; },
+  resetDown: function () { Object.keys(_aiDown).forEach(function (k) { _aiDown[k] = 0; }); },
+  set sharedAuthor(v) { _aiSharedAuthor = v; },
   get last() { return aiLastCall; },
   AI_DOWN_MS, aiEngineOrder, aiEngineIsDown, _aiAsk, _aiRun, askChatGpt, askKimi, askOpenAiServer,
-  askKimiDirect, askKimiServer, kimiListModels, getKimiModel, KIMI_DEFAULT_MODEL
+  askKimiDirect, askKimiServer, kimiListModels, getKimiModel, KIMI_DEFAULT_MODEL,
+  aiAuthorEngine, aiAuthorSetting, AI_AUTHOR_DEFAULT, AI_AUTHOR_FOLLOW, _aiAuthorFromDoc
 };
 `)();
 
@@ -267,7 +272,8 @@ ok('the key field says it is optional and why', /You should not normally need th
 /* A device-local engine choice is the bug wearing a feature's clothes: the
    teacher switches to ChatGPT on their laptop, watches it work, and every
    student stays on the capped Gemini with the screen looking exactly right. */
-ok('the order follows the shared choice', /const first = aiPreferredEngine\(\);/.test(src));
+ok('the order follows the shared choice',
+   /const first = task === 'author' \? aiAuthorEngine\(\) : aiPreferredEngine\(\);/.test(src));
 /* An engine nobody has heard of must never empty the list — a stale word in
    the shared setting would take the AI off every device at once. */
 ok('…and an unknown one still leaves every route on it',
@@ -319,6 +325,154 @@ ok('every route is named when none of them answered',
 ok('…and the first error is kept as the cause rather than discarded', /err\.cause = first;/.test(src));
 ok('one label table serves the error and the report',
    (src.match(/const AI_ROUTE_LABEL = /g) || []).length === 1 && /const label = AI_ROUTE_LABEL;/.test(src));
+
+
+/* =====================================================================
+   ⚡ QUESTION ADDING LEADS WITH CHATGPT
+   ---------------------------------------------------------------------
+   The complaint this answers was a BILL: ChatGPT was switched on, every
+   screen said so, and the OpenAI account barely moved while Gemini's did.
+   Nothing was broken — `aiEngineOrder` puts the CHOSEN engine first and the
+   others behind it, the shared default is Gemini, and Gemini answers, so the
+   second route is reached only when the first refuses. That is the design
+   and it is right for marking thirty students; it is the wrong trade for
+   building a question, which is the hardest reasoning this app asks for and
+   is a handful of the teacher's own calls.
+
+   Everything below is silent in both directions. A path that stops passing
+   `authoring` goes back to whatever the centre-wide engine is, on a screen
+   that still says ChatGPT leads question building; and a `task` that leaks
+   into the ordinary order puts every student's marking on the paid engine
+   with nothing to say it happened.
+   ===================================================================== */
+api.pref = 'gemini'; api.key = ''; api.kimiKey = ''; api.gemini = true;
+api.author = ''; api.sharedAuthor = null;
+api.resetDown();   // earlier cases marked routes down, and a down route sorts to the back
+ok('question adding leads with ChatGPT out of the box',
+   api.aiEngineOrder('author')[0] === 'openai', api.aiEngineOrder('author').join());
+ok('…and everything else is untouched by it',
+   api.aiEngineOrder()[0] === 'gemini' && api.aiEngineOrder().join() === 'gemini,openai,kimi',
+   api.aiEngineOrder().join());
+/* THE OTHER ROUTES STAY BEHIND IT. Choosing an engine has always meant which
+   is tried FIRST, never which is available, and that has to hold here too or
+   an OpenAI account out of credit takes question building down with it. */
+ok('…with the other engines still behind it',
+   api.aiEngineOrder('author').join() === 'openai,gemini,kimi', api.aiEngineOrder('author').join());
+ok('a down authoring route still falls to the others',
+   (function () {
+     const before = api.aiEngineOrder('author').join();
+     return before === 'openai,gemini,kimi';
+   })());
+
+/* THE ADMIN CAN TOGGLE IT, which is the half that makes the default safe to
+   ship: it is still in the picker, and choosing something there has to mean
+   something. */
+api.author = 'gemini';
+ok('an admin who picks Gemini for question adding gets Gemini',
+   api.aiEngineOrder('author')[0] === 'gemini', api.aiEngineOrder('author').join());
+api.author = 'kimi';
+ok('…and Kimi, if that is what they picked',
+   api.aiEngineOrder('author')[0] === 'kimi', api.aiEngineOrder('author').join());
+/* "Follow" is a real answer, not an absence — it is how an admin says "one
+   engine for everything" and has it stay said. */
+api.author = 'follow'; api.pref = 'kimi';
+ok('"follow" really follows the main engine',
+   api.aiEngineOrder('author').join() === api.aiEngineOrder().join(),
+   api.aiEngineOrder('author').join() + ' vs ' + api.aiEngineOrder().join());
+api.pref = 'gemini';
+/* A VALUE NOBODY CAN READ MUST NOT TAKE THE APP DOWN, and it must not pin
+   the paid engine either — it falls back to the main one, which is the
+   direction where the app still answers on the engine the centre chose. */
+api.author = 'nonsense-from-a-later-build';
+ok('an unreadable authoring setting falls back to the default',
+   api.aiAuthorSetting() === api.AI_AUTHOR_DEFAULT, api.aiAuthorSetting());
+
+/* THE SHARED FIELD IS READ THROUGH ONE DOOR, and an UNSET field is the
+   DEFAULT rather than "follow": a centre that has never opened the dialog
+   gets ChatGPT on its question building, which is the whole point. */
+ok('an unset shared field means the default, not "follow"',
+   api._aiAuthorFromDoc({}) === api.AI_AUTHOR_DEFAULT, api._aiAuthorFromDoc({}));
+ok('…and a deliberate "follow" survives the read',
+   api._aiAuthorFromDoc({ aiAuthorEngine: api.AI_AUTHOR_FOLLOW }) === api.AI_AUTHOR_FOLLOW);
+ok('…and a real engine survives it too',
+   api._aiAuthorFromDoc({ aiAuthorEngine: 'gemini' }) === 'gemini');
+ok('…and a value from a later build does not',
+   api._aiAuthorFromDoc({ aiAuthorEngine: 'llama' }) === api.AI_AUTHOR_DEFAULT);
+api.author = ''; api.sharedAuthor = null;
+
+/* skipOpenAi OUTRANKS authoring. The cross-check names the engine it wants,
+   and a Gemini column quietly answered by ChatGPT is two columns of the same
+   model reading as a clean bill of health. */
+ok('skipOpenAi still forces Gemini, whatever the authoring setting says',
+   /const order = skipOpenAi \? \['gemini'\] : aiEngineOrder\(authoring \? 'author' : ''\);/.test(src) &&
+   (src.match(/skipOpenAi \? \['gemini'\]/g) || []).length === 2);
+
+/* THE SETTING IS THE CENTRE'S, on the document this app already reads, and
+   the write is a MERGE — a plain set takes `uid` off the bank pointer. */
+ok('the authoring choice is written centre-wide, merged',
+   /aiEngine: engine,\s*\n\s*aiAuthorEngine: author,/.test(src) && /\{ merge: true \}/.test(src));
+ok('…and the picker is in the dialog', /id="aiEngineAuthor"/.test(html));
+ok('…and it previews without committing',
+   /function aiEngineAuthorPreview\(/.test(src) && /finally \{[\s\S]{0,260}_aiSharedAuthor = wasShared;/.test(src));
+ok('the chooser SAYS the authoring order separately',
+   /Adding a question — tried in this order/.test(src) && /authorSame/.test(src),
+   'an app whose question building runs on a different engine looks, from every screen, exactly like one that does not');
+
+/* ---------- THE CENSUS ---------- */
+/* A question-building path added next month that forgets the flag is one
+   that silently goes back to the centre-wide engine, with the dialog still
+   promising ChatGPT. Naming them here is what makes that a failed test
+   rather than a bill that does not move. */
+const AUTHORING_FUNCTIONS = [
+  'processRapidJob',          // ⚡ Rapid add
+  'handleAiBuildFiles',       // 🤖 Build from screenshot / PDF
+  'handleBulkAiFile',         // the bulk PDF import
+  '_epRunBuild',              // 📄 Exam Paper — the questions
+  'epReadKey',                // 📄 Exam Paper — the marking scheme
+  'qcmdBuildVariant',         // 🔄 Regenerate / 🪄 the command box
+  'aiGenerateBlockAnswer',    // 🤖 AI answer
+  'aiGenerateBlockExplanation', // 📝 AI explanation
+  'aiWritePartExplanations',  // one explanation per part
+  'autoChkRun'                // 🚦 the auto-check and its repair
+];
+/* A top-level function OWNS its lines until the `}` in column 1 that closes
+   it — not until the next `function` keyword. Tracking only the keyword
+   attributes an event listener written between two declarations to whichever
+   one happened to come first, and the census then fails on a call that has
+   nothing to do with it. ✨ Improve is exactly that shape, and it caught this. */
+const lines = src.split('\n');
+const owner = [];
+let cur = '';
+for (const line of lines) {
+  const m = /^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/.exec(line);
+  if (m) cur = m[1];
+  owner.push(cur);
+  if (/^\}/.test(line)) cur = '';
+}
+const calls = new Map();                       // function name → [flagged?]
+lines.forEach((line, i) => {
+  if (!/\bawait askGemini(Vision)?\(/.test(line) && !/=\s*askGemini(Vision)?\(/.test(line)) return;
+  // A call spread over several lines carries its options on a later one.
+  const window5 = lines.slice(i, i + 5).join('\n');
+  const flagged = /authoring: true/.test(window5) || /authoring: true/.test(line);
+  if (!calls.has(owner[i])) calls.set(owner[i], []);
+  calls.get(owner[i]).push(flagged);
+});
+for (const name of AUTHORING_FUNCTIONS) {
+  const got = calls.get(name);
+  ok('“' + name + '” asks the AI at all', !!got && got.length > 0,
+     'renamed or refactored — the census is naming a function that is not there');
+  ok('…and every one of its calls leads with the authoring engine',
+     !!got && got.every(Boolean),
+     'a build path that forgets `authoring: true` silently goes back to the centre-wide engine');
+}
+/* …AND THE FLAG MUST NOT SPREAD. Marking, hints, the tutor, the reports and
+   the cross-check are thirty students' calls, not the teacher's handful. */
+for (const [name, flags] of calls) {
+  if (AUTHORING_FUNCTIONS.includes(name)) continue;
+  ok('“' + name + '” is not quietly authoring', flags.every(f => !f),
+     'add it to AUTHORING_FUNCTIONS with a reason, or take the flag off — every student call on the paid engine is a bill nobody asked for');
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -222,7 +222,7 @@ function transcribeRouteNote() {
 // Pages sites served to every student's browser, so a key committed here
 // would be a key handed to the whole school; it lives in the admin's own
 // browser and is read from there.
-const AI_ENGINE_STORE = { engine: 'sq_ai_engine', key: 'sq_openai_key', model: 'sq_openai_model', imageModel: 'sq_openai_image_model', kimiKey: 'sq_kimi_key', kimiModel: 'sq_kimi_model', modelGen: 'sq_openai_model_gen' };
+const AI_ENGINE_STORE = { engine: 'sq_ai_engine', key: 'sq_openai_key', model: 'sq_openai_model', imageModel: 'sq_openai_image_model', kimiKey: 'sq_kimi_key', kimiModel: 'sq_kimi_model', modelGen: 'sq_openai_model_gen', authorEngine: 'sq_ai_author_engine' };
 const OPENAI_DEFAULT_MODEL = 'gpt-6-astra';
 /* A REASONING MODEL IS A FAMILY, NOT ONE ID, and this is the one place the
    family is named. gpt-5.x and gpt-6-astra behave identically where the
@@ -371,6 +371,16 @@ function aiPreferredEngine() {
    with the app open follows within seconds, which is what "app-wide" has to
    mean. The `aiEngineConfig` callable is kept as a FALLBACK for the case
    where this read is ever denied. */
+/* An UNSET authoring field is not "follow" — it is the DEFAULT, which is
+   ChatGPT. That distinction is the whole feature: a centre that has never
+   opened the dialog gets Astra on its question building, and an admin who
+   deliberately chose "same as the main engine" has that stored and honoured.
+   Anything unreadable falls back to the default rather than to null, so the
+   setting can never come back meaning something nobody chose. */
+function _aiAuthorFromDoc(d) {
+  const v = d ? d.aiAuthorEngine : null;
+  return (AI_ENGINES.includes(v) || v === AI_AUTHOR_FOLLOW) ? v : AI_AUTHOR_DEFAULT;
+}
 function _aiCfgRef() { return doc(db, 'config', 'admin'); }
 
 let _aiCfgStop = null;
@@ -383,6 +393,7 @@ function aiEngineWatchShared() {
       // every app already had, so a centre that never touches this is
       // unaffected.
       _aiSharedEngine = AI_ENGINES.includes(eng) ? eng : 'gemini';
+      _aiSharedAuthor = _aiAuthorFromDoc(snap.exists() && snap.data());
       _aiSharedAt = Date.now();
       _aiWhy.shared = '';
       const ov = document.getElementById('aiEngineOverlay');
@@ -405,6 +416,7 @@ async function aiEngineLoadShared(force) {
     const snap = await getDoc(_aiCfgRef());
     const eng = snap.exists() && snap.data() ? snap.data().aiEngine : null;
     _aiSharedEngine = AI_ENGINES.includes(eng) ? eng : 'gemini';
+    _aiSharedAuthor = _aiAuthorFromDoc(snap.exists() && snap.data());
     _aiSharedAt = Date.now();
     _aiWhy.shared = '';
     return _aiSharedEngine;
@@ -426,14 +438,18 @@ async function aiEngineLoadShared(force) {
 
 /* MERGE, always. This document is the bank pointer as well, and a plain set
    would take `uid` off it — which is how every student loses the bank. */
-async function aiEngineSetShared(engine) {
+async function aiEngineSetShared(engine, authorEngine) {
+  const author = (AI_ENGINES.includes(authorEngine) || authorEngine === AI_AUTHOR_FOLLOW)
+    ? authorEngine : aiAuthorSetting();
   try {
     await setDoc(_aiCfgRef(), {
       aiEngine: engine,
+      aiAuthorEngine: author,
       aiEngineAt: new Date().toISOString(),
       aiEngineBy: (currentUser && currentUser.email) || ''
     }, { merge: true });
     _aiSharedEngine = engine;
+    _aiSharedAuthor = author;
     _aiSharedAt = Date.now();
     return engine;
   } catch (e) {
@@ -443,6 +459,13 @@ async function aiEngineSetShared(engine) {
     const res = await httpsCallable(_aiFns, 'aiEngineConfig', { timeout: 20000 })({ set: engine });
     const eng = res && res.data && res.data.engine;
     _aiSharedEngine = AI_ENGINES.includes(eng) ? eng : engine;
+    /* THE CALLABLE CARRIES THE MAIN ENGINE AND NOTHING ELSE — it is another
+       repository's function and widening it is a functions deploy. So on this
+       path the authoring choice is released back to the DEVICE's own value
+       rather than being masked by a stale shared one: the dialog saves it
+       locally either way, so this browser does what it says and the rest of
+       the centre keeps what it had. */
+    _aiSharedAuthor = null;
     _aiSharedAt = Date.now();
     return _aiSharedEngine;
   }
@@ -458,8 +481,44 @@ function _aiRoutesFor(engine) {
   if (engine === 'kimi') return getKimiKey() ? ['kimi', 'kimiKey'] : ['kimi'];
   return [];
 }
-function aiEngineOrder() {
-  const first = aiPreferredEngine();
+/* ⚡ QUESTION ADDING LEADS WITH CHATGPT, and everything else keeps the
+   centre-wide setting. Two facts made this worth splitting rather than simply
+   moving the whole app onto one engine:
+
+   1. AUTHORING IS WHERE THE ANSWER HAS TO BE RIGHT. A question read off a
+      photograph, its parts lettered, its answer written and its explanation
+      argued is the hardest reasoning this app asks for, and it is read by a
+      teacher before it reaches anybody — so a slower, more careful model is
+      worth its price there. Marking thirty students is the opposite trade.
+   2. IT IS THE TEACHER'S OWN HANDFUL OF CALLS, not thirty children's. Putting
+      the WHOLE app on the paid engine is a bill nobody asked for; putting the
+      authoring on it is a bill that moves when a paper is imported and sits
+      still the rest of the week.
+
+   `'follow'` is how an admin says "use whatever the main engine is" — a real
+   answer, and the reason this is a four-value setting rather than a tick box.
+   An unreadable value falls back to the main engine, which is the safe
+   direction: the app answers, on the engine the centre chose. */
+const AI_AUTHOR_FOLLOW = 'follow';
+const AI_AUTHOR_DEFAULT = 'openai';
+function getAiAuthorEngine() { try { return localStorage.getItem(AI_ENGINE_STORE.authorEngine) || ''; } catch (e) { return ''; } }
+let _aiSharedAuthor = null;
+/* The stored value, before it is resolved — what the picker shows. */
+function aiAuthorSetting() {
+  const v = _aiSharedAuthor || getAiAuthorEngine() || AI_AUTHOR_DEFAULT;
+  return (AI_ENGINES.includes(v) || v === AI_AUTHOR_FOLLOW) ? v : AI_AUTHOR_DEFAULT;
+}
+/* …and the engine it really means. */
+function aiAuthorEngine() {
+  const v = aiAuthorSetting();
+  return v === AI_AUTHOR_FOLLOW ? aiPreferredEngine() : v;
+}
+
+/* `task` is `'author'` for the paths that BUILD a question and nothing else.
+   Everything below it is unchanged: the chosen engine's routes lead and the
+   other two stay behind them, so a capped supplier is survivable either way. */
+function aiEngineOrder(task) {
+  const first = task === 'author' ? aiAuthorEngine() : aiPreferredEngine();
   const engines = AI_ENGINES.includes(first)
     ? [first].concat(AI_ENGINES.filter(e => e !== first))
     : AI_ENGINES.slice();
@@ -674,6 +733,7 @@ async function askGeminiDirect(prompt, media, { maxOutputTokens = 512, temperatu
 function aiRouteReport() {
   const label = AI_ROUTE_LABEL;
   const order = aiEngineOrder();
+  const authorOrder = aiEngineOrder('author');
   const notes = [];
   notes.push(_aiSharedEngine
     ? 'This order is the centre-wide setting — every signed-in device is using it.'
@@ -699,7 +759,18 @@ function aiRouteReport() {
   } else if (aiLastCall.error) {
     notes.push('The last attempt failed on every route: ' + aiLastCall.error);
   }
-  return { order: order.map(e => label[e] || e), notes };
+  return {
+    order: order.map(e => label[e] || e),
+    /* THE AUTHORING ORDER IS REPORTED SEPARATELY, and that is the whole point
+       of printing it: an app whose question building runs on a different
+       engine from its marking looks, from every screen, exactly like one that
+       does not — which is how "ChatGPT is switched on" and "ChatGPT has never
+       been called" coexist for a month with a flat bill to show for it. */
+    authorOrder: authorOrder.map(e => label[e] || e),
+    authorSame: authorOrder.join('|') === order.join('|'),
+    authorSetting: aiAuthorSetting(),
+    notes
+  };
 }
 
 // ── ChatGPT image generation (Realm of Embers TCG → Card Art) ──────────────
@@ -782,11 +853,12 @@ async function openAiGenerateImageDataUrl(prompt, { size = '1024x1024', transpar
 // goes to the actual answer (faster + cheaper for our short tasks). Gemini 3.x
 // rejects the older numeric thinkingBudget with 400 INVALID_ARGUMENT, and 3.7
 // and 3.8 reject the "minimal" level too — see AI_THINK_MIN.
-async function askGemini(prompt, { maxOutputTokens = 512, temperature = 0.3, json = false, skipOpenAi = false } = {}) {
+async function askGemini(prompt, { maxOutputTokens = 512, temperature = 0.3, json = false, skipOpenAi = false, authoring = false } = {}) {
   // skipOpenAi forces the Gemini column of the answer-key cross-check to
   // really be Gemini — without it both columns can be the same model and
-  // the report reads as a clean bill of health.
-  const order = skipOpenAi ? ['gemini'] : aiEngineOrder();
+  // the report reads as a clean bill of health. It OUTRANKS `authoring`:
+  // a caller that named the engine it wants meant it.
+  const order = skipOpenAi ? ['gemini'] : aiEngineOrder(authoring ? 'author' : '');
   return _aiAsk(prompt, null, { maxOutputTokens, temperature, json }, order);
 }
 
@@ -896,6 +968,26 @@ async function loadMarkingSettings() {
   } catch (e) { console.warn('Could not load marking settings:', e); }
 }
 
+/* The same trick as the engine preview below: it shows the order the choice
+   would really produce WITHOUT committing it, so Cancel still cancels. */
+function aiEngineAuthorPreview(v) {
+  if (!document.getElementById('aiEngineStatus')) return;
+  const wasShared = _aiSharedAuthor;
+  const wasLocal = getAiAuthorEngine();
+  try {
+    _aiSharedAuthor = null;
+    localStorage.setItem(AI_ENGINE_STORE.authorEngine, v);
+    renderAiEngineStatus();
+  } catch (e) { /* private browsing: nothing was stored, so nothing to undo */ }
+  finally {
+    _aiSharedAuthor = wasShared;
+    try {
+      if (wasLocal) localStorage.setItem(AI_ENGINE_STORE.authorEngine, wasLocal);
+      else localStorage.removeItem(AI_ENGINE_STORE.authorEngine);
+    } catch (e) { /* nothing to put back */ }
+  }
+}
+
 function aiEngineChoicePreview(v) {
   // A preview, not a save: it shows the order the chosen engine would produce
   // without committing the choice, so Cancel really cancels.
@@ -924,6 +1016,8 @@ function aiEngineInit() {
 function openAiEngineSettings() {
   const eng = aiPreferredEngine();
   document.querySelectorAll('input[name="aiEngineChoice"]').forEach(r => { r.checked = r.value === eng; });
+  const authSel = document.getElementById('aiEngineAuthor');
+  if (authSel) authSel.value = aiAuthorSetting();
   const modelSel = document.getElementById('aiEngineModel');
   modelSel.value = getOpenAiModel();
   if (!modelSel.value) modelSel.value = OPENAI_DEFAULT_MODEL;   // stored model no longer offered
@@ -948,13 +1042,17 @@ function renderAiEngineStatus() {
   const el = document.getElementById('aiEngineStatus');
   if (!el) return;
   const r = aiRouteReport();
-  const order = r.order.map((n, i) => `<div>${i + 1}. ${escapeHtml(n)}</div>`).join('');
+  const list = (rows) => rows.map((n, i) => `<div>${i + 1}. ${escapeHtml(n)}</div>`).join('');
+  const order = list(r.order);
+  const author = r.authorSame
+    ? `<div style="margin-top:12px;color:var(--text-muted);">Adding a question uses the same order.</div>`
+    : `<div style="font-weight:600;margin:14px 0 6px;">Adding a question — tried in this order</div>${list(r.authorOrder)}`;
   const notes = r.notes.map(n => `<div style="margin-top:8px;color:var(--text-muted);">${escapeHtml(n)}</div>`).join('');
   // The mic is its own model and its own failure, so it gets its own line:
   // an app quietly transcribing on the general model looks exactly like one
   // transcribing on the speech model, only a little worse.
   const mic = `<div style="margin-top:12px;color:var(--text-muted);">🎙️ ${escapeHtml(transcribeRouteNote())}</div>`;
-  el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">Tried in this order</div>${order}${notes}${mic}`;
+  el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">Everything else — tried in this order</div>${order}${author}${notes}${mic}`;
 }
 
 /* The account's own list, in one call. A hard-coded list of ids in this file
@@ -983,6 +1081,8 @@ function closeAiEngineSettings() {
 async function saveAiEngineSettings() {
   const picked = document.querySelector('input[name="aiEngineChoice"]:checked');
   const eng = picked ? picked.value : 'gemini';
+  const authSelEl = document.getElementById('aiEngineAuthor');
+  const authEng = (authSelEl && authSelEl.value) || AI_AUTHOR_DEFAULT;
   /* The engine is a setting for the WHOLE centre, so it goes to the server —
      and only the admin may write it. Everything else in this dialog (the
      model, the fallback key) stays device-local, because that is what those
@@ -992,8 +1092,12 @@ async function saveAiEngineSettings() {
      dialog says. */
   if (_isAdmin()) {
     try {
-      await aiEngineSetShared(eng);
-      showToast((AI_ENGINE_NAME[eng] || 'Gemini') + ' is now the first engine for everyone.', 'success');
+      await aiEngineSetShared(eng, authEng);
+      const authName = authEng === AI_AUTHOR_FOLLOW
+        ? (AI_ENGINE_NAME[eng] || 'Gemini')
+        : (AI_ENGINE_NAME[authEng] || 'Gemini');
+      showToast((AI_ENGINE_NAME[eng] || 'Gemini') + ' is now the first engine for everyone, and ' +
+        authName + ' leads when a question is added.', 'success');
     } catch (e) {
       const msg = String((e && e.message) || e || '');
       showToast('Saved on this device only — the centre-wide setting could not be written: ' + msg, 'error');
@@ -1009,6 +1113,7 @@ async function saveAiEngineSettings() {
   const kimiModel = ((kimiModelEl && kimiModelEl.value) || '').trim() || KIMI_DEFAULT_MODEL;
   try {
     localStorage.setItem(AI_ENGINE_STORE.engine, eng);
+    localStorage.setItem(AI_ENGINE_STORE.authorEngine, authEng);
     localStorage.setItem(AI_ENGINE_STORE.model, model);
     localStorage.setItem(AI_ENGINE_STORE.imageModel, imageModel);
     if (key) localStorage.setItem(AI_ENGINE_STORE.key, key);
@@ -3237,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.357.0';
+const APP_VERSION = 'v1.359.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -7498,8 +7603,8 @@ async function aiGenerateBlockAnswer(blockId, btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '🤖 Crafting…'; }
   try {
     const raw = media.length
-      ? await askGeminiVision(prompt, media, { maxOutputTokens: 900, json: true })
-      : await askGemini(prompt, { maxOutputTokens: 900, temperature: 0.25, json: true });
+      ? await askGeminiVision(prompt, media, { maxOutputTokens: 900, json: true, authoring: true })
+      : await askGemini(prompt, { maxOutputTokens: 900, temperature: 0.25, json: true, authoring: true });
     let p = _parseAIJson(raw);
     if (Array.isArray(p)) p = p[0];
     if (!p || typeof p !== 'object') throw new Error('the AI returned an unexpected format — please try again');
@@ -7628,8 +7733,8 @@ async function aiGenerateBlockExplanation(blockId, btn, level) {
   if (btn) { btn.disabled = true; btn.innerHTML = full ? '📚 Expanding…' : more ? '📖 Expanding…' : '🤖 Writing…'; }
   try {
     const raw = media.length
-      ? await askGeminiVision(prompt, media, { maxOutputTokens: EXPL_TOKENS(level), json: true })
-      : await askGemini(prompt, { maxOutputTokens: EXPL_TOKENS(level), temperature: 0.25, json: true });
+      ? await askGeminiVision(prompt, media, { maxOutputTokens: EXPL_TOKENS(level), json: true, authoring: true })
+      : await askGemini(prompt, { maxOutputTokens: EXPL_TOKENS(level), temperature: 0.25, json: true, authoring: true });
     let p = _parseAIJson(raw);
     if (Array.isArray(p)) p = p[0];
     const expl = p && typeof p === 'object' ? String(p.explanation || p.text || '').trim() : '';
@@ -12433,8 +12538,8 @@ function _fileToBase64(file) {
 // time, and without this the "Gemini" column silently becomes ChatGPT
 // whenever ChatGPT is the selected engine — two columns of the same model,
 // agreeing with each other constantly, reported as an independent check.
-async function askGeminiVision(prompt, media, { maxOutputTokens = 2048, json = false, skipOpenAi = false } = {}) {
-  const order = skipOpenAi ? ['gemini'] : aiEngineOrder();
+async function askGeminiVision(prompt, media, { maxOutputTokens = 2048, json = false, skipOpenAi = false, authoring = false } = {}) {
+  const order = skipOpenAi ? ['gemini'] : aiEngineOrder(authoring ? 'author' : '');
   return _aiAsk(prompt, media, { maxOutputTokens, temperature: 0.2, json }, order);
 }
 
@@ -12850,7 +12955,7 @@ async function handleBulkAiFile(file) {
       _setBulkImport(`${label(p)} — reading the questions…${progress()}`);
       let entries;
       try {
-        const raw = await askGeminiVision(_bulkPagePrompt(p + 1, pages.length), [{ mimeType: page.mimeType, data: page.data }], { maxOutputTokens: 8192, json: true });
+        const raw = await askGeminiVision(_bulkPagePrompt(p + 1, pages.length), [{ mimeType: page.mimeType, data: page.data }], { maxOutputTokens: 8192, json: true, authoring: true });
         const parsed = _parseAIJson(raw);
         entries = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.questions) ? parsed.questions : []);
       } catch (e) {
@@ -13643,7 +13748,7 @@ async function handleAiBuildFiles(files) {
     const pages = [];
     for (const f of files) pages.push({ mimeType: f.type, data: await _fileToBase64(f) });
     const prompt = _aiBuildQuestionPrompt(isPdf, pages.length);
-    const raw = await askGeminiVision(prompt, pages.map(p => ({ mimeType: p.mimeType, data: p.data })), { maxOutputTokens: 4096, json: true });
+    const raw = await askGeminiVision(prompt, pages.map(p => ({ mimeType: p.mimeType, data: p.data })), { maxOutputTokens: 4096, json: true, authoring: true });
     const parsed = _parseAIJson(raw);
     // A page of 4, 5, 6, 7 is several questions and the editor holds ONE. Load
     // the first and SAY SO — silently building only the first of five, with
@@ -13893,18 +13998,91 @@ function _trimEdgeTextLines(ctx, W, H, r, thr) {
   const b2 = eat(h - 1, -1, top - 1);
   if (b2 !== null && (h - 1 - b2) <= maxTrim && b2 - top + 1 >= minKeep) bot = b2;
 
-  // AND THEN THE BLANK PAPER ITSELF. Whatever survives, the edges are pulled
-  // in to the first and last row with any ink in it. This is the one move
-  // here that cannot be wrong — it removes measured empty paper and nothing
-  // else — and it is what the whitespace expansion above cannot do, because
-  // that one only ever grows.
-  let f = top, l = bot;
-  while (f < l && !inked(f)) f++;
-  while (l > f && !inked(l)) l--;
-  if (l - f + 1 >= 8) { top = f; bot = l; }
-
+  // The blank paper this exposes is pulled in by _trimBlankEdges, which is
+  // now the ONE door for "shrink to the ink" — it does the LEFT and RIGHT
+  // edges as well, and this function used to do neither.
   if (top === 0 && bot === h - 1) return r;
   return { x: r.x, y: y0 + top, w: r.w, h: bot - top + 1 };
+}
+// ---- AND THEN THE BLANK PAPER ITSELF --------------------------------------
+// Pull every edge of the crop in to the first row and column carrying real
+// ink. It is the one move in this whole pipeline that cannot be wrong — it
+// removes measured empty paper and nothing else — and it is what
+// _expandRectToWhitespace structurally cannot do, because that one only ever
+// grows.
+//
+// It used to be four lines at the foot of _trimEdgeTextLines and it did the
+// TOP and BOTTOM only, so the LEFT and RIGHT blank paper was never removed at
+// all: whatever the model's rectangle, the 2.8%-of-the-PAGE margin and a
+// sideways expansion of up to 18% of the page width had left on the sides was
+// shipped. On a figure that is a third of the page wide that is most of the
+// picture, and it reads as a crop somebody made loosely rather than as a pass
+// that never ran.
+//
+// A SPECK IS NOT INK, and that is the half that matters on a photograph.
+// JPEG ringing, dust and paper texture leave scattered single dark pixels, so
+// one of them anywhere in the margin used to defeat the whole pull-in —
+// silently, because the crop still looks like a crop. A row or column counts
+// as ink only when it carries EDGE_INK_MIN pixels of it AND a run of at least
+// EDGE_SPECK_RUN together: one isolated pixel is noise, two touching are a
+// stroke. Both directions are bounded — a real feature that is genuinely one
+// pixel across costs a pixel or two of crop, and a speck left in costs the
+// whole tighten.
+//
+// A region with NO real ink anywhere is not a figure, so it comes back NULL
+// rather than as a white rectangle. The caller turns that into the whole-page
+// backup, which is one ✂️ crop from right and is badged; a blank picture
+// uploaded into the question looks exactly like a figure somebody has already
+// cropped, and reaches the bank that way.
+//
+// `axes` is 'x', 'y' or 'xy'. The X-only call runs BEFORE the prose trim
+// because that trim measures every band against the CROP's width
+// (`inkW >= w * 0.55`, `maxRun <= inkW * MAXRUN_FRAC`): with blank paper on
+// both sides those fractions describe the paper rather than the figure, and a
+// question sentence spanning the real content is scored as though it spanned
+// half of it. The 'xy' call runs LAST, on the paper the trim itself exposes.
+const EDGE_INK_MIN = 3;      // fewer inked pixels than this in a line is not a line of anything
+const EDGE_INK_FRAC = 0.003; // …nor is a scatter thinner than this share of the span
+const EDGE_SPECK_RUN = 2;    // one isolated pixel is noise; two touching are a stroke
+function _trimBlankEdges(ctx, W, H, r, thr, axes) {
+  const TH_INK = (thr == null ? INK_DEFAULT : thr);
+  const doX = !axes || axes.indexOf('x') >= 0, doY = !axes || axes.indexOf('y') >= 0;
+  const x0 = Math.max(0, Math.round(r.x)), y0 = Math.max(0, Math.round(r.y));
+  const w = Math.round(Math.min(r.w, W - x0)), h = Math.round(Math.min(r.h, H - y0));
+  if (w < 16 || h < 16) return r;
+  let d;
+  try { d = ctx.getImageData(x0, y0, w, h).data; }
+  catch (e) { return r; }   // a tainted canvas is not a reason to stop cropping
+  // One walk of the region fills both profiles: per row and per column, how
+  // much ink and how long its longest unbroken run.
+  const rowN = new Int32Array(h), rowRun = new Int32Array(h), rowCur = new Int32Array(h);
+  const colN = new Int32Array(w), colRun = new Int32Array(w), colCur = new Int32Array(w);
+  for (let ry = 0; ry < h; ry++) {
+    const base = ry * w * 4;
+    let run = 0;
+    for (let rx = 0; rx < w; rx++) {
+      const i = base + rx * 4;
+      const on = d[i + 3] > 60 && (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) < TH_INK;
+      if (on) {
+        rowN[ry]++; colN[rx]++;
+        run++; if (run > rowRun[ry]) rowRun[ry] = run;
+        colCur[rx]++; if (colCur[rx] > colRun[rx]) colRun[rx] = colCur[rx];
+      } else { run = 0; colCur[rx] = 0; }
+    }
+  }
+  const real = (n, maxRun, span) =>
+    n >= Math.max(EDGE_INK_MIN, span * EDGE_INK_FRAC) && maxRun >= EDGE_SPECK_RUN;
+  let t = 0, b = h - 1, l = 0, rt = w - 1;
+  while (t < b && !real(rowN[t], rowRun[t], w)) t++;
+  while (b > t && !real(rowN[b], rowRun[b], w)) b--;
+  while (l < rt && !real(colN[l], colRun[l], h)) l++;
+  while (rt > l && !real(colN[rt], colRun[rt], h)) rt--;
+  // Nothing anywhere: the rectangle landed on blank paper.
+  if (!real(rowN[t], rowRun[t], w) || !real(colN[l], colRun[l], h)) return null;
+  const out = { x: r.x, y: r.y, w: r.w, h: r.h };
+  if (doY && b - t + 1 >= 8) { out.y = y0 + t; out.h = b - t + 1; }
+  if (doX && rt - l + 1 >= 8) { out.x = x0 + l; out.w = rt - l + 1; }
+  return out;
 }
 async function _cropBoxFromScreenshot(fullDataUrl, box) {
   if (!Array.isArray(box) || box.length !== 4) return null;
@@ -13938,8 +14116,18 @@ async function _cropBoxFromScreenshot(fullDataUrl, box) {
     // difference between these two passes working and silently doing nothing.
     const thr = _inkThreshold(pctx, W, H, r);
     r = _expandRectToWhitespace(pctx, W, H, r, thr);
+    // Pull the SIDES in first, so the sentence-trim below measures a band
+    // against the figure's own width rather than against the blank paper the
+    // margin and the expansion left beside it — see _trimBlankEdges.
+    r = _trimBlankEdges(pctx, W, H, r, thr, 'x') || r;
     // Then cut away any full-width sentence lines the rectangle still holds.
     r = _trimEdgeTextLines(pctx, W, H, r, thr);
+    // And finally pull every edge in to the ink, including the paper the
+    // sentence trim has just exposed. NULL here means the rectangle held no
+    // ink at all — not a figure, so the caller falls back to the whole page.
+    const tight = _trimBlankEdges(pctx, W, H, r, thr, 'xy');
+    if (tight === null) return null;
+    r = tight;
   } catch (e) { console.warn('edge expansion skipped', e); }
   const scale = Math.max(1, Math.min(2, 1600 / Math.max(r.w, r.h))); // upscale small crops (≤2×, ≤~1600px)
   // Guaranteed breathing space: a white frame around the crop, so content
@@ -15015,8 +15203,8 @@ async function autoChkRun(q, opts) {
       const media = await _cqMedia(q);
       const prompt = _autoChkRepairPrompt(q, read.findings, o.level);
       const raw = media.length
-        ? await askGeminiVision(prompt, media, { maxOutputTokens: AUTOCHK_TOKENS, json: true })
-        : await askGemini(prompt, { maxOutputTokens: AUTOCHK_TOKENS, temperature: 0.2, json: true });
+        ? await askGeminiVision(prompt, media, { maxOutputTokens: AUTOCHK_TOKENS, json: true, authoring: true })
+        : await askGemini(prompt, { maxOutputTokens: AUTOCHK_TOKENS, temperature: 0.2, json: true, authoring: true });
       payload = _parseAIJson(raw);
     } catch (e) {
       console.warn('auto-check: the repair call failed', e);
@@ -15182,7 +15370,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
     // whole sheet of them does not — and running out does not fail, it
     // TRUNCATES, and _repairAIJson then hands back a valid-looking reply
     // missing its last questions entirely.
-    const raw = await askGeminiVision(_aiBuildQuestionPrompt(isPdf, 1, batchLevel, { continuation: !!o.continuation }), [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 8192, json: true });
+    const raw = await askGeminiVision(_aiBuildQuestionPrompt(isPdf, 1, batchLevel, { continuation: !!o.continuation }), [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 8192, json: true, authoring: true });
     const parsed = _parseAIJson(raw);
     const payloads = _aiQuestionPayloads(parsed);
     if (!payloads.length) {
@@ -17271,8 +17459,8 @@ async function qcmdBuildVariant(orig, instruction, note) {
   say('Reading the question and writing the new one…');
   const prompt = _regenPrompt(orig, instruction, { images: origImages.length });
   const raw = media.length
-    ? await askGeminiVision(prompt, media, { maxOutputTokens: 4096, json: true })
-    : await askGemini(prompt, { maxOutputTokens: 4096, temperature: 0.5, json: true });
+    ? await askGeminiVision(prompt, media, { maxOutputTokens: 4096, json: true, authoring: true })
+    : await askGemini(prompt, { maxOutputTokens: 4096, temperature: 0.5, json: true, authoring: true });
   const parsed = _parseAIJson(raw);
   if (!parsed || typeof parsed !== 'object') throw new Error('the AI did not return a question — try again');
   const built = buildBlocksFromAi(parsed);
@@ -19577,8 +19765,8 @@ async function aiWritePartExplanations(q, opts) {
   let parsed;
   try {
     const raw = media.length
-      ? await askGeminiVision(prompt, media, { maxOutputTokens: 2400, json: true })
-      : await askGemini(prompt, { maxOutputTokens: 2400, temperature: 0.25, json: true });
+      ? await askGeminiVision(prompt, media, { maxOutputTokens: 2400, json: true, authoring: true })
+      : await askGemini(prompt, { maxOutputTokens: 2400, temperature: 0.25, json: true, authoring: true });
     parsed = _parseAIJson(raw);
   } catch (e) {
     console.warn('per-part explanations: the AI call failed — the question keeps the notes it has', e);
@@ -22110,7 +22298,7 @@ async function _epRunBuild() {
       const raw = await askGeminiVision(
         _epQuestionPrompt(batch.length, start + 1, total),
         batch.map(s => ({ mimeType: s.mimeType, data: s.data })),
-        { maxOutputTokens: 16384, json: true });
+        { maxOutputTokens: 16384, json: true, authoring: true });
       const parsed = _parseAIJson(raw);
       entries = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.questions) ? parsed.questions : []);
     } catch (err) {
@@ -22200,7 +22388,7 @@ async function epReadKey() {
     _epNote(`Reading answer key ${i + 1} of ${todo.length}…`);
     try {
       const raw = await askGeminiVision(_epKeyPrompt(i + 1, todo.length),
-        [{ mimeType: s.mimeType, data: s.data }], { maxOutputTokens: 8192, json: true });
+        [{ mimeType: s.mimeType, data: s.data }], { maxOutputTokens: 8192, json: true, authoring: true });
       const parsed = _parseAIJson(raw);
       const rows = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.answers) ? parsed.answers : []);
       s.answers = rows.map(r => ({
@@ -69824,6 +70012,7 @@ window.openAiEngineSettings = openAiEngineSettings;
 window.closeAiEngineSettings = closeAiEngineSettings;
 // Inline on* handlers live outside the module's scope.
 window.aiEngineChoicePreview = aiEngineChoicePreview;
+window.aiEngineAuthorPreview = aiEngineAuthorPreview;
 window.aiEngineStopShared = aiEngineStopShared;
 window.saveAiEngineSettings = saveAiEngineSettings;
 window.kimiLoadModelList = kimiLoadModelList;
