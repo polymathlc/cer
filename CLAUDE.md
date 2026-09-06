@@ -1329,7 +1329,7 @@ step**; what genuinely differs here is the question SHAPE and the agreement
 test, and both are called out below.
 
 ✅ Check Questions serves a question back to a HUMAN for a second pair of eyes.
-This asks **two models** — ChatGPT (`gpt-5.6-sol` by default) and Gemini
+This asks **two models** — ChatGPT (`gpt-6-astra` by default) and Gemini
 (`AI_MODEL`) — to answer every question from scratch **simultaneously**, and
 reports their two answers beside the teacher's own key, with a recommendation.
 Gated on `_canAuthor()`.
@@ -3263,6 +3263,25 @@ cap`, on every call, on every device, until the month turns over.
 - **`askGeminiDirect` is the raw Gemini call, written once.** Both doors used
   to carry their own copy of it, and both carried their own copy of the
   one-way ChatGPT fallback too.
+- **A REASONING MODEL IS A FAMILY, NOT ONE ID** (`OPENAI_REASONING_RE`,
+  v1.357.0). The default is **`gpt-6-astra`** now, and gpt-5.x and gpt-6-astra
+  want the same request SHAPE — `reasoning_effort` yes, `temperature` never.
+  A gate written as `/^gpt-5/` therefore does not merely miss the newer model,
+  it sends it the WRONG request: a temperature it answers with a **400**, and
+  no thinking at all. Both are silent — the call falls to the next route for a
+  reason nothing on screen can name, or comes back fluent and thin. So the
+  family is named ONCE and every gate asks it. `bar-model.html` carries its own
+  copy (`isReasoning`) because it is a standalone page.
+- **A DEFAULT NOBODY CHOSE IS NOT A CHOICE** (`OPENAI_SUPERSEDED_MODELS` /
+  `OPENAI_MODEL_GEN` / the one-shot lift). The stored model is written every
+  time the AI Engine dialog is saved, so almost everyone is carrying
+  yesterday's default pinned in their own settings — and a NEW default then
+  reaches nobody who has ever opened that dialog, on a screen still naming the
+  old model. That is the whole upgrade silently not happening. A model that was
+  only ever a default is lifted ONCE, per device; the flag is what makes a
+  DELIBERATE pick of the old model stick, because it is still in the dropdown
+  and choosing it there has to mean something. Bump `OPENAI_MODEL_GEN` and add
+  the outgoing id to `OPENAI_SUPERSEDED_MODELS` on the next flagship.
 - **The chooser SAYS what is actually happening** (`renderAiEngineStatus`),
   because an app quietly running on its second route looks exactly like one
   running on its first, and an app with nothing behind its first looks like

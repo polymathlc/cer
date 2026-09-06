@@ -222,8 +222,34 @@ function transcribeRouteNote() {
 // Pages sites served to every student's browser, so a key committed here
 // would be a key handed to the whole school; it lives in the admin's own
 // browser and is read from there.
-const AI_ENGINE_STORE = { engine: 'sq_ai_engine', key: 'sq_openai_key', model: 'sq_openai_model', imageModel: 'sq_openai_image_model', kimiKey: 'sq_kimi_key', kimiModel: 'sq_kimi_model' };
-const OPENAI_DEFAULT_MODEL = 'gpt-5.6-sol';
+const AI_ENGINE_STORE = { engine: 'sq_ai_engine', key: 'sq_openai_key', model: 'sq_openai_model', imageModel: 'sq_openai_image_model', kimiKey: 'sq_kimi_key', kimiModel: 'sq_kimi_model', modelGen: 'sq_openai_model_gen' };
+const OPENAI_DEFAULT_MODEL = 'gpt-6-astra';
+/* A REASONING MODEL IS A FAMILY, NOT ONE ID, and this is the one place the
+   family is named. gpt-5.x and gpt-6-astra behave identically where the
+   request SHAPE is concerned — both take `reasoning_effort` and both REFUSE a
+   temperature — so a gate written as /^gpt-5/ does not merely miss the newer
+   model, it sends it the WRONG REQUEST: a temperature it answers with a 400,
+   and no thinking at all. Both are silent: the call drops to the other engine
+   for a reason nothing on screen can name, or comes back fluent and thin. */
+const OPENAI_REASONING_RE = /^(gpt-[5-9]|o[1-9])/;
+/* THE MODEL AN ADMIN NEVER CHOSE IS NOT A CHOICE. The stored model is written
+   every time the AI Engine dialog is saved, so almost everyone is carrying
+   yesterday's DEFAULT pinned in their own settings — and a new default would
+   then reach nobody who had ever opened that dialog, on a screen still naming
+   the old model. That is the whole upgrade silently not happening. So a model
+   that was only ever a default is lifted to the new one ONCE, per device, and
+   the flag is what makes a DELIBERATE pick of the old model stick: it is still
+   in the dropdown, and choosing it there has to mean something. */
+const OPENAI_SUPERSEDED_MODELS = ['gpt-5.6-sol'];
+const OPENAI_MODEL_GEN = 'astra';
+(function _openAiLiftDefaultOnce() {
+  try {
+    if (localStorage.getItem(AI_ENGINE_STORE.modelGen) === OPENAI_MODEL_GEN) return;
+    localStorage.setItem(AI_ENGINE_STORE.modelGen, OPENAI_MODEL_GEN);
+    var m = (localStorage.getItem(AI_ENGINE_STORE.model) || '').trim();
+    if (m && OPENAI_SUPERSEDED_MODELS.indexOf(m) >= 0) localStorage.setItem(AI_ENGINE_STORE.model, OPENAI_DEFAULT_MODEL);
+  } catch (e) { /* private browsing: nothing is stored, so there is nothing to lift */ }
+})();
 function getAiEngine() { try { return localStorage.getItem(AI_ENGINE_STORE.engine) || 'gemini'; } catch (e) { return 'gemini'; } }
 function getOpenAiKey() { try { return (localStorage.getItem(AI_ENGINE_STORE.key) || '').trim(); } catch (e) { return ''; } }
 function getOpenAiModel() { try { return localStorage.getItem(AI_ENGINE_STORE.model) || OPENAI_DEFAULT_MODEL; } catch (e) { return OPENAI_DEFAULT_MODEL; } }
@@ -238,8 +264,8 @@ async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, js
   });
   const body = { model, messages: [{ role: 'user', content }], max_completion_tokens: Math.max(1024, maxOutputTokens) };
   if (json) body.response_format = { type: 'json_object' };
-  // gpt-5.x models only run at their default temperature; sending one is a 400
-  if (temperature !== undefined && !/^gpt-5/.test(model)) body.temperature = temperature;
+  // A reasoning model only runs at its default temperature; sending one is a 400
+  if (temperature !== undefined && !OPENAI_REASONING_RE.test(model)) body.temperature = temperature;
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getOpenAiKey() },
@@ -3211,7 +3237,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.356.0';
+const APP_VERSION = 'v1.357.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -7090,7 +7116,7 @@ async function _widgetAskAI(engine, effortKey, prompt) {
     const body = { model, messages: [{ role: 'user', content: prompt }] };
     if (eff.oa.maxTokens) body.max_completion_tokens = eff.oa.maxTokens;
     // Reasoning models take an effort knob; older chat models 400 on it.
-    if (/^(gpt-5|o\d)/.test(model)) body.reasoning_effort = eff.oa.effort;
+    if (OPENAI_REASONING_RE.test(model)) body.reasoning_effort = eff.oa.effort;
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },

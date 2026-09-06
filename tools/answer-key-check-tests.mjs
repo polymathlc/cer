@@ -86,7 +86,7 @@ const localStorage = { getItem: () => null, setItem: () => {} };
 const document = { getElementById: () => null };
 let geminiModel = {};
 const AI_MODEL = "gemini-3.8-flash";
-let openAiKey = "sk-test", openAiModel = "gpt-5.6-sol";
+let openAiKey = "sk-test", openAiModel = "gpt-6-astra";
 function getOpenAiKey() { return openAiKey; }
 function getOpenAiModel() { return openAiModel; }
 let bankShown = [];
