@@ -1150,5 +1150,209 @@ ok('window.cpbRebuild is exported — the page is inline on* handlers',
   ok('the mode chooser has its own styles', /\.cpb-mode-on \{/.test(html) && /\.cpb-modes \{/.test(html));
 }
 
+/* ------------------------------------------------------------------ *
+ * 🖨 EXPORTING A PAPER KEEPS IT.                                       *
+ *                                                                     *
+ * The export was the one moment on this page that persisted NOTHING:  *
+ * `cpbPrint` built HTML and printed it, and the only copy of the      *
+ * paper was the per-tab IndexedDB draft — that machine, that tab. A   *
+ * teacher who exported a paper at home and closed the browser had no  *
+ * copy on any server and nothing the computer in front of them could  *
+ * reach. That is a real afternoon, and it happened.                   *
+ *                                                                     *
+ * Every failure here is silent, and they point opposite ways:         *
+ *                                                                     *
+ *  • THE KEEP NOT HAPPENING is the original loss, restored — and now  *
+ *    worse, because the teacher has been told the export keeps it.    *
+ *    So a refusal is SAID OUT LOUD rather than swallowed.             *
+ *  • THE KEEP INTERFERING is the export failing, waiting on, or being *
+ *    changed by a write nobody asked for. It is started and not       *
+ *    awaited, and the automatic path neither greys the page's buttons *
+ *    out nor repaints it mid-print.                                   *
+ *  • A SECOND WRITER is the 💾 button and the export drifting apart   *
+ *    over the size cap, the shelf cap or the payload — which is this  *
+ *    very fault arriving through its own fix.                         *
+ *  • REUSING `_cpbLibId` is what stops a paper exported six times     *
+ *    being six rows on a shelf that caps at CPB_LIB_MAX.              *
+ * ------------------------------------------------------------------ */
+{
+  const rowFns = cut('function _cpbLibRow(r) {', 'async function cpbLibLoad(', 'lib row fns');
+  const writer = cut('async function _cpbWritePaper(opts) {', '\nasync function _cpbLibOpenNow(', 'writer');
+
+  const run = (o) => {
+    const state = {
+      author: o.author !== false,
+      busy: !!o.busy,
+      questions: o.questions === undefined ? [{ id: 'q1' }] : o.questions,
+      typedName: o.typedName === undefined ? 'Paper A' : o.typedName,
+      title: o.title === undefined ? '2026 Cover Title' : o.title,
+      libId: o.libId || '',
+      lib: o.lib || [],
+      writes: [],
+      renders: 0,
+      busySet: [],
+      toasts: [],
+      notes: [],
+      fail: o.fail || null,
+    };
+    const shim = `
+      let _cpbLibBusy = ${state.busy};
+      let _cpbLibId = ${JSON.stringify(state.libId)};
+      let _cpbLib = S.lib;
+      const _cpbQuestions = S.questions;
+      const _cpbMeta = { name: S.typedName };
+      const currentUser = { uid: 'u1' };
+      const CPB_LIB_MAX = ${o.libMax === undefined ? 60 : o.libMax};
+      const CPB_LIB_MAX_BYTES = ${o.maxBytes === undefined ? 900 * 1024 : o.maxBytes};
+      const _canAuthor = () => S.author;
+      const _cpbMetaGet = (k) => (k === 'name' ? S.typedName : '');
+      const _cpbPaperTitle = () => S.title;
+      const cpbMarks = () => ({ nA: 1, nB: 2, total: 30 });
+      const cpbMode = () => 'paper';
+      const cpbThing = () => 'paper';
+      let _idN = 0;
+      const _cpbId = () => 'cpb_new' + (++_idN);   // fresh per call, like the real one
+      const _cpbLibDoc = (id) => ({ id });
+      const setDoc = async (ref, payload) => {
+        if (S.fail) { const e = new Error('nope'); e.code = S.fail; throw e; }
+        S.writes.push({ id: ref.id, payload });
+      };
+      const cpbRender = () => { S.renders++; S.busySet.push(_cpbLibBusy); };
+      const showToast = (m) => S.toasts.push(m);
+      const _cpbNote = (m) => S.notes.push(m);
+      const console = { warn() {} };
+      ${rowFns}
+      ${writer}
+      return { _cpbWritePaper, _cpbSaveFailNote, cpbSavePaper, _cpbKeepOnExport,
+               libId: () => _cpbLibId, lib: () => _cpbLib };
+    `;
+    const api = new Function('S', shim)(state);
+    return { state, api };
+  };
+
+  // ---- the manual door is unchanged --------------------------------
+  {
+    const { state, api } = run({});
+    const r = await api._cpbWritePaper({ auto: false });
+    ok('💾 the button still writes the paper', r.ok === true && state.writes.length === 1);
+    eq('…under the typed name', state.writes[0].payload.name, 'Paper A');
+    ok('…and the screenshots are still not in it',
+      !('shots' in state.writes[0].payload) && Array.isArray(state.writes[0].payload.questions));
+    ok('…and it still greys the page while it runs', state.busySet.includes(true),
+      'a second press mid-write would file the paper twice');
+  }
+  {
+    const { state, api } = run({ typedName: '   ' });
+    const r = await api._cpbWritePaper({ auto: false });
+    ok('💾 an unnamed paper is still REFUSED by the button', r.ok === false && r.reason === 'unnamed');
+    eq('…and nothing was written', state.writes.length, 0);
+  }
+
+  // ---- the automatic keep ------------------------------------------
+  {
+    const { state, api } = run({ typedName: '   ' });
+    const r = await api._cpbWritePaper({ auto: true });
+    ok('🖨 an UNNAMED paper is still kept on export', r.ok === true && state.writes.length === 1,
+      'the papers nobody has got round to naming are the ones most likely to be lost');
+    eq('…listed under the title printed on its own cover', state.writes[0].payload.name, '2026 Cover Title');
+  }
+  {
+    const { state, api } = run({ typedName: '', title: '' });
+    const r = await api._cpbWritePaper({ auto: true });
+    ok('…and a paper with no title either is STILL kept', r.ok === true && state.writes.length === 1,
+      'the shelf labels an empty name "Untitled paper"; refusing would lose the paper instead');
+  }
+  {
+    const { state, api } = run({});
+    await api._cpbWritePaper({ auto: true });
+    ok('🖨 the automatic keep never greys the page out mid-print',
+      !state.busySet.includes(true));
+  }
+  {
+    const { api } = run({});
+    const a = await api._cpbWritePaper({ auto: true });
+    const first = api.libId();
+    ok('🖨 the first export mints a shelf row', a.ok === true && /^cpb_new/.test(first));
+    const b = await api._cpbWritePaper({ auto: true });
+    ok('…and every export after it OVERWRITES that row', b.ok === true && api.libId() === first);
+    eq('…so a paper exported twice is ONE row on the shelf', api.lib().length, 1);
+  }
+  {
+    const { state, api } = run({ questions: [] });
+    const r = await api._cpbWritePaper({ auto: true });
+    ok('a paper with no questions is not kept', r.ok === false && r.reason === 'empty' && !state.writes.length);
+  }
+  {
+    const { state, api } = run({ author: false });
+    const r = await api._cpbWritePaper({ auto: true });
+    ok('a non-author writes nothing', r.ok === false && r.reason === 'role' && !state.writes.length);
+  }
+  {
+    const { api } = run({ maxBytes: 10 });
+    const r = await api._cpbWritePaper({ auto: true });
+    ok('a paper too big to fit is refused, not truncated', r.ok === false && r.reason === 'big' && r.kb >= 0);
+  }
+  {
+    const { api } = run({ libMax: 1, lib: [{ id: 'other' }] });
+    const r = await api._cpbWritePaper({ auto: true });
+    ok('a full shelf refuses rather than evicting somebody else s paper',
+      r.ok === false && r.reason === 'full');
+  }
+  {
+    const { api } = run({ libId: 'existing', libMax: 1, lib: [{ id: 'existing' }] });
+    const r = await api._cpbWritePaper({ auto: true });
+    ok('…but a paper ALREADY on the shelf is still kept when the shelf is full',
+      r.ok === true, 'it overwrites its own row and adds nothing');
+  }
+  {
+    const { api } = run({ fail: 'permission-denied' });
+    const r = await api._cpbWritePaper({ auto: true });
+    ok('a denied write is NAMED — it is a one-line rules fix', r.ok === false && r.reason === 'denied');
+    ok('…and the wording says so', /customPapers collection needs a rule/.test(api._cpbSaveFailNote(r)));
+  }
+
+  // ---- a keep that did not happen is said out loud ------------------
+  {
+    const { state, api } = run({ fail: 'unavailable' });
+    api._cpbKeepOnExport();
+    await new Promise(r => setTimeout(r, 0));
+    ok('🖨 a FAILED keep is reported to the teacher', state.toasts.some(t => /NOT kept on your shelf/.test(t)),
+      'a paper the teacher believes is on the shelf and is not is the whole fault this prevents');
+  }
+  {
+    const { state, api } = run({});
+    api._cpbKeepOnExport();
+    await new Promise(r => setTimeout(r, 0));
+    ok('…and a successful one says where the paper went',
+      state.notes.some(t => /Kept on your shelf/.test(t)),
+      'a costly invisible thing is a thing nobody trusts');
+  }
+  {
+    const { state, api } = run({ questions: [] });
+    api._cpbKeepOnExport();
+    await new Promise(r => setTimeout(r, 0));
+    eq('…and nothing is said when there was nothing to keep', state.toasts.length, 0);
+  }
+
+  // ---- the wiring --------------------------------------------------
+  const saveFn = cut('async function cpbSavePaper() {', '\n// 🖨 EXPORTING A PAPER KEEPS IT', 'cpbSavePaper');
+  ok('💾 the button writes nothing itself — ONE writer, two doors',
+    !/setDoc\(/.test(saveFn) && /_cpbWritePaper\(\{ auto: false \}\)/.test(saveFn));
+  ok('…and both doors read the SAME refusal wording',
+    /_cpbSaveFailNote\(r\)/.test(saveFn) && /_cpbSaveFailNote\(r\)/.test(cut('function _cpbKeepOnExport() {', '\nasync function _cpbLibOpenNow(', 'keep')));
+
+  const printFn = cut('async function cpbPrint() {', '\nfunction cpbPreview(', 'cpbPrint');
+  ok('🖨 the export starts the keep', /_cpbKeepOnExport\(\);/.test(printFn));
+  ok('…and does NOT await it — the export must never wait on a write',
+    !/await _cpbKeepOnExport/.test(printFn));
+  ok('…and starts it BEFORE the layout work, so a cancelled print still keeps the paper',
+    printFn.indexOf('_cpbKeepOnExport();') < printFn.indexOf('_printProgressShow'));
+  ok('the preview does NOT keep it — a look is not an export',
+    !/_cpbKeepOnExport/.test(cut('function cpbPreview() {', '\n// 👁 ONE QUESTION OFF THE PAPER', 'cpbPreview')));
+  ok('🖨 from inside the preview goes back through cpbPrint, so it keeps it too',
+    /if \(a\.source === 'custompaper'\) \{ cpbPrint\(\); return; \}/.test(src),
+    'one export door, or the preview s own printer silently keeps nothing');
+}
+
 console.log((fails ? '✗ ' : '✓ ') + (ran - fails) + '/' + ran + ' checks passed');
 process.exit(fails ? 1 : 0);

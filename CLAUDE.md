@@ -5175,6 +5175,55 @@ listed, and reopened whenever.
   does not have every render trying again behind a teacher who is working, and a
   denied write is NAMED — it is a one-line rules fix on `customPapers`.
 
+#### 🖨 …and EXPORTING a paper keeps it (v1.370.0)
+
+**`_cpbWritePaper({ auto })`** / `_cpbSaveFailNote` / **`_cpbKeepOnExport`**, and
+the one unawaited call at the top of `cpbPrint`.
+
+**The export was the one moment on this page that persisted NOTHING.**
+`cpbPrint` built HTML and printed it; the only copy of the paper was the per-tab
+draft, which is IndexedDB on THAT machine keyed to THAT tab. So a teacher who
+exported a paper at home and closed the browser had no copy on any server and
+nothing the computer in front of them could reach — the questions were not in
+the bank either, because nothing is written until Send. That is a real
+afternoon's work, and it happened. The export now writes the paper onto the 📁
+shelf, which is Firestore and therefore every device.
+
+- **THE EXPORT MUST NEVER FAIL, WAIT ON, OR BE CHANGED BY THE KEEP.** It is
+  started at the TOP of `cpbPrint` — before the image preload and the layout —
+  and deliberately **not awaited**, so a refused write, a full shelf or a dead
+  connection costs the teacher nothing they asked for, and a print they cancel
+  still keeps the paper.
+- **ONE WRITER, TWO DOORS.** The 💾 button and the keep both go through
+  `_cpbWritePaper`, which REPORTS rather than toasts because the two want
+  different wording for the same refusal (`_cpbSaveFailNote` is that wording,
+  written once). A second writer is the size cap, the shelf cap, the payload
+  shape and the row bookkeeping drifting apart — which is a paper the button
+  saves and the export quietly does not, i.e. this very fault arriving through
+  its own fix.
+- **IT REUSES `_cpbLibId`**, or a paper exported six times is six rows on a
+  shelf that caps at `CPB_LIB_MAX`.
+- **AN UNNAMED PAPER IS STILL KEPT.** The 💾 button refuses without a name,
+  which is right for a deliberate save onto a NAMED shelf and exactly backwards
+  here: the papers nobody has got round to naming are the ones most likely to be
+  lost. The keep takes `_cpbPaperTitle()` — the title printed on the cover — and
+  keeps the paper even when that is empty too, because the shelf already labels
+  an empty name *Untitled paper*.
+- **A KEEP THAT DID NOT HAPPEN IS SAID OUT LOUD.** A teacher who believes the
+  paper is on the shelf and finds it is not has lost it in exactly the way they
+  were told they could not, which is worse than never promising. A success gets
+  the quiet status line instead — a costly invisible thing is a thing nobody
+  trusts.
+- **The automatic path never sets `_cpbLibBusy`**, so it neither greys the
+  page's buttons out nor repaints it while the teacher is printing.
+- **👁 Preview does NOT keep it** — a look is not an export. 🖨 from inside the
+  preview does, because `printFromPreview` routes `custompaper` straight back to
+  `cpbPrint`: ONE export door, or the preview's own printer silently keeps
+  nothing.
+- **The screenshots are still not saved**, which was already true of the 💾
+  button. Once the questions are read out of them the pictures are worth nothing
+  to a paper being edited, and megabytes against a 1 MB document.
+
 ### 👁 Preview one question of the paper (v1.367.0)
 
 `cpbPreviewQuestion` and the `'cpbq'` preview source, plus the SCOPED exported
@@ -5527,6 +5576,17 @@ pupil writes, in their own words, what they were learning.
   and Booklet A's chip and Booklet B's read identically while counting
   different things; and stop treating 0 as "no target" and every short topical
   paper is nagged for being 22 questions short of a PSLE paper.
+  On the **KEEP**: drop `_cpbKeepOnExport()` from `cpbPrint` and the export
+  persists nothing again — a paper built at home and printed is gone the moment
+  the browser closes, on any machine but that one, with the questions not in
+  the bank either. `await` it and a dead connection is a print that never
+  happens. Let `cpbSavePaper` write a document of its own instead of going
+  through `_cpbWritePaper` and the button and the export drift apart over the
+  caps and the payload, which is that same loss arriving through its own fix.
+  Drop the `_cpbLibId ||` and a paper exported six times is six shelf rows;
+  make the automatic keep refuse an unnamed paper and the papers most likely to
+  be lost are exactly the ones it skips; and swallow a failed keep and the
+  teacher is told the export saved a paper that it did not.
 - After touching **🚦 the auto-check** (`AUTOCHK_TRIES`, `AUTOCHK_KEEP_FINDINGS`,
   `autoChkOn`, `autoChkRead`, `autoChkState`, `autoChkBetter`, `autoChkRun`,
   `_autoChkRepairPrompt`, `_autoChkApply`, `autoChkStamp`, `autoChkCardHtml`,
