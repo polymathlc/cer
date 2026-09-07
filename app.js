@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.369.0';
+const APP_VERSION = 'v1.369.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -24951,6 +24951,15 @@ function _cpbPaperOpts() {
       noStudentFields: true,
       answerKeyExtras: true,
       sectionHtmlById,
+      // 🎯 EXPLICITLY OFF, and it has to be said out loud here. `cpbPrint`
+      // calls `buildWorksheetHtml` directly with these `buildOpts` and would
+      // get `false` by default — but the PREVIEW goes through
+      // `_wsPreviewCtx`'s adhoc branch, which reads the 🖨 print picker's own
+      // `printIncludeObjBox`. `buildOpts` is assigned OVER the preview's base
+      // object, so without this line a teacher who has that box ticked sees a
+      // 🎯 box on every question of the preview that the PDF does not have —
+      // which is the one thing a preview must never be.
+      objectivesBoxAll: false,
       paper: {
         numbers,
         pageHtmlById,
@@ -25004,6 +25013,15 @@ function _cpbWorksheetOpts() {
       noStudentFields: !_cpbMetaGet('wsFields'),
       answerKeyExtras: true,
       sectionHtmlById,
+      // 🎯 EXPLICITLY OFF, and it has to be said out loud here. `cpbPrint`
+      // calls `buildWorksheetHtml` directly with these `buildOpts` and would
+      // get `false` by default — but the PREVIEW goes through
+      // `_wsPreviewCtx`'s adhoc branch, which reads the 🖨 print picker's own
+      // `printIncludeObjBox`. `buildOpts` is assigned OVER the preview's base
+      // object, so without this line a teacher who has that box ticked sees a
+      // 🎯 box on every question of the preview that the PDF does not have —
+      // which is the one thing a preview must never be.
+      objectivesBoxAll: false,
     },
   };
 }
@@ -34429,7 +34447,14 @@ function vetPrintPeekShow(anchor, event) {
       const html = buildWorksheetHtml([copy], q.title || 'Question', {
         frontHtml: '', plainNumbers: true, noStudentFields: true,
         whyNotes: _wnyCachedNotes([copy], wnyPrintOn('bank')),
-        answerKeyExtras: akxPrintOn('bank')
+        answerKeyExtras: akxPrintOn('bank'),
+        // …and the 🎯 box, off the SAME `bank` switches the two lines above
+        // already read. `previewOneQuestionPrint` — the FULL preview this
+        // hover's own "Open full preview" opens, on the very same question —
+        // reads it through `_wsPreviewCtx`'s adhoc branch, so leaving it out
+        // here is the hover and the full preview showing two different sheets
+        // for one question.
+        objectivesBoxAll: objBoxPrintOn('bank')
       });
       _wsWritePreview(frame, html, { readOnly: true,
         isCurrent: () => serial === _vetPrintPeekSerial && host.isConnected,

@@ -54,7 +54,7 @@ function harness() {
   const factory = new Function('document','window','setTimeout','clearTimeout','_canAuthor','buildWorksheetHtml','_wsWritePreview','actions', `
     let vettingList=[], _cpbQuestions=[];
     const escapeHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;');
-    const _wnyCachedNotes=()=>({cached:true}), wnyPrintOn=()=>false, akxPrintOn=()=>true;
+    const _wnyCachedNotes=()=>({cached:true}), wnyPrintOn=()=>false, akxPrintOn=()=>true, objBoxPrintOn=()=>true;
     const previewOneQuestionPrint=(id,where)=>actions.push(['full',id,where]);
     const editQuestion=id=>actions.push(['edit',id]);
     const cpbPreviewQuestion=id=>actions.push(['cpb-full',id]);
@@ -136,7 +136,7 @@ test('hover renders the current Vetting copy with the export options and isolate
   const edited={...q,title:'Latest edit'};h.api.list=[edited]; h.flush();
   const r=h.rendered[0]; assert.equal(r.title,'Latest edit'); assert.deepEqual(r.qs,[edited]);
   assert.notEqual(r.qs[0],edited); assert.notEqual(r.qs[0].blocks,edited.blocks);
-  assert.deepEqual(r.opts,{frontHtml:'',plainNumbers:true,noStudentFields:true,whyNotes:{cached:true},answerKeyExtras:true});
+  assert.deepEqual(r.opts,{frontHtml:'',plainNumbers:true,noStudentFields:true,whyNotes:{cached:true},answerKeyExtras:true,objectivesBoxAll:true});
   assert.equal(h.written[0].opts.readOnly,true); assert.equal(h.written[0].frame.style.width,'850px');
   assert.equal(h.written[0].frame.style.transform,'scale(0.8)');
   assert.equal(a.attrs['aria-expanded'],'true'); assert.deepEqual(h.actions,[]);
