@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.370.0';
+const APP_VERSION = 'v1.371.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -23869,6 +23869,73 @@ function cpbQuestionMarks(q) {
 function cpbDefaultMarks(q) {
   return qIsMcqOnly(q && q.blocks) ? CPB_MCQ_MARKS : CPB_OPEN_DEFAULT_MARKS;
 }
+
+// 🔢 A QUESTION THAT PRINTS NO MARKS GETS THE DEFAULT FOR ITS KIND, WRITTEN ON.
+//
+// `cpbDefaultMarks` says what an unmarked question is ASSUMED to be worth so
+// the cover's total is never silently short. This is the other half: it stamps
+// that number onto the question so it is really there — on the row, on the
+// printed sheet as `[2]`, and on the answer key. A question picked out of the
+// bank very often carries no allocation at all, because a bank question is
+// written to be practised rather than sat.
+//
+//  • **IT NEVER OVERWRITES.** A question that prints ANY marks anywhere is
+//    left alone — the paper it came off, or the teacher, has already said what
+//    it is worth, and a default quietly replacing that is the one thing this
+//    must not do. `cpbQuestionMarks` is the ONE test both halves ask.
+//  • **A PART IS A QUESTION.** Each part is printed under its own heading and
+//    marked on its own, so every part that OPENS gets the default rather than
+//    the whole question carrying one number three parts share. That is why a
+//    three-part question can come out worth 6 where `cpbDefaultMarks` assumed
+//    2 — the stamped total is the accurate one, and the toast says it changed.
+//  • **`block.marks` IS THE FIELD, never characters in the wording.** It is
+//    the same field the editor's Marks box writes, so `qPartBodyHtml` draws it
+//    and both print builders print it with nothing else to teach.
+//  • **A QUESTION WITH NOTHING THAT ASKS ANYTHING IS LEFT ALONE.** Only a text
+//    block may carry marks (`QPART_OPENER_TYPES`); a question that is a picture
+//    and an option list has nowhere to print a number, so it keeps the assumed
+//    default rather than having one written somewhere it cannot show.
+function cpbAutoMarks(q) {
+  const bs = (q && q.blocks) || [];
+  if (!bs.length) return 0;
+  if (cpbQuestionMarks(q)) return 0;
+  const each = cpbDefaultMarks(q);
+  const opener = b => b && QPART_OPENER_TYPES.includes(b.type);
+  const parts = bs.filter(b => opener(b) && qBlockOpensPart(b));
+  const targets = parts.length ? parts : bs.filter(opener).slice(0, 1);
+  let added = 0;
+  targets.forEach(b => { b.marks = each; added += each; });
+  return added;
+}
+
+// How many questions on the sheet print no allocation at all. Read by the
+// button's label and by its own guard, so the count on it is the count it acts
+// on rather than a number worked out twice.
+function cpbMarksMissing() {
+  return _cpbQuestions.filter(q => !cpbQuestionMarks(q)).length;
+}
+
+// 🔢 Assign missing marks — the same rule, over the whole sheet. It is offered
+// as a button as well as run on every bank pick, because the questions that
+// most often print nothing are the ones READ off a screenshot whose paper did
+// not allocate them, and those never go through the picker.
+function cpbAssignMissingMarks() {
+  if (!_canAuthor() || _cpbBusy) return;
+  let did = 0, added = 0, stuck = 0;
+  _cpbQuestions.forEach(q => {
+    if (cpbQuestionMarks(q)) return;
+    const got = cpbAutoMarks(q);
+    if (got) { did++; added += got; } else stuck++;
+  });
+  cpbRender();
+  if (!did && !stuck) { showToast('Every question already prints its marks', 'info'); return; }
+  showToast(did
+    ? '🔢 ' + did + ' question' + (did === 1 ? '' : 's') + ' stamped · ' + added + ' mark' + (added === 1 ? '' : 's') + ' added'
+        + (stuck ? ' · ' + stuck + ' had nowhere to print a number' : '') + ' — change any that are wrong with ✏️ Edit'
+    : stuck + ' question' + (stuck === 1 ? '' : 's') + ' had nowhere to print a number — they still count as the default',
+    did ? 'success' : 'info');
+}
+
 function cpbMarks() {
   const lay = cpbLayout();
   // 📝 WORKSHEET — one list, and every question is worth what it prints. A
@@ -25186,6 +25253,167 @@ function cpbPreviewQuestion(id) {
   previewQuestionsPrint([copy], q.title || 'Question', 'cpbq');
 }
 
+// =====================================================================
+// 🏦 ADD A QUESTION THAT IS ALREADY IN THE BANK
+//
+// The screenshot pad builds questions that have never existed. Most of a mock
+// paper is not that: it is questions the centre has already written, checked
+// and printed — and until now the only way to put one on a Custom Paper was to
+// screenshot it back out of the app and have the model read it again.
+//
+// So the picker adds the bank question ITSELF. What makes that safe is one
+// rule, and everything below follows from it:
+//
+//   **A QUESTION THAT IS ALREADY IN THE BANK IS NEVER WRITTEN TO BY THIS PAGE.**
+//
+// `_cpbCommit` files every question `holdBack: true` and stamps the paper's
+// name onto `source`. Run over a bank question that is ALREADY LIVE, that one
+// line would **withdraw it from every child in the school** — out of every
+// practice mode, every game, every quest and every other worksheet using it —
+// and re-file it under this paper's name, silently, because the send reports
+// only how many documents went. So a picked question carries `_cpbFromBank`
+// and the send SKIPS it: it is in the bank, it does not need putting there
+// again, and it is not this page's to change.
+//
+//  • **A COPY UNDER A NEW ID WOULD BE WORSE, not safer.** It looks like it
+//    keeps the hold-back promise and does not: the ORIGINAL stays released, so
+//    a child can still meet the question before sitting the paper — and the
+//    bank gains a duplicate of every question picked, which is the very thing
+//    the duplicate warning exists to prevent.
+//  • **SO THE PROMISE IS NARROWED HONESTLY RATHER THAN FAKED.** The row wears
+//    a 📚 chip, the ③ card says it, and the send confirm names the count. A
+//    teacher who wants a picked question held back too does that on the 🗓
+//    Scheduled Questions page, where it is a deliberate act on a live question
+//    rather than a side effect of building a paper.
+//  • **IT IS A DEEP COPY ON THE PAGE.** The paper may be reordered, moved
+//    between booklets, given marks and edited with ✏️ Edit, and none of that
+//    may reach `questionBank` — the same reason 👁 preview deep-copies. The
+//    edits live on the paper, travel to the 📁 shelf with it, and stop there.
+//  • **`_wseBank()` IS THE ONE "what may go on a sheet" RULE**, shared with the
+//    ✎ Questions drawer: retired topics out, everything else in. A second list
+//    here would drift into offering a question no student can ever be served.
+const CPB_BANK_SHOWN = 60;   // a picker, not the bank page — filter to find, don't scroll to find
+let _cpbBankOpen = false;
+
+function cpbQuestionFromBank(q) { return !!(q && q._cpbFromBank); }
+function cpbBankCount() { return _cpbQuestions.filter(cpbQuestionFromBank).length; }
+
+function cpbBankOpen() {
+  if (!_canAuthor()) return;
+  const ov = document.getElementById('cpbBankOverlay');
+  if (!ov) return;
+  _cpbBankOpen = true;
+  ov.classList.add('show');
+  _cpbBankFilters();
+  cpbBankRender();
+  setTimeout(() => { const s = document.getElementById('cpbBankSearch'); if (s) s.focus(); }, 30);
+}
+
+function cpbBankClose() {
+  _cpbBankOpen = false;
+  const ov = document.getElementById('cpbBankOverlay');
+  if (ov) ov.classList.remove('show');
+}
+
+// Esc closes it. Bound ONCE on the document rather than on the overlay,
+// because the overlay's own list is rebuilt on every keystroke in the search
+// box and a listener hung inside it would go with the rows.
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && _cpbBankOpen) cpbBankClose();
+});
+
+// The topic and type lists are built from the very bank the rows are drawn
+// from, so neither can offer a filter that returns nothing.
+function _cpbBankFilters() {
+  const bank = _wseBank();
+  const lv = document.getElementById('cpbBankLevel');
+  if (lv) {
+    const cur = lv.value;
+    lv.innerHTML = levelOptionsHtml('', 'All levels');
+    if (cur) lv.value = cur;
+  }
+  const fill = (id, values, allLabel) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">' + escapeHtml(allLabel) + '</option>'
+      + values.map(v => '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>').join('');
+    if (cur && values.includes(cur)) sel.value = cur;
+  };
+  fill('cpbBankTopic', [...new Set(bank.flatMap(q => qTopicList(q)))].filter(Boolean).sort(), 'All topics');
+  fill('cpbBankCategory', [...new Set(bank.map(q => normalizeCategoryValue(q.category)))].filter(Boolean).sort(), 'All types');
+}
+
+// Which bank questions the picker may offer. A question already ON the paper
+// is dropped by its own id — picked twice it would print twice, numbered twice
+// and be answered twice.
+function cpbBankMatches() {
+  const on = new Set(_cpbQuestions.map(q => String(q.id)));
+  const topic = document.getElementById('cpbBankTopic')?.value || '';
+  const cat = document.getElementById('cpbBankCategory')?.value || '';
+  const level = document.getElementById('cpbBankLevel')?.value || '';
+  const search = (document.getElementById('cpbBankSearch')?.value || '').trim().toLowerCase();
+  return _wseBank().filter(q => {
+    if (on.has(String(q.id))) return false;
+    if (topic && !qMatchesTopic(q, topic)) return false;
+    if (cat && !qMatchesCategory(q, cat)) return false;
+    if (level && getTopicLevel(q.topic || '') !== level) return false;
+    if (search && !extractQuestionSearchText(q).includes(search)) return false;
+    return true;
+  });
+}
+
+function cpbBankRender() {
+  const list = document.getElementById('cpbBankList');
+  const count = document.getElementById('cpbBankCount');
+  if (!list) return;
+  const matches = cpbBankMatches();
+  if (count) count.textContent = '· ' + matches.length + ' available';
+  if (!matches.length) {
+    list.innerHTML = '<div class="cpbb-empty">No questions match those filters.<br>Try widening them.</div>';
+    return;
+  }
+  const shown = matches.slice(0, CPB_BANK_SHOWN);
+  list.innerHTML = shown.map(q => {
+    const esc = escapeHtml(String(q.id)).replace(/'/g, '&#39;');
+    const own = cpbQuestionMarks(q);
+    return `<div class="cpbb-row">
+      <div class="cpbb-row-main">
+        <div class="cpbb-row-title">${escapeHtml(q.title || 'Untitled question')} ${qReleaseChipHtml(q)}</div>
+        <div class="cpbb-row-meta">${_wseMetaHtml(q)}
+          ${own ? `<span class="qb-tag">${escapeHtml(own + ' mark' + (own === 1 ? '' : 's'))}</span>`
+                : `<span class="qb-tag cpbb-nomarks">no marks — ${cpbDefaultMarks(q)} will be assigned</span>`}</div>
+        <div class="cpbb-row-prev">${escapeHtml(getQuestionPreview(q))}</div>
+      </div>
+      <div class="cpbb-row-acts">
+        <button type="button" class="cpbb-add" onclick="cpbBankAdd('${esc}')" title="Put this question at the end of the ${escapeHtml(cpbThing())}">＋ Add</button>
+      </div>
+    </div>`;
+  }).join('') + (matches.length > shown.length
+    ? `<div class="cpbb-empty">Showing the first ${shown.length} of ${matches.length}. Narrow the search to see the rest.</div>`
+    : '');
+}
+
+function cpbBankAdd(id) {
+  if (!_canAuthor()) return;
+  const qid = String(id);
+  if (_cpbQuestions.some(q => String(q.id) === qid)) { showToast('That question is already on this ' + cpbThing(), 'info'); return; }
+  const src = questionBank.find(q => String(q.id) === qid);
+  if (!src) { showToast('That question is no longer in the bank', 'error'); return; }
+  // DEEP COPY. `_cpbQuestions` is reordered, re-lettered, given marks and
+  // edited; none of that may reach the live bank object.
+  const q = JSON.parse(JSON.stringify(src));
+  q._cpbFromBank = true;
+  // 🔢 …and it is given its marks on the way in, because a bank question is
+  // written to be practised rather than sat and very often prints none.
+  const added = cpbAutoMarks(q);
+  _cpbQuestions.push(q);
+  cpbRender();
+  cpbBankRender();
+  showToast('📚 Added “' + (q.title || 'Untitled question') + '” to the ' + cpbThing()
+    + (added ? ' · ' + added + ' mark' + (added === 1 ? '' : 's') + ' assigned' : ''), 'success');
+}
+
 // ---- Sending the paper to the bank ---------------------------------------
 // HELD BACK, always — that is the whole contract of this page. The questions
 // have to be in the bank for the teacher to edit, check, print and reuse them;
@@ -25195,10 +25423,21 @@ function cpbPreviewQuestion(id) {
 function cpbSend() {
   if (!_canAuthor()) { showToast('Only question authors can save questions', 'error'); return; }
   if (!_cpbQuestions.length) { showToast('Nothing to send yet', 'error'); return; }
-  const { a, b } = cpbLayout();
+  const lay = cpbLayout();
   const ws = cpbIsWorksheet();
   const thing = cpbThing();
-  const n = _cpbQuestions.length;
+  // 📚 THE COUNT IS WHAT IS REALLY BEING SENT. A question picked out of the
+  // bank is already there and is skipped, so counting the whole sheet would
+  // promise a number the send cannot deliver — and the toast afterwards would
+  // read as questions lost.
+  const fromBank = _cpbQuestions.filter(cpbQuestionFromBank).length;
+  const n = _cpbQuestions.length - fromBank;
+  if (!n) {
+    showToast(`Every question on this ${thing} was picked from the bank 📚 — they are already there, so there is nothing to send.`, 'info');
+    return;
+  }
+  const a = lay.a.filter(q => !cpbQuestionFromBank(q));
+  const b = lay.b.filter(q => !cpbQuestionFromBank(q));
   // The HOLD-BACK is the same promise in both modes, and it is the reason the
   // page can be used on a live bank at all — so it is said in the same words
   // whichever of the two is being sent.
@@ -25207,6 +25446,9 @@ function cpbSend() {
     : `${a.length} multiple choice and ${b.length} open-ended go`;
   showConfirm('Send ' + n + ' question' + (n === 1 ? '' : 's') + ' to the bank',
     `${what} into the question bank <b>held back from students</b> — you can edit, check, print and put them on a worksheet, and no practice mode, quest or game will serve one to a child until you release them.`
+    + (fromBank
+        ? `<br><br>📚 <b>${fromBank} question${fromBank === 1 ? ' was' : 's were'} picked from the bank</b> and ${fromBank === 1 ? 'is' : 'are'} already there, so ${fromBank === 1 ? 'it is' : 'they are'} <b>not sent and not changed</b> — including not being held back, because withdrawing a live question would take it off every other worksheet and practice mode too. Hold ${fromBank === 1 ? 'it' : 'them'} back on the 🗓 <b>Scheduled Questions</b> page if you need to.`
+        : '')
     + `<br><br>Release them later on the 🗓 <b>Scheduled Questions</b> page, which lists them under this ${thing}'s name.`
     + (_cpbMetaGet('name') ? '' : `<br><br><b>This ${thing} has no name yet.</b> The name is what groups them on that page — without one they are listed as “Unnamed paper”.`)
     + (_cpbLibId ? `<br><br>This ${thing} is on your 📁 shelf, so it stays here to reprint and edit.`
@@ -25220,14 +25462,16 @@ async function _cpbCommit() {
   if (_cpbBusy) return;
   const order = _cpbPrintOrder();
   const source = _cpbMetaGet('name');
-  let done = 0, failed = 0;
+  let done = 0, failed = 0, skipped = 0;
   // Forty awaited writes is a real wait, so the page says where it is and the
   // buttons are out of reach while it runs — pressed twice, this would file the
   // whole paper into the bank a second time.
   _cpbBusy = true;
   cpbRender();
-  for (const q of order) {
-    _cpbNote('Saving ' + (done + failed + 1) + ' of ' + order.length + '…');
+  const toSend = order.filter(q => !cpbQuestionFromBank(q));
+  skipped = order.length - toSend.length;
+  for (const q of toSend) {
+    _cpbNote('Saving ' + (done + failed + 1) + ' of ' + toSend.length + '…');
     const clean = Object.assign({}, q);
     // Page-local bookkeeping never reaches the bank.
     delete clean._cpbBook; delete clean._cpbSaid;
@@ -25278,10 +25522,17 @@ async function _cpbCommit() {
   updateCounts();
   try { renderQuestionBank(); } catch (err) {}
   try { renderBankScheduled(); } catch (err) {}
+  // 📚 A question PICKED OUT OF THE BANK was never sent — it is already there,
+  // and writing it would have held a live question back from the whole school.
+  // Said out loud either way: "3 sent" on a paper of five reads as two lost.
+  const bankNote = skipped ? ` · ${skipped} already in the bank 📚` : '';
   showToast(done
-    ? `${done} question${done === 1 ? '' : 's'} sent to the bank, held back from students 🔒${failed ? ` · ${failed} could not be saved` : ''}`
+    ? `${done} question${done === 1 ? '' : 's'} sent to the bank, held back from students 🔒${failed ? ` · ${failed} could not be saved` : ''}${bankNote}`
       + (done && !failed && _cpbLibId ? ' · the ' + cpbThing() + ' is still here' : '')
-    : 'Nothing could be saved — check your connection and try again', failed ? 'error' : 'success');
+    : (failed
+        ? 'Nothing could be saved — check your connection and try again'
+        : `Every question on this ${cpbThing()} was picked from the bank 📚 — they are already there, so nothing was sent and nothing was changed.`),
+    failed ? 'error' : (done || skipped ? 'success' : 'error'));
 }
 
 // ---- Rendering ------------------------------------------------------------
@@ -25576,6 +25827,7 @@ function _cpbRowHtml(q, num, book, first, last) {
           : (book === 'a' ? escapeHtml(String(CPB_MCQ_MARKS) + ' marks') : (marks ? escapeHtml(marks + ' mark' + (marks === 1 ? '' : 's')) : '<span class="cpb-nomarks">no marks printed</span>'))}
         ${q._dupOf ? ' · <span class="cpb-dup">possible duplicate</span>' : ''}
         ${overridden ? ' · <span class="cpb-moved">moved here by hand</span>' : ''}
+        ${cpbQuestionFromBank(q) ? ' · <span class="cpb-frombank" title="This question is already in the question bank. Send leaves it exactly as it is — it is not written to, and it is not held back, because withdrawing a live question would take it off every other worksheet too.">📚 already in the bank</span>' : ''}
       </div>
     </div>
     <div class="cpb-row-tools">
@@ -25627,11 +25879,18 @@ function _cpbPaperCardHtml() {
   const { a, b, numbers } = lay;
   if (!_cpbQuestions.length) {
     return `<div class="cpb-card">
-      <h3 class="cpb-h3">③ The ${ws ? 'worksheet' : 'paper'}</h3>
-      <p class="cpb-empty">Read the screenshots and every question shows up here, ${ws ? 'in the order you put them in and numbered.' : 'sorted into its booklet and numbered.'}</p>
+      <div class="cpb-head">
+        <h3 class="cpb-h3">③ The ${ws ? 'worksheet' : 'paper'}</h3>
+        <div class="cpb-head-tools">
+          <button class="btn btn-outline btn-sm" onclick="cpbBankOpen()" ${_cpbBusy ? 'disabled' : ''}>📚 Add from the bank</button>
+        </div>
+      </div>
+      <p class="cpb-empty">Read the screenshots and every question shows up here, ${ws ? 'in the order you put them in and numbered.' : 'sorted into its booklet and numbered.'}<br>You can also <b>pick questions the bank already has</b> — they go on the ${ws ? 'worksheet' : 'paper'} exactly as they are, and are never written to.</p>
     </div>`;
   }
   const m = cpbMarks();
+  const missing = cpbMarksMissing();
+  const fromBank = cpbBankCount();
   const totals = ws
     ? `<span class="cpb-total-big${m.needQuestions == null ? '' : cpbGapClass(m.needQuestions)}">
          <b>${m.n}</b>${m.wantQuestions ? ' of ' + m.wantQuestions : ''} question${m.n === 1 ? '' : 's'}${m.needQuestions ? ' <span class="cpb-gap">' + escapeHtml(cpbGapLabel(m.needQuestions, 'question')) + '</span>' : ''}
@@ -25653,6 +25912,8 @@ function _cpbPaperCardHtml() {
     <div class="cpb-head">
       <h3 class="cpb-h3">③ The ${ws ? 'worksheet' : 'paper'} <span class="cpb-pill">${_cpbQuestions.length}</span></h3>
       <div class="cpb-head-tools">
+        <button class="btn btn-outline btn-sm" onclick="cpbBankOpen()" ${_cpbBusy ? 'disabled' : ''} title="Pick questions the bank already has. They go on as they are — Send never writes to them.">📚 Add from the bank</button>
+        ${missing ? `<button class="btn btn-outline btn-sm" onclick="cpbAssignMissingMarks()" ${_cpbBusy ? 'disabled' : ''} title="Give every question that prints no allocation the default for its kind — ${CPB_MCQ_MARKS} for multiple choice, ${CPB_OPEN_DEFAULT_MARKS} a part for open-ended. Nothing that already prints marks is touched.">🔢 Assign marks to ${missing}</button>` : ''}
         <button class="btn btn-outline btn-sm" onclick="cpbPreview()" ${_cpbBusy ? 'disabled' : ''}>👁 Preview</button>
         <button class="btn btn-outline btn-sm" onclick="cpbPrint()" ${_cpbBusy ? 'disabled' : ''}>🖨 Print / Save PDF</button>
         <button class="btn btn-primary btn-sm" onclick="cpbSend()" ${_cpbBusy ? 'disabled' : ''}>📤 Send to bank 🔒</button>
@@ -25660,7 +25921,8 @@ function _cpbPaperCardHtml() {
     </div>
     <div class="cpb-totals">
       ${totals}
-      ${m.guessed ? `<span class="cpb-warn-inline" title="These questions had no printed mark allocation for the reader to find, so each is counted as the default for its kind. Open one in the editor to set its marks properly.">⚠ ${m.guessed} with no printed marks</span>` : ''}
+      ${m.guessed ? `<span class="cpb-warn-inline" title="These questions had no printed mark allocation for the reader to find, so each is counted as the default for its kind. Press 🔢 to write the default onto them, or open one in the editor to set its marks properly.">⚠ ${m.guessed} with no printed marks</span>` : ''}
+      ${fromBank ? `<span class="cpb-bank-inline" title="Already in the question bank, so Send leaves them exactly as they are: not written to, and not held back — withdrawing a live question would take it off every other worksheet and practice mode too.">📚 ${fromBank} from the bank</span>` : ''}
     </div>
     ${ws
       ? (m.needQuestions ? `<p class="cpb-target-note">🎯 Building to <b>${m.wantQuestions}</b> question${m.wantQuestions === 1 ? '' : 's'}. Change the target in ① The worksheet, or set it to 0 to stop measuring — a worksheet has no standard length.</p>` : '')
@@ -72820,6 +73082,11 @@ window.cpbCancel = cpbCancel;
 window.cpbMove = cpbMove;
 window.cpbSetBook = cpbSetBook;
 window.cpbDropQuestion = cpbDropQuestion;
+window.cpbBankOpen = cpbBankOpen;
+window.cpbBankClose = cpbBankClose;
+window.cpbBankRender = cpbBankRender;
+window.cpbBankAdd = cpbBankAdd;
+window.cpbAssignMissingMarks = cpbAssignMissingMarks;
 window.cpbSetMeta = cpbSetMeta;
 window.cpbSetMode = cpbSetMode;
 window.cpbPreview = cpbPreview;

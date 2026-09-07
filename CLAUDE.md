@@ -5224,6 +5224,87 @@ shelf, which is Firestore and therefore every device.
   button. Once the questions are read out of them the pictures are worth nothing
   to a paper being edited, and megabytes against a 1 MB document.
 
+### 📚 Questions the bank already has (v1.371.0)
+
+`CPB_BANK_SHOWN` / `_cpbBankOpen` / **`cpbQuestionFromBank`** / `cpbBankCount` /
+`cpbBankOpen` / `cpbBankClose` / `_cpbBankFilters` / `cpbBankMatches` /
+`cpbBankRender` / **`cpbBankAdd`** (search `A QUESTION THAT IS ALREADY IN THE
+BANK`), the `toSend` filter in `_cpbCommit`, the `fromBank` count in `cpbSend`,
+the 📚 chip in `_cpbRowHtml`, plus `#cpbBankOverlay` and the `.cpbb-*` CSS.
+
+A sheet is not always all-new. Half of it is very often questions the bank
+already has — last term's, one written by hand, one off another paper — and
+until now the only way to put one on a Custom Paper was to find its screenshot
+again and have it read a second time, which files a DUPLICATE.
+
+- **A QUESTION THAT IS ALREADY IN THE BANK IS NEVER WRITTEN TO BY THIS PAGE, and
+  that is the whole safety story.** `_cpbCommit` sets `clean.holdBack = true`
+  and `clean.source = <paper name>` on everything it sends. Run over a question
+  that is already LIVE, that one line **withdraws it from every child in the
+  school** — out of every practice mode, every game, every quest and every other
+  worksheet using it — and re-files it under this paper's name, silently,
+  because the send reports only how many documents went. So a picked question
+  carries **`_cpbFromBank`** and `_cpbCommit` SKIPS it.
+  - **A COPY UNDER A NEW ID WOULD BE WORSE, not safer.** It looks like it keeps
+    the hold-back promise and does not: the ORIGINAL stays released, so a child
+    can still meet the question before sitting the paper — and the bank gains a
+    duplicate of every question picked, which is the very thing the duplicate
+    warning exists to prevent.
+  - **SO THE PROMISE IS NARROWED HONESTLY RATHER THAN FAKED.** The row wears a
+    📚 chip, the ③ card counts them and the send confirm says in as many words
+    that those questions are not sent, not changed and **not held back**. A
+    teacher who wants one held back does it on the 🗓 Scheduled Questions page,
+    where it is a deliberate act on a live question rather than a side effect of
+    building a paper.
+- **IT IS A DEEP COPY ON THE PAGE.** The paper is reordered, moved between
+  booklets, given marks and edited with ✏️ Edit, and none of that may reach
+  `questionBank` — the same reason 👁 preview deep-copies. Those edits live on
+  the paper, travel to the 📁 shelf with it, and stop there.
+- **`_wseBank()` IS THE ONE "what may go on a sheet" RULE**, shared with the
+  ✎ Questions drawer. A second list here would drift into offering a question no
+  student can ever be served. A question already ON the paper is dropped by its
+  own id — picked twice it would print twice, be numbered twice and be answered
+  twice — and an id the bank no longer has is REFUSED rather than pushed on as
+  `undefined`, because the picker's rows outlive a delete made in another tab.
+- **`cpbBankAdd` refuses a non-author IN THE HANDLER**, as `cpbBankOpen` does: it
+  reads the bank and puts a live question onto a paper, and a hidden button is
+  never the lock.
+- The overlay shows with **`.show`**, the house's own class — `.active` opens
+  nothing at all — and `cpbRender`'s rows are rebuilt wholesale, so the picker is
+  its own dialog rather than anything hung inside them.
+
+#### 🔢 …and a question that prints no marks is given the default (v1.371.0)
+
+**`cpbAutoMarks`** / `cpbMarksMissing` / `cpbAssignMissingMarks`, the call inside
+`cpbBankAdd`, and the 🔢 **Assign marks to N** button on the ③ card.
+
+`cpbDefaultMarks` says what an unmarked question is ASSUMED to be worth so the
+cover's total is never silently short. This is the other half: it writes that
+number onto the question, so the row, the printed `[2]` and the answer key all
+agree with the cover. A bank question very often carries no allocation at all,
+because a bank question is written to be practised rather than sat.
+
+- **IT NEVER OVERWRITES.** A question that prints ANY marks anywhere is left
+  alone — the paper it came off, or the teacher, has already said what it is
+  worth, and a default quietly replacing that changes what a class is marked out
+  of. `cpbQuestionMarks` is the ONE test both halves ask.
+- **A PART IS A QUESTION.** Each part prints under its own heading and is marked
+  on its own, so every part that OPENS gets the default rather than one number
+  three headings share. That is why a three-part question comes out worth 6 where
+  `cpbDefaultMarks` assumed 2 — the stamped total is the accurate one, and the
+  toast says what changed.
+- **`block.marks` IS THE FIELD, never characters in the wording** — the same
+  field the editor's Marks box writes, so `qPartBodyHtml` draws it and both print
+  builders print it with nothing else to teach.
+- **A QUESTION WITH NOWHERE TO PRINT A NUMBER IS LEFT ALONE.** Only a text block
+  may carry marks (`QPART_OPENER_TYPES`), so a question that is a picture and an
+  option list keeps the ASSUMED default rather than having one written where it
+  cannot show — and the toast counts those separately.
+- It runs on every bank pick **and** as a button, because the questions that most
+  often print nothing are the ones READ off a screenshot whose paper did not
+  allocate them, and those never go through the picker.
+- Run **`node tools/custom-paper-tests.mjs`** after touching any of it.
+
 ### 👁 Preview one question of the paper (v1.367.0)
 
 `cpbPreviewQuestion` and the `'cpbq'` preview source, plus the SCOPED exported
@@ -5460,6 +5541,32 @@ pupil writes, in their own words, what they were learning.
   renders perfectly with nothing to write on. And emit the automatic box after
   the chunk's closing `</div>` and it belongs to no question at all, measured
   against the wrong page.
+- After touching **📚 the bank picker or 🔢 the auto-marks** (`cpbQuestionFromBank`,
+  `cpbBankCount`, `cpbBankOpen` / `cpbBankClose`, `_cpbBankFilters`,
+  `cpbBankMatches`, `cpbBankRender`, `cpbBankAdd`, `cpbAutoMarks`,
+  `cpbMarksMissing`, `cpbAssignMissingMarks`, the `toSend` filter in
+  `_cpbCommit`, the `fromBank` count in `cpbSend`, the 📚 chip in `_cpbRowHtml`,
+  `#cpbBankOverlay` or the `.cpbb-*` CSS), run
+  `node tools/custom-paper-tests.mjs`. **The one that reaches a child is the
+  send**: let it stop skipping `_cpbFromBank` and `clean.holdBack = true` is
+  written onto a question that is already LIVE, withdrawing it from every
+  practice mode, game, quest and other worksheet in the school and re-filing it
+  under this paper's name — silently, because the send reports only how many
+  documents went. Answer that by copying the question under a new id instead and
+  it is worse, not safer: the original stays released, so the promise is fake,
+  and the bank gains a duplicate of everything picked. Everything else is quiet
+  in its own way. Drop the deep copy and a reorder, a booklet move or an ✏️ Edit
+  on the paper rewrites a live bank question. Drop the from-bank flag and the
+  send has nothing to skip on. Fork `_wseBank()` and the picker offers questions
+  no student can ever be served. Drop the already-on-the-paper test and a
+  question prints twice, numbered twice; push a missing id on anyway and the
+  page throws mid-add. Use `.active` instead of `.show` and 📚 Add from the bank
+  opens nothing at all. And on the MARKS: let `cpbAutoMarks` overwrite and a
+  paper's own allocation is replaced by a default, which changes what a class is
+  marked out of; stamp only the first opener and a three-part question is worth
+  2 with two of its headings unmarked; let a non-text block carry marks and a
+  number is written where nothing can print it; and drop the `_cpbBusy` guard
+  and a stamp lands on a question the send loop has already copied.
 - After touching **👁 the one-question preview** (`cpbPreviewQuestion`, the
   `'cpbq'` source in `previewQuestionsPrint` / `_wsPreviewIsDraft` /
   `_wsPreviewSnapshot`, the `custompaper` branch of `printFromPreview`,

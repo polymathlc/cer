@@ -73,6 +73,19 @@ const modes = cut(
   '// 🎯 THE SHAPE A PAPER IS BUILT TO',
   'modes');
 
+// …and the part vocabulary `cpbAutoMarks` stamps through, cut narrowly: the
+// marks it writes go on `block.marks` of a PART OPENER, so which blocks may
+// open a part has to be the app's own answer and not a guess made here.
+const partAlpha = cut(
+  "const QPART_ASSIGN = 'abcdefghjklmnopqrstuvwxyz';",
+  '\n// A part marker is a SINGLE letter',
+  'part alphabet');
+const partNorm = cut('function qPartLetterNormalize(v) {', 'function qSubNormalize(', 'letter normalise');
+const partOpen = cut('function qBlockOpensPart(b) {', '\n// =====', 'part openers');
+// 📚 the from-bank flag and the picker's own add, as themselves.
+const fromBank = cut('function cpbQuestionFromBank(q)', 'function cpbBankOpen(', 'from-bank flag');
+const bankAdd  = cut('function cpbBankAdd(id) {', '\n// ---- Sending the paper to the bank', 'cpbBankAdd');
+
 const shim = `
   const CPB_MCQ_MARKS = 2, CPB_OPEN_DEFAULT_MARKS = 2, QMARKS_MAX = 99;
   let _cpbQuestions = [];
@@ -83,10 +96,27 @@ const shim = `
   const CPB_META_DEFAULTS = { mode: 'paper', targetMcq: CPB_TARGET_MCQ, targetOpen: CPB_TARGET_OPEN_MARKS,
     targetQuestions: CPB_TARGET_QUESTIONS, wsIntro: '', wsFields: true };
   function _cpbMetaGet(k) { const v = _cpbMeta[k]; return v === undefined || v === null ? CPB_META_DEFAULTS[k] : v; }
+  let _cpbBusy = false;
+  const _canAuthor = () => true;
+  const toasts = [];
+  const showToast = (m, kind) => { toasts.push({ m: String(m), kind }); };
+  let questionBank = [];
+  const cpbBankRender = () => {};
+  ${partAlpha}
+  ${partNorm}
+  ${partOpen}
   ${marks}
   ${shape}
   ${model}
+  ${fromBank}
+  ${bankAdd}
   return {
+    cpbAutoMarks, cpbMarksMissing, cpbAssignMissingMarks,
+    cpbQuestionFromBank, cpbBankCount, cpbBankAdd,
+    qBlockOpensPart, QPART_OPENER_TYPES,
+    setBank: b => { questionBank = b; },
+    setBusy: v => { _cpbBusy = v; },
+    toasts,
     qIsMcqOnly, cpbBookOf, cpbSetBook, cpbBooklets, cpbLayout, cpbMarks, cpbQuestionMarks,
     cpbGapLabel, cpbGapClass, _cpbTargetNum, cpbDefaultMarks,
     cpbMode, cpbIsWorksheet, cpbThing, CPB_MODES,
@@ -546,6 +576,230 @@ ok('qIsMcqOnly takes a QUESTION as well as a block list — both call sites pass
   ok('…and a write that failed changes nothing on screen',
      /if \(prev === undefined\) delete q\.holdBack; else q\.holdBack = prev;/.test(setHold),
      'a page that has released a question the database still holds back looks right until the next sign-in');
+}
+
+/* ---------- ⑥ 🔢 the marks a question that prints none is given ---------- */
+{
+  // The whole point of stamping is that it is REAL: `cpbDefaultMarks` only says
+  // what an unmarked question is assumed to be worth, so the cover's total is
+  // never short. This writes that number onto the block, so the row, the
+  // printed `[2]` and the answer key all agree with the cover.
+  const bare = q => JSON.parse(JSON.stringify(q));
+
+  // ① NEVER OVERWRITE. A paper, or a teacher, has already said what this is
+  // worth, and a default quietly replacing that is the one thing this must not
+  // do — it is silent, and it changes what a class is marked out of.
+  {
+    const q = open('already', 5);
+    eq('a question that already prints marks is left alone', api.cpbAutoMarks(q), 0);
+    eq('…with its own number untouched', q.blocks[0].marks, 5);
+  }
+
+  // ② …and the default is the one for its KIND.
+  {
+    const m = bare(mcq('m'));
+    // The shim's own CPB_MCQ_MARKS / CPB_OPEN_DEFAULT_MARKS are stubs, so the
+    // two numbers are pinned against the app's real constants here rather than
+    // compared with themselves.
+    ok('the app really pays 2 for an MCQ and 2 for an unmarked open question',
+       /const CPB_MCQ_MARKS = 2;/.test(src) && /const CPB_OPEN_DEFAULT_MARKS = 2;/.test(src));
+    eq('an unmarked MCQ is stamped with the MCQ default', api.cpbAutoMarks(m), 2);
+    eq('…on its text block', m.blocks[0].marks, 2);
+    const o = { id: 'o', title: 'o', blocks: [{ type: 'text', content: 'x' }, { type: 'plainanswer', content: 'a' }] };
+    eq('an unmarked written question is stamped with the open default', api.cpbAutoMarks(o), 2);
+    eq('…on its text block too', o.blocks[0].marks, 2);
+  }
+
+  // ③ A PART IS A QUESTION. Each part prints under its own heading and is
+  // marked on its own, so three parts is three allocations — not one number
+  // three headings share, which is a key nobody can mark from.
+  {
+    const q = { id: 'p', title: 'p', blocks: [
+      { type: 'text', content: 'stem' },
+      { type: 'text', content: 'first', part: 'a' },
+      { type: 'plainanswer', content: '1' },
+      { type: 'text', content: 'second', part: 'b' },
+      { type: 'plainanswer', content: '2' },
+      { type: 'text', content: 'third', part: 'c' },
+      { type: 'plainanswer', content: '3' },
+    ] };
+    eq('every part that OPENS is stamped', api.cpbAutoMarks(q), 6);
+    ok('…each one of them', q.blocks[1].marks === 2 && q.blocks[3].marks === 2 && q.blocks[5].marks === 2);
+    eq('…and the shared stem is not, because it asks nothing on its own',
+       q.blocks[0].marks, undefined);
+    ok('…nor is any answer box', q.blocks[2].marks === undefined && q.blocks[6].marks === undefined,
+       'an answer box is not a question and has no marks of its own');
+  }
+
+  // ④ THE FIELD, never characters in the wording. It is the same field the
+  // editor's Marks box writes, so `qPartBodyHtml` draws it and both print
+  // builders print it with nothing else to teach.
+  {
+    const q = bare(mcq('w'));
+    const before = q.blocks[0].content;
+    api.cpbAutoMarks(q);
+    eq('the wording is not rewritten', q.blocks[0].content, before);
+    eq('…the number is a field on the block', typeof q.blocks[0].marks, 'number');
+  }
+
+  // ⑤ A question with nowhere to PRINT a number keeps the assumed default
+  // rather than having one written where it cannot show. Only a text block may
+  // carry marks, which is the app's own `QPART_OPENER_TYPES`.
+  {
+    eq('only a text block may open a part', api.QPART_OPENER_TYPES.join(','), 'text');
+    const pic = { id: 'pic', title: 'pic', blocks: [
+      { type: 'image', url: 'u' }, { type: 'mcq', options: [{}, {}] }] };
+    eq('a picture-and-options question is left alone', api.cpbAutoMarks(pic), 0);
+    ok('…and nothing was written onto it', pic.blocks.every(b => b.marks === undefined));
+    eq('a question with no blocks at all is left alone', api.cpbAutoMarks({ id: 'z', blocks: [] }), 0);
+    eq('…and nothing at all is not a crash', api.cpbAutoMarks(null), 0);
+  }
+
+  // ⑥ The count on the button is the count it acts on.
+  {
+    api.set([open('has', 3), bare(mcq('none1')), bare(mcq('none2'))]);
+    eq('only the questions printing nothing are counted', api.cpbMarksMissing(), 2);
+    api.cpbAssignMissingMarks();
+    eq('…and after the run there are none left', api.cpbMarksMissing(), 0);
+    eq('the one that already printed marks kept its own number', api.get()[0].blocks[0].marks, 3);
+    eq('…and the other two were stamped', api.get()[1].blocks[0].marks, 2);
+  }
+
+  // ⑦ It refuses while the page is busy sending — a stamp landing mid-send
+  // would change a question the loop has already copied.
+  {
+    api.set([bare(mcq('busy'))]);
+    api.setBusy(true);
+    api.cpbAssignMissingMarks();
+    eq('nothing is stamped while the send is running', api.get()[0].blocks[0].marks, undefined);
+    api.setBusy(false);
+    api.cpbAssignMissingMarks();
+    eq('…and it works again once it is not', api.get()[0].blocks[0].marks, 2);
+  }
+}
+
+/* ---------- ⑦ 📚 a question picked out of the bank ---------- */
+{
+  const bankQ = (id, marks) => ({
+    id, title: 'Bank ' + id, topic: 'Heat',
+    blocks: [{ type: 'text', content: 'stem ' + id, marks }, { type: 'plainanswer', content: 'a' }],
+  });
+
+  // ① THE DEEP COPY is what keeps this page's promise that it never writes to
+  // the bank. The paper is reordered, moved between booklets, given marks and
+  // edited with ✏️ Edit — and none of that may reach a LIVE question.
+  {
+    api.set([]);
+    const live = bankQ('b1');
+    api.setBank([live]);
+    api.cpbBankAdd('b1');
+    eq('the question goes onto the paper', api.get().length, 1);
+    ok('…as a copy, not the bank object', api.get()[0] !== live);
+    api.get()[0].title = 'renamed on the paper';
+    api.get()[0].blocks[0].content = 'rewritten on the paper';
+    eq('editing the paper leaves the bank question alone', live.title, 'Bank b1');
+    eq('…right down to its blocks', live.blocks[0].content, 'stem b1');
+  }
+
+  // ② …and it is FLAGGED, which is the one thing the send reads to know it
+  // must not write to it. Without the flag the send would set `holdBack` on a
+  // live question and withdraw it from every child in the school.
+  {
+    ok('a picked question carries the flag', api.cpbQuestionFromBank(api.get()[0]));
+    eq('…and the page can count them', api.cpbBankCount(), 1);
+    ok('a question the page built itself does not', !api.cpbQuestionFromBank(mcq('own')));
+  }
+
+  // ③ It is given its marks on the way in, because a bank question is written
+  // to be practised rather than sat and very often prints none.
+  {
+    eq('an unmarked bank question is stamped as it lands', api.get()[0].blocks[0].marks, 2);
+    api.set([]); api.setBank([bankQ('b2', 4)]);
+    api.cpbBankAdd('b2');
+    eq('…and one that already prints marks keeps its own number', api.get()[0].blocks[0].marks, 4);
+  }
+
+  // ④ The same question twice would print twice, be numbered twice and be
+  // answered twice.
+  {
+    api.set([]); api.setBank([bankQ('b3')]);
+    api.cpbBankAdd('b3');
+    api.cpbBankAdd('b3');
+    eq('picking the same question twice adds it once', api.get().length, 1);
+  }
+
+  // ⑤ An id the bank no longer has is REFUSED rather than pushed on as
+  // undefined — the picker's rows outlive a delete made in another tab.
+  {
+    api.set([]); api.setBank([]);
+    api.cpbBankAdd('gone');
+    eq('a question that has left the bank is not added', api.get().length, 0);
+  }
+}
+
+/* ---------- ⑧ …and the send never writes to one ---------- */
+{
+  const commit = cut('async function _cpbCommit() {', '\n// ---- Rendering', 'commit');
+  ok('the send skips every question picked from the bank',
+     /const toSend = order\.filter\(q => !cpbQuestionFromBank\(q\)\);/.test(commit),
+     'run over a LIVE question, `clean.holdBack = true` withdraws it from every child in the school');
+  ok('…and it is the skipped set that is written, not the whole order',
+     /for \(const q of toSend\)/.test(commit));
+  ok('…so hold-back is only ever set on what is really being sent',
+     commit.indexOf('const toSend') < commit.indexOf('clean.holdBack = true'));
+  ok('…and the count reported is the count that was tried',
+     /of ' \+ toSend\.length/.test(commit));
+  ok('the skipped ones are named rather than silently dropped',
+     /skipped/.test(commit),
+     'a send that reports only what it wrote reads as questions lost');
+
+  const send = cut('function cpbSend() {', 'async function _cpbCommit', 'send');
+  ok('the confirm counts only what will really be sent',
+     /const fromBank = _cpbQuestions\.filter\(cpbQuestionFromBank\)\.length;/.test(send)
+     && /const n = _cpbQuestions\.length - fromBank;/.test(send));
+  ok('…and a sheet that is ALL bank picks says so instead of sending nothing quietly',
+     /if \(!n\) \{/.test(send));
+  ok('…and the confirm says the picked ones are not held back',
+     /not sent and not changed/.test(send),
+     'a teacher who thinks a live question was held back finds out from a child who met it');
+
+  // The flag has to SURVIVE the 📁 shelf. A paper saved, reopened and sent
+  // would otherwise hold-back every live question that had been picked into it
+  // — the same fault, arriving a day later.
+  const write = cut('async function _cpbWritePaper(opts) {', 'function _cpbSaveFailNote(', 'shelf write');
+  ok('the shelf stores the questions whole, flag and all',
+     /questions: _cpbQuestions,/.test(write));
+  const openNow = cut('async function _cpbLibOpenNow(id) {', '\nfunction cpbLibOpen(', 'shelf open');
+  ok('…and puts them back whole',
+     /_cpbQuestions = Array\.isArray\(v\.questions\) \? v\.questions : \[\];/.test(openNow),
+     'a flag dropped on the round trip means a reopened paper holds back a live question');
+
+  ok('a picked question wears its chip on the row',
+     /cpbQuestionFromBank\(q\) \? ' · <span class="cpb-frombank"/.test(src),
+     'a question the send will skip must not look like one it will write');
+  ok('the picker draws from the ONE "what may go on a sheet" rule',
+     /return _wseBank\(\)\.filter\(q => \{/.test(src),
+     'a second list here drifts into offering a question no student can ever be served');
+  ok('…and a question already on the paper is never offered',
+     /if \(on\.has\(String\(q\.id\)\)\) return false;/.test(src));
+  ok('the add refuses anyone who may not author',
+     /function cpbBankAdd\(id\) \{\s*\n\s*if \(!_canAuthor\(\)\) return;/.test(src),
+     'it reads the bank and puts a live question on a paper — a hidden button is not the lock');
+  ok('…and so does the picker itself', /function cpbBankOpen\(\) \{\s*\n\s*if \(!_canAuthor\(\)\) return;/.test(src));
+  ok('assigning marks refuses too', /function cpbAssignMissingMarks\(\) \{\s*\n\s*if \(!_canAuthor\(\) \|\| _cpbBusy\) return;/.test(src));
+
+  // The overlay, its CSS and the window exports — an inline handler in a module
+  // reaches nothing unless it is on window.
+  ok('the picker overlay exists', /id="cpbBankOverlay"/.test(html));
+  ok('…with somewhere to draw the rows', /id="cpbBankList"/.test(html));
+  ok('…and every filter it reads', ['cpbBankSearch', 'cpbBankLevel', 'cpbBankTopic', 'cpbBankCategory']
+     .every(id => html.includes('id="' + id + '"')));
+  ok('it shows with the house’s own class, not a second one',
+     /\.cpbb-overlay\.show \{/.test(html),
+     'the convention is .show — .active would open nothing at all');
+  ['cpbBankOpen', 'cpbBankClose', 'cpbBankRender', 'cpbBankAdd', 'cpbAssignMissingMarks'].forEach(fn => {
+    ok('window.' + fn + ' is exported', new RegExp('window\\.' + fn + ' = ' + fn + ';').test(src));
+  });
 }
 
 /* ---------- the markup and the print CSS ---------- */
@@ -1116,7 +1370,7 @@ ok('window.cpbRebuild is exported — the page is inline on* handlers',
   ok('the HOLD-BACK is promised in the same words in BOTH modes',
      /held back from students/.test(send) && !/cpbIsWorksheet\(\)[\s\S]{0,200}held back/.test(send),
      'a worksheet whose questions reached students early is the one failure this page must never have');
-  ok('…and the send reads the ONE layout function', /const \{ a, b \} = cpbLayout\(\);/.test(send));
+  ok('…and the send reads the ONE layout function', /cpbLayout\(\)/.test(send));
 
   const commit = cut('async function _cpbCommit() {', '\n// ---- Rendering', 'commit');
   ok('a worksheet’s questions are held back exactly as a paper’s are',

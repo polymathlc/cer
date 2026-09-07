@@ -5638,6 +5638,156 @@ body.em-editing #printProgress { z-index: 470; }
    that list: what is on the sheet on the left, the bank to draw from on the
    right. Sits above the live preview (400) and the quick-edit drawer (410),
    because it can be opened from either. */
+/* ==================== 🗂️ CUSTOM PAPER — the bank picker ====================
+   One column: the sheet is on the page behind this, so a second column would
+   be the same list twice. z-index sits with the other builder overlays and
+   BELOW ✏️ editing mode (440), which cannot be open at the same time anyway.
+   ========================================================================= */
+.cpbb-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 420;
+  background: rgba(20, 24, 22, 0.5);
+  align-items: center;
+  justify-content: center;
+  padding: 28px 22px;
+}
+.cpbb-overlay.show { display: flex; }
+.cpbb-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  max-height: 100%;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.cpbb-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.cpbb-head h3 { font-size: 1.02rem; font-weight: 700; }
+.cpbb-count { color: var(--text-muted); font-weight: 600; font-size: 0.85rem; }
+.cpbb-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+  line-height: 1.6;
+  max-width: 62ch;
+}
+/* Its own close, not `.preview-close` — that one is white, drawn for a dark
+   header, and vanishes on this light one. */
+.cpbb-close {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.cpbb-close:hover { border-color: var(--accent-red); color: var(--accent-red); }
+.cpbb-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px 6px;
+}
+.cpbb-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.cpbb-filters input,
+.cpbb-filters select {
+  flex: 1 1 140px;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.82rem;
+}
+.cpbb-filters input { flex-basis: 100%; }
+.cpbb-filters input:focus,
+.cpbb-filters select:focus { outline: none; border-color: var(--primary); }
+.cpbb-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 16px;
+}
+.cpbb-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 15px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.cpbb-row-main { flex: 1; min-width: 0; }
+.cpbb-row-title { font-size: 0.86rem; font-weight: 600; line-height: 1.45; }
+.cpbb-row-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.cpbb-row-prev { font-size: 0.76rem; color: var(--text-muted); line-height: 1.55; margin-top: 8px; }
+.cpbb-nomarks { border-color: var(--accent-orange) !important; color: var(--accent-orange) !important; }
+.cpbb-row-acts { flex: 0 0 auto; display: flex; align-items: center; }
+.cpbb-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 13px;
+  border: 1.5px solid var(--primary);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--primary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.cpbb-add:hover { background: var(--primary); color: #fff; }
+.cpbb-empty {
+  padding: 26px 18px;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+.cpbb-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 26px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.cpbb-foot-note { font-size: 0.76rem; color: var(--text-muted); line-height: 1.6; max-width: 58ch; }
+/* 📚 On a row of the sheet: this question is already in the bank, so Send
+   leaves it alone. Green rather than the orange of a warning — it is a fact
+   about the question, not something to fix. */
+.cpb-frombank { color: var(--primary); font-weight: 600; }
+.cpb-bank-inline {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
 .wse-overlay {
   display: none;
   position: fixed;
@@ -12377,6 +12527,41 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     <div class="qm-foot">
       <button class="btn btn-outline" type="button" onclick="qmClose()">Cancel</button>
       <button class="btn btn-primary" type="button" id="qmGoBtn" style="margin-left:auto;" onclick="qmConfirm()">🔗 Merge</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 🗂️ CUSTOM PAPER — ADD FROM THE QUESTION BANK ====================
+     ONE COLUMN, because the sheet itself is already on the page behind this.
+     The ✎ Questions drawer needs two (it edits a stored list of ids); here the
+     ③ card is the other column, so a second one would be the same list twice.
+     Its own `.cpbb-*` classes rather than the drawer's `.wse-*`: those mean
+     "the worksheet editor", and a rule changed there must not silently change
+     this. ================================================================= -->
+<div class="cpbb-overlay" id="cpbBankOverlay" onclick="if(event.target===this)cpbBankClose()">
+  <div class="cpbb-panel" role="dialog" aria-label="Add a question from the bank">
+    <div class="cpbb-head">
+      <div>
+        <h3>📚 Add from the question bank <span class="cpbb-count" id="cpbBankCount"></span></h3>
+        <div class="cpbb-sub">These questions are <b>already in the bank</b>. They go onto the sheet exactly as they are — Send never writes to them, and never holds them back, because withdrawing a live question would take it off every other worksheet and practice mode too. A question with no printed marks is given the default for its kind on the way in.</div>
+      </div>
+      <button class="cpbb-close" type="button" onclick="cpbBankClose()" title="Close" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="cpbb-body">
+      <div class="cpbb-filters">
+        <input type="text" id="cpbBankSearch" placeholder="Search the bank…" oninput="cpbBankRender()">
+        <select id="cpbBankLevel" onchange="cpbBankRender()"><option value="">All levels</option></select>
+        <select id="cpbBankTopic" onchange="cpbBankRender()"><option value="">All topics</option></select>
+        <select id="cpbBankCategory" onchange="cpbBankRender()"><option value="">All types</option></select>
+      </div>
+      <div class="cpbb-list" id="cpbBankList"></div>
+    </div>
+    <div class="cpbb-foot">
+      <span class="cpbb-foot-note">Every question you add lands at the end of the sheet — move it with ▲▼. Nothing here changes the question bank.</span>
+      <span style="flex:1;"></span>
+      <button class="btn btn-primary" type="button" onclick="cpbBankClose()">Done</button>
     </div>
   </div>
 </div>
