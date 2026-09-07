@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.369.1';
+const APP_VERSION = 'v1.370.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -24556,17 +24556,29 @@ async function cpbLibLoad(force) {
   cpbRender();
 }
 
-// 💾 Save this paper onto the shelf. Overwrites the one it was opened from, or
-// makes a new one — which is what the name is for, so the button says which.
-async function cpbSavePaper() {
-  if (!_canAuthor()) { showToast('Only question authors can save a paper', 'error'); return; }
-  if (_cpbLibBusy) return;
-  if (!_cpbQuestions.length) { showToast('Read the screenshots first — there is no paper to save yet', 'info'); return; }
-  const name = String(_cpbMetaGet('name') || '').trim();
-  if (!name) {
-    showToast('Give the paper a name in ① The paper first — that is what it is listed under', 'error');
-    return;
-  }
+// 💾 ONE WRITER, TWO DOORS — the button, and the export's automatic keep.
+//
+// Two writers would be two places for the size cap, the shelf cap, the payload
+// shape and the row bookkeeping to drift apart, and the drift shows up as a
+// paper the 💾 button saves and the export quietly does not — which is exactly
+// the failure the automatic keep exists to prevent, arriving through the fix
+// for it. So this is the only function that writes a shelf document, and it
+// REPORTS rather than toasts: its two callers want very different wording for
+// the same refusal.
+async function _cpbWritePaper(opts) {
+  const auto = !!(opts && opts.auto);
+  if (!_canAuthor()) return { ok: false, reason: 'role' };
+  if (_cpbLibBusy) return { ok: false, reason: 'busy' };
+  if (!_cpbQuestions.length) return { ok: false, reason: 'empty' };
+  // The 💾 button wants a name typed on purpose — it is a NAMED shelf, and a
+  // row nobody can identify is a row nobody reopens. An automatic keep takes
+  // the title printed on the cover instead, and never refuses for the want of
+  // one: the papers nobody has got round to naming are precisely the ones most
+  // likely to be lost, so skipping them is exactly backwards.
+  const typed = String(_cpbMetaGet('name') || '').trim();
+  if (!typed && !auto) return { ok: false, reason: 'unnamed' };
+  const name = typed || String(_cpbPaperTitle() || '').trim();
+
   const m = cpbMarks();
   const id = _cpbLibId || _cpbId();
   const payload = {
@@ -24580,34 +24592,92 @@ async function cpbSavePaper() {
   // rather than failing inside Firestore with an error nobody can act on.
   let bytes = 0;
   try { bytes = JSON.stringify(payload).length; } catch (err) { bytes = 0; }
-  if (bytes > CPB_LIB_MAX_BYTES) {
-    showToast('This paper is too big to save in one piece (' + Math.round(bytes / 1024) + ' KB). '
-      + 'A picture pasted straight into a question rather than cropped from a screenshot is the usual cause.', 'error');
-    return;
-  }
-  if (!_cpbLibId && _cpbLib.length >= CPB_LIB_MAX) {
-    showToast('The shelf is full at ' + CPB_LIB_MAX + ' papers — delete one you have finished with first', 'error');
-    return;
-  }
-  _cpbLibBusy = true;
-  cpbRender();
+  if (bytes > CPB_LIB_MAX_BYTES) return { ok: false, reason: 'big', kb: Math.round(bytes / 1024) };
+  if (!_cpbLibId && _cpbLib.length >= CPB_LIB_MAX) return { ok: false, reason: 'full' };
+
+  // The automatic keep runs behind an export, so it neither greys the page's
+  // buttons out nor repaints it while the teacher is printing.
+  if (!auto) { _cpbLibBusy = true; cpbRender(); }
+  let out;
   try {
     await setDoc(_cpbLibDoc(id), payload);
+    // REUSED FROM NOW ON. Without this a paper exported six times is six rows
+    // on the shelf, and the shelf caps at CPB_LIB_MAX.
     _cpbLibId = id;
     const at = _cpbLib.findIndex(r => r.id === id);
     const row = _cpbLibRow({ id, name, at: payload.at, mode: payload.mode, nA: m.nA, nB: m.nB, marks: m.total,
       sentAt: at >= 0 ? _cpbLib[at].sentAt : 0 });
     if (at >= 0) _cpbLib[at] = row; else _cpbLib.push(row);
     _cpbLibSort();
-    showToast('📁 Saved as “' + name + '” — reopen it any time from 📁 Saved papers', 'success');
+    out = { ok: true, name };
   } catch (err) {
     console.warn('custom paper save:', err);
-    showToast(String((err && err.code) || '') === 'permission-denied'
-      ? 'This account is not allowed to save papers — the customPapers collection needs a rule'
-      : 'Could not save the paper — check your connection and try again', 'error');
+    out = { ok: false, reason: String((err && err.code) || '') === 'permission-denied' ? 'denied' : 'write' };
   }
-  _cpbLibBusy = false;
+  if (!auto) _cpbLibBusy = false;
   cpbRender();
+  return out;
+}
+
+// The refusals, worded once. Both doors read them, so the button and the
+// export can never explain the same refusal two different ways.
+function _cpbSaveFailNote(r) {
+  switch (r && r.reason) {
+    case 'role':    return 'Only question authors can save a paper';
+    case 'busy':    return 'A save is already running — try again in a moment';
+    case 'empty':   return 'Read the screenshots first — there is no paper to save yet';
+    case 'unnamed': return 'Give the paper a name in ① The paper first — that is what it is listed under';
+    case 'big':     return 'This paper is too big to save in one piece (' + ((r && r.kb) || 0) + ' KB). '
+                         + 'A picture pasted straight into a question rather than cropped from a screenshot is the usual cause.';
+    case 'full':    return 'The shelf is full at ' + CPB_LIB_MAX + ' papers — delete one you have finished with first';
+    case 'denied':  return 'This account is not allowed to save papers — the customPapers collection needs a rule';
+    default:        return 'Could not save the paper — check your connection and try again';
+  }
+}
+
+// 💾 Save this paper onto the shelf. Overwrites the one it was opened from, or
+// makes a new one — which is what the name is for, so the button says which.
+async function cpbSavePaper() {
+  const r = await _cpbWritePaper({ auto: false });
+  if (r.ok) { showToast('📁 Saved as “' + (r.name || 'Untitled') + '” — reopen it any time from 📁 Saved papers', 'success'); return; }
+  if (r.reason === 'busy') return;   // a second press while the first is in flight
+  showToast(_cpbSaveFailNote(r), r.reason === 'empty' ? 'info' : 'error');
+}
+
+// 🖨 EXPORTING A PAPER KEEPS IT.
+//
+// A paper is exported at the moment it is finished enough to hand to a class —
+// which is when it is worth the most and was, until now, the one moment that
+// persisted NOTHING. `cpbPrint` built HTML and printed it; the only copy was
+// the per-tab draft, which is IndexedDB on THAT machine, keyed to THAT tab. So
+// a teacher who exported a paper at home and closed the browser had no copy on
+// any server and nothing the computer in front of them could reach. That is a
+// real afternoon's work, and it is what this exists to stop happening again.
+//
+// The export therefore writes the paper onto the 📁 shelf — Firestore, and so
+// every device the teacher signs in on — through the ONE writer above.
+//
+// Three rules, and each is a way this could go wrong:
+//  • THE EXPORT MUST NEVER FAIL, WAIT ON, OR BE CHANGED BY THE KEEP. It is
+//    started before the layout work and NOT awaited, so a refused write, a
+//    full shelf or a dead connection costs the teacher nothing they asked for.
+//  • A KEEP THAT DID NOT HAPPEN IS SAID OUT LOUD. A teacher who believes the
+//    paper is on the shelf and finds it is not has lost it in exactly the way
+//    they were told they could not — which is worse than never promising.
+//  • IT IS THE SCREENSHOTS THAT ARE NOT KEPT, and that was already true of the
+//    💾 button: once the questions are read out of them the pictures are worth
+//    nothing to a paper being edited, and megabytes against a 1 MB document.
+function _cpbKeepOnExport() {
+  _cpbWritePaper({ auto: true }).then(r => {
+    if (r.ok) {
+      _cpbNote('📁 Kept on your shelf as “' + (r.name || 'Untitled') + '” — open it from any device you sign in on.');
+      return;
+    }
+    // Nothing to report: no paper to keep, not an author, or a save the 💾
+    // button already has in flight.
+    if (r.reason === 'empty' || r.reason === 'role' || r.reason === 'busy') return;
+    showToast('⚠️ This ' + cpbThing() + ' was NOT kept on your shelf — ' + _cpbSaveFailNote(r), 'error');
+  }).catch(err => console.warn('custom paper keep:', err));
 }
 
 async function _cpbLibOpenNow(id) {
@@ -25054,6 +25124,11 @@ function _cpbReady() {
 
 async function cpbPrint() {
   if (!_cpbReady()) return;
+  // 🖨 …AND THE EXPORT KEEPS IT. Started HERE — before the image preload and
+  // the layout, and deliberately not awaited — so the paper reaches the shelf
+  // even if the print itself is cancelled, and so nothing about the export can
+  // ever wait on, or fail because of, a write. See `_cpbKeepOnExport`.
+  _cpbKeepOnExport();
   const o = _cpbOutputOpts();
   const selected = _cpbPrintOrder();
   const output = document.getElementById('printOutput');
