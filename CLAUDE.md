@@ -5355,6 +5355,21 @@ pupil writes, in their own words, what they were learning.
 - **The LIVE A4 preview reads the same switches** (`_wsPreviewCtx` →
   `objectivesBoxAll`), or the preview is a preview of a different sheet. The
   past-paper branch is explicitly `objBoxAll: false` rather than merely absent.
+- **…and so must every OTHER surface that shows a proof of a sheet** (v1.369.1).
+  Two of them read a different set of switches from the printer that makes the
+  sheet, and both looked like a working preview:
+  - **🗂️ Custom Paper sets `objectivesBoxAll: false` in `buildOpts`, in BOTH
+    modes.** `cpbPrint` calls `buildWorksheetHtml` with those `buildOpts` and
+    gets `false` by default — but its PREVIEW goes through `_wsPreviewCtx`'s
+    ADHOC branch, which reads the 🖨 print picker's own `printIncludeObjBox`,
+    and `buildOpts` is assigned OVER that base object. Merely absent, a teacher
+    with that box ticked sees a 🎯 box on every question of the preview that the
+    exported paper does not have.
+  - **The 👁 Vetting hover reads `objBoxPrintOn('bank')`** beside the
+    `wnyPrintOn('bank')` / `akxPrintOn('bank')` it already read. Its own
+    "Open full preview" opens `previewOneQuestionPrint` on the SAME question,
+    which does read it — so leaving it out is one question with two proofs that
+    disagree.
 - The height needs no reservation: the CER planner MEASURES the finished page
   in a print-CSS iframe, so an extra box re-paginates for free. What it does
   need is the `.print-chunk-tall` / `.print-page-tall` release — a box that
@@ -5369,6 +5384,15 @@ pupil writes, in their own words, what they were learning.
 - Run **`node tools/objectives-box-tests.mjs`** after touching any of it.
 
 ## House rules
+- After touching **any surface that shows a PROOF of a printed sheet** — the
+  live A4 preview, 🗂️ Custom Paper's `buildOpts`, or the 👁 Vetting hover — make
+  it read the same switches as the printer that makes that sheet, and run
+  `node tools/objectives-box-tests.mjs`. A preview reading one set of switches
+  and the PDF another does not throw and does not look wrong: it looks like a
+  working preview of a sheet that will never come out of the printer, which is
+  the one thing a preview must never be. `buildOpts` is assigned OVER the
+  preview's base object, so a Custom Paper option that is merely ABSENT is not
+  off — it is whatever the print picker happens to be set to.
 - After touching **🎯 the learning-objectives box** (`OBJBOX_*`, `objBoxLines`,
   `objBoxLabel`, `objBoxPrintHtml`, `objBoxScreenHtml`, `objBoxPreviewHtml`,
   `objBoxAutoHtml`, `OBJBOX_SWITCHES` / `objBoxPrintOn`, either print builder's

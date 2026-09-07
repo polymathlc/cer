@@ -303,6 +303,34 @@ test('a question carrying a box is not "MCQ only"', () => {
   ok(fn.indexOf("'objectivesBox'") >= 0, 'qIsMcqOnly counts a box-carrying MCQ as MCQ-only');
 });
 
+// ---- THE PREVIEW IS THE PRINT ----------------------------------------------
+// Both of these are the same fault wearing two hats: a surface that shows a
+// proof of a sheet and reads a DIFFERENT set of switches from the printer that
+// makes it. Neither throws, and both look like a working preview.
+test('🗂️ Custom Paper turns the box off explicitly, in both modes', () => {
+  // `cpbPrint` calls buildWorksheetHtml with these `buildOpts` and would get
+  // false by default — but the PREVIEW goes through _wsPreviewCtx's adhoc
+  // branch, which reads the 🖨 print picker's own printIncludeObjBox, and
+  // buildOpts is assigned OVER that base. Without an explicit false a teacher
+  // with that box ticked sees a 🎯 box on every question of the preview that
+  // the exported paper does not have.
+  const paperOpts = cut('function _cpbPaperOpts() {', '\nfunction _cpbWorksheetOpts()', 'the paper opts');
+  const wsOpts = cut('function _cpbWorksheetOpts() {', '\n// THE ONE DOOR the printer', 'the worksheet opts');
+  ok(paperOpts.indexOf('objectivesBoxAll: false') >= 0, 'paper mode does not turn the box off');
+  ok(wsOpts.indexOf('objectivesBoxAll: false') >= 0, 'worksheet mode does not turn the box off');
+});
+
+test('the 👁 Vetting hover reads the same bank switches as the full preview', () => {
+  // The hover's own "Open full preview" opens previewOneQuestionPrint on the
+  // SAME question, which reads objBoxPrintOn('bank') through the adhoc
+  // context. Left out here, the two proofs of one question differ.
+  const peek = cut('const html = buildWorksheetHtml([copy]', '_wsWritePreview(frame, html', 'the hover build');
+  ok(peek.indexOf("wnyPrintOn('bank')") >= 0, 'the hover stopped reading the why switch');
+  ok(peek.indexOf("akxPrintOn('bank')") >= 0, 'the hover stopped reading the explanations switch');
+  ok(peek.indexOf("objectivesBoxAll: objBoxPrintOn('bank')") >= 0,
+     'the hover does not read the 🎯 switch the full preview reads');
+});
+
 // ---- run -------------------------------------------------------------------
 const only = process.argv[2];
 let pass = 0, fail = 0;
