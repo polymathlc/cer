@@ -3342,7 +3342,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.368.0';
+const APP_VERSION = 'v1.369.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5049,6 +5049,13 @@ function createBlock(type) {
       break;
     case 'openLines':
       block.lines = 4;
+      break;
+    // 🎯 A blank rounded box for the student's OWN learning objective. Two
+    // lines by default; never an answer, never on the key — see the block of
+    // notes above `loBoxPrintHtml`.
+    case 'learningObjectives':
+      block.lines = LOBOX_LINES;
+      block.label = LOBOX_LABEL;
       break;
     case 'fillblank':
       // Paragraph text; blanked answers are wrapped in [[double brackets]].
@@ -6803,6 +6810,7 @@ function renderBlocks() {
       case 'mcq':         badgeClass = 'answer-badge'; badgeIcon = '🔘'; badgeLabel = 'Multiple Choice'; break;
       case 'answerLine':  badgeClass = 'plainanswer-badge'; badgeIcon = '✏️'; badgeLabel = 'Answer Line'; break;
       case 'openLines':   badgeClass = 'plainanswer-badge'; badgeIcon = '✍️'; badgeLabel = 'Open-Ended Answer'; break;
+      case 'learningObjectives': badgeClass = 'text-badge'; badgeIcon = '🎯'; badgeLabel = 'Learning Objective'; break;
       case 'fillblank':   badgeClass = 'plainanswer-badge'; badgeIcon = '🔲'; badgeLabel = 'Fill in the Blanks'; break;
       case 'workingSpace':badgeClass = 'plainanswer-badge'; badgeIcon = block.annotate ? '✍️' : '🧮'; badgeLabel = block.annotate ? 'Annotation Working Area' : 'Working Space'; break;
       case 'commonMistake':badgeClass = 'explanation-badge'; badgeIcon = '⚠️'; badgeLabel = 'Common Mistake'; break;
@@ -7096,6 +7104,7 @@ function makeBlockInsertBar(index) {
       <button type="button" class="block-insert-btn" onclick="addBlockAt('openLines', ${index})">✍️ Open-Ended Answer</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('fillblank', ${index})">🔲 Fill-in-the-Blanks</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('workingSpace', ${index})">🧮 Working Space</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('learningObjectives', ${index})">🎯 Learning Objective</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('commonMistake', ${index})">⚠️ Common Mistake</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('studentAnswer', ${index})">🧑‍🎓 Student Answer</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('answerKey', ${index})">🔑 Answer Key</button>
@@ -8185,6 +8194,35 @@ function renderImportedBlockEditorBody(block) {
           </div>
         </div>`;
     }
+    case 'learningObjectives': {
+      const lon = loBoxLines(block.lines);
+      const lolab = loBoxLabel(block);
+      return `
+        <div class="block-body">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+            <label style="font-size:0.85rem;font-weight:600;">\u{1F3AF} Lines
+              <input class="form-input" type="number" min="1" max="${LOBOX_LINES_MAX}" style="width:80px;margin-left:8px;"
+                     value="${lon}" oninput="saveBlockNum('${id}','lines',this.value,1,${LOBOX_LINES_MAX})"></label>
+            <label style="font-size:0.85rem;font-weight:600;flex:1;min-width:200px;">Caption
+              <input class="form-input" type="text" placeholder="Leave blank for no caption" style="margin-left:8px;max-width:260px;"
+                     value="${escapeHtml(lolab)}" oninput="saveBlockField('${id}','label',this.value)"></label>
+          </div>
+          <div style="font-size:0.78rem;color:var(--text-muted);line-height:1.6;margin-bottom:10px;">
+            A blank rounded box the student writes their own learning objective in \u2014 what this question taught them.
+            <strong>It is never marked and never appears on the answer key.</strong> On screen it is a scratch box they can type in;
+            on a printed or exported worksheet it is ${lon} ruled line${lon === 1 ? '' : 's'}.
+            You can also switch one on for <em>every</em> question at once from the worksheet's
+            \u{1F3AF} <em>Learning-objective box on every question</em> option when you print.
+          </div>
+          <div style="border:1px dashed var(--border);border-radius:8px;padding:10px 12px;background:var(--surface-alt,#fafbfa);">
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;">Printed box preview:</div>
+            <div style="border:1.5px solid #b9b9b9;border-radius:10px;padding:8px 10px;background:#fff;">
+              ${lolab ? `<div style="font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase;font-weight:700;color:#777;margin-bottom:5px;">\u{1F3AF} ${escapeHtml(lolab)}</div>` : ''}
+              ${Array.from({ length: lon }).map(() => '<div style="border-bottom:1px dotted #ccc;height:20px;"></div>').join('')}
+            </div>
+          </div>
+        </div>`;
+    }
     case 'fillblank':
       return `
         <div class="block-body">
@@ -8308,6 +8346,19 @@ function renderImportedBlockStudent(block, q) {
       return `<div class="ws-open-lines" style="margin:10px 0;height:${_wsBlockLines(block.lines, 4) * 26}px;"></div>`;
     case 'workingSpace':
       return `<div class="ws-working" style="margin:10px 0;border:1px dashed #c4c4c4;border-radius:8px;height:${_wsBlockLines(block.lines, 6) * 26}px;"></div>`;
+    // The STATIC box — exactly what prints. The interactive one a student can
+    // type into is `buildOpenBody`'s own case, which is the single place in
+    // this app where a block becomes something to fill in; every other
+    // consumer of this renderer (the read-only preview, the ✎ Questions
+    // drawer, the vetting card) wants the printed shape.
+    case 'learningObjectives': {
+      const lon = loBoxLines(block.lines);
+      const lolab = loBoxLabel(block);
+      return `<div class="lo-box">`
+        + (lolab ? `<div class="lo-box-label">&#127919; ${escapeHtml(lolab)}</div>` : '')
+        + Array.from({ length: lon }).map(() => '<div class="lo-box-line"></div>').join('')
+        + `</div>`;
+    }
     case 'fillblank':
       return _fbHasBlanks(block) ? `<div style="margin:10px 0;">${_fbReadonlyHtml(block)}</div>` : `<div class="fb-sentence" style="line-height:2;margin:10px 0;">${escapeHtml(block.text || '')}</div>`;
     case 'commonMistake': {
@@ -20842,6 +20893,101 @@ function printAnswerLines(block, text) {
   return Math.max(PRINT_ANSWER_LINES, Math.min(PRINT_LINES_MAX, need));
 }
 
+// =====================================================================
+// 🎯 THE LEARNING-OBJECTIVE BOX — a blank rounded rectangle a student writes
+// their OWN learning objective into.
+//
+// IT IS NOT AN ANSWER, and that is the whole design. Nothing about it reaches
+// `_pushBlockAnswerKey`, the marker, `_openSection`'s `items`, or any of the
+// "does this question have an answer" predicates (`qHasOpenAnswer`,
+// `kwBlockFields`, `_mpBankAnswer`, `qIsMcqOnly`…). What a child writes here is
+// their own reflection on what the question taught them; a box that quietly got
+// marked would stop being honest the first time one of them was told their
+// learning objective was wrong. So the type is deliberately absent from every
+// one of those lists rather than present-and-filtered — an omission cannot be
+// half-forgotten the way a filter can.
+//
+// TWO WAYS IN, ONE BUILDER. A 🎯 Learning Objectives block can be dropped into
+// a single question from the block editor, and the worksheet-export switch puts
+// one at the foot of EVERY question on the sheet. Both go through
+// `loBoxPrintHtml`, so the box a teacher inserted by hand and the box the sheet
+// gave every question are the same box — and the two print paths cannot drift
+// apart over it the way they had already drifted over the MCQ answer.
+const LOBOX_LINES = 2;        // the default — two lines, which is what a
+                              // learning objective is: one sentence, sometimes
+                              // two. The author can change it per block.
+// The cap on the author's line count. It is FAR below PRINT_LINES_MANUAL_MAX
+// (24) on purpose: an answer box is one question's own, but with the
+// sheet-wide switch on this box is added to EVERY question, so a big number is
+// multiplied by the whole paper. 12 lines is ~96pt of rules plus padding —
+// generous for a sentence, and it can never be the thing that makes a question
+// too tall for its sheet.
+const LOBOX_LINES_MAX = 12;
+const LOBOX_LABEL = 'Learning objective';
+// The label above the box. `undefined` is a block that has never been touched
+// and gets the default; an EMPTY STRING is the author having cleared it, and
+// prints no caption at all. `|| LOBOX_LABEL` would bring a cleared one back on
+// the next render — the same trap `wsHeaderOrgOf` documents in the Maths app.
+function loBoxLabel(block) {
+  if (!block || block.label === undefined || block.label === null) return LOBOX_LABEL;
+  return String(block.label).trim();
+}
+// Anything that is not a whole number of lines is the DEFAULT, never zero: a
+// box with no lines in it is a rounded rectangle nobody can write in, and it
+// renders perfectly.
+function loBoxLines(value) {
+  const n = parseInt(value, 10);
+  if (!isFinite(n) || n < 1) return LOBOX_LINES;
+  return Math.min(LOBOX_LINES_MAX, n);
+}
+// …and the SHEET-WIDE reading of the same value, where 0 has to survive.
+// `loBoxLines` exists for a BLOCK, where a missing count means "give it the
+// default" — a rounded rectangle with no rules in it is a box nobody can write
+// in. Here a missing count means the switch is OFF, so it must come back as 0
+// and not as two lines quietly added to every question on the paper.
+function loBoxLines0(value) {
+  const n = parseInt(value, 10);
+  if (!isFinite(n) || n < 1) return 0;
+  return Math.min(LOBOX_LINES_MAX, n);
+}
+// The ONE printed box. Both print paths and the read-only renderings call it.
+function loBoxPrintHtml(block) {
+  const n = loBoxLines(block && block.lines);
+  const label = loBoxLabel(block);
+  return `<div class="print-lo-box">`
+    + (label ? `<div class="print-lo-label">&#127919; ${escapeHtml(label)}</div>` : '')
+    + Array.from({ length: n }).map(() => '<div class="print-lo-line"></div>').join('')
+    + `</div>`;
+}
+// A question that already carries a box of its own must not be given a second
+// one by the sheet-wide switch — two identical empty boxes under one question
+// reads as a printing fault, and the author's own line count would be the one
+// that looked wrong.
+function qHasLoBox(q) {
+  return !!(q && Array.isArray(q.blocks) && q.blocks.some(b => b && b.type === 'learningObjectives'));
+}
+// The sheet-wide box for one question, or nothing. `lines` is falsy when the
+// export switch is off, which is every print this app made before this existed.
+function loBoxSheetHtml(q, lines) {
+  if (!lines || qHasLoBox(q)) return '';
+  return loBoxPrintHtml({ lines: lines });
+}
+
+// WHICH SURFACE ASKED FOR IT. The same shape as WNY_SWITCHES / AKX_SWITCHES,
+// and for the same reason: an unknown surface returns false rather than
+// falling through to another page's checkbox, which would honour a switch the
+// teacher set somewhere else on a print they started from here, with nothing on
+// this screen able to explain it.
+const LOB_SWITCHES = { builder: 'wsIncludeLo', saved: 'mwIncludeLo', bank: 'printIncludeLo' };
+// A number of lines rather than a boolean, so `buildWorksheetHtml` takes one
+// value that says both WHETHER and HOW TALL — and 0 is the honest "off".
+function lobPrintLines(where) {
+  const id = LOB_SWITCHES[where];
+  if (!id) return 0;
+  const el = document.getElementById(id);
+  return (el && el.checked) ? LOBOX_LINES : 0;
+}
+
 // A printed MCQ needs somewhere to WRITE THE ANSWER.
 //
 // On screen an MCQ is answered by tapping an option, so nothing had to be
@@ -20998,6 +21144,15 @@ function doPrintWorksheetOpen(whyNotes) {
           qHtml += renderTableReadonly(block, 'print-table');
           break;
         }
+        // 🎯 Explicit, and through `loBoxPrintHtml` — the ONE builder the other
+        // print path and the sheet-wide switch also call, so a box inserted by
+        // hand and a box the sheet gave every question are the same box. It
+        // pushes NOTHING onto the key: a learning objective is the student's
+        // own, and there is no right answer to print beside it.
+        case 'learningObjectives': {
+          qHtml += loBoxPrintHtml(block);
+          break;
+        }
         // Explicit, so it does NOT fall through to renderImportedBlockStudent,
         // whose fillblank branch prints the answer inside every blank.
         case 'fillblank': {
@@ -21031,6 +21186,12 @@ function doPrintWorksheetOpen(whyNotes) {
       }
     });
 
+    // 🎯 …and the sheet-wide box, at the FOOT of the question, after everything
+    // the author wrote. Read straight off this page's own checkbox, exactly as
+    // `akxPrintOn('bank')` is a few lines above. `loBoxSheetHtml` gives nothing
+    // when the switch is off (every print this app made before this existed) or
+    // when the question already carries a box of its own.
+    qHtml += loBoxSheetHtml(q, lobPrintLines('bank'));
     qHtml += `</div>`;
     allHtml += qHtml;
     const _akExtra = _qAnswerKeyExtraSection(q);
@@ -24791,6 +24952,13 @@ function _cpbPaperOpts() {
       noStudentFields: true,
       answerKeyExtras: true,
       sectionHtmlById,
+      // 🎯 EXPLICITLY OFF. `cpbPrint` calls `buildWorksheetHtml` directly and
+      // would get 0 by default, but the PREVIEW goes through `_wsPreviewCtx`'s
+      // adhoc branch, which reads the 🖨 print picker's own checkbox — so
+      // without this the preview grows a learning-objective box on every
+      // question that the PDF does not have. `buildOpts` is assigned over the
+      // preview's base, which is what makes this the deciding value on both.
+      loBox: 0,
       paper: {
         numbers,
         pageHtmlById,
@@ -24844,6 +25012,13 @@ function _cpbWorksheetOpts() {
       noStudentFields: !_cpbMetaGet('wsFields'),
       answerKeyExtras: true,
       sectionHtmlById,
+      // 🎯 EXPLICITLY OFF. `cpbPrint` calls `buildWorksheetHtml` directly and
+      // would get 0 by default, but the PREVIEW goes through `_wsPreviewCtx`'s
+      // adhoc branch, which reads the 🖨 print picker's own checkbox — so
+      // without this the preview grows a learning-objective box on every
+      // question that the PDF does not have. `buildOpts` is assigned over the
+      // preview's base, which is what makes this the deciding value on both.
+      loBox: 0,
     },
   };
 }
@@ -29069,6 +29244,20 @@ function buildOpenBody(q, containerSel, markCfg) {
       case 'table':
         add(renderTableReadonly(block, ''));
         break;
+      // 🎯 A learning-objective box. `add`, NEVER `addAnswer` — the section it
+      // sits in must not be counted as carrying an answer, or a question whose
+      // only "answer" is a reflection box would be served, marked and scored on
+      // one. Nothing is pushed into `items`, so the marker never sees it.
+      case 'learningObjectives': {
+        const lon = loBoxLines(block.lines);
+        const lolab = loBoxLabel(block);
+        add(`<div class="lo-box lo-box-live">`
+          + (lolab ? `<div class="lo-box-label">&#127919; ${escapeHtml(lolab)}</div>` : '')
+          + `<textarea class="lo-box-write" rows="${lon}" spellcheck="true" placeholder="What did this question teach you?" aria-label="${escapeHtml(lolab || 'Learning objective')}"></textarea>`
+          + `<div class="lo-box-note">Just for you \u2014 this is not marked and is not saved.</div>`
+          + `</div>`);
+        break;
+      }
       default:
         add(renderImportedBlockStudent(block, q));
         break;
@@ -32313,6 +32502,11 @@ function renderQuestionBodyPreviewHtml(q) {
         }
         html += `<div style="margin:8px 0;padding:8px 12px;border:1px dashed var(--border);border-radius:8px;background:var(--surface-alt,#fafbfa);font-size:0.82rem;color:var(--text-muted);">✍️ Open-ended answer space (${Number(block.lines) || (block.type === 'openLines' ? 4 : 6)} lines)</div>`;
         break;
+      case 'learningObjectives': {
+        const lon = loBoxLines(block.lines);
+        html += `<div style="margin:8px 0;padding:8px 12px;border:1px dashed var(--border);border-radius:8px;background:var(--surface-alt,#fafbfa);font-size:0.82rem;color:var(--text-muted);">&#127919; Learning-objective box (${lon} line${lon === 1 ? '' : 's'}) &mdash; not marked, not on the key</div>`;
+        break;
+      }
       case 'explanation':
         break;
       default:
@@ -32560,7 +32754,7 @@ async function reprintWorksheet(id) {
   const noFields = !_wsStudentFieldsOn('saved');
   const wantCover = !!document.getElementById('mwIncludeCover')?.checked;
   const why = await _wnyRunPrepare(selected, wnyPrintOn('saved'));
-  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields) : '', noFields, why, akxPrintOn('saved'));
+  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields) : '', noFields, why, akxPrintOn('saved'), lobPrintLines('saved'));
 }
 
 // The questions of a saved worksheet, in the order they were chosen — the ids
@@ -33059,7 +33253,7 @@ async function printStudentWorksheet() {
   const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
   const frontHtml = await _wsFrontHtml(selected, title);
   const why = await _wnyRunPrepare(selected, wnyPrintOn('builder'));
-  await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why, akxPrintOn('builder'));
+  await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why, akxPrintOn('builder'), lobPrintLines('builder'));
 }
 
 // Worksheet title banner + name/date/class strip printed at the top of page 1.
@@ -33121,6 +33315,12 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   //                                 question, for a `.print-front-page` that
   //                                 must not be hoisted to the front
   //   noBracketIds  Set of qids whose MCQ prints no answer bracket
+  // loBox: 🎯 put a blank learning-objective box at the foot of EVERY question
+  // on this sheet, this many ruled lines tall. It is a number rather than a
+  // boolean so one value says both whether and how tall; 0 or absent — which is
+  // every caller that has not opted in — prints byte-for-byte the sheet that
+  // printed before this existed.
+  const loBoxEvery = loBoxLines0(opts && opts.loBox);
   const paper = (opts && opts.paper) || null;
   const paperNums = (paper && paper.numbers) || null;
   const pageHtmlById = (paper && paper.pageHtmlById) || null;
@@ -33215,6 +33415,9 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             break;
           }
           case 'table': { qHtml += renderTableReadonly(block, 'print-table'); break; }
+          // 🎯 The identical case is in `doPrintWorksheetOpen`, and both build
+          // the box through `loBoxPrintHtml` — the two sheets cannot drift.
+          case 'learningObjectives': { qHtml += loBoxPrintHtml(block); break; }
           case 'explanation': {
             // `bPart` matters now that explanations can be filed per part from
             // the preview: without it the key prints (b)'s explanation under
@@ -33262,6 +33465,13 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
           }
         }
       });
+      // 🎯 The sheet-wide box, at the foot of the question. `loBox` is a NUMBER
+      // OF LINES, so one value says both whether and how tall, and 0 — every
+      // caller that does not pass it — is the honest "off". A question that
+      // already carries a 🎯 block of its own keeps that one and is not given a
+      // second: two identical empty boxes under one question read as a printing
+      // fault, and the author's own line count is the one that looks wrong.
+      qHtml += loBoxSheetHtml(q, loBoxEvery);
       qHtml += `</div>`;
       allHtml += qHtml;
       const _akExtra = _qAnswerKeyExtraSection(q);
@@ -33324,12 +33534,15 @@ async function _wnyRunPrepare(selected, on) {
   return notes;
 }
 
-async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes, akExtras) {
+async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes, akExtras, loBox) {
   const output = document.getElementById('printOutput');
   // plainNumbers: a worksheet is numbered "Question 1, 2, 3…" for the student.
   // The bank's own title and its category/topic line are internal filing —
   // useful in the admin's bank, meaningless (and a giveaway) on a printed sheet.
-  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields, whyNotes: whyNotes || null, answerKeyExtras: !!akExtras });
+  // loBox: 🎯 lines for a learning-objective box on every question, 0 for none.
+  // It is the LAST argument for a reason — every existing caller that does not
+  // pass it gets `undefined`, which `loBoxLines0` reads as off.
+  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields, whyNotes: whyNotes || null, answerKeyExtras: !!akExtras, loBox: loBox });
   autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp });
 }
 
@@ -33956,6 +34169,9 @@ function _wsPreviewCtx() {
       // A past paper always prints its explanations — it is a marking scheme,
       // not a worksheet — so there is no checkbox and nothing to read.
       akExtras: true,
+      // …and no 🎯 learning-objective box, for the same reason: a paper is
+      // reproduced as it was sat, and `ppDoPrint` passes none either.
+      loBox: 0,
       frontHtml: _ppCoverHtml(_wsPreviewPaper.coverTitle || _wsPreviewPaper.title || 'Past paper')
     };
   }
@@ -33972,6 +34188,7 @@ function _wsPreviewCtx() {
       // there rather than inventing a second pair of checkboxes.
       where: 'bank',
       akExtras: akxPrintOn('bank'),
+      loBox: lobPrintLines('bank'),
       // 📝 Custom Paper hands the preview the SAME arguments its printer uses
       // — its covers, its gutter numbers, its forced breaks — so the sheet on
       // screen is the sheet that comes out of the PDF.
@@ -33989,7 +34206,8 @@ function _wsPreviewCtx() {
       cover: !!document.getElementById('mwIncludeCover')?.checked,
       noFields: !_wsStudentFieldsOn('saved'),
       where: 'saved',
-      akExtras: akxPrintOn('saved')
+      akExtras: akxPrintOn('saved'),
+      loBox: lobPrintLines('saved')
     };
   }
   return {
@@ -33999,7 +34217,8 @@ function _wsPreviewCtx() {
     cover: !!document.getElementById('wsIncludeCover')?.checked,
     noFields: !_wsStudentFieldsOn('builder'),
     where: 'builder',
-    akExtras: akxPrintOn('builder')
+    akExtras: akxPrintOn('builder'),
+    loBox: lobPrintLines('builder')
   };
 }
 
@@ -34221,7 +34440,12 @@ function vetPrintPeekShow(anchor, event) {
       const html = buildWorksheetHtml([copy], q.title || 'Question', {
         frontHtml: '', plainNumbers: true, noStudentFields: true,
         whyNotes: _wnyCachedNotes([copy], wnyPrintOn('bank')),
-        answerKeyExtras: akxPrintOn('bank')
+        answerKeyExtras: akxPrintOn('bank'),
+        // The 🎯 box too, off the SAME `bank` switches the two lines above
+        // read. The hover and the full preview are the same proof of the same
+        // question, and one of them quietly showing a different sheet is the
+        // exact drift `_wsWritePreview` being shared exists to prevent.
+        loBox: lobPrintLines('bank')
       });
       _wsWritePreview(frame, html, { readOnly: true,
         isCurrent: () => serial === _vetPrintPeekSerial && host.isConnected,
@@ -34382,7 +34606,7 @@ async function printQuestionsDirect(questions, title) {
   const list = (questions || []).filter(Boolean);
   if (!list.length) { showToast('There is nothing to print', 'error'); return; }
   const why = await _wnyRunPrepare(list, wnyPrintOn('bank'));
-  await doPrintStudentWorksheet(list, title || 'Questions', '', true, why, akxPrintOn('bank'));
+  await doPrintStudentWorksheet(list, title || 'Questions', '', true, why, akxPrintOn('bank'), lobPrintLines('bank'));
 }
 
 async function renderWsPreview() {
@@ -34397,7 +34621,8 @@ async function renderWsPreview() {
   const html = buildWorksheetHtml(selected, title, Object.assign({
     frontHtml, plainNumbers: true, noStudentFields: ctx.noFields,
     whyNotes: _wnyCachedNotes(selected, wnyPrintOn(ctx.where)),
-    answerKeyExtras: !!ctx.akExtras
+    answerKeyExtras: !!ctx.akExtras,
+    loBox: ctx.loBox || 0
   }, ctx.buildOpts || {}));   // exactly what will print
   _wsWritePreview(frame, html, { ctxBreaks: ctx.forcedBreakIds || null });
 }
@@ -34654,6 +34879,8 @@ function _wsQeBlockSummary(b) {
     case 'plainanswer': return printAnswerLines(b, b.content) + ' printed answer line'
       + (printAnswerLines(b, b.content) === 1 ? '' : 's');
     case 'openLines': return (Number(b.lines) || 4) + ' blank lines';
+    case 'learningObjectives': return 'Learning-objective box \u00b7 ' + loBoxLines(b.lines) + ' line'
+      + (loBoxLines(b.lines) === 1 ? '' : 's');
     case 'workingSpace': return 'Working space';
     case 'answerLine': return 'Answer line';
     case 'fillblank': return 'Fill in the blanks';

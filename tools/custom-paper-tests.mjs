@@ -599,6 +599,9 @@ ok('qIsMcqOnly takes a QUESTION as well as a block list — both call sites pass
  * ------------------------------------------------------------------ */
 const bwh = cut('function buildWorksheetHtml(selected, worksheetTitle, opts) {', '\n// One AI call per MCQ is a real wait', 'buildWorksheetHtml');
 const shapeFn = cut('function qIsMcqOnly(blocks) {', '\n// Take a printed marks marker back out', 'qIsMcqOnly');
+// The REAL 🎯 learning-objective helpers, not stubs: with them in, this harness
+// also proves that a sheet built with no `loBox` option grows no box at all.
+const loCore = cut('const LOBOX_LINES = 2;', '\n// WHICH SURFACE ASKED FOR IT.', 'the learning-objective helpers');
 const bwhStubs = `
   const escapeHtml = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const escapeHtmlKeepLines = s => escapeHtml(s);
@@ -633,6 +636,7 @@ const bwhStubs = `
   const _printMcqBlockHtml = (b) => renderImportedBlockStudent(b) + '<div class="print-mcq-answer">BRACKET</div>';
   const _pushBlockAnswerKey = (s, b) => { if (b.type === 'mcq') { const c = (b.options||[]).find(o=>o.id===b.correctId); if (c) s.push({ label: 'Answer', content: escapeHtml(c.text) }); } };
   const qMarksOf = () => 0;
+  ${loCore}
   ${shapeFn}
   ${bwh}
   return buildWorksheetHtml;

@@ -3467,6 +3467,38 @@ option {
     height: 20pt;
     width: 100%;
   }
+  /* 🎯 THE LEARNING-OBJECTIVE BOX — a blank rounded rectangle the student
+     writes their own learning objective into. Rounder and lighter than the
+     open-answer box above it on purpose: a bordered box on this sheet already
+     means "write your answer here", and a student who reads this one as an
+     answer box writes the answer in it and leaves the real box empty. Its
+     caption is what tells them apart, so the caption is not decoration.
+     `break-inside: avoid` keeps it with the question it belongs to — a blank
+     box stranded at the top of the next sheet is a box nobody connects to
+     anything. */
+  .print-lo-box {
+    border: 1.2pt solid #b9b9b9;
+    border-radius: 10pt;
+    margin: 8pt 0 6pt 0;
+    padding: 7pt 10pt 5pt 10pt;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-lo-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    font-weight: 700;
+    color: #777;
+    margin-bottom: 4pt;
+  }
+  .print-lo-line {
+    border-bottom: 1pt dotted #cccccc;
+    height: 20pt;
+    width: 100%;
+  }
+
   /* The MCQ answer box — where the student writes the option they chose.
      A printed MCQ used to end at its last option, so the answer went in the
      margin, in a different place on every script. Right-aligned and one line
@@ -3779,9 +3811,11 @@ option {
   .print-chunk-tall .print-open-answer-box,
   .print-chunk-tall .print-open-cer-box,
   .print-chunk-tall .print-cer-section,
+  .print-chunk-tall .print-lo-box,
   .print-page-tall .print-open-answer-box,
   .print-page-tall .print-open-cer-box,
   .print-page-tall .print-cer-section,
+  .print-page-tall .print-lo-box,
   .print-page-tall .print-ak-question {
     page-break-inside: auto !important;
     break-inside: auto !important;
@@ -9704,6 +9738,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
               &#x1F532; Add Fill-in-the-Blanks
             </button>
+            <button class="add-block-btn text-add" onclick="addBlock('learningObjectives')" title="A blank rounded box the student writes their own learning objective in. Never marked, never on the answer key.">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+              &#x1F3AF; Add Learning Objective
+            </button>
             <button class="add-block-btn explanation-add" onclick="addBlock('explanation')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
               &#x1F4A1; Add Explanation
@@ -10347,6 +10385,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             <input type="checkbox" id="printIncludeExpl" style="width:16px;height:16px;accent-color:var(--primary);">
             &#128161; Explanations on the answer key
           </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Put a blank rounded box at the foot of every question for the student to write their own learning objective in. A question that already carries its own &#127919; Learning Objective block keeps that one.">
+            <input type="checkbox" id="printIncludeLo" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#127919; Learning-objective box on every question
+          </label>
           <span class="selected-count" id="printSelectedCount">0 selected</span>
           <button class="btn btn-primary" onclick="printWorksheet()" id="printBtn" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -10458,6 +10500,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             <input type="checkbox" id="wsIncludeExpl" style="width:16px;height:16px;accent-color:var(--primary);">
             &#128161; Explanations on the answer key
           </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Put a blank rounded box at the foot of every question for the student to write their own learning objective in. A question that already carries its own &#127919; Learning Objective block keeps that one.">
+            <input type="checkbox" id="wsIncludeLo" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#127919; Learning-objective box on every question
+          </label>
         </div>
 
         <div class="ws-actions-bar">
@@ -10519,6 +10565,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <label title="Print each question's explanation on the answer key, under its answer. Write and edit them from the preview with ✏️ edit answer.">
             <input type="checkbox" id="mwIncludeExpl" style="width:16px;height:16px;accent-color:var(--primary);">
             &#128161; Explanations on the answer key
+          </label>
+          <label title="Put a blank rounded box at the foot of every question for the student to write their own learning objective in. A question that already carries its own &#127919; Learning Objective block keeps that one.">
+            <input type="checkbox" id="mwIncludeLo" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#127919; Learning-objective box on every question
           </label>
         </div>
         <div class="ws-saved-grid" id="savedWsGrid"></div>
@@ -13830,6 +13880,20 @@ body.lore-reading { overflow: hidden; }
 .kw-fib-label{ display:inline-block; font-size:0.72rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; padding:2px 9px; border-radius:6px; margin-bottom:8px; }
 .kw-fib-sentence{ line-height:2.6; font-size:0.98rem; }
 .kw-mode-note{ display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; padding:10px 14px; border:1px solid var(--accent-blue,#2d6ca8); background:rgba(45,108,168,0.06); border-radius:10px; font-size:0.85rem; line-height:1.6; }
+/* ── 🎯 The learning-objective box ──────────────────────────────────────
+   A blank rounded rectangle the student writes their own learning objective
+   in. Deliberately a DASHED, quieter box than the answer surfaces around it:
+   a solid bordered box in practice already means "your answer goes here", and
+   a student who reads this one as an answer box writes the answer in it. Its
+   caption and its note are what tell them apart, so neither is decoration. */
+.lo-box{ margin:12px 0; padding:12px 14px 10px; border:1.5px dashed var(--border); border-radius:14px; background:var(--surface-alt,#fafbfa); }
+.lo-box-label{ font-size:0.72rem; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px; }
+/* The STATIC rendering — what prints, and what every read-only surface shows. */
+.lo-box-line{ border-bottom:1px dotted #cbcbcb; height:22px; }
+/* …and the live one a student can actually type in. */
+.lo-box-write{ display:block; width:100%; box-sizing:border-box; border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-family:inherit; font-size:0.95rem; line-height:1.7; background:#fff; color:var(--on-surface,#14161a); resize:vertical; }
+.lo-box-write:focus{ outline:none; border-color:var(--accent-blue,#2d6ca8); box-shadow:0 0 0 2px rgba(45,108,168,0.15); }
+.lo-box-note{ font-size:0.76rem; color:var(--text-muted); margin-top:7px; line-height:1.5; }
 /* ── Practice question parts — clean grouped cards instead of tag chips ── */
 .qp-part{ border:1px solid var(--border); border-radius:14px; padding:18px 20px 14px; margin:0 0 16px; background:var(--surface,#fff); }
 .qp-part.solo{ border:none; border-radius:0; padding:0; margin:0; }

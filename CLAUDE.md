@@ -4808,6 +4808,73 @@ plainly printed had to be typed back in by hand, question by question.
   nothing and the teacher types the number in again.
 - Run **`node tools/auto-check-tests.mjs`** after touching any of it.
 
+## 🎯 The learning-objective box (v1.369.0)
+
+`LOBOX_LINES` / `LOBOX_LINES_MAX` / `LOBOX_LABEL` / `loBoxLabel` / `loBoxLines`
+/ `loBoxLines0` / **`loBoxPrintHtml`** / `qHasLoBox` / `loBoxSheetHtml` /
+`LOB_SWITCHES` / `lobPrintLines` (in `app.js`, search `THE LEARNING-OBJECTIVE
+BOX`), the `learningObjectives` block type, the `.print-lo-*` / `.lo-box*` CSS
+in `index.html`, and the 🎯 **Learning-objective box on every question**
+checkbox on all three printing surfaces.
+
+A blank rounded rectangle — **two ruled lines by default**, one or more if the
+author says so — that a student writes their OWN learning objective in: what
+this question taught them.
+
+- **IT IS NOT AN ANSWER, and the type is ABSENT from every answer list rather
+  than present-and-filtered.** `_pushBlockAnswerKey` has no case for it, it is
+  in none of `answery` / `hasOpen` / `kwBlockFields` / `qIsMcqOnly` /
+  `_mpBankAnswer`, and on screen it goes through **`add`, never `addAnswer`**,
+  pushing nothing into `items`. What a child writes here is their own
+  reflection; a box that quietly got marked would stop being honest the first
+  time one of them was told their learning objective was wrong. An omission
+  cannot be half-forgotten the way a filter can.
+- **TWO WAYS IN, ONE BUILDER.** A 🎯 block can be dropped into one question
+  from the block editor, and the export switch puts one at the foot of EVERY
+  question on the sheet. Both go through `loBoxPrintHtml`, so a box the teacher
+  inserted by hand and a box the sheet gave every question are the same box —
+  and the two print paths cannot drift apart over it the way they had already
+  drifted over the MCQ answer. Both carry an explicit `case
+  'learningObjectives'` and both append `loBoxSheetHtml(q, …)` at the foot of
+  the chunk.
+- **`loBoxLines` and `loBoxLines0` mean opposite things by a missing value, and
+  that is the point.** On a BLOCK a missing count is the DEFAULT — a rounded
+  rectangle with no rules in it is a box nobody can write in, and it renders
+  perfectly. On the SHEET a missing count is the switch being OFF, so it must
+  come back as **0** and not as two lines quietly added to every question on
+  every worksheet this app has ever printed.
+- **The cap is `LOBOX_LINES_MAX` (12), far below `PRINT_LINES_MANUAL_MAX` (24).**
+  An answer box is one question's own; with the sheet-wide switch on this one is
+  multiplied by the whole paper, so a big number is a paper of blank boxes.
+- **A question that already carries a 🎯 block is never given a second one.**
+  Two identical empty boxes under one question read as a printing fault, and the
+  author's own line count is the one that looks wrong.
+- **`LOB_SWITCHES` is the same shape as `WNY_SWITCHES` / `AKX_SWITCHES`**, and
+  for the same reason: an unknown surface returns 0 rather than falling through
+  to another page's checkbox, which would honour a switch the teacher set
+  somewhere else with nothing on this screen able to explain it. The three
+  surfaces are the worksheet builder, 📄 My Worksheets and the 🖨 print picker.
+- **THE PREVIEW IS THE PRINT.** All four `_wsPreviewCtx` branches decide it
+  (a past paper is `0` — it is reproduced as it was sat), `renderWsPreview`
+  passes it in the BASE object so `ctx.buildOpts` still wins, and the 👁 Vetting
+  hover reads the same `bank` switches its `whyNotes` and `answerKeyExtras`
+  already read. **🗂️ Custom Paper sets `loBox: 0` explicitly in BOTH modes**:
+  `cpbPrint` calls `buildWorksheetHtml` directly and would get 0 by default,
+  but its preview goes through the adhoc branch and would otherwise grow a box
+  on every question that the PDF does not have.
+- **`renderImportedBlockStudent` draws the STATIC box** — ruled lines, exactly
+  what prints — because every other consumer of that renderer (the read-only
+  preview, the ✎ Questions drawer, the vetting card, both print paths' `default`)
+  wants the printed shape. The interactive one is `buildOpenBody`'s own case,
+  and it says on the box that it is not marked and not saved.
+- **An emptied caption stays empty.** `loBoxLabel` treats `undefined` as the
+  default and `''` as the author having cleared it; `|| LOBOX_LABEL` would bring
+  a cleared caption back on the next render.
+- On paper it is `break-inside: avoid` and released on a tall page, like every
+  other bordered box on the sheet. The print planner MEASURES, so the extra
+  height re-paginates for free.
+- Run **`node tools/learning-objective-tests.mjs`** after touching any of it.
+
 ## 🗂️ Custom Paper — a whole mock paper, built from screenshots (v1.363.0)
 
 `cpb*` / `CPB_*` in `app.js` (search `CUSTOM PAPER — a whole mock paper`), the
@@ -5284,6 +5351,31 @@ every booklet they had moved by hand went with it.
 - Run **`node tools/custom-paper-tests.mjs`** after touching any of it.
 
 ## House rules
+- After touching **🎯 the learning-objective box** (`LOBOX_*`, `loBoxLabel`,
+  `loBoxLines`, `loBoxLines0`, `loBoxPrintHtml`, `qHasLoBox`, `loBoxSheetHtml`,
+  `LOB_SWITCHES`, `lobPrintLines`, either print path's `learningObjectives`
+  case or its `loBoxSheetHtml` line, `_wsPreviewCtx`'s four `loBox` values,
+  `doPrintStudentWorksheet`'s `loBox` argument, or Custom Paper's `loBox: 0`),
+  run `node tools/learning-objective-tests.mjs` **and**
+  `node tools/custom-paper-tests.mjs` **and**
+  `node tools/vetting-export-hover-tests.mjs`. Every failure is silent and the
+  sheet still prints. **The one that reaches a child is the box becoming an
+  ANSWER**: give it a case in `_pushBlockAnswerKey` and the teacher's key
+  prints a "correct" learning objective; add it to `answery` / `hasOpen` /
+  `kwBlockFields` and a question whose only answer-bearing block is a
+  reflection box is served and scored on one; call `addAnswer` instead of `add`
+  and the part it sits in is counted as answered. **The second is the switch
+  defaulting ON**: let `loBoxLines0` read a missing value as two lines and
+  every worksheet this app has ever printed grows a blank box on every
+  question. Let `loBoxLines` read a missing value as ZERO instead and the box
+  is a rounded rectangle with nothing to write on, which renders perfectly.
+  Drop the already-has-one test and a teacher who inserted a 6-line box gets
+  a 2-line one underneath it, and their own count is the one that looks wrong.
+  Let an unknown surface fall through to another page's checkbox and a print
+  started here honours a switch set somewhere else. And take `loBox: 0` out of
+  Custom Paper and its PREVIEW grows a box on every question that its PDF does
+  not have — which is the preview/print drift the shared builder exists to
+  prevent.
 - After touching **👁 the one-question preview** (`cpbPreviewQuestion`, the
   `'cpbq'` source in `previewQuestionsPrint` / `_wsPreviewIsDraft` /
   `_wsPreviewSnapshot`, the `custompaper` branch of `printFromPreview`,
