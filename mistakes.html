@@ -257,7 +257,7 @@ import { getStorage, ref as sRef, uploadString, getDownloadURL }
 import { getFunctions, httpsCallable }
   from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
 
-const APP_VERSION = 'v1.6.0';
+const APP_VERSION = 'v1.6.1';
 document.getElementById('verTag').textContent = APP_VERSION;
 
 /* The one collection this page reads, and the one folder it writes. Named
@@ -404,9 +404,9 @@ function inlineImageOf(result) {
   return null;
 }
 /* ChatGPT Images 2.5 by the server's key. The crop goes up as the ONE
-   reference picture of an EDIT with `input_fidelity: high` — the whole point
-   is that everything printed stays exactly as it is — and `size: auto` keeps
-   the crop's own shape rather than squaring it off. */
+   reference picture of an EDIT — the 2.5 family reads it at high fidelity by
+   itself and REFUSES an `input_fidelity` field, so none is sent (v1.6.1) —
+   and `size: auto` keeps the crop's own shape rather than squaring it off. */
 async function cleanFigureChatGpt(dataUrl, kind) {
   if (!fns) fns = getFunctions(app);
   const mime = (/^data:([^;,]+)/.exec(dataUrl) || [])[1] || 'image/jpeg';
@@ -415,8 +415,7 @@ async function cleanFigureChatGpt(dataUrl, kind) {
     images: [{ mimeType: mime, data: dataUrl.split(',')[1] || '' }],
     size: 'auto',
     quality: 'high',
-    outputFormat: 'png',
-    inputFidelity: 'high'
+    outputFormat: 'png'
   });
   const d = res && res.data;
   if (!d || typeof d.b64 !== 'string' || !d.b64) throw new Error('the server image route returned no picture');

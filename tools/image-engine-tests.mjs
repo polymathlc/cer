@@ -17,7 +17,8 @@
 //    to the browser key, which hands over to Gemini, and when everything
 //    refuses the error names EVERY route;
 //  • a refusal about ONE picture (invalid-argument) does not close the route;
-//  • the request shape: edits carry input_fidelity high, several references
+//  • the request shape: edits carry NO input_fidelity on the 2.5 family (it is
+//    refused there) and do on gpt-image-1, several references
 //    go up as image[], transparent asks for png, and xhigh is clamped to
 //    high on a legacy model;
 //  • the census: no caller reaches generateImageDataUrlGemini or
@@ -114,7 +115,8 @@ return {
   OPENAI_IMAGE_DEFAULT_MODEL, OPENAI_IMAGE_MODELS, OPENAI_IMAGE_25_RE, OPENAI_IMAGE_SUPERSEDED, OPENAI_IMAGE_GEN,
   getOpenAiImageModel, openAiImageModelKnown, openAiImageModelOptionsHtml, aiImageEngineSetting,
   imageEngineOrder, imageOpenAiPossible, imageEngineLabel, _tcgArtEngineLabel, _imgRefsFrom, _imgQualityFor,
-  openAiGenerateImageDataUrl, openAiImageServer, generateImageDataUrl, imageRouteReport, _imgRouteFault
+  openAiGenerateImageDataUrl, openAiImageServer, generateImageDataUrl, imageRouteReport, _imgRouteFault,
+  _isUnsupportedImageParam, _imgFidelityFor, _imgSizeField
 };
 `)();
 }
@@ -253,10 +255,30 @@ await run('request shape', async () => {
   const fd = call.init.body;
   ok('…as multipart', typeof fd.getAll === 'function');
   ok('several references go up as image[]', fd.getAll('image[]').length === 2 && fd.getAll('image').length === 0);
-  ok('input_fidelity is high on every edit', fd.get('input_fidelity') === 'high');
-  ok('an edit keeps the reference\'s own shape', fd.get('size') === 'auto');
+  ok('input_fidelity is NEVER sent to the 2.5 family — it refuses the parameter', fd.get('input_fidelity') === null);
+  ok('an edit keeps the reference\'s own shape by sending NO size (auto is the API default, and the word is refused by some models)', fd.get('size') === null);
   ok('transparent asks for a transparent background on png', fd.get('background') === 'transparent' && fd.get('output_format') === 'png');
-  ok('the server was offered the same edit', api.serverCalls[0].payload.images.length === 2 && api.serverCalls[0].payload.inputFidelity === 'high' && api.serverCalls[0].payload.background === 'transparent');
+  ok('the server was offered the same edit, and decides about fidelity itself', api.serverCalls[0].payload.images.length === 2 && api.serverCalls[0].payload.inputFidelity === undefined && api.serverCalls[0].payload.background === 'transparent');
+  ok('the fidelity rule: gpt-image-1 and 1-mini take it, nothing newer does',
+     api._imgFidelityFor('gpt-image-1') === 'high' && api._imgFidelityFor('gpt-image-1-mini') === 'high' && api._imgFidelityFor('gpt-image-1-2025-04-23') === 'high' &&
+     api._imgFidelityFor('gpt-image-1.5') === '' && api._imgFidelityFor('gpt-image-2') === '' && api._imgFidelityFor('gpt-image-2.5-flare') === '' && api._imgFidelityFor('gpt-image-2.5-sunburst') === '');
+  ok('the size rule: auto and blank send nothing, a real size goes through', api._imgSizeField('auto') === '' && api._imgSizeField('') === '' && api._imgSizeField('1536x1024') === '1536x1024');
+
+  api.resetDown();
+  await api.generateImageDataUrl('draw', { refDataUrl: 'data:image/png;base64,QUJD', model: 'gpt-image-1' });
+  ok('…so a gpt-image-1 edit still carries input_fidelity high', api.fetchCalls[0].init.body.get('input_fidelity') === 'high' && api.fetchCalls[0].init.body.get('model') === 'gpt-image-1');
+
+  api.resetDown();
+  await api.generateImageDataUrl('draw', { refDataUrl: 'data:image/png;base64,QUJD', size: '1536x1024' });
+  ok('an explicit size on an edit is sent as given', api.fetchCalls[0].init.body.get('size') === '1536x1024');
+
+  ok('the retry net catches the wording the 2.5 family actually uses',
+     api._isUnsupportedImageParam({ status: 400, detail: "The model 'gpt-image-2.5-flare' does not support the 'input_fidelity' parameter." }) &&
+     api._isUnsupportedImageParam({ status: 400, detail: 'Unknown parameter: input_fidelity' }) &&
+     api._isUnsupportedImageParam({ status: 400, detail: "Invalid value: 'auto'. Supported values are: '1024x1024'." }) &&
+     api._isUnsupportedImageParam({ status: 400, detail: 'Unrecognized request argument supplied: quality' }) &&
+     !api._isUnsupportedImageParam({ status: 400, detail: 'Incorrect API key provided' }) &&
+     !api._isUnsupportedImageParam({ status: 401, detail: 'Unknown parameter: x' }));
 
   api.resetDown();
   await api.generateImageDataUrl('draw', { refDataUrl: 'data:image/png;base64,QUJD' });
@@ -332,7 +354,8 @@ await run('request shape', async () => {
   ok('the dropdown in the markup leads with Flare, selected', /<option value="gpt-image-2\.5-flare" selected>/.test(html) && /<option value="gpt-image-2\.5-sunburst">/.test(html));
   ok('…and the markup lists no id the code does not know', ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'gpt-image-2', 'gpt-image-1', 'gpt-image-1-mini'].every(id => html.indexOf('<option value="' + id + '"') >= 0));
   ok('the dropdown is rebuilt from the list when the dialog opens', /imgSel\.innerHTML = openAiImageModelOptionsHtml\(getOpenAiImageModel\(\)\);/.test(src));
-  ok('the Try-again sheet cleans figures with ChatGPT Images by the server key', /httpsCallable\(fns, 'openAiImage'/.test(mistakes) && /inputFidelity: 'high'/.test(mistakes));
+  ok('the Try-again sheet cleans figures with ChatGPT Images by the server key, sending no input_fidelity', /httpsCallable\(fns, 'openAiImage'/.test(mistakes) && !/inputFidelity/.test(mistakes));
+  ok('no client sends input_fidelity unconditionally any more', !/fd\.append\('input_fidelity', 'high'\)/.test(src) && !/inputFidelity: refs\.length \? 'high'/.test(src));
   ok('…with Gemini as the fallback, not the plan', /falling back to Gemini/.test(mistakes) && /if \(!imageModels\.length\) throw first/.test(mistakes));
   ok('…and a refusal about one picture does not close the route there either', /invalid-argument/.test(mistakes));
   ok('the version was bumped', /const APP_VERSION = 'v1\.373\./.test(src) && /const APP_VERSION = 'v1\.6\./.test(mistakes));
@@ -352,14 +375,16 @@ await run('badge', async () => {
   await api.generateImageDataUrl('draw', {});
   ok('after a server picture the door records the server route and its model', api.last.route === 'imgServer' && api.last.model === 'gpt-image-2.5-flare' && api.last.engine === 'openai');
   ok('…and announces it', api.announced.length === 1 && /🖼 Picture generated by ChatGPT Images · gpt-image-2\.5-flare · server key/.test(api.announced[0].text) && api.announced[0].type === 'image');
-  ok('…without the fallback note when nothing refused', !/after another route refused/.test(api.announced[0].text));
+  ok('…without the fallback note when nothing refused', !/\(after /.test(api.announced[0].text));
 
   api.resetDown(); api.announced.length = 0;
   api.serverMode = 'precondition'; api.key = 'sk-test-key';
   api.store.x_openai_image_model = 'gpt-image-2.5-sunburst';
   await api.generateImageDataUrl('draw', {});
   ok('a browser-key picture names the id the key was asked for', api.last.route === 'imgKey' && api.last.model === 'gpt-image-2.5-sunburst');
-  ok('…and says another route refused first', /after another route refused/.test(api.announced[0].text) && /key on this device/.test(api.announced[0].text));
+  ok('…and says WHICH route refused first, and WHY', /\(after ChatGPT Images \(server key\) refused: No OpenAI key is configured on the server\./.test(api.announced[0].text) && /key on this device/.test(api.announced[0].text), api.announced[0].text);
+  ok('…with the transport prefix stripped off the reason', !/functions\//.test(api.announced[0].text) && api.last.refusedBy === 'ChatGPT Images (server key)');
+  ok('…and the chooser repeats it', /after ChatGPT Images \(server key\) refused: No OpenAI key/.test(api.imageRouteReport().notes.join(' ')), api.imageRouteReport().notes.join(' | '));
 
   api.resetDown(); api.announced.length = 0;
   api.serverMode = 'precondition'; api.key = ''; api.fetchMode = 'ok';
