@@ -5513,7 +5513,120 @@ pupil writes, in their own words, what they were learning.
   names, same two switches. Ship a change to both together.
 - Run **`node tools/objectives-box-tests.mjs`** after touching any of it.
 
+## 🖼 The image engine — ChatGPT Images 2.5 for EVERY picture (v1.372.0)
+
+`OPENAI_IMAGE_DEFAULT_MODEL` / `OPENAI_IMAGE_MODELS` / `OPENAI_IMAGE_25_RE` /
+`OPENAI_IMAGE_SUPERSEDED` / `OPENAI_IMAGE_GEN` / `getOpenAiImageModel` /
+`openAiImageModelOptionsHtml` / `AI_IMAGE_ENGINES` / `AI_IMAGE_ENGINE_DEFAULT` /
+`_aiImageFromDoc` / `aiImageEngineSetting` / `imageEngineOrder` /
+`imageOpenAiPossible` / `imageEngineLabel` / `openAiGenerateImageDataUrl` /
+`openAiImageServer` / **`generateImageDataUrl`** / `imageRouteReport` /
+`aiEngineImageChoicePreview` (in `app.js`, search `THE IMAGE ENGINE`), the
+`openAiImage` callable in `polymathlc/math/functions`, the **Pictures** radios
+and the image-model dropdown in the AI Engine dialog, and `cleanFigureChatGpt`
+in `mistakes.html`. **`polymathlc/math` and `polymathlc/anskey` carry the same
+block — ship a change to all three together.**
+
+Every picture this app draws — card art, avatars, pack frames, artifacts,
+heroes, set banners, lore plates, the 🖼 answer-key and explanation diagrams,
+the redrawn exam figures, the scan clean-up, the ✏️ Touch up editor's AI fill
+and ✨ Regenerate, the Try-again sheet's figures — is drawn by **ChatGPT Images
+2.5** now. OpenAI shipped it on 8 September 2026 with two API models:
+`gpt-image-2.5-flare` (its own default for most work — higher quality than
+gpt-image-2 at half the latency) and `gpt-image-2.5-sunburst` (premium edits,
+slower). Both take `quality` low / medium / high / **xhigh** / **max**,
+`background: transparent` outright, arbitrary WIDTHxHEIGHT sizes (both sides
+divisible by 16, aspect 1:3 to 3:1) and up to 16 reference pictures on an edit
+with `input_fidelity`. Both cost the same.
+
+- **BEFORE THIS, WHICH MODEL DREW WAS TWO ACCIDENTS.** The ChatGPT image model
+  fired only when this browser held an OpenAI key AND the *text* engine was
+  set to ChatGPT; every other picture — and every picture on a student's
+  phone — was Gemini's. A decision about MARKING was deciding what a monster
+  looks like. **The image engine is its own setting now** (`aiImageEngine`, a
+  field on the same centre-wide `config/admin` document as the text engine,
+  same merge write, same live listener), defaulting to ChatGPT Images.
+- **`generateImageDataUrl(prompt, opts)` IS THE ONE DOOR.**
+  `generateEnhancedImageDataUrl`, `_diagramDraw` and `_tcgGenOnce` all go
+  through it, so the order the routes are tried in is decided in exactly one
+  place. `generateImageDataUrlGemini` is the RAW Gemini route and is reached
+  only from inside the door; `tools/image-engine-tests.mjs` carries a census
+  that fails on the next caller that reaches it — or `geminiImageModels`, or
+  `openAiGenerateImageDataUrl` — directly, because that caller is a surface
+  that quietly stayed on Gemini while every other picture moved.
+- **THE SERVER ROUTE IS WHAT MAKES THE CHOICE REAL.** `openAiImage` is a
+  callable holding the same `OPENAI_API_KEY` secret `askOpenAi` does, so a
+  device nobody has typed a key into — every student's phone, and
+  `mistakes.html`, which runs on nothing else — draws with ChatGPT Images too.
+  It is deployed by the Maths repo's `deploy-functions.yml` when its PR merges.
+  Until then it answers `failed-precondition`, the route is marked down for
+  `AI_DOWN_MS` and the chooser says **in those words** that the image function
+  is not deployed yet. A key in this browser is the route BEHIND the server,
+  and Gemini's image model is the route behind that: the fallback, never the
+  plan, and never dropped — the day the OpenAI account is out of credit is a
+  slower picture rather than no picture.
+- **THE SERVER PINS THE MODEL TO THE 2.5 FAMILY.** The client passes the model
+  it chose; the callable honours it when `OPENAI_IMAGE_MODEL_RE` says it is a
+  2.5 id and falls back to Flare when it is not, because a client that could
+  name a model could name an expensive one and the bill is the centre's. It
+  validates every field (size, quality, background, output format, fidelity)
+  into an `invalid-argument` the page can print, rather than a 400 it has to
+  guess at, and it counts on ITS OWN throttle fields (`openAiImgDay` …): a
+  card-art batch must not close the text engine for the day.
+- **A REFUSAL ABOUT ONE PICTURE DOES NOT CLOSE THE ROUTE** (`_imgRouteFault`).
+  An `invalid-argument` — a size the model will not take, a prompt its safety
+  layer declined — says nothing about the route, so it falls through to the
+  next one and marks nothing down. A 401, a billing 400, a `failed-precondition`
+  do mark the route down, exactly as the text routes are.
+- **EVERY EDIT SENDS `input_fidelity: 'high'`**, because every edit in this app
+  is "keep this exact thing and change one aspect of it" — the same creature
+  on the avatar, the same apparatus on the diagram, the same figure with the
+  pencil rubbed out. An edit keeps the reference's own shape (`size: 'auto'`)
+  unless the caller says otherwise; a picture drawn from nothing is square.
+  Several references go up as `image[]`, one as `image`.
+- **A DEFAULT NOBODY CHOSE IS NOT A CHOICE.** Every device that ever saved the
+  dialog is carrying `gpt-image-1` pinned in its own settings, so
+  `OPENAI_IMAGE_SUPERSEDED` is lifted to Flare **once** per device
+  (`OPENAI_IMAGE_GEN`), exactly as the chat model's lift works; a deliberate
+  re-pick of a legacy model afterwards sticks. A stored id the dropdown no
+  longer offers is the DEFAULT, never a 404 on every picture. `xhigh` / `max`
+  are clamped to `high` on a legacy model (`_imgQualityFor`).
+- **`imageAiReady()` counts ChatGPT Images as an image model**, so a project
+  with no Gemini image model is no longer a project with no pictures. It is
+  guarded because it is read during module evaluation.
+- **The dialog says what is happening** — `imageRouteReport` prints the picture
+  order, the model and what each route last said, beside the text order —
+  because an app quietly drawing with Gemini looks exactly like one drawing
+  with ChatGPT Images, only a little worse.
+- Run **`node tools/image-engine-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🖼 the image engine** (`OPENAI_IMAGE_DEFAULT_MODEL`,
+  `OPENAI_IMAGE_MODELS`, `OPENAI_IMAGE_25_RE`, `OPENAI_IMAGE_SUPERSEDED`,
+  `getOpenAiImageModel`, `aiImageEngineSetting`, `imageEngineOrder`,
+  `imageOpenAiPossible`, `openAiGenerateImageDataUrl`, `openAiImageServer`,
+  `generateImageDataUrl`, `_imgRouteFault`, `_imgQualityFor`,
+  `generateEnhancedImageDataUrl`, `generateImageDataUrlGemini`, `_tcgGenOnce`,
+  `_diagramDraw`'s draw line, `_aiImageFromDoc`, `aiEngineSetShared`'s third
+  argument, the **Pictures** radios, or `cleanFigure` in `mistakes.html`), run
+  `node tools/image-engine-tests.mjs`, and `node tools/ai-routes-tests.mjs`,
+  `node tools/auto-diagram-tests.mjs` and `node tools/paper-clean-tests.mjs`
+  beside it. A picture comes out whichever model drew it, so every failure
+  here is silent. **Let a caller reach `generateImageDataUrlGemini` or
+  `geminiImageModels` directly and that surface quietly stays on Gemini** while
+  every other picture moved — the census at the foot of the harness is what
+  catches the next one. Put `openAiActive()` back in front of the ChatGPT
+  route and the chat toggle decides who draws again, which is two accidents
+  deciding what a monster looks like. Mark the server route down on an
+  `invalid-argument` and one odd-sized picture closes ChatGPT Images for ten
+  minutes on every picture after it. Drop `input_fidelity` and a battle avatar
+  comes back a different creature from its card. Let a stored id the dropdown
+  no longer offers reach the API and every picture is a 404 with nothing on
+  screen to say the id is merely out of date. Lift the image model without the
+  `OPENAI_IMAGE_GEN` flag and a deliberate legacy pick is undone on every
+  reload; forget the lift and the new default reaches nobody who ever opened
+  the dialog. And let the server accept a model outside `OPENAI_IMAGE_MODEL_RE`
+  and a client is naming models on the centre's bill.
 - After touching **any surface that shows a PROOF of a printed sheet** — the
   live A4 preview, 🗂️ Custom Paper's `buildOpts`, or the 👁 Vetting hover — make
   it read the same switches as the printer that makes that sheet, and run

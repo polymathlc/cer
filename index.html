@@ -11916,12 +11916,28 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     </div>
 
     <div class="form-group">
+      <label class="form-label">Pictures &mdash; which engine draws</label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:0.9rem;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">
+        <input type="radio" name="aiImageEngineChoice" value="openai" checked onchange="aiEngineImageChoicePreview('openai')">
+        <span><strong>ChatGPT Images 2.5</strong> <span style="color:var(--text-muted);">&mdash; OpenAI's newest image model &middot; default &middot; key held on the server</span></span>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:0.9rem;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;">
+        <input type="radio" name="aiImageEngineChoice" value="gemini" onchange="aiEngineImageChoicePreview('gemini')">
+        <span><strong>Gemini image model</strong> <span style="color:var(--text-muted);">&mdash; Firebase AI Logic &middot; the fallback, for the day the OpenAI account is out of credit</span></span>
+      </label>
+      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;">This is <strong>every picture the app draws</strong>: the Realm of Embers card art, avatars, pack frames, artifacts, heroes, banners and lore plates; the &#128444; answer-key and explanation diagrams; the redrawn exam figures; the scan clean-up; the ✏️ Touch up editor's AI fill and ✨ Regenerate. Whichever you choose, the other takes over the moment it refuses. It is separate from the text engine above on purpose &mdash; a decision about marking should not decide what a monster looks like.</p>
+    </div>
+
+    <div class="form-group">
       <label class="form-label">ChatGPT image model</label>
       <select id="aiEngineImageModel" class="form-input">
-        <option value="gpt-image-1" selected>gpt-image-1 &mdash; best quality (recommended)</option>
-        <option value="gpt-image-1-mini">gpt-image-1-mini &mdash; cheaper &amp; faster</option>
+        <option value="gpt-image-2.5-flare" selected>ChatGPT Images 2.5 Flare &mdash; newest, fastest (recommended)</option>
+        <option value="gpt-image-2.5-sunburst">ChatGPT Images 2.5 Sunburst &mdash; extra precision on edits, slower</option>
+        <option value="gpt-image-2">gpt-image-2 &mdash; the previous generation</option>
+        <option value="gpt-image-1">gpt-image-1 &mdash; legacy</option>
+        <option value="gpt-image-1-mini">gpt-image-1-mini &mdash; legacy, cheaper</option>
       </select>
-      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;">Used only by the <strong>✨ AI art generator</strong> on the Realm of Embers Trading Card Game &rarr; Card Art (the chat model above cannot draw). If ChatGPT image generation fails, the app falls back to the Gemini image model.</p>
+      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;"><strong>Flare</strong> is OpenAI's own default for most work &mdash; higher quality than gpt-image-2 at half the latency. <strong>Sunburst</strong> takes longer and is built for edits that need tighter control, such as a lore plate or a set banner. Both cost the same per picture. The chat model above cannot draw, so this is the model every picture comes from; a legacy pick is still honoured by the key in this browser, while the server route always draws with the 2.5 family.</p>
     </div>
 
     <div class="form-group">
