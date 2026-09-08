@@ -111,7 +111,12 @@ try {
     generationConfig: { responseModalities: [ResponseModality.TEXT, ResponseModality.IMAGE] }
   }));
 } catch (e) { console.warn("Firebase image AI init failed:", e); }
-const imageAiReady = () => geminiImageModels.length > 0;
+// Gemini's image models are the FALLBACK now: the image engine is ChatGPT
+// Images 2.5 (search `THE IMAGE ENGINE`). A picture can be drawn when EITHER
+// is reachable, so a project with no Gemini image model is no longer a
+// project with no pictures. Guarded, because this is read at module-evaluation
+// time in a couple of places, before the engine block below has run.
+const imageAiReady = () => geminiImageModels.length > 0 || (function () { try { return imageOpenAiPossible(); } catch (e) { return false; } })();
 
 // =====================================================================
 // 🎙️ TRANSCRIPTION — ONE MODEL, ONE DOOR
@@ -222,7 +227,7 @@ function transcribeRouteNote() {
 // Pages sites served to every student's browser, so a key committed here
 // would be a key handed to the whole school; it lives in the admin's own
 // browser and is read from there.
-const AI_ENGINE_STORE = { engine: 'sq_ai_engine', key: 'sq_openai_key', model: 'sq_openai_model', imageModel: 'sq_openai_image_model', kimiKey: 'sq_kimi_key', kimiModel: 'sq_kimi_model', modelGen: 'sq_openai_model_gen', authorEngine: 'sq_ai_author_engine' };
+const AI_ENGINE_STORE = { engine: 'sq_ai_engine', key: 'sq_openai_key', model: 'sq_openai_model', imageModel: 'sq_openai_image_model', kimiKey: 'sq_kimi_key', kimiModel: 'sq_kimi_model', modelGen: 'sq_openai_model_gen', authorEngine: 'sq_ai_author_engine', imageEngine: 'sq_ai_image_engine', imageGen: 'sq_openai_image_gen' };
 const OPENAI_DEFAULT_MODEL = 'gpt-6-astra';
 /* A REASONING MODEL IS A FAMILY, NOT ONE ID, and this is the one place the
    family is named. gpt-5.x and gpt-6-astra behave identically where the
@@ -381,6 +386,22 @@ function _aiAuthorFromDoc(d) {
   const v = d ? d.aiAuthorEngine : null;
   return (AI_ENGINES.includes(v) || v === AI_AUTHOR_FOLLOW) ? v : AI_AUTHOR_DEFAULT;
 }
+/* 🖼 WHICH ENGINE DRAWS is a centre-wide setting too — `aiImageEngine`, on the
+   same document and the same merge write as the text engine, because a
+   picture drawn by one model on the teacher's laptop and by another on every
+   student's phone is the bug the shared text setting was written to end. An
+   UNSET field is ChatGPT Images, the default since v1.372.0, so a centre that
+   has never opened the dialog gets the 2.5 models on every picture; anything
+   unreadable falls back to the default rather than to null. The block that
+   READS it — `imageEngineOrder` and friends — is beside the image generators
+   (search `THE IMAGE ENGINE`). */
+const AI_IMAGE_ENGINES = ['openai', 'gemini'];
+const AI_IMAGE_ENGINE_DEFAULT = 'openai';
+let _aiSharedImageEngine = null;
+function _aiImageFromDoc(d) {
+  const v = d ? d.aiImageEngine : null;
+  return AI_IMAGE_ENGINES.includes(v) ? v : AI_IMAGE_ENGINE_DEFAULT;
+}
 function _aiCfgRef() { return doc(db, 'config', 'admin'); }
 
 let _aiCfgStop = null;
@@ -394,6 +415,7 @@ function aiEngineWatchShared() {
       // unaffected.
       _aiSharedEngine = AI_ENGINES.includes(eng) ? eng : 'gemini';
       _aiSharedAuthor = _aiAuthorFromDoc(snap.exists() && snap.data());
+      _aiSharedImageEngine = _aiImageFromDoc(snap.exists() && snap.data());
       _aiSharedAt = Date.now();
       _aiWhy.shared = '';
       const ov = document.getElementById('aiEngineOverlay');
@@ -417,6 +439,7 @@ async function aiEngineLoadShared(force) {
     const eng = snap.exists() && snap.data() ? snap.data().aiEngine : null;
     _aiSharedEngine = AI_ENGINES.includes(eng) ? eng : 'gemini';
     _aiSharedAuthor = _aiAuthorFromDoc(snap.exists() && snap.data());
+    _aiSharedImageEngine = _aiImageFromDoc(snap.exists() && snap.data());
     _aiSharedAt = Date.now();
     _aiWhy.shared = '';
     return _aiSharedEngine;
@@ -438,18 +461,21 @@ async function aiEngineLoadShared(force) {
 
 /* MERGE, always. This document is the bank pointer as well, and a plain set
    would take `uid` off it — which is how every student loses the bank. */
-async function aiEngineSetShared(engine, authorEngine) {
+async function aiEngineSetShared(engine, authorEngine, imageEngine) {
   const author = (AI_ENGINES.includes(authorEngine) || authorEngine === AI_AUTHOR_FOLLOW)
     ? authorEngine : aiAuthorSetting();
+  const image = AI_IMAGE_ENGINES.includes(imageEngine) ? imageEngine : aiImageEngineSetting();
   try {
     await setDoc(_aiCfgRef(), {
       aiEngine: engine,
       aiAuthorEngine: author,
+      aiImageEngine: image,
       aiEngineAt: new Date().toISOString(),
       aiEngineBy: (currentUser && currentUser.email) || ''
     }, { merge: true });
     _aiSharedEngine = engine;
     _aiSharedAuthor = author;
+    _aiSharedImageEngine = image;
     _aiSharedAt = Date.now();
     return engine;
   } catch (e) {
@@ -466,6 +492,7 @@ async function aiEngineSetShared(engine, authorEngine) {
        locally either way, so this browser does what it says and the rest of
        the centre keeps what it had. */
     _aiSharedAuthor = null;
+    _aiSharedImageEngine = null;
     _aiSharedAt = Date.now();
     return _aiSharedEngine;
   }
@@ -773,15 +800,189 @@ function aiRouteReport() {
   };
 }
 
-// ── ChatGPT image generation (Realm of Embers TCG → Card Art) ──────────────
-// Same key/device-local settings as the text engine, but a separate image
-// model (the chat model cannot draw). Two modes:
-//   • text only            → the trading-card art
-//   • with a reference PNG → the battle avatar, redrawn FROM the card art so
-//                            both pictures are unmistakably the same creature.
-const OPENAI_IMAGE_DEFAULT_MODEL = 'gpt-image-1';
-function getOpenAiImageModel() { try { return localStorage.getItem(AI_ENGINE_STORE.imageModel) || OPENAI_IMAGE_DEFAULT_MODEL; } catch (e) { return OPENAI_IMAGE_DEFAULT_MODEL; } }
+/* =====================================================================
+   🖼 THE IMAGE ENGINE — ChatGPT Images 2.5 for EVERY picture (v1.372.0)
+   ---------------------------------------------------------------------
+   Every picture this app draws — a trading card, a battle avatar, a pack
+   frame, a hero portrait, an artifact, a set banner, a lore plate, an
+   answer-key diagram, an explanation diagram, a redrawn exam figure, a
+   cleaned-up scan, an AI content-aware fill, a ✨ Regenerate — used to come
+   out of Gemini's image model unless TWO accidents lined up: this browser
+   held an OpenAI key AND the TEXT engine happened to be set to ChatGPT. On a
+   student's phone neither ever happens, so a student's pictures were always
+   Gemini's however the centre was configured — and even on the admin's own
+   laptop the art generator drew with whatever the chat toggle said, which is
+   a decision about MARKING deciding what a monster looks like.
 
+   ChatGPT Images 2.5 (OpenAI, 8 September 2026) is the image engine now,
+   for every image purpose, and three things carry that:
+
+   • `generateImageDataUrl(prompt, opts)` IS THE ONE DOOR. Every path that
+     used to reach a model directly — `generateEnhancedImageDataUrl`,
+     `_diagramDraw`, `_tcgGenOnce` — now goes through it, so the order the
+     routes are tried in is decided in exactly one place. A caller that
+     reaches `generateImageDataUrlGemini` or `geminiImageModels` directly is
+     a surface that quietly stayed on Gemini, and the harness fails on it.
+   • THE SERVER ROUTE IS WHAT MAKES THE CHOICE REAL. `openAiImage` is a
+     callable in `polymathlc/math/functions` holding the same OPENAI_API_KEY
+     secret `askOpenAi` does, so a device nobody has typed a key into — every
+     student's phone — draws with ChatGPT Images too. A key pasted into this
+     browser is the route BEHIND it, and Gemini's image model is the route
+     behind that: the fallback, never the plan.
+   • WHICH ENGINE DRAWS IS ITS OWN SETTING (`aiImageEngine`, on the same
+     centre-wide document as the text engine), NOT a side effect of the chat
+     toggle. It defaults to ChatGPT Images; "Gemini image model" is there
+     for the day the OpenAI account is out of credit.
+
+   THE MODEL. OpenAI released two: `gpt-image-2.5-flare` — its own default
+   choice for most applications, higher quality than gpt-image-2 at half the
+   latency — and `gpt-image-2.5-sunburst`, built for premium visual work that
+   benefits from tighter control across edits, at the cost of longer
+   generation. Both cost the same (image output US$30 / 1M tokens, image
+   input US$8 / 1M, text input US$5 / 1M). Flare is the default here; the
+   dropdown offers Sunburst for the admin who wants it on a lore plate.
+
+   WHAT THE 2.5 MODELS TAKE, from OpenAI's published API spec: `quality` in
+   low / medium / high / xhigh / max / auto (xhigh and max are new), a
+   `background` of transparent / opaque / auto (transparent is fully
+   supported — on gpt-image-2 it was a preview), `output_format` png / jpeg /
+   webp, arbitrary WIDTHxHEIGHT sizes with both sides divisible by 16 and an
+   aspect ratio between 1:3 and 3:1, and up to 16 reference pictures on an
+   edit with `input_fidelity` high or low. `input_fidelity: 'high'` is sent
+   on every edit here, because every edit in this app is "keep this exact
+   thing and change one aspect of it" — the same creature on the avatar, the
+   same apparatus on the diagram, the same figure with the pencil rubbed out.
+
+   A DEFAULT NOBODY CHOSE IS NOT A CHOICE. The image model is written to
+   localStorage every time the AI Engine dialog is saved, so every device
+   that ever opened it is carrying `gpt-image-1` pinned in its own settings —
+   and a new default would reach none of them. `OPENAI_IMAGE_SUPERSEDED` is
+   lifted to Flare ONCE per device (`OPENAI_IMAGE_GEN`), exactly as the chat
+   model's lift works; a deliberate re-pick of a legacy model afterwards
+   sticks, because it is still in the dropdown and choosing it has to mean
+   something.
+
+   `polymathlc/math` and `polymathlc/anskey` carry the same block — ship a
+   change to all three together. Run tools/image-engine-tests.mjs.
+   ===================================================================== */
+const OPENAI_IMAGE_DEFAULT_MODEL = 'gpt-image-2.5-flare';
+/* The dropdown, in the order it is offered. The two 2.5 models lead; the
+   older generations stay so a picture drawn under one can be redrawn under
+   the same one, and because a model an admin can see in the list is a model
+   they can deliberately choose. */
+const OPENAI_IMAGE_MODELS = [
+  { id: 'gpt-image-2.5-flare', label: 'ChatGPT Images 2.5 Flare — newest, fastest (recommended)' },
+  { id: 'gpt-image-2.5-sunburst', label: 'ChatGPT Images 2.5 Sunburst — extra precision on edits, slower' },
+  { id: 'gpt-image-2', label: 'gpt-image-2 — the previous generation' },
+  { id: 'gpt-image-1', label: 'gpt-image-1 — legacy' },
+  { id: 'gpt-image-1-mini', label: 'gpt-image-1-mini — legacy, cheaper' }
+];
+/* The FAMILY, not one id — the two 2.5 models and their dated snapshots. */
+const OPENAI_IMAGE_25_RE = /^gpt-image-2\.5-(flare|sunburst)(-\d{4}-\d{2}-\d{2})?$/;
+/* Every image model that was only ever a DEFAULT before 2.5. */
+const OPENAI_IMAGE_SUPERSEDED = ['gpt-image-1', 'gpt-image-1-mini', 'gpt-image-1.5', 'gpt-image-2', 'gpt-image-2-2026-04-21'];
+const OPENAI_IMAGE_GEN = 'images25';
+(function _openAiImageLiftDefaultOnce() {
+  try {
+    if (localStorage.getItem(AI_ENGINE_STORE.imageGen) === OPENAI_IMAGE_GEN) return;
+    localStorage.setItem(AI_ENGINE_STORE.imageGen, OPENAI_IMAGE_GEN);
+    const m = (localStorage.getItem(AI_ENGINE_STORE.imageModel) || '').trim();
+    if (m && OPENAI_IMAGE_SUPERSEDED.indexOf(m) >= 0) localStorage.setItem(AI_ENGINE_STORE.imageModel, OPENAI_IMAGE_DEFAULT_MODEL);
+  } catch (e) { /* private browsing: nothing is stored, so there is nothing to lift */ }
+})();
+/* A stored id the dropdown no longer offers is the DEFAULT, not a 404 on
+   every picture: an id from a build that has since been rolled back, or a
+   typo in localStorage, must not take the art generator down. */
+function openAiImageModelKnown(id) {
+  const s = String(id || '').trim();
+  return OPENAI_IMAGE_MODELS.some(m => m.id === s) || OPENAI_IMAGE_25_RE.test(s);
+}
+function getOpenAiImageModel() {
+  try {
+    const m = (localStorage.getItem(AI_ENGINE_STORE.imageModel) || '').trim();
+    return openAiImageModelKnown(m) ? m : OPENAI_IMAGE_DEFAULT_MODEL;
+  } catch (e) { return OPENAI_IMAGE_DEFAULT_MODEL; }
+}
+/* The <select> is BUILT from the list rather than typed into index.html, so
+   the ids on screen and the ids the code accepts cannot drift apart. */
+function openAiImageModelOptionsHtml(selected) {
+  const cur = selected || getOpenAiImageModel();
+  return OPENAI_IMAGE_MODELS.map(m =>
+    '<option value="' + m.id + '"' + (m.id === cur ? ' selected' : '') + '>' + escapeHtml(m.label) + '</option>').join('');
+}
+
+/* ── WHICH ENGINE DRAWS — its own setting, centre-wide ─────────────────── */
+function getAiImageEngine() { try { return localStorage.getItem(AI_ENGINE_STORE.imageEngine) || ''; } catch (e) { return ''; } }
+/* The stored value — what the radios show. Shared first, this device's own
+   behind it, and the DEFAULT (ChatGPT Images) when nobody has chosen. */
+function aiImageEngineSetting() {
+  const v = _aiSharedImageEngine || getAiImageEngine() || AI_IMAGE_ENGINE_DEFAULT;
+  return AI_IMAGE_ENGINES.includes(v) ? v : AI_IMAGE_ENGINE_DEFAULT;
+}
+const AI_IMAGE_ROUTE_LABEL = {
+  imgServer: 'ChatGPT Images (server key)',
+  imgKey: 'ChatGPT Images (key in this browser)',
+  imgGemini: 'Gemini image model'
+};
+/* An ENGINE is one or two ROUTES. `imgServer` is ALWAYS listed for ChatGPT
+   Images, for the reason the text engine's server route is: whether the
+   function is deployed is not something a page can know without asking, and
+   one refused call marks it down for AI_DOWN_MS rather than being paid for
+   again on every card of a batch. */
+function _imgRoutesFor(engine) {
+  if (engine === 'openai') return getOpenAiKey() ? ['imgServer', 'imgKey'] : ['imgServer'];
+  if (engine === 'gemini') return geminiImageModels.length ? ['imgGemini'] : [];
+  return [];
+}
+/* The chosen engine's routes lead and the other engine's stay BEHIND them,
+   which is what makes an OpenAI account out of credit — or a capped Firebase
+   project — a slower picture rather than no picture. `sort` is stable, so
+   the chooser's order survives underneath the down-marking. */
+function imageEngineOrder(opts) {
+  const o = opts || {};
+  if (o.skipOpenAi) return _imgRoutesFor('gemini');
+  const first = aiImageEngineSetting();
+  const engines = [first].concat(AI_IMAGE_ENGINES.filter(e => e !== first));
+  const have = engines.reduce((all, e) => all.concat(_imgRoutesFor(e)), []);
+  return have.sort((a, b) => (aiEngineIsDown(a) ? 1 : 0) - (aiEngineIsDown(b) ? 1 : 0));
+}
+/* "Could ChatGPT Images answer at all" — a key in this browser, or a server
+   route that has not been found missing. What `imageAiReady` reads. */
+function imageOpenAiPossible() {
+  if (getOpenAiKey()) return true;
+  return !(aiEngineIsDown('imgServer') && /not-?found|failed-?precondition|not configured/i.test(_aiWhy.imgServer || ''));
+}
+/* What the Card Art tab and every "Draw N pictures with …" confirm print. */
+function imageEngineLabel() {
+  const order = imageEngineOrder();
+  if (!order.length) return 'no image model';
+  return order[0] === 'imgGemini' ? 'Gemini image model' : 'ChatGPT Images · ' + getOpenAiImageModel();
+}
+/* Backwards-compatible name: the Card Art tab has always asked this. */
+function _tcgArtEngineLabel() { return imageEngineLabel(); }
+
+/* ── The reference pictures, whatever shape they arrive in ─────────────
+   `refDataUrl` (one data URL), `refDataUrls` (several), or `media` — the
+   `{ mimeType, data }` shape every enhance path already builds. All three
+   become an array of data URLs, so the routes below take one shape. */
+function _imgRefsFrom(opts) {
+  const o = opts || {};
+  const out = [];
+  const push = u => { if (typeof u === 'string' && /^data:image\//i.test(u)) out.push(u); };
+  push(o.refDataUrl);
+  (Array.isArray(o.refDataUrls) ? o.refDataUrls : []).forEach(push);
+  const media = Array.isArray(o.media) ? o.media : (o.media ? [o.media] : []);
+  media.forEach(m => { if (m && m.data) push('data:' + (m.mimeType || 'image/png') + ';base64,' + m.data); });
+  return out;
+}
+function _imgRefsToMedia(refs) {
+  return refs.map(u => {
+    const parsed = _parseImageDataUrl(u);
+    return { mimeType: (parsed && parsed.mime) || 'image/png', data: u.split(',')[1] || '' };
+  }).filter(m => m.data);
+}
+
+/* ── ChatGPT Images by the key in THIS browser ─────────────────────────── */
 function _dataUrlToBlob(dataUrl) {
   const parsed = _parseImageDataUrl(dataUrl);
   if (!parsed) throw new Error('reference image is not an image');
@@ -797,7 +998,7 @@ async function _openAiImageRequest(path, body, isForm) {
   if (!res.ok) {
     let detail = '';
     try { const ej = await res.json(); detail = ej && ej.error ? ej.error.message : ''; } catch (e) { /* non-JSON error body */ }
-    const err = new Error('OpenAI image API error ' + res.status + (detail ? ': ' + detail : ''));
+    const err = new Error('ChatGPT Images API error ' + res.status + (detail ? ': ' + detail : ''));
     err.status = res.status; err.detail = detail;
     throw err;
   }
@@ -805,30 +1006,51 @@ async function _openAiImageRequest(path, body, isForm) {
   const item = data && data.data && data.data[0];
   if (item && item.b64_json) return 'data:image/png;base64,' + item.b64_json;
   if (item && item.url) return await _urlToDataUrlRobust(item.url);
-  throw new Error('OpenAI did not return an image');
+  throw new Error('ChatGPT Images did not return an image');
 }
 
-// Older image models (and some accounts) reject the newer extras — transparent
-// background, output_format, quality — with a 400. Retry once with the bare
-// minimum rather than failing the whole batch.
+/* A LEGACY model (and some accounts) reject the newer extras — transparent
+   background, output_format, quality, input_fidelity — with a 400. Retry once
+   with the bare minimum rather than failing the whole batch. The 2.5 family
+   takes every one of them, so on the default model this never fires. */
 function _isUnsupportedImageParam(e) {
   return !!e && e.status === 400 && /unknown parameter|unsupported|not supported|invalid value|additional properties/i.test(e.detail || e.message || '');
 }
+/* `xhigh` and `max` exist only on the 2.5 family; an older model asked for
+   them 400s. Clamp rather than refuse, so a caller can ask for the best and
+   get the best the chosen model has. */
+function _imgQualityFor(model, quality) {
+  const q = String(quality || 'high').toLowerCase();
+  if (OPENAI_IMAGE_25_RE.test(model)) return ['low', 'medium', 'high', 'xhigh', 'max', 'auto'].includes(q) ? q : 'high';
+  return ['low', 'medium', 'high', 'auto'].includes(q) ? q : 'high';
+}
 
-async function openAiGenerateImageDataUrl(prompt, { size = '1024x1024', transparent = false, refDataUrl = null, quality = 'high' } = {}) {
+async function openAiGenerateImageDataUrl(prompt, opts) {
+  const o = opts || {};
   if (!getOpenAiKey()) throw new Error('No OpenAI API key saved on this device');
-  const model = getOpenAiImageModel();
-  if (refDataUrl) {
+  const model = o.model && openAiImageModelKnown(o.model) ? o.model : getOpenAiImageModel();
+  const refs = _imgRefsFrom(o);
+  const transparent = !!o.transparent;
+  const quality = _imgQualityFor(model, o.quality);
+  /* An EDIT keeps the reference's own shape unless the caller said otherwise:
+     a redrawn exam figure that came back square would be a different figure.
+     A picture drawn from nothing is square unless asked for. */
+  const size = o.size || (refs.length ? 'auto' : '1024x1024');
+  if (refs.length) {
     const buildForm = (extras) => {
       const fd = new FormData();
       fd.append('model', model);
       fd.append('prompt', prompt);
       fd.append('size', size);
       fd.append('n', '1');
-      fd.append('image', _dataUrlToBlob(refDataUrl), 'reference.png');
+      // Several references go up as `image[]`; one goes up as `image`. Both
+      // are what the API documents, and a single picture sent as `image[]`
+      // is refused by the older models.
+      refs.forEach((u, i) => fd.append(refs.length > 1 ? 'image[]' : 'image', _dataUrlToBlob(u), 'reference-' + (i + 1) + '.png'));
       if (extras) {
         fd.append('output_format', 'png');
         fd.append('quality', quality);
+        fd.append('input_fidelity', 'high');
         if (transparent) fd.append('background', 'transparent');
       }
       return fd;
@@ -846,6 +1068,110 @@ async function openAiGenerateImageDataUrl(prompt, { size = '1024x1024', transpar
     if (!_isUnsupportedImageParam(e)) throw e;
     return await _openAiImageRequest('generations', base, false);
   }
+}
+
+/* ── ChatGPT Images by the SERVER's key ────────────────────────────────
+   The `openAiImage` callable in the Maths repo's functions/. It pins the
+   model to the 2.5 family itself (a client that could name a model could
+   name an expensive one), validates every field, and answers on a device
+   nobody has typed a key into. The image model chosen here is passed along
+   — the server honours it when it is a 2.5 id and falls back to Flare when
+   it is not, so a legacy pick in this browser never becomes a 400. */
+async function openAiImageServer(prompt, opts) {
+  const o = opts || {};
+  if (!_aiFns) _aiFns = getFunctions(app);
+  const call = httpsCallable(_aiFns, 'openAiImage', { timeout: 240000 });
+  const refs = _imgRefsFrom(o);
+  const model = getOpenAiImageModel();
+  const res = await call({
+    prompt: String(prompt == null ? '' : prompt),
+    images: _imgRefsToMedia(refs),
+    model,
+    size: o.size || (refs.length ? 'auto' : '1024x1024'),
+    quality: _imgQualityFor(OPENAI_IMAGE_25_RE.test(model) ? model : OPENAI_IMAGE_DEFAULT_MODEL, o.quality),
+    background: o.transparent ? 'transparent' : 'auto',
+    outputFormat: 'png',
+    inputFidelity: refs.length ? 'high' : undefined
+  });
+  const d = res && res.data;
+  if (!d || typeof d.b64 !== 'string' || !d.b64) throw new Error('The server image route returned no picture.');
+  return 'data:' + (d.mimeType || 'image/png') + ';base64,' + d.b64;
+}
+
+/* ── THE ONE DOOR ──────────────────────────────────────────────────────── */
+let imageLastCall = { route: '', fellBack: false, error: '' };
+function _imgRun(route, prompt, opts) {
+  if (route === 'imgServer') return openAiImageServer(prompt, opts);
+  if (route === 'imgKey') return openAiGenerateImageDataUrl(prompt, opts);
+  return generateImageDataUrlGemini(prompt, _imgRefsFrom(opts));
+}
+/* A refusal that is about THIS picture — a size the model will not take, a
+   prompt its safety layer declined — says nothing about the route, so it must
+   not close the route for ten minutes on every later picture. */
+function _imgRouteFault(e) {
+  const msg = String((e && (e.detail || e.message)) || e || '');
+  const code = String((e && e.code) || '');
+  if (/invalid-argument/.test(code)) return false;
+  if (e && e.status === 400 && !/api key|authenticat|billing|quota|credit/i.test(msg)) return false;
+  return true;
+}
+/* Returns a data: URL. `opts`: refDataUrl | refDataUrls | media (the
+   reference pictures — any of them makes this an EDIT), transparent, size,
+   quality, model, skipOpenAi. Tries every route in `imageEngineOrder` and,
+   when all of them refuse, throws an error naming what EVERY route said —
+   "Gemini refused" alone would send the teacher to the Google console when
+   what actually needs doing is deploying the image function. */
+async function generateImageDataUrl(prompt, opts) {
+  const order = imageEngineOrder(opts);
+  if (!order.length) throw new Error('No image model is available — neither ChatGPT Images nor a Gemini image model could be reached');
+  let first = null;
+  for (let i = 0; i < order.length; i++) {
+    const route = order[i];
+    try {
+      const out = await _imgRun(route, prompt, opts);
+      if (typeof out !== 'string' || !/^data:image\//i.test(out)) throw new Error('the image model returned no picture');
+      _aiMarkUp(route);
+      imageLastCall = { route, fellBack: i > 0, error: first ? String(first.message || first) : '' };
+      return out;
+    } catch (e) {
+      if (_imgRouteFault(e)) _aiMarkDown(route, String((e && e.message) || e || ''));
+      if (!first) first = e;
+      console.warn('image route ' + route + ' refused:', e);
+    }
+  }
+  const why = order.map(r => AI_IMAGE_ROUTE_LABEL[r] + ': ' + (_aiWhy[r] || (first && first.message) || 'refused')).join(' · ');
+  imageLastCall = { route: '', fellBack: false, error: why };
+  const err = new Error(why);
+  err.cause = first;
+  err.status = first && first.status;
+  throw err;
+}
+
+/* What the chooser prints about pictures — the routes in the order they will
+   be tried, and what each said the last time it refused. */
+function imageRouteReport() {
+  const order = imageEngineOrder();
+  const notes = [];
+  if (aiEngineIsDown('imgServer') && _aiWhy.imgServer) {
+    notes.push(/not-?found|failed-?precondition|not configured|internal error/i.test(_aiWhy.imgServer)
+      ? 'The server image route is not switched on yet — the openAiImage function has not been deployed, or OPENAI_API_KEY has not been set. Until then ChatGPT Images needs a key in this browser. (' + _aiWhy.imgServer + ')'
+      : 'The server image route refused a moment ago and is being skipped for a few minutes: ' + _aiWhy.imgServer);
+  }
+  if (aiEngineIsDown('imgKey') && _aiWhy.imgKey) notes.push('The ChatGPT key in this browser was refused for pictures: ' + _aiWhy.imgKey);
+  if (aiEngineIsDown('imgGemini') && _aiWhy.imgGemini) notes.push('The Gemini image model refused a moment ago and is being skipped for a few minutes: ' + _aiWhy.imgGemini);
+  if (imageLastCall.route) {
+    notes.push('The last picture came from ' + (AI_IMAGE_ROUTE_LABEL[imageLastCall.route] || imageLastCall.route) +
+      (imageLastCall.fellBack ? ', after an earlier route refused.' : '.'));
+  } else if (imageLastCall.error) {
+    notes.push('The last picture failed on every route: ' + imageLastCall.error);
+  }
+  return {
+    order: order.map(r => AI_IMAGE_ROUTE_LABEL[r] || r),
+    model: getOpenAiImageModel(),
+    setting: aiImageEngineSetting(),
+    shared: !!_aiSharedImageEngine,
+    notes
+  };
 }
 
 // Single swap-point for all model calls. Returns trimmed text.
@@ -988,6 +1314,25 @@ function aiEngineAuthorPreview(v) {
   }
 }
 
+/* A preview of the PICTURE order as the image radios change — the same shape
+   as the two previews below: nothing is committed, so Cancel really cancels. */
+function aiEngineImageChoicePreview(v) {
+  if (!document.getElementById('aiEngineStatus')) return;
+  const wasShared = _aiSharedImageEngine;
+  const wasLocal = getAiImageEngine();
+  try {
+    _aiSharedImageEngine = null;
+    localStorage.setItem(AI_ENGINE_STORE.imageEngine, AI_IMAGE_ENGINES.includes(v) ? v : AI_IMAGE_ENGINE_DEFAULT);
+    renderAiEngineStatus();
+  } catch (e) { /* private browsing: nothing was stored, so nothing to undo */ }
+  finally {
+    _aiSharedImageEngine = wasShared;
+    try {
+      if (wasLocal) localStorage.setItem(AI_ENGINE_STORE.imageEngine, wasLocal);
+      else localStorage.removeItem(AI_ENGINE_STORE.imageEngine);
+    } catch (e) { /* nothing to put back */ }
+  }
+}
 function aiEngineChoicePreview(v) {
   // A preview, not a save: it shows the order the chosen engine would produce
   // without committing the choice, so Cancel really cancels.
@@ -1022,7 +1367,9 @@ function openAiEngineSettings() {
   modelSel.value = getOpenAiModel();
   if (!modelSel.value) modelSel.value = OPENAI_DEFAULT_MODEL;   // stored model no longer offered
   const imgSel = document.getElementById('aiEngineImageModel');
-  if (imgSel) { imgSel.value = getOpenAiImageModel(); if (!imgSel.value) imgSel.value = OPENAI_IMAGE_DEFAULT_MODEL; }
+  if (imgSel) imgSel.innerHTML = openAiImageModelOptionsHtml(getOpenAiImageModel());
+  const imgEng = aiImageEngineSetting();
+  document.querySelectorAll('input[name="aiImageEngineChoice"]').forEach(r => { r.checked = r.value === imgEng; });
   document.getElementById('aiEngineKey').value = getOpenAiKey();
   const kModelEl = document.getElementById('aiEngineKimiModel');
   if (kModelEl) kModelEl.value = getKimiModel();
@@ -1052,7 +1399,14 @@ function renderAiEngineStatus() {
   // an app quietly transcribing on the general model looks exactly like one
   // transcribing on the speech model, only a little worse.
   const mic = `<div style="margin-top:12px;color:var(--text-muted);">🎙️ ${escapeHtml(transcribeRouteNote())}</div>`;
-  el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">Everything else — tried in this order</div>${order}${author}${notes}${mic}`;
+  // Pictures are their own engine and their own failure: an app quietly
+  // drawing with Gemini looks exactly like one drawing with ChatGPT Images,
+  // only a little worse — so the order and the model are printed too.
+  const ir = imageRouteReport();
+  const pics = `<div style="font-weight:600;margin:14px 0 6px;">🖼 Pictures — tried in this order</div>${list(ir.order)}` +
+    `<div style="margin-top:6px;color:var(--text-muted);">ChatGPT image model: <b>${escapeHtml(ir.model)}</b>${ir.shared ? ' · centre-wide setting' : ''}</div>` +
+    ir.notes.map(n => `<div style="margin-top:8px;color:var(--text-muted);">${escapeHtml(n)}</div>`).join('');
+  el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">Everything else — tried in this order</div>${order}${author}${notes}${mic}${pics}`;
 }
 
 /* The account's own list, in one call. A hard-coded list of ids in this file
@@ -1083,6 +1437,8 @@ async function saveAiEngineSettings() {
   const eng = picked ? picked.value : 'gemini';
   const authSelEl = document.getElementById('aiEngineAuthor');
   const authEng = (authSelEl && authSelEl.value) || AI_AUTHOR_DEFAULT;
+  const imgPicked = document.querySelector('input[name="aiImageEngineChoice"]:checked');
+  const imgEng = imgPicked && AI_IMAGE_ENGINES.includes(imgPicked.value) ? imgPicked.value : AI_IMAGE_ENGINE_DEFAULT;
   /* The engine is a setting for the WHOLE centre, so it goes to the server —
      and only the admin may write it. Everything else in this dialog (the
      model, the fallback key) stays device-local, because that is what those
@@ -1092,7 +1448,7 @@ async function saveAiEngineSettings() {
      dialog says. */
   if (_isAdmin()) {
     try {
-      await aiEngineSetShared(eng, authEng);
+      await aiEngineSetShared(eng, authEng, imgEng);
       const authName = authEng === AI_AUTHOR_FOLLOW
         ? (AI_ENGINE_NAME[eng] || 'Gemini')
         : (AI_ENGINE_NAME[authEng] || 'Gemini');
@@ -1114,6 +1470,7 @@ async function saveAiEngineSettings() {
   try {
     localStorage.setItem(AI_ENGINE_STORE.engine, eng);
     localStorage.setItem(AI_ENGINE_STORE.authorEngine, authEng);
+    localStorage.setItem(AI_ENGINE_STORE.imageEngine, imgEng);
     localStorage.setItem(AI_ENGINE_STORE.model, model);
     localStorage.setItem(AI_ENGINE_STORE.imageModel, imageModel);
     if (key) localStorage.setItem(AI_ENGINE_STORE.key, key);
@@ -1126,7 +1483,8 @@ async function saveAiEngineSettings() {
   // Saying "all four subjects" is what tells the admin they do NOT have to go
   // and do this again in Maths, English and Chinese.
   const what = eng === 'openai' ? 'ChatGPT (' + model + ')' : eng === 'kimi' ? 'Kimi (' + kimiModel + ')' : 'Gemini';
-  showToast('AI engine set to ' + what + ' — for all four subjects', 'success');
+  const pics = imgEng === 'gemini' ? 'Gemini image model' : 'ChatGPT Images (' + imageModel + ')';
+  showToast('AI engine set to ' + what + ', pictures by ' + pics + ' — for all four subjects', 'success');
 }
 
 function openMarkingSettings() {
@@ -3342,7 +3700,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.371.0';
+const APP_VERSION = 'v1.372.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -8831,7 +9189,7 @@ async function _diagramDraw(q, buildPrompt, currentUrl, regen) {
     catch (e) { console.warn('auto diagram: could not read the current diagram, drawing fresh', e); }
   }
   if (!ref) { ref = await _akdQuestionFigure(q); kind = ref ? 'question' : 'none'; }
-  const dataUrl = await generateImageDataUrlGemini(buildPrompt(kind), ref);
+  const dataUrl = await generateImageDataUrl(buildPrompt(kind), { refDataUrl: ref });
   // Straight through the shared paper cleaner, exactly as an enhanced scan is:
   // an image model has no flat white, so it leaves the faint weave that prints
   // as a grey wash. A refusal there hands the picture back untouched.
@@ -9865,36 +10223,34 @@ async function generateCleanEnhancedImage(prompt, media) {
   return res.url;
 }
 
-// Ask an image model to produce an image; returns a data: URL.
-// `media` may be a single { mimeType, data } or an array of them.
+// Ask the image engine to REDRAW a picture; returns a data: URL.
+// `media` may be a single { mimeType, data } or an array of them. It is a thin
+// wrapper over THE ONE DOOR — ChatGPT Images 2.5 first, Gemini's image model
+// behind it — so every enhance path in the app (the scan clean-up, the ✨
+// Enhance button, the auto diagram's crop, the AI content-aware fill, the
+// ✨ Regenerate, the redrawn exam figure) changed engine at once and cannot
+// drift apart again.
 async function generateEnhancedImageDataUrl(prompt, media) {
   if (!imageAiReady()) throw new Error('AI image enhancement is not configured yet');
-  const m = Array.isArray(media) ? media[0] : media;
-  if (!m || !m.data) throw new Error('no image to enhance');
-  const parts = [prompt, { inlineData: { mimeType: m.mimeType, data: m.data } }];
-  let lastError = null;
-  for (const model of geminiImageModels) {
-    try {
-      const result = await model.generateContent(parts);
-      const img = extractInlineImage(result);
-      if (img) return 'data:' + (img.mimeType || 'image/png') + ';base64,' + img.data;
-      const text = result?.response?.text ? result.response.text() : '';
-      throw new Error(text || 'the AI did not return an image');
-    } catch (e) { lastError = e; console.warn('image enhancement model failed', e); }
-  }
-  throw lastError || new Error('AI image enhancement failed');
+  const list = Array.isArray(media) ? media : [media];
+  if (!list.length || !list[0] || !list[0].data) throw new Error('no image to enhance');
+  return await generateImageDataUrl(prompt, { media: list });
 }
 
-// Free-form image generation through the same Gemini image models: text-only
-// (draw something new) or text + a reference data URL (redraw from it). Used
-// as the fallback whenever the ChatGPT image engine is off or fails.
-async function generateImageDataUrlGemini(prompt, refDataUrl) {
-  if (!imageAiReady()) throw new Error('no Gemini image model is available in this project');
+// THE RAW GEMINI ROUTE — text only (draw something new) or text + reference
+// pictures (redraw from them) through the Gemini image models, tried in order.
+// It is the FALLBACK route inside `generateImageDataUrl` and must not be
+// called from anywhere else: a caller that reaches it directly is a surface
+// that quietly stayed on Gemini while every other picture moved to ChatGPT
+// Images 2.5, and tools/image-engine-tests.mjs fails on it.
+async function generateImageDataUrlGemini(prompt, refDataUrls) {
+  if (!imageAiReady() || !geminiImageModels.length) throw new Error('no Gemini image model is available in this project');
   const parts = [prompt];
-  if (refDataUrl) {
-    const parsed = _parseImageDataUrl(refDataUrl);
-    if (parsed) parts.push({ inlineData: { mimeType: parsed.mime, data: refDataUrl.split(',')[1] || '' } });
-  }
+  const refs = Array.isArray(refDataUrls) ? refDataUrls : (refDataUrls ? [refDataUrls] : []);
+  refs.forEach(u => {
+    const parsed = _parseImageDataUrl(u);
+    if (parsed) parts.push({ inlineData: { mimeType: parsed.mime, data: u.split(',')[1] || '' } });
+  });
   let lastError = null;
   for (const model of geminiImageModels) {
     try {
@@ -9903,9 +10259,9 @@ async function generateImageDataUrlGemini(prompt, refDataUrl) {
       if (img) return 'data:' + (img.mimeType || 'image/png') + ';base64,' + img.data;
       const text = result?.response?.text ? result.response.text() : '';
       throw new Error(text || 'the AI did not return an image');
-    } catch (e) { lastError = e; console.warn('image generation model failed', e); }
+    } catch (e) { lastError = e; console.warn('Gemini image model failed', e); }
   }
-  throw lastError || new Error('AI image generation failed');
+  throw lastError || new Error('Gemini image generation failed');
 }
 
 async function _urlToDataUrl(url) {
@@ -54141,8 +54497,10 @@ function tcgAvatarPrompt(c, harder) {
     + 'STYLE: clean crisp game-asset sprite with bold shapes that still read clearly at 128 pixels.\n'
     + 'HARD RULES: no text, letters, numbers or watermarks; exactly one creature; nothing frightening or gruesome.';
 }
-// One call, whichever engine is on: ChatGPT image model first when the
-// ChatGPT engine is active, Gemini image model otherwise (and as the fallback).
+// One call through THE ONE DOOR (search `THE IMAGE ENGINE`): ChatGPT Images
+// 2.5 first, by the server's key or this browser's, and Gemini's image model
+// as the fallback — the order the centre-wide image setting decides, never
+// the chat toggle.
 const _tcgSleep = ms => new Promise(r => setTimeout(r, ms));
 // A rate-limit or a hiccup halfway through 150 monsters shouldn't cost the
 // whole batch — back off and try that one picture again.
@@ -54151,18 +54509,7 @@ function _tcgTransientError(e) {
   return (e && (e.status === 429 || e.status >= 500)) || /rate limit|429|timeout|timed out|temporarily|overloaded|failed to fetch|network|503|500/i.test(msg);
 }
 async function _tcgGenOnce(prompt, refDataUrl, transparent) {
-  let openAiErr = null;
-  if (openAiActive()) {
-    try { return await openAiGenerateImageDataUrl(prompt, { refDataUrl: refDataUrl || null, transparent: !!transparent }); }
-    catch (e) { openAiErr = e; console.warn('ChatGPT image generation failed, falling back to Gemini:', e); }
-  }
-  try { return await generateImageDataUrlGemini(prompt, refDataUrl || null); }
-  catch (ge) {
-    if (!openAiErr) throw ge;
-    const err = new Error('ChatGPT: ' + openAiErr.message + ' · Gemini fallback: ' + ge.message);
-    err.status = openAiErr.status;
-    throw err;
-  }
+  return await generateImageDataUrl(prompt, { refDataUrl: refDataUrl || null, transparent: !!transparent });
 }
 // The words that make an image model paint the very thing we are trying to
 // avoid. "Transparent" makes it paint the editor's chequerboard; naming the
@@ -54189,7 +54536,6 @@ let _tcgGenBusy = false;   // a generation (single slot or batch) is running
 let _tcgGenStop = false;   // batch cancel flag
 
 function _tcgSlotKey(slotId) { return slotId.replace(/:/g, '-'); }   // 'c001:av' / 'fx:cosmic:3' → safe element ids
-function _tcgArtEngineLabel() { return openAiActive() ? 'ChatGPT · ' + getOpenAiImageModel() : 'Gemini image model'; }
 // Re-download the saved card art so it can be handed to the model as the
 // avatar's reference.
 async function _tcgCardArtDataUrl(card) {
@@ -73572,6 +73918,7 @@ window.closeAiEngineSettings = closeAiEngineSettings;
 // Inline on* handlers live outside the module's scope.
 window.aiEngineChoicePreview = aiEngineChoicePreview;
 window.aiEngineAuthorPreview = aiEngineAuthorPreview;
+window.aiEngineImageChoicePreview = aiEngineImageChoicePreview;
 window.aiEngineStopShared = aiEngineStopShared;
 window.saveAiEngineSettings = saveAiEngineSettings;
 window.kimiLoadModelList = kimiLoadModelList;
