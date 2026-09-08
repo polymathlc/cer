@@ -848,10 +848,12 @@ function aiRouteReport() {
    supported — on gpt-image-2 it was a preview), `output_format` png / jpeg /
    webp, arbitrary WIDTHxHEIGHT sizes with both sides divisible by 16 and an
    aspect ratio between 1:3 and 3:1, and up to 16 reference pictures on an
-   edit with `input_fidelity` high or low. `input_fidelity: 'high'` is sent
-   on every edit here, because every edit in this app is "keep this exact
-   thing and change one aspect of it" — the same creature on the avatar, the
-   same apparatus on the diagram, the same figure with the pencil rubbed out.
+   edit. `input_fidelity` is NOT one of them (v1.373.1): the gpt-image-2
+   family reads every reference at high fidelity by itself and REFUSES the
+   parameter with a 400 — "does not support the 'input_fidelity' parameter" —
+   so it is a gpt-image-1 knob and `_imgFidelityFor` sends it to that family
+   and to no other. Every edit in this app is "keep this exact thing and
+   change one aspect of it", which is what the 2.x default already does.
 
    A DEFAULT NOBODY CHOSE IS NOT A CHOICE. The image model is written to
    localStorage every time the AI Engine dialog is saved, so every device
@@ -1009,13 +1011,28 @@ async function _openAiImageRequest(path, body, isForm) {
   throw new Error('ChatGPT Images did not return an image');
 }
 
-/* A LEGACY model (and some accounts) reject the newer extras — transparent
-   background, output_format, quality, input_fidelity — with a 400. Retry once
-   with the bare minimum rather than failing the whole batch. The 2.5 family
-   takes every one of them, so on the default model this never fires. */
+/* A model that rejects one of the extras — transparent background,
+   output_format, quality, a parameter it does not know — does it with a 400
+   whose wording varies by the month: "Unknown parameter", "does not support
+   the 'x' parameter", "Invalid value", "not supported for this model". Any of
+   them is retried ONCE with the bare minimum rather than failing the whole
+   batch. The net is wide on purpose: the first cut matched "not supported" and
+   not "does not support", and that one word was every edit in the app falling
+   silently through to Gemini (v1.373.1). */
 function _isUnsupportedImageParam(e) {
-  return !!e && e.status === 400 && /unknown parameter|unsupported|not supported|invalid value|additional properties/i.test(e.detail || e.message || '');
+  return !!e && e.status === 400 && /unknown|unrecogni[sz]ed|unsupported|not support|invalid value|additional propert|not (?:allowed|permitted)/i.test(e.detail || e.message || '');
 }
+/* `input_fidelity` belongs to the gpt-image-1 family and to no other. The 2.x
+   models read every reference at high fidelity by default and answer the
+   parameter with a 400 — sent on every edit, that was every edit in the app
+   refused by ChatGPT and drawn by Gemini instead, with only the green box to
+   say so (v1.373.1). So it goes only where it is accepted, never by default. */
+const OPENAI_IMAGE_FIDELITY_RE = /^gpt-image-1(-mini)?(-\d{4}-\d{2}-\d{2})?$/;
+function _imgFidelityFor(model) { return OPENAI_IMAGE_FIDELITY_RE.test(String(model || '')) ? 'high' : ''; }
+/* `size: auto` IS what the API does when no size is sent, so the word is never
+   sent: a model that does not list "auto" among its sizes refuses it, and
+   leaving the field out asks for exactly the same thing. */
+function _imgSizeField(size) { const v = String(size || '').trim(); return v && v.toLowerCase() !== 'auto' ? v : ''; }
 /* `xhigh` and `max` exist only on the 2.5 family; an older model asked for
    them 400s. Clamp rather than refuse, so a caller can ask for the best and
    get the best the chosen model has. */
@@ -1042,7 +1059,7 @@ async function openAiGenerateImageDataUrl(prompt, opts) {
       const fd = new FormData();
       fd.append('model', model);
       fd.append('prompt', prompt);
-      fd.append('size', size);
+      if (_imgSizeField(size)) fd.append('size', _imgSizeField(size));
       fd.append('n', '1');
       // Several references go up as `image[]`; one goes up as `image`. Both
       // are what the API documents, and a single picture sent as `image[]`
@@ -1051,7 +1068,7 @@ async function openAiGenerateImageDataUrl(prompt, opts) {
       if (extras) {
         fd.append('output_format', 'png');
         fd.append('quality', quality);
-        fd.append('input_fidelity', 'high');
+        if (_imgFidelityFor(model)) fd.append('input_fidelity', _imgFidelityFor(model));
         if (transparent) fd.append('background', 'transparent');
       }
       return fd;
@@ -1062,7 +1079,7 @@ async function openAiGenerateImageDataUrl(prompt, opts) {
       return await _openAiImageRequest('edits', buildForm(false), true);
     }
   }
-  const base = { model, prompt, size, n: 1 };
+  const base = Object.assign({ model, prompt, n: 1 }, _imgSizeField(size) ? { size: _imgSizeField(size) } : {});
   const full = Object.assign({}, base, { output_format: 'png', quality }, transparent ? { background: 'transparent' } : {});
   try { return await _openAiImageRequest('generations', full, false); }
   catch (e) {
@@ -1091,8 +1108,9 @@ async function openAiImageServer(prompt, opts) {
     size: o.size || (refs.length ? 'auto' : '1024x1024'),
     quality: _imgQualityFor(OPENAI_IMAGE_25_RE.test(model) ? model : OPENAI_IMAGE_DEFAULT_MODEL, o.quality),
     background: o.transparent ? 'transparent' : 'auto',
-    outputFormat: 'png',
-    inputFidelity: refs.length ? 'high' : undefined
+    outputFormat: 'png'
+    // No inputFidelity: the server pins the model to the 2.5 family, which
+    // refuses the parameter (see _imgFidelityFor). It decides what to send.
   });
   const d = res && res.data;
   if (!d || typeof d.b64 !== 'string' || !d.b64) throw new Error('The server image route returned no picture.');
@@ -1103,7 +1121,16 @@ async function openAiImageServer(prompt, opts) {
 }
 
 /* ── THE ONE DOOR ──────────────────────────────────────────────────────── */
-let imageLastCall = { route: '', fellBack: false, error: '', model: '', engine: '' };
+let imageLastCall = { route: '', fellBack: false, error: '', model: '', engine: '', refusedBy: '' };
+/* The refusal, short enough for a badge: the transport prefixes stripped and
+   the rest clipped, so "why did Gemini draw this" is answered on the box
+   itself rather than by opening the console (v1.373.1). */
+const IMG_REFUSAL_CHARS = 160;
+function _imgRefusalText(e) {
+  let m = String((e && (e.detail || e.message)) || e || '').replace(/^functions\/[a-z-]+:\s*/i, '').replace(/^ChatGPT Images API error \d+:\s*/i, '').trim();
+  if (m.length > IMG_REFUSAL_CHARS) m = m.slice(0, IMG_REFUSAL_CHARS - 1).trimEnd() + '…';
+  return m;
+}
 /* WHICH MODEL ANSWERED. Every route sets this just before it hands its
    picture back — the server's own `model` field, the id the browser key was
    asked for, the Gemini id that finally returned a picture — and the door
@@ -1111,6 +1138,9 @@ let imageLastCall = { route: '', fellBack: false, error: '', model: '', engine: 
    than a change to the routes' return shape, because a dozen callers read the
    door as "a data URL comes back" and must go on doing so. */
 let _imgRouteModel = '';
+/* What each route said the last time it refused, kept whether or not the
+   refusal closed the route — `_aiWhy` only records the ones that did. */
+const _imgRefusal = {};
 /* The words on the badge. `route` is what answered; `model` is the id it
    answered with. */
 function imageEngineDescribe(route, model) {
@@ -1136,7 +1166,8 @@ function imageAnnounce(info) {
   try {
     const i = info || imageLastCall || {};
     if (!i.route) return;
-    const text = '🖼 Picture generated by ' + imageEngineDescribe(i.route, i.model) + (i.fellBack ? ' (after another route refused)' : '');
+    const text = '🖼 Picture generated by ' + imageEngineDescribe(i.route, i.model) +
+      (i.fellBack ? ' (after ' + (i.refusedBy || 'another route') + ' refused' + (i.error ? ': ' + i.error : '') + ')' : '');
     if (typeof showToast === 'function') showToast(text, 'image');
   } catch (e) { console.warn('image badge:', e); }
 }
@@ -1164,7 +1195,7 @@ function _imgRouteFault(e) {
 async function generateImageDataUrl(prompt, opts) {
   const order = imageEngineOrder(opts);
   if (!order.length) throw new Error('No image model is available — neither ChatGPT Images nor a Gemini image model could be reached');
-  let first = null;
+  let first = null, firstRoute = '';
   for (let i = 0; i < order.length; i++) {
     const route = order[i];
     try {
@@ -1172,17 +1203,21 @@ async function generateImageDataUrl(prompt, opts) {
       const out = await _imgRun(route, prompt, opts);
       if (typeof out !== 'string' || !/^data:image\//i.test(out)) throw new Error('the image model returned no picture');
       _aiMarkUp(route);
-      imageLastCall = { route, fellBack: i > 0, error: first ? String(first.message || first) : '', model: _imgRouteModel, engine: route === 'imgGemini' ? 'gemini' : 'openai' };
+      imageLastCall = { route, fellBack: i > 0, error: first ? _imgRefusalText(first) : '', model: _imgRouteModel, engine: route === 'imgGemini' ? 'gemini' : 'openai',
+        refusedBy: first ? (AI_IMAGE_ROUTE_LABEL[firstRoute] || firstRoute) : '' };
       imageAnnounce(imageLastCall);
       return out;
     } catch (e) {
       if (_imgRouteFault(e)) _aiMarkDown(route, String((e && e.message) || e || ''));
-      if (!first) first = e;
+      // Remembered whether or not it closed the route: a refusal about ONE
+      // picture is exactly the kind the chooser has to be able to show.
+      _imgRefusal[route] = _imgRefusalText(e);
+      if (!first) { first = e; firstRoute = route; }
       console.warn('image route ' + route + ' refused:', e);
     }
   }
   const why = order.map(r => AI_IMAGE_ROUTE_LABEL[r] + ': ' + (_aiWhy[r] || (first && first.message) || 'refused')).join(' · ');
-  imageLastCall = { route: '', fellBack: false, error: why, model: '', engine: '' };
+  imageLastCall = { route: '', fellBack: false, error: why, model: '', engine: '', refusedBy: '' };
   const err = new Error(why);
   err.cause = first;
   err.status = first && first.status;
@@ -1201,9 +1236,12 @@ function imageRouteReport() {
   }
   if (aiEngineIsDown('imgKey') && _aiWhy.imgKey) notes.push('The ChatGPT key in this browser was refused for pictures: ' + _aiWhy.imgKey);
   if (aiEngineIsDown('imgGemini') && _aiWhy.imgGemini) notes.push('The Gemini image model refused a moment ago and is being skipped for a few minutes: ' + _aiWhy.imgGemini);
+  order.forEach(r => {
+    if (!aiEngineIsDown(r) && _imgRefusal[r]) notes.push((AI_IMAGE_ROUTE_LABEL[r] || r) + ' refused the last picture it was asked for (the route itself is still open): ' + _imgRefusal[r]);
+  });
   if (imageLastCall.route) {
     notes.push('The last picture came from ' + imageEngineDescribe(imageLastCall.route, imageLastCall.model) +
-      (imageLastCall.fellBack ? ', after an earlier route refused.' : '.'));
+      (imageLastCall.fellBack ? ', after ' + (imageLastCall.refusedBy || 'an earlier route') + ' refused' + (imageLastCall.error ? ': ' + imageLastCall.error : '.') : '.'));
   } else if (imageLastCall.error) {
     notes.push('The last picture failed on every route: ' + imageLastCall.error);
   }
@@ -3742,7 +3780,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.373.0';
+const APP_VERSION = 'v1.373.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
