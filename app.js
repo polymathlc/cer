@@ -1,3 +1,4 @@
+import { mountInterfaceStudio, isReleased as interfaceIsReleased } from "./interface-studio.mjs?v=1";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-analytics.js";
 import {
@@ -17,6 +18,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import {
   getFirestore,
+  runTransaction,
+  serverTimestamp,
   doc,
   collection,
   getDoc,
@@ -57,6 +60,34 @@ const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// Interface rollout is independent of game releases and of the other subject.
+// Transactions fail offline rather than queueing a surprise release for later.
+let interfaceStudio = null;
+function syncInterfaceStudio() {
+  if (!interfaceStudio) {
+    const releaseRef = doc(db, 'config', 'admin');
+    const storage = {
+      getItem: key => sessionStorage.getItem('Science:interface:' + key),
+      setItem: (key, value) => sessionStorage.setItem('Science:interface:' + key, value)
+    };
+    interfaceStudio = mountInterfaceStudio({
+      subject: 'Science', root: document.querySelector('.main-content'), storage,
+      subscribe: (next, fail) => onSnapshot(releaseRef, { includeMetadataChanges: true },
+        snap => next(snap.exists() ? snap.data() : {}, snap.metadata), fail),
+      save: (released, uid, expected) => runTransaction(db, async transaction => {
+        if (!currentUser || currentUser.role !== 'admin' || currentUser.uid !== uid || auth.currentUser?.uid !== uid)
+          throw new Error('Sign in as an admin to change the student interface.');
+        const snapshot = await transaction.get(releaseRef);
+        if (interfaceIsReleased(snapshot.exists() ? snapshot.data() : {}) !== expected)
+          throw new Error('Another admin changed the release setting. Review the current status and try again.');
+        transaction.set(releaseRef, { arcadeUi: { version: 1, released, updatedAt: serverTimestamp(), updatedBy: uid } }, { merge: true });
+      })
+    });
+  }
+  interfaceStudio.setUser(currentUser);
+}
+
 const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 
@@ -3625,6 +3656,7 @@ async function enterApp(user) {
   currentUser = _practiceAs
     ? { uid: _practiceAs.uid, email: _practiceAs.email, name: _practiceAs.name, role: 'student' }
     : { uid: user.uid, email: user.email, name: displayName, role: roleOf };
+  syncInterfaceStudio();
   showPage('appWrapper');
   // Record login event for usage tracking. This logs the REAL sign-in (the
   // admin) — a practice session is not a login by the student, and the
@@ -3780,7 +3812,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.373.1';
+const APP_VERSION = 'v1.374.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -4255,6 +4287,7 @@ onAuthStateChanged(auth, (user) => {
     enterApp(user);
   } else {
     currentUser = null;
+    interfaceStudio?.setUser(null);
     rpgOnSignOut();
     // The notebook belongs to whoever was signed in — a live listener left
     // running would go on feeding one account's notes to the next person to
@@ -48667,7 +48700,7 @@ async function rpgRenderLeaderboard(force = false) {
     const rank = i + 1;
     const me = r.uid === myUid;
     const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : rank;
-    return `<div class="rpg-board-row ${rpgRowClass(rank)} ${me ? "me" : ""}">
+    return `<div class="rpg-board-row ${rpgRowClass(rank)} ${me ? "me" : ""}" data-arcade-rank="${rank}" style="--arcade-delay:${Math.min(i, 9) * 45}ms">
       <div class="rpg-board-rank">${medal}</div>
       <div class="rpg-board-ava">${rpgAvatarSvg(r.equipment || {}, r.gender)}</div>
       <div class="rpg-board-main">

@@ -1,0 +1,183 @@
+/* Original arcade-inspired controls. All student-facing changes are gated and screen-only. */
+.arcade-studio-bar[hidden], .arcade-studio-error[hidden] { display: none !important; }
+.arcade-studio-bar, .arcade-release-dialog {
+  font-family: 'Space Grotesk', 'DM Sans', sans-serif; color: #172542;
+  background: #fff; border: 2px solid #172542; border-radius: 18px;
+}
+.arcade-studio-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 16px;
+  margin: 20px 24px; padding: 18px 20px; box-shadow: 0 5px 0 #d4dced;
+}
+.arcade-studio-copy { display: grid; gap: 4px; flex: 1 1 260px; }
+.arcade-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .12em; color: #495a78; }
+.arcade-studio-copy strong { font-size: 19px; line-height: 1.3; }
+.arcade-studio-status { font-size: 14px; line-height: 1.5; }
+.arcade-studio-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.arcade-control {
+  appearance: none; font: 700 14px/1.4 'DM Sans', sans-serif; cursor: pointer;
+  min-height: 44px; padding: 11px 16px; border: 2px solid #172542; border-radius: 12px;
+  background: #fff; color: #172542; box-shadow: 0 4px 0 #172542;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.arcade-control-primary { background: #ffdb47; }
+.arcade-control:enabled:hover { transform: translateY(-2px); box-shadow: 0 6px 0 #172542; }
+.arcade-control:enabled:active { transform: translateY(3px); box-shadow: 0 1px 0 #172542; }
+.arcade-control:disabled { opacity: .55; cursor: wait; }
+.arcade-control:focus-visible, .arcade-motion-control:focus-visible { outline: 3px solid #2563eb; outline-offset: 5px; }
+.arcade-studio-error { flex-basis: 100%; margin: 0; color: #a11936; font-size: 14px; }
+.arcade-release-dialog { margin: auto; padding: 28px; width: min(540px, calc(100% - 32px)); max-height: 90dvh; overflow-y: auto; box-shadow: 0 12px 0 #17254255; }
+.arcade-release-dialog::backdrop { background: #0b1734bb; backdrop-filter: blur(4px); }
+.arcade-release-dialog h2 { font-size: 26px; line-height: 1.2; margin: 12px 0; }
+.arcade-release-dialog p { font-size: 16px; line-height: 1.65; margin: 0 0 24px; }
+.arcade-motion-control { display: none; }
+body:not(.arcade-ui) .arcade-prize-details > summary { display: none; }
+@media screen {
+  body.arcade-ui {
+    --bg: #edf2ff; --surface: #fff; --surface-alt: #f2f6ff; --border: #c4d0e7;
+    --text: #172542; --text-muted: #4c5f7c; --text-light: #657795;
+    --primary: #365bd7; --primary-hover: #2947b1; --primary-light: #e6edff;
+    --border-focus: #365bd7; --accent-blue: #215ec2; --accent-blue-light: #e4efff;
+    --accent-green: #08744a; --accent-green-light: #dcf8eb;
+    --accent-orange: #9c5700; --accent-orange-light: #fff1d1;
+    --accent-red: #be2949; --accent-red-light: #fff0f3; --accent-purple: #7040b8;
+    --radius-sm: 9px; --radius-md: 14px; --radius-lg: 20px; --radius-xl: 26px;
+    --shadow-sm: 0 3px 0 #cad5ec; --shadow-md: 0 6px 0 #cad5ec;
+    --shadow-lg: 0 12px 30px #17254226; --arcade-highlight: #ffdb47;
+    font-size: 16px;
+    background-color: var(--bg);
+    background-image: radial-gradient(#b9c9ed 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  body.arcade-ui[data-arcade-subject="science"] {
+    --bg: #ecf8f8; --surface-alt: #f0faf8; --border: #bdd8d6;
+    --primary: #087762; --primary-hover: #055d4d; --primary-light: #dcf6ee;
+    --border-focus: #087762; --shadow-sm: 0 3px 0 #c2dcda; --shadow-md: 0 6px 0 #c2dcda;
+    background-image: radial-gradient(#b9dad7 1px, transparent 1px);
+  }
+  body.arcade-ui .sidebar {
+    background: #14213d; border-right: 3px solid #0a1429;
+    box-shadow: 8px 0 0 #14213d0a; color: #fff;
+  }
+  body.arcade-ui .sidebar-brand { min-height: 92px; background: #1d3155; padding-top: 22px; padding-bottom: 22px; border-bottom: 2px solid #30476d; }
+  body.arcade-ui .sidebar-brand :is(h1, .sidebar-brand-text h1) { color: #fff; font-family: 'Space Grotesk', sans-serif; font-size: 19px; font-weight: 700; line-height: 1.2; }
+  body.arcade-ui .sidebar-brand span { color: #becdea; letter-spacing: .05em; font-size: 11px; }
+  body.arcade-ui .sidebar-brand :is(img, .sidebar-brand-logo) { background: #fff; border-radius: 12px; padding: 3px; }
+  body.arcade-ui .sidebar-nav { padding: 16px 12px 26px; }
+  body.arcade-ui :is(.nav-section, .nav-section-label, .nav-bookmarks-title) { color: #b7c7e7; font-size: 12px; letter-spacing: .09em; padding-top: 20px; }
+  body.arcade-ui .nav-item {
+    color: #dfeaff; font-size: 14px; font-weight: 700; line-height: 1.4;
+    min-height: 46px; padding: 11px 12px; margin-bottom: 7px;
+    border: 2px solid transparent; border-radius: 12px;
+    transition: background .18s ease, transform .22s cubic-bezier(.2,1.7,.5,1), box-shadow .18s ease;
+  }
+  body.arcade-ui .nav-item:hover { background: #263d65; color: #fff; transform: translateX(3px); }
+  body.arcade-ui .nav-item.active { background: #ffdb47; border-color: #07142b; color: #14213d; box-shadow: 0 4px 0 #07142b; }
+  body.arcade-ui .nav-item .ico { font-size: 19px; }
+  body.arcade-ui .nav-item:focus-visible { outline: 3px solid #74e1ff; outline-offset: 2px; }
+  body.arcade-ui :is(.sidebar-footer, .sidebar-foot) { background: #10203b; border-top: 2px solid #30476d; }
+  body.arcade-ui :is(.sidebar-user, .sidebar-user b) { color: #dbe7ff; }
+  body.arcade-ui :is(.sidebar-logout-btn, .logout-btn) { background: #2d4367; color: #fff; min-height: 40px; border-radius: 10px; }
+  body.arcade-ui :is(.main, .main-content) { min-width: 0; }
+  body.arcade-ui :is(.page-header, .topbar) { background: #fff; border-bottom: 3px solid var(--text); gap: 16px; }
+  body.arcade-ui :is(.page-header h2, .topbar h2, .page-head h3) {
+    font-family: 'Space Grotesk', 'DM Sans', sans-serif; font-size: clamp(22px, 2.1vw, 30px);
+    font-weight: 700; line-height: 1.2; letter-spacing: -.04em;
+  }
+  body.arcade-ui :is(.page-header .subtitle, .page-head p) { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+  body.arcade-ui .page-body { max-width: 1260px; }
+  body.arcade-ui .page.active { animation: arcade-page-enter .28s ease-out both; }
+  body.arcade-ui :is(.card, .home-card, .block-card, .q-card, .bank-card, .question-card, .stat-card, .rpg-panel) {
+    border: 2px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-sm); background: var(--surface);
+  }
+  body.arcade-ui :is(.card-pad, .worksheet-card, .home-card) { padding: 24px; }
+  body.arcade-ui .home-grid { gap: 22px; }
+  body.arcade-ui .home-card h3 { color: var(--text); font-family: 'Space Grotesk', sans-serif; font-size: 18px; }
+  body.arcade-ui .home-big { color: var(--primary); font-family: 'Space Grotesk', sans-serif; font-size: 40px; letter-spacing: -.04em; }
+  body.arcade-ui .home-card.wide { border-top: 6px solid var(--primary); }
+  body.arcade-ui :is(.section-label, .form-label, .field label) { color: var(--text-muted); font-size: 14px; font-weight: 700; }
+  body.arcade-ui :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]), textarea, select, .block-edit) {
+    border-color: var(--border); border-radius: 10px; color: var(--text);
+  }
+  body.arcade-ui :is(input, textarea, select, [contenteditable=true]):focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+  body.arcade-ui :is(.block-head, .card-header) { background: var(--surface-alt); border-bottom: 2px solid var(--border); padding: 14px; }
+  body.arcade-ui .block-body { padding: 16px; }
+  body.arcade-ui .btn {
+    --button-face: #fff; --button-text: #172542; --button-base: #172542;
+    background: var(--button-face); color: var(--button-text);
+    border: 2px solid var(--button-base); border-radius: 12px;
+    box-shadow: 0 4px 0 var(--button-base), inset 0 2px 0 #ffffff55;
+    font-weight: 700; line-height: 1.35; min-height: 44px;
+    padding: 11px 17px; gap: 9px; position: relative;
+    transition: transform .18s cubic-bezier(.2,1.7,.5,1), box-shadow .18s ease, filter .18s ease;
+  }
+  body.arcade-ui .btn-primary { --button-face: #ffdb47; --button-text: #172542; }
+  body.arcade-ui :is(.btn-blue, .btn-check) { --button-face: var(--primary); --button-text: #fff; }
+  body.arcade-ui .btn-orange { --button-face: #ffb950; --button-text: #172542; }
+  body.arcade-ui .btn-danger { --button-face: #fff0f3; --button-base: #ae2744; --button-text: #a21e3a; }
+  body.arcade-ui .btn:not(:disabled):not([aria-disabled=true]):hover {
+    background: var(--button-face); color: var(--button-text); transform: translateY(-3px) rotate(-.6deg);
+    box-shadow: 0 7px 0 var(--button-base), inset 0 2px 0 #ffffff88; filter: brightness(1.02);
+  }
+  body.arcade-ui .btn:not(:disabled):not([aria-disabled=true]):active { transform: translateY(3px); box-shadow: 0 1px 0 var(--button-base); }
+  body.arcade-ui .btn:focus-visible { outline: 3px solid var(--primary); outline-offset: 5px; }
+  body.arcade-ui .btn:disabled { opacity: .5; filter: grayscale(.35); transform: none; box-shadow: 0 2px 0 var(--button-base); cursor: not-allowed; }
+  body.arcade-ui .btn-sm { min-height: 36px; padding: 7px 12px; font-size: 14px; }
+  body.arcade-ui :is(.icon-btn, .q-nav button) { border: 2px solid var(--text); border-radius: 10px; box-shadow: 0 3px 0 var(--text); min-height: 38px; }
+  body.arcade-ui .rpg-tabs { gap: 12px; padding-bottom: 5px; }
+  body.arcade-ui .rpg-tab { border: 2px solid var(--border); border-radius: 11px; min-height: 42px; font-size: 14px; color: var(--text); box-shadow: 0 3px 0 var(--border); transition: transform .18s ease; }
+  body.arcade-ui .rpg-tab.active { background: var(--primary); border-color: var(--text); color: #fff; box-shadow: 0 3px 0 var(--text); }
+  body.arcade-ui .rpg-tab:hover { transform: translateY(-2px); }
+  body.arcade-ui :is(.chip, .block-badge, .rpg-you-tag) { border-radius: 7px; font-size: 12px; font-weight: 700; }
+  body.arcade-ui :is(.modal-content, .modal-box, .dialog-box) { border: 2px solid var(--text); border-radius: 22px; box-shadow: 0 10px 0 #17254244; }
+  body.arcade-ui .empty-note { border: 2px dashed var(--border); border-radius: 16px; background: var(--surface-alt); color: var(--text-muted); line-height: 1.7; }
+  body.arcade-ui .arcade-prize-details { margin-bottom: 20px; border: 2px solid #dbc45c; border-radius: 14px; background: #fff8d8; }
+  body.arcade-ui .arcade-prize-details > summary { cursor: pointer; padding: 15px 18px; color: #4a3b09; font-size: 14px; font-weight: 700; }
+  body.arcade-ui .arcade-prize-details > summary:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+  body.arcade-ui .arcade-prize-details .rpg-prize-banner { border: 0; margin: 0; border-radius: 0 0 12px 12px; }
+  body.arcade-ui .rpg-board-row {
+    border: 2px solid var(--border); border-radius: 16px; background: #fff;
+    margin-bottom: 14px; padding: 16px; gap: 14px; box-shadow: 0 4px 0 var(--border);
+    animation: arcade-rank-enter .45s cubic-bezier(.16,1,.3,1) var(--arcade-delay, 0ms) both;
+  }
+  body.arcade-ui .rpg-board-row[data-arcade-rank="1"] { background: #fff6cb; border-color: #cca528; box-shadow: 0 5px 0 #cca528; }
+  body.arcade-ui .rpg-board-row[data-arcade-rank="2"] { background: #edf3ff; border-color: #95accb; }
+  body.arcade-ui .rpg-board-row[data-arcade-rank="3"] { background: #fff0e5; border-color: #d6a380; }
+  body.arcade-ui .rpg-board-row.me { outline: 3px solid var(--primary); outline-offset: 2px; }
+  body.arcade-ui .rpg-board-rank { font-family: 'Space Grotesk', sans-serif; font-size: 24px; width: 42px; }
+  body.arcade-ui .rpg-board-row[data-arcade-rank="1"] .rpg-board-rank { animation: arcade-medal-bounce .7s ease-in-out 2; }
+  body.arcade-ui .rpg-board-name { font-size: 16px; }
+  body.arcade-ui .rpg-board-meta { font-family: 'DM Sans', sans-serif; font-size: 13px; white-space: normal; }
+  body.arcade-ui .rpg-board-xp { font-family: 'Space Grotesk', sans-serif; font-size: 21px; color: #172542; }
+  body.arcade-ui .rpg-board-xp span { font-family: 'DM Sans', sans-serif; font-size: 12px; }
+  body.arcade-ui .rpg-board-prize { font-size: 12px; }
+  body.arcade-ui .rpg-houses { background: #fff; padding: 18px; border: 2px solid var(--border); border-radius: 16px; margin-bottom: 22px; }
+  body.arcade-ui :is(.rpg-house-bar, .home-bar) { height: 12px; border-radius: 6px; }
+  body.arcade-ui .rpg-house-bar > div { transform-origin: left; animation: arcade-score-fill .65s ease-out both; }
+  body.arcade-ui .arcade-motion-control { display: block; margin: 20px 10px 4px; background: #253f67; color: #e4eeff; padding: 10px 16px; border: 1px solid #7189ac; border-radius: 10px; font: 700 14px 'DM Sans', sans-serif; cursor: pointer; }
+  @keyframes arcade-page-enter { from { opacity: .6; } to { opacity: 1; } }
+  @keyframes arcade-rank-enter { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+  @keyframes arcade-medal-bounce { 0%,100% { transform: rotate(0); } 45% { transform: translateY(-5px) rotate(-10deg); } 70% { transform: rotate(8deg); } }
+  @keyframes arcade-score-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @media (max-width: 680px) {
+    .arcade-studio-bar { margin: 12px; padding: 16px; gap: 12px; }
+    .arcade-studio-actions { width: 100%; }
+    .arcade-studio-actions > button { flex: 1 1 150px; }
+    body.arcade-ui :is(.card-pad, .worksheet-card, .home-card) { padding: 16px; }
+    body.arcade-ui .topbar { flex-wrap: wrap; padding: 14px; gap: 10px; }
+    body.arcade-ui .rpg-board-row { flex-wrap: wrap; padding: 12px; gap: 9px; }
+    body.arcade-ui .rpg-board-ava { width: 36px; }
+    body.arcade-ui .rpg-board-main { flex-basis: calc(100% - 115px); }
+    body.arcade-ui .rpg-board-xp { margin-left: auto; }
+    body.arcade-ui .rpg-board-prize { margin-left: 51px; }
+    body.arcade-ui .rpg-board-name { white-space: normal; overflow-wrap: anywhere; }
+    body.arcade-ui .btn { max-width: 100%; }
+  }
+  body.arcade-ui.arcade-calm *, body.arcade-ui.arcade-calm *::before, body.arcade-ui.arcade-calm *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  body.arcade-ui.arcade-calm :is(.btn, .nav-item, .rpg-tab):hover { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.arcade-ui *, body.arcade-ui *::before, body.arcade-ui *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  body.arcade-ui :is(.btn, .nav-item, .rpg-tab):hover, .arcade-control:hover { transform: none; }
+  .arcade-control { transition: none; }
+}
+@media print { .arcade-studio-bar, .arcade-release-dialog, .arcade-motion-control { display: none !important; } }
