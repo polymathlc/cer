@@ -1,0 +1,26 @@
+name: Interface preview and release
+on:
+  pull_request:
+    paths: ['index.html', 'app.js', 'arcade-ui.css', 'interface-studio.mjs', 'tools/interface-studio-tests.mjs', '.github/workflows/interface-studio.yml']
+  push:
+    branches: [main]
+    paths: ['index.html', 'app.js', 'arcade-ui.css', 'interface-studio.mjs', 'tools/interface-studio-tests.mjs', '.github/workflows/interface-studio.yml']
+permissions:
+  contents: read
+jobs:
+  release-controls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node tools/interface-studio-tests.mjs
+      - name: Check application module syntax
+        run: |
+          if [ -f app.js ]; then
+            cp app.js /tmp/portal-module.mjs
+          else
+            node --input-type=module -e 'import fs from "node:fs"; const html = fs.readFileSync("index.html", "utf8"); fs.writeFileSync("/tmp/portal-module.mjs", html.match(/<script type="module">([\s\S]*?)<\/script>/)[1]);'
+          fi
+          node --check /tmp/portal-module.mjs

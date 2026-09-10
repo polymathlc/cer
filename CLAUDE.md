@@ -6735,3 +6735,12 @@ or online mode is unchecked. Desktop now has an explicit multiple-file picker.
 This change is scoped to CER; no sibling portal or Maths deployment is included.
 Run both existing PDF/merge regression suites and the tests in
 `rapid-import/functions` when changing this flow. Bump `APP_VERSION` in app.js.
+
+
+## Interface Studio (2026-09-10)
+
+See `docs/interface-studio.md`. The new arcade interface is an admin preview
+until the protected config flag is explicitly released. Preserve default-off
+student access, subject separation, transactional writes, auth cleanup,
+reduced motion, and the screen-only CSS scope. Run
+`node tools/interface-studio-tests.mjs` when changing the rollout.
