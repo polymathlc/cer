@@ -3812,7 +3812,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.374.0';
+const APP_VERSION = 'v1.375.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -9044,7 +9044,9 @@ function imgPrintAttr(block, autoLarge) {
 // away from Auto starts HERE, so the first press of − or + moves from the size
 // on screen instead of jumping to some notional default.
 function _imgRenderedPct(containerId, fallback) {
-  const wrap = document.getElementById(containerId);
+  // An id (the editor's imgPreview_<id>) or the wrapper element itself (a
+  // preview pill, whose wrapper may live inside an iframe).
+  const wrap = typeof containerId === 'string' ? document.getElementById(containerId) : containerId;
   const img = wrap && wrap.querySelector('img');
   const room = wrap ? wrap.clientWidth : 0;
   if (!img || !room || !img.offsetWidth) return fallback;
@@ -9088,6 +9090,251 @@ function resetImgScale(blockId) {
   const img = document.querySelector('#imgPreview_' + blockId + ' img');
   if (img) img.setAttribute('style', imgSizeStyle(block));
 }
+
+// =====================================================================
+// 🔍± PICTURE SIZE, FROM A PREVIEW — resized where it is READ, written back
+// =====================================================================
+// Resizing a picture is the commonest edit a question ever gets, and until
+// now it lived behind ✏️ Edit: open the editor, find the block, press + four
+// times, Save, find the way back. Every surface that PREVIEWS a question — the
+// past-paper hover, the bank hover in the attach picker, the 👁 exported hover
+// in Vetting, the A4 preview, ✅ Check Questions, the Question Doctor, the ✎
+// Questions drawer, the ⇄ duplicate comparison — now carries a − / + / Auto
+// pill on every picture, and the size is SAVED TO THE BANK when the preview
+// closes.
+//
+// - `block.scale` IS the field — the same one the editor's own +/− writes and
+//   `imgSizeStyle` reads — so a size chosen here prints, practises and
+//   previews exactly as one chosen in the editor. There is no second number,
+//   and `imgScaleStep` is the ONE stepper (5% a press, floored and capped), so
+//   + means the same thing on a preview as on the block card.
+// - THE WRITE HAPPENS WHEN THE PREVIEW CLOSES, not on every press. A teacher
+//   presses + four times to find the size, and four writes of the same
+//   document for one decision is noise on the wire. `_pvsDirty` holds the
+//   questions touched; every preview's close hook calls `pvsFlush`. A surface
+//   with no close of its own (a Doctor card, a drawer row) is flushed
+//   PVS_IDLE_MS after the last press, and `pagehide` flushes whatever is left,
+//   so a tab closed with a hover still open does not lose the edit.
+// - THE QUESTION IS RE-RESOLVED BY ID at press time and at write time
+//   (`pvsFind`): the bank is re-read and re-assigned wholesale elsewhere, and a
+//   hover outlives that. A vetting question is written through
+//   `saveVettingQuestion`, a bank question through `saveQuestion` — the two
+//   doors every committed question already goes through — and QUIETLY: a
+//   picture nudged is housekeeping, not a question authored, so it must not
+//   land in anybody's work-session log.
+// - ONLY AN AUTHOR GETS THE PILL, AND THE HANDLER ASKS AGAIN. A student's
+//   hover renders the very same preview, and a hidden button is not a lock.
+// - EVERY COPY OF THE PICTURE ON THE PAGE IS REPAINTED TOGETHER (`pvsPaint`),
+//   including one inside an exported-preview IFRAME, so the hover, the card
+//   underneath it and the A4 sheet cannot show three different sizes. The A4
+//   preview is then re-planned (`renderWsPreview`) a moment later, because a
+//   picture that changed size changes where the page breaks.
+// - The question open in the EDITOR follows too, so pressing Save there a
+//   minute later does not put the old size straight back.
+const PVS_IDLE_MS = 3500;      // a surface with no close: write this long after the last press
+const PVS_REPLAN_MS = 900;     // the A4 preview re-paginates this long after the last press
+const _pvsDirty = new Map();   // qid -> 'bank' | 'vetting'
+let _pvsIdleTimer = null;
+let _pvsReplanTimer = null;
+const PVS_CSS = `
+.pvs-bar{display:inline-flex;align-items:center;gap:2px;margin:4px 0 0;padding:2px 4px;border-radius:999px;background:rgba(255,255,255,.94);border:1px solid rgba(0,0,0,.14);box-shadow:0 1px 4px rgba(0,0,0,.12);font-family:inherit;font-size:11px;font-weight:600;line-height:1;color:#333;pointer-events:auto;user-select:none;vertical-align:top}
+.pvs-bar.pvs-over{position:absolute;left:6px;top:6px;margin:0;z-index:5}
+.pvs-btn{width:22px;height:22px;border:0;border-radius:999px;background:transparent;font-family:inherit;font-size:14px;font-weight:700;line-height:1;color:#333;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.pvs-btn:hover{background:rgba(0,0,0,.08)}
+.pvs-btn.pvs-auto{width:auto;padding:0 7px;font-size:10px;font-weight:600;color:#555}
+.pvs-label{min-width:34px;text-align:center;font-variant-numeric:tabular-nums}
+@media print{.pvs-bar{display:none!important}}`;
+function pvsAllowed() { try { return !!_canAuthor(); } catch (_) { return false; } }
+// The ONE resolver: bank first, then the vetting list. Anything else (a Custom
+// Paper's unsaved question, an editor draft) has no document to write to, so
+// it gets no pill.
+function pvsFind(qid) {
+  const id = String(qid == null ? '' : qid);
+  if (!id) return null;
+  let q = (questionBank || []).find(x => x && String(x.id) === id);
+  if (q) return { q, where: 'bank' };
+  q = (vettingList || []).find(x => x && String(x.id) === id);
+  if (q) return { q, where: 'vetting' };
+  return null;
+}
+function _pvsBlock(found, bid) {
+  return ((found && found.q && found.q.blocks) || []).find(b => b && b.type === 'image' && String(b.id) === String(bid)) || null;
+}
+// The stylesheet is ONE string injected into whichever document is showing a
+// pill — the app's own, or an exported-preview iframe — rather than a copy in
+// index.html and a copy in the print CSS that would drift.
+function pvsEnsureCss(doc) {
+  try {
+    const d = doc || document;
+    if (!d.head || d.getElementById('pvsStyle')) return;
+    const st = d.createElement('style'); st.id = 'pvsStyle'; st.textContent = PVS_CSS;
+    d.head.appendChild(st);
+  } catch (_) {}
+}
+function _pvsButtonsHtml(qid, bid, block) {
+  const q = escapeHtml(String(qid)), b = escapeHtml(String(bid));
+  return `<button type="button" class="pvs-btn" aria-label="Smaller picture" title="Smaller (−5%)" onclick="event.stopPropagation();pvsStep('${q}','${b}',-1)">−</button>
+    <span class="pvs-label">${escapeHtml(imgSizeLabelText(block))}</span>
+    <button type="button" class="pvs-btn" aria-label="Larger picture" title="Larger (+5%)" onclick="event.stopPropagation();pvsStep('${q}','${b}',1)">+</button>
+    <button type="button" class="pvs-btn pvs-auto" aria-label="Back to automatic size" title="Back to Auto" onclick="event.stopPropagation();pvsReset('${q}','${b}')">Auto</button>`;
+}
+// The pill as rendered INTO a preview's own markup. Empty for anyone who is not
+// an author, for a question with no id (an editor draft) and for a block with
+// none — a pill that cannot name what it changes is a button that does nothing.
+function pvsBarHtml(q, block) {
+  if (!q || q.id == null || q.id === '' || !block || !block.id || !pvsAllowed()) return '';
+  pvsEnsureCss(document);
+  return `<div class="pvs-bar" data-pvs-bar="1" onclick="event.stopPropagation()" title="Picture size — saved to the question bank when this preview closes">${_pvsButtonsHtml(q.id, block.id, block)}</div>`;
+}
+// `data-pvs-q` / `data-pvs-b` on the wrapper is what lets every copy of a
+// picture be found and repainted together, and what the iframe decorator hangs
+// its pill on.
+function pvsWrapAttrs(q, block) {
+  if (!q || q.id == null || !block || !block.id) return '';
+  return ` data-pvs-q="${escapeHtml(String(q.id))}" data-pvs-b="${escapeHtml(String(block.id))}"`;
+}
+// Every document a preview can be showing in: the app's own, and any
+// same-origin iframe (the 👁 exported hover, the A4 preview).
+function pvsDocs() {
+  const docs = [document];
+  document.querySelectorAll('iframe').forEach(f => {
+    try { const d = f.contentDocument; if (d && d.body) docs.push(d); } catch (_) {}
+  });
+  return docs;
+}
+function pvsWraps(qid, bid) {
+  const sel = '[data-pvs-q="' + String(qid).replace(/"/g, '\\"') + '"][data-pvs-b="' + String(bid).replace(/"/g, '\\"') + '"]';
+  const out = [];
+  pvsDocs().forEach(d => { try { d.querySelectorAll(sel).forEach(w => out.push(w)); } catch (_) {} });
+  return out;
+}
+// Repaint every copy of ONE picture from the block: only the width properties
+// move, so a preview's own border-radius or print class is left exactly as it
+// was. The label follows on every pill at once.
+function pvsPaint(qid, bid, block) {
+  const set = imgHasScale(block);
+  const pct = set ? Math.round(imgScale(block) * 100) : 0;
+  pvsWraps(qid, bid).forEach(wrap => {
+    const img = wrap.querySelector('img');
+    if (img) {
+      img.style.height = 'auto';
+      if (set) { img.style.width = pct + '%'; img.style.maxWidth = '100%'; }
+      else { img.style.width = ''; img.style.maxWidth = IMG_AUTO_MAX_PCT + '%'; }
+    }
+    wrap.querySelectorAll('.pvs-label').forEach(l => { l.textContent = imgSizeLabelText(block); });
+  });
+  // The editor, if this very question is open in it: the block card's own
+  // label and preview, so Save there does not put the old size back.
+  try {
+    if (typeof currentEditingQuestion !== 'undefined' && currentEditingQuestion && String(currentEditingQuestion) === String(qid) && Array.isArray(blocks)) {
+      const eb = blocks.find(b => b && b.type === 'image' && String(b.id) === String(bid));
+      if (eb && eb !== block) {
+        if (set) eb.scale = block.scale; else delete eb.scale;
+        const label = document.getElementById('imgSizeLabel_' + bid);
+        if (label) label.textContent = imgSizeLabelText(block);
+        const eimg = document.querySelector('#imgPreview_' + bid + ' img');
+        if (eimg) eimg.setAttribute('style', imgSizeStyle(block));
+      }
+    }
+  } catch (_) {}
+}
+function _pvsMark(found) {
+  _pvsDirty.set(String(found.q.id), found.where);
+  clearTimeout(_pvsIdleTimer);
+  _pvsIdleTimer = setTimeout(() => { pvsFlush(); }, PVS_IDLE_MS);
+  // The A4 preview measured its pages before the picture changed size, so it
+  // is re-planned — a moment later, so a run of presses is one re-plan.
+  try {
+    const ov = document.getElementById('wsPreviewOverlay');
+    if (ov && ov.classList.contains('show') && typeof renderWsPreview === 'function') {
+      clearTimeout(_pvsReplanTimer);
+      _pvsReplanTimer = setTimeout(() => { try { renderWsPreview(); } catch (e) { console.warn('preview re-plan', e); } }, PVS_REPLAN_MS);
+    }
+  } catch (_) {}
+}
+// One press of − or +. Steps from the size that is SET, or from the size the
+// picture is rendered at when none is — the first press moves from what the
+// teacher is looking at rather than jumping to a notional default.
+function pvsStep(qid, bid, dir) {
+  if (!pvsAllowed()) return;
+  const found = pvsFind(qid);
+  if (!found) { showToast('That question is no longer here', 'error'); return; }
+  const block = _pvsBlock(found, bid);
+  if (!block) return;
+  const next = imgScaleStep(block, dir > 0 ? 1 : -1, pvsWraps(qid, bid)[0] || null);
+  block.scale = next / 100;
+  _pvsMark(found);
+  pvsPaint(qid, bid, block);
+}
+// Back to Auto: the field is DELETED, never set to 0 — `imgHasScale` asks
+// whether the field is there at all.
+function pvsReset(qid, bid) {
+  if (!pvsAllowed()) return;
+  const found = pvsFind(qid);
+  if (!found) return;
+  const block = _pvsBlock(found, bid);
+  if (!block || !imgHasScale(block)) return;
+  delete block.scale;
+  _pvsMark(found);
+  pvsPaint(qid, bid, block);
+}
+// Write every question touched since the last flush. Called from every
+// preview's close, from the idle timer and from pagehide. A write that did not
+// land keeps the question dirty for the next flush and says so.
+async function pvsFlush() {
+  clearTimeout(_pvsIdleTimer);
+  if (!_pvsDirty.size) return;
+  const entries = Array.from(_pvsDirty.entries());
+  _pvsDirty.clear();
+  let n = 0, failed = 0;
+  for (const [qid] of entries) {
+    const found = pvsFind(qid);
+    if (!found) continue;   // deleted since — nothing left to write
+    let ok = false;
+    try {
+      ok = found.where === 'vetting' ? await saveVettingQuestion(found.q) : await saveQuestion(found.q, { quiet: true });
+    } catch (e) { console.warn('preview picture size:', e); ok = false; }
+    if (ok === false) { failed++; if (!_pvsDirty.has(qid)) _pvsDirty.set(qid, found.where); }
+    else n++;
+  }
+  if (failed) showToast('⚠ Could not save ' + failed + ' picture size' + (failed === 1 ? '' : 's') + ' — it will be tried again', 'error');
+  else if (n) showToast('🖼 Picture size saved' + (n > 1 ? ' on ' + n + ' questions' : ''), 'success');
+}
+// Hang a pill on every picture inside an EXPORTED preview (an iframe written
+// by _wsWritePreview). Those pages were measured by the planner before this
+// runs, so the pill sits OVER the picture's corner and takes no layout height.
+function pvsDecorateDoc(doc) {
+  if (!doc || !pvsAllowed()) return;
+  try {
+    let any = false;
+    doc.querySelectorAll('[data-pvs-q][data-pvs-b]').forEach(wrap => {
+      if (wrap.querySelector('[data-pvs-bar]')) return;
+      const qid = wrap.getAttribute('data-pvs-q'), bid = wrap.getAttribute('data-pvs-b');
+      const found = pvsFind(qid);
+      const block = _pvsBlock(found, bid);
+      const img = wrap.querySelector('img');
+      if (!block || !img) return;
+      const bar = doc.createElement('div');
+      bar.className = 'pvs-bar pvs-over';
+      bar.setAttribute('data-pvs-bar', '1');
+      bar.title = 'Picture size — saved to the question bank when this preview closes';
+      bar.innerHTML = _pvsButtonsHtml(qid, bid, block);
+      // The inline onclick above resolves against the IFRAME's window, which
+      // has no pvsStep — so the handlers are bound here, to this document's.
+      const btns = bar.querySelectorAll('button');
+      btns[0].onclick = e => { e.stopPropagation(); pvsStep(qid, bid, -1); };
+      btns[1].onclick = e => { e.stopPropagation(); pvsStep(qid, bid, 1); };
+      btns[2].onclick = e => { e.stopPropagation(); pvsReset(qid, bid); };
+      bar.addEventListener('pointerdown', e => e.stopPropagation());
+      const view = doc.defaultView;
+      if (view && view.getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+      wrap.appendChild(bar);
+      any = true;
+    });
+    if (any) pvsEnsureCss(doc);
+  } catch (e) { console.warn('preview picture pills', e); }
+}
+try { window.addEventListener('pagehide', () => { pvsFlush(); }); } catch (_) {}
 
 function previewImage(blockId, url) {
   const container = document.getElementById('imgPreview_' + blockId);
@@ -14237,6 +14484,7 @@ function dupCompare(dupId, mineId) {
   if (ov) ov.classList.add('show');
 }
 function dupCompareClose() {
+  pvsFlush();   // 🔍± a picture resized in the comparison is written as it closes
   const ov = document.getElementById('dupCompareOverlay');
   if (ov) ov.classList.remove('show');
 }
@@ -21563,7 +21811,7 @@ function doPrintWorksheetOpen(whyNotes) {
         }
         case 'image': {
           if (block.url) {
-            qHtml += `<div class="print-text-block"><img${imgPrintAttr(block, bigImgs)} src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="${imgSizeStyle(block)}"></div>`;
+            qHtml += `<div class="print-text-block"${pvsWrapAttrs(q, block)}><img${imgPrintAttr(block, bigImgs)} src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="${imgSizeStyle(block)}"></div>`;
           }
           break;
         }
@@ -33301,7 +33549,9 @@ function renderQuestionBodyPreviewHtml(q) {
       case 'image':
         // Preview images (Doctor cards, past-paper hover, worksheet preview) load
         // eagerly at high priority so the diagram is visible right away.
-        if (block.url) html += `<div style="margin:8px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="eager" decoding="async" fetchpriority="high" style="${imgSizeStyle(block)};border-radius:6px;"></div>`;
+        // …and every preview carries the − / + / Auto pill (pvsBarHtml), so a
+        // picture is resized where it is read and written back on close.
+        if (block.url) html += `<div style="margin:8px 0;"${pvsWrapAttrs(q, block)}><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="eager" decoding="async" fetchpriority="high" style="${imgSizeStyle(block)};border-radius:6px;">${pvsBarHtml(q, block)}</div>`;
         break;
       case 'answer':
         html += `<div style="margin:8px 0;padding:8px 12px;background:var(--accent-blue-light);border-radius:6px;"><strong style="color:var(--accent-blue);font-size:0.78rem;">Claim:</strong> ${block.claim || '<em>empty</em>'}</div>`;
@@ -34214,7 +34464,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             break;
           }
           case 'image': {
-            if (block.url) qHtml += `<div class="print-text-block"><img${imgPrintAttr(block, bigImgs)} src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="${imgSizeStyle(block)}"></div>`;
+            if (block.url) qHtml += `<div class="print-text-block"${pvsWrapAttrs(q, block)}><img${imgPrintAttr(block, bigImgs)} src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="${imgSizeStyle(block)}"></div>`;
             break;
           }
           case 'answer': {
@@ -35180,6 +35430,7 @@ function vetPrintPeekLeave() {
 }
 
 function vetPrintPeekHide() {
+  pvsFlush();   // 🔍± a picture resized in the peek is written as it closes
   clearTimeout(_vetPrintPeekOpenTimer);
   clearTimeout(_vetPrintPeekCloseTimer);
   _vetPrintPeekSerial++;
@@ -35385,6 +35636,8 @@ function _wsShowPreviewOverlay() {
 }
 
 function closeWorksheetPreview() {
+  pvsFlush();   // 🔍± a picture resized on the A4 preview is written as it closes
+  clearTimeout(_pvsReplanTimer);
   const ov = document.getElementById('wsPreviewOverlay');
   if (ov) ov.classList.remove('show');
   closeWsQuickEdit();
@@ -35662,6 +35915,8 @@ function _wsPreviewPack(doc, opts) {
     sh.p.zoom));
   const cnt = readOnly ? null : document.getElementById('wsPreviewPageCount');
   if (cnt) cnt.textContent = '· ' + totalPages + ' page' + (totalPages === 1 ? '' : 's');
+  // 🔍± the picture-size pills, hung AFTER the planner has measured the pages.
+  pvsDecorateDoc(doc);
   return true;
 }
 
@@ -69164,6 +69419,7 @@ function ppHoverChipLeave(){
   ppHoverHide();
 }
 function ppHoverHide(){
+  pvsFlush();   // 🔍± a picture resized in the hover is written as it closes
   clearTimeout(_ppHoverTimer);
   clearTimeout(_ppHoverGrace);
   _ppHoverLocked = false;
@@ -73767,6 +74023,9 @@ window.execCmd = execCmd;
 window.execCmdVal = execCmdVal;
 window.previewImage = previewImage;
 window.adjustImgScale = adjustImgScale;
+window.pvsStep = pvsStep;
+window.pvsReset = pvsReset;
+window.pvsFlush = pvsFlush;
 window.resetImgScale = resetImgScale;
 window.handleImagePaste = handleImagePaste;
 window.handleImageDrop = handleImageDrop;

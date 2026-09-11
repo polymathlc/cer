@@ -59,11 +59,13 @@ function harness() {
     const editQuestion=id=>actions.push(['edit',id]);
     const cpbPreviewQuestion=id=>actions.push(['cpb-full',id]);
     const cpbEditQuestion=id=>actions.push(['cpb-edit',id]);
+    // 🔍± the picture-size pills: a hover that closes writes the sizes back.
+    let pvsFlushes=0; const pvsFlush=()=>{pvsFlushes++;};
     ${hover}
     return {show:vetPrintPeekShow,leave:vetPrintPeekLeave,keep:vetPrintPeekKeep,hide:vetPrintPeekHide,
       dismiss:vetPrintPeekDismiss,key:vetPrintPeekKeydown,button:vetPrintPeekButton,
       full:vetPrintPeekFull,edit:vetPrintPeekEdit,resolve:_vetPeekQuestion,
-      get state(){return _vetPrintPeek},set list(x){vettingList=x},set paper(x){_cpbQuestions=x}};
+      get state(){return _vetPrintPeek},get flushes(){return pvsFlushes},set list(x){vettingList=x},set paper(x){_cpbQuestions=x}};
   `);
   const api = factory(document, window, (cb,ms)=>{const id=++timerSeq;timers.set(id,{cb,ms});return id;}, id=>timers.delete(id), ()=>author,
     (qs,title,opts)=>{rendered.push({qs,title,opts});return '<p>exported</p>';},
@@ -203,6 +205,7 @@ function packHarness(readOnly) {
   const pack=new Function('document','_printPlanIn','_printAkPageEl','wsManualBreaks','wsMergeUp', `
     const PRINT_PAGE_PX=1000, _canAuthor=()=>true, _wsPreviewIsDraft=()=>false;
     const _wsPreviewSaved={id:'existing-worksheet'};
+    const pvsDecorateDoc=()=>{};   // 🔍± the picture-size pills hung after packing
     // The REAL front-sheet placement, so the hover preview is exercised with
     // the same rule the printer uses rather than a stub that cannot disagree
     // with it. Every front page here is unanchored, which is every front page
@@ -231,4 +234,20 @@ test('read-only pack uses the same pages and answer key without worksheet tools 
   assert.deepEqual([...full.seen[0].forcedBreakIds],['stored-break']);
   assert.deepEqual([...full.forced],['stored-break']);
   assert.equal(full.seen[0].mergeUpIds,full.merged);
+});
+
+test('closing the peek writes any picture resized inside it back (pvsFlush)', () => {
+  // The − / + pills inside the exported hover change `block.scale` in memory
+  // and the write is deferred to the close — so a hide that stopped calling
+  // pvsFlush is a size the teacher watched change and that never reached the
+  // bank.
+  const h = harness();
+  h.api.list = [{ id: 'a', title: 'A', blocks: [] }];
+  const before = h.api.flushes;
+  h.show(h.anchor('a')); h.flush();
+  h.api.hide();
+  assert.ok(h.api.flushes > before, 'vetPrintPeekHide did not flush the picture sizes');
+  // …and the pack hangs the pills on the exported pages, or the hover's
+  // pictures carry no control at all.
+  assert.ok(/pvsDecorateDoc\(doc\)/.test(cut('function _wsPreviewPack(', '// WORKSHEET QUICK EDIT')), '_wsPreviewPack does not decorate the pages with the picture-size pills');
 });
