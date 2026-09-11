@@ -5681,7 +5681,85 @@ redrawn figure, every explanation diagram and every scan clean-up.
   prints it, so the AI Engine dialog answers the same question after the box
   has gone.
 
+## 🔍± Picture size, from a preview — resized where it is READ (v1.375.0)
+
+`PVS_IDLE_MS` / `PVS_REPLAN_MS` / `PVS_CSS` / `pvsAllowed` / `pvsFind` / `pvsBarHtml` /
+`pvsWrapAttrs` / `pvsDocs` / `pvsWraps` / `pvsPaint` / **`pvsStep`** / `pvsReset` /
+**`pvsFlush`** / `pvsDecorateDoc` (in `app.js`, search `PICTURE SIZE, FROM A PREVIEW`),
+`imgScaleStep` and the element-taking `_imgRenderedPct`, the `pvsWrapAttrs` on both
+print builders' pictures, the `pvsDecorateDoc(doc)` at the foot of `_wsPreviewPack`,
+and the `pvsFlush()` at the top of every preview's close. **All three portals carry
+the same block byte-for-byte, and the Maths app carries its own — ship a change to
+all four together.**
+
+Resizing a picture is the commonest edit a question ever gets, and it lived behind ✏️ Edit:
+open the editor, find the block, press + four times, Save, find the way back. Every surface that
+PREVIEWS a question — the past-paper hover, the bank hover in the attach picker, the 👁 exported hover in Vetting, the A4 preview, ✅ Check Questions, the Question Doctor, the ✎ Questions drawer and the ⇄ duplicate comparison — now carries a **− / + pill on every picture**, and the size is
+**saved to the question bank when the preview closes**.
+
+- **`block.scale` IS THE FIELD** — the same one the editor's own +/− writes and the renderer reads —
+  so a size chosen on a preview prints, practises and previews exactly as one chosen in the
+  editor. There is no second number, and `imgScaleStep` is the ONE stepper (5% a press, floored at `IMG_SCALE_MIN` and capped at
+  `IMG_SCALE_MAX`), so + means the same thing on a preview as
+  on the block card.
+- **THE WRITE HAPPENS WHEN THE PREVIEW CLOSES, not on every press.** A teacher presses + four
+  times to find the size, and four writes of the same document for one decision is noise on the
+  wire. `_pvsDirty` holds the questions touched; every preview's close calls `pvsFlush`. A
+  surface with no close of its own is flushed `PVS_IDLE_MS` after the last press, and `pagehide`
+  flushes whatever is left, so a tab closed with a hover still open does not lose the edit.
+- **THE QUESTION IS RE-RESOLVED BY ID at press time and at write time** (`pvsFind`, bank first
+  then the vetting list). The bank is re-read and re-assigned wholesale elsewhere, and a hover
+  outlives that. A vetting question is written through `saveVettingQuestion`, a bank question through `saveQuestion` — the two doors every committed
+  question already goes through — and QUIETLY: a picture nudged is housekeeping, not a question
+  authored, so it must not land in anybody's work-session log or announce itself to every other tab. A write that did not land keeps
+  the question DIRTY for the next flush and says so; a question deleted between the press and
+  the flush is skipped, never resurrected.
+- **ONLY AN AUTHOR GETS THE PILL, AND THE HANDLER ASKS AGAIN** (`_canAuthor()`). A student's device
+  renders the very same preview, and a hidden button is not a lock. A draft with no id (the
+  left-hand side of the duplicate comparison) gets no pill either: a pill that cannot name what
+  it changes is a button that does nothing.
+- **EVERY COPY OF THE PICTURE ON THE PAGE IS REPAINTED TOGETHER** (`pvsPaint`, through the
+  `data-pvs-q` / `data-pvs-b` attributes on the wrapper), iframes included, so the hover, the
+  card underneath it and the A4 sheet cannot show three different sizes. Only the WIDTH
+  properties are touched, so a preview's own border-radius or print class is left alone. **The
+  question open in the EDITOR follows too** — its own block card is updated when it is this very
+  question — or pressing Save there a minute later puts the old size straight back. It must be
+  THIS question: duplicated questions share block ids, so a match on the block id alone would
+  resize a different question's picture.
+- **A PREVIEW INSIDE AN IFRAME GETS ITS PILLS HUNG AFTERWARDS** (`pvsDecorateDoc`, from the foot
+  of `_wsPreviewPack`). The exported pages were MEASURED by the planner before the pill exists,
+  so it sits OVER the picture's top-left corner and takes no layout height; both print builders
+  tag every picture with `pvsWrapAttrs(q, block)` so the decorator can find it. The inline
+  `onclick` written into the pill resolves against the IFRAME's window, which has no `pvsStep`,
+  so the decorator BINDS the handlers to this document's functions instead. The A4 preview is
+  then re-planned (`renderWsPreview`, `PVS_REPLAN_MS` after the last press) because a picture
+  that changed size changes where the page breaks; the 👁 peek is a peek and is not.
+- **The stylesheet is ONE string** (`PVS_CSS`), injected into whichever document is showing a pill
+  — the app's own or an iframe — rather than a copy in `index.html` and a copy in the print CSS
+  that would drift. `@media print` hides it.
+- **Every press stops its own propagation.** The pill sits on a chip that attaches, a tile that
+  picks and a card that selects; a + that also fired the click under it is a + that files a
+  question somewhere.
+- Run **`node tools/preview-picture-size-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🔍± the preview picture size** (`pvsFind`, `pvsBarHtml`, `pvsWrapAttrs`,
+  `pvsPaint`, `pvsStep`, `pvsReset`, `pvsFlush`, `pvsDecorateDoc`, `imgScaleStep`,
+  `_imgRenderedPct`, the image branch of `renderQuestionBodyPreviewHtml`, either print
+  builder's `pvsWrapAttrs`, the `pvsDecorateDoc(doc)` in `_wsPreviewPack`, or the `pvsFlush()`
+  at the top of any preview's close), run `node tools/preview-picture-size-tests.mjs`. Every
+  failure here is silent and the preview still looks right. **A close that stops flushing is the
+  worst of them**: the teacher watches the picture change size, the hover closes, and the size
+  never reaches the bank — which is exactly the edit this exists to save. Write on every press
+  and one decision is four documents; write a question that has been deleted and it is back.
+  Let `Auto` set 0 instead of DELETING the field and "no size chosen" means two different things
+  to two callers. Render the pill for a student and a hover writes to the bank. Drop the
+  `pvsWrapAttrs` from one print builder and the 👁 hover's pictures carry no pill on one print
+  button and do on the other. Let the iframe's inline `onclick` stand instead of BINDING the
+  handlers and every press inside the peek is a `ReferenceError` in a window that has no
+  `pvsStep`. Sync the editor by block id alone and a duplicated question's picture is resized
+  through another question's hover. And put the pill in the FLOW of an exported page and the
+  planner's measured pagination is a few pixels short on every page that holds a picture.
 - After touching **🖼 the image engine** (`OPENAI_IMAGE_DEFAULT_MODEL`,
   `OPENAI_IMAGE_MODELS`, `OPENAI_IMAGE_25_RE`, `OPENAI_IMAGE_SUPERSEDED`,
   `getOpenAiImageModel`, `aiImageEngineSetting`, `imageEngineOrder`,
