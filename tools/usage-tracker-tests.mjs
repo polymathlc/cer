@@ -46,6 +46,8 @@ const FIXTURE = `
 let questionBank = [];
 const RAPID_ATTEMPT_MS = 15000;
 function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// The bank's tag reader (the real one lives beside the editor, far above the tracker).
+function qTagList(q) { return (q && Array.isArray(q.tags)) ? q.tags.map(t => String(t || '').trim()).filter(Boolean) : []; }
 function attemptTime(a) { return (a && a.timestamp) ? (a.timestamp.toDate ? a.timestamp.toDate().getTime() : new Date(a.timestamp).getTime()) : 0; }
 function formatGap(ms) { return ms == null ? '—' : Math.round(ms / 1000) + 's'; }
 function formatDateTimeSGT(d) { return d.toISOString(); }
@@ -218,6 +220,27 @@ test('the search reads the question and its topic, not the raw id', () => {
   T.filter('search', 'matter');
   eq(T.sutVisible().length, 1, 'matched by topic');
   T.filter('search', '');
+});
+
+test('the search reads the question’s TAGS, and the tags never crowd the meta line', () => {
+  // "expansion" is a tag on q1 and appears in neither title, topic nor category
+  // — a question about a jar lid loosening under hot water never says the word.
+  const bank = [{ id: 'q1', title: 'The jar lid', topic: 'Heat', category: 'Physics', tags: ['Expansion', 'contraction'] },
+                { id: 'q2', title: 'Melting ice', topic: 'Matter', category: 'Physics' }];
+  T.seed([at('practice', 1, 1, 1, 'q1'), at('practice', 1, 1, 1, 'q2')], bank);
+  T.filter('search', 'expansion');
+  eq(T.sutVisible().length, 1, 'matched by tag alone');
+  eq(T.sutVisible()[0].questionId, 'q1');
+  T.filter('search', 'CONTRACTION');
+  eq(T.sutVisible().length, 1, 'case-insensitive on a tag');
+  T.filter('search', 'ice');
+  eq(T.sutVisible().length, 1, 'the title still matches');
+  T.filter('search', '');
+  eq(T.sutVisible().length, 2);
+  const m = T.sutQuestionMeta({ questionId: 'q1' });
+  eq(m.meta, 'Heat · Physics', 'the meta line is the topic and the category — the tags are not printed there');
+  eq(m.tags, 'Expansion contraction', 'the tags ride beside it for the search');
+  eq(T.sutQuestionMeta({ questionId: 'q2' }).tags, '', 'no tags is an empty string, never undefined');
 });
 
 test('the filters compose rather than override one another', () => {

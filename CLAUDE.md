@@ -5755,6 +5755,43 @@ PREVIEWS a question — the past-paper hover, the bank hover in the attach picke
   question somewhere.
 - Run **`node tools/preview-picture-size-tests.mjs`** after touching any of it.
 
+## 🏷 Every search box reads the TAGS (v1.377.0)
+
+`extractQuestionSearchText` already put `qTagList(q)` into the haystack the
+Question Bank, the Vetting list, the worksheet builder, the community quest
+picker, the 🗂️ Custom Paper bank picker, the ✎ Questions drawer and the 🎯
+objective picker all read — so "expansion" typed into any of those already
+found every question TAGGED expansion. **Five boxes built their own haystack
+and left the tags out**, and every one of them was silent about it: the box
+searched, the list narrowed, and the tagged questions were simply not in it.
+
+- **🔑 Answer Keys** (`renderAnswerKeysPage`) read the title and the topic;
+  **🗓 Scheduled Questions** (`renderScheduleQuestionList`) the title, both
+  topics and both categories; **📄 Past Papers' assign list**
+  (`ppRenderAssignList`) the title, topic, category and preview; **the
+  concept picker** (`ppRenderConceptPicker`) a paper row's year, number,
+  topic and title; and **📊 the Student Usage Tracker** (`sutVisible`) the
+  row's title and its topic · category line. All five read the tags now.
+- **THE CONCEPT PICKER'S ROWS ARE PAPER ROWS, NOT BANK QUESTIONS.** A paper
+  row has no tags of its own; the bank question ATTACHED to it through
+  `paperMap` does, so that question's title and tags are searched beside the
+  row's own fields — through ONE `Map` built per keystroke rather than a
+  `find` per row over the whole bank.
+- **THE TRACKER'S TAGS ARE SEARCHED AND NOT PRINTED.** `sutQuestionMeta`
+  carries them as a separate `tags` string; `meta` stays the topic · category
+  line, because a row wearing twelve tags beside its topic is a row nobody can
+  read. `tools/usage-tracker-tests.mjs` pins both halves, and stubs
+  `qTagList` in its fixture because the real one lives beside the editor, far
+  above the cut.
+- **A tag is read through `qTagList`, always** — never `q.tags` raw — so a
+  search agrees with the tag filter and the tag chips about what a tag IS
+  (whitespace folded, a bare number dropped, clipped and capped).
+- The Mindmap app (`polymathlc/mindmap`), which pins questions out of this
+  bank onto shapes, mirrors the same rule in its picker (`tagsOf` /
+  `searchText`), so "expansion" finds the same questions there as here.
+- Every placeholder on those boxes now SAYS tags are searched. A box that
+  searches something its label does not name is a feature nobody discovers.
+
 ## House rules
 - After touching **🔍± the preview picture size** (`pvsFind`, `pvsBarHtml`, `pvsWrapAttrs`,
   `pvsPaint`, `pvsStep`, `pvsReset`, `pvsFlush`, `pvsDecorateDoc`, `imgScaleStep`,
