@@ -10106,7 +10106,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         <div class="filter-bar">
           <div class="search-box">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="bankSearch" placeholder="Search words or \"phrases\" in title/content..." oninput="renderQuestionBank()">
+            <input id="bankSearch" placeholder="Search words or \"phrases\" in title/tags/content..." oninput="renderQuestionBank()">
           </div>
           <div class="ms-filter" id="bankTopicFilter">
             <button type="button" class="ms-toggle" id="bankTopicToggle" onclick="toggleBankTopicMenu(event)"
@@ -10239,7 +10239,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         <div class="filter-bar" style="margin-bottom:16px;">
           <div class="search-box">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="vettingSearch" placeholder="Search words or \"phrases\" in title/content..." oninput="renderVettingList()">
+            <input id="vettingSearch" placeholder="Search words or \"phrases\" in title/tags/content..." oninput="renderVettingList()">
           </div>
         </div>
         <!-- 🧰 The same tools bar the Question Bank carries — one renderer, so a
@@ -10369,7 +10369,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         <div class="filter-bar" style="margin-bottom:16px;">
           <div class="search-box">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="answerKeysSearch" placeholder="Search title / topic…" oninput="renderAnswerKeysPage()">
+            <input id="answerKeysSearch" placeholder="Search title / topic / tags…" oninput="renderAnswerKeysPage()">
           </div>
           <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;white-space:nowrap;">
             <input type="checkbox" id="answerKeysOnlyMissing" checked onchange="renderAnswerKeysPage()"> Only ones still missing an answer key
@@ -12333,7 +12333,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 
     <div class="form-group">
       <label class="form-label">Select Question from Bank</label>
-      <input type="text" id="scheduleSearchInput" class="form-input" placeholder="Search questions..." oninput="filterScheduleQuestions()" style="margin-bottom:10px;">
+      <input type="text" id="scheduleSearchInput" class="form-input" placeholder="Search questions by title, topic or tag..." oninput="filterScheduleQuestions()" style="margin-bottom:10px;">
       <div id="scheduleQuestionList" class="schedule-question-list"></div>
     </div>
 
@@ -12613,7 +12613,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <span class="wse-col-title">Add from the bank <span class="wse-count" id="wseBankCount"></span></span>
         </div>
         <div class="wse-filters">
-          <input type="text" id="wseSearch" placeholder="Search the bank…" oninput="wseRenderBank()">
+          <input type="text" id="wseSearch" placeholder="Search the bank — title, tags or wording…" oninput="wseRenderBank()">
           <select id="wseLevel" onchange="wseRenderBank()">
             <option value="">All Levels</option>
             <option value="P3">P3</option>
@@ -12709,7 +12709,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     <h3 id="ppAssignTitle" style="margin-bottom:6px;">Attach a question</h3>
     <div id="ppAssignInfo" style="padding:10px 12px;background:var(--surface-alt,#fafbfa);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;"></div>
     <div id="ppAssignDiff" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>
-    <input id="ppAssignSearch" class="form-input" type="text" placeholder="Search your question bank by title, topic or content…" oninput="ppRenderAssignList()" style="margin-bottom:6px;">
+    <input id="ppAssignSearch" class="form-input" type="text" placeholder="Search your question bank by title, topic, tags or content…" oninput="ppRenderAssignList()" style="margin-bottom:6px;">
     <div id="ppAssignCount" style="font-size:0.76rem;color:var(--text-muted);margin-bottom:8px;"></div>
     <div id="ppAssignList" style="flex:1;overflow-y:auto;min-height:120px;"></div>
     <div class="btn-group" style="justify-content:space-between;margin-top:14px;gap:8px;flex-wrap:wrap;">
@@ -12900,7 +12900,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     <textarea id="ppCeNote" class="form-input" rows="3" placeholder="Why this pattern matters and what to master" style="margin-bottom:12px;resize:vertical;"></textarea>
     <label class="form-label">Questions in this concept</label>
     <div id="ppCeSelected" style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px;"></div>
-    <input id="ppCeSearch" class="form-input" type="text" placeholder="Filter questions to add…" oninput="ppRenderConceptPicker()" style="margin-bottom:8px;">
+    <input id="ppCeSearch" class="form-input" type="text" placeholder="Filter by year, number, topic, title or tag…" oninput="ppRenderConceptPicker()" style="margin-bottom:8px;">
     <div id="ppCePicker" style="flex:1;overflow-y:auto;min-height:120px;max-height:280px;border:1px solid var(--border);border-radius:10px;padding:10px;"></div>
     <div class="btn-group" style="justify-content:space-between;margin-top:16px;gap:8px;flex-wrap:wrap;">
       <button class="btn btn-outline" id="ppCeDeleteBtn" onclick="ppDeleteConceptFromEditor()" style="display:none;color:var(--accent-red,#b23b36);">Delete</button>

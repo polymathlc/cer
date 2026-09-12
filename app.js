@@ -3812,7 +3812,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.376.0';
+const APP_VERSION = 'v1.377.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -10233,7 +10233,9 @@ function renderAnswerKeysPage() {
   const term = (document.getElementById('answerKeysSearch')?.value || '').trim().toLowerCase();
   let list = questionBank.filter(_needsAnswerKey);
   if (onlyMissing) list = list.filter(q => !_hasAnswerKeyExtra(q));
-  if (term) list = list.filter(q => ((q.title || '') + ' ' + (q.topic || '')).toLowerCase().includes(term));
+  // Title, topic AND tags: "expansion" typed here has to find every question
+  // TAGGED expansion, not only the ones whose title happens to say the word.
+  if (term) list = list.filter(q => ((q.title || '') + ' ' + (q.topic || '') + ' ' + qTagList(q).join(' ')).toLowerCase().includes(term));
   const cntEl = document.getElementById('answerKeysCount'); if (cntEl) cntEl.textContent = list.length;
   const navBadge = document.getElementById('answerKeysNavCount');
   if (navBadge) { const miss = questionBank.filter(q => _needsAnswerKey(q) && !_hasAnswerKeyExtra(q)).length; if (miss) { navBadge.style.display = ''; navBadge.textContent = miss; } else navBadge.style.display = 'none'; }
@@ -40998,6 +41000,9 @@ function sutQuestionMeta(a) {
   return {
     title: title || (id ? 'Question ' + id.slice(0, 8) : 'Untitled question'),
     meta: bits.join(' · '),
+    // The tags are searchable but NOT printed in `meta`: a row wearing twelve
+    // tags beside its topic is a row nobody can read. `sutVisible` reads them.
+    tags: q ? qTagList(q).join(' ') : '',
     gone: !!(id && !q)          // answered, then deleted from the bank since
   };
 }
@@ -41014,7 +41019,7 @@ function sutVisible() {
     if (cut && a._t < cut) return false;
     if (needle) {
       const m = a._q;
-      if (!((m.title + ' ' + m.meta).toLowerCase().includes(needle))) return false;
+      if (!((m.title + ' ' + m.meta + ' ' + (m.tags || '')).toLowerCase().includes(needle))) return false;
     }
     return true;
   });
@@ -41819,7 +41824,8 @@ function renderScheduleQuestionList() {
   let filtered = questionBank.filter(q => {
     if (!qInSyllabus(q)) return false;             // retired topics are never released to students
     if (searchTerm) {
-      const haystack = (q.title + ' ' + q.topic + ' ' + qSecondaryTopic(q) + ' ' + q.category + ' ' + qSecondaryCategory(q)).toLowerCase();
+      // …and the tags, so a batch filed under one tag can be found and scheduled together.
+      const haystack = (q.title + ' ' + q.topic + ' ' + qSecondaryTopic(q) + ' ' + q.category + ' ' + qSecondaryCategory(q) + ' ' + qTagList(q).join(' ')).toLowerCase();
       return haystack.includes(searchTerm);
     }
     return true;
@@ -69491,7 +69497,10 @@ function ppRenderAssignList(){
   const cur = paperMap[id];
   let list = questionBank.slice();
   if (term) {
-    list = list.filter(x => ((x.title || '') + ' ' + (x.topic || '') + ' ' + (x.category || '') + ' ' + getQuestionPreview(x)).toLowerCase().includes(term));
+    // Title, topic, category, the wording AND the tags — a bank question is
+    // filed under a tag as often as under a topic, and this list is where a
+    // paper's question is matched against the bank by what it is ABOUT.
+    list = list.filter(x => ((x.title || '') + ' ' + (x.topic || '') + ' ' + (x.category || '') + ' ' + qTagList(x).join(' ') + ' ' + getQuestionPreview(x)).toLowerCase().includes(term));
     // While searching, float same-topic matches up, then alphabetical.
     list.sort((a,b)=> ((a.topic === q.topic ? 0 : 1) - (b.topic === q.topic ? 0 : 1)) || String(a.title||'').localeCompare(String(b.title||'')));
   } else {
@@ -70672,7 +70681,18 @@ function ppRenderConceptPicker(){
     selWrap.innerHTML = chips || '<span style="color:var(--text-muted);font-size:0.8rem;">No questions selected yet — pick some below.</span>';
   }
   let list = ppQuestions().slice();
-  if (term) list = list.filter(q => (String(q.year) + ' q' + q.n + ' ' + (q.topic||'') + ' ' + (q.title||'')).toLowerCase().includes(term));
+  if (term) {
+    // A paper row is a year, a number, a topic and a title. The bank question
+    // ATTACHED to it (paperMap) is where the tags live, so the attached
+    // question's title and tags are searched too — looked up through one map
+    // built once per keystroke rather than a find per row.
+    const byId = new Map((questionBank || []).map(b => [b.id, b]));
+    list = list.filter(q => {
+      const bq = paperMap[q.id] ? byId.get(paperMap[q.id]) : null;
+      const extra = bq ? ((bq.title || '') + ' ' + qTagList(bq).join(' ')) : '';
+      return (String(q.year) + ' q' + q.n + ' ' + (q.topic||'') + ' ' + (q.title||'') + ' ' + extra).toLowerCase().includes(term);
+    });
+  }
   const rows = ppYears().map(y => {
     const yq = list.filter(q => String(q.year) === y).sort((a,b)=> (Number(a.n)||0)-(Number(b.n)||0));
     if (!yq.length) return '';
