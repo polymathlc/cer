@@ -1830,6 +1830,19 @@ still serves both readers (the admin's unfiltered sweep, and a student's own
 
 - Run **`node tools/usage-tracker-tests.mjs`** after touching any of it.
 
+### 🧠 A mode written from ANOTHER app — the Mindmap (v1.376.0)
+
+The Mindmap app (`polymathlc/mindmap`, `js/cer-questions.js`) lets the teacher pin
+questions out of THIS bank (`users/{adminUid}/questions`, resolved through the same
+`config/admin` pointer) onto a shape, and a student answers them on the map. Its
+multiple-choice answers land in `questionAttempts` under the mode **`mindmap`**, so
+that row is in `USAGE_MODES` here. A mode written from outside `app.js` needs its label
+more than most: unlabelled it reads as a mode somebody forgot rather than as a mindmap.
+It READS the bank and writes nothing but that attempt row; it serves only what
+`qInSyllabus` / `qReleased` would serve, through its own copy of those gates (a copy of
+the RULES, not of the topic list). **Rename the mode, the collection or the release
+fields here and that app goes quietly out of step — ship a change to both.**
+
 ### Every mode must actually log (v1.297.0)
 
 The tracker is only as good as the weakest game: a mode that pays points and

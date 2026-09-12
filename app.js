@@ -3812,7 +3812,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.375.0';
+const APP_VERSION = 'v1.376.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -40904,6 +40904,11 @@ const USAGE_MODES = {
   'worksheet-open':      { icon: '📄', label: 'Worksheet',         group: 'practice' },
   'snapmark-open':       { icon: '📸', label: 'Snap & Mark',       group: 'practice' },
   'flashcards':          { icon: '🗂️', label: 'Flashcards',        group: 'practice' },
+  // Written from OUTSIDE this file: a question pinned to a shape in the
+  // Mindmap app (polymathlc/mindmap) and answered there. A mode written by
+  // another app needs its label more than most — unlabelled, the row reads as
+  // a mode somebody forgot rather than as a mindmap.
+  'mindmap':             { icon: '🧠', label: 'Mindmap',           group: 'practice' },
   'preview':             { icon: '👁️', label: 'Preview',           group: 'other'    },
   'tcg-train':           { icon: '🎓', label: 'Embers Trainer',    group: 'game'     },
   'tcg-duel':            { icon: '🎴', label: 'Ember Duel',        group: 'game'     },
