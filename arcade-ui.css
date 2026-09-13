@@ -1,34 +1,5 @@
-/* Original arcade-inspired controls. All student-facing changes are gated and screen-only. */
-.arcade-studio-bar[hidden], .arcade-studio-error[hidden] { display: none !important; }
-.arcade-studio-bar, .arcade-release-dialog {
-  font-family: 'Space Grotesk', 'DM Sans', sans-serif; color: #172542;
-  background: #fff; border: 2px solid #172542; border-radius: 18px;
-}
-.arcade-studio-bar {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 16px;
-  margin: 20px 24px; padding: 18px 20px; box-shadow: 0 5px 0 #d4dced;
-}
-.arcade-studio-copy { display: grid; gap: 4px; flex: 1 1 260px; }
-.arcade-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .12em; color: #495a78; }
-.arcade-studio-copy strong { font-size: 19px; line-height: 1.3; }
-.arcade-studio-status { font-size: 14px; line-height: 1.5; }
-.arcade-studio-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-.arcade-control {
-  appearance: none; font: 700 14px/1.4 'DM Sans', sans-serif; cursor: pointer;
-  min-height: 44px; padding: 11px 16px; border: 2px solid #172542; border-radius: 12px;
-  background: #fff; color: #172542; box-shadow: 0 4px 0 #172542;
-  transition: transform .18s ease, box-shadow .18s ease;
-}
-.arcade-control-primary { background: #ffdb47; }
-.arcade-control:enabled:hover { transform: translateY(-2px); box-shadow: 0 6px 0 #172542; }
-.arcade-control:enabled:active { transform: translateY(3px); box-shadow: 0 1px 0 #172542; }
-.arcade-control:disabled { opacity: .55; cursor: wait; }
-.arcade-control:focus-visible, .arcade-motion-control:focus-visible { outline: 3px solid #2563eb; outline-offset: 5px; }
-.arcade-studio-error { flex-basis: 100%; margin: 0; color: #a11936; font-size: 14px; }
-.arcade-release-dialog { margin: auto; padding: 28px; width: min(540px, calc(100% - 32px)); max-height: 90dvh; overflow-y: auto; box-shadow: 0 12px 0 #17254255; }
-.arcade-release-dialog::backdrop { background: #0b1734bb; backdrop-filter: blur(4px); }
-.arcade-release-dialog h2 { font-size: 26px; line-height: 1.2; margin: 12px 0; }
-.arcade-release-dialog p { font-size: 16px; line-height: 1.65; margin: 0 0 24px; }
+/* Permanent approved interface. Theme changes remain screen-only. */
+.arcade-motion-control:focus-visible { outline: 3px solid #2563eb; outline-offset: 5px; }
 .arcade-motion-control { display: none; }
 body:not(.arcade-ui) .arcade-prize-details > summary { display: none; }
 @media screen {
@@ -159,9 +130,6 @@ body:not(.arcade-ui) .arcade-prize-details > summary { display: none; }
   @keyframes arcade-medal-bounce { 0%,100% { transform: rotate(0); } 45% { transform: translateY(-5px) rotate(-10deg); } 70% { transform: rotate(8deg); } }
   @keyframes arcade-score-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
   @media (max-width: 680px) {
-    .arcade-studio-bar { margin: 12px; padding: 16px; gap: 12px; }
-    .arcade-studio-actions { width: 100%; }
-    .arcade-studio-actions > button { flex: 1 1 150px; }
     body.arcade-ui :is(.card-pad, .worksheet-card, .home-card) { padding: 16px; }
     body.arcade-ui .topbar { flex-wrap: wrap; padding: 14px; gap: 10px; }
     body.arcade-ui .rpg-board-row { flex-wrap: wrap; padding: 12px; gap: 9px; }
@@ -177,7 +145,7 @@ body:not(.arcade-ui) .arcade-prize-details > summary { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   body.arcade-ui *, body.arcade-ui *::before, body.arcade-ui *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  body.arcade-ui :is(.btn, .nav-item, .rpg-tab):hover, .arcade-control:hover { transform: none; }
-  .arcade-control { transition: none; }
+  body.arcade-ui :is(.btn, .nav-item, .rpg-tab):hover { transform: none; }
+
 }
-@media print { .arcade-studio-bar, .arcade-release-dialog, .arcade-motion-control { display: none !important; } }
+@media print { .arcade-motion-control { display: none !important; } }

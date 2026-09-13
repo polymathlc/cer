@@ -1,22 +1,14 @@
-# Science interface studio
+# Science interface
 
-Sign in to https://polymathlc.github.io/cer/ with your existing admin account.
-The Interface Studio bar above the app opens the new look by default. Use
-**View current interface** and **Preview new interface** to compare. This choice
-is per admin, per subject, and per browser tab; it never releases anything.
+The approved arcade interface is permanent for every signed-in account.
+The former Interface Studio banner, comparison buttons, release dialog and
+rollback controls have been removed. Existing release flags and preview choices
+are ignored; signing in applies the interface immediately without waiting for
+a configuration read. Refresh a previously open tab after deployment to load
+this version.
 
-When ready, choose **Release to students** and confirm in the dialog. The
-separate **Return students to current interface** action restores the original
-look. Connected, signed-in clients follow the saved release setting in real
-time. Refresh a previously open tab after deployment to load this version.
-
-The rollout flag is `config/admin.arcadeUi`, with `version: 1` and an explicit
-boolean `released: true`. Missing, unknown, failed and cache-only snapshots do
-not enable the student theme. Only an admin can invoke a write, through the
-existing protected config document. A Firestore transaction checks for a
-concurrent change and fails offline instead of queueing a later release. The
-transaction merges its own field and preserves bank pointers and other settings.
-No new Firestore rules, functions, or account privileges are needed.
+The interface no longer reads or writes `config/admin.arcadeUi`. Other
+configuration, account permissions and learning features are unchanged.
 
 `arcade-ui.css` contains screen-only styles scoped to `body.arcade-ui`. Printing
 uses the existing styles. Buttons have raised edges, hover lift and press
@@ -27,8 +19,9 @@ The design uses original controls and the apps' existing artwork, with no copied
 game logos or characters.
 
 `interface-studio.mjs` is shared verbatim with the other subject. Keep the two
-copies in sync. Sign-out and account switching unsubscribe and invalidate
-callbacks so an admin preview cannot carry into a student's session.
+copies in sync. Sign-out clears the signed-in theme; signing into any account
+applies the permanent interface. Motion preferences remain per subject and
+browser tab.
 
 Validation: `node tools/interface-studio-tests.mjs`; existing focused regression
 suites; main module syntax checks. GitHub Actions runs the interface tests.
