@@ -71,11 +71,14 @@ function fpsFixture(bank){
   const c=vm.createContext({buildScienceFeedContext,planScienceQuestions,console,currentUser:{uid:'u',name:'Ada',authName:'Parent',role:'student'},
     studentLevelCap:4,studentLevelFloor:0,fpsProfileSignature:'',fpsAssignedFallback:'',fpsFeedAttempts:[],fpsFeedReady:true,fpsFeedBank:bank,
     fpsFeedLoad:0,fpsProfileStop:null,fpsFailedImages:new Map(),questions:bank.map(q=>({id:q.id,feedSource:q})),customTopicLevels:{},
+    suspendCombat:noop,clearTimeout:noop,cancelAnimationFrame:noop,hideOverlays:noop,enterMenu:noop,
+    qLockT:0,raf:0,skillsOpen:false,skillsFromPause:false,
     G:{activeQ:null},QUESTION_INTERVAL:15000,$:el,isAdmin:()=>false,localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},
     Map,Set,Date,JSON,Number,String,Array,Math});
   vm.runInContext(cut(fps,'const TOPIC_LEVEL_MAP =','let studentLevelCap =')
     +cut(fps,'function levelNum(l)','// The cap in force')
     +cut(fps,'function fpsFeedKey()','const $ =')
+    +cut(fps,'function fpsCancelRunForIdentityChange(','function pauseRun(')
     +cut(fps,'function qSeenKey()','/* ---------- shared leaderboard'),c);
   return {c,storage};
 }
@@ -98,9 +101,9 @@ test('Science Strike respects topic2, retired topics, per-child history and cros
   storage.set('scienceFeed:history:'+key,JSON.stringify({b:{last:Date.now(),latestFrac:1}}));assert.equal(c.nextQuestion(),null);
   c.currentUser.name='Other child';assert.equal(c.nextQuestion().id,'a','child histories stay separate');
 });
-test('Science Strike clears stale active question on a live child or level change',()=>{
+test('Science Strike clears the old run on a live child or level change',()=>{
   const {c}=fpsFixture([question('a')]);c.fpsApplyProfile({students:[{name:'Ada',level:'P4'}]});
-  c.G.activeQ=c.nextQuestion();assert.ok(c.G.activeQ);c.fpsApplyProfile({students:[{name:'Ben',level:'P3'}]});assert.equal(c.G.activeQ,null);
+  c.G.activeQ=c.nextQuestion();assert.ok(c.G.activeQ);c.fpsApplyProfile({students:[{name:'Ben',level:'P3'}]});assert.equal(c.G,null);
 });
 
 test('a late old-question image error cannot withdraw the next question for the same child',async()=>{

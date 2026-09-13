@@ -278,6 +278,27 @@
   .draft-card .dkey { margin-top: 8px; font-size: 0.75rem; color: #ffd76a; font-weight: 700; }
   .mod-chip { display: inline-block; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 3px 9px; margin: 2px 3px 2px 0; font-size: 0.75rem; font-weight: 600; }
   .mfr-tag { display: inline-block; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.08em; background: #2a3550; color: #ffd76a; border-radius: 6px; padding: 2px 7px; margin-right: 6px; vertical-align: middle; }
+  .mission-card { margin: 18px 0; padding: 16px 18px; text-align: left; border: 1px solid #37526e; border-radius: 14px; background: #132638; line-height: 1.65; font-size: .9rem; }
+  .mission-card b { color: #8fe1c2; }
+  .mission-card p + p { margin-top: 8px; }
+  .settings { margin: 16px 0; text-align: left; color: var(--muted); font-size: .88rem; }
+  .settings summary, .howto summary { cursor: pointer; font-weight: 700; color: var(--text); }
+  .settings label { display: flex; align-items: center; gap: 10px; margin: 15px 0; line-height: 1.5; }
+  .settings input[type=range] { flex: 1; min-width: 60px; accent-color: #8fb4ff; }
+  .settings input[type=checkbox] { width: 19px; height: 19px; accent-color: #8fb4ff; }
+  .settings output { min-width: 3em; color: var(--text); }
+  .howto[open] summary { margin-bottom: 16px; }
+  .ready-status { font-size: .85rem; line-height: 1.5; color: #bdd4eb; margin: 10px 0; }
+  .control-help { color: var(--muted); font-size: .85rem; line-height: 1.8; margin: 18px 0; }
+  .control-help kbd { font: inherit; color: #e8ecf5; background: #25354b; padding: 2px 5px; border-radius: 4px; }
+  button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px solid #ffd76a; outline-offset: 4px; }
+  button.class-card, button.draft-card { color: var(--text); font: inherit; }
+  #hudObjective { top: 108px; right: 20px; max-width: 310px; text-align: right; }
+  #hudObjective .hud-chip { font-size: .76rem; line-height: 1.5; }
+  #qHelp { color: #a7c7da; margin-bottom: 14px; font-size: .8rem; line-height: 1.6; }
+  .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation: none !important; transition: none !important; }
+  .reduce-motion #dmgVignette.lowhp { opacity: .25; }
+  @media (max-width: 760px) { #hudTop { left: 8px; top: 8px; transform: none; gap: 5px; } .hud-chip { padding: 6px 8px; font-size: .75rem; } #qTimer { top: 51px; right: 8px; } #skillBtn { top: 92px; right: 8px; } #hudObjective { top: 138px; right: 8px; max-width: 240px; } .card { padding: 24px 18px; } }
 </style>
 </head>
 <body>
@@ -298,6 +319,11 @@
   <div class="card" style="max-width:620px;">
     <h1>🔫 Science Strike</h1>
     <p class="sub" id="menuHello">Open world. Infinite waves. Every 15 seconds, science decides your luck.</p>
+    <div class="mission-card">
+      <p><b>Your mission:</b> clear each wave, collect a better weapon and choose an upgrade. A science check pauses the action every 15 seconds of play.</p>
+      <p>Move with <b>W A S D</b>, aim with the <b>mouse</b>, click to shoot. <b>Esc</b> pauses safely. Take your time with questions — enemies wait.</p>
+    </div>
+    <p class="ready-status" id="strikeReadiness" role="status">Loading questions for your school level…</p>
     <button class="btn good" id="playBtn" style="font-size:1.15rem;padding:15px 42px;">▶ Start Run</button>
     <div id="creditLine" style="display:none;margin-top:14px;font-size:0.86rem;opacity:0.88;line-height:1.5;"></div>
     <div style="margin-top:4px;">
@@ -320,7 +346,8 @@
       <div id="upgradeRows"></div>
     </div>
 
-    <div class="howto">
+    <details class="settings" id="menuSettings"><summary>Aim &amp; comfort settings</summary><div class="strike-settings"></div></details>
+    <details class="howto"><summary>Full guide: classes, loot, controls and rewards</summary>
       <b>🪙 Points:</b> every science question you answer in a run pays <b>points into your portal wallet</b> — 8 for a correct answer, 2 for a wrong one. They arrive the next time you open the portal, and buy Realm of Embers booster packs, Spire packs and everything in the shop.<br>
       <b>Controls:</b> WASD move · mouse look (left/right AND up/down) · click shoot · <b>right-click aim/scope</b> · R reload · E pick up loot · <b>Q grenade</b> · <b>F class ability</b> · <b>I skill tree</b> · Esc pause<br>
       <b>Classes:</b> 🪖 Soldier (assault rifle, Bullet Time) · 🎯 Sniper (huge range, slow heavy shots, sees crit boxes, traps) · 🔧 Engineer (turrets, healing drones). Each class has a <b>100-node skill tree</b> with prerequisites — cores are banked and saved the instant you earn them, so you can stop any time and lose nothing.<br>
@@ -341,14 +368,14 @@
       <b>Waves:</b> most of every wave is a swarm of tiny minions that barely scratch you — mow them down! A few real enemies fight among them, and every so often a 💀 <b>ELITE</b> (orange HP bar and minimap blip) hunts you with serious damage — but it always drops Rare-or-better loot.<br>
       Wipe a wave to get a 5-second breather, then a bigger wave rolls in. Waves never end — how long can you last?<br>
       Enemies flash red before they strike — keep moving! Press <b>M</b> to mute sound.
-    </div>
+    </details>
 
   </div>
 </div>
 
 <!-- ========== GAME ========== -->
 <div id="gameWrap">
-  <canvas id="gameCanvas"></canvas>
+  <canvas id="gameCanvas" tabindex="-1" aria-label="Science Strike play area. Press Escape to pause."></canvas>
   <div id="dmgVignette"></div>
 
   <div class="hud" id="hudTop">
@@ -356,6 +383,7 @@
     <div class="hud-chip" id="hudKills">👾 0/6</div>
     <div class="hud-chip" id="hudStreak">🔥 Streak 0 · Luck +0%</div>
   </div>
+  <div class="hud" id="hudObjective"><div class="hud-chip" id="hudObjectiveText">Clear the wave · collect loot with E</div></div>
   <div class="hud" id="qTimer"><div class="hud-chip" id="hudQTimer">🧪 next question 15s</div></div>
 
   <div class="hud" id="hudBottomLeft">
@@ -380,18 +408,19 @@
   <div class="hud" id="toastMsg"></div>
 
   <!-- question overlay -->
-  <div class="overlay" id="questionOverlay">
+  <div class="overlay" id="questionOverlay" role="dialog" aria-modal="true" aria-label="Science check">
     <div class="qcard">
       <div class="qtag">🧪 SCIENCE CHECK · <span class="tpc" id="qTopic"></span> · streak <span id="qStreakNow">0</span></div>
-      <div id="qStem"></div>
+      <p id="qHelp">Action paused. Read the question, then click an answer or press its number. There is no time limit.</p>
+      <div id="qStem" tabindex="-1"></div>
       <div id="qOptions"></div>
-      <div id="qFeedback"><div class="verdict"></div><div class="explain"></div></div>
-      <button class="btn" id="qContinue">Continue ▶</button>
+      <div id="qFeedback" role="status" aria-live="polite" tabindex="-1"><div class="verdict"></div><div class="explain"></div></div>
+      <button class="btn" id="qContinue">Return to action ▶</button>
     </div>
   </div>
 
   <!-- wave-clear upgrade draft overlay -->
-  <div class="overlay" id="draftOverlay">
+  <div class="overlay" id="draftOverlay" role="dialog" aria-modal="true" aria-labelledby="draftTitle">
     <div class="qcard" style="max-width:760px;text-align:center;">
       <div class="qtag" id="draftTitle">⚙️ WAVE CLEARED — CHOOSE AN UPGRADE</div>
       <div class="draft-row" id="draftCards"></div>
@@ -400,10 +429,12 @@
   </div>
 
   <!-- pause overlay -->
-  <div class="overlay" id="pauseOverlay">
-    <div class="qcard" style="max-width:420px;text-align:center;">
-      <h2 style="margin-bottom:8px;">⏸ Paused</h2>
-      <p style="color:var(--muted);margin-bottom:18px;">Click Resume to lock the mouse again.</p>
+  <div class="overlay" id="pauseOverlay" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
+    <div class="qcard" style="max-width:520px;text-align:center;">
+      <h2 id="pauseTitle" style="margin-bottom:8px;">⏸ Paused — you are safe</h2>
+      <p id="pauseReason" class="ready-status" role="status">Click Resume when you are ready.</p>
+      <div class="control-help"><kbd>W A S D</kbd> move · mouse aim · click shoot<br>Right-click scope · <kbd>R</kbd> reload · <kbd>E</kbd> collect<br><kbd>Q</kbd> grenade · <kbd>F</kbd> ability · <kbd>I</kbd> skills · <kbd>M</kbd> sound</div>
+      <details class="settings"><summary>Aim &amp; comfort settings</summary><div class="strike-settings"></div></details>
       <button class="btn good" id="resumeBtn">▶ Resume</button>
       <button class="btn warn" id="abandonBtn">Abandon run</button>
     </div>
@@ -416,7 +447,7 @@
       <div class="death-stats" id="deathStats"></div>
       <div style="font-size:1.05rem;margin-bottom:10px;">Banked <span class="cores" style="color:#ffd76a;font-weight:800;" id="deathCores">⚛ 0</span> Science Cores this run — already saved. Spend them in the skill tree [I]!</div>
       <div style="font-size:0.95rem;margin-bottom:16px;color:#9fb0c9;line-height:1.6;">Your questions earned <b style="color:#ffd76a;" id="deathPoints">🪙 0 points</b> — they land in your wallet the next time you open the portal, ready for booster packs.</div>
-      <button class="btn good" id="againBtn">↻ Run it back</button>
+      <button class="btn good" id="againBtn">↻ Plan next run</button>
       <button class="btn ghost" id="deathMenuBtn">Menu</button>
     </div>
   </div>
@@ -424,7 +455,7 @@
 
 
 <!-- skill tree overlay: usable from the menu AND mid-run (pauses the game) -->
-<div id="skillOverlay">
+<div id="skillOverlay" role="dialog" aria-modal="true" aria-labelledby="skillTitle">
   <div class="skill-panel">
     <div class="skill-head">
       <h2 id="skillTitle">🧠 Skill Tree</h2>
@@ -438,7 +469,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v1.7.0</div>
+<div id="versionBadge">Science Strike v1.8.0</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -493,7 +524,7 @@ function fpsApplyProfile(data) {
   currentUser.name=String(active && active.name || d.servingName || currentUser.authName || '').trim();
   const signature=fpsFeedKey()+'|'+studentLevelCap;
   if(fpsProfileSignature && signature!==fpsProfileSignature){
-    if(typeof G!=='undefined' && G){G.activeQ=null;G.qTimerMs=QUESTION_INTERVAL;}
+    if(typeof G!=='undefined' && G){G.activeQ=null;G.qTimerMs=QUESTION_INTERVAL;fpsCancelRunForIdentityChange();}
     const overlay=$('questionOverlay');if(overlay)overlay.classList.remove('active');
   }
   fpsProfileSignature=signature;
@@ -528,6 +559,7 @@ $('signInBtn').addEventListener('click', async () => {
 });
 
 onAuthStateChanged(auth, async (user) => {
+  fpsCancelRunForIdentityChange(false);
   fpsFeedClear(); fpsProfileSignature=''; fpsAssignedFallback='';
   if (!user) { currentUser = null; showScreen('authScreen'); return; }
   currentUser = {
@@ -541,7 +573,7 @@ onAuthStateChanged(auth, async (user) => {
   await loadStudentLevelCap();   // before the bank loads — the cap filters it
   await loadGameCredits();       // a run costs a credit, so the menu must know
   enterMenu();     // fully released — every signed-in user goes straight in
-  loadQuestions(); // background — the run can start before it finishes
+  loadQuestions(); // background — the menu explains readiness before a run can spend a credit
 });
 
 /* ---------- primary admin uid (owner of the shared question bank) ---------- */
@@ -766,7 +798,8 @@ function fpsWireQuestionImages(container,q) {
     const fail=()=>{
       if(!G || G.activeQ!==q || q.feedKey!==fpsFeedKey())return;
       const failed=fpsFailedImages.get(q.id)||new Set();failed.add(img.getAttribute('src')||img.src);fpsFailedImages.set(q.id,failed);
-      G.activeQ=null;$('questionOverlay').classList.remove('active');toast('This diagram could not load. The question has been set aside.');
+      G.activeQ=null;G.qTimerMs=QUESTION_INTERVAL;$('questionOverlay').classList.remove('active');
+      pauseRun('A diagram could not load, so that question was set aside. Click Resume to continue safely.');
     };
     img.addEventListener('error',fail,{once:true});
     if(img.complete && !img.naturalWidth)fail();
@@ -794,6 +827,7 @@ async function loadQuestions() {
     if(!currentUser || currentUser.uid!==uid || ticket!==fpsFeedLoad)return;
     fpsFeedBank=raw;fpsFeedAttempts=attempts;questions=pool;qCursor=0;fpsFeedReady=true;
   }catch(e){console.error('loadQuestions',e);}
+  finally { if (currentUser && currentUser.uid===uid && ticket===fpsFeedLoad) paintStrikeReadiness(); }
 }
 
 // ---- No-repeat rotation (invisible to students) ----
@@ -807,7 +841,7 @@ function qSeenKey() { return 'scienceFeed:served:' + fpsFeedKey(); }
 function qSeenLoad() { try { return JSON.parse(localStorage.getItem(qSeenKey())) || {}; } catch (e) { return {}; } }
 function qSeenSave(m) { try { localStorage.setItem(qSeenKey(), JSON.stringify(m)); } catch (e) {} }
 let _recentQIds = [];   // last few served this session — never repeat back-to-back
-function nextQuestion() {
+function fpsQuestionCandidate() {
   if(!fpsFeedReady || !currentUser || !questions.length)return null;
   const shown=qSeenLoad();
   const context=buildScienceFeedContext({bank:fpsFeedBank,studentLevel:studentLevelCap?levelLabel(studentLevelCap):'',
@@ -815,7 +849,12 @@ function nextQuestion() {
     flags:(()=>{try{return JSON.parse(localStorage.getItem('scienceFeed:flags:'+fpsFeedKey())||'{}')||{};}catch(e){return {};}})()});
   const raw=planScienceQuestions(questions.map(q=>q.feedSource),{context,limit:1}).questions[0];
   if(!raw)return null;
-  const q=questions.find(row=>row.id===raw.id);shown[q.id]=Date.now();qSeenSave(shown);q.feedKey=fpsFeedKey();
+  return questions.find(row=>row.id===raw.id) || null;
+}
+function nextQuestion() {
+  const q=fpsQuestionCandidate();
+  if(!q)return null;
+  const shown=qSeenLoad();shown[q.id]=Date.now();qSeenSave(shown);q.feedKey=fpsFeedKey();
   return q;
 }
 
@@ -909,6 +948,7 @@ function enterMenu() {
   renderClassRow();
   paintCredits();
   showScreen('menuScreen');
+  paintStrikeReadiness();
 }
 
 /* ════════════════ CLASSES & SKILL TREES ════════════════ */
@@ -1097,7 +1137,9 @@ function renderClassRow() {
   const host = $('classRow');
   host.innerHTML = '';
   for (const [key, c] of Object.entries(CLASSES)) {
-    const card = document.createElement('div');
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.setAttribute('aria-pressed', String(meta.class === key));
     card.className = 'class-card' + (meta.class === key ? ' sel' : '');
     card.innerHTML = '<div class="cic">' + c.icon + '</div><div class="cnm">' + c.name + '</div>'
       + '<div class="cds">' + c.desc + '</div>'
@@ -1115,20 +1157,20 @@ function renderClassRow() {
 let skillsOpen = false;
 let skillsFromPause = false;   // opened over the pause menu → return to it on close
 function openSkills() {
+  if (G && !G.over && (G.activeQ || G.draftOpen)) return;
   skillsOpen = true;
   ensureMetaShape();
   skillsFromPause = !!(G && !G.over && overlayVisible('pauseOverlay'));
-  if (G && !G.over) { G.paused = true; document.exitPointerLock && document.exitPointerLock(); }
+  if (G && !G.over) suspendCombat();
   renderSkills();
   $('skillOverlay').classList.add('active');
+  $('skillCloseBtn').focus();
 }
 function closeSkills() {
   skillsOpen = false;
   $('skillOverlay').classList.remove('active');
   if (G && !G.over && !G.activeQ && !skillsFromPause) {
     // opened mid-run with I — resume straight into the run
-    $('pauseOverlay').classList.remove('active');
-    G.paused = false;
     requestLock();
   } else if (!G || G.over) {
     renderMeta(); renderClassRow();   // cores may have been spent
@@ -1436,7 +1478,26 @@ canvas.width = REND_W; canvas.height = REND_H;
 const keys = {};
 let pointerLocked = false;
 
+function strikeStartIssue() {
+  if (!currentUser) return 'Sign in to start a run.';
+  if (typeof canvas.requestPointerLock !== 'function' || window.matchMedia('(pointer: coarse) and (hover: none)').matches)
+    return 'Science Strike needs a keyboard and mouse. Open it on a computer to play.';
+  if (!fpsFeedReady) return 'Your questions are still loading. If this message stays, reload this page and try again.';
+  if (!studentLevelCap) return 'Set your school level in the Science Learning Portal before playing.';
+  try { if (!fpsQuestionCandidate()) return 'No suitable fresh questions are ready. Return to the portal for practice, or come back later.'; }
+  catch (error) { console.warn('Science Strike readiness', error); return 'Questions could not be checked. Reload this page before starting.'; }
+  return '';
+}
+function paintStrikeReadiness() {
+  const issue = strikeStartIssue();
+  $('strikeReadiness').textContent = issue || 'Ready for ' + (isAdmin() ? 'your' : levelLabel(studentLevelCap)) + ' science · keyboard and mouse required · 1 credit per run';
+  // Keep the control actionable so a cooldown expiring never leaves a stale disabled button.
+  $('playBtn').setAttribute('aria-describedby', 'strikeReadiness creditLine');
+  return issue;
+}
 function startRun() {
+  if (G && !G.over) return;  // one start, one credit, even on a double-click
+  if (paintStrikeReadiness()) return;
   // One credit per run — the same toll every other game in the portal takes.
   // Gated here rather than on the buttons so "▶ Start Run" and "↻ Run it back"
   // both pay, and the player is put back on the menu (never a dead canvas).
@@ -1475,7 +1536,8 @@ function startRun() {
     draftOpen: false, draftOffers: null,
     qTimerMs: QUESTION_INTERVAL,
     qOpenedAt: 0, activeQ: null,
-    paused: false, over: false,
+    paused: true, over: false,
+    playSeconds: 0, questionAnswered: false,
     startedAt: performance.now(),
   };
   G.grenades.count = Math.max(1, G.grenades.count);
@@ -1671,79 +1733,167 @@ function lineOfSight(x0, y0, x1, y1) {
 }
 
 /* ════════════════ INPUT ════════════════ */
-function requestLock() { canvas.requestPointerLock && canvas.requestPointerLock(); }
-document.addEventListener('pointerlockchange', () => {
-  pointerLocked = document.pointerLockElement === canvas;
-  if (!pointerLocked && G && !G.over && !G.activeQ && !G.draftOpen && !skillsOpen && !overlayVisible('deathOverlay')) {
-    G.paused = true;
-    $('pauseOverlay').classList.add('active');
-  }
-});
-// look-sway state: the viewmodel lags behind recent mouse movement (springy)
+// The simulation may advance only after the browser confirms pointer lock.
+// Every modal/focus transition clears held inputs; returning never fires a stale click.
+let lockWanted = false, lockTicket = 0;
+let mouseDown = false, adsHeld = false;
 let swayX = 0, swayY = 0, swayVX = 0, swayVY = 0;
-document.addEventListener('mousemove', e => {
-  if (!pointerLocked || !G || G.paused || G.activeQ || G.draftOpen) return;
-  // aiming down sights halves mouse sensitivity at full scope
-  const adsSens = 1 - 0.5 * (G.ads || 0);
-  G.player.dir += e.movementX * 0.0026 * adsSens;
-  // vertical look: y-shear pitch (positive = looking up). Shots respect it —
-  // aim over a head or into the floor and you miss; hit the head band for x2.
-  G.player.pitch = Math.max(-150, Math.min(180, (G.player.pitch || 0) - e.movementY * 0.55 * adsSens));
-  swayVX += e.movementX * 0.9;
-  swayVY += e.movementY * 0.6;
-});
-document.addEventListener('keydown', e => {
-  keys[e.code] = true;
-  if (e.code === 'KeyM') toggleMute();   // mute toggle works in menus too
+function resetCombatInput() {
+  for (const code of Object.keys(keys)) delete keys[code];
+  mouseDown = false; adsHeld = false;
+  swayX = swayY = swayVX = swayVY = 0;
+}
+function combatReady() {
+  return !!(G && !G.over && !G.paused && !G.activeQ && !G.draftOpen && !skillsOpen
+    && pointerLocked && document.pointerLockElement === canvas && !document.hidden && document.hasFocus());
+}
+function suspendCombat() {
+  lockWanted = false; lockTicket++;
+  if (G) G.paused = true;
+  resetCombatInput();
+  if (document.pointerLockElement) document.exitPointerLock?.();
+}
+function fpsCancelRunForIdentityChange(showMenu = true) {
+  if (!G) return;
+  suspendCombat(); clearTimeout(qLockT); cancelAnimationFrame(raf);
+  G = null; skillsOpen = false; skillsFromPause = false;
+  hideOverlays(); $('skillOverlay').classList.remove('active');
+  $('dmgVignette').classList.remove('lowhp');
+  if (showMenu && currentUser) enterMenu();
+}
+function pauseRun(reason = 'Click Resume when you are ready. Enemies and the science countdown are paused.') {
   if (!G || G.over) return;
-  if (e.code === 'KeyR' && !G.paused && !G.activeQ && !G.draftOpen) startReload();
-  if (e.code === 'KeyE' && !G.paused && !G.activeQ && !G.draftOpen) tryPickup();
-  if (e.code === 'KeyQ' && !G.paused && !G.activeQ && !G.draftOpen) throwGrenade();
-  if (e.code === 'KeyF' && !G.paused && !G.activeQ && !G.draftOpen) useAbility();
+  suspendCombat();
+  $('pauseReason').textContent = reason;
+  if (G.activeQ || G.draftOpen || skillsOpen) return;
+  $('pauseOverlay').classList.add('active');
+  $('resumeBtn').focus();
+}
+function finishLock() {
+  pointerLocked = document.pointerLockElement === canvas;
+  if (pointerLocked && combatReady()) return; // browsers may report a confirmed grant twice
+  if (pointerLocked && lockWanted && G && !G.over && !G.activeQ && !G.draftOpen && !skillsOpen && !document.hidden && document.hasFocus()) {
+    lockWanted = false; G.paused = false;
+    resetCombatInput(); lastT = performance.now();
+    $('pauseOverlay').classList.remove('active');
+    canvas.focus();
+  } else if (!pointerLocked) pauseRun();
+  else suspendCombat();
+}
+function requestLock() {
+  if (!G || G.over || G.activeQ || G.draftOpen || skillsOpen || document.hidden || !document.hasFocus()) return;
+  G.paused = true; resetCombatInput();
+  $('pauseReason').textContent = 'Waiting for mouse control. If it does not connect, click Resume again.';
+  $('pauseOverlay').classList.add('active');
+  lockWanted = true;
+  const ticket = ++lockTicket;
+  const failed = () => { if (ticket === lockTicket) pauseRun('Mouse control was not allowed. Click Resume to try again, or return to the menu. Your run is safely paused.'); };
+  try {
+    if (typeof canvas.requestPointerLock !== 'function') { failed(); return; }
+    const pending = canvas.requestPointerLock();
+    if (pending && typeof pending.catch === 'function') pending.catch(failed);
+    if (document.pointerLockElement === canvas) finishLock();
+  } catch (error) { failed(); }
+}
+document.addEventListener('pointerlockchange', finishLock);
+document.addEventListener('pointerlockerror', () => {
+  if (lockWanted) pauseRun('Mouse control was not allowed. Click Resume to try again.');
 });
-// 1/2/3 picks a card while the wave-clear upgrade draft is open
+window.addEventListener('blur', () => pauseRun('You left the game window. Click Resume when you are ready.'));
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseRun('You switched tabs. Click Resume when you are ready.'); });
+window.addEventListener('pagehide', suspendCombat);
+
+function readStrikeSettings() {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  try {
+    const saved = JSON.parse(localStorage.getItem('scienceStrike:controls') || '{}');
+    const sensitivity = Number(saved.sensitivity);
+    return { sensitivity: Number.isFinite(sensitivity) ? Math.min(2, Math.max(.4, sensitivity)) : 1,
+      reducedMotion: typeof saved.reducedMotion === 'boolean' ? saved.reducedMotion : reducedMotion };
+  } catch { return { sensitivity: 1, reducedMotion }; }
+}
+const strikeSettings = readStrikeSettings();
+function paintStrikeSettings() {
+  document.body.classList.toggle('reduce-motion', strikeSettings.reducedMotion);
+  document.querySelectorAll('.strike-settings').forEach((host, i) => {
+    host.innerHTML = '<label for="strikeSensitivity' + i + '">Aim speed <input id="strikeSensitivity' + i + '" type="range" min="0.4" max="2" step="0.1" value="' + strikeSettings.sensitivity + '"><output>' + strikeSettings.sensitivity.toFixed(1) + '×</output></label>'
+      + '<label><input type="checkbox" ' + (strikeSettings.reducedMotion ? 'checked' : '') + '> Reduce screen shake and weapon sway</label>';
+    const range = host.querySelector('input[type=range]'), checkbox = host.querySelector('input[type=checkbox]');
+    range.addEventListener('input', () => { strikeSettings.sensitivity = Number(range.value); syncStrikeSettings(); });
+    checkbox.addEventListener('change', () => { strikeSettings.reducedMotion = checkbox.checked; syncStrikeSettings(); });
+  });
+}
+function syncStrikeSettings() {
+  try { localStorage.setItem('scienceStrike:controls', JSON.stringify(strikeSettings)); } catch {}
+  document.body.classList.toggle('reduce-motion', strikeSettings.reducedMotion);
+  document.querySelectorAll('.strike-settings').forEach(host => {
+    host.querySelector('input[type=range]').value = strikeSettings.sensitivity;
+    host.querySelector('output').textContent = strikeSettings.sensitivity.toFixed(1) + '×';
+    host.querySelector('input[type=checkbox]').checked = strikeSettings.reducedMotion;
+  });
+}
+paintStrikeSettings();
+document.addEventListener('mousemove', e => {
+  if (!combatReady()) return;
+  const adsSens = (1 - .5 * (G.ads || 0)) * strikeSettings.sensitivity;
+  G.player.dir += e.movementX * .0026 * adsSens;
+  G.player.pitch = Math.max(-150, Math.min(180, (G.player.pitch || 0) - e.movementY * .55 * adsSens));
+  swayVX += e.movementX * .9; swayVY += e.movementY * .6;
+});
+function strikeTypingTarget(target) { return !!(target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))); }
 document.addEventListener('keydown', e => {
-  if (!G || !G.draftOpen) return;
-  const n = { Digit1: 0, Digit2: 1, Digit3: 2, Numpad1: 0, Numpad2: 1, Numpad3: 2 }[e.code];
-  if (n !== undefined) pickDraft(n);
+  if (e.altKey || e.ctrlKey || e.metaKey || strikeTypingTarget(e.target)) return;
+  if (e.code === 'Escape' && G && !G.over) { e.preventDefault(); if (skillsOpen) { skillsFromPause = true; closeSkills(); } pauseRun(); return; }
+  if (e.repeat) return;
+  if (e.code === 'KeyM') { toggleMute(); return; }
+  if (e.code === 'KeyI') {
+    if (skillsOpen) closeSkills();
+    else if ((!G || G.over || !G.activeQ && !G.draftOpen) && (G || $('menuScreen').classList.contains('active'))) openSkills();
+    return;
+  }
+  if (!G || G.over || skillsOpen) return;
+  const n = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 }[e.code];
+  if (G.activeQ) {
+    if (n !== undefined) { e.preventDefault(); const btn = $('qOptions').querySelectorAll('.qopt')[n]; if (btn) answerQuestion(n, btn); }
+    return;
+  }
+  if (G.draftOpen) { if (n !== undefined) { e.preventDefault(); pickDraft(n); } return; }
+  if (!combatReady()) return;
+  keys[e.code] = true;
+  if (e.code === 'KeyR') startReload();
+  if (e.code === 'KeyE') tryPickup();
+  if (e.code === 'KeyQ') throwGrenade();
+  if (e.code === 'KeyF') useAbility();
 });
-// I toggles the skill tree anywhere (menu, mid-run — the run pauses)
+// Keep keyboard focus inside the current dialog, including rich diagram controls.
 document.addEventListener('keydown', e => {
-  if (e.code !== 'KeyI') return;
-  if (skillsOpen) closeSkills();
-  else if ((G && !G.over && !G.activeQ) || overlayVisible('pauseOverlay') || overlayVisible('deathOverlay') || $('menuScreen').classList.contains('active')) openSkills();
+  if (e.code !== 'Tab') return;
+  const modal = ['skillOverlay', 'questionOverlay', 'draftOverlay', 'pauseOverlay', 'deathOverlay'].map($).find(el => el.classList.contains('active'));
+  if (!modal) return;
+  const controls = [...modal.querySelectorAll('button:not(:disabled), a[href], input, select, summary, [tabindex="0"]')].filter(el => el.getClientRects().length);
+  if (!controls.length) return;
+  if (!e.shiftKey && document.activeElement === $('qFeedback') && G && G.questionAnswered) { e.preventDefault(); $('qContinue').focus(); return; }
+  const first = controls[0], last = controls[controls.length - 1];
+  if (e.shiftKey && (document.activeElement === first || !controls.includes(document.activeElement))) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (document.activeElement === last || !controls.includes(document.activeElement))) { e.preventDefault(); first.focus(); }
 });
-document.addEventListener('keyup', e => { keys[e.code] = false; });
-let mouseDown = false;
-let adsHeld = false;   // right mouse button — aim down sights on scoped weapons
+document.addEventListener('keyup', e => { delete keys[e.code]; });
 canvas.addEventListener('mousedown', e => {
-  if (!G || G.paused || G.over || G.activeQ || G.draftOpen) return;
-  if (!pointerLocked) { requestLock(); return; }
+  if (!combatReady()) return;
   if (e.button === 0) mouseDown = true;
   if (e.button === 2) adsHeld = true;
 });
-document.addEventListener('mouseup', () => { mouseDown = false; });
-
-$('resumeBtn').addEventListener('click', () => {
-  $('pauseOverlay').classList.remove('active');
-  if (G) { G.paused = false; requestLock(); }
-});
+document.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; if (e.button === 2) adsHeld = false; });
+$('resumeBtn').addEventListener('click', requestLock);
 $('abandonBtn').addEventListener('click', () => { if (G) endRun(); });
-$('againBtn').addEventListener('click', () => { hideOverlays(); startRun(); });
-$('deathMenuBtn').addEventListener('click', () => { hideOverlays(); G = null; cancelAnimationFrame(raf); enterMenu(); });
+$('againBtn').addEventListener('click', () => { suspendCombat(); cancelAnimationFrame(raf); G = null; hideOverlays(); enterMenu(); });
+$('deathMenuBtn').addEventListener('click', () => { suspendCombat(); hideOverlays(); G = null; cancelAnimationFrame(raf); enterMenu(); });
 $('playBtn').addEventListener('click', startRun);
 $('menuSkillsBtn').addEventListener('click', openSkills);
 $('skillBtn').addEventListener('click', openSkills);
 $('skillCloseBtn').addEventListener('click', closeSkills);
-canvas.addEventListener('contextmenu', e => e.preventDefault());   // right-click = ADS
-// while in-game, an accidental right-click over any overlay (e.g. the science
-// question) must not pop the browser context menu
-document.addEventListener('contextmenu', e => {
-  if ($('gameWrap').classList.contains('active')) e.preventDefault();
-});
-// on document (not canvas) so a release over an overlay still un-scopes
-document.addEventListener('mouseup', e => { if (e.button === 2) adsHeld = false; });
-
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('contextmenu', e => { if ($('gameWrap').classList.contains('active')) e.preventDefault(); });
 function overlayVisible(id) { return $(id).classList.contains('active'); }
 function hideOverlays() { document.querySelectorAll('#gameWrap .overlay').forEach(o => o.classList.remove('active')); }
 
@@ -2414,6 +2564,7 @@ function rollDraftOffers() {
 }
 function openDraft() {
   G.draftOpen = true;
+  suspendCombat();
   G.draftOffers = rollDraftOffers();
   sfx.draft();
   document.exitPointerLock && document.exitPointerLock();
@@ -2422,7 +2573,8 @@ function openDraft() {
   const host = $('draftCards');
   host.innerHTML = '';
   G.draftOffers.forEach((u, i) => {
-    const card = document.createElement('div');
+    const card = document.createElement('button');
+    card.type = 'button';
     card.className = 'draft-card ' + u.rar;
     card.innerHTML = '<div class="dic">' + u.icon + '</div>'
       + '<div class="dnm">' + u.name + '</div>'
@@ -2433,9 +2585,10 @@ function openDraft() {
     host.appendChild(card);
   });
   $('draftOverlay').classList.add('active');
+  host.querySelector('button')?.focus();
 }
 function pickDraft(i) {
-  if (!G || !G.draftOpen || !G.draftOffers) return;
+  if (!G || G.over || skillsOpen || !G.draftOpen || !G.draftOffers) return;
   const u = G.draftOffers[i];
   if (!u) return;
   G.mods[u.key] = (G.mods[u.key] || 0) + 1;
@@ -2470,9 +2623,12 @@ function openQuestion() {
   const q = nextQuestion();
   if (!q) { G.qTimerMs = QUESTION_INTERVAL; toast(studentLevelCap ? 'No suitable questions are ready — return later for fresh practice.' : 'Set your school level in the Science Learning Portal before answering questions.'); return; }
   G.activeQ = q;
+  G.questionAnswered = false;
+  suspendCombat();
   G.qOpenedAt = performance.now();
   sfx.qPop();
   document.exitPointerLock && document.exitPointerLock();
+  $('qHelp').textContent = 'Action paused. Read the question, then click an answer or press its number. There is no time limit.';
   $('qTopic').textContent = q.topic;
   $('qStreakNow').textContent = G.streak;
   $('qStem').innerHTML = q.stemHtml;
@@ -2496,14 +2652,16 @@ function openQuestion() {
   adsHeld = false;
   host.classList.add('qlock');
   clearTimeout(qLockT);
-  qLockT = setTimeout(() => host.classList.remove('qlock'), 800);
+  qLockT = setTimeout(() => { if (G && G.activeQ===q) host.classList.remove('qlock'); }, 800);
   $('questionOverlay').classList.add('active');
+  $('qStem').focus();
 }
 let qLockT = 0;
 function answerQuestion(i, btn) {
-  const q = G.activeQ;
-  if (!q || q.feedKey!==fpsFeedKey()) return;
+  const q = G && G.activeQ;
+  if (!q || G.over || G.questionAnswered || q.feedKey!==fpsFeedKey() || !Number.isInteger(i) || i<0 || i>=q.options.length) return;
   if ($('qOptions').classList.contains('qlock')) return;   // still in the anti-misclick window
+  G.questionAnswered = true; // settle once before any rewards or asynchronous writes
   const ms = performance.now() - G.qOpenedAt;
   const correct = i === q.answer;
   document.querySelectorAll('#qOptions .qopt').forEach((b, idx) => {
@@ -2538,12 +2696,14 @@ function answerQuestion(i, btn) {
   } else {
     sfx.qBad();
     G.streak = 0;
-    verdict.textContent = '✘ Not quite. Streak reset — your loot luck is back to base.';
+    verdict.textContent = '✘ Not quite. The correct choice is ' + (q.answer + 1) + '. Read it again, then try the next challenge. Your streak will start again.';
     verdict.style.color = 'var(--bad)';
   }
   explain.textContent = q.explain || '';
   fb.style.display = 'block';
   $('qContinue').style.display = 'inline-block';
+  fb.focus();
+  $('qHelp').textContent = 'Read the feedback. Press Tab, then Enter to return to action, or click the button below.';
   recordAttempt(q, correct, ms);
   const pts = bankPortalPoints(q, correct, ms);
   if (pts) verdict.textContent += '  🪙 +' + pts + ' points';
@@ -2574,6 +2734,7 @@ function bankPortalPoints(q, correct, ms) {
   } catch (e) { console.warn('portal points bank', e); return 0; }
 }
 $('qContinue').addEventListener('click', () => {
+  if (!G || !G.activeQ || !G.questionAnswered || G.activeQ.feedKey!==fpsFeedKey()) return;
   G.activeQ = null;
   G.qTimerMs = QUESTION_INTERVAL;
   $('questionOverlay').classList.remove('active');
@@ -2584,10 +2745,11 @@ $('qContinue').addEventListener('click', () => {
 function endRun() {
   if (!G || G.over) return;
   G.over = true;
+  suspendCombat();
   sfx.death();
   $('dmgVignette').classList.remove('lowhp');
   document.exitPointerLock && document.exitPointerLock();
-  const mins = (performance.now() - G.startedAt) / 60000;
+  const mins = (G.playSeconds || 0) / 60;
   // cores were banked + saved the moment they were earned; nothing awarded here
   const cores = G.coresEarned || 0;
   // leaderboard: bank the run's kills + best wave
@@ -2607,6 +2769,7 @@ function endRun() {
   $('deathPoints').textContent = '🪙 ' + _strikeRunPoints.toLocaleString() + ' point' + (_strikeRunPoints === 1 ? '' : 's');
   hideOverlays();
   $('deathOverlay').classList.add('active');
+  $('againBtn').focus();
 }
 
 /* ════════════════ SIM ════════════════ */
@@ -2615,7 +2778,11 @@ function tick(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
   if (!G || G.over) { if (G) render(); return; }
-  if (G.paused || G.activeQ || G.draftOpen) { render(); return; }
+  if (!combatReady()) {
+    if (!G.paused && !G.activeQ && !G.draftOpen && !skillsOpen) pauseRun();
+    render(); return;
+  }
+  G.playSeconds += dt;
 
   const P = G.player;
   // question countdown runs only while actually playing
@@ -2864,7 +3031,7 @@ function render() {
   const P = G.player;
   refreshZoom();
   // screen shake: trauma² drives a random frame offset + a tiny roll
-  const tr = Math.min(1, G.trauma || 0);
+  const tr = strikeSettings.reducedMotion || !combatReady() ? 0 : Math.min(1, G.trauma || 0);
   const sh = tr * tr * 6;
   ctx.save();
   if (sh > 0.05) {
@@ -3945,25 +4112,26 @@ function drawViewModel() {
   const w = G.weapon;
   const kick = G.gunKick || 0;
   const ads = G.ads || 0;
-  const bobX = Math.sin(bobT * 7) * 6 * (1 - ads * 0.8);
-  const bobY = Math.abs(Math.cos(bobT * 7)) * 5 * (1 - ads * 0.8);
+  const comfort = strikeSettings.reducedMotion ? 0 : 1;
+  const bobX = Math.sin(bobT * 7) * 6 * (1 - ads * 0.8) * comfort;
+  const bobY = Math.abs(Math.cos(bobT * 7)) * 5 * (1 - ads * 0.8) * comfort;
   // idle breathing sway (slow sin) + look-sway: the gun lags opposite recent
   // mouse movement; both blend with (never replace) the walk bob above
   const nowS = performance.now() / 1000;
-  const calm = 1 - ads * 0.75;
+  const calm = (1 - ads * 0.75) * comfort;
   const brX = Math.sin(nowS * 1.7) * 2 * calm;
   const brY = Math.cos(nowS * 1.3) * 2.5 * calm;
-  const swX = Math.max(-26, Math.min(26, -swayX)) * (1 - ads * 0.6);
-  const swY = Math.max(-16, Math.min(16, -swayY)) * 0.5 * (1 - ads * 0.6);
+  const swX = Math.max(-26, Math.min(26, -swayX)) * (1 - ads * 0.6) * comfort;
+  const swY = Math.max(-16, Math.min(16, -swayY)) * 0.5 * (1 - ads * 0.6) * comfort;
   // reload: the gun dips down and rolls, easing down then back up with progress
   let relDip = 0;
   if (G.reloading > 0) {
     const pr = Math.max(0, Math.min(1, 1 - G.reloading / (G.reloadTotal || 1)));
     relDip = Math.sin(pr * Math.PI);
   }
-  // hip: gun sits big in the lower-right like a real shooter; ADS pulls it to centre
-  const hipX = REND_W / 2 + 175, hipY = REND_H + 34, hipR = -0.40;
-  const adsX = REND_W / 2 + 88, adsY = REND_H + 6, adsR = -0.30;
+  // Models point left from the grip: positive rotation lifts the barrel into view.
+  const hipX = REND_W / 2 + 175, hipY = REND_H - 24, hipR = 0.40;
+  const adsX = REND_W / 2 + 88, adsY = REND_H - 28, adsR = 0.30;
   ctx.save();
   ctx.translate(
     hipX + (adsX - hipX) * ads + bobX + brX + swX + kick * 22,
@@ -4151,6 +4319,7 @@ function updateHud() {
   const alive = G.enemies.filter(e => e.hp > 0).length;
   const comboTxt = G.combo >= 2 ? ' · 🔥×' + G.combo : '';
   $('hudKills').textContent = (alive === 0 ? '⏳ next wave…' : '👾 ' + alive + ' left') + comboTxt;
+  $('hudObjectiveText').textContent = alive ? 'Clear the wave · collect loot with E · Esc pauses' : 'Wave cleared · choose an upgrade, then collect your supply chest';
   const luckPct = Math.round((luckNow() - 1) * 100);
   const st = $('hudStreak');
   st.textContent = '🔥 Streak ' + G.streak + ' · Luck +' + luckPct + '%';
