@@ -1,6 +1,8 @@
 import { mountInterfaceStudio, isReleased as interfaceIsReleased } from "./interface-studio.mjs?v=1";
 import { mountScienceCoach, resetScienceCoaches } from "./science-coaches.js";
 import { SCIENCE_COACH_INSTRUCTIONS } from "./science-coach-core.js";
+import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit, scienceQuestionLevel } from "./science-feed-core.js";
+import { evaluateQuestionQuality, questionQualitySignature, buildQuestionQualitySummary, questionHasUnresolvedStudentFlag } from "./science-feed-quality.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-analytics.js";
 import {
@@ -3814,7 +3816,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.379.0';
+const APP_VERSION = 'v1.380.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -28394,6 +28396,7 @@ async function saveQuestion(q, opts) {
   // them for the editor), so a save from a held object — the tag passes, the
   // usage backfill — must convert them back on the way out, exactly as
   // collectQuestionData does for the editor. The in-memory object stays as-is.
+  q = { ...q, practiceQuality: _scienceFeedSummary(q) };
   let payload = q;
   if (q && Array.isArray(q.blocks) && q.blocks.some(b => b && b.type === 'table' &&
       (Array.isArray(b.data) || Array.isArray(b.colWidths)))) {
@@ -28840,6 +28843,7 @@ async function loadFromStorage() {
   }
   updateCounts();
   populateTopicFilter();
+  _scienceFeedPublishSummaries().catch(e => console.warn('Quality summary refresh', e));
 }
 
 function updateCounts() {
@@ -29626,6 +29630,9 @@ function populatePracticeStudentSelect() {
 function onPracticeStudentChange() {
   const sel = document.getElementById('practiceStudentSelect');
   activeStudentIndex = sel.value !== '' ? parseInt(sel.value) : -1;
+  currentPracticeQ = null;
+  _resetOpenScienceCoaches('#practiceContainer');
+  for (const store of [_openQStore, _openItemsStore, _openMcqStore, _openSurfaceCfg, _openPartResults, _openFinalized, _openPhoto, _annotPadScores]) delete store['#practiceContainer'];
   practiceSessionResults = [];   // a new student starts a fresh session
   _practiceServed = _practiceServedLoad(students[activeStudentIndex]);
   if (activeStudentIndex >= 0) {
@@ -29903,6 +29910,266 @@ function qLockNote(locked) {
     (on ? ' — the first unlocks ' + qReleaseWhen(on) + ' (' + qReleaseLabel(on) + ')' : '');
 }
 
+// ---- Student feeding: one local policy for practice, worksheets and games ----
+// Selection never asks an AI. The learner key separates siblings sharing a login.
+let _qpFeedManual = false;
+let _qpFeedAllowRetired = false;
+let _scienceFeedDeletedReviews = new Map();
+let _scienceFeedFlagsLoadedUid = '';
+let _scienceFeedIdentity = '';
+let _scienceFeedMetaCache = null, _scienceFeedPassCache = null;
+let _scienceFeedImageFailures = new Map();
+function _scienceFeedKey(profile) {
+  const child = profile || (typeof famActive === 'function' ? famActive() : null);
+  return JSON.stringify([(currentUser && currentUser.uid) || 'guest',
+    (child && child.name) || (currentUser && currentUser.name) || '']);
+}
+function _scienceFeedLevel(profile) {
+  if (profile && (!currentUser || currentUser.role !== 'student')) return isLevelCode(profile.level) ? profile.level : '';
+  if (!currentUser || currentUser.role !== 'student') return LEVEL_MAX;
+  const own = isLevelCode(currentUser.level) ? currentUser.level : '';
+  if (!own) return '';
+  const teacher = isLevelCode(currentUser.adminLevel) ? currentUser.adminLevel : '';
+  if (isSecondaryLevel(own) && !isSecondaryLevel(teacher)) return '';
+  let cap = teacher && getLevelNumber(teacher) < getLevelNumber(own) ? teacher : own;
+  if (profile && isLevelCode(profile.level) && getLevelNumber(profile.level) < getLevelNumber(cap)) cap = profile.level;
+  return cap;
+}
+function _scienceFeedMeta() {
+  if (_scienceFeedMetaCache) return _scienceFeedMetaCache;
+  const topicLevels = {};
+  Object.entries(topicLevelMap).concat(Object.entries(customTopics || {})).forEach(([topic, level]) => {
+    if (isLevelCode(level)) topicLevels[topic] = level;
+  });
+  let objectives = [], objectiveMap = {};
+  try { objectives = loData.objectives || []; objectiveMap = loData.map || {}; } catch (_) {}
+  _scienceFeedMetaCache = { topicLevels, objectives, objectiveMap };
+  queueMicrotask(() => { _scienceFeedMetaCache = null; });
+  return _scienceFeedMetaCache;
+}
+function _scienceFeedStoreRead(kind, profile) {
+  try { const value = JSON.parse(localStorage.getItem('scienceFeed:' + kind + ':' + _scienceFeedKey(profile)) || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch (_) { return {}; }
+}
+function _scienceFeedStoreWrite(kind, value, profile) {
+  _scienceFeedPassCache = null;
+  try { localStorage.setItem('scienceFeed:' + kind + ':' + _scienceFeedKey(profile), JSON.stringify(value)); } catch (_) {}
+}
+function _scienceFeedMark(id, profile) {
+  if (!id) return;
+  const served = _scienceFeedStoreRead('served', profile), now = Date.now();
+  served[String(id)] = now;
+  Object.keys(served).forEach(k => { if (!Number.isFinite(served[k]) || served[k] < now - 180 * 86400000) delete served[k]; });
+  _scienceFeedStoreWrite('served', served, profile);
+}
+function _scienceFeedRememberResult(id, score, total, profile) {
+  if (!id || !(Number(total) > 0)) return;
+  const history = _scienceFeedStoreRead('history', profile);
+  history[String(id)] = { last: Date.now(), latestFrac: Math.max(0, Math.min(1, Number(score) / Number(total))) };
+  _scienceFeedStoreWrite('history', history, profile);
+}
+function _scienceFeedProgress(profile) {
+  const remote = (!profile && _qAttemptStatsUid === _scienceFeedKey()) ? (_qAttemptStats || {}) : {};
+  const result = { ...remote };
+  Object.entries(_scienceFeedStoreRead('history', profile)).forEach(([id, row]) => {
+    if (row && Number(row.last) > Number((result[id] || {}).last || 0)) result[id] = { ...(result[id] || {}), ...row };
+  });
+  return result;
+}
+function _scienceFeedSources() {
+  let builtins = [];
+  try { builtins = _scienceTcgSources(); } catch (_) {}
+  return (questionBank || []).concat(builtins);
+}
+function _scienceFeedQualityOptions(q) {
+  let checkedState = null, importSignature = '';
+  try { checkedState = tlStateOf(q); importSignature = tlSig(q); } catch (_) {}
+  return { checkedState, importSignature };
+}
+function _scienceFeedContext(profile) {
+  const key = JSON.stringify([_scienceFeedKey(profile), _scienceFeedLevel(profile)]);
+  const cached = _scienceFeedPassCache;
+  if (cached && cached.key === key && cached.bank === questionBank && cached.count === questionBank.length && cached.stats === _qAttemptStats) return cached.context;
+  const context = buildScienceFeedContext({ bank: _scienceFeedSources(), studentLevel: _scienceFeedLevel(profile),
+    progress: _scienceFeedProgress(profile), served: _scienceFeedStoreRead('served', profile), now: Date.now(),
+    flags: _scienceFeedStoreRead('flags', profile), failedImageUrls: _scienceFeedImageFailures,
+    qualityOptions: _scienceFeedQualityOptions, ..._scienceFeedMeta() });
+  _scienceFeedPassCache = { key, bank: questionBank, count: questionBank.length, stats: _qAttemptStats, context };
+  // Reuse only within this synchronous selection/render pass. Edits, reports,
+  // retries and another user's events always see a fresh snapshot.
+  queueMicrotask(() => { _scienceFeedPassCache = null; });
+  return context;
+}
+function _scienceFeedPlan(candidates, opts = {}) {
+  const manual = !!opts.manual;
+  if (!opts.profile && (!currentUser || currentUser.role !== 'student')) {
+    return { questions: (candidates || []).filter(Boolean), blocked: [], reviewCount: 0, reasons: {} };
+  }
+  const ready = (candidates || []).filter(q => q && (opts.allowRetired || qInSyllabus(q)) && qAvailableToViewer(q));
+  return planScienceQuestions(ready, { ...opts, manual, context: opts.context || _scienceFeedContext(opts.profile) });
+}
+function _scienceFeedMessage(profile) {
+  return !_scienceFeedLevel(profile) ? 'Choose your current school level in Settings before starting practice.'
+    : 'No suitable fresh questions are available right now. Try another topic or come back after your review break.';
+}
+function _scienceFeedEmptyHtml(profile) {
+  return '<div class="empty-state"><h3>Practice paused</h3><p>' + escapeHtml(_scienceFeedMessage(profile)) + '</p>'
+    + (!_scienceFeedLevel(profile) ? '<button type="button" class="btn btn-primary" onclick="navigateTo(\'settings\')">Choose my level</button>' : '') + '</div>';
+}
+function _scienceFeedAllowed(q, { manual = false, profile, allowRetired = false } = {}) {
+  if (!profile && (!currentUser || currentUser.role !== 'student')) return true;
+  if (!q || !qAvailableToViewer(q) || (!allowRetired && !qInSyllabus(q))) return false;
+  const context = _scienceFeedContext(profile);
+  const fit = evaluateScienceFit(q, { context, manual });
+  const flags = _scienceFeedStoreRead('flags', profile);
+  const quality = evaluateQuestionQuality(q, { ..._scienceFeedQualityOptions(q),
+    studentFlagged: questionHasUnresolvedStudentFlag(q, flags[String(q.id)]),
+    failedImageUrls: _scienceFeedImageFailures.get(String(q.id)) });
+  return fit.eligible && quality.eligible && (manual || quality.tier === 'sound');
+}
+function _scienceFeedManual(candidates, allowRetired = false) {
+  const plan = _scienceFeedPlan(candidates, { manual: true, allowRetired });
+  if (plan.questions.length < (candidates || []).length) showToast('Some questions were skipped because their school level or content needs checking.', 'info');
+  if (plan.reviewCount) showToast('Some questions in this chosen set need teacher review. You can skip them if something looks wrong.', 'info');
+  return plan.questions;
+}
+function _scienceFeedRefreshFrames() {
+  _scienceFeedPassCache = null; _scienceFeedMetaCache = null;
+  const identity = JSON.stringify([_scienceFeedKey(), _scienceFeedLevel()]);
+  if (_scienceFeedIdentity && _scienceFeedIdentity !== identity) {
+    // A sibling can share the same Firebase UID; pending marks and cached quizzes cannot.
+    Object.keys(_openQStore || {}).forEach(selector => {
+      const host = document.querySelector(selector);
+      _resetOpenScienceCoaches(selector);
+      if (host) host.innerHTML = _scienceFeedEmptyHtml();
+    });
+    _openQStore = {}; _openItemsStore = {}; _openMcqStore = {}; _openSurfaceCfg = {}; _openPartResults = {}; _openFinalized = {};
+    Object.keys(_openPhoto).forEach(key => delete _openPhoto[key]); currentPracticeQ = null;
+    qpQueue = []; qpIndex = -1; qpAnswered = 0; qpSessionResults = [];
+    tpQueue = []; tpIndex = -1; tpAnswered = 0; tpSessionResults = [];
+    _qpFeedManual = false; _qpFeedAllowRetired = false;
+    _questRun = null; _ainsteinQuiz = null;
+    if (_tcgQuiz) { _tcgQuiz.pool = []; _tcgQuiz.cur = null; _tcgQuiz.answered = true; }
+    for (const run of [duelRun, emsRun, elgRun]) if (run) { run.pool = []; run.quiz = null; }
+    for (const id of ['tcgqBody', 'duelQuiz', 'emsQuizBody', 'elgQuiz']) {
+      const host = document.getElementById(id); if (host) host.innerHTML = _scienceFeedEmptyHtml();
+    }
+    _scienceFeedImageFailures = new Map();
+  }
+  _scienceFeedIdentity = identity;
+  ['defendersFrame', 'raidersFrame', 'spireFrame', 'legendsFrame', 'slayersFrame'].forEach(id => {
+    const frame = document.getElementById(id);
+    try { frame?.contentWindow?.postMessage({ type: 'SD_FEED_INVALIDATE', studentKey: _scienceFeedKey(), studentLevel: _scienceFeedLevel() }, location.origin); } catch (_) {}
+  });
+}
+function _scienceFeedGameMessageCurrent(d, source) {
+  return !!(d && d.studentKey === _scienceFeedKey() && d.studentLevel === _scienceFeedLevel()
+    && ['defendersFrame', 'raidersFrame', 'spireFrame', 'legendsFrame', 'slayersFrame'].some(id => document.getElementById(id)?.contentWindow === source));
+}
+function _scienceFeedGameRows(rows, opts = {}) {
+  const bank = _scienceFeedSources(), byId = new Map(bank.map(q => [String(q.id), q]));
+  const originals = (rows || []).map(row => byId.get(String(row.id))).filter(Boolean);
+  const plan = _scienceFeedPlan(originals, opts);
+  const byRow = new Map((rows || []).map(row => [String(row.id), row]));
+  return plan.questions.map(q => {
+    const row = byRow.get(String(q.id));
+    if (!row || !row.feedSource) return row;
+    const fresh = _sdExtractMcq(q);
+    if (!fresh) return null;
+    return { ...row, html: fresh.html, opts: fresh.options.map(_htmlPlainText), optsHtml: fresh.options,
+      a: fresh.answer, ex: fresh.explain || (row.db ? '' : row.ex), feedSource: q };
+  }).filter(Boolean);
+}
+function _scienceFeedNextGame(run, field = 'poolI') {
+  if (!run || !Array.isArray(run.pool)) return null;
+  const choices = _scienceFeedGameRows(run.pool);
+  const q = choices[0] || null;
+  if (q) { run[field] = (run[field] || 0) + 1; _scienceFeedMark(q.id); }
+  return q;
+}
+function _scienceFeedPublicImageUrls(q) {
+  const urls = [];
+  const scan = value => {
+    if (typeof value === 'string') for (const match of value.matchAll(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)) urls.push(match[1].replace(/&amp;/g, '&'));
+    else if (value && typeof value === 'object') Object.values(value).forEach(scan);
+  };
+  for (const block of q.blocks || []) {
+    if (block.type === 'image' && block.url) urls.push(String(block.url));
+    if (block.type === 'text' || block.type === 'part' || block.type === 'mcq') { scan(block.content); scan(block.options?.map(o => o.text)); }
+    if (block.type === 'table') { scan(block.data); scan(block.caption); }
+    if (block.type === 'studentAnswer') scan(block.answer);
+    if (block.type === 'commonMistake') scan(block.text);
+  }
+  return [...new Set(urls)];
+}
+function _scienceFeedImageUrl(url) {
+  try { const parsed = new URL(transformImageUrl(String(url || '')), location.href); parsed.searchParams.delete('_retry'); return parsed.href; }
+  catch (_) { return String(url || ''); }
+}
+function _scienceFeedImageResult(q, url, failed) {
+  if (!q?.id) return;
+  const matches = _scienceFeedPublicImageUrls(q).filter(source => _scienceFeedImageUrl(source) === _scienceFeedImageUrl(url));
+  if (!matches.length) return;
+  const failures = _scienceFeedImageFailures.get(String(q.id)) || new Set();
+  matches.forEach(source => failed ? failures.add(source) : failures.delete(source));
+  if (failures.size) _scienceFeedImageFailures.set(String(q.id), failures); else _scienceFeedImageFailures.delete(String(q.id));
+  _scienceFeedPassCache = null;
+}
+function _scienceFeedImageEvent(event) {
+  const img = event.target;
+  if (currentUser?.role !== 'student' || !img || img.tagName !== 'IMG' || !img.closest) return;
+  let q = null;
+  for (const [selector, source] of Object.entries(_openQStore || {})) {
+    const host = document.querySelector(selector);
+    if (host && host.contains(img)) { q = source; break; }
+  }
+  if (!q) {
+    const row = img.closest('#tcgqBody') ? _tcgQuiz?.cur : img.closest('#emsQuizBody') ? emsRun?.quiz?.q : img.closest('#elgQuiz') ? elgRun?.quiz?.q : img.closest('#duelQuiz') ? duelRun?.quiz?.q : null;
+    if (row) q = row.feedSource || questionBank.find(x => String(x.id) === String(row.id));
+  }
+  _scienceFeedImageResult(q, img.getAttribute('src') || img.src, event.type === 'error');
+}
+document.addEventListener('error', _scienceFeedImageEvent, true);
+document.addEventListener('load', _scienceFeedImageEvent, true);
+
+function _scienceFeedFlagOwn(id, signature, key = _scienceFeedKey()) {
+  if (!id || key !== _scienceFeedKey()) return;
+  const flags = _scienceFeedStoreRead('flags');
+  flags[String(id)] = { signature, at: Date.now() };
+  _scienceFeedStoreWrite('flags', flags);
+  _scienceFeedRefreshFrames();
+}
+function _scienceFeedSummary(q) {
+  const options = _scienceFeedQualityOptions(q);
+  if (currentUser?.role === 'admin' && _scienceFeedFlagsLoadedUid === currentUser.uid) {
+    const sig = questionQualitySignature(q);
+    const reports = flaggedQuestions.filter(f => String(f.questionId) === String(q.id) && (!f.questionSignature || f.questionSignature === sig));
+    options.unresolvedFlagCount = reports.filter(f => f.status === 'open').length;
+    if (!options.unresolvedFlagCount) {
+      const reviewed = reports.filter(f => f.status === 'resolved' || f.status === 'dismissed').map(f => Number(f.reviewedAt) || 0);
+      const removed = _scienceFeedDeletedReviews.get(String(q.id));
+      if (removed && removed.signature === sig) reviewed.push(removed.at);
+      const at = Math.max(0, ...reviewed);
+      if (at) options.reportsReviewedAt = at;
+    }
+  }
+  return buildQuestionQualitySummary(q, options);
+}
+async function _scienceFeedPublishSummaries(questions = questionBank) {
+  if (currentUser?.role !== 'admin') return;
+  const uid = currentUser.uid;
+  for (const q of questions || []) {
+    if (currentUser?.uid !== uid || currentUser?.role !== 'admin') return;
+    const summary = _scienceFeedSummary(q);
+    // Only an explicit review of this revision acknowledges a student's report.
+    if (q.practiceQuality && summary.signature === q.practiceQuality.signature && q.practiceQuality.reportsReviewedAt)
+      summary.reportsReviewedAt = Math.max(summary.reportsReviewedAt || 0, q.practiceQuality.reportsReviewedAt);
+    if (JSON.stringify(q.practiceQuality || {}) === JSON.stringify(summary)) continue;
+    try { await setDoc(_qRef(q.id), { practiceQuality: summary }, { merge: true });
+      if (currentUser?.uid === uid) q.practiceQuality = summary; } catch (e) { console.warn('Question quality summary', e); }
+  }
+}
+
 function getQuestionsForLevel(level) {
   return questionBank.filter(q => {
     if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
@@ -29930,34 +30197,17 @@ function _practiceServedSave(stu) { if (!stu) return; try { localStorage.setItem
 
 async function loadRandomPracticeQuestion() {
   rpgQuestionChanged();
-  const student = students[activeStudentIndex];
+  const profileIndex = activeStudentIndex;
+  const student = students[profileIndex];
   if (!student) return;
+  const profileKey = _scienceFeedKey(student);
 
-  const available = getQuestionsForLevel(student.level);
-  if (available.length === 0) {
-    document.getElementById('practiceContainer').innerHTML = `
-      <div class="practice-student-info">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        ${escapeHtml(student.name)} &mdash; Level ${escapeHtml(student.level)}
-      </div>
-      <div class="empty-state">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        <h3>No Questions Available</h3>
-        <p>There are no questions for ${escapeHtml(student.level)} level or below yet. Add questions to the Question Bank first.</p>
-      </div>`;
-    return;
-  }
-
-  // Serve the LEAST-DONE question first: never-attempted (0×) is top priority,
-  // then ascending attempt count (orderByAttemptPriority). A session-served
-  // counter breaks ties so one sitting still rotates through everything before
-  // any repeats.
-  try { await loadAttemptStats(); } catch (_) {}
-  const ordered = orderByAttemptPriority(available);
-  ordered.sort((a, b) => (_practiceServed[a.id] || 0) - (_practiceServed[b.id] || 0)); // stable: keeps count-priority within equal serves
-  const q = ordered[0];
-  _practiceServed[q.id] = (_practiceServed[q.id] || 0) + 1;
-  _practiceServedSave(student);
+  await loadAttemptStats();
+  if (profileIndex !== activeStudentIndex || students[profileIndex] !== student || profileKey !== _scienceFeedKey(student)) return;
+  const available = _scienceFeedPlan(getQuestionsForLevel(student.level), { profile: student }).questions;
+  const q = available[0];
+  if (!q) { document.getElementById('practiceContainer').innerHTML = _scienceFeedEmptyHtml(student); return; }
+  _scienceFeedMark(q.id, student);
   renderPracticeQuestion(q, student);
 }
 
@@ -29989,12 +30239,12 @@ function _captureScienceCoachTarget(containerSel, q, host) {
   const request = (_scienceCoachRequests.get(host) || 0) + 1;
   _scienceCoachRequests.set(host, request);
   return { containerSel, container, q, host, cfg, request,
-    epoch: _scienceCoachEpochs.get(containerSel) || 0, uid: currentUser?.uid };
+    epoch: _scienceCoachEpochs.get(containerSel) || 0, uid: currentUser?.uid, learner: currentUser?.name, level: currentUser?.level };
 }
 function _showScienceCoachFeedback(target, result, context = {}) {
   if (!target || !result || !['correct', 'partial', 'incorrect'].includes(String(result.verdict || '').toLowerCase())) return;
   const { containerSel, container, q, host, cfg } = target;
-  if (target.uid !== currentUser?.uid || _openQStore[containerSel] !== q || _openSurfaceCfg[containerSel] !== cfg
+  if (target.uid !== currentUser?.uid || target.learner !== currentUser?.name || target.level !== currentUser?.level || _openQStore[containerSel] !== q || _openSurfaceCfg[containerSel] !== cfg
       || cfg?.mode === 'preview' || (_scienceCoachEpochs.get(containerSel) || 0) !== target.epoch
       || _scienceCoachRequests.get(host) !== target.request || !host.isConnected
       || document.querySelector(containerSel) !== container || !container.contains(host)) return;
@@ -30219,6 +30469,12 @@ document.addEventListener('click', function (e) {
 // part of the question has been marked.
 function buildOpenBody(q, containerSel, markCfg) {
   _resetOpenScienceCoaches(containerSel);
+  // Last guard for direct links, photo matching, previews and newly added callers.
+  // It does not schedule a second question or change the normal marking writes.
+  if (currentUser?.role === 'student' && !_scienceFeedAllowed(q, { manual: true, allowRetired: true })) {
+    delete _openQStore[containerSel]; delete _openItemsStore[containerSel]; delete _openMcqStore[containerSel];
+    return _scienceFeedEmptyHtml();
+  }
   const items = [];
   const mcqItems = [];
   const fbBlocks = [];
@@ -30820,6 +31076,12 @@ function annotShowAnswer(containerSel, pid) {
 const _annotPadScores = {}; // containerSel -> { pid: { score, total } }
 async function annotAiCheck(containerSel, pid, btn) {
   const q = _openQStore[containerSel];
+  if (!q) return null;
+  const gradingIdentity = JSON.stringify([currentUser?.uid, currentUser?.name, currentUser?.level]);
+  const gradingCfg = _openSurfaceCfg[containerSel];
+  const gradingCurrent = () => gradingIdentity === JSON.stringify([currentUser?.uid, currentUser?.name, currentUser?.level])
+    && _openQStore[containerSel] === q && _openSurfaceCfg[containerSel] === gradingCfg;
+
   const cfg = _openSurfaceCfg[containerSel] || {};
   const c = document.querySelector(containerSel);
   if (!c || !q) return;
@@ -30892,7 +31154,9 @@ async function annotAiCheck(containerSel, pid, btn) {
       SCIENCE_COACH_INSTRUCTIONS + '\n' +
       `Return ONLY JSON: {"score":<number>,"total":<number>,"verdict":"correct|partial|incorrect","feedback":"<1-2 sentences to the student: what they got right and what was wrong or missing>","coachIssues":[],"modelAnswer":"<what a fully correct ${isWorkingPad ? 'working area' : 'annotated diagram'} should show>","explanation":"<2-4 sentences addressed to \\"you\\" that refer to what the student actually annotated and explain the marks>"}. ` +
       `If there are no visible annotations, return score 0 and say they haven't annotated yet.`;
+    if (!gradingCurrent()) return null;
     const raw = await askGeminiVision(prompt, input.media, { maxOutputTokens: 1200, json: true });
+    if (!gradingCurrent()) return null;
     const parsed = _parseAIJson(raw) || {};
     let total = Number(parsed.total);
     if (!(total > 0)) total = 1;
@@ -31870,11 +32134,14 @@ document.addEventListener('change', function (e) {
 });
 
 function renderOpenPracticeBody(q) {
+  const practiceIndex = activeStudentIndex, practiceStudent = students[practiceIndex];
   return buildOpenBody(q, '#practiceContainer', {
     scoreElId: 'practiceScoreDisplay', scorePrefix: 'AI Score', mode: 'practice-open',
     // Every fully-marked question is banked into the session so "Finish &
     // report" can summarise the whole sitting.
     onAllMarked: res => {
+      if (currentPracticeQ !== q || activeStudentIndex !== practiceIndex || students[practiceIndex] !== practiceStudent) return;
+      _scienceFeedRememberResult(q.id, res.score, res.total, practiceStudent);
       practiceSessionResults.push({ title: q.title || '', topic: q.topic || '', correct: res.score, total: res.total, mistakes: res.mistakes || [] });
       const btn = document.getElementById('practiceFinishBtn');
       if (btn) btn.innerHTML = `🏁 Finish &amp; report (${practiceSessionResults.length})`;
@@ -31899,6 +32166,7 @@ function startNewPracticeSession() {
 }
 
 function renderPracticeQuestion(q, student) {
+  if (!_scienceFeedAllowed(q, { profile: student })) { document.getElementById('practiceContainer').innerHTML = _scienceFeedEmptyHtml(student); return; }
   currentPracticeQ = q;
 
   let html = `
@@ -32594,6 +32862,12 @@ function _fallbackExplanation(entries) {
 // Generic AI marking for open-ended written answers (correct / partial / incorrect).
 // Returns { score, total, mistakes } on success, or null if nothing was marked.
 async function markOpenAnswersIn(containerSel, q, opts = {}) {
+  if (!q) return null;
+  const gradingIdentity = JSON.stringify([currentUser?.uid, currentUser?.name, currentUser?.level]);
+  const gradingCfg = _openSurfaceCfg[containerSel];
+  const gradingCurrent = () => gradingIdentity === JSON.stringify([currentUser?.uid, currentUser?.name, currentUser?.level])
+    && _openQStore[containerSel] === q && _openSurfaceCfg[containerSel] === gradingCfg;
+
   const { btnId, scoreElId, scorePrefix = 'AI Score', mode = 'practice-open' } = opts;
   const areas = Array.from(document.querySelectorAll(containerSel + ' .open-answer'));
   const mcqList = _openMcqStore[containerSel] || [];
@@ -32691,6 +32965,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         `Also write a clear overall EXPLANATION (2-4 sentences) addressed to "you" that is SPECIFIC to the answer the student actually gave: explain WHY their answer was marked correct, partial or incorrect — quote or refer to what they wrote, say what they got right, what was missing or wrong, and what a full-mark answer needs. Do NOT just restate the model answer or describe the question in the abstract. ` +
         SCIENCE_COACH_INSTRUCTIONS + '\n' +
         `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","coachIssues":[],"chosen":"B"}],"modelAnswer":"...","explanation":"..."}.\n${list}`;
+      if (!gradingCurrent()) return null;
       let raw;
       if (input.media.length) {
         raw = await askGeminiVision(prompt, input.media, { maxOutputTokens: 1100 + aiEntries.length * 360, json: true });
@@ -32711,6 +32986,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
 
+  if (!gradingCurrent()) return null;
   let score = 0;
   const mistakes = [];
   entries.forEach((e, i) => {
@@ -32811,6 +33087,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     for (let attempt = 0; attempt < 2 && !aiExplanation; attempt++) {
       try {
         const expRaw = await askGemini(expPrompt, { maxOutputTokens: 300, temperature: attempt === 0 ? 0.3 : 0.6 });
+        if (!gradingCurrent()) return null;
         aiExplanation = (expRaw || '').trim();
       } catch (e) {
         console.warn('Explanation follow-up failed (attempt ' + (attempt + 1) + '):', e);
@@ -32819,6 +33096,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     if (!aiExplanation) aiExplanation = _fallbackExplanation(entries);
   }
 
+  if (!gradingCurrent()) return null;
   showExplanation(containerSel, q, aiExplanation, scoreElId, aiModelAnswer);
   return { score, total, mistakes };
 }
@@ -32983,6 +33261,12 @@ async function _genAndShowExplanation(containerSel, q, results, scoreElId) {
 // Mark ONE part of the question (an open answer box or one MCQ) with the AI.
 async function markQuestionPart(containerSel, kind, pid, btn) {
   const q = _openQStore[containerSel];
+  if (!q) return null;
+  const gradingIdentity = JSON.stringify([currentUser?.uid, currentUser?.name, currentUser?.level]);
+  const gradingCfg = _openSurfaceCfg[containerSel];
+  const gradingCurrent = () => gradingIdentity === JSON.stringify([currentUser?.uid, currentUser?.name, currentUser?.level])
+    && _openQStore[containerSel] === q && _openSurfaceCfg[containerSel] === gradingCfg;
+
   const photo = _openPhoto[containerSel];
 
   let areaEl = null, fbEl = null, mcq = null, correctOpt = null;
@@ -33040,6 +33324,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
   try {
     const input = await _gradingQuestionInput(q, photo && photo.data
       ? [{ ...photo, role: 'STUDENT RESPONSE — the uploaded photo of this student\'s written answers.' }] : []);
+    if (!gradingCurrent()) return null;
     let item;
     if (kind === 'open') {
       item = `Part: [${label}] type=open expected="${model || '(none provided — work out the correct answer from the question context)'}" student="${student || '(see attached photo)'}"`;
@@ -33075,6 +33360,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     showToast('AI mark error: ' + (e && e.message ? e.message : e), 'error');
   }
   if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  if (!gradingCurrent()) return null;
   if (!parsed || typeof parsed !== 'object') return;
 
   const v = String(parsed.verdict || '').toLowerCase();
@@ -34353,7 +34639,7 @@ function practiceSavedWorksheet(id, mode) {
 // blanks, anything else for ordinary practice. It is set BEFORE the queue is
 // built and before navigateTo, because navigating to Quick Practice repaints
 // its controls and the dropdown has to end up agreeing with the flag.
-function launchWorksheetPractice(questions, mode) {
+function launchWorksheetPractice(questions, mode, feedOptions = {}) {
   // 🔒 THE GATE FOR EVERY WORKSHEET-DRIVEN QUEUE, and the reason it lives here
   // rather than at the call sites: this is the ONE door the builder's own
   // selection, a saved worksheet, a past paper and Ai-nstein's set all come
@@ -34379,7 +34665,10 @@ function launchWorksheetPractice(questions, mode) {
   // Quick Practice queue is: one with no keywords marked would arrive with
   // nothing blanked out. The whole sheet being filtered away is said out loud
   // rather than silently starting an empty session.
-  let pool = _lock.ready;
+  let pool = _scienceFeedManual(_lock.ready, !!feedOptions.allowRetired);
+  if (!pool.length) { showToast(_scienceFeedMessage(), 'info'); return; }
+  _qpFeedManual = true;
+  _qpFeedAllowRetired = !!feedOptions.allowRetired;
   if (qpFibOn()) {
     const withKw = pool.filter(qHasKeywords);
     if (!withKw.length) {
@@ -34389,12 +34678,8 @@ function launchWorksheetPractice(questions, mode) {
     if (withKw.length < pool.length) showToast(`${pool.length - withKw.length} question${pool.length - withKw.length === 1 ? '' : 's'} skipped — no keywords marked`, 'info');
     pool = withKw;
   }
-  // Shuffle the questions
-  const shuffled = [...pool];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
+  // An explicitly chosen worksheet retains its teacher-defined order.
+  const shuffled = pool.slice();
   // Reuse the Quick Practice infrastructure
   qpQueue = shuffled;
   qpIndex = -1;
@@ -37437,11 +37722,12 @@ let qpSessionResults = []; // per-question results for the end-of-session AI fee
 // few each visit kept seeing the same opening questions. We remember served IDs
 // per student and front-load the ones they haven't seen recently.
 const QP_SEEN_CAP = 600; // rolling window of remembered question IDs
-function qpSeenKey() { return 'sciQuestQpSeen:' + (currentUser ? currentUser.uid : 'anon'); }
+function qpSeenKey() { return 'sciQuestQpSeen:' + _scienceFeedKey(); }
 function qpLoadSeen() { try { const a = JSON.parse(localStorage.getItem(qpSeenKey()) || '[]'); return Array.isArray(a) ? a.map(String) : []; } catch (_) { return []; } }
 function qpSaveSeen(arr) { try { localStorage.setItem(qpSeenKey(), JSON.stringify(arr.slice(-QP_SEEN_CAP))); } catch (_) {} }
 function qpMarkServed(qid) {
   qid = String(qid || ''); if (!qid) return;
+  _scienceFeedMark(qid);
   const a = qpLoadSeen().filter(x => x !== qid); // move to most-recent
   a.push(qid);
   qpSaveSeen(a);
@@ -37483,16 +37769,13 @@ function studentCapNum() { return getLevelNumber(studentCapLevel()); }
 // P4 student just because its primary topic is low. Reading only q.topic was
 // how above-level questions leaked into every mode that caps by level.
 function qLevelNum(q) {
-  const ts = qTopicList(q);
-  if (!ts.length) return getLevelNumber(getTopicLevel(''));
-  return ts.reduce((n, t) => Math.max(n, getLevelNumber(getTopicLevel(t))), 0);
+  const level = scienceQuestionLevel(q, _scienceFeedMeta());
+  return level.known && !level.invalid ? level.max : Infinity;
 }
 function qWithinStudentLevel(q) {
-  // Not a student → no cap at all. This has to be explicit now: studentCapLevel
-  // returns LEVEL_MAX for an admin, and LEVEL_MAX is SECONDARY, so running an
-  // admin through the band would show them Sec 1 questions and nothing else.
   if (!currentUser || currentUser.role !== 'student') return true;
-  return qInLevelBand(q, studentCapLevel());
+  const cap = _scienceFeedLevel();
+  return !!cap && qInLevelBand(q, cap);
 }
 // The bottom of the band THIS student is served from.
 function studentBandMinNum() {
@@ -37524,6 +37807,7 @@ function applyStudentLevelCaps() {
     });
     sel.value = (isLevelCode(cur) && getLevelNumber(cur) <= capNum) ? cur : studentCapLevel();
   });
+  _scienceFeedRefreshFrames();
 }
 // Load the signed-in student's assigned level. Primary source: their own
 // userProfiles doc (set by the admin). Fallback: the admin's shared
@@ -37577,7 +37861,7 @@ async function famLoadProfile() {
       familyProfile.students = Array.isArray(d.students)
         ? d.students.filter(x => x && typeof x.name === 'string' && x.name.trim()).map(x => ({
             name: x.name.trim(),
-            level: isLevelCode(x.level || '') ? x.level : LEVEL_DEFAULT_CAP,
+            level: isLevelCode(x.level || '') ? x.level : '',
             edits: Math.max(0, Number(x.edits) || 0)
           }))
         : [];
@@ -37637,6 +37921,7 @@ function famApplyActiveStudent() {
     if (av) av.textContent = s.name[0].toUpperCase();
   }
   applyStudentLevelCaps();
+  _scienceFeedRefreshFrames();
 }
 
 function famHintHtml() {
@@ -37930,35 +38215,37 @@ let _qAttemptStats = null;   // { '<questionId>': { n, correct, best } }
 let _qAttemptStatsAt = 0;
 let _qAttemptStatsUid = '';  // who the cache belongs to — never reuse across accounts
 async function loadAttemptStats(force) {
-  if (!currentUser || !currentUser.uid || !db) { _qAttemptStats = _qAttemptStats || {}; return _qAttemptStats; }
-  if (_qAttemptStatsUid !== currentUser.uid) { _qAttemptStats = null; _qAttemptStatsAt = 0; }
-  if (_qAttemptStats && !force && (Date.now() - _qAttemptStatsAt) < 5 * 60 * 1000) return _qAttemptStats;
+  const key = _scienceFeedKey(), uid = currentUser?.uid, name = currentUser?.name || '';
+  if (_qAttemptStatsUid !== key) { _qAttemptStats = null; _qAttemptStatsAt = 0; _qAttemptStatsUid = key; }
+  if (!uid || !db) return (_qAttemptStats ||= {});
+  if (_qAttemptStats && !force && Date.now() - _qAttemptStatsAt < 5 * 60000) return _qAttemptStats;
   try {
-    const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', currentUser.uid)));
-    const stats = {};
+    const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', uid)));
+    if (key !== _scienceFeedKey()) return {};
+    const stats = {}, namedFamily = famStudents().length > 0;
     snap.forEach(d => {
       const a = d.data();
-      if (!a || a.questionId == null) return;
-      const id = String(a.questionId);
-      const frac = a.totalBlanks ? Math.max(0, Math.min(1, (Number(a.score) || 0) / a.totalBlanks)) : 0;
-      const ts = (a.timestamp && typeof a.timestamp.toMillis === 'function') ? a.timestamp.toMillis() : 0;
+      if (!a || a.questionId == null || (namedFamily && String(a.displayName || '') !== name)) return;
+      const id = String(a.questionId), total = Number(a.totalBlanks);
+      const frac = total > 0 ? Math.max(0, Math.min(1, Number(a.score) / total)) : null;
+      const ts = a.timestamp?.toMillis ? a.timestamp.toMillis() : Number(a.timestamp) || Date.parse(a.timestamp || '') || 0;
       const r = stats[id] || (stats[id] = { n: 0, correct: 0, best: 0, last: 0 });
-      r.n++; if (frac >= 1) r.correct++; if (frac > r.best) r.best = frac; if (ts > r.last) r.last = ts;
+      r.n++; if (frac >= 1) r.correct++; if (frac > r.best) r.best = frac;
+      if (Number.isFinite(frac) && ts >= r.last) { r.last = ts; r.latestFrac = frac; }
     });
-    _qAttemptStats = stats;
-    _qAttemptStatsAt = Date.now();
-    _qAttemptStatsUid = currentUser.uid;
-  } catch (e) { console.warn('attempt stats load', e); _qAttemptStats = _qAttemptStats || {}; }
-  return _qAttemptStats;
+    _qAttemptStats = stats; _qAttemptStatsAt = Date.now(); _qAttemptStatsUid = key;
+  } catch (e) { console.warn('attempt stats load', e); if (key === _scienceFeedKey()) _qAttemptStats ||= {}; }
+  return key === _scienceFeedKey() ? (_qAttemptStats || {}) : {};
 }
-// Keep the in-memory stats current as the student answers, so a rebuilt queue
-// mid-session already treats just-answered questions as attempted.
 function noteAttemptLocally(qid, score, total) {
-  if (!_qAttemptStats) return;
-  const id = String(qid || ''); if (!id) return;
-  const frac = total ? Math.max(0, Math.min(1, (Number(score) || 0) / total)) : 0;
+  const id = String(qid || ''); if (!id || !(Number(total) > 0)) return;
+  _scienceFeedRememberResult(id, score, total);
+  if (_qAttemptStatsUid !== _scienceFeedKey()) { _qAttemptStats = {}; _qAttemptStatsUid = _scienceFeedKey(); _qAttemptStatsAt = 0; }
+  _qAttemptStats ||= {};
+  const frac = Math.max(0, Math.min(1, Number(score) / Number(total)));
   const r = _qAttemptStats[id] || (_qAttemptStats[id] = { n: 0, correct: 0, best: 0, last: 0 });
-  r.n++; if (frac >= 1) r.correct++; if (frac > r.best) r.best = frac; r.last = Date.now();
+  r.n++; if (frac >= 1) r.correct++; if (frac > r.best) r.best = frac;
+  r.last = Date.now(); r.latestFrac = frac;
 }
 // Order a pool by how many times the student has DONE each question (the
 // per-question attempt counter): never-attempted first (0× = top priority),
@@ -37978,6 +38265,8 @@ function orderByAttemptPriority(pool) {
 // Reset the practice session and show the "ready" state. Reused whenever the
 // level, type or topic filter changes.
 function resetQpSession() {
+  _qpFeedManual = false;
+  _qpFeedAllowRetired = false;
   qpLevel = document.getElementById('qpLevelSelect').value;
   qpQueue = [];
   qpIndex = -1;
@@ -38051,111 +38340,20 @@ function onQpFilterChange() {
   resetQpSession();
 }
 
-// Let the AI pick the student's weakest topic and a suitable difficulty (level)
-// from their performance history, then set the filters and start practising.
+// Smart practice uses the same local mastery and quality policy as every mode.
 async function qpAiRecommend() {
   const btn = document.getElementById('qpAiRecommendBtn');
-  const banner = document.getElementById('qpRecommendBanner');
-  const orig = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = 'Thinking…'; }
+  if (btn) btn.disabled = true;
   try {
-    if (!cerPerf) await loadCerPerf();
-    const p = cerPerf || _emptyPerf();
-    const f = qpFilters();
-    const counts = qpAvailableTopics(f.type);
-    const available = Object.keys(counts);
-    if (!available.length) {
-      showToast('No questions available to recommend from yet.', 'info');
-      return;
-    }
-
-    // Per-topic accuracy from the student's record, limited to topics we can serve.
-    const accByTopic = {};
-    _topicAccuracy(p).forEach(x => { accByTopic[x.topic] = x; });
-
-    let pick = null;       // { topic, level, reason }
-    const aiReady = window.__aiReady && window.__aiReady();
-    if (aiReady && p.attempts) {
-      const lines = available.map(t => {
-        const a = accByTopic[t];
-        const lvl = getTopicLevel(t);
-        return `- "${t}" (${lvl}, ${counts[t]} questions): ${a ? a.acc + '% over ' + a.n + ' attempts' : 'not attempted yet'}`;
-      }).join('\n');
-      // The rest of the student's weakness profile: skill category + question type.
-      const catAcc = Object.entries(p.categories || {}).map(([c, d]) => ({ name: c, acc: d.possible ? Math.round(100 * d.score / d.possible) : 0, n: d.attempts || 0 })).filter(x => x.n > 0).sort((a, b) => a.acc - b.acc);
-      const typeAcc = Object.entries(p.types || {}).map(([t, d]) => ({ name: t, acc: d.possible ? Math.round(100 * d.score / d.possible) : 0, n: d.attempts || 0 })).filter(x => x.n > 0);
-      const prompt =
-        `You are an adaptive primary-school science tutor choosing what a student should practise next.\n` +
-        `Their overall mastery score is ${p.score100 || 0}/100 over ${p.attempts} attempts.\n` +
-        `Available topics with the student's accuracy and the topic's syllabus level (P3 easiest … P6 hardest):\n${lines}\n` +
-        `Accuracy by skill category (weakest first): ${catAcc.length ? catAcc.map(c => c.name + ' ' + c.acc + '%').join(', ') : 'none yet'}.\n` +
-        `Accuracy by question type: ${typeAcc.length ? typeAcc.map(t => (t.name === 'open' ? 'open-ended' : 'MCQ') + ' ' + t.acc + '%').join(', ') : 'none yet'}.\n\n` +
-        `Pick the ONE topic the student should practise next — prefer a weak topic (low accuracy) or an important untried one, keeping their weak skill categories in mind. ` +
-        `Choose a difficulty level ${levelFromNumber(studentBandMinNum())}–${studentCapLevel()} — never outside that range, which is the levels this student is taught: easier when struggling, harder when doing well. ` +
-        `Also choose a question "type": "mcq", "written" (open-ended) or "all" — target the student's weaker type when there is a clear gap, otherwise "all". ` +
-        `Return ONLY JSON: {"topic":"<exact topic from the list>","level":"${levelsInBand(studentCapLevel()).join('|')}","type":"mcq|written|all","reason":"one short sentence to the student starting with 'Let's'"}`;
-      try {
-        const raw = await askGemini(prompt, { maxOutputTokens: 220, temperature: 0.3, json: true });
-        const parsed = _parseAIJson(raw);
-        if (parsed && parsed.topic && counts[parsed.topic]) {
-          const lvl = clampToStudentLevel(isLevelCode(parsed.level) ? parsed.level : getTopicLevel(parsed.topic));
-          const ty = /^(mcq|written|all)$/.test(parsed.type) ? parsed.type : 'all';
-          pick = { topic: parsed.topic, level: lvl, type: ty, reason: parsed.reason || '' };
-        }
-      } catch (e) { console.warn('AI recommend failed, using local fallback', e); }
-    }
-
-    // Fallback: lowest-accuracy available topic (or one not yet attempted).
-    if (!pick) {
-      const scored = available.map(t => ({
-        topic: t,
-        acc: accByTopic[t] ? accByTopic[t].acc : -1,  // untried sorts first
-        n: accByTopic[t] ? accByTopic[t].n : 0
-      })).sort((a, b) => a.acc - b.acc);
-      const top = scored[0];
-      const lvl = clampToStudentLevel(getTopicLevel(top.topic));
-      // Ease off by one level if they have been scoring low on it.
-      const easedNum = top.acc >= 0 && top.acc < 50 ? getLevelNumber(lvl) - 1 : getLevelNumber(lvl);
-      pick = {
-        topic: top.topic,
-        level: levelFromNumber(easedNum),
-        type: 'all',
-        reason: top.acc < 0
-          ? `Let's try ${top.topic} — you haven't practised it yet!`
-          : `Let's strengthen ${top.topic}, where you're scoring around ${top.acc}%.`
-      };
-    }
-
-    // Apply the recommendation to the controls.
-    const levelEl = document.getElementById('qpLevelSelect');
-    const topicEl = document.getElementById('qpTopicSelect');
-    const typeEl = document.getElementById('qpTypeSelect');
-    if (levelEl) levelEl.value = pick.level;
-    if (typeEl && pick.type) typeEl.value = pick.type;
-    // If the chosen type can't serve this topic, fall back to "all" so we still practise it.
-    if (typeEl && pick.topic && !qpAvailableTopics(typeEl.value)[pick.topic]) typeEl.value = 'all';
-    populateQpControls(); // topic options depend on the type filter
-    if (topicEl && qpAvailableTopics((typeEl && typeEl.value) || 'all')[pick.topic]) topicEl.value = pick.topic;
-
-    if (banner) {
-      banner.style.display = '';
-      banner.innerHTML = `
-        <div style="display:flex;gap:10px;align-items:center;padding:12px 14px;border:1.5px solid var(--primary);background:var(--primary-light,#e8f5e9);border-radius:var(--radius-md);">
-          <span style="font-size:1.2rem;">✨</span>
-          <div style="flex:1;min-width:0;font-size:0.88rem;color:var(--on-surface,#14161a);">
-            <strong>AI suggestion:</strong> ${escapeHtml(pick.reason)}
-            <span style="color:var(--text-muted);"> (${escapeHtml(pick.topic)} · ${escapeHtml(pick.level)})</span>
-          </div>
-        </div>`;
-    }
-    // Start practising the recommendation straight away.
+    const key = _scienceFeedKey();
+    await loadAttemptStats();
+    if (key !== _scienceFeedKey()) return;
+    const level = document.getElementById('qpLevelSelect');
+    const topic = document.getElementById('qpTopicSelect');
+    if (level) level.value = _scienceFeedLevel();
+    if (topic) topic.value = '';
     await startQuickPractice();
-  } catch (e) {
-    console.error('qpAiRecommend error', e);
-    showToast('Could not generate a recommendation right now.', 'error');
-  } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
-  }
+  } finally { if (btn) btn.disabled = false; }
 }
 
 // ── Question-type helpers (shared by Quick Practice filters) ──────────
@@ -38233,22 +38431,7 @@ function buildQpQueue(level) {
     return qLevelNum(q) <= levelNum && qWithinStudentLevel(q);
   });
 
-  // Serving order: questions this student has NEVER attempted (in any mode, on
-  // any device) come first, then previously attempted ones with the lowest
-  // best score. Within the unattempted group, ones not served recently in
-  // quick practice float to the front so back-to-back sessions stay fresh.
-  const stats = _qAttemptStats || {};
-  const ordered = orderByAttemptPriority(pool);
-  const served = new Set(qpLoadSeen());
-  const unattempted = ordered.filter(q => !stats[String(q.id)]);
-  const attempted = ordered.filter(q => !!stats[String(q.id)]);
-  // Recently-served demotion applies to BOTH groups: a question opened and
-  // abandoned last session keeps its attempt-priority rank, so without this it
-  // would lead the queue again every single sitting.
-  return unattempted.filter(q => !served.has(String(q.id)))
-    .concat(unattempted.filter(q => served.has(String(q.id))))
-    .concat(attempted.filter(q => !served.has(String(q.id))))
-    .concat(attempted.filter(q => served.has(String(q.id))));
+  return _scienceFeedPlan(pool).questions;
 }
 
 // Student shortcut: jump straight into MCQ-only Quick Practice.
@@ -38266,8 +38449,12 @@ function startMcqPractice() {
 }
 async function startQuickPractice() {
   _questRun = null;   // a normal practice run is not part of any encounter quest
+  _qpFeedManual = false;
+  _qpFeedAllowRetired = false;
+  const feedKey = _scienceFeedKey();
   qpLevel = document.getElementById('qpLevelSelect').value;
-  await loadAttemptStats(); // unattempted-first ordering needs the attempt log
+  await loadAttemptStats(); // mastery needs the current child's latest outcomes
+  if (feedKey !== _scienceFeedKey()) return;
   qpQueue = buildQpQueue(qpLevel);
   qpIndex = -1;
   qpAnswered = 0;
@@ -38279,19 +38466,22 @@ async function startQuickPractice() {
         <h3>No Questions Available</h3>
         <p>${qpFibOn()
           ? 'No question here has keywords marked on its model answer yet, so there is nothing to fill in. Switch Mode back to ✍️ Normal, or ask your teacher to mark some keywords with 🔑 Assign keywords.'
-          : 'No questions match your current filters. Try a different type, topic or level.'}</p>
+          : escapeHtml(_scienceFeedMessage())}</p>
       </div>`;
     updateQpProgress();
     return;
   }
   // Preload images before starting
   await preloadQueueImages(qpQueue);
+  if (feedKey !== _scienceFeedKey()) return;
   loadNextQpQuestion();
 }
 
 function loadNextQpQuestion() {
   rpgQuestionChanged();
   qpIndex++;
+  const eligible = new Set(_scienceFeedPlan(qpQueue.slice(qpIndex), { manual: _qpFeedManual, allowRetired: _qpFeedAllowRetired }).questions.map(q => String(q.id)));
+  while (qpIndex < qpQueue.length && !eligible.has(String(qpQueue[qpIndex].id))) qpIndex++;
   if (qpIndex >= qpQueue.length) {
     renderQpSummary();
     updateQpProgress();
@@ -38454,6 +38644,7 @@ function updateQpProgress() {
 }
 
 function renderQpQuestion(q) {
+  if (!_scienceFeedAllowed(q, { manual: _qpFeedManual, allowRetired: _qpFeedAllowRetired })) { document.getElementById('qpContainer').innerHTML = _scienceFeedEmptyHtml(); return; }
   const qLevel = getTopicLevel(q.topic || '');
   let html = `
     <div class="practice-card">
@@ -38820,7 +39011,7 @@ function _homeReviewPool() {
   });
   const best = q => (stats[String(q.id)] && stats[String(q.id)].best) || 0;
   const last = q => (stats[String(q.id)] && stats[String(q.id)].last) || 0;
-  return pool.sort((a, b) => (best(a) - best(b)) || (last(a) - last(b)));
+  return _scienceFeedPlan(pool.sort((a, b) => (best(a) - best(b)) || (last(a) - last(b)))).questions;
 }
 
 async function renderHomePage() {
@@ -38936,6 +39127,7 @@ function homeStartReview() {
   const pool = _homeReviewPool();
   if (!pool.length) { showToast('Nothing to review — great work!', 'success'); return; }
   _questRun = null;
+  _qpFeedManual = false;
   qpQueue = pool.slice(0, 10);
   qpIndex = -1;
   qpAnswered = 0;
@@ -40002,11 +40194,13 @@ async function tpStartPractice() {
   }
 
   tpActiveTopics = Array.from(tpSelectedTopics);
+  const feedKey = _scienceFeedKey();
 
   // Gather questions per topic, each ordered unattempted-first then weakest-first
   // (orderByAttemptPriority shuffles within those groups).
   await loadAttemptStats();
   const questionsByTopic = {};
+  if (feedKey !== _scienceFeedKey()) return;
   const tpServed = new Set(qpLoadSeen());   // same served memory as quick practice
   tpActiveTopics.forEach(topic => {
     const markable = questionBank.filter(q => questionHasMarkableAnswer(q) && qInSyllabus(q) && qAvailableToViewer(q) && qMatchesTopic(q, topic) && qWithinStudentLevel(q));
@@ -40033,13 +40227,13 @@ async function tpStartPractice() {
     remaining = remaining.filter(t => indices[t] < questionsByTopic[t].length);
   }
 
-  tpQueue = queue;
+  tpQueue = _scienceFeedPlan(queue).questions;
   tpSessionResults = [];
   tpIndex = -1;
   tpAnswered = 0;
 
   if (tpQueue.length === 0) {
-    showToast('No markable questions found for the selected topics', 'error');
+    showToast(_scienceFeedMessage(), 'info');
     return;
   }
 
@@ -40075,6 +40269,7 @@ async function tpStartPractice() {
 
   // Preload all images in the queue before starting
   await preloadQueueImages(tpQueue);
+  if (feedKey !== _scienceFeedKey()) return;
   tpLoadNextQuestion();
 }
 
@@ -40088,6 +40283,8 @@ function tpStartTopic(topic) {
 function tpLoadNextQuestion() {
   rpgQuestionChanged();
   tpIndex++;
+  const eligible = new Set(_scienceFeedPlan(tpQueue.slice(tpIndex)).questions.map(q => String(q.id)));
+  while (tpIndex < tpQueue.length && !eligible.has(String(tpQueue[tpIndex].id))) tpIndex++;
   if (tpIndex >= tpQueue.length) {
     renderPracticeReport('#tpContainer', tpSessionResults, `
         <button class="btn btn-outline" onclick="tpBackToTopics()">
@@ -40116,6 +40313,7 @@ function tpUpdateProgress() {
 }
 
 function tpRenderQuestion(q) {
+  if (!_scienceFeedAllowed(q)) { document.getElementById('tpContainer').innerHTML = _scienceFeedEmptyHtml(); return; }
   const qLevel = getTopicLevel(q.topic || '');
   let html = `
     <div class="practice-card">
@@ -42238,8 +42436,11 @@ async function submitFlag() {
   }
 
   try {
+    const feedKey = _scienceFeedKey(), flaggedId = flaggingQuestionId;
+    const questionSignature = questionQualitySignature(questionBank.find(q => String(q.id) === String(flaggedId)) || {});
     await addDoc(collection(db, 'flaggedQuestions'), {
-      questionId: flaggingQuestionId,
+      questionSignature,
+      questionId: flaggedId,
       questionTitle: flaggingQuestionTitle,
       comment: comment,
       flaggedBy: currentUser.name,
@@ -42248,6 +42449,7 @@ async function submitFlag() {
       timestamp: Timestamp.now(),
       status: 'open' // open | resolved | dismissed
     });
+    _scienceFeedFlagOwn(flaggedId, questionSignature, feedKey);
     closeFlagDialog();
     showToast('Question flagged — your teacher will review it', 'success');
   } catch (err) {
@@ -42264,7 +42466,10 @@ let flaggedQuestions = [];
 async function loadFlaggedQuestions() {
   if (!currentUser || currentUser.role !== 'admin') return;
   try {
+    const uid = currentUser.uid;
     const snap = await getDocs(collection(db, 'flaggedQuestions'));
+    if (currentUser?.uid !== uid || currentUser?.role !== 'admin') return;
+    _scienceFeedFlagsLoadedUid = uid;
     flaggedQuestions = [];
     snap.forEach(d => {
       flaggedQuestions.push({ ...d.data(), _docId: d.id });
@@ -42279,6 +42484,7 @@ async function loadFlaggedQuestions() {
       const tb = b.timestamp ? (b.timestamp.toDate ? b.timestamp.toDate() : new Date(b.timestamp)) : new Date(0);
       return tb - ta;
     });
+    _scienceFeedPublishSummaries().catch(e => console.warn('Question report summary', e));
     // Flagged questions are NOT auto-moved out of the bank any more — they stay
     // live and simply appear here on the Flagged page, where the admin decides
     // what to do (Edit / Move to Vetting / Resolve / Dismiss).
@@ -42433,9 +42639,11 @@ function _resolveFlagsForQuestion(questionId) {
 async function updateFlagStatus(docId, status) {
   try {
     const ref = doc(db, 'flaggedQuestions', docId);
-    await updateDoc(ref, { status });
+    const reviewedAt = Date.now();
+    await updateDoc(ref, { status, reviewedAt });
     const f = flaggedQuestions.find(f => f._docId === docId);
-    if (f) f.status = status;
+    if (f) { f.status = status; f.reviewedAt = reviewedAt;
+      await _scienceFeedPublishSummaries(questionBank.filter(q => String(q.id) === String(f.questionId))); }
     updateFlaggedCount();
     renderFlaggedQuestions();
   } catch (err) {
@@ -42447,10 +42655,16 @@ async function updateFlagStatus(docId, status) {
 async function deleteFlaggedQuestion(docId) {
   showConfirm('Delete Flag', 'Remove this flagged question report?', async () => {
     try {
+      const report = flaggedQuestions.find(f => f._docId === docId);
       await deleteDoc(doc(db, 'flaggedQuestions', docId));
       flaggedQuestions = flaggedQuestions.filter(f => f._docId !== docId);
       updateFlaggedCount();
       renderFlaggedQuestions();
+      if (report) {
+        const q = questionBank.find(q => String(q.id) === String(report.questionId));
+        if (q) _scienceFeedDeletedReviews.set(String(q.id), { at: Date.now(), signature: report.questionSignature || questionQualitySignature(q) });
+        await _scienceFeedPublishSummaries(q ? [q] : []);
+      }
       showToast('Flag removed', 'info');
     } catch (err) {
       console.error('deleteFlaggedQuestion failed:', err);
@@ -49786,9 +50000,10 @@ function commStartQuestRun(questId) {
   if (quest.winnerUid || quest.status === 'ended' || left <= 0) { showToast('That quest has ended.', 'info'); return; }
   const ids = Array.isArray(quest.questionIds) ? quest.questionIds.map(String) : [];
   const byId = {}; (Array.isArray(questionBank) ? questionBank : []).forEach(q => { if (q && q.id != null) byId[String(q.id)] = q; });
-  const queue = ids.map(id => byId[id]).filter(Boolean);
+  const queue = _scienceFeedManual(ids.map(id => byId[id]).filter(Boolean));
+  _qpFeedManual = true;
   if (!queue.length) { showToast('These quest questions aren\'t available on your device yet — try again shortly.', 'error'); return; }
-  _questRun = { questId: quest._id, ids, total: ids.length, best: {} };
+  _questRun = { questId: quest._id, ids: queue.map(q => String(q.id)), total: queue.length, best: {} };
   qpQueue = queue;
   qpIndex = -1;
   qpAnswered = 0;
@@ -49830,9 +50045,10 @@ async function commStartAutoQuest(questId) {
     .sort((a, b) => (bestByQ[String(a.id)] || 0) - (bestByQ[String(b.id)] || 0));
   const rest = shuffle(pool.filter(q => seen(String(q.id)) && bestByQ[String(q.id)] >= 0.5));
   const ordered = [];
-  const add = list => list.forEach(q => { if (ordered.length < count && !ordered.some(x => String(x.id) === String(q.id))) ordered.push(q); });
+  const add = list => list.forEach(q => { if (!ordered.some(x => String(x.id) === String(q.id))) ordered.push(q); });
   add(unseen); add(struggled); add(rest);
-  const queue = ordered.slice(0, count);
+  const queue = _scienceFeedPlan(ordered, { limit: count }).questions;
+  _qpFeedManual = false;
   if (!queue.length) { showToast('Couldn\'t pick questions — try again shortly.', 'error'); return; }
   _questRun = { questId: quest._id, mode: 'auto', win: quest.win || 'highest', ids: queue.map(q => String(q.id)), total: queue.length, best: {}, answered: new Set(), startedAt: Date.now(), _finished: false };
   qpQueue = queue; qpIndex = -1; qpAnswered = 0; qpSessionResults = [];
@@ -51617,14 +51833,22 @@ function _sdStemHtml(blocks) {
       if (b.url) { html += `<div style="margin:10px 0;text-align:center;position:relative;overflow:auto;max-height:440px;"><img src="${escapeHtml(transformImageUrl(b.url))}" loading="eager" decoding="async" style="${imgSizeStyle(b)};border-radius:8px;" onerror="if(window.sdImgError)sdImgError(this)">${_sdZoomBtns()}</div>`; plain.push('[diagram]'); }
     } else if (b.type === 'table') {
       try { html += `<div style="margin:10px 0;overflow-x:auto;">${renderTableReadonly(b, '')}</div>`; plain.push('[table]'); } catch (e) {}
+    } else if (b.type === 'studentAnswer' || b.type === 'commonMistake') {
+      const text = b.type === 'studentAnswer' ? b.answer : b.text;
+      if (text) { html += '<div class="qp-qtext">' + text + '</div>'; plain.push(stripHtmlToText(text)); }
     }
   }
   return { html, plain };
 }
 function _sdExtractMcq(q) {
   const blocks = (q && q.blocks) || [];
-  const mcq = blocks.find(b => b.type === 'mcq' && (b.options || []).length >= 2);
-  if (!mcq) return null;
+  const choices = blocks.filter(b => b && b.type === 'mcq');
+  // A game records one answer, so a multipart worksheet stays in full practice.
+  if (choices.length !== 1) return null;
+  if (blocks.some(b => b && (['answer', 'plainanswer', 'openLines', 'workingSpace', 'fillblank', 'answerLine'].includes(b.type)
+      || (q.annotation && b.type === 'image' && b.annotate !== false)))) return null;
+  const mcq = choices[0];
+  if ((mcq.options || []).length < 2) return null;
   // Need a defined correct option.
   const answer = (mcq.options || []).findIndex(o => o.id === mcq.correctId);
   if (answer < 0) return null;
@@ -51835,7 +52059,8 @@ function _gamePtsReset() {
 // mid-answer. The local stats are stamped first so the serving rotation treats
 // the question as done even when the network is out.
 function logGameAttempt(q, correct, mode, ms) {
-  if (!q || !q.db || !q.id) return;          // a built-in fallback question is not the teacher's
+  if (!q || !q.id) return;
+  if (!q.db) { _scienceFeedRememberResult(q.id, correct ? 1 : 0, 1); return; }
   try { _gqMark(q.id); } catch (e) {}
   if (!(currentUser && currentUser.role === 'student')) return;
   try { noteAttemptLocally(q.id, correct ? 1 : 0, 1); } catch (e) {}
@@ -51935,7 +52160,10 @@ async function _sdRecordFlag(d, source) {
     if (!currentUser || !d || !d.questionId) { ack(false, 'Sign in to flag a question'); return; }
     if (await _flagsTodayCount() >= FLAG_DAILY_LIMIT) { ack(false, `Daily flag limit reached (${FLAG_DAILY_LIMIT}/day) — try again tomorrow`); return; }
     const game = d.mode === 'raiders' ? 'Science Raiders' : d.mode === 'spire' ? 'Science Spire' : d.mode === 'legends' ? 'Science Legends' : d.mode === 'slayers' ? 'Science Slayers' : 'Science Defenders';
+    const feedKey = _scienceFeedKey();
+    const questionSignature = questionQualitySignature(questionBank.find(q => String(q.id) === String(d.questionId)) || {});
     await addDoc(collection(db, 'flaggedQuestions'), {
+      questionSignature,
       questionId: d.questionId,
       questionTitle: d.questionTitle || '',
       comment: `[${game}] ${comment}`,
@@ -51945,6 +52173,7 @@ async function _sdRecordFlag(d, source) {
       timestamp: Timestamp.now(),
       status: 'open'
     });
+    _scienceFeedFlagOwn(d.questionId, questionSignature, feedKey);
     if (currentUser.role === 'admin') { try { loadFlaggedQuestions(); } catch (e) {} }
     ack(true);
   } catch (e) { console.warn('SD flag failed', e); ack(false, 'Could not submit — check your connection'); }
@@ -52291,21 +52520,9 @@ function _gqSave(m) { try { localStorage.setItem(_gqKey(), JSON.stringify(m)); }
 // The games' built-in demo/fallback questions (b0…b7, sp_f*, builtin_*) must
 // never enter the rotation map — those ids don't exist in the real bank.
 function _gqRealId(id) { return !!id && !/^(b\d+|sp_f\d+|builtin_\d+)$/.test(String(id)); }
-function _gqMark(id) { if (!_gqRealId(id)) return; const m = _gqLoad(); m[id] = Date.now(); _gqSave(m); }
+function _gqMark(id) { if (!_gqRealId(id)) return; _scienceFeedMark(id); const m = _gqLoad(); m[id] = Date.now(); _gqSave(m); }
 function _gqFilterPool(pool) {
-  if (!Array.isArray(pool) || pool.length < 2) return pool;
-  const m = _gqLoad();
-  const unseen = [], seenQs = [];
-  for (const q of pool) { if (q) (m[q.id] ? seenQs : unseen).push(q); }
-  // A run needs a decent spread of questions, so the payload never shrinks
-  // below a floor (or the whole pool when it's smaller than the floor).
-  const floor = Math.min(pool.length, Math.max(12, Math.min(30, Math.ceil(pool.length / 3))));
-  if (unseen.length >= floor) return unseen;
-  // Top up with the least-recently-served. Legacy cycle counters (tiny
-  // numbers) sort as ancient stamps, so they rotate back in first — no
-  // migration needed.
-  seenQs.sort((a, b) => (m[a.id] || 0) - (m[b.id] || 0));
-  return unseen.concat(seenQs.slice(0, floor - unseen.length));
+  return _scienceFeedGameRows(pool);
 }
 
 // Build the SD_QUESTIONS payload for a game frame: bank (or past-paper pool)
@@ -52313,20 +52530,25 @@ function _gqFilterPool(pool) {
 // initial frame request AND every run start, so long sittings never play from
 // a stale pool snapshot.
 async function _sdQuestionsPayload(source) {
+  const feedKey = _scienceFeedKey();
+  const seenStats = await _sdSeenStats();
   let questions = [];
   // Past-paper mode: the game launched from the Past Papers page gets ONLY
   // the selected portion's attached questions (MCQ + OEQ self-check).
   const ppMode = _ppGameFrameMatches(source);
   try { questions = ppMode ? ppGamePool(_ppGameSel.year) : buildDefenderQuestions(); } catch (e) { console.warn('SD bank extract failed', e); }
   // rotation: never-served questions first, least-recently-served top-up
-  try { questions = _gqFilterPool(questions); } catch (e) { console.warn('gq filter', e); }
-  const seenStats = await _sdSeenStats();
+  try { questions = _gqFilterPool(questions); } catch (e) { questions = []; console.warn('gq filter', e); }
+  if (feedKey !== _scienceFeedKey()) questions = [];
   return {
     type: 'SD_QUESTIONS',
     questions,
     seenIds: Object.keys(seenStats),
     seenStats,
-    studentKey: (currentUser && currentUser.uid) || 'guest',
+    feedPolicyVersion: 1,
+    studentKey: _scienceFeedKey(),
+    studentLevel: _scienceFeedLevel(),
+    feedMessage: _scienceFeedMessage(),
     studentName: (currentUser && currentUser.name) || '',
     playLimit: _dailyCreditAllowance(),
     playsLeft: _playsLeftPayload()
@@ -52338,9 +52560,11 @@ window.addEventListener('message', function (ev) {
   if (d.type === 'SD_REQUEST_QUESTIONS') {
     (async () => {
       const payload = await _sdQuestionsPayload(ev.source);
+      payload.requestId = d.requestId;
       try { ev.source && ev.source.postMessage(payload, '*'); } catch (e) {}
     })();
   } else if (d.type === 'SD_RECORD') {
+    if (!_scienceFeedGameMessageCurrent(d, ev.source)) return;
     try { _gqMark(d && d.questionId); } catch (e) {}   // stamp it as served in the rotation
     _sdRecordAttempt(d);
     // Defenders / Raiders / Legends / Slayers / Spire all report answers
@@ -52350,10 +52574,16 @@ window.addEventListener('message', function (ev) {
       if (pts) ev.source && ev.source.postMessage({ type: 'SD_POINTS', points: pts, runTotal: _gameRunPts }, '*');
     } catch (e) {}
   } else if (d.type === 'SD_SHOWN') {
+    if (!_scienceFeedGameMessageCurrent(d, ev.source)) return;
     // A game displayed this question (answered or not — skips and abandoned
     // runs count too), so the rotation must not serve it again soon.
     try { _gqMark(d && d.questionId); } catch (e) {}
+  } else if (d.type === 'SD_IMAGE_FAILED') {
+    if (!_scienceFeedGameMessageCurrent(d, ev.source)) return;
+    const q = questionBank.find(q => String(q.id) === String(d.questionId));
+    _scienceFeedImageResult(q, d.url, true);
   } else if (d.type === 'SD_FLAG') {
+    if (!_scienceFeedGameMessageCurrent(d, ev.source)) return;
     _sdRecordFlag(d, ev.source);
   } else if (d.type === 'SD_SCORE') {
     _sdRecordScore(d);
@@ -52375,6 +52605,7 @@ window.addEventListener('message', function (ev) {
     // served earlier in the sitting (in this or any other game) drop out.
     (async () => {
       const payload = await _sdQuestionsPayload(ev.source);
+      payload.requestId = d.requestId;
       try { ev.source && ev.source.postMessage(payload, '*'); } catch (e) {}
     })();
   } else if (d.type === 'LEGENDS_REQUEST_ASSETS') {
@@ -58987,45 +59218,33 @@ function _htmlPlainText(html) {
 }
 function _tcgBankQuestions() {
   const out = [];
-  try {
-    (typeof questionBank !== 'undefined' && Array.isArray(questionBank) ? questionBank : []).forEach(q => {
-      if (!q || (q.status && q.status !== 'approved') || !Array.isArray(q.blocks)) return;
-      if (!qInSyllabus(q)) return;   // retired topics never reach the Realm of Embers TCG quiz
-      if (!qAvailableToViewer(q)) return;     // …and neither does one scheduled for a future date
-      // Never above the pupil's level. This one pool feeds the monster trainer,
-      // Ember Siege AND Ember Legends, so leaving it uncapped served P5/P6
-      // questions to P3/P4 students in all three modes at once.
-      if (!qWithinStudentLevel(q)) return;
-      const mcq = q.blocks.find(b => b && b.type === 'mcq' && b.correctId && Array.isArray(b.options) && b.options.length >= 2);
-      if (!mcq) return;
-      const ai = mcq.options.findIndex(o => o.id === mcq.correctId);
-      if (ai < 0) return;
-      const opts = mcq.options.map(o => stripHtml(o.text || '').trim());
-      if (opts.some(t => !t)) return;
-      let html = '', hasStem = false;
-      q.blocks.forEach(b => {
-        if (!b) return;
-        if (b.type === 'text' && b.content && stripHtml(b.content).trim()) { html += '<div class="qp-qtext">' + b.content + '</div>'; hasStem = true; }
-        else if (b.type === 'image' && b.url) { html += '<div class="tcg-quiz-img"><img src="' + escapeHtml(transformImageUrl(b.url)) + '" onerror="handleImgError(this)" loading="lazy" decoding="async" style="' + imgSizeStyle(b) + '"></div>'; hasStem = true; }
-      });
-      if (!hasStem) return;
-      // The question's explanation block rides along so the modes that teach
-      // after the answer (the Legends arena and the trainer) can show it.
-      // Decoded to real text — stripHtml would leave &amp;/&lt; entities in,
-      // and the consumers escapeHtml the string again on render.
-      const exB = q.blocks.find(b => b && b.type === 'explanation' && b.content && stripHtml(b.content).trim());
-      out.push({ id: q.id || '', html: html, opts: opts, a: ai, ex: exB ? _htmlPlainText(exB.content) : '', db: true });
-    });
-  } catch (e) {}
+  for (const q of questionBank || []) {
+    if (!q || !qInSyllabus(q) || !qAvailableToViewer(q) || !qWithinStudentLevel(q)) continue;
+    const row = _sdExtractMcq(q);
+    if (!row) continue;
+    out.push({ id: q.id, html: row.html, opts: row.options.map(_htmlPlainText), optsHtml: row.options,
+      a: row.answer, ex: row.explain, db: true, feedSource: q });
+  }
   return out;
 }
 // Fallback pool: quick built-in questions, used only when the bank has no
 // auto-gradable questions yet (so training never hard-breaks).
+const SCIENCE_TCG_TOPICS = ["Energy in Food", "Energy in Food", "Energy in Food", "Life Cycles", "Life Cycles", "Living and non-living things", "Cells — The Basic Unit of Life", "Human and Plant Transport", "Human Body Systems", "Human Body Systems", "Human and Plant Respiration", "Matter and its 3 States", "Matter and its 3 States", "Matter and its 3 States", "Water and its 3 States", "Water and its 3 States", "Water and its 3 States", "Water and its 3 States", "Heat", "Heat", "Heat", "Heat", "Electrical Systems", "Electrical Systems", "Electrical Systems", "Magnets", "Magnets", "Forces", "Forces", "Energy Conversion", "Energy Conversion", "Light", "Light", "Light", "Plant Reproduction", "Plant Reproduction", "Plant Reproduction", "Humans and the Environment", "Humans and the Environment", "Living Together", "Food Chains and Webs", "Food Chains and Webs", "The Scientific Endeavour", "Measurement and Lab Skills"];
+function _scienceTcgSources() {
+  return TCG_QUIZ.map((q, index) => ({ id: 'science_tcg_' + index, title: q.q,
+    topic: SCIENCE_TCG_TOPICS[index], level: getTopicLevel(SCIENCE_TCG_TOPICS[index]), difficulty: 'easy',
+    // This legacy item has an internally contradictory answer (exhaled air is mostly nitrogen).
+    status: index === 10 ? 'flagged' : 'approved',
+    blocks: [{ id: 'stem', type: 'text', content: escapeHtml(q.q) }, { id: 'choices', type: 'mcq',
+      options: q.opts.map((text, i) => ({ id: String(i), text: escapeHtml(text) })), correctId: String(q.a) }] }));
+}
 function _tcgFallbackQuestions() {
-  return TCG_QUIZ.map(x => ({ html: '<div class="qp-qtext">' + escapeHtml(x.q) + '</div>', opts: x.opts, a: x.a, ex: x.ex, db: false }));
+  const sources = _scienceTcgSources();
+  return TCG_QUIZ.map((x, i) => ({ id: sources[i].id, html: '<div class="qp-qtext">' + escapeHtml(x.q) + '</div>',
+    opts: x.opts, a: x.a, ex: x.ex, db: false, feedSource: sources[i] }));
 }
 // Prefer real database questions; fall back to the built-in set if there are none.
-function _tcgQuizPool() { const db = _tcgBankQuestions(); return db.length ? db : _tcgFallbackQuestions(); }
+function _tcgQuizPool() { return _scienceFeedGameRows(_tcgBankQuestions().concat(_tcgFallbackQuestions())); }
 function _tcgShuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 // Persistent per-student trainer rotation: every question served in Monster
 // Cards training is stamped, and the pool is ordered least-recently-served
@@ -59033,7 +59252,7 @@ function _tcgShuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) 
 // reshuffles recently-answered questions straight back in.
 function _tcgServedKey() { return 'tcgTrainServed_' + ((currentUser && currentUser.uid) || 'guest'); }
 function _tcgServedLoad() { try { return JSON.parse(localStorage.getItem(_tcgServedKey())) || {}; } catch (e) { return {}; } }
-function _tcgServedMark(id) { if (!id) return; try { const m = _tcgServedLoad(); m[id] = Date.now(); localStorage.setItem(_tcgServedKey(), JSON.stringify(m)); } catch (e) {} }
+function _tcgServedMark(id) { if (!id) return; _scienceFeedMark(id); try { const m = _tcgServedLoad(); m[id] = Date.now(); localStorage.setItem(_tcgServedKey(), JSON.stringify(m)); } catch (e) {} }
 let _tcgQuiz = null;
 function tcgTrainCard(id) {
   const s = tcgState();
@@ -59079,13 +59298,14 @@ function _tcgQuizRender() {
   }
   _tcgQuiz.answered = false;
   _tcgQuiz.at = performance.now();   // clocked so the shared anti-rush gate applies here too
-  const q = _tcgQuiz.pool[_tcgQuiz.i % _tcgQuiz.pool.length];
+  const q = _scienceFeedNextGame(_tcgQuiz, 'i');
+  if (!q) { _tcgQuiz.cur = null; body.innerHTML = _scienceFeedEmptyHtml(); return; }
   _tcgQuiz.cur = q;
   if (q && q.id) _tcgServedMark(q.id);
   body.innerHTML = '<div class="tcg-quiz-q">' + (q.html || escapeHtml(q.q || '')) + '</div>'
     + '<div class="tcg-quiz-opts">'
     + q.opts.map((o, idx) => '<button type="button" class="tcg-quiz-opt" data-i="' + idx + '" onclick="_tcgQuizAnswer(' + idx + ')">'
-        + '<span class="tcg-quiz-let">' + (idx + 1) + '</span>' + escapeHtml(o) + '</button>').join('')
+        + '<span class="tcg-quiz-let">' + (idx + 1) + '</span>' + (q.optsHtml?.[idx] || escapeHtml(o)) + '</button>').join('')
     + '</div>'
     + '<div class="tcg-quiz-fb" id="tcgqFb"></div>';
 }
@@ -59126,7 +59346,7 @@ function _tcgQuizAnswer(idx) {
   const fb = document.getElementById('tcgqFb');
   if (fb) fb.innerHTML = msg;
 }
-function _tcgQuizNext() { if (!_tcgQuiz) return; _tcgQuiz.i++; _tcgQuizRender(); }
+function _tcgQuizNext() { if (!_tcgQuiz) return; _tcgQuizRender(); }
 function _tcgLevelUpBurst() {
   const modal = document.querySelector('.tcg-train-modal'); if (!modal) return;
   const d = document.createElement('div'); d.className = 'tcg-levelup-burst'; d.textContent = 'LEVEL UP!';
@@ -63059,7 +63279,8 @@ function duelOpenQuiz() {
   if (r.quiz) return;                                     // one panel, never two
   const stale = document.getElementById('duelQuiz'); if (stale) stale.remove();
   if (!r.pool.length) { showToast('No questions available yet', 'error'); return; }
-  const q = r.pool[r.poolI % r.pool.length]; r.poolI++;
+  const q = _scienceFeedNextGame(r);
+  if (!q) { showToast(_scienceFeedMessage(), 'info'); return; }
   if (q && q.id) _tcgServedMark(q.id);
   r.quiz = { q, at: (typeof performance !== 'undefined' ? performance.now() : Date.now()), answered: false };
   const host = document.getElementById('duelOverlay'); if (!host) return;
@@ -63070,7 +63291,7 @@ function duelOpenQuiz() {
     + '<div class="duel-quiz-q">' + q.html + '</div>'
     + '<div class="duel-quiz-opts">'
     + q.opts.map((o, i) => '<button type="button" class="duel-quiz-opt" onclick="duelAnswer(' + i + ')">'
-        + '<b>' + String.fromCharCode(65 + i) + '</b> ' + escapeHtml(o) + '</button>').join('')
+        + '<b>' + (i + 1) + '</b> ' + (q.optsHtml?.[i] || escapeHtml(o)) + '</button>').join('')
     + '</div><div class="duel-quiz-foot" id="duelQuizFoot"></div></div>';
   host.appendChild(box);
   r.insightUsed = true;             // spent on OPENING it, so the button cannot re-arm
@@ -64334,8 +64555,8 @@ function emsCloseQuiz() {
 }
 function emsNextQuestion() {
   const r = emsRun; if (!r) return;
-  const q = r.pool[r.poolI % r.pool.length];
-  r.poolI++;
+  const q = _scienceFeedNextGame(r);
+  if (!q) { emsCloseQuiz(); showToast(_scienceFeedMessage(), 'info'); return; }
   r.quiz = { q: q, at: performance.now(), answered: false };
   if (q && q.id) _tcgServedMark(q.id);
   const body = document.getElementById('emsQuizBody');
@@ -64343,7 +64564,7 @@ function emsNextQuestion() {
   body.innerHTML = '<div class="ems-quiz-q">' + (q.html || escapeHtml(q.q || '')) + '</div>'
     + '<div class="ems-quiz-opts">'
     + q.opts.map((o, i) => '<button type="button" class="ems-quiz-opt" data-i="' + i + '" onclick="emsAnswer(' + i + ')">'
-        + '<span class="ems-quiz-let">' + (i + 1) + '</span>' + escapeHtml(o) + '</button>').join('')
+        + '<span class="ems-quiz-let">' + (i + 1) + '</span>' + (q.optsHtml?.[i] || escapeHtml(o)) + '</button>').join('')
     + '</div>'
     + '<div class="ems-quiz-fb" id="emsQuizFb">' + (r.roundTotal
         ? '⏸ The battle is paused and there is no timer — read carefully, every correct answer pays full mana.'
@@ -65697,8 +65918,8 @@ function elgCloseQuiz() {
 }
 function elgNextQuestion() {
   const r = elgRun; if (!r) return;
-  const q = r.pool[r.poolI % r.pool.length];
-  r.poolI++;
+  const q = _scienceFeedNextGame(r);
+  if (!q) { elgCloseQuiz(); showToast(_scienceFeedMessage(), 'info'); return; }
   r.quiz = { q, at: performance.now(), answered: false };
   if (q && q.id) _tcgServedMark(q.id);
   const box = document.getElementById('elgQuiz'); if (!box) return;
@@ -65706,7 +65927,7 @@ function elgNextQuestion() {
     + '<div class="elg-quiz-head">⏸ Battle paused · answer for <b>✦ ' + ELG_SP_CORRECT + ' skill point</b></div>'
     + '<div class="elg-quiz-q">' + (q.html || escapeHtml(q.q || '')) + '</div>'
     + '<div class="elg-quiz-opts">' + q.opts.map((o, i) =>
-        '<button type="button" class="elg-quiz-opt" data-i="' + i + '" onclick="elgAnswer(' + i + ')"><span>' + (i + 1) + '</span>' + escapeHtml(o) + '</button>').join('')
+        '<button type="button" class="elg-quiz-opt" data-i="' + i + '" onclick="elgAnswer(' + i + ')"><span>' + (i + 1) + '</span>' + (q.optsHtml?.[i] || escapeHtml(o)) + '</button>').join('')
     + '</div>'
     + '<div class="elg-quiz-fb" id="elgQuizFb"></div>'
     + '</div>';
@@ -69696,7 +69917,7 @@ function ppRenderAssignList(){
 }
 async function ppAssign(id, qid){ ppHoverHide(); paperMap[id] = qid; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Question attached — students can now practise it', 'success'); }
 async function ppUnassign(){ const id = _ppAssignKey; if (!id) return; ppHoverHide(); delete paperMap[id]; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Attachment removed', 'info'); }
-function ppPractise(id){ const bq = ppBankQ(id); if (!bq) { showToast('This question is not available to practise', 'error'); return; } ppHoverHide(); ppCloseAssign(); ppTopicClose(); launchWorksheetPractice([bq]); }
+function ppPractise(id){ const bq = ppBankQ(id); if (!bq) { showToast('This question is not available to practise', 'error'); return; } ppHoverHide(); ppCloseAssign(); ppTopicClose(); launchWorksheetPractice([bq], undefined, { allowRetired: true }); }
 // Edit the attached bank question in the full editor, returning to Past Papers on save.
 function ppEditAttachedQuestion(){
   const id = _ppAssignKey; if (!id) return;
@@ -70154,7 +70375,7 @@ function ppTopicPractise(){
   ppTopicQs().forEach(q => { const bq = ppBankQ(q.id); if (bq && !seen.has(bq.id)) { seen.add(bq.id); bqs.push(bq); } });
   if (!bqs.length) { showToast('None of these questions are available to practise yet', 'error'); return; }
   ppTopicClose();
-  launchWorksheetPractice(bqs);
+  launchWorksheetPractice(bqs, undefined, { allowRetired: true });
 }
 
 // -------- practise the papers (on the system + in the mini-games) --------
@@ -70190,7 +70411,7 @@ function ppPracticeYear(year){
   const bqs = ppAttachedBankQs(year);
   if (!bqs.length) { showToast('No questions are attached ' + (year ? 'for ' + year : '') + ' yet', 'error'); return; }
   ppHoverHide();
-  launchWorksheetPractice(bqs);
+  launchWorksheetPractice(bqs, undefined, { allowRetired: true });
 }
 
 // Model answer of an open-ended bank question as one HTML snippet (CER answer
@@ -71997,6 +72218,8 @@ async function ainsteinTrySimilar(token) {
 }
 
 async function _ainsteinOpenQuiz(q, concept) {
+  if (!_scienceFeedPlan([q]).questions.length) { showToast(_scienceFeedMessage(), 'info'); return; }
+  const feedKey = _scienceFeedKey();
   const panel = _ainsteinEl('ainsteinPanel');
   const body = _ainsteinEl('ainsteinQuizBody');
   if (!panel || !body) return;
@@ -72014,7 +72237,7 @@ async function _ainsteinOpenQuiz(q, concept) {
   _ainsteinEl('ainsteinBubble')?.classList.add('active');
   try { await preloadQueueImages([q]); } catch (_) {}
   // Still the question we opened? (They may have gone back to chat meanwhile.)
-  if (!_ainsteinQuiz || _ainsteinQuiz.q !== q) return;
+  if (!_ainsteinQuiz || _ainsteinQuiz.q !== q || feedKey !== _scienceFeedKey() || !_scienceFeedPlan([q]).questions.length) return;
   body.innerHTML = buildOpenBody(q, AINSTEIN_QUIZ_SEL, {
     scoreElId: 'ainsteinQuizScore', scorePrefix: 'Score', mode: 'quickpractice-open',
     onAllMarked: _ainsteinQuizMarked,
