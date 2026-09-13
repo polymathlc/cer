@@ -2,7 +2,7 @@
 // selected from this fixed cast; caller-provided IDs never become SVG markup.
 export const SCIENCE_COACH_IDS = Object.freeze([
   'comparison', 'specific', 'evidence', 'keywords',
-  'concept', 'reasoning', 'careful', 'complete'
+  'concept', 'reasoning', 'careful', 'complete', 'context'
 ]);
 const INK = '#29314d';
 const CREAM = '#fff7df';
@@ -14,7 +14,8 @@ const CAST = Object.freeze({
   concept:{fur:'#a780c9',shade:'#7958a5',coat:'#ad84db',dark:'#815eb8',shirt:'#eaa6d1',light:'#f0e2ff',accent:'#f8d770',animal:'owl'},
   reasoning:{fur:'#dc8550',shade:'#a8503b',coat:'#f5a165',dark:'#be6540',shirt:'#6b87b8',light:'#ffead5',accent:'#7fd5d0',animal:'red-panda'},
   careful:{fur:'#9dcd72',shade:'#6d9b54',coat:'#a6ce68',dark:'#558a64',shirt:'#459f98',light:'#edfad1',accent:'#ffd46b',animal:'tortoise'},
-  complete:{fur:'#b98057',shade:'#865437',coat:'#ee8db6',dark:'#c76496',shirt:'#f6cb69',light:'#ffe0ed',accent:'#84d9cf',animal:'beaver'}
+  complete:{fur:'#b98057',shade:'#865437',coat:'#ee8db6',dark:'#c76496',shirt:'#f6cb69',light:'#ffe0ed',accent:'#84d9cf',animal:'beaver'},
+  context:{fur:'#d9ae70',shade:'#986a47',coat:'#49b8b8',dark:'#25858d',shirt:'#edbd64',light:'#e0f4ed',accent:'#f0bb59',animal:'meerkat'}
 });
 const path = (d,fill,extra='') => `<path d="${d}" fill="${fill}" ${extra}/>`;
 const line = (d,color=INK,width=2.8) => path(d,'none',`stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"`);
@@ -123,9 +124,41 @@ function beaver(c,motion) {
     ${outlined('M73 99c8 5 20 5 28-1-2 17-25 21-28 1Z','#683f3c',1.8)}${outlined('M78 101h9v12h-7Zm10 0h9l-2 12h-7Z','#fffef5',1.5)}${line('M60 89l-13-3m13 8-14 3m68-8 12-3m-12 8 14 3',c.shade,1.7)}
     ${ellipse(57,83,5,3,'#e9a69c')}${ellipse(119,83,5,3,'#e9a69c')}${leftPaw(c)}${heldProp('complete',c,motion)}`;
 }
-const ANIMAL_ART = Object.freeze({comparison:chameleon,specific:fox,evidence:elephant,keywords:parrot,concept:owl,reasoning:redPanda,careful:tortoise,complete:beaver});
+function meerkat(c,motion) {
+  return `${outlined('M69 147c-18 9-44 13-45-8-1-9 1-25 8-32-4 17-4 33 5 38 7 3 18-2 24-7Z',c.fur,2.5)}
+    ${path('M24 126c1-8 4-15 8-19-2 8-3 17-2 23Z',c.shade)}
+    ${outlined('M77 93c-10 12-15 31-14 49 1 15 8 22 24 22 17 0 25-7 24-23-1-17-6-35-15-47Z',c.fur)}
+    ${ellipse(86,135,15,26,CREAM)}
+    ${ellipse(71,162,13,6,c.shade,rim(2.3))}${ellipse(103,162,13,6,c.shade,rim(2.3))}${line('M66 162v3m6-3v3m27-3v3m6-3v3',CREAM,1.5)}
+    ${outlined('M72 108l10 8 5 20 7-20 10-8c7 12 10 27 8 43l-19 7-6-22-4 22-21-6c0-17 2-31 10-44Z',c.coat,2.4)}
+    ${outlined('M67 126h14v19H67Z',c.shirt,1.8)}${path('M68 127h12v6H68Z',c.accent)}${circle(74,134,1.5,c.shade)}
+    ${line('M99 111l-12 29',c.shirt,5)}${line('M99 111l-12 29',c.shade,1.3)}
+    ${circle(59,43,12,c.fur,rim(2.5))}${circle(117,43,12,c.fur,rim(2.5))}${circle(59,43,6,c.shade)}${circle(117,43,6,c.shade)}
+    ${outlined('M52 62c0-23 15-37 36-37 22 0 37 14 36 37l-4 19c-3 15-16 26-31 29-15-3-28-14-32-29Z',c.fur)}
+    ${path('M76 29l7-10 5 8 8-8 3 11Z',c.fur)}
+    ${path('M66 43c10-9 31-9 43 0l-5 6c-10-7-23-8-33 0Z','#efcb91')}
+    ${outlined('M58 63c1-12 15-14 22-3 4 8 1 17-8 20-10 0-16-7-14-17Zm39-3c7-11 21-9 22 3 2 10-4 17-14 17-9-3-12-12-8-20Z','#6c5647',1.9)}
+    ${eyes([[69,65],[108,65]],motion,.84)}
+    ${path('M69 80c7-5 13-7 20-7 8 0 15 3 21 8l-13 19c-5 5-11 5-16 0Z',CREAM)}
+    ${outlined('M81 84c4-3 12-3 16 0-1 7-6 11-8 11s-7-4-8-11Z',INK,1.5)}
+    ${line('M89 95v5m0 0c-4 4-8 3-11 0m11 0c4 4 8 3 11 0',INK,1.9)}
+    ${ellipse(61,83,5,3,'#e4a594')}${ellipse(116,83,5,3,'#e4a594')}
+    ${outlined('M75 107l12 6 14-6-4 11-10 4-12-6Z',c.shirt,2)}${outlined('M91 117l9 11-9 2-6-10Z',c.accent,1.8)}
+    ${outlined('M66 117c-10 1-21 11-17 18 4 7 14 4 19-2l5-8Z',c.fur,2.3)}${line('M52 131l3 3m2-7 3 3',c.shade,1.6)}
+    ${heldProp('context',c,motion)}`;
+}
+const ANIMAL_ART = Object.freeze({comparison:chameleon,specific:fox,evidence:elephant,keywords:parrot,concept:owl,reasoning:redPanda,careful:tortoise,complete:beaver,context:meerkat});
 
 function prop(id, c) {
+  if (id === 'context') return `<g transform="rotate(7 134 117)">
+    ${outlined('M108 96l17-5 17 5 17-5v46l-17 5-17-5-17 5Z',CREAM,2.5)}
+    ${path('M125 91l17 5v46l-17-5Z','#d5ece1')}${line('M125 94v40m17-35v40','#9bbcad',1.5)}
+    ${outlined('M116 121l8-12 8 12-3 9h-10Z',c.accent,1.7)}${path('M119 123h10v6h-10Z','#e7a849')}
+    ${outlined('M144 103h11v8h-11Z',c.coat,1.5)}${line('M147 107h5',CREAM,1.5)}
+    ${line('M148 114v7h-11m4-4-4 4 4 4',c.dark,2.3)}
+    ${outlined('M111 99h10v7h-10Z','#efac8d',1.4)}${line('M114 102.5h4',CREAM,1.4)}
+    ${line('M117 109v7',c.shade,1.6)}${circle(117,117,2,c.shade)}
+    ${circle(150,131,4,c.coat,rim(1.4))}${line('M148 131h4m-2-2v4',CREAM,1.4)}</g>`;
   if (id === 'comparison') return `<g transform="rotate(9 133 111)">
     ${outlined('M130 93h6v46h-6Z','#ffe9ac',2.1)}${outlined('M115 134h37v7h-37Z','#ffe9ac',2.1)}
     ${line('M110 105h46',INK,3)}${circle(133,103,4,c.accent,`stroke="${INK}" stroke-width="2"`)}

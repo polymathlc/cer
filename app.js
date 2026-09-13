@@ -3814,7 +3814,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.378.1';
+const APP_VERSION = 'v1.379.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -30853,16 +30853,17 @@ async function annotAiCheck(containerSel, pid, btn) {
   try {
     const d = await _annotExportBase64(pid);
     if (!d) throw new Error('could not read the annotated diagram (the image may block copying)');
-    const media = [{ mimeType: 'image/jpeg', data: d }];
+    const leading = [{ mimeType: 'image/jpeg', data: d, role: 'STUDENT RESPONSE — the working area or diagram with this student\'s annotations.' }];
     // The marked-up answer screenshot goes in as a SECOND picture. Comparing
     // two diagrams is a far more reliable way to mark a drawing than comparing
     // a drawing against a sentence describing one.
     let hasAnsImg = false;
     if (padAnsImg) {
       const am = await _annotImgToMedia(padAnsImg);
-      if (am) { media.push(am); hasAnsImg = true; }
+      if (am) { leading.push({ ...am, role: 'CORRECT ANSWER KEY — the model annotations for comparison, not question source evidence.' }); hasAnsImg = true; }
     }
-    const ctx = _questionContext(q);
+    const input = await _gradingQuestionInput(q, leading);
+    const ctx = input.text;
     const guide = (q.markingGuide || '').trim();
     const model = _deriveModelAnswer(q);
     const multi = allPids.length > 1;
@@ -30877,20 +30878,21 @@ async function annotAiCheck(containerSel, pid, btn) {
       ? `ANSWER KEY for this ${isWorkingPad ? 'working area' : 'diagram'} — mark the student's work against it: "${padKey.slice(0, 700)}". `
       : (model ? `Expected correct answer: "${model.replace(/\s+/g, ' ').slice(0, 700)}". ` : '');
     const twoPics = hasAnsImg
-      ? `TWO pictures are attached. The FIRST is the student's work. The SECOND is the CORRECT answer — the same ${isWorkingPad ? 'area' : 'diagram'} with the correct annotations already on it. Compare the first against the second and mark what the student drew and labelled. `
+      ? `The FIRST picture is the student's work. The SECOND is the CORRECT answer — the same ${isWorkingPad ? 'area' : 'diagram'} with the correct annotations already on it. Compare the first against the second and mark what the student drew and labelled. Other pictures, if present, are the question's original source diagrams. `
       : '';
     const prompt =
       intro +
       twoPics +
-      (multi ? `This question has ${allPids.length} annotated areas and you are marking ONLY the ${hasAnsImg ? 'FIRST attached' : 'attached'} one${padName ? ` (called "${padName}")` : ''} — award marks only for what THIS one asks for. ` : '') +
+      (multi ? `This question has ${allPids.length} annotated areas and you are marking ONLY the FIRST attached one${padName ? ` (called "${padName}")` : ''} — award marks only for what THIS one asks for. ` : '') +
       `${_markingPreamble(guide, q && q.topic)}\n` +
       `Question context: "${ctx}". ` +
+      input.note +
       expected +
       `Work out how many marks the student earned out of the total available for this ${isWorkingPad ? 'working area' : 'diagram'}. ` +
       SCIENCE_COACH_INSTRUCTIONS + '\n' +
       `Return ONLY JSON: {"score":<number>,"total":<number>,"verdict":"correct|partial|incorrect","feedback":"<1-2 sentences to the student: what they got right and what was wrong or missing>","coachIssues":[],"modelAnswer":"<what a fully correct ${isWorkingPad ? 'working area' : 'annotated diagram'} should show>","explanation":"<2-4 sentences addressed to \\"you\\" that refer to what the student actually annotated and explain the marks>"}. ` +
       `If there are no visible annotations, return score 0 and say they haven't annotated yet.`;
-    const raw = await askGeminiVision(prompt, media, { maxOutputTokens: 1200, json: true });
+    const raw = await askGeminiVision(prompt, input.media, { maxOutputTokens: 1200, json: true });
     const parsed = _parseAIJson(raw) || {};
     let total = Number(parsed.total);
     if (!(total > 0)) total = 1;
@@ -31985,6 +31987,98 @@ function _questionContext(q) {
   return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 800);
 }
 
+// The grader needs the actual question, including the evidence in its tables
+// and pictures. Only student-facing source blocks belong here: answer keys,
+// authored explanations and working-area model answers stay in the existing
+// separately labelled marking fields, never masquerading as question clues.
+function _gradingQuestionSource(q) {
+  const lines = [String(q?.title || '').trim()].filter(Boolean), images = [];
+  const seen = new Map(), blocks = (q && q.blocks) || [], partMap = qPartMap(blocks);
+  const plain = value => stripHtml(String(value || '')).replace(/\s+/g, ' ').trim();
+  const picture = (url, caption = '') => {
+    const clean = String(url || '').trim().replace(/&amp;/g, '&');
+    const words = plain(caption);
+    if (!clean) { if (words) lines.push(words); return; }
+    const number = seen.get(clean) || images.length + 1;
+    const label = 'Question figure ' + number + (words ? ': ' + words : '');
+    if (!seen.has(clean)) { seen.set(clean, number); images.push({ url: clean, label }); }
+    // Reused pictures still carry each part's own visible caption and label.
+    lines.push('[' + label + ']');
+  };
+  const inlinePictures = html => {
+    const re = /<img\b[^>]*>/gi;
+    let match;
+    while ((match = re.exec(String(html || '')))) {
+      const url = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(match[0]);
+      const alt = /\balt\s*=\s*["']([^"']*)["']/i.exec(match[0]);
+      if (url) picture(url[1], alt ? alt[1] : '');
+    }
+  };
+  blocks.forEach(block => {
+    if (!block) return;
+    const part = qBlockOpensKey(block, partMap);
+    const prefix = part ? qPartLabel(part) + ' ' : '';
+    if (block.type === 'text' || block.type === 'part') {
+      const html = block.type === 'text' ? qPartBodyHtml(block) : block.content;
+      const words = plain(html);
+      const label = prefix || (block.type === 'part' && block.label ? plain(block.label) + ' ' : '');
+      if (words || label) lines.push(label + words);
+      inlinePictures(html);
+    } else if (block.type === 'image') {
+      picture(block.url, prefix + [block.dgnLabel, block.caption || block.alt].filter(Boolean).join(' — '));
+    } else if (block.type === 'table') {
+      const rows = _cqTableRows(block);
+      if (rows.length) lines.push(prefix + 'TABLE:\n' + rows.map(row => row.join(' | ')).join('\n'));
+      Object.values(block.data || {}).forEach(row => Object.values(row || {}).forEach(inlinePictures));
+    } else if (block.type === 'mcq') {
+      (block.options || []).forEach((option, index) => {
+        lines.push(prefix + 'Option ' + (index + 1) + ': ' + plain(option.text));
+        inlinePictures(option.text);
+      });
+    } else if (block.type === 'fillblank') {
+      lines.push(prefix + _fbSegments(block.text || '').map(part => part.type === 'blank' ? '____' : part.text).join(''));
+    }
+  });
+  return { text: lines.join('\n'), images };
+}
+const GRADING_SOURCE_IMAGE_MAX = 12;
+const GRADING_SOURCE_IMAGE_TIMEOUT_MS = 15000;
+async function _gradingQuestionInput(q, leading = []) {
+  const source = _gradingQuestionSource(q), media = [], roles = [], missing = [];
+  leading.forEach(image => {
+    if (!image || !image.data) return;
+    media.push({ mimeType: image.mimeType, data: image.data });
+    roles.push('Image ' + media.length + ': ' + image.role);
+  });
+  const loaded = await Promise.all(source.images.slice(0, GRADING_SOURCE_IMAGE_MAX).map(async image => {
+    let timer;
+    try {
+      const dataUrl = await Promise.race([
+        _urlToDataUrl(transformImageUrl(image.url)),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('source picture timed out')), GRADING_SOURCE_IMAGE_TIMEOUT_MS); })
+      ]);
+      const parsed = _parseImageDataUrl(dataUrl);
+      const mimeType = parsed && (parsed.mime === 'image/jpg' ? 'image/jpeg' : parsed.mime);
+      // Keep source colours intact. Formats that the grading routes cannot
+      // read (such as SVG/TIFF) must not make every answer fail to grade.
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType) || !parsed.bytes.length || !/;base64,/i.test(dataUrl)) throw new Error('unsupported or unreadable source picture');
+      return { image, media: { mimeType, data: dataUrl.slice(dataUrl.indexOf(',') + 1) } };
+    } catch (e) {
+      console.warn('Question picture unavailable for marking', e);
+      return { image, media: null };
+    } finally { clearTimeout(timer); }
+  }));
+  loaded.forEach(entry => {
+    if (!entry.media) { missing.push(entry.image.label); return; }
+    media.push(entry.media);
+    roles.push('Image ' + media.length + ': QUESTION SOURCE — ' + entry.image.label + '. This is a question clue, not the student\'s answer or the answer key.');
+  });
+  source.images.slice(GRADING_SOURCE_IMAGE_MAX).forEach(image => missing.push(image.label));
+  const note = (roles.length ? 'IMAGE ROLES (in attachment order):\n' + roles.join('\n') + '\n' : '') +
+    (missing.length ? 'UNAVAILABLE QUESTION PICTURES: ' + missing.join('; ') + '. These pictures were not loaded. Do not claim to have seen them or invent their colours, labels or details. Base visual-context feedback only on visible attachments or explicit question wording and the supplied key.\n' : '');
+  return { text: source.text, media, note };
+}
+
 // =====================================================================
 // 🔎 WHY NOT THIS ONE — the ⓘ on a MARKED question's wrong options
 // =====================================================================
@@ -32508,7 +32602,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
   const items = _openItemsStore[containerSel] || [];
   const scoreEl = scoreElId ? document.getElementById(scoreElId) : null;
   const btn = btnId ? document.getElementById(btnId) : null;
-  const ctx = q ? _questionContext(q) : '';
+  const ctx = _gradingQuestionSource(q).text;
   const photo = _openPhoto[containerSel];
 
   // Reset visuals
@@ -32572,6 +32666,8 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     if (btn) { btn.disabled = true; btn.innerHTML = 'Checking…'; }
     if (scoreEl) scoreEl.textContent = 'Marking with AI…';
     try {
+      const input = await _gradingQuestionInput(q, photo && photo.data
+        ? [{ ...photo, role: 'STUDENT RESPONSE — the uploaded photo of this student\'s written answers.' }] : []);
       const list = aiEntries.map(({ e, i }) => {
         if (e.kind === 'open') {
           return `${i}. [${e.label}] type=open expected="${e.model}" student="${e.student || (photo ? '(see attached photo)' : '(blank)')}"`;
@@ -32584,6 +32680,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         `You are a science teacher marking a student's answers. ` +
         `${_markingPreamble(q && q.markingGuide, q && q.topic)}\n` +
         `Question context: "${ctx}".\n` +
+        input.note +
         (photo
           ? `The student wrote their answers on paper and attached ONE photo of the whole page. Read the photo carefully and find the student's answer for EACH item below, matching by its label and order. For a multiple-choice item, work out which option number the student chose (a circled option, a written number or letter, or a tick) from the photo when they have not selected one on screen. Ignore handwriting quality.\n`
           : ``) +
@@ -32595,8 +32692,8 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         SCIENCE_COACH_INSTRUCTIONS + '\n' +
         `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","coachIssues":[],"chosen":"B"}],"modelAnswer":"...","explanation":"..."}.\n${list}`;
       let raw;
-      if (photo && photo.data) {
-        raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 1100 + aiEntries.length * 360, json: true });
+      if (input.media.length) {
+        raw = await askGeminiVision(prompt, input.media, { maxOutputTokens: 1100 + aiEntries.length * 360, json: true });
       } else {
         raw = await askGemini(prompt, { maxOutputTokens: 1100 + aiEntries.length * 360, temperature: 0.2, json: true });
       }
@@ -32886,7 +32983,6 @@ async function _genAndShowExplanation(containerSel, q, results, scoreElId) {
 // Mark ONE part of the question (an open answer box or one MCQ) with the AI.
 async function markQuestionPart(containerSel, kind, pid, btn) {
   const q = _openQStore[containerSel];
-  const ctx = q ? _questionContext(q) : '';
   const photo = _openPhoto[containerSel];
 
   let areaEl = null, fbEl = null, mcq = null, correctOpt = null;
@@ -32942,6 +33038,8 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
 
   let parsed = null;
   try {
+    const input = await _gradingQuestionInput(q, photo && photo.data
+      ? [{ ...photo, role: 'STUDENT RESPONSE — the uploaded photo of this student\'s written answers.' }] : []);
     let item;
     if (kind === 'open') {
       item = `Part: [${label}] type=open expected="${model || '(none provided — work out the correct answer from the question context)'}" student="${student || '(see attached photo)'}"`;
@@ -32952,7 +33050,8 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     const prompt =
       `You are a science teacher marking ONE part of a student's answer to a question. ` +
       `${_markingPreamble(q && q.markingGuide, q && q.topic)}\n` +
-      `Question context: "${ctx}".\n` +
+      `Question context: "${input.text}".\n` +
+      input.note +
       (photo
         ? `The student wrote their answers on paper and attached ONE photo of the whole page. Find the student's answer for THIS part in the photo, matching by its label and order${kind === 'mcq' ? ' (a circled option, a written number or letter, or a tick)' : ''}. Ignore handwriting quality.\n`
         : ``) +
@@ -32964,8 +33063,8 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
       SCIENCE_COACH_INSTRUCTIONS + '\n' +
       `Return ONLY JSON: {"verdict":"correct","feedback":"...","coachIssues":[],"modelAnswer":"..."${kind === 'mcq' ? ',"chosen":"2"' : ''}}.\n${item}`;
     let raw;
-    if (photo && photo.data) {
-      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 900, json: true });
+    if (input.media.length) {
+      raw = await askGeminiVision(prompt, input.media, { maxOutputTokens: 900, json: true });
     } else {
       raw = await askGemini(prompt, { maxOutputTokens: 900, temperature: 0.2, json: true });
     }
