@@ -3800,7 +3800,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.381.1';
+const APP_VERSION = 'v1.382.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -50553,9 +50553,104 @@ function advRunsLeft() { return _creditsLeft(); }
 // The floor the next raid resumes on. Saved across raids/days so the dungeon is
 // a continuous climb — each raid advances it by up to ADV_FLOORS_PER_RAID.
 function advDungeonFloor() { return Math.max(1, Math.floor((rpgState && rpgState.dungeonFloor) || 1)); }
+// A run-local clock keeps cooldowns, poison and already-launched hits frozen together.
+function advNow() { return adv ? (adv.paused ? adv.pausedAt : Date.now()) - (adv.timeOffset || 0) : Date.now(); }
 function advAfter(ms, fn) {
-  const t = advToken;
-  setTimeout(() => { if (adv && advToken === t) fn(); }, ms);
+  const t = advToken, due = advNow() + ms;
+  const step = () => {
+    if (!adv || advToken !== t || advCancelStaleRun()) return;
+    if (adv.paused) { setTimeout(step, 100); return; }
+    const left = due - advNow();
+    if (left > 0) { setTimeout(step, Math.min(left, 100)); return; }
+    fn();
+  };
+  setTimeout(step, Math.min(ms, 100));
+}
+function advRunCurrent() {
+  return !!adv && adv.ownerUid === (currentUser && currentUser.uid || "") && adv.ownerKey === _scienceFeedKey() && adv.ownerLevel === _scienceFeedLevel() && adv.ownerState === rpgState;
+}
+function advCancelStaleRun() {
+  if (!adv || advRunCurrent()) return false;
+  advStopLoop(); adv = null; advToken++;
+  advUpdateTactics();
+  $("advFoes").innerHTML = ""; $("advSkillbar").innerHTML = "";
+  $("advStartBtn").style.display = ""; $("advQuitBtn").style.display = "none";
+  advOverlay("<div><h4>Choose a new adventure</h4><p>The learner changed. Start a fresh run for the current learner.</p></div>");
+  return true;
+}
+function advInitTactics() {
+  Object.assign(adv, { ownerUid: currentUser && currentUser.uid || "", ownerKey: _scienceFeedKey(), ownerLevel: _scienceFeedLevel(), ownerState: rpgState });
+  Object.assign(adv, { paused: false, pausedAt: 0, timeOffset: 0, manualSkills: false, guardUntil: 0, guardReadyAt: 0 });
+  advWireTactics();
+}
+function advTogglePause() {
+  if (!adv || adv.phase !== "fight") return;
+  if (adv.paused) { adv.timeOffset += Date.now() - adv.pausedAt; adv.paused = false; }
+  else { adv.pausedAt = Date.now(); adv.paused = true; }
+  const stage = $("advStage");
+  if (stage && stage.getAnimations) stage.getAnimations({ subtree: true }).forEach(a => { if (adv.paused) a.pause(); else a.play(); });
+  advUpdateTactics();
+}
+function advToggleSkills() {
+  if (!adv) return;
+  adv.manualSkills = !adv.manualSkills;
+  advUpdateTactics();
+}
+function advUseSkill(i) {
+  if (!adv || advCancelStaleRun() || adv.paused || adv.phase !== "fight") return false;
+  const s = adv.skills[i], now = advNow();
+  if (!s || now < s.readyAt || (advFrontFoe() < 0 && s.def.kind !== "heal" && s.def.kind !== "block")) return false;
+  s.readyAt = now + s.def.cd * 1000 * (1 - Math.min(0.6, (adv.stats.cdr || 0) + adv.mods.cdr));
+  advCast(s, i);
+  advUpdateTactics();
+  return true;
+}
+function advGuard() {
+  if (!adv || advCancelStaleRun() || adv.paused || adv.phase !== "fight" || advNow() < adv.guardReadyAt) return false;
+  adv.guardUntil = advNow() + 1400;
+  adv.guardReadyAt = advNow() + 8000;
+  advFloat($("advHero"), "🛡️ Guard ready", "heal");
+  advUpdateTactics();
+  return true;
+}
+function advGuardDamage(damage) {
+  if (!adv || advNow() >= (adv.guardUntil || 0)) return damage;
+  advFloat($("advHero"), "🛡️ Guarded!", "heal");
+  return Math.max(1, Math.round(damage * 0.4));
+}
+function advWireTactics() {
+  const bind = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
+  bind("advPauseBtn", advTogglePause); bind("advAutoBtn", advToggleSkills); bind("advGuardBtn", advGuard);
+  const bar = $("advSkillbar");
+  if (bar) bar.onclick = e => { const tile = e.target.closest("[data-adv-skill]"); if (tile && bar.contains(tile)) advUseSkill(Number(tile.dataset.advSkill)); };
+  advUpdateTactics();
+}
+function advUpdateTactics() {
+  const now = advNow(), active = !!adv, fighting = active && adv.phase === "fight";
+  const stage = $("advStage"), guard = $("advGuardBtn"), pause = $("advPauseBtn"), auto = $("advAutoBtn"), cue = $("advTacticalHint");
+  if (stage) {
+    stage.classList.toggle("adv-paused", !!(adv && adv.paused));
+    stage.classList.toggle("adv-guarding", !!(adv && now < adv.guardUntil));
+    stage.dataset.realm = adv && adv.arena ? "arena" : ["crystal", "ember", "forest"][((adv ? adv.floor : advDungeonFloor()) - 1) % 3];
+  }
+  if (pause) { pause.disabled = !fighting; pause.textContent = adv && adv.paused ? "▶ Resume" : "Ⅱ Pause"; pause.setAttribute("aria-pressed", String(!!(adv && adv.paused))); }
+  if (auto) { auto.disabled = !active; auto.textContent = adv && adv.manualSkills ? "✋ Manual skills" : "⚡ Auto skills"; auto.setAttribute("aria-pressed", String(!!(adv && adv.manualSkills))); }
+  const remaining = adv ? Math.max(0, adv.guardReadyAt - now) : 0;
+  if (guard) { guard.disabled = !fighting || adv.paused || remaining > 0; guard.textContent = adv && now < adv.guardUntil ? "🛡 Guarding" : remaining ? "🛡 Guard · " + Math.ceil(remaining / 1000) + "s" : "🛡 Guard"; }
+  if (cue) cue.textContent = adv && adv.paused ? "Paused — cooldowns and incoming hits are frozen." : "Guard blocks 60% for 1.4s · 8s cooldown. " + (adv && adv.manualSkills ? "Tap a ready skill to cast." : "Switch to manual to time your skills.");
+  if (!adv) return;
+  adv.skills.forEach((s, i) => { const tile = $("advSkill" + i); if (tile) tile.disabled = !fighting || adv.paused || now < s.readyAt; });
+  adv.foes.forEach((f, i) => {
+    const el = advFoeEl(i); if (!el) return;
+    const special = f.ghost && adv.arena && adv.arena.skill;
+    const due = special ? Math.min(f.nextAtk, special.readyAt) : f.nextAtk;
+    const casting = !!(special && special.readyAt <= f.nextAtk);
+    const winding = fighting && !f.dead && now >= (f.stunned || 0) && (f.ranged || f.reached || casting) && due - now <= 900;
+    el.classList.toggle("adv-winding", winding);
+    let label = el.querySelector(".adv-intent");
+    if (!label) { label = document.createElement("span"); label.className = "adv-intent"; el.appendChild(label); }
+    label.textContent = f.dead ? "" : winding ? (casting ? "✦ Skill " : f.ranged ? "➶ Shot " : "⚔ Strike ") + Math.max(0, (due - now) / 1000).toFixed(1) + "s" : now < (f.stunned || 0) ? "Stunned" : "";
+  });
 }
 // weapon → auto-attack style + element effects
 function rpgWeaponFx(itemId) {
@@ -50722,14 +50817,15 @@ function advEquippedSkills() {
 function advSkillbarHtml(skills) {
   if (!skills.length) return `<div class="adv-status">Equip a weapon (and a pet!) to unlock skills</div>`;
   return skills.map((s, i) =>
-    `<div class="adv-skill ready" id="advSkill${i}" title="${escapeHtml(advSkillDesc(s.def))}">
+    `<button type="button" class="adv-skill ready" data-adv-skill="${i}" id="advSkill${i}" title="${escapeHtml(advSkillDesc(s.def))}">
       <div class="adv-skill-tile"><span>${s.def.icon}</span><div class="adv-skill-cd" id="advSkillCd${i}"></div><span class="adv-skill-time" id="advSkillT${i}"></span></div>
       <span class="adv-skill-owner">${s.owner === "pet" ? "🐾" : s.owner === "class" ? (RPG_CLASSES[rpgState.clazz] ? RPG_CLASSES[rpgState.clazz].icon : "📜") : "⚔️"}</span>
       <span class="adv-skill-name">${escapeHtml(s.def.name)}</span>
-    </div>`).join("");
+    </button>`).join("");
 }
 function rpgRenderAdventure() {
   if (!rpgState || adv) return;
+  advWireTactics();
   advUpdateRunsChip();
   $("advHero").innerHTML = advHeroHtml();
   $("advFoes").innerHTML = "";
@@ -50744,7 +50840,7 @@ function rpgRenderAdventure() {
   const best = (rpgState.stats && rpgState.stats.bestFloor) || 0;
   const floor = advDungeonFloor();
   advOverlay(advRunsLeft() > 0 || rpgCanPreview()
-    ? `<div><h4>🏰 The Dungeon awaits — Floor ${floor}</h4><p>Your hero fights on their own — skills and pet abilities cast automatically. Each raid you descend up to <b>${ADV_FLOORS_PER_RAID} floors</b>, then make camp; your progress is saved and the next raid continues from where you stopped. Each raid spends <b>1 game credit</b> (${advRunsLeft()} left today).${best > 1 ? ` Your deepest: <b>Floor ${best}</b>.` : ""}</p></div>`
+    ? `<div><h4>🏰 The Dungeon awaits — Floor ${floor}</h4><p>Your hero attacks automatically. Time your guard against glowing enemy strikes, or switch to manual skills. Pause whenever you need to plan. Each raid you descend up to <b>${ADV_FLOORS_PER_RAID} floors</b>, then make camp; your progress is saved and the next raid continues from where you stopped. Each raid spends <b>1 game credit</b> (${advRunsLeft()} left today).${best > 1 ? ` Your deepest: <b>Floor ${best}</b>.` : ""}</p></div>`
     : `<div><h4>🎮 Out of game credits</h4><p>You've used all your game credits for today. Answer <b>5 questions</b> in any practice mode to earn another, or come back tomorrow to descend from <b>Floor ${floor}</b>.</p></div>`);
 }
 function advStart() {
@@ -50756,7 +50852,9 @@ function advStart() {
   const startFloor = advDungeonFloor(); // resume the climb from where the last raid stopped
   adv = { phase: "walk", wave: 0, floor: startFloor, startFloor, tiers: advWaveTiers(startFloor - 1), stats, heroHp: stats.maxHp, heroMax: stats.maxHp,
     foes: [], skills: advEquippedSkills(), shield: 0, heroNextAtk: 0, heroX: 0, heroInRange: false, worldX: 0, scroll: 0, lurch: 0, gold: 0, xp: 0, kills: 0, loopId: 0, rafOn: false, mods: { atkPct: 0, goldPct: 0, cdr: 0, dr: 0, leech: 0, el: {} } };
-  adv.loopId = setInterval(advTick, ADV_TICK_MS);
+  advInitTactics();
+  const run = adv;
+  adv.loopId = setInterval(() => { if (adv !== run) { clearInterval(run.loopId); return; } advTick(); }, ADV_TICK_MS);
   adv.rafOn = true;
   advRafLast = 0;
   if (typeof requestAnimationFrame === "function") requestAnimationFrame(advRaf);
@@ -50848,11 +50946,13 @@ function advStartArena(row) {
   const g = rpgGhostStats(row);
   const gKind = rpgWeaponFx(g.weapon).kind;
   adv = { phase: "fight", wave: 0, floor: 1, tiers: [1, 1, 1, 1, 1], stats, heroHp: stats.maxHp, heroMax: stats.maxHp,
-    foes: [], skills: advEquippedSkills(), shield: 0, heroNextAtk: Date.now() + 1600, heroX: 0, heroInRange: false,
+    foes: [], skills: advEquippedSkills(), shield: 0, heroNextAtk: advNow() + 1600, heroX: 0, heroInRange: false,
     worldX: 0, scroll: 0, lurch: 0, gold: 0, xp: 0, kills: 0, loopId: 0, rafOn: false,
     mods: { atkPct: 0, goldPct: 0, cdr: 0, dr: 0, leech: 0, el: {} },
-    arena: { row, stats: g, skill: g.weapon && RPG_SKILLS[g.weapon] ? { def: RPG_SKILLS[g.weapon], readyAt: Date.now() + 4000 } : null } };
-  adv.loopId = setInterval(advTick, ADV_TICK_MS);
+    arena: { row, stats: g, skill: g.weapon && RPG_SKILLS[g.weapon] ? { def: RPG_SKILLS[g.weapon], readyAt: advNow() + 4000 } : null } };
+  advInitTactics();
+  const run = adv;
+  adv.loopId = setInterval(() => { if (adv !== run) { clearInterval(run.loopId); return; } advTick(); }, ADV_TICK_MS);
   adv.rafOn = true;
   advRafLast = 0;
   if (typeof requestAnimationFrame === "function") requestAnimationFrame(advRaf);
@@ -50865,7 +50965,7 @@ function advStartArena(row) {
   adv.foes = [{ e: { id: "ghost", name: row.name || "Ghost", emoji: "", atk: g.atk, el: rpgWeaponElement(g.weapon), gold: 0, xp: 0 },
     boss: false, minion: false, hp: g.maxHp, max: g.maxHp, scale: 1, ranged: gKind === "magic" || gKind === "ranged",
     wx: Math.round(w * 0.66), reached: false, slot: 0, speed: 0.07, armor: Math.floor(g.def * 0.4),
-    atkMs: 1500, nextAtk: Date.now() + 2200, dots: [], chillUntil: 0, stunned: 0, dead: false, ghost: true }];
+    atkMs: 1500, nextAtk: advNow() + 2200, dots: [], chillUntil: 0, stunned: 0, dead: false, ghost: true }];
   const chip = $("advWaveChip");
   chip.style.display = "";
   chip.textContent = "👻 Arena duel";
@@ -50876,10 +50976,12 @@ function advStartArena(row) {
   $("advStatus").textContent = `Duel vs ${row.name}'s build — Lv ${row.level || 1} ${row.clazz ? RPG_CLASSES[row.clazz].name : "hero"}!`;
 }
 function advArenaEnd(won) {
+  if (advCancelStaleRun()) return;
   if (!adv || !adv.arena) return;
   const name = adv.arena.row.name || "the ghost";
   advStopLoop();
   adv = null;
+  advUpdateTactics();
   advToken++;
   if (won) {
     // Duels pay NOTHING — no 🪙 points, no ✨ XP, no raid-boss damage. A duel
@@ -50902,9 +51004,10 @@ function advArenaEnd(won) {
 const ADV_BEAT_EPOCH = Date.now();
 let advRafLast = 0;
 function advRaf(ts) {
-  if (!adv || !adv.rafOn) return;
+  if (!adv || !adv.rafOn || advCancelStaleRun()) return;
   const dt = Math.max(0, Math.min(60, advRafLast ? ts - advRafLast : 16));
   advRafLast = ts;
+  if (adv.paused) { if (typeof requestAnimationFrame === "function") requestAnimationFrame(advRaf); return; }
   // ease scroll speed toward its target; consume kill-lurch boosts
   const target = adv.phase === "fight" || adv.phase === "between" ? adv.scrollTarget || 0 : 0;
   adv.scroll += (target - adv.scroll) * Math.min(1, dt / 220);
@@ -50927,7 +51030,7 @@ function advStageW() {
 }
 function advHeroScreenX() {
   const hero = $("advHero");
-  return ((hero && hero.offsetLeft != null) ? hero.offsetLeft : 30) + 100;
+  return ((hero && hero.offsetLeft != null) ? hero.offsetLeft : 30) + (advStageW() < 420 ? 72 : 100);
 }
 function advFoeScreenX(i) { const f = adv.foes[i]; return f ? f.wx - adv.worldX : 400; }
 function advWalk() {
@@ -50938,7 +51041,7 @@ function advWalk() {
 }
 function advSpawnWave() {
   const comp = advWaveComp(adv.wave);
-  const now = Date.now();
+  const now = advNow();
   const w = advStageW();
   const aheadBase = adv.worldX + w + 80;
   adv.foes = comp.map((c, i) => {
@@ -50970,7 +51073,7 @@ function advSpawnWave() {
   const chip = $("advWaveChip");
   chip.style.display = "";
   chip.textContent = `Floor ${adv.floor} · Wave ${adv.wave + 1}/${ADV_WAVES}${adv.foes.some(f => f.boss) ? " — BOSS" : ""}`;
-  const beatDelay = -((Date.now() - ADV_BEAT_EPOCH) % 500);
+  const beatDelay = -((advNow() - ADV_BEAT_EPOCH) % 500);
   $("advFoes").innerHTML = adv.foes.map((f, i) => {
     const size = f.boss ? 84 : f.minion ? 38 : 60;
     return `<div class="adv-actor adv-foe" id="advFoeEl${i}" style="transform:translateX(${Math.round(f.wx)}px);transition:none;">
@@ -50989,8 +51092,9 @@ function advFoeEl(i) { return $("advFoeEl" + i); }
 function advFrontFoe() { return adv.foes.findIndex(f => !f.dead); }
 function advLivingFoes() { return adv.foes.map((f, i) => i).filter(i => !adv.foes[i].dead); }
 function advTick() {
-  if (!adv) return;
-  const now = Date.now();
+  if (!adv || advCancelStaleRun() || adv.paused) return;
+  advUpdateTactics();
+  const now = advNow();
   adv.skills.forEach((s, i) => {
     const remain = Math.max(0, s.readyAt - now);
     const cd = $("advSkillCd" + i), t = $("advSkillT" + i), tile = $("advSkill" + i);
@@ -51050,12 +51154,7 @@ function advTick() {
     adv.heroNextAtk = now + ADV_HERO_ATK_MS;
     advAutoAttack();
   }
-  adv.skills.forEach((s, i) => {
-    if (now >= s.readyAt && (advFrontFoe() >= 0 || s.def.kind === "heal" || s.def.kind === "block")) {
-      s.readyAt = now + s.def.cd * 1000 * (1 - Math.min(0.6, (adv.stats.cdr || 0) + adv.mods.cdr));
-      advCast(s, i);
-    }
-  });
+  if (!adv.manualSkills) adv.skills.forEach((s, i) => advUseSkill(i));
   const stageHp = $("advStage");
   if (stageHp && stageHp.classList) stageHp.classList.toggle("low-hp", adv.heroHp / adv.heroMax < 0.25);
   adv.foes.forEach((f, i) => {
@@ -51074,7 +51173,7 @@ function advTick() {
     }
     if (f.ghost && adv.arena && adv.arena.skill && now >= adv.arena.skill.readyAt) {
       adv.arena.skill.readyAt = now + adv.arena.skill.def.cd * 1000;
-      const sd = Math.max(1, Math.round(adv.arena.stats.atk * (adv.arena.skill.def.mult || 1.5) - adv.stats.def * 0.5));
+      const sd = advGuardDamage(Math.max(1, Math.round(adv.arena.stats.atk * (adv.arena.skill.def.mult || 1.5) - adv.stats.def * 0.5)));
       advFloat($("advHero"), `${adv.arena.skill.def.icon} -${sd}`, "hurt");
       adv.heroHp = Math.max(0, adv.heroHp - sd);
       advSetBar("advHeroHp", adv.heroHp / adv.heroMax);
@@ -51139,7 +51238,7 @@ function advHurtFoe(i, dmg, opts = {}) {
   if (bTier) dmg *= 1 + 0.01 * bTier;
   if (opts.element && RPG_COUNTERS[opts.element] === f.e.el) { dmg *= 1.25; superHit = true; }
   if (adv.mods.exePower && f.hp / f.max < 0.35) dmg *= adv.mods.exePower;
-  if (adv.mods.chillBonus && Date.now() < (f.chillUntil || 0)) dmg *= 1 + adv.mods.chillBonus;
+  if (adv.mods.chillBonus && advNow() < (f.chillUntil || 0)) dmg *= 1 + adv.mods.chillBonus;
   if (adv.mods.scalingFloor) dmg *= 1 + 0.03 * (adv.floor - 1);
   let final = Math.max(1, Math.round(dmg - (opts.pierce ? 0 : f.armor)));
   if (opts.exec && f.hp / f.max < 0.35) final *= 2;
@@ -51176,7 +51275,7 @@ function advFoeDie(i) {
     for (let s = 0; s < 2; s++) {
       const e2 = rpgEnemiesOfTier(1)[0];
       adv.foes.push({ e: e2, boss: false, minion: true, hp: 18, max: 18, scale: 1, ranged: false, wx: f.wx + 40 + s * 50,
-        reached: false, slot: 5, speed: 0.09, armor: 0, atkMs: 2800, nextAtk: Date.now() + 1500, dots: [], chillUntil: 0, stunned: 0, dead: false, affixes: [], baseLeft: 540 });
+        reached: false, slot: 5, speed: 0.09, armor: 0, atkMs: 2800, nextAtk: advNow() + 1500, dots: [], chillUntil: 0, stunned: 0, dead: false, affixes: [], baseLeft: 540 });
       const host = $("advFoes");
       if (host && host.insertAdjacentHTML) host.insertAdjacentHTML("beforeend",
         `<div class="adv-actor adv-foe" id="advFoeEl${adv.foes.length - 1}" style="transform:translateX(${Math.round(f.wx + 40 + s * 50)}px);"><div class="adv-tag">${escapeHtml(e2.name)}</div><span class="adv-foe-emoji" style="font-size:34px;">${e2.emoji}</span>${advBarHtml("advFoeHp" + (adv.foes.length - 1))}</div>`);
@@ -51253,6 +51352,7 @@ function advFloorClear() {
 // Raid hit its floor cap — bank the rewards, save progress, and invite the
 // hero back for the next available raid.
 function advRaidComplete() {
+  if (advCancelStaleRun()) return;
   if (!adv) return;
   advStopLoop();
   const fromFloor = adv.startFloor || adv.floor, lastCleared = adv.floor, nextFloor = adv.floor + 1;
@@ -51264,6 +51364,7 @@ function advRaidComplete() {
   rpgSave();
   rpgPublishLeaderboard();
   adv = null;
+  advUpdateTactics();
   advToken++;
   $("advQuitBtn").style.display = "none";
   $("advStartBtn").style.display = "";
@@ -51298,7 +51399,7 @@ function advFoeBolt(i) {
     { transform: `translate(${Math.round(dx * 0.5)}px, -20px)`, offset: 0.5 },
     { transform: `translate(${Math.round(dx)}px, 6px) scale(1.1)` }
   ], { duration: 420, easing: "linear" });
-  setTimeout(() => p.remove(), 460);
+  advAfter(460, () => p.remove());
 }
 function advFoeAttack(i) {
   const f = adv.foes[i];
@@ -51329,6 +51430,7 @@ function advFoeAttack(i) {
     let dmg = Math.max(1, Math.round(f.e.atk * 0.6 * (f.scale || 1) * (f.boss ? 1.2 : f.minion ? 0.55 : 1) * (0.85 + Math.random() * 0.3) - adv.stats.def * 0.5 - adv.mods.dr));
     if (f.enraged && f.hp / f.max < 0.3) dmg = Math.round(dmg * 1.5);
     if (adv.mods.vuln) dmg = Math.round(dmg * (1 + adv.mods.vuln));
+    dmg = advGuardDamage(dmg);
     if (f.vampiric) { f.hp = Math.min(f.max, f.hp + Math.round(dmg * 0.5)); advSetBar("advFoeHp" + i, f.hp / f.max); }
     if (hero.classList) { hero.classList.add("hit"); advAfter(380, () => hero.classList && hero.classList.remove("hit")); }
     advFloat(hero, "-" + dmg, "hurt");
@@ -51357,14 +51459,14 @@ function advAddDot(i, type, dmg, ticks, color) {
   if (!f || f.dead) return;
   const ex = f.dots.find(d => d.type === type);
   if (ex) { ex.left = Math.max(ex.left, ticks); ex.dmg = Math.max(ex.dmg, dmg); }
-  else f.dots.push({ type, dmg, left: ticks, next: Date.now() + 900, color });
+  else f.dots.push({ type, dmg, left: ticks, next: advNow() + 900, color });
 }
 function advCastRiders(d, i, dealt) {
   const atk = adv.stats.atk;
   if (d.poison) advAddDot(i, "poison", Math.round(atk * 0.35), 4, "#0f7a5a");
   if (d.burn) advAddDot(i, "burn", Math.round(atk * 0.45), 3, "#ff6b35");
-  if (d.chill) { const f = adv.foes[i]; if (f && !f.dead && !f.juggernaut) { f.chillUntil = Date.now() + 4000; advParticles(advFoeEl(i), "❄️", 3); } }
-  if (d.stun) { const f = adv.foes[i]; if (f && !f.dead && !f.juggernaut) { f.stunned = Date.now() + 2200; advFloat(advFoeEl(i), "💫", "dmg"); } }
+  if (d.chill) { const f = adv.foes[i]; if (f && !f.dead && !f.juggernaut) { f.chillUntil = advNow() + 4000; advParticles(advFoeEl(i), "❄️", 3); } }
+  if (d.stun) { const f = adv.foes[i]; if (f && !f.dead && !f.juggernaut) { f.stunned = advNow() + 2200; advFloat(advFoeEl(i), "💫", "dmg"); } }
   if (d.lifesteal && dealt) advHeal(dealt * d.lifesteal, "🩸");
   if (d.healPct) advHeal(adv.heroMax * d.healPct);
 }
@@ -51441,7 +51543,7 @@ function advCast(s, idx) {
       break;
     case "slow": {
       advShower("❄️", 9);
-      const until = Date.now() + 4500;
+      const until = advNow() + 4500;
       advLivingFoes().forEach(i => { adv.foes[i].chillUntil = until; advParticles(advFoeEl(i), "❄️", 3); });
       break;
     }
@@ -51502,8 +51604,24 @@ function advChainFx(indices) {
     setTimeout(() => c.remove(), 420);
   } catch (_) {}
 }
-function advStopLoop() { if (adv) { adv.rafOn = false; if (adv.loopId) clearInterval(adv.loopId); adv.loopId = 0; } advRafLast = 0; const wEl = $("advFoes"); if (wEl && wEl.style) wEl.style.transform = ""; }
+function advStopLoop() {
+  if (adv && adv.paused) advTogglePause();
+  if (adv) { adv.rafOn = false; if (adv.loopId) clearInterval(adv.loopId); adv.loopId = 0; }
+  advRafLast = 0;
+  const wEl = $("advFoes"); if (wEl && wEl.style) wEl.style.transform = "";
+  // Run-bound timers are cancelled on exit, so retire their visuals here too.
+  const fx = $("advFx"); if (fx) fx.innerHTML = "";
+  const stage = $("advStage");
+  if (stage) {
+    stage.classList.remove("walking", "shake", "low-hp", "adv-paused", "adv-guarding");
+    stage.querySelectorAll(".rpg-float,.adv-burst,.adv-pop,.adv-slash").forEach(el => el.remove());
+    stage.querySelectorAll(".hit,.adv-winding").forEach(el => el.classList.remove("hit", "adv-winding"));
+  }
+  const skills = $("advSkillbar");
+  if (skills) skills.querySelectorAll(".casting").forEach(el => el.classList.remove("casting"));
+}
 function advEnd() {
+  if (advCancelStaleRun()) return;
   if (!adv) return;
   advStopLoop();
   const floor = adv.floor, kills = adv.kills;
@@ -51516,6 +51634,7 @@ function advEnd() {
   rpgSave();
   rpgPublishLeaderboard();
   adv = null;
+  advUpdateTactics();
   advToken++;
   $("advQuitBtn").style.display = "none";
   $("advStartBtn").style.display = "";
@@ -51533,11 +51652,13 @@ function advEnd() {
   </div>`);
 }
 function advAbandon(manual = false) {
+  if (advCancelStaleRun()) return;
   if (!adv) return;
   if (manual && !confirm("Retreat from the dungeon? You keep the rewards earned so far.")) return;
   const gold = adv.gold, xp = adv.xp, floor = adv.floor;
   advStopLoop();
   adv = null;
+  advUpdateTactics();
   advToken++;
   if (rpgState) rpgState.stats.bestFloor = Math.max((rpgState.stats.bestFloor || 0), floor || 1);
   if (gold || xp) { rpgApplyRewards(gold, xp); rpgSave(); rpgPublishLeaderboard(); }
@@ -51555,7 +51676,7 @@ function advFloat(host, text, cls) {
   if (el.style && /^💥/.test(String(text))) el.style.fontSize = "1.5rem";
   el.textContent = String(text).replace(/-(\d{4,})/, (m, num) => "-" + advAbbrev(Number(num)));
   host.appendChild(el);
-  setTimeout(() => el.remove(), 1200);
+  advAfter(1200, () => el.remove());
 }
 function advBurst(host, color) {
   if (!host || !host.appendChild) return;
@@ -51563,7 +51684,7 @@ function advBurst(host, color) {
   b.className = "adv-burst";
   if (b.style) b.style.borderColor = color;
   host.appendChild(b);
-  setTimeout(() => b.remove(), 700);
+  advAfter(700, () => b.remove());
 }
 function advParticles(host, emoji, n) {
   if (!host || !host.appendChild) return;
@@ -51579,7 +51700,7 @@ function advParticles(host, emoji, n) {
       s.style.animationDelay = (Math.random() * 0.14).toFixed(2) + "s";
     }
     host.appendChild(s);
-    setTimeout(() => s.remove(), 1150);
+    advAfter(1150, () => s.remove());
   }
 }
 function advSlashFx(host, color) {
@@ -51588,7 +51709,7 @@ function advSlashFx(host, color) {
   a.className = "adv-slash";
   a.innerHTML = `<svg viewBox="0 0 80 80"><path d="M12 66 A42 42 0 0 1 66 12" fill="none" stroke="${color}" stroke-width="7" stroke-linecap="round" opacity="0.9"/></svg>`;
   host.appendChild(a);
-  setTimeout(() => a.remove(), 520);
+  advAfter(520, () => a.remove());
 }
 function advProjDrop(stage, fromFrac) {
   // foes stand ~70px above the stage floor; shots launch at fromFrac of the
@@ -51614,7 +51735,7 @@ function advProjectile(fx) {
     { transform: `translate(${Math.round(dist * 0.5)}px, ${Math.round(drop * 0.5) - 24}px) scale(1)`, offset: 0.5 },
     { transform: `translate(${dist}px, ${drop}px) scale(1.15)`, offset: 1 }
   ], { duration: 460, easing: "linear" });
-  setTimeout(() => p.remove(), 500);
+  advAfter(500, () => p.remove());
 }
 function advArrow(i, fx, miss) {
   const layer = $("advFx"), stage = $("advStage");
@@ -51640,7 +51761,7 @@ function advArrow(i, fx, miss) {
     { transform: `translate(${Math.round(dx * 0.5)}px, ${Math.round(drop * 0.5 - arc)}px) rotate(0deg)`, offset: 0.5 },
     { transform: `translate(${Math.round(dx)}px, ${drop + 8}px) rotate(28deg)`, offset: 1 }
   ], { duration: 400, easing: "linear" });
-  setTimeout(() => p.remove(), 440);
+  advAfter(440, () => p.remove());
 }
 
 // ---- Static event wiring (elements live in the game pages / sidebar) ----
@@ -52570,6 +52691,7 @@ window.addEventListener('message', function (ev) {
     if (!_scienceFeedGameMessageCurrent(d, ev.source)) return;
     _sdRecordFlag(d, ev.source);
   } else if (d.type === 'SD_SCORE') {
+    if (!_scienceFeedGameMessageCurrent(d, ev.source)) return;
     _sdRecordScore(d);
   } else if (d.type === 'RAIDERS_REQUEST_ASSETS') {
     (async () => {
@@ -52582,6 +52704,7 @@ window.addEventListener('message', function (ev) {
       try { ev.source && ev.source.postMessage(payload, '*'); } catch (e) {}
     })();
   } else if (d.type === 'SD_PLAY_START') {
+    if (!_scienceFeedGameMessageCurrent(d, ev.source)) return;
     _spendCredit();
     _gamePtsReset();   // the header readout counts THIS run
     try { ev.source && ev.source.postMessage({ type: 'SD_PLAYS_LEFT', playsLeft: _playsLeftPayload() }, '*'); } catch (e) {}

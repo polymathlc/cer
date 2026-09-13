@@ -321,7 +321,7 @@
     <p class="sub" id="menuHello">Open world. Infinite waves. Every 15 seconds, science decides your luck.</p>
     <div class="mission-card">
       <p><b>Your mission:</b> clear each wave, collect a better weapon and choose an upgrade. A science check pauses the action every 15 seconds of play.</p>
-      <p>Move with <b>W A S D</b>, aim with the <b>mouse</b>, click to shoot. <b>Esc</b> pauses safely. Take your time with questions — enemies wait.</p>
+      <p>Move with <b>W A S D</b>, aim with the <b>mouse</b>, click to shoot. <b>Shift</b> quicksteps out of danger. <b>Esc</b> pauses safely. Take your time with questions — enemies wait.</p>
     </div>
     <p class="ready-status" id="strikeReadiness" role="status">Loading questions for your school level…</p>
     <button class="btn good" id="playBtn" style="font-size:1.15rem;padding:15px 42px;">▶ Start Run</button>
@@ -349,7 +349,7 @@
     <details class="settings" id="menuSettings"><summary>Aim &amp; comfort settings</summary><div class="strike-settings"></div></details>
     <details class="howto"><summary>Full guide: classes, loot, controls and rewards</summary>
       <b>🪙 Points:</b> every science question you answer in a run pays <b>points into your portal wallet</b> — 8 for a correct answer, 2 for a wrong one. They arrive the next time you open the portal, and buy Realm of Embers booster packs, Spire packs and everything in the shop.<br>
-      <b>Controls:</b> WASD move · mouse look (left/right AND up/down) · click shoot · <b>right-click aim/scope</b> · R reload · E pick up loot · <b>Q grenade</b> · <b>F class ability</b> · <b>I skill tree</b> · Esc pause<br>
+      <b>Controls:</b> WASD move · <b>Shift quickstep</b> · mouse look (left/right AND up/down) · click shoot · <b>right-click aim/scope</b> · R reload · E pick up loot · <b>Q grenade</b> · <b>F class ability</b> · <b>I skill tree</b> · Esc pause<br><b>Dodge the warning:</b> amber sights lock before ranged enemies fire. Step aside or quickstep — it does not make you invincible.<br>
       <b>Classes:</b> 🪖 Soldier (assault rifle, Bullet Time) · 🎯 Sniper (huge range, slow heavy shots, sees crit boxes, traps) · 🔧 Engineer (turrets, healing drones). Each class has a <b>100-node skill tree</b> with prerequisites — cores are banked and saved the instant you earn them, so you can stop any time and lose nothing.<br>
       <b>Bullets are real:</b> every shot streaks out of your muzzle as a glowing tracer and flies until it hits a monster, a tree trunk, or runs out of range. Enemies standing beside trees CAN be shot — only the trunk itself blocks bullets.<br>
       <b>Crosshair</b> blooms while you move and fire — stand still (or scope in) for accurate shots.<br>
@@ -395,6 +395,7 @@
     <div class="hud-chip" id="hudCores">⚛ 0</div>
     <div class="hud-chip" id="hudGrenade">💣 ×2 [Q]</div>
     <div class="hud-chip" id="hudAbility">✨ [F]</div>
+    <div class="hud-chip" id="hudDodge">↗ Quickstep ready [Shift]</div>
     <div class="hud-chip" id="hudSfx">🔊 [M]</div>
   </div>
   <div class="hud" id="skillBtn">🧠 Skills [I]</div>
@@ -469,7 +470,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v1.8.0</div>
+<div id="versionBadge">Science Strike v1.9.0</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -1538,6 +1539,7 @@ function startRun() {
     qOpenedAt: 0, activeQ: null,
     paused: true, over: false,
     playSeconds: 0, questionAnswered: false,
+    dodgeT: 0, dodgeCd: 0, dodgeVector: null,
     startedAt: performance.now(),
   };
   G.grenades.count = Math.max(1, G.grenades.count);
@@ -1722,6 +1724,27 @@ function tryMove(e, nx, ny, rad) {
   if (!solid(nx + rad, e.y) && !solid(nx - rad, e.y)) e.x = nx;
   if (!solid(e.x, ny + rad) && !solid(e.x, ny - rad)) e.y = ny;
 }
+function strikePlayerBlocked(x, y, rad) {
+  for (let cy = Math.floor(y - rad); cy <= Math.floor(y + rad); cy++) {
+    for (let cx = Math.floor(x - rad); cx <= Math.floor(x + rad); cx++) {
+      if (obstacleAt(cx, cy) === null) continue;
+      const nearX = Math.max(cx, Math.min(x, cx + 1));
+      const nearY = Math.max(cy, Math.min(y, cy + 1));
+      if ((x - nearX) ** 2 + (y - nearY) ** 2 < rad * rad) return true;
+    }
+  }
+  return false;
+}
+function strikeMovePlayer(player, dx, dy, rad) {
+  if (![dx, dy, rad].every(Number.isFinite) || rad <= 0) return;
+  // Sample the full path, including quicksteps with stacked movement upgrades.
+  const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 0.16));
+  const sx = dx / steps, sy = dy / steps;
+  for (let i = 0; i < steps; i++) {
+    if (!strikePlayerBlocked(player.x + sx, player.y, rad)) player.x += sx;
+    if (!strikePlayerBlocked(player.x, player.y + sy, rad)) player.y += sy;
+  }
+}
 function lineOfSight(x0, y0, x1, y1) {
   const d = Math.hypot(x1 - x0, y1 - y0);
   const steps = Math.ceil(d * 4);
@@ -1739,6 +1762,7 @@ let lockWanted = false, lockTicket = 0;
 let mouseDown = false, adsHeld = false;
 let swayX = 0, swayY = 0, swayVX = 0, swayVY = 0;
 function resetCombatInput() {
+  if (G) { G.dodgeT = 0; G.dodgeVector = null; }
   for (const code of Object.keys(keys)) delete keys[code];
   mouseDown = false; adsHeld = false;
   swayX = swayY = swayVX = swayVY = 0;
@@ -1864,6 +1888,7 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyE') tryPickup();
   if (e.code === 'KeyQ') throwGrenade();
   if (e.code === 'KeyF') useAbility();
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { e.preventDefault(); strikeQuickstep(); }
 });
 // Keep keyboard focus inside the current dialog, including rich diagram controls.
 document.addEventListener('keydown', e => {
@@ -2772,6 +2797,40 @@ function endRun() {
   $('againBtn').focus();
 }
 
+// Normalize diagonal movement; a quickstep uses a fixed direction for its duration.
+function strikeMovementVector(dir, fwd, str) {
+  const length = Math.hypot(fwd, str);
+  if (!length) return { x: 0, y: 0 };
+  return { x: (Math.cos(dir) * fwd - Math.sin(dir) * str) / length,
+    y: (Math.sin(dir) * fwd + Math.cos(dir) * str) / length };
+}
+function strikeQuickstep() {
+  if (!combatReady() || G.dodgeCd > 0) return false;
+  const fwd = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+  const str = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  G.dodgeVector = strikeMovementVector(G.player.dir, fwd || (!str ? 1 : 0), str);
+  G.dodgeT = 0.18; G.dodgeCd = 2.4;
+  paintStrikeQuickstep();
+  return true;
+}
+function paintStrikeQuickstep() {
+  const label = G.dodgeCd > 0 ? '↗ Quickstep ' + G.dodgeCd.toFixed(1) + 's [Shift]' : '↗ Quickstep ready [Shift]';
+  const element = $('hudDodge');
+  if (element.textContent !== label) element.textContent = label;
+}
+// Lock the aim when charging begins, so the warning predicts the actual shot.
+function strikeBeginCharge(enemy, target) {
+  enemy.charge = 0.6;
+  enemy.chargeAim = Math.atan2(target.y - enemy.y, target.x - enemy.x);
+}
+function strikeReleaseCharge(enemy) {
+  if (!Number.isFinite(enemy.chargeAim)) return;
+  const aim = enemy.chargeAim;
+  G.projectiles.push({ x: enemy.x, y: enemy.y, dx: Math.cos(aim) * 5.5, dy: Math.sin(aim) * 5.5,
+    dmg: enemy.dmg * (enemy.shred > 0 ? 0.8 : 1), t: 4, src: enemy });
+  enemy.chargeAim = null;
+}
+
 /* ════════════════ SIM ════════════════ */
 function tick(now) {
   raf = requestAnimationFrame(tick);
@@ -2810,18 +2869,24 @@ function tick(now) {
   G.ads += (wantAds - G.ads) * Math.min(1, dt * 9);
   if (G.ads < 0.01 && !wantAds) G.ads = 0;
 
-  // movement
-  const fwd = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
-  const str = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
-  const moving = fwd !== 0 || str !== 0;
+  // Movement stays collision-checked during a quickstep, with no invulnerability.
+  G.dodgeCd = Math.max(0, (G.dodgeCd || 0) - dt);
+  const fwd = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+  const str = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  const dodgeTime = Math.min(dt, Math.max(0, G.dodgeT || 0));
+  const movement = strikeMovementVector(P.dir, fwd, str);
+  const moving = fwd !== 0 || str !== 0 || dodgeTime > 0;
   if (moving) {
-    const slowWalk = G.timeSlow > 0 ? 0.8 : 1;   // slight slow-mo drag on the player
-    const adsSlow = skillLv('cap_wraith') ? 0 : 0.4;   // WRAITH: full speed while scoped
-    const sp = 3.1 * P.speedMult * (1 + (G.mods.speed || 0) * 0.08) * (1 - adsSlow * G.ads) * slowWalk * dt;
-    const nx = P.x + (Math.cos(P.dir) * fwd - Math.sin(P.dir) * str) * sp;
-    const ny = P.y + (Math.sin(P.dir) * fwd + Math.cos(P.dir) * str) * sp;
-    tryMove(P, nx, ny, 0.22);
+    const slowWalk = G.timeSlow > 0 ? 0.8 : 1;
+    const adsSlow = skillLv('cap_wraith') ? 0 : 0.4;
+    const speed = 3.1 * P.speedMult * (1 + (G.mods.speed || 0) * 0.08) * (1 - adsSlow * G.ads) * slowWalk;
+    const dodge = G.dodgeVector || movement;
+    const dx = movement.x * (dt - dodgeTime) + dodge.x * dodgeTime * 2.7;
+    const dy = movement.y * (dt - dodgeTime) + dodge.y * dodgeTime * 2.7;
+    strikeMovePlayer(P, dx * speed, dy * speed, 0.22);
   }
+  G.dodgeT = Math.max(0, (G.dodgeT || 0) - dt);
+  paintStrikeQuickstep();
   // crosshair bloom: movement raises the floor, firing spikes it, stillness settles it
   const moveBloom = moving ? 3.2 : 0;
   G.bloomNow = Math.max(moveBloom, G.bloomNow - dt * 9 * (1 + skillLv('steadyaim') * 0.06));
@@ -2872,7 +2937,7 @@ function tick(now) {
     if (e.slag > 0) e.slag -= wdt;    // slag damage-amp wears off
     if (e.shred > 0) e.shred -= wdt;  // corrosive armor-shred wears off
     if (e.spawnT > 0) e.spawnT -= wdt;   // spawn-in scale-up
-    if (e.stun > 0) { e.stun -= wdt; e.windup = 0; e.charge = 0; continue; }   // stun cancels telegraphs
+    if (e.stun > 0) { e.stun -= wdt; e.windup = 0; e.charge = 0; e.chargeAim = null; continue; }   // stun cancels telegraphs
     const slowMult = e.slow > 0 ? 0.45 : 1;
     if (e.slow > 0) e.slow -= wdt;
     const d = Math.hypot(P.x - e.x, P.y - e.y);
@@ -2887,15 +2952,11 @@ function tick(now) {
       }
       continue;   // rooted while winding up
     }
-    // ranged charge telegraph: the enemy glows, THEN the projectile leaves
+    // A charging enemy roots and fires along its announced direction.
     if (e.charge > 0) {
       e.charge -= wdt;
-      if (e.charge <= 0) {
-        const ang2 = Math.atan2(P.y - e.y, P.x - e.x);
-        if (lineOfSight(e.x, e.y, P.x, P.y)) {
-          G.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(ang2) * 5.5, dy: Math.sin(ang2) * 5.5, dmg: e.dmg * (e.shred > 0 ? 0.8 : 1), t: 4, src: e });
-        }
-      }
+      if (e.charge <= 0) strikeReleaseCharge(e);
+      continue;
     }
     if (e.state === 'chase') {
       const ang = Math.atan2(P.y - e.y, P.x - e.x);
@@ -2907,7 +2968,7 @@ function tick(now) {
         e.fireCd -= wdt;
         if (e.fireCd <= 0 && sees && d < 10 && !(e.charge > 0)) {
           e.fireCd = e.boss ? 0.9 : 1.6;
-          e.charge = 0.4;   // glow first, fire when the charge expires
+          strikeBeginCharge(e, P);
         }
       } else {
         e.atkCd -= wdt;
@@ -3046,6 +3107,7 @@ function render() {
   zbuf.fill(VIEW_DIST);   // no walls — depth-sorted sprites occlude each other
   drawSky(P);
   drawGround(P);
+  drawStrikeWarnings();
   // gather nearby world obstacles once — reused by sprites AND the minimap
   const obstacles = [];
   const pix = Math.floor(P.x), piy = Math.floor(P.y);
@@ -3114,7 +3176,7 @@ function drawSky(P) {
     ctx.restore();
   }
   // drifting blocky clouds
-  const t = performance.now() / 1000;
+  const t = strikeSettings.reducedMotion ? 0 : G.playSeconds;
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   for (let i = 0; i < 7; i++) {
     const rel = wrapAngle(i * 0.9 + t * 0.008 - P.dir);
@@ -3193,6 +3255,26 @@ function drawGround(P) {
 }
 
 /* ---------- minimap: player-up rotating radar, enemies as red blips ---------- */
+// Amber ground marks and radar rays show the fixed firing lane before a shot.
+function drawStrikeWarnings() {
+  ctx.save();
+  for (const e of G.enemies) {
+    if (e.hp <= 0 || !(e.charge > 0) || !Number.isFinite(e.chargeAim)) continue;
+    for (let d = 0.5; d <= 10; d += 0.4) {
+      const wx = e.x + Math.cos(e.chargeAim) * d, wy = e.y + Math.sin(e.chargeAim) * d;
+      if (solid(wx, wy)) break;
+      const point = projectPoint(wx, wy);
+      if (!point || point.perp > VIEW_DIST || point.x < -20 || point.x > REND_W + 20) continue;
+      const size = REND_H * ZOOM / point.perp;
+      const y = HOR + size * 0.46;
+      if (y > REND_H) continue;
+      ctx.fillStyle = 'rgba(255,191,71,' + (0.3 + 0.5 * (1 - e.charge / 0.6)) + ')';
+      ctx.beginPath(); ctx.ellipse(point.x, y, Math.min(14, size * 0.085), Math.max(1, size * 0.017), 0, 0, 7); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
 function drawMinimap(obstacles) {
   const S = 150, x0 = 14, y0 = 14, c = S / 2, cxm = x0 + c, cym = y0 + c, scale = 2.9;
   const P = G.player;
@@ -3237,6 +3319,11 @@ function drawMinimap(obstacles) {
   for (const e of G.enemies) {
     if (e.hp <= 0) continue;
     const p = put(e.x, e.y, true);
+    if (e.charge > 0 && Number.isFinite(e.chargeAim)) {
+      const end = put(e.x + Math.cos(e.chargeAim) * 7, e.y + Math.sin(e.chargeAim) * 7);
+      ctx.strokeStyle = '#ffd071'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(end.x, end.y); ctx.stroke();
+    }
     if (e.boss) {
       const pr = 5.5 + Math.sin(performance.now() / 170) * 1.8;
       ctx.fillStyle = '#ff2d3c';
@@ -3320,6 +3407,7 @@ function drawTracers() {
 }
 
 function drawSprite(s) {
+  const visualTime = strikeSettings.reducedMotion ? 0 : (G.playSeconds || 0) * 1000;
   const P = G.player;
   const dx = s.sx - P.x, dy = s.sy - P.y;
   const dist = Math.sqrt(s.dist);
@@ -3334,13 +3422,19 @@ function drawSprite(s) {
   const size = REND_H * ZOOM / perp;
 
   if (s.kind === 'tree' || s.kind === 'rock') {
-    const spr = obstacleSprites[s.kind];
+    const variants = obstacleSprites[s.kind];
+    const spr = variants[Math.floor(cellHash(Math.floor(s.sx) * 7 + 137, Math.floor(s.sy) * 11 - 91) * variants.length) % variants.length];
     const hf = s.kind === 'tree' ? 2.5 : 1.0;
     const eh = size * hf;
     const ew = eh * (SPR_W / SPR_H) * (s.kind === 'tree' ? 1.05 : 1.35);
     const top = HOR + size * 0.48 - eh;
     drawClipped(screenX, ew, perp, () => {
+      ctx.save();
+      ctx.fillStyle = 'rgba(9,30,22,0.22)';
+      ctx.beginPath(); ctx.ellipse(screenX + ew * 0.1, HOR + size * 0.47, ew * 0.39, size * 0.075, -0.12, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1 - Math.max(0, (dist - 7) / 23) * 0.5;
       ctx.drawImage(spr, screenX - ew / 2, top, ew, eh);
+      ctx.restore();
     });
     return;
   }
@@ -3349,7 +3443,7 @@ function drawSprite(s) {
     const f = s.f;
     const rx = f.r * size, ry = f.r * size * 0.28;
     const gy = HOR + size * 0.48;
-    ctx.globalAlpha = Math.min(0.55, f.t * 0.4) * (0.75 + 0.25 * Math.sin(performance.now() / 120));
+    ctx.globalAlpha = Math.min(0.55, f.t * 0.4) * (0.75 + 0.25 * Math.sin(visualTime / 120));
     ctx.fillStyle = f.type === 'fire' ? '#ff7a3c' : '#7fd4ff';
     ctx.beginPath(); ctx.ellipse(screenX, gy, rx, ry, 0, 0, 7); ctx.fill();
     ctx.globalAlpha = 1;
@@ -3529,20 +3623,20 @@ function drawSprite(s) {
   let scaleM = 1;
   if ((e.spawnT || 0) > 0) scaleM = 0.2 + 0.8 * (1 - e.spawnT / 0.35);
   if (e.hitFlash > 0) scaleM *= 1 + 0.12 * (e.hitFlash / 0.12);   // eases back as hitFlash decays
-  if ((e.charge || 0) > 0) scaleM *= 1 + 0.05 * Math.sin(performance.now() / 40);   // charge shiver
+  if ((e.charge || 0) > 0) scaleM *= 1 + 0.05 * Math.sin(visualTime / 40);   // charge shiver
   const eh = size * 0.95 * e.size * scaleM;
   const ew = eh * (SPR_W / SPR_H);
   // walk cycle: slight vertical bob + a waddle lean while chasing
   let bobO = 0, lean = 0;
   if (e.state === 'chase') {
-    const wt = performance.now() / 1000 * (5 + e.speed * 2.5) + (e.animPhase || 0) * 3.14;
+    const wt = visualTime / 1000 * (5 + e.speed * 2.5) + (e.animPhase || 0) * 3.14;
     bobO = Math.sin(wt) * size * 0.012;
     lean = Math.sin(wt * 0.5) * 0.05;
   }
   const top = HOR + size * 0.48 - eh + bobO;
-  const frame = (((performance.now() / 260) | 0) + (e.animPhase || 0)) % 2;
+  const frame = (((visualTime / 260) | 0) + (e.animPhase || 0)) % 2;
   // melee windup telegraph: blink white + a red glow so the strike reads fair
-  const windBlink = (e.windup || 0) > 0 && ((performance.now() / 90) | 0) % 2 === 0;
+  const windBlink = (e.windup || 0) > 0 && ((visualTime / 90) | 0) % 2 === 0;
   const img = (e.hitFlash > 0 || windBlink) ? spr.white[frame] : spr.frames[frame];
   drawClipped(screenX, ew, perp, () => {
     // contact shadow grounds the monster on the grass
@@ -3550,13 +3644,13 @@ function drawSprite(s) {
     ctx.beginPath(); ctx.ellipse(screenX, HOR + size * 0.47, ew * 0.38, Math.max(2, ew * 0.09), 0, 0, 7); ctx.fill();
     // elite/boss presence: a soft aura ring under the sprite
     if (e.elite || e.boss) {
-      const pulse = 0.22 + 0.13 * Math.sin(performance.now() / 220);
+      const pulse = 0.22 + 0.13 * Math.sin(visualTime / 220);
       ctx.fillStyle = e.boss ? 'rgba(192,36,60,' + pulse + ')' : 'rgba(62,162,255,' + pulse + ')';
       ctx.beginPath(); ctx.ellipse(screenX, HOR + size * 0.47, ew * 0.62, Math.max(3, ew * 0.16), 0, 0, 7); ctx.fill();
     }
     // telegraph glows: red for melee windup, bright white for a ranged charge
     if ((e.windup || 0) > 0 || (e.charge || 0) > 0) {
-      const ga = 0.3 + 0.25 * Math.sin(performance.now() / 70);
+      const ga = 0.3 + 0.25 * Math.sin(visualTime / 70);
       ctx.fillStyle = (e.windup || 0) > 0 ? 'rgba(255,45,60,' + ga + ')' : 'rgba(235,245,255,' + ga + ')';
       ctx.beginPath(); ctx.ellipse(screenX, top + eh * 0.5, ew * 0.72, eh * 0.55, 0, 0, 7); ctx.fill();
     }
@@ -3870,38 +3964,32 @@ buildEnemySprites();
 /* ---------- blocky Minecraft-style world props (12×16 pixel grid) ---------- */
 const obstacleSprites = {};
 function buildObstacleSprites() {
-  // finer 24×32 pixel grid = HD props
-  obstacleSprites.tree = sprCanvas(g => {
-    const px = 4;
-    const put2 = (x, y, w2, h2, c) => { g.fillStyle = c; g.fillRect(x * px, y * px, w2 * px, h2 * px); };
-    put2(10, 20, 4, 11, '#6b4a2b');    // trunk with bark shading
-    put2(10, 20, 1, 11, '#7d5732');
-    put2(13, 20, 1, 11, '#553a20');
-    put2(8, 30, 2, 2, '#5e4126');      // root flare
-    put2(14, 30, 2, 2, '#5e4126');
-    put2(3, 10, 18, 6, '#2e6f30');     // layered canopy, dark → light
-    put2(4, 6, 16, 6, '#357f36');
-    put2(6, 3, 12, 5, '#3e8f3e');
-    put2(8, 1, 8, 4, '#4aa348');
-    put2(9, 2, 3, 1, '#5cb85a');       // sunlit clusters
-    put2(14, 4, 3, 2, '#54ad52');
-    put2(5, 8, 3, 2, '#46984a');
-    put2(15, 9, 4, 2, '#46984a');
-    put2(4, 14, 4, 2, '#255c28');      // shaded underside
-    put2(16, 13, 4, 2, '#255c28');
-  });
-  obstacleSprites.rock = sprCanvas(g => {
-    const px = 4;
-    const put2 = (x, y, w2, h2, c) => { g.fillStyle = c; g.fillRect(x * px, y * px, w2 * px, h2 * px); };
-    put2(4, 22, 16, 8, '#8b9097');
-    put2(6, 18, 12, 4, '#9aa0a8');
-    put2(8, 16, 6, 2, '#a8aeb6');
-    put2(4, 30, 16, 2, '#767b82');
-    put2(13, 22, 6, 5, '#7d838b');     // shadowed facet
-    put2(5, 24, 4, 3, '#98a0a8');
-    put2(9, 17, 2, 1, '#c0c6cd');      // quartz glint
-    put2(5, 28, 5, 2, '#6f8f5f');      // moss
-  });
+  const palettes = [['#244d3f','#347654','#589363','#8ab875'], ['#203e42','#2f6155','#468673','#81b79b'], ['#395339','#627d45','#89a657','#c1c780']];
+  obstacleSprites.tree = palettes.map((colors, variant) => sprCanvas(g => {
+    g.fillStyle = '#45382c'; g.fillRect(42, 61, 12, 65);
+    g.fillStyle = variant === 2 ? '#c9c5ae' : '#876c49'; g.fillRect(43, 62, 5, 62);
+    for (let y = 71; y < 120; y += 11) { g.fillStyle = '#493d30'; g.fillRect(43 + y % 3, y, 7, 2); }
+    g.fillStyle = '#534936'; g.fillRect(35, 121, 28, 7);
+    // Layered polygon crowns are cached once; distinct silhouettes share collision bounds.
+    const crowns = variant === 1 ? [[48,3,18,34],[48,22,29,36],[48,43,39,39]] : [[34,27,28,24],[62,32,30,25],[48,12,29,26],[48,51,40,25]];
+    crowns.forEach(([x,y,w,h], i) => {
+      g.fillStyle = colors[i % 2]; g.beginPath();
+      g.moveTo(x-w,y+h*.5); g.lineTo(x-w*.67,y); g.lineTo(x,y-h*.3); g.lineTo(x+w*.72,y+h*.08); g.lineTo(x+w,y+h*.65); g.lineTo(x+w*.55,y+h); g.lineTo(x-w*.5,y+h); g.closePath(); g.fill();
+      g.fillStyle = colors[2]; g.beginPath(); g.moveTo(x-w*.67,y); g.lineTo(x,y-h*.3); g.lineTo(x+w*.7,y+h*.1); g.lineTo(x-w*.2,y+h*.4); g.closePath(); g.fill();
+    });
+    for (let k=0;k<25;k++) {
+      const x=21+cellHash(k,variant)*52, y=14+cellHash(variant+8,k)*52;
+      g.fillStyle=colors[k%3===0?3:2]; g.fillRect(x,y,3+k%4,2);
+    }
+  }));
+  obstacleSprites.rock = palettes.map((_,variant) => sprCanvas(g => {
+    const top=variant===1?70:83;
+    g.fillStyle='#475a61'; g.beginPath(); g.moveTo(12,124); g.lineTo(17,99); g.lineTo(35,top); g.lineTo(69,top+7); g.lineTo(85,110); g.lineTo(81,127); g.closePath(); g.fill();
+    g.fillStyle='#9ba9a6'; g.beginPath(); g.moveTo(17,99); g.lineTo(35,top); g.lineTo(69,top+7); g.lineTo(57,108); g.closePath(); g.fill();
+    g.fillStyle='#71868b'; g.beginPath(); g.moveTo(17,99); g.lineTo(57,108); g.lineTo(50,126); g.lineTo(12,124); g.closePath(); g.fill();
+    g.strokeStyle='#d0d7bb'; g.lineWidth=1.5; g.beginPath(); g.moveTo(35,top+2); g.lineTo(53,top+6); g.stroke();
+    g.fillStyle='#6b8452'; for(let k=0;k<8;k++)g.fillRect(16+cellHash(k,variant)*54,118+cellHash(variant,k+2)*8,5,2);
+  }));
 }
 buildObstacleSprites();
 
@@ -4335,6 +4423,7 @@ function updateHud() {
     $('wpnName').style.color = w.rarity.color;
     $('wpnAmmo').innerHTML = (G.reloading > 0 ? '…' : G.ammo) + ' <span class="rl">/ ∞</span>';
   }
+  paintStrikeQuickstep();
   $('hudCores').textContent = '⚛ ' + meta.cores;
   const gt = GRENADE_TYPES[G.grenades.type];
   $('hudGrenade').textContent = gt.icon + ' ' + gt.name + ' ×' + G.grenades.count + ' [Q]';

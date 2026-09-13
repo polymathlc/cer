@@ -27,7 +27,8 @@
           return q && q.id && Array.isArray(q.options) && q.options.length >= 2 && Number.isInteger(q.answer)
             && q.answer >= 0 && q.answer < q.options.length && (String(q.q || '').trim() || String(q.html || '').trim());
         }) : [];
-        if (options.onPool) options.onPool(pool);
+        // Metadata consumers must share the exact response accepted by these guards.
+        if (options.onPool) options.onPool(pool, event);
         settle(true);
       }
       root.addEventListener('message', receive);

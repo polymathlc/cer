@@ -520,6 +520,15 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
 }
 .tree-tip b { color: #FFD54F; }
 
+
+/* Expedition combat refresh: code-native art, readable hazards and touch controls. */
+.battle-status{position:absolute;left:14px;top:54px;z-index:4;max-width:300px;padding:9px 12px;border:1px solid #aec9b74d;border-radius:10px;background:#101c22dc;color:#e9f3e8;font-size:.75rem;line-height:1.5;pointer-events:none;box-shadow:0 6px 24px #0003}
+.battle-status strong{display:block;color:#ffe0a0;letter-spacing:.04em}.evade-btn{position:absolute;right:18px;bottom:26px;z-index:4;min-width:108px;min-height:48px;border:2px solid #ffe0a0;border-radius:14px;background:#173137ed;color:#fff2ca;font-family:inherit;font-size:.8rem;font-weight:800;cursor:pointer;box-shadow:0 4px 0 #06171c}
+.evade-btn:disabled{opacity:.6;cursor:default}.evade-btn small{display:block;font-size:.65rem;margin-top:3px}.motion-control{display:flex;gap:8px;justify-content:center;align-items:center;font-size:.85rem;margin:16px 0}
+.hud{background:linear-gradient(110deg,#fffdf6,#edf3f2)}.skill-slot.ready{box-shadow:0 0 0 2px #ffe0a044,0 5px 18px #0005}.class-card{background:linear-gradient(145deg,#fff,#f5eee1);transition:transform .15s,box-shadow .15s}.class-card.sel{box-shadow:0 0 0 2px var(--accent-base),0 8px 24px #653a1626}.class-card:focus-visible,.evade-btn:focus-visible{outline:3px solid #38a7cc;outline-offset:3px}
+.hint-bar{max-width:calc(100% - 30px);white-space:normal;text-align:center;font-size:.67rem}.battle-map{position:absolute;right:14px;top:54px;width:142px;height:166px;z-index:4;background:#071019eb;border:1px solid #c4a77088;border-radius:10px;padding:5px;pointer-events:none}.battle-map canvas{width:130px;height:130px;display:block}.battle-map span{display:block;text-align:center;font-size:10px;letter-spacing:.08em;color:#ffe0a0;margin-top:4px}.descend-btn{position:absolute;left:50%;top:98px;transform:translateX(-50%);z-index:4;border:2px solid #ffe0a0;background:#213b38;color:#fff2cf;border-radius:12px;padding:12px 20px;font-weight:800;cursor:pointer}.descend-btn[hidden]{display:none}
+body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:none!important;transition:none!important}
+@media(max-width:700px){.hint-bar{display:none}.battle-status{top:52px;max-width:calc(100% - 145px);font-size:.67rem;padding:6px 8px}.battle-map{width:116px;height:140px}.battle-map canvas{width:104px;height:104px}.qtimer{font-size:.7rem;white-space:nowrap}.pbars,body.touch .pbars{bottom:166px;width:165px}.skillbar{bottom:18px;left:calc(50% + 42px);gap:6px}.skill-slot{width:43px;height:46px;font-size:21px}.evade-btn{right:15px;bottom:85px;min-width:86px;min-height:44px}.hint-bar{bottom:127px}.sksel-btn,body.touch .sksel-btn{bottom:140px;right:15px;left:auto;transform:none}.joy{left:12px;bottom:18px;width:96px;height:96px}.battle-map span{font-size:9px}.descend-btn{top:145px;font-size:.75rem}}
 </style>
 </head>
 <body>
@@ -543,6 +552,10 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
   <!-- ===== STAGE ===== -->
   <div class="stage" id="stage">
     <canvas id="game"></canvas>
+    <div class="battle-status" id="battleStatus" style="display:none"></div>
+    <button class="evade-btn" id="evadeBtn" type="button" style="display:none">Evade<small>Space · READY</small></button>
+    <div class="battle-map" id="mapWrap" style="display:none"><canvas id="dungeonMap" width="150" height="150" aria-label="Explored dungeon map"></canvas><span>EXPLORED · YOU ◆</span></div>
+    <button class="descend-btn" id="descendBtn" type="button" hidden>Descend · E</button>
     <div class="beta-ribbon">Beta</div>
     <div class="qtimer" id="qTimer" style="display:none;"><span class="dot"></span> ⚡ <b id="qTimerN" style="margin-left:2px;">30</b>&nbsp;actions until the question</div>
     <div class="pbars" id="pBars" style="display:none;">
@@ -552,7 +565,7 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
     </div>
     <div class="skillbar" id="skillBar" style="display:none;"></div>
     <button class="sksel-btn" id="skillSelBtn" type="button" style="display:none;" title="Choose which 4 of your 12 skills sit on the bar (K)">🎯 Select Skill</button>
-    <div class="hint-bar" id="hintBar">Move: <b>WASD</b> or <b>click</b> the ground · <b>Click an enemy</b> / hold <b>right-click</b> to attack · Skills <b>1–4</b> fire at the crosshair · <b>T</b> tree · <b>K</b> skills · <b>B</b> armory</div>
+    <div class="hint-bar" id="hintBar"><b>Space</b> evade · Move: <b>WASD</b> or <b>click</b> the ground · <b>Click an enemy</b> / hold <b>right-click</b> to attack · Skills <b>1–4</b> fire at the crosshair · <b>T</b> tree · <b>K</b> skills · <b>B</b> armory</div>
     <div class="joy" id="joy"><div class="base"></div><div class="knob" id="joyKnob"></div></div>
     <div class="toast-wrap" id="toastWrap"></div>
 
@@ -561,9 +574,10 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
       <div class="panel wide"><div class="panel-pad">
         <span class="tag">Dungeon Crawler RPG</span> <span class="beta-chip" style="vertical-align:2px;">🧪 Beta</span>
         <h1>🗡️ Science Slayers</h1>
-        <p class="sub">Descend a <b>procedurally generated dungeon</b>. Monster packs idle in their lairs until you get close — pick your fights, hunt <b>magic packs</b> and <b>legendary uniques</b>, slay the <b>floor boss</b> for loot, and take the stairs down to harder floors with harder questions.</p>
+        <p class="sub">Descend a <b>procedurally generated dungeon</b>. Monster packs idle in their lairs until you get close — pick your fights, hunt <b>magic packs</b> and <b>legendary uniques</b>, slay the <b>floor boss</b> for loot, and take the stairs down to harder floors with questions matched to your mastery.</p>
         <div class="beta-note">🧪 <span><b>Beta build</b> — no Science Slayers leaderboard yet. Questions you answer here <b>still count</b> toward the main leaderboard and your monthly questions total. Your Armory gear and skill loadouts are <b>shared with Science Legends</b>.</span></div>
         <ul class="how">
+          <li data-ico="💨"><strong>Space / Evade</strong>: dodge in your movement direction (5-second cooldown; costs 1 action). Step out of the <strong>orange charge lane</strong> before its ring fills. The map tracks explored corridors; use <strong>E / Descend</strong> at the stairs when ready. Leaving the game pauses combat.</li>
           <li data-ico="🕹️">Move with <strong>WASD / arrows</strong>, or <strong>click the ground</strong> to walk there. <strong>Click an enemy</strong> to attack it, hold <strong>right-click</strong> to fire at the crosshair, and skills <strong>1–4 fire at the crosshair</strong>.</li>
           <li data-ico="✨">Each class knows <strong>12 skills</strong> — unlock, rank, branch and crown them with 1-of-3 <strong>ULTIMATES</strong> in a huge <strong>skill tree (T)</strong>, then pick your <strong>4</strong> with 🎯 <strong>Select Skill (K)</strong>.</li>
           <li data-ico="⚡">Everything spends <strong>action points</strong>: basic attacks <strong>1 ⚡</strong>, skills <strong>4 ⚡</strong>, and even the auto-attacks from unique/mythic gear <strong>2–3 ⚡</strong>. At zero, a science MCQ appears — <strong>correct = full refill</strong> +1 skill point; <strong>wrong = only ⅓ of your actions</strong> next turn.</li>
@@ -674,6 +688,7 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
     <div class="overlay" id="pauseOverlay">
       <div class="panel"><div class="panel-pad center">
         <h2>⏸ Paused</h2>
+        <label class="motion-control"><input id="motionToggle" type="checkbox"> Reduce motion and screen shake</label>
         <p class="sub">The horde holds its breath.</p>
         <div class="row" style="justify-content:center;">
           <button class="btn btn-primary" id="resumeBtn" type="button">▶ Resume</button>
@@ -725,8 +740,8 @@ function toast(msg, kind){
   w.appendChild(el);
   setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 3100);
 }
-function show(id){ $(id).classList.add('show'); }
-function hide(id){ $(id).classList.remove('show'); }
+function show(id){ clearCombatInput(); $(id).classList.add('show'); }
+function hide(id){ clearCombatInput(); $(id).classList.remove('show'); }
 function embedded(){ return !!(window.parent && window.parent !== window); }
 
 /* ---------------- SFX (tiny WebAudio synth) ---------------- */
@@ -2182,9 +2197,10 @@ function dropItem(bossTable){
   if (it.r === 'mythic'){ toast('✦ MYTHIC ITEM! ✦', 'good'); G.shake = 0.5; }
   return it;
 }
-/* Boss down → stairs appear; walking onto them descends to a harder floor. */
+/* Boss down → stairs appear; explicit descent keeps exploration deliberate. */
 function nextDepth(){
   G.wave++;
+  G.explored=null;
   G.stairs = null;
   G.enemies = []; G.projs = []; G.eprojs = []; G.zones = []; G.orbs = []; G.fx = []; G.texts = []; G.auras = []; G.orbits = []; G.spin = null;
   G.pets = G.pets.filter(function(pt){ return pt.follower || pt.kind === 'bear'; });
@@ -2196,15 +2212,16 @@ function nextDepth(){
   G.moveTarget = null; G.atkTarget = null;
   healPlayer(G.player.maxHp * 0.3);
   earnPoints(12, 'depth ' + G.wave + ' reached');
-  toast('⬇️ Depth ' + G.wave + ' — enemies grow stronger, questions get harder!', 'energy');
+  toast('⬇️ Depth ' + G.wave + ' — enemies grow stronger. Your questions stay matched to your mastery!', 'energy');
   sfx('level');
   updateHud();
 }
 
 function newGame(cls){
   var c = CLASSES[cls];
+  var feedOwner=JSON.stringify(scienceFeed.context());
   G = {
-    state: 'play', cls: cls,
+    state: 'play', cls: cls, feedOwner:feedOwner,
     player: {
       x: WORLD.w / 2, y: WORLD.h / 2, r: 16,
       hp: c.hp, maxHp: c.hp, levelHp: 0,
@@ -2252,7 +2269,7 @@ function saveRun(auto){
     answered: G.answered, correct: G.correct,
     cheatUsed: G.cheatUsed, phoenixUsed: G.phoenixUsed, packSeq: G.packSeq,
     player: { x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp, levelHp: p.levelHp },
-    stairs: G.stairs, map: Array.from(map), rooms: rooms,
+    stairs: G.stairs, map: Array.from(map), rooms: rooms, explored: G.explored ? Array.from(G.explored) : [], evadeCd:G.player.evadeCd||0,
     enemies: G.enemies, pets: G.pets, cds: G.cds, abuffs: G.abuffs
   };
   try { localStorage.setItem(saveKey(), JSON.stringify(snap)); } catch(e){ if (!auto) toast('Could not save — storage full?', 'bad'); return; }
@@ -2272,6 +2289,7 @@ function renderContinue(){
   if (ok) $('contBtn').textContent = '▶ Continue — Depth ' + s.wave + ' · Lv ' + s.level + ' ' + CLASSES[s.cls].name;
 }
 function resumeRun(){
+  if(!_gameCreditsReady()){_showPlayLimit();return;}
   var s = loadSave();
   if (!s || s.v !== 1 || !CLASSES[s.cls]){ renderContinue(); return; }
   chosenClass = s.cls;
@@ -2287,6 +2305,8 @@ function resumeRun(){
   G.answered = s.answered || 0; G.correct = s.correct || 0;
   G.cheatUsed = !!s.cheatUsed; G.phoenixUsed = !!s.phoenixUsed; G.packSeq = s.packSeq || 999;
   G.stairs = s.stairs || null;
+  G.explored=s.explored && s.explored.length===map.length ? Uint8Array.from(s.explored) : null;
+  G.player.evadeCd=Math.max(0,Math.min(5,Number(s.evadeCd)||0));
   G.enemies = s.enemies || []; G.pets = s.pets || [];
   G.cds = s.cds || {}; G.abuffs = s.abuffs || [];
   G.player.levelHp = (s.player && s.player.levelHp) || 0;
@@ -2305,19 +2325,143 @@ function resumeRun(){
 }
 window.addEventListener('beforeunload', function(){ try { saveRun(true); } catch(e){} });
 
+
+/* Defensive mobility is separate from class skills and never awards points. */
+var COMBAT_BUILD = 'expedition-2';
+var lowMotion = false;
+try { var motionPref=localStorage.getItem('science_expedition_motion'); lowMotion=motionPref===null ? !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) : motionPref==='1'; } catch(e){}
+function clearCombatInput(){
+  keys={};
+  if(typeof joyVec!=='undefined'){joyVec.on=false;joyVec.x=0;joyVec.y=0;}
+  if(typeof mouse!=='undefined' && mouse){mouse.lDown=false;mouse.rDown=false;}
+  if(G){G.moveTarget=null;G.atkTarget=null;}
+  window.dispatchEvent(new Event('combatinputreset'));
+}
+function suspendCombat(){
+  clearCombatInput();
+  if(G && G.state==='play' && !overlayOpen()) show('pauseOverlay');
+}
+function evade(){
+  if(!G || G.state!=='play' || overlayOpen()) return false;
+  var p=G.player;
+  if((p.evadeCd||0)>0 || p.dashT>0 || p.evadeT>0) return false;
+  noteAction(1);if(G.state!=='play'||overlayOpen())return false;
+  var mv=moveInput(), mag=Math.hypot(mv.x,mv.y);
+  if(mag<.05){mv={x:p.fx,y:p.fy};mag=Math.hypot(mv.x,mv.y)||1;}
+  p.evadeX=mv.x/mag;p.evadeY=mv.y/mag;p.evadeT=.20;p.evadeCd=5;
+  G.moveTarget=null;G.atkTarget=null;
+  ringFx(p.x,p.y,30,'#a8f0df');sfx('skill');
+  return true;
+}
+function updateCombatReadability(dt){
+  var p=G.player;
+  p.evadeCd=Math.max(0,(p.evadeCd||0)-dt);
+  G.evadeTrail=(G.evadeTrail||[]).filter(function(t){t.life-=dt;return t.life>0;});
+  G.enemies.forEach(function(e){e.hitFlash=Math.max(0,(e.hitFlash||0)-dt);});
+  G.readabilityT=(G.readabilityT||0)-dt;if(G.readabilityT>0)return;G.readabilityT=.1;
+  var b=$('evadeBtn');b.style.display='';b.disabled=p.evadeCd>0;
+  b.innerHTML=p.evadeCd>0 ? 'Evade '+p.evadeCd.toFixed(1)+'s<small>Recharging</small>' : 'Evade<small>Space · READY</small>';
+  var status=$('battleStatus');status.style.display='';
+  revealDungeon();drawDungeonMap();$('descendBtn').hidden=!nearStairs();status.innerHTML='<strong>DEPTH '+G.wave+' · EXPLORE THE RUINS</strong>'+(G.stairs?'Boss defeated · find the gold stairs':'Find and defeat the floor boss');
+}
+function moveEvade(p,dt){
+  var step=Math.min(dt,p.evadeT);p.evadeT=Math.max(0,p.evadeT-dt);
+  if(!lowMotion)G.evadeTrail.push({x:p.x,y:p.y,life:.20});
+  moveActor(p,p.evadeX*650*step,p.evadeY*650*step);
+  p.fx=p.evadeX;p.fy=p.evadeY;p.moving=true;
+}
+function lockCharge(e,dx,dy){
+  var mag=Math.hypot(dx,dy)||1;
+  e.chargeSt=1;e.chargeT=.7;e.cvx=dx/mag*e.speed*4.6;e.cvy=dy/mag*e.speed*4.6;
+}
+function drawCombatCues(){
+  ctx.save();
+  G.enemies.forEach(function(e){
+    if(e.dead || e.hp<=0)return;
+    if(e.chargeSt===1 && e.frozen<=0 && e.stun<=0){
+      var l=Math.hypot(e.cvx,e.cvy)||1, dx=e.cvx/l,dy=e.cvy/l,len=l*.55;
+      ctx.fillStyle='rgba(255,126,90,.20)';ctx.strokeStyle='#ffbc83';ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(e.x-dy*e.r,e.y+dx*e.r);ctx.lineTo(e.x+dx*len-dy*e.r,e.y+dy*len+dx*e.r);ctx.lineTo(e.x+dx*len+dy*e.r,e.y+dy*len-dx*e.r);ctx.lineTo(e.x+dy*e.r,e.y-dx*e.r);ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.strokeStyle='#fff2cd';ctx.beginPath();ctx.arc(e.x,e.y,e.r+9,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-clamp(e.chargeT/.7,0,1)));ctx.stroke();
+    }
+    if(e.hitFlash>0){ctx.globalAlpha=e.hitFlash/.12*.65;ctx.strokeStyle='#fff1be';ctx.lineWidth=3;ctx.beginPath();ctx.arc(e.x,e.y,e.r+5,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;}
+  });
+  (G.evadeTrail||[]).forEach(function(t){ctx.globalAlpha=t.life/.2*.35;ctx.fillStyle='#aeffe2';ctx.beginPath();ctx.ellipse(t.x,t.y,15,23,0,0,Math.PI*2);ctx.fill();});
+  ctx.globalAlpha=1;var p=G.player;
+  ctx.strokeStyle=p.evadeT>0?'#c5ffef':'#97c9b38c';ctx.lineWidth=p.evadeT>0?4:1.5;
+  ctx.beginPath();ctx.ellipse(p.x,p.y+14,22,10,0,0,Math.PI*2);ctx.stroke();
+  ctx.restore();
+}
+function drawAtmosphere(){
+  ctx.save();var v=ctx.createRadialGradient(VW/2,VH/2,Math.min(VW,VH)*.22,VW/2,VH/2,Math.max(VW,VH)*.70);
+  v.addColorStop(0,'#06151a00');v.addColorStop(1,'#06151a99');ctx.fillStyle=v;ctx.fillRect(0,0,VW,VH);ctx.restore();
+}
+function wireCombatPolish(){
+  document.body.classList.toggle('low-motion',lowMotion);$('motionToggle').checked=lowMotion;
+  $('motionToggle').addEventListener('change',function(){lowMotion=this.checked;document.body.classList.toggle('low-motion',lowMotion);try{localStorage.setItem('science_expedition_motion',lowMotion?'1':'0');}catch(e){}});
+  $('evadeBtn').addEventListener('pointerdown',function(e){e.preventDefault();e.stopPropagation();evade();});
+  $('evadeBtn').addEventListener('click',function(e){if(e.detail===0)evade();});
+  window.addEventListener('blur',suspendCombat);
+  document.addEventListener('visibilitychange',function(){if(document.hidden)suspendCombat();});
+  window.addEventListener('pointercancel',clearCombatInput);
+}
+
+function revealDungeon(){
+  if(!map||!G)return;
+  if(!G.explored || G.explored.length!==map.length)G.explored=new Uint8Array(map.length);
+  var px=Math.floor(G.player.x/TILE),py=Math.floor(G.player.y/TILE);
+  for(var y=Math.max(0,py-6);y<=Math.min(MAPH-1,py+6);y++)for(var x=Math.max(0,px-6);x<=Math.min(MAPW-1,px+6);x++){
+    if((x-px)*(x-px)+(y-py)*(y-py)>36)continue;
+    // Reveal only cells connected by sight; a wall stops the ray.
+    var steps=Math.max(Math.abs(x-px),Math.abs(y-py)),visible=true;
+    for(var n=1;n<steps;n++){var tx=Math.round(px+(x-px)*n/steps),ty=Math.round(py+(y-py)*n/steps);if(map[ty*MAPW+tx]===1){visible=false;break;}}
+    if(visible)G.explored[y*MAPW+x]=1;
+  }
+}
+function drawDungeonMap(){
+  if(!G||!map)return;
+  var mc=$('dungeonMap'),g=mc.getContext('2d'),s=mc.width/MAPW;
+  g.fillStyle='#071019';g.fillRect(0,0,mc.width,mc.height);
+  for(var i=0;i<map.length;i++)if(G.explored&&G.explored[i]){g.fillStyle=map[i]?'#465260':'#a3b1a0';g.fillRect((i%MAPW)*s,Math.floor(i/MAPW)*s,Math.ceil(s),Math.ceil(s));}
+  if(G.stairs && G.explored[Math.floor(G.stairs.y/TILE)*MAPW+Math.floor(G.stairs.x/TILE)]){g.fillStyle='#ffd36c';g.fillRect(G.stairs.x/TILE*s-3,G.stairs.y/TILE*s-3,6,6);}
+  g.fillStyle='#90ffe8';g.beginPath();g.arc(G.player.x/TILE*s,G.player.y/TILE*s,3,0,Math.PI*2);g.fill();
+  $('mapWrap').style.display='';
+}
+function nearStairs(){return !!(G&&G.stairs&&dist2(G.player.x,G.player.y,G.stairs.x,G.stairs.y)<64*64);}
+function descend(){if(!G||G.state!=='play'||overlayOpen()||!nearStairs())return false;clearCombatInput();nextDepth();$('descendBtn').hidden=true;return true;}
+function drawDungeonDetails(camX,camY){
+  if(!map)return;ctx.save();
+  for(var y=Math.max(1,Math.floor(camY/TILE)-1);y<Math.min(MAPH-1,Math.ceil((camY+VH)/TILE)+1);y++)for(var x=Math.max(1,Math.floor(camX/TILE)-1);x<Math.min(MAPW-1,Math.ceil((camX+VW)/TILE)+1);x++){
+    if(map[y*MAPW+x]!==0)continue;var xx=x*TILE,yy=y*TILE;
+    ctx.fillStyle=(x+y)%2?'#67707133':'#8b8d7833';ctx.fillRect(xx+2,yy+2,TILE-4,TILE-4);ctx.strokeStyle='#1c2c3844';ctx.lineWidth=1;ctx.strokeRect(xx+1,yy+1,TILE-2,TILE-2);
+    if(map[(y-1)*MAPW+x]===1 && x%4===0){
+      var gl=ctx.createRadialGradient(xx+23,yy+3,0,xx+23,yy+3,104);gl.addColorStop(0,'#ffc36666');gl.addColorStop(1,'#ffc36600');ctx.fillStyle=gl;ctx.fillRect(xx-81,yy-101,208,208);
+      ctx.fillStyle='#b7a488';ctx.fillRect(xx+18,yy-6,10,17);ctx.fillStyle='#ffe3a1';ctx.beginPath();ctx.ellipse(xx+23,yy-5,5,lowMotion?7:7+Math.sin(G.time*9+x+y)*2,0,0,Math.PI*2);ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
 /* ---------------- INPUT ---------------- */
 var keys = {};
 var joyVec = { x: 0, y: 0, on: false };
 window.addEventListener('keydown', function(e){
-  var k = e.key.toLowerCase();
-  if (['arrowup','arrowdown','arrowleft','arrowright',' '].indexOf(k) >= 0) e.preventDefault();
-  keys[k] = true;
-  if (!G) return;
-  if (k >= '1' && k <= '4') castSkill(parseInt(k, 10) - 1);
-  if (k === 't') toggleTree();
-  if (k === 'i' || k === 'b') toggleArmory();
-  if (k === 'k') toggleSkillSel();
-  if (k === 'p' || k === 'escape') togglePause();
+  if(e.ctrlKey||e.metaKey||e.altKey||e.target.closest('input,textarea,select,[contenteditable="true"]'))return;
+  var k=e.key.toLowerCase();
+  if(e.repeat)return;
+  if(qState && qState.active){if(k>='1'&&k<='8'){e.preventDefault();var qi=parseInt(k,10)-1;if(qState.current && qi<qState.current.options.length)answerQuestion(qi);}return;}
+  if(k==='p'||k==='escape'){e.preventDefault();togglePause();return;}
+  if(overlayOpen())return;
+  if(e.target.closest('button')&&(k===' '||k==='enter'))return;
+  if(['arrowup','arrowdown','arrowleft','arrowright',' '].indexOf(k)>=0)e.preventDefault();
+  keys[k]=true;
+  if(!G || G.state!=='play')return;
+  if(k===' '){evade();return;}
+  if(k==='e'){descend();return;}
+  if(k>='1'&&k<='4')castSkill(parseInt(k,10)-1);
+  if(k==='t')toggleTree();
+  if(k==='i'||k==='b')toggleArmory();
+  if(k==='k')toggleSkillSel();
 });
 window.addEventListener('keyup', function(e){ keys[e.key.toLowerCase()] = false; });
 function moveInput(){
@@ -2340,7 +2484,8 @@ function moveInput(){
   stage.addEventListener('pointerdown', function(e){
     if (e.pointerType !== 'touch') return;
     if (!document.body.classList.contains('touch')) return;
-    if (e.target.closest('.skill-slot') || e.target.closest('.overlay') || e.target.closest('.hud') || e.target.closest('.sksel-btn')) return;
+    if (!G || G.state!=='play' || overlayOpen()) return;
+    if (e.target.closest('.evade-btn') || e.target.closest('.descend-btn') || e.target.closest('.skill-slot') || e.target.closest('.overlay') || e.target.closest('.hud') || e.target.closest('.sksel-btn')) return;
     if (pid !== null) return;
     var r = stage.getBoundingClientRect();
     if (e.clientX - r.left > r.width * 0.55) return;
@@ -2365,6 +2510,7 @@ function moveInput(){
     setKnob(0, 0);
     joy.style.left = '24px'; joy.style.top = 'auto'; joy.style.bottom = '24px';
   }
+  window.addEventListener('combatinputreset',function(){pid=null;setKnob(0,0);});
   window.addEventListener('pointerup', end);
   window.addEventListener('pointercancel', end);
 })();
@@ -2496,7 +2642,7 @@ function wavePool(){
 }
 function doSpawning(dt){
   // Slayers: no wave spawning — floors are pre-populated. Handle the stairs.
-  if (G.stairs && dist2(G.player.x, G.player.y, G.stairs.x, G.stairs.y) < 44 * 44) nextDepth();
+  $('descendBtn').hidden=!nearStairs();
 }
 
 /* ---------------- DAMAGE / KILLS ---------------- */
@@ -2514,6 +2660,7 @@ function dealDamage(e, amount, opts){
   if (e.hp <= 0) return;
   amount *= (e.dmgTaken || 1);
   if (e.state && e.state !== 'aggro') aggroPack(e.pack, e);
+  e.hitFlash=.12;
   var crit = opts.crit;
   e.hp -= amount;
   addText(e.x, e.y, Math.round(amount), crit ? '#FFD54F' : (opts.color || '#FFFFFF'), crit);
@@ -2589,7 +2736,7 @@ function healPlayer(n){
 }
 function hurtPlayer(raw){
   var p = G.player;
-  if (p.dashT > 0) return;
+  if (p.dashT > 0 || p.evadeT > 0) return;
   var dmg = raw * (1 - G.stats.armor);
   if (p.shield > 0){
     var used = Math.min(p.shield, dmg);
@@ -2877,7 +3024,7 @@ function strikeAt(x, y, radius, dmg, delay, opts){
   G.fx.push({ kind: 'meteor', x: x, y: y, r: radius, t: 0, life: delay, dmg: dmg, strike: opts || {} });
 }
 function castSkill(idx){
-  if (!G || G.state !== 'play' || overlayOpen()) return;
+  if (!G || G.state !== 'play' || overlayOpen() || G.player.evadeT>0) return;
   var sid = G.slots[idx];
   if (!sid){ toast('Slot ' + (idx + 1) + ' is empty — tap 🎯 Select Skill', 'bad'); return; }
   if (!skillUnlocked(sid)){ toast('🔒 ' + SKILLS[sid].name + ' — unlock it in the skill tree (T)', 'bad'); return; }
@@ -3382,10 +3529,10 @@ function updateEnemies(dt){
       if (e.chargeSt === 0){
         moveActor(e, dx / d * e.speed * slowMult * dt, dy / d * e.speed * slowMult * dt);
         e.chargeT -= dt;
-        if (d < 300 && e.chargeT <= 0){ e.chargeSt = 1; e.chargeT = 0.6; }
+        if (d < 300 && e.chargeT <= 0){ lockCharge(e,dx,dy); }
       } else if (e.chargeSt === 1){
         e.chargeT -= dt;
-        if (e.chargeT <= 0){ e.chargeSt = 2; e.chargeT = 0.55; e.cvx = dx / d * e.speed * 4.6; e.cvy = dy / d * e.speed * 4.6; }
+        if (e.chargeT <= 0){ e.chargeSt = 2; e.chargeT = 0.55; }
       } else {
         e.chargeT -= dt;
         moveActor(e, e.cvx * dt, e.cvy * dt);
@@ -3420,6 +3567,7 @@ function overlayOpen(){
 function update(dt){
   var p = G.player;
   G.time += dt;
+  updateCombatReadability(dt);
   if (mouse.active){
     mouse.wx = (G.camX || 0) + mouse.sx;
     mouse.wy = (G.camY || 0) + mouse.sy;
@@ -3495,7 +3643,8 @@ function update(dt){
     }
   }
   p.moving = !!(mv.x || mv.y);
-  if (p.dashT > 0){
+  if(p.evadeT>0){moveEvade(p,dt);}
+  else if (p.dashT > 0){
     p.dashT -= dt;
     var dashDef = p.dashSid ? SKILLS[p.dashSid] : null;
     var dashDist = dashDef ? dashDef.p.dist : 300;
@@ -3664,13 +3813,13 @@ function buildGround(){
   c = _groundTileC = document.createElement('canvas');
   c.width = 256; c.height = 256;
   var g = c.getContext('2d');
-  g.fillStyle = '#3E4A3D'; g.fillRect(0, 0, 256, 256);
+  g.fillStyle = '#414c52'; g.fillRect(0, 0, 256, 256);
   for (var i = 0; i < 260; i++){
-    g.fillStyle = ['#42503F', '#394638', '#465243', '#3A473C'][i % 4];
+    g.fillStyle = ['#46545a', '#3a464e', '#4d585e', '#3e4b51'][i % 4];
     g.fillRect((Math.random() * 256) | 0, (Math.random() * 256) | 0, 3 + ((Math.random() * 5) | 0), 3 + ((Math.random() * 5) | 0));
   }
   for (var j = 0; j < 26; j++){
-    g.fillStyle = j % 3 ? '#4E5B48' : '#55624E';
+    g.fillStyle = j % 3 ? '#586064' : '#666b69';
     var x = (Math.random() * 250) | 0, y = (Math.random() * 250) | 0;
     g.fillRect(x, y, 2, 2); g.fillRect(x + 2, y - 1, 1, 1);
   }
@@ -3993,7 +4142,7 @@ function draw(){
   if (!G || !p) return;
   var camX = clamp(p.x - VW / 2, 0, WORLD.w - VW), camY = clamp(p.y - VH / 2, 0, WORLD.h - VH);
   G.camX = camX; G.camY = camY;
-  if (G.shake > 0){ camX += rand(-1, 1) * G.shake * 14; camY += rand(-1, 1) * G.shake * 14; }
+  if (G.shake > 0 && !lowMotion){ camX += rand(-1, 1) * G.shake * 14; camY += rand(-1, 1) * G.shake * 14; }
   ctx.save();
   ctx.translate(-camX, -camY);
   ctx.fillStyle = groundPat || '#3E4A3D';
@@ -4010,8 +4159,10 @@ function draw(){
       for (var wtx = t0x; wtx <= t1x; wtx++){
         if (map[wty * MAPW + wtx] !== 1) continue;
         var wwx = wtx * TILE, wwy = wty * TILE;
-        ctx.fillStyle = '#23262C';
-        ctx.fillRect(wwx, wwy, TILE, TILE);
+        ctx.fillStyle = '#263340';ctx.fillRect(wwx,wwy,TILE,TILE);
+        ctx.fillStyle=(wtx+wty)%2?'#34404a':'#303a43';ctx.fillRect(wwx+2,wwy+2,TILE-4,TILE-4);
+        ctx.strokeStyle='#5b646744';ctx.strokeRect(wwx+2,wwy+2,TILE-4,TILE-4);
+        ctx.fillStyle='#1c2530';ctx.fillRect(wwx+2,wwy+TILE/2,TILE-4,2);
         if (wty + 1 <= MAPH - 1 && map[(wty + 1) * MAPW + wtx] === 0){
           ctx.fillStyle = '#3C424A';
           ctx.fillRect(wwx, wwy + TILE - 10, TILE, 10);
@@ -4019,6 +4170,7 @@ function draw(){
       }
     }
   }
+  drawDungeonDetails(camX,camY);
   // stairs to the next depth (revealed by the floor boss)
   if (G.stairs){
     var stx = G.stairs.x, sty = G.stairs.y;
@@ -4037,6 +4189,7 @@ function draw(){
     ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
   });
+  drawCombatCues();
   // click-to-move destination + clicked-enemy marker
   if (G.moveTarget){
     var mtp = 0.55 + 0.4 * Math.sin(G.time * 8);
@@ -4245,7 +4398,7 @@ function draw(){
       ctx.stroke();
       ctx.globalAlpha = 1;
     } else if (f.kind === 'meteor'){
-      ctx.globalAlpha = 0.25 + 0.2 * Math.sin(f.t * 16);
+      ctx.globalAlpha = 0.25 + 0.2 * (lowMotion ? 0 : Math.sin(f.t * 16));
       ctx.fillStyle = f.evil ? '#CE93D8' : '#FF7043';
       ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 0.9;
@@ -4270,6 +4423,7 @@ function draw(){
     ctx.globalAlpha = 1;
   });
   ctx.restore();
+  drawAtmosphere();
   // ---- crosshair (screen space): attack symbol over an enemy, cross otherwise
   if (mouse.active && mouse.sx >= 0 && G.state === 'play'){
     ctx.save();
@@ -4422,10 +4576,37 @@ function recordAnswer(q, correct){
 
 var qState = { active: false, current: null, answered: false };
 
+// A portal learner change ends the old run before any pending question can resume.
+// The bridge also invalidates failed diagrams: the same learner keeps their run.
+function syncCombatLearner(){
+  var context=scienceFeed.context(),owner=JSON.stringify(context);
+  if(_gameCreditOwner && _gameCreditOwner!==owner){_gameCreditOwner='';_gPlaysLeft=null;}
+  if(G && G.feedOwner!==owner){
+    clearCombatInput();G=null;scienceFeedOpening=false;
+    qState.active=false;qState.current=null;qState.answered=true;
+    document.querySelectorAll('.overlay').forEach(function(el){el.classList.remove('show');});
+    ['pBars','skillBar','skillSelBtn','qTimer','battleStatus','evadeBtn','mapWrap'].forEach(function(id){var el=$(id);if(el)el.style.display='none';});
+    if($('descendBtn'))$('descendBtn').hidden=true;
+    resetFlagUI();show('menuOverlay');renderClassCards();
+  }
+  var nextKey=context.studentKey||'guest';
+  if(nextKey!==studentKey){
+    if(_metaSaveT){clearTimeout(_metaSaveT);_metaSaveT=null;}
+    if(_pendingBuy){clearTimeout(_pendingBuy);_pendingBuy=null;}
+    studentKey=nextKey;META={inv:[],eq:{},loadout:{},follower:'fdef',pts:0};
+    metaReady=false;appGold=null;_gPlaysLeft=null;
+    loadAdaptiveState();metaLoadLocal();renderMenuFollowers();
+    if(typeof renderContinue==='function')renderContinue();
+    _metaReqTries=0;requestMeta();updateHud();
+  }
+}
+
 // The portal owns level, mastery, quality and shared repetition decisions.
+var acceptedFeedEvent=null;
 var scienceFeed = ScienceFeedBridge.create({
-  onPool: function(rows){ applyBankQuestions(rows); },
+  onPool: function(rows, event){ acceptedFeedEvent=event||null; applyBankQuestions(rows); syncCombatLearner(); },
   onInvalidate: function(){
+    syncCombatLearner();
     if(typeof qState !== 'undefined' && qState){ qState.active=false; qState.current=null; qState.answered=true; }
     var overlay=document.getElementById('questionOverlay'); if(overlay) overlay.classList.remove('show');
   }
@@ -4584,23 +4765,35 @@ function requestMeta(){
   _metaReqTries++;
   if (_metaReqTries < 8 && !metaReady) setTimeout(requestMeta, 1200);
 }
-var _gPlaysLeft = null;
-function _canPlayGame(){ return _gPlaysLeft == null || _gPlaysLeft > 0; }
-function _noteGamePlayStart(){
-  if (embedded()){ try { window.parent.postMessage({ type: 'SD_PLAY_START', mode: 'slayers' }, '*'); } catch(e){} }
+var _gPlaysLeft = null, _gameCreditOwner='';
+function _gameCreditsReady(){
+  if(!embedded())return true;
+  var context=scienceFeed.context();
+  return !!context.studentKey && /^(?:P[3-6]|S1)$/.test(context.studentLevel) && _gameCreditOwner===JSON.stringify(context) && Number.isFinite(_gPlaysLeft);
+}
+function _canPlayGame(){ return _gameCreditsReady() && (_gPlaysLeft == null || _gPlaysLeft > 0); }
+function _noteGamePlayStart(runOwner){
+  if (embedded()){ try {
+    var owner=JSON.parse(runOwner); // accepted identity captured for this run start
+    window.parent.postMessage({type:'SD_PLAY_START',mode:'slayers',studentKey:owner.studentKey,studentLevel:owner.studentLevel},location.origin);
+  } catch(e){} }
   if (_gPlaysLeft != null && _gPlaysLeft > 0) _gPlaysLeft--;
   updateHud();
 }
-function _showPlayLimit(){ toast('Out of game credits — answer 5 questions in any practice mode to earn one, or come back tomorrow!', 'bad'); }
+function _showPlayLimit(){ if(!_gameCreditsReady()){toast('Loading your game credits — try again in a moment.','energy');return;} toast('Out of game credits — answer 5 questions in any practice mode to earn one, or come back tomorrow!', 'bad'); }
 window.addEventListener('message', function(ev){
+  if(!embedded() || ev.source!==window.parent || ev.origin!==location.origin)return;
   var d = ev && ev.data;
   if (!d) return;
   if (d.type === 'SD_PLAYS_LEFT'){
+    if(!_gameCreditsReady())return;
     if (d.playsLeft && typeof d.playsLeft.slayers === 'number') _gPlaysLeft = d.playsLeft.slayers;
     updateHud();
   } else if (d.type === 'SD_QUESTIONS'){
+    var context=scienceFeed.context();
+    if(ev!==acceptedFeedEvent || d.feedPolicyVersion!==1 || String(d.studentKey||'')!==context.studentKey || String(d.studentLevel||'')!==context.studentLevel)return;
     if (d.studentKey && d.studentKey !== studentKey){ studentKey = String(d.studentKey); loadAdaptiveState(); metaLoadLocal(); try { renderContinue(); } catch(e){} }
-    if (d.playsLeft && typeof d.playsLeft.slayers === 'number') _gPlaysLeft = d.playsLeft.slayers;
+    if(d.playsLeft && Number.isFinite(d.playsLeft.slayers)){_gPlaysLeft=d.playsLeft.slayers;_gameCreditOwner=JSON.stringify(context);}
   // scienceFeed accepts only a current policy response.
     if (Array.isArray(d.seenIds)){
       d.seenIds.forEach(function(id){ if (id && !student.seen[id]) student.seen[id] = { n: 1, correct: 0, fromHistory: true }; });
@@ -4627,6 +4820,7 @@ window.addEventListener('message', function(ev){
     if ($('armoryOverlay').classList.contains('show')) renderArmory();
     updateHud();
   } else if (d.type === 'LEGENDS_GOLD_RESULT'){
+    if(d.reason==='lootbox' && !_pendingBuy)return; // cancelled old-learner purchase
     if (typeof d.gold === 'number') appGold = d.gold;
     if (d.reason === 'lootbox'){
       if (_pendingBuy){ clearTimeout(_pendingBuy); _pendingBuy = null; }
@@ -4751,6 +4945,7 @@ function legendsSpriteThumbs(){
   return out;
 }
 window.addEventListener('message', function(ev){
+  if(!embedded() || ev.source!==window.parent || ev.origin!==location.origin)return;
   var d = ev && ev.data;
   if (!d) return;
   if (d.type === 'legendsAssets'){
@@ -4779,6 +4974,8 @@ function renderClassCards(){
     var c = CLASSES[key];
     var el = document.createElement('div');
     el.className = 'class-card' + (key === chosenClass ? ' sel' : '');
+    el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-pressed',key===chosenClass?'true':'false');
+    el.addEventListener('keydown',function(ev){if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();chosenClass=key;renderClassCards();}});
     var skillsHtml = c.skills.slice(0, 4).map(function(sid){
       return '<div class="sk">' + SKILLS[sid].icon + ' <b>' + SKILLS[sid].name + '</b></div>';
     }).join('');
@@ -4805,8 +5002,10 @@ function renderMenuFollowers(){
   });
 }
 function startRun(){
+  if(G && G.state==='play')return;
   if (!_canPlayGame()){ _showPlayLimit(); return; }
-  _noteGamePlayStart();
+  var runOwner=_gameCreditOwner;
+  _noteGamePlayStart(runOwner);
   clearSave(true);                       // a new run replaces the old save
   hide('menuOverlay'); hide('overOverlay');
   newGame(chosenClass);
@@ -4879,7 +5078,7 @@ function loop(t){
   requestAnimationFrame(loop);
   var dt = Math.min(0.05, (t - lastT) / 1000 || 0.016);
   lastT = t;
-  if (G && G.state === 'play' && !overlayOpen()) update(dt);
+  if (G && G.state === 'play' && !overlayOpen() && !document.hidden) update(dt);
   draw();
 }
 document.addEventListener('visibilitychange', function(){
@@ -4888,6 +5087,8 @@ document.addEventListener('visibilitychange', function(){
 
 /* ---------------- WIRING ---------------- */
 function init(){
+  wireCombatPolish();
+  $('descendBtn').addEventListener('click',descend);
   resize();
   buildGround();
   metaLoadLocal();

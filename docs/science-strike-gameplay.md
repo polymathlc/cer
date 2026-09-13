@@ -1,6 +1,6 @@
-# Science Strike v1.8.0
+# Science Strike v1.9.0
 
-Released with the Science portal v1.381.0.
+Released with the Science portal v1.382.0.
 
 ## Playing
 
@@ -14,6 +14,16 @@ Aim & comfort settings are available from both the menu and the pause screen.
 Aim speed is adjustable, and reduced motion removes screen shake and weapon
 sway. Settings are remembered on the device; the initial reduced-motion choice
 respects the operating system preference.
+
+Shift gives a short quickstep in the movement direction, with a 2.4-second
+cooldown. Movement remains collision-checked, and quickstep does not grant
+invulnerability. Diagonal movement has the same speed as straight movement.
+Ranged enemies root while charging and fire along their announced direction;
+amber marks on the ground and radar show the lane before the shot.
+
+The world uses multiple cached tree and rock silhouettes, contact shadows and
+distance fading. The scenery adds no network requests. Enemy animation follows
+active play time and respects reduced motion.
 
 ## Pauses and science checks
 
@@ -43,5 +53,5 @@ API boundaries. Its test accounts, question bank and writes are synthetic.
 The existing Science feeding checks continue to cover year limits, mastery,
 duplicate spacing, broken images and mixed-question restrictions.
 
-The Science Strike workflow runs both state and browser checks and retains
-gameplay screenshots for review.
+The Non-TCG gameplay checks workflow runs both state and browser checks and
+retains gameplay screenshots for review.

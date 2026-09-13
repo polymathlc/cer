@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta name="science-game-version" content="Science Raiders 1.1.0">
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Polymath Science Raiders — Roguelite Shooter MCQ</title>
@@ -328,6 +329,27 @@ html, body {
 
 .touch-only { display: none; }
 @media (pointer: coarse) { .touch-only { display: block; } }
+
+/* Raider control deck */
+.combat-deck { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:9px 12px; background:#182d40; color:#e6f5fc; border-radius:12px; margin:8px 0; font-size:12px; }
+.combat-deck button { padding:8px 12px; border:1px solid #72becb; border-radius:9px; color:#e6faff; background:#284c62; font:inherit; font-weight:700; font-size:12px; cursor:pointer; }
+.combat-deck button:focus-visible { outline:3px solid #ffe29a; outline-offset:2px; }
+.combat-deck label { display:flex; gap:6px; align-items:center; margin-left:auto; }
+.combat-deck #dashBtn { min-width:110px; background:#224a46; border-color:#77e1bd; }
+.combat-deck #dashBtn:disabled { opacity:.65; cursor:default; }
+@media (max-width:600px) {
+  .hud { gap:6px; padding:7px 10px; } .hud .spacer { display:none; }
+  .hud .brand { font-size:13px; } .hud .stat { font-size:11px; padding:4px 7px; }
+  .hud .hpwrap { min-width:120px; flex:1 1 135px; } .hud .btn { padding:7px 9px; }
+  .combat-deck { font-size:11px; gap:6px; padding:8px 10px; }
+  .combat-deck button { font-size:11px; }
+  .banner,.banner.show { left:10px; transform:none; font-size:11px; padding:7px 10px; }
+}
+@media (max-width:600px) and (min-height:600px) {
+  .stage { place-items:start center; } #game { margin-top:54px; }
+  .skillbar { bottom:auto; top:calc(54px + (100vw - 24px)*.75 + 8px); }
+}
+@media (prefers-reduced-motion:reduce) { .banner,.toast,.hpbar.low { animation:none!important; transition:none!important; } }
 </style>
 </head>
 <body>
@@ -349,6 +371,13 @@ html, body {
     <button class="btn btn-ghost" id="restartBtn" type="button" title="Abandon this run and start over">↻</button>
   </div>
 
+  <div class="combat-deck">
+    <button type="button" id="aimModeBtn" aria-pressed="false">Aim: Mouse</button>
+    <button type="button" id="dashBtn" title="Dash in your movement direction. Space or Shift also works.">Dash ready</button>
+    <span id="roomObjective">Clear the room, then earn your next upgrade.</span>
+    <label><input type="checkbox" id="motionToggle"> Reduced motion</label>
+
+  </div>
   <!-- ===== STAGE ===== -->
   <div class="stage">
     <canvas id="game" width="720" height="540"></canvas>
@@ -563,7 +592,7 @@ function drawOverride(img, cx, cy, size, opts){
 // ---- New sprite-based renderers (fall back to the *Proc versions) ----
 function _treeAt(x, y){ var o = ovr('tree'); if (o) drawOverride(o, x, y, 30, {}); else drawSprite(IMG_TOWN, 3, x, y, 30, {}); }
 
-function drawFloor(){
+function drawFloorTiles(){
   if (!_townReady()){ drawFloorProc(); return; }
   var S = 32, cols = Math.ceil(VIEW_W / S), rows = Math.ceil(VIEW_H / S);
   for (var r = 0; r < rows; r++){
@@ -581,6 +610,28 @@ function drawFloor(){
   ctx.fillRect(0, 0, bw, VIEW_H); ctx.fillRect(VIEW_W - bw, 0, bw, VIEW_H);
 }
 
+function drawFloor(){
+  drawFloorTiles();
+  ctx.save();
+  var palettes=[['#132b42','#338ea6'],['#252544','#8871ba'],['#183c3b','#53b08f']];
+  var palette=palettes[G?(G.floor-1)%palettes.length:0];
+  ctx.fillStyle=palette[0];ctx.globalAlpha=.9;ctx.fillRect(0,0,VIEW_W,VIEW_H);ctx.globalAlpha=1;
+  for(var y=20;y<VIEW_H-20;y+=50)for(var x=20;x<VIEW_W-20;x+=50){
+    ctx.fillStyle=((x+y)%100===40)?'rgba(181,211,222,.065)':'rgba(181,211,222,.025)';ctx.fillRect(x,y,48,48);
+    ctx.fillStyle='rgba(172,216,231,.18)';ctx.fillRect(x+4,y+4,2,2);
+  }
+  // Glowing service rails, protected corners and a central reactor seal.
+  ctx.strokeStyle=palette[1];ctx.lineWidth=3;ctx.strokeRect(17,17,VIEW_W-34,VIEW_H-34);
+  ctx.strokeStyle='rgba(180,228,242,.13)';ctx.lineWidth=1;ctx.strokeRect(23,23,VIEW_W-46,VIEW_H-46);
+  [[31,31],[VIEW_W-77,31],[31,VIEW_H-57],[VIEW_W-77,VIEW_H-57]].forEach(function(c){
+    ctx.fillStyle='#0c1b2b';ctx.fillRect(c[0],c[1],46,26);ctx.fillStyle=palette[1];ctx.fillRect(c[0]+5,c[1]+5,25,4);ctx.fillStyle='#afd9e7';ctx.fillRect(c[0]+35,c[1]+6,5,5);
+    ctx.fillStyle='#324858';for(var j=0;j<5;j++)ctx.fillRect(c[0]+5+j*7,c[1]+16,4,5);
+  });
+  ctx.translate(VIEW_W/2,VIEW_H/2);ctx.strokeStyle='rgba(146,210,229,.13)';ctx.lineWidth=3;
+  [60,74].forEach(function(rad){ctx.beginPath();ctx.arc(0,0,rad,0,TAU);ctx.stroke();});
+  for(var i=0;i<3;i++){ctx.save();ctx.rotate(i*Math.PI/3);ctx.beginPath();ctx.ellipse(0,0,44,15,0,0,TAU);ctx.stroke();ctx.restore();}
+  ctx.fillStyle='rgba(146,210,229,.2)';ctx.beginPath();ctx.arc(0,0,6,0,TAU);ctx.fill();ctx.restore();
+}
 function drawPlayer(p){
   if (!_dunReady()){ drawPlayerProc(p); return; }
   var idx = CLASS_SPR[p.clazz] != null ? CLASS_SPR[p.clazz] : 98;
@@ -614,7 +665,7 @@ function drawEnemy(e){
   ctx.globalAlpha = al;
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath(); ctx.ellipse(e.x, e.y + e.r + 2, e.r*0.9, e.r*0.4, 0, 0, TAU); ctx.fill();
-  var bob = spawn ? 0 : Math.sin(e.wob) * e.r * 0.06;
+  var bob = spawn || raiderReducedMotion ? 0 : Math.sin(e.wob) * e.r * 0.06;
   var tint = null, ta = 0;
   if (e.hitFlash > 0){ tint = '#ffffff'; ta = 0.85; }
   else if (e.frozenT > 0){ tint = '#4FC3F7'; ta = 0.55; }
@@ -906,6 +957,29 @@ var lastTime = 0;
 var chosenClass = 'ranger';
 var chosenDiff = 'raider';
 var chosenSkill = 'mortar';
+var raiderRunKey='',raiderRunLevel='';
+function bindRaiderRunIdentity(){
+  if(!G || raiderRunKey || !scienceFeed)return;
+  var identity=scienceFeed.context();raiderRunKey=identity.studentKey;raiderRunLevel=identity.studentLevel;
+}
+function retireRaiderIdentity(){
+  var identity=scienceFeed.context();
+  if(!G || !raiderRunKey || (identity.studentKey===raiderRunKey && identity.studentLevel===raiderRunLevel))return false;
+  backToMenu();toast('Learner changed — start a fresh raid for this learner.','energy');return true;
+}
+var raiderAutoAim=window.matchMedia('(pointer: coarse)').matches, raiderReducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+try { var prefs=JSON.parse(localStorage.getItem('raiders_controls')||'null'); if(prefs){ raiderAutoAim=prefs.autoAim===true; if(typeof prefs.reducedMotion==='boolean') raiderReducedMotion=prefs.reducedMotion; } } catch(e){}
+function saveRaiderControls(){ try{ localStorage.setItem('raiders_controls',JSON.stringify({autoAim:raiderAutoAim,reducedMotion:raiderReducedMotion})); }catch(e){} }
+function resetRaiderInput(){ keys={}; mouse.active=false; mouse.down=false; touchMove.active=false;touchMove.dx=0;touchMove.dy=0;touchMove.id=null; }
+function pauseRaid(){ if(G && G.state==='play'){ paused=true; resetRaiderInput(); show('pauseOverlay'); } }
+function resumeRaid(){ if(!G || G.state!=='play' || document.hidden) return; resetRaiderInput();paused=false;hide('pauseOverlay'); }
+function updateRaiderDeck(){
+  var button=$('aimModeBtn');button.textContent=raiderAutoAim?'Aim: Nearest enemy':'Aim: Mouse';button.setAttribute('aria-pressed',String(raiderAutoAim));
+  var active=!!(G && G.state==='play' && !paused), cooldown=active?Math.max(0,G.player.dashCd):0;
+  $('dashBtn').disabled=!active || cooldown>0;$('dashBtn').textContent=cooldown>0?'Dash '+cooldown.toFixed(1)+'s':'Dash ready';
+  $('roomObjective').textContent=G ? (G.state==='play'?'Clear '+(G.enemies.length+G.pending.length)+' enemies · dodge red aim lines':'Read, answer and choose your next upgrade') : 'Clear the room, then earn your next upgrade.';
+}
+
 
 function newPlayer(clazz){
   var c = CLASSES[clazz];
@@ -934,6 +1008,7 @@ function newPlayer(clazz){
 }
 
 function startRun(){
+  resetRaiderInput();raiderRunKey='';raiderRunLevel='';
   G = {
     player: newPlayer(chosenClass),
     diff: DIFFS[chosenDiff],
@@ -949,6 +1024,7 @@ function startRun(){
     mortars: [], blackholes: [], allies: [],
     pending: [], spawnTimer: 0, spawnBudget: 0     // periodic enemy spawning
   };
+  bindRaiderRunIdentity();
   buildRoom();
   hideAll();
   paused = false;
@@ -1059,15 +1135,20 @@ var keys = {};
 var mouse = { x: VIEW_W/2, y: VIEW_H/2, active: false, down: false };
 
 window.addEventListener('keydown', function(e){
-  var k = e.key.toLowerCase();
-  keys[k] = true;
-  if ((k === ' ' || k === 'shift') && G && G.state === 'play') { e.preventDefault(); tryDash(); }
-  if (k === 'q' && G && G.state === 'play' && !paused) { e.preventDefault(); triggerSkill(); }
-  if (k === 'p') togglePause();
-  if (k === 'escape' && G && G.state === 'play') togglePause();
-  if ([ 'arrowup','arrowdown','arrowleft','arrowright',' ' ].indexOf(e.key.toLowerCase()) >= 0) e.preventDefault();
+  if(e.ctrlKey || e.altKey || e.metaKey || (e.target && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)))) return;
+    if(e.target && e.target.tagName==='BUTTON' && (e.key===' ' || e.key==='Enter')) return;
+  var k=e.key.toLowerCase();
+  if(!G || G.state!=='play') return;
+  if((k==='p'||k==='escape') && !e.repeat){e.preventDefault();togglePause();return;}
+  if(paused) return;
+  keys[k]=true;
+  if(!e.repeat && (k===' '||k==='shift')){e.preventDefault();tryDash();}
+  if(!e.repeat && k==='q'){e.preventDefault();triggerSkill();}
+  if(['arrowup','arrowdown','arrowleft','arrowright',' '].indexOf(k)>=0)e.preventDefault();
 });
-window.addEventListener('keyup', function(e){ keys[e.key.toLowerCase()] = false; });
+window.addEventListener('keyup',function(e){keys[e.key.toLowerCase()]=false;});
+window.addEventListener('blur',pauseRaid);
+document.addEventListener('visibilitychange',function(){if(document.hidden)pauseRaid();});
 
 function canvasPos(clientX, clientY){
   var r = canvas.getBoundingClientRect();
@@ -1083,7 +1164,9 @@ var touchMove = { active: false, sx: 0, sy: 0, dx: 0, dy: 0 };
 var lastTap = 0;
 canvas.addEventListener('touchstart', function(e){
   e.preventDefault();
-  var t = e.changedTouches[0];
+  if(!G || G.state!=='play' || paused || touchMove.active) return;
+  mouse.active=false;
+  var t = e.changedTouches[0]; touchMove.id=t.identifier;
   touchMove.active = true; touchMove.sx = t.clientX; touchMove.sy = t.clientY; touchMove.dx = 0; touchMove.dy = 0;
   var now = Date.now();
   if (now - lastTap < 280 && G && G.state === 'play') tryDash();
@@ -1092,12 +1175,18 @@ canvas.addEventListener('touchstart', function(e){
 canvas.addEventListener('touchmove', function(e){
   e.preventDefault();
   if (!touchMove.active) return;
-  var t = e.changedTouches[0];
+  var t=Array.prototype.find.call(e.changedTouches,function(t){return t.identifier===touchMove.id;}); if(!t)return;
   touchMove.dx = t.clientX - touchMove.sx; touchMove.dy = t.clientY - touchMove.sy;
 }, { passive: false });
-canvas.addEventListener('touchend', function(e){ e.preventDefault(); touchMove.active = false; touchMove.dx = 0; touchMove.dy = 0; }, { passive: false });
+function endRaiderTouch(e){
+  if(!Array.prototype.some.call(e.changedTouches,function(t){return t.identifier===touchMove.id;}))return;
+  e.preventDefault();touchMove.active=false;touchMove.dx=0;touchMove.dy=0;touchMove.id=null;
+}
+canvas.addEventListener('touchend',endRaiderTouch,{passive:false});
+canvas.addEventListener('touchcancel',endRaiderTouch,{passive:false});
 
 function tryDash(){
+  if(!G || G.state!=='play' || paused || document.hidden) return;
   var p = G.player;
   if (p.dashCd > 0) return;
   var mv = moveVector();
@@ -1156,7 +1245,7 @@ function update(dt){
   p.y = clamp(p.y, 26, VIEW_H - 26);
 
   // aim
-  if (mouse.active){ p.aim = Math.atan2(mouse.y - p.y, mouse.x - p.x); }
+  if (mouse.active && !raiderAutoAim && !touchMove.active){ p.aim = Math.atan2(mouse.y - p.y, mouse.x - p.x); }
   else {
     var near = nearestEnemy(p.x, p.y);
     if (near) p.aim = Math.atan2(near.y - p.y, near.x - p.x);
@@ -1605,7 +1694,7 @@ function updateEnemies(dt){
       e.y += Math.sin(ang) * e.speed * 60 * dt * spdMul;
     } else if (e.behavior === 'shoot'){
       // hold position, fire when in range (frozen enemies can't fire)
-      if (!frozen){ e.fireCd -= dt; if (d < e.range && e.fireCd <= 0){ enemyShoot(e, ang); e.fireCd = 1 / e.fireRate; } }
+      if (!frozen) updateEnemyFire(e,dt,ang,d);
     } else if (e.behavior === 'strafe'){
       // keep mid distance, circle, and fire
       var ideal = e.range * 0.6;
@@ -1615,7 +1704,7 @@ function updateEnemies(dt){
       var perp = ang + Math.PI/2 * e.strafeDir;
       e.x += Math.cos(perp) * e.speed * 35 * dt * spdMul;
       e.y += Math.sin(perp) * e.speed * 35 * dt * spdMul;
-      if (!frozen){ e.fireCd -= dt; if (d < e.range && e.fireCd <= 0){ enemyShoot(e, ang); e.fireCd = 1 / e.fireRate; } }
+      if (!frozen) updateEnemyFire(e,dt,ang,d);
     } else if (e.behavior === 'boss'){
       if (!frozen) updateBoss(e, dt, ang, d, p);
     }
@@ -1647,12 +1736,45 @@ function updateEnemies(dt){
   }
 }
 
+function enemyWindup(e){ return e.shot==='fast' ? .6 : .4; }
+function updateEnemyFire(e,dt,angle,distance){
+  var range=e.behavior==='boss'?VIEW_W*2:e.range;
+  if(distance>=range){ e.aimLock=null;e.fireCd=Math.max(0,e.fireCd-dt);return; }
+  if(e.aimLock==null && e.fireCd<=enemyWindup(e)){e.aimLock=angle;e.fireCd=Math.max(e.fireCd,enemyWindup(e));}
+  e.fireCd-=dt;
+  if(e.fireCd<=0){ enemyShoot(e,e.aimLock==null?angle:e.aimLock);e.aimLock=null;e.fireCd=1/e.fireRate; }
+}
+function drawThreatTelegraphs(){
+  G.enemies.forEach(function(e){
+    if(e.dead || e.spawnT>0 || e.frozenT>0)return;
+    ctx.save();
+    if(e.aimLock!=null){
+      var strength=1-clamp(e.fireCd/enemyWindup(e),0,1),length=e.shot==='fast'?VIEW_W:Math.min(e.range||360,360);
+      ctx.translate(e.x,e.y);ctx.rotate(e.aimLock);ctx.strokeStyle='rgba(255,132,126,'+(.4+strength*.5)+')';ctx.lineWidth=e.shot==='fast'?3:2;
+      ctx.setLineDash([8,7]);ctx.beginPath();ctx.moveTo(e.r+4,0);ctx.lineTo(length,0);ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle='#ffc9a5';ctx.beginPath();ctx.arc(e.r+7,0,3+strength*3,0,TAU);ctx.fill();
+    }
+    ctx.restore();
+    if(e.behavior==='boss' && e.bossCd<.65){ctx.save();ctx.strokeStyle='#ffb36b';ctx.lineWidth=3;ctx.beginPath();ctx.arc(e.x,e.y,e.r+12+(1-e.bossCd/.65)*28,0,TAU);ctx.stroke();ctx.fillStyle='#fff0d3';ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.fillText('BURST INCOMING',e.x,e.y-e.r-22);ctx.restore();}
+  });
+}
+function drawRaiderIndicators(){
+  var p=G.player;
+  ctx.save();
+  // Player marker and dash meter remain readable over every floor palette.
+  ctx.strokeStyle=p.dashCd<=0?'#81f0cf':'#608794';ctx.lineWidth=3;ctx.beginPath();ctx.arc(p.x,p.y,p.r+10,-Math.PI/2,-Math.PI/2+TAU*(1-clamp(p.dashCd/.9,0,1)));ctx.stroke();
+  if(p.dashTime>0){ctx.strokeStyle='#adffea';ctx.lineWidth=7;ctx.globalAlpha=.4;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x-Math.cos(p.dashAng)*35,p.y-Math.sin(p.dashAng)*35);ctx.stroke();ctx.globalAlpha=1;}
+  var target=mouse.active&&!raiderAutoAim&&!touchMove.active?mouse:nearestEnemy(p.x,p.y);
+  if(target){ctx.strokeStyle='#c5fff2';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(target.x,target.y,11,0,TAU);ctx.stroke();for(var i=0;i<4;i++){var a=i*Math.PI/2;ctx.beginPath();ctx.moveTo(target.x+Math.cos(a)*14,target.y+Math.sin(a)*14);ctx.lineTo(target.x+Math.cos(a)*19,target.y+Math.sin(a)*19);ctx.stroke();}}
+  if(touchMove.active){var origin=canvasPos(touchMove.sx,touchMove.sy),len=Math.hypot(touchMove.dx,touchMove.dy)||1;ctx.globalAlpha=.45;ctx.fillStyle='#b3f4ff';ctx.beginPath();ctx.arc(origin.x,origin.y,32,0,TAU);ctx.fill();ctx.globalAlpha=.9;ctx.beginPath();ctx.arc(origin.x+touchMove.dx/len*Math.min(23,len),origin.y+touchMove.dy/len*Math.min(23,len),12,0,TAU);ctx.fill();}
+  ctx.restore();
+}
 function updateBoss(e, dt, ang, d, p){
-  e.bossCd -= dt; e.fireCd -= dt;
+  e.bossCd -= dt;
   // drift toward player slowly
   e.x += Math.cos(ang) * e.speed * 60 * dt * 0.5;
   e.y += Math.sin(ang) * e.speed * 60 * dt * 0.5;
-  if (e.fireCd <= 0){ enemyShoot(e, ang); e.fireCd = 1 / e.fireRate; }   // aimed 3-spread, often
+  updateEnemyFire(e,dt,ang,d); // lock and show the aimed burst before it fires
   if (e.bossCd <= 0){
     // alternate a big radial burst with a sweeping spiral — faster & denser
     e.bossPhase = (e.bossPhase + 1) % 2;
@@ -2011,7 +2133,8 @@ function onRoomCleared(){
   G.ebullets = [];
   // small heal drop occasionally
   banner('Room cleared!', 900);
-  setTimeout(openQuestion, 650);
+  var clearedRun=G;
+  setTimeout(function(){if(G===clearedRun && G.state==='question')openQuestion();}, 650);
 }
 
 function advanceRoom(){
@@ -2034,7 +2157,7 @@ function advanceRoom(){
 function render(){
   ctx.save();
   // screen shake
-  if (G && G.shakeT > 0){
+  if (G && G.shakeT > 0 && !raiderReducedMotion){
     var m = G.shakeMag * (G.shakeT / 0.2);
     ctx.translate(rand(-m, m), rand(-m, m));
   }
@@ -2068,8 +2191,9 @@ function render(){
   }
 
   // pickups
-  for (var i = 0; i < G.pickups.length; i++){ var k = G.pickups[i]; drawHeart(k.x, k.y + Math.sin(k.t*4)*2, 9); }
+  for (var i = 0; i < G.pickups.length; i++){ var k = G.pickups[i]; drawHeart(k.x, k.y + (raiderReducedMotion?0:Math.sin(k.t*4)*2), 9); }
 
+  drawThreatTelegraphs();
   // enemies
   for (var e = 0; e < G.enemies.length; e++) drawEnemy(G.enemies[e]);
 
@@ -2112,6 +2236,7 @@ function render(){
 
   // player
   drawPlayer(G.player);
+  drawRaiderIndicators();
 
   // orbital guard drones (on top of the player)
   if (G.player.orbit){
@@ -2377,17 +2502,12 @@ function toast(msg, kind){
 
 /* ---------------- 12. OVERLAYS ---------------- */
 function hideAll(){ ['introOverlay','upgradeOverlay','questionOverlay','pauseOverlay','overOverlay'].forEach(function(id){ $(id).classList.remove('show'); }); }
-function show(id){ $(id).classList.add('show'); }
+function show(id){ resetRaiderInput(); $(id).classList.add('show'); }
 function hide(id){ $(id).classList.remove('show'); }
 
 function togglePause(){
-  if (!G || G.state !== 'play') {
-    // allow unpausing
-    if (paused){ paused = false; hide('pauseOverlay'); }
-    return;
-  }
-  paused = !paused;
-  if (paused) show('pauseOverlay'); else hide('pauseOverlay');
+  if(!G || G.state!=='play')return;
+  if(paused)resumeRaid();else pauseRaid();
 }
 
 /* ---------------- 13. GAME OVER ---------------- */
@@ -2397,7 +2517,7 @@ function raidScore(){ return (G.floor * 1000) + G.kills; }
 function raidScoreLabel(){ return 'Floor ' + G.floor + ' · ' + G.kills + ' kills'; }
 function reportScore(){
   if (!embedded()) return;
-  try { window.parent.postMessage({ type:'SD_SCORE', mode:'raiders', score: raidScore(), label: raidScoreLabel() }, '*'); } catch(e){}
+  try { window.parent.postMessage({ type:'SD_SCORE', studentKey:raiderRunKey, studentLevel:raiderRunLevel, mode:'raiders', score: raidScore(), label: raidScoreLabel() }, '*'); } catch(e){}
 }
 
 function gameOver(){
@@ -2485,10 +2605,13 @@ function recordAnswer(q, correct){
 var qState = { active: false, current: null, answered: false };
 
 // The portal owns level, mastery, quality and shared repetition decisions.
+var raiderAcceptedFeedEvent=null;
 var scienceFeed = ScienceFeedBridge.create({
-  onPool: function(rows){ applyBankQuestions(rows); },
+  onPool: function(rows, acceptedEvent){ raiderAcceptedFeedEvent=acceptedEvent||null; applyBankQuestions(rows);bindRaiderRunIdentity(); },
   onInvalidate: function(){
-    var wasActive=typeof qState!=='undefined' && qState && qState.active;
+    var retired=retireRaiderIdentity();
+    if(!_gameCreditsReady()){_gPlaysLeft=null;scienceFeed.refresh();}
+    var wasActive=!retired && typeof qState!=='undefined' && qState && qState.active;
     if(wasActive && G && G.state==='question')advanceRoom();
     if(typeof qState !== 'undefined' && qState){ qState.active=false; qState.current=null; qState.answered=true; }
     var overlay=document.getElementById('questionOverlay'); if(overlay) overlay.classList.remove('show');
@@ -2497,9 +2620,10 @@ var scienceFeed = ScienceFeedBridge.create({
 var scienceFeedOpening=false;
 async function openQuestion(){
   if(scienceFeedOpening || qState.active) return;
+  var questionRun=G;if(!questionRun)return;
   scienceFeedOpening=true;
   try { await scienceFeed.refresh(); } finally { scienceFeedOpening=false; }
-  if (qState.active) return;
+  if (G!==questionRun || qState.active) return;
   var q = pickQuestion();
   if (!q){ // Keep the activity moving without awarding an answer bonus.
     toast(scienceFeed.message(), 'energy');
@@ -2579,6 +2703,7 @@ function answerQuestion(idx, btnEl){
   btn.style.display = 'inline-flex';
   btn.textContent = grantsUpgrade ? 'Choose an upgrade →' : 'Continue →';
   btn.onclick = function(){
+    if(!G || !qState.active || qState.current!==q || !scienceFeed.current(q))return;
     qState.active = false;
     hide('questionOverlay');
     if (grantsUpgrade){ openUpgrade(); }
@@ -2749,23 +2874,31 @@ function requestBankQuestions(){
   if (!usingBankQuestions) setTimeout(requestBankQuestions, _bankReqTries < 8 ? 1200 : 5000);
 }
 // Daily play limit (set by the parent app). null = unknown / not embedded = no limit.
-var _gPlaysLeft = null;
-function _canPlayGame(){ return _gPlaysLeft == null || _gPlaysLeft > 0; }
+var _gPlaysLeft = null, _gPlaysIdentity='';
+function _gameCreditIdentity(){var c=scienceFeed.context();return JSON.stringify([c.studentKey,c.studentLevel]);}
+function _gameCreditsReady(){ return !(window.parent && window.parent!==window) || (_gPlaysLeft!==null && !!scienceFeed.context().studentKey && _gPlaysIdentity===_gameCreditIdentity()); }
+function _canPlayGame(){ return _gameCreditsReady() && (_gPlaysLeft==null || _gPlaysLeft>0); }
 function _noteGamePlayStart(){
-  if (window.parent && window.parent !== window){ try { window.parent.postMessage({ type:'SD_PLAY_START', mode:'raiders' }, '*'); } catch(e){} }
+  if(!_gameCreditsReady())return;
+  if (window.parent && window.parent !== window){ try { window.parent.postMessage({ type:'SD_PLAY_START', studentKey:raiderRunKey, studentLevel:raiderRunLevel, mode:'raiders' }, '*'); } catch(e){} }
   if (_gPlaysLeft != null && _gPlaysLeft > 0) _gPlaysLeft--;
 }
-function _showPlayLimit(){ toast("Out of game credits — answer 5 questions in any practice mode to earn one, or come back tomorrow!", 'bad'); }
+function _showPlayLimit(){ toast(!_gameCreditsReady()?"Game credits are still loading. Please wait a moment.":"Out of game credits — answer 5 questions in any practice mode to earn one, or come back tomorrow!", 'bad'); }
 window.addEventListener('message', function(ev){
   var d = ev && ev.data;
   if (!d || d.type !== 'SD_PLAYS_LEFT') return;
-  if (d.playsLeft && typeof d.playsLeft.raiders === 'number') _gPlaysLeft = d.playsLeft.raiders;
+  if(ev.source!==window.parent || ev.origin!==location.origin)return;
+  if (d.playsLeft && typeof d.playsLeft.raiders === 'number') { _gPlaysLeft = d.playsLeft.raiders; _gPlaysIdentity=_gameCreditIdentity(); }
 });
 window.addEventListener('message', function(ev){
   var d = ev && ev.data;
   if (!d || d.type !== 'SD_QUESTIONS') return;
+  if(ev.source!==window.parent || ev.origin!==location.origin || d.feedPolicyVersion!==1) return;
+  if(ev!==raiderAcceptedFeedEvent)return;
+  var acceptedIdentity=scienceFeed.context();
+  if(String(d.studentKey||'')!==acceptedIdentity.studentKey || String(d.studentLevel||'')!==acceptedIdentity.studentLevel) return;
   if (d.studentKey){ studentKey = String(d.studentKey); loadAdaptiveState(); }
-  if (d.playsLeft && typeof d.playsLeft.raiders === 'number') _gPlaysLeft = d.playsLeft.raiders;
+  if (d.playsLeft && typeof d.playsLeft.raiders === 'number') { _gPlaysLeft = d.playsLeft.raiders; _gPlaysIdentity=_gameCreditIdentity(); }
   // scienceFeed accepts only a current policy response.
   if (Array.isArray(d.seenIds)){
     d.seenIds.forEach(function(id){ if (id && !student.seen[id]) student.seen[id] = { n:1, correct:0, fromHistory:true }; });
@@ -2872,6 +3005,7 @@ function flagFailed(msg){
 window.addEventListener('message', function(ev){
   var d = ev && ev.data;
   if (!d || d.type !== 'SD_FLAG_RESULT') return;
+  if(ev.source!==window.parent || ev.origin!==location.origin)return;
   if (d.ok) flagSucceeded(); else flagFailed(d.message);
 });
 
@@ -2915,13 +3049,17 @@ function wireUI(){
   $('startBtn').addEventListener('click', function(){ if (!_canPlayGame()){ _showPlayLimit(); return; } startRun(); _noteGamePlayStart(); });
   $('againBtn').addEventListener('click', function(){ if (!_canPlayGame()){ _showPlayLimit(); return; } hide('overOverlay'); startRun(); _noteGamePlayStart(); });
   $('pauseBtn').addEventListener('click', togglePause);
-  $('resumeBtn').addEventListener('click', function(){ paused = false; hide('pauseOverlay'); });
+  $('resumeBtn').addEventListener('click', resumeRaid);
+  $('dashBtn').addEventListener('click',tryDash);
+  $('aimModeBtn').addEventListener('click',function(){raiderAutoAim=!raiderAutoAim;saveRaiderControls();updateRaiderDeck();});
+  $('motionToggle').checked=raiderReducedMotion;
+  $('motionToggle').addEventListener('change',function(){raiderReducedMotion=this.checked;saveRaiderControls();});
   $('quitBtn').addEventListener('click', backToMenu);
   $('restartBtn').addEventListener('click', function(){ if (G && confirm('Abandon this run and return to the menu?')) backToMenu(); });
 }
 
 function backToMenu(){
-  G = null; paused = false;
+  resetRaiderInput();G = null; paused = false;
   hideAll(); show('introOverlay');
 }
 
@@ -2932,6 +3070,7 @@ function loop(now){
   update(dt);
   render();
   renderSkillBar();
+  updateRaiderDeck();
   requestAnimationFrame(loop);
 }
 

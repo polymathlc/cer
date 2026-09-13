@@ -7013,6 +7013,40 @@ body.em-editing #printProgress { z-index: 470; }
 .rpg-you-tag { font-family: 'Space Mono', monospace; font-size: 0.56rem; background: var(--primary); color: #fff; border-radius: 999px; padding: 2px 7px; margin-left: 6px; vertical-align: middle; }
 @media (max-width: 560px) { .rpg-board-meta { display: none; } }
 /* adventure mode */
+/* Tactical adventure controls and three illustrated dungeon realms. */
+.adv-tactics { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 10px; }
+.adv-control { font:700 .8rem inherit; padding:9px 12px; border:1px solid #c7c3da; border-radius:10px; background:#f4f1fc; color:#362b59; cursor:pointer; min-height:40px; }
+.adv-control:disabled { opacity:.5; cursor:default; }
+.adv-control[aria-pressed="true"] { background:#392857; color:white; }
+.adv-control.adv-guard-btn { background:linear-gradient(135deg,#15777c,#124d72); color:#fff; border-color:#218a98; }
+.adv-tactical-hint { flex:1 1 220px; color:var(--text-muted); font-size:.75rem; line-height:1.4; }
+.adv-stage { --adv-glow:#64caee; }
+.adv-stage[data-realm="crystal"] { background:radial-gradient(ellipse at 60% 100%,#25445d,#11192d 66%); }
+.adv-stage[data-realm="ember"] { --adv-glow:#ff995d; background:radial-gradient(ellipse at 60% 100%,#65302e,#251727 66%); }
+.adv-stage[data-realm="forest"] { --adv-glow:#7ce4ac; background:radial-gradient(ellipse at 60% 100%,#235149,#112726 66%); }
+.adv-stage[data-realm="arena"] { --adv-glow:#d6a1ff; background:radial-gradient(ellipse at 60% 100%,#533673,#21192e 66%); }
+.adv-scenery { position:absolute; inset:0; width:100%; height:100%; color:var(--adv-glow); opacity:.5; pointer-events:none; }
+.adv-mist { position:absolute; inset:50% -10% 0; background:radial-gradient(ellipse at 50% 100%,var(--adv-glow),transparent 67%); opacity:.13; pointer-events:none; animation:advMist 7s ease-in-out infinite alternate; }
+@keyframes advMist { to { transform:translateX(5%) scaleY(.75); opacity:.23; } }
+.adv-realm-badge { position:absolute; top:12px; left:14px; font-size:.64rem; text-transform:uppercase; letter-spacing:.16em; color:var(--adv-glow); font-weight:800; z-index:3; }
+.adv-realm-badge::after { content:"Crystal vault"; }
+.adv-stage[data-realm="ember"] .adv-realm-badge::after { content:"Ember forge"; }
+.adv-stage[data-realm="forest"] .adv-realm-badge::after { content:"Verdant ruins"; }
+.adv-stage[data-realm="arena"] .adv-realm-badge::after { content:"Ghost arena"; }
+.adv-pause-label { display:none; position:absolute; inset:0; z-index:6; align-items:center; justify-content:center; color:white; font-weight:800; letter-spacing:.18em; background:#11182d88; pointer-events:none; }
+.adv-paused .adv-pause-label { display:flex; }
+.adv-paused, .adv-paused * { animation-play-state:paused !important; }
+.adv-intent { position:absolute; left:50%; bottom:-23px; transform:translateX(-50%); color:#ffe8ca; background:#501e24; font-size:.64rem; font-weight:800; white-space:nowrap; border-radius:7px; padding:3px 7px; }
+.adv-intent:empty { display:none; }
+.adv-winding::before { content:""; position:absolute; left:-10%; width:120%; bottom:-6px; height:12px; border:2px solid #ff8267; border-radius:50%; background:#ff614445; box-shadow:0 0 16px #ff6144; animation:advDanger .45s ease-in-out infinite alternate; }
+@keyframes advDanger { to { transform:scaleX(.85); filter:brightness(1.7); } }
+.adv-guarding .adv-hero::after { content:""; position:absolute; inset:6px -4px -8px; border-radius:48%; border:3px solid #9eefff; background:#6cdcf32b; box-shadow:0 0 28px #75dff977,inset 0 0 22px #75dff955; pointer-events:none; }
+button.adv-skill { padding:0; border:0; background:transparent; font:inherit; cursor:pointer; }
+button.adv-skill:disabled { cursor:default; }
+button.adv-skill:focus-visible { outline:3px solid #5499e5; outline-offset:4px; border-radius:12px; }
+@media(max-width:640px) { .adv-tactics { gap:6px; } .adv-control { padding:8px 9px; font-size:.75rem; } .adv-tactical-hint { flex-basis:100%; } .adv-realm-badge { font-size:.54rem; } }
+@media(prefers-reduced-motion:reduce) { .adv-mist,.adv-winding::before { animation:none; } }
+
 .adv-card { padding: 16px; }
 .adv-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .adv-stage { position: relative; height: 300px; border-radius: var(--radius-md); border: 1px solid #14101c; overflow: hidden; background: linear-gradient(#171225 0%, #221a30 70%, #281e36 100%); }
@@ -7040,6 +7074,7 @@ body.em-editing #printProgress { z-index: 470; }
 .adv-hero svg, .adv-foe .adv-foe-emoji { animation: advStep 0.5s ease-in-out infinite; }
 .adv-hero svg { width: 122px; height: auto; display: block; margin: 0 auto; }
 .adv-foe { left: 0; min-width: 70px; }
+@media(max-width:640px) { .adv-foe { width:112px; } .adv-foe .adv-tag { box-sizing:border-box; max-width:112px; } }
 .adv-foe.poisoned .adv-foe-emoji { filter: drop-shadow(0 0 9px #0f7a5a) hue-rotate(40deg) saturate(1.3); }
 .adv-foe.burning .adv-foe-emoji { filter: drop-shadow(0 0 10px #ff6b35) saturate(1.5); }
 .adv-foe.chilled .adv-foe-emoji { filter: drop-shadow(0 0 9px #8fd4ee) saturate(0.55); animation-duration: 4.4s; }
@@ -11459,7 +11494,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2>🏰 Endless Dungeon</h2>
           </div>
-          <div class="subtitle">Your hero fights automatically — weapon skills and pet abilities fire on cooldown. Beat each floor boss to descend deeper, where monsters grow ever stronger and richer. Each raid advances up to 3 floors, then you make camp — your progress is saved and the next raid carries on from there. Each raid spends 1 of your daily game credits (answer 5 questions in any practice mode to earn more).</div>
+          <div class="subtitle">Your hero attacks automatically. Guard against glowing enemy strikes, switch to manual skills to time your abilities, or pause to plan your next move. Beat each floor boss to descend deeper, where monsters grow ever stronger and richer. Each raid advances up to 3 floors, then you make camp — your progress is saved and the next raid carries on from there. Each raid spends 1 of your daily game credits (answer 5 questions in any practice mode to earn more).</div>
         </div>
       </div>
       <div class="page-body">
@@ -11471,7 +11506,15 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             <button class="btn btn-ghost btn-sm" id="advQuitBtn" type="button" style="display:none;">🏳️ Give up</button>
             <button class="btn btn-primary" id="advStartBtn" type="button">⛏️ Enter dungeon</button>
           </div>
+          <div class="adv-tactics" aria-label="Battle controls">
+            <button class="adv-control" id="advPauseBtn" type="button" disabled>Ⅱ Pause</button>
+            <button class="adv-control" id="advAutoBtn" type="button" disabled>⚡ Auto skills</button>
+            <button class="adv-control adv-guard-btn" id="advGuardBtn" type="button" disabled>🛡 Guard</button>
+            <span class="adv-tactical-hint" id="advTacticalHint">Guard blocks 60% for 1.4s · 8s cooldown. Switch to manual to time your skills.</span>
+          </div>
           <div class="adv-stage" id="advStage">
+            <svg class="adv-scenery" viewBox="0 0 960 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g fill="none" stroke="currentColor"><path d="M55 270V115Q55 8 155 8T255 115V270M385 270V115Q385 8 485 8T585 115V270M715 270V115Q715 8 815 8T915 115V270" stroke-width="15" opacity=".18"/><path d="M72 270V115Q72 26 155 26T238 115V270M402 270V115Q402 26 485 26T568 115V270M732 270V115Q732 26 815 26T898 115V270" stroke-width="2" opacity=".55"/><path d="M155 58l20 31-20 31-20-31zM485 58l20 31-20 31-20-31zM815 58l20 31-20 31-20-31z" fill="currentColor" opacity=".6"/><path d="M0 270H960M0 286H960M95 270l-25 30M290 270l-10 30M485 270v30M680 270l10 30M875 270l25 30" opacity=".3"/></g></svg>
+            <div class="adv-mist"></div><span class="adv-realm-badge"></span><div class="adv-pause-label">Ⅱ PAUSED</div>
             <div class="dgn-wall"></div>
             <span class="dgn-web" style="left:-6px;top:-8px;">🕸️</span>
             <span class="dgn-web" style="right:-6px;top:-8px;transform:scaleX(-1);">🕸️</span>

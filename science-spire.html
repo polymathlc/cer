@@ -194,6 +194,41 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
 .hero-card .hp-flavor{font-size:0.7rem;font-style:italic;color:#8f86a8;margin-top:5px;line-height:1.3;}
 @media(max-width:560px){ .card{width:112px;min-height:168px;} .card .cframe{height:60px;} .card .cdesc{font-size:0.64rem;} .enemy .art,.hero .art{font-size:48px;}
   .log-panel{width:150px;font-size:0.64rem;max-height:40%;} }
+
+/* The vault is illustrated locally: no downloads or graphics services. */
+.stage { isolation:isolate; background:radial-gradient(ellipse at 50% 52%,#2c386247,transparent 65%); }
+.spire-vault { position:absolute; inset:0; width:100%; height:100%; z-index:-1; pointer-events:none; }
+.stage[data-room="boss"] .spire-vault { filter:hue-rotate(130deg) saturate(1.4); }
+.stage[data-room="elite"] .spire-vault { filter:hue-rotate(45deg); }
+.forecast { display:flex; align-items:center; gap:8px 14px; flex-wrap:wrap; padding:11px 240px 11px 16px; background:linear-gradient(90deg,#101b32ee,#17233899); border-bottom:1px solid #668ac055; font-size:.77rem; min-height:57px; color:#c5d9f5; }
+.forecast .turn-label { color:#a8eedb; font-size:.62rem; font-weight:900; letter-spacing:.13em; }
+.forecast.danger .hp-risk { color:#ffb997; font-weight:800; }
+.forecast:not(.danger) .hp-risk { color:#92f5c1; }
+.enemy-row { padding-top:38px; }
+.enemy::after { content:""; position:absolute; bottom:-10px; width:110%; height:14px; border-radius:50%; background:#91b9ef20; border:1px solid #91b9ef40; z-index:-1; }
+.enemy.target-preview { filter:drop-shadow(0 0 12px #ffcb6680); }
+.enemy.target-preview::after { border:2px solid #ffd76a; box-shadow:0 0 20px #ffd76a80; }
+.target-label { position:absolute; bottom:100%; margin-bottom:7px; color:#ffe7a5; font-size:.68rem; white-space:nowrap; padding:4px 8px; background:#30264a; border:1px solid #d8b878; border-radius:6px; }
+.card.selected { transform:translateY(-20px); margin:0 9px; box-shadow:0 0 0 3px #ffdc75,0 0 28px #ffce6580; z-index:5; }
+.card:focus-visible,.enemy:focus-visible { outline:3px solid #a3ddff; outline-offset:5px; }
+.target-help { display:flex; align-items:center; justify-content:center; gap:10px; min-height:38px; padding:2px 12px 8px; }
+.target-help .hint { padding:0; }
+.target-help .btn { font-size:.7rem; padding:5px 9px; flex-shrink:0; }
+.hand { overflow-x:auto; overflow-y:hidden; padding-top:28px; flex-shrink:0; min-height:230px; justify-content:safe center; scrollbar-width:thin; }
+.hero-row { flex-shrink:0; }
+@media(max-width:560px) {
+ .hud { gap:5px; padding:6px 8px; } .hud .brand { font-size:.8rem; } .chip { font-size:.68rem; padding:3px 7px; } .hud .btn { padding:5px 8px; font-size:.7rem; }
+ .forecast { padding:9px 10px; padding-right:84px; font-size:.68rem; gap:5px 8px; min-height:65px; } .forecast .turn-label { flex-basis:100%; }
+ .log-panel { width:74px; top:5px; right:5px; } .log-panel:not(.collapsed) { width:185px; } .log-head { padding:6px; font-size:0; } .log-head::before { content:"Log"; font-size:.65rem; } .log-head span { font-size:.65rem; }
+ .enemy-row { gap:15px; padding-top:25px; } .enemy .art svg.spr { width:64px; height:64px; } .enemy[data-tier="Boss"] svg.spr { width:88px; height:88px; }
+ .enemy .intent { font-size:.68rem; } .enemy .bar { width:82px; } .hero .art svg.spr { width:64px; height:64px; } .hero .hpbar { width:100px; }
+ .hero-row { padding:4px 9px; gap:7px; flex-wrap:wrap; } .controls { gap:8px; padding:0; } .energy-orb { width:42px; height:42px; font-size:.85rem; } .controls .btn { font-size:.7rem; padding:8px; } .pile { flex-basis:100%; text-align:right; font-size:.64rem; }
+ .hand { min-height:216px; justify-content:flex-start; padding-left:22px; padding-right:24px; gap:8px; } .hand .card { margin:0; width:112px; } .hand .card:hover { margin:0; transform:translateY(-8px); } .hand .card.selected { transform:translateY(-14px); }
+ .target-help { min-height:40px; } .target-help .hint { font-size:.66rem; }
+}
+@media(max-height:650px) { .enemy-row { padding-top:24px; } .hero .art svg.spr { width:48px; height:48px; } .hand { min-height:194px; } .hand .card { min-height:155px; } .hand .card .cframe { height:44px; } }
+@media(prefers-reduced-motion:reduce) { svg.spr,.enemy,.card,.hero { animation:none!important; transition:none!important; } }
+
 </style>
 </head>
 <body>
@@ -211,8 +246,10 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
   </div>
 
   <div class="stage" id="stage">
-    <div class="log-panel" id="logPanel">
-      <div class="log-head" id="logHead">📜 Battle Log<span class="spc"></span><span id="logToggle">▾</span></div>
+    <svg class="spire-vault" viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="vaultGlow" x2="0" y2="1"><stop stop-color="#87dcff" stop-opacity=".42"/><stop offset="1" stop-color="#443d91" stop-opacity=".04"/></linearGradient></defs><g fill="url(#vaultGlow)" stroke="#90bdde" stroke-opacity=".24"><path d="M50 510V240Q50 35 210 35T370 240V510Z"/><path d="M405 510V150Q405 -10 500 -10T595 150V510Z"/><path d="M630 510V240Q630 35 790 35T950 240V510Z"/></g><g fill="none" stroke="#9cbdff" opacity=".2"><path d="M0 510H1000M0 550H1000M0 620H1000M500 510L100 640M500 510L900 640M500 510V640"/><circle cx="500" cy="265" r="105"/><circle cx="500" cy="265" r="92"/><path d="M500 160l91 157H409Z"/></g><g fill="#a1ddff" opacity=".5"><path d="M210 180l20 35-20 35-20-35zM790 180l20 35-20 35-20-35z"/></g></svg>
+    <div class="forecast" id="forecast" aria-live="polite"></div>
+    <div class="log-panel collapsed" id="logPanel">
+      <div class="log-head" id="logHead">📜 Battle Log<span class="spc"></span><span id="logToggle">▸</span></div>
       <div class="log-list" id="logList"></div>
     </div>
     <div class="enemy-row" id="enemyRow"></div>
@@ -225,7 +262,7 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
       <div class="pile" id="pileInfo">Draw 0 · Discard 0</div>
     </div>
     <div class="hand" id="hand"></div>
-    <div class="hint" id="hint">Click a card to play it — attacks need a target.</div>
+    <div class="target-help"><div class="hint" id="hint">Tap a card to play.</div><button class="btn" id="cancelTargetBtn" type="button" hidden>Cancel target</button></div>
   </div>
 </div>
 
@@ -364,7 +401,7 @@ var CARDS = {
   cleave:   { name:'Cleave',      type:'attack', cost:1, rarity:'uncommon', art:'🪓', desc:'Deal 5 to ALL enemies.', eff:function(s){ s.enemies.forEach(function(e){ if(!e.dead) dealDamage(e,5); }); } },
   pommel:   { name:'Pommel Strike',type:'attack',cost:1, rarity:'uncommon', art:'⚔️', desc:'Deal 7 and draw 1 card.', eff:function(s,t){ dealDamage(t,7); drawCards(1); } },
   focus:    { name:'Focus',       type:'skill',  cost:0, rarity:'uncommon', art:'🌀', desc:'Draw 2 cards.', eff:function(s){ drawCards(2); } },
-  adrenal:  { name:'Adrenaline',  type:'skill',  cost:0, rarity:'uncommon', art:'⚡', desc:'Gain 1 Energy & draw 1.', eff:function(s){ s.energy+=1; drawCards(1); } },
+  adrenal:  { name:'Adrenaline',  type:'skill',  cost:0, rarity:'uncommon', art:'⚡', desc:'Gain 1 Energy & draw 1.', eff:function(s){ s.player.energy+=1; drawCards(1); } },
   weaken:   { name:'Weaken Ray',  type:'skill',  cost:1, rarity:'uncommon', art:'🔬', desc:'Apply 2 Weak to ALL enemies.', eff:function(s){ s.enemies.forEach(function(e){ if(!e.dead) e.weak=(e.weak||0)+2; }); } },
   poison:   { name:'Acid Flask',  type:'skill',  cost:1, rarity:'uncommon', art:'🧪', desc:'Apply 5 Poison.', eff:function(s,t){ t.poison=(t.poison||0)+5; } },
   // ---- rares / powerful (pack-worthy) ----
@@ -375,7 +412,7 @@ var CARDS = {
   meteor:   { name:'Meteor',      type:'attack', cost:3, rarity:'epic', art:'☄️', desc:'Deal 11 to ALL enemies, 4 Vulnerable.', eff:function(s){ s.enemies.forEach(function(e){ if(!e.dead){ dealDamage(e,11); e.vuln=(e.vuln||0)+4; } }); } },
   lifesteal:{ name:'Vampiric Bite',type:'attack',cost:2, rarity:'epic', art:'🩸', desc:'Deal 12 and heal 6 HP.', eff:function(s,t){ dealDamage(t,12); healPlayer(6); } },
   fortress: { name:'Bulwark',     type:'power',  cost:2, rarity:'epic', art:'🛡️', desc:'Gain 4 Block at the start of every turn.', eff:function(s){ s.player.regenBlock=(s.player.regenBlock||0)+4; toast('Bulwark!'); } },
-  apex:     { name:'Apex Nova',   type:'attack', cost:3, rarity:'legendary', art:'🌟', desc:'Deal 9 to ALL, gain 1 Energy & Strength.', eff:function(s){ s.enemies.forEach(function(e){ if(!e.dead) dealDamage(e,9); }); s.energy+=1; s.player.str=(s.player.str||0)+1; } },
+  apex:     { name:'Apex Nova',   type:'attack', cost:3, rarity:'legendary', art:'🌟', desc:'Deal 9 to ALL, gain 1 Energy & Strength.', eff:function(s){ s.enemies.forEach(function(e){ if(!e.dead) dealDamage(e,9); }); s.player.energy+=1; s.player.str=(s.player.str||0)+1; } },
   singularity:{name:'Singularity',type:'attack',cost:2, rarity:'legendary', art:'🕳️', desc:'Deal damage = 30% of target max HP.', eff:function(s,t){ dealDamage(t, Math.max(8, Math.round(t.maxHp*0.30))); } }
 };
 var RARITY = { common:'#cfd6e2', uncommon:'#7be0a2', rare:'#6fb3ff', epic:'#b79ae0', legendary:'#ffce5a' };
@@ -523,8 +560,10 @@ function spriteSvg(kind, pal, anim){
 /* ============================ STATE ============================ */
 var G = null, qState = { current:null, answered:false, pending:null }, _toastT=null, _busy=false;
 function newRun(){
+  _busy=false; _selCard=null;
   var hero = HEROES[selectedHero] || HEROES.warrior;
   G = {
+    feedContext: scienceFeed.context(),
     floor: 1,
     maxFloor: 0,
     heroKind: hero.kind,
@@ -600,6 +639,7 @@ function spawnEnemies(type){
 }
 function rollIntents(){ G.enemies.forEach(function(e){ if(!e.dead) e.intent = choice(e.moves); }); }
 function startPlayerTurn(first){
+  _selCard=null; G.actedEnemies=[];
   var p = G.player;
   p.block = 0;
   addLog('— Your turn —', 'log-turn');
@@ -608,6 +648,7 @@ function startPlayerTurn(first){
   if (first && G.questionBonus){ p.energy += G.questionBonus; addLog('✨ Question bonus: +'+G.questionBonus+' energy', 'log-buff'); G.questionBonus=0; }
   // tick poison on enemies at turn start
   G.enemies.forEach(function(e){ if(!e.dead && e.poison){ dealDamage(e, e.poison, true, 'poison'); } });
+  if (G.enemies.length && G.enemies.every(function(e){return e.dead;})){ winCombat(); return; }
   drawCards(5);
   G.turn='player';
   render();
@@ -645,41 +686,40 @@ function dealDamage(target, amt, ignoreBlockBuffs, srcLabel){
 function gainBlock(n){ G.player.block += n; floatText(heroEl(), '+'+n+'🛡', '#9fd0ff'); addLog('🛡️ You gain <b>'+n+'</b> block', 'log-block'); }
 function healPlayer(n){ var was=G.player.hp; G.player.hp = Math.min(G.player.maxHp, G.player.hp+n); floatText(heroEl(), '+'+n+'❤', '#7fe0a2'); addLog('❤️ You heal <b>'+(G.player.hp-was)+'</b> HP', 'log-heal'); }
 function damagePlayer(amt){
-  var dmg = amt;
+  var run=G, dmg = amt;
   var absorbed = Math.min(G.player.block, dmg);
   G.player.block -= absorbed; dmg -= absorbed;
   G.player.hp -= dmg;
-  if (dmg>0){ floatText(heroEl(), '-'+dmg, '#ff8a82'); flashHit(heroEl()); setAnim('player','hurt'); setTimeout(function(){ if(G&&G._heroAnim==='hurt'){ setAnim('player','idle'); render(); } }, 320); }
+  if (dmg>0){ floatText(heroEl(), '-'+dmg, '#ff8a82'); flashHit(heroEl()); setAnim('player','hurt'); setTimeout(function(){ if(G===run&&G._heroAnim==='hurt'){ setAnim('player','idle'); render(); } }, 320); }
   if (G.player.hp<=0){ G.player.hp=0; setAnim('player','death'); gameOver(); }
 }
 function playCard(handIdx, targetIdx){
-  if (_busy || G.turn!=='player' || G.state!=='combat') return;
+  if (!G || !spireRunCurrent() || _busy || G.turn!=='player' || G.state!=='combat') return;
   var id = G.hand[handIdx]; var c = CARDS[id]; if (!c) return;
   if (G.player.energy < c.cost){ toast('Not enough energy'); return; }
-  var target = (targetIdx!=null) ? G.enemies[targetIdx] : null;
-  if (c.type==='attack' && !target){
-    // pick first alive enemy if single-target attack auto
-    target = firstAlive();
-    if (!target){ return; }
-  }
+  var mode = cardTarget(id);
+  var target = targetIdx!=null ? G.enemies[targetIdx] : firstAlive();
+  if (mode==='enemy' && (!target || target.dead)) return;
+  _selCard=null;
+  var run=G;
   G.player.energy -= c.cost;
   addLog('🃏 You play <b>'+c.name+'</b> <span class="log-sub">— '+c.desc+'</span>', 'log-play');
   // card-appropriate animation: attacks throw the card's art at the target(s),
   // skills/powers pop the art over the hero.
   var hero=heroEl();
-  if (c.type==='attack'){
+  if (c.type==='attack' || mode==='enemy'){
     setAnim('player','attack');
     if (hero){ hero.classList.add('lunge'); setTimeout(function(){ var h=heroEl(); if(h) h.classList.remove('lunge'); }, 320); }
-    var isAoeHit = /enemies\.forEach/.test(c.eff.toString());
+    var isAoeHit = mode==='all';
     var tgts = isAoeHit ? G.enemies.filter(function(e){ return !e.dead; }) : (target?[target]:[]);
     tgts.forEach(function(tg){ projectile(hero, enemyEl(tg), c.art, { color: RARITY[c.rarity] }); });
   } else {
     castPop(hero, c.art, RARITY[c.rarity]);
   }
-  setTimeout(function(){ setAnim('player','idle'); render(); }, 260);
-  try { c.eff(G, target); } catch(e){ console.warn('card eff', e); }
-  // remove from hand -> discard
+  setTimeout(function(){ if(G===run && G.state==='combat'){ setAnim('player','idle'); render(); } }, 260);
+  // Free the played slot before a draw effect; the card enters discard after resolving.
   G.hand.splice(handIdx,1);
+  try { c.eff(G, target); } catch(e){ console.warn('card eff', e); }
   G.discard.push(id);
   reap();
   render();
@@ -688,16 +728,17 @@ function playCard(handIdx, targetIdx){
 function firstAlive(){ for (var i=0;i<G.enemies.length;i++) if(!G.enemies[i].dead) return G.enemies[i]; return null; }
 function reap(){ /* deaths handled by dead flag; visual removed on render */ }
 function endTurn(){
-  if (_busy || G.turn!=='player' || G.state!=='combat') return;
+  if (!G || !spireRunCurrent() || _busy || G.turn!=='player' || G.state!=='combat') return;
   // discard hand
   G.discard = G.discard.concat(G.hand); G.hand=[];
+  _selCard=null; G.actedEnemies=[];
   G.turn='enemy'; render();
   if (G.enemies.some(function(e){ return !e.dead; })) addLog('— Enemy turn —', 'log-turn');
   _busy = true;
   enemyActSeq(0);
 }
 function enemyActSeq(i){
-  if (G.state!=='combat'){ _busy=false; return; }
+  if (!G || !spireRunCurrent() || G.state!=='combat'){ _busy=false; return; }
   var alive = G.enemies.filter(function(e){ return !e.dead; });
   if (i>=alive.length){
     // weaken/vuln decay
@@ -708,7 +749,8 @@ function enemyActSeq(i){
     startPlayerTurn(false);
     return;
   }
-  var e = alive[i];
+  var run=G, e = alive[i];
+  G.actedEnemies=G.actedEnemies||[]; G.actedEnemies.push(e);
   var act = e.intent || choice(e.moves);
   setAnim(e, act.type==='attack'?'attack':'idle');
   if (act.type==='attack'){
@@ -730,8 +772,8 @@ function enemyActSeq(i){
     addLog('🌀 '+e.name+' weakens you (+2 Weak)', 'log-enemy');
   }
   render();
-  if (G.state!=='combat'){ _busy=false; return; }
-  setTimeout(function(){ setAnim(e,'idle'); enemyActSeq(i+1); }, 460);
+  if (!G || !spireRunCurrent() || G.state!=='combat'){ _busy=false; return; }
+  setTimeout(function(){ if(G!==run || G.state!=='combat' || G.turn!=='enemy') return; setAnim(e,'idle'); enemyActSeq(i+1); }, 460);
 }
 
 function winCombat(){
@@ -765,19 +807,38 @@ function nextNode(){
 
 /* ============================ QUESTION (MCQ) ============================ */
 // The portal owns level, mastery, quality and shared repetition decisions.
+var spireAcceptedFeedEvent=null;
 var scienceFeed = ScienceFeedBridge.create({
-  onPool: function(rows){ applyBank(rows); },
+  onPool: function(rows,event){ applyBank(rows); if(event)spireAcceptedFeedEvent=event; },
   onInvalidate: function(){
+    if(_gameCreditOwner!==JSON.stringify(scienceFeed.context())){ _gPlaysLeft=null; _gameCreditOwner=''; SEEN_STATS={}; CUSTOM_DECK=[]; OWNED_CARDS={}; scienceFeed.refresh(); }
+    if(spireCancelChangedLearner()) return;
     if(G && G.state==='question'){G.questionBonus=0;beginCombat();}
     if(typeof qState !== 'undefined' && qState){ qState.active=false; qState.current=null; qState.answered=true; }
     var overlay=document.getElementById('qOverlay'); if(overlay) overlay.classList.remove('show');
   }
 });
+function spireRunCurrent(){
+  if(!G) return false;
+  var expected=G.feedContext, actual=scienceFeed.context();
+  return !embedded() || !!expected && expected.studentKey===actual.studentKey && expected.studentLevel===actual.studentLevel;
+}
+function spireCancelChangedLearner(){
+  if(!G || spireRunCurrent()) return false;
+  G=null; _busy=false; _selCard=null; scienceFeedOpening=false;
+  qState.current=null; qState.answered=true; CUSTOM_DECK=[]; OWNED_CARDS={}; SEEN_STATS={};
+  document.querySelectorAll('.overlay').forEach(function(el){el.classList.remove('show');});
+  $('enemyRow').innerHTML=''; $('hand').innerHTML='';
+  $('forecast').textContent='Learner changed — begin a new climb.';
+  show('introOverlay'); requestAssets();
+  return true;
+}
 var scienceFeedOpening=false;
 async function askQuestion(){
-  if(scienceFeedOpening) return;
-  scienceFeedOpening=true;
-  try { await scienceFeed.refresh(); } finally { scienceFeedOpening=false; }
+  if(!G || scienceFeedOpening===G) return;
+  var run=G; scienceFeedOpening=run;
+  try { await scienceFeed.refresh(); } finally { if(scienceFeedOpening===run) scienceFeedOpening=false; }
+  if(G!==run || !spireRunCurrent()) return;
   var q = pickQuestion();
   if (!q){ toast(scienceFeed.message()); G.questionBonus=0; beginCombat(); return; }
   qState.current=q; qState.answered=false; qState.shownAt=performance.now();
@@ -816,7 +877,7 @@ function answerQuestion(idx, btn){
   try {
     if (embedded()) window.parent.postMessage({ type:'SD_RECORD', studentKey:scienceFeed.context().studentKey, studentLevel:scienceFeed.context().studentLevel, mode:'spire', questionId:q.id, questionTitle:(q.q||'').slice(0,140), correct:!!correct, topic:q.topic||'', ms: Math.max(0, Math.round(performance.now() - (qState.shownAt||performance.now()))) }, '*');
   } catch(e){}
-  var btnc=$('qContinueBtn'); btnc.style.display=''; btnc.onclick=function(){ hide('qOverlay'); beginCombat(); };
+  var btnc=$('qContinueBtn'); btnc.style.display=''; btnc.onclick=function(){ if(!scienceFeed.current(q) || !spireRunCurrent()) return; hide('qOverlay'); beginCombat(); };
   updateHud();
 }
 
@@ -934,16 +995,25 @@ function intentText(e){
 function render(){
   if (!G) return;
   updateHud();
+  var forecast=incomingForecast(), selected=_selCard!=null ? CARDS[G.hand[_selCard]] : null;
+  $('stage').dataset.room=G.pendingRoom ? G.pendingRoom.type : 'fight';
+  $('forecast').classList.toggle('danger',forecast.exposed>0);
+  $('forecast').innerHTML='<span class="turn-label">'+(G.turn==='player'?'YOUR TURN':'ENEMY TURN')+'</span><b>⚔ '+forecast.incoming+' incoming</b><span>🛡 '+forecast.blocked+' blocked</span><span class="hp-risk">'+forecast.exposed+' HP at risk</span>'+(forecast.other?'<span>'+forecast.other+' support action'+(forecast.other>1?'s':'')+'</span>':'');
+  $('hint').textContent=selected ? selected.name+' — choose a highlighted enemy, or cancel.' : 'Plan around enemy intent. Block resets next turn. Tap a card to play.';
+  $('cancelTargetBtn').hidden=!selected;
   // enemies
   var row=$('enemyRow'); row.innerHTML='';
   G.enemies.forEach(function(e,i){
     var def=ENEMIES[e.key]||{};
     var d=document.createElement('div'); d.className='enemy'+(e.dead?' dead':'')+(G.turn==='player'&&G.state==='combat'?' targetable':''); d.dataset.i=i;
+    if(selected && !e.dead) d.classList.add('target-preview');
+    if(!e.dead){ d.setAttribute('role','button'); d.tabIndex=selected?0:-1; d.setAttribute('aria-label',e.name+' — '+intentText(e)+(selected?' — target with '+selected.name:'')); d.onkeydown=function(ev){ if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();onEnemyClick(i);} }; }
     if(def.tier) d.dataset.tier=def.tier;
     var tip=def.name+(def.tier?' · '+def.tier:'')+(def.flavor?'\n'+def.flavor:'');
     var st=''; if(e.vuln) st+='<span class="status vuln">Vuln '+e.vuln+'</span>'; if(e.weak) st+='<span class="status weak">Weak '+e.weak+'</span>'; if(e.poison) st+='<span class="status">☠ '+e.poison+'</span>'; if(e.str) st+='<span class="status str">Str '+e.str+'</span>';
     d.innerHTML =
       '<div class="intent">'+(e.dead?'':intentText(e))+'</div>'+
+      (selected&&!e.dead?'<div class="target-label">'+(G.hand[_selCard]==='poison'?'☠ +5 poison':'🎯 '+escapeText(selected.name))+'</div>':'')+
       '<div class="art" title="'+tip.replace(/"/g,'&quot;')+'">'+artHtml(e.key, e.emoji, e.anim)+(e.block?'<span class="eblock">'+e.block+'</span>':'')+'</div>'+
       '<div class="statuses">'+st+'</div>'+
       '<div class="bar"><i style="width:'+(100*e.hp/e.maxHp)+'%"></i><div class="txt">'+e.hp+'/'+e.maxHp+'</div></div>';
@@ -967,36 +1037,45 @@ function render(){
   G.hand.forEach(function(id,idx){
     var el=cardEl(id,false);
     if (G.player.energy < CARDS[id].cost || G.turn!=='player') el.classList.add('unplayable');
+    if(idx===_selCard) el.classList.add('selected');
+    el.setAttribute('role','button'); el.tabIndex=0; el.setAttribute('aria-label',CARDS[id].name+', '+CARDS[id].cost+' energy. '+CARDS[id].desc);
+    el.setAttribute('aria-pressed',String(idx===_selCard));
+    el.onkeydown=function(ev){ if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();onCardClick(idx);} };
     el.onclick=function(){ onCardClick(idx); };
     hand.appendChild(el);
   });
-  $('endTurnBtn').disabled = (G.turn!=='player' || G.state!=='combat');
+  $('endTurnBtn').disabled = (_busy || G.turn!=='player' || G.state!=='combat');
+  $('endTurnBtn').textContent=G.turn==='player' ? 'End turn · '+forecast.exposed+' HP risk' : 'Enemies acting…';
 }
 var _selCard = null;
+function cardTarget(id){
+  if (['cleave','weaken','meteor','apex'].indexOf(id)>=0) return 'all';
+  return id==='poison' || (CARDS[id] && CARDS[id].type==='attack') ? 'enemy' : 'self';
+}
+function incomingForecast(){
+  var incoming=0, other=0;
+  G.enemies.forEach(function(e){
+    if(e.dead || (G.turn==='enemy' && (G.actedEnemies||[]).indexOf(e)>=0)) return;
+    var a=e.intent;
+    if(a && a.type==='attack'){ var n=a.value+(e.str||0); incoming+=e.weak?Math.floor(n*.75):n; }
+    else if(a) other++;
+  });
+  return {incoming:incoming,blocked:Math.min(incoming,G.player.block),exposed:Math.max(0,incoming-G.player.block),other:other};
+}
 function onCardClick(idx){
-  if (G.turn!=='player'||G.state!=='combat') return;
-  var id=G.hand[idx]; var c=CARDS[id];
+  if (!G || _busy || G.turn!=='player'||G.state!=='combat') return;
+  var id=G.hand[idx], c=CARDS[id]; if(!c) return;
   if (G.player.energy < c.cost){ toast('Not enough energy'); return; }
-  if (c.type==='attack' && !c.eff.toString().indexOf('enemies.forEach')>-1){
-    // single-target attack: need a target. Highlight + wait for enemy click.
+  if (_selCard===idx){ _selCard=null; render(); return; }
+  if (cardTarget(id)==='enemy' && G.enemies.filter(function(e){return !e.dead;}).length>1){
+    _selCard=idx; render(); return;
   }
-  // For single-target attacks, require choosing an enemy if more than one alive.
-  var aliveCount = G.enemies.filter(function(e){return !e.dead;}).length;
-  var isAoe = /enemies\.forEach/.test(c.eff.toString());
-  if (c.type==='attack' && !isAoe && aliveCount>1){
-    _selCard = idx; toast('Pick a target');
-    document.querySelectorAll('.enemy.targetable').forEach(function(el){ el.style.outline='2px solid var(--gold)'; });
-    return;
-  }
-  playCard(idx, null);
+  playCard(idx,null);
 }
 function onEnemyClick(i){
-  if (_selCard!=null){
-    var idx=_selCard; _selCard=null;
-    document.querySelectorAll('.enemy').forEach(function(el){ el.style.outline=''; });
-    playCard(idx, i);
-  }
+  if (_selCard!=null) playCard(_selCard,i);
 }
+function cancelCardTarget(){ _selCard=null; render(); }
 /* ====================== CARD ART — designed vector emblems ======================
    Every card shows an illustrated scene in its gilded window: a type-tinted glow
    plus a gold-lined vector emblem. Admins can later override any card with their
@@ -1116,7 +1195,8 @@ function victory(){
   show('overOverlay');
 }
 function reportScore(bonus){
-  try { if (embedded()) window.parent.postMessage({ type:'SD_SCORE', mode:'spire', score: score()+(bonus||0), label:'Floor '+G.maxFloor }, '*'); } catch(e){}
+  if(!spireRunCurrent()) return;
+  try { if (embedded()) window.parent.postMessage({ type:'SD_SCORE', studentKey:G.feedContext.studentKey, studentLevel:G.feedContext.studentLevel, mode:'spire', score: score()+(bonus||0), label:'Floor '+G.maxFloor }, '*'); } catch(e){}
 }
 
 /* ============================ DECK / MAP VIEW ============================ */
@@ -1171,28 +1251,36 @@ function applyBank(list){
   usingBank=true;
 }
 /* ============================ PLAY LIMIT ============================ */
-var _gPlaysLeft = null;
-function _canPlayGame(){ return _gPlaysLeft==null || _gPlaysLeft>0; }
+var _gPlaysLeft = null, _gameCreditOwner='';
+function _gameCreditsReady(){
+  if(!embedded()) return true;
+  var context=scienceFeed.context();
+  return !!context.studentKey && /^(?:P[3-6]|S1)$/.test(context.studentLevel) && _gameCreditOwner===JSON.stringify(context) && Number.isFinite(_gPlaysLeft);
+}
+function _canPlayGame(){ return _gameCreditsReady() && (_gPlaysLeft==null || _gPlaysLeft>0); }
 function _noteGamePlayStart(){
-  if (embedded()){ try{ window.parent.postMessage({type:'SD_PLAY_START', mode:'spire'},'*'); }catch(e){} }
+  if (embedded()){ try{ window.parent.postMessage({type:'SD_PLAY_START', studentKey:G.feedContext.studentKey, studentLevel:G.feedContext.studentLevel, mode:'spire'},'*'); }catch(e){} }
   if (_gPlaysLeft!=null && _gPlaysLeft>0) _gPlaysLeft--;
 }
-function _showPlayLimit(){ toast("Out of game credits — answer 5 questions in any practice mode to earn one, or come back tomorrow!"); }
+function _showPlayLimit(){ if(!_gameCreditsReady())scienceFeed.refresh(); toast(!_gameCreditsReady()?"Your game credits are still loading. Try again in a moment.":"Out of game credits — answer 5 questions in any practice mode to earn one, or come back tomorrow!"); }
 
 /* ============================ MESSAGING ============================ */
 var _bankTries=0, _assetTries=0;
 function requestBank(){ if(usingBank) return; if(!embedded()) return; try{ window.parent.postMessage({type:'SD_REQUEST_QUESTIONS'},'*'); }catch(e){} _bankTries++; if(!usingBank) setTimeout(requestBank, _bankTries<8?1200:5000); /* keep asking — a slow bank load must not strand the sitting on the fallback questions */ }
 function requestAssets(){ if(!embedded()) return; try{ window.parent.postMessage({type:'SPIRE_REQUEST_ASSETS'},'*'); }catch(e){} _assetTries++; if(_assetTries<5) setTimeout(requestAssets,1500); }
 window.addEventListener('message', function(ev){
-  var d=ev&&ev.data; if(!d) return;
+  if(!ev || ev.source!==window.parent || ev.origin!==location.origin) return;
+  var d=ev.data; if(!d) return;
   if (d.type==='SD_QUESTIONS'){
-    if (d.playsLeft && typeof d.playsLeft.spire==='number') _gPlaysLeft=d.playsLeft.spire;
+    if(ev!==spireAcceptedFeedEvent) return;
+    if (d.playsLeft && Number.isFinite(d.playsLeft.spire)){ _gPlaysLeft=d.playsLeft.spire; _gameCreditOwner=JSON.stringify(scienceFeed.context()); }
   // scienceFeed accepts only a current policy response.
     if (d.seenStats && typeof d.seenStats==='object'){
       Object.keys(d.seenStats).forEach(function(id){ var s=d.seenStats[id]; if(s && !SEEN_STATS[id]) SEEN_STATS[id]={ n:s.n||1, correct:s.correct||0, last:s.last||0 }; });
     }
   } else if (d.type==='SD_PLAYS_LEFT'){
-    if (d.playsLeft && typeof d.playsLeft.spire==='number') _gPlaysLeft=d.playsLeft.spire;
+    if(!_gameCreditsReady()) return;
+    if (d.playsLeft && Number.isFinite(d.playsLeft.spire)) _gPlaysLeft=d.playsLeft.spire;
   } else if (d.type==='spireAssets'){
     _assetTries=99;
     if (d.cardArt) _spireCardArtSet(d.cardArt);
@@ -1235,10 +1323,20 @@ function renderHeroPick(){
   });
 }
 renderHeroPick();
-function startRun(){ hide('introOverlay'); hide('overOverlay'); newRun(); updateHud(); startNode(); }
-$('introStartBtn').onclick=function(){ if(!_canPlayGame()){ _showPlayLimit(); return; } startRun(); _noteGamePlayStart(); };
-$('againBtn').onclick=function(){ if(!_canPlayGame()){ _showPlayLimit(); return; } startRun(); _noteGamePlayStart(); };
+function spireReadyForStart(){
+  var identity=scienceFeed.context();
+  return !embedded() || !!identity.studentKey && /^(?:P[3-6]|S1)$/.test(identity.studentLevel) && _gameCreditsReady();
+}
+function startRun(){
+  if(!spireReadyForStart()){ toast('Your learner profile is still loading. Try Start again in a moment.'); return false; }
+  if(G && G.state!=='over') return false;
+  hide('introOverlay'); hide('overOverlay'); newRun(); updateHud(); startNode(); return true;
+}
+$('introStartBtn').onclick=function(){ if(!_canPlayGame()){ _showPlayLimit(); return; } if(startRun())_noteGamePlayStart(); };
+$('againBtn').onclick=function(){ if(!_canPlayGame()){ _showPlayLimit(); return; } if(startRun())_noteGamePlayStart(); };
 $('endTurnBtn').onclick=endTurn;
+$('cancelTargetBtn').onclick=cancelCardTarget;
+document.addEventListener('keydown',function(e){ if(e.key==='Escape' && _selCard!=null) cancelCardTarget(); });
 $('logHead').onclick=function(){ var p=$('logPanel'); var c=p.classList.toggle('collapsed'); $('logToggle').textContent=c?'▸':'▾'; if(!c) renderLog(true); };
 $('mapBtn').onclick=showMap; $('mapClose').onclick=function(){ hide('mapOverlay'); };
 $('deckBtn').onclick=showDeck; $('deckClose').onclick=function(){ hide('deckOverlay'); };
