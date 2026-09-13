@@ -3812,7 +3812,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.377.0';
+const APP_VERSION = 'v1.377.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -14758,8 +14758,11 @@ function _expandRectToWhitespace(ctx, W, H, r, thr) {
   let { x, y, w, h } = r, gL = 0, gR = 0, gT = 0, gB = 0;
   for (let i = 0; i < 40; i++) {
     let moved = false;
-    if (x > 0 && gL < maxX && inkFrac(x, y, 3, h) > TH) { const d = Math.min(stepX, x, maxX - gL); x -= d; w += d; gL += d; moved = true; }
-    if (x + w < W && gR < maxX && inkFrac(x + w - 3, y, 3, h) > TH) { const d = Math.min(stepX, W - (x + w), maxX - gR); w += d; gR += d; moved = true; }
+    // Look one step past horizontal edges: a three-pixel strip can land in
+    // the gap BETWEEN letters and stop halfway through a label. This short
+    // halo bridges letter spacing while the existing growth caps still hold.
+    if (x > 0 && gL < maxX && inkFrac(Math.max(0, x - stepX), y, Math.min(stepX, x) + 3, h) > TH) { const d = Math.min(stepX, x, maxX - gL); x -= d; w += d; gL += d; moved = true; }
+    if (x + w < W && gR < maxX && inkFrac(x + w - 3, y, stepX + 3, h) > TH) { const d = Math.min(stepX, W - (x + w), maxX - gR); w += d; gR += d; moved = true; }
     if (y > 0 && gT < maxY && inkFrac(x, y, w, 3) > TH) { const d = Math.min(stepY, y, maxY - gT); y -= d; h += d; gT += d; moved = true; }
     if (y + h < H && gB < maxY && inkFrac(x, y + h - 3, w, 3) > TH) { const d = Math.min(stepY, H - (y + h), maxY - gB); h += d; gB += d; moved = true; }
     if (!moved) break;

@@ -1,5 +1,6 @@
 import {test,mock} from 'node:test';
 import assert from 'node:assert/strict';
+import {createCanvas,loadImage} from '@napi-rs/canvas';
 const docs=new Map(), files=new Map(), tasks=[];
 const clone=x=>x===undefined?undefined:structuredClone(x);
 const snap=path=>({exists:docs.has(path),data:()=>clone(docs.get(path))});
@@ -22,9 +23,10 @@ mock.module('firebase-functions/v2/https',{namedExports:{onCall:(opts,fn)=>fn,Ht
 mock.module('firebase-functions/v2/firestore',{namedExports:{onDocumentWritten:(opts,fn)=>fn}});
 mock.module('firebase-functions/v2/tasks',{namedExports:{onTaskDispatched:(opts,fn)=>fn}});
 mock.module('firebase-functions/params',{namedExports:{defineSecret:()=>({value:()=>''}),defineString:(name,opts)=>({value:()=>opts.default})}});
-let aiPages=[];
+let aiPages=[], aiPrompts=[];
 mock.module('@google/genai',{namedExports:{GoogleGenAI:class {
   models={generateContent:async request=>{
+    aiPrompts.push(request.contents[0].parts[0].text);
     const page=Number(/CURRENT page (\d+)/.exec(request.contents[0].parts[0].text)?.[1]);
     return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({questions:aiPages[page-1]||[]})};
   }};
@@ -33,7 +35,7 @@ const api=await import('../index.js');
 const auth={uid:'teacher',token:{admin:true,name:'Teacher'}};
 const makeJob=(id='job')=>({id,ownerUid:'teacher',name:'paper.pdf',status:'queued',phase:'publish',publishIndex:0,nextPage:3,total:2,added:0,generation:0,autoCheck:false,checkpoint:'checkpoint',updatedAt:new Date().toISOString()});
 const question={id:'q_rapid_job_1_0',title:'A',blocks:[],sourcePages:[]};
-function setup(j=makeJob()){docs.clear();files.clear();tasks.length=0;docs.set('cerRapidImports/'+j.id,j);files.set('checkpoint',Buffer.from(JSON.stringify({pending:null,ready:[question]})));return j;}
+function setup(j=makeJob()){docs.clear();files.clear();tasks.length=0;aiPrompts=[];docs.set('cerRapidImports/'+j.id,j);files.set('checkpoint',Buffer.from(JSON.stringify({pending:null,ready:[question]})));return j;}
 test('duplicate delivery publishes once, atomically with checkpoint progress',async()=>{
  setup();const request={data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0},retryCount:0};
  await api.rapidImportPage(request);await api.rapidImportPage(request);
@@ -76,12 +78,12 @@ test('student and cross-owner requests are rejected',async()=>{
  await assert.rejects(api.rapidImportFinish({auth:{uid:'other',token:{admin:true}},data:{id:'job'}}),/not found/);
 });
 
-function pdfFixture(pageCount) {
+function pdfFixture(pageCount,streams=[]) {
   const objects=['<< /Type /Catalog /Pages 2 0 R >>'];
   objects.push('<< /Type /Pages /Kids ['+Array.from({length:pageCount},(_,i)=>(3+i*2)+' 0 R').join(' ')+'] /Count '+pageCount+' >>');
   for(let i=0;i<pageCount;i++) {
     objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 300] /Contents '+(4+i*2)+' 0 R /Resources << >> >>');
-    const stream='0 0 0 rg 20 20 50 60 re f\n';objects.push('<< /Length '+stream.length+' >>\nstream\n'+stream+'endstream');
+    const stream=streams[i]??'0 0 0 rg 20 20 50 60 re f\n';objects.push('<< /Length '+stream.length+' >>\nstream\n'+stream+'endstream');
   }
   let pdf='%PDF-1.4\n',offsets=[0];
   objects.forEach((obj,i)=>{offsets.push(Buffer.byteLength(pdf));pdf+=(i+1)+' 0 obj\n'+obj+'\nendobj\n';});
@@ -92,9 +94,9 @@ function pdfFixture(pageCount) {
 test('full upload and real PDF rendering continue entirely server-side across three pages',async()=>{
   setup();docs.clear();files.clear();
   const payload=(text,number,continuation)=>({title:'Question '+number,topic:'Heat',sourceQuestionNumber:number,continuation,
-    blocks:[{type:'text',text},{type:'image',box_2d:[0,0,500,500]},{type:'plainanswer',text:'Answer'},{type:'explanation',text:'Reason'}]});
+    blocks:[{type:'text',text},{type:'image',box_2d:[700,80,960,390]},{type:'plainanswer',text:'Answer'},{type:'explanation',text:'Reason'}]});
   aiPages=[[payload('(a) First part','8',false)],[payload('(b) Second part','8',true)],[payload('(c) Third part','8',true),payload('New question','9',false)]];
-  const pdf=pdfFixture(3);
+  const pdf=pdfFixture(3,['1 0 0 rg 20 20 50 60 re f\n','0 0 1 rg 20 20 50 60 re f\n','0 0.5 0 rg 20 20 50 60 re f\n']);
   await api.rapidImportBegin({auth,data:{id:'realpdf',name:'three-pages.pdf',size:pdf.length,prompt:'Read science questions',engineOrder:['gemini'],topics:['Heat'],autoCheck:false}});
   await api.rapidImportChunk({auth,data:{id:'realpdf',index:0,data:pdf.toString('base64')}});
   await api.rapidImportFinish({auth,data:{id:'realpdf'}});
@@ -108,5 +110,58 @@ test('full upload and real PDF rendering continue entirely server-side across th
   const merged=questions.find(q=>q.sourceQuestionNumber==='8');
   assert.deepEqual(merged.sourcePages.map(p=>p.page),[1,2,3]);
   assert.deepEqual(merged.blocks.filter(b=>b.type==='text').map(b=>b.part),['a','b','c']);
-  assert.equal(merged.blocks.filter(b=>b.type==='image').length,3);
+  const pictures=merged.blocks.filter(b=>b.type==='image');
+  assert.equal(pictures.length,3);
+  for(const [i,picture] of pictures.entries()) {
+    assert.notEqual(picture.url,merged.sourcePages[i].url,'a valid figure must be cropped');
+    const path=decodeURIComponent(new URL(picture.url).pathname.split('/o/')[1]);
+    const img=await loadImage(files.get(path)),canvas=createCanvas(img.width,img.height),ctx=canvas.getContext('2d');
+    ctx.drawImage(img,0,0);
+    const rgb=[...ctx.getImageData(Math.floor(img.width/2),Math.floor(img.height/2),1,1).data].slice(0,3);
+    assert.equal(rgb.indexOf(Math.max(...rgb)),[0,2,1][i],'each continuation figure must come from the current page, not the previous context page');
+  }
+});
+
+test('real PDF worker keeps failed crops and mixed-case figures in the correct worksheet positions',async()=>{
+  const pdf=pdfFixture(1,['1 0 0 rg 20 220 50 35 re f\n0 0 1 rg 110 100 60 40 re f\n']);
+  const j=setup({...makeJob('figures'),phase:'page',nextPage:1,total:1,checkpoint:null,path:'original.pdf',engineOrder:['gemini'],prompt:'Read all questions'});
+  files.set(j.path,pdf);
+  aiPages=[[{title:'Diagrams',sourceQuestionNumber:'1',blocks:[
+    {type:'text',text:'(a) Examine the first figure.'},
+    {type:' IMAGE ',caption:'First figure',box_2d:[130,80,280,390]},
+    {type:'text',text:'(b) Examine the missing figure.'},
+    {type:'Image',caption:'Blank selection',box_2d:[350,50,450,300]},
+    {type:'text',text:'(c) Examine the third figure.'},
+    {type:'image',caption:'Third figure',box:[500,520,690,900]},
+    {type:'image',caption:'Whole page selection',box_2d:[0,0,1000,1000]},
+    {type:'image',caption:'Malformed selection',box_2d:[900,100,300,800]},
+    {type:'plainanswer',text:'Answer'}
+  ]}]];
+  await api.rapidImportPage({data:{id:j.id,page:1,generation:0,phase:'page',publishIndex:0},retryCount:0});
+  const next=docs.get('cerRapidImports/figures');
+  await api.rapidImportPage({data:{id:j.id,page:next.nextPage,generation:0,phase:next.phase,publishIndex:0},retryCount:0});
+  const q=[...docs].find(([key])=>key.includes('/vetting/'))[1];
+  assert.deepEqual(q.blocks.map(b=>b.type),['text','image','text','image','text','image','image','image','plainanswer']);
+  const pictures=q.blocks.filter(b=>b.type==='image'),source=q.sourcePages[0].url;
+  assert.equal(pictures.length,5,'required figures cannot be dropped when cropping fails');
+  assert.deepEqual(pictures.map(b=>b.part),['a','b','c','c','c']);
+  assert.equal(pictures[1].url,source,'blank crop must retain its source in its own slot');
+  assert.equal(pictures[3].url,source,'whole-page box must be marked as a fallback');
+  assert.equal(pictures[4].url,source,'malformed box must retain its source');
+  assert.equal(q.diagramWhole,true);
+  const decoded=await Promise.all([pictures[0],pictures[2]].map(async b=>{
+    assert.notEqual(b.url,source);
+    const path=decodeURIComponent(new URL(b.url).pathname.split('/o/')[1]);
+    const img=await loadImage(files.get(path));
+    const canvas=createCanvas(img.width,img.height),ctx=canvas.getContext('2d');ctx.drawImage(img,0,0);
+    return {width:img.width,height:img.height,pixel:[...ctx.getImageData(Math.floor(img.width/2),Math.floor(img.height/2),1,1).data]};
+  }));
+  assert.ok(decoded[0].pixel[0]>200&&decoded[0].pixel[2]<40,'first image slot must hold the red first figure');
+  assert.ok(decoded[1].pixel[2]>200&&decoded[1].pixel[0]<40,'third image slot must hold the blue third figure');
+  assert.ok(decoded.every(img=>img.width<300&&img.height<220),'cropped figures should lose the loose page margins');
+  assert.match(aiPrompts[0],/source reading order/);
+  assert.match(aiPrompts[0],/CURRENT image 1 only/);
+  assert.match(aiPrompts[0],/complete labels/);
+  assert.match(aiPrompts[0],/Exclude surrounding question prose/);
+  assert.equal(docs.get('cerRapidImports/figures').status,'completed');
 });

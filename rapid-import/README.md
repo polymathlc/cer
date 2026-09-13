@@ -97,9 +97,15 @@ rules over the project's live rules.
   parts. It holds the final question privately until its boundary is known.
   Unmatched/contradictory continuations are flagged rather than silently joined.
 - Every question retains links to all its source pages under its vetting card.
-  Each figure is cropped from the correct page, falling back to the page if its
-  rectangle is invalid. Figures preserve the PDF's original appearance; they
+  Each figure is cropped from the correct page using the browser crop's pixel
+  protections: expand clipped edges to whitespace, remove separated prose,
+  and trim blank margins while preserving diagram labels and table borders.
+  Invalid, blank or whole-page selections retain the source page in the same
+  image block and mark the question as needing cropping; later figures keep
+  their own positions. Figures preserve the PDF's original appearance; they
   do not use the screenshot engine's optional generative B&W enhancement.
+  These protections apply to pages processed after the worker is deployed;
+  previously saved questions and existing checkpoints are not rewritten.
 - The authoring engine order, reading prompt, teaching-note grounding, level/topics, release date and
   auto-check preference are captured when queued. Checks operate on the whole
   assembled question with its source pages; up to three answer repairs are

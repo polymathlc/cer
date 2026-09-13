@@ -2,6 +2,7 @@
 export const MAX_PDF_BYTES = 40 * 1024 * 1024;
 export const CHUNK_BYTES = 3 * 1024 * 1024;
 export const MAX_PAGES = 60;
+export const blockType = block => String(block?.type || '').trim().toLowerCase();
 export const html = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])).replace(/\r?\n/g, '<br>');
 export function parseReply(response) {
   if (response.candidates?.[0]?.finishReason !== 'STOP') throw new Error('AI response incomplete; retrying this page without saving partial questions.');
@@ -18,12 +19,12 @@ export function cropRect(box, width, height) {
   const h = Math.min(height - y, Math.ceil((y2-y1)*height/1000));
   return w >= 5 && h >= 5 ? {x,y,w,h} : null;
 }
-export function normaliseQuestion(payload, id, job, page, sourceUrl, imageUrls) {
-  let part = '';
+export function normaliseQuestion(payload, id, job, page, sourceUrl, imageUrls = []) {
+  let part = '', imageIndex = 0;
   const blocks = [];
   for (const b of payload.blocks) {
     const bid = id + '_b' + blocks.length;
-    const type = String(b.type || '').toLowerCase();
+    const type = blockType(b);
     const text = String(b.text ?? b.content ?? '');
     let out;
     if (type === 'text') {
@@ -32,7 +33,7 @@ export function normaliseQuestion(payload, id, job, page, sourceUrl, imageUrls) 
       out = { id: bid, type, content: html(match ? text.slice(match[0].length) : text) };
       if (Number.isInteger(b.marks) && b.marks > 0 && b.marks <= 20) out.marks = b.marks;
     } else if (type === 'image') {
-      out = { id: bid, type, url: imageUrls.shift() || sourceUrl, caption: String(b.caption || '') };
+      out = { id: bid, type, url: imageUrls[imageIndex++] || sourceUrl, caption: String(b.caption || '') };
     } else if (type === 'mcq') {
       if (!Array.isArray(b.options) || b.options.length < 2) throw new Error('Incomplete multiple-choice options.');
       const options = b.options.map((s,i) => ({id: bid + '_' + i, text: String(s)}));

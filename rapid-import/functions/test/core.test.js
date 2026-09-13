@@ -43,6 +43,23 @@ test('invalid image rectangles use fallback; valid crop is clamped',()=>{
   assert.equal(cropRect([NaN,0,100,100],1000,1000),null);
   assert.deepEqual(cropRect([-20,10,1005,900],1000,500),{x:10,y:0,w:890,h:500});
 });
+
+test('mixed-case image blocks keep their own crop or fallback and original part position',()=>{
+  const urls=['first-figure',null,'third-figure'];
+  const r=normaliseQuestion({blocks:[
+    {type:'text',text:'(a) First part'},
+    {type:' IMAGE ',caption:'First'},
+    {type:'text',text:'(b) Second part'},
+    {type:'Image',caption:'Needs review'},
+    {type:'plainanswer',text:'Answer'},
+    {type:'image',caption:'Third'}
+  ]},'q',{topics:[]},1,'source-page',urls);
+  assert.deepEqual(r.blocks.map(b=>b.type),['text','image','text','image','plainanswer','image']);
+  assert.deepEqual(r.blocks.filter(b=>b.type==='image').map(b=>[b.url,b.caption,b.part]),[
+    ['first-figure','First','a'],['source-page','Needs review','b'],['third-figure','Third','b']
+  ]);
+  assert.deepEqual(urls,['first-figure',null,'third-figure'],'normalisation must not consume its input array');
+});
 test('question signature changes after an answer edit',()=>{
   const a=q('a',1), before=signature(a);a.blocks[0].content='changed';assert.notEqual(signature(a),before);
 });

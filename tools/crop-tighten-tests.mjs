@@ -203,6 +203,23 @@ test('a tainted canvas, or a tiny box, is handed back unchanged', () => {
 
 // ---- it composes with the passes either side of it -------------------------
 
+test('label expansion crosses gaps between letters on BOTH sides', () => {
+  for (const gap of [3, 6]) for (const mirror of [false, true]) {
+    const p = page(600, 400).rect(mirror ? 280 : 210, 140, 110, 80);
+    let end;
+    for (let x = 365; x < 420; x += 3 + gap) {
+      p.rect(mirror ? 600 - x - 3 : x, 160, 3, 10);
+      end = x + 3;
+    }
+    const initial = { x: mirror ? 216 : 180, y: 110, w: 204, h: 160 };
+    const expanded = M._expandRectToWhitespace(p.ctx, p.W, p.H, initial, thrOf(p));
+    const out = tight(p, expanded, 'xy');
+    ok(out, 'a figure with a label was refused');
+    if (mirror) near(out.x, 600 - end, 1, 'the left label stopped between letters');
+    else near(out.x + out.w, end, 1, 'the right label stopped between letters');
+  }
+});
+
 test('the sentence above a figure goes, and then its blank paper goes too', () => {
   const p = page(400, 300, { paper: 250 });
   p.prose(30, 70, 340, 6);        // a full-width line of question text

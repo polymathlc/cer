@@ -1,0 +1,23 @@
+name: PDF import crop checks
+
+on:
+  pull_request:
+    paths: ['app.js', 'rapid-import/**', 'tools/crop-tighten-tests.mjs', '.github/workflows/rapid-import-tests.yml']
+  push:
+    branches: [main]
+    paths: ['app.js', 'rapid-import/**', 'tools/crop-tighten-tests.mjs', '.github/workflows/rapid-import-tests.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --prefix rapid-import/functions --no-audit --no-fund
+      - run: npm test --prefix rapid-import/functions
+      - run: node tools/crop-tighten-tests.mjs
