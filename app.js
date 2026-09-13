@@ -1,4 +1,4 @@
-import { mountInterfaceStudio, isReleased as interfaceIsReleased } from "./interface-studio.mjs?v=1";
+import { mountInterfaceStudio } from "./interface-studio.mjs?v=2";
 import { mountScienceCoach, resetScienceCoaches } from "./science-coaches.js";
 import { SCIENCE_COACH_INSTRUCTIONS } from "./science-coach-core.js";
 import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit, scienceQuestionLevel } from "./science-feed-core.js";
@@ -22,8 +22,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import {
   getFirestore,
-  runTransaction,
-  serverTimestamp,
   doc,
   collection,
   getDoc,
@@ -65,29 +63,15 @@ const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Interface rollout is independent of game releases and of the other subject.
-// Transactions fail offline rather than queueing a surprise release for later.
+// The approved interface is permanent for every signed-in role.
 let interfaceStudio = null;
 function syncInterfaceStudio() {
   if (!interfaceStudio) {
-    const releaseRef = doc(db, 'config', 'admin');
     const storage = {
       getItem: key => sessionStorage.getItem('Science:interface:' + key),
       setItem: (key, value) => sessionStorage.setItem('Science:interface:' + key, value)
     };
-    interfaceStudio = mountInterfaceStudio({
-      subject: 'Science', root: document.querySelector('.main-content'), storage,
-      subscribe: (next, fail) => onSnapshot(releaseRef, { includeMetadataChanges: true },
-        snap => next(snap.exists() ? snap.data() : {}, snap.metadata), fail),
-      save: (released, uid, expected) => runTransaction(db, async transaction => {
-        if (!currentUser || currentUser.role !== 'admin' || currentUser.uid !== uid || auth.currentUser?.uid !== uid)
-          throw new Error('Sign in as an admin to change the student interface.');
-        const snapshot = await transaction.get(releaseRef);
-        if (interfaceIsReleased(snapshot.exists() ? snapshot.data() : {}) !== expected)
-          throw new Error('Another admin changed the release setting. Review the current status and try again.');
-        transaction.set(releaseRef, { arcadeUi: { version: 1, released, updatedAt: serverTimestamp(), updatedBy: uid } }, { merge: true });
-      })
-    });
+    interfaceStudio = mountInterfaceStudio({ subject: 'Science', storage });
   }
   interfaceStudio.setUser(currentUser);
 }
@@ -3816,7 +3800,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.381.0';
+const APP_VERSION = 'v1.381.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)

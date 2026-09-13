@@ -6865,10 +6865,11 @@ Run both existing PDF/merge regression suites and the tests in
 `rapid-import/functions` when changing this flow. Bump `APP_VERSION` in app.js.
 
 
-## Interface Studio (2026-09-10)
+## Permanent interface (2026-09-14)
 
-See `docs/interface-studio.md`. The new arcade interface is an admin preview
-until the protected config flag is explicitly released. Preserve default-off
-student access, subject separation, transactional writes, auth cleanup,
-reduced motion, and the screen-only CSS scope. Run
-`node tools/interface-studio-tests.mjs` when changing the rollout.
+See `docs/interface-studio.md`. The user approved the arcade interface as
+permanent for both subjects. All signed-in roles receive it immediately; do not
+restore the preview banner, rollback controls or remote release flag. Preserve
+auth cleanup, subject-specific motion preferences, keyboard navigation and the
+screen-only CSS scope. Keep the shared module and styles in sync with Math.
+Run `node tools/interface-studio-tests.mjs` when changing this integration.
