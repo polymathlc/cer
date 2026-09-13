@@ -302,9 +302,21 @@ try {
   await native.page.keyboard.up('w');
   const nativeAfter = await native.page.evaluate(() => window.__strikeQA.state);
   check(nativeBefore.x !== nativeAfter.x || nativeBefore.y !== nativeAfter.y, 'Native pointer capture permits real simulation and movement');
+  await native.page.keyboard.down('d');
+  await native.page.keyboard.press('Shift');
+  check(await native.page.evaluate(() => window.__strikeQA.run.dodgeCd > 2), 'Native Shift starts a quickstep and its cooldown');
+  await native.page.waitForTimeout(200);
+  await native.page.keyboard.up('d');
+  const stepped = await native.page.evaluate(() => window.__strikeQA.state);
+  check(stepped.x !== nativeAfter.x || stepped.y !== nativeAfter.y, 'Quickstep moves through the real collision-checked simulation');
+  check(await native.page.evaluate(() => window.__strikeQA.run.dodgeT === 0), 'Quickstep ends after its brief movement window');
   await native.page.keyboard.press('Escape');
   await native.page.waitForFunction(() => window.__strikeQA.run.paused && !document.pointerLockElement);
   check(await native.page.locator('#pauseOverlay').evaluate(el => el.classList.contains('active')), 'Native Escape safely releases capture and shows pause');
+  const pausedDodge = await native.page.evaluate(() => window.__strikeQA.run.dodgeCd);
+  await native.page.keyboard.press('Shift');
+  await native.page.waitForTimeout(100);
+  check(await native.page.evaluate(() => window.__strikeQA.run.dodgeCd) === pausedDodge, 'Paused quickstep cooldown stays frozen and Shift cannot restart it');
   // Browsers impose a short unlock cooldown; the pause remains safe throughout.
   await native.page.waitForTimeout(1300);
   await native.page.locator('#resumeBtn').click();

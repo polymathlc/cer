@@ -8,15 +8,15 @@ const bridgeSource=read('science-feed-bridge.js'), fps=read('fps.html');
 const cut=(source,start,end)=>{const i=source.indexOf(start),j=source.indexOf(end,i+start.length);assert.ok(i>=0&&j>i,start);return source.slice(i,j);};
 const row=(id='a')=>({id,q:'A science question '+id,options:['One','Two'],answer:0});
 function bridgeFixture(embedded=true){
-  const messages=[],pools=[],listeners=[];let invalidated=0;
+  const messages=[],pools=[],acceptedEvents=[],listeners=[];let invalidated=0;
   const parent={postMessage:data=>messages.push(data)};
   const window={parent,location:{origin:'https://school.example'},addEventListener:(name,fn)=>listeners.push(fn)};
   if(!embedded)window.parent=window;
   const c=vm.createContext({window,Map,Date,Promise,Number,String,Array,setTimeout,clearTimeout});vm.runInContext(bridgeSource,c);
-  const bridge=window.ScienceFeedBridge.create({onPool:rows=>pools.push(rows),onInvalidate:()=>invalidated++});
-  const event=(data,extra={})=>listeners.forEach(fn=>fn({data,source:parent,origin:window.location.origin,...extra}));
+  const bridge=window.ScienceFeedBridge.create({onPool:(rows,event)=>{pools.push(rows);acceptedEvents.push(event);},onInvalidate:()=>invalidated++});
+  const event=(data,extra={})=>{const incoming={data,source:parent,origin:window.location.origin,...extra};listeners.forEach(fn=>fn(incoming));return incoming;};
   const reply=(extra={})=>event({type:'SD_QUESTIONS',feedPolicyVersion:1,requestId:messages.at(-1)?.requestId,studentKey:'child-a',studentLevel:'P4',questions:[row()],...extra});
-  return {bridge,messages,pools,event,reply,get invalidated(){return invalidated;}};
+  return {bridge,messages,pools,acceptedEvents,event,reply,get invalidated(){return invalidated;}};
 }
 test('standalone game cannot substitute unlevelled built-in samples',async()=>{const f=bridgeFixture(false);assert.equal(await f.bridge.refresh(),false);assert.equal(f.bridge.take(),null);assert.equal(f.messages.length,0);});
 test('embedded games await current policy and preserve parent ranking',async()=>{
@@ -35,6 +35,19 @@ test('untrusted, unversioned and stale request responses cannot feed a question'
   f.event({type:'SD_QUESTIONS',questions:[row()]},{origin:'https://other.example'});
   f.reply({feedPolicyVersion:0});f.reply({requestId:'old'});assert.equal(f.bridge.take(),null);
   f.reply();assert.equal(await pending,true);assert.equal(f.bridge.take().id,'a');
+});
+
+test('metadata consumers receive only the exact event accepted by the question guards',async()=>{
+  const f=bridgeFixture(),pending=f.bridge.refresh();
+  assert.equal(f.acceptedEvents.at(-1),undefined,'clearing is not accepted metadata');
+  const count=f.acceptedEvents.length;
+  f.reply({requestId:'stale',playsLeft:100});
+  assert.equal(f.acceptedEvents.length,count);
+  const accepted=f.reply({playsLeft:2});await pending;
+  assert.equal(f.acceptedEvents.at(-1),accepted);
+  f.reply({playsLeft:100});assert.equal(f.acceptedEvents.at(-1),accepted,'duplicate response stays rejected');
+  f.event({type:'SD_FEED_INVALIDATE',studentKey:'child-b',studentLevel:'P3'});
+  assert.equal(f.acceptedEvents.at(-1),undefined,'learner change retires accepted metadata');
 });
 test('learner invalidation clears active answers and rejects delayed old-learner pools',async()=>{
   const f=bridgeFixture();let pending=f.bridge.refresh();f.reply();await pending;const old=f.bridge.stamp(f.bridge.take());assert.equal(f.bridge.current(old),true);

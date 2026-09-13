@@ -1,10 +1,10 @@
-name: Science Strike gameplay checks
+name: Non-TCG gameplay checks
 on:
   pull_request:
-    paths: ['fps.html', 'science-strike*.js', 'science-feed*.js', 'tools/science-strike*.mjs', '.github/workflows/science-strike.yml']
+    paths: ['fps.html', 'science-*.html', 'app.js', 'index.html', 'science-strike*.js', 'science-feed*.js', 'tools/science-strike*.mjs', 'tools/game-*.mjs', '.github/workflows/science-strike.yml']
   push:
     branches: [main]
-    paths: ['fps.html', 'science-strike*.js', 'science-feed*.js', 'tools/science-strike*.mjs', '.github/workflows/science-strike.yml']
+    paths: ['fps.html', 'science-*.html', 'app.js', 'index.html', 'science-strike*.js', 'science-feed*.js', 'tools/science-strike*.mjs', 'tools/game-*.mjs', '.github/workflows/science-strike.yml']
 permissions:
   contents: read
 jobs:
@@ -17,20 +17,25 @@ jobs:
         with:
           node-version: '22'
       - name: Check game state and existing question safeguards
-        run: node --test tools/science-strike-tests.mjs tools/science-feed-standalone-tests.mjs
+        run: node --test tools/science-strike-tests.mjs tools/science-feed-standalone-tests.mjs tools/game-*-tests.mjs
       - name: Install isolated browser runtime
         run: |
           npm install --prefix "$RUNNER_TEMP/strike-browser" --no-audit --no-fund playwright@1.62.1
           "$RUNNER_TEMP/strike-browser/node_modules/.bin/playwright" install --with-deps chromium
-      - name: Play the production game with isolated test accounts
+      - name: Play the production games with isolated test accounts
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/strike-browser/node_modules/playwright/index.mjs
-          SCIENCE_STRIKE_SCREENSHOTS: ${{ runner.temp }}/science-strike-qa
-        run: node tools/science-strike-browser-tests.mjs
+          SCIENCE_STRIKE_SCREENSHOTS: ${{ runner.temp }}/science-strike-qa/strike
+          GAME_SCREENSHOTS: ${{ runner.temp }}/science-strike-qa
+        run: |
+          node tools/science-strike-browser-tests.mjs
+          node tools/game-defenders-raiders-browser.mjs
+          node tools/game-legends-slayers-browser.mjs
+          node tools/game-spire-adventure-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: science-strike-gameplay
+          name: non-tcg-gameplay
           path: ${{ runner.temp }}/science-strike-qa
           if-no-files-found: ignore
           retention-days: 7
