@@ -9,7 +9,8 @@ import { getStorage } from 'firebase-admin/storage';
 import { getFunctions } from 'firebase-admin/functions';
 import { GoogleGenAI } from '@google/genai';
 import { createCanvas, DOMMatrix, ImageData, Path2D } from '@napi-rs/canvas';
-import { MAX_PDF_BYTES, CHUNK_BYTES, MAX_PAGES, parseReply, cropRect, normaliseQuestion, assemblePage, signature, html } from './core.js';
+import { MAX_PDF_BYTES, CHUNK_BYTES, MAX_PAGES, parseReply, blockType, normaliseQuestion, assemblePage, signature, html } from './core.js';
+import { cropDiagram } from './crop.js';
 
 initializeApp();
 Object.assign(globalThis, {DOMMatrix, ImageData, Path2D});
@@ -230,16 +231,17 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
     const canvas=await render(doc,page), image=canvas.toBuffer('image/jpeg').toString('base64');
     const reference=page>1?(await render(doc,page-1)).toBuffer('image/jpeg').toString('base64'):null;
     const boundary=`\nPDF BOUNDARY RULES (override single-image assumptions): image 1 is the CURRENT page ${page}. ${reference?'Image 2 is the PREVIOUS page for context only; NEVER extract it again.':''} Extract ALL and ONLY questions/parts printed on image 1. Add sourceQuestionNumber to each entry (original main number, no part suffix). The first entry may have continuation:true if it belongs to the last question on the previous page, including repeated numbers with (continued), a new diagram for an existing question, a stem split mid-sentence, or later lettered parts. A repeated number or a continuation diagram does NOT start a new question. All other entries have continuation:false. Never renumber lettered parts. Use previous-page context to answer continuation parts. A continuation-only page is NOT blank. All image rectangles refer to image 1. Last held question: ${pending?JSON.stringify({number:pending.sourceQuestionNumber,blocks:pending.blocks}).slice(0,35000):'none; do not guess a preceding question'}.`;
-    const payloads=parseReply(await ask(job.prompt+boundary,reference?[image,reference]:[image],job));
+    const figures='\nFIGURE RULES: Keep text and image blocks in source reading order, at the exact point each figure belongs among the stem and lettered parts. Use one image block per figure or complete table, and retain every figure needed to answer the question. Each box_2d is [ymin,xmin,ymax,xmax], 0-1000 on CURRENT image 1 only, never on the previous context page or on an already cropped image. Include complete labels, units, arrows, legends, captions, table headers and borders belonging to the figure; check the last letter on every side and leave clear whitespace beyond it. Exclude surrounding question prose, question numbers, ordinary written options and answer lines; put that wording in text or mcq blocks instead. Keep picture answer choices together in one image including their option labels. Do not use a whole-page rectangle as a figure. If you cannot locate a required figure, keep its image block with box_2d:null in its original position so its source page can be retained for review.';
+    const payloads=parseReply(await ask(job.prompt+boundary+figures,reference?[image,reference]:[image],job));
     if(payloads.length>60) throw new Error('Too many questions on one page; review this PDF.');
     const token=randomUUID(), sourceUrl=await storeImage(job,token,`page-${page}`,canvas), entries=[];
     for(let i=0;i<payloads.length;i++) {
       const payload=payloads[i], urls=[];
-      for(const block of payload.blocks.filter(b=>b.type==='image')) {
-        const rect=cropRect(block.box_2d,canvas.width,canvas.height);
-        if(!rect) {urls.push(sourceUrl);continue;}
-        const crop=createCanvas(rect.w,rect.h);
-        crop.getContext('2d').drawImage(canvas,rect.x,rect.y,rect.w,rect.h,0,0,rect.w,rect.h);
+      for(const block of payload.blocks.filter(b=>blockType(b)==='image')) {
+        const crop=cropDiagram(canvas,block.box_2d??block.box,createCanvas);
+        // Reserve one result for every image block, including refused crops,
+        // so later figures never slide into an earlier figure's position.
+        if(!crop) {urls.push(sourceUrl);continue;}
         urls.push(await storeImage(job,token,`page-${page}-q${i}-figure${urls.length}`,crop));
       }
       const q=normaliseQuestion(payload,`q_rapid_${id}_${page}_${i}`,job,page,sourceUrl,urls);
