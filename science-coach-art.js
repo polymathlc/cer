@@ -1,77 +1,129 @@
-// Original, self-contained SVG artwork. Every interpolated value is selected
-// from this fixed cast; caller-provided IDs never become SVG markup.
+// Original, self-contained animal mascot artwork. Every interpolated value is
+// selected from this fixed cast; caller-provided IDs never become SVG markup.
 export const SCIENCE_COACH_IDS = Object.freeze([
   'comparison', 'specific', 'evidence', 'keywords',
   'concept', 'reasoning', 'careful', 'complete'
 ]);
-
 const INK = '#29314d';
+const CREAM = '#fff7df';
 const CAST = Object.freeze({
-  comparison: {skin:'#c88663',shade:'#ae654d',hair:'#34304f',coat:'#aa88ef',dark:'#7e60c7',shirt:'#ff8c83',light:'#eee2ff',accent:'#ff9f90',name:'Casey'},
-  specific: {skin:'#995b45',shade:'#784338',hair:'#282638',coat:'#51c4b7',dark:'#249d99',shirt:'#fff0ac',light:'#d7f8ee',accent:'#ffcf69',name:'Sherry'},
-  evidence: {skin:'#f2bd98',shade:'#d79272',hair:'#a94f3d',coat:'#ffc259',dark:'#e2993d',shirt:'#5987cc',light:'#fff0c5',accent:'#78bce4',name:'Ellen'},
-  keywords: {skin:'#e8b08b',shade:'#c9896e',hair:'#273451',coat:'#6d9feb',dark:'#4074c3',shirt:'#76d5ca',light:'#dfedff',accent:'#ffd577',name:'Kai'},
-  concept: {skin:'#cba17e',shade:'#ac7a61',hair:'#443154',coat:'#ad84db',dark:'#815eb8',shirt:'#eaa6d1',light:'#f0e2ff',accent:'#f8d770',name:'Cora'},
-  reasoning: {skin:'#ad704b',shade:'#8b523c',hair:'#312d36',coat:'#f5a165',dark:'#d77943',shirt:'#6b87b8',light:'#ffead5',accent:'#7fd5d0',name:'Ravi'},
-  careful: {skin:'#ebbd9d',shade:'#ca8e73',hair:'#2b5d57',coat:'#a6ce68',dark:'#72a34a',shirt:'#459f98',light:'#edfad1',accent:'#ffd46b',name:'Cleo'},
-  complete: {skin:'#a96e59',shade:'#895143',hair:'#49324f',coat:'#ee8db6',dark:'#c76496',shirt:'#f6cb69',light:'#ffe0ed',accent:'#84d9cf',name:'Cody'}
+  comparison:{fur:'#9f83df',shade:'#7861bd',coat:'#aa88ef',dark:'#7157b3',shirt:'#ff9e91',light:'#eee2ff',accent:'#72d8c3',animal:'chameleon'},
+  specific:{fur:'#ee944c',shade:'#c86935',coat:'#51c4b7',dark:'#249d99',shirt:'#fff0ac',light:'#d7f8ee',accent:'#ffcf69',animal:'fox'},
+  evidence:{fur:'#8bb9d4',shade:'#6492b4',coat:'#ffc259',dark:'#c98c32',shirt:'#5987cc',light:'#fff0c5',accent:'#78bce4',animal:'elephant'},
+  keywords:{fur:'#4ebebc',shade:'#278f9f',coat:'#6d9feb',dark:'#4074c3',shirt:'#76d5ca',light:'#dfedff',accent:'#ffd577',animal:'parrot'},
+  concept:{fur:'#a780c9',shade:'#7958a5',coat:'#ad84db',dark:'#815eb8',shirt:'#eaa6d1',light:'#f0e2ff',accent:'#f8d770',animal:'owl'},
+  reasoning:{fur:'#dc8550',shade:'#a8503b',coat:'#f5a165',dark:'#be6540',shirt:'#6b87b8',light:'#ffead5',accent:'#7fd5d0',animal:'red-panda'},
+  careful:{fur:'#9dcd72',shade:'#6d9b54',coat:'#a6ce68',dark:'#558a64',shirt:'#459f98',light:'#edfad1',accent:'#ffd46b',animal:'tortoise'},
+  complete:{fur:'#b98057',shade:'#865437',coat:'#ee8db6',dark:'#c76496',shirt:'#f6cb69',light:'#ffe0ed',accent:'#84d9cf',animal:'beaver'}
 });
+const path = (d,fill,extra='') => `<path d="${d}" fill="${fill}" ${extra}/>`;
+const line = (d,color=INK,width=2.8) => path(d,'none',`stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"`);
+const outlined = (d,fill,width=2.8) => path(d,fill,`stroke="${INK}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"`);
+const ellipse = (cx,cy,rx,ry,fill,extra='') => `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${fill}" ${extra}/>`;
+const circle = (cx,cy,r,fill,extra='') => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" ${extra}/>`;
+const rim = (width=2.8) => `stroke="${INK}" stroke-width="${width}"`;
+const star = (x,y,color,scale=1) => `<g transform="translate(${x} ${y}) scale(${scale})">${path('M0-7 2-2 7 0 2 2 0 7-2 2-7 0-2-2Z',color)}</g>`;
 
-const path = (d, fill, extra = '') => `<path d="${d}" fill="${fill}" ${extra}/>`;
-const line = (d, color = INK, width = 2.8) => path(d, 'none', `stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"`);
-const outlined = (d, fill, width = 2.8) => path(d, fill, `stroke="${INK}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"`);
-const ellipse = (cx, cy, rx, ry, fill, extra = '') => `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${fill}" ${extra}/>`;
-const circle = (cx, cy, r, fill, extra = '') => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" ${extra}/>`;
-const star = (x, y, color, scale = 1) => `<g transform="translate(${x} ${y}) scale(${scale})">${path('M0-7 2-2 7 0 2 2 0 7-2 2-7 0-2-2Z',color)}</g>`;
-
-function backdrop(c, motion) {
+function backdrop(c,motion) {
   return `${ellipse(89,165,57,7,INK,'opacity=".09"')}
     ${path('M34 114C15 90 26 51 56 39c28-12 48-17 73-3 27 15 38 46 21 74-14 22-37 42-64 43-24 1-38-22-52-39Z',c.light)}
-    <g${motion('sc-avatar-spark')}>${star(30,70,c.accent,1.05)}${star(146,45,c.coat,.8)}
-      ${circle(147,82,3.5,c.accent)}${circle(33,121,2.5,c.coat)}
-      ${line('M30 41l4 5m-13 6 6 1',c.coat,2.6)}${line('M149 137l4 4m-14 2 1 5',c.coat,2.6)}
-    </g>`;
+    <g${motion('sc-avatar-spark')}>${star(25,70,c.accent,.9)}${star(149,42,c.coat,.8)}${circle(150,81,3,c.accent)}${circle(24,116,2.5,c.coat)}
+    ${line('M28 39l4 5m-13 6 6 1',c.coat,2.6)}${line('M154 146l4 4m-14 2 1 5',c.coat,2.6)}</g>`;
 }
-
-function hairBehind(id, c) {
-  if (id === 'specific') return `${outlined('M49 57C34 65 26 52 32 42c-8-12 4-24 15-20 6-13 23-11 26 0 14-2 19 14 11 23L66 69Z',c.hair)}
-    ${outlined('M116 55c17 11 31 0 27-13 11-10 3-25-10-24-8-10-23-6-23 6-15-1-20 16-9 27Z',c.hair)}
-    ${path('M34 39c3-8 10-8 14-5m83-9c7 0 11 6 10 10','none','stroke="#544150" stroke-width="4" stroke-linecap="round"')}`;
-  if (id === 'evidence') return `${outlined('M58 52C44 53 44 37 54 33c0-15 14-21 24-13 19-13 48-1 52 22l-4 48-22 19H62Z',c.hair)}
-    ${outlined('M119 78c15 3 15 17 5 22 12 6 10 19-1 22 7 9 4 21-7 24l-6-11c-9-7-7-16 0-21-10-8-9-21 0-27Z',c.hair)}
-    ${line('M119 93l-8 6m12 17-12 5m9 13-9 1','#dc8460',3.5)}${path('M109 138l15-3-2 10-10 2Z','#76b9e1')}`;
-  if (id === 'concept') return `${outlined('M54 59C42 31 58 17 79 20c16-16 49 0 51 23 13 16 7 28 3 40 10 14 3 29-9 31l-21-8-35 10C49 116 41 98 49 84Z',c.hair)}
-    ${line('M50 63c-4 11-2 17 4 22m74-34c5 9 4 18 0 23','#685073',3.5)}`;
-  if (id === 'careful') return `${outlined('M52 61c-6-30 16-40 40-39 27-1 42 15 38 43l-9 38-57 2Z',c.hair)}
-    ${outlined('M56 82c-10 7-11 16-5 24-6 9-4 20 6 24l8-9c3-6 1-11-3-15 7-8 5-17-2-23Z',c.hair)}
-    ${outlined('M123 82c10 7 11 16 5 24 6 9 4 20-6 24l-8-9c-3-6-1-11 3-15-7-8-5-17 2-23Z',c.hair)}
-    ${line('M52 98l10 6m-11 13 10 4m64-23-10 6m11 13-10 4','#538177',3)}
-    ${path('M48 123l12-2 4 8-12 2Z',c.accent)}${path('M119 121l12 2-4 8-12-2Z',c.accent)}`;
-  if (id === 'complete') return `${outlined('M52 62C36 51 40 35 52 30c-1-13 17-20 28-11 10-14 27-7 30 2 16-2 27 11 24 24 12 10 7 28-4 35l-10 13-60-2Z',c.hair)}
-    ${line('M50 45c-2-6 3-12 9-11m18-13c4-2 9-1 12 3m27 5c6 0 10 6 9 11','#6f4d72',4)}`;
-  return outlined('M53 62C45 39 58 18 80 19c19-13 46 4 49 24l-2 40-68 9Z',c.hair);
+function eyes(points,motion,size=1) {
+  return `<g${motion('sc-avatar-blink')}>${points.map(([x,y]) => `${ellipse(x,y,7*size,9*size,'#fffef8')}${ellipse(x+1,y+1,3.7*size,5.5*size,INK)}${circle(x+2.1,y-1.5,1.5*size,'#fff')}`).join('')}</g>`;
 }
-
-function outfit(id, c, motion) {
-  const coat = `${outlined('M74 110c-19 2-32 14-37 38-1 5 3 9 9 10l14 2 2 10h58l3-10 14-2c7-1 10-5 8-12-6-22-19-33-37-36Z',c.coat)}
-    ${path('M116 121c13 6 18 20 19 29l-17 7-1 13H94l13-57Z',c.dark)}
-    ${outlined('M76 105v14c0 12 29 12 29-1v-14Z',c.skin,2.5)}
-    ${path('M76 108v9c7 7 18 8 29 0v-9Z',c.shade)}
-    ${path('M73 115l17 12 18-12-3 55H77Z',c.shirt)}
-    ${outlined('M74 112l-10 8 9 13-6 8 17 29 3-44Z',c.light,2.2)}
-    ${outlined('M107 112l10 9-9 12 6 8-19 29-2-44Z',c.light,2.2)}
-    ${line('M52 135l7 14m68-15-6 14',c.dark,2.5)}
-    ${outlined('M45 145c-6-2-9 2-7 7 2 7 11 10 18 5l8-6c3-4-2-8-6-5l-4 2-3-7c-2-4-7-1-6 4Z',c.skin,2.3)}
-    ${path('M88 131h4v36h-4Z',c.light)}${circle(90,142,1.7,c.dark)}${circle(90,152,1.7,c.dark)}
-    ${outlined('M60 132h12v15H60Z','#fffaf0',1.7)}${line('M63 136h6m-6 4h4',c.coat,1.8)}
-    ${path('M64 129h5v5h-5Z',c.accent)}`;
-  const accent = id === 'reasoning' ? `${path('M45 126l10-7 3 8-10 6Z',c.accent)}${circle(51,127,1.6,INK)}`
-    : id === 'complete' ? `${outlined('M62 113l-8 7 10 10 14-13Z',c.dark,2)}${outlined('M111 113l12 8-12 10-14-13Z',c.dark,2)}`
-      : id === 'keywords' ? `${path('M103 145h10v12h-10Z',c.dark)}${line('M105 146v-6m5 6v-4',c.accent,2.3)}` : '';
-  return `${coat}${accent}<g${motion('sc-avatar-hand')}>${prop(id,c)}
-    ${outlined('M133 132c-5-1-9 2-8 7 2 7 11 10 17 5 4-3 5-8 1-10-3-1-4 2-6 3l1-6c0-3-4-4-5 1Z',c.skin,2.3)}
-    ${line('M133 141l5 1',c.shade,1.8)}</g>`;
+function paw(c,x=134,y=140) {
+  return `${ellipse(x,y,10,7,c.fur,rim(2.4))}${line(`M${x-3} ${y+1}v3m5-3v3`,c.shade,1.6)}`;
 }
+function heldProp(id,c,motion,bird=false) {
+  return `<g${motion('sc-avatar-hand')}>${prop(id,c)}${bird ? `${outlined('M124 129c9 0 20 5 19 12-1 7-11 9-19 3l-7-8Z',c.coat,2.4)}${line('M129 140l9-2m-8 6 8-3',c.dark,1.8)}` : paw(c)}</g>`;
+}
+function badge(c,x=70,y=137) {
+  return `${outlined(`M${x-7} ${y-9}h14v18h-14Z`,CREAM,1.7)}${path(`M${x-3} ${y-12}h6v6h-6Z`,c.accent)}${line(`M${x-4} ${y-2}h8m-8 5h5`,c.dark,1.8)}`;
+}
+function body(c) {
+  return `${outlined('M71 98c-15 8-20 28-18 43 2 18 14 23 35 23s34-6 36-24c2-19-5-36-20-42Z',c.fur)}${ellipse(88,138,22,23,CREAM)}
+    ${ellipse(69,161,13,6,c.shade,rim(2.4))}${ellipse(108,161,13,6,c.shade,rim(2.4))}${line('M65 161v3m6-3v3m32-3v3m6-3v3',CREAM,1.5)}
+    ${outlined('M66 107l13 7 9 19 9-19 14-7c9 13 12 28 10 45-9 6-21 8-29 8l-4-27-4 27c-11 0-21-3-28-8-1-16 2-34 10-45Z',c.coat,2.4)}
+    ${path('M96 118l16-7 6 15-18 3Z',c.dark)}${badge(c)}`;
+}
+function leftPaw(c) {
+  return `${outlined('M59 118c-11-2-21 9-17 17 3 6 12 7 18 0l7-10Z',c.fur,2.4)}${line('M46 131l3 3m2-7 3 3',c.shade,1.7)}`;
+}
+function muzzle(c,motion,{red=false}={}) {
+  return `${eyes([[68,70],[108,70]],motion,.86)}${outlined('M80 88c4-3 12-3 16 0-1 7-6 10-8 10s-7-3-8-10Z',INK,1.5)}
+    ${line('M88 98v5m0 0c-5 4-9 2-12 0m12 0c5 4 9 2 12 0',INK,1.9)}${ellipse(56,84,5,3,red?'#e7a38c':'#ecb0a4')}${ellipse(120,84,5,3,red?'#e7a38c':'#ecb0a4')}`;
+}
+function chameleon(c,motion) {
+  return `${line('M66 144C42 167 14 147 25 128c8-14 28-8 24 4-3 9-14 8-15 1',INK,19)}${line('M66 144C42 167 14 147 25 128c8-14 28-8 24 4-3 9-14 8-15 1',c.accent,13)}
+    ${outlined('M77 98c-16 9-21 28-17 45 4 13 17 17 34 17 18 0 25-8 23-24-1-15-5-28-14-36Z',c.fur)}${path('M86 110c-7 17-8 34-2 49h14c8-16 6-34-3-49Z',c.accent)}
+    ${line('M69 117l9 3m-11 9 9 3m-9 10 8 3',c.shade,4)}${outlined('M68 150l-8 11 8 3 7-5 8 3 5-5-11-10Z',c.accent,2.3)}${outlined('M103 149l-2 12 9 3 5-5 8 1 2-5-13-9Z',c.accent,2.3)}
+    ${outlined('M56 64c6-22 25-32 45-25 10 4 17 15 20 27l14 14c6 7 2 18-8 21-16 5-28 13-43 12-18-1-32-17-28-49Z',c.fur)}
+    ${path('M59 87c21 9 45 11 73 0-1 7-3 11-8 12-18 6-28 13-40 12-11 0-20-9-25-24Z',c.accent)}${outlined('M62 44l5-13 10 8 9-12 9 14 9-6 5 13Z',c.accent,2.2)}
+    ${circle(72,60,19,c.shade,rim(2.7))}${circle(105,59,20,c.accent,rim(2.7))}${circle(72,60,14,c.fur)}${circle(105,59,14,'#b8efe0')}${eyes([[72,60],[105,59]],motion,.98)}
+    ${circle(128,80,1.8,INK)}${line('M79 90c12 7 26 7 37-1',INK,2.4)}${ellipse(69,86,6,3,'#f9b4b2','opacity=".65"')}
+    ${outlined('M65 115c-14-6-24-1-25 10-1 7 4 10 9 7l7-6 12 2Z',c.fur,2.4)}${line('M44 125l5 2m-1-6 5 2',c.shade,1.8)}${heldProp('comparison',c,motion)}`;
+}
+function fox(c,motion) {
+  return `${outlined('M65 148C24 168 10 133 22 104c6 20 35 13 43 38Z',c.fur)}${path('M22 104c5 14 15 17 26 23l-12 5-4 11-13-7c-3-10-1-22 3-32Z',CREAM)}${body(c)}
+    ${outlined('M49 65l-7-42c-1-7 4-9 9-5l28 25Zm48-20 24-26c5-5 10-2 9 5l-6 44Z',c.fur)}${path('M51 30l5 24 15-10Zm68 3-16 13 17 12Z','#8c4b48')}
+    ${outlined('M47 65c4-21 21-31 40-31 20 0 38 12 42 33l8 16-18 8c-7 13-20 23-32 24-14-1-25-12-33-24l-17-8Z',c.fur)}
+    ${path('M43 77l19-8c8 6 16 13 25 26 9-13 18-20 25-26l19 8-17 10c-7 13-17 23-27 25-10-2-21-14-28-26Z',CREAM)}
+    ${muzzle(c,motion)}${line('M59 57l11-3m38 0 8 4',c.shade,2.8)}${leftPaw(c)}${heldProp('specific',c,motion)}`;
+}
+function elephant(c,motion) {
+  return `${outlined('M120 135c13 4 18 13 12 22l-6-4c4-6 1-9-9-10Z',c.fur,2.2)}${body(c)}
+    ${outlined('M63 48C39 30 23 46 28 77c3 23 19 35 35 24l14-28Z',c.fur)}${outlined('M110 47c25-17 42 0 37 29-4 24-20 35-36 24l-13-27Z',c.fur)}
+    ${path('M57 55C42 42 34 54 38 75c3 14 10 20 20 16l8-16Z','#e1b2c8')}${path('M117 54c15-12 23 1 19 22-3 14-10 19-20 15l-7-16Z','#e1b2c8')}
+    ${outlined('M54 58c0-24 15-37 34-37s35 14 35 37v21c0 19-15 30-34 30S54 98 54 79Z',c.fur)}${path('M78 22l8-8 3 9 8-4-1 10Z',c.shade)}
+    ${eyes([[70,64],[105,64]],motion,.92)}${line('M64 52c4-3 8-3 12-1m23-1c4-2 8-1 11 2',c.shade,2.8)}${ellipse(64,83,7,4,'#e1b2c8','opacity=".8"')}${ellipse(111,83,7,4,'#e1b2c8','opacity=".8"')}
+    ${outlined('M76 85c-4 13-2 24 5 31 10 11 28 5 30-5 2-8-6-12-10-7-3 5-7 6-9 2-3-5 0-13 0-21Z',c.fur,2.5)}${line('M77 96h12m-10 8 9-1m-4 10 7-3',c.shade,1.8)}${line('M69 93l5 4m25-4-4 4',INK,2)}
+    ${leftPaw(c)}${heldProp('evidence',c,motion)}`;
+}
+function parrot(c,motion) {
+  return `${outlined('M81 137l-9 30 13-3 7 6 7-27Z',c.dark,2.5)}${line('M85 147l-2 15m8-16 1 15',c.accent,2.2)}
+    ${outlined('M61 83c-14 16-17 40-10 62 6 17 23 20 39 17 24-4 35-21 31-44-3-20-17-35-32-40Z',c.fur)}${path('M69 98c-10 15-16 33-11 48 4 13 16 17 30 14 15-4 22-19 17-35l-13-26Z',c.accent)}
+    ${outlined('M60 109c-21 0-33 22-20 38 5 6 11 5 16-4 3-5 9-8 11-14Z',c.coat,2.5)}${line('M43 131l7 6m-8 1 6 5m6-17 7 5',c.dark,2.3)}
+    ${outlined('M56 62c0-25 16-40 38-40 22 0 36 17 36 38 0 23-17 41-39 41-23 0-35-16-35-39Z',c.fur)}${outlined('M78 26c-3-11 2-18 9-15l9 13c-1-15 8-18 12-12l4 18Z',c.coat,2.4)}
+    ${path('M91 30c-17 5-22 19-20 35 3 14 17 18 28 10 14 10 26 0 27-13 1-16-14-29-35-32Z',CREAM)}${eyes([[83,57],[113,58]],motion,.96)}
+    ${outlined('M93 69c9-5 24 0 23 10-1 9-12 17-20 18 4-10 6-16-3-28Z',c.accent,2.4)}${outlined('M94 81c8-3 13-2 16 0-4 7-9 11-14 14Z',c.shade,1.8)}${line('M99 76l8-1','#d4993b',1.8)}${ellipse(73,77,6,3,'#eeaca4')}
+    ${outlined('M70 156v5l-8 3 4 4 11-4 8 1 2-4-8-2v-4Zm30 0v5l-5 4 3 3 8-4 10 2 2-4-10-3v-4Z',c.accent,2.2)}${badge(c,76,124)}${heldProp('keywords',c,motion,true)}`;
+}
+function owl(c,motion) {
+  return `${outlined('M72 149l-4 17 13-5 8 6 9-7 11 4-6-16Z',c.shade,2.4)}${outlined('M53 80c-8 17-9 42 0 62 6 15 20 21 36 21 23 0 36-9 40-30 4-25-5-46-16-56Z',c.fur)}${ellipse(89,128,25,30,'#dcc4ed')}
+    ${line('M73 118l5 5 5-5m3 9 5 5 5-5m-23 12 5 5 5-5m15-22 5 5 5-5m-7 22 5 5 5-5',c.shade,2.5)}
+    ${outlined('M60 105c-14-3-23 12-20 26 2 11 9 18 16 13l12-21Z',c.shade,2.5)}${line('M45 126l8 8m-7-1 7 7',c.coat,2.1)}
+    ${outlined('M48 65l-4-40 26 13c12-5 26-5 38 0l27-13-5 40c1 27-17 44-41 44-25 0-43-17-41-44Z',c.fur)}${path('M52 38l3 20 13-14Zm75 0-15 7 12 13Z',c.shade)}
+    ${outlined('M89 57c-6-17-33-22-37 4-4 25 24 39 37 24 13 15 40 1 36-24-4-26-30-21-36-4Z',CREAM,2)}${circle(70,67,14,'#f0dfbf')}${circle(108,67,14,'#f0dfbf')}${eyes([[70,67],[108,67]],motion,1.13)}
+    ${outlined('M83 81l6-6 6 6-6 10Z',c.accent,2)}${ellipse(57,85,6,3,'#e8b4cb')}${ellipse(120,85,6,3,'#e8b4cb')}${line('M63 49l9-3m31 0 9 3',c.shade,2.8)}${star(89,40,c.accent,.6)}
+    ${outlined('M75 157l-7 7 7 3 6-5 7 3 4-4-10-5Zm25 0-5 6 5 4 6-5 8 3 4-4-11-5Z',c.accent,2.1)}${heldProp('concept',c,motion,true)}`;
+}
+function redPanda(c,motion) {
+  return `${outlined('M66 149C34 176 11 147 23 118c4-9 13-13 19-8-11 16 2 22 23 23Z',c.fur)}${path('M19 133l22 3 7 11-26-3Zm8 22 13-13 12 7-10 13Zm-2-37 13 8-1-11-8-2Z',c.shade)}${body(c)}
+    ${outlined('M52 54C30 42 43 16 62 25l13 18Zm51-13 14-17c20-8 29 20 11 33Z',c.fur)}${path('M51 41c-7-11 1-17 8-11l7 11Zm62 0 9-11c8-4 13 5 5 14Z',CREAM)}
+    ${outlined('M46 62c4-21 21-30 42-30s39 12 42 33l7 13-16 8c-5 18-20 28-33 28-16 0-31-11-36-28l-13-8Z',c.fur)}
+    ${path('M49 70l18-13c5 0 10 5 14 13l7 12 8-12c5-9 9-13 14-13l18 13-12 10c-6 19-15 29-28 29S65 98 60 80Z',CREAM)}
+    ${outlined('M57 65c8-8 21 0 23 10l-13 12c-11-3-17-15-10-22Zm61 0c-8-8-20 0-23 10l13 12c12-3 17-15 10-22Z',c.shade,1.7)}${muzzle(c,motion,{red:true})}${leftPaw({...c,fur:c.shade,shade:CREAM})}${heldProp('reasoning',{...c,fur:c.shade,shade:CREAM},motion)}`;
+}
+function tortoise(c,motion) {
+  return `${outlined('M45 150l-14 6 3-14 15-6Z',c.fur,2.4)}${outlined('M83 86C46 82 25 106 32 138c4 22 26 29 53 23 24-5 38-20 31-43-5-17-17-28-33-32Z',c.dark)}
+    ${outlined('M73 95c-25-1-39 17-35 38 4 19 20 23 41 18 20-4 30-17 25-34-3-13-15-21-31-22Z','#83b988',2.3)}${outlined('M63 109l20-1 9 18-13 17-20-6-4-17Z','#588c6c',2.2)}${line('M63 109l-6-10m26 9 7-8m2 26 13 3m-26 14 2 7m-22-13-16 1m12-18-15-6',INK,2)}
+    ${outlined('M80 105c17-5 33 10 36 28 2 16-6 28-20 29-13 0-22-10-22-26Z',c.fur)}${path('M87 116c-10 9-12 30-3 43 10 3 18 0 22-6 5-14-3-31-10-37Z','#e2e9a1')}${line('M83 135h15m-15 9h19',c.shade,2)}
+    ${outlined('M58 147l-8 13 5 7 11-2 10-10-5-8Zm41 7 2 11 14 2 7-5-10-12Z',c.fur,2.5)}${line('M54 160l4 3m1-6 4 3m42 1v3m6-3v3',CREAM,1.8)}
+    ${outlined('M65 60c2-20 16-31 34-30 19 1 31 16 29 35l-2 17c-2 18-15 28-33 27-20-2-31-17-30-35Z',c.fur)}${path('M73 51c11-15 32-15 43 1l-5-16-19-8-16 8Z',c.shade)}${eyes([[81,67],[112,67]],motion,.9)}
+    ${ellipse(96,86,24,14,'#c4e59c')}${circle(88,81,1.6,c.shade)}${circle(103,81,1.6,c.shade)}${line('M84 91c7 7 18 6 25-1',INK,2.2)}${ellipse(76,85,5,3,'#edc294')}${ellipse(117,85,5,3,'#edc294')}
+    ${outlined('M75 113c-15 0-23 6-19 16 3 7 13 9 19 3l7-11Z',c.fur,2.4)}${line('M59 126l4 3m1-7 4 3',c.shade,1.7)}${outlined('M81 109l7 8 9-7 5 9-12 8-13-9Z',c.shirt,2)}${heldProp('careful',c,motion)}`;
+}
+function beaver(c,motion) {
+  return `${outlined('M65 144C50 124 27 119 19 134c-9 19 14 36 38 26l15-9Z',c.shade)}${line('M27 133l24 23m-31-15 22 20m-5-34 20 19m-32-3 19-16m-10 25 19-17','#bb8d63',2.1)}${body(c)}
+    ${circle(58,44,15,c.fur,rim())}${circle(117,44,15,c.fur,rim())}${circle(58,44,8,'#e7b49d')}${circle(117,44,8,'#e7b49d')}
+    ${outlined('M46 70c-1-26 17-42 41-42 25 0 43 16 42 42 0 27-15 45-42 45-26 0-41-18-41-45Z',c.fur)}${path('M78 30l4-9 8 7 7-8 3 13Z',c.fur)}${eyes([[68,67],[106,67]],motion,.94)}${line('M60 54c4-3 9-4 13-2m26 0c4-2 9-1 12 2',c.shade,2.7)}
+    ${ellipse(74,91,19,15,'#edcda4')}${ellipse(101,91,19,15,'#edcda4')}${outlined('M79 81c5-3 12-3 17 0-1 7-6 10-9 10s-7-3-8-10Z',INK,1.7)}
+    ${outlined('M73 99c8 5 20 5 28-1-2 17-25 21-28 1Z','#683f3c',1.8)}${outlined('M78 101h9v12h-7Zm10 0h9l-2 12h-7Z','#fffef5',1.5)}${line('M60 89l-13-3m13 8-14 3m68-8 12-3m-12 8 14 3',c.shade,1.7)}
+    ${ellipse(57,83,5,3,'#e9a69c')}${ellipse(119,83,5,3,'#e9a69c')}${leftPaw(c)}${heldProp('complete',c,motion)}`;
+}
+const ANIMAL_ART = Object.freeze({comparison:chameleon,specific:fox,evidence:elephant,keywords:parrot,concept:owl,reasoning:redPanda,careful:tortoise,complete:beaver});
 
 function prop(id, c) {
   if (id === 'comparison') return `<g transform="rotate(9 133 111)">
@@ -126,71 +178,11 @@ function prop(id, c) {
     ${outlined('M143 87h8c-2-6 7-6 7 0h7v8c6-2 6 7 0 7v8h-8c2-6-7-6-7 0h-7v-8c6 2 6-7 0-7Z',c.shirt,2.1)}</g>`;
 }
 
-function face(id, c, motion) {
-  const face = `${ellipse(56,76,8,11,c.skin,`stroke="${INK}" stroke-width="2.4"`)}${ellipse(126,76,8,11,c.skin,`stroke="${INK}" stroke-width="2.4"`)}
-    ${line('M54 74l4 5m70-5-4 5',c.shade,2)}
-    ${outlined('M57 62c-1-23 12-36 33-36s36 14 35 37v14c0 23-15 36-34 36S57 100 57 78Z',c.skin,2.8)}
-    ${path('M118 49c2 8 2 18 2 27 0 23-14 33-30 33-12 0-21-5-27-13 5 11 15 17 28 17 19 0 34-13 34-36V63c0-6-2-11-7-14Z',c.shade)}
-    ${ellipse(67,87,7,4,'#e6837a','opacity=".52"')}${ellipse(114,87,7,4,'#e6837a','opacity=".48"')}
-    ${line('M88 82l-3 7c2 2 5 2 7 1',c.shade,2.1)}`;
-  const eyes = `<g${motion('sc-avatar-blink')}>
-    ${ellipse(75,75,6.5,8.2,'#fffdf7')}${ellipse(105,75,6.5,8.2,'#fffdf7')}
-    ${ellipse(76,76,3.9,5.7,INK)}${ellipse(104,76,3.9,5.7,INK)}
-    ${circle(77.4,73.5,1.6,'#fff')}${circle(105.4,73.5,1.6,'#fff')}
-    ${line('M69 71c3-3 7-3 11 0m19 0c3-3 7-3 11 0',INK,1.5)}</g>`;
-  const brows = id === 'specific' ? line('M67 64c4-3 9-3 13-1m20 0c4-5 9-5 13-2',c.hair,3)
-    : id === 'reasoning' ? line('M67 64l12-2m22 0 11 3',c.hair,3)
-      : line('M67 64c4-3 9-3 13-1m20 0c4-3 9-3 13 1',c.hair,3);
-  const mouth = id === 'complete' ? `${outlined('M80 96c6 3 15 3 22-1-1 12-19 16-22 1Z','#763e49',1.9)}${path('M84 98h6v6h-6Zm9 0h6l-1 5h-5Z','#fffdf5')}${path('M87 106c4-4 9-3 11-1-3 4-8 5-11 1Z','#e79092')}`
-    : id === 'careful' || id === 'concept' ? `${line('M81 97c5 6 13 5 19-1',INK,2.3)}${line('M88 102h5',c.shade,1.7)}`
-      : `${outlined('M79 96c8 4 16 4 24-1-1 12-20 15-24 1Z','#763e49',1.9)}${path('M82 98c5 2 12 2 17 0l-1 4c-5 2-10 2-14 0Z','#fffdf5')}${path('M86 106c4-3 8-3 11-2-2 4-7 5-11 2Z','#e79092')}`;
-  const freckles = id === 'evidence' || id === 'careful' ? `${circle(64,84,1.1,c.shade)}${circle(69,82,1.1,c.shade)}${circle(71,87,1.1,c.shade)}${circle(111,83,1.1,c.shade)}${circle(116,84,1.1,c.shade)}${circle(113,88,1.1,c.shade)}` : '';
-  return face + eyes + brows + mouth + freckles;
-}
-
-function hairFront(id, c) {
-  if (id === 'comparison') return `${outlined('M54 65C42 53 48 42 54 40c-3-13 10-23 21-18 7-12 23-10 29 0 14-2 25 7 26 20 8 9 5 21-4 27l-4-16c-9 3-17-2-21-10-5 12-17 16-28 11l-8 13-2-10Z',c.hair)}
-    ${line('M58 41c-1-6 4-10 10-10m9-8c5-3 11 0 12 4m19 1c6 0 10 4 10 10','#595070',4)}
-    ${outlined('M111 44l13 6-3 7-13-6Z',c.accent,1.7)}
-    ${outlined('M61 68c9-4 19-4 26 0v11c-2 11-23 11-25 0Zm34 0c8-4 18-4 25 0l-1 11c-2 11-23 11-24 0Z','none',2.4)}${line('M87 72h8',INK,2.4)}`;
-  if (id === 'specific') return `${outlined('M54 63C47 44 60 29 77 29c22-15 48 2 48 27l-3 10-5-16c-16 5-30-1-38-10-2 13-12 20-25 23Z',c.hair)}
-    ${line('M65 40c8-5 17-5 23-1','#504050',3.4)}
-    ${outlined('M48 47l10-2 4 8-11 4Z',c.accent,1.7)}${outlined('M119 42l10 3-2 9-11-3Z',c.accent,1.7)}
-    ${circle(54,86,2.8,c.accent,`stroke="${INK}" stroke-width="1.4"`)}${circle(128,86,2.8,c.accent,`stroke="${INK}" stroke-width="1.4"`)}`;
-  if (id === 'evidence') return `${outlined('M53 60c-6-14 7-30 23-30 22-13 45 1 49 23l-1 11-7-16c-6 5-13 6-23 2l4-11c-10 13-23 17-36 14l-5 14Z',c.hair)}
-    ${line('M61 44c9 2 20-2 26-9m21 0c5 2 8 5 10 10','#dd8963',4)}
-    ${outlined('M55 54l6-12 7 3-6 12Z','#ffd469',1.6)}
-    ${path('M117 62l5 10-3 4-6-12Z',c.hair)}`;
-  if (id === 'keywords') return `${outlined('M55 63C46 47 54 31 67 30l-4-10c15 7 24-5 31-5 3 7 1 13-1 15 13-6 27-1 32 10l-3 26-7-18c-9 8-27 11-40 6l-14 17Z',c.hair)}
-    ${line('M70 40c12 3 23-3 30-5','#4c6080',4)}
-    ${outlined('M50 65h8v21h-8c-4 0-6-4-6-10s2-11 6-11Zm75 0h6c4 0 6 5 6 11s-2 10-6 10h-6Z',c.coat,2.1)}
-    ${line('M49 65c-2-27 18-45 43-45s40 18 40 44',c.dark,4.5)}${line('M50 69v12m79-12v12',c.light,2.3)}`;
-  if (id === 'concept') return `${outlined('M51 67c-6-15 3-31 17-31 5-15 23-19 35-8 14 0 23 14 22 31l-4 10-7-23c-7 9-17 11-28 6l3-10c-6 13-18 17-30 15l-1 13Z',c.hair)}
-    ${line('M59 45c5-5 13-6 20-5m23-8c8 1 14 8 16 14','#76557f',4)}
-    ${path('M56 48c15-22 48-23 67 0l-3 6c-18-21-44-19-60 0Z',c.coat)}${star(114,42,c.accent,.8)}
-    ${outlined('M62 69h24v13c-7 7-19 6-24-1Zm34 0h24v12c-5 7-17 8-24 1Z','none',2.3)}${line('M86 74h10',INK,2.3)}`;
-  if (id === 'reasoning') return `${outlined('M54 64c-4-12 0-26 11-30l-6-10c13 5 16-8 31-8 14 0 14 10 23 11 10 2 15 12 13 24l-5 17-6-21c-14 11-34 13-51 6l-5 17Z',c.hair)}
-    ${line('M68 38c12 4 26-1 33-6','#615058',4)}
-    ${outlined('M59 37l61 2v9l-61-2Z',c.dark,2)}
-    ${outlined('M64 34h18v14H64Zm31 0h18v14H95Z','#c2f1ea',2.4)}
-    ${path('M68 37h10l-10 7Zm31 0h10l-10 7Z','#f0fffb')}${line('M83 40h10',INK,2.7)}`;
-  if (id === 'careful') return `${outlined('M55 64c-4-14 4-27 19-29 17-8 42 0 47 19l-1 13-8-14c-9 4-22 4-28-3-5 9-14 11-23 8l-4 13Z',c.hair)}
-    ${outlined('M48 43l9-17c17-9 43-9 62 0l13 17c-25 7-60 7-84 0Z',c.coat,2.5)}
-    ${path('M55 39c20 5 46 5 68-1l-4-10c-10 5-18 3-23-3-11 7-23 7-37 5Z',c.light)}
-    ${outlined('M43 43c22 9 65 10 96-1l3 8c-29 13-73 13-103 1Z',c.coat,2.4)}
-    ${outlined('M88 30c9-3 14 0 13 5-1 6-8 8-13 3Z',c.dark,1.5)}${line('M89 37l9-4',c.light,1.4)}`;
-  return `${outlined('M52 68c-9-13-4-28 7-32 1-11 16-18 25-10 9-10 24-7 28 3 14-1 23 12 18 24l-8 15-5-16c-9 5-21 2-25-5-10 12-24 10-30 6l-3 17Z',c.hair)}
-    ${line('M62 39c4-7 11-8 17-3m14-6c6-3 12 0 14 5m12 5c6 4 7 9 4 13','#795778',4)}
-    ${outlined('M53 57l10 2-2 10-11-2Z',c.coat,1.9)}${star(57,63,'#fff0b5',.48)}
-    ${line('M109 64l7 1',c.hair,2.5)}`;
-}
-
-export function renderScienceCoachAvatar(id, {animated = true} = {}) {
-  const key = typeof id === 'string' && Object.hasOwn(CAST, id) ? id : 'comparison';
+export function renderScienceCoachAvatar(id,{animated=true}={}) {
+  const key = typeof id === 'string' && Object.hasOwn(CAST,id) ? id : 'comparison';
   const c = CAST[key];
   const motion = name => animated ? ` class="${name}"` : '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180" class="sc-avatar sc-avatar--${key}${animated ? '' : ' sc-avatar--still'}" aria-hidden="true" role="presentation" focusable="false" style="overflow:visible">
-    ${backdrop(c,motion)}
-    <g${motion('sc-avatar-float')}>${hairBehind(key,c)}${outfit(key,c,motion)}${face(key,c,motion)}${hairFront(key,c)}</g>
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180" class="sc-avatar sc-avatar--${key}${animated ? '' : ' sc-avatar--still'}" data-animal="${c.animal}" aria-hidden="true" role="presentation" focusable="false" style="overflow:visible">
+    ${backdrop(c,motion)}<g${motion('sc-avatar-float')}>${ANIMAL_ART[key](c,motion)}</g>
   </svg>`;
 }

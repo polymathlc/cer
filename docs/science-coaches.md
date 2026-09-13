@@ -1,17 +1,20 @@
-# Science Sidekicks — v1.378.0
+# Science Sidekicks — v1.378.1
 
-Eight original animated SVG coaches appear beside marked student answers:
+Eight original animated SVG animal coaches appear beside marked student answers:
 
-| Coach | Skill |
-| --- | --- |
-| Comparison Casey | Compare both things using the same feature |
-| Specific Sherry | Name the exact object, change or observation |
-| Evidence Ellen | Support a claim with a relevant observation or result |
-| Keyword Kai | Use the required science terminology accurately |
-| Concept Cora | Revisit a specific scientific misconception |
-| Reasoning Ravi | Explain the causal link between evidence and claim |
-| Careful Cleo | Check a flagged unit, label, number or instruction |
-| Complete Cody | Finish a part or choose a small revision |
+| Coach | Animal | Skill |
+| --- | --- | --- |
+| Comparison Casey | Chameleon | Compare both things using the same feature |
+| Specific Sherry | Fox | Name the exact object, change or observation |
+| Evidence Ellen | Elephant | Support a claim with a relevant observation or result |
+| Keyword Kai | Parrot | Use the required science terminology accurately |
+| Concept Cora | Owl | Revisit a specific scientific misconception |
+| Reasoning Ravi | Red panda | Explain the causal link between evidence and claim |
+| Careful Cleo | Tortoise | Check a flagged unit, label, number or instruction |
+| Complete Cody | Beaver | Finish a part or choose a small revision |
+
+Each mascot has an animal silhouette, paws or wings and a role-specific science
+prop. Species labels appear below the active portrait and in the team roster.
 
 The coaches use the existing mark and feedback. The three existing AI marking
 prompts may supply up to three optional `coachIssues` entries per answer. Old

@@ -70,7 +70,7 @@ export function mountScienceCoach(feedback, result, context = {}) {
         <span class="sc-count"></span>
       </div>
       <details class="sc-team"><summary>Meet the whole team <span aria-hidden="true">↗</span></summary>
-        <p class="sc-team-note">Eight friendly coaches, eight ways to strengthen your science answers. Your answer's tips are above.</p>
+        <p class="sc-team-note">Eight friendly animal coaches, eight ways to strengthen your science answers. Your answer's tips are above.</p>
         <div class="sc-team-grid"></div>
       </details>
     </div>`;
@@ -87,7 +87,7 @@ export function mountScienceCoach(feedback, result, context = {}) {
     selected = index;
     const coach = issues[index];
     root.dataset.coach = coach.id;
-    stage.innerHTML = `<div class="sc-portrait">${renderScienceCoachAvatar(coach.id)}<span class="sc-portrait-caption">YOUR COACH</span></div>
+    stage.innerHTML = `<div class="sc-portrait">${renderScienceCoachAvatar(coach.id)}<span class="sc-portrait-caption">${escape(coach.animal)}</span></div>
       <div class="sc-message">
         <span class="sc-focus">${escape(coach.focus)}</span>
         <h3>${escape(coach.name)}</h3>
@@ -132,7 +132,7 @@ export function mountScienceCoach(feedback, result, context = {}) {
     const grid = root.querySelector('.sc-team-grid');
     if (!team.open || grid.childElementCount) return;
     grid.innerHTML = Object.values(SCIENCE_COACHES).map(coach => `<article class="sc-team-member" data-coach="${escape(coach.id)}">
-      ${renderScienceCoachAvatar(coach.id, {animated:false})}<h4>${escape(coach.name)}</h4><p>${escape(coach.focus)}</p></article>`).join('');
+      ${renderScienceCoachAvatar(coach.id, {animated:false})}<h4>${escape(coach.name)}</h4><p>${escape(coach.animal)} · ${escape(coach.focus)}</p></article>`).join('');
   });
   show(0);
   syncMotion();
