@@ -13,7 +13,7 @@ import fs from 'fs';
 const APP = new URL('../app.js', import.meta.url).pathname;
 const src = fs.readFileSync(APP, 'utf8');
 const a = src.indexOf('// ---- Retired topics ---');
-const b = src.indexOf('function getQuestionsForLevel', a);
+const b = src.indexOf('// ---- Student feeding: one local policy', a);
 if (a < 0 || b < 0) throw new Error('retired-topic section not found in app.js — did the banner comment change?');
 const section = 'function qSecondaryTopic(q) { return (q && typeof q.topic2 === \'string\') ? q.topic2.trim() : \'\'; }\n'
   + src.slice(a, b);

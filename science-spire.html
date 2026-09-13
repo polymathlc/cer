@@ -316,6 +316,7 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
 
 <div class="toast" id="toast"></div>
 
+<script src="science-feed-bridge.js"></script>
 <script>
 "use strict";
 var $ = function(id){ return document.getElementById(id); };
@@ -763,12 +764,27 @@ function nextNode(){
 }
 
 /* ============================ QUESTION (MCQ) ============================ */
-function askQuestion(){
+// The portal owns level, mastery, quality and shared repetition decisions.
+var scienceFeed = ScienceFeedBridge.create({
+  onPool: function(rows){ applyBank(rows); },
+  onInvalidate: function(){
+    if(G && G.state==='question'){G.questionBonus=0;beginCombat();}
+    if(typeof qState !== 'undefined' && qState){ qState.active=false; qState.current=null; qState.answered=true; }
+    var overlay=document.getElementById('qOverlay'); if(overlay) overlay.classList.remove('show');
+  }
+});
+var scienceFeedOpening=false;
+async function askQuestion(){
+  if(scienceFeedOpening) return;
+  scienceFeedOpening=true;
+  try { await scienceFeed.refresh(); } finally { scienceFeedOpening=false; }
   var q = pickQuestion();
-  if (!q){ G.questionBonus=0; beginCombat(); return; }
-  qState.current=q; qState.answered=false;
+  if (!q){ toast(scienceFeed.message()); G.questionBonus=0; beginCombat(); return; }
+  qState.current=q; qState.answered=false; qState.shownAt=performance.now();
+  try{window.parent.postMessage({type:'SD_SHOWN',studentKey:scienceFeed.context().studentKey,studentLevel:scienceFeed.context().studentLevel,questionId:q.id},location.origin);}catch(e){}
   var stem = $('qStem');
   if (q.html){ stem.innerHTML = q.html; } else { stem.textContent = q.q; }
+  stem.querySelectorAll('img').forEach(function(img){img.addEventListener('error',function(){scienceFeed.fail(q,img.getAttribute('src')||img.src);},{once:true});});
   var opts = $('qOptions'); opts.innerHTML='';
   $('qExplain').style.display='none';
   $('qContinueBtn').style.display='none';
@@ -778,9 +794,11 @@ function askQuestion(){
     b.onclick=function(){ answerQuestion(i,b); };
     opts.appendChild(b);
   });
+  opts.querySelectorAll('img').forEach(function(img){img.addEventListener('error',function(){scienceFeed.fail(q,img.getAttribute('src')||img.src);},{once:true});});
   G.state='question'; show('qOverlay');
 }
 function answerQuestion(idx, btn){
+  if(!scienceFeed.current(qState.current)) return;
   if (qState.answered) return; qState.answered=true;
   var q=qState.current; var correct = (idx===q.answer);
   var opts = $('qOptions').children;
@@ -796,7 +814,7 @@ function answerQuestion(idx, btn){
   noteQuestionAnswered(q, correct); // keep the unseen-first pick honest mid-run
   // record to parent (teacher log + leaderboard "questions done")
   try {
-    if (embedded()) window.parent.postMessage({ type:'SD_RECORD', mode:'spire', questionId:q.id, questionTitle:(q.q||'').slice(0,140), correct:!!correct, topic:q.topic||'', ms: Math.max(0, Math.round(performance.now() - (qState.shownAt||performance.now()))) }, '*');
+    if (embedded()) window.parent.postMessage({ type:'SD_RECORD', studentKey:scienceFeed.context().studentKey, studentLevel:scienceFeed.context().studentLevel, mode:'spire', questionId:q.id, questionTitle:(q.q||'').slice(0,140), correct:!!correct, topic:q.topic||'', ms: Math.max(0, Math.round(performance.now() - (qState.shownAt||performance.now()))) }, '*');
   } catch(e){}
   var btnc=$('qContinueBtn'); btnc.style.display=''; btnc.onclick=function(){ hide('qOverlay'); beginCombat(); };
   updateHud();
@@ -1141,43 +1159,17 @@ var Q_CYCLE = {};
 function _qLast(q){ var s = q && q.id != null ? SEEN_STATS[q.id] : null; return (s && s.last) || 0; }
 var _sessionAsked = [];   // last served ids — no back-to-back repeats after a round reset
 function pickQuestion(){
-  if(!QBANK.length) return null;
-  // Every question served once this round? Start the next round.
-  if(QBANK.every(function(q){ return q.id != null && Q_CYCLE[q.id]; })) Q_CYCLE = {};
-  var pool = QBANK.filter(function(q){ return !(q.id != null && Q_CYCLE[q.id]); });
-  // Never re-serve one of the last few questions while any alternative exists.
-  var avoid = _sessionAsked.slice(-3);
-  var freshPool = pool.filter(function(q){ return !(q && q.id != null && avoid.indexOf(q.id) >= 0); });
-  if(freshPool.length) pool = freshPool;
-  var unseen = pool.filter(function(q){ return !(q && q.id != null && SEEN_STATS[q.id]); });
-  var choice;
-  if(unseen.length){
-    choice = unseen[Math.floor(Math.random()*unseen.length)];
-  } else {
-    pool.sort(function(a,b){ return _qLast(a) - _qLast(b); }); // last done longest ago first
-    choice = pool[0];
-  }
-  if(choice && choice.id != null){
-    Q_CYCLE[choice.id] = 1;
-    _sessionAsked.push(choice.id);
-    if(_sessionAsked.length > 12) _sessionAsked.shift();
-    // Tell the parent it was SHOWN so the cross-game rotation stops re-serving it.
-    try{ if(usingBank && embedded()) window.parent.postMessage({ type:'SD_SHOWN', questionId:choice.id }, '*'); }catch(e){}
-  }
-  return choice;
-}
-function noteQuestionAnswered(q, correct){
+  return scienceFeed.stamp(scienceFeed.take());
+}function noteQuestionAnswered(q, correct){
   if(!q || q.id == null) return;
   var s = SEEN_STATS[q.id] || (SEEN_STATS[q.id] = { n:0, correct:0, last:0 });
   s.n++; if(correct) s.correct++; s.last = Date.now();
 }
 function applyBank(list){
-  if(!Array.isArray(list)||!list.length) return;
-  var cleaned=list.filter(function(q){ return q && Array.isArray(q.options)&&q.options.length>=2&&typeof q.answer==='number'&&q.answer>=0&&q.answer<q.options.length&&((q.q&&q.q.trim())||(q.html&&q.html.trim())); });
-  if(!cleaned.length) return;
-  QBANK = cleaned; usingBank=true;
+  var cleaned=Array.isArray(list)?list:[];
+  QBANK.length=0; Array.prototype.push.apply(QBANK,cleaned);
+  usingBank=true;
 }
-
 /* ============================ PLAY LIMIT ============================ */
 var _gPlaysLeft = null;
 function _canPlayGame(){ return _gPlaysLeft==null || _gPlaysLeft>0; }
@@ -1195,7 +1187,7 @@ window.addEventListener('message', function(ev){
   var d=ev&&ev.data; if(!d) return;
   if (d.type==='SD_QUESTIONS'){
     if (d.playsLeft && typeof d.playsLeft.spire==='number') _gPlaysLeft=d.playsLeft.spire;
-    applyBank(d.questions);
+  // scienceFeed accepts only a current policy response.
     if (d.seenStats && typeof d.seenStats==='object'){
       Object.keys(d.seenStats).forEach(function(id){ var s=d.seenStats[id]; if(s && !SEEN_STATS[id]) SEEN_STATS[id]={ n:s.n||1, correct:s.correct||0, last:s.last||0 }; });
     }

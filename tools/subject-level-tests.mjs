@@ -25,6 +25,7 @@
 //    both ways: too loose and an off-level topic is kept while the author was
 //    promised a level, too eager and it overwrites a topic that was right.
 import fs from 'fs';
+import { scienceQuestionLevel } from '../science-feed-core.js';
 
 const APP = new URL('../app.js', import.meta.url).pathname;
 const src = fs.readFileSync(APP, 'utf8');
@@ -60,6 +61,7 @@ function currentTopics() {
 let currentUser = null;                      // the gate reads it; tests set it
 let removedTopics = [];
 let customTopics = {};
+let _scienceFeedMetaCache = null;
 function qSecondaryTopic2(q) { return (q && typeof q.topic2 === 'string') ? q.topic2.trim() : ''; }
 function qTopicList(q) {
   const out = [];
@@ -94,6 +96,7 @@ const section = [
   // The ONE gate. Every serving surface asks it, so this is where "only a Sec 1
   // student may touch a Sec 1 question" is either true or silently not.
   cut('// ── Student level cap', '\n// Load the signed-in student', 'student level cap'),
+  cut('function _scienceFeedLevel(profile)', '\nfunction _scienceFeedStoreRead(', 'strict feeding level and metadata'),
   cut('// What studentCapLevel would ACTUALLY serve', '\n// Admin: assign a student', 'roster cap'),
   // The REAL bucket builder, renamed so the FIXTURE's stub can go on serving
   // the prompt-narrowing tests. It is cut because stubbing it is exactly why
@@ -105,8 +108,8 @@ const section = [
   FIXTURE
 ].join('\n');
 
-const M = new Function(section +
-  '\nreturn { SUBJECT_KEY, SUBJECT_APPS, subjectCurrent, _rapidApplyLevel, _aiBuildQuestionPrompt, currentTopicsByLevel,\n  TOPIC_LEVELS, LEVEL_ORDER, LEVEL_MAX, LEVEL_MIN, isLevelCode, isSecondaryLevel, getLevelNumber, levelFromNumber, audienceFor, schoolFor, levelOptionsHtml,\n  topicLevelMap, topicsByLevel, levelColors, topicEmojis,\n  LEVEL_DEFAULT_CAP, LEVEL_SECONDARY_MIN, levelBandMin, qInLevelBand, levelsInBand, studentBandMinNum,\n  _emptyLevelBuckets, levelGroupLabel, realTopicsByLevel, studentCapLevel, studentCapNum, qLevelNum, qWithinStudentLevel, clampToStudentLevel, rosterEffectiveCap,\n  setUser: u => { currentUser = u; } };')();
+const M = new Function('scienceQuestionLevel', section +
+  '\nreturn { SUBJECT_KEY, SUBJECT_APPS, subjectCurrent, _rapidApplyLevel, _aiBuildQuestionPrompt, currentTopicsByLevel,\n  TOPIC_LEVELS, LEVEL_ORDER, LEVEL_MAX, LEVEL_MIN, isLevelCode, isSecondaryLevel, getLevelNumber, levelFromNumber, audienceFor, schoolFor, levelOptionsHtml,\n  topicLevelMap, topicsByLevel, levelColors, topicEmojis,\n  LEVEL_DEFAULT_CAP, LEVEL_SECONDARY_MIN, levelBandMin, qInLevelBand, levelsInBand, studentBandMinNum,\n  _emptyLevelBuckets, levelGroupLabel, realTopicsByLevel, studentCapLevel, studentCapNum, qLevelNum, qWithinStudentLevel, clampToStudentLevel, rosterEffectiveCap,\n  setUser: u => { currentUser = u; } };')(scienceQuestionLevel);
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -349,7 +352,7 @@ const S1Q = { topic: 'Separation Techniques' };          // an S1 question
 const P4Q = { topic: 'Heat' };                           // a P4 question
 const P6Q = { topic: 'Forces' };
 
-test('an UNASSIGNED student is capped at the top of PRIMARY', () => {
+test('an UNASSIGNED student must select a school level before receiving questions', () => {
   // The whole P3–P6 roster has no level set, and nobody is going to go round
   // and set them all. Capping at LEVEL_MAX instead would open the Sec 1 bank
   // to every one of them the moment the first S1 question was saved.
@@ -357,7 +360,8 @@ test('an UNASSIGNED student is capped at the top of PRIMARY', () => {
   asStudent('');
   eq(M.studentCapLevel(), 'P6', 'an unassigned student is not capped at P6');
   eq(M.qWithinStudentLevel(S1Q), false, 'an unassigned student reached a Sec 1 question');
-  eq(M.qWithinStudentLevel(P6Q), true, 'an unassigned student lost P6');
+  eq(M.qWithinStudentLevel(P6Q), false, 'an unassigned student was silently given P6');
+  eq(M.qWithinStudentLevel(P4Q), false, 'an unassigned student was silently given P4');
 });
 
 test('a P3–P6 student can never touch a Sec 1 question', () => {
@@ -532,7 +536,7 @@ test('a self-declared S1 is refused BOTH ways', () => {
   // rather than being banded into a Sec 1 they were never granted.
   asStudent('S1', '');
   eq(M.qWithinStudentLevel(S1Q), false, 'a self-declared S1 reached Sec 1');
-  eq(M.qWithinStudentLevel({ topic: 'Heat' }), true, 'a self-declared S1 lost the primary bank as well');
+  eq(M.qWithinStudentLevel({ topic: 'Heat' }), false, 'an unverified secondary level silently defaulted to primary');
 });
 
 // ── the batch level: narrowing the topics is the whole mechanism ────────────

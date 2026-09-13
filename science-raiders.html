@@ -453,6 +453,7 @@ html, body {
   </div>
 </div>
 
+<script src="science-feed-bridge.js"></script>
 <script>
 /* ============================================================================
  * SCIENCE RAIDERS — roguelite top-down shooter with a science-MCQ economy.
@@ -2459,38 +2460,10 @@ function saveQElo(){ _lsSet('raiders_qElo', qElo); }
    No repeats until the whole pool has been served once (one full round);
    then the next round starts. */
 function pickQuestion(){
-  if (QUESTION_BANK.length === 0) return null;
-  if (!student.cycle) student.cycle = {};
-  // Every question served once this round? Start the next round.
-  if (QUESTION_BANK.every(function(q){ return student.cycle[q.id]; })){
-    student.cycle = {};
-    if (usingBankQuestions) toast("Full round done — starting a new round!", 'energy');
-  }
-  var pool = QUESTION_BANK.filter(function(q){ return !student.cycle[q.id]; });
-  // Never re-serve one of the last few questions while any alternative exists.
-  var avoid = sessionAsked.slice(-3);
-  var freshPool = pool.filter(function(q){ return avoid.indexOf(q.id) < 0; });
-  if (freshPool.length) pool = freshPool;
-  var unseen = pool.filter(function(q){ return !isSeen(q); });
-  var ch;
-  if (unseen.length){
-    ch = unseen[Math.floor(Math.random() * unseen.length)];
-  } else {
-    pool.sort(function(a, b){
-      var ta = (student.seen[a.id] && student.seen[a.id].lastTs) || 0;
-      var tb = (student.seen[b.id] && student.seen[b.id].lastTs) || 0;
-      return ta - tb; // last done longest ago first
-    });
-    ch = pool[0];
-  }
-  student.cycle[ch.id] = 1;
-  sessionAsked.push(ch.id);
-  if (sessionAsked.length > 12) sessionAsked.shift();
-  saveStudent();
-  return ch;
+  return scienceFeed.stamp(scienceFeed.take());
 }
-
 function recordAnswer(q, correct){
+  if(!scienceFeed.current(q)) return;
   if (!q || !q.id) return;
   var Rs = student.ability, Rq = questionElo(q);
   var E = 1/(1 + Math.pow(10, (Rq - Rs)/400));
@@ -2504,19 +2477,33 @@ function recordAnswer(q, correct){
   saveStudent(); saveQElo();
   try {
     if (window.parent && window.parent !== window){
-      window.parent.postMessage({ type:'SD_RECORD', mode:'raiders', questionId:q.id, questionTitle:(q.q||'').slice(0,140), correct:!!correct, topic:q.topic||'', ms:(qState.shownAt ? Math.round(performance.now() - qState.shownAt) : 0) }, '*');
+      window.parent.postMessage({ type:'SD_RECORD', studentKey:scienceFeed.context().studentKey, studentLevel:scienceFeed.context().studentLevel, mode:'raiders', questionId:q.id, questionTitle:(q.q||'').slice(0,140), correct:!!correct, topic:q.topic||'', ms:(qState.shownAt ? Math.round(performance.now() - qState.shownAt) : 0) }, '*');
     }
   } catch(e){}
 }
 
 var qState = { active: false, current: null, answered: false };
 
-function openQuestion(){
+// The portal owns level, mastery, quality and shared repetition decisions.
+var scienceFeed = ScienceFeedBridge.create({
+  onPool: function(rows){ applyBankQuestions(rows); },
+  onInvalidate: function(){
+    var wasActive=typeof qState!=='undefined' && qState && qState.active;
+    if(wasActive && G && G.state==='question')advanceRoom();
+    if(typeof qState !== 'undefined' && qState){ qState.active=false; qState.current=null; qState.answered=true; }
+    var overlay=document.getElementById('questionOverlay'); if(overlay) overlay.classList.remove('show');
+  }
+});
+var scienceFeedOpening=false;
+async function openQuestion(){
+  if(scienceFeedOpening || qState.active) return;
+  scienceFeedOpening=true;
+  try { await scienceFeed.refresh(); } finally { scienceFeedOpening=false; }
   if (qState.active) return;
   var q = pickQuestion();
-  if (!q){ // no questions ready — skip straight to an upgrade
-    toast('Questions still loading — free upgrade!', 'energy');
-    openUpgrade(true);
+  if (!q){ // Keep the activity moving without awarding an answer bonus.
+    toast(scienceFeed.message(), 'energy');
+    advanceRoom();
     return;
   }
   qState.current = q; qState.answered = false; qState.active = true;
@@ -2524,7 +2511,7 @@ function openQuestion(){
   // Tell the parent it was SHOWN so the cross-game rotation stops re-serving it.
   try{
     if (usingBankQuestions && window.parent && window.parent !== window){
-      window.parent.postMessage({ type:'SD_SHOWN', questionId:q.id }, '*');
+      window.parent.postMessage({ type:'SD_SHOWN', studentKey:scienceFeed.context().studentKey, studentLevel:scienceFeed.context().studentLevel, questionId:q.id }, '*');
     }
   }catch(e){}
 
@@ -2544,6 +2531,8 @@ function openQuestion(){
     btn.addEventListener('click', function(){ answerQuestion(i, btn); });
     optWrap.appendChild(btn);
   });
+  wireQuestionImages(optWrap);
+  if(!scienceFeed.current(q))return;
   var ex = $('qExplain'); ex.className = 'q-explain'; ex.innerHTML = '';
   $('qContinueBtn').style.display = 'none';
   $('qReward').textContent = 'Room cleared!';
@@ -2552,6 +2541,7 @@ function openQuestion(){
 }
 
 function answerQuestion(idx, btnEl){
+  if(!scienceFeed.current(qState.current)) return;
   if (qState.answered) return;
   qState.answered = true;
   var q = qState.current;
@@ -2726,6 +2716,7 @@ function sdImgError(img){
     setTimeout(function(){ img.src = base + sep + '_r=' + Date.now(); }, 300*(tries+1));
     return;
   }
+  if(img.closest && img.closest('#qText, #qStem, #qOptions'))scienceFeed.fail(img.__feedQuestion, src.replace(/[?&]_r=\d+/, ''));
   var ph = document.createElement('div');
   ph.style.cssText = 'padding:14px;text-align:center;color:#8A8A8A;font-size:0.82rem;border:1.5px dashed #D4D4CF;border-radius:8px;background:#FAFAFA;margin:8px auto;max-width:320px;';
   ph.innerHTML = '🖼️ Image could not be loaded';
@@ -2735,6 +2726,7 @@ window.sdImgError = sdImgError;
 function wireQuestionImages(container){
   if (!container) return;
   Array.prototype.forEach.call(container.querySelectorAll('img'), function(img){
+    if(img.closest && img.closest('#qText, #qStem, #qOptions'))img.__feedQuestion=qState.current;
     if (!img.__wired){ img.__wired = true; if (!img.getAttribute('data-tries')) img.setAttribute('data-tries','0'); img.addEventListener('error', function(){ sdImgError(img); }); }
     if (img.complete && img.naturalWidth === 0) sdImgError(img);
   });
@@ -2742,23 +2734,10 @@ function wireQuestionImages(container){
 
 /* ---- bank bridge ---- */
 function applyBankQuestions(list){
-  if (!Array.isArray(list) || list.length === 0) return;
-  var cleaned = list.filter(function(q){
-    return q && Array.isArray(q.options) && q.options.length >= 2 &&
-      typeof q.answer === 'number' && q.answer >= 0 && q.answer < q.options.length &&
-      ((typeof q.q === 'string' && q.q.trim()) || (typeof q.html === 'string' && q.html.trim()));
-  }).map(function(q){
-    return { id:q.id || '', q:q.q || '', html:q.html || '', options:q.options, answer:q.answer,
-      explain:q.explain || 'Review this concept in your notes.', explainHtml:q.explainHtml || '',
-      topic:q.topic || 'Science', seedElo:(typeof q.seedElo === 'number' ? q.seedElo : 1200),
-      len:(typeof q.len === 'number' ? q.len : (q.q || '').length) };
-  });
-  if (!cleaned.length) return;
-  QUESTION_BANK.length = 0;
-  Array.prototype.push.apply(QUESTION_BANK, cleaned);
-  usingBankQuestions = true;
+  var cleaned=Array.isArray(list)?list:[];
+  QUESTION_BANK.length=0; Array.prototype.push.apply(QUESTION_BANK,cleaned);
+  usingBankQuestions=true;
 }
-
 var _bankReqTries = 0;
 function requestBankQuestions(){
   if (usingBankQuestions) return;
@@ -2787,7 +2766,7 @@ window.addEventListener('message', function(ev){
   if (!d || d.type !== 'SD_QUESTIONS') return;
   if (d.studentKey){ studentKey = String(d.studentKey); loadAdaptiveState(); }
   if (d.playsLeft && typeof d.playsLeft.raiders === 'number') _gPlaysLeft = d.playsLeft.raiders;
-  applyBankQuestions(d.questions);
+  // scienceFeed accepts only a current policy response.
   if (Array.isArray(d.seenIds)){
     d.seenIds.forEach(function(id){ if (id && !student.seen[id]) student.seen[id] = { n:1, correct:0, fromHistory:true }; });
     saveStudent();
@@ -2862,13 +2841,14 @@ function wireFlag(){
 }
 
 function submitFlag(){
+  if(!scienceFeed.current(flagState.q)) return;
   if (flagState.busy || !flagState.q) return;
   var comment = $('flagComment').value.trim();
   if (!comment){ toast('Please describe the issue', 'bad'); $('flagComment').focus(); return; }
   flagState.busy = true;
   var sb = $('flagSubmit'); sb.disabled = true; sb.textContent = 'Submitting…';
   try {
-    window.parent.postMessage({ type:'SD_FLAG', mode:'raiders', questionId:flagState.q.id, questionTitle:(flagState.q.q||'').slice(0,140), comment:comment }, '*');
+    window.parent.postMessage({ type:'SD_FLAG', studentKey:scienceFeed.context().studentKey, studentLevel:scienceFeed.context().studentLevel, mode:'raiders', questionId:flagState.q.id, questionTitle:(flagState.q.q||'').slice(0,140), comment:comment }, '*');
   } catch(e){ flagFailed('Could not submit — try again'); }
   // Fallback if the parent never answers (e.g. older app build).
   flagState.timeout = setTimeout(function(){ if (flagState.busy) flagSucceeded(); }, 4000);

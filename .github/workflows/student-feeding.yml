@@ -1,0 +1,55 @@
+name: Student question feeding checks
+on:
+  pull_request:
+    paths: ['app.js', 'index.html', 'science-feed*.js', 'science-*.html', 'fps.html', 'tools/science-feed*.mjs', 'tools/subject-level-tests.mjs', '.github/workflows/student-feeding.yml']
+  push:
+    branches: [main]
+    paths: ['app.js', 'index.html', 'science-feed*.js', 'science-*.html', 'fps.html', 'tools/science-feed*.mjs', 'tools/subject-level-tests.mjs', '.github/workflows/student-feeding.yml']
+permissions:
+  contents: read
+jobs:
+  feeding:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check grade, skill mastery, quality, spacing and every game boundary
+        run: node --test tools/science-feed-core-tests.mjs tools/science-feed-mastery-tests.mjs tools/science-feed-quality-tests.mjs tools/science-feeding-integration-tests.mjs tools/science-feed-standalone-tests.mjs
+      - name: Check existing level, syllabus, release and history behavior
+        run: |
+          node tools/subject-level-tests.mjs
+          node tools/syllabus-tests.mjs
+          node tools/scheduled-release-tests.mjs
+          node tools/usage-tracker-tests.mjs
+      - name: Check application syntax
+        run: |
+          cp app.js "$RUNNER_TEMP/science-app.mjs"
+          node --check "$RUNNER_TEMP/science-app.mjs"
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated browser runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/feeding-browser" --no-audit --no-fund playwright@1.62.1
+          "$RUNNER_TEMP/feeding-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Check student practice in the browser
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/feeding-browser/node_modules/playwright/index.mjs
+          SCIENCE_FEED_SCREENSHOTS: ${{ runner.temp }}/science-feeding-qa
+        run: |
+          node tools/science-feeding-browser-tests.mjs
+          node tools/science-feed-standalone-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: science-feeding-browser
+          path: ${{ runner.temp }}/science-feeding-qa
+          if-no-files-found: ignore
+          retention-days: 7

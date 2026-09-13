@@ -48,7 +48,7 @@ function ok(name, cond, extra) {
  * ------------------------------------------------------------------ */
 const core = cut(
   '// ---- Scheduled release — a question that is IN the bank and not yet due -----',
-  'function getQuestionsForLevel(',
+  '// ---- Student feeding: one local policy',
   'core release block');
 const pad = cut(
   '// ---- 📅 The RELEASE DATE this batch is scheduled for ----------------------',
@@ -316,7 +316,7 @@ ok('soonest first', /localeCompare/.test(rows));
      /_wsLockedQuestions/.test(empty) && /qLockNote/.test(empty),
      '"no longer in the bank" sends somebody to rebuild a sheet that is perfectly fine and early');
 
-  const launch = cut('function launchWorksheetPractice(questions, mode) {', '\n  // Shuffle', 'launch');
+  const launch = cut('function launchWorksheetPractice(', '\n  // Shuffle', 'launch');
   ok('the ONE practice door splits the queue', /qLockSplit\(questions/.test(launch),
      'the builder\'s selection, a past paper and Ai-nstein all come through here');
   ok('…and SAYS what it is holding back', /qLockNote\(/.test(launch));
