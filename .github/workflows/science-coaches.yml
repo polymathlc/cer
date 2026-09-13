@@ -1,0 +1,40 @@
+name: Science coach feedback checks
+on:
+  pull_request:
+    paths: ['app.js', 'index.html', 'science-coach*.js', 'tools/science-coach*.mjs', '.github/workflows/science-coaches.yml']
+  push:
+    branches: [main]
+    paths: ['app.js', 'index.html', 'science-coach*.js', 'tools/science-coach*.mjs', '.github/workflows/science-coaches.yml']
+permissions:
+  contents: read
+jobs:
+  coaching:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check feedback selection and real marking integration
+        run: node --test tools/science-coach-core-tests.mjs tools/science-coach-integration-tests.mjs
+      - name: Check existing student marking behavior
+        run: |
+          node tools/part-explanation-tests.mjs
+          node tools/scanned-question-tests.mjs
+          node tools/fill-blank-tests.mjs
+          node tools/ai-routes-tests.mjs
+          node tools/keyword-blank-tests.mjs
+          node tools/why-not-tests.mjs
+          node tools/usage-tracker-tests.mjs
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: Check mobile, keyboard, reduced motion and safe feedback rendering
+        run: node tools/science-coach-browser-tests.mjs
+        env:
+          COACH_SCREENSHOTS: artifacts/science-coaches
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: science-coach-previews
+          path: artifacts/science-coaches
+          if-no-files-found: ignore
