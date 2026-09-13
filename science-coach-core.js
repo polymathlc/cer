@@ -1,15 +1,15 @@
 // Presentation-only coaching: consumes marks already awarded and existing
 // feedback. It never grades an answer, calls a model or reads the answer key.
-const coach = (id,name,focus,intro,action,accent) => Object.freeze({id,name,focus,intro,action,accent});
+const coach = (id,name,focus,intro,action,accent,animal) => Object.freeze({id,name,focus,intro,action,accent,animal});
 export const SCIENCE_COACHES = Object.freeze({
-  comparison:coach('comparison','Comparison Casey','Compare both sides',"Let's make the comparison clear.",'Name both things, compare the same feature, and say how they differ or are alike.','#3867a8'),
-  specific:coach('specific','Specific Sherry','Make it precise',"Let's help your reader picture exactly what you mean.",'Replace vague words with the exact object, change or observation named in the feedback.','#9a4e99'),
-  evidence:coach('evidence','Evidence Ellen','Use the evidence',"Let's find something that supports your answer.",'Choose a relevant observation or result from the question and state how it supports your claim.','#287b72'),
-  keywords:coach('keywords','Keyword Kai','Choose science terms',"Let's choose the science words that make your meaning clear.",'Use the science term identified in the feedback, then explain what it means in this question.','#996719'),
-  concept:coach('concept','Concept Cora','Check the science idea',"Let's work through the science idea together.",'Compare the specific idea flagged in the feedback with the explanation, then rewrite that part in your own words.','#6558a6'),
-  reasoning:coach('reasoning','Reasoning Ravi','Explain the link',"Let's show how your evidence leads to your answer.",'Link your observation to a science idea using “because”, then explain how that leads to your claim.','#ab5b31'),
-  careful:coach('careful','Careful Cleo','Check the details',"Let's give the details one more look.",'Check the particular label, unit, number or instruction flagged in the feedback against the question.','#367c95'),
-  complete:coach('complete','Complete Cody','Take the next step',"One small revision is a good next step.",'Re-read each part of the question and use the marking feedback to choose one thing to add or revise.','#6d7c35')
+  comparison:coach('comparison','Comparison Casey','Compare both sides',"Let's make the comparison clear.",'Name both things, compare the same feature, and say how they differ or are alike.','#3867a8','Chameleon'),
+  specific:coach('specific','Specific Sherry','Make it precise',"Let's help your reader picture exactly what you mean.",'Replace vague words with the exact object, change or observation named in the feedback.','#9a4e99','Fox'),
+  evidence:coach('evidence','Evidence Ellen','Use the evidence',"Let's find something that supports your answer.",'Choose a relevant observation or result from the question and state how it supports your claim.','#287b72','Elephant'),
+  keywords:coach('keywords','Keyword Kai','Choose science terms',"Let's choose the science words that make your meaning clear.",'Use the science term identified in the feedback, then explain what it means in this question.','#996719','Parrot'),
+  concept:coach('concept','Concept Cora','Check the science idea',"Let's work through the science idea together.",'Compare the specific idea flagged in the feedback with the explanation, then rewrite that part in your own words.','#6558a6','Owl'),
+  reasoning:coach('reasoning','Reasoning Ravi','Explain the link',"Let's show how your evidence leads to your answer.",'Link your observation to a science idea using “because”, then explain how that leads to your claim.','#ab5b31','Red panda'),
+  careful:coach('careful','Careful Cleo','Check the details',"Let's give the details one more look.",'Check the particular label, unit, number or instruction flagged in the feedback against the question.','#367c95','Tortoise'),
+  complete:coach('complete','Complete Cody','Take the next step',"One small revision is a good next step.",'Re-read each part of the question and use the marking feedback to choose one thing to add or revise.','#6d7c35','Beaver')
 });
 
 export const SCIENCE_COACH_INSTRUCTIONS =
