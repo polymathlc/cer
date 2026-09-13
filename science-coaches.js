@@ -70,7 +70,7 @@ export function mountScienceCoach(feedback, result, context = {}) {
         <span class="sc-count"></span>
       </div>
       <details class="sc-team"><summary>Meet the whole team <span aria-hidden="true">↗</span></summary>
-        <p class="sc-team-note">Eight friendly animal coaches, eight ways to strengthen your science answers. Your answer's tips are above.</p>
+        <p class="sc-team-note">Meet your animal coaches, each with a different way to strengthen your science answers. Your answer's tips are above.</p>
         <div class="sc-team-grid"></div>
       </details>
     </div>`;

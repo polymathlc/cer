@@ -12,6 +12,17 @@ assert.ok(css, 'Production coach styles must be present.');
 // Include the real global styles too, so portal rules cannot silently break a
 // component that looked correct in isolation. The fixture makes no AI calls.
 const styles = [...html.slice(0,html.indexOf('</head>')).matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map(match=>match[1]).join('\n');
+const contextExample = `<p class="label">USE THE DIAGRAM</p>
+<p>Fruit F grows among green leaves and has a strong smell. Explain how its smell helps animals find it.</p>
+<svg viewBox="0 0 340 145" role="img" aria-label="Dull-green fruit F growing among green leaves" style="display:block;width:100%;max-width:340px;height:auto;margin:12px auto">
+  <rect x="1" y="1" width="338" height="143" rx="15" fill="#f5f8ed" stroke="#d6e3c6"/>
+  <path d="M66 94Q158 36 258 42M163 59v24" fill="none" stroke="#816241" stroke-width="5" stroke-linecap="round"/>
+  <g fill="#8faf65" stroke="#547748" stroke-width="1.5"><path d="M81 83Q58 42 115 54Q123 71 81 83ZM129 64Q112 30 155 27Q165 50 129 64ZM188 50Q197 18 235 28Q224 49 188 50ZM206 49Q243 55 250 87Q208 86 206 49Z"/></g>
+  <path d="M161 73C143 68 134 87 141 103C149 122 176 123 186 104C195 84 180 69 167 73Z" fill="#778b51" stroke="#4e6541" stroke-width="2"/>
+  <g fill="#344d37" font-family="system-ui,sans-serif" font-size="12"><text x="14" y="27">Green leaves</text><text x="221" y="118">Dull-green fruit F</text></g>
+  <path d="M84 32l40 15M217 113l-27-12" fill="none" stroke="#536a46" stroke-width="1.5"/>
+</svg><p class="label">YOUR ANSWER</p><p>The smell attracts animals.</p>
+<p class="score" id="feedback">Partial · Link fruit F's colour to how animals locate it.</p>`;
 const fixture = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Science sidekicks — interaction check</title><style>${styles}
 body{margin:0;background:#f3f5f8;color:#25304c;font-family:system-ui,sans-serif}main{max-width:800px;margin:40px auto;padding:0 20px 40px}
@@ -71,7 +82,9 @@ try {
   assert.equal(await page.locator('.sc-card').isVisible(),true);
   await page.locator('.sc-team summary').click();
   await page.locator('.sc-team-member').last().waitFor();
-  assert.equal(await page.locator('.sc-team-member').count(),8);
+  assert.equal(await page.locator('.sc-team-member').count(),9);
+  assert.equal(await page.locator('.sc-team-member[data-coach="context"] h4').textContent(),'Context Connie');
+  assert.equal(await page.locator('.sc-team-member[data-coach="context"] svg').getAttribute('data-animal'),'meerkat');
   assert.equal(await page.locator('.sc-team-member .sc-avatar-float').count(),0,'Roster artwork is static.');
   await screenshot('team');
   if (shots) await page.locator('.sc-team-grid').screenshot({path:path.join(shots,'cast.png')});
@@ -109,9 +122,36 @@ try {
   await page.evaluate(()=>window.coachTest.mount());
   await page.evaluate(()=>window.coachTest.reset());
   assert.equal(await page.locator('[data-sc-mount]').count(),0,'Resetting the question clears coaches.');
-  await page.evaluate(()=>window.coachTest.mount());
+
+  // A question-specific clue and scientific link survive the real presentation
+  // path, including a new ninth avatar, narrow screens and motion preferences.
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.evaluate(markup=>{
+    document.querySelector('.answer').innerHTML=markup;
+    document.getElementById('check').focus();
+    window.coachTest.mount({verdict:'partial',coachIssues:[{type:'context',detail:
+      "You did not use fruit F's dull-green colour in the diagram: it blends into the green leaves, so it is harder to see. Its smell helps animals locate it."}]});
+  },contextExample);
+  assert.equal(await page.locator(':focus').getAttribute('id'),'check');
+  assert.equal(await page.locator('.sc-message h3').textContent(),'Context Connie');
+  assert.equal(await page.locator('.sc-portrait svg').getAttribute('data-animal'),'meerkat');
+  assert.match(await page.locator('.sc-observation').textContent(),/fruit F.*dull-green.*green leaves.*smell/i);
+  assert.match(await page.locator('.sc-next-move').textContent(),/diagram|question/i);
+  assert.equal(await page.locator('[data-sc-tip]').count(),1,'One context gap gives one focused coach.');
+  assert.equal(await page.locator('[data-sc-mount]').getAttribute('data-motion'),'on');
+  for (const width of [1040,375,320]) {
+    await page.setViewportSize({width,height:950});await settle();
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    const portrait=await page.locator('.sc-portrait').boundingBox();
+    const card=await page.locator('.sc-card').boundingBox();
+    assert.ok(portrait.x>=card.x&&portrait.x+portrait.width<=card.x+card.width);
+    await screenshot('context-'+width);
+    if(shots&&width===1040) await page.locator('.sc-card').screenshot({path:path.join(shots,'context-card.png')});
+  }
+  await page.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await page.locator('.sc-avatar-float').evaluate(el=>getComputedStyle(el).animationName),'none');
   await page.emulateMedia({media:'print'});
   assert.equal(await page.locator('[data-sc-mount]').isVisible(),false,'Coaches never print on worksheets.');
   assert.deepEqual(errors,[]);
-  console.log('Science coach browser checks passed: desktop, 375/320px, focus, tabs, dismiss, motion, roster, escaping, reset and print.');
+  console.log('Science coach browser checks passed: desktop, 375/320px, focus, tabs, dismiss, motion, nine animals, context example, escaping, reset and print.');
 } finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); }
