@@ -1,4 +1,6 @@
 import { mountInterfaceStudio, isReleased as interfaceIsReleased } from "./interface-studio.mjs?v=1";
+import { mountScienceCoach, resetScienceCoaches } from "./science-coaches.js";
+import { SCIENCE_COACH_INSTRUCTIONS } from "./science-coach-core.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-analytics.js";
 import {
@@ -3812,7 +3814,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.377.1';
+const APP_VERSION = 'v1.378.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -29967,6 +29969,40 @@ let _openSurfaceCfg = {};        // containerSel -> { scoreElId, scorePrefix, mo
 let _openPartResults = {};       // containerSel -> { 'open:<oidx>'|'mcq:<blockId>': { verdict, pts, expected, student } }
 let _openFinalized = {};         // containerSel -> true once the attempt has been recorded
 
+// Coaches read an existing mark. They never mark, save an answer, or request AI.
+// A fresh rendering/reset and a newer check of the same part both invalidate
+// late feedback so a coach cannot land beside a different attempt.
+const _scienceCoachEpochs = new Map();
+const _scienceCoachRequests = new WeakMap();
+function _resetOpenScienceCoaches(containerSel) {
+  _scienceCoachEpochs.set(containerSel, (_scienceCoachEpochs.get(containerSel) || 0) + 1);
+  const container = document.querySelector(containerSel);
+  if (container) {
+    try { resetScienceCoaches(container); } catch (e) { console.warn('Coach reset skipped', e); }
+  }
+}
+function _captureScienceCoachTarget(containerSel, q, host) {
+  const container = document.querySelector(containerSel);
+  const cfg = _openSurfaceCfg[containerSel];
+  if (!container || !host || !q || cfg?.mode === 'preview' || !container.contains(host)) return null;
+  try { resetScienceCoaches(host); } catch (e) { console.warn('Coach reset skipped', e); }
+  const request = (_scienceCoachRequests.get(host) || 0) + 1;
+  _scienceCoachRequests.set(host, request);
+  return { containerSel, container, q, host, cfg, request,
+    epoch: _scienceCoachEpochs.get(containerSel) || 0, uid: currentUser?.uid };
+}
+function _showScienceCoachFeedback(target, result, context = {}) {
+  if (!target || !result || !['correct', 'partial', 'incorrect'].includes(String(result.verdict || '').toLowerCase())) return;
+  const { containerSel, container, q, host, cfg } = target;
+  if (target.uid !== currentUser?.uid || _openQStore[containerSel] !== q || _openSurfaceCfg[containerSel] !== cfg
+      || cfg?.mode === 'preview' || (_scienceCoachEpochs.get(containerSel) || 0) !== target.epoch
+      || _scienceCoachRequests.get(host) !== target.request || !host.isConnected
+      || document.querySelector(containerSel) !== container || !container.contains(host)) return;
+  const page = host.closest('.page');
+  if (page && !page.classList.contains('active')) return;
+  try { mountScienceCoach(host, result, context); } catch (e) { console.warn('Coach display skipped', e); }
+}
+
 // Hint + Check answer buttons for ONE part of a question (an answer box or an MCQ),
 // plus the box the hint is written into.
 function _partActionsHtml(containerSel, kind, pid) {
@@ -30182,6 +30218,7 @@ document.addEventListener('click', function (e) {
 // Check answer buttons where to show the running score and what to do once every
 // part of the question has been marked.
 function buildOpenBody(q, containerSel, markCfg) {
+  _resetOpenScienceCoaches(containerSel);
   const items = [];
   const mcqItems = [];
   const fbBlocks = [];
@@ -30808,6 +30845,7 @@ async function annotAiCheck(containerSel, pid, btn) {
   const padKey = padBlock ? stripHtml(padBlock.answerKey || '').replace(/\s+/g, ' ').trim() : '';
   const padAnsImg = padBlock ? String(padBlock.answerImg || '').trim() : '';
   const fb = c.querySelector('[data-dgn-fb-pad="' + pid + '"]') || c.querySelector('.dgn-feedback');
+  const coachTarget = _captureScienceCoachTarget(containerSel, q, fb);
   const scoreEl = cfg.scoreElId ? document.getElementById(cfg.scoreElId) : null;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = 'Checking…'; }
@@ -30849,9 +30887,10 @@ async function annotAiCheck(containerSel, pid, btn) {
       `Question context: "${ctx}". ` +
       expected +
       `Work out how many marks the student earned out of the total available for this ${isWorkingPad ? 'working area' : 'diagram'}. ` +
-      `Return ONLY JSON: {"score":<number>,"total":<number>,"verdict":"correct|partial|incorrect","feedback":"<1-2 sentences to the student: what they got right and what was wrong or missing>","modelAnswer":"<what a fully correct ${isWorkingPad ? 'working area' : 'annotated diagram'} should show>","explanation":"<2-4 sentences addressed to \\"you\\" that refer to what the student actually annotated and explain the marks>"}. ` +
+      SCIENCE_COACH_INSTRUCTIONS + '\n' +
+      `Return ONLY JSON: {"score":<number>,"total":<number>,"verdict":"correct|partial|incorrect","feedback":"<1-2 sentences to the student: what they got right and what was wrong or missing>","coachIssues":[],"modelAnswer":"<what a fully correct ${isWorkingPad ? 'working area' : 'annotated diagram'} should show>","explanation":"<2-4 sentences addressed to \\"you\\" that refer to what the student actually annotated and explain the marks>"}. ` +
       `If there are no visible annotations, return score 0 and say they haven't annotated yet.`;
-    const raw = await askGeminiVision(prompt, media, { maxOutputTokens: 900, json: true });
+    const raw = await askGeminiVision(prompt, media, { maxOutputTokens: 1200, json: true });
     const parsed = _parseAIJson(raw) || {};
     let total = Number(parsed.total);
     if (!(total > 0)) total = 1;
@@ -30863,6 +30902,9 @@ async function annotAiCheck(containerSel, pid, btn) {
     const color = verdict === 'correct' ? 'var(--primary)' : verdict === 'partial' ? 'var(--accent-orange)' : 'var(--accent-red)';
     const icon = verdict === 'correct' ? '✓' : verdict === 'partial' ? '≈' : '✗';
     if (fb) fb.innerHTML = `<div style="padding:6px 0;"><span style="color:${color};font-weight:700;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span><span style="color:var(--text-muted);"> — ${escapeHtml(parsed.feedback || '')}</span></div>`;
+    if (['correct', 'partial', 'incorrect'].includes(vfromtext) || (Number.isFinite(parsed.score) && Number.isFinite(parsed.total) && parsed.total > 0)) {
+      _showScienceCoachFeedback(coachTarget, { ...parsed, verdict, score, total }, { kind: 'annotation', label: padName });
+    }
     // Aggregate this pad's result with the question's other pads AND any typed
     // parts, so mixed questions (answer boxes + pads) score and finalise once.
     const store = _annotPadScores[containerSel] = _annotPadScores[containerSel] || {};
@@ -31550,6 +31592,7 @@ async function fbCheck(containerSel, blockId, btn) {
   const store = (_fbStore[containerSel] || []).find(x => x.blockId === blockId); if (!store) return;
   const q = _openQStore[containerSel];
   const fb = c.querySelector('[data-fb-fb="' + blockId + '"]');
+  const coachTarget = _captureScienceCoachTarget(containerSel, q, fb);
   const rows = store.oidxs.map((oidx, i) => {
     const el = c.querySelector('.fb-input[data-oidx="' + oidx + '"]');
     return { oidx, i, el, model: store.answers[i] || '', student: el ? el.value.trim() : '' };
@@ -31578,6 +31621,7 @@ async function fbCheck(containerSel, blockId, btn) {
     } catch (e) { console.warn('fill-blank AI mark', e); }
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
+  const coachHasVerdicts = rows.every(r => ['correct', 'incorrect'].includes(r.verdict));
   let correct = 0;
   rows.forEach(r => {
     if (!r.verdict) r.verdict = 'incorrect';
@@ -31590,6 +31634,11 @@ async function fbCheck(containerSel, blockId, btn) {
     fb.innerHTML = `<span style="font-weight:700;color:${correct === rows.length ? 'var(--primary)' : 'var(--accent-orange)'};">${correct} / ${rows.length} correct</span>` +
       (wrong.length ? `<span style="color:var(--text-muted);font-size:0.85rem;"> — correct answer${wrong.length === 1 ? '' : 's'}: ${wrong.map(r => escapeHtml(r.model)).join(', ')}</span>` : ' 🎉');
   }
+  if (coachHasVerdicts) _showScienceCoachFeedback(coachTarget, {
+    verdict: correct === rows.length ? 'correct' : correct > 0 ? 'partial' : 'incorrect',
+    score: correct, total: rows.length,
+    feedback: correct === rows.length ? '' : 'Some blanks need another answer. Review the marked blanks.'
+  }, { kind: 'fillblank' });
   _checkAllPartsMarked(containerSel);
 }
 
@@ -31888,6 +31937,7 @@ function renderPracticeQuestion(q, student) {
 }
 
 function resetOpenAnswersIn(containerSel, scoreElId) {
+  _resetOpenScienceCoaches(containerSel);
   document.querySelectorAll(containerSel + ' .open-answer').forEach(a => {
     a.value = '';
     a.disabled = false;
@@ -32482,6 +32532,12 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     if (checked) { const o = m.options.find(x => x.id === checked.value); if (o) studentLetter = o.letter; }
     entries.push({ kind: 'mcq', mcq: m, studentLetter });
   });
+  entries.forEach(e => {
+    const host = e.kind === 'open'
+      ? e.areaEl.closest('.open-answer-section')?.querySelector('.open-feedback')
+      : document.querySelector(containerSel + ' [data-mcq-fb="' + e.mcq.blockId + '"]');
+    e.coachTarget = _captureScienceCoachTarget(containerSel, q, host);
+  });
 
   // MCQs are marked LOCALLY — the correct option is already in the bank, so they
   // never need an AI call. Only OPEN answers go to the AI (plus an MCQ whose
@@ -32536,12 +32592,13 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         `Give ONE short feedback sentence (max 22 words) addressed to the student for each item. ` +
         `Provide the full correct MODEL ANSWER for the whole question as "modelAnswer" — the ideal answer a student should give (use the expected answers if provided, otherwise generate the correct answer yourself; for multiple choice state the correct option and what it says). ` +
         `Also write a clear overall EXPLANATION (2-4 sentences) addressed to "you" that is SPECIFIC to the answer the student actually gave: explain WHY their answer was marked correct, partial or incorrect — quote or refer to what they wrote, say what they got right, what was missing or wrong, and what a full-mark answer needs. Do NOT just restate the model answer or describe the question in the abstract. ` +
-        `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","chosen":"B"}],"modelAnswer":"...","explanation":"..."}.\n${list}`;
+        SCIENCE_COACH_INSTRUCTIONS + '\n' +
+        `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","coachIssues":[],"chosen":"B"}],"modelAnswer":"...","explanation":"..."}.\n${list}`;
       let raw;
       if (photo && photo.data) {
-        raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 1100 + aiEntries.length * 220, json: true });
+        raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 1100 + aiEntries.length * 360, json: true });
       } else {
-        raw = await askGemini(prompt, { maxOutputTokens: 1100 + aiEntries.length * 220, temperature: 0.2, json: true });
+        raw = await askGemini(prompt, { maxOutputTokens: 1100 + aiEntries.length * 360, temperature: 0.2, json: true });
       }
       const parsed = _parseAIJson(raw);
       (Array.isArray(parsed) ? parsed : ((parsed && parsed.items) || [])).forEach(v => { if (v && typeof v.i === 'number') byI[v.i] = v; });
@@ -32580,6 +32637,8 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         fb.innerHTML = inner;
       }
       _setPartResult(containerSel, 'open:' + (e.areaEl.dataset.oidx || ''), verdict, pts, e.model, e.student);
+      _showScienceCoachFeedback(e.coachTarget, v, { kind: 'open', label: e.label,
+        ...(photo ? {} : { student: e.student }) });
     } else {
       const m = e.mcq;
       const correctOpt = m.options.find(o => o.correct);
@@ -32594,6 +32653,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         fb.innerHTML = inner;
       }
       _setPartResult(containerSel, 'mcq:' + m.blockId, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter);
+      _showScienceCoachFeedback(e.coachTarget, v, { kind: 'mcq' });
     }
   });
 
@@ -32851,6 +32911,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     fbEl = document.querySelector(containerSel + ' [data-mcq-fb="' + pid + '"]');
   }
 
+  const coachTarget = _captureScienceCoachTarget(containerSel, q, fbEl);
   // Multiple-choice is deterministic — mark it locally (no AI) unless the choice
   // has to be read from a photo.
   if (kind === 'mcq' && !photo) {
@@ -32866,6 +32927,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
       fbEl.innerHTML = inner;
     }
     _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', studentLetter);
+    _showScienceCoachFeedback(coachTarget, { verdict }, { kind: 'mcq' });
     _checkAllPartsMarked(containerSel);
     return;
   }
@@ -32899,12 +32961,13 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
         : `Decide which option the student chose and mark "correct" only if it matches the correct option number, otherwise "incorrect"; also include "chosen":"<the option number the student picked, or empty>". `) +
       `Give ONE short feedback sentence (max 22 words) addressed to the student. ` +
       `Provide the full correct answer for THIS part as "modelAnswer"${kind === 'mcq' ? ' (state the correct option number and what it says)' : ' (use the expected answer if provided, otherwise generate the correct answer yourself)'}. ` +
-      `Return ONLY JSON: {"verdict":"correct","feedback":"...","modelAnswer":"..."${kind === 'mcq' ? ',"chosen":"2"' : ''}}.\n${item}`;
+      SCIENCE_COACH_INSTRUCTIONS + '\n' +
+      `Return ONLY JSON: {"verdict":"correct","feedback":"...","coachIssues":[],"modelAnswer":"..."${kind === 'mcq' ? ',"chosen":"2"' : ''}}.\n${item}`;
     let raw;
     if (photo && photo.data) {
-      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 500, json: true });
+      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 900, json: true });
     } else {
-      raw = await askGemini(prompt, { maxOutputTokens: 500, temperature: 0.2, json: true });
+      raw = await askGemini(prompt, { maxOutputTokens: 900, temperature: 0.2, json: true });
     }
     parsed = _parseAIJson(raw);
     if (Array.isArray(parsed)) parsed = parsed[0];
@@ -32942,6 +33005,8 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     }
     _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter);
   }
+  _showScienceCoachFeedback(coachTarget, parsed, { kind, label,
+    ...(kind === 'open' && !photo ? { student } : {}) });
   _checkAllPartsMarked(containerSel);
 }
 
