@@ -51,10 +51,11 @@ const check = label => { checks.push(label); process.stdout.write(`PASS ${label}
 async function frames(page, count = 2) { await page.evaluate(count => new Promise(resolve => { function tick() { if (--count <= 0) resolve(); else requestAnimationFrame(tick); } requestAnimationFrame(tick); }), count); }
 async function screenshot(page, name) { await page.screenshot({ path: path.join(shots, name + '.png'), fullPage: !name.includes('detail') }); }
 async function noOverflow(page) { assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), 'Page has no horizontal overflow'); }
-async function standalone(page, subject = 'math') {
+async function standalone(page, subject = 'math', {manual = true} = {}) {
   await page.goto(base + '/grand-line.html?test=1&subject=' + subject);
   await page.waitForFunction(() => window.__grandLine?.ready);
   await page.evaluate(() => { __grandLine.settings.muted = true; });
+  if (manual) await page.evaluate(() => __grandLine.setAutoBattle(false));
 }
 async function stablePlayer(frame) { await frame.waitForFunction(() => __grandLine.battle?.status === 'player' && !document.querySelector('#cast-button').disabled); }
 async function forcePlayer(frame, id, { last = false, terminal = false } = {}) {
@@ -98,6 +99,7 @@ try {
   const host = await browser.newPage({ viewport: { width: 1440, height: 1000 } }); observe(host); await host.goto(base + '/__harness.html');
   const game = host.frames().find(f => f.url().includes('grand-line.html')) || await host.waitForEvent('framenavigated', f => f.url().includes('grand-line.html'));
   await game.waitForFunction(() => window.__grandLine?.ready); await game.evaluate(() => { __grandLine.settings.muted = true; });
+  await game.evaluate(() => __grandLine.setAutoBattle(false));
   assert.equal(await game.evaluate(() => __grandLine.wallet.balance), 5000);
   assert.equal(await game.evaluate(() => __grandLine.collection.packs), 0);
   await game.locator('[data-view="packs"]').click();
@@ -170,11 +172,16 @@ try {
   assert.equal(await game.evaluate(() => __grandLine.dialog), 'save-progress', 'Unsaved grading cannot be dismissed');
   assert.equal(await host.evaluate(() => fake.records.length), 3);
   await host.evaluate(() => { fake.blockSave = false; });
+  await game.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));});
   await game.getByRole('button', { name: 'Retry saving', exact: true }).click();
   await game.waitForFunction(() => !__grandLine.dialog);
   assert.equal(await host.evaluate(() => fake.records.length), 3, 'Save retry does not regrade questions');
   check('Failed battle progress saves keep combat paused and can be retried without repeating grades');
   await game.waitForFunction(previous => __grandLine.battle.round === previous + 1, round);
+  await frames(host,35);
+  await game.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
+  await stablePlayer(game);
+  assert.ok(await game.locator('#skill-buttons button:not(:disabled)').count()>0,'Manual controls recover when a hidden-tab save finishes');
   assert.equal(await game.evaluate(() => __grandLine.collection.stats.correctAnswers), statsBefore + 3);
   const boost = await game.evaluate(() => __grandLine.battle.learningBoost);
   assert.equal(boost.correct, 3); assert.equal(boost.round, round + 1);
@@ -196,6 +203,50 @@ try {
   await game.waitForFunction(() => __grandLine.battle.status === 'victory' && __grandLine.dialog === 'ending');
   assert.equal(await game.evaluate(() => __grandLine.collection.unlockedEncounter), 2); await screenshot(host, 'desktop-victory');
   check('The final battle round also requires three graded answers before victory and campaign unlock');
+
+  const idleHost = await browser.newPage({viewport:{width:1440,height:1000}}); observe(idleHost);
+  await idleHost.goto(base+'/__harness.html');
+  const idleGame = idleHost.frames().find(f=>f.url().includes('grand-line.html')) || await idleHost.waitForEvent('framenavigated',f=>f.url().includes('grand-line.html'));
+  await idleGame.waitForFunction(()=>window.__grandLine?.ready);
+  assert.equal(await idleGame.evaluate(()=>__grandLine.settings.autoBattle),true);
+  assert.equal(await idleGame.evaluate(()=>__grandLine.settings.battleSpeed),4);
+  const roster=await idleGame.evaluate(()=>__grandLine.CHARACTERS.map(c=>c.id));
+  for(const id of ['shanks','blackbeard','bigmom','kizaru','sengoku','garp','mihawk','hancock']) assert.ok(!roster.includes(id));
+  for(const id of ['wyper','kaku','wapol','hina','paulie','donkrieg','hatchan','kalifa']) assert.ok(roster.includes(id));
+  await idleGame.locator('.roster-update summary').click();assert.equal(await idleGame.locator('#future-characters li').count(),8);
+  check('Current cards exclude eight reserved legends and explain all eight replacements and future seven-star expansions');
+  await idleGame.locator('[data-view="campaign"]').click();await idleGame.locator('#campaign-map button').first().click();
+  await idleGame.locator('#idle-pause').click();assert.equal(await idleGame.evaluate(()=>__grandLine.idlePaused),true);
+  let pausedTurns=await idleGame.evaluate(()=>__grandLine.battle.stats.turns);await frames(idleHost,25);
+  assert.equal(await idleGame.evaluate(()=>__grandLine.battle.stats.turns),pausedTurns);
+  assert.equal(await idleGame.locator('#manual-commands').isVisible(),false);assert.equal(await idleGame.locator('#idle-summary').isVisible(),true);
+  await idleGame.locator('#idle-speed').selectOption('2');await idleGame.locator('#idle-strategy').selectOption('sustain');
+  assert.equal(await idleGame.evaluate(()=>__grandLine.settings.battleSpeed),2);assert.equal(await idleGame.evaluate(()=>__grandLine.settings.strategy),'sustain');
+  await idleGame.locator('#idle-mode').click();assert.equal(await idleGame.locator('#manual-commands').isVisible(),true);
+  await idleGame.locator('#idle-mode').click();await idleGame.locator('#idle-pause').click();
+  await idleGame.locator('#idle-speed').selectOption('4');await idleGame.locator('#idle-strategy').selectOption('balanced');
+  await screenshot(idleHost,'desktop-idle-voyage');
+  check('Idle starts at four times speed, supports strategies, pauses without advancing, and switches to manual command');
+  await idleGame.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));});
+  await idleGame.locator('#idle-pause').click();pausedTurns=await idleGame.evaluate(()=>__grandLine.battle.stats.turns);await frames(idleHost,30);
+  assert.equal(await idleGame.evaluate(()=>__grandLine.battle.stats.turns),pausedTurns);
+  await idleGame.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
+  await idleGame.waitForFunction(()=>__grandLine.battle.status==='learning');
+  assert.ok(await idleGame.evaluate(()=>__grandLine.battle.stats.turns>0));
+  assert.equal(await idleHost.evaluate(()=>fake.records.length),0);assert.equal(await idleGame.evaluate(()=>__grandLine.collection.packs),0);
+  pausedTurns=await idleGame.evaluate(()=>__grandLine.battle.stats.turns);await frames(idleHost,25);assert.equal(await idleGame.evaluate(()=>__grandLine.battle.stats.turns),pausedTurns);
+  check('Idle handles a complete round without skill clicks and pauses for hidden tabs and the three-question gate');
+  await idleHost.evaluate(()=>{fake.blockSave=true;});await idleGame.locator('#study-button').click();
+  for(let i=0;i<3;i++)await idleHost.locator('#questions [data-answer="1"]').click();
+  await idleGame.waitForFunction(()=>__grandLine.dialog==='save-progress');pausedTurns=await idleGame.evaluate(()=>__grandLine.battle.stats.turns);
+  await frames(idleHost,25);assert.equal(await idleGame.evaluate(()=>__grandLine.battle.stats.turns),pausedTurns);
+  assert.equal(await idleGame.locator('#idle-mode').isDisabled(),true);assert.equal(await idleHost.evaluate(()=>fake.records.length),3);
+  await idleHost.evaluate(()=>{fake.blockSave=false;});await idleGame.getByRole('button',{name:'Retry saving',exact:true}).click();
+  await idleGame.waitForFunction(turns=>__grandLine.battle.stats.turns>turns,pausedTurns);
+  assert.equal(await idleHost.evaluate(()=>fake.records.length),3);assert.match(await idleGame.locator('#learning-boost').textContent(),/Attack \+30%/);
+  await idleGame.waitForFunction(()=>__grandLine.battle.status==='learning');assert.equal(await idleHost.evaluate(()=>fake.records.length),3);
+  check('Automatic combat stays stopped through save failure, resumes only after acknowledgement, and never regrades or skips the next quiz');
+  await idleHost.close();
 
   await page.locator('[data-view="campaign"]').click(); await page.locator('#campaign-map button').first().click(); await stablePlayer(page);
   const effects = await page.evaluate(async () => {
@@ -236,9 +287,12 @@ try {
     await mobile.locator('#apex-showcase [data-character="kaido"]').click(); await noOverflow(mobile); await screenshot(mobile, name + '-detail'); await mobile.locator('#dialog-panel .dialog-close').click();
     await mobile.locator('[data-view="campaign"]').click(); await mobile.locator('#campaign-map button').first().click(); await stablePlayer(mobile); await noOverflow(mobile);
     await mobile.locator('#skill-buttons button').first().click(); await mobile.locator('#target-buttons button').first().click(); await mobile.locator('#cast-button').click(); await screenshot(mobile, name + '-battle');
+    await mobile.evaluate(()=>{document.getElementById('idle-mode').click();document.getElementById('idle-pause').click();});
+    assert.equal(await mobile.locator('#idle-summary').isVisible(),true);await noOverflow(mobile);await screenshot(mobile,name+'-idle-voyage');
+    if(viewport.width<=600){assert.ok((await mobile.locator('#idle-strategy').boundingBox()).width>=100,'Strategy value remains readable');assert.ok((await mobile.locator('#idle-speed').boundingBox()).width>=70,'Speed value remains readable');}
     await mobile.close();
   }
-  check('Collection, full card details, targeting, and battle controls fit portrait and landscape phones');
+  check('Collection, full card details, manual targeting, and idle voyage controls fit portrait and landscape phones');
   const production = await browser.newPage(); observe(production); await production.goto(base + '/grand-line.html'); await production.locator('#card-grid .tcg-card').first().waitFor();
   assert.equal(await production.evaluate(() => typeof window.__grandLine), 'undefined');
   check('Production pages do not expose the test API');

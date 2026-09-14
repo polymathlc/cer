@@ -1,5 +1,5 @@
-import { CHARACTERS, CHARACTER_BY_ID, STARTER_IDS, PACK_ODDS, ENCOUNTERS, LORE_SOURCES } from './grand-line-data.js';
-export { CHARACTERS, CHARACTER_BY_ID, STARTER_IDS, PACK_ODDS, ENCOUNTERS, LORE_SOURCES };
+import { CHARACTERS, CHARACTER_BY_ID, STARTER_IDS, PACK_ODDS, ENCOUNTERS, LORE_SOURCES, RETIRED_CHARACTER_REPLACEMENTS } from './grand-line-data.js?v=1.1.0';
+export { CHARACTERS, CHARACTER_BY_ID, STARTER_IDS, PACK_ODDS, ENCOUNTERS, LORE_SOURCES, RETIRED_CHARACTER_REPLACEMENTS };
 
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const integer = (v, fallback = 0, max = 1000000) => Number.isFinite(v) ? clamp(Math.floor(v), 0, max) : fallback;
@@ -11,23 +11,34 @@ const negative = new Set(['stun', 'freeze', 'burn', 'poison', 'weaken', 'slow'])
 const roll = rng => clamp(Number(rng()) || 0, 0, 0.999999999999);
 const validTeam = c => Array.isArray(c?.team) && c.team.length === 5 && new Set(c.team).size === 5 && c.team.every(id => typeof id === 'string' && CHARACTER_BY_ID[id] && c.cards?.[id]?.copies >= 1);
 const rankFor = copies => Math.min(10, Math.floor(Math.log2(Math.max(1, integer(copies, 1, 1000000000)))));
+const maxCopies = Number.MAX_SAFE_INTEGER;
+
+export function currentCharacterId(id) {
+  if (typeof id !== 'string') return null;
+  const current = Object.hasOwn(RETIRED_CHARACTER_REPLACEMENTS, id) ? RETIRED_CHARACTER_REPLACEMENTS[id] : id;
+  return Object.hasOwn(CHARACTER_BY_ID, current) ? current : null;
+}
 
 export function createCollection() {
-  return { version: 1, cards: Object.fromEntries(STARTER_IDS.map(id => [id, { copies: 1 }])), team: [...STARTER_IDS],
+  return { version: 2, cards: Object.fromEntries(STARTER_IDS.map(id => [id, { copies: 1 }])), team: [...STARTER_IDS],
     packs: 0, unlockedEncounter: 1, completed: [], stats: { packsOpened: 0, victories: 0, correctAnswers: 0 } };
 }
 
 export function normalizeCollection(raw) {
   const c = createCollection();
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return c;
-  for (const character of CHARACTERS) {
-    const copies = integer(raw.cards?.[character.id]?.copies, 0, 1000000000);
-    if (copies > 0) c.cards[character.id] = { copies };
+  const owned = {};
+  // Convert paid copies, never grant replacements merely because a card was
+  // retired. Summing first also preserves saves containing both card IDs.
+  for (const [oldId, card] of Object.entries(raw.cards && typeof raw.cards === 'object' && !Array.isArray(raw.cards) ? raw.cards : {})) {
+    const id = currentCharacterId(oldId), copies = integer(card?.copies, 0, maxCopies);
+    if (id && copies > 0) owned[id] = Math.min(maxCopies, (owned[id] || 0) + copies);
   }
+  for (const [id, copies] of Object.entries(owned)) c.cards[id] = { copies };
   c.packs = integer(raw.packs, 0);
   c.unlockedEncounter = clamp(integer(raw.unlockedEncounter, 1), 1, 9);
   c.completed = Array.isArray(raw.completed) ? [...new Set(raw.completed.filter(n => Number.isInteger(n) && n >= 1 && n <= 9))].sort((a, b) => a - b) : [];
-  const team = Array.isArray(raw.team) ? raw.team.filter(id => typeof id === 'string' && CHARACTER_BY_ID[id] && c.cards[id]) : [];
+  const team = Array.isArray(raw.team) ? raw.team.map(currentCharacterId).filter(id => id && c.cards[id]) : [];
   c.team = [...new Set(team)].slice(0, 5);
   for (const id of STARTER_IDS) if (c.team.length < 5 && !c.team.includes(id)) c.team.push(id);
   for (const key of Object.keys(c.stats)) c.stats[key] = integer(raw.stats?.[key]);
@@ -35,11 +46,13 @@ export function normalizeCollection(raw) {
 }
 
 export function addCard(collection, id) {
-  if (typeof id !== 'string') return null;
+  // Only normalization converts legacy ownership. A retired ID is never a
+  // valid new grant, even when an old page still tries to use it.
+  if (typeof id !== 'string' || Object.hasOwn(RETIRED_CHARACTER_REPLACEMENTS, id)) return null;
   const character = CHARACTER_BY_ID[id];
   if (!character || !collection?.cards || typeof collection.cards !== 'object') return null;
-  const oldCopies = integer(collection.cards[id]?.copies, 0, 1000000000);
-  const copies = Math.min(1000000000, oldCopies + 1);
+  const oldCopies = integer(collection.cards[id]?.copies, 0, maxCopies);
+  const copies = Math.min(maxCopies, oldCopies + 1);
   collection.cards[id] = { copies };
   return { character, card: collection.cards[id], copies, rank: rankFor(copies), duplicate: oldCopies > 0 };
 }

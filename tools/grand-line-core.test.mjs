@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 const dataSource = await readFile(new URL('../grand-line-data.js', import.meta.url), 'utf8');
 const dataUrl = `data:text/javascript;base64,${Buffer.from(dataSource).toString('base64')}`;
-const source = (await readFile(new URL('../grand-line-core.js', import.meta.url), 'utf8')).replace("'./grand-line-data.js'", `'${dataUrl}'`);
+const source = (await readFile(new URL('../grand-line-core.js', import.meta.url), 'utf8')).replace(/(['"])\.\/grand-line-data\.js(?:\?v=[^'"]+)?\1/, `'${dataUrl}'`);
 const api = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 const { CHARACTERS, CHARACTER_BY_ID, PACK_ODDS, STARTER_IDS, ENCOUNTERS, createCollection, normalizeCollection, openPack, addCard, setTeam, statsFor,
   createBattle, act, advanceBattle, chooseDefend, completeLearning, grantLearningReward, getActiveUnit, getValidTargets } = api;
@@ -113,12 +113,12 @@ test('normalization rejects malformed saves, bounds counters, and repairs a five
 test('team selection requires exactly five different owned heroes and rejects a locked campaign', () => {
   const c = createCollection();
   assert.equal(setTeam(c, ['luffy', 'luffy', 'zoro', 'nami', 'chopper']), false);
-  assert.equal(setTeam(c, ['shanks', 'zoro', 'nami', 'usopp', 'chopper']), false);
+  assert.equal(setTeam(c, ['wyper', 'zoro', 'nami', 'usopp', 'chopper']), false);
   assert.equal(setTeam(c, ['luffy']), false);
   assert.equal(createBattle(c, { encounter: 2 }), null);
   assert.equal(createBattle(c, { encounter: 10 }), null);
-  addCard(c, 'shanks');
-  assert.equal(setTeam(c, ['shanks', 'zoro', 'nami', 'usopp', 'chopper']), true);
+  addCard(c, 'wyper');
+  assert.equal(setTeam(c, ['wyper', 'zoro', 'nami', 'usopp', 'chopper']), true);
   assert.ok(createBattle(c, { seed: 42 }));
 });
 

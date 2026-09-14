@@ -26,7 +26,11 @@ Purchases debit points and save the card and receipt together through the existi
 
 ## Turn-based battles and learning
 
-Nine encounters form three acts. Command the active hero, choose one of three skills, select a valid target, and confirm. Basic attacks restore Spirit; stronger abilities spend it and have cooldowns. Defend restores Spirit and protects the hero. Healing, revival, control, shields, damage over time, and lore-based passives support different crew combinations.
+**Grand Line Voyage** is an idle crew adventure across nine encounters in three acts. Choose five owned cards and start an encounter. The crew fights automatically at **4× speed** by default, choosing legal skills and targets, finishing weakened opponents, healing injured allies, and reviving fallen crewmates. You no longer need to click through each character’s turn.
+
+Choose **Balanced**, **Assault**, or **Sustain** strategy and **1×, 2×, or 4×** speed. Pause/resume any time, or select **Take command** to reveal the manual skill controls. These preferences are saved for the learner’s profile. Basic attacks restore Spirit; stronger abilities spend it and have cooldowns. Healing, control, shields, damage over time, and lore-based passives still matter.
+
+The idle loop is **choose your crew → automatic battle round → three questions → continue with a knowledge boost**. Actions pause while the game is hidden, while a dialog is open, during questions, or until a pending save is acknowledged. Returning does not simulate missed rounds, skip questions, or grant offline rewards. A victory opens the next encounter for you to start.
 
 After **every full round, including the final round**, the portal presents exactly three suitable questions. Math uses authenticated marking for student answers. Science uses its existing feeding and attempt-recording flow. Wrong answers receive feedback and count toward completing the three-question pause. Combat resumes only after all three results and battle progress have been confirmed.
 
@@ -43,6 +47,25 @@ Bonuses do not stack between rounds. Critical chance, including character passiv
 
 Keyboard: **1 / 2 / 3** select a skill; **D** defends. Buttons support keyboard navigation and touch. Sound and reduced motion are available in Settings.
 
+These skill shortcuts apply in manual mode. Idle mode needs no skill or target clicks.
+
+## Current roster and future expansions
+
+Eight legends are reserved for future **seven-star** expansions. They are absent from current card packs, active teams, and encounters; they are not available to unlock yet. Kaido, Whitebeard, and Admiral Akainu remain the only current seven-star cards.
+
+| Reserved future seven-star character | Current replacement |
+|---|---|
+| Shanks | Wyper · 4★ |
+| Marshall D. Teach | Kaku · 4★ |
+| Charlotte Linlin | Wapol · 2★ |
+| Admiral Kizaru | Hina · 3★ |
+| Sengoku | Paulie · 3★ |
+| Monkey D. Garp | Don Krieg · 3★ |
+| Dracule Mihawk | Hatchan · 2★ |
+| Boa Hancock | Kalifa · 3★ |
+
+Existing copies transfer **one-for-one** to the corresponding replacement, including team slots. When a save contains both names, their copies combine and merge normally. Copy counts, reward points, purchase receipts and campaign progress are preserved; combat strength follows the replacement’s current rarity. Repeated loading or replaying a purchase receipt cannot duplicate copies or charge points again. Future seven-star editions will have their own expansion releases; owning an earlier retired card does not automatically grant an unreleased card.
+
 ## Artwork and lore
 
 All 50 character images were generated with the built-in image generator. Each original source contains painted card art beside a transparent full-body battle avatar. The manifest records the actual panel split; CSS draws standard rarity frames, and the battle renderer uses the corresponding avatar. Artwork prompts and provenance are in [assets/grand-line/ART.md](assets/grand-line/ART.md). Character ability references and the distinction between lore and game balance are in [LORE-SOURCES.md](LORE-SOURCES.md).
@@ -53,6 +76,7 @@ Run the core, economy, bank and learning tests with Node 24:
 
 ```sh
 node --test tools/grand-line-core.test.mjs tools/grand-line-economy-tests.mjs tools/grand-line-learning-tests.mjs tools/grand-line-bank-tests.mjs
+node --test tools/grand-line-idle-tests.mjs tools/grand-line-roster-tests.mjs tools/grand-line-migration-tests.mjs
 ```
 
 The Science repository uses its science-feeding integration suite instead of a separate Math bank test. Both repositories run the browser suites below. Set `PLAYWRIGHT_MODULE` to an installed Playwright module path; optionally set `PLAYWRIGHT_BROWSER_CHANNEL` and `GRAND_LINE_SCREENSHOTS`.

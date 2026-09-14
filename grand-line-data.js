@@ -1,5 +1,21 @@
 /* Original fan-game rules; names and power themes are anchored to official character profiles. */
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
+// Retired collection IDs migrate to these current cards; future seven-star
+// editions remain separate from the obtainable roster and pack draw pools.
+export const RETIRED_CHARACTER_REPLACEMENTS = {
+  shanks: 'wyper', blackbeard: 'kaku', bigmom: 'wapol', kizaru: 'hina',
+  sengoku: 'paulie', garp: 'donkrieg', mihawk: 'hatchan', hancock: 'kalifa',
+};
+export const FUTURE_EXPANSION_CHARACTERS = [
+  { id: 'shanks', name: 'Shanks', stars: 7 },
+  { id: 'blackbeard', name: 'Marshall D. Teach', stars: 7 },
+  { id: 'bigmom', name: 'Charlotte Linlin', stars: 7 },
+  { id: 'kizaru', name: 'Admiral Kizaru', stars: 7 },
+  { id: 'sengoku', name: 'Sengoku', stars: 7 },
+  { id: 'garp', name: 'Monkey D. Garp', stars: 7 },
+  { id: 'mihawk', name: 'Dracule Mihawk', stars: 7 },
+  { id: 'hancock', name: 'Boa Hancock', stars: 7 },
+];
 export const STARTER_IDS = ['luffy', 'zoro', 'nami', 'usopp', 'chopper'];
 export const PACK_ODDS = [
   { stars: 1, probability: 0.40 }, { stars: 2, probability: 0.30 },
@@ -20,12 +36,23 @@ export const LORE_SOURCES = [
   { title: 'Fujitora: gravity', url: 'https://one-piece.com/character/fujitora/index.html' },
   { title: 'Ryokugyu: forest power', url: 'https://one-piece.com/character/Aramaki/index.html' },
   { title: 'Enel and King: lightning and Lunarian flame', url: 'https://www.bandainamcoent.com/news/one-piece-pirate-warriors-4-special-new-dlc-adds-three-characters' },
+  { title: 'Wyper: Shandian warrior', url: 'https://one-piece.com/character/Wyper/index.html' },
+  { title: 'Kaku: giraffe transformation and four-sword fighting', url: 'https://one-piece.com/character/Kaku/index.html' },
+  { title: 'Wapol: Munch-Munch assimilation and factory', url: 'https://one-piece.com/character/Wapol/index.html' },
+  { title: 'Hina: iron restraints', url: 'https://one-piece.com/character/Hina/index.html' },
+  { title: 'Paulie: Galley-La shipwright', url: 'https://one-piece.com/character/Paulie/index.html' },
+  { title: 'Don Krieg: concealed weapons', url: 'https://one-piece.com/character/Don_Krieg/index.html' },
+  { title: 'Hatchan: octopus fish-man and six swords', url: 'https://one-piece.com/character/Hacchan/index.html' },
+  { title: 'Kalifa: soap powers and Cipher Pol', url: 'https://one-piece.com/character/Kalifa/index.html' },
+  { title: 'Wyper: Burn Bazooka', url: 'https://one-piece.com/anime/171/index.html' },
+  { title: 'Wyper: Reject Dial', url: 'https://one-piece.com/anime/169/index.html' },
+  { title: 'Paulie: rope fighting', url: 'https://one-piece.com/anime/232/index.html' },
 ];
 
 const E = (type, amount = 0, duration = 0, extra = {}) => ({ type, amount, duration, ...extra });
 const S = (name, target, power, kind, effects = [], cost, cooldown) => ({ name, target, power, kind, effects, cost, cooldown });
 const P = (name, type, value, description) => ({ name, type, value, description });
-const COLORS = { rubber: '#f5b45f', steel: '#a7e3c2', storm: '#e8cf6b', plant: '#8dd68e', fire: '#ff896b', medicine: '#f59cbd', bloom: '#d49ee6', machine: '#72cce6', soul: '#bfb1ff', water: '#65bdda', haki: '#f38293', ice: '#a1e6fa', magnet: '#b798ce', love: '#f497cf', sand: '#d9bd79', string: '#e991bf', smoke: '#bacbdb', light: '#f7e394', gravity: '#be9be4', dark: '#af94dd', mochi: '#debab6', dragon: '#97c5f8', poison: '#c394df', earth: '#dca986', spirit: '#bddb8b', electric: '#b1e5fc', venom: '#bb87d9', magma: '#ff7754' };
+const COLORS = { rubber: '#f5b45f', steel: '#a7e3c2', storm: '#e8cf6b', plant: '#8dd68e', fire: '#ff896b', medicine: '#f59cbd', bloom: '#d49ee6', machine: '#72cce6', soul: '#bfb1ff', water: '#65bdda', haki: '#f38293', ice: '#a1e6fa', magnet: '#b798ce', shell: '#a8d7e8', rope: '#d0af85', soap: '#e8b7db', sand: '#d9bd79', string: '#e991bf', smoke: '#bacbdb', light: '#f7e394', gravity: '#be9be4', dark: '#af94dd', mochi: '#debab6', dragon: '#97c5f8', poison: '#c394df', earth: '#dca986', spirit: '#bddb8b', electric: '#b1e5fc', venom: '#bb87d9', magma: '#ff7754' };
 function describeSkill(skill, index) {
   const parts = [];
   if (skill.power) parts.push(`${Math.round(skill.power * 100)}% attack damage${skill.target === 'all-enemies' ? ' to every enemy' : ''}`);
@@ -114,11 +141,11 @@ export const CHARACTERS = [
       S('Shark Brick Fist', 'enemy', 1.8, 'water', [E('pierce')]),
       S('Ocean Current Shoulder Throw', 'all-enemies', 1.35, 'water', [E('weaken', 0.22, 2)]),
     ]),
-  C('shanks', 'Shanks', 'Red-Haired Emperor', 6, 'Striker', 'haki', 'An Emperor whose saber and overwhelming Haki command the battlefield.',
-    P('Captain’s Presence', 'all-attack', 0.06, 'The entire crew deals 6% more damage while Shanks stands.'), [
-      S('Gryphon Cut', 'enemy', 1.12, 'slash'),
-      S('Divine Departure', 'enemy', 2.1, 'dark', [E('drain', 15)]),
-      S('Conqueror’s Presence', 'all-enemies', 1.1, 'lightning', [E('stun', 0, 1, { chance: 0.7 })]),
+  C('wyper', 'Wyper', 'Shandian Battle Warrior', 4, 'Striker', 'shell', 'A resolute Shandian warrior who fights with a bazooka, blue-white flame and the dangerous Reject Dial.',
+    P('Shandian Resolve', 'low-health-defense', 0.2, 'Take 20% less direct damage while below half health.'), [
+      S('Bazooka Shot', 'enemy', 1.02, 'explosion'),
+      S('Burn Bazooka', 'all-enemies', 1.1, 'fire', [E('burn', 0.2, 2)]),
+      S('Reject Dial', 'enemy', 2.6, 'earth', [E('pierce'), E('weaken', 0.3, 1, { scope: 'self' })], 65),
     ]),
   C('ace', 'Portgas D. Ace', 'Fire Fist', 5, 'Striker', 'fire', 'Whitebeard’s fiery commander turns flame into sweeping, explosive attacks.',
     P('Living Flame', 'burn-immune', 1, 'Immune to burn damage and the burn status.'), [
@@ -150,17 +177,17 @@ export const CHARACTERS = [
       S('Sonic Scythe', 'enemy', 1.7, 'wind', [E('pierce')]),
       S('Sonic Blade Cyclone', 'all-enemies', 1.5, 'slash', [E('weaken', 0.15, 2)]),
     ]),
-  C('hancock', 'Boa Hancock', 'Pirate Empress', 5, 'Controller', 'love', 'The Love-Love Fruit and powerful kicks can petrify foes who underestimate the Empress.',
-    P('Empress’s Grace', 'evade', 0.12, '12% chance to evade direct attacks.'), [
-      S('Perfume Femur', 'enemy', 1.04, 'punch'),
-      S('Love-Love Mellow', 'enemy', 1.2, 'soul', [E('stun', 0, 1)]),
-      S('Slave Arrow', 'all-enemies', 1.35, 'light', [E('stun', 0, 1, { chance: 0.5 })]),
+  C('kalifa', 'Kalifa', 'Cipher Pol Soap Agent', 3, 'Controller', 'soap', 'A Six Powers agent whose Bubble-Bubble Fruit washes away strength and leaves opponents slippery and helpless.',
+    P('Slippery Soap', 'evade', 0.1, '10% chance to evade direct attacks.'), [
+      S('Finger Pistol', 'enemy', 0.98, 'punch'),
+      S('Bubble Master', 'enemy', 1.15, 'water', [E('weaken', 0.3, 2), E('drain', 15)]),
+      S('Golden Hour', 'all-enemies', 0.95, 'water', [E('slow', 0.25, 2), E('stun', 0, 1, { chance: 0.45 })]),
     ]),
-  C('mihawk', 'Dracule Mihawk', 'World’s Greatest Swordsman', 6, 'Striker', 'steel', 'The black blade Yoru cuts with terrifying precision.',
-    P('Hawk Eyes', 'crit', 0.2, 'Gain 20% additional critical chance.'), [
-      S('Yoru Slash', 'enemy', 1.15, 'slash'),
-      S('Black Blade Crescent', 'all-enemies', 1.4, 'slash', [E('pierce')]),
-      S('World-Cutting Stroke', 'enemy', 2.9, 'slash', [E('pierce')]),
+  C('hatchan', 'Hatchan', 'Six-Sword Octopus', 2, 'Striker', 'water', 'An octopus fish-man who wields six swords, sprays ink and later opens the Takoyaki 8 stand.',
+    P('Six-Blade Guard', 'counter', 0.12, 'Counter direct hits for damage equal to 12% of attack.'), [
+      S('Six-Sword Cut', 'enemy', 1.0, 'slash'),
+      S('Octopus Black Ink', 'all-enemies', 0.7, 'water', [E('weaken', 0.22, 2)]),
+      S('Six-Sword Waltz', 'enemy', 2.35, 'slash', [E('slow', 0.2, 2)]),
     ]),
   C('crocodile', 'Crocodile', 'Desert King', 5, 'Controller', 'sand', 'The Sand-Sand Fruit drains moisture while a hooked weapon delivers venom.',
     P('Desert Drain', 'lifesteal', 0.13, 'Recover health equal to 13% of direct damage dealt.'), [
@@ -198,23 +225,23 @@ export const CHARACTERS = [
       S('Protective Resolve', 'self', 0, 'shield', [E('shield', 2.2), E('taunt', 0, 2)]),
       S('Honesty Impact', 'all-enemies', 1.7, 'earth', [E('weaken', 0.15, 2)]),
     ], 'https://one-piece.com/character/Coby/index.html'),
-  C('garp', 'Monkey D. Garp', 'Hero of the Marines', 6, 'Guardian', 'haki', 'Legendary strength and Haki put the power of a battleship into a bare fist.',
-    P('Iron Fist Veteran', 'counter', 0.2, 'Counter direct hits for damage equal to 20% of attack.'), [
-      S('Fist of Love', 'enemy', 1.12, 'punch'),
-      S('Blue Hole', 'enemy', 1.85, 'earth', [E('stun', 0, 1, { chance: 0.65 })]),
-      S('Galaxy Impact', 'all-enemies', 1.75, 'earth', [E('weaken', 0.2, 2)]),
-    ], 'https://one-piece.com/character/Monkey_D_Garp/index.html'),
-  C('sengoku', 'Sengoku', 'Buddha Strategist', 6, 'Guardian', 'light', 'A mythical Buddha transformation releases tremendous shock waves.',
-    P('Fleet Tactician', 'all-guard', 0.07, 'The crew takes 7% less direct damage while Sengoku stands.'), [
-      S('Buddha Palm', 'enemy', 1.05, 'punch'),
-      S('Golden Guardian', 'all-allies', 0, 'shield', [E('shield', 1.25)]),
-      S('Daibutsu Shockwave', 'all-enemies', 1.55, 'light', [E('stun', 0, 1, { chance: 0.45 })]),
+  C('donkrieg', 'Don Krieg', 'Armored Pirate Admiral', 3, 'Guardian', 'machine', 'A heavily armored fleet captain who hides firearms, an explosive battle spear and poison gas in his arsenal.',
+    P('Wootz Steel Armor', 'defense', 0.12, 'Take 12% less direct damage.'), [
+      S('Concealed Pistol', 'enemy', 1.0, 'explosion'),
+      S('Great Battle Spear', 'enemy', 1.8, 'explosion', [E('burn', 0.2, 2)]),
+      S('MH5 Poison Gas', 'all-enemies', 1.15, 'poison', [E('poison', 0.32, 3)], 60, 4),
     ]),
-  C('kizaru', 'Admiral Kizaru', 'Borsalino of Light', 6, 'Striker', 'light', 'The Glint-Glint Fruit turns movement and attacks into brilliant light.',
-    P('Light-Speed Step', 'speed', 0.2, 'Initiative speed is increased by 20%.'), [
-      S('Light-Speed Kick', 'enemy', 1.08, 'light'),
-      S('Sacred Yata Mirror', 'enemy', 1.75, 'light', [E('shield', 0.85, 0, { scope: 'self' })]),
-      S('Yasakani Sacred Jewel', 'all-enemies', 1.65, 'light', [E('pierce')]),
+  C('paulie', 'Paulie', 'Galley-La Rope Rigger', 3, 'Guardian', 'rope', 'A Galley-La shipwright whose rope techniques bind opponents and pull crewmates out of danger.',
+    P('Secure the Rigging', 'all-shield', 0.06, 'Every ally starts with a shield worth 6% maximum health.'), [
+      S('Rope Strike', 'enemy', 0.95, 'string'),
+      S('Dockyard Rescue', 'ally', 0, 'shield', [E('shield', 1.8), E('guard', 0.2, 2)], 25),
+      S('Rope Action: Dock Bind', 'all-enemies', 1.1, 'string', [E('slow', 0.2, 2), E('stun', 0, 1, { chance: 0.5 })], 55),
+    ]),
+  C('hina', 'Hina', 'Black Cage Marine', 3, 'Controller', 'steel', 'The Bind-Bind Fruit lets this disciplined Marine pass through opponents and lock them inside iron restraints.',
+    P('Black Cage Discipline', 'debuff-duration', 1, 'The first harmful effect she applies each battle lasts one additional turn.'), [
+      S('Iron Bind', 'enemy', 0.9, 'string', [E('slow', 0.12, 1, { chance: 0.4 })]),
+      S('Black Cage', 'enemy', 1.1, 'string', [E('stun', 0, 1)]),
+      S('Iron-Bar Enclosure', 'all-enemies', 1.25, 'string', [E('weaken', 0.2, 2), E('slow', 0.2, 2)]),
     ]),
   C('aokiji', 'Kuzan', 'Aokiji of Ice', 6, 'Controller', 'ice', 'The Ice-Ice Fruit freezes seas and traps enemies in deep cold.',
     P('Ice Body', 'freeze-immune', 1, 'Immune to freeze.'), [
@@ -234,17 +261,17 @@ export const CHARACTERS = [
       S('Nutrient Drain', 'enemy', 1.4, 'plant', [E('lifesteal', 0.6)]),
       S('Giant Forest Form', 'all-enemies', 1.4, 'plant', [E('shield', 2.0, 0, { scope: 'self' }), E('slow', 0.2, 2)]),
     ], 'https://one-piece.com/character/Aramaki/index.html'),
-  C('blackbeard', 'Marshall D. Teach', 'Blackbeard', 6, 'Controller', 'dark', 'Darkness draws enemies in, while stolen tremor power breaks their defenses.',
-    P('Relentless Ambition', 'execute', 0.25, 'Deal 25% more damage to enemies below half health.'), [
-      S('Dark Fist', 'enemy', 1.07, 'dark'),
-      S('Black Vortex', 'enemy', 1.45, 'dark', [E('drain', 30), E('weaken', 0.25, 2)]),
-      S('Darkness and Tremor', 'all-enemies', 1.65, 'earth', [E('pierce')]),
+  C('kaku', 'Kaku', 'Giraffe of Cipher Pol', 4, 'Striker', 'steel', 'A giraffe Zoan agent who combines two swords with cutting Tempest Kicks for four-sword fighting.',
+    P('Six Powers Footwork', 'speed', 0.08, 'Initiative speed is increased by 8%.'), [
+      S('Four-Sword Cut', 'enemy', 1.05, 'slash'),
+      S('Giraffe Neck Strike', 'enemy', 1.7, 'punch', [E('stun', 0, 1, { chance: 0.6 })]),
+      S('Rankyaku: Amane Dachi', 'all-enemies', 1.5, 'wind', [E('pierce')]),
     ]),
-  C('bigmom', 'Charlotte Linlin', 'Big Mom', 6, 'Guardian', 'soul', 'The Soul-Soul Fruit empowers living weapons, fire and thunder homies.',
-    P('Iron Balloon', 'defense', 0.18, 'Take 18% less direct damage.'), [
-      S('Napoleon Swing', 'enemy', 1.12, 'slash'),
-      S('Prometheus: Heavenly Fire', 'all-enemies', 1.2, 'fire', [E('burn', 0.25, 2)]),
-      S('Hera: Fulgora', 'all-enemies', 1.6, 'lightning', [E('stun', 0, 1, { chance: 0.45 })]),
+  C('wapol', 'Wapol', 'Munch-Munch King', 2, 'Guardian', 'machine', 'The Munch-Munch Fruit lets the former Drum king absorb what he eats and combine it into new machinery.',
+    P('Scrap Diet', 'shield-on-hit', 0.1, 'After dealing direct damage, gain a shield worth 10% of attack.'), [
+      S('Munch-Munch Bite', 'enemy', 0.9, 'punch', [E('lifesteal', 0.1)]),
+      S('Baku Baku Factory', 'self', 0, 'shield', [E('shield', 1.6), E('attack-up', 0.2, 2)], 25),
+      S('Tongue Cannon', 'all-enemies', 1.35, 'explosion', [E('weaken', 0.15, 1)]),
     ]),
   C('katakuri', 'Charlotte Katakuri', 'Sweet Commander', 5, 'Striker', 'mochi', 'Mochi techniques and advanced Observation Haki anticipate the enemy’s next move.',
     P('Future Sight', 'evade', 0.18, '18% chance to evade direct attacks.'), [
@@ -357,10 +384,10 @@ export const CHARACTERS = [
 ];
 
 const VERIFIED_PROFILE_SLUGS = {
-  luffy: 'luffy', zoro: 'zoro', nami: 'nami', brook: 'brook', shanks: 'Shanks', ace: 'ace', sabo: 'sabo', law: 'law', kid: 'kid', killer: 'killer',
-  hancock: 'Boa_Hancock', mihawk: 'Dracule_Mihawk', crocodile: 'Crocodile', doflamingo: 'doflamingo', buggy: 'Buggy', smoker: 'smoker', tashigi: 'tashigi',
-  koby: 'Coby', garp: 'Monkey_D_Garp', sengoku: 'Sengoku', kizaru: 'Borsalino', aokiji: 'kuzan', fujitora: 'fujitora', ryokugyu: 'Aramaki',
-  blackbeard: 'Marshall_D_Teech', bigmom: 'CharlotteLinlin', katakuri: 'Charlotte_Katakuri', marco: 'marco', king: 'King', queen: 'Queen', jack: 'Jack',
+  luffy: 'luffy', zoro: 'zoro', nami: 'nami', brook: 'brook', wyper: 'Wyper', ace: 'ace', sabo: 'sabo', law: 'law', kid: 'kid', killer: 'killer',
+  kalifa: 'Kalifa', hatchan: 'Hacchan', crocodile: 'Crocodile', doflamingo: 'doflamingo', buggy: 'Buggy', smoker: 'smoker', tashigi: 'tashigi',
+  koby: 'Coby', donkrieg: 'Don_Krieg', paulie: 'Paulie', hina: 'Hina', aokiji: 'kuzan', fujitora: 'fujitora', ryokugyu: 'Aramaki',
+  kaku: 'Kaku', wapol: 'Wapol', katakuri: 'Charlotte_Katakuri', marco: 'marco', king: 'King', queen: 'Queen', jack: 'Jack',
   lucci: 'Rob_Lucci', perona: 'Perona', bartolomeo: 'bartolomeo', bonclay: 'Bon_Clay_Mr2', carrot: 'carrot', vivi: 'Nefeltari_Vivi', arlong: 'Arlong',
   magellan: 'Magellan', kaido: 'Kaido', whitebeard: 'edward_newgate', akainu: 'Sakazuki',
 };
@@ -373,12 +400,12 @@ for (const character of CHARACTERS) {
 export const CHARACTER_BY_ID = Object.assign(Object.create(null), Object.fromEntries(CHARACTERS.map(c => [c.id, c])));
 export const ENCOUNTERS = [
   { id: 1, name: 'Orange Town', chapter: 'EAST BLUE', description: 'A small pirate crew makes a gentle first test.', enemies: ['buggy', 'tashigi', 'vivi'], scale: 0.72 },
-  { id: 2, name: 'Arlong Park', chapter: 'EAST BLUE', description: 'Break the sawtooth captain’s siege.', enemies: ['arlong', 'buggy', 'smoker'], scale: 0.83 },
-  { id: 3, name: 'Alabasta Crossroads', chapter: 'PARADISE', description: 'Sandstorms and deceptive strings test your support skills.', enemies: ['crocodile', 'bonclay', 'perona', 'tashigi'], scale: 0.82 },
-  { id: 4, name: 'Skypiea Storm', chapter: 'PARADISE', description: 'Read the initiative order and interrupt the lightning.', enemies: ['enel', 'carrot', 'usopp', 'robin'], scale: 0.9 },
-  { id: 5, name: 'Enies Lobby', chapter: 'PARADISE', description: 'Careful healing and focused attacks overcome trained fighters.', enemies: ['lucci', 'smoker', 'koby', 'tashigi', 'franky'], scale: 0.89 },
-  { id: 6, name: 'Impel Down', chapter: 'NEW WORLD', description: 'Cleanse venom and preserve your crew through long rounds.', enemies: ['magellan', 'crocodile', 'buggy', 'queen', 'perona'], scale: 0.98 },
-  { id: 7, name: 'Whole Cake Pursuit', chapter: 'NEW WORLD', description: 'Sweet commanders demand a coordinated five-card team.', enemies: ['bigmom', 'katakuri', 'hancock', 'king', 'sabo'], scale: 1.03 },
+  { id: 2, name: 'Arlong Park', chapter: 'EAST BLUE', description: 'Break a siege of sawteeth, six swords and concealed weapons.', enemies: ['arlong', 'hatchan', 'donkrieg'], scale: 0.83 },
+  { id: 3, name: 'Alabasta Crossroads', chapter: 'PARADISE', description: 'Sandstorms and iron restraints test your support skills.', enemies: ['crocodile', 'bonclay', 'hina', 'tashigi'], scale: 0.82 },
+  { id: 4, name: 'Skypiea Storm', chapter: 'PARADISE', description: 'Read the initiative order to survive lightning, flame and rope snares.', enemies: ['enel', 'wyper', 'usopp', 'paulie'], scale: 0.9 },
+  { id: 5, name: 'Enies Lobby', chapter: 'PARADISE', description: 'Careful healing and focused attacks overcome Six Powers and soap tricks.', enemies: ['lucci', 'kaku', 'kalifa', 'tashigi', 'franky'], scale: 0.89 },
+  { id: 6, name: 'Impel Down', chapter: 'NEW WORLD', description: 'Cleanse venom and break through a scrap-armored blockade.', enemies: ['magellan', 'crocodile', 'wapol', 'queen', 'perona'], scale: 0.98 },
+  { id: 7, name: 'New World Crossfire', chapter: 'NEW WORLD', description: 'Mochi, swordplay and soap snares demand a coordinated five-card crew.', enemies: ['katakuri', 'kaku', 'kalifa', 'king', 'sabo'], scale: 1.03 },
   { id: 8, name: 'Onigashima', chapter: 'APEX', description: 'Face the Beast and his All-Stars. Merge duplicates to strengthen your crew.', enemies: ['kaido', 'king', 'queen', 'jack', 'yamato'], scale: 1.09 },
-  { id: 9, name: 'Clash at Marineford', chapter: 'APEX', description: 'An original dream-match finale against the era’s greatest powers.', enemies: ['whitebeard', 'akainu', 'kizaru', 'aokiji', 'sengoku'], scale: 1.15 },
+  { id: 9, name: 'Clash at Marineford', chapter: 'APEX', description: 'An original dream-match finale against tremors, magma, gravity, ice and living forests.', enemies: ['whitebeard', 'akainu', 'fujitora', 'aokiji', 'ryokugyu'], scale: 1.15 },
 ];

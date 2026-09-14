@@ -1,6 +1,6 @@
 // Purchases use the portal's existing reward-point wallet. The iframe cannot
 // choose its card, price, odds, ownership or balance, and receives no ledger.
-import { CHARACTERS, createCollection, normalizeCollection, addCard, setTeam } from './grand-line-core.js';
+import { CHARACTERS, CHARACTER_BY_ID, currentCharacterId, createCollection, normalizeCollection, addCard, setTeam } from './grand-line-core.js?v=1.1.0';
 
 const token = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
 const number = (value, max = 1000000) => Number.isSafeInteger(value) && value >= 0 ? Math.min(max, value) : 0;
@@ -90,7 +90,13 @@ export function createGrandLineEconomy(env) {
       const saved = record(state, ctx), ledger = saved.purchases || {};
       if (Object.hasOwn(ledger, purchaseId)) {
         if (ledger[purchaseId].packId !== packId) throw new Error('That purchase request already belongs to another pack.');
-        return { ...snapshot(ctx), grant: { ...ledger[purchaseId].grant }, replayed: true };
+        const result = snapshot(ctx), grant = { ...ledger[purchaseId].grant };
+        const id = currentCharacterId(grant.characterId);
+        if (!id || !result.collection.cards[id]) throw new Error('This saved purchase could not be loaded. Reopen the game to retry the same receipt.');
+        // Keep the original durable receipt as evidence that it was charged.
+        // A replay only presents its migrated card; it never grants or saves.
+        if (id !== grant.characterId) Object.assign(grant, { characterId: id, stars: CHARACTER_BY_ID[id].stars, copies: result.collection.cards[id].copies });
+        return { ...result, grant, replayed: true };
       }
       if (Object.keys(ledger).length >= 10000) throw rejected('This collection has reached its purchase limit.');
       if (state.gold < offer.cost) throw rejected(`This pack costs ${offer.cost} reward points. Answer more questions to earn points.`);

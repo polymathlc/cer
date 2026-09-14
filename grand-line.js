@@ -1,5 +1,7 @@
-import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam,createBattle,getActiveUnit,getValidTargets,act,chooseDefend,advanceBattle,completeLearning} from './grand-line-core.js?v=1.0.0';
-import {createArtManager,createBattleRenderer} from './grand-line-render.js?v=1.0.0';
+import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam,createBattle,getActiveUnit,getValidTargets,act,chooseDefend,advanceBattle,completeLearning} from './grand-line-core.js?v=1.1.0';
+import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS} from './grand-line-data.js?v=1.1.0';
+import {createArtManager,createBattleRenderer} from './grand-line-render.js?v=1.1.0';
+import {IDLE_STRATEGIES,IDLE_SPEEDS,idleActionDelay,advanceIdleBattle} from './grand-line-idle.js?v=1.1.0';
 
 const $=id=>document.getElementById(id);
 const embedded=parent!==window,params=new URLSearchParams(location.search),origin=location.origin;
@@ -11,7 +13,8 @@ const format=n=>Number.isFinite(n)?Math.floor(n).toLocaleString():'—';
 const displayName=c=>c.id==='luffy'?'Luffy':c.id==='whitebeard'?'Whitebeard':c.id==='akainu'?'Akainu':c.id==='kaido'?'Kaido':c.name;
 let collection=createCollection(),wallet={available:false,balance:0,currency:'points',offers:[]};
 let subject=params.get('subject')?.toLowerCase()==='science'?'Science':'Math',scope='preview',sessionId='',helloId='',ready=!embedded;
-let settings={muted:false,reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches};
+let settings={muted:false,reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches,autoBattle:true,battleSpeed:4,strategy:'balanced'};
+let idlePaused=false,idleReason='Your crew chooses its skills automatically.';
 let view='collection',dialog='',battle=null,selectedSlot=null,selectedSkill='',selectedTarget='',lastActor='',busyUntil=0,wasBusy=false;
 let lastOutcome='',bannerUntil=0,enemyAt=0,bridgeRound=0,learningPending=null,savePending=null,purchasePending=null;
 let selectedPack='spark',toastTimer=0,helloTimer=0,audioContext=null,questionSession=null,initialFocus=null,unsavedLearning=false;
@@ -25,7 +28,7 @@ function toast(message){clearTimeout(toastTimer);$('toast').textContent=message;
 function post(message){if(embedded)parent.postMessage(message,origin);}
 function localGet(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(_){return null;}}
 function localSet(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true;}catch(_){return false;}}
-function loadPreferences(){const old=localGet(storageKey());for(const k of Object.keys(settings))if(typeof old?.settings?.[k]==='boolean')settings[k]=old.settings[k];if(!embedded)collection=normalizeCollection(old?.collection);settingsUI();}
+function loadPreferences(){const old=localGet(storageKey());for(const k of ['muted','reducedMotion','autoBattle'])if(typeof old?.settings?.[k]==='boolean')settings[k]=old.settings[k];if(IDLE_SPEEDS.includes(old?.settings?.battleSpeed))settings.battleSpeed=old.settings.battleSpeed;if(Object.hasOwn(IDLE_STRATEGIES,old?.settings?.strategy||''))settings.strategy=old.settings.strategy;if(!embedded)collection=normalizeCollection(old?.collection);settingsUI();}
 function savePreferences(){localSet(storageKey(),{settings,...(!embedded?{collection}:{})});}
 function sound(kind='click'){
   if(settings.muted||document.hidden)return;
@@ -77,7 +80,7 @@ function openDialog(kind,title){
   if(kind!=='question')panel.append(button('×',closeDialog,'dialog-close'));
   requestAnimationFrame(()=>panel.querySelector('button:not(:disabled)')?.focus());return panel;
 }
-function closeDialog(){if(dialog==='question'&&questionSession||dialog==='save-progress'&&unsavedLearning)return;dialog='';$('dialog-layer').hidden=true;$('dialog-panel').replaceChildren();if(initialFocus?.isConnected)initialFocus.focus({preventScroll:true});initialFocus=null;enemyAt=performance.now()+650;if(view==='battle')renderBattle();}
+function closeDialog(){if(dialog==='question'&&questionSession||dialog==='save-progress'&&unsavedLearning)return;dialog='';$('dialog-layer').hidden=true;$('dialog-panel').replaceChildren();if(initialFocus?.isConnected)initialFocus.focus({preventScroll:true});initialFocus=null;enemyAt=performance.now()+idleActionDelay(settings.battleSpeed);if(view==='battle')renderBattle();}
 function inspectCard(id){
   const c=CHARACTER_BY_ID[id];if(!c)return;const panel=openDialog('card',c.name);panel.querySelector('h1').remove();const layout=el('div','card-detail'),copy=el('div','detail-copy');
   const owned=collection.cards[id],stats=statsFor(id,owned?.copies||1);layout.append(card(c,{inspect:false,eager:true}));copy.append(el('p','eyebrow',`${RARITIES[c.stars]} · ${c.stars} STARS · ${c.role.toUpperCase()}`));const title=el('h1','',c.name);title.id='dialog-title';copy.append(title,el('p','',c.description));
@@ -102,7 +105,7 @@ async function changeTeam(index,id){
   selectedSlot=null;closeDialog();renderCrew();try{await persistCollection();toast(`${displayName(CHARACTER_BY_ID[id])} is ready to sail.`);}catch(error){collection.team=before;renderCrew();toast(error.message);}
 }
 function renderCampaign(){
-  $('campaign-map').replaceChildren(...ENCOUNTERS.map(e=>{const locked=e.id>collection.unlockedEncounter,n=el('article','encounter');n.dataset.locked=String(locked);n.style.setProperty('--encounter-color',['#8ac7ca','#b998d5','#dd9584'][Math.ceil(e.id/3)-1]);n.append(el('span','chapter-number',String(e.id).padStart(2,'0')),el('p','eyebrow',`ACT ${Math.ceil(e.id/3)} · ENCOUNTER ${e.id}`),el('h2','',e.name),el('p','',e.description));const avatars=el('div','enemy-roster');for(const id of e.enemies){const medallion=el('div','enemy-medallion');medallion.title=CHARACTER_BY_ID[id].name;const image=el('div','card-art');art.attach(image,id);medallion.append(image);avatars.append(medallion);}n.append(avatars);if(collection.completed.includes(e.id))n.append(el('p','completed-tag','✓ Completed · Replay available'));const start=button(locked?`Complete encounter ${e.id-1} first`:'Battle with this crew →',()=>beginBattle(e.id),'gold-button');start.disabled=locked||!current()||!!savePending;n.append(start);return n;}));
+  $('campaign-map').replaceChildren(...ENCOUNTERS.map(e=>{const locked=e.id>collection.unlockedEncounter,n=el('article','encounter');n.dataset.locked=String(locked);n.style.setProperty('--encounter-color',['#8ac7ca','#b998d5','#dd9584'][Math.ceil(e.id/3)-1]);n.append(el('span','chapter-number',String(e.id).padStart(2,'0')),el('p','eyebrow',`ACT ${Math.ceil(e.id/3)} · ENCOUNTER ${e.id}`),el('h2','',e.name),el('p','',e.description));const avatars=el('div','enemy-roster');for(const id of e.enemies){const medallion=el('div','enemy-medallion');medallion.title=CHARACTER_BY_ID[id].name;const image=el('div','card-art');art.attach(image,id);medallion.append(image);avatars.append(medallion);}n.append(avatars);if(collection.completed.includes(e.id))n.append(el('p','completed-tag','✓ Completed · Replay available'));const start=button(locked?`Complete encounter ${e.id-1} first`:'Start idle voyage →',()=>beginBattle(e.id),'gold-button');start.disabled=locked||!current()||!!savePending;n.append(start);return n;}));
 }
 function renderPacks(){
   $('pack-balance').textContent=embedded?format(wallet.balance):'—';const offer=wallet.offers.find(o=>o.id===selectedPack)||wallet.offers[0];if(offer)selectedPack=offer.id;
@@ -140,12 +143,24 @@ function persistCollection(){
 }
 function beginBattle(encounter){
   if(purchasePending){toast('Resume your pending purchase in the Card shop before starting a battle.');return;}if(!current()||savePending||unsavedLearning)return;const next=createBattle(collection,{encounter,seed:uuid('voyage')});if(!next){toast('Choose five unlocked crew members and an available encounter.');return;}
-  battle=next;lastActor='';lastOutcome='';selectedSkill='';selectedTarget='';busyUntil=performance.now()+400;enemyAt=busyUntil+600;learningPending=null;go('battle');sound();
+  battle=next;lastActor='';lastOutcome='';selectedSkill='';selectedTarget='';idlePaused=false;idleReason='Your crew chooses its skills automatically.';busyUntil=performance.now()+400;enemyAt=busyUntil;learningPending=null;go('battle');sound();
 }
-function selectSkill(id){if(!battle||battle.status!=='player'||busy())return;selectedSkill=id;const targets=getValidTargets(battle,id);if(!targets.some(u=>u.id===selectedTarget))selectedTarget=targets[0]?.id||'';renderBattle();}
-function selectTarget(id){if(!battle||battle.status!=='player'||busy())return;if(getValidTargets(battle,selectedSkill).some(u=>u.id===id)){selectedTarget=id;renderBattle();}}
-function useSkill(){if(!battle||battle.status!=='player'||busy())return;if(act(battle,selectedSkill,selectedTarget)){busyUntil=performance.now()+900;enemyAt=busyUntil+350;sound('skill');lastActor='';renderBattle();}else toast('That action is unavailable. Check your target, Spirit and cooldown.');}
-function defend(){if(!battle||busy())return;if(chooseDefend(battle)){busyUntil=performance.now()+650;enemyAt=busyUntil+300;lastActor='';renderBattle();}}
+function selectSkill(id){if(settings.autoBattle||!battle||battle.status!=='player'||busy())return;selectedSkill=id;const targets=getValidTargets(battle,id);if(!targets.some(u=>u.id===selectedTarget))selectedTarget=targets[0]?.id||'';renderBattle();}
+function selectTarget(id){if(settings.autoBattle||!battle||battle.status!=='player'||busy())return;if(getValidTargets(battle,selectedSkill).some(u=>u.id===id)){selectedTarget=id;renderBattle();}}
+function useSkill(){if(settings.autoBattle||!battle||battle.status!=='player'||busy())return;if(act(battle,selectedSkill,selectedTarget)){busyUntil=performance.now()+idleActionDelay(settings.battleSpeed);enemyAt=busyUntil;sound('skill');lastActor='';renderBattle();}else toast('That action is unavailable. Check your target, Spirit and cooldown.');}
+function defend(){if(settings.autoBattle||!battle||busy())return;if(chooseDefend(battle)){busyUntil=performance.now()+idleActionDelay(settings.battleSpeed);enemyAt=busyUntil;lastActor='';renderBattle();}}
+function setAutoBattle(enabled){settings.autoBattle=!!enabled;idlePaused=false;enemyAt=performance.now()+400;savePreferences();renderBattle();}
+function renderIdleControls(){
+  const gated=!battle||!['player','enemy'].includes(battle.status),locked=!current()||!!savePending||unsavedLearning||!!learningPending?.waiting;
+  $('idle-mode').textContent=settings.autoBattle?'Take command':'Return to idle';$('idle-mode').setAttribute('aria-pressed',String(settings.autoBattle));$('idle-mode').disabled=locked;
+  $('idle-pause').textContent=idlePaused?'Resume voyage':'Pause voyage';$('idle-pause').disabled=!settings.autoBattle||gated||locked;$('idle-pause').setAttribute('aria-pressed',String(idlePaused));
+  $('idle-speed').value=String(settings.battleSpeed);$('idle-strategy').value=settings.strategy;
+  $('idle-state').textContent=locked?'Saving / studying':gated?battle?.status==='learning'?'Waiting for 3 answers':'Voyage complete':settings.autoBattle?idlePaused?'VOYAGE PAUSED':`CREW SAILING · ${settings.battleSpeed}×`:'MANUAL COMMAND';
+  $('idle-description').textContent=settings.autoBattle?IDLE_STRATEGIES[settings.strategy].description:'Choose each skill and target yourself. Return to idle at any time.';
+  $('idle-action').textContent=idleReason;$('idle-summary').hidden=!settings.autoBattle;document.querySelector('.battle-console').dataset.idle=String(settings.autoBattle);
+  $('manual-commands').hidden=settings.autoBattle;$('defend-button').hidden=settings.autoBattle;
+  const progress=battle?Math.min(100,Math.round(battle.turnIndex/Math.max(1,battle.turnOrder.length)*100)):0;$('idle-round-progress').value=gated?100:progress;
+}
 function renderBattle(){
   if(!battle)return;const b=battle,e=typeof b.encounter==='object'?b.encounter:ENCOUNTERS.find(x=>x.id===b.encounter),actor=getActiveUnit(b);
   $('battle-chapter').textContent=`ACT ${Math.ceil((e?.id||1)/3)} · GRAND LINE EXPEDITION`;$('battle-title').textContent=e?.name||'The Grand Line';$('round-label').textContent=`Round ${b.round}`;
@@ -157,7 +172,7 @@ function renderBattle(){
   $('gate-message').textContent=learningPending?.message||`Answer three ${subject} questions to ${b.pendingOutcome?'finish the battle':'continue the next round'}.`;
   $('study-button').textContent=learningPending?.waiting?'Questions in progress…':learningPending?'Retry these 3 questions →':'Answer 3 questions →';$('study-button').disabled=!!learningPending?.waiting||!!savePending||!current();
   if(actor&&lastActor!==actor.id){lastActor=actor.id;selectedSkill=actor.skills[0]?.id||'';selectedTarget=getValidTargets(b,selectedSkill)[0]?.id||'';}
-  const player=b.status==='player',locked=busy()||!player;$('actor-label').textContent=waiting?'STUDY BREAK':player?'YOUR TURN':b.status==='enemy'?'ENEMY TURN':'EXPEDITION COMPLETE';$('actor-name').textContent=actor?displayName(CHARACTER_BY_ID[actor.characterId]):waiting?'Knowledge is power.':'Well fought.';
+  const player=b.status==='player',locked=busy()||!player||settings.autoBattle;$('actor-label').textContent=waiting?'STUDY BREAK':player?settings.autoBattle?'CREW IN ACTION':'YOUR TURN':b.status==='enemy'?'ENEMY TURN':'EXPEDITION COMPLETE';$('actor-name').textContent=actor?displayName(CHARACTER_BY_ID[actor.characterId]):waiting?'Knowledge is power.':'Well fought.';
   $('actor-passive').textContent=actor?`${actor.passive.name} · ${actor.passive.description}`:waiting?'Combat resumes only after all three answers are graded.':'Return to your collection to prepare your next crew.';
   $('actor-energy').replaceChildren();if(actor){const fill=el('span');fill.style.width=`${actor.energy/actor.maxEnergy*100}%`;$('actor-energy').append(fill,el('b','',`${Math.floor(actor.energy)} / ${actor.maxEnergy} SPIRIT`));}
   $('defend-button').disabled=locked;
@@ -166,6 +181,7 @@ function renderBattle(){
   const skill=actor?.skills.find(s=>s.id===selectedSkill);$('target-label').textContent=waiting?'Three questions are required between every battle round.':player?skill?`${skill.name} · Select ${skill.target==='all-enemies'?'any enemy to confirm an attack on all enemies':skill.target==='all-allies'?'any ally to confirm the whole crew':skill.target==='self'?'your character':'a target'}.`:'Choose a skill.':'The opposing crew is taking its turn.';
   $('cast-button').textContent=skill?.name||'Use skill';$('cast-button').disabled=locked||!skill||!targets.length||!selectedTarget||(actor.cooldowns[selectedSkill]||0)>0||actor.energy<skill.cost;
   $('battle-log').replaceChildren(...b.log.map(text=>el('li','',text)));
+  renderIdleControls();
   if(['victory','defeat'].includes(b.status)&&!unsavedLearning&&lastOutcome!==b.id){lastOutcome=b.id;ending();}
 }
 function retreat(after){if(learningPending?.waiting||savePending||unsavedLearning){toast('Finish the current questions and save before leaving the battle.');return;}if(!battle){after?.();return;}if(['victory','defeat'].includes(battle.status)){battle=null;after?.();return;}const panel=openDialog('retreat','Leave this battle?');panel.append(el('p','', 'This battle will end. Completed question records and your collected cards are retained. The current unfinished round gives no battle progress.'));const actions=el('div','dialog-actions');actions.append(button('Keep fighting',closeDialog,'gold-button'),button('Retreat',()=>{learningPending=null;questionSession=null;closeDialog();battle=null;go('campaign');after?.();}));panel.append(actions);}
@@ -181,7 +197,7 @@ async function finishLearning(correct,total,battleRound){
   learningPending=null;unsavedLearning=true;lastActor='';renderCounters();if(result.boost)toast(`${correct}/3 correct · Your crew’s attack, critical chance, and defense are stronger for round ${result.boost.round}.`);await saveLearningProgress();
 }
 async function saveLearningProgress(){
-  try{await persistCollection();unsavedLearning=false;if(dialog==='save-progress')closeDialog();busyUntil=performance.now()+700;enemyAt=busyUntil+350;renderBattle();}
+  try{await persistCollection();unsavedLearning=false;if(dialog==='save-progress')closeDialog();busyUntil=performance.now()+400;enemyAt=busyUntil;renderBattle();}
   catch(error){if(!current())return;const panel=openDialog('save-progress','Saving your voyage');panel.querySelector('.dialog-close')?.remove();panel.append(el('p','',error.message),el('p','', 'Your answers have been graded. Combat is paused until your battle progress is saved.'),button('Retry saving',saveLearningProgress,'gold-button'));}
 }
 
@@ -199,9 +215,9 @@ function previewQuestion(){
   else{const submit=button('Check answer',()=>{if(q.selected===null||q.graded)return;q.graded=true;if(q.selected===answer)q.correct++;previewQuestion();},'gold-button');submit.disabled=q.selected===null;panel.append(submit);}
 }
 function help(){
-  const panel=openDialog('settings','A crew worth collecting.');panel.append(el('p','', 'Collect fifty One Piece characters, build a crew of five, and command each hero in turn-based battles. Your card’s star rating is its fixed rarity; repeat copies merge into stronger ranks.'));
+  const panel=openDialog('settings','A crew worth collecting.');panel.append(el('p','', 'Collect fifty One Piece characters, build a crew of five, and let them fight automatically in Grand Line Voyage. Your card’s star rating is its fixed rarity; repeat copies merge into stronger ranks.'));
   const options=el('div','settings-options');for(const [key,label]of[['muted','Mute sound'],['reducedMotion','Reduce animation']]){const n=el('label'),input=el('input');input.type='checkbox';input.checked=settings[key];input.onchange=()=>{settings[key]=input.checked;settingsUI();savePreferences();};n.append(input,document.createTextNode(label));options.append(n);}panel.append(options);
-  const rules=el('ol','rules-list');for(const text of ['Choose five different unlocked characters in My crew. Tap a slot to replace it.','Choose a skill, select its target, then confirm. Basic skills restore Spirit; stronger skills spend it. Defend adds a shield and restores Spirit.','Initiative determines the order. Freeze, stun, poison, shields and each character’s passive can change the battle.','After every full round—including the final round—answer exactly three questions from your active Math or Science portal. Standalone play uses labeled preview questions.','Each correct answer grants +10% attack damage, +5 percentage points critical chance, and +8% defense for the next full round. Three correct answers give +30% attack, +15 percentage points critical chance, and +24% defense. Boosts refresh after each quiz and never stack across rounds. Critical chance is capped at 75%.','Packs are purchased using your platform’s existing reward points and TCG rates. One purchase grants exactly one card. A duplicate merges automatically.','Merge rank increases at 2, 4, 8, 16… copies, up to rank 10. Every rank adds 12% to base life, attack and defense.','Seven-star expansion cards: Kaido the Beast, Whitebeard, and Admiral Akainu. Their gold galaxy foil animates unless reduced motion is enabled.','In battle, press 1, 2 or 3 to choose a skill and D to defend. Skill and target buttons also support keyboard navigation.'])rules.append(el('li','',text));panel.append(rules);panel.append(button('Ready to sail',closeDialog,'gold-button'));
+  const rules=el('ol','rules-list');for(const text of ['Choose five different unlocked characters in My crew. Tap a slot to replace it.','Idle mode starts at 4× speed. Choose Balanced, Assault, or Sustain strategy; your crew chooses legal skills and targets, heals, and revives automatically. Pause any time or select Take command to play manually.','Initiative determines the order. Freeze, stun, poison, shields and each character’s passive can change the battle.','After every full round—including the final round—answer exactly three questions from your active Math or Science portal. Standalone play uses labeled preview questions.','Each correct answer grants +10% attack damage, +5 percentage points critical chance, and +8% defense for the next full round. Three correct answers give +30% attack, +15 percentage points critical chance, and +24% defense. Boosts refresh after each quiz and never stack across rounds. Critical chance is capped at 75%.','Packs are purchased using your platform’s existing reward points and TCG rates. One purchase grants exactly one card. A duplicate merges automatically.','Merge rank increases at 2, 4, 8, 16… copies, up to rank 10. Every rank adds 12% to base life, attack and defense.','Seven-star expansion cards: Kaido the Beast, Whitebeard, and Admiral Akainu. Their gold galaxy foil animates unless reduced motion is enabled.','In manual mode, press 1, 2 or 3 to choose a skill and D to defend. In idle mode, no skill clicks are needed. Actions pause in hidden tabs, dialogs, during grading, and until saves are confirmed; there are no offline rewards.'])rules.append(el('li','',text));panel.append(rules);panel.append(button('Ready to sail',closeDialog,'gold-button'));
 }
 
 function hello(){if(!embedded)return;clearTimeout(helloTimer);helloId=uuid('hello');post({type:'GLTCG_HELLO',requestId:helloId});helloTimer=setTimeout(()=>{if(!ready)connection('The portal connection is taking longer than expected. Close and reopen Grand Line Chronicles from the portal to try again.');},12000);}
@@ -231,9 +247,12 @@ window.addEventListener('message',event=>{
 function frame(now){
   if(battle&&view==='battle'){
     const events=renderer.draw(battle,now,{selectedTarget,selectedSkill,reducedMotion:settings.reducedMotion})||[];
-    if(events.length){const text=events.find(e=>e.text)?.text||'';$('action-banner').textContent=text;bannerUntil=now+1100;}
+    if(events.length){const text=events.find(e=>e.text)?.text||'';$('action-banner').textContent=text;bannerUntil=now+Math.max(350,idleActionDelay(settings.battleSpeed));}
     if(bannerUntil&&now>bannerUntil){$('action-banner').textContent='';bannerUntil=0;}
-    if(battle.status==='enemy'&&!busy()&&now>=enemyAt){if(advanceBattle(battle)){busyUntil=now+900;enemyAt=busyUntil+350;lastActor='';renderBattle();}}
+    if(!busy()&&now>=enemyAt&&(!settings.autoBattle||!idlePaused)){
+      const result=settings.autoBattle?advanceIdleBattle(battle,settings.strategy):battle.status==='enemy'&&advanceBattle(battle);
+      if(result){busyUntil=now+idleActionDelay(settings.battleSpeed);enemyAt=busyUntil;if(result.reason)idleReason=result.name?`${result.name} · ${result.reason}`:result.reason;lastActor='';renderBattle();}
+    }
     const isBusy=now<busyUntil;if(wasBusy&&!isBusy&&!dialog)renderBattle();wasBusy=isBusy;
   }requestAnimationFrame(frame);
 }
@@ -243,6 +262,11 @@ document.querySelector('.brand').onclick=event=>{event.preventDefault();go('coll
 $('search-input').oninput=renderCollection;for(const id of ['ownership-filter','star-filter','sort-filter'])$(id).onchange=renderCollection;
 $('apex-showcase').replaceChildren(...['kaido','whitebeard','akainu'].map(id=>card(CHARACTER_BY_ID[id],{eager:true})));
 $('open-pack').onclick=beginPurchase;$('cast-button').onclick=useSkill;$('defend-button').onclick=defend;$('study-button').onclick=requestLearning;$('retreat-button').onclick=()=>retreat();
+$('idle-mode').onclick=()=>setAutoBattle(!settings.autoBattle);$('idle-pause').onclick=()=>{idlePaused=!idlePaused;enemyAt=performance.now()+idleActionDelay(settings.battleSpeed);renderBattle();};
+$('idle-speed').onchange=()=>{const value=Number($('idle-speed').value);if(IDLE_SPEEDS.includes(value))settings.battleSpeed=value;enemyAt=performance.now()+idleActionDelay(settings.battleSpeed);savePreferences();renderBattle();};
+$('idle-strategy').onchange=()=>{if(Object.hasOwn(IDLE_STRATEGIES,$('idle-strategy').value))settings.strategy=$('idle-strategy').value;savePreferences();renderBattle();};
+$('future-characters').replaceChildren(...FUTURE_EXPANSION_CHARACTERS.map(c=>el('li','',`${c.name} · 7★ future expansion`)));
+$('roster-conversions').textContent=FUTURE_EXPANSION_CHARACTERS.map(c=>`${c.name} → ${CHARACTER_BY_ID[RETIRED_CHARACTER_REPLACEMENTS[c.id]]?.name}`).join(' · ');
 $('battle-canvas').addEventListener('click',e=>{const id=renderer.hitTest(e.clientX,e.clientY);if(id)selectTarget(id);});
 $('settings-button').onclick=help;$('help-button').onclick=help;$('sound-button').onclick=()=>{settings.muted=!settings.muted;settingsUI();savePreferences();sound();};
 $('rift-button').onclick=()=>{if(learningPending?.waiting||unsavedLearning||savePending||purchasePending?.waiting){toast('Finish the current questions or save before switching games.');return;}if(embedded)post({type:'GLTCG_OPEN_RIFT'});else location.href='./pirate-rift.html';};
@@ -251,8 +275,8 @@ window.addEventListener('keydown',event=>{
   if(dialog){if(event.key==='Escape'&&dialog!=='question'){event.preventDefault();closeDialog();}if(event.key==='Tab'){const nodes=[...$('dialog-panel').querySelectorAll('button:not(:disabled),input,select,a[href]')];if(nodes.length&&event.shiftKey&&document.activeElement===nodes[0]){event.preventDefault();nodes.at(-1).focus();}else if(nodes.length&&!event.shiftKey&&document.activeElement===nodes.at(-1)){event.preventDefault();nodes[0].focus();}}return;}
   if(view!=='battle'||!battle||event.repeat)return;const actor=getActiveUnit(battle);if(['1','2','3'].includes(event.key)&&actor){event.preventDefault();selectSkill(actor.skills[Number(event.key)-1].id);}if(event.key.toLowerCase()==='d'){event.preventDefault();defend();}
 });
-window.addEventListener('pagehide',()=>{savePreferences();audioContext?.suspend().catch(()=>{});});document.addEventListener('visibilitychange',()=>{enemyAt=performance.now()+750;if(document.hidden)audioContext?.suspend().catch(()=>{});});
+window.addEventListener('pagehide',()=>{savePreferences();audioContext?.suspend().catch(()=>{});});document.addEventListener('visibilitychange',()=>{enemyAt=performance.now()+750;if(document.hidden)audioContext?.suspend().catch(()=>{});else if(battle&&view==='battle')renderBattle();});
 window.addEventListener('error',()=>{if(!document.querySelector('.tcg-card'))$('fatal').hidden=false;});
 loadPreferences();renderCounters();renderCollection();if(!embedded)connection('Preview voyage · Questions are local examples. Sign in through Math or Science to purchase cards with platform reward points.');else{connection('Connecting to your portal, learning profile and reward-point wallet…');hello();}
 requestAnimationFrame(frame);
-if(params.get('test')==='1')window.__grandLine={get collection(){return collection;},get battle(){return battle;},get wallet(){return wallet;},get dialog(){return dialog;},get sessionId(){return sessionId;},get learningPending(){return learningPending;},get purchasePending(){return purchasePending;},get scope(){return scope;},get settings(){return settings;},get ready(){return ready;},art,renderer,go,beginBattle,selectSkill,selectTarget,useSkill,defend,requestLearning,inspectCard,closeDialog,renderBattle,renderCollection,applySnapshot,statsFor,completeLearning,CHARACTERS,ENCOUNTERS};
+if(params.get('test')==='1')window.__grandLine={get collection(){return collection;},get battle(){return battle;},get wallet(){return wallet;},get dialog(){return dialog;},get sessionId(){return sessionId;},get learningPending(){return learningPending;},get purchasePending(){return purchasePending;},get scope(){return scope;},get settings(){return settings;},get idlePaused(){return idlePaused;},setAutoBattle,get ready(){return ready;},art,renderer,go,beginBattle,selectSkill,selectTarget,useSkill,defend,requestLearning,inspectCard,closeDialog,renderBattle,renderCollection,applySnapshot,statsFor,completeLearning,CHARACTERS,ENCOUNTERS};
