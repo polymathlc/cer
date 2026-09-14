@@ -1,5 +1,7 @@
-import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS } from './grand-line-data.js?v=1.2.1';
-import { statsFor } from './grand-line-core.js?v=1.2.1';
+import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS } from './grand-line-data.js?v=2.0.0';
+import { statsFor } from './grand-line-core.js?v=2.0.0';
+import { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=2.0.0';
+export { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=2.0.0';
 
 export const DEFENSE_PATH = Object.freeze([
   { x: 20, y: 110 }, { x: 250, y: 110 }, { x: 250, y: 300 },
@@ -18,7 +20,7 @@ export const DEFENSE_PADS = Object.freeze([
   { id: 'dock', x: 930, y: 365, name: 'Final dock' },
 ]);
 export const DEFENSE_STAGES = Object.freeze(ENCOUNTERS.map(encounter => ({
-  ...encounter, waveCount: 3, description: `Defend the ship through three waves at ${encounter.name}. Position your crew, stop the raiders, and answer three questions after every wave.`,
+  ...encounter, waveCount: 6, description: `Defend ${encounter.name} through six waves. Summon owned cards, cover the road with different attack shapes, and train your defenders after three questions each wave.`,
 })));
 
 const STEP = 0.05;
@@ -48,6 +50,14 @@ export function defensePointAt(progress) {
   }
   return { ...DEFENSE_PATH.at(-1) };
 }
+export function defenseEnemyPointAt(progress, laneOffset = 0) {
+  const point = defensePointAt(progress);
+  if (!laneOffset) return point;
+  const before = defensePointAt(progress - .001), after = defensePointAt(progress + .001);
+  const length = distance(before, after) || 1;
+  return { x: point.x - (after.y - before.y) / length * laneOffset,
+    y: point.y + (after.x - before.x) / length * laneOffset };
+}
 
 function seeded(seed) {
   let state = 2166136261;
@@ -67,10 +77,12 @@ function emit(b, kind, source, targets, text, extra = {}) {
 }
 function makeUnit(characterId, side, copies = 1) {
   const character = CHARACTER_BY_ID[characterId], stats = statsFor(characterId, copies);
-  const range = characterId === 'usopp' ? 280 : character.role === 'Healer' ? 275 : character.role === 'Controller' ? 240 : character.role === 'Guardian' ? 190 : 205;
+  const profile = getDefenseProfile(characterId), range = profile.range;
   return { id: `ally-${characterId}`, characterId, name: character.name, stars: character.stars, role: character.role,
     side, color: character.color, ...stats, hp: stats.maxHp, energy: 45, maxEnergy: 100, shield: 0,
     x: 0, y: 0, padId: null, range, radius: 22, skills: character.skills,
+    profile, level: 1, specialization: null, priority: 'first', summonCost: 20 + character.stars * 5,
+    paidSupplies: 0, baseStats: { ...stats }, baseRange: range,
     passive: character.passive, passiveUsed: false, attacksMade: 0, alive: true, statuses: [],
     cooldowns: Object.fromEntries(character.skills.map(skill => [skill.id, 0])),
     attackInterval: clamp(1.5 - (stats.speed - 42) * 0.014, 0.95, 1.5), actionTimer: 0,
@@ -79,17 +91,17 @@ function makeUnit(characterId, side, copies = 1) {
 
 export function createDefense(collection, options = {}) {
   const encounterId = options.encounter ?? 1;
-  if (!Array.isArray(collection?.team) || collection.team.length !== 5 || new Set(collection.team).size !== 5 ||
+  if (!collection?.cards || !Array.isArray(collection?.team) || collection.team.length > 5 || new Set(collection.team).size !== collection.team.length ||
       !collection.team.every(id => typeof id === 'string' && Object.hasOwn(CHARACTER_BY_ID, id) && collection.cards?.[id]?.copies >= 1) ||
       !Number.isInteger(encounterId) || encounterId < 1 || encounterId > 9 || encounterId > collection.unlockedEncounter) return null;
   const seed = options.seed ?? 1;
   const b = { id: `crew-defense-${encounterId}-${seed}`, seed, rng: seeded(seed), collection,
-    encounter: DEFENSE_STAGES[encounterId - 1], round: 1, waveCount: 3, status: 'setup',
+    encounter: DEFENSE_STAGES[encounterId - 1], round: 1, waveCount: 6, status: 'setup',
     allies: collection.team.map(id => makeUnit(id, 'ally', collection.cards[id].copies)), enemies: [],
     ship: { id: 'ship', x: 950, y: 485, hp: 360, maxHp: 360, color: '#e1c087' },
-    elapsed: 0, waveTime: 0, accumulator: 0, spawnTotal: 8, spawned: 0, remainingToSpawn: 8,
+    elapsed: 0, waveTime: 0, accumulator: 0, spawnTotal: 32, spawned: 0, remainingToSpawn: 32,
     spawnTimer: 0, defeatedThisWave: 0, leakedThisWave: 0, waveProgress: 0,
-    effects: [], log: [], eventSequence: 0, pendingOutcome: null, learning: null, learningBoost: null,
+    effects: [], projectiles: [], supplies: 100, trainingPoints: 0, reserve: {}, log: [], eventSequence: 0, pendingOutcome: null, learning: null, learningBoost: null,
     rewardedRounds: [], roundResults: [], outcomeCommitted: false,
     stats: { damageDealt: 0, kills: 0, leaks: 0, skillsUsed: 0, turns: 0, waves: 0, rounds: 0, simulatedSeconds: 0 } };
   for (let i = 0; i < b.allies.length; i++) Object.assign(b.allies[i], pointOf(DEFENSE_PADS[i]), { padId: DEFENSE_PADS[i].id });
@@ -97,8 +109,90 @@ export function createDefense(collection, options = {}) {
     if (unit.passive.type === 'shield-start') unit.shield += Math.round(unit.maxHp * unit.passive.value);
     if (['all-shield', 'apex-whitebeard'].includes(unit.passive.type)) for (const ally of b.allies) ally.shield += Math.round(ally.maxHp * unit.passive.value);
   }
-  log(b, 'Place your five crew members beside the route, then start wave 1.');
+  log(b, 'Your saved crew deploys free. Spend supplies to summon any owned card into an empty position.');
   return b;
+}
+
+const editable = b => b?.status === 'setup' && !b.pendingOutcome;
+export function summonDefender(b, characterId, padId) {
+  if (!editable(b) || !Object.hasOwn(CHARACTER_BY_ID, characterId) || !(b.collection.cards?.[characterId]?.copies >= 1) ||
+      b.allies.length >= DEFENSE_PADS.length || b.allies.some(unit => unit.characterId === characterId || unit.padId === padId)) return false;
+  const pad = DEFENSE_PADS.find(entry => entry.id === padId), cost = 20 + CHARACTER_BY_ID[characterId].stars * 5;
+  if (!pad || b.supplies < cost) return false;
+  const previous = b.reserve[characterId], unit = previous || makeUnit(characterId, 'ally', b.collection.cards[characterId].copies);
+  delete b.reserve[characterId];
+  Object.assign(unit, pointOf(pad), { padId, paidSupplies: cost });
+  b.supplies -= cost;
+  if (!previous) {
+    if (unit.passive.type === 'shield-start') unit.shield += Math.round(unit.maxHp * unit.passive.value);
+    for (const ally of b.allies) if (['all-shield', 'apex-whitebeard'].includes(ally.passive.type)) unit.shield += Math.round(unit.maxHp * ally.passive.value);
+    if (['all-shield', 'apex-whitebeard'].includes(unit.passive.type)) for (const ally of [...b.allies, unit]) ally.shield = Math.min(ally.maxHp, ally.shield + Math.round(ally.maxHp * unit.passive.value));
+  }
+  b.allies.push(unit);
+  log(b, `${unit.name} summoned for ${cost} supplies.`);
+  return true;
+}
+export function recallDefender(b, allyId) {
+  if (!editable(b)) return false;
+  const index = b.allies.findIndex(unit => unit.id === allyId);
+  if (index < 0) return false;
+  const [unit] = b.allies.splice(index, 1), refund = Math.floor(unit.paidSupplies / 2);
+  b.supplies += refund; unit.padId = null; unit.paidSupplies = 0; b.reserve[unit.characterId] = unit;
+  log(b, `${unit.name} recalled. ${refund} supplies returned; training is kept for this defense.`);
+  return true;
+}
+function refreshTrainingStats(unit) {
+  const base = unit.baseStats, healthRatio = unit.hp / unit.maxHp;
+  unit.attack = Math.round(base.attack * (1 + (unit.level - 1) * .2) * (unit.specialization === 'power' ? 1.25 : 1));
+  unit.maxHp = Math.round(base.maxHp * (1 + (unit.level - 1) * .15));
+  unit.hp = Math.max(1, Math.round(unit.maxHp * healthRatio));
+  unit.defense = Math.round(base.defense * (1 + (unit.level - 1) * .1));
+  unit.range = Math.round(unit.baseRange * (unit.specialization === 'reach' ? 1.15 : 1));
+  unit.attackInterval = clamp(1.5 - (base.speed - 42) * .014, .95, 1.5) * (unit.specialization === 'reach' ? .85 : 1);
+}
+export function upgradeDefender(b, allyId) {
+  if (!editable(b)) return false;
+  const unit = b.allies.find(ally => ally.id === allyId);
+  if (!unit || unit.level >= 5 || b.trainingPoints < unit.level) return false;
+  b.trainingPoints -= unit.level; unit.level++; refreshTrainingStats(unit);
+  log(b, `${unit.name} trained to level ${unit.level}${unit.level === 3 ? ': choose Power or Reach' : ''}.`);
+  return true;
+}
+export function specializeDefender(b, allyId, specialization) {
+  if (!editable(b) || !['power', 'reach'].includes(specialization)) return false;
+  const unit = b.allies.find(ally => ally.id === allyId);
+  if (!unit || unit.level < 3 || unit.specialization) return false;
+  unit.specialization = specialization; refreshTrainingStats(unit);
+  log(b, `${unit.name} specializes in ${specialization === 'power' ? 'Power: damage and armor penetration' : 'Reach: range, wider attacks and faster skills'}.`);
+  return true;
+}
+export function setDefensePriority(b, allyId, priority) {
+  if (!b || !['setup', 'running'].includes(b.status) || !['first', 'strongest', 'cluster'].includes(priority)) return false;
+  const unit = b.allies.find(ally => ally.id === allyId);
+  if (!unit) return false;
+  unit.priority = priority; return true;
+}
+
+const WAVE_PLANS = Object.freeze([
+  { name: 'Landing party', pattern: ['swarm', 'swarm', 'raider', 'runner'], count: 32, tip: 'Line attacks cover straight roads. Splash damage catches tightly packed landing parties.' },
+  { name: 'Runner rush', pattern: ['runner', 'runner', 'swarm', 'raider'], count: 40, tip: 'Fast runners need slow, freeze or a defender watching the final bend.' },
+  { name: 'Iron convoy', pattern: ['armored', 'swarm', 'swarm', 'raider'], count: 48, tip: 'Armored raiders resist ordinary hits. Use piercing skills or a Power specialist.' },
+  { name: 'Crowded assault', pattern: ['swarm', 'swarm', 'swarm', 'runner', 'armored'], count: 56, tip: 'Radial attacks cover bends; chains and splash attacks punish dense packs.' },
+  { name: 'Siege crossfire', pattern: ['armored', 'runner', 'raider', 'swarm'], count: 64, tip: 'Pair area damage with a Strongest-priority armor breaker and nearby healing.' },
+  { name: 'Captain’s armada', pattern: ['armored', 'swarm', 'runner', 'raider'], count: 72, tip: 'The captain arrives with the main fleet. Keep armor penetration on the captain while area towers clear escorts.' },
+]);
+function typeForWave(round, index, count) {
+  if (round === 6 && index === Math.floor(count * .55)) return 'captain';
+  const plan = WAVE_PLANS[round - 1]; return plan.pattern[index % plan.pattern.length];
+}
+export function getDefenseWavePreview(b) {
+  if (!b || !Number.isInteger(b.round) || b.round < 1 || b.round > 6) return null;
+  const plan = WAVE_PLANS[b.round - 1], counts = { swarm: 0, runner: 0, armored: 0, raider: 0, captain: 0 };
+  for (let i = 0; i < plan.count; i++) counts[typeForWave(b.round, i, plan.count)]++;
+  const labels = { swarm: 'Swarm', runner: 'Runners', armored: 'Armored', raider: 'Raiders', captain: 'Captain' };
+  const groups = Object.entries(counts).filter(([, count]) => count).map(([type, count]) => ({ type, label: labels[type], count }));
+  return { round: b.round, waveCount: 6, name: plan.name, title: plan.name, total: plan.count, count: plan.count, counts, tip: plan.tip,
+    enemies: groups, groups };
 }
 
 export function placeDefender(b, allyId, padId) {
@@ -116,39 +210,44 @@ export function placeDefender(b, allyId, padId) {
 }
 
 export function startDefenseWave(b) {
-  if (!b || b.status !== 'setup' || b.ship.hp <= 0 || b.round > b.waveCount || new Set(b.allies.map(unit => unit.padId)).size !== 5 ||
+  if (!b || b.status !== 'setup' || b.ship.hp <= 0 || b.round > b.waveCount || b.allies.length < 1 || b.allies.length > 10 ||
+      new Set(b.allies.map(unit => unit.padId)).size !== b.allies.length ||
       !b.allies.every(unit => DEFENSE_PADS.some(pad => pad.id === unit.padId))) return false;
   b.status = 'running'; b.waveTime = 0; b.accumulator = 0; b.spawned = 0;
-  b.spawnTotal = 6 + b.round * 2; b.remainingToSpawn = b.spawnTotal;
-  b.spawnTimer = 0.6; b.enemies = []; b.defeatedThisWave = 0; b.leakedThisWave = 0; b.waveProgress = 0;
+  b.spawnTotal = getDefenseWavePreview(b).total; b.remainingToSpawn = b.spawnTotal;
+  b.spawnTimer = 0.6; b.enemies = []; b.projectiles = []; b.defeatedThisWave = 0; b.leakedThisWave = 0; b.waveProgress = 0;
   b.learning = null; b.pendingOutcome = null;
   for (const unit of b.allies) {
     unit.actionTimer = 0; unit.regenerationTimer = 0;
     if (unit.passive.type === 'all-regen' && alive(unit)) for (const ally of b.allies.filter(alive)) heal(b, unit, ally, ally.maxHp * unit.passive.value);
     if (unit.passive.type === 'all-energy' && alive(unit)) for (const ally of b.allies.filter(alive)) ally.energy = Math.min(100, ally.energy + unit.passive.value);
   }
-  log(b, `Wave ${b.round} of ${b.waveCount}: ${b.spawnTotal} raiders incoming${b.round === 3 ? ', including the captain' : ''}.`);
+  log(b, `Wave ${b.round} of ${b.waveCount}: ${b.spawnTotal} enemies incoming${b.round === 6 ? ', including the captain' : ''}.`);
   return true;
 }
 
 function spawnEnemy(b) {
   // The captain leads the last reinforcements, so the final wave does not
   // become a long wait for one slow boss after every ordinary raider is gone.
-  const index = b.spawned, boss = b.round === 3 && index === b.spawnTotal - 4;
+  const index = b.spawned, enemyType = typeForWave(b.round, index, b.spawnTotal), boss = enemyType === 'captain';
   const roster = b.encounter.enemies;
   const id = boss ? roster[0] : roster[(index + b.round - 1) % roster.length];
   const unit = makeUnit(id, 'enemy');
-  const scale = b.encounter.scale * (1 + (b.round - 1) * 0.12);
+  const scale = b.encounter.scale * (1 + (b.round - 1) * 0.18);
   unit.id = `raider-${b.round}-${index}-${id}`;
-  unit.maxHp = unit.hp = Math.round(unit.maxHp * 1.7 * scale * (boss ? 2.3 : 1));
-  unit.attack = Math.round(unit.attack * scale * (boss ? 0.68 : 0.37));
-  unit.defense = Math.round(unit.defense * scale);
-  unit.range = boss ? 245 : index % 3 === 1 ? 215 : 140;
-  unit.attackInterval = boss ? 1.9 : 2.6;
+  unit.maxHp = unit.hp = Math.round(unit.maxHp * scale * ({ swarm: .55, runner: .7, armored: 1.5, raider: .92, captain: 4.2 }[enemyType]));
+  unit.attack = Math.round(unit.attack * scale * (boss ? .38 : enemyType === 'raider' ? .17 : .09));
+  unit.defense = Math.round(unit.defense * scale * (enemyType === 'armored' ? 4.8 : boss ? 2 : 1));
+  unit.armor = enemyType === 'armored' ? .42 : boss ? .2 : 0;
+  unit.range = boss ? 245 : enemyType === 'raider' ? 200 : 110;
+  unit.attackInterval = boss ? 2.4 : 3.6;
   unit.actionTimer = 0.7; unit.energy = boss ? 65 : 30;
-  unit.moveSpeed = (boss ? 54 : 72 + (index % 3) * 5) * (1 + (b.encounter.id - 1) * 0.012);
-  unit.boss = boss; unit.leakDamage = boss ? 110 : 35;
-  Object.assign(unit, defensePointAt(0));
+  unit.moveSpeed = ({ swarm: 60, runner: 99, armored: 40, raider: 53, captain: 36 }[enemyType]) * (1 + (b.encounter.id - 1) * .012);
+  unit.boss = boss; unit.enemyType = unit.archetype = enemyType; unit.radius = boss ? 28 : enemyType === 'swarm' ? 14 : 19;
+  unit.laneOffset = boss ? 0 : [-16, 8, -8, 16, 0][index % 5];
+  unit.leakDamage = boss ? 95 : enemyType === 'armored' ? 16 : enemyType === 'runner' ? 9 : 7;
+  unit.suppliesReward = boss ? 15 : enemyType === 'armored' ? 2 : 1;
+  Object.assign(unit, defenseEnemyPointAt(0, unit.laneOffset));
   if (unit.passive.type === 'shield-start') unit.shield = Math.round(unit.maxHp * unit.passive.value);
   b.enemies.push(unit); b.spawned++; b.remainingToSpawn = Math.max(0, b.spawnTotal - b.spawned);
   if (boss) { log(b, `${unit.name} leads the final assault!`); emit(b, 'boss', unit, [unit], 'Captain incoming', { life: 2 }); }
@@ -173,7 +272,7 @@ function knockedOut(b, unit, source) {
     return;
   }
   unit.hp = 0; unit.alive = false; unit.shield = 0; unit.statuses = [];
-  if (unit.side === 'enemy') { b.stats.kills++; b.defeatedThisWave++; }
+  if (unit.side === 'enemy') { b.stats.kills++; b.defeatedThisWave++; b.supplies += unit.suppliesReward || 1; }
   emit(b, 'knockout', source, [unit], unit.side === 'enemy' ? 'Stopped' : 'Crew down');
 }
 function damage(b, source, target, amount, direct = true) {
@@ -198,11 +297,12 @@ function directDamage(b, actor, target, skill) {
   if (actor.passive.type === 'focus') multiplier *= 1 + Math.min(6, actor.attacksMade) * actor.passive.value;
   if (actor.passive.type === 'apex-whitebeard' && actor.hp < actor.maxHp * 0.5) multiplier *= 1.2;
   if (actor.passive.type === 'apex-akainu' && has(target, 'burn')) multiplier *= 1 + actor.passive.value;
-  const pierce = skill.effects.some(effect => effect.type === 'pierce') ? 1 : actor.passive.type === 'pierce' ? actor.passive.value : 0;
+  const pierce = Math.min(1, (skill.effects.some(effect => effect.type === 'pierce') ? 1 : actor.passive.type === 'pierce' ? actor.passive.value : 0) + (actor.specialization === 'power' ? .35 : 0));
   const bonus = boostOf(b), criticalChance = Math.min(0.75, 0.07 + (actor.passive.type === 'crit' ? actor.passive.value : 0) + (actor.side === 'ally' ? bonus?.critBonus || 0 : 0));
   const critical = random(b) < criticalChance;
   const defense = target.defense * (target.side === 'ally' ? bonus?.defenseMultiplier || 1 : 1);
   let amount = Math.max(3, actor.attack * skill.power * multiplier - defense * (1 - pierce) * 0.45);
+  amount *= 1 - (target.armor || 0) * (1 - pierce);
   if (critical) amount *= 1.55;
   amount *= 1 - valueOf(target, 'guard');
   if (['defense', 'apex-kaido'].includes(target.passive.type)) amount *= 1 - target.passive.value;
@@ -264,21 +364,79 @@ export function getDefenseTargets(b, actor, skill) {
   if (!b || !actor || !skill) return [];
   if (skill.target === 'self') return alive(actor) ? [actor] : [];
   const friendly = ['ally', 'all-allies', 'fallen-ally'].includes(skill.target);
+  const geometry = getDefenseSkillProfile(actor, skill), range = actor.range * (!friendly ? geometry?.rangeMultiplier || 1 : 1);
   let targets = (friendly ? teamOf(b, actor) : foesOf(b, actor)).filter(unit =>
-    (skill.target === 'fallen-ally' ? unit.hp <= 0 && !unit.escaped : alive(unit)) && distance(actor, unit) <= actor.range + 0.00001);
+    (skill.target === 'fallen-ally' ? unit.hp <= 0 && !unit.escaped : alive(unit)) && distance(actor, unit) <= range + 0.00001);
   if (!friendly && skill.target === 'enemy') {
     const taunting = targets.filter(target => has(target, 'taunt'));
     if (taunting.length) targets = taunting;
   }
   return targets;
 }
+
+function direction(source, aim) {
+  const length = distance(source, aim) || 1;
+  return { x: (aim.x - source.x) / length, y: (aim.y - source.y) / length };
+}
+function inFootprint(unit, origin, aim, geometry, range) {
+  const dx = unit.x - origin.x, dy = unit.y - origin.y, d = Math.hypot(dx, dy);
+  if (geometry.shape === 'radial') return d <= Math.min(range, geometry.radius) + 1e-6;
+  if (geometry.shape === 'splash') return distance(unit, aim) <= geometry.radius + 1e-6;
+  const axis = direction(origin, aim), along = dx * axis.x + dy * axis.y;
+  if (geometry.shape === 'line') return along >= 0 && along <= range + 1e-6 && Math.abs(dx * axis.y - dy * axis.x) <= geometry.width / 2 + 1e-6;
+  if (geometry.shape === 'cone') return d <= range + 1e-6 && along >= d * Math.cos(geometry.angle) - 1e-6;
+  return false;
+}
+function areaTargets(b, actor, skill, aim) {
+  const geometry = getDefenseSkillProfile(actor, skill);
+  if (!aim || !geometry) return [];
+  const candidates = foesOf(b, actor).filter(alive), range = actor.range * geometry.rangeMultiplier;
+  if (geometry.shape === 'single') return candidates.includes(aim) ? [aim] : [];
+  if (geometry.shape === 'chain') {
+    if (!candidates.includes(aim)) return [];
+    const chain = [aim];
+    while (chain.length < geometry.bounces) {
+      const previous = chain.at(-1), next = candidates.filter(unit => !chain.includes(unit) && distance(unit, previous) <= geometry.chainRange)
+        .sort((a, z) => distance(a, previous) - distance(z, previous) || a.id.localeCompare(z.id))[0];
+      if (!next) break;
+      chain.push(next);
+    }
+    return chain;
+  }
+  return candidates.filter(unit => inFootprint(unit, actor, aim, geometry, range));
+}
+function priorityTarget(b, actor, skill, valid = getDefenseTargets(b, actor, skill)) {
+  const ordered = [...valid];
+  if (actor.priority === 'strongest') ordered.sort((a, z) => z.maxHp - a.maxHp || z.progress - a.progress);
+  else if (actor.priority === 'cluster') ordered.sort((a, z) => areaTargets(b, actor, skill, z).length - areaTargets(b, actor, skill, a).length || z.progress - a.progress);
+  else ordered.sort((a, z) => (z.progress || 0) - (a.progress || 0) || a.id.localeCompare(z.id));
+  return ordered[0] || null;
+}
+export function getDefenseAreaTargets(b, actor, skill, aimTarget) {
+  if (!b || !actor || !skill) return [];
+  if (['self', 'ally', 'all-allies', 'fallen-ally'].includes(skill.target)) {
+    const valid = getDefenseTargets(b, actor, skill);
+    return skill.target === 'all-allies' ? valid : aimTarget && valid.includes(aimTarget) ? [aimTarget] : valid.slice(0, 1);
+  }
+  return areaTargets(b, actor, skill, aimTarget || priorityTarget(b, actor, skill));
+}
+export function getDefenseAttackPreview(b, actor, skill = actor?.skills?.[0]) {
+  if (!b || !actor || !skill) return null;
+  const geometry = getDefenseSkillProfile(actor, skill), source = pointOf(actor);
+  const aim = priorityTarget(b, actor, skill) || actor.lastAim || [...DEFENSE_PATH].sort((a, z) => distance(a, actor) - distance(z, actor))[0];
+  return { shape: geometry.shape, geometry, source, target: pointOf(aim), aimTargetId: aim.id || null, range: actor.range * geometry.rangeMultiplier,
+    width: geometry.width, radius: Math.min(actor.range * geometry.rangeMultiplier, geometry.radius), angle: geometry.angle,
+    targetIds: getDefenseAreaTargets(b, actor, skill, aim).map(unit => unit.id) };
+}
+
 function chooseSkill(b, actor) {
   let best = null;
   for (const skill of actor.skills) {
     if (actor.energy < skill.cost || (actor.cooldowns[skill.id] || 0) > 0) continue;
-    const valid = getDefenseTargets(b, actor, skill);
-    for (const target of valid) {
-      const targets = skill.target.startsWith('all-') ? valid : [target];
+    const valid = getDefenseTargets(b, actor, skill), friendly = ['self', 'ally', 'all-allies', 'fallen-ally'].includes(skill.target);
+    const anchors = friendly ? valid : [priorityTarget(b, actor, skill, valid)].filter(Boolean);
+    for (const target of anchors) {
+      const targets = friendly ? skill.target.startsWith('all-') ? valid : [target] : areaTargets(b, actor, skill, target);
       let score = 0;
       if (skill.power) for (const enemy of targets) {
         const expected = Math.max(3, actor.attack * skill.power - enemy.defense * 0.45);
@@ -299,7 +457,7 @@ function chooseSkill(b, actor) {
         if (effect.type === 'lifesteal') score += Math.min(actor.maxHp - actor.hp, actor.attack * skill.power * effect.amount);
       }
       score -= skill.cost * 0.12;
-      if (!best || score > best.score) best = { skill, targets, score };
+      if (!best || score > best.score) best = { skill, targets, aim: target, score };
     }
   }
   return best && best.score > 0 ? best : null;
@@ -307,18 +465,86 @@ function chooseSkill(b, actor) {
 function attack(b, actor) {
   const action = chooseSkill(b, actor);
   if (!action) return false;
-  const { skill, targets } = action;
-  actor.energy -= skill.cost; actor.cooldowns[skill.id] = defenseSkillCooldown(skill); actor.actionTimer = actor.attackInterval;
-  emit(b, skill.kind, actor, targets, skill.name, { skillId: skill.id, animation: skill.animation, color: skill.color });
-  let total = 0;
-  if (skill.power) {
-    for (const target of targets) { if (!alive(actor)) break; total += directDamage(b, actor, target, skill); }
-    actor.attacksMade++;
+  const { skill, targets, aim } = action;
+  actor.energy -= skill.cost; actor.cooldowns[skill.id] = defenseSkillCooldown(skill) * (actor.specialization === 'reach' ? .85 : 1); actor.actionTimer = actor.attackInterval;
+  if (skill.power && !['self', 'ally', 'all-allies', 'fallen-ally'].includes(skill.target)) {
+    launchProjectile(b, actor, skill, aim); actor.attacksMade++;
+  } else {
+    emit(b, skill.kind, actor, targets, skill.name, { skillId: skill.id, animation: skill.animation, color: skill.color });
+    for (const effect of skill.effects) applyEffect(b, actor, targets, effect, 0);
   }
-  if (alive(actor)) for (const effect of skill.effects) applyEffect(b, actor, targets, effect, total);
   if (skill.id.endsWith('-0')) actor.energy = Math.min(100, actor.energy + 12);
   b.stats.skillsUsed++; b.stats.turns++;
   return true;
+}
+
+function launchProjectile(b, actor, skill, target) {
+  const geometry = getDefenseSkillProfile(actor, skill), start = pointOf(actor), axis = direction(start, target);
+  const range = actor.range * geometry.rangeMultiplier;
+  const end = ['line', 'cone'].includes(geometry.shape) ? { x: start.x + axis.x * range, y: start.y + axis.y * range } : pointOf(target);
+  const travel = geometry.shape === 'radial' ? Math.min(range, geometry.radius) : distance(start, end);
+  const p = { id: `${b.id}-projectile-${++b.eventSequence}`, sourceId: actor.id, characterId: actor.characterId,
+    skillId: skill.id, kind: skill.kind, animation: skill.animation, color: skill.color || actor.color,
+    ...geometry, geometry, start, end, x: start.x, y: start.y, age: 0, duration: Math.max(.12, travel / geometry.speed),
+    range, targetId: target.id, hitIds: [], actor, skill, damageTotal: 0, finished: false };
+  actor.lastAim = pointOf(target); b.projectiles.push(p);
+  emit(b, skill.kind, actor, [target], skill.name, { projectileId: p.id, skillId: skill.id, animation: skill.animation, color: p.color, life: .6 });
+}
+function projectileHit(b, p, targets) {
+  const fresh = targets.filter(target => alive(target) && !p.hitIds.includes(target.id));
+  if (!fresh.length) return;
+  for (const target of fresh) {
+    p.hitIds.push(target.id);
+    const amount = directDamage(b, p.actor, target, p.skill); p.damageTotal += amount;
+    for (const effect of p.skill.effects) if (!['self', 'all-allies'].includes(effect.scope) && effect.type !== 'lifesteal') applyEffect(b, p.actor, [target], effect, amount);
+  }
+  emit(b, 'impact', p.actor, fresh, p.skill.name, { characterId: p.characterId, skillId: p.skillId, attackKind: p.kind,
+    shape: p.shape, geometry: p.geometry, animation: p.animation, color: p.color, origin: p.start, end: p.end,
+    center: p.shape === 'radial' ? p.start : p.end, life: .45 });
+}
+function finishProjectile(b, p) {
+  for (const effect of p.skill.effects) if (['self', 'all-allies'].includes(effect.scope) || effect.type === 'lifesteal') applyEffect(b, p.actor, [], effect, p.damageTotal);
+  p.finished = true;
+}
+function tickProjectiles(b) {
+  for (const p of b.projectiles) {
+    const previousProgress = p.age / p.duration;
+    p.age = Math.min(p.duration, p.age + STEP);
+    const progress = p.age / p.duration;
+    if (['single', 'splash', 'chain'].includes(p.shape)) {
+      const target = foesOf(b, p.actor).find(unit => unit.id === p.targetId && alive(unit));
+      if (target) p.end = pointOf(target);
+    }
+    p.x = p.start.x + (p.end.x - p.start.x) * progress;
+    p.y = p.start.y + (p.end.y - p.start.y) * progress;
+    const candidates = foesOf(b, p.actor).filter(alive);
+    if (p.shape === 'line') {
+      // Test the segment swept by this frame's moving slash. A later enemy
+      // cannot be damaged by the empty trail behind an already passed blade.
+      const axis = direction(p.start, p.end), previousFront = p.range * previousProgress;
+      projectileHit(b, p, candidates.filter(unit => inFootprint(unit, p.start, p.end, p.geometry, p.range * progress) &&
+        (unit.x - p.start.x) * axis.x + (unit.y - p.start.y) * axis.y >= previousFront - 4));
+    } else if (p.shape === 'cone' || p.shape === 'radial') {
+      const reached = (p.shape === 'radial' ? Math.min(p.range, p.radius) : p.range) * progress;
+      const previousFront = (p.shape === 'radial' ? Math.min(p.range, p.radius) : p.range) * previousProgress;
+      projectileHit(b, p, candidates.filter(unit => inFootprint(unit, p.start, p.end, p.geometry, reached) && distance(unit, p.start) >= previousFront - 4));
+    } else if (progress >= 1 - 1e-9) {
+      const target = candidates.find(unit => unit.id === p.targetId);
+      if (p.shape === 'splash') projectileHit(b, p, candidates.filter(unit => distance(unit, p.end) <= p.radius));
+      else if (p.shape === 'chain' && target) {
+        const chain = [target];
+        while (chain.length < p.bounces) {
+          const last = chain.at(-1), next = candidates.filter(unit => !chain.includes(unit) && distance(last, unit) <= p.chainRange)
+            .sort((a, z) => distance(a, last) - distance(z, last) || a.id.localeCompare(z.id))[0];
+          if (!next) break;
+          chain.push(next);
+        }
+        projectileHit(b, p, chain);
+      } else if (target) projectileHit(b, p, [target]);
+    }
+    if (progress >= 1 - 1e-9) finishProjectile(b, p);
+  }
+  b.projectiles = b.projectiles.filter(p => !p.finished);
 }
 
 function tickUnit(b, unit) {
@@ -361,14 +587,21 @@ function fixedStep(b) {
   if (b.ship.hp <= 0) { gate(b, 'defeat'); return; }
   b.spawnTimer -= STEP;
   if (b.spawned < b.spawnTotal && b.spawnTimer <= 1e-9) {
-    spawnEnemy(b);
-    b.spawnTimer += [0, 2.5, 2.2, 1.85][b.round];
+    // Closely spaced volleys create actual clusters for area damage instead
+    // of feeding one isolated enemy to the crew every few seconds.
+    for (let i = 0; i < 4 && b.spawned < b.spawnTotal; i++) {
+      spawnEnemy(b);
+      const enemy = b.enemies.at(-1);
+      enemy.progress = i * .006;
+      Object.assign(enemy, defenseEnemyPointAt(enemy.progress, enemy.laneOffset));
+    }
+    b.spawnTimer += b.round === 2 ? .7 : .9;
   }
   for (const unit of [...b.allies, ...b.enemies]) tickUnit(b, unit);
   for (const enemy of b.enemies.filter(alive)) {
     if (has(enemy, 'stun') || has(enemy, 'freeze')) continue;
     enemy.progress = Math.min(1, enemy.progress + enemy.moveSpeed * (1 - Math.min(0.8, valueOf(enemy, 'slow'))) * STEP / routeLength);
-    Object.assign(enemy, defensePointAt(enemy.progress));
+    Object.assign(enemy, defenseEnemyPointAt(enemy.progress, enemy.moveSpeed > 0 ? enemy.laneOffset : 0));
     if (enemy.progress >= 1) {
       enemy.escaped = true; enemy.alive = false;
       b.ship.hp = Math.max(0, b.ship.hp - enemy.leakDamage); b.stats.leaks++; b.leakedThisWave++;
@@ -376,6 +609,7 @@ function fixedStep(b) {
       if (b.ship.hp <= 0) { gate(b, 'defeat'); return; }
     }
   }
+  tickProjectiles(b);
   for (const unit of [...b.allies, ...b.enemies]) if (alive(unit) && unit.actionTimer <= 1e-9 && !has(unit, 'stun') && !has(unit, 'freeze')) attack(b, unit);
   b.remainingToSpawn = Math.max(0, b.spawnTotal - b.spawned);
   const resolved = b.enemies.filter(enemy => !alive(enemy)).length;
@@ -399,13 +633,15 @@ export function completeDefenseLearning(b, answer = {}) {
       answer.round !== b.round) return false;
   b.learning.completed = true; b.rewardedRounds.push(b.round);
   b.collection.stats.correctAnswers += answer.correct;
+  const trainingGranted = 1 + answer.correct, suppliesGranted = 20 + answer.correct * 5;
+  b.trainingPoints += trainingGranted; b.supplies += suppliesGranted;
   b.learningBoost = !b.pendingOutcome && answer.correct > 0 ? {
     correct: answer.correct, round: b.round + 1, attackMultiplier: 1 + answer.correct * 0.1,
     critBonus: answer.correct * 0.05, defenseMultiplier: 1 + answer.correct * 0.08,
   } : null;
   const result = { round: b.round, correct: answer.correct, total: 3, packsEarned: 0,
     outcome: b.pendingOutcome, boost: b.learningBoost ? { ...b.learningBoost } : null,
-    recovery: 0.25 + answer.correct * 0.04, energyGranted: answer.correct * 3 };
+    recovery: 0.25 + answer.correct * 0.04, energyGranted: answer.correct * 3, trainingGranted, suppliesGranted };
   b.roundResults.push(result);
   if (b.pendingOutcome) {
     b.status = b.pendingOutcome;
@@ -422,15 +658,15 @@ export function completeDefenseLearning(b, answer = {}) {
     }
     return result;
   }
-  for (const unit of b.allies) {
+  for (const unit of [...b.allies, ...Object.values(b.reserve)]) {
     unit.hp = Math.min(unit.maxHp, Math.max(unit.hp, unit.maxHp * 0.35) + Math.round(unit.maxHp * result.recovery));
     unit.alive = true; unit.statuses = []; unit.energy = Math.min(100, Math.max(45, unit.energy) + result.energyGranted);
     unit.cooldowns = Object.fromEntries(unit.skills.map(skill => [skill.id, 0]));
   }
   b.ship.hp = Math.min(b.ship.maxHp, b.ship.hp + answer.correct * 6);
   b.round++; b.status = 'setup'; b.accumulator = 0; b.learning = null;
-  b.spawnTotal = 6 + b.round * 2; b.remainingToSpawn = b.spawnTotal; b.spawned = 0; b.waveProgress = 0;
-  log(b, `${answer.correct}/3 correct. Reposition your crew and start wave ${b.round}.`);
+  b.spawnTotal = getDefenseWavePreview(b).total; b.remainingToSpawn = b.spawnTotal; b.spawned = 0; b.waveProgress = 0;
+  log(b, `${answer.correct}/3 correct: +${trainingGranted} training and +${suppliesGranted} supplies. Train, summon and reposition before wave ${b.round}.`);
   return result;
 }
 

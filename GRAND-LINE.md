@@ -5,7 +5,7 @@ A One Piece collectible card and ship-defense game alongside Pirate Rift. Open *
 ## Cards and crews
 
 - Fifty illustrated characters, each with a matching battle avatar, three active abilities, and a passive.
-- Five starter cards: Luffy, Zoro, Nami, Usopp, and Chopper. Choose five different owned characters for the battle crew.
+- Five starter cards: Luffy, Zoro, Nami, Usopp, and Chopper. Choose five different owned characters for the free starting formation. Any other owned card can be summoned during defense preparation.
 - Every purchased pack contains exactly **one** character card. New cards unlock their avatars immediately; duplicates automatically merge into the existing character.
 - Star ratings are fixed rarities from one to seven. Merge rank rises at 2, 4, 8, 16… total copies, capped at rank 10. Each rank adds 12% to base life, attack, and defense.
 - Expansion 01's seven-star cards are **Kaido the Beast, Whitebeard, and Admiral Akainu**, with animated gold galaxy frames and foil. Reduced motion disables the decorative animation.
@@ -34,26 +34,57 @@ These controls are unavailable to students and standalone previews. The portal c
 
 ## Crew Defense and learning
 
-**Crew Defense** replaces the former turn-based and idle-voyage modes. Choose a stage, arrange your five owned characters on defense pads, and protect your ship from moving enemies. Defenders use the battle avatars unlocked by their cards and attack automatically when enemies enter range. Their powers provide damage, area attacks, healing, shields, and control.
+Crew Defense is a real-time tower-defense game. Each of nine harbors contains **six waves** of enemies that follow a route toward the ship. A wave contains dense groups of raiders, with swarms, fast runners, armored enemies, ranged pressure, and captains demanding different counters. The scout report shows the next wave and a tactical suggestion before it begins.
 
-The nine stages each contain **three waves**. Your five crew members begin on separate pads. Select a defender and an empty pad to reposition that character before starting a wave. Start each wave when ready, adjust the simulation speed, and pause/resume with the defense controls. Defenders stay within the active owned crew; choosing a formation never buys or unlocks a card.
+### Summoning and placement
 
-The loop is **choose five owned cards → arrange defenders → protect the ship → answer three questions → prepare the next wave**. Enemies follow the battlefield path toward the ship. Movement and attacks pause when the game is hidden, a dialog is open, questions are in progress, or a save is awaiting confirmation. Returning never simulates offline waves or awards offline points.
+Your chosen five crew members deploy free at the start. All other **owned cards** are available in **Summon from collection**; the starting crew is not a restriction on reinforcements. Choose a character, select an empty numbered position, and confirm the summon. Each character can appear once, across ten positions. Locked and future-expansion cards cannot be summoned.
 
-After **every completed wave, including the final wave or a ship defeat**, the portal presents exactly three suitable questions. Math uses authenticated marking for student answers. Science uses its existing feeding and attempt-recording flow. Wrong answers receive feedback and count toward completing the three-question pause. The next wave and final results remain locked until all three results and progress have been confirmed.
+Each defense starts with 100 battle supplies. A summon costs 20 + 5 × the card's stars; defeating enemies and finishing waves adds supplies. These supplies belong only to the current defense and never debit, award, or replace Math or Science reward points. Recalls refund half the supplies actually paid, rounded down. The five free starting defenders refund zero. A recalled character keeps its training and specialization for this defense, but returning costs the normal summon price. Repositioning and swapping deployed defenders are free during preparation.
 
-Each correct answer strengthens the **next wave**:
+### Attack shapes and target priority
 
-| Correct answers | Attack damage | Critical chance | Defense |
-|---:|---:|---:|---:|
-| 0 | No bonus | No bonus | No bonus |
-| 1 | +10% | +5 percentage points | +8% |
-| 2 | +20% | +10 percentage points | +16% |
-| 3 | +30% | +15 percentage points | +24% |
+Every character has a defense profile, and each of their three skills has a real attack shape. The map previews the selected defender's coverage. Attacks resolve with travel or wind-up time; their damage uses the actual line, cone, impact area, chain, or surrounding radius.
 
-Bonuses apply to the next wave and do not stack. The defense screen shows the current boost. Completing all three waves and the final questions records the victory and opens the next stage. A defeated ship ends the defense after the required questions; it does not unlock a stage or grant a pack.
+| Pattern | Tactical use |
+|---|---|
+| Piercing line | Face a long stretch of the route to cut through several enemies. Zoro sends sword crescents through aligned targets. |
+| Sweeping cone | Cover a bend or a packed approach. Luffy's Gatling punches and Whitebeard's guan dao sweep cover a forward arc. |
+| Surrounding area | Put the defender between nearby path segments to hit enemies around them. Whitebeard's earthquake spreads outward through the ground. |
+| Splash blast | Aim at a dense group; enemies outside the impact radius are not hit. Slow enemies first to keep them together. |
+| Chain | Hit a sequence of nearby enemies; gaps between enemies limit the chain. |
+| Single target | Focus a dangerous runner or high-health captain. |
+| Support | Keep healers, shields, and control skills close enough to protect the damage dealers. |
 
-Placement, start-wave, pause, and speed controls support keyboard navigation and touch. There are no turn-order, manual skill-selection, or idle-strategy controls. Sound and reduced motion remain in Settings.
+Target priority can change during combat: **First** picks enemies nearest the ship, **Strongest** favors high-health enemies, and **Cluster** aims at groups. AOE damage is valuable against the larger waves, while control, armor penetration, and focused attacks answer other threats. The existing character passives, poison, burn, slow, freeze, healing, and shields remain active.
+
+### Three questions, then individual upgrades
+
+After every wave, including the final wave or a ship defeat, the portal presents **exactly three** questions from the selected learner's Math or Science bank. Wrong answers receive feedback and still count toward completing the round. Combat and preparation remain locked until all three results and the progress save are confirmed.
+
+Completing the round grants **1 training point + 1 per correct answer**, once. Spend training points on a selected defender between waves. Levels run from 1 to 5; the next level costs the current level (1, 2, 3, then 4 points). Each additional level adds 20% base attack, 15% base health, and 10% base defense. Training is shared, so investing in one carry trades off against improving several defenders.
+
+At level 3, choose one specialization for that character:
+
+- **Power:** +25% damage and 35% armor penetration.
+- **Reach:** +15% range, wider attacks and splash areas, longer chain reach, and faster attacks and skill recovery.
+
+Training, supplies, placement, and specialization reset for a new defense; permanent card copies, merge ranks, platform points, and harbor unlocks are retained.
+
+Correct answers also strengthen the next wave without stacking across waves:
+
+| Correct answers | Training earned | Attack damage | Critical chance | Defense |
+|---:|---:|---:|---:|---:|
+| 0 | 1 | No bonus | No bonus | No bonus |
+| 1 | 2 | +10% | +5 percentage points | +8% |
+| 2 | 3 | +20% | +10 percentage points | +16% |
+| 3 | 4 | +30% | +15 percentage points | +24% |
+
+Completing all six waves and the final questions records the victory and opens the next harbor. A defeated ship ends the defense after its required questions. Questions continue to use the host's normal scoring and reward rules; the game does not mint packs or platform currency.
+
+### Controls
+
+Select defenders or numbered positions with the map, buttons, touch, or keyboard. Keys 1–9 and 0 select up to ten defenders; Space starts or pauses the wave. Pause and 1×, 2×, or 4× speed are available. Hidden tabs, dialogs, question rounds, and pending saves pause simulation. Returning never simulates offline waves or awards offline points. Admin pack controls remain available in Card shop.
 
 ## Current roster and future expansions
 

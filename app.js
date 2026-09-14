@@ -1,8 +1,8 @@
 import { installHadesDisplay } from "./hades-display.js";
 import { installPirateRiftPortal } from "./pirate-rift-portal.js?v=1.0.0";
-import { installGrandLinePortal } from "./grand-line-portal.js?v=1.2.1";
-import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=1.2.1";
-import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from "./grand-line-economy.js?v=1.2.1";
+import { installGrandLinePortal } from "./grand-line-portal.js?v=2.0.0";
+import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=2.0.0";
+import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from "./grand-line-economy.js?v=2.0.0";
 const grandLineRpgSaveGate = createGrandLineRpgSaveGate({getUser:()=>currentUser,flush:()=>rpgSave()});
 const grandLinePortal=installGrandLinePortal({
   ...createGrandLineEconomy({
@@ -39235,7 +39235,7 @@ const ARCADE_GAMES = [
   { page: 'legends', ico: '⚔️', name: 'Science Legends', beta: true, desc: 'Top-down action RPG — three classes, big skill trees, a question every 20 seconds.' },
   { page: 'slayers', ico: '🗡️', name: 'Science Slayers', beta: true, desc: 'Dungeon crawler — procedural floors, boss loot, questions power your actions.' },
   { page: 'hades', ico: '🔥', name: 'Hades Sanctuary', beta:true, desc:'Intricate elemental combat — five bank questions between rooms power healing and boon upgrades.' },
-  { page:'grand-line',ico:'🃏',name:'Crew Defense',beta:true,freePlay:true,desc:'Collect 50 One Piece characters, place five owned defenders and protect your ship from moving enemy waves. Answer three Science questions after every wave. Buy one-character packs with your reward points.' },
+  { page:'grand-line',ico:'🃏',name:'Crew Defense',beta:true,freePlay:true,desc:'Collect 50 One Piece characters. Summon any unlocked character across ten positions. Counter swarms with line, splash and area attacks, then train individual defenders. Answer three Science questions after every wave. Buy one-character packs with your reward points.' },
   { page: 'pirate-rift', ico: '🏴‍☠️', name: 'One Piece: Pirate Rift', beta: true, freePlay: true, desc: 'An isometric action RPG starring Luffy, Zoro, Whitebeard and Shanks. Three acts, signature abilities, boss battles and legendary loot.' }
 ];
 function renderArcadePage() {
