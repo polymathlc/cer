@@ -106,16 +106,18 @@ function stageDifficulty(stage) { return 500 + stage * 100; }
 
 function questionDifficulty(q, level) {
   const base = stageDifficulty(level.max), number = Number(q.difficulty);
+  const descriptor = norm(`${q.level || ''} ${typeof q.difficulty === 'string' ? q.difficulty : ''}`);
+  const offset = /\b(?:olympiad|expert|advanced)\b/.test(descriptor) ? 180
+    : /\b(?:hard|harder|challenge|challenging)\b/.test(descriptor) ? 110
+      : /\b(?:easy|easier|basic|foundation|beginner)\b/.test(descriptor) ? -90 : 0;
+  // An explicit teacher difficulty label is stronger than an old game Elo.
+  if (offset) return { value: base + offset, source: 'stage-and-description' };
   // A saved legacy Elo is useful only inside its school-stage envelope.
   // Missing, malformed, or unsupported scales use that stage's neutral value.
   if (str(q.difficulty) && Number.isFinite(number) && number >= 400 && number <= 2200) {
     return { value: Math.round(clamp(number, base - 140, base + 260)), source: 'stage-bounded-rating' };
   }
-  const descriptor = norm(`${q.level || ''} ${typeof q.difficulty === 'string' ? q.difficulty : ''}`);
-  const offset = /\b(?:olympiad|expert|advanced)\b/.test(descriptor) ? 180
-    : /\b(?:hard|harder|challenge|challenging)\b/.test(descriptor) ? 110
-      : /\b(?:easy|easier|basic|foundation|beginner)\b/.test(descriptor) ? -90 : 0;
-  return { value: base + offset, source: offset ? 'stage-and-description' : 'school-stage' };
+  return { value: base, source: 'school-stage' };
 }
 
 function outcome(progress) {
@@ -192,9 +194,10 @@ export function evaluatePracticeFit(question, options = {}) {
   const confidence = weight / (weight + 4);
   const mastery = (4 * 0.65 + relevant.reduce((sum, item) => sum + item.weight * item.observation.credit, 0)) / (4 + weight);
   const evidenceTarget = relevant.reduce((sum, { observation, weight: w }) => {
-    // A correct easy question is evidence at that question's difficulty, not
-    // a free promotion. A miss lowers the local target and invites scaffolding.
-    const estimate = clamp(observation.difficulty + (observation.credit - 0.7) * 280 - 20, baseline - 240, baseline + 260);
+    // Success on easy revision does not prove harder mastery, but must not
+    // demote the learner either. Only weak results can pull below the prior.
+    const estimate = clamp(observation.difficulty + (observation.credit - 0.7) * 280 - 20,
+      observation.credit >= 0.7 ? prior : baseline - 240, baseline + 260);
     return sum + w * estimate;
   }, 0);
   const target = Math.round(clamp((4 * prior + evidenceTarget) / (4 + weight), baseline - 100, baseline + 220));
@@ -204,15 +207,23 @@ export function evaluatePracticeFit(question, options = {}) {
   // not fill a capable older pupil's feed with very basic arithmetic. A
   // teacher's explicit level-only revision choice can still go further back.
   const floor = target - 220;
-  // Lower-level revision has an explicit cost, so a cold P6 learner starts
-  // on P6 rather than cycling through P1 arithmetic. Weak evidence can still
-  // make a carefully chosen prior-stage scaffold the closest fit.
+  // Grade priority comes before numeric closeness in the shared planner.
   const stageGap = student.max - level.max;
+  // A legacy rating can put P3 numerically beside P6. It cannot turn that
+  // topic into current-grade work. Only several recent, distinct near-grade
+  // misses on this skill justify stepping further back for a scaffold.
+  const weaknesses = relevant.filter(({ observation }) => observation.credit < 0.55 && observation.level >= student.max - 1);
+  const scaffoldSupported = mastery < 0.55 && weaknesses.length >= 3
+    && weaknesses.reduce((sum, item) => sum + item.weight, 0) >= 2;
+  const gradeEligible = stageGap <= (scaffoldSupported ? 2 : 1);
+  const priorityTier = stageGap === 0 || (stageGap === 1 && scaffoldSupported) ? 0 : stageGap;
   const score = Math.round(1000 - Math.abs(difficulty.value - target) - stageGap * 12);
   const diagnostic = { level, evidenceCount: relevant.length, confidence, mastery,
+    stageGap, scaffoldSupported, priorityTier,
     difficultySource: difficulty.source, difficultyFloor: floor, difficultyCeiling: ceiling,
     focus: mastery < 0.55 ? 'scaffold' : confidence >= 0.35 && mastery >= 0.75 ? 'progress' : 'steady' };
-  return { ...result, stageEligible: true, eligible: !!options.levelOnly || (difficulty.value >= floor && difficulty.value <= ceiling),
-    reason: options.levelOnly ? '' : difficulty.value > ceiling ? 'difficulty-too-high' : difficulty.value < floor ? 'difficulty-too-low' : '',
+  return { ...result, stageEligible: true, eligible: !!options.levelOnly || (gradeEligible && difficulty.value >= floor && difficulty.value <= ceiling),
+    reason: options.levelOnly ? '' : difficulty.value > ceiling ? 'difficulty-too-high' : difficulty.value < floor ? 'difficulty-too-low'
+      : !gradeEligible ? 'earlier-grade-review-not-needed' : '',
     difficulty: difficulty.value, target, score, diagnostic };
 }

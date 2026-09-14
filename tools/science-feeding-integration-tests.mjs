@@ -49,7 +49,8 @@ function harness(bank = []) {
     const qInSyllabus=q=>!q.notInSyllabus&&!qTopicList(q).some(t=>/Cell Systems/.test(t));
     const qAvailableToViewer=q=>!q.releaseOn||q.releaseOn<'2026-09-14';
     const questionHasMarkableAnswer=q=>q.blocks?.some(b=>b.type==='mcq'||b.type==='plainanswer');
-    const localStorage={getItem:k=>state.storage.get(k)||null,setItem:(k,v)=>state.storage.set(k,v)};
+    const localStorage={getItem:k=>{if(state.blockStorage)throw new Error('Storage blocked');return state.storage.get(k)||null;},
+      setItem:(k,v)=>{if(state.blockStorage)throw new Error('Storage blocked');state.storage.set(k,v);}};
     const showToast=(...args)=>state.toasts.push(args);
     const escapeHtml=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
     const transformImageUrl=url=>url;
@@ -112,15 +113,15 @@ function harness(bank = []) {
     ${fn('_tcgBankQuestions')}
     return {
       plan:(qs=questionBank,opts)=>_scienceFeedPlan(qs,opts),
-      level:qWithinStudentLevel,key:_scienceFeedKey,
+      level:qWithinStudentLevel,key:_scienceFeedKey,gameLevel:_scienceFeedGameLevel,gameMessage:_scienceFeedGameMessage,
       user:u=>{currentUser={...currentUser,...u};_scienceFeedPassCache=null;},
       family:value=>{familyProfile=value;_scienceFeedPassCache=null;},
       queue:qs=>{qpQueue=qs;qpIndex=-1;_qpFeedManual=false;},
       next:loadNextQpQuestion,build:()=>buildQpQueue('P6'),manual:launchWorksheetPractice,
       mark:_scienceFeedMark,result:noteAttemptLocally,load:loadAttemptStats,stats:()=>_qAttemptStats,
-      store:_scienceFeedStoreRead,ownFlag:_scienceFeedFlagOwn,summary:_scienceFeedSummary,
+      store:_scienceFeedStoreRead,writeStore:_scienceFeedStoreWrite,ownFlag:_scienceFeedFlagOwn,summary:_scienceFeedSummary,
       reports:rows=>{flaggedQuestions=rows;_scienceFeedFlagsLoadedUid=currentUser.uid;},
-      image:_scienceFeedImageResult,gameRows:_tcgBankQuestions,nextGame:_scienceFeedNextGame,
+      image:_scienceFeedImageResult,gameRows:()=>_scienceFeedGameRows(_tcgBankQuestions()),nextGame:_scienceFeedNextGame,
       refresh:_scienceFeedRefreshFrames,
       active:q=>{_openQStore['#question']=q;_openSurfaceCfg['#question']={mode:'practice'};qpQueue=[q];},
       activeState:()=>({questions:_openQStore,queue:qpQueue}),
@@ -156,6 +157,67 @@ test('a served exact copy cannot repeat through a new title, mode or freshly bui
   api.queue([original,copy]);api.next();api.next();
   assert.equal(state.renders.length,1);assert.deepEqual(api.build(),[]);
   assert.equal(api.nextGame({pool:[{id:'copy',feedSource:copy}]}),null);
+});
+
+test('blocked browser storage still remembers game questions, family copies and results across game runs', () => {
+  const original=q('original'),copy={...original,id:'copy',title:'Another worksheet'};
+  const {api,state}=harness([original,copy]);state.blockStorage=true;
+  const makeRun=()=>({pool:[{id:'original',feedSource:original},{id:'copy',feedSource:copy}]});
+  assert.equal(api.nextGame(makeRun()).id,'original');
+  api.result(original.id,1,1);
+  assert.equal(api.nextGame(makeRun()),null);
+  assert.ok(api.store('served').original>0);
+  assert.equal(api.store('history').original.latestFrac,1);
+  assert.equal(state.storage.size,0);
+});
+
+test('in-memory served, outcomes and question reports remain separate for siblings and accounts', () => {
+  const question=q('shared');const {api,state}=harness([question]);state.blockStorage=true;
+  api.mark(question.id);api.result(question.id,0,1);api.ownFlag(question.id,quality.questionQualitySignature(question));
+  api.user({name:'Sibling'});api.family({students:[{name:'Sibling',level:'P4'}],activeStudent:0});
+  for(const kind of ['served','history','flags'])assert.deepEqual(api.store(kind),{});
+  assert.equal(api.gameRows().length,1);
+  api.user({name:'Mika'});api.family({students:[{name:'Mika',level:'P4'}],activeStudent:0});
+  assert.ok(api.store('served').shared);assert.equal(api.store('history').shared.latestFrac,0);assert.ok(api.store('flags').shared);
+  assert.equal(api.gameRows().length,0);
+  api.user({uid:'different-family'});
+  for(const kind of ['served','history','flags'])assert.deepEqual(api.store(kind),{});
+});
+
+test('fresh cross-tab served, result and report timestamps merge with blocked-storage session memory', () => {
+  const {api,state}=harness();const now=Date.now(),key=api.key();state.blockStorage=true;
+  const records={served:{shared:now-2000,local:now-1000},
+    history:{shared:{last:now-2000,latestFrac:1},local:{last:now-1000,latestFrac:0}},
+    flags:{shared:{at:now-2000,signature:'older'},local:{at:now-1000,signature:'local'}}};
+  for(const [kind,rows]of Object.entries(records))api.writeStore(kind,rows);
+  state.blockStorage=false;
+  const newer={served:{shared:now,remote:now},history:{shared:{last:now,latestFrac:0},remote:{last:now,latestFrac:1}},
+    flags:{shared:{at:now,signature:'newer'},remote:{at:now,signature:'remote'}}};
+  for(const [kind,rows]of Object.entries(newer)){
+    state.storage.set('scienceFeed:'+kind+':'+key,JSON.stringify(rows));
+    const merged=api.store(kind);assert.deepEqual(merged.shared,rows.shared);assert.ok(merged.local);assert.ok(merged.remote);
+    // An older browser tab cannot rewind the newer in-memory record.
+    state.storage.set('scienceFeed:'+kind+':'+key,JSON.stringify(records[kind]));
+    assert.deepEqual(api.store(kind).shared,rows.shared);
+  }
+});
+
+test('a P6 admin game preview follows its selected school level and shared freshness without changing authoring access', () => {
+  const low=q('p3',{level:'P3',topic:'Magnets'}),near=q('p6',{level:'P6',topic:'Forces'}),high=q('s1',{level:'S1',topic:'Cells — The Basic Unit of Life'});
+  const {api}=harness([low,near,high]);api.user({role:'admin',level:'P6'});api.family({students:[],activeStudent:0});
+  assert.equal(api.gameLevel(),'P6');
+  assert.deepEqual(api.gameRows().map(row=>row.id),['p6']);
+  assert.deepEqual(api.plan().questions.map(row=>row.id),['p3','p6','s1'],'question authoring retains unrestricted visibility');
+  const row=api.nextGame({pool:[{id:'p3',feedSource:low},{id:'p6',feedSource:near},{id:'s1',feedSource:high}]});
+  assert.equal(row.id,'p6');assert.deepEqual(api.gameRows(),[]);
+});
+
+test('an admin game preview needs an actual selected school level instead of silently assuming S1', () => {
+  const question=q('p4');const {api}=harness([question]);api.user({role:'admin',level:''});api.family({students:[],activeStudent:0});
+  assert.equal(api.gameLevel(),'');assert.deepEqual(api.gameRows(),[]);assert.match(api.gameMessage(),/Choose your current school level/);
+  assert.equal(api.plan().questions.length,1);
+  api.family({students:[{name:'Selected pupil',level:'P4'}],activeStudent:0});
+  assert.equal(api.gameLevel(),'P4');assert.equal(api.gameRows().length,1);
 });
 
 test('explicit worksheet preserves order and permits same-level difficult revision, while blocking above-level and broken questions', () => {

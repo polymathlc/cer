@@ -106,6 +106,16 @@ test('Science Strike uses real school, mastery, quality and repetition policies'
   c.studentLevelCap=0;assert.equal(c.nextQuestion(),null);
 });
 
+test('Science Strike prioritizes fresh P6 then P5 instead of legacy-rated P3 for a P6 account',()=>{
+  const bank=[question('p3-legacy','Magnets',{difficulty:1200}),question('p5','Electrical Systems'),
+    question('p6-easy','Forces',{difficulty:'easy'}),question('p6','Forces')];
+  const {c}=fpsFixture(bank);c.studentLevelCap=6;
+  assert.equal(c.nextQuestion().id,'p6');
+  assert.equal(c.nextQuestion().id,'p6-easy');
+  assert.equal(c.nextQuestion().id,'p5');
+  assert.equal(c.nextQuestion(),null,'running out does not reopen old or recently served questions');
+});
+
 test('Science Strike ignores non-database cached rows and re-extracts the current saved answer',()=>{
   const live=question('database'),{c}=fpsFixture([live]);
   c.questions=[{id:'random-sample',feedSource:question('random-sample'),options:['Invented','Other'],answer:0}];
