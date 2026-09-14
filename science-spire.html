@@ -242,7 +242,7 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
     <div class="spacer"></div>
     <button class="btn" id="mapBtn" type="button">🗺️ Map</button>
     <button class="btn" id="deckBtn" type="button">View deck</button>
-    <button class="btn" id="restartBtn" type="button" title="Abandon this climb">↻</button>
+    <button class="btn" id="restartBtn" type="button" title="End this climb and record your score">End climb</button>
   </div>
 
   <div class="stage" id="stage">
@@ -270,7 +270,8 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
 <div class="overlay show" id="introOverlay">
   <div class="panel center">
     <h2>🗼 Science Spire</h2>
-    <p>Climb the spire one floor at a time. Win turn-based card battles, answer a science question before each fight for a bonus, collect gold, and open <b>booster packs</b> for rare, powerful cards to forge a deadly deck.</p>
+    <p>An <b>endless climb</b> with no final floor. Win card battles, answer science questions for bonuses, and open <b>booster packs</b> to build your deck. Beat a boss every <b>12 floors</b>, recover health, and keep climbing against stronger foes.</p>
+    <p>Your score is recorded as you clear rooms. Keep going until you fall, or choose <b>End climb</b> whenever you are ready. Continuing after a boss uses no extra play credit.</p>
     <p style="font-size:0.82rem;">Play cards using <b>energy</b>. <b>Attacks</b> hurt foes, <b>skills</b> give block & utility, <b>powers</b> are permanent buffs. Block resets each turn. Watch the enemy <b>intent</b> above their head and plan ahead.</p>
     <p style="font-size:0.82rem;">Buy <b>Spell Packs</b> in the app with points you earn from questions to <b>permanently collect cards</b> and build your own starting deck — your climb begins with whatever deck you forged.</p>
     <h3 style="margin:14px 0 6px;font-size:0.95rem;letter-spacing:.03em;">Choose your hero</h3>
@@ -293,7 +294,7 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
 <!-- Reward -->
 <div class="overlay" id="rewardOverlay">
   <div class="panel center">
-    <h2>Victory! 🎉</h2>
+    <h2 id="rewardTitle">Victory! 🎉</h2>
     <p id="rewardGold">+0 🪙</p>
     <p>Add one card to your deck:</p>
     <div class="reward-cards" id="rewardCards"></div>
@@ -326,7 +327,7 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
 <!-- Map -->
 <div class="overlay" id="mapOverlay">
   <div class="panel">
-    <h2 class="center">🗺️ The Spire</h2>
+    <h2 class="center" id="mapTitle">🗺️ The Endless Spire</h2>
     <div class="map" id="mapList"></div>
     <div class="center" style="margin-top:14px;"><button class="btn" id="mapClose" type="button">Close</button></div>
   </div>
@@ -588,18 +589,20 @@ function newRun(){
   }
 }
 
-// A linear ascent of typed rooms ending in a boss.
-function buildMap(){
+// Keep only the current 12-floor section; bosses are milestones, never an ending.
+function buildMap(startFloor){
+  startFloor = startFloor || 1;
   var rooms = [];
   var pattern = ['combat','combat','treasure','combat','rest','elite','combat','treasure','combat','rest','elite','boss'];
-  pattern.forEach(function(t,i){ rooms.push({ type:t, done:false }); });
+  pattern.forEach(function(t,i){ rooms.push({ type:t, floor:startFloor+i, done:false }); });
   return rooms;
 }
 
 /* ============================ COMBAT ============================ */
 function startNode(){
+  if(!G || !spireRunCurrent() || G.state==='over') return;
   var room = G.map[G.node];
-  if (!room){ victory(); return; }
+  if (!room || room.done) return;
   if (room.type === 'rest'){ G.state='rest'; show('restOverlay'); return; }
   if (room.type === 'treasure'){ G.state='pack'; openTreasurePack(); return; }
   // combat / elite / boss -> ask a question first, then fight
@@ -607,7 +610,9 @@ function startNode(){
   askQuestion();
 }
 function beginCombat(){
-  var room = G.pendingRoom; if (!room) return;
+  if(!G || !spireRunCurrent() || G.state!=='question') return;
+  var room = G.pendingRoom; if (!room || room!==G.map[G.node] || room.done) return;
+  G.pendingRoom = null;
   G.enemies = spawnEnemies(room.type);
   G.player.block = 0;
   G.player.energy = G.player.maxEnergy;
@@ -625,8 +630,14 @@ function spawnEnemies(type){
   function mk(key){
     var d = ENEMIES[key]; var hp = randint(d.hp[0], d.hp[1]);
     hp = Math.round(hp * (1 + (G.floor-1)*0.10));   // scale a little per floor
+    var strength = 1 + Math.floor((G.floor-1)/12)*0.12;
+    var moves = d.moves.map(function(move){
+      var scaled = Object.assign({}, move);
+      if ((move.type==='attack' || move.type==='block') && Number.isFinite(move.value)) scaled.value = Math.round(move.value*strength);
+      return scaled;
+    });
     return { key:key, name:d.name, emoji:d.emoji, hp:hp, maxHp:hp, block:0, vuln:0, weak:0, poison:0, str:0,
-             moves:d.moves, intent:null, dead:false, anim:'idle' };
+             moves:moves, intent:null, dead:false, anim:'idle' };
   }
   if (type==='boss'){ list.push(mk('titan')); }
   else if (type==='elite'){ list.push(mk(choice(['golem','beast']))); }
@@ -777,31 +788,52 @@ function enemyActSeq(i){
 }
 
 function winCombat(){
-  var room = G.map[G.node]; room.done = true;
+  if(!G || !spireRunCurrent() || G.state!=='combat') return;
+  var run=G, room = G.map[G.node];
+  if(!room || room.done) return;
+  room.done = true;
   var isBoss = room.type==='boss';
-  if (isBoss){ victory(); return; }
-  var gold = randint(12,22) + (room.type==='elite'?20:0);
+  var gold = randint(12,22) + (isBoss?50:room.type==='elite'?20:0);
   G.gold += gold;
   G.maxFloor = Math.max(G.maxFloor, G.floor);
+  var healed=0;
+  if(isBoss){
+    healed=Math.min(G.player.maxHp-G.player.hp, Math.round(G.player.maxHp*0.30));
+    G.player.hp+=healed;
+  }
+  G.state='reward';
+  reportScore(); updateHud();
   // reward card choice
   var picks = [];
   var pool = REWARD_POOL.slice();
   while (picks.length<3 && pool.length){ picks.push(pool.splice(randint(0,pool.length-1),1)[0]); }
-  $('rewardGold').textContent = '+'+gold+' 🪙';
+  $('rewardTitle').textContent = isBoss ? '👑 Floor '+G.floor+' boss defeated!' : 'Victory! 🎉';
+  $('rewardGold').textContent = '+'+gold+' 🪙'+(isBoss?' · +'+healed+' HP · Floor '+(G.floor+1)+' awaits!':'');
   var wrap = $('rewardCards'); wrap.innerHTML='';
   picks.forEach(function(id){
     var el = cardEl(id, true);
-    el.onclick = function(){ G.deck.push(id); toast('Added '+CARDS[id].name); afterReward(); };
+    el.onclick = function(){
+      if(G!==run || !spireRunCurrent() || G.state!=='reward' || G.map[G.node]!==room) return;
+      G.deck.push(id); toast('Added '+CARDS[id].name); afterReward();
+    };
     wrap.appendChild(el);
   });
-  G.state='reward'; show('rewardOverlay');
+  show('rewardOverlay');
 }
-function afterReward(){ hide('rewardOverlay'); nextNode(); }
+function afterReward(){
+  if(!G || !spireRunCurrent() || G.state!=='reward') return;
+  hide('rewardOverlay'); nextNode();
+}
 function nextNode(){
+  if(!G || !spireRunCurrent() || G.state==='over') return;
+  var room=G.map[G.node];
+  if(!room || !room.done) return;
+  G.maxFloor=Math.max(G.maxFloor,G.floor);
+  reportScore();
   G.node++; G.floor++;
-  updateHud();
-  if (G.node >= G.map.length){ victory(); return; }
+  if (G.node >= G.map.length){ G.map=buildMap(G.floor); G.node=0; }
   G.state='map';
+  updateHud();
   startNode();
 }
 
@@ -835,10 +867,10 @@ function spireCancelChangedLearner(){
 }
 var scienceFeedOpening=false;
 async function askQuestion(){
-  if(!G || scienceFeedOpening===G) return;
-  var run=G; scienceFeedOpening=run;
+  if(!G || G.state==='over' || scienceFeedOpening===G) return;
+  var run=G; scienceFeedOpening=run; G.state='question';
   try { await scienceFeed.refresh(); } finally { if(scienceFeedOpening===run) scienceFeedOpening=false; }
-  if(G!==run || !spireRunCurrent()) return;
+  if(G!==run || !spireRunCurrent() || G.state!=='question') return;
   var q = pickQuestion();
   if (!q){ toast(scienceFeed.message()); G.questionBonus=0; beginCombat(); return; }
   qState.current=q; qState.answered=false; qState.shownAt=performance.now();
@@ -852,14 +884,16 @@ async function askQuestion(){
   q.options.forEach(function(opt,i){
     var b=document.createElement('button'); b.className='q-opt';
     b.innerHTML = '<b>'+(i+1)+'.</b> ' + (usingBank ? opt : escapeText(opt));
-    b.onclick=function(){ answerQuestion(i,b); };
+    b.onclick=function(){ if(G===run && qState.current===q) answerQuestion(i,b); };
     opts.appendChild(b);
   });
   opts.querySelectorAll('img').forEach(function(img){img.addEventListener('error',function(){scienceFeed.fail(q,img.getAttribute('src')||img.src);},{once:true});});
   G.state='question'; show('qOverlay');
 }
 function answerQuestion(idx, btn){
+  if(!G || G.state!=='question' || !spireRunCurrent()) return;
   if(!scienceFeed.current(qState.current)) return;
+  var run=G;
   if (qState.answered) return; qState.answered=true;
   var q=qState.current; var correct = (idx===q.answer);
   var opts = $('qOptions').children;
@@ -877,7 +911,7 @@ function answerQuestion(idx, btn){
   try {
     if (embedded()) window.parent.postMessage({ type:'SD_RECORD', studentKey:scienceFeed.context().studentKey, studentLevel:scienceFeed.context().studentLevel, mode:'spire', questionId:q.id, questionTitle:(q.q||'').slice(0,140), correct:!!correct, topic:q.topic||'', ms: Math.max(0, Math.round(performance.now() - (qState.shownAt||performance.now()))) }, '*');
   } catch(e){}
-  var btnc=$('qContinueBtn'); btnc.style.display=''; btnc.onclick=function(){ if(!scienceFeed.current(q) || !spireRunCurrent()) return; hide('qOverlay'); beginCombat(); };
+  var btnc=$('qContinueBtn'); btnc.style.display=''; btnc.onclick=function(){ if(G!==run || G.state!=='question' || qState.current!==q || !scienceFeed.current(q) || !spireRunCurrent()) return; hide('qOverlay'); beginCombat(); };
   updateHud();
 }
 
@@ -899,19 +933,27 @@ function openTreasurePack(){
 }
 function openShopPack(){ /* shop packs cost gold; reachable from map treasure rooms too */ }
 function renderPackButtons(opts){
+  var run=G, room=G.map[G.node];
   var box=$('packButtons'); box.innerHTML='';
   opts.forEach(function(o){
     var b=document.createElement('button'); b.className='btn gold';
     b.textContent = o.cost>0 ? (o.label+' — '+o.cost+'🪙') : o.label;
     b.disabled = o.cost>0 && G.gold<o.cost;
-    b.onclick=function(){ if(o.cost>0) G.gold-=o.cost; doOpenPack(); };
+    b.onclick=function(){
+      if(G!==run || !spireRunCurrent() || G.state!=='pack' || G.map[G.node]!==room || room.done || room.packOpened || G.gold<o.cost) return;
+      if(o.cost>0) G.gold-=o.cost; doOpenPack();
+    };
     box.appendChild(b);
   });
   var skip=document.createElement('button'); skip.className='btn'; skip.textContent='Move on →';
-  skip.onclick=function(){ hide('packOverlay'); nextNode(); };
+  skip.onclick=function(){ if(G===run && G.map[G.node]===room && !room.packOpened) finishTreasure(); };
   box.appendChild(skip);
 }
 function doOpenPack(){
+  if(!G || !spireRunCurrent() || G.state!=='pack') return;
+  var run=G, room=G.map[G.node];
+  if(!room || room.done || room.packOpened) return;
+  room.packOpened=true;
   // reveal 3 cards; you pick ONE to add.
   var ids=[]; for(var i=0;i<3;i++) ids.push(weightedCard());
   // guarantee at least one rare+ feels good occasionally
@@ -921,10 +963,27 @@ function doOpenPack(){
   var wrap=$('packCards'); wrap.innerHTML=''; $('packSub').textContent='Pick ONE card to add to your deck:';
   ids.forEach(function(id){
     var el=cardEl(id,true); el.style.animation='floatup .01s';
-    el.onclick=function(){ G.deck.push(id); toast('Added '+CARDS[id].name+'!'); hide('packOverlay'); nextNode(); };
+    el.onclick=function(){ if(G===run && G.map[G.node]===room) finishTreasure(id); };
     wrap.appendChild(el);
   });
   $('packButtons').innerHTML='';
+}
+function finishTreasure(cardId){
+  if(!G || !spireRunCurrent() || G.state!=='pack') return;
+  var room=G.map[G.node];
+  if(!room || room.type!=='treasure' || room.done) return;
+  if(cardId){
+    if(!room.packOpened || !CARDS[cardId]) return;
+    G.deck.push(cardId); toast('Added '+CARDS[cardId].name+'!');
+  }
+  room.done=true; hide('packOverlay'); nextNode();
+}
+function leaveRest(heal){
+  if(!G || !spireRunCurrent() || G.state!=='rest') return;
+  var room=G.map[G.node];
+  if(!room || room.type!=='rest' || room.done) return;
+  if(heal){ G.player.hp=Math.min(G.player.maxHp,G.player.hp+Math.round(G.player.maxHp*0.30)); toast('Rested'); }
+  room.done=true; hide('restOverlay'); nextNode();
 }
 
 /* ============================ RENDER ============================ */
@@ -996,7 +1055,7 @@ function render(){
   if (!G) return;
   updateHud();
   var forecast=incomingForecast(), selected=_selCard!=null ? CARDS[G.hand[_selCard]] : null;
-  $('stage').dataset.room=G.pendingRoom ? G.pendingRoom.type : 'fight';
+  $('stage').dataset.room=G.map[G.node] ? G.map[G.node].type : 'fight';
   $('forecast').classList.toggle('danger',forecast.exposed>0);
   $('forecast').innerHTML='<span class="turn-label">'+(G.turn==='player'?'YOUR TURN':'ENEMY TURN')+'</span><b>⚔ '+forecast.incoming+' incoming</b><span>🛡 '+forecast.blocked+' blocked</span><span class="hp-risk">'+forecast.exposed+' HP at risk</span>'+(forecast.other?'<span>'+forecast.other+' support action'+(forecast.other>1?'s':'')+'</span>':'');
   $('hint').textContent=selected ? selected.name+' — choose a highlighted enemy, or cancel.' : 'Plan around enemy intent. Block resets next turn. Tap a card to play.';
@@ -1177,30 +1236,35 @@ function escapeText(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replac
 /* ============================ END STATES ============================ */
 function score(){ return G.maxFloor*120 + G.kills*15 + G.gold; }
 function gameOver(){
-  if (G.state==='over') return;
+  return finishRun(true);
+}
+function finishRun(defeated){
+  if(!G || !spireRunCurrent() || G.state==='over') return false;
   G.state='over';
-  $('overTitle').textContent='Defeated on Floor '+G.floor;
-  $('overMsg').textContent='The spire claims another climber. You defeated '+G.kills+' foes.';
+  G.pendingRoom=null; _busy=false; _selCard=null; scienceFeedOpening=false;
+  qState.current=null; qState.answered=true;
+  document.querySelectorAll('.overlay').forEach(function(el){el.classList.remove('show');});
+  $('overTitle').textContent=defeated?'Defeated on Floor '+G.floor:'Climb ended on Floor '+G.floor;
+  $('overMsg').textContent='Floors cleared: '+G.maxFloor+' · Foes defeated: '+G.kills+'. The spire has no final floor — how high will your next climb go?';
   $('overScore').textContent='Score: '+score();
-  reportScore();
+  if(!G._scoreReported){ G._scoreReported=true; reportScore(); }
   show('overOverlay');
+  return true;
 }
-function victory(){
-  if (G.state==='over') return;
-  G.state='over';
-  $('overTitle').textContent='🏆 Spire Conquered!';
-  $('overMsg').textContent='You reached the summit and defeated the Spire Titan! '+G.kills+' foes vanquished.';
-  $('overScore').textContent='Score: '+(score()+500);
-  reportScore(500);
-  show('overOverlay');
-}
-function reportScore(bonus){
+function reportScore(){
   if(!spireRunCurrent()) return;
-  try { if (embedded()) window.parent.postMessage({ type:'SD_SCORE', studentKey:G.feedContext.studentKey, studentLevel:G.feedContext.studentLevel, mode:'spire', score: score()+(bonus||0), label:'Floor '+G.maxFloor }, '*'); } catch(e){}
+  var value=score();
+  if(G._lastScore===value) return;
+  // The portal keeps the best score, so checkpoints never add duplicate rewards.
+  try {
+    if(embedded()) window.parent.postMessage({type:'SD_SCORE',studentKey:G.feedContext.studentKey,studentLevel:G.feedContext.studentLevel,mode:'spire',score:value,label:'Floor '+G.maxFloor},'*');
+    G._lastScore=value;
+  } catch(e){}
 }
 
 /* ============================ DECK / MAP VIEW ============================ */
 function showDeck(){
+  if(!G || !spireRunCurrent() || G.state==='over') return;
   var w=$('deckCards'); w.innerHTML='';
   $('deckTitle').textContent='Your deck ('+G.deck.length+')';
   var sorted=G.deck.slice().sort(function(a,b){ return (RARITY_RANK[CARDS[b].rarity]||0)-(RARITY_RANK[CARDS[a].rarity]||0); });
@@ -1208,11 +1272,13 @@ function showDeck(){
   show('deckOverlay');
 }
 function showMap(){
+  if(!G || !spireRunCurrent() || G.state==='over') return;
   var w=$('mapList'); w.innerHTML='';
+  $('mapTitle').textContent='🗺️ Endless Spire · Floors '+G.map[0].floor+'–'+G.map[G.map.length-1].floor;
   var icon={combat:'⚔️ Battle',elite:'💀 Elite',rest:'🔥 Campfire',treasure:'🎁 Treasure',boss:'👹 Boss'};
   G.map.forEach(function(r,i){
     var d=document.createElement('div'); d.className='map-node'+(r.done?' done':'')+(i===G.node?' cur':'');
-    d.textContent=(i+1)+'. '+(icon[r.type]||r.type)+(i===G.node?'  ← you are here':'');
+    d.textContent=r.floor+'. '+(icon[r.type]||r.type)+(i===G.node?'  ← you are here':'');
     w.appendChild(d);
   });
   show('mapOverlay');
@@ -1340,9 +1406,15 @@ document.addEventListener('keydown',function(e){ if(e.key==='Escape' && _selCard
 $('logHead').onclick=function(){ var p=$('logPanel'); var c=p.classList.toggle('collapsed'); $('logToggle').textContent=c?'▸':'▾'; if(!c) renderLog(true); };
 $('mapBtn').onclick=showMap; $('mapClose').onclick=function(){ hide('mapOverlay'); };
 $('deckBtn').onclick=showDeck; $('deckClose').onclick=function(){ hide('deckOverlay'); };
-$('restartBtn').onclick=function(){ if(G && confirm('Abandon this climb?')){ hide('overOverlay'); show('introOverlay'); G=null; } };
-$('restHeal').onclick=function(){ G.player.hp=Math.min(G.player.maxHp, G.player.hp+Math.round(G.player.maxHp*0.30)); G.map[G.node].done=true; hide('restOverlay'); toast('Rested'); nextNode(); };
-$('restLeave').onclick=function(){ G.map[G.node].done=true; hide('restOverlay'); nextNode(); };
+$('restartBtn').onclick=function(){ if(G && G.state!=='over' && confirm('End this climb and record your score?')) finishRun(); };
+['qOverlay','rewardOverlay','packOverlay','restOverlay'].forEach(function(id){
+  var button=document.createElement('button'); button.className='btn'; button.type='button';
+  button.textContent='End climb'; button.style.cssText='display:block;margin:16px auto 0;font-size:.75rem';
+  button.onclick=$('restartBtn').onclick;
+  $(id).querySelector('.panel').appendChild(button);
+});
+$('restHeal').onclick=function(){ leaveRest(true); };
+$('restLeave').onclick=function(){ leaveRest(false); };
 $('rewardSkip').onclick=function(){ afterReward(); };
 
 maybeStandaloneNotice();
