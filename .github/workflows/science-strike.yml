@@ -1,10 +1,10 @@
 name: Non-TCG gameplay checks
 on:
   pull_request:
-    paths: ['fps.html', 'science-*.html', 'app.js', 'index.html', 'science-strike*.js', 'science-feed*.js', 'tools/science-strike*.mjs', 'tools/game-*.mjs', '.github/workflows/science-strike.yml']
+    paths: ['fps.html', 'science-*.html', 'app.js', 'index.html', 'science-strike*.js', 'science-feed*.js', 'rpg-*.js', 'spire-svg-art.js', 'tools/science-strike*.mjs', 'tools/game-*.mjs', 'tools/rpg-*.mjs', '.github/workflows/science-strike.yml']
   push:
     branches: [main]
-    paths: ['fps.html', 'science-*.html', 'app.js', 'index.html', 'science-strike*.js', 'science-feed*.js', 'tools/science-strike*.mjs', 'tools/game-*.mjs', '.github/workflows/science-strike.yml']
+    paths: ['fps.html', 'science-*.html', 'app.js', 'index.html', 'science-strike*.js', 'science-feed*.js', 'rpg-*.js', 'spire-svg-art.js', 'tools/science-strike*.mjs', 'tools/game-*.mjs', 'tools/rpg-*.mjs', '.github/workflows/science-strike.yml']
 permissions:
   contents: read
 jobs:
@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '22'
       - name: Check game state and existing question safeguards
-        run: node --test tools/science-strike-tests.mjs tools/science-strike-database-tests.mjs tools/science-feed-standalone-tests.mjs tools/game-*-tests.mjs
+        run: node --test tools/science-strike-tests.mjs tools/science-strike-database-tests.mjs tools/science-feed-standalone-tests.mjs tools/game-*-tests.mjs tools/rpg-*-tests.mjs
       - name: Install isolated browser runtime
         run: |
           npm install --prefix "$RUNNER_TEMP/strike-browser" --no-audit --no-fund playwright@1.62.1
@@ -32,6 +32,7 @@ jobs:
           node tools/game-defenders-raiders-browser.mjs
           node tools/game-legends-slayers-browser.mjs
           node tools/game-spire-adventure-browser.mjs
+          node tools/rpg-svg-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
