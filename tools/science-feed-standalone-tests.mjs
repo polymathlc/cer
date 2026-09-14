@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {buildScienceFeedContext,planScienceQuestions} from '../science-feed-core.js';
+import {strikeQuestionQualityOptions,strikeAttemptProgress} from '../science-strike-feed.js';
 const read = name => fs.readFileSync(new URL('../'+name,import.meta.url),'utf8').replace(/\r\n/g,'\n');
 const bridgeSource=read('science-feed-bridge.js'), fps=read('fps.html');
 const cut=(source,start,end)=>{const i=source.indexOf(start),j=source.indexOf(end,i+start.length);assert.ok(i>=0&&j>i,start);return source.slice(i,j);};
@@ -81,9 +82,11 @@ const question=(id,topic='Plant Systems',extra={})=>({id,title:id,topic,blocks:[
 function fpsFixture(bank){
   const storage=new Map(),elements=new Map(),noop=()=>{};
   const el=id=>{if(!elements.has(id))elements.set(id,{classList:{remove:noop}});return elements.get(id);};
-  const c=vm.createContext({buildScienceFeedContext,planScienceQuestions,console,currentUser:{uid:'u',name:'Ada',authName:'Parent',role:'student'},
+  const c=vm.createContext({buildScienceFeedContext,planScienceQuestions,strikeQuestionQualityOptions,strikeAttemptProgress,console,currentUser:{uid:'u',name:'Ada',authName:'Parent',role:'student'},
     studentLevelCap:4,studentLevelFloor:0,fpsProfileSignature:'',fpsAssignedFallback:'',fpsFeedAttempts:[],fpsFeedReady:true,fpsFeedBank:bank,
     fpsFeedLoad:0,fpsProfileStop:null,fpsFailedImages:new Map(),questions:bank.map(q=>({id:q.id,feedSource:q})),customTopicLevels:{},
+    fpsServedMemory:new Map(),fpsFeedFlags:[],fpsFeedObjectives:[],fpsFeedObjectiveMap:{},
+    stripHtml:html=>String(html||'').replace(/<[^>]*>/g,''),qZoomBtns:()=>'',
     suspendCombat:noop,clearTimeout:noop,cancelAnimationFrame:noop,hideOverlays:noop,enterMenu:noop,
     qLockT:0,raf:0,skillsOpen:false,skillsFromPause:false,
     G:{activeQ:null},QUESTION_INTERVAL:15000,$:el,isAdmin:()=>false,localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},
@@ -92,6 +95,8 @@ function fpsFixture(bank){
     +cut(fps,'function levelNum(l)','// The cap in force')
     +cut(fps,'function fpsFeedKey()','const $ =')
     +cut(fps,'function fpsCancelRunForIdentityChange(','function pauseRun(')
+    +cut(fps,'function fpsEscape(value)','function fpsWireQuestionImages')
+    +cut(fps,'function fpsDatabaseQuestionAvailable(','function fpsRecheckActiveQuestion(')
     +cut(fps,'function qSeenKey()','/* ---------- shared leaderboard'),c);
   return {c,storage};
 }
@@ -99,6 +104,37 @@ test('Science Strike uses real school, mastery, quality and repetition policies'
   const bank=[question('p6','Forces'),question('hard','Plant Systems',{difficulty:5}),question('broken','Plant Systems',{status:'flagged'}),question('p4')];
   const {c}=fpsFixture(bank);assert.equal(c.nextQuestion().id,'p4');assert.equal(c.nextQuestion(),null);
   c.studentLevelCap=0;assert.equal(c.nextQuestion(),null);
+});
+
+test('Science Strike ignores non-database cached rows and re-extracts the current saved answer',()=>{
+  const live=question('database'),{c}=fpsFixture([live]);
+  c.questions=[{id:'random-sample',feedSource:question('random-sample'),options:['Invented','Other'],answer:0}];
+  live.blocks[1].correctId='b';
+  const picked=c.nextQuestion();assert.equal(picked.id,'database');assert.equal(picked.answer,1);
+});
+
+test('Science Strike never repeats a question family during a run even after its timed cooldown',()=>{
+  const first=question('original'),copy={...first,id:'copy',title:'Different label'},other=question('other','Heat');
+  const {c}=fpsFixture([first,copy,other]);c.localStorage.getItem=()=>{throw Error('blocked storage');};c.localStorage.setItem=()=>{throw Error('blocked storage');};
+  assert.equal(c.nextQuestion().id,'original');
+  c.fpsServedMemory.clear(); // Even losing the timed cache must not reopen a run's family.
+  assert.equal(c.nextQuestion().id,'other');assert.equal(c.nextQuestion(),null);
+});
+
+test('Science Strike respects custom objective mappings and current teacher checks',()=>{
+  const higher=question('mapped-high'),bad=question('review'),valid=question('valid');
+  bad.autoCheck={state:'red',sig:strikeQuestionQualityOptions(bad).importSignature};
+  const {c}=fpsFixture([higher,bad,valid]);c.fpsFeedObjectives=[{id:'higher',level:'P6'}];c.fpsFeedObjectiveMap={higher:['mapped-high']};
+  assert.equal(c.nextQuestion().id,'valid');assert.equal(c.nextQuestion(),null);
+});
+
+test('Science Strike skips malformed documents and preserves sparse database tables and header labels',()=>{
+  const broken=question('broken-table'),valid=question('valid-table');
+  broken.blocks.unshift({type:'table',rows:2,cols:2,data:[['a','b'],['c','d']],merges:{bad:true}});
+  valid.blocks.unshift({type:'table',rows:2,cols:2,data:{0:{0:'Fruit colour',1:'Detection'},1:{0:'dull green',1:'smell'}}});
+  const {c}=fpsFixture([broken,valid]);const picked=c.nextQuestion();assert.equal(picked.id,'valid-table');assert.match(picked.stemHtml,/dull green/);
+  const headers=question('headers');headers.blocks.unshift({type:'table',rows:1,cols:2,data:[['dull green','smell']],headers:{0:'Colour label',1:'Detection label'}});
+  assert.match(c.extractMcq(headers).stemHtml,/Colour label/);assert.match(c.extractMcq(headers).stemHtml,/Detection label/);
 });
 test('Science Strike takes the active child level, not a younger sibling; secondary requires teacher authority',()=>{
   const {c}=fpsFixture([]);

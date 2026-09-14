@@ -53,7 +53,7 @@ function fixture() {
     G: { paused: false, over: false, activeQ: null, draftOpen: false, playSeconds: 0, qTimerMs: 15000,
       qOpenedAt: 0, questionAnswered: false, qCorrect: 0, qTotal: 0, streak: 0, bestStreak: 0, nextDropFloorTier: 0,
       ammo: 0, grenades: { count: 0 }, player: { hp: 30, maxHp: 100, x: 1, y: 1, dir: 0, pitch: 0 } },
-    currentUser: { name: 'Ada', role: 'student' }, fpsFeedReady: true, studentLevelCap: 4,
+    currentUser: { name: 'Ada', role: 'student' }, fpsFeedReady: true, fpsFeedError: '', studentLevelCap: 4,
     fpsQuestionCandidate: () => q, fpsFeedKey: () => 'child',
     localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
     performance: { now: () => 5000 }, raf: 0, lastT: 0, qLockT: 0,
@@ -82,10 +82,17 @@ function fixture() {
   return { c, run, counts, document, window, canvas, q, options, element, emit, grant, held, timers, storage };
 }
 
+test('intentional question-feed pause keeps its explanation after mouse capture is released',()=>{
+  const f=fixture();f.c.pauseRun('No fresh database MCQs are available.');
+  f.emit('document','pointerlockchange');
+  assert.equal(f.element('pauseReason').textContent,'No fresh database MCQs are available.');
+  assert.equal(f.c.G.paused,true);
+});
+
 test('FPS module remains syntactically valid and versioned', () => {
   const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
   new vm.Script(script.replace(/^import .*;\n/gm, ''));
-  assert.match(source, /Science Strike v1\.9\.0/);
+  assert.match(source, /Science Strike v1\.9\.1/);
 });
 
 test('combat waits for confirmed pointer lock; duplicate confirmations are harmless', () => {
