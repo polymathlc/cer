@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="application-version" content="2.1.2" />
+  <meta name="application-version" content="2.2.0" />
   <meta name="theme-color" content="#08131b" />
   <title>HADES II: Chronos Fall — Endless Descent</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -232,6 +232,25 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
 }
 
 .learning-card{max-width:620px;text-align:center}.learning-card h2{font:700 clamp(23px,4vw,32px)/1.25 var(--font-title);color:#f4da9d;margin:18px 0}.learning-card p{color:#c8d9dc;line-height:1.6;margin:16px 0}.learning-card .learning-tiers{font-size:13px;color:#aacbbe}.learning-buttons{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:22px}.learning-tier-note{color:#a5e6cf;font-size:12px;line-height:1.5;margin-top:8px}
+
+/* Engraved glass and warm metallic highlights; geometry stays HUD-safe. */
+.runtime-panel{position:relative;isolation:isolate;overflow:hidden;border-color:#d3b777;box-shadow:0 28px 100px #000c,inset 0 0 0 5px #c7a76812,inset 0 1px #fff1;background:radial-gradient(ellipse at 50% 0,#31515399,transparent 64%),linear-gradient(145deg,#152b34fa,#070f1cfb)}
+.runtime-panel::before{content:"";position:absolute;width:440px;height:440px;left:50%;top:-285px;margin-left:-220px;border:1px solid #ddb97455;border-radius:50%;box-shadow:0 0 0 17px #dab86d0a,0 0 0 43px #dab86d08;z-index:-1;pointer-events:none;animation:sanctuary-halo 18s linear infinite;background:repeating-conic-gradient(from 0deg,transparent 0deg 14deg,#b9e8df33 14deg 15deg,transparent 15deg 30deg)}
+.runtime-panel::after{content:"";position:absolute;inset:10px;border:1px solid #b9d4cb15;border-radius:14px;pointer-events:none;z-index:-1}
+.runtime-eyebrow{color:#afe9d8;text-shadow:0 0 18px #68d7b866}
+.runtime-primary{background:linear-gradient(115deg,#b99550,#f4dfa6 45%,#c4a568);box-shadow:0 6px 22px #cbaa4f28,inset 0 1px #fff9;transition:filter .18s,transform .18s,box-shadow .18s}
+.runtime-primary:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 10px 30px #cbaa4f40}
+.runtime-primary:active:not(:disabled){transform:translateY(1px)}
+.stat-bar-container,.currency-panel,.ability-slot{box-shadow:0 5px 18px #0007,inset 0 1px #f8e5b521}
+.health-fill,.magick-fill{background-size:160% 100%;box-shadow:inset 0 1px #fff5}
+.boon-card{overflow:hidden;border-color:#b4bca166;box-shadow:0 10px 22px #0003,inset 0 1px #ffffff0c;animation:divine-arrival .4s both}
+.boon-card:nth-child(2){animation-delay:.06s}.boon-card:nth-child(3){animation-delay:.12s}
+.boon-card::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 15%,#fff1 45%,transparent 65%);transform:translateX(-110%);transition:transform .6s}
+.boon-card:hover::after,.boon-card:focus-visible::after{transform:translateX(110%)}
+.boon-card-name{text-shadow:0 2px 10px #0008}.dialogue-portrait-canvas{box-shadow:0 0 0 5px #d6bc7e0c,0 0 0 6px #d6bc7e22,0 8px 28px #0006}
+@keyframes divine-arrival{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes sanctuary-halo{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.runtime-panel::before,.boon-card{animation:none}.boon-card::after,.runtime-primary{transition:none}}
 
 </style>
 </head>
@@ -612,7 +631,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
         <div id="runtime-toolbar"><button id="runtime-pause" type="button" aria-label="Pause game and open settings">Ⅱ <span>Pause</span></button></div>
         <section id="runtime-overlay" role="dialog" aria-modal="true" aria-labelledby="runtime-title">
           <div class="runtime-panel">
-            <div class="runtime-eyebrow">CHRONOS FALL · UNDERWORLD ODYSSEY · v2.1.2</div><h1 id="runtime-title">Defy the Titan of Time</h1>
+            <div class="runtime-eyebrow">CHRONOS FALL · UNDERWORLD ODYSSEY · v2.2.0 · BETA</div><h1 id="runtime-title">Defy the Titan of Time</h1>
             <p id="runtime-description">Descend through shifting chambers, forge a divine build and challenge the endless depths beyond Chronos.</p>
             <div class="runtime-help"><span><b>MOVE</b> WASD / Arrows</span><span><b>STRIKE</b> Hold click / J</span><span><b>SPECIAL</b> Right click / K</span><span><b>DASH</b> Space / Shift</span><span><b>CAST</b> Q / E</span><span><b>HEX</b> F when charged</span></div>
             <p class="runtime-touch-hint">Touch: move with the left pad and use the ability buttons. Attacks aim at the nearest foe.</p>
@@ -2142,6 +2161,17 @@ function installHadesLearning() {
         ctx.save();
         ctx.translate(this.x, this.y);
 
+        // A bounded set of spectral silhouettes follows the dash direction.
+        const heroTrail = loadedImages.hero;
+        if (this.isDashing && !graphicsReducedMotion() && usableArtwork(heroTrail)) {
+          const angle = Math.atan2(this.dashVy, this.dashVx), cw = heroTrail.width / 4, ch = heroTrail.height / 4;
+          for (let i = 3; i > 0; i--) {
+            ctx.save(); ctx.translate(-Math.cos(angle) * i * 16, -Math.sin(angle) * i * 16);
+            ctx.globalAlpha = .08 + (3 - i) * .04;
+            if (Math.cos(this.angle) < 0) ctx.scale(-1,1);
+            ctx.drawImage(heroTrail, this.animFrame*cw+8, this.animRow*ch+8, cw-16, ch-16, -52,-66,105,105); ctx.restore();
+          }
+        }
         // Character glowing aura
         ctx.beginPath();
         ctx.arc(0, 0, 32, 0, Math.PI * 2);
@@ -4682,6 +4712,7 @@ function installHadesLearning() {
       if (typeof drawSvgCast === 'function') drawSvgCast(ctx, player.castActive);
       for (const p of gameState.particles) if (isGroundEffect(p)) p.draw(ctx);
       drawProps(ctx, worldTime);
+      if (typeof drawPremiumAtmosphere === 'function') drawPremiumAtmosphere(ctx, worldTime);
       if (typeof drawCombatReadability === 'function') drawCombatReadability(ctx, worldTime);
       if (typeof drawBoonEffects === 'function') drawBoonEffects(ctx);
       for (const e of gameState.enemies) e.draw(ctx);
@@ -4756,6 +4787,23 @@ function buildChamberArtwork() {
   const light = c.createRadialGradient(0, -40, 30, 0, 0, w);
   light.addColorStop(0, '#c0ebd911'); light.addColorStop(0.62, '#02070c05'); light.addColorStop(1, '#02070c99');
   c.fillStyle = light; c.fillRect(-w, -h, arena.width, arena.height);
+  // Inlaid octagonal dais, etched radial channels and worn masonry are cached.
+  c.save(); c.strokeStyle = palette.gold + '24';
+  for (const radius of [275, 286, 355]) {
+    c.beginPath();
+    for (let i = 0; i < 8; i++) { const a = (i + .5) * Math.PI / 4; const x = Math.cos(a) * radius, y = Math.sin(a) * radius; if (i) c.lineTo(x,y); else c.moveTo(x,y); }
+    c.closePath(); c.stroke();
+  }
+  for (let i = 0; i < 48; i++) {
+    const a = i * Math.PI / 24; c.beginPath();
+    c.moveTo(Math.cos(a) * 289, Math.sin(a) * 289); c.lineTo(Math.cos(a) * (i % 4 ? 298 : 319), Math.sin(a) * (i % 4 ? 298 : 319)); c.stroke();
+  }
+  c.strokeStyle = '#a3c4be0b';
+  for (let i = 0; i < 150; i++) {
+    const x = Math.sin(i * 89.3) * w, y = Math.cos(i * 31.7) * h;
+    c.beginPath(); c.moveTo(x,y); c.lineTo(x+9,y+3); c.lineTo(x+15,y-2); c.stroke();
+  }
+  c.restore();
   drawMoonSigil(c, 0, 0, 250, palette.gold + '33');
   for (const x of [-w + 75, w - 75]) {
     for (const y of [-h + 80, h - 80]) drawMoonSigil(c, x, y, 29, palette.gold + '60');
@@ -4814,6 +4862,7 @@ function drawProps(ctx, time) {
     const door = gameState.doors[idx], reward = door.reward;
     const near = Math.hypot(player.x - door.x, player.y - door.y) < 160;
     const accent = reward.type === 'heart' ? '#ffafb2' : reward.type === 'god' ? '#8aefd8' : '#efd398';
+    drawPremiumGate(ctx, door, accent, motionTime);
     const bob = Math.sin(motionTime / 650 + idx * 2) * (reduced ? 0 : 3);
     ctx.save(); ctx.translate(door.x, door.y);
     ctx.strokeStyle = accent; ctx.fillStyle = '#07131ced'; ctx.lineWidth = near ? 3 : 1.5;
@@ -4861,6 +4910,54 @@ function drawCombatReadability(ctx) {
 }
 function drawScreenAtmosphere(ctx) {
   // The screen vignette lives in CSS, not a full-screen per-frame gradient.
+}
+
+// Fixed-cost light ribbons and sparks use simulation time, never new particles.
+function drawPremiumAtmosphere(c, time) {
+  const palette = chamberPalette(), t = graphicsReducedMotion() ? 0 : time / 1000;
+  c.save(); c.globalCompositeOperation = 'lighter';
+  for (const pillar of arena.pillars) {
+    if (Math.abs(pillar.x - gameState.camera.x) > canvas.width / 2 + 150 || Math.abs(pillar.y - gameState.camera.y) > canvas.height / 2 + 220) continue;
+    c.save(); c.translate(pillar.x, pillar.y - 136);
+    const pulse = 1 + Math.sin(t * 1.8 + pillar.x) * .08;
+    c.scale(pulse, pulse); c.strokeStyle = palette.glow; c.lineWidth = 1;
+    c.globalAlpha = .24;
+    for (let ring = 0; ring < 2; ring++) {
+      c.beginPath(); c.ellipse(0, 0, 20 + ring * 11, 7 + ring * 4, t * .12 * (ring ? -1 : 1), 0, Math.PI * 2); c.stroke();
+    }
+    c.globalAlpha = .55;
+    for (let i = 0; i < 5; i++) {
+      const phase = (t * .22 + i / 5) % 1;
+      c.fillStyle = palette.glow; c.globalAlpha = Math.sin(phase * Math.PI) * .5;
+      c.fillRect(Math.sin(i * 3 + t) * 14, -phase * 62, 2, 3);
+    }
+    c.restore();
+  }
+  // Two quiet layers add depth without obscuring silhouettes or damage warnings.
+  for (let i = 0; i < 28; i++) {
+    const x = Math.sin(i * 127.1) * arena.width * .46 + Math.sin(t * .19 + i) * 18;
+    const y = Math.cos(i * 311.7) * arena.height * .44 - ((t * 5 + i * 19) % 90);
+    c.globalAlpha = .09 + (Math.sin(t * .6 + i) + 1) * .06;
+    c.fillStyle = i % 3 ? palette.glow : '#f7d99a';
+    c.beginPath(); c.arc(x, y, i % 4 ? 1 : 2, 0, Math.PI * 2); c.fill();
+  }
+  c.restore();
+}
+function drawPremiumGate(c, door, accent, time) {
+  const t = graphicsReducedMotion() ? 0 : time / 1000;
+  c.save(); c.translate(door.x, door.y - 45); c.globalCompositeOperation = 'lighter';
+  c.strokeStyle = accent; c.lineWidth = 1.2;
+  for (let ring = 0; ring < 3; ring++) {
+    c.save(); c.scale(1, 1.3); c.rotate(t * (ring % 2 ? -.14 : .12) + ring);
+    c.globalAlpha = .2 + ring * .06;
+    c.beginPath(); c.arc(0, 0, 43 + ring * 7, .2, Math.PI * 1.8); c.stroke();
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4, r = 43 + ring * 7;
+      c.beginPath(); c.moveTo(Math.cos(a) * (r - 2), Math.sin(a) * (r - 2)); c.lineTo(Math.cos(a) * (r + 2), Math.sin(a) * (r + 2)); c.stroke();
+    }
+    c.restore();
+  }
+  c.restore();
 }
 
     installRuntimeControls();

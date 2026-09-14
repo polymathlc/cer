@@ -8,6 +8,7 @@ const html=read('hades-game.html');
 const digest=value=>createHash('sha256').update(value).digest('hex');
 assert.equal(digest(html),manifest.gameSha256,'Hades beta must match its reviewed build');
 assert.equal(digest(read('hades-learning-parent.js')),manifest.parentSha256,'Bridge must match the reviewed integration');
+assert.equal(digest(read(manifest.sourcePatch)),manifest.sourcePatchSha256,'Source patch must match the release manifest');
 assert.match(manifest.upstreamCommit,/^[a-f0-9]{40}$/);
 assert.ok(html.includes('name="application-version" content="'+manifest.version+'"'));
 assert.ok(html.includes('HADES_ROUND_REQUEST')&&html.includes('drawSvgCast'));
