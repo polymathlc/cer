@@ -58,19 +58,30 @@ export function createGrandLineLearningController(config) {
     }
     const s = session;
     if (!s || !s.identity || d.sessionId !== s.id) return false;
-    if (d.type === 'GLTCG_BUY_REQUEST' || d.type === 'GLTCG_SAVE_REQUEST') {
-      const buying = d.type === 'GLTCG_BUY_REQUEST', action = buying ? config.buyPack : config.saveCollection;
+    if (['GLTCG_BUY_REQUEST', 'GLTCG_SAVE_REQUEST', 'GLTCG_ADMIN_REQUEST'].includes(d.type)) {
+      const buying = d.type === 'GLTCG_BUY_REQUEST', admin = d.type === 'GLTCG_ADMIN_REQUEST';
+      const action = admin ? config.adminAction : buying ? config.buyPack : config.saveCollection;
+      const reply = { requestId: d.requestId, sessionId: s.id, ...(buying ? { purchaseId: d.purchaseId } : {}),
+        ...(admin && typeof d.action === 'string' ? { action: d.action } : {}) };
+      const prefix = admin ? 'GLTCG_ADMIN_' : buying ? 'GLTCG_BUY_' : 'GLTCG_SAVE_';
+      const adminAllowed = () => config.isAdmin?.() === true;
+      if (admin && (!adminAllowed() || typeof action !== 'function')) {
+        send(s.source, { ...reply, type: prefix + 'BLOCKED', retryable: false, message: 'Administrator access is required.' }); return true;
+      }
+      if (admin && !(d.action === 'unlock-all' || (d.action === 'set-unlimited-gold' && typeof d.enabled === 'boolean'))) {
+        send(s.source, { ...reply, type: prefix + 'BLOCKED', retryable: false, message: 'Choose a valid administrator action.' }); return true;
+      }
       if (typeof action !== 'function' || (buying && (!token(d.purchaseId) || !token(d.packId)))) return false;
-      const reply = { requestId: d.requestId, sessionId: s.id, ...(buying ? { purchaseId: d.purchaseId } : {}) };
-      const prefix = buying ? 'GLTCG_BUY_' : 'GLTCG_SAVE_';
       if (s.busy || s.saving) { send(s.source, { ...reply, type: prefix + 'BLOCKED', retryable: true, message: 'Finish the current learning round or save before trying again.' }); return true; }
       s.saving = true; const revision = generation;
       try {
-        const snapshot = await action(buying ? { purchaseId: d.purchaseId, packId: d.packId } : { team: d.team, progress: d.progress });
-        if (!current(s) || revision !== generation) return false;
-        send(s.source, { ...reply, ...snapshot, type: prefix + 'RESULT' });
+        const request = admin ? { action: d.action, ...(d.action === 'set-unlimited-gold' ? { enabled: d.enabled } : {}) }
+          : buying ? { purchaseId: d.purchaseId, packId: d.packId } : { team: d.team, progress: d.progress };
+        const snapshot = await action(request);
+        if (!current(s) || revision !== generation || (admin && !adminAllowed())) return false;
+        send(s.source, { ...snapshot, ...reply, type: prefix + 'RESULT' });
       } catch (error) {
-        if (current(s) && revision === generation) send(s.source, { ...reply, type: prefix + 'BLOCKED', retryable: !error?.confirmedNoCharge,
+        if (current(s) && revision === generation && (!admin || adminAllowed())) send(s.source, { ...reply, type: prefix + 'BLOCKED', retryable: !error?.confirmedNoCharge,
           ...(error?.confirmedNoCharge ? { confirmedNoCharge: true } : {}), message: error?.message || 'Your change could not be saved. Retry safely.' });
       } finally { if (session === s) s.saving = false; }
       return true;

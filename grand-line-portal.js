@@ -1,4 +1,4 @@
-import { installGrandLineLearningParent } from './grand-line-learning-parent.js?v=1.2.0';
+import { installGrandLineLearningParent } from './grand-line-learning-parent.js?v=1.2.1';
 import { pirateRiftScope } from './pirate-rift-portal.js?v=1.0.0';
 
 const CSS = `.grand-line-portal{position:fixed;inset:0;z-index:100002;background:#09131b;color:#f9eed0;display:flex;flex-direction:column;font:14px/1.5 system-ui,sans-serif}.grand-line-portal>header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#132331;padding:10px 16px;border-bottom:1px solid #927b48}.grand-line-portal h2{flex:1;margin:0;font:700 18px Georgia,serif}.grand-line-portal h2 small{font:700 9px system-ui;color:#dcbb68}.grand-line-portal label{display:flex;gap:7px;align-items:center}.grand-line-portal button,.grand-line-portal select{border:1px solid #8d7954;color:#fff2ce;background:#1a3040;border-radius:5px;padding:8px 12px;min-height:44px;font:inherit;cursor:pointer}.grand-line-portal button:focus-visible,.grand-line-portal select:focus-visible{outline:3px solid #72d8d4;outline-offset:2px}.grand-line-stage{flex:1;min-height:0;display:flex}.grand-line-stage iframe{flex:1;width:100%;height:100%;min-height:0;border:0;background:#09131b}.grand-line-intro{margin:auto;max-width:640px;text-align:center;padding:24px}.grand-line-intro h3{font:30px Georgia,serif;color:#edca81}.grand-line-status{margin:0;padding:5px 16px;background:#132331;font-size:12px;color:#c9d7df}.grand-line-portal [hidden]{display:none!important}@media(max-width:640px){.grand-line-portal>header{padding:8px;gap:7px}.grand-line-portal h2{min-width:100%;font-size:16px}.grand-line-portal label{flex:1}.grand-line-portal button,.grand-line-portal select{font-size:12px;padding:7px 9px}}`;
@@ -38,6 +38,7 @@ export function installGrandLinePortal(env) {
     if(!env.isLevel(level)){select.focus();return false;}
     stopFrame();runIdentity=JSON.stringify([subject,openedIdentity,level,env.getUser().role==='admin'?'preview':'student']);
     const ctx=Object.freeze(context());env.onStart?.(ctx);
+    const isAdmin=()=>current()&&ctx.admin===true&&env.getUser()?.role==='admin';
     const stage=overlay.querySelector('.grand-line-stage');stage.replaceChildren();
     frame=doc.createElement('iframe');frame.title='Grand Line Chronicles — Crew Defense';
     frame.setAttribute('allow','fullscreen; autoplay');frame.setAttribute('referrerpolicy','no-referrer');
@@ -47,13 +48,18 @@ export function installGrandLinePortal(env) {
       ...(env.getSnapshot?{getSnapshot:()=>guarded(()=>env.getSnapshot(ctx),null,ctx)}:{}),
       ...(env.buyPack?{buyPack:request=>guarded(env.buyPack,request,ctx)}:{}),
       ...(env.saveCollection?{saveCollection:request=>guarded(env.saveCollection,request,ctx)}:{}),
+      isAdmin,
+      ...(env.adminAction?{adminAction:request=>guarded((value,scope)=>{
+        if(!isAdmin())throw new Error('Administrator access is required.');
+        return env.adminAction(value,scope);
+      },request,ctx)}:{}),
       ...(env.gradeQuestion?{gradeQuestion:request=>guarded(env.gradeQuestion,request,ctx)}:{}),
       markShown:q=>{if(current()&&ctx.identity===runIdentity)env.markShown?.(q,ctx);},
       recordAnswer:result=>guarded(env.recordAnswer,result,ctx),
       onImageFailure:(q,url)=>{if(current())env.onImageFailure?.(q,url,ctx);},
       onQuestionUnavailable:q=>{if(current())env.onQuestionUnavailable?.(q,ctx);}
     });
-    const url=new URL('./grand-line.html',win.location.href);url.searchParams.set('v','1.2.0');url.searchParams.set('subject',subject.toLowerCase());url.searchParams.set('profile',ctx.profileKey);url.searchParams.set('learning','1');
+    const url=new URL('./grand-line.html',win.location.href);url.searchParams.set('v','1.2.1');url.searchParams.set('subject',subject.toLowerCase());url.searchParams.set('profile',ctx.profileKey);url.searchParams.set('learning','1');
     frame.src=url.href;stage.append(frame);frame.focus();return true;
   }
   function open() {

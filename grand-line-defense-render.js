@@ -1,5 +1,5 @@
-import { DEFENSE_PATH, DEFENSE_PADS } from './grand-line-defense.js?v=1.2.0';
-import { CHARACTER_BY_ID } from './grand-line-data.js?v=1.2.0';
+import { DEFENSE_PATH, DEFENSE_PADS } from './grand-line-defense.js?v=1.2.1';
+import { CHARACTER_BY_ID } from './grand-line-data.js?v=1.2.1';
 
 const WORLD_W = 1000, WORLD_H = 600, TAU = Math.PI * 2;
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));

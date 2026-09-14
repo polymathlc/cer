@@ -24,6 +24,14 @@ The host rolls rarity first, then chooses uniformly among characters of that rar
 
 Purchases debit points and save the card and receipt together through the existing RPG account storage. An interrupted confirmation retains the same purchase receipt for safe retry. The host controls price, draw, ownership and balance; the game frame sends no card grants or point amounts. Collections and receipts are scoped by subject, account, learner, role and school level. The reward-point wallet retains the platform's existing account scope.
 
+## Administrator tools
+
+Sign in with an **administrator account**, open Crew Defense, choose a school level, and visit **Card shop**. The administrator panel provides **Unlimited gold** and **Unlock all 50 cards**.
+
+Unlimited gold lets that administrator open any of the three pack tiers without spending reward points. Turning it off restores the normal listed prices. The setting is saved for the administrator's account on that portal; its actual point balance is unchanged. Unlock all adds any missing current cards to the administrator's selected collection without removing duplicate copies or changing the chosen crew. It excludes the eight reserved future-expansion characters. Repeating either action does not stack grants.
+
+These controls are unavailable to students and standalone previews. The portal checks the signed-in role and current profile before each action and before accepting its result. Administrator actions wait for question rounds, purchases and saves to finish; a profile or role change retires the open game session.
+
 ## Crew Defense and learning
 
 **Crew Defense** replaces the former turn-based and idle-voyage modes. Choose a stage, arrange your five owned characters on defense pads, and protect your ship from moving enemies. Defenders use the battle avatars unlocked by their cards and attack automatically when enemies enter range. Their powers provide damage, area attacks, healing, shields, and control.
@@ -73,7 +81,7 @@ All 50 character images were generated with the built-in image generator. Each o
 Run the core, economy, bank and learning tests with Node 24:
 
 ```sh
-node --test tools/grand-line-core.test.mjs tools/grand-line-economy-tests.mjs tools/grand-line-learning-tests.mjs tools/grand-line-bank-tests.mjs
+node --test tools/grand-line-core.test.mjs tools/grand-line-economy-tests.mjs tools/grand-line-admin-tests.mjs tools/grand-line-learning-tests.mjs tools/grand-line-bank-tests.mjs
 node --test tools/grand-line-defense-tests.mjs tools/grand-line-roster-tests.mjs tools/grand-line-migration-tests.mjs
 ```
 

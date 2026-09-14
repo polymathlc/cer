@@ -1,8 +1,8 @@
-import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam} from './grand-line-core.js?v=1.2.0';
-import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS} from './grand-line-data.js?v=1.2.0';
-import {createArtManager} from './grand-line-render.js?v=1.2.0';
-import {DEFENSE_PADS,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning} from './grand-line-defense.js?v=1.2.0';
-import {createDefenseRenderer} from './grand-line-defense-render.js?v=1.2.0';
+import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam} from './grand-line-core.js?v=1.2.1';
+import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS} from './grand-line-data.js?v=1.2.1';
+import {createArtManager} from './grand-line-render.js?v=1.2.1';
+import {DEFENSE_PADS,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning} from './grand-line-defense.js?v=1.2.1';
+import {createDefenseRenderer} from './grand-line-defense-render.js?v=1.2.1';
 const DEFENSE_SPEEDS=[1,2,4];
 const $=id=>document.getElementById(id);
 const embedded=parent!==window,params=new URLSearchParams(location.search),origin=location.origin;
@@ -20,7 +20,7 @@ function passiveDescription(p){
   if(['all-attack','all-guard'].includes(p.type))text+=' Applies to crew members in range.';
   return text;
 }
-let collection=createCollection(),wallet={available:false,balance:0,currency:'points',offers:[]};
+let collection=createCollection(),wallet={available:false,balance:0,currency:'points',offers:[],unlimitedGold:false},admin={available:false,unlimitedGold:false},adminPending=null;
 let subject=params.get('subject')?.toLowerCase()==='science'?'Science':'Math',scope='preview',sessionId='',helloId='',ready=!embedded;
 let settings={muted:false,reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches,battleSpeed:2};
 let defensePaused=false,selectedAllyId='',lastFrame=0,lastHud=0;
@@ -30,7 +30,7 @@ let selectedPack='spark',toastTimer=0,helloTimer=0,audioContext=null,questionSes
 const storageKey=()=>`grand-line.v1:${subject.toLowerCase()}:${scope}`;
 const pendingKey=()=>storageKey()+':purchase';
 const current=()=>ready&&(!embedded||!!sessionId);
-const busy=()=>performance.now()<busyUntil||!!savePending||unsavedLearning||!!dialog||!current()||document.hidden;
+const busy=()=>performance.now()<busyUntil||!!adminPending||!!savePending||unsavedLearning||!!dialog||!current()||document.hidden;
 const el=(tag,className,text)=>{const n=document.createElement(tag);if(className)n.className=className;if(text!==undefined)n.textContent=text;return n;};
 const button=(text,fn,className='subtle')=>{const n=el('button',className,text);n.type='button';n.onclick=fn;return n;};
 function toast(message){clearTimeout(toastTimer);$('toast').textContent=message;$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,3400);}
@@ -48,16 +48,18 @@ function sound(kind='click'){
 }
 function settingsUI(){document.documentElement.classList.toggle('reduced-motion',settings.reducedMotion);$('sound-button').textContent=settings.muted?'♩':'♪';$('sound-button').setAttribute('aria-pressed',String(settings.muted));$('sound-button').setAttribute('aria-label',settings.muted?'Turn sound on':'Mute sound');}
 function applySnapshot(data){
+  if(data?.admin)admin={available:embedded&&data.admin.available===true,unlimitedGold:embedded&&data.admin.available===true&&data.admin.unlimitedGold===true};
   if(data?.collection){collection=normalizeCollection(data.collection);if(battle)battle.collection=collection;}
-  if(data?.wallet){const w=data.wallet;wallet={available:w.available===true,balance:Number.isFinite(w.balance)?Math.max(0,Math.floor(w.balance)):0,currency:'points',offers:(Array.isArray(w.offers)?w.offers:[]).filter(o=>typeof o.id==='string'&&Number.isSafeInteger(o.cost)&&o.cost>0&&o.odds&&typeof o.odds==='object')};}
+  if(data?.wallet){const w=data.wallet;wallet={available:w.available===true,unlimitedGold:w.unlimitedGold===true,balance:Number.isFinite(w.balance)?Math.max(0,Math.floor(w.balance)):0,currency:'points',offers:(Array.isArray(w.offers)?w.offers:[]).filter(o=>typeof o.id==='string'&&Number.isSafeInteger(o.cost)&&o.cost>0&&o.odds&&typeof o.odds==='object')};}
   renderCounters();if(view==='packs')renderPacks();if(view==='collection')renderCollection();if(view==='crew')renderCrew();if(view==='campaign')renderCampaign();
 }
+const unlimitedGold=()=>embedded&&current()&&admin.available&&admin.unlimitedGold&&wallet.unlimitedGold;
 function connection(message,blocked=false){$('connection').hidden=!message;$('connection').textContent=message;if(blocked){ready=false;wallet.available=false;}renderCounters();}
 function renderCounters(){
   const owned=Object.keys(collection.cards).filter(id=>CHARACTER_BY_ID[id]&&collection.cards[id].copies>0).length;
-  $('collection-count').textContent=`${owned} / 50`;$('packs-count').textContent=embedded?`${format(wallet.balance)} points`:'Preview';
+  $('collection-count').textContent=`${owned} / 50`;$('packs-count').textContent=unlimitedGold()?'∞ gold':embedded?`${format(wallet.balance)} points`:'Preview';
   $('subject-tag').textContent=embedded?`${subject.toUpperCase()} · ${ready?'CONNECTED':'CONNECTING'}`:`${subject.toUpperCase()} PREVIEW`;
-  $('learning-progress').textContent=embedded?`${format(wallet.balance)} ${subject} points · One card per pack`:'Preview · Sign in to Math or Science to buy cards';
+  $('learning-progress').textContent=unlimitedGold()?'Admin · Unlimited gold · One card per pack':embedded?`${format(wallet.balance)} ${subject} points · One card per pack`:'Preview · Sign in to Math or Science to buy cards';
   $('collection-summary').textContent=`${owned} / 50 unlocked · ${format(collection.stats.packsOpened)} packs opened`;
 }
 function card(character,{eager=false,inspect=true,owned=!!collection.cards[character.id],copies=collection.cards[character.id]?.copies||0}={}){
@@ -77,7 +79,7 @@ function renderCollection(){
 }
 function go(next){
   if(!['collection','crew','campaign','packs','battle'].includes(next))return;
-  if(next!=='battle'&&(unsavedLearning||savePending)){toast('Please wait for your progress to finish saving.');return;}
+  if(adminPending||next!=='battle'&&(unsavedLearning||savePending)){toast('Please wait for your progress to finish saving.');return;}
   if(battle&&view==='battle'&&next!=='battle'&&!['victory','defeat'].includes(battle.status)){retreat(()=>go(next));return;}
   view=next;for(const n of document.querySelectorAll('.view'))n.hidden=n.id!==`${next}-view`;
   for(const n of document.querySelectorAll('[data-view]')){if(n.dataset.view===next)n.setAttribute('aria-current','page');else n.removeAttribute('aria-current');}
@@ -108,7 +110,7 @@ function renderCrew(){
 }
 function replaceMenu(id){const panel=openDialog('replace','Choose a crew slot');panel.append(el('p','',`${CHARACTER_BY_ID[id].name} will replace the selected character. Your previous card stays in the collection.`));const grid=el('div','replace-grid');collection.team.forEach((current,index)=>{const n=button('',()=>changeTeam(index,id));n.append(el('span','',`Slot ${index+1}`),document.createTextNode(displayName(CHARACTER_BY_ID[current])));grid.append(n);});panel.append(grid);}
 async function changeTeam(index,id){
-  if(!current()||savePending)return;
+  if(!current()||savePending||adminPending)return;
   if(collection.team.includes(id)&&collection.team[index]!==id){toast('That character is already in your crew. Choose a different character.');return;}
   const before=[...collection.team],next=[...before];next[index]=id;if(!setTeam(collection,next)){toast('Choose five different unlocked characters.');return;}
   selectedSlot=null;closeDialog();renderCrew();try{await persistCollection();toast(`${displayName(CHARACTER_BY_ID[id])} is ready to defend.`);}catch(error){collection.team=before;renderCrew();toast(error.message);}
@@ -117,12 +119,34 @@ function renderCampaign(){
   $('campaign-map').replaceChildren(...DEFENSE_STAGES.map(e=>{const locked=e.id>collection.unlockedEncounter,n=el('article','encounter');n.dataset.locked=String(locked);n.style.setProperty('--encounter-color',['#8ac7ca','#b998d5','#dd9584'][Math.ceil(e.id/3)-1]);n.append(el('span','chapter-number',String(e.id).padStart(2,'0')),el('p','eyebrow',`HARBOR ${e.id} · THREE WAVES`),el('h2','',e.name),el('p','',e.description));const avatars=el('div','enemy-roster');for(const id of e.enemies){const medallion=el('div','enemy-medallion');medallion.title=CHARACTER_BY_ID[id].name;const image=el('div','card-art');art.attach(image,id);medallion.append(image);avatars.append(medallion);}n.append(avatars);if(collection.completed.includes(e.id))n.append(el('p','completed-tag','✓ Harbor unlocked · Replay available'));const start=button(locked?`Defend harbor ${e.id-1} first`:'Prepare defense →',()=>beginBattle(e.id),'gold-button');start.disabled=locked||!current()||!!savePending;n.append(start);return n;}));
 }
 function renderPacks(){
-  $('pack-balance').textContent=embedded?format(wallet.balance):'—';const offer=wallet.offers.find(o=>o.id===selectedPack)||wallet.offers[0];if(offer)selectedPack=offer.id;
-  $('pack-tiers').replaceChildren(...wallet.offers.map(o=>{const n=button('',()=>{selectedPack=o.id;renderPacks();});n.dataset.pack=o.id;n.setAttribute('aria-pressed',String(o.id===selectedPack));n.append(el('strong','',`${format(o.cost)} points`),document.createTextNode(o.name),el('small','',`ONE CARD · ${Math.min(...Object.keys(o.odds).filter(k=>Number(o.odds[k])>0).map(Number))}★+`));return n;}));
-  $('open-pack').textContent=purchasePending?'Resume pending purchase':!embedded?'Sign in to buy packs':offer?`Buy ${offer.name} · ${format(offer.cost)} points`:'Shop unavailable';
-  $('open-pack').disabled=!current()||!embedded||(!purchasePending&&(!wallet.available||!offer||wallet.balance<offer.cost));
-  $('pack-progress').textContent=purchasePending?'This purchase is awaiting confirmation. Resume uses the same receipt and cannot charge twice.':!embedded?'Preview collection. Open this game from the Math or Science portal to use your real reward points.':!wallet.available?'Your platform wallet is not ready. Answer a question in the portal first.':offer&&wallet.balance<offer.cost?`You need ${format(offer.cost-wallet.balance)} more points for this pack.`:`Purchases use your ${subject} reward-point wallet. Every pack contains one character card.`;
-  const odds=el('div','odds-grid');if(offer)for(let stars=1;stars<=7;stars++){const n=el('div');n.append(el('strong','',`${Number(offer.odds[stars]||0)}%`),el('span','',`${stars} STAR · ${RARITIES[stars]}`));odds.append(n);}else{const note=el('p','', 'Live pack prices and odds appear when connected to your platform wallet.');$('odds-table').replaceChildren(note);return;}$('odds-table').replaceChildren(el('p','',`${offer.name} · ${offer.cost} points · one character card`),odds);
+  const unlimited=unlimitedGold(),locked=!!adminPending||!!savePending||unsavedLearning||!!learningPending;
+  $('pack-balance').textContent=unlimited?'∞':embedded?format(wallet.balance):'—';$('pack-balance-label').textContent=unlimited?'admin gold · unlimited':'platform reward points';const offer=wallet.offers.find(o=>o.id===selectedPack)||wallet.offers[0];if(offer)selectedPack=offer.id;
+  $('pack-tiers').replaceChildren(...wallet.offers.map(o=>{const n=button('',()=>{selectedPack=o.id;renderPacks();});n.dataset.pack=o.id;n.setAttribute('aria-pressed',String(o.id===selectedPack));n.disabled=locked;n.append(el('strong','',unlimited?'∞ ADMIN GOLD':`${format(o.cost)} points`),document.createTextNode(o.name),el('small','',`ONE CARD · ${Math.min(...Object.keys(o.odds).filter(k=>Number(o.odds[k])>0).map(Number))}★+`));return n;}));
+  $('open-pack').textContent=adminPending?adminPending.waiting?'Saving admin change…':'Confirm admin change first':purchasePending?'Resume pending purchase':!embedded?'Sign in to buy packs':offer?unlimited?`Open ${offer.name} · Unlimited gold`:`Buy ${offer.name} · ${format(offer.cost)} points`:'Shop unavailable';
+  $('open-pack').disabled=locked||!current()||!embedded||(!purchasePending&&(!wallet.available||!offer||!unlimited&&wallet.balance<offer.cost));
+  $('pack-progress').textContent=purchasePending?'This purchase is awaiting confirmation. Resume uses the same receipt and cannot charge twice.':!embedded?'Preview collection. Open this game from the Math or Science portal to use your real reward points.':!wallet.available?'Your platform wallet is not ready. Answer a question in the portal first.':unlimited?'Unlimited gold is active for your admin account. Open any tier as often as you like; your saved points are kept.':offer&&wallet.balance<offer.cost?`You need ${format(offer.cost-wallet.balance)} more points for this pack.`:`Purchases use your ${subject} reward-point wallet. Every pack contains one character card.`;
+  renderAdminTools();
+  const odds=el('div','odds-grid');if(offer)for(let stars=1;stars<=7;stars++){const n=el('div');n.append(el('strong','',`${Number(offer.odds[stars]||0)}%`),el('span','',`${stars} STAR · ${RARITIES[stars]}`));odds.append(n);}else{const note=el('p','', 'Live pack prices and odds appear when connected to your platform wallet.');$('odds-table').replaceChildren(note);return;}$('odds-table').replaceChildren(el('p','',unlimited?`${offer.name} · Unlimited admin gold · one character card`:`${offer.name} · ${offer.cost} points · one character card`),odds);
+}
+function renderAdminTools(){
+  const visible=embedded&&current()&&admin.available,owned=CHARACTERS.filter(c=>collection.cards[c.id]?.copies>0).length;
+  $('admin-tools').hidden=!visible;if(!visible)return;
+  const locked=!!adminPending||!!purchasePending||!!savePending||unsavedLearning||!!learningPending||!!battle&&!['victory','defeat'].includes(battle.status);
+  $('admin-unlimited').textContent=admin.unlimitedGold?'Turn off unlimited gold':'Enable unlimited gold';$('admin-unlimited').setAttribute('aria-pressed',String(admin.unlimitedGold));$('admin-unlimited').disabled=locked;
+  $('admin-unlock-all').textContent=owned===50?'All 50 cards unlocked':'Unlock all 50 cards';$('admin-unlock-all').disabled=locked||owned===50;
+  $('admin-retry').hidden=!adminPending||adminPending.waiting;$('admin-retry').disabled=!adminPending||adminPending.waiting;
+  $('admin-status').textContent=adminPending?adminPending.waiting?'Saving your admin change…':adminPending.message||'Confirm this change before opening more packs.':admin.unlimitedGold?'Unlimited gold is on. Pack openings keep your saved points.':'Unlimited gold is off. Packs use your saved reward points.';
+}
+function requestAdminAction(action,enabled){
+  if(!embedded||!current()||!admin.available||view!=='packs'||adminPending||purchasePending||savePending||unsavedLearning||learningPending||dialog||battle&&!['victory','defeat'].includes(battle.status))return false;
+  if(action!=='unlock-all'&&!(action==='set-unlimited-gold'&&typeof enabled==='boolean'))return false;
+  adminPending={action,...(action==='set-unlimited-gold'?{enabled}:{}),waiting:false};return retryAdminAction();
+}
+function retryAdminAction(){
+  if(!adminPending||adminPending.waiting||!embedded||!current()||!admin.available)return false;
+  const pending=adminPending,requestId=uuid('admin');pending.requestId=requestId;pending.waiting=true;pending.message='';
+  pending.timer=setTimeout(()=>{if(adminPending?.requestId!==requestId)return;pending.waiting=false;pending.message='Confirmation is taking longer than expected. Retry this admin change before opening more packs.';renderPacks();},15000);
+  post({type:'GLTCG_ADMIN_REQUEST',sessionId,requestId,action:pending.action,...(pending.action==='set-unlimited-gold'?{enabled:pending.enabled}:{})});renderPacks();return true;
 }
 function purchaseDialog(message='Confirming your card purchase…'){
   const panel=openDialog('purchase','Your next legend.');panel.append(el('p','purchase-pending',message));
@@ -130,8 +154,9 @@ function purchaseDialog(message='Confirming your card purchase…'){
   panel.append(el('p','', 'A purchase is complete only when your platform confirms the points and card together. Closing this window does not create a second charge.'));
 }
 function beginPurchase(){
+  if(adminPending||savePending||unsavedLearning||learningPending)return;
   if(purchasePending){purchaseDialog('A previous purchase is awaiting confirmation. Resume it to recover the same card receipt.');return;}
-  const offer=wallet.offers.find(o=>o.id===selectedPack);if(!current()||!embedded||!wallet.available||!offer||wallet.balance<offer.cost)return;
+  const offer=wallet.offers.find(o=>o.id===selectedPack);if(!current()||!embedded||!wallet.available||!offer||!unlimitedGold()&&wallet.balance<offer.cost)return;
   purchasePending={purchaseId:uuid('pack'),packId:offer.id,requestId:'',waiting:false};if(!localSet(pendingKey(),{purchaseId:purchasePending.purchaseId,packId:offer.id})){purchasePending=null;toast('Your browser could not save a purchase receipt. Enable storage before buying a pack.');return;}sendPurchase();
 }
 function sendPurchase(){
@@ -151,7 +176,7 @@ function persistCollection(){
   post({type:'GLTCG_SAVE_REQUEST',sessionId,requestId,team:[...collection.team],progress:{unlockedEncounter:collection.unlockedEncounter,completed:[...collection.completed],stats:{...collection.stats}}});return promise;
 }
 function beginBattle(encounter){
-  if(purchasePending){toast('Resume your pending purchase in the Card shop before starting a defense.');return;}if(!current()||savePending||unsavedLearning)return;const next=createDefense(collection,{encounter,seed:uuid('defense')});if(!next){toast('Choose five unlocked crew members and an available harbor.');return;}
+  if(purchasePending){toast('Resume your pending purchase in the Card shop before starting a defense.');return;}if(!current()||adminPending||savePending||unsavedLearning)return;const next=createDefense(collection,{encounter,seed:uuid('defense')});if(!next){toast('Choose five unlocked crew members and an available harbor.');return;}
   battle=next;lastOutcome='';selectedAllyId=next.allies[0]?.id||'';defensePaused=false;busyUntil=0;lastFrame=0;lastHud=0;learningPending=null;go('battle');sound();
 }
 function startWave(){if(!battle||busy()||learningPending?.waiting)return false;const result=startDefenseWave(battle);if(result){defensePaused=false;lastFrame=0;sound();renderBattle();}return result;}
@@ -193,7 +218,7 @@ function retreat(after){if(learningPending?.waiting||savePending||unsavedLearnin
 function ending(){if(!battle)return;const win=battle.status==='victory',panel=openDialog('ending',win?'The harbor is safe.':'Regroup. Return stronger.');panel.classList.add('battle-result');panel.insertBefore(el('p','eyebrow',win?'DEFENSE COMPLETE':'CREW DEFENSE'),panel.firstChild);panel.append(el('p','',win?(battle.encounter.id===9?'Your crew protected every harbor. Replay a defense with a new crew or formation.':'Your crew held the route. A new harbor is ready to defend.'):'Move attackers near bends in the route, cover them with a healer, and strengthen the next wave with correct answers.'));
   const stats=el('div','result-stats');for(const [label,value]of[['WAVES',battle.round],['CORRECT ANSWERS',(battle.roundResults||[]).reduce((n,r)=>n+r.correct,0)],['SHIP LIFE',Math.ceil(battle.ship.hp)]]){const n=el('span');n.append(el('strong','',value),document.createTextNode(label));stats.append(n);}panel.append(stats);const actions=el('div','dialog-actions');actions.append(button(win?(battle.encounter.id===9?'Choose a harbor':'Choose next harbor'):'Try defense again',()=>{const stage=battle.encounter.id;closeDialog();battle=null;win?go('campaign'):beginBattle(stage);},'gold-button'),button('Review my crew',()=>{closeDialog();battle=null;go('crew');}));panel.append(actions);sound(win?'win':'click');}
 function requestLearning(){
-  if(!battle||battle.status!=='learning'||learningPending?.waiting||savePending||!current())return;
+  if(!battle||battle.status!=='learning'||learningPending?.waiting||adminPending||savePending||!current())return;
   if(!embedded){startPreviewQuestions();return;}
   const requestId=uuid('round'),round=bridgeRound+1;learningPending={requestId,round,battleId:battle.id,battleRound:battle.round,waiting:true,message:'Your portal is preparing three suitable questions.'};post({type:'GLTCG_ROUND_REQUEST',requestId,sessionId,round});renderBattle();
 }
@@ -233,7 +258,13 @@ window.addEventListener('message',event=>{
     const old=localGet(pendingKey());if(old&&typeof old.purchaseId==='string'&&typeof old.packId==='string')purchasePending={...old,requestId:'',waiting:false};renderPacks();renderCounters();return;
   }
   if(!sessionId||d.sessionId!==sessionId)return;
-  if(d.type==='GLTCG_INVALIDATE'){sessionId='';ready=false;learningPending=null;questionSession=null;unsavedLearning=false;battle=null;if(purchasePending)clearTimeout(purchasePending.timer);purchasePending=null;if(savePending){clearTimeout(savePending.timer);savePending.reject(Error('The learning profile changed.'));savePending=null;}closeDialog();go('collection');connection(d.message||'Your profile changed. Reopen the game from the portal.',true);return;}
+  if(d.type==='GLTCG_INVALIDATE'){if(adminPending)clearTimeout(adminPending.timer);adminPending=null;admin={available:false,unlimitedGold:false};wallet.unlimitedGold=false;$('admin-tools').hidden=true;sessionId='';ready=false;learningPending=null;questionSession=null;unsavedLearning=false;battle=null;if(purchasePending)clearTimeout(purchasePending.timer);purchasePending=null;if(savePending){clearTimeout(savePending.timer);savePending.reject(Error('The learning profile changed.'));savePending=null;}closeDialog();go('collection');connection(d.message||'Your profile changed. Reopen the game from the portal.',true);return;}
+  if(['GLTCG_ADMIN_RESULT','GLTCG_ADMIN_BLOCKED'].includes(d.type)){
+    const pending=adminPending;if(!pending||d.requestId!==pending.requestId)return;clearTimeout(pending.timer);
+    if(d.type==='GLTCG_ADMIN_RESULT'){adminPending=null;applySnapshot(d);toast(pending.action==='unlock-all'?'All 50 current cards and their battle avatars are unlocked.':admin.unlimitedGold?'Unlimited gold is on. Keep opening packs.':'Unlimited gold is off. Packs use your saved points.');}
+    else{pending.waiting=false;pending.message=(d.message||'The admin change could not be confirmed.')+' Retry this change before opening more packs.';toast(pending.message);}
+    renderPacks();return;
+  }
   if(['GLTCG_BUY_RESULT','GLTCG_BUY_BLOCKED'].includes(d.type)){
     const p=purchasePending;if(!p||d.requestId!==p.requestId||d.purchaseId!==p.purchaseId)return;clearTimeout(p.timer);p.waiting=false;
     if(d.type==='GLTCG_BUY_RESULT'&&d.grant&&CHARACTER_BY_ID[d.grant.characterId]&&d.collection){applySnapshot(d);try{localStorage.removeItem(pendingKey());}catch(_){}purchasePending=null;reveal(d.grant);renderCounters();}
@@ -264,6 +295,7 @@ for(const n of document.querySelectorAll('[data-go]'))n.onclick=()=>go(n.dataset
 document.querySelector('.brand').onclick=event=>{event.preventDefault();go('collection');};
 $('search-input').oninput=renderCollection;for(const id of ['ownership-filter','star-filter','sort-filter'])$(id).onchange=renderCollection;
 $('apex-showcase').replaceChildren(...['kaido','whitebeard','akainu'].map(id=>card(CHARACTER_BY_ID[id],{eager:true})));
+$('admin-unlimited').onclick=()=>requestAdminAction('set-unlimited-gold',!admin.unlimitedGold);$('admin-unlock-all').onclick=()=>requestAdminAction('unlock-all');$('admin-retry').onclick=retryAdminAction;
 $('open-pack').onclick=beginPurchase;$('study-button').onclick=requestLearning;$('retreat-button').onclick=()=>retreat();
 $('start-wave').onclick=startWave;$('defense-pause').onclick=toggleDefensePause;
 $('defense-speed').onchange=()=>{const value=Number($('defense-speed').value);if(DEFENSE_SPEEDS.includes(value))settings.battleSpeed=value;lastFrame=0;savePreferences();renderBattle();};
@@ -271,7 +303,7 @@ $('future-characters').replaceChildren(...FUTURE_EXPANSION_CHARACTERS.map(c=>el(
 $('roster-conversions').textContent=FUTURE_EXPANSION_CHARACTERS.map(c=>`${c.name} → ${CHARACTER_BY_ID[RETIRED_CHARACTER_REPLACEMENTS[c.id]]?.name}`).join(' · ');
 $('battle-canvas').addEventListener('click',e=>{const id=renderer.pickPad(e.clientX,e.clientY);if(id)placeDefender(selectedAllyId,id);});
 $('settings-button').onclick=help;$('help-button').onclick=help;$('sound-button').onclick=()=>{settings.muted=!settings.muted;settingsUI();savePreferences();sound();};
-$('rift-button').onclick=()=>{if(learningPending?.waiting||unsavedLearning||savePending||purchasePending?.waiting){toast('Finish the current questions or save before switching games.');return;}if(embedded)post({type:'GLTCG_OPEN_RIFT'});else location.href='./pirate-rift.html';};
+$('rift-button').onclick=()=>{if(adminPending||learningPending?.waiting||unsavedLearning||savePending||purchasePending?.waiting){toast('Finish the current questions or save before switching games.');return;}if(embedded)post({type:'GLTCG_OPEN_RIFT'});else location.href='./pirate-rift.html';};
 window.addEventListener('keydown',event=>{
   if(event.ctrlKey||event.metaKey||event.altKey||event.target.closest?.('input,textarea,select'))return;
   if(dialog){if(event.key==='Escape'&&dialog!=='question'){event.preventDefault();closeDialog();}if(event.key==='Tab'){const nodes=[...$('dialog-panel').querySelectorAll('button:not(:disabled),input,select,a[href]')];if(nodes.length&&event.shiftKey&&document.activeElement===nodes[0]){event.preventDefault();nodes.at(-1).focus();}else if(nodes.length&&!event.shiftKey&&document.activeElement===nodes.at(-1)){event.preventDefault();nodes[0].focus();}}return;}
@@ -282,4 +314,4 @@ window.addEventListener('pagehide',()=>{savePreferences();audioContext?.suspend(
 window.addEventListener('error',()=>{if(!document.querySelector('.tcg-card'))$('fatal').hidden=false;});
 loadPreferences();renderCounters();renderCollection();if(!embedded)connection('Crew Defense preview · Questions are local examples. Sign in through Math or Science to purchase cards with platform reward points.');else{connection('Connecting to your portal, learning profile and reward-point wallet…');hello();}
 requestAnimationFrame(frame);
-if(params.get('test')==='1')window.__grandLine={get collection(){return collection;},get battle(){return battle;},get wallet(){return wallet;},get dialog(){return dialog;},get sessionId(){return sessionId;},get learningPending(){return learningPending;},get purchasePending(){return purchasePending;},get scope(){return scope;},get settings(){return settings;},get defensePaused(){return defensePaused;},get ready(){return ready;},get unsavedLearning(){return unsavedLearning;},art,renderer,go,beginBattle,startWave,placeDefender,selectDefender,toggleDefensePause,advanceDefense,completeDefenseLearning,requestLearning,inspectCard,closeDialog,renderBattle,renderCollection,applySnapshot,statsFor,CHARACTERS,ENCOUNTERS,DEFENSE_STAGES,DEFENSE_PADS};
+if(params.get('test')==='1')window.__grandLine={get collection(){return collection;},get battle(){return battle;},get wallet(){return wallet;},get admin(){return admin;},get adminPending(){return adminPending;},requestAdminAction,retryAdminAction,get dialog(){return dialog;},get sessionId(){return sessionId;},get learningPending(){return learningPending;},get purchasePending(){return purchasePending;},get scope(){return scope;},get settings(){return settings;},get defensePaused(){return defensePaused;},get ready(){return ready;},get unsavedLearning(){return unsavedLearning;},art,renderer,go,beginBattle,startWave,placeDefender,selectDefender,toggleDefensePause,advanceDefense,completeDefenseLearning,requestLearning,inspectCard,closeDialog,renderBattle,renderCollection,applySnapshot,statsFor,CHARACTERS,ENCOUNTERS,DEFENSE_STAGES,DEFENSE_PADS};

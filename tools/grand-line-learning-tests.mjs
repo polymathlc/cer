@@ -151,6 +151,77 @@ test('save messages cannot forward owned cards or points and round results refre
   await f.round(); assert.equal(f.messages.at(-1).data.wallet.balance, 1024); assert.equal(f.messages.at(-1).data.total, 3);
 });
 
+test('admin actions require the live role, exact iframe, origin and session', async () => {
+  const calls = []; let admin = false;
+  const f = fixture({ isAdmin: () => admin, adminAction: async request => { calls.push(request); return {}; } });
+  await f.hello();
+  const data = { type: 'GLTCG_ADMIN_REQUEST', requestId: 'admin-1', sessionId: 'session-1', action: 'unlock-all', admin: true, role: 'admin' };
+  await f.send(data); assert.equal(calls.length, 0); assert.equal(f.messages.at(-1).data.type, 'GLTCG_ADMIN_BLOCKED');
+  assert.equal(f.messages.at(-1).data.retryable, false); admin = true;
+  await f.controller.handleMessage({ origin: 'https://evil.test', source: f.source, data });
+  await f.controller.handleMessage({ origin: f.options.origin, source: {}, data });
+  await f.send({ ...data, sessionId: 'forged' }); assert.equal(calls.length, 0);
+  await f.send(data); assert.deepEqual(calls, [{ action: 'unlock-all' }]);
+  assert.equal(f.messages.at(-1).data.action, 'unlock-all'); assert.equal(f.messages.at(-1).data.type, 'GLTCG_ADMIN_RESULT');
+  const missingRole = fixture({ adminAction: async () => { throw Error('must not call'); } });
+  await missingRole.hello(); await missingRole.send(data); assert.equal(missingRole.messages.at(-1).data.type, 'GLTCG_ADMIN_BLOCKED');
+});
+test('admin action values are validated and only the action and boolean setting reach the host', async () => {
+  const calls = [], admin = { available: true, unlimitedGold: true };
+  const f = fixture({ isAdmin: () => true, adminAction: async request => { calls.push(request); return { admin, wallet: { balance: 0, unlimitedGold: true } }; } });
+  await f.hello(); const data = { type: 'GLTCG_ADMIN_REQUEST', requestId: 'admin', sessionId: 'session-1' };
+  for (const action of [undefined, 'grant-gold', '__proto__', 'set-unlimited-gold']) {
+    await f.send({ ...data, action, enabled: 'true' }); assert.equal(f.messages.at(-1).data.type, 'GLTCG_ADMIN_BLOCKED');
+  }
+  assert.equal(calls.length, 0);
+  for (const enabled of [true, false]) await f.send({ ...data, action: 'set-unlimited-gold', enabled, cards: { kaido: 999 }, gold: Infinity, role: 'admin', profileKey: 'other' });
+  await f.send({ ...data, action: 'unlock-all', enabled: true, gold: 999 });
+  assert.deepEqual(calls, [{ action: 'set-unlimited-gold', enabled: true }, { action: 'set-unlimited-gold', enabled: false }, { action: 'unlock-all' }]);
+  assert.deepEqual(f.messages.at(-1).data.admin, admin); assert.equal(f.messages.at(-1).data.wallet.balance, 0);
+});
+test('admin writes block purchases, crew saves, learning and overlapping admin actions until confirmation', async () => {
+  let finish, calls = 0; const f = fixture({ isAdmin: () => true, adminAction: () => { calls++; return new Promise(resolve => { finish = resolve; }); },
+    buyPack: () => { throw Error('must not buy'); }, saveCollection: () => { throw Error('must not save'); } });
+  await f.hello(); const data = { type: 'GLTCG_ADMIN_REQUEST', requestId: 'admin', sessionId: 'session-1', action: 'unlock-all' };
+  const pending = f.send(data);
+  await f.send({ ...data, requestId: 'again' }); assert.equal(f.messages.at(-1).data.type, 'GLTCG_ADMIN_BLOCKED');
+  await f.send({ type: 'GLTCG_BUY_REQUEST', requestId: 'buy', sessionId: 'session-1', purchaseId: 'purchase', packId: 'spark' });
+  assert.equal(f.messages.at(-1).data.type, 'GLTCG_BUY_BLOCKED');
+  await f.send({ type: 'GLTCG_SAVE_REQUEST', requestId: 'save', sessionId: 'session-1', team: [] });
+  assert.equal(f.messages.at(-1).data.type, 'GLTCG_SAVE_BLOCKED');
+  await f.round(); assert.equal(f.messages.at(-1).data.type, 'GLTCG_ROUND_BLOCKED'); assert.equal(f.messages.at(-1).data.retryable, true);
+  assert.equal(f.shown.length, 0); assert.equal(calls, 1); finish({}); await pending;
+  await f.round(1, 'after-admin'); assert.equal(f.records.length, 3);
+});
+test('questions and pending ordinary saves block an admin write without dropping the action', async () => {
+  for (const saving of [false, true]) {
+    let finish, calls = 0; const f = fixture({ isAdmin: () => true, adminAction: async () => { calls++; return {}; },
+      saveCollection: () => new Promise(resolve => { finish = resolve; }),
+      presentQuestions: () => new Promise(resolve => { finish = resolve; }) });
+    await f.hello(); const pending = saving ? f.send({ type: 'GLTCG_SAVE_REQUEST', requestId: 'save', sessionId: 'session-1' }) : f.round();
+    await tick(); const data = { type: 'GLTCG_ADMIN_REQUEST', requestId: 'admin', sessionId: 'session-1', action: 'unlock-all' };
+    await f.send(data); assert.equal(calls, 0); assert.equal(f.messages.at(-1).data.type, 'GLTCG_ADMIN_BLOCKED');
+    assert.equal(f.messages.at(-1).data.retryable, true); finish(false); await pending;
+    await f.send(data); assert.equal(calls, 1); assert.equal(f.messages.at(-1).data.type, 'GLTCG_ADMIN_RESULT');
+  }
+});
+test('live role loss, profile changes and closing suppress late admin success and failure replies', async () => {
+  for (const change of ['role', 'profile', 'close']) for (const reject of [false, true]) {
+    let finish, fail, admin = true;
+    const f = fixture({ isAdmin: () => admin, adminAction: () => new Promise((resolve, reject) => { finish = resolve; fail = reject; }) });
+    await f.hello(); const pending = f.send({ type: 'GLTCG_ADMIN_REQUEST', requestId: 'admin', sessionId: 'session-1', action: 'unlock-all' });
+    if (change === 'role') admin = false; else if (change === 'profile') f.setIdentity('other-child'); else f.controller.destroy();
+    if (reject) fail(Error('offline')); else finish({ admin: { available: true, unlimitedGold: true } });
+    await pending; assert.equal(f.messages.some(m => /^GLTCG_ADMIN_(RESULT|BLOCKED)$/.test(m.data.type)), false);
+  }
+});
+test('an admin write failure releases the lock so the same idempotent action can retry', async () => {
+  let fail = true; const f = fixture({ isAdmin: () => true, adminAction: async () => { if (fail) throw Error('offline'); return { changed: true }; } });
+  await f.hello(); const request = { type: 'GLTCG_ADMIN_REQUEST', requestId: 'admin', sessionId: 'session-1', action: 'set-unlimited-gold', enabled: true };
+  await f.send(request); assert.equal(f.messages.at(-1).data.type, 'GLTCG_ADMIN_BLOCKED'); assert.equal(f.messages.at(-1).data.retryable, true);
+  fail = false; await f.send(request); assert.equal(f.messages.at(-1).data.type, 'GLTCG_ADMIN_RESULT'); assert.equal(f.messages.at(-1).data.changed, true);
+});
+
 const root = new URL('../', import.meta.url), science = fs.existsSync(new URL('app.js', root));
 const app = fs.readFileSync(new URL(science ? 'app.js' : 'index.html', root), 'utf8');
 test('navigation, authentication and learner changes explicitly retire Grand Line', () => {
@@ -164,6 +235,7 @@ test('navigation, authentication and learner changes explicitly retire Grand Lin
   } else assert.match(section('async function saveStudentLevel(lv)'), /grandLinePortal.close\(\)/);
   const html = fs.readFileSync(new URL('index.html', root), 'utf8'); assert.match(html, /Crew Defense <span class="nav-beta">TCG/);
   assert.match(app, /Collect 50 One Piece characters/);
+  assert.match(app, /createGrandLineEconomy\(\{\s*getUser:\(\)=>currentUser,/);
 });
 if (science) test('Science navigation reaches the new overlay without a missing page', () => {
   const start = app.indexOf('function navigateTo(page) {'), endText = "if (page === 'grand-line') { grandLinePortal.open(); return; }";
