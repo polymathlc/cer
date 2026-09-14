@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="application-version" content="2.1.1" />
+  <meta name="application-version" content="2.1.2" />
   <meta name="theme-color" content="#08131b" />
   <title>HADES II: Chronos Fall — Endless Descent</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -612,7 +612,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
         <div id="runtime-toolbar"><button id="runtime-pause" type="button" aria-label="Pause game and open settings">Ⅱ <span>Pause</span></button></div>
         <section id="runtime-overlay" role="dialog" aria-modal="true" aria-labelledby="runtime-title">
           <div class="runtime-panel">
-            <div class="runtime-eyebrow">CHRONOS FALL · UNDERWORLD ODYSSEY · v2.1.1</div><h1 id="runtime-title">Defy the Titan of Time</h1>
+            <div class="runtime-eyebrow">CHRONOS FALL · UNDERWORLD ODYSSEY · v2.1.2</div><h1 id="runtime-title">Defy the Titan of Time</h1>
             <p id="runtime-description">Descend through shifting chambers, forge a divine build and challenge the endless depths beyond Chronos.</p>
             <div class="runtime-help"><span><b>MOVE</b> WASD / Arrows</span><span><b>STRIKE</b> Hold click / J</span><span><b>SPECIAL</b> Right click / K</span><span><b>DASH</b> Space / Shift</span><span><b>CAST</b> Q / E</span><span><b>HEX</b> F when charged</span></div>
             <p class="runtime-touch-hint">Touch: move with the left pad and use the ability buttons. Attacks aim at the nearest foe.</p>
@@ -769,9 +769,26 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
       }
       register('fire-bloom', `<circle r="88" fill="url(#halo)"/>${repeat(10,i=>`<g transform="rotate(${i*36})"><path d="M-13-23C-37-40-11-54-15-82C8-63 3-53 13-43C18-53 16-61 21-65C41-38 25-26 12-17Z" fill="url(#flame)" stroke="#ffb568" stroke-width="1"/><path d="M-3-31Q-12-47-8-60Q7-48 3-32" fill="#ffecc0" opacity=".85"/></g>`)}<circle r="24" fill="#fff0b6"/><path d="M-16 0H16M0-16V16" stroke="#fffbea" stroke-width="2"/>`, 'fire', 256);
       register('water-wave', `<path d="M-38-83C47-85 93-45 84 1C99 38 51 84-38 83C17 60 43 35 43 0C46-33 18-62-38-83Z" fill="url(#metal)" opacity=".83" stroke="#d9fcff" stroke-width="1.4"/><path d="M-22-69C39-62 70-27 61 3C67 34 37 62-22 69M-4-50C23-48 42-28 41-5M-2 51C22 45 38 30 37 15" fill="none" stroke="#edffff" stroke-width="2"/><path d="M31-60C47-66 66-46 54-40C44-38 40-46 46-48M64-20C79-22 89-5 76 1C65 5 64-5 70-8M48 38C66 37 66 61 48 61C36 60 39 50 47 50" fill="none" stroke="#f4ffff" stroke-width="2"/>${repeat(7,i=>`<circle cx="${30+Math.sin(i*2)*43}" cy="${-72+i*23}" r="${1+i%3}" fill="#e7ffff"/>`)}`, 'tide', 192);
-      register('cast-outer', `${seal(moon,91)}${repeat(8,i=>`<g transform="rotate(${i*45})"><path d="M0-96L6-86L0-76L-6-86Z" fill="#392d63" stroke="#ebd9ff" stroke-width="1.2"/><path d="M0-88L2-85L0-82L-2-85Z" fill="#fff2cf"/></g>`)}<path d="M0-62L53.69 31H-53.69ZM0 62L53.69-31H-53.69Z" fill="none" stroke="#c4a8f7" stroke-width=".8"/>`, 'moon', 384);
-      register('cast-inner', `<circle r="94" fill="url(#halo)"/>${runes(58,12,'#c5bcff',15)}<circle r="40" fill="none" stroke="#e9d9ff" stroke-width="1.3"/><circle r="35" fill="none" stroke="#b09adf" stroke-width=".6"/>${repeat(3,i=>`<g transform="rotate(${i*120})"><path d="M0-27C28-22 31 11 8 24C17 5 11-13 0-27Z" fill="url(#metal)"/><path d="M-4-29L-10-37L-8-25" fill="#ddd6ff"/></g>`)}<circle r="6" fill="#fff1dd"/><path d="M0-15V-8M0 8V15M-15 0H-8M8 0H15" stroke="#e1c7ff"/>`, 'moon', 256);
-      register('cast-burst', `<circle r="86" fill="url(#halo)"/>${repeat(12,i=>`<g transform="rotate(${i*30})"><path d="M0-95L4-67L0-34L-4-67Z" fill="url(#metal)"/><path d="M-9-50L0-64L9-50" fill="none" stroke="#e9d2ff" stroke-width="1.2"/></g>`)}${runes(76,12,'#bfa7ee',15)}<circle r="27" fill="none" stroke="#f7e9ff" stroke-width="3"/>`, 'moon', 256);
+      // The cast is an inscription on the arena floor, not a flying spell.
+      // The outside stroke ends exactly at 96 SVG units: drawSvgCast maps that
+      // boundary to the real cast radius. All ornaments remain inside it.
+      const castGlyphs = [
+        'M-2.5 3V-3L2.5 0L-2.5 3M0-2V2',
+        'M-2.5-3L0 3L2.5-3M-2-1H2M0-3V3',
+        'M-2.5 3V-3H2.5M-2.5 0H1.5M.5-3V3',
+        'M0-3V3M-2.5-1L0 1L2.5-1M-2.5-3H2.5',
+        'M-2.5 2L0-3L2.5 2ZM-2.5 0H2.5M0 2V3.5',
+        'M-2.5-2L0 0L-2.5 2M2.5-2L0 0L2.5 2M0-3V3'
+      ];
+      const castRunes = (radius, count, color, offset = 0) => repeat(count, i =>
+        `<g transform="rotate(${offset+i*360/count}) translate(0 ${-radius})" fill="none" stroke="${color}" stroke-width=".85"><path d="${castGlyphs[i%castGlyphs.length]}"/><circle cx="4.4" r=".48" fill="${color}" stroke="none"/></g>`);
+      const castGeometry = `<path d="M0-69.5L60.19 34.75H-60.19ZM0 69.5L60.19-34.75H-60.19Z" fill="none" stroke="#bfa7f1" stroke-width=".82"/><path d="M0-64L55.43 32H-55.43ZM0 64L55.43-32H-55.43Z" fill="none" stroke="#8b78bc" stroke-width=".48"/><circle r="40" fill="none" stroke="#d9c4ff" stroke-width=".85"/><circle r="36.7" fill="none" stroke="#ad94db" stroke-width=".55"/><path d="M0-32L32 0L0 32L-32 0ZM-22.63-22.63H22.63V22.63H-22.63Z" fill="none" stroke="#d5bef8" stroke-width=".85"/>${repeat(4,i=>`<g transform="rotate(${i*90})" fill="none" stroke="#f5e5c4" stroke-width=".85"><path d="M0-32V-21M-3-26L0-23L3-26"/><circle cy="-35" r="1.3"/></g>`)}<circle r="18" fill="none" stroke="#ccb2ef" stroke-width=".65"/><path d="M0-14L12.12 7H-12.12ZM0 14L12.12-7H-12.12Z" fill="none" stroke="#fff0d1" stroke-width="1.1"/><circle r="4.2" fill="none" stroke="#efd9ff" stroke-width=".85"/><path d="M0-2V2M-2 0H2" fill="none" stroke="#fff4da" stroke-width=".65"/>`;
+      register('cast-outer', `<circle r="95" fill="#6550a6" opacity=".065"/><circle r="95.4" fill="none" stroke="#e8d5ff" stroke-width="1.2"/><circle r="91.6" fill="none" stroke="#ad92d9" stroke-width=".65"/><circle r="82.3" fill="none" stroke="#c1a6f0" stroke-width=".8"/><circle r="79.5" fill="none" stroke="#806aa6" stroke-width=".5"/>${repeat(72,i=>`<path transform="rotate(${i*5})" d="M0-92.8V-${i%3===0?94.5:93.8}" fill="none" stroke="#ddc6fb" stroke-width="${i%3===0?.7:.45}"/>`)}${repeat(4,i=>`<g transform="rotate(${i*90})" fill="none"><path d="M0-95L4-90V-83L0-78L-4-83V-90Z" fill="#211d39" stroke="#f3dfbc" stroke-width=".95"/><path d="M0-91V-82M-2-87H2M0-78V-71M-3-74L0-71L3-74" stroke="#efdbff" stroke-width=".75"/><circle cy="-68.5" r="2.5" stroke="#efdabd" stroke-width=".85"/></g>`)}${repeat(4,i=>`<g transform="rotate(${45+i*90})" fill="none" stroke="#ba9ce7" stroke-width=".7"><path d="M0-79V-73M-3-76L0-73L3-76"/><circle cy="-69.5" r="1.35"/></g>`)}${castGeometry}`, 'moon', 384);
+      // A single cached inscription band is reused at two radii. Only these
+      // internal bands turn; the cardinal markers and center stay grounded.
+      register('cast-inner', `<circle r="89.8" fill="none" stroke="#c4abe8" stroke-width=".5"/><circle r="83.1" fill="none" stroke="#f0dfff" stroke-width=".45"/>${castRunes(86.5,36,'#eee0ff',5)}${repeat(12,i=>`<path transform="rotate(${i*30})" d="M-1.5-80.4H1.5" fill="none" stroke="#d8bfef" stroke-width=".55"/>`)}`, 'moon', 384);
+      // Detonation stays a circular ground ripple; no spikes, blades or orb.
+      register('cast-burst', `<circle r="94" fill="#a183dd" opacity=".055"/><circle r="95.1" fill="none" stroke="#f4e3ff" stroke-width="1.6"/><circle r="90.8" fill="none" stroke="#bfa0ee" stroke-width=".75"/><circle r="78.5" fill="none" stroke="#d9bef5" stroke-width=".75"/>${castRunes(85,30,'#e9d1ff',6)}<circle r="73.8" fill="none" stroke="#f7e5ff" stroke-width="1.25"/><circle r="54" fill="none" stroke="#dbc0f2" stroke-width=".8"/><circle r="48" fill="none" stroke="#b196dc" stroke-width=".55"/>${castGeometry}`, 'moon', 384);
       register('lunar-ray', `<path d="M0-12C70-25 160-25 298 0C160 25 70 25 0 12Z" fill="url(#metal)" opacity=".65"/><path d="M2-8Q138-8 295 0Q138 8 2 8Z" fill="#fdf1ff"/><path d="M2-16Q115-33 258-6M2 16Q115 33 258 6" fill="none" stroke="#bba5ec" stroke-width="1.6"/>${repeat(10,i=>`<path transform="translate(${20+i*26} 0)" d="M-3-9L3 0L-3 9M-1-17L5-12M-1 17L5 12" fill="none" stroke="#6950a5" stroke-width="1"/>`)}`, 'moon', 384, '0 -40 300 80');
       register('ice-trap', `<ellipse cy="52" rx="77" ry="26" fill="url(#halo)" stroke="#77c5dd" stroke-width="1.3"/>${repeat(5,i=>{const x=(i-2)*27, top=[-13,-44,-85,-52,-21][i];return `<path d="M${x-14} 47L${x-8} ${top}L${x+6} ${top-10}L${x+16} 42L${x} 56Z" fill="url(#metal)" stroke="#eaffff" stroke-width="1.3"/><path d="M${x+6} ${top-10}L${x} 56M${x-8} ${top}L${x+4} ${top+12}L${x+16} 42" fill="none" stroke="#6699c3" stroke-width="1"/>`;})}<path d="M-56 60L-21 67L3 61L29 68L61 57" fill="none" stroke="#c3f4ff"/>`, 'frost', 192);
       register('charm-bloom', `${seal(palettes.heart)}${repeat(8,i=>`<g transform="rotate(${i*45}) translate(0 -43) scale(.34)"><path d="M0 38C-65-7-20-59 0-22C20-59 65-7 0 38Z" fill="url(#metal)" stroke="#ffe0f0" stroke-width="3"/><path d="M-14-14Q-23-19-28-7" stroke="#fff5f9" stroke-width="2" fill="none"/></g>`)}<path d="M0-17C-25-40-48-10 0 28C48-10 25-40 0-17Z" fill="url(#metal)" stroke="#ffe3ef" stroke-width="1"/>`, 'heart', 256);
@@ -821,8 +838,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
       const x = cast.x-originX, y = cast.y-originY, diameter = cast.radius*2 / .96;
       const remaining = Math.max(0, Math.min(1, cast.timer / 2.5));
       const reduced = gameRuntime.settings.reducedMotion;
-      attackSvgArt.draw(ctx, 'cast-outer', x,y,diameter,diameter,reduced ? 0 : cast.angle*.22,.82);
-      attackSvgArt.draw(ctx, 'cast-inner', x,y,diameter,diameter,reduced ? 0 : -cast.angle*.36,.48+remaining*.32);
+      attackSvgArt.draw(ctx, 'cast-outer', x,y,diameter,diameter,0,.88);
+      attackSvgArt.draw(ctx, 'cast-inner', x,y,diameter,diameter,reduced ? 0 : cast.angle*.08,.7+remaining*.18);
+      attackSvgArt.draw(ctx, 'cast-inner', x,y,diameter*.57,diameter*.57,reduced ? 0 : -cast.angle*.13,.52+remaining*.2);
     }
     function drawSvgBoonEffects(ctx) {
       const time = boonState().time || 0, reduced = gameRuntime.settings.reducedMotion;
@@ -2123,8 +2141,6 @@ function installHadesLearning() {
       draw(ctx) {
         ctx.save();
         ctx.translate(this.x, this.y);
-
-        drawSvgCast(ctx, this.castActive, this.x, this.y);
 
         // Character glowing aura
         ctx.beginPath();
@@ -4526,7 +4542,7 @@ function installHadesLearning() {
         constructor(values = []) { super(); this.counts = new Map(); this.cells = new Map(); for (const value of values) this.push(value); }
         key(effect) {
           const numeric = effect.constructor === FloatingText && (Number.isFinite(effect.damageTotal) || /^-?\d+(?:\.\d+)?$/.test(effect.text));
-          const shape = `${effect.combo ?? ''}:${effect.maxRadius ?? effect.size ?? ''}:${Math.round((effect.angle || 0) * 4)}`;
+          const shape = `${effect.artKind ?? ''}:${effect.combo ?? ''}:${effect.maxRadius ?? effect.size ?? ''}:${Math.round((effect.angle || 0) * 4)}`;
           return `${ids.get(effect.constructor)}:${Math.floor(effect.x / 48)}:${Math.floor(effect.y / 48)}:${effect.color || ''}:${numeric ? 'damage' : (effect.text || '')}:${shape}`;
         }
         push(...effects) {
@@ -4583,6 +4599,10 @@ function installHadesLearning() {
       const margin = (projectile.radius || 24) + 48;
       return Math.abs(projectile.x - gameState.camera.x) <= canvas.width / 2 + margin &&
         Math.abs(projectile.y - gameState.camera.y) <= canvas.height / 2 + margin;
+    }
+    function isGroundEffect(effect) {
+      return effect instanceof FireTrail || effect instanceof IceShardTrap ||
+        (typeof AnimatedFireExplosion !== 'undefined' && effect instanceof AnimatedFireExplosion && effect.artKind === 'cast');
     }
     let lastTime = performance.now(), simulationDebt = 0, worldTime = 0;
     function resetFrameClock() { lastTime = performance.now(); simulationDebt = 0; }
@@ -4657,14 +4677,17 @@ function installHadesLearning() {
       // A resize can make the previous camera offset invalid immediately.
       Object.assign(gameState.camera, clampedCameraTarget(gameState.camera.x, gameState.camera.y));
       ctx.translate(canvas.width / 2 - gameState.camera.x + shakeX, canvas.height / 2 - gameState.camera.y + shakeY);
-      drawChamberTiles(ctx); drawProps(ctx, worldTime);
+      drawChamberTiles(ctx);
+      // A cast is a world-anchored inscription: scenery and actors cover it.
+      if (typeof drawSvgCast === 'function') drawSvgCast(ctx, player.castActive);
+      for (const p of gameState.particles) if (isGroundEffect(p)) p.draw(ctx);
+      drawProps(ctx, worldTime);
       if (typeof drawCombatReadability === 'function') drawCombatReadability(ctx, worldTime);
       if (typeof drawBoonEffects === 'function') drawBoonEffects(ctx);
-      for (const p of gameState.particles) if (p instanceof FireTrail || p instanceof IceShardTrap) p.draw(ctx);
       for (const e of gameState.enemies) e.draw(ctx);
       player.draw(ctx);
       for (const p of gameState.projectiles) if (projectileIsVisible(p)) p.draw(ctx);
-      for (const p of gameState.particles) if (!(p instanceof FireTrail) && !(p instanceof IceShardTrap)) p.draw(ctx);
+      for (const p of gameState.particles) if (!isGroundEffect(p)) p.draw(ctx);
       ctx.restore();
       if (typeof drawScreenAtmosphere === 'function') drawScreenAtmosphere(ctx, worldTime);
       const workMs = performance.now() - workStarted; metrics.frames++;

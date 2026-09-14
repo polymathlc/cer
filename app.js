@@ -3813,7 +3813,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.386.1';
+const APP_VERSION = 'v1.386.2';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -51915,7 +51915,7 @@ function _hadesInit() {
   const frame = document.getElementById('hadesFrame'), note = document.getElementById('hadesPreviewNote');
   const ready = !!_hadesPreviewLevel();
   if (note) note.textContent = ready ? 'Administrator beta · Five fresh science MCQs between rooms determine healing and boon tier. Preview answers stay separate from student records.' : 'Choose the school level to test the same question selection used for students.';
-  if (frame) { frame.hidden = !ready; if (ready && !frame.getAttribute('src')) frame.setAttribute('src','hades-game.html?learning=1&subject=science&v=2.1.1'); }
+  if (frame) { frame.hidden = !ready; if (ready && !frame.getAttribute('src')) frame.setAttribute('src','hades-game.html?learning=1&subject=science&v=2.1.2'); }
 }
 
 function buildDefenderQuestions() {
