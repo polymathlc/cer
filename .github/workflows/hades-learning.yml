@@ -1,10 +1,10 @@
 name: Hades sanctuary beta checks
 on:
   pull_request:
-    paths: ['hades-*.js', 'hades-game.html', 'app.js', 'index.html', 'tools/hades-*.mjs', '.github/workflows/hades-learning.yml']
+    paths: ['hades-*', 'HADES-BETA.md', 'app.js', 'index.html', 'tools/hades-*.mjs', '.github/workflows/hades-learning.yml']
   push:
     branches: [main]
-    paths: ['hades-*.js', 'hades-game.html', 'app.js', 'index.html', 'tools/hades-*.mjs', '.github/workflows/hades-learning.yml']
+    paths: ['hades-*', 'HADES-BETA.md', 'app.js', 'index.html', 'tools/hades-*.mjs', '.github/workflows/hades-learning.yml']
 permissions:
   contents: read
 jobs:
@@ -32,6 +32,7 @@ jobs:
           node tools/hades-learning-browser.mjs
           node tools/hades-display-browser.mjs
           node tools/hades-student-browser.mjs
+          node tools/hades-cursor-browser.mjs
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:

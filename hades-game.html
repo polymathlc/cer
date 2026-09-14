@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="application-version" content="2.2.0" />
+  <meta name="application-version" content="2.2.1" />
   <meta name="theme-color" content="#08131b" />
   <title>HADES II: Chronos Fall — Endless Descent</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -199,6 +199,14 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
 .touch-action.is-held { background: #437d79; box-shadow: 0 0 18px #7eebbd6b; transform: scale(.96); }
 .touch-strike { grid-column: span 2; color: #fff0c1; border-color: #d7bd77; background: #5b4829e8; }
 .touch-dash { border-color: #a1e4c2; color: #b1f3d6; }
+.ability-status { display: block; margin-top: 3px; color: #aedbcf; font: 600 8px/1.25 system-ui, sans-serif; letter-spacing: 0; white-space: nowrap; }
+.ability-slot { height: 78px; min-width: 66px; }
+[data-readiness="waiting"] .ability-status { color: #efc6a3; }
+.ability-slot[data-readiness="waiting"] .ability-icon { opacity: .5; }
+[data-readiness="active"] { border-color: #dfbcff; box-shadow: inset 0 0 16px #b793e92b; }
+[data-readiness="active"] .ability-status { color: #efd8ff; }
+.touch-action .ability-status { font-size: 8px; margin-top: 4px; }
+.touch-action[data-readiness="waiting"] { border-color: #786e65; }
 .reduced-motion *, .reduced-motion *::before, .reduced-motion *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 @media (pointer: coarse) {
   .runtime-help { display: none; } .runtime-touch-hint { display: block; }
@@ -294,7 +302,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
         <span><span class="key-badge">WASD</span> Move</span>
         <span><span class="key-badge">L-CLICK / J</span> Strike</span>
         <span><span class="key-badge">R-CLICK / K</span> Special</span>
-        <span><span class="key-badge">Q / E</span> Cast</span>
+        <span><span class="key-badge">Q / E</span> Cast at cursor · again to burst</span>
         <span><span class="key-badge">SPACE</span> Dash</span>
         <span><span class="key-badge">F</span> Hex</span>
         <span><span class="key-badge">TAB</span> Boons Codex</span>
@@ -304,22 +312,22 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
       <!-- Bottom HUD -->
       <div class="bottom-hud">
         <div class="abilities-cluster">
-          <div class="ability-slot active">
+          <div class="ability-slot active" data-ability="strike">
             <div class="ability-key">L-CLICK</div>
             <div class="ability-icon"><svg class="ui-glyph" viewBox="0 0 36 36" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="m9 25 15-15 5-2-2 5-15 15m-4-5 8 8M7 30l-3 3m19-22 3 3"/></svg></div>
             <div class="ability-name">Strike</div>
           </div>
-          <div class="ability-slot active">
+          <div class="ability-slot active" data-ability="special">
             <div class="ability-key">R-CLICK</div>
             <div class="ability-icon"><svg class="ui-glyph" viewBox="0 0 36 36" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M27 5a14 14 0 1 0 5 22A13 13 0 0 1 27 5Z"/><path d="m10 8 2-4 2 4 4 2-4 2-2 4-2-4-4-2Z"/></svg></div>
             <div class="ability-name">Special</div>
           </div>
-          <div class="ability-slot active">
+          <div class="ability-slot active" data-ability="cast">
             <div class="ability-key">Q</div>
             <div class="ability-icon"><svg class="ui-glyph" viewBox="0 0 36 36" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><circle cx="18" cy="18" r="13"/><circle cx="18" cy="18" r="9"/><path d="m18 8 9 15H9Zm0-6v3m0 26v3M2 18h3m26 0h3"/></svg></div>
             <div class="ability-name">Cast</div>
           </div>
-          <div class="ability-slot active">
+          <div class="ability-slot active" data-ability="dash">
             <div class="ability-key">SPACE</div>
             <div class="ability-icon"><svg class="ui-glyph" viewBox="0 0 36 36" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="m13 7 13 11-13 11m7-22 13 11-13 11M3 11h9M1 18h14M3 25h9"/></svg></div>
             <div class="ability-name">Dash</div>
@@ -335,7 +343,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
         </div>
 
         <!-- Selene Hex Gauge -->
-        <div id="hex-gauge" class="hex-circle">
+        <div id="hex-gauge" class="hex-circle" data-ability="hex">
           <div class="ability-key">F</div>
           <div class="hex-emblem"><svg class="ui-glyph" viewBox="0 0 36 36" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M27 5a14 14 0 1 0 5 22A13 13 0 0 1 27 5Z"/><path d="m10 8 2-4 2 4 4 2-4 2-2 4-2-4-4-2Z"/></svg></div>
           <div style="font-size: 9px; font-family: var(--font-title); color: #c084fc; font-weight: 700;">HEX</div>
@@ -453,7 +461,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
     }
     const gameRuntime = {
       started: false, ready: false, manualPaused: false, settings: readRuntimeSettings(),
-      aimAssist: false, lastAim: { x: 0, y: -1 }, modalNodes: [],
+      aimAssist: true, pointerAim: null, viewShake: { x: 0, y: 0 }, lastAim: { x: 0, y: -1 }, modalNodes: [],
       frameMetrics: { frames: 0, lastFrameMs: 0, averageWorkMs: 0, worstWorkMs: 0, simulationSteps: 0, droppedTimeMs: 0 }
     };
     function saveRuntimeSettings() {
@@ -542,7 +550,14 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
       document.querySelectorAll('.touch-action.is-held').forEach(button => button.classList.remove('is-held'));
     }
     function updateAimAssist() {
-      if (!gameRuntime.aimAssist) return;
+      if (!gameRuntime.aimAssist) {
+        refreshPointerAim();
+        return;
+      }
+      const moveX = Number(Boolean(keys.d || keys.arrowright)) - Number(Boolean(keys.a || keys.arrowleft));
+      const moveY = Number(Boolean(keys.s || keys.arrowdown)) - Number(Boolean(keys.w || keys.arrowup));
+      const movement = Math.hypot(moveX, moveY);
+      if (movement) gameRuntime.lastAim = { x: moveX / movement, y: moveY / movement };
       let nearest = null, distance = Infinity;
       for (const enemy of gameState.enemies) {
         if (enemy.hp <= 0) continue;
@@ -564,10 +579,24 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
       if (mouse.leftDown || keys.j || [...touchPointers.values()].includes('strike')) performRuntimeAction('strike');
       if (mouse.rightDown || keys.k || [...touchPointers.values()].includes('special')) performRuntimeAction('special');
     }
-    function setPointerAim(event) {
+    function refreshPointerAim() {
+      const pointer = gameRuntime.pointerAim;
+      if (!pointer) return;
+      // Store viewport coordinates, not a stale canvas offset. A stationary
+      // cursor must still aim correctly after scrolling, layout or a resize.
       const rect = canvas.getBoundingClientRect();
-      mouse.x = (event.clientX - rect.left) * canvas.width / Math.max(1, rect.width);
-      mouse.y = (event.clientY - rect.top) * canvas.height / Math.max(1, rect.height); gameRuntime.aimAssist = false;
+      // Undo the shake in the last displayed frame so casting selects the
+      // piece of floor actually beneath the cursor at the moment of the press.
+      mouse.x = (pointer.x - rect.left) * canvas.width / Math.max(1, rect.width) - gameRuntime.viewShake.x;
+      mouse.y = (pointer.y - rect.top) * canvas.height / Math.max(1, rect.height) - gameRuntime.viewShake.y;
+      const worldX = mouse.x + gameState.camera.x - canvas.width / 2;
+      const worldY = mouse.y + gameState.camera.y - canvas.height / 2;
+      player.angle = Math.atan2(worldY - player.y, worldX - player.x);
+    }
+    function setPointerAim(event) {
+      gameRuntime.pointerAim = { x: event.clientX, y: event.clientY };
+      gameRuntime.aimAssist = false;
+      refreshPointerAim();
     }
     function pauseRuntime(reason = 'paused') {
       if (!gameRuntime.started) return;
@@ -601,7 +630,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
       if ([' ', 'shift', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) event.preventDefault();
       keys[key] = true; if (event.repeat) return;
       const action = { q: 'cast', e: 'cast', ' ': 'dash', shift: 'dash', f: 'hex', j: 'strike', k: 'special' }[key];
-      if (action) { gameRuntime.aimAssist = true; performRuntimeAction(action); }
+      // Ability keys do not change aim mode: mouse players also cast with Q/E.
+      // Keyboard-only play starts assisted; touch controls explicitly select it.
+      if (action) performRuntimeAction(action);
     });
     window.addEventListener('keyup', event => { delete keys[event.key.toLowerCase()]; });
     canvas.addEventListener('pointermove', event => { if (event.pointerType !== 'touch') setPointerAim(event); });
@@ -631,9 +662,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
         <div id="runtime-toolbar"><button id="runtime-pause" type="button" aria-label="Pause game and open settings">Ⅱ <span>Pause</span></button></div>
         <section id="runtime-overlay" role="dialog" aria-modal="true" aria-labelledby="runtime-title">
           <div class="runtime-panel">
-            <div class="runtime-eyebrow">CHRONOS FALL · UNDERWORLD ODYSSEY · v2.2.0 · BETA</div><h1 id="runtime-title">Defy the Titan of Time</h1>
+            <div class="runtime-eyebrow">CHRONOS FALL · UNDERWORLD ODYSSEY · v2.2.1 · BETA</div><h1 id="runtime-title">Defy the Titan of Time</h1>
             <p id="runtime-description">Descend through shifting chambers, forge a divine build and challenge the endless depths beyond Chronos.</p>
-            <div class="runtime-help"><span><b>MOVE</b> WASD / Arrows</span><span><b>STRIKE</b> Hold click / J</span><span><b>SPECIAL</b> Right click / K</span><span><b>DASH</b> Space / Shift</span><span><b>CAST</b> Q / E</span><span><b>HEX</b> F when charged</span></div>
+            <div class="runtime-help"><span><b>MOVE</b> WASD / Arrows</span><span><b>STRIKE</b> Hold click / J</span><span><b>SPECIAL</b> Right click / K</span><span><b>DASH</b> Space / Shift</span><span><b>CAST</b> Aim cursor · Q / E<br>Press again to burst</span><span><b>HEX</b> F when charged</span></div>
             <p class="runtime-touch-hint">Touch: move with the left pad and use the ability buttons. Attacks aim at the nearest foe.</p>
             <div class="runtime-settings"><label><input id="runtime-mute" type="checkbox"> Mute sound</label><label><input id="runtime-motion" type="checkbox"> Reduce motion</label></div>
             <button id="runtime-start" class="runtime-primary" type="button" disabled>Preparing the underworld…</button>
@@ -1638,8 +1669,9 @@ function installHadesLearning() {
         this.angle = Math.atan2(worldMouseY - this.y, worldMouseX - this.x);
 
         if (this.isDashing) {
-          this.dashTimer -= dt;
-          this.moveWithCollision(this.dashVx * dt, this.dashVy * dt);
+          const dashStep = Math.min(dt, this.dashTimer);
+          this.dashTimer = Math.max(0, this.dashTimer - dt);
+          this.moveWithCollision(this.dashVx * dashStep, this.dashVy * dashStep);
           if (Math.random() < 0.8) {
             gameState.particles.push(new Particle(this.x + (Math.random()-0.5)*20, this.y + (Math.random()-0.5)*20, 0, 0, '#2ae6b4', 18, 0.3, 'ghost'));
           }
@@ -1689,18 +1721,6 @@ function installHadesLearning() {
         if (this.castActive) {
           this.castActive.timer -= dt;
           this.castActive.angle += dt * 1.2;
-
-          if (hasBoon('duo_blizzard')) {
-            gameState.enemies.slice().forEach(e => {
-              const d = Math.hypot(e.x - this.castActive.x, e.y - this.castActive.y);
-              if (d < 240) {
-                const ang = Math.atan2(this.castActive.y - e.y, this.castActive.x - e.x);
-                e.x += Math.cos(ang) * 75 * dt;
-                e.y += Math.sin(ang) * 75 * dt;
-                e.applyChill(0.5);
-              }
-            });
-          }
 
           if (this.castActive.timer <= 0) {
             this.detonateCast();
@@ -2314,7 +2334,8 @@ function installHadesLearning() {
           if (this.weakTimer <= 0) this.isWeak = false;
         }
 
-        let moveSpeed = this.speed * speedMult;
+        // effectiveDt already applies Chill and time dilation to movement.
+        let moveSpeed = this.speed;
         if (player.castActive) {
           const dToCast = Math.hypot(this.x - player.castActive.x, this.y - player.castActive.y);
           if (dToCast <= player.castActive.radius) {
@@ -2897,14 +2918,19 @@ function installHadesLearning() {
 
       applyChill(duration) {
         if (this.dead) return;
-        this.chillStacks++;
-        this.chillTimer = duration;
+        this.chillStacks = Math.min(5, this.chillStacks + 1);
+        this.chillTimer = Math.max(this.chillTimer, duration);
       }
 
       applyDoom(amount) {
         if (this.dead) return;
-        this.doomDamage = amount * (hasBoon('ares_impending') ? 1.8 : 1);
-        this.doomTimer = hasBoon('ares_impending') ? 1.5 : 1.1;
+        const damage = amount * (hasBoon('ares_impending') ? 1.8 : 1);
+        // Sustained combos may strengthen pending Doom, but never postpone it.
+        if (this.doomTimer > 0) this.doomDamage = Math.max(this.doomDamage, damage);
+        else {
+          this.doomDamage = damage;
+          this.doomTimer = hasBoon('ares_impending') ? 1.5 : 1.1;
+        }
       }
 
       takeDamage(amount, source = 'normal', silent = false) {
@@ -4448,7 +4474,8 @@ function installHadesLearning() {
             if (hasBoon('poseidon_undertow') || hasBoon('poseidon_dash')) {
               const damage = (hasBoon('poseidon_undertow') ? 60 * boonPower('poseidon_undertow') : 0) + (hasBoon('poseidon_dash') ? 50 * boonPower('poseidon_dash') : 0);
               enemy.takeDamage(damage, 'wave');
-              enemy.moveWithCollision(Math.cos(player.angle) * 75, Math.sin(player.angle) * 75);
+              const dashAngle = Math.atan2(player.dashVy, player.dashVx);
+              enemy.moveWithCollision(Math.cos(dashAngle) * 75, Math.sin(dashAngle) * 75);
             }
           }
         }
@@ -4468,12 +4495,19 @@ function installHadesLearning() {
         if (hasBoon('selene_gravity')) clearHostileBullets(cast.x, cast.y, cast.radius);
         if (hasBoon('ares_engulf')) cast.radius = cast.baseRadius * (1 + 0.4 * (1 - Math.max(0, cast.timer) / 2.5));
         state.castTick = (state.castTick || 0) - dt;
-        const tick = state.castTick <= 0;
-        if (tick) state.castTick = hasBoon('zeus_fury') ? 0.32 : 0.4;
+        const tick = state.castTick <= 1e-9;
+        if (tick) state.castTick += hasBoon('zeus_fury') ? 0.32 : 0.4;
         for (const enemy of gameState.enemies.slice()) {
-          if (Math.hypot(enemy.x-cast.x, enemy.y-cast.y) > cast.radius) continue;
+          const distance = Math.hypot(enemy.x-cast.x, enemy.y-cast.y);
+          const inBlizzard = hasBoon('duo_blizzard') && distance < 240;
+          if (inBlizzard && distance > 0) {
+            const pull = Math.min(75 * dt, distance) / distance;
+            enemy.moveWithCollision((cast.x-enemy.x)*pull, (cast.y-enemy.y)*pull);
+          }
+          // A field applies one Chill stack per pulse, including overlapping boons.
+          if (tick && (inBlizzard || (hasBoon('demeter_ring') && distance <= cast.radius))) enemy.applyChill(0.6);
+          if (distance > cast.radius) continue;
           if (hasBoon('ares_engulf')) enemy.moveWithCollision((cast.x-enemy.x)*dt, (cast.y-enemy.y)*dt);
-          if (hasBoon('demeter_ring')) enemy.applyChill(0.6);
           if (tick && hasBoon('zeus_ring')) procChainLightning(enemy, 22 * boonPower('zeus_ring'));
           if (tick && hasBoon('hestia_ring')) enemy.applyScorch(12 * boonPower('hestia_ring'));
           if (tick && hasBoon('apollo_ring')) { enemy.blindTimer = 1; enemy.takeDamage(12 * boonPower('apollo_ring'), 'solar'); }
@@ -4706,6 +4740,7 @@ function installHadesLearning() {
       ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.save();
       // A resize can make the previous camera offset invalid immediately.
       Object.assign(gameState.camera, clampedCameraTarget(gameState.camera.x, gameState.camera.y));
+      gameRuntime.viewShake.x = shakeX; gameRuntime.viewShake.y = shakeY;
       ctx.translate(canvas.width / 2 - gameState.camera.x + shakeX, canvas.height / 2 - gameState.camera.y + shakeY);
       drawChamberTiles(ctx);
       // A cast is a world-anchored inscription: scenery and actors cover it.
@@ -4910,6 +4945,47 @@ function drawCombatReadability(ctx) {
 }
 function drawScreenAtmosphere(ctx) {
   // The screen vignette lives in CSS, not a full-screen per-frame gradient.
+  updateAbilityReadiness();
+}
+
+// Cache both nodes and displayed values: cooldowns change in tenths of a
+// second, so the HUD does not rewrite the DOM on every animation frame.
+let abilityReadinessNodes;
+function updateAbilityReadiness() {
+  if (!abilityReadinessNodes) {
+    abilityReadinessNodes = new Map();
+    for (const action of ['strike', 'special', 'cast', 'dash', 'hex']) {
+      const nodes = [...document.querySelectorAll(`[data-ability="${action}"], .touch-action[data-action="${action}"]`)];
+      abilityReadinessNodes.set(action, nodes.map(node => {
+        const label = document.createElement('span');
+        label.className = 'ability-status';
+        node.appendChild(label);
+        return {node, label, value: ''};
+      }));
+    }
+  }
+  const cooldown = value => value > 0 ? `${(Math.ceil(value * 10) / 10).toFixed(1)}s` : 'Ready';
+  const cast = player.castActive;
+  const statuses = {
+    strike: {text: player.isDashing ? 'Dashing' : cooldown(player.attackTimer), ready: !player.isDashing && player.attackTimer <= 0},
+    special: {text: cooldown(player.specialCooldown), ready: player.specialCooldown <= 0},
+    cast: cast ? {text: `${Math.max(0, cast.timer).toFixed(1)}s · Burst`, ready: true, active: true}
+      : {text: player.magick >= 15 ? '15 Magick' : 'Low Magick', ready: player.magick >= 15},
+    dash: {text: cooldown(player.dashCooldown), ready: player.dashCooldown <= 0},
+    hex: {text: player.hexCharge >= player.hexMax ? 'Ready' : `${Math.floor(player.hexCharge / player.hexMax * 100)}%`, ready: player.hexCharge >= player.hexMax}
+  };
+  for (const [action, entries] of abilityReadinessNodes) {
+    const state = statuses[action];
+    const mode = state.active ? 'active' : state.ready ? 'ready' : 'waiting';
+    const value = `${mode}:${state.text}`;
+    for (const entry of entries) {
+      if (entry.value === value) continue;
+      entry.value = value;
+      entry.label.textContent = state.text;
+      entry.node.dataset.readiness = mode;
+      entry.node.title = action === 'cast' && cast ? 'Press Cast again to detonate the circle now.' : `${action}: ${state.text}`;
+    }
+  }
 }
 
 // Fixed-cost light ribbons and sparks use simulation time, never new particles.

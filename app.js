@@ -1,5 +1,5 @@
 import { installHadesDisplay } from "./hades-display.js";
-import { installHadesLearningParent } from "./hades-learning-parent.js?v=2.2.0";
+import { installHadesLearningParent } from "./hades-learning-parent.js?v=2.2.1";
 import { scienceTcgIdentity, scienceTcgIdentityText, scienceTcgSkillPath } from './science-tcg-identity.js';
 import { applyScienceTcgSignature, scienceTcgBrandedDamage, scienceTcgAbsorbBarrier } from './science-tcg-runtime.js';
 import { createTcgMedia } from './tcg-media.js';
@@ -51874,8 +51874,8 @@ function _sdSeedElo(q) {
   if (d === 'hard') return 1400;
   return 1200;
 }
-// Hades stays in the administrator's beta area. Preview questions go through
-// the same grade, mastery, quality and family-spacing policy as student play.
+// Hades student beta uses the active learner; administrator previews go through
+// the same grade, mastery, quality and family-spacing policy with separate history.
 var _hadesBridge = null;
 var _hadesDisplay = null;
 var _hadesUnavailableContent = new Map();
@@ -51926,7 +51926,7 @@ function _hadesInit() {
   const ready = !!_hadesPreviewLevel();
   if (note && !_isAdmin()) note.textContent = ready ? 'BETA · '+_hadesPreviewLevel()+' · Answer five Science questions between chambers to heal and earn stronger boons.' : 'Set your school level in your profile to start Hades.';
   else if (note) note.textContent = ready ? 'Administrator beta · Five fresh science MCQs between rooms determine healing and boon tier. Preview answers stay separate from student records.' : 'Choose the school level to test the same question selection used for students.';
-  if (frame) { frame.hidden = !ready; if (ready && !frame.getAttribute('src')) frame.setAttribute('src','hades-game.html?learning=1&subject=science&v=2.2.0'); }
+  if (frame) { frame.hidden = !ready; if (ready && !frame.getAttribute('src')) frame.setAttribute('src','hades-game.html?learning=1&subject=science&v=2.2.1'); }
 }
 
 function buildDefenderQuestions() {
