@@ -18,16 +18,20 @@ const harness = `<!doctype html><meta charset="utf-8"><title>Isolated Grand Line
 import {createGrandLineLearningController} from '/grand-line-learning-parent.js';
 import {createGrandLineEconomy} from '/grand-line-economy.js';
 import {createCollection} from '/grand-line-core.js';
-const ctx={profileKey:'test-profile'}, profile=createCollection();
-let state={gold:5000,grandLine:{profiles:{'test-profile':{collection:profile}}}};
+const administrator=new URLSearchParams(location.search).get('role')==='admin';
+const ctx={profileKey:'test-profile',admin:administrator}, profile=createCollection();
+if(administrator)profile.cards.luffy.copies=3;
+let state={gold:administrator?0:5000,grandLine:{profiles:{'test-profile':{collection:profile}}}};
 const offers=[{id:'spark',name:'Bronze',cost:120,odds:{1:40,2:30,3:17,4:8,5:3.5,6:1.2,7:.3}},{id:'nova',name:'Silver',cost:320,bonusOdds:{3:62,4:25,5:9,6:3,7:1}},{id:'galaxy',name:'Gold',cost:750,bonusOdds:{4:68,5:22,6:8,7:2}}];
-window.fake={requests:[],records:[],randomValue:0,questionIndex:0,commits:0,blockPurchase:false,blockSave:false,get state(){return state;}};
-const economy=createGrandLineEconomy({getState:()=>state,getPacks:()=>offers,isCurrent:()=>true,random:()=>fake.randomValue,commit:async next=>{state=next;fake.commits++;}});
+window.fake={requests:[],records:[],adminCalls:[],role:administrator?'admin':'student',randomValue:0,questionIndex:0,commits:0,blockPurchase:false,blockSave:false,blockAdmin:false,holdAdmin:false,failAdminResponseOnce:false,get state(){return state;}};
+const currentContext=()=>({...ctx,admin:fake.role==='admin'});
+const economy=createGrandLineEconomy({getState:()=>state,getUser:()=>({uid:'test-user',role:fake.role}),getPacks:()=>offers,isCurrent:c=>c.profileKey===ctx.profileKey&&c.admin===(fake.role==='admin'),random:()=>fake.randomValue,commit:async next=>{state=next;fake.commits++;}});
 const frame=document.createElement('iframe');frame.id='game';
-const controller=createGrandLineLearningController({origin:location.origin,subject:'Math',getFrame:()=>frame,getIdentity:()=> 'test-identity',getProfileKey:()=>ctx.profileKey,isAllowed:()=>true,isActive:()=>true,makeSessionId:()=> 'test-session',getSnapshot:()=>economy.getSnapshot(ctx),buyPack:(d)=>{if(fake.blockPurchase)throw Object.assign(Error('Test pack unavailable'),{confirmedNoCharge:true});return economy.buyPack(d,ctx);},saveCollection:d=>{if(fake.blockSave)throw Error('Test progress save failure');return economy.saveCollection(d,ctx);},getQuestions:()=>[0,1,2].map(i=>({id:'test-q-'+i,html:'<p>Test question '+(i+1)+'</p>',options:['Wrong','Correct'],answer:1})),recordAnswer:async r=>fake.records.push({correct:r.correct,round:r.round}),presentQuestions:({questions,grade})=>new Promise(resolve=>{const box=document.querySelector('#questions');fake.questionIndex=0;box.hidden=false;function draw(){box.replaceChildren();const p=document.createElement('p');p.id='question-index';p.textContent='Question '+(fake.questionIndex+1)+' of 3';box.append(p);for(let choice=0;choice<2;choice++){const b=document.createElement('button');b.dataset.answer=choice;b.textContent=choice?'Correct':'Wrong';b.onclick=async()=>{b.disabled=true;const result=await grade(fake.questionIndex,choice,1000);if(!result)return;fake.questionIndex++;if(fake.questionIndex===3){box.hidden=true;resolve(true);}else draw();};box.append(b);}}draw();})});
+const controller=createGrandLineLearningController({origin:location.origin,subject:'Math',getFrame:()=>frame,getIdentity:()=> 'test-identity:'+fake.role,getProfileKey:()=>ctx.profileKey,isAllowed:()=>true,isActive:()=>true,isAdmin:()=>fake.role==='admin',makeSessionId:()=> 'test-session',getSnapshot:()=>economy.getSnapshot(currentContext()),buyPack:(d)=>{if(fake.blockPurchase)throw Object.assign(Error('Test pack unavailable'),{confirmedNoCharge:true});return economy.buyPack(d,currentContext());},saveCollection:d=>{if(fake.blockSave)throw Error('Test progress save failure');return economy.saveCollection(d,currentContext());},adminAction:async d=>{fake.adminCalls.push({...d});if(fake.holdAdmin)await new Promise(resolve=>{fake.releaseAdmin=()=>{fake.holdAdmin=false;resolve();};});if(fake.blockAdmin)throw Error('Test admin save unavailable');const result=await economy.adminAction(d,currentContext());if(fake.failAdminResponseOnce){fake.failAdminResponseOnce=false;throw Error('Test admin response interrupted');}return result;},getQuestions:()=>[0,1,2].map(i=>({id:'test-q-'+i,html:'<p>Test question '+(i+1)+'</p>',options:['Wrong','Correct'],answer:1})),recordAnswer:async r=>fake.records.push({correct:r.correct,round:r.round}),presentQuestions:({questions,grade})=>new Promise(resolve=>{const box=document.querySelector('#questions');fake.questionIndex=0;box.hidden=false;function draw(){box.replaceChildren();const p=document.createElement('p');p.id='question-index';p.textContent='Question '+(fake.questionIndex+1)+' of 3';box.append(p);for(let choice=0;choice<2;choice++){const b=document.createElement('button');b.dataset.answer=choice;b.textContent=choice?'Correct':'Wrong';b.onclick=async()=>{b.disabled=true;const result=await grade(fake.questionIndex,choice,1000);if(!result)return;fake.questionIndex++;if(fake.questionIndex===3){box.hidden=true;resolve(true);}else draw();};box.append(b);}}draw();})});
 window.addEventListener('message',event=>{if(event.source===frame.contentWindow)fake.requests.push(event.data);controller.handleMessage(event);});
 fake.send=data=>frame.contentWindow.postMessage(data,location.origin);
-fake.snapshot=()=>economy.getSnapshot(ctx);
+fake.snapshot=()=>economy.getSnapshot(currentContext());
+fake.invalidate=()=>controller.invalidate('The signed-in role changed.');
 frame.src='/grand-line.html?test=1&subject=math&learning=1';document.body.append(frame);
 </script>`;
 
@@ -81,6 +85,212 @@ async function defenseState(frame) {
     time:__grandLine.battle.stats.simulatedSeconds,spawned:__grandLine.battle.spawned,
     allies:__grandLine.battle.allies.map(a=>({id:a.id,hp:a.hp,energy:a.energy})),
     enemies:__grandLine.battle.enemies.map(e=>({id:e.id,x:e.x,y:e.y,hp:e.hp}))}));
+}
+
+async function harnessGame(host, role = 'student') {
+  await host.goto(base + '/__harness.html?role=' + role);
+  await host.waitForFunction(() => document.querySelector('#game')?.contentWindow.__grandLine?.ready);
+  const frame = host.frames().find(f => f.url().includes('grand-line.html'));
+  await frame.evaluate(() => { __grandLine.settings.muted = true; });
+  return frame;
+}
+
+async function checkAdministratorShop() {
+  const student = await browser.newPage({ viewport: { width: 1100, height: 850 } }); observe(student);
+  const learner = await harnessGame(student);
+  await learner.locator('[data-view="packs"]').click();
+  assert.equal(await learner.locator('#admin-tools').isHidden(), true);
+  assert.deepEqual(await learner.evaluate(() => __grandLine.admin), { available: false, unlimitedGold: false });
+  const studentBefore = await student.evaluate(() => JSON.stringify(fake.state));
+  const dispatched = await student.evaluate(() => fake.requests.filter(d => d.type === 'GLTCG_ADMIN_REQUEST').length);
+  await learner.evaluate(() => __grandLine.requestAdminAction('unlock-all'));
+  await frames(student, 3);
+  assert.equal(await student.evaluate(() => fake.requests.filter(d => d.type === 'GLTCG_ADMIN_REQUEST').length), dispatched);
+  // A compromised child can alter its own display but cannot supply parent authority.
+  await learner.evaluate(() => {
+    __grandLine.applySnapshot({ admin: { available: true, unlimitedGold: true }, wallet: { ...__grandLine.wallet, unlimitedGold: true } });
+    parent.postMessage({ type: 'GLTCG_ADMIN_REQUEST', requestId: 'forged-unlock', sessionId: __grandLine.sessionId, action: 'unlock-all' }, location.origin);
+    parent.postMessage({ type: 'GLTCG_ADMIN_REQUEST', requestId: 'forged-unlimited', sessionId: __grandLine.sessionId, action: 'set-unlimited-gold', enabled: true, admin: true }, location.origin);
+  });
+  await student.waitForFunction(() => fake.requests.some(d => d.requestId === 'forged-unlimited'));
+  await frames(student, 3);
+  assert.equal(await student.evaluate(() => JSON.stringify(fake.state)), studentBefore);
+  assert.equal(await student.evaluate(() => fake.adminCalls.length), 0);
+  await learner.locator('[data-pack="spark"]').click();
+  await learner.locator('#open-pack').click();
+  await learner.waitForFunction(() => __grandLine.dialog === 'reveal');
+  assert.equal(await student.evaluate(() => fake.state.gold), 4880, 'Forged free-purchase display still pays the host wallet rate');
+  assert.equal(await learner.evaluate(() => __grandLine.wallet.unlimitedGold), false);
+  await student.close();
+  check('Student controls stay hidden and forged administrator availability cannot authorize parent actions');
+
+  const host = await browser.newPage({ viewport: { width: 1440, height: 1000 } }); observe(host);
+  let game = await harnessGame(host, 'admin');
+  await game.locator('[data-view="packs"]').click();
+  await game.locator('#admin-tools').waitFor({ state: 'visible' });
+  assert.deepEqual(await game.evaluate(() => __grandLine.admin), { available: true, unlimitedGold: false });
+  assert.equal(await game.evaluate(() => __grandLine.wallet.balance), 0);
+  assert.equal(await game.locator('#open-pack').isDisabled(), true);
+
+  await host.evaluate(() => { fake.holdAdmin = true; });
+  await game.locator('#admin-unlimited').click();
+  await game.waitForFunction(() => !!__grandLine.adminPending);
+  assert.equal(await game.evaluate(() => __grandLine.admin.unlimitedGold), false, 'Unlimited gold waits for the real parent confirmation');
+  assert.equal(await game.locator('#open-pack').isDisabled(), true);
+  assert.equal(await game.locator('#admin-unlock-all').isDisabled(), true);
+  await game.evaluate(() => __grandLine.beginBattle(1));
+  assert.equal(await game.evaluate(() => __grandLine.battle), null, 'A pending admin save prevents starting a defense');
+  await host.waitForFunction(() => typeof fake.releaseAdmin === 'function');
+  await host.evaluate(() => fake.releaseAdmin());
+  await game.waitForFunction(() => !__grandLine.adminPending && __grandLine.admin.unlimitedGold);
+  assert.equal(await game.evaluate(() => __grandLine.wallet.unlimitedGold), true);
+  assert.equal(await host.evaluate(() => fake.state.gold), 0);
+  assert.equal(await game.locator('#open-pack').isEnabled(), true);
+  check('Admin gold starts disabled and only unlocks purchases after an acknowledged save; pending actions lock purchases and defense');
+
+  for (const tier of ['spark', 'nova', 'galaxy']) {
+    const before = await game.evaluate(() => Object.values(__grandLine.collection.cards).reduce((sum, c) => sum + c.copies, 0));
+    await game.locator(`[data-pack="${tier}"]`).click();
+    assert.equal(await game.locator('#open-pack').isEnabled(), true);
+    await game.locator('#open-pack').click();
+    await game.waitForFunction(() => __grandLine.dialog === 'reveal');
+    assert.equal(await game.locator('#dialog-panel .tcg-card').count(), 1);
+    assert.equal(await game.evaluate(() => Object.values(__grandLine.collection.cards).reduce((sum, c) => sum + c.copies, 0)), before + 1);
+    assert.equal(await host.evaluate(() => fake.state.gold), 0);
+    assert.equal(await game.evaluate(() => __grandLine.wallet.balance), 0);
+    assert.equal(await host.evaluate(() => Number.isFinite(fake.state.gold)), true);
+    await game.locator('#dialog-panel .dialog-close').click();
+  }
+  const freeReceipt = await host.evaluate(() => fake.requests.findLast(d => d.type === 'GLTCG_BUY_REQUEST'));
+  const afterFreePurchase = await host.evaluate(() => JSON.stringify(fake.state));
+  await game.evaluate(d => parent.postMessage(d, location.origin), freeReceipt); await frames(host, 3);
+  assert.equal(await host.evaluate(() => JSON.stringify(fake.state)), afterFreePurchase);
+  assert.equal(await game.evaluate(() => __grandLine.collection.stats.packsOpened), 3);
+  check('All three administrator pack tiers work at zero gold with one normal card per purchase, finite wallet values and durable replay protection');
+
+  const beforeUnlock = await game.evaluate(() => ({ cards: structuredClone(__grandLine.collection.cards), stats: structuredClone(__grandLine.collection.stats), team: [...__grandLine.collection.team] }));
+  await host.evaluate(() => { fake.failAdminResponseOnce = true; });
+  await game.locator('#admin-unlock-all').click();
+  await game.waitForFunction(() => __grandLine.adminPending?.waiting === false);
+  assert.deepEqual(await game.evaluate(() => __grandLine.collection.cards), beforeUnlock.cards, 'Failed responses do not optimistically grant the roster');
+  assert.equal(await host.evaluate(() => Object.keys(fake.state.grandLine.profiles['test-profile'].collection.cards).length), 50);
+  const commits = await host.evaluate(() => fake.commits);
+  assert.equal(await game.locator('#open-pack').isDisabled(), true);
+  await game.locator('#admin-retry').click();
+  await game.waitForFunction(() => !__grandLine.adminPending && Object.keys(__grandLine.collection.cards).length === 50);
+  assert.equal(await host.evaluate(() => fake.commits), commits, 'Retrying the acknowledged mutation has no second write');
+  const unlocked = await game.evaluate(() => ({ cards: structuredClone(__grandLine.collection.cards), stats: structuredClone(__grandLine.collection.stats), team: [...__grandLine.collection.team], roster: __grandLine.CHARACTERS.map(c => c.id) }));
+  assert.equal(Object.keys(unlocked.cards).length, 50);
+  assert.deepEqual(Object.keys(unlocked.cards).sort(), unlocked.roster.sort());
+  for (const [id, card] of Object.entries(unlocked.cards)) assert.equal(card.copies, beforeUnlock.cards[id]?.copies || 1, id + ' preserves existing copies or receives one copy');
+  assert.equal(unlocked.cards.luffy.copies, 3);
+  assert.deepEqual(unlocked.stats, beforeUnlock.stats); assert.deepEqual(unlocked.team, beforeUnlock.team);
+  for (const id of ['shanks', 'blackbeard', 'bigmom', 'kizaru', 'sengoku', 'garp', 'mihawk', 'hancock']) assert.equal(unlocked.cards[id], undefined);
+  await screenshot(host, 'admin-shop-desktop');
+  check('Unlock all grants only the 50 current cards, preserves duplicate ranks and crew, and safely retries an interrupted response');
+
+  await game.locator('#admin-unlimited').click();
+  await game.waitForFunction(() => !__grandLine.adminPending && !__grandLine.admin.unlimitedGold);
+  assert.equal(await game.evaluate(() => __grandLine.wallet.unlimitedGold), false);
+  assert.equal(await game.locator('#open-pack').isDisabled(), true);
+  const noDebit = await host.evaluate(() => JSON.stringify(fake.state));
+  await game.evaluate(() => document.querySelector('#open-pack').click()); await frames(host, 3);
+  assert.equal(await host.evaluate(() => JSON.stringify(fake.state)), noDebit);
+  await game.locator('#admin-unlimited').click();
+  await game.waitForFunction(() => !__grandLine.adminPending && __grandLine.admin.unlimitedGold);
+  await Promise.all([game.waitForNavigation(), game.evaluate(() => location.reload())]);
+  game = host.frames().find(f => f.url().includes('grand-line.html'));
+  await game.waitForFunction(() => __grandLine?.ready && __grandLine.admin.available);
+  assert.equal(await game.evaluate(() => __grandLine.admin.unlimitedGold), true);
+  assert.equal(await game.evaluate(() => __grandLine.wallet.balance), 0);
+  assert.deepEqual(await game.evaluate(() => __grandLine.collection.cards), unlocked.cards);
+  await game.locator('[data-view="packs"]').click();
+
+  await host.evaluate(() => { fake.state.gold = 1000; fake.holdAdmin = true; });
+  await game.evaluate(snapshot => {
+    __grandLine.applySnapshot(snapshot);
+    window.adminTestSetTimeout = window.setTimeout;
+    window.setTimeout = (callback, delay, ...args) => window.adminTestSetTimeout(callback, delay === 15000 ? 50 : delay, ...args);
+  }, await host.evaluate(() => fake.snapshot()));
+  await game.locator('#admin-unlimited').click();
+  await game.waitForFunction(() => __grandLine.adminPending?.waiting === false);
+  assert.equal(await game.locator('#admin-retry').isVisible(), true);
+  assert.equal(await game.locator('#open-pack').isDisabled(), true);
+  assert.equal(await game.evaluate(() => __grandLine.admin.unlimitedGold), true);
+  const timeoutRequests = await host.evaluate(() => fake.requests.filter(d => d.type === 'GLTCG_ADMIN_REQUEST').length);
+  await game.evaluate(() => { window.setTimeout = window.adminTestSetTimeout; delete window.adminTestSetTimeout; });
+  await host.waitForFunction(() => typeof fake.releaseAdmin === 'function');
+  await host.evaluate(() => fake.releaseAdmin());
+  await game.waitForFunction(() => !__grandLine.adminPending && !__grandLine.admin.unlimitedGold);
+  assert.equal(await host.evaluate(() => fake.requests.filter(d => d.type === 'GLTCG_ADMIN_REQUEST').length), timeoutRequests);
+  assert.equal(await host.evaluate(() => fake.state.gold), 1000);
+  assert.match(await game.locator('#open-pack').textContent(), /points/);
+  await game.locator('#admin-unlimited').click();
+  await game.waitForFunction(() => !__grandLine.adminPending && __grandLine.admin.unlimitedGold);
+  check('An admin timeout keeps purchases locked and accepts the late original confirmation without a duplicate request');
+
+  // A failed disable reply is especially sensitive: the parent can already be
+  // charging normal rates while the child still displays unlimited gold.
+  await host.evaluate(() => { fake.state.gold = 1000; fake.failAdminResponseOnce = true; });
+  await game.evaluate(snapshot => __grandLine.applySnapshot(snapshot), await host.evaluate(() => fake.snapshot()));
+  await game.locator('#admin-unlimited').click();
+  await game.waitForFunction(() => __grandLine.adminPending?.waiting === false);
+  assert.equal(await host.evaluate(() => fake.state.grandLine.admin.unlimitedGold), false);
+  assert.equal(await game.evaluate(() => __grandLine.admin.unlimitedGold), true, 'The child still has its last confirmed snapshot');
+  assert.equal(await game.locator('#open-pack').isDisabled(), true, 'Uncertain admin state cannot silently turn a free-looking purchase into a debit');
+  assert.equal(await game.locator('#admin-unlimited').isDisabled(), true);
+  const pendingDisable = await game.evaluate(() => ({ action: __grandLine.adminPending.action, enabled: __grandLine.adminPending.enabled }));
+  assert.deepEqual(pendingDisable, { action: 'set-unlimited-gold', enabled: false });
+  await game.evaluate(() => { document.querySelector('#open-pack').click(); __grandLine.go('campaign'); __grandLine.beginBattle(1); });
+  assert.equal(await game.locator('#packs-view').isVisible(), true);
+  assert.equal(await game.evaluate(() => __grandLine.battle), null);
+  assert.equal(await host.evaluate(() => fake.state.gold), 1000);
+  await game.locator('#admin-retry').click();
+  await game.waitForFunction(() => !__grandLine.adminPending && !__grandLine.admin.unlimitedGold);
+  const disableCalls = await host.evaluate(() => fake.adminCalls.slice(-2).map(({ action, enabled }) => ({ action, enabled })));
+  assert.deepEqual(disableCalls, [pendingDisable, pendingDisable], 'Retry repeats the exact intended toggle, rather than reversing it');
+  assert.equal(await game.locator('#open-pack').isEnabled(), true);
+  assert.match(await game.locator('#open-pack').textContent(), /points/);
+  assert.equal(await host.evaluate(() => fake.state.gold), 1000);
+  check('An uncertain unlimited-gold disable locks spending and navigation until the exact action is confirmed, then restores visible paid prices');
+  await host.evaluate(() => { fake.state.gold = 0; });
+  await game.evaluate(snapshot => __grandLine.applySnapshot(snapshot), await host.evaluate(() => fake.snapshot()));
+  await game.locator('#admin-unlimited').click();
+  await game.waitForFunction(() => !__grandLine.adminPending && __grandLine.admin.unlimitedGold);
+
+  await host.setViewportSize({ width: 320, height: 740 }); await frames(host, 3);
+  await noOverflow(host);
+  assert.ok(await game.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), 'Administrator card shop fits a 320px iframe');
+  for (const selector of ['#admin-unlimited', '#admin-unlock-all']) {
+    assert.equal(await game.locator(selector).isVisible(), true);
+    assert.ok((await game.locator(selector).boundingBox()).height >= 40, 'Admin touch controls remain usable');
+  }
+  await game.locator('#admin-unlimited').click();
+  await game.waitForFunction(() => !__grandLine.adminPending && !__grandLine.admin.unlimitedGold);
+  assert.equal(await game.locator('#open-pack').isDisabled(), true);
+  await game.locator('#admin-unlimited').click();
+  await game.waitForFunction(() => !__grandLine.adminPending && __grandLine.admin.unlimitedGold);
+  assert.equal(await game.locator('#open-pack').isEnabled(), true);
+  await screenshot(host, 'admin-shop-small-phone');
+  await game.locator('#open-pack').scrollIntoViewIfNeeded();
+  await screenshot(host, 'admin-shop-small-phone-tiers');
+  check('Admin controls disable and re-enable free packs, persist after iframe reload, and fit a 320px card shop');
+
+  // Role changes retire both the visible controls and outstanding work.
+  await host.evaluate(() => { fake.holdAdmin = true; });
+  await game.locator('#admin-unlimited').click();
+  await game.waitForFunction(() => !!__grandLine.adminPending);
+  const beforeRoleChange = await host.evaluate(() => JSON.stringify(fake.state));
+  await host.evaluate(() => { fake.role = 'student'; fake.invalidate(); fake.releaseAdmin(); });
+  await game.waitForFunction(() => !__grandLine.ready && !__grandLine.adminPending);
+  assert.equal(await game.locator('#admin-tools').isHidden(), true);
+  assert.deepEqual(await game.evaluate(() => __grandLine.admin), { available: false, unlimitedGold: false });
+  assert.equal(await game.evaluate(() => __grandLine.wallet.unlimitedGold), false);
+  await frames(host, 3);
+  assert.equal(await host.evaluate(() => JSON.stringify(fake.state)), beforeRoleChange);
+  assert.equal(await game.evaluate(() => __grandLine.sessionId), '');
+  await host.close();
+  check('Role invalidation hides admin features, clears pending authority, and rejects a stale in-flight action');
 }
 
 try {
@@ -321,6 +531,7 @@ try {
     await mobile.close();
   }
   check('Collection, full card details, defender placement and running defense fit portrait and landscape phones');
+  await checkAdministratorShop();
   const production = await browser.newPage(); observe(production); await production.goto(base + '/grand-line.html'); await production.locator('#card-grid .tcg-card').first().waitFor();
   assert.equal(await production.evaluate(() => typeof window.__grandLine), 'undefined');
   check('Production pages do not expose the test API');

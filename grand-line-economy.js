@@ -1,6 +1,6 @@
 // Purchases use the portal's existing reward-point wallet. The iframe cannot
 // choose its card, price, odds, ownership or balance, and receives no ledger.
-import { CHARACTERS, CHARACTER_BY_ID, currentCharacterId, createCollection, normalizeCollection, addCard, setTeam } from './grand-line-core.js?v=1.2.0';
+import { CHARACTERS, CHARACTER_BY_ID, currentCharacterId, createCollection, normalizeCollection, addCard, setTeam } from './grand-line-core.js?v=1.2.1';
 
 const token = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
 const number = (value, max = 1000000) => Number.isSafeInteger(value) && value >= 0 ? Math.min(max, value) : 0;
@@ -52,6 +52,17 @@ export function createGrandLineRpgCommit(env) {
 }
 export function createGrandLineEconomy(env) {
   let saving = false;
+  // Only the host's current authenticated user and trusted context can grant
+  // administrator privileges. A stored flag never authorizes a student.
+  function adminUid(ctx) {
+    const user = env.getUser?.();
+    return user?.uid && user.role === 'admin' && ctx?.admin === true && env.isCurrent(ctx) ? user.uid : null;
+  }
+  function requireAdmin(ctx, expectedUid) {
+    const uid = adminUid(ctx);
+    if (!uid || expectedUid !== undefined && uid !== expectedUid) throw rejected('Administrator access changed or is unavailable. Reopen the game.');
+    return uid;
+  }
   function current(ctx) {
     if (!ctx?.profileKey || !env.isCurrent(ctx)) throw new Error('Your learning profile changed. Reopen Grand Line Chronicles.');
     const state = env.getState();
@@ -66,18 +77,25 @@ export function createGrandLineEconomy(env) {
   function snapshot(ctx) {
     if (saving) throw new Error('Your wallet is still saving. Retry in a moment.');
     const state = current(ctx), saved = record(state, ctx);
-    return { wallet: { available: true, balance: Math.floor(state.gold), currency: 'points', offers: offers() },
+    const available = !!adminUid(ctx), unlimitedGold = available && state.grandLine?.admin?.unlimitedGold === true;
+    return { wallet: { available: true, balance: Math.floor(state.gold), currency: 'points', offers: offers(), unlimitedGold },
+      admin: { available, unlimitedGold },
       collection: normalizeCollection(saved.collection || createCollection()) };
   }
-  async function commit(ctx, original, saved, balance = original.gold) {
+  async function commit(ctx, original, saved, balance = original.gold, { adminPatch, authority } = {}) {
     if (saving) throw new Error('Another purchase or save is still finishing. Retry in a moment.');
     if (current(ctx) !== original) throw new Error('Your wallet changed. Retry with the refreshed balance.');
+    if (authority !== undefined) requireAdmin(ctx, authority);
     const next = clone(original);
     next.gold = balance;
-    next.grandLine = { version: 1, profiles: { ...(next.grandLine?.profiles || {}), [ctx.profileKey]: saved } };
+    const profiles = { ...(next.grandLine?.profiles || {}) };
+    if (saved !== undefined) profiles[ctx.profileKey] = saved;
+    next.grandLine = { ...(next.grandLine || {}), version: 1, profiles };
+    if (adminPatch) next.grandLine.admin = { ...(next.grandLine.admin || {}), ...adminPatch };
     saving = true;
     try { await env.commit(next, original, ctx); }
     finally { saving = false; }
+    if (authority !== undefined) requireAdmin(ctx, authority);
     current(ctx); return snapshot(ctx);
   }
   return {
@@ -99,7 +117,9 @@ export function createGrandLineEconomy(env) {
         return { ...result, grant, replayed: true };
       }
       if (Object.keys(ledger).length >= 10000) throw rejected('This collection has reached its purchase limit.');
-      if (state.gold < offer.cost) throw rejected(`This pack costs ${offer.cost} reward points. Answer more questions to earn points.`);
+      const authority = state.grandLine?.admin?.unlimitedGold === true ? adminUid(ctx) : null;
+      const cost = authority ? 0 : offer.cost;
+      if (state.gold < cost) throw rejected(`This pack costs ${offer.cost} reward points. Answer more questions to earn points.`);
       const weighted = Object.entries(offer.odds).filter(([stars, weight]) => Number(stars) >= 1 && Number(stars) <= 7 && Number.isFinite(weight) && weight > 0);
       const total = weighted.reduce((sum, [, weight]) => sum + weight, 0);
       if (!total) throw rejected('This pack has no available characters.');
@@ -112,8 +132,29 @@ export function createGrandLineEconomy(env) {
       const added = addCard(collection, character.id);
       collection.stats.packsOpened = number(collection.stats.packsOpened) + 1;
       const grant = { characterId: character.id, copies: added.copies, duplicate: added.duplicate, stars };
-      const next = { ...saved, collection, purchases: { ...ledger, [purchaseId]: { packId, cost: offer.cost, grant, at: new Date().toISOString() } } };
-      return { ...await commit(ctx, state, next, state.gold - offer.cost), grant, replayed: false };
+      const next = { ...saved, collection, purchases: { ...ledger, [purchaseId]: { packId, cost,
+        ...(authority ? { normalCost: offer.cost, adminUnlimited: true } : {}), grant, at: new Date().toISOString() } } };
+      return { ...await commit(ctx, state, next, state.gold - cost, authority ? { authority } : {}), grant, replayed: false };
+    },
+    async adminAction(request, ctx) {
+      if (saving) throw new Error('Your wallet is still saving. Retry in a moment.');
+      const authority = requireAdmin(ctx), state = current(ctx);
+      if (request?.action === 'set-unlimited-gold') {
+        if (typeof request.enabled !== 'boolean') throw rejected('Choose whether unlimited gold is enabled.');
+        const changed = (state.grandLine?.admin?.unlimitedGold === true) !== request.enabled;
+        if (!changed) return { ...snapshot(ctx), action: request.action, changed: false };
+        return { ...await commit(ctx, state, undefined, state.gold, { authority, adminPatch: { unlimitedGold: request.enabled } }),
+          action: request.action, changed: true };
+      }
+      if (request?.action === 'unlock-all') {
+        const saved = record(state, ctx), collection = normalizeCollection(saved.collection);
+        let unlockedCount = 0;
+        for (const character of CHARACTERS) if (!collection.cards[character.id]) { addCard(collection, character.id); unlockedCount++; }
+        if (!unlockedCount) return { ...snapshot(ctx), action: request.action, unlockedCount: 0, changed: false };
+        return { ...await commit(ctx, state, { ...saved, collection }, state.gold, { authority }),
+          action: request.action, unlockedCount, changed: true };
+      }
+      throw rejected('Unknown administrator action.');
     },
     async saveCollection({ team, progress }, ctx) {
       if (saving) throw new Error('Your wallet is still saving. Retry in a moment.');

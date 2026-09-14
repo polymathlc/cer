@@ -1,12 +1,12 @@
 import { installHadesDisplay } from "./hades-display.js";
 import { installPirateRiftPortal } from "./pirate-rift-portal.js?v=1.0.0";
-import { installGrandLinePortal } from "./grand-line-portal.js?v=1.2.0";
-import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=1.2.0";
-import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from "./grand-line-economy.js?v=1.2.0";
+import { installGrandLinePortal } from "./grand-line-portal.js?v=1.2.1";
+import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=1.2.1";
+import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from "./grand-line-economy.js?v=1.2.1";
 const grandLineRpgSaveGate = createGrandLineRpgSaveGate({getUser:()=>currentUser,flush:()=>rpgSave()});
 const grandLinePortal=installGrandLinePortal({
   ...createGrandLineEconomy({
-    getState:()=>rpgState,getPacks:()=>TCG_PACKS,isCurrent:ctx=>grandLinePortal.isCurrent(ctx),
+    getUser:()=>currentUser,getState:()=>rpgState,getPacks:()=>TCG_PACKS,isCurrent:ctx=>grandLinePortal.isCurrent(ctx),
     commit:createGrandLineRpgCommit({saveGate:grandLineRpgSaveGate,getUser:()=>currentUser,getState:()=>rpgState,setState:state=>{rpgState=state;},
       isCurrent:ctx=>grandLinePortal.isCurrent(ctx),render:()=>rpgRenderSide(),
       writeState:(state,uid)=>RPG_STORAGE_MODE==='firestore'

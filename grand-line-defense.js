@@ -1,5 +1,5 @@
-import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS } from './grand-line-data.js?v=1.2.0';
-import { statsFor } from './grand-line-core.js?v=1.2.0';
+import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS } from './grand-line-data.js?v=1.2.1';
+import { statsFor } from './grand-line-core.js?v=1.2.1';
 
 export const DEFENSE_PATH = Object.freeze([
   { x: 20, y: 110 }, { x: 250, y: 110 }, { x: 250, y: 300 },
