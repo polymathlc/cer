@@ -125,56 +125,6 @@
     "sourceSha256": "867b2eff36dc5f9a2c3261e5b15fc7d2a271e7886734242038dd3c55889474cd"
   },
   {
-    "id": "bigmom",
-    "file": "bigmom.webp",
-    "width": 1448,
-    "height": 1086,
-    "hasAlpha": true,
-    "artRect": {
-      "x": 0,
-      "y": 0,
-      "w": 0.5,
-      "h": 1
-    },
-    "avatarRect": {
-      "x": 0.5,
-      "y": 0,
-      "w": 0.5,
-      "h": 1
-    },
-    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of CHARLOTTE LINLIN BIG MOM from One Piece: towering broad elderly pirate empress with pink hair, huge grin, pink spotted dress, red pirate bicorne hat, long cape and curved sword Napoleon. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Surreal candy castle battlefield with animated blazing sun and thundercloud, magenta lightning and scattered confectionery towers.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with generous transparent padding. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
-    "tool": "built-in image_gen",
-    "sourceFile": "bigmom.png",
-    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
-    "sha256": "64af34514d876cf99689ec7079fa101c0bd326a814936b50770b511fec9df33b",
-    "sourceSha256": "6ced5a706e5d5929cee02145fc73d334268a40569178dc9be12d7dc6e73d8876"
-  },
-  {
-    "id": "blackbeard",
-    "file": "blackbeard.webp",
-    "width": 1448,
-    "height": 1086,
-    "hasAlpha": true,
-    "artRect": {
-      "x": 0,
-      "y": 0,
-      "w": 0.5,
-      "h": 1
-    },
-    "avatarRect": {
-      "x": 0.5,
-      "y": 0,
-      "w": 0.5,
-      "h": 1
-    },
-    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of MARSHALL D. TEACH BLACKBEARD from One Piece: huge adult pirate with wild black hair and beard, missing teeth in boisterous grin, black pirate hat, open red shirt, black captain coat, yellow patterned trousers, rings and pistol belts. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Stormy pirate stronghold at midnight, swirling black-violet darkness vortex and turbulent sea.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with generous transparent padding. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
-    "tool": "built-in image_gen",
-    "sourceFile": "blackbeard.png",
-    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
-    "sha256": "d431b4e9f38814012282db0b531d311566b4931fd0f97f49424a868f8fe1f7ba",
-    "sourceSha256": "7909596c9086be541be8586c8051c21bfa3c9715e36ee2184fd36c0af53ad4d4"
-  },
-  {
     "id": "bonclay",
     "file": "bonclay.webp",
     "width": 1448,
@@ -350,6 +300,32 @@
     "sourceSha256": "4c9acabca994c7374e6de3a93e2ca16dfb915d86ea97c4446624b442f12bb059"
   },
   {
+    "id": "donkrieg",
+    "file": "donkrieg.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of DON KRIEG from One Piece, imposing muscular adult pirate admiral with short lavender-gray hair and angular face, huge polished golden battle armor with round heavy shoulder plates, thick gauntlets, dark combat trousers, heavy armored boots and red-lined captain cape, holding massive gold-and-steel battle spear upright at a shallow diagonal. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Stormy East Blue ocean beside the floating restaurant Baratie, wrecked pirate fleet, cannon smoke and metallic gold sparks under a dramatic grey sky.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with at least 5 percent empty transparent padding around EVERY outermost point including head, toes, fingers, wing tips and weapon tips. Scale avatar down slightly when needed to fit all equipment inside its panel. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
+    "tool": "built-in image_gen",
+    "reference": "https://one-piece.com/character/Don_Krieg/index.html",
+    "sourceFile": "donkrieg.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "8b5f5b3cf5bcf4c3c5389f3b88fe3676ae800da8f968e59cdf08af6040b43bda",
+    "sourceSha256": "c8eb214a92114ae76e5c5fe1b906a2fc91b80f0101649438560dc01a06b7531b"
+  },
+  {
     "id": "enel",
     "file": "enel.webp",
     "width": 1448,
@@ -425,8 +401,34 @@
     "sourceSha256": "5ba917655b75b716fdfc23498c4ca5de45d445dc248738327f6ac842835c12d5"
   },
   {
-    "id": "garp",
-    "file": "garp.webp",
+    "id": "hatchan",
+    "file": "hatchan.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5006906077348067,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5006906077348067,
+      "y": 0,
+      "w": 0.49930939226519333,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of HATCHAN, HACHI from One Piece, a friendly but formidable pink-skinned adult octopus fish-man swordsman: muscular build, grey hair in five thick spikes, red sun tattoo on forehead, distinctive round protruding octopus-like mouth, EXACTLY SIX ARMS plus TWO LEGS, visible suction cups on arms, black-and-white striped sleeveless shirt, dark cropped trousers and sandals. Hold EXACTLY SIX separate swords, one in each of the six hands, arranged compactly with every blade tip inside image. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Sunlit tropical seaport courtyard with palm trees, turquoise canal, coral stone buildings and six crisp silver sword arcs above ocean spray.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with at least 5 percent empty transparent padding around EVERY outermost point including head, toes, fingers, wing tips and weapon tips. Scale avatar down slightly when needed to fit all equipment inside its panel. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
+    "tool": "built-in image_gen",
+    "reference": "https://one-piece.com/character/Hacchan/index.html",
+    "sourceFile": "hatchan.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "311dcaf003b672b8724362bd5530c8c57e474cce50e55cc39c25ea0fdcb12331",
+    "sourceSha256": "7ba868a3d0e2a22f81c294fcec7ed19fa0f09c2fa5f4831c179bff53a0b3942d"
+  },
+  {
+    "id": "hina",
+    "file": "hina.webp",
     "width": 1448,
     "height": 1086,
     "hasAlpha": true,
@@ -442,37 +444,13 @@
       "w": 0.5,
       "h": 1
     },
-    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of MONKEY D. GARP from One Piece: broad elderly muscular marine hero with short white hair, white beard, scar near left eye, white military suit and admiral coat with gold epaulettes, blue shirt and tie, enormous clenched fist. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Naval fortress harbor under golden daylight, explosive blue impact shockwave and shattered stone.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with generous transparent padding. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
+    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of HINA from One Piece, adult marine officer with long straight pink hair, stern elegant face, violet sunglasses resting on forehead, fitted magenta business suit with white shirt and dark tie, magenta trousers, white marine coat with gold epaulettes hanging over shoulders, dark shoes, gloved hand extended forming black iron binding bars. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Marine harbor at rose-colored dusk, navy battleship masts, dramatic black iron cage bars rising through sea mist and subtle pink rim lighting.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with at least 5 percent empty transparent padding around EVERY outermost point including head, toes, fingers, wing tips and weapon tips. Scale avatar down slightly when needed to fit all equipment inside its panel. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
     "tool": "built-in image_gen",
-    "sourceFile": "garp.png",
+    "reference": "https://one-piece.com/character/Hina/index.html",
+    "sourceFile": "hina.png",
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
-    "sha256": "421d38fb6fc9cfd012d8636ff44173385faf0440109cffc231e05149b8dfdb04",
-    "sourceSha256": "37e9d450a6eb0c9b87fde647ae7fe64fbc5f4da1698f502ed0f8d2396e6d297c"
-  },
-  {
-    "id": "hancock",
-    "file": "hancock.webp",
-    "width": 1448,
-    "height": 1086,
-    "hasAlpha": true,
-    "artRect": {
-      "x": 0,
-      "y": 0,
-      "w": 0.5400552486187845,
-      "h": 1
-    },
-    "avatarRect": {
-      "x": 0.5400552486187845,
-      "y": 0,
-      "w": 0.4599447513812155,
-      "h": 1
-    },
-    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of BOA HANCOCK from One Piece: adult regal pirate empress with very long black hair, gold snake earrings, elegant red and white high-collar dress, cape and high heels, poised confident commanding stance. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Ornate island palace with jade serpentine stone columns, red silk banners and soft pink petrification sparkles.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with generous transparent padding. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
-    "tool": "built-in image_gen",
-    "sourceFile": "hancock.png",
-    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
-    "sha256": "8fe0a5d87769ba2d9046b0c965ca2a45c552fbb75b524d3e235ee54869d9434f",
-    "sourceSha256": "369e8a7ee0a3c9ffbdcc4077cbb621858c338b068d52cff15374a375b300010c"
+    "sha256": "ca8abf58c38f24a7ddcf2d6e461be712f09e73b089a51def7b2001c71f1e8d4f",
+    "sourceSha256": "13709621352166ac984ba4408b91cd0b7889db51bc0e26a3e339d13a56b67ebf"
   },
   {
     "id": "jack",
@@ -548,6 +526,58 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "8f8b28e4064c14095aa330993263f3698973e6415749c2c5a13e38995c968684",
     "sourceSha256": "8c18c3fae0a1ff0c25dc1b8d1f35b17176441d85e5019861974bedbcc9ee83f6"
+  },
+  {
+    "id": "kaku",
+    "file": "kaku.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5006906077348067,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5006906077348067,
+      "y": 0,
+      "w": 0.49930939226519333,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of KAKU from One Piece in his human CP9 form: lean athletic adult man with unmistakably long RECTANGULAR SQUARE-TIPPED NOSE, short orange hair under black baseball cap, calm confident expression, black high-collared shirt, fitted black suit with orange pocket square, black trousers and shoes, wielding two katana swords. Keep human face and body in both panels. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Enies Lobby stone rooftop and distant judicial tower, pale blue Rankyaku wind arcs, sunlit clouds and subtly reflected giraffe-pattern golden energy motif in background only.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with at least 5 percent empty transparent padding around EVERY outermost point including head, toes, fingers, wing tips and weapon tips. Scale avatar down slightly when needed to fit all equipment inside its panel. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
+    "tool": "built-in image_gen",
+    "reference": "https://one-piece.com/character/Kaku/index.html",
+    "sourceFile": "kaku.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "51634ece1bb1788f7be6a0147536da9c4be685ac4635ad0255319dbb718b12a7",
+    "sourceSha256": "c3bb7b92de10adba0a6b076fcbc13ca10eb48bf76ff96156b30720bcd5dea0be"
+  },
+  {
+    "id": "kalifa",
+    "file": "kalifa.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5027624309392266,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5027624309392266,
+      "y": 0,
+      "w": 0.49723756906077343,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of KALIFA from One Piece, adult blonde secret agent with long straight golden-blonde hair, dark rectangular glasses and composed intelligent expression, elegant fitted black long-sleeved high-neck dress with opaque black tights and heeled black boots, graceful guarded martial stance, one hand surrounded by pearlescent soap bubbles. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Elegant Enies Lobby marble hallway with high arched windows, glossy tiled reflections, floating pearlescent blue-violet soap bubbles and pale golden window light.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with at least 5 percent empty transparent padding around EVERY outermost point including head, toes, fingers, wing tips and weapon tips. Scale avatar down slightly when needed to fit all equipment inside its panel. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
+    "tool": "built-in image_gen",
+    "reference": "https://one-piece.com/character/Kalifa/index.html",
+    "sourceFile": "kalifa.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "48170b740d078e28de9b821ea86d3268a0650701341e023423da4e965606e854",
+    "sourceSha256": "7c6db48810d2ea4d9572b50dd53f988669f730a9744de94729666861c1483403"
   },
   {
     "id": "katakuri",
@@ -648,31 +678,6 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "b272d69aa7396ac7e5fd6709ef7e80509732c405846b9a8998894abeb17a380b",
     "sourceSha256": "302469c3990de99b44cabdbf030f211901f4992c7b71ab2e6da5ba25ce3aa70c"
-  },
-  {
-    "id": "kizaru",
-    "file": "kizaru.webp",
-    "width": 1448,
-    "height": 1086,
-    "hasAlpha": true,
-    "artRect": {
-      "x": 0,
-      "y": 0,
-      "w": 0.5,
-      "h": 1
-    },
-    "avatarRect": {
-      "x": 0.5,
-      "y": 0,
-      "w": 0.5,
-      "h": 1
-    },
-    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of BORSALINO KIZARU from One Piece: tall middle-aged admiral with short dark hair, trimmed beard, amber sunglasses, yellow pinstripe suit, white admiral coat with gold epaulettes, black shoes, one foot shining with light. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Dusk naval docks and glowing golden laser rays, shattered stone suspended in luminous streaks.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with generous transparent padding. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
-    "tool": "built-in image_gen",
-    "sourceFile": "kizaru.png",
-    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
-    "sha256": "722757167040c88dd401b7f0a1e73818f9dc1e420683742191ee107081f08020",
-    "sourceSha256": "2c12ba8d392d2d0bc0a97e158663da1d135ee7b0c9ff93e7d8e0e9b144d0aca9"
   },
   {
     "id": "koby",
@@ -825,31 +830,6 @@
     "sourceSha256": "1887364ca9b0e9081cc7e40fa334f63e61ff139431a622e0053a8ac5c6a9cf0b"
   },
   {
-    "id": "mihawk",
-    "file": "mihawk.webp",
-    "width": 1448,
-    "height": 1086,
-    "hasAlpha": true,
-    "artRect": {
-      "x": 0,
-      "y": 0,
-      "w": 0.5,
-      "h": 1
-    },
-    "avatarRect": {
-      "x": 0.5,
-      "y": 0,
-      "w": 0.5,
-      "h": 1
-    },
-    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of DRACULE MIHAWK from One Piece: adult master swordsman with sharp golden eyes, narrow beard and moustache, black wide-brimmed feathered hat, open burgundy patterned coat, pale trousers, black boots and huge black cross-shaped sword Yoru. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Ruined gothic island castle at night, giant moon, green-black sword energy and drifting pale rose petals.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with generous transparent padding. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
-    "tool": "built-in image_gen",
-    "sourceFile": "mihawk.png",
-    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
-    "sha256": "bf678f3f38637cb2b1990cfd91ab91b9cdd211052461767fe979db30645ec2f0",
-    "sourceSha256": "d7310bd32df05c43d379d9aa8ca2cc74e10a54b67a581f09f82b3275154972c5"
-  },
-  {
     "id": "nami",
     "file": "nami.webp",
     "width": 1448,
@@ -873,6 +853,32 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "23fa2e371ffc76d9b22c3ceb4e1cb31a61922079a6bef4f240e0c9aaa9f61f30",
     "sourceSha256": "84fd888b40b7a808618e746b3a49721b9d56b89598fba1ab03b773c4eb58d9b5"
+  },
+  {
+    "id": "paulie",
+    "file": "paulie.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5214088397790055,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5214088397790055,
+      "y": 0,
+      "w": 0.47859116022099446,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of PAULIE from One Piece, adult Water Seven shipwright: muscular blond man with slicked-back hair, orange goggles on forehead, short beard stubble and determined expression, denim work jacket with orange flame trim, yellow T-shirt bearing simple white concentric rings, tool belt and small pouch, loose work trousers tucked into heavy boots, thick ropes coiling from both sleeves into clearly visible loops. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Water Seven canal-side shipyard, giant timber ship ribs and cranes, rushing blue water and sweeping rope arcs in warm afternoon sun.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with at least 5 percent empty transparent padding around EVERY outermost point including head, toes, fingers, wing tips and weapon tips. Scale avatar down slightly when needed to fit all equipment inside its panel. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
+    "tool": "built-in image_gen",
+    "reference": "https://one-piece.com/character/Paulie/index.html",
+    "sourceFile": "paulie.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "90063f1ad9d477a393d38d0b529570efa04352c58104891cd82518c5bfad13a5",
+    "sourceSha256": "ded6c26d583283e11c62fc14322b4f02f597d7bd70e8ff739d58bfb32d97b5a7"
   },
   {
     "id": "perona",
@@ -1025,56 +1031,6 @@
     "sourceSha256": "26a3e90c8a38a3829ef50da36a8072ce159530adca3d83f6d7bc433d4d6b3db4"
   },
   {
-    "id": "sengoku",
-    "file": "sengoku.webp",
-    "width": 1448,
-    "height": 1086,
-    "hasAlpha": true,
-    "artRect": {
-      "x": 0,
-      "y": 0,
-      "w": 0.5006906077348067,
-      "h": 1
-    },
-    "avatarRect": {
-      "x": 0.5006906077348067,
-      "y": 0,
-      "w": 0.49930939226519333,
-      "h": 1
-    },
-    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of SENGOKU from One Piece: dignified adult marine leader with round glasses, long braided black beard, white uniform with medals, white coat and cap topped by small seagull emblem, commanding martial stance. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Marineford plaza backed by radiant golden Buddha silhouette, rows of ships and brilliant sunburst.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with generous transparent padding. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
-    "tool": "built-in image_gen",
-    "sourceFile": "sengoku.png",
-    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
-    "sha256": "22b5c3acc3b37caf3055644113d0312309da5e778f897730122b7c6d669d6e45",
-    "sourceSha256": "cbf77d0555e68925bba3ac9360a61458350e3eb8356a261ba7eb07f75634478a"
-  },
-  {
-    "id": "shanks",
-    "file": "shanks.webp",
-    "width": 1448,
-    "height": 1086,
-    "hasAlpha": true,
-    "artRect": {
-      "x": 0,
-      "y": 0,
-      "w": 0.5,
-      "h": 1
-    },
-    "avatarRect": {
-      "x": 0.5,
-      "y": 0,
-      "w": 0.5,
-      "h": 1
-    },
-    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of RED-HAIRED SHANKS from One Piece: red-haired adult pirate with short beard, three diagonal scars over left eye, ONLY ONE ARM his right arm, white open shirt, dark cloak, patterned knee-length trousers, sandals and saber Gryphon held in right hand. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Dramatic crimson sunset over pirate fleet, red conqueror lightning and windswept cape, richly painted ocean spray.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with generous transparent padding. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
-    "tool": "built-in image_gen",
-    "sourceFile": "shanks.png",
-    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
-    "sha256": "5d6f6fb5d559bb9a0c31103bf4eac233202dc4df4151421b901c0b7cf29e0513",
-    "sourceSha256": "ddd675a7a1b5d4337f61bf68b447c96381f6750d134edcf90c6334fd683a303d"
-  },
-  {
     "id": "smoker",
     "file": "smoker.webp",
     "width": 1448,
@@ -1175,6 +1131,32 @@
     "sourceSha256": "c0487432f5058a4f65f1e13c40572a374bc94960dfb452d58ac1a9183912184b"
   },
   {
+    "id": "wapol",
+    "file": "wapol.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of WAPOL from One Piece in his original Drum Island villain appearance: very broad round adult king with dark violet hair, tiny eyes, huge cylindrical tin-plate hinged jaw, mischievous toothy grin, white furry hooded royal cape, grey tin armor, thick brown gloves, purple and orange shorts and short brown boots, holding a bitten scrap of metal in one gloved hand. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Snow-covered Drum Castle battlements with cylindrical mountain peaks behind, discarded iron cannon parts, icy blue wind and warm amber furnace glow.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with at least 5 percent empty transparent padding around EVERY outermost point including head, toes, fingers, wing tips and weapon tips. Scale avatar down slightly when needed to fit all equipment inside its panel. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
+    "tool": "built-in image_gen",
+    "reference": "https://one-piece.com/character/Wapol/index.html",
+    "sourceFile": "wapol.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "cbe629ffbcdcbeda7e3adf239dee309f6787aedd20a3c25cff2169eedd4ce48f",
+    "sourceSha256": "c948c92b118839ec8be29e2f8c0e08d29c09714300042353e6ab166cd520a054"
+  },
+  {
     "id": "whitebeard",
     "file": "whitebeard.webp",
     "width": 1448,
@@ -1198,6 +1180,32 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "afbcce13ac283fb47369fa41ee32c3af7ab004d6f6e903f601062ad5661e2550",
     "sourceSha256": "4a93bbd0d70d59eae0b8402d9041cff88584a2e1ecf39359009476878ac78d5c"
+  },
+  {
+    "id": "wyper",
+    "file": "wyper.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5400552486187845,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5400552486187845,
+      "y": 0,
+      "w": 0.4599447513812155,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of WYPER from One Piece, Shandia warrior in his Skypiea arc appearance: tall muscular adult man with tan skin, dark-brown mohawk continuing into a long segmented braid, red and green tribal tattoo over left side of face and left shoulder, small white feathered wings on back, bare chest, layered grass skirt over shorts with rope belt and fang ornaments, barefoot with compact dial skates, holding a large dark bazooka. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Ancient Shandora stone ruins rising through luminous sky-island clouds, jungle vines, monumental golden bell, strong teal-white dial blast and sunlit cloud spray.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with at least 5 percent empty transparent padding around EVERY outermost point including head, toes, fingers, wing tips and weapon tips. Scale avatar down slightly when needed to fit all equipment inside its panel. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
+    "tool": "built-in image_gen",
+    "reference": "https://one-piece.com/character/Wyper/index.html",
+    "sourceFile": "wyper.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "1c2a24c6335bcead5b4ed23fad68470d13a7e1c72133dbd9cb64564a7a355505",
+    "sourceSha256": "311a13ba1a6a09e1811319260bf7121bee4add01c540b79413412bd13db5b54d"
   },
   {
     "id": "yamato",

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from '../grand-line-economy.js';
-import { CHARACTERS, STARTER_IDS } from '../grand-line-core.js';
+import { CHARACTERS, CHARACTER_BY_ID, RETIRED_CHARACTER_REPLACEMENTS, STARTER_IDS, createCollection } from '../grand-line-core.js';
 
 const root = new URL('../', import.meta.url), science = fs.existsSync(new URL('app.js', root));
 const app = fs.readFileSync(new URL(science ? 'app.js' : 'index.html', root), 'utf8');
@@ -56,6 +56,48 @@ test('durable purchase IDs make retries and reopened sessions idempotent', async
   assert.equal(f.writes.length, 1); assert.equal(again.replayed, true); assert.deepEqual(again.grant, first.grant);
   assert.equal(again.wallet.balance, first.wallet.balance);
   await assert.rejects(reopened.buyPack({ ...request, packId: 'nova' }, f.ctx), /another pack/);
+});
+
+test('every retired paid receipt replays its replacement without charges, grants or writes', async () => {
+  for (const [oldId, newId] of Object.entries(RETIRED_CHARACTER_REPLACEMENTS)) {
+    const f = fixture(), c = createCollection();
+    c.version = 1; c.cards[oldId] = { copies: 4 }; c.cards[newId] = { copies: 2 };
+    c.team = [oldId, ...STARTER_IDS.slice(1)]; c.stats.packsOpened = 9;
+    const receipt = { packId: 'galaxy', cost: 750, at: '2026-09-14T12:00:00.000Z',
+      grant: { characterId: oldId, copies: 4, duplicate: true, stars: 6 } };
+    f.state().grandLine = { version: 1, profiles: { [f.ctx.profileKey]: { collection: c, purchases: { 'legacy-paid': receipt } } } };
+    f.state().gold = 19; // Replay works even when another purchase is unaffordable.
+    const original = structuredClone(f.state()), request = { purchaseId: 'legacy-paid', packId: 'galaxy' };
+    const first = await f.economy.buyPack(request, f.ctx);
+    assert.equal(first.replayed, true); assert.equal(first.wallet.balance, 19);
+    assert.deepEqual(first.grant, { characterId: newId, copies: 6, duplicate: true, stars: CHARACTER_BY_ID[newId].stars });
+    assert.equal(first.collection.cards[oldId], undefined); assert.equal(first.collection.cards[newId].copies, 6);
+    assert.deepEqual(first.collection.team, [newId, ...STARTER_IDS.slice(1)]);
+    assert.equal(first.collection.stats.packsOpened, 9); assert.equal(first.collection.packs, 0);
+    assert.equal(f.writes.length, 0); assert.deepEqual(f.state(), original);
+    const reopened = createGrandLineEconomy(f.env), again = await reopened.buyPack(request, f.ctx);
+    assert.deepEqual(again, first); assert.equal(f.writes.length, 0);
+    await assert.rejects(reopened.buyPack({ ...request, packId: 'spark' }, f.ctx), /another pack/);
+    const saved = await reopened.saveCollection({ team: first.collection.team }, f.ctx);
+    assert.equal(f.writes.length, 1); assert.equal(saved.wallet.balance, 19);
+    assert.deepEqual(f.state().grandLine.profiles[f.ctx.profileKey].purchases['legacy-paid'], receipt);
+    f.setState(structuredClone(f.writes[0].state));
+    const persisted = await createGrandLineEconomy(f.env).buyPack(request, f.ctx);
+    assert.deepEqual(persisted, first); assert.equal(f.writes.length, 1);
+  }
+});
+
+test('a failed migration save keeps the paid receipt and retries without another grant', async () => {
+  const f = fixture(), c = createCollection(); c.version = 1; c.cards.shanks = { copies: 3 };
+  c.team = ['shanks', ...STARTER_IDS.slice(1)];
+  f.state().grandLine = { version: 1, profiles: { [f.ctx.profileKey]: { collection: c,
+    purchases: { old: { packId: 'spark', cost: 120, grant: { characterId: 'shanks', copies: 3, stars: 6, duplicate: true } } } } } };
+  const snapshot = f.economy.getSnapshot(f.ctx); f.fail(true);
+  await assert.rejects(f.economy.saveCollection({ team: snapshot.collection.team }, f.ctx), /could not be saved/);
+  assert.equal(f.state().grandLine.profiles[f.ctx.profileKey].collection.cards.shanks.copies, 3);
+  f.fail(false); const result = await f.economy.buyPack({ packId: 'spark', purchaseId: 'old' }, f.ctx);
+  assert.equal(result.replayed, true); assert.equal(result.wallet.balance, 2000);
+  assert.equal(result.collection.cards.wyper.copies, 3); assert.equal(f.writes.length, 0);
 });
 test('a failed durable save restores the wallet and collection and never reports a grant', async () => {
   const f = fixture(), initial = f.economy.getSnapshot(f.ctx); f.fail(true);

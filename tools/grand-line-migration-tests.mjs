@@ -1,0 +1,57 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { CHARACTERS, CHARACTER_BY_ID, RETIRED_CHARACTER_REPLACEMENTS, STARTER_IDS,
+  createCollection, normalizeCollection, addCard, setTeam, createBattle } from '../grand-line-core.js';
+
+const replacements = Object.entries(RETIRED_CHARACTER_REPLACEMENTS);
+test('all eight retired cards convert paid copies one-for-one and preserve progress without free packs', () => {
+  assert.equal(replacements.length, 8);
+  const raw = { ...createCollection(), version: 1, cards: { ...createCollection().cards },
+    team: replacements.slice(0, 5).map(([id]) => id), packs: 0, unlockedEncounter: 6,
+    completed: [1, 2, 3], stats: { packsOpened: 20, victories: 3, correctAnswers: 18 } };
+  for (const [index, [oldId]] of replacements.entries()) raw.cards[oldId] = { copies: index + 2 };
+  const untouched = structuredClone(raw), migrated = normalizeCollection(raw);
+  assert.deepEqual(raw, untouched, 'normalizing a snapshot must not mutate stored ownership');
+  for (const [index, [oldId, newId]] of replacements.entries()) {
+    assert.equal(migrated.cards[oldId], undefined);
+    assert.equal(migrated.cards[newId].copies, index + 2);
+    assert.ok(CHARACTER_BY_ID[newId]); assert.equal(CHARACTER_BY_ID[oldId], undefined);
+  }
+  assert.deepEqual(migrated.team, replacements.slice(0, 5).map(([, id]) => id));
+  assert.ok(createBattle(migrated), 'converted ownership supports a real battle');
+  for (const key of ['packs', 'unlockedEncounter', 'completed', 'stats']) assert.deepEqual(migrated[key], raw[key]);
+  assert.deepEqual(normalizeCollection(migrated), migrated, 'repeat loading never adds copies');
+});
+
+test('old and replacement copies merge, duplicate team slots repair, and every slot stays owned', () => {
+  const c = createCollection();
+  c.cards.shanks = { copies: 7 }; c.cards.wyper = { copies: 3 };
+  c.cards.blackbeard = { copies: 2 }; c.cards.kaku = { copies: 4 };
+  c.team = ['shanks', 'wyper', 'blackbeard', 'zoro', 'nami'];
+  const result = normalizeCollection(c);
+  assert.equal(result.cards.wyper.copies, 10); assert.equal(result.cards.kaku.copies, 6);
+  assert.deepEqual(result.team, ['wyper', 'kaku', 'zoro', 'nami', 'luffy']);
+  assert.equal(new Set(result.team).size, 5);
+  assert.ok(result.team.every(id => result.cards[id].copies >= 1));
+  assert.deepEqual(normalizeCollection(result), result);
+});
+
+test('merged valid legacy copy counts survive normalization and the next paid grant', () => {
+  const c = normalizeCollection({ cards: { shanks: { copies: 1000000000 }, wyper: { copies: 1000000000 } } });
+  assert.equal(c.cards.wyper.copies, 2000000000);
+  assert.deepEqual(normalizeCollection(c), c);
+  assert.equal(addCard(c, 'wyper').copies, 2000000001);
+  assert.deepEqual(normalizeCollection(c), c);
+});
+
+test('retirement does not unlock unowned cards or permit legacy grants and teams', () => {
+  const c = normalizeCollection({ cards: { shanks: { copies: -1 }, blackbeard: { copies: Infinity }, bigmom: { copies: '9' } }, team: ['shanks', 'blackbeard'] });
+  assert.deepEqual(c, createCollection());
+  for (const [id, replacement] of replacements) {
+    assert.equal(CHARACTERS.some(card => card.id === id), false);
+    assert.equal(addCard(c, id), null); assert.equal(c.cards[replacement], undefined);
+    assert.equal(setTeam(c, [id, ...STARTER_IDS.slice(1)]), false);
+  }
+  assert.equal(addCard(c, '__proto__'), null);
+  assert.deepEqual(normalizeCollection({ cards: JSON.parse('{"__proto__":{"copies":99}}') }), createCollection());
+});

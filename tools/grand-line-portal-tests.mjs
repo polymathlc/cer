@@ -56,6 +56,7 @@ try {
     const initial = await open(), url = new URL(await page.locator('iframe').getAttribute('src'));
     assert.equal(initial.questionCount, 3); assert.equal(initial.available, true); assert.match(initial.profileKey, /^p[0-9a-f]{16}$/);
     assert.equal(url.searchParams.get('profile'), initial.profileKey); assert.equal(url.searchParams.get('subject'), subject.toLowerCase()); assert.ok(!url.href.includes('private-account'));
+    assert.equal(url.searchParams.get('v'), '1.1.0');
     assert.equal(initial.collection.packs, 0); assert.equal(initial.wallet.balance, 2000);
     assert.equal(await page.locator('#app').evaluate(el => el.inert), true);
     assert.equal(await page.locator('select').isDisabled(), true);
@@ -95,6 +96,22 @@ try {
     assert.equal(await page.locator('#app').evaluate(el => el.inert), false); assert.equal(await page.locator('#already-inert').evaluate(el => el.inert), true);
     assert.equal(await page.evaluate(() => document.body.style.overflow), 'auto'); assert.equal(await page.evaluate(() => document.activeElement.id), 'launch');
     const sibling = await open(); assert.notEqual(sibling.profileKey, initial.profileKey); assert.equal(sibling.collection.stats.packsOpened, 0); assert.equal(sibling.wallet.balance, 1710);
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    const beforeMigrationWrites = await page.evaluate(() => writes.length);
+    await page.evaluate(({ profileKey, collection }) => {
+      collection.version = 1; collection.cards.shanks = { copies: 4 }; collection.cards.wyper = { copies: 2 };
+      collection.team = ['shanks', 'zoro', 'nami', 'usopp', 'chopper'];
+      rpg.grandLine.profiles[profileKey] = { collection, purchases: { 'legacy-paid': { packId: 'galaxy', cost: 750,
+        grant: { characterId: 'shanks', copies: 4, stars: 6, duplicate: true } } } };
+    }, sibling);
+    const migrated = await open();
+    assert.equal(migrated.collection.cards.shanks, undefined); assert.equal(migrated.collection.cards.wyper.copies, 6);
+    assert.deepEqual(migrated.collection.team, ['wyper', 'zoro', 'nami', 'usopp', 'chopper']);
+    await game.evaluate(() => send({ type: 'GLTCG_BUY_REQUEST', requestId: 'legacy-retry', sessionId, purchaseId: 'legacy-paid', packId: 'galaxy' }));
+    const legacy = await message('GLTCG_BUY_RESULT');
+    assert.equal(legacy.replayed, true); assert.equal(legacy.wallet.balance, 1710);
+    assert.equal(legacy.grant.characterId, 'wyper'); assert.equal(legacy.grant.copies, 6); assert.equal(legacy.grant.stars, 4);
+    assert.equal(await page.evaluate(() => writes.length), beforeMigrationWrites);
     await page.getByRole('button', { name: 'Close', exact: true }).click();
     for (const denied of [null, { uid: 'employee', role: 'employee' }, { uid: 'other', role: 'unknown' }, { role: 'student' }]) {
       assert.equal(await page.evaluate(user => { window.user = user; return portal.open(); }, denied), false); assert.equal(await page.locator('iframe').count(), 0);
