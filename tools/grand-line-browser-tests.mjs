@@ -385,8 +385,49 @@ try {
   await screenshot(host,'desktop-defense-setup');
   check('Crew Defense replaces former combat modes with five owned defenders, ten pads and valid placement');
 
+  assert.equal(await game.evaluate(()=>__grandLine.battle.waveCount),6);
+  assert.equal(await game.evaluate(()=>__grandLine.battle.supplies),100);
+  assert.equal(await game.evaluate(()=>__grandLine.battle.trainingPoints),0);
+  assert.equal(await game.locator('#upgrade-defender').isDisabled(),true);
+  assert.match(await game.locator('#wave-preview').textContent(),/32/);
+  const nonteam=await game.evaluate(()=>Object.keys(__grandLine.collection.cards).find(id=>!__grandLine.collection.team.includes(id)));
+  assert.ok(nonteam,'Purchases and the saved crew leave another owned character available to summon');
+  const summonPad=await game.evaluate(()=>__grandLine.DEFENSE_PADS.find(p=>!__grandLine.battle.allies.some(a=>a.padId===p.id)).id);
+  await game.locator('#summon-toggle').click();await game.locator('#summon-panel').waitFor({state:'visible'});
+  await game.locator('#summon-pattern').selectOption('line');
+  assert.equal(await game.locator('#summon-roster [data-summon="zoro"]').count(),1);
+  assert.equal(await game.locator('#summon-roster [data-summon="nami"]').count(),0);
+  await game.locator('#summon-pattern').selectOption('all');
+  assert.equal(await game.locator('#summon-roster [data-summon="kaido"]').count(),0);
+  await game.locator('#summon-roster [data-summon="'+nonteam+'"]').click();
+  await game.locator('#placement-buttons [data-pad="'+summonPad+'"]').click();
+  assert.equal(await game.evaluate(()=>__grandLine.battle.supplies),100,'Selecting an owned summon and pad never spends supplies');
+  await game.locator('#summon-confirm').click();
+  const summoned=await game.evaluate(id=>__grandLine.battle.allies.find(a=>a.characterId===id),nonteam);
+  assert.ok(summoned);assert.equal(summoned.padId,summonPad);assert.equal(summoned.level,1);
+  assert.equal(await game.evaluate(()=>__grandLine.battle.supplies),100-summoned.summonCost);
+  const summonCount=await game.evaluate(()=>__grandLine.battle.allies.length);
+  assert.equal(await game.evaluate(({nonteam,summonPad})=>__grandLine.summonCharacter(nonteam,summonPad),{nonteam,summonPad}),false);
+  assert.equal(await game.evaluate(pad=>__grandLine.summonCharacter('kaido',pad),summonPad),false);
+  assert.equal(await game.evaluate(()=>__grandLine.battle.allies.length),summonCount);
+  await game.locator('#defender-buttons [data-ally="'+summoned.id+'"]').click();
+  for(const priority of ['strongest','cluster','first']) {
+    await game.locator('#defense-priority').selectOption(priority);
+    assert.equal(await game.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).priority,summoned.id),priority);
+  }
+  await game.locator('#recall-defender').click();
+  assert.equal(await game.evaluate(id=>__grandLine.battle.allies.some(a=>a.id===id),summoned.id),false);
+  const afterRecall=await game.evaluate(()=>__grandLine.battle.supplies);
+  assert.ok(afterRecall>100-summoned.summonCost&&afterRecall<=100,'Recalling returns only a bounded portion of the paid summon');
+  await game.locator('#move-toggle').click();await game.locator('#defender-buttons [data-ally="'+firstDefender.id+'"]').click();
+  check('Six dense waves offer owned summons outside the saved crew, explicit supply spending, bounded recall and defender targeting priorities');
+
   await game.locator('#defense-speed').selectOption('1');
   await game.locator('#start-wave').click();await game.waitForFunction(()=>__grandLine.battle.status==='running');
+  assert.equal(await game.locator('#upgrade-defender').isDisabled(),true);
+  assert.equal(await game.locator('#recall-defender').isDisabled(),true);
+  await game.locator('#defense-priority').selectOption('strongest');
+  assert.equal(await game.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).priority,firstDefender.id),'strongest');
   await game.waitForFunction(()=>__grandLine.battle.enemies.some(e=>e.hp>0));
   const mover=await game.evaluate(()=>{const e=__grandLine.battle.enemies.find(e=>e.hp>0);e.hp=e.maxHp=1000;return {id:e.id,x:e.x,y:e.y};});
   await game.waitForFunction(before=>{const e=__grandLine.battle.enemies.find(e=>e.id===before.id);return e&&(e.x!==before.x||e.y!==before.y);},mover);
@@ -417,6 +458,7 @@ try {
   await answerThree(host);await game.waitForFunction(()=>__grandLine.dialog==='save-progress');
   const unsaved=await defenseState(game);await frames(host,25);assert.deepEqual(await defenseState(game),unsaved);
   await game.evaluate(()=>__grandLine.startWave());assert.notEqual(await game.evaluate(()=>__grandLine.battle.status),'running');
+  assert.equal(await game.evaluate(()=>__grandLine.upgradeSelected()),false,'Unacknowledged question progress cannot buy an upgrade');
   await game.locator('#dialog-panel button').press('Escape');assert.equal(await game.evaluate(()=>__grandLine.dialog),'save-progress');
   assert.equal(await host.evaluate(()=>fake.records.length),3);
   await host.evaluate(()=>{fake.blockSave=false;});
@@ -438,22 +480,51 @@ try {
   assert.equal(await game.evaluate(()=>__grandLine.collection.packs),0);await screenshot(host,'desktop-defense-boost');
   check('Every wave needs exactly three private grades; save failures, hidden-tab saves and forged/replayed results cannot bypass or stack the boost');
 
+  assert.equal(await game.evaluate(()=>__grandLine.battle.trainingPoints),4);
+  await game.locator('#defender-buttons [data-ally="'+firstDefender.id+'"]').click();
+  const trainingBase=await game.evaluate(id=>{const a=__grandLine.battle.allies.find(a=>a.id===id);return {range:a.range,attack:a.attack,cards:JSON.stringify(__grandLine.collection.cards)};},firstDefender.id);
+  await game.locator('#upgrade-defender').click();
+  assert.equal(await game.evaluate(()=>__grandLine.battle.trainingPoints),3);
+  await game.locator('#upgrade-defender').click();
+  assert.equal(await game.evaluate(()=>__grandLine.battle.trainingPoints),1);
+  assert.equal(await game.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).level,firstDefender.id),3);
+  await game.locator('#specialize-reach').click();
+  assert.equal(await game.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).specialization,firstDefender.id),'reach');
+  assert.ok(await game.evaluate(({id,range})=>__grandLine.battle.allies.find(a=>a.id===id).range>range,{id:firstDefender.id,range:trainingBase.range}));
+  assert.equal(await game.evaluate(()=>__grandLine.specializeSelected('power')),false);
+  assert.equal(await game.locator('#upgrade-defender').isDisabled(),true,'Level three needs three more training points to upgrade');
+  assert.equal(await game.evaluate(()=>JSON.stringify(__grandLine.collection.cards)),trainingBase.cards);
+  check('Exactly three graded answers award training once; paid battle levels unlock one permanent-in-battle specialization without changing owned card copies');
+
   await game.locator('#start-wave').click();await clearWave(game);
   assert.equal(await game.evaluate(()=>__grandLine.battle.learningBoost),null);
   await game.locator('#study-button').click();await answerThree(host,0);
   await game.waitForFunction(()=>__grandLine.battle.status==='setup'&&__grandLine.battle.round===3);
   assert.equal(await host.evaluate(()=>fake.records.length),6);
-  await game.locator('#start-wave').click();await clearWave(game);
+  assert.equal(await game.evaluate(()=>__grandLine.battle.trainingPoints),2,'Three wrong answers still earn the one base training point');
+  for(let wave=3;wave<=6;wave++) {
+    await game.locator('#start-wave').click();await clearWave(game);
+    assert.equal(await game.evaluate(()=>__grandLine.battle.round),wave);
+    assert.equal(await game.evaluate(()=>__grandLine.collection.unlockedEncounter),1);
+    if(wave<6) {
+      assert.equal(await game.evaluate(()=>__grandLine.battle.pendingOutcome),null);
+      await game.locator('#study-button').click();await answerThree(host);
+      await game.waitForFunction(wave=>__grandLine.battle.status==='setup'&&__grandLine.battle.round===wave+1,wave);
+      assert.equal(await host.evaluate(()=>fake.records.length),wave*3);
+    }
+  }
   assert.equal(await game.evaluate(()=>__grandLine.battle.pendingOutcome),'victory');
   assert.equal(await game.evaluate(()=>__grandLine.collection.unlockedEncounter),1);
   await game.locator('#study-button').click();await answerThree(host);
   await game.waitForFunction(()=>__grandLine.battle.status==='victory'&&__grandLine.dialog==='ending');
   assert.equal(await game.evaluate(()=>__grandLine.collection.unlockedEncounter),2);
   assert.equal(await game.evaluate(()=>__grandLine.collection.stats.victories),1);
-  assert.equal(await host.evaluate(()=>fake.records.length),9);await screenshot(host,'desktop-defense-victory');
-  check('All three waves require three questions each, including wrong answers and the final wave before a stage unlock');
+  assert.equal(await host.evaluate(()=>fake.records.length),18);await screenshot(host,'desktop-defense-victory');
+  check('All six waves require three questions each, including wrong answers and the final wave before a stage unlock');
 
   await game.evaluate(()=>{__grandLine.closeDialog();__grandLine.go('campaign');__grandLine.beginBattle(1);});
+  assert.equal(await game.evaluate(()=>__grandLine.battle.trainingPoints),0);
+  assert.ok(await game.evaluate(()=>__grandLine.battle.allies.every(a=>a.level===1&&a.specialization===null)),'A new defense starts without battle-only upgrades');
   await game.locator('#start-wave').click();
   await game.evaluate(()=>{__grandLine.battle.ship.hp=0;__grandLine.advanceDefense(__grandLine.battle,.05);__grandLine.renderBattle();});
   await game.waitForFunction(()=>__grandLine.battle.status==='learning');
@@ -463,7 +534,7 @@ try {
   assert.equal(await game.evaluate(()=>__grandLine.collection.unlockedEncounter),2);
   assert.equal(await game.evaluate(()=>__grandLine.collection.stats.victories),1);
   assert.equal(await game.evaluate(()=>__grandLine.collection.packs),0);
-  assert.equal(await host.evaluate(()=>fake.records.length),12);await screenshot(host,'desktop-defense-defeat');
+  assert.equal(await host.evaluate(()=>fake.records.length),21);await screenshot(host,'desktop-defense-defeat');
   check('Ship defeat stops defense, requires its three questions and grants no stage, pack or victory');
 
   const closedSession=await game.evaluate(()=>__grandLine.sessionId);
@@ -480,6 +551,14 @@ try {
   assert.equal(await page.locator('#future-characters li').count(),8);
   check('Current collection preserves all eight replacements and clearly reserves future seven-star expansions');
   await page.locator('[data-view="campaign"]').click();await page.locator('#campaign-map button').first().click();
+  await page.locator('#defender-skills [data-skill-preview="luffy-2"]').click();
+  assert.equal(await page.locator('#defender-skills [data-skill-preview="luffy-2"]').getAttribute('aria-pressed'),'true');
+  assert.equal(await page.locator('#defender-skills [data-skill-preview="luffy-0"]').getAttribute('aria-pressed'),'false');
+  await page.evaluate(()=>{const draw=__grandLine.renderer.draw;__grandLine.renderer.draw=(b,now,options)=>{window.lastPreviewSkill=options.previewSkillId;return draw(b,now,options);};});
+  await page.waitForFunction(()=>window.lastPreviewSkill==='luffy-2');await screenshot(page,'desktop-radial-skill-preview');
+  await page.locator('#defender-skills [data-skill-preview="luffy-0"]').click();
+  await page.waitForFunction(()=>window.lastPreviewSkill==='luffy-0');
+  check('Skill preview buttons select the actual radial or line attack passed to the battlefield renderer');
   await page.locator('#start-wave').click();await clearWave(page);await page.locator('#study-button').click();
   for(let i=0;i<3;i++) {
     assert.match(await page.locator('.question-count').textContent(),new RegExp('Question '+(i+1)+' of 3.*No platform points awarded'));
@@ -524,13 +603,25 @@ try {
     await mobile.touchscreen.tap(canvasBox.x+(canvasBox.width-1000*scale)/2+lastPad.x*scale,
       canvasBox.y+(canvasBox.height-600*scale)/2+lastPad.y*scale);
     assert.equal(await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),lastPad.id,'The last pad responds at its actual canvas coordinates');
+    const recalled=await mobile.evaluate(()=>({id:__grandLine.battle.allies[0].id,characterId:__grandLine.battle.allies[0].characterId}));
+    await mobile.locator('#recall-defender').tap();assert.equal(await mobile.evaluate(()=>__grandLine.battle.supplies),100);
+    await mobile.locator('#summon-toggle').tap();await mobile.locator('#summon-panel').waitFor({state:'visible'});
+    await mobile.locator('#summon-search').fill(recalled.characterId);
+    await mobile.locator('#summon-roster [data-summon="'+recalled.characterId+'"]').tap();
+    await mobile.locator('#placement-buttons [data-pad="'+lastPad.id+'"]').tap();
+    await noOverflow(mobile);await screenshot(mobile,name+'-summon-preview');
+    await mobile.locator('#summon-confirm').tap();
+    assert.equal(await mobile.evaluate(id=>__grandLine.battle.allies.find(a=>a.characterId===id)?.padId,recalled.characterId),lastPad.id);
+    await mobile.locator('#defense-priority').selectOption('cluster');
+    assert.equal(await mobile.evaluate(id=>__grandLine.battle.allies.find(a=>a.characterId===id).priority,recalled.characterId),'cluster');
+    await noOverflow(mobile);
     await screenshot(mobile,name+'-defense-setup');
     await mobile.locator('#start-wave').tap();await mobile.waitForFunction(()=>__grandLine.battle.status==='running');
     await mobile.locator('#defense-pause').tap();await noOverflow(mobile);await screenshot(mobile,name+'-defense-running');
     for(const id of ['defense-pause','defense-speed'])assert.ok((await mobile.locator('#'+id).boundingBox()).height>=40,'Defense touch controls remain usable');
     await mobile.close();
   }
-  check('Collection, full card details, defender placement and running defense fit portrait and landscape phones');
+  check('Collection, full card details, owned summon selection, targeting, defender placement and running defense fit portrait and landscape phones');
   await checkAdministratorShop();
   const production = await browser.newPage(); observe(production); await production.goto(base + '/grand-line.html'); await production.locator('#card-grid .tcg-card').first().waitFor();
   assert.equal(await production.evaluate(() => typeof window.__grandLine), 'undefined');
