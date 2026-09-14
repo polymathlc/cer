@@ -134,6 +134,13 @@ const gameNext=async frame=>{
   if(result.id)await page.waitForFunction(id=>!!feedFixture.state().served[id],result.id);
   return result;
 };
+// Reproducible entropy at the browser boundary; the production planner and
+// message handlers still choose every question themselves.
+const seedGameRandom=seed=>page.evaluate(seed=>{Math.random=()=>{
+  seed|=0;seed=seed+0x6D2B79F5|0;let value=Math.imul(seed^seed>>>15,1|seed);
+  value=value+Math.imul(value^value>>>7,61|value)^value;
+  return ((value^value>>>14)>>>0)/4294967296;
+};},seed);
 const shot=async name=>{const dir=process.env.SCIENCE_FEED_SCREENSHOTS;if(dir){fs.mkdirSync(dir,{recursive:true});await page.screenshot({path:path.join(dir,name+'.png'),fullPage:true});}};
 let passed=0;const pass=name=>{passed++;console.log('PASS Science browser: '+name);};
 try{
@@ -191,22 +198,26 @@ try{
   const younger=q('plant-current',{level:'P4',topic:'Plant Systems',difficulty:3,title:'Root investigation',stem:'Which plant part takes in water from the soil?'});
   const tooBasic=q('magnets-basic',{level:'P3',topic:'Magnets',difficulty:1200,title:'Magnetic materials',stem:'Which material is attracted to a magnet?'});
   const mixedGrades=[tooBasic,previousGrade,younger,current,currentCopy,currentNext];
+  const currentFamily=id=>['forces-current','forces-copy'].includes(id)?'friction':id;
+  const currentIds=['forces-current','forces-copy','forces-next'];
   await setup(mixedGrades,'P6','Older child');let game=await openGame();
   let selected=await gameNext(game);
-  assert.equal(selected.id,'forces-current');assert.equal(selected.studentLevel,'P6');
+  assert.ok(currentIds.includes(selected.id));assert.equal(selected.studentLevel,'P6');
   assert.ok(!selected.pool.includes('magnets-basic'),'a legacy difficulty rating must not promote easy P3 work for a P6 child');
-  assert.match(await game.locator('#question').innerText(),/friction/);
+  assert.match(await game.locator('#question').innerText(),/friction|elastic band/);
   pass('real embedded-game request prioritises current-grade database MCQs over P3 legacy ratings');
 
-  selected=await gameNext(game);assert.equal(selected.id,'forces-next');
-  assert.ok(!selected.pool.includes('forces-current'));assert.ok(!selected.pool.includes('forces-copy'));
+  const firstFamily=currentFamily(selected.id);
+  selected=await gameNext(game);assert.ok(currentIds.includes(selected.id));
+  assert.notEqual(currentFamily(selected.id),firstFamily);
+  assert.ok(selected.pool.every(id=>currentFamily(id)!==firstFamily));
   selected=await gameNext(game);assert.equal(selected.id,'electrical-revision');
   selected=await gameNext(game);assert.equal(selected.id,null);
   assert.match(await game.locator('#question').innerText(),/No suitable fresh questions/);
   pass('fresh embedded requests space question families, use nearby revision next and pause before basic P3 fallback');
 
   await setup(mixedGrades,'P6','Same child');game=await openGame();
-  assert.equal((await gameNext(game)).id,'forces-current');
+  assert.ok(currentIds.includes((await gameNext(game)).id));
   await page.evaluate(()=>feedFixture.switchChild('Same child','P4'));
   await game.waitForFunction(()=>gameFixture.context().studentLevel==='P4');
   assert.equal(await game.evaluate(()=>gameFixture.previousCurrent()),false);
@@ -221,13 +232,41 @@ try{
 
   await setup(mixedGrades,'P6','Older child');
   await page.evaluate(()=>{Storage.prototype.getItem=Storage.prototype.setItem=()=>{throw new DOMException('Storage blocked','SecurityError');};});
-  game=await openGame();assert.equal((await gameNext(game)).id,'forces-current');
+  game=await openGame();const beforeModeChange=await gameNext(game);assert.ok(currentIds.includes(beforeModeChange.id));
   game=await openGame('defendersFrame');selected=await gameNext(game);
-  assert.equal(selected.id,'forces-next');assert.ok(!selected.pool.includes('forces-copy'));
+  assert.ok(currentIds.includes(selected.id));assert.notEqual(currentFamily(selected.id),currentFamily(beforeModeChange.id));
+  assert.ok(selected.pool.every(id=>currentFamily(id)!==currentFamily(beforeModeChange.id)));
   await page.evaluate(()=>feedFixture.switchChild('Sibling','P6'));
   await game.waitForFunction(()=>gameFixture.context().studentKey.includes('Sibling'));
-  assert.equal((await gameNext(game)).id,'forces-current');
+  assert.ok(currentIds.includes((await gameNext(game)).id));
   pass('blocked browser storage still spaces question families across games while keeping siblings separate');
+
+  const peers=[current,currentNext,
+    q('forces-gravity',{level:'P6',topic:'Forces',difficulty:3,title:'Falling marble',stem:'Which force pulls a marble towards the ground?'}),
+    q('forces-spring',{level:'P6',topic:'Forces',difficulty:3,title:'Weighing bag',stem:'Why does the spring become longer when a bag is attached?'})];
+  const varietyBank=[tooBasic,previousGrade,...peers],peerIds=new Set(peers.map(q=>q.id)),openers=[],openingSets=[];
+  for(const seed of [1,7,19,43,101,509]){
+    await setup(varietyBank,'P6','Fresh cohort');await seedGameRandom(seed);game=await openGame();
+    selected=await gameNext(game);openers.push(selected.id);
+    assert.ok(peerIds.has(selected.id),'random selection must stay in the best available school tier');
+    const second=await gameNext(game);assert.ok(peerIds.has(second.id));assert.notEqual(second.id,selected.id);
+    openingSets.push([selected.id,second.id].sort().join(','));
+  }
+  assert.ok(new Set(openers).size>1,'fresh cohorts must not all start with the first database question');
+  assert.ok(new Set(openingSets).size>1,'short sessions must vary the selected set, not just swap a fixed pair');
+  pass('controlled fresh cohorts receive different current-grade starting questions');
+
+  for(const frameId of ['defendersFrame','raidersFrame','spireFrame','legendsFrame','slayersFrame']){
+    await setup(varietyBank,'P6','Variety learner');await seedGameRandom(101);game=await openGame(frameId);
+    const sequence=[];
+    for(let index=0;index<peers.length;index++){
+      selected=await gameNext(game);assert.ok(peerIds.has(selected.id));sequence.push(selected.id);
+    }
+    assert.equal(new Set(sequence).size,peers.length,'repeated requests must exhaust distinct P6 peers before easier revision');
+    assert.equal((await gameNext(game)).id,'electrical-revision');
+    assert.equal((await gameNext(game)).id,null,'random ordering must never revive unsuitable basic work');
+  }
+  pass('all five embedded modes randomise suitable peers without repeats and keep P6 ahead of P5/P3');
 
   const context=q('context',{title:'Fruit F',blocks:[{id:'s',type:'text',content:'<p>Use the table and Jo’s answer to explain how animals find fruit F.</p>'},
     {id:'t',type:'table',rows:2,cols:2,data:[['Colour','Dull green'],['Smell','Strong']]},

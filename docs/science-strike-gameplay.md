@@ -1,6 +1,6 @@
-# Science Strike v1.9.2
+# Science Strike v1.9.3
 
-Released with the Science portal v1.382.2.
+Released with the Science portal v1.382.3.
 
 ## Playing
 
@@ -49,6 +49,9 @@ Suitable current-grade work now comes first. Earlier-year game ratings cannot
 push basic P3 questions ahead of P6 work, and stepping further back requires
 several relevant weak results. Successful easy answers never pull the target
 below its starting point for that school level.
+Each question draw randomizes among comparably suitable, fresh database families
+before choosing one. A fixed bank prefix no longer supplies every opening set;
+grade priorities, mastery limits, quality checks and run-wide spacing still apply.
 
 Number keys select answers, and feedback keeps the game paused until the
 student chooses Continue. Each displayed question can settle only once, so

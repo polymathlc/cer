@@ -3800,7 +3800,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.382.2';
+const APP_VERSION = 'v1.382.3';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -30087,7 +30087,7 @@ function _scienceFeedGameMessageCurrent(d, source) {
 function _scienceFeedGameRows(rows, opts = {}) {
   const bank = _scienceFeedSources(), byId = new Map(bank.map(q => [String(q.id), q]));
   const originals = (rows || []).map(row => byId.get(String(row.id))).filter(Boolean);
-  const plan = _scienceFeedPlan(originals, { ...opts, game: true });
+  const plan = _scienceFeedPlan(originals, { ...opts, game: true, randomize: true });
   const byRow = new Map((rows || []).map(row => [String(row.id), row]));
   return plan.questions.map(q => {
     const row = byRow.get(String(q.id));
@@ -50065,7 +50065,7 @@ async function commStartAutoQuest(questId) {
   const ordered = [];
   const add = list => list.forEach(q => { if (!ordered.some(x => String(x.id) === String(q.id))) ordered.push(q); });
   add(unseen); add(struggled); add(rest);
-  const queue = _scienceFeedPlan(ordered, { limit: count }).questions;
+  const queue = _scienceFeedPlan(ordered, { limit: count, randomize: true }).questions;
   _qpFeedManual = false;
   if (!queue.length) { showToast('Couldn\'t pick questions — try again shortly.', 'error'); return; }
   _questRun = { questId: quest._id, mode: 'auto', win: quest.win || 'highest', ids: queue.map(q => String(q.id)), total: queue.length, best: {}, answered: new Set(), startedAt: Date.now(), _finished: false };
