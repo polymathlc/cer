@@ -71,6 +71,7 @@ function harness(bank = [], random = () => 0.5) {
     const _resetOpenScienceCoaches=()=>{};
     const _hadesInit=()=>{state.hadesStarts=(state.hadesStarts||0)+1;};
     const _hadesResetLearning=()=>{state.hadesInvalidations=(state.hadesInvalidations||0)+1;};
+    const pirateRiftPortal={sync:()=>{state.pirateProfileSyncs=(state.pirateProfileSyncs||0)+1;}};
     const db={}; const collection=(...x)=>x,where=(...x)=>x,query=(...x)=>x;
     const getDocs=async()=> { if(state.wait) await state.wait; return {forEach:visit=>state.attempts.forEach(a=>visit({data:()=>a}))}; };
     const setDoc=async(ref,value)=>state.writes.push(value),_qRef=id=>id;
@@ -284,6 +285,7 @@ test('learner change clears active questions, marking stores and cached queues e
   api.user({name:'Mika',level:'P4'});api.family({students:[{name:'Mika',level:'P4'}],activeStudent:0});api.refresh();
   assert.deepEqual(api.activeState(),{questions:{},queue:[]});
   assert.equal(state.hadesInvalidations,1,'an open Hades sanctuary must retire the old learning profile');
+  assert.equal(state.pirateProfileSyncs,2,'each learning refresh checks whether Pirate Rift belongs to the active profile');
 });
 
 test('managed pupil practice has independent served memory and cannot exceed that pupil level', async () => {

@@ -1,0 +1,38 @@
+name: Pirate Rift checks
+on:
+  pull_request:
+    paths: ['pirate-rift*', 'assets/pirate-rift/**', 'index.html', 'app.js', 'tools/pirate-rift*', '.github/workflows/pirate-rift.yml']
+  push:
+    branches: [main]
+    paths: ['pirate-rift*', 'assets/pirate-rift/**', 'index.html', 'app.js', 'tools/pirate-rift*', '.github/workflows/pirate-rift.yml']
+permissions:
+  contents: read
+jobs:
+  adventure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Validate combat, progression and portal access
+        run: node --test tools/pirate-rift-core.test.mjs tools/pirate-rift-portal-access-tests.mjs
+      - name: Install isolated browser runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pirate-browser" --no-audit --no-fund playwright@1.62.1
+          "$RUNNER_TEMP/pirate-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify crew, gameplay, mobile controls and portal lifecycle
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/pirate-browser/node_modules/playwright/index.mjs
+          PIRATE_RIFT_SCREENSHOTS: ${{ runner.temp }}/pirate-qa
+        run: |
+          node tools/pirate-rift-browser-tests.mjs
+          node tools/pirate-rift-portal-tests.mjs
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: pirate-rift-qa
+          path: ${{ runner.temp }}/pirate-qa
+          if-no-files-found: ignore
+          retention-days: 7
