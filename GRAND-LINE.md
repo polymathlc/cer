@@ -1,6 +1,6 @@
 # Grand Line Chronicles
 
-A One Piece collectible card adventure alongside Pirate Rift. Open **Grand Line Chronicles** in the Math or Science portal to use the signed-in learner's real question bank and existing reward-point wallet. A direct visit to `grand-line.html` provides a clearly labeled local preview without platform purchases or reward points.
+A One Piece collectible card and ship-defense game alongside Pirate Rift. Open **Crew Defense** in the Math or Science portal to use the signed-in learner's real question bank and existing reward-point wallet. A direct visit to `grand-line.html` provides a clearly labeled local preview without platform purchases or reward points.
 
 ## Cards and crews
 
@@ -24,17 +24,17 @@ The host rolls rarity first, then chooses uniformly among characters of that rar
 
 Purchases debit points and save the card and receipt together through the existing RPG account storage. An interrupted confirmation retains the same purchase receipt for safe retry. The host controls price, draw, ownership and balance; the game frame sends no card grants or point amounts. Collections and receipts are scoped by subject, account, learner, role and school level. The reward-point wallet retains the platform's existing account scope.
 
-## Turn-based battles and learning
+## Crew Defense and learning
 
-**Grand Line Voyage** is an idle crew adventure across nine encounters in three acts. Choose five owned cards and start an encounter. The crew fights automatically at **4× speed** by default, choosing legal skills and targets, finishing weakened opponents, healing injured allies, and reviving fallen crewmates. You no longer need to click through each character’s turn.
+**Crew Defense** replaces the former turn-based and idle-voyage modes. Choose a stage, arrange your five owned characters on defense pads, and protect your ship from moving enemies. Defenders use the battle avatars unlocked by their cards and attack automatically when enemies enter range. Their powers provide damage, area attacks, healing, shields, and control.
 
-Choose **Balanced**, **Assault**, or **Sustain** strategy and **1×, 2×, or 4×** speed. Pause/resume any time, or select **Take command** to reveal the manual skill controls. These preferences are saved for the learner’s profile. Basic attacks restore Spirit; stronger abilities spend it and have cooldowns. Healing, control, shields, damage over time, and lore-based passives still matter.
+The nine stages each contain **three waves**. Your five crew members begin on separate pads. Select a defender and an empty pad to reposition that character before starting a wave. Start each wave when ready, adjust the simulation speed, and pause/resume with the defense controls. Defenders stay within the active owned crew; choosing a formation never buys or unlocks a card.
 
-The idle loop is **choose your crew → automatic battle round → three questions → continue with a knowledge boost**. Actions pause while the game is hidden, while a dialog is open, during questions, or until a pending save is acknowledged. Returning does not simulate missed rounds, skip questions, or grant offline rewards. A victory opens the next encounter for you to start.
+The loop is **choose five owned cards → arrange defenders → protect the ship → answer three questions → prepare the next wave**. Enemies follow the battlefield path toward the ship. Movement and attacks pause when the game is hidden, a dialog is open, questions are in progress, or a save is awaiting confirmation. Returning never simulates offline waves or awards offline points.
 
-After **every full round, including the final round**, the portal presents exactly three suitable questions. Math uses authenticated marking for student answers. Science uses its existing feeding and attempt-recording flow. Wrong answers receive feedback and count toward completing the three-question pause. Combat resumes only after all three results and battle progress have been confirmed.
+After **every completed wave, including the final wave or a ship defeat**, the portal presents exactly three suitable questions. Math uses authenticated marking for student answers. Science uses its existing feeding and attempt-recording flow. Wrong answers receive feedback and count toward completing the three-question pause. The next wave and final results remain locked until all three results and progress have been confirmed.
 
-Each correct answer strengthens the **next full round**:
+Each correct answer strengthens the **next wave**:
 
 | Correct answers | Attack damage | Critical chance | Defense |
 |---:|---:|---:|---:|
@@ -43,11 +43,9 @@ Each correct answer strengthens the **next full round**:
 | 2 | +20% | +10 percentage points | +16% |
 | 3 | +30% | +15 percentage points | +24% |
 
-Bonuses do not stack between rounds. Critical chance, including character passives, is capped at 75%. Each correct answer also restores 1.8% of living crew members' maximum life and 3 Spirit. The battle screen displays the current bonus and its round. The final quiz records the result and opens the next encounter after victory.
+Bonuses apply to the next wave and do not stack. The defense screen shows the current boost. Completing all three waves and the final questions records the victory and opens the next stage. A defeated ship ends the defense after the required questions; it does not unlock a stage or grant a pack.
 
-Keyboard: **1 / 2 / 3** select a skill; **D** defends. Buttons support keyboard navigation and touch. Sound and reduced motion are available in Settings.
-
-These skill shortcuts apply in manual mode. Idle mode needs no skill or target clicks.
+Placement, start-wave, pause, and speed controls support keyboard navigation and touch. There are no turn-order, manual skill-selection, or idle-strategy controls. Sound and reduced motion remain in Settings.
 
 ## Current roster and future expansions
 
@@ -64,7 +62,7 @@ Eight legends are reserved for future **seven-star** expansions. They are absent
 | Dracule Mihawk | Hatchan · 2★ |
 | Boa Hancock | Kalifa · 3★ |
 
-Existing copies transfer **one-for-one** to the corresponding replacement, including team slots. When a save contains both names, their copies combine and merge normally. Copy counts, reward points, purchase receipts and campaign progress are preserved; combat strength follows the replacement’s current rarity. Repeated loading or replaying a purchase receipt cannot duplicate copies or charge points again. Future seven-star editions will have their own expansion releases; owning an earlier retired card does not automatically grant an unreleased card.
+Existing copies transfer **one-for-one** to the corresponding replacement, including team slots. When a save contains both names, their copies combine and merge normally. Copy counts, reward points, purchase receipts and stage progress are preserved; combat strength follows the replacement’s current rarity. Repeated loading or replaying a purchase receipt cannot duplicate copies or charge points again. Future seven-star editions will have their own expansion releases; owning an earlier retired card does not automatically grant an unreleased card.
 
 ## Artwork and lore
 
@@ -76,7 +74,7 @@ Run the core, economy, bank and learning tests with Node 24:
 
 ```sh
 node --test tools/grand-line-core.test.mjs tools/grand-line-economy-tests.mjs tools/grand-line-learning-tests.mjs tools/grand-line-bank-tests.mjs
-node --test tools/grand-line-idle-tests.mjs tools/grand-line-roster-tests.mjs tools/grand-line-migration-tests.mjs
+node --test tools/grand-line-defense-tests.mjs tools/grand-line-roster-tests.mjs tools/grand-line-migration-tests.mjs
 ```
 
 The Science repository uses its science-feeding integration suite instead of a separate Math bank test. Both repositories run the browser suites below. Set `PLAYWRIGHT_MODULE` to an installed Playwright module path; optionally set `PLAYWRIGHT_BROWSER_CHANNEL` and `GRAND_LINE_SCREENSHOTS`.

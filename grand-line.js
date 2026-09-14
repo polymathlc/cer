@@ -1,22 +1,31 @@
-import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam,createBattle,getActiveUnit,getValidTargets,act,chooseDefend,advanceBattle,completeLearning} from './grand-line-core.js?v=1.1.0';
-import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS} from './grand-line-data.js?v=1.1.0';
-import {createArtManager,createBattleRenderer} from './grand-line-render.js?v=1.1.0';
-import {IDLE_STRATEGIES,IDLE_SPEEDS,idleActionDelay,advanceIdleBattle} from './grand-line-idle.js?v=1.1.0';
-
+import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam} from './grand-line-core.js?v=1.2.0';
+import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS} from './grand-line-data.js?v=1.2.0';
+import {createArtManager} from './grand-line-render.js?v=1.2.0';
+import {DEFENSE_PADS,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning} from './grand-line-defense.js?v=1.2.0';
+import {createDefenseRenderer} from './grand-line-defense-render.js?v=1.2.0';
+const DEFENSE_SPEEDS=[1,2,4];
 const $=id=>document.getElementById(id);
 const embedded=parent!==window,params=new URLSearchParams(location.search),origin=location.origin;
-const art=createArtManager(),renderer=createBattleRenderer($('battle-canvas'),art);
+const art=createArtManager(),renderer=createDefenseRenderer($('battle-canvas'),art);
 const RARITIES=['','Common','Uncommon','Rare','Epic','Legendary','Mythic','Galaxy'];
 const GLYPHS={punch:'✦',slash:'╱',lightning:'ϟ',fire:'♨',ice:'❄',water:'≈',heal:'✚',shield:'⬡',earth:'◈',poison:'●',dark:'◉',soul:'♬',wind:'≋',light:'☀',plant:'❧',dragon:'✧',gravity:'◎',magnet:'∩',explosion:'✷',smoke:'☁',string:'⌘',sand:'⁙',revive:'✥'};
 const uuid=prefix=>prefix+'-'+(crypto.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
 const format=n=>Number.isFinite(n)?Math.floor(n).toLocaleString():'—';
 const displayName=c=>c.id==='luffy'?'Luffy':c.id==='whitebeard'?'Whitebeard':c.id==='akainu'?'Akainu':c.id==='kaido'?'Kaido':c.name;
+const skillDescription=s=>s.description.replaceAll('restore 20 Spirit','restore 12 Spirit').replace(/for (\d+) turns?/g,(_,n)=>`for ${Number(n)*2} seconds`).replaceAll('every enemy','every enemy in range').replaceAll('the whole crew','all crew members in range');
+function passiveDescription(p){
+  if(p.type==='energy')return `Recover ${(p.value*.6).toFixed(1)} extra Spirit per second.`;
+  let text=p.description.replaceAll('round’s','wave’s').replaceAll('one additional turn','two additional seconds');
+  if(['regen','apex-kaido'].includes(p.type))text=text.replaceAll('at the start of each turn','every 4 seconds').replaceAll('at each turn','every 4 seconds');
+  if(['all-attack','all-guard'].includes(p.type))text+=' Applies to crew members in range.';
+  return text;
+}
 let collection=createCollection(),wallet={available:false,balance:0,currency:'points',offers:[]};
 let subject=params.get('subject')?.toLowerCase()==='science'?'Science':'Math',scope='preview',sessionId='',helloId='',ready=!embedded;
-let settings={muted:false,reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches,autoBattle:true,battleSpeed:4,strategy:'balanced'};
-let idlePaused=false,idleReason='Your crew chooses its skills automatically.';
-let view='collection',dialog='',battle=null,selectedSlot=null,selectedSkill='',selectedTarget='',lastActor='',busyUntil=0,wasBusy=false;
-let lastOutcome='',bannerUntil=0,enemyAt=0,bridgeRound=0,learningPending=null,savePending=null,purchasePending=null;
+let settings={muted:false,reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches,battleSpeed:2};
+let defensePaused=false,selectedAllyId='',lastFrame=0,lastHud=0;
+let view='collection',dialog='',battle=null,selectedSlot=null,busyUntil=0;
+let lastOutcome='',bannerUntil=0,bridgeRound=0,learningPending=null,savePending=null,purchasePending=null;
 let selectedPack='spark',toastTimer=0,helloTimer=0,audioContext=null,questionSession=null,initialFocus=null,unsavedLearning=false;
 const storageKey=()=>`grand-line.v1:${subject.toLowerCase()}:${scope}`;
 const pendingKey=()=>storageKey()+':purchase';
@@ -28,8 +37,8 @@ function toast(message){clearTimeout(toastTimer);$('toast').textContent=message;
 function post(message){if(embedded)parent.postMessage(message,origin);}
 function localGet(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(_){return null;}}
 function localSet(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true;}catch(_){return false;}}
-function loadPreferences(){const old=localGet(storageKey());for(const k of ['muted','reducedMotion','autoBattle'])if(typeof old?.settings?.[k]==='boolean')settings[k]=old.settings[k];if(IDLE_SPEEDS.includes(old?.settings?.battleSpeed))settings.battleSpeed=old.settings.battleSpeed;if(Object.hasOwn(IDLE_STRATEGIES,old?.settings?.strategy||''))settings.strategy=old.settings.strategy;if(!embedded)collection=normalizeCollection(old?.collection);settingsUI();}
-function savePreferences(){localSet(storageKey(),{settings,...(!embedded?{collection}:{})});}
+function loadPreferences(){const old=localGet(storageKey());for(const k of ['muted','reducedMotion'])if(typeof old?.settings?.[k]==='boolean')settings[k]=old.settings[k];if(DEFENSE_SPEEDS.includes(old?.settings?.defenseSpeed))settings.battleSpeed=old.settings.defenseSpeed;if(!embedded)collection=normalizeCollection(old?.collection);settingsUI();}
+function savePreferences(){localSet(storageKey(),{settings:{...settings,defenseSpeed:settings.battleSpeed},...(!embedded?{collection}:{})});}
 function sound(kind='click'){
   if(settings.muted||document.hidden)return;
   try{audioContext ||=new(window.AudioContext||window.webkitAudioContext)();audioContext.resume().catch(()=>{});const now=audioContext.currentTime;
@@ -80,13 +89,13 @@ function openDialog(kind,title){
   if(kind!=='question')panel.append(button('×',closeDialog,'dialog-close'));
   requestAnimationFrame(()=>panel.querySelector('button:not(:disabled)')?.focus());return panel;
 }
-function closeDialog(){if(dialog==='question'&&questionSession||dialog==='save-progress'&&unsavedLearning)return;dialog='';$('dialog-layer').hidden=true;$('dialog-panel').replaceChildren();if(initialFocus?.isConnected)initialFocus.focus({preventScroll:true});initialFocus=null;enemyAt=performance.now()+idleActionDelay(settings.battleSpeed);if(view==='battle')renderBattle();}
+function closeDialog(){if(dialog==='question'&&questionSession||dialog==='save-progress'&&unsavedLearning)return;dialog='';$('dialog-layer').hidden=true;$('dialog-panel').replaceChildren();if(initialFocus?.isConnected)initialFocus.focus({preventScroll:true});initialFocus=null;lastFrame=0;if(view==='battle')renderBattle();}
 function inspectCard(id){
   const c=CHARACTER_BY_ID[id];if(!c)return;const panel=openDialog('card',c.name);panel.querySelector('h1').remove();const layout=el('div','card-detail'),copy=el('div','detail-copy');
   const owned=collection.cards[id],stats=statsFor(id,owned?.copies||1);layout.append(card(c,{inspect:false,eager:true}));copy.append(el('p','eyebrow',`${RARITIES[c.stars]} · ${c.stars} STARS · ${c.role.toUpperCase()}`));const title=el('h1','',c.name);title.id='dialog-title';copy.append(title,el('p','',c.description));
   const statRow=el('div','detail-stats');for(const [label,value]of[['LIFE',stats.hp],['ATTACK',stats.attack],['DEFENSE',stats.defense],['SPEED',stats.speed]]){const item=el('span');item.append(el('b','',value),document.createTextNode(label));statRow.append(item);}copy.append(statRow);
-  for(const skill of c.skills){const n=el('div','skill-description');n.style.setProperty('--skill-color',skill.color);n.append(el('h3','',`${GLYPHS[skill.kind]||'✧'} ${skill.name}`),el('p','',skill.description),el('small','',`${skill.cost} Spirit · ${skill.cooldown?skill.cooldown+' own-turn cooldown':'Always available'}`));copy.append(n);}
-  const passive=el('div','skill-description');passive.append(el('h3','',`Passive · ${c.passive.name}`),el('p','',c.passive.description));copy.append(passive);
+  for(const skill of c.skills){const n=el('div','skill-description');n.style.setProperty('--skill-color',skill.color);n.append(el('h3','',`${GLYPHS[skill.kind]||'✧'} ${skill.name}`),el('p','',skillDescription(skill)),el('small','',`${skill.cost} Spirit · Used automatically when ready and in range`));copy.append(n);}
+  const passive=el('div','skill-description');passive.append(el('h3','',`Passive · ${c.passive.name}`),el('p','',passiveDescription(c.passive)));copy.append(passive);
   copy.append(el('p','merge-note',owned?`${owned.copies} ${owned.copies===1?'copy':'copies'} · Merge rank ${stats.rank}. ${stats.rank>=10?'Maximum merge rank.':`Next rank at ${2**(stats.rank+1)} total copies. Duplicates merge automatically.`}`:'Not yet collected. Find this character in a single-card pack to unlock the battle avatar.'));
   if(owned){const add=button(collection.team.includes(id)?'Already in your crew':'Add to my crew',()=>replaceMenu(id),'gold-button');add.disabled=collection.team.includes(id)||!current()||!!battle&&!['victory','defeat'].includes(battle.status);copy.append(add);}else copy.append(button('View card packs',()=>{closeDialog();go('packs');},'gold-button'));
   layout.append(copy);panel.append(layout);
@@ -102,10 +111,10 @@ async function changeTeam(index,id){
   if(!current()||savePending)return;
   if(collection.team.includes(id)&&collection.team[index]!==id){toast('That character is already in your crew. Choose a different character.');return;}
   const before=[...collection.team],next=[...before];next[index]=id;if(!setTeam(collection,next)){toast('Choose five different unlocked characters.');return;}
-  selectedSlot=null;closeDialog();renderCrew();try{await persistCollection();toast(`${displayName(CHARACTER_BY_ID[id])} is ready to sail.`);}catch(error){collection.team=before;renderCrew();toast(error.message);}
+  selectedSlot=null;closeDialog();renderCrew();try{await persistCollection();toast(`${displayName(CHARACTER_BY_ID[id])} is ready to defend.`);}catch(error){collection.team=before;renderCrew();toast(error.message);}
 }
 function renderCampaign(){
-  $('campaign-map').replaceChildren(...ENCOUNTERS.map(e=>{const locked=e.id>collection.unlockedEncounter,n=el('article','encounter');n.dataset.locked=String(locked);n.style.setProperty('--encounter-color',['#8ac7ca','#b998d5','#dd9584'][Math.ceil(e.id/3)-1]);n.append(el('span','chapter-number',String(e.id).padStart(2,'0')),el('p','eyebrow',`ACT ${Math.ceil(e.id/3)} · ENCOUNTER ${e.id}`),el('h2','',e.name),el('p','',e.description));const avatars=el('div','enemy-roster');for(const id of e.enemies){const medallion=el('div','enemy-medallion');medallion.title=CHARACTER_BY_ID[id].name;const image=el('div','card-art');art.attach(image,id);medallion.append(image);avatars.append(medallion);}n.append(avatars);if(collection.completed.includes(e.id))n.append(el('p','completed-tag','✓ Completed · Replay available'));const start=button(locked?`Complete encounter ${e.id-1} first`:'Start idle voyage →',()=>beginBattle(e.id),'gold-button');start.disabled=locked||!current()||!!savePending;n.append(start);return n;}));
+  $('campaign-map').replaceChildren(...DEFENSE_STAGES.map(e=>{const locked=e.id>collection.unlockedEncounter,n=el('article','encounter');n.dataset.locked=String(locked);n.style.setProperty('--encounter-color',['#8ac7ca','#b998d5','#dd9584'][Math.ceil(e.id/3)-1]);n.append(el('span','chapter-number',String(e.id).padStart(2,'0')),el('p','eyebrow',`HARBOR ${e.id} · THREE WAVES`),el('h2','',e.name),el('p','',e.description));const avatars=el('div','enemy-roster');for(const id of e.enemies){const medallion=el('div','enemy-medallion');medallion.title=CHARACTER_BY_ID[id].name;const image=el('div','card-art');art.attach(image,id);medallion.append(image);avatars.append(medallion);}n.append(avatars);if(collection.completed.includes(e.id))n.append(el('p','completed-tag','✓ Harbor unlocked · Replay available'));const start=button(locked?`Defend harbor ${e.id-1} first`:'Prepare defense →',()=>beginBattle(e.id),'gold-button');start.disabled=locked||!current()||!!savePending;n.append(start);return n;}));
 }
 function renderPacks(){
   $('pack-balance').textContent=embedded?format(wallet.balance):'—';const offer=wallet.offers.find(o=>o.id===selectedPack)||wallet.offers[0];if(offer)selectedPack=offer.id;
@@ -142,63 +151,59 @@ function persistCollection(){
   post({type:'GLTCG_SAVE_REQUEST',sessionId,requestId,team:[...collection.team],progress:{unlockedEncounter:collection.unlockedEncounter,completed:[...collection.completed],stats:{...collection.stats}}});return promise;
 }
 function beginBattle(encounter){
-  if(purchasePending){toast('Resume your pending purchase in the Card shop before starting a battle.');return;}if(!current()||savePending||unsavedLearning)return;const next=createBattle(collection,{encounter,seed:uuid('voyage')});if(!next){toast('Choose five unlocked crew members and an available encounter.');return;}
-  battle=next;lastActor='';lastOutcome='';selectedSkill='';selectedTarget='';idlePaused=false;idleReason='Your crew chooses its skills automatically.';busyUntil=performance.now()+400;enemyAt=busyUntil;learningPending=null;go('battle');sound();
+  if(purchasePending){toast('Resume your pending purchase in the Card shop before starting a defense.');return;}if(!current()||savePending||unsavedLearning)return;const next=createDefense(collection,{encounter,seed:uuid('defense')});if(!next){toast('Choose five unlocked crew members and an available harbor.');return;}
+  battle=next;lastOutcome='';selectedAllyId=next.allies[0]?.id||'';defensePaused=false;busyUntil=0;lastFrame=0;lastHud=0;learningPending=null;go('battle');sound();
 }
-function selectSkill(id){if(settings.autoBattle||!battle||battle.status!=='player'||busy())return;selectedSkill=id;const targets=getValidTargets(battle,id);if(!targets.some(u=>u.id===selectedTarget))selectedTarget=targets[0]?.id||'';renderBattle();}
-function selectTarget(id){if(settings.autoBattle||!battle||battle.status!=='player'||busy())return;if(getValidTargets(battle,selectedSkill).some(u=>u.id===id)){selectedTarget=id;renderBattle();}}
-function useSkill(){if(settings.autoBattle||!battle||battle.status!=='player'||busy())return;if(act(battle,selectedSkill,selectedTarget)){busyUntil=performance.now()+idleActionDelay(settings.battleSpeed);enemyAt=busyUntil;sound('skill');lastActor='';renderBattle();}else toast('That action is unavailable. Check your target, Spirit and cooldown.');}
-function defend(){if(settings.autoBattle||!battle||busy())return;if(chooseDefend(battle)){busyUntil=performance.now()+idleActionDelay(settings.battleSpeed);enemyAt=busyUntil;lastActor='';renderBattle();}}
-function setAutoBattle(enabled){settings.autoBattle=!!enabled;idlePaused=false;enemyAt=performance.now()+400;savePreferences();renderBattle();}
-function renderIdleControls(){
-  const gated=!battle||!['player','enemy'].includes(battle.status),locked=!current()||!!savePending||unsavedLearning||!!learningPending?.waiting;
-  $('idle-mode').textContent=settings.autoBattle?'Take command':'Return to idle';$('idle-mode').setAttribute('aria-pressed',String(settings.autoBattle));$('idle-mode').disabled=locked;
-  $('idle-pause').textContent=idlePaused?'Resume voyage':'Pause voyage';$('idle-pause').disabled=!settings.autoBattle||gated||locked;$('idle-pause').setAttribute('aria-pressed',String(idlePaused));
-  $('idle-speed').value=String(settings.battleSpeed);$('idle-strategy').value=settings.strategy;
-  $('idle-state').textContent=locked?'Saving / studying':gated?battle?.status==='learning'?'Waiting for 3 answers':'Voyage complete':settings.autoBattle?idlePaused?'VOYAGE PAUSED':`CREW SAILING · ${settings.battleSpeed}×`:'MANUAL COMMAND';
-  $('idle-description').textContent=settings.autoBattle?IDLE_STRATEGIES[settings.strategy].description:'Choose each skill and target yourself. Return to idle at any time.';
-  $('idle-action').textContent=idleReason;$('idle-summary').hidden=!settings.autoBattle;document.querySelector('.battle-console').dataset.idle=String(settings.autoBattle);
-  $('manual-commands').hidden=settings.autoBattle;$('defend-button').hidden=settings.autoBattle;
-  const progress=battle?Math.min(100,Math.round(battle.turnIndex/Math.max(1,battle.turnOrder.length)*100)):0;$('idle-round-progress').value=gated?100:progress;
-}
+function startWave(){if(!battle||busy()||learningPending?.waiting)return false;const result=startDefenseWave(battle);if(result){defensePaused=false;lastFrame=0;sound();renderBattle();}return result;}
+function selectDefender(id){if(!battle?.allies.some(u=>u.id===id))return;selectedAllyId=id;renderBattle();}
+function placeDefender(allyId,padId){if(!battle||!['setup','learning'].includes(battle.status)||busy()||learningPending)return false;const result=placeDefenseUnit(battle,allyId,padId);if(result){selectedAllyId=allyId;renderBattle();sound();}return result;}
+function toggleDefensePause(){if(!battle||battle.status!=='running'||savePending||unsavedLearning||dialog)return;defensePaused=!defensePaused;lastFrame=0;renderBattle();}
 function renderBattle(){
-  if(!battle)return;const b=battle,e=typeof b.encounter==='object'?b.encounter:ENCOUNTERS.find(x=>x.id===b.encounter),actor=getActiveUnit(b);
-  $('battle-chapter').textContent=`ACT ${Math.ceil((e?.id||1)/3)} · GRAND LINE EXPEDITION`;$('battle-title').textContent=e?.name||'The Grand Line';$('round-label').textContent=`Round ${b.round}`;
-  const all=[...b.allies,...b.enemies];$('turn-order').replaceChildren(...b.turnOrder.map(id=>all.find(u=>u.id===id)).filter(u=>u&&u.hp>0).map(u=>el('span','turn-token'+(u.side==='enemy'?' enemy':'')+(u.id===b.activeId?' active':''),displayName(CHARACTER_BY_ID[u.characterId]))));
-  const waiting=b.status==='learning';$('round-gate').hidden=!waiting;$('gate-title').textContent=b.pendingOutcome?'The final round is complete.':`Round ${b.round} complete`;
-  const boost=b.learningBoost;$('learning-boost').dataset.active=String(!!boost);$('learning-boost').replaceChildren();
-  if(boost){$('learning-boost').append(el('strong','',`✧ KNOWLEDGE BOOST · ${boost.correct}/3 CORRECT`),el('span','',`Attack +${Math.round((boost.attackMultiplier-1)*100)}%`),el('span','',`Critical chance +${Math.round(boost.critBonus*100)} percentage points`),el('span','',`Defense +${Math.round((boost.defenseMultiplier-1)*100)}%`),el('small','',`ACTIVE FOR ROUND ${boost.round}`));}
-  else $('learning-boost').append(el('span','',waiting?'Each correct answer powers the next round: +10% attack, +5 percentage points critical chance, +8% defense.':'Answer the next three questions to strengthen your crew’s attack, critical chance, and defense.'));
-  $('gate-message').textContent=learningPending?.message||`Answer three ${subject} questions to ${b.pendingOutcome?'finish the battle':'continue the next round'}.`;
-  $('study-button').textContent=learningPending?.waiting?'Questions in progress…':learningPending?'Retry these 3 questions →':'Answer 3 questions →';$('study-button').disabled=!!learningPending?.waiting||!!savePending||!current();
-  if(actor&&lastActor!==actor.id){lastActor=actor.id;selectedSkill=actor.skills[0]?.id||'';selectedTarget=getValidTargets(b,selectedSkill)[0]?.id||'';}
-  const player=b.status==='player',locked=busy()||!player||settings.autoBattle;$('actor-label').textContent=waiting?'STUDY BREAK':player?settings.autoBattle?'CREW IN ACTION':'YOUR TURN':b.status==='enemy'?'ENEMY TURN':'EXPEDITION COMPLETE';$('actor-name').textContent=actor?displayName(CHARACTER_BY_ID[actor.characterId]):waiting?'Knowledge is power.':'Well fought.';
-  $('actor-passive').textContent=actor?`${actor.passive.name} · ${actor.passive.description}`:waiting?'Combat resumes only after all three answers are graded.':'Return to your collection to prepare your next crew.';
-  $('actor-energy').replaceChildren();if(actor){const fill=el('span');fill.style.width=`${actor.energy/actor.maxEnergy*100}%`;$('actor-energy').append(fill,el('b','',`${Math.floor(actor.energy)} / ${actor.maxEnergy} SPIRIT`));}
-  $('defend-button').disabled=locked;
-  $('skill-buttons').replaceChildren(...(actor?.skills||[]).map(s=>{const n=button('',()=>selectSkill(s.id),'skill-command'+(selectedSkill===s.id?' selected':''));n.style.setProperty('--skill-color',s.color);n.dataset.skill=s.id;const cd=actor.cooldowns[s.id]||0;n.disabled=locked||cd>0||actor.energy<s.cost;n.append(el('span','glyph',GLYPHS[s.kind]||'✧'),el('strong','',s.name),el('p','',s.description),el('small','',cd?`${cd} own-turn cooldown`:actor.energy<s.cost?`Need ${s.cost} Spirit`:`${s.cost} Spirit · ${s.target.replaceAll('-',' ')}`));return n;}));
-  const targets=player?getValidTargets(b,selectedSkill):[];$('target-buttons').replaceChildren(...targets.map(u=>{const n=button(`${displayName(CHARACTER_BY_ID[u.characterId])} · ${Math.max(0,Math.ceil(u.hp))}`,()=>selectTarget(u.id),'');n.dataset.target=u.id;n.setAttribute('aria-pressed',String(selectedTarget===u.id));n.disabled=locked;return n;}));
-  const skill=actor?.skills.find(s=>s.id===selectedSkill);$('target-label').textContent=waiting?'Three questions are required between every battle round.':player?skill?`${skill.name} · Select ${skill.target==='all-enemies'?'any enemy to confirm an attack on all enemies':skill.target==='all-allies'?'any ally to confirm the whole crew':skill.target==='self'?'your character':'a target'}.`:'Choose a skill.':'The opposing crew is taking its turn.';
-  $('cast-button').textContent=skill?.name||'Use skill';$('cast-button').disabled=locked||!skill||!targets.length||!selectedTarget||(actor.cooldowns[selectedSkill]||0)>0||actor.energy<skill.cost;
-  $('battle-log').replaceChildren(...b.log.map(text=>el('li','',text)));
-  renderIdleControls();
-  if(['victory','defeat'].includes(b.status)&&!unsavedLearning&&lastOutcome!==b.id){lastOutcome=b.id;ending();}
+  if(!battle)return;const b=battle,e=b.encounter,waiting=b.status==='learning',setup=b.status==='setup',locked=!current()||!!savePending||unsavedLearning||!!learningPending?.waiting;
+  $('battle-chapter').textContent=`CREW DEFENSE · HARBOR ${e.id}`;$('battle-title').textContent=e.name;$('round-label').textContent=`Wave ${b.round} / ${b.waveCount}`;
+  $('defense-state').textContent=locked?'SAVING / STUDYING':setup?'PLACE YOUR CREW':waiting?'WAVE COMPLETE':b.status==='running'?defensePaused?'DEFENSE PAUSED':`DEFENDING · ${settings.battleSpeed}×`:'DEFENSE COMPLETE';
+  $('defense-description').textContent=setup?'Select a crew member, then a numbered spot. Start when you are ready.':waiting?'The battlefield is paused for three questions.':defensePaused?'Take a breather. Resume when you are ready.':'Your crew attacks and uses skills automatically. Stop enemies before they reach the ship.';
+  $('start-wave').hidden=!setup;$('start-wave').textContent=`Start wave ${b.round} →`;$('start-wave').disabled=locked||!!dialog;
+  $('defense-pause').hidden=setup||waiting||['victory','defeat'].includes(b.status);$('defense-pause').disabled=locked;$('defense-pause').textContent=defensePaused?'Resume defense':'Pause defense';$('defense-pause').setAttribute('aria-pressed',String(defensePaused));$('defense-speed').value=String(settings.battleSpeed);$('defense-speed').disabled=locked;
+  $('ship-health').textContent=`${Math.max(0,Math.ceil(b.ship.hp))} / ${b.ship.maxHp}`;$('ship-meter').value=b.ship.hp;$('ship-meter').max=b.ship.maxHp;
+  const remaining=(b.remainingToSpawn||0)+b.enemies.filter(u=>u.hp>0&&!u.escaped).length;$('wave-enemies').textContent=`${remaining} remaining`;$('wave-meter').value=Math.min(100,(b.waveProgress||0)*100);$('defense-kills').textContent=format(b.stats.kills||0);
+  $('round-gate').hidden=!waiting;$('gate-title').textContent=b.pendingOutcome==='defeat'?'The ship needs a new defense.':b.pendingOutcome==='victory'?'The harbor is secure.':`Wave ${b.round} cleared`;
+  $('gate-message').textContent=learningPending?.message||`Answer three ${subject} questions to ${b.pendingOutcome?'complete this defense':'prepare the next wave'}.`;
+  $('study-button').textContent=learningPending?.waiting?'Questions in progress…':learningPending?'Retry these 3 questions →':'Answer 3 questions →';$('study-button').disabled=!!learningPending?.waiting||locked;
+  const boost=b.learningBoost,boostKey=`${b.id}:${b.round}:${waiting}:${boost?.correct||0}`;
+  if($('learning-boost').dataset.key!==boostKey){$('learning-boost').dataset.key=boostKey;$('learning-boost').dataset.active=String(!!boost);$('learning-boost').replaceChildren();
+  if(boost)$('learning-boost').append(el('strong','',`✧ KNOWLEDGE BOOST · ${boost.correct}/3 CORRECT`),el('span','',`Attack +${Math.round((boost.attackMultiplier-1)*100)}%`),el('span','',`Critical chance +${Math.round(boost.critBonus*100)} percentage points`),el('span','',`Defense +${Math.round((boost.defenseMultiplier-1)*100)}%`),el('small','',`WAVE ${boost.round}`));
+  else $('learning-boost').append(el('span','',waiting?'Each correct answer powers the next wave: +10% attack, +5 percentage points critical chance, +8% defense.':'Three questions between waves strengthen your crew’s attack, critical chance, and defense.'));}
+  renderPlacement();$('battle-log').replaceChildren(...b.log.map(text=>el('li','',text)));
+  if(['victory','defeat'].includes(b.status)&&!unsavedLearning&&!savePending&&lastOutcome!==b.id){lastOutcome=b.id;ending();}
 }
-function retreat(after){if(learningPending?.waiting||savePending||unsavedLearning){toast('Finish the current questions and save before leaving the battle.');return;}if(!battle){after?.();return;}if(['victory','defeat'].includes(battle.status)){battle=null;after?.();return;}const panel=openDialog('retreat','Leave this battle?');panel.append(el('p','', 'This battle will end. Completed question records and your collected cards are retained. The current unfinished round gives no battle progress.'));const actions=el('div','dialog-actions');actions.append(button('Keep fighting',closeDialog,'gold-button'),button('Retreat',()=>{learningPending=null;questionSession=null;closeDialog();battle=null;go('campaign');after?.();}));panel.append(actions);}
-function ending(){if(!battle)return;const win=battle.status==='victory',panel=openDialog('ending',win?'Your crew prevails.':'Regroup. Return stronger.');panel.classList.add('battle-result');panel.insertBefore(el('p','eyebrow',win?'ENCOUNTER COMPLETE':'THE VOYAGE CONTINUES'),panel.firstChild);panel.append(el('p','',win?'A new course is open. Use your reward points to discover more crew members.':'Try a new crew combination, defend to recover Spirit, and watch your healing and control abilities.'));
-  const stats=el('div','result-stats');for(const [label,value]of[['ROUNDS',battle.round],['CORRECT ANSWERS',battle.roundResults.reduce((n,r)=>n+r.correct,0)],['CREW STANDING',battle.allies.filter(u=>u.hp>0).length]]){const n=el('span');n.append(el('strong','',value),document.createTextNode(label));stats.append(n);}panel.append(stats);const actions=el('div','dialog-actions');actions.append(button('Continue the voyage',()=>{closeDialog();battle=null;go('campaign');},'gold-button'),button('Review my crew',()=>{closeDialog();battle=null;go('crew');}));panel.append(actions);sound(win?'win':'click');}
+function renderPlacement(){
+  if(!battle)return;const b=battle,setup=b.status==='setup',locked=!setup||!!savePending||unsavedLearning||!current();
+  // Reuse focused controls while the live HUD updates; keyboard selection stays stable.
+  if($('defender-buttons').dataset.battle!==b.id){$('defender-buttons').dataset.battle=b.id;$('defender-buttons').replaceChildren(...b.allies.map(u=>{const c=CHARACTER_BY_ID[u.characterId],n=button('',()=>selectDefender(u.id),'defender-chip');n.dataset.ally=u.id;const face=el('span','defender-face card-art');art.attach(face,c.id,true);n.append(face,el('strong','',displayName(c)),el('small'),el('progress'));return n;}));}
+  for(const n of $('defender-buttons').children){const u=b.allies.find(u=>u.id===n.dataset.ally);n.setAttribute('aria-pressed',String(u.id===selectedAllyId));n.querySelector('small').textContent=`Spot ${DEFENSE_PADS.findIndex(p=>p.id===u.padId)+1} · ${Math.ceil(u.hp)} HP`;const meter=n.querySelector('progress');meter.value=u.hp;meter.max=u.maxHp;}
+  if(!$('placement-buttons').children.length)$('placement-buttons').replaceChildren(...DEFENSE_PADS.map((p,i)=>{const n=button(String(i+1),()=>placeDefender(selectedAllyId,p.id),'placement-spot');n.dataset.pad=p.id;return n;}));
+  const selected=b.allies.find(u=>u.id===selectedAllyId)||b.allies[0];
+  for(const n of $('placement-buttons').children){const occupant=b.allies.find(u=>u.padId===n.dataset.pad),index=DEFENSE_PADS.findIndex(p=>p.id===n.dataset.pad);n.disabled=locked;n.setAttribute('aria-pressed',String(selected.padId===n.dataset.pad));n.setAttribute('aria-label',`Spot ${index+1}, ${occupant?displayName(CHARACTER_BY_ID[occupant.characterId]):'empty'}`);n.title=DEFENSE_PADS[index].name;n.classList.toggle('occupied',!!occupant);}
+  const c=CHARACTER_BY_ID[selected.characterId];$('defender-name').textContent=displayName(c);$('defender-role').textContent=`${c.role.toUpperCase()} · RANGE ${Math.round(selected.range)}`;$('defender-passive').textContent=`${c.passive.name} · ${passiveDescription(c.passive)}`;
+  $('placement-hint').textContent=setup?`Place ${displayName(c)} on a numbered spot. Choosing an occupied spot swaps the two crew members.`:'Positions are locked during the wave. Reposition after answering all three questions.';
+  if($('defender-skills').dataset.ally!==selected.id){$('defender-skills').dataset.ally=selected.id;$('defender-skills').replaceChildren(...c.skills.map(s=>{const n=el('div','defense-skill');n.style.setProperty('--skill-color',s.color);n.append(el('strong','',`${GLYPHS[s.kind]||'✧'} ${s.name}`),el('span','',skillDescription(s)));return n;}));}
+}
+function retreat(after){if(learningPending?.waiting||savePending||unsavedLearning){toast('Finish the current questions and save before leaving the defense.');return;}if(!battle){after?.();return;}if(['victory','defeat'].includes(battle.status)){battle=null;after?.();return;}const panel=openDialog('retreat','Leave this defense?');panel.append(el('p','', 'This defense will end. Your cards and completed question records are retained. Finish all three waves and their questions to open the next harbor.'));const actions=el('div','dialog-actions');actions.append(button('Keep defending',closeDialog,'gold-button'),button('Retreat',()=>{learningPending=null;questionSession=null;closeDialog();battle=null;go('campaign');after?.();}));panel.append(actions);}
+function ending(){if(!battle)return;const win=battle.status==='victory',panel=openDialog('ending',win?'The harbor is safe.':'Regroup. Return stronger.');panel.classList.add('battle-result');panel.insertBefore(el('p','eyebrow',win?'DEFENSE COMPLETE':'CREW DEFENSE'),panel.firstChild);panel.append(el('p','',win?(battle.encounter.id===9?'Your crew protected every harbor. Replay a defense with a new crew or formation.':'Your crew held the route. A new harbor is ready to defend.'):'Move attackers near bends in the route, cover them with a healer, and strengthen the next wave with correct answers.'));
+  const stats=el('div','result-stats');for(const [label,value]of[['WAVES',battle.round],['CORRECT ANSWERS',(battle.roundResults||[]).reduce((n,r)=>n+r.correct,0)],['SHIP LIFE',Math.ceil(battle.ship.hp)]]){const n=el('span');n.append(el('strong','',value),document.createTextNode(label));stats.append(n);}panel.append(stats);const actions=el('div','dialog-actions');actions.append(button(win?(battle.encounter.id===9?'Choose a harbor':'Choose next harbor'):'Try defense again',()=>{const stage=battle.encounter.id;closeDialog();battle=null;win?go('campaign'):beginBattle(stage);},'gold-button'),button('Review my crew',()=>{closeDialog();battle=null;go('crew');}));panel.append(actions);sound(win?'win':'click');}
 function requestLearning(){
   if(!battle||battle.status!=='learning'||learningPending?.waiting||savePending||!current())return;
   if(!embedded){startPreviewQuestions();return;}
   const requestId=uuid('round'),round=bridgeRound+1;learningPending={requestId,round,battleId:battle.id,battleRound:battle.round,waiting:true,message:'Your portal is preparing three suitable questions.'};post({type:'GLTCG_ROUND_REQUEST',requestId,sessionId,round});renderBattle();
 }
 async function finishLearning(correct,total,battleRound){
-  if(!battle||battle.status!=='learning')return;const result=completeLearning(battle,{correct,total,round:battleRound});if(!result)return;
-  learningPending=null;unsavedLearning=true;lastActor='';renderCounters();if(result.boost)toast(`${correct}/3 correct · Your crew’s attack, critical chance, and defense are stronger for round ${result.boost.round}.`);await saveLearningProgress();
+  if(!battle||battle.status!=='learning')return;const result=completeDefenseLearning(battle,{correct,total,round:battleRound});if(!result)return;
+  learningPending=null;unsavedLearning=true;renderCounters();if(result.boost)toast(`${correct}/3 correct · Your crew’s attack, critical chance, and defense are stronger for wave ${result.boost.round}.`);await saveLearningProgress();
 }
 async function saveLearningProgress(){
-  try{await persistCollection();unsavedLearning=false;if(dialog==='save-progress')closeDialog();busyUntil=performance.now()+400;enemyAt=busyUntil;renderBattle();}
-  catch(error){if(!current())return;const panel=openDialog('save-progress','Saving your voyage');panel.querySelector('.dialog-close')?.remove();panel.append(el('p','',error.message),el('p','', 'Your answers have been graded. Combat is paused until your battle progress is saved.'),button('Retry saving',saveLearningProgress,'gold-button'));}
+  try{await persistCollection();unsavedLearning=false;if(dialog==='save-progress')closeDialog();busyUntil=0;lastFrame=0;renderBattle();}
+  catch(error){if(!current())return;const panel=openDialog('save-progress','Saving your defense');panel.querySelector('.dialog-close')?.remove();panel.append(el('p','',error.message),el('p','', 'Your answers have been graded. Combat is paused until your battle progress is saved.'),button('Retry saving',saveLearningProgress,'gold-button'));}
 }
 
 // Standalone examples never stand in for portal grading or award real points.
@@ -211,15 +216,14 @@ function startPreviewQuestions(){
 }
 function previewQuestion(){
   const q=questionSession;if(!q||battle?.id!==q.battleId)return;const [stem,options,answer,explanation]=q.rows[q.index],panel=openDialog('question',stem);panel.classList.add('question-preview');panel.insertBefore(el('p','eyebrow',`${subject.toUpperCase()} PREVIEW · LOCAL EXAMPLES`),panel.firstChild);panel.append(el('p','question-count',`Question ${q.index+1} of 3 · No platform points awarded`));const choices=el('div','question-options');options.forEach((text,index)=>{const n=button(text,()=>{if(q.graded)return;q.selected=index;previewQuestion();},'');n.dataset.answer=index;n.setAttribute('aria-pressed',String(q.selected===index));n.disabled=q.graded;choices.append(n);});panel.append(choices);
-  if(q.graded){panel.append(el('p','question-feedback'+(q.selected===answer?'':' wrong'),`${q.selected===answer?'Correct.':'The correct answer is '+options[answer]+'.'} ${explanation}`));panel.append(button(q.index===2?'Return to battle':'Next question',()=>{if(q.index===2){const result={correct:q.correct,round:q.battleRound};questionSession=null;closeDialog();finishLearning(result.correct,3,result.round);}else{q.index++;q.selected=null;q.graded=false;previewQuestion();}},'gold-button'));}
+  if(q.graded){panel.append(el('p','question-feedback'+(q.selected===answer?'':' wrong'),`${q.selected===answer?'Correct.':'The correct answer is '+options[answer]+'.'} ${explanation}`));panel.append(button(q.index===2?'Return to defense':'Next question',()=>{if(q.index===2){const result={correct:q.correct,round:q.battleRound};questionSession=null;closeDialog();finishLearning(result.correct,3,result.round);}else{q.index++;q.selected=null;q.graded=false;previewQuestion();}},'gold-button'));}
   else{const submit=button('Check answer',()=>{if(q.selected===null||q.graded)return;q.graded=true;if(q.selected===answer)q.correct++;previewQuestion();},'gold-button');submit.disabled=q.selected===null;panel.append(submit);}
 }
 function help(){
-  const panel=openDialog('settings','A crew worth collecting.');panel.append(el('p','', 'Collect fifty One Piece characters, build a crew of five, and let them fight automatically in Grand Line Voyage. Your card’s star rating is its fixed rarity; repeat copies merge into stronger ranks.'));
+  const panel=openDialog('settings','Collect. Place. Defend.');panel.append(el('p','', 'Collect fifty One Piece characters and deploy five matching avatars in Crew Defense. Their skills fire automatically as enemies follow the route toward your ship.'));
   const options=el('div','settings-options');for(const [key,label]of[['muted','Mute sound'],['reducedMotion','Reduce animation']]){const n=el('label'),input=el('input');input.type='checkbox';input.checked=settings[key];input.onchange=()=>{settings[key]=input.checked;settingsUI();savePreferences();};n.append(input,document.createTextNode(label));options.append(n);}panel.append(options);
-  const rules=el('ol','rules-list');for(const text of ['Choose five different unlocked characters in My crew. Tap a slot to replace it.','Idle mode starts at 4× speed. Choose Balanced, Assault, or Sustain strategy; your crew chooses legal skills and targets, heals, and revives automatically. Pause any time or select Take command to play manually.','Initiative determines the order. Freeze, stun, poison, shields and each character’s passive can change the battle.','After every full round—including the final round—answer exactly three questions from your active Math or Science portal. Standalone play uses labeled preview questions.','Each correct answer grants +10% attack damage, +5 percentage points critical chance, and +8% defense for the next full round. Three correct answers give +30% attack, +15 percentage points critical chance, and +24% defense. Boosts refresh after each quiz and never stack across rounds. Critical chance is capped at 75%.','Packs are purchased using your platform’s existing reward points and TCG rates. One purchase grants exactly one card. A duplicate merges automatically.','Merge rank increases at 2, 4, 8, 16… copies, up to rank 10. Every rank adds 12% to base life, attack and defense.','Seven-star expansion cards: Kaido the Beast, Whitebeard, and Admiral Akainu. Their gold galaxy foil animates unless reduced motion is enabled.','In manual mode, press 1, 2 or 3 to choose a skill and D to defend. In idle mode, no skill clicks are needed. Actions pause in hidden tabs, dialogs, during grading, and until saves are confirmed; there are no offline rewards.'])rules.append(el('li','',text));panel.append(rules);panel.append(button('Ready to sail',closeDialog,'gold-button'));
+  const rules=el('ol','rules-list');for(const text of ['Choose five different unlocked characters in My crew. Each card unlocks its matching defender.','Prepare a harbor: select a crew member, then a numbered spot on the map or below it. Occupied spots swap defenders. Range circles show coverage; protect the route’s bends and keep healers near allies.','Start a wave and watch the crew defend automatically. Attackers target enemies in range; healers, shields, freezing, poison, and character passives support the crew. Enemies reaching the ship damage its life.','Each harbor has three waves. After every wave, including the last or a defeat, answer exactly three Math or Science questions. Reposition before starting the next wave.','Each correct answer gives the next wave +10% attack, +5 percentage points critical chance, and +8% defense. Three correct answers give +30%, +15 percentage points, and +24%. Boosts refresh and do not stack between waves.','Pause any time; choose 1×, 2×, or 4× speed. Keyboard: 1–5 select a defender and Space starts or pauses a wave. All numbered placement buttons also work with a keyboard.','Packs cost your platform’s existing reward points at its current TCG rates. Every pack contains exactly one card. Duplicate copies merge at 2, 4, 8, 16… copies up to rank 10, adding 12% base life, attack, and defense per rank.','The current seven-star cards are Kaido the Beast, Whitebeard, and Admiral Akainu. Eight reserved legends, including Sengoku, remain unavailable until future expansions.','Gameplay pauses in hidden tabs, menus, questions, and pending saves. There are no offline rewards. Previously unlocked harbors, cards, and pack receipts carry over.'])rules.append(el('li','',text));panel.append(rules);panel.append(button('Ready to defend',closeDialog,'gold-button'));
 }
-
 function hello(){if(!embedded)return;clearTimeout(helloTimer);helloId=uuid('hello');post({type:'GLTCG_HELLO',requestId:helloId});helloTimer=setTimeout(()=>{if(!ready)connection('The portal connection is taking longer than expected. Close and reopen Grand Line Chronicles from the portal to try again.');},12000);}
 window.addEventListener('message',event=>{
   const d=event.data;if(!embedded||event.origin!==origin||event.source!==parent||!d||typeof d!=='object')return;
@@ -245,15 +249,14 @@ window.addEventListener('message',event=>{
   }
 });
 function frame(now){
+  const delta=lastFrame?Math.min(.1,Math.max(0,(now-lastFrame)/1000)):0;lastFrame=now;
   if(battle&&view==='battle'){
-    const events=renderer.draw(battle,now,{selectedTarget,selectedSkill,reducedMotion:settings.reducedMotion})||[];
-    if(events.length){const text=events.find(e=>e.text)?.text||'';$('action-banner').textContent=text;bannerUntil=now+Math.max(350,idleActionDelay(settings.battleSpeed));}
+    const previous=battle.status;
+    if(!busy()&&!defensePaused&&battle.status==='running')advanceDefense(battle,delta*settings.battleSpeed);
+    const events=renderer.draw(battle,now,{selectedAllyId,reducedMotion:settings.reducedMotion})||[];
+    if(events.length){const text=(events.find(e=>e.skillId&&e.text)||events.find(e=>e.text))?.text||'';$('action-banner').textContent=text;bannerUntil=now+1100;}
     if(bannerUntil&&now>bannerUntil){$('action-banner').textContent='';bannerUntil=0;}
-    if(!busy()&&now>=enemyAt&&(!settings.autoBattle||!idlePaused)){
-      const result=settings.autoBattle?advanceIdleBattle(battle,settings.strategy):battle.status==='enemy'&&advanceBattle(battle);
-      if(result){busyUntil=now+idleActionDelay(settings.battleSpeed);enemyAt=busyUntil;if(result.reason)idleReason=result.name?`${result.name} · ${result.reason}`:result.reason;lastActor='';renderBattle();}
-    }
-    const isBusy=now<busyUntil;if(wasBusy&&!isBusy&&!dialog)renderBattle();wasBusy=isBusy;
+    if(previous!==battle.status||now-lastHud>250){renderBattle();lastHud=now;}
   }requestAnimationFrame(frame);
 }
 for(const n of document.querySelectorAll('[data-view]'))n.onclick=()=>go(n.dataset.view);
@@ -261,22 +264,22 @@ for(const n of document.querySelectorAll('[data-go]'))n.onclick=()=>go(n.dataset
 document.querySelector('.brand').onclick=event=>{event.preventDefault();go('collection');};
 $('search-input').oninput=renderCollection;for(const id of ['ownership-filter','star-filter','sort-filter'])$(id).onchange=renderCollection;
 $('apex-showcase').replaceChildren(...['kaido','whitebeard','akainu'].map(id=>card(CHARACTER_BY_ID[id],{eager:true})));
-$('open-pack').onclick=beginPurchase;$('cast-button').onclick=useSkill;$('defend-button').onclick=defend;$('study-button').onclick=requestLearning;$('retreat-button').onclick=()=>retreat();
-$('idle-mode').onclick=()=>setAutoBattle(!settings.autoBattle);$('idle-pause').onclick=()=>{idlePaused=!idlePaused;enemyAt=performance.now()+idleActionDelay(settings.battleSpeed);renderBattle();};
-$('idle-speed').onchange=()=>{const value=Number($('idle-speed').value);if(IDLE_SPEEDS.includes(value))settings.battleSpeed=value;enemyAt=performance.now()+idleActionDelay(settings.battleSpeed);savePreferences();renderBattle();};
-$('idle-strategy').onchange=()=>{if(Object.hasOwn(IDLE_STRATEGIES,$('idle-strategy').value))settings.strategy=$('idle-strategy').value;savePreferences();renderBattle();};
+$('open-pack').onclick=beginPurchase;$('study-button').onclick=requestLearning;$('retreat-button').onclick=()=>retreat();
+$('start-wave').onclick=startWave;$('defense-pause').onclick=toggleDefensePause;
+$('defense-speed').onchange=()=>{const value=Number($('defense-speed').value);if(DEFENSE_SPEEDS.includes(value))settings.battleSpeed=value;lastFrame=0;savePreferences();renderBattle();};
 $('future-characters').replaceChildren(...FUTURE_EXPANSION_CHARACTERS.map(c=>el('li','',`${c.name} · 7★ future expansion`)));
 $('roster-conversions').textContent=FUTURE_EXPANSION_CHARACTERS.map(c=>`${c.name} → ${CHARACTER_BY_ID[RETIRED_CHARACTER_REPLACEMENTS[c.id]]?.name}`).join(' · ');
-$('battle-canvas').addEventListener('click',e=>{const id=renderer.hitTest(e.clientX,e.clientY);if(id)selectTarget(id);});
+$('battle-canvas').addEventListener('click',e=>{const id=renderer.pickPad(e.clientX,e.clientY);if(id)placeDefender(selectedAllyId,id);});
 $('settings-button').onclick=help;$('help-button').onclick=help;$('sound-button').onclick=()=>{settings.muted=!settings.muted;settingsUI();savePreferences();sound();};
 $('rift-button').onclick=()=>{if(learningPending?.waiting||unsavedLearning||savePending||purchasePending?.waiting){toast('Finish the current questions or save before switching games.');return;}if(embedded)post({type:'GLTCG_OPEN_RIFT'});else location.href='./pirate-rift.html';};
 window.addEventListener('keydown',event=>{
   if(event.ctrlKey||event.metaKey||event.altKey||event.target.closest?.('input,textarea,select'))return;
   if(dialog){if(event.key==='Escape'&&dialog!=='question'){event.preventDefault();closeDialog();}if(event.key==='Tab'){const nodes=[...$('dialog-panel').querySelectorAll('button:not(:disabled),input,select,a[href]')];if(nodes.length&&event.shiftKey&&document.activeElement===nodes[0]){event.preventDefault();nodes.at(-1).focus();}else if(nodes.length&&!event.shiftKey&&document.activeElement===nodes.at(-1)){event.preventDefault();nodes[0].focus();}}return;}
-  if(view!=='battle'||!battle||event.repeat)return;const actor=getActiveUnit(battle);if(['1','2','3'].includes(event.key)&&actor){event.preventDefault();selectSkill(actor.skills[Number(event.key)-1].id);}if(event.key.toLowerCase()==='d'){event.preventDefault();defend();}
+  if(view!=='battle'||!battle||event.repeat||event.target.closest?.('button,a'))return;if(['1','2','3','4','5'].includes(event.key)){event.preventDefault();selectDefender(battle.allies[Number(event.key)-1].id);}if(event.code==='Space'){event.preventDefault();battle.status==='setup'?startWave():toggleDefensePause();}
 });
-window.addEventListener('pagehide',()=>{savePreferences();audioContext?.suspend().catch(()=>{});});document.addEventListener('visibilitychange',()=>{enemyAt=performance.now()+750;if(document.hidden)audioContext?.suspend().catch(()=>{});else if(battle&&view==='battle')renderBattle();});
+window.addEventListener('pagehide',()=>{savePreferences();audioContext?.suspend().catch(()=>{});});document.addEventListener('visibilitychange',()=>{lastFrame=0;if(document.hidden)audioContext?.suspend().catch(()=>{});else if(battle&&view==='battle')renderBattle();});
+
 window.addEventListener('error',()=>{if(!document.querySelector('.tcg-card'))$('fatal').hidden=false;});
-loadPreferences();renderCounters();renderCollection();if(!embedded)connection('Preview voyage · Questions are local examples. Sign in through Math or Science to purchase cards with platform reward points.');else{connection('Connecting to your portal, learning profile and reward-point wallet…');hello();}
+loadPreferences();renderCounters();renderCollection();if(!embedded)connection('Crew Defense preview · Questions are local examples. Sign in through Math or Science to purchase cards with platform reward points.');else{connection('Connecting to your portal, learning profile and reward-point wallet…');hello();}
 requestAnimationFrame(frame);
-if(params.get('test')==='1')window.__grandLine={get collection(){return collection;},get battle(){return battle;},get wallet(){return wallet;},get dialog(){return dialog;},get sessionId(){return sessionId;},get learningPending(){return learningPending;},get purchasePending(){return purchasePending;},get scope(){return scope;},get settings(){return settings;},get idlePaused(){return idlePaused;},setAutoBattle,get ready(){return ready;},art,renderer,go,beginBattle,selectSkill,selectTarget,useSkill,defend,requestLearning,inspectCard,closeDialog,renderBattle,renderCollection,applySnapshot,statsFor,completeLearning,CHARACTERS,ENCOUNTERS};
+if(params.get('test')==='1')window.__grandLine={get collection(){return collection;},get battle(){return battle;},get wallet(){return wallet;},get dialog(){return dialog;},get sessionId(){return sessionId;},get learningPending(){return learningPending;},get purchasePending(){return purchasePending;},get scope(){return scope;},get settings(){return settings;},get defensePaused(){return defensePaused;},get ready(){return ready;},get unsavedLearning(){return unsavedLearning;},art,renderer,go,beginBattle,startWave,placeDefender,selectDefender,toggleDefensePause,advanceDefense,completeDefenseLearning,requestLearning,inspectCard,closeDialog,renderBattle,renderCollection,applySnapshot,statsFor,CHARACTERS,ENCOUNTERS,DEFENSE_STAGES,DEFENSE_PADS};

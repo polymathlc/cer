@@ -21,7 +21,7 @@ window.portal=installGrandLinePortal({subject:new URLSearchParams(location.searc
  gradeQuestion:async({choice})=>{if(delayGrade)await new Promise(resolve=>window.finishGrade=resolve);return {correct:choice===1,answer:1};}});
 document.querySelector('#launch').onclick=()=>portal.open();window.ready=true;
 </script></body></html>`;
-const childHtml = `<!doctype html><html><body><button id="round">Complete combat round</button><script>
+const childHtml = `<!doctype html><html><body><button id="round">Complete defense wave</button><script>
 window.messages=[];window.sessionId='';window.round=1;
 window.send=data=>parent.postMessage(data,location.origin);
 addEventListener('message',event=>{if(event.source!==parent||event.origin!==location.origin)return;messages.push(event.data);if(event.data.type==='GLTCG_READY')sessionId=event.data.sessionId;});
@@ -56,7 +56,10 @@ try {
     const initial = await open(), url = new URL(await page.locator('iframe').getAttribute('src'));
     assert.equal(initial.questionCount, 3); assert.equal(initial.available, true); assert.match(initial.profileKey, /^p[0-9a-f]{16}$/);
     assert.equal(url.searchParams.get('profile'), initial.profileKey); assert.equal(url.searchParams.get('subject'), subject.toLowerCase()); assert.ok(!url.href.includes('private-account'));
-    assert.equal(url.searchParams.get('v'), '1.1.0');
+    assert.equal(url.searchParams.get('v'), '1.2.0');
+    assert.equal(await page.locator('.grand-line-portal').getAttribute('aria-label'), 'Crew Defense');
+    assert.match(await page.locator('.grand-line-stage iframe').getAttribute('title'), /Crew Defense/);
+    assert.match(await page.locator('.grand-line-status').textContent(), /three questions after every wave/);
     assert.equal(initial.collection.packs, 0); assert.equal(initial.wallet.balance, 2000);
     assert.equal(await page.locator('#app').evaluate(el => el.inert), true);
     assert.equal(await page.locator('select').isDisabled(), true);
@@ -67,12 +70,13 @@ try {
     });
     assert.equal(await game.evaluate(() => messages.length), 1);
     await game.locator('#round').click(); await page.getByText('Question 1 of 3', { exact: true }).waitFor();
+    await page.getByText(subject + ' · Wave', { exact: true }).waitFor();
     assert.equal(await page.locator('.grand-line-learning-stem table').count(), 1); assert.equal(await page.locator('.grand-line-learning-stem .math-frac').count(), 1);
     assert.equal(await page.evaluate(() => window.evil), undefined); assert.equal(await page.locator('.grand-line-learning-stem script').count(), 0);
     await page.screenshot({ path: path.join(screens, subject.toLowerCase() + '-learning-mobile.png') });
     for (let i = 1; i <= 3; i++) {
       await page.getByText('Question ' + i + ' of 3', { exact: true }).waitFor(); await page.locator('.grand-line-learning-option').nth(1).click();
-      await page.getByRole('button', { name: i === 3 ? 'Complete battle round' : 'Next question', exact: true }).click();
+      await page.getByRole('button', { name: i === 3 ? 'Complete wave' : 'Next question', exact: true }).click();
     }
     const result = await message('GLTCG_ROUND_RESULT'); assert.equal(result.correct, 3); assert.equal(result.total, 3); assert.equal(result.wallet.balance, 2030);
     assert.deepEqual(await page.evaluate(() => shown), ['bank-1', 'bank-2', 'bank-3']); assert.equal(await page.evaluate(() => records.length), 3);
