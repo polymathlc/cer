@@ -1,9 +1,9 @@
 {
-  "version": "2.2.0",
+  "version": "2.2.1",
   "upstreamRepository": "polymathlc/hades",
   "upstreamCommit": "02e9537dfcc380baae6bec32e399db319b304426",
-  "gameSha256": "f21e0cd30c2e9ab95623c7416f817c9d126e72fd10b7199cce1bba1cdc992152",
+  "gameSha256": "76f729189efd67a66c5b01675c87624bd2fd7b20347adacb49eac6b84391d7d1",
   "parentSha256": "e7348714fe183398987a676554f9fd1b645372b14a4ddd3fe61cccf6f884ebb4",
   "sourcePatch": "hades-game.source.patch",
-  "sourcePatchSha256": "83808451d014af5a67ec3dca7c5108c0d5af3f6b14122963287560839d3843c2"
+  "sourcePatchSha256": "3c081f719c83ae2505dc994595d4c427d0de6859d2c1d37a55817246e512c8a7"
 }
