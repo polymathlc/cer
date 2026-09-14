@@ -1,5 +1,5 @@
 /* Original fan-game rules; names and power themes are anchored to official character profiles. */
-export const VERSION = '2.0.0';
+export const VERSION = '2.1.0';
 // Retired collection IDs migrate to these current cards; future seven-star
 // editions remain separate from the obtainable roster and pack draw pools.
 export const RETIRED_CHARACTER_REPLACEMENTS = {

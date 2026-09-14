@@ -1,10 +1,10 @@
 name: Grand Line Chronicles checks
 on:
   pull_request:
-    paths: ['grand-line*', 'assets/grand-line/**', 'index.html', 'app.js', 'practice-*.js', 'science-feed-*.js', 'tools/grand-line*', '.github/workflows/grand-line.yml']
+    paths: ['grand-line*', 'assets/grand-line/**', 'assets/grand-line-vfx/**', 'index.html', 'app.js', 'practice-*.js', 'science-feed-*.js', 'tools/grand-line*', '.github/workflows/grand-line.yml']
   push:
     branches: [main]
-    paths: ['grand-line*', 'assets/grand-line/**', 'index.html', 'app.js', 'practice-*.js', 'science-feed-*.js', 'tools/grand-line*', '.github/workflows/grand-line.yml']
+    paths: ['grand-line*', 'assets/grand-line/**', 'assets/grand-line-vfx/**', 'index.html', 'app.js', 'practice-*.js', 'science-feed-*.js', 'tools/grand-line*', '.github/workflows/grand-line.yml']
 permissions:
   contents: read
 jobs:
@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '24'
       - name: Verify combat, exact learning rounds and durable reward-point purchases
-        run: node --test tools/grand-line-core.test.mjs tools/grand-line-defense-tests.mjs tools/grand-line-roster-tests.mjs tools/grand-line-migration-tests.mjs tools/grand-line-learning-tests.mjs tools/grand-line-economy-tests.mjs tools/grand-line-admin-tests.mjs tools/science-feeding-integration-tests.mjs tools/grand-line-asset-tests.mjs
+        run: node --test tools/grand-line-core.test.mjs tools/grand-line-defense-tests.mjs tools/grand-line-vfx-tests.mjs tools/grand-line-roster-tests.mjs tools/grand-line-migration-tests.mjs tools/grand-line-learning-tests.mjs tools/grand-line-economy-tests.mjs tools/grand-line-admin-tests.mjs tools/science-feeding-integration-tests.mjs tools/grand-line-asset-tests.mjs
       - name: Install isolated browser runtime
         run: |
           npm install --prefix "$RUNNER_TEMP/grand-line-browser" --no-audit --no-fund playwright@1.62.1

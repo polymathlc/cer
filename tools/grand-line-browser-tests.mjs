@@ -293,6 +293,152 @@ async function checkAdministratorShop() {
   check('Role invalidation hides admin features, clears pending authority, and rejects a stale in-flight action');
 }
 
+async function checkGeneratedDefenseVfx() {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }); observe(page); await standalone(page);
+  const atlases = await page.evaluate(async () => {
+    const { createDefenseVfxManager, VFX_ATLAS_SPECS } = await import('./grand-line-vfx.js');
+    window.qaVfx = createDefenseVfxManager(); await qaVfx.ready; await qaVfx.preload();
+    return VFX_ATLAS_SPECS.map(spec => {
+      const item = qaVfx.images.get(spec.id), metadata = qaVfx.metadata.get(spec.id);
+      if (!item?.loaded) return { id: spec.id, loaded: false };
+      const canvas = document.createElement('canvas'); canvas.width = item.image.naturalWidth; canvas.height = item.image.naturalHeight;
+      const context = canvas.getContext('2d', { willReadFrequently: true }); context.drawImage(item.image, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data, frames = [];
+      for (let row = 0; row < 3; row++) for (let frame = 0; frame < 4; frame++) {
+        let clear = 0, visible = 0, samples = 0, hash = 2166136261;
+        const left = Math.floor(frame * canvas.width / 4), right = Math.floor((frame + 1) * canvas.width / 4);
+        const top = Math.floor(row * canvas.height / 3), bottom = Math.floor((row + 1) * canvas.height / 3);
+        for (let y = top; y < bottom; y += 3) for (let x = left; x < right; x += 3) {
+          const offset = (y * canvas.width + x) * 4, alpha = pixels[offset + 3]; samples++;
+          if (alpha <= 2) clear++; if (alpha >= 16) visible++;
+          for (let channel = 0; channel < 4; channel++) hash = Math.imul(hash ^ pixels[offset + channel], 16777619) >>> 0;
+        }
+        frames.push({ row, frame, clear: clear / samples, visible: visible / samples, hash });
+      }
+      return { id: spec.id, loaded: true, width: canvas.width, height: canvas.height, frames,
+        source: item.image.currentSrc || item.image.src, expected: metadata?.file ? new URL('./assets/grand-line-vfx/' + metadata.file, location.href).href : null };
+    });
+  });
+  assert.equal(atlases.length, 9); const premiumRows = new Set();
+  for (const atlas of atlases) {
+    assert.equal(atlas.loaded, true, atlas.id + ' generated VFX loads'); assert.ok(atlas.width >= 1000 && atlas.height >= 1000);
+    assert.ok(atlas.expected); assert.equal(new URL(atlas.source).pathname, new URL(atlas.expected).pathname);
+    assert.equal(atlas.frames.length, 12);
+    for (const frame of atlas.frames) {
+      assert.ok(frame.clear > .1, `${atlas.id} row ${frame.row} frame ${frame.frame} has a transparent background`);
+      assert.ok(frame.visible > .001, `${atlas.id} row ${frame.row} frame ${frame.frame} contains visible painted effects`);
+    }
+    for (let row = 0; row < 3; row++) {
+      const hashes = atlas.frames.filter(frame => frame.row === row).map(frame => frame.hash);
+      assert.equal(new Set(hashes).size, 4, `${atlas.id} skill row ${row} animates through four different frames`);
+      if (atlas.id !== 'generic') premiumRows.add(hashes.join(':'));
+    }
+  }
+  assert.equal(premiumRows.size, 24, 'All premium skill rows have distinct actual image content');
+  check('All 24 premium skill animations and the shared lower-star effects load 108 visible, distinct, transparent image frames');
+
+  await page.evaluate(async () => {
+    const defense = await import('./grand-line-defense.js'), { createDefenseRenderer } = await import('./grand-line-defense-render.js');
+    const { PREMIUM_VFX_CHARACTERS, createDefenseVfxManager } = await import('./grand-line-vfx.js');
+    const collection = JSON.parse(JSON.stringify(__grandLine.collection));
+    collection.cards = Object.fromEntries(__grandLine.CHARACTERS.map(c => [c.id, { copies: 1 }])); collection.team = PREMIUM_VFX_CHARACTERS.slice(0,5);
+    const b = defense.createDefense(collection, { seed: 42 }); b.supplies = 1000;
+    PREMIUM_VFX_CHARACTERS.slice(5).forEach((id,i) => defense.summonDefender(b,id,defense.DEFENSE_PADS[i+5].id));
+    defense.startDefenseWave(b); for(let i=0;i<12;i++)defense.advanceDefense(b,.05);
+    const enemy = b.enemies[0];
+    b.enemies = Array.from({length:50},(_,i) => {
+      const unit = JSON.parse(JSON.stringify(enemy)); unit.id = 'vfx-mob-'+i; unit.progress = .03+i*.0175;
+      unit.hp = unit.maxHp = 1000; unit.alive = true; unit.escaped = false; unit.laneOffset = (i%5-2)*8;
+      Object.assign(unit,defense.defenseEnemyPointAt(unit.progress,unit.laneOffset)); return unit;
+    });
+    b.projectiles = Array.from({length:80},(_,i) => {
+      const actor=b.allies[i%b.allies.length], skill=actor.skills[i%3], geometry=defense.getDefenseSkillProfile(actor,skill);
+      const target=b.enemies[(i*7)%50], start={x:actor.x,y:actor.y}, end={x:target.x,y:target.y}, phase=.15+(i%5)*.14;
+      return { id:'vfx-projectile-'+i,sourceId:actor.id,characterId:actor.characterId,skillId:skill.id,kind:skill.kind,animation:skill.animation,color:skill.color,
+        ...geometry,geometry,start,end,x:start.x+(end.x-start.x)*phase,y:start.y+(end.y-start.y)*phase,
+        age:phase,duration:1,range:actor.range,targetId:target.id,hitIds:[],actor,skill,damageTotal:0,finished:false };
+    });
+    b.effects = Array.from({length:80},(_,i) => {const target=b.enemies[i%50],actor=b.allies[i%8];return {
+      id:'vfx-damage-'+i,kind:'damage',sourceId:actor.id,source:{x:actor.x,y:actor.y},targetIds:[target.id],targets:[{x:target.x,y:target.y}],amount:50+i,age:0,life:1,
+    };});
+    for(let i=0;i<30;i++){const p=b.projectiles[i],target=b.enemies[(i*7)%50];b.effects.push({id:'vfx-impact-'+i,kind:'impact',sourceId:p.sourceId,characterId:p.characterId,
+      skillId:p.skillId,attackKind:p.kind,shape:'splash',geometry:p.geometry,source:p.start,origin:p.start,center:p.end,end:p.end,
+      targetIds:[target.id],targets:[{x:target.x,y:target.y}],age:0,life:.45});}
+    const law=b.allies.find(a=>a.characterId==='law');
+    for(let i=0;i<12;i++){const target=b.allies[i%8];b.effects.push({id:'vfx-support-'+i,kind:'heal',sourceId:law.id,characterId:'law',skillId:'law-1',source:{x:law.x,y:law.y},
+      targetIds:[target.id],targets:[{x:target.x,y:target.y}],age:0,life:1});}
+    window.qaBattle=JSON.parse(JSON.stringify(b));
+    const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};freeze(qaBattle);
+    const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:999999;background:#082c39;display:grid;place-items:center';
+    const canvas=document.createElement('canvas');canvas.id='vfx-qa-canvas';canvas.style.cssText='width:100%;height:auto;aspect-ratio:5/3;max-height:100vh';overlay.append(canvas);document.body.append(overlay);
+    window.qaPhases=[];window.qaPreloads=[];
+    window.qaRenderer=createDefenseRenderer(canvas,__grandLine.art,{vfx:{
+      preload:ids=>{qaPreloads.push([...ids]);return qaVfx.preload(ids);},sprite:(...args)=>{qaPhases.push(args[3]);return qaVfx.sprite(...args);},
+    }});
+    qaRenderer.draw({...qaBattle,allies:qaBattle.allies.slice(0,5),projectiles:[],effects:[]},800,{});
+    window.qaInitialPreloads=qaPreloads.flat();
+    window.qaFallback=()=>{qaRenderer.destroy();const missing=createDefenseVfxManager({baseUrl:new URL('./missing-vfx/',location.href).href,fetchFn:null,timeoutMs:100});
+      qaRenderer=createDefenseRenderer(canvas,__grandLine.art,{vfx:missing});return missing.preload();};
+    window.qaTintProbe=()=>{
+      qaRenderer.destroy();const image=document.createElement('canvas');image.width=image.height=16;
+      const paint=image.getContext('2d');paint.fillStyle='#fff';paint.fillRect(0,0,16,16);let tint='#ff0000';
+      qaRenderer=createDefenseRenderer(canvas,__grandLine.art,{vfx:{preload:()=>Promise.resolve(),sprite:()=>({image,sx:0,sy:0,sw:16,sh:16,row:0,frame:0,atlasId:'generic',premium:false,tint})}});
+      const p={...qaBattle.projectiles[0],id:'tint-shot',characterId:'nami',skillId:'nami-0',kind:'lightning',shape:'single',start:{x:450,y:300},end:{x:550,y:300},x:500,y:300};
+      const battle={...qaBattle,id:'tint-probe',allies:[],enemies:[],effects:[],projectiles:[p]},before=JSON.stringify(battle);
+      const pixel=()=>{const box=canvas.getBoundingClientRect(),scale=Math.min(box.width/1000,box.height/600),ox=(box.width-scale*1000)/2,oy=(box.height-scale*600)/2;
+        return [...canvas.getContext('2d').getImageData(Math.round((ox+500*scale)*canvas.width/box.width),Math.round((oy+270*scale)*canvas.height/box.height),1,1).data];};
+      qaRenderer.draw(battle,3000,{});const red=pixel();tint='#0000ff';qaRenderer.draw(battle,3000,{});const blue=pixel();
+      for(let i=0;i<40;i++){tint='#'+((i*7919+37)&0xffffff).toString(16).padStart(6,'0');qaRenderer.draw(battle,3000,{});}
+      return {red,blue,stats:qaRenderer.getVfxStats(),unchanged:before===JSON.stringify(battle)};
+    };
+  });
+  function assertBudget(stats) {
+    for(const key of ['projectiles','impacts','supports','damageLabels'])assert.ok(stats[key]<=stats.budget[key],key+' is bounded');
+    assert.ok(stats.sprites<=stats.budget.totalSprites); assert.ok(stats.projectiles+stats.impacts+stats.supports<=stats.budget.totalSprites);
+    assert.ok(stats.droppedSprites>0,'Dense overlapping effects are culled');
+  }
+  for(const [label,viewport] of [['desktop',{width:1440,height:1000}],['phone',{width:320,height:740}]]) {
+    await page.setViewportSize(viewport);await frames(page,3);
+    for(const reducedMotion of [false,true]) {
+      const report=await page.evaluate(reducedMotion=>{
+        qaRenderer.resize();qaPhases.length=0;const before=JSON.stringify(qaBattle);
+        qaRenderer.draw(qaBattle,1000,{selectedAllyId:qaBattle.allies[0].id,reducedMotion});
+        return {unchanged:before===JSON.stringify(qaBattle),stats:qaRenderer.getVfxStats(),phases:[...new Set(qaPhases)],enemies:qaBattle.enemies.length,
+          prefetched:qaPreloads.flat(),initialPreloads:qaInitialPreloads,newAllies:qaBattle.allies.slice(5).map(a=>a.characterId)};
+      },reducedMotion);
+      assert.equal(report.enemies,50);assert.equal(report.unchanged,true);assertBudget(report.stats);
+      assert.ok(report.stats.sprites>0);assert.equal(report.stats.fallbacks,0);assert.equal(report.stats.rangeVisible,false);
+      assert.equal(report.stats.reducedMotion,reducedMotion);
+      for(const id of report.newAllies){assert.ok(!report.initialPreloads.includes(id));assert.ok(report.prefetched.includes(id),'Newly summoned '+id+' is prefetched within the same battle');}
+      if(label==='phone')assert.ok(report.stats.budget.totalSprites<=12);
+      if(reducedMotion)assert.ok(report.phases.every(phase=>phase===.35||phase===.7),'Reduced motion uses fixed animation poses');
+      await page.screenshot({path:path.join(shots,`vfx-${label}-${reducedMotion?'reduced':'dense'}.png`)});
+    }
+    const preview=await page.evaluate(()=>{qaRenderer.draw(qaBattle,1000,{selectedAllyId:qaBattle.allies[0].id,previewSkillId:qaBattle.allies[0].skills[0].id});return qaRenderer.getVfxStats();});
+    assert.equal(preview.rangeVisible,true,'Attack areas appear when explicitly requested');
+  }
+  check('Dense 50-enemy scenes obey desktop/mobile sprite and label budgets, support reduced motion and never mutate combat state');
+  for(const status of ['learning','setup','victory','defeat']) {
+    const stopped=await page.evaluate(status=>{
+      const battle={...qaBattle,status},before=JSON.stringify(battle);
+      qaRenderer.draw(battle,2000,{selectedAllyId:battle.allies[0].id});
+      return {stats:qaRenderer.getVfxStats(),remaining:battle.projectiles.length,unchanged:before===JSON.stringify(battle)};
+    },status);
+    assert.ok(stopped.remaining>0,'The regression includes real leftover projectile records');
+    assert.equal(stopped.stats.projectiles,0,`${status} never paints leftover projectiles after a wave stops`);
+    assert.equal(stopped.unchanged,true);
+  }
+  await page.evaluate(()=>qaFallback());
+  const fallback=await page.evaluate(()=>{const before=JSON.stringify(qaBattle);qaRenderer.draw(qaBattle,1000,{selectedAllyId:qaBattle.allies[0].id});return {stats:qaRenderer.getVfxStats(),unchanged:before===JSON.stringify(qaBattle)};});
+  assertBudget(fallback.stats);assert.equal(fallback.stats.sprites,0);assert.ok(fallback.stats.fallbacks>0);assert.equal(fallback.unchanged,true);
+  await page.screenshot({path:path.join(shots,'vfx-phone-offline-fallback.png')});
+  const tinted=await page.evaluate(()=>qaTintProbe());
+  assert.ok(tinted.red[0]>tinted.red[2]+80&&tinted.blue[2]>tinted.blue[0]+80,'Shared sprites visibly use the requested elemental tint');
+  assert.equal(tinted.stats.tintedSprites,1);assert.ok(tinted.stats.tintCacheEntries>0&&tinted.stats.tintCacheEntries<=tinted.stats.tintCacheLimit&&tinted.stats.tintCacheLimit<=24);
+  assert.equal(tinted.unchanged,true);await page.close();
+  check('Missing VFX images fall back to bounded quiet markers without blocking rendering or changing damage');
+}
+
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }); observe(page); await standalone(page);
   assert.equal(await page.locator('#card-grid .tcg-card').count(), 50);
@@ -623,6 +769,7 @@ try {
   }
   check('Collection, full card details, owned summon selection, targeting, defender placement and running defense fit portrait and landscape phones');
   await checkAdministratorShop();
+  if(process.env.GRAND_LINE_REQUIRE_ART==='1')await checkGeneratedDefenseVfx();
   const production = await browser.newPage(); observe(production); await production.goto(base + '/grand-line.html'); await production.locator('#card-grid .tcg-card').first().waitFor();
   assert.equal(await production.evaluate(() => typeof window.__grandLine), 'undefined');
   check('Production pages do not expose the test API');
