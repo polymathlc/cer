@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
+import { strikeQuestionQualityOptions } from '../science-strike-feed.js';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE
   ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href : 'playwright');
@@ -35,7 +36,7 @@ const bank = [
 const firestore = `
 const snap = value => ({exists:()=>value!==undefined,data:()=>value});
 export const getFirestore = () => ({});
-export const doc = (_, ...p) => ({path:p.join('/')});
+export const doc = (_, ...p) => ({path:p.join('/'),kind:'doc'});
 export const collection = (_, ...p) => ({path:p.join('/')});
 export const query = (ref, ...filters) => ({...ref,filters});
 export const where = (...args) => args;
@@ -45,7 +46,8 @@ export async function getDoc(ref){
  const m=window.__mock;
  if(ref.path==='config/admin')return snap({uid:'teacher'});
  if(ref.path==='userProfiles/learner')return snap(m.profile);
- if(ref.path==='users/teacher/settings/topics')return snap({custom:{}});
+ if(ref.path==='users/teacher/settings/topics')return snap(m.topics||{custom:{}});
+ if(ref.path==='users/teacher/settings/learningObjectives')return snap(m.objectives);
  if(ref.path==='users/learner/settings/scienceRpg')return snap({credits:{day:'2000-01-01',balance:6}});
  if(ref.path==='scienceGameLeaderboard/learner')return snap({fps:{correct:0,kills:0,bestWave:0}});
  return snap(undefined);
@@ -53,24 +55,32 @@ export async function getDoc(ref){
 export async function getDocs(ref){
  const m=window.__mock;
  if(ref.path==='users/teacher/questions' && m.bankPending)await new Promise(r=>m.releaseBank=r);
- const rows=ref.path==='users/teacher/questions'?m.bank:[];
+ const rows=ref.path==='users/teacher/questions'?m.bank:ref.path==='questionAttempts'?m.attempts:ref.path==='flaggedQuestions'?m.reports:[];
  return {forEach:fn=>rows.forEach((v,i)=>fn({id:v.id||String(i),data:()=>v}))};
 }
 export async function setDoc(ref,value,options){window.__mock.writes.push({path:ref.path,value,options});}
 export async function addDoc(ref,value){window.__mock.writes.push({path:ref.path,value});return {id:'attempt'};}
-export function onSnapshot(ref,callback){window.__mock.profileCallback=callback;return ()=>{window.__mock.profileCallback=null;};}
+export function onSnapshot(ref,callback,onError){
+ const m=window.__mock,entry={callback,onError,active:true};
+ (m.listeners[ref.path]||=([])).push(entry);
+ if(ref.path==='userProfiles/learner')m.profileCallback=callback;
+ const deliver=async()=>{try{const value=ref.kind==='doc'?await getDoc(ref):await getDocs(ref);if(entry.active)callback(value);}catch(e){if(entry.active)onError?.(e);}};
+ entry.deliver=deliver;queueMicrotask(deliver);
+ m.emit=async path=>{await Promise.all((m.listeners[path]||[]).filter(e=>e.active).map(e=>e.deliver()));};
+ return ()=>{entry.active=false;if(m.profileCallback===callback)m.profileCallback=null;};
+}
 `;
 const auth = `export const getAuth=()=>({}); export class GoogleAuthProvider{}
 export function onAuthStateChanged(_,callback){window.__mock.authCallback=callback;setTimeout(()=>callback(null),0);}
 export async function signInWithPopup(){return window.__mock.authCallback({uid:'learner',email:'learner@example.test',displayName:'Test Learner'});}`;
 
-async function pageFor({ bankRows = bank, pending = false, lock = 'success', mobile = false } = {}) {
+async function pageFor({ bankRows = bank, pending = false, lock = 'success', mobile = false, objectives, topics, attempts = [], reports = [] } = {}) {
   const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 },
     ...(mobile ? { isMobile: true, hasTouch: true } : {}) });
   const page = await context.newPage(), errors = [], external = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.addInitScript(({ bankRows, pending, lock }) => {
-    window.__mock = { bank: bankRows, bankPending: pending, writes: [],
+  await page.addInitScript(({ bankRows, pending, lock, objectives, topics, attempts, reports }) => {
+    window.__mock = { bank: bankRows, bankPending: pending, objectives, topics, attempts, reports, listeners:{}, writes: [],
       profile: { level: 'P4', students: [{ name: 'Test Learner', level: 'P4' }], activeStudent: 0 }, lock };
     if (lock === 'native') return;
     let locked = null;
@@ -83,7 +93,7 @@ async function pageFor({ bankRows = bank, pending = false, lock = 'success', mob
       return Promise.resolve();
     };
     if (lock === 'unsupported') HTMLCanvasElement.prototype.requestPointerLock = undefined;
-  }, { bankRows, pending, lock });
+  }, { bankRows, pending, lock, objectives, topics, attempts, reports });
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.hostname === 'www.gstatic.com') {
@@ -100,11 +110,11 @@ async function pageFor({ bankRows = bank, pending = false, lock = 'success', mob
       const closing = html.lastIndexOf('</script>');
       // Read-only observation plus scenario setup: the next real animation frame
       // opens the question/draft, and all user actions go through real DOM events.
-      const seam = `\nwindow.__strikeQA={get run(){return G;},get ready(){return fpsFeedReady;},get current(){return currentUser;},get cap(){return studentLevelCap;},get credits(){return creditsLeft();},get skills(){return skillsOpen;},get pointer(){return pointerLocked;},get keys(){return keys;},get meta(){return meta;},get rows(){return questions;},get mouse(){return {fire:mouseDown,ads:adsHeld};},get state(){return {run:!!G,paused:G?.paused,over:G?.over,q:G?.activeQ?.id,total:G?.qTotal,correct:G?.qCorrect,ammo:G?.ammo,timer:G?.qTimerMs,x:G?.player.x,y:G?.player.y};},openDraft,answerQuestion};\n`;
+      const seam = `\nwindow.__strikeQA={get run(){return G;},get ready(){return fpsFeedReady;},candidate:fpsQuestionCandidate,take:nextQuestion,refresh:loadQuestions,clearFeed:fpsFeedClear,get db(){return fpsFeedBank;},get current(){return currentUser;},get cap(){return studentLevelCap;},get credits(){return creditsLeft();},get skills(){return skillsOpen;},get pointer(){return pointerLocked;},get keys(){return keys;},get meta(){return meta;},get rows(){return questions;},get mouse(){return {fire:mouseDown,ads:adsHeld};},get state(){return {run:!!G,paused:G?.paused,over:G?.over,q:G?.activeQ?.id,total:G?.qTotal,correct:G?.qCorrect,ammo:G?.ammo,timer:G?.qTimerMs,x:G?.player.x,y:G?.player.y};},openDraft,answerQuestion};\n`;
       html = html.slice(0, closing) + seam + html.slice(closing);
       return route.fulfill({ contentType: 'text/html', body: html });
     }
-    if (/^science-feed-(core|mastery|variety|quality)\.js$/.test(file))
+    if (/^(?:science-feed-(core|mastery|variety|quality)|science-strike-feed)\.js$/.test(file))
       return route.fulfill({ contentType: 'application/javascript', body: fs.readFileSync(new URL(file, root), 'utf8') });
     return route.abort();
   });
@@ -326,6 +336,50 @@ try {
   await checkClean(native);
   await native.context.close();
   console.log('PASS native browser pointer lock: captured movement, Escape pause and Resume (no pointer API overrides)');
+
+  // Use the actual database adapters, source collections and live subscriptions.
+  const high=question('objective-high','Plant Systems','Choose the statement for the investigation.','A','B');
+  const red=question('teacher-red','Plant Systems','Which statement matches the teacher experiment?','C','D');
+  red.autoCheck={state:'red',sig:strikeQuestionQualityOptions(red).importSignature};
+  const fresh=question('saved-mcq','Plant Systems','Use the fruit labels to choose its dispersal method.','Smell helps animals find it','Wind carries it');
+  fresh.title='Fruit dispersal worksheet';
+  fresh.blocks.unshift({type:'table',rows:2,cols:2,data:{0:{0:'Fruit colour',1:'Dull green'},1:{0:'Fruit smell',1:'Strong'}}});
+  const copied={...fresh,id:'copied-mcq',title:'Renamed worksheet'};
+  const written={id:'written-only',title:'Written question',topic:'Plant Systems',blocks:[{type:'text',content:'Explain plant growth.'},{type:'plainanswer',content:'Water supports growth.'}]};
+  const malformed={id:'malformed',topic:'Plant Systems',blocks:[null]};
+  const available=question('other-saved','Light','Which material casts a clear dark shadow?','Wood','Air');
+  const feed=await pageFor({bankRows:[high,red,written,malformed,fresh,copied,available],objectives:{objectives:[{id:'advanced-lo',level:'P6'}],map:{'advanced-lo':['objective-high']}}});
+  check(await feed.page.evaluate(()=>window.__strikeQA.candidate()?.id)==='saved-mcq','Database-only selection skips written/malformed, above-objective and teacher-red questions');
+  await feed.page.locator('#playBtn').click();await feed.page.waitForFunction(()=>window.__strikeQA.run&&!window.__strikeQA.run.paused);
+  await feed.page.evaluate(()=>{window.__strikeQA.run.qTimerMs=0;});await feed.page.waitForFunction(()=>window.__strikeQA.run.activeQ);
+  check(await feed.page.locator('#qSource').innerText()==='Fruit dispersal worksheet','The actual database worksheet title is shown');
+  check((await feed.page.locator('#qStem').innerText()).includes('Dull green'),'Saved numeric-key table labels remain visible');
+  check(await feed.page.evaluate(()=>window.__strikeQA.run.activeQ.id)==='saved-mcq','The shown MCQ is the selected database document');
+  await shot(feed.page,'08-database-mcq');
+  await feed.page.evaluate(async()=>{window.__mock.bank=window.__mock.bank.filter(q=>q.id!=='saved-mcq');await window.__mock.emit('users/teacher/questions');});
+  check(await feed.page.evaluate(()=>!window.__strikeQA.run.activeQ&&window.__strikeQA.run.paused),'A teacher deletion withdraws the active question safely');
+  check(await feed.page.evaluate(()=>window.__mock.writes.filter(w=>w.path==='questionAttempts').length)===0,'Withdrawal does not log a wrong answer');
+  await feed.page.evaluate(async()=>{window.__mock.bank=window.__mock.bank.map(q=>q.id==='copied-mcq'?{...q,variantOf:'saved-mcq'}:q);await window.__mock.emit('users/teacher/questions');});
+  check(await feed.page.evaluate(()=>window.__strikeQA.candidate()?.id)==='other-saved','A renamed copy cannot follow the original question');
+  await feed.page.evaluate(async()=>{window.__mock.attempts=[{questionId:'other-saved',displayName:'Test Learner',score:1,totalBlanks:1,timestamp:{seconds:Date.now()/1000},mode:'practice'}];await window.__mock.emit('questionAttempts');});
+  check(await feed.page.evaluate(()=>window.__strikeQA.candidate())===null,'Fresh practice history from the database blocks cross-mode repetition immediately');
+  await feed.page.locator('#resumeBtn').click();await feed.page.waitForFunction(()=>!window.__strikeQA.run.paused);await feed.page.evaluate(()=>{window.__strikeQA.run.qTimerMs=0;});
+  await feed.page.waitForFunction(()=>window.__strikeQA.run.paused);
+  check(/No fresh database MCQs/.test(await feed.page.locator('#pauseReason').innerText()),'Exhausted suitable MCQs pause the game without invented questions');
+  check(await feed.page.evaluate(()=>!window.__strikeQA.run.activeQ),'No fallback science question is displayed');
+  await checkClean(feed);await feed.context.close();
+
+  const memory=await pageFor({bankRows:[fresh,copied,available]});
+  await memory.page.evaluate(()=>{Storage.prototype.getItem=()=>{throw Error('Storage blocked');};Storage.prototype.setItem=()=>{throw Error('Storage blocked');};});
+  const selected=await memory.page.evaluate(()=>[window.__strikeQA.take()?.id,window.__strikeQA.take()?.id,window.__strikeQA.take()]);
+  check(selected[0]==='saved-mcq'&&selected[1]==='other-saved'&&selected[2]===null,'Blocked browser storage cannot cause repeated questions or copies');
+  await memory.page.evaluate(()=>{const entries=window.__mock.listeners['questionAttempts'].filter(e=>e.active);entries[0].onError(new Error('test history unavailable'));});
+  check(await memory.page.evaluate(()=>!window.__strikeQA.ready&&!window.__strikeQA.candidate()),'A history read failure stops feeding rather than using an unchecked pool');
+  await memory.page.evaluate(()=>window.__strikeQA.clearFeed());
+  check(await memory.page.evaluate(()=>Object.values(window.__mock.listeners).flat().every(e=>!e.active)),'Signing out or clearing the feed stops all account subscriptions');
+  await checkClean(memory);await memory.context.close();
+  console.log('PASS database MCQs: authored context, objective/quality restrictions, live edits/history, empty-pool pause, storage failure and subscription cleanup');
+
 } finally {
   await browser.close();
 }

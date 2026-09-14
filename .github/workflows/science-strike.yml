@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '22'
       - name: Check game state and existing question safeguards
-        run: node --test tools/science-strike-tests.mjs tools/science-feed-standalone-tests.mjs tools/game-*-tests.mjs
+        run: node --test tools/science-strike-tests.mjs tools/science-strike-database-tests.mjs tools/science-feed-standalone-tests.mjs tools/game-*-tests.mjs
       - name: Install isolated browser runtime
         run: |
           npm install --prefix "$RUNNER_TEMP/strike-browser" --no-audit --no-fund playwright@1.62.1

@@ -1,6 +1,6 @@
-# Science Strike v1.9.0
+# Science Strike v1.9.1
 
-Released with the Science portal v1.382.0.
+Released with the Science portal v1.382.1.
 
 ## Playing
 
@@ -33,8 +33,20 @@ skill tree or answering a question clears held movement, firing and aiming
 inputs. If the browser refuses mouse control, the run stays paused with a retry
 message. Resuming an existing run does not spend another credit.
 
-Science questions retain the shared school-level, mastery, quality and spacing
-rules. Number keys select answers, and feedback keeps the game paused until the
+Science Strike serves only authored MCQs from the published teacher database.
+It shows the worksheet title and preserves diagrams, table labels and choices.
+Written-answer tasks, mixed worksheets and malformed MCQs are not converted into
+game questions. There are no generated questions or sample fallback pools.
+
+The shared school-level, mastery, quality and spacing rules use current database
+history, teacher corrections, custom topics and learning objectives. Live bank
+changes withdraw deleted, changed or newly unsuitable active questions without
+marking an answer. Existing teacher checks are read without calling an AI.
+Question families cannot repeat within a run; shared spacing also survives new
+runs, and session memory still protects students when browser storage is blocked.
+An exhausted suitable pool pauses the game instead of filling it with repeats.
+
+Number keys select answers, and feedback keeps the game paused until the
 student chooses Continue. Each displayed question can settle only once, so
 repeated clicks or keys cannot multiply results or rewards. Wrong answers show
 the correct option and the supplied explanation before play resumes.

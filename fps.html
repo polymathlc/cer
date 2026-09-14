@@ -411,7 +411,8 @@
   <!-- question overlay -->
   <div class="overlay" id="questionOverlay" role="dialog" aria-modal="true" aria-label="Science check">
     <div class="qcard">
-      <div class="qtag">🧪 SCIENCE CHECK · <span class="tpc" id="qTopic"></span> · streak <span id="qStreakNow">0</span></div>
+      <div class="qtag">🧪 QUESTION BANK MCQ · <span class="tpc" id="qTopic"></span> · streak <span id="qStreakNow">0</span></div>
+      <div id="qSource" class="ready-status"></div>
       <p id="qHelp">Action paused. Read the question, then click an answer or press its number. There is no time limit.</p>
       <div id="qStem" tabindex="-1"></div>
       <div id="qOptions"></div>
@@ -470,7 +471,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v1.9.0</div>
+<div id="versionBadge">Science Strike v1.9.1</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -478,7 +479,8 @@ import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, getDocs, collection, addDoc, Timestamp, increment, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
-import { buildScienceFeedContext, planScienceQuestions } from './science-feed-core.js';
+import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit } from './science-feed-core.js';
+import { strikeQuestionQualityOptions, strikeAttemptProgress, STRIKE_DEFAULT_OBJECTIVES } from './science-strike-feed.js';
 
 /* ════════════════ FIREBASE (same project as index.html) ════════════════ */
 const firebaseConfig = {
@@ -507,10 +509,15 @@ let questions = [];          // extracted MCQ pool
 let qCursor = 0;
 let fpsFeedBank = [], fpsFeedAttempts = [], fpsFeedReady = false, fpsFeedLoad = 0;
 let fpsProfileStop = null, fpsProfileSignature = '', fpsAssignedFallback = '';
+let fpsQuestionStops = [], fpsFeedObjectives = [], fpsFeedObjectiveMap = {}, fpsFeedFlags = [];
+let fpsFeedError = '';
+const fpsServedMemory = new Map();
 const fpsFailedImages = new Map();
 function fpsFeedKey() { return JSON.stringify([currentUser && currentUser.uid || '', currentUser && currentUser.name || '']); }
 function fpsFeedClear() {
   questions=[]; fpsFeedBank=[]; fpsFeedAttempts=[]; fpsFeedReady=false; fpsFeedLoad++; fpsFailedImages.clear();
+  fpsQuestionStops.splice(0).forEach(stop=>stop());
+  fpsFeedObjectives=[]; fpsFeedObjectiveMap={}; fpsFeedFlags=[]; fpsFeedError='';
   if(fpsProfileStop){ fpsProfileStop(); fpsProfileStop=null; }
 }
 function fpsApplyProfile(data) {
@@ -533,15 +540,9 @@ function fpsApplyProfile(data) {
 function fpsFeedProgress() {
   let progress={};
   try{progress=JSON.parse(localStorage.getItem('scienceFeed:history:'+fpsFeedKey())||'{}')||{};}catch(e){}
-  for(const a of fpsFeedAttempts){
-    if(!a || !a.questionId || String(a.displayName || '').trim()!==String(currentUser && currentUser.name || '').trim())continue;
-    const at=typeof a.timestamp==='number'?a.timestamp:a.timestamp && typeof a.timestamp.toMillis==='function'?a.timestamp.toMillis():0;
-    const total=Number(a.totalBlanks || a.outOf), score=Number(a.score ?? a.marks);
-    if(!at || !(total>0) || !Number.isFinite(score) || (progress[a.questionId] && progress[a.questionId].last>=at))continue;
-    progress[a.questionId]={last:at,latestFrac:Math.max(0,Math.min(1,score/total))};
-  }
-  return progress;
+  return strikeAttemptProgress(fpsFeedAttempts,currentUser && currentUser.name,progress);
 }
+
 
 const $ = id => document.getElementById(id);
 const isAdmin = () => !!(currentUser && currentUser.role === 'admin');
@@ -654,9 +655,7 @@ async function loadStudentLevelCap() {
   fpsProfileStop=onSnapshot(doc(db,'userProfiles',uid),snap=>{
     if(currentUser && currentUser.uid===uid)fpsApplyProfile(snap.exists()?snap.data():{});
   },()=>{if(currentUser && currentUser.uid===uid)fpsApplyProfile({});});
-  try {if(adminUid){const snap=await getDoc(doc(db,'users',adminUid,'settings','topics'));
-    if(currentUser && currentUser.uid===uid && snap.exists() && typeof snap.data().custom==='object')customTopicLevels=snap.data().custom||{};}}
-  catch(e){console.warn('shared topics read',e);}
+
 }
 
 /* ---------- game credits (mirrors index.html's shared daily pool) ----------
@@ -740,13 +739,18 @@ function qZoomBtns() {
 
 function fpsEscape(value) { return String(value ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function fpsTableHtml(block) {
-  if (!Array.isArray(block.data) || !block.data.length) return null;
-  const data=block.data.map(row=>Array.isArray(row)?row.slice():null);
-  if(data.some(row=>!row))return null;
-  const cols=Number(block.cols)||Math.max(...data.map(row=>row.length));
-  const offset=Array.isArray(block.headers)?1:0;
+  const source=block.data;
+  if (!source || typeof source!=='object') return null;
+  const rowCount=Number(block.rows)||Object.keys(source).length;
+  const cols=Number(block.cols)||Math.max(0,...Object.values(source).map(row=>row && typeof row==='object'?Object.keys(row).length:0));
+  if(!Number.isInteger(rowCount)||!Number.isInteger(cols)||rowCount<1||cols<1||rowCount>200||cols>100)return null;
+  if(Object.keys(source).some(r=>!/^\d+$/.test(r)||+r>=rowCount||!source[r]||typeof source[r]!=='object'
+    ||Object.keys(source[r]).some(c=>!/^\d+$/.test(c)||+c>=cols)))return null;
+  const data=Array.from({length:rowCount},(_,r)=>Array.from({length:cols},(_,c)=>source[r]?.[c]??''));
+  const offset=block.headers && typeof block.headers==='object'?1:0;
+  if(offset && Object.keys(block.headers).some(c=>!/^\d+$/.test(c)||+c>=cols))return null;
   if(offset)data.unshift(Array.from({length:cols},(_,c)=>block.headers[c]||''));
-  const rows=(Number(block.rows)||block.data.length)+offset;
+  const rows=rowCount+offset;
   const merges=(block.merges||[]).map(m=>({...m,sr:m.sr+offset,er:m.er+offset}));
   let html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><tbody>';
   for(let r=0;r<rows;r++){
@@ -764,7 +768,12 @@ function fpsTableHtml(block) {
   return html+'</tbody></table></div>';
 }
 function extractMcq(q) {
-  const blocks = (q && q.blocks) || [];
+  // One malformed database document must not strand the rest of the bank.
+  try { return fpsExtractMcq(q); } catch (_) { return null; }
+}
+function fpsExtractMcq(q) {
+  if(!q || !Array.isArray(q.blocks) || q.blocks.some(b=>!b || typeof b!=='object'))return null;
+  const blocks = q.blocks;
   const mcqs = blocks.filter(b => b.type === 'mcq');
   // One answer interaction cannot represent a multi-part MCQ worksheet.
   if (mcqs.length !== 1 || !q.id) return null;
@@ -774,7 +783,8 @@ function extractMcq(q) {
     || b.type === 'fillblank' && /\[\[[\s\S]+?\]\]/.test(b.text || '')
   ))) return null;
   const mcq=mcqs[0];
-  if(!Array.isArray(mcq.options)||mcq.options.length<2)return null;
+  if(!Array.isArray(mcq.options)||mcq.options.length<2||mcq.options.some(o=>!o || typeof o!=='object' || o.id==null)
+    ||new Set(mcq.options.map(o=>o.id)).size!==mcq.options.length)return null;
   const answer = mcq.options.findIndex(o => o.id === mcq.correctId);
   if (answer < 0 || mcq.options.some(o => !stripHtml(o.text || '') && !/<img\b[^>]*\bsrc\s*=/i.test(o.text || ''))) return null;
   let stemHtml = '';
@@ -807,55 +817,97 @@ function fpsWireQuestionImages(container,q) {
   });
 }
 
+function fpsDatabaseQuestionAvailable(q) {
+  const today=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
+  return !!q && (isAdmin() || !(q.holdBack===true || /^\d{4}-\d{2}-\d{2}$/.test(q.releaseOn||'') && q.releaseOn>today));
+}
+function fpsQuestionContext() {
+  let flags={};try{flags=JSON.parse(localStorage.getItem('scienceFeed:flags:'+fpsFeedKey())||'{}')||{};}catch(e){}
+  if(typeof flags!=='object' || Array.isArray(flags))flags={};
+  for(const report of fpsFeedFlags){
+    if(!report || report.status!=='open' || String(report.flaggedBy||'').trim()!==String(currentUser?.name||'').trim())continue;
+    if(report.questionSignature)flags[report.questionId]={signature:report.questionSignature,at:report.timestamp?.toMillis?.()||0};
+  }
+  return buildScienceFeedContext({bank:fpsFeedBank,studentLevel:studentLevelCap?levelLabel(studentLevelCap):'',
+    topicLevels:Object.assign({},TOPIC_LEVEL_MAP,customTopicLevels),objectives:fpsFeedObjectives,objectiveMap:fpsFeedObjectiveMap,
+    progress:fpsFeedProgress(),served:qSeenLoad(),failedImageUrls:fpsFailedImages,flags,qualityOptions:strikeQuestionQualityOptions});
+}
+function fpsRecheckActiveQuestion() {
+  const active=typeof G!=='undefined' && G?.activeQ;
+  if(!active || G.questionAnswered)return;
+  const live=fpsFeedBank.find(q=>q.id===active.id), context=fpsQuestionContext();
+  if(fpsFeedReady && fpsDatabaseQuestionAvailable(live) && JSON.stringify(live)===JSON.stringify(active.feedSource)
+    && evaluateScienceFit(live,{context,manual:true}).eligible && context.qualityById.get(live.id)?.tier==='sound')return;
+  G.activeQ=null;G.qTimerMs=QUESTION_INTERVAL;$('questionOverlay').classList.remove('active');
+  pauseRun('This database question was updated or is no longer suitable. It has been set aside without marking your answer.');
+}
 async function loadQuestions() {
-  const uid=currentUser && currentUser.uid, ticket=++fpsFeedLoad;fpsFeedReady=false;
+  const uid=currentUser && currentUser.uid,ticket=++fpsFeedLoad;fpsFeedReady=false;fpsFeedError='';
+  fpsQuestionStops.splice(0).forEach(stop=>stop());
   if(!uid)return;
+  const current=()=>currentUser && currentUser.uid===uid && ticket===fpsFeedLoad;
   try {
     const uids=adminUid?[adminUid]:[];
     try {const profs=await getDocs(collection(db,'userProfiles'));profs.forEach(d=>{const p=d.data();if(p && p.uid && ADMIN_EMAILS.includes(p.email) && !uids.includes(p.uid))uids.push(p.uid);});}
     catch(e){console.warn('admin uid discovery',e);}
-    const raw=[],pool=[],seen=new Set(),today=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
-    for(const owner of uids){
-      try {const snap=await getDocs(collection(db,'users',owner,'questions'));snap.forEach(d=>{
-        const q=d.data();if(!q || !q.id || seen.has(q.id))return;
-        if(!isAdmin() && (q.holdBack===true || /^\d{4}-\d{2}-\d{2}$/.test(q.releaseOn||'') && q.releaseOn>today))return;
-        seen.add(q.id);raw.push(q);const row=extractMcq(q);if(row)pool.push(row);
-      });}catch(e){console.warn('bank load',owner,e);}
+    if(!current())return;
+    if(!adminUid || !uids.length)throw Error('The shared question bank is unavailable.');
+    const banks=new Map(),ready=new Set(),total=uids.length+4;
+    const rows=snap=>{const out=[];snap.forEach(d=>{const value=d.data();if(value && typeof value==='object')out.push(value);});return out;};
+    function publish(){
+      if(!current())return;
+      const raw=[],seen=new Set();
+      // Only published teacher database documents enter the game. No samples,
+      // generated quiz items, written-answer conversions or alternate pools.
+      for(const owner of uids)for(const q of banks.get(owner)||[]){if(q.id && !seen.has(q.id)){seen.add(q.id);raw.push(q);}}
+      fpsFeedBank=raw;questions=raw.map(extractMcq).filter(Boolean);qCursor=0;
+      fpsFeedReady=ready.size===total && !fpsFeedError;
+      fpsRecheckActiveQuestion();paintStrikeReadiness();
     }
-    const attempts=[];
-    try {const snap=await getDocs(query(collection(db,'questionAttempts'),where('uid','==',uid)));snap.forEach(d=>attempts.push(d.data()));}
-    catch(e){console.warn('attempt history unavailable',e);return;}
-    if(!currentUser || currentUser.uid!==uid || ticket!==fpsFeedLoad)return;
-    fpsFeedBank=raw;fpsFeedAttempts=attempts;questions=pool;qCursor=0;fpsFeedReady=true;
-  }catch(e){console.error('loadQuestions',e);}
-  finally { if (currentUser && currentUser.uid===uid && ticket===fpsFeedLoad) paintStrikeReadiness(); }
+    function watch(key,ref,apply){
+      return new Promise(resolve=>{
+        const stop=onSnapshot(ref,snap=>{if(!current()){resolve(false);return;}apply(snap);ready.add(key);publish();resolve(true);},error=>{
+          if(!current()){resolve(false);return;}
+          fpsFeedError='Your database questions or learning history could not be loaded. Reload this page to try again.';
+          fpsFeedReady=false;fpsRecheckActiveQuestion();paintStrikeReadiness();console.warn('Science Strike feed',key,error);resolve(false);
+        });
+        fpsQuestionStops.push(stop);
+      });
+    }
+    await Promise.all([
+      ...uids.map(owner=>watch('bank:'+owner,collection(db,'users',owner,'questions'),snap=>banks.set(owner,rows(snap)))),
+      watch('topics',doc(db,'users',adminUid,'settings','topics'),snap=>{customTopicLevels=snap.exists()?snap.data().custom||{}:{};}),
+      watch('objectives',doc(db,'users',adminUid,'settings','learningObjectives'),snap=>{
+        const data=snap.exists()?snap.data():{};fpsFeedObjectives=Array.isArray(data.objectives)?data.objectives:STRIKE_DEFAULT_OBJECTIVES;fpsFeedObjectiveMap=data.map||{};
+      }),
+      watch('attempts',query(collection(db,'questionAttempts'),where('uid','==',uid)),snap=>{fpsFeedAttempts=rows(snap);}),
+      watch('reports',query(collection(db,'flaggedQuestions'),where('flaggedByUid','==',uid)),snap=>{fpsFeedFlags=rows(snap);})
+    ]);
+  }catch(e){if(current()){fpsFeedError='Your database questions could not be loaded. Reload this page to try again.';fpsFeedReady=false;paintStrikeReadiness();}console.error('loadQuestions',e);}
 }
 
-// ---- No-repeat rotation (invisible to students) ----
-// Shares the 'gameQSeen_<uid>' localStorage map with index.html's arcade
-// games. Each entry is the time the question was last shown in ANY game mode.
-// Never-shown questions are served first; once everything has been shown, the
-// least-recently-shown come back — the map is never bulk-reset, so a question
-// answered minutes ago can't jump straight back in (here or in the arcade).
-// The stamps are internal bookkeeping and never shown anywhere.
+// Share spacing with all portal modes, and keep it even when browser storage
+// is blocked. A new run never resets the current learner's served history.
 function qSeenKey() { return 'scienceFeed:served:' + fpsFeedKey(); }
-function qSeenLoad() { try { return JSON.parse(localStorage.getItem(qSeenKey())) || {}; } catch (e) { return {}; } }
-function qSeenSave(m) { try { localStorage.setItem(qSeenKey(), JSON.stringify(m)); } catch (e) {} }
-let _recentQIds = [];   // last few served this session — never repeat back-to-back
+function qSeenLoad() {
+  let saved={};try{saved=JSON.parse(localStorage.getItem(qSeenKey())||'{}')||{};}catch(e){}
+  const merged={...(fpsServedMemory.get(fpsFeedKey())||{})};
+  for(const [id,at] of Object.entries(saved))if(Number.isFinite(at)&&at>Number(merged[id]||0))merged[id]=at;
+  return merged;
+}
+function qSeenSave(m) { fpsServedMemory.set(fpsFeedKey(),{...m});try{localStorage.setItem(qSeenKey(),JSON.stringify(m));}catch(e){} }
 function fpsQuestionCandidate() {
-  if(!fpsFeedReady || !currentUser || !questions.length)return null;
-  const shown=qSeenLoad();
-  const context=buildScienceFeedContext({bank:fpsFeedBank,studentLevel:studentLevelCap?levelLabel(studentLevelCap):'',
-    topicLevels:Object.assign({},TOPIC_LEVEL_MAP,customTopicLevels),progress:fpsFeedProgress(),served:shown,failedImageUrls:fpsFailedImages,
-    flags:(()=>{try{return JSON.parse(localStorage.getItem('scienceFeed:flags:'+fpsFeedKey())||'{}')||{};}catch(e){return {};}})()});
-  const raw=planScienceQuestions(questions.map(q=>q.feedSource),{context,limit:1}).questions[0];
-  if(!raw)return null;
-  return questions.find(row=>row.id===raw.id) || null;
+  if(!fpsFeedReady || !currentUser || !fpsFeedBank.length)return null;
+  const candidates=fpsFeedBank.filter(q=>fpsDatabaseQuestionAvailable(q) && extractMcq(q));
+  const asked=typeof G!=='undefined' && G && !G.over ? G.fpsAskedIds||[] : [];
+  const raw=planScienceQuestions(candidates,{context:fpsQuestionContext(),limit:1,excludeIds:asked,excludeFamilyIds:asked}).questions[0];
+  return raw?extractMcq(raw):null;
 }
 function nextQuestion() {
   const q=fpsQuestionCandidate();
   if(!q)return null;
   const shown=qSeenLoad();shown[q.id]=Date.now();qSeenSave(shown);q.feedKey=fpsFeedKey();
+  if(typeof G!=='undefined' && G && !G.over){if(!G.fpsAskedIds)G.fpsAskedIds=[];G.fpsAskedIds.push(q.id);}
   return q;
 }
 
@@ -1483,7 +1535,7 @@ function strikeStartIssue() {
   if (!currentUser) return 'Sign in to start a run.';
   if (typeof canvas.requestPointerLock !== 'function' || window.matchMedia('(pointer: coarse) and (hover: none)').matches)
     return 'Science Strike needs a keyboard and mouse. Open it on a computer to play.';
-  if (!fpsFeedReady) return 'Your questions are still loading. If this message stays, reload this page and try again.';
+  if (!fpsFeedReady) return fpsFeedError || 'Your database MCQs and learning progress are loading. If this message stays, reload this page and try again.';
   if (!studentLevelCap) return 'Set your school level in the Science Learning Portal before playing.';
   try { if (!fpsQuestionCandidate()) return 'No suitable fresh questions are ready. Return to the portal for practice, or come back later.'; }
   catch (error) { console.warn('Science Strike readiness', error); return 'Questions could not be checked. Reload this page before starting.'; }
@@ -1529,7 +1581,7 @@ function startRun() {
     grenadeEnts: [], fields: [], deployables: [],
     cdF: 0, timeSlow: 0,
     totalKills: 0, coresEarned: 0,
-    streak: 0, bestStreak: 0, qCorrect: 0, qTotal: 0,
+    streak: 0, bestStreak: 0, qCorrect: 0, qTotal: 0, fpsAskedIds: [],
     nextDropFloorTier: 0,     // guaranteed min rarity for the NEXT drop (streak milestones)
     mods: {}, modsTaken: [],  // run-scoped drafted upgrades: key → stacks, names for the death recap
     combo: 0, comboT: 0,      // kill combo: chained kills within 3s of each other
@@ -1801,7 +1853,7 @@ function finishLock() {
     resetCombatInput(); lastT = performance.now();
     $('pauseOverlay').classList.remove('active');
     canvas.focus();
-  } else if (!pointerLocked) pauseRun();
+  } else if (!pointerLocked) pauseRun(G?.paused ? $('pauseReason').textContent || undefined : undefined);
   else suspendCombat();
 }
 function requestLock() {
@@ -2646,7 +2698,7 @@ function spawnChest() {
 /* ════════════════ QUESTIONS every 15s ════════════════ */
 function openQuestion() {
   const q = nextQuestion();
-  if (!q) { G.qTimerMs = QUESTION_INTERVAL; toast(studentLevelCap ? 'No suitable questions are ready — return later for fresh practice.' : 'Set your school level in the Science Learning Portal before answering questions.'); return; }
+  if (!q) { G.qTimerMs=QUESTION_INTERVAL;pauseRun(studentLevelCap ? 'No fresh database MCQs match your level and progress right now. Return to the portal for another activity.' : 'Set your school level in the Science Learning Portal before answering questions.');return; }
   G.activeQ = q;
   G.questionAnswered = false;
   suspendCombat();
@@ -2655,6 +2707,7 @@ function openQuestion() {
   document.exitPointerLock && document.exitPointerLock();
   $('qHelp').textContent = 'Action paused. Read the question, then click an answer or press its number. There is no time limit.';
   $('qTopic').textContent = q.topic;
+  $('qSource').textContent = q.title || 'Science question bank';
   $('qStreakNow').textContent = G.streak;
   $('qStem').innerHTML = q.stemHtml;
   fpsWireQuestionImages($('qStem'),q);
