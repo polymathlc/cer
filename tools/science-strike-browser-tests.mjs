@@ -126,6 +126,15 @@ async function pageFor({ bankRows = bank, pending = false, lock = 'success', mob
   return { page, context, errors, external };
 }
 async function shot(page, name) { if (screens) await page.screenshot({ path: path.join(screens, `${name}.png`), fullPage: true }); }
+async function seededTake(page, seed, count=1) {
+  return page.evaluate(({seed,count})=>{
+    const original=Math.random;
+    Math.random=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let value=Math.imul(seed^seed>>>15,1|seed);
+      value=value+Math.imul(value^value>>>7,61|value)^value;return ((value^value>>>14)>>>0)/4294967296;};
+    try{return Array.from({length:count},()=>window.__strikeQA.take()?.id||null);}
+    finally{Math.random=original;}
+  },{seed,count});
+}
 async function checkClean(session) {
   check(session.errors.length === 0, `No uncaught browser errors: ${session.errors.join('; ')}`);
   check(session.external.length === 0, `No real external requests: ${session.external.join('; ')}`);
@@ -348,7 +357,7 @@ try {
   const written={id:'written-only',title:'Written question',topic:'Plant Systems',blocks:[{type:'text',content:'Explain plant growth.'},{type:'plainanswer',content:'Water supports growth.'}]};
   const malformed={id:'malformed',topic:'Plant Systems',blocks:[null]};
   const available=question('other-saved','Light','Which material casts a clear dark shadow?','Wood','Air');
-  const feed=await pageFor({bankRows:[high,red,written,malformed,fresh,copied,available],objectives:{objectives:[{id:'advanced-lo',level:'P6'}],map:{'advanced-lo':['objective-high']}}});
+  const feed=await pageFor({bankRows:[high,red,written,malformed,fresh],objectives:{objectives:[{id:'advanced-lo',level:'P6'}],map:{'advanced-lo':['objective-high']}}});
   check(await feed.page.evaluate(()=>window.__strikeQA.candidate()?.id)==='saved-mcq','Database-only selection skips written/malformed, above-objective and teacher-red questions');
   await feed.page.locator('#playBtn').click();await feed.page.waitForFunction(()=>window.__strikeQA.run&&!window.__strikeQA.run.paused);
   await feed.page.evaluate(()=>{window.__strikeQA.run.qTimerMs=0;});await feed.page.waitForFunction(()=>window.__strikeQA.run.activeQ);
@@ -359,7 +368,7 @@ try {
   await feed.page.evaluate(async()=>{window.__mock.bank=window.__mock.bank.filter(q=>q.id!=='saved-mcq');await window.__mock.emit('users/teacher/questions');});
   check(await feed.page.evaluate(()=>!window.__strikeQA.run.activeQ&&window.__strikeQA.run.paused),'A teacher deletion withdraws the active question safely');
   check(await feed.page.evaluate(()=>window.__mock.writes.filter(w=>w.path==='questionAttempts').length)===0,'Withdrawal does not log a wrong answer');
-  await feed.page.evaluate(async()=>{window.__mock.bank=window.__mock.bank.map(q=>q.id==='copied-mcq'?{...q,variantOf:'saved-mcq'}:q);await window.__mock.emit('users/teacher/questions');});
+  await feed.page.evaluate(async({copied,available})=>{window.__mock.bank.push({...copied,variantOf:'saved-mcq'},available);await window.__mock.emit('users/teacher/questions');},{copied,available});
   check(await feed.page.evaluate(()=>window.__strikeQA.candidate()?.id)==='other-saved','A renamed copy cannot follow the original question');
   await feed.page.evaluate(async()=>{window.__mock.attempts=[{questionId:'other-saved',displayName:'Test Learner',score:1,totalBlanks:1,timestamp:{seconds:Date.now()/1000},mode:'practice'}];await window.__mock.emit('questionAttempts');});
   check(await feed.page.evaluate(()=>window.__strikeQA.candidate())===null,'Fresh practice history from the database blocks cross-mode repetition immediately');
@@ -372,13 +381,38 @@ try {
   const memory=await pageFor({bankRows:[fresh,copied,available]});
   await memory.page.evaluate(()=>{Storage.prototype.getItem=()=>{throw Error('Storage blocked');};Storage.prototype.setItem=()=>{throw Error('Storage blocked');};});
   const selected=await memory.page.evaluate(()=>[window.__strikeQA.take()?.id,window.__strikeQA.take()?.id,window.__strikeQA.take()]);
-  check(selected[0]==='saved-mcq'&&selected[1]==='other-saved'&&selected[2]===null,'Blocked browser storage cannot cause repeated questions or copies');
+  const selectedFamilies=selected.slice(0,2).map(id=>['saved-mcq','copied-mcq'].includes(id)?'fruit':id);
+  check(new Set(selectedFamilies).size===2&&selectedFamilies.includes('fruit')&&selectedFamilies.includes('other-saved')&&selected[2]===null,'Blocked browser storage cannot cause repeated questions or copies');
   await memory.page.evaluate(()=>{const entries=window.__mock.listeners['questionAttempts'].filter(e=>e.active);entries[0].onError(new Error('test history unavailable'));});
   check(await memory.page.evaluate(()=>!window.__strikeQA.ready&&!window.__strikeQA.candidate()),'A history read failure stops feeding rather than using an unchecked pool');
   await memory.page.evaluate(()=>window.__strikeQA.clearFeed());
   check(await memory.page.evaluate(()=>Object.values(window.__mock.listeners).flat().every(e=>!e.active)),'Signing out or clearing the feed stops all account subscriptions');
   await checkClean(memory);await memory.context.close();
   console.log('PASS database MCQs: authored context, objective/quality restrictions, live edits/history, empty-pool pause, storage failure and subscription cleanup');
+
+  const peers=[
+    question('friction','Forces','How does friction affect a trolley moving across the floor?','It slows the trolley','It produces food',{title:'Trolley investigation',level:'P6',difficulty:3}),
+    question('spring','Forces','What happens to a spring when a heavy bag is attached?','It becomes longer','It vanishes',{title:'Weighing bag',level:'P6',difficulty:3}),
+    question('gravity','Forces','Which force causes a falling marble to move towards the ground?','Gravitational force','Magnetic force',{title:'Falling marble',level:'P6',difficulty:3}),
+    question('elastic','Forces','How does stretching an elastic band change its stored energy?','It increases','It disappears',{title:'Elastic band',level:'P6',difficulty:3}),
+  ];
+  const revision=question('p5-revision','Electrical Systems','Why does the lamp go out when a switch opens?','The circuit is incomplete','The wire becomes transparent',{title:'Open circuit',level:'P5',difficulty:3});
+  const basic=question('p3-basic','Magnets','Which material is attracted to a magnet?','Iron','Wood',{title:'Magnetic materials',level:'P3',difficulty:1200});
+  const peerIds=new Set(peers.map(q=>q.id)),openers=[],openingSets=[];
+  for(const seed of [1,7,19,43,101,509]){
+    const variety=await pageFor({bankRows:[basic,revision,...peers]});
+    await variety.page.evaluate(async()=>{window.__mock.profile={level:'P6',students:[{name:'Test Learner',level:'P6'}],activeStudent:0};await window.__mock.emit('userProfiles/learner');});
+    await variety.page.waitForFunction(()=>window.__strikeQA.ready&&window.__strikeQA.cap===6);
+    const sequence=await seededTake(variety.page,seed,peers.length+2);openers.push(sequence[0]);
+    openingSets.push(sequence.slice(0,2).sort().join(','));
+    check(sequence.slice(0,peers.length).every(id=>peerIds.has(id)),'Random standalone questions stay in the current-grade tier before revision');
+    check(new Set(sequence.slice(0,peers.length)).size===peers.length,'Repeated standalone requests visit every suitable peer without repeats');
+    check(sequence[peers.length]==='p5-revision'&&sequence[peers.length+1]===null,'P5 revision follows P6 work and randomisation cannot revive P3 fallback');
+    await checkClean(variety);await variety.context.close();
+  }
+  check(new Set(openers).size>1,'Different controlled fresh starts vary the first database MCQ in Science Strike');
+  check(new Set(openingSets).size>1,'Short Science Strike sessions vary the chosen set, not just the order of a fixed pair');
+  console.log('PASS randomized standalone feed: seeded fresh starts vary, current-grade peers remain distinct and school priority is preserved');
 
 } finally {
   await browser.close();

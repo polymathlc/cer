@@ -471,7 +471,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v1.9.2</div>
+<div id="versionBadge">Science Strike v1.9.3</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -900,7 +900,7 @@ function fpsQuestionCandidate() {
   if(!fpsFeedReady || !currentUser || !fpsFeedBank.length)return null;
   const candidates=fpsFeedBank.filter(q=>fpsDatabaseQuestionAvailable(q) && extractMcq(q));
   const asked=typeof G!=='undefined' && G && !G.over ? G.fpsAskedIds||[] : [];
-  const raw=planScienceQuestions(candidates,{context:fpsQuestionContext(),limit:1,excludeIds:asked,excludeFamilyIds:asked}).questions[0];
+  const raw=planScienceQuestions(candidates,{context:fpsQuestionContext(),limit:1,randomize:true,excludeIds:asked,excludeFamilyIds:asked}).questions[0];
   return raw?extractMcq(raw):null;
 }
 function nextQuestion() {

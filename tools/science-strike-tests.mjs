@@ -92,7 +92,7 @@ test('intentional question-feed pause keeps its explanation after mouse capture 
 test('FPS module remains syntactically valid and versioned', () => {
   const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
   new vm.Script(script.replace(/^import .*;\n/gm, ''));
-  assert.match(source, /Science Strike v1\.9\.2/);
+  assert.match(source, /Science Strike v1\.9\.3/);
 });
 
 test('combat waits for confirmed pointer lock; duplicate confirmations are harmless', () => {

@@ -1,4 +1,4 @@
-# Student question feeding — v1.382.2
+# Student question feeding — v1.382.3
 
 Science uses the same school-level, mastery and repetition safeguards as Math
 v1.79.0 (Math PR #195), adapted to Science's question blocks and family accounts.
@@ -33,6 +33,19 @@ years below is admitted. Automatic feeding never drops three school years; a
 teacher's deliberate worksheet revision remains available. A depleted pool never
 overrides quality, school ceilings or repeat spacing. Game preview accounts with
 a chosen school level use the same policy; preview without one asks for a level.
+
+Games and automatic quests randomize the full eligible pool before choosing the
+requested number of questions. After quality, grade, mastery and spacing checks,
+questions in the same grade-priority tier and within 50 fit points of the best
+remaining candidate form a shuffle group. A Fisher–Yates shuffle gives each
+question family one place in that group's lottery, then randomizes its eligible
+variants. Numerous copies of a question do not give its family extra chances.
+The next request makes a fresh draw; neither bank order nor a fixed small prefix
+determines every student's set. Earlier-grade and less suitable groups remain
+behind the preferred group. There is no extra AI call or database write.
+Ordinary practice retains its learning order; explicit worksheets retain their
+selected order even if a caller requests randomization. Choice text and authored
+answer positions are not changed.
 
 Practice and games share served timestamps and per-child outcome history. Exact
 copies and story variants stay spaced across modes. A correct answer normally

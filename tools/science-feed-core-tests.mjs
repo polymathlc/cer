@@ -8,6 +8,81 @@ const q = (id, extra = {}) => ({ id, title: 'Question', topic: 'Plant life', cat
     {id:'answer',type:'plainanswer',content:'The roots take up water.'}], ...extra });
 const opts = (bank, extra = {}) => ({bank,studentLevel:'P4',topicLevels,now,...extra});
 const ids = result => result.questions.map(item => item.id);
+const seededRandom = seed => () => {
+  seed = (seed + 0x6D2B79F5) | 0;
+  let value = Math.imul(seed ^ seed >>> 15, 1 | seed);
+  value ^= value + Math.imul(value ^ value >>> 7, 61 | value);
+  return ((value ^ value >>> 14) >>> 0) / 4294967296;
+};
+
+test('random games draw different sets from the full suitable bank before applying the limit', () => {
+  const bank=Array.from({length:12},(_,i)=>q('fresh'+i)), before=JSON.stringify(bank);
+  const starts=new Set(), reached=new Set(), sets=new Set();
+  for(let seed=0;seed<64;seed++) {
+    const picked=ids(planScienceQuestions(bank,opts(bank,{randomize:true,random:seededRandom(seed),limit:3})));
+    assert.equal(picked.length,3);assert.equal(new Set(picked).size,3);
+    starts.add(picked[0]);picked.forEach(id=>reached.add(id));sets.add(picked.slice().sort().join(','));
+  }
+  assert.equal(starts.size,12);assert.equal(reached.size,12);assert.ok(sets.size>30);
+  assert.equal(JSON.stringify(bank),before);
+});
+
+test('randomness preserves grade priority, narrow fit bands, hard ceilings and quality', () => {
+  const bank=[q('old',{topic:'Magnets',difficulty:1200}),q('previous',{topic:'Electricity',difficulty:1065}),
+    q('near-a',{topic:'Forces'}),q('near-b',{topic:'Forces',difficulty:'easy'}),
+    q('less-suitable',{topic:'Forces',difficulty:1160}),q('too-hard',{topic:'Forces',difficulty:5}),
+    q('above',{topic:'Cells'}),q('broken',{topic:'Forces',blocks:[]}),q('flagged',{topic:'Forces',practiceQuarantined:true})];
+  for(let seed=0;seed<32;seed++) {
+    const picked=ids(planScienceQuestions(bank,opts(bank,{studentLevel:'P6',randomize:true,random:seededRandom(seed)})));
+    assert.deepEqual(picked.slice(0,2).sort(),['near-a','near-b']);
+    assert.deepEqual(picked.slice(2),['less-suitable','previous']);
+  }
+});
+
+test('many copies never give their question family extra lottery entries', () => {
+  const original=q('alpha'), other=q('beta'), third=q('gamma');
+  const copies=Array.from({length:40},(_,i)=>q('copy'+i,{variantOf:'alpha'}));
+  const family=id=>id.startsWith('copy')?'alpha':id;
+  const base=[original,other,third], inflated=[original,...copies,other,third];
+  for(let seed=0;seed<128;seed++) {
+    const pick=bank=>ids(planScienceQuestions(bank,opts(bank,{randomize:true,random:seededRandom(seed),limit:1})))[0];
+    assert.equal(family(pick(inflated)),pick(base));
+    const all=ids(planScienceQuestions(inflated,opts(inflated,{randomize:true,random:seededRandom(seed)}))).map(family);
+    assert.deepEqual(all.sort(),['alpha','beta','gamma']);
+  }
+});
+
+test('random draws respect cross-mode family spacing and stop after every eligible family', () => {
+  const fresh=Array.from({length:8},(_,i)=>q('fresh'+i));
+  const bank=fresh.concat(q('copy',{variantOf:'fresh0'}),q('due-later'));
+  const served={},progress={'due-later':{latestFrac:1,last:now-1000}}, random=seededRandom(73),picked=[];
+  for(let i=0;i<8;i++) {
+    const item=planScienceQuestions(bank,opts(bank,{randomize:true,random,limit:1,served,progress})).questions[0];
+    assert.ok(item);picked.push(item.id==='copy'?'fresh0':item.id);served[item.id]=now;
+  }
+  assert.equal(new Set(picked).size,8);
+  const empty=planScienceQuestions(bank,opts(bank,{randomize:true,random,limit:1,served,progress}));
+  assert.equal(empty.questions.length,0);assert.ok(empty.nextReviewAt>now);
+});
+
+test('blocked family members are removed before the lottery and cannot hide a fresh variant', () => {
+  const bank=[q('original'),q('variant',{variantOf:'original'}),q('excluded'),q('other')];
+  const progress={original:{latestFrac:1,last:now-3600000}};
+  for(let seed=0;seed<16;seed++) {
+    const config=opts(bank,{randomize:true,random:seededRandom(seed),progress,excludeIds:['excluded']});
+    assert.deepEqual(ids(planScienceQuestions(bank,config)).sort(),['other','variant']);
+    assert.deepEqual(ids(planScienceQuestions(bank,{...config,excludeFamilyIds:['original']})),['other']);
+  }
+});
+
+test('manual revision and ordinary practice keep their deliberate order without drawing randomness', () => {
+  const bank=[q('easy',{difficulty:'easy'}),q('normal'),q('hard',{difficulty:5})];
+  const random=()=>{throw Error('Unexpected random draw');};
+  assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{manual:true,randomize:true,random}))),['easy','normal','hard']);
+  assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{random}))),['normal','easy']);
+  const copies=[q('a'),q('b',{variantOf:'a'})];
+  assert.deepEqual(ids(planScienceQuestions(copies,opts(copies,{randomize:true,random:()=>0,onePerFamily:false}))).sort(),['a','b']);
+});
 
 test('P6 games prioritize their grade over legacy-rated P3 and then use fresh P5', () => {
   const bank = [q('old-elo',{topic:'Magnets',difficulty:1200}),q('old-d',{topic:'Magnets',d:1050}),

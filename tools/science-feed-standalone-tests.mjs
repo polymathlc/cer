@@ -79,10 +79,10 @@ for(const file of ['science-defenders.html','science-raiders.html','science-lege
   assert.equal(c.pickQuestion().id,'safe');c[apply]([]);assert.equal(c[bank].length,0);
 });
 const question=(id,topic='Plant Systems',extra={})=>({id,title:id,topic,blocks:[{type:'text',content:'Which statement is true for '+id+'?'},{type:'mcq',options:[{id:'a',text:'First'},{id:'b',text:'Second'}],correctId:'a'}],...extra});
-function fpsFixture(bank){
+function fpsFixture(bank,random=()=>0.5){
   const storage=new Map(),elements=new Map(),noop=()=>{};
   const el=id=>{if(!elements.has(id))elements.set(id,{classList:{remove:noop}});return elements.get(id);};
-  const c=vm.createContext({buildScienceFeedContext,planScienceQuestions,strikeQuestionQualityOptions,strikeAttemptProgress,console,currentUser:{uid:'u',name:'Ada',authName:'Parent',role:'student'},
+  const c=vm.createContext({buildScienceFeedContext,planScienceQuestions:(qs,opts)=>planScienceQuestions(qs,{random,...opts}),strikeQuestionQualityOptions,strikeAttemptProgress,console,currentUser:{uid:'u',name:'Ada',authName:'Parent',role:'student'},
     studentLevelCap:4,studentLevelFloor:0,fpsProfileSignature:'',fpsAssignedFallback:'',fpsFeedAttempts:[],fpsFeedReady:true,fpsFeedBank:bank,
     fpsFeedLoad:0,fpsProfileStop:null,fpsFailedImages:new Map(),questions:bank.map(q=>({id:q.id,feedSource:q})),customTopicLevels:{},
     fpsServedMemory:new Map(),fpsFeedFlags:[],fpsFeedObjectives:[],fpsFeedObjectiveMap:{},
@@ -110,10 +110,26 @@ test('Science Strike prioritizes fresh P6 then P5 instead of legacy-rated P3 for
   const bank=[question('p3-legacy','Magnets',{difficulty:1200}),question('p5','Electrical Systems'),
     question('p6-easy','Forces',{difficulty:'easy'}),question('p6','Forces')];
   const {c}=fpsFixture(bank);c.studentLevelCap=6;
-  assert.equal(c.nextQuestion().id,'p6');
-  assert.equal(c.nextQuestion().id,'p6-easy');
+  assert.deepEqual(new Set([c.nextQuestion().id,c.nextQuestion().id]),new Set(['p6','p6-easy']));
   assert.equal(c.nextQuestion().id,'p5');
   assert.equal(c.nextQuestion(),null,'running out does not reopen old or recently served questions');
+});
+
+test('Science Strike changes the sampled database question set while retaining P6-first difficulty and run spacing',()=>{
+  const names=['cedar','maple','birch','willow','spruce','acacia','juniper','poplar'];
+  const bank=[question('foundation','Magnets'),...names.map(id=>question(id,'Forces')),
+    question('needs-review','Forces',{importWarning:'Check the source diagram'})];
+  const sets=new Set();
+  for(let seed=1;seed<=12;seed++){
+    let value=seed;const random=()=>((value=(Math.imul(value,1664525)+1013904223)>>>0)/4294967296);
+    const {c}=fpsFixture(bank,random);c.studentLevelCap=6;const picked=[];
+    for(let i=0;i<3;i++){
+      const item=c.nextQuestion();assert.ok(names.includes(item.id),'only sound current-grade questions are selected');picked.push(item.id);
+    }
+    assert.equal(new Set(picked).size,picked.length,'a run never repeats its own sampled question');
+    sets.add(picked.slice().sort().join(','));
+  }
+  assert.ok(sets.size>1,'new randomness changes which questions are sampled, not just display order');
 });
 
 test('Science Strike ignores non-database cached rows and re-extracts the current saved answer',()=>{
@@ -126,9 +142,10 @@ test('Science Strike ignores non-database cached rows and re-extracts the curren
 test('Science Strike never repeats a question family during a run even after its timed cooldown',()=>{
   const first=question('original'),copy={...first,id:'copy',title:'Different label'},other=question('other','Heat');
   const {c}=fpsFixture([first,copy,other]);c.localStorage.getItem=()=>{throw Error('blocked storage');};c.localStorage.setItem=()=>{throw Error('blocked storage');};
-  assert.equal(c.nextQuestion().id,'original');
+  const picked=[c.nextQuestion().id];
   c.fpsServedMemory.clear(); // Even losing the timed cache must not reopen a run's family.
-  assert.equal(c.nextQuestion().id,'other');assert.equal(c.nextQuestion(),null);
+  picked.push(c.nextQuestion().id);assert.equal(c.nextQuestion(),null);
+  assert.equal(picked.filter(id=>['original','copy'].includes(id)).length,1);assert.ok(picked.includes('other'));
 });
 
 test('Science Strike respects custom objective mappings and current teacher checks',()=>{
@@ -158,7 +175,7 @@ test('Science Strike respects topic2, retired topics, per-child history and cros
   const {c,storage}=fpsFixture(bank);const key=c.fpsFeedKey();
   storage.set('scienceFeed:served:'+key,JSON.stringify({a:Date.now()}));
   storage.set('scienceFeed:history:'+key,JSON.stringify({b:{last:Date.now(),latestFrac:1}}));assert.equal(c.nextQuestion(),null);
-  c.currentUser.name='Other child';assert.equal(c.nextQuestion().id,'a','child histories stay separate');
+  c.currentUser.name='Other child';assert.ok(['a','b'].includes(c.nextQuestion().id),'child histories stay separate');
 });
 test('Science Strike clears the old run on a live child or level change',()=>{
   const {c}=fpsFixture([question('a')]);c.fpsApplyProfile({students:[{name:'Ada',level:'P4'}]});

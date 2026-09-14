@@ -17,8 +17,8 @@ const q = (id, extra = {}) => ({ id, title: `Heat investigation ${id}`, topic: '
   blocks: [{ id: 'text', type: 'text', content: `<p>In investigation ${id}, which material conducts heat?</p>` },
     { id: 'choices', type: 'mcq', options: [{ id: 'a', text: 'Metal' }, { id: 'b', text: 'Wood' }], correctId: 'a' }], ...extra });
 
-function harness(bank = []) {
-  const state = { bank, toasts: [], renders: [], summaries: 0, attempts: [], nodes: new Map(), storage: new Map(), writes: [], messages: [] };
+function harness(bank = [], random = () => 0.5) {
+  const state = { bank, random, plans: [], toasts: [], renders: [], summaries: 0, attempts: [], nodes: new Map(), storage: new Map(), writes: [], messages: [] };
   const node = id => {
     if (!state.nodes.has(id)) state.nodes.set(id, { id, innerHTML: '', value: id.includes('Level') ? 'P4' : id.includes('Type') ? 'all' : '',
       textContent: '', style: {}, contains: () => false, querySelectorAll: () => [], classList: { add() {}, remove() {} } });
@@ -26,7 +26,8 @@ function harness(bank = []) {
   };
   const document = { getElementById: node, querySelector: sel => node(sel), querySelectorAll: () => [], addEventListener() {} };
   const api = new Function('state', 'document', 'core', 'quality', `
-    const {buildScienceFeedContext,planScienceQuestions,evaluateScienceFit,scienceQuestionLevel}=core;
+    const {buildScienceFeedContext,evaluateScienceFit,scienceQuestionLevel}=core;
+    const planScienceQuestions=(qs,opts)=>{state.plans.push(opts);return core.planScienceQuestions(qs,{random:state.random,...opts});};
     const {evaluateQuestionQuality,questionQualitySignature,buildQuestionQualitySummary,questionHasUnresolvedStudentFlag}=quality;
     let currentUser={uid:'family',name:'Mika',level:'P4',adminLevel:'P6',role:'student'};
     let familyProfile={students:[{name:'Mika',level:'P4'}],activeStudent:0};
@@ -163,11 +164,11 @@ test('blocked browser storage still remembers game questions, family copies and 
   const original=q('original'),copy={...original,id:'copy',title:'Another worksheet'};
   const {api,state}=harness([original,copy]);state.blockStorage=true;
   const makeRun=()=>({pool:[{id:'original',feedSource:original},{id:'copy',feedSource:copy}]});
-  assert.equal(api.nextGame(makeRun()).id,'original');
-  api.result(original.id,1,1);
+  const picked=api.nextGame(makeRun());assert.ok(['original','copy'].includes(picked.id));
+  api.result(picked.id,1,1);
   assert.equal(api.nextGame(makeRun()),null);
-  assert.ok(api.store('served').original>0);
-  assert.equal(api.store('history').original.latestFrac,1);
+  assert.ok(api.store('served')[picked.id]>0);
+  assert.equal(api.store('history')[picked.id].latestFrac,1);
   assert.equal(state.storage.size,0);
 });
 
@@ -220,11 +221,32 @@ test('an admin game preview needs an actual selected school level instead of sil
   assert.equal(api.gameLevel(),'P4');assert.equal(api.gameRows().length,1);
 });
 
+test('portal game feeds vary suitable question sets across random seeds without weakening P6-first selection or freshness', () => {
+  const names=['cedar','maple','birch','willow','spruce','acacia','juniper','poplar'];
+  const bank=[q('foundation',{level:'P3',topic:'Magnets'}),...names.map(id=>q(id,{level:'P6',topic:'Forces'})),
+    q('too-high',{level:'S1',topic:'Cells — The Basic Unit of Life'}),q('needs-review',{level:'P6',topic:'Forces',importWarning:'Check the crop'})];
+  const sets=new Set();
+  for(let seed=1;seed<=12;seed++){
+    let value=seed;const random=()=>((value=(Math.imul(value,1664525)+1013904223)>>>0)/4294967296);
+    const {api,state}=harness(bank,random);api.user({level:'P6'});api.family({students:[{name:'Mika',level:'P6'}],activeStudent:0});
+    const picks=[];
+    for(let i=0;i<3;i++){
+      const picked=api.nextGame({pool:bank.map(question=>({id:question.id,feedSource:question}))});
+      assert.ok(names.includes(picked.id),'every pick is a sound P6 question');picks.push(picked.id);
+    }
+    assert.equal(new Set(picks).size,picks.length,'new runs still share repeat protection');
+    assert.ok(state.plans.every(options=>options.randomize===true),'every game recheck opts into randomization');
+    sets.add(picks.slice().sort().join(','));
+  }
+  assert.ok(sets.size>1,'a different seed changes which questions appear, not just the order');
+});
+
 test('explicit worksheet preserves order and permits same-level difficult revision, while blocking above-level and broken questions', () => {
   const hard=q('hard',{difficulty:1200}), easy=q('easy'), high=q('p6',{level:'P6'});
   const broken=q('broken',{blocks:[{id:'stem',type:'text',content:''}]});
   const {api,state}=harness([hard,easy,high,broken]);api.mark('hard');api.manual([hard,high,broken,easy]);api.next();
   assert.deepEqual(state.renders,['hard','easy']);assert.ok(state.toasts.some(x=>/skipped/.test(x[0])));
+  assert.ok(state.plans.filter(options=>options.manual).every(options=>!options.randomize),'explicit worksheets keep their authored order');
 });
 
 test('suspect questions are excluded automatically but explicitly selected revision warns the student', () => {
@@ -287,6 +309,7 @@ test('automatic quest considers suitable candidates after the requested number o
   const sound=q('sound'),suspect=q('review',{importWarning:'Review source crop'});
   const {api,state}=harness([sound,suspect]);await api.autoQuest(1);
   assert.deepEqual(api.quest().ids,['sound']);assert.deepEqual(state.renders,['sound']);
+  assert.ok(state.plans.some(options=>options.limit===1&&options.randomize===true),'automatic quest opts into the shared randomized picker');
 });
 
 test('a loaded empty report inbox cannot acknowledge a newer own report it never reviewed', () => {

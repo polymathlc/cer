@@ -157,6 +157,43 @@ export function evaluateScienceFit(question, options = {}) {
   return result;
 }
 
+// Games draw a fresh order among comparably suitable questions, never across
+// grade priorities or a large mastery gap. Each family gets one lottery entry
+// in its fit band, so importing twenty copies cannot crowd out other stories.
+function randomizeGameRows(rows, context, options) {
+  const random = typeof options.random === 'function' ? options.random : Math.random;
+  const shuffle = values => {
+    const result = values.slice();
+    for (let i = result.length - 1; i > 0; i--) {
+      const sample = Number(random());
+      const j = Math.floor((Number.isFinite(sample) ? clamp(sample, 0, 1 - Number.EPSILON) : 0.5) * (i + 1));
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+  };
+  const result = [];
+  for (let start = 0; start < rows.length;) {
+    const best = rows[start]; let end = start + 1;
+    while (end < rows.length && rows[end].fit.diagnostic.priorityTier === best.fit.diagnostic.priorityTier
+      && best.fit.score - rows[end].fit.score <= 50) end++;
+    const band = rows.slice(start, end);
+    if (options.onePerFamily === false) result.push(...shuffle(band));
+    else {
+      const families = new Map();
+      for (const row of band) {
+        const id = str(row.q.id), family = context.catalog.families.get(id) || id;
+        if (!families.has(family)) families.set(family, []);
+        families.get(family).push(row);
+      }
+      // Pick the family order before its representative; copy count cannot
+      // change which family the first random draw chooses.
+      for (const family of shuffle([...families.values()])) result.push(...shuffle(family));
+    }
+    start = end;
+  }
+  return result;
+}
+
 export function planScienceQuestions(candidates, options = {}) {
   const source = (Array.isArray(candidates) ? candidates : []).filter(Boolean);
   const context = options.context || buildScienceFeedContext({ ...options, bank: options.bank || source });
@@ -175,12 +212,29 @@ export function planScienceQuestions(candidates, options = {}) {
   });
   if (!options.manual) rows.sort((a,b) => a.fit.diagnostic.priorityTier - b.fit.diagnostic.priorityTier
     || b.fit.score - a.fit.score || a.order - b.order);
-  const scheduled = planPracticeQuestions(rows.map(row => context.normalizedById.get(str(row.q.id)) || normalizeQuestion(row.q, context.meta)), {
+  const scheduleOptions = {
     catalog: context.catalog, bank: context.bank, progress: context.progress, run: context.run,
     uid: 'science', now: context.now, manual: !!options.manual, limit: options.limit,
-    excludeIds: options.excludeIds, excludeFamilyIds: options.excludeFamilyIds, onePerFamily: options.onePerFamily });
+    excludeIds: options.excludeIds, excludeFamilyIds: options.excludeFamilyIds, onePerFamily: options.onePerFamily };
+  const normalized = row => context.normalizedById.get(str(row.q.id)) || normalizeQuestion(row.q, context.meta);
+  let ordered = rows, available;
+  if (options.randomize && !options.manual) {
+    // Remove recent/held-back questions before forming fit bands. Randomize
+    // the entire suitable pool before applying limit; never shuffle a fixed
+    // prefix of bank IDs that would give every child the same small set.
+    available = planPracticeQuestions(rows.map(normalized), { ...scheduleOptions, limit: Infinity, onePerFamily: false });
+    const readyIds = new Set(available.questions.map(q => str(q.id)));
+    const unique = new Set();
+    ordered = randomizeGameRows(rows.filter(row => {
+      const id = str(row.q.id);
+      if (!readyIds.has(id) || unique.has(id)) return false;
+      unique.add(id); return true;
+    }), context, options);
+  }
+  const scheduled = planPracticeQuestions(ordered.map(normalized), scheduleOptions);
   const originals = new Map(source.map(q => [str(q.id), q]));
+  if (available) blocked.push(...available.blocked);
   blocked.push(...scheduled.blocked);
   return { questions: scheduled.questions.map(q => originals.get(str(q.id))).filter(Boolean), blocked,
-    reasons: [...new Set(blocked.map(row => row.reason))], reviewCount, nextReviewAt: scheduled.nextReviewAt };
+    reasons: [...new Set(blocked.map(row => row.reason))], reviewCount, nextReviewAt: available?.nextReviewAt || scheduled.nextReviewAt };
 }
