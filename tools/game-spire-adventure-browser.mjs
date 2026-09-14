@@ -8,6 +8,14 @@ const root=fileURLToPath(new URL('../',import.meta.url));
 const read=name=>fs.readFileSync(path.join(root,name),'utf8').replace(/\r\n/g,'\n');
 const app=read('app.js'),spire=read('science-spire.html'),index=read('index.html');
 function section(s,a,b){const start=s.indexOf(a),end=s.indexOf(b,start+a.length);assert.ok(start>=0&&end>start,a);return s.slice(start,end);}
+async function settledSpireRoom(frame,floor){
+ await frame.waitForFunction(expected=>{
+  if(!G||G.floor!==expected||scienceFeedOpening)return false;
+  if(G.state==='question')return !!document.querySelector('#qOverlay.show')&&!qState.answered&&scienceFeed.current(qState.current);
+  return ['combat','rest','pack'].includes(G.state);
+ },floor);
+ return frame.evaluate(()=>G.state);
+}
 {
  const module=process.env.PLAYWRIGHT_MODULE||'playwright';
  const{chromium}=await import(/^[A-Za-z]:[\\/]/.test(module)?pathToFileURL(module).href:module);
@@ -43,7 +51,9 @@ function section(s,a,b){const start=s.indexOf(a),end=s.indexOf(b,start+a.length)
  const parent=`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,iframe{margin:0;width:100%;height:100%;border:0}</style><iframe src="/science-spire.html"></iframe><script>
  window.hold=new URLSearchParams(location.search).has('hold');window.noCredits=new URLSearchParams(location.search).has('noCredits');window.feedKey='child';window.feedLevel='P4';window.pending=[];window.messages=[];window.feedCredits=3;
  window.questionRows=new URLSearchParams(location.search).has('questions')?Array.from({length:10},(_,i)=>({id:'eligible-p4-'+i,q:'Suitable P4 question '+(i+1),options:['Correct choice','Other choice'],answer:0,topic:'P4 science'})):[];
- window.reply=e=>e.source.postMessage({type:'SD_QUESTIONS',feedPolicyVersion:1,requestId:e.data.requestId,studentKey:feedKey,studentLevel:feedLevel,...(noCredits?{}:{playsLeft:{spire:feedCredits}}),questions:questionRows.filter(q=>!messages.some(m=>m.type==='SD_SHOWN'&&m.questionId===q.id))},location.origin);
+ // A delayed finite feed exposes the question-loading state, including exhaustion.
+ window.feedDelay=new URLSearchParams(location.search).has('questions')?90:0;
+ window.reply=e=>{const send=()=>e.source.postMessage({type:'SD_QUESTIONS',feedPolicyVersion:1,requestId:e.data.requestId,studentKey:feedKey,studentLevel:feedLevel,...(noCredits?{}:{playsLeft:{spire:feedCredits}}),questions:questionRows.filter(q=>!messages.some(m=>m.type==='SD_SHOWN'&&m.questionId===q.id))},location.origin);if(feedDelay)setTimeout(send,feedDelay);else send();};
  window.release=()=>{hold=false;pending.splice(0).forEach(reply);};
  addEventListener('message',e=>{messages.push(e.data);if(e.data?.type==='SD_PLAY_START')feedCredits--;if(e.data?.type==='SD_REQUEST_QUESTIONS'){if(hold)pending.push(e);else reply(e);}});
  </script>`;
@@ -75,11 +85,11 @@ function section(s,a,b){const start=s.indexOf(a),end=s.indexOf(b,start+a.length)
   // Exercise a continuous run through two bosses with a finite eligible bank.
   await page.setViewportSize({width:1120,height:820});await page.goto('http://game.test/?questions=1');
   const endless=page.frames().find(f=>f.url().endsWith('/science-spire.html'));await endless.waitForFunction(()=>typeof scienceFeed!=='undefined'&&_gameCreditsReady());
-  await endless.locator('#introStartBtn').click();await endless.waitForFunction(()=>G?.state==='question');await endless.evaluate(()=>{window.endlessRun=G;window.originalDeck=G.deck;});
+  await endless.locator('#introStartBtn').click();await settledSpireRoom(endless,1);await endless.evaluate(()=>{window.endlessRun=G;window.originalDeck=G.deck;});
   for(let floor=1;floor<=24;floor++){
-    await endless.waitForFunction(()=>G&&['question','combat','rest','pack'].includes(G.state));
+    const roomState=await settledSpireRoom(endless,floor);
     assert.equal(await endless.evaluate(()=>G.floor),floor);
-    if(await endless.evaluate(()=>G.state==='question')){
+    if(roomState==='question'){
       await endless.locator('#qOptions .q-opt').first().click();
       await endless.evaluate(()=>answerQuestion(0,document.querySelector('#qOptions .q-opt')));
       await endless.locator('#qContinueBtn').click();
@@ -120,8 +130,9 @@ function section(s,a,b){const start=s.indexOf(a),end=s.indexOf(b,start+a.length)
   // Deliberately end while a question reply is pending; it cannot reopen play.
   await page.evaluate(()=>{hold=true;});await endless.evaluate(()=>{G.pendingRoom=G.map[G.node];void askQuestion();});
   await page.waitForFunction(()=>pending.length>0);const endingScore=await endless.evaluate(()=>score());
+  await endless.evaluate(()=>{window.finishedQuestionReply=scienceFeed.refresh();});
   page.once('dialog',dialog=>dialog.accept());await endless.locator('#restartBtn').click();await endless.waitForFunction(()=>G.state==='over');
-  await page.evaluate(()=>release());await page.waitForTimeout(80);assert.equal(await endless.evaluate(()=>G.state),'over');assert.equal(await endless.locator('#qOverlay.show').count(),0);
+  await page.evaluate(()=>release());await endless.evaluate(()=>finishedQuestionReply);assert.equal(await endless.evaluate(()=>G.state),'over');assert.equal(await endless.locator('#qOverlay.show').count(),0);
   assert.equal(await endless.locator('#overOverlay.show').count(),1);assert.equal(await page.evaluate(()=>messages.filter(m=>m.type==='SD_SCORE').at(-1).score),endingScore);
   const endedReports=await page.evaluate(()=>messages.filter(m=>m.type==='SD_SCORE').length);await endless.evaluate(()=>{finishRun();gameOver();});assert.equal(await page.evaluate(()=>messages.filter(m=>m.type==='SD_SCORE').length),endedReports);
   await endless.locator('#againBtn').click();await endless.waitForFunction(()=>G.state==='combat');assert.equal(await page.evaluate(()=>messages.filter(m=>m.type==='SD_PLAY_START').length),2);assert.equal(await page.evaluate(()=>feedCredits),1);
