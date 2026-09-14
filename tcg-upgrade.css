@@ -1,0 +1,62 @@
+/* Real game surfaces keep the existing keyed character art above these scenes. */
+.tcgb-stage, .ems-field, .elg-field, .duel-shell {
+  --scene-gold: #edc277;
+  background-color: #111827;
+  background-image: radial-gradient(ellipse at 50% 5%, #3f367980, transparent 58%),
+    radial-gradient(ellipse at 8% 100%, #f28b273b, transparent 42%),
+    radial-gradient(ellipse at 95% 85%, #36d5e130, transparent 45%),
+    repeating-linear-gradient(30deg, transparent 0 68px, #b6d9eb0c 69px 70px),
+    repeating-linear-gradient(150deg, transparent 0 68px, #b6d9eb0c 69px 70px), linear-gradient(#152238, #11131d);
+  box-shadow: inset 0 0 90px #030714b3, 0 18px 55px #07090f66;
+  border: 1px solid #d1ac645c;
+}
+.ems-field { background-image: linear-gradient(90deg, #e1aa4230, transparent 19%, transparent 80%, #bd393b30), repeating-linear-gradient(0deg, transparent 0 19.8%, #ffdda624 19.9% 20%), radial-gradient(ellipse at 50% 25%, #34595c, #15262e 70%); }
+.elg-field::before, .tcgb-stage::before {
+  content: ''; position: absolute; pointer-events: none; width: 64%; aspect-ratio: 1; left: 18%; top: 8%;
+  border: 2px solid #d5b87826; border-radius: 50%; outline: 14px double #7bb4ce12;
+  background: repeating-conic-gradient(from 12deg, transparent 0deg 29deg, #dcb66a1c 29deg 30deg);
+  box-shadow: 0 0 65px #59a8f512, inset 0 0 65px #59a8f512;
+}
+.tcgb-stage::before { width: 52%; left: 24%; top: 4%; transform: perspective(550px) rotateX(35deg); }
+.elg-field::after { content: ''; position:absolute; inset: 0; pointer-events:none; background: radial-gradient(circle at 16% 21%, #facc1570 0 2px, transparent 3px), radial-gradient(circle at 85% 70%, #93c5fd60 0 2px, transparent 3px); animation: tcgAtmosphere 8s ease-in-out infinite alternate; }
+.elg-units, .ems-units { z-index: 2; }
+.tcg-audio-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:5px 8px; border:1px solid #d6c39840; border-radius:12px; background:#0e172bc4; color:#e5ecfa; font-size:.74rem; }
+.tcg-audio-controls button { border:1px solid #91a8ce55; background:#233656; color:#f3f6ff; padding:7px 9px; border-radius:8px; min-height:32px; cursor:pointer; white-space:nowrap; }
+.tcg-audio-controls label { display:flex; align-items:center; gap:6px; }
+.tcg-audio-controls input { width:66px; accent-color:#ecc267; }
+.duel-sfx-btn { display:none; }
+.tcg-signature-note { border:1px solid #e1be7150; border-left:3px solid #e1be71; background:linear-gradient(110deg,#38274d90,#182f4490); border-radius:12px; padding:14px 16px; margin:14px 0; color:#f5ddab; }
+.tcg-signature-note b,.tcg-signature-note span { display:block; }
+.tcg-signature-note span { font-size:.8rem; line-height:1.65; margin-top:6px; color:#dbe5f1; }
+.tcg-tree-routes { display:flex; flex-wrap:wrap; gap:9px; padding:16px; margin:16px 0; border:1px solid #7dd3fc44; border-radius:14px; background:#0d2637; }
+.tcg-tree-routes>b,.tcg-tree-routes>span { width:100%; }
+.tcg-tree-routes>span { color:#bdd0de; line-height:1.6; font-size:.8rem; }
+.tcg-tree-routes button,.tcg-route-steps button { padding:9px 12px; border-radius:9px; background:#273d50; color:#fbe3b3; border:1px solid #d9b16560; cursor:pointer; text-align:left; }
+.tcg-route-steps { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+.tcg-route-steps>b { width:100%; }
+.elg-tree-map.radial { border-radius:50%; background:radial-gradient(circle,#67549138 0 12%,transparent 13% 28%,#2c81930d 29% 55%,transparent 56%); }
+.elg-rnode.can { box-shadow:0 0 0 3px #fdcc6530,0 0 20px #ffce6740; }
+.elg-rnode.sel { outline:3px solid #f5d178; outline-offset:3px; }
+.elg-shot::after { width:52px; height:5px; filter:none; background:linear-gradient(90deg,transparent,var(--trail),#fff); }
+.elg-shot[data-element="spark"]::after { height:17px; clip-path:polygon(0 45%,35% 20%,50% 50%,75% 0,66% 50%,100% 45%,70% 100%,45% 65%,30% 90%); }
+.elg-shot[data-element="frost"] .elg-orb,.elg-shot[data-element="metal"] .elg-orb { border-radius:2px; transform:rotate(45deg); border:1px solid #ecfeff; }
+.elg-shot[data-element="flame"]::after { height:12px; border-radius:80% 20% 20% 80%; }
+.elg-shot[data-signature="meteor"],.elg-shot[data-signature="execution"] { filter:drop-shadow(0 0 8px #ffe6aa); }
+.elg-field[data-element="frost"] { background-color:#163f50; background-blend-mode:screen,normal,normal,normal,normal,normal; }
+.elg-field[data-element="flame"] { background-color:#48241b; background-blend-mode:screen,normal,normal,normal,normal,normal; }
+.elg-flash[data-signature="winter"] { border:3px dashed #c8efff; box-shadow:inset 0 0 20px #b7e6fa60; }
+.elg-flash[data-signature="execution"] { border-radius:0; clip-path:polygon(40% 0,60% 0,100% 100%,90% 100%,50% 28%,10% 100%,0 100%); }
+.elg-flash[data-signature="chain"] { border-radius:0; clip-path:polygon(0 40%,42% 0,35% 40%,100% 12%,59% 100%,66% 51%,0 75%); }
+.elg-flash[data-signature="meteor"],.elg-flash[data-signature="constellation"] { border:2px solid #f8dd94; box-shadow:0 0 16px #e9c98560; }
+.elg-flash[data-signature="curse"],.elg-flash[data-signature="pact"] { border:3px dotted #ce8cec; }
+.elg-flash[data-signature="guardian"],.elg-flash[data-signature="bulwark"],.elg-flash[data-signature="capacitor"] { border:3px double #cbe5ff; border-radius:25% 25% 45% 45%; }
+.signature-guarded .ems-art { filter:drop-shadow(0 0 6px #8cdcff) drop-shadow(0 0 12px #8cdcff); }
+.ems-shot-orb { box-shadow:0 0 7px #fff9,0 0 18px currentColor; }
+.duel-minion.can-attack { filter:drop-shadow(0 0 6px #f5d08044); }
+@keyframes tcgAtmosphere { from {opacity:.4;transform:translateY(0)} to {opacity:.95;transform:translateY(-10px)} }
+@media(max-width:640px) { .tcg-audio-controls { gap:5px; } .tcg-audio-controls input {width:54px} .elg-topbar {gap:8px} .tcgb-controls {flex-wrap:wrap} .tcg-signature-note {padding:12px} .tcg-tree-routes {padding:12px} }
+@media(prefers-reduced-motion:reduce) {
+  .elg-field::after { animation:none; }
+  .tcgb-stage *, .ems-field *, .elg-field *, .duel-shell * { animation-duration:.001ms!important; animation-iteration-count:1!important; transition-duration:.001ms!important; }
+  [class*="duel-quake-"] { animation:none!important; }
+}

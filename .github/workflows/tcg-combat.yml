@@ -1,0 +1,37 @@
+name: Science TCG combat checks
+on:
+  pull_request:
+    paths: ["index.html","app.js","tcg-*.js","tcg-*.css","tools/tcg-*.mjs",".github/workflows/tcg-combat.yml","science-tcg*.js","tools/science-tcg*.mjs"]
+  push:
+    branches: [main]
+    paths: ["index.html","app.js","tcg-*.js","tcg-*.css","tools/tcg-*.mjs",".github/workflows/tcg-combat.yml","science-tcg*.js","tools/science-tcg*.mjs"]
+permissions:
+  contents: read
+jobs:
+  combat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check character mechanics, skill progression and audio
+        run: node --test tools/science-tcg-identity-tests.mjs tools/tcg-media-tests.mjs
+      - name: Install isolated browser runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/combat-browser" --no-audit --no-fund playwright@1.62.1
+          "$RUNNER_TEMP/combat-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Exercise the production combat screens
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/combat-browser/node_modules/playwright/index.mjs
+          TCG_SCREENSHOTS: ${{ runner.temp }}/tcg-combat-qa
+          GAME_SCREENSHOTS: ${{ runner.temp }}/tcg-combat-qa
+        run: node tools/science-tcg-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tcg-combat-browser
+          path: ${{ runner.temp }}/tcg-combat-qa
+          if-no-files-found: ignore
+          retention-days: 7
