@@ -21,7 +21,7 @@ function harness(bank = [], random = () => 0.5) {
   const state = { bank, random, plans: [], toasts: [], renders: [], summaries: 0, attempts: [], nodes: new Map(), storage: new Map(), writes: [], messages: [] };
   const node = id => {
     if (!state.nodes.has(id)) state.nodes.set(id, { id, innerHTML: '', value: id.includes('Level') ? 'P4' : id.includes('Type') ? 'all' : '',
-      textContent: '', style: {}, contains: () => false, querySelectorAll: () => [], classList: { add() {}, remove() {} } });
+      textContent: '', style: {}, contains: () => false, querySelectorAll: () => [], classList: { add() {}, remove() {}, contains() { return false; } } });
     return state.nodes.get(id);
   };
   const document = { getElementById: node, querySelector: sel => node(sel), querySelectorAll: () => [], addEventListener() {} };
@@ -69,6 +69,7 @@ function harness(bank = [], random = () => 0.5) {
     const preloadQueueImages=async()=>{};
     const Math=Object.create(globalThis.Math);Math.random=()=>0;
     const _resetOpenScienceCoaches=()=>{};
+    const _hadesInit=()=>{state.hadesStarts=(state.hadesStarts||0)+1;};
     const _hadesResetLearning=()=>{state.hadesInvalidations=(state.hadesInvalidations||0)+1;};
     const db={}; const collection=(...x)=>x,where=(...x)=>x,query=(...x)=>x;
     const getDocs=async()=> { if(state.wait) await state.wait; return {forEach:visit=>state.attempts.forEach(a=>visit({data:()=>a}))}; };
@@ -388,4 +389,12 @@ test('a pending real per-part grade cannot record results for a sibling after th
   `)(state,new Promise(resolve=>finish=resolve));
   const pending=api.mark();await new Promise(resolve=>setTimeout(resolve,0));assert.equal(state.started,true);
   api.switch();finish();await pending;assert.equal(state.writes,0);assert.equal(state.completed,0);
+});
+
+test('an active Hades page reopens for the newly selected learner after invalidation',()=>{
+  const {api,state}=harness([q('p6',{level:'P6'})]);
+  api.user({name:'Older',level:'P6'});api.refresh();
+  state.nodes.set('page-hades',{classList:{contains:()=>true}});
+  api.user({name:'Younger',level:'P4'});api.refresh();
+  assert.equal(state.hadesInvalidations,1);assert.equal(state.hadesStarts,1);
 });
