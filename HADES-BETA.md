@@ -23,4 +23,6 @@ The iframe receives the completed score only. Answer keys remain in the portal. 
 
 Validation: `node --test tools/hades-learning-tests.mjs` checks protocol, scoring, idempotency, access and Science bank integration. `tools/hades-learning-browser.mjs` checks the rendered sanctuary, mobile layout, diagrams, tables, fractions, failed-image behavior, retries and account changes. The `Hades sanctuary beta checks` workflow runs both.
 
-Release bundle: **Hades 2.1.1**, Science **v1.386.1**. The generated game and shared bridge are verified against `hades-game.manifest.json` in CI. Tests exercise all six scores, rendered reward summaries and duplicate-request protection.
+Release bundle: **Hades 2.1.2**, Science **v1.386.2**. The generated game and shared bridge are verified against `hades-game.manifest.json` in CI. Tests exercise all six scores, rendered reward summaries and duplicate-request protection.
+
+The cast now forms a detailed SVG summoning circle on the floor, beneath scenery and combat actors. Its fixed boundary matches the spell’s reach, with counter-rotating interior rune bands that stop in reduced-motion mode.
