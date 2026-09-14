@@ -13,7 +13,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-<link rel="modulepreload" href="app.js">
+<link rel="modulepreload" href="app.js?v=grand-line-1.0.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -9695,6 +9695,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="nav-item" data-page="pirate-rift" onclick="navigateTo('pirate-rift')" title="One Piece: Pirate Rift — Luffy, Zoro, Whitebeard and Shanks">
         <span class="ico">🏴‍☠️</span> Pirate Rift <span class="nav-beta">BETA</span>
       </div>
+      <div class="nav-item" data-page="grand-line" onclick="navigateTo('grand-line')" title="One Piece TCG — three Science questions after every battle round"><span class="ico">🃏</span> Grand Line Chronicles <span class="nav-beta">TCG</span></div>
       <!-- Realm of Embers TCG (beta) — admins always; students only once the admin presses Release.
            For a STUDENT the whole wrap is moved up to sit directly under 🏛️ Community
            (_tcgPlaceNavItem); this empty anchor is where it lives for an admin, and where
@@ -14964,6 +14965,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=grand-line-1.0.0"></script>
 </body>
 </html>
