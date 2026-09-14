@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as core from '../science-feed-core.js';
 import * as quality from '../science-feed-quality.js';
+import { createGrandLineScienceAdapter } from '../grand-line-science-adapter.js';
 
 const source = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const slice = (from, to) => {
@@ -25,7 +26,7 @@ function harness(bank = [], random = () => 0.5) {
     return state.nodes.get(id);
   };
   const document = { getElementById: node, querySelector: sel => node(sel), querySelectorAll: () => [], addEventListener() {} };
-  const api = new Function('state', 'document', 'core', 'quality', `
+  const api = new Function('state', 'document', 'core', 'quality', 'createGrandLineScienceAdapter', `
     const {buildScienceFeedContext,evaluateScienceFit,scienceQuestionLevel}=core;
     const planScienceQuestions=(qs,opts)=>{state.plans.push(opts);return core.planScienceQuestions(qs,{random:state.random,...opts});};
     const {evaluateQuestionQuality,questionQualitySignature,buildQuestionQualitySummary,questionHasUnresolvedStudentFlag}=quality;
@@ -72,6 +73,7 @@ function harness(bank = [], random = () => 0.5) {
     const _hadesInit=()=>{state.hadesStarts=(state.hadesStarts||0)+1;};
     const _hadesResetLearning=()=>{state.hadesInvalidations=(state.hadesInvalidations||0)+1;};
     const pirateRiftPortal={sync:()=>{state.pirateProfileSyncs=(state.pirateProfileSyncs||0)+1;}};
+    const grandLinePortal={sync:()=>{state.grandLineProfileSyncs=(state.grandLineProfileSyncs||0)+1;}};
     const db={}; const collection=(...x)=>x,where=(...x)=>x,query=(...x)=>x;
     const getDocs=async()=> { if(state.wait) await state.wait; return {forEach:visit=>state.attempts.forEach(a=>visit({data:()=>a}))}; };
     const setDoc=async(ref,value)=>state.writes.push(value),_qRef=id=>id;
@@ -117,6 +119,9 @@ function harness(bank = [], random = () => 0.5) {
     ${fn('_tcgBankQuestions')}
     return {
       plan:(qs=questionBank,opts)=>_scienceFeedPlan(qs,opts),
+      grandLine:createGrandLineScienceAdapter({getBank:()=>questionBank,isReleased:qAvailableToViewer,isInSyllabus:qInSyllabus,extractMcq:_sdExtractMcq,
+        makeContext:_scienceFeedContext,plan:_scienceFeedPlan,mark:_scienceFeedMark,remember:_scienceFeedRememberResult,
+        recordAttempt:record=>state.writes.push(record),awardPoints:(...args)=>{state.gameAwards=(state.gameAwards||[]);state.gameAwards.push(args);},imageResult:_scienceFeedImageResult}),
       level:qWithinStudentLevel,key:_scienceFeedKey,gameLevel:_scienceFeedGameLevel,gameMessage:_scienceFeedGameMessage,
       user:u=>{currentUser={...currentUser,...u};_scienceFeedPassCache=null;},
       family:value=>{familyProfile=value;_scienceFeedPassCache=null;},
@@ -138,7 +143,7 @@ function harness(bank = [], random = () => 0.5) {
       quest:()=>_questRun,
       flags:()=>_scienceFeedStoreRead('flags')
     };
-  `)(state, document, core, quality);
+  `)(state, document, core, quality, createGrandLineScienceAdapter);
   return { api, state, node };
 }
 
@@ -285,6 +290,7 @@ test('learner change clears active questions, marking stores and cached queues e
   api.user({name:'Mika',level:'P4'});api.family({students:[{name:'Mika',level:'P4'}],activeStudent:0});api.refresh();
   assert.deepEqual(api.activeState(),{questions:{},queue:[]});
   assert.equal(state.hadesInvalidations,1,'an open Hades sanctuary must retire the old learning profile');
+  assert.equal(state.grandLineProfileSyncs,2,'each learning refresh checks the Grand Line learner identity');
   assert.equal(state.pirateProfileSyncs,2,'each learning refresh checks whether Pirate Rift belongs to the active profile');
 });
 
@@ -399,4 +405,18 @@ test('an active Hades page reopens for the newly selected learner after invalida
   state.nodes.set('page-hades',{classList:{contains:()=>true}});
   api.user({name:'Younger',level:'P4'});api.refresh();
   assert.equal(state.hadesInvalidations,1);assert.equal(state.hadesStarts,1);
+});
+
+
+test('Grand Line selects exactly three actual Science records through the shared grade and quality planner',()=>{
+  const bank=['Copper spoon','Wooden roof','Woollen blanket','Metal pan','Glass flask','Air pocket'].map((name,i)=>q('gl-'+i,{title:name}));
+  const {api,state}=harness(bank.concat(q('too-high',{level:'P6'}),q('not-released',{releaseOn:'2099-01-01'}),q('retired',{notInSyllabus:true})));
+  const ctx={admin:false,level:'P4',identity:'family:Mika:P4',profileKey:'p-child'};
+  const rows=api.grandLine.getQuestions(ctx);assert.equal(rows.length,3);assert.ok(rows.every(row=>row.id.startsWith('gl-')));
+  assert.ok(state.plans.every(plan=>plan.limit===3&&plan.onePerFamily));
+  rows.forEach(row=>api.grandLine.markShown(row,ctx));assert.equal(Object.keys(api.store('served')).length,3);
+  const next=api.grandLine.getQuestions(ctx);assert.ok(next.every(row=>!rows.some(old=>old.id===row.id)));
+  api.grandLine.recordAnswer({question:rows[0],correct:true,ms:2000},ctx);assert.equal(state.writes[0].mode,'grand-line');assert.equal(state.gameAwards.length,1);assert.deepEqual(state.gameAwards[0],[rows[0].id,true,2000]);
+  const before=state.writes.length;api.grandLine.recordAnswer({question:rows[1],correct:false,ms:2000},{...ctx,admin:true});assert.equal(state.writes.length,before,'preview never writes a student attempt');assert.equal(state.gameAwards.length,1,'preview never awards student points');
+  assert.equal(harness([]).api.grandLine.getQuestions(ctx).length,0);
 });

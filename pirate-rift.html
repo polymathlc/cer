@@ -25,7 +25,7 @@
       <div id="room-clear" class="room-clear" hidden><span>ENCOUNTER COMPLETE</span><strong>The path opens.</strong><button id="next-room" class="primary">Enter the next rift <span>→</span></button></div>
     </div>
     <section id="crew-screen" class="screen crew-screen" aria-labelledby="crew-title">
-      <header class="masthead"><div class="wordmark">ONE PIECE <span>FAN ADVENTURE · BETA</span></div><div class="settings"><button id="sound-button" aria-pressed="false">Sound on</button><button id="motion-button" aria-pressed="false">Motion on</button><button id="fullscreen-button">Fullscreen</button></div></header>
+      <header class="masthead"><div class="wordmark">ONE PIECE <span>FAN ADVENTURE · BETA</span></div><div class="settings"><button id="card-game-button">Card game ↗</button><button id="sound-button" aria-pressed="false">Sound on</button><button id="motion-button" aria-pressed="false">Motion on</button><button id="fullscreen-button">Fullscreen</button></div></header>
       <div class="crew-intro"><p class="eyebrow">FOUR LEGENDS. ONE UNFORGIVING SEA.</p><h1 id="crew-title">PIRATE <em>RIFT</em></h1><p>Choose your legend. Break the siege. Claim the treasure.</p></div>
       <div id="crew-roster" class="crew-roster" role="group" aria-label="Choose a character"></div>
       <div class="crew-details"><div><span id="selected-title" class="eyebrow"></span><h2 id="selected-name"></h2><p id="selected-description"></p></div><div id="selected-skills" class="selected-skills"></div></div>
@@ -35,6 +35,6 @@
     <p id="toast" class="toast" role="status" hidden></p>
     <div id="load-error" class="fatal-error" hidden><h1>The rift could not open.</h1><p>Please reload to restore the game files.</p><button onclick="location.reload()">Reload</button></div>
   </main>
-  <script type="module" src="./pirate-rift.js?v=1.0.0" onerror="document.getElementById('load-error').hidden=false"></script>
+  <script type="module" src="./pirate-rift.js?v=1.0.1" onerror="document.getElementById('load-error').hidden=false"></script>
 </body>
 </html>

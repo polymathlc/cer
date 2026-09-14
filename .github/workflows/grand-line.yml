@@ -1,0 +1,39 @@
+name: Grand Line Chronicles checks
+on:
+  pull_request:
+    paths: ['grand-line*', 'assets/grand-line/**', 'index.html', 'app.js', 'practice-*.js', 'science-feed-*.js', 'tools/grand-line*', '.github/workflows/grand-line.yml']
+  push:
+    branches: [main]
+    paths: ['grand-line*', 'assets/grand-line/**', 'index.html', 'app.js', 'practice-*.js', 'science-feed-*.js', 'tools/grand-line*', '.github/workflows/grand-line.yml']
+permissions:
+  contents: read
+jobs:
+  grand-line:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Verify combat, exact learning rounds and durable reward-point purchases
+        run: node --test tools/grand-line-core.test.mjs tools/grand-line-learning-tests.mjs tools/grand-line-economy-tests.mjs tools/science-feeding-integration-tests.mjs tools/grand-line-asset-tests.mjs
+      - name: Install isolated browser runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/grand-line-browser" --no-audit --no-fund playwright@1.62.1
+          "$RUNNER_TEMP/grand-line-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify the game, mobile layout, secure bank presentation and portal lifecycle
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/grand-line-browser/node_modules/playwright/index.mjs
+          GRAND_LINE_SCREENSHOTS: ${{ runner.temp }}/grand-line-qa
+          GRAND_LINE_REQUIRE_ART: '1'
+        run: |
+          node tools/grand-line-browser-tests.mjs
+          node tools/grand-line-portal-tests.mjs
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: grand-line-qa
+          path: ${{ runner.temp }}/grand-line-qa
+          if-no-files-found: ignore
+          retention-days: 7

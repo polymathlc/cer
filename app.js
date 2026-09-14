@@ -1,5 +1,27 @@
 import { installHadesDisplay } from "./hades-display.js";
 import { installPirateRiftPortal } from "./pirate-rift-portal.js?v=1.0.0";
+import { installGrandLinePortal } from "./grand-line-portal.js?v=1.0.0";
+import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=1.0.0";
+import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from "./grand-line-economy.js?v=1.0.0";
+const grandLineRpgSaveGate = createGrandLineRpgSaveGate({getUser:()=>currentUser,flush:()=>rpgSave()});
+const grandLinePortal=installGrandLinePortal({
+  ...createGrandLineEconomy({
+    getState:()=>rpgState,getPacks:()=>TCG_PACKS,isCurrent:ctx=>grandLinePortal.isCurrent(ctx),
+    commit:createGrandLineRpgCommit({saveGate:grandLineRpgSaveGate,getUser:()=>currentUser,getState:()=>rpgState,setState:state=>{rpgState=state;},
+      isCurrent:ctx=>grandLinePortal.isCurrent(ctx),render:()=>rpgRenderSide(),
+      writeState:(state,uid)=>RPG_STORAGE_MODE==='firestore'
+        ?setDoc(doc(db,'users',uid,'settings','scienceRpg'),state)
+        :Promise.resolve(localStorage.setItem('scienceQuestRpg:'+uid,JSON.stringify(state)))})
+  }),
+  subject:'Science',getUser:()=>currentUser,getLevel:_scienceFeedGameLevel,getProfileKey:()=>JSON.stringify([_scienceFeedKey(),familyProfile.activeStudent]),
+  levels:()=>TOPIC_LEVELS,isLevel:isLevelCode,notify:message=>showToast(message,'error'),
+  beforeOpen:()=>{pirateRiftPortal.close();if(document.getElementById('page-hades')?.classList.contains('active'))navigateTo('arcade');else _hadesResetLearning('Grand Line Chronicles was opened.');},
+  openRift:()=>openPirateRift(),getRiftFrame:()=>document.querySelector('.pirate-rift-portal iframe'),
+  ...createGrandLineScienceAdapter({getBank:()=>questionBank,isReleased:qReleased,isInSyllabus:qInSyllabus,extractMcq:_sdExtractMcq,
+    makeContext:_scienceFeedContext,plan:_scienceFeedPlan,mark:_scienceFeedMark,remember:_scienceFeedRememberResult,
+    recordAttempt:_sdRecordAttempt,awardPoints:rpgAwardGameQuestion,imageResult:_scienceFeedImageResult})
+});
+window.openGrandLine=()=>grandLinePortal.open();
 // Initialize before any page setup can navigate; callbacks read the active
 // account, family learner and level only when the player opens the adventure.
 const pirateRiftPortal = installPirateRiftPortal({
@@ -7,6 +29,7 @@ const pirateRiftPortal = installPirateRiftPortal({
   getProfileKey: () => JSON.stringify([_scienceFeedKey(), familyProfile.activeStudent]),
   notify: message => showToast(message, 'error'),
   beforeOpen: () => {
+    grandLinePortal.close();
     if (document.getElementById('page-hades')?.classList.contains('active')) navigateTo('arcade');
     else _hadesResetLearning('Pirate Rift was opened.');
   }
@@ -4057,6 +4080,7 @@ async function startPracticeAs(uid) {
 
 function configureSidebarForRole(role) {
   pirateRiftPortal.close();
+  grandLinePortal.close();
   _hadesResetLearning("The signed-in profile changed. Start a new run.");
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -4300,6 +4324,7 @@ async function loadAdminQuestions() {
 
 onAuthStateChanged(auth, (user) => {
   pirateRiftPortal.close();
+  grandLinePortal.close();
   if (user) {
     enterApp(user);
   } else {
@@ -5224,11 +5249,13 @@ function applyMcqCategory(q) {
 function navigateTo(page) {
   vetPrintPeekHide();
   pirateRiftPortal.close();
+  grandLinePortal.close();
   // Employees may only reach the pages they were hired to use. Hiding the nav
   // items is not enough on its own — a bookmark, a deep link (#usage) or any
   // navigateTo() call from shared code would otherwise walk straight in.
   if (_isEmployee() && EMPLOYEE_PAGES.indexOf(page) < 0) page = 'create';
   if (page === 'pirate-rift') { openPirateRift(); return; }
+  if (page === 'grand-line') { grandLinePortal.open(); return; }
   // 🎨 The Photo Editor is an admin tool. The nav item carries `admin-only` so
   // nobody else sees it, and an employee has already been sent to `create` by
   // the line above — this is the guard for arriving at the page any other way,
@@ -30088,6 +30115,7 @@ function _scienceFeedManual(candidates, allowRetired = false) {
 }
 function _scienceFeedRefreshFrames() {
   pirateRiftPortal.sync();
+  grandLinePortal.sync();
   _scienceFeedPassCache = null; _scienceFeedMetaCache = null;
   const identity = JSON.stringify([_scienceFeedKey(), _scienceFeedGameLevel()]);
   if (_scienceFeedIdentity && _scienceFeedIdentity !== identity) {
@@ -39207,6 +39235,7 @@ const ARCADE_GAMES = [
   { page: 'legends', ico: '⚔️', name: 'Science Legends', beta: true, desc: 'Top-down action RPG — three classes, big skill trees, a question every 20 seconds.' },
   { page: 'slayers', ico: '🗡️', name: 'Science Slayers', beta: true, desc: 'Dungeon crawler — procedural floors, boss loot, questions power your actions.' },
   { page: 'hades', ico: '🔥', name: 'Hades Sanctuary', beta:true, desc:'Intricate elemental combat — five bank questions between rooms power healing and boon upgrades.' },
+  { page:'grand-line',ico:'🃏',name:'Grand Line Chronicles',beta:true,freePlay:true,desc:'Collect 50 One Piece characters, build a five-card crew and answer three Science questions after every full battle round. Buy one-character packs with your reward points.' },
   { page: 'pirate-rift', ico: '🏴‍☠️', name: 'One Piece: Pirate Rift', beta: true, freePlay: true, desc: 'An isometric action RPG starring Luffy, Zoro, Whitebeard and Shanks. Three acts, signature abilities, boss battles and legendary loot.' }
 ];
 function renderArcadePage() {
@@ -41335,6 +41364,7 @@ const USAGE_MODES = {
   // a mode somebody forgot rather than as a mindmap.
   'mindmap':             { icon: '🧠', label: 'Mindmap',           group: 'practice' },
   'preview':             { icon: '👁️', label: 'Preview',           group: 'other'    },
+  'grand-line':          { icon: '🃏', label: 'Grand Line Chronicles', group: 'game' },
   'tcg-train':           { icon: '🎓', label: 'Embers Trainer',    group: 'game'     },
   'tcg-duel':            { icon: '🎴', label: 'Ember Duel',        group: 'game'     },
   'tcg-siege':           { icon: '🌋', label: 'Ember Siege',       group: 'game'     },
@@ -46637,6 +46667,7 @@ function rpgHydrate(saved) {
 }
 function rpgSave() {
   if (!rpgState || !currentUser) return;
+  if (grandLineRpgSaveGate.defer()) return;
   rpgState.updatedAt = new Date().toISOString();
   if (RPG_STORAGE_MODE === "firestore") {
     setDoc(doc(db, "users", currentUser.uid, "settings", "scienceRpg"), rpgState)
@@ -52165,7 +52196,7 @@ function logGameAttempt(q, correct, mode, ms) {
 // The embedded games report their answers through one postMessage, so the mode
 // arrives as a string from inside an iframe: it is matched against this list
 // rather than trusted, and anything unknown falls back to Defenders.
-const SD_GAME_MODES = ['defenders', 'raiders', 'spire', 'legends', 'slayers', 'hades'];
+const SD_GAME_MODES = ['defenders', 'raiders', 'spire', 'legends', 'slayers', 'hades', 'grand-line'];
 function _sdRecordAttempt(d) {
   try {
     if (!currentUser || currentUser.role !== 'student' || !d || !d.questionId) return;

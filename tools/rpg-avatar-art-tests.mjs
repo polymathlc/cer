@@ -119,7 +119,9 @@ export function runChecks() {
   assert.equal(f.item('weapon', {weapon:'missing_old_item'}), '', 'unknown saved items do not crash the avatar');
   assert.doesNotMatch(f.icon({...f.byId.wood_sword, name:'"><script>alert(1)</script>'}), /<script>/);
   assert.match(f.icon({...f.byId.wood_sword, name:'A "quoted" blade'}), /aria-label="A &quot;quoted&quot; blade"/, 'quoted names cannot break out of an SVG attribute');
-  for (const name of moduleNames) assert.ok(html.indexOf(name) < html.indexOf('type="module" src="app.js"'), `${name} loads before its consumers`);
+  const appPosition = html.search(/type="module" src="app\.js(?:\?[^\"]*)?"/);
+  assert.ok(appPosition >= 0, 'The application module is present');
+  for (const name of moduleNames) assert.ok(html.indexOf(name) < appPosition, `${name} loads before its consumers`);
   assert.match(app, /rpgAvatarSvg\(r\.equipment \|\| \{\}, r\.gender\)/, 'leaderboard uses owner gender');
   assert.match(app, /rpgAvatarSvg\(row\.equipment \|\| \{\}, row\.gender\)/, 'arena uses owner gender');
   console.log(`rpg-avatar-art-tests: 143 collectible IDs, every pet stage, both genders, equipment layers and ${allIds.size} unique paint definitions OK`);

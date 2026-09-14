@@ -58,7 +58,7 @@ if (science) test('Science navigation launches the overlay without entering a mi
   assert.ok(start > 0 && end > start);
   const prefix = app.slice(start, end + "if (page === 'pirate-rift') { openPirateRift(); return; }".length);
   let opened = 0, closed = 0;
-  const context = vm.createContext({ vetPrintPeekHide() {}, pirateRiftPortal: { close() { closed++; } },
+  const context = vm.createContext({ vetPrintPeekHide() {}, grandLinePortal: { close() {} }, pirateRiftPortal: { close() { closed++; } },
     _isEmployee: () => false, EMPLOYEE_PAGES: ['create'], openPirateRift() { opened++; } });
   vm.runInContext(prefix + '\nthrow new Error("unhandled page");\n}', context);
   vm.runInContext('navigateTo("pirate-rift")', context);
