@@ -1,3 +1,15 @@
+import { scienceTcgIdentity, scienceTcgIdentityText, scienceTcgSkillPath } from './science-tcg-identity.js';
+import { applyScienceTcgSignature, scienceTcgBrandedDamage, scienceTcgAbsorbBarrier } from './science-tcg-runtime.js';
+import { createTcgMedia } from './tcg-media.js';
+const tcgMedia = createTcgMedia({ storageKey: 'science-tcg-combat-audio', legacyMuteKey: 'sq_duel_sfx' });
+tcgMedia.installControls(document);
+const tcgSyncDuelVolume = () => queueMicrotask(() => {
+  if (typeof _duelBus !== 'undefined' && _duelBus) _duelBus.gain.value = tcgMedia.settings.enabled ? tcgMedia.settings.volume * .9 : 0;
+  if (!tcgMedia.settings.enabled) tcgCombatStop();
+});
+document.addEventListener('click', event => { if (event.target.closest?.('[data-tcg-audio]')) tcgSyncDuelVolume(); });
+document.addEventListener('input', event => { if (event.target.matches?.('[data-tcg-audio]')) tcgSyncDuelVolume(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) tcgCombatStop(); });
 import { mountInterfaceStudio } from "./interface-studio.mjs?v=2";
 import { mountScienceCoach, resetScienceCoaches } from "./science-coaches.js";
 import { SCIENCE_COACH_INSTRUCTIONS } from "./science-coach-core.js";
@@ -3800,7 +3812,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.382.3';
+const APP_VERSION = 'v1.383.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -53230,6 +53242,75 @@ const TCG_ELEMENTS = {
 // strike/pierce = big single hit · blast = hits all foes · drain = hit + self-heal
 // heal/healall = restore HP · shield = absorb barrier · rage = team ATK buff
 // stun = hit + skip target's turn · poison = hit + damage over time.
+// ---- Combat identities: run-local adapters for all four TCG modes ----------
+function tcgSignatureNote(card, mode) {
+  const identity = scienceTcgIdentity(card);
+  return identity ? '<div class="tcg-signature-note"><b>' + identity.icon + ' ' + escapeHtml(identity.name) + '</b><span>' + escapeHtml(scienceTcgIdentityText(card, mode)) + '</span></div>' : '';
+}
+function tcgCombatCue(card, cue) {
+  tcgMedia.play(cue || 'skill', card && card.element || 'cosmic', card && card.stars >= 7 ? 1.3 : 1);
+}
+function tcgCombatStop() {
+  tcgMedia.stop();
+  if (typeof _duelAC !== 'undefined' && _duelAC) {
+    const context = _duelAC;
+    _duelAC = null; _duelBus = null; _duelCueAt = {};
+    // Retire queued legacy cues: suspending would replay them on the next run.
+    try { const closing = context.close(); if (closing?.catch) closing.catch(() => {}); } catch (_) {}
+  }
+}
+function tcgSignatureArena(unit, allies, foes) {
+  if (!scienceTcgIdentity(unit.card) || unit.hp <= 0) return;
+  applyScienceTcgSignature('arena', { card: unit.card, actor: unit, allies, enemies: foes, power: unit.atk,
+    damage: (t, n) => _tcgHitFx(t, _tcgDamage(unit, t, n / Math.max(1, unit.atk), false)),
+    feedback: a => { _tcgRefreshUnit(a.target); if (a.type !== 'damage') _tcgPopup(a.target, scienceTcgIdentity(unit.card).icon, 'status'); }
+  });
+  _tcgLog('✦ ' + escapeHtml(scienceTcgIdentity(unit.card).name));
+  tcgCombatCue(unit.card);
+}
+function tcgSignatureDuel(who, actor) {
+  if (!scienceTcgIdentity(actor.card) || actor.dead) return;
+  applyScienceTcgSignature('duel', { card: actor.card, actor, allies: _duelSide(who).board, enemies: _duelFoe(who).board, power: 2, attackCap: DUEL_ATK_MAX,
+    damage: (t, n) => duelHurtMinion(t, n, { cls: 'skill', element: actor.card.element }),
+    feedback: a => { if (a.type !== 'damage') duelFx(a.target.uid, a.type === 'heal' ? Math.round(a.amount) : 0, a.type === 'heal' ? 'heal' : a.type === 'delay' ? 'freeze' : 'buff'); }
+  });
+  duelLog('✦ ' + scienceTcgIdentity(actor.card).name);
+  duelZoneFx('summon', who, actor.card.element, actor.uid);
+}
+function tcgSignatureSiege(d) {
+  const r = emsRun; if (!r || r.over || r.paused || r.qPause || !scienceTcgIdentity(d.card)) return;
+  d._signatureBeat = (d._signatureBeat || 0) + 1;
+  if (d._signatureBeat % (d.card.stars >= 6 ? 4 : 6)) return;
+  const enemies = r.enemies.filter(e => Math.abs(e.lane - d.lane) <= 1 && e.x >= d.col - .2 && e.x - d.col <= Math.max(2, d.p.range)).sort((a, b) => a.x - b.x).slice(0, 4);
+  const allies = r.defenders.filter(a => Math.abs(a.lane - d.lane) <= 1);
+  applyScienceTcgSignature('siege', { card: d.card, actor: d, allies, enemies, power: d.p.atk,
+    damage: (t, n) => emsHit(t, n, d.card, 'signature'), feedback: a => { a.target.mend = .35; }
+  });
+  emsBanner(scienceTcgIdentity(d.card).icon + ' ' + scienceTcgIdentity(d.card).name, 1100);
+  tcgCombatCue(d.card);
+}
+function tcgSignatureLegends() {
+  const r = elgRun; if (!r || r.over || r.paused || r.qPause || !scienceTcgIdentity(r.card) || r.atkN % (r.card.stars >= 6 ? 4 : 6)) return;
+  const enemies = r.enemies.filter(e => Math.hypot(e.x - r.x, e.y - r.y) <= r.base.range * 1.35).sort((a, b) => Math.hypot(a.x - r.x, a.y - r.y) - Math.hypot(b.x - r.x, b.y - r.y)).slice(0, 6);
+  applyScienceTcgSignature('legends', { card: r.card, actor: r, allies: [r], enemies, power: r.base.dmg, restore: (t, n) => elgHeal(n),
+    damage: (t, n) => { elgDamage(t, n); elgImpactFx(t.x, t.y); },
+    feedback: a => { if (a.type !== 'damage') elgFlash(a.target.x, a.target.y, 42, a.type === 'heal' ? 'pulse' : 'nova'); }
+  });
+  elgBanner(scienceTcgIdentity(r.card).icon + ' ' + scienceTcgIdentity(r.card).name, 1100);
+  tcgCombatCue(r.card);
+}
+function elgBuildRoute(id) {
+  const r = elgRun; if (!r) return [];
+  return scienceTcgSkillPath(ELG_TREES[r.role] || [], id, r.tree);
+}
+function elgTreeRouteHtml() {
+  const r = elgRun; if (!r) return '';
+  const nodes = ELG_TREES[r.role] || [];
+  return '<div class="tcg-tree-routes"><b>Choose a destination</b><span>Preview the exact path and points needed. Each Learn button still costs one earned point.</span>'
+    + nodes.filter(n => n.tier === 6 && !n.small).map(n => { const route = elgBuildRoute(n.id); return '<button type="button" onclick="elgTreeSelect(\'' + n.id + '\')">' + n.icon + ' ' + escapeHtml(n.name) + ' · ' + route.length + ' point' + (route.length === 1 ? '' : 's') + ' away</button>'; }).join('') + '</div>';
+}
+// ---- End combat identities ------------------------------------------------
+
 const TCG_SKILLS = {
   scratch: { name: 'Wild Swipes',      icon: '💢', kind: 'strike',  pow: 1.85, desc: 'Slashes one foe for 185% ATK.' },
   smash:   { name: 'Boulder Smash',    icon: '🪨', kind: 'strike',  pow: 2.15, desc: 'Crushes one foe for 215% ATK.' },
@@ -58909,7 +58990,7 @@ function _tcgModeBodyHtml(card, mode) {
       +   '<div class="tcg-peek-n"><b>🛡️ ' + Math.round(st.armor * 100) + '%</b><span>damage cut</span></div>'
       +   '<div class="tcg-peek-n"><b>🏹 ' + Math.round(st.range) + '</b><span>reach</span></div>'
       + '</div>'
-      + (leg ? _tcgPeekBox('7★ legend passive', leg.icon + ' ' + escapeHtml(leg.name), escapeHtml(leg.desc)) : '')
+      + (leg && leg.name !== scienceTcgIdentity(card)?.name ? _tcgPeekBox('7★ legend passive', leg.icon + ' ' + escapeHtml(leg.name), escapeHtml(leg.desc)) : '')
       + '<div class="tcg-peek-foot">Every monster of this role shares the same skill tree, so swapping hero never means learning a new game.</div>';
   } else {
     // The arena is the one mode the printed skill actually fires in.
@@ -58927,7 +59008,7 @@ function _tcgModeBodyHtml(card, mode) {
       +   ' · ▲ double damage to ' + beats.icon + ' ' + escapeHtml(beats.name)
       +   ' · ▼ double damage from ' + weak.icon + ' ' + escapeHtml(weak.name) + '</div>';
   }
-  return body;
+  return body + tcgSignatureNote(card, mode);
 }
 function tcgPeekHtml(card, mode) {
   const m = TCG_PEEK_MODES[mode] || TCG_PEEK_MODES.arena;
@@ -61372,7 +61453,7 @@ function duelRenderHeroes() {
   if (!shell || !s) return;
   const list = duelHeroesFor(s);
   const mine = duelHeroId(s);
-  shell.innerHTML = '<div class="duel-top">'
+  shell.innerHTML = '<div class="duel-top">' + tcgMedia.controlsHTML()
     +   '<div class="duel-title">🦸 Choose your hero</div>'
     +   '<button type="button" class="duel-x" onclick="duelCloseHeroes()" title="Close">✕</button>'
     + '</div>'
@@ -61515,7 +61596,7 @@ function duelRenderBuilder() {
   const chips = [['all', 'All'], ['spells', '✨ Spells']].concat([7, 6, 5, 4, 3, 2, 1]
     .filter(n => col.cards.some(c => c.stars === n)).map(n => [String(n), n + '★']));
   const slots = duelDraftSlots();
-  shell.innerHTML = '<div class="duel-top">'
+  shell.innerHTML = '<div class="duel-top">' + tcgMedia.controlsHTML()
     +   '<div class="duel-title">🎴 ' + escapeHtml(d.name)
     +     '<button type="button" class="duel-rename" onclick="duelDraftRename()" title="Rename this deck">✎</button></div>'
     +   '<div class="duel-deckcount' + (d.deck.length === DUEL_DECK_SIZE ? ' full' : '') + '">' + d.deck.length + ' / ' + DUEL_DECK_SIZE + '</div>'
@@ -61577,6 +61658,7 @@ function duelOpen() {
   tcgLoadArt().catch(() => {}).then(() => duelStart());
 }
 function duelStart() {
+  void tcgMedia.unlock();
   const s = tcgState(); if (!s) return;
   duelDropQuiz();                 // nothing from a previous run may outlive it
   const rivalLvl = duelRivalLevel(s);
@@ -61621,6 +61703,7 @@ function duelStart() {
   duelRender();
 }
 function duelClose() {
+  tcgCombatStop();
   duelBank();                    // bank BEFORE the run is dropped
   if (duelRun) clearTimeout(duelRun.reapT);
   duelRun = null;
@@ -61747,7 +61830,7 @@ function duelHurtMinion(m, amount, opts) {
     duelFx(m.uid, 0, 'shield');
     return 0;
   }
-  const dealt = Math.max(0, amount | 0);
+  const dealt = Math.max(0, Math.round(scienceTcgBrandedDamage(m, amount)));
   m.hp -= dealt;
   if (opts.venom && dealt > 0) m.hp = 0;       // Poisonous destroys outright
   duelFx(m.uid, dealt, opts.cls || 'dmg', opts.element);
@@ -61877,6 +61960,7 @@ function duelCommitPlay(who, i, target) {
     duelLog((who === 'P' ? 'You summon ' : 'Rival summons ') + tcgShortName(m.card) + '.');
     // Battlecry — the card's generated duel ability.
     duelResolveBattlecry(who, m, target);
+    tcgSignatureDuel(who, m);
     // …and its animation. This is dispatched HERE rather than inside
     // duelResolveBattlecry, which returns early for a PASSIVE ability — doing
     // it there meant Divine Shield, Poisonous, Lifesteal and Rush never
@@ -62102,6 +62186,7 @@ function duelAttack(attUid, targetKey, byAi) {
     }
     duelLog(tcgShortName(att.card) + ' strikes ' + tcgShortName(t.card) + '.');
   }
+  if (!att.dead && att.hp > 0 && scienceTcgIdentity(att.card)?.kind === 'capacitor' && att._signature?.casts === 1) tcgSignatureDuel(r.whose, att);
   r.sel = null;
   duelCheckOver();
   duelRender();
@@ -62606,16 +62691,19 @@ function _duelAudio() {
       _duelBus.connect(_duelAC.destination);
     } catch (_) { _duelACDead = true; return null; }
   }
+  if (typeof tcgMedia !== 'undefined' && _duelBus) _duelBus.gain.value = tcgMedia.settings.enabled ? tcgMedia.settings.volume * .9 : 0;
   if (_duelAC.state === 'suspended') { try { _duelAC.resume(); } catch (_) {} }
   return _duelAC;
 }
 function duelSfxOn() {
+  if (typeof tcgMedia !== 'undefined') return tcgMedia.settings.enabled && !document.hidden;
   if (_duelSfxOff === null) {
     try { _duelSfxOff = localStorage.getItem(DUEL_SFX_KEY) === '0'; } catch (_) { _duelSfxOff = false; }
   }
   return !_duelSfxOff;
 }
 function duelToggleSfx() {
+  if (typeof tcgMedia !== 'undefined') { tcgMedia.setEnabled(!tcgMedia.settings.enabled); tcgCombatStop(); duelRender(); return; }
   _duelSfxOff = duelSfxOn();
   try { localStorage.setItem(DUEL_SFX_KEY, _duelSfxOff ? '0' : '1'); } catch (_) {}
   if (!_duelSfxOff) { duelSfxPrime(); duelSfxCue(DUEL_HEAL_TIERS[0], 0); }   // let them hear it come back on
@@ -62625,8 +62713,11 @@ function duelToggleSfx() {
 // rather than the synth standing in for one that is still downloading.
 function duelSfxPrime() {
   if (!duelSfxOn()) return;
-  if (!_duelAudio()) return;
-  _duelSfxManifest().then(m => Object.keys(m || {}).forEach(_duelSfxLoad)).catch(() => {});
+  const ac = _duelAudio(); if (!ac) return;
+  _duelSfxManifest().then(m => {
+    if (_duelAC !== ac || !duelSfxOn()) return;
+    Object.keys(m || {}).forEach(_duelSfxLoad);
+  }).catch(() => {});
 }
 // ONE request per page, and a missing manifest is the ordinary case — it just
 // means nobody has dropped any audio files in, and the synth carries the mode.
@@ -62640,7 +62731,9 @@ function _duelSfxManifest() {
 }
 function _duelSfxLoad(cue) {
   if (cue in _duelSfxBuf) return Promise.resolve(_duelSfxBuf[cue]);
-  const ac = _duelAudio();
+  // Asset warmup cannot create or resume a context after combat has stopped.
+  const ac = _duelAC;
+  if (!ac) return Promise.resolve(null);
   const src = (_duelSfxMap || {})[cue];
   _duelSfxBuf[cue] = null;                 // the synth stands in until this really lands
   if (!ac || !src) return Promise.resolve(null);
@@ -63020,7 +63113,7 @@ function duelRender() {
   duelPeekHide();          // the card it was pinned to is about to be replaced
   if (!r) { shell.innerHTML = ''; return; }
   const yourTurn = r.whose === 'P' && !r.busy && !r.over;
-  shell.innerHTML = '<div class="duel-top">'
+  shell.innerHTML = '<div class="duel-top">' + tcgMedia.controlsHTML()
     +   '<div class="duel-title">🎴 Ember Duel <span class="duel-beta">' + (duelReleased() ? 'NEW' : 'BETA') + '</span></div>'
     +   '<div class="duel-turn' + (yourTurn ? ' you' : '') + '">' + (r.over ? 'Duel over' : (yourTurn ? 'Your turn' : 'Rival thinking…')) + '</div>'
     +   '<button type="button" class="duel-x duel-sfx-btn' + (duelSfxOn() ? '' : ' off') + '" onclick="duelToggleSfx()"'
@@ -63206,6 +63299,7 @@ function duelPeekHtml(id, live) {
     +   '</div>'
     + '</div>'
     + (kws ? '<div class="duel-peek-kws">' + kws + '</div>' : '')
+    + tcgSignatureNote(card, 'duel')
     + '<div class="duel-peek-ab"><b>' + ab.icon + ' ' + escapeHtml(ab.name) + '</b><br>' + escapeHtml(ab.text) + '</div>'
     + '<div class="duel-peek-foot">Lv ' + level + ' · ⟡ M ' + merge + ' · rank ' + (st.rank | 0) + '/' + DUEL_RANK_MAX
     +   (next ? ' · next at Lv' + next.at + ': ' + escapeHtml(next.text) : ' · fully ranked')
@@ -63924,6 +64018,7 @@ function emsOpen() {
   emsOpenSquad();
 }
 function emsLaunch() {
+  void tcgMedia.unlock();
   const s = tcgState();
   if (!s) { showToast('Answer a question anywhere in the app to wake your hero first', 'error'); return; }
   if (!Object.keys(s.cards).length) { showToast('Open a booster pack first — you need at least one monster', 'error'); return; }
@@ -63940,7 +64035,7 @@ function emsLaunch() {
     + '</aside>'
     + '<div class="ems-main">'
     + '<div class="ems-topbar">'
-    +   '<div class="ems-title">🌋 Ember Siege</div>'
+    +   '<div class="ems-title">🌋 Ember Siege</div>' + tcgMedia.controlsHTML()
     +   '<div class="ems-stat" id="emsWave">Wave 1</div>'
     +   '<div class="ems-stat" id="emsGate">🏰 100%</div>'
     +   '<div class="ems-mana"><span class="ems-mana-orb">⚡</span><b id="emsMana">0</b><span class="ems-mana-cap">/ ' + EMS_MANA_CAP + '</span></div>'
@@ -64070,6 +64165,7 @@ function emsStart() {
   emsRun.raf = requestAnimationFrame(emsFrame);
 }
 function emsClose() {
+  tcgCombatStop();
   if (emsRun && emsRun.raf) cancelAnimationFrame(emsRun.raf);
   if (emsRun && !emsRun.over) emsBank();
   emsRun = null;
@@ -64077,6 +64173,7 @@ function emsClose() {
   try { tcgUpdateGoldChip(); tcgRenderBody(); } catch (_) {}
 }
 function emsTogglePause() {
+  tcgCombatStop();
   if (!emsRun || emsRun.over) return;
   emsRun.paused = !emsRun.paused;
   const b = document.getElementById('emsPauseBtn');
@@ -64192,6 +64289,7 @@ function emsUpdate(dt) {
     // Breather = study break: five questions back-to-back to stock up on mana
     // before the next wave walks in.
     emsOpenQuiz(EMS_ROUND_SIZE);
+    if (r.qPause || r.paused) return;
   }
   // defenders act
   r.defenders.forEach(d => {
@@ -64205,6 +64303,7 @@ function emsUpdate(dt) {
       const targets = m === 'healall' ? near : [near.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]];
       targets.forEach(o => { o.hp = Math.min(o.maxHp, o.hp + d.p.heal); o.mend = 0.35; });
       d.cool = d.p.rate; d.fire = 0.16;
+      tcgSignatureSiege(d);
       return;
     }
     const inLane = r.enemies.filter(e => e.lane === d.lane && e.x > d.col - 0.2 && e.x - d.col <= d.p.range);
@@ -64213,6 +64312,7 @@ function emsUpdate(dt) {
       const e = inLane.sort((a, b) => a.x - b.x)[0];
       emsHit(e, Math.round(d.p.atk), d.card, null);
       d.cool = d.p.rate; d.fire = 0.16;
+      tcgSignatureSiege(d);
       return;
     }
     // Rage builds up: down to half the interval after ~40 seconds alive.
@@ -64220,6 +64320,7 @@ function emsUpdate(dt) {
     emsFire(d);
     d.cool = d.p.rate * rageK;
     d.fire = 0.16;
+    tcgSignatureSiege(d);
   });
   // projectiles fly, hit, and (for pierce) carry on
   r.shots.forEach(s => {
@@ -64251,7 +64352,7 @@ function emsUpdate(dt) {
       e.cool -= dt;
       if (e.cool <= 0) {
         const mult = tcgElemMult(e.card, blocker.card);
-        blocker.hp -= Math.max(1, Math.round(e.atk * mult));
+        blocker.hp -= scienceTcgAbsorbBarrier(blocker, Math.max(1, Math.round(e.atk * mult)));
         blocker.flash = 0.2;
         e.fire = 0.16;          // the lunge, so a blocked enemy is visibly fighting
         e.cool = 1;
@@ -64275,6 +64376,7 @@ function emsUpdate(dt) {
 const EMS_SHOT_SPEED = 7.5;   // columns per second — fast enough to feel instant
 function emsFire(d) {
   const r = emsRun; if (!r) return;
+  tcgCombatCue(d.card, 'attack');
   r.shots.push({
     id: r.nextId++, lane: d.lane, x: d.col + 0.55, vx: EMS_SHOT_SPEED,
     card: d.card, el: d.card.element, dmg: d.p.atk, mode: d.p.mode,
@@ -64287,7 +64389,7 @@ function emsHit(e, dmg, card, mode) {
   if (mode !== 'splash') emsImpact(e.lane, e.x, card.element);   // the splash draws its own explosion
   const mult = tcgElemMult(card, e.card);
   const vuln = (e.curse || 0) > 0 ? 1.4 : 1;
-  e.hp -= Math.max(1, Math.round(dmg * mult * vuln));
+  e.hp -= Math.max(1, Math.round(scienceTcgBrandedDamage(e, dmg * mult * vuln)));
   e.flash = 0.18;
   if (mult >= 2) e.crit = 0.4;
   if (mode === 'poison') { e.poison = Math.max(e.poison || 0, Math.round(dmg * 0.25)); e.poisonT = 4; }
@@ -64482,6 +64584,7 @@ function emsRender() {
     u.el.classList.toggle('slowed', (u.slowT || 0) > 0);
     u.el.classList.toggle('cursed', (u.curse || 0) > 0);
     u.el.classList.toggle('poisoned', (u.poisonT || 0) > 0);
+    u.el.classList.toggle('signature-guarded', (u._signatureShield || 0) > 0);
   };
   r.defenders.forEach(d => paint(d, 'def', d.col + 0.5));
   r.enemies.forEach(e => paint(e, 'enemy', e.x));
@@ -64645,6 +64748,7 @@ function emsPoof(el) {
 //                   is the risky way to make mana: the question is untimed, but
 //                   the horde is not waiting for you.
 function emsOpenQuiz(count) {
+  tcgCombatStop();
   const r = emsRun;
   if (!r || r.over) return;
   const setOf = (count | 0) > 0 ? (count | 0) : 0;
@@ -64945,7 +65049,12 @@ const ELG_TREES = {
 };
 // Which skill each node grows FROM — the links drawn on the tree. A node can
 // only be learned once its parent is, exactly like the Science Legends trees.
+ELG_TREES.striker.push({ id: 'st_follow', tier: 3, name: 'Pursuit Echo', icon: '🎯', desc: 'After casting a skill, your next attack fires one extra shot.', fx: { followShot: 1 }, max: 1 });
+ELG_TREES.arcanist.push({ id: 'ar_reserve', tier: 3, name: 'Spell Reservoir', icon: '💠', desc: 'Every fourth normal attack recharges each learned active by one second.', fx: { reserve: 1 }, max: 1 });
+ELG_TREES.mender.push({ id: 'me_overflow', tier: 3, name: 'Overflowing Grace', icon: '💚', desc: 'Half of healing above full health becomes a six-second barrier, up to 20% of maximum health.', fx: { overflow: 1 }, max: 1 });
+ELG_TREES.warden.push({ id: 'wa_recoil', tier: 3, name: 'Shield Reprisal', icon: '🔰', desc: 'When a barrier fully blocks a blow, stun its attacker for one second.', fx: { recoil: 1 }, max: 1 });
 const ELG_REQS = {
+  st_follow: 'st_dash', ar_reserve: 'ar_chain', me_overflow: 'me_bloom', wa_recoil: 'wa_aegis',
   // striker
   st_lance: 'st_edge',  st_dash: 'st_step',   st_twin: 'st_grip',   st_leech: 'st_keen',
   st_cyc: 'st_lance',   st_volley: 'st_twin', st_fury: 'st_dash',   st_hunt: 'st_leech',
@@ -65060,6 +65169,8 @@ const ELG_LEGEND_PASSIVES = {
              desc: 'Every 10 seconds dawn breaks: you are healed for 12% of your health and every enemy in the arena is seared.' },
   doom:    { name: 'Worldsend Aura', icon: '🕯️',
              desc: 'Everything that comes near you is cursed — cursed enemies take 30% more damage from everything.' },
+  dragonfall: { name: 'Dragon Hunter', icon: '🗡️', desc: 'Every fourth attack hunts the largest enemy in range; larger enemies take a harder signature strike.' },
+  winter: { name: 'Winter Sanctuary', icon: '👑', desc: 'Every fourth attack stuns enemies in range and grants a protective barrier.' },
   chrono:  { name: 'Time Dilation', icon: '⌛',
              desc: 'Time runs slow around you: the entire horde moves and attacks 30% slower, all run long.' }
 };
@@ -65313,13 +65424,14 @@ function elgRenderPick() {
 
 // ---- The run --------------------------------------------------------------
 function elgStart(cardId) {
+  void tcgMedia.unlock();
   const card = TCG_BY_ID[cardId];
   const o = document.getElementById('elgOverlay');
   if (!card || !o) return;
   const st = elgHeroStats(card);
   o.innerHTML = '<div class="elg-shell">'
     + '<div class="elg-topbar">'
-    +   '<div class="elg-title">⚔️ Ember Legends</div>'
+    +   '<div class="elg-title">⚔️ Ember Legends</div>' + tcgMedia.controlsHTML()
     +   '<div class="elg-stat" id="elgWave">Wave 1</div>'
     +   '<div class="elg-stat" id="elgKills">☠️ 0</div>'
     +   '<div class="elg-sp" id="elgSp">✦ 0 skill points</div>'
@@ -65334,6 +65446,7 @@ function elgStart(cardId) {
     + '<div class="elg-note">Drag (or use the arrow keys / WASD) to move — you attack the nearest enemy by yourself. A science question arrives every ' + ELG_Q_EVERY + ' seconds: every correct answer is a skill point.</div>'
     + '</div>';
   const field = document.getElementById('elgField');
+  if (field) field.dataset.element = card.element;
   const box = field ? field.getBoundingClientRect() : { width: 900, height: 500 };
   elgRun = {
     card, role: elgRoleId(card), base: st, legend: elgLegendPassive(card),
@@ -65362,12 +65475,14 @@ function elgStart(cardId) {
   elgRun.raf = requestAnimationFrame(elgFrame);
 }
 function elgClose() {
+  tcgCombatStop();
   if (elgRun) { elgBank(); if (elgRun.raf) cancelAnimationFrame(elgRun.raf); }
   elgRun = null;
   const o = document.getElementById('elgOverlay'); if (o) o.remove();
   try { tcgRenderBody(); } catch (_) {}
 }
 function elgTogglePause() {
+  tcgCombatStop();
   const r = elgRun; if (!r || r.over) return;
   r.paused = !r.paused;
   const b = document.getElementById('elgPauseBtn');
@@ -65507,7 +65622,7 @@ function elgUpdate(dt) {
   // Question timer — the battle freezes while it is up, so nobody is punished
   // for reading properly.
   r.qT += dt;
-  if (r.qT >= ELG_Q_EVERY && !r.quiz) { r.qT = 0; elgOpenQuiz(); }
+  if (r.qT >= ELG_Q_EVERY && !r.quiz) { r.qT = 0; elgOpenQuiz(); if (r.qPause || r.paused) return; }
 
   // Waves
   if (!r.enemies.length && !r.spawnQ.length) {
@@ -65624,8 +65739,12 @@ function elgUpdate(dt) {
     if (target) {
       r.atkT = 0;
       r.atkN = (r.atkN | 0) + 1;
+      tcgCombatCue(r.card, 'attack');
+      tcgSignatureLegends();
       if (p.capCyclone && r.atkN % 5 === 0) elgAreaHit(r.x, r.y, 150, r.base.dmg * 2.4 * (1 + p.dmg), 'nova');
-      const shots = 1 + (p.shots | 0);
+      if (p.reserve && r.atkN % 4 === 0) Object.keys(r.cds).forEach(k => { r.cds[k] = Math.max(0, r.cds[k] - 1); });
+      const shots = 1 + (p.shots | 0) + (r.followShot ? 1 : 0);
+      r.followShot = false;
       for (let i = 0; i < shots; i++) {
         const ang = Math.atan2(target.y - r.y, target.x - r.x) + (i ? (Math.random() - 0.5) * 0.35 : 0);
         r.shots.push({ id: r.nextId++, x: r.x, y: r.y, vx: Math.cos(ang) * ELG_SHOT_SPEED, vy: Math.sin(ang) * ELG_SHOT_SPEED,
@@ -65707,7 +65826,7 @@ function elgNearest(x, y, range) {
 function elgDamage(e, dmg) {
   const r = elgRun; if (!r || e.hp <= 0) return;
   const p = elgPassives(r);
-  let d = dmg;
+  let d = scienceTcgBrandedDamage(e, dmg);
   if (e.cursed > 0) d *= 1.3;
   if (p.execute && e.hp < e.maxHp / 2) d *= 1 + p.execute;
   d = Math.max(1, Math.round(d));
@@ -65737,6 +65856,7 @@ function elgHeal(amount, quiet) {
   const amt = amount * (1 + p.healAmp);
   const before = r.hp;
   r.hp = Math.min(r.maxHp, r.hp + amt);
+  if (p.overflow && before + amt > r.maxHp) { r.shield = Math.max(r.shield || 0, Math.min(r.maxHp * .2, (r.shield || 0) + (before + amt - r.maxHp) * .5)); r.shieldT = Math.max(r.shieldT, 6); }
   if (!quiet && r.hp - before >= 1) elgPop(r.x, r.y, '+' + Math.round(r.hp - before), 'heal');
 }
 function elgHurt(dmg, from) {
@@ -65747,6 +65867,7 @@ function elgHurt(dmg, from) {
     const absorbed = Math.min(r.shield, d);
     r.shield -= absorbed; d -= absorbed;
     elgPop(r.x, r.y, '🛡️', 'shield');
+    if (p.recoil && from && d <= 0) from.stun = Math.max(from.stun || 0, 1);
   }
   d = Math.max(0, Math.round(d));
   r.hp -= d;
@@ -65780,6 +65901,8 @@ function elgCast(id) {
   const lvl = Math.max(1, Math.min(r.tree[id] | 0, elgNodeMax(n)));
   const power = r.base.dmg * (1 + p.dmg + p.skillDmg) * (1 + 0.3 * (lvl - 1));
   r.cds[id] = a.cd * (1 - 0.08 * (lvl - 1));
+  if (p.followShot) r.followShot = true;
+  tcgCombatCue(r.card, 'skill');
   if (a.kind === 'nova') {
     elgAreaHit(r.x, r.y, a.radius, power * a.dmg, 'nova');
     if (a.stun) r.enemies.forEach(e => { if (Math.hypot(e.x - r.x, e.y - r.y) <= a.radius + e.r) e.stun = a.stun; });
@@ -65889,6 +66012,7 @@ function elgHud() {
 
 // ---- Skill tree panel -----------------------------------------------------
 function elgOpenTree() {
+  tcgCombatStop();
   const r = elgRun; if (!r || r.over) return;
   r.qPause = true;
   const o = document.getElementById('elgOverlay'); if (!o) return;
@@ -65972,7 +66096,9 @@ function elgRenderTree() {
     +   '<button type="button" class="elg-x" onclick="elgCloseTree()">✕</button>'
     + '</div>'
     + '<p class="elg-tree-lead">' + nodes.length + ' skills in a wheel around your role\'s heart, most of them levelling 1→5 — far more than any run can afford, so every run is a build. Skills unlock along the links: each one needs the skill it grows from. Answer a science question or clear a wave for another ✦ point; in the fight, keys <b>1–9</b> fire your actives and <b>T</b> opens this wheel.</p>'
-    + (leg ? '<div class="elg-legend-box">' + leg.icon + ' <b>' + escapeHtml(leg.name) + '</b> — ' + escapeHtml(leg.desc) + '<span>7★ passive · always on</span></div>' : '')
+    + (leg && leg.name !== scienceTcgIdentity(r.card)?.name ? '<div class="elg-legend-box">' + leg.icon + ' <b>' + escapeHtml(leg.name) + '</b> — ' + escapeHtml(leg.desc) + '<span>7★ passive · always on</span></div>' : '')
+    + tcgSignatureNote(r.card, 'legends')
+    + elgTreeRouteHtml()
     + '<div class="elg-tree-map radial">'
     +   '<svg class="elg-tree-links" viewBox="0 0 100 100" aria-hidden="true">' + links + '</svg>'
     +   '<div class="elg-heart" title="' + escapeHtml(role.name + ' — ' + role.blurb) + '">' + role.icon + '</div>'
@@ -66018,7 +66144,8 @@ function elgRenderNodeInfo() {
     + '<div class="elg-ni-desc">' + escapeHtml(n.desc)
     + (n.act ? ' <span class="elg-ni-scale">Each level: +30% power, −8% cooldown.</span>' : '')
     + '</div>'
-    + '<div class="elg-ni-state">' + state + '</div>';
+    + '<div class="elg-ni-state">' + state + '</div>'
+    + (!reach ? '<div class="tcg-route-steps"><b>Path to this skill</b>' + elgBuildRoute(n.id).map((id, i) => '<button type="button" onclick="elgTreeSelect(\'' + id + '\')">' + (i + 1) + '. ' + escapeHtml(ELG_NODE_BY_ID[id].name) + '</button>').join('') + '</div>' : '');
 }
 function elgBuy(id) {
   const r = elgRun; if (!r || r.sp <= 0) return;
@@ -66028,6 +66155,7 @@ function elgBuy(id) {
   if (lvl >= elgNodeMax(n)) return;
   r.sp--;
   r.tree[id] = lvl + 1;
+  tcgCombatCue(r.card, 'level');
   // Health passives grow the pool the moment each level is bought.
   if (n.fx && n.fx.hp) { const add = r.base.maxHp * n.fx.hp; r.maxHp = Math.round(r.maxHp + add); r.hp += add; }
   elgTreeSel = id;
@@ -66038,6 +66166,7 @@ function elgBuy(id) {
 
 // ---- Questions ------------------------------------------------------------
 function elgOpenQuiz() {
+  tcgCombatStop();
   const r = elgRun; if (!r || r.over || r.quiz) return;
   if (!r.pool || !r.pool.length) return;
   const o = document.getElementById('elgOverlay'); if (!o) return;
@@ -66143,6 +66272,8 @@ function elgRender() {
     if (!s.node) {
       const d = document.createElement('div');
       d.className = 'elg-shot' + (r.card.stars >= 7 ? ' mighty' : '');
+      d.dataset.element = r.card.element;
+      d.dataset.signature = scienceTcgIdentity(r.card)?.kind || '';
       d.style.setProperty('--trail', fx.glow);
       d.style.setProperty('--a', Math.atan2(s.vy, s.vx).toFixed(3) + 'rad');
       if (r.flyFrames) { d.classList.add('framed'); d.innerHTML = '<img alt="">'; }
@@ -66267,6 +66398,7 @@ function elgFlash(x, y, radius, kind) {
   const rad = Math.min(radius, 460);
   const d = document.createElement('div');
   d.className = 'elg-flash ' + (kind || '');
+  d.dataset.signature = scienceTcgIdentity(r && r.card)?.kind || '';
   d.style.width = d.style.height = (rad * 2) + 'px';
   d.style.background = 'radial-gradient(circle, ' + ((TCG_ELEM_FX[r && r.card ? r.card.element : 'flame'] || {}).glow || 'rgba(255,150,60,.7)') + ' 0%, transparent 70%)';
   d.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px) translate(-50%,-50%)';
@@ -66481,7 +66613,7 @@ function _tcgDamage(attacker, target, mult, ignoreDef) {
   if (target.curse) raw *= 1.25; // Worldsend Curse: cursed foes take +25% damage
   const crit = Math.random() < (0.10 + (attacker.critBonus || 0));
   if (crit) raw *= 1.5;
-  let dmg = Math.max(4, Math.round(raw));
+  let dmg = Math.max(4, Math.round(scienceTcgBrandedDamage(target, raw)));
   if (target.shield > 0) {
     const absorbed = Math.min(target.shield, dmg);
     target.shield -= absorbed;
@@ -66539,6 +66671,7 @@ function _tcgPickTarget(foes) {
   return alive[Math.floor(Math.random() * alive.length)];
 }
 async function _tcgLunge(unit) {
+  if (_tcgBattle && !_tcgBattle.skip) tcgCombatCue(unit.card, 'attack');
   const el = _tcgUnitEl(unit);
   if (!el) return;
   el.classList.add(unit.side === 'L' ? 'lungeR' : 'lungeL');
@@ -66549,6 +66682,7 @@ function _tcgUnlunge(unit) {
   if (el) el.classList.remove('lungeR', 'lungeL');
 }
 async function _tcgAct(stage, unit, allies, foes) {
+  const signatureSession = _tcgBattle;
   const el = _tcgUnitEl(unit);
   if (el) el.classList.add('acting');
   // A curse burns down at the start of the cursed monster's turn.
@@ -66735,6 +66869,7 @@ async function _tcgAct(stage, unit, allies, foes) {
       _tcgUnlunge(unit);
     }
   }
+  if (useSkill && _tcgBattle && _tcgBattle === signatureSession) tcgSignatureArena(unit, allies, foes);
   if (el) el.classList.remove('acting');
 }
 // Artifact badge pinned to the battle stage (opponent top-left, you top-right).
@@ -66778,6 +66913,7 @@ function tcgBattleSpeed(mult) {
 }
 function tcgSkipBattle() { if (_tcgBattle) _tcgBattle.skip = true; }
 function tcgCloseBattle() {
+  tcgCombatStop();
   if (_tcgBattle) _tcgBattle.token++;
   _tcgBattle = null;
   const o = document.getElementById('tcgBattleOverlay');
@@ -66792,6 +66928,7 @@ async function tcgFindBattle() {
   tcgRunBattle(s.team.slice(), { name: (currentUser && currentUser.name) || 'You' }, opp);
 }
 async function tcgRunBattle(myTeam, me, opp) {
+  void tcgMedia.unlock();
   const old = document.getElementById('tcgBattleOverlay');
   if (old) old.remove();
   _tcgBattle = { token: 1, speed: 1, skip: false };
@@ -66842,7 +66979,7 @@ async function tcgRunBattle(myTeam, me, opp) {
     +       '<span>🎯 ' + escapeHtml((TCG_STRATS_ATK.find(x => x.id === myStrat.attack) || {}).name || 'Finisher') + '</span>'
     +       '<span>➕ ' + escapeHtml((TCG_STRATS_HEAL.find(x => x.id === myStrat.heal) || {}).name || 'Triage') + '</span></div>'
     +   '</div>'
-    +   '<div class="tcgb-controls">'
+    +   '<div class="tcgb-controls">' + tcgMedia.controlsHTML()
     +     '<button type="button" data-tcgspeed="1" class="on" onclick="tcgBattleSpeed(1)">1×</button>'
     +     '<button type="button" data-tcgspeed="2" onclick="tcgBattleSpeed(2)">2×</button>'
     +     '<button type="button" data-tcgspeed="4" onclick="tcgBattleSpeed(4)">4×</button>'
