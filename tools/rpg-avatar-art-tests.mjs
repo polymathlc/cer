@@ -1,141 +1,127 @@
-import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
-const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
-const assetRoot = path.join(root, "assets", "science-quest", "avatar-v2");
-const manifestPath = path.join(assetRoot, "asset-manifest.json");
-
-const start = app.indexOf("const RPG_ITEMS = [");
-const end = app.indexOf("const RPG_ITEMS_BY_ID", start);
-assert.ok(start >= 0 && end > start, "RPG item catalogue should be readable");
-const catalog = app.slice(start, end);
-const items = catalog.split(/\r?\n/).filter(line => /\{\s*id:\s*"/.test(line) && /\bslot:\s*"/.test(line)).map(line => {
-  const field = key => line.match(new RegExp(`\\b${key}:\\s*"([^"]+)"`))?.[1];
-  return { id: field("id"), name: field("name"), slot: field("slot"), rarity: field("rarity") };
-});
-assert.equal(items.length, 143, "all 143 RPG items should remain in the catalogue");
-assert.equal(new Set(items.map(x => x.id)).size, items.length, "RPG item ids should be unique");
-
-assert.match(app, /const RPG_ART_BETA_RELEASED = false;/, "generated art must remain unreleased");
-assert.match(app, /if \(!rpgCanPreview\(\)\) return false;/, "unreleased art should be admin-only");
-assert.match(app, /function rpgUnlockAllBetaItems\(\)/, "admin test unlock control should exist");
-assert.match(app, /RPG_ITEMS\.forEach\(it => \{ rpgState\.inventory\[it\.id\]/, "unlock control should cover the full catalogue");
-assert.match(app, /function rpgItemImageAspect\(src\)/, "bundled sprites should map into paper-doll slot geometry");
-assert.match(app, /includes\(`\$\{RPG_ART_BETA_ROOT\}\/`\) \? "none" : "xMidYMid meet"/, "manual overrides should keep their historical aspect ratio");
-assert.match(html, /id="rpgArtBetaPanel" hidden/, "beta UI should start hidden");
-
-const avatarStart = app.indexOf("function rpgAvatarSvg(");
-const avatarEnd = app.indexOf("function rpgItemIconSvg(", avatarStart);
-const avatar = app.slice(avatarStart, avatarEnd);
-for (const slot of ["armor", "helmet", "pet", "shield", "weapon"]) {
-  assert.match(avatar, new RegExp(`rpgItemArt\\(\"${slot}\"`), `${slot} should layer into the generated avatar`);
+export const root = fileURLToPath(new URL('../', import.meta.url));
+export const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+export const moduleNames = ['rpg-svg-art.js', 'rpg-hero-svg.js', 'spire-svg-art.js'];
+export function section(source, start, end) {
+  const a = source.indexOf(start), b = source.indexOf(end, a + start.length);
+  assert.ok(a >= 0 && b > a, `Production section exists: ${start}`);
+  return source.slice(a, b);
 }
-assert.match(avatar, /const accArt = acc \? rpgItemArt\("accessory"/, "accessories should use the shared image-aware layer");
-assert.ok(avatar.indexOf("const eq =") < avatar.indexOf("if (charUrl) return"), "equipment must resolve before generated character composition");
-for (const slot of ["armor", "helmet", "pet", "shield", "weapon"]) {
-  const n = avatar.split(`rpgItemArt("${slot}"`).length - 1;
-  assert.equal(n, 2, `${slot} should layer into BOTH avatar branches — the drawn hero and an uploaded character`);
+// Only storage is replaced; the catalogue, upgrade thresholds, gender resolver,
+// paper-doll compositor and icon renderer below are the production functions.
+export const rendererSource = `
+let rpgState = {gender:'male',equipment:{},inventory:{},upgrades:{},gold:321};
+let _rpgArt = {_character:'https://invalid.test/old.png',_character_female:'https://invalid.test/female.png',wood_sword:'https://invalid.test/sword.png'};
+${section(app, 'function escapeHtml(str) {', '// Escape a text block')}
+${section(app, 'const RPG_SLOT_META =', '// ---- Enemy catalog')}
+${section(app, 'const RPG_PET_EVO =', '// ---- Item affixes:')}
+${app.match(/const RPG_UPGRADE_MAX = [^;]+;/)[0]}
+${section(app, 'function rpgUpgradeLevel(', 'function rpgUpgradeCost(')}
+${section(app, 'function rpgItemImageUrl()', '// ---- Codex: bestiary')}
+globalThis.fixture = {
+  items:RPG_ITEMS, byId:RPG_ITEMS_BY_ID, slots:RPG_SLOT_META,
+  avatar:rpgAvatarSvg, icon:rpgItemIconSvg, item:rpgItemArt,
+  gender:rpgHeroGender, petStage:rpgPetStage, petName:rpgPetDisplayName,
+  itemImage:rpgItemImageUrl, characterImage:rpgCharacterArtUrl,
+  setState(next){rpgState=next;}, state(){return rpgState;},
+  setOverrides(next){_rpgArt=next;}
+};`;
+export function loadRenderer() {
+  const document = {
+    createTextNode(value) { return {value:String(value)}; },
+    createElement() { return {innerHTML:'',appendChild(node){this.innerHTML=node.value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}}; }
+  };
+  const context = vm.createContext({ console, document });
+  for (const file of moduleNames) vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, { filename: file });
+  vm.runInContext(rendererSource, context, { filename: 'production-avatar-fixture.js' });
+  return context;
 }
-
-// ── THE HERO IS DRAWN; ONLY HIS KIT IS GENERATED ─────────────────────────────
-// The generated character PNG stands in a different pose and at different
-// proportions from the slot boxes every piece of equipment is placed by, so a
-// breastplate landed on his belly, a helm across his eyes and his shoulders
-// stayed bare. Both halves of the fix are silent when undone: put the bundled
-// character back and every piece is out of place again on a screen that still
-// renders perfectly, and put the two bundled box overrides back and the helmet
-// and the amulet alone go wrong while the armour looks right.
-const charStart = app.indexOf("function rpgCharacterArtUrl(");
-const charEnd = app.indexOf("function rpgAvatarSvg(", charStart);
-assert.ok(charStart >= 0 && charEnd > charStart, "rpgCharacterArtUrl should be readable");
-const charFn = app.slice(charStart, charEnd);
-assert.ok(!charFn.includes("RPG_ART_BETA_ROOT"), "the hero must NOT fall back to a generated character sprite");
-assert.ok(!charFn.includes("rpgArtBetaEnabled"), "the beta switch decides the item art, not the body");
-assert.match(charFn, /_rpgArt\._character_male/, "an admin's own character upload must still win");
-assert.match(charFn, /_rpgArt\._character_female/, "…for either gender");
-
-const boxStart = app.indexOf("function rpgItemAvatarBox(");
-const boxEnd = app.indexOf("function rpgItemArtImage(", boxStart);
-assert.ok(boxStart >= 0 && boxEnd > boxStart, "rpgItemAvatarBox should be readable");
-const boxFn = app.slice(boxStart, boxEnd);
-assert.ok(!boxFn.includes("RPG_ART_BETA_ROOT"), "every item goes on its OWN slot box, generated or drawn");
-assert.match(boxFn, /return it\.box \|\| RPG_SLOT_META\[it\.slot\]\.box;/, "the slot box is the one place a piece is placed");
-
-// ── THE DRAWN HERO'S LANDMARKS ───────────────────────────────────────────────
-// He was redrawn to look like the generated characters bundled beside him, and
-// the one thing that redraw may never move is where an item lands: the head is
-// the circle the helmet box was measured against, and the two hands ARE the
-// points the shield and the weapon's swing group are translated to. Move
-// either and every piece is out of place again on a screen that still renders
-// perfectly — the exact fault this whole area exists to prevent.
-for (const fn of ["rpgHeroLower", "rpgHeroArms", "rpgHeroHead", "rpgHeroGender"]) {
-  assert.match(app, new RegExp(`function ${fn}\\(`), `${fn} should exist`);
+export function validateFragment(svg, allIds = new Set()) {
+  assert.doesNotMatch(svg, /<(?:image|img|text|script|foreignObject)\b/i, 'avatar art must remain vector-only');
+  assert.doesNotMatch(svg.replace(/aria-label="[^"]*"/g, ''), /undefined|NaN|Infinity/, 'SVG geometry must remain finite');
+  const ids = [...svg.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]);
+  const refs = [...svg.matchAll(/url\(#([^)]+)\)/g)].map(m => m[1]);
+  for (const ref of refs) assert.ok(ids.includes(ref), `Paint reference ${ref} resolves in this SVG`);
+  for (const id of ids) { assert.ok(!allIds.has(id), `Definition ${id} must not collide with another avatar`); allIds.add(id); }
+  return svg;
 }
-const heroStart = app.indexOf("function rpgHeroLower(");
-const hero = app.slice(heroStart, app.indexOf("function rpgAvatarSvg(", heroStart));
-assert.match(hero, /<circle cx="100" cy="78" r="34"/, "the head must stay where the helmet box was measured");
-assert.match(hero, /<circle cx="58" cy="158" r="8"/, "the left hand is the shield anchor");
-assert.match(hero, /<circle cx="142" cy="158" r="8"/, "the right hand is the weapon anchor");
-assert.match(avatar, /<g transform="translate\(58,158\)">/, "the shield hangs off the left hand");
-assert.match(avatar, /<g transform="translate\(142,158\)">/, "the weapon hangs off the right hand");
-// Order: the suit under the armour, the sleeves over it, the head under the helmet.
-const seq = ["rpgHeroLower()", 'rpgItemArt("armor", eq)', "rpgHeroArms()", "rpgHeroHead(gender)", 'rpgItemArt("helmet", eq)']
-  .map(t => avatar.lastIndexOf(t));
-assert.ok(seq.every(i => i >= 0), "the drawn hero should layer through its three helpers");
-assert.deepEqual(seq.slice().sort((a, b) => a - b), seq, "suit → armour → sleeves → head → helmet");
-
-// A real female hero — the old drawing had none — and her hair must reach the
-// installed <defs>, which are built once from whatever gets rendered here.
-assert.match(app, /rpgAvatarSvg\(\{\}, "male"\);/, "the male hero should be pre-rendered for the gradient defs");
-assert.match(app, /rpgAvatarSvg\(\{\}, "female"\);/, "…and the female hero, or a colour only she uses is missing from them");
-const headStart = app.indexOf("function rpgHeroHead(");
-const headFn = app.slice(headStart, app.indexOf("function rpgAvatarSvg(", headStart));
-assert.match(headFn, /g === "female"/, "the hero should have a female variant");
-
-// rpgHeroGender is pure — run it rather than reading it.
-const genderFn = new Function("rpgState", app.slice(app.indexOf("function rpgHeroGender("), headStart) + "\nreturn rpgHeroGender;");
-const G = genderFn({ gender: null });
-assert.equal(G("female"), "female", "an explicit female stays female");
-assert.equal(G("male"), "male", "an explicit male stays male");
-assert.equal(G(undefined), "male", "an unset hero has always been drawn male");
-assert.equal(genderFn({ gender: "female" })(undefined), "female", "…and this hero's own choice is used when none is passed");
-assert.equal(G("anything else"), "male", "an unknown value must not blank the hero");
-
-// …and the generated ITEM art — the half worth keeping — is still served.
-assert.match(app, /function rpgBundledItemArtUrl\(it\)/, "generated item art should still be bundled in");
-assert.match(app, /\$\{RPG_ART_BETA_ROOT\}\/items\//, "items should still resolve to the bundled sprites");
-
-assert.match(app, /rpgAvatarSvg\(r\.equipment \|\| \{\}, r\.gender\)/, "leaderboards should render the owner's gender");
-assert.match(app, /rpgAvatarSvg\(row\.equipment \|\| \{\}, row\.gender\)/, "arena ghosts should render the owner's gender");
-assert.match(app, /gender: rpgState\.gender \|\| null/, "leaderboard payload should publish gender");
-
-assert.ok(fs.existsSync(manifestPath), "asset-manifest.json should exist");
-const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-assert.equal(manifest.status, "admin-beta", "manifest should identify the unreleased beta");
-assert.equal(manifest.characters.length, 2, "male and female characters should both be bundled");
-assert.equal(manifest.items.length, items.length, "manifest should cover every RPG item");
-
-const manifestById = new Map(manifest.items.map(x => [x.id, x]));
-for (const item of items) {
-  const entry = manifestById.get(item.id);
-  assert.ok(entry, `manifest entry missing for ${item.id}`);
-  assert.equal(entry.slot, item.slot, `${item.id} slot should match the catalogue`);
-  assert.equal(entry.rarity, item.rarity, `${item.id} rarity should match the catalogue`);
-  assert.equal(entry.file, `items/${item.slot}/${item.id}.webp`, `${item.id} should use its stable id path`);
-  const file = path.join(assetRoot, entry.file);
-  assert.ok(fs.existsSync(file), `asset missing for ${item.id}: ${entry.file}`);
-  const bytes = fs.readFileSync(file);
-  assert.ok(bytes.length > 1000, `${item.id} image should not be empty`);
-  assert.equal(bytes.subarray(0, 4).toString("ascii"), "RIFF", `${item.id} should be WebP`);
-  assert.equal(bytes.subarray(8, 12).toString("ascii"), "WEBP", `${item.id} should be WebP`);
+export const sampleSets = [
+  {name:'Explorer',gender:'male',equipment:{}},
+  {name:'Explorer',gender:'female',equipment:{}},
+  {name:'Knight',gender:'male',equipment:{weapon:'knight_sword',shield:'knight_shield',armor:'knight_plate',helmet:'knight_helm',accessory:'hero_cape',pet:'loyal_pup'}},
+  {name:'Forest ranger',gender:'female',equipment:{weapon:'elven_blade',shield:'swift_buckler',armor:'emerald_scale',helmet:'adventurers_hood',accessory:'forest_cloak',pet:'owl_familiar'}},
+  {name:'Dragonfire',gender:'male',equipment:{weapon:'dragon_blade',shield:'dragonscale_ward',armor:'dragon_plate',helmet:'dragonfang_helm',accessory:'dragon_wings',pet:'pocket_dragon'}},
+  {name:'Celestial',gender:'female',equipment:{weapon:'celestial_edge',shield:'aurora_aegis',armor:'celestial_plate',helmet:'cosmos_crown',accessory:'wings_eternity',pet:'eternal_phoenix'}},
+  {name:'Astral mage',gender:'female',equipment:{weapon:'starfire_staff',shield:'void_ward',armor:'phoenix_mantle',helmet:'astral_hat',accessory:'cosmos_amulet',pet:'astral_drake'}},
+  {name:'Worldender',gender:'male',equipment:{weapon:'worldender',shield:'aegis_eternity',armor:'dawnforged_plate',helmet:'crown_infinity',accessory:'wings_dawn',pet:'cosmic_wyrm'}}
+];
+export function runChecks() {
+  const context = loadRenderer(), f = context.fixture, allIds = new Set();
+  assert.equal(f.items.length, 143);
+  assert.equal(new Set(f.items.map(it => it.id)).size, 143);
+  assert.deepEqual([...context.RpgSvgArt.ids].sort(), [...f.items.map(it => it.id)].sort(), 'every saved collectible gets authored art');
+  // Stable IDs and all gameplay fields are covered, excluding the art function.
+  const metadata = JSON.stringify(f.items.map(({ art, ...rest }) => rest));
+  const digest = createHash('sha256').update(metadata).digest('hex');
+  assert.equal(digest, '6628217ae91fadea2447ffda7e5d32f97d299f1f6a5a670c7173a69bcd64de4f', 'item identities, prices, requirements and bonuses remain compatible');
+  const state = {gender:'female',equipment:{weapon:'wood_sword'},inventory:{wood_sword:1},upgrades:{},gold:321,petBond:{loyal_pup:40}};
+  f.setState(state);
+  const before = JSON.stringify(state);
+  for (const it of f.items) {
+    assert.equal(context.RpgSvgArt.profiles[it.id].slot, it.slot, it.id);
+    validateFragment(f.icon(it), allIds);
+    validateFragment(f.avatar({[it.slot]:it.id}, 'male'), allIds);
+    validateFragment(f.avatar({[it.slot]:it.id}, 'female'), allIds);
+    assert.equal(f.itemImage(it), '');
+  }
+  assert.equal(JSON.stringify(state), before, 'rendering never changes inventory, points, gender, upgrades or bonds');
+  assert.equal(f.characterImage('female'), null, 'stored raster overrides cannot replace the vector body');
+  for (const level of [0, 2, 3, 5, 6, 10]) {
+    const expected = level >= 6 ? 2 : level >= 3 ? 1 : 0;
+    for (const it of f.items.filter(it => it.slot === 'pet')) {
+      f.setState({...state, upgrades:{[it.id]:level}});
+      assert.equal(f.petStage(it), expected);
+      for (const svg of [f.icon(it), f.avatar({pet:it.id}, 'female')]) {
+        validateFragment(svg, allIds);
+        assert.match(svg, new RegExp(`data-art-stage="${expected}"`));
+      }
+    }
+  }
+  f.setState(state);
+  assert.equal(f.gender(undefined), 'female');
+  assert.equal(f.gender('male'), 'male');
+  assert.equal(f.gender('unknown'), 'male');
+  assert.match(f.avatar({}, 'male'), /data-gender="male"/);
+  assert.match(f.avatar({}, 'female'), /data-gender="female"/);
+  for (const set of sampleSets) {
+    for (const [slot,id] of Object.entries(set.equipment)) assert.equal(f.byId[id]?.slot, slot, `${set.name}: valid ${slot} item ${id}`);
+    const svg = validateFragment(f.avatar(set.equipment, set.gender), allIds);
+    assert.match(svg, /<circle cx="100" cy="78" r="34"/);
+    assert.match(svg, /translate\(58,158\)/);
+    assert.match(svg, /translate\(142,158\)/);
+    const marks = ['data-hero-part="lower"','data-art-slot="armor"','data-hero-part="arms"','data-hero-part="head"','data-art-slot="helmet"'];
+    const present = marks.map(mark => svg.indexOf(mark)).filter(at => at >= 0);
+    assert.deepEqual([...present].sort((a,b) => a-b), present, 'clothes, armour, arms, face and helmet retain their layer order');
+    if (set.equipment.accessory) {
+      const itemAt = svg.indexOf('data-art-slot="accessory"');
+      assert.equal(itemAt < svg.indexOf('data-hero-part="lower"'), f.byId[set.equipment.accessory].layer === 'back');
+    }
+    assert.match(svg, /class="av-anim-slash"/);
+    assert.ok(svg.lastIndexOf('data-hero-part="grip"') > svg.lastIndexOf('data-art-slot="weapon"'), 'fingers hold the animated weapon');
+  }
+  assert.equal(f.item('weapon', {weapon:'missing_old_item'}), '', 'unknown saved items do not crash the avatar');
+  assert.doesNotMatch(f.icon({...f.byId.wood_sword, name:'"><script>alert(1)</script>'}), /<script>/);
+  assert.match(f.icon({...f.byId.wood_sword, name:'A "quoted" blade'}), /aria-label="A &quot;quoted&quot; blade"/, 'quoted names cannot break out of an SVG attribute');
+  for (const name of moduleNames) assert.ok(html.indexOf(name) < html.indexOf('type="module" src="app.js"'), `${name} loads before its consumers`);
+  assert.match(app, /rpgAvatarSvg\(r\.equipment \|\| \{\}, r\.gender\)/, 'leaderboard uses owner gender');
+  assert.match(app, /rpgAvatarSvg\(row\.equipment \|\| \{\}, row\.gender\)/, 'arena uses owner gender');
+  console.log(`rpg-avatar-art-tests: 143 collectible IDs, every pet stage, both genders, equipment layers and ${allIds.size} unique paint definitions OK`);
 }
-for (const character of manifest.characters) {
-  const file = path.join(assetRoot, character.file);
-  assert.ok(fs.existsSync(file), `character asset missing: ${character.file}`);
-}
-
-console.log(`rpg-avatar-art-tests: ${manifest.characters.length} characters + ${items.length} items OK (admin beta)`);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) runChecks();

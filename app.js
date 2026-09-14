@@ -3784,7 +3784,7 @@ async function enterApp(user) {
   // Load message inbox so the unread badge shows on the Messages nav item.
   loadMessages().then(updateMsgBadge).catch(e => console.warn('messages init', e));
 
-  // Load any custom avatar / item art so the hero and shop render the PNG overrides.
+  // Keep legacy art settings available to older admin tools; active avatars use SVG.
   loadRpgArtOverrides().catch(e => console.warn('rpg art init', e));
 
   // Deep-link: a game tab's "Open in the app" button links to index.html#raiders
@@ -3812,7 +3812,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.384.0';
+const APP_VERSION = 'v1.385.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -45722,25 +45722,9 @@ function akcBindOnce() {
 const $ = (id) => document.getElementById(id);
 function toast(msg, type = "") { showToast(msg, type || "info"); }
 function rpgCanPreview() { return !!currentUser && currentUser.role === "admin"; }
-// Generated Science Quest characters and equipment stay in teacher beta until
-// the release flag is deliberately flipped. Admins can compare old/new art in
-// one session without changing what students see.
-const RPG_ART_BETA_RELEASED = false;
-const RPG_ART_BETA_KEY = "scienceQuestAvatarV2";
-const RPG_ART_BETA_ROOT = "assets/science-quest/avatar-v2";
-function rpgArtBetaEnabled() {
-  if (RPG_ART_BETA_RELEASED) return true;
-  if (!rpgCanPreview()) return false;
-  try { return sessionStorage.getItem(RPG_ART_BETA_KEY) !== "off"; }
-  catch (_) { return true; }
-}
-function rpgSetArtBeta(on) {
-  if (!rpgCanPreview() || RPG_ART_BETA_RELEASED) return;
-  try { sessionStorage.setItem(RPG_ART_BETA_KEY, on ? "on" : "off"); } catch (_) {}
-  rpgRenderCharacterPage();
-  rpgRenderBattle();
-  toast(on ? "Generated avatar beta enabled" : "Generated avatar beta disabled", "success");
-}
+// Generated art is retired. Saved uploads remain stored, but avatars use SVG.
+function rpgArtBetaEnabled() { return false; }
+function rpgSetArtBeta() { /* Compatibility for an older open tab. */ }
 function rpgUnlockAllBetaItems() {
   if (!rpgCanPreview() || !rpgState) return;
   RPG_ITEMS.forEach(it => { rpgState.inventory[it.id] = Math.max(1, rpgState.inventory[it.id] || 0); });
@@ -47154,23 +47138,10 @@ function rpgStatLine(it) {
 }
 
 // ---- Avatar (layered SVG paper doll; equipment renders on the hero) ----
-// A custom PNG override (_rpgArt[id]) is dropped in as an <image> at the item's
-// box — the same rectangle the inventory icon uses — so it lands in the right
-// avatar slot. For weapon/shield the box is local space and the avatar wraps the
-// art in a translated/animated <g>, so the override inherits the swing animation.
-function rpgBundledItemArtUrl(it) {
-  if (!it || !rpgArtBetaEnabled()) return "";
-  return `${RPG_ART_BETA_ROOT}/items/${encodeURIComponent(it.slot)}/${encodeURIComponent(it.id)}.webp?${encodeURIComponent(APP_VERSION)}`;
-}
-function rpgItemImageUrl(it) {
-  return (it && _rpgArt[it.id]) || rpgBundledItemArtUrl(it) || "";
-}
-function rpgItemImageAspect(src) {
-  // Bundle sprites are authored on a square source canvas specifically to be
-  // mapped into each paper-doll slot (a weapon slot is deliberately tall).
-  // Keep uploaded overrides on their historical aspect-preserving behaviour.
-  return String(src || "").includes(`${RPG_ART_BETA_ROOT}/`) ? "none" : "xMidYMid meet";
-}
+// Raster lookups stay inert for compatibility with older open tabs.
+function rpgBundledItemArtUrl() { return ""; }
+function rpgItemImageUrl() { return ""; }
+function rpgItemImageAspect() { return "xMidYMid meet"; }
 // WHERE A PIECE OF KIT LANDS ON THE HERO — its own box, always.
 // A slot's box was drawn to fit the SVG hero below: the armour box is his
 // torso, the helmet box is his head. There used to be two overrides here that
@@ -47188,53 +47159,11 @@ function rpgItemArtImage(it, src) {
 }
 function rpgItemArt(slot, eq) {
   const it = RPG_ITEMS_BY_ID[(eq || {})[slot]];
-  if (!it) return "";
-  const imageUrl = rpgItemImageUrl(it);
-  if (slot === "pet") {
-    const st = rpgPetStage(it);
-    const halo = st ? `<circle cx="33" cy="104" r="${16 + st * 3}" fill="#ffd76a" opacity="${st === 2 ? 0.3 : 0.18}">${svgPulse(0.12, 0.3)}</circle>` : "";
-    if (imageUrl) return halo + rpgItemArtImage(it, imageUrl);
-    if (!it.art) return halo;
-    const evoEmoji = rpgPetEvoEmoji(it);
-    if (evoEmoji) return halo + svgPetEmoji(evoEmoji);
-    return halo + it.art();
-  }
-  if (imageUrl) return rpgItemArtImage(it, imageUrl);
-  if (!it.art) return "";
-  return it.art();
+  return it ? globalThis.RpgSvgArt.item(it, { stage: slot === "pet" ? rpgPetStage(it) : 0 }) : "";
 }
-// THE HERO HIMSELF IS DRAWN, NOT GENERATED — and the kit he wears is not.
-// The generated character PNG stands in a different pose and at different
-// proportions from the slot boxes every piece of equipment is placed by, so a
-// breastplate landed on his belly, a helm across his eyes and his shoulders
-// stayed bare: the armour was right, the body under it was not. The bundled
-// characters/*.webp are therefore NOT served here — the SVG paper doll below
-// is, which is the body those boxes were drawn around — while the generated
-// ITEM art stays exactly as it is (rpgBundledItemArtUrl), because that is the
-// half that was worth having.
-//
-// An admin's own upload still wins, as every _rpgArt override always has: a
-// character PNG somebody chose deliberately is not this function's to refuse.
-// Which one — the student's male/female sprite, falling back to the generic
-// _character (and vice-versa) so a partial setup still works.
-function rpgCharacterArtUrl(gender) {
-  const g = gender !== undefined ? gender : ((rpgState && rpgState.gender) || null);
-  if (g === "female") return _rpgArt._character_female || _rpgArt._character || null;
-  if (g === "male") return _rpgArt._character_male || _rpgArt._character || null;
-  return _rpgArt._character || _rpgArt._character_male || _rpgArt._character_female || null;
-}
-// ---- The drawn hero ---------------------------------------------------------
-// He is the body every equipment slot box was measured against, so the
-// landmarks below are load-bearing and none of them may drift: the head is a
-// circle at (100,78) r34 under the helmet box, the torso sits inside the armour
-// box, and the hands are at (58,158) and (142,158) — the shield and the
-// weapon's swing group are translated to exactly those two points.
-//
-// He was redrawn to look like the generated characters bundled beside him
-// (assets/science-quest/avatar-v2/characters): the charcoal bodysuit, the
-// chunky boots, the layered brown hair, the big friendly eyes — and a real
-// female variant, which the old drawing never had. Colours are sampled from
-// those two pictures. What changed is paint; nothing an item hangs off moved.
+// The shared vector hero uses the original equipment anchors. Stored raster
+// overrides are kept in storage but no longer replace characters or equipment.
+function rpgCharacterArtUrl() { return null; }
 const RPG_HERO = {
   skin: "#fbd8b4", skinLo: "#f0b98d",
   suit: "#4a4849", suitLo: "#343233",
@@ -47252,71 +47181,16 @@ function rpgHeroGender(gender) {
 }
 // Legs, boots and the bodysuit — everything drawn UNDER the armour layer.
 function rpgHeroLower() {
-  const suit = rpgGrad(RPG_HERO.suit, "h"), suitLo = rpgGrad(RPG_HERO.suitLo, "h");
-  const boot = rpgGrad(RPG_HERO.boot), bootLo = rpgGrad(RPG_HERO.bootLo, "h");
-  return `
-    <rect x="84" y="148" width="12" height="42" rx="5.5" fill="${suitLo}" ${RPG_O_THIN}/>
-    <rect x="104" y="148" width="12" height="42" rx="5.5" fill="${suitLo}" ${RPG_O_THIN}/>
-    <path d="M78 194 q0 -3 3 -3 h15 q3 0 3 3 v13 q0 6 -6 6 h-9 q-6 0 -6 -6 z" fill="${boot}" ${RPG_O_THIN}/>
-    <path d="M101 194 q0 -3 3 -3 h15 q3 0 3 3 v13 q0 6 -6 6 h-9 q-6 0 -6 -6 z" fill="${boot}" ${RPG_O_THIN}/>
-    <rect x="80" y="180" width="17" height="13" rx="5.5" fill="${bootLo}" ${RPG_O_THIN}/>
-    <rect x="103" y="180" width="17" height="13" rx="5.5" fill="${bootLo}" ${RPG_O_THIN}/>
-    <path d="M80 116 Q100 107 120 116 L122 141 Q121 152 118 162 Q100 169 82 162 Q79 152 78 141 Z" fill="${suit}" ${RPG_O}/>
-    <path d="M89 118 Q100 113 111 118 L112 158 Q100 163 88 158 Z" fill="rgba(255,255,255,0.08)"/>
-    <path d="M81 117 Q100 109 119 117 L120 128 Q100 121 80 128 Z" fill="rgba(255,255,255,0.10)"/>
-    <path d="M79 148 Q100 155 121 148" stroke="rgba(0,0,0,0.24)" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-    <path d="M89 111 Q100 120 111 111" stroke="rgba(0,0,0,0.28)" stroke-width="2.2" fill="none" stroke-linecap="round"/>`;
+  return globalThis.RpgHeroSvg.lower();
 }
 // Sleeves and hands — drawn OVER the armour, as they always were, so a
 // breastplate reads as worn on the chest with the suit's sleeves outside it.
 function rpgHeroArms() {
-  const suit = RPG_HERO.suit, skin = rpgGrad(RPG_HERO.skin, "r");
-  return `
-    <path d="M81 123 Q67 133 60 152" stroke="${RPG_OUT}" stroke-width="13.5" fill="none" stroke-linecap="round" opacity="0.85"/>
-    <path d="M119 123 Q133 133 140 152" stroke="${RPG_OUT}" stroke-width="13.5" fill="none" stroke-linecap="round" opacity="0.85"/>
-    <path d="M81 123 Q67 133 60 152" stroke="${suit}" stroke-width="10.5" fill="none" stroke-linecap="round"/>
-    <path d="M119 123 Q133 133 140 152" stroke="${suit}" stroke-width="10.5" fill="none" stroke-linecap="round"/>
-    <path d="M80 126 Q69 135 64 150" stroke="rgba(255,255,255,0.14)" stroke-width="3" fill="none" stroke-linecap="round"/>
-    <path d="M120 126 Q131 135 136 150" stroke="rgba(255,255,255,0.14)" stroke-width="3" fill="none" stroke-linecap="round"/>
-    <circle cx="58" cy="158" r="8" fill="${skin}" ${RPG_O_THIN}/>
-    <circle cx="142" cy="158" r="8" fill="${skin}" ${RPG_O_THIN}/>`;
+  return globalThis.RpgHeroSvg.arms();
 }
 // Neck, head, hair and face — drawn UNDER the helmet layer.
 function rpgHeroHead(gender) {
-  const g = rpgHeroGender(gender);
-  const skin = rpgGrad(RPG_HERO.skin, "r"), skinLo = rpgGrad(RPG_HERO.skinLo, "h");
-  const hair = rpgGrad(RPG_HERO.hair, "v"), hairLo = rpgGrad(RPG_HERO.hairLo, "v");
-  const eye = RPG_HERO.eye;
-  // Long hair goes BEHIND the head, so it has to be laid down before it.
-  const behind = g === "female"
-    ? `<path d="M124 60 Q151 68 153 94 Q155 117 141 128 Q141 106 130 93 Q123 78 124 60 Z" fill="${hairLo}" ${RPG_O_THIN}/>
-       <path d="M64 68 Q59 96 68 116 Q78 105 73 78 Z" fill="${hairLo}" ${RPG_O_THIN}/>
-       <path d="M136 68 Q141 96 132 116 Q122 105 127 78 Z" fill="${hairLo}" ${RPG_O_THIN}/>`
-    : "";
-  const fringe = g === "female"
-    ? `<path d="M63 78 Q58 40 100 36 Q142 40 137 78 Q134 62 127 57 Q112 78 100 73 Q88 78 73 57 Q66 62 63 78 Z" fill="${hair}" ${RPG_O_THIN}/>`
-    : `<path d="M63 78 Q58 40 100 36 Q142 40 137 78 Q135 64 129 59 Q114 76 92 70 Q77 68 70 59 Q64 64 63 78 Z" fill="${hair}" ${RPG_O_THIN}/>`;
-  const lashes = g === "female"
-    ? `<path d="M81 76 Q85 73 90 75" stroke="${eye}" stroke-width="1.9" fill="none" stroke-linecap="round"/>
-       <path d="M119 76 Q115 73 110 75" stroke="${eye}" stroke-width="1.9" fill="none" stroke-linecap="round"/>`
-    : "";
-  return `
-    <rect x="92" y="100" width="16" height="19" rx="7" fill="${skinLo}"/>
-    ${behind}
-    <ellipse cx="66" cy="88" rx="6" ry="7.5" fill="${skin}" ${RPG_O_THIN}/>
-    <ellipse cx="134" cy="88" rx="6" ry="7.5" fill="${skin}" ${RPG_O_THIN}/>
-    <circle cx="100" cy="78" r="34" fill="${skin}" ${RPG_O}/>
-    ${fringe}
-    <path d="M74 52 Q90 40 110 43 Q120 45 126 52" stroke="${RPG_HERO.hairHi}" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.55"/>
-    <path d="M97 38 Q106 48 101 60" stroke="${RPG_HERO.hairLo}" stroke-width="2.2" fill="none" stroke-linecap="round" opacity="0.35"/>
-    <ellipse cx="88" cy="84" rx="5" ry="6.4" fill="${eye}"/>
-    <ellipse cx="112" cy="84" rx="5" ry="6.4" fill="${eye}"/>
-    <circle cx="86.1" cy="81.2" r="1.9" fill="#fff" opacity="0.92"/>
-    <circle cx="110.1" cy="81.2" r="1.9" fill="#fff" opacity="0.92"/>
-    ${lashes}
-    <path d="M93 95 Q100 101.5 107 95" stroke="${eye}" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-    <ellipse cx="79" cy="93" rx="5.6" ry="3.6" fill="${RPG_HERO.blush}" opacity="0.38"/>
-    <ellipse cx="121" cy="93" rx="5.6" ry="3.6" fill="${RPG_HERO.blush}" opacity="0.38"/>`;
+  return globalThis.RpgHeroSvg.head(rpgHeroGender(gender));
 }
 function rpgAvatarSvg(equipment, gender) {
   const eq = equipment || (rpgState && rpgState.equipment) || {};
@@ -47324,19 +47198,6 @@ function rpgAvatarSvg(equipment, gender) {
   const accArt = acc ? rpgItemArt("accessory", eq) : "";
   const capeArt = acc && acc.layer === "back" ? accArt : "";
   const frontAccArt = acc && acc.layer !== "back" ? accArt : "";
-  const charUrl = rpgCharacterArtUrl(gender);
-  if (charUrl) return `<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Your equipped hero avatar">
-    <ellipse cx="100" cy="222" rx="46" ry="9" fill="rgba(0,0,0,0.10)"/>
-    ${rpgState && rpgState.auraGold ? `<ellipse cx="100" cy="130" rx="78" ry="96" fill="#ffd76a" opacity="0.16">${svgPulse(0.1, 0.22)}</ellipse>` : ""}
-    ${capeArt}
-    <image href="${escapeHtml(charUrl)}" x="0" y="0" width="200" height="240" preserveAspectRatio="xMidYMid meet" style="image-rendering:auto;"/>
-    ${rpgItemArt("armor", eq)}
-    ${rpgItemArt("helmet", eq)}
-    ${frontAccArt}
-    ${rpgItemArt("pet", eq)}
-    <g transform="translate(58,158)">${rpgItemArt("shield", eq)}</g>
-    <g transform="translate(142,158)"><g class="av-swing" transform="rotate(14)"><animateTransform class="av-anim-slash" attributeName="transform" type="rotate" values="14;-44;112;78;14" keyTimes="0;0.26;0.52;0.66;1" dur="0.62s" begin="indefinite"/><animateTransform class="av-anim-chop" attributeName="transform" type="rotate" values="14;-78;122;14" keyTimes="0;0.36;0.6;1" dur="0.74s" begin="indefinite"/><animateTransform class="av-anim-raise" attributeName="transform" type="rotate" values="14;-30;-30;14" keyTimes="0;0.3;0.72;1" dur="0.8s" begin="indefinite"/>${rpgItemArt("weapon", eq)}</g></g>
-  </svg>`;
   return `<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Your hero avatar">
     <ellipse cx="100" cy="222" rx="46" ry="9" fill="rgba(0,0,0,0.10)"/>
     ${rpgState && rpgState.auraGold ? `<ellipse cx="100" cy="130" rx="78" ry="96" fill="#ffd76a" opacity="0.16">${svgPulse(0.1, 0.22)}</ellipse>` : ""}
@@ -47349,28 +47210,12 @@ function rpgAvatarSvg(equipment, gender) {
     ${frontAccArt}
     ${rpgItemArt("pet", eq)}
     <g transform="translate(58,158)">${rpgItemArt("shield", eq)}</g>
-    <g transform="translate(142,158)"><g class="av-swing" transform="rotate(14)"><animateTransform class="av-anim-slash" attributeName="transform" type="rotate" values="14;-44;112;78;14" keyTimes="0;0.26;0.52;0.66;1" dur="0.62s" begin="indefinite"/><animateTransform class="av-anim-chop" attributeName="transform" type="rotate" values="14;-78;122;14" keyTimes="0;0.36;0.6;1" dur="0.74s" begin="indefinite"/><animateTransform class="av-anim-raise" attributeName="transform" type="rotate" values="14;-30;-30;14" keyTimes="0;0.3;0.72;1" dur="0.8s" begin="indefinite"/>${rpgItemArt("weapon", eq)}<circle r="8" fill="${rpgGrad(RPG_HERO.skin, "r")}" stroke="#2a2d3a" stroke-width="1.6"/></g></g>
+    <g transform="translate(142,158)"><g class="av-swing" transform="rotate(14)"><animateTransform class="av-anim-slash" attributeName="transform" type="rotate" values="14;-44;112;78;14" keyTimes="0;0.26;0.52;0.66;1" dur="0.62s" begin="indefinite"/><animateTransform class="av-anim-chop" attributeName="transform" type="rotate" values="14;-78;122;14" keyTimes="0;0.36;0.6;1" dur="0.74s" begin="indefinite"/><animateTransform class="av-anim-raise" attributeName="transform" type="rotate" values="14;-30;-30;14" keyTimes="0;0.3;0.72;1" dur="0.8s" begin="indefinite"/>${rpgItemArt("weapon", eq)}${globalThis.RpgHeroSvg.grip()}</g></g>
   </svg>`;
 }
 function rpgItemIconSvg(it) {
   const box = it.box || RPG_SLOT_META[it.slot].box;
-  const imageUrl = rpgItemImageUrl(it);
-  if (imageUrl) {
-    const [bx, by, bw, bh] = box.split(" ").map(Number);
-    return `<svg viewBox="${box}" xmlns="http://www.w3.org/2000/svg"><image href="${escapeHtml(imageUrl)}" x="${bx}" y="${by}" width="${bw}" height="${bh}" preserveAspectRatio="${rpgItemImageAspect(imageUrl)}" style="image-rendering:auto;"/></svg>`;
-  }
-  const rank = RPG_RARITY[it.rarity].rank;
-  const [bx, by, bw, bh] = box.split(" ").map(Number);
-  const cx = bx + bw / 2, cy = by + bh / 2;
-  const auraColor = rank === 6 ? "#ff7ab8" : rank === 5 ? "#ffd76a" : "#b88ae8";
-  const aura = rank >= 4
-    ? `<ellipse cx="${cx}" cy="${cy}" rx="${(bw * (rank === 6 ? 0.34 : 0.3)).toFixed(1)}" ry="${(bh * (rank === 6 ? 0.42 : 0.38)).toFixed(1)}" fill="${auraColor}" opacity="${rank === 6 ? "0.32" : rank === 5 ? "0.28" : "0.22"}">${rank >= 5 ? svgPulse(0.18, 0.36) : ""}</ellipse>`
-    : "";
-  const spark = rank >= 5
-    ? `<g>${svgStar(bx + bw * 0.18, by + bh * 0.22, bw * 0.05, bw * 0.022, "#fff")}${svgTwinkle(2)}</g><g>${svgStar(bx + bw * 0.84, by + bh * 0.58, bw * 0.04, bw * 0.018, rank === 6 ? "#ff9ad1" : "#ffe9a3")}${svgTwinkle(1.5)}</g>${rank === 6 ? `<g>${svgStar(bx + bw * 0.78, by + bh * 0.18, bw * 0.045, bw * 0.02, "#ffd76a")}${svgTwinkle(1.2)}</g>` : ""}`
-    : "";
-  const art = it.slot === "pet" && rpgPetEvoEmoji(it) ? svgPetEmoji(rpgPetEvoEmoji(it)) : it.art();
-  return `<svg viewBox="${box}" xmlns="http://www.w3.org/2000/svg">${aura}${art}${spark}</svg>`;
+  return `<svg viewBox="${box}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${escapeHtml(it.name).replace(/"/g, '&quot;')}">${globalThis.RpgSvgArt.item(it, { stage: it.slot === "pet" ? rpgPetStage(it) : 0 })}</svg>`;
 }
 
 // ---- Codex: bestiary tiers, titles, houses ----
@@ -48520,17 +48365,6 @@ function rpgRenderCharacterPage() {
   if (_genderRow) _genderRow.innerHTML =
     `<button type="button" class="rpg-gender-btn${_g === "male" ? " on" : ""}" onclick="rpgSetGender('male')">👦 Male</button>
      <button type="button" class="rpg-gender-btn${_g === "female" ? " on" : ""}" onclick="rpgSetGender('female')">👧 Female</button>`;
-  const betaPanel = $("rpgArtBetaPanel");
-  if (betaPanel) {
-    betaPanel.hidden = !rpgCanPreview() || RPG_ART_BETA_RELEASED;
-    if (!betaPanel.hidden) {
-      const betaOn = rpgArtBetaEnabled();
-      const owned = RPG_ITEMS.reduce((n, it) => n + (rpgState.inventory[it.id] ? 1 : 0), 0);
-      betaPanel.innerHTML = `<div><b>🧪 Generated avatar beta</b><span>${betaOn ? "ON — generated character + layered gear" : "OFF — current SVG art"}</span></div>
-        <button class="btn btn-ghost btn-sm" type="button" onclick="rpgSetArtBeta(${betaOn ? "false" : "true"})">${betaOn ? "Compare old art" : "Test new art"}</button>
-        <button class="btn btn-primary btn-sm" type="button" onclick="rpgUnlockAllBetaItems()">🔓 Unlock all ${RPG_ITEMS.length} (${owned}/${RPG_ITEMS.length})</button>`;
-    }
-  }
   $("rpgHeroName").textContent = (currentUser && currentUser.name) || "Hero";
   $("rpgHeroBars").innerHTML =
     `<div class="rpg-hero-title">Lv ${info.level} science adventurer · ${rpgState.stats.wins} battles won${rpgState.stats.bestFloor ? ` · 🏰 best floor ${rpgState.stats.bestFloor}` : ``} · ${rpgState.monthXp || 0} XP this month</div>
@@ -53106,31 +52940,11 @@ async function loadGameAssets(){
 
   // ===== Avatar & Items — replace the hero ragdoll + gear SVGs with PNGs =====
   await loadRpgArtOverrides(true);
-  const _rpgCard = (id, label, thumbHtml) => {
-    const custom = !!_rpgArt[id];
-    return '<div class="ga-card">'
-      + '<div class="ga-prev">' + thumbHtml + '</div>'
-      + '<div class="ga-name">' + escapeHtml(label) + '</div>'
-      + '<div class="ga-zone" tabindex="0"'
-      +   ' onpaste="onRpgArtPaste(\'' + id + '\', event)"'
-      +   ' ondragover="event.preventDefault(); this.classList.add(\'drag\')"'
-      +   ' ondragleave="this.classList.remove(\'drag\')"'
-      +   ' ondrop="onRpgArtDrop(\'' + id + '\', event)"'
-      +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
-      + '<div class="ga-actions"><label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onRpgArtPick(\'' + id + '\', event)"></label>'
-      +   (custom ? '<button class="btn btn-ghost ga-mini" onclick="resetRpgArt(\'' + id + '\')">Reset</button>' : '')
-      + '</div>'
-      + '<div class="ga-status ' + (custom ? 'custom' : '') + '">' + (custom ? '● Custom' : 'Default') + '</div>'
-      + '</div>';
-  };
-  html += '<h2 class="ga-game">🧍 Avatar &amp; Items <span style="font-weight:400;font-size:0.8rem;color:#94a3b8;">— replace the ragdoll SVGs with pixel-art PNGs</span></h2>';
-  const _charPrev = (key, gender) => _rpgArt[key]
-    ? '<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg"><image href="' + escapeHtml(_rpgArt[key]) + '" x="0" y="0" width="200" height="240" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated;"/></svg>'
-    : rpgAvatarSvg({}, gender);
-  html += '<h3 class="ga-cat">Hero character <span style="font-weight:400;font-size:0.8rem;color:#94a3b8;">— students pick Male or Female on their hero page</span></h3><div class="ga-cards">'
-    + _rpgCard('_character_male', '👦 Hero — Male', _charPrev('_character_male', 'male'))
-    + _rpgCard('_character_female', '👧 Hero — Female', _charPrev('_character_female', 'female'))
-    + _rpgCard('_character', 'Hero — Default (no choice yet)', _charPrev('_character', null))
+  const _rpgCard = (id, label, thumbHtml) => '<div class="ga-card"><div class="ga-prev">' + thumbHtml + '</div><div class="ga-name">' + escapeHtml(label) + '</div></div>';
+  html += '<h2 class="ga-game">Avatar &amp; Items</h2><p class="ga-cat">The full illustrated wardrobe, used on characters and throughout the games.</p>';
+  html += '<h3 class="ga-cat">Hero characters</h3><div class="ga-cards">'
+    + _rpgCard('_character_male', 'Male explorer', rpgAvatarSvg({}, 'male'))
+    + _rpgCard('_character_female', 'Female explorer', rpgAvatarSvg({}, 'female'))
     + '</div>';
   const bySlot = {};
   RPG_ITEMS.forEach(it => { (bySlot[it.slot] = bySlot[it.slot] || []).push(it); });
@@ -53142,43 +52956,12 @@ async function loadGameAssets(){
     html += '</div>';
   });
 
-  // ===== Science Spire — per-object animation slots (idle/attack/hurt/death) =====
-  await loadSpireOverrides(true);
-  const spireCats = {};
-  SPIRE_OBJECTS.forEach(o => { (spireCats[o.cat] = spireCats[o.cat] || []).push(o); });
-  html += '<h2 class="ga-game">🃏 Science Spire <span style="font-weight:400;font-size:0.8rem;color:#94a3b8;">— paste a PNG for each animation state; missing states fall back to Idle</span></h2>';
-  Object.keys(spireCats).forEach(cat => {
-    html += '<h3 class="ga-cat">' + cat + '</h3>';
-    spireCats[cat].forEach(o => {
-      html += '<div class="ga-objrow"><div class="ga-objname" style="font-weight:600;margin:6px 0;">' + o.emoji + ' ' + escapeHtml(o.label) + '</div><div class="ga-cards">';
-      SPIRE_ANIMS.forEach(an => {
-        const slotId = o.id + ':' + an.id;
-        const safe = slotId.replace(':','-');
-        const ov = _spireOverridesCache[slotId];
-        const thumb = ov ? ('<img src="' + ov + '" alt="' + escapeHtml(o.label) + ' ' + an.label + '">') : ('<div style="font-size:34px;line-height:64px;text-align:center;opacity:.7;">' + o.emoji + '</div>');
-        html += '<div class="ga-card" id="sgcard-' + safe + '">'
-          + '<div class="ga-prev">' + thumb + '</div>'
-          + '<div class="ga-name">' + an.label + '</div>'
-          + '<div class="ga-zone" id="sgzone-' + safe + '" tabindex="0"'
-          +   ' onpaste="onSpireObjPaste(\'' + slotId + '\', event)"'
-          +   ' ondragover="event.preventDefault(); this.classList.add(\'drag\')"'
-          +   ' ondragleave="this.classList.remove(\'drag\')"'
-          +   ' ondrop="onSpireObjDrop(\'' + slotId + '\', event)"'
-          +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
-          + '<div class="ga-actions">'
-          +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onSpireObjPick(\'' + slotId + '\', event)"></label>'
-          +   (ov ? '<button class="btn btn-ghost ga-mini" onclick="resetSpireObj(\'' + slotId + '\')">Reset</button>' : '')
-          + '</div>'
-          + '<div class="ga-status ' + (ov ? 'custom' : '') + '" id="sgstatus-' + safe + '">' + (ov ? '● Custom' : 'Default') + '</div>'
-          + '</div>';
-      });
-      html += '</div></div>';
-    });
+  // Science Spire shares the same vector artwork with the game and Spellbook.
+  html += '<h2 class="ga-game">Science Spire — Characters</h2><div class="ga-cards">';
+  [['warrior','Bastion'],['mage','Sablewyn'],['rogue','Quill'],['slime','Lab Slime'],['bat','Cave Bat'],['spider','Acid Spider'],['wraith','Wraith'],['bot','Sentry Bot'],['golem','Stone Golem'],['chimera','Chimera'],['titan','Spire Titan']].forEach(([kind,label]) => {
+    html += _rpgCard(kind,label,globalThis.SpireSvgArt.character(kind,null,'idle'));
   });
-
-  // ===== Science Spire — card art overrides (one picture per card) =====
-  await loadSpireCardArt(true);
-  html += spireCardArtAdminHtml();
+  html += '</div>' + spireCardArtAdminHtml();
 
   host.innerHTML = html;
 }
@@ -68128,12 +67911,9 @@ async function loadSpireOverrides(force){
   } catch (e) { console.warn('spire overrides load failed', e); _spireOverridesCache = _spireOverridesCache || {}; }
   return _spireOverridesCache;
 }
-// Full asset payload for the Spire game: character overrides + card art overrides
-// + the player's permanently-owned cards and their chosen starting deck.
+// Spire shares vector art locally; send only the original card ownership and deck.
 async function spireAssetsPayload(){
-  const overrides = await loadSpireOverrides();
-  const cardArt = await loadSpireCardArt();
-  return { type: 'spireAssets', overrides, cardArt,
+  return { type: 'spireAssets', overrides: {}, cardArt: {},
     cards: (rpgState && rpgState.spireCards) || {}, deck: spireResolvedDeck() };
 }
 async function pushSpireAssets(){
@@ -68318,9 +68098,7 @@ function spireRenderCardPack(results, spent, refund, n){
 
 // ---- mini gilded card (collection / deck / pack views) ----
 function spireCardArtThumb(id){
-  const ov = _spireCardArtCache && _spireCardArtCache[id];
-  if (ov) return `<img src="${escapeHtml(ov)}" alt="" onerror="this.style.display='none'">`;
-  return `<span>${SPIRE_CARDS[id].art}</span>`;
+  return globalThis.SpireSvgArt.card(id);
 }
 function spireMiniCard(id, opts){
   opts = opts || {};
@@ -68346,7 +68124,7 @@ function spireMiniCard(id, opts){
 // ---- Spellbook overlay (shop + deck builder) ----
 function spireBookOpen(){
   if (!rpgState){ showToast('Sign in to collect cards', 'error'); return; }
-  loadSpireCardArt().then(() => { spireRenderBook(); const ov = document.getElementById('spireBookOverlay'); if (ov) ov.classList.add('show'); });
+  spireRenderBook(); const ov = document.getElementById('spireBookOverlay'); if (ov) ov.classList.add('show');
 }
 function spireRenderBook(){
   const body = document.getElementById('spireBookBody'); if (!body) return;
@@ -68436,27 +68214,7 @@ async function resetSpireCardArt(id){
 // Builds the admin "Spire Cards" art-override grid (ga-* markup), appended by
 // loadGameAssets after the Spire character section. Returns an HTML string.
 function spireCardArtAdminHtml(){
-  let html = '<h2 class="ga-game">🃏 Science Spire — Card Art <span style="font-weight:400;font-size:0.8rem;color:#94a3b8;">— paste a PNG to replace any card\'s picture; default is the built-in vector art</span></h2><div class="ga-cards">';
-  Object.keys(SPIRE_CARDS).filter(id => !SPIRE_CARDS[id].basic).forEach(id => {
-    const c = SPIRE_CARDS[id]; const url = (_spireCardArtCache || {})[id];
-    const thumb = url ? ('<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(c.name) + '">') : ('<div style="font-size:34px;line-height:64px;text-align:center;opacity:.7;">' + c.art + '</div>');
-    html += '<div class="ga-card" id="scardcard-' + id + '">'
-      + '<div class="ga-prev">' + thumb + '</div>'
-      + '<div class="ga-name">' + escapeHtml(c.name) + '</div>'
-      + '<div class="ga-zone" tabindex="0"'
-      +   ' onpaste="onSpireCardPaste(\'' + id + '\', event)"'
-      +   ' ondragover="event.preventDefault(); this.classList.add(\'drag\')"'
-      +   ' ondragleave="this.classList.remove(\'drag\')"'
-      +   ' ondrop="onSpireCardDrop(\'' + id + '\', event)"'
-      +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
-      + '<div class="ga-actions">'
-      +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onSpireCardPick(\'' + id + '\', event)"></label>'
-      +   (url ? '<button class="btn btn-ghost ga-mini" onclick="resetSpireCardArt(\'' + id + '\')">Reset</button>' : '')
-      + '</div>'
-      + '<div class="ga-status ' + (url ? 'custom' : '') + '" id="scardstatus-' + id + '">' + (url ? '● Custom' : 'Default') + '</div>'
-      + '</div>';
-  });
-  return html + '</div>';
+  return '<h2 class="ga-game">Science Spire — Card Illustrations</h2><div class="ga-cards">' + Object.keys(SPIRE_CARDS).map(id => '<div class="ga-card"><div class="ga-prev">' + spireCardArtThumb(id) + '</div><div class="ga-name">' + escapeHtml(SPIRE_CARDS[id].name) + '</div></div>').join('') + '</div>';
 }
 
 // ---- wiring ----

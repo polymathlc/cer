@@ -6,9 +6,9 @@
 <title>Polymath Science Spire — Deck-Building MCQ Roguelike</title>
 <!--
    POLYMATH SCIENCE SPIRE — a Slay-the-Spire-style deck-building dungeon crawler.
-   Single-file build. Procedural / emoji art by default; every character object
-   (player + enemies) supports pasted PNG overrides per animation state
-   (idle / attack / hurt / death) pushed from the parent app via postMessage.
+   Hand-authored SVG characters, equipment and spells from spire-svg-art.js.
+   Shared with the portal Spellbook. Saved raster assets remain in storage,
+   while every displayed character and card uses the vector collection.
    Shares the question bank + play-limit + scoring protocol with the other games.
 -->
 <style>
@@ -42,8 +42,7 @@ body{background:radial-gradient(900px 500px at 50% -8%,#241c38,#15121f) fixed, v
 .enemy.hit{animation:shake .28s;}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
 .enemy .art,.hero .art{font-size:62px;line-height:1;filter:drop-shadow(0 6px 8px rgba(0,0,0,.4));user-select:none;}
-.enemy .art img,.hero .art img{height:84px;width:auto;max-width:120px;object-fit:contain;image-rendering:pixelated;display:block;}
-/* animated procedural bestiary sprites */
+/* Animated, hand-authored bestiary illustrations. */
 .enemy .art svg.spr,.hero .art svg.spr{display:block;overflow:visible;will-change:transform,filter;}
 svg.spr{transform-origin:50% 92%;}
 svg.spr.anim-idle{animation:sprBreathe 2.6s ease-in-out infinite;}
@@ -107,8 +106,7 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
 .card .cframe{margin:9px 9px 0;height:74px;border-radius:8px;position:relative;overflow:hidden;
   border:1px solid rgba(201,164,74,.5);box-shadow:0 1px 4px rgba(0,0,0,.5) inset;background:#0c0a14;}
 .card.big .cframe{height:106px;}
-.card .cframe svg,.card .cframe img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
-.card .cframe .cart-emoji{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:40px;filter:drop-shadow(0 3px 4px rgba(0,0,0,.6));}
+.card .cframe svg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
 /* nameplate */
 .card .cname{margin:7px 8px 0;text-align:center;font-weight:800;font-size:0.8rem;line-height:1.05;color:#f4e9c6;
   font-family:Georgia,'Times New Roman',serif;text-shadow:0 1px 2px rgba(0,0,0,.6);}
@@ -229,6 +227,14 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
 @media(max-height:650px) { .enemy-row { padding-top:24px; } .hero .art svg.spr { width:48px; height:48px; } .hand { min-height:194px; } .hand .card { min-height:155px; } .hand .card .cframe { height:44px; } }
 @media(prefers-reduced-motion:reduce) { svg.spr,.enemy,.card,.hero { animation:none!important; transition:none!important; } }
 
+.proj{width:78px;height:58px;filter:drop-shadow(0 0 7px rgba(255,210,137,.55));}
+.cast{width:96px;height:72px;filter:drop-shadow(0 0 9px rgba(191,222,255,.6));}
+.proj svg,.cast svg{display:block;width:100%;height:100%;overflow:visible;}
+.spr.anim-idle .spire-aura{transform-origin:80px 80px;animation:spireRuneOrbit 28s linear infinite;}
+.spr.anim-idle .spire-glow{animation:spireRuneGlow 3s ease-in-out infinite;}
+@keyframes spireRuneOrbit{to{transform:rotate(360deg);}}
+@keyframes spireRuneGlow{50%{opacity:.55;}}
+@media(prefers-reduced-motion:reduce){.spr *,.proj,.cast,.burst{animation:none!important;transition:none!important;}}
 </style>
 </head>
 <body>
@@ -355,6 +361,7 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
 <div class="toast" id="toast"></div>
 
 <script src="science-feed-bridge.js"></script>
+<script src="spire-svg-art.js"></script>
 <script>
 "use strict";
 var $ = function(id){ return document.getElementById(id); };
@@ -365,30 +372,20 @@ function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random
 function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
 function embedded(){ return !!(window.parent && window.parent !== window); }
 
-/* ============================ ASSET OVERRIDES ============================
-   Each character object (player + enemy types) can have a pasted PNG per
-   animation state. The parent app pushes { 'objId:anim': url }. We show the
-   override for the current state (falling back to idle), else an emoji. */
+/* Legacy asset payloads remain accepted for older parent tabs. Displayed art
+   always comes from the shared SVG collection; no saved asset is deleted. */
 var OVR = {};
 function _ovrSet(map){ OVR = map || {}; render(); }
 // Player's permanent card collection + chosen starting deck, pushed from the app.
 var CUSTOM_DECK = null;   // [cardId,...]  — used by newRun() when ≥8 valid cards
 var OWNED_CARDS = {};     // { cardId: count }  — reference only inside the game
-function ovrUrl(objId, anim){
-  if (!OVR) return null;
-  return OVR[objId+':'+anim] || OVR[objId+':idle'] || null;
-}
 function artHtml(objId, emoji, anim){
-  var u = ovrUrl(objId, anim || 'idle');
-  if (u) return '<img src="'+u+'" alt="" onerror="this.style.display=\'none\'">';
-  // Player hero: animated procedural sprite for the chosen class.
-  if (objId==='player' && G && G.heroKind && HEROES[G.heroKind]){
-    var h = HEROES[G.heroKind]; var hs = spriteSvg(h.kind, h.palette, anim); if (hs) return hs;
+  if (objId==='player'){
+    var hero = HEROES[G && G.heroKind] || HEROES.warrior;
+    return spriteSvg(hero.kind, hero.palette, anim);
   }
-  // Animated procedural sprite for any enemy kind in the bestiary.
-  var d = (typeof ENEMIES!=='undefined') ? ENEMIES[objId] : null;
-  if (d && d.kind){ var svg = spriteSvg(d.kind, d.palette, anim); if (svg) return svg; }
-  return emoji;
+  var enemy = ENEMIES[objId];
+  return enemy ? spriteSvg(enemy.kind, enemy.palette, anim) : SpireSvgArt.effect('impact');
 }
 
 /* ============================ CARD POOL ============================ */
@@ -423,7 +420,7 @@ var REWARD_POOL = ['bash','jab','guard','cleave','pommel','focus','adrenal','wea
 
 /* ============================ ENEMIES ============================ */
 // moves: {type:'attack',value} | {type:'block',value} | {type:'buff'} | {type:'debuff'}
-// kind = sprite key (see SPRITES); tier/flavor/palette drive the animated
+// kind = SpireSvgArt character key; tier/flavor/palette drive the animated
 // bestiary art. palette = [body, shadow, highlight]. Gameplay hp/moves are
 // intentionally left as tuned ranges (the bestiary single-HP figures are the
 // reference silhouette, not the in-combat roll).
@@ -449,92 +446,8 @@ var ENEMIES = {
 };
 
 /* ===================== ANIMATED BESTIARY SPRITES =====================
-   Procedural SVG silhouettes drawn from each enemy's 3-colour palette
-   (body / shadow / highlight). The <svg> carries an `anim-<state>` class
-   that maps to the idle / attack / hurt / death keyframes in the stylesheet:
-     idle  — gentle breathe loop      attack — windup -> lunge
-     hurt  — shake + flash            death  — topple + fade
-   PNG overrides (OVR) still win when the parent app pushes them. */
-var SPRITES = {
-  slime: function(a,b,c){ return ''+
-    '<path d="M16 80 Q8 50 30 36 Q50 22 70 36 Q92 50 84 80 Z" fill="'+a+'"/>'+
-    '<path d="M16 80 Q14 64 26 60 Q40 70 50 70 Q60 70 74 60 Q86 64 84 80 Z" fill="'+b+'" opacity=".45"/>'+
-    '<ellipse cx="36" cy="40" rx="9" ry="12" fill="'+c+'" opacity=".5"/>'+
-    '<circle cx="41" cy="58" r="6" fill="#0d1f12"/><circle cx="63" cy="58" r="6" fill="#0d1f12"/>'+
-    '<circle cx="43" cy="56" r="2" fill="#fff"/><circle cx="65" cy="56" r="2" fill="#fff"/>'; },
-  bat: function(a,b,c){ return ''+
-    '<path d="M50 50 L6 32 Q20 48 12 62 Q26 52 34 60 Q42 52 50 58 Z" fill="'+a+'"/>'+
-    '<path d="M50 50 L94 32 Q80 48 88 62 Q74 52 66 60 Q58 52 50 58 Z" fill="'+a+'"/>'+
-    '<path d="M41 40 L38 24 L50 38 Z" fill="'+b+'"/><path d="M59 40 L62 24 L50 38 Z" fill="'+b+'"/>'+
-    '<ellipse cx="50" cy="54" rx="13" ry="16" fill="'+b+'"/>'+
-    '<circle cx="45" cy="50" r="3.4" fill="'+c+'"/><circle cx="55" cy="50" r="3.4" fill="'+c+'"/>'; },
-  spider: function(a,b,c){ return ''+
-    '<g stroke="'+b+'" stroke-width="4" stroke-linecap="round" fill="none">'+
-    '<path d="M40 58 L14 40"/><path d="M40 62 L10 60"/><path d="M40 66 L14 78"/><path d="M44 70 L30 88"/>'+
-    '<path d="M60 58 L86 40"/><path d="M60 62 L90 60"/><path d="M60 66 L86 78"/><path d="M56 70 L70 88"/></g>'+
-    '<ellipse cx="50" cy="64" rx="18" ry="16" fill="'+a+'"/>'+
-    '<circle cx="50" cy="46" r="11" fill="'+b+'"/>'+
-    '<circle cx="46" cy="44" r="2.4" fill="'+c+'"/><circle cx="54" cy="44" r="2.4" fill="'+c+'"/>'+
-    '<circle cx="42" cy="48" r="1.5" fill="'+c+'"/><circle cx="58" cy="48" r="1.5" fill="'+c+'"/>'; },
-  wraith: function(a,b,c){ return ''+
-    '<path d="M28 88 Q22 40 50 22 Q78 40 72 88 L64 78 L58 88 L50 78 L42 88 L36 78 Z" fill="'+a+'" opacity=".9"/>'+
-    '<path d="M38 44 Q50 28 62 44 Q60 58 50 60 Q40 58 38 44 Z" fill="'+b+'"/>'+
-    '<ellipse cx="44" cy="46" rx="3" ry="4.5" fill="'+c+'"/><ellipse cx="56" cy="46" rx="3" ry="4.5" fill="'+c+'"/>'; },
-  bot: function(a,b,c){ return ''+
-    '<rect x="34" y="58" width="32" height="24" rx="4" fill="'+b+'"/>'+
-    '<rect x="38" y="82" width="7" height="10" fill="'+b+'"/><rect x="55" y="82" width="7" height="10" fill="'+b+'"/>'+
-    '<rect x="30" y="30" width="40" height="30" rx="6" fill="'+a+'"/>'+
-    '<line x1="50" y1="30" x2="50" y2="15" stroke="'+b+'" stroke-width="3"/><circle cx="50" cy="13" r="4" fill="'+c+'"/>'+
-    '<rect x="36" y="40" width="28" height="9" rx="4.5" fill="#0c1a22"/>'+
-    '<circle cx="50" cy="44.5" r="5" fill="'+c+'"/>'; },
-  chimera: function(a,b,c){ return ''+
-    '<ellipse cx="50" cy="68" rx="24" ry="17" fill="'+b+'"/>'+
-    '<path d="M30 50 Q30 30 50 28 Q70 30 70 50 Q70 64 50 66 Q30 64 30 50 Z" fill="'+a+'"/>'+
-    '<path d="M34 34 L26 16 L41 30 Z" fill="'+b+'"/><path d="M66 34 L74 16 L59 30 Z" fill="'+b+'"/>'+
-    '<path d="M50 28 l-4 -10 l8 0 Z" fill="'+c+'" opacity=".85"/>'+
-    '<path d="M40 47 l9 -3 l0 6 Z" fill="'+c+'"/><path d="M60 47 l-9 -3 l0 6 Z" fill="'+c+'"/>'+
-    '<path d="M43 60 L46 70 L49 60 Z" fill="#fff"/><path d="M51 60 L54 70 L57 60 Z" fill="#fff"/>'; },
-  golem: function(a,b,c){ return ''+
-    '<rect x="14" y="48" width="14" height="26" rx="3" fill="'+b+'"/><rect x="72" y="48" width="14" height="26" rx="3" fill="'+b+'"/>'+
-    '<path d="M30 86 L26 44 L40 34 L62 34 L74 46 L70 86 Z" fill="'+a+'"/>'+
-    '<path d="M50 36 L50 84" stroke="'+b+'" stroke-width="2" opacity=".5"/>'+
-    '<path d="M34 42 L66 42" stroke="'+b+'" stroke-width="3"/>'+
-    '<rect x="38" y="46" width="8" height="6" rx="1" fill="'+c+'"/><rect x="54" y="46" width="8" height="6" rx="1" fill="'+c+'"/>'; },
-  titan: function(a,b,c){ return ''+
-    '<path d="M26 90 L30 50 Q50 40 70 50 L74 90 Z" fill="'+b+'"/>'+
-    '<path d="M26 50 L14 43 L30 48 Z" fill="'+a+'"/><path d="M74 50 L86 43 L70 48 Z" fill="'+a+'"/>'+
-    '<ellipse cx="50" cy="66" rx="10" ry="12" fill="'+c+'" opacity=".75"/>'+
-    '<circle cx="50" cy="36" r="16" fill="'+a+'"/>'+
-    '<path d="M33 30 L33 17 L42 26 L50 13 L58 26 L67 17 L67 30 Z" fill="'+c+'"/>'+
-    '<circle cx="44" cy="38" r="3" fill="'+b+'"/><circle cx="56" cy="38" r="3" fill="'+b+'"/>'; },
-  // ---- player heroes ----
-  warrior: function(a,b,c){ return ''+
-    '<rect x="40" y="74" width="8" height="16" fill="'+b+'"/><rect x="52" y="74" width="8" height="16" fill="'+b+'"/>'+
-    '<rect x="36" y="40" width="28" height="38" rx="5" fill="'+a+'"/>'+
-    '<path d="M36 50 L64 50" stroke="'+b+'" stroke-width="2"/>'+
-    '<rect x="42" y="22" width="16" height="18" rx="5" fill="'+a+'"/>'+
-    '<rect x="44" y="29" width="12" height="4" fill="'+b+'"/>'+
-    '<polygon points="50,12 54,24 46,24" fill="'+c+'"/>'+
-    '<rect x="18" y="44" width="16" height="26" rx="6" fill="'+b+'"/><rect x="22" y="50" width="8" height="14" rx="3" fill="'+c+'" opacity=".75"/>'+
-    '<g transform="rotate(18 73 50)"><rect x="70" y="28" width="6" height="42" rx="2" fill="#eef2f6"/></g>'+
-    '<rect x="65" y="56" width="16" height="4" rx="2" fill="'+c+'"/>'; },
-  mage: function(a,b,c){ return ''+
-    '<path d="M30 86 Q34 50 50 44 Q66 50 70 86 Z" fill="'+a+'"/>'+
-    '<path d="M50 50 L50 86" stroke="'+b+'" stroke-width="2" opacity=".4"/>'+
-    '<circle cx="50" cy="37" r="9" fill="'+c+'"/>'+
-    '<path d="M36 31 L50 4 L64 31 Z" fill="'+b+'"/>'+
-    '<ellipse cx="50" cy="31" rx="16" ry="4" fill="'+a+'"/>'+
-    '<polygon points="50,8 53,16 47,16" fill="'+c+'"/>'+
-    '<rect x="72" y="34" width="4" height="50" rx="2" fill="'+b+'"/>'+
-    '<circle cx="74" cy="30" r="7" fill="'+c+'"/><circle cx="74" cy="30" r="3" fill="#fff"/>'; },
-  rogue: function(a,b,c){ return ''+
-    '<rect x="42" y="74" width="7" height="16" fill="'+b+'"/><rect x="53" y="74" width="7" height="16" fill="'+b+'"/>'+
-    '<path d="M34 84 Q34 46 50 40 Q66 46 66 84 L58 78 L50 84 L42 78 Z" fill="'+a+'"/>'+
-    '<path d="M38 40 Q50 24 62 40 Q60 50 50 52 Q40 50 38 40 Z" fill="'+b+'"/>'+
-    '<circle cx="46" cy="42" r="2.2" fill="'+c+'"/><circle cx="54" cy="42" r="2.2" fill="'+c+'"/>'+
-    '<g transform="rotate(28 24 67)"><rect x="22" y="56" width="4" height="20" rx="1" fill="#dfeee0"/></g>'+
-    '<g transform="rotate(-28 76 67)"><rect x="74" y="56" width="4" height="20" rx="1" fill="#dfeee0"/></g>'; }
-};
+   Detailed SVG illustrations share the existing idle / attack / hurt / death
+   classes, so artwork changes never alter turn timing or combat rules. */
 // Playable heroes — title/role/hp/signature/flavour + class starter deck.
 var HEROES = {
   warrior: { kind:'warrior', title:'Bastion', role:'Warrior', hp:80, emoji:'🛡️',
@@ -552,10 +465,7 @@ var HEROES = {
 };
 var selectedHero = 'warrior';
 function spriteSvg(kind, pal, anim){
-  var fn = SPRITES[kind]; if (!fn) return null;
-  pal = pal || ['#9aa0aa','#3a3f48','#d6dae2'];
-  return '<svg class="spr anim-'+(anim||'idle')+'" viewBox="0 0 100 100" width="86" height="86" aria-hidden="true">'+
-    fn(pal[0], pal[1], pal[2])+'</svg>';
+  return SpireSvgArt.character(kind, pal, anim);
 }
 
 /* ============================ STATE ============================ */
@@ -723,9 +633,9 @@ function playCard(handIdx, targetIdx){
     if (hero){ hero.classList.add('lunge'); setTimeout(function(){ var h=heroEl(); if(h) h.classList.remove('lunge'); }, 320); }
     var isAoeHit = mode==='all';
     var tgts = isAoeHit ? G.enemies.filter(function(e){ return !e.dead; }) : (target?[target]:[]);
-    tgts.forEach(function(tg){ projectile(hero, enemyEl(tg), c.art, { color: RARITY[c.rarity] }); });
+    tgts.forEach(function(tg){ projectile(hero, enemyEl(tg), id, { color: RARITY[c.rarity] }); });
   } else {
-    castPop(hero, c.art, RARITY[c.rarity]);
+    castPop(hero, id, RARITY[c.rarity]);
   }
   setTimeout(function(){ if(G===run && G.state==='combat'){ setAnim('player','idle'); render(); } }, 260);
   // Free the played slot before a draw effect; the card enters discard after resolving.
@@ -767,7 +677,7 @@ function enemyActSeq(i){
   if (act.type==='attack'){
     var v = act.value + (e.str||0);
     if (e.weak) v = Math.floor(v*0.75);
-    projectile(enemyEl(e), heroEl(), '💢', { color:'#e8584f', spin:-200 });
+    projectile(enemyEl(e), heroEl(), 'impact', { color:'#e8584f', spin:-200 });
     var hpBefore=G.player.hp, blkBefore=G.player.block;
     damagePlayer(v);
     var dealt=hpBefore-G.player.hp, blocked=Math.min(blkBefore, v);
@@ -1014,12 +924,12 @@ function renderLog(scroll){
   if(scroll) box.scrollTop = box.scrollHeight;
 }
 /* ---- card-themed attack visuals ---- */
-function projectile(fromEl, toEl, emoji, opts){
+function projectile(fromEl, toEl, artId, opts){
   opts=opts||{}; if(!fromEl||!toEl) return;
   var a=fromEl.getBoundingClientRect(), b=toEl.getBoundingClientRect();
   var x0=a.left+a.width/2, y0=a.top+a.height/2;
   var x1=b.left+b.width/2, y1=b.top+b.height*0.45;
-  var el=document.createElement('div'); el.className='proj'; el.textContent=emoji||'✦';
+  var el=document.createElement('div'); el.className='proj'; el.innerHTML=SpireSvgArt.effect(artId);
   el.style.left=x0+'px'; el.style.top=y0+'px';
   document.body.appendChild(el);
   requestAnimationFrame(function(){
@@ -1035,9 +945,9 @@ function burst(x,y,color){
   requestAnimationFrame(function(){ r.style.transform='translate(-50%,-50%) scale(2.4)'; r.style.opacity='0'; });
   setTimeout(function(){ r.remove(); }, 360);
 }
-function castPop(el, emoji, color){
+function castPop(el, artId, color){
   if(!el) return; var r=el.getBoundingClientRect();
-  var p=document.createElement('div'); p.className='cast'; p.textContent=emoji||'✨';
+  var p=document.createElement('div'); p.className='cast'; p.innerHTML=SpireSvgArt.effect(artId);
   p.style.left=(r.left+r.width/2)+'px'; p.style.top=(r.top+r.height/2)+'px'; if(color) p.style.color=color;
   document.body.appendChild(p);
   requestAnimationFrame(function(){ p.style.transform='translate(-50%,-140%) scale(1.5)'; p.style.opacity='0'; });
@@ -1135,44 +1045,11 @@ function onEnemyClick(i){
   if (_selCard!=null) playCard(_selCard,i);
 }
 function cancelCardTarget(){ _selCard=null; render(); }
-/* ====================== CARD ART — designed vector emblems ======================
-   Every card shows an illustrated scene in its gilded window: a type-tinted glow
-   plus a gold-lined vector emblem. Admins can later override any card with their
-   own picture (pushed from the parent app as cardArt[id]=url) — the override
-   renders in place of the vector art, so cards become "game objects" too. */
+/* ====================== CARD ART — shared SVG scenes ======================
+   The Spellbook and combat use the same detailed vector illustrations.
+   Older parent tabs may still send cardArt; it never replaces this collection. */
 var CARD_ART_OVR = {};                 // { cardId: imageUrl }  (from parent app)
 function _spireCardArtSet(map){ CARD_ART_OVR = map || {}; }
-var CARD_TINT = { attack:'#d06b57', skill:'#5fae93', power:'#a98cdf', relic:'#cba74e' };
-var _artSeq = 0;
-// inner SVG drawn on a 130×80 canvas, centred ≈ (65,40). Gold outline = #c9a44a.
-var EMBLEMS = {
-  blade:'<path d="M65 10 69 44 65 55 61 44Z" fill="#e3e9f1" stroke="#c9a44a" stroke-width="1.2"/><rect x="57" y="53" width="16" height="5" rx="2" fill="#c9a44a"/><rect x="63" y="58" width="4" height="11" fill="#6f5220"/><circle cx="65" cy="71" r="3" fill="#e8b41f"/>',
-  twin:'<path d="M44 16 84 64" stroke="#dfe7f0" stroke-width="5" stroke-linecap="round"/><path d="M86 16 46 64" stroke="#dfe7f0" stroke-width="5" stroke-linecap="round"/><path d="M44 16 84 64M86 16 46 64" stroke="#c9a44a" stroke-width="1" fill="none"/><circle cx="65" cy="40" r="3.5" fill="#e8b41f"/>',
-  hammer:'<rect x="46" y="20" width="38" height="17" rx="3" fill="#9aa4b0" stroke="#c9a44a"/><rect x="48" y="20" width="9" height="17" fill="#c0cad6"/><rect x="62" y="37" width="6" height="31" fill="#6f5220"/>',
-  fist:'<rect x="50" y="30" width="30" height="24" rx="6" fill="#b98a4e" stroke="#c9a44a"/><g fill="#8a6230"><rect x="53" y="25" width="6" height="11" rx="3"/><rect x="61" y="23" width="6" height="13" rx="3"/><rect x="69" y="25" width="6" height="11" rx="3"/></g><rect x="50" y="44" width="30" height="3" fill="#8a6230"/>',
-  boulder:'<path d="M48 56 44 38 56 26 76 28 86 44 80 58Z" fill="#7d756b" stroke="#c9a44a"/><path d="M56 26 62 44 80 58M44 38 62 44" stroke="#544e47" fill="none"/>',
-  axe:'<path d="M58 18 C82 18 86 44 64 46 C82 50 80 70 58 66Z" fill="#9aa4b0" stroke="#c9a44a"/><rect x="55" y="14" width="5" height="56" fill="#6f5220"/>',
-  vortex:'<g fill="none" stroke="#a98cdf" stroke-width="3" stroke-linecap="round"><circle cx="65" cy="40" r="6"/><path d="M65 22 A18 18 0 0 1 83 40"/><path d="M65 58 A18 18 0 0 1 47 40"/><path d="M78 28 A26 26 0 0 1 85 50" opacity=".55"/></g>',
-  bolt:'<path d="M70 12 52 44 64 44 58 68 84 32 68 32Z" fill="#ffd76a" stroke="#c9a44a" stroke-width="1.2"/>',
-  lens:'<circle cx="65" cy="40" r="16" fill="#13283a" stroke="#5fae93" stroke-width="2"/><circle cx="65" cy="40" r="7" fill="#7be0a2"/><path d="M65 17v8M65 55v8M42 40h8M80 40h8" stroke="#c9a44a"/>',
-  flask:'<path d="M59 16h12v12l9 22a6 6 0 0 1-6 9H56a6 6 0 0 1-6-9l9-22Z" fill="#0f3322" stroke="#c9a44a"/><path d="M53 44h24l3 8a4 4 0 0 1-4 6H54a4 4 0 0 1-4-6Z" fill="#3ad07a"/><rect x="57" y="12" width="16" height="5" rx="2" fill="#c9a44a"/>',
-  flame:'<path d="M65 14 C74 26 78 30 72 40 C80 38 80 28 78 24 C90 36 86 60 65 68 C44 60 44 40 56 30 C56 38 60 40 64 40 C58 32 60 22 65 14Z" fill="#ff8a3c" stroke="#c9a44a"/><path d="M65 34 C70 40 70 48 65 58 C60 48 60 40 65 34Z" fill="#ffd76a"/>',
-  citadel:'<g fill="#8a93a0" stroke="#c9a44a"><rect x="46" y="34" width="38" height="30"/><rect x="40" y="26" width="13" height="38"/><rect x="77" y="26" width="13" height="38"/></g><rect x="61" y="46" width="8" height="18" fill="#2a1830"/><path d="M40 26h13M77 26h13" stroke="#c9a44a"/>',
-  fang:'<path d="M50 24 56 54 60 30Z" fill="#f0f0f0" stroke="#c9a44a"/><path d="M80 24 74 54 70 30Z" fill="#f0f0f0" stroke="#c9a44a"/><path d="M47 23h36" stroke="#c9a44a" stroke-width="2"/>',
-  droplet:'<path d="M65 16 C77 34 82 44 76 54 A14 14 0 1 1 54 54 C48 44 53 34 65 16Z" fill="#c0392b" stroke="#c9a44a"/><path d="M59 44 a6 6 0 0 0 4 11" fill="none" stroke="#ff9a8a" stroke-width="2"/>',
-  comet:'<circle cx="76" cy="30" r="11" fill="#ff7a3c" stroke="#c9a44a"/><path d="M66 40 38 64M72 44 50 66M62 34 38 54" stroke="#ffd76a" stroke-width="3" stroke-linecap="round"/>',
-  star:'<path d="M65 13 71 33 92 33 75 46 81 67 65 54 49 67 55 46 38 33 59 33Z" fill="#ffe08a" stroke="#c9a44a" stroke-width="1.2"/>',
-  voidcore:'<circle cx="65" cy="40" r="14" fill="#08060f"/><g fill="none" stroke="#a98cdf" stroke-width="2"><ellipse cx="65" cy="40" rx="27" ry="8"/><circle cx="65" cy="40" r="20" opacity=".4"/></g><circle cx="65" cy="40" r="14" fill="none" stroke="#c9a44a"/>',
-  shield:'<path d="M65 16 86 24 V42 C86 58 76 66 65 70 C54 66 44 58 44 42 V24Z" fill="#3f5e9c" stroke="#c9a44a" stroke-width="1.4"/><path d="M65 16 V70M44 40 H86" stroke="#c9a44a" opacity=".6"/><circle cx="65" cy="40" r="6.5" fill="#ffd76a"/>',
-  fury:'<circle cx="65" cy="40" r="16" fill="#7a1f18" stroke="#c9a44a"/><path d="M56 36 60 40 56 44M74 36 70 40 74 44" stroke="#ffd76a" stroke-width="2" fill="none"/><path d="M58 49 q7 7 14 0" stroke="#ffd76a" stroke-width="2" fill="none"/><path d="M50 22 58 30M80 22 72 30M65 17V27" stroke="#ff8a3c" stroke-width="2"/>'
-};
-var SCENES = {
-  strike:'blade', defend:'shield', bash:'hammer', jab:'fist', guard:'boulder',
-  cleave:'axe', pommel:'twin', focus:'vortex', adrenal:'bolt', weaken:'lens',
-  poison:'flask', fireball:'flame', shieldwall:'citadel', doublestrike:'fang',
-  rage:'fury', meteor:'comet', lifesteal:'droplet', fortress:'shield',
-  apex:'star', singularity:'voidcore'
-};
 var CARD_KW = {
   bash:['Vulnerable'], cleave:['AoE'], pommel:['Draw'], focus:['Draw'],
   adrenal:['Energy','Draw'], weaken:['Weak','AoE'], poison:['Poison'],
@@ -1190,21 +1067,7 @@ var GEM = {
 function gemBg(r){ return GEM[r] || GEM.common; }
 function descHtml(s){ return escapeText(s).replace(/(\d+)/g,'<b>$1</b>'); }
 function cardArtHtml(id){
-  var ov = CARD_ART_OVR[id];
-  if (ov) return '<img src="'+ov+'" alt="" onerror="this.style.display=\'none\'">';
-  var c = CARDS[id];
-  var emb = EMBLEMS[SCENES[id]];
-  if (!emb) return '<div class="cart-emoji">'+(c?c.art:'✨')+'</div>';
-  var tint = CARD_TINT[c && c.type] || '#caa54b';
-  var gid = 'ca'+(++_artSeq);
-  return '<svg viewBox="0 0 130 80" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">'+
-    '<defs><radialGradient id="'+gid+'" cx="50%" cy="36%" r="78%">'+
-      '<stop offset="0%" stop-color="'+tint+'" stop-opacity=".6"/>'+
-      '<stop offset="52%" stop-color="'+tint+'" stop-opacity=".13"/>'+
-      '<stop offset="100%" stop-color="#0c0a14"/>'+
-    '</radialGradient></defs>'+
-    '<rect width="130" height="80" fill="#0c0a14"/><rect width="130" height="80" fill="url(#'+gid+')"/>'+
-    emb+'</svg>';
+  return SpireSvgArt.card(id);
 }
 function cardEl(id, big){
   var c=CARDS[id]; var el=document.createElement('div');
@@ -1352,7 +1215,7 @@ window.addEventListener('message', function(ev){
     if (d.cardArt) _spireCardArtSet(d.cardArt);
     if (Array.isArray(d.deck)) CUSTOM_DECK = d.deck.filter(function(x){ return CARDS[x]; });
     if (d.cards && typeof d.cards==='object') OWNED_CARDS = d.cards;
-    _ovrSet(d.overrides);   // also re-renders so new card art shows immediately
+    _ovrSet(d.overrides);   // refresh the UI after receiving compatible deck data
   }
 });
 // stamp question-shown time when the overlay opens (for anti-rush counting)

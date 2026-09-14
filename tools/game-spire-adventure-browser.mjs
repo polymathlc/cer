@@ -57,7 +57,7 @@ async function settledSpireRoom(frame,floor){
  window.release=()=>{hold=false;pending.splice(0).forEach(reply);};
  addEventListener('message',e=>{messages.push(e.data);if(e.data?.type==='SD_PLAY_START')feedCredits--;if(e.data?.type==='SD_REQUEST_QUESTIONS'){if(hold)pending.push(e);else reply(e);}});
  </script>`;
- await page.route('**/*',async route=>{const u=new URL(route.request().url());if(u.origin!=='http://game.test'){requests.push(u.href);return route.abort();}const body=u.pathname==='/science-spire.html'?spire:u.pathname==='/science-feed-bridge.js'?fs.readFileSync(path.join(root,'science-feed-bridge.js'),'utf8'):u.pathname==='/adventure'?fixture:parent;return route.fulfill({status:200,contentType:u.pathname.endsWith('.js')?'text/javascript':'text/html',body});});
+ await page.route('**/*',async route=>{const u=new URL(route.request().url());if(u.origin!=='http://game.test'){requests.push(u.href);return route.abort();}const body=u.pathname==='/science-spire.html'?spire:['/science-feed-bridge.js','/spire-svg-art.js'].includes(u.pathname)?read(u.pathname.slice(1)):u.pathname==='/adventure'?fixture:parent;return route.fulfill({status:200,contentType:u.pathname.endsWith('.js')?'text/javascript':'text/html',body});});
  const shots=process.env.GAME_SCREENSHOTS||path.join(root,'..','game-upgrade-qa');fs.mkdirSync(shots,{recursive:true});
  try{
   await page.goto('http://game.test/?hold=1');const early=page.frames().find(f=>f.url().endsWith('/science-spire.html'));await early.waitForFunction(()=>typeof scienceFeed!=='undefined');
