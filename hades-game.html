@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="application-version" content="2.1.0" />
+  <meta name="application-version" content="2.1.1" />
   <meta name="theme-color" content="#08131b" />
   <title>HADES II: Chronos Fall — Endless Descent</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -612,7 +612,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
         <div id="runtime-toolbar"><button id="runtime-pause" type="button" aria-label="Pause game and open settings">Ⅱ <span>Pause</span></button></div>
         <section id="runtime-overlay" role="dialog" aria-modal="true" aria-labelledby="runtime-title">
           <div class="runtime-panel">
-            <div class="runtime-eyebrow">CHRONOS FALL · UNDERWORLD ODYSSEY · v2.1.0</div><h1 id="runtime-title">Defy the Titan of Time</h1>
+            <div class="runtime-eyebrow">CHRONOS FALL · UNDERWORLD ODYSSEY · v2.1.1</div><h1 id="runtime-title">Defy the Titan of Time</h1>
             <p id="runtime-description">Descend through shifting chambers, forge a divine build and challenge the endless depths beyond Chronos.</p>
             <div class="runtime-help"><span><b>MOVE</b> WASD / Arrows</span><span><b>STRIKE</b> Hold click / J</span><span><b>SPECIAL</b> Right click / K</span><span><b>DASH</b> Space / Shift</span><span><b>CAST</b> Q / E</span><span><b>HEX</b> F when charged</span></div>
             <p class="runtime-touch-hint">Touch: move with the left pad and use the ability buttons. Attacks aim at the nearest foe.</p>
@@ -862,16 +862,54 @@ const HADES_LEARNING_ENABLED = new URLSearchParams(window.location.search).get('
 const hadesLearning = {
   enabled: HADES_LEARNING_ENABLED, sessionId: null, profileKey: null,
   helloId: null, round: 0, pending: null, onStart: null, timer: null,
-  tier: 'common', state: 'idle', subject: new URLSearchParams(window.location.search).get('subject') === 'math' ? 'Math' : 'Science'
+  tier: 'common', rewardEpoch: 0, state: 'idle', subject: new URLSearchParams(window.location.search).get('subject') === 'math' ? 'Math' : 'Science'
 };
-const HADES_BOON_TIERS = { common: {name: 'Common', rank: 1}, rare: {name: 'Rare', rank: 2}, epic: {name: 'Epic', rank: 3}, heroic: {name: 'Heroic', rank: 4} };
+const HADES_BOON_TIERS = {
+  fractured: {name:'Fractured', rank:0, fallback:1, heart:1, shopHeart:1, ash:1},
+  common: {name:'Common', rank:1, fallback:5, heart:10, shopHeart:12, ash:5},
+  uncommon: {name:'Uncommon', rank:2, fallback:10, heart:18, shopHeart:24, ash:10},
+  rare: {name:'Rare', rank:3, fallback:20, heart:25, shopHeart:35, ash:15},
+  epic: {name:'Epic', rank:5, fallback:35, heart:40, shopHeart:50, ash:25},
+  heroic: {name:'Heroic', rank:8, fallback:60, heart:60, shopHeart:80, ash:40}
+};
 function learningRewardForScore(correct) {
   if (!Number.isInteger(correct) || correct < 0 || correct > 5) return null;
-  return {correct, total: 5, healPercent: correct * 8, boonTier: correct === 5 ? 'heroic' : correct === 4 ? 'epic' : correct >= 2 ? 'rare' : 'common'};
+  return {correct, total: 5, healPercent: correct * 8, boonTier: ['fractured','common','uncommon','rare','epic','heroic'][correct]};
 }
 function learningStorageKey() {
   if (!hadesLearning.enabled) return 'chronos-fall-progress-v1';
   return hadesLearning.profileKey ? 'chronos-fall-learning-v1:' + encodeURIComponent(hadesLearning.profileKey) : null;
+}
+function learningMaxLifeReward(kind = 'fallback') { return HADES_BOON_TIERS[hadesLearning.tier][kind]; }
+function learningAshReward() { return HADES_BOON_TIERS[hadesLearning.tier].ash; }
+function applyLearningMaxLife(amount) {
+  // An upgrade increases capacity; only quiz accuracy supplies checkpoint healing.
+  player.maxHp += amount;
+  gameState.particles.push(new FloatingText(player.x, player.y - 40, '+' + amount + ' MAX LIFE · NO HEALING', '#efbda7'));
+  updateHUD();
+}
+function learningRewardGuard() {
+  const {rewardEpoch, sessionId, round, tier} = hadesLearning;
+  return () => !hadesLearning.enabled || (hadesLearning.rewardEpoch === rewardEpoch && hadesLearning.sessionId === sessionId && hadesLearning.round === round && hadesLearning.tier === tier);
+}
+function openFracturedBoonReward(onComplete) {
+  const canClaimReward = learningRewardGuard();
+  const modal = document.getElementById('boon-modal');
+  document.getElementById('pom-modal').style.display = 'none';
+  document.getElementById('god-name').innerText = 'FRACTURED · 0/5 CORRECT';
+  document.getElementById('god-quote').innerText = 'A tiny consolation. Improve your answers to earn stronger upgrades.';
+  const portrait = document.getElementById('god-portrait-canvas');
+  portrait.getContext('2d').clearRect(0,0,portrait.width,portrait.height);
+  const choices = document.getElementById('boon-choices-container'); choices.innerHTML = '';
+  const card = document.createElement('button'); card.type = 'button'; card.className = 'boon-card';
+  card.innerHTML = '<div><div class="boon-rarity">FRACTURED REWARD</div><div class="boon-card-name">Faint life fragment</div><div class="boon-card-desc">+1 maximum life only. No healing, new boon or Pom levels.</div></div><div class="boon-card-slot">Claim and continue</div>';
+  let claimed = false;
+  card.onclick = () => {
+    if (claimed || !canClaimReward()) return; claimed = true;
+    applyLearningMaxLife(1); sound.playBoonChime(); modal.style.display = 'none'; gameState.isPaused = false;
+    if (onComplete) onComplete();
+  };
+  choices.appendChild(card); modal.style.display = 'flex'; gameState.isPaused = true;
 }
 function learningBoonRank() { return hadesLearning.enabled ? HADES_BOON_TIERS[hadesLearning.tier].rank : 1; }
 function learningBoonLabel() { return hadesLearning.enabled ? HADES_BOON_TIERS[hadesLearning.tier].name + ' · sanctuary reward' : 'Rare boon'; }
@@ -891,7 +929,11 @@ function showLearningWait(title, message) {
 }
 function hideLearningWait() { document.getElementById('learning-wait').style.display = 'none'; }
 function resetLearningSession() {
-  clearLearningTimer();
+  clearLearningTimer(); hadesLearning.rewardEpoch++;
+  for (const kind of ['boon','pom','shop']) {
+    const modal = document.getElementById(kind + '-modal'); if (modal) modal.style.display = 'none';
+    const choices = document.getElementById(kind + '-choices-container'); if (choices) choices.innerHTML = '';
+  }
   hadesLearning.sessionId = null; hadesLearning.profileKey = null;
   hadesLearning.helloId = null; hadesLearning.pending = null; hadesLearning.onStart = null;
   hadesLearning.round = 0; hadesLearning.tier = 'common'; hadesLearning.state = 'idle';
@@ -998,7 +1040,7 @@ function receiveLearningMessage(event) {
 function installHadesLearning() {
   if (!hadesLearning.enabled) return;
   const panel = document.createElement('div'); panel.id = 'learning-wait'; panel.className = 'modal-overlay';
-  panel.innerHTML = '<section class="modal-card learning-card" role="dialog" aria-modal="true" aria-labelledby="learning-title"><div class="runtime-eyebrow">SANCTUARY CHECKPOINT</div><h2 id="learning-title"></h2><p id="learning-message" role="status"></p><p class="learning-tiers">0–1 correct: Common · 2–3: Rare · 4: Epic · 5: Heroic</p><div class="learning-buttons"><button id="learning-retry" class="hades-btn" type="button">Retry</button><button id="learning-end" class="hades-btn" type="button">End run</button></div></section>';
+  panel.innerHTML = '<section class="modal-card learning-card" role="dialog" aria-modal="true" aria-labelledby="learning-title"><div class="runtime-eyebrow">SANCTUARY CHECKPOINT</div><h2 id="learning-title"></h2><p id="learning-message" role="status"></p><p class="learning-tiers">0: Fractured · 1: Common · 2: Uncommon · 3: Rare · 4: Epic · 5: Heroic (Lv 8 / +8 Pom)</p><div class="learning-buttons"><button id="learning-retry" class="hades-btn" type="button">Retry</button><button id="learning-end" class="hades-btn" type="button">End run</button></div></section>';
   document.getElementById('game-container').append(panel); gameRuntime.modalNodes.push(panel);
   document.getElementById('learning-retry').onclick = () => {
     if (hadesLearning.pending) requestLearningRound();
@@ -3521,13 +3563,14 @@ function installHadesLearning() {
       // 1. Grant pre-chosen gate reward if entering a non-combat or specialized room
       if (chosenReward) {
         if (chosenReward.type === 'heart') {
-          gainHealth(25, true);
+          if (typeof HADES_LEARNING_ENABLED !== 'undefined' && HADES_LEARNING_ENABLED) applyLearningMaxLife(learningMaxLifeReward('heart'));
+          else { gainHealth(25, true); gameState.particles.push(new FloatingText(player.x, player.y - 40, '+25 MAX HEALTH!', '#ef4444')); }
           sound.playBoonChime();
-          gameState.particles.push(new FloatingText(player.x, player.y - 40, '+25 MAX HEALTH!', '#ef4444'));
         } else if (chosenReward.type === 'ash') {
-          gameState.ashes += 15;
+          const ashes = typeof HADES_LEARNING_ENABLED !== 'undefined' && HADES_LEARNING_ENABLED ? learningAshReward() : 15;
+          gameState.ashes += ashes;
           sound.playGold();
-          gameState.particles.push(new FloatingText(player.x, player.y - 40, '+15 ASHES!', '#cbd5e1'));
+          gameState.particles.push(new FloatingText(player.x, player.y - 40, '+' + ashes + ' ASHES!', '#cbd5e1'));
         }
       }
 
@@ -3726,6 +3769,7 @@ function installHadesLearning() {
 
     // --- REWARD SELECTION MODALS (God Boon, Pom, Shop) ---
     function openGodBoonModal(godKey, onComplete) {
+      if (typeof HADES_LEARNING_ENABLED !== 'undefined' && HADES_LEARNING_ENABLED && learningBoonRank() === 0) { openFracturedBoonReward(onComplete); return; }
       gameState.isPaused = true;
       const god = GODS[godKey] || GODS['zeus'];
       const modal = document.getElementById('boon-modal');
@@ -3777,6 +3821,7 @@ function installHadesLearning() {
         openPomModal(onComplete, god.boons.map(boon => boon.id));
         return;
       }
+      const canClaimReward = typeof learningRewardGuard === 'function' ? learningRewardGuard() : () => true;
       let chosen = false;
       choices.forEach(boon => {
         const rewardLevel = POM_UPGRADE_EFFECTS[boon.id] && typeof learningBoonRank === 'function' ? learningBoonRank() : 1;
@@ -3789,18 +3834,19 @@ function installHadesLearning() {
             <div class="boon-card-name">${boon.name}</div>
             <div class="boon-card-desc">${boon.desc}</div>
             ${rewardLevel > 1 ? `<div class="boon-card-desc">Lv ${rewardLevel}: ${pomUpgradeDescription(boon, rewardLevel)}</div>` : ''}
-            ${typeof HADES_LEARNING_ENABLED !== 'undefined' && HADES_LEARNING_ENABLED && !POM_UPGRADE_EFFECTS[boon.id] ? '<div class="boon-card-desc">Unique effect · fixed strength</div>' : ''}
+            ${typeof HADES_LEARNING_ENABLED !== 'undefined' && HADES_LEARNING_ENABLED && !POM_UPGRADE_EFFECTS[boon.id] ? `<div class="boon-card-desc">Unique effect + ${learningBoonRank() * 5} maximum life reinforcement (no healing)</div>` : ''}
           </div>
           <div class="boon-card-slot">${boon.isDuo ? `Synergy: ${boon.gods.join(' + ')}` : boon.slot === 'Hex' ? 'Hex ability • replaces your current Hex' : `Slot: ${boon.slot}`}</div>
         `;
         card.onclick = () => {
-          if (chosen) return;
+          if (chosen || !canClaimReward()) return;
           chosen = true;
           // Hexes are alternative ultimate abilities. A new Hex replaces the old one.
           if (boon.slot === 'Hex') gameState.equippedBoons = gameState.equippedBoons.filter(owned => owned.slot !== 'Hex');
           gameState.equippedBoons.push({ ...boon, level: rewardLevel, tier: typeof hadesLearning !== 'undefined' && hadesLearning.enabled ? hadesLearning.tier : 'rare', godName: boon.isDuo ? boon.gods.join(' & ') : god.name });
           if (boon.id === 'hephaestus_armor') { player.maxHp += 50; player.hp += 50; }
           if (boon.id === 'hephaestus_shield') player.barrierHp = 40;
+          if (typeof HADES_LEARNING_ENABLED !== 'undefined' && HADES_LEARNING_ENABLED && !POM_UPGRADE_EFFECTS[boon.id]) applyLearningMaxLife(learningBoonRank() * 5);
           modal.style.display = 'none';
           gameState.isPaused = false;
           sound.playBoonChime();
@@ -3814,12 +3860,16 @@ function installHadesLearning() {
     }
 
     function openPomModal(onComplete, preferredIds = null) {
+      if (typeof HADES_LEARNING_ENABLED !== 'undefined' && HADES_LEARNING_ENABLED && learningBoonRank() === 0) { openFracturedBoonReward(onComplete); return; }
       const scalable = gameState.equippedBoons.filter(boon => POM_UPGRADE_EFFECTS[boon.id]);
       if (scalable.length === 0) {
         // A build made entirely of unique utility effects still receives a useful reward.
-        gainHealth(50, true);
+        if (typeof HADES_LEARNING_ENABLED !== 'undefined' && HADES_LEARNING_ENABLED) applyLearningMaxLife(learningMaxLifeReward());
+        else {
+          gainHealth(50, true);
+          gameState.particles.push(new FloatingText(player.x, player.y - 40, '+50 BASE MAX HP (NO SCALABLE BOONS)', '#ef4444'));
+        }
         sound.playBoonChime();
-        gameState.particles.push(new FloatingText(player.x, player.y - 40, '+50 BASE MAX HP (NO SCALABLE BOONS)', '#ef4444'));
         document.getElementById('pom-modal').style.display = 'none';
         gameState.isPaused = false;
         updateHUD();
@@ -3844,6 +3894,7 @@ function installHadesLearning() {
       // Pick up to 3 player boons to level up
       const pool = preferredIds ? scalable.filter(boon => preferredIds.includes(boon.id)) : scalable;
       const upgradeable = shuffled(pool.length ? pool : scalable).slice(0, 3);
+      const canClaimReward = typeof learningRewardGuard === 'function' ? learningRewardGuard() : () => true;
       let chosen = false;
 
       upgradeable.forEach(boon => {
@@ -3861,7 +3912,7 @@ function installHadesLearning() {
           <div class="boon-card-slot">${pomUpgradeDescription(boon, curLvl)}<br>Next: ${pomUpgradeDescription(boon, nextLvl)}</div>
         `;
         card.onclick = () => {
-          if (chosen) return;
+          if (chosen || !canClaimReward()) return;
           chosen = true;
           boon.level = nextLvl;
           modal.style.display = 'none';
@@ -3894,13 +3945,16 @@ function installHadesLearning() {
       const godKeys = Object.keys(GODS);
       const randomGod = godKeys[Math.floor(Math.random() * godKeys.length)];
 
+      const learningShop = typeof HADES_LEARNING_ENABLED !== 'undefined' && HADES_LEARNING_ENABLED;
+      const rewardNote = learningShop ? (learningBoonRank() === 0 ? 'Fractured: +1 maximum life only, no healing or boon levels.' : learningBoonLabel() + ': Lv ' + learningBoonRank() + ' scalable boon / +' + learningBoonRank() + ' Pom levels. Utility boon: +' + learningBoonRank()*5 + ' maximum life.') : '';
       const shopItems = [
-        { name: `${GODS[randomGod].name} Divine Blessing`, desc: 'Receive a random rare boon from Olympus.', cost: 140, type: 'god', godKey: randomGod },
-        { name: 'Pom of Power Slice', desc: 'Upgrade one of your equipped boons by +1 Level.', cost: 95, type: 'pom' },
+        { name: `${GODS[randomGod].name} Divine Blessing`, desc: rewardNote || 'Receive a random rare boon from Olympus.', cost: 140, type: 'god', godKey: randomGod },
+        { name: 'Pom of Power Slice', desc: rewardNote || 'Upgrade one of your equipped boons by +1 Level.', cost: 95, type: 'pom' },
         { name: 'Underworld Gyros & Nectar', desc: 'Restore 75 Health instantly to Melinoë.', cost: 70, type: 'heal' },
-        { name: 'Centaur Heart Vessel', desc: 'Gain +35 maximum Health for this run.', cost: 120, type: 'heart' }
+        { name: 'Centaur Heart Vessel', desc: learningShop ? '+' + learningMaxLifeReward('shopHeart') + ' maximum life for this run (no healing).' : 'Gain +35 maximum Health for this run.', cost: 120, type: 'heart' }
       ];
 
+      const canClaimReward = typeof learningRewardGuard === 'function' ? learningRewardGuard() : () => true;
       const purchased = new Set();
       const refreshShop = () => { modal.style.display = 'flex'; gameState.isPaused = true; };
       shopItems.forEach(item => {
@@ -3916,7 +3970,7 @@ function installHadesLearning() {
           <div class="boon-card-slot" style="color:#fde047; font-weight:700;">🪙 ${item.cost} Gold Obols</div>
         `;
         card.onclick = () => {
-          if (purchased.has(item.type)) return;
+          if (purchased.has(item.type) || !canClaimReward()) return;
           if (gameState.gold >= item.cost) {
             purchased.add(item.type);
             gameState.gold -= item.cost;
@@ -3936,7 +3990,8 @@ function installHadesLearning() {
               sound.playBoonChime();
               updateHUD();
             } else if (item.type === 'heart') {
-              gainHealth(35, true);
+              if (learningShop) applyLearningMaxLife(learningMaxLifeReward('shopHeart'));
+              else gainHealth(35, true);
               sound.playBoonChime();
               updateHUD();
             }

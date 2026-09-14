@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {createHadesLearningController, hadesLearningReward, validHadesQuestions} from '../hades-learning-parent.js';
+import {createHadesLearningController, hadesLearningReward, hadesLearningRewardSummary, validHadesQuestions} from '../hades-learning-parent.js';
 import {buildScienceFeedContext,planScienceQuestions} from '../science-feed-core.js';
 const question = id => ({id,html:'<p>Compare the labelled diagram '+id+'</p>',options:['A','B','C','D'],answer:1,topic:'Living things'});
 function fixture(overrides={}) {
@@ -18,12 +18,31 @@ function fixture(overrides={}) {
   const round=(n=1,requestId='round-'+n)=>send({type:'HADES_ROUND_REQUEST',requestId,sessionId:'session-1',round:n});
   return {controller,source,messages,marked,records,send,hello,round,setIdentity:v=>{identity=v;},setActive:v=>{active=v;}};
 }
-test('five-score reward mapping is bounded and deterministic',()=>{
+test('all six reward outcomes are bounded and deterministic',()=>{
   assert.deepEqual([0,1,2,3,4,5].map(hadesLearningReward),[
-    {correct:0,total:5,healPercent:0,boonTier:'common'},{correct:1,total:5,healPercent:8,boonTier:'common'},
-    {correct:2,total:5,healPercent:16,boonTier:'rare'},{correct:3,total:5,healPercent:24,boonTier:'rare'},
+    {correct:0,total:5,healPercent:0,boonTier:'fractured'},{correct:1,total:5,healPercent:8,boonTier:'common'},
+    {correct:2,total:5,healPercent:16,boonTier:'uncommon'},{correct:3,total:5,healPercent:24,boonTier:'rare'},
     {correct:4,total:5,healPercent:32,boonTier:'epic'},{correct:5,total:5,healPercent:40,boonTier:'heroic'}]);
   for(const n of [-1,6,1.5,'5',NaN])assert.throws(()=>hadesLearningReward(n));
+});
+test('every completed score sends the matching tier and truthful upgrade summary',async()=>{
+  const tiers=['fractured','common','uncommon','rare','epic','heroic'];
+  const ranks=[0,1,2,3,5,8];
+  for(let score=0;score<=5;score++){
+    const f=fixture({presentQuestions:async({questions,grade})=>{
+      for(let i=0;i<5;i++)await grade(i,i<score?questions[i].answer:0,2000);
+      return true;
+    }});
+    await f.hello();await f.round();
+    const result=f.messages.at(-1).message;
+    assert.equal(result.type,'HADES_ROUND_RESULT');assert.equal(result.correct,score);
+    assert.equal(result.healPercent,score*8);assert.equal(result.boonTier,tiers[score]);
+    assert.equal(f.records.filter(record=>record.correct).length,score);assert.equal(f.records.length,5);
+    const summary=hadesLearningRewardSummary(score);
+    if(score===0){assert.match(summary,/No healing/);assert.match(summary,/no boon or Pom upgrade/);}
+    else {assert.ok(summary.includes('Lv '+ranks[score]));assert.ok(summary.includes('Pom +'+ranks[score]));}
+    await f.round(1,'score-retry');assert.equal(f.records.length,5);assert.equal(f.messages.at(-1).message.correct,score);
+  }
 });
 test('only distinct complete MCQs enter a five-question round',()=>{
   const q=question('a');

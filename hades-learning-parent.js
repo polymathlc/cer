@@ -5,7 +5,14 @@ const token = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.t
 const validRound = value => Number.isSafeInteger(value) && value > 0;
 export function hadesLearningReward(correct) {
   if (!Number.isInteger(correct) || correct < 0 || correct > 5) throw new RangeError('A round has five answers.');
-  return { correct, total: 5, healPercent: correct * 8, boonTier: correct === 5 ? 'heroic' : correct === 4 ? 'epic' : correct >= 2 ? 'rare' : 'common' };
+  return { correct, total: 5, healPercent: correct * 8, boonTier: ['fractured', 'common', 'uncommon', 'rare', 'epic', 'heroic'][correct] };
+}
+export function hadesLearningRewardSummary(correct) {
+  const reward = hadesLearningReward(correct);
+  if (correct === 0) return '0/5 correct · No healing · Fractured: tiny consolation only; no boon or Pom upgrade.';
+  const rank = [0, 1, 2, 3, 5, 8][correct];
+  const tier = reward.boonTier[0].toUpperCase() + reward.boonTier.slice(1);
+  return `${correct}/5 correct · Restore ${reward.healPercent}% maximum life · ${tier}: next scalable boon Lv ${rank}, or Pom +${rank} ${rank === 1 ? 'level' : 'levels'}.`;
 }
 export function validHadesQuestions(rows) {
   const seen = new Set();
@@ -185,7 +192,7 @@ export function installHadesLearningParent(config) {
       const started = performance.now();
       const top = make('div','hades-learning-top'); top.append(make('span','',subject + ' sanctuary'), make('span','',`Question ${index + 1} of 5`));
       const heading = make('h2','',q.topic || subject + ' question'); heading.id = 'hades-learning-title';
-      const copy = make('p','hades-learning-copy','Five answers restore up to 40% of your maximum life and improve the next boon: 2 correct = Rare, 4 = Epic, 5 = Heroic.');
+      const copy = make('p','hades-learning-copy','Every correct answer improves your reward. 0/5: tiny consolation, no healing or boon upgrade. 5/5: restore 40% life and unlock Heroic rewards — a scalable boon at Lv 8 or +8 Pom levels.');
       const stem = make('div','hades-learning-stem'); stem.innerHTML = sanitizeHadesQuestionHtml(q.html,doc);
       const options = make('div','hades-learning-options');
       const feedback = make('div','hades-learning-feedback'); feedback.setAttribute('aria-live','polite');
@@ -210,7 +217,7 @@ export function installHadesLearningParent(config) {
           buttons[answer.answer].dataset.correct = 'true'; if (!answer.correct) button.dataset.wrong = 'true';
           feedback.textContent = answer.correct ? 'Correct. ' : `The correct answer is ${answer.answer + 1}. `;
           if (answer.explainHtml) { const explanation = make('div'); explanation.innerHTML = sanitizeHadesQuestionHtml(answer.explainHtml,doc); feedback.append(explanation); }
-          if (index === 4) { const reward = hadesLearningReward(score); feedback.append(make('p','',`${score}/5 correct · Restore ${reward.healPercent}% maximum life · ${reward.boonTier[0].toUpperCase()+reward.boonTier.slice(1)} boon tier`)); }
+          if (index === 4) feedback.append(make('p','hades-learning-reward',hadesLearningRewardSummary(score)));
           next.hidden = false; next.focus();
         };
         options.append(button); return button;
