@@ -1,3 +1,4 @@
+import { installHadesDisplay } from "./hades-display.js";
 import { installHadesLearningParent } from "./hades-learning-parent.js?v=2.1.1";
 import { scienceTcgIdentity, scienceTcgIdentityText, scienceTcgSkillPath } from './science-tcg-identity.js';
 import { applyScienceTcgSignature, scienceTcgBrandedDamage, scienceTcgAbsorbBarrier } from './science-tcg-runtime.js';
@@ -51875,10 +51876,12 @@ function _sdSeedElo(q) {
 // Hades stays in the administrator's beta area. Preview questions go through
 // the same grade, mastery, quality and family-spacing policy as student play.
 var _hadesBridge = null;
+var _hadesDisplay = null;
 var _hadesUnavailableContent = new Map();
 function _hadesPreviewLevel() { const value = document.getElementById('hadesPreviewLevel')?.value || ''; return isLevelCode(value) ? value : ''; }
 function _hadesPreviewProfile() { const level = _hadesPreviewLevel(); return { name: 'Hades beta preview ' + level, level }; }
 function _hadesResetLearning(message) {
+  _hadesDisplay?.destroy(); _hadesDisplay = null;
   _hadesBridge?.invalidate(message || 'The preview changed. Start a new run to continue.');
   const frame = document.getElementById('hadesFrame'); if (frame?.getAttribute('src')) frame.removeAttribute('src');
 }
@@ -51895,6 +51898,7 @@ async function _hadesScienceQuestions() {
 }
 function _hadesInit() {
   if (!_isAdmin()) return;
+  if (!_hadesDisplay) _hadesDisplay = installHadesDisplay({ container: document.getElementById('hadesDisplay'), button: document.getElementById('hadesFullscreen') });
   const select = document.getElementById('hadesPreviewLevel');
   if (select && !select.dataset.ready) {
     select.dataset.ready = '1';
