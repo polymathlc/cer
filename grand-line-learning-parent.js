@@ -9,7 +9,7 @@ export function grandLineLearningReward(correct) {
 }
 export function grandLineLearningRewardSummary(correct) {
   grandLineLearningReward(correct);
-  return `${correct}/3 correct · Battle round complete.`;
+  return `${correct}/3 correct · Wave complete.`;
 }
 export function validGrandLineQuestions(rows, allowRemote = false) {
   const seen = new Set();
@@ -228,9 +228,9 @@ export function installGrandLineLearningParent(config) {
       dialog.replaceChildren(); const q = questions[index]; let selected = false;
       const unsupported = grandLineUnsupportedQuestionVisual(q,doc); let failed = unsupported;
       const started = performance.now();
-      const top = make('div','grand-line-learning-top'); top.append(make('span','',subject + ' · Battle round'), make('span','',`Question ${index + 1} of 3`));
+      const top = make('div','grand-line-learning-top'); top.append(make('span','',subject + ' · Wave'), make('span','',`Question ${index + 1} of 3`));
       const heading = make('h2','',q.topic || subject + ' question'); heading.id = 'grand-line-learning-title';
-      const copy = make('p','grand-line-learning-copy','Answer all three questions to complete this battle round. Correct answers strengthen your crew in the next battle round.');
+      const copy = make('p','grand-line-learning-copy','Answer all three questions to complete this wave. Correct answers strengthen your crew in the next wave.');
       const stem = make('div','grand-line-learning-stem'); stem.innerHTML = sanitizeGrandLineQuestionHtml(q.html,doc);
       const options = make('div','grand-line-learning-options');
       const feedback = make('div','grand-line-learning-feedback'); feedback.setAttribute('aria-live','polite');
@@ -239,7 +239,7 @@ export function installGrandLineLearningParent(config) {
         : 'A diagram could not load. This question cannot be answered safely. Return to the game and retry with a fresh set.'); warning.hidden = !unsupported;
       const actions = make('div','grand-line-learning-actions');
       const exit = make('button','grand-line-learning-action secondary','Return to game'); exit.type = 'button'; exit.onclick = () => close();
-      const next = make('button','grand-line-learning-action',index === 2 ? 'Complete battle round' : 'Next question'); next.type = 'button'; next.hidden = true;
+      const next = make('button','grand-line-learning-action',index === 2 ? 'Complete wave' : 'Next question'); next.type = 'button'; next.hidden = true;
       next.onclick = () => { if (!selected || failed || !isCurrent()) return; if (index === 2) close(true); else { index++; render(); } };
       actions.append(exit,next);
       const buttons = q.options.map((html, choice) => {

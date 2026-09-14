@@ -50,24 +50,37 @@ function observe(page) { page.setDefaultTimeout(12000); page.on('pageerror', err
 const check = label => { checks.push(label); process.stdout.write(`PASS ${label}\n`); };
 async function frames(page, count = 2) { await page.evaluate(count => new Promise(resolve => { function tick() { if (--count <= 0) resolve(); else requestAnimationFrame(tick); } requestAnimationFrame(tick); }), count); }
 async function screenshot(page, name) { await page.screenshot({ path: path.join(shots, name + '.png'), fullPage: !name.includes('detail') }); }
-async function noOverflow(page) { assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), 'Page has no horizontal overflow'); }
-async function standalone(page, subject = 'math', {manual = true} = {}) {
+async function noOverflow(page) {
+  const width=page.viewportSize().width;
+  assert.ok(await page.evaluate(width=>document.documentElement.scrollWidth<=width+2,width),'Page fits its configured viewport without horizontal overflow');
+}
+async function standalone(page, subject = 'math') {
   await page.goto(base + '/grand-line.html?test=1&subject=' + subject);
   await page.waitForFunction(() => window.__grandLine?.ready);
   await page.evaluate(() => { __grandLine.settings.muted = true; });
-  if (manual) await page.evaluate(() => __grandLine.setAutoBattle(false));
 }
-async function stablePlayer(frame) { await frame.waitForFunction(() => __grandLine.battle?.status === 'player' && !document.querySelector('#cast-button').disabled); }
-async function forcePlayer(frame, id, { last = false, terminal = false } = {}) {
-  await frame.evaluate(({ id, last, terminal }) => {
-    const a = __grandLine, b = a.battle, u = b.allies.find(x => x.characterId === id) || b.allies[0];
-    b.rng = () => .5; // Keep evasion/critical rolls deterministic in combat fixtures.
-    for (const unit of [...b.allies, ...b.enemies]) { unit.hp = unit.maxHp; unit.alive = true; unit.statuses = []; unit.shield = 0; }
-    if (terminal) { b.enemies.forEach((x, i) => { x.hp = i ? 0 : 1; x.alive = i === 0; }); }
-    b.status = 'player'; b.activeId = u.id; b.turnOrder = last ? [u.id] : [u.id, ...b.allies.filter(x => x !== u).map(x => x.id), ...b.enemies.map(x => x.id)]; b.turnIndex = 0;
-    u.energy = u.maxEnergy; u.cooldowns = {}; a.renderBattle();
-  }, { id, last, terminal });
-  await stablePlayer(frame);
+async function clearWave(frame) {
+  await frame.evaluate(() => {
+    const a=__grandLine,b=a.battle;
+    if(b.status!=='running')throw Error('Only a running wave may be cleared');
+    b.spawned=b.spawnTotal;b.remainingToSpawn=0;
+    for(const enemy of b.enemies){enemy.hp=0;enemy.alive=false;}
+    a.advanceDefense(b,.05);a.renderBattle();
+  });
+  await frame.waitForFunction(()=>__grandLine.battle.status==='learning');
+}
+async function answerThree(host,choice=1) {
+  await host.locator('#questions').waitFor({state:'visible'});
+  for(let i=0;i<3;i++) {
+    assert.match(await host.locator('#question-index').textContent(),new RegExp('Question '+(i+1)+' of 3'));
+    await host.locator('#questions [data-answer="'+choice+'"]').click();
+  }
+}
+async function defenseState(frame) {
+  return frame.evaluate(()=>({status:__grandLine.battle.status,round:__grandLine.battle.round,ship:__grandLine.battle.ship.hp,
+    time:__grandLine.battle.stats.simulatedSeconds,spawned:__grandLine.battle.spawned,
+    allies:__grandLine.battle.allies.map(a=>({id:a.id,hp:a.hp,energy:a.energy})),
+    enemies:__grandLine.battle.enemies.map(e=>({id:e.id,x:e.x,y:e.y,hp:e.hp}))}));
 }
 
 try {
@@ -99,7 +112,6 @@ try {
   const host = await browser.newPage({ viewport: { width: 1440, height: 1000 } }); observe(host); await host.goto(base + '/__harness.html');
   const game = host.frames().find(f => f.url().includes('grand-line.html')) || await host.waitForEvent('framenavigated', f => f.url().includes('grand-line.html'));
   await game.waitForFunction(() => window.__grandLine?.ready); await game.evaluate(() => { __grandLine.settings.muted = true; });
-  await game.evaluate(() => __grandLine.setAutoBattle(false));
   assert.equal(await game.evaluate(() => __grandLine.wallet.balance), 5000);
   assert.equal(await game.evaluate(() => __grandLine.collection.packs), 0);
   await game.locator('[data-view="packs"]').click();
@@ -136,141 +148,139 @@ try {
   await game.waitForFunction(id => __grandLine.collection.team[0] === id, grants[0]);
   // Crew changes render optimistically; wait for persistence and the child acknowledgement before inspecting the save or navigating.
   await host.waitForFunction(id => fake.state.grandLine.profiles['test-profile'].collection.team[0] === id, grants[0]);
-  await game.locator('#toast').filter({ hasText: 'is ready to sail.' }).waitFor({ state: 'visible' });
+  await game.locator('#toast').filter({ hasText: 'is ready to defend.' }).waitFor({ state: 'visible' });
   assert.equal(await host.evaluate(() => fake.state.grandLine.profiles['test-profile'].collection.team[0]), grants[0]);
   check('An unlocked card can replace a crew slot and persists through the parent');
 
-  await game.locator('[data-view="campaign"]').click(); assert.equal(await game.locator('#campaign-map .encounter').count(), 9);
-  assert.equal(await game.locator('#campaign-map button:disabled').count(), 8); await game.locator('#campaign-map button').first().click();
-  await stablePlayer(game); await forcePlayer(game, 'zoro');
-  const actor = await game.evaluate(() => __grandLine.battle.activeId);
-  await game.locator('#skill-buttons button').nth(1).click(); await game.locator('#target-buttons button').first().click();
-  const hpBefore = await game.evaluate(() => __grandLine.battle.enemies[0].hp);
-  await game.locator('#cast-button').click();
-  assert.ok(await game.evaluate(hp => __grandLine.battle.enemies[0].hp < hp, hpBefore));
-  assert.ok(await game.evaluate(id => __grandLine.battle.effects.some(e => e.sourceId === id && e.skillId), actor));
-  await forcePlayer(game, 'zoro', { last: true }); await game.locator('#defend-button').click();
-  await game.waitForFunction(() => __grandLine.battle.status === 'learning');
-  assert.equal(await game.locator('#round-gate').isVisible(), true); assert.equal(await game.locator('#cast-button').isDisabled(), true);
-  const round = await game.evaluate(() => __grandLine.battle.round);
-  const statsBefore = await game.evaluate(() => __grandLine.collection.stats.correctAnswers);
-  await game.locator('#study-button').click(); await host.locator('#questions').waitFor({ state: 'visible' });
-  const pending = await game.evaluate(() => ({ ...__grandLine.learningPending, sessionId: __grandLine.sessionId }));
-  await game.evaluate(p => window.postMessage({ type: 'GLTCG_ROUND_RESULT', requestId: p.requestId, sessionId: p.sessionId, round: p.round, correct: 3, total: 3 }, location.origin), pending);
-  await host.evaluate(p => fake.send({ type: 'GLTCG_ROUND_RESULT', requestId: 'forged', sessionId: p.sessionId, round: p.round, correct: 3, total: 3 }), pending);
-  await host.evaluate(p => fake.send({ type: 'GLTCG_ROUND_RESULT', requestId: p.requestId, sessionId: p.sessionId, round: p.round, correct: 3, total: 2 }), pending);
-  await frames(host, 3); assert.equal(await game.evaluate(() => __grandLine.battle.status), 'learning');
-  await host.evaluate(() => { fake.blockSave = true; });
-  for (let i = 0; i < 3; i++) {
-    assert.match(await host.locator('#question-index').textContent(), new RegExp(`Question ${i + 1} of 3`));
-    if (i < 2) assert.equal(await game.evaluate(() => __grandLine.battle.status), 'learning');
-    await host.locator('#questions [data-answer="1"]').click();
-  }
-  await game.waitForFunction(() => __grandLine.dialog === 'save-progress');
-  assert.equal(await game.locator('#cast-button').isDisabled(), true);
-  await game.locator('#dialog-panel button').press('Escape');
-  assert.equal(await game.evaluate(() => __grandLine.dialog), 'save-progress', 'Unsaved grading cannot be dismissed');
-  assert.equal(await host.evaluate(() => fake.records.length), 3);
-  await host.evaluate(() => { fake.blockSave = false; });
+  await game.locator('[data-view="campaign"]').click();
+  assert.equal(await game.locator('#campaign-map .encounter').count(),9);
+  assert.equal(await game.locator('#campaign-map button:disabled').count(),8);
+  assert.match(await game.locator('#campaign-view').textContent(),/Crew Defense/i);
+  await game.locator('#campaign-map button').first().click();
+  await game.waitForFunction(()=>__grandLine.battle?.status==='setup');
+  assert.equal(await game.locator('#defender-buttons [data-ally]').count(),5);
+  assert.equal(await game.locator('#placement-buttons [data-pad]').count(),10);
+  const crew=await game.evaluate(()=>__grandLine.battle.allies.map(a=>({id:a.id,characterId:a.characterId,padId:a.padId})));
+  assert.equal(new Set(crew.map(a=>a.padId)).size,5);
+  assert.deepEqual(crew.map(a=>a.characterId),await game.evaluate(()=>__grandLine.collection.team));
+  const pads=await game.locator('#placement-buttons [data-pad]').evaluateAll(nodes=>nodes.map(n=>n.dataset.pad));
+  const emptyPad=pads.find(id=>!crew.some(a=>a.padId===id));assert.ok(emptyPad);
+  const firstDefender=crew[0];
+  await game.locator('#defender-buttons [data-ally="'+firstDefender.id+'"]').click();
+  await game.locator('#placement-buttons [data-pad="'+emptyPad+'"]').click();
+  assert.equal(await game.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).padId,firstDefender.id),emptyPad);
+  await game.evaluate(()=>__grandLine.placeDefender('not-an-owned-defender','not-a-pad'));
+  assert.equal(await game.evaluate(()=>new Set(__grandLine.battle.allies.map(a=>a.padId)).size),5);
+  assert.equal(await game.locator('#idle-mode,#manual-commands,#skill-buttons,#turn-order').count(),0);
+  await screenshot(host,'desktop-defense-setup');
+  check('Crew Defense replaces former combat modes with five owned defenders, ten pads and valid placement');
+
+  await game.locator('#defense-speed').selectOption('1');
+  await game.locator('#start-wave').click();await game.waitForFunction(()=>__grandLine.battle.status==='running');
+  await game.waitForFunction(()=>__grandLine.battle.enemies.some(e=>e.hp>0));
+  const mover=await game.evaluate(()=>{const e=__grandLine.battle.enemies.find(e=>e.hp>0);e.hp=e.maxHp=1000;return {id:e.id,x:e.x,y:e.y};});
+  await game.waitForFunction(before=>{const e=__grandLine.battle.enemies.find(e=>e.id===before.id);return e&&(e.x!==before.x||e.y!==before.y);},mover);
+  await game.locator('#defense-pause').click();const paused=await defenseState(game);await frames(host,25);assert.deepEqual(await defenseState(game),paused);
+  await game.locator('#defense-speed').selectOption('4');assert.equal(await game.evaluate(()=>__grandLine.settings.battleSpeed),4);
+  await frames(host,12);assert.deepEqual(await defenseState(game),paused,'Changing speed does not resume a paused wave');
   await game.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));});
-  await game.getByRole('button', { name: 'Retry saving', exact: true }).click();
-  await game.waitForFunction(() => !__grandLine.dialog);
-  assert.equal(await host.evaluate(() => fake.records.length), 3, 'Save retry does not regrade questions');
-  check('Failed battle progress saves keep combat paused and can be retried without repeating grades');
-  await game.waitForFunction(previous => __grandLine.battle.round === previous + 1, round);
-  await frames(host,35);
+  await game.locator('#defense-pause').click();const hidden=await defenseState(game);await frames(host,25);assert.deepEqual(await defenseState(game),hidden);
   await game.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
-  await stablePlayer(game);
-  assert.ok(await game.locator('#skill-buttons button:not(:disabled)').count()>0,'Manual controls recover when a hidden-tab save finishes');
-  assert.equal(await game.evaluate(() => __grandLine.collection.stats.correctAnswers), statsBefore + 3);
-  const boost = await game.evaluate(() => __grandLine.battle.learningBoost);
-  assert.equal(boost.correct, 3); assert.equal(boost.round, round + 1);
-  assert.equal(boost.attackMultiplier, 1.3); assert.ok(Math.abs(boost.critBonus - .15) < 1e-10); assert.equal(boost.defenseMultiplier, 1.24);
-  const boostText = await game.locator('#learning-boost').textContent();
-  assert.match(boostText, /3\/3 CORRECT/); assert.match(boostText, /Attack \+30%/); assert.match(boostText, /Critical chance \+15 percentage points/); assert.match(boostText, /Defense \+24%/);
-  await screenshot(host, 'desktop-learning-boost');
-  assert.equal(await game.evaluate(() => __grandLine.collection.packs), 0);
-  assert.equal(await host.evaluate(() => fake.records.length), 3);
-  await host.evaluate(p => fake.send({ type: 'GLTCG_ROUND_RESULT', requestId: p.requestId, sessionId: p.sessionId, round: p.round, correct: 3, total: 3 }), pending); await frames(host, 3);
-  assert.equal(await game.evaluate(() => __grandLine.collection.stats.correctAnswers), statsBefore + 3);
-  assert.deepEqual(await game.evaluate(() => __grandLine.battle.learningBoost), boost, 'A replay cannot stack combat bonuses');
-  check('Real skill and defend controls work; every full round waits for three parent-graded answers and rejects forgeries/replays');
-  await forcePlayer(game, 'zoro', { last: true, terminal: true }); await game.locator('#cast-button').click(); await game.waitForFunction(() => __grandLine.battle.status === 'learning');
-  assert.equal(await game.evaluate(() => __grandLine.battle.pendingOutcome), 'victory');
-  assert.equal(await game.evaluate(() => __grandLine.battle.learningBoost), null, 'Combat bonuses expire at the next question gate');
-  assert.equal(await game.evaluate(() => __grandLine.collection.unlockedEncounter), 1);
-  await game.locator('#study-button').click(); for (let i = 0; i < 3; i++) { await host.locator('#questions [data-answer="1"]').click(); }
-  await game.waitForFunction(() => __grandLine.battle.status === 'victory' && __grandLine.dialog === 'ending');
-  assert.equal(await game.evaluate(() => __grandLine.collection.unlockedEncounter), 2); await screenshot(host, 'desktop-victory');
-  check('The final battle round also requires three graded answers before victory and campaign unlock');
+  await game.locator('#settings-button').click();const menu=await defenseState(game);await frames(host,25);assert.deepEqual(await defenseState(game),menu);
+  await game.locator('#dialog-panel .dialog-close').click();
+  await game.waitForFunction(()=>__grandLine.battle.stats.damageDealt>0);
+  await screenshot(host,'desktop-defense-running');
+  check('Enemies move naturally; defenders attack; pause, speed, hidden tabs and dialogs gate the simulation');
 
-  const idleHost = await browser.newPage({viewport:{width:1440,height:1000}}); observe(idleHost);
-  await idleHost.goto(base+'/__harness.html');
-  const idleGame = idleHost.frames().find(f=>f.url().includes('grand-line.html')) || await idleHost.waitForEvent('framenavigated',f=>f.url().includes('grand-line.html'));
-  await idleGame.waitForFunction(()=>window.__grandLine?.ready);
-  assert.equal(await idleGame.evaluate(()=>__grandLine.settings.autoBattle),true);
-  assert.equal(await idleGame.evaluate(()=>__grandLine.settings.battleSpeed),4);
-  const roster=await idleGame.evaluate(()=>__grandLine.CHARACTERS.map(c=>c.id));
-  for(const id of ['shanks','blackbeard','bigmom','kizaru','sengoku','garp','mihawk','hancock']) assert.ok(!roster.includes(id));
-  for(const id of ['wyper','kaku','wapol','hina','paulie','donkrieg','hatchan','kalifa']) assert.ok(roster.includes(id));
-  await idleGame.locator('.roster-update summary').click();assert.equal(await idleGame.locator('#future-characters li').count(),8);
-  check('Current cards exclude eight reserved legends and explain all eight replacements and future seven-star expansions');
-  await idleGame.locator('[data-view="campaign"]').click();
-  await idleGame.evaluate(()=>{
-    document.querySelector('#campaign-map button').click();document.getElementById('idle-pause').click();
-    // Keep the first two learning rounds nonterminal regardless of random crits.
-    __grandLine.battle.rng=()=>0.5;for(const enemy of __grandLine.battle.enemies)enemy.hp=enemy.maxHp=500;
-  });
-  assert.equal(await idleGame.evaluate(()=>__grandLine.idlePaused),true);
-  let pausedTurns=await idleGame.evaluate(()=>__grandLine.battle.stats.turns);await frames(idleHost,25);
-  assert.equal(await idleGame.evaluate(()=>__grandLine.battle.stats.turns),pausedTurns);
-  assert.equal(await idleGame.locator('#manual-commands').isVisible(),false);assert.equal(await idleGame.locator('#idle-summary').isVisible(),true);
-  await idleGame.locator('#idle-speed').selectOption('2');await idleGame.locator('#idle-strategy').selectOption('sustain');
-  assert.equal(await idleGame.evaluate(()=>__grandLine.settings.battleSpeed),2);assert.equal(await idleGame.evaluate(()=>__grandLine.settings.strategy),'sustain');
-  await idleGame.locator('#idle-mode').click();assert.equal(await idleGame.locator('#manual-commands').isVisible(),true);
-  await idleGame.evaluate(()=>{document.getElementById('idle-mode').click();document.getElementById('idle-pause').click();});
-  await idleGame.locator('#idle-speed').selectOption('4');await idleGame.locator('#idle-strategy').selectOption('balanced');
-  await screenshot(idleHost,'desktop-idle-voyage');
-  check('Idle starts at four times speed, supports strategies, pauses without advancing, and switches to manual command');
-  await idleGame.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));});
-  await idleGame.locator('#idle-pause').click();pausedTurns=await idleGame.evaluate(()=>__grandLine.battle.stats.turns);await frames(idleHost,30);
-  assert.equal(await idleGame.evaluate(()=>__grandLine.battle.stats.turns),pausedTurns);
-  await idleGame.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
-  await idleGame.waitForFunction(()=>__grandLine.battle.status==='learning');
-  assert.ok(await idleGame.evaluate(()=>__grandLine.battle.stats.turns>0));
-  assert.equal(await idleHost.evaluate(()=>fake.records.length),0);assert.equal(await idleGame.evaluate(()=>__grandLine.collection.packs),0);
-  pausedTurns=await idleGame.evaluate(()=>__grandLine.battle.stats.turns);await frames(idleHost,25);assert.equal(await idleGame.evaluate(()=>__grandLine.battle.stats.turns),pausedTurns);
-  check('Idle handles a complete round without skill clicks and pauses for hidden tabs and the three-question gate');
-  await idleHost.evaluate(()=>{fake.blockSave=true;});await idleGame.locator('#study-button').click();
-  for(let i=0;i<3;i++)await idleHost.locator('#questions [data-answer="1"]').click();
-  await idleGame.waitForFunction(()=>__grandLine.dialog==='save-progress');pausedTurns=await idleGame.evaluate(()=>__grandLine.battle.stats.turns);
-  await frames(idleHost,25);assert.equal(await idleGame.evaluate(()=>__grandLine.battle.stats.turns),pausedTurns);
-  assert.equal(await idleGame.locator('#idle-mode').isDisabled(),true);assert.equal(await idleHost.evaluate(()=>fake.records.length),3);
-  assert.match(await idleGame.locator('#learning-boost').textContent(),/Attack \+30%/,'Inspect the round bonus while saving keeps the voyage paused');
-  await idleHost.evaluate(()=>{fake.blockSave=false;});await idleGame.getByRole('button',{name:'Retry saving',exact:true}).click();
-  await idleGame.waitForFunction(turns=>__grandLine.battle.stats.turns>turns,pausedTurns);
-  assert.equal(await idleHost.evaluate(()=>fake.records.length),3);
-  await idleGame.waitForFunction(()=>__grandLine.battle.status==='learning');assert.equal(await idleHost.evaluate(()=>fake.records.length),3);
-  check('Automatic combat stays stopped through save failure, resumes only after acknowledgement, and never regrades or skips the next quiz');
-  await idleHost.close();
+  await clearWave(game);
+  assert.equal(await game.locator('#round-gate').isVisible(),true);
+  const round=await game.evaluate(()=>__grandLine.battle.round),statsBefore=await game.evaluate(()=>__grandLine.collection.stats.correctAnswers);
+  const gated=await defenseState(game);await frames(host,25);assert.deepEqual(await defenseState(game),gated);
+  await game.evaluate(()=>__grandLine.startWave());assert.equal(await game.evaluate(()=>__grandLine.battle.status),'learning');
+  await game.locator('#study-button').click();await host.locator('#questions').waitFor({state:'visible'});
+  const pending=await game.evaluate(()=>({...__grandLine.learningPending,sessionId:__grandLine.sessionId}));
+  await game.evaluate(p=>window.postMessage({type:'GLTCG_ROUND_RESULT',requestId:p.requestId,sessionId:p.sessionId,round:p.round,correct:3,total:3},location.origin),pending);
+  await host.evaluate(p=>fake.send({type:'GLTCG_ROUND_RESULT',requestId:'forged',sessionId:p.sessionId,round:p.round,correct:3,total:3}),pending);
+  await host.evaluate(p=>fake.send({type:'GLTCG_ROUND_RESULT',requestId:p.requestId,sessionId:p.sessionId,round:p.round,correct:3,total:2}),pending);
+  await frames(host,3);assert.equal(await game.evaluate(()=>__grandLine.battle.status),'learning');
+  await host.evaluate(()=>{fake.blockSave=true;});
+  await answerThree(host);await game.waitForFunction(()=>__grandLine.dialog==='save-progress');
+  const unsaved=await defenseState(game);await frames(host,25);assert.deepEqual(await defenseState(game),unsaved);
+  await game.evaluate(()=>__grandLine.startWave());assert.notEqual(await game.evaluate(()=>__grandLine.battle.status),'running');
+  await game.locator('#dialog-panel button').press('Escape');assert.equal(await game.evaluate(()=>__grandLine.dialog),'save-progress');
+  assert.equal(await host.evaluate(()=>fake.records.length),3);
+  await host.evaluate(()=>{fake.blockSave=false;});
+  await game.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));});
+  await game.getByRole('button',{name:'Retry saving',exact:true}).click();await game.waitForFunction(()=>!__grandLine.dialog);
+  await frames(host,30);assert.equal(await host.evaluate(()=>fake.records.length),3);
+  await game.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
+  await game.locator('#start-wave').waitFor({state:'visible'});assert.equal(await game.locator('#start-wave').isEnabled(),true);
+  assert.equal(await game.evaluate(()=>__grandLine.battle.status),'setup');
+  assert.equal(await game.evaluate(()=>__grandLine.battle.round),round+1);
+  const boost=await game.evaluate(()=>__grandLine.battle.learningBoost);
+  assert.equal(boost.correct,3);assert.equal(boost.round,round+1);assert.equal(boost.attackMultiplier,1.3);
+  assert.ok(Math.abs(boost.critBonus-.15)<1e-10);assert.equal(boost.defenseMultiplier,1.24);
+  assert.equal(await game.evaluate(()=>__grandLine.collection.stats.correctAnswers),statsBefore+3);
+  assert.match(await game.locator('#learning-boost').textContent(),/Attack \+30%/);
+  await host.evaluate(p=>fake.send({type:'GLTCG_ROUND_RESULT',requestId:p.requestId,sessionId:p.sessionId,round:p.round,correct:3,total:3}),pending);await frames(host,3);
+  assert.deepEqual(await game.evaluate(()=>__grandLine.battle.learningBoost),boost);
+  assert.equal(await game.evaluate(()=>__grandLine.collection.stats.correctAnswers),statsBefore+3);
+  assert.equal(await game.evaluate(()=>__grandLine.collection.packs),0);await screenshot(host,'desktop-defense-boost');
+  check('Every wave needs exactly three private grades; save failures, hidden-tab saves and forged/replayed results cannot bypass or stack the boost');
 
-  await page.locator('[data-view="campaign"]').click(); await page.locator('#campaign-map button').first().click(); await stablePlayer(page);
-  const effects = await page.evaluate(async () => {
-    const core = await import('/grand-line-core.js'); const api = __grandLine, drawn = [];
-    for (const c of core.CHARACTERS) for (const skill of c.skills) {
-      const collection = core.createCollection(); core.addCard(collection, c.id); collection.team = [c.id, ...core.STARTER_IDS.filter(id => id !== c.id)].slice(0, 5);
-      const b = core.createBattle(collection, { seed: 82 }); const actor = b.allies.find(u => u.characterId === c.id);
-      b.status = 'player'; b.activeId = actor.id; b.turnOrder = [actor.id, ...b.enemies.map(u => u.id)]; b.turnIndex = 0; actor.energy = 100;
-      if (skill.target === 'fallen-ally') { b.allies[1].hp = 0; b.allies[1].alive = false; }
-      for (const e of b.enemies) { e.hp = e.maxHp = 10000; e.shield = 100; }
-      const targets = core.getValidTargets(b, skill.id); if (!core.act(b, skill.id, targets[0]?.id)) throw Error('Could not execute ' + skill.id);
-      const primary = b.effects.find(e => e.skillId === skill.id); if (!primary) throw Error('No animation for ' + skill.id);
-      b.id += '-' + skill.id; api.renderer.draw(b, performance.now(), { selectedTarget: targets[0]?.id }); api.renderer.draw(b, performance.now() + 450, {}); drawn.push(primary.animation);
-    }
-    return drawn;
-  });
-  assert.equal(effects.length, 150); assert.equal(new Set(effects).size, 150);
-  check('All 150 distinct active abilities execute and render their canvas effects without an error');
+  await game.locator('#start-wave').click();await clearWave(game);
+  assert.equal(await game.evaluate(()=>__grandLine.battle.learningBoost),null);
+  await game.locator('#study-button').click();await answerThree(host,0);
+  await game.waitForFunction(()=>__grandLine.battle.status==='setup'&&__grandLine.battle.round===3);
+  assert.equal(await host.evaluate(()=>fake.records.length),6);
+  await game.locator('#start-wave').click();await clearWave(game);
+  assert.equal(await game.evaluate(()=>__grandLine.battle.pendingOutcome),'victory');
+  assert.equal(await game.evaluate(()=>__grandLine.collection.unlockedEncounter),1);
+  await game.locator('#study-button').click();await answerThree(host);
+  await game.waitForFunction(()=>__grandLine.battle.status==='victory'&&__grandLine.dialog==='ending');
+  assert.equal(await game.evaluate(()=>__grandLine.collection.unlockedEncounter),2);
+  assert.equal(await game.evaluate(()=>__grandLine.collection.stats.victories),1);
+  assert.equal(await host.evaluate(()=>fake.records.length),9);await screenshot(host,'desktop-defense-victory');
+  check('All three waves require three questions each, including wrong answers and the final wave before a stage unlock');
+
+  await game.evaluate(()=>{__grandLine.closeDialog();__grandLine.go('campaign');__grandLine.beginBattle(1);});
+  await game.locator('#start-wave').click();
+  await game.evaluate(()=>{__grandLine.battle.ship.hp=0;__grandLine.advanceDefense(__grandLine.battle,.05);__grandLine.renderBattle();});
+  await game.waitForFunction(()=>__grandLine.battle.status==='learning');
+  assert.equal(await game.evaluate(()=>__grandLine.battle.pendingOutcome),'defeat');
+  await game.locator('#study-button').click();await answerThree(host);
+  await game.waitForFunction(()=>__grandLine.battle.status==='defeat'&&__grandLine.dialog==='ending');
+  assert.equal(await game.evaluate(()=>__grandLine.collection.unlockedEncounter),2);
+  assert.equal(await game.evaluate(()=>__grandLine.collection.stats.victories),1);
+  assert.equal(await game.evaluate(()=>__grandLine.collection.packs),0);
+  assert.equal(await host.evaluate(()=>fake.records.length),12);await screenshot(host,'desktop-defense-defeat');
+  check('Ship defeat stops defense, requires its three questions and grants no stage, pack or victory');
+
+  const closedSession=await game.evaluate(()=>__grandLine.sessionId);
+  await host.evaluate(sessionId=>fake.send({type:'GLTCG_INVALIDATE',sessionId,message:'The learner changed.'}),closedSession);
+  await game.waitForFunction(()=>!__grandLine.ready&&__grandLine.battle===null);
+  await game.evaluate(()=>__grandLine.beginBattle(1));assert.equal(await game.evaluate(()=>__grandLine.battle),null);
+  assert.equal(await game.evaluate(()=>__grandLine.sessionId),'');
+  check('A profile invalidation removes the defense and its authority to start another stage');
+
+  const roster=await page.evaluate(()=>__grandLine.CHARACTERS.map(c=>c.id));
+  for(const id of ['shanks','blackbeard','bigmom','kizaru','sengoku','garp','mihawk','hancock'])assert.ok(!roster.includes(id));
+  for(const id of ['wyper','kaku','wapol','hina','paulie','donkrieg','hatchan','kalifa'])assert.ok(roster.includes(id));
+  await page.locator('[data-view="collection"]').click();await page.locator('.roster-update summary').click();
+  assert.equal(await page.locator('#future-characters li').count(),8);
+  check('Current collection preserves all eight replacements and clearly reserves future seven-star expansions');
+  await page.locator('[data-view="campaign"]').click();await page.locator('#campaign-map button').first().click();
+  await page.locator('#start-wave').click();await clearWave(page);await page.locator('#study-button').click();
+  for(let i=0;i<3;i++) {
+    assert.match(await page.locator('.question-count').textContent(),new RegExp('Question '+(i+1)+' of 3.*No platform points awarded'));
+    await page.locator('#dialog-panel [data-answer]').first().click();
+    await page.getByRole('button',{name:'Check answer',exact:true}).click();
+    await page.getByRole('button',{name:i===2?'Return to defense':'Next question',exact:true}).click();
+  }
+  await page.waitForFunction(()=>__grandLine.battle.status==='setup'&&__grandLine.battle.round===2);
+  assert.equal(await page.evaluate(()=>__grandLine.collection.packs),0);
+  assert.equal(await page.evaluate(()=>__grandLine.wallet.available),false);
+  check('Standalone defense uses exactly three labeled local examples and cannot create platform points or packs');
   if (process.env.GRAND_LINE_REQUIRE_ART === '1') {
     const assets = await page.evaluate(async () => {
       const a = __grandLine.art; await a.ready;
@@ -291,18 +301,30 @@ try {
   for (const [name, viewport] of [['phone', { width: 390, height: 844 }], ['small-phone', { width: 320, height: 740 }], ['landscape', { width: 844, height: 390 }]]) {
     const mobile = await browser.newPage({ viewport, isMobile: true, hasTouch: true }); observe(mobile); await standalone(mobile, 'science'); await noOverflow(mobile); await screenshot(mobile, name + '-collection');
     await mobile.locator('#apex-showcase [data-character="kaido"]').click(); await noOverflow(mobile); await screenshot(mobile, name + '-detail'); await mobile.locator('#dialog-panel .dialog-close').click();
-    await mobile.locator('[data-view="campaign"]').click(); await mobile.locator('#campaign-map button').first().click(); await stablePlayer(mobile); await noOverflow(mobile);
-    await mobile.locator('#skill-buttons button').first().click(); await mobile.locator('#target-buttons button').first().click(); await mobile.locator('#cast-button').click(); await screenshot(mobile, name + '-battle');
-    await mobile.evaluate(()=>{document.getElementById('idle-mode').click();document.getElementById('idle-pause').click();});
-    assert.equal(await mobile.locator('#idle-summary').isVisible(),true);await noOverflow(mobile);await screenshot(mobile,name+'-idle-voyage');
-    if(viewport.width<=600){assert.ok((await mobile.locator('#idle-strategy').boundingBox()).width>=100,'Strategy value remains readable');assert.ok((await mobile.locator('#idle-speed').boundingBox()).width>=70,'Speed value remains readable');}
+    await mobile.locator('[data-view="campaign"]').click();await mobile.locator('#campaign-map button').first().click();
+    await mobile.waitForFunction(()=>__grandLine.battle?.status==='setup');await noOverflow(mobile);
+    await mobile.locator('#defender-buttons [data-ally]').first().tap();await mobile.locator('#placement-buttons [data-pad]').last().tap();
+    const lastPad=await mobile.evaluate(()=>__grandLine.DEFENSE_PADS.at(-1));
+    assert.equal(await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),lastPad.id);
+    await mobile.locator('#placement-buttons [data-pad]').first().tap();
+    await mobile.locator('#battle-canvas').scrollIntoViewIfNeeded();await frames(mobile);
+    const canvasBox=await mobile.locator('#battle-canvas').boundingBox();
+    assert.ok(canvasBox.width<=viewport.width,'The defense canvas fits the configured viewport');
+    const scale=Math.min(canvasBox.width/1000,canvasBox.height/600);
+    await mobile.touchscreen.tap(canvasBox.x+(canvasBox.width-1000*scale)/2+lastPad.x*scale,
+      canvasBox.y+(canvasBox.height-600*scale)/2+lastPad.y*scale);
+    assert.equal(await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),lastPad.id,'The last pad responds at its actual canvas coordinates');
+    await screenshot(mobile,name+'-defense-setup');
+    await mobile.locator('#start-wave').tap();await mobile.waitForFunction(()=>__grandLine.battle.status==='running');
+    await mobile.locator('#defense-pause').tap();await noOverflow(mobile);await screenshot(mobile,name+'-defense-running');
+    for(const id of ['defense-pause','defense-speed'])assert.ok((await mobile.locator('#'+id).boundingBox()).height>=40,'Defense touch controls remain usable');
     await mobile.close();
   }
-  check('Collection, full card details, manual targeting, and idle voyage controls fit portrait and landscape phones');
+  check('Collection, full card details, defender placement and running defense fit portrait and landscape phones');
   const production = await browser.newPage(); observe(production); await production.goto(base + '/grand-line.html'); await production.locator('#card-grid .tcg-card').first().waitFor();
   assert.equal(await production.evaluate(() => typeof window.__grandLine), 'undefined');
   check('Production pages do not expose the test API');
   assert.deepEqual(errors, [], 'No browser runtime errors');
-  await fs.writeFile(path.join(shots, 'results.json'), JSON.stringify({ checks, errors, abilityAnimations: effects.length, screenshots: shots }, null, 2));
+  await fs.writeFile(path.join(shots, 'results.json'), JSON.stringify({ checks, errors,  screenshots: shots }, null, 2));
   process.stdout.write(`Grand Line browser checks passed: ${checks.length}. Screenshots: ${shots}\n`);
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

@@ -1,4 +1,4 @@
-import { installGrandLineLearningParent } from './grand-line-learning-parent.js?v=1.1.0';
+import { installGrandLineLearningParent } from './grand-line-learning-parent.js?v=1.2.0';
 import { pirateRiftScope } from './pirate-rift-portal.js?v=1.0.0';
 
 const CSS = `.grand-line-portal{position:fixed;inset:0;z-index:100002;background:#09131b;color:#f9eed0;display:flex;flex-direction:column;font:14px/1.5 system-ui,sans-serif}.grand-line-portal>header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#132331;padding:10px 16px;border-bottom:1px solid #927b48}.grand-line-portal h2{flex:1;margin:0;font:700 18px Georgia,serif}.grand-line-portal h2 small{font:700 9px system-ui;color:#dcbb68}.grand-line-portal label{display:flex;gap:7px;align-items:center}.grand-line-portal button,.grand-line-portal select{border:1px solid #8d7954;color:#fff2ce;background:#1a3040;border-radius:5px;padding:8px 12px;min-height:44px;font:inherit;cursor:pointer}.grand-line-portal button:focus-visible,.grand-line-portal select:focus-visible{outline:3px solid #72d8d4;outline-offset:2px}.grand-line-stage{flex:1;min-height:0;display:flex}.grand-line-stage iframe{flex:1;width:100%;height:100%;min-height:0;border:0;background:#09131b}.grand-line-intro{margin:auto;max-width:640px;text-align:center;padding:24px}.grand-line-intro h3{font:30px Georgia,serif;color:#edca81}.grand-line-status{margin:0;padding:5px 16px;background:#132331;font-size:12px;color:#c9d7df}.grand-line-portal [hidden]{display:none!important}@media(max-width:640px){.grand-line-portal>header{padding:8px;gap:7px}.grand-line-portal h2{min-width:100%;font-size:16px}.grand-line-portal label{flex:1}.grand-line-portal button,.grand-line-portal select{font-size:12px;padding:7px 9px}}`;
@@ -18,7 +18,7 @@ export function installGrandLinePortal(env) {
   }
   function close() {
     if(!overlay)return;
-    stopFrame('Grand Line Chronicles was closed.');
+    stopFrame('Crew Defense was closed.');
     if(doc.fullscreenElement&&overlay.contains(doc.fullscreenElement))Promise.resolve(doc.exitFullscreen?.()).catch(()=>{});
     overlay.remove();overlay=null;level='';openedIdentity='';
     for(const [element,value] of inert)element.inert=value;inert=[];doc.body.style.overflow=priorOverflow;
@@ -39,7 +39,7 @@ export function installGrandLinePortal(env) {
     stopFrame();runIdentity=JSON.stringify([subject,openedIdentity,level,env.getUser().role==='admin'?'preview':'student']);
     const ctx=Object.freeze(context());env.onStart?.(ctx);
     const stage=overlay.querySelector('.grand-line-stage');stage.replaceChildren();
-    frame=doc.createElement('iframe');frame.title='Grand Line Chronicles — One Piece trading card game';
+    frame=doc.createElement('iframe');frame.title='Grand Line Chronicles — Crew Defense';
     frame.setAttribute('allow','fullscreen; autoplay');frame.setAttribute('referrerpolicy','no-referrer');
     bridge=installGrandLineLearningParent({window:win,subject,getFrame:()=>frame,isAllowed:current,isActive:()=>!!overlay?.isConnected,
       getIdentity:()=>current()?runIdentity:'',getProfileKey:()=>ctx.profileKey,
@@ -53,15 +53,15 @@ export function installGrandLinePortal(env) {
       onImageFailure:(q,url)=>{if(current())env.onImageFailure?.(q,url,ctx);},
       onQuestionUnavailable:q=>{if(current())env.onQuestionUnavailable?.(q,ctx);}
     });
-    const url=new URL('./grand-line.html',win.location.href);url.searchParams.set('v','1.1.0');url.searchParams.set('subject',subject.toLowerCase());url.searchParams.set('profile',ctx.profileKey);url.searchParams.set('learning','1');
+    const url=new URL('./grand-line.html',win.location.href);url.searchParams.set('v','1.2.0');url.searchParams.set('subject',subject.toLowerCase());url.searchParams.set('profile',ctx.profileKey);url.searchParams.set('learning','1');
     frame.src=url.href;stage.append(frame);frame.focus();return true;
   }
   function open() {
-    if(!allowed()){close();env.notify?.('Sign in as a student or administrator to play Grand Line Chronicles.');return false;}
+    if(!allowed()){close();env.notify?.('Sign in as a student or administrator to play Crew Defense.');return false;}
     close();env.beforeOpen?.();priorFocus=doc.activeElement;openedIdentity=baseIdentity();
     if(!doc.getElementById('grand-line-portal-style')){const style=doc.createElement('style');style.id='grand-line-portal-style';style.textContent=CSS;doc.head.append(style);}
-    overlay=doc.createElement('section');overlay.className='grand-line-portal';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label','Grand Line Chronicles');
-    overlay.innerHTML='<header><h2>GRAND LINE CHRONICLES <small>ONE PIECE TCG · BETA</small></h2><label>School level <select aria-label="Grand Line school level"></select></label><button type="button" data-start>Start game</button><button type="button" data-rift>Pirate Rift</button><button type="button" data-fullscreen>Fullscreen</button><button type="button" data-close>Close</button></header><p class="grand-line-status" role="status">Answer three questions after every full battle round. Buy one-character packs with your portal reward points.</p><div class="grand-line-stage"><div class="grand-line-intro"><h3>Your crew. Your cards. Your next adventure.</h3><p>Choose a school level to start. Your portal selects three fresh questions from the real question bank after every battle round.</p></div></div>';
+    overlay=doc.createElement('section');overlay.className='grand-line-portal';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label','Crew Defense');
+    overlay.innerHTML='<header><h2>CREW DEFENSE <small>GRAND LINE CHRONICLES · BETA</small></h2><label>School level <select aria-label="Grand Line school level"></select></label><button type="button" data-start>Start game</button><button type="button" data-rift>Pirate Rift</button><button type="button" data-fullscreen>Fullscreen</button><button type="button" data-close>Close</button></header><p class="grand-line-status" role="status">Place five owned defenders, protect your ship, and answer three questions after every wave. Buy one-character packs with your portal reward points.</p><div class="grand-line-stage"><div class="grand-line-intro"><h3>Your crew. Your defenses. Protect the ship.</h3><p>Choose a school level to start. Your portal selects three fresh questions from the real question bank after every wave.</p></div></div>';
     const select=overlay.querySelector('select'),placeholder=doc.createElement('option');placeholder.value='';placeholder.textContent='Choose level';select.append(placeholder);
     for(const value of typeof env.levels==='function'?env.levels():env.levels){const option=doc.createElement('option');option.value=value;option.textContent=value;select.append(option);}
     const stored=env.getLevel();if(env.isLevel(stored))select.value=stored;select.disabled=env.getUser().role!=='admin';

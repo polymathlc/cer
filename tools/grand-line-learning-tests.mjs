@@ -162,7 +162,7 @@ test('navigation, authentication and learner changes explicitly retire Grand Lin
     assert.match(section('function configureSidebarForRole(role)'), /grandLinePortal.close\(\)/);
     assert.match(fs.readFileSync(new URL('grand-line-science-adapter.js',root),'utf8'), /mode:'grand-line'/); assert.match(app, /getProfileKey:.*familyProfile.activeStudent/);
   } else assert.match(section('async function saveStudentLevel(lv)'), /grandLinePortal.close\(\)/);
-  const html = fs.readFileSync(new URL('index.html', root), 'utf8'); assert.match(html, /Grand Line Chronicles <span class="nav-beta">TCG/);
+  const html = fs.readFileSync(new URL('index.html', root), 'utf8'); assert.match(html, /Crew Defense <span class="nav-beta">TCG/);
   assert.match(app, /Collect 50 One Piece characters/);
 });
 if (science) test('Science navigation reaches the new overlay without a missing page', () => {
