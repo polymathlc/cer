@@ -663,10 +663,10 @@ index d4c0dfa..a16fe0e 100644
      ctx, canvas: {width: 1440, height: 900}, arena: {width: 1400, height: 900},
 diff --git a/tools/cursor-cast-browser-check.mjs b/tools/cursor-cast-browser-check.mjs
 new file mode 100644
-index 0000000..becb50f
+index 0000000..e926e9f
 --- /dev/null
 +++ b/tools/cursor-cast-browser-check.mjs
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,184 @@
 +import assert from 'node:assert/strict';
 +import {withBrowser, preparePage} from './browser-harness.mjs';
 +
@@ -810,6 +810,8 @@ index 0000000..becb50f
 +  assertPointerCast(await lastCast(page), scaledPointer, 'layout shift with a stationary pointer');
 +  await page.evaluate(() => { player.castActive = null; player.magick = player.maxMagick; });
 +  await page.setViewportSize({width: 1200, height: 850});
++  // Viewport emulation resolves before Chromium necessarily dispatches resize.
++  await page.waitForFunction(() => canvas.width === 720 && canvas.height === 500);
 +  await page.keyboard.press('q');
 +  const resized = await lastCast(page);
 +  assertPointerCast(resized, scaledPointer, 'viewport resize with a stationary pointer');

@@ -141,6 +141,8 @@ await withBrowser(async ({browser, url}) => {
   assertPointerCast(await lastCast(page), scaledPointer, 'layout shift with a stationary pointer');
   await page.evaluate(() => { player.castActive = null; player.magick = player.maxMagick; });
   await page.setViewportSize({width: 1200, height: 850});
+  // Viewport emulation resolves before Chromium necessarily dispatches resize.
+  await page.waitForFunction(() => canvas.width === 720 && canvas.height === 500);
   await page.keyboard.press('q');
   const resized = await lastCast(page);
   assertPointerCast(resized, scaledPointer, 'viewport resize with a stationary pointer');
