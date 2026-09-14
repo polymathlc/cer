@@ -1,7 +1,7 @@
-import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS } from './grand-line-data.js?v=2.0.0';
-import { statsFor } from './grand-line-core.js?v=2.0.0';
-import { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=2.0.0';
-export { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=2.0.0';
+import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS } from './grand-line-data.js?v=2.1.0';
+import { statsFor } from './grand-line-core.js?v=2.1.0';
+import { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=2.1.0';
+export { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=2.1.0';
 
 export const DEFENSE_PATH = Object.freeze([
   { x: 20, y: 110 }, { x: 250, y: 110 }, { x: 250, y: 300 },

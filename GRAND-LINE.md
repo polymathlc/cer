@@ -44,7 +44,7 @@ Each defense starts with 100 battle supplies. A summon costs 20 + 5 × the card'
 
 ### Attack shapes and target priority
 
-Every character has a defense profile, and each of their three skills has a real attack shape. The map previews the selected defender's coverage. Attacks resolve with travel or wind-up time; their damage uses the actual line, cone, impact area, chain, or surrounding radius.
+Every character has a defense profile, and each of their three skills has a real attack shape. Coverage appears during preparation; skill buttons toggle a specific attack-area preview, which clears when a wave starts. Attacks resolve with travel or wind-up time; their damage uses the actual line, cone, impact area, chain, or surrounding radius.
 
 | Pattern | Tactical use |
 |---|---|
@@ -57,6 +57,14 @@ Every character has a defense profile, and each of their three skills has a real
 | Support | Keep healers, shields, and control skills close enough to protect the damage dealers. |
 
 Target priority can change during combat: **First** picks enemies nearest the ship, **Strongest** favors high-health enemies, and **Cluster** aims at groups. AOE damage is valuable against the larger waves, while control, armor penetration, and focused attacks answer other threats. The existing character passives, poison, burn, slow, freeze, healing, and shields remain active.
+
+### Illustrated ability animations
+
+The eight current six- and seven-star characters each have three dedicated animated ability rows: Kaido, Whitebeard, Akainu, Luffy, Law, Kuzan, Fujitora, and Ryokugyu. The other 42 characters share directional-strike, area-impact and support animations tinted to their abilities. Zoro uses the shared sword-slash effects; his actual piercing attack geometry remains distinct.
+
+Nine transparent sprite sheets contain 108 generated frames. Each cast plays cropped wind-up, travel, impact and fade frames; splash and chain effects follow their actual resolution. Whitebeard's ground tremors, forest eruptions and gravity impacts draw beneath the characters. Compact status markers and shield bars replace large overlapping auras. Visual budgets cap effects and combine damage labels during crowded waves without changing damage or target selection. Reduced motion uses fixed frames and removes shakes and moving trails.
+
+The browser loads only the deployed characters' sheets plus the shared fallback. Image failures retain quiet attack cues. The shipped WebP files preserve the generated images' visible pixels and transparency losslessly; full generation prompts and hashes are recorded in `assets/grand-line-vfx/ART.md` and its manifest.
 
 ### Three questions, then individual upgrades
 

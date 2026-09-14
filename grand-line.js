@@ -1,8 +1,8 @@
-import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam} from './grand-line-core.js?v=2.0.0';
-import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS} from './grand-line-data.js?v=2.0.0';
-import {createArtManager} from './grand-line-render.js?v=2.0.0';
-import {DEFENSE_PADS,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning,getDefenseProfile,getDefenseSkillProfile,getDefenseWavePreview,summonDefender,recallDefender,upgradeDefender,specializeDefender,setDefensePriority} from './grand-line-defense.js?v=2.0.0';
-import {createDefenseRenderer} from './grand-line-defense-render.js?v=2.0.0';
+import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam} from './grand-line-core.js?v=2.1.0';
+import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS} from './grand-line-data.js?v=2.1.0';
+import {createArtManager} from './grand-line-render.js?v=2.1.0';
+import {DEFENSE_PADS,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning,getDefenseProfile,getDefenseSkillProfile,getDefenseWavePreview,summonDefender,recallDefender,upgradeDefender,specializeDefender,setDefensePriority} from './grand-line-defense.js?v=2.1.0';
+import {createDefenseRenderer} from './grand-line-defense-render.js?v=2.1.0';
 const DEFENSE_SPEEDS=[1,2,4];
 const $=id=>document.getElementById(id);
 const embedded=parent!==window,params=new URLSearchParams(location.search),origin=location.origin;
@@ -180,7 +180,7 @@ function beginBattle(encounter){
   if(purchasePending){toast('Resume your pending purchase in the Card shop before starting a defense.');return;}if(!current()||adminPending||savePending||unsavedLearning)return;const next=createDefense(collection,{encounter,seed:uuid('defense')});if(!next){toast('Choose five unlocked crew members and an available harbor.');return;}
   battle=next;lastOutcome='';selectedAllyId=next.allies[0]?.id||'';selectedPadId='';selectedSummonId='';summonMode=false;hoverPadId='';defensePaused=false;busyUntil=0;lastFrame=0;lastHud=0;learningPending=null;go('battle');sound();
 }
-function startWave(){if(!battle||busy()||learningPending?.waiting)return false;const result=startDefenseWave(battle);if(result){summonMode=false;defensePaused=false;lastFrame=0;sound();renderBattle();}return result;}
+function startWave(){if(!battle||busy()||learningPending?.waiting)return false;const result=startDefenseWave(battle);if(result){summonMode=false;selectedPreviewSkillId='';defensePaused=false;lastFrame=0;sound();renderBattle();}return result;}
 function selectDefender(id){if(!battle?.allies.some(u=>u.id===id))return;selectedAllyId=id;selectedPreviewSkillId='';summonMode=false;selectedPadId=battle.allies.find(u=>u.id===id).padId;renderBattle();}
 function placeDefender(allyId,padId){if(!battle||!['setup','learning'].includes(battle.status)||busy()||learningPending)return false;const result=placeDefenseUnit(battle,allyId,padId);if(result){selectedAllyId=allyId;renderBattle();sound();}return result;}
 function canPrepare(){return !!battle&&battle.status==='setup'&&!busy()&&!learningPending&&!purchasePending;}
@@ -252,8 +252,8 @@ function renderPlacement(){
   $('specialization-description').textContent=selected.specialization?'Specialization: '+(selected.specialization==='power'?'Power · +25% damage and 35% armor penetration':'Reach · +15% range, wider areas, and faster attacks'):level<3?'At level 3, choose Power (+25% damage, 35% armor penetration) or Reach (+15% range, wider areas, faster attacks).':'Choose Power for armored enemies or Reach for crowd coverage. This choice lasts for this defense.';
   for(const branch of ['power','reach']){const n=$('specialize-'+branch);n.disabled=locked||level<3||!!selected.specialization;n.setAttribute('aria-pressed',String(selected.specialization===branch));}
   const skillKey=selected.id+':'+level+':'+selected.specialization;
-  if($('defender-skills').dataset.ally!==skillKey){$('defender-skills').dataset.ally=skillKey;$('defender-skills').replaceChildren(...c.skills.map(s=>{const shape=getDefenseSkillProfile(selected,s),n=button('',()=>{selectedPreviewSkillId=s.id;renderPlacement();},'defense-skill');n.dataset.skillPreview=s.id;n.setAttribute('aria-label','Preview '+s.name+' attack area');n.style.setProperty('--skill-color',s.color);n.append(el('strong','',(GLYPHS[s.kind]||'✧')+' '+s.name),el('small','skill-shape',(PATTERN_LABELS[profilePattern(shape)]||'Support')+' · Preview area'),el('span','',skillDescription(s).replaceAll('every enemy in range','enemies inside its attack shape')));return n;}));}
-  for(const n of $('defender-skills').children)n.setAttribute('aria-pressed',String(n.dataset.skillPreview===(selectedPreviewSkillId||c.skills[0].id)));
+  if($('defender-skills').dataset.ally!==skillKey){$('defender-skills').dataset.ally=skillKey;$('defender-skills').replaceChildren(...c.skills.map(s=>{const shape=getDefenseSkillProfile(selected,s),n=button('',()=>{selectedPreviewSkillId=selectedPreviewSkillId===s.id?'':s.id;renderPlacement();},'defense-skill');n.dataset.skillPreview=s.id;n.setAttribute('aria-label','Preview '+s.name+' attack area');n.style.setProperty('--skill-color',s.color);n.append(el('strong','',(GLYPHS[s.kind]||'✧')+' '+s.name),el('small','skill-shape',(PATTERN_LABELS[profilePattern(shape)]||'Support')+' · Preview area'),el('span','',skillDescription(s).replaceAll('every enemy in range','enemies inside its attack shape')));return n;}));}
+  for(const n of $('defender-skills').children)n.setAttribute('aria-pressed',String(n.dataset.skillPreview===selectedPreviewSkillId));
 }
 function renderSummons(locked){
   const b=battle,query=$('summon-search').value.trim().toLowerCase(),pattern=$('summon-pattern').value;

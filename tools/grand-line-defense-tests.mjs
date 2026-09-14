@@ -201,7 +201,7 @@ test('fixed-step seeded movement and combat are independent of render delta part
   for (let i = 0; i < 100; i++) advanceDefense(a, 0.05);
   for (let i = 0; i < 20; i++) advanceDefense(z, 0.25);
   assert.deepEqual(a.enemies, z.enemies); assert.deepEqual(a.allies, z.allies); assert.deepEqual(a.stats, z.stats);
-  assert.deepEqual(a.effects, z.effects);
+  assert.deepEqual(a.effects, z.effects); assert.deepEqual(a.projectiles, z.projectiles);
   assert.ok(a.enemies.some(enemy => enemy.progress > 0 && enemy.x !== DEFENSE_PATH[0].x));
 });
 

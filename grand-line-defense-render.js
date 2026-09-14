@@ -1,5 +1,6 @@
-import { DEFENSE_PATH, DEFENSE_PADS, getDefenseAttackPreview, getDefenseProfile } from './grand-line-defense.js?v=2.0.0';
-import { CHARACTER_BY_ID } from './grand-line-data.js?v=2.0.0';
+import { DEFENSE_PATH, DEFENSE_PADS, getDefenseAttackPreview, getDefenseProfile } from './grand-line-defense.js?v=2.1.0';
+import { CHARACTER_BY_ID } from './grand-line-data.js?v=2.1.0';
+import { createDefenseVfxManager, getVfxSpec } from './grand-line-vfx.js?v=2.1.0';
 
 const WORLD_W = 1000, WORLD_H = 600, TAU = Math.PI * 2;
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -27,12 +28,6 @@ function polygon(g, points, fill, outline) {
 function rounded(g, x, y, w, h, r, color) {
   g.fillStyle = color; g.beginPath(); g.roundRect(x, y, w, h, r); g.fill();
 }
-function spark(g, x, y, r, color) {
-  polygon(g, Array.from({ length: 8 }, (_, i) => {
-    const a = i / 8 * TAU, radius = i % 2 ? r * .22 : r;
-    return [x + Math.cos(a) * radius, y + Math.sin(a) * radius];
-  }), color);
-}
 function closestRoutePoint(p) {
   let closest = DEFENSE_PATH[0] || p, distance = Infinity;
   for (let i = 1; i < DEFENSE_PATH.length; i++) {
@@ -45,11 +40,14 @@ function closestRoutePoint(p) {
 }
 
 /** Canvas drawing has its own animation state and never writes to the battle. */
-export function createDefenseRenderer(canvas, art) {
+export function createDefenseRenderer(canvas, art, { vfx: suppliedVfx } = {}) {
   const ctx = canvas.getContext('2d');
+  const vfx = suppliedVfx || createDefenseVfxManager();
   let width = 1, height = 1, dpr = 1, scale = 1, offsetX = 0, offsetY = 0;
   let backdrop = null, destroyed = false, battleKey, seen = new Set(), animations = [];
-  let unitPositions = new Map();
+  let unitPositions = new Map(), floats = [], vfxStats = {}, occupiedFx = [];
+  const tintCache = new Map(), tintCacheLimit = 24, imageKeys = new WeakMap(), preloadedIds = new Set();
+  let nextImageKey = 0, deployedSignature = '';
 
   function resize() {
     if (destroyed) return;
@@ -338,10 +336,6 @@ export function createDefenseRenderer(canvas, art) {
     ctx.save(); ctx.globalAlpha = dead ? .28 : 1;
     ellipse(ctx, x, y + 2, h * .23, h * .065, '#06232a91');
     if (selected) { ctx.strokeStyle = '#ffe2a0'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(x, y + 1, 26, 9, 0, 0, TAU); ctx.stroke(); }
-    if (unit.shield > 0) {
-      ctx.fillStyle = '#8fdff016'; ctx.strokeStyle = '#a5e8f6b8'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.ellipse(x, y - h * .46, h * .34, h * .52, 0, 0, TAU); ctx.fill(); ctx.stroke();
-    }
     const asset = ally || unit.boss ? art?.load(unit.characterId) : null;
     if (asset?.loaded && asset.bounds && asset.image) {
       const r = asset.bounds, w = h * r.w / r.h;
@@ -375,324 +369,229 @@ export function createDefenseRenderer(canvas, art) {
     }
     const status = unit.statuses?.find(s => ['freeze', 'stun', 'burn', 'poison', 'slow'].includes(s.type));
     if (status && !dead) {
-      const symbol = { freeze: '❄', stun: '✦', burn: '♨', poison: '●', slow: '↓' }[status.type];
-      ctx.fillStyle = '#fff0b4'; ctx.font = '21px "Segoe UI", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(symbol, x + 21, y - h + 12);
+      const symbol = { freeze: 'Ⅱ', stun: '!', burn: '♨', poison: '●', slow: '↓' }[status.type];
+      const color = { freeze: '#b8e6ef', stun: '#f3dfa0', burn: '#f0a27e', poison: '#c1a0d7', slow: '#adcdde' }[status.type];
+      rounded(ctx, x + 14, y - h + 7, 16, 16, 4, '#123440ec');
+      ctx.fillStyle = color; ctx.font = '600 13px "Segoe UI", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(symbol, x + 22, y - h + 19);
     }
   }
 
-  function blade(x, y, angle, size, color, triple = false) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
-    const count = triple ? 3 : 1;
-    for (let i = 0; i < count; i++) {
-      ctx.save(); ctx.translate(-i * 9, (i - (count - 1) / 2) * 9);
-      ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(-size * .18, -size);
-      ctx.bezierCurveTo(size * .9, -size * .43, size * .9, size * .43, -size * .18, size);
-      ctx.bezierCurveTo(size * .38, size * .35, size * .38, -size * .35, -size * .18, -size); ctx.fill();
-      ctx.strokeStyle = '#ecffe1'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-size * .18, -size);
-      ctx.bezierCurveTo(size * .9, -size * .43, size * .9, size * .43, -size * .18, size); ctx.stroke(); ctx.restore();
+  function resetVfxFrame(options) {
+    const compact = scale < .6;
+    vfxStats = { sprites: 0, projectiles: 0, impacts: 0, supports: 0, damageLabels: 0, fallbacks: 0, droppedSprites: 0, tintedSprites: 0,
+      rangeVisible: false, reducedMotion: !!options.reducedMotion,
+      budget: { projectiles: compact ? 8 : 10, impacts: compact ? 3 : 4, supports: compact ? 1 : 2, damageLabels: compact ? 2 : 3, totalSprites: compact ? 12 : 16 } };
+    occupiedFx = [];
+  }
+
+  function tintedFrame(sprite) {
+    if (!sprite.tint || sprite.premium) return null;
+    if (!imageKeys.has(sprite.image)) imageKeys.set(sprite.image, ++nextImageKey);
+    const key = `${imageKeys.get(sprite.image)}:${sprite.sx}:${sprite.sy}:${sprite.sw}:${sprite.sh}:${sprite.tint}`;
+    if (tintCache.has(key)) {
+      const cached = tintCache.get(key); tintCache.delete(key); tintCache.set(key, cached); return cached;
     }
-    ctx.restore();
+    const surface = canvas.ownerDocument.createElement('canvas'), size = 160;
+    const ratio = sprite.sw / sprite.sh;
+    surface.width = Math.max(1, Math.round(size * Math.min(1, ratio)));
+    surface.height = Math.max(1, Math.round(size / Math.max(1, ratio)));
+    const g = surface.getContext('2d');
+    g.drawImage(sprite.image, sprite.sx, sprite.sy, sprite.sw, sprite.sh, 0, 0, surface.width, surface.height);
+    g.globalCompositeOperation = 'multiply'; g.fillStyle = sprite.tint; g.fillRect(0, 0, surface.width, surface.height);
+    g.globalCompositeOperation = 'destination-in';
+    g.drawImage(sprite.image, sprite.sx, sprite.sy, sprite.sw, sprite.sh, 0, 0, surface.width, surface.height);
+    tintCache.set(key, surface);
+    while (tintCache.size > tintCacheLimit) tintCache.delete(tintCache.keys().next().value);
+    return surface;
   }
 
-  function fist(x, y, angle, size, haki = false) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(angle); ctx.scale(size / 12, size / 12);
-    rounded(ctx, -11, -8, 17, 17, 4, haki ? '#493549' : '#eaa887');
-    rounded(ctx, -3, -11, 13, 20, 5, haki ? '#342738' : '#f4bf96');
-    rounded(ctx, -6, 3, 11, 9, 3, haki ? '#675060' : '#da916f');
-    for (let i = 0; i < 3; i++) stroke(ctx, [{ x: 0, y: -6 + i * 5 }, { x: 7, y: -6 + i * 5 }], haki ? '#e88cab' : '#b66e5a', 1.5);
-    ctx.restore();
-  }
-
-  function rubberArm(from, to, size, alpha = 1, haki = false) {
-    ctx.save(); ctx.globalAlpha *= alpha;
-    const angle = Math.atan2(to.y - from.y, to.x - from.x);
-    stroke(ctx, [from, to], haki ? '#532f43' : '#a2574c', size * 1.12);
-    stroke(ctx, [from, to], haki ? '#a65c79' : '#e9a383', size * .76);
-    stroke(ctx, [{ x: from.x, y: from.y }, { x: from.x + Math.cos(angle) * 13, y: from.y + Math.sin(angle) * 13 }], '#d85450', size * 1.28);
-    fist(to.x, to.y, angle, size * 1.35, haki); ctx.restore();
-  }
-
-  function earthquake(from, radius, phase, seed, strong = false) {
-    const reach = Math.max(8, radius * phase);
-    ctx.save();
-    ctx.strokeStyle = '#b8f1f36b'; ctx.lineWidth = strong ? 5 : 3;
-    ctx.beginPath(); ctx.arc(from.x, from.y, reach, 0, TAU); ctx.stroke();
-    ctx.strokeStyle = '#e5fdeda8'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(from.x, from.y, reach * .84, 0, TAU); ctx.stroke();
-    for (let i = 0; i < 7; i++) {
-      const angle = i * TAU / 7 + (seed % 17) * .07;
-      const points = Array.from({ length: 6 }, (_, j) => {
-        const d = reach * j / 5, bend = Math.sin(i * 13 + j * 8 + seed) * reach * .055;
-        return { x: from.x + Math.cos(angle) * d - Math.sin(angle) * bend, y: from.y + Math.sin(angle) * d + Math.cos(angle) * bend };
-      });
-      stroke(ctx, points, '#193e50', strong ? 6 : 4); stroke(ctx, points, '#d7fff1', strong ? 2.5 : 1.8);
-      const branch = points[3];
-      stroke(ctx, [branch, { x: branch.x + Math.cos(angle + .6) * reach * .19, y: branch.y + Math.sin(angle + .6) * reach * .19 }], '#d7fff1', 1.5);
+  function admitVfx(type, x, y) {
+    const count = vfxStats.projectiles + vfxStats.impacts + vfxStats.supports;
+    // A dense formation needs visible enemies between attacks, even with ten towers.
+    if (vfxStats[type] >= vfxStats.budget[type] || count >= vfxStats.budget.totalSprites || occupiedFx.filter(p => Math.hypot(p.x - x, p.y - y) < 55).length >= 2) {
+      vfxStats.droppedSprites++; return false;
     }
-    ctx.restore();
+    occupiedFx.push({ x, y }); vfxStats[type]++; return true;
   }
 
-  function bolt(points, color, width = 3, seed = 0) {
-    const zigzag = [];
-    for (let j = 1; j < points.length; j++) {
-      const a = points[j - 1], z = points[j], length = Math.hypot(z.x - a.x, z.y - a.y), n = Math.max(2, Math.ceil(length / 20));
-      for (let i = 0; i <= n; i++) {
-        const t = i / n, offset = i && i < n ? Math.sin(i * 12 + seed + j * 7) * 9 : 0;
-        zigzag.push({ x: a.x + (z.x - a.x) * t - (z.y - a.y) / (length || 1) * offset, y: a.y + (z.y - a.y) * t + (z.x - a.x) / (length || 1) * offset });
+  function drawSprite(characterId, skillId, kind, phase, placement, type) {
+    const sprite = vfx.sprite(characterId, skillId, kind, phase);
+    if (!admitVfx(type, placement.x, placement.y)) return false;
+    ctx.save(); ctx.translate(placement.x, placement.y); ctx.rotate(placement.angle || 0);
+    ctx.globalAlpha = placement.alpha ?? 1;
+    if (sprite?.image && sprite.sw > 0 && sprite.sh > 0) {
+      // Crop exactly one cell. Transparent gutters remain transparent, without
+      // stretching the atlas or drawing any neighbouring animation frames.
+      const ratio = sprite.sw / sprite.sh, long = Math.max(1, ratio);
+      const w = placement.size * ratio / long, h = placement.size / long * (placement.flatten || 1);
+      const tinted = tintedFrame(sprite);
+      if (tinted) { ctx.drawImage(tinted, -w / 2, -h / 2, w, h); vfxStats.tintedSprites++; }
+      else ctx.drawImage(sprite.image, sprite.sx, sprite.sy, sprite.sw, sprite.sh, -w / 2, -h / 2, w, h);
+      vfxStats.sprites++;
+    } else {
+      // Asset loading and offline failures get one quiet marker, never the old
+      // beams, polygons, shield clouds, or piles of particles.
+      const color = CHARACTER_BY_ID[characterId]?.color || '#e0d5b4';
+      if (type === 'supports') { stroke(ctx, [{ x: -4, y: 0 }, { x: 4, y: 0 }], color, 2); stroke(ctx, [{ x: 0, y: -4 }, { x: 0, y: 4 }], color, 2); }
+      else ellipse(ctx, 0, 0, type === 'impacts' ? 5 : 3, type === 'impacts' ? 5 : 3, color);
+      vfxStats.fallbacks++;
+    }
+    ctx.restore(); return true;
+  }
+
+  function attackPriority(p, selectedId) {
+    const character = CHARACTER_BY_ID[p.characterId], skillIndex = Number(String(p.skillId || '').split('-').at(-1)) || 0;
+    return (character?.stars || 1) * 3 + skillIndex * 8 + (p.sourceId === selectedId ? 6 : 0) + (p.sourceId?.startsWith('ally-') ? 8 : 0);
+  }
+
+  function paintProjectiles(b, options, groundLayer = false) {
+    if (b.status !== 'running') return;
+    const projectiles = (b.projectiles || []).filter(p => p.start && p.end).slice().sort((a, z) => attackPriority(z, options.selectedAllyId) - attackPriority(a, options.selectedAllyId));
+    for (const p of projectiles) {
+      const progress = clamp(p.age / Math.max(.01, p.duration), 0, 1), spec = getVfxSpec(p.characterId, p.skillId, p.kind);
+      const skillIndex = Number(String(p.skillId || '').split('-').at(-1)) || 0;
+      const burst = ['single', 'splash', 'chain'].includes(p.shape), ground = ['earth', 'quake', 'plant', 'gravity'].includes(p.kind);
+      if ((ground || p.shape === 'radial') !== groundLayer) continue;
+      let size = spec?.premium ? [72, 110, 142][skillIndex] : [47, 64, 80][skillIndex];
+      let x = finite(p.x, p.end.x), y = finite(p.y, p.end.y) - (ground ? 8 : 30);
+      let angle = Math.atan2(p.end.y - p.start.y, p.end.x - p.start.x), flatten = 1;
+      if (p.shape === 'radial') {
+        x = p.start.x; y = p.start.y - (ground ? 0 : 26); angle = 0;
+        size = clamp(Math.min(p.range, p.radius) * (1 + progress * .45), 80, spec?.premium ? 205 : 150); flatten = ground ? .7 : 1;
+      } else if (p.shape === 'cone') {
+        size = clamp(size * 1.12, 58, 168);
+      } else if (p.shape === 'line') {
+        size = Math.max(size, clamp(finite(p.width, 25) * 1.08, 45, 140));
       }
-    }
-    stroke(ctx, zigzag, color, width); stroke(ctx, zigzag, '#f5ffda', Math.max(1, width / 3));
-  }
-
-  function groundRupture(from, to, width, seed) {
-    const dx = to.x - from.x, dy = to.y - from.y, distance = Math.hypot(dx, dy);
-    const nx = -dy / (distance || 1), ny = dx / (distance || 1);
-    for (let row = -1; row <= 1; row++) {
-      const points = Array.from({ length: 11 }, (_, i) => {
-        const f = i / 10, offset = (row * width * .33 + Math.sin(i * 2.7 + seed + row * 4) * width * .13) * Math.min(1, f * 5);
-        return { x: from.x + dx * f + nx * offset, y: from.y + dy * f + ny * offset };
-      });
-      stroke(ctx, points, '#15394b', 7); stroke(ctx, points, '#c0faf3', 2.5);
-      for (let i = 3; i < points.length; i += 3) {
-        const p = points[i], side = i % 2 ? 1 : -1;
-        stroke(ctx, [p, { x: p.x - dx * .035 + nx * width * .18 * side, y: p.y - dy * .035 + ny * width * .18 * side }], '#d9fff1', 1.5);
-      }
-    }
-    ctx.strokeStyle = '#e0fff0ab'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.ellipse(to.x, to.y, width * .56, 12, Math.atan2(dy, dx) + Math.PI / 2, Math.PI, TAU); ctx.stroke();
-  }
-
-  function paintProjectiles(b, reducedMotion) {
-    for (const p of (b.projectiles || []).slice(-100)) {
-      if (!p.start || !p.end) continue;
-      const phase = clamp(p.age / Math.max(.01, p.duration), 0, 1), angle = Math.atan2(p.end.y - p.start.y, p.end.x - p.start.x);
-      const ground = p.characterId === 'whitebeard' && ['earth', 'quake'].includes(p.kind);
-      const lift = ground ? 0 : 30;
-      const from = { x: p.start.x, y: p.start.y - lift }, to = { x: finite(p.x, p.end.x), y: finite(p.y, p.end.y) - lift };
-      const end = { x: p.end.x, y: p.end.y - lift }, color = p.color || '#ffdb92', seed = hash(p.id);
-      const powerful = !p.skillId?.endsWith('-0');
-      ctx.save();
-      if (reducedMotion) {
-        ctx.globalAlpha = .5; ctx.strokeStyle = color; ctx.lineWidth = 3;
-        traceArea(p.shape, p.start, p.end, p, p.range); ctx.stroke();
-        ellipse(ctx, to.x, to.y, 7, 7, color); ctx.restore(); continue;
-      }
-      if (ground) {
-        if (p.shape === 'line') groundRupture(p.start, to, p.width || 100, seed);
-        else earthquake(p.start, p.radius || p.range, phase, seed, powerful);
-        ellipse(ctx, from.x, from.y - 33, 13 + Math.sin(phase * Math.PI) * 7, 13, '#e6fcf198');
-      } else if (p.characterId === 'luffy') {
-        if (p.shape === 'radial') {
-          const reach = (p.radius || p.range) * Math.sin(phase * Math.PI / 2);
-          for (let i = 0; i < 8; i++) { const a = i * TAU / 8 + seed; rubberArm(from, { x: from.x + Math.cos(a) * reach, y: from.y + Math.sin(a) * reach }, 8, .6, powerful); }
-        } else if (p.shape === 'cone' || /gatling/i.test(p.animation || p.skillId)) {
-          for (let i = 0; i < 7; i++) {
-            const a = angle + (i - 3) / 3 * (p.angle || .4), pulse = .68 + .32 * Math.sin(phase * 14 + i * 2.6) ** 2;
-            const reach = (p.range || Math.hypot(end.x - from.x, end.y - from.y)) * Math.min(1, phase * 2.6) * pulse;
-            rubberArm({ x: from.x, y: from.y + (i % 2 ? 5 : -5) }, { x: from.x + Math.cos(a) * reach, y: from.y + Math.sin(a) * reach }, 7, .45 + i * .055, powerful);
-          }
-        } else rubberArm(from, to, powerful ? 13 : 9, .95, powerful);
-      } else if (p.characterId === 'whitebeard' && p.kind === 'slash') {
-        // Murakumogiri's long pole and crescent blade are visible before the air slash.
-        const sweep = angle - .9 + phase * 1.8, reach = 71;
-        const bladeEnd = { x: from.x + Math.cos(sweep) * reach, y: from.y + Math.sin(sweep) * reach };
-        stroke(ctx, [{ x: from.x - Math.cos(sweep) * 31, y: from.y - Math.sin(sweep) * 31 }, bladeEnd], '#382f38', 7);
-        stroke(ctx, [{ x: from.x - Math.cos(sweep) * 31, y: from.y - Math.sin(sweep) * 31 }, bladeEnd], '#bd954c', 3);
-        blade(bladeEnd.x, bladeEnd.y, sweep, 23, '#e8edcb');
-        blade(to.x, to.y, angle, Math.max(26, finite(p.width, 50) * .6), '#b8eeec');
-      } else if (p.kind === 'slash' || ['zoro', 'brook', 'killer', 'kaku'].includes(p.characterId)) {
-        const shade = p.characterId === 'zoro' ? '#a7f3b0' : color;
-        if (p.shape === 'radial' || p.shape === 'cone') {
-          const count = p.shape === 'radial' ? 7 : 4;
-          const reach = (p.shape === 'radial' ? p.radius : p.range) * phase;
-          for (let i = 0; i < count; i++) {
-            const a = p.shape === 'radial' ? i * TAU / count + phase : angle + (i / (count - 1) - .5) * p.angle * 2;
-            blade(from.x + Math.cos(a) * reach, from.y + Math.sin(a) * reach, a, 24, shade);
-          }
-        } else {
-          stroke(ctx, [{ x: to.x - Math.cos(angle) * 45, y: to.y - Math.sin(angle) * 45 }, to], shade + '65', 5);
-          blade(to.x, to.y, angle, Math.max(21, finite(p.width, 35) * .6), shade, p.characterId === 'zoro');
-        }
-      } else if (['lightning', 'electric', 'light'].includes(p.kind) || p.shape === 'chain') {
-        bolt([from, to], color, powerful ? 5 : 3, seed + Math.floor(phase * 8)); spark(ctx, to.x, to.y, 11, '#fff0ae');
-      } else if (p.shape === 'radial') {
-        const radius = (p.radius || p.range) * phase;
-        ctx.strokeStyle = color; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(from.x, from.y, radius, 0, TAU); ctx.stroke();
-        for (let i = 0; i < 8; i++) { const a = i * TAU / 8 + phase; spark(ctx, from.x + Math.cos(a) * radius, from.y + Math.sin(a) * radius, 7, color); }
-      } else if (['fire', 'magma', 'explosion', 'dragon'].includes(p.kind)) {
-        const distance = Math.hypot(to.x - from.x, to.y - from.y), tail = Math.min(distance, powerful ? 72 : 40);
-        stroke(ctx, [{ x: to.x - Math.cos(angle) * tail, y: to.y - Math.sin(angle) * tail }, to], '#ee80566e', powerful ? 18 : 11);
-        if (p.shape === 'cone') {
-          const spread = finite(p.angle, .35), reach = p.range * phase;
-          ctx.fillStyle = '#ff7d4340'; traceArea('cone', from, end, p, reach); ctx.fill();
-          for (let i = 0; i < 5; i++) { const a = angle + (i - 2) * spread / 2; const f = { x: from.x + Math.cos(a) * reach, y: from.y + Math.sin(a) * reach }; stroke(ctx, [from, f], i % 2 ? '#ffcd7c88' : '#ed75516e', 8); ellipse(ctx, f.x, f.y, 9, 9, color); }
-        } else if (p.kind === 'dragon' && p.shape === 'line') {
-          stroke(ctx, [from, to], '#e7755266', (p.width || 80) * .8);
-          stroke(ctx, [from, to], '#ffce836b', (p.width || 80) * .37);
-          for (let i = 0; i < 5; i++) { const d = (i - 2) * (p.width || 80) / 6; ellipse(ctx, to.x - Math.sin(angle) * d, to.y + Math.cos(angle) * d, 11, 11, i % 2 ? color : '#ffe3a0'); }
-        } else { ellipse(ctx, to.x, to.y, powerful ? 13 : 9, powerful ? 13 : 9, color); ellipse(ctx, to.x + 2, to.y - 2, 6, 6, '#fff3b0'); }
-      } else if (['ice', 'water', 'wind', 'sand', 'poison', 'plant', 'smoke', 'soul', 'soap'].includes(p.kind)) {
-        for (let i = 0; i < 4; i++) {
-          const length = Math.min(36, Math.hypot(to.x - from.x, to.y - from.y)) * i / 4;
-          const x = to.x - Math.cos(angle) * length, y = to.y - Math.sin(angle) * length;
-          ctx.globalAlpha = 1 - i * .17;
-          if (p.kind === 'ice') polygon(ctx, [[x + 11, y], [x - 7, y - 7], [x - 3, y + 8]], i % 2 ? '#f1ffef' : color);
-          else ellipse(ctx, x, y + Math.sin(i * 2 + phase * 8) * 4, 8 - i, 9 - i, color);
-        }
-      } else if (p.kind === 'punch') rubberArm(from, to, powerful ? 9 : 6, .75);
-      else {
-        stroke(ctx, [{ x: to.x - Math.cos(angle) * 28, y: to.y - Math.sin(angle) * 28 }, to], '#f5e5b991', 2.5);
-        ellipse(ctx, to.x, to.y, 6, 6, color); ellipse(ctx, to.x + 1, to.y - 1, 2, 2, '#fffbe0');
-      }
-      ctx.restore();
+      if (burst) size *= .77;
+      const phase = options.reducedMotion ? .35 : progress * (['splash', 'chain'].includes(p.shape) ? .49 : .95);
+      drawSprite(p.characterId, p.skillId, p.kind, phase,
+        { x, y, size, angle, flatten, alpha: options.reducedMotion ? .7 : p.shape === 'radial' ? .78 : .94 }, 'projectiles');
     }
   }
 
-  function recordEffects(b, now) {
+  function recordEffects(b, now, options) {
     const fresh = [];
     for (const event of b.effects || []) {
       if (seen.has(event.id)) continue;
       seen.add(event.id); fresh.push(event);
-      const source = event.source || unitPositions.get(event.sourceId);
+      const source = event.origin || event.source || unitPositions.get(event.sourceId);
       const targets = event.targets?.length ? event.targets : (event.targetIds || []).map(id => unitPositions.get(id)).filter(Boolean);
+      const characterId = event.characterId || unitPositions.get(event.sourceId)?.characterId;
       if (event.projectileId || event.kind === 'projectile-launch') continue;
-      animations.push({ event, start: now - finite(event.age) * 1000,
-        duration: event.kind === 'impact' ? 450 : ['damage', 'knockout'].includes(event.kind) ? 650 : 1050,
-        source: source ? { x: source.x, y: source.y - 36 } : null,
-        targets: targets.map(t => ({ x: t.x, y: t.y - 35 })) });
+      const start = now - finite(event.age) * 1000;
+      if (event.kind === 'damage' && event.amount > 0) {
+        const target = targets[0]; if (!target) continue;
+        const important = event.sourceId === options.selectedAllyId || (event.targetIds || []).some(id => unitPositions.get(id)?.boss);
+        const key = `${event.sourceId}:${Math.floor(start / 220)}`;
+        const existing = floats.find(item => item.key === key);
+        if (existing) {
+          existing.x = (existing.x * existing.count + target.x) / (existing.count + 1);
+          existing.y = (existing.y * existing.count + target.y) / (existing.count + 1);
+          existing.amount += event.amount; existing.count++; existing.important ||= important;
+        } else floats.push({ key, start, duration: 630, amount: event.amount, count: 1, x: target.x, y: target.y, important });
+        continue;
+      }
+      if (event.kind === 'leak') {
+        floats.push({ key: event.id, start, duration: 850, amount: -Math.abs(event.amount || 0), count: 1, x: b.ship?.x || 940, y: b.ship?.y || 485, important: true, ship: true });
+        continue;
+      }
+      // Only the cast event owns an animation. Shield/heal ticks, status events,
+      // critical procs and each casualty update the unit UI without extra art.
+      if (event.kind === 'impact') {
+        if (!['splash', 'chain'].includes(event.shape)) continue;
+        const center = event.center || event.end || targets[0] || source; if (!center) continue;
+        const duplicate = animations.some(a => a.type === 'impacts' && a.sourceId === event.sourceId && a.skillId === event.skillId && Math.abs(start - a.start) < 180);
+        if (duplicate) continue;
+        animations.push({ type: 'impacts', sourceId: event.sourceId, characterId, skillId: event.skillId, kind: event.attackKind || event.kind,
+          shape: event.shape, radius: event.geometry?.radius || 60, center: { ...center }, start, duration: 380, source: source ? { ...source } : null });
+      } else if (event.skillId && characterId) {
+        const character = CHARACTER_BY_ID[characterId], skill = character?.skills.find(skill => skill.id === event.skillId);
+        if (!skill || !['self', 'ally', 'all-allies', 'fallen-ally'].includes(skill.target)) continue;
+        const center = targets[0] || source; if (!center) continue;
+        animations.push({ type: 'supports', sourceId: event.sourceId, characterId, skillId: event.skillId, kind: event.kind,
+          center: { ...center }, start, duration: 620, source: source ? { ...source } : null });
+      }
     }
-    if (seen.size > 1200) seen = new Set([...seen].slice(-600));
-    animations = animations.filter(a => now - a.start < a.duration).slice(-64);
+    if (seen.size > 1600) seen = new Set([...seen].slice(-800));
+    animations = animations.filter(a => now - a.start < a.duration).slice(-24);
+    floats = floats.filter(a => now - a.start < a.duration).slice(-20);
     return fresh;
   }
 
-  function paintEffects(now, reducedMotion) {
-    for (const a of animations) {
-      const e = a.event, t = clamp((now - a.start) / a.duration, 0, 1), color = e.color || '#f2d28d';
-      const targets = a.targets.length ? a.targets : a.source ? [a.source] : [];
-      const seed = hash(e.animation || e.skillId || e.id), phase = clamp(t * 2.9, 0, 1);
-      ctx.save(); ctx.globalAlpha = reducedMotion ? .65 * (1 - t * .65) : Math.min(1, (1 - t) * 2.5);
-      if (e.kind === 'impact') {
-        const profile = e.geometry || e, shape = e.shape || profile.shape;
-        const source = e.source || (a.source ? { x: a.source.x, y: a.source.y + 36 } : null);
-        const center = e.center || e.end || e.targets?.[0] || source;
-        if (center) {
-          const radius = finite(profile.radius, shape === 'single' ? 18 : 40);
-          if (shape === 'radial' && source) {
-            ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(source.x, source.y, radius * (.86 + t * .14), 0, TAU); ctx.stroke();
-          } else if (shape === 'splash') {
-            ctx.fillStyle = color + (color.length === 7 ? '20' : ''); ctx.strokeStyle = color; ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.arc(center.x, center.y, radius * (.45 + phase * .55), 0, TAU); ctx.fill(); ctx.stroke();
-            for (let i = 0; i < 9; i++) { const angle = i * TAU / 9 + seed; spark(ctx, center.x + Math.cos(angle) * radius * t, center.y - 20 + Math.sin(angle) * radius * t, 7 * (1 - t) + 2, i % 2 ? color : '#fff1c4'); }
-          } else if (shape === 'chain' && source) bolt([{ x: source.x, y: source.y - 30 }, ...targets], color, 3, seed);
-          for (const to of targets.slice(0, 16)) spark(ctx, to.x, to.y, 8 + 12 * (1 - t), color);
-        }
-        ctx.restore(); continue;
-      }
-      if (['damage', 'knockout'].includes(e.kind)) {
-        for (const to of targets.slice(0, 1)) {
-          if (e.kind === 'knockout') { ctx.strokeStyle = '#f9dfae'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(to.x, to.y + 28, 12 + t * 13, 5 + t * 5, 0, 0, TAU); ctx.stroke(); }
-          else if (e.amount >= 35 || e.critical) {
-            ctx.textAlign = 'center'; ctx.font = `${e.critical ? 800 : 600} ${e.critical ? 18 : 14}px "Segoe UI", sans-serif`; ctx.lineWidth = 3;
-            const text = `${e.critical ? '✦ ' : ''}${Math.round(e.amount)}`, yy = to.y - 26 - (reducedMotion ? 0 : t * 18);
-            ctx.strokeStyle = '#143341'; ctx.strokeText(text, to.x, yy); ctx.fillStyle = e.critical ? '#ffe59e' : '#fff2d0'; ctx.fillText(text, to.x, yy);
-          }
-        }
-        ctx.restore(); continue;
-      }
-      for (const to of targets.slice(0, 12)) {
-        const x = to.x, y = to.y, source = a.source || to, sx = source.x, sy = source.y;
-        const px = sx + (x - sx) * phase, py = sy + (y - sy) * phase, r = e.skillId ? 38 : 23, kind = e.kind;
-        if (reducedMotion) {
-          ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, r * .65, 0, TAU); ctx.stroke();
-          if (['heal', 'revive'].includes(kind)) { stroke(ctx, [{ x: x - 8, y }, { x: x + 8, y }], color, 4); stroke(ctx, [{ x, y: y - 8 }, { x, y: y + 8 }], color, 4); }
-        } else if (['punch', 'projectile', 'shot', 'basic'].includes(kind)) {
-          stroke(ctx, [{ x: sx, y: sy }, { x: px, y: py }], color, kind === 'punch' ? 5 : 2);
-          ellipse(ctx, px, py, kind === 'punch' ? 8 : 5, 6, color);
-          if (phase === 1) spark(ctx, x, y, r * (1 - t), '#fff1be');
-        } else if (['slash', 'string', 'rope'].includes(kind)) {
-          if (phase < 1) stroke(ctx, [{ x: sx, y: sy }, { x: px, y: py }], color, 2);
-          ctx.save(); ctx.translate(x, y); ctx.rotate(-.8 + seed % 5 * .2);
-          for (let i = 0; i < (kind === 'slash' ? 3 : 6); i++) {
-            ctx.strokeStyle = color; ctx.lineWidth = kind === 'slash' ? 4 : 1.5; ctx.beginPath();
-            ctx.ellipse((i - 1) * 9, 0, r * phase, r * .27, 0, -2.6, .7); ctx.stroke();
-          } ctx.restore();
-        } else if (['lightning', 'light', 'electric'].includes(kind)) {
-          const points = Array.from({ length: 9 }, (_, i) => ({ x: x + (i && i < 8 ? Math.sin(i * 6 + seed) * r * .45 : 0), y: y - 100 + i / 8 * 103 }));
-          stroke(ctx, points, color, 5); stroke(ctx, points, '#fffbdc', 1.5); spark(ctx, x, y, r * .6, '#ffefb4');
-        } else if (['heal', 'revive', 'shield', 'cleanse'].includes(kind)) {
-          ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.beginPath();
-          for (let i = 0; i <= 6; i++) { const angle = i / 6 * TAU - Math.PI / 2; const xx = x + Math.cos(angle) * r, yy = y + Math.sin(angle) * r; i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); } ctx.stroke();
-          if (kind !== 'shield') {
-            stroke(ctx, [{ x: x - 10, y: y - t * 15 }, { x: x + 10, y: y - t * 15 }], color, 5);
-            stroke(ctx, [{ x, y: y - 10 - t * 15 }, { x, y: y + 10 - t * 15 }], color, 5);
-          }
-          for (let i = 0; i < 5; i++) spark(ctx, x + Math.cos(i * 2.1) * r * .8, y + Math.sin(i * 2.1) * r * .8 - t * 15, 4, color);
-        } else if (['fire', 'magma', 'explosion', 'dragon'].includes(kind)) {
-          if (kind === 'dragon') {
-            const points = Array.from({ length: 19 }, (_, i) => { const f = i / 18; return { x: sx + (x - sx) * f * phase, y: sy + (y - sy) * f * phase + Math.sin(f * TAU * 2 - t * 5) * 10 }; });
-            stroke(ctx, points, color, 13); stroke(ctx, points, '#ffe6a3', 3);
-          } else { ellipse(ctx, px, py, 10, 7, color); ellipse(ctx, px - 3, py, 4, 4, '#ffebac'); }
-          if (phase > .6) for (let i = 0; i < 10; i++) {
-            const angle = i / 10 * TAU, spread = r * t;
-            ellipse(ctx, x + Math.cos(angle) * spread, y + Math.sin(angle) * spread - t * 13, 5 * (1 - t) + 2, 9 * (1 - t) + 2, i % 2 ? color : '#ffe1a0');
-          }
-        } else if (['ice', 'earth', 'quake'].includes(kind)) {
-          for (let i = 0; i < 5; i++) { const xx = x + (i - 2) * 13; polygon(ctx, [[xx - 7, y + 17], [xx + 2, y - r * phase * (.6 + (i % 2) * .4)], [xx + 9, y + 12]], i % 2 ? color : '#d7e9d5'); }
-          stroke(ctx, [{ x: x - r, y: y + 20 }, { x: x - 8, y: y + 12 }, { x: x + 9, y: y + 22 }, { x: x + r, y: y + 13 }], color, 3);
-        } else if (['water', 'wind', 'sand', 'smoke', 'soul', 'soap', 'poison'].includes(kind)) {
-          for (let i = 0; i < 5; i++) {
-            ctx.strokeStyle = color; ctx.lineWidth = kind === 'water' ? 5 : 2.5; ctx.beginPath();
-            ctx.ellipse(x + Math.sin(i * 2 + t * 3) * 7, y + (i - 2) * 9, r * (.55 + i * .1) * phase, r * .23, i * .15 + t, .2, Math.PI * 1.75); ctx.stroke();
-          }
-        } else if (['gravity', 'dark', 'magnet'].includes(kind)) {
-          const glow = ctx.createRadialGradient(x, y, 0, x, y, r);
-          glow.addColorStop(0, '#142136bf'); glow.addColorStop(1, '#14213600'); ctx.fillStyle = glow; ctx.fillRect(x - r, y - r, r * 2, r * 2);
-          for (let i = 0; i < 3; i++) { ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.ellipse(x, y, r * (.5 + i * .2), r * (.2 + i * .15), t * 2 + i, 0, TAU); ctx.stroke(); }
-        } else if (['plant', 'bloom'].includes(kind)) {
-          for (let i = 0; i < 5; i++) { const xx = x + (i - 2) * 12; ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(xx, y + 22); ctx.quadraticCurveTo(xx - 12, y, xx + 4, y - r * phase); ctx.stroke(); ellipse(ctx, xx - 3, y - 3, 9, 4, color); }
-        } else {
-          ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, r * phase, 0, TAU); ctx.stroke();
-          for (let i = 0; i < 5; i++) spark(ctx, x + Math.cos(i * 1.26) * r * t, y + Math.sin(i * 1.26) * r * t, 5, color);
-        }
-        if (Number.isFinite(e.amount) && t > .2 && (e.skillId || ['heal', 'leak'].includes(kind))) {
-          ctx.textAlign = 'center'; ctx.font = '700 21px "Segoe UI", sans-serif'; ctx.lineWidth = 4;
-          const text = `${['heal', 'revive'].includes(kind) ? '+' : ''}${Math.round(e.amount)}`;
-          const textY = y - 35 - (reducedMotion ? 0 : t * 14);
-          ctx.strokeStyle = '#0a2939'; ctx.strokeText(text, x, textY); ctx.fillStyle = '#fff3c5'; ctx.fillText(text, x, textY);
-        }
-      }
-      ctx.restore();
+  function paintEffects(now, options, groundLayer = false) {
+    const ordered = animations.slice().sort((a, z) => attackPriority(z, options.selectedAllyId) - attackPriority(a, options.selectedAllyId));
+    for (const a of ordered) {
+      const ground = a.type !== 'supports' && ['earth', 'quake', 'plant', 'gravity'].includes(a.kind);
+      if (ground !== groundLayer) continue;
+      const t = clamp((now - a.start) / a.duration, 0, 1), spec = getVfxSpec(a.characterId, a.skillId, a.kind);
+      const skillIndex = Number(String(a.skillId || '').split('-').at(-1)) || 0;
+      const support = a.type === 'supports';
+      const size = support ? spec?.premium ? 112 : 65 : clamp(a.radius * (spec?.premium ? 1.35 : 1), 50, spec?.premium ? 175 : 120);
+      const phase = options.reducedMotion ? .7 : support ? t : .5 + t * .49;
+      drawSprite(a.characterId, a.skillId, a.kind, phase,
+        { x: a.center.x, y: a.center.y - (support ? 30 : 20), size: size * (skillIndex === 0 ? .86 : 1), angle: 0,
+          alpha: (options.reducedMotion ? .6 : .84) * Math.min(1, (1 - t) * 3) }, a.type);
+    }
+    if (groundLayer) return;
+    const labels = floats.filter(a => a.important || a.count >= 3).sort((a, z) => Number(z.important) - Number(a.important) || z.amount - a.amount);
+    const occupied = [];
+    for (const item of labels) {
+      if (vfxStats.damageLabels >= vfxStats.budget.damageLabels) break;
+      if (occupied.some(p => Math.hypot(p.x - item.x, p.y - item.y) < 75)) continue;
+      occupied.push(item); vfxStats.damageLabels++;
+      const t = clamp((now - item.start) / item.duration, 0, 1), y = item.y - 64 - (options.reducedMotion ? 0 : t * 10);
+      const text = `${Math.round(item.amount)}${item.count > 1 ? ` · ${item.count} hits` : ''}`;
+      ctx.save(); ctx.globalAlpha = Math.min(1, (1 - t) * 3); ctx.font = '600 14px "Segoe UI", sans-serif'; ctx.textAlign = 'center';
+      ctx.lineWidth = 3; ctx.strokeStyle = '#12313fe8'; ctx.strokeText(text, item.x, y);
+      ctx.fillStyle = item.ship ? '#f8b294' : '#f8e9b9'; ctx.fillText(text, item.x, y); ctx.restore();
     }
   }
 
   function draw(b, now = 0, options = {}) {
     if (!b || !ctx || destroyed) return [];
     const key = b.id ?? b;
-    if (key !== battleKey) { battleKey = key; seen.clear(); animations = []; }
+    if (key !== battleKey) {
+      battleKey = key; seen.clear(); animations = []; floats = [];
+      deployedSignature = '';
+    }
     if (width < 2 || height < 2) resize();
     if (!backdrop) makeBackdrop();
     const allies = b.allies || [], enemies = b.enemies || [];
+    const deployed = [...new Set(allies.map(unit => unit.characterId))].sort(), signature = deployed.join('|');
+    if (signature !== deployedSignature) {
+      deployedSignature = signature;
+      const freshIds = deployed.filter(id => !preloadedIds.has(id));
+      if (freshIds.length) { freshIds.forEach(id => preloadedIds.add(id)); vfx.preload?.(freshIds)?.catch?.(() => {}); }
+    }
     const preview = summonPreview(b, options);
     const visualOptions = options.summonCharacterId ? { ...options, selectedAllyId: '' } : options;
+    resetVfxFrame(options);
     unitPositions = new Map([...allies.map(u => [u, true]), ...enemies.map(u => [u, false])].map(([u, ally]) => [u.id, {
-      x: finite(u.x), y: finite(u.y), h: Math.max(36, Math.min(finite(u.y) - 12, ally ? 84 : u.boss ? 89 : /armor|brute/.test(String(u.archetype || u.enemyType || '')) ? 62 : 52)), ally,
+      x: finite(u.x), y: finite(u.y), h: Math.max(36, Math.min(finite(u.y) - 12, ally ? 84 : u.boss ? 89 : /armor|brute/.test(String(u.archetype || u.enemyType || '')) ? 62 : 52)), ally, characterId: u.characterId, boss: !!u.boss,
     }]));
     if (b.ship) unitPositions.set(b.ship.id || 'ship', { x: finite(b.ship.x, 940), y: finite(b.ship.y, 475), h: 95 });
-    const fresh = recordEffects(b, finite(now));
+    const fresh = recordEffects(b, finite(now), options);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = '#082c39'; ctx.fillRect(0, 0, width, height);
     ctx.save(); ctx.translate(offsetX, offsetY); ctx.scale(scale, scale);
     ctx.beginPath(); ctx.rect(0, 0, WORLD_W, WORLD_H); ctx.clip(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.drawImage(backdrop, 0, 0, WORLD_W, WORLD_H); drawWater(now, options.reducedMotion);
-    drawRange(b, options.summonCharacterId ? preview : allies.find(u => u.id === options.selectedAllyId), options); drawPads(allies, visualOptions);
+    const rangeUnit = options.summonCharacterId ? preview : allies.find(u => u.id === options.selectedAllyId);
+    if (b.status !== 'running' || options.showAttackArea === true || options.previewSkillId) {
+      vfxStats.rangeVisible = !!rangeUnit;
+      drawRange(b, rangeUnit, options);
+    }
+    drawPads(allies, visualOptions);
     drawShip(b.ship);
+    paintProjectiles(b, options, true);
+    paintEffects(now, options, true);
     const units = [...allies.map(u => ({ u, ally: true })), ...enemies.filter(u => u.hp > 0 && !u.escaped).map(u => ({ u, ally: false }))]
       .sort((a, z) => finite(a.u.y) - finite(z.u.y));
     for (const { u, ally } of units) paintUnit(u, ally, now, visualOptions);
     paintSummonPreview(preview);
-    paintProjectiles(b, options.reducedMotion);
-    paintEffects(now, options.reducedMotion);
+    paintProjectiles(b, options);
+    paintEffects(now, options);
     const state = b.status || b.state || b.phase;
     const caption = { setup: 'SUMMON · POSITION · UPGRADE', running: `WAVE ${b.round} · ${enemies.filter(u => u.hp > 0 && !u.escaped).length} RAIDERS ON SHORE`, learning: 'TRAIN YOUR CREW · 3 QUESTIONS', victory: 'HARBOR SECURED', defeat: 'SHIP LOST' }[state];
     if (caption) label(caption, 720, 45, { size: 19, color: state === 'defeat' ? '#ffc2ac' : '#dce9c3' });
@@ -718,5 +617,6 @@ export function createDefenseRenderer(canvas, art) {
     return nearest;
   }
 
-  return { resize, draw, pickPad, destroy() { destroyed = true; observer?.disconnect(); animations = []; seen.clear(); unitPositions.clear(); backdrop = null; } };
+  return { resize, draw, pickPad, getVfxStats() { return { ...vfxStats, tintCacheEntries: tintCache.size, tintCacheLimit, budget: { ...vfxStats.budget } }; },
+    destroy() { destroyed = true; observer?.disconnect(); animations = []; floats = []; seen.clear(); unitPositions.clear(); tintCache.clear(); preloadedIds.clear(); backdrop = null; if (!suppliedVfx) vfx.destroy(); } };
 }
