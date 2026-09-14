@@ -1,0 +1,38 @@
+name: Hades sanctuary beta checks
+on:
+  pull_request:
+    paths: ['hades-*.js', 'hades-game.html', 'app.js', 'index.html', 'tools/hades-*.mjs', '.github/workflows/hades-learning.yml']
+  push:
+    branches: [main]
+    paths: ['hades-*.js', 'hades-game.html', 'app.js', 'index.html', 'tools/hades-*.mjs', '.github/workflows/hades-learning.yml']
+permissions:
+  contents: read
+jobs:
+  sanctuary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Validate secure grading, bank selection and beta access
+        run: node --test tools/hades-learning-tests.mjs
+      - name: Verify published game and bridge
+        run: node tools/hades-artifact-check.mjs
+      - name: Install isolated browser runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/hades-browser" --no-audit --no-fund playwright@1.62.1
+          "$RUNNER_TEMP/hades-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Check five-question rounds and rich question rendering
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/hades-browser/node_modules/playwright/index.mjs
+          HADES_SCREENSHOTS: ${{ runner.temp }}/hades-qa
+        run: node tools/hades-learning-browser.mjs
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: hades-sanctuary-beta
+          path: ${{ runner.temp }}/hades-qa
+          if-no-files-found: ignore
+          retention-days: 7

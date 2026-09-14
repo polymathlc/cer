@@ -69,6 +69,7 @@ function harness(bank = [], random = () => 0.5) {
     const preloadQueueImages=async()=>{};
     const Math=Object.create(globalThis.Math);Math.random=()=>0;
     const _resetOpenScienceCoaches=()=>{};
+    const _hadesResetLearning=()=>{state.hadesInvalidations=(state.hadesInvalidations||0)+1;};
     const db={}; const collection=(...x)=>x,where=(...x)=>x,query=(...x)=>x;
     const getDocs=async()=> { if(state.wait) await state.wait; return {forEach:visit=>state.attempts.forEach(a=>visit({data:()=>a}))}; };
     const setDoc=async(ref,value)=>state.writes.push(value),_qRef=id=>id;
@@ -278,9 +279,10 @@ test('an old account or sibling history request cannot populate the new child ca
 });
 
 test('learner change clears active questions, marking stores and cached queues even with the same login', () => {
-  const {api}=harness([q('p6',{level:'P6'})]);api.user({name:'Older',level:'P6'});api.refresh();api.active(q('p6',{level:'P6'}));
+  const {api,state}=harness([q('p6',{level:'P6'})]);api.user({name:'Older',level:'P6'});api.refresh();api.active(q('p6',{level:'P6'}));
   api.user({name:'Mika',level:'P4'});api.family({students:[{name:'Mika',level:'P4'}],activeStudent:0});api.refresh();
   assert.deepEqual(api.activeState(),{questions:{},queue:[]});
+  assert.equal(state.hadesInvalidations,1,'an open Hades sanctuary must retire the old learning profile');
 });
 
 test('managed pupil practice has independent served memory and cannot exceed that pupil level', async () => {

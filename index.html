@@ -9689,6 +9689,9 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="nav-item rpg-el" data-page="arcade" onclick="navigateTo('arcade')" style="display:none;" title="Arcade — Science Defenders, Raiders, Spire, Legends and Slayers, all in one place. Each play costs 1 game credit.">
         <span class="ico">🕹️</span> Arcade
       </div>
+      <div class="nav-item admin-only" data-page="hades" onclick="navigateTo('hades')" style="display:none;" title="Administrator beta — Hades with question-bank sanctuary rounds">
+        <span class="ico">🔥</span> Hades Sanctuary <span class="nav-beta">BETA</span>
+      </div>
       <!-- Realm of Embers TCG (beta) — admins always; students only once the admin presses Release.
            For a STUDENT the whole wrap is moved up to sit directly under 🏛️ Community
            (_tcgPlaceNavItem); this empty anchor is where it lives for an admin, and where
@@ -11696,6 +11699,19 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="page-body" style="max-width:880px;">
         <div id="arcadeContainer"></div>
       </div>
+    </div>
+
+    <div class="page" id="page-hades">
+      <div class="page-header">
+        <div><h2>Hades Sanctuary <span class="nav-beta">BETA</span></h2>
+          <p class="subtitle" id="hadesPreviewNote">Choose a school level for the administrator preview.</p></div>
+        <button type="button" class="btn btn-outline" onclick="navigateTo('arcade')">Back to Arcade</button>
+      </div>
+      <div class="card card-pad" style="margin-bottom:12px;">
+        <label for="hadesPreviewLevel" style="font-weight:700;">Preview school level</label>
+        <select id="hadesPreviewLevel" class="form-control" style="max-width:260px;margin-top:6px;"><option value="">Choose a school level</option></select>
+      </div>
+      <iframe id="hadesFrame" class="embed-frame" title="Hades Sanctuary — Science administrator beta" allow="fullscreen" hidden></iframe>
     </div>
 
     <!-- ===== PAGE: REALM OF EMBERS TCG (beta — admin first, released to students with one click) ===== -->
