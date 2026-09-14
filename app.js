@@ -1,3 +1,4 @@
+import { installHadesLearningParent } from "./hades-learning-parent.js";
 import { scienceTcgIdentity, scienceTcgIdentityText, scienceTcgSkillPath } from './science-tcg-identity.js';
 import { applyScienceTcgSignature, scienceTcgBrandedDamage, scienceTcgAbsorbBarrier } from './science-tcg-runtime.js';
 import { createTcgMedia } from './tcg-media.js';
@@ -3812,7 +3813,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.385.0';
+const APP_VERSION = 'v1.386.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -4042,6 +4043,7 @@ async function startPracticeAs(uid) {
 }
 
 function configureSidebarForRole(role) {
+  _hadesResetLearning("The signed-in profile changed. Start a new run.");
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
   // The engine choice is the centre's, not this browser's, so every signed-in
@@ -4287,6 +4289,7 @@ onAuthStateChanged(auth, (user) => {
     enterApp(user);
   } else {
     currentUser = null;
+    _hadesResetLearning("You signed out. Sign in again to start a new run.");
     interfaceStudio?.setUser(null);
     rpgOnSignOut();
     // The notebook belongs to whoever was signed in — a live listener left
@@ -5215,6 +5218,8 @@ function navigateTo(page) {
   // the same shape the Realm of Embers release gate uses. Hiding a nav item is
   // never on its own what keeps a page shut.
   if (page === 'photoedit' && !_isAdmin()) page = rpgHomePage();
+  if (page === 'hades' && !_isAdmin()) page = rpgHomePage();
+  if (page !== 'hades' && document.getElementById('page-hades')?.classList.contains('active')) _hadesResetLearning('The beta preview was closed.');
   // 📝 Custom Paper builds the centre's own mock paper and decides, through
   // `holdBack`, what the whole school is served. That is a teacher's call, so
   // the page is the admin's — the nav item carries `admin-only`, `custompaper`
@@ -5374,6 +5379,7 @@ function navigateTo(page) {
     if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
+  if (page === 'hades') _hadesInit();
   if (page === 'gameassets') loadGameAssets();
   if (page === 'tcg') tcgRenderPage();
   if (page === 'messages') loadMessagesPage();
@@ -30067,6 +30073,7 @@ function _scienceFeedRefreshFrames() {
   _scienceFeedPassCache = null; _scienceFeedMetaCache = null;
   const identity = JSON.stringify([_scienceFeedKey(), _scienceFeedGameLevel()]);
   if (_scienceFeedIdentity && _scienceFeedIdentity !== identity) {
+    _hadesResetLearning("The learning profile changed. Start a new run.");
     // A sibling can share the same Firebase UID; pending marks and cached quizzes cannot.
     Object.keys(_openQStore || {}).forEach(selector => {
       const host = document.querySelector(selector);
@@ -39179,7 +39186,8 @@ const ARCADE_GAMES = [
   { page: 'raiders', ico: '👾', name: 'Science Raiders', desc: 'Roguelite top-down shooter — clear rooms, answer questions to pick power-ups.' },
   { page: 'spire', ico: '🃏', name: 'Science Spire', desc: 'Endless deck-building climb — answer questions, beat bosses, open card packs.' },
   { page: 'legends', ico: '⚔️', name: 'Science Legends', beta: true, desc: 'Top-down action RPG — three classes, big skill trees, a question every 20 seconds.' },
-  { page: 'slayers', ico: '🗡️', name: 'Science Slayers', beta: true, desc: 'Dungeon crawler — procedural floors, boss loot, questions power your actions.' }
+  { page: 'slayers', ico: '🗡️', name: 'Science Slayers', beta: true, desc: 'Dungeon crawler — procedural floors, boss loot, questions power your actions.' },
+  { page: 'hades', ico: '🔥', name: 'Hades Sanctuary', beta:true, adminOnly:true, desc:'Intricate elemental combat — five bank questions between rooms power healing and boon upgrades.' }
 ];
 function renderArcadePage() {
   const c = document.getElementById('arcadeContainer');
@@ -39195,7 +39203,7 @@ function renderArcadePage() {
       </div>
     </div>
     <div class="arcade-grid">
-      ${ARCADE_GAMES.map(g => `
+      ${ARCADE_GAMES.filter(g => !g.adminOnly || _isAdmin()).map(g => `
       <div class="arcade-card">
         <div class="arcade-ico">${g.ico}</div>
         <h3>${escapeHtml(g.name)}${g.beta ? beta : ''}</h3>
@@ -51864,6 +51872,52 @@ function _sdSeedElo(q) {
   if (d === 'hard') return 1400;
   return 1200;
 }
+// Hades stays in the administrator's beta area. Preview questions go through
+// the same grade, mastery, quality and family-spacing policy as student play.
+var _hadesBridge = null;
+var _hadesUnavailableContent = new Map();
+function _hadesPreviewLevel() { const value = document.getElementById('hadesPreviewLevel')?.value || ''; return isLevelCode(value) ? value : ''; }
+function _hadesPreviewProfile() { const level = _hadesPreviewLevel(); return { name: 'Hades beta preview ' + level, level }; }
+function _hadesResetLearning(message) {
+  _hadesBridge?.invalidate(message || 'The preview changed. Start a new run to continue.');
+  const frame = document.getElementById('hadesFrame'); if (frame?.getAttribute('src')) frame.removeAttribute('src');
+}
+async function _hadesScienceQuestions() {
+  if (!_isAdmin() || !_hadesPreviewLevel()) return [];
+  const level = _hadesPreviewLevel(), profile = _hadesPreviewProfile();
+  // Only the real, released bank supplies MCQs; no TCG/demo fallback set.
+  const rows = new Map();
+  const candidates = (questionBank || []).filter(q => q && q.status !== 'pending' && q.status !== 'flagged'
+    && qReleased(q) && qInSyllabus(q) && _hadesUnavailableContent.get(String(q.id)) !== questionQualitySignature(q)).filter(q => { const row = _sdExtractMcq(q); if (row) rows.set(String(q.id),row); return !!row; });
+  const context = _scienceFeedContext(profile,level);
+  const planned = _scienceFeedPlan(candidates,{ game:true,profile,context,randomize:true,onePerFamily:true,limit:5 });
+  return planned.questions.map(q => ({ ...rows.get(String(q.id)),id:String(q.id),title:q.title || '' }));
+}
+function _hadesInit() {
+  if (!_isAdmin()) return;
+  const select = document.getElementById('hadesPreviewLevel');
+  if (select && !select.dataset.ready) {
+    select.dataset.ready = '1';
+    select.innerHTML = '<option value="">Choose a school level</option>' + TOPIC_LEVELS.map(level => '<option value="'+level+'">'+level+'</option>').join('');
+    if (isLevelCode(currentUser?.level)) select.value = currentUser.level;
+    select.addEventListener('change',() => { _hadesResetLearning('The school level changed. Start a new run with suitable questions.'); _hadesInit(); });
+  }
+  if (!_hadesBridge) _hadesBridge = installHadesLearningParent({
+    subject:'Science',getFrame:()=>document.getElementById('hadesFrame'),isAllowed:()=>_isAdmin(),
+    isActive:()=>!!document.getElementById('page-hades')?.classList.contains('active'),
+    getIdentity:()=>_isAdmin() && _hadesPreviewLevel() ? JSON.stringify([currentUser.uid,_hadesPreviewLevel()]) : '',
+    getQuestions:_hadesScienceQuestions,
+    markShown:q=>_scienceFeedMark(q.id,_hadesPreviewProfile()),
+    recordAnswer:({question,correct})=>_scienceFeedRememberResult(question.id,correct ? 1 : 0,1,_hadesPreviewProfile()),
+    onImageFailure:(row,url)=>{ const q=questionBank.find(q=>String(q.id)===row.id); _scienceFeedImageResult(q,url,true); },
+    onQuestionUnavailable:row=>{ const q=questionBank.find(q=>String(q.id)===row.id); if (q) _hadesUnavailableContent.set(row.id,questionQualitySignature(q)); }
+  });
+  const frame = document.getElementById('hadesFrame'), note = document.getElementById('hadesPreviewNote');
+  const ready = !!_hadesPreviewLevel();
+  if (note) note.textContent = ready ? 'Administrator beta · Five fresh science MCQs between rooms determine healing and boon tier. Preview answers stay separate from student records.' : 'Choose the school level to test the same question selection used for students.';
+  if (frame) { frame.hidden = !ready; if (ready && !frame.getAttribute('src')) frame.setAttribute('src','hades-game.html?learning=1&subject=science'); }
+}
+
 function buildDefenderQuestions() {
   return (questionBank || [])
     .filter(q => q && q.status !== 'pending' && q.status !== 'flagged')

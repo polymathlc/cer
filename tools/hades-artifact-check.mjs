@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import {createHash} from 'node:crypto';
+const read=name=>fs.readFileSync(new URL('../'+name,import.meta.url),'utf8').replace(/\r\n/g,'\n');
+const manifest=JSON.parse(read('hades-game.manifest.json'));
+const html=read('hades-game.html');
+const digest=value=>createHash('sha256').update(value).digest('hex');
+assert.equal(digest(html),manifest.gameSha256,'Hades beta must match its reviewed build');
+assert.equal(digest(read('hades-learning-parent.js')),manifest.parentSha256,'Bridge must match the reviewed integration');
+assert.match(manifest.upstreamCommit,/^[a-f0-9]{40}$/);
+assert.ok(html.includes('name="application-version" content="'+manifest.version+'"'));
+assert.ok(html.includes('HADES_ROUND_REQUEST')&&html.includes('drawSvgCast'));
+assert.doesNotMatch(html,/%(?:ASSETS_JSON|SCRIPTS|STYLES)%/);
+for(const script of html.matchAll(/<script>([\s\S]*?)<\/script>/g))new vm.Script(script[1]);
+console.log('Hades '+manifest.version+' beta artifact and parent bridge match their release manifest.');
