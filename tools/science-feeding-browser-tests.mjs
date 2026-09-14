@@ -32,7 +32,7 @@ const functions=[
   'buildQpQueue','qpHasWritten','qpHasMcq','qpMatchesType','qpFilters','startQuickPractice','loadNextQpQuestion','renderQpQuestion',
   'updateQpProgress','_qpAllPartsMarked','_recordQpResult','renderQpSummary','renderPracticeReport','_reportColor','_fmtScore',
   'qLevelNum','qWithinStudentLevel','qInLevelBand','levelBandMin','studentCapLevel','studentCapNum',
-  'famApplyActiveStudent','_tcgBankQuestions','_sdExtractMcq','_sdStemHtml','_sdBreakStatements','_sdZoomBtns','_sdSeedElo',
+  'famApplyActiveStudent','_hadesResetLearning','_tcgBankQuestions','_sdExtractMcq','_sdStemHtml','_sdBreakStatements','_sdZoomBtns','_sdSeedElo',
   'buildDefenderQuestions','_sdSeenStats','_sdQuestionsPayload','_gqKey','_gqLoad','_gqSave','_gqRealId','_gqMark','_gqFilterPool'
 ].map(fn).join('\n');
 const moduleFiles=new Set(['science-feed-core.js','science-feed-variety.js','science-feed-mastery.js','science-feed-quality.js','science-feed-bridge.js']);
@@ -57,6 +57,7 @@ let _qAttemptStats={},_qAttemptStatsUid='',_qAttemptStatsAt=0,flaggedQuestions=[
 let qpQueue=[],qpIndex=-1,qpAnswered=0,qpSessionResults=[],qpSubmitted=false,qpLevel='P4';
 let tpQueue=[],tpIndex=-1,tpAnswered=0,tpSessionResults=[],_questRun=null,_ainsteinQuiz=null,currentPracticeQ=null;
 let _tcgQuiz=null,duelRun=null,emsRun=null,elgRun=null;
+let _hadesBridge=null;
 let _openItemsStore={},_openMcqStore={},_fbStore={},_openQStore={},_openSurfaceCfg={},_openPartResults={},_annotPadScores={},_openFinalized={},_openPhoto={};
 const writes=[],notices=[],navigation=[];
 const _isAdmin=()=>false,_canAuthor=()=>false;

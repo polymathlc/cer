@@ -302,8 +302,11 @@ ok('…and an unset field means Gemini, so a centre that never touches it is una
    /AI_ENGINES\.includes\(eng\) \? eng : 'gemini'/.test(src));
 ok('…and the shared setting knows all three engines',
    /const AI_ENGINES = \['gemini', 'openai', 'kimi'\];/.test(src));
+// Check the shared prelude before any role can branch/return. Additional
+// sign-in cleanup and comments must not break an arbitrary character window.
+const sharedSignInPrelude = section('function configureSidebarForRole(role) {', "  if (role === 'employee') {");
 ok('…at sign-in, from the one function every role comes through',
-   /function configureSidebarForRole\(role\) \{[\s\S]{0,400}aiEngineInit\(\);/.test(src));
+   /\baiEngineInit\(\);/.test(sharedSignInPrelude));
 ok('…and refreshed when the chooser opens', /aiEngineLoadShared\(true\)\.then\(renderAiEngineStatus\)/.test(src));
 /* A setting that cannot be READ must never stop the app choosing at all, and
    one that cannot be WRITTEN must never let the teacher believe it moved. */
