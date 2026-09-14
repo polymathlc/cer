@@ -29,3 +29,30 @@ The non-TCG workflow runs focused production-mechanics tests, the existing
 standalone question checks and real-page browser checks with synthetic accounts.
 The browser fixtures intercept network/account boundaries; they do not write to
 live student accounts. Screenshots are retained by CI for inspection.
+
+## Endless Science Spire — v1.384.0
+
+Spire continues past its Floor 12 boss to Floor 13 and beyond. Each section has
+12 rooms with a boss at its end; only the current section stays in memory. Map
+labels and the cleared-floor score use the absolute floor number. The same run
+keeps its hero, deck, health, gold and question-feed history across sections, with
+one play credit charged when starting the climb.
+
+Bosses award a card choice, the normal gold reward plus 50 gold, and a heal worth
+30% of maximum health (up to full health). Enemy health keeps its existing 10%
+per-floor scaling. Attack and block values increase by 12% of their base value
+per subsequent section, using copies of enemy moves so later runs start normally.
+This combat scaling does not change the learner's question level or mastery rules.
+
+Every completed room records a best-score checkpoint, including rest and treasure
+rooms. Defeat or the explicit **End climb** button records the current score and
+closes the run; no summit, forced victory, or one-time summit bonus remains.
+The score continues to be `cleared floors * 120 + foes defeated * 15 + gold`.
+Repeated controls and late question/turn callbacks cannot advance or restart an
+ended run. The question bridge still declines an exhausted or unsuitable pool;
+it never resets question history to fill a new section.
+
+`tools/game-spire-endless-tests.mjs` checks 240 floors, boss rewards, all room
+types, score and callback guards. The existing Spire/Adventure browser suite
+also plays through Floor 25, verifies one credit, tests a finite question pool,
+and captures the map at desktop and phone sizes.

@@ -41,10 +41,11 @@ function section(s,a,b){const start=s.indexOf(a),end=s.indexOf(b,start+a.length)
  });
  </script></body></html>`;
  const parent=`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,iframe{margin:0;width:100%;height:100%;border:0}</style><iframe src="/science-spire.html"></iframe><script>
- window.hold=new URLSearchParams(location.search).has('hold');window.noCredits=new URLSearchParams(location.search).has('noCredits');window.feedKey='child';window.feedLevel='P4';window.pending=[];window.messages=[];
- window.reply=e=>e.source.postMessage({type:'SD_QUESTIONS',feedPolicyVersion:1,requestId:e.data.requestId,studentKey:feedKey,studentLevel:feedLevel,...(noCredits?{}:{playsLeft:{spire:3}}),questions:[]},location.origin);
+ window.hold=new URLSearchParams(location.search).has('hold');window.noCredits=new URLSearchParams(location.search).has('noCredits');window.feedKey='child';window.feedLevel='P4';window.pending=[];window.messages=[];window.feedCredits=3;
+ window.questionRows=new URLSearchParams(location.search).has('questions')?Array.from({length:10},(_,i)=>({id:'eligible-p4-'+i,q:'Suitable P4 question '+(i+1),options:['Correct choice','Other choice'],answer:0,topic:'P4 science'})):[];
+ window.reply=e=>e.source.postMessage({type:'SD_QUESTIONS',feedPolicyVersion:1,requestId:e.data.requestId,studentKey:feedKey,studentLevel:feedLevel,...(noCredits?{}:{playsLeft:{spire:feedCredits}}),questions:questionRows.filter(q=>!messages.some(m=>m.type==='SD_SHOWN'&&m.questionId===q.id))},location.origin);
  window.release=()=>{hold=false;pending.splice(0).forEach(reply);};
- addEventListener('message',e=>{messages.push(e.data);if(e.data?.type==='SD_REQUEST_QUESTIONS'){if(hold)pending.push(e);else reply(e);}});
+ addEventListener('message',e=>{messages.push(e.data);if(e.data?.type==='SD_PLAY_START')feedCredits--;if(e.data?.type==='SD_REQUEST_QUESTIONS'){if(hold)pending.push(e);else reply(e);}});
  </script>`;
  await page.route('**/*',async route=>{const u=new URL(route.request().url());if(u.origin!=='http://game.test'){requests.push(u.href);return route.abort();}const body=u.pathname==='/science-spire.html'?spire:u.pathname==='/science-feed-bridge.js'?fs.readFileSync(path.join(root,'science-feed-bridge.js'),'utf8'):u.pathname==='/adventure'?fixture:parent;return route.fulfill({status:200,contentType:u.pathname.endsWith('.js')?'text/javascript':'text/html',body});});
  const shots=process.env.GAME_SCREENSHOTS||path.join(root,'..','game-upgrade-qa');fs.mkdirSync(shots,{recursive:true});
@@ -71,6 +72,68 @@ function section(s,a,b){const start=s.indexOf(a),end=s.indexOf(b,start+a.length)
   const turnHp=await frame.evaluate(()=>G.player.hp);await frame.locator('#endTurnBtn').click();await frame.waitForFunction(()=>G.turn==='player'&&!_busy);assert.equal(await frame.evaluate(()=>G.player.hp),turnHp-14,'Displayed forecast matches a complete real enemy turn');assert.equal(await frame.evaluate(()=>G.player.energy),3);
   await page.evaluate(()=>document.querySelector('iframe').contentWindow.postMessage({type:'SD_FEED_INVALIDATE',studentKey:'child',studentLevel:'P4'},location.origin));assert.equal(await frame.evaluate(()=>G.state),'combat');
   await page.evaluate(()=>document.querySelector('iframe').contentWindow.postMessage({type:'SD_FEED_INVALIDATE',studentKey:'other',studentLevel:'P6'},location.origin));await frame.waitForFunction(()=>G===null);assert.equal(await frame.locator('#introOverlay.show').count(),1);
+  // Exercise a continuous run through two bosses with a finite eligible bank.
+  await page.setViewportSize({width:1120,height:820});await page.goto('http://game.test/?questions=1');
+  const endless=page.frames().find(f=>f.url().endsWith('/science-spire.html'));await endless.waitForFunction(()=>typeof scienceFeed!=='undefined'&&_gameCreditsReady());
+  await endless.locator('#introStartBtn').click();await endless.waitForFunction(()=>G?.state==='question');await endless.evaluate(()=>{window.endlessRun=G;window.originalDeck=G.deck;});
+  for(let floor=1;floor<=24;floor++){
+    await endless.waitForFunction(()=>G&&['question','combat','rest','pack'].includes(G.state));
+    assert.equal(await endless.evaluate(()=>G.floor),floor);
+    if(await endless.evaluate(()=>G.state==='question')){
+      await endless.locator('#qOptions .q-opt').first().click();
+      await endless.evaluate(()=>answerQuestion(0,document.querySelector('#qOptions .q-opt')));
+      await endless.locator('#qContinueBtn').click();
+    }
+    const state=await endless.evaluate(()=>G.state);
+    if(floor===13){
+      assert.equal(await endless.evaluate(()=>G.map[0].floor),13);await endless.locator('#mapBtn').click();
+      assert.match(await endless.locator('#mapList').innerText(),/13/);assert.match(await endless.locator('#mapList').innerText(),/24/);
+      await page.screenshot({path:path.join(shots,'spire-endless-chapter-two-desktop.png')});await endless.locator('#mapClose').click();
+    }
+    if(state==='combat'){
+      assert.equal(await endless.locator('#stage').getAttribute('data-room'),await endless.evaluate(()=>G.map[G.node].type),'Combat keeps its actual boss, elite or ordinary room appearance');
+      const before=await endless.evaluate(()=>({hp:G.player.hp,maxHp:G.player.maxHp,gold:G.gold,boss:G.map[G.node].type==='boss'}));
+      await endless.evaluate(()=>{G.enemies.forEach(e=>{e.hp=0;e.dead=true;G.kills++;});winCombat();});
+      assert.equal(await endless.evaluate(()=>G.state),'reward');
+      if(before.boss){
+        assert.equal(await endless.evaluate(()=>G.maxFloor),floor);assert.equal(await endless.locator('#overOverlay.show').count(),0);
+        assert.ok(await endless.evaluate(()=>G.gold)>=before.gold+50);assert.equal(await endless.evaluate(()=>G.player.hp),Math.min(before.maxHp,before.hp+Math.round(before.maxHp*.3)));
+      }
+      await endless.locator('#rewardSkip').click();
+    }else if(state==='rest')await endless.locator('#restHeal').click();
+    else if(state==='pack')await endless.locator('#packButtons button').last().click();
+    else assert.fail('Unexpected room state '+state);
+    await endless.waitForFunction(f=>G.floor===f+1,floor);
+    assert.equal(await endless.evaluate(()=>G.maxFloor),floor);
+    assert.equal(await endless.evaluate(()=>G===endlessRun&&G.deck===originalDeck),true);
+    assert.equal(await endless.evaluate(()=>G.map.length),12);
+  }
+  await endless.waitForFunction(()=>G.floor===25&&G.state==='combat');
+  assert.equal(await page.evaluate(()=>messages.filter(m=>m.type==='SD_PLAY_START').length),1);assert.equal(await page.evaluate(()=>feedCredits),2);
+  const learning=await page.evaluate(()=>({shown:messages.filter(m=>m.type==='SD_SHOWN'),answers:messages.filter(m=>m.type==='SD_RECORD'),scores:messages.filter(m=>m.type==='SD_SCORE')}));
+  assert.equal(learning.shown.length,10);assert.equal(new Set(learning.shown.map(m=>m.questionId)).size,10);assert.equal(learning.answers.length,10);
+  assert.ok(learning.shown.every(m=>m.studentKey==='child'&&m.studentLevel==='P4'&&m.questionId.startsWith('eligible-p4-')));
+  assert.equal(await endless.evaluate(()=>G.questionBonus),0,'Exhausting suitable questions permits combat without stale bonuses or fallback repeats');
+  assert.equal(learning.scores.at(-1).label,'Floor 24');assert.ok(learning.scores.every((m,i)=>!i||m.score>learning.scores[i-1].score),'Room checkpoints advance the best score without duplicate payouts');
+  await page.setViewportSize({width:390,height:844});await endless.locator('#mapBtn').click();assert.match(await endless.locator('#mapList').innerText(),/25/);assert.match(await endless.locator('#mapList').innerText(),/36/);
+  assert.equal(await endless.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);await page.screenshot({path:path.join(shots,'spire-endless-chapter-three-mobile.png')});await endless.locator('#mapClose').click();
+  // Deliberately end while a question reply is pending; it cannot reopen play.
+  await page.evaluate(()=>{hold=true;});await endless.evaluate(()=>{G.pendingRoom=G.map[G.node];void askQuestion();});
+  await page.waitForFunction(()=>pending.length>0);const endingScore=await endless.evaluate(()=>score());
+  page.once('dialog',dialog=>dialog.accept());await endless.locator('#restartBtn').click();await endless.waitForFunction(()=>G.state==='over');
+  await page.evaluate(()=>release());await page.waitForTimeout(80);assert.equal(await endless.evaluate(()=>G.state),'over');assert.equal(await endless.locator('#qOverlay.show').count(),0);
+  assert.equal(await endless.locator('#overOverlay.show').count(),1);assert.equal(await page.evaluate(()=>messages.filter(m=>m.type==='SD_SCORE').at(-1).score),endingScore);
+  const endedReports=await page.evaluate(()=>messages.filter(m=>m.type==='SD_SCORE').length);await endless.evaluate(()=>{finishRun();gameOver();});assert.equal(await page.evaluate(()=>messages.filter(m=>m.type==='SD_SCORE').length),endedReports);
+  await endless.locator('#againBtn').click();await endless.waitForFunction(()=>G.state==='combat');assert.equal(await page.evaluate(()=>messages.filter(m=>m.type==='SD_PLAY_START').length),2);assert.equal(await page.evaluate(()=>feedCredits),1);
+  await endless.evaluate(()=>damagePlayer(G.player.hp+G.player.block));await endless.waitForFunction(()=>G.state==='over');assert.match(await endless.locator('#overTitle').innerText(),/Defeated/);
+  await page.evaluate(()=>{questionRows=[{id:'eligible-p4-final',q:'One fresh P4 question',options:['Correct choice','Other choice'],answer:0,topic:'P4 science'}];});
+  await endless.locator('#againBtn').click();await endless.waitForFunction(()=>G.state==='question'&&qState.current?.id==='eligible-p4-final');
+  await endless.evaluate(()=>{window.oldAnswer=document.querySelector('#qOptions .q-opt').onclick;});await endless.locator('#qOptions .q-opt').first().click();
+  await endless.evaluate(()=>{window.oldContinue=document.getElementById('qContinueBtn').onclick;});
+  await page.waitForFunction(()=>messages.some(m=>m.type==='SD_RECORD'&&m.questionId==='eligible-p4-final'));
+  const answerCount=await page.evaluate(()=>messages.filter(m=>m.type==='SD_RECORD').length);page.once('dialog',dialog=>dialog.accept());await endless.locator('#qOverlay').getByRole('button',{name:'End climb',exact:true}).click();
+  await endless.evaluate(()=>{oldAnswer();oldContinue();});assert.equal(await endless.evaluate(()=>G.state),'over');assert.equal(await endless.locator('#qOverlay.show').count(),0);assert.equal(await page.evaluate(()=>messages.filter(m=>m.type==='SD_RECORD').length),answerCount);
+  await page.screenshot({path:path.join(shots,'spire-ended-mobile.png')});assert.equal(await endless.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
   await page.setViewportSize({width:1120,height:820});await page.goto('http://game.test/adventure');await page.evaluate(()=>fixture.start());assert.equal(await page.evaluate(()=>facts.credits),2,'Adventure spends the existing one-credit price');await page.evaluate(()=>advStart());assert.equal(await page.evaluate(()=>facts.credits),2,'Duplicate start leaves the current run alone');await page.evaluate(()=>fixture.threat());await page.waitForTimeout(250);await page.locator('#advPauseBtn').click();const before=await page.evaluate(()=>fixture.snapshot());await page.waitForTimeout(1600);const after=await page.evaluate(()=>fixture.snapshot());assert.equal(after.hp,before.hp);assert.equal(after.now,before.now);assert.equal(after.paused,true);await page.screenshot({path:path.join(shots,'adventure-paused-desktop.png')});
   await page.locator('#advPauseBtn').click();await page.locator('#advGuardBtn').click();assert.equal(await page.evaluate(()=>fixture.damage(20)),8);await page.locator('[data-adv-skill="0"]').click();assert.ok(await page.evaluate(()=>fixture.snapshot().skillAt>fixture.snapshot().now));await page.waitForTimeout(500);assert.ok(await page.evaluate(()=>fixture.snapshot().foeHp<240));
   await page.locator('#advAutoBtn').click();assert.equal(await page.evaluate(()=>fixture.snapshot().manual),false);await page.locator('#advAutoBtn').click();assert.equal(await page.evaluate(()=>fixture.snapshot().manual),true);await page.evaluate(()=>fixture.armBasic());const basicHp=await page.evaluate(()=>fixture.snapshot().foeHp);await page.waitForTimeout(550);assert.equal(await page.evaluate(()=>fixture.snapshot().skillAt),0,'Manual mode does not cast ready skills automatically');assert.ok(await page.evaluate(()=>fixture.snapshot().foeHp)<basicHp,'Manual skills retain the real basic attack');
@@ -79,6 +142,6 @@ function section(s,a,b){const start=s.indexOf(a),end=s.indexOf(b,start+a.length)
   await page.evaluate(()=>fixture.switchChild());await page.waitForTimeout(150);assert.equal(await page.evaluate(()=>fixture.snapshot().hp),undefined);assert.deepEqual(await page.evaluate(()=>facts.payouts),[],'Switching learners does not publish the old run rewards');
   await page.evaluate(()=>fixture.startArena());assert.equal(await page.evaluate(()=>facts.credits),2,'Ghost Arena retains free entry');await page.evaluate(()=>fixture.winArena());await page.waitForFunction(()=>fixture.snapshot().hp===undefined);assert.deepEqual(await page.evaluate(()=>facts.payouts),[],'Winning a free Ghost Arena duel pays no currency or XP');
   await page.evaluate(()=>{fixture.startArena();fixture.endWithEffects();});await page.waitForTimeout(650);assert.equal(await page.locator('#advFx > *,#advHero .rpg-float').count(),0,'Ending a run removes in-flight visual effects');
-  assert.deepEqual(errors,[]);assert.deepEqual(requests,[]);console.log('Browser passed: Spire delayed profile/credits, stale metadata, idle learner switch, keyboard targeting, energy and complete forecast turn; Adventure pause/guard/manual basics, mobile bounds, learner cancellation, free Arena rewards and exit effects; desktop/mobile screenshots.');console.log('Screenshots: '+shots);
+  assert.deepEqual(errors,[]);assert.deepEqual(requests,[]);console.log('Browser passed: Spire delayed profile/credits, stale metadata, learner switching, targeting, complete forecast turn, two endless boss transitions, bounded global maps, one-credit continuation, finite question bank, score checkpoints and ending with a delayed reply; Adventure pause/guard/manual basics, mobile bounds, learner cancellation, free Arena rewards and exit effects; desktop/mobile screenshots.');console.log('Screenshots: '+shots);
  }finally{await browser.close();}
 }

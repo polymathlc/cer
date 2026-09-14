@@ -3812,7 +3812,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.383.0';
+const APP_VERSION = 'v1.384.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -39177,7 +39177,7 @@ function homePractiseWeakest() {
 const ARCADE_GAMES = [
   { page: 'defenders', ico: '🧪', name: 'Science Defenders', desc: 'Tower defense — answer MCQs to earn gold and build towers.' },
   { page: 'raiders', ico: '👾', name: 'Science Raiders', desc: 'Roguelite top-down shooter — clear rooms, answer questions to pick power-ups.' },
-  { page: 'spire', ico: '🃏', name: 'Science Spire', desc: 'Deck-building dungeon — answer questions, build a deck, open card packs.' },
+  { page: 'spire', ico: '🃏', name: 'Science Spire', desc: 'Endless deck-building climb — answer questions, beat bosses, open card packs.' },
   { page: 'legends', ico: '⚔️', name: 'Science Legends', beta: true, desc: 'Top-down action RPG — three classes, big skill trees, a question every 20 seconds.' },
   { page: 'slayers', ico: '🗡️', name: 'Science Slayers', beta: true, desc: 'Dungeon crawler — procedural floors, boss loot, questions power your actions.' }
 ];
