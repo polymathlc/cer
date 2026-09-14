@@ -57,7 +57,7 @@ let _qAttemptStats={},_qAttemptStatsUid='',_qAttemptStatsAt=0,flaggedQuestions=[
 let qpQueue=[],qpIndex=-1,qpAnswered=0,qpSessionResults=[],qpSubmitted=false,qpLevel='P4';
 let tpQueue=[],tpIndex=-1,tpAnswered=0,tpSessionResults=[],_questRun=null,_ainsteinQuiz=null,currentPracticeQ=null;
 let _tcgQuiz=null,duelRun=null,emsRun=null,elgRun=null;
-let _hadesBridge=null;
+let _hadesBridge=null, _hadesDisplay=null;
 let _openItemsStore={},_openMcqStore={},_fbStore={},_openQStore={},_openSurfaceCfg={},_openPartResults={},_annotPadScores={},_openFinalized={},_openPhoto={};
 const writes=[],notices=[],navigation=[];
 const _isAdmin=()=>false,_canAuthor=()=>false;
