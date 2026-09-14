@@ -14,13 +14,13 @@ export function hadesLearningRewardSummary(correct) {
   const tier = reward.boonTier[0].toUpperCase() + reward.boonTier.slice(1);
   return `${correct}/5 correct · Restore ${reward.healPercent}% maximum life · ${tier}: next scalable boon Lv ${rank}, or Pom +${rank} ${rank === 1 ? 'level' : 'levels'}.`;
 }
-export function validHadesQuestions(rows) {
+export function validHadesQuestions(rows, allowRemote = false) {
   const seen = new Set();
   return (Array.isArray(rows) ? rows : []).filter(q => {
     if (!q || typeof q.id !== 'string' || !q.id || seen.has(q.id) || typeof q.html !== 'string' || !q.html.trim()
       || !Array.isArray(q.options) || q.options.length < 2 || q.options.length > 8
       || q.options.some(option => typeof option !== 'string' || !option.trim())
-      || !Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.options.length) return false;
+      || (!(allowRemote && q.grading === 'remote') && (!Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.options.length))) return false;
     seen.add(q.id); return true;
   }).slice(0, HADES_QUESTION_COUNT);
 }
@@ -64,7 +64,7 @@ export function createHadesLearningController(config) {
     const blocked = message => send(s.source, { type: 'HADES_ROUND_BLOCKED', requestId: d.requestId,
       sessionId: s.id, round: d.round, message });
     try {
-      const questions = validHadesQuestions(await config.getQuestions());
+      const questions = validHadesQuestions(await config.getQuestions(), typeof config.gradeQuestion === 'function');
       if (!current(s) || revision !== generation) return false;
       if (questions.length !== HADES_QUESTION_COUNT) {
         blocked('Five fresh, suitable questions are needed. Try again later or choose another preview level.');
@@ -73,13 +73,22 @@ export function createHadesLearningController(config) {
       // Reserve the set together so another mode cannot serve an unseen tail
       // while this round is being answered. Abandonment never grants a reward.
       for (const q of questions) config.markShown?.(q);
-      let index = 0, correct = 0;
+      let index = 0, correct = 0, marking = false;
       const graded = new Map();
       const grade = async (questionIndex, choice, ms) => {
-        if (!current(s) || revision !== generation || questionIndex !== index || !Number.isInteger(choice)) return null;
+        if (marking || !current(s) || revision !== generation || questionIndex !== index || !Number.isInteger(choice)) return null;
         const q = questions[index]; if (!q || choice < 0 || choice >= q.options.length) return null;
         if (graded.has(index)) return graded.get(index);
-        const result = { correct: choice === q.answer, answer: q.answer, explainHtml: q.explainHtml || '' };
+        let result;
+        if (q.grading === 'remote') {
+          marking = true;
+          try { result = await config.gradeQuestion({ question: q, choice, round: d.round, sessionId: s.id }); }
+          finally { marking = false; }
+          if (!current(s) || revision !== generation) return null;
+          if (!result || typeof result.correct !== 'boolean' || !Number.isInteger(result.answer)
+            || result.answer < 0 || result.answer >= q.options.length || result.correct !== (choice === result.answer))
+            throw new Error('No valid marking result was returned.');
+        } else result = { correct: choice === q.answer, answer: q.answer, explainHtml: q.explainHtml || '' };
         // Claim before the write: rapid clicks cannot double-count history.
         graded.set(index, result); if (result.correct) correct++;
         index++;
@@ -211,7 +220,15 @@ export function installHadesLearningParent(config) {
         button.onclick = async () => {
           if (selected || failed || !isCurrent()) return;
           selected = true; buttons.forEach(b => { b.disabled = true; });
-          const answer = await grade(index,choice,performance.now()-started);
+          let answer;
+          feedback.textContent = 'Checking your answer…';
+          try { answer = await grade(index,choice,performance.now()-started); }
+          catch (_) {
+            if (!isCurrent()) return;
+            failed = true; warning.hidden = false;
+            warning.textContent = 'We could not confirm this answer. Return to the game and try a new sanctuary round when your connection is ready.';
+            feedback.textContent = ''; return;
+          }
           if (!answer || !isCurrent()) { close(); return; }
           if (answer.correct) score++;
           buttons[answer.answer].dataset.correct = 'true'; if (!answer.correct) button.dataset.wrong = 'true';

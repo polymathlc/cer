@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '24'
       - name: Validate secure grading, bank selection and beta access
-        run: node --test tools/hades-learning-tests.mjs
+        run: node --test tools/hades-learning-tests.mjs tools/hades-remote-grading-tests.mjs
       - name: Verify published game and bridge
         run: node tools/hades-artifact-check.mjs
       - name: Install isolated browser runtime
@@ -28,7 +28,10 @@ jobs:
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/hades-browser/node_modules/playwright/index.mjs
           HADES_SCREENSHOTS: ${{ runner.temp }}/hades-qa
-        run: node tools/hades-learning-browser.mjs
+        run: |
+          node tools/hades-learning-browser.mjs
+          node tools/hades-display-browser.mjs
+          node tools/hades-student-browser.mjs
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:

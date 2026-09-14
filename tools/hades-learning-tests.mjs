@@ -119,7 +119,7 @@ test('CER beta integration uses real bank, explicit level, release and shared sa
   const start=app.indexOf('async function _hadesScienceQuestions()'),stop=app.indexOf('function _hadesInit()',start);
   const code=app.slice(start,stop);let captured;
   const rows=Array.from({length:5},(_,i)=>({id:'q'+i,title:'Title '+i}));
-  const context=vm.createContext({_isAdmin:()=>true,_hadesPreviewLevel:()=> 'P6',_hadesPreviewProfile:()=>({level:'P6'}),
+  const context=vm.createContext({_isAdmin:()=>true,_hadesAllowed:()=>true,_hadesPreviewLevel:()=> 'P6',_hadesPreviewProfile:()=>({level:'P6'}),
     _hadesUnavailableContent:new Map(),questionQualitySignature:q=>q.id,
     questionBank:[...rows,{id:'pending',status:'pending'},{id:'future'},{id:'retired'}],
     qReleased:q=>q.id!=='future',qInSyllabus:q=>q.id!=='retired',_sdExtractMcq:q=>({...question(q.id)}),
@@ -127,8 +127,8 @@ test('CER beta integration uses real bank, explicit level, release and shared sa
   return vm.runInContext(code+';_hadesScienceQuestions()',context).then(result=>{
     assert.equal(result.length,5);assert.equal(captured.options.context.level,'P6');assert.equal(captured.options.game,true);
     assert.equal(captured.options.randomize,true);assert.equal(captured.options.onePerFamily,true);assert.equal(captured.options.limit,5);
-    assert.match(app,/page === 'hades' && !_isAdmin\(\)/);assert.match(app,/ARCADE_GAMES\.filter\(g => !g\.adminOnly \|\| _isAdmin\(\)\)/);
-    assert.match(html,/class="nav-item admin-only" data-page="hades"/);assert.match(html,/id="hadesFrame"/);
+    assert.match(app,/page === 'hades' && !_hadesAllowed\(\)/);assert.match(app,/ARCADE_GAMES\.filter\(g => !g\.adminOnly \|\| _isAdmin\(\)\)/);
+    assert.match(html,/class="nav-item" data-page="hades"/);assert.match(html,/id="hadesFrame"/);
     assert.match(app,/hades-game\.html\?learning=1&subject=science/);
   });
 });
@@ -138,11 +138,29 @@ test('the actual CER beta adapter prioritizes fresh P6 bank families and rejects
   const science=(id,level)=>({id,title:'Observe sample '+id,level,topic:'Plants',blocks:[{type:'text',content:'Which plant organ absorbs water for sample '+id+'?'},{type:'mcq',correctId:'b',options:[{id:'a',text:'Flower'},{id:'b',text:'Root'}]}]});
   const bank=[...Array.from({length:8},(_,i)=>science('p6-'+i,'P6')),science('p3','P3'),science('above','S1'),{...science('flagged','P6'),status:'flagged'}, {...science('future','P6'),future:true}];
   const served={'p6-0':Date.now()};
-  const context=vm.createContext({_isAdmin:()=>true,_hadesPreviewLevel:()=> 'P6',_hadesPreviewProfile:()=>({name:'Preview',level:'P6'}),
+  const context=vm.createContext({_isAdmin:()=>true,_hadesAllowed:()=>true,_hadesPreviewLevel:()=> 'P6',_hadesPreviewProfile:()=>({name:'Preview',level:'P6'}),
     _hadesUnavailableContent:new Map(),questionQualitySignature:q=>q.id,
     questionBank:bank,qReleased:q=>!q.future,qInSyllabus:()=>true,_sdExtractMcq:q=>({...question(q.id)}),
     _scienceFeedContext:()=>buildScienceFeedContext({bank,studentLevel:'P6',served,now:Date.now()}),
     _scienceFeedPlan:(candidates,options)=>planScienceQuestions(candidates,options)});
   const result=await vm.runInContext(app.slice(start,stop)+';_hadesScienceQuestions()',context);
   assert.equal(result.length,5);assert.ok(result.every(q=>q.id.startsWith('p6-') && q.id!=='p6-0'));
+});
+
+test('student Hades uses the learner level, shared history and keeps beta access authenticated',async()=>{
+  const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+  const start=app.indexOf('var _hadesBridge = null;'),stop=app.indexOf('function _hadesInit()',start);
+  let options;
+  const context=vm.createContext({currentUser:{uid:'student',role:'student',level:'P6'},_isAdmin:()=>false,
+    _scienceFeedLevel:()=> 'P6',document:{getElementById:()=>({value:'P3'})},
+    questionBank:Array.from({length:5},(_,i)=>({id:'student-'+i})),qReleased:()=>true,qInSyllabus:()=>true,
+    questionQualitySignature:q=>q.id,_sdExtractMcq:q=>question(q.id),_scienceFeedContext:(profile,level)=>({profile,level}),
+    _scienceFeedPlan:(rows,opts)=>{options=opts;return {questions:rows};}});
+  vm.runInContext(app.slice(start,stop),context);
+  assert.equal(vm.runInContext('_hadesAllowed()',context),true);
+  assert.equal(vm.runInContext('_hadesPreviewLevel()',context),'P6','DOM preview cannot change a student level');
+  assert.equal(vm.runInContext('_hadesPreviewProfile()',context),undefined,'student history is not a preview profile');
+  assert.equal((await vm.runInContext('_hadesScienceQuestions()',context)).length,5);
+  assert.equal(options.context.level,'P6');assert.equal(options.profile,undefined);
+  context.currentUser=null;assert.equal(vm.runInContext('_hadesAllowed()',context),false);
 });
