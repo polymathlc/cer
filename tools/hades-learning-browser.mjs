@@ -46,6 +46,7 @@ try{
   for(let i=0;i<5;i++){
     await page.locator('.hades-learning-option').nth(1).click();
     assert.equal(await page.locator('.hades-learning-option[data-correct=true]').count(),1);
+    if(i===4)assert.match(await page.locator('.hades-learning-reward').textContent(),/Heroic: next scalable boon Lv 8, or Pom \+8 levels/);
     await page.getByRole('button',{name:i===4?'Claim sanctuary reward':'Next question',exact:true}).click();
   }
   await frame.waitForFunction(()=>messages.at(-1)?.type==='HADES_ROUND_RESULT');
@@ -54,6 +55,26 @@ try{
   await send({type:'HADES_ROUND_REQUEST',requestId:'round-retry',sessionId,round:1});
   await frame.waitForFunction(()=>messages.at(-1)?.requestId==='round-retry');assert.equal(await page.evaluate(()=>records.length),5);
   assert.equal(await frame.evaluate(()=>JSON.stringify(messages).includes('options')),false);
+  // Exercise every real dialog score, including zero, with an idempotent replay.
+  for(let score=0;score<5;score++){
+    await page.evaluate(()=>{window.records=[];});sessionId=await hello('score-'+score);
+    await send({type:'HADES_ROUND_REQUEST',requestId:'score-round-'+score,sessionId,round:1});
+    await page.getByRole('dialog').waitFor();
+    for(let i=0;i<5;i++){
+      await page.locator('.hades-learning-option').nth(i<score?1:0).click();
+      if(i===4){
+        const summary=await page.locator('.hades-learning-reward').textContent();
+        if(score===0){assert.match(summary,/0\/5 correct · No healing/);assert.match(summary,/tiny consolation only; no boon or Pom upgrade/);}
+        else {assert.ok(summary.includes('Lv '+[0,1,2,3,5][score]));assert.ok(summary.includes('Pom +'+[0,1,2,3,5][score]));}
+      }
+      await page.getByRole('button',{name:i===4?'Claim sanctuary reward':'Next question',exact:true}).click();
+    }
+    await frame.waitForFunction(()=>messages.at(-1)?.type==='HADES_ROUND_RESULT');
+    const scored=await frame.evaluate(()=>messages.at(-1));
+    assert.equal(scored.correct,score);assert.equal(scored.healPercent,score*8);assert.equal(scored.boonTier,['fractured','common','uncommon','rare','epic'][score]);
+    await send({type:'HADES_ROUND_REQUEST',requestId:'score-retry-'+score,sessionId,round:1});
+    await frame.waitForFunction(id=>messages.at(-1)?.requestId===id,'score-retry-'+score);assert.equal(await page.evaluate(()=>records.length),5);
+  }
   const sanitized=await page.evaluate(()=>clean('<img src="javascript:alert(1)" onerror="alert(1)"><script>alert(1)</script><a href="javascript:alert(1)">label</a><span class="math-frac arbitrary" aria-label="one half" style="position:fixed;background-image:url(https://evil.test/x)"><span class="num">1</span><span class="den">2</span></span>'));
   assert.doesNotMatch(sanitized,/javascript:|onerror|<script|position:|background-image|arbitrary/);assert.match(sanitized,/math-frac/);assert.match(sanitized,/aria-label="one half"/);
   // Broken essential diagrams stop all options, flag the real bank id and let
@@ -80,5 +101,5 @@ try{
     await page.getByRole('button',{name:'Return to game',exact:true}).click();await frame.waitForFunction(()=>messages.at(-1)?.type==='HADES_ROUND_BLOCKED');
   }
   assert.equal(await page.evaluate(()=>unavailable.length),3);assert.equal(await page.evaluate(()=>records.length),5);
-  assert.deepEqual(errors,[]);console.log('Hades learning browser: five questions, rich rendering, mobile, retries, missing/unsupported visuals and late account-change callbacks passed.');
+  assert.deepEqual(errors,[]);console.log('Hades learning browser: all six reward scores and summaries, five questions, rich rendering, mobile, retries, missing/unsupported visuals and late account-change callbacks passed.');
 }finally{pendingImages.forEach(response=>response.destroy());await browser.close();await new Promise(resolve=>server.close(resolve));}
