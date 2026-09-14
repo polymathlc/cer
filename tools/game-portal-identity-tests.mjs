@@ -6,22 +6,26 @@ import assert from 'node:assert/strict';
 const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const helperStart = app.indexOf('function _scienceFeedGameMessageCurrent(');
 const helper = app.slice(helperStart, app.indexOf('\n}', helperStart) + 2);
+const levelStart = app.indexOf('function _scienceFeedGameLevel(');
+const levelHelper = app.slice(levelStart, app.indexOf('\n}', levelStart) + 2);
 const bridgeStart = app.indexOf("window.addEventListener('message'", app.indexOf('async function _sdQuestionsPayload('));
 const bridge = app.slice(bridgeStart, app.indexOf('\n});', bridgeStart) + 4);
-assert.ok(helperStart > 0 && bridgeStart > 0);
+assert.ok(helperStart > 0 && levelStart > 0 && bridgeStart > 0);
 
 function fixture() {
-  const state = { key: 'child-a', level: 'P4', spent: 0, scores: [], resets: 0, replies: [], listeners: [] };
+  const state = { key: 'child-a', level: 'P4', role: 'student', spent: 0, scores: [], resets: 0, replies: [], listeners: [] };
   const frame = { postMessage: data => state.replies.push(data) };
   const c = vm.createContext({
     document: { getElementById: id => id === 'defendersFrame' ? { contentWindow: frame } : null },
     window: { addEventListener: (_, listener) => state.listeners.push(listener) },
     _scienceFeedKey: () => state.key, _scienceFeedLevel: () => state.level,
+    currentUser: { get role() { return state.role; }, get level() { return state.level; } },
+    isLevelCode: value => /^(P[3-6]|S1)$/.test(value || ''), famActive: () => null,
     _spendCredit: () => { state.spent++; return true; },
     _sdRecordScore: data => state.scores.push(data), _gamePtsReset: () => state.resets++,
     _playsLeftPayload: () => ({ defenders: 2 }), _sdQuestionsPayload: async () => ({ type: 'SD_QUESTIONS' }),
   });
-  vm.runInContext(helper + '\n' + bridge, c);
+  vm.runInContext(levelHelper + '\n' + helper + '\n' + bridge, c);
   return { state, frame, send(data, source = frame) { state.listeners[0]({ data, source }); } };
 }
 
@@ -46,4 +50,12 @@ test('current embedded run still spends one credit, refreshes its pool and recor
   assert.equal(f.state.spent, 1); assert.equal(f.state.resets, 1);
   assert.equal(f.state.scores.length, 1); assert.equal(f.state.scores[0].score, 500);
   assert.deepEqual(f.state.replies.map(reply => reply.type), ['SD_PLAYS_LEFT', 'SD_QUESTIONS']);
+});
+
+test('admin game messages use the configured school level and reject stale unrestricted preview messages', () => {
+  const f = fixture();f.state.role='admin';f.state.level='P6';
+  f.send({type:'SD_SCORE',studentKey:'child-a',studentLevel:'S1',score:500});
+  assert.equal(f.state.scores.length,0);
+  f.send({type:'SD_SCORE',studentKey:'child-a',studentLevel:'P6',score:500});
+  assert.equal(f.state.scores.length,1);
 });

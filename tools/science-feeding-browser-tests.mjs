@@ -26,14 +26,16 @@ const fn=name=>{
 const css=[...html.slice(0,html.indexOf('</head>')).matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map(m=>m[1]).join('\n');
 const markup=section(html,'    <div class="page" id="page-quickpractice">','    <!-- ===== PAGE: TOPICAL PRACTICE');
 const feed=section(source,'// ---- Student feeding: one local policy','function getQuestionsForLevel(');
+const gameMessages=section(source,"window.addEventListener('message', function (ev) {\n  const d = ev && ev.data;\n  if (!d) return;\n  if (d.type === 'SD_REQUEST_QUESTIONS')",'\n\n// =====================================================================\n// SCIENCE LEGENDS');
 const functions=[
   'buildOpenBody','renderImportedBlockStudent','renderTableReadonly','ensureTableMigrated','_tblCellCss','markMcqChoice',
   'buildQpQueue','qpHasWritten','qpHasMcq','qpMatchesType','qpFilters','startQuickPractice','loadNextQpQuestion','renderQpQuestion',
   'updateQpProgress','_qpAllPartsMarked','_recordQpResult','renderQpSummary','renderPracticeReport','_reportColor','_fmtScore',
   'qLevelNum','qWithinStudentLevel','qInLevelBand','levelBandMin','studentCapLevel','studentCapNum',
-  'famApplyActiveStudent','_tcgBankQuestions','_sdExtractMcq','_sdStemHtml','_sdBreakStatements','_sdZoomBtns','_sdSeedElo'
+  'famApplyActiveStudent','_tcgBankQuestions','_sdExtractMcq','_sdStemHtml','_sdBreakStatements','_sdZoomBtns','_sdSeedElo',
+  'buildDefenderQuestions','_sdSeenStats','_sdQuestionsPayload','_gqKey','_gqLoad','_gqSave','_gqRealId','_gqMark','_gqFilterPool'
 ].map(fn).join('\n');
-const moduleFiles=new Set(['science-feed-core.js','science-feed-variety.js','science-feed-mastery.js','science-feed-quality.js']);
+const moduleFiles=new Set(['science-feed-core.js','science-feed-variety.js','science-feed-mastery.js','science-feed-quality.js','science-feed-bridge.js']);
 const errors=[],network=[];
 const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_BROWSER_CHANNEL?{channel:process.env.PLAYWRIGHT_BROWSER_CHANNEL}:{})});
 const page=await browser.newPage({viewport:{width:1120,height:920}});
@@ -68,6 +70,7 @@ const normalizeCategoryValue=v=>v||'',qSecondaryTagsHtml=()=>'',showToast=(...ar
 const navigateTo=page=>navigation.push(page),rpgQuestionChanged=()=>{},loadAttemptStats=async()=>_qAttemptStats,preloadQueueImages=async()=>{};
 const _scienceTcgSources=()=>[],tlStateOf=q=>q.testCheck||{state:'idle'},tlSig=q=>q.testSignature||'';
 const _famPersistServingLevel=()=>{},applyStudentLevelCaps=()=>{};
+const _ppGameFrameMatches=()=>false,_dailyCreditAllowance=()=>10,_playsLeftPayload=()=>({defenders:10,raiders:10,spire:10,legends:10,slayers:10});
 const transformImageUrl=url=>url,imgSizeStyle=()=> 'max-width:70%;height:auto',handleImgError=()=>{},_scheduleImgWait=()=>{},imgWaitBarHtml=()=>'';
 const qHasParts=()=>false,qPartMap=()=>null,qPartOf=()=>'',qPartLabel=p=>p,qBlockOpensKey=()=>'',qPartBodyHtml=b=>b.content||'';
 const _qpTextHtml=(part,body)=>'<div class="qp-qtext">'+(part?'<b>'+escapeHtml(part)+'</b> ':'')+(body||'')+'</div>';
@@ -79,14 +82,16 @@ const _htmlPlainText=stripHtmlToText,db={},_qRef=id=>id,setDoc=async(...args)=>w
 const qpMarkServed=id=>_scienceFeedMark(id),resetQpOpenAnswers=()=>{},openFlagDialog=()=>{};
 ${feed}
 ${functions}
+${gameMessages}
 Object.assign(window,{loadNextQpQuestion,markMcqChoice,resetQpOpenAnswers,openFlagDialog,navigateTo});
 window.feedFixture={
  setup(bank,level='P4',name='Learner'){questionBank=structuredClone(bank);child={name,level};currentUser={uid:'fixture-family',name,role:'student',level,adminLevel:'P6'};localStorage.clear();_qAttemptStats={};_qAttemptStatsUid=_scienceFeedKey();_scienceFeedIdentity='';_scienceFeedImageFailures=new Map();qpQueue=[];qpIndex=-1;qpSessionResults=[];qpAnswered=0;_openQStore={};_openItemsStore={};_openMcqStore={};_openSurfaceCfg={};_openPartResults={};_openFinalized={};_scienceFeedRefreshFrames();document.getElementById('qpContainer').innerHTML='';document.getElementById('qpLevelSelect').value=level||'P6';},
  start:()=>startQuickPractice(),next:()=>loadNextQpQuestion(),finish:()=>_qpAllPartsMarked({score:1,total:1,mistakes:[]}),
- state:()=>({id:_openQStore['#qpContainer']?.id||null,queue:qpQueue.map(q=>q.id),index:qpIndex,level:_scienceFeedLevel(),key:_scienceFeedKey(),writes:writes.length,notices,navigation,history:_scienceFeedStoreRead('history')}),
+ state:()=>({id:_openQStore['#qpContainer']?.id||null,queue:qpQueue.map(q=>q.id),index:qpIndex,level:_scienceFeedLevel(),key:_scienceFeedKey(),writes:writes.length,notices,navigation,history:_scienceFeedStoreRead('history'),served:_scienceFeedStoreRead('served')}),
  plan:(manual=false)=>_scienceFeedPlan(questionBank,{manual}).questions.map(q=>q.id),
  direct:id=>{document.getElementById('qpContainer').innerHTML=buildOpenBody(questionBank.find(q=>q.id===id),'#qpContainer',{});},
  switchChild(name,level){child={name,level};famApplyActiveStudent();},
+ openGame(id){document.querySelectorAll('iframe').forEach(frame=>frame.remove());const frame=document.createElement('iframe');frame.id=id;frame.src='/game-fixture';document.body.append(frame);},
  gamePool:()=>_scienceFeedGameRows(_tcgBankQuestions()).map(q=>q.id),
  gameHtml:id=>_tcgBankQuestions().find(q=>q.id===id),
  report:id=>_scienceFeedFlagOwn(id,questionQualitySignature(questionBank.find(q=>q.id===id))),
@@ -95,10 +100,22 @@ window.feedFixture={
  invalidate:()=>_scienceFeedRefreshFrames()
 };window.ready=true;
 </script></body></html>`;
+// The parent runs the production request listener, payload builder and MCQ
+// extractor; this tiny frame uses the same bridge as all five embedded games.
+const gameFixture=`<!doctype html><html><body><main id="question"></main><script src="/science-feed-bridge.js"></script><script>
+let lastPool=[];const bridge=ScienceFeedBridge.create({onPool:pool=>{lastPool=pool;}});
+window.gameFixture={
+ async next(){await bridge.refresh();const pool=lastPool.map(q=>q.id),question=bridge.stamp(bridge.take());
+  document.getElementById('question').innerHTML=question?.html||bridge.message();
+  if(question){window.previousQuestion=question;parent.postMessage({type:'SD_SHOWN',questionId:question.id,...bridge.context()},location.origin);}
+  return {id:question?.id||null,pool,...bridge.context()};},
+ context:()=>bridge.context(),previousCurrent:()=>bridge.current(window.previousQuestion)
+};window.gameReady=true;</script></body></html>`;
 await page.route('**/*',async route=>{
   const u=new URL(route.request().url());
   if(u.origin!=='https://science-feed.test'){network.push(u.origin);return route.abort();}
   if(u.pathname==='/')return route.fulfill({contentType:'text/html',body:fixture});
+  if(u.pathname==='/game-fixture')return route.fulfill({contentType:'text/html',body:gameFixture});
   const file=u.pathname.slice(1);
   if(moduleFiles.has(file))return route.fulfill({contentType:'text/javascript',body:fs.readFileSync(path.join(root,file),'utf8')});
   return route.fulfill({status:404,body:'Fixture image unavailable'});
@@ -107,6 +124,16 @@ const q=(id,{level='P4',title='Question '+id,stem='Explain observation '+id+'.',
   {id:'stem',type:'text',content:'<p>'+stem+'</p>'},{id:'choices',type:'mcq',correctId:'o1',options:[{id:'o1',text:'The roots take in water.'},{id:'o2',text:'The roots release light.'}]}],...extra});
 const setup=async(bank,level='P4',name='Learner')=>{await page.goto('https://science-feed.test/');await page.waitForFunction(()=>window.ready);await page.evaluate(({bank,level,name})=>feedFixture.setup(bank,level,name),{bank,level,name});};
 const state=()=>page.evaluate(()=>feedFixture.state());
+const openGame=async(id='raidersFrame')=>{
+  await page.evaluate(id=>feedFixture.openGame(id),id);
+  const frame=await page.locator('#'+id).elementHandle().then(handle=>handle.contentFrame());
+  await frame.waitForFunction(()=>window.gameReady);return frame;
+};
+const gameNext=async frame=>{
+  const result=await frame.evaluate(()=>gameFixture.next());
+  if(result.id)await page.waitForFunction(id=>!!feedFixture.state().served[id],result.id);
+  return result;
+};
 const shot=async name=>{const dir=process.env.SCIENCE_FEED_SCREENSHOTS;if(dir){fs.mkdirSync(dir,{recursive:true});await page.screenshot({path:path.join(dir,name+'.png'),fullPage:true});}};
 let passed=0;const pass=name=>{passed++;console.log('PASS Science browser: '+name);};
 try{
@@ -156,6 +183,51 @@ try{
   await page.evaluate(()=>feedFixture.switchChild('Sibling','P4'));
   assert.deepEqual(await page.evaluate(()=>feedFixture.plan()),['reported','other']);
   pass('reports and served state are scoped to the child sharing the account');
+
+  const current=q('forces-current',{level:'P6',topic:'Forces',difficulty:3,title:'Forces investigation',stem:'How does friction change the distance travelled by the trolley?'});
+  const currentCopy={...structuredClone(current),id:'forces-copy',title:'Renamed worksheet copy'};
+  const currentNext=q('forces-next',{level:'P6',topic:'Forces',difficulty:3,title:'Elastic band',stem:'How does stretching an elastic band change its stored energy?'});
+  const previousGrade=q('electrical-revision',{level:'P5',topic:'Electrical Systems',difficulty:3,title:'Electric circuit',stem:'Why does the lamp go out when the switch opens?'});
+  const younger=q('plant-current',{level:'P4',topic:'Plant Systems',difficulty:3,title:'Root investigation',stem:'Which plant part takes in water from the soil?'});
+  const tooBasic=q('magnets-basic',{level:'P3',topic:'Magnets',difficulty:1200,title:'Magnetic materials',stem:'Which material is attracted to a magnet?'});
+  const mixedGrades=[tooBasic,previousGrade,younger,current,currentCopy,currentNext];
+  await setup(mixedGrades,'P6','Older child');let game=await openGame();
+  let selected=await gameNext(game);
+  assert.equal(selected.id,'forces-current');assert.equal(selected.studentLevel,'P6');
+  assert.ok(!selected.pool.includes('magnets-basic'),'a legacy difficulty rating must not promote easy P3 work for a P6 child');
+  assert.match(await game.locator('#question').innerText(),/friction/);
+  pass('real embedded-game request prioritises current-grade database MCQs over P3 legacy ratings');
+
+  selected=await gameNext(game);assert.equal(selected.id,'forces-next');
+  assert.ok(!selected.pool.includes('forces-current'));assert.ok(!selected.pool.includes('forces-copy'));
+  selected=await gameNext(game);assert.equal(selected.id,'electrical-revision');
+  selected=await gameNext(game);assert.equal(selected.id,null);
+  assert.match(await game.locator('#question').innerText(),/No suitable fresh questions/);
+  pass('fresh embedded requests space question families, use nearby revision next and pause before basic P3 fallback');
+
+  await setup(mixedGrades,'P6','Same child');game=await openGame();
+  assert.equal((await gameNext(game)).id,'forces-current');
+  await page.evaluate(()=>feedFixture.switchChild('Same child','P4'));
+  await game.waitForFunction(()=>gameFixture.context().studentLevel==='P4');
+  assert.equal(await game.evaluate(()=>gameFixture.previousCurrent()),false);
+  selected=await gameNext(game);assert.equal(selected.id,'plant-current');assert.equal(selected.studentLevel,'P4');
+  assert.ok(selected.pool.every(id=>!['forces-current','forces-copy','forces-next','electrical-revision'].includes(id)));
+  pass('changing the same child’s level invalidates an open game and selects the new current grade');
+
+  await setup([tooBasic],'P6','Older child');game=await openGame();
+  assert.equal((await gameNext(game)).id,null);
+  assert.match(await game.locator('#question').innerText(),/No suitable fresh questions/);
+  pass('a P3-only database pauses a P6 game instead of filling the run with unsuitable easy questions');
+
+  await setup(mixedGrades,'P6','Older child');
+  await page.evaluate(()=>{Storage.prototype.getItem=Storage.prototype.setItem=()=>{throw new DOMException('Storage blocked','SecurityError');};});
+  game=await openGame();assert.equal((await gameNext(game)).id,'forces-current');
+  game=await openGame('defendersFrame');selected=await gameNext(game);
+  assert.equal(selected.id,'forces-next');assert.ok(!selected.pool.includes('forces-copy'));
+  await page.evaluate(()=>feedFixture.switchChild('Sibling','P6'));
+  await game.waitForFunction(()=>gameFixture.context().studentKey.includes('Sibling'));
+  assert.equal((await gameNext(game)).id,'forces-current');
+  pass('blocked browser storage still spaces question families across games while keeping siblings separate');
 
   const context=q('context',{title:'Fruit F',blocks:[{id:'s',type:'text',content:'<p>Use the table and Jo’s answer to explain how animals find fruit F.</p>'},
     {id:'t',type:'table',rows:2,cols:2,data:[['Colour','Dull green'],['Smell','Strong']]},

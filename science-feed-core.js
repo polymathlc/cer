@@ -173,7 +173,8 @@ export function planScienceQuestions(candidates, options = {}) {
     if (quality.tier !== 'sound') reviewCount++;
     rows.push({ q, order, fit });
   });
-  if (!options.manual) rows.sort((a,b) => b.fit.score - a.fit.score || a.order - b.order);
+  if (!options.manual) rows.sort((a,b) => a.fit.diagnostic.priorityTier - b.fit.diagnostic.priorityTier
+    || b.fit.score - a.fit.score || a.order - b.order);
   const scheduled = planPracticeQuestions(rows.map(row => context.normalizedById.get(str(row.q.id)) || normalizeQuestion(row.q, context.meta)), {
     catalog: context.catalog, bank: context.bank, progress: context.progress, run: context.run,
     uid: 'science', now: context.now, manual: !!options.manual, limit: options.limit,

@@ -9,6 +9,51 @@ const q = (id, extra = {}) => ({ id, title: 'Question', topic: 'Plant life', cat
 const opts = (bank, extra = {}) => ({bank,studentLevel:'P4',topicLevels,now,...extra});
 const ids = result => result.questions.map(item => item.id);
 
+test('P6 games prioritize their grade over legacy-rated P3 and then use fresh P5', () => {
+  const bank = [q('old-elo',{topic:'Magnets',difficulty:1200}),q('old-d',{topic:'Magnets',d:1050}),
+    q('previous',{topic:'Electricity'}),q('current-easy',{topic:'Forces',difficulty:'easy'}),q('current',{topic:'Forces'})];
+  const config = opts(bank,{studentLevel:'P6'});
+  assert.deepEqual(ids(planScienceQuestions(bank,config)),['current','current-easy','previous']);
+  const served = {current:now-1000,'current-easy':now-1000};
+  assert.deepEqual(ids(planScienceQuestions(bank,{...config,served})),['previous']);
+  served.previous=now-1000;
+  assert.deepEqual(ids(planScienceQuestions(bank,{...config,served})),[]);
+  assert.deepEqual(ids(planScienceQuestions(bank,{...config,manual:true})),bank.map(item=>item.id));
+});
+
+test('an explicit easy label cannot be promoted by a legacy game rating', () => {
+  const item=q('old',{topic:'Magnets',level:'easy',d:1200});
+  const result=evaluateScienceFit(item,opts([item],{studentLevel:'P6'}));
+  assert.equal(result.difficulty,710);
+  assert.equal(result.eligible,false);
+});
+
+test('successful easy revision never drags a P6 learner below the starting target', () => {
+  const history=Array.from({length:12},(_,i)=>q('old'+i,{topic:'Magnets',level:'P3',difficulty:'easy'}));
+  const current=q('current',{topic:'Magnets',level:'P6'});
+  const bank=history.concat(current);
+  const progress=Object.fromEntries(history.map(item=>[item.id,{latestFrac:1,last:now-1000}]));
+  const cold=evaluateScienceFit(current,opts(bank,{studentLevel:'P6'}));
+  const warm=evaluateScienceFit(current,opts(bank,{studentLevel:'P6',progress}));
+  assert.equal(warm.target,cold.target);
+  assert.equal(warm.diagnostic.scaffoldSupported,false);
+  assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{studentLevel:'P6',progress}))),['current']);
+});
+
+test('only distinct relevant near-grade misses unlock deeper revision', () => {
+  const observations=Array.from({length:6},(_,i)=>q('miss'+i,{topic:'Magnets',level:'P6'}));
+  const scaffold=q('scaffold',{topic:'Magnets',level:'P4'}), adjacent=q('adjacent',{topic:'Magnets',level:'P5'});
+  const current=q('current',{topic:'Magnets',level:'P6'}), distant=q('distant',{topic:'Magnets',d:1200});
+  const bank=observations.concat(scaffold,adjacent,current,distant);
+  const progress=Object.fromEntries(observations.map(item=>[item.id,{latestFrac:0,last:now-1000}]));
+  assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{studentLevel:'P6',progress}))),['adjacent','current','scaffold']);
+  for(const revised of [observations.map(item=>({...item,variantOf:'same-family'})),
+    observations.map(item=>({...item,topic:'Forces'}))]) {
+    const config=opts(revised.concat(scaffold,adjacent,current,distant),{studentLevel:'P6',progress});
+    assert.equal(evaluateScienceFit(scaffold,config).eligible,false);
+  }
+});
+
 test('highest explicit year, second topic and arbitrary mapped Science objective enforce the cap', () => {
   const bank = [q('p4'), q('p5',{topic2:'Electricity'}), q('p6',{level:'P6'}), q('mixed',{level:'P4/P6'}), q('lo',{los:['force-lo']}), q('inverse')];
   const config = opts(bank,{objectives:[{id:'force-lo',level:'P6'}],objectiveMap:{'force-lo':['inverse']}});

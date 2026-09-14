@@ -3800,7 +3800,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.382.1';
+const APP_VERSION = 'v1.382.2';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -29903,6 +29903,7 @@ let _scienceFeedFlagsLoadedUid = '';
 let _scienceFeedIdentity = '';
 let _scienceFeedMetaCache = null, _scienceFeedPassCache = null;
 let _scienceFeedImageFailures = new Map();
+const _scienceFeedStoreMemory = new Map();
 function _scienceFeedKey(profile) {
   const child = profile || (typeof famActive === 'function' ? famActive() : null);
   return JSON.stringify([(currentUser && currentUser.uid) || 'guest',
@@ -29919,6 +29920,16 @@ function _scienceFeedLevel(profile) {
   if (profile && isLevelCode(profile.level) && getLevelNumber(profile.level) < getLevelNumber(cap)) cap = profile.level;
   return cap;
 }
+function _scienceFeedGameLevel(profile) {
+  if (profile || currentUser?.role === 'student') return _scienceFeedLevel(profile);
+  if (isLevelCode(currentUser?.level)) return currentUser.level;
+  const child = typeof famActive === 'function' ? famActive() : null;
+  return isLevelCode(child?.level) ? child.level : '';
+}
+function _scienceFeedGameMessage() {
+  return !_scienceFeedGameLevel() ? 'Choose your current school level in Settings before starting a game.'
+    : 'No suitable fresh questions are available right now. Try another topic or come back after your review break.';
+}
 function _scienceFeedMeta() {
   if (_scienceFeedMetaCache) return _scienceFeedMetaCache;
   const topicLevels = {};
@@ -29931,13 +29942,35 @@ function _scienceFeedMeta() {
   queueMicrotask(() => { _scienceFeedMetaCache = null; });
   return _scienceFeedMetaCache;
 }
+function _scienceFeedStoreMerge(kind, ...sources) {
+  const result = {}, stamp = row => Number(kind === 'served' ? row : kind === 'history' ? row?.last : row?.at);
+  const oldest = kind === 'served' ? Date.now() - 180 * 86400000 : 0;
+  for (const source of sources) {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+    for (const [id, row] of Object.entries(source)) {
+      const at = stamp(row);
+      if (!Number.isFinite(at) || at <= oldest || (Object.hasOwn(result, id) && at < stamp(result[id]))) continue;
+      Object.defineProperty(result, id, { value: kind === 'served' ? at : { ...row }, enumerable: true, writable: true, configurable: true });
+    }
+  }
+  return result;
+}
 function _scienceFeedStoreRead(kind, profile) {
-  try { const value = JSON.parse(localStorage.getItem('scienceFeed:' + kind + ':' + _scienceFeedKey(profile)) || '{}');
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch (_) { return {}; }
+  const key = 'scienceFeed:' + kind + ':' + _scienceFeedKey(profile);
+  let persisted = {};
+  try { persisted = JSON.parse(localStorage.getItem(key) || '{}'); } catch (_) {}
+  // The session still remembers answers when storage is blocked. Reading the
+  // persisted map each time also picks up newer activity from another tab.
+  const value = _scienceFeedStoreMerge(kind, _scienceFeedStoreMemory.get(key), persisted);
+  _scienceFeedStoreMemory.set(key, value);
+  return _scienceFeedStoreMerge(kind, value);
 }
 function _scienceFeedStoreWrite(kind, value, profile) {
   _scienceFeedPassCache = null;
-  try { localStorage.setItem('scienceFeed:' + kind + ':' + _scienceFeedKey(profile), JSON.stringify(value)); } catch (_) {}
+  const key = 'scienceFeed:' + kind + ':' + _scienceFeedKey(profile);
+  const merged = _scienceFeedStoreMerge(kind, _scienceFeedStoreRead(kind, profile), value);
+  _scienceFeedStoreMemory.set(key, merged);
+  try { localStorage.setItem(key, JSON.stringify(merged)); } catch (_) {}
 }
 function _scienceFeedMark(id, profile) {
   if (!id) return;
@@ -29970,11 +30003,11 @@ function _scienceFeedQualityOptions(q) {
   try { checkedState = tlStateOf(q); importSignature = tlSig(q); } catch (_) {}
   return { checkedState, importSignature };
 }
-function _scienceFeedContext(profile) {
-  const key = JSON.stringify([_scienceFeedKey(profile), _scienceFeedLevel(profile)]);
+function _scienceFeedContext(profile, studentLevel = _scienceFeedLevel(profile)) {
+  const key = JSON.stringify([_scienceFeedKey(profile), studentLevel]);
   const cached = _scienceFeedPassCache;
   if (cached && cached.key === key && cached.bank === questionBank && cached.count === questionBank.length && cached.stats === _qAttemptStats) return cached.context;
-  const context = buildScienceFeedContext({ bank: _scienceFeedSources(), studentLevel: _scienceFeedLevel(profile),
+  const context = buildScienceFeedContext({ bank: _scienceFeedSources(), studentLevel,
     progress: _scienceFeedProgress(profile), served: _scienceFeedStoreRead('served', profile), now: Date.now(),
     flags: _scienceFeedStoreRead('flags', profile), failedImageUrls: _scienceFeedImageFailures,
     qualityOptions: _scienceFeedQualityOptions, ..._scienceFeedMeta() });
@@ -29986,11 +30019,12 @@ function _scienceFeedContext(profile) {
 }
 function _scienceFeedPlan(candidates, opts = {}) {
   const manual = !!opts.manual;
-  if (!opts.profile && (!currentUser || currentUser.role !== 'student')) {
+  if (!opts.game && !opts.profile && (!currentUser || currentUser.role !== 'student')) {
     return { questions: (candidates || []).filter(Boolean), blocked: [], reviewCount: 0, reasons: {} };
   }
   const ready = (candidates || []).filter(q => q && (opts.allowRetired || qInSyllabus(q)) && qAvailableToViewer(q));
-  return planScienceQuestions(ready, { ...opts, manual, context: opts.context || _scienceFeedContext(opts.profile) });
+  return planScienceQuestions(ready, { ...opts, manual, context: opts.context || _scienceFeedContext(opts.profile,
+    opts.game ? _scienceFeedGameLevel(opts.profile) : _scienceFeedLevel(opts.profile)) });
 }
 function _scienceFeedMessage(profile) {
   return !_scienceFeedLevel(profile) ? 'Choose your current school level in Settings before starting practice.'
@@ -30019,7 +30053,7 @@ function _scienceFeedManual(candidates, allowRetired = false) {
 }
 function _scienceFeedRefreshFrames() {
   _scienceFeedPassCache = null; _scienceFeedMetaCache = null;
-  const identity = JSON.stringify([_scienceFeedKey(), _scienceFeedLevel()]);
+  const identity = JSON.stringify([_scienceFeedKey(), _scienceFeedGameLevel()]);
   if (_scienceFeedIdentity && _scienceFeedIdentity !== identity) {
     // A sibling can share the same Firebase UID; pending marks and cached quizzes cannot.
     Object.keys(_openQStore || {}).forEach(selector => {
@@ -30043,17 +30077,17 @@ function _scienceFeedRefreshFrames() {
   _scienceFeedIdentity = identity;
   ['defendersFrame', 'raidersFrame', 'spireFrame', 'legendsFrame', 'slayersFrame'].forEach(id => {
     const frame = document.getElementById(id);
-    try { frame?.contentWindow?.postMessage({ type: 'SD_FEED_INVALIDATE', studentKey: _scienceFeedKey(), studentLevel: _scienceFeedLevel() }, location.origin); } catch (_) {}
+    try { frame?.contentWindow?.postMessage({ type: 'SD_FEED_INVALIDATE', studentKey: _scienceFeedKey(), studentLevel: _scienceFeedGameLevel() }, location.origin); } catch (_) {}
   });
 }
 function _scienceFeedGameMessageCurrent(d, source) {
-  return !!(d && d.studentKey === _scienceFeedKey() && d.studentLevel === _scienceFeedLevel()
+  return !!(d && d.studentKey === _scienceFeedKey() && d.studentLevel === _scienceFeedGameLevel()
     && ['defendersFrame', 'raidersFrame', 'spireFrame', 'legendsFrame', 'slayersFrame'].some(id => document.getElementById(id)?.contentWindow === source));
 }
 function _scienceFeedGameRows(rows, opts = {}) {
   const bank = _scienceFeedSources(), byId = new Map(bank.map(q => [String(q.id), q]));
   const originals = (rows || []).map(row => byId.get(String(row.id))).filter(Boolean);
-  const plan = _scienceFeedPlan(originals, opts);
+  const plan = _scienceFeedPlan(originals, { ...opts, game: true });
   const byRow = new Map((rows || []).map(row => [String(row.id), row]));
   return plan.questions.map(q => {
     const row = byRow.get(String(q.id));
@@ -52611,14 +52645,9 @@ function tcgOpenFreePack() {
 }
 
 // ---- No-repeat rotation for game questions (invisible to students) ----
-// A per-student localStorage map stamps every question a game mode serves with
-// the time it was last shown. Games receive never-served questions first; when
-// those run low, the payload is topped up with the least-recently-served ones
-// so a run always has enough variety and nothing comes back until everything
-// else has had a turn. The key is shared with Science Strike (fps.html) so the
-// rotation spans every game mode, and the map is never bulk-reset — recency
-// alone decides what rotates back in. Internal bookkeeping only — the stamps
-// are never rendered anywhere a student can see.
+// The shared per-child policy ranks current-grade/mastery fit and applies
+// quality and family spacing across practice and games. The older gameQSeen
+// map remains for existing consumers; it cannot top up a depleted safe pool.
 function _gqKey() { return 'gameQSeen_' + ((currentUser && currentUser.uid) || 'guest'); }
 function _gqLoad() { try { return JSON.parse(localStorage.getItem(_gqKey())) || {}; } catch (e) { return {}; } }
 function _gqSave(m) { try { localStorage.setItem(_gqKey(), JSON.stringify(m)); } catch (e) {} }
@@ -52635,16 +52664,16 @@ function _gqFilterPool(pool) {
 // initial frame request AND every run start, so long sittings never play from
 // a stale pool snapshot.
 async function _sdQuestionsPayload(source) {
-  const feedKey = _scienceFeedKey();
+  const feedKey = _scienceFeedKey(), feedLevel = _scienceFeedGameLevel();
   const seenStats = await _sdSeenStats();
   let questions = [];
   // Past-paper mode: the game launched from the Past Papers page gets ONLY
   // the selected portion's attached questions (MCQ + OEQ self-check).
   const ppMode = _ppGameFrameMatches(source);
   try { questions = ppMode ? ppGamePool(_ppGameSel.year) : buildDefenderQuestions(); } catch (e) { console.warn('SD bank extract failed', e); }
-  // rotation: never-served questions first, least-recently-served top-up
+  // Current-grade fit first, with shared quality and repetition safeguards.
   try { questions = _gqFilterPool(questions); } catch (e) { questions = []; console.warn('gq filter', e); }
-  if (feedKey !== _scienceFeedKey()) questions = [];
+  if (feedKey !== _scienceFeedKey() || feedLevel !== _scienceFeedGameLevel()) questions = [];
   return {
     type: 'SD_QUESTIONS',
     questions,
@@ -52652,8 +52681,8 @@ async function _sdQuestionsPayload(source) {
     seenStats,
     feedPolicyVersion: 1,
     studentKey: _scienceFeedKey(),
-    studentLevel: _scienceFeedLevel(),
-    feedMessage: _scienceFeedMessage(),
+    studentLevel: _scienceFeedGameLevel(),
+    feedMessage: _scienceFeedGameMessage(),
     studentName: (currentUser && currentUser.name) || '',
     playLimit: _dailyCreditAllowance(),
     playsLeft: _playsLeftPayload()

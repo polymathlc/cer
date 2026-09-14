@@ -93,11 +93,13 @@ test('automatic work has a lower difficulty floor rather than filling a P6 feed 
     assert.equal(result.stageEligible, true, 'an explicit revision choice may still use this school level');
     assert.equal(result.diagnostic.difficultyFloor, 845);
   }
-  assert.equal(fit(q('revision', { level: 'P4' }), { studentLevel: 'P6' }).eligible, true);
+  assert.equal(fit(q('revision', { level: 'P4' }), { studentLevel: 'P6' }).eligible, false);
   const history = evidence(12, 'incorrect', { level: 'P6' });
   const scaffold = fit(q('scaffold', { level: 'P3' }), { ...history, studentLevel: 'P6' });
   assert.equal(scaffold.target, 1000);
-  assert.equal(scaffold.eligible, true, 'evidence of struggle permits a more accessible scaffold');
+  assert.equal(scaffold.eligible, false, 'automatic scaffolding cannot jump back three school years');
+  assert.equal(fit(q('scaffold', { level: 'P4' }), { ...history, studentLevel: 'P6' }).eligible, true,
+    'distinct relevant struggles permit a two-year scaffold');
   assert.equal(fit(q('filler', { level: 'P1' }), { ...history, studentLevel: 'P6' }).eligible, false);
 });
 

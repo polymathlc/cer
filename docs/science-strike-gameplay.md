@@ -1,6 +1,6 @@
-# Science Strike v1.9.1
+# Science Strike v1.9.2
 
-Released with the Science portal v1.382.1.
+Released with the Science portal v1.382.2.
 
 ## Playing
 
@@ -45,6 +45,10 @@ marking an answer. Existing teacher checks are read without calling an AI.
 Question families cannot repeat within a run; shared spacing also survives new
 runs, and session memory still protects students when browser storage is blocked.
 An exhausted suitable pool pauses the game instead of filling it with repeats.
+Suitable current-grade work now comes first. Earlier-year game ratings cannot
+push basic P3 questions ahead of P6 work, and stepping further back requires
+several relevant weak results. Successful easy answers never pull the target
+below its starting point for that school level.
 
 Number keys select answers, and feedback keeps the game paused until the
 student chooses Continue. Each displayed question can settle only once, so
