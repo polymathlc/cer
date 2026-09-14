@@ -132,6 +132,9 @@ try {
   check('A confirmed no-charge rejection clears its receipt and allows another pack choice');
   await game.locator('[data-view="crew"]').click(); await game.locator('#crew-slots .text-button').first().click(); await game.locator(`#crew-picker [data-character="${grants[0]}"]`).click();
   await game.waitForFunction(id => __grandLine.collection.team[0] === id, grants[0]);
+  // Crew changes render optimistically; wait for persistence and the child acknowledgement before inspecting the save or navigating.
+  await host.waitForFunction(id => fake.state.grandLine.profiles['test-profile'].collection.team[0] === id, grants[0]);
+  await game.locator('#toast').filter({ hasText: 'is ready to sail.' }).waitFor({ state: 'visible' });
   assert.equal(await host.evaluate(() => fake.state.grandLine.profiles['test-profile'].collection.team[0]), grants[0]);
   check('An unlocked card can replace a crew slot and persists through the parent');
 
