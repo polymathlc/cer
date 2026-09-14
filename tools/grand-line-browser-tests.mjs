@@ -215,15 +215,20 @@ try {
   for(const id of ['wyper','kaku','wapol','hina','paulie','donkrieg','hatchan','kalifa']) assert.ok(roster.includes(id));
   await idleGame.locator('.roster-update summary').click();assert.equal(await idleGame.locator('#future-characters li').count(),8);
   check('Current cards exclude eight reserved legends and explain all eight replacements and future seven-star expansions');
-  await idleGame.locator('[data-view="campaign"]').click();await idleGame.locator('#campaign-map button').first().click();
-  await idleGame.locator('#idle-pause').click();assert.equal(await idleGame.evaluate(()=>__grandLine.idlePaused),true);
+  await idleGame.locator('[data-view="campaign"]').click();
+  await idleGame.evaluate(()=>{
+    document.querySelector('#campaign-map button').click();document.getElementById('idle-pause').click();
+    // Keep the first two learning rounds nonterminal regardless of random crits.
+    __grandLine.battle.rng=()=>0.5;for(const enemy of __grandLine.battle.enemies)enemy.hp=enemy.maxHp=500;
+  });
+  assert.equal(await idleGame.evaluate(()=>__grandLine.idlePaused),true);
   let pausedTurns=await idleGame.evaluate(()=>__grandLine.battle.stats.turns);await frames(idleHost,25);
   assert.equal(await idleGame.evaluate(()=>__grandLine.battle.stats.turns),pausedTurns);
   assert.equal(await idleGame.locator('#manual-commands').isVisible(),false);assert.equal(await idleGame.locator('#idle-summary').isVisible(),true);
   await idleGame.locator('#idle-speed').selectOption('2');await idleGame.locator('#idle-strategy').selectOption('sustain');
   assert.equal(await idleGame.evaluate(()=>__grandLine.settings.battleSpeed),2);assert.equal(await idleGame.evaluate(()=>__grandLine.settings.strategy),'sustain');
   await idleGame.locator('#idle-mode').click();assert.equal(await idleGame.locator('#manual-commands').isVisible(),true);
-  await idleGame.locator('#idle-mode').click();await idleGame.locator('#idle-pause').click();
+  await idleGame.evaluate(()=>{document.getElementById('idle-mode').click();document.getElementById('idle-pause').click();});
   await idleGame.locator('#idle-speed').selectOption('4');await idleGame.locator('#idle-strategy').selectOption('balanced');
   await screenshot(idleHost,'desktop-idle-voyage');
   check('Idle starts at four times speed, supports strategies, pauses without advancing, and switches to manual command');
@@ -241,9 +246,10 @@ try {
   await idleGame.waitForFunction(()=>__grandLine.dialog==='save-progress');pausedTurns=await idleGame.evaluate(()=>__grandLine.battle.stats.turns);
   await frames(idleHost,25);assert.equal(await idleGame.evaluate(()=>__grandLine.battle.stats.turns),pausedTurns);
   assert.equal(await idleGame.locator('#idle-mode').isDisabled(),true);assert.equal(await idleHost.evaluate(()=>fake.records.length),3);
+  assert.match(await idleGame.locator('#learning-boost').textContent(),/Attack \+30%/,'Inspect the round bonus while saving keeps the voyage paused');
   await idleHost.evaluate(()=>{fake.blockSave=false;});await idleGame.getByRole('button',{name:'Retry saving',exact:true}).click();
   await idleGame.waitForFunction(turns=>__grandLine.battle.stats.turns>turns,pausedTurns);
-  assert.equal(await idleHost.evaluate(()=>fake.records.length),3);assert.match(await idleGame.locator('#learning-boost').textContent(),/Attack \+30%/);
+  assert.equal(await idleHost.evaluate(()=>fake.records.length),3);
   await idleGame.waitForFunction(()=>__grandLine.battle.status==='learning');assert.equal(await idleHost.evaluate(()=>fake.records.length),3);
   check('Automatic combat stays stopped through save failure, resumes only after acknowledgement, and never regrades or skips the next quiz');
   await idleHost.close();
