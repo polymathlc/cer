@@ -1,4 +1,16 @@
 import { installHadesDisplay } from "./hades-display.js";
+import { installPirateRiftPortal } from "./pirate-rift-portal.js?v=1.0.0";
+// Initialize before any page setup can navigate; callbacks read the active
+// account, family learner and level only when the player opens the adventure.
+const pirateRiftPortal = installPirateRiftPortal({
+  subject: 'science', getUser: () => currentUser, getLevel: _scienceFeedGameLevel,
+  getProfileKey: () => JSON.stringify([_scienceFeedKey(), familyProfile.activeStudent]),
+  notify: message => showToast(message, 'error'),
+  beforeOpen: () => {
+    if (document.getElementById('page-hades')?.classList.contains('active')) navigateTo('arcade');
+    else _hadesResetLearning('Pirate Rift was opened.');
+  }
+});
 import { installHadesLearningParent } from "./hades-learning-parent.js?v=2.2.1";
 import { scienceTcgIdentity, scienceTcgIdentityText, scienceTcgSkillPath } from './science-tcg-identity.js';
 import { applyScienceTcgSignature, scienceTcgBrandedDamage, scienceTcgAbsorbBarrier } from './science-tcg-runtime.js';
@@ -4044,6 +4056,7 @@ async function startPracticeAs(uid) {
 }
 
 function configureSidebarForRole(role) {
+  pirateRiftPortal.close();
   _hadesResetLearning("The signed-in profile changed. Start a new run.");
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -4286,6 +4299,7 @@ async function loadAdminQuestions() {
 }
 
 onAuthStateChanged(auth, (user) => {
+  pirateRiftPortal.close();
   if (user) {
     enterApp(user);
   } else {
@@ -5209,10 +5223,12 @@ function applyMcqCategory(q) {
 // =====================================================================
 function navigateTo(page) {
   vetPrintPeekHide();
+  pirateRiftPortal.close();
   // Employees may only reach the pages they were hired to use. Hiding the nav
   // items is not enough on its own — a bookmark, a deep link (#usage) or any
   // navigateTo() call from shared code would otherwise walk straight in.
   if (_isEmployee() && EMPLOYEE_PAGES.indexOf(page) < 0) page = 'create';
+  if (page === 'pirate-rift') { openPirateRift(); return; }
   // 🎨 The Photo Editor is an admin tool. The nav item carries `admin-only` so
   // nobody else sees it, and an employee has already been sent to `create` by
   // the line above — this is the guard for arriving at the page any other way,
@@ -30071,6 +30087,7 @@ function _scienceFeedManual(candidates, allowRetired = false) {
   return plan.questions;
 }
 function _scienceFeedRefreshFrames() {
+  pirateRiftPortal.sync();
   _scienceFeedPassCache = null; _scienceFeedMetaCache = null;
   const identity = JSON.stringify([_scienceFeedKey(), _scienceFeedGameLevel()]);
   if (_scienceFeedIdentity && _scienceFeedIdentity !== identity) {
@@ -39189,7 +39206,8 @@ const ARCADE_GAMES = [
   { page: 'spire', ico: '🃏', name: 'Science Spire', desc: 'Endless deck-building climb — answer questions, beat bosses, open card packs.' },
   { page: 'legends', ico: '⚔️', name: 'Science Legends', beta: true, desc: 'Top-down action RPG — three classes, big skill trees, a question every 20 seconds.' },
   { page: 'slayers', ico: '🗡️', name: 'Science Slayers', beta: true, desc: 'Dungeon crawler — procedural floors, boss loot, questions power your actions.' },
-  { page: 'hades', ico: '🔥', name: 'Hades Sanctuary', beta:true, desc:'Intricate elemental combat — five bank questions between rooms power healing and boon upgrades.' }
+  { page: 'hades', ico: '🔥', name: 'Hades Sanctuary', beta:true, desc:'Intricate elemental combat — five bank questions between rooms power healing and boon upgrades.' },
+  { page: 'pirate-rift', ico: '🏴‍☠️', name: 'One Piece: Pirate Rift', beta: true, freePlay: true, desc: 'An isometric action RPG starring Luffy, Zoro, Whitebeard and Shanks. Three acts, signature abilities, boss battles and legendary loot.' }
 ];
 function renderArcadePage() {
   const c = document.getElementById('arcadeContainer');
@@ -39201,7 +39219,7 @@ function renderArcadePage() {
       <div style="font-size:1.9rem;line-height:1;">🎟️</div>
       <div style="flex:1;min-width:220px;">
         <div style="font-weight:700;font-size:1.02rem;">Game credits today: ${Math.max(0, credits.balance | 0)}</div>
-        <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.65;margin-top:4px;">Each play costs 1 credit. Answer ${CREDITS_PER_REWARD} practice questions to earn another — practice powers your play!</div>
+        <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.65;margin-top:4px;">Credit games cost 1 credit per play. Pirate Rift is free to play. Answer ${CREDITS_PER_REWARD} practice questions to earn another — practice powers your play!</div>
       </div>
     </div>
     <div class="arcade-grid">
@@ -39212,7 +39230,7 @@ function renderArcadePage() {
         <p>${escapeHtml(g.desc)}</p>
         <button class="btn btn-primary" onclick="navigateTo('${g.page}')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          Play
+          ${g.freePlay ? 'Set sail · Free play' : 'Play'}
         </button>
       </div>`).join('')}
     </div>`;
@@ -51874,6 +51892,17 @@ function _sdSeedElo(q) {
   if (d === 'hard') return 1400;
   return 1200;
 }
+function openPirateRift() {
+  const opened = pirateRiftPortal.open();
+  if (opened) {
+    document.getElementById('sidebar')?.classList.remove('open');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (backdrop) backdrop.style.display = 'none';
+  }
+  return opened;
+}
+window.openPirateRift = openPirateRift;
+
 // Hades student beta uses the active learner; administrator previews go through
 // the same grade, mastery, quality and family-spacing policy with separate history.
 var _hadesBridge = null;

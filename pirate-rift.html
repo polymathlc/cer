@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="application-version" content="1.0.0">
+  <meta name="theme-color" content="#101213">
+  <title>One Piece: Pirate Rift</title>
+  <link rel="stylesheet" href="./pirate-rift.css?v=1.0.0">
+</head>
+<body>
+  <main id="game-shell">
+    <canvas id="arena" tabindex="0" aria-label="Pirate Rift arena. WASD to move, click or J to strike, E for signature, Q for ultimate, Space to dodge, R to heal."></canvas>
+    <div id="hud" hidden>
+      <header class="game-top">
+        <div class="vitals"><div id="hero-medallion" class="crew-art miniature" aria-hidden="true"></div><div class="vitals-data"><div class="hero-line"><strong id="hero-name"></strong><span id="hero-level"></span></div><div class="meter health"><span id="health-fill"></span><b id="health-label"></b></div><div class="meter energy"><span id="energy-fill"></span><b id="energy-label"></b></div></div></div>
+        <div class="chapter"><span id="act-label">ACT I</span><h1 id="room-name"></h1><p id="objective"></p></div>
+        <div class="toolbar"><span class="gold"><i aria-hidden="true">◈</i> <b id="gold-count">0</b></span><button id="inventory-button" title="Equipment (I)">Equipment <kbd>I</kbd></button><button id="pause-button" aria-label="Pause game">Ⅱ</button></div>
+      </header>
+      <div id="boss-status" hidden><div><strong id="boss-name"></strong><span id="boss-health"></span></div><div class="meter boss"><span id="boss-fill"></span></div></div>
+      <aside class="journey-note"><span>THE GRAND LINE</span><strong id="room-count"></strong><p id="encounter-note"></p></aside>
+      <div class="combat-log" id="combat-log" aria-live="polite"></div>
+      <footer class="game-bottom"><div class="experience"><span id="xp-fill"></span></div><div class="ability-bar"><button class="skill" data-slot="0"><kbd>J / CLICK</kbd><span class="skill-symbol">✦</span><strong></strong><small></small></button><button class="skill" data-slot="1"><kbd>E / RIGHT CLICK</kbd><span class="skill-symbol">〽</span><strong></strong><small></small></button><button class="skill ultimate" data-slot="2"><kbd>Q</kbd><span class="skill-symbol">✺</span><strong></strong><small></small></button><button class="skill utility" id="dodge-button"><kbd>SPACE</kbd><span class="skill-symbol">»</span><strong>Dodge</strong><small></small></button><button class="skill utility" id="potion-button"><kbd>R</kbd><span class="skill-symbol">♜</span><strong>Restore</strong><small></small></button></div><p class="desktop-hint">WASD to move · Aim with your cursor · Walk over treasure to collect</p></footer>
+      <div id="touch-pad" role="group" aria-label="Movement pad"><div class="stick-ring"></div><div id="stick-knob"></div><span>MOVE</span></div>
+      <div id="room-clear" class="room-clear" hidden><span>ENCOUNTER COMPLETE</span><strong>The path opens.</strong><button id="next-room" class="primary">Enter the next rift <span>→</span></button></div>
+    </div>
+    <section id="crew-screen" class="screen crew-screen" aria-labelledby="crew-title">
+      <header class="masthead"><div class="wordmark">ONE PIECE <span>FAN ADVENTURE · BETA</span></div><div class="settings"><button id="sound-button" aria-pressed="false">Sound on</button><button id="motion-button" aria-pressed="false">Motion on</button><button id="fullscreen-button">Fullscreen</button></div></header>
+      <div class="crew-intro"><p class="eyebrow">FOUR LEGENDS. ONE UNFORGIVING SEA.</p><h1 id="crew-title">PIRATE <em>RIFT</em></h1><p>Choose your legend. Break the siege. Claim the treasure.</p></div>
+      <div id="crew-roster" class="crew-roster" role="group" aria-label="Choose a character"></div>
+      <div class="crew-details"><div><span id="selected-title" class="eyebrow"></span><h2 id="selected-name"></h2><p id="selected-description"></p></div><div id="selected-skills" class="selected-skills"></div></div>
+      <footer class="crew-footer"><div><strong>9 encounters · 3 bosses · Rare & legendary loot</strong><p>WASD / touch to move · Click to strike · E signature · Q ultimate · Space dodge</p><small id="best-record">Your legend begins here.</small></div><button id="begin-button" class="primary">Enter the rift <span>→</span></button></footer>
+    </section>
+    <section id="dialog-layer" class="screen dialog-layer" hidden role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div id="dialog-panel" class="dialog-panel"></div></section>
+    <p id="toast" class="toast" role="status" hidden></p>
+    <div id="load-error" class="fatal-error" hidden><h1>The rift could not open.</h1><p>Please reload to restore the game files.</p><button onclick="location.reload()">Reload</button></div>
+  </main>
+  <script type="module" src="./pirate-rift.js?v=1.0.0" onerror="document.getElementById('load-error').hidden=false"></script>
+</body>
+</html>
