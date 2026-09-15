@@ -3858,7 +3858,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.395.0';
+const APP_VERSION = 'v1.396.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -33466,23 +33466,31 @@ const SUT_ANS_CHARS = 700;      // one answer, trimmed with an ellipsis
 const SUT_ANS_PARTS = 20;       // parts kept per question
 const SUT_WHY_CHARS = 400;      // the marker's one-line reason for the habit
 
+/* 🐾 WHICH PART a marked answer belongs to, DERIVED FROM THE KEY.
+   `_setPartResult` already has six call sites across three marking paths and
+   a further argument threaded through them would be six chances to forget
+   one — the reasoning that put the habit itself here in v1.394.0. So the
+   label is read where it is needed, ONCE: the attempt row the teacher's
+   dashboard shows, the child's own mistake log, and through both of those
+   the 🐾 Mistake Bank, can never disagree about which part an answer was
+   for. It is the item's own label as `_openSection` built it — "(b) Claim",
+   "(b)(i) Answer", "Blank 2" — or the bare "Answer" a question with no
+   lettered parts gets. */
+function _partLabelFor(containerSel, key) {
+  if (String(key || '').startsWith('mcq:')) return 'Multiple choice';
+  const it = (_openItemsStore[containerSel] || [])[parseInt(String(key).slice(5), 10)];
+  return (it && it.label) ? String(it.label) : 'Answer';
+}
 function _attemptAnswers(containerSel) {
   const results = _openPartResults[containerSel] || {};
-  const items = _openItemsStore[containerSel] || [];
   const clip = v => {
     const s = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
     return s.length > SUT_ANS_CHARS ? s.slice(0, SUT_ANS_CHARS) + '…' : s;
   };
   return Object.keys(results).slice(0, SUT_ANS_PARTS).map(key => {
     const r = results[key] || {};
-    let label = 'Answer';
-    if (String(key).startsWith('mcq:')) label = 'Multiple choice';
-    else {
-      const it = items[parseInt(String(key).slice(5), 10)];
-      if (it && it.label) label = String(it.label);
-    }
     const row = {
-      label: clip(label),
+      label: clip(_partLabelFor(containerSel, key)),
       student: clip(r.student),
       expected: clip(r.expected),
       verdict: String(r.verdict || ''),
@@ -33563,7 +33571,10 @@ function _checkAllPartsMarked(containerSel) {
       .filter(([, r]) => r && r.verdict !== 'correct')
       .map(([key, r]) => ({ kind: String(key).startsWith('mcq:') ? 'mcq' : 'open',
                             verdict: r.verdict, expected: r.expected, student: r.student,
-                            mistake: r.mistake, mistakeWhy: r.mistakeWhy })),
+                            mistake: r.mistake, mistakeWhy: r.mistakeWhy,
+                            // WHICH PART this was, through the ONE derivation, so the
+                            // child's own 🐾 card can say it (v1.396.0).
+                            label: _partLabelFor(containerSel, key) })),
       cfg.mode || 'practice-open');
   }
   recordCerPerformance(q, finalScore, finalTotal, cfg.mode || 'practice-open', answerText);
@@ -39637,6 +39648,13 @@ function fcNoteMistakes(q, parts, mode) {
         const why = _fcClip(p.mistakeWhy);
         if (why) rec.mistakeWhy = why;
       }
+      // 🐾 WHICH PART the answer was for (v1.396.0), so the child's own
+      // Learn-from-mistakes card can name it — the whole question is drawn on
+      // that card now, and nothing else on it says which of (a), (b) and (c)
+      // the answer beside it answers. ABSENT when the caller recorded none,
+      // never an empty string a later reader could take for a part.
+      const where = String(p.label || '').trim();
+      if (where) rec.part = where.slice(0, 60);
       mistakeLog.unshift(rec);
       setDoc(_mkRef(rec.id), rec).catch(e => console.warn('mistake log write', e));
     });
@@ -74886,6 +74904,9 @@ var MISTAKE_ANIMAL_RULE =
 // ---- The bank ------------------------------------------------------------
 const MK_COLLECTION = 'mistakeBank';
 const MK_STATUSES = ['pending', 'approved', 'rejected'];
+// …and the fourth chip, which is not a status: every entry whatever its pile,
+// so a teacher clearing the bank never has to guess which one a mistake is in.
+const MK_STATUS_ALL = 'all';
 const MK_HARVEST_SCAN = 400;    // newest attempts read on one 🔎
 const MK_HARVEST_MAX = 60;      // analysed on one ✨ press
 const MK_PAR = 3;               // AI calls in flight
@@ -74985,6 +75006,63 @@ function _mkQuestionImages(q) {
      down (`_mkFigure`'s rule). The harness pins the drawn path, so a real
      breakage is loud there rather than a card that silently goes back to
      reading as a paragraph. */
+/* 🐾 WHICH PART OF THE QUESTION THE MISTAKE IS IN (v1.396.0)
+   ---------------------------------------------------------------------
+   The WHOLE question is drawn on a card now — every part, every option — and
+   nothing on it said which of them the answer beside it was answering. On a
+   question with (a), (b) and (c), or with a multiple choice and a written
+   part, that is the one thing a child needs before the lesson means anything.
+
+   • `e.part` IS THE ITEM'S OWN LABEL, as the marking wrote it: "(b)",
+     "(b) Claim", "(b)(i) Answer", "Blank 2", or the bare "Answer" a question
+     with no lettered parts gets. It is read TWO ways and they are kept apart —
+     `_mkPartKey` is the PART, in the key `qPartMap` files blocks under, so the
+     drawn question can MARK the blocks this lesson is about; `_mkPartNote` is
+     the sentence a child READS.
+   • IT GOES THROUGH THE APP'S OWN PART VOCABULARY (`qPartLetterNormalize` /
+     `qSubNormalize` / `qPartKey` / `qPartKeyIn`), never a second reading of
+     what a part is. A label this block parsed its own way would file the
+     lesson under a letter the question does not have — and `i` is not a part
+     letter here (`QPART_ASSIGN` skips it, because it is the roman (i)), which
+     is exactly the kind of rule a private regex forgets.
+   • A KEY THAT NAMES NOTHING IN THE QUESTION MARKS NOTHING. A question
+     re-lettered since the mistake was filed would otherwise have the card
+     claim a part it cannot point at, which is worse than not pointing.
+   • A BARE "Answer" IS STILL WORTH SAYING, and that is the reported card: a
+     question whose choices are drawn under its wording, answered in writing,
+     where "the written answer" is the whole of what was missing. So it is
+     WORDED rather than dropped.
+   • NOTHING RECORDED SAYS NOTHING. A generated example is written against the
+     whole question, and an entry filed before the part travelled has none to
+     show. A guessed part is a lesson pointing at the wrong sub-question, so
+     nothing here guesses — the fix for an old entry is that new ones carry it. */
+const MK_PART_RE = /^[(\uff08]?\s*([a-z])\s*[)\uff09.]\s*(?:[(\uff08]\s*([ivx]+)\s*[)\uff09]\s*)?/i;
+function _mkPartKey(part) {
+  const m = MK_PART_RE.exec(String(part == null ? '' : part).trim());
+  if (!m) return '';
+  const letter = qPartLetterNormalize(m[1]);
+  return letter ? qPartKey(letter, qSubNormalize(m[2] || '')) : '';
+}
+/* What is left of the label once the marker has been read off it — "Claim",
+   "Reasoning", "Blank 2" — or '' for the bare "Answer" the marking writes when
+   there is nothing else to call it. */
+function _mkPartWhat(part) {
+  const s = String(part == null ? '' : part).trim();
+  const m = MK_PART_RE.exec(s);
+  const rest = (m && qPartLetterNormalize(m[1]) ? s.slice(m[0].length) : s).trim();
+  return /^answers?$/i.test(rest) ? '' : rest;
+}
+/* The ONE sentence every surface prints, so the teacher's card, the child's
+   card and the marker of their rewrite can never disagree about which part
+   this is. '' when the entry records none. */
+function _mkPartNote(e) {
+  const raw = String((e && e.part) || '').trim();
+  if (!raw) return '';
+  const key = _mkPartKey(raw), what = _mkPartWhat(raw);
+  if (key) return 'part ' + qPartLabel(key) + (what ? ' \u00b7 ' + what : '');
+  return what || 'the written answer';
+}
+
 const MK_Q_BLOCKS = ['text', 'part', 'image', 'table', 'mcq', 'fillblank'];
 
 /* The question's own blocks, in the question's own order. '' when there is
@@ -74996,34 +75074,46 @@ function _mkQuestionBlocksHtml(q, opts) {
   if (!shown.length) return '';
   const map = qPartMap(all);
   const load = opts && opts.eager ? 'eager' : 'lazy';
+  /* The blocks this lesson is about, through the app's own `qPartKeyIn` — so a
+     bare letter covers its own sub-parts, exactly as it does everywhere else.
+     A key that matches NOTHING here marks nothing at all rather than claiming
+     a part the question cannot show. */
+  const want = (opts && opts.part) || '';
+  const mine = new Set(want ? shown.filter(b => qPartKeyIn(qPartOf(map, b), want)) : []);
+  let marked = false;
   let html = '';
   shown.forEach(b => {
     const opens = qBlockOpensKey(b, map);
+    const here = mine.has(b);
+    // The "this part" flag goes on the FIRST block of the run and nowhere
+    // else: repeated down three blocks it stops reading as a pointer.
+    const flag = here && !marked ? (marked = true, '<span class="mk-qb-here">this part</span>') : '';
+    const cls = 'mk-qb' + (here ? ' mk-qb-this' : '');
     const tag = opens ? '<span class="mk-qb-part">' + escapeHtml(qPartLabel(opens)) + '</span>' : '';
     switch (b.type) {
       case 'text':
-        html += '<div class="mk-qb">' + tag + qPartBodyHtml(b) + '</div>';
+        html += '<div class="' + cls + '">' + tag + flag + qPartBodyHtml(b) + '</div>';
         break;
       case 'part':
-        html += '<div class="mk-qb">' + (b.label ? '<span class="mk-qb-part">' + escapeHtml(b.label) + '</span>' : tag) + (b.content || '') + '</div>';
+        html += '<div class="' + cls + '">' + (b.label ? '<span class="mk-qb-part">' + escapeHtml(b.label) + '</span>' : tag) + flag + (b.content || '') + '</div>';
         break;
       case 'image':
         if (!b.url) break;
-        html += '<div class="mk-qb mk-qb-fig">' + tag + '<img src="' + escapeHtml(transformImageUrl(b.url)) + '" loading="' + load + '" decoding="async" alt="" style="' + imgSizeStyle(b) + '">' +
+        html += '<div class="' + cls + ' mk-qb-fig">' + tag + flag + '<img src="' + escapeHtml(transformImageUrl(b.url)) + '" loading="' + load + '" decoding="async" alt="" style="' + imgSizeStyle(b) + '">' +
           (b.caption ? '<div class="mk-qb-cap">' + escapeHtml(b.caption) + '</div>' : '') + '</div>';
         break;
       case 'table':
-        html += '<div class="mk-qb mk-qb-table">' + tag + renderTableReadonly(b, '') + '</div>';
+        html += '<div class="' + cls + ' mk-qb-table">' + tag + flag + renderTableReadonly(b, '') + '</div>';
         break;
       case 'mcq': {
         const opts2 = (b.options || []).filter(Boolean);
         if (!opts2.length) break;
-        html += '<div class="mk-qb">' + tag + '<ol class="mk-qb-opts">' + opts2.map((o, i) =>
+        html += '<div class="' + cls + '">' + tag + flag + '<ol class="mk-qb-opts">' + opts2.map((o, i) =>
           '<li class="mk-qb-opt"><b>' + (i + 1) + '</b><span>' + (o.text || '') + '</span></li>').join('') + '</ol></div>';
         break;
       }
       case 'fillblank':
-        html += '<div class="mk-qb mk-qb-fb">' + tag + _fbSegments(b.text || '').map(p =>
+        html += '<div class="' + cls + ' mk-qb-fb">' + tag + flag + _fbSegments(b.text || '').map(p =>
           p.type === 'blank' ? '<span class="mk-qb-blank"></span>' : escapeHtml(p.text || '')).join('') + '</div>';
         break;
     }
@@ -75042,7 +75132,9 @@ function _mkQuestionHtml(e, opts) {
       '<img src="' + escapeHtml(transformImageUrl(u)) + '" loading="' + load + '" alt="">').join('') + '</div>' : '');
   try {
     const q = _docQById(String((e && e.questionId) || ''));
-    const drawn = q ? _mkQuestionBlocksHtml(q, opts) : '';
+    // The entry's own part, so the drawn question marks the blocks the lesson
+    // is about. A caller's own `part` still wins.
+    const drawn = q ? _mkQuestionBlocksHtml(q, Object.assign({ part: _mkPartKey(e && e.part) }, opts || {})) : '';
     return drawn ? '<div class="mk-qbody">' + drawn + '</div>' : asWritten;
   } catch (err) {
     console.warn('mistake card question render failed', err);
@@ -75250,6 +75342,11 @@ function _mkQuizOptions(correctId, n) {
 // =====================================================================
 let _mk = { bank: [], loaded: false, error: '', status: 'pending', animal: '', search: '',
             candidates: null, running: false, stop: false, progress: '', genOpen: false, expanded: {}, autoRan: false };
+/* 🗑 CLEARING THE BANK — the teacher reads it and deletes what they do not
+   want (v1.396.0). `_mkPicked` is a Set of IDS, never a flag on an entry:
+   those objects are replaced wholesale by every `mkReload`, every write and
+   every harvest, which would silently drop the tick. */
+const _mkPicked = new Set();
 
 /* AN ENTRY FILED UNDER THE OLD TEN-ANIMAL LIST STILL READS. The taxonomy
    became the nine Science Sidekicks' skills in v1.394.0, and every entry the
@@ -75314,11 +75411,12 @@ async function mkRender() {
   if (!_mk.autoRan && !_mk.error && !_mk.running) { _mk.autoRan = true; mkHarvest({ auto: true }); return; }
   const counts = { pending: 0, approved: 0, rejected: 0 };
   _mk.bank.forEach(e => { if (counts[e.status] != null) counts[e.status]++; });
-  const shown = _mkSort(_mk.bank.filter(e => e.status === _mk.status)
-    .filter(e => !_mk.animal || (_mk.animal === 'none' ? !mistakeAnimal(e.animal) : e.animal === _mk.animal))
-    .filter(e => !_mk.search || (e.questionTitle + ' ' + e.topic + ' ' + e.studentAnswer + ' ' + e.why).toLowerCase().includes(_mk.search.toLowerCase())));
+  const shown = _mkVisible();
+  _mkPruneSelection(shown);
+  const picked = shown.filter(e => _mkPicked.has(e.id));
+  const inStatus = _mk.bank.filter(e => _mk.status === MK_STATUS_ALL || e.status === _mk.status);
   const animalCounts = {};
-  _mk.bank.filter(e => e.status === _mk.status).forEach(e => { const k = mistakeAnimal(e.animal) ? e.animal : 'none'; animalCounts[k] = (animalCounts[k] || 0) + 1; });
+  inStatus.forEach(e => { const k = mistakeAnimal(e.animal) ? e.animal : 'none'; animalCounts[k] = (animalCounts[k] || 0) + 1; });
   const cands = _mk.candidates;
   let html = '';
   if (_mk.error) html += '<div class="mk-warn">' + _mkRulesNote() + '</div>';
@@ -75335,6 +75433,7 @@ async function mkRender() {
   </div>`;
   html += `<div class="mk-filters">
     ${MK_STATUSES.map(s => `<button class="mk-chip ${_mk.status === s ? 'on' : ''}" onclick="mkSetStatus('${s}')">${s === 'pending' ? '🕒 Pending' : s === 'approved' ? '✅ Approved' : '🗑 Rejected'} <b>${counts[s]}</b></button>`).join('')}
+    <button class="mk-chip ${_mk.status === MK_STATUS_ALL ? 'on' : ''}" onclick="mkSetStatus('${MK_STATUS_ALL}')" title="Every entry in the bank, whatever its status — so a mistake can be found and removed without guessing which pile it is in">📚 All <b>${_mk.bank.length}</b></button>
     <span class="mk-sep"></span>
     <button class="mk-chip ${_mk.animal === '' ? 'on' : ''}" onclick="mkSetAnimal('')">All animals</button>
     ${MISTAKE_ANIMALS.map(m => `<button class="mk-chip ${_mk.animal === m.id ? 'on' : ''}" onclick="mkSetAnimal('${m.id}')" title="${escapeHtml(m.name)}">${m.emoji} ${escapeHtml(m.animal.replace(/^The /, ''))} <b>${animalCounts[m.id] || 0}</b></button>`).join('')}
@@ -75344,6 +75443,12 @@ async function mkRender() {
   if (!shown.length) {
     html += '<div class="mk-empty">' + (_mk.bank.length ? 'Nothing here under this filter.' : 'The bank is empty. Press 🔎 Find wrong answers to read the attempt log, or ✨ Write wrong answers to have some written for a topic.') + '</div>';
   } else {
+    html += `<div class="mk-bulk">
+      <label class="mk-bulk-all"><input type="checkbox" class="mk-pick" ${picked.length === shown.length ? 'checked' : ''} onchange="mkPickAll(this.checked)"> Select all ${shown.length} shown</label>
+      <span class="mk-bulk-n">${picked.length ? picked.length + ' selected' : ''}</span>
+      <button class="btn btn-outline mk-del" onclick="mkDeleteSelected()" ${picked.length ? '' : 'disabled'}>🗑 Delete selected</button>
+      <button class="btn btn-outline mk-del" onclick="mkDeleteAllShown()" ${_mk.running ? 'disabled' : ''}>🗑 Delete all ${shown.length} shown</button>
+    </div>`;
     html += shown.map(_mkCardHtml).join('');
   }
   host.innerHTML = html;
@@ -75351,7 +75456,7 @@ async function mkRender() {
   if (c) c.textContent = counts.pending + ' pending · ' + counts.approved + ' approved';
 }
 function mkReload() { _mk.loaded = false; mkRender(); }
-function mkSetStatus(s) { if (MK_STATUSES.includes(s)) { _mk.status = s; mkRender(); } }
+function mkSetStatus(s) { if (s === MK_STATUS_ALL || MK_STATUSES.includes(s)) { _mk.status = s; mkRender(); } }
 function mkSetAnimal(a) { _mk.animal = a; mkRender(); }
 function mkSearch(v) { _mk.search = String(v || ''); clearTimeout(_mk._searchT); _mk._searchT = setTimeout(mkRender, 180); }
 function mkToggleQ(id) { _mk.expanded[id] = !_mk.expanded[id]; mkRender(); }
@@ -75365,8 +75470,11 @@ function _mkAnimalSelectHtml(current, attr) {
 function _mkCardHtml(e) {
   const m = mistakeAnimal(e.animal);
   const open = !!_mk.expanded[e.id];
-  return `<div class="mk-card" data-mk="${escapeHtml(e.id)}">
+  // WHICH PART this lesson is about, in the same words the class reads.
+  const where = _mkPartNote(e);
+  return `<div class="mk-card${_mkPicked.has(e.id) ? ' picked' : ''}" data-mk="${escapeHtml(e.id)}">
     <div class="mk-card-head">
+      <input type="checkbox" class="mk-pick" ${_mkPicked.has(e.id) ? 'checked' : ''} onchange="mkTogglePick('${escapeHtml(e.id)}')" title="Tick to delete this one with the others">
       ${_mkAnimalSelectHtml(e.animal, 'data-f="animal"')}
       <span class="mk-badge ${e.source === 'generated' ? 'gen' : 'stu'}">${e.source === 'generated' ? '✨ written by the AI' : '📝 a student wrote this'}</span>
       ${e.filedBy === MK_FILED_MARKING ? '<span class="mk-badge mark" title="The marker named this habit on the answer itself; nothing has been tidied. Read it as written before you approve it.">🐾 filed from the marking</span>' : ''}
@@ -75374,7 +75482,7 @@ function _mkCardHtml(e) {
       <span class="mk-meta">${escapeHtml([e.topic, e.level].filter(Boolean).join(' · '))}</span>
     </div>
     <div class="mk-q">
-      <div class="mk-q-title">${escapeHtml(e.questionTitle || 'Untitled question')}${e.part ? ' <span class="mk-part">' + escapeHtml(e.part) + '</span>' : ''}</div>
+      <div class="mk-q-title">${escapeHtml(e.questionTitle || 'Untitled question')}${where ? ' <span class="mk-part">' + escapeHtml(where) + '</span>' : ''}</div>
       ${open
         ? `<div class="mk-q-full">${_mkQuestionHtml(e)}</div>
       <button class="mk-qtoggle" onclick="mkToggleQ('${escapeHtml(e.id)}')">▴ Show less</button>`
@@ -75469,16 +75577,104 @@ async function mkPending(id) {
 }
 function mkDelete(id) {
   if (!_canAuthor()) return;
-  showConfirm('Delete this entry?', 'It leaves the mistake bank for good. The attempt it came from is untouched, and would be found again by 🔎.', async () => {
-    const col = _mkBankCol();
-    if (!col) return;
+  showConfirm('Delete this entry?', 'It leaves the mistake bank for good. The attempt it came from is untouched, and would be found again by 🔎.', () => _mkDeleteMany([id], 'this entry'));
+}
+
+/* 🗑 READING THE BANK AND CLEARING IT (v1.396.0)
+   ---------------------------------------------------------------------
+   Every entry has always had its own 🗑, and the bank still filled up: a bad
+   harvest is forty entries, forty confirms is not something anybody works
+   through, and the three status chips meant a teacher looking for ONE mistake
+   had to guess which pile it was in first. So: a 📚 All chip, a search that
+   really searches, a tick on every card and one press for the lot — the rules
+   `_vetDeleteMany` already proved on the vetting list.
+
+   • "ALL" MEANS EVERY CARD THE TEACHER CAN SEE. `_mkVisible` is the ONE place
+     that set is worked out — the status chip, the animal chip and the search
+     box decide it — and the cards, the tick-all box, 🗑 Delete selected and
+     🗑 Delete all shown all read it. Deleting entries hidden behind a filter
+     is the one outcome nobody could have predicted from the button they
+     pressed, so the confirm SAYS how many are going and how many are spared.
+   • THE DELETES ARE AWAITED, ONE DOCUMENT AT A TIME. A batch has to be able
+     to report that four of forty would not go, and an entry leaves `_mk.bank`
+     only once its document really went — a page that has dropped an entry the
+     database still holds looks perfectly right until the next sign-in.
+   • THE SELECTION IS PRUNED ON EVERY RENDER (`_mkPruneSelection`), in the
+     renderer rather than in each path that can remove an entry, which is what
+     covers a path added later. "3 selected" outliving the cards it counted is
+     how the wrong entry gets deleted.
+   • IT IS THE ADMIN'S, CHECKED IN THE HANDLER. A student's device renders no
+     admin page at all, and a hidden button is never the lock.
+   • THE STUDENT'S OWN LOG IS NOT TOUCHED. `users/{uid}/mistakes` is the
+     child's private record of their own wrong answers; this clears the class
+     BANK, which is the teacher's. */
+function _mkHaystack(e) {
+  const m = mistakeAnimal(e && e.animal);
+  return [e.questionTitle, e.topic, e.topic2, e.level, e.part, e.question,
+          e.studentAnswer, e.why, e.fixed, e.hint, m && m.animal, m && m.name]
+    .filter(Boolean).join(' ').toLowerCase();
+}
+function _mkVisible() {
+  const q = String(_mk.search || '').trim().toLowerCase();
+  return _mkSort(_mk.bank
+    .filter(e => _mk.status === MK_STATUS_ALL || e.status === _mk.status)
+    .filter(e => !_mk.animal || (_mk.animal === 'none' ? !mistakeAnimal(e.animal) : e.animal === _mk.animal))
+    .filter(e => !q || _mkHaystack(e).includes(q)));
+}
+function _mkPruneSelection(shown) {
+  const live = new Set((shown || []).map(e => e.id));
+  Array.from(_mkPicked).forEach(id => { if (!live.has(id)) _mkPicked.delete(id); });
+}
+function mkTogglePick(id) {
+  if (_mkPicked.has(id)) _mkPicked.delete(id); else _mkPicked.add(id);
+  mkRender();
+}
+function mkPickAll(on) {
+  const shown = _mkVisible();
+  if (on) shown.forEach(e => _mkPicked.add(e.id)); else shown.forEach(e => _mkPicked.delete(e.id));
+  mkRender();
+}
+async function _mkDeleteMany(ids, what) {
+  if (!_canAuthor()) return;
+  const col = _mkBankCol();
+  if (!col) { showToast('The mistake bank could not be opened.', 'error'); return; }
+  const list = (ids || []).filter(Boolean);
+  if (!list.length) return;
+  let gone = 0, failed = 0, lastErr = '';
+  _mk.running = true; _mk.progress = 'Deleting ' + list.length + '…'; mkRender();
+  for (const id of list) {
     try {
       await deleteDoc(doc(col, id));
       _mk.bank = _mk.bank.filter(x => x.id !== id);
-      mkSyncBadge();
-      mkRender();
-    } catch (err) { showToast('Could not delete: ' + ((err && err.message) || err), 'error'); }
-  });
+      _mkPicked.delete(id);
+      gone++;
+    } catch (err) { failed++; lastErr = (err && err.message) || String(err); }
+  }
+  _mk.running = false;
+  _mk.progress = 'Deleted ' + gone + ' ' + (what || 'entries') + (failed ? ' — ' + failed + ' would not go: ' + lastErr : '') + '.';
+  mkSyncBadge();
+  mkRender();
+  if (failed) showToast(failed + ' could not be deleted: ' + lastErr, 'error');
+}
+function mkDeleteSelected() {
+  if (!_canAuthor()) return;
+  const shown = _mkVisible();
+  _mkPruneSelection(shown);
+  const ids = shown.filter(e => _mkPicked.has(e.id)).map(e => e.id);
+  if (!ids.length) { showToast('Tick the entries you want to remove first.', 'info'); return; }
+  showConfirm('Delete ' + ids.length + ' selected ' + (ids.length === 1 ? 'entry' : 'entries') + '?',
+    'They leave the mistake bank for good. The attempts they came from are untouched, and 🔎 would find them again.',
+    () => _mkDeleteMany(ids, 'selected'));
+}
+function mkDeleteAllShown() {
+  if (!_canAuthor()) return;
+  const shown = _mkVisible();
+  if (!shown.length) return;
+  const spared = _mk.bank.length - shown.length;
+  showConfirm('Delete all ' + shown.length + ' shown?',
+    'Every entry ON SCREEN under this filter goes, for good' + (spared ? ' — the other ' + spared + ' in the bank are not touched' : '') +
+    '. The attempts they came from are untouched, and 🔎 would find them again.',
+    () => _mkDeleteMany(shown.map(e => e.id), 'shown'));
 }
 
 // ---- 🔎 Harvest -------------------------------------------------------------
@@ -75779,7 +75975,7 @@ function _mkOwnEntries(log, findQ) {
       questionTitle: _mkClip(rec.qTitle || q.title || '', 200),
       topic: String(rec.topic || q.topic || ''),
       level: getTopicLevel(String(rec.topic || q.topic || '')) || '',
-      part: '',
+      part: String(rec.part || ''),
       question: question,
       images: _mkQuestionImages(q),
       expected: expected,
@@ -75945,6 +76141,10 @@ function _mkRenderSession(host) {
   const e = _mkCur();
   const m = mistakeAnimal(e.animal);
   const quizMode = s.mode === 'learn' || s.mode === 'quiz';
+  // WHICH PART the answer beside the question answers (v1.396.0). The whole
+  // question is drawn, so without this a child reading a three-part question
+  // has no way to tell which sub-question the lesson is about.
+  const where = _mkPartNote(e);
   if (quizMode && !s.opts) { s.opts = _mkQuizOptions(e.animal, MK_QUIZ_OPTIONS); s.startedAt = Date.now(); }
   const answered = quizMode ? s.pick != null : true;
   let html = `<div class="mk-sess-head">
@@ -75954,7 +76154,8 @@ function _mkRenderSession(host) {
   </div>
   <div class="mk-round">
     <div class="mk-round-q">
-      <div class="mk-round-label">The question${e.part ? ' · part ' + escapeHtml(e.part) : ''}</div>
+      <div class="mk-round-label">The question</div>
+      ${where ? `<div class="mk-where">🐾 The mistake is in <b>${escapeHtml(where)}</b></div>` : ''}
       ${_mkQuestionHtml(e, { eager: true })}
     </div>
     <div class="mk-round-a">
@@ -76027,6 +76228,10 @@ async function mkCheckRewrite() {
        never handed the exemplars — only the correct answer on the entry. */
     const sys = 'You are marking a Singapore primary science pupil\'s rewritten answer.\n' +
       'THE QUESTION:\n' + e.question + '\n' +
+      // The part the answer is FOR, when the entry records one: handed the whole
+      // question and one part's model answer, a marker otherwise expects the
+      // whole question answered and marks a correct rewrite down for being short.
+      (_mkPartNote(e) ? 'THE PART BEING ANSWERED: ' + _mkPartNote(e) + '\n' : '') +
       'THE CORRECT ANSWER: ' + (e.fixed || e.expected) + '\n' +
       'THE MISTAKE the pupil was asked to avoid: ' + mistakeAnimalLabel(e.animal) + ' — ' + (e.why || '') + '\n' +
       'THE PUPIL\'S REWRITE: "' + text + '"\n' +
@@ -76103,6 +76308,10 @@ window.mkApprove = mkApprove;
 window.mkReject = mkReject;
 window.mkPending = mkPending;
 window.mkDelete = mkDelete;
+window.mkTogglePick = mkTogglePick;
+window.mkPickAll = mkPickAll;
+window.mkDeleteSelected = mkDeleteSelected;
+window.mkDeleteAllShown = mkDeleteAllShown;
 window.mkSaveCard = mkSaveCard;
 window.mkGenToggle = mkGenToggle;
 window.mkGenerateRun = mkGenerateRun;

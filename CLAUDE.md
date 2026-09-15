@@ -5913,6 +5913,113 @@ question prints it, the options as a numbered list.
   goes back to being a paragraph.
 - Run **`node tools/mistake-bank-tests.mjs`** after touching any of it.
 
+## 🐾 Which PART of the question the mistake is in (v1.396.0)
+
+`MK_PART_RE` / `_mkPartKey` / `_mkPartWhat` / **`_mkPartNote`** (beside
+`MK_Q_BLOCKS` — search `WHICH PART OF THE QUESTION THE MISTAKE IS IN`), the
+`opts.part` marking inside `_mkQuestionBlocksHtml`, the `.mk-where` line on the
+practice card, the chip on the teacher's card, the `THE PART BEING ANSWERED`
+line in `mkCheckRewrite`'s prompt — and the half that carries it there:
+**`_partLabelFor`** (beside `_attemptAnswers`), the `label` on
+`fcNoteMistakes`'s parts, `rec.part` on the child's own log, and
+`_mkOwnEntries`' read of it. Plus `.mk-qb-this` / `.mk-qb-here` / `.mk-where`
+in `index.html`.
+
+v1.395.0 drew the WHOLE question on a card — every part, every option — and
+nothing on it said which of them the answer beside it was answering. On a
+question with (a), (b) and (c), or with a multiple choice and a written part,
+that is the one thing a child needs before the lesson means anything.
+
+- **`e.part` IS THE ITEM'S OWN LABEL, as the marking wrote it** — `"(b)"`,
+  `"(b) Claim"`, `"(b)(i) Answer"`, `"Blank 2"`, or the bare `"Answer"` a
+  question with no lettered parts gets. It is read TWO ways and they are kept
+  apart: **`_mkPartKey`** is the PART, in the key `qPartMap` files blocks under,
+  so the drawn question can MARK the blocks this lesson is about;
+  **`_mkPartNote`** is the sentence a child READS, and it is the ONE wording —
+  the teacher's card, the practice card and the marker of the rewrite all print
+  it, so they can never disagree about which part this is.
+- **IT GOES THROUGH THE APP'S OWN PART VOCABULARY** (`qPartLetterNormalize` /
+  `qSubNormalize` / `qPartKey` / `qPartKeyIn`), never a second reading of what a
+  part is. A label parsed privately would file the lesson under a letter the
+  question does not have — and **`i` is not a part letter here**
+  (`QPART_ASSIGN` skips it, because it is the roman `(i)`), which is exactly the
+  kind of rule a private regex forgets.
+- **A KEY THAT NAMES NOTHING IN THE QUESTION MARKS NOTHING.** A question
+  re-lettered since the mistake was filed would otherwise have the card claim a
+  part it cannot point at, which is worse than not pointing.
+- **The marked blocks are ACCENTED, never dimmed**, and the "this part" flag is
+  on the FIRST block of the run only: every other part is context the child
+  still needs to read, and a flag repeated down three blocks stops reading as a
+  pointer.
+- **A BARE "Answer" IS WORDED RATHER THAN DROPPED** — *"the written answer"*.
+  That is the reported card: a question whose choices are drawn under its
+  wording, answered in writing, where naming which of the two was the whole of
+  what was missing. Printing the raw `"Answer"` instead would put *"part
+  Answer"* over every single-part question, which is why the old header suffix
+  said nothing worth reading.
+- **NOTHING RECORDED SAYS NOTHING.** A generated example is written against the
+  whole question, and an entry filed before the part travelled has none to show.
+  A guessed part is a lesson pointing at the wrong sub-question, so nothing here
+  guesses — `e.expected` could be matched against the question's per-part model
+  answers and deliberately is not.
+- **THE PART TRAVELS, AND `_partLabelFor` IS THE ONE DERIVATION.** It is read
+  off the KEY, the rule v1.394.0 already set for the habit itself: a further
+  argument threaded through `_setPartResult`'s six call sites would be six
+  chances to forget one. The attempt row, the child's own mistake log and —
+  through both — the 🐾 Mistake Bank now read that same function.
+  **`_mkOwnEntries` hard-coded `part: ''`**, so a child studying their OWN
+  mistakes could never be told which part it was; `fcNoteMistakes` writes
+  `rec.part` when a label was recorded and leaves it **ABSENT** otherwise, never
+  an empty string a later reader could take for a part.
+- **The marker of a rewrite is told the part.** Handed the whole question and
+  ONE part's model answer, it otherwise expects the whole question answered and
+  marks a correct rewrite down for being short.
+- Run **`node tools/mistake-bank-tests.mjs`** after touching any of it.
+
+## 🗑 The teacher reads the mistake bank and clears it (v1.396.0)
+
+`MK_STATUS_ALL` / `_mkPicked` / `_mkHaystack` / **`_mkVisible`** /
+`_mkPruneSelection` / `mkTogglePick` / `mkPickAll` / **`_mkDeleteMany`** /
+`mkDeleteSelected` / `mkDeleteAllShown` (search `READING THE BANK AND CLEARING
+IT`), the 📚 **All** chip and the `#mkBulk` bar in `mkRender`, the tick on every
+card, and `.mk-pick` / `.mk-bulk` / `.mk-card.picked` in `index.html`.
+
+Every entry has always had its own 🗑 and the bank still filled up. A bad
+harvest is forty entries, forty confirms is not something anybody works
+through, and the three status chips meant a teacher looking for ONE mistake had
+to guess which pile it was in first.
+
+- **"ALL" MEANS EVERY CARD THE TEACHER CAN SEE.** `_mkVisible` is the ONE place
+  that set is worked out — the status chip, the animal chip and the search box
+  decide it — and the cards, the tick-all box, 🗑 Delete selected and 🗑 Delete
+  all shown all read it. Deleting entries hidden behind a filter is the one
+  outcome nobody could have predicted from the button they pressed, so the
+  confirm **says how many are going and how many are spared**. It is
+  `_vetDeleteMany`'s rule on the vetting list, stated once more here.
+- **📚 All is a fourth chip and NOT a status.** `MK_STATUSES` still holds the
+  three real ones, so nothing that writes a status can write `'all'`.
+- **THE DELETES ARE AWAITED, ONE DOCUMENT AT A TIME.** A batch has to be able to
+  report that four of forty would not go, and an entry leaves `_mk.bank` only
+  once its document really went — a page that has dropped an entry the database
+  still holds looks perfectly right until the next sign-in.
+- **THE SELECTION IS PRUNED ON EVERY RENDER**, in the renderer rather than in
+  each path that can remove an entry, which is what covers a path added later.
+  "3 selected" outliving the cards it counted is how the wrong entry gets
+  deleted. The ticks live in a `Set` of **IDS**, never a flag on an entry: those
+  objects are replaced wholesale by every reload, write and harvest.
+- **`.mk-pick` must set `appearance: auto`** — Tailwind's preflight sets it to
+  `none`, which leaves an invisible white square exactly where the control the
+  teacher is looking for should be. The usual trap.
+- **IT IS THE ADMIN'S, CHECKED IN THE HANDLER.** A hidden button is never the
+  lock, and this one both reads the bank and deletes from it.
+- **THE SEARCH REALLY SEARCHES** (`_mkHaystack`): the question wording, the
+  correct answer, the part and the animal's own name, not just the title. A
+  teacher cannot delete what they cannot find.
+- **THE CHILD'S OWN LOG IS NOT TOUCHED.** `users/{uid}/mistakes` is their
+  private record of their own wrong answers; this clears the class BANK, which
+  is the teacher's.
+- Run **`node tools/mistake-bank-tests.mjs`** after touching any of it.
+
 ## 🐾 The mistake analysis that FOLLOWS a sidekick (v1.393.0)
 
 `science-mistakes.js` (`prepareMistakeAnalysis` / `mountMistakeAnalysis` /
@@ -6060,6 +6167,32 @@ Three things a wrong answer used to lose the moment its card was swept.
   any of it.
 
 ## House rules
+- After touching **🐾 which part the mistake is in** (`MK_PART_RE`,
+  `_mkPartKey`, `_mkPartWhat`, `_mkPartNote`, `_mkQuestionBlocksHtml`'s
+  `opts.part`, `_partLabelFor`, the `label` on `fcNoteMistakes`'s parts,
+  `rec.part`, `_mkOwnEntries`' read of it, or the `.mk-qb-this` / `.mk-qb-here`
+  / `.mk-where` rules) — or **🗑 clearing the bank** (`MK_STATUS_ALL`,
+  `_mkPicked`, `_mkHaystack`, `_mkVisible`, `_mkPruneSelection`,
+  `mkTogglePick`, `mkPickAll`, `_mkDeleteMany`, `mkDeleteSelected`,
+  `mkDeleteAllShown`, the 📚 All chip, the bulk bar, or `.mk-pick`) — run
+  `node tools/mistake-bank-tests.mjs` **and**
+  `node tools/usage-tracker-tests.mjs`, which pins the one derivation the part
+  now rides. Every failure is silent and the card still paints. Say nothing
+  and the lesson is about a three-part question with no pointer, which is the
+  fault this fixed; GUESS and it points at the wrong sub-question, which is
+  worse — so a part naming no block in the drawn question must keep marking
+  nothing. Parse the label privately instead of through the app's own part
+  vocabulary and `(i)` is filed as part i, which is not a part letter here.
+  Print the raw stored label and every single-part question reads "part
+  Answer". Write `rec.part` as an empty string rather than leaving it absent
+  and a later reader takes it for a part. And on the DELETE half: scope
+  🗑 Delete all to `_mk.bank` rather than to `_mkVisible()` and it destroys the
+  entries the teacher had filtered away and never saw; drop an entry from the
+  page on a delete the database refused and it is back at the next sign-in;
+  stop pruning the ticks and "3 selected" outlives the cards it counted; hold a
+  tick as a flag on an entry and every reload drops it; gate the delete on the
+  button rather than in the handler and the page has no lock at all; and let
+  `appearance: auto` off `.mk-pick` and the tick is an invisible white square.
 - After touching **🐾 the question on a mistake card** (`MK_Q_BLOCKS`,
   `_mkQuestionBlocksHtml`, `_mkQuestionHtml`, the call in `_mkRenderSession` or
   `_mkCardHtml`, or the `.mk-qbody` / `.mk-qb-*` rules), run

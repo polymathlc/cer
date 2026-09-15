@@ -10507,6 +10507,16 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           .mk-chip.on b{ color:var(--primary); }
           .mk-search{ font:inherit; font-size:0.84rem; padding:8px 12px; border:1px solid var(--border); border-radius:999px; min-width:220px; flex:1; }
           .mk-card{ border:1px solid var(--border); border-radius:16px; background:var(--surface,#fff); padding:18px 22px 16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+          /* 🗑 Clearing the bank (v1.396.0). `appearance:auto` is not optional —
+             Tailwind's preflight sets it to none, which leaves an invisible
+             white square exactly where the control the teacher is looking for
+             should be. The usual trap. */
+          .mk-pick{ appearance:auto; -webkit-appearance:auto; width:17px; height:17px; accent-color:var(--primary); cursor:pointer; flex:0 0 auto; }
+          .mk-card.picked{ border-color:var(--primary); box-shadow:0 0 0 2px var(--primary-light,#eef7f1); }
+          .mk-bulk{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:12px 16px; margin-bottom:14px; border:1px solid var(--border); border-radius:14px; background:var(--surface-alt,#fafbfa); }
+          .mk-bulk-all{ display:flex; gap:8px; align-items:center; font-size:0.84rem; font-weight:700; cursor:pointer; }
+          .mk-bulk-n{ font-size:0.82rem; color:var(--primary); font-weight:700; flex:1; }
+          .mk-bulk .btn{ font-size:0.8rem; padding:7px 14px; }
           .mk-card-head{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
           .mk-animal{ font:inherit; font-size:0.84rem; padding:7px 10px; border:1px solid var(--border); border-radius:10px; background:#fff; max-width:100%; }
           .mk-badge{ font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:999px; border:1px solid var(--border); color:var(--text-muted); }
@@ -10548,6 +10558,17 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           .mk-qb-opt span{ flex:1; min-width:0; }
           .mk-qb-opt img{ max-width:100%; height:auto; }
           .mk-qb-blank{ display:inline-block; min-width:96px; border-bottom:1px solid var(--text-muted); margin:0 3px; }
+          /* 🐾 WHICH PART the lesson is about (v1.396.0). The whole question is
+             drawn, so the blocks this mistake belongs to are marked IN it —
+             accented rather than dimmed, because every other part is context a
+             child still needs to read. The "this part" flag is on the first
+             block of the run only; repeated down three it stops reading as a
+             pointer. Nothing is marked when the recorded part names no block
+             here, so the card never claims to point at something it cannot. */
+          .mk-qb-this{ border-left:3px solid var(--primary); padding-left:12px; margin-left:-2px; background:var(--primary-light,#eef7f1); border-radius:0 8px 8px 0; padding-top:6px; padding-bottom:6px; padding-right:10px; }
+          .mk-qb-here{ display:inline-block; font-size:0.68rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:#fff; background:var(--primary); padding:2px 8px; border-radius:999px; margin-right:8px; vertical-align:2px; }
+          .mk-where{ font-size:0.86rem; color:var(--primary); background:var(--primary-light,#eef7f1); border:1px solid var(--primary); border-radius:10px; padding:7px 12px; margin:0 0 10px; line-height:1.5; }
+          .mk-where b{ font-weight:800; }
           .mk-q-full{ margin-top:6px; }
           .mk-qtoggle{ font:inherit; font-size:0.78rem; color:var(--text-muted); background:none; border:none; padding:4px 0 0; cursor:pointer; }
           .mk-qtoggle:hover{ color:var(--primary); }

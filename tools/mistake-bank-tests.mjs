@@ -60,7 +60,8 @@ const prelude = `
   }
   async function addDoc(col, data) { writes.push(data); return { id: 'w' + writes.length }; }
   async function setDoc(ref, data, opts) { merges.push({ id: ref.id, data, opts }); }
-  async function deleteDoc() {}
+  const deletes = [];
+  async function deleteDoc(ref) { deletes.push(ref && ref.id); }
   function deleteField() { return DEL; }
   let currentUser = { uid: 'admin1', email: 'chungzhikai@gmail.com', name: 'Mr Chung', role: 'admin' };
   let adminUid = 'admin1';
@@ -100,7 +101,8 @@ const prelude = `
   function _parseAIJson(raw) { return JSON.parse(raw); }
   const toasts = [];
   function showToast(m, t) { toasts.push({ m, t }); }
-  function showConfirm(t, m, fn) { fn(); }
+  const confirms = [];
+  function showConfirm(t, m, fn) { confirms.push({ t: t, m: m }); return fn(); }
   const document = { getElementById: () => null, querySelector: () => null };
   const CSS = { escape: s => s };
   // The animated figure and the shared motion preference are imported from
@@ -111,9 +113,20 @@ const prelude = `
   // The question renderers a card draws a bank question with. Each is the real
   // function's shape and nothing more — this harness checks WHICH blocks are
   // drawn and what is never drawn, not how a table or a part label looks.
-  function qPartMap(blocks) { const m = new Map(); (blocks || []).forEach(b => { if (b && b.part) m.set(b, b.part); }); return m; }
+  // The part vocabulary, in the REAL shape: the marking of which part a
+  // mistake is in is read through it, so a stub that is not the app's own
+  // rule would check nothing. qPartMap INHERITS forward, as the app's does.
+  // (No backticks anywhere in here - this is inside a template literal.)
+  function qPartMap(blocks) { const m = new Map(); let cur = ''; (blocks || []).forEach(b => { if (!b) return; if (b.part) cur = b.part; m.set(b, cur); }); return m; }
+  function qPartOf(map, b) { return (map && b && map.get(b)) || ''; }
   function qBlockOpensKey(b, map) { return (b && b.part) || ''; }
-  function qPartLabel(p) { return p ? '(' + p + ')' : ''; }
+  function qPartLetterOf(k) { const s = String(k == null ? '' : k); const i = s.indexOf('.'); return i < 0 ? s : s.slice(0, i); }
+  function qPartSubOf(k) { const s = String(k == null ? '' : k); const i = s.indexOf('.'); return i < 0 ? '' : s.slice(i + 1); }
+  function qPartLetterNormalize(v) { const t = String(v == null ? '' : v).trim().toLowerCase().replace(/[()\\s.]/g, ''); return t && 'abcdefghjklmnopqrstuvwxyz'.indexOf(t) >= 0 ? t : ''; }
+  function qSubNormalize(v) { const t = String(v == null ? '' : v).trim().toLowerCase().replace(/[()\\s.]/g, ''); return ['i','ii','iii','iv','v','vi','vii','viii'].indexOf(t) >= 0 ? t : ''; }
+  function qPartKey(letter, sub) { return letter && sub ? letter + '.' + sub : (letter || (sub ? '.' + sub : '')); }
+  function qPartKeyIn(key, want) { const k = String(key || ''), w = String(want || ''); if (!w) return !k; return qPartSubOf(w) ? k === w : qPartLetterOf(k) === w; }
+  function qPartLabel(p) { const L = qPartLetterOf(p), S = qPartSubOf(p); return (L ? '(' + L + ')' : '') + (S ? '(' + S + ')' : ''); }
   function qPartBodyHtml(b) { return (b && b.content) || ''; }
   function imgSizeStyle(b) { return 'height:auto;max-width:70%'; }
   function renderTableReadonly(b, cls) { if (b && b.boom) throw new Error('the table renderer blew up'); return '<table><tr><td>' + escapeHtml((b && b.cell) || '') + '</td></tr></table>'; }
@@ -139,6 +152,10 @@ const api = new Function('scienceQuestionContentKey',prelude + block + `
     MK_HARVEST_MAX, MK_MIN_ANSWER_WORDS, MK_QUIZ_OPTIONS, MK_SESSION_MAX, MK_COLLECTION,
     _mkEntryFromAnalysis, _mkCandidatesFrom, _mkSort, _mkVisibleToStudent, _mkQuizOptions, _mkModelAnswer,
     _mkQuestionHtml, _mkQuestionBlocksHtml, MK_Q_BLOCKS,
+    _mkPartKey, _mkPartWhat, _mkPartNote, _mkCardHtml,
+    MK_STATUS_ALL, _mkVisible, _mkHaystack, _mkPruneSelection, _mkDeleteMany,
+    mkTogglePick, mkPickAll, mkDeleteSelected, mkDeleteAllShown, mkSetStatus, mkSetAnimal, mkDelete,
+    picked: () => _mkPicked, deletes, confirms,
     _mkAnalysePrompt, _mkGenPrompt, mkAnalyseCandidate, mkGenerateOne, _mkStudentPool, _mkLogQuiz,
     _mkMarkedEntry, _mkFileMarked, _mkHarvestNote, mkHarvest, _mkOwnEntries, _mkOwnSectionHtml, MK_FILED_MARKING, MK_FILED_AI,
     setAttempts: a => { attemptDocs = a; }, setLog: l => { mistakeLog = l; }, state: () => _mk, _mkNormaliseEntry, loadAdmin: () => mkLoad(true),
@@ -534,7 +551,7 @@ ok('…and must read as an honest attempt', /Never a parody, never obviously sil
   ok('a failure to draw is the stored wording, never a practice card that breaks',
      /The stored wording stands/.test(boom) && !/mk-qbody/.test(boom));
 
-  const sess = block.slice(block.indexOf('function _mkRenderSession'), block.indexOf('function mkPick'));
+  const sess = block.slice(block.indexOf('function _mkRenderSession'), block.indexOf('function mkPick('));
   ok('the practice card draws the question through the ONE renderer',
      /_mkQuestionHtml\(e, \{ eager: true \}\)/.test(sess) && !/escapeHtml\(e\.question\)/.test(sess));
   const teacher = block.slice(block.indexOf('function _mkCardHtml'), block.indexOf('function _mkReadCard'));
@@ -547,6 +564,153 @@ ok('…and must read as an honest attempt', /Never a parody, never obviously sil
      /function _mkFeedQuestion\(e\) \{\s*return \{ id: 'mistake:' \+ e\.id, blocks: \[\{ type: 'text', content: e\.question \|\| '' \}/.test(block));
   ok('the drawn question has its stylesheet',
      /\.mk-qbody\b/.test(html) && /\.mk-qb-opts\b/.test(html) && /\.mk-qb-blank\b/.test(html) && /\.mk-qb-fig\b/.test(html) && /\.mk-qtoggle\b/.test(html));
+}
+
+/* ---------- 🐾 WHICH PART OF THE QUESTION THE MISTAKE IS IN (v1.396.0) ----------
+   The whole question is drawn now, so the card has to say which of (a), (b)
+   and (c) — or which of a multiple choice and a written part — the answer
+   beside it answers. Both directions are silent and the card still paints:
+   say nothing and the lesson is about a question with three sub-questions and
+   no pointer, guess and it points at the wrong one. ---------------------- */
+{
+  ok('a bracketed letter is read as a PART KEY', api._mkPartKey('(b) Claim') === 'b');
+  ok('a roman sub-part comes through with its letter', api._mkPartKey('(b)(i) Answer') === 'b.i');
+  ok('a bare letter form is read too', api._mkPartKey('c) Reasoning') === 'c');
+  ok('a label with no marker is no part', api._mkPartKey('Answer') === '' && api._mkPartKey('Blank 2') === '' && api._mkPartKey('') === '');
+  ok('(i) alone is NOT a part letter — the app skips i, because it is the roman',
+     api._mkPartKey('(i) Answer') === '');
+
+  ok('what is left of the label is kept', api._mkPartWhat('(b) Claim') === 'Claim' && api._mkPartWhat('Blank 2') === 'Blank 2');
+  ok('a bare "Answer" is not a field worth printing', api._mkPartWhat('(b) Answer') === '' && api._mkPartWhat('Answer') === '');
+
+  ok('a lettered part reads as a part', api._mkPartNote({ part: '(b) Answer' }) === 'part (b)');
+  ok('a CER field is named beside its part', api._mkPartNote({ part: '(b) Reasoning' }) === 'part (b) · Reasoning');
+  ok('a sub-part is named in full', api._mkPartNote({ part: '(c)(ii) Answer' }) === 'part (c)(ii)');
+  ok('a bare "Answer" is WORDED rather than dropped — on a question whose choices are drawn under it, that is the whole of what was missing',
+     api._mkPartNote({ part: 'Answer' }) === 'the written answer');
+  ok('a blank is named', api._mkPartNote({ part: 'Blank 2' }) === 'Blank 2');
+  ok('NOTHING RECORDED SAYS NOTHING — a guessed part points a lesson at the wrong sub-question',
+     api._mkPartNote({ part: '' }) === '' && api._mkPartNote({}) === '' && api._mkPartNote(null) === '');
+
+  // …and the drawn question MARKS it.
+  api.setBank([{ id: 'qP', title: 'Three parts', blocks: [
+    { type: 'text', part: 'a', content: 'Part a wording' },
+    { type: 'text', part: 'b', content: 'Part b wording' },
+    { type: 'image', url: 'https://x/b-fig.png' },
+    { type: 'text', part: 'c', content: 'Part c wording' }
+  ] }]);
+  const marked = api._mkQuestionHtml({ questionId: 'qP', part: '(b) Answer', question: 'flat' });
+  ok('the blocks the lesson is about are marked in the drawn question',
+     (marked.match(/mk-qb-this/g) || []).length === 2);
+  ok('the "this part" flag is on the FIRST block of the run only',
+     (marked.match(/mk-qb-here/g) || []).length === 1);
+  ok('a block that INHERITS the part is marked with its opener — the figure under (b) belongs to (b)',
+     /class="mk-qb mk-qb-this mk-qb-fig"/.test(marked));
+  const unmarked = api._mkQuestionHtml({ questionId: 'qP', part: '', question: 'flat' });
+  ok('an entry with no part marks nothing', !/mk-qb-this|mk-qb-here/.test(unmarked));
+  const stale = api._mkQuestionHtml({ questionId: 'qP', part: '(z) Answer', question: 'flat' });
+  ok('a part that names no block here marks NOTHING rather than claiming to point at one',
+     !/mk-qb-this|mk-qb-here/.test(stale) && /mk-qbody/.test(stale));
+
+  const sess2 = block.slice(block.indexOf('function _mkRenderSession'), block.indexOf('function mkPick('));
+  ok('the practice card prints which part the mistake is in',
+     /const where = _mkPartNote\(e\)/.test(sess2) && /mk-where/.test(sess2));
+  ok('the practice card no longer prints the raw stored label',
+     !/part ' \+ escapeHtml\(e\.part\)/.test(sess2));
+  const teacher2 = block.slice(block.indexOf('function _mkCardHtml'), block.indexOf('function _mkReadCard'));
+  ok('the teacher reads the part in the SAME words the class does',
+     /const where = _mkPartNote\(e\)/.test(teacher2) && !/escapeHtml\(e\.part\)/.test(teacher2));
+  ok('the marker of a rewrite is told which part it is marking, or it expects the whole question answered',
+     /THE PART BEING ANSWERED: ' \+ _mkPartNote\(e\)/.test(block));
+  ok('the part marking has its stylesheet',
+     /\.mk-qb-this\b/.test(html) && /\.mk-qb-here\b/.test(html) && /\.mk-where\b/.test(html));
+
+  // The part TRAVELS: derived ONCE from the key, onto the attempt row, onto
+  // the child's own log, and out of it onto their own card.
+  ok('the label is derived from the KEY, in ONE place', /function _partLabelFor\(containerSel, key\)/.test(src));
+  ok('the attempt row reads that one derivation', /label: clip\(_partLabelFor\(containerSel, key\)\)/.test(src));
+  ok('the child\'s own mistake log is handed the same label', /label: _partLabelFor\(containerSel, key\)/.test(src));
+  ok('a recorded label is written onto the log record, and an empty one is ABSENT',
+     /const where = String\(p\.label \|\| ''\)\.trim\(\);\s*\n\s*if \(where\) rec\.part = where/.test(src));
+  ok('the child\'s own card reads it back', /part: String\(rec\.part \|\| ''\)/.test(block));
+
+  api.setUser({ uid: 'kid', email: 'kid@x', name: 'Kid', role: 'student' });
+  api.setBank([{ id: 'qP', title: 'Three parts', blocks: [{ type: 'text', part: 'b', content: 'Part b wording' }, { type: 'plainanswer', content: 'the model' }] }]);
+  const own = api._mkOwnEntries([{ id: 'r1', qId: 'qP', kind: 'open', mistake: 'evidence',
+    student: 'a wrong answer here', expected: 'the model', part: '(b) Claim' }], id => id === 'qP' ? { id: 'qP', title: 'Three parts', blocks: [{ type: 'text', part: 'b', content: 'Part b wording' }, { type: 'plainanswer', content: 'the model' }] } : null);
+  ok('a child studying their OWN mistake is told which part it was',
+     own.length === 1 && own[0].part === '(b) Claim' && api._mkPartNote(own[0]) === 'part (b) · Claim');
+}
+
+/* ---------- 🗑 The teacher reads the bank and clears it (v1.396.0) ----------
+   Every failure here is silent and the page looks tidy: a delete scoped to
+   the whole bank rather than to what is ON SCREEN destroys the entries the
+   teacher had filtered away and never saw, and an entry dropped from the
+   list on a delete the database refused is back at the next sign-in. ---- */
+{
+  api.setUser({ uid: 'admin1', email: 'chungzhikai@gmail.com', name: 'Mr Chung', role: 'admin' });
+  api.setDocs([
+    { id: 'p1', status: 'pending',  animal: 'evidence', studentAnswer: 'one two', question: 'About heat', questionTitle: 'Heat A', topic: 'Heat' },
+    { id: 'p2', status: 'pending',  animal: 'specific', studentAnswer: 'one two', question: 'About light', questionTitle: 'Light A', topic: 'Light' },
+    { id: 'a1', status: 'approved', animal: 'evidence', studentAnswer: 'one two', question: 'About heat', questionTitle: 'Heat B', topic: 'Heat' },
+    { id: 'r1', status: 'rejected', animal: 'evidence', studentAnswer: 'one two', question: 'About heat', questionTitle: 'Heat C', topic: 'Heat' }
+  ]);
+  await api.loadAdmin();
+  const ids = () => api._mkVisible().map(e => e.id).sort();
+
+  api.mkSetStatus('pending');
+  ok('the status chip still narrows the bank', ids().join(',') === 'p1,p2');
+  api.mkSetStatus(api.MK_STATUS_ALL);
+  ok('📚 All shows every entry, whatever pile it is in — so a mistake can be removed without guessing which',
+     ids().join(',') === 'a1,p1,p2,r1');
+  ok('an unknown status is refused', (api.mkSetStatus('nonsense'), api.state().status === api.MK_STATUS_ALL));
+
+  ok('the search reaches the question wording and the animal, not just the title',
+     api._mkHaystack({ question: 'About heat', animal: 'evidence' }).includes('about heat') &&
+     api._mkHaystack({ animal: 'evidence' }).includes('evidence'));
+
+  // "ALL" MEANS WHAT IS ON SCREEN.
+  api.mkSetAnimal('specific');
+  ok('the animal chip narrows it too', ids().join(',') === 'p2');
+  api.mkTogglePick('p2');
+  ok('a tick is held by ID', api.picked().has('p2'));
+  api.mkSetAnimal('evidence');
+  api._mkPruneSelection(api._mkVisible());
+  ok('a tick is PRUNED when the card it counted is no longer shown', !api.picked().has('p2'));
+
+  api.mkSetAnimal('');
+  const before = api.deletes.length;
+  await api._mkDeleteMany(['a1'], 'selected');
+  ok('a delete really deletes the document', api.deletes.length === before + 1 && api.deletes[api.deletes.length - 1] === 'a1');
+  ok('…and the entry leaves the page only once it has gone', !api.bank().some(e => e.id === 'a1'));
+
+  api.mkSetAnimal('specific');
+  const cBefore = api.confirms.length;
+  await api.mkDeleteAllShown();
+  ok('🗑 Delete all shown deletes only what is ON SCREEN', !api.bank().some(e => e.id === 'p2') && api.bank().some(e => e.id === 'p1'));
+  ok('…and the confirm SAYS how many are being spared', /not touched/.test(api.confirms[cBefore].m));
+
+  api.mkSetAnimal('');
+  api.mkTogglePick('p1');
+  await api.mkDeleteSelected();
+  ok('🗑 Delete selected deletes the ticked ones', !api.bank().some(e => e.id === 'p1'));
+
+  api.setUser({ uid: 'kid', email: 'kid@x', name: 'Kid', role: 'student' });
+  const kidBefore = api.deletes.length;
+  await api._mkDeleteMany(['r1'], 'selected');
+  await api.mkDeleteAllShown();
+  ok('a student can delete NOTHING — the gate is in the handler, not on the button',
+     api.deletes.length === kidBefore && api.bank().some(e => e.id === 'r1'));
+  api.setUser({ uid: 'admin1', email: 'chungzhikai@gmail.com', name: 'Mr Chung', role: 'admin' });
+
+  ok('the tick box sets appearance:auto, or it is an invisible white square',
+     /\.mk-pick\{[^}]*appearance:auto/.test(html.replace(/\s/g, '')) || /\.mk-pick\s*\{[^}]*appearance:\s*auto/.test(html));
+  ok('the bulk bar has its stylesheet', /\.mk-bulk\b/.test(html) && /\.mk-card\.picked\b/.test(html));
+  ok('every bulk handler is on window, or the inline on* attributes find nothing',
+     /window\.mkTogglePick = mkTogglePick;/.test(src) && /window\.mkPickAll = mkPickAll;/.test(src) &&
+     /window\.mkDeleteSelected = mkDeleteSelected;/.test(src) && /window\.mkDeleteAllShown = mkDeleteAllShown;/.test(src));
+  ok('the student\'s OWN private log is not what this clears',
+     !/mistakeLog/.test(block.slice(block.indexOf('async function _mkDeleteMany'), block.indexOf('function mkDeleteSelected'))));
 }
 
 /* ---------- 🐾 An entry stored under the OLD list still reads (v1.394.0) ---------- */
