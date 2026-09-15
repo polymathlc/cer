@@ -5752,7 +5752,123 @@ searched, the list narrowed, and the tagged questions were simply not in it.
 - Every placeholder on those boxes now SAYS tags are searched. A box that
   searches something its label does not name is a feature nobody discovers.
 
+## 🐾 Learning from mistakes — the mistake bank (v1.391.0)
+
+`MISTAKE_ANIMALS` / `mistakeAnimal` / `mistakeAnimalNormalize` / `mistakeAnimalLabel` /
+`MISTAKE_ANIMAL_RULE` (the shared taxonomy), `MK_COLLECTION` / `_mkOwnerUid` / `_mkBankCol` /
+**`_mkEntryFromAnalysis`** / `_mkCandidatesFrom` / `_mkSort` / **`_mkVisibleToStudent`** /
+`_mkQuizOptions`, the admin half — `mkRender` / `mkHarvest` / `mkAnalyseAll` /
+`mkAnalyseCandidate` / `mkApprove` / `mkReject` / `mkDelete` / `mkSaveCard` /
+`mkGenerateRun` / `mkGenerateOne` — and the student half — `mkStudentRender` / `mkStart` /
+`mkPick` / `mkReveal` / **`mkCheckRewrite`** / `_mkLogQuiz` (in `app.js`, search
+`LEARNING FROM MISTAKES — the mistake bank`), plus `#page-mistakebank` (admin) and
+`#page-mistakes` (student) in `index.html`, the `mistakes` row in `USAGE_MODES`, and the two
+nav items.
+
+A wrong answer is the most useful thing a class produces, and this app threw every one of them
+away the moment it was marked. The 🐾 **Mistake Bank** keeps them: the teacher harvests the wrong
+and partly-right answers out of the attempt log, the AI CLEANS each one up and names the HABIT
+behind it as one of ten **mistake animals** (🐇 the Rabbit rushed it, 🦜 the Parrot repeated the
+question, 🦥 the Sloth stopped early, …), the teacher VETS and SORTS them, and only then are they
+served back to students — as a "which mistake is this?" quiz, or one animal at a time with a
+rewrite box under it.
+
+- **THE TEN ANIMALS ARE ONE LIST IN THREE APPS, BYTE FOR BYTE.** `MISTAKE_ANIMALS` is identical
+  in `polymathlc/scan` (which tags every marked answer with one) and `polymathlc/anskey` (whose
+  🐾 Mistake button writes an answer that is wrong on purpose in one of them). The `id` is the
+  contract: an entry filed here under `parrot` has to mean what Scan's `parrot` means, or the
+  same habit wears a different animal in each app. **Ship a change to the block to all three
+  together.**
+- **`mistakeAnimalNormalize` IS THE ONE DOOR, AND "NONE" IS A REAL ANSWER.** Every id reaching
+  the bank goes through it — an id, an animal's name, a habit's name or a `{animal}` object all
+  come out as the id, and *unsure* / *none* / an invented animal come out as `''`. A wrong answer
+  that fits no habit is filed with NO type rather than the nearest one: a wrong label teaches a
+  wrong lesson with a straight face. `MISTAKE_ANIMAL_RULE` says so to the model in as many words,
+  and it forbids a type on a correct answer or on a blank.
+- **A STUDENT'S OWN WORDS NEVER CARRY THE STUDENT.** `_mkEntryFromAnalysis` is the ONE builder
+  and it writes no `uid`, no email, no name — only the question, the cleaned answer, the animal,
+  why, the fixed answer, a hint, the attempt id it came from and a hash. The one field that could
+  identify a child by its wording, `raw`, is kept on a PENDING entry so the teacher can check the
+  clean-up against what was actually written, and **deleted on approve** (`raw: deleteField()`),
+  so what students read was never anybody's exact words. A generated example never carries it.
+- **THE CLEAN-UP MUST KEEP THE MISTAKE.** `_mkAnalysePrompt` asks for the spelling and the
+  grammar tidied and the science left exactly as wrong as it was, because an answer cleaned into
+  a right one is a lesson about nothing. Two guards refuse an entry outright: fewer than
+  `MK_MIN_ANSWER_WORDS`, and a `worth: false` from the model — a one-word wrong answer is not a
+  mistake anyone can learn from.
+- **NOTHING REACHES A STUDENT UNVETTED, AND `_mkVisibleToStudent` IS THE ONE GATE.** It asks five
+  things: `approved`, a real animal (an entry the teacher approved with no type is a card the
+  quiz cannot ask about), an answer and a question, and — when the source question is still in
+  the bank — `qAvailableToViewer` **and** `qInSyllabus` **and** `qWithinStudentLevel`. A mistake
+  on a held-back paper, a retired topic or a Sec 1 question is served to nobody it should not be,
+  because the pool reads the same three predicates every other student-facing pool reads. The
+  release census in `tools/scheduled-release-tests.mjs` counts it.
+- **HARVEST, ANALYSE, VET — THREE SEPARATE PRESSES, and the middle one is the only one that
+  costs.** 🔎 reads the newest `MK_HARVEST_SCAN` attempts and makes ONE candidate per WRONG PART
+  (`_mkCandidatesFrom` — a three-part question wrong in two parts is two lessons), skipping any
+  attempt already in the bank and any question no longer in it. ✨ analyses at most
+  `MK_HARVEST_MAX` of them, `MK_PAR` at a time, with ⏹ honoured between calls; the same wrong
+  answer twice is one entry (`hash`). Every entry lands PENDING. The teacher then approves,
+  changes the animal, edits the words, or rejects — and `_mkWrite` is the ONE writer for all of it.
+- **THE ANALYSIS IS GROUNDED AS `'teach'`, THE REWRITE CHECK AS `'mark'`.** A lesson about a
+  mistake has to be in this teacher's words and against this teacher's standard, so
+  `mkAnalyseCandidate` and `mkGenerateOne` carry `aiGrounding('teach', topic, question)` — and
+  the question's own diagrams go along through `_cqMedia`, because a habit is judged from what
+  was asked. `mkCheckRewrite` marks a pupil's rewrite and is grounded `'mark'`: a marker is never
+  handed the exemplars, and the correct answer it sees is the entry's own. Both call sites pass
+  the grounding census.
+- **✨ WRITE WRONG ANSWERS invents examples where the class has not made the mistake yet.** The
+  teacher picks a topic and an animal, `mkGenerateOne` asks for an answer a real pupil would
+  plausibly write with exactly that habit and everything else right, and it is filed
+  `source: 'generated'` and PENDING like everything else — the teacher vets an invented mistake
+  exactly as they vet a real one. `MK_GEN_MAX` caps one press.
+- **THE STUDENT SIDE IS THREE MODES OVER ONE POOL.** 🐾 *Learn from mistakes* serves a shuffled
+  mix and asks the animal, then offers the rewrite; ❓ *Quiz* asks the animal and nothing else;
+  and each animal's own card serves that habit alone, with the reveal and the rewrite. All three
+  read `_mkStudentPool`, which reads `_mkVisibleToStudent`, so a mode cannot drift into serving
+  what the others refuse. `MK_SESSION_MAX` bounds a sitting. The four quiz options come from
+  `_mkQuizOptions` — the right animal is always among them and never twice.
+- **THE QUIZ IS LOGGED, AND PAYS NOTHING.** Each animal pick lands in `questionAttempts` under
+  mode `'mistakes'` through `_mkLogQuiz`, so the 📊 Student Usage Tracker shows it (the row is in
+  `USAGE_MODES`). It deliberately does **not** call `rpgAwardGameQuestion`: a four-option guess
+  at an animal is not a science question answered, and points are never earnable from a
+  repeatable button.
+- **IT NEEDS ONE FIRESTORE RULE**, and the failure without it is silent on the student side:
+  `users/{adminUid}/mistakeBank/{id}` — the admin reads and writes, any signed-in user reads.
+  Until it is pasted the admin page names the denial (`permission-denied` is spelled out in the
+  toast), and the STUDENT page deliberately does not: a denied read is not an error worth showing
+  a child, so it reads as "nothing to practise yet" — which is also why the admin's own page is
+  where a missing rule has to be noticed. The bank lives under the admin's uid and a student
+  resolves it through the same `config/admin` pointer the question bank uses (`_mkOwnerUid`).
+- **`_mkBankCol` is deliberately NOT `_mkCol`.** That name already belongs to this app's own
+  `users/{uid}/mistakes` log — a student's personal record of their own wrong answers — and the
+  two collections are different things: one is private and per student, the other is the
+  teacher's vetted, anonymised bank. Nothing here reads or writes the older one.
+- **The admin page is admin-only in two places**: the nav item carries `admin-only`, `mistakebank`
+  is not on `EMPLOYEE_PAGES`, and `navigateTo` rewrites it — hiding a nav item is never the lock.
+  `mkHarvest`, `mkAnalyseAll` and `mkGenerateRun` refuse a non-author in the handler, and a
+  write from anyone else is refused by the rule itself and named in the toast.
+- Run **`node tools/mistake-bank-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🐾 the mistake bank** (`MISTAKE_ANIMALS`, `mistakeAnimalNormalize`,
+  `MISTAKE_ANIMAL_RULE`, `_mkEntryFromAnalysis`, `_mkCandidatesFrom`, `_mkVisibleToStudent`,
+  `_mkQuizOptions`, `_mkAnalysePrompt`, `mkAnalyseCandidate`, `mkGenerateOne`, `mkApprove`,
+  `_mkWrite`, `_mkStudentPool`, `mkCheckRewrite`, `_mkLogQuiz`, or the `mistakes` row in
+  `USAGE_MODES`), run `node tools/mistake-bank-tests.mjs` **and**
+  `node tools/scheduled-release-tests.mjs`, `node tools/teaching-notes-tests.mjs` and
+  `node tools/usage-tracker-tests.mjs`. Everything this page serves is another child's wrong
+  answer, so every failure is silent and lands in front of a class. **Let an entry carry a uid,
+  an email or a name — or keep `raw` past approval — and a student is reading which classmate
+  got it wrong.** Let `_mkVisibleToStudent` stop asking `approved`, or the animal, or the three
+  serving predicates, and an unvetted, untyped, held-back or off-level mistake is quizzed on;
+  let `mistakeAnimalNormalize` accept an invented animal and the quiz's right answer is a habit
+  nobody can name. Let the clean-up fix the science and the class studies a lesson about
+  nothing. Ground the analysis as `'mark'` and the lesson is written in nobody's voice; ground
+  the rewrite check as `'teach'` and the marker has been handed the exemplars. Let the quiz call
+  `rpgAwardGameQuestion` and a four-option guess is a points farm. And let the taxonomy drift
+  from `polymathlc/scan` and `polymathlc/anskey` and the same habit wears three different
+  animals in three apps that were meant to agree.
 - After touching **🔍± the preview picture size** (`pvsFind`, `pvsBarHtml`, `pvsWrapAttrs`,
   `pvsPaint`, `pvsStep`, `pvsReset`, `pvsFlush`, `pvsDecorateDoc`, `imgScaleStep`,
   `_imgRenderedPct`, the image branch of `renderQuestionBodyPreviewHtml`, either print

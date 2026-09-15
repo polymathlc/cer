@@ -9563,6 +9563,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         Check Questions
         <span class="badge" id="cqBadge" style="display:none;">0</span>
       </div>
+      <div class="nav-item admin-only" data-page="mistakebank" onclick="navigateTo('mistakebank')" title="Mistake Bank — students' own wrong answers, cleaned up, sorted under ten mistake animals and vetted by you before the class practises on them.">
+        <span class="ico">🐾</span> Mistake Bank
+        <span class="badge" id="mkPendingBadge" style="display:none;">0</span>
+      </div>
       <div class="nav-item admin-only" data-page="flagged" onclick="navigateTo('flagged')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
         Flagged Questions
@@ -9660,6 +9664,9 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="nav-item student-only" data-page="flashcards" onclick="navigateTo('flashcards')" style="display:none;" title="Revision Cards — flashcards written from the questions you keep getting wrong, so you revise your gaps instead of everything.">
         <span class="ico">🃏</span> Revision Cards
         <span class="badge" id="fcDueBadge" style="display:none;">0</span>
+      </div>
+      <div class="nav-item student-only" data-page="mistakes" onclick="navigateTo('mistakes')" style="display:none;" title="Learn from Mistakes — other students' wrong answers: spot which mistake animal it is, then write it the right way.">
+        <span class="ico">🐾</span> Learn from Mistakes
       </div>
       <div class="nav-item student-only" data-page="myreport" onclick="navigateTo('myreport')" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
@@ -10435,6 +10442,119 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       </div>
     </div>
 
+    <!-- ===== PAGE: 🐾 MISTAKE BANK (admin) ===== -->
+    <div class="page" id="page-mistakebank">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>🐾 Mistake Bank</h2>
+          </div>
+          <div class="subtitle">Students' own wrong answers, cleaned up, sorted under ten mistake animals and vetted by you before the class practises on them</div>
+        </div>
+        <span id="mkCount" style="font-size:0.85rem;color:var(--text-muted);font-weight:600;"></span>
+      </div>
+      <div class="page-body" style="max-width:980px;">
+        <style>
+          /* 🐾 shared by the Mistake Bank and Learn from Mistakes pages */
+          .mk-empty{ border:1px dashed var(--border); border-radius:14px; padding:26px 22px; text-align:center; color:var(--text-muted); font-size:0.9rem; line-height:1.7; background:var(--surface,#fff); }
+          .mk-warn{ border:1px solid #f5c26b; background:#fff7e6; color:#7a4b00; border-radius:12px; padding:14px 18px; font-size:0.86rem; line-height:1.7; margin-bottom:16px; }
+          .mk-warn code{ font-size:0.8rem; }
+          .mk-tools{ border:1px solid var(--border); border-radius:14px; padding:18px 20px; background:var(--surface,#fff); margin-bottom:16px; }
+          .mk-tools-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+          .mk-status{ margin-top:12px; font-size:0.86rem; color:var(--text-muted); line-height:1.7; }
+          .mk-gen{ margin-top:16px; padding-top:16px; border-top:1px solid var(--border); }
+          .mk-gen-intro{ font-size:0.86rem; color:var(--text-muted); line-height:1.7; margin-bottom:12px; }
+          .mk-gen-row{ display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; }
+          .mk-gen-row label{ display:flex; flex-direction:column; gap:6px; font-size:0.8rem; font-weight:600; color:var(--text-muted); }
+          .mk-gen-row select, .mk-gen-row input{ font:inherit; font-size:0.86rem; padding:8px 10px; border:1px solid var(--border); border-radius:10px; background:#fff; min-width:120px; }
+          .mk-filters{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }
+          .mk-sep{ width:1px; height:22px; background:var(--border); margin:0 4px; }
+          .mk-chip{ font:inherit; font-size:0.8rem; padding:7px 12px; border-radius:999px; border:1px solid var(--border); background:var(--surface,#fff); cursor:pointer; color:var(--text); }
+          .mk-chip b{ margin-left:4px; color:var(--text-muted); font-weight:600; }
+          .mk-chip.on{ border-color:var(--primary); background:var(--primary-light,#eef7f1); color:var(--primary); }
+          .mk-chip.on b{ color:var(--primary); }
+          .mk-search{ font:inherit; font-size:0.84rem; padding:8px 12px; border:1px solid var(--border); border-radius:999px; min-width:220px; flex:1; }
+          .mk-card{ border:1px solid var(--border); border-radius:16px; background:var(--surface,#fff); padding:18px 22px 16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+          .mk-card-head{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+          .mk-animal{ font:inherit; font-size:0.84rem; padding:7px 10px; border:1px solid var(--border); border-radius:10px; background:#fff; max-width:100%; }
+          .mk-badge{ font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:999px; border:1px solid var(--border); color:var(--text-muted); }
+          .mk-badge.gen{ background:#eef2ff; color:#3730a3; border-color:#c7d2fe; }
+          .mk-badge.stu{ background:#ecfdf5; color:#065f46; border-color:#a7f3d0; }
+          .mk-badge.st-approved{ background:#ecfdf5; color:#065f46; border-color:#a7f3d0; }
+          .mk-badge.st-pending{ background:#fffbeb; color:#92400e; border-color:#fde68a; }
+          .mk-badge.st-rejected{ background:#fef2f2; color:#991b1b; border-color:#fecaca; }
+          .mk-meta{ font-size:0.78rem; color:var(--text-muted); margin-left:auto; }
+          .mk-q{ margin-bottom:14px; }
+          .mk-q-title{ font-weight:700; font-size:0.95rem; line-height:1.45; }
+          .mk-part{ font-size:0.74rem; font-weight:700; color:var(--primary); background:var(--primary-light,#eef7f1); padding:2px 8px; border-radius:999px; margin-left:6px; }
+          .mk-q-text{ font-size:0.86rem; color:var(--text-muted); line-height:1.7; margin-top:6px; cursor:pointer; white-space:pre-wrap; }
+          .mk-q-imgs{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+          .mk-q-imgs img{ max-width:min(100%,320px); max-height:240px; border-radius:8px; border:1px solid var(--border); }
+          .mk-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px 16px; }
+          .mk-grid label{ display:flex; flex-direction:column; gap:6px; font-size:0.8rem; font-weight:700; }
+          .mk-grid .mk-hint{ font-weight:500; color:var(--text-muted); }
+          .mk-grid textarea, .mk-grid input{ font:inherit; font-size:0.86rem; line-height:1.6; padding:9px 11px; border:1px solid var(--border); border-radius:10px; background:#fff; resize:vertical; }
+          .mk-raw{ font-size:0.76rem; color:var(--text-muted); font-weight:500; line-height:1.6; }
+          .mk-tip{ margin-top:14px; font-size:0.83rem; color:var(--text-muted); line-height:1.7; padding:10px 14px; background:var(--surface-alt,#fafbfa); border-radius:10px; }
+          .mk-tip.warn{ background:#fffbeb; color:#92400e; }
+          .mk-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+          .mk-actions .btn{ font-size:0.82rem; }
+          .mk-del{ margin-left:auto; color:#991b1b; }
+          /* the student's page */
+          .mk-intro{ border:1px solid var(--border); border-radius:16px; padding:22px 24px; background:var(--surface,#fff); margin-bottom:22px; }
+          .mk-intro p{ margin:0 0 16px; font-size:0.92rem; line-height:1.75; color:var(--text-muted); }
+          .mk-intro-btns{ display:flex; gap:12px; flex-wrap:wrap; }
+          .mk-big{ display:flex; flex-direction:column; align-items:flex-start; gap:4px; padding:14px 20px !important; font-size:1rem !important; border-radius:14px !important; text-align:left; line-height:1.3; }
+          .mk-big span{ font-size:0.78rem; font-weight:500; opacity:0.85; }
+          .mk-h3{ font-size:0.95rem; font-weight:700; margin:0 0 12px; }
+          .mk-animals{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
+          .mk-animal{ border:1px solid var(--border); border-radius:16px; padding:18px 18px 16px; background:var(--surface,#fff); display:flex; flex-direction:column; gap:6px; }
+          .mk-animal-emoji{ font-size:2rem; line-height:1; }
+          .mk-animal-name{ font-weight:700; font-size:0.98rem; }
+          .mk-animal-kind{ font-size:0.8rem; font-weight:700; color:var(--primary); }
+          .mk-animal-desc{ font-size:0.82rem; color:var(--text-muted); line-height:1.65; flex:1; }
+          .mk-animal-spot{ font-size:0.78rem; color:var(--text-muted); line-height:1.6; font-style:italic; }
+          .mk-animal .btn{ margin-top:8px; font-size:0.82rem; }
+          .mk-sess-head{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:14px; font-size:0.86rem; font-weight:600; color:var(--text-muted); }
+          .mk-sess-head .btn{ margin-left:auto; font-size:0.8rem; }
+          .mk-dots{ display:flex; gap:4px; }
+          .mk-dots i{ width:10px; height:10px; border-radius:999px; background:var(--border); display:inline-block; }
+          .mk-dots i.ok{ background:#16a34a; } .mk-dots i.no{ background:#dc2626; } .mk-dots i.cur{ background:var(--primary); }
+          .mk-round{ border:1px solid var(--border); border-radius:18px; background:var(--surface,#fff); padding:22px 24px; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+          .mk-round-label{ font-size:0.74rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px; }
+          .mk-round-q{ margin-bottom:16px; }
+          .mk-round-text{ font-size:0.95rem; line-height:1.75; white-space:pre-wrap; }
+          .mk-round-a{ padding:14px 16px; border-radius:12px; background:#fff7ed; border:1px solid #fed7aa; margin-bottom:18px; }
+          .mk-wrote{ font-style:italic; }
+          .mk-quiz{ margin-bottom:18px; }
+          .mk-opts{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+          .mk-opt{ font:inherit; text-align:left; border:1px solid var(--border); border-radius:12px; padding:12px 14px; background:#fff; cursor:pointer; display:flex; flex-direction:column; gap:4px; color:var(--text); line-height:1.45; }
+          .mk-opt b{ font-size:0.92rem; } .mk-opt span{ font-size:0.78rem; color:var(--text-muted); }
+          .mk-opt:hover:not(:disabled){ border-color:var(--primary); }
+          .mk-opt.right{ border-color:#16a34a; background:#ecfdf5; } .mk-opt.wrong{ border-color:#dc2626; background:#fef2f2; } .mk-opt.dim{ opacity:0.5; }
+          .mk-lesson{ border-radius:12px; padding:14px 16px; margin-bottom:18px; border:1px solid var(--border); background:var(--surface-alt,#fafbfa); }
+          .mk-lesson.ok{ border-color:#a7f3d0; background:#ecfdf5; } .mk-lesson.no{ border-color:#fecaca; background:#fef2f2; }
+          .mk-lesson-verdict{ font-size:0.95rem; margin-bottom:6px; }
+          .mk-lesson-why{ font-size:0.88rem; line-height:1.7; }
+          .mk-lesson-hint{ font-size:0.82rem; color:var(--text-muted); line-height:1.6; margin-top:6px; }
+          .mk-fix textarea{ width:100%; font:inherit; font-size:0.92rem; line-height:1.6; padding:10px 12px; border:1px solid var(--border); border-radius:10px; resize:vertical; box-sizing:border-box; }
+          .mk-fix-btns{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+          .mk-check{ margin-top:12px; padding:12px 14px; border-radius:10px; font-size:0.88rem; line-height:1.65; border:1px solid var(--border); }
+          .mk-check.v-correct{ background:#ecfdf5; border-color:#a7f3d0; } .mk-check.v-partial{ background:#fffbeb; border-color:#fde68a; } .mk-check.v-wrong{ background:#fef2f2; border-color:#fecaca; }
+          .mk-model{ margin-top:12px; padding:12px 14px; border-radius:10px; background:#ecfdf5; border:1px solid #a7f3d0; }
+          .mk-next{ display:flex; justify-content:flex-end; margin-top:18px; }
+          .mk-summary{ border:1px solid var(--border); border-radius:18px; background:var(--surface,#fff); padding:28px 26px; text-align:center; }
+          .mk-summary-big{ font-size:1.3rem; font-weight:700; margin-bottom:16px; }
+          .mk-summary-list{ display:inline-flex; flex-direction:column; gap:6px; text-align:left; margin-bottom:20px; min-width:240px; }
+          .mk-summary-list div{ display:flex; justify-content:space-between; gap:16px; font-size:0.9rem; }
+          .mk-summary-btns{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+          @media (max-width:640px){ .mk-grid, .mk-opts{ grid-template-columns:1fr; } .mk-del{ margin-left:0; } }
+        </style>
+        <div id="mkAdminBody"></div>
+      </div>
+    </div>
+
     <div class="page" id="page-checkq">
       <div class="page-header">
         <div>
@@ -11045,6 +11165,23 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     <!-- ===== PAGE: REVISION FLASHCARDS (Student Only) =====
          Cards written from this student's own mistakes — the gaps they miss most
          often and most recently. Nothing here is generic revision. -->
+    <!-- ===== PAGE: 🐾 LEARN FROM MISTAKES (Student Only) ===== -->
+    <div class="page" id="page-mistakes">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>🐾 Learn from Mistakes</h2>
+          </div>
+          <div class="subtitle">Other students' wrong answers — spot which of the ten mistake animals it is, then write it the right way</div>
+        </div>
+        <button class="btn btn-outline" onclick="mkStudentReload()" style="font-size:0.82rem;">↻ Refresh</button>
+      </div>
+      <div class="page-body" style="max-width:860px;">
+        <div id="mkStudentBody"></div>
+      </div>
+    </div>
+
     <div class="page" id="page-flashcards">
       <div class="page-header">
         <div>
