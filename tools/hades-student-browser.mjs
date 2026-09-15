@@ -18,6 +18,7 @@ const _scienceFeedLevel=()=>currentUser.level,_scienceFeedKey=()=>currentUser.ui
 const questionBank=Array.from({length:10},(_,i)=>({id:'bank-'+i,title:'Science bank question '+i,html:'<p>Which part absorbs water?</p>',options:['Root','Leaf'],answer:0}));
 const qReleased=()=>true,qInSyllabus=()=>true,questionQualitySignature=q=>q.id,_sdExtractMcq=q=>q;
 const _scienceFeedContext=()=>({}),_scienceFeedPlan=rows=>({questions:rows.filter(q=>!shown.includes(q.id)).slice(0,5)});
+const _scienceFeedTake=async rows=>rows.filter(q=>!shown.includes(q.id)).slice(0,5);
 const _scienceFeedMark=id=>shown.push(id),_scienceFeedRememberResult=()=>{},_scienceFeedImageResult=()=>{};
 const _sdRecordAttempt=row=>records.push({...row,learner:currentUser.name});
 ${adapter}

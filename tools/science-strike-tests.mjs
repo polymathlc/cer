@@ -67,7 +67,7 @@ function fixture() {
     sfx: { qGood() {}, qBad() {}, qPop() {} }, recordAttempt: () => counts.record++, bankPortalPoints: () => { counts.bank++; return 8; },
     spendGameCredit: () => { counts.credit++; return true; },
     isAdmin: () => false, levelLabel: n => 'P' + n,
-    nextQuestion: () => q, QUESTION_INTERVAL: 15000, fpsWireQuestionImages() {}, toast() {},
+    nextQuestion: async () => q, QUESTION_INTERVAL: 15000, fpsWireQuestionImages() {}, toast() {},
   });
   vm.runInContext(cut('// The simulation may advance', '/* ════════════════ COMBAT'), c);
   const emit = (scope, name, extra = {}) => {
@@ -159,10 +159,10 @@ test('settings inputs retain keyboard control and do not move the player', () =>
   assert.equal(f.counts.grenade, 0); assert.equal(Object.keys(f.c.keys).length, 0);
 });
 
-test('opening a question clears held controls and applies the answer guard', () => {
+test('opening a question clears held controls and applies the answer guard', async () => {
   const f = fixture();
-  vm.runInContext(cut('function openQuestion()', 'let qLockT = 0;'), f.c);
-  f.held(); f.c.openQuestion();
+  vm.runInContext(cut('async function openQuestion()', 'let qLockT = 0;'), f.c);
+  f.held(); await f.c.openQuestion();
   assert.equal(f.c.G.activeQ, f.q); assert.equal(f.c.G.paused, true);
   assert.equal(f.run('mouseDown || adsHeld'), false); assert.equal(Object.keys(f.c.keys).length, 0);
   assert.equal(f.element('qOptions').classList.contains('qlock'), true);

@@ -477,9 +477,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, getDocs, collection, addDoc, Timestamp, increment, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, getDocs, collection, addDoc, Timestamp, increment, query, where, onSnapshot, runTransaction } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
-import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit } from './science-feed-core.js';
+import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit, scienceQuestionContentKey } from './science-feed-core.js?v=question-history-1';
+import { createStudentQuestionHistory } from './student-question-history.js?v=1';
 import { strikeQuestionQualityOptions, strikeAttemptProgress, STRIKE_DEFAULT_OBJECTIVES } from './science-strike-feed.js';
 
 /* ════════════════ FIREBASE (same project as index.html) ════════════════ */
@@ -513,8 +514,39 @@ let fpsQuestionStops = [], fpsFeedObjectives = [], fpsFeedObjectiveMap = {}, fps
 let fpsFeedError = '';
 const fpsServedMemory = new Map();
 const fpsFailedImages = new Map();
-function fpsFeedKey() { return JSON.stringify([currentUser && currentUser.uid || '', currentUser && currentUser.name || '']); }
+const fpsHistory = createStudentQuestionHistory({db,doc,collection,getDocs,onSnapshot,runTransaction,subject:'science',
+  onError:()=>{fpsFeedError='Your question history could not sync. Check your connection and reload.';fpsFeedReady=false;paintStrikeReadiness();}});
+let fpsHistoryOpening = null;
+function fpsFeedKey() { return JSON.stringify([currentUser && currentUser.uid || '', currentUser && (currentUser.historyName || currentUser.name) || '']); }
+function fpsHistoryIdentity() { return {uid:currentUser?.uid||'',profile:currentUser?.historyName||currentUser?.name||''}; }
+async function fpsEnsureHistory() {
+  const identity=fpsHistoryIdentity(),key=fpsFeedKey(),ticket=fpsFeedLoad;
+  if(fpsHistory.isReady(identity))return true;
+  if(fpsHistoryOpening?.key===key)return fpsHistoryOpening.promise;
+  const promise=(async()=>{
+    try {
+      const byId=new Map(fpsFeedBank.map(q=>[String(q.id),q])),entries=new Map();
+      const remember=(id,at)=>{if(!id)return;const q=byId.get(String(id));entries.set(String(id),{id:String(id),at:Number(at)||1,contentKey:q?scienceQuestionContentKey(q):''});};
+      const names=new Set([identity.profile,currentUser?.name,...(currentUser?.historyNames||[])].filter(Boolean));
+      for(const name of names) {
+        const localKey=JSON.stringify([identity.uid,name]);
+        for(const kind of ['served','history']) {
+          let saved={};try{saved=JSON.parse(localStorage.getItem('scienceFeed:'+kind+':'+localKey)||'{}');}catch(_){}
+          for(const [id,row] of Object.entries(saved||{}))if(kind==='served'?Number(row)>0:Number(row?.last)>0)remember(id,kind==='served'?row:row.last);
+        }
+        let seen=[];try{seen=JSON.parse(localStorage.getItem('sciQuestQpSeen:'+localKey)||'[]');}catch(_){}
+        if(Array.isArray(seen))seen.forEach(id=>remember(id,1));
+      }
+      for(const a of fpsFeedAttempts)if(a?.questionId!=null&&(!currentUser?.familyCount||names.has(String(a.displayName||''))))remember(a.questionId,a.timestamp?.toMillis?.()||Number(a.timestamp)||Date.parse(a.timestamp||'')||1);
+      if(key!==fpsFeedKey() || ticket!==fpsFeedLoad)return false;
+      return await fpsHistory.open(identity,[...entries.values()]) && key===fpsFeedKey() && ticket===fpsFeedLoad;
+    }catch(error){if(key===fpsFeedKey()&&ticket===fpsFeedLoad)fpsFeedError='Your question history could not sync. Check your connection and reload.';console.warn('Science Strike history',error);return false;}
+    finally{if(fpsHistoryOpening?.key===key)fpsHistoryOpening=null;}
+  })();
+  fpsHistoryOpening={key,promise};return promise;
+}
 function fpsFeedClear() {
+  fpsHistory.close();fpsHistoryOpening=null;
   questions=[]; fpsFeedBank=[]; fpsFeedAttempts=[]; fpsFeedReady=false; fpsFeedLoad++; fpsFailedImages.clear();
   fpsQuestionStops.splice(0).forEach(stop=>stop());
   fpsFeedObjectives=[]; fpsFeedObjectiveMap={}; fpsFeedFlags=[]; fpsFeedError='';
@@ -530,10 +562,15 @@ function fpsApplyProfile(data) {
   if(studentLevelCap>=LEVEL_SECONDARY_MIN && assigned<LEVEL_SECONDARY_MIN) studentLevelCap=0;
   studentLevelFloor=studentLevelCap>=LEVEL_SECONDARY_MIN?LEVEL_SECONDARY_MIN:0;
   currentUser.name=String(active && active.name || d.servingName || currentUser.authName || '').trim();
+  currentUser.historyName=String(active?.historyName||active?.name||currentUser.name).trim();
+  currentUser.historyNames=Array.isArray(active?.historyNames)?active.historyNames:[];
+  currentUser.familyCount=children.length;
   const signature=fpsFeedKey()+'|'+studentLevelCap;
   if(fpsProfileSignature && signature!==fpsProfileSignature){
+    fpsHistory.close();fpsHistoryOpening=null;fpsFeedReady=false;
     if(typeof G!=='undefined' && G){G.activeQ=null;G.qTimerMs=QUESTION_INTERVAL;fpsCancelRunForIdentityChange();}
     const overlay=$('questionOverlay');if(overlay)overlay.classList.remove('active');
+    loadQuestions();
   }
   fpsProfileSignature=signature;
 }
@@ -830,7 +867,8 @@ function fpsQuestionContext() {
   }
   return buildScienceFeedContext({bank:fpsFeedBank,studentLevel:studentLevelCap?levelLabel(studentLevelCap):'',
     topicLevels:Object.assign({},TOPIC_LEVEL_MAP,customTopicLevels),objectives:fpsFeedObjectives,objectiveMap:fpsFeedObjectiveMap,
-    progress:fpsFeedProgress(),served:qSeenLoad(),failedImageUrls:fpsFailedImages,flags,qualityOptions:strikeQuestionQualityOptions});
+    progress:fpsFeedProgress(),served:qSeenLoad(),seen:fpsHistory.snapshot().seen,seenContentKeys:fpsHistory.snapshot().contentKeys,
+    failedImageUrls:fpsFailedImages,flags,qualityOptions:strikeQuestionQualityOptions});
 }
 function fpsRecheckActiveQuestion() {
   const active=typeof G!=='undefined' && G?.activeQ;
@@ -861,7 +899,8 @@ async function loadQuestions() {
       // generated quiz items, written-answer conversions or alternate pools.
       for(const owner of uids)for(const q of banks.get(owner)||[]){if(q.id && !seen.has(q.id)){seen.add(q.id);raw.push(q);}}
       fpsFeedBank=raw;questions=raw.map(extractMcq).filter(Boolean);qCursor=0;
-      fpsFeedReady=ready.size===total && !fpsFeedError;
+      fpsFeedReady=ready.size===total && !fpsFeedError && fpsHistory.isReady(fpsHistoryIdentity());
+      if(ready.size===total && !fpsFeedError && !fpsFeedReady)fpsEnsureHistory().then(ok=>{if(current()){fpsFeedReady=ok;fpsRecheckActiveQuestion();paintStrikeReadiness();}});
       fpsRecheckActiveQuestion();paintStrikeReadiness();
     }
     function watch(key,ref,apply){
@@ -897,15 +936,23 @@ function qSeenLoad() {
 }
 function qSeenSave(m) { fpsServedMemory.set(fpsFeedKey(),{...m});try{localStorage.setItem(qSeenKey(),JSON.stringify(m));}catch(e){} }
 function fpsQuestionCandidate() {
-  if(!fpsFeedReady || !currentUser || !fpsFeedBank.length)return null;
+  if(!fpsFeedReady || !currentUser || !fpsFeedBank.length || !fpsHistory.isReady(fpsHistoryIdentity()))return null;
   const candidates=fpsFeedBank.filter(q=>fpsDatabaseQuestionAvailable(q) && extractMcq(q));
   const asked=typeof G!=='undefined' && G && !G.over ? G.fpsAskedIds||[] : [];
   const raw=planScienceQuestions(candidates,{context:fpsQuestionContext(),limit:1,randomize:true,excludeIds:asked,excludeFamilyIds:asked}).questions[0];
   return raw?extractMcq(raw):null;
 }
-function nextQuestion() {
-  const q=fpsQuestionCandidate();
-  if(!q)return null;
+async function nextQuestion() {
+  const key=fpsFeedKey(),ticket=fpsFeedLoad;
+  if(!fpsFeedReady || !await fpsEnsureHistory())return null;
+  let q=null;
+  for(let retry=0;retry<8;retry++) {
+    if(key!==fpsFeedKey())return null;
+    q=fpsQuestionCandidate();if(!q)return null;
+    try {if(await fpsHistory.claimMany([{id:q.id,contentKey:scienceQuestionContentKey(q.feedSource),at:Date.now()}]))break;q=null;}
+    catch(error){if(key===fpsFeedKey()&&ticket===fpsFeedLoad){fpsFeedError='Your question history could not sync. Check your connection and reload.';fpsFeedReady=false;}return null;}
+  }
+  if(!q || key!==fpsFeedKey())return null;
   const shown=qSeenLoad();shown[q.id]=Date.now();qSeenSave(shown);q.feedKey=fpsFeedKey();
   if(typeof G!=='undefined' && G && !G.over){if(!G.fpsAskedIds)G.fpsAskedIds=[];G.fpsAskedIds.push(q.id);}
   return q;
@@ -1820,7 +1867,7 @@ function resetCombatInput() {
   swayX = swayY = swayVX = swayVY = 0;
 }
 function combatReady() {
-  return !!(G && !G.over && !G.paused && !G.activeQ && !G.draftOpen && !skillsOpen
+  return !!(G && !G.over && !G.paused && !G.activeQ && !G.questionLoading && !G.draftOpen && !skillsOpen
     && pointerLocked && document.pointerLockElement === canvas && !document.hidden && document.hasFocus());
 }
 function suspendCombat() {
@@ -1848,7 +1895,7 @@ function pauseRun(reason = 'Click Resume when you are ready. Enemies and the sci
 function finishLock() {
   pointerLocked = document.pointerLockElement === canvas;
   if (pointerLocked && combatReady()) return; // browsers may report a confirmed grant twice
-  if (pointerLocked && lockWanted && G && !G.over && !G.activeQ && !G.draftOpen && !skillsOpen && !document.hidden && document.hasFocus()) {
+  if (pointerLocked && lockWanted && G && !G.over && !G.activeQ && !G.questionLoading && !G.draftOpen && !skillsOpen && !document.hidden && document.hasFocus()) {
     lockWanted = false; G.paused = false;
     resetCombatInput(); lastT = performance.now();
     $('pauseOverlay').classList.remove('active');
@@ -1924,7 +1971,7 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyM') { toggleMute(); return; }
   if (e.code === 'KeyI') {
     if (skillsOpen) closeSkills();
-    else if ((!G || G.over || !G.activeQ && !G.draftOpen) && (G || $('menuScreen').classList.contains('active'))) openSkills();
+    else if ((!G || G.over || !G.activeQ && !G.questionLoading && !G.draftOpen) && (G || $('menuScreen').classList.contains('active'))) openSkills();
     return;
   }
   if (!G || G.over || skillsOpen) return;
@@ -2696,8 +2743,12 @@ function spawnChest() {
 }
 
 /* ════════════════ QUESTIONS every 15s ════════════════ */
-function openQuestion() {
-  const q = nextQuestion();
+async function openQuestion() {
+  const run=G,key=fpsFeedKey();
+  if(!run || run.over || run.questionLoading || run.activeQ)return;
+  run.questionLoading=true;suspendCombat();
+  const q = await nextQuestion().finally(()=>{run.questionLoading=false;});
+  if(G!==run || run.over || key!==fpsFeedKey())return;
   if (!q) { G.qTimerMs=QUESTION_INTERVAL;pauseRun(studentLevelCap ? 'No fresh database MCQs match your level and progress right now. Return to the portal for another activity.' : 'Set your school level in the Science Learning Portal before answering questions.');return; }
   G.activeQ = q;
   G.questionAnswered = false;
@@ -2891,7 +2942,7 @@ function tick(now) {
   lastT = now;
   if (!G || G.over) { if (G) render(); return; }
   if (!combatReady()) {
-    if (!G.paused && !G.activeQ && !G.draftOpen && !skillsOpen) pauseRun();
+    if (!G.paused && !G.activeQ && !G.questionLoading && !G.draftOpen && !skillsOpen) pauseRun();
     render(); return;
   }
   G.playSeconds += dt;

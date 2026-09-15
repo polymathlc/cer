@@ -1,7 +1,7 @@
 import { installHadesDisplay } from "./hades-display.js";
 import { installPirateRiftPortal } from "./pirate-rift-portal.js?v=1.0.0";
 import { installGrandLinePortal } from "./grand-line-portal.js?v=3.4.0";
-import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=3.4.0";
+import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=question-history-1";
 import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from "./grand-line-economy.js?v=3.4.0";
 const grandLineRpgSaveGate = createGrandLineRpgSaveGate({getUser:()=>currentUser,flush:()=>rpgSave()});
 const grandLinePortal=installGrandLinePortal({
@@ -19,6 +19,7 @@ const grandLinePortal=installGrandLinePortal({
   openRift:()=>openPirateRift(),getRiftFrame:()=>document.querySelector('.pirate-rift-portal iframe'),
   ...createGrandLineScienceAdapter({getBank:()=>questionBank,isReleased:qReleased,isInSyllabus:qInSyllabus,extractMcq:_sdExtractMcq,
     makeContext:_scienceFeedContext,plan:_scienceFeedPlan,mark:_scienceFeedMark,remember:_scienceFeedRememberResult,
+    ensure:_scienceFeedEnsure,claim:_scienceFeedClaim,
     recordAttempt:_sdRecordAttempt,awardPoints:rpgAwardGameQuestion,imageResult:_scienceFeedImageResult})
 });
 window.openGrandLine=()=>grandLinePortal.open();
@@ -50,7 +51,8 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) tcgCo
 import { mountInterfaceStudio } from "./interface-studio.mjs?v=2";
 import { mountScienceCoach, resetScienceCoaches } from "./science-coaches.js";
 import { SCIENCE_COACH_INSTRUCTIONS } from "./science-coach-core.js";
-import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit, scienceQuestionLevel } from "./science-feed-core.js";
+import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit, scienceQuestionLevel, scienceQuestionContentKey } from "./science-feed-core.js?v=question-history-1";
+import { createStudentQuestionHistory } from "./student-question-history.js?v=1";
 import { evaluateQuestionQuality, questionQualitySignature, buildQuestionQualitySummary, questionHasUnresolvedStudentFlag } from "./science-feed-quality.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-analytics.js";
@@ -87,6 +89,7 @@ import {
   increment,
   onSnapshot,
   writeBatch,
+  runTransaction,
   Timestamp
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 // App Check (protects the Gemini quota from abuse) + Firebase AI Logic (free-tier Gemini)
@@ -3850,7 +3853,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.391.0';
+const APP_VERSION = 'v1.392.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -29974,10 +29977,104 @@ let _scienceFeedIdentity = '';
 let _scienceFeedMetaCache = null, _scienceFeedPassCache = null;
 let _scienceFeedImageFailures = new Map();
 const _scienceFeedStoreMemory = new Map();
-function _scienceFeedKey(profile) {
+const _scienceHistoryClients = new Map();
+const _scienceHistoryOpening = new Map();
+const _scienceHistoryErrors = new Map();
+let _scienceHistoryGeneration = 0;
+function _scienceFeedHistoryError(profile) { return _scienceHistoryErrors.get(JSON.stringify(_scienceFeedHistoryIdentity(profile))) || ''; }
+function _scienceFeedHistoryIdentity(profile) {
   const child = profile || (typeof famActive === 'function' ? famActive() : null);
-  return JSON.stringify([(currentUser && currentUser.uid) || 'guest',
-    (child && child.name) || (currentUser && currentUser.name) || '']);
+  const uid = currentUser?.uid || '', name = String(child?.historyName || child?.name || currentUser?.name || '');
+  const signedInUid = typeof auth !== 'undefined' && auth.currentUser?.uid || uid;
+  return { uid: signedInUid, profile: signedInUid !== uid ? 'preview:' + uid + ':' + name : name };
+}
+function _scienceFeedHistoryClient(profile) {
+  const identity = _scienceFeedHistoryIdentity(profile), key = JSON.stringify(identity), generation = _scienceHistoryGeneration;
+  if (!_scienceHistoryClients.has(key)) _scienceHistoryClients.set(key, createStudentQuestionHistory({
+    db, doc, collection, getDocs, onSnapshot, runTransaction, subject: 'science',
+    onChange: () => { _scienceFeedPassCache = null; },
+    onError: () => { if (generation === _scienceHistoryGeneration) _scienceHistoryErrors.set(key, 'Your question history could not sync. Check your connection and try again.'); }
+  }));
+  return _scienceHistoryClients.get(key);
+}
+function _scienceFeedHistoryReady(profile) {
+  if (!currentUser?.uid) return false;
+  return _scienceFeedHistoryClient(profile).isReady(_scienceFeedHistoryIdentity(profile));
+}
+async function _scienceFeedEnsure(profile) {
+  if (!currentUser?.uid) return false;
+  const identity = _scienceFeedHistoryIdentity(profile), key = JSON.stringify(identity), client = _scienceFeedHistoryClient(profile);
+  const learnerUid = currentUser?.uid || '';
+  const generation = _scienceHistoryGeneration;
+  if (client.isReady(identity)) return true;
+  if (_scienceHistoryOpening.has(key)) return _scienceHistoryOpening.get(key);
+  const pending = (async () => {
+    try {
+      const child = profile || (typeof famActive === 'function' ? famActive() : null);
+      const names = new Set([child?.historyName || child?.name || currentUser?.name, child?.name || currentUser?.name, ...(child?.historyNames || [])].filter(Boolean));
+      const byId = new Map(_scienceFeedSources().map(q => [String(q.id), q])), entries = new Map();
+      const remember = (id, at) => { if (!id) return; const q = byId.get(String(id)); entries.set(String(id), { id: String(id), at: Number(at) || 1, contentKey: q ? scienceQuestionContentKey(q) : '' }); };
+      for (const name of names) {
+        const localKey = JSON.stringify([learnerUid, name]);
+        for (const kind of ['served', 'history']) {
+          let saved = {}; try { saved = JSON.parse(localStorage.getItem('scienceFeed:' + kind + ':' + localKey) || '{}'); } catch (_) {}
+          for (const [id, row] of Object.entries(saved || {})) if (kind === 'served' ? Number(row) > 0 : Number(row?.last) > 0) remember(id, kind === 'served' ? row : row.last);
+        }
+        let seen = []; try { seen = JSON.parse(localStorage.getItem('sciQuestQpSeen:' + localKey) || '[]'); } catch (_) {}
+        if (Array.isArray(seen)) seen.forEach(id => remember(id, 1));
+        let counts = {}; try { counts = JSON.parse(localStorage.getItem('practiceServed_' + learnerUid + '_' + name) || '{}'); } catch (_) {}
+        for (const [id, count] of Object.entries(counts || {})) if (Number(count) > 0) remember(id, 1);
+      }
+      // Old account-only caches cannot be assigned to one sibling reliably.
+      if (typeof famStudents !== 'function' || famStudents().length < 2) for (const prefix of ['gameQSeen_', 'tcgTrainServed_']) {
+        let saved = {}; try { saved = JSON.parse(localStorage.getItem(prefix + learnerUid) || '{}'); } catch (_) {}
+        for (const [id, at] of Object.entries(saved || {})) if (Number(at) > 0) remember(id, at);
+      }
+      const attempts = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', learnerUid)));
+      if (attempts.metadata?.fromCache) throw new Error('Connect to sync your previous questions.');
+      const namedFamily = typeof famStudents === 'function' && famStudents().length > 0;
+      attempts.forEach(item => { const a = item.data(); if (a?.questionId != null && (!namedFamily || names.has(String(a.displayName || '')))) remember(a.questionId, a.timestamp?.toMillis?.() || Number(a.timestamp) || Date.parse(a.timestamp || '') || 1); });
+      if (generation !== _scienceHistoryGeneration || key !== JSON.stringify(_scienceFeedHistoryIdentity(profile))) return false;
+      const ready = await client.open(identity, [...entries.values()]);
+      if (ready && generation === _scienceHistoryGeneration) _scienceHistoryErrors.delete(key);
+      return ready && generation === _scienceHistoryGeneration && key === JSON.stringify(_scienceFeedHistoryIdentity(profile));
+    } catch (error) { if (generation === _scienceHistoryGeneration) _scienceHistoryErrors.set(key, 'Your question history could not sync. Check your connection and try again.'); console.warn('Question history load', error); return false; }
+    finally { if (_scienceHistoryOpening.get(key) === pending) _scienceHistoryOpening.delete(key); }
+  })();
+  _scienceHistoryOpening.set(key, pending);
+  return pending;
+}
+async function _scienceFeedClaim(questions, profile, manual = false) {
+  const identity = JSON.stringify(_scienceFeedHistoryIdentity(profile)), generation = _scienceHistoryGeneration;
+  if (!await _scienceFeedEnsure(profile) || identity !== JSON.stringify(_scienceFeedHistoryIdentity(profile))) return false;
+  try {
+    const accepted = await _scienceFeedHistoryClient(profile).claimMany(questions.map(q => ({ id: String(q.id), contentKey: scienceQuestionContentKey(q), at: Date.now() })), { allowSeen: manual });
+    return accepted && identity === JSON.stringify(_scienceFeedHistoryIdentity(profile));
+  } catch (error) { if (generation === _scienceHistoryGeneration) _scienceHistoryErrors.set(identity, 'Your question history could not sync. Check your connection and try again.'); console.warn('Question history claim', error); return false; }
+}
+async function _scienceFeedTake(candidates, opts = {}) {
+  const identity = JSON.stringify(_scienceFeedHistoryIdentity(opts.profile));
+  if (!await _scienceFeedEnsure(opts.profile)) return [];
+  for (let retry = 0; retry < 8; retry++) {
+    if (identity !== JSON.stringify(_scienceFeedHistoryIdentity(opts.profile))) return [];
+    const selected = _scienceFeedPlan(candidates, { ...opts, context: undefined }).questions.slice(0, opts.limit || 1);
+    if (!selected.length || opts.requireFull && selected.length !== opts.limit) return [];
+    if (await _scienceFeedClaim(selected, opts.profile, !!opts.manual)) {
+      selected.forEach(q => _scienceFeedMark(q.id, opts.profile));
+      return selected;
+    }
+    if (!_scienceFeedHistoryReady(opts.profile)) return [];
+  }
+  return [];
+}
+function _scienceFeedCloseHistory() {
+  _scienceHistoryGeneration++;
+  _scienceHistoryClients.forEach(client => client.close());
+  _scienceHistoryClients.clear(); _scienceHistoryOpening.clear(); _scienceHistoryErrors.clear(); _scienceFeedPassCache = null;
+}
+function _scienceFeedKey(profile) {
+  const identity = _scienceFeedHistoryIdentity(profile);
+  return JSON.stringify([identity.uid || 'guest', identity.profile]);
 }
 function _scienceFeedLevel(profile) {
   if (profile && (!currentUser || currentUser.role !== 'student')) return isLevelCode(profile.level) ? profile.level : '';
@@ -29997,8 +30094,9 @@ function _scienceFeedGameLevel(profile) {
   return isLevelCode(child?.level) ? child.level : '';
 }
 function _scienceFeedGameMessage() {
+  if (!_scienceFeedHistoryReady()) return _scienceFeedHistoryError() || 'Loading your question history. Please try again in a moment.';
   return !_scienceFeedGameLevel() ? 'Choose your current school level in Settings before starting a game.'
-    : 'No suitable fresh questions are available right now. Try another topic or come back after your review break.';
+    : 'No suitable unseen questions are available. Try another topic or choose a worksheet for revision.';
 }
 function _scienceFeedMeta() {
   if (_scienceFeedMetaCache) return _scienceFeedMetaCache;
@@ -30014,7 +30112,7 @@ function _scienceFeedMeta() {
 }
 function _scienceFeedStoreMerge(kind, ...sources) {
   const result = {}, stamp = row => Number(kind === 'served' ? row : kind === 'history' ? row?.last : row?.at);
-  const oldest = kind === 'served' ? Date.now() - 180 * 86400000 : 0;
+  const oldest = 0;
   for (const source of sources) {
     if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
     for (const [id, row] of Object.entries(source)) {
@@ -30046,7 +30144,6 @@ function _scienceFeedMark(id, profile) {
   if (!id) return;
   const served = _scienceFeedStoreRead('served', profile), now = Date.now();
   served[String(id)] = now;
-  Object.keys(served).forEach(k => { if (!Number.isFinite(served[k]) || served[k] < now - 180 * 86400000) delete served[k]; });
   _scienceFeedStoreWrite('served', served, profile);
 }
 function _scienceFeedRememberResult(id, score, total, profile) {
@@ -30079,6 +30176,7 @@ function _scienceFeedContext(profile, studentLevel = _scienceFeedLevel(profile))
   if (cached && cached.key === key && cached.bank === questionBank && cached.count === questionBank.length && cached.stats === _qAttemptStats) return cached.context;
   const context = buildScienceFeedContext({ bank: _scienceFeedSources(), studentLevel,
     progress: _scienceFeedProgress(profile), served: _scienceFeedStoreRead('served', profile), now: Date.now(),
+    seen: _scienceFeedHistoryClient(profile).snapshot().seen, seenContentKeys: _scienceFeedHistoryClient(profile).snapshot().contentKeys,
     flags: _scienceFeedStoreRead('flags', profile), failedImageUrls: _scienceFeedImageFailures,
     qualityOptions: _scienceFeedQualityOptions, ..._scienceFeedMeta() });
   _scienceFeedPassCache = { key, bank: questionBank, count: questionBank.length, stats: _qAttemptStats, context };
@@ -30092,13 +30190,15 @@ function _scienceFeedPlan(candidates, opts = {}) {
   if (!opts.game && !opts.profile && (!currentUser || currentUser.role !== 'student')) {
     return { questions: (candidates || []).filter(Boolean), blocked: [], reviewCount: 0, reasons: {} };
   }
+  if (!_scienceFeedHistoryReady(opts.profile)) { _scienceFeedEnsure(opts.profile); return { questions: [], blocked: [], reviewCount: 0, reasons: ['history-loading'] }; }
   const ready = (candidates || []).filter(q => q && (opts.allowRetired || qInSyllabus(q)) && qAvailableToViewer(q));
   return planScienceQuestions(ready, { ...opts, manual, context: opts.context || _scienceFeedContext(opts.profile,
     opts.game ? _scienceFeedGameLevel(opts.profile) : _scienceFeedLevel(opts.profile)) });
 }
 function _scienceFeedMessage(profile) {
+  if (!_scienceFeedHistoryReady(profile)) return _scienceFeedHistoryError(profile) || 'Loading your question history. Please try again in a moment.';
   return !_scienceFeedLevel(profile) ? 'Choose your current school level in Settings before starting practice.'
-    : 'No suitable fresh questions are available right now. Try another topic or come back after your review break.';
+    : 'No suitable unseen questions are available. Try another topic or choose a worksheet for revision.';
 }
 function _scienceFeedEmptyHtml(profile) {
   return '<div class="empty-state"><h3>Practice paused</h3><p>' + escapeHtml(_scienceFeedMessage(profile)) + '</p>'
@@ -30122,6 +30222,7 @@ function _scienceFeedManual(candidates, allowRetired = false) {
   return plan.questions;
 }
 function _scienceFeedRefreshFrames() {
+  if (currentUser?.uid) _scienceFeedEnsure();
   pirateRiftPortal.sync();
   grandLinePortal.sync();
   _scienceFeedPassCache = null; _scienceFeedMetaCache = null;
@@ -30141,6 +30242,7 @@ function _scienceFeedRefreshFrames() {
     tpQueue = []; tpIndex = -1; tpAnswered = 0; tpSessionResults = [];
     _qpFeedManual = false; _qpFeedAllowRetired = false;
     _questRun = null; _ainsteinQuiz = null;
+    if (typeof _mkSess !== 'undefined') { _mkSess = null; const host = document.getElementById('mkStudentBody'); if (host) host.innerHTML = _scienceFeedEmptyHtml(); }
     if (_tcgQuiz) { _tcgQuiz.pool = []; _tcgQuiz.cur = null; _tcgQuiz.answered = true; }
     for (const run of [duelRun, emsRun, elgRun]) if (run) { run.pool = []; run.quiz = null; }
     for (const id of ['tcgqBody', 'duelQuiz', 'emsQuizBody', 'elgQuiz']) {
@@ -30172,12 +30274,16 @@ function _scienceFeedGameRows(rows, opts = {}) {
       a: fresh.answer, ex: fresh.explain || (row.db ? '' : row.ex), feedSource: q };
   }).filter(Boolean);
 }
-function _scienceFeedNextGame(run, field = 'poolI') {
+async function _scienceFeedNextGame(run, field = 'poolI') {
   if (!run || !Array.isArray(run.pool)) return null;
-  const choices = _scienceFeedGameRows(run.pool);
-  const q = choices[0] || null;
-  if (q) { run[field] = (run[field] || 0) + 1; _scienceFeedMark(q.id); }
-  return q;
+  const byId = new Map(_scienceFeedSources().map(q => [String(q.id), q]));
+  const selected = await _scienceFeedTake(run.pool.map(row => byId.get(String(row.id))).filter(Boolean), { game: true, randomize: true, limit: 1 });
+  const q = selected[0] && run.pool.find(row => String(row.id) === String(selected[0].id));
+  if (q) run[field] = (run[field] || 0) + 1;
+  if (!q || !q.feedSource) return q || null;
+  const fresh = _sdExtractMcq(selected[0]);
+  return fresh ? { ...q, html: fresh.html, opts: fresh.options.map(_htmlPlainText), optsHtml: fresh.options,
+    a: fresh.answer, ex: fresh.explain || (q.db ? '' : q.ex), feedSource: selected[0] } : null;
 }
 function _scienceFeedPublicImageUrls(q) {
   const urls = [];
@@ -30295,8 +30401,10 @@ async function loadRandomPracticeQuestion() {
   const profileKey = _scienceFeedKey(student);
 
   await loadAttemptStats();
+  if (!await _scienceFeedEnsure(student)) { document.getElementById('practiceContainer').innerHTML = _scienceFeedEmptyHtml(student); return; }
   if (profileIndex !== activeStudentIndex || students[profileIndex] !== student || profileKey !== _scienceFeedKey(student)) return;
-  const available = _scienceFeedPlan(getQuestionsForLevel(student.level), { profile: student }).questions;
+  const available = await _scienceFeedTake(getQuestionsForLevel(student.level), { profile: student, limit: 1 });
+  if (profileIndex !== activeStudentIndex || students[profileIndex] !== student || profileKey !== _scienceFeedKey(student)) return;
   const q = available[0];
   if (!q) { document.getElementById('practiceContainer').innerHTML = _scienceFeedEmptyHtml(student); return; }
   _scienceFeedMark(q.id, student);
@@ -34731,7 +34839,9 @@ function practiceSavedWorksheet(id, mode) {
 // blanks, anything else for ordinary practice. It is set BEFORE the queue is
 // built and before navigateTo, because navigating to Quick Practice repaints
 // its controls and the dropdown has to end up agreeing with the flag.
-function launchWorksheetPractice(questions, mode, feedOptions = {}) {
+async function launchWorksheetPractice(questions, mode, feedOptions = {}) {
+  const identity = _scienceFeedKey();
+  if (!await _scienceFeedEnsure() || identity !== _scienceFeedKey()) { showToast(_scienceFeedMessage(), 'info'); return; }
   // 🔒 THE GATE FOR EVERY WORKSHEET-DRIVEN QUEUE, and the reason it lives here
   // rather than at the call sites: this is the ONE door the builder's own
   // selection, a saved worksheet, a past paper and Ai-nstein's set all come
@@ -34781,7 +34891,7 @@ function launchWorksheetPractice(questions, mode, feedOptions = {}) {
   navigateTo('quickpractice');
   qpSetMode(qpFibOn() ? 'fillblanks' : 'normal');   // the page has just repainted its controls
   // Start practicing with these questions
-  loadNextQpQuestion();
+  await loadNextQpQuestion();
 }
 
 // ---- Print student worksheet with logo ----
@@ -37952,7 +38062,8 @@ async function famLoadProfile() {
       const d = s.data();
       familyProfile.students = Array.isArray(d.students)
         ? d.students.filter(x => x && typeof x.name === 'string' && x.name.trim()).map(x => ({
-            name: x.name.trim(),
+            name: x.name.trim(), historyName: String(x.historyName || x.name).trim(),
+            historyNames: [...new Set([x.name.trim(), ...(Array.isArray(x.historyNames) ? x.historyNames.filter(name => typeof name === 'string') : [])])],
             level: isLevelCode(x.level || '') ? x.level : '',
             edits: Math.max(0, Number(x.edits) || 0)
           }))
@@ -37965,7 +38076,8 @@ async function famLoadProfile() {
 function famSaveProfile() {
   if (!currentUser || !db) return Promise.resolve();
   return setDoc(doc(db, 'userProfiles', currentUser.uid), {
-    students: famStudents().map(s => ({ name: s.name, level: s.level, edits: s.edits || 0 })),
+    students: famStudents().map(s => ({ name: s.name, historyName: s.historyName || s.name,
+      historyNames: [...new Set([s.name, ...(s.historyNames || [])])], level: s.level, edits: s.edits || 0 })),
     address: familyProfile.address || '',
     activeStudent: familyProfile.activeStudent || 0
   }, { merge: true }).catch(e => console.warn('family profile save', e));
@@ -38283,6 +38395,8 @@ async function famSaveStudentEdit(i) {
   if (!name) { showToast('Name cannot be empty', 'error'); return; }
   if (name === s.name && level === s.level) { showToast('Nothing changed', 'info'); return; }
   if ((s.edits || 0) >= FAM_EDIT_LIMIT) { showToast('No edits left for this student — ask your teacher.', 'error'); return; }
+  s.historyName ||= s.name;
+  s.historyNames = [...new Set([s.name, name, ...(s.historyNames || [])])];
   s.name = name;
   s.level = isLevelCode(level) ? level : s.level;
   s.edits = (s.edits || 0) + 1;
@@ -38546,6 +38660,7 @@ async function startQuickPractice() {
   const feedKey = _scienceFeedKey();
   qpLevel = document.getElementById('qpLevelSelect').value;
   await loadAttemptStats(); // mastery needs the current child's latest outcomes
+  await _scienceFeedEnsure();
   if (feedKey !== _scienceFeedKey()) return;
   qpQueue = buildQpQueue(qpLevel);
   qpIndex = -1;
@@ -38566,10 +38681,17 @@ async function startQuickPractice() {
   // Preload images before starting
   await preloadQueueImages(qpQueue);
   if (feedKey !== _scienceFeedKey()) return;
-  loadNextQpQuestion();
+  await loadNextQpQuestion();
 }
 
-function loadNextQpQuestion() {
+let _scienceQpLoading = false;
+async function loadNextQpQuestion() {
+  if (_scienceQpLoading) return;
+  _scienceQpLoading = true;
+  const identity = _scienceFeedKey(), queue = qpQueue;
+  try {
+  if (!await _scienceFeedEnsure()) { document.getElementById('qpContainer').innerHTML = _scienceFeedEmptyHtml(); return; }
+  if (identity !== _scienceFeedKey() || queue !== qpQueue) return;
   rpgQuestionChanged();
   qpIndex++;
   const eligible = new Set(_scienceFeedPlan(qpQueue.slice(qpIndex), { manual: _qpFeedManual, allowRetired: _qpFeedAllowRetired }).questions.map(q => String(q.id)));
@@ -38579,10 +38701,15 @@ function loadNextQpQuestion() {
     updateQpProgress();
     return;
   }
-  const q = qpQueue[qpIndex];
+  const selected = await _scienceFeedTake(qpQueue.slice(qpIndex), { manual: _qpFeedManual, allowRetired: _qpFeedAllowRetired, limit: 1 });
+  if (identity !== _scienceFeedKey() || queue !== qpQueue) return;
+  const q = selected[0];
+  if (!q) { document.getElementById('qpContainer').innerHTML = _scienceFeedEmptyHtml(); return; }
+  qpIndex = qpQueue.indexOf(q, qpIndex);
   if (q && q.id) qpMarkServed(q.id); // remember it so next session shows fresh ones first
   renderQpQuestion(q);
   updateQpProgress();
+  } finally { _scienceQpLoading = false; }
 }
 
 function _recordQpResult(correct, total, mistakes) {
@@ -39103,7 +39230,7 @@ function _homeReviewPool() {
   });
   const best = q => (stats[String(q.id)] && stats[String(q.id)].best) || 0;
   const last = q => (stats[String(q.id)] && stats[String(q.id)].last) || 0;
-  return _scienceFeedPlan(pool.sort((a, b) => (best(a) - best(b)) || (last(a) - last(b)))).questions;
+  return _scienceFeedPlan(pool.sort((a, b) => (best(a) - best(b)) || (last(a) - last(b))), { manual: true }).questions;
 }
 
 async function renderHomePage() {
@@ -39115,6 +39242,7 @@ async function renderHomePage() {
   c.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">Loading your day…</div>';
   try { await loadAttemptStats(); } catch (_) {}
   try { if (!cerPerf) await loadCerPerf(); } catch (_) {}
+  await _scienceFeedEnsure();
   const p = cerPerf || _emptyPerf();
 
   // Today's practice (the 10-a-day goal that also feeds the voucher streak).
@@ -39215,18 +39343,23 @@ function homeContinuePractice() {
   navigateTo('quickpractice');
   startQuickPractice();
 }
-function homeStartReview() {
+async function homeStartReview() {
+  const learner = _scienceFeedKey();
+  await loadAttemptStats();
+  if (!await _scienceFeedEnsure() || learner !== _scienceFeedKey()) { showToast(_scienceFeedMessage(), 'info'); return; }
   const pool = _homeReviewPool();
   if (!pool.length) { showToast('Nothing to review — great work!', 'success'); return; }
   _questRun = null;
-  _qpFeedManual = false;
+  _qpFeedManual = true;
+  _qpFeedAllowRetired = false;
   qpQueue = pool.slice(0, 10);
   qpIndex = -1;
   qpAnswered = 0;
   qpSessionResults = [];
   navigateTo('quickpractice');
   showToast('🔁 Review session — beat your old scores!', 'info');
-  preloadQueueImages(qpQueue).then(() => loadNextQpQuestion()).catch(() => loadNextQpQuestion());
+  try { await preloadQueueImages(qpQueue); } catch (_) {}
+  if (learner === _scienceFeedKey()) await loadNextQpQuestion();
 }
 function homePractiseWeakest() {
   navigateTo('topicalpractice');
@@ -40294,6 +40427,7 @@ async function tpStartPractice() {
   // Gather questions per topic, each ordered unattempted-first then weakest-first
   // (orderByAttemptPriority shuffles within those groups).
   await loadAttemptStats();
+  await _scienceFeedEnsure();
   const questionsByTopic = {};
   if (feedKey !== _scienceFeedKey()) return;
   const tpServed = new Set(qpLoadSeen());   // same served memory as quick practice
@@ -40365,7 +40499,7 @@ async function tpStartPractice() {
   // Preload all images in the queue before starting
   await preloadQueueImages(tpQueue);
   if (feedKey !== _scienceFeedKey()) return;
-  tpLoadNextQuestion();
+  await tpLoadNextQuestion();
 }
 
 // Legacy single-topic start (kept for compatibility but routes through multi-select)
@@ -40375,7 +40509,14 @@ function tpStartTopic(topic) {
   tpStartPractice();
 }
 
-function tpLoadNextQuestion() {
+let _scienceTpLoading = false;
+async function tpLoadNextQuestion() {
+  if (_scienceTpLoading) return;
+  _scienceTpLoading = true;
+  const identity = _scienceFeedKey(), queue = tpQueue;
+  try {
+  if (!await _scienceFeedEnsure()) { document.getElementById('tpContainer').innerHTML = _scienceFeedEmptyHtml(); return; }
+  if (identity !== _scienceFeedKey() || queue !== tpQueue) return;
   rpgQuestionChanged();
   tpIndex++;
   const eligible = new Set(_scienceFeedPlan(tpQueue.slice(tpIndex)).questions.map(q => String(q.id)));
@@ -40393,10 +40534,15 @@ function tpLoadNextQuestion() {
     tpUpdateProgress();
     return;
   }
-  const _tpQ = tpQueue[tpIndex];
+  const selected = await _scienceFeedTake(tpQueue.slice(tpIndex), { limit: 1 });
+  if (identity !== _scienceFeedKey() || queue !== tpQueue) return;
+  const _tpQ = selected[0];
+  if (!_tpQ) { document.getElementById('tpContainer').innerHTML = _scienceFeedEmptyHtml(); return; }
+  tpIndex = tpQueue.indexOf(_tpQ, tpIndex);
   if (_tpQ && _tpQ.id) qpMarkServed(_tpQ.id); // shared served memory with quick practice
   tpRenderQuestion(_tpQ);
   tpUpdateProgress();
+  } finally { _scienceTpLoading = false; }
 }
 
 function tpUpdateProgress() {
@@ -47647,6 +47793,7 @@ document.addEventListener('visibilitychange', () => {
   rpgClaimStrikePoints();
 });
 function rpgOnSignOut() {
+  _scienceFeedCloseHistory();
   advToken++; adv = null;
   rpgState = null;
   rpgBoardRows = null;
@@ -49925,16 +50072,19 @@ function commOfferQuestPrize(quest) {
 }
 
 // ---- score-mode quest run (student answers the admin-picked questions) ----
-function commStartQuestRun(questId) {
+async function commStartQuestRun(questId) {
   const quest = _commQuests.find(q => q._id === questId);
   if (!quest || quest.mode !== 'score') return;
   if (!(currentUser && currentUser.role === 'student')) return;
   const left = new Date(quest.endAt).getTime() - Date.now();
   if (quest.winnerUid || quest.status === 'ended' || left <= 0) { showToast('That quest has ended.', 'info'); return; }
+  const learner = _scienceFeedKey();
+  if (!await _scienceFeedEnsure() || learner !== _scienceFeedKey()) { showToast(_scienceFeedMessage(), 'info'); return; }
   const ids = Array.isArray(quest.questionIds) ? quest.questionIds.map(String) : [];
   const byId = {}; (Array.isArray(questionBank) ? questionBank : []).forEach(q => { if (q && q.id != null) byId[String(q.id)] = q; });
   const queue = _scienceFeedManual(ids.map(id => byId[id]).filter(Boolean));
   _qpFeedManual = true;
+  _qpFeedAllowRetired = false;
   if (!queue.length) { showToast('These quest questions aren\'t available on your device yet — try again shortly.', 'error'); return; }
   _questRun = { questId: quest._id, ids: queue.map(q => String(q.id)), total: queue.length, best: {} };
   qpQueue = queue;
@@ -49943,7 +50093,8 @@ function commStartQuestRun(questId) {
   qpSessionResults = [];
   showToast('⚡ Quest started — answer them all, your best % counts!', 'success');
   navigateTo('quickpractice');
-  preloadQueueImages(qpQueue).then(() => loadNextQpQuestion()).catch(() => loadNextQpQuestion());
+  try { await preloadQueueImages(qpQueue); } catch (_) {}
+  if (learner === _scienceFeedKey()) await loadNextQpQuestion();
 }
 // ---- auto-fed quest run: the system picks each student's questions ----
 // Priority: questions the student hasn't done yet, then ones they previously
@@ -49969,6 +50120,7 @@ async function commStartAutoQuest(questId) {
   showToast('Picking your questions…', 'info');
   // Best recorded fraction (0–1) per question from this student's attempt log.
   const _stats = await loadAttemptStats();
+  if (!await _scienceFeedEnsure()) { showToast(_scienceFeedMessage(), 'info'); return; }
   const bestByQ = {};
   Object.keys(_stats).forEach(id => { bestByQ[id] = _stats[id].best; });
   const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
@@ -49988,7 +50140,8 @@ async function commStartAutoQuest(questId) {
   const winMsg = quest.win === 'fastest' ? 'fastest to finish wins — go!' : quest.win === 'graded' ? 'do your best, Mr Chung grades!' : 'highest score wins!';
   showToast('⚡ Quest started — ' + winMsg, 'success');
   navigateTo('quickpractice');
-  preloadQueueImages(qpQueue).then(() => loadNextQpQuestion()).catch(() => loadNextQpQuestion());
+  await preloadQueueImages(qpQueue).catch(() => {});
+  await loadNextQpQuestion();
 }
 // Called from rpgOnMarked for every real marked question. If a score-quest run
 // is live and this question belongs to it, record the student's best credit
@@ -51964,9 +52117,8 @@ async function _hadesScienceQuestions() {
   const rows = new Map();
   const candidates = (questionBank || []).filter(q => q && q.status !== 'pending' && q.status !== 'flagged'
     && qReleased(q) && qInSyllabus(q) && _hadesUnavailableContent.get(String(q.id)) !== questionQualitySignature(q)).filter(q => { const row = _sdExtractMcq(q); if (row) rows.set(String(q.id),row); return !!row; });
-  const context = _scienceFeedContext(profile,level);
-  const planned = _scienceFeedPlan(candidates,{ game:true,profile,context,randomize:true,onePerFamily:true,limit:5 });
-  return planned.questions.map(q => ({ ...rows.get(String(q.id)),id:String(q.id),title:q.title || '' }));
+  const selected = await _scienceFeedTake(candidates,{ game:true,profile,randomize:true,onePerFamily:true,limit:5,requireFull:true });
+  return selected.map(q => ({ ...rows.get(String(q.id)),id:String(q.id),title:q.title || '' }));
 }
 function _hadesInit() {
   if (!_hadesAllowed()) return;
@@ -52647,6 +52799,7 @@ function _gqFilterPool(pool) {
 async function _sdQuestionsPayload(source) {
   const feedKey = _scienceFeedKey(), feedLevel = _scienceFeedGameLevel();
   const seenStats = await _sdSeenStats();
+  await _scienceFeedEnsure();
   let questions = [];
   // Past-paper mode: the game launched from the Past Papers page gets ONLY
   // the selected portion's attached questions (MCQ + OEQ self-check).
@@ -52654,6 +52807,11 @@ async function _sdQuestionsPayload(source) {
   try { questions = ppMode ? ppGamePool(_ppGameSel.year) : buildDefenderQuestions(); } catch (e) { console.warn('SD bank extract failed', e); }
   // Current-grade fit first, with shared quality and repetition safeguards.
   try { questions = _gqFilterPool(questions); } catch (e) { questions = []; console.warn('gq filter', e); }
+  if (questions.length) {
+    const bank = new Map(_scienceFeedSources().map(q => [String(q.id), q]));
+    const selected = await _scienceFeedTake(questions.map(q => bank.get(String(q.id))).filter(Boolean), { game: true, randomize: true, limit: 1 });
+    questions = selected.flatMap(q => questions.filter(row => String(row.id) === String(q.id)));
+  }
   if (feedKey !== _scienceFeedKey() || feedLevel !== _scienceFeedGameLevel()) questions = [];
   return {
     type: 'SD_QUESTIONS',
@@ -52673,6 +52831,7 @@ window.addEventListener('message', function (ev) {
   const d = ev && ev.data;
   if (!d) return;
   if (d.type === 'SD_REQUEST_QUESTIONS') {
+    if (ev.origin !== location.origin || !['defendersFrame', 'raidersFrame', 'spireFrame', 'legendsFrame', 'slayersFrame'].some(id => document.getElementById(id)?.contentWindow === ev.source)) return;
     (async () => {
       const payload = await _sdQuestionsPayload(ev.source);
       payload.requestId = d.requestId;
@@ -59423,8 +59582,12 @@ function _tcgQuizStatus(flash) {
         + '<span class="tcg-quiz-count">' + prog + ' / ' + TCG_LVL_STEP + ' to Lv ' + (level + 1) + '</span>');
   if (flash) { st.classList.remove('flash'); void st.offsetWidth; st.classList.add('flash'); }
 }
-function _tcgQuizRender() {
+async function _tcgQuizRender() {
   const body = document.getElementById('tcgqBody'); if (!body || !_tcgQuiz) return;
+  const run = _tcgQuiz, identity = _scienceFeedKey();
+  if (run.loading) return;
+  run.loading = true;
+  try {
   const level = tcgLevel(_tcgQuiz.id);
   if (level >= TCG_LVL_MAX) {
     body.innerHTML = '<div class="tcg-quiz-done">🌟 <b>' + escapeHtml(tcgShortName(TCG_BY_ID[_tcgQuiz.id])) + '</b> is fully trained to Level ' + TCG_LVL_MAX + ' — max stats and skill!'
@@ -59433,7 +59596,8 @@ function _tcgQuizRender() {
   }
   _tcgQuiz.answered = false;
   _tcgQuiz.at = performance.now();   // clocked so the shared anti-rush gate applies here too
-  const q = _scienceFeedNextGame(_tcgQuiz, 'i');
+  const q = await _scienceFeedNextGame(run, 'i');
+  if (run !== _tcgQuiz || identity !== _scienceFeedKey()) return;
   if (!q) { _tcgQuiz.cur = null; body.innerHTML = _scienceFeedEmptyHtml(); return; }
   _tcgQuiz.cur = q;
   if (q && q.id) _tcgServedMark(q.id);
@@ -59443,6 +59607,7 @@ function _tcgQuizRender() {
         + '<span class="tcg-quiz-let">' + (idx + 1) + '</span>' + (q.optsHtml?.[idx] || escapeHtml(o)) + '</button>').join('')
     + '</div>'
     + '<div class="tcg-quiz-fb" id="tcgqFb"></div>';
+  } finally { run.loading = false; }
 }
 function _tcgQuizAnswer(idx) {
   if (!_tcgQuiz || _tcgQuiz.answered) return;
@@ -63422,12 +63587,17 @@ function duelTap(e) {
 // like every other mode — it TRAINS the monsters standing on your board.
 // rpgAwardGameQuestion is the ONLY points path; it already handles the wallet,
 // the energy bar, the rushed-answer guard and the save.
-function duelOpenQuiz() {
+async function duelOpenQuiz() {
   const r = duelRun; if (!r || r.over || r.busy || r.whose !== 'P' || r.insightUsed) return;
+  if (r.feedLoading) return;
+  r.feedLoading = true;
+  const identity = _scienceFeedKey();
+  try {
   if (r.quiz) return;                                     // one panel, never two
   const stale = document.getElementById('duelQuiz'); if (stale) stale.remove();
   if (!r.pool.length) { showToast('No questions available yet', 'error'); return; }
-  const q = _scienceFeedNextGame(r);
+  const q = await _scienceFeedNextGame(r);
+  if (r !== duelRun || r.over || r.whose !== 'P' || identity !== _scienceFeedKey()) return;
   if (!q) { showToast(_scienceFeedMessage(), 'info'); return; }
   if (q && q.id) _tcgServedMark(q.id);
   r.quiz = { q, at: (typeof performance !== 'undefined' ? performance.now() : Date.now()), answered: false };
@@ -63443,6 +63613,7 @@ function duelOpenQuiz() {
     + '</div><div class="duel-quiz-foot" id="duelQuizFoot"></div></div>';
   host.appendChild(box);
   r.insightUsed = true;             // spent on OPENING it, so the button cannot re-arm
+  } finally { r.feedLoading = false; }
   duelRender();
 }
 function duelAnswer(i) {
@@ -64711,9 +64882,13 @@ function emsCloseQuiz() {
   // has the game manually paused anyway.
   if (wasRound && emsRun && !emsRun.paused && !emsRun.over) emsBanner('▶ Battle resumed!', 1400);
 }
-function emsNextQuestion() {
+async function emsNextQuestion() {
   const r = emsRun; if (!r) return;
-  const q = _scienceFeedNextGame(r);
+  if (r.feedLoading) return;
+  r.feedLoading = true;
+  const identity = _scienceFeedKey();
+  const q = await _scienceFeedNextGame(r).finally(() => { r.feedLoading = false; });
+  if (r !== emsRun || r.over || identity !== _scienceFeedKey()) return;
   if (!q) { emsCloseQuiz(); showToast(_scienceFeedMessage(), 'info'); return; }
   r.quiz = { q: q, at: performance.now(), answered: false };
   if (q && q.id) _tcgServedMark(q.id);
@@ -66099,9 +66274,13 @@ function elgCloseQuiz() {
   const b = document.getElementById('elgQuiz'); if (b) b.remove();
   if (r) { r.quiz = null; if (!document.getElementById('elgTree')) r.qPause = false; }
 }
-function elgNextQuestion() {
+async function elgNextQuestion() {
   const r = elgRun; if (!r) return;
-  const q = _scienceFeedNextGame(r);
+  if (r.feedLoading) return;
+  r.feedLoading = true;
+  const identity = _scienceFeedKey();
+  const q = await _scienceFeedNextGame(r).finally(() => { r.feedLoading = false; });
+  if (r !== elgRun || r.over || identity !== _scienceFeedKey()) return;
   if (!q) { elgCloseQuiz(); showToast(_scienceFeedMessage(), 'info'); return; }
   r.quiz = { q, at: performance.now(), answered: false };
   if (q && q.id) _tcgServedMark(q.id);
@@ -72384,6 +72563,7 @@ async function ainsteinTrySimilar(token) {
 }
 
 async function _ainsteinOpenQuiz(q, concept) {
+  if (!await _scienceFeedEnsure()) { showToast(_scienceFeedMessage(), 'info'); return; }
   if (!_scienceFeedPlan([q]).questions.length) { showToast(_scienceFeedMessage(), 'info'); return; }
   const feedKey = _scienceFeedKey();
   const panel = _ainsteinEl('ainsteinPanel');
@@ -72404,6 +72584,7 @@ async function _ainsteinOpenQuiz(q, concept) {
   try { await preloadQueueImages([q]); } catch (_) {}
   // Still the question we opened? (They may have gone back to chat meanwhile.)
   if (!_ainsteinQuiz || _ainsteinQuiz.q !== q || feedKey !== _scienceFeedKey() || !_scienceFeedPlan([q]).questions.length) return;
+  if (!await _scienceFeedClaim([q]) || !_ainsteinQuiz || _ainsteinQuiz.q !== q || feedKey !== _scienceFeedKey()) return;
   body.innerHTML = buildOpenBody(q, AINSTEIN_QUIZ_SEL, {
     scoreElId: 'ainsteinQuizScore', scorePrefix: 'Score', mode: 'quickpractice-open',
     onAllMarked: _ainsteinQuizMarked,
@@ -75115,12 +75296,20 @@ async function mkStudentLoad(force) {
   return _mkStudent.entries;
 }
 function _mkStudentPool(animalId) {
-  return _mkSort(_mkStudent.entries.filter(e => _mkVisibleToStudent(e, _docQById) && (!animalId || e.animal === animalId)));
+  const history = _scienceFeedHistoryClient();
+  return _mkSort(_mkStudent.entries.filter(e => _mkVisibleToStudent(e, _docQById) && (!animalId || e.animal === animalId)
+    && !history.has('mistake:' + e.id, scienceQuestionContentKey(_mkFeedQuestion(e)))));
+}
+function _mkFeedQuestion(e) {
+  return { id: 'mistake:' + e.id, blocks: [{ type: 'text', content: e.question || '' },
+    ...(e.images || []).map(url => ({ type: 'image', url })), { type: 'studentAnswer', answer: e.studentAnswer || '' }] };
 }
 
 async function mkStudentRender() {
   const host = document.getElementById('mkStudentBody');
   if (!host) return;
+  if (!await _scienceFeedEnsure()) { host.innerHTML = _scienceFeedEmptyHtml(); return; }
+  if (_mkSess && _mkSess.learner !== _scienceFeedKey()) _mkSess = null;
   if (_mkSess) { _mkRenderSession(host); return; }
   if (!_mkStudent.loaded) { host.innerHTML = '<div class="mk-empty">Loading…</div>'; await mkStudentLoad(); }
   const all = _mkStudentPool('');
@@ -75151,12 +75340,25 @@ async function mkStudentRender() {
 /* `mode`: 'learn' — the animal quiz, then rewrite it; 'quiz' — the animal
    quiz alone, quick fire; 'study' — ONE animal, so the guess would be no
    guess: the mistake is shown, the lesson read, and the answer rewritten. */
-function mkStart(animalId, mode) {
+let _mkStarting = false;
+async function mkStart(animalId, mode) {
+  if (_mkStarting) return;
+  _mkStarting = true;
+  const identity = _scienceFeedKey();
+  try {
+  if (!await _scienceFeedEnsure() || identity !== _scienceFeedKey()) { showToast(_scienceFeedMessage(), 'info'); return; }
   const pool = _mkShuffle(_mkStudentPool(animalId || '')).slice(0, MK_SESSION_MAX);
   if (!pool.length) { showToast('Nothing to practise there yet.', 'info'); return; }
+  if (!await _scienceFeedClaim(pool.map(_mkFeedQuestion)) || identity !== _scienceFeedKey()) { showToast(_scienceFeedMessage(), 'info'); return; }
+  // This corrective task is distinct from answering the original question.
+  // Its original is nevertheless now familiar in every ordinary game feed.
+  const originals = pool.map(e => _docQById(e.questionId)).filter(Boolean);
+  if (originals.length && !await _scienceFeedClaim(originals, undefined, true) || identity !== _scienceFeedKey()) return;
   _mkSess = { list: pool, i: 0, mode: mode || 'learn', animal: animalId || '', right: 0, results: [],
+              learner: identity,
               pick: null, opts: null, checked: null, checking: false, revealed: false, startedAt: Date.now() };
-  mkStudentRender();
+  await mkStudentRender();
+  } finally { _mkStarting = false; }
 }
 function mkQuit() { _mkSess = null; mkStudentRender(); }
 function _mkCur() { return _mkSess && _mkSess.list[_mkSess.i]; }
@@ -75218,7 +75420,7 @@ function _mkRenderSession(host) {
   host.innerHTML = html;
 }
 function mkPick(id) {
-  const s = _mkSess; if (!s || s.pick != null) return;
+  const s = _mkSess; if (!s || s.learner !== _scienceFeedKey() || s.pick != null) return;
   const e = _mkCur();
   s.pick = id;
   const right = id === e.animal;
@@ -75235,7 +75437,7 @@ function mkReveal() {
   mkStudentRender();
 }
 async function mkCheckRewrite() {
-  const s = _mkSess; if (!s || s.checking || s.checked) return;
+  const s = _mkSess; if (!s || s.learner !== _scienceFeedKey() || s.checking || s.checked) return;
   const e = _mkCur();
   const ta = document.getElementById('mkRewrite');
   const text = String(ta ? ta.value : '').trim();
@@ -75263,7 +75465,7 @@ async function mkCheckRewrite() {
   mkStudentRender();
 }
 function mkNext() {
-  const s = _mkSess; if (!s) return;
+  const s = _mkSess; if (!s || s.learner !== _scienceFeedKey()) return;
   if (s.mode === 'study') s.results.push({ animal: _mkCur().animal, right: s.checked ? s.checked.verdict === 'correct' : false });
   s.i++; s.pick = null; s.opts = null; s.checked = null; s.checking = false; s.revealed = false; s.rewrite = '';
   mkStudentRender();

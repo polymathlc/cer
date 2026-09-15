@@ -1,4 +1,4 @@
-# Student question feeding — v1.382.3
+# Student question feeding — v1.392.0
 
 Science uses the same school-level, mastery and repetition safeguards as Math
 v1.79.0 (Math PR #195), adapted to Science's question blocks and family accounts.
@@ -42,19 +42,35 @@ question family one place in that group's lottery, then randomizes its eligible
 variants. Numerous copies of a question do not give its family extra chances.
 The next request makes a fresh draw; neither bank order nor a fixed small prefix
 determines every student's set. Earlier-grade and less suitable groups remain
-behind the preferred group. There is no extra AI call or database write.
+behind the preferred group. Shuffling adds no AI call or database scan.
 Ordinary practice retains its learning order; explicit worksheets retain their
 selected order even if a caller requests randomization. Choice text and authored
 answer positions are not changed.
 
-Practice and games share served timestamps and per-child outcome history. Exact
-copies and story variants stay spaced across modes. A correct answer normally
-returns no sooner than a day, a partial answer after four hours and an incorrect
-answer after thirty minutes; explicit later review dates are respected. A new
-numerical variant waits at least fifteen minutes. A depleted suitable pool stops
-instead of cycling or falling back to unclassified built-in questions.
-Per-child session memory also preserves spacing and results when browser storage
-is blocked; available storage continues sharing updates across tabs.
+Practice and games share permanent account history for each family learner.
+Showing or reserving a question records it before automatic delivery, including
+abandoned games and skipped questions. Reloading, restarting a game, switching
+modes, waiting for an old review date or using another device never resets this
+history. Exact visible copies under different IDs are excluded as well; private
+answer corrections cannot turn an old question into a fresh one. Truly new
+numerical variants retain the separate fifteen-minute family spacing rule.
+A depleted suitable pool stops instead of cycling or falling back to samples.
+
+The portal and standalone Science Strike wait for account history before
+automatic feeding. Existing per-child served caches and completed attempts are
+merged into that history. Unrelated accounts and siblings remain isolated.
+Explicitly chosen worksheets and review actions remain available for deliberate
+revision; automatic feeds never silently switch into revision.
+The mistake bank tracks the distinct corrective task as well as exposure to its
+original question. It can teach a new mistake lesson on familiar work without
+repeating that same lesson on the next session. Family name edits preserve the
+learner's history identity and previous names used by older attempt records.
+
+When a teacher uses Practice As Student, its preview history belongs to the
+signed-in teacher and a separate profile for that learner. Preview delivery
+does not directly reserve the student's permanent history. Existing grading
+and attempt recording are unchanged; work recorded for a student still counts
+when that student's previous attempts are migrated.
 
 Explicit worksheet revision retains eligible question order and can include
 harder work within the school ceiling, with notices for suspect content. It

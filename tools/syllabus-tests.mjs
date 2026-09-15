@@ -10,7 +10,7 @@
 // anywhere. Neither shows up as a crash, so it is pinned here.
 import fs from 'fs';
 
-const APP = new URL('../app.js', import.meta.url).pathname;
+const APP = new URL('../app.js', import.meta.url);
 const src = fs.readFileSync(APP, 'utf8');
 const a = src.indexOf('// ---- Retired topics ---');
 const b = src.indexOf('// ---- Student feeding: one local policy', a);

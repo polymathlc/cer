@@ -110,7 +110,7 @@ export function createGrandLineLearningController(config) {
       const questions = validGrandLineQuestions(await config.getQuestions(), typeof config.gradeQuestion === 'function');
       if (!current(s) || revision !== generation) return false;
       if (questions.length !== GRAND_LINE_QUESTION_COUNT) {
-        blocked('Three fresh, suitable questions are needed at your saved school level. Try again after your portal has loaded or your review break.');
+        blocked('Three new, suitable questions are needed at your school level. Choose another topic or wait for your teacher to add questions.');
         return true;
       }
       // Reserve the set together so another mode cannot serve an unseen tail

@@ -67,7 +67,7 @@ export function createHadesLearningController(config) {
       const questions = validHadesQuestions(await config.getQuestions(), typeof config.gradeQuestion === 'function');
       if (!current(s) || revision !== generation) return false;
       if (questions.length !== HADES_QUESTION_COUNT) {
-        blocked('Five fresh, suitable questions are needed. Try again later or choose another preview level.');
+        blocked('Five new, suitable questions are needed at your school level. Choose another topic or wait for your teacher to add questions.');
         return true;
       }
       // Reserve the set together so another mode cannot serve an unseen tail

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {buildScienceFeedContext,planScienceQuestions} from '../science-feed-core.js';
+import {buildScienceFeedContext,planScienceQuestions,scienceQuestionContentKey} from '../science-feed-core.js';
 import {strikeQuestionQualityOptions,strikeAttemptProgress} from '../science-strike-feed.js';
 const read = name => fs.readFileSync(new URL('../'+name,import.meta.url),'utf8').replace(/\r\n/g,'\n');
 const bridgeSource=read('science-feed-bridge.js'), fps=read('fps.html');
@@ -67,7 +67,7 @@ test('an observed diagram failure withdraws the question without recording a wro
   assert.equal(f.messages.at(-1).type,'SD_IMAGE_FAILED');assert.equal(f.messages.at(-1).studentKey,'child-a');
   assert.equal(f.messages.some(message=>message.type==='SD_RECORD'),false);assert.equal(f.invalidated,1);
 });
-for(const file of ['science-defenders.html','science-raiders.html','science-legends.html','science-slayers.html','science-spire.html'])test(file+' uses the guarded picker and accepts empty banks',()=>{
+for(const file of ['science-defenders.html','science-raiders.html','science-legends.html','science-slayers.html','science-spire.html'])test(file+' uses the guarded picker and accepts empty banks', async () => {
   const source=read(file),spire=file.includes('spire'),bank=spire?'QBANK':'QUESTION_BANK',apply=spire?'applyBank':'applyBankQuestions';
   for(const match of source.matchAll(/<script>([\s\S]*?)<\/script>/g))new vm.Script(match[1]);
   assert.match(source,/<script src="science-feed-bridge\.js"><\/script>/);
@@ -82,7 +82,9 @@ const question=(id,topic='Plant Systems',extra={})=>({id,title:id,topic,blocks:[
 function fpsFixture(bank,random=()=>0.5){
   const storage=new Map(),elements=new Map(),noop=()=>{};
   const el=id=>{if(!elements.has(id))elements.set(id,{classList:{remove:noop}});return elements.get(id);};
-  const c=vm.createContext({buildScienceFeedContext,planScienceQuestions:(qs,opts)=>planScienceQuestions(qs,{random,...opts}),strikeQuestionQualityOptions,strikeAttemptProgress,console,currentUser:{uid:'u',name:'Ada',authName:'Parent',role:'student'},
+  const ledgers=new Map();
+  const ledger=()=>{const key=c.fpsFeedKey();if(!ledgers.has(key))ledgers.set(key,{seen:{},contentKeys:new Set()});return ledgers.get(key);};
+  const c=vm.createContext({scienceQuestionContentKey, fpsHistoryOpening:null,loadQuestions:()=>{c.fpsFeedReady=true;},fpsHistory:{isReady:()=>true,close(){},snapshot:()=>({seen:ledger().seen,contentKeys:[...ledger().contentKeys]}),async claimMany(rows){const data=ledger();if(rows.some(r=>data.seen[r.id]||data.contentKeys.has(r.contentKey)))return false;rows.forEach(r=>{data.seen[r.id]=r.at||1;if(r.contentKey)data.contentKeys.add(r.contentKey);});return true;}},buildScienceFeedContext,planScienceQuestions:(qs,opts)=>planScienceQuestions(qs,{random,...opts}),strikeQuestionQualityOptions,strikeAttemptProgress,console,currentUser:{uid:'u',name:'Ada',authName:'Parent',role:'student'},
     studentLevelCap:4,studentLevelFloor:0,fpsProfileSignature:'',fpsAssignedFallback:'',fpsFeedAttempts:[],fpsFeedReady:true,fpsFeedBank:bank,
     fpsFeedLoad:0,fpsProfileStop:null,fpsFailedImages:new Map(),questions:bank.map(q=>({id:q.id,feedSource:q})),customTopicLevels:{},
     fpsServedMemory:new Map(),fpsFeedFlags:[],fpsFeedObjectives:[],fpsFeedObjectiveMap:{},
@@ -100,22 +102,22 @@ function fpsFixture(bank,random=()=>0.5){
     +cut(fps,'function qSeenKey()','/* ---------- shared leaderboard'),c);
   return {c,storage};
 }
-test('Science Strike uses real school, mastery, quality and repetition policies',()=>{
+test('Science Strike uses real school, mastery, quality and repetition policies', async () => {
   const bank=[question('p6','Forces'),question('hard','Plant Systems',{difficulty:5}),question('broken','Plant Systems',{status:'flagged'}),question('p4')];
-  const {c}=fpsFixture(bank);assert.equal(c.nextQuestion().id,'p4');assert.equal(c.nextQuestion(),null);
-  c.studentLevelCap=0;assert.equal(c.nextQuestion(),null);
+  const {c}=fpsFixture(bank);assert.equal((await c.nextQuestion()).id,'p4');assert.equal((await c.nextQuestion()),null);
+  c.studentLevelCap=0;assert.equal((await c.nextQuestion()),null);
 });
 
-test('Science Strike prioritizes fresh P6 then P5 instead of legacy-rated P3 for a P6 account',()=>{
+test('Science Strike prioritizes fresh P6 then P5 instead of legacy-rated P3 for a P6 account', async () => {
   const bank=[question('p3-legacy','Magnets',{difficulty:1200}),question('p5','Electrical Systems'),
     question('p6-easy','Forces',{difficulty:'easy'}),question('p6','Forces')];
   const {c}=fpsFixture(bank);c.studentLevelCap=6;
-  assert.deepEqual(new Set([c.nextQuestion().id,c.nextQuestion().id]),new Set(['p6','p6-easy']));
-  assert.equal(c.nextQuestion().id,'p5');
-  assert.equal(c.nextQuestion(),null,'running out does not reopen old or recently served questions');
+  assert.deepEqual(new Set([(await c.nextQuestion()).id,(await c.nextQuestion()).id]),new Set(['p6','p6-easy']));
+  assert.equal((await c.nextQuestion()).id,'p5');
+  assert.equal((await c.nextQuestion()),null,'running out does not reopen old or recently served questions');
 });
 
-test('Science Strike changes the sampled database question set while retaining P6-first difficulty and run spacing',()=>{
+test('Science Strike changes the sampled database question set while retaining P6-first difficulty and run spacing', async () => {
   const names=['cedar','maple','birch','willow','spruce','acacia','juniper','poplar'];
   const bank=[question('foundation','Magnets'),...names.map(id=>question(id,'Forces')),
     question('needs-review','Forces',{importWarning:'Check the source diagram'})];
@@ -124,7 +126,7 @@ test('Science Strike changes the sampled database question set while retaining P
     let value=seed;const random=()=>((value=(Math.imul(value,1664525)+1013904223)>>>0)/4294967296);
     const {c}=fpsFixture(bank,random);c.studentLevelCap=6;const picked=[];
     for(let i=0;i<3;i++){
-      const item=c.nextQuestion();assert.ok(names.includes(item.id),'only sound current-grade questions are selected');picked.push(item.id);
+      const item=(await c.nextQuestion());assert.ok(names.includes(item.id),'only sound current-grade questions are selected');picked.push(item.id);
     }
     assert.equal(new Set(picked).size,picked.length,'a run never repeats its own sampled question');
     sets.add(picked.slice().sort().join(','));
@@ -132,54 +134,54 @@ test('Science Strike changes the sampled database question set while retaining P
   assert.ok(sets.size>1,'new randomness changes which questions are sampled, not just display order');
 });
 
-test('Science Strike ignores non-database cached rows and re-extracts the current saved answer',()=>{
+test('Science Strike ignores non-database cached rows and re-extracts the current saved answer', async () => {
   const live=question('database'),{c}=fpsFixture([live]);
   c.questions=[{id:'random-sample',feedSource:question('random-sample'),options:['Invented','Other'],answer:0}];
   live.blocks[1].correctId='b';
-  const picked=c.nextQuestion();assert.equal(picked.id,'database');assert.equal(picked.answer,1);
+  const picked=(await c.nextQuestion());assert.equal(picked.id,'database');assert.equal(picked.answer,1);
 });
 
-test('Science Strike never repeats a question family during a run even after its timed cooldown',()=>{
+test('Science Strike never repeats a question family during a run even after its timed cooldown', async () => {
   const first=question('original'),copy={...first,id:'copy',title:'Different label'},other=question('other','Heat');
   const {c}=fpsFixture([first,copy,other]);c.localStorage.getItem=()=>{throw Error('blocked storage');};c.localStorage.setItem=()=>{throw Error('blocked storage');};
-  const picked=[c.nextQuestion().id];
+  const picked=[(await c.nextQuestion()).id];
   c.fpsServedMemory.clear(); // Even losing the timed cache must not reopen a run's family.
-  picked.push(c.nextQuestion().id);assert.equal(c.nextQuestion(),null);
+  picked.push((await c.nextQuestion()).id);assert.equal((await c.nextQuestion()),null);
   assert.equal(picked.filter(id=>['original','copy'].includes(id)).length,1);assert.ok(picked.includes('other'));
 });
 
-test('Science Strike respects custom objective mappings and current teacher checks',()=>{
+test('Science Strike respects custom objective mappings and current teacher checks', async () => {
   const higher=question('mapped-high'),bad=question('review'),valid=question('valid');
   bad.autoCheck={state:'red',sig:strikeQuestionQualityOptions(bad).importSignature};
   const {c}=fpsFixture([higher,bad,valid]);c.fpsFeedObjectives=[{id:'higher',level:'P6'}];c.fpsFeedObjectiveMap={higher:['mapped-high']};
-  assert.equal(c.nextQuestion().id,'valid');assert.equal(c.nextQuestion(),null);
+  assert.equal((await c.nextQuestion()).id,'valid');assert.equal((await c.nextQuestion()),null);
 });
 
-test('Science Strike skips malformed documents and preserves sparse database tables and header labels',()=>{
+test('Science Strike skips malformed documents and preserves sparse database tables and header labels', async () => {
   const broken=question('broken-table'),valid=question('valid-table');
   broken.blocks.unshift({type:'table',rows:2,cols:2,data:[['a','b'],['c','d']],merges:{bad:true}});
   valid.blocks.unshift({type:'table',rows:2,cols:2,data:{0:{0:'Fruit colour',1:'Detection'},1:{0:'dull green',1:'smell'}}});
-  const {c}=fpsFixture([broken,valid]);const picked=c.nextQuestion();assert.equal(picked.id,'valid-table');assert.match(picked.stemHtml,/dull green/);
+  const {c}=fpsFixture([broken,valid]);const picked=(await c.nextQuestion());assert.equal(picked.id,'valid-table');assert.match(picked.stemHtml,/dull green/);
   const headers=question('headers');headers.blocks.unshift({type:'table',rows:1,cols:2,data:[['dull green','smell']],headers:{0:'Colour label',1:'Detection label'}});
   assert.match(c.extractMcq(headers).stemHtml,/Colour label/);assert.match(c.extractMcq(headers).stemHtml,/Detection label/);
 });
-test('Science Strike takes the active child level, not a younger sibling; secondary requires teacher authority',()=>{
+test('Science Strike takes the active child level, not a younger sibling; secondary requires teacher authority', async () => {
   const {c}=fpsFixture([]);
   c.fpsApplyProfile({level:'P6',activeStudent:1,students:[{name:'Young',level:'P3'},{name:'Ada',level:'P4'}]});assert.equal(c.studentLevelCap,4);assert.equal(c.currentUser.name,'Ada');
   c.fpsApplyProfile({students:[{name:'Ada',level:'S1'}]});assert.equal(c.studentLevelCap,0);
   c.fpsApplyProfile({level:'S1',students:[{name:'Ada',level:'S1'}]});assert.equal(c.studentLevelCap,7);assert.equal(c.studentLevelFloor,7);
   c.fpsApplyProfile({});assert.equal(c.studentLevelCap,0);
 });
-test('Science Strike respects topic2, retired topics, per-child history and cross-mode cooldown',()=>{
+test('Science Strike respects topic2, retired topics, per-child history and cross-mode cooldown', async () => {
   const bank=[question('mixed','Plant Systems',{topic2:'Forces'}),question('retired','Plant Systems',{topic2:'Cell Systems'}),question('a'),question('b')];
   const {c,storage}=fpsFixture(bank);const key=c.fpsFeedKey();
   storage.set('scienceFeed:served:'+key,JSON.stringify({a:Date.now()}));
-  storage.set('scienceFeed:history:'+key,JSON.stringify({b:{last:Date.now(),latestFrac:1}}));assert.equal(c.nextQuestion(),null);
-  c.currentUser.name='Other child';assert.ok(['a','b'].includes(c.nextQuestion().id),'child histories stay separate');
+  storage.set('scienceFeed:history:'+key,JSON.stringify({b:{last:Date.now(),latestFrac:1}}));assert.equal((await c.nextQuestion()),null);
+  c.currentUser.name='Other child';assert.ok(['a','b'].includes((await c.nextQuestion()).id),'child histories stay separate');
 });
-test('Science Strike clears the old run on a live child or level change',()=>{
+test('Science Strike clears the old run on a live child or level change', async () => {
   const {c}=fpsFixture([question('a')]);c.fpsApplyProfile({students:[{name:'Ada',level:'P4'}]});
-  c.G.activeQ=c.nextQuestion();assert.ok(c.G.activeQ);c.fpsApplyProfile({students:[{name:'Ben',level:'P3'}]});assert.equal(c.G,null);
+  c.G.activeQ=(await c.nextQuestion());assert.ok(c.G.activeQ);c.fpsApplyProfile({students:[{name:'Ben',level:'P3'}]});assert.equal(c.G,null);
 });
 
 test('a late old-question image error cannot withdraw the next question for the same child',async()=>{
@@ -188,7 +190,7 @@ test('a late old-question image error cannot withdraw the next question for the 
   const next=f.bridge.stamp(f.bridge.take()),count=f.messages.length;
   f.bridge.fail(old,'https://school.example/old.png');assert.equal(f.messages.length,count);assert.equal(f.bridge.current(next),true);
 });
-test('Science Strike preserves the full public MCQ context and rich options',()=>{
+test('Science Strike preserves the full public MCQ context and rich options', async () => {
   const c=vm.createContext({stripHtml:html=>String(html||'').replace(/<[^>]*>/g,''),qZoomBtns:()=>'',String,Number,Math,Array,Object});
   vm.runInContext(cut(fps,'function fpsEscape(value)','function fpsWireQuestionImages'),c);
   const q=question('rich');q.blocks.unshift({type:'table',rows:2,cols:2,data:[['Fruit colour','Detection'],['dull green','smell']],cellStyles:{'1_0':{backgroundColor:'green'}}},
@@ -201,7 +203,7 @@ test('Science Strike preserves the full public MCQ context and rich options',()=
   q.blocks.push({...q.blocks[5]});assert.equal(c.extractMcq(q),null,'do not flatten multiple MCQ parts into a single answer');
 });
 
-test('Science Strike never counts a mixed MCQ and written task as one complete answer',()=>{
+test('Science Strike never counts a mixed MCQ and written task as one complete answer', async () => {
   const c=vm.createContext({stripHtml:html=>String(html||'').replace(/<[^>]*>/g,''),qZoomBtns:()=>'',String,Number,Math,Array,Object});
   vm.runInContext(cut(fps,'function fpsEscape(value)','function fpsWireQuestionImages'),c);
   const q=question('mixed');q.blocks.unshift({type:'part',label:'(a)',content:'Choose the plant part.'});

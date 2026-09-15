@@ -34,7 +34,11 @@ test('authentication, navigation and learner changes dispose or invalidate the a
   assert.match(app, /function navigateTo\(page\) \{\s*vetPrintPeekHide\(\);\s*(?:hadesMathBeta.close\(\);\s*)?pirateRiftPortal\.close\(\)/);
   if (science) {
     assert.match(app, /function configureSidebarForRole\(role\) \{\s*pirateRiftPortal\.close\(\)/);
-    assert.match(app, /function _scienceFeedRefreshFrames\(\) \{\s*pirateRiftPortal\.sync\(\)/);
+    const refreshStart = app.indexOf("function _scienceFeedRefreshFrames() {");
+    const refreshEnd = app.indexOf("\n}", refreshStart);
+    assert.ok(refreshStart >= 0 && refreshEnd > refreshStart);
+    assert.match(app.slice(refreshStart, refreshEnd), /pirateRiftPortal\.sync\(\)/,
+      "learner refresh synchronizes the adventure alongside history loading");
     assert.match(app, /getProfileKey: \(\) => JSON\.stringify\(\[_scienceFeedKey\(\), familyProfile\.activeStudent\]\)/);
   } else {
     assert.match(app, /async function saveStudentLevel\(lv\) \{\s*hadesMathBeta.close\(\);\s*pirateRiftPortal\.close\(\)/);
