@@ -408,7 +408,7 @@ test('a pending real per-part grade cannot record results for a sibling after th
     const fb={innerHTML:''};const area={value:'A force',style:{},closest:()=>({querySelector:()=>fb})};
     const document={querySelector:sel=>sel.includes('.open-answer')?area:fb};
     const window={__aiReady:()=>true},showToast=()=>{},_captureScienceCoachTarget=()=>null,_showScienceCoachFeedback=()=>{};
-    const _gradingQuestionInput=async()=>({text:'Question',note:'',media:[]}),_markingPreamble=()=>'',SCIENCE_COACH_INSTRUCTIONS='';
+    const _gradingQuestionInput=async()=>({text:'Question',note:'',media:[]}),_markingPreamble=()=>'',SCIENCE_COACH_INSTRUCTIONS='',MISTAKE_ANIMAL_RULE='';
     const askGemini=async()=>{state.started=true;await wait;return JSON.stringify({verdict:'correct',feedback:'Good'})};
     const _parseAIJson=JSON.parse,escapeHtml=String,qKeyPlainHtml=(q,v)=>v;
     const _setPartResult=()=>state.writes++,_checkAllPartsMarked=()=>state.completed++;

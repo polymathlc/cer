@@ -5,3 +5,7 @@ package-lock.json
 
 !rapid-import/functions/package.json
 !rapid-import/functions/package-lock.json
+
+# Playwright screenshot output — every browser harness in tools/ writes here.
+# 37 MB of PNGs after one sweep, so one `git add -A` commits the lot.
+test-results/

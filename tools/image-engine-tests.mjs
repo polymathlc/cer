@@ -358,7 +358,16 @@ await run('request shape', async () => {
   ok('no client sends input_fidelity unconditionally any more', !/fd\.append\('input_fidelity', 'high'\)/.test(src) && !/inputFidelity: refs\.length \? 'high'/.test(src));
   ok('…with Gemini as the fallback, not the plan', /falling back to Gemini/.test(mistakes) && /if \(!imageModels\.length\) throw first/.test(mistakes));
   ok('…and a refusal about one picture does not close the route there either', /invalid-argument/.test(mistakes));
-  ok('the version was bumped', /const APP_VERSION = 'v1\.373\./.test(src) && /const APP_VERSION = 'v1\.6\./.test(mistakes));
+  /* A FLOOR, never a pin. Written as `=== v1.373.` this passed on the day the
+     fidelity fix shipped and went red on every single release after it — and a
+     harness that is always red is one nobody runs, which costs far more than
+     the bump it was nagging about. The invariant worth keeping is that the
+     release carrying this block bumped the version, so the floor is that
+     version and anything later. */
+  const _ver = s => { const m = /const APP_VERSION = 'v(\d+)\.(\d+)\.(\d+)'/.exec(s); return m ? [+m[1], +m[2], +m[3]] : null; };
+  const _atLeast = (s, a, b, c) => { const v = _ver(s); return !v ? false : v[0] !== a ? v[0] > a : v[1] !== b ? v[1] > b : v[2] >= c; };
+  ok('the version was bumped for the release that carried this — a FLOOR, or the check goes red on every release after it',
+     _atLeast(src, 1, 373, 0) && _atLeast(mistakes, 1, 6, 0));
 }
 
 /* ---------- 🖼 the green box — which model drew it ---------- */
