@@ -30,7 +30,7 @@ Multi-pack controls activate only when the portal confirms that both its purchas
 
 Sign in with an **administrator account**, open Crew Defense and visit **Card shop**. The portal automatically supplies the saved school level; administrators without one use its P6 preview. The administrator panel provides **Unlimited gold** and **Unlock all 50 cards**.
 
-Unlimited gold lets that administrator open any of the three pack tiers without spending reward points. Turning it off restores the normal listed prices. The setting is saved for the administrator's account on that portal; its actual point balance is unchanged. Unlock all adds any missing current cards to the administrator's selected collection without removing duplicate copies or changing the chosen crew. It excludes the eight reserved future-expansion characters. Repeating either action does not stack grants.
+Unlimited gold lets that administrator open any of the three pack tiers without spending reward points. Turning it off restores the normal listed prices. The setting is saved for the administrator's account on that portal; its actual point balance is unchanged. Unlock all adds any missing current cards to the administrator's selected collection without removing duplicate copies or changing the chosen crew. It excludes the twelve reserved future-expansion characters. Repeating either action does not stack grants.
 
 These controls are unavailable to students and standalone previews. The portal checks the signed-in role and current profile before each action and before accepting its result. Administrator actions wait for question rounds, purchases and saves to finish; a profile or role change retires the open game session.
 
@@ -76,9 +76,9 @@ Target priority can change during combat: **First** picks enemies nearest the sh
 
 ### Illustrated ability animations
 
-The eight current six- and seven-star characters each have three dedicated animated ability rows: Kaido, Whitebeard, Akainu, Luffy, Law, Kuzan, Fujitora, and Ryokugyu. The other 42 characters share directional-strike, area-impact and support animations tinted to their abilities. Zoro uses the shared sword-slash effects; his actual piercing attack geometry remains distinct.
+The seven current six- and seven-star characters each have three dedicated animated ability rows, for 21 individual abilities: Kaido, Whitebeard, Akainu, Luffy, Kuzan, Fujitora, and Ryokugyu. The other 43 characters share directional-strike, area-impact and support animations tinted to their abilities. Zoro and Kuro use the shared sword-slash effects; their actual attack geometry and speed remain distinct. Law's earlier sprite sheet is archived and is excluded from active ability bindings and preloading.
 
-Nine transparent sprite sheets contain 108 generated frames. Each cast plays cropped wind-up, travel, impact and fade frames; splash and chain effects follow their actual resolution. Whitebeard's ground tremors, forest eruptions and gravity impacts draw beneath the characters. Compact status markers and shield bars replace large overlapping auras. Visual budgets cap effects and combine damage labels during crowded waves without changing damage or target selection. Reduced motion uses fixed frames and removes shakes and moving trails.
+Eight active transparent sprite sheets contain 96 generated frames. Each cast plays cropped wind-up, travel, impact and fade frames; splash and chain effects follow their actual resolution. Whitebeard's ground tremors, forest eruptions and gravity impacts draw beneath the characters. Compact status markers and shield bars replace large overlapping auras. Visual budgets cap effects and combine damage labels during crowded waves without changing damage or target selection. Reduced motion uses fixed frames and removes shakes and moving trails.
 
 The browser loads only the deployed characters' sheets plus the shared fallback. Image failures retain quiet attack cues. The shipped WebP files preserve the generated images' visible pixels and transparency losslessly; full generation prompts and hashes are recorded in `assets/grand-line-vfx/ART.md` and its manifest.
 
@@ -112,7 +112,7 @@ The high-contrast Build, Move, Summon and Sell toolbar and Start wave control si
 
 ## Current roster and future expansions
 
-Eight legends are reserved for future **seven-star** expansions. They are absent from current card packs, active teams, and encounters; they are not available to unlock yet. Kaido, Whitebeard, and Admiral Akainu remain the only current seven-star cards.
+Twelve legends are reserved for future **seven-star** expansions. They are absent from current card packs, active teams, and encounters; they are not available to unlock yet. Kaido, Whitebeard, and Admiral Akainu remain the only current seven-star cards. Fifty characters remain obtainable.
 
 | Reserved future seven-star character | Current replacement |
 |---|---|
@@ -124,8 +124,14 @@ Eight legends are reserved for future **seven-star** expansions. They are absent
 | Monkey D. Garp | Don Krieg · 3★ |
 | Dracule Mihawk | Hatchan · 2★ |
 | Boa Hancock | Kalifa · 3★ |
+| Portgas D. Ace | Bellamy · 3★ |
+| Sabo | Gin · 2★ |
+| Trafalgar Law | Galdino · Mr. 3 · 3★ |
+| King | Captain Kuro · 2★ |
 
 Existing copies transfer **one-for-one** to the corresponding replacement, including team slots. When a save contains both names, their copies combine and merge normally. Copy counts, reward points, purchase receipts and stage progress are preserved; combat strength follows the replacement’s current rarity. Repeated loading or replaying a purchase receipt cannot duplicate copies or charge points again. Future seven-star editions will have their own expansion releases; owning an earlier retired card does not automatically grant an unreleased card.
+
+The new lower-rarity cards fill distinct defense roles. Bellamy builds attack momentum with spring-driven lines and a forward ricochet cone. Gin holds bends with short-range tonfa sweeps, an armor-piercing focused strike and a stunning spin around himself. Mr. 3 sends slowing wax along a line, shields an ally with Candle Wall and hardens a larger crowd with Giant Candle Set. Kuro attacks quickly with three claw-line techniques; Silent Step Cut has a short cooldown. Their controls and damage follow actual attack footprints, so placement still determines which enemies they reach.
 
 ## Artwork and lore
 

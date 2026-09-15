@@ -144,6 +144,18 @@ test('unlock-all grants only missing current cards and preserves copies, team, p
   assert.equal(repeated.unlockedCount, 0); assert.equal(repeated.changed, false); assert.deepEqual(f.state(), state); assert.equal(f.writes.length, 1);
 });
 
+test('unlock-all converts the four reserved legends without replacing paid copies or restoring retired IDs', async () => {
+  const f=fixture(),profile=f.state().grandLine.profiles[f.ctx.profileKey],entries=[['ace','bellamy'],['sabo','gin'],['law','mr3'],['king','kuro']];
+  for(const [i,[oldId,newId]]of entries.entries()){profile.collection.cards[oldId]={copies:8+i};profile.collection.cards[newId]={copies:2};}
+  profile.collection.cards.kaido={copies:1};profile.collection.team=[...entries.map(([id])=>id),...STARTER_IDS,'kaido'];profile.collection.stats.packsOpened=29;
+  const result=await f.economy.adminAction({action:'unlock-all'},f.ctx);
+  assert.equal(Object.keys(result.collection.cards).length,50);assert.equal(result.unlockedCount,40);assert.equal(result.wallet.balance,0);
+  assert.deepEqual(result.collection.team,[...entries.map(([,id])=>id),...STARTER_IDS,'kaido']);assert.equal(result.collection.stats.packsOpened,29);
+  for(const [i,[oldId,newId]]of entries.entries()){assert.equal(result.collection.cards[oldId],undefined);assert.equal(result.collection.cards[newId].copies,10+i);}
+  for(const id of Object.keys(RETIRED_CHARACTER_REPLACEMENTS))assert.equal(result.collection.cards[id],undefined);
+  const again=await f.economy.adminAction({action:'unlock-all'},f.ctx);assert.deepEqual(again.collection,result.collection);assert.equal(again.changed,false);assert.equal(f.writes.length,1);
+});
+
 test('account-wide flags and unrelated metadata survive profile saves and ordinary paid purchases', async () => {
   const f = fixture({ gold: 500, enabled: true });
   const other = structuredClone(f.state().grandLine.profiles['other-learner']);

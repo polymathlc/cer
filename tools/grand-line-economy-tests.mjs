@@ -48,6 +48,20 @@ test('each pack can reach a seven-star apex and duplicates strengthen the same o
   assert.equal(first.grant.stars, 7); assert.equal(second.grant.characterId, first.grant.characterId);
   assert.equal(second.grant.copies, first.grant.copies + 1); assert.equal(second.grant.duplicate, true);
 });
+
+test('paid pack odds can grant every current card and never reintroduce any of the twelve reserved legends', async () => {
+  const draws=[],f=fixture({random:()=>{assert.ok(draws.length);return draws.shift();}}),offer=f.economy.getSnapshot(f.ctx).wallet.offers.find(p=>p.id==='spark');
+  const weighted=Object.entries(offer.odds),total=weighted.reduce((sum,[,weight])=>sum+weight,0);
+  for(const character of CHARACTERS){
+    const before=weighted.filter(([stars])=>Number(stars)<character.stars).reduce((sum,[,weight])=>sum+weight,0);
+    draws.push((before+offer.odds[character.stars]/2)/total);
+    const pool=CHARACTERS.filter(c=>c.stars===character.stars);draws.push((pool.findIndex(c=>c.id===character.id)+.5)/pool.length);
+  }
+  f.state().gold=offer.cost*50;const result=await f.economy.buyPack({purchaseId:'complete-current-pool',packId:'spark',quantity:50},f.ctx);
+  assert.deepEqual(result.grants.map(g=>g.characterId),CHARACTERS.map(c=>c.id));assert.equal(draws.length,0);
+  assert.equal(new Set(result.grants.map(g=>g.characterId)).size,50);assert.equal(result.wallet.balance,0);assert.equal(f.writes.length,1);
+  for(const id of Object.keys(RETIRED_CHARACTER_REPLACEMENTS))assert.ok(!result.grants.some(g=>g.characterId===id));
+});
 test('durable purchase IDs make retries and reopened sessions idempotent', async () => {
   const f = fixture(), request = { packId: 'spark', purchaseId: 'persisted-id' };
   const first = await f.economy.buyPack(request, f.ctx);
@@ -98,6 +112,25 @@ test('a failed migration save keeps the paid receipt and retries without another
   f.fail(false); const result = await f.economy.buyPack({ packId: 'spark', purchaseId: 'old' }, f.ctx);
   assert.equal(result.replayed, true); assert.equal(result.wallet.balance, 2000);
   assert.equal(result.collection.cards.wyper.copies, 3); assert.equal(f.writes.length, 0);
+});
+
+test('a paid batch containing all four newly reserved cards replays at zero gold without rolls, writes or new copies', async () => {
+  const f=fixture({random:()=>{throw Error('Receipt replay must never roll another card');}}),c=createCollection();
+  const entries=[['ace','bellamy'],['sabo','gin'],['law','mr3'],['king','kuro']];c.cards.kaido={copies:1};
+  for(const [i,[oldId,newId]]of entries.entries()){c.cards[oldId]={copies:4+i};c.cards[newId]={copies:2};}
+  c.team=[...entries.map(([id])=>id),...STARTER_IDS,'kaido'];c.stats.packsOpened=24;
+  const receipt={packId:'galaxy',quantity:4,cost:3000,at:'2026-09-14T12:00:00.000Z',grants:entries.map(([characterId],i)=>({characterId,copies:4+i,duplicate:true,stars:characterId==='law'?6:5}))};
+  f.state().gold=0;f.state().grandLine={version:1,profiles:{[f.ctx.profileKey]:{collection:c,purchases:{'four-legends':receipt}}}};
+  const original=structuredClone(f.state()),request={purchaseId:'four-legends',packId:'galaxy',quantity:4};
+  const result=await f.economy.buyPack(request,f.ctx);assert.equal(result.replayed,true);assert.equal(result.quantity,4);assert.equal(result.grant,undefined);
+  assert.equal(result.wallet.balance,0);assert.equal(result.collection.stats.packsOpened,24);assert.equal(result.collection.packs,0);
+  assert.deepEqual(result.grants,entries.map(([,characterId],i)=>({characterId,copies:6+i,duplicate:true,stars:CHARACTER_BY_ID[characterId].stars})));
+  assert.deepEqual(result.collection.team,[...entries.map(([,id])=>id),...STARTER_IDS,'kaido']);
+  assert.equal(totalCopies(result.collection),totalCopies(c));assert.equal(f.writes.length,0);assert.deepEqual(f.state(),original);
+  assert.deepEqual(await createGrandLineEconomy(f.env).buyPack(request,f.ctx),result);assert.equal(f.writes.length,0);
+  await f.economy.saveCollection({team:result.collection.team},f.ctx);assert.equal(f.writes.length,1);
+  assert.deepEqual(f.state().grandLine.profiles[f.ctx.profileKey].purchases['four-legends'],receipt);
+  assert.deepEqual(await createGrandLineEconomy(f.env).buyPack(request,f.ctx),result);assert.equal(f.writes.length,1);
 });
 test('a failed durable save restores the wallet and collection and never reports a grant', async () => {
   const f = fixture(), initial = f.economy.getSnapshot(f.ctx); f.fail(true);

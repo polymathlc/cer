@@ -12,6 +12,7 @@ const { CHARACTERS, CHARACTER_BY_ID, STARTER_IDS, ENCOUNTERS, RETIRED_CHARACTER_
 const replacements = {
   shanks: 'wyper', blackbeard: 'kaku', bigmom: 'wapol', kizaru: 'hina',
   sengoku: 'paulie', garp: 'donkrieg', mihawk: 'hatchan', hancock: 'kalifa',
+  ace: 'bellamy', sabo: 'gin', law: 'mr3', king: 'kuro',
 };
 const replacementIds = Object.values(replacements);
 
@@ -43,12 +44,12 @@ function use(fixture, index, target = fixture.target) {
 }
 const status = (unit, type) => unit.statuses.find(effect => effect.type === type);
 
-test('v1.1 reserves precisely eight future apex cards outside the fifty-card obtainable roster', () => {
-  assert.equal(data.VERSION, '3.2.0');
+test('twelve future apex cards remain outside the fifty-card obtainable roster', () => {
+  assert.equal(data.VERSION, '3.3.0');
   assert.deepEqual(RETIRED_CHARACTER_REPLACEMENTS, replacements);
   assert.equal(CHARACTERS.length, 50);
   assert.equal(new Set(CHARACTERS.map(character => character.id)).size, 50);
-  assert.equal(FUTURE_EXPANSION_CHARACTERS.length, 8);
+  assert.equal(FUTURE_EXPANSION_CHARACTERS.length, 12);
   assert.deepEqual(FUTURE_EXPANSION_CHARACTERS.map(character => character.id).sort(), Object.keys(replacements).sort());
   for (const future of FUTURE_EXPANSION_CHARACTERS) {
     assert.equal(future.stars, 7);
@@ -57,7 +58,7 @@ test('v1.1 reserves precisely eight future apex cards outside the fifty-card obt
     assert.equal(CHARACTER_BY_ID[future.id], undefined);
   }
   assert.deepEqual(CHARACTERS.filter(character => character.stars === 7).map(character => character.id), ['kaido', 'whitebeard', 'akainu']);
-  assert.deepEqual(replacementIds.map(id => CHARACTER_BY_ID[id].stars), [4, 4, 2, 3, 3, 3, 2, 3]);
+  assert.deepEqual(replacementIds.map(id => CHARACTER_BY_ID[id].stars), [4, 4, 2, 3, 3, 3, 2, 3, 3, 2, 3, 2]);
 });
 
 test('all nine encounters use obtainable enemies and introduce every replacement', () => {
@@ -69,13 +70,13 @@ test('all nine encounters use obtainable enemies and introduce every replacement
       assert.equal(Object.hasOwn(replacements, id), false);
       introduced.add(id);
     }
-    assert.doesNotMatch(`${encounter.name} ${encounter.description}`, /Shanks|Teach|Linlin|Kizaru|Sengoku|Garp|Mihawk|Hancock/i);
+    assert.doesNotMatch(`${encounter.name} ${encounter.description}`, /Shanks|Teach|Linlin|Kizaru|Sengoku|Garp|Mihawk|Hancock|\bAce\b|\bSabo\b|\bLaw\b|\bKing\b/i);
   }
   for (const id of replacementIds) assert.ok(introduced.has(id), `${id} has no campaign appearance`);
 });
 
 test('each replacement has a specific official primary profile and a documented reservation', async () => {
-  const expectedSlugs = { wyper: 'Wyper', kaku: 'Kaku', wapol: 'Wapol', hina: 'Hina', paulie: 'Paulie', donkrieg: 'Don_Krieg', hatchan: 'Hacchan', kalifa: 'Kalifa' };
+  const expectedSlugs = { wyper: 'Wyper', kaku: 'Kaku', wapol: 'Wapol', hina: 'Hina', paulie: 'Paulie', donkrieg: 'Don_Krieg', hatchan: 'Hacchan', kalifa: 'Kalifa', bellamy: 'bellamy', gin: 'Gin', mr3: 'Galdino', kuro: 'Kuro' };
   const lore = await readFile(new URL('../LORE-SOURCES.md', import.meta.url), 'utf8');
   for (const [id, slug] of Object.entries(expectedSlugs)) {
     assert.equal(CHARACTER_BY_ID[id].source, `https://one-piece.com/character/${slug}/index.html`);
@@ -85,7 +86,7 @@ test('each replacement has a specific official primary profile and a documented 
   assert.match(lore, /future seven-star expansions, with no release dates announced/);
 });
 
-test('all twenty-four new moves execute and emit a distinct supported animation', () => {
+test('all thirty-six replacement moves execute and emit a distinct supported animation', () => {
   const supportedKinds = new Set(['punch', 'slash', 'fire', 'water', 'wind', 'earth', 'explosion', 'string', 'shield', 'poison']);
   const animations = new Set();
   for (const id of replacementIds) {
@@ -107,7 +108,7 @@ test('all twenty-four new moves execute and emit a distinct supported animation'
       else assert.ok(target.shield > 0, `${skill.name} did not protect its target`);
     }
   }
-  assert.equal(animations.size, 24);
+  assert.equal(animations.size, 36);
 });
 
 test('Wyper burns the enemy group and pays a recoil penalty for Reject Dial', () => {

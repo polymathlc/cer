@@ -1,8 +1,8 @@
-import { CHARACTER_BY_ID } from './grand-line-data.js?v=3.2.0';
-import { getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.2.0';
+import { CHARACTER_BY_ID } from './grand-line-data.js?v=3.3.0';
+import { getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.3.0';
 
 export const PREMIUM_VFX_CHARACTERS = Object.freeze([
-  'kaido', 'whitebeard', 'akainu', 'luffy', 'law', 'aokiji', 'fujitora', 'ryokugyu',
+  'kaido', 'whitebeard', 'akainu', 'luffy', 'aokiji', 'fujitora', 'ryokugyu',
 ]);
 const premiumCharacters = new Set(PREMIUM_VFX_CHARACTERS);
 export const VFX_ATLAS_SPECS = Object.freeze([...PREMIUM_VFX_CHARACTERS, 'generic'].map(id => Object.freeze({
@@ -11,6 +11,8 @@ export const VFX_ATLAS_SPECS = Object.freeze([...PREMIUM_VFX_CHARACTERS, 'generi
 })));
 const atlasById = new Map(VFX_ATLAS_SPECS.map(atlas => [atlas.id, atlas]));
 
+// Only the current catalog is selectable; archived sheets in the delivery
+// manifest are deliberately excluded from metadata and preload requests.
 // A premium sheet has one dedicated animated row for each catalog skill.
 // The shared sheet holds a directional strike, an area impact and a support
 // pulse; the renderer may tint those neutral sprites to the catalog color.

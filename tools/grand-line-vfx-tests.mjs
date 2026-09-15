@@ -23,11 +23,11 @@ function images(outcome = () => 'load', width = 1536, height = 1024) {
 const managerFor = (fixture, options = {}) => createDefenseVfxManager({ ImageCtor: fixture.ImageCtor, baseUrl, fetchFn: null, timeoutMs: 100, ...options });
 const metadata = (id, extra = {}) => ({ id, file: `${id}.webp`, columns: 4, rows: 3, frames: 12, width: 1536, height: 1024, ...extra });
 
-test('all eight six/seven-star characters have 24 distinct dedicated skill animations; every lower-star skill uses the shared sheet', () => {
+test('all seven six/seven-star characters have 21 distinct dedicated skill animations; every lower-star skill uses the shared sheet', () => {
   const premium = CHARACTERS.filter(c => c.stars >= 6), common = CHARACTERS.filter(c => c.stars < 6);
-  assert.equal(premium.length, 8); assert.equal(common.length, 42);
+  assert.equal(premium.length, 7); assert.equal(common.length, 43);
   assert.deepEqual([...PREMIUM_VFX_CHARACTERS].sort(), premium.map(c => c.id).sort());
-  assert.equal(VFX_ATLAS_SPECS.length, 9); assert.equal(new Set(VFX_ATLAS_SPECS.map(a => a.id)).size, 9);
+  assert.equal(VFX_ATLAS_SPECS.length, 8); assert.equal(new Set(VFX_ATLAS_SPECS.map(a => a.id)).size, 8);
   const unique = new Set(); let covered = 0;
   for (const character of CHARACTERS) for (const [index, skill] of character.skills.entries()) {
     const spec = getVfxSpec(character.id, skill.id); covered++;
@@ -39,14 +39,14 @@ test('all eight six/seven-star characters have 24 distinct dedicated skill anima
       unique.add(`${spec.source}:${spec.row}`);
     } else { assert.equal(spec.atlasId, 'generic'); assert.ok(spec.tint); }
   }
-  assert.equal(covered, 150); assert.equal(unique.size, 24);
+  assert.equal(covered, 150); assert.equal(unique.size, 21);
   assert.equal(getVfxSpec('zoro', 'zoro-0').row, 0);
   assert.equal(getVfxSpec('usopp', 'usopp-1').row, 1);
   assert.equal(getVfxSpec('chopper', 'chopper-1').row, 2);
 });
 
 test('unknown or mismatched character/skill requests cannot select another character’s premium artwork', () => {
-  for (const id of ['__proto__', 'constructor', 'unknown', 'shanks', null]) assert.equal(getVfxSpec(id, 'luffy-0'), null);
+  for (const id of ['__proto__', 'constructor', 'unknown', 'shanks', 'ace', 'sabo', 'law', 'king', null]) assert.equal(getVfxSpec(id, 'luffy-0'), null);
   assert.equal(getVfxSpec('luffy', 'zoro-0'), null); assert.equal(getVfxSpec('luffy', 'luffy-9'), null);
   assert.equal(getVfxSpec({ characterId: 'luffy' }, { id: 'luffy-2' }).row, 2);
 });
@@ -70,13 +70,29 @@ test('atlas loading is lazy, shared across skill rows, and frame crops remain in
 test('manifest metadata admits only fixed atlas files and valid grids, and versions image requests by the delivery hash', async () => {
   const f = images(), sha256 = 'a'.repeat(64);
   const manager = managerFor(f, { fetchFn: async () => ({ ok: true, json: async () => ({ assets: [
-    metadata('luffy', { sha256 }), metadata('kaido', { file: '../foreign.webp' }), metadata('law', { columns: 3 }),
+    metadata('luffy', { sha256 }), metadata('kaido', { file: '../foreign.webp' }), metadata('whitebeard', { columns: 3 }),
     metadata('aokiji', { width: 0 }), metadata('unrecognized'),
   ] }) }) });
   await manager.ready; assert.deepEqual([...manager.metadata.keys()], ['luffy']);
   await manager.load('luffy', 'luffy-0').promise;
   assert.ok(f.requests.some(url => url.endsWith('/luffy.webp?v=' + sha256.slice(0, 16))));
   assert.ok(f.requests.every(url => !url.includes('foreign'))); manager.destroy();
+});
+
+test('archived Law artwork is never selectable, admitted as active metadata, or fetched by explicit or full preloads', async () => {
+  const f = images(), manager = managerFor(f, { fetchFn: async () => ({ ok: true, json: async () => ({ assets: [metadata('law')] }) }) });
+  await manager.ready; assert.equal(manager.metadata.has('law'), false);
+  for (const id of ['law', 'ace', 'sabo', 'king']) {
+    assert.equal(manager.load(id, `${id}-0`), null);
+    assert.equal(manager.sprite(id, `${id}-0`), null);
+  }
+  await manager.preload(['law', 'ace', 'sabo', 'king']);
+  assert.deepEqual([...manager.images.keys()], ['generic']);
+  await manager.preload();
+  assert.deepEqual([...manager.images.keys()].sort(), VFX_ATLAS_SPECS.map(spec => spec.id).sort());
+  assert.equal(f.requests.length, 8);
+  assert.ok(f.requests.every(url => !url.includes('/law.webp')));
+  manager.destroy();
 });
 
 test('a loading or failed premium atlas uses a loaded generic animation without blocking or changing its requested skill', async () => {
@@ -134,10 +150,10 @@ function webpInfo(bytes) {
   }
   return info;
 }
-test('all nine delivered generated atlases have verified source dimensions, alpha channels, provenance and unique checksums', async () => {
+test('all eight active atlases and archived Law artwork retain verified dimensions, alpha, provenance and unique checksums', async () => {
   const manifest = JSON.parse(await fs.readFile(new URL('manifest.json', assetRoot), 'utf8'));
   const rows = Array.isArray(manifest) ? manifest : manifest.assets;
-  assert.equal(rows.length, 9); assert.deepEqual(rows.map(r=>r.id).sort(),VFX_ATLAS_SPECS.map(s=>s.id).sort());
+  assert.equal(rows.length, 9); assert.deepEqual(rows.map(r=>r.id).sort(),[...VFX_ATLAS_SPECS.map(s=>s.id), 'law'].sort());
   const hashes = new Set();
   for (const row of rows) {
     assert.equal(row.file, row.id+'.webp'); assert.equal(row.columns,4); assert.equal(row.rows,3); assert.equal(row.frames,12);
