@@ -5,12 +5,12 @@ import crypto from 'node:crypto';
 import {CHARACTERS} from '../grand-line-data.js';
 
 const root=new URL('../assets/grand-line/',import.meta.url);
-test('all fifty characters ship their complete generated card and avatar artwork',async()=>{
+test('all one hundred characters ship their complete generated card and avatar artwork',async()=>{
   const manifest=JSON.parse(await fs.readFile(new URL('manifest.json',root),'utf8'));
-  assert.equal(manifest.length,50);
-  assert.equal(new Set(manifest.map(row=>row.id)).size,50);
+  assert.equal(manifest.length,100);
+  assert.equal(new Set(manifest.map(row=>row.id)).size,100);
   assert.deepEqual(manifest.map(row=>row.id).sort(),CHARACTERS.map(c=>c.id).sort());
-  assert.equal(CHARACTERS.filter(c=>c.stars===7).length,3);
+  assert.equal(CHARACTERS.filter(c=>c.stars===7).length,6);
   for(const row of manifest){
     assert.equal(row.file,row.id+'.webp');
     assert.equal(row.hasAlpha,true,row.id+' avatar requires transparency');

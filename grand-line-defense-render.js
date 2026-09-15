@@ -1,6 +1,6 @@
-import { DEFENSE_PATH, DEFENSE_PADS, DEFENSE_GRID, getDefenseAttackPreview, getDefenseProfile, getMazePlacementPreview } from './grand-line-defense.js?v=3.3.0';
-import { CHARACTER_BY_ID } from './grand-line-data.js?v=3.3.0';
-import { createDefenseVfxManager, getVfxSpec } from './grand-line-vfx.js?v=3.3.0';
+import { DEFENSE_PATH, DEFENSE_PADS, DEFENSE_GRID, getDefenseAttackPreview, getDefenseProfile, getMazePlacementPreview } from './grand-line-defense.js?v=3.4.0';
+import { CHARACTER_BY_ID } from './grand-line-data.js?v=3.4.0';
+import { createDefenseVfxManager, getVfxSpec } from './grand-line-vfx.js?v=3.4.0';
 
 const WORLD_W = 1120, WORLD_H = 630, TAU = Math.PI * 2;
 const MAP_PALETTES = [

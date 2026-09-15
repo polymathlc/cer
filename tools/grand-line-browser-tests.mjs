@@ -131,7 +131,7 @@ async function checkApexHover(page) {
     assert.ok(samples.length>=20);
     for(const sample of samples)for(const key of ['x','y','width','height'])assert.ok(Math.abs(sample.rect[key]-before[key])<.1,label+' keeps its '+key+' unchanged');
   };
-  for(const id of ['kaido','whitebeard','akainu'])for(const edge of ['side','bottom']){
+  for(const id of ['bigmom7','garp7','sabo7'])for(const edge of ['side','bottom']){
     await page.mouse.move(1,1);await page.locator(selector(id)).scrollIntoViewIfNeeded();await waitFrames(15);
     const target=page.locator(selector(id)),before=await rect(target);
     const point=await target.evaluate((element,edge)=>{
@@ -153,7 +153,7 @@ async function checkApexHover(page) {
     await page.keyboard.press('Escape');
   }
   await page.mouse.move(1,1);await page.keyboard.press('Tab');
-  for(const id of ['kaido','whitebeard','akainu']){
+  for(const id of ['bigmom7','garp7','sabo7']){
     const target=page.locator(selector(id));await target.scrollIntoViewIfNeeded();const before=await rect(target);await target.focus();
     const samples=await target.evaluate(async element=>{
       const samples=[];for(let i=0;i<20;i++){await new Promise(requestAnimationFrame);const r=element.getBoundingClientRect(),css=getComputedStyle(element);samples.push({rect:{x:r.x,y:r.y,width:r.width,height:r.height},focused:document.activeElement===element,visible:element.matches(':focus-visible'),outlined:css.outlineStyle!=='none'&&parseFloat(css.outlineWidth)>0});}return samples;
@@ -223,12 +223,12 @@ async function checkMazeBuilder() {
   check('A player-built chokepoint keeps its final passage open; sealing the maze or editing during a wave is rejected without a charge or route change');
 }
 
-async function checkTenCrew() {
+async function checkSevenCrew() {
   const host=await browser.newPage({viewport:{width:1440,height:1000}});observe(host);const game=await harnessGame(host,'admin');
   await game.locator('[data-view="packs"]').click();await game.locator('#admin-unlock-all').click();
-  await game.waitForFunction(()=>!__grandLine.adminPending&&Object.keys(__grandLine.collection.cards).length===50);
+  await game.waitForFunction(()=>!__grandLine.adminPending&&Object.keys(__grandLine.collection.cards).length===100);
   await game.locator('[data-view="crew"]').click();
-  const additions=await game.evaluate(()=>__grandLine.CHARACTERS.map(c=>c.id).filter(id=>!__grandLine.collection.team.includes(id)).slice(0,5));
+  const additions=await game.evaluate(()=>__grandLine.CHARACTERS.map(c=>c.id).filter(id=>!__grandLine.collection.team.includes(id)).slice(0,2));
   const before=await game.evaluate(()=>[...__grandLine.collection.team]);
   await host.evaluate(()=>{fake.blockSave=true;});
   await game.evaluate(id=>__grandLine.changeTeam(5,id),additions[0]);
@@ -241,17 +241,17 @@ async function checkTenCrew() {
     await host.waitForFunction(count=>fake.state.grandLine.profiles['test-profile'].collection.team.length===count,6+i);
     await game.locator('#toast').filter({hasText:'is ready to defend.'}).waitFor({state:'visible'});
   }
-  const ten=await game.evaluate(()=>[...__grandLine.collection.team]);assert.equal(ten.length,10);assert.equal(new Set(ten).size,10);
+  const seven=await game.evaluate(()=>[...__grandLine.collection.team]);assert.equal(seven.length,7);assert.equal(new Set(seven).size,7);
   assert.equal(await game.locator('#crew-slots .empty-crew-slot').count(),0);
-  await game.evaluate(async()=>{await __grandLine.changeTeam(0,'not-owned');await __grandLine.changeTeam(0,__grandLine.collection.team[1]);await __grandLine.changeTeam(10,'kaido');});
-  assert.deepEqual(await game.evaluate(()=>__grandLine.collection.team),ten);
+  await game.evaluate(async()=>{await __grandLine.changeTeam(0,'not-owned');await __grandLine.changeTeam(0,__grandLine.collection.team[1]);await __grandLine.changeTeam(7,'kaido');});
+  assert.deepEqual(await game.evaluate(()=>__grandLine.collection.team),seven);
   await Promise.all([game.waitForNavigation(),game.evaluate(()=>location.reload())]);
-  await game.waitForFunction(()=>__grandLine?.ready);assert.deepEqual(await game.evaluate(()=>__grandLine.collection.team),ten);
+  await game.waitForFunction(()=>__grandLine?.ready);assert.deepEqual(await game.evaluate(()=>__grandLine.collection.team),seven);
   await game.locator('[data-view="campaign"]').click();await game.locator('#campaign-map button').first().click();
   const deployed=await game.evaluate(()=>({ids:__grandLine.battle.allies.map(a=>a.characterId),pads:__grandLine.battle.allies.map(a=>a.padId),paid:__grandLine.battle.allies.map(a=>a.paidSupplies),supplies:__grandLine.battle.supplies}));
-  assert.deepEqual(deployed.ids,ten);assert.equal(new Set(deployed.pads).size,10);assert.deepEqual(deployed.paid,Array(10).fill(0));assert.equal(deployed.supplies,100);
-  await screenshot(host,'desktop-ten-crew-maze');await host.close();
-  check('Ten distinct owned crew members save through the parent and reload into ten free defenders; failed saves, duplicate slots, unowned cards and an eleventh slot are rejected');
+  assert.deepEqual(deployed.ids,seven);assert.equal(new Set(deployed.pads).size,7);assert.deepEqual(deployed.paid,Array(7).fill(0));assert.equal(deployed.supplies,100);
+  await screenshot(host,'desktop-seven-crew-maze');await host.close();
+  check('Seven distinct owned crew members save through the parent and reload into seven free defenders; failed saves, duplicate slots, unowned cards and an eighth slot are rejected');
 }
 
 async function checkDirectPlacement() {
@@ -454,21 +454,21 @@ async function checkAdministratorShop() {
   await game.locator('#admin-unlock-all').click();
   await game.waitForFunction(() => __grandLine.adminPending?.waiting === false);
   assert.deepEqual(await game.evaluate(() => __grandLine.collection.cards), beforeUnlock.cards, 'Failed responses do not optimistically grant the roster');
-  assert.equal(await host.evaluate(() => Object.keys(fake.state.grandLine.profiles['test-profile'].collection.cards).length), 50);
+  assert.equal(await host.evaluate(() => Object.keys(fake.state.grandLine.profiles['test-profile'].collection.cards).length), 100);
   const commits = await host.evaluate(() => fake.commits);
   assert.equal(await game.locator('#open-pack').isDisabled(), true);
   await game.locator('#admin-retry').click();
-  await game.waitForFunction(() => !__grandLine.adminPending && Object.keys(__grandLine.collection.cards).length === 50);
+  await game.waitForFunction(() => !__grandLine.adminPending && Object.keys(__grandLine.collection.cards).length === 100);
   assert.equal(await host.evaluate(() => fake.commits), commits, 'Retrying the acknowledged mutation has no second write');
   const unlocked = await game.evaluate(() => ({ cards: structuredClone(__grandLine.collection.cards), stats: structuredClone(__grandLine.collection.stats), team: [...__grandLine.collection.team], roster: __grandLine.CHARACTERS.map(c => c.id) }));
-  assert.equal(Object.keys(unlocked.cards).length, 50);
+  assert.equal(Object.keys(unlocked.cards).length, 100);
   assert.deepEqual(Object.keys(unlocked.cards).sort(), unlocked.roster.sort());
   for (const [id, card] of Object.entries(unlocked.cards)) assert.equal(card.copies, beforeUnlock.cards[id]?.copies || 1, id + ' preserves existing copies or receives one copy');
   assert.equal(unlocked.cards.luffy.copies, 3);
   assert.deepEqual(unlocked.stats, beforeUnlock.stats); assert.deepEqual(unlocked.team, beforeUnlock.team);
   for (const id of ['shanks', 'blackbeard', 'bigmom', 'kizaru', 'sengoku', 'garp', 'mihawk', 'hancock', 'ace', 'sabo', 'law', 'king']) assert.equal(unlocked.cards[id], undefined);
   await screenshot(host, 'admin-shop-desktop');
-  check('Unlock all grants only the 50 current cards, preserves duplicate ranks and crew, and safely retries an interrupted response');
+  check('Unlock all grants only the 100 current cards, preserves duplicate ranks and crew, and safely retries an interrupted response');
 
   await game.locator('#admin-unlimited').click();
   await game.waitForFunction(() => !__grandLine.adminPending && !__grandLine.admin.unlimitedGold);
@@ -693,14 +693,16 @@ async function checkPaidRosterMigration() {
   const stored=await host.evaluate(()=>({state:JSON.stringify(fake.state),commits:fake.commits,rolls:fake.randomCalls}));
   await Promise.all([game.waitForNavigation(),game.evaluate(()=>location.reload())]);await game.waitForFunction(()=>__grandLine.ready);
   const migrated=await game.evaluate(()=>structuredClone(__grandLine.collection));
-  assert.deepEqual(migrated.team,[...entries.map(([,id])=>id),'luffy','zoro','nami','usopp','chopper','kaido']);
+  assert.deepEqual(migrated.team,[...entries.map(([,id])=>id),'luffy','zoro','nami']);
+  for(const id of ['usopp','chopper','kaido'])assert.ok(migrated.cards[id]?.copies>0,'Trimming an old ten-person crew preserves '+id+' in the collection');
+  for(const id of ['bigmom7','garp7','sabo7'])assert.equal(migrated.cards[id],undefined,'Historical cards do not grant new seven-star editions');
   for(const [i,[oldId,newId]]of entries.entries()){assert.equal(migrated.cards[oldId],undefined);assert.equal(migrated.cards[newId].copies,3+i);assert.equal(await game.locator('#card-grid [data-character="'+oldId+'"]').count(),0);}
   assert.equal(migrated.stats.packsOpened,17);assert.equal(migrated.packs,0);
   await game.locator('[data-view="packs"]').click();await game.locator('#open-pack').click();await game.getByRole('button',{name:'Resume this purchase',exact:true}).click();await game.waitForFunction(()=>__grandLine.dialog==='reveal');
   assert.deepEqual(await game.locator('.batch-reveal-item').evaluateAll(nodes=>nodes.map(n=>n.dataset.character)),[...entries.map(([,id])=>id),'zoro']);
   assert.deepEqual(await game.evaluate(()=>__grandLine.collection),migrated);
   assert.deepEqual(await host.evaluate(()=>({state:JSON.stringify(fake.state),commits:fake.commits,rolls:fake.randomCalls})),stored,'Paid historical batches migrate their reveal without a debit, random draw or save');
-  await game.getByRole('button',{name:'Back to card shop',exact:true}).click();await game.locator('#admin-unlock-all').click();await game.waitForFunction(()=>!__grandLine.adminPending&&Object.keys(__grandLine.collection.cards).length===50);
+  await game.getByRole('button',{name:'Back to card shop',exact:true}).click();await game.locator('#admin-unlock-all').click();await game.waitForFunction(()=>!__grandLine.adminPending&&Object.keys(__grandLine.collection.cards).length===100);
   const all=await game.evaluate(()=>structuredClone(__grandLine.collection));assert.deepEqual(all.team,migrated.team);assert.deepEqual(all.stats,migrated.stats);
   for(const [i,[oldId,newId]]of entries.entries()){assert.equal(all.cards[oldId],undefined);assert.equal(all.cards[newId].copies,3+i);}
   assert.equal(await host.evaluate(()=>fake.state.gold),0);
@@ -713,15 +715,15 @@ async function checkPaidRosterMigration() {
   await game.locator('[data-view="campaign"]').click();await game.locator('#campaign-map button').first().click();
   assert.deepEqual(await game.evaluate(()=>__grandLine.battle.allies.map(a=>a.characterId)),migrated.team);
   await screenshot(host,'reserved-four-migrated-crew');await host.close();
-  check('Four newly reserved cards transfer paid copies, ten crew slots and historical batch reveals once; admin unlock and deployment keep only current characters');
+  check('Four retired IDs transfer paid copies and historical batch reveals once; old ten-person crews trim to seven without losing cards or granting new expansion editions');
 }
 
 async function checkGeneratedDefenseVfx() {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }); observe(page); await standalone(page);
   const mappings=await page.evaluate(async()=>{const {getVfxSpec,PREMIUM_VFX_CHARACTERS}=await import('./grand-line-vfx.js');return {premium:PREMIUM_VFX_CHARACTERS.length,
     skills:__grandLine.CHARACTERS.flatMap(c=>c.skills.map(skill=>({id:skill.id,premium:getVfxSpec(c.id,skill)?.premium,atlasId:getVfxSpec(c.id,skill)?.atlasId})))};});
-  assert.equal(mappings.premium,7);assert.equal(mappings.skills.length,150);assert.equal(mappings.skills.filter(s=>s.premium).length,21);
-  assert.equal(mappings.skills.filter(s=>s.atlasId==='generic').length,43*3);assert.ok(mappings.skills.every(s=>s.atlasId));
+  assert.equal(mappings.premium,12);assert.equal(mappings.skills.length,300);assert.equal(mappings.skills.filter(s=>s.premium).length,36);
+  assert.equal(mappings.skills.filter(s=>s.atlasId==='generic').length,88*3);assert.ok(mappings.skills.every(s=>s.atlasId));
   const atlases = await page.evaluate(async () => {
     const { createDefenseVfxManager, VFX_ATLAS_SPECS } = await import('./grand-line-vfx.js');
     window.qaVfx = createDefenseVfxManager(); await qaVfx.ready; await qaVfx.preload();
@@ -746,7 +748,7 @@ async function checkGeneratedDefenseVfx() {
         source: item.image.currentSrc || item.image.src, expected: metadata?.file ? new URL('./assets/grand-line-vfx/' + metadata.file, location.href).href : null };
     });
   });
-  assert.equal(atlases.length, 8); const premiumRows = new Set();
+  assert.equal(atlases.length, 13); const premiumRows = new Set();
   for (const atlas of atlases) {
     assert.equal(atlas.loaded, true, atlas.id + ' generated VFX loads'); assert.ok(atlas.width >= 1000 && atlas.height >= 1000);
     assert.ok(atlas.expected); assert.equal(new URL(atlas.source).pathname, new URL(atlas.expected).pathname);
@@ -761,8 +763,8 @@ async function checkGeneratedDefenseVfx() {
       if (atlas.id !== 'generic') premiumRows.add(hashes.join(':'));
     }
   }
-  assert.equal(premiumRows.size, 21, 'All premium skill rows have distinct actual image content');
-  check('All 21 premium skill animations and the shared lower-star effects load 96 visible, distinct, transparent image frames');
+  assert.equal(premiumRows.size, 36, 'All premium skill rows have distinct actual image content');
+  check('All 36 premium skill animations and the shared lower-star effects load 156 visible, distinct, transparent image frames');
 
   await page.evaluate(async () => {
     const defense = await import('./grand-line-defense.js'), { createDefenseRenderer } = await import('./grand-line-defense-render.js');
@@ -770,7 +772,7 @@ async function checkGeneratedDefenseVfx() {
     const collection = JSON.parse(JSON.stringify(__grandLine.collection));
     collection.cards = Object.fromEntries(__grandLine.CHARACTERS.map(c => [c.id, { copies: 1 }])); collection.team = PREMIUM_VFX_CHARACTERS.slice(0,5);
     const b = defense.createDefense(collection, { seed: 42 }); b.supplies = 1000;
-    [...PREMIUM_VFX_CHARACTERS.slice(5),'marco'].forEach((id,i) => defense.summonDefender(b,id,defense.DEFENSE_DEFAULT_PADS[i+5].id));
+    [...PREMIUM_VFX_CHARACTERS.slice(5,6),'marco'].forEach((id,i) => defense.summonDefender(b,id,defense.DEFENSE_DEFAULT_PADS[i+5].id));
     const avatars=await Promise.all(b.allies.map(ally=>__grandLine.art.load(ally.characterId).promise));
     if(avatars.some(item=>!item.loaded||item.failed))throw Error('Dense VFX screenshots require every deployed avatar to load');
     for(const [column,gap]of[[7,2],[17,10]])for(let row=0;row<13;row++)if(row!==gap){
@@ -871,9 +873,115 @@ async function checkGeneratedDefenseVfx() {
   check('Missing VFX images fall back to bounded quiet markers without blocking rendering or changing damage');
 }
 
+async function checkBattlefieldWorkspace() {
+  for (const viewport of [{width:2048,height:1100},{width:1440,height:900},{width:1366,height:768}]) {
+    const page=await browser.newPage({viewport});observe(page);await standalone(page);
+    await page.evaluate(()=>{
+      const collection=structuredClone(__grandLine.collection);
+      collection.team=__grandLine.CHARACTERS.slice(0,7).map(c=>c.id);
+      for(const id of collection.team)collection.cards[id]={copies:1};
+      __grandLine.applySnapshot({collection});
+    });
+    await page.locator('[data-view="campaign"]').click();await page.locator('#campaign-map button').first().click();
+    await page.locator('#map-viewport').scrollIntoViewIfNeeded();await frames(page,3);await noOverflow(page);
+    const layout=await page.evaluate(()=>{
+      const bounds=id=>{const r=document.getElementById(id).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom};};
+      const viewport=document.getElementById('map-viewport');
+      return {map:bounds('battle-canvas'),viewport:bounds('map-viewport'),build:bounds('build-toggle'),start:bounds('start-wave'),palette:bounds('placement-palette'),scrollHeight:viewport.scrollHeight,clientHeight:viewport.clientHeight};
+    });
+    assert.ok(layout.map.width>=viewport.width*.70,'The battlefield occupies most of a desktop screen instead of shrinking with its height');
+    assert.ok(layout.map.width>=layout.viewport.width*.98,'The map fills its column without empty side gutters');
+    assert.ok(layout.map.width/layout.map.height>1.76&&layout.map.width/layout.map.height<1.80,'A wider map preserves landscape geometry');
+    assert.ok(layout.scrollHeight<=layout.clientHeight+2,'The fitted desktop map shows all rows without internal scrolling');
+    assert.ok(layout.build.x>=layout.map.right-2,'Desktop build controls stay beside the enlarged map');
+    assert.ok(layout.build.y<layout.map.bottom&&layout.build.bottom>layout.map.y,'Tower palette stays alongside the play area');
+    assert.ok(layout.start.y>=0&&layout.start.bottom<=viewport.height,'Start wave stays on screen with the map');
+    assert.equal(await page.locator('#defender-buttons [data-ally]').count(),7);
+    await page.locator('#build-toggle').click();await clickCell(page,page,'cell-4-6');
+    assert.equal(await page.evaluate(()=>__grandLine.battle.mazeTowers.some(t=>t.cellId==='cell-4-6')),true,'Full-width canvas picking places the tower at the clicked cell');
+    assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),95);
+    await screenshot(page,'workspace-'+viewport.width);await page.close();
+  }
+  check('Wide and short desktop screens use a large landscape battlefield with adjacent seven-crew controls and accurate grid placement');
+}
+
+async function checkPackSelectionReadability() {
+  const page=await browser.newPage({viewport:{width:390,height:844}});observe(page);await standalone(page);
+  await page.locator('[data-view="packs"]').click();
+  for(const quantity of [1,5,10,50]) {
+    const selected=page.locator(`#pack-quantities [data-quantity="${quantity}"]`);await selected.click();
+    assert.equal(await page.locator('#pack-quantities [aria-pressed="true"]').count(),1,'Exactly one pack quantity is selected');
+    assert.equal(await selected.getAttribute('aria-pressed'),'true');
+    for(const hover of [false,true]) {
+      if(hover)await selected.hover();else await page.mouse.move(1,1);
+      await frames(page,15);
+      const contrast=await selected.evaluate(element=>{
+        const css=getComputedStyle(element),rgb=text=>(text.match(/[\d.]+/g)||[]).slice(0,3).map(Number);
+        const luminance=values=>values.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((a,v,i)=>a+v*[.2126,.7152,.0722][i],0);
+        const foreground=luminance(rgb(css.color)),background=luminance(rgb(css.backgroundColor));
+        return (Math.max(foreground,background)+.05)/(Math.min(foreground,background)+.05);
+      });
+      assert.ok(contrast>=4.5,`Selected ${quantity}-pack label stays readable ${hover?'while hovered':'at rest'} (${contrast.toFixed(2)}:1)`);
+    }
+    assert.match(await page.locator('#pack-total').textContent(),new RegExp('^'+quantity+' pack'));
+    assert.equal(await page.locator('#open-pack').isDisabled(),true,'Changing a quantity does not authorize preview purchases');
+  }
+  await noOverflow(page);await screenshot(page,'phone-pack-quantity-selection');await page.close();
+  check('Every selected pack quantity stays readable at rest and on hover with one clear selection and unchanged purchase authorization');
+}
+
+async function checkCrewStrategyInterface() {
+  for(const viewport of [{width:1440,height:900},{width:390,height:844},{width:320,height:740}]) {
+    const page=await browser.newPage({viewport,isMobile:viewport.width<500,hasTouch:viewport.width<500});observe(page);await standalone(page);
+    await page.evaluate(()=>{const collection=JSON.parse(JSON.stringify(__grandLine.collection));collection.cards=Object.fromEntries(__grandLine.CHARACTERS.map(c=>[c.id,{copies:1}]));collection.team=['kaido','bigmom7','luffy','zoro','nami','usopp','chopper'];__grandLine.applySnapshot({collection});});
+    await page.locator('#allegiance-filter').selectOption('rocks');
+    assert.deepEqual((await page.locator('#card-grid [data-character]').evaluateAll(nodes=>nodes.map(n=>n.dataset.character))).sort(),['bigmom7','kaido','whitebeard']);
+    assert.match(await page.locator('#collection-result-count').textContent(),/Showing 3 cards/);
+    await page.locator('#search-input').fill('does-not-exist');assert.equal(await page.locator('#empty-collection').isVisible(),true);
+    await page.locator('#clear-collection-filters').click();assert.equal(await page.locator('#card-grid .tcg-card').count(),100);assert.equal(await page.locator('#allegiance-filter').inputValue(),'all');
+    await page.locator('[data-view="crew"]').click();assert.equal(await page.locator('#crew-slots .crew-slot').count(),7);assert.match(await page.locator('#crew-nav-count').textContent(),/^7 \/ 7$/);
+    const straw=page.locator('#crew-synergies .synergy-group').filter({hasText:'Straw Hat Pirates'}),rocks=page.locator('#crew-synergies .synergy-group').filter({hasText:'Rocks Pirates'});
+    assert.match(await straw.textContent(),/5.*\+16% all stats/);assert.match(await rocks.textContent(),/2.*\+6% all stats/);
+    await page.getByRole('button',{name:'Inspect Kaido the Beast, captain, crew slot 1',exact:true}).click();
+    assert.match(await page.locator('#dialog-panel .allegiance-badges').textContent(),/Beast Pirates.*Captain/);assert.match(await page.locator('#dialog-panel .allegiance-badges').textContent(),/Rocks Pirates/);
+    assert.match(await page.locator('#dialog-panel .captain-aura-description').textContent(),/10% attack/);await page.keyboard.press('Escape');
+    const before=await page.evaluate(()=>[...__grandLine.collection.team]);
+    await page.getByRole('button',{name:'Change crew slot 7',exact:true}).click();await page.locator('#crew-search').fill('Queen');
+    assert.deepEqual((await page.locator('#crew-picker [data-character]').evaluateAll(nodes=>nodes.map(n=>n.dataset.character))).sort(),['bigmom7','queen'],'Search includes Queen and Big Mom’s Soul Queen title');
+    await page.locator('#cancel-crew-selection').click();assert.deepEqual(await page.evaluate(()=>__grandLine.collection.team),before);assert.equal(await page.locator('#cancel-crew-selection').isHidden(),true);
+    await page.getByRole('button',{name:'Change crew slot 7',exact:true}).click();assert.equal(await page.locator('#crew-search').inputValue(),'');
+    await page.locator('#crew-allegiance-filter').selectOption('beasts');
+    const beasts=await page.locator('#crew-picker [data-character]').evaluateAll(nodes=>nodes.map(n=>n.dataset.character));assert.ok(beasts.includes('kaido')&&beasts.includes('queen'));assert.ok(!beasts.includes('zoro'));
+    assert.equal(await page.locator('#crew-picker [data-character="kaido"]').isDisabled(),true,'The visible captain cannot occupy a second crew slot');
+    await page.locator('#crew-picker [data-character="queen"]').click();await page.waitForFunction(()=>__grandLine.collection.team[6]==='queen');
+    assert.match(await straw.textContent(),/4.*\+10% all stats/);assert.match(await page.locator('#crew-synergies .synergy-group').filter({hasText:'Beast Pirates'}).textContent(),/2.*\+6% all stats/);
+    assert.equal(await page.locator('#cancel-crew-selection').isHidden(),true);await noOverflow(page);await screenshot(page,'alliances-crew-'+viewport.width);
+    await page.locator('[data-view="campaign"]').click();await page.locator('#defense-continue button').click();
+    assert.equal(await page.locator('#defender-buttons [data-ally]').count(),7);const dimensions=await page.locator('#defender-buttons').evaluate(element=>({width:element.clientWidth,scroll:element.scrollWidth,tiles:[...element.children].map(n=>{const r=n.getBoundingClientRect();return {width:r.width,height:r.height,left:r.left,right:r.right};})}));
+    assert.ok(dimensions.scroll<=dimensions.width+1,'Every crew tile is in the visible grid, with no swipe-only hidden crew');for(const tile of dimensions.tiles)assert.ok(tile.width>=44&&tile.height>=44,'Crew touch targets remain reachable');
+    await page.locator('#summon-toggle').click();assert.match(await page.locator('#summon-choice').textContent(),/seven crew slots are filled/);assert.equal(await page.locator('#summon-roster [data-summon="marco"]').isDisabled(),true);await page.locator('#summon-toggle').click();
+    const zoro=await page.evaluate(()=>__grandLine.battle.allies.find(a=>a.characterId==='zoro').id);
+    await page.locator('#defender-buttons [data-ally="'+zoro+'"]').click();await clickCell(page,page,'cell-7-7');
+    assert.equal(await page.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).padId,zoro),'cell-7-7');
+    assert.match(await page.locator('#defender-bonus-summary').textContent(),/All stats \+10%.*Aura attack \+12%/);
+    await openAbilities(page);assert.match(await page.locator('#defender-synergies .captain-aura-status').textContent(),/attack \+12%/);await page.locator('#defender-abilities summary').click();
+    await page.locator('#defender-buttons [data-ally="'+zoro+'"]').click();await clickCell(page,page,'cell-24-11');
+    assert.match(await page.locator('#defender-bonus-summary').textContent(),/^All stats \+10%$/,'Moving away removes the spatial aura while retaining allegiance bonuses');
+    await openAbilities(page);assert.match(await page.locator('#defender-synergies .captain-aura-status').textContent(),/No active leader aura in range/);
+    await page.locator('#battle-synergies summary').first().click();assert.match(await page.locator('#battle-synergy-summary').textContent(),/3 active/);await noOverflow(page);await screenshot(page,'alliances-battle-'+viewport.width);await page.close();
+  }
+  check('Collection allegiance filters, seven-slot search/cancel/replacement, captain badges, live group thresholds and nearby aura readouts stay correct on desktop and both phone sizes');
+}
+
+if(process.env.GRAND_LINE_BROWSER_FOCUS==='interface') {
+  try{await checkBattlefieldWorkspace();await checkPackSelectionReadability();await checkCrewStrategyInterface();assert.deepEqual(errors,[]);await fs.writeFile(path.join(shots,'interface-results.json'),JSON.stringify({checks,errors},null,2));}
+  finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
+  process.exit(0);
+}
+
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }); observe(page); await standalone(page);
-  assert.equal(await page.locator('#card-grid .tcg-card').count(), 50);
+  assert.equal(await page.locator('#card-grid .tcg-card').count(), 100);
   assert.equal(await page.locator('#card-grid .tcg-card[data-owned="true"]').count(), 5);
   assert.equal(await page.locator('#apex-showcase .tcg-card[data-stars="7"]').count(), 3);
   assert.equal(await page.evaluate(() => __grandLine.collection.packs), 0);
@@ -886,17 +994,17 @@ try {
     assert.equal(await page.locator('#dialog-panel .tcg-card').count(), 1);
     await page.keyboard.press('Escape');
   }
-  check('All 50 catalog cards open complete three-skill and passive details');
-  await page.locator('#star-filter').selectOption('7'); assert.equal(await page.locator('#card-grid .tcg-card').count(), 3);
+  check('All 100 catalog cards open complete three-skill and passive details');
+  await page.locator('#star-filter').selectOption('7'); assert.equal(await page.locator('#card-grid .tcg-card').count(), 6);
   await page.locator('#star-filter').selectOption('all'); await page.locator('#ownership-filter').selectOption('owned'); assert.equal(await page.locator('#card-grid .tcg-card').count(), 5);
   await page.locator('#ownership-filter').selectOption('all'); await page.locator('#search-input').fill('Kaido'); assert.equal(await page.locator('#card-grid .tcg-card').count(), 1);
   await page.locator('#search-input').fill(''); await noOverflow(page); await screenshot(page, 'desktop-collection');
-  await page.locator('[data-view="crew"]').click(); assert.equal(await page.locator('#crew-slots .crew-slot').count(), 10);
-  assert.equal(await page.locator('#crew-slots .empty-crew-slot').count(),5);
-  await page.locator('#crew-slots .text-button').first().click(); await page.locator('#crew-picker [data-character="zoro"]').click();
-  assert.match(await page.locator('#toast').textContent(), /already in your crew/); assert.equal(await page.evaluate(() => new Set(__grandLine.collection.team).size), 5);
+  await page.locator('[data-view="crew"]').click(); assert.equal(await page.locator('#crew-slots .crew-slot').count(), 7);
+  assert.equal(await page.locator('#crew-slots .empty-crew-slot').count(),2);
+  await page.getByRole('button',{name:'Change crew slot 1',exact:true}).click(); assert.equal(await page.locator('#crew-picker [data-character="zoro"]').isDisabled(),true,'A character already assigned to another slot cannot be picked');
+  await page.evaluate(()=>__grandLine.changeTeam(0,'zoro'));assert.match(await page.locator('#toast').textContent(), /already in your crew/); assert.equal(await page.evaluate(() => new Set(__grandLine.collection.team).size), 5);
   assert.equal(await page.locator('#crew-picker [data-character="kaido"]').count(), 0);
-  check('Existing five-character crews remain valid with five open slots; duplicate and non-owned choices are blocked');
+  check('Existing five-character crews remain valid with two open slots; duplicate and non-owned choices are blocked');
   await page.locator('[data-view="packs"]').click(); assert.equal(await page.locator('#open-pack').isDisabled(), true);
   check('Standalone preview starts with no packs and cannot spend reward points');
 
@@ -935,7 +1043,7 @@ try {
   await game.locator('[data-pack="nova"]').click(); assert.equal(await game.locator('#open-pack').isEnabled(), true);
   await host.evaluate(() => { fake.blockPurchase = false; });
   check('A confirmed no-charge rejection clears its receipt and allows another pack choice');
-  await game.locator('[data-view="crew"]').click(); await game.locator('#crew-slots .text-button').first().click(); await game.locator(`#crew-picker [data-character="${grants[0]}"]`).click();
+  await game.locator('[data-view="crew"]').click(); await game.getByRole('button',{name:'Change crew slot 1',exact:true}).click(); await game.locator(`#crew-picker [data-character="${grants[0]}"]`).click();
   await game.waitForFunction(id => __grandLine.collection.team[0] === id, grants[0]);
   // Crew changes render optimistically; wait for persistence and the child acknowledgement before inspecting the save or navigating.
   await host.waitForFunction(id => fake.state.grandLine.profiles['test-profile'].collection.team[0] === id, grants[0]);
@@ -1135,8 +1243,8 @@ try {
   for(const id of ['shanks','blackbeard','bigmom','kizaru','sengoku','garp','mihawk','hancock','ace','sabo','law','king'])assert.ok(!roster.includes(id));
   for(const id of ['wyper','kaku','wapol','hina','paulie','donkrieg','hatchan','kalifa','bellamy','gin','mr3','kuro'])assert.ok(roster.includes(id));
   await page.locator('[data-view="collection"]').click();await page.locator('.roster-update summary').click();
-  assert.equal(await page.locator('#future-characters li').count(),12);
-  check('Current collection preserves all twelve replacements and clearly reserves future seven-star expansions');
+  assert.equal(await page.locator('#future-characters li').count(),9);
+  check('Current collection preserves all twelve replacements and clearly reserves nine future legends alongside six current seven-star editions');
   await page.locator('[data-view="campaign"]').click();await page.locator('#campaign-map button').first().click();
   await page.locator('#defender-buttons [data-ally]').first().click();await openAbilities(page);await page.locator('#defender-skills [data-skill-preview="luffy-2"]').click();
   assert.equal(await page.locator('#defender-skills [data-skill-preview="luffy-2"]').getAttribute('aria-pressed'),'true');
@@ -1166,18 +1274,18 @@ try {
         return { id: c.id, metadata: !!metadata, file: metadata?.file, source: item.image.currentSrc || item.image.src, expectedSource: metadata?.file ? new URL('./assets/grand-line/' + metadata.file, location.href).href : '', loaded: item.loaded, failed: item.failed, width: item.image.naturalWidth, height: item.image.naturalHeight, bounds: item.bounds };
       }));
     });
-    assert.equal(assets.length, 50);
+    assert.equal(assets.length, 100);
     for (const asset of assets) {
       assert.ok(asset.metadata && asset.loaded && !asset.failed && asset.width >= 1000 && asset.height >= 800 && asset.bounds?.w > 30 && asset.bounds?.h > 30, 'Full card and usable avatar artwork: ' + asset.id);
       assert.equal(asset.source, asset.expectedSource, 'Renderer loads the exact manifest file, including lossless WebP deployments: ' + asset.id);
     }
-    check('All 50 original card paintings and battle avatars load with valid metadata and cropped bounds');
+    check('All 100 original card paintings and battle avatars load with valid metadata and cropped bounds');
   }
 
   for (const [name, viewport] of [['phone', { width: 390, height: 844 }], ['small-phone', { width: 320, height: 740 }], ['landscape', { width: 844, height: 390 }]]) {
     const mobile = await browser.newPage({ viewport, isMobile: true, hasTouch: true }); observe(mobile); await standalone(mobile, 'science'); await noOverflow(mobile); await screenshot(mobile, name + '-collection');
-    await mobile.locator('#apex-showcase [data-character="kaido"]').click(); await noOverflow(mobile); await screenshot(mobile, name + '-detail'); await mobile.locator('#dialog-panel .dialog-close').click();
-    await mobile.locator('[data-view="crew"]').click();assert.equal(await mobile.locator('#crew-slots .crew-slot').count(),10);await noOverflow(mobile);await screenshot(mobile,name+'-crew');
+    await mobile.locator('#apex-showcase [data-character="garp7"]').click(); await noOverflow(mobile); await screenshot(mobile, name + '-detail'); await mobile.locator('#dialog-panel .dialog-close').click();
+    await mobile.locator('[data-view="crew"]').click();assert.equal(await mobile.locator('#crew-slots .crew-slot').count(),7);await noOverflow(mobile);await screenshot(mobile,name+'-crew');
     await mobile.locator('[data-view="campaign"]').click();await mobile.locator('#campaign-map button').first().click();
     await mobile.waitForFunction(()=>__grandLine.battle?.status==='setup');await noOverflow(mobile);
     await mobile.locator('#defender-buttons [data-ally]').first().tap();
@@ -1234,11 +1342,14 @@ try {
     await mobile.locator('#study-button').tap();assert.equal(await mobile.locator('.question-count').count(),1);
     await mobile.close();
   }
-  check('Collection, ten-slot crews, direct map taps, keyboard placement, zoom/panning and running defense fit portrait and landscape phones');
+  check('Collection, seven-slot crews, direct map taps, keyboard placement, zoom/panning and running defense fit portrait and landscape phones');
+  await checkBattlefieldWorkspace();
+  await checkPackSelectionReadability();
+  await checkCrewStrategyInterface();
   await checkMazeBuilder();
   await checkDirectPlacement();
   await checkTouchPlacement();
-  await checkTenCrew();
+  await checkSevenCrew();
   await checkAdministratorShop();
   await checkMultiPackPurchases();
   await checkLegacyPackCapability();

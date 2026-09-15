@@ -115,14 +115,14 @@ test('summons use any owned card independently of the saved five and reject dupl
   forceGate(b); assert.equal(summonDefender(b, 'kaido', DEFENSE_PADS[6].id), false);
 });
 
-test('all ten crew slots can be filled, recalls refund only a bounded paid cost and repeated recalls cannot mint supplies', () => {
+test('all seven crew slots can be filled, recalls refund only a bounded paid cost and repeated recalls cannot mint supplies', () => {
   const collection = createCollection();
-  const extras = CHARACTERS.filter(c => !collection.cards[c.id]).slice(0, 6);
+  const extras = CHARACTERS.filter(c => !collection.cards[c.id]).slice(0, 3);
   for (const c of extras) addCard(collection, c.id);
   const b = createDefense(collection); b.supplies = 1000;
-  for (let i = 0; i < 5; i++) assert.equal(summonDefender(b, extras[i].id, DEFENSE_PADS[i + 5].id), true);
-  assert.equal(b.allies.length, 10); assert.equal(new Set(b.allies.map(a => a.padId)).size, 10);
-  assert.equal(summonDefender(b, extras[5].id, DEFENSE_PADS[9].id), false);
+  for (let i = 0; i < 2; i++) assert.equal(summonDefender(b, extras[i].id, DEFENSE_PADS[i + 5].id), true);
+  assert.equal(b.allies.length, 7); assert.equal(new Set(b.allies.map(a => a.padId)).size, 7);
+  assert.equal(summonDefender(b, extras[2].id, DEFENSE_PADS[9].id), false);
   const free = b.allies[0], paid = b.allies.at(-1), paidPad = paid.padId, funds = b.supplies;
   assert.equal(recallDefender(b, free.id), true); assert.equal(b.supplies, funds, 'The initial free deployment has no refund');
   assert.equal(recallDefender(b, free.id), false); assert.equal(b.supplies, funds);
@@ -335,7 +335,7 @@ test('hostile area attacks and friendly support obey each defender’s actual ra
   castOnce(h); assert.equal(ally.hp, 10);
 });
 
-test('all fifty characters use all 150 catalog abilities with real effects and world animation positions', () => {
+test('all one hundred characters use all 300 catalog abilities with real effects and world animation positions', () => {
   const animations = new Set();
   for (const character of CHARACTERS) for (const skill of character.skills) {
     const f = fixture(character.id); f.actor.skills = [skill];
@@ -350,7 +350,7 @@ test('all fifty characters use all 150 catalog abilities with real effects and w
     assert.ok(effect.targets.length && effect.targets.every(point => Number.isFinite(point.x) && Number.isFinite(point.y)));
     if (skill.power && ['enemy', 'all-enemies'].includes(skill.target)) assert.ok(f.enemy.hp < f.enemy.maxHp, `${skill.id} damage`);
   }
-  assert.equal(animations.size, 150);
+  assert.equal(animations.size, 300);
 });
 
 test('cooldowns use seconds, Spirit is spent once, and basics restore the stated twelve Spirit', () => {

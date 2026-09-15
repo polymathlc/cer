@@ -1,12 +1,13 @@
-import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS } from './grand-line-data.js?v=3.3.0';
-import { statsFor } from './grand-line-core.js?v=3.3.0';
-import { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.3.0';
-export { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.3.0';
+import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS, MAX_CREW_SIZE } from './grand-line-data.js?v=3.4.0';
+import { statsFor, getCrewSynergies, getCaptainAuras } from './grand-line-core.js?v=3.4.0';
+export { getCaptainAuras } from './grand-line-core.js?v=3.4.0';
+import { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.4.0';
+export { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.4.0';
 import { DEFENSE_GRID, DEFENSE_PATH, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_TERRAIN, defenseCell,
   pointOnDefenseRoute, commitDefenseRoute, planDefenseRoute, getMazePlacementPreview,
-  MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.3.0';
+  MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.4.0';
 export { DEFENSE_GRID, DEFENSE_PATH, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_TERRAIN,
-  getDefenseRoute, getMazePlacementPreview, MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.3.0';
+  getDefenseRoute, getMazePlacementPreview, MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.4.0';
 export const DEFENSE_STAGES = Object.freeze(ENCOUNTERS.map(encounter => ({
   ...encounter, waveCount: 6, description: `Build a maze at ${encounter.name}. Slow the swarm, summon your collection and train your crew after three questions each wave.`,
 })));
@@ -58,7 +59,8 @@ function makeUnit(characterId, side, copies = 1) {
     side, color: character.color, ...stats, hp: stats.maxHp, energy: 45, maxEnergy: 100, shield: 0,
     x: 0, y: 0, padId: null, range, radius: 22, skills: character.skills,
     profile, level: 1, specialization: null, priority: 'first', summonCost: 20 + character.stars * 5,
-    paidSupplies: 0, baseStats: { ...stats }, baseRange: range,
+    paidSupplies: 0, copies, baseStats: { ...stats }, baseRange: range,
+    allegiances: character.allegiances, captainOf: character.captainOf, aura: character.aura,
     passive: character.passive, passiveUsed: false, attacksMade: 0, alive: true, statuses: [],
     cooldowns: Object.fromEntries(character.skills.map(skill => [skill.id, 0])),
     attackInterval: clamp(1.5 - (stats.speed - 42) * 0.014, 0.95, 1.5), actionTimer: 0,
@@ -67,7 +69,7 @@ function makeUnit(characterId, side, copies = 1) {
 
 export function createDefense(collection, options = {}) {
   const encounterId = options.encounter ?? 1;
-  if (!collection?.cards || !Array.isArray(collection?.team) || collection.team.length < 1 || collection.team.length > 10 || new Set(collection.team).size !== collection.team.length ||
+  if (!collection?.cards || !Array.isArray(collection?.team) || collection.team.length < 1 || collection.team.length > MAX_CREW_SIZE || new Set(collection.team).size !== collection.team.length ||
       !collection.team.every(id => typeof id === 'string' && Object.hasOwn(CHARACTER_BY_ID, id) && collection.cards?.[id]?.copies >= 1) ||
       !Number.isInteger(encounterId) || encounterId < 1 || encounterId > 9 || encounterId > collection.unlockedEncounter) return null;
   const seed = options.seed ?? 1;
@@ -82,6 +84,7 @@ export function createDefense(collection, options = {}) {
     rewardedRounds: [], roundResults: [], outcomeCommitted: false,
     stats: { damageDealt: 0, kills: 0, leaks: 0, skillsUsed: 0, turns: 0, waves: 0, rounds: 0, simulatedSeconds: 0 } };
   for (let i = 0; i < b.allies.length; i++) Object.assign(b.allies[i], pointOf(DEFENSE_DEFAULT_PADS[i]), { padId: DEFENSE_DEFAULT_PADS[i].id });
+  refreshCrewStats(b);
   if (!commitDefenseRoute(b)) return null;
   for (const unit of b.allies) {
     if (unit.passive.type === 'shield-start') unit.shield += Math.round(unit.maxHp * unit.passive.value);
@@ -94,7 +97,7 @@ export function createDefense(collection, options = {}) {
 const editable = b => b?.status === 'setup' && !b.pendingOutcome;
 export function summonDefender(b, characterId, padId) {
   if (!editable(b) || !Object.hasOwn(CHARACTER_BY_ID, characterId) || !(b.collection.cards?.[characterId]?.copies >= 1) ||
-      b.allies.length >= 10 || b.allies.some(unit => unit.characterId === characterId || unit.padId === padId)) return false;
+      b.allies.length >= MAX_CREW_SIZE || b.allies.some(unit => unit.characterId === characterId || unit.padId === padId)) return false;
   const pad = DEFENSE_PADS.find(entry => entry.id === padId), cost = 20 + CHARACTER_BY_ID[characterId].stars * 5;
   if (!pad || b.supplies < cost || !getMazePlacementPreview(b, padId, { kind: 'crew' }).valid) return false;
   const previous = b.reserve[characterId], unit = previous || makeUnit(characterId, 'ally', b.collection.cards[characterId].copies);
@@ -107,6 +110,7 @@ export function summonDefender(b, characterId, padId) {
     if (['all-shield', 'apex-whitebeard'].includes(unit.passive.type)) for (const ally of [...b.allies, unit]) ally.shield = Math.min(ally.maxHp, ally.shield + Math.round(ally.maxHp * unit.passive.value));
   }
   b.allies.push(unit);
+  refreshCrewStats(b);
   commitDefenseRoute(b);
   log(b, `${unit.name} summoned for ${cost} supplies.`);
   return true;
@@ -117,6 +121,7 @@ export function recallDefender(b, allyId) {
   if (index < 0) return false;
   const [unit] = b.allies.splice(index, 1), refund = Math.floor(unit.paidSupplies / 2);
   b.supplies += refund; unit.padId = null; unit.paidSupplies = 0; b.reserve[unit.characterId] = unit;
+  refreshCrewStats(b);
   commitDefenseRoute(b);
   log(b, `${unit.name} recalled. ${refund} supplies returned; training is kept for this defense.`);
   return true;
@@ -143,13 +148,30 @@ export function sellMazeTower(b, cellId) {
   log(b, 'Basic tower sold. 3 supplies returned.'); return true;
 }
 function refreshTrainingStats(unit) {
-  const base = unit.baseStats, healthRatio = unit.hp / unit.maxHp;
+  const base = unit.baseStats, previous = unit.healthScale;
+  // Retain the precise fraction through stat-only changes. Rounding down a
+  // formation bonus and back up must not mint health by repeatedly recalling
+  // a teammate. A real heal, hit or knockout starts a new fraction instead.
+  const healthRatio = previous?.hp === unit.hp && previous.maxHp === unit.maxHp
+    ? previous.ratio : clamp(unit.hp / unit.maxHp, 0, 1);
   unit.attack = Math.round(base.attack * (1 + (unit.level - 1) * .2) * (unit.specialization === 'power' ? 1.25 : 1));
   unit.maxHp = Math.round(base.maxHp * (1 + (unit.level - 1) * .15));
-  unit.hp = Math.max(1, Math.round(unit.maxHp * healthRatio));
+  unit.hp = healthRatio > 0 ? Math.max(1, Math.round(unit.maxHp * healthRatio)) : 0;
+  unit.healthScale = { hp: unit.hp, maxHp: unit.maxHp, ratio: healthRatio };
   unit.defense = Math.round(base.defense * (1 + (unit.level - 1) * .1));
+  unit.speed = base.speed;
+  unit.synergyBonus = base.synergyBonus || 0;
   unit.range = Math.round(unit.baseRange * (unit.specialization === 'reach' ? 1.15 : 1));
   unit.attackInterval = clamp(1.5 - (base.speed - 42) * .014, .95, 1.5) * (unit.specialization === 'reach' ? .85 : 1);
+}
+function refreshCrewStats(b) {
+  const ids = b.allies.map(unit => unit.characterId);
+  b.synergies = getCrewSynergies(ids);
+  for (const unit of b.allies) {
+    unit.baseStats = statsFor(unit.characterId, unit.copies, 1, ids);
+    refreshTrainingStats(unit);
+    unit.shield = Math.min(unit.maxHp, unit.shield);
+  }
 }
 export function upgradeDefender(b, allyId) {
   if (!editable(b)) return false;
@@ -212,7 +234,7 @@ export function placeDefender(b, allyId, padId) {
 }
 
 export function startDefenseWave(b) {
-  if (!b || b.status !== 'setup' || b.ship.hp <= 0 || b.round > b.waveCount || b.allies.length < 1 || b.allies.length > 10 ||
+  if (!b || b.status !== 'setup' || b.ship.hp <= 0 || b.round > b.waveCount || b.allies.length < 1 || b.allies.length > MAX_CREW_SIZE ||
       new Set(b.allies.map(unit => unit.padId)).size !== b.allies.length ||
       !b.allies.every(unit => DEFENSE_PADS.some(pad => pad.id === unit.padId))) return false;
   if (!planDefenseRoute(b) || !commitDefenseRoute(b)) return false;
@@ -294,7 +316,7 @@ function damage(b, source, target, amount, direct = true) {
 }
 function directDamage(b, actor, target, skill) {
   if (target.passive.type === 'evade' && random(b) < target.passive.value) { emit(b, 'wind', target, [target], 'Evaded'); return 0; }
-  let multiplier = Math.max(0.1, 1 + valueOf(actor, 'attack-up') - valueOf(actor, 'weaken'));
+  let multiplier = Math.max(0.1, 1 + valueOf(actor, 'attack-up') - valueOf(actor, 'weaken') + getCaptainAuras(b, actor).attackBonus);
   for (const ally of teamOf(b, actor).filter(alive)) if (ally.passive.type === 'all-attack' && distance(actor, ally) <= ally.range) multiplier += ally.passive.value;
   if (actor.passive.type === 'execute' && target.hp < target.maxHp * 0.5) multiplier *= 1 + actor.passive.value;
   if (actor.passive.type === 'focus') multiplier *= 1 + Math.min(6, actor.attacksMade) * actor.passive.value;
@@ -563,7 +585,7 @@ function tickProjectiles(b) {
 
 function tickUnit(b, unit) {
   if (!alive(unit)) return;
-  unit.actionTimer = Math.max(0, unit.actionTimer - STEP);
+  unit.actionTimer = Math.max(0, unit.actionTimer - STEP * (1 + getCaptainAuras(b, unit).speedBonus));
   unit.energy = Math.min(100, unit.energy + STEP * (4 + (unit.passive.type === 'energy' ? unit.passive.value * 0.6 : 0)));
   for (const id of Object.keys(unit.cooldowns)) unit.cooldowns[id] = Math.max(0, unit.cooldowns[id] - STEP);
   unit.regenerationTimer += STEP;

@@ -1,14 +1,44 @@
-# Grand Line Chronicles
+# Grand Line Chronicles · 3.4.0
 
 A One Piece collectible card and ship-defense game alongside Pirate Rift. Open **Crew Defense** in the Math or Science portal to use the signed-in learner's real question bank and existing reward-point wallet. A direct visit to `grand-line.html` provides a clearly labeled local preview without platform purchases or reward points.
 
 ## Cards and crews
 
-- Fifty illustrated characters, each with a matching battle avatar, three active abilities, and a passive.
-- Five starter cards: Luffy, Zoro, Nami, Usopp, and Chopper. Choose up to ten different owned characters for the free starting formation. Any other owned card can be summoned during defense preparation.
+- **100 illustrated characters**, each with a matching battle avatar, three active abilities, and a passive: 300 abilities in total.
+- Five starter cards: Luffy, Zoro, Nami, Usopp, and Chopper. Choose up to **seven different owned characters** for the free starting formation. Any other owned card can be summoned during defense preparation while a crew slot is available.
 - Open **1, 5, 10, or 50 packs** at once in Card shop. Every pack contains exactly **one** character card. New cards unlock their avatars immediately; duplicates automatically merge into the existing character. Multi-pack openings show every card together, with new/merged labels and final copy counts.
 - Star ratings are fixed rarities from one to seven. Merge rank rises at 2, 4, 8, 16… total copies, capped at rank 10. Each rank adds 12% to base life, attack, and defense.
-- Expansion 01's seven-star cards are **Kaido the Beast, Whitebeard, and Admiral Akainu**, with animated gold galaxy frames and foil. Reduced motion disables the decorative animation.
+- Expansion 01's seven-star cards are **Kaido the Beast, Whitebeard, and Admiral Akainu**. Expansion 02 adds 50 cards, including **Big Mom, Garp, and Sabo** at seven stars and **Silvers Rayleigh and Kozuki Oden** at six stars. All six seven-star cards have animated gold galaxy frames and foil. Reduced motion disables the decorative animation.
+
+Collection search and the allegiance, ownership and rarity filters narrow the full roster. My crew uses compact slots with **Change** and **Remove** actions; choose a slot, search owned characters by name or fighting style, or filter by allegiance. **Cancel slot change** leaves the formation intact. The navigation shows the current crew count, and the defense page offers a direct shortcut to the next unlocked harbor.
+
+### Allegiances, captains and nearby auras
+
+Matching crew members gain a shared allegiance bonus to **life, attack, defense and speed**. Only members of that allegiance receive its bonus; no captain is required.
+
+| Members sharing an allegiance | Bonus to each matching member's stats |
+|---:|---:|
+| 1 | None |
+| 2 | +6% |
+| 3–4 | +10% |
+| 5–7 | +16% |
+
+Characters can have several current or historical allegiances. Kaido belongs to the Beast Pirates and Rocks Pirates; Big Mom belongs to the Big Mom Pirates and Rocks Pirates; Whitebeard belongs to the Whitebeard Pirates and Rocks Pirates. Bonuses from qualifying groups add for each character, up to **+30% all stats**. For example, two Beast Pirates and two Rocks Pirates give Kaido +12%; a Beast Pirate without the Rocks tag receives only the Beast bonus. My crew shows active groups and the next required member count. Defense recalculates these bonuses when a character is summoned or recalled.
+
+**Captain** badges identify the character's lore role; players do not appoint a single captain, and several captains may be deployed together. Some captains and commanders also give nearby living allies an attack or attack-speed aura:
+
+| Leader | Aura | Effect |
+|---|---|---|
+| Luffy | Captain's Courage | +8% attack |
+| Buggy | Showman's Rally | +6% attack speed |
+| Kaido | Emperor's Might | +10% attack |
+| Whitebeard | A Father's Rally | +10% attack speed |
+| Big Mom | Queen's Command | +12% attack |
+| Garp | Hero's Training | +10% attack |
+| Sabo | Flame of Freedom | +10% attack speed |
+| Belo Betty | Revolutionary Encouragement | +8% attack |
+
+Each aura reaches **240 battlefield units, or six grid cells measured as a radius**, including the leader. It can affect allies of any allegiance. Only the strongest active aura of each stat applies, capped at **12% attack and 12% attack speed**; an attack aura and a speed aura can coexist. Moving out of range or a leader being knocked out removes that aura immediately. Maze towers and enemies receive no leader aura. Aura effects are separate from allegiance bonuses and do not become permanent upgrades. The selected defender shows its actual received bonuses and whether a leader aura is out of range. Garp, Sabo and Belo Betty retain their Marine or Revolutionary leadership roles rather than receiving pirate-captain labels.
 
 ## Existing platform reward points
 
@@ -28,9 +58,9 @@ Multi-pack controls activate only when the portal confirms that both its purchas
 
 ## Administrator tools
 
-Sign in with an **administrator account**, open Crew Defense and visit **Card shop**. The portal automatically supplies the saved school level; administrators without one use its P6 preview. The administrator panel provides **Unlimited gold** and **Unlock all 50 cards**.
+Sign in with an **administrator account**, open Crew Defense and visit **Card shop**. The portal automatically supplies the saved school level; administrators without one use its P6 preview. The administrator panel provides **Unlimited gold** and **Unlock all 100 cards**.
 
-Unlimited gold lets that administrator open any of the three pack tiers without spending reward points. Turning it off restores the normal listed prices. The setting is saved for the administrator's account on that portal; its actual point balance is unchanged. Unlock all adds any missing current cards to the administrator's selected collection without removing duplicate copies or changing the chosen crew. It excludes the twelve reserved future-expansion characters. Repeating either action does not stack grants.
+Unlimited gold lets that administrator open any of the three pack tiers without spending reward points. Turning it off restores the normal listed prices. The setting is saved for the administrator's account on that portal; its actual point balance is unchanged. Unlock all adds any missing current cards to the administrator's selected collection without removing duplicate copies or changing the chosen crew. It includes the new Big Mom, Garp and Sabo editions and excludes the nine still-reserved future characters. Repeating either action does not stack grants.
 
 These controls are unavailable to students and standalone previews. The portal checks the signed-in role and current profile before each action and before accepting its result. Administrator actions wait for question rounds, purchases and saves to finish; a profile or role change retires the open game session.
 
@@ -44,13 +74,15 @@ Select the **Maze tower** tile in the placement grid, then click battlefield cel
 
 Towers and crew both block movement. The map previews the proposed route before a placement; building, moving or summoning is rejected without spending supplies if it would seal the exit. Entrance, exit, fixed terrain and occupied cells cannot receive towers. Routes use orthogonal steps, so enemies cannot cut diagonally through blocked corners. Build, sell, summon and move between waves; attacks run automatically during waves.
 
-Choose **one to ten different owned characters** in My crew. They deploy free at the start; existing five-member crews carry over. Empty crew slots can be filled as more cards unlock. During preparation, any other **owned card** can be summoned if fewer than ten characters are deployed. Open **More crew**, then drag an owned character onto an empty grid cell, or select their tile and click the cell. Deployed crew can be dragged directly by their map avatars or palette tiles; selecting a crew member and clicking a destination also moves them. Locked and future-expansion cards cannot be summoned. Swapping two deployed crew members is free and preserves the same blockers.
+Choose **one to seven different owned characters** in My crew. They deploy free at the start; existing five-member crews carry over with two open slots. Empty crew slots can be filled as more cards unlock. During preparation, any other **owned card** can be summoned if fewer than seven characters are deployed. Open **More crew**, then drag an owned character onto an empty grid cell, or select their tile and click the cell. Deployed crew can be dragged directly by their map avatars or palette tiles; selecting a crew member and clicking a destination also moves them. Locked and future-expansion cards cannot be summoned. Swapping two deployed crew members is free and preserves the same blockers.
 
 Each defense starts with 100 battle supplies. A crew summon costs 20 + 5 × the card's stars; defeating enemies and finishing waves adds supplies. These supplies belong only to the current defense and never debit, award, or replace Math or Science reward points. Recalls refund half the supplies actually paid, rounded down. Free starting defenders refund zero. A recalled character keeps its training and specialization for this defense, but returning costs the normal summon price.
 
 ### Direct placement controls
 
-The map keeps Start wave, Pause, speed and zoom together. The compact placement grid contains a 5-supply tower tile and the deployed crew. Selecting a placed tower reveals its **Sell tower · +3** action. Crew selection reveals targeting and level-up controls; skills, specialization and recall are grouped inside **Skills & upgrades**. Exact column/row selectors remain in the collapsed **Keyboard placement** panel.
+The landscape map fills the available main column, with placement and selected-character controls beside it on desktop. Start wave, Pause, speed and zoom stay together directly above the play area. On phones, the map fills the screen width and all seven crew tiles fit in a compact two-row grid below it. **Zoom map** enlarges the cells and enables panning; **Fit map** returns to the complete landscape view.
+
+The compact placement grid contains a 5-supply tower tile and the deployed crew. Selecting a placed tower reveals its **Sell tower · +3** action. Crew selection reveals the character's active bonuses, target priority and **Level up** action above the placement tiles; longer skill, allegiance, aura, specialization and recall details are grouped inside **Skills, alliances & upgrades**. Exact column/row selectors remain in the collapsed **Keyboard placement** panel.
 
 Pointer previews never spend supplies. A drag commits only once, on release over a valid visible grid cell. Blocked cells, releases outside the map, Escape, lost capture, a second touch, hidden windows, and a change out of preparation cancel safely. During preparation, dragging empty map space pans a zoomed viewport without placing anything. Mouse, pen and touch use the same game rules.
 
@@ -76,9 +108,9 @@ Target priority can change during combat: **First** picks enemies nearest the sh
 
 ### Illustrated ability animations
 
-The seven current six- and seven-star characters each have three dedicated animated ability rows, for 21 individual abilities: Kaido, Whitebeard, Akainu, Luffy, Kuzan, Fujitora, and Ryokugyu. The other 43 characters share directional-strike, area-impact and support animations tinted to their abilities. Zoro and Kuro use the shared sword-slash effects; their actual attack geometry and speed remain distinct. Law's earlier sprite sheet is archived and is excluded from active ability bindings and preloading.
+The twelve current six- and seven-star characters each have three dedicated animated ability rows, for **36 individual abilities**: Kaido, Whitebeard, Akainu, Luffy, Kuzan, Fujitora, Ryokugyu, Big Mom, Garp, Sabo, Rayleigh and Oden. The other 88 characters share directional-strike, area-impact and support animations tinted to their abilities. Zoro and Kuro use the shared sword-slash effects; their actual attack geometry and speed remain distinct. Law's earlier sprite sheet is archived and is excluded from active ability bindings and preloading.
 
-Eight active transparent sprite sheets contain 96 generated frames. Each cast plays cropped wind-up, travel, impact and fade frames; splash and chain effects follow their actual resolution. Whitebeard's ground tremors, forest eruptions and gravity impacts draw beneath the characters. Compact status markers and shield bars replace large overlapping auras. Visual budgets cap effects and combine damage labels during crowded waves without changing damage or target selection. Reduced motion uses fixed frames and removes shakes and moving trails.
+Thirteen active transparent sprite sheets contain **156 generated frames**. Each cast plays cropped wind-up, travel, impact and fade frames; splash and chain effects follow their actual resolution. Whitebeard's ground tremors, forest eruptions and gravity impacts draw beneath the characters. Compact status markers and shield bars replace large overlapping auras. Visual budgets cap effects and combine damage labels during crowded waves without changing damage or target selection. Reduced motion uses fixed frames and removes shakes and moving trails.
 
 The browser loads only the deployed characters' sheets plus the shared fallback. Image failures retain quiet attack cues. The shipped WebP files preserve the generated images' visible pixels and transparency losslessly; full generation prompts and hashes are recorded in `assets/grand-line-vfx/ART.md` and its manifest.
 
@@ -108,13 +140,17 @@ Completing all six waves and the final questions records the victory and opens t
 
 ### Controls
 
-The high-contrast Build, Move, Summon and Sell toolbar and Start wave control sit directly beside the map. Tap a cell, then confirm its action. Column/row selectors and arrow buttons give precise placement; focus the map and use arrow keys plus Enter with a keyboard. Zoom map lets phones pan across larger cells. Keys 1–9 and 0 select up to ten defenders; Space starts or pauses the wave. Pause and 1×, 2×, or 4× speed are available. Hidden tabs, dialogs, question rounds, and pending saves pause simulation. Returning never simulates offline waves or awards offline points. Admin pack controls remain available in Card shop.
+Click a tower or crew tile, then click a valid map cell to place it directly, or drag the tile onto the cell. Crew avatars can also be dragged from the map. Tower selection stays armed for repeated building; select a placed tower to sell it. For precise keyboard placement, open **Keyboard placement**, or focus the map and use arrow keys followed by Enter. Escape cancels placement. Keys **1–7** select defenders; Space starts or pauses the wave. Pause and **1×, 2×, or 4×** speed are available. On phones, enlarge the map with **Zoom map** and drag empty map space to pan. Hidden tabs, dialogs, question rounds, and pending saves pause simulation. Returning never simulates offline waves or awards offline points. Admin pack controls remain available in Card shop.
 
 ## Current roster and future expansions
 
-Twelve legends are reserved for future **seven-star** expansions. They are absent from current card packs, active teams, and encounters; they are not available to unlock yet. Kaido, Whitebeard, and Admiral Akainu remain the only current seven-star cards. Fifty characters remain obtainable.
+There are **100 obtainable cards**, including six seven-star cards: Kaido, Whitebeard, Admiral Akainu, Big Mom, Garp and Sabo. The new expansion editions use the distinct IDs `bigmom7`, `garp7` and `sabo7`; the earlier replacement cards remain obtainable.
 
-| Reserved future seven-star character | Current replacement |
+**Nine** legends remain reserved for future seven-star expansions: Shanks, Marshall D. Teach, Admiral Kizaru, Sengoku, Dracule Mihawk, Boa Hancock, Portgas D. Ace, Trafalgar Law and King. They are absent from current packs, active teams and encounters, and cannot be unlocked yet. These are fan-game expansion reservations, not official ONE PIECE release announcements.
+
+All **twelve historical ID conversions** remain permanent, including the three names that now have separately unlockable seven-star editions:
+
+| Retired legacy character | Permanent replacement |
 |---|---|
 | Shanks | Wyper · 4★ |
 | Marshall D. Teach | Kaku · 4★ |
@@ -129,13 +165,15 @@ Twelve legends are reserved for future **seven-star** expansions. They are absen
 | Trafalgar Law | Galdino · Mr. 3 · 3★ |
 | King | Captain Kuro · 2★ |
 
-Existing copies transfer **one-for-one** to the corresponding replacement, including team slots. When a save contains both names, their copies combine and merge normally. Copy counts, reward points, purchase receipts and stage progress are preserved; combat strength follows the replacement’s current rarity. Repeated loading or replaying a purchase receipt cannot duplicate copies or charge points again. Future seven-star editions will have their own expansion releases; owning an earlier retired card does not automatically grant an unreleased card.
+Existing copies transfer **one-for-one** to the corresponding replacement, including team slots. When a save contains both names, their copies combine and merge normally. The retired bare IDs `bigmom`, `garp` and `sabo` still convert to Wapol, Don Krieg and Gin; they never grant `bigmom7`, `garp7` or `sabo7`. New editions must be unlocked through current packs or the authorized administrator unlock action. Copy counts, reward points, purchase receipts and stage progress are preserved; combat strength follows the replacement’s current rarity. Repeated loading or replaying a purchase receipt cannot duplicate copies, reroll a result or charge points again.
 
-The new lower-rarity cards fill distinct defense roles. Bellamy builds attack momentum with spring-driven lines and a forward ricochet cone. Gin holds bends with short-range tonfa sweeps, an armor-piercing focused strike and a stunning spin around himself. Mr. 3 sends slowing wax along a line, shields an ally with Candle Wall and hardens a larger crowd with Giant Candle Set. Kuro attacks quickly with three claw-line techniques; Silent Step Cut has a short cooldown. Their controls and damage follow actual attack footprints, so placement still determines which enemies they reach.
+When an older save has eight to ten active crew members, migration keeps the **first seven valid, distinct owned characters in their existing order** after legacy conversions. Every owned card and duplicate copy remains in the collection, including characters removed from the active formation. Existing five-member crews remain valid. The smaller active-crew limit applies to new selections, saved formations and deployed defenders.
+
+The earlier lower-rarity replacements fill distinct defense roles. Bellamy builds attack momentum with spring-driven lines and a forward ricochet cone. Gin holds bends with short-range tonfa sweeps, an armor-piercing focused strike and a stunning spin around himself. Mr. 3 sends slowing wax along a line, shields an ally with Candle Wall and hardens a larger crowd with Giant Candle Set. Kuro attacks quickly with three claw-line techniques; Silent Step Cut has a short cooldown. Their controls and damage follow actual attack footprints, so placement still determines which enemies they reach.
 
 ## Artwork and lore
 
-All 50 character images were generated with the built-in image generator. Each original source contains painted card art beside a transparent full-body battle avatar. The manifest records the actual panel split; CSS draws standard rarity frames, and the battle renderer uses the corresponding avatar. Artwork prompts and provenance are in [assets/grand-line/ART.md](assets/grand-line/ART.md). Character ability references and the distinction between lore and game balance are in [LORE-SOURCES.md](LORE-SOURCES.md).
+All 100 character images were generated with the built-in image generator. The expansion adds 50 distinct character compositions and backgrounds. Each original source contains painted card art beside a transparent full-body battle avatar. The manifest records the actual panel split; CSS draws standard rarity frames, and the battle renderer uses the corresponding avatar. Artwork prompts and provenance are in [assets/grand-line/ART.md](assets/grand-line/ART.md). Character ability references and the distinction between lore and game balance are in [LORE-SOURCES.md](LORE-SOURCES.md).
 
 ## Validation
 
@@ -143,7 +181,7 @@ Run the core, economy, bank and learning tests with Node 24:
 
 ```sh
 node --test tools/grand-line-core.test.mjs tools/grand-line-economy-tests.mjs tools/grand-line-admin-tests.mjs tools/grand-line-learning-tests.mjs tools/grand-line-bank-tests.mjs
-node --test tools/grand-line-defense-tests.mjs tools/grand-line-maze-tests.mjs tools/grand-line-vfx-tests.mjs tools/grand-line-roster-tests.mjs tools/grand-line-migration-tests.mjs
+node --test tools/grand-line-defense-tests.mjs tools/grand-line-maze-tests.mjs tools/grand-line-vfx-tests.mjs tools/grand-line-roster-tests.mjs tools/grand-line-migration-tests.mjs tools/grand-line-synergy-tests.mjs tools/grand-line-asset-tests.mjs
 ```
 
 The Science repository uses its science-feeding integration suite instead of a separate Math bank test. Both repositories run the browser suites below. Set `PLAYWRIGHT_MODULE` to an installed Playwright module path; optionally set `PLAYWRIGHT_BROWSER_CHANNEL` and `GRAND_LINE_SCREENSHOTS`.

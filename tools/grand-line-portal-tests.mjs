@@ -56,7 +56,7 @@ try {
     const initial = await open(), url = new URL(await page.locator('iframe').getAttribute('src'));
     assert.equal(initial.questionCount, 3); assert.equal(initial.available, true); assert.match(initial.profileKey, /^p[0-9a-f]{16}$/);
     assert.equal(url.searchParams.get('profile'), initial.profileKey); assert.equal(url.searchParams.get('subject'), subject.toLowerCase()); assert.ok(!url.href.includes('private-account'));
-    assert.equal(url.searchParams.get('v'), '3.3.0');
+    assert.equal(url.searchParams.get('v'), '3.4.0');
     assert.equal(await page.locator('.grand-line-portal').getAttribute('aria-label'), 'Crew Defense');
     assert.match(await page.locator('.grand-line-stage iframe').getAttribute('title'), /Crew Defense/);
     assert.match(await page.locator('.grand-line-status').textContent(), /three questions after every wave/);
@@ -117,13 +117,16 @@ try {
     const beforeMigrationWrites = await page.evaluate(() => writes.length);
     await page.evaluate(({ profileKey, collection }) => {
       collection.version = 1; collection.cards.shanks = { copies: 4 }; collection.cards.wyper = { copies: 2 };
-      collection.team = ['shanks', 'zoro', 'nami', 'usopp', 'chopper'];
+      for(const id of ['bellamy','gin','mr3','kuro','whitebeard'])collection.cards[id]={copies:2};
+      collection.team = ['shanks', 'zoro', 'nami', 'usopp', 'chopper','bellamy','gin','mr3','kuro','whitebeard'];
       rpg.grandLine.profiles[profileKey] = { collection, purchases: { 'legacy-paid': { packId: 'galaxy', cost: 750,
         grant: { characterId: 'shanks', copies: 4, stars: 6, duplicate: true } } } };
     }, sibling);
     const migrated = await open();
     assert.equal(migrated.collection.cards.shanks, undefined); assert.equal(migrated.collection.cards.wyper.copies, 6);
-    assert.deepEqual(migrated.collection.team, ['wyper', 'zoro', 'nami', 'usopp', 'chopper']);
+    assert.deepEqual(migrated.collection.team, ['wyper', 'zoro', 'nami', 'usopp', 'chopper','bellamy','gin']);
+    for(const id of ['mr3','kuro','whitebeard'])assert.equal(migrated.collection.cards[id].copies,2,'Shrinking the active crew preserves all overflow character copies');
+    for(const id of ['bigmom7','garp7','sabo7'])assert.equal(migrated.collection.cards[id],undefined,'Historical migration cannot grant a newly released edition');
     await game.evaluate(() => send({ type: 'GLTCG_BUY_REQUEST', requestId: 'legacy-retry', sessionId, purchaseId: 'legacy-paid', packId: 'galaxy' }));
     const legacy = await message('GLTCG_BUY_RESULT');
     assert.equal(legacy.replayed, true); assert.equal(legacy.wallet.balance, 1710);
@@ -181,8 +184,9 @@ try {
     assert.equal((await message('GLTCG_BUY_RESULT', ++adminPurchases)).replayed, true); assert.equal(await page.evaluate(() => writes.length), beforeAdminReplay);
     await game.evaluate(() => send({ type: 'GLTCG_ADMIN_REQUEST', requestId: 'unlock-all', sessionId, action: 'unlock-all' }));
     const unlocked = await message('GLTCG_ADMIN_RESULT', 2); assert.equal(unlocked.action, 'unlock-all');
-    assert.equal(Object.keys(unlocked.collection.cards).length, 50); assert.equal(unlocked.wallet.balance, 0);
+    assert.equal(Object.keys(unlocked.collection.cards).length, 100); assert.equal(unlocked.wallet.balance, 0);
     assert.deepEqual(unlocked.collection.team, adminReady.collection.team); assert.equal(unlocked.collection.stats.packsOpened, 3);
+    for(const id of ['bigmom7','garp7','sabo7'])assert.equal(unlocked.collection.cards[id].copies,1,'Admin unlock includes the new expansion edition '+id);
     for (const id of ['shanks','blackbeard','bigmom','kizaru','sengoku','garp','mihawk','hancock','ace','sabo','law','king']) assert.equal(unlocked.collection.cards[id], undefined);
     const beforeUnlockReplay = await page.evaluate(() => writes.length);
     await game.evaluate(() => send({ type: 'GLTCG_ADMIN_REQUEST', requestId: 'unlock-retry', sessionId, action: 'unlock-all' }));
@@ -223,5 +227,5 @@ try {
     await game.evaluate(() => send({ type: 'GLTCG_OPEN_RIFT' })); await page.waitForFunction(() => riftOpened === 1); assert.equal(await page.locator('.grand-line-portal').count(), 0);
     assert.deepEqual(errors, []); await page.close();
   }
-  console.log('Grand Line Math/Science browser checks passed: automatic saved school level, no level selector, missing-level blocking, forged-level and live-level guards, real parent rendering, three answers, private grading, wallet purchases/replay, admin zero-balance packs/all 50 cards, role guards, crew saves, mobile access, profile invalidation and companion navigation.');
+  console.log('Grand Line Math/Science browser checks passed: automatic saved school level, no level selector, missing-level blocking, forged-level and live-level guards, real parent rendering, three answers, private grading, wallet purchases/replay, admin zero-balance packs/all 100 cards, role guards, crew saves, mobile access, profile invalidation and companion navigation.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

@@ -24,17 +24,19 @@ test('all twelve retired cards convert paid copies one-for-one and preserve prog
   assert.deepEqual(normalizeCollection(migrated), migrated, 'repeat loading never adds copies');
 });
 
-test('the four newly reserved cards merge paid copies and preserve a ten-member defense exactly once', () => {
+test('four legacy IDs merge paid copies and trim an old ten-member defense to its first seven exactly once', () => {
   const entries=[['ace','bellamy'],['sabo','gin'],['law','mr3'],['king','kuro']];
   const raw=createCollection();raw.cards.kaido={copies:1};
   for(const [i,[oldId,newId]] of entries.entries()){raw.cards[oldId]={copies:2**(i+1)};raw.cards[newId]={copies:i+1};}
   raw.team=[...entries.map(([id])=>id),...STARTER_IDS,'kaido'];raw.stats={packsOpened:47,victories:2,correctAnswers:18};raw.completed=[1,2];raw.unlockedEncounter=3;
   const original=structuredClone(raw),once=normalizeCollection(raw),twice=normalizeCollection(once);
   assert.deepEqual(raw,original);assert.deepEqual(twice,once);
-  assert.deepEqual(once.team,[...entries.map(([,id])=>id),...STARTER_IDS,'kaido']);assert.equal(once.team.length,10);
+  assert.deepEqual(once.team,[...entries.map(([,id])=>id),...STARTER_IDS,'kaido'].slice(0,7));assert.equal(once.team.length,7);
   for(const [i,[oldId,newId]]of entries.entries()){assert.equal(once.cards[oldId],undefined);assert.equal(once.cards[newId].copies,2**(i+1)+i+1);}
   assert.deepEqual(once.stats,raw.stats);assert.deepEqual(once.completed,raw.completed);assert.equal(once.packs,0);
-  const defense=createDefense(once,{seed:41});assert.equal(defense.allies.length,10);assert.deepEqual(defense.allies.map(a=>a.characterId),once.team);
+  for(const id of [...STARTER_IDS,'kaido'])assert.deepEqual(once.cards[id],raw.cards[id],'Trimming team slots never removes copies');
+  assert.equal(once.cards.sabo7,undefined,'An old Sabo card does not unlock his new seven-star edition');
+  const defense=createDefense(once,{seed:41});assert.equal(defense.allies.length,7);assert.deepEqual(defense.allies.map(a=>a.characterId),once.team);
   assert.ok(defense.allies.every(a=>!entries.some(([id])=>a.characterId===id)));
 });
 

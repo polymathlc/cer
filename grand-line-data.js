@@ -1,7 +1,7 @@
 /* Original fan-game rules; names and power themes are anchored to official character profiles. */
-export const VERSION = '3.3.0';
+export const VERSION = '3.4.0';
 // Retired collection IDs migrate to these current cards; future seven-star
-// editions remain separate from the obtainable roster and pack draw pools.
+// editions use separate IDs, so replaying an old receipt never grants a new legend.
 export const RETIRED_CHARACTER_REPLACEMENTS = {
   shanks: 'wyper', blackbeard: 'kaku', bigmom: 'wapol', kizaru: 'hina',
   sengoku: 'paulie', garp: 'donkrieg', mihawk: 'hatchan', hancock: 'kalifa',
@@ -10,18 +10,16 @@ export const RETIRED_CHARACTER_REPLACEMENTS = {
 export const FUTURE_EXPANSION_CHARACTERS = [
   { id: 'shanks', name: 'Shanks', stars: 7 },
   { id: 'blackbeard', name: 'Marshall D. Teach', stars: 7 },
-  { id: 'bigmom', name: 'Charlotte Linlin', stars: 7 },
   { id: 'kizaru', name: 'Admiral Kizaru', stars: 7 },
   { id: 'sengoku', name: 'Sengoku', stars: 7 },
-  { id: 'garp', name: 'Monkey D. Garp', stars: 7 },
   { id: 'mihawk', name: 'Dracule Mihawk', stars: 7 },
   { id: 'hancock', name: 'Boa Hancock', stars: 7 },
   { id: 'ace', name: 'Portgas D. Ace', stars: 7 },
-  { id: 'sabo', name: 'Sabo', stars: 7 },
   { id: 'law', name: 'Trafalgar Law', stars: 7 },
   { id: 'king', name: 'King', stars: 7 },
 ];
 export const STARTER_IDS = ['luffy', 'zoro', 'nami', 'usopp', 'chopper'];
+export const MAX_CREW_SIZE = 7;
 export const PACK_ODDS = [
   { stars: 1, probability: 0.40 }, { stars: 2, probability: 0.30 },
   { stars: 3, probability: 0.17 }, { stars: 4, probability: 0.08 },
@@ -60,6 +58,17 @@ export const LORE_SOURCES = [
   { title: 'Kuro: Shakushi slashing technique', url: 'https://one-piece.com/news/o20181210_8267/index.html' },
   { title: 'Gin: iron-ball tonfa break through a shield', url: 'https://one-piece.com/anime/27/index.html' },
   { title: 'Kuro: bladed gloves and Shakushi', url: 'https://one-piece.com/anime/16/index.html' },
+  { title: 'Garp: Galaxy Impact', url: 'https://optc-ww.channel.or.jp/news/562/' },
+  { title: 'Sabo: flame-coated Dragon Claw Fist', url: 'https://one-piece.com/anime/o2851/index.html' },
+  { title: 'Big Mom: Ikoku Sovereignty', url: 'https://one-piece.com/anime/o4765/index.html' },
+  { title: 'Big Mom: Emperor Sword Cognac', url: 'https://one-piece.com/anime/o4907/index.html' },
+  { title: 'Rocks Pirates: former crew members', url: 'https://one-piece.com/character/Rocks_D_Xebec/index.html' },
+  { title: 'Oden: Whitebeard and Roger crews', url: 'https://one-piece.com/greg/o20170222_0695/index.html' },
+  { title: 'Big Mom: Misery combines flame and lightning', url: 'https://one-piece.com/anime/62293/index.html' },
+  { title: 'Garp: Blue Hole', url: 'https://one-piece.com/anime/68212/index.html' },
+  { title: 'Garp and Grus: fist shockwaves and clay golems', url: 'https://one-piece.com/anime/68048/index.html' },
+  { title: 'Grus: Clay Web protects a Marine ship', url: 'https://one-piece.com/anime/69263/index.html' },
+  { title: 'Morley: Push-Push Fruit', url: 'https://one-piece.com/character/Morley/index.html' },
 ];
 
 const E = (type, amount = 0, duration = 0, extra = {}) => ({ type, amount, duration, ...extra });
@@ -396,6 +405,265 @@ export const CHARACTERS = [
     ], 'https://one-piece.com/character/Sakazuki/index.html'),
 ];
 
+// Expansion II: current seven-star editions deliberately do not reuse retired save IDs.
+CHARACTERS.push(
+  C('bigmom7', 'Charlotte Linlin · Big Mom', 'Apex · Soul Queen', 7, 'Guardian', 'soul', 'Napoleon, Prometheus and Hera turn the Soul-Soul Fruit into a terrifying combined arsenal.',
+    P('Iron Balloon', 'defense', .18, 'Take 18% less direct damage.'), [
+      S('Napoleon: Cognac', 'enemy', 1.12, 'slash', [E('burn', .18, 2)]),
+      S('Ikoku Sovereignty', 'all-enemies', 1.45, 'slash', [E('pierce')], 35),
+      S('Misery: Homie Fusion', 'all-enemies', 1.8, 'lightning', [E('burn', .3, 2), E('stun', 0, 1, { chance: .3 })], 65),
+    ], 'https://one-piece.com/character/CharlotteLinlin/index.html'),
+  C('garp7', 'Monkey D. Garp', 'Apex · Marine Hero', 7, 'Striker', 'haki', 'A legendary Marine whose immense physical strength and Haki create devastating fist shockwaves. Galaxy Impact is not a gravity Devil Fruit power.',
+    P('Fist of the Hero', 'pierce', .3, 'Every damaging skill ignores 30% of defense.'), [
+      S('Iron Fist', 'enemy', 1.16, 'punch'),
+      S('Blue Hole', 'enemy', 2.05, 'punch', [E('stun', 0, 1)], 35),
+      S('Galaxy Impact', 'all-enemies', 1.9, 'earth', [E('weaken', .2, 2)], 65),
+    ], 'https://optc-ww.channel.or.jp/news/562/'),
+  C('sabo7', 'Sabo', 'Apex · Flame Emperor', 7, 'Striker', 'fire', 'The Revolutionary Army chief of staff combines Dragon Claw Fist with the Flame-Flame Fruit inherited from Ace.',
+    P('Inherited Flame', 'burn-immune', 1, 'Immune to burn damage and the burn status.'), [
+      S('Dragon Claw Fist', 'enemy', 1.12, 'punch', [E('pierce')]),
+      S('Fire Fist', 'all-enemies', 1.4, 'fire', [E('burn', .25, 2)], 35),
+      S('Flame Dragon King', 'all-enemies', 1.85, 'fire', [E('burn', .35, 2), E('weaken', .15, 2)], 65),
+    ], 'https://one-piece.com/anime/o2851/index.html'),
+  C('rayleigh', 'Silvers Rayleigh', 'Dark King', 6, 'Guardian', 'haki', 'The Roger Pirates’ former first mate wields a sword, masterful Armament Haki and an intimidating presence.',
+    P('A Master’s Foresight', 'evade', .12, '12% chance to evade direct attacks.'), [
+      S('Haki Blade', 'enemy', 1.1, 'slash', [E('pierce')]),
+      S('Armament Repulsion', 'all-allies', 0, 'shield', [E('shield', 1.6), E('guard', .15, 2)]),
+      S('Dark King’s Presence', 'all-enemies', 1.35, 'soul', [E('stun', 0, 1, { chance: .65 }), E('weaken', .2, 2)]),
+    ]),
+  C('oden', 'Kozuki Oden', 'Two-Sword Legend', 6, 'Striker', 'steel', 'Enma and Ame no Habakiri carry Oden’s forceful two-sword style. He sailed with both Whitebeard and Roger.',
+    P('Unbreakable Will', 'low-health-defense', .25, 'Take 25% less direct damage below half health.'), [
+      S('Two-Sword Cut', 'enemy', 1.1, 'slash'),
+      S('Paradise Waterfall', 'all-enemies', 1.3, 'slash', [E('weaken', .18, 2)]),
+      S('Paradise Totsuka', 'enemy', 2.65, 'slash', [E('pierce')]),
+    ], 'https://one-piece.com/greg/o20170222_0695/index.html'),
+  C('bennbeckman', 'Benn Beckman', 'Red Hair’s First Mate', 5, 'Controller', 'haki', 'A composed veteran whose rifle and tactical awareness keep dangerous opponents in check.',
+    P('Measured Aim', 'crit', .12, 'Gain 12% additional critical chance.'), [
+      S('Rifle Shot', 'enemy', 1.05, 'wind'), S('Covering Fire', 'all-enemies', 1.1, 'wind', [E('slow', .2, 2)]),
+      S('Veteran’s Deadeye', 'enemy', 2.4, 'wind', [E('pierce')]),
+    ]),
+  C('luckyroux', 'Lucky Roux', 'Red Hair’s Combatant', 4, 'Striker', 'steel', 'A cheerful Red Hair Pirate who fights with sudden movement, a flintlock and his imposing build.',
+    P('Quick on the Draw', 'speed', .12, 'Initiative speed is increased by 12%.'), [
+      S('Flintlock Snap', 'enemy', 1, 'wind'), S('Rolling Rush', 'all-enemies', 1.25, 'punch', [E('slow', .15, 2)]),
+      S('Close-Range Volley', 'enemy', 2.2, 'wind', [E('stun', 0, 1, { chance: .5 })]),
+    ]),
+  C('yasopp', 'Yasopp', 'Red Hair’s Sharpshooter', 4, 'Striker', 'steel', 'A renowned sniper who reads a distant target and places a precise rifle shot.',
+    P('A Sniper’s Eye', 'crit', .17, 'Gain 17% additional critical chance.'), [
+      S('Distant Shot', 'enemy', 1.04, 'wind'), S('Sighting Shot', 'enemy', 1.55, 'wind', [E('weaken', .25, 2)]),
+      S('Unerring Bullet', 'enemy', 2.3, 'wind', [E('pierce')]),
+    ]),
+  C('jozu', 'Jozu', 'Diamond Vanguard', 5, 'Guardian', 'earth', 'Whitebeard’s third-division commander turns his body to diamond for crushing tackles and unyielding defense.',
+    P('Diamond Body', 'defense', .2, 'Take 20% less direct damage.'), [
+      S('Diamond Shoulder', 'enemy', 1, 'punch'), S('Brilliant Punk', 'all-enemies', 1.3, 'earth', [E('stun', 0, 1, { chance: .45 })]),
+      S('Diamond Bulwark', 'all-allies', 0, 'shield', [E('shield', 2), E('guard', .2, 2)]),
+    ]),
+  C('vista', 'Vista', 'Flower Sword', 4, 'Striker', 'steel', 'Whitebeard’s fifth-division commander uses two swords in a flowing style evoking scattered rose petals.',
+    P('Duelist’s Rhythm', 'focus', .035, 'Each attack raises damage by 3.5%, up to 21% per battle.'), [
+      S('Twin Saber Cut', 'enemy', 1.06, 'slash'), S('Rose-Petal Sweep', 'all-enemies', 1.25, 'slash'),
+      S('Flower Sword Dance', 'all-enemies', 1.65, 'slash', [E('weaken', .2, 2)]),
+    ]),
+  C('izo', 'Izo', 'Guns of the Kozuki', 4, 'Striker', 'haki', 'A former Kozuki retainer and Whitebeard commander whose twin pistols fire disciplined Haki-infused shots.',
+    P('Swordsman’s Resolve', 'low-health-defense', .2, 'Take 20% less direct damage below half health.'), [
+      S('Twin Pistol Shot', 'enemy', 1.03, 'wind'), S('Slicing Rounds', 'all-enemies', 1.2, 'wind', [E('pierce')]),
+      S('Crossfire Barrage', 'enemy', 2.25, 'wind', [E('weaken', .2, 2)]),
+    ]),
+  C('perospero', 'Charlotte Perospero', 'Candy Minister', 4, 'Controller', 'wax', 'The Lick-Lick Fruit shapes sticky candy into walls, arrows and traps.',
+    P('Candy Armor', 'shield-start', .12, 'Begin battle with a shield worth 12% maximum health.'), [
+      S('Candy Arrow', 'enemy', .95, 'earth', [E('slow', .12, 1)]), S('Candy Wall', 'ally', 0, 'shield', [E('shield', 2), E('guard', .15, 2)], 25),
+      S('Candy Maiden', 'all-enemies', 1.35, 'earth', [E('slow', .3, 3), E('stun', 0, 1, { chance: .4 })]),
+    ]),
+  C('smoothie', 'Charlotte Smoothie', 'Juice Sweet Commander', 5, 'Striker', 'water', 'The Wring-Wring Fruit extracts liquid; Smoothie grows stronger and releases great liquid sword waves.',
+    P('Wring-Wring Recovery', 'lifesteal', .12, 'Heal for 12% of direct damage dealt.'), [
+      S('Juice Slash', 'enemy', 1.02, 'water'), S('Wringing Blade', 'enemy', 1.65, 'water', [E('drain', 20)]),
+      S('Liquid Giant Wave', 'all-enemies', 1.7, 'water', [E('slow', .2, 2)]),
+    ]),
+  C('cracker', 'Charlotte Cracker', 'Biscuit Sweet Commander', 5, 'Guardian', 'earth', 'The Biscuit-Biscuit Fruit creates hard biscuit soldiers while Pretzel delivers precise sword thrusts.',
+    P('Biscuit Armor', 'shield-start', .18, 'Begin battle with a shield worth 18% maximum health.'), [
+      S('Pretzel Thrust', 'enemy', 1.04, 'slash'), S('Biscuit Battalion', 'all-allies', 0, 'shield', [E('shield', 1.8), E('guard', .15, 2)]),
+      S('Roll Pretzel', 'enemy', 2.5, 'slash', [E('pierce')]),
+    ]),
+  C('oven', 'Charlotte Oven', 'Minister of Browned Food', 4, 'Controller', 'fire', 'The Heat-Heat Fruit turns Oven’s body and the surrounding sea searing hot.',
+    P('Heatproof', 'burn-immune', 1, 'Immune to burn damage and the burn status.'), [
+      S('Heated Fist', 'enemy', 1, 'fire', [E('burn', .12, 2)]), S('Heat Wave', 'all-enemies', 1.15, 'fire', [E('burn', .22, 2)]),
+      S('Boiling Sea', 'all-enemies', 1.5, 'fire', [E('burn', .3, 3)]),
+    ]),
+  C('daifuku', 'Charlotte Daifuku', 'Genie Minister', 4, 'Guardian', 'smoke', 'The Puff-Puff Fruit summons a huge halberd-wielding genie from Daifuku’s body.',
+    P('Genie’s Reach', 'pierce', .15, 'Every damaging skill ignores 15% of defense.'), [
+      S('Genie Halberd', 'enemy', 1.03, 'slash'), S('Genie Cleave', 'all-enemies', 1.3, 'slash'),
+      S('Genie Execution', 'all-enemies', 1.6, 'slash', [E('weaken', .2, 2)]),
+    ]),
+  C('pudding', 'Charlotte Pudding', 'Memory Film Editor', 2, 'Support', 'bloom', 'The Memo-Memo Fruit extracts memories as film that Pudding can inspect and edit.',
+    P('Careful Editing', 'energy', 6, 'Recover 6 extra Spirit at the start of each turn.'), [
+      S('Memory Glimpse', 'enemy', .85, 'soul', [E('weaken', .1, 1)]), S('Memory Edit', 'ally', 0, 'heal', [E('cleanse'), E('heal', 1.4)], 25),
+      S('Missing Memory', 'all-enemies', .85, 'soul', [E('weaken', .3, 2), E('slow', .2, 2)]),
+    ]),
+  C('brulee', 'Charlotte Brulee', 'Keeper of the Mirror World', 3, 'Controller', 'bloom', 'The Mirror-Mirror Fruit opens a reflected world and turns mirrors into shields and deceptive attacks.',
+    P('Mirror Reflection', 'counter', .22, 'Return damage equal to 22% attack after surviving a direct hit.'), [
+      S('Mirror Shard', 'enemy', .9, 'light'), S('Mirror Screen', 'ally', 0, 'shield', [E('shield', 1.7), E('cleanse')], 25),
+      S('Mirror Ambush', 'all-enemies', 1.3, 'light', [E('stun', 0, 1, { chance: .45 })]),
+    ]),
+  C('ulti', 'Ulti', 'Pachycephalosaurus Headliner', 4, 'Striker', 'earth', 'An ancient pachycephalosaurus Zoan gives Ulti powerful headbutts and remarkable toughness.',
+    P('Ancient Endurance', 'defense', .12, 'Take 12% less direct damage.'), [
+      S('Ulti Headbutt', 'enemy', 1.05, 'punch'), S('Ulti-Mortar', 'enemy', 1.75, 'earth', [E('stun', 0, 1, { chance: .65 })]),
+      S('Ulti-Meteor', 'all-enemies', 1.55, 'earth', [E('weaken', .15, 2)]),
+    ]),
+  C('pageone', 'Page One', 'Spinosaurus Headliner', 3, 'Guardian', 'dragon', 'An ancient spinosaurus Zoan grants Page One huge jaws, claws and a resilient hybrid body.',
+    P('Ancient Hide', 'defense', .14, 'Take 14% less direct damage.'), [
+      S('Spinosaurus Claw', 'enemy', 1, 'slash'), S('Hybrid Jaw Crush', 'enemy', 1.7, 'punch', [E('weaken', .2, 2)]),
+      S('Spinosaurus Tail Sweep', 'all-enemies', 1.4, 'earth', [E('slow', .2, 2)]),
+    ]),
+  C('whoswho', 'Who’s-Who', 'Saber-Tooth Assassin', 4, 'Striker', 'steel', 'A former Cipher Pol agent combines Six Powers with an ancient saber-toothed tiger Zoan.',
+    P('Predatory Technique', 'crit', .1, 'Gain 10% additional critical chance.'), [
+      S('Fang Pistol', 'enemy', 1.03, 'wind'), S('Tempest Kick', 'all-enemies', 1.2, 'slash'),
+      S('Fang Flash', 'enemy', 2.35, 'punch', [E('pierce')]),
+    ]),
+  C('sasaki', 'Sasaki', 'Armored Triceratops', 3, 'Guardian', 'earth', 'A triceratops Zoan and a rotating neck frill turn Sasaki into a charging armored threat.',
+    P('Armored Frill', 'defense', .15, 'Take 15% less direct damage.'), [
+      S('Horn Charge', 'enemy', 1.02, 'punch'), S('Heliceratops', 'all-enemies', 1.2, 'wind', [E('slow', .15, 2)]),
+      S('Triceratops Drill', 'enemy', 2.2, 'punch', [E('pierce')]),
+    ]),
+  C('blackmaria', 'Black Maria', 'Spider of Onigashima', 4, 'Controller', 'bloom', 'An ancient spider Zoan weaves binding webs while a burning wheel weapon threatens trapped enemies.',
+    P('Web Weaver', 'debuff-duration', 1, 'The first harmful effect she applies each battle lasts one additional turn.'), [
+      S('Spider Thread', 'enemy', .9, 'plant', [E('slow', .15, 1)]), S('Maria Net', 'all-enemies', .9, 'plant', [E('slow', .3, 2), E('stun', 0, 1, { chance: .4 })]),
+      S('Burning Wanyudo', 'all-enemies', 1.55, 'fire', [E('burn', .25, 2)]),
+    ]),
+  C('xdrake', 'X Drake', 'Undercover Allosaurus', 4, 'Guardian', 'dragon', 'A Marine SWORD officer who infiltrated the Beast Pirates, wielding an axe, sword and an allosaurus form.',
+    P('Ancient Recovery', 'regen', .04, 'Recover 4% maximum health at the start of each turn.'), [
+      S('Axe and Saber', 'enemy', 1.02, 'slash'), S('Allosaurus Bite', 'enemy', 1.75, 'punch', [E('weaken', .2, 2)]),
+      S('X-Calibur', 'all-enemies', 1.6, 'slash', [E('pierce')]),
+    ]),
+  C('apoo', 'Scratchmen Apoo', 'Roar of the Sea', 3, 'Controller', 'soul', 'The Tone-Tone Fruit turns Apoo’s body into instruments whose sound delivers cuts and explosions.',
+    P('Perfect Tempo', 'energy', 7, 'Recover 7 extra Spirit at the start of each turn.'), [
+      S('Scratch', 'enemy', .95, 'slash'), S('Boom', 'all-enemies', 1.15, 'explosion', [E('stun', 0, 1, { chance: .4 })]),
+      S('Fighting Music', 'all-enemies', 1.45, 'soul', [E('weaken', .2, 2)]),
+    ]),
+  C('hawkins', 'Basil Hawkins', 'Straw Magician', 3, 'Controller', 'plant', 'The Straw-Straw Fruit animates straw while tarot cards guide Hawkins’ risky battle choices.',
+    P('Straw Substitute', 'stubborn', .1, 'Once per battle, survive a lethal blow with 10% health.'), [
+      S('Straw Sword', 'enemy', .98, 'slash'), S('Straw Man’s Card', 'ally', 0, 'shield', [E('shield', 1.7), E('guard', .15, 2)]),
+      S('Straw Man’s Scythe', 'all-enemies', 1.5, 'plant', [E('slow', .2, 2)]),
+    ]),
+  C('bege', 'Capone Bege', 'Fire Tank Captain', 3, 'Guardian', 'machine', 'The Castle-Castle Fruit houses a miniature armed fortress within Bege’s body.',
+    P('Fortress Walls', 'all-shield', .07, 'Every ally begins battle with a shield worth 7% maximum health.'), [
+      S('Castle Musket', 'enemy', .98, 'wind'), S('Castle Cannonade', 'all-enemies', 1.2, 'explosion'),
+      S('Big Father', 'all-allies', 0, 'shield', [E('shield', 2.2), E('guard', .25, 2)]),
+    ]),
+  C('bonney', 'Jewelry Bonney', 'Age-Shifting Captain', 4, 'Controller', 'bloom', 'The Age-Age Fruit changes ages and draws strength from imagined futures.',
+    P('A Future of Freedom', 'stubborn', .12, 'Once per battle, survive a lethal blow with 12% health.'), [
+      S('Age Thrust', 'enemy', .95, 'punch', [E('slow', .12, 1)]), S('Aging Touch', 'enemy', 1.2, 'soul', [E('weaken', .3, 2), E('slow', .25, 2)]),
+      S('Distorted Future', 'all-enemies', 1.65, 'punch', [E('attack-up', .2, 2, { scope: 'self' })]),
+    ]),
+  C('urouge', 'Urouge', 'Mad Monk', 4, 'Guardian', 'earth', 'The Fallen Monk Pirates captain turns the punishment he receives into greater physical power.',
+    P('Damage into Strength', 'counter', .25, 'Return damage equal to 25% attack after surviving a direct hit.'), [
+      S('Iron Pillar', 'enemy', 1.02, 'punch'), S('Karmic Growth', 'self', 0, 'shield', [E('shield', 1.5), E('attack-up', .3, 2)]),
+      S('Karmic Punishment', 'enemy', 2.4, 'punch', [E('stun', 0, 1, { chance: .5 })]),
+    ]),
+  C('bepo', 'Bepo', 'Heart Pirates Navigator', 3, 'Striker', 'electric', 'A polar bear Mink whose martial arts, Electro and Sulong potential protect the Heart Pirates.',
+    P('Mink Footwork', 'speed', .12, 'Initiative speed is increased by 12%.'), [
+      S('Polar Bear Palm', 'enemy', 1, 'punch'), S('Electro Kick', 'enemy', 1.55, 'lightning', [E('stun', 0, 1, { chance: .5 })]),
+      S('Sulong Rescue', 'all-enemies', 1.45, 'lightning', [E('shield', .8, 0, { scope: 'all-allies' })]),
+    ]),
+  C('penguin', 'Penguin', 'Heart Pirates Diver', 1, 'Support', 'water', 'An experienced Heart Pirates crewman whose swimming and teamwork make the sea his battlefield.',
+    P('Submarine Teamwork', 'all-energy', 3, 'Every living ally recovers 3 Spirit at each round’s start.'), [
+      S('Deckhand Strike', 'enemy', .9, 'punch'), S('Diving Cover', 'ally', 0, 'shield', [E('shield', 1.3)], 20, 1),
+      S('Underwater Rush', 'all-enemies', 1.2, 'water', [E('slow', .15, 2)]),
+    ]),
+  C('shachi', 'Shachi', 'Heart Pirates Seawater Gunner', 1, 'Controller', 'water', 'A Heart Pirates swimmer who takes in seawater and spits it out as a powerful defensive spray.',
+    P('Sea Readiness', 'energy', 5, 'Recover 5 extra Spirit at the start of each turn.'), [
+      S('Water Spit', 'enemy', .9, 'water'), S('Seawater Intercept', 'enemy', 1.3, 'water', [E('weaken', .2, 2)], 20),
+      S('Ocean Spray', 'all-enemies', 1.2, 'water', [E('slow', .2, 2)]),
+    ]),
+  C('kinemon', 'Kin’emon', 'Foxfire Samurai', 4, 'Guardian', 'fire', 'A loyal Kozuki retainer whose Foxfire Style both cuts flames and sets his sword ablaze.',
+    P('Flame-Cutting Guard', 'burn-immune', 1, 'Immune to burn damage and the burn status.'), [
+      S('Foxfire Cut', 'enemy', 1.02, 'slash'), S('Flame-Cleaving Guard', 'all-allies', 0, 'shield', [E('cleanse'), E('shield', 1.4)]),
+      S('Flaming Double Slash', 'all-enemies', 1.6, 'fire', [E('burn', .2, 2)]),
+    ]),
+  C('denjiro', 'Denjiro', 'Hidden Blade of Wano', 4, 'Striker', 'steel', 'A Kozuki retainer whose patient resolve and precise swordsmanship hid beneath the identity Kyoshiro.',
+    P('Patient Blade', 'crit', .12, 'Gain 12% additional critical chance.'), [
+      S('Quickdraw', 'enemy', 1.05, 'slash'), S('Retainer’s Parry', 'ally', 0, 'shield', [E('shield', 1.4), E('guard', .2, 2)]),
+      S('Moonlit Sword Rush', 'enemy', 2.35, 'slash', [E('pierce')]),
+    ]),
+  C('kiku', 'Kikunojo', 'Lingering Snow Samurai', 3, 'Striker', 'steel', 'A graceful Kozuki swordswoman whose calm resolve conceals a formidable blade.',
+    P('Samurai Composure', 'evade', .09, '9% chance to evade direct attacks.'), [
+      S('Snow-Moon Cut', 'enemy', 1, 'slash'), S('Demon Mask Charge', 'enemy', 1.6, 'slash', [E('weaken', .2, 2)]),
+      S('Lingering Snow Dance', 'all-enemies', 1.45, 'slash', [E('slow', .15, 2)]),
+    ]),
+  C('raizo', 'Raizo', 'Raizo of the Mist', 3, 'Controller', 'water', 'A ninja retainer whose Scroll-Scroll Fruit stores attacks and releases their force from scrolls.',
+    P('Ninja Evasion', 'evade', .1, '10% chance to evade direct attacks.'), [
+      S('Shuriken Volley', 'enemy', .95, 'wind'), S('Scroll Capture', 'ally', 0, 'shield', [E('shield', 1.7), E('cleanse')]),
+      S('Scroll Release: Great Flood', 'all-enemies', 1.45, 'water', [E('slow', .25, 2)]),
+    ]),
+  C('kawamatsu', 'Kawamatsu', 'Kappa Yokozuna', 3, 'Guardian', 'water', 'A fish-man and Kozuki retainer whose sumo strength complements flowing swordsmanship.',
+    P('Yokozuna Stance', 'defense', .13, 'Take 13% less direct damage.'), [
+      S('River Blade', 'enemy', 1, 'slash'), S('Sumo Palm', 'enemy', 1.65, 'punch', [E('stun', 0, 1, { chance: .5 })]),
+      S('River of Retribution', 'all-enemies', 1.45, 'water', [E('weaken', .18, 2)]),
+    ]),
+  C('ashura', 'Ashura Doji', 'Strongest Bandit of Kuri', 4, 'Guardian', 'steel', 'Once a mountain bandit, Ashura’s great strength and swordsmanship became devoted to the Kozuki cause.',
+    P('Mountain Endurance', 'low-health-defense', .25, 'Take 25% less direct damage below half health.'), [
+      S('Bandit’s Blade', 'enemy', 1.04, 'slash'), S('Mountain Cleave', 'all-enemies', 1.25, 'slash'),
+      S('Kuri’s Resolute Charge', 'enemy', 2.35, 'slash', [E('pierce')]),
+    ]),
+  C('inuarashi', 'Inuarashi', 'Ruler of the Day', 4, 'Striker', 'electric', 'The canine Mink ruler, Kozuki retainer and former voyage companion channels Electro through his sword.',
+    P('Musketeer Footwork', 'speed', .12, 'Initiative speed is increased by 12%.'), [
+      S('Electro Saber', 'enemy', 1.02, 'slash'), S('Musketeer Rush', 'enemy', 1.65, 'lightning', [E('pierce')]),
+      S('Sulong Sword Storm', 'all-enemies', 1.6, 'lightning', [E('stun', 0, 1, { chance: .4 })]),
+    ]),
+  C('nekomamushi', 'Nekomamushi', 'Ruler of the Night', 4, 'Guardian', 'electric', 'The feline Mink ruler and Kozuki retainer fights with enormous claws, Electro and a prosthetic firearm.',
+    P('Night Watch', 'counter', .22, 'Return damage equal to 22% attack after surviving a direct hit.'), [
+      S('Electro Claw', 'enemy', 1.03, 'lightning'), S('Cat Viper Pounce', 'enemy', 1.7, 'punch', [E('stun', 0, 1, { chance: .5 })]),
+      S('Sulong Night Raid', 'all-enemies', 1.6, 'lightning', [E('weaken', .2, 2)]),
+    ]),
+  C('ivankov', 'Emporio Ivankov', 'Miracle Worker', 5, 'Healer', 'medicine', 'The Horm-Horm Fruit manipulates hormones, supporting recovery and extraordinary vitality while mighty winks create shockwaves.',
+    P('Miracle Medicine', 'healing', .2, 'Healing and revival restore 20% more health.'), [
+      S('Death Wink', 'enemy', .98, 'wind'), S('Healing Hormones', 'ally', 0, 'heal', [E('heal', 2), E('cleanse')], 25),
+      S('Tension Hormones', 'all-allies', 0, 'heal', [E('heal', 1.25), E('attack-up', .2, 2), E('energy', 15)]),
+    ]),
+  C('koala', 'Koala', 'Revolutionary Karate Instructor', 3, 'Support', 'water', 'A human Fish-Man Karate practitioner who trains allies and supports the Revolutionary Army.',
+    P('Karate Discipline', 'all-guard', .06, 'Living allies take 6% less direct damage; in defense this protects nearby allies.'), [
+      S('Karate Palm', 'enemy', .98, 'water'), S('Instructor’s Guard', 'ally', 0, 'shield', [E('shield', 1.5), E('cleanse')], 25),
+      S('Revolutionary Palm Wave', 'all-enemies', 1.4, 'water', [E('weaken', .2, 2)]),
+    ]),
+  C('belobetty', 'Belo Betty', 'East Army Commander', 4, 'Support', 'spirit', 'The Pump-Pump Fruit turns Betty’s encouragement into courage and increased fighting strength for others.',
+    P('Rousing Resolve', 'all-energy', 5, 'Every living ally recovers 5 Spirit at each round’s start.'), [
+      S('Flagstaff Strike', 'enemy', .92, 'punch'), S('Pump-Up Rally', 'all-allies', 0, 'soul', [E('attack-up', .2, 2), E('energy', 15)]),
+      S('Rise for Freedom', 'all-allies', 0, 'shield', [E('shield', 1.6), E('attack-up', .3, 2), E('cleanse')]),
+    ]),
+  C('lindbergh', 'Lindbergh', 'South Army Inventor', 2, 'Controller', 'machine', 'A Mink engineer whose jetpack, freeze gun and other gadgets support revolutionary operations.',
+    P('Inventor’s Fuel', 'energy', 6, 'Recover 6 extra Spirit at the start of each turn.'), [
+      S('Gadget Shot', 'enemy', .94, 'wind'), S('Cool Shooter', 'enemy', 1.3, 'ice', [E('freeze', 0, 1, { chance: .75 })]),
+      S('Jetpack Frost Sweep', 'all-enemies', 1.25, 'ice', [E('slow', .25, 2)]),
+    ]),
+  C('morley', 'Morley', 'West Army Tunnel Maker', 4, 'Guardian', 'earth', 'The Push-Push Fruit lets this giant commander push the ground aside and sculpt tunnels through solid earth.',
+    P('Giant’s Cover', 'all-shield', .08, 'Every ally begins battle with a shield worth 8% maximum health.'), [
+      S('Trident Sweep', 'enemy', 1, 'slash'), S('Push-Push Earth', 'all-enemies', 1.15, 'earth', [E('slow', .3, 2)]),
+      S('Underground Uprising', 'all-enemies', 1.55, 'earth', [E('stun', 0, 1, { chance: .45 })]),
+    ]),
+  C('karasu', 'Karasu', 'North Army Soot Commander', 4, 'Controller', 'dark', 'The Soot-Soot Fruit forms flocks of soot crows for movement, communication and attacks.',
+    P('Soot Dispersion', 'evade', .12, '12% chance to evade direct attacks.'), [
+      S('Soot Crow', 'enemy', .95, 'dark'), S('Obscuring Flock', 'all-enemies', 1.05, 'dark', [E('weaken', .25, 2)]),
+      S('Soot Beak Barrage', 'all-enemies', 1.5, 'dark', [E('slow', .2, 2)]),
+    ]),
+  C('helmeppo', 'Helmeppo', 'SWORD Kukri Fighter', 1, 'Striker', 'steel', 'A Marine trained beside Koby under Garp who now fights with paired kukri blades.',
+    P('Training Pays Off', 'focus', .03, 'Each attack raises damage by 3%, up to 18% per battle.'), [
+      S('Kukri Cut', 'enemy', .95, 'slash'), S('Twin Kukri', 'enemy', 1.5, 'slash', [E('weaken', .15, 2)]),
+      S('SWORD Cover Charge', 'all-enemies', 1.25, 'slash', [E('shield', .6, 0, { scope: 'all-allies' })]),
+    ]),
+  C('doll', 'Doll', 'Vice Admiral of G-14', 3, 'Striker', 'haki', 'A seasoned Marine vice admiral who relies on powerful kicks and disciplined close combat.',
+    P('Veteran’s Timing', 'crit', .1, 'Gain 10% additional critical chance.'), [
+      S('Marine Kick', 'enemy', 1.02, 'punch'), S('Breaking Heel', 'enemy', 1.65, 'punch', [E('pierce')]),
+      S('Vice Admiral’s Sweep', 'all-enemies', 1.4, 'punch', [E('stun', 0, 1, { chance: .4 })]),
+    ]),
+  C('princegrus', 'Prince Grus', 'SWORD Clay Commander', 4, 'Guardian', 'earth', 'The Glorp-Glorp Fruit creates malleable clay and golems that defend allies and disrupt an enemy advance.',
+    P('Clay Cover', 'all-shield', .08, 'Every ally begins battle with a shield worth 8% maximum health.'), [
+      S('Clay Fist', 'enemy', .98, 'earth'), S('Golem Guard', 'ally', 0, 'shield', [E('shield', 2), E('guard', .15, 2)]),
+      S('Clay Web', 'all-enemies', 1.35, 'earth', [E('slow', .3, 2), E('stun', 0, 1, { chance: .35 })]),
+    ]),
+  C('tbone', 'T Bone', 'Ship Cutter', 3, 'Guardian', 'steel', 'A compassionate Marine swordsman whose straight-edged sword attacks protect others at any cost.',
+    P('Duty to Protect', 'all-guard', .06, 'Living allies take 6% less direct damage; in defense this protects nearby allies.'), [
+      S('Right-Angle Cut', 'enemy', 1, 'slash'), S('Bone Guard', 'ally', 0, 'shield', [E('shield', 1.7), E('guard', .15, 2)]),
+      S('Ship-Cutting Slash', 'all-enemies', 1.5, 'slash', [E('pierce')]),
+    ]),
+);
+
 const VERIFIED_PROFILE_SLUGS = {
   luffy: 'luffy', zoro: 'zoro', nami: 'nami', brook: 'brook', wyper: 'Wyper', bellamy: 'bellamy', gin: 'Gin', mr3: 'Galdino', kid: 'kid', killer: 'killer',
   kalifa: 'Kalifa', hatchan: 'Hacchan', crocodile: 'Crocodile', doflamingo: 'doflamingo', buggy: 'Buggy', smoker: 'smoker', tashigi: 'tashigi',
@@ -403,12 +671,81 @@ const VERIFIED_PROFILE_SLUGS = {
   kaku: 'Kaku', wapol: 'Wapol', katakuri: 'Charlotte_Katakuri', marco: 'marco', kuro: 'Kuro', queen: 'Queen', jack: 'Jack',
   lucci: 'Rob_Lucci', perona: 'Perona', bartolomeo: 'bartolomeo', bonclay: 'Bon_Clay_Mr2', carrot: 'carrot', vivi: 'Nefeltari_Vivi', arlong: 'Arlong',
   magellan: 'Magellan', kaido: 'Kaido', whitebeard: 'edward_newgate', akainu: 'Sakazuki',
+  bigmom7: 'CharlotteLinlin', morley: 'Morley',
 };
 for (const character of CHARACTERS) {
   const slug = VERIFIED_PROFILE_SLUGS[character.id];
   if (slug) character.source = `https://one-piece.com/character/${slug}/index.html`;
   else if (['usopp', 'sanji', 'chopper', 'robin', 'franky'].includes(character.id)) character.source = LORE_SOURCES[1].url;
   else if (character.id === 'enel') character.source = LORE_SOURCES[12].url;
+}
+// Historical membership and lasting allegiances both count in this dream-team mode.
+// A commander or former member does not become captain of that whole faction.
+export const CREWS = Object.freeze(Object.fromEntries([
+  ['strawhat', 'Straw Hat Pirates', '#e6ba65'], ['roger', 'Roger Pirates', '#ea9590'],
+  ['whitebeard', 'Whitebeard Pirates', '#d1c6f4'], ['rocks', 'Rocks Pirates', '#caa1d6'],
+  ['beasts', 'Beast Pirates', '#92b6ec'], ['bigmom', 'Big Mom Pirates', '#ed9ec7'],
+  ['marines', 'Marines', '#9bd6ee'], ['sword', 'SWORD', '#b7dfdf'],
+  ['revolutionary', 'Revolutionary Army', '#eea680'], ['redhair', 'Red Hair Pirates', '#d39191'],
+  ['heart', 'Heart Pirates', '#f1cf76'], ['kozuki', 'Kozuki Clan', '#d9b1e6'],
+  ['minks', 'Mokomo Dukedom', '#acdab4'], ['kid', 'Kid Pirates', '#d18b84'],
+  ['crossguild', 'Cross Guild', '#d9a881'], ['baroque', 'Baroque Works', '#d4c59b'],
+  ['donquixote', 'Donquixote Pirates', '#eeb4d7'], ['krieg', 'Krieg Pirates', '#c8cd8b'],
+  ['blackcat', 'Black Cat Pirates', '#adb7ca'], ['arlong', 'Arlong Pirates', '#7ac9d4'],
+  ['sun', 'Sun Pirates', '#e99f8a'], ['cipherpol', 'Cipher Pol', '#b5bbc9'],
+  ['galleyla', 'Galley-La Company', '#cca778'], ['shandia', 'Shandian Warriors', '#baaa7e'],
+  ['blackdrum', 'Black Drum Kingdom', '#a6b5c8'], ['thrillerbark', 'Thriller Bark Pirates', '#b89bd5'],
+  ['bartoclub', 'Barto Club', '#afcd86'], ['grandfleet', 'Straw Hat Grand Fleet', '#dfc16e'],
+  ['alabasta', 'Alabasta Kingdom', '#92d9e4'], ['impeldown', 'Impel Down', '#b2a5c7'],
+  ['skyarmy', 'God’s Army', '#d7c17b'], ['firetank', 'Fire Tank Pirates', '#b0b5ba'],
+  ['bonney', 'Bonney Pirates', '#e5a5c6'], ['fallenmonk', 'Fallen Monk Pirates', '#bcba97'],
+  ['hawkins', 'Hawkins Pirates', '#c8bc7d'], ['onair', 'On Air Pirates', '#daa184'],
+  ['drake', 'Drake Pirates', '#98b4bc'], ['rumbar', 'Rumbar Pirates', '#c3ace4'],
+  ['blackbeard', 'Blackbeard Pirates', '#a0a0c1'], ['bellamy', 'Bellamy Pirates', '#d5b17c'],
+].map(([id, name, color]) => [id, Object.freeze({ id, name, color })])));
+
+const CREW_MEMBERS = {
+  strawhat: ['luffy', 'zoro', 'nami', 'usopp', 'sanji', 'chopper', 'robin', 'franky', 'brook', 'jinbe', 'vivi'],
+  roger: ['rayleigh', 'oden', 'buggy', 'inuarashi', 'nekomamushi'],
+  whitebeard: ['whitebeard', 'marco', 'jozu', 'vista', 'izo', 'oden', 'inuarashi', 'nekomamushi'],
+  rocks: ['kaido', 'whitebeard', 'bigmom7'],
+  beasts: ['kaido', 'queen', 'jack', 'ulti', 'pageone', 'whoswho', 'sasaki', 'blackmaria', 'xdrake', 'hawkins', 'apoo'],
+  bigmom: ['bigmom7', 'katakuri', 'perospero', 'smoothie', 'cracker', 'oven', 'daifuku', 'pudding', 'brulee'],
+  marines: ['garp7', 'akainu', 'aokiji', 'fujitora', 'ryokugyu', 'smoker', 'tashigi', 'hina', 'koby', 'helmeppo', 'doll', 'princegrus', 'tbone', 'xdrake'],
+  sword: ['koby', 'helmeppo', 'princegrus', 'xdrake'],
+  revolutionary: ['sabo7', 'ivankov', 'koala', 'belobetty', 'lindbergh', 'morley', 'karasu'],
+  redhair: ['bennbeckman', 'luckyroux', 'yasopp'], heart: ['bepo', 'penguin', 'shachi'],
+  kozuki: ['oden', 'yamato', 'kinemon', 'denjiro', 'kiku', 'raizo', 'kawamatsu', 'ashura', 'inuarashi', 'nekomamushi', 'izo'],
+  minks: ['carrot', 'bepo', 'inuarashi', 'nekomamushi', 'lindbergh'], kid: ['kid', 'killer'],
+  crossguild: ['buggy', 'crocodile', 'mr3'], baroque: ['crocodile', 'robin', 'bonclay', 'mr3', 'vivi'],
+  donquixote: ['doflamingo', 'bellamy'], krieg: ['donkrieg', 'gin'], blackcat: ['kuro'],
+  arlong: ['arlong', 'hatchan'], sun: ['jinbe', 'arlong', 'hatchan'], cipherpol: ['lucci', 'kaku', 'kalifa', 'whoswho'],
+  galleyla: ['paulie', 'lucci', 'kaku', 'kalifa'], shandia: ['wyper'], blackdrum: ['wapol'],
+  thrillerbark: ['perona'], bartoclub: ['bartolomeo'], grandfleet: ['luffy', 'bartolomeo'],
+  alabasta: ['vivi'], impeldown: ['magellan'], skyarmy: ['enel'], firetank: ['bege'],
+  bonney: ['bonney'], fallenmonk: ['urouge'], hawkins: ['hawkins'], onair: ['apoo'], drake: ['xdrake'],
+  rumbar: ['brook'], blackbeard: ['aokiji'], bellamy: ['bellamy'],
+};
+const CAPTAINS = {
+  luffy: ['strawhat', 'grandfleet'], whitebeard: ['whitebeard'], kaido: ['beasts'], bigmom7: ['bigmom'],
+  kid: ['kid'], buggy: ['crossguild'], crocodile: ['baroque'], doflamingo: ['donquixote'],
+  donkrieg: ['krieg'], kuro: ['blackcat'], arlong: ['arlong'], jinbe: ['sun'],
+  bartolomeo: ['bartoclub'], bege: ['firetank'], bonney: ['bonney'], urouge: ['fallenmonk'],
+  hawkins: ['hawkins'], apoo: ['onair'], xdrake: ['drake'], brook: ['rumbar'], bellamy: ['bellamy'],
+};
+const aura = (label, stat, amount, range = 240) => Object.freeze({ label, stat, amount, range,
+  description: `Nearby living crew gain ${Math.round(amount * 100)}% ${stat === 'speed' ? 'attack speed' : 'attack'}. Only the strongest aura of each type applies.` });
+const LEADER_AURAS = {
+  luffy: aura('Captain’s Courage', 'attack', .08), whitebeard: aura('A Father’s Rally', 'speed', .1),
+  kaido: aura('Emperor’s Might', 'attack', .1), bigmom7: aura('Queen’s Command', 'attack', .12),
+  garp7: aura('Hero’s Training', 'attack', .1), sabo7: aura('Flame of Freedom', 'speed', .1),
+  belobetty: aura('Revolutionary Encouragement', 'attack', .08), buggy: aura('Showman’s Rally', 'speed', .06),
+};
+for (const character of CHARACTERS) {
+  character.allegiances = Object.keys(CREW_MEMBERS).filter(id => CREW_MEMBERS[id].includes(character.id));
+  character.captainOf = CAPTAINS[character.id] || [];
+  character.aura = LEADER_AURAS[character.id] || null;
+  character.expansion = ['bigmom7', 'garp7', 'sabo7', 'rayleigh', 'oden'].includes(character.id) || CHARACTERS.indexOf(character) >= 50 ? 2 : 1;
 }
 export const CHARACTER_BY_ID = Object.assign(Object.create(null), Object.fromEntries(CHARACTERS.map(c => [c.id, c])));
 export const ENCOUNTERS = [
