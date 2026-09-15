@@ -19,6 +19,23 @@ const { findDefenseGridRoute, defenseCell, planDefenseRoute } = await import(gri
 const step = (b, seconds) => { for (let n = 0; n < Math.round(seconds / .05); n++) advanceDefense(b, .05); };
 const battle = (stage = 1) => { const c = createCollection(); c.unlockedEncounter = 9; return createDefense(c, { encounter: stage, seed: 7 }); };
 const blocked = b => new Set([...b.terrain, ...b.allies.map(u => u.padId), ...b.mazeTowers.map(t => t.cellId)]);
+// Isolate release timing from combat: retain each emitted volley for inspection.
+function releaseWave(b) {
+  const emitted = [];
+  let firstRelease = null;
+  for (let tick = 0; tick < 2000 && b.spawned < b.spawnTotal; tick++) {
+    advanceDefense(b, .05);
+    if (b.enemies.length && firstRelease === null) firstRelease = b.waveTime;
+    emitted.push(...b.enemies);
+    b.enemies = [];
+  }
+  assert.equal(b.spawned, b.spawnTotal);
+  const oldCount = [80, 105, 130, 160, 190, 230][b.round - 1];
+  const oldSpan = (Math.ceil(oldCount / 8) - 1) * (b.round === 2 ? .32 : .38);
+  assert.ok(Math.abs((b.waveTime - firstRelease) - oldSpan * 5) <= .050001,
+    `Harbor ${b.encounter.id}, wave ${b.round}: release span is five times the original, within one simulation step`);
+  b.enemies = emitted;
+}
 function assertRoute(b) {
   const closed = blocked(b);
   assert.deepEqual(Object.keys(b.routes), DEFENSE_GRID.entryIds);
@@ -213,11 +230,11 @@ test('a player-built detour increases travel time rather than simply painting a 
 });
 
 test('the six large-wave previews match actual spawning, preserve exactly three grades and include armored threats plus one captain', () => {
-  const b = battle(), totals = [80, 105, 130, 160, 190, 230];
+  const b = battle(), totals = [800, 1050, 1300, 1600, 1900, 2300];
   b.ship.hp = b.ship.maxHp = 1000000;
   b.allies.forEach(u => { u.skills = []; });
   for (let round = 1; round <= 6; round++) {
-    assert.equal(getDefenseWavePreview(b).total, totals[round - 1]); startDefenseWave(b); step(b, 12);
+    assert.equal(getDefenseWavePreview(b).total, totals[round - 1]); startDefenseWave(b); releaseWave(b);
     assert.equal(b.spawned, totals[round - 1]); assert.equal(b.enemies.length, totals[round - 1]);
     if (round >= 3) assert.ok(b.enemies.some(e => e.enemyType === 'armored' && e.armor >= .4));
     assert.equal(b.enemies.filter(e => e.boss).length, round === 6 ? 1 : 0);
@@ -244,7 +261,7 @@ test('all nine harbors mix one, two and three entrances with exact fair spawn co
     if (preview.entrances.length === 2) pairs.add(preview.activeEntryIds.join(','));
     if (preview.entrances.length === 1) single.add(preview.activeEntryIds[0]);
     assert.deepEqual(preview, getDefenseWavePreview(b), 'Entrance activity is deterministic');
-    assert.equal(startDefenseWave(b), true); step(b, 12);
+    assert.equal(startDefenseWave(b), true); releaseWave(b);
     assert.equal(b.enemies.length, preview.total); assert.deepEqual(b.activeEntryIds, preview.activeEntryIds);
     for (const entry of DEFENSE_ENTRIES) {
       assert.equal(b.enemies.filter(enemy => enemy.entryId === entry.id).length, preview.entrances.find(active => active.id === entry.id)?.count || 0);

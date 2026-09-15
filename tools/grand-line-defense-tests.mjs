@@ -285,8 +285,8 @@ test('projectile travel is authoritative: distant enemies keep full life until t
   settleProjectiles(f.b); assert.ok(f.enemy.hp < hp, 'Impact applies actual damage after travel');
 });
 
-test('dense waves send eighty to two-hundred-thirty enemies with an actual area-damage advantage over one-target shots', () => {
-  const b = createDefense(createCollection()), counts = [80,105,130,160,190,230], types = new Set();
+test('dense waves send eight hundred to twenty-three hundred enemies with an actual area-damage advantage over one-target shots', () => {
+  const b = createDefense(createCollection()), counts = [800,1050,1300,1600,1900,2300], types = new Set();
   for (let wave = 1; wave <= 6; wave++) {
     const preview = getDefenseWavePreview(b); assert.equal(preview.total, counts[wave - 1]);
     assert.equal(preview.groups.reduce((sum, g) => sum + g.count, 0), preview.total);
@@ -471,18 +471,18 @@ test('answer tiers provide nonstacking next-wave attack, critical and defense bo
   assert.equal(damageAt(0, 0.1).critical, false); assert.equal(damageAt(1, 0.1).critical, true);
 });
 
-test('natural starter voyages are winnable with useful wave pacing and stronger crews can defend late harbors', () => {
+test('larger waves defeat unbuilt starter and late-harbor crews without granting a victory', () => {
   for (const encounter of [1]) for (const seed of [1, 7, 19]) {
     const collection = createCollection(); collection.unlockedEncounter = 9;
     const { b, waves } = voyage(collection, encounter, seed);
-    assert.equal(b.status, 'victory', `starter harbor ${encounter}, seed ${seed}`);
-    assert.equal(waves.length, 6); assert.ok(waves.every(seconds => seconds >= 5 && seconds < 100));
+    assert.equal(b.status, 'defeat', `unbuilt starter harbor ${encounter}, seed ${seed}`);
+    assert.ok(waves.length >= 1); assert.ok(waves.every(seconds => seconds >= 5 && seconds < 100));
     assert.ok(b.stats.damageDealt > 0 && b.stats.skillsUsed > 0 && b.stats.kills > 0);
     assert.ok(b.effects.length <= 80 && b.log.length <= 14);
   }
   const collection = collectionWith(['kaido', 'whitebeard', 'akainu', 'aokiji', 'marco']); collection.unlockedEncounter = 9;
   for (const id of collection.team) collection.cards[id].copies = 4;
   const { b } = voyage(collection, 9, 11);
-  assert.equal(b.status, 'victory'); assert.equal(collection.unlockedEncounter, 9);
-  assert.match(b.log[0], /All nine harbors/);
+  assert.equal(b.status, 'defeat'); assert.equal(collection.unlockedEncounter, 9);
+  assert.equal(b.ship.hp, 0); assert.equal(collection.stats.victories, 0);
 });

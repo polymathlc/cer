@@ -1148,7 +1148,7 @@ try {
   assert.equal(await game.evaluate(()=>__grandLine.battle.supplies),100);
   assert.equal(await game.evaluate(()=>__grandLine.battle.trainingPoints),0);
   assert.equal(await game.locator('#upgrade-defender').isDisabled(),true);
-  assert.match(await game.locator('#wave-preview').textContent(),/80/);
+  assert.match(await game.locator('#wave-preview').textContent(),/800/);
   const nonteam=await game.evaluate(()=>Object.keys(__grandLine.collection.cards).find(id=>!__grandLine.collection.team.includes(id)));
   assert.ok(nonteam,'Purchases and the saved crew leave another owned character available to summon');
   const summonPad=await game.evaluate(()=>__grandLine.DEFENSE_DEFAULT_PADS.find(p=>!__grandLine.battle.allies.some(a=>a.padId===p.id)).id);
@@ -1228,7 +1228,7 @@ try {
   await game.locator('#start-wave').waitFor({state:'visible'});assert.equal(await game.locator('#start-wave').isEnabled(),true);
   assert.equal(await game.evaluate(()=>__grandLine.battle.status),'setup');
   assert.equal(await game.evaluate(()=>__grandLine.battle.round),round+1);
-  assert.equal(await game.evaluate(()=>__grandLine.battle.spawnTotal),105);
+  assert.equal(await game.evaluate(()=>__grandLine.battle.spawnTotal),1050);
   const boost=await game.evaluate(()=>__grandLine.battle.learningBoost);
   assert.equal(boost.correct,3);assert.equal(boost.round,round+1);assert.equal(boost.attackMultiplier,1.3);
   assert.ok(Math.abs(boost.critBonus-.15)<1e-10);assert.equal(boost.defenseMultiplier,1.24);
@@ -1263,7 +1263,7 @@ try {
   assert.equal(await host.evaluate(()=>fake.records.length),6);
   assert.equal(await game.evaluate(()=>__grandLine.battle.trainingPoints),2,'Three wrong answers still earn the one base training point');
   for(let wave=3;wave<=6;wave++) {
-    assert.equal(await game.evaluate(()=>__grandLine.battle.spawnTotal),[80,105,130,160,190,230][wave-1]);
+    assert.equal(await game.evaluate(()=>__grandLine.battle.spawnTotal),[800,1050,1300,1600,1900,2300][wave-1]);
     await checkWaveEntrances(game);await game.locator('#start-wave').click();await checkWaveEntrances(game,{spawned:true});await clearWave(game);
     assert.equal(await game.evaluate(()=>__grandLine.battle.round),wave);
     assert.equal(await game.evaluate(()=>__grandLine.collection.unlockedEncounter),1);

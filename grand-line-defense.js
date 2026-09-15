@@ -81,7 +81,7 @@ export function createDefense(collection, options = {}) {
     allies: collection.team.map(id => makeUnit(id, 'ally', collection.cards[id].copies)), enemies: [],
     ship: { id: 'ship', x: 1100, y: 310, hp: 360, maxHp: 360, color: '#e1c087' },
     mazeTowers: [], terrain: [...DEFENSE_TERRAIN[encounterId - 1]], route: [], routes: {}, routeCellIds: [], routeRevision: 0,
-    elapsed: 0, waveTime: 0, accumulator: 0, spawnTotal: 80, spawned: 0, remainingToSpawn: 80,
+    elapsed: 0, waveTime: 0, accumulator: 0, spawnTotal: 0, spawned: 0, remainingToSpawn: 0,
     spawnTimer: 0, defeatedThisWave: 0, leakedThisWave: 0, waveProgress: 0,
     effects: [], projectiles: [], supplies: 100, trainingPoints: 0, reserve: {}, log: [], eventSequence: 0, pendingOutcome: null, learning: null, learningBoost: null,
     rewardedRounds: [], roundResults: [], outcomeCommitted: false,
@@ -90,6 +90,7 @@ export function createDefense(collection, options = {}) {
   refreshCrewStats(b);
   if (!commitDefenseRoute(b)) return null;
   const opening = getDefenseWavePreview(b);
+  b.spawnTotal = opening.total; b.remainingToSpawn = opening.total;
   b.waveEntrances = opening.entrances; b.activeEntryIds = opening.activeEntryIds;
   for (const unit of b.allies) {
     if (unit.passive.type === 'shield-start') unit.shield += Math.round(unit.maxHp * unit.passive.value);
@@ -201,6 +202,9 @@ export function setDefensePriority(b, allyId, priority) {
   unit.priority = priority; return true;
 }
 
+const ENEMY_COUNT_MULTIPLIER = 10;
+const RELEASE_DURATION_MULTIPLIER = 5;
+const SPAWN_BATCH_SIZE = 8;
 const WAVE_PLANS = Object.freeze([
   { name: 'Landing party', pattern: ['swarm', 'swarm', 'swarm', 'raider', 'runner'], count: 80, tip: 'Build a detour beside your crew. Piercing lines and splash attacks clear the packed landing party.' },
   { name: 'Runner rush', pattern: ['runner', 'runner', 'swarm', 'swarm', 'raider'], count: 105, tip: 'Lengthen the route and use disruptor towers, slow or freeze to catch runners.' },
@@ -208,7 +212,12 @@ const WAVE_PLANS = Object.freeze([
   { name: 'Crowded assault', pattern: ['swarm', 'swarm', 'swarm', 'runner', 'swarm', 'armored'], count: 160, tip: 'Create a winding corridor through radial and splash coverage. Leave a complete exit route.' },
   { name: 'Siege crossfire', pattern: ['armored', 'runner', 'swarm', 'raider', 'swarm'], count: 190, tip: 'Separate armor-breaking and cluster-clearing duties, with healers behind the maze.' },
   { name: 'Captain’s armada', pattern: ['armored', 'swarm', 'runner', 'swarm', 'raider'], count: 230, tip: 'A huge escort protects the captain. Aim Strongest at the captain and keep the maze inside your area attacks.' },
-]);
+].map((plan, index) => ({
+  ...plan, count: plan.count * ENEMY_COUNT_MULTIPLIER,
+  // Keep eight-enemy clusters and stretch the first-to-last release span exactly 5x.
+  spawnInterval: (Math.ceil(plan.count / SPAWN_BATCH_SIZE) - 1) * (index === 1 ? .32 : .38)
+    * RELEASE_DURATION_MULTIPLIER / (Math.ceil(plan.count * ENEMY_COUNT_MULTIPLIER / SPAWN_BATCH_SIZE) - 1),
+})));
 function typeForWave(round, index, count) {
   if (round === 6 && index === Math.floor(count * .55)) return 'captain';
   const plan = WAVE_PLANS[round - 1]; return plan.pattern[index % plan.pattern.length];
@@ -642,13 +651,13 @@ function fixedStep(b) {
   if (b.spawned < b.spawnTotal && b.spawnTimer <= 1e-9) {
     // Closely spaced volleys create actual clusters for area damage instead
     // of feeding one isolated enemy to the crew every few seconds.
-    for (let i = 0; i < 8 && b.spawned < b.spawnTotal; i++) {
+    for (let i = 0; i < SPAWN_BATCH_SIZE && b.spawned < b.spawnTotal; i++) {
       spawnEnemy(b);
       const enemy = b.enemies.at(-1);
       enemy.progress = Math.floor(i / b.waveEntrances.length) * 3 / routeLengthFor(b, enemy.entryId);
       Object.assign(enemy, defenseEnemyPointAt(enemy.progress, enemy.laneOffset, b, enemy.entryId));
     }
-    b.spawnTimer += b.round === 2 ? .32 : .38;
+    b.spawnTimer += WAVE_PLANS[b.round - 1].spawnInterval;
   }
   for (const unit of [...b.allies, ...b.enemies]) tickUnit(b, unit);
   for (const enemy of b.enemies.filter(alive)) {
