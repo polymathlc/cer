@@ -3858,7 +3858,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.394.0';
+const APP_VERSION = 'v1.395.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -74940,6 +74940,115 @@ function _mkQuestionText(q) {
 function _mkQuestionImages(q) {
   try { return _gradingQuestionSource(q).images.map(i => i.url).filter(Boolean).slice(0, 4); } catch (e) { return []; }
 }
+
+/* 🐾 THE QUESTION ON A CARD IS THE QUESTION OUT OF THE BANK (v1.395.0)
+   ---------------------------------------------------------------------
+   `e.question` is the wording FLATTENED FOR A PROMPT: `_gradingQuestionSource`
+   joins the stem, each statement and each option with newlines, and `_mkClip`
+   then folds every one of those into a space. That is exactly right for the
+   model that cleaned the answer up and unreadable for the child being asked to
+   study it — the stem, "A: fruit becomes larger B: flowers die C: plant dies"
+   and "Option 1: A only Option 2: B only…" arrive as one grey paragraph, with
+   the figure dumped in a row underneath wherever it happened to fall. So the
+   card DRAWS THE QUESTION, out of the bank, the way a student meets it:
+   wording as wording, the figure where the question prints it, the options as
+   a numbered list.
+
+   • IT IS A RENDER, NOT A RE-STORE. Nothing about an entry changes, so every
+     card already in the bank reads properly from the next paint — and the
+     content key the feed history is built on (`_mkFeedQuestion`, over
+     `e.question`) does not move, or every mistake a child has already been
+     served would be served to them again.
+   • `MK_Q_BLOCKS` IS AN ALLOWLIST, and that is the answer-leak guard. It
+     names the block types a question ASKS with; `answer`, `plainanswer`,
+     `answerLine`, `answerKey`, `explanation` and `workingSpace`'s own model
+     answer are not drawn at all. A skip-list would let a block type added next
+     month through by default — and this card is read BEFORE the child has
+     rewritten the answer, so anything that leaks here hands them the very
+     thing they are being asked to write.
+   • A FILL-IN-THE-BLANK IS DRAWN BLANK. `_fbReadonlyHtml` — what
+     `renderImportedBlockStudent` uses — is a REVIEW rendering with each answer
+     sitting in its slot, so the block renderer every other student surface
+     shares is the one thing that cannot be reused here.
+   • AN MCQ IS A READ-ONLY NUMBERED LIST: no radios, because the card is about
+     somebody else's answer rather than a question to answer here, and the
+     correct option is never marked. The numbers are the app's own `i + 1`, so
+     "(3) A and B only" in the answer beside it names the option a child can
+     see.
+   • NO −/+ PICTURE PILL. `pvsBarHtml` writes a size straight back to the
+     question bank; the thing being vetted on this card is the LESSON, and a
+     control that quietly edits the question underneath it is a surprise on a
+     page nobody opened to author with.
+   • A QUESTION THAT HAS LEFT THE BANK STILL READS. The stored flat text and
+     the stored pictures are the fallback, exactly as they were — and so is a
+     failure of any kind, because presentation may never take a practice card
+     down (`_mkFigure`'s rule). The harness pins the drawn path, so a real
+     breakage is loud there rather than a card that silently goes back to
+     reading as a paragraph. */
+const MK_Q_BLOCKS = ['text', 'part', 'image', 'table', 'mcq', 'fillblank'];
+
+/* The question's own blocks, in the question's own order. '' when there is
+   nothing a student would be shown — the caller falls back to the wording the
+   entry carries. */
+function _mkQuestionBlocksHtml(q, opts) {
+  const all = (q && q.blocks) || [];
+  const shown = all.filter(b => b && MK_Q_BLOCKS.includes(b.type));
+  if (!shown.length) return '';
+  const map = qPartMap(all);
+  const load = opts && opts.eager ? 'eager' : 'lazy';
+  let html = '';
+  shown.forEach(b => {
+    const opens = qBlockOpensKey(b, map);
+    const tag = opens ? '<span class="mk-qb-part">' + escapeHtml(qPartLabel(opens)) + '</span>' : '';
+    switch (b.type) {
+      case 'text':
+        html += '<div class="mk-qb">' + tag + qPartBodyHtml(b) + '</div>';
+        break;
+      case 'part':
+        html += '<div class="mk-qb">' + (b.label ? '<span class="mk-qb-part">' + escapeHtml(b.label) + '</span>' : tag) + (b.content || '') + '</div>';
+        break;
+      case 'image':
+        if (!b.url) break;
+        html += '<div class="mk-qb mk-qb-fig">' + tag + '<img src="' + escapeHtml(transformImageUrl(b.url)) + '" loading="' + load + '" decoding="async" alt="" style="' + imgSizeStyle(b) + '">' +
+          (b.caption ? '<div class="mk-qb-cap">' + escapeHtml(b.caption) + '</div>' : '') + '</div>';
+        break;
+      case 'table':
+        html += '<div class="mk-qb mk-qb-table">' + tag + renderTableReadonly(b, '') + '</div>';
+        break;
+      case 'mcq': {
+        const opts2 = (b.options || []).filter(Boolean);
+        if (!opts2.length) break;
+        html += '<div class="mk-qb">' + tag + '<ol class="mk-qb-opts">' + opts2.map((o, i) =>
+          '<li class="mk-qb-opt"><b>' + (i + 1) + '</b><span>' + (o.text || '') + '</span></li>').join('') + '</ol></div>';
+        break;
+      }
+      case 'fillblank':
+        html += '<div class="mk-qb mk-qb-fb">' + tag + _fbSegments(b.text || '').map(p =>
+          p.type === 'blank' ? '<span class="mk-qb-blank"></span>' : escapeHtml(p.text || '')).join('') + '</div>';
+        break;
+    }
+  });
+  return html;
+}
+/* The ONE thing a card shows under "The question" — the teacher's and the
+   class's alike, so the entry a teacher approves reads the way the child will
+   read it. */
+function _mkQuestionHtml(e, opts) {
+  const flat = String((e && e.question) || '');
+  const pics = Array.isArray(e && e.images) ? e.images : [];
+  const load = opts && opts.eager ? 'eager' : 'lazy';
+  const asWritten = '<div class="mk-round-text">' + escapeHtml(flat) + '</div>' +
+    (pics.length ? '<div class="mk-q-imgs">' + pics.map(u =>
+      '<img src="' + escapeHtml(transformImageUrl(u)) + '" loading="' + load + '" alt="">').join('') + '</div>' : '');
+  try {
+    const q = _docQById(String((e && e.questionId) || ''));
+    const drawn = q ? _mkQuestionBlocksHtml(q, opts) : '';
+    return drawn ? '<div class="mk-qbody">' + drawn + '</div>' : asWritten;
+  } catch (err) {
+    console.warn('mistake card question render failed', err);
+    return asWritten;
+  }
+}
 /* The model answer, as words. A question with none cannot have a wrong
    answer written FOR it (there is no standard to be wrong against), and a
    harvested attempt falls back to the marker's own `expected`. */
@@ -75256,7 +75365,6 @@ function _mkAnimalSelectHtml(current, attr) {
 function _mkCardHtml(e) {
   const m = mistakeAnimal(e.animal);
   const open = !!_mk.expanded[e.id];
-  const qText = open ? e.question : _mkClip(e.question, 220);
   return `<div class="mk-card" data-mk="${escapeHtml(e.id)}">
     <div class="mk-card-head">
       ${_mkAnimalSelectHtml(e.animal, 'data-f="animal"')}
@@ -75267,8 +75375,10 @@ function _mkCardHtml(e) {
     </div>
     <div class="mk-q">
       <div class="mk-q-title">${escapeHtml(e.questionTitle || 'Untitled question')}${e.part ? ' <span class="mk-part">' + escapeHtml(e.part) + '</span>' : ''}</div>
-      <div class="mk-q-text" onclick="mkToggleQ('${escapeHtml(e.id)}')" title="Click to ${open ? 'shorten' : 'read the whole question'}">${escapeHtml(qText)}</div>
-      ${open && (e.images || []).length ? '<div class="mk-q-imgs">' + e.images.map(u => `<img src="${escapeHtml(transformImageUrl(u))}" loading="lazy" alt="">`).join('') + '</div>' : ''}
+      ${open
+        ? `<div class="mk-q-full">${_mkQuestionHtml(e)}</div>
+      <button class="mk-qtoggle" onclick="mkToggleQ('${escapeHtml(e.id)}')">▴ Show less</button>`
+        : `<div class="mk-q-text" onclick="mkToggleQ('${escapeHtml(e.id)}')" title="Click to read the whole question, drawn the way the class will see it">${escapeHtml(_mkClip(e.question, 220))}</div>`}
     </div>
     <div class="mk-grid">
       <label>A student wrote <span class="mk-hint">— cleaned up; the mistake itself must stay in</span>
@@ -75845,8 +75955,7 @@ function _mkRenderSession(host) {
   <div class="mk-round">
     <div class="mk-round-q">
       <div class="mk-round-label">The question${e.part ? ' · part ' + escapeHtml(e.part) : ''}</div>
-      <div class="mk-round-text">${escapeHtml(e.question)}</div>
-      ${(e.images || []).length ? '<div class="mk-q-imgs">' + e.images.map(u => `<img src="${escapeHtml(transformImageUrl(u))}" loading="eager" alt="">`).join('') + '</div>' : ''}
+      ${_mkQuestionHtml(e, { eager: true })}
     </div>
     <div class="mk-round-a">
       <div class="mk-round-label">${e.own ? 'You wrote' : 'A student wrote'}</div>

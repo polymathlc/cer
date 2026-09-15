@@ -5856,6 +5856,63 @@ rewrite box under it.
   write from anyone else is refused by the rule itself and named in the toast.
 - Run **`node tools/mistake-bank-tests.mjs`** after touching any of it.
 
+## 🐾 The question on a mistake card is the question out of the BANK (v1.395.0)
+
+`MK_Q_BLOCKS` / `_mkQuestionBlocksHtml` / **`_mkQuestionHtml`** (beside
+`_mkQuestionText`, search `THE QUESTION ON A CARD IS THE QUESTION OUT OF THE
+BANK`), the one call in `_mkRenderSession` and the one in `_mkCardHtml`, and the
+`.mk-qbody` / `.mk-qb-*` / `.mk-qtoggle` rules in `index.html`.
+
+A card used to print `e.question` — and `e.question` is the wording **flattened
+for a PROMPT**: `_gradingQuestionSource` joins the stem, each lettered statement
+and each option with newlines, and `_mkClip` then folds every one of those into
+a space. Right for the model that cleaned the answer up, unreadable for the
+child being asked to study it: *"…The diagram shows a plant. [Question figure 1]
+What will be the effect(s)… A: fruit becomes larger B: flowers die C: plant dies
+Option 1: A only Option 2: B only…"* arrives as one grey paragraph, with the
+figure dumped in a row underneath wherever it happened to fall. The card draws
+the question out of the bank instead — wording as wording, the figure where the
+question prints it, the options as a numbered list.
+
+- **IT IS A RENDER, NOT A RE-STORE.** Nothing about an entry changes, so every
+  card already in the bank reads properly from the next paint — and the content
+  key the feed history is built on (`_mkFeedQuestion`, over `e.question`) does
+  not move. Rewrite the stored wording instead and every mistake a child has
+  already been served is served to them again, which is the one cost of a
+  tidier-looking fix that nothing on any screen would report.
+- **`MK_Q_BLOCKS` IS AN ALLOWLIST, and that is the answer-leak guard.** It names
+  the block types a question ASKS with — text, part, image, table, mcq,
+  fillblank — and `answer`, `plainanswer`, `answerLine`, `answerKey`,
+  `explanation` and `workingSpace`'s own model answer are not drawn at all. A
+  skip-list would let a block type added next month through by default, and this
+  card is read BEFORE the child rewrites the answer: anything that leaks here
+  hands them the very thing they are being asked to write.
+- **A FILL-IN-THE-BLANK IS DRAWN BLANK.** `_fbReadonlyHtml` — what
+  `renderImportedBlockStudent` uses — is a REVIEW rendering with each answer
+  sitting in its slot, which is exactly why the block renderer every other
+  student surface shares is the one thing that cannot be reused here.
+  `renderQuestionBodyPreviewHtml` is the teacher's preview and prints the model
+  answer outright, so it cannot either.
+- **AN MCQ IS A READ-ONLY NUMBERED LIST.** No radios — the card is about
+  somebody else's answer, not a question to answer here — and the correct option
+  is never marked. The numbers are the app's own `i + 1`, so "(3) A and B only"
+  in the answer beside it names an option the child can see.
+- **NO −/+ PICTURE PILL.** `pvsBarHtml` writes a size straight back to the
+  question bank; what is being vetted on this card is the LESSON, and a control
+  that quietly edits the question underneath it is a surprise on a page nobody
+  opened to author with.
+- **ONE RENDERER, BOTH CARDS.** The teacher's vetting card opens on the same
+  drawing the class reads, so an entry cannot be approved against a different
+  rendering from the one it is served in. The teacher's card keeps the clipped
+  flat text as its COLLAPSED summary line — that is a one-line label in a list
+  of forty, not the question.
+- **A QUESTION THAT HAS LEFT THE BANK STILL READS**, on the wording and pictures
+  the entry carries — and so does a failure of any kind, because presentation
+  may never take a practice card down (`_mkFigure`'s rule). The harness pins the
+  drawn path, so a real breakage is loud there rather than a card that silently
+  goes back to being a paragraph.
+- Run **`node tools/mistake-bank-tests.mjs`** after touching any of it.
+
 ## 🐾 The mistake analysis that FOLLOWS a sidekick (v1.393.0)
 
 `science-mistakes.js` (`prepareMistakeAnalysis` / `mountMistakeAnalysis` /
@@ -6003,6 +6060,23 @@ Three things a wrong answer used to lose the moment its card was swept.
   any of it.
 
 ## House rules
+- After touching **🐾 the question on a mistake card** (`MK_Q_BLOCKS`,
+  `_mkQuestionBlocksHtml`, `_mkQuestionHtml`, the call in `_mkRenderSession` or
+  `_mkCardHtml`, or the `.mk-qbody` / `.mk-qb-*` rules), run
+  `node tools/mistake-bank-tests.mjs`. Both directions are silent and the card
+  still paints. Stop drawing and it is a grey paragraph again — stem, lettered
+  statements and options run together with the figure dumped underneath — and
+  nobody reports a card that has always looked like that. Draw a block that
+  carries an ANSWER — reach for `renderQuestionBodyPreviewHtml` (it prints the
+  model answer), for `renderImportedBlockStudent` (its fill-in-the-blank is the
+  REVIEW rendering, answers in the slots), or turn the allowlist into a
+  skip-list — and the card hands a child the answer they are being asked to
+  write, on the one screen whose whole job is to make them write it. Mark the
+  correct option and the quiz above it is answered before it is read. Rewrite
+  the STORED wording instead of drawing it and every mistake already served is
+  served again, because the feed's content key moves with it. And let the two
+  cards drift apart and a teacher approves a lesson against a rendering the
+  class never sees.
 - After touching **🐾 the mistake analysis that follows a sidekick**
   (`_mistakeAnalysisFor`, `_mcqChoiceLabel`, the `mistake` / `mistakeWhy`
   fields or `MISTAKE_ANIMAL_RULE` in any of the three marking prompts,
