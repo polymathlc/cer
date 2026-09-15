@@ -6020,6 +6020,63 @@ to guess which pile it was in first.
   is the teacher's.
 - Run **`node tools/mistake-bank-tests.mjs`** after touching any of it.
 
+## 🐾 A mistake is an OPEN-ENDED mistake — the ✨ generator's own gate (v1.397.0)
+
+`_mkOpenAnswer` / `_mkModelAnswer`'s `openOnly` flag / `MK_GEN_OPEN_RULE` /
+**`_mkMcqOnlyEntry`** (search `A MISTAKE IS AN OPEN-ENDED MISTAKE`), the pool
+filter in `mkGenerateRun`, the re-check at the top of `mkGenerateOne`, the
+fourth gate in `_mkVisibleToStudent`, the ⚠ badge in `_mkCardHtml` and
+`.mk-badge.mcq` in `index.html`.
+
+The bank has been open-ended only since v1.394.0 — the sidekick, the analysis
+card, `_partMistakeOf`, `fcNoteMistakes`, `_mkOwnEntries` and
+`_mkCandidatesFrom` all stand down on a multiple choice, because "(3)" shows no
+missed comparison and no vague wording. **✨ Write wrong answers was the one
+door with no gate**, so it invented prose "mistakes" for questions whose whole
+answer is a tick in a box: a card headed *Functions of Nose and Lungs*, a habit
+that fits, and a lesson about a mistake nobody could have made.
+
+- **`_mkOpenAnswer(q)` IS THE ONE PREDICATE, and it is `_mkModelAnswer` with a
+  flag rather than a second walk over the blocks.** Two walkers drift into two
+  different answers to *what is this question's answer*, and the drift is
+  invisible — the generator would be reading one and the prompt carrying the
+  other. `openOnly` skips the `mcq` branch and nothing else, so **every OTHER
+  caller of `_mkModelAnswer` is byte-for-byte unchanged** and still names the
+  option: `_mkMarkedEntry` and `mkAnalyseCandidate` are filing a REAL wrong
+  answer to a question that was really asked, and the option is what the
+  correct answer was.
+- **IT IS GATED TWICE, and the second one is not redundant.** `mkGenerateRun`
+  filters the pool, and `mkGenerateOne` refuses again at the top: a caller
+  added later is not bound by a filter it never saw, and a hidden button is
+  never the lock — the same rule every admin door in this file follows.
+- **THE GENERATOR IS HANDED THE WRITTEN ANSWER, and `MK_GEN_OPEN_RULE` on top.**
+  Being prompted with `(2) The tiny hairs…` is precisely what put the option
+  number into the reported card, so the gate keeps the wrong QUESTION out and
+  only the rule keeps the wrong SHAPE of answer out of a right one — a model
+  told to imitate a pupil will open with "(2)" on a written question if it has
+  just been shown one. **There is deliberately NO text-stripper** for a leading
+  option marker: "(3) times the length" is a legitimate answer, and a cleaner
+  that mangles one is worse than a prompt that is obeyed nearly always.
+- **THE BANK ALREADY HOLDS THOSE ENTRIES**, and nobody is going to open them one
+  at a time — so `_mkMcqOnlyEntry` is a fourth gate in `_mkVisibleToStudent`
+  (the class is never served one, whatever it was approved as) and a ⚠ badge on
+  the teacher's card. **ONE predicate for both**: two tests drift into a card
+  flagged on one screen and quizzed on the next.
+- **It asks for the MCQ EXPLICITLY rather than only for the absence of a written
+  answer.** A question with no answer blocks at all is a different fault with
+  its own warning, and this badge has to mean what it says.
+- **A question with BOTH an option list and a written part is NEVER flagged**,
+  because `_mkOpenAnswer` reads its written half — which is also what makes the
+  generator's pool include it.
+- **A question that has LEFT the bank keeps its entry**, exactly as the three
+  serving gates above it already have it: the work was still done and there is
+  nothing left to judge it by. The asymmetry is deliberate, and it is why the
+  predicate answers `false` on a missing question rather than refusing.
+- **An entry served to nobody with nothing on screen to say why reads as one
+  nobody has got round to**, which is why the badge exists at all — it names
+  the reason and says to delete it.
+- Run **`node tools/mistake-bank-tests.mjs`** after touching any of it.
+
 ## 🐾 The mistake analysis that FOLLOWS a sidekick (v1.393.0)
 
 `science-mistakes.js` (`prepareMistakeAnalysis` / `mountMistakeAnalysis` /
@@ -6167,6 +6224,25 @@ Three things a wrong answer used to lose the moment its card was swept.
   any of it.
 
 ## House rules
+- After touching **🐾 the open-ended gate** (`_mkOpenAnswer`, `_mkModelAnswer`'s
+  `openOnly` flag, `MK_GEN_OPEN_RULE`, `_mkGenPrompt`, `mkGenerateRun`'s pool
+  filter, `mkGenerateOne`'s re-check, `_mkMcqOnlyEntry`, the fourth gate in
+  `_mkVisibleToStudent`, the ⚠ badge in `_mkCardHtml`, or `.mk-badge.mcq`), run
+  `node tools/mistake-bank-tests.mjs`. Every failure is silent and the card
+  still renders: drop either gate and ✨ Write wrong answers goes back to
+  inventing prose "mistakes" for questions whose whole answer is a tick in a
+  box — a card that reads perfectly and teaches a habit nobody could have had,
+  which is exactly what it was reported for. Hand the generator
+  `_mkModelAnswer` again and it is prompted with "(2) The tiny hairs…", so the
+  answer it writes opens with an option number on a written question. Let
+  `openOnly` leak into any OTHER caller and a real marked wrong answer loses
+  the option that WAS the correct answer. Flag a question with BOTH halves and
+  every explain-your-choice question in the bank is withheld from the class and
+  badged as broken; flag one that has LEFT the bank and every entry outliving
+  its question is too. Ask only for the absence of a written answer and the
+  badge starts claiming "multiple choice" about questions with no answer
+  recorded at all. And let the card and the student gate read two different
+  tests and an entry is flagged on one screen and quizzed on the next.
 - After touching **🐾 which part the mistake is in** (`MK_PART_RE`,
   `_mkPartKey`, `_mkPartWhat`, `_mkPartNote`, `_mkQuestionBlocksHtml`'s
   `opts.part`, `_partLabelFor`, the `label` on `fcNoteMistakes`'s parts,
