@@ -11,7 +11,20 @@ function cut(start, end) {
   assert.ok(a >= 0 && b > a, `Missing source section ${start}`);
   return src.slice(a, b);
 }
-const core = cut('// ---- Scheduled release — a question that is IN the bank', 'function getQuestionsForLevel(');
+// The end marker is the NEXT SECTION HEADER, not whatever function happened
+// to sit under the block. Pinned to `function getQuestionsForLevel(` this
+// slice silently grew from 220 lines to 621 when v1.377.0 inserted the
+// student-feeding subsystem between the two — swallowing two TOP-LEVEL
+// document.addEventListener calls that then ran at evaluation time and took
+// every subtest in this file down before a single assertion. Same marker
+// tools/scheduled-release-tests.mjs already cuts this block on.
+const core = cut('// ---- Scheduled release — a question that is IN the bank', '// ---- Student feeding: one local policy');
+// …and if it drifts again, SAY SO. A slice that has grown past its block
+// announces itself as `document.addEventListener is not a function` thrown
+// from a stub — four markers away from the cause, and the reason this took
+// a bisect to find rather than a glance.
+assert.ok(!/^document\.addEventListener/m.test(core),
+  'the core slice has swallowed a top-level listener — its end marker has drifted past the block again');
 const editor = cut('var _editorReleaseDraft = null;', 'function getYouTubeEmbedUrl(');
 const collector = cut('function collectQuestionData()', 'function setEditMode(');
 const metadata = cut('const EDITOR_OWNED_QUESTION_FIELDS', 'function saveEditedQuestion(');
@@ -53,6 +66,11 @@ function harness() {
     const qInSyllabus = ()=>true, qpFibOn = ()=>false, qpMatchesType = ()=>true;
     const qLevelNum = ()=>4, qWithinStudentLevel = ()=>true, _qAttemptStats = {};
     const orderByAttemptPriority = q=>q, qpLoadSeen = ()=>[];
+    // A PASS-THROUGH. buildQpQueue ends in _scienceFeedPlan(pool), which lives
+    // outside every slice here — handing every candidate back leaves
+    // buildQpQueue's own qAvailableToViewer filter as what decides these
+    // tests, so the release gate under test is not the thing being stubbed.
+    const _scienceFeedPlan = rows=>({questions:(rows||[]).filter(Boolean)});
     ${roles + cpbGate + core + collector + metadata + editor + queue}
     return {
       openEditorRelease, closeEditorRelease, saveEditorRelease, editorReleaseKeydown,
@@ -182,6 +200,7 @@ function writerHarness() {
     const _xtAnnounceQuestion=(...args)=>events.push(args);
     const console={error(){},warn(){}};
     const setDoc=async(ref,value)=>records.set(ref,value);
+    const _scienceFeedSummary=q=>({signature:String(q&&q.id)});
     function writeBatch() {
       const pending=[];
       return {set(ref,value){pending.push(()=>records.set(ref,value))},
@@ -200,7 +219,16 @@ test('atomic approval never removes Vetting on failure and announces both change
   assert.deepEqual(w.events,[]);
   w.failed=false;
   assert.equal(await w.saveQuestion(q,{fromVetting:true}),true);
-  assert.equal(w.records.has('vetting/id'),false); assert.deepEqual(w.records.get('bank/id'),q);
+  assert.equal(w.records.has('vetting/id'),false);
+  // v1.377.0 stamps a practice-quality summary onto EVERY bank write, so the
+  // written document is no longer byte-identical to the question — by design.
+  // What this subtest is for is that the question crosses UNTOUCHED, so that
+  // is what is pinned, plus the stronger half the old deepEqual gave for
+  // free: nothing ELSE may be added. A field appearing on a bank document
+  // that nobody authored is exactly what this would otherwise stop catching.
+  const wrote=w.records.get('bank/id'); const {practiceQuality,...carried}=wrote;
+  assert.deepEqual(carried,q);
+  assert.deepEqual(Object.keys(wrote).filter(k=>!(k in q)),['practiceQuality']);
   assert.deepEqual(w.events,[['id','bank','save'],['id','vetting','del']]);
 });
 test('ordinary bank writes still use the existing save path', async () => {
