@@ -86,6 +86,12 @@ async function defenseState(frame) {
     allies:__grandLine.battle.allies.map(a=>({id:a.id,hp:a.hp,energy:a.energy})),
     enemies:__grandLine.battle.enemies.map(e=>({id:e.id,x:e.x,y:e.y,hp:e.hp}))}));
 }
+async function selectCell(frame,id) {
+  const [,column,row]=id.split('-');
+  await frame.locator('#grid-column').selectOption({value:column});
+  await frame.locator('#grid-row').selectOption({value:row});
+  assert.equal(await frame.locator('#selected-cell').textContent(),String.fromCharCode(65+Number(column))+(Number(row)+1),'Coordinate selectors choose the exact requested cell');
+}
 
 async function harnessGame(host, role = 'student') {
   await host.goto(base + '/__harness.html?role=' + role);
@@ -93,6 +99,88 @@ async function harnessGame(host, role = 'student') {
   const frame = host.frames().find(f => f.url().includes('grand-line.html'));
   await frame.evaluate(() => { __grandLine.settings.muted = true; });
   return frame;
+}
+
+async function checkMazeBuilder() {
+  const page=await browser.newPage({viewport:{width:1440,height:1000}});observe(page);await standalone(page);
+  await page.locator('[data-view="campaign"]').click();await page.locator('#campaign-map button').first().click();
+  await page.evaluate(async()=>{window.mazeTools=await import('./grand-line-defense.js');});
+  const original=await page.evaluate(()=>({route:__grandLine.battle.route,revision:__grandLine.battle.routeRevision,supplies:__grandLine.battle.supplies,
+    crewCell:__grandLine.battle.allies[0].padId,terrain:__grandLine.battle.terrain[0]}));
+  await page.locator('#build-toggle').click();
+  for(const cell of [original.crewCell,original.terrain,'cell-0-6','cell-25-6']) {
+    await selectCell(page,cell);assert.equal(await page.locator('#cell-apply').isDisabled(),true,'Crew, terrain, entry and exit cannot accept a basic tower');
+    assert.equal(await page.evaluate(()=>__grandLine.applyCellAction()),false);
+  }
+  await selectCell(page,'cell-12-6');
+  const preview=await page.evaluate(()=>mazeTools.getMazePlacementPreview(__grandLine.battle,'cell-12-6',{kind:'tower'}));
+  assert.equal(preview.valid,true);assert.notDeepEqual(preview.route,original.route);
+  assert.deepEqual(await page.evaluate(()=>__grandLine.battle.route),original.route,'Selecting a proposed obstacle never commits a route or spends supplies');
+  assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),100);
+  await screenshot(page,'maze-route-preview');await page.locator('#cell-apply').click();
+  assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),95);
+  assert.deepEqual(await page.evaluate(()=>__grandLine.battle.route),preview.route);
+  assert.ok(await page.evaluate(revision=>__grandLine.battle.routeRevision>revision,original.revision));
+  assert.equal(await page.locator('#cell-apply').isDisabled(),true,'The occupied tower cell cannot be built twice');
+  await page.locator('#sell-toggle').click();await selectCell(page,'cell-12-6');
+  assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),95,'Sale selection is only a preview');
+  await page.locator('#cell-apply').click();
+  assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),98);
+  assert.deepEqual(await page.evaluate(()=>__grandLine.battle.route),original.route);
+  assert.equal(await page.evaluate(()=>__grandLine.applyCellAction()),false,'A sold tower cannot pay its refund twice');
+  check('Tower placement previews a rerouted maze before confirmation, charges five supplies once, and sale restores the route for a bounded three-supply refund');
+
+  await page.locator('#build-toggle').click();
+  for(let row=0;row<13;row++)if(row!==6){await selectCell(page,`cell-1-${row}`);await page.locator('#cell-apply').click();}
+  const passage=await page.evaluate(()=>({route:__grandLine.battle.route,revision:__grandLine.battle.routeRevision,supplies:__grandLine.battle.supplies,towers:__grandLine.battle.mazeTowers.length}));
+  assert.equal(passage.towers,12);assert.equal(passage.supplies,38);
+  assert.ok(await page.evaluate(()=>__grandLine.battle.routeCellIds.includes('cell-1-6')),'The wall funnels every enemy through its one-cell gap');
+  await selectCell(page,'cell-1-6');assert.equal(await page.locator('#cell-apply').isDisabled(),true);
+  assert.match(await page.locator('#cell-feedback').textContent(),/route.*exit/i);
+  assert.equal(await page.evaluate(()=>__grandLine.applyCellAction()),false);
+  assert.deepEqual(await page.evaluate(()=>({route:__grandLine.battle.route,revision:__grandLine.battle.routeRevision,supplies:__grandLine.battle.supplies,towers:__grandLine.battle.mazeTowers.length})),passage);
+  await screenshot(page,'maze-chokepoint-blocked');
+  await page.locator('#start-wave').click();
+  assert.equal(await page.locator('#build-toggle').isDisabled(),true);
+  const unchanged=await page.evaluate(()=>({route:__grandLine.battle.route,revision:__grandLine.battle.routeRevision,supplies:__grandLine.battle.supplies}));
+  assert.equal(await page.evaluate(()=>__grandLine.applyCellAction()),false);
+  assert.deepEqual(await page.evaluate(()=>({route:__grandLine.battle.route,revision:__grandLine.battle.routeRevision,supplies:__grandLine.battle.supplies})),unchanged);
+  await page.waitForFunction(()=>__grandLine.battle.spawned>0);await page.locator('#defense-pause').click();
+  const moving=await page.evaluate(()=>__grandLine.battle.enemies.map(e=>({x:e.x,y:e.y})));
+  assert.ok(moving.length>0&&moving.every(e=>Number.isFinite(e.x)&&Number.isFinite(e.y)));
+  await page.close();
+  check('A player-built chokepoint keeps its final passage open; sealing the maze or editing during a wave is rejected without a charge or route change');
+}
+
+async function checkTenCrew() {
+  const host=await browser.newPage({viewport:{width:1440,height:1000}});observe(host);const game=await harnessGame(host,'admin');
+  await game.locator('[data-view="packs"]').click();await game.locator('#admin-unlock-all').click();
+  await game.waitForFunction(()=>!__grandLine.adminPending&&Object.keys(__grandLine.collection.cards).length===50);
+  await game.locator('[data-view="crew"]').click();
+  const additions=await game.evaluate(()=>__grandLine.CHARACTERS.map(c=>c.id).filter(id=>!__grandLine.collection.team.includes(id)).slice(0,5));
+  const before=await game.evaluate(()=>[...__grandLine.collection.team]);
+  await host.evaluate(()=>{fake.blockSave=true;});
+  await game.evaluate(id=>__grandLine.changeTeam(5,id),additions[0]);
+  assert.deepEqual(await game.evaluate(()=>__grandLine.collection.team),before,'Rejected crew persistence rolls back the optimistic sixth member');
+  assert.deepEqual(await host.evaluate(()=>fake.state.grandLine.profiles['test-profile'].collection.team),before);
+  await host.evaluate(()=>{fake.blockSave=false;});
+  for(let i=0;i<additions.length;i++){
+    await game.locator('#crew-slots .empty-crew-slot button').first().click();
+    await game.locator(`#crew-picker [data-character="${additions[i]}"]`).click();
+    await host.waitForFunction(count=>fake.state.grandLine.profiles['test-profile'].collection.team.length===count,6+i);
+    await game.locator('#toast').filter({hasText:'is ready to defend.'}).waitFor({state:'visible'});
+  }
+  const ten=await game.evaluate(()=>[...__grandLine.collection.team]);assert.equal(ten.length,10);assert.equal(new Set(ten).size,10);
+  assert.equal(await game.locator('#crew-slots .empty-crew-slot').count(),0);
+  await game.evaluate(async()=>{await __grandLine.changeTeam(0,'not-owned');await __grandLine.changeTeam(0,__grandLine.collection.team[1]);await __grandLine.changeTeam(10,'kaido');});
+  assert.deepEqual(await game.evaluate(()=>__grandLine.collection.team),ten);
+  await Promise.all([game.waitForNavigation(),game.evaluate(()=>location.reload())]);
+  await game.waitForFunction(()=>__grandLine?.ready);assert.deepEqual(await game.evaluate(()=>__grandLine.collection.team),ten);
+  await game.locator('[data-view="campaign"]').click();await game.locator('#campaign-map button').first().click();
+  const deployed=await game.evaluate(()=>({ids:__grandLine.battle.allies.map(a=>a.characterId),pads:__grandLine.battle.allies.map(a=>a.padId),paid:__grandLine.battle.allies.map(a=>a.paidSupplies),supplies:__grandLine.battle.supplies}));
+  assert.deepEqual(deployed.ids,ten);assert.equal(new Set(deployed.pads).size,10);assert.deepEqual(deployed.paid,Array(10).fill(0));assert.equal(deployed.supplies,100);
+  await screenshot(host,'desktop-ten-crew-maze');await host.close();
+  check('Ten distinct owned crew members save through the parent and reload into ten free defenders; failed saves, duplicate slots, unowned cards and an eleventh slot are rejected');
 }
 
 async function checkAdministratorShop() {
@@ -343,25 +431,30 @@ async function checkGeneratedDefenseVfx() {
     const collection = JSON.parse(JSON.stringify(__grandLine.collection));
     collection.cards = Object.fromEntries(__grandLine.CHARACTERS.map(c => [c.id, { copies: 1 }])); collection.team = PREMIUM_VFX_CHARACTERS.slice(0,5);
     const b = defense.createDefense(collection, { seed: 42 }); b.supplies = 1000;
-    PREMIUM_VFX_CHARACTERS.slice(5).forEach((id,i) => defense.summonDefender(b,id,defense.DEFENSE_PADS[i+5].id));
+    PREMIUM_VFX_CHARACTERS.slice(5).forEach((id,i) => defense.summonDefender(b,id,defense.DEFENSE_DEFAULT_PADS[i+5].id));
+    const avatars=await Promise.all(b.allies.map(ally=>__grandLine.art.load(ally.characterId).promise));
+    if(avatars.some(item=>!item.loaded||item.failed))throw Error('Dense VFX screenshots require every deployed avatar to load');
+    for(const [column,gap]of[[7,2],[17,10]])for(let row=0;row<13;row++)if(row!==gap){
+      const cell=`cell-${column}-${row}`;if(defense.getMazePlacementPreview(b,cell,{kind:'tower'}).valid)defense.buildMazeTower(b,cell);
+    }
     defense.startDefenseWave(b); for(let i=0;i<12;i++)defense.advanceDefense(b,.05);
     const enemy = b.enemies[0];
-    b.enemies = Array.from({length:50},(_,i) => {
-      const unit = JSON.parse(JSON.stringify(enemy)); unit.id = 'vfx-mob-'+i; unit.progress = .03+i*.0175;
-      unit.hp = unit.maxHp = 1000; unit.alive = true; unit.escaped = false; unit.laneOffset = (i%5-2)*8;
-      Object.assign(unit,defense.defenseEnemyPointAt(unit.progress,unit.laneOffset)); return unit;
+    b.enemies = Array.from({length:200},(_,i) => {
+      const unit = JSON.parse(JSON.stringify(enemy)); unit.id = 'vfx-mob-'+i; unit.progress = .02+i*.0047;
+      unit.hp = unit.maxHp = 1000; unit.alive = true; unit.escaped = false; unit.laneOffset = (i%5-2)*4;
+      Object.assign(unit,defense.defenseEnemyPointAt(unit.progress,unit.laneOffset,b)); return unit;
     });
     b.projectiles = Array.from({length:80},(_,i) => {
       const actor=b.allies[i%b.allies.length], skill=actor.skills[i%3], geometry=defense.getDefenseSkillProfile(actor,skill);
-      const target=b.enemies[(i*7)%50], start={x:actor.x,y:actor.y}, end={x:target.x,y:target.y}, phase=.15+(i%5)*.14;
+      const target=b.enemies[(i*17)%200], start={x:actor.x,y:actor.y}, end={x:target.x,y:target.y}, phase=.15+(i%5)*.14;
       return { id:'vfx-projectile-'+i,sourceId:actor.id,characterId:actor.characterId,skillId:skill.id,kind:skill.kind,animation:skill.animation,color:skill.color,
         ...geometry,geometry,start,end,x:start.x+(end.x-start.x)*phase,y:start.y+(end.y-start.y)*phase,
         age:phase,duration:1,range:actor.range,targetId:target.id,hitIds:[],actor,skill,damageTotal:0,finished:false };
     });
-    b.effects = Array.from({length:80},(_,i) => {const target=b.enemies[i%50],actor=b.allies[i%8];return {
+    b.effects = Array.from({length:80},(_,i) => {const target=b.enemies[(i*17)%200],actor=b.allies[i%8];return {
       id:'vfx-damage-'+i,kind:'damage',sourceId:actor.id,source:{x:actor.x,y:actor.y},targetIds:[target.id],targets:[{x:target.x,y:target.y}],amount:50+i,age:0,life:1,
     };});
-    for(let i=0;i<30;i++){const p=b.projectiles[i],target=b.enemies[(i*7)%50];b.effects.push({id:'vfx-impact-'+i,kind:'impact',sourceId:p.sourceId,characterId:p.characterId,
+    for(let i=0;i<30;i++){const p=b.projectiles[i],target=b.enemies[(i*17)%200];b.effects.push({id:'vfx-impact-'+i,kind:'impact',sourceId:p.sourceId,characterId:p.characterId,
       skillId:p.skillId,attackKind:p.kind,shape:'splash',geometry:p.geometry,source:p.start,origin:p.start,center:p.end,end:p.end,
       targetIds:[target.id],targets:[{x:target.x,y:target.y}],age:0,life:.45});}
     const law=b.allies.find(a=>a.characterId==='law');
@@ -370,7 +463,7 @@ async function checkGeneratedDefenseVfx() {
     window.qaBattle=JSON.parse(JSON.stringify(b));
     const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};freeze(qaBattle);
     const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:999999;background:#082c39;display:grid;place-items:center';
-    const canvas=document.createElement('canvas');canvas.id='vfx-qa-canvas';canvas.style.cssText='width:100%;height:auto;aspect-ratio:5/3;max-height:100vh';overlay.append(canvas);document.body.append(overlay);
+    const canvas=document.createElement('canvas');canvas.id='vfx-qa-canvas';canvas.style.cssText='width:100%;height:auto;aspect-ratio:16/9;max-height:100vh';overlay.append(canvas);document.body.append(overlay);
     window.qaPhases=[];window.qaPreloads=[];
     window.qaRenderer=createDefenseRenderer(canvas,__grandLine.art,{vfx:{
       preload:ids=>{qaPreloads.push([...ids]);return qaVfx.preload(ids);},sprite:(...args)=>{qaPhases.push(args[3]);return qaVfx.sprite(...args);},
@@ -385,8 +478,8 @@ async function checkGeneratedDefenseVfx() {
       qaRenderer=createDefenseRenderer(canvas,__grandLine.art,{vfx:{preload:()=>Promise.resolve(),sprite:()=>({image,sx:0,sy:0,sw:16,sh:16,row:0,frame:0,atlasId:'generic',premium:false,tint})}});
       const p={...qaBattle.projectiles[0],id:'tint-shot',characterId:'nami',skillId:'nami-0',kind:'lightning',shape:'single',start:{x:450,y:300},end:{x:550,y:300},x:500,y:300};
       const battle={...qaBattle,id:'tint-probe',allies:[],enemies:[],effects:[],projectiles:[p]},before=JSON.stringify(battle);
-      const pixel=()=>{const box=canvas.getBoundingClientRect(),scale=Math.min(box.width/1000,box.height/600),ox=(box.width-scale*1000)/2,oy=(box.height-scale*600)/2;
-        return [...canvas.getContext('2d').getImageData(Math.round((ox+500*scale)*canvas.width/box.width),Math.round((oy+270*scale)*canvas.height/box.height),1,1).data];};
+      const pixel=()=>{const box=canvas.getBoundingClientRect(),scale=Math.min(box.width/1120,box.height/630),ox=(box.width-scale*1120)/2,oy=(box.height-scale*630)/2;
+        return [...canvas.getContext('2d').getImageData(Math.round((ox+500*scale)*canvas.width/box.width),Math.round((oy+286*scale)*canvas.height/box.height),1,1).data];};
       qaRenderer.draw(battle,3000,{});const red=pixel();tint='#0000ff';qaRenderer.draw(battle,3000,{});const blue=pixel();
       for(let i=0;i<40;i++){tint='#'+((i*7919+37)&0xffffff).toString(16).padStart(6,'0');qaRenderer.draw(battle,3000,{});}
       return {red,blue,stats:qaRenderer.getVfxStats(),unchanged:before===JSON.stringify(battle)};
@@ -406,7 +499,7 @@ async function checkGeneratedDefenseVfx() {
         return {unchanged:before===JSON.stringify(qaBattle),stats:qaRenderer.getVfxStats(),phases:[...new Set(qaPhases)],enemies:qaBattle.enemies.length,
           prefetched:qaPreloads.flat(),initialPreloads:qaInitialPreloads,newAllies:qaBattle.allies.slice(5).map(a=>a.characterId)};
       },reducedMotion);
-      assert.equal(report.enemies,50);assert.equal(report.unchanged,true);assertBudget(report.stats);
+      assert.equal(report.enemies,200);assert.equal(report.unchanged,true);assertBudget(report.stats);
       assert.ok(report.stats.sprites>0);assert.equal(report.stats.fallbacks,0);assert.equal(report.stats.rangeVisible,false);
       assert.equal(report.stats.reducedMotion,reducedMotion);
       for(const id of report.newAllies){assert.ok(!report.initialPreloads.includes(id));assert.ok(report.prefetched.includes(id),'Newly summoned '+id+' is prefetched within the same battle');}
@@ -417,7 +510,7 @@ async function checkGeneratedDefenseVfx() {
     const preview=await page.evaluate(()=>{qaRenderer.draw(qaBattle,1000,{selectedAllyId:qaBattle.allies[0].id,previewSkillId:qaBattle.allies[0].skills[0].id});return qaRenderer.getVfxStats();});
     assert.equal(preview.rangeVisible,true,'Attack areas appear when explicitly requested');
   }
-  check('Dense 50-enemy scenes obey desktop/mobile sprite and label budgets, support reduced motion and never mutate combat state');
+  check('Dense 200-enemy maze scenes with loaded crew art obey desktop/mobile sprite and label budgets, support reduced motion and never mutate combat state');
   for(const status of ['learning','setup','victory','defeat']) {
     const stopped=await page.evaluate(status=>{
       const battle={...qaBattle,status},before=JSON.stringify(battle);
@@ -457,11 +550,12 @@ try {
   await page.locator('#star-filter').selectOption('all'); await page.locator('#ownership-filter').selectOption('owned'); assert.equal(await page.locator('#card-grid .tcg-card').count(), 5);
   await page.locator('#ownership-filter').selectOption('all'); await page.locator('#search-input').fill('Kaido'); assert.equal(await page.locator('#card-grid .tcg-card').count(), 1);
   await page.locator('#search-input').fill(''); await noOverflow(page); await screenshot(page, 'desktop-collection');
-  await page.locator('[data-view="crew"]').click(); assert.equal(await page.locator('#crew-slots .crew-slot').count(), 5);
+  await page.locator('[data-view="crew"]').click(); assert.equal(await page.locator('#crew-slots .crew-slot').count(), 10);
+  assert.equal(await page.locator('#crew-slots .empty-crew-slot').count(),5);
   await page.locator('#crew-slots .text-button').first().click(); await page.locator('#crew-picker [data-character="zoro"]').click();
   assert.match(await page.locator('#toast').textContent(), /already in your crew/); assert.equal(await page.evaluate(() => new Set(__grandLine.collection.team).size), 5);
   assert.equal(await page.locator('#crew-picker [data-character="kaido"]').count(), 0);
-  check('Crew has exactly five unique owned characters; duplicate and non-owned choices are blocked');
+  check('Existing five-character crews remain valid with five open slots; duplicate and non-owned choices are blocked');
   await page.locator('[data-view="packs"]').click(); assert.equal(await page.locator('#open-pack').isDisabled(), true);
   check('Standalone preview starts with no packs and cannot spend reward points');
 
@@ -515,30 +609,34 @@ try {
   await game.locator('#campaign-map button').first().click();
   await game.waitForFunction(()=>__grandLine.battle?.status==='setup');
   assert.equal(await game.locator('#defender-buttons [data-ally]').count(),5);
-  assert.equal(await game.locator('#placement-buttons [data-pad]').count(),10);
+  assert.equal(await game.evaluate(()=>__grandLine.DEFENSE_PADS.length),338);
+  assert.equal(await game.locator('#grid-column option').count(),26);
+  assert.equal(await game.locator('#grid-row option').count(),13);
   const crew=await game.evaluate(()=>__grandLine.battle.allies.map(a=>({id:a.id,characterId:a.characterId,padId:a.padId})));
   assert.equal(new Set(crew.map(a=>a.padId)).size,5);
   assert.deepEqual(crew.map(a=>a.characterId),await game.evaluate(()=>__grandLine.collection.team));
-  const pads=await game.locator('#placement-buttons [data-pad]').evaluateAll(nodes=>nodes.map(n=>n.dataset.pad));
+  const pads=await game.evaluate(()=>__grandLine.DEFENSE_DEFAULT_PADS.map(p=>p.id));
   const emptyPad=pads.find(id=>!crew.some(a=>a.padId===id));assert.ok(emptyPad);
   const firstDefender=crew[0];
   await game.locator('#defender-buttons [data-ally="'+firstDefender.id+'"]').click();
-  await game.locator('#placement-buttons [data-pad="'+emptyPad+'"]').click();
+  await selectCell(game,emptyPad);
+  assert.equal(await game.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).padId,firstDefender.id),firstDefender.padId,'Choosing a grid cell only previews movement');
+  await game.locator('#cell-apply').click();
   assert.equal(await game.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).padId,firstDefender.id),emptyPad);
   await game.evaluate(()=>__grandLine.placeDefender('not-an-owned-defender','not-a-pad'));
   assert.equal(await game.evaluate(()=>new Set(__grandLine.battle.allies.map(a=>a.padId)).size),5);
   assert.equal(await game.locator('#idle-mode,#manual-commands,#skill-buttons,#turn-order').count(),0);
-  await screenshot(host,'desktop-defense-setup');
-  check('Crew Defense replaces former combat modes with five owned defenders, ten pads and valid placement');
+  await game.locator('#start-wave').scrollIntoViewIfNeeded();await screenshot(host,'desktop-defense-setup');
+  check('Existing owned crews deploy on the 338-cell maze; coordinate selection previews placement and only confirmation moves a defender');
 
   assert.equal(await game.evaluate(()=>__grandLine.battle.waveCount),6);
   assert.equal(await game.evaluate(()=>__grandLine.battle.supplies),100);
   assert.equal(await game.evaluate(()=>__grandLine.battle.trainingPoints),0);
   assert.equal(await game.locator('#upgrade-defender').isDisabled(),true);
-  assert.match(await game.locator('#wave-preview').textContent(),/32/);
+  assert.match(await game.locator('#wave-preview').textContent(),/80/);
   const nonteam=await game.evaluate(()=>Object.keys(__grandLine.collection.cards).find(id=>!__grandLine.collection.team.includes(id)));
   assert.ok(nonteam,'Purchases and the saved crew leave another owned character available to summon');
-  const summonPad=await game.evaluate(()=>__grandLine.DEFENSE_PADS.find(p=>!__grandLine.battle.allies.some(a=>a.padId===p.id)).id);
+  const summonPad=await game.evaluate(()=>__grandLine.DEFENSE_DEFAULT_PADS.find(p=>!__grandLine.battle.allies.some(a=>a.padId===p.id)).id);
   await game.locator('#summon-toggle').click();await game.locator('#summon-panel').waitFor({state:'visible'});
   await game.locator('#summon-pattern').selectOption('line');
   assert.equal(await game.locator('#summon-roster [data-summon="zoro"]').count(),1);
@@ -546,7 +644,7 @@ try {
   await game.locator('#summon-pattern').selectOption('all');
   assert.equal(await game.locator('#summon-roster [data-summon="kaido"]').count(),0);
   await game.locator('#summon-roster [data-summon="'+nonteam+'"]').click();
-  await game.locator('#placement-buttons [data-pad="'+summonPad+'"]').click();
+  await selectCell(game,summonPad);
   assert.equal(await game.evaluate(()=>__grandLine.battle.supplies),100,'Selecting an owned summon and pad never spends supplies');
   await game.locator('#summon-confirm').click();
   const summoned=await game.evaluate(id=>__grandLine.battle.allies.find(a=>a.characterId===id),nonteam);
@@ -586,7 +684,7 @@ try {
   await game.locator('#settings-button').click();const menu=await defenseState(game);await frames(host,25);assert.deepEqual(await defenseState(game),menu);
   await game.locator('#dialog-panel .dialog-close').click();
   await game.waitForFunction(()=>__grandLine.battle.stats.damageDealt>0);
-  await screenshot(host,'desktop-defense-running');
+  await game.locator('#map-viewport').scrollIntoViewIfNeeded();await screenshot(host,'desktop-defense-running');
   check('Enemies move naturally; defenders attack; pause, speed, hidden tabs and dialogs gate the simulation');
 
   await clearWave(game);
@@ -615,6 +713,7 @@ try {
   await game.locator('#start-wave').waitFor({state:'visible'});assert.equal(await game.locator('#start-wave').isEnabled(),true);
   assert.equal(await game.evaluate(()=>__grandLine.battle.status),'setup');
   assert.equal(await game.evaluate(()=>__grandLine.battle.round),round+1);
+  assert.equal(await game.evaluate(()=>__grandLine.battle.spawnTotal),105);
   const boost=await game.evaluate(()=>__grandLine.battle.learningBoost);
   assert.equal(boost.correct,3);assert.equal(boost.round,round+1);assert.equal(boost.attackMultiplier,1.3);
   assert.ok(Math.abs(boost.critBonus-.15)<1e-10);assert.equal(boost.defenseMultiplier,1.24);
@@ -649,6 +748,7 @@ try {
   assert.equal(await host.evaluate(()=>fake.records.length),6);
   assert.equal(await game.evaluate(()=>__grandLine.battle.trainingPoints),2,'Three wrong answers still earn the one base training point');
   for(let wave=3;wave<=6;wave++) {
+    assert.equal(await game.evaluate(()=>__grandLine.battle.spawnTotal),[80,105,130,160,190,230][wave-1]);
     await game.locator('#start-wave').click();await clearWave(game);
     assert.equal(await game.evaluate(()=>__grandLine.battle.round),wave);
     assert.equal(await game.evaluate(()=>__grandLine.collection.unlockedEncounter),1);
@@ -736,25 +836,46 @@ try {
   for (const [name, viewport] of [['phone', { width: 390, height: 844 }], ['small-phone', { width: 320, height: 740 }], ['landscape', { width: 844, height: 390 }]]) {
     const mobile = await browser.newPage({ viewport, isMobile: true, hasTouch: true }); observe(mobile); await standalone(mobile, 'science'); await noOverflow(mobile); await screenshot(mobile, name + '-collection');
     await mobile.locator('#apex-showcase [data-character="kaido"]').click(); await noOverflow(mobile); await screenshot(mobile, name + '-detail'); await mobile.locator('#dialog-panel .dialog-close').click();
+    await mobile.locator('[data-view="crew"]').click();assert.equal(await mobile.locator('#crew-slots .crew-slot').count(),10);await noOverflow(mobile);await screenshot(mobile,name+'-crew');
     await mobile.locator('[data-view="campaign"]').click();await mobile.locator('#campaign-map button').first().click();
     await mobile.waitForFunction(()=>__grandLine.battle?.status==='setup');await noOverflow(mobile);
-    await mobile.locator('#defender-buttons [data-ally]').first().tap();await mobile.locator('#placement-buttons [data-pad]').last().tap();
-    const lastPad=await mobile.evaluate(()=>__grandLine.DEFENSE_PADS.at(-1));
+    await mobile.locator('#defender-buttons [data-ally]').first().tap();
+    const originalPad=await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),lastPad=await mobile.evaluate(()=>__grandLine.DEFENSE_DEFAULT_PADS.at(-1));
+    await selectCell(mobile,lastPad.id);
+    assert.equal(await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),originalPad);
+    await mobile.locator('#cell-apply').tap();
     assert.equal(await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),lastPad.id);
-    await mobile.locator('#placement-buttons [data-pad]').first().tap();
-    await mobile.locator('#battle-canvas').scrollIntoViewIfNeeded();await frames(mobile);
+    await selectCell(mobile,originalPad);await mobile.locator('#cell-apply').tap();
+    await mobile.locator('#map-viewport').scrollIntoViewIfNeeded();await frames(mobile);
     const canvasBox=await mobile.locator('#battle-canvas').boundingBox();
     assert.ok(canvasBox.width<=viewport.width,'The defense canvas fits the configured viewport');
-    const scale=Math.min(canvasBox.width/1000,canvasBox.height/600);
-    await mobile.touchscreen.tap(canvasBox.x+(canvasBox.width-1000*scale)/2+lastPad.x*scale,
-      canvasBox.y+(canvasBox.height-600*scale)/2+lastPad.y*scale);
-    assert.equal(await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),lastPad.id,'The last pad responds at its actual canvas coordinates');
+    const scale=Math.min(canvasBox.width/1120,canvasBox.height/630);
+    await mobile.touchscreen.tap(canvasBox.x+(canvasBox.width-1120*scale)/2+lastPad.x*scale,
+      canvasBox.y+(canvasBox.height-630*scale)/2+lastPad.y*scale);
+    assert.equal(await mobile.locator('#selected-cell').textContent(),lastPad.name,'The touched cell responds at its actual fitted canvas coordinates');
+    assert.equal(await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),originalPad,'A map tap selects without accidentally moving or spending');
+    await mobile.locator('#cell-apply').tap();
+    assert.equal(await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),lastPad.id);
+    await mobile.locator('#map-zoom').tap();assert.equal(await mobile.locator('#map-zoom').getAttribute('aria-pressed'),'true');
+    await mobile.locator('#map-viewport').scrollIntoViewIfNeeded();await frames(mobile,3);
+    const pan=await mobile.locator('#map-viewport').evaluate((element,pad)=>{
+      const canvas=element.querySelector('canvas');element.scrollLeft=element.scrollWidth-element.clientWidth;
+      element.scrollTop=Math.max(0,pad.y/630*canvas.clientHeight-element.clientHeight/2);
+      return {left:element.scrollLeft,overflow:element.scrollWidth>element.clientWidth,touch:getComputedStyle(canvas).touchAction};
+    },lastPad);
+    assert.ok(pan.overflow&&pan.left>0,'Zoomed grid can pan horizontally without widening the page');
+    assert.ok(['auto','manipulation'].includes(pan.touch)||(pan.touch.includes('pan-x')&&pan.touch.includes('pan-y')),'Canvas permits browser panning on both axes');
+    await noOverflow(mobile);
+    const zoomBox=await mobile.locator('#battle-canvas').boundingBox(),zoomScale=Math.min(zoomBox.width/1120,zoomBox.height/630);
+    await mobile.touchscreen.tap(zoomBox.x+lastPad.x*zoomScale,zoomBox.y+lastPad.y*zoomScale);
+    assert.equal(await mobile.locator('#selected-cell').textContent(),lastPad.name,'Panned canvas touch picking preserves grid coordinates');
+    await screenshot(mobile,name+'-maze-zoom');await mobile.locator('#map-zoom').tap();
     const recalled=await mobile.evaluate(()=>({id:__grandLine.battle.allies[0].id,characterId:__grandLine.battle.allies[0].characterId}));
     await mobile.locator('#recall-defender').tap();assert.equal(await mobile.evaluate(()=>__grandLine.battle.supplies),100);
     await mobile.locator('#summon-toggle').tap();await mobile.locator('#summon-panel').waitFor({state:'visible'});
     await mobile.locator('#summon-search').fill(recalled.characterId);
     await mobile.locator('#summon-roster [data-summon="'+recalled.characterId+'"]').tap();
-    await mobile.locator('#placement-buttons [data-pad="'+lastPad.id+'"]').tap();
+    await selectCell(mobile,lastPad.id);
     await noOverflow(mobile);await screenshot(mobile,name+'-summon-preview');
     await mobile.locator('#summon-confirm').tap();
     assert.equal(await mobile.evaluate(id=>__grandLine.battle.allies.find(a=>a.characterId===id)?.padId,recalled.characterId),lastPad.id);
@@ -762,12 +883,19 @@ try {
     assert.equal(await mobile.evaluate(id=>__grandLine.battle.allies.find(a=>a.characterId===id).priority,recalled.characterId),'cluster');
     await noOverflow(mobile);
     await screenshot(mobile,name+'-defense-setup');
+    await mobile.locator('#map-zoom').tap();
     await mobile.locator('#start-wave').tap();await mobile.waitForFunction(()=>__grandLine.battle.status==='running');
     await mobile.locator('#defense-pause').tap();await noOverflow(mobile);await screenshot(mobile,name+'-defense-running');
-    for(const id of ['defense-pause','defense-speed'])assert.ok((await mobile.locator('#'+id).boundingBox()).height>=40,'Defense touch controls remain usable');
+    for(const id of ['defense-pause','defense-speed','build-toggle','sell-toggle','move-toggle','summon-toggle','map-zoom','grid-column','grid-row','cell-apply'])assert.ok((await mobile.locator('#'+id).boundingBox()).height>=44,'Defense touch controls remain usable: '+id);
+    await clearWave(mobile);await mobile.locator('#map-viewport').scrollIntoViewIfNeeded();await frames(mobile,3);
+    const gate=await mobile.locator('#study-button').boundingBox(),visibleMap=await mobile.locator('#map-viewport').boundingBox();
+    assert.ok(gate.x>=visibleMap.x-1&&gate.x+gate.width<=visibleMap.x+visibleMap.width+1&&gate.y>=visibleMap.y-1&&gate.y+gate.height<=visibleMap.y+visibleMap.height+1,'The three-question button stays fully reachable after a zoomed wave');
+    await mobile.locator('#study-button').tap();assert.equal(await mobile.locator('.question-count').count(),1);
     await mobile.close();
   }
-  check('Collection, full card details, owned summon selection, targeting, defender placement and running defense fit portrait and landscape phones');
+  check('Collection, ten-slot crew controls, precise maze selection, confirmed placement, zoom/panning and running defense fit portrait and landscape phones');
+  await checkMazeBuilder();
+  await checkTenCrew();
   await checkAdministratorShop();
   if(process.env.GRAND_LINE_REQUIRE_ART==='1')await checkGeneratedDefenseVfx();
   const production = await browser.newPage(); observe(production); await production.goto(base + '/grand-line.html'); await production.locator('#card-grid .tcg-card').first().waitFor();

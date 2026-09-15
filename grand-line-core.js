@@ -1,4 +1,4 @@
-import { CHARACTERS, CHARACTER_BY_ID, STARTER_IDS, PACK_ODDS, ENCOUNTERS, LORE_SOURCES, RETIRED_CHARACTER_REPLACEMENTS } from './grand-line-data.js?v=2.1.0';
+import { CHARACTERS, CHARACTER_BY_ID, STARTER_IDS, PACK_ODDS, ENCOUNTERS, LORE_SOURCES, RETIRED_CHARACTER_REPLACEMENTS } from './grand-line-data.js?v=3.0.0';
 export { CHARACTERS, CHARACTER_BY_ID, STARTER_IDS, PACK_ODDS, ENCOUNTERS, LORE_SOURCES, RETIRED_CHARACTER_REPLACEMENTS };
 
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -9,7 +9,7 @@ const side = (b, unit) => unit.side === 'ally' ? b.allies : b.enemies;
 const opponents = (b, unit) => unit.side === 'ally' ? b.enemies : b.allies;
 const negative = new Set(['stun', 'freeze', 'burn', 'poison', 'weaken', 'slow']);
 const roll = rng => clamp(Number(rng()) || 0, 0, 0.999999999999);
-const validTeam = c => Array.isArray(c?.team) && c.team.length === 5 && new Set(c.team).size === 5 && c.team.every(id => typeof id === 'string' && CHARACTER_BY_ID[id] && c.cards?.[id]?.copies >= 1);
+const validTeam = c => Array.isArray(c?.team) && c.team.length >= 1 && c.team.length <= 10 && new Set(c.team).size === c.team.length && c.team.every(id => typeof id === 'string' && CHARACTER_BY_ID[id] && c.cards?.[id]?.copies >= 1);
 const rankFor = copies => Math.min(10, Math.floor(Math.log2(Math.max(1, integer(copies, 1, 1000000000)))));
 const maxCopies = Number.MAX_SAFE_INTEGER;
 
@@ -39,8 +39,11 @@ export function normalizeCollection(raw) {
   c.unlockedEncounter = clamp(integer(raw.unlockedEncounter, 1), 1, 9);
   c.completed = Array.isArray(raw.completed) ? [...new Set(raw.completed.filter(n => Number.isInteger(n) && n >= 1 && n <= 9))].sort((a, b) => a - b) : [];
   const team = Array.isArray(raw.team) ? raw.team.map(currentCharacterId).filter(id => id && c.cards[id]) : [];
-  c.team = [...new Set(team)].slice(0, 5);
-  for (const id of STARTER_IDS) if (c.team.length < 5 && !c.team.includes(id)) c.team.push(id);
+  c.team = [...new Set(team)].slice(0, 10);
+  // A valid small crew is intentional. Malformed legacy teams still receive
+  // the five owned starters so a broken save cannot prevent play.
+  const intact = Array.isArray(raw.team) && raw.team.length > 0 && raw.team.length <= 10 && team.length === raw.team.length && new Set(team).size === team.length;
+  if (!intact) for (const id of STARTER_IDS) if (c.team.length < 5 && !c.team.includes(id)) c.team.push(id);
   for (const key of Object.keys(c.stats)) c.stats[key] = integer(raw.stats?.[key]);
   return c;
 }
@@ -75,7 +78,7 @@ export function openPack(collection, rng = Math.random) {
 }
 
 export function setTeam(collection, ids) {
-  if (!Array.isArray(ids) || ids.length !== 5 || new Set(ids).size !== 5 || !ids.every(id => typeof id === 'string' && CHARACTER_BY_ID[id] && collection?.cards?.[id]?.copies >= 1)) return false;
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 10 || new Set(ids).size !== ids.length || !ids.every(id => typeof id === 'string' && CHARACTER_BY_ID[id] && collection?.cards?.[id]?.copies >= 1)) return false;
   collection.team = [...ids];
   return true;
 }
@@ -136,7 +139,7 @@ export function createBattle(collection, options = {}) {
       if (['all-shield', 'apex-whitebeard'].includes(unit.passive.type)) for (const ally of team) ally.shield += Math.round(ally.maxHp * unit.passive.value);
     }
   }
-  log(b, `${encounter.name}: your five-card crew is ready.`);
+  log(b, `${encounter.name}: your crew is ready.`);
   startRound(b);
   return b;
 }

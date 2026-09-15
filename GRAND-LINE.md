@@ -5,7 +5,7 @@ A One Piece collectible card and ship-defense game alongside Pirate Rift. Open *
 ## Cards and crews
 
 - Fifty illustrated characters, each with a matching battle avatar, three active abilities, and a passive.
-- Five starter cards: Luffy, Zoro, Nami, Usopp, and Chopper. Choose five different owned characters for the free starting formation. Any other owned card can be summoned during defense preparation.
+- Five starter cards: Luffy, Zoro, Nami, Usopp, and Chopper. Choose up to ten different owned characters for the free starting formation. Any other owned card can be summoned during defense preparation.
 - Every purchased pack contains exactly **one** character card. New cards unlock their avatars immediately; duplicates automatically merge into the existing character.
 - Star ratings are fixed rarities from one to seven. Merge rank rises at 2, 4, 8, 16… total copies, capped at rank 10. Each rank adds 12% to base life, attack, and defense.
 - Expansion 01's seven-star cards are **Kaido the Beast, Whitebeard, and Admiral Akainu**, with animated gold galaxy frames and foil. Reduced motion disables the decorative animation.
@@ -26,7 +26,7 @@ Purchases debit points and save the card and receipt together through the existi
 
 ## Administrator tools
 
-Sign in with an **administrator account**, open Crew Defense, choose a school level, and visit **Card shop**. The administrator panel provides **Unlimited gold** and **Unlock all 50 cards**.
+Sign in with an **administrator account**, open Crew Defense and visit **Card shop**. The portal automatically supplies the saved school level; administrators without one use its P6 preview. The administrator panel provides **Unlimited gold** and **Unlock all 50 cards**.
 
 Unlimited gold lets that administrator open any of the three pack tiers without spending reward points. Turning it off restores the normal listed prices. The setting is saved for the administrator's account on that portal; its actual point balance is unchanged. Unlock all adds any missing current cards to the administrator's selected collection without removing duplicate copies or changing the chosen crew. It excludes the eight reserved future-expansion characters. Repeating either action does not stack grants.
 
@@ -34,17 +34,25 @@ These controls are unavailable to students and standalone previews. The portal c
 
 ## Crew Defense and learning
 
-Crew Defense is a real-time tower-defense game. Each of nine harbors contains **six waves** of enemies that follow a route toward the ship. A wave contains dense groups of raiders, with swarms, fast runners, armored enemies, ranged pressure, and captains demanding different counters. The scout report shows the next wave and a tactical suggestion before it begins.
+Crew Defense is a real-time tower-defense game. Each of nine harbors contains **six waves** of enemies that follow a route toward the ship. Every map is a 16:9 landscape grid of 26 × 13 square cells. Enemies enter at the left and travel to the right exit through the shortest open orthogonal route. The six waves contain **80, 105, 130, 160, 190, and 230 enemies**, with smaller swarms, fast runners, armored enemies, ranged pressure, and captains demanding different counters. The scout report shows the next wave and a tactical suggestion before it begins.
 
-### Summoning and placement
+### Build a maze
 
-Your chosen five crew members deploy free at the start. All other **owned cards** are available in **Summon from collection**; the starting crew is not a restriction on reinforcements. Choose a character, select an empty numbered position, and confirm the summon. Each character can appear once, across ten positions. Locked and future-expansion cards cannot be summoned.
+Use **Build towers**, select a cell, then **Build here**. Each basic disruptor tower costs **5 battle supplies**; selling it returns **3**. Up to 80 can be placed. These small structures block a cell, deal modest damage, and briefly slow enemies. Their main purpose is to form corridors and chokepoints around your crew's line, radial and splash attacks. Nine distinct fixed-terrain layouts provide different starting puzzles.
 
-Each defense starts with 100 battle supplies. A summon costs 20 + 5 × the card's stars; defeating enemies and finishing waves adds supplies. These supplies belong only to the current defense and never debit, award, or replace Math or Science reward points. Recalls refund half the supplies actually paid, rounded down. The five free starting defenders refund zero. A recalled character keeps its training and specialization for this defense, but returning costs the normal summon price. Repositioning and swapping deployed defenders are free during preparation.
+Towers and crew both block movement. The map previews the proposed route before a placement; building, moving or summoning is rejected without spending supplies if it would seal the exit. Entrance, exit, fixed terrain and occupied cells cannot receive towers. Routes use orthogonal steps, so enemies cannot cut diagonally through blocked corners. Build, sell, summon and move between waves; attacks run automatically during waves.
+
+Choose **one to ten different owned characters** in My crew. They deploy free at the start; existing five-member crews carry over. Empty crew slots can be filled as more cards unlock. During preparation, any other **owned card** can be summoned if fewer than ten characters are deployed. Select an empty grid cell and confirm the summon. Locked and future-expansion cards cannot be summoned. Swapping two deployed crew members is free and preserves the same blockers.
+
+Each defense starts with 100 battle supplies. A crew summon costs 20 + 5 × the card's stars; defeating enemies and finishing waves adds supplies. These supplies belong only to the current defense and never debit, award, or replace Math or Science reward points. Recalls refund half the supplies actually paid, rounded down. Free starting defenders refund zero. A recalled character keeps its training and specialization for this defense, but returning costs the normal summon price.
+
+### Automatic school level
+
+Opening Crew Defense launches it with the student's saved portal level. There is no school-level selector or second Start game step. Math uses its saved learning-profile level; Science uses its existing student-level and teacher-cap resolution. A missing or invalid level blocks the game until the profile is corrected. Student level, learner or account changes invalidate the old question session and wallet authority. Administrators use their saved level or the host's P6 preview; student accounts never receive that fallback.
 
 ### Attack shapes and target priority
 
-Every character has a defense profile, and each of their three skills has a real attack shape. Coverage appears during preparation; skill buttons toggle a specific attack-area preview, which clears when a wave starts. Attacks resolve with travel or wind-up time; their damage uses the actual line, cone, impact area, chain, or surrounding radius.
+Every character has a defense profile, and each of their three skills has a real attack shape. Crew coverage appears in Move crew mode during preparation; skill buttons toggle a specific attack-area preview, which clears when a wave starts. Attacks resolve with travel or wind-up time; their damage uses the actual line, cone, impact area, chain, or surrounding radius.
 
 | Pattern | Tactical use |
 |---|---|
@@ -92,7 +100,7 @@ Completing all six waves and the final questions records the victory and opens t
 
 ### Controls
 
-Select defenders or numbered positions with the map, buttons, touch, or keyboard. Keys 1–9 and 0 select up to ten defenders; Space starts or pauses the wave. Pause and 1×, 2×, or 4× speed are available. Hidden tabs, dialogs, question rounds, and pending saves pause simulation. Returning never simulates offline waves or awards offline points. Admin pack controls remain available in Card shop.
+The high-contrast Build, Move, Summon and Sell toolbar and Start wave control sit directly beside the map. Tap a cell, then confirm its action. Column/row selectors and arrow buttons give precise placement; focus the map and use arrow keys plus Enter with a keyboard. Zoom map lets phones pan across larger cells. Keys 1–9 and 0 select up to ten defenders; Space starts or pauses the wave. Pause and 1×, 2×, or 4× speed are available. Hidden tabs, dialogs, question rounds, and pending saves pause simulation. Returning never simulates offline waves or awards offline points. Admin pack controls remain available in Card shop.
 
 ## Current roster and future expansions
 
@@ -121,7 +129,7 @@ Run the core, economy, bank and learning tests with Node 24:
 
 ```sh
 node --test tools/grand-line-core.test.mjs tools/grand-line-economy-tests.mjs tools/grand-line-admin-tests.mjs tools/grand-line-learning-tests.mjs tools/grand-line-bank-tests.mjs
-node --test tools/grand-line-defense-tests.mjs tools/grand-line-roster-tests.mjs tools/grand-line-migration-tests.mjs
+node --test tools/grand-line-defense-tests.mjs tools/grand-line-maze-tests.mjs tools/grand-line-vfx-tests.mjs tools/grand-line-roster-tests.mjs tools/grand-line-migration-tests.mjs
 ```
 
 The Science repository uses its science-feeding integration suite instead of a separate Math bank test. Both repositories run the browser suites below. Set `PLAYWRIGHT_MODULE` to an installed Playwright module path; optionally set `PLAYWRIGHT_BROWSER_CHANNEL` and `GRAND_LINE_SCREENSHOTS`.

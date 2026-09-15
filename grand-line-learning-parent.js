@@ -53,7 +53,7 @@ export function createGrandLineLearningController(config) {
       if (!current(greeting)) return false;
       send(event.source, { type: 'GLTCG_READY', requestId: d.requestId, sessionId: greeting.id,
         subject: config.subject, profileKey: String(config.getProfileKey?.() || ''), questionCount: GRAND_LINE_QUESTION_COUNT,
-        available: !!greeting.identity, reason: greeting.identity ? '' : 'Choose your school level before starting.', ...snapshot });
+        available: !!greeting.identity, reason: greeting.identity ? '' : 'Your saved school level is unavailable. Reopen the game after your portal profile has loaded.', ...snapshot });
       return true;
     }
     const s = session;
@@ -104,7 +104,7 @@ export function createGrandLineLearningController(config) {
       const questions = validGrandLineQuestions(await config.getQuestions(), typeof config.gradeQuestion === 'function');
       if (!current(s) || revision !== generation) return false;
       if (questions.length !== GRAND_LINE_QUESTION_COUNT) {
-        blocked('Three fresh, suitable questions are needed. Try again later or choose another preview level.');
+        blocked('Three fresh, suitable questions are needed at your saved school level. Try again after your portal has loaded or your review break.');
         return true;
       }
       // Reserve the set together so another mode cannot serve an unseen tail

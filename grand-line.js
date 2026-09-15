@@ -1,8 +1,8 @@
-import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam} from './grand-line-core.js?v=2.1.0';
-import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS} from './grand-line-data.js?v=2.1.0';
-import {createArtManager} from './grand-line-render.js?v=2.1.0';
-import {DEFENSE_PADS,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning,getDefenseProfile,getDefenseSkillProfile,getDefenseWavePreview,summonDefender,recallDefender,upgradeDefender,specializeDefender,setDefensePriority} from './grand-line-defense.js?v=2.1.0';
-import {createDefenseRenderer} from './grand-line-defense-render.js?v=2.1.0';
+import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam} from './grand-line-core.js?v=3.0.0';
+import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS} from './grand-line-data.js?v=3.0.0';
+import {createArtManager} from './grand-line-render.js?v=3.0.0';
+import {DEFENSE_GRID,DEFENSE_PADS,DEFENSE_DEFAULT_PADS,buildMazeTower,sellMazeTower,getMazePlacementPreview,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning,getDefenseProfile,getDefenseSkillProfile,getDefenseWavePreview,summonDefender,recallDefender,upgradeDefender,specializeDefender,setDefensePriority} from './grand-line-defense.js?v=3.0.0';
+import {createDefenseRenderer} from './grand-line-defense-render.js?v=3.0.0';
 const DEFENSE_SPEEDS=[1,2,4];
 const $=id=>document.getElementById(id);
 const embedded=parent!==window,params=new URLSearchParams(location.search),origin=location.origin;
@@ -11,7 +11,7 @@ const RARITIES=['','Common','Uncommon','Rare','Epic','Legendary','Mythic','Galax
 const GLYPHS={punch:'✦',slash:'╱',lightning:'ϟ',fire:'♨',ice:'❄',water:'≈',heal:'✚',shield:'⬡',earth:'◈',poison:'●',dark:'◉',soul:'♬',wind:'≋',light:'☀',plant:'❧',dragon:'✧',gravity:'◎',magnet:'∩',explosion:'✷',smoke:'☁',string:'⌘',sand:'⁙',revive:'✥'};
 const uuid=prefix=>prefix+'-'+(crypto.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
 const format=n=>Number.isFinite(n)?Math.floor(n).toLocaleString():'—';
-const displayName=c=>c.id==='luffy'?'Luffy':c.id==='whitebeard'?'Whitebeard':c.id==='akainu'?'Akainu':c.id==='kaido'?'Kaido':c.name;
+const displayName=c=>({luffy:'Luffy',zoro:'Zoro',chopper:'Chopper',whitebeard:'Whitebeard',akainu:'Akainu',kaido:'Kaido',law:'Law',aokiji:'Kuzan',fujitora:'Fujitora',ryokugyu:'Ryokugyu'})[c.id]||c.name;
 const skillDescription=s=>s.description.replaceAll('restore 20 Spirit','restore 12 Spirit').replace(/for (\d+) turns?/g,(_,n)=>`for ${Number(n)*2} seconds`).replaceAll('every enemy','every enemy in range').replaceAll('the whole crew','all crew members in range');
 function passiveDescription(p){
   if(p.type==='energy')return `Recover ${(p.value*.6).toFixed(1)} extra Spirit per second.`;
@@ -24,6 +24,7 @@ let collection=createCollection(),wallet={available:false,balance:0,currency:'po
 let subject=params.get('subject')?.toLowerCase()==='science'?'Science':'Math',scope='preview',sessionId='',helloId='',ready=!embedded;
 let settings={muted:false,reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches,battleSpeed:2};
 let defensePaused=false,selectedAllyId='',selectedPadId='',selectedSummonId='',selectedPreviewSkillId='',summonMode=false,hoverPadId='',lastFrame=0,lastHud=0;
+let buildMode='crew',placementPreview=null,placementPreviewKey='',mapZoom=1;
 let view='collection',dialog='',battle=null,selectedSlot=null,busyUntil=0;
 let lastOutcome='',bannerUntil=0,bridgeRound=0,learningPending=null,savePending=null,purchasePending=null;
 let selectedPack='spark',toastTimer=0,helloTimer=0,audioContext=null,questionSession=null,initialFocus=null,unsavedLearning=false;
@@ -104,17 +105,28 @@ function inspectCard(id){
   layout.append(copy);panel.append(layout);
 }
 function renderCrew(){
-  $('crew-slots').replaceChildren(...collection.team.map((id,index)=>{const slot=el('div','crew-slot'+(selectedSlot===index?' selected':''));slot.append(card(CHARACTER_BY_ID[id]),button(`SLOT ${index+1} · CHANGE`,()=>{selectedSlot=index;renderCrew();$('crew-picker-heading').scrollIntoView({behavior:settings.reducedMotion?'instant':'smooth',block:'center'});},'text-button'));return slot;}));
-  $('crew-picker-heading').textContent=selectedSlot===null?'Your unlocked characters':`Choose a character for slot ${selectedSlot+1}`;
-  const owned=CHARACTERS.filter(c=>collection.cards[c.id]);$('crew-count').textContent=`${owned.length} unlocked · 5 crew slots`;
+  $('crew-slots').replaceChildren(...Array.from({length:10},(_,index)=>{
+    const id=collection.team[index],slot=el('div','crew-slot'+(!id?' empty-crew-slot':'')+(selectedSlot===index?' selected':''));
+    if(id){slot.append(card(CHARACTER_BY_ID[id]),button('SLOT '+(index+1)+' · CHANGE',()=>pickCrewSlot(index),'text-button'));const remove=button('Remove from crew',()=>removeCrewMember(index),'text-button');remove.disabled=collection.team.length<=1||!!savePending||!!adminPending;slot.append(remove);}
+    else{slot.append(el('span','empty-slot-number',String(index+1)),el('strong','','Open crew slot'),button('+ Add character',()=>pickCrewSlot(collection.team.length),'subtle'));}
+    return slot;
+  }));
+  $('crew-picker-heading').textContent=selectedSlot===null?'Your unlocked characters':'Choose a character for slot '+(selectedSlot+1);
+  const owned=CHARACTERS.filter(c=>collection.cards[c.id]);$('crew-count').textContent=owned.length+' unlocked · '+collection.team.length+' / 10 crew members';
   $('crew-picker').replaceChildren(...owned.map(c=>{const n=card(c);n.onclick=()=>selectedSlot===null?inspectCard(c.id):changeTeam(selectedSlot,c.id);return n;}));
 }
-function replaceMenu(id){const panel=openDialog('replace','Choose a crew slot');panel.append(el('p','',`${CHARACTER_BY_ID[id].name} will replace the selected character. Your previous card stays in the collection.`));const grid=el('div','replace-grid');collection.team.forEach((current,index)=>{const n=button('',()=>changeTeam(index,id));n.append(el('span','',`Slot ${index+1}`),document.createTextNode(displayName(CHARACTER_BY_ID[current])));grid.append(n);});panel.append(grid);}
+function pickCrewSlot(index){selectedSlot=index;renderCrew();$('crew-picker-heading').scrollIntoView({behavior:settings.reducedMotion?'instant':'smooth',block:'center'});}
+function replaceMenu(id){if(collection.team.length<10){changeTeam(collection.team.length,id);return;}const panel=openDialog('replace','Choose a crew slot');panel.append(el('p','',CHARACTER_BY_ID[id].name+' will replace one of your ten crew members.'));const grid=el('div','replace-grid');collection.team.forEach((current,index)=>{const n=button('',()=>changeTeam(index,id));n.append(el('span','','Slot '+(index+1)),document.createTextNode(displayName(CHARACTER_BY_ID[current])));grid.append(n);});panel.append(grid);}
+async function removeCrewMember(index){
+  if(!current()||savePending||adminPending||collection.team.length<=1)return;
+  const before=[...collection.team];if(!setTeam(collection,before.filter((_,i)=>i!==index)))return;
+  selectedSlot=null;renderCrew();try{await persistCollection();}catch(error){collection.team=before;renderCrew();toast(error.message);}
+}
 async function changeTeam(index,id){
-  if(!current()||savePending||adminPending)return;
-  if(collection.team.includes(id)&&collection.team[index]!==id){toast('That character is already in your crew. Choose a different character.');return;}
-  const before=[...collection.team],next=[...before];next[index]=id;if(!setTeam(collection,next)){toast('Choose five different unlocked characters.');return;}
-  selectedSlot=null;closeDialog();renderCrew();try{await persistCollection();toast(`${displayName(CHARACTER_BY_ID[id])} is ready to defend.`);}catch(error){collection.team=before;renderCrew();toast(error.message);}
+  if(!current()||savePending||adminPending||!Number.isInteger(index)||index<0||index>collection.team.length||index>=10)return;
+  if(collection.team.includes(id)&&collection.team[index]!==id){toast('That character is already in your crew.');return;}
+  const before=[...collection.team],next=[...before];next[index]=id;if(!setTeam(collection,next)){toast('Choose up to ten different unlocked characters.');return;}
+  selectedSlot=null;closeDialog();renderCrew();try{await persistCollection();toast(displayName(CHARACTER_BY_ID[id])+' is ready to defend.');}catch(error){collection.team=before;renderCrew();toast(error.message);}
 }
 function renderCampaign(){
   $('campaign-map').replaceChildren(...DEFENSE_STAGES.map(e=>{const locked=e.id>collection.unlockedEncounter,n=el('article','encounter');n.dataset.locked=String(locked);n.style.setProperty('--encounter-color',['#8ac7ca','#b998d5','#dd9584'][Math.ceil(e.id/3)-1]);n.append(el('span','chapter-number',String(e.id).padStart(2,'0')),el('p','eyebrow',`HARBOR ${e.id} · SIX WAVES`),el('h2','',e.name),el('p','',e.description));const avatars=el('div','enemy-roster');for(const id of e.enemies){const medallion=el('div','enemy-medallion');medallion.title=CHARACTER_BY_ID[id].name;const image=el('div','card-art');art.attach(image,id);medallion.append(image);avatars.append(medallion);}n.append(avatars);if(collection.completed.includes(e.id))n.append(el('p','completed-tag','✓ Harbor unlocked · Replay available'));const start=button(locked?`Defend harbor ${e.id-1} first`:'Prepare defense →',()=>beginBattle(e.id),'gold-button');start.disabled=locked||!current()||!!savePending;n.append(start);return n;}));
@@ -177,20 +189,38 @@ function persistCollection(){
   post({type:'GLTCG_SAVE_REQUEST',sessionId,requestId,team:[...collection.team],progress:{unlockedEncounter:collection.unlockedEncounter,completed:[...collection.completed],stats:{...collection.stats}}});return promise;
 }
 function beginBattle(encounter){
-  if(purchasePending){toast('Resume your pending purchase in the Card shop before starting a defense.');return;}if(!current()||adminPending||savePending||unsavedLearning)return;const next=createDefense(collection,{encounter,seed:uuid('defense')});if(!next){toast('Choose five unlocked crew members and an available harbor.');return;}
-  battle=next;lastOutcome='';selectedAllyId=next.allies[0]?.id||'';selectedPadId='';selectedSummonId='';summonMode=false;hoverPadId='';defensePaused=false;busyUntil=0;lastFrame=0;lastHud=0;learningPending=null;go('battle');sound();
+  if(purchasePending){toast('Resume your pending purchase in the Card shop before starting a defense.');return;}if(!current()||adminPending||savePending||unsavedLearning)return;const next=createDefense(collection,{encounter,seed:uuid('defense')});if(!next){toast('Choose up to ten unlocked crew members and an available harbor.');return;}
+  battle=next;lastOutcome='';buildMode='crew';placementPreviewKey='';placementPreview=null;selectedPreviewSkillId='';selectedAllyId=next.allies[0]?.id||'';selectedPadId='';selectedSummonId='';summonMode=false;hoverPadId='';defensePaused=false;busyUntil=0;lastFrame=0;lastHud=0;learningPending=null;go('battle');sound();
 }
-function startWave(){if(!battle||busy()||learningPending?.waiting)return false;const result=startDefenseWave(battle);if(result){summonMode=false;selectedPreviewSkillId='';defensePaused=false;lastFrame=0;sound();renderBattle();}return result;}
-function selectDefender(id){if(!battle?.allies.some(u=>u.id===id))return;selectedAllyId=id;selectedPreviewSkillId='';summonMode=false;selectedPadId=battle.allies.find(u=>u.id===id).padId;renderBattle();}
+function startWave(){if(!battle||busy()||learningPending?.waiting)return false;const result=startDefenseWave(battle);if(result){summonMode=false;buildMode='crew';placementPreviewKey='';placementPreview=null;selectedPreviewSkillId='';defensePaused=false;lastFrame=0;sound();renderBattle();}return result;}
+function selectDefender(id){if(!battle?.allies.some(u=>u.id===id))return;selectedAllyId=id;selectedPreviewSkillId='';summonMode=false;buildMode='crew';placementPreviewKey='';selectedPadId=battle.allies.find(u=>u.id===id).padId;renderBattle();}
 function placeDefender(allyId,padId){if(!battle||!['setup','learning'].includes(battle.status)||busy()||learningPending)return false;const result=placeDefenseUnit(battle,allyId,padId);if(result){selectedAllyId=allyId;renderBattle();sound();}return result;}
 function canPrepare(){return !!battle&&battle.status==='setup'&&!busy()&&!learningPending&&!purchasePending;}
+const cellLabel=id=>{const p=DEFENSE_PADS.find(c=>c.id===id);return p?String.fromCharCode(65+(p.col??p.column??Number(id.split('-')[1])))+((p.row??Number(id.split('-')[2]))+1):'Choose a cell';};
 function choosePad(padId){
   if(!battle||!DEFENSE_PADS.some(p=>p.id===padId))return false;
-  if(summonMode){if(!canPrepare())return false;selectedPadId=padId;renderPlacement();return true;}
-  if(battle.status==='running'){const unit=battle.allies.find(u=>u.padId===padId);if(unit)selectDefender(unit.id);return !!unit;}
-  return placeDefender(selectedAllyId,padId);
+  selectedPadId=padId;hoverPadId='';placementPreviewKey='';
+  if(battle.status==='running'){const unit=battle.allies.find(u=>u.padId===padId);if(unit)selectDefender(unit.id);}
+  renderPlacement();return true;
 }
-function selectSummon(id){if(!canPrepare()||!collection.cards[id]?.copies)return false;summonMode=true;selectedSummonId=id;renderPlacement();return true;}
+function setBuildMode(mode){if(!canPrepare())return;buildMode=mode;summonMode=false;selectedPreviewSkillId='';placementPreviewKey='';renderPlacement();}
+function updatePlacementPreview(){
+  if(!battle||battle.status!=='setup'){placementPreview=null;return;}
+  const cellId=hoverPadId||selectedPadId,kind=buildMode==='tower'?'tower':'crew';
+  const key=[battle.id,battle.routeRevision,battle.supplies,cellId,kind,buildMode,summonMode,selectedAllyId].join(':');
+  if(key===placementPreviewKey)return;placementPreviewKey=key;
+  placementPreview=cellId?getMazePlacementPreview(battle,cellId,{kind,remove:buildMode==='sell',...(buildMode==='crew'&&!summonMode?{allyId:selectedAllyId}:{})}):null;
+}
+function applyCellAction(){
+  if(!canPrepare()||!selectedPadId)return false;
+  const id=selectedPadId;let ok=false;
+  if(buildMode==='tower')ok=buildMazeTower(battle,id);
+  else if(buildMode==='sell')ok=sellMazeTower(battle,id);
+  else if(summonMode)return summonCharacter();
+  else ok=placeDefenseUnit(battle,selectedAllyId,id);
+  if(ok){placementPreviewKey='';sound();renderBattle();}else{const preview=getMazePlacementPreview(battle,id,{kind:buildMode==='tower'?'tower':'crew',remove:buildMode==='sell',...(buildMode==='crew'&&!summonMode?{allyId:selectedAllyId}:{})});toast(preview?.reason||'That placement is unavailable. Keep an open route to the exit.');}return ok;
+}
+function selectSummon(id){if(!canPrepare()||!collection.cards[id]?.copies)return false;buildMode='crew';summonMode=true;selectedSummonId=id;placementPreviewKey='';renderPlacement();return true;}
 function summonCharacter(id=selectedSummonId,padId=selectedPadId){
   if(!canPrepare())return false;const ok=summonDefender(battle,id,padId);
   if(ok){selectedAllyId=battle.allies.find(u=>u.characterId===id).id;summonMode=false;selectedSummonId='';selectedPadId=padId;toast(displayName(CHARACTER_BY_ID[id])+' joins the defense.');sound();renderBattle();}return ok;
@@ -202,6 +232,7 @@ function setPriority(priority){if(!battle||busy()||learningPending)return false;
 function toggleDefensePause(){if(!battle||battle.status!=='running'||savePending||unsavedLearning||dialog)return;defensePaused=!defensePaused;lastFrame=0;renderBattle();}
 function renderBattle(){
   if(!battle)return;const b=battle,e=b.encounter,waiting=b.status==='learning',setup=b.status==='setup',locked=!current()||!!savePending||unsavedLearning||!!learningPending?.waiting;
+  if(waiting&&mapZoom!==1)setMapZoom(1);
   $('battle-chapter').textContent=`CREW DEFENSE · HARBOR ${e.id}`;$('battle-title').textContent=e.name;$('round-label').textContent=`Wave ${b.round} / ${b.waveCount}`;
   $('defense-state').textContent=locked?'SAVING / STUDYING':setup?'BUILD YOUR DEFENSE':waiting?'WAVE COMPLETE':b.status==='running'?defensePaused?'DEFENSE PAUSED':`DEFENDING · ${settings.battleSpeed}×`:'DEFENSE COMPLETE';
   $('defense-description').textContent=setup?'Scout the wave. Summon from your collection, line up your attacks, and spend training points before starting.':waiting?'The battlefield is paused for three questions.':defensePaused?'Take a breather. Resume when you are ready.':'Your defenders attack automatically. Change target priority to catch runners, focus armor, or punish a cluster.';
@@ -231,17 +262,25 @@ function renderWavePreview(){
 }
 function renderPlacement(){
   if(!battle)return;const b=battle,setup=b.status==='setup',locked=!setup||!!savePending||!!adminPending||!!learningPending||unsavedLearning||!current()||!!dialog;
-  $('battle-supplies').textContent=format(b.supplies);$('training-points').textContent=format(b.trainingPoints);$('deployed-count').textContent=b.allies.length+' / '+DEFENSE_PADS.length;
+  $('battle-supplies').textContent=format(b.supplies);$('training-points').textContent=format(b.trainingPoints);$('deployed-count').textContent=b.allies.length+' / 10';
   const rosterKey=b.id+':'+b.allies.map(u=>u.id).join(',');
   if($('defender-buttons').dataset.battle!==rosterKey){$('defender-buttons').dataset.battle=rosterKey;$('defender-buttons').replaceChildren(...b.allies.map(u=>{const c=CHARACTER_BY_ID[u.characterId],n=button('',()=>selectDefender(u.id),'defender-chip');n.dataset.ally=u.id;const face=el('span','defender-face card-art');art.attach(face,c.id,true);n.append(face,el('strong','',displayName(c)),el('small'),el('progress'));return n;}));}
-  for(const n of $('defender-buttons').children){const u=b.allies.find(u=>u.id===n.dataset.ally);n.setAttribute('aria-pressed',String(!summonMode&&u.id===selectedAllyId));n.querySelector('small').textContent='Lv '+(u.level||1)+' · Spot '+(DEFENSE_PADS.findIndex(p=>p.id===u.padId)+1)+' · '+Math.ceil(u.hp)+' HP';const meter=n.querySelector('progress');meter.value=u.hp;meter.max=u.maxHp;}
-  if(!$('placement-buttons').children.length)$('placement-buttons').replaceChildren(...DEFENSE_PADS.map((p,i)=>{const n=button(String(i+1),()=>choosePad(p.id),'placement-spot');n.dataset.pad=p.id;return n;}));
+  for(const n of $('defender-buttons').children){const u=b.allies.find(u=>u.id===n.dataset.ally);n.setAttribute('aria-pressed',String(!summonMode&&u.id===selectedAllyId));n.querySelector('small').textContent='Lv '+(u.level||1)+' · '+cellLabel(u.padId)+' · '+Math.ceil(u.hp)+' HP';const meter=n.querySelector('progress');meter.value=u.hp;meter.max=u.maxHp;}
   let selected=b.allies.find(u=>u.id===selectedAllyId)||b.allies[0];if(selected)selectedAllyId=selected.id;
-  for(const n of $('placement-buttons').children){const occupant=b.allies.find(u=>u.padId===n.dataset.pad),index=DEFENSE_PADS.findIndex(p=>p.id===n.dataset.pad);n.disabled=locked&&b.status!=='running';n.setAttribute('aria-pressed',String((summonMode?selectedPadId:selected?.padId)===n.dataset.pad));n.setAttribute('aria-label','Spot '+(index+1)+', '+(occupant?displayName(CHARACTER_BY_ID[occupant.characterId]):'empty'));n.title=DEFENSE_PADS[index].name;n.classList.toggle('occupied',!!occupant);}
-  $('move-toggle').setAttribute('aria-pressed',String(!summonMode));$('summon-toggle').setAttribute('aria-pressed',String(summonMode));$('summon-toggle').disabled=locked;$('summon-panel').hidden=!summonMode;
-  $('placement-hint').textContent=summonMode?'Choose a character below, then an empty numbered spot. Confirm to spend battle supplies.':setup?(selected?'Place '+displayName(CHARACTER_BY_ID[selected.characterId])+' on a numbered spot. An occupied spot swaps the two defenders.':'Summon a defender to start this wave.'):'Positions are locked during the wave. Select a defender to change target priority. Answer three questions to prepare again.';
+  updatePlacementPreview();const selectedPreview=selectedPadId?getSelectedPlacementPreview():null;
+  for(const [id,active]of[['move-toggle',buildMode==='crew'&&!summonMode],['summon-toggle',summonMode],['build-toggle',buildMode==='tower'],['sell-toggle',buildMode==='sell']]){$(id).setAttribute('aria-pressed',String(active));$(id).disabled=id==='move-toggle'?false:locked;}
+  $('summon-panel').hidden=!summonMode;
+  $('maze-tower-count').textContent=(b.mazeTowers?.length||0)+' / 80 towers';
+  $('route-length').textContent=Math.round((b.routeLength||0)/DEFENSE_GRID.cellSize)+' cells to exit';
+  $('selected-cell').textContent=cellLabel(selectedPadId);
+  $('cell-feedback').textContent=selectedPreview?.reason||(selectedPadId?'Ready to place.':'Tap a cell on the map or use the grid controls.');
+  $('cell-feedback').dataset.valid=String(selectedPreview?.valid!==false);
+  $('cell-apply').textContent=buildMode==='tower'?'Build here · 5 supplies':buildMode==='sell'?'Sell here · +3 supplies':summonMode?'Summon here':'Move crew here';
+  $('cell-apply').disabled=locked||!selectedPadId||!selectedPreview?.valid||(summonMode&&!selectedSummonId);
+  const selectedCell=DEFENSE_PADS.find(p=>p.id===selectedPadId);if(selectedCell){$('grid-column').value=String(selectedCell.col??selectedCell.column??Number(selectedPadId.split('-')[1]));$('grid-row').value=String(selectedCell.row??Number(selectedPadId.split('-')[2]));}
+  $('placement-hint').textContent=!setup?'Building pauses during combat. Select a crew member to change targeting.':buildMode==='tower'?'Build small towers for 5 supplies. Shape the path into chokepoints beside your splash heroes.':buildMode==='sell'?'Sell a basic tower for 3 supplies to reopen or reshape a passage.':summonMode?'Select an owned character and an empty grid cell, then summon.':'Select a crew member, choose a cell, then Move crew here. Crew also blocks the route.';
   if(summonMode)renderSummons(locked);
-  const detail=document.querySelector('.defender-detail');detail.hidden=!selected||summonMode;if(!selected)return;
+  const detail=document.querySelector('.defender-detail');detail.hidden=!selected||summonMode||buildMode!=='crew';if(!selected)return;
   const c=CHARACTER_BY_ID[selected.characterId],p=getDefenseProfile(c.id),level=selected.level||1;
   $('defender-name').textContent=displayName(c)+' · Level '+level;$('defender-role').textContent=(p.label||PATTERN_LABELS[profilePattern(p)]||c.role).toUpperCase()+' · RANGE '+Math.round(selected.range);
   $('defender-pattern').textContent=profileText(p);$('defender-passive').textContent=c.passive.name+' · '+passiveDescription(c.passive);
@@ -255,15 +294,18 @@ function renderPlacement(){
   if($('defender-skills').dataset.ally!==skillKey){$('defender-skills').dataset.ally=skillKey;$('defender-skills').replaceChildren(...c.skills.map(s=>{const shape=getDefenseSkillProfile(selected,s),n=button('',()=>{selectedPreviewSkillId=selectedPreviewSkillId===s.id?'':s.id;renderPlacement();},'defense-skill');n.dataset.skillPreview=s.id;n.setAttribute('aria-label','Preview '+s.name+' attack area');n.style.setProperty('--skill-color',s.color);n.append(el('strong','',(GLYPHS[s.kind]||'✧')+' '+s.name),el('small','skill-shape',(PATTERN_LABELS[profilePattern(shape)]||'Support')+' · Preview area'),el('span','',skillDescription(s).replaceAll('every enemy in range','enemies inside its attack shape')));return n;}));}
   for(const n of $('defender-skills').children)n.setAttribute('aria-pressed',String(n.dataset.skillPreview===selectedPreviewSkillId));
 }
+let selectedPlacementKey='',selectedPlacementValue=null;
+function getSelectedPlacementPreview(){const key=[battle?.id,battle?.routeRevision,battle?.supplies,selectedPadId,buildMode,summonMode,selectedAllyId].join(':');if(key!==selectedPlacementKey){selectedPlacementKey=key;selectedPlacementValue=getMazePlacementPreview(battle,selectedPadId,{kind:buildMode==='tower'?'tower':'crew',remove:buildMode==='sell',...(buildMode==='crew'&&!summonMode?{allyId:selectedAllyId}:{})});}return selectedPlacementValue;}
 function renderSummons(locked){
   const b=battle,query=$('summon-search').value.trim().toLowerCase(),pattern=$('summon-pattern').value;
   const rows=CHARACTERS.filter(c=>collection.cards[c.id]?.copies>0&&(!query||(c.name+' '+c.title).toLowerCase().includes(query))&&(pattern==='all'||getDefenseProfile(c.id).skills.some(skill=>skill.shape===pattern)));
   const key=b.id+':'+rows.map(c=>c.id).join(',');
   if($('summon-roster').dataset.key!==key){$('summon-roster').dataset.key=key;$('summon-roster').replaceChildren(...rows.map(c=>{const p=getDefenseProfile(c.id),n=button('',()=>selectSummon(c.id),'summon-card');n.dataset.summon=c.id;const face=el('span','summon-face card-art');art.attach(face,c.id);n.append(face,el('strong','',displayName(c)),el('span','',p.label||PATTERN_LABELS[profilePattern(p)]),el('small'));return n;}));}
   for(const n of $('summon-roster').children){const c=CHARACTER_BY_ID[n.dataset.summon],deployed=b.allies.some(u=>u.characterId===c.id),cost=20+5*c.stars;n.disabled=locked||deployed||b.supplies<cost;n.setAttribute('aria-pressed',String(c.id===selectedSummonId));n.querySelector('small').textContent=deployed?'DEPLOYED':cost+' SUPPLIES';}
-  const c=CHARACTER_BY_ID[selectedSummonId],pad=DEFENSE_PADS.find(p=>p.id===selectedPadId),occupied=b.allies.some(u=>u.padId===selectedPadId),cost=c?20+5*c.stars:0;
-  $('summon-choice').textContent=c?(displayName(c)+' · '+(profileText(getDefenseProfile(c.id)))+' '+(pad?(occupied?'That position is occupied. Choose an empty spot.':'Position '+(DEFENSE_PADS.indexOf(pad)+1)+' · '+pad.name):'Choose an empty numbered position.')):rows.length?'Select an unlocked character to see their attack style.':'No owned characters match. Open packs to expand your options.';
-  $('summon-confirm').textContent=c?'Summon '+displayName(c)+' · '+cost+' supplies':'Choose a character and position';$('summon-confirm').disabled=locked||!c||!pad||occupied||b.supplies<cost||b.allies.some(u=>u.characterId===selectedSummonId)||b.allies.length>=DEFENSE_PADS.length;
+  const c=CHARACTER_BY_ID[selectedSummonId],pad=DEFENSE_PADS.find(p=>p.id===selectedPadId),occupied=b.allies.some(u=>u.padId===selectedPadId),cost=c?20+5*c.stars:0,preview=pad?getMazePlacementPreview(b,pad.id,{kind:'crew'}):null;
+  $('summon-choice').textContent=c?(displayName(c)+' · '+(profileText(getDefenseProfile(c.id)))+' '+(pad?(occupied?'That position is occupied. Choose an empty spot.':cellLabel(pad.id)):'Choose an empty grid cell.')):rows.length?'Select an unlocked character to see their attack style.':'No owned characters match. Open packs to expand your options.';
+  $('summon-confirm').textContent=c?'Summon '+displayName(c)+' · '+cost+' supplies':'Choose a character and cell';$('summon-confirm').disabled=locked||!c||!pad||occupied||b.supplies<cost||b.allies.some(u=>u.characterId===selectedSummonId)||b.allies.length>=10||!preview?.valid;
+  $('cell-apply').disabled=$('summon-confirm').disabled;
 }
 function retreat(after){if(learningPending?.waiting||savePending||unsavedLearning){toast('Finish the current questions and save before leaving the defense.');return;}if(!battle){after?.();return;}if(['victory','defeat'].includes(battle.status)){battle=null;after?.();return;}const panel=openDialog('retreat','Leave this defense?');panel.append(el('p','', 'This defense will end. Your cards and completed question records are retained. Finish all six waves and their questions to open the next harbor.'));const actions=el('div','dialog-actions');actions.append(button('Keep defending',closeDialog,'gold-button'),button('Retreat',()=>{learningPending=null;questionSession=null;closeDialog();battle=null;go('campaign');after?.();}));panel.append(actions);}
 function ending(){if(!battle)return;const win=battle.status==='victory',panel=openDialog('ending',win?'The harbor is safe.':'Regroup. Return stronger.');panel.classList.add('battle-result');panel.insertBefore(el('p','eyebrow',win?'DEFENSE COMPLETE':'CREW DEFENSE'),panel.firstChild);panel.append(el('p','',win?(battle.encounter.id===9?'Your crew protected every harbor. Replay a defense with a new crew or formation.':'Your crew held the route. A new harbor is ready to defend.'):'Move attackers near bends in the route, cover them with a healer, and strengthen the next wave with correct answers.'));
@@ -296,9 +338,9 @@ function previewQuestion(){
   else{const submit=button('Check answer',()=>{if(q.selected===null||q.graded)return;q.graded=true;if(q.selected===answer)q.correct++;previewQuestion();},'gold-button');submit.disabled=q.selected===null;panel.append(submit);}
 }
 function help(){
-  const panel=openDialog('settings','Collect. Place. Defend.');panel.append(el('p','', 'Collect fifty One Piece characters and summon their matching avatars across ten positions in Crew Defense. Their skills fire automatically as enemies follow the route toward your ship.'));
+  const panel=openDialog('settings','Build. Summon. Defend.');panel.append(el('p','', 'Collect fifty One Piece characters and deploy up to ten matching avatars on the maze grid. Build cheap towers to steer enemies through their attacks on the way from the left entrance to the right exit.'));
   const options=el('div','settings-options');for(const [key,label]of[['muted','Mute sound'],['reducedMotion','Reduce animation']]){const n=el('label'),input=el('input');input.type='checkbox';input.checked=settings[key];input.onchange=()=>{settings[key]=input.checked;settingsUI();savePreferences();};n.append(input,document.createTextNode(label));options.append(n);}panel.append(options);
-  const rules=el('ol','rules-list');for(const text of ['Choose your five free starting defenders in My crew. Summon any other owned card onto an empty position using battle supplies. Each character can be deployed once, up to ten at a time.','Prepare a harbor: select a crew member, then a numbered spot on the map or below it. Occupied spots swap defenders. Range circles show coverage; protect the route’s bends and keep healers near allies.','Start a wave and watch the crew defend automatically. Line, cone, surrounding area, splash, and chain attacks hit different groups. Target First, Strongest, or Cluster; healers, shields, freezing, poison, and character passives support the crew. Enemies reaching the ship damage its life.','Each harbor has six waves. After every wave, including the last or a defeat, answer exactly three Math or Science questions. Spend your training points to level up defenders, choose Power or Reach at level 3, and summon reinforcements before starting the next wave.','Each correct answer gives the next wave +10% attack, +5 percentage points critical chance, and +8% defense. Three correct answers give +30%, +15 percentage points, and +24%. Boosts refresh and do not stack between waves.','Pause any time; choose 1×, 2×, or 4× speed. Keyboard: 1–9 and 0 select a defender and Space starts or pauses a wave. All numbered placement buttons also work with a keyboard.','Packs cost your platform’s existing reward points at its current TCG rates. Every pack contains exactly one card. Duplicate copies merge at 2, 4, 8, 16… copies up to rank 10, adding 12% base life, attack, and defense per rank.','The current seven-star cards are Kaido the Beast, Whitebeard, and Admiral Akainu. Eight reserved legends, including Sengoku, remain unavailable until future expansions.','Gameplay pauses in hidden tabs, menus, questions, and pending saves. There are no offline rewards. Previously unlocked harbors, cards, and pack receipts carry over.'])rules.append(el('li','',text));panel.append(rules);panel.append(button('Ready to defend',closeDialog,'gold-button'));
+  const rules=el('ol','rules-list');for(const text of ['Choose up to ten free starting defenders in My crew. Summon any other owned card onto an empty position using battle supplies. Each character can be deployed once, up to ten at a time.','Build a maze with cheap 5-supply towers. Tap a square cell, then Build here. Towers and crew block the route; the preview shows the new path and sealed paths are rejected. Place splash heroes beside chokepoints. Sell towers for 3 supplies between waves.','Start a wave and watch the crew defend automatically. Line, cone, surrounding area, splash, and chain attacks hit different groups. Target First, Strongest, or Cluster; healers, shields, freezing, poison, and character passives support the crew. Enemies reaching the ship damage its life.','Each harbor has six waves. After every wave, including the last or a defeat, answer exactly three Math or Science questions. Spend your training points to level up defenders, choose Power or Reach at level 3, and summon reinforcements before starting the next wave.','Each correct answer gives the next wave +10% attack, +5 percentage points critical chance, and +8% defense. Three correct answers give +30%, +15 percentage points, and +24%. Boosts refresh and do not stack between waves.','Pause any time; choose 1×, 2×, or 4× speed. Keyboard: 1–9 and 0 select a defender and Space starts or pauses a wave. Focus the map and use arrow keys to select a cell, then Enter to apply the selected build tool. Grid column and row controls provide precise phone placement.','Packs cost your platform’s existing reward points at its current TCG rates. Every pack contains exactly one card. Duplicate copies merge at 2, 4, 8, 16… copies up to rank 10, adding 12% base life, attack, and defense per rank.','The current seven-star cards are Kaido the Beast, Whitebeard, and Admiral Akainu. Eight reserved legends, including Sengoku, remain unavailable until future expansions.','Gameplay pauses in hidden tabs, menus, questions, and pending saves. There are no offline rewards. Previously unlocked harbors, cards, and pack receipts carry over.'])rules.append(el('li','',text));panel.append(rules);panel.append(button('Ready to defend',closeDialog,'gold-button'));
 }
 function hello(){if(!embedded)return;clearTimeout(helloTimer);helloId=uuid('hello');post({type:'GLTCG_HELLO',requestId:helloId});helloTimer=setTimeout(()=>{if(!ready)connection('The portal connection is taking longer than expected. Close and reopen Grand Line Chronicles from the portal to try again.');},12000);}
 window.addEventListener('message',event=>{
@@ -335,7 +377,7 @@ function frame(now){
   if(battle&&view==='battle'){
     const previous=battle.status;
     if(!busy()&&!defensePaused&&battle.status==='running')advanceDefense(battle,delta*settings.battleSpeed);
-    const events=renderer.draw(battle,now,{selectedAllyId,selectedPadId,hoverPadId,summonCharacterId:summonMode?selectedSummonId:'',previewSkillId:selectedPreviewSkillId,reducedMotion:settings.reducedMotion})||[];
+    updatePlacementPreview();const events=renderer.draw(battle,now,{selectedAllyId,selectedPadId,hoverPadId,buildMode,placementPreview,summonCharacterId:summonMode?selectedSummonId:'',previewSkillId:selectedPreviewSkillId,reducedMotion:settings.reducedMotion})||[];
     if(events.length){const text=(events.find(e=>e.skillId&&e.text)||events.find(e=>e.text))?.text||'';$('action-banner').textContent=text;bannerUntil=now+1100;}
     if(bannerUntil&&now>bannerUntil){$('action-banner').textContent='';bannerUntil=0;}
     if(previous!==battle.status||now-lastHud>250){renderBattle();lastHud=now;}
@@ -355,8 +397,15 @@ $('roster-conversions').textContent=FUTURE_EXPANSION_CHARACTERS.map(c=>`${c.name
 $('battle-canvas').addEventListener('click',e=>{const id=renderer.pickPad(e.clientX,e.clientY);if(id)choosePad(id);});
 $('battle-canvas').addEventListener('pointermove',e=>{hoverPadId=renderer.pickPad(e.clientX,e.clientY)||'';});
 $('battle-canvas').addEventListener('pointerleave',()=>{hoverPadId='';});
-$('summon-toggle').onclick=()=>{if(!canPrepare())return;summonMode=true;selectedPadId='';renderPlacement();};
-$('move-toggle').onclick=()=>{summonMode=false;renderPlacement();};
+for(let c=0;c<26;c++){$('grid-column').append(new Option(String.fromCharCode(65+c),String(c)));}for(let r=0;r<13;r++)$('grid-row').append(new Option(String(r+1),String(r)));
+function selectGridControl(){choosePad('cell-'+$('grid-column').value+'-'+$('grid-row').value);}
+$('grid-column').onchange=selectGridControl;$('grid-row').onchange=selectGridControl;
+for(const n of document.querySelectorAll('[data-grid-step]'))n.onclick=()=>{const [dc,dr]=n.dataset.gridStep.split(',').map(Number);const p=DEFENSE_PADS.find(p=>p.id===selectedPadId)||DEFENSE_DEFAULT_PADS[0];choosePad('cell-'+Math.max(0,Math.min(25,Number(p.id.split('-')[1])+dc))+'-'+Math.max(0,Math.min(12,Number(p.id.split('-')[2])+dr)));};
+function setMapZoom(value){mapZoom=value===2?2:1;const viewport=$('map-viewport');viewport.classList.toggle('map-zoomed',mapZoom===2);if(mapZoom===1){viewport.scrollLeft=0;viewport.scrollTop=0;}$('map-zoom').setAttribute('aria-pressed',String(mapZoom===2));$('map-zoom').textContent=mapZoom===2?'Fit map':'Zoom map';requestAnimationFrame(()=>renderer.resize());}
+$('map-zoom').onclick=()=>setMapZoom(mapZoom===1?2:1);
+$('battle-canvas').onkeydown=event=>{const moves={ArrowLeft:'-1,0',ArrowRight:'1,0',ArrowUp:'0,-1',ArrowDown:'0,1'};if(moves[event.key]){event.preventDefault();document.querySelector('[data-grid-step="'+moves[event.key]+'"]').click();}if(event.key==='Enter'){event.preventDefault();applyCellAction();}};
+$('summon-toggle').onclick=()=>{if(!canPrepare())return;buildMode='crew';summonMode=true;placementPreviewKey='';selectedPadId='';renderPlacement();};
+$('move-toggle').onclick=()=>setBuildMode('crew');$('build-toggle').onclick=()=>setBuildMode('tower');$('sell-toggle').onclick=()=>setBuildMode('sell');$('cell-apply').onclick=applyCellAction;
 $('summon-search').oninput=()=>renderPlacement();$('summon-pattern').onchange=()=>renderPlacement();
 $('summon-confirm').onclick=()=>summonCharacter();$('upgrade-defender').onclick=upgradeSelected;$('recall-defender').onclick=recallSelected;
 $('specialize-power').onclick=()=>specializeSelected('power');$('specialize-reach').onclick=()=>specializeSelected('reach');$('defense-priority').onchange=e=>setPriority(e.target.value);
@@ -372,4 +421,4 @@ window.addEventListener('pagehide',()=>{savePreferences();audioContext?.suspend(
 window.addEventListener('error',()=>{if(!document.querySelector('.tcg-card'))$('fatal').hidden=false;});
 loadPreferences();renderCounters();renderCollection();if(!embedded)connection('Crew Defense preview · Questions are local examples. Sign in through Math or Science to purchase cards with platform reward points.');else{connection('Connecting to your portal, learning profile and reward-point wallet…');hello();}
 requestAnimationFrame(frame);
-if(params.get('test')==='1')window.__grandLine={get collection(){return collection;},get battle(){return battle;},get wallet(){return wallet;},get admin(){return admin;},get adminPending(){return adminPending;},requestAdminAction,retryAdminAction,get dialog(){return dialog;},get sessionId(){return sessionId;},get learningPending(){return learningPending;},get purchasePending(){return purchasePending;},get scope(){return scope;},get settings(){return settings;},get defensePaused(){return defensePaused;},get ready(){return ready;},get unsavedLearning(){return unsavedLearning;},art,renderer,go,beginBattle,startWave,placeDefender,selectDefender,summonCharacter,recallSelected,upgradeSelected,specializeSelected,setPriority,selectSummon,choosePad,toggleDefensePause,advanceDefense,completeDefenseLearning,requestLearning,inspectCard,closeDialog,renderBattle,renderCollection,applySnapshot,statsFor,CHARACTERS,ENCOUNTERS,DEFENSE_STAGES,DEFENSE_PADS};
+if(params.get('test')==='1')window.__grandLine={get collection(){return collection;},get battle(){return battle;},get wallet(){return wallet;},get admin(){return admin;},get adminPending(){return adminPending;},requestAdminAction,retryAdminAction,get dialog(){return dialog;},get sessionId(){return sessionId;},get learningPending(){return learningPending;},get purchasePending(){return purchasePending;},get scope(){return scope;},get settings(){return settings;},get defensePaused(){return defensePaused;},get ready(){return ready;},get unsavedLearning(){return unsavedLearning;},art,renderer,go,beginBattle,startWave,placeDefender,selectDefender,summonCharacter,recallSelected,upgradeSelected,specializeSelected,setPriority,selectSummon,choosePad,setBuildMode,applyCellAction,changeTeam,removeCrewMember,toggleDefensePause,advanceDefense,completeDefenseLearning,requestLearning,inspectCard,closeDialog,renderBattle,renderCollection,applySnapshot,statsFor,CHARACTERS,ENCOUNTERS,DEFENSE_STAGES,DEFENSE_PADS,DEFENSE_GRID,DEFENSE_DEFAULT_PADS};
