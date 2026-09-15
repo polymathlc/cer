@@ -6223,7 +6223,103 @@ Three things a wrong answer used to lose the moment its card was swept.
   `node tools/usage-tracker-tests.mjs` and the Playwright harness after touching
   any of it.
 
+## 🐾 ONE PART'S ANSWER, and not the rest of the question (v1.398.0)
+
+`MK_RUN_MIN` / `MK_RUN_RE` / `_mkAnswerRuns` / **`_mkAnswerFor`** /
+`_mkPartNamed` / `_mkSpansParts` / **`_mkShownAnswer`** (beside the part
+vocabulary — search `ONE PART'S ANSWER, AND NOT THE REST OF THE QUESTION`),
+the third argument to **`_mkModelAnswer(q, openOnly, part)`**, the `cut` inside
+**`_mkEntryFromAnalysis`**, the cut in `_mkCandidatesFrom`, the stand-down in
+`_mkMarkedEntry`, the `"part"` field `_mkAnalysePrompt` asks for, the read of
+it in `mkAnalyseCandidate`, the cut in `_mkOwnEntries`, and `.mk-cut` in
+`index.html`.
+
+v1.396.0 put WHICH part on the card. What still reached the class beside it was
+the **whole question's ANSWER**: a food-web card whose lesson was entirely
+about (b) opened — in the pupil's box and in the correct answer alike — with a
+paragraph of part (a), which was right, which the lesson never mentions, and
+which overflowed the scroll box before the child reached the part the mistake
+is in. Asked for in the teacher's own words: a mistake is written for ONE part
+of the question, and a part that is not relevant is **IGNORED — not
+shortened**.
+
+- **`_mkAnswerFor` IS THE ONE CUTTER**, and `_mkAnswerRuns` cuts on the markers
+  the ANSWER ITSELF carries, through the app's own part vocabulary
+  (`qPartLetterNormalize` / `qSubNormalize` / `qPartKey` / `qPartKeyIn`) and
+  never a second reading of what a part is. It is v1.396.0's rule applied to
+  the answer instead of to the label.
+- **IT REFUSES FAR MORE OFTEN THAN IT CUTS, and that is the whole safety
+  story** — an answer cut in the wrong place is a lesson with half its science
+  missing, and it reads perfectly. Fewer than `MK_RUN_MIN` markers is prose; a
+  letter that does not follow the one before it is prose; an **UPPERCASE**
+  letter is prose (`E. coli`, and the organism label "E." that opens the very
+  answer this was reported for); a bare `b)` needs white space behind it, where
+  `(b)` does not. **A KEY THAT NAMES NOTHING IN THE ANSWER CUTS NOTHING** — the
+  rule `_mkQuestionBlocksHtml` already follows for the drawn question.
+- **IT IS IDEMPOTENT.** One run has one marker, which is prose, so a text
+  already cut comes back unchanged — which is what lets the ONE builder store
+  it cut AND the cards cut what was filed before this shipped.
+- **THE RUN KEEPS ITS OWN LABEL.** "(b) The population of C will increase" is
+  what the paper printed; stripped to "The population…" the child has to be
+  told which part in a second sentence.
+- **`_mkModelAnswer` ANSWERS A PART TWO WAYS, because a paper answers its parts
+  two ways**: a question whose parts each carry their own answer block is read
+  off those blocks, and one that answers every part in a single box is cut by
+  the markers typed into it. Asking the BLOCKS first and falling back is what
+  keeps both honest — a part-scoped walk that found nothing would otherwise
+  hand back an empty answer for a question that plainly has one. With no part
+  it is byte-for-byte what it always was, so **`_mkOpenAnswer` did not move**.
+- **`_mkEntryFromAnalysis` IS WHERE THE ANSWER IS STORED CUT**, because it is
+  the one door every write path goes through — the marking's own filing,
+  ✨ Find wrong answers and ✨ Write wrong answers alike. `_mkCandidatesFrom`
+  cuts as well, and that is not redundancy: it is what the ✨ PROMPT is handed,
+  and a model given both parts writes a correction covering both.
+- **A MARKED CANDIDATE THE MARKING CANNOT PLACE IS LEFT FOR ✨**
+  (`_mkSpansParts` → `_mkMarkedEntry` returns null). There is no AI call on
+  that path, so there is nothing there that can say which part the lesson is
+  in, and a guess is a lesson pointing at the wrong sub-question. It is the
+  door that path already uses for a candidate whose habit the marker did not
+  name — a second reading spent only where the first one said nothing.
+- **THE ANALYSIS IS ASKED WHICH PART, AND ONLY WHEN IT HAS TO.** When the
+  marking's own label named one, everything above has already been cut to it
+  and the prompt is byte-for-byte what it always was. `_mkPartNamed` is
+  deliberately looser than `_mkPartKey` — that one reads a LABEL the marking
+  wrote and can insist on the marker shape; a model asked for a letter answers
+  with a letter — and anything that is not a part comes back `''`.
+- **THE PART GOES INTO `part`, NEVER INTO A FIELD OF ITS OWN.** Every reader
+  this app already has — the note the class reads, the marked blocks in the
+  drawn question, the rewrite marker's prompt and the ONE builder's own cut —
+  picks it up with nothing new to be taught.
+- **`_mkShownAnswer` IS THE RENDER SIDE**, so a bank that is already full
+  improves on the next paint rather than being rewritten. It is a RENDER: the
+  feed's content key is over `e.question`, which does not move.
+- **THE TEACHER VETS THE ANSWER THE CLASS IS SERVED**, the rule
+  `_mkQuestionHtml` already carries — so the card's boxes hold the CUT answer
+  and `.mk-cut` says so under them. Saving the card makes it the record; a cut
+  that happened silently would be a rewrite nobody asked for.
+- Run **`node tools/mistake-bank-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🐾 one part's answer** (`MK_RUN_MIN`, `MK_RUN_RE`,
+  `_mkAnswerRuns`, `_mkAnswerFor`, `_mkPartNamed`, `_mkSpansParts`,
+  `_mkShownAnswer`, `_mkModelAnswer`'s `part` argument, the `cut` in
+  `_mkEntryFromAnalysis`, the cut in `_mkCandidatesFrom` or `_mkOwnEntries`,
+  the stand-down in `_mkMarkedEntry`, the `"part"` field in `_mkAnalysePrompt`,
+  or `.mk-cut`), run `node tools/mistake-bank-tests.mjs`. Both directions are
+  silent and the card still paints. Stop cutting and a lesson about (b) opens
+  with a paragraph of (a) that is right, is never mentioned again, and
+  overflows the box before the child reaches the part the mistake is in —
+  which is exactly what it was reported for. Cut in the WRONG place and the
+  lesson is served with half its science missing: let one marker split an
+  answer, or a letter that does not follow the one before it, or an UPPERCASE
+  "E." that is the organism the answer names, and a sentence is torn in two on
+  a card that reads perfectly. Cut on a key that names nothing in the answer
+  and the whole answer disappears. File a spanning candidate from the MARKING
+  and the lesson points at whichever sub-question the guess landed on — there
+  is no AI call on that path, which is why it stands down instead. Leave
+  `_mkCandidatesFrom` uncut and the ✨ prompt is handed both parts, so the
+  correction it writes covers both. And show the STORED answer on the teacher's
+  card and an entry is approved against a rendering the class never sees.
 - After touching **🐾 the open-ended gate** (`_mkOpenAnswer`, `_mkModelAnswer`'s
   `openOnly` flag, `MK_GEN_OPEN_RULE`, `_mkGenPrompt`, `mkGenerateRun`'s pool
   filter, `mkGenerateOne`'s re-check, `_mkMcqOnlyEntry`, the fourth gate in

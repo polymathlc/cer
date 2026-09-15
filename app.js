@@ -3858,7 +3858,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.397.0';
+const APP_VERSION = 'v1.398.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -75063,6 +75063,122 @@ function _mkPartNote(e) {
   return what || 'the written answer';
 }
 
+/* 🐾 ONE PART'S ANSWER, AND NOT THE REST OF THE QUESTION (v1.398.0)
+   ---------------------------------------------------------------------
+   v1.396.0 put WHICH part on the card. What still reached the class was the
+   WHOLE question's answer: a food-web card whose lesson was entirely about
+   (b) opened — in the pupil's box and in the correct answer alike — with a
+   paragraph of part (a), which was right, which the lesson never mentions,
+   and which overflowed the scroll box before the child got to the part the
+   mistake is in. Asked for, in the teacher's own words: the bank should write
+   a mistake for ONE part of the question, and a part that is not relevant
+   should be IGNORED — not shortened.
+
+   • `_mkAnswerRuns` CUTS ON THE MARKERS THE ANSWER ITSELF CARRIES, through
+     the app's own part vocabulary (`qPartLetterNormalize` / `qSubNormalize` /
+     `qPartKey`) and never a second reading of what a part is. It is the
+     v1.396.0 rule applied to the ANSWER instead of the label.
+   • IT REFUSES FAR MORE OFTEN THAN IT CUTS, and that is the whole safety
+     story — an answer cut in the wrong place is a lesson with half its
+     science missing, and it reads perfectly. Fewer than `MK_RUN_MIN` markers
+     is prose; a letter that does not follow the one before it is prose; an
+     UPPERCASE letter is prose ("E. coli", and the organism label "E." that
+     opens the very answer this was reported for); a bare "b)" needs white
+     space behind it, where "(b)" does not.
+   • A KEY THAT NAMES NOTHING IN THE ANSWER CUTS NOTHING — the rule
+     `_mkQuestionBlocksHtml` already follows for the drawn question, so a
+     question re-lettered since the mistake was filed loses neither half.
+   • IT IS IDEMPOTENT. One run has one marker, which is prose, so a text
+     already cut comes back unchanged — which is what lets the ONE builder
+     store it cut AND the cards cut what was filed before this shipped.
+   • THE RUN KEEPS ITS OWN LABEL. "(b) The population of C will increase" is
+     what the paper printed; stripped to "The population…" the child has to be
+     told which part in a second sentence. */
+const MK_RUN_MIN = 2;   // fewer markers than this is prose, not a list of parts
+/* A marker at the very start, or after a space, a newline or the " | " the
+   model answer is joined with: "(b)", "（b）", "b)", "b." — with an optional
+   roman "(i)" behind it. */
+const MK_RUN_RE = /(^|[\s\u00a0|\u00b6])(?:[(\uff08]\s*([a-z])\s*[)\uff09]|([a-z])[).](?=[\s\u00a0]))\s*(?:[(\uff08]\s*([ivx]+)\s*[)\uff09])?\s*/g;
+/* `[{ key, text }]` — the runs an answer splits into, or `[]` when it is
+   prose. Pure, so the harness can run it. */
+function _mkAnswerRuns(text) {
+  const s = String(text == null ? '' : text);
+  if (!s) return [];
+  const hits = [];
+  MK_RUN_RE.lastIndex = 0;
+  let m;
+  while ((m = MK_RUN_RE.exec(s))) {
+    const letter = qPartLetterNormalize(m[2] || m[3]);
+    if (!letter) continue;
+    hits.push({
+      at: m.index + String(m[1] || '').length,
+      end: m.index + m[0].length,
+      key: qPartKey(letter, qSubNormalize(m[4] || ''))
+    });
+  }
+  if (hits.length < MK_RUN_MIN) return [];
+  /* The letters have to READ as a list — the same letter again for a roman
+     sub-part, or the next one along — or a stray "b)" in the middle of a
+     sentence would cut an answer in half. */
+  for (let i = 1; i < hits.length; i++) {
+    const a = qPartLetterOf(hits[i - 1].key), b = qPartLetterOf(hits[i].key);
+    if (a === b) continue;
+    if (QPART_ASSIGN.indexOf(b) !== QPART_ASSIGN.indexOf(a) + 1) return [];
+  }
+  const tidy = t => String(t || '').replace(/^\s*\|\s*/, '').replace(/\s*\|\s*$/, '').trim();
+  const runs = [];
+  const lead = tidy(s.slice(0, hits[0].at));
+  if (lead) runs.push({ key: '', text: lead });
+  hits.forEach((h, i) => {
+    const body = tidy(s.slice(h.end, i + 1 < hits.length ? hits[i + 1].at : s.length));
+    if (body) runs.push({ key: h.key, text: qPartLabel(h.key) + ' ' + body });
+  });
+  return runs;
+}
+/* The ONE cutter. The part of `text` that answers `want`, or `text` exactly as
+   it arrived when there is nothing to cut. A bare letter takes its own roman
+   sub-parts with it, through `qPartKeyIn`, exactly as it does everywhere else. */
+function _mkAnswerFor(text, want) {
+  const s = String(text == null ? '' : text);
+  const w = qPartNormalize(want || '');
+  if (!w || !s) return s;
+  const runs = _mkAnswerRuns(s);
+  if (!runs.length) return s;
+  const mine = runs.filter(r => r.key && qPartKeyIn(r.key, w));
+  return mine.length ? mine.map(r => r.text).join(' ') : s;
+}
+/* The model's OWN answer to "which part is the mistake in" — "b", "(b)",
+   "b(i)", "b.ii". It is deliberately looser than `_mkPartKey`, which reads a
+   LABEL the marking wrote and can insist on the marker shape; a model asked
+   for a letter answers with a letter. Anything that is not a part comes back
+   '' and names nothing, which is what keeps "none", "the whole question" and
+   an invented letter from becoming a lesson pointing at a sub-question. */
+function _mkPartNamed(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  const m = /^[(\uff08]?\s*([a-z])\s*[)\uff09.]?\s*(?:[(\uff08]?\s*([ivx]+)\s*[)\uff09]?)?$/i.exec(s);
+  if (!m) return _mkPartKey(s);
+  const letter = qPartLetterNormalize(m[1]);
+  return letter ? qPartKey(letter, qSubNormalize(m[2] || '')) : '';
+}
+/* Does this candidate's answer plainly cover several parts while the marking's
+   own label names none of them? Such a candidate is left for ✨, which can ASK
+   which part the mistake is in — the door `_mkMarkedEntry` already uses for a
+   candidate whose habit the marker did not name. Guessing would file a lesson
+   pointing at the wrong sub-question. */
+function _mkSpansParts(c) {
+  if (!c || _mkPartKey(c.part)) return false;
+  return _mkAnswerRuns(String((c && c.expected) || '')).length >= MK_RUN_MIN ||
+         _mkAnswerRuns(String((c && c.raw) || '')).length >= MK_RUN_MIN;
+}
+/* What a card SHOWS. The ONE builder stores a new entry cut to its part; this
+   is what cuts the ones filed before it did, so a bank that is already full
+   improves on the next paint rather than being rewritten. It is a RENDER: the
+   feed's content key is over `e.question`, which does not move. */
+function _mkShownAnswer(e, field) {
+  return _mkAnswerFor(String((e && e[field]) || ''), _mkPartKey(e && e.part));
+}
+
 const MK_Q_BLOCKS = ['text', 'part', 'image', 'table', 'mcq', 'fillblank'];
 
 /* The question's own blocks, in the question's own order. '' when there is
@@ -75144,24 +75260,40 @@ function _mkQuestionHtml(e, opts) {
 /* The model answer, as words. A question with none cannot have a wrong
    answer written FOR it (there is no standard to be wrong against), and a
    harvested attempt falls back to the marker's own `expected`.
-   `openOnly` reads the WRITTEN answer alone — see `_mkOpenAnswer` below. */
-function _mkModelAnswer(q, openOnly) {
-  const bits = [];
-  ((q && q.blocks) || []).forEach(b => {
-    if (!b) return;
-    if (b.type === 'plainanswer') { const t = stripHtml(b.content || ''); if (t) bits.push(t); }
-    else if (b.type === 'answer') {
-      const t = ['claim', 'evidence', 'reasoning'].map(f => stripHtml(b[f] || '')).filter(Boolean).join(' ');
-      if (t) bits.push(t);
-    }
-    else if (b.type === 'answerLine') { const t = stripHtml(b.answer || ''); if (t) bits.push(t); }
-    else if (b.type === 'answerKey') { const t = stripHtml(b.text || ''); if (t) bits.push(t); }
-    else if (b.type === 'mcq' && !openOnly) {
-      const i = (b.options || []).findIndex(o => o && o.id === b.correctId);
-      if (i >= 0) bits.push('(' + (i + 1) + ') ' + stripHtml((b.options[i] && b.options[i].text) || ''));
-    }
-  });
-  return _mkClip(bits.join(' | '), MK_ANSWER_CHARS);
+   `openOnly` reads the WRITTEN answer alone — see `_mkOpenAnswer` below.
+   `part` is the lesson's own part key (v1.398.0), and it is answered TWO ways
+   because a paper answers its parts two ways: a question whose parts each
+   carry their own answer block is read off those blocks, and one that answers
+   every part in a single box is cut by the markers typed into it. Asking the
+   blocks FIRST and falling back is what keeps both honest — a part-scoped walk
+   that found nothing would otherwise hand back an empty answer for a question
+   that plainly has one. With no part it is byte-for-byte what it always was. */
+function _mkModelAnswer(q, openOnly, part) {
+  const blocks = (q && q.blocks) || [];
+  const read = keep => {
+    const bits = [];
+    blocks.forEach(b => {
+      if (!b || (keep && !keep(b))) return;
+      if (b.type === 'plainanswer') { const t = stripHtml(b.content || ''); if (t) bits.push(t); }
+      else if (b.type === 'answer') {
+        const t = ['claim', 'evidence', 'reasoning'].map(f => stripHtml(b[f] || '')).filter(Boolean).join(' ');
+        if (t) bits.push(t);
+      }
+      else if (b.type === 'answerLine') { const t = stripHtml(b.answer || ''); if (t) bits.push(t); }
+      else if (b.type === 'answerKey') { const t = stripHtml(b.text || ''); if (t) bits.push(t); }
+      else if (b.type === 'mcq' && !openOnly) {
+        const i = (b.options || []).findIndex(o => o && o.id === b.correctId);
+        if (i >= 0) bits.push('(' + (i + 1) + ') ' + stripHtml((b.options[i] && b.options[i].text) || ''));
+      }
+    });
+    return bits.join(' | ');
+  };
+  const all = read(null);
+  const want = qPartNormalize(part || '');
+  if (!want) return _mkClip(all, MK_ANSWER_CHARS);
+  const map = qPartMap(blocks);
+  const mine = read(b => qPartKeyIn(qPartOf(map, b), want));
+  return _mkClip(mine || _mkAnswerFor(all, want), MK_ANSWER_CHARS);
 }
 
 /* 🐾 A MISTAKE IS AN OPEN-ENDED MISTAKE — the ✨ generator's own gate (v1.397.0)
@@ -75204,7 +75336,14 @@ function _mkOpenAnswer(q) { return _mkModelAnswer(q, true); }
    compare the clean-up against it, and deleted on approve. */
 function _mkEntryFromAnalysis(analysis, ctx) {
   const a = analysis && typeof analysis === 'object' ? analysis : {};
-  const cleaned = _mkClip(a.cleaned || ctx.raw || '', MK_ANSWER_CHARS);
+  /* ONE PART'S ANSWER (v1.398.0). Every answer field on the entry is cut to
+     the part the lesson is in, HERE, because this is the one door every write
+     path goes through — the marking's own filing, ✨ Find wrong answers and
+     ✨ Write wrong answers alike. `_mkAnswerFor` is a no-op on an answer that
+     covers one part, which is nearly all of them, and idempotent on one that
+     has already been cut. */
+  const cut = t => _mkAnswerFor(String(t == null ? '' : t), _mkPartKey(ctx.part));
+  const cleaned = _mkClip(cut(a.cleaned || ctx.raw || ''), MK_ANSWER_CHARS);
   if (!cleaned || _mkWords(cleaned) < MK_MIN_ANSWER_WORDS) return null;
   if (a.worth === false) return null;
   const animal = mistakeAnimalNormalize(a.animal);
@@ -75220,10 +75359,10 @@ function _mkEntryFromAnalysis(analysis, ctx) {
     part: _mkClip(ctx.part || '', 60),
     question: _mkClip(ctx.question || '', MK_QUESTION_CHARS),
     images: Array.isArray(ctx.images) ? ctx.images.slice(0, 4).map(String) : [],
-    expected: _mkClip(ctx.expected || '', MK_ANSWER_CHARS),
+    expected: _mkClip(cut(ctx.expected || ''), MK_ANSWER_CHARS),
     studentAnswer: cleaned,
     why: _mkClip(a.why || '', MK_WHY_CHARS),
-    fixed: _mkClip(a.fixed || ctx.expected || '', MK_ANSWER_CHARS),
+    fixed: _mkClip(cut(a.fixed || ctx.expected || ''), MK_ANSWER_CHARS),
     hint: _mkClip(a.hint || '', 300),
     fromAttempt: String(ctx.fromAttempt || ''),
     /* Who read the answer: the MARKER, on the very reply that gave the part
@@ -75234,7 +75373,7 @@ function _mkEntryFromAnalysis(analysis, ctx) {
     hash: _mkHash(String(ctx.questionId || '') + '|' + cleaned.toLowerCase()),
     createdAt: Timestamp.now()
   };
-  if (ctx.source !== 'generated') entry.raw = _mkClip(ctx.raw || '', MK_ANSWER_CHARS);
+  if (ctx.source !== 'generated') entry.raw = _mkClip(cut(ctx.raw || ''), MK_ANSWER_CHARS);
   return entry;
 }
 
@@ -75256,7 +75395,14 @@ function _mkCandidatesFrom(attempts, have, findQ) {
       // A multiple-choice row is a letter, not an answer anyone can learn a
       // habit from — the bank is open-ended only, whatever the row carries.
       if (String(ans.label || '').trim().toLowerCase() === 'multiple choice') return;
-      const student = String(ans.student || '').trim();
+      /* ONE PART'S ANSWER (v1.398.0). A marked item whose label names a part
+         may still hold the answer to the whole question — a paper very often
+         prints one model answer covering (a) and (b), and a photographed
+         script is read into one box. It is cut HERE and not only in the
+         builder, because this is what the ✨ prompt is handed: given both
+         parts, the model writes a correction covering both. */
+      const pkey = _mkPartKey(ans.label);
+      const student = _mkAnswerFor(String(ans.student || '').trim(), pkey);
       if (_mkWords(student) < MK_MIN_ANSWER_WORDS) return;
       const key = d.id + ':' + idx;
       if (have && have.has(key)) return;
@@ -75266,7 +75412,7 @@ function _mkCandidatesFrom(attempts, have, findQ) {
         q: q,
         part: String(ans.label || ''),
         raw: student,
-        expected: String(ans.expected || ''),
+        expected: _mkAnswerFor(String(ans.expected || ''), pkey),
         verdict: verdict,
         /* The habit the MARKER named on this part, when it named one — read
            through the taxonomy, so a stray word on an attempt row can never
@@ -75295,15 +75441,20 @@ function _mkCandidatesFrom(attempts, have, findQ) {
    • IT CARRIES NO CHILD. The same ONE builder as every other entry, so no
      uid, email or name can arrive by this door either.
    • A CANDIDATE WITH NO HABIT COMES BACK NULL and is left for ✨ — the
-     second reading is spent only where the first one named nothing. */
+     second reading is spent only where the first one named nothing.
+   • …AND SO DOES ONE WHOSE ANSWER SPANS SEVERAL PARTS while the marking's
+     label names none (v1.398.0). There is no AI call on this path, so there
+     is nothing here that can say which part the lesson is in, and a guess is
+     a lesson pointing at the wrong sub-question. ✨ can ask, so it does. */
 function _mkMarkedEntry(c) {
   if (!c || !c.q) return null;
   const animal = mistakeAnimal(c.mistake);
   if (!animal) return null;
+  if (_mkSpansParts(c)) return null;
   const q = c.q;
   const topic = (q && q.topic) || '';
   const qText = _mkQuestionText(q);
-  const model = c.expected || _mkModelAnswer(q);
+  const model = c.expected || _mkModelAnswer(q, false, _mkPartKey(c.part));
   return _mkEntryFromAnalysis({
     worth: true,
     cleaned: c.raw,
@@ -75525,6 +75676,15 @@ function _mkCardHtml(e) {
   const open = !!_mk.expanded[e.id];
   // WHICH PART this lesson is about, in the same words the class reads.
   const where = _mkPartNote(e);
+  /* ONE PART'S ANSWER (v1.398.0). The teacher vets the entry the class is
+     served, so the boxes hold the CUT answer — the rule `_mkQuestionHtml`
+     already follows for the question itself. An entry filed before that was
+     stored cut is cut here, and saving the card makes it so; the note under
+     the boxes is what stops that being a silent rewrite. */
+  const shownAnswer = _mkShownAnswer(e, 'studentAnswer');
+  const shownFixed = _mkShownAnswer(e, 'fixed');
+  const shownRaw = _mkShownAnswer(e, 'raw');
+  const wasCut = shownAnswer !== String(e.studentAnswer || '') || shownFixed !== String(e.fixed || '');
   return `<div class="mk-card${_mkPicked.has(e.id) ? ' picked' : ''}" data-mk="${escapeHtml(e.id)}">
     <div class="mk-card-head">
       <input type="checkbox" class="mk-pick" ${_mkPicked.has(e.id) ? 'checked' : ''} onchange="mkTogglePick('${escapeHtml(e.id)}')" title="Tick to delete this one with the others">
@@ -75544,19 +75704,20 @@ function _mkCardHtml(e) {
     </div>
     <div class="mk-grid">
       <label>A student wrote <span class="mk-hint">— cleaned up; the mistake itself must stay in</span>
-        <textarea data-f="studentAnswer" rows="3">${escapeHtml(e.studentAnswer)}</textarea>
-        ${e.raw && e.raw !== e.studentAnswer ? '<div class="mk-raw">As written: “' + escapeHtml(e.raw) + '”</div>' : ''}
+        <textarea data-f="studentAnswer" rows="3">${escapeHtml(shownAnswer)}</textarea>
+        ${shownRaw && shownRaw !== shownAnswer ? '<div class="mk-raw">As written: “' + escapeHtml(shownRaw) + '”</div>' : ''}
       </label>
       <label>What went wrong <span class="mk-hint">— read by the class after they guess</span>
         <textarea data-f="why" rows="3">${escapeHtml(e.why)}</textarea>
       </label>
       <label>The correct answer <span class="mk-hint">— what they should have written</span>
-        <textarea data-f="fixed" rows="3">${escapeHtml(e.fixed)}</textarea>
+        <textarea data-f="fixed" rows="3">${escapeHtml(shownFixed)}</textarea>
       </label>
       <label>Spot it next time <span class="mk-hint">— one line</span>
         <input data-f="hint" type="text" value="${escapeHtml(e.hint)}">
       </label>
     </div>
+    ${wasCut ? '<div class="mk-cut">✂ Cut to <b>' + escapeHtml(where || 'this part') + '</b> — the parts of the question this lesson is not about are left out rather than shortened. 💾 Save edits keeps it that way.</div>' : ''}
     ${m ? '<div class="mk-tip">' + m.emoji + ' <b>' + escapeHtml(m.animal) + '</b> — ' + escapeHtml(m.desc) + '</div>' : '<div class="mk-tip warn">❓ Choose the animal before approving — an entry with no type is never served, because there is nothing to quiz on.</div>'}
     <div class="mk-actions">
       ${e.status !== 'approved' ? `<button class="btn btn-primary" onclick="mkApprove('${escapeHtml(e.id)}')">✅ Approve</button>` : ''}
@@ -75831,15 +75992,24 @@ async function mkAnalyseAll() {
   mkRender();
 }
 function _mkAnalysePrompt(c, qText, model) {
+  /* ONE PART'S ANSWER (v1.398.0). When the marking's own label named a part,
+     everything above has already been cut to it and this prompt is
+     byte-for-byte what it always was. It is only when the label named none
+     AND the answer plainly covers several that the model is asked which part
+     the mistake is in — the one thing nothing on this path can work out. */
+  const spans = _mkSpansParts(c);
   return 'You are an experienced Singapore primary science teacher sorting a pupil\'s WRONG answer for a "learn from mistakes" lesson.\n' +
     'THE QUESTION:\n' + qText + '\n' +
     (c.part ? 'THE PART being answered: ' + c.part + '\n' : '') +
     'THE MODEL ANSWER for it: ' + (model || '(none recorded — judge against the syllabus)') + '\n' +
     'WHAT THE PUPIL WROTE: "' + c.raw + '"\n' +
     'THE MARKER\'S VERDICT: ' + c.verdict + '\n\n' +
-    'Do five things and return STRICT JSON only, no markdown, exactly this shape:\n' +
-    '{"worth":true,"cleaned":"…","animal":"…","why":"…","fixed":"…","hint":"…"}\n' +
+    'Do ' + (spans ? 'six' : 'five') + ' things and return STRICT JSON only, no markdown, exactly this shape:\n' +
+    '{"worth":true,"cleaned":"…","animal":"…","why":"…","fixed":"…","hint":"…"' + (spans ? ',"part":"…"' : '') + '}\n' +
     '- "worth": false when the answer is blank, "idk", a joke, nonsense, off-topic, a name, or so garbled that no lesson can be read from it. Such an answer is never shown to anybody.\n' +
+    (spans
+      ? '- "part": the answer above covers MORE THAN ONE lettered part of the question. Name the ONE part the mistake is in — "a", "b", "b(i)" — and write "cleaned", "fixed" and "why" about THAT PART ALONE. The parts the pupil got right are not this lesson: leave them out completely rather than shortening them. Return "" only when the mistake really does run across every part.\n'
+      : '') +
     '- "cleaned": the pupil\'s answer with spelling and punctuation tidied and ANY name or personal detail removed — and the meaning, the wording and THE MISTAKE kept exactly as they wrote it. Never correct it, never improve the science, never add a word of your own: the class is going to be asked to find the mistake, so it has to still be there.\n' +
     '- "animal": one id from MISTAKE TYPES below, or "" when none genuinely fits.\n' +
     '- "why": one or two sentences to ANOTHER pupil explaining what this answer got wrong and why it does not earn the mark. Say "this student", never "you".\n' +
@@ -75850,7 +76020,8 @@ function _mkAnalysePrompt(c, qText, model) {
 async function mkAnalyseCandidate(c) {
   const q = c.q;
   const qText = _mkQuestionText(q);
-  const model = c.expected || _mkModelAnswer(q);
+  const known = _mkPartKey(c.part);
+  const model = c.expected || _mkModelAnswer(q, false, known);
   const topic = (q && q.topic) || '';
   /* Grounded as TEACHING: the lesson has to be in this teacher's words and
      against this teacher's standard, or the class is told a mistake is a
@@ -75862,10 +76033,21 @@ async function mkAnalyseCandidate(c) {
     ? await askGeminiVision(sys, media, { maxOutputTokens: 900, json: true })
     : await askGemini(sys, { maxOutputTokens: 900, temperature: 0.2, json: true });
   const res = _parseAIJson(raw);
+  /* The part the analysis named, when the marking's label named none. It is
+     written into `part` rather than into a field of its own, so every reader
+     this app already has — the note the class reads, the marked blocks in the
+     drawn question, the rewrite marker's prompt and the ONE builder's own
+     cut — picks it up with nothing new to be taught. Whatever the label did
+     say ("Claim", "Blank 2") is kept behind the letter. */
+  const named = known ? '' : _mkPartNamed(res && res.part);
+  const rest = named ? _mkPartWhat(c.part) : '';
   const entry = _mkEntryFromAnalysis(res, {
     source: 'student', questionId: c.questionId, questionTitle: q.title || '', topic: topic, topic2: q.topic2 || '',
-    level: getTopicLevel(topic) || '', part: c.part, question: qText, images: _mkQuestionImages(q),
-    expected: model, raw: c.raw, fromAttempt: c.fromAttempt
+    level: getTopicLevel(topic) || '',
+    part: named ? (qPartLabel(named) + (rest ? ' ' + rest : '')) : c.part,
+    question: qText, images: _mkQuestionImages(q),
+    expected: named ? (_mkModelAnswer(q, false, named) || model) : model,
+    raw: c.raw, fromAttempt: c.fromAttempt
   });
   if (!entry) return 'skipped';
   if (_mk.bank.some(e => e.hash === entry.hash)) return 'skipped';   // the same wrong answer, already here
@@ -76036,14 +76218,17 @@ function _mkOwnEntries(log, findQ) {
     const q = findQ ? findQ(String(rec.qId || '')) : null;
     if (!q) return;
     if (!qAvailableToViewer(q) || !qInSyllabus(q) || !qWithinStudentLevel(q)) return;
-    const student = _mkClip(rec.student || '', MK_ANSWER_CHARS);
+    // ONE PART'S ANSWER (v1.398.0) — the same cut the class bank's own
+    // builder makes, applied here because this list is built by hand.
+    const pkey = _mkPartKey(rec.part);
+    const student = _mkClip(_mkAnswerFor(rec.student || '', pkey), MK_ANSWER_CHARS);
     if (!student) return;
     const key = String(rec.qId) + '|' + student.toLowerCase();
     if (seen.has(key)) return;   // the same wrong answer marked twice is one lesson
     seen.add(key);
     const question = _mkQuestionText(q);
     if (!question) return;
-    const expected = _mkClip(rec.expected || '', MK_ANSWER_CHARS) || _mkModelAnswer(q);
+    const expected = _mkClip(_mkAnswerFor(rec.expected || '', pkey), MK_ANSWER_CHARS) || _mkModelAnswer(q, false, pkey);
     out.push({
       id: 'own:' + rec.id,
       own: true,
@@ -76238,7 +76423,7 @@ function _mkRenderSession(host) {
     </div>
     <div class="mk-round-a">
       <div class="mk-round-label">${e.own ? 'You wrote' : 'A student wrote'}</div>
-      <div class="mk-round-text mk-wrote">“${escapeHtml(e.studentAnswer)}”</div>
+      <div class="mk-round-text mk-wrote">“${escapeHtml(_mkShownAnswer(e, 'studentAnswer'))}”</div>
     </div>`;
   if (quizMode) {
     html += `<div class="mk-quiz"><div class="mk-round-label">Which mistake did this student make?</div><div class="mk-opts">`;
@@ -76269,7 +76454,7 @@ function _mkRenderSession(host) {
           <button class="btn btn-outline" onclick="mkReveal()">Show the correct answer</button>` : ''}
         </div>
         ${s.checked ? `<div class="mk-check v-${escapeHtml(s.checked.verdict)}"><b>${s.checked.verdict === 'correct' ? '✅ Correct' : s.checked.verdict === 'partial' ? '~ Partly there' : '✗ Not yet'}</b> ${escapeHtml(s.checked.feedback || '')}</div>` : ''}
-        ${(s.checked || s.revealed) ? `<div class="mk-model"><div class="mk-round-label">The correct answer</div><div class="mk-round-text">${escapeHtml(e.fixed)}</div></div>` : ''}
+        ${(s.checked || s.revealed) ? `<div class="mk-model"><div class="mk-round-label">The correct answer</div><div class="mk-round-text">${escapeHtml(_mkShownAnswer(e, 'fixed'))}</div></div>` : ''}
       </div>`;
     }
     html += `<div class="mk-next"><button class="btn btn-primary" onclick="mkNext()">${s.i + 1 < s.list.length ? 'Next →' : 'Finish'}</button></div>`;
@@ -76310,7 +76495,7 @@ async function mkCheckRewrite() {
       // question and one part's model answer, a marker otherwise expects the
       // whole question answered and marks a correct rewrite down for being short.
       (_mkPartNote(e) ? 'THE PART BEING ANSWERED: ' + _mkPartNote(e) + '\n' : '') +
-      'THE CORRECT ANSWER: ' + (e.fixed || e.expected) + '\n' +
+      'THE CORRECT ANSWER: ' + (_mkShownAnswer(e, 'fixed') || _mkShownAnswer(e, 'expected')) + '\n' +
       'THE MISTAKE the pupil was asked to avoid: ' + mistakeAnimalLabel(e.animal) + ' — ' + (e.why || '') + '\n' +
       'THE PUPIL\'S REWRITE: "' + text + '"\n' +
       'Judge the rewrite against the correct answer. Return STRICT JSON only: {"verdict":"correct | partial | wrong","feedback":"one or two kind sentences spoken to the pupil: what is right, what is still missing, and whether the mistake above has gone"}.\n' +
