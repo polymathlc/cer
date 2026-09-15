@@ -1,7 +1,8 @@
 // 🐾 The MISTAKE ANALYSIS card — the card that FOLLOWS the Science Sidekicks.
 //
 // A Sidekick (Evidence Ellen, Concept Cora…) says what a stronger answer
-// needs next. This card says which of the ten familiar HABITS the answer
+// needs next. This card says which of the nine familiar HABITS — a Science
+// Sidekick's skill, missing — the answer
 // showed — the Rabbit rushed it, the Parrot repeated the question, the Sloth
 // stopped halfway — drawn as the same kind of animated figure, standing
 // beside the ACTUAL QUESTION and what the student wrote, so the lesson is
@@ -140,7 +141,7 @@ export function mountMistakeAnalysis(feedback, anchor, input) {
       <div class="sc-bottomline">
         <span class="sc-count">Spot it: ${escape(data.spot)}</span>
       </div>
-      ${data.roster.length ? `<details class="sc-team"><summary>Meet all ${data.roster.length} mistake animals <span aria-hidden="true">↗</span></summary>
+      ${data.roster.length ? `<details class="sc-team"><summary>Meet all ${data.roster.length} Science Sidekicks — the mistake types <span aria-hidden="true">↗</span></summary>
         <p class="sc-team-note">Every wrong answer is one of these familiar habits. Naming yours is how you watch for it next time.</p>
         <div class="sc-team-grid sc-team-grid--mistake"></div>
       </details>` : ''}

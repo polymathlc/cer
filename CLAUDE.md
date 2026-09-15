@@ -5768,17 +5768,23 @@ nav items.
 A wrong answer is the most useful thing a class produces, and this app threw every one of them
 away the moment it was marked. The 🐾 **Mistake Bank** keeps them: the teacher harvests the wrong
 and partly-right answers out of the attempt log, the AI CLEANS each one up and names the HABIT
-behind it as one of ten **mistake animals** (🐇 the Rabbit rushed it, 🦜 the Parrot repeated the
-question, 🦥 the Sloth stopped early, …), the teacher VETS and SORTS them, and only then are they
+behind it as one of the **nine Science Sidekicks' skills, missing** (🦎 Comparison Casey — missed
+the comparison, 🐘 Evidence Ellen — ignored the evidence, 🦊 Specific Sherry — too vague, …; it was
+a list of ten animals of its own until v1.394.0), the teacher VETS and SORTS them, and only then are they
 served back to students — as a "which mistake is this?" quiz, or one animal at a time with a
 rewrite box under it.
 
-- **THE TEN ANIMALS ARE ONE LIST IN THREE APPS, BYTE FOR BYTE.** `MISTAKE_ANIMALS` is identical
+- **THE NINE TYPES ARE ONE LIST IN THREE APPS, BYTE FOR BYTE.** `MISTAKE_ANIMALS` is identical
   in `polymathlc/scan` (which tags every marked answer with one) and `polymathlc/anskey` (whose
   🐾 Mistake button writes an answer that is wrong on purpose in one of them). The `id` is the
-  contract: an entry filed here under `parrot` has to mean what Scan's `parrot` means, or the
+  contract: an entry filed here under `specific` has to mean what Scan's `specific` means, or the
   same habit wears a different animal in each app. **Ship a change to the block to all three
-  together.**
+  together.** The ids are the Science Sidekicks' own (`comparison` / `context` / `specific` /
+  `evidence` / `keywords` / `concept` / `reasoning` / `careful` / `complete`), so the coach that
+  says what the answer needs NEXT and the animal that names the habit are ONE figure; the old
+  ten-animal ids (`fox`, `parrot`, `sloth`, …) are carried to their Sidekick by
+  `MISTAKE_ANIMAL_ALIASES` inside `mistakeAnimalNormalize`, and `_mkNormaliseEntry` applies that
+  to every stored entry on the way in, so nothing already filed reads as an unknown mistake.
 - **`mistakeAnimalNormalize` IS THE ONE DOOR, AND "NONE" IS A REAL ANSWER.** Every id reaching
   the bank goes through it — an id, an animal's name, a habit's name or a `{animal}` object all
   come out as the id, and *unsure* / *none* / an invented animal come out as `''`. A wrong answer
@@ -5864,8 +5870,8 @@ the `.sc-mistake-*` / `.sc-question*` / `.mk-figure*` CSS in `index.html`.
 
 A Science Sidekick (Evidence Ellen, Context Connie…) says what a stronger
 answer needs NEXT. Directly under it, on a wrong or partly-right answer, the
-**🐾 Mistake analysis** card now says which of the ten mistake animals the
-answer showed — the Parrot repeated the question, the Sloth stopped halfway —
+**🐾 Mistake analysis** card now says which Science Sidekick's skill the
+answer was missing — Specific Sherry's precision, Complete Cody's finish —
 drawn as the SAME kind of animated figure, standing beside the ACTUAL question
 (its title, its wording, its part label, its pictures) and what the student
 wrote, with the animal's lesson under it. The same figures animate on each
@@ -5914,8 +5920,8 @@ animal's card of the student's Learn-from-mistakes page.
   answer.
 - **A FAILURE NEVER BLOCKS MARKING.** Both mounts are wrapped: a card that
   could not be drawn costs the student a card, not their mark.
-- **`science-mistake-art.js` is its OWN sheet of ten**, one avatar per animal
-  id, each self-contained (no shared `id`, no external reference) so ten on the
+- **`science-mistake-art.js` is its OWN sheet of nine**, one avatar per animal
+  id, each self-contained (no shared `id`, no external reference) so nine on the
   Learn-from-mistakes page do not cross-reference each other — the same rule
   the Sidekick art and Chung GPT's face follow. `mistakeAnimalAccent` is the
   ONE place an animal's accent colour comes from, so the card and the roster
@@ -5930,6 +5936,71 @@ animal's card of the student's Learn-from-mistakes page.
   `COACH_PLAYWRIGHT_MODULE=/opt/node22/lib/node_modules/playwright/index.mjs node
   tools/science-coach-browser-tests.mjs`; it runs in the `science-coaches.yml`
   workflow) after touching any of it.
+
+## 🐾 A mistake STAYS: the marker's habit is filed, and the analysis is open-ended only (v1.394.0)
+
+`_partMistakeOf` (beside `_setPartResult`, which now hands it the KEY), the
+`mistake` / `mistakeWhy` fields on `_attemptAnswers` rows and on the student's
+own `fcNoteMistakes` records, `MK_FILED_MARKING` / `MK_FILED_AI` / `filedBy`,
+**`_mkMarkedEntry`** / `_mkFileMarked` / `_mkHarvestNote`, the auto harvest in
+`mkRender` (`_mk.autoRan`), `MK_OWN_SHOWN` / **`_mkOwnEntries`** /
+`_mkStudentPool(…, 'mine')` / `_mkOwnSectionHtml` / `mkStudyOwn`,
+`_mkNormaliseEntry` in both loads, `_coachKindIsMcq` beside
+`_showScienceCoachFeedback`, the `kind === 'open'` branch of `markQuestionPart`'s
+prompt, the `.mk-own*` CSS, and the nine-Sidekick `MISTAKE_ANIMALS` block
+(shared byte for byte with `polymathlc/scan` v1.8.0 and `polymathlc/anskey`
+v1.94.0).
+
+Three things a wrong answer used to lose the moment its card was swept.
+
+- **THE HABIT RIDES `_openPartResults`, NOT THE CARD.** The marking reply
+  named the animal; until now that name lived only on the card under the
+  sidekick, so it reached neither the attempt row nor the child's own log nor
+  the 🐾 Mistake Bank, and the teacher's 🔎 harvest paid a SECOND AI call to
+  work out a habit the marker had already named. `_partMistakeOf` reads it
+  ONCE at `_setPartResult`, through the taxonomy, never on a correct part —
+  and it rides the same store into the attempt row (`_attemptAnswers`) and
+  the child's own log (`fcNoteMistakes`) that the score and the feedback
+  already ride. Absent when nothing was named, so old rows and new look alike.
+- **THE BANK FILLS ITSELF FROM THE MARKING, PENDING, WITH NO CALL.** A
+  candidate carrying a habit is filed by `_mkMarkedEntry` (through the ONE
+  builder, `_mkEntryFromAnalysis`, so it strips a child's identity exactly as
+  the AI path does) with `filedBy: 'marking'`; the rest wait for ✨ as they
+  always did. `mkRender` runs `mkHarvest({ auto: true })` once a sitting, so
+  the teacher opens the page to a Pending list rather than a button — and
+  `_mkHarvestNote` SAYS what was filed, because a costly, invisible thing
+  happening by itself is a thing nobody trusts. **Still pending, still
+  vetted**: nothing here reaches a student unapproved.
+- **THE CHILD'S OWN MISTAKES ARE THEIR OWN PAGE'S FIRST CARD.** `_mkOwnEntries`
+  reads `users/{uid}/mistakes` — the private log, never the class bank —
+  through the same three serving gates the class pool reads, so a held-back or
+  off-level question is not studied through a wrong answer to it either.
+  `_mkStudentPool(…, 'mine')` is that list and nothing else, and it skips the
+  feed history on purpose: a child revising their own mistake is meant to meet
+  it again. The card says *You wrote*, never *a student wrote*.
+- **THE SIDEKICK AND THE ANALYSIS ARE OPEN-ENDED ONLY.** A multiple-choice
+  part is a tick or a cross — "(3)" shows no missed comparison and no vague
+  wording — so `_coachKindIsMcq` stands both cards down in
+  `_showScienceCoachFeedback` (and sweeps any earlier card), `_mistakeAnalysisFor`
+  refuses an mcq context on its own, `_partMistakeOf` refuses an `mcq:` key
+  whatever the model returned, `fcNoteMistakes` and `_mkOwnEntries` skip an mcq
+  record, `_mkCandidatesFrom` skips a *Multiple choice* row, and the per-part
+  prompt asks for coach issues and a habit on an OPEN part only (the batch
+  prompt says in as many words that an MCQ item carries neither). A part with
+  no kind is treated as open — the two local marks pass none.
+- **THE TAXONOMY IS THE SIDEKICKS' OWN.** The mistake types are the nine
+  Science Sidekicks' skills, missing, not a second cast of ten animals: the
+  coach that says what the answer needs next and the figure that names the
+  habit are ONE figure, so `science-mistake-art.js` draws the Sidekick avatar
+  and the roster on the card is the nine. Every stored old id is carried
+  across by `MISTAKE_ANIMAL_ALIASES` — nothing already filed under `fox` or
+  `parrot` reads as unknown — and an id that fits nothing is left for the
+  teacher to re-pick rather than guessed.
+- Run **`node tools/mistake-bank-tests.mjs`**,
+  `node --test tools/science-coach-core-tests.mjs tools/science-coach-integration-tests.mjs tools/science-mistake-tests.mjs`,
+  `node tools/teaching-notes-tests.mjs`, `node tools/scheduled-release-tests.mjs`,
+  `node tools/usage-tracker-tests.mjs` and the Playwright harness after touching
+  any of it.
 
 ## House rules
 - After touching **🐾 the mistake analysis that follows a sidekick**
@@ -5955,6 +6026,27 @@ animal's card of the student's Learn-from-mistakes page.
   from any scheme, and a classmate's sentence runs in another child's page.
   Ask for the habit in a SECOND call and the animal and the verdict come from
   two different readings. And let the taxonomy block drift from
+  `polymathlc/scan` and `polymathlc/anskey` and the same habit wears three
+  animals in three apps.
+- After touching **🐾 the filed habit, the child's own page or the MCQ gate**
+  (`_partMistakeOf`, `_setPartResult`'s seventh argument, the `mistake` fields
+  on `_attemptAnswers` / `fcNoteMistakes`, `_mkMarkedEntry`, `_mkFileMarked`,
+  `_mkHarvestNote`, the auto harvest in `mkRender`, `_mkOwnEntries`,
+  `_mkStudentPool`'s `'mine'` mode, `_mkOwnSectionHtml`, `mkStudyOwn`,
+  `_mkNormaliseEntry`, `_coachKindIsMcq`, the `kind === 'open'` branch of
+  `markQuestionPart`'s prompt, or `MISTAKE_ANIMAL_ALIASES`), run
+  `node tools/mistake-bank-tests.mjs`, the three `node --test` coach suites and
+  the Playwright harness. Every failure is silent and the answer is still
+  marked. Store the habit on an `mcq:` key — or mount a card on an mcq context
+  — and a child is told their cross on "(3)" showed a habit nobody can act
+  on; drop the key from `_setPartResult` and every MCQ habit the model
+  invents is filed. File a marked candidate anywhere but through
+  `_mkEntryFromAnalysis` and a child's name reaches the bank; file it approved
+  and it reaches a student unvetted. Let the own page read the class bank and
+  a classmate's answer is shown as "You wrote"; let it skip the serving gates
+  and a held-back paper is studied through a wrong answer to it. Drop
+  `_mkNormaliseEntry` and every entry filed before v1.394.0 is an unknown
+  mistake the quiz cannot ask about. And let the taxonomy drift from
   `polymathlc/scan` and `polymathlc/anskey` and the same habit wears three
   animals in three apps.
 - After touching **🐾 the mistake bank** (`MISTAKE_ANIMALS`, `mistakeAnimalNormalize`,

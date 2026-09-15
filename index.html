@@ -13,7 +13,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-<link rel="modulepreload" href="app.js?v=1.393.0">
+<link rel="modulepreload" href="app.js?v=1.394.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -9594,7 +9594,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         Check Questions
         <span class="badge" id="cqBadge" style="display:none;">0</span>
       </div>
-      <div class="nav-item admin-only" data-page="mistakebank" onclick="navigateTo('mistakebank')" title="Mistake Bank — students' own wrong answers, cleaned up, sorted under ten mistake animals and vetted by you before the class practises on them.">
+      <div class="nav-item admin-only" data-page="mistakebank" onclick="navigateTo('mistakebank')" title="Mistake Bank — students' own wrong answers, cleaned up, sorted under the nine Science Sidekicks' skills — the comparison, the evidence, the exact word that was missing — and vetted by you before the class practises on them.">
         <span class="ico">🐾</span> Mistake Bank
         <span class="badge" id="mkPendingBadge" style="display:none;">0</span>
       </div>
@@ -10481,7 +10481,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2>🐾 Mistake Bank</h2>
           </div>
-          <div class="subtitle">Students' own wrong answers, cleaned up, sorted under ten mistake animals and vetted by you before the class practises on them</div>
+          <div class="subtitle">Students' own wrong answers, cleaned up, sorted under the nine Science Sidekicks' skills and vetted by you before the class practises on them</div>
         </div>
         <span id="mkCount" style="font-size:0.85rem;color:var(--text-muted);font-weight:600;"></span>
       </div>
@@ -10579,6 +10579,24 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           .mk-figure[data-motion="on"] .sc-avatar-hand{ animation:sc-wave 1.3s ease-in-out 3; transform-box:fill-box; transform-origin:bottom center; }
           .mk-figure[data-motion="on"] .sc-avatar-spark{ animation:sc-spark 2.1s ease-in-out 4; transform-box:fill-box; transform-origin:center; }
           .mk-animal-figure svg{ display:block; width:96px; height:96px; margin:0 auto 4px; overflow:visible; }
+          /* 🐾 My own mistakes — the child's OWN wrong answers, at the top of the
+             page, each with the Sidekick figure, the question and what they wrote
+             (v1.394.0). Same rounded card, same breathing space as the intro. */
+          .mk-own{ border:1px solid var(--border); border-radius:16px; padding:22px 24px; background:var(--surface,#fff); margin-bottom:22px; }
+          .mk-own-head{ display:flex; gap:18px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; }
+          .mk-own-head > div{ flex:1 1 320px; min-width:0; }
+          .mk-own-intro{ margin:0; font-size:0.9rem; line-height:1.65; color:var(--text-muted); }
+          .mk-own-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; margin-top:18px; }
+          .mk-own-card{ display:grid; grid-template-columns:76px minmax(0,1fr); gap:6px 14px; align-items:start; border:1px solid var(--border); border-radius:14px; padding:14px 16px; background:#fff; }
+          .mk-own-figure{ align-self:center; }
+          .mk-own-figure svg{ display:block; width:76px; height:76px; overflow:visible; margin:0 auto; }
+          .mk-own-body{ min-width:0; display:flex; flex-direction:column; gap:6px; }
+          .mk-own-animal{ font-size:0.84rem; } .mk-own-animal span{ color:var(--text-muted); margin-left:4px; }
+          .mk-own-q{ font-weight:600; font-size:0.9rem; line-height:1.45; }
+          .mk-own-wrote{ font-size:0.86rem; line-height:1.55; color:var(--text); overflow-wrap:anywhere; }
+          .mk-own-wrote .mk-round-label{ display:block; margin-bottom:2px; }
+          .mk-own-body .btn{ align-self:flex-start; margin-top:4px; }
+          @media (max-width:480px){ .mk-own{ padding:18px 16px; } .mk-own-card{ grid-template-columns:60px minmax(0,1fr); } .mk-own-figure svg{ width:60px; height:60px; } }
           @media (max-width:480px){ .mk-lesson.has-figure{ grid-template-columns:84px minmax(0,1fr); gap:6px 12px; } .mk-figure svg{ width:84px; height:84px; } }
           @media (prefers-reduced-motion:reduce){ .mk-figure *{ animation:none !important; } }
           .mk-fix textarea{ width:100%; font:inherit; font-size:0.92rem; line-height:1.6; padding:10px 12px; border:1px solid var(--border); border-radius:10px; resize:vertical; box-sizing:border-box; }
@@ -11216,7 +11234,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2>🐾 Learn from Mistakes</h2>
           </div>
-          <div class="subtitle">Other students' wrong answers — spot which of the ten mistake animals it is, then write it the right way</div>
+          <div class="subtitle">Other students' wrong answers — spot which Science Sidekick's skill was missing, then write it the right way</div>
         </div>
         <button class="btn btn-outline" onclick="mkStudentReload()" style="font-size:0.82rem;">↻ Refresh</button>
       </div>
@@ -15145,6 +15163,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
-<script type="module" src="app.js?v=1.393.0"></script>
+<script type="module" src="app.js?v=1.394.0"></script>
 </body>
 </html>

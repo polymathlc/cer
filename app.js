@@ -3858,7 +3858,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.393.0';
+const APP_VERSION = 'v1.394.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -30457,6 +30457,16 @@ function _showScienceCoachFeedback(target, result, context = {}) {
       || document.querySelector(containerSel) !== container || !container.contains(host)) return;
   const page = host.closest('.page');
   if (page && !page.classList.contains('active')) return;
+  // 🐾 OPEN-ENDED ANSWERS ONLY. A multiple-choice part is a tick or a cross:
+  // there is no wording to coach and no habit an answer of "(3)" can show, so
+  // a Science Sidekick or a mistake analysis under it is a lesson about
+  // nothing. Neither card mounts on an MCQ, and any card an earlier check of
+  // this part left behind is swept — whatever the model returned.
+  if (_coachKindIsMcq(context)) {
+    try { resetScienceCoaches(host); } catch (e) { console.warn('Coach reset skipped', e); }
+    try { resetMistakeAnalysis(host); } catch (e) { console.warn('Mistake analysis reset skipped', e); }
+    return;
+  }
   let coachRoot = null;
   try { coachRoot = mountScienceCoach(host, result, context) || null; } catch (e) { console.warn('Coach display skipped', e); }
   // The 🐾 mistake analysis FOLLOWS the sidekick: it is mounted after the
@@ -30472,10 +30482,20 @@ function _showScienceCoachFeedback(target, result, context = {}) {
   } catch (e) { console.warn('Mistake analysis skipped', e); }
 }
 
+/* The ONE test for "this part is multiple choice" on the coach path. Every
+   marking call site names its part's kind ('open' / 'mcq' / 'annotation');
+   an unknown or missing kind is treated as open-ended, because the two
+   local marks that pass no kind are the fill-in-the-blank and the open box. */
+function _coachKindIsMcq(context) {
+  return !!context && typeof context === 'object' && String(context.kind || '').trim().toLowerCase() === 'mcq';
+}
+
 /* 🐾 THE MISTAKE ANALYSIS THAT FOLLOWS A SIDEKICK.
    A coach says what a stronger answer needs NEXT; this names the HABIT the
-   answer showed — one of the ten mistake animals, the taxonomy shared with
-   the mistake bank, Scan and Ans Key. Three rules, each silent if dropped:
+   answer showed — the skill one of the nine Science Sidekicks stands for,
+   the taxonomy shared with the mistake bank, Scan and Ans Key. It is drawn
+   on an OPEN-ENDED answer and never on a multiple-choice one. Three rules,
+   each silent if dropped:
    • THE HABIT RIDES THE SAME MARKING REPLY as the coach issues (`mistake` /
      `mistakeWhy`, asked for by MISTAKE_ANIMAL_RULE in all three marking
      prompts). No second call, no second reading: the verdict and the habit
@@ -30491,6 +30511,7 @@ function _showScienceCoachFeedback(target, result, context = {}) {
      rendered escaped and clipped by the card itself. */
 function _mistakeAnalysisFor(result, context = {}, q = null) {
   if (!result || typeof result !== 'object') return null;
+  if (_coachKindIsMcq(context)) return null;   // a tick or a cross shows no habit
   const verdict = String(result.verdict || '').trim().toLowerCase();
   if (!['partial', 'incorrect', 'wrong'].includes(verdict)) return null;
   const id = mistakeAnimalNormalize(result.mistake);
@@ -33235,7 +33256,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         `Also write a clear overall EXPLANATION (2-4 sentences) addressed to "you" that is SPECIFIC to the answer the student actually gave: explain WHY their answer was marked correct, partial or incorrect — quote or refer to what they wrote, say what they got right, what was missing or wrong, and what a full-mark answer needs. Do NOT just restate the model answer or describe the question in the abstract. ` +
         SCIENCE_COACH_INSTRUCTIONS + '\n' +
         MISTAKE_ANIMAL_RULE + '\n' +
-        `For each item also include "mistake" (the mistake type id for a wrong or partial item, or empty) and "mistakeWhy" (one sentence to the student: how THIS answer shows that habit, or empty). ` +
+        `For each OPEN item also include "mistake" (the mistake type id for a wrong or partial OPEN item, or empty) and "mistakeWhy" (one sentence to the student: how THIS answer shows that habit, or empty). A MULTIPLE-CHOICE item is a tick or a cross and never shows a habit: leave its "coachIssues" empty, its "mistake" empty and its "mistakeWhy" empty. ` +
         `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","coachIssues":[],"mistake":"","mistakeWhy":"","chosen":"B"}],"modelAnswer":"...","explanation":"..."}.\n${list}`;
       if (!gradingCurrent()) return null;
       let raw;
@@ -33281,7 +33302,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         if (verdict !== 'correct' && e.model) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Model answer:</strong> ${qKeyPlainHtml(q, e.model)}</div>`;
         fb.innerHTML = inner;
       }
-      _setPartResult(containerSel, 'open:' + (e.areaEl.dataset.oidx || ''), verdict, pts, e.model, e.student);
+      _setPartResult(containerSel, 'open:' + (e.areaEl.dataset.oidx || ''), verdict, pts, e.model, e.student, v);
       _showScienceCoachFeedback(e.coachTarget, v, { kind: 'open', label: e.label,
         ...(photo ? {} : { student: e.student }) });
     } else {
@@ -33297,7 +33318,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         if (verdict !== 'correct' && correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
         fb.innerHTML = inner;
       }
-      _setPartResult(containerSel, 'mcq:' + m.blockId, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter);
+      _setPartResult(containerSel, 'mcq:' + m.blockId, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter, v);
       _showScienceCoachFeedback(e.coachTarget, v, { kind: 'mcq', ...(chosenLetter ? { student: _mcqChoiceLabel(m.options, chosenLetter) } : {}) });
     }
   });
@@ -33377,8 +33398,46 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
 // PER-PART AI MARKING + HINTS — every answer box / MCQ gets its own
 // "✓ Check answer" and "💡 Hint" buttons instead of one big per-question button.
 // =====================================================================
-function _setPartResult(containerSel, key, verdict, pts, expected, student) {
-  (_openPartResults[containerSel] = _openPartResults[containerSel] || {})[key] = { verdict, pts, expected, student };
+function _setPartResult(containerSel, key, verdict, pts, expected, student, reply) {
+  (_openPartResults[containerSel] = _openPartResults[containerSel] || {})[key] = Object.assign({ verdict, pts, expected, student }, _partMistakeOf(reply, verdict, key));
+}
+
+/* 🐾 THE HABIT STAYS WITH THE PART IT WAS NAMED ON.
+   The marking reply that gave a part its verdict also names the mistake
+   animal (`mistake` / `mistakeWhy`, asked for by MISTAKE_ANIMAL_RULE in all
+   three marking prompts). Until v1.394.0 that habit lived only on the card
+   drawn under the sidekick — swept on the next check, gone with the tab — so
+   the one thing a wrong answer TEACHES never reached the attempt row, the
+   student's own mistake log or the 🐾 Mistake Bank, and the teacher's 🔎
+   harvest had to pay a SECOND AI call to work out a habit the marker had
+   already named. It is read here, once, and rides `_openPartResults` into
+   `_attemptAnswers` (the attempt row) and `fcNoteMistakes` (the student's
+   own log) with the rest of the part's result. Three rules, each silent if
+   dropped:
+   • ONLY THROUGH THE TAXONOMY. `mistakeAnimalNormalize` turns the model's
+     word into an id or into '' — and '' is an answer. An invented animal is
+     never stored; a wrong label filed under a child's own answer teaches a
+     wrong lesson with a straight face every time they revise it.
+   • NEVER ON A CORRECT PART, whatever the model said. A correct answer has
+     no mistake to name, and a habit filed against it is a red cross on a
+     question they got right.
+   • NEVER ON A MULTIPLE-CHOICE PART. A wrong option is a cross, not a
+     habit — "(3)" shows no missed comparison and no vague wording — so a
+     part keyed `mcq:` stores no habit whatever the model returned, and the
+     Sidekick and the mistake analysis are open-ended cards only.
+   • IT IS OPTIONAL AT EVERY CALL SITE. The local MCQ mark and the
+     fill-in-the-blank mark make no AI call and pass nothing; a reply with no
+     habit stores no fields at all, so an attempt row written before this
+     existed and one written by a marker that named nothing look the same. */
+function _partMistakeOf(reply, verdict, key) {
+  const v = String(verdict || '').toLowerCase();
+  if (String(key || '').startsWith('mcq:')) return {};
+  if (!reply || typeof reply !== 'object' || v === 'correct') return {};
+  let id = '';
+  try { id = mistakeAnimalNormalize(reply.mistake); } catch (e) { id = ''; }
+  if (!id) return {};
+  const why = typeof reply.mistakeWhy === 'string' ? reply.mistakeWhy.replace(/\s+/g, ' ').trim() : '';
+  return why ? { mistake: id, mistakeWhy: why } : { mistake: id };
 }
 
 /* WHAT THE STUDENT ACTUALLY WROTE, KEPT — so the teacher can read it back.
@@ -33405,6 +33464,7 @@ function _setPartResult(containerSel, key, verdict, pts, expected, student) {
    attempt unwritable: a lost attempt is a lost mark. */
 const SUT_ANS_CHARS = 700;      // one answer, trimmed with an ellipsis
 const SUT_ANS_PARTS = 20;       // parts kept per question
+const SUT_WHY_CHARS = 400;      // the marker's one-line reason for the habit
 
 function _attemptAnswers(containerSel) {
   const results = _openPartResults[containerSel] || {};
@@ -33421,13 +33481,23 @@ function _attemptAnswers(containerSel) {
       const it = items[parseInt(String(key).slice(5), 10)];
       if (it && it.label) label = String(it.label);
     }
-    return {
+    const row = {
       label: clip(label),
       student: clip(r.student),
       expected: clip(r.expected),
       verdict: String(r.verdict || ''),
       pts: Number(r.pts) || 0
     };
+    // The habit the marker named rides the row it was named on, so the 🐾
+    // Mistake Bank can file this part without asking a model a second time.
+    // It is written only when there is one: an unmarked habit is an ABSENT
+    // field, never an empty string that a later reader could take for a type.
+    if (r.mistake && mistakeAnimal(r.mistake)) {
+      row.mistake = String(r.mistake);
+      const why = String(r.mistakeWhy || '').replace(/\s+/g, ' ').trim();
+      if (why) row.mistakeWhy = why.length > SUT_WHY_CHARS ? why.slice(0, SUT_WHY_CHARS) + '…' : why;
+    }
+    return row;
   });
 }
 
@@ -33492,7 +33562,8 @@ function _checkAllPartsMarked(containerSel) {
     fcNoteMistakes(q, Object.entries(results)
       .filter(([, r]) => r && r.verdict !== 'correct')
       .map(([key, r]) => ({ kind: String(key).startsWith('mcq:') ? 'mcq' : 'open',
-                            verdict: r.verdict, expected: r.expected, student: r.student })),
+                            verdict: r.verdict, expected: r.expected, student: r.student,
+                            mistake: r.mistake, mistakeWhy: r.mistakeWhy })),
       cfg.mode || 'practice-open');
   }
   recordCerPerformance(q, finalScore, finalTotal, cfg.mode || 'practice-open', answerText);
@@ -33617,10 +33688,13 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
         : `Decide which option the student chose and mark "correct" only if it matches the correct option number, otherwise "incorrect"; also include "chosen":"<the option number the student picked, or empty>". `) +
       `Give ONE short feedback sentence (max 22 words) addressed to the student. ` +
       `Provide the full correct answer for THIS part as "modelAnswer"${kind === 'mcq' ? ' (state the correct option number and what it says)' : ' (use the expected answer if provided, otherwise generate the correct answer yourself)'}. ` +
-      SCIENCE_COACH_INSTRUCTIONS + '\n' +
-      MISTAKE_ANIMAL_RULE + '\n' +
-      `Also include "mistake" (the mistake type id for a wrong or partial answer, or empty) and "mistakeWhy" (one sentence to the student: how THIS answer shows that habit, or empty). ` +
-      `Return ONLY JSON: {"verdict":"correct","feedback":"...","coachIssues":[],"mistake":"","mistakeWhy":"","modelAnswer":"..."${kind === 'mcq' ? ',"chosen":"2"' : ''}}.\n${item}`;
+      (kind === 'open'
+        ? SCIENCE_COACH_INSTRUCTIONS + '\n' +
+          MISTAKE_ANIMAL_RULE + '\n' +
+          `Also include "mistake" (the mistake type id for a wrong or partial answer, or empty) and "mistakeWhy" (one sentence to the student: how THIS answer shows that habit, or empty). ` +
+          `Return ONLY JSON: {"verdict":"correct","feedback":"...","coachIssues":[],"mistake":"","mistakeWhy":"","modelAnswer":"..."}.\n${item}`
+        // A multiple-choice part is a tick or a cross: no Sidekick, no habit.
+        : `Return ONLY JSON: {"verdict":"correct","feedback":"...","modelAnswer":"...","chosen":"2"}.\n${item}`);
     let raw;
     if (input.media.length) {
       raw = await askGeminiVision(prompt, input.media, { maxOutputTokens: 900, json: true });
@@ -33654,7 +33728,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
       if (modelShown) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Model answer:</strong> ${qKeyPlainHtml(q, modelShown)}</div>`;
       fbEl.innerHTML = inner;
     }
-    _setPartResult(containerSel, 'open:' + pid, verdict, pts, model, student);
+    _setPartResult(containerSel, 'open:' + pid, verdict, pts, model, student, parsed);
   } else {
     const chosenLetter = parsed.chosen ? _normMcqChoice(parsed.chosen) : studentLetter;
     mcqChoice = chosenLetter ? _mcqChoiceLabel(mcq.options, chosenLetter) : '';
@@ -33664,7 +33738,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
       if (correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
       fbEl.innerHTML = inner;
     }
-    _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter);
+    _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter, parsed);
   }
   _showScienceCoachFeedback(coachTarget, parsed, { kind, label,
     ...(kind === 'open' && !photo ? { student } : {}),
@@ -39552,6 +39626,17 @@ function fcNoteMistakes(q, parts, mode) {
         mode: String(mode || ''),
         at,
       };
+      // 🐾 The habit the marker named, kept on the child's OWN log so the
+      // Learn-from-mistakes page can show them their own mistakes with the
+      // animal beside each — through the taxonomy, never as the model's raw
+      // word, and never on a part that was marked correct (the filter above
+      // has already dropped those). Absent when nothing was named.
+      const habit = rec.kind === 'mcq' ? '' : mistakeAnimalNormalize(p.mistake);
+      if (habit) {
+        rec.mistake = habit;
+        const why = _fcClip(p.mistakeWhy);
+        if (why) rec.mistakeWhy = why;
+      }
       mistakeLog.unshift(rec);
       setDoc(_mkRef(rec.id), rec).catch(e => console.warn('mistake log write', e));
     });
@@ -74599,8 +74684,9 @@ function ainsteinOnSignOut() {
 // that nobody else ever sees. The attempt log holds thousands of them —
 // what was written, what was expected, what the marker said — and until now
 // the only reader was the teacher's own Usage page. This turns them into a
-// LESSON: every wrong answer is cleaned up, sorted under one of ten familiar
-// MISTAKE ANIMALS, vetted by the teacher, and then served back to the whole
+// LESSON: every wrong answer is cleaned up, sorted under one of the nine
+// MISTAKE TYPES — the Science Sidekicks' own skills, each one missing —
+// vetted by the teacher, and then served back to the whole
 // class to practise on — "which mistake did this student make?", and "now
 // write it correctly". The system can also WRITE a wrong answer of a chosen
 // kind for a question that has no real ones yet.
@@ -74642,8 +74728,12 @@ function ainsteinOnSignOut() {
    ---------------------------------------------------------------------
    A wrong answer is wrong in one of a small number of FAMILIAR ways, and a
    child who can NAME the way they went wrong can watch for it next time.
-   Each way is an animal, because "insufficient specificity in the causal
-   chain" is not a thing a nine-year-old keeps and "you did a Peacock" is.
+   Each way is a Science Sidekick — the coach who already stands beside a
+   marked answer asking for exactly that skill — because "insufficient
+   specificity in the causal chain" is not a thing a nine-year-old keeps and
+   "Specific Sherry would have caught that" is. ONE cast, not two: the coach
+   drawn beside the answer and the animal the mistake is filed under are the
+   same figure (science-mistake-art.js draws the coach's own art).
 
    THIS LIST IS THE CONTRACT BETWEEN REPOSITORIES THAT CANNOT SEE EACH OTHER.
    The Science Learning Portal (polymathlc/cer) files students' own answers
@@ -74656,7 +74746,7 @@ function ainsteinOnSignOut() {
 
    Three rules every reader keeps:
    • `mistakeAnimal(id)` is the ONE lookup and it returns null for anything
-     it does not know, never a guess. A model that invents an eleventh animal
+     it does not know, never a guess. A model that invents a tenth type
      must not be able to file a mistake under it.
    • `mistakeAnimalNormalize(v)` is how a MODEL's answer becomes an id — it
      takes the id, the animal's name or the mistake's name in any case, and
@@ -74667,64 +74757,85 @@ function ainsteinOnSignOut() {
    • `MISTAKE_ANIMAL_RULE` is the ONE wording every prompt uses to ask for a
      type, so three apps classify the same answer the same way. */
 var MISTAKE_ANIMALS = [
-  { id: 'rabbit',    emoji: '🐇', animal: 'The Rabbit',    name: 'Rushed it',
-    desc: 'Answered a different question from the one printed — skimmed past NOT, "two reasons", "in terms of", or the unit that was asked for.',
-    spot: 'The answer is fine on its own but does not fit the question.',
-    fix: 'Underline what the question asks for before you write a word.' },
-  { id: 'parrot',    emoji: '🦜', animal: 'The Parrot',    name: 'Repeated the question',
-    desc: 'Restated the question or the data instead of answering it — "the ice melted because it turned into liquid".',
-    spot: 'Nothing in the answer that was not already in the question.',
-    fix: 'Add the science: the process, the cause, the reason.' },
-  { id: 'sloth',     emoji: '🦥', animal: 'The Sloth',     name: 'Stopped halfway',
-    desc: 'A right start with no finish — the cause without the effect, one of two parts, no link back to the question.',
-    spot: 'The answer ends before it reaches the point.',
-    fix: 'Finish every chain: cause → process → effect → back to the question.' },
-  { id: 'chameleon', emoji: '🦎', animal: 'The Chameleon', name: 'Wrong keyword',
+  /* THE NINE SCIENCE SIDEKICKS ARE THE MISTAKE TYPES (cer v1.394.0, scan
+     v1.8.0, anskey v1.94.0). The list used to be ten animals of its own —
+     the Rabbit, the Parrot, the Sloth… — a second cast standing beside the
+     Sidekicks who already coach the same answers. Two casts naming the same
+     habit two ways is one the child has to translate, so the mistake a card
+     names is now the SKILL a Sidekick coaches, missing: what Comparison
+     Casey asks for is what a "comparison" mistake left out. The `id` is the
+     Sidekick's own id (science-coach-core.js in the Portal), so the coach
+     drawn beside a marked answer and the animal the mistake is filed under
+     are ONE figure. The old ids still normalise (MISTAKE_ANIMAL_ALIASES), so
+     an entry filed under them in any app reads as the habit it always meant. */
+  { id: 'comparison', emoji: '🦎', animal: 'Comparison Casey', name: 'Missed the comparison',
+    desc: 'Described only one of the two things, or compared them on different features — "A is hotter" with nothing said about B, or A\'s mass set against B\'s volume.',
+    spot: 'Only one of the two things is in the answer, or the two are measured by different features.',
+    fix: 'Name both things, compare the SAME feature, and say how they differ or are alike.' },
+  { id: 'context',    emoji: '🐹', animal: 'Context Connie',   name: 'Ignored the question clues',
+    desc: 'A general answer that never used this question\'s own scenario, diagram feature or label — right about the topic, blind to the setup in front of them.',
+    spot: 'The answer would fit any question on the topic; nothing in it names this one\'s details.',
+    fix: 'Pick the relevant detail or label from the question or diagram, name it, and explain how it changes the answer.' },
+  { id: 'specific',   emoji: '🦊', animal: 'Specific Sherry',  name: 'Too vague',
+    desc: 'Words a reader cannot picture — "it changes", "something happens", "it affects the plant" — where the exact object, change or observation was needed; or the question repeated back as the answer.',
+    spot: 'A sentence that could be about almost any question.',
+    fix: 'Replace the vague word with the exact thing: what changed, from what to what, seen how.' },
+  { id: 'evidence',   emoji: '🐘', animal: 'Evidence Ellen',   name: 'Ignored the evidence',
+    desc: 'Answered from general knowledge and never used the diagram, table, graph or result the question gave.',
+    spot: 'Nothing from the data appears in the answer.',
+    fix: 'Point at the result — "the reading rose from 20 to 35" — and say what it shows.' },
+  { id: 'keywords',   emoji: '🦜', animal: 'Keyword Kai',      name: 'Wrong keyword',
     desc: 'The right idea in the wrong word — "melt" for "dissolve", "heat" for "temperature", "grow" for "reproduce".',
     spot: 'A near-miss word a marker cannot accept.',
-    fix: 'Use the exact keyword the topic is taught with.' },
-  { id: 'octopus',   emoji: '🐙', animal: 'The Octopus',   name: 'Grabbed everything',
-    desc: 'Everything remembered about the topic, instead of the one point that answers the question.',
-    spot: 'Long, full of facts, and the point is missing or buried.',
-    fix: 'One question, one point: answer it and stop.' },
-  { id: 'monkey',    emoji: '🐒', animal: 'The Monkey',    name: 'Mixed-up ideas',
-    desc: 'Two ideas swapped or blended — evaporation and boiling, conductor and insulator, mass and weight.',
+    fix: 'Use the exact science term the topic is taught with, and say what it means in this question.' },
+  { id: 'concept',    emoji: '🦉', animal: 'Concept Cora',     name: 'Mixed up the science',
+    desc: 'The science idea itself is wrong or two ideas are swapped — evaporation for boiling, conductor for insulator, a fact misremembered or guessed.',
     spot: 'A confident answer about the wrong concept.',
-    fix: 'Put the pair side by side and say what makes them different.' },
-  { id: 'goldfish',  emoji: '🐟', animal: 'The Goldfish',  name: 'Forgot the fact',
-    desc: 'A plain wrong fact — misremembered, or guessed.',
-    spot: 'The science itself is wrong.',
-    fix: 'Go back to the notes for that topic and relearn the fact.' },
-  { id: 'fox',       emoji: '🦊', animal: 'The Fox',       name: 'Reversed the logic',
-    desc: 'Cause and effect the wrong way round, or a "because" that is really the result.',
-    spot: 'Read backwards, it makes sense.',
-    fix: 'Ask "which happened first?" before you write "because".' },
-  { id: 'bat',       emoji: '🦇', animal: 'The Bat',       name: 'Ignored the evidence',
-    desc: 'Answered from general knowledge and never looked at the diagram, table, graph or experiment the question gave.',
-    spot: 'Nothing from the data appears in the answer.',
-    fix: 'Quote the evidence: the number, the label, the change in the diagram.' },
-  { id: 'peacock',   emoji: '🦚', animal: 'The Peacock',   name: 'Too vague',
-    desc: 'A sweeping statement with nothing specific in it — "it affects the plant", "it gets worse" — no unit, no direction, no amount.',
-    spot: 'Could be written under almost any question.',
-    fix: 'Say what changed, which way, and by how much.' }
+    fix: 'Go back to the idea in the notes and put the two ideas side by side.' },
+  { id: 'reasoning',  emoji: '🐼', animal: 'Reasoning Ravi',   name: 'Broke the chain',
+    desc: 'Cause and effect not linked — a "because" that does not lead to the claim, the logic the wrong way round, or an observation left unexplained.',
+    spot: 'The evidence and the answer sit side by side with no link, or the answer reads better backwards.',
+    fix: 'Link observation → science idea → claim with "because", in that order.' },
+  { id: 'careful',    emoji: '🐢', animal: 'Careful Cleo',     name: 'Slipped on a detail',
+    desc: 'Misread the question or the data — the NOT, the unit, the label, the number, "two reasons" — so the answer does not fit what was asked.',
+    spot: 'The answer is fine on its own but does not match the question or the figure.',
+    fix: 'Underline what is asked, then check every unit, label and number against the question.' },
+  { id: 'complete',   emoji: '🦫', animal: 'Complete Cody',    name: 'Stopped halfway',
+    desc: 'A right start with no finish — one of two parts, the cause without the effect, a blank, no link back to the question.',
+    spot: 'The answer ends before it reaches the point.',
+    fix: 'Re-read every part of the question and finish the chain back to it.' }
 ];
-
-/* The ONE lookup. Null for anything not on the list — never a default. */
+/* The ten ids this list carried before the Sidekicks took it over, and the
+   habit each one MEANT, so an answer filed under "sloth" in any app still
+   reads as "Stopped halfway" rather than as an unknown mistake. Read only by
+   mistakeAnimalNormalize; never written, never offered. */
+var MISTAKE_ANIMAL_ALIASES = {
+  rabbit: 'careful', 'rushed it': 'careful',
+  parrot: 'specific', 'repeated the question': 'specific',
+  sloth: 'complete', 'stopped halfway': 'complete',
+  chameleon: 'keywords', 'wrong keyword': 'keywords',
+  octopus: 'specific', 'grabbed everything': 'specific',
+  monkey: 'concept', 'mixed-up ideas': 'concept', 'mixed up ideas': 'concept',
+  goldfish: 'concept', 'forgot the fact': 'concept',
+  fox: 'reasoning', 'reversed the logic': 'reasoning',
+  bat: 'evidence', 'ignored the evidence': 'evidence',
+  peacock: 'specific', 'too vague': 'specific'
+};
+/* The ONE lookup. `null` for an id nobody knows — never a guess. */
 function mistakeAnimal(id) {
-  var key = String(id == null ? '' : id).trim().toLowerCase();
-  if (!key) return null;
-  for (var i = 0; i < MISTAKE_ANIMALS.length; i++) {
-    if (MISTAKE_ANIMALS[i].id === key) return MISTAKE_ANIMALS[i];
-  }
+  var s = String(id == null ? '' : id).trim().toLowerCase();
+  if (!s) return null;
+  for (var i = 0; i < MISTAKE_ANIMALS.length; i++) if (MISTAKE_ANIMALS[i].id === s) return MISTAKE_ANIMALS[i];
   return null;
 }
 function mistakeAnimalIds() {
   return MISTAKE_ANIMALS.map(function (m) { return m.id; });
 }
 /* A model's answer becomes an id here, and here only. It accepts the id, the
-   animal ("The Rabbit", "rabbit 🐇"), or the mistake's own name ("rushed it")
-   in any case — and hands back '' for "unsure", "none", nothing at all, or a
-   word it has never heard. '' is an answer: NO type. */
+   Sidekick ("Comparison Casey", "casey", "comparison 🦎"), the mistake's own
+   name ("too vague") or one of the OLD ids and habit names in any case — and
+   hands back '' for "unsure", "none", nothing at all, or a word it has never
+   heard. '' is an answer: NO type. */
 function mistakeAnimalNormalize(v) {
   if (v && typeof v === 'object') v = v.animal || v.id || v.type || '';
   var s = String(v == null ? '' : v).trim().toLowerCase();
@@ -74734,15 +74845,20 @@ function mistakeAnimalNormalize(v) {
   var bare = s.replace(/^the\s+/, '');
   for (var i = 0; i < MISTAKE_ANIMALS.length; i++) {
     var m = MISTAKE_ANIMALS[i];
+    var who = m.animal.toLowerCase();
     if (bare === m.id) return m.id;
-    if (bare === m.animal.toLowerCase().replace(/^the\s+/, '')) return m.id;
+    if (bare === who) return m.id;
+    if (bare === who.split(' ').pop()) return m.id;          // "casey"
     if (s === m.name.toLowerCase()) return m.id;
   }
-  // "rabbit — rushed it", "The Rabbit (rushed it)": the id is the first word.
+  if (Object.prototype.hasOwnProperty.call(MISTAKE_ANIMAL_ALIASES, bare)) return MISTAKE_ANIMAL_ALIASES[bare];
+  // "comparison — missed the comparison", "Comparison Casey (missed…)": the id is the first word.
   var first = bare.split(' ')[0];
-  return mistakeAnimal(first) ? first : '';
+  if (mistakeAnimal(first)) return first;
+  if (Object.prototype.hasOwnProperty.call(MISTAKE_ANIMAL_ALIASES, first)) return MISTAKE_ANIMAL_ALIASES[first];
+  return '';
 }
-/* "🐇 The Rabbit — Rushed it", or '' for an id nobody knows. */
+/* "🦎 Comparison Casey — Missed the comparison", or '' for an id nobody knows. */
 function mistakeAnimalLabel(id) {
   var m = mistakeAnimal(id);
   return m ? m.emoji + ' ' + m.animal + ' — ' + m.name : '';
@@ -74756,10 +74872,10 @@ function mistakeAnimalPromptList() {
 }
 /* The ONE wording every prompt that asks for a type uses, so three apps sort
    the same answer the same way. It asks for the id and it allows "" — a
-   mistake that fits none of the ten is filed under none of them. */
+   mistake that fits none of the nine is filed under none of them. */
 var MISTAKE_ANIMAL_RULE =
-  'MISTAKE TYPES. Every wrong or partly-right answer is wrong in ONE of these familiar ways, each named after ' +
-  'an animal so that a child can remember it:\n' + mistakeAnimalPromptList() + '\n' +
+  'MISTAKE TYPES. Every wrong or partly-right answer is wrong in ONE of these familiar ways, each the skill ' +
+  'of one of the nine Science Sidekicks — an animal coach a child already knows by name — left out of the answer:\n' + mistakeAnimalPromptList() + '\n' +
   'When you are asked for a "mistake", give the ONE id from that list (the lowercase word before the "=") ' +
   'that best names the HABIT behind the error — not what the right answer is, but the way the student went ' +
   'wrong. Judge the habit from what they actually wrote against what the question asked. If two fit, choose ' +
@@ -74780,6 +74896,9 @@ const MK_WHY_CHARS = 600;
 const MK_MIN_ANSWER_WORDS = 2;  // one word is not a mistake anyone can learn from
 const MK_QUIZ_OPTIONS = 4;
 const MK_SESSION_MAX = 12;
+const MK_OWN_SHOWN = 6;         // the child's own latest mistakes listed on their page
+const MK_FILED_MARKING = 'marking';   // an entry filed straight from the marker's own reading
+const MK_FILED_AI = 'ai';             // …or by the ✨ clean-up call (and every entry from before v1.394.0)
 
 /* Whose bank. The admin's own; a student or an employee reads the teacher's
    through the same pointer the question bank is resolved from. */
@@ -74873,6 +74992,11 @@ function _mkEntryFromAnalysis(analysis, ctx) {
     fixed: _mkClip(a.fixed || ctx.expected || '', MK_ANSWER_CHARS),
     hint: _mkClip(a.hint || '', 300),
     fromAttempt: String(ctx.fromAttempt || ''),
+    /* Who read the answer: the MARKER, on the very reply that gave the part
+       its verdict (v1.394.0), or the ✨ clean-up call. A marked entry has not
+       been tidied — the answer is exactly as the child wrote it — so the card
+       says so before the teacher approves it. Nothing else reads this. */
+    filedBy: ctx.filedBy === MK_FILED_MARKING ? MK_FILED_MARKING : MK_FILED_AI,
     hash: _mkHash(String(ctx.questionId || '') + '|' + cleaned.toLowerCase()),
     createdAt: Timestamp.now()
   };
@@ -74895,6 +75019,9 @@ function _mkCandidatesFrom(attempts, have, findQ) {
       if (!ans) return;
       const verdict = String(ans.verdict || '').toLowerCase();
       if (verdict !== 'wrong' && verdict !== 'partial') return;
+      // A multiple-choice row is a letter, not an answer anyone can learn a
+      // habit from — the bank is open-ended only, whatever the row carries.
+      if (String(ans.label || '').trim().toLowerCase() === 'multiple choice') return;
       const student = String(ans.student || '').trim();
       if (_mkWords(student) < MK_MIN_ANSWER_WORDS) return;
       const key = d.id + ':' + idx;
@@ -74906,11 +75033,56 @@ function _mkCandidatesFrom(attempts, have, findQ) {
         part: String(ans.label || ''),
         raw: student,
         expected: String(ans.expected || ''),
-        verdict: verdict
+        verdict: verdict,
+        /* The habit the MARKER named on this part, when it named one — read
+           through the taxonomy, so a stray word on an attempt row can never
+           become a type. A candidate carrying one is filed by `_mkMarkedEntry`
+           with no AI call; one without goes to ✨ as it always did. */
+        mistake: mistakeAnimalNormalize(ans.mistake),
+        mistakeWhy: String(ans.mistakeWhy || '').replace(/\s+/g, ' ').trim()
       });
     });
   });
   return out.slice(0, MK_HARVEST_MAX);
+}
+
+/* 🐾 THE MISTAKE STAYS IN THE BANK — filed from the marking itself (v1.394.0).
+   Every marked answer already carries its habit (`_partMistakeOf`), so a
+   wrong part whose attempt row names an animal is a lesson the bank can hold
+   the moment the teacher's page reads it: the question as the marker saw it,
+   the answer exactly as the child wrote it, the animal, the marker's own
+   one-line reason, and the model answer as the correction. Pure, so the
+   harness can run it.
+   • IT LANDS PENDING, like everything else. The marker named the habit; it
+     did not tidy the spelling, take a name out, or write the lesson to
+     another pupil — so the card wears 📝 "filed from the marking" and the
+     teacher reads it before the class does. Nothing reaches a student
+     unvetted, and that rule did not move.
+   • IT CARRIES NO CHILD. The same ONE builder as every other entry, so no
+     uid, email or name can arrive by this door either.
+   • A CANDIDATE WITH NO HABIT COMES BACK NULL and is left for ✨ — the
+     second reading is spent only where the first one named nothing. */
+function _mkMarkedEntry(c) {
+  if (!c || !c.q) return null;
+  const animal = mistakeAnimal(c.mistake);
+  if (!animal) return null;
+  const q = c.q;
+  const topic = (q && q.topic) || '';
+  const qText = _mkQuestionText(q);
+  const model = c.expected || _mkModelAnswer(q);
+  return _mkEntryFromAnalysis({
+    worth: true,
+    cleaned: c.raw,
+    animal: animal.id,
+    why: c.mistakeWhy || animal.desc,
+    fixed: model,
+    hint: animal.fix
+  }, {
+    source: 'student', filedBy: MK_FILED_MARKING,
+    questionId: c.questionId, questionTitle: q.title || '', topic: topic, topic2: q.topic2 || '',
+    level: getTopicLevel(topic) || '', part: c.part, question: qText, images: _mkQuestionImages(q),
+    expected: model, raw: c.raw, fromAttempt: c.fromAttempt
+  });
 }
 
 /* How the bank is SORTED, for the teacher and for the class alike: by
@@ -74968,15 +75140,33 @@ function _mkQuizOptions(correctId, n) {
 // THE ADMIN'S HALF — 🐾 Mistake Bank
 // =====================================================================
 let _mk = { bank: [], loaded: false, error: '', status: 'pending', animal: '', search: '',
-            candidates: null, running: false, stop: false, progress: '', genOpen: false, expanded: {} };
+            candidates: null, running: false, stop: false, progress: '', genOpen: false, expanded: {}, autoRan: false };
 
+/* AN ENTRY FILED UNDER THE OLD TEN-ANIMAL LIST STILL READS. The taxonomy
+   became the nine Science Sidekicks' skills in v1.394.0, and every entry the
+   bank already holds carries the OLD id — `fox`, `parrot`, `sloth`. Read raw,
+   each of those is "an unknown mistake" the quiz cannot ask about and the
+   student page cannot list. `mistakeAnimalNormalize` carries the alias table
+   (fox → reasoning, parrot → specific, …), so the id is translated ONCE on
+   the way in and every reader downstream sees a live one. An id that fits
+   nothing is left as it was, so the teacher's page can still show the card
+   and the type can be picked again by hand. */
+function _mkNormaliseEntry(e) {
+  if (!e || typeof e !== 'object') return e;
+  const raw = e.animal;
+  if (raw == null || raw === '') return e;
+  let id = '';
+  try { id = mistakeAnimalNormalize(raw); } catch (err) { id = ''; }
+  if (id && id !== raw) e.animal = id;
+  return e;
+}
 async function mkLoad(force) {
   if (_mk.loaded && !force) return _mk.bank;
   const col = _mkBankCol();
   if (!col) { _mk.bank = []; _mk.loaded = true; return _mk.bank; }
   try {
     const snap = await getDocs(col);
-    _mk.bank = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    _mk.bank = snap.docs.map(d => _mkNormaliseEntry(Object.assign({ id: d.id }, d.data())));
     _mk.error = '';
   } catch (e) {
     console.warn('mistake bank read failed', e);
@@ -75005,6 +75195,14 @@ async function mkRender() {
   if (!host) return;
   if (!_canAuthor()) { host.innerHTML = '<div class="mk-empty">Teachers only.</div>'; return; }
   if (!_mk.loaded) { host.innerHTML = '<div class="mk-empty">Loading the mistake bank…</div>'; await mkLoad(); }
+  /* THE BANK FILLS ITSELF the first time the page is opened in a sitting:
+     every wrong answer the marker has already sorted is in Pending before
+     the teacher has pressed anything, so "the mistake stays in the bank"
+     does not depend on somebody remembering 🔎. Once per session (`autoRan`),
+     never on a bank that could not be read (a refused read would file
+     duplicates against an empty list), and it hands over to mkHarvest,
+     which renders on its own. */
+  if (!_mk.autoRan && !_mk.error && !_mk.running) { _mk.autoRan = true; mkHarvest({ auto: true }); return; }
   const counts = { pending: 0, approved: 0, rejected: 0 };
   _mk.bank.forEach(e => { if (counts[e.status] != null) counts[e.status]++; });
   const shown = _mkSort(_mk.bank.filter(e => e.status === _mk.status)
@@ -75023,7 +75221,7 @@ async function mkRender() {
       <button class="btn btn-outline" onclick="mkGenToggle()">✨ Write wrong answers ${_mk.genOpen ? '▴' : '▾'}</button>
       <button class="btn btn-outline" onclick="mkReload()" title="Read the bank again">↻</button>
     </div>
-    <div class="mk-status">${escapeHtml(_mk.progress || (cands ? (cands.length ? cands.length + ' wrong answer' + (cands.length === 1 ? '' : 's') + ' found in the attempt log that are not in the bank yet. Press ✨ to clean them up, sort them under an animal and write the lesson — nothing is shown to a student until you approve it.' : 'Nothing new in the attempt log — every wrong answer it holds is already here.') : 'Press 🔎 to read the newest ' + MK_HARVEST_SCAN + ' attempts for wrong answers.'))}</div>
+    <div class="mk-status">${escapeHtml(_mk.progress || (cands ? (cands.length ? cands.length + ' wrong answer' + (cands.length === 1 ? '' : 's') + ' found in the attempt log with no mistake type yet. Press ✨ to clean them up, sort them under an animal and write the lesson — nothing is shown to a student until you approve it.' : 'Nothing new in the attempt log — every wrong answer it holds is already here.') : 'Press 🔎 to read the newest ' + MK_HARVEST_SCAN + ' attempts for wrong answers. A wrong answer the marker has already sorted under an animal is filed into Pending on its own.'))}</div>
     ${_mk.genOpen ? _mkGenFormHtml() : ''}
   </div>`;
   html += `<div class="mk-filters">
@@ -75063,6 +75261,7 @@ function _mkCardHtml(e) {
     <div class="mk-card-head">
       ${_mkAnimalSelectHtml(e.animal, 'data-f="animal"')}
       <span class="mk-badge ${e.source === 'generated' ? 'gen' : 'stu'}">${e.source === 'generated' ? '✨ written by the AI' : '📝 a student wrote this'}</span>
+      ${e.filedBy === MK_FILED_MARKING ? '<span class="mk-badge mark" title="The marker named this habit on the answer itself; nothing has been tidied. Read it as written before you approve it.">🐾 filed from the marking</span>' : ''}
       <span class="mk-badge st-${escapeHtml(e.status)}">${escapeHtml(e.status)}</span>
       <span class="mk-meta">${escapeHtml([e.topic, e.level].filter(Boolean).join(' · '))}</span>
     </div>
@@ -75173,23 +75372,74 @@ function mkDelete(id) {
 }
 
 // ---- 🔎 Harvest -------------------------------------------------------------
-async function mkHarvest() {
+/* `opts.auto` is the run the page makes for itself the first time the teacher
+   opens it in a sitting (see mkRender): the same read and the same filing,
+   worded as something that happened rather than something pressed. */
+async function mkHarvest(opts) {
   if (!_canAuthor() || _mk.running) return;
-  _mk.progress = 'Reading the newest ' + MK_HARVEST_SCAN + ' attempts…';
+  const auto = !!(opts && opts.auto);
+  _mk.running = true;
+  _mk.progress = (auto ? 'Checking' : 'Reading') + ' the newest ' + MK_HARVEST_SCAN + ' attempts…';
   mkRender();
+  let filed = { added: 0, skipped: 0, failed: 0 };
   try {
     await mkLoad();
     const snap = await getDocs(query(collection(db, 'questionAttempts'), orderBy('timestamp', 'desc'), limit(MK_HARVEST_SCAN)));
     const attempts = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     const have = new Set(_mk.bank.map(e => e.fromAttempt).filter(Boolean));
-    _mk.candidates = _mkCandidatesFrom(attempts, have, _docQById);
-    _mk.progress = '';
+    const cands = _mkCandidatesFrom(attempts, have, _docQById);
+    // A candidate the marker already sorted is filed NOW, without a call;
+    // the rest wait for ✨ exactly as before.
+    const marked = cands.filter(c => c.mistake);
+    filed = await _mkFileMarked(marked);
+    _mk.candidates = cands.filter(c => !c.mistake);
+    _mk.progress = _mkHarvestNote(filed, _mk.candidates.length, auto);
+    if (filed.added) _mk.status = 'pending';
   } catch (e) {
     console.warn('harvest failed', e);
     _mk.candidates = null;
     _mk.progress = 'Could not read the attempt log: ' + ((e && e.message) || e);
   }
+  _mk.running = false;
   mkRender();
+}
+/* The sentence under the buttons after a harvest. Pure, so the harness can
+   pin that a filed mistake is SAID: a costly, invisible thing happening by
+   itself is a thing nobody trusts. */
+function _mkHarvestNote(filed, waiting, auto) {
+  const f = filed || { added: 0, skipped: 0, failed: 0 };
+  const bits = [];
+  if (f.added) bits.push(f.added + ' wrong answer' + (f.added === 1 ? '' : 's') + ' the marker had already sorted ' + (f.added === 1 ? 'is' : 'are') + ' in Pending now — read ' + (f.added === 1 ? 'it' : 'them') + ' before approving');
+  if (f.failed) bits.push(f.failed + ' could not be written');
+  if (waiting) bits.push(waiting + ' more wrong answer' + (waiting === 1 ? '' : 's') + ' carr' + (waiting === 1 ? 'ies' : 'y') + ' no mistake type yet. Press ✨ to clean ' + (waiting === 1 ? 'it' : 'them') + ' up, sort ' + (waiting === 1 ? 'it' : 'them') + ' under an animal and write the lesson');
+  if (!bits.length) return auto ? 'Every wrong answer in the newest attempts is already here.' : 'Nothing new in the attempt log — every wrong answer it holds is already here.';
+  return (auto ? 'Checked the newest attempts: ' : '') + bits.join('; ') + '. Nothing is shown to a student until you approve it.';
+}
+/* Files every candidate that carries a habit. One at a time, each on its
+   own try — a refused write costs that entry and nothing else — and the
+   same two dedupes ✨ applies: the attempt part (`fromAttempt`, which the
+   harvest has already excluded) and the same wrong answer to the same
+   question (`hash`), so a habit marked twice is one lesson. */
+async function _mkFileMarked(cands) {
+  const out = { added: 0, skipped: 0, failed: 0 };
+  const col = _mkBankCol();
+  if (!col) return out;
+  for (const c of cands || []) {
+    if (_mk.stop) break;
+    try {
+      const entry = _mkMarkedEntry(c);
+      if (!entry) { out.skipped++; continue; }
+      if (_mk.bank.some(e => e.hash === entry.hash || (entry.fromAttempt && e.fromAttempt === entry.fromAttempt))) { out.skipped++; continue; }
+      const ref = await addDoc(col, entry);
+      _mk.bank.push(Object.assign({ id: ref.id }, entry));
+      out.added++;
+    } catch (e) {
+      console.warn('marked mistake could not be filed', e);
+      out.failed++;
+    }
+  }
+  mkSyncBadge();
+  return out;
 }
 function mkStop() { _mk.stop = true; }
 
@@ -75360,7 +75610,7 @@ async function mkStudentLoad(force) {
   if (!col) { _mkStudent.entries = []; _mkStudent.loaded = true; return []; }
   try {
     const snap = await getDocs(query(col, where('status', '==', 'approved')));
-    _mkStudent.entries = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    _mkStudent.entries = snap.docs.map(d => _mkNormaliseEntry(Object.assign({ id: d.id }, d.data())));
     _mkStudent.error = '';
   } catch (e) {
     // A denied read is not an error worth showing a child: the page simply
@@ -75372,7 +75622,76 @@ async function mkStudentLoad(force) {
   _mkStudent.loaded = true;
   return _mkStudent.entries;
 }
-function _mkStudentPool(animalId) {
+/* 🐾 A CHILD'S OWN MISTAKES, ON THEIR OWN PAGE (v1.394.0).
+   The class bank holds other students' answers, vetted and anonymised. This
+   is the other thing a child wants from the page: THEIR OWN wrong answers,
+   each with the animal the marker named beside it, to preview and study the
+   moment they were marked — no teacher in the loop, because the answer is
+   theirs and nobody else's. It is read off the student's own mistake log
+   (`users/{uid}/mistakes`, written by fcNoteMistakes), never off the class
+   bank, and it is rebuilt from the QUESTION BANK at read time so the wording
+   and figures are current. Pure over its two arguments, so the harness can
+   run it. Four gates, each silent if dropped:
+   • a REAL animal — a logged part with no habit has nothing to study by, and
+     an invented one would be a lesson about nothing;
+   • the question STILL IN THE BANK — the log keeps no wording, and a lesson
+     with no question over it cannot be read;
+   • the same three serving predicates every other student pool asks
+     (released, in the syllabus, inside their level band) — the answer is
+     theirs, the QUESTION is still the teacher's;
+   • it is the child's OWN log, so `own: true` on every entry is what the
+     renderer reads to say "you wrote" rather than "a student wrote". */
+function _mkOwnEntries(log, findQ) {
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(log) ? log : []).forEach(rec => {
+    if (!rec || !rec.id) return;
+    if (String(rec.kind || '') === 'mcq') return;   // a wrong option is not a habit to study
+    const animal = mistakeAnimal(mistakeAnimalNormalize(rec.mistake));
+    if (!animal) return;
+    const q = findQ ? findQ(String(rec.qId || '')) : null;
+    if (!q) return;
+    if (!qAvailableToViewer(q) || !qInSyllabus(q) || !qWithinStudentLevel(q)) return;
+    const student = _mkClip(rec.student || '', MK_ANSWER_CHARS);
+    if (!student) return;
+    const key = String(rec.qId) + '|' + student.toLowerCase();
+    if (seen.has(key)) return;   // the same wrong answer marked twice is one lesson
+    seen.add(key);
+    const question = _mkQuestionText(q);
+    if (!question) return;
+    const expected = _mkClip(rec.expected || '', MK_ANSWER_CHARS) || _mkModelAnswer(q);
+    out.push({
+      id: 'own:' + rec.id,
+      own: true,
+      status: 'own',
+      animal: animal.id,
+      questionId: String(rec.qId || ''),
+      questionTitle: _mkClip(rec.qTitle || q.title || '', 200),
+      topic: String(rec.topic || q.topic || ''),
+      level: getTopicLevel(String(rec.topic || q.topic || '')) || '',
+      part: '',
+      question: question,
+      images: _mkQuestionImages(q),
+      expected: expected,
+      studentAnswer: student,
+      why: _mkClip(rec.mistakeWhy || '', MK_WHY_CHARS) || animal.desc,
+      fixed: expected,
+      hint: animal.fix,
+      verdict: String(rec.verdict || ''),
+      at: String(rec.at || ''),
+      createdAt: rec.at || null
+    });
+  });
+  return out;
+}
+/* `mode === 'mine'` reads the child's own log and NOTHING ELSE — never the
+   class bank — and skips the feed history on purpose: a child revising their
+   own mistake is meant to meet it again. Every other mode is the class pool
+   it always was. */
+function _mkStudentPool(animalId, mode) {
+  if (mode === 'mine') {
+    return _mkSort(_mkOwnEntries(typeof mistakeLog !== 'undefined' ? mistakeLog : [], _docQById).filter(e => !animalId || e.animal === animalId));
+  }
   const history = _scienceFeedHistoryClient();
   return _mkSort(_mkStudent.entries.filter(e => _mkVisibleToStudent(e, _docQById) && (!animalId || e.animal === animalId)
     && !history.has('mistake:' + e.id, scienceQuestionContentKey(_mkFeedQuestion(e)))));
@@ -75395,6 +75714,46 @@ function _mkFigure(id, opts) {
 function _mkMotion() {
   try { scienceCoachMotion.load(); return scienceCoachMotion.allowed() ? 'on' : 'off'; } catch (e) { return 'off'; }
 }
+/* The 🐾 "My own mistakes" card at the top of the student's page: how many
+   the marker has named, a button to study them all, and the newest few with
+   the animal figure, the question and what they wrote. Pure over the list,
+   so the harness can pin what it says — and that it never says "a student
+   wrote" about the child's own answer. */
+function _mkOwnSectionHtml(mine) {
+  const list = Array.isArray(mine) ? mine : [];
+  const latest = list.slice().sort((a, b) => String(b.at || '').localeCompare(String(a.at || ''))).slice(0, MK_OWN_SHOWN);
+  const byAnimal = {};
+  list.forEach(e => { byAnimal[e.animal] = (byAnimal[e.animal] || 0) + 1; });
+  const top = Object.keys(byAnimal).sort((a, b) => byAnimal[b] - byAnimal[a]).slice(0, 3).map(id => mistakeAnimal(id)).filter(Boolean);
+  let html = `<div class="mk-own">
+    <div class="mk-own-head">
+      <div>
+        <h3 class="mk-h3" style="margin-bottom:4px;">🐾 My own mistakes</h3>
+        <p class="mk-own-intro">${list.length
+          ? 'Every wrong answer of yours that the marker sorted under an animal stays here, with the question, so you can study it again. ' +
+            (top.length ? 'Your most common: ' + top.map(m => m.emoji + ' ' + escapeHtml(m.animal)).join(', ') + '.' : '')
+          : 'When a marked answer of yours is sorted under an animal, it stays here with the question — so you can come back and study it.'}</p>
+      </div>
+      <button class="btn btn-primary mk-big" onclick="mkStart('', 'mine')" ${list.length ? '' : 'disabled'}>🐾 Study my mistakes <span>${list.length ? list.length + ' to revisit · read the lesson, then write it correctly' : 'none yet'}</span></button>
+    </div>`;
+  if (latest.length) {
+    html += '<div class="mk-own-grid">' + latest.map(e => {
+      const m = mistakeAnimal(e.animal);
+      return `<div class="mk-own-card" data-mistake="${escapeHtml(e.animal)}">
+        <div class="mk-own-figure" aria-hidden="true">${_mkFigure(e.animal, { animated: false })}</div>
+        <div class="mk-own-body">
+          <div class="mk-own-animal">${m.emoji} <b>${escapeHtml(m.animal)}</b> <span>${escapeHtml(m.name)}</span></div>
+          <div class="mk-own-q">${escapeHtml(e.questionTitle || 'Untitled question')}</div>
+          <div class="mk-own-wrote"><span class="mk-round-label">You wrote</span>“${escapeHtml(_mkClip(e.studentAnswer, 140))}”</div>
+          <button class="btn btn-outline" onclick="mkStudyOwn('${escapeHtml(e.id)}')">Study this one</button>
+        </div>
+      </div>`;
+    }).join('') + '</div>';
+    if (list.length > latest.length) html += `<div class="mk-hint" style="margin-top:10px;">Showing your newest ${latest.length} of ${list.length}. 🐾 Study my mistakes goes through them all.</div>`;
+  }
+  html += '</div>';
+  return html;
+}
 async function mkStudentRender() {
   const host = document.getElementById('mkStudentBody');
   if (!host) return;
@@ -75402,11 +75761,16 @@ async function mkStudentRender() {
   if (_mkSess && _mkSess.learner !== _scienceFeedKey()) _mkSess = null;
   if (_mkSess) { _mkRenderSession(host); return; }
   if (!_mkStudent.loaded) { host.innerHTML = '<div class="mk-empty">Loading…</div>'; await mkStudentLoad(); }
+  // The child's own log, read once and cached by loadMistakeLog; a refused
+  // read is an empty section, never an error shown to a child.
+  try { if (currentUser && currentUser.role === 'student') await loadMistakeLog(); } catch (e) { console.warn('own mistakes read skipped', e); }
   const all = _mkStudentPool('');
   const counts = {};
   all.forEach(e => { counts[e.animal] = (counts[e.animal] || 0) + 1; });
-  let html = `<div class="mk-intro">
-    <p>Every mistake is one of <b>ten animals</b>. Read what another student wrote, work out which animal it is, then write it the right way. Nobody's name is on anything — only the answer and the lesson.</p>
+  const mine = _mkStudentPool('', 'mine');
+  let html = _mkOwnSectionHtml(mine);
+  html += `<div class="mk-intro">
+    <p>Every mistake is one of the <b>nine Science Sidekicks' skills</b>, missing — Comparison Casey's comparison, Evidence Ellen's evidence, Specific Sherry's precision… Read what another student wrote, work out which Sidekick would have caught it, then write it the right way. Nobody's name is on anything — only the answer and the lesson.</p>
     <div class="mk-intro-btns">
       <button class="btn btn-primary mk-big" onclick="mkStart('', 'learn')" ${all.length ? '' : 'disabled'}>🐾 Learn from mistakes <span>guess the animal, then fix the answer · ${all.length} to try</span></button>
       <button class="btn btn-outline mk-big" onclick="mkStart('', 'quiz')" ${all.length ? '' : 'disabled'}>🎯 Quiz me on mistake types <span>quick fire — which animal is it?</span></button>
@@ -75432,15 +75796,25 @@ async function mkStudentRender() {
    quiz alone, quick fire; 'study' — ONE animal, so the guess would be no
    guess: the mistake is shown, the lesson read, and the answer rewritten. */
 let _mkStarting = false;
-async function mkStart(animalId, mode) {
+/* `mode === 'mine'` is the child's own log (see _mkOwnEntries): the newest
+   first rather than shuffled, claimed with `manual` because they are meant
+   to be met again, and `onlyId` narrows it to the one card they pressed. */
+async function mkStart(animalId, mode, onlyId) {
   if (_mkStarting) return;
   _mkStarting = true;
   const identity = _scienceFeedKey();
+  const mine = mode === 'mine';
   try {
   if (!await _scienceFeedEnsure() || identity !== _scienceFeedKey()) { showToast(_scienceFeedMessage(), 'info'); return; }
-  const pool = _mkShuffle(_mkStudentPool(animalId || '')).slice(0, MK_SESSION_MAX);
-  if (!pool.length) { showToast('Nothing to practise there yet.', 'info'); return; }
-  if (!await _scienceFeedClaim(pool.map(_mkFeedQuestion)) || identity !== _scienceFeedKey()) { showToast(_scienceFeedMessage(), 'info'); return; }
+  let pool;
+  if (mine) {
+    pool = _mkStudentPool(animalId || '', 'mine').filter(e => !onlyId || e.id === onlyId)
+      .sort((a, b) => String(b.at || '').localeCompare(String(a.at || ''))).slice(0, MK_SESSION_MAX);
+  } else {
+    pool = _mkShuffle(_mkStudentPool(animalId || '')).slice(0, MK_SESSION_MAX);
+  }
+  if (!pool.length) { showToast(mine ? 'None of your mistakes has been sorted under an animal yet.' : 'Nothing to practise there yet.', 'info'); return; }
+  if (!await _scienceFeedClaim(pool.map(_mkFeedQuestion), undefined, mine) || identity !== _scienceFeedKey()) { showToast(_scienceFeedMessage(), 'info'); return; }
   // This corrective task is distinct from answering the original question.
   // Its original is nevertheless now familiar in every ordinary game feed.
   const originals = pool.map(e => _docQById(e.questionId)).filter(Boolean);
@@ -75452,6 +75826,7 @@ async function mkStart(animalId, mode) {
   } finally { _mkStarting = false; }
 }
 function mkQuit() { _mkSess = null; mkStudentRender(); }
+function mkStudyOwn(id) { return mkStart('', 'mine', String(id || '')); }
 function _mkCur() { return _mkSess && _mkSess.list[_mkSess.i]; }
 
 function _mkRenderSession(host) {
@@ -75463,7 +75838,7 @@ function _mkRenderSession(host) {
   if (quizMode && !s.opts) { s.opts = _mkQuizOptions(e.animal, MK_QUIZ_OPTIONS); s.startedAt = Date.now(); }
   const answered = quizMode ? s.pick != null : true;
   let html = `<div class="mk-sess-head">
-    <span>${s.mode === 'study' ? m.emoji + ' ' + escapeHtml(m.animal) : s.mode === 'quiz' ? '🎯 Mistake quiz' : '🐾 Learn from mistakes'} · ${s.i + 1} of ${s.list.length}</span>
+    <span>${s.mode === 'mine' ? '🐾 My own mistakes' : s.mode === 'study' ? m.emoji + ' ' + escapeHtml(m.animal) : s.mode === 'quiz' ? '🎯 Mistake quiz' : '🐾 Learn from mistakes'} · ${s.i + 1} of ${s.list.length}</span>
     <span class="mk-dots">${s.list.map((_, k) => `<i class="${k < s.results.length ? (s.results[k].right ? 'ok' : 'no') : (k === s.i ? 'cur' : '')}"></i>`).join('')}</span>
     <button class="btn btn-outline" onclick="mkQuit()">✕ Leave</button>
   </div>
@@ -75474,7 +75849,7 @@ function _mkRenderSession(host) {
       ${(e.images || []).length ? '<div class="mk-q-imgs">' + e.images.map(u => `<img src="${escapeHtml(transformImageUrl(u))}" loading="eager" alt="">`).join('') + '</div>' : ''}
     </div>
     <div class="mk-round-a">
-      <div class="mk-round-label">A student wrote</div>
+      <div class="mk-round-label">${e.own ? 'You wrote' : 'A student wrote'}</div>
       <div class="mk-round-text mk-wrote">“${escapeHtml(e.studentAnswer)}”</div>
     </div>`;
   if (quizMode) {
@@ -75561,7 +75936,7 @@ async function mkCheckRewrite() {
 }
 function mkNext() {
   const s = _mkSess; if (!s || s.learner !== _scienceFeedKey()) return;
-  if (s.mode === 'study') s.results.push({ animal: _mkCur().animal, right: s.checked ? s.checked.verdict === 'correct' : false });
+  if (s.mode === 'study' || s.mode === 'mine') s.results.push({ animal: _mkCur().animal, right: s.checked ? s.checked.verdict === 'correct' : false });
   s.i++; s.pick = null; s.opts = null; s.checked = null; s.checking = false; s.revealed = false; s.rewrite = '';
   mkStudentRender();
 }
@@ -75569,7 +75944,7 @@ function _mkSummaryHtml() {
   const s = _mkSess;
   const per = {};
   s.results.forEach(r => { per[r.animal] = per[r.animal] || { n: 0, right: 0 }; per[r.animal].n++; if (r.right) per[r.animal].right++; });
-  const quiz = s.mode !== 'study';
+  const quiz = s.mode !== 'study' && s.mode !== 'mine';
   return `<div class="mk-summary">
     <div class="mk-summary-big">${quiz ? '🐾 ' + s.right + ' of ' + s.results.length + ' animals spotted' : '🐾 ' + s.results.length + ' answers rewritten'}</div>
     <div class="mk-summary-list">${Object.keys(per).map(id => { const m = mistakeAnimal(id); return m ? `<div><span>${m.emoji} ${escapeHtml(m.animal)}</span><b>${per[id].right} / ${per[id].n}</b></div>` : ''; }).join('')}</div>
@@ -75625,6 +76000,7 @@ window.mkGenerateRun = mkGenerateRun;
 window.mkStudentRender = mkStudentRender;
 window.mkStudentReload = mkStudentReload;
 window.mkStart = mkStart;
+window.mkStudyOwn = mkStudyOwn;
 window.mkQuit = mkQuit;
 window.mkPick = mkPick;
 window.mkReveal = mkReveal;
