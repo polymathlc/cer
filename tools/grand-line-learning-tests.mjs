@@ -31,10 +31,16 @@ test('only four scores exist and exactly three distinct complete records are adm
 });
 test('READY sends an opaque stable scope; neither handshake nor results expose questions or private identity', async () => {
   const f = fixture(); await f.hello(); await f.round();
-  assert.deepEqual(f.messages[0].data, { type: 'GLTCG_READY', requestId: 'hello-1', sessionId: 'session-1', subject: 'Math', profileKey: 'p0123456789abcdef', questionCount: 3, available: true, reason: '' });
+  assert.deepEqual(f.messages[0].data, { type: 'GLTCG_READY', requestId: 'hello-1', sessionId: 'session-1', subject: 'Math', profileKey: 'p0123456789abcdef', questionCount: 3, maxPackQuantity: 1, available: true, reason: '' });
   const payload = JSON.stringify(f.messages);
   for (const secret of ['private-account', 'child-a', 'options', 'answer', 'Authored question']) assert.ok(!payload.includes(secret));
   assert.ok(f.messages.every(m => m.origin === 'https://school.test'));
+});
+test('READY advertises multi-pack support only when the wallet authority explicitly supports fifty packs', async () => {
+  for(const maxPackQuantity of [undefined,null,1,5,49,51,'50',false]){
+    const f=fixture({getSnapshot:()=>({wallet:{maxPackQuantity}})});await f.hello();assert.equal(f.messages.at(-1).data.maxPackQuantity,1);
+  }
+  const f=fixture({getSnapshot:()=>({wallet:{maxPackQuantity:50}})});await f.hello();assert.equal(f.messages.at(-1).data.maxPackQuantity,50);
 });
 test('all scores grade and reserve exactly three, even when the selector returns five', async () => {
   for (let score = 0; score <= 3; score++) {
@@ -118,14 +124,42 @@ test('closing retires the session and late visual callbacks have no authority', 
   callbacks.imageFailed(question('q1'), 'image.png'); callbacks.questionUnavailable(question('q1')); finish(true); await running; await f.round();
   assert.equal(failures, 0); assert.equal(f.messages.at(-1).data.type, 'GLTCG_INVALIDATE'); assert.equal(f.controller.getState(), null);
 });
-test('purchases require the exact active iframe/session and accept only an ID and tier', async () => {
+test('purchases require the exact active iframe/session and accept only an ID, tier and bounded quantity', async () => {
   const calls = [], f = fixture({ buyPack: async request => { calls.push(request); return { wallet: { balance: 880 } }; } });
   await f.hello(); const data = { type: 'GLTCG_BUY_REQUEST', sessionId: 'session-1', requestId: 'buy', purchaseId: 'purchase', packId: 'spark', balance: 9999, characterId: 'kaido' };
   await f.controller.handleMessage({ origin: 'https://evil.test', source: f.source, data });
   await f.controller.handleMessage({ origin: f.options.origin, source: {}, data });
   await f.send({ ...data, sessionId: 'forged' }); assert.equal(calls.length, 0);
-  await f.send(data); assert.deepEqual(calls, [{ purchaseId: 'purchase', packId: 'spark' }]);
+  await f.send(data); assert.deepEqual(calls, [{ purchaseId: 'purchase', packId: 'spark', quantity: 1 }]);
   assert.equal(f.messages.at(-1).data.type, 'GLTCG_BUY_RESULT'); assert.equal(f.messages.at(-1).data.purchaseId, 'purchase');
+});
+test('batch quantities default only when omitted and forward every allowed whole number without client rewards', async () => {
+  const calls = [], f = fixture({ buyPack: async request => { calls.push(request); return { quantity: request.quantity, grants: [] }; } });
+  await f.hello();
+  for(let quantity=1;quantity<=50;quantity++){
+    const data={type:'GLTCG_BUY_REQUEST',sessionId:'session-1',requestId:'batch-'+quantity,purchaseId:'purchase-'+quantity,packId:'nova',quantity,cost:0,grants:[{characterId:'kaido'}],cards:{kaido:999},balance:Infinity,admin:true};
+    await f.send(data);assert.deepEqual(calls.at(-1),{purchaseId:data.purchaseId,packId:'nova',quantity});
+    assert.equal(f.messages.at(-1).data.type,'GLTCG_BUY_RESULT');assert.equal(f.messages.at(-1).data.quantity,quantity);
+  }
+  assert.equal(calls.length,50);
+});
+test('malformed or excessive quantities are confirmed uncharged without calling the purchase authority or holding its lock', async () => {
+  const calls=[],f=fixture({buyPack:async request=>{calls.push(request);return {};}});await f.hello();
+  const data={type:'GLTCG_BUY_REQUEST',sessionId:'session-1',requestId:'batch',purchaseId:'purchase',packId:'spark'};
+  for(const quantity of [null,false,true,0,-1,51,1.5,'5',NaN,Infinity,-Infinity,Number.MAX_SAFE_INTEGER+1,[],{},new Number(5)]){
+    await f.send({...data,quantity});const result=f.messages.at(-1).data;
+    assert.equal(result.type,'GLTCG_BUY_BLOCKED');assert.equal(result.confirmedNoCharge,true);assert.equal(result.retryable,false);
+    assert.equal(result.purchaseId,'purchase');assert.equal(calls.length,0);
+  }
+  await f.send({...data,quantity:5});assert.equal(calls.length,1);assert.equal(f.messages.at(-1).data.type,'GLTCG_BUY_RESULT');
+});
+test('a pending batch keeps its exact quantity across retries and shares the same learning/save lock', async () => {
+  let finish;const calls=[],f=fixture({buyPack:request=>{calls.push(request);return new Promise(resolve=>{finish=resolve;});}});await f.hello();
+  const request={type:'GLTCG_BUY_REQUEST',sessionId:'session-1',requestId:'first',purchaseId:'batch-receipt',packId:'galaxy',quantity:50};
+  const first=f.send(request);await f.send({...request,requestId:'overlap'});assert.equal(calls.length,1);assert.equal(f.messages.at(-1).data.retryable,true);
+  finish({quantity:50,grants:[]});await first;
+  const retry=f.send({...request,requestId:'retry'});assert.deepEqual(calls[1],calls[0]);finish({quantity:50,grants:[]});await retry;
+  assert.equal(f.messages.at(-1).data.requestId,'retry');assert.equal(f.messages.at(-1).data.quantity,50);
 });
 test('pending purchase invalidation suppresses stale replies without restarting the purchase', async () => {
   let finish; const f = fixture({ buyPack: () => new Promise(resolve => { finish = resolve; }) }); await f.hello();

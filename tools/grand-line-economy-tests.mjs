@@ -209,3 +209,122 @@ test('same-account learner changes preserve ordinary points but keep the receipt
   assert.deepEqual(Object.keys(f.cloud().grandLine.profiles), ['p-fixture']);
   assert.ok(f.cloud().grandLine.profiles['p-fixture'].purchases['original-learner']);
 });
+
+test('one to fifty packs use each live tier price and merge every card in one durable batch', async () => {
+  for (const packId of ['spark', 'nova', 'galaxy']) for (const quantity of [1, 5, 10, 50]) {
+    let rolls = 0;
+    const f = fixture({ random: () => { rolls++; return 0; } }); f.state().gold = 50000;
+    const before = f.economy.getSnapshot(f.ctx), offer = before.wallet.offers.find(p => p.id === packId);
+    const result = await f.economy.buyPack({ packId, quantity, purchaseId: 'batch' }, f.ctx);
+    assert.equal(result.quantity, quantity); assert.equal(result.grants.length, quantity);
+    assert.equal(result.wallet.balance, 50000 - offer.cost * quantity);
+    assert.equal(totalCopies(result.collection), totalCopies(before.collection) + quantity);
+    assert.equal(result.collection.stats.packsOpened, quantity); assert.equal(result.collection.packs, 0);
+    assert.equal(rolls, quantity * 2); assert.equal(f.writes.length, 1);
+    const id = result.grants[0].characterId, previousCopies = before.collection.cards[id]?.copies || 0;
+    for (const [index, grant] of result.grants.entries()) {
+      assert.equal(grant.characterId, id); assert.equal(grant.copies, previousCopies + index + 1);
+      assert.equal(grant.duplicate, previousCopies + index > 0);
+    }
+    assert.equal(Object.hasOwn(result, 'grant'), quantity === 1);
+    if (quantity === 1) assert.deepEqual(result.grant, result.grants[0]);
+    const receipt = f.writes[0].state.grandLine.profiles[f.ctx.profileKey].purchases.batch;
+    assert.equal(receipt.quantity, quantity); assert.equal(receipt.cost, offer.cost * quantity);
+    assert.deepEqual(receipt.grants, result.grants); assert.equal(Object.hasOwn(receipt, 'grant'), quantity === 1);
+    assert.deepEqual(result.collection.team, before.collection.team);
+    assert.deepEqual(Object.keys(f.state().grandLine.profiles[f.ctx.profileKey].purchases), ['batch']);
+  }
+});
+
+test('each card in a batch independently rolls rarity and its character from the original tier odds', async () => {
+  const tickets = [0, .5, .8, .9, .96, .99, .9999], picks = [0, .2, .4, .6, .8, .1, .9999];
+  const randoms = tickets.flatMap((ticket, i) => [ticket, picks[i]]); let index = 0;
+  const f = fixture({ random: () => randoms[index++] });
+  const result = await f.economy.buyPack({ packId: 'spark', purchaseId: 'independent', quantity: 7 }, f.ctx);
+  assert.equal(index, 14); assert.deepEqual(result.grants.map(g => g.stars), [1, 2, 3, 4, 5, 6, 7]);
+  result.grants.forEach((grant, i) => {
+    const pool = CHARACTERS.filter(c => c.stars === i + 1);
+    assert.equal(grant.characterId, pool[Math.floor(picks[i] * pool.length)].id);
+  });
+});
+
+test('invalid quantities, unaffordable totals and unsafe multiplied prices reject before randomness or writes', async () => {
+  let rolls = 0; const f = fixture({ random: () => { rolls++; return 0; } });
+  const before = structuredClone(f.state());
+  for (const quantity of [0, -1, 1.5, 51, Number.MAX_SAFE_INTEGER + 1, NaN, Infinity, '5', null, true, {}, []]) {
+    await assert.rejects(f.economy.buyPack({ packId: 'spark', purchaseId: 'invalid', quantity }, f.ctx), error => error.confirmedNoCharge === true);
+  }
+  await assert.rejects(f.economy.buyPack({ packId: 'spark', purchaseId: 'too-expensive', quantity: 50 }, f.ctx), /6000/);
+  f.env.getPacks = () => [{ id: 'spark', name: 'Invalid total', cost: Number.MAX_SAFE_INTEGER, odds: { 1: 1 } }];
+  await assert.rejects(f.economy.buyPack({ packId: 'spark', purchaseId: 'unsafe', quantity: 2 }, f.ctx), /invalid total price/);
+  assert.equal(rolls, 0); assert.equal(f.writes.length, 0); assert.deepEqual(f.state(), before);
+});
+
+test('batch receipts survive reload and changed offers without rerolls, extra charges or altered quantities', async () => {
+  let rolls = 0; const f = fixture({ random: () => { rolls++; return 0; } });
+  const request = { packId: 'spark', purchaseId: 'immutable-batch', quantity: 5 };
+  const first = await f.economy.buyPack(request, f.ctx), firstGrants = structuredClone(first.grants);
+  const receipt = structuredClone(f.state().grandLine.profiles[f.ctx.profileKey].purchases[request.purchaseId]);
+  first.grants[0].characterId = 'kaido';
+  assert.deepEqual(f.state().grandLine.profiles[f.ctx.profileKey].purchases[request.purchaseId], receipt, 'returned cards cannot mutate the durable receipt');
+  f.setState(structuredClone(f.writes[0].state)); f.env.getPacks = () => [];
+  const reopened = createGrandLineEconomy(f.env), again = await reopened.buyPack(request, f.ctx);
+  assert.equal(again.replayed, true); assert.equal(again.quantity, 5); assert.deepEqual(again.grants, firstGrants);
+  assert.equal(again.wallet.balance, 1400); assert.equal(rolls, 10); assert.equal(f.writes.length, 1);
+  await assert.rejects(reopened.buyPack({ ...request, quantity: 1 }, f.ctx), /another quantity/);
+  await assert.rejects(reopened.buyPack({ ...request, quantity: 10 }, f.ctx), /another quantity/);
+  await assert.rejects(reopened.buyPack({ ...request, packId: 'nova' }, f.ctx), /another pack/);
+  assert.equal(rolls, 10); assert.equal(f.writes.length, 1);
+  assert.deepEqual(f.state().grandLine.profiles[f.ctx.profileKey].purchases[request.purchaseId], receipt);
+});
+
+test('legacy single receipts default to one and every retired grant in a batch migrates without mutating receipts', async () => {
+  const f = fixture({ random: () => { throw Error('A paid receipt must not reroll'); } });
+  const collection = createCollection(); collection.cards.shanks = { copies: 3 }; collection.cards.wyper = { copies: 2 }; collection.cards.sengoku = { copies: 1 };
+  collection.stats.packsOpened = 4;
+  const legacy = { packId: 'spark', cost: 120, grant: { characterId: 'shanks', stars: 6, copies: 1, duplicate: false } };
+  const batch = { packId: 'galaxy', cost: 2250, quantity: 3, grants: [
+    { characterId: 'shanks', stars: 6, copies: 2, duplicate: true },
+    { characterId: 'sengoku', stars: 6, copies: 1, duplicate: false },
+    { characterId: 'shanks', stars: 6, copies: 3, duplicate: true },
+  ] };
+  f.state().gold = 0; f.state().grandLine = { profiles: { [f.ctx.profileKey]: { collection, purchases: { legacy, batch } } } };
+  const before = structuredClone(f.state());
+  const one = await f.economy.buyPack({ packId: 'spark', purchaseId: 'legacy' }, f.ctx);
+  assert.equal(one.quantity, 1); assert.deepEqual(one.grants, [one.grant]); assert.equal(one.grant.characterId, 'wyper');
+  await assert.rejects(f.economy.buyPack({ packId: 'spark', purchaseId: 'legacy', quantity: 2 }, f.ctx), /another quantity/);
+  const result = await f.economy.buyPack({ packId: 'galaxy', purchaseId: 'batch', quantity: 3 }, f.ctx);
+  assert.deepEqual(result.grants.map(g => g.characterId), ['wyper', 'paulie', 'wyper']);
+  assert.deepEqual(result.grants.map(g => g.copies), [5, 1, 5]); assert.deepEqual(result.grants.map(g => g.stars), [4, 3, 4]);
+  assert.equal(result.collection.stats.packsOpened, 4); assert.equal(result.wallet.balance, 0);
+  assert.deepEqual(f.state(), before); assert.equal(f.writes.length, 0);
+});
+
+test('a failed batch save rolls back all cards and its total debit before one complete retry', async () => {
+  const f = concurrentSaveFixture(), request = { packId: 'spark', purchaseId: 'batch-retry', quantity: 5 };
+  const pending = f.economy.buyPack(request, f.ctx);
+  assert.throws(() => f.economy.getSnapshot(f.ctx), /still saving/);
+  await assert.rejects(f.economy.buyPack(request, f.ctx), /still saving/);
+  f.context.rpgState.gold += 17; f.context.rpgSave();
+  assert.equal(f.ordinaryWrites.length, 0);
+  f.settle().reject(Error('batch write failed')); await assert.rejects(pending, /could not be saved/);
+  assert.equal(f.context.rpgState.gold, 1017); assert.equal(f.cloud().gold, 1017); assert.equal(f.cloud().grandLine, undefined);
+  f.noHold(); const result = await f.economy.buyPack(request, f.ctx);
+  assert.equal(result.wallet.balance, 417); assert.equal(result.collection.stats.packsOpened, 5);
+  assert.equal(result.grants.length, 5); assert.equal(totalCopies(result.collection), 10);
+  const receipt = f.cloud().grandLine.profiles[f.ctx.profileKey].purchases[request.purchaseId];
+  assert.equal(receipt.quantity, 5); assert.equal(receipt.cost, 600); assert.deepEqual(receipt.grants, result.grants);
+  assert.equal((await f.economy.buyPack(request, f.ctx)).replayed, true);
+  assert.equal(f.economy.getSnapshot(f.ctx).wallet.balance, 417);
+});
+
+test('malformed stored batch receipts fail closed without repairing, rerolling or charging', async () => {
+  const f = fixture({ random: () => { throw Error('No receipt replay may roll'); } }), collection = createCollection();
+  const grants = [{ characterId: 'luffy', stars: 6, copies: 1, duplicate: true }];
+  for (const receipt of [{ quantity: 2, grants }, { quantity: 2, grants: [grants[0], { characterId: 'not-a-card' }] }, { quantity: 2, grant: grants[0] }]) {
+    f.state().grandLine = { profiles: { [f.ctx.profileKey]: { collection, purchases: { invalid: { packId: 'spark', cost: 240, ...receipt } } } } };
+    const before = structuredClone(f.state());
+    await assert.rejects(f.economy.buyPack({ packId: 'spark', purchaseId: 'invalid', quantity: 2 }, f.ctx), /could not be loaded/);
+    assert.deepEqual(f.state(), before); assert.equal(f.writes.length, 0);
+  }
+});

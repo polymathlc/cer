@@ -23,12 +23,12 @@ const ctx={profileKey:'test-profile',admin:administrator}, profile=createCollect
 if(administrator)profile.cards.luffy.copies=3;
 let state={gold:administrator?0:5000,grandLine:{profiles:{'test-profile':{collection:profile}}}};
 const offers=[{id:'spark',name:'Bronze',cost:120,odds:{1:40,2:30,3:17,4:8,5:3.5,6:1.2,7:.3}},{id:'nova',name:'Silver',cost:320,bonusOdds:{3:62,4:25,5:9,6:3,7:1}},{id:'galaxy',name:'Gold',cost:750,bonusOdds:{4:68,5:22,6:8,7:2}}];
-window.fake={requests:[],records:[],adminCalls:[],role:administrator?'admin':'student',randomValue:0,questionIndex:0,commits:0,blockPurchase:false,blockSave:false,blockAdmin:false,holdAdmin:false,failAdminResponseOnce:false,get state(){return state;}};
+window.fake={legacyHost:new URLSearchParams(location.search).get('legacy')==='1',requests:[],records:[],adminCalls:[],role:administrator?'admin':'student',randomValue:0,questionIndex:0,commits:0,blockPurchase:false,failPurchaseResponseOnce:false,blockSave:false,blockAdmin:false,holdAdmin:false,failAdminResponseOnce:false,get state(){return state;}};
 const currentContext=()=>({...ctx,admin:fake.role==='admin'});
 const economy=createGrandLineEconomy({getState:()=>state,getUser:()=>({uid:'test-user',role:fake.role}),getPacks:()=>offers,isCurrent:c=>c.profileKey===ctx.profileKey&&c.admin===(fake.role==='admin'),random:()=>fake.randomValue,commit:async next=>{state=next;fake.commits++;}});
 const frame=document.createElement('iframe');frame.id='game';
-const controller=createGrandLineLearningController({origin:location.origin,subject:'Math',getFrame:()=>frame,getIdentity:()=> 'test-identity:'+fake.role,getProfileKey:()=>ctx.profileKey,isAllowed:()=>true,isActive:()=>true,isAdmin:()=>fake.role==='admin',makeSessionId:()=> 'test-session',getSnapshot:()=>economy.getSnapshot(currentContext()),buyPack:(d)=>{if(fake.blockPurchase)throw Object.assign(Error('Test pack unavailable'),{confirmedNoCharge:true});return economy.buyPack(d,currentContext());},saveCollection:d=>{if(fake.blockSave)throw Error('Test progress save failure');return economy.saveCollection(d,currentContext());},adminAction:async d=>{fake.adminCalls.push({...d});if(fake.holdAdmin)await new Promise(resolve=>{fake.releaseAdmin=()=>{fake.holdAdmin=false;resolve();};});if(fake.blockAdmin)throw Error('Test admin save unavailable');const result=await economy.adminAction(d,currentContext());if(fake.failAdminResponseOnce){fake.failAdminResponseOnce=false;throw Error('Test admin response interrupted');}return result;},getQuestions:()=>[0,1,2].map(i=>({id:'test-q-'+i,html:'<p>Test question '+(i+1)+'</p>',options:['Wrong','Correct'],answer:1})),recordAnswer:async r=>fake.records.push({correct:r.correct,round:r.round}),presentQuestions:({questions,grade})=>new Promise(resolve=>{const box=document.querySelector('#questions');fake.questionIndex=0;box.hidden=false;function draw(){box.replaceChildren();const p=document.createElement('p');p.id='question-index';p.textContent='Question '+(fake.questionIndex+1)+' of 3';box.append(p);for(let choice=0;choice<2;choice++){const b=document.createElement('button');b.dataset.answer=choice;b.textContent=choice?'Correct':'Wrong';b.onclick=async()=>{b.disabled=true;const result=await grade(fake.questionIndex,choice,1000);if(!result)return;fake.questionIndex++;if(fake.questionIndex===3){box.hidden=true;resolve(true);}else draw();};box.append(b);}}draw();})});
-window.addEventListener('message',event=>{if(event.source===frame.contentWindow)fake.requests.push(event.data);controller.handleMessage(event);});
+const controller=createGrandLineLearningController({origin:location.origin,subject:'Math',getFrame:()=>frame,getIdentity:()=> 'test-identity:'+fake.role,getProfileKey:()=>ctx.profileKey,isAllowed:()=>true,isActive:()=>true,isAdmin:()=>fake.role==='admin',makeSessionId:()=> 'test-session',getSnapshot:()=>economy.getSnapshot(currentContext()),buyPack:async d=>{if(fake.blockPurchase)throw Object.assign(Error('Test pack unavailable'),{confirmedNoCharge:true});const result=await economy.buyPack(d,currentContext());if(fake.failPurchaseResponseOnce){fake.failPurchaseResponseOnce=false;throw Error('Test purchase response interrupted');}return result;},saveCollection:d=>{if(fake.blockSave)throw Error('Test progress save failure');return economy.saveCollection(d,currentContext());},adminAction:async d=>{fake.adminCalls.push({...d});if(fake.holdAdmin)await new Promise(resolve=>{fake.releaseAdmin=()=>{fake.holdAdmin=false;resolve();};});if(fake.blockAdmin)throw Error('Test admin save unavailable');const result=await economy.adminAction(d,currentContext());if(fake.failAdminResponseOnce){fake.failAdminResponseOnce=false;throw Error('Test admin response interrupted');}return result;},getQuestions:()=>[0,1,2].map(i=>({id:'test-q-'+i,html:'<p>Test question '+(i+1)+'</p>',options:['Wrong','Correct'],answer:1})),recordAnswer:async r=>fake.records.push({correct:r.correct,round:r.round}),presentQuestions:({questions,grade})=>new Promise(resolve=>{const box=document.querySelector('#questions');fake.questionIndex=0;box.hidden=false;function draw(){box.replaceChildren();const p=document.createElement('p');p.id='question-index';p.textContent='Question '+(fake.questionIndex+1)+' of 3';box.append(p);for(let choice=0;choice<2;choice++){const b=document.createElement('button');b.dataset.answer=choice;b.textContent=choice?'Correct':'Wrong';b.onclick=async()=>{b.disabled=true;const result=await grade(fake.questionIndex,choice,1000);if(!result)return;fake.questionIndex++;if(fake.questionIndex===3){box.hidden=true;resolve(true);}else draw();};box.append(b);}}draw();})});
+window.addEventListener('message',event=>{if(event.source===frame.contentWindow){fake.requests.push(event.data);if(fake.legacyHost&&event.data?.type==='GLTCG_HELLO'){const post=frame.contentWindow.postMessage;frame.contentWindow.postMessage=function(data,...args){if(data?.type==='GLTCG_READY'){data={...data};delete data.maxPackQuantity;}return post.call(this,data,...args);};}if(fake.legacyHost&&event.data?.type==='GLTCG_BUY_REQUEST'){const data={...event.data};delete data.quantity;controller.handleMessage({origin:event.origin,source:event.source,data});return;}}controller.handleMessage(event);});
 fake.send=data=>frame.contentWindow.postMessage(data,location.origin);
 fake.snapshot=()=>economy.getSnapshot(currentContext());
 fake.invalidate=()=>controller.invalidate('The signed-in role changed.');
@@ -164,8 +164,8 @@ async function checkApexHover(page) {
 }
 // APEX_HOVER_REGRESSION_END
 
-async function harnessGame(host, role = 'student') {
-  await host.goto(base + '/__harness.html?role=' + role);
+async function harnessGame(host, role = 'student', legacy = false) {
+  await host.goto(base + '/__harness.html?role=' + role + (legacy ? '&legacy=1' : ''));
   await host.waitForFunction(() => document.querySelector('#game')?.contentWindow.__grandLine?.ready);
   const frame = host.frames().find(f => f.url().includes('grand-line.html'));
   await frame.evaluate(() => { __grandLine.settings.muted = true; });
@@ -572,6 +572,111 @@ async function checkAdministratorShop() {
   assert.equal(await game.evaluate(() => __grandLine.sessionId), '');
   await host.close();
   check('Role invalidation hides admin features, clears pending authority, and rejects a stale in-flight action');
+}
+
+async function checkMultiPackPurchases() {
+  const host=await browser.newPage({viewport:{width:1440,height:1000}});observe(host);let game=await harnessGame(host);
+  await game.locator('[data-view="packs"]').click();
+  assert.deepEqual(await game.locator('#pack-quantities [data-quantity]').evaluateAll(nodes=>nodes.map(n=>Number(n.dataset.quantity))),[1,5,10,50]);
+  await game.locator('[data-pack="spark"]').click();await game.locator('[data-quantity="5"]').click();
+  assert.match(await game.locator('#pack-total').textContent(),/5 packs.*5 cards.*600/);
+  assert.match(await game.locator('#open-pack').textContent(),/5.*600/);
+  const before=await host.evaluate(()=>({gold:fake.state.gold,commits:fake.commits,collection:structuredClone(fake.state.grandLine.profiles['test-profile'].collection)}));
+  await game.locator('#open-pack').click();await game.waitForFunction(()=>__grandLine.dialog==='reveal');
+  const first=await host.evaluate(()=>{const request=fake.requests.findLast(d=>d.type==='GLTCG_BUY_REQUEST');return {request,receipt:fake.state.grandLine.profiles['test-profile'].purchases[request.purchaseId],gold:fake.state.gold,commits:fake.commits};});
+  assert.equal(first.request.quantity,5);assert.equal(first.receipt.quantity,5);assert.equal(first.receipt.cost,600);
+  assert.equal(first.gold,before.gold-600);assert.equal(first.commits,before.commits+1,'All five grants and the total debit share one persistence operation');
+  assert.equal(first.receipt.grants.length,5);assert.equal(first.receipt.grant,undefined);
+  assert.deepEqual(await game.locator('.batch-reveal-item').evaluateAll(nodes=>nodes.map(n=>n.dataset.character)),first.receipt.grants.map(g=>g.characterId));
+  assert.equal(await game.locator('.batch-reveal-content .tcg-card').count(),5);assert.equal(await game.locator('.reveal-content').count(),0);
+  const after=await game.evaluate(()=>structuredClone(__grandLine.collection)),counts={};for(const grant of first.receipt.grants)counts[grant.characterId]=(counts[grant.characterId]||0)+1;
+  for(const [id,count]of Object.entries(counts))assert.equal(after.cards[id].copies,(before.collection.cards[id]?.copies||0)+count);
+  assert.ok(first.receipt.grants.filter(g=>g.duplicate).length>=4,'Repeated draws merge inside the same batch');
+  assert.equal(after.stats.packsOpened,before.collection.stats.packsOpened+5);
+  await screenshot(host,'batch-five-reveal');await game.getByRole('button',{name:'Back to card shop',exact:true}).click();
+  check('Five-pack purchases debit the exact total once, persist all grants atomically, merge repeated cards and reveal every receipt item');
+
+  await game.locator('[data-pack="galaxy"]').click();await game.locator('[data-quantity="10"]').click();
+  assert.match(await game.locator('#pack-total').textContent(),/7,500/);assert.equal(await game.locator('#open-pack').isDisabled(),true);
+  const unchanged=await host.evaluate(()=>JSON.stringify(fake.state)),requestCount=await host.evaluate(()=>fake.requests.length);
+  await game.locator('#open-pack').dispatchEvent('click');await frames(host,2);
+  assert.equal(await host.evaluate(()=>fake.requests.length),requestCount,'Insufficient total disables the purchase before it reaches the host');
+  await game.evaluate(()=>{
+    window.batchRejection=null;window.addEventListener('message',event=>{if(event.source===parent&&event.data.purchaseId==='insufficient-batch')window.batchRejection=event.data;});
+    parent.postMessage({type:'GLTCG_BUY_REQUEST',sessionId:__grandLine.sessionId,requestId:'insufficient-request',purchaseId:'insufficient-batch',packId:'galaxy',quantity:10},location.origin);
+  });
+  await game.waitForFunction(()=>window.batchRejection?.type==='GLTCG_BUY_BLOCKED');
+  assert.equal(await game.evaluate(()=>batchRejection.confirmedNoCharge),true);assert.equal(await host.evaluate(()=>JSON.stringify(fake.state)),unchanged);
+  check('An unaffordable batch is disabled at its full price and the parent independently rejects it without a debit or partial grants');
+
+  await game.locator('[data-pack="nova"]').click();await game.locator('[data-quantity="5"]').click();await host.evaluate(()=>{fake.failPurchaseResponseOnce=true;});
+  await game.locator('#open-pack').click();await game.waitForFunction(()=>__grandLine.purchasePending&&!__grandLine.purchasePending.waiting&&__grandLine.dialog==='purchase');
+  const pending=await game.evaluate(()=>({purchaseId:__grandLine.purchasePending.purchaseId,packId:__grandLine.purchasePending.packId,quantity:__grandLine.purchasePending.quantity}));
+  assert.equal(pending.quantity,5);assert.equal(pending.packId,'nova');
+  const committed=await host.evaluate(()=>({state:JSON.stringify(fake.state),commits:fake.commits}));
+  assert.equal(await game.locator('[data-quantity="50"]').isDisabled(),true);assert.equal(await game.locator('[data-pack="galaxy"]').isDisabled(),true);
+  await Promise.all([game.waitForNavigation(),game.evaluate(()=>location.reload())]);await game.waitForFunction(()=>__grandLine?.ready);await game.evaluate(()=>{__grandLine.settings.muted=true;});
+  assert.deepEqual(await game.evaluate(()=>({purchaseId:__grandLine.purchasePending.purchaseId,packId:__grandLine.purchasePending.packId,quantity:__grandLine.purchasePending.quantity})),pending);
+  await game.locator('[data-view="packs"]').click();assert.equal(await game.locator('[data-quantity="5"]').getAttribute('aria-pressed'),'true');
+  await game.locator('#open-pack').click();await game.getByRole('button',{name:'Resume this purchase',exact:true}).click();await game.waitForFunction(()=>__grandLine.dialog==='reveal');
+  const resumed=await host.evaluate(()=>fake.requests.findLast(d=>d.type==='GLTCG_BUY_REQUEST'));
+  assert.equal(resumed.purchaseId,pending.purchaseId);assert.equal(resumed.packId,pending.packId);assert.equal(resumed.quantity,5);
+  assert.deepEqual(await host.evaluate(()=>({state:JSON.stringify(fake.state),commits:fake.commits})),committed,'Resuming an acknowledged batch cannot charge or grant again');
+  assert.equal(await game.locator('.batch-reveal-item').count(),5);assert.equal(await game.evaluate(()=>__grandLine.purchasePending),null);
+  const savedGrantIds=await host.evaluate(id=>fake.state.grandLine.profiles['test-profile'].purchases[id].grants.map(g=>g.characterId),pending.purchaseId);
+  assert.deepEqual(await game.locator('.batch-reveal-item').evaluateAll(nodes=>nodes.map(n=>n.dataset.character)),savedGrantIds);
+  await host.close();check('An interrupted batch response survives iframe reload and resumes the same five-pack receipt with no second save, debit or grant');
+
+  const adminHost=await browser.newPage({viewport:{width:1440,height:1000}});observe(adminHost);const adminGame=await harnessGame(adminHost,'admin');
+  await adminGame.locator('[data-view="packs"]').click();await adminGame.locator('#admin-unlimited').click();await adminGame.waitForFunction(()=>__grandLine.admin.unlimitedGold&&!__grandLine.adminPending);
+  await adminGame.locator('[data-pack="galaxy"]').click();await adminGame.locator('[data-quantity="50"]').click();
+  assert.match(await adminGame.locator('#pack-total').textContent(),/50 packs.*50 cards.*0 points/);assert.equal(await adminGame.locator('#open-pack').isEnabled(),true);
+  await adminGame.locator('#open-pack').click();await adminGame.waitForFunction(()=>__grandLine.dialog==='reveal');
+  assert.equal(await adminGame.locator('.batch-reveal-item').count(),50);
+  const fifty=await adminHost.evaluate(()=>{const request=fake.requests.findLast(d=>d.type==='GLTCG_BUY_REQUEST');return {gold:fake.state.gold,receipt:fake.state.grandLine.profiles['test-profile'].purchases[request.purchaseId]};});
+  assert.equal(fifty.gold,0);assert.equal(fifty.receipt.quantity,50);assert.equal(fifty.receipt.cost,0);assert.equal(fifty.receipt.normalCost,37500);assert.equal(fifty.receipt.adminUnlimited,true);
+  assert.deepEqual(await adminGame.locator('.batch-reveal-item').evaluateAll(nodes=>nodes.map(n=>n.dataset.character)),fifty.receipt.grants.map(g=>g.characterId));
+  assert.equal(await adminGame.evaluate(()=>__grandLine.collection.stats.packsOpened),50);
+  await screenshot(adminHost,'batch-fifty-admin');await adminHost.setViewportSize({width:320,height:740});await frames(adminHost,4);
+  assert.equal(await adminGame.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),true);
+  await adminGame.locator('.batch-reveal-item').last().scrollIntoViewIfNeeded();assert.equal(await adminGame.locator('.batch-reveal-item').last().isVisible(),true);
+  await adminGame.getByRole('button',{name:'Back to card shop',exact:true}).scrollIntoViewIfNeeded();await screenshot(adminHost,'batch-fifty-mobile');
+  await adminGame.getByRole('button',{name:'Back to card shop',exact:true}).click();await adminHost.close();
+  check('Administrators can open fifty packs at zero gold, retain normal-rate receipt evidence, and browse every reveal on a small phone');
+}
+
+async function checkLegacyPackCapability() {
+  const host=await browser.newPage({viewport:{width:1100,height:850}});observe(host);const game=await harnessGame(host,'student',true);
+  await game.locator('[data-view="packs"]').click();
+  for(const quantity of [5,10,50])assert.equal(await game.locator('[data-quantity="'+quantity+'"]').isDisabled(),true,'A stale parent cannot authorize batch size '+quantity);
+  assert.equal(await game.locator('[data-quantity="1"]').isEnabled(),true);
+  await game.locator('[data-quantity="5"]').dispatchEvent('click');assert.equal(await game.locator('[data-quantity="1"]').getAttribute('aria-pressed'),'true');
+  await game.locator('#open-pack').click();await game.waitForFunction(()=>__grandLine.dialog==='reveal');
+  assert.equal(await game.locator('.reveal-content .tcg-card').count(),1);assert.equal(await host.evaluate(()=>fake.state.gold),4880);
+  assert.equal(await host.evaluate(()=>fake.requests.findLast(d=>d.type==='GLTCG_BUY_REQUEST').quantity),1);
+
+  await host.evaluate(()=>{fake.legacyHost=false;});
+  await Promise.all([game.waitForNavigation(),game.evaluate(()=>location.reload())]);await game.waitForFunction(()=>__grandLine.ready);
+  await game.locator('[data-view="packs"]').click();await game.locator('[data-quantity="5"]').click();await host.evaluate(()=>{fake.failPurchaseResponseOnce=true;});
+  await game.locator('#open-pack').click();await game.waitForFunction(()=>__grandLine.purchasePending&&!__grandLine.purchasePending.waiting);
+  const pending=await game.evaluate(()=>({purchaseId:__grandLine.purchasePending.purchaseId,quantity:__grandLine.purchasePending.quantity}));assert.equal(pending.quantity,5);
+  const committed=await host.evaluate(()=>({state:JSON.stringify(fake.state),commits:fake.commits}));
+  await host.evaluate(()=>{fake.legacyHost=true;});
+  await Promise.all([game.waitForNavigation(),game.evaluate(()=>location.reload())]);await game.waitForFunction(()=>__grandLine.ready);
+  assert.deepEqual(await game.evaluate(()=>({purchaseId:__grandLine.purchasePending.purchaseId,quantity:__grandLine.purchasePending.quantity})),pending);
+  await game.locator('[data-view="packs"]').click();const requests=await host.evaluate(()=>fake.requests.filter(d=>d.type==='GLTCG_BUY_REQUEST').length);
+  assert.equal(await game.locator('#open-pack').isDisabled(),true);assert.match(await game.locator('#pack-progress').textContent(),/refresh/i);
+  await game.locator('#open-pack').dispatchEvent('click');
+  for(const button of await game.getByRole('button',{name:'Resume this purchase',exact:true}).all())await button.dispatchEvent('click');
+  await frames(host,3);assert.equal(await host.evaluate(()=>fake.requests.filter(d=>d.type==='GLTCG_BUY_REQUEST').length),requests,'A five-pack receipt never reaches a host that would silently buy one');
+  assert.deepEqual(await host.evaluate(()=>({state:JSON.stringify(fake.state),commits:fake.commits})),committed);
+  assert.equal(await game.evaluate(()=>__grandLine.purchasePending.purchaseId),pending.purchaseId);
+
+  await host.evaluate(()=>{fake.legacyHost=false;});
+  await Promise.all([game.waitForNavigation(),game.evaluate(()=>location.reload())]);await game.waitForFunction(()=>__grandLine.ready);
+  await game.locator('[data-view="packs"]').click();await game.locator('#open-pack').click();await game.getByRole('button',{name:'Resume this purchase',exact:true}).click();await game.waitForFunction(()=>__grandLine.dialog==='reveal');
+  assert.equal(await game.locator('.batch-reveal-item').count(),5);assert.deepEqual(await host.evaluate(()=>({state:JSON.stringify(fake.state),commits:fake.commits})),committed);
+  await host.close();check('Legacy portals allow only one pack and retain pending batches without sending them until a refreshed portal confirms batch support');
 }
 
 async function checkGeneratedDefenseVfx() {
@@ -1094,6 +1199,8 @@ try {
   await checkTouchPlacement();
   await checkTenCrew();
   await checkAdministratorShop();
+  await checkMultiPackPurchases();
+  await checkLegacyPackCapability();
   if(process.env.GRAND_LINE_REQUIRE_ART==='1')await checkGeneratedDefenseVfx();
   const production = await browser.newPage(); observe(production); await production.goto(base + '/grand-line.html'); await production.locator('#card-grid .tcg-card').first().waitFor();
   assert.equal(await production.evaluate(() => typeof window.__grandLine), 'undefined');

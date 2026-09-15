@@ -1,6 +1,6 @@
 // Purchases use the portal's existing reward-point wallet. The iframe cannot
 // choose its card, price, odds, ownership or balance, and receives no ledger.
-import { CHARACTERS, CHARACTER_BY_ID, currentCharacterId, createCollection, normalizeCollection, addCard, setTeam } from './grand-line-core.js?v=3.1.0';
+import { CHARACTERS, CHARACTER_BY_ID, currentCharacterId, createCollection, normalizeCollection, addCard, setTeam } from './grand-line-core.js?v=3.2.0';
 
 const token = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
 const number = (value, max = 1000000) => Number.isSafeInteger(value) && value >= 0 ? Math.min(max, value) : 0;
@@ -78,7 +78,7 @@ export function createGrandLineEconomy(env) {
     if (saving) throw new Error('Your wallet is still saving. Retry in a moment.');
     const state = current(ctx), saved = record(state, ctx);
     const available = !!adminUid(ctx), unlimitedGold = available && state.grandLine?.admin?.unlimitedGold === true;
-    return { wallet: { available: true, balance: Math.floor(state.gold), currency: 'points', offers: offers(), unlimitedGold },
+    return { wallet: { available: true, balance: Math.floor(state.gold), currency: 'points', offers: offers(), unlimitedGold, maxPackQuantity: 50 },
       admin: { available, unlimitedGold },
       collection: normalizeCollection(saved.collection || createCollection()) };
   }
@@ -100,41 +100,56 @@ export function createGrandLineEconomy(env) {
   }
   return {
     getSnapshot: snapshot,
-    async buyPack({ purchaseId, packId }, ctx) {
+    async buyPack({ purchaseId, packId, quantity = 1 } = {}, ctx) {
       if (saving) throw new Error('Your wallet is still saving. Retry with the same purchase request.');
       if (!token(purchaseId) || !token(packId)) throw rejected('Invalid purchase request.');
-      const state = current(ctx), offer = offers().find(p => p.id === packId);
-      if (!offer) throw rejected('This booster pack is unavailable.');
+      if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 50) throw rejected('Choose between 1 and 50 packs.');
+      const state = current(ctx);
       const saved = record(state, ctx), ledger = saved.purchases || {};
       if (Object.hasOwn(ledger, purchaseId)) {
-        if (ledger[purchaseId].packId !== packId) throw new Error('That purchase request already belongs to another pack.');
-        const result = snapshot(ctx), grant = { ...ledger[purchaseId].grant };
-        const id = currentCharacterId(grant.characterId);
-        if (!id || !result.collection.cards[id]) throw new Error('This saved purchase could not be loaded. Reopen the game to retry the same receipt.');
+        const receipt = ledger[purchaseId], receiptQuantity = receipt?.quantity === undefined ? 1 : receipt.quantity;
+        if (receipt?.packId !== packId) throw new Error('That purchase request already belongs to another pack.');
+        if (receiptQuantity !== quantity) throw new Error('That purchase request already belongs to another quantity of packs.');
+        const result = snapshot(ctx), originalGrants = receipt.grants === undefined && quantity === 1 ? [receipt.grant] : receipt.grants;
+        if (!Array.isArray(originalGrants) || originalGrants.length !== quantity) throw new Error('This saved purchase could not be loaded. Reopen the game to retry the same receipt.');
+        const grants = originalGrants.map(original => {
+          const grant = { ...original }, id = currentCharacterId(grant.characterId);
+          if (!id || !result.collection.cards[id]) throw new Error('This saved purchase could not be loaded. Reopen the game to retry the same receipt.');
+          if (id !== grant.characterId) Object.assign(grant, { characterId: id, stars: CHARACTER_BY_ID[id].stars, copies: result.collection.cards[id].copies });
+          return grant;
+        });
         // Keep the original durable receipt as evidence that it was charged.
-        // A replay only presents its migrated card; it never grants or saves.
-        if (id !== grant.characterId) Object.assign(grant, { characterId: id, stars: CHARACTER_BY_ID[id].stars, copies: result.collection.cards[id].copies });
-        return { ...result, grant, replayed: true };
+        // Replay presents each migrated card without changing counts or saving.
+        return { ...result, quantity, grants, ...(quantity === 1 ? { grant: grants[0] } : {}), replayed: true };
       }
+      const offer = offers().find(p => p.id === packId);
+      if (!offer) throw rejected('This booster pack is unavailable.');
       if (Object.keys(ledger).length >= 10000) throw rejected('This collection has reached its purchase limit.');
+      const normalCost = offer.cost * quantity;
+      if (!Number.isSafeInteger(normalCost)) throw rejected('This pack quantity has an invalid total price.');
       const authority = state.grandLine?.admin?.unlimitedGold === true ? adminUid(ctx) : null;
-      const cost = authority ? 0 : offer.cost;
-      if (state.gold < cost) throw rejected(`This pack costs ${offer.cost} reward points. Answer more questions to earn points.`);
-      const weighted = Object.entries(offer.odds).filter(([stars, weight]) => Number(stars) >= 1 && Number(stars) <= 7 && Number.isFinite(weight) && weight > 0);
+      const cost = authority ? 0 : normalCost;
+      if (state.gold < cost) throw rejected(`${quantity === 1 ? 'This pack costs' : `These ${quantity} packs cost`} ${normalCost} reward points. Answer more questions to earn points.`);
+      const weighted = Object.entries(offer.odds).filter(([stars, weight]) => Number.isInteger(Number(stars)) && Number(stars) >= 1 && Number(stars) <= 7 && Number.isFinite(weight) && weight > 0);
       const total = weighted.reduce((sum, [, weight]) => sum + weight, 0);
-      if (!total) throw rejected('This pack has no available characters.');
+      if (!Number.isFinite(total) || !total) throw rejected('This pack has no available characters.');
+      const pools = new Map(weighted.map(([stars]) => [Number(stars), CHARACTERS.filter(c => c.stars === Number(stars))]));
+      if ([...pools.values()].some(pool => !pool.length)) throw rejected('This pack has no available characters.');
       const random = () => Math.max(0, Math.min(0.99999999999, Number((env.random || Math.random)()) || 0));
-      let ticket = random() * total, stars = Number(weighted.at(-1)[0]);
-      for (const [star, weight] of weighted) { ticket -= weight; if (ticket < 0) { stars = Number(star); break; } }
-      const pool = CHARACTERS.filter(c => c.stars === stars);
-      if (!pool.length) throw rejected('This pack has no available characters.');
-      const collection = normalizeCollection(saved.collection), character = pool[Math.floor(random() * pool.length)];
-      const added = addCard(collection, character.id);
-      collection.stats.packsOpened = number(collection.stats.packsOpened) + 1;
-      const grant = { characterId: character.id, copies: added.copies, duplicate: added.duplicate, stars };
-      const next = { ...saved, collection, purchases: { ...ledger, [purchaseId]: { packId, cost,
-        ...(authority ? { normalCost: offer.cost, adminUnlimited: true } : {}), grant, at: new Date().toISOString() } } };
-      return { ...await commit(ctx, state, next, state.gold - cost, authority ? { authority } : {}), grant, replayed: false };
+      const collection = normalizeCollection(saved.collection), grants = [];
+      for (let index = 0; index < quantity; index++) {
+        let ticket = random() * total, stars = Number(weighted.at(-1)[0]);
+        for (const [star, weight] of weighted) { ticket -= weight; if (ticket < 0) { stars = Number(star); break; } }
+        const pool = pools.get(stars), character = pool[Math.floor(random() * pool.length)];
+        const added = addCard(collection, character.id);
+        grants.push({ characterId: character.id, copies: added.copies, duplicate: added.duplicate, stars });
+      }
+      collection.stats.packsOpened = number(collection.stats.packsOpened) + quantity;
+      const compatibleGrant = quantity === 1 ? { grant: grants[0] } : {};
+      const next = { ...saved, collection, purchases: { ...ledger, [purchaseId]: { packId, quantity, cost,
+        ...(authority ? { normalCost, adminUnlimited: true } : {}), grants: clone(grants),
+        ...(quantity === 1 ? { grant: { ...grants[0] } } : {}), at: new Date().toISOString() } } };
+      return { ...await commit(ctx, state, next, state.gold - cost, authority ? { authority } : {}), quantity, grants, ...compatibleGrant, replayed: false };
     },
     async adminAction(request, ctx) {
       if (saving) throw new Error('Your wallet is still saving. Retry in a moment.');

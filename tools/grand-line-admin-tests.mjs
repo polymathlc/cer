@@ -250,3 +250,78 @@ test('a role change after pack selection is checked again before any zero-cost m
   assert.deepEqual(f.state(), before); assert.equal(f.writes.length, 0);
   assert.equal(f.economy.getSnapshot(f.ctx).wallet.unlimitedGold, false);
 });
+
+test('unlimited administrators open fifty one-card packs at each tier in one atomic zero-cost batch', async () => {
+  for (const [index, packId] of ['spark', 'nova', 'galaxy'].entries()) {
+    let rolls = 0; const f = fixture({ enabled: true, random: () => { rolls++; return .9999999999; } });
+    const result = await f.economy.buyPack({ purchaseId: 'free-fifty', packId, quantity: 50 }, f.ctx);
+    assert.equal(result.quantity, 50); assert.equal(result.grants.length, 50); assert.equal(result.grant, undefined);
+    assert.equal(result.wallet.balance, 0); assert.equal(result.collection.stats.packsOpened, 50);
+    assert.equal(copies(result.collection), STARTER_IDS.length + 50); assert.equal(rolls, 100);
+    assert.deepEqual(result.grants.map(g => g.copies), Array.from({ length: 50 }, (_, n) => n + 1));
+    assert.ok(result.grants.every(g => g.stars === 7)); assert.equal(result.grants[0].duplicate, false);
+    assert.ok(result.grants.slice(1).every(g => g.duplicate));
+    const receipt = f.durable().grandLine.profiles[f.ctx.profileKey].purchases['free-fifty'];
+    assert.equal(receipt.cost, 0); assert.equal(receipt.normalCost, [120, 320, 750][index] * 50);
+    assert.equal(receipt.adminUnlimited, true); assert.equal(receipt.quantity, 50);
+    assert.deepEqual(receipt.grants, result.grants); assert.equal(f.writes.length, 1);
+    assert.equal(f.durable().gold, 0); assert.equal(f.durable().grandLine.accountNote, 'keep me');
+  }
+});
+
+test('a free batch receipt replays unchanged after unlimited mode is disabled and rejects quantity substitution', async () => {
+  let rolls = 0; const f = fixture({ enabled: true, random: () => { rolls++; return 0; } });
+  const request = { purchaseId: 'replay-free-batch', packId: 'galaxy', quantity: 10 };
+  const first = await f.economy.buyPack(request, f.ctx);
+  await f.economy.adminAction({ action: 'set-unlimited-gold', enabled: false }, f.ctx);
+  f.setState(structuredClone(f.durable())); const before = structuredClone(f.state());
+  const replay = await createGrandLineEconomy(f.env).buyPack(request, f.ctx);
+  assert.equal(replay.replayed, true); assert.equal(replay.quantity, 10); assert.deepEqual(replay.grants, first.grants);
+  assert.equal(replay.wallet.balance, 0); assert.equal(replay.admin.unlimitedGold, false);
+  assert.equal(rolls, 20); assert.equal(f.writes.length, 2); assert.deepEqual(f.state(), before);
+  await assert.rejects(f.economy.buyPack({ ...request, quantity: 50 }, f.ctx), /another quantity/);
+  await assert.rejects(f.economy.buyPack({ ...request, quantity: undefined }, f.ctx), /another quantity/);
+  assert.equal(rolls, 20); assert.equal(f.writes.length, 2); assert.deepEqual(f.state(), before);
+});
+
+test('student flags and untrusted admin contexts cannot authorize free batches or reach randomness', async () => {
+  for (const config of [{ role: 'student' }, { role: 'admin', trustedAdmin: false }]) {
+    let rolls = 0; const f = fixture({ ...config, enabled: true, random: () => { rolls++; return 0; } });
+    const before = structuredClone(f.state());
+    await assert.rejects(f.economy.buyPack({ purchaseId: 'forged-batch', packId: 'galaxy', quantity: 50,
+      unlimitedGold: true, admin: true, cost: 0, grants: Array(50).fill({ characterId: 'kaido' }) }, f.ctx), /37500/);
+    assert.equal(rolls, 0); assert.equal(f.writes.length, 0); assert.deepEqual(f.state(), before);
+  }
+  const f = fixture({ enabled: true }), before = structuredClone(f.state());
+  await assert.rejects(f.economy.buyPack({ purchaseId: 'too-many', packId: 'spark', quantity: 51 }, f.ctx), /1 and 50/);
+  assert.deepEqual(f.state(), before); assert.equal(f.writes.length, 0);
+});
+
+test('a failed fifty-pack free batch restores every card and receipt while preserving ordinary earnings', async () => {
+  const f = fixture({ enabled: true }), before = structuredClone(f.state().grandLine);
+  const request = { purchaseId: 'failed-free-batch', packId: 'nova', quantity: 50 };
+  f.hold(); const pending = f.economy.buyPack(request, f.ctx); f.earn(13);
+  await assert.rejects(f.economy.buyPack(request, f.ctx), /still saving/);
+  f.settle().reject(Error('offline')); await assert.rejects(pending, /could not be saved/);
+  assert.equal(f.state().gold, 13); assert.equal(f.durable().gold, 13);
+  assert.deepEqual(f.state().grandLine, before); assert.deepEqual(f.durable().grandLine, before);
+  f.noHold(); const retry = await f.economy.buyPack(request, f.ctx);
+  assert.equal(retry.wallet.balance, 13); assert.equal(retry.collection.stats.packsOpened, 50);
+  assert.equal(retry.grants.length, 50); assert.equal(f.writes.length, 1);
+  const receipt = f.durable().grandLine.profiles[f.ctx.profileKey].purchases[request.purchaseId];
+  assert.equal(receipt.cost, 0); assert.equal(receipt.quantity, 50);
+});
+
+test('admin authority is rechecked around an entire batch rather than trusting its captured free price', async () => {
+  const f = fixture({ enabled: true }), before = structuredClone(f.state()); let rolls = 0;
+  f.env.random = () => { if (++rolls === 3) f.user().role = 'student'; return 0; };
+  await assert.rejects(f.economy.buyPack({ purchaseId: 'lost-during-rolls', packId: 'spark', quantity: 10 }, f.ctx), /Administrator/);
+  assert.deepEqual(f.state(), before); assert.equal(f.writes.length, 0);
+  const held = fixture({ enabled: true }); held.hold();
+  const pending = held.economy.buyPack({ purchaseId: 'lost-during-write', packId: 'spark', quantity: 10 }, held.ctx);
+  held.user().role = 'student'; held.settle().resolve(); await assert.rejects(pending, /Administrator/);
+  assert.equal(held.writes.length, 1); assert.equal(held.durable().grandLine.profiles[held.ctx.profileKey].purchases['lost-during-write'].quantity, 10);
+  assert.equal(held.economy.getSnapshot(held.ctx).wallet.unlimitedGold, false);
+  await assert.rejects(held.economy.buyPack({ purchaseId: 'student-next', packId: 'spark', quantity: 10 }, held.ctx), /1200/);
+  assert.equal(held.writes.length, 1);
+});
