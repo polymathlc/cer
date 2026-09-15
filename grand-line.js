@@ -1,8 +1,8 @@
 import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam,MAX_CREW_SIZE,getCrewSynergies} from './grand-line-core.js?v=3.5.0';
 import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS,CREWS} from './grand-line-data.js?v=3.5.0';
 import {createArtManager} from './grand-line-render.js?v=3.5.0';
-import {DEFENSE_GRID,DEFENSE_PADS,DEFENSE_ENTRIES,DEFENSE_DEFAULT_PADS,buildMazeTower,sellMazeTower,getMazePlacementPreview,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning,getDefenseProfile,getDefenseSkillProfile,getDefenseWavePreview,getCaptainAuras,summonDefender,recallDefender,upgradeDefender,specializeDefender,setDefensePriority} from './grand-line-defense.js?v=3.5.0';
-import {createDefenseRenderer} from './grand-line-defense-render.js?v=3.5.0';
+import {DEFENSE_GRID,DEFENSE_PADS,DEFENSE_ENTRIES,DEFENSE_DEFAULT_PADS,buildMazeTower,sellMazeTower,getMazePlacementPreview,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning,getDefenseProfile,getDefenseSkillProfile,getDefenseWavePreview,getCaptainAuras,summonDefender,recallDefender,upgradeDefender,specializeDefender,setDefensePriority} from './grand-line-defense.js?v=3.5.1';
+import {createDefenseRenderer} from './grand-line-defense-render.js?v=3.5.1';
 import {installPlacementInput} from './grand-line-placement-input.js?v=3.5.0';
 const DEFENSE_SPEEDS=[1,2,4];
 const $=id=>document.getElementById(id);

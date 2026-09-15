@@ -1,4 +1,4 @@
-import { DEFENSE_PATH, DEFENSE_PADS, DEFENSE_GRID, DEFENSE_ENTRIES, getDefenseWavePreview, getDefenseAttackPreview, getDefenseProfile, getMazePlacementPreview } from './grand-line-defense.js?v=3.5.0';
+import { DEFENSE_PATH, DEFENSE_PADS, DEFENSE_GRID, DEFENSE_ENTRIES, getDefenseWavePreview, getDefenseAttackPreview, getDefenseProfile, getMazePlacementPreview } from './grand-line-defense.js?v=3.5.1';
 import { CHARACTER_BY_ID } from './grand-line-data.js?v=3.5.0';
 import { createDefenseVfxManager, getVfxSpec } from './grand-line-vfx.js?v=3.5.0';
 
