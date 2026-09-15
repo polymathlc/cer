@@ -73,6 +73,23 @@ async function clearWave(frame) {
   });
   await frame.waitForFunction(()=>__grandLine.battle.status==='learning');
 }
+async function checkWaveEntrances(frame,{spawned=false}={}) {
+  const expected=await frame.evaluate(async()=>{
+    const {getDefenseWavePreview}=await import('./grand-line-defense.js');const b=__grandLine.battle,p=getDefenseWavePreview(b);
+    return {round:b.round,total:p.total,entries:p.entrances,all:__grandLine.DEFENSE_GRID.entryIds};
+  });
+  const markers=await frame.locator('#wave-entrances [data-entry]').evaluateAll(nodes=>nodes.map(n=>({id:n.dataset.entry,active:n.dataset.active==='true',text:n.textContent,label:n.getAttribute('aria-label')})));
+  assert.deepEqual(markers.map(m=>m.id),expected.all,'All three named entrances remain visible');
+  assert.deepEqual(markers.filter(m=>m.active).map(m=>m.id),expected.entries.map(e=>e.id),`Wave ${expected.round} highlights only the entrances that will release enemies`);
+  for(const entry of expected.entries)assert.match(markers.find(m=>m.id===entry.id).label,new RegExp(entry.label+' entrance: '+entry.count+' enemies'));
+  assert.equal(expected.entries.reduce((sum,e)=>sum+e.count,0),expected.total,'Entrance counts account for the full wave');
+  assert.equal(expected.entries.length,1+(expected.round-1)%3);
+  if(spawned){
+    await frame.waitForFunction(ids=>{const b=__grandLine.battle;return b.status==='running'&&ids.every(id=>b.enemies.some(e=>e.entryId===id));},expected.entries.map(e=>e.id));
+    const observed=await frame.evaluate(()=>[...new Set(__grandLine.battle.enemies.map(e=>e.entryId))].sort());
+    assert.deepEqual(observed,expected.entries.map(e=>e.id).sort(),'Real frame-driven spawns match the advertised gates');
+  }
+}
 async function answerThree(host,choice=1) {
   await host.locator('#questions').waitFor({state:'visible'});
   for(let i=0;i<3;i++) {
@@ -778,12 +795,12 @@ async function checkGeneratedDefenseVfx() {
     for(const [column,gap]of[[7,2],[17,10]])for(let row=0;row<13;row++)if(row!==gap){
       const cell=`cell-${column}-${row}`;if(defense.getMazePlacementPreview(b,cell,{kind:'tower'}).valid)defense.buildMazeTower(b,cell);
     }
-    defense.startDefenseWave(b); for(let i=0;i<12;i++)defense.advanceDefense(b,.05);
+    b.round=3;defense.startDefenseWave(b); for(let i=0;i<12;i++)defense.advanceDefense(b,.05);
     const enemy = b.enemies[0];
     b.enemies = Array.from({length:200},(_,i) => {
       const unit = JSON.parse(JSON.stringify(enemy)); unit.id = 'vfx-mob-'+i; unit.progress = .02+i*.0047;
-      unit.hp = unit.maxHp = 1000; unit.alive = true; unit.escaped = false; unit.laneOffset = (i%5-2)*4;
-      Object.assign(unit,defense.defenseEnemyPointAt(unit.progress,unit.laneOffset,b)); return unit;
+      unit.hp = unit.maxHp = 1000; unit.alive = true; unit.escaped = false; unit.laneOffset = (i%5-2)*4;unit.entryId=b.activeEntryIds[i%b.activeEntryIds.length];
+      Object.assign(unit,defense.defenseEnemyPointAt(unit.progress,unit.laneOffset,b,unit.entryId)); return unit;
     });
     b.projectiles = Array.from({length:80},(_,i) => {
       const actor=b.allies[i%b.allies.length], skill=actor.skills[i%3], geometry=defense.getDefenseSkillProfile(actor,skill);
@@ -971,6 +988,55 @@ async function checkCrewStrategyInterface() {
     await page.locator('#battle-synergies summary').first().click();assert.match(await page.locator('#battle-synergy-summary').textContent(),/3 active/);await noOverflow(page);await screenshot(page,'alliances-battle-'+viewport.width);await page.close();
   }
   check('Collection allegiance filters, seven-slot search/cancel/replacement, captain badges, live group thresholds and nearby aura readouts stay correct on desktop and both phone sizes');
+}
+
+async function checkThreeEntranceInterface() {
+  for(const viewport of [{width:2048,height:1100},{width:390,height:844},{width:320,height:740}]) {
+    const page=await browser.newPage({viewport,isMobile:viewport.width<500,hasTouch:viewport.width<500});observe(page);await standalone(page);
+    await page.evaluate(async()=>{
+      const a=__grandLine,collection=structuredClone(a.collection);collection.cards=Object.fromEntries(a.CHARACTERS.map(c=>[c.id,{copies:1}]));collection.team=['kaido','bigmom7','whitebeard','marco','sabo7','koala','garp7'];a.applySnapshot({collection});a.settings.battleSpeed=1;
+      await a.art.ready;await Promise.all(collection.team.map(id=>a.art.load(id).promise));
+    });
+    await page.locator('[data-view="campaign"]').click();await page.locator('#defense-continue button').click();
+    for(let wave=1;wave<=3;wave++) {
+      await checkWaveEntrances(page);await noOverflow(page);
+      const summary=await page.locator('#wave-entrances').boundingBox(),start=await page.locator('#start-wave').boundingBox();
+      assert.ok(Math.abs(summary.y-start.y)<100,'Entry information stays beside Start wave on desktop and phone');
+      assert.equal(await page.locator('#defender-buttons [data-ally]').count(),7);
+      assert.match(await page.locator('#route-length').textContent(),/^3 open routes/);
+      if(wave===3){
+        const roads=await page.evaluate(()=>{
+          const a=__grandLine,g=document.querySelector('#battle-canvas').getContext('2d'),original={},strokes=[];let segments=[],pen=null;
+          const edge=(p,q)=>[p.join(','),q.join(',')].sort().join('|');
+          for(const name of ['beginPath','moveTo','lineTo','stroke'])original[name]=g[name];
+          g.beginPath=function(...args){segments=[];pen=null;return original.beginPath.apply(this,args);};
+          g.moveTo=function(x,y){pen=[x,y];return original.moveTo.call(this,x,y);};
+          g.lineTo=function(x,y){if(pen)segments.push(edge(pen,[x,y]));pen=[x,y];return original.lineTo.call(this,x,y);};
+          g.stroke=function(...args){if(this.lineWidth===10)strokes.push([...segments]);return original.stroke.apply(this,args);};
+          try{a.renderer.draw(a.battle,1000,{reducedMotion:true,placementArmed:false});}finally{for(const name of Object.keys(original))g[name]=original[name];}
+          // Wave three uses every entrance, including roads that merge near the exit.
+          const all=[];for(const route of Object.values(a.battle.routes))for(let i=1;i<route.points.length;i++)all.push(edge([route.points[i-1].x,route.points[i-1].y],[route.points[i].x,route.points[i].y]));
+          return {strokes,unique:[...new Set(all)].sort(),unmerged:all.length};
+        });
+        assert.equal(roads.strokes.length,1,'All three roads share one paint operation');
+        assert.deepEqual(roads.strokes[0].sort(),roads.unique,'Every active road segment paints exactly once');
+        assert.ok(roads.unique.length<roads.unmerged,'The fixture includes a genuinely shared exit segment');
+      }
+      await page.locator('#start-wave').scrollIntoViewIfNeeded();await frames(page,3);
+      await page.screenshot({path:path.join(shots,`entrances-${viewport.width}-wave-${wave}-setup.png`)});
+      await page.locator('#start-wave').click();await checkWaveEntrances(page,{spawned:true});
+      if(wave===3){await page.locator('#defense-pause').click();await frames(page,3);await page.screenshot({path:path.join(shots,`entrances-${viewport.width}-wave-3-running.png`)});await page.locator('#defense-pause').click();}
+      if(wave<3){await clearWave(page);await page.evaluate(()=>{const a=__grandLine,b=a.battle;a.completeDefenseLearning(b,{total:3,correct:3,round:b.round});a.renderBattle();});}
+    }
+    await page.close();
+  }
+  check('Three labeled gates, accurate per-gate counts and real one/two/three-gate spawns stay clear beside Start wave at desktop and both phone sizes');
+}
+
+if(process.env.GRAND_LINE_BROWSER_FOCUS==='entrances') {
+  try{await checkThreeEntranceInterface();assert.deepEqual(errors,[]);await fs.writeFile(path.join(shots,'entrances-results.json'),JSON.stringify({checks,errors},null,2));}
+  finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
+  process.exit(0);
 }
 
 if(process.env.GRAND_LINE_BROWSER_FOCUS==='interface') {
@@ -1190,7 +1256,7 @@ try {
   assert.equal(await game.evaluate(()=>JSON.stringify(__grandLine.collection.cards)),trainingBase.cards);
   check('Exactly three graded answers award training once; paid battle levels unlock one permanent-in-battle specialization without changing owned card copies');
 
-  await game.locator('#start-wave').click();await clearWave(game);
+  await checkWaveEntrances(game);await game.locator('#start-wave').click();await checkWaveEntrances(game,{spawned:true});await clearWave(game);
   assert.equal(await game.evaluate(()=>__grandLine.battle.learningBoost),null);
   await game.locator('#study-button').click();await answerThree(host,0);
   await game.waitForFunction(()=>__grandLine.battle.status==='setup'&&__grandLine.battle.round===3);
@@ -1198,7 +1264,7 @@ try {
   assert.equal(await game.evaluate(()=>__grandLine.battle.trainingPoints),2,'Three wrong answers still earn the one base training point');
   for(let wave=3;wave<=6;wave++) {
     assert.equal(await game.evaluate(()=>__grandLine.battle.spawnTotal),[80,105,130,160,190,230][wave-1]);
-    await game.locator('#start-wave').click();await clearWave(game);
+    await checkWaveEntrances(game);await game.locator('#start-wave').click();await checkWaveEntrances(game,{spawned:true});await clearWave(game);
     assert.equal(await game.evaluate(()=>__grandLine.battle.round),wave);
     assert.equal(await game.evaluate(()=>__grandLine.collection.unlockedEncounter),1);
     if(wave<6) {
@@ -1354,6 +1420,7 @@ try {
   await checkMultiPackPurchases();
   await checkLegacyPackCapability();
   await checkPaidRosterMigration();
+  await checkThreeEntranceInterface();
   if(process.env.GRAND_LINE_REQUIRE_ART==='1')await checkGeneratedDefenseVfx();
   const production = await browser.newPage(); observe(production); await production.goto(base + '/grand-line.html'); await production.locator('#card-grid .tcg-card').first().waitFor();
   assert.equal(await production.evaluate(() => typeof window.__grandLine), 'undefined');

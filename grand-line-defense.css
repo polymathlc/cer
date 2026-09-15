@@ -367,3 +367,10 @@
 .defender-bonus-summary{font-size:10px;line-height:1.5;color:#c5dfab;margin:5px 0 0;max-width:600px}
 .placement-dock .defender-abilities>summary{font-size:11px;min-height:36px}
 .placement-dock .defender-abilities #defender-pattern{margin:10px 0 8px;font-size:11px}
+.wave-entrances{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;max-width:420px}
+.wave-entrance{padding:4px 8px;border:1px solid #54706a;border-radius:4px;color:#a9bbb4;background:#193933;font:11px/1.35 system-ui;white-space:nowrap}
+.wave-entrance[data-active=true]{color:#fff0b4;background:#3a5036;border-color:#d1bd76;font-weight:700}
+@media(max-width:760px){
+  .wave-entrances{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));max-width:none;gap:5px}
+  .wave-entrance{padding:5px 3px;text-align:center;font-size:11px}
+}

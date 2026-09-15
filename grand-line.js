@@ -1,9 +1,9 @@
-import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam,MAX_CREW_SIZE,getCrewSynergies} from './grand-line-core.js?v=3.4.0';
-import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS,CREWS} from './grand-line-data.js?v=3.4.0';
-import {createArtManager} from './grand-line-render.js?v=3.4.0';
-import {DEFENSE_GRID,DEFENSE_PADS,DEFENSE_DEFAULT_PADS,buildMazeTower,sellMazeTower,getMazePlacementPreview,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning,getDefenseProfile,getDefenseSkillProfile,getDefenseWavePreview,getCaptainAuras,summonDefender,recallDefender,upgradeDefender,specializeDefender,setDefensePriority} from './grand-line-defense.js?v=3.4.0';
-import {createDefenseRenderer} from './grand-line-defense-render.js?v=3.4.0';
-import {installPlacementInput} from './grand-line-placement-input.js?v=3.4.0';
+import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam,MAX_CREW_SIZE,getCrewSynergies} from './grand-line-core.js?v=3.5.0';
+import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS,CREWS} from './grand-line-data.js?v=3.5.0';
+import {createArtManager} from './grand-line-render.js?v=3.5.0';
+import {DEFENSE_GRID,DEFENSE_PADS,DEFENSE_ENTRIES,DEFENSE_DEFAULT_PADS,buildMazeTower,sellMazeTower,getMazePlacementPreview,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning,getDefenseProfile,getDefenseSkillProfile,getDefenseWavePreview,getCaptainAuras,summonDefender,recallDefender,upgradeDefender,specializeDefender,setDefensePriority} from './grand-line-defense.js?v=3.5.0';
+import {createDefenseRenderer} from './grand-line-defense-render.js?v=3.5.0';
+import {installPlacementInput} from './grand-line-placement-input.js?v=3.5.0';
 const DEFENSE_SPEEDS=[1,2,4];
 const $=id=>document.getElementById(id);
 const embedded=parent!==window,params=new URLSearchParams(location.search),origin=location.origin;
@@ -293,7 +293,7 @@ function renderBattle(){
   if(waiting&&mapZoom!==1)setMapZoom(1);
   $('battle-chapter').textContent=`CREW DEFENSE · HARBOR ${e.id}`;$('battle-title').textContent=e.name;$('round-label').textContent=`Wave ${b.round} / ${b.waveCount}`;
   $('defense-state').textContent=locked?'SAVING / STUDYING':setup?'BUILD YOUR DEFENSE':waiting?'WAVE COMPLETE':b.status==='running'?defensePaused?'DEFENSE PAUSED':`DEFENDING · ${settings.battleSpeed}×`:'DEFENSE COMPLETE';
-  $('defense-description').textContent=setup?'Build a maze · Deploy crew · Start the wave':waiting?'The battlefield is paused for three questions.':defensePaused?'Take a breather. Resume when you are ready.':'Crew attacks automatically · Select a hero for targeting.';
+  $('defense-description').textContent=setup?'Keep all 3 entrances open · Active gates glow':waiting?'The battlefield is paused for three questions.':defensePaused?'Take a breather. Resume when you are ready.':'Crew attacks automatically · Select a hero for targeting.';
   $('start-wave').hidden=!setup;$('start-wave').textContent=`Start wave ${b.round} →`;$('start-wave').disabled=locked||!!dialog||!b.allies.length;
   $('defense-pause').hidden=setup||waiting||['victory','defeat'].includes(b.status);$('defense-pause').disabled=locked;$('defense-pause').textContent=defensePaused?'Resume':'Pause';$('defense-pause').setAttribute('aria-label',defensePaused?'Resume defense':'Pause defense');$('defense-pause').setAttribute('aria-pressed',String(defensePaused));$('defense-speed').value=String(settings.battleSpeed);$('defense-speed').disabled=locked;
   $('ship-health').textContent=`${Math.max(0,Math.ceil(b.ship.hp))} / ${b.ship.maxHp}`;$('ship-meter').value=b.ship.hp;$('ship-meter').max=b.ship.maxHp;
@@ -313,6 +313,18 @@ const profilePattern=p=>p?.shape||p?.pattern||p?.style||'single';
 const profileText=p=>p?.description||p?.summary||'';
 function renderWavePreview(){
   if(!battle)return;const p=getDefenseWavePreview(battle);$('wave-preview').hidden=battle.status!=='setup';
+  const entrySummary=$('wave-entrances'),entryKey=`${battle.id}:${battle.round}:${p.entrances.map(e=>e.id+':'+e.count).join(',')}`;
+  if(entrySummary.dataset.key!==entryKey){
+    entrySummary.dataset.key=entryKey;entrySummary.setAttribute('aria-label',`Wave ${battle.round} enemy entrances`);
+    entrySummary.replaceChildren(...DEFENSE_ENTRIES.map(entry=>{
+      const incoming=p.entrances.find(e=>e.id===entry.id),node=el('span','wave-entrance');node.dataset.entry=entry.id;node.dataset.active=String(!!incoming);
+      node.textContent=entry.label+' · '+(incoming?format(incoming.count):'—');
+      node.setAttribute('aria-label',entry.label+' entrance: '+(incoming?incoming.count+' enemies':'inactive this wave'));return node;
+    }));
+    const active=p.entrances.map(e=>`${e.label.toLowerCase()} (${e.count} enemies)`).join(', ');
+    $('battle-canvas').setAttribute('aria-label',`Landscape maze battlefield. Wave ${battle.round} enemies enter from the ${active} left entrance${p.entrances.length===1?'':'s'} and travel right. Keep all three entrances connected to the exit. Click a tower or crew member, then a grid square, or drag it into place. Arrow keys select cells and Enter places the selected item.`);
+    $('start-wave').setAttribute('aria-describedby','wave-entrances');
+  }
   $('wave-preview-title').textContent=(p.title||p.name||'Wave '+battle.round)+' · '+(p.total||p.count||battle.spawnTotal)+' enemies';
   $('wave-preview-tip').textContent=p.tip||p.description||'Line attacks reward long sightlines. Slow clustered enemies before hitting them with splash damage.';
   const rows=p.groups||p.types||[];
@@ -334,7 +346,8 @@ function renderPlacement(){
   $('placement-cancel').hidden=!placementArmed;
   $('tower-selection').hidden=!selectedTowerCell;$('sell-selected-tower').disabled=locked;
   $('maze-tower-count').textContent=(b.mazeTowers?.length||0)+' / 80 towers';
-  $('route-length').textContent=Math.round((b.routeLength||0)/DEFENSE_GRID.cellSize)+' cells to exit';
+  const routeLengths=Object.values(b.routes||{}).map(route=>Math.round((route.length||0)/DEFENSE_GRID.cellSize));
+  $('route-length').textContent=routeLengths.length===3?'3 open routes · '+Math.min(...routeLengths)+(Math.min(...routeLengths)===Math.max(...routeLengths)?'':'–'+Math.max(...routeLengths))+' cells':Math.round((b.routeLength||0)/DEFENSE_GRID.cellSize)+' cells to exit';
   $('selected-cell').textContent=cellLabel(selectedPadId);
   $('cell-feedback').textContent=selectedPreview?.reason||(selectedPadId?'Ready to place.':'Choose a column and row.');
   $('cell-feedback').dataset.valid=String(selectedPreview?.valid!==false);
@@ -407,7 +420,7 @@ function previewQuestion(){
   else{const submit=button('Check answer',()=>{if(q.selected===null||q.graded)return;q.graded=true;if(q.selected===answer)q.correct++;previewQuestion();},'gold-button');submit.disabled=q.selected===null;panel.append(submit);}
 }
 function help(){
-  const panel=openDialog('settings','Build. Summon. Defend.');panel.append(el('p','', 'Collect one hundred One Piece characters and deploy up to seven matching avatars on the maze grid. Build cheap towers to steer enemies through their attacks on the way from the left entrance to the right exit.'));
+  const panel=openDialog('settings','Build. Summon. Defend.');panel.append(el('p','', 'Collect one hundred One Piece characters and deploy up to seven matching avatars on the maze grid. Build cheap towers to steer enemies through their attacks from three left entrances to the right exit. Each wave uses one, two, or all three entrances: check the glowing gates and enemy counts before starting. Keep a route open from every entrance.'));
   const options=el('div','settings-options');for(const [key,label]of[['muted','Mute sound'],['reducedMotion','Reduce animation']]){const n=el('label'),input=el('input');input.type='checkbox';input.checked=settings[key];input.onchange=()=>{settings[key]=input.checked;settingsUI();savePreferences();};n.append(input,document.createTextNode(label));options.append(n);}panel.append(options);
   const rules=el('ol','rules-list');for(const text of ['Choose up to seven free starting defenders in My crew. Summon any other owned card onto an empty position using battle supplies. Each character can be deployed once, up to seven at a time.','Build a maze with cheap 5-supply towers. Select the Maze tower tile and click grid squares to build, or drag the tile onto the map. Towers and crew block the route; the preview shows the new path and sealed paths are rejected. Place splash heroes beside chokepoints. Select a placed tower to sell it for 3 supplies between waves. Drag a crew member from their tile or their map avatar to reposition them, or select them and click a destination.','Start a wave and watch the crew defend automatically. Line, cone, surrounding area, splash, and chain attacks hit different groups. Target First, Strongest, or Cluster; healers, shields, freezing, poison, and character passives support the crew. Enemies reaching the ship damage its life.','Each harbor has six waves. After every wave, including the last or a defeat, answer exactly three Math or Science questions. Spend your training points to level up defenders, choose Power or Reach at level 3, and summon reinforcements before starting the next wave.','Each correct answer gives the next wave +10% attack, +5 percentage points critical chance, and +8% defense. Three correct answers give +30%, +15 percentage points, and +24%. Boosts refresh and do not stack between waves.','Pause any time; choose 1×, 2×, or 4× speed. Keyboard: 1–7 select a defender and Space starts or pauses a wave. Focus the map and use arrow keys to select a cell, then Enter to place your selection. Escape cancels placement. Open Keyboard placement for precise column and row controls. On touch screens, drag empty map space to pan while zoomed.','Packs cost your platform’s existing reward points at its current TCG rates. Every pack contains exactly one card. Duplicate copies merge at 2, 4, 8, 16… copies up to rank 10, adding 12% base life, attack, and defense per rank.','Big Mom, Garp, and Sabo join Kaido, Whitebeard, and Akainu at seven stars. Earlier replacement cards stay in your collection; new expansion editions must be unlocked from packs. Shared allegiances improve matching crew members at 2, 3, and 5 members. Some captains and commanders also give nearby allies an attack or attack-speed aura.','Gameplay pauses in hidden tabs, menus, questions, and pending saves. There are no offline rewards. Previously unlocked harbors, cards, and pack receipts carry over.'])rules.append(el('li','',text));panel.append(rules);panel.append(button('Ready to defend',closeDialog,'gold-button'));
 }

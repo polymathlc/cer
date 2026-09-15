@@ -45,7 +45,7 @@ function use(fixture, index, target = fixture.target) {
 const status = (unit, type) => unit.statuses.find(effect => effect.type === type);
 
 test('nine future apex cards remain outside the hundred-card roster while three new editions become obtainable', () => {
-  assert.equal(data.VERSION, '3.4.0');
+  assert.equal(data.VERSION, '3.5.0');
   assert.deepEqual(RETIRED_CHARACTER_REPLACEMENTS, replacements);
   assert.equal(CHARACTERS.length, 100);
   assert.equal(new Set(CHARACTERS.map(character => character.id)).size, 100);

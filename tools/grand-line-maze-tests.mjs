@@ -11,16 +11,28 @@ const profilesUrl = moduleUrl(await readFile(new URL('../grand-line-defense-prof
 let source = await readFile(new URL('../grand-line-defense.js', import.meta.url), 'utf8');
 for (const [name, url] of [['grand-line-data', dataUrl], ['grand-line-core', coreUrl], ['grand-line-defense-grid', gridUrl], ['grand-line-defense-profiles', profilesUrl]]) source = replaceImport(source, name, url);
 const { createCollection, addCard } = await import(coreUrl);
-const { CHARACTERS, DEFENSE_GRID, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_TERRAIN, MAZE_TOWER_COST, MAZE_TOWER_REFUND,
+const { CHARACTERS, DEFENSE_GRID, DEFENSE_ENTRIES, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_TERRAIN, MAZE_TOWER_COST, MAZE_TOWER_REFUND,
   MAX_MAZE_TOWERS, createDefense, startDefenseWave, advanceDefense, completeDefenseLearning, getDefenseRoute,
   getMazePlacementPreview, buildMazeTower, sellMazeTower, placeDefender, summonDefender, recallDefender,
-  defensePointAt, defenseEnemyPointAt, getDefenseWavePreview } = await import(moduleUrl(source));
-const { findDefenseGridRoute, defenseCell } = await import(gridUrl);
+  defensePointAt, defenseEnemyPointAt, defenseEnemyRemainingDistance, getDefenseWavePreview, getDefenseAttackPreview } = await import(moduleUrl(source));
+const { findDefenseGridRoute, defenseCell, planDefenseRoute } = await import(gridUrl);
 const step = (b, seconds) => { for (let n = 0; n < Math.round(seconds / .05); n++) advanceDefense(b, .05); };
 const battle = (stage = 1) => { const c = createCollection(); c.unlockedEncounter = 9; return createDefense(c, { encounter: stage, seed: 7 }); };
 const blocked = b => new Set([...b.terrain, ...b.allies.map(u => u.padId), ...b.mazeTowers.map(t => t.cellId)]);
 function assertRoute(b) {
   const closed = blocked(b);
+  assert.deepEqual(Object.keys(b.routes), DEFENSE_GRID.entryIds);
+  for (const entry of DEFENSE_ENTRIES) {
+    const route = b.routes[entry.id];
+    assert.equal(route.cellIds[0], entry.id); assert.equal(route.cellIds.at(-1), DEFENSE_GRID.exitId);
+    assert.equal(new Set(route.cellIds).size, route.cellIds.length);
+    assert.deepEqual(route.points[0], { x: entry.x, y: entry.y }); assert.deepEqual(route.points.at(-1), { x: 1100, y: 310 });
+    assert.equal(route.length, route.metrics.length); assert.equal(route.length, (route.points.length - 1) * 40);
+    for (let n = 0; n < route.cellIds.length; n++) {
+      const cell = defenseCell(route.cellIds[n]); assert.ok(cell); assert.equal(closed.has(cell.id), false, `${entry.label}: ${cell.id}`);
+      if (n) { const previous = defenseCell(route.cellIds[n - 1]); assert.equal(Math.abs(cell.col - previous.col) + Math.abs(cell.row - previous.row), 1); }
+    }
+  }
   assert.equal(b.routeCellIds[0], DEFENSE_GRID.entryId); assert.equal(b.routeCellIds.at(-1), DEFENSE_GRID.exitId);
   assert.equal(new Set(b.routeCellIds).size, b.routeCellIds.length);
   for (let n = 0; n < b.routeCellIds.length; n++) {
@@ -34,6 +46,8 @@ function assertRoute(b) {
 test('the landscape grid contains 338 square cells and every harbor has distinct sparse terrain with an orthogonal exit route', () => {
   assert.deepEqual([DEFENSE_GRID.width, DEFENSE_GRID.height, DEFENSE_GRID.columns, DEFENSE_GRID.rows, DEFENSE_GRID.cellSize], [1120, 630, 26, 13, 40]);
   assert.equal(DEFENSE_PADS.length, 338); assert.equal(DEFENSE_DEFAULT_PADS.length, 10);
+  assert.deepEqual(DEFENSE_GRID.entryIds, ['cell-0-2', 'cell-0-6', 'cell-0-10']);
+  assert.deepEqual(DEFENSE_ENTRIES.map(entry => [entry.label, entry.x, entry.y]), [['Top', 20, 150], ['Middle', 20, 310], ['Bottom', 20, 470]]);
   assert.equal(new Set(DEFENSE_PADS.map(c => c.id)).size, 338);
   assert.equal(new Set(DEFENSE_TERRAIN.map(t => t.join('|'))).size, 9);
   for (let stage = 1; stage <= 9; stage++) {
@@ -56,7 +70,7 @@ test('one through seven unique owned crew members deploy for free and all nine t
 
 test('placement previews are pure, reject fixed terrain and portals, and show the exact committed detour and sale refund', () => {
   const b = battle(), before = JSON.stringify(b), revision = b.routeRevision;
-  for (const id of [DEFENSE_GRID.entryId, DEFENSE_GRID.exitId, b.terrain[0], 'cell-26-6', '__proto__', b.allies[0].padId]) {
+  for (const id of [...DEFENSE_GRID.entryIds, DEFENSE_GRID.exitId, b.terrain[0], 'cell-26-6', '__proto__', b.allies[0].padId]) {
     const preview = getMazePlacementPreview(b, id); assert.equal(preview.valid, false); assert.ok(preview.reason);
   }
   assert.equal(getMazePlacementPreview(b, b.allies[0].padId, { kind: 'tower', allyId: b.allies[0].id }).valid, false,
@@ -64,6 +78,7 @@ test('placement previews are pure, reject fixed terrain and portals, and show th
   const preview = getMazePlacementPreview(b, 'cell-3-6'); assert.equal(preview.valid, true); assert.equal(preview.cost, 5);
   assert.ok(preview.route.length > b.route.length); assert.equal(JSON.stringify(b), before); assert.equal(b.routeRevision, revision);
   assert.equal(buildMazeTower(b, 'cell-3-6'), true); assert.deepEqual(b.route, preview.route); assertRoute(b);
+  for (const entry of DEFENSE_ENTRIES) assert.deepEqual(b.routes[entry.id].points, preview.routes[entry.id].points);
   assert.equal(getMazePlacementPreview(b, 'cell-3-6').valid, false);
   const sale = getMazePlacementPreview(b, 'cell-3-6', { remove: true }); assert.equal(sale.valid, true); assert.equal(sale.cost, -3);
   assert.equal(sellMazeTower(b, 'cell-3-6'), true); assert.deepEqual(b.route, sale.route); assert.equal(b.supplies, 98);
@@ -83,6 +98,30 @@ test('the last opening in a wall cannot be sealed by a tower, a moved hero or a 
   assert.equal(b.supplies, funds); assert.equal(b.route, route); assert.equal(JSON.stringify(b), before); assertRoute(b);
   assert.equal(sellMazeTower(b, 'cell-1-0'), true); assert.equal(buildMazeTower(b, 'cell-1-6'), true); assertRoute(b);
   assert.equal(findDefenseGridRoute(new Set(Array.from({ length: 13 }, (_, row) => `cell-1-${row}`))), null);
+});
+
+test('an inactive entrance cannot be occupied or isolated while the center route stays open', () => {
+  for (const entry of DEFENSE_ENTRIES) {
+    const b = battle(); addCard(b.collection, 'kaido'); b.supplies = 1000;
+    assert.equal(getDefenseWavePreview(b).entrances.length, 1);
+    assert.equal(buildMazeTower(b, entry.id), false);
+    assert.equal(placeDefender(b, b.allies[0].id, entry.id), false);
+    assert.equal(summonDefender(b, 'kaido', entry.id), false);
+  }
+  for (const entry of [DEFENSE_ENTRIES[0], DEFENSE_ENTRIES[2]]) {
+    const b = battle(); addCard(b.collection, 'kaido'); b.supplies = 1000;
+    assert.equal(buildMazeTower(b, `cell-0-${entry.row - 1}`), true);
+    assert.equal(buildMazeTower(b, `cell-0-${entry.row + 1}`), true);
+    const last = `cell-1-${entry.row}`, closed = new Set([...blocked(b), last]);
+    assert.ok(findDefenseGridRoute(closed), 'The legacy middle-only check would incorrectly allow this placement');
+    assert.equal(findDefenseGridRoute(closed, entry.id), null);
+    assert.equal(planDefenseRoute(b, { cellId: last }), null);
+    const before = JSON.stringify(b);
+    assert.equal(buildMazeTower(b, last), false);
+    assert.equal(placeDefender(b, b.allies[0].id, last), false);
+    assert.equal(summonDefender(b, 'kaido', last), false);
+    assert.equal(JSON.stringify(b), before); assertRoute(b);
+  }
 });
 
 test('moving, swapping and recalling a crew member rebuild the same route cache as tower changes', () => {
@@ -152,8 +191,8 @@ test('enemies stay inside traversable orthogonal cells even at tight bends and o
   for (const stage of [1, 3, 7, 9]) {
     const b = battle(stage); for (let row = 0; row <= 9; row++) buildMazeTower(b, `cell-3-${row}`);
     const closed = blocked(b); assertRoute(b);
-    for (let sample = 0; sample <= 3000; sample++) for (const lane of [-7, 0, 7]) {
-      const point = defenseEnemyPointAt(sample / 3000, lane, b);
+    for (const entry of DEFENSE_ENTRIES) for (let sample = 0; sample <= 3000; sample++) for (const lane of [-7, 0, 7]) {
+      const point = defenseEnemyPointAt(sample / 3000, lane, b, entry.id);
       const col = Math.floor((point.x - 40) / 40), row = Math.floor((point.y - 50) / 40);
       if (col >= 0 && col < 26 && row >= 0 && row < 13) assert.equal(closed.has(`cell-${col}-${row}`), false, `stage ${stage}, sample ${sample}, lane ${lane}`);
     }
@@ -189,4 +228,66 @@ test('the six large-wave previews match actual spawning, preserve exactly three 
     b.allies.forEach(u => { u.skills = []; });
   }
   assert.equal(b.status, 'victory'); assert.equal(b.rewardedRounds.length, 6); assert.equal(b.collection.stats.correctAnswers, 18);
+});
+
+test('all nine harbors mix one, two and three entrances with exact fair spawn counts and no extra enemies', () => {
+  const pairs = new Set(), single = new Set();
+  for (let stage = 1; stage <= 9; stage++) for (let round = 1; round <= 6; round++) {
+    const b = battle(stage); b.round = round; b.ship.hp = b.ship.maxHp = 1000000;
+    b.allies.forEach(unit => { unit.skills = []; });
+    const preview = getDefenseWavePreview(b), entryCounts = preview.entrances.map(entry => entry.count);
+    assert.equal(preview.entrances.length, 1 + (round - 1) % 3);
+    assert.deepEqual(preview.activeEntryIds, preview.entrances.map(entry => entry.id));
+    assert.equal(entryCounts.reduce((sum, n) => sum + n, 0), preview.total);
+    assert.ok(Math.max(...entryCounts) - Math.min(...entryCounts) <= 1);
+    if (round === 1) assert.deepEqual(preview.activeEntryIds, [DEFENSE_GRID.entryId]);
+    if (preview.entrances.length === 2) pairs.add(preview.activeEntryIds.join(','));
+    if (preview.entrances.length === 1) single.add(preview.activeEntryIds[0]);
+    assert.deepEqual(preview, getDefenseWavePreview(b), 'Entrance activity is deterministic');
+    assert.equal(startDefenseWave(b), true); step(b, 12);
+    assert.equal(b.enemies.length, preview.total); assert.deepEqual(b.activeEntryIds, preview.activeEntryIds);
+    for (const entry of DEFENSE_ENTRIES) {
+      assert.equal(b.enemies.filter(enemy => enemy.entryId === entry.id).length, preview.entrances.find(active => active.id === entry.id)?.count || 0);
+    }
+    for (const enemy of b.enemies.filter(enemy => !enemy.escaped && enemy.hp > 0)) {
+      assert.deepEqual({ x: enemy.x, y: enemy.y }, defenseEnemyPointAt(enemy.progress, enemy.laneOffset, b, enemy.entryId));
+    }
+  }
+  assert.equal(pairs.size, 3); assert.equal(single.size, 3);
+});
+
+test('different-length entrance routes retain equal world speed, real slowing and the same exit damage', () => {
+  const b = battle(6); b.round = 3; b.allies.forEach(unit => { unit.skills = []; }); startDefenseWave(b); step(b, .6);
+  b.enemies = DEFENSE_ENTRIES.map(entry => b.enemies.find(enemy => enemy.entryId === entry.id)); b.spawned = b.spawnTotal;
+  assert.equal(new Set(Object.values(b.routes).map(route => route.length)).size, 3);
+  for (const enemy of b.enemies) {
+    Object.assign(enemy, { skills: [], hp: 100000, maxHp: 100000, moveSpeed: 100, progress: 0, laneOffset: 0, statuses: [] });
+    Object.assign(enemy, defensePointAt(0, b, enemy.entryId));
+  }
+  step(b, 1);
+  for (const enemy of b.enemies) assert.ok(Math.abs(enemy.progress * b.routes[enemy.entryId].length - 100) < 1e-9);
+  const slow = b.enemies[0], start = slow.progress; slow.statuses = [{ type: 'slow', amount: .5, duration: 2 }];
+  step(b, 1); assert.ok(Math.abs((slow.progress - start) * b.routes[slow.entryId].length - 50) < 1e-9);
+  b.ship.hp = b.ship.maxHp = 1000;
+  for (const enemy of b.enemies) Object.assign(enemy, { progress: 1 - 4 / b.routes[enemy.entryId].length, statuses: [], leakDamage: 7 });
+  step(b, .05);
+  assert.equal(b.enemies.filter(enemy => enemy.escaped).length, 3); assert.equal(b.stats.leaks, 3); assert.equal(b.ship.hp, 979);
+});
+
+test('First targeting and tower shots compare distance to the exit across unequal routes', () => {
+  const b = battle(6); b.round = 3; assert.equal(buildMazeTower(b, 'cell-1-5'), true);
+  startDefenseWave(b); step(b, .6); const template = b.enemies[0];
+  b.spawned = b.spawnTotal; b.projectiles = []; b.mazeTowers[0].actionTimer = 0; b.mazeTowers[0].range = 10000;
+  const actor = b.allies[0]; actor.range = 10000;
+  b.enemies = [
+    { ...structuredClone(template), id: 'long-further', entryId: DEFENSE_ENTRIES[2].id, progress: .7 },
+    { ...structuredClone(template), id: 'short-nearer', entryId: DEFENSE_ENTRIES[0].id, progress: .68 },
+  ];
+  for (const enemy of b.enemies) Object.assign(enemy, { x: actor.x + 50, y: actor.y, moveSpeed: 0, hp: 1000, maxHp: 1000, skills: [], statuses: [] });
+  assert.ok(defenseEnemyRemainingDistance(b.enemies[0], b) > defenseEnemyRemainingDistance(b.enemies[1], b));
+  for (const priority of ['first', 'strongest', 'cluster']) {
+    actor.priority = priority; assert.equal(getDefenseAttackPreview(b, actor).aimTargetId, 'short-nearer', priority);
+  }
+  b.allies.forEach(unit => { unit.skills = []; }); step(b, .05);
+  assert.equal(b.projectiles.find(projectile => projectile.mazeTower)?.targetId, 'short-nearer');
 });
