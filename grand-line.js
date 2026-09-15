@@ -1,9 +1,9 @@
-import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam} from './grand-line-core.js?v=3.1.0';
-import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS} from './grand-line-data.js?v=3.1.0';
-import {createArtManager} from './grand-line-render.js?v=3.1.0';
-import {DEFENSE_GRID,DEFENSE_PADS,DEFENSE_DEFAULT_PADS,buildMazeTower,sellMazeTower,getMazePlacementPreview,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning,getDefenseProfile,getDefenseSkillProfile,getDefenseWavePreview,summonDefender,recallDefender,upgradeDefender,specializeDefender,setDefensePriority} from './grand-line-defense.js?v=3.1.0';
-import {createDefenseRenderer} from './grand-line-defense-render.js?v=3.1.0';
-import {installPlacementInput} from './grand-line-placement-input.js?v=3.1.0';
+import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam} from './grand-line-core.js?v=3.2.0';
+import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS} from './grand-line-data.js?v=3.2.0';
+import {createArtManager} from './grand-line-render.js?v=3.2.0';
+import {DEFENSE_GRID,DEFENSE_PADS,DEFENSE_DEFAULT_PADS,buildMazeTower,sellMazeTower,getMazePlacementPreview,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning,getDefenseProfile,getDefenseSkillProfile,getDefenseWavePreview,summonDefender,recallDefender,upgradeDefender,specializeDefender,setDefensePriority} from './grand-line-defense.js?v=3.2.0';
+import {createDefenseRenderer} from './grand-line-defense-render.js?v=3.2.0';
+import {installPlacementInput} from './grand-line-placement-input.js?v=3.2.0';
 const DEFENSE_SPEEDS=[1,2,4];
 const $=id=>document.getElementById(id);
 const embedded=parent!==window,params=new URLSearchParams(location.search),origin=location.origin;
@@ -29,7 +29,7 @@ let buildMode='crew',placementPreview=null,placementPreviewKey='',mapZoom=1;
 let placementArmed=false,selectedTowerCell='',placementNotice='',rosterOpen=false,placementInput=null;
 let view='collection',dialog='',battle=null,selectedSlot=null,busyUntil=0;
 let lastOutcome='',bannerUntil=0,bridgeRound=0,learningPending=null,savePending=null,purchasePending=null;
-let selectedPack='spark',toastTimer=0,helloTimer=0,audioContext=null,questionSession=null,initialFocus=null,unsavedLearning=false;
+let selectedPack='spark',selectedQuantity=1,maxPackQuantity=embedded?1:50,toastTimer=0,helloTimer=0,audioContext=null,questionSession=null,initialFocus=null,unsavedLearning=false;
 const storageKey=()=>`grand-line.v1:${subject.toLowerCase()}:${scope}`;
 const pendingKey=()=>storageKey()+':purchase';
 const current=()=>ready&&(!embedded||!!sessionId);
@@ -136,11 +136,17 @@ function renderCampaign(){
 }
 function renderPacks(){
   const unlimited=unlimitedGold(),locked=!!adminPending||!!savePending||unsavedLearning||!!learningPending;
+  if(purchasePending){selectedPack=purchasePending.packId;selectedQuantity=purchasePending.quantity;}
+  else if(selectedQuantity>maxPackQuantity)selectedQuantity=1;
   $('pack-balance').textContent=unlimited?'∞':embedded?format(wallet.balance):'—';$('pack-balance-label').textContent=unlimited?'admin gold · unlimited':'platform reward points';const offer=wallet.offers.find(o=>o.id===selectedPack)||wallet.offers[0];if(offer)selectedPack=offer.id;
-  $('pack-tiers').replaceChildren(...wallet.offers.map(o=>{const n=button('',()=>{selectedPack=o.id;renderPacks();});n.dataset.pack=o.id;n.setAttribute('aria-pressed',String(o.id===selectedPack));n.disabled=locked;n.append(el('strong','',unlimited?'∞ ADMIN GOLD':`${format(o.cost)} points`),document.createTextNode(o.name),el('small','',`ONE CARD · ${Math.min(...Object.keys(o.odds).filter(k=>Number(o.odds[k])>0).map(Number))}★+`));return n;}));
-  $('open-pack').textContent=adminPending?adminPending.waiting?'Saving admin change…':'Confirm admin change first':purchasePending?'Resume pending purchase':!embedded?'Sign in to buy packs':offer?unlimited?`Open ${offer.name} · Unlimited gold`:`Buy ${offer.name} · ${format(offer.cost)} points`:'Shop unavailable';
-  $('open-pack').disabled=locked||!current()||!embedded||(!purchasePending&&(!wallet.available||!offer||!unlimited&&wallet.balance<offer.cost));
-  $('pack-progress').textContent=purchasePending?'This purchase is awaiting confirmation. Resume uses the same receipt and cannot charge twice.':!embedded?'Preview collection. Open this game from the Math or Science portal to use your real reward points.':!wallet.available?'Your platform wallet is not ready. Answer a question in the portal first.':unlimited?'Unlimited gold is active for your admin account. Open any tier as often as you like; your saved points are kept.':offer&&wallet.balance<offer.cost?`You need ${format(offer.cost-wallet.balance)} more points for this pack.`:`Purchases use your ${subject} reward-point wallet. Every pack contains one character card.`;
+  const quantity=selectedQuantity,total=offer?offer.cost*quantity:0,validTotal=Number.isSafeInteger(total)&&total>0,packLabel=`${quantity} ${quantity===1?'pack':'packs'}`;
+  $('pack-tiers').replaceChildren(...wallet.offers.map(o=>{const n=button('',()=>{if(purchasePending)return;selectedPack=o.id;renderPacks();});n.dataset.pack=o.id;n.setAttribute('aria-pressed',String(o.id===selectedPack));n.disabled=locked||!!purchasePending;n.append(el('strong','',unlimited?'∞ ADMIN GOLD':`${format(o.cost)} points`),document.createTextNode(o.name),el('small','',`ONE CARD · ${Math.min(...Object.keys(o.odds).filter(k=>Number(o.odds[k])>0).map(Number))}★+`));return n;}));
+  for(const n of $('pack-quantities').querySelectorAll('[data-quantity]')){n.setAttribute('aria-pressed',String(Number(n.dataset.quantity)===quantity));n.disabled=locked||!!purchasePending||Number(n.dataset.quantity)>maxPackQuantity;}
+  $('pack-total').textContent=offer?`${packLabel} · ${quantity} ${quantity===1?'card':'cards'} · ${unlimited?'0 points with unlimited gold':format(total)+' points total'}`:`${packLabel} · ${quantity} ${quantity===1?'card':'cards'} · Connect to see prices`;
+  $('open-pack').textContent=adminPending?adminPending.waiting?'Saving admin change…':'Confirm admin change first':purchasePending?purchasePending.waiting?`Opening ${packLabel}…`:'Resume pending purchase':!embedded?'Sign in to buy packs':offer?unlimited?`Open ${packLabel} · Unlimited gold`:`Open ${packLabel} · ${format(total)} points`:'Shop unavailable';
+  $('open-pack').disabled=locked||quantity>maxPackQuantity||!!purchasePending?.waiting||!current()||!embedded||(!purchasePending&&(!wallet.available||!offer||!validTotal||!unlimited&&wallet.balance<total));
+  $('pack-progress').textContent=purchasePending?'This purchase is awaiting confirmation. Resume uses the same receipt and cannot charge twice.':!embedded?'Preview collection. Open this game from the Math or Science portal to use your real reward points.':!wallet.available?'Your platform wallet is not ready. Answer a question in the portal first.':unlimited?'Unlimited gold is active for your admin account. Open any tier as often as you like; your saved points are kept.':offer&&wallet.balance<total?`You need ${format(total-wallet.balance)} more points to open ${packLabel}.`:`Purchases use your ${subject} reward-point wallet. Every pack contains one character card. Duplicates merge automatically.`;
+  if(embedded&&current()&&wallet.available&&maxPackQuantity<50)$('pack-progress').textContent=purchasePending&&quantity>1?'Refresh the portal, then reopen Card shop to recover your pending multi-pack purchase safely.':'Refresh the portal to enable multi-pack opening. Single packs are available now.';
   renderAdminTools();
   const odds=el('div','odds-grid');if(offer)for(let stars=1;stars<=7;stars++){const n=el('div');n.append(el('strong','',`${Number(offer.odds[stars]||0)}%`),el('span','',`${stars} STAR · ${RARITIES[stars]}`));odds.append(n);}else{const note=el('p','', 'Live pack prices and odds appear when connected to your platform wallet.');$('odds-table').replaceChildren(note);return;}$('odds-table').replaceChildren(el('p','',unlimited?`${offer.name} · Unlimited admin gold · one character card`:`${offer.name} · ${offer.cost} points · one character card`),odds);
 }
@@ -165,24 +171,38 @@ function retryAdminAction(){
   post({type:'GLTCG_ADMIN_REQUEST',sessionId,requestId,action:pending.action,...(pending.action==='set-unlimited-gold'?{enabled:pending.enabled}:{})});renderPacks();return true;
 }
 function purchaseDialog(message='Confirming your card purchase…'){
-  const panel=openDialog('purchase','Your next legend.');panel.append(el('p','purchase-pending',message));
-  if(purchasePending&&!purchasePending.waiting)panel.append(button('Resume this purchase',sendPurchase,'gold-button'));
-  panel.append(el('p','', 'A purchase is complete only when your platform confirms the points and card together. Closing this window does not create a second charge.'));
+  const quantity=purchasePending?.quantity||1,panel=openDialog('purchase',quantity===1?'Your next legend.':`Opening ${quantity} packs`);panel.append(el('p','purchase-pending',message));
+  if(quantity>maxPackQuantity)panel.append(el('p','','Refresh the portal, then reopen Card shop to recover this multi-pack purchase safely.'));
+  else if(purchasePending&&!purchasePending.waiting)panel.append(button('Resume this purchase',sendPurchase,'gold-button'));
+  panel.append(el('p','', 'A purchase is complete only when your platform saves the points and all cards together. Closing this window does not create a second charge.'));
 }
 function beginPurchase(){
   if(adminPending||savePending||unsavedLearning||learningPending)return;
-  if(purchasePending){purchaseDialog('A previous purchase is awaiting confirmation. Resume it to recover the same card receipt.');return;}
-  const offer=wallet.offers.find(o=>o.id===selectedPack);if(!current()||!embedded||!wallet.available||!offer||!unlimitedGold()&&wallet.balance<offer.cost)return;
-  purchasePending={purchaseId:uuid('pack'),packId:offer.id,requestId:'',waiting:false};if(!localSet(pendingKey(),{purchaseId:purchasePending.purchaseId,packId:offer.id})){purchasePending=null;toast('Your browser could not save a purchase receipt. Enable storage before buying a pack.');return;}sendPurchase();
+  if(purchasePending){purchaseDialog('A previous purchase is awaiting confirmation. Resume it to recover the same cards.');return;}
+  const offer=wallet.offers.find(o=>o.id===selectedPack),total=offer?.cost*selectedQuantity;if(!current()||!embedded||!wallet.available||!offer||selectedQuantity>maxPackQuantity||![1,5,10,50].includes(selectedQuantity)||!Number.isSafeInteger(total)||!unlimitedGold()&&wallet.balance<total)return;
+  purchasePending={purchaseId:uuid('pack'),packId:offer.id,quantity:selectedQuantity,requestId:'',waiting:false};if(!localSet(pendingKey(),{purchaseId:purchasePending.purchaseId,packId:offer.id,quantity:selectedQuantity})){purchasePending=null;toast('Your browser could not save a purchase receipt. Enable storage before buying packs.');return;}sendPurchase();
 }
 function sendPurchase(){
-  if(!purchasePending||purchasePending.waiting||!sessionId)return;
-  purchasePending.waiting=true;purchasePending.requestId=uuid('buy');post({type:'GLTCG_BUY_REQUEST',sessionId,requestId:purchasePending.requestId,purchaseId:purchasePending.purchaseId,packId:purchasePending.packId});
-  purchaseDialog();renderPacks();const request=purchasePending.requestId;purchasePending.timer=setTimeout(()=>{if(purchasePending?.requestId!==request)return;purchasePending.waiting=false;purchaseDialog('Confirmation is taking longer than expected. Resume with the same receipt to check the outcome.');},15000);
+  if(!purchasePending||purchasePending.waiting||!sessionId||purchasePending.quantity>maxPackQuantity)return;
+  purchasePending.waiting=true;purchasePending.requestId=uuid('buy');post({type:'GLTCG_BUY_REQUEST',sessionId,requestId:purchasePending.requestId,purchaseId:purchasePending.purchaseId,packId:purchasePending.packId,quantity:purchasePending.quantity});
+  purchaseDialog();renderPacks();const request=purchasePending.requestId;purchasePending.timer=setTimeout(()=>{if(purchasePending?.requestId!==request)return;purchasePending.waiting=false;purchaseDialog('Confirmation is taking longer than expected. Resume with the same receipt to check the outcome.');renderPacks();},15000);
 }
 function reveal(grant){
   const c=CHARACTER_BY_ID[grant.characterId];if(!c)return;const panel=openDialog('reveal',grant.duplicate?'Your legend grows.':'A new legend joins you.');panel.classList.add('reveal-panel');const title=panel.querySelector('h1');const body=el('div','reveal-content'+(c.stars===7?' apex-reveal':''));body.append(el('p','eyebrow',`${RARITIES[c.stars]} · ${c.stars} STARS · EXACTLY ONE CARD`),title,card(c,{inspect:false,eager:true}));
   const copies=collection.cards[c.id]?.copies||grant.copies,rank=statsFor(c.id,copies).rank;body.append(el('p','',grant.duplicate?`${c.name} merged automatically. ${copies} total copies · Merge rank ${rank}.`:`${c.name} and the matching battle avatar are now unlocked.`));const actions=el('div','dialog-actions');actions.append(button('View character',()=>inspectCard(c.id),'gold-button'),button('Back to card shop',()=>{closeDialog();go('packs');}));body.append(actions);panel.append(body);sound(c.stars===7?'apex':'reveal');
+}
+function revealBatch(grants){
+  if(grants.length===1){reveal(grants[0]);return;}
+  const panel=openDialog('reveal',`${grants.length} packs opened`);panel.classList.add('batch-reveal-panel');
+  const body=el('div','batch-reveal-content'),merged=grants.filter(g=>g.duplicate).length;
+  body.append(el('p','batch-reveal-summary',`${grants.length} cards · ${grants.length-merged} newly unlocked · ${merged} duplicates merged automatically`));
+  const grid=el('div','batch-reveal-grid');grid.setAttribute('aria-label','Cards from this opening');
+  for(const [index,grant] of grants.entries()){
+    const c=CHARACTER_BY_ID[grant.characterId],item=el('article','batch-reveal-item'),copies=collection.cards[c.id]?.copies||grant.copies,n=card(c,{eager:index<10});item.dataset.character=c.id;
+    n.onclick=()=>{inspectCard(c.id);$('dialog-panel').append(button('Back to opened cards',()=>revealBatch(grants),'gold-button'));};
+    item.append(el('small','',`PACK ${index+1} · ${grant.duplicate?'MERGED':'NEW CHARACTER'}`),n,el('small','',`${copies} total ${copies===1?'copy':'copies'} · Merge rank ${statsFor(c.id,copies).rank}`));grid.append(item);
+  }
+  const actions=el('div','batch-reveal-actions');actions.append(button('Back to card shop',()=>{closeDialog();go('packs');},'gold-button'),button('View my collection',()=>{closeDialog();go('collection');}));body.append(grid,actions);panel.append(body);sound(grants.some(g=>g.stars===7)?'apex':'reveal');
 }
 function persistCollection(){
   if(!embedded){savePreferences();return Promise.resolve(collection);}if(!current())return Promise.reject(Error('The learning profile is no longer active.'));
@@ -373,8 +393,8 @@ window.addEventListener('message',event=>{
   const d=event.data;if(!embedded||event.origin!==origin||event.source!==parent||!d||typeof d!=='object')return;
   if(d.type==='GLTCG_READY'){
     if(d.requestId!==helloId||typeof d.sessionId!=='string'||typeof d.profileKey!=='string'||sessionId)return;
-    clearTimeout(helloTimer);sessionId=d.sessionId;scope=d.profileKey;subject=d.subject==='Science'?'Science':'Math';ready=d.available===true;bridgeRound=0;loadPreferences();applySnapshot(d);connection(ready?'':d.reason||'Choose your school level in the portal before playing.');
-    const old=localGet(pendingKey());if(old&&typeof old.purchaseId==='string'&&typeof old.packId==='string')purchasePending={...old,requestId:'',waiting:false};renderPacks();renderCounters();return;
+    clearTimeout(helloTimer);sessionId=d.sessionId;scope=d.profileKey;subject=d.subject==='Science'?'Science':'Math';ready=d.available===true;maxPackQuantity=d.maxPackQuantity===50?50:1;bridgeRound=0;loadPreferences();applySnapshot(d);connection(ready?'':d.reason||'Choose your school level in the portal before playing.');
+    const old=localGet(pendingKey());if(old&&typeof old.purchaseId==='string'&&typeof old.packId==='string')purchasePending={purchaseId:old.purchaseId,packId:old.packId,quantity:old.quantity===undefined?1:old.quantity,requestId:'',waiting:false};renderPacks();renderCounters();return;
   }
   if(!sessionId||d.sessionId!==sessionId)return;
   if(d.type==='GLTCG_INVALIDATE'){if(adminPending)clearTimeout(adminPending.timer);adminPending=null;admin={available:false,unlimitedGold:false};wallet.unlimitedGold=false;$('admin-tools').hidden=true;sessionId='';ready=false;learningPending=null;questionSession=null;unsavedLearning=false;battle=null;if(purchasePending)clearTimeout(purchasePending.timer);purchasePending=null;if(savePending){clearTimeout(savePending.timer);savePending.reject(Error('The learning profile changed.'));savePending=null;}closeDialog();go('collection');connection(d.message||'Your profile changed. Reopen the game from the portal.',true);return;}
@@ -386,7 +406,8 @@ window.addEventListener('message',event=>{
   }
   if(['GLTCG_BUY_RESULT','GLTCG_BUY_BLOCKED'].includes(d.type)){
     const p=purchasePending;if(!p||d.requestId!==p.requestId||d.purchaseId!==p.purchaseId)return;clearTimeout(p.timer);p.waiting=false;
-    if(d.type==='GLTCG_BUY_RESULT'&&d.grant&&CHARACTER_BY_ID[d.grant.characterId]&&d.collection){applySnapshot(d);try{localStorage.removeItem(pendingKey());}catch(_){}purchasePending=null;reveal(d.grant);renderCounters();}
+    const grants=Array.isArray(d.grants)?d.grants:d.grant?[d.grant]:[],quantity=d.quantity===undefined?1:d.quantity;
+    if(d.type==='GLTCG_BUY_RESULT'&&quantity===p.quantity&&grants.length===p.quantity&&grants.every(g=>g&&CHARACTER_BY_ID[g.characterId]&&d.collection?.cards?.[g.characterId]?.copies>0)&&d.collection){applySnapshot(d);try{localStorage.removeItem(pendingKey());}catch(_){}purchasePending=null;revealBatch(grants);renderCounters();}
     else{if(d.wallet)applySnapshot(d);if(d.confirmedNoCharge===true){try{localStorage.removeItem(pendingKey());}catch(_){}purchasePending=null;closeDialog();toast(d.message||'No points were charged. Choose a pack when you are ready.');}else purchaseDialog(d.message||'The purchase could not be confirmed. Resume using the same receipt.');}renderPacks();return;
   }
   if(['GLTCG_SAVE_RESULT','GLTCG_SAVE_BLOCKED'].includes(d.type)){
@@ -416,6 +437,7 @@ $('search-input').oninput=renderCollection;for(const id of ['ownership-filter','
 $('apex-showcase').replaceChildren(...['kaido','whitebeard','akainu'].map(id=>card(CHARACTER_BY_ID[id],{eager:true})));
 $('admin-unlimited').onclick=()=>requestAdminAction('set-unlimited-gold',!admin.unlimitedGold);$('admin-unlock-all').onclick=()=>requestAdminAction('unlock-all');$('admin-retry').onclick=retryAdminAction;
 $('open-pack').onclick=beginPurchase;$('study-button').onclick=requestLearning;$('retreat-button').onclick=()=>retreat();
+for(const n of $('pack-quantities').querySelectorAll('[data-quantity]'))n.onclick=()=>{if(purchasePending||adminPending||savePending||unsavedLearning||learningPending||Number(n.dataset.quantity)>maxPackQuantity)return;selectedQuantity=Number(n.dataset.quantity);renderPacks();};
 $('start-wave').onclick=startWave;$('defense-pause').onclick=toggleDefensePause;
 $('defense-speed').onchange=()=>{const value=Number($('defense-speed').value);if(DEFENSE_SPEEDS.includes(value))settings.battleSpeed=value;lastFrame=0;savePreferences();renderBattle();};
 $('future-characters').replaceChildren(...FUTURE_EXPANSION_CHARACTERS.map(c=>el('li','',`${c.name} · 7★ future expansion`)));

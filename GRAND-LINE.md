@@ -6,7 +6,7 @@ A One Piece collectible card and ship-defense game alongside Pirate Rift. Open *
 
 - Fifty illustrated characters, each with a matching battle avatar, three active abilities, and a passive.
 - Five starter cards: Luffy, Zoro, Nami, Usopp, and Chopper. Choose up to ten different owned characters for the free starting formation. Any other owned card can be summoned during defense preparation.
-- Every purchased pack contains exactly **one** character card. New cards unlock their avatars immediately; duplicates automatically merge into the existing character.
+- Open **1, 5, 10, or 50 packs** at once in Card shop. Every pack contains exactly **one** character card. New cards unlock their avatars immediately; duplicates automatically merge into the existing character. Multi-pack openings show every card together, with new/merged labels and final copy counts.
 - Star ratings are fixed rarities from one to seven. Merge rank rises at 2, 4, 8, 16… total copies, capped at rank 10. Each rank adds 12% to base life, attack, and defense.
 - Expansion 01's seven-star cards are **Kaido the Beast, Whitebeard, and Admiral Akainu**, with animated gold galaxy frames and foil. Reduced motion disables the decorative animation.
 
@@ -22,7 +22,9 @@ Pack offers are read from the host platform's `TCG_PACKS`; prices and odds are n
 
 The host rolls rarity first, then chooses uniformly among characters of that rarity. The in-game shop shows the live rates. Questions award points through the platform's existing game-question rules, including its speed and repeat controls. Questions do not directly grant packs.
 
-Purchases debit points and save the card and receipt together through the existing RPG account storage. An interrupted confirmation retains the same purchase receipt for safe retry. The host controls price, draw, ownership and balance; the game frame sends no card grants or point amounts. Collections and receipts are scoped by subject, account, learner, role and school level. The reward-point wallet retains the platform's existing account scope.
+The shop shows the total price before opening: the platform's price per pack multiplied by the selected quantity, with the same independent rarity odds for every card. Purchases debit points and save all cards and one receipt together through the existing RPG account storage. Insufficient funds reject the entire batch. An interrupted confirmation retains the same purchase receipt and quantity for safe retry, even after reopening the game. Receipts bind the pack tier and quantity; replaying them does not roll or charge again. Old single-pack receipts remain supported. The host accepts only integer quantities from 1 to 50 and controls price, draw, ownership and balance; the game frame sends no card grants or point amounts. Collections and receipts are scoped by subject, account, learner, role and school level. The reward-point wallet retains the platform's existing account scope.
+
+Multi-pack controls activate only when the portal confirms that both its purchase bridge and wallet support batch purchases. A portal tab opened before this update keeps single-pack purchases available and asks for a portal refresh; a pending batch stays locked until that refresh so an older bridge cannot silently reduce it to one pack.
 
 ## Administrator tools
 

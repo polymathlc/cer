@@ -53,7 +53,8 @@ export function createGrandLineLearningController(config) {
       if (!current(greeting)) return false;
       send(event.source, { type: 'GLTCG_READY', requestId: d.requestId, sessionId: greeting.id,
         subject: config.subject, profileKey: String(config.getProfileKey?.() || ''), questionCount: GRAND_LINE_QUESTION_COUNT,
-        available: !!greeting.identity, reason: greeting.identity ? '' : 'Your saved school level is unavailable. Reopen the game after your portal profile has loaded.', ...snapshot });
+        available: !!greeting.identity, reason: greeting.identity ? '' : 'Your saved school level is unavailable. Reopen the game after your portal profile has loaded.', ...snapshot,
+        maxPackQuantity: snapshot.wallet?.maxPackQuantity === 50 ? 50 : 1 });
       return true;
     }
     const s = session;
@@ -72,11 +73,16 @@ export function createGrandLineLearningController(config) {
         send(s.source, { ...reply, type: prefix + 'BLOCKED', retryable: false, message: 'Choose a valid administrator action.' }); return true;
       }
       if (typeof action !== 'function' || (buying && (!token(d.purchaseId) || !token(d.packId)))) return false;
+      const quantity = buying ? (d.quantity === undefined ? 1 : d.quantity) : undefined;
+      if (buying && (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 50)) {
+        send(s.source, { ...reply, type: prefix + 'BLOCKED', retryable: false, confirmedNoCharge: true,
+          message: 'Choose a whole number of packs from 1 to 50.' }); return true;
+      }
       if (s.busy || s.saving) { send(s.source, { ...reply, type: prefix + 'BLOCKED', retryable: true, message: 'Finish the current learning round or save before trying again.' }); return true; }
       s.saving = true; const revision = generation;
       try {
         const request = admin ? { action: d.action, ...(d.action === 'set-unlimited-gold' ? { enabled: d.enabled } : {}) }
-          : buying ? { purchaseId: d.purchaseId, packId: d.packId } : { team: d.team, progress: d.progress };
+          : buying ? { purchaseId: d.purchaseId, packId: d.packId, quantity } : { team: d.team, progress: d.progress };
         const snapshot = await action(request);
         if (!current(s) || revision !== generation || (admin && !adminAllowed())) return false;
         send(s.source, { ...snapshot, ...reply, type: prefix + 'RESULT' });
