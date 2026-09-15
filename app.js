@@ -3858,7 +3858,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.396.0';
+const APP_VERSION = 'v1.397.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -75143,8 +75143,9 @@ function _mkQuestionHtml(e, opts) {
 }
 /* The model answer, as words. A question with none cannot have a wrong
    answer written FOR it (there is no standard to be wrong against), and a
-   harvested attempt falls back to the marker's own `expected`. */
-function _mkModelAnswer(q) {
+   harvested attempt falls back to the marker's own `expected`.
+   `openOnly` reads the WRITTEN answer alone — see `_mkOpenAnswer` below. */
+function _mkModelAnswer(q, openOnly) {
   const bits = [];
   ((q && q.blocks) || []).forEach(b => {
     if (!b) return;
@@ -75155,13 +75156,45 @@ function _mkModelAnswer(q) {
     }
     else if (b.type === 'answerLine') { const t = stripHtml(b.answer || ''); if (t) bits.push(t); }
     else if (b.type === 'answerKey') { const t = stripHtml(b.text || ''); if (t) bits.push(t); }
-    else if (b.type === 'mcq') {
+    else if (b.type === 'mcq' && !openOnly) {
       const i = (b.options || []).findIndex(o => o && o.id === b.correctId);
       if (i >= 0) bits.push('(' + (i + 1) + ') ' + stripHtml((b.options[i] && b.options[i].text) || ''));
     }
   });
   return _mkClip(bits.join(' | '), MK_ANSWER_CHARS);
 }
+
+/* 🐾 A MISTAKE IS AN OPEN-ENDED MISTAKE — the ✨ generator's own gate (v1.397.0)
+   ---------------------------------------------------------------------
+   Every other path into this bank has been open-ended only since v1.394.0:
+   `_coachKindIsMcq` stands both cards down, `_partMistakeOf` refuses an
+   `mcq:` key whatever the marker returned, `fcNoteMistakes` and
+   `_mkOwnEntries` skip an mcq record, and `_mkCandidatesFrom` skips a
+   *Multiple choice* row. The ✨ generator is the one door that was missed, and
+   it had no gate of its own at all: it asked `_mkModelAnswer(q)`, whose `mcq`
+   branch answers "(2) …" for a question that is nothing BUT a multiple
+   choice — so the pool served one and the model dutifully invented a prose
+   "mistake" for a question whose whole answer is a tick in a box.
+
+   • WHY IT MUST NOT. A tick on "(3)" shows no missed comparison, no vague
+     wording and no half-finished reasoning, so there is nothing there to name
+     a HABIT from and whatever comes back is invented rather than observed.
+     And it reads perfectly: the card renders, the animal fits, the lesson is
+     about a mistake nobody could have made.
+   • `_mkOpenAnswer` IS THE ONE PREDICATE, and it is the SAME walker asked
+     with the mcq branch off — never a second walk of the blocks, which would
+     be free to drift about what an answer even is. A question carrying BOTH a
+     multiple choice and a written part is still eligible, on the written
+     half, which is the honest reading of it.
+   • IT IS ASKED TWICE: the pool is filtered with it AND `mkGenerateOne` asks
+     again, because a caller added later is not bound by a filter it never saw.
+   • THE MODEL ANSWER HANDED TO THE GENERATOR IS THE WRITTEN ONE. Prompted
+     with "(2) The tiny hairs…", the model writes that option number into the
+     pupil's answer — which is exactly what the reported card did, word for
+     word. `MK_GEN_OPEN_RULE` says the same thing to the model in as many
+     words, because a gate keeps the wrong QUESTION out and only the rule
+     keeps the wrong SHAPE of answer out of a right one. */
+function _mkOpenAnswer(q) { return _mkModelAnswer(q, true); }
 
 // ---- What comes back from the AI becomes an entry HERE and nowhere else ----
 /* `analysis` is the model's reply; `ctx` is what the app already knew. The
@@ -75315,10 +75348,30 @@ function _mkStamp(e) {
    this student may be served at all: released, in the syllabus, inside
    their level band. A question that has since left the bank still carries
    its own wording on the entry, so it is served on that. */
+/* An entry the ✨ generator wrote before it had a gate (v1.397.0): its
+   question is a multiple choice with no written part anywhere in it, so
+   whatever "mistake" it carries was invented rather than observed. ONE
+   predicate, so the badge the teacher reads and the pool the class is served
+   can never disagree about which entries those are — two tests drift into a
+   card flagged on one screen and quizzed on the next.
+   It asks for the MCQ explicitly rather than only for the absence of a
+   written answer: a question with no answer blocks at all is a different
+   fault, and this badge has to mean what it says. A question that has LEFT
+   the bank keeps its entry, exactly as the three gates below already have it
+   — the work was still done and there is nothing left to judge it by. */
+function _mkMcqOnlyEntry(e, findQ) {
+  const q = (e && findQ) ? findQ(e.questionId) : null;
+  if (!q) return false;
+  if (!((q.blocks || []).some(b => b && b.type === 'mcq'))) return false;
+  return !_mkOpenAnswer(q);
+}
+
 function _mkVisibleToStudent(e, findQ) {
   if (!e || e.status !== 'approved') return false;
   if (!mistakeAnimal(e.animal)) return false;
   if (!e.studentAnswer || !e.question) return false;
+  // Open-ended only, whatever an older entry was approved as.
+  if (_mkMcqOnlyEntry(e, findQ)) return false;
   const q = findQ ? findQ(e.questionId) : null;
   if (q) {
     if (!qAvailableToViewer(q)) return false;
@@ -75478,6 +75531,7 @@ function _mkCardHtml(e) {
       ${_mkAnimalSelectHtml(e.animal, 'data-f="animal"')}
       <span class="mk-badge ${e.source === 'generated' ? 'gen' : 'stu'}">${e.source === 'generated' ? '✨ written by the AI' : '📝 a student wrote this'}</span>
       ${e.filedBy === MK_FILED_MARKING ? '<span class="mk-badge mark" title="The marker named this habit on the answer itself; nothing has been tidied. Read it as written before you approve it.">🐾 filed from the marking</span>' : ''}
+      ${_mkMcqOnlyEntry(e, _docQById) ? '<span class="mk-badge mcq" title="This question is a multiple choice with no written part. A tick on an option shows no habit to name, so the bank is open-ended only — this entry is not served to anybody. Delete it.">⚠ multiple choice — not open-ended</span>' : ''}
       <span class="mk-badge st-${escapeHtml(e.status)}">${escapeHtml(e.status)}</span>
       <span class="mk-meta">${escapeHtml([e.topic, e.level].filter(Boolean).join(' · '))}</span>
     </div>
@@ -75828,7 +75882,7 @@ function mkGenToggle() { _mk.genOpen = !_mk.genOpen; mkRender(); }
 function _mkGenFormHtml() {
   const topics = (typeof currentTopics === 'function' ? currentTopics() : []) || [];
   return `<div class="mk-gen">
-    <div class="mk-gen-intro">Have wrong answers <b>written</b> for questions that have no real ones yet — a plausible pupil's answer with exactly one mistake of the chosen kind built in, everything else right. They land in Pending like everything else.</div>
+    <div class="mk-gen-intro">Have wrong answers <b>written</b> for questions that have no real ones yet — a plausible pupil's answer with exactly one mistake of the chosen kind built in, everything else right. They land in Pending like everything else. <b>Open-ended questions only</b>: a multiple choice is a tick, and a tick shows no habit to name.</div>
     <div class="mk-gen-row">
       <label>Topic <select id="mkGenTopic"><option value="">Any topic</option>${topics.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}</select></label>
       <label>Mistake ${_mkAnimalSelectHtml('', 'id="mkGenAnimal"').replace('❓ No type yet', '🎲 A different animal each time')}</label>
@@ -75837,6 +75891,15 @@ function _mkGenFormHtml() {
     </div>
   </div>`;
 }
+/* The gate keeps a multiple-choice QUESTION out; this keeps an option-shaped
+   ANSWER out of a written one. A model handed a question that prints its
+   choices under the wording will happily open the pupil's answer with "(2)."
+   whatever it was asked for. */
+const MK_GEN_OPEN_RULE =
+  'THE ANSWER IS WRITTEN, IN THE PUPIL\'S OWN SENTENCES. This is an open-ended question: ' +
+  'never answer it with an option number or letter, never open with one, and never write "(1)", ' +
+  '"(2)", "A)" or "B)" anywhere in the answer. If the question prints choices under its wording, ' +
+  'ignore them — what is being written is the sentence a pupil would write on the line.';
 function _mkGenPrompt(qText, model, m) {
   return 'You are helping a Singapore primary science teacher build a "spot the mistake" lesson.\n' +
     'THE QUESTION:\n' + qText + '\n' +
@@ -75844,6 +75907,7 @@ function _mkGenPrompt(qText, model, m) {
     'Write the answer a real pupil of this level would PLAUSIBLY write to this question, containing EXACTLY ONE mistake of this kind and no other error of any kind:\n' +
     '  ' + m.id + ' = ' + m.animal + ' (' + m.name + '): ' + m.desc + ' How it shows: ' + m.spot + '\n' +
     'It must read as an honest attempt — the length, the wording and the tone of a pupil who believes they are right. Never a parody, never obviously silly, never a hint that it is wrong. Everything else in it stays correct, so that the ONE mistake is what a classmate has to find.\n' +
+    MK_GEN_OPEN_RULE + '\n' +
     'Return STRICT JSON only, no markdown, exactly this shape:\n' +
     '{"answer":"the pupil\'s wrong answer","why":"one or two sentences to another pupil saying what this answer got wrong — say \\"this student\\", never \\"you\\"","fixed":"the answer written correctly, in a pupil\'s words","hint":"one sentence for spotting this kind of mistake next time"}\n\n' +
     MISTAKE_ANIMAL_RULE;
@@ -75853,8 +75917,18 @@ async function mkGenerateRun() {
   const topic = String((document.getElementById('mkGenTopic') || {}).value || '');
   const animalPick = mistakeAnimalNormalize((document.getElementById('mkGenAnimal') || {}).value || '');
   const count = Math.max(1, Math.min(MK_GEN_MAX, parseInt((document.getElementById('mkGenCount') || {}).value, 10) || 4));
-  const pool = _mkShuffle((questionBank || []).filter(q => q && (!topic || q.topic === topic || q.topic2 === topic) && qInSyllabus(q) && _mkModelAnswer(q)));
-  if (!pool.length) { showToast('No question with a model answer under that topic — a wrong answer needs a right one to be wrong against.', 'error'); return; }
+  const where = topic ? ' under that topic' : ' in the bank';
+  /* Open-ended ONLY, and the toast names WHICH of the two reasons it is: "no
+     questions here" and "no questions here anyone could make a habit of a
+     mistake on" are different things to be told. */
+  const inTopic = (questionBank || []).filter(q => q && (!topic || q.topic === topic || q.topic2 === topic) && qInSyllabus(q));
+  const pool = _mkShuffle(inTopic.filter(q => _mkOpenAnswer(q)));
+  if (!pool.length) {
+    showToast(inTopic.length
+      ? 'No open-ended question with a model answer' + where + '. A mistake is an open-ended mistake — a multiple choice is a tick, and a tick shows no habit to name.'
+      : 'No question' + where + ' to write for.', 'error');
+    return;
+  }
   const picks = pool.slice(0, count);
   _mk.running = true; _mk.stop = false;
   let done = 0, added = 0, failed = 0, idx = 0;
@@ -75875,8 +75949,12 @@ async function mkGenerateRun() {
   mkRender();
 }
 async function mkGenerateOne(q, m) {
+  /* Asked AGAIN, never only in the pool filter: a caller added later is not
+     bound by a filter it never saw, and an MCQ-only question has no habit in
+     it to write about. */
+  const model = _mkOpenAnswer(q);
+  if (!model) return false;
   const qText = _mkQuestionText(q);
-  const model = _mkModelAnswer(q);
   const topic = (q && q.topic) || '';
   /* Grounded as TEACHING, so everything AROUND the one mistake comes out in
      this teacher's words — the class is hunting for the error, not for an

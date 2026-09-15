@@ -157,6 +157,7 @@ const api = new Function('scienceQuestionContentKey',prelude + block + `
     mkTogglePick, mkPickAll, mkDeleteSelected, mkDeleteAllShown, mkSetStatus, mkSetAnimal, mkDelete,
     picked: () => _mkPicked, deletes, confirms,
     _mkAnalysePrompt, _mkGenPrompt, mkAnalyseCandidate, mkGenerateOne, _mkStudentPool, _mkLogQuiz,
+    _mkOpenAnswer, mkGenerateRun, MK_GEN_OPEN_RULE, _mkMcqOnlyEntry,
     _mkMarkedEntry, _mkFileMarked, _mkHarvestNote, mkHarvest, _mkOwnEntries, _mkOwnSectionHtml, MK_FILED_MARKING, MK_FILED_AI,
     setAttempts: a => { attemptDocs = a; }, setLog: l => { mistakeLog = l; }, state: () => _mk, _mkNormaliseEntry, loadAdmin: () => mkLoad(true),
     writes, merges, prompts, groundings, toasts,
@@ -360,6 +361,152 @@ ok('…and must read as an honest attempt', /Never a parody, never obviously sil
   ok('a generated example is written pending, generated, typed, with no raw answer',
      g === true && gw.status === 'pending' && gw.source === 'generated' && gw.animal === 'reasoning' && !('raw' in gw));
   ok('…and it is grounded as teaching too', api.groundings.filter(k => k === 'teach').length >= 2);
+}
+
+/* ---------- 🐾 A MISTAKE IS AN OPEN-ENDED MISTAKE — the ✨ generator's gate ----------
+   Every other path into this bank has been open-ended only since v1.394.0 and
+   the generator had no gate at all, so it wrote prose "mistakes" for questions
+   whose whole answer is a tick in a box. Every failure below is silent: the
+   card renders, the animal fits, and the lesson is about a mistake nobody
+   could have made. */
+{
+  const mcqOnly = { id: 'qm', title: 'Nose and lungs', topic: 'Heat', blocks: [
+    { type: 'text', content: 'Which of the following shows the function of the nose?' },
+    { type: 'mcq', options: [{ id: 'o1', text: 'One' }, { id: 'o2', text: 'Two' }], correctId: 'o2' }
+  ] };
+  const both = { id: 'qb', title: 'Both', topic: 'Heat', blocks: [
+    { type: 'text', content: 'Pick one, then explain why.' },
+    { type: 'mcq', options: [{ id: 'o1', text: 'One' }, { id: 'o2', text: 'Two' }], correctId: 'o2' },
+    { type: 'plainanswer', content: 'Because the hairs trap the dust.' }
+  ] };
+  const openOnly = { id: 'qo', title: 'Open', topic: 'Heat', blocks: [
+    { type: 'text', content: 'Why does the ice melt?' },
+    { type: 'plainanswer', content: 'It gains heat.' }
+  ] };
+
+  ok('an MCQ-only question has NO open answer — the gap the generator fell through',
+     api._mkOpenAnswer(mcqOnly) === '' && /\(2\) Two/.test(api._mkModelAnswer(mcqOnly)));
+  ok('…and `_mkModelAnswer` still reads the option, for every OTHER caller',
+     /\(2\) Two/.test(api._mkModelAnswer(both)));
+  ok('a question with BOTH is eligible, on its WRITTEN half only',
+     api._mkOpenAnswer(both) === 'Because the hairs trap the dust.');
+  ok('an open-ended question is unchanged', api._mkOpenAnswer(openOnly) === 'It gains heat.');
+
+  ok('the model is told the answer is WRITTEN, never an option number or letter',
+     /THE ANSWER IS WRITTEN, IN THE PUPIL'S OWN SENTENCES/.test(api.MK_GEN_OPEN_RULE)
+     && /never answer it with an option number or letter/.test(api.MK_GEN_OPEN_RULE)
+     && /"\(1\)"/.test(api.MK_GEN_OPEN_RULE) && /"A\)"/.test(api.MK_GEN_OPEN_RULE));
+  ok('…and the generator prompt carries it',
+     api._mkGenPrompt('Q?', 'A.', api.mistakeAnimal('evidence')).includes(api.MK_GEN_OPEN_RULE));
+
+  // `mkGenerateOne` asks AGAIN — a caller added later is not bound by a
+  // filter it never saw. An MCQ-only question must cost no AI call at all.
+  api.setUser({ uid: 'admin1', email: 'chungzhikai@gmail.com', name: 'Mr Chung', role: 'admin' });
+  api.resetBank();
+  api.setReply(JSON.stringify({ answer: 'The hairs absorb the dust.', why: 'Wrong word.', fixed: 'They trap it.', hint: 'Which word?' }));
+  {
+    const w = api.writes.length, calls = api.prompts.length;
+    const r = await api.mkGenerateOne(mcqOnly, api.mistakeAnimal('keywords'));
+    ok('mkGenerateOne REFUSES a multiple-choice question, and spends nothing on it',
+       r === false && api.writes.length === w && api.prompts.length === calls);
+  }
+  {
+    const w = api.writes.length;
+    const r = await api.mkGenerateOne(both, api.mistakeAnimal('keywords'));
+    const gw = api.writes[api.writes.length - 1];
+    ok('…and still writes for a question that has a written part',
+       r === true && api.writes.length === w + 1 && gw.source === 'generated');
+    ok('the model answer handed over is the WRITTEN one, never "(2) …"',
+       gw.expected === 'Because the hairs trap the dust.' && !/\(2\)/.test(gw.expected));
+    ok('…and the prompt says so too', !/THE MODEL ANSWER: \(2\)/.test(api.prompts[api.prompts.length - 1].prompt));
+  }
+
+  // The pool the run draws from, and the two DIFFERENT things it can say.
+  {
+    api.setBank([mcqOnly, Object.assign({}, mcqOnly, { id: 'qm2' })]);
+    const w = api.writes.length, t = api.toasts.length;
+    await api.mkGenerateRun();
+    ok('a bank of nothing but multiple choice writes NOTHING',
+       api.writes.length === w && api.toasts.length === t + 1);
+    ok('…and the toast says WHY — open-ended only, not "no questions here"',
+       /No open-ended question/.test(api.toasts[api.toasts.length - 1].m)
+       && /a tick shows no habit to name/.test(api.toasts[api.toasts.length - 1].m));
+  }
+  {
+    api.setBank([]);
+    await api.mkGenerateRun();
+    ok('an EMPTY bank says the other thing — the two reasons are different',
+       /No question in the bank to write for/.test(api.toasts[api.toasts.length - 1].m));
+  }
+  {
+    api.setBank([mcqOnly, openOnly, Object.assign({}, mcqOnly, { id: 'qm3' })]);
+    api.setReply(JSON.stringify({ answer: 'The ice loses heat and melts.', why: 'Backwards.', fixed: 'It gains heat.', hint: 'Which way?' }));
+    const w = api.writes.length;
+    await api.mkGenerateRun();
+    const made = api.writes.slice(w);
+    ok('a mixed bank draws ONLY the open-ended question',
+       made.length === 1 && made[0].questionId === 'qo', made.map(e => e.questionId).join(','));
+  }
+  api.setBank([]);
+}
+
+/* ---------- 🐾 …and the entries filed BEFORE that gate existed ----------
+   The generator wrote for MCQ-only questions until v1.397.0, so the bank
+   already holds those entries and nobody is going to open them one at a
+   time. ONE predicate answers for both screens — the teacher's card wears a
+   warning and the class is never served it — because two tests drift into a
+   card flagged on one screen and quizzed on the next. */
+{
+  const zMcq = { id: 'zq', title: 'Nose and lungs', topic: 'Heat', blocks: [
+    { type: 'text', content: 'Which of the following shows the function of the nose?' },
+    { type: 'mcq', options: [{ id: 'o1', text: 'One' }, { id: 'o2', text: 'Two' }], correctId: 'o2' }
+  ] };
+  const zBoth = { id: 'zb', title: 'Both', topic: 'Heat', blocks: [
+    { type: 'text', content: 'Pick one, then explain why.' },
+    { type: 'mcq', options: [{ id: 'o1', text: 'One' }, { id: 'o2', text: 'Two' }], correctId: 'o2' },
+    { type: 'plainanswer', content: 'Because the hairs trap the dust.' }
+  ] };
+  const zNone = { id: 'zn', title: 'Nothing recorded', topic: 'Heat', blocks: [
+    { type: 'text', content: 'Why does the ice melt?' }
+  ] };
+  const find = id => [zMcq, zBoth, zNone].find(q => q.id === id) || null;
+  const mk = (id, questionId) => ({ id: id, status: 'approved', animal: 'reasoning', questionId: questionId,
+    questionTitle: 'Nose and lungs', question: 'Which of the following shows the function of the nose?',
+    studentAnswer: 'the nose warms the air', why: 'Backwards.', fixed: 'It traps dust.', hint: 'Which way?',
+    source: 'generated', topic: 'Heat', level: 'P4' });
+  const eMcq = mk('zme', 'zq'), eBoth = mk('zmb', 'zb'), eNone = mk('zmn', 'zn');
+
+  ok('an entry whose question is a multiple choice with NO written part anywhere is flagged',
+     api._mkMcqOnlyEntry(eMcq, find) === true);
+  ok('…a question carrying BOTH an option list and a written part is NOT — it is answerable in words',
+     api._mkMcqOnlyEntry(eBoth, find) === false);
+  ok('…a question with no MCQ at all is NOT — a question with no answer recorded is a different fault, and this badge has to mean what it says',
+     api._mkMcqOnlyEntry(eNone, find) === false);
+  ok('…and a question that has LEFT the bank keeps its entry, exactly as the three serving gates already have it',
+     api._mkMcqOnlyEntry(eMcq, () => null) === false && api._mkMcqOnlyEntry(eMcq, null) === false);
+
+  ok('the STUDENT gate refuses it, whatever it was approved as',
+     api._mkVisibleToStudent(eMcq, find) === false && api._mkVisibleToStudent(eBoth, find) === true);
+
+  api.setGates({ released: true, inSyllabus: true, withinLevel: true });
+  api.setBank([zMcq, zBoth, zNone]);
+  api.setUser({ uid: 'smcq', role: 'student', email: 's@x', name: 'S' });
+  api.setDocs([eMcq, eBoth]);
+  await api.loadStudent();
+  const pool = api._mkStudentPool('');
+  ok('…so it is absent from the pool the class is served, while the question with a written part is still in it',
+     pool.length === 1 && pool[0].id === 'zmb', pool.map(e => e.id).join(','));
+
+  ok('the teacher’s card SAYS so, because an entry served to nobody with nothing on it to explain why reads as one nobody has got round to',
+     /mk-badge mcq/.test(api._mkCardHtml(eMcq)));
+  ok('…and an ordinary entry carries no such badge', !/mk-badge mcq/.test(api._mkCardHtml(eBoth)));
+
+  ok('ONE predicate answers for both screens — the card and the student gate each read it',
+     /_mkMcqOnlyEntry\(e, _docQById\)/.test(block)
+     && /function _mkVisibleToStudent[\s\S]*?_mkMcqOnlyEntry\(e, findQ\)[\s\S]*?\n\}/.test(block));
+
+  api.setDocs([]);
+  api.setBank([]);
 }
 
 /* ---------- The student read and the quiz log ---------- */
