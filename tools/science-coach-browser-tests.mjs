@@ -43,9 +43,9 @@ window.coachTest={mount:(value=result,id='feedback')=>mountScienceCoach(document
 reset:()=>resetScienceCoaches(document.getElementById('question')),resetHost:()=>resetScienceCoaches(document.getElementById('feedback')),catalog:SCIENCE_COACHES};
 // The 🐾 mistake analysis, mounted the way app.js mounts it: after the coach
 // card when one is up, after the feedback otherwise, keyed by the feedback.
-const animal=(id,extra={})=>({id,emoji:'🦜',animal:'The Parrot',name:'Repeated the question',desc:'Restated the question or the data instead of answering it.',spot:'Nothing in the answer that was not already in the question.',fix:'Add the science: the process, the cause, the reason.',...extra});
+const animal=(id,extra={})=>({id,emoji:'🦊',animal:'The Fox',name:'Specific Sherry',desc:'The answer stayed general where the question wanted one exact thing named.',spot:'Words like "it changes" with nothing named.',fix:'Name the exact thing: the part, the property, the process, the number.',...extra});
 const roster=MISTAKE_ANIMAL_ART_IDS.map(id=>animal(id,{animal:'The '+id[0].toUpperCase()+id.slice(1),name:'Habit '+id}));
-const analysis={verdict:'partial',animal:animal('parrot'),why:'You repeated that the temperature rose instead of comparing the two readings.',
+const analysis={verdict:'partial',animal:animal('specific'),why:'You repeated that the temperature rose instead of comparing the two readings.',
 question:{title:'Compare the results',label:'(b) Evidence',text:'The graph shows the temperature of water in cups made of materials X and Y.\\n(b) Which material is the poorer conductor of heat? Use the graph as evidence.',images:[]},
 student:'Poorer conductor of heat',roster};
 window.mistakeTest={mount:(value=analysis,id='feedback')=>{const host=document.getElementById(id);const coach=host.nextElementSibling&&host.nextElementSibling.matches('[data-sc-mount]:not([data-sc-mistake])')?host.nextElementSibling:null;return mountMistakeAnalysis(host,coach||host,value);},
@@ -170,21 +170,21 @@ try {
   assert.equal(await page.locator('[data-sc-mistake]').count(),1);
   assert.equal(await page.locator('[data-sc-mount]').count(),2,'The coach card stays; the analysis is added after it.');
   assert.equal(await page.locator('[data-sc-mistake]').evaluate(el=>el.previousElementSibling&&el.previousElementSibling.hasAttribute('data-sc-mount')&&!el.previousElementSibling.hasAttribute('data-sc-mistake')),true,'The analysis comes directly after the sidekick card.');
-  assert.equal(await page.locator('[data-sc-mistake]').getAttribute('data-mistake'),'parrot');
-  assert.equal(await page.locator('[data-sc-mistake] .sc-portrait svg').getAttribute('data-animal'),'parrot','The animated figure is the animal named in the reply.');
+  assert.equal(await page.locator('[data-sc-mistake]').getAttribute('data-mistake'),'specific');
+  assert.equal(await page.locator('[data-sc-mistake] .sc-portrait svg').getAttribute('data-animal'),'specific','The animated figure is the Sidekick skill named in the reply.');
   assert.equal(await page.locator('[data-sc-mistake] .sc-portrait .sc-avatar-float').count(),1);
   assert.equal(await page.locator('[data-sc-mistake]').getAttribute('data-motion'),'on');
   assert.notEqual(await page.locator('[data-sc-mistake] .sc-portrait .sc-avatar-float').evaluate(el=>getComputedStyle(el).animationName),'none','The figure animates under the coaches\' own motion rules.');
   assert.equal(await page.locator('[data-sc-mistake] .sc-eyebrow').evaluate(el=>el.textContent.trim()),'MISTAKE ANALYSIS');
-  assert.equal(await page.locator('[data-sc-mistake] .sc-message h3').textContent(),'The Parrot');
-  assert.equal(await page.locator('[data-sc-mistake] .sc-focus').textContent(),'Repeated the question');
+  assert.equal(await page.locator('[data-sc-mistake] .sc-message h3').textContent(),'The Fox');
+  assert.equal(await page.locator('[data-sc-mistake] .sc-focus').textContent(),'Specific Sherry');
   assert.match(await page.locator('[data-sc-mistake] .sc-observation').textContent(),/comparing the two readings/);
   assert.match(await page.locator('[data-sc-mistake] .sc-question-title').textContent(),/Compare the results/);
   assert.match(await page.locator('[data-sc-mistake] .sc-question-text').textContent(),/poorer conductor of heat\? Use the graph/,'The ACTUAL question is on the card.');
   assert.match(await page.locator('[data-sc-mistake] .sc-question-text').evaluate(el=>getComputedStyle(el).whiteSpace),/pre-line/,'The question keeps its line breaks.');
   assert.match(await page.locator('[data-sc-mistake] .sc-question-wrote').textContent(),/Poorer conductor of heat/,'What the student wrote is quoted beside it.');
-  assert.match(await page.locator('[data-sc-mistake] .sc-next-move').textContent(),/WATCH FOR IT NEXT TIME[\s\S]*Add the science/);
-  assert.match(await page.locator('[data-sc-mistake] [role="status"]').textContent(),/Mistake analysis: The Parrot/);
+  assert.match(await page.locator('[data-sc-mistake] .sc-next-move').textContent(),/WATCH FOR IT NEXT TIME[\s\S]*Name the exact thing/);
+  assert.match(await page.locator('[data-sc-mistake] [role="status"]').textContent(),/Mistake analysis: The Fox/);
   const coachBox=await page.locator('[data-sc-mount]:not([data-sc-mistake]) .sc-card').boundingBox();
   const mistakeBox=await page.locator('[data-sc-mistake] .sc-card').boundingBox();
   assert.ok(mistakeBox.y>coachBox.y+coachBox.height-2,'On screen the analysis sits below the sidekick.');
@@ -209,8 +209,8 @@ try {
   assert.equal(await page.locator('[data-sc-mistake] .sc-team-grid > *').count(),0);
   await page.locator('[data-sc-mistake] .sc-team summary').click();
   await page.locator('[data-sc-mistake] .sc-team-member').last().waitFor();
-  assert.equal(await page.locator('[data-sc-mistake] .sc-team-member').count(),10);
-  assert.equal(await page.locator('[data-sc-mistake] .sc-team-member--here').getAttribute('data-mistake'),'parrot');
+  assert.equal(await page.locator('[data-sc-mistake] .sc-team-member').count(),9,'the nine Science Sidekicks, never the retired ten-animal list');
+  assert.equal(await page.locator('[data-sc-mistake] .sc-team-member--here').getAttribute('data-mistake'),'specific');
   assert.equal(await page.locator('[data-sc-mistake] .sc-team-member .sc-avatar-float').count(),0,'Roster figures are still.');
   assert.deepEqual(await page.locator('[data-sc-mistake] .sc-team-member svg').evaluateAll(els=>els.map(el=>el.dataset.animal)),
     await page.evaluate(()=>[...window.mistakeTest.ids]),'All ten animals, in the shared order.');

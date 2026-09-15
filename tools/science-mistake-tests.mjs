@@ -25,13 +25,13 @@ function taxonomyIds() {
   assert.ok(start > 0 && end > start, 'the shared taxonomy block exists in app.js');
   return [...src.slice(start, end).matchAll(/\{ id: '([a-z]+)',/g)].map(m => m[1]);
 }
-const animal = (id, extra = {}) => ({ id, emoji: '🦜', animal: 'The Parrot', name: 'Repeated the question',
-  desc: 'Restated the question instead of answering it.', spot: 'Nothing new in the answer.', fix: 'Add the science.', ...extra });
-const good = (extra = {}) => ({ verdict: 'partial', animal: animal('parrot'), why: 'You restated the rise.',
+const animal = (id, extra = {}) => ({ id, emoji: '🦜', animal: 'The Fox', name: 'Specific Sherry',
+  desc: 'The answer stayed general where the question wanted one exact thing named.', spot: 'Words like "it changes" or "something happens" with nothing named.', fix: 'Name the exact thing: the part, the property, the process, the number.', ...extra });
+const good = (extra = {}) => ({ verdict: 'partial', animal: animal('specific'), why: 'You restated the rise.',
   question: { title: 'Compare the results', label: '(b) Evidence', text: 'Which cup cooled fastest?\nOption 1: Cup A', images: ['fruit.png'] },
-  student: 'A rose higher.', roster: [animal('parrot'), animal('rabbit', { animal: 'The Rabbit', name: 'Rushed it' })], ...extra });
+  student: 'A rose higher.', roster: [animal('specific'), animal('careful', { animal: 'The Tortoise', name: 'Careful Cleo' })], ...extra });
 
-test('the art knows exactly the ten shared animals, in the shared order', () => {
+test('the art knows exactly the nine shared Sidekick skills, in the shared order', () => {
   assert.deepEqual([...MISTAKE_ANIMAL_ART_IDS], taxonomyIds());
   assert.ok(Object.isFrozen(MISTAKE_ANIMAL_ART_IDS));
 });
@@ -55,14 +55,14 @@ test('every animal renders a self-contained animated figure with no ids, filters
     assert.equal(svg, renderMistakeAnimalAvatar(id), id + ' renders deterministically');
     seen.add(svg);
   }
-  assert.equal(seen.size, MISTAKE_ANIMAL_ART_IDS.length, 'ten different animals, not one drawing relabelled');
+  assert.equal(seen.size, MISTAKE_ANIMAL_ART_IDS.length, 'nine different figures, not one drawing relabelled');
 });
 
 test('a still figure carries no motion classes and an unknown animal draws nothing', () => {
-  const still = renderMistakeAnimalAvatar('sloth', { animated: false });
+  const still = renderMistakeAnimalAvatar('complete', { animated: false });
   assert.match(still, /sc-avatar--still/);
   assert.doesNotMatch(still, /sc-avatar-float|sc-avatar-blink|sc-avatar-hand|sc-avatar-spark/);
-  for (const bad of ['dragon', '', null, undefined, 42, {}, 'toString', '__proto__', 'constructor']) {
+  for (const bad of ['dragon', 'sloth', 'parrot', 'rabbit', '', null, undefined, 42, {}, 'toString', '__proto__', 'constructor']) {
     assert.equal(renderMistakeAnimalAvatar(bad), '', String(bad));
     assert.equal(mistakeAnimalAccent(bad), null, String(bad));
   }
@@ -82,18 +82,18 @@ test('every animal has its own accent and wash colour', () => {
 test('a valid analysis is prepared whole, frozen, and with "wrong" read as "incorrect"', () => {
   const data = prepareMistakeAnalysis(good());
   assert.ok(data && Object.isFrozen(data) && Object.isFrozen(data.question) && Object.isFrozen(data.roster));
-  assert.equal(data.id, 'parrot');
+  assert.equal(data.id, 'specific');
   assert.equal(data.verdict, 'partial');
-  assert.equal(data.animal, 'The Parrot');
-  assert.equal(data.name, 'Repeated the question');
-  assert.equal(data.fix, 'Add the science.');
+  assert.equal(data.animal, 'The Fox');
+  assert.equal(data.name, 'Specific Sherry');
+  assert.equal(data.fix, 'Name the exact thing: the part, the property, the process, the number.');
   assert.equal(data.why, 'You restated the rise.');
   assert.equal(data.question.title, 'Compare the results');
   assert.equal(data.question.label, '(b) Evidence');
   assert.equal(data.question.text, 'Which cup cooled fastest?\nOption 1: Cup A');
   assert.deepEqual([...data.question.images], ['fruit.png']);
   assert.equal(data.student, 'A rose higher.');
-  assert.deepEqual(data.roster.map(m => m.id), ['parrot', 'rabbit']);
+  assert.deepEqual(data.roster.map(m => m.id), ['specific', 'careful']);
   assert.equal(prepareMistakeAnalysis(good({ verdict: 'wrong' })).verdict, 'incorrect');
   assert.equal(prepareMistakeAnalysis(good({ verdict: ' Incorrect ' })).verdict, 'incorrect');
 });
@@ -107,11 +107,11 @@ test('a correct, unmarked or unknown verdict is never analysed', () => {
 
 test('an animal the art cannot draw, or one missing its own words, is no analysis at all', () => {
   assert.equal(prepareMistakeAnalysis(good({ animal: animal('dragon') })), null, 'an invented animal');
-  assert.equal(prepareMistakeAnalysis(good({ animal: 'parrot' })), null, 'a bare string is not a taxonomy entry');
+  assert.equal(prepareMistakeAnalysis(good({ animal: 'specific' })), null, 'a bare string is not a taxonomy entry');
   assert.equal(prepareMistakeAnalysis(good({ animal: null })), null);
-  assert.equal(prepareMistakeAnalysis(good({ animal: animal('parrot', { fix: '' }) })), null, 'no lesson, no card');
-  assert.equal(prepareMistakeAnalysis(good({ animal: animal('parrot', { name: '   ' }) })), null);
-  assert.equal(prepareMistakeAnalysis(good({ animal: animal('parrot', { animal: '' }) })), null);
+  assert.equal(prepareMistakeAnalysis(good({ animal: animal('specific', { fix: '' }) })), null, 'no lesson, no card');
+  assert.equal(prepareMistakeAnalysis(good({ animal: animal('specific', { name: '   ' }) })), null);
+  assert.equal(prepareMistakeAnalysis(good({ animal: animal('specific', { animal: '' }) })), null);
 });
 
 test('missing detail degrades to a card with less on it, never to no card', () => {
@@ -161,10 +161,10 @@ test('only a picture from where a question figure can come from is kept, and at 
 });
 
 test('the roster keeps only animals the art can draw and never more than the card shows', () => {
-  const roster = [...MISTAKE_ANIMAL_ART_IDS, 'dragon', 'unicorn', 'rabbit'].map(id => animal(id));
-  roster.push(null, 'parrot', { id: 42 });
+  const roster = [...MISTAKE_ANIMAL_ART_IDS, 'dragon', 'unicorn', 'rabbit', 'sloth', 'careful'].map(id => animal(id));
+  roster.push(null, 'specific', { id: 42 });
   const data = prepareMistakeAnalysis(good({ roster }));
-  assert.deepEqual(data.roster.map(m => m.id), [...MISTAKE_ANIMAL_ART_IDS, 'rabbit']);
+  assert.deepEqual(data.roster.map(m => m.id), [...MISTAKE_ANIMAL_ART_IDS, 'careful'], 'the retired ten-animal ids are not art ids any more');
   assert.ok(data.roster.every(m => Object.isFrozen(m)));
 });
 

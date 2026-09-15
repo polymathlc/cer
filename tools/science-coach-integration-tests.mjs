@@ -21,7 +21,7 @@ const helpers = section('const _scienceCoachEpochs =', '// Hint + Check answer b
 // because it comes out as none there.
 const taxonomy = section('var MISTAKE_ANIMALS = [', '// ---- The bank');
 const grade = fn('markQuestionPart', true);
-const resultStore = fn('_setPartResult');
+const resultStore = fn('_setPartResult') + '\n' + fn('_partMistakeOf');
 const sourceHelpers = section('function _gradingQuestionSource(', '\n// =====================================================================');
 const sourceDependencies = [fn('_cqTableRows'), fn('_parseImageDataUrl'), fn('_decodeBase64'),
   fn('_fbParse'), fn('_fbMergeBlankRuns'), src.match(/^function _fbSegments\([^\n]+/m)[0]].join('\n');
@@ -137,6 +137,8 @@ function harness() {
       analysis: (result, context, question) => _mistakeAnalysisFor(result, context, question),
       choice: (options, letter) => _mcqChoiceLabel(options, letter),
       rule: MISTAKE_ANIMAL_RULE,
+      coachRule: SCIENCE_COACH_INSTRUCTIONS,
+      partMistake: (reply, verdict, key) => _partMistakeOf(reply, verdict, key),
       animals: MISTAKE_ANIMALS
     };
   `)(state, document, host, area, SCIENCE_COACH_INSTRUCTIONS, selectScienceCoaches);
@@ -224,13 +226,15 @@ test('the real open-answer marker forwards issue metadata with one existing AI c
   assert.deepEqual(h.state.mounts[0].context, { kind: 'open', label: '(b) Evidence', student: 'A rose higher.' });
 });
 
-test('a local wrong MCQ keeps zero credit, makes no AI call and gets neutral coaching', async () => {
+test('a local wrong MCQ keeps zero credit, makes no AI call and mounts NO sidekick', async () => {
   const h = harness();
   await h.api.grade('mcq');
   assert.equal(h.state.calls.length, 0);
   assert.equal(h.api.results()['mcq:m1'].pts, 0);
   assert.equal(h.state.painted, 1);
-  assert.equal(h.state.mounts[0].selected[0].id, 'complete');
+  assert.equal(h.state.mounts.length, 0, 'a tick or a cross has no wording to coach');
+  assert.ok(h.state.resets.includes(h.host), 'an earlier coach card at this feedback is swept');
+  assert.ok(h.state.analysisResets.includes(h.host), 'and so is an earlier mistake card');
   assert.equal(h.state.completed, 1);
 });
 
@@ -433,7 +437,7 @@ test('all three grading paths use the shared source input and explicitly labelle
 // reply, goes through the shared taxonomy, carries the actual question, and is
 // mounted after the coach card — every one of which fails silently if dropped.
 // ---------------------------------------------------------------------------
-const mistakeResult = () => ({ ...goodResult(), mistake: 'parrot', mistakeWhy: 'You restated the rise instead of comparing the two readings.' });
+const mistakeResult = () => ({ ...goodResult(), mistake: 'specific', mistakeWhy: 'You restated the rise instead of comparing the two readings.' });
 
 test('a wrong answer whose reply names a habit mounts the mistake analysis AFTER the coach card', () => {
   const h = harness(), target = h.api.capture();
@@ -444,14 +448,14 @@ test('a wrong answer whose reply names a habit mounts the mistake analysis AFTER
   assert.equal(feedback, h.host, 'the card is keyed by the same feedback element as the coach');
   assert.equal(anchor, h.state.coachRoot, 'it is inserted after the coach card, not after the feedback');
   assert.equal(input.verdict, 'partial');
-  assert.equal(input.animal.id, 'parrot');
-  assert.equal(input.animal, h.api.animals.find(m => m.id === 'parrot'), 'the taxonomy entry itself, never a model string');
+  assert.equal(input.animal.id, 'specific');
+  assert.equal(input.animal, h.api.animals.find(m => m.id === 'specific'), 'the taxonomy entry itself, never a model string');
   assert.equal(input.why, 'You restated the rise instead of comparing the two readings.');
   assert.equal(input.question.title, 'Compare the results');
   assert.equal(input.question.label, '(b) Evidence');
   assert.equal(input.student, 'A rose higher.');
   assert.equal(input.roster, h.api.animals);
-  assert.equal(input.roster.length, 10);
+  assert.equal(input.roster.length, 9, 'the nine Science Sidekicks, never the retired ten-animal list');
 });
 
 test('with no coach card the analysis follows the feedback element itself', () => {
@@ -463,8 +467,9 @@ test('with no coach card the analysis follows the feedback element itself', () =
 
 test('the actual question travels with the analysis: parts, options, figures — never the answer key', () => {
   const h = harness(), q = fruitQuestion(), before = JSON.stringify(q);
-  const analysis = h.api.analysis({ verdict: 'incorrect', mistake: 'The Rabbit', mistakeWhy: 'Skimmed the question.' }, { kind: 'open', label: '(b)' }, q);
-  assert.equal(analysis.animal.id, 'rabbit', 'the animal name resolves through the shared normaliser');
+  const analysis = h.api.analysis({ verdict: 'incorrect', mistake: 'Careful Cleo', mistakeWhy: 'Skimmed the question.' }, { kind: 'open', label: '(b)' }, q);
+  assert.equal(analysis.animal.id, 'careful', 'the Sidekick name resolves through the shared normaliser');
+  assert.equal(h.api.analysis({ verdict: 'incorrect', mistake: 'The Rabbit' }, { kind: 'open' }, q).animal.id, 'careful', 'an old ten-animal id is carried to its Sidekick by the alias table');
   assert.equal(analysis.question.title, 'Fruit and seed dispersal');
   assert.doesNotMatch(analysis.question.text, /^Fruit and seed dispersal/, 'the title has its own slot and is not repeated in the wording');
   assert.match(analysis.question.text, /\(b\) Explain how its strong odour/);
@@ -481,7 +486,7 @@ test('a reply that names no habit, an unknown animal, or a correct answer gives 
     { ...goodResult(), mistake: 'unsure' },
     { ...goodResult(), mistake: 'dragon', mistakeWhy: 'An invented eleventh animal.' },
     { ...goodResult() },
-    { verdict: 'correct', feedback: 'Good.', mistake: 'parrot', mistakeWhy: 'Never on a correct answer.' }
+    { verdict: 'correct', feedback: 'Good.', mistake: 'specific', mistakeWhy: 'Never on a correct answer.' }
   ]) {
     h.state.analyses = []; h.state.analysisResets = [];
     h.api.show(h.api.capture(), result, { kind: 'open' });
@@ -492,7 +497,7 @@ test('a reply that names no habit, an unknown animal, or a correct answer gives 
 
 test('a blank or unmarked reply never becomes an analysis', () => {
   const h = harness();
-  for (const result of [null, {}, { mistake: 'parrot' }, { verdict: 'unknown', mistake: 'parrot' }]) {
+  for (const result of [null, {}, { mistake: 'specific' }, { verdict: 'unknown', mistake: 'specific' }]) {
     assert.equal(h.api.analysis(result, {}, { title: 'Q', blocks: [] }), null);
   }
 });
@@ -533,7 +538,7 @@ test('the real per-part marker asks for the habit on the SAME call and mounts th
   assert.match(h.state.calls[0].prompt, /"mistakeWhy":""/);
   assert.ok(h.state.calls[0].prompt.indexOf(h.api.rule) < h.state.calls[0].prompt.indexOf('Return ONLY JSON'), 'the rule precedes the format line');
   assert.equal(h.state.analyses.length, 1);
-  assert.equal(h.state.analyses[0].input.animal.id, 'parrot');
+  assert.equal(h.state.analyses[0].input.animal.id, 'specific');
   assert.equal(h.state.analyses[0].input.student, 'A rose higher.');
   assert.equal(h.state.analyses[0].input.question.label, '(b) Evidence');
   assert.deepEqual(h.state.mounts[0].context, { kind: 'open', label: '(b) Evidence', student: 'A rose higher.' }, 'the coach context is unchanged');
@@ -546,22 +551,54 @@ test('a local MCQ makes no AI call, so it never carries a habit', async () => {
   assert.equal(h.state.analyses.length, 0);
 });
 
-test('an MCQ read from a photo quotes the option the student chose', async () => {
+test('an MCQ read from a photo is marked without a sidekick, a habit or the mistake rule', async () => {
   const h = harness();
   h.api.photo({ mimeType: 'image/png', data: 'PHOTO' });
-  h.state.result = { verdict: 'incorrect', feedback: 'Read the question again.', chosen: '2', mistake: 'rabbit', mistakeWhy: 'You answered the opposite of what was asked.' };
+  h.state.result = { verdict: 'incorrect', feedback: 'Read the question again.', chosen: '2', mistake: 'careful', mistakeWhy: 'You answered the opposite of what was asked.', coachIssues: [{ type: 'careful', detail: 'x' }] };
   await h.api.grade('mcq');
   assert.equal(h.state.calls.length, 1);
-  assert.equal(h.state.mounts[0].context.student, '2) A is smaller');
-  assert.equal(h.state.analyses[0].input.student, '2) A is smaller');
+  assert.equal(h.state.calls[0].prompt.includes(h.api.rule), false, 'a multiple-choice part is never asked for a habit');
+  assert.equal(h.state.calls[0].prompt.includes(h.api.coachRule), false, 'nor for coach issues');
+  assert.doesNotMatch(h.state.calls[0].prompt, /"mistake":"|coachIssues/);
+  assert.match(h.state.calls[0].prompt, /"chosen":"2"/);
+  assert.equal(h.state.mounts.length, 0, 'no sidekick on a multiple-choice part, whatever the model returned');
+  assert.equal(h.state.analyses.length, 0, 'and no mistake analysis');
+  assert.deepEqual(h.api.results()['mcq:m1'], { verdict: 'incorrect', pts: 0, expected: '1) A is greater', student: '2' }, 'the stored result carries no habit');
   assert.equal(h.api.choice([{ letter: '1', text: 'A <b>is</b> greater' }], '1'), '1) A is greater');
   assert.equal(h.api.choice([], '3'), '3');
+});
+
+test('the mistake analysis and the sidekick are open-ended only: an mcq context mounts neither and sweeps both', () => {
+  const h = harness(), target = h.api.capture();
+  h.state.resets = []; h.state.analysisResets = [];
+  h.api.show(target, mistakeResult(), { kind: 'mcq', student: '2) A is smaller' });
+  assert.equal(h.state.mounts.length, 0);
+  assert.equal(h.state.analyses.length, 0);
+  assert.deepEqual(h.state.resets, [h.host]);
+  assert.deepEqual(h.state.analysisResets, [h.host]);
+  assert.equal(h.api.analysis(mistakeResult(), { kind: 'mcq' }, { title: 'Q', blocks: [] }), null, '_mistakeAnalysisFor refuses an mcq context on its own');
+  assert.equal(h.api.analysis(mistakeResult(), { kind: 'MCQ ' }, { title: 'Q', blocks: [] }), null, 'whatever the case or spacing');
+  assert.ok(h.api.analysis(mistakeResult(), { kind: 'open' }, { title: 'Q', blocks: [] }), 'an open part still gets one');
+  assert.ok(h.api.analysis(mistakeResult(), {}, { title: 'Q', blocks: [] }), 'and a part with no kind is treated as open');
+});
+
+test('_partMistakeOf stores a habit on an open part and never on an mcq part', () => {
+  const h = harness();
+  const reply = { mistake: 'Specific Sherry', mistakeWhy: '  Too   vague. ' };
+  assert.deepEqual(h.api.partMistake(reply, 'incorrect', 'open:0'), { mistake: 'specific', mistakeWhy: 'Too vague.' });
+  assert.deepEqual(h.api.partMistake({ mistake: 'fox' }, 'partial', 'open:1'), { mistake: 'reasoning' }, 'an old id is carried to its Sidekick');
+  assert.deepEqual(h.api.partMistake(reply, 'incorrect', 'mcq:m1'), {}, 'a wrong option is a cross, not a habit');
+  assert.deepEqual(h.api.partMistake(reply, 'correct', 'open:0'), {}, 'never on a correct part');
+  assert.deepEqual(h.api.partMistake({ mistake: 'dragon' }, 'incorrect', 'open:0'), {}, 'an invented animal is never stored');
+  assert.deepEqual(h.api.partMistake(null, 'incorrect', 'open:0'), {});
 });
 
 test('all three grading prompts carry the shared mistake rule and both reply fields', () => {
   for (const name of ['markOpenAnswersIn', 'markQuestionPart', 'annotAiCheck']) {
     const body = fn(name, true);
     assert.match(body, /MISTAKE_ANIMAL_RULE \+ '\\n' \+/, name + ' asks for the habit');
+    if (name === 'markQuestionPart') assert.match(body, /\(kind === 'open'\s*\?\s*SCIENCE_COACH_INSTRUCTIONS/, 'the per-part prompt asks for coach issues and the habit on an OPEN part only');
+    if (name === 'markOpenAnswersIn') assert.match(body, /MULTIPLE-CHOICE item is a tick or a cross and never shows a habit/, 'the batch prompt says an MCQ item carries no habit');
     assert.match(body, /"mistake":"/, name + ' names the field');
     assert.match(body, /"mistakeWhy":"/, name + ' names the reason');
     assert.ok(body.indexOf('SCIENCE_COACH_INSTRUCTIONS') < body.indexOf('MISTAKE_ANIMAL_RULE'), name + ': coach issues first, then the habit');

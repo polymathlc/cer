@@ -71,11 +71,12 @@ workflow also runs the existing marking regression suites.
 ## 🐾 Mistake analysis — the card that follows a sidekick (v1.393.0)
 
 A sidekick says what a stronger answer needs next. The **mistake analysis**
-that follows it says which of the ten familiar habits the answer showed — the
-Rabbit rushed it, the Parrot repeated the question, the Sloth stopped halfway,
-the Chameleon used the wrong keyword, the Octopus grabbed everything, the Monkey
-mixed up ideas, the Goldfish forgot the fact, the Fox reversed the logic, the Bat
-ignored the evidence, the Peacock was too vague — drawn as an animated animal in
+that follows it says which Science Sidekick's skill the answer was missing —
+Comparison Casey's comparison, Context Connie's clue, Specific Sherry's exact
+word, Evidence Ellen's evidence, Keyword Kai's keyword, Concept Cora's science,
+Reasoning Ravi's chain, Careful Cleo's detail, Complete Cody's finish (nine,
+since v1.394.0; it was a separate cast of ten animals before) — drawn as the
+same animated figure in
 the sidekicks' own style, standing beside the **actual question** (its title,
 wording, parts, options and up to two figures) and what the student wrote.
 
@@ -90,8 +91,10 @@ wording, parts, options and up to two figures) and what the student wrote.
 - **Same shell.** The card is `science-mistakes.js`, mounted by app.js after
   the sidekick card (after the feedback itself when there is no sidekick),
   wearing both `.sc-coach-mount` and `.sc-mistake-mount`, so the sidekicks'
-  pop-in, motion rules, print rule and mobile layout cover it. The ten figures
-  live in `science-mistake-art.js`; each animal carries its own accent colour.
+  pop-in, motion rules, print rule and mobile layout cover it. The nine figures
+  are the Sidekick avatars, served through `science-mistake-art.js`; each
+  carries its own accent colour. **Open-ended answers only** (v1.394.0): a
+  multiple-choice part mounts neither the sidekick nor the analysis.
 - **One motion switch.** *Pause motion* on either card pauses both, through
   the `scienceCoachMotion` export; the device preference and the reduced-motion
   media query are honoured as before.
@@ -106,5 +109,5 @@ Run `node --test tools/science-coach-core-tests.mjs
 tools/science-coach-integration-tests.mjs tools/science-mistake-tests.mjs` and
 `node tools/mistake-bank-tests.mjs`. The browser checks now cover the mistake
 card too: its placement after the sidekick, the figure, the question and the
-quoted answer, the shared motion switch, dismiss and reopen, the ten-animal
+quoted answer, the shared motion switch, dismiss and reopen, the nine-Sidekick
 roster, escaping, reset, narrow screens and print.
