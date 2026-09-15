@@ -93,6 +93,50 @@ async function selectCell(frame,id) {
   assert.equal(await frame.locator('#selected-cell').textContent(),String.fromCharCode(65+Number(column))+(Number(row)+1),'Coordinate selectors choose the exact requested cell');
 }
 
+// APEX_HOVER_REGRESSION_START
+// Focused regression for the featured fan: the interactive button itself must
+// stay still when a pointer enters an exposed side or its lower edge.
+async function checkApexHover(page) {
+  const selector=id=>`#apex-showcase [data-character="${id}"]`;
+  const waitFrames=count=>page.evaluate(count=>new Promise(resolve=>{function tick(){if(--count<=0)resolve();else requestAnimationFrame(tick);}requestAnimationFrame(tick);}),count);
+  const rect=async locator=>locator.evaluate(element=>{const r=element.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};});
+  const stable=(samples,before,label)=>{
+    assert.ok(samples.length>=20);
+    for(const sample of samples)for(const key of ['x','y','width','height'])assert.ok(Math.abs(sample.rect[key]-before[key])<.1,label+' keeps its '+key+' unchanged');
+  };
+  for(const id of ['kaido','whitebeard','akainu'])for(const edge of ['side','bottom']){
+    await page.mouse.move(1,1);await page.locator(selector(id)).scrollIntoViewIfNeeded();await waitFrames(15);
+    const target=page.locator(selector(id)),before=await rect(target);
+    const point=await target.evaluate((element,edge)=>{
+      const box=element.getBoundingClientRect(),points=[];
+      for(let y=Math.ceil(box.top)+1;y<Math.floor(box.bottom);y+=2)for(let x=Math.ceil(box.left)+1;x<Math.floor(box.right);x+=2)
+        if(document.elementFromPoint(x,y)?.closest('.tcg-card')===element)points.push({x,y});
+      if(!points.length)return null;
+      if(edge==='bottom')return points.sort((a,b)=>b.y-a.y||Math.abs(a.x-(box.left+box.width/2))-Math.abs(b.x-(box.left+box.width/2)))[0];
+      return points.sort((a,b)=>a.x-b.x||Math.abs(a.y-(box.top+box.height/2))-Math.abs(b.y-(box.top+box.height/2)))[0];
+    },edge);
+    assert.ok(point,id+' has an exposed '+edge+' pointer target');
+    await page.mouse.move(point.x,point.y);
+    const samples=await target.evaluate(async(element,point)=>{
+      const samples=[];for(let i=0;i<20;i++){await new Promise(requestAnimationFrame);const r=element.getBoundingClientRect();samples.push({rect:{x:r.x,y:r.y,width:r.width,height:r.height},hover:element.matches(':hover'),hit:document.elementFromPoint(point.x,point.y)?.closest('.tcg-card')===element});}return samples;
+    },point);
+    stable(samples,before,id+' '+edge+' hover');assert.ok(samples.every(sample=>sample.hover&&sample.hit),id+' keeps the stationary '+edge+' pointer for every frame');
+    await page.mouse.click(point.x,point.y);
+    await page.locator('#dialog-panel .tcg-card').waitFor();assert.equal(await page.locator('#dialog-panel .tcg-card').getAttribute('data-character'),id);
+    await page.keyboard.press('Escape');
+  }
+  await page.mouse.move(1,1);await page.keyboard.press('Tab');
+  for(const id of ['kaido','whitebeard','akainu']){
+    const target=page.locator(selector(id));await target.scrollIntoViewIfNeeded();const before=await rect(target);await target.focus();
+    const samples=await target.evaluate(async element=>{
+      const samples=[];for(let i=0;i<20;i++){await new Promise(requestAnimationFrame);const r=element.getBoundingClientRect(),css=getComputedStyle(element);samples.push({rect:{x:r.x,y:r.y,width:r.width,height:r.height},focused:document.activeElement===element,visible:element.matches(':focus-visible'),outlined:css.outlineStyle!=='none'&&parseFloat(css.outlineWidth)>0});}return samples;
+    });
+    stable(samples,before,id+' keyboard focus');assert.ok(samples.every(sample=>sample.focused&&sample.visible&&sample.outlined),id+' keeps visible keyboard focus');
+    await page.keyboard.press('Enter');await page.locator('#dialog-panel .tcg-card').waitFor();assert.equal(await page.locator('#dialog-panel .tcg-card').getAttribute('data-character'),id);await page.keyboard.press('Escape');
+  }
+}
+// APEX_HOVER_REGRESSION_END
+
 async function harnessGame(host, role = 'student') {
   await host.goto(base + '/__harness.html?role=' + role);
   await host.waitForFunction(() => document.querySelector('#game')?.contentWindow.__grandLine?.ready);
@@ -538,6 +582,8 @@ try {
   assert.equal(await page.locator('#card-grid .tcg-card[data-owned="true"]').count(), 5);
   assert.equal(await page.locator('#apex-showcase .tcg-card[data-stars="7"]').count(), 3);
   assert.equal(await page.evaluate(() => __grandLine.collection.packs), 0);
+  await checkApexHover(page);
+  check('All three featured apex cards keep stationary side and lower-edge hover targets, stable keyboard focus and the correct detail action');
   const ids = await page.locator('#card-grid .tcg-card').evaluateAll(nodes => nodes.map(n => n.dataset.character));
   for (const id of ids) {
     await page.locator(`#card-grid [data-character="${id}"]`).click();

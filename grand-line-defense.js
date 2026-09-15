@@ -1,12 +1,12 @@
-import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS } from './grand-line-data.js?v=3.0.0';
-import { statsFor } from './grand-line-core.js?v=3.0.0';
-import { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.0.0';
-export { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.0.0';
+import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS } from './grand-line-data.js?v=3.0.1';
+import { statsFor } from './grand-line-core.js?v=3.0.1';
+import { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.0.1';
+export { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.0.1';
 import { DEFENSE_GRID, DEFENSE_PATH, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_TERRAIN, defenseCell,
   pointOnDefenseRoute, commitDefenseRoute, planDefenseRoute, getMazePlacementPreview,
-  MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.0.0';
+  MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.0.1';
 export { DEFENSE_GRID, DEFENSE_PATH, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_TERRAIN,
-  getDefenseRoute, getMazePlacementPreview, MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.0.0';
+  getDefenseRoute, getMazePlacementPreview, MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.0.1';
 export const DEFENSE_STAGES = Object.freeze(ENCOUNTERS.map(encounter => ({
   ...encounter, waveCount: 6, description: `Build a maze at ${encounter.name}. Slow the swarm, summon your collection and train your crew after three questions each wave.`,
 })));

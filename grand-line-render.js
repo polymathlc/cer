@@ -20,7 +20,7 @@ export function createArtManager(){
     for(const entry of entries)if(entry.isIntersecting){apply(entry.target,entry.target.dataset.art);observer.unobserve(entry.target);}
   },{rootMargin:'250px'}):null;
   function attach(node,id,eager=false){node.dataset.art=id;nodes.add(node);if(eager||!observer)apply(node,id);else observer.observe(node);if(!pruneQueued){pruneQueued=true;queueMicrotask(()=>{pruneQueued=false;for(const old of nodes)if(!old.isConnected){nodes.delete(old);observer?.unobserve(old);}});}}
-  const ready=fetch('./assets/grand-line/manifest.json?v=3.0.0').then(r=>{if(!r.ok)throw Error('Card manifest unavailable');return r.json();}).then(rows=>{
+  const ready=fetch('./assets/grand-line/manifest.json?v=3.0.1').then(r=>{if(!r.ok)throw Error('Card manifest unavailable');return r.json();}).then(rows=>{
     for(const row of Array.isArray(rows)?rows:rows.assets||[])if(row?.id&&row.artRect&&row.avatarRect)metadata.set(row.id,row);
     for(const node of nodes){if(!node.isConnected){nodes.delete(node);observer?.unobserve(node);}else if(node.dataset.loaded)apply(node,node.dataset.art);}
     return metadata;
