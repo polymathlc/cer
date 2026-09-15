@@ -1,10 +1,10 @@
 name: Science coach feedback checks
 on:
   pull_request:
-    paths: ['app.js', 'index.html', 'science-coach*.js', 'tools/science-coach*.mjs', '.github/workflows/science-coaches.yml']
+    paths: ['app.js', 'index.html', 'science-coach*.js', 'science-mistake*.js', 'tools/science-coach*.mjs', 'tools/science-mistake*.mjs', '.github/workflows/science-coaches.yml']
   push:
     branches: [main]
-    paths: ['app.js', 'index.html', 'science-coach*.js', 'tools/science-coach*.mjs', '.github/workflows/science-coaches.yml']
+    paths: ['app.js', 'index.html', 'science-coach*.js', 'science-mistake*.js', 'tools/science-coach*.mjs', 'tools/science-mistake*.mjs', '.github/workflows/science-coaches.yml']
 permissions:
   contents: read
 jobs:
@@ -15,10 +15,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Check feedback selection and real marking integration
-        run: node --test tools/science-coach-core-tests.mjs tools/science-coach-integration-tests.mjs
+      - name: Check feedback selection, the mistake analysis and real marking integration
+        run: node --test tools/science-coach-core-tests.mjs tools/science-coach-integration-tests.mjs tools/science-mistake-tests.mjs
       - name: Check existing student marking behavior
         run: |
+          node tools/mistake-bank-tests.mjs
           node tools/part-explanation-tests.mjs
           node tools/scanned-question-tests.mjs
           node tools/fill-blank-tests.mjs

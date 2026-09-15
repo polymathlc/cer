@@ -67,3 +67,44 @@ Browser checks use Playwright 1.62.1: install it and its Chromium browser, then
 run `node tools/science-coach-browser-tests.mjs`. Set `COACH_SCREENSHOTS` to an
 output directory to save desktop, mobile and roster previews. The dedicated
 workflow also runs the existing marking regression suites.
+
+## 🐾 Mistake analysis — the card that follows a sidekick (v1.393.0)
+
+A sidekick says what a stronger answer needs next. The **mistake analysis**
+that follows it says which of the ten familiar habits the answer showed — the
+Rabbit rushed it, the Parrot repeated the question, the Sloth stopped halfway,
+the Chameleon used the wrong keyword, the Octopus grabbed everything, the Monkey
+mixed up ideas, the Goldfish forgot the fact, the Fox reversed the logic, the Bat
+ignored the evidence, the Peacock was too vague — drawn as an animated animal in
+the sidekicks' own style, standing beside the **actual question** (its title,
+wording, parts, options and up to two figures) and what the student wrote.
+
+- **Same marking call.** The three marking prompts carry the shared
+  `MISTAKE_ANIMAL_RULE` and return `mistake` (an id from the list, or empty) and
+  `mistakeWhy` beside `coachIssues`. There is no second request, and the verdict
+  and the habit come from one reading of the answer.
+- **Same taxonomy.** The id is resolved through `mistakeAnimalNormalize` /
+  `mistakeAnimal` — the list shared byte-for-byte with the mistake bank, the
+  Scan app and Ans Key. An invented animal, "unsure" or an empty string is no
+  analysis; a correct answer never has one whatever the reply says.
+- **Same shell.** The card is `science-mistakes.js`, mounted by app.js after
+  the sidekick card (after the feedback itself when there is no sidekick),
+  wearing both `.sc-coach-mount` and `.sc-mistake-mount`, so the sidekicks'
+  pop-in, motion rules, print rule and mobile layout cover it. The ten figures
+  live in `science-mistake-art.js`; each animal carries its own accent colour.
+- **One motion switch.** *Pause motion* on either card pauses both, through
+  the `scienceCoachMotion` export; the device preference and the reduced-motion
+  media query are honoured as before.
+- **Everything is data.** The question, the reason and the student's words are
+  clipped, stripped of control characters and escaped by the card; a picture is
+  shown only from an http(s), blob, relative or image data URL.
+- **The same figure on the practice page.** 🐾 Learn from mistakes shows the
+  animated animal beside each lesson and a still one on each roster card, so
+  the animal a child meets beside their answer is the one they drill.
+
+Run `node --test tools/science-coach-core-tests.mjs
+tools/science-coach-integration-tests.mjs tools/science-mistake-tests.mjs` and
+`node tools/mistake-bank-tests.mjs`. The browser checks now cover the mistake
+card too: its placement after the sidekick, the figure, the question and the
+quoted answer, the shared motion switch, dismiss and reopen, the ten-animal
+roster, escaping, reset, narrow screens and print.

@@ -15,6 +15,11 @@ function fn(name, async = false) {
   return section(`${async ? 'async ' : ''}function ${name}(`, '\n}') + '\n}';
 }
 const helpers = section('const _scienceCoachEpochs =', '// Hint + Check answer buttons');
+// The 🐾 mistake taxonomy is the REAL one (shared byte-for-byte with Scan and
+// Ans Key), so the analysis that follows a coach is resolved exactly as the
+// app resolves it — an invented animal has to come out as no analysis here
+// because it comes out as none there.
+const taxonomy = section('var MISTAKE_ANIMALS = [', '// ---- The bank');
 const grade = fn('markQuestionPart', true);
 const resultStore = fn('_setPartResult');
 const sourceHelpers = section('function _gradingQuestionSource(', '\n// =====================================================================');
@@ -26,7 +31,8 @@ const goodResult = () => ({ verdict: 'partial', feedback: 'Compare both results;
 function harness() {
   const state = { calls: [], mounts: [], resets: [], warnings: [], toasts: [], completed: 0, painted: 0,
     result: goodResult(), active: true, ownsHost: true, selected: 'b', photo: null,
-    sourceLoads: [], sourceImages: new Map(), timeouts: [] };
+    sourceLoads: [], sourceImages: new Map(), timeouts: [],
+    analyses: [], analysisResets: [], coachRoot: { coach: true } };
   const page = { classList: { contains: name => name === 'active' && state.active } };
   const host = { isConnected: true, innerHTML: '', closest: selector => selector === '.page' ? page : null };
   const container = { contains: element => state.ownsHost && element === host };
@@ -89,6 +95,16 @@ function harness() {
     const mountScienceCoach = (element, result, context) => {
       if (state.mountError) throw new Error('coach paint failed');
       state.mounts.push({ element, result, context, selected: selectScienceCoaches(result, context) });
+      return state.coachRoot;
+    };
+    const mountMistakeAnalysis = (feedback, anchor, input) => {
+      if (state.analysisError) throw new Error('mistake paint failed');
+      state.analyses.push({ feedback, anchor, input });
+      return { mistake: true };
+    };
+    const resetMistakeAnalysis = element => {
+      state.analysisResets.push(element);
+      if (state.analysisResetError) throw new Error('mistake reset failed');
     };
     const read = async (kind, prompt, options, media = []) => {
       state.calls.push({ kind, prompt, options, media });
@@ -100,6 +116,7 @@ function harness() {
     const askGeminiVision = (prompt, media, options) => read('vision', prompt, options, media);
     ${sourceDependencies}
     ${sourceHelpers}
+    ${taxonomy}
     ${helpers}
     ${resultStore}
     ${grade}
@@ -116,7 +133,11 @@ function harness() {
       replaceConfig: () => { _openSurfaceCfg['#question'] = { ..._openSurfaceCfg['#question'] }; },
       mode: mode => { _openSurfaceCfg['#question'].mode = mode; },
       user: user => { currentUser = user; },
-      photo: photo => { _openPhoto['#question'] = photo; }
+      photo: photo => { _openPhoto['#question'] = photo; },
+      analysis: (result, context, question) => _mistakeAnalysisFor(result, context, question),
+      choice: (options, letter) => _mcqChoiceLabel(options, letter),
+      rule: MISTAKE_ANIMAL_RULE,
+      animals: MISTAKE_ANIMALS
     };
   `)(state, document, host, area, SCIENCE_COACH_INSTRUCTIONS, selectScienceCoaches);
   return { api, state, host, area, container };
@@ -405,4 +426,150 @@ test('all three grading paths use the shared source input and explicitly labelle
   const annotation = fn('annotAiCheck', true);
   assert.match(annotation, /CORRECT ANSWER KEY/);
   assert.doesNotMatch(annotation, /TWO pictures are attached/);
+});
+
+// ---------------------------------------------------------------------------
+// 🐾 The mistake analysis that FOLLOWS a sidekick. It rides the same marking
+// reply, goes through the shared taxonomy, carries the actual question, and is
+// mounted after the coach card — every one of which fails silently if dropped.
+// ---------------------------------------------------------------------------
+const mistakeResult = () => ({ ...goodResult(), mistake: 'parrot', mistakeWhy: 'You restated the rise instead of comparing the two readings.' });
+
+test('a wrong answer whose reply names a habit mounts the mistake analysis AFTER the coach card', () => {
+  const h = harness(), target = h.api.capture();
+  h.api.show(target, mistakeResult(), { kind: 'open', label: '(b) Evidence', student: 'A rose higher.' });
+  assert.equal(h.state.mounts.length, 1, 'the coach still mounts');
+  assert.equal(h.state.analyses.length, 1);
+  const { feedback, anchor, input } = h.state.analyses[0];
+  assert.equal(feedback, h.host, 'the card is keyed by the same feedback element as the coach');
+  assert.equal(anchor, h.state.coachRoot, 'it is inserted after the coach card, not after the feedback');
+  assert.equal(input.verdict, 'partial');
+  assert.equal(input.animal.id, 'parrot');
+  assert.equal(input.animal, h.api.animals.find(m => m.id === 'parrot'), 'the taxonomy entry itself, never a model string');
+  assert.equal(input.why, 'You restated the rise instead of comparing the two readings.');
+  assert.equal(input.question.title, 'Compare the results');
+  assert.equal(input.question.label, '(b) Evidence');
+  assert.equal(input.student, 'A rose higher.');
+  assert.equal(input.roster, h.api.animals);
+  assert.equal(input.roster.length, 10);
+});
+
+test('with no coach card the analysis follows the feedback element itself', () => {
+  const h = harness();
+  h.state.coachRoot = null;
+  h.api.show(h.api.capture(), mistakeResult(), { kind: 'open' });
+  assert.equal(h.state.analyses[0].anchor, h.host);
+});
+
+test('the actual question travels with the analysis: parts, options, figures — never the answer key', () => {
+  const h = harness(), q = fruitQuestion(), before = JSON.stringify(q);
+  const analysis = h.api.analysis({ verdict: 'incorrect', mistake: 'The Rabbit', mistakeWhy: 'Skimmed the question.' }, { kind: 'open', label: '(b)' }, q);
+  assert.equal(analysis.animal.id, 'rabbit', 'the animal name resolves through the shared normaliser');
+  assert.equal(analysis.question.title, 'Fruit and seed dispersal');
+  assert.doesNotMatch(analysis.question.text, /^Fruit and seed dispersal/, 'the title has its own slot and is not repeated in the wording');
+  assert.match(analysis.question.text, /\(b\) Explain how its strong odour/);
+  assert.match(analysis.question.text, /Colour \| Dull green/);
+  assert.doesNotMatch(analysis.question.text, /HIDDEN/);
+  assert.deepEqual(analysis.question.images, ['fruit.png'], 'hidden model pictures are not question figures');
+  assert.equal(JSON.stringify(q), before, 'building the analysis must not mutate the question');
+});
+
+test('a reply that names no habit, an unknown animal, or a correct answer gives no analysis and clears an old card', () => {
+  const h = harness();
+  for (const result of [
+    { ...goodResult(), mistake: '' },
+    { ...goodResult(), mistake: 'unsure' },
+    { ...goodResult(), mistake: 'dragon', mistakeWhy: 'An invented eleventh animal.' },
+    { ...goodResult() },
+    { verdict: 'correct', feedback: 'Good.', mistake: 'parrot', mistakeWhy: 'Never on a correct answer.' }
+  ]) {
+    h.state.analyses = []; h.state.analysisResets = [];
+    h.api.show(h.api.capture(), result, { kind: 'open' });
+    assert.equal(h.state.analyses.length, 0, JSON.stringify(result));
+    assert.ok(h.state.analysisResets.includes(h.host), 'an earlier card at this feedback is cleared');
+  }
+});
+
+test('a blank or unmarked reply never becomes an analysis', () => {
+  const h = harness();
+  for (const result of [null, {}, { mistake: 'parrot' }, { verdict: 'unknown', mistake: 'parrot' }]) {
+    assert.equal(h.api.analysis(result, {}, { title: 'Q', blocks: [] }), null);
+  }
+});
+
+test('the analysis cannot block the coach, the grade or the completion callback', async () => {
+  const h = harness();
+  h.state.result = mistakeResult();
+  h.state.analysisError = true;
+  await h.api.grade();
+  assert.equal(h.state.mounts.length, 1);
+  assert.equal(h.api.results()['open:0'].pts, 0.5);
+  assert.equal(h.state.completed, 1);
+  assert.ok(h.state.warnings.some(w => /Mistake analysis skipped/.test(w[0])));
+});
+
+test('resetting a question and rechecking a part both clear the mistake card with the coach', () => {
+  const h = harness();
+  h.api.capture();
+  assert.ok(h.state.analysisResets.includes(h.host), 'a new check clears the last card at this feedback');
+  h.api.reset();
+  assert.ok(h.state.analysisResets.includes(h.state.container), 'resetting the question sweeps the container');
+});
+
+test('a stale target mounts no analysis either', () => {
+  const h = harness(), target = h.api.capture();
+  h.api.reset();
+  h.api.show(target, mistakeResult(), { kind: 'open' });
+  assert.equal(h.state.analyses.length, 0);
+});
+
+test('the real per-part marker asks for the habit on the SAME call and mounts the analysis from its reply', async () => {
+  const h = harness();
+  h.state.result = mistakeResult();
+  await h.api.grade();
+  assert.equal(h.state.calls.length, 1, 'no second call is made for the habit');
+  assert.ok(h.state.calls[0].prompt.includes(h.api.rule), 'the shared MISTAKE_ANIMAL_RULE is in the marking prompt');
+  assert.match(h.state.calls[0].prompt, /"mistake":""/);
+  assert.match(h.state.calls[0].prompt, /"mistakeWhy":""/);
+  assert.ok(h.state.calls[0].prompt.indexOf(h.api.rule) < h.state.calls[0].prompt.indexOf('Return ONLY JSON'), 'the rule precedes the format line');
+  assert.equal(h.state.analyses.length, 1);
+  assert.equal(h.state.analyses[0].input.animal.id, 'parrot');
+  assert.equal(h.state.analyses[0].input.student, 'A rose higher.');
+  assert.equal(h.state.analyses[0].input.question.label, '(b) Evidence');
+  assert.deepEqual(h.state.mounts[0].context, { kind: 'open', label: '(b) Evidence', student: 'A rose higher.' }, 'the coach context is unchanged');
+});
+
+test('a local MCQ makes no AI call, so it never carries a habit', async () => {
+  const h = harness();
+  await h.api.grade('mcq');
+  assert.equal(h.state.calls.length, 0);
+  assert.equal(h.state.analyses.length, 0);
+});
+
+test('an MCQ read from a photo quotes the option the student chose', async () => {
+  const h = harness();
+  h.api.photo({ mimeType: 'image/png', data: 'PHOTO' });
+  h.state.result = { verdict: 'incorrect', feedback: 'Read the question again.', chosen: '2', mistake: 'rabbit', mistakeWhy: 'You answered the opposite of what was asked.' };
+  await h.api.grade('mcq');
+  assert.equal(h.state.calls.length, 1);
+  assert.equal(h.state.mounts[0].context.student, '2) A is smaller');
+  assert.equal(h.state.analyses[0].input.student, '2) A is smaller');
+  assert.equal(h.api.choice([{ letter: '1', text: 'A <b>is</b> greater' }], '1'), '1) A is greater');
+  assert.equal(h.api.choice([], '3'), '3');
+});
+
+test('all three grading prompts carry the shared mistake rule and both reply fields', () => {
+  for (const name of ['markOpenAnswersIn', 'markQuestionPart', 'annotAiCheck']) {
+    const body = fn(name, true);
+    assert.match(body, /MISTAKE_ANIMAL_RULE \+ '\\n' \+/, name + ' asks for the habit');
+    assert.match(body, /"mistake":"/, name + ' names the field');
+    assert.match(body, /"mistakeWhy":"/, name + ' names the reason');
+    assert.ok(body.indexOf('SCIENCE_COACH_INSTRUCTIONS') < body.indexOf('MISTAKE_ANIMAL_RULE'), name + ': coach issues first, then the habit');
+  }
+  const show = fn('_showScienceCoachFeedback');
+  assert.ok(show.indexOf('mountScienceCoach(') < show.indexOf('mountMistakeAnalysis('), 'the coach mounts before the analysis');
+  assert.match(show, /mountMistakeAnalysis\(host, coachRoot \|\| host, analysis\)/);
+  assert.match(fn('_resetOpenScienceCoaches'), /resetMistakeAnalysis\(container\)/);
+  assert.match(fn('_captureScienceCoachTarget'), /resetMistakeAnalysis\(host\)/);
+  assert.match(src, /import \{ mountMistakeAnalysis, resetMistakeAnalysis \} from "\.\/science-mistakes\.js";/);
 });

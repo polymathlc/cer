@@ -49,8 +49,13 @@ document.addEventListener('click', event => { if (event.target.closest?.('[data-
 document.addEventListener('input', event => { if (event.target.matches?.('[data-tcg-audio]')) tcgSyncDuelVolume(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) tcgCombatStop(); });
 import { mountInterfaceStudio } from "./interface-studio.mjs?v=2";
-import { mountScienceCoach, resetScienceCoaches } from "./science-coaches.js";
+import { mountScienceCoach, resetScienceCoaches, scienceCoachMotion } from "./science-coaches.js";
 import { SCIENCE_COACH_INSTRUCTIONS } from "./science-coach-core.js";
+// 🐾 The mistake analysis that FOLLOWS a sidekick — the habit behind a wrong
+// answer, drawn as an animated animal beside the actual question. Same
+// marking call, same motion preference, one card after the coach.
+import { mountMistakeAnalysis, resetMistakeAnalysis } from "./science-mistakes.js";
+import { renderMistakeAnimalAvatar } from "./science-mistake-art.js";
 import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit, scienceQuestionLevel, scienceQuestionContentKey } from "./science-feed-core.js?v=question-history-1";
 import { createStudentQuestionHistory } from "./student-question-history.js?v=1";
 import { evaluateQuestionQuality, questionQualitySignature, buildQuestionQualitySummary, questionHasUnresolvedStudentFlag } from "./science-feed-quality.js";
@@ -3853,7 +3858,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.392.0';
+const APP_VERSION = 'v1.393.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -30429,6 +30434,7 @@ function _resetOpenScienceCoaches(containerSel) {
   const container = document.querySelector(containerSel);
   if (container) {
     try { resetScienceCoaches(container); } catch (e) { console.warn('Coach reset skipped', e); }
+    try { resetMistakeAnalysis(container); } catch (e) { console.warn('Mistake analysis reset skipped', e); }
   }
 }
 function _captureScienceCoachTarget(containerSel, q, host) {
@@ -30436,6 +30442,7 @@ function _captureScienceCoachTarget(containerSel, q, host) {
   const cfg = _openSurfaceCfg[containerSel];
   if (!container || !host || !q || cfg?.mode === 'preview' || !container.contains(host)) return null;
   try { resetScienceCoaches(host); } catch (e) { console.warn('Coach reset skipped', e); }
+  try { resetMistakeAnalysis(host); } catch (e) { console.warn('Mistake analysis reset skipped', e); }
   const request = (_scienceCoachRequests.get(host) || 0) + 1;
   _scienceCoachRequests.set(host, request);
   return { containerSel, container, q, host, cfg, request,
@@ -30450,7 +30457,69 @@ function _showScienceCoachFeedback(target, result, context = {}) {
       || document.querySelector(containerSel) !== container || !container.contains(host)) return;
   const page = host.closest('.page');
   if (page && !page.classList.contains('active')) return;
-  try { mountScienceCoach(host, result, context); } catch (e) { console.warn('Coach display skipped', e); }
+  let coachRoot = null;
+  try { coachRoot = mountScienceCoach(host, result, context) || null; } catch (e) { console.warn('Coach display skipped', e); }
+  // The 🐾 mistake analysis FOLLOWS the sidekick: it is mounted after the
+  // coach card when there is one, after the feedback itself otherwise, and
+  // only when the SAME marking reply named a habit this app can draw. It is
+  // presentation, so a failure here can no more block the mark than the
+  // coach can — and a reply with no habit clears any card an earlier check
+  // of this part left behind.
+  try {
+    const analysis = _mistakeAnalysisFor(result, context, q);
+    if (analysis) mountMistakeAnalysis(host, coachRoot || host, analysis);
+    else resetMistakeAnalysis(host);
+  } catch (e) { console.warn('Mistake analysis skipped', e); }
+}
+
+/* 🐾 THE MISTAKE ANALYSIS THAT FOLLOWS A SIDEKICK.
+   A coach says what a stronger answer needs NEXT; this names the HABIT the
+   answer showed — one of the ten mistake animals, the taxonomy shared with
+   the mistake bank, Scan and Ans Key. Three rules, each silent if dropped:
+   • THE HABIT RIDES THE SAME MARKING REPLY as the coach issues (`mistake` /
+     `mistakeWhy`, asked for by MISTAKE_ANIMAL_RULE in all three marking
+     prompts). No second call, no second reading: the verdict and the habit
+     come from one look at the answer.
+   • THE ID GOES THROUGH THE TAXONOMY and nothing else. `mistakeAnimalNormalize`
+     turns a model's word into an id or into '' — and '' is an answer: a wrong
+     answer that fits no habit gets NO card rather than the nearest one, and a
+     correct answer never gets one whatever the model said.
+   • THE ACTUAL QUESTION GOES WITH IT, read through `_gradingQuestionSource`
+     — the same student-facing wording, parts, options and figures the marker
+     was shown, never an answer key or an authored explanation — so the lesson
+     is read against the very answer it is about. The words are only ever
+     rendered escaped and clipped by the card itself. */
+function _mistakeAnalysisFor(result, context = {}, q = null) {
+  if (!result || typeof result !== 'object') return null;
+  const verdict = String(result.verdict || '').trim().toLowerCase();
+  if (!['partial', 'incorrect', 'wrong'].includes(verdict)) return null;
+  const id = mistakeAnimalNormalize(result.mistake);
+  const animal = id ? mistakeAnimal(id) : null;
+  if (!animal) return null;
+  let source = { text: '', images: [] };
+  try { source = _gradingQuestionSource(q) || source; } catch (e) { console.warn('Mistake analysis source skipped', e); }
+  const title = String((q && q.title) || '').trim();
+  let text = String(source.text || '');
+  // The title has its own slot on the card; the source puts it on line one.
+  if (title && text.startsWith(title)) text = text.slice(title.length).replace(/^\s+/, '');
+  const images = (Array.isArray(source.images) ? source.images : [])
+    .map(image => { try { return transformImageUrl(image && image.url); } catch (e) { return image && image.url; } })
+    .filter(url => typeof url === 'string' && url);
+  const student = typeof context.student === 'string' ? context.student
+    : (typeof result.chosen === 'string' && result.chosen.trim() ? 'Option ' + result.chosen.trim() : '');
+  return {
+    verdict,
+    animal,
+    why: typeof result.mistakeWhy === 'string' ? result.mistakeWhy : '',
+    question: { title, label: typeof context.label === 'string' ? context.label : '', text, images },
+    student,
+    roster: MISTAKE_ANIMALS
+  };
+}
+/* "2) A is smaller" — the option a student chose, as the card quotes it. */
+function _mcqChoiceLabel(options, letter) {
+  const chosen = (Array.isArray(options) ? options : []).find(o => o && String(o.letter) === String(letter));
+  return chosen ? chosen.letter + ') ' + String(chosen.text || '').replace(/<[^>]*>/g, '').trim() : String(letter || '');
 }
 
 // Hint + Check answer buttons for ONE part of a question (an answer box or an MCQ),
@@ -31352,7 +31421,8 @@ async function annotAiCheck(containerSel, pid, btn) {
       expected +
       `Work out how many marks the student earned out of the total available for this ${isWorkingPad ? 'working area' : 'diagram'}. ` +
       SCIENCE_COACH_INSTRUCTIONS + '\n' +
-      `Return ONLY JSON: {"score":<number>,"total":<number>,"verdict":"correct|partial|incorrect","feedback":"<1-2 sentences to the student: what they got right and what was wrong or missing>","coachIssues":[],"modelAnswer":"<what a fully correct ${isWorkingPad ? 'working area' : 'annotated diagram'} should show>","explanation":"<2-4 sentences addressed to \\"you\\" that refer to what the student actually annotated and explain the marks>"}. ` +
+      MISTAKE_ANIMAL_RULE + '\n' +
+      `Return ONLY JSON: {"score":<number>,"total":<number>,"verdict":"correct|partial|incorrect","feedback":"<1-2 sentences to the student: what they got right and what was wrong or missing>","coachIssues":[],"mistake":"<mistake type id from the MISTAKE TYPES list, or empty>","mistakeWhy":"<one sentence to the student: how THIS answer shows that habit, or empty>","modelAnswer":"<what a fully correct ${isWorkingPad ? 'working area' : 'annotated diagram'} should show>","explanation":"<2-4 sentences addressed to \\"you\\" that refer to what the student actually annotated and explain the marks>"}. ` +
       `If there are no visible annotations, return score 0 and say they haven't annotated yet.`;
     if (!gradingCurrent()) return null;
     const raw = await askGeminiVision(prompt, input.media, { maxOutputTokens: 1200, json: true });
@@ -33164,7 +33234,9 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         `Provide the full correct MODEL ANSWER for the whole question as "modelAnswer" — the ideal answer a student should give (use the expected answers if provided, otherwise generate the correct answer yourself; for multiple choice state the correct option and what it says). ` +
         `Also write a clear overall EXPLANATION (2-4 sentences) addressed to "you" that is SPECIFIC to the answer the student actually gave: explain WHY their answer was marked correct, partial or incorrect — quote or refer to what they wrote, say what they got right, what was missing or wrong, and what a full-mark answer needs. Do NOT just restate the model answer or describe the question in the abstract. ` +
         SCIENCE_COACH_INSTRUCTIONS + '\n' +
-        `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","coachIssues":[],"chosen":"B"}],"modelAnswer":"...","explanation":"..."}.\n${list}`;
+        MISTAKE_ANIMAL_RULE + '\n' +
+        `For each item also include "mistake" (the mistake type id for a wrong or partial item, or empty) and "mistakeWhy" (one sentence to the student: how THIS answer shows that habit, or empty). ` +
+        `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","coachIssues":[],"mistake":"","mistakeWhy":"","chosen":"B"}],"modelAnswer":"...","explanation":"..."}.\n${list}`;
       if (!gradingCurrent()) return null;
       let raw;
       if (input.media.length) {
@@ -33226,7 +33298,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         fb.innerHTML = inner;
       }
       _setPartResult(containerSel, 'mcq:' + m.blockId, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter);
-      _showScienceCoachFeedback(e.coachTarget, v, { kind: 'mcq' });
+      _showScienceCoachFeedback(e.coachTarget, v, { kind: 'mcq', ...(chosenLetter ? { student: _mcqChoiceLabel(m.options, chosenLetter) } : {}) });
     }
   });
 
@@ -33546,7 +33618,9 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
       `Give ONE short feedback sentence (max 22 words) addressed to the student. ` +
       `Provide the full correct answer for THIS part as "modelAnswer"${kind === 'mcq' ? ' (state the correct option number and what it says)' : ' (use the expected answer if provided, otherwise generate the correct answer yourself)'}. ` +
       SCIENCE_COACH_INSTRUCTIONS + '\n' +
-      `Return ONLY JSON: {"verdict":"correct","feedback":"...","coachIssues":[],"modelAnswer":"..."${kind === 'mcq' ? ',"chosen":"2"' : ''}}.\n${item}`;
+      MISTAKE_ANIMAL_RULE + '\n' +
+      `Also include "mistake" (the mistake type id for a wrong or partial answer, or empty) and "mistakeWhy" (one sentence to the student: how THIS answer shows that habit, or empty). ` +
+      `Return ONLY JSON: {"verdict":"correct","feedback":"...","coachIssues":[],"mistake":"","mistakeWhy":"","modelAnswer":"..."${kind === 'mcq' ? ',"chosen":"2"' : ''}}.\n${item}`;
     let raw;
     if (input.media.length) {
       raw = await askGeminiVision(prompt, input.media, { maxOutputTokens: 900, json: true });
@@ -33570,6 +33644,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
   const icon = verdict === 'correct' ? '✓' : verdict === 'partial' ? '≈' : '✗';
   const fbHead = `<span style="color:${color};font-weight:600;font-size:0.85rem;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span>` +
     `<span style="color:var(--text-muted);font-size:0.85rem;"> — ${escapeHtml(parsed.feedback || '')}</span>`;
+  let mcqChoice = '';
 
   if (kind === 'open') {
     areaEl.style.borderColor = color;
@@ -33582,6 +33657,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     _setPartResult(containerSel, 'open:' + pid, verdict, pts, model, student);
   } else {
     const chosenLetter = parsed.chosen ? _normMcqChoice(parsed.chosen) : studentLetter;
+    mcqChoice = chosenLetter ? _mcqChoiceLabel(mcq.options, chosenLetter) : '';
     _mcqPaintResult(containerSel, pid, mcq.options, chosenLetter);
     if (fbEl) {
       let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(chosenLetter)})</span>` : '');
@@ -33591,7 +33667,8 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter);
   }
   _showScienceCoachFeedback(coachTarget, parsed, { kind, label,
-    ...(kind === 'open' && !photo ? { student } : {}) });
+    ...(kind === 'open' && !photo ? { student } : {}),
+    ...(kind === 'mcq' && mcqChoice ? { student: mcqChoice } : {}) });
   _checkAllPartsMarked(containerSel);
 }
 
@@ -75305,6 +75382,19 @@ function _mkFeedQuestion(e) {
     ...(e.images || []).map(url => ({ type: 'image', url })), { type: 'studentAnswer', answer: e.studentAnswer || '' }] };
 }
 
+/* The same animated figure the 🐾 mistake analysis card wears after a marked
+   answer, drawn on the student's own practice page — so the animal a child
+   meets beside their answer is the one they meet when they drill it. The
+   art module is presentation; a failure to draw is an empty string and the
+   lesson is read without a picture, exactly as it was before. */
+function _mkFigure(id, opts) {
+  try { return String(renderMistakeAnimalAvatar(id, opts) || ''); } catch (e) { return ''; }
+}
+/* The ONE motion preference, shared with the sidekicks and the mistake card:
+   the device's toggle plus the reduced-motion media query. */
+function _mkMotion() {
+  try { scienceCoachMotion.load(); return scienceCoachMotion.allowed() ? 'on' : 'off'; } catch (e) { return 'off'; }
+}
 async function mkStudentRender() {
   const host = document.getElementById('mkStudentBody');
   if (!host) return;
@@ -75325,7 +75415,8 @@ async function mkStudentRender() {
   </div>
   <h3 class="mk-h3">Or practise one kind of mistake</h3>
   <div class="mk-animals">
-    ${MISTAKE_ANIMALS.map(m => `<div class="mk-animal">
+    ${MISTAKE_ANIMALS.map(m => `<div class="mk-animal" data-mistake="${m.id}">
+      <div class="mk-animal-figure" aria-hidden="true">${_mkFigure(m.id, { animated: false })}</div>
       <div class="mk-animal-emoji">${m.emoji}</div>
       <div class="mk-animal-name">${escapeHtml(m.animal)}</div>
       <div class="mk-animal-kind">${escapeHtml(m.name)}</div>
@@ -75397,10 +75488,14 @@ function _mkRenderSession(host) {
     html += '</div></div>';
   }
   if (answered) {
-    html += `<div class="mk-lesson ${quizMode ? (s.pick === e.animal ? 'ok' : 'no') : ''}">
+    const figure = _mkFigure(m.id);
+    html += `<div class="mk-lesson ${quizMode ? (s.pick === e.animal ? 'ok' : 'no') : ''}${figure ? ' has-figure' : ''}" data-mistake="${escapeHtml(m.id)}">
+      ${figure ? `<div class="mk-figure" data-motion="${_mkMotion()}" aria-hidden="true">${figure}</div>` : ''}
+      <div class="mk-lesson-text">
       ${quizMode ? '<div class="mk-lesson-verdict">' + (s.pick === e.animal ? '✅ Yes — ' : '✗ Not quite — it is ') + m.emoji + ' <b>' + escapeHtml(m.animal) + '</b>, ' + escapeHtml(m.name.toLowerCase()) + '.</div>' : '<div class="mk-lesson-verdict">' + m.emoji + ' <b>' + escapeHtml(m.animal) + '</b> — ' + escapeHtml(m.name) + '</div>'}
       <div class="mk-lesson-why">${escapeHtml(e.why || m.desc)}</div>
       <div class="mk-lesson-hint">Spot it next time: ${escapeHtml(e.hint || m.fix)}</div>
+      </div>
     </div>`;
     if (s.mode !== 'quiz') {
       html += `<div class="mk-fix">
