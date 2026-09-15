@@ -23,9 +23,9 @@ const ctx={profileKey:'test-profile',admin:administrator}, profile=createCollect
 if(administrator)profile.cards.luffy.copies=3;
 let state={gold:administrator?0:5000,grandLine:{profiles:{'test-profile':{collection:profile}}}};
 const offers=[{id:'spark',name:'Bronze',cost:120,odds:{1:40,2:30,3:17,4:8,5:3.5,6:1.2,7:.3}},{id:'nova',name:'Silver',cost:320,bonusOdds:{3:62,4:25,5:9,6:3,7:1}},{id:'galaxy',name:'Gold',cost:750,bonusOdds:{4:68,5:22,6:8,7:2}}];
-window.fake={legacyHost:new URLSearchParams(location.search).get('legacy')==='1',requests:[],records:[],adminCalls:[],role:administrator?'admin':'student',randomValue:0,questionIndex:0,commits:0,blockPurchase:false,failPurchaseResponseOnce:false,blockSave:false,blockAdmin:false,holdAdmin:false,failAdminResponseOnce:false,get state(){return state;}};
+window.fake={legacyHost:new URLSearchParams(location.search).get('legacy')==='1',requests:[],records:[],adminCalls:[],role:administrator?'admin':'student',randomValue:0,randomCalls:0,questionIndex:0,commits:0,blockPurchase:false,failPurchaseResponseOnce:false,blockSave:false,blockAdmin:false,holdAdmin:false,failAdminResponseOnce:false,get state(){return state;}};
 const currentContext=()=>({...ctx,admin:fake.role==='admin'});
-const economy=createGrandLineEconomy({getState:()=>state,getUser:()=>({uid:'test-user',role:fake.role}),getPacks:()=>offers,isCurrent:c=>c.profileKey===ctx.profileKey&&c.admin===(fake.role==='admin'),random:()=>fake.randomValue,commit:async next=>{state=next;fake.commits++;}});
+const economy=createGrandLineEconomy({getState:()=>state,getUser:()=>({uid:'test-user',role:fake.role}),getPacks:()=>offers,isCurrent:c=>c.profileKey===ctx.profileKey&&c.admin===(fake.role==='admin'),random:()=>{fake.randomCalls++;return fake.randomValue;},commit:async next=>{state=next;fake.commits++;}});
 const frame=document.createElement('iframe');frame.id='game';
 const controller=createGrandLineLearningController({origin:location.origin,subject:'Math',getFrame:()=>frame,getIdentity:()=> 'test-identity:'+fake.role,getProfileKey:()=>ctx.profileKey,isAllowed:()=>true,isActive:()=>true,isAdmin:()=>fake.role==='admin',makeSessionId:()=> 'test-session',getSnapshot:()=>economy.getSnapshot(currentContext()),buyPack:async d=>{if(fake.blockPurchase)throw Object.assign(Error('Test pack unavailable'),{confirmedNoCharge:true});const result=await economy.buyPack(d,currentContext());if(fake.failPurchaseResponseOnce){fake.failPurchaseResponseOnce=false;throw Error('Test purchase response interrupted');}return result;},saveCollection:d=>{if(fake.blockSave)throw Error('Test progress save failure');return economy.saveCollection(d,currentContext());},adminAction:async d=>{fake.adminCalls.push({...d});if(fake.holdAdmin)await new Promise(resolve=>{fake.releaseAdmin=()=>{fake.holdAdmin=false;resolve();};});if(fake.blockAdmin)throw Error('Test admin save unavailable');const result=await economy.adminAction(d,currentContext());if(fake.failAdminResponseOnce){fake.failAdminResponseOnce=false;throw Error('Test admin response interrupted');}return result;},getQuestions:()=>[0,1,2].map(i=>({id:'test-q-'+i,html:'<p>Test question '+(i+1)+'</p>',options:['Wrong','Correct'],answer:1})),recordAnswer:async r=>fake.records.push({correct:r.correct,round:r.round}),presentQuestions:({questions,grade})=>new Promise(resolve=>{const box=document.querySelector('#questions');fake.questionIndex=0;box.hidden=false;function draw(){box.replaceChildren();const p=document.createElement('p');p.id='question-index';p.textContent='Question '+(fake.questionIndex+1)+' of 3';box.append(p);for(let choice=0;choice<2;choice++){const b=document.createElement('button');b.dataset.answer=choice;b.textContent=choice?'Correct':'Wrong';b.onclick=async()=>{b.disabled=true;const result=await grade(fake.questionIndex,choice,1000);if(!result)return;fake.questionIndex++;if(fake.questionIndex===3){box.hidden=true;resolve(true);}else draw();};box.append(b);}}draw();})});
 window.addEventListener('message',event=>{if(event.source===frame.contentWindow){fake.requests.push(event.data);if(fake.legacyHost&&event.data?.type==='GLTCG_HELLO'){const post=frame.contentWindow.postMessage;frame.contentWindow.postMessage=function(data,...args){if(data?.type==='GLTCG_READY'){data={...data};delete data.maxPackQuantity;}return post.call(this,data,...args);};}if(fake.legacyHost&&event.data?.type==='GLTCG_BUY_REQUEST'){const data={...event.data};delete data.quantity;controller.handleMessage({origin:event.origin,source:event.source,data});return;}}controller.handleMessage(event);});
@@ -466,7 +466,7 @@ async function checkAdministratorShop() {
   for (const [id, card] of Object.entries(unlocked.cards)) assert.equal(card.copies, beforeUnlock.cards[id]?.copies || 1, id + ' preserves existing copies or receives one copy');
   assert.equal(unlocked.cards.luffy.copies, 3);
   assert.deepEqual(unlocked.stats, beforeUnlock.stats); assert.deepEqual(unlocked.team, beforeUnlock.team);
-  for (const id of ['shanks', 'blackbeard', 'bigmom', 'kizaru', 'sengoku', 'garp', 'mihawk', 'hancock']) assert.equal(unlocked.cards[id], undefined);
+  for (const id of ['shanks', 'blackbeard', 'bigmom', 'kizaru', 'sengoku', 'garp', 'mihawk', 'hancock', 'ace', 'sabo', 'law', 'king']) assert.equal(unlocked.cards[id], undefined);
   await screenshot(host, 'admin-shop-desktop');
   check('Unlock all grants only the 50 current cards, preserves duplicate ranks and crew, and safely retries an interrupted response');
 
@@ -679,8 +679,49 @@ async function checkLegacyPackCapability() {
   await host.close();check('Legacy portals allow only one pack and retain pending batches without sending them until a refreshed portal confirms batch support');
 }
 
+async function checkPaidRosterMigration() {
+  const host=await browser.newPage({viewport:{width:1440,height:1000}});observe(host);const game=await harnessGame(host,'admin');
+  const entries=[['ace','bellamy'],['sabo','gin'],['law','mr3'],['king','kuro']];
+  await host.evaluate(entries=>{
+    const profile=fake.state.grandLine.profiles['test-profile'],c=profile.collection;
+    for(const [i,[oldId,newId]]of entries.entries()){c.cards[oldId]={copies:2+i};c.cards[newId]={copies:1};}
+    c.cards.kaido={copies:1};c.cards.zoro.copies=2;c.team=[...entries.map(([id])=>id),'luffy','zoro','nami','usopp','chopper','kaido'];c.stats.packsOpened=17;
+    profile.purchases={'reserved-batch':{packId:'galaxy',quantity:5,cost:3750,at:'2026-09-14T12:00:00.000Z',grants:[...entries.map(([characterId],i)=>({characterId,copies:2+i,duplicate:true,stars:characterId==='law'?6:5})),{characterId:'zoro',copies:2,duplicate:true,stars:5}]}};
+    fake.state.gold=0;
+  },entries);
+  await game.evaluate(()=>localStorage.setItem('grand-line.v1:math:'+__grandLine.scope+':purchase',JSON.stringify({purchaseId:'reserved-batch',packId:'galaxy',quantity:5})));
+  const stored=await host.evaluate(()=>({state:JSON.stringify(fake.state),commits:fake.commits,rolls:fake.randomCalls}));
+  await Promise.all([game.waitForNavigation(),game.evaluate(()=>location.reload())]);await game.waitForFunction(()=>__grandLine.ready);
+  const migrated=await game.evaluate(()=>structuredClone(__grandLine.collection));
+  assert.deepEqual(migrated.team,[...entries.map(([,id])=>id),'luffy','zoro','nami','usopp','chopper','kaido']);
+  for(const [i,[oldId,newId]]of entries.entries()){assert.equal(migrated.cards[oldId],undefined);assert.equal(migrated.cards[newId].copies,3+i);assert.equal(await game.locator('#card-grid [data-character="'+oldId+'"]').count(),0);}
+  assert.equal(migrated.stats.packsOpened,17);assert.equal(migrated.packs,0);
+  await game.locator('[data-view="packs"]').click();await game.locator('#open-pack').click();await game.getByRole('button',{name:'Resume this purchase',exact:true}).click();await game.waitForFunction(()=>__grandLine.dialog==='reveal');
+  assert.deepEqual(await game.locator('.batch-reveal-item').evaluateAll(nodes=>nodes.map(n=>n.dataset.character)),[...entries.map(([,id])=>id),'zoro']);
+  assert.deepEqual(await game.evaluate(()=>__grandLine.collection),migrated);
+  assert.deepEqual(await host.evaluate(()=>({state:JSON.stringify(fake.state),commits:fake.commits,rolls:fake.randomCalls})),stored,'Paid historical batches migrate their reveal without a debit, random draw or save');
+  await game.getByRole('button',{name:'Back to card shop',exact:true}).click();await game.locator('#admin-unlock-all').click();await game.waitForFunction(()=>!__grandLine.adminPending&&Object.keys(__grandLine.collection.cards).length===50);
+  const all=await game.evaluate(()=>structuredClone(__grandLine.collection));assert.deepEqual(all.team,migrated.team);assert.deepEqual(all.stats,migrated.stats);
+  for(const [i,[oldId,newId]]of entries.entries()){assert.equal(all.cards[oldId],undefined);assert.equal(all.cards[newId].copies,3+i);}
+  assert.equal(await host.evaluate(()=>fake.state.gold),0);
+  await game.locator('[data-view="collection"]').click();
+  for(const [,id]of entries){await game.locator('#card-grid [data-character="'+id+'"]').click();assert.equal(await game.locator('#dialog-panel [data-character="'+id+'"]').count(),1);await game.locator('#dialog-panel .dialog-close').click();}
+  if(process.env.GRAND_LINE_REQUIRE_ART==='1'){
+    const art=await game.evaluate(async ids=>Promise.all(ids.map(async id=>{const item=__grandLine.art.load(id);await item.promise;return {id,loaded:item.loaded,failed:item.failed,bounds:item.bounds,metadata:__grandLine.art.metadata.has(id)};})),entries.map(([,id])=>id));
+    assert.ok(art.every(item=>item.loaded&&!item.failed&&item.metadata&&item.bounds?.w>30&&item.bounds?.h>30),'Every replacement has loaded original card and avatar art');
+  }
+  await game.locator('[data-view="campaign"]').click();await game.locator('#campaign-map button').first().click();
+  assert.deepEqual(await game.evaluate(()=>__grandLine.battle.allies.map(a=>a.characterId)),migrated.team);
+  await screenshot(host,'reserved-four-migrated-crew');await host.close();
+  check('Four newly reserved cards transfer paid copies, ten crew slots and historical batch reveals once; admin unlock and deployment keep only current characters');
+}
+
 async function checkGeneratedDefenseVfx() {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }); observe(page); await standalone(page);
+  const mappings=await page.evaluate(async()=>{const {getVfxSpec,PREMIUM_VFX_CHARACTERS}=await import('./grand-line-vfx.js');return {premium:PREMIUM_VFX_CHARACTERS.length,
+    skills:__grandLine.CHARACTERS.flatMap(c=>c.skills.map(skill=>({id:skill.id,premium:getVfxSpec(c.id,skill)?.premium,atlasId:getVfxSpec(c.id,skill)?.atlasId})))};});
+  assert.equal(mappings.premium,7);assert.equal(mappings.skills.length,150);assert.equal(mappings.skills.filter(s=>s.premium).length,21);
+  assert.equal(mappings.skills.filter(s=>s.atlasId==='generic').length,43*3);assert.ok(mappings.skills.every(s=>s.atlasId));
   const atlases = await page.evaluate(async () => {
     const { createDefenseVfxManager, VFX_ATLAS_SPECS } = await import('./grand-line-vfx.js');
     window.qaVfx = createDefenseVfxManager(); await qaVfx.ready; await qaVfx.preload();
@@ -705,7 +746,7 @@ async function checkGeneratedDefenseVfx() {
         source: item.image.currentSrc || item.image.src, expected: metadata?.file ? new URL('./assets/grand-line-vfx/' + metadata.file, location.href).href : null };
     });
   });
-  assert.equal(atlases.length, 9); const premiumRows = new Set();
+  assert.equal(atlases.length, 8); const premiumRows = new Set();
   for (const atlas of atlases) {
     assert.equal(atlas.loaded, true, atlas.id + ' generated VFX loads'); assert.ok(atlas.width >= 1000 && atlas.height >= 1000);
     assert.ok(atlas.expected); assert.equal(new URL(atlas.source).pathname, new URL(atlas.expected).pathname);
@@ -720,8 +761,8 @@ async function checkGeneratedDefenseVfx() {
       if (atlas.id !== 'generic') premiumRows.add(hashes.join(':'));
     }
   }
-  assert.equal(premiumRows.size, 24, 'All premium skill rows have distinct actual image content');
-  check('All 24 premium skill animations and the shared lower-star effects load 108 visible, distinct, transparent image frames');
+  assert.equal(premiumRows.size, 21, 'All premium skill rows have distinct actual image content');
+  check('All 21 premium skill animations and the shared lower-star effects load 96 visible, distinct, transparent image frames');
 
   await page.evaluate(async () => {
     const defense = await import('./grand-line-defense.js'), { createDefenseRenderer } = await import('./grand-line-defense-render.js');
@@ -729,7 +770,7 @@ async function checkGeneratedDefenseVfx() {
     const collection = JSON.parse(JSON.stringify(__grandLine.collection));
     collection.cards = Object.fromEntries(__grandLine.CHARACTERS.map(c => [c.id, { copies: 1 }])); collection.team = PREMIUM_VFX_CHARACTERS.slice(0,5);
     const b = defense.createDefense(collection, { seed: 42 }); b.supplies = 1000;
-    PREMIUM_VFX_CHARACTERS.slice(5).forEach((id,i) => defense.summonDefender(b,id,defense.DEFENSE_DEFAULT_PADS[i+5].id));
+    [...PREMIUM_VFX_CHARACTERS.slice(5),'marco'].forEach((id,i) => defense.summonDefender(b,id,defense.DEFENSE_DEFAULT_PADS[i+5].id));
     const avatars=await Promise.all(b.allies.map(ally=>__grandLine.art.load(ally.characterId).promise));
     if(avatars.some(item=>!item.loaded||item.failed))throw Error('Dense VFX screenshots require every deployed avatar to load');
     for(const [column,gap]of[[7,2],[17,10]])for(let row=0;row<13;row++)if(row!==gap){
@@ -749,14 +790,14 @@ async function checkGeneratedDefenseVfx() {
         ...geometry,geometry,start,end,x:start.x+(end.x-start.x)*phase,y:start.y+(end.y-start.y)*phase,
         age:phase,duration:1,range:actor.range,targetId:target.id,hitIds:[],actor,skill,damageTotal:0,finished:false };
     });
-    b.effects = Array.from({length:80},(_,i) => {const target=b.enemies[(i*17)%200],actor=b.allies[i%8];return {
+    b.effects = Array.from({length:80},(_,i) => {const target=b.enemies[(i*17)%200],actor=b.allies[i%b.allies.length];return {
       id:'vfx-damage-'+i,kind:'damage',sourceId:actor.id,source:{x:actor.x,y:actor.y},targetIds:[target.id],targets:[{x:target.x,y:target.y}],amount:50+i,age:0,life:1,
     };});
     for(let i=0;i<30;i++){const p=b.projectiles[i],target=b.enemies[(i*17)%200];b.effects.push({id:'vfx-impact-'+i,kind:'impact',sourceId:p.sourceId,characterId:p.characterId,
       skillId:p.skillId,attackKind:p.kind,shape:'splash',geometry:p.geometry,source:p.start,origin:p.start,center:p.end,end:p.end,
       targetIds:[target.id],targets:[{x:target.x,y:target.y}],age:0,life:.45});}
-    const law=b.allies.find(a=>a.characterId==='law');
-    for(let i=0;i<12;i++){const target=b.allies[i%8];b.effects.push({id:'vfx-support-'+i,kind:'heal',sourceId:law.id,characterId:'law',skillId:'law-1',source:{x:law.x,y:law.y},
+    const healer=b.allies.find(a=>a.characterId==='marco');
+    for(let i=0;i<12;i++){const target=b.allies[i%b.allies.length];b.effects.push({id:'vfx-support-'+i,kind:'heal',sourceId:healer.id,characterId:'marco',skillId:'marco-1',source:{x:healer.x,y:healer.y},
       targetIds:[target.id],targets:[{x:target.x,y:target.y}],age:0,life:1});}
     window.qaBattle=JSON.parse(JSON.stringify(b));
     const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};freeze(qaBattle);
@@ -1091,11 +1132,11 @@ try {
   check('A profile invalidation removes the defense and its authority to start another stage');
 
   const roster=await page.evaluate(()=>__grandLine.CHARACTERS.map(c=>c.id));
-  for(const id of ['shanks','blackbeard','bigmom','kizaru','sengoku','garp','mihawk','hancock'])assert.ok(!roster.includes(id));
-  for(const id of ['wyper','kaku','wapol','hina','paulie','donkrieg','hatchan','kalifa'])assert.ok(roster.includes(id));
+  for(const id of ['shanks','blackbeard','bigmom','kizaru','sengoku','garp','mihawk','hancock','ace','sabo','law','king'])assert.ok(!roster.includes(id));
+  for(const id of ['wyper','kaku','wapol','hina','paulie','donkrieg','hatchan','kalifa','bellamy','gin','mr3','kuro'])assert.ok(roster.includes(id));
   await page.locator('[data-view="collection"]').click();await page.locator('.roster-update summary').click();
-  assert.equal(await page.locator('#future-characters li').count(),8);
-  check('Current collection preserves all eight replacements and clearly reserves future seven-star expansions');
+  assert.equal(await page.locator('#future-characters li').count(),12);
+  check('Current collection preserves all twelve replacements and clearly reserves future seven-star expansions');
   await page.locator('[data-view="campaign"]').click();await page.locator('#campaign-map button').first().click();
   await page.locator('#defender-buttons [data-ally]').first().click();await openAbilities(page);await page.locator('#defender-skills [data-skill-preview="luffy-2"]').click();
   assert.equal(await page.locator('#defender-skills [data-skill-preview="luffy-2"]').getAttribute('aria-pressed'),'true');
@@ -1201,6 +1242,7 @@ try {
   await checkAdministratorShop();
   await checkMultiPackPurchases();
   await checkLegacyPackCapability();
+  await checkPaidRosterMigration();
   if(process.env.GRAND_LINE_REQUIRE_ART==='1')await checkGeneratedDefenseVfx();
   const production = await browser.newPage(); observe(production); await production.goto(base + '/grand-line.html'); await production.locator('#card-grid .tcg-card').first().waitFor();
   assert.equal(await production.evaluate(() => typeof window.__grandLine), 'undefined');

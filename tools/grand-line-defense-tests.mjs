@@ -95,18 +95,18 @@ test('defense starts with five unique owned defenders, nine harbors and valid ro
 });
 
 test('summons use any owned card independently of the saved five and reject duplicate, invalid, occupied or unaffordable choices', () => {
-  const collection = createCollection(); addCard(collection, 'ace'); addCard(collection, 'kaido');
+  const collection = createCollection(); addCard(collection, 'bellamy'); addCard(collection, 'kaido');
   const before = structuredClone(collection), b = createDefense(collection), empty = DEFENSE_PADS[5];
-  const cost = 20 + 5 * CHARACTERS.find(c => c.id === 'ace').stars;
-  for (const [id, pad] of [['mihawk', empty.id], ['marco', empty.id], ['__proto__', empty.id], ['ace', '__proto__'], ['ace', b.allies[0].padId]]) {
+  const cost = 20 + 5 * CHARACTERS.find(c => c.id === 'bellamy').stars;
+  for (const [id, pad] of [['mihawk', empty.id], ['marco', empty.id], ['__proto__', empty.id], ['bellamy', '__proto__'], ['bellamy', b.allies[0].padId]]) {
     assert.equal(summonDefender(b, id, pad), false);
   }
   assert.equal(b.supplies, 100); assert.equal(b.allies.length, 5);
-  assert.equal(summonDefender(b, 'ace', empty.id), true);
-  const summoned = b.allies.find(ally => ally.characterId === 'ace');
+  assert.equal(summonDefender(b, 'bellamy', empty.id), true);
+  const summoned = b.allies.find(ally => ally.characterId === 'bellamy');
   assert.ok(summoned); assert.equal(summoned.padId, empty.id); assert.equal(summoned.summonCost, cost);
   assert.equal(b.supplies, 100 - cost); assert.equal(summoned.level, 1); assert.equal(summoned.specialization, null);
-  assert.equal(summonDefender(b, 'ace', DEFENSE_PADS[6].id), false);
+  assert.equal(summonDefender(b, 'bellamy', DEFENSE_PADS[6].id), false);
   b.supplies = 0; assert.equal(summonDefender(b, 'kaido', DEFENSE_PADS[6].id), false);
   assert.equal(b.allies.length, 6); assert.deepEqual(collection, before);
   assert.equal(startDefenseWave(b), true); b.supplies = 100;
@@ -399,7 +399,7 @@ test('stun and freeze stop route movement, slow reduces speed, and poison deals 
 });
 
 test('burn immunity and once-per-voyage self-revival remain active in real-time defense', () => {
-  const immune = fixture('ace');
+  const immune = fixture('akainu');
   immune.actor.skills = []; immune.enemy.skills = [CHARACTERS.find(c => c.id === 'akainu').skills[0]];
   immune.b.allies.slice(1).forEach(unit => { unit.x = 950; unit.y = 550; }); immune.enemy.actionTimer = 0;
   castOnce(immune); assert.equal(immune.actor.statuses.some(status => status.type === 'burn'), false);
@@ -480,7 +480,7 @@ test('natural starter voyages are winnable with useful wave pacing and stronger 
     assert.ok(b.stats.damageDealt > 0 && b.stats.skillsUsed > 0 && b.stats.kills > 0);
     assert.ok(b.effects.length <= 80 && b.log.length <= 14);
   }
-  const collection = collectionWith(['kaido', 'whitebeard', 'akainu', 'law', 'marco']); collection.unlockedEncounter = 9;
+  const collection = collectionWith(['kaido', 'whitebeard', 'akainu', 'aokiji', 'marco']); collection.unlockedEncounter = 9;
   for (const id of collection.team) collection.cards[id].copies = 4;
   const { b } = voyage(collection, 9, 11);
   assert.equal(b.status, 'victory'); assert.equal(collection.unlockedEncounter, 9);

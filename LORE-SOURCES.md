@@ -17,9 +17,9 @@ Character identities, fruit families, weapons and fighting themes follow these s
 | Brook | A revived musician whose cane sword carries the chill of the underworld. | [Official source](https://one-piece.com/character/brook/index.html) |
 | Jinbe | Fish-Man Karate channels water through powerful, disciplined strikes. | [Official source](https://one-piece.com/character/index.html) |
 | Wyper | The Shandian warrior fights to reclaim his homeland; his bazooka and dangerous Reject Dial anchor his offensive abilities. | [Official source](https://one-piece.com/character/Wyper/index.html) |
-| Portgas D. Ace | Whitebeard’s fiery commander turns flame into sweeping, explosive attacks. | [Official source](https://one-piece.com/character/ace/index.html) |
-| Sabo | The Revolutionary Army’s chief of staff combines Dragon Claw martial arts with flame. | [Official source](https://one-piece.com/character/sabo/index.html) |
-| Trafalgar Law | ROOM turns the battlefield into an operating theater governed by the Op-Op Fruit. | [Official source](https://one-piece.com/character/law/index.html) |
+| Bellamy | The Spring-Spring Fruit transforms his limbs into springs; Spring Hopper anchors his ricocheting rushes. | [Official profile](https://one-piece.com/character/bellamy/index.html), [official Spring Hopper feature](https://one-piece.com/greg/o20150204_0347/index.html) |
+| Gin | Krieg's combat commander fights at close quarters with weighted iron-ball tonfa; his resolve changes after Sanji's kindness. | [Official profile](https://one-piece.com/character/Gin/index.html), [official episode 27 synopsis](https://one-piece.com/anime/27/index.html) |
+| Galdino · Mr. 3 | Wax-Wax powers produce offensive and defensive constructs; Giant Candle Set hardens wax around opponents. | [Official profile](https://one-piece.com/character/Galdino/index.html), [official Candle Set feature](https://one-piece.com/news/o20210423_12417/index.html) |
 | Eustass Kid | Magnetism assembles scrap metal into crushing mechanical weapons. | [Official source](https://one-piece.com/character/kid/index.html) |
 | Killer | Rotating Punisher blades and sonic attacks punish heavily armored targets. | [Official source](https://one-piece.com/character/killer/index.html) |
 | Kalifa | The Cipher Pol agent uses Six Powers and Bubble-Bubble Fruit soap that washes away an opponent’s strength. | [Official source](https://one-piece.com/character/Kalifa/index.html) |
@@ -41,7 +41,7 @@ Character identities, fruit families, weapons and fighting themes follow these s
 | Charlotte Katakuri | Mochi techniques and advanced Observation Haki anticipate the enemy’s next move. | [Official source](https://one-piece.com/character/Charlotte_Katakuri/index.html) |
 | Yamato | A mythical guardian wolf, freezing breath and a mighty kanabo protect Wano. | [Official source](https://one-piece.com/character/YAMATO/) |
 | Marco | Blue phoenix flames regenerate wounds and support allies. | [Official source](https://one-piece.com/character/marco/index.html) |
-| King | Lunarian flames and an ancient pteranodon form combine endurance with aerial power. | [Official source](https://one-piece.com/character/King/index.html) |
+| Captain Kuro | The former Black Cat captain is a calculating strategist; his rapid claw fighting includes Shakushi. | [Official profile](https://one-piece.com/character/Kuro/index.html), [official episode 16 synopsis](https://one-piece.com/anime/16/index.html), [official Shakushi feature](https://one-piece.com/news/o20181210_8267/index.html) |
 | Queen | A brachiosaurus cyborg equipped with lasers and dangerous engineered toxins. | [Official source](https://one-piece.com/character/Queen/index.html) |
 | Jack | An ancient mammoth form makes this Beast Pirate a relentless siege engine. | [Official source](https://one-piece.com/character/Jack/index.html) |
 | Enel | The Rumble-Rumble Fruit and Mantra turn lightning into a terrifying weapon. | [Official source](https://www.bandainamcoent.com/news/one-piece-pirate-warriors-4-special-new-dlc-adds-three-characters) |
@@ -57,7 +57,7 @@ Character identities, fruit families, weapons and fighting themes follow these s
 | Whitebeard | Edward Newgate’s bisento and Tremor-Tremor power can shake the sea itself. | [Official source](https://one-piece.com/character/edward_newgate/index.html) |
 | Admiral Akainu | Sakazuki’s magma power consumes defenses in a relentless volcanic offensive. | [Official source](https://one-piece.com/character/Sakazuki/index.html) |
 
-Version 1.1.0 keeps 50 obtainable cards. The following eight characters are reserved for future seven-star expansions, with no release dates announced. This is a game design reservation, not an official ONE PIECE announcement. Existing collection IDs migrate to the replacement shown; Kaido, Whitebeard and Akainu remain the only obtainable seven-star cards.
+The current roster keeps 50 obtainable cards. The following twelve characters are reserved for future seven-star expansions, with no release dates announced. This is a game design reservation, not an official ONE PIECE announcement. Existing collection IDs migrate to the replacement shown; Kaido, Whitebeard and Akainu remain the only obtainable seven-star cards.
 
 | Reserved future seven-star character | Current replacement | Replacement stars |
 |---|---|---|
@@ -69,7 +69,15 @@ Version 1.1.0 keeps 50 obtainable cards. The following eight characters are rese
 | Monkey D. Garp | Don Krieg | 3 |
 | Dracule Mihawk | Hatchan | 2 |
 | Boa Hancock | Kalifa | 3 |
+| Portgas D. Ace | Bellamy | 3 |
+| Sabo | Gin | 2 |
+| Trafalgar Law | Galdino · Mr. 3 | 3 |
+| King | Captain Kuro | 2 |
 
 Additional primary anchors for the replacement abilities: the official synopsis for [episode 171](https://one-piece.com/anime/171/index.html) describes Wyper’s blue-white Burn Bazooka flame, and [episode 169](https://one-piece.com/anime/169/index.html) identifies his body-straining Reject Dial strike. [Episode 232](https://one-piece.com/anime/232/index.html) identifies Paulie as the rope-and-mast specialist and describes his rope fighting. The numerical recoil penalty, barriers, damage-over-time effects, Spirit drain, evasion and other combat statistics translate these themes into this game’s shared rules.
+
+For the four newest replacements, the official Bellamy feature identifies Spring Hopper; its widening cone and momentum passive are game adaptations. Episode 27 explicitly describes Gin breaking Pearl's shield with iron-ball tonfa. His tonfa sweep, focused armor-piercing hit and defensive passive adapt that close-combat fighting without assigning him a Devil Fruit. Mr. 3's official profile explicitly supports both attack and defense with wax, and the Little Garden feature describes immobilizing Candle Set victims and his distinctive numeral-3 hairstyle. Wax shields, slows and brief stuns translate those powers into the existing rules. Episode 16 and Kuro's official game feature identify his hand blades and Shakushi slashing technique; the fast, narrow line and shorter automatic attack interval represent his footwork, not teleportation or a Devil Fruit. Attack multipliers, ranges, area shapes, stun chances and skill/passive labels beyond named canonical techniques are original balance choices.
+
+The active VFX roster contains seven premium characters with 21 dedicated ability rows and 43 characters using the shared animations. Law's archived artwork and effects do not make his reserved future card obtainable. Legacy copies, team slots and single- or multi-pack receipts resolve to the current replacement IDs without another roll or charge.
 
 Mechanics and economy: packs are purchased only through the host platform reward-point shop at its existing rates. Correct answers in three-question rounds grant recovery and attack, critical-chance and defense bonuses for the next round; no question-to-pack or free-pack economy is implemented.

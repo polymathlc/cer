@@ -1,10 +1,11 @@
 /* Original fan-game rules; names and power themes are anchored to official character profiles. */
-export const VERSION = '3.2.0';
+export const VERSION = '3.3.0';
 // Retired collection IDs migrate to these current cards; future seven-star
 // editions remain separate from the obtainable roster and pack draw pools.
 export const RETIRED_CHARACTER_REPLACEMENTS = {
   shanks: 'wyper', blackbeard: 'kaku', bigmom: 'wapol', kizaru: 'hina',
   sengoku: 'paulie', garp: 'donkrieg', mihawk: 'hatchan', hancock: 'kalifa',
+  ace: 'bellamy', sabo: 'gin', law: 'mr3', king: 'kuro',
 };
 export const FUTURE_EXPANSION_CHARACTERS = [
   { id: 'shanks', name: 'Shanks', stars: 7 },
@@ -15,6 +16,10 @@ export const FUTURE_EXPANSION_CHARACTERS = [
   { id: 'garp', name: 'Monkey D. Garp', stars: 7 },
   { id: 'mihawk', name: 'Dracule Mihawk', stars: 7 },
   { id: 'hancock', name: 'Boa Hancock', stars: 7 },
+  { id: 'ace', name: 'Portgas D. Ace', stars: 7 },
+  { id: 'sabo', name: 'Sabo', stars: 7 },
+  { id: 'law', name: 'Trafalgar Law', stars: 7 },
+  { id: 'king', name: 'King', stars: 7 },
 ];
 export const STARTER_IDS = ['luffy', 'zoro', 'nami', 'usopp', 'chopper'];
 export const PACK_ODDS = [
@@ -31,11 +36,11 @@ export const LORE_SOURCES = [
   { title: 'Yamato: mythical guardian wolf and club', url: 'https://one-piece.com/character/YAMATO/' },
   { title: 'Marco: regenerating phoenix', url: 'https://one-piece.com/character/marco/index.html' },
   { title: 'Brook: soul, music and freezing swordplay', url: 'https://one-piece.com/character/brook/index.html' },
-  { title: 'Law: surgeon and Op-Op powers', url: 'https://one-piece.com/character/law/index.html' },
+  { title: 'Galdino: wax for offense and defense', url: 'https://one-piece.com/character/Galdino/index.html' },
   { title: 'Koby: Marine training and Observation Haki', url: 'https://one-piece.com/character/Coby/index.html' },
   { title: 'Fujitora: gravity', url: 'https://one-piece.com/character/fujitora/index.html' },
   { title: 'Ryokugyu: forest power', url: 'https://one-piece.com/character/Aramaki/index.html' },
-  { title: 'Enel and King: lightning and Lunarian flame', url: 'https://www.bandainamcoent.com/news/one-piece-pirate-warriors-4-special-new-dlc-adds-three-characters' },
+  { title: 'Enel: lightning powers', url: 'https://www.bandainamcoent.com/news/one-piece-pirate-warriors-4-special-new-dlc-adds-three-characters' },
   { title: 'Wyper: Shandian warrior', url: 'https://one-piece.com/character/Wyper/index.html' },
   { title: 'Kaku: giraffe transformation and four-sword fighting', url: 'https://one-piece.com/character/Kaku/index.html' },
   { title: 'Wapol: Munch-Munch assimilation and factory', url: 'https://one-piece.com/character/Wapol/index.html' },
@@ -47,12 +52,20 @@ export const LORE_SOURCES = [
   { title: 'Wyper: Burn Bazooka', url: 'https://one-piece.com/anime/171/index.html' },
   { title: 'Wyper: Reject Dial', url: 'https://one-piece.com/anime/169/index.html' },
   { title: 'Paulie: rope fighting', url: 'https://one-piece.com/anime/232/index.html' },
+  { title: 'Bellamy: Spring-Spring Fruit', url: 'https://one-piece.com/character/bellamy/index.html' },
+  { title: 'Gin: Krieg Pirates combat commander', url: 'https://one-piece.com/character/Gin/index.html' },
+  { title: 'Kuro: Black Cat captain and strategist', url: 'https://one-piece.com/character/Kuro/index.html' },
+  { title: 'Bellamy: Spring Hopper', url: 'https://one-piece.com/greg/o20150204_0347/index.html' },
+  { title: 'Mr. 3: Candle Set and distinctive hair', url: 'https://one-piece.com/news/o20210423_12417/index.html' },
+  { title: 'Kuro: Shakushi slashing technique', url: 'https://one-piece.com/news/o20181210_8267/index.html' },
+  { title: 'Gin: iron-ball tonfa break through a shield', url: 'https://one-piece.com/anime/27/index.html' },
+  { title: 'Kuro: bladed gloves and Shakushi', url: 'https://one-piece.com/anime/16/index.html' },
 ];
 
 const E = (type, amount = 0, duration = 0, extra = {}) => ({ type, amount, duration, ...extra });
 const S = (name, target, power, kind, effects = [], cost, cooldown) => ({ name, target, power, kind, effects, cost, cooldown });
 const P = (name, type, value, description) => ({ name, type, value, description });
-const COLORS = { rubber: '#f5b45f', steel: '#a7e3c2', storm: '#e8cf6b', plant: '#8dd68e', fire: '#ff896b', medicine: '#f59cbd', bloom: '#d49ee6', machine: '#72cce6', soul: '#bfb1ff', water: '#65bdda', haki: '#f38293', ice: '#a1e6fa', magnet: '#b798ce', shell: '#a8d7e8', rope: '#d0af85', soap: '#e8b7db', sand: '#d9bd79', string: '#e991bf', smoke: '#bacbdb', light: '#f7e394', gravity: '#be9be4', dark: '#af94dd', mochi: '#debab6', dragon: '#97c5f8', poison: '#c394df', earth: '#dca986', spirit: '#bddb8b', electric: '#b1e5fc', venom: '#bb87d9', magma: '#ff7754' };
+const COLORS = { spring: '#eab26e', wax: '#f2ddb1', rubber: '#f5b45f', steel: '#a7e3c2', storm: '#e8cf6b', plant: '#8dd68e', fire: '#ff896b', medicine: '#f59cbd', bloom: '#d49ee6', machine: '#72cce6', soul: '#bfb1ff', water: '#65bdda', haki: '#f38293', ice: '#a1e6fa', magnet: '#b798ce', shell: '#a8d7e8', rope: '#d0af85', soap: '#e8b7db', sand: '#d9bd79', string: '#e991bf', smoke: '#bacbdb', light: '#f7e394', gravity: '#be9be4', dark: '#af94dd', mochi: '#debab6', dragon: '#97c5f8', poison: '#c394df', earth: '#dca986', spirit: '#bddb8b', electric: '#b1e5fc', venom: '#bb87d9', magma: '#ff7754' };
 function describeSkill(skill, index) {
   const parts = [];
   if (skill.power) parts.push(`${Math.round(skill.power * 100)}% attack damage${skill.target === 'all-enemies' ? ' to every enemy' : ''}`);
@@ -147,24 +160,24 @@ export const CHARACTERS = [
       S('Burn Bazooka', 'all-enemies', 1.1, 'fire', [E('burn', 0.2, 2)]),
       S('Reject Dial', 'enemy', 2.6, 'earth', [E('pierce'), E('weaken', 0.3, 1, { scope: 'self' })], 65),
     ]),
-  C('ace', 'Portgas D. Ace', 'Fire Fist', 5, 'Striker', 'fire', 'Whitebeard’s fiery commander turns flame into sweeping, explosive attacks.',
-    P('Living Flame', 'burn-immune', 1, 'Immune to burn damage and the burn status.'), [
-      S('Fire Gun', 'enemy', 1.0, 'fire'),
-      S('Hiken: Fire Fist', 'enemy', 1.65, 'fire', [E('burn', 0.32, 2)]),
-      S('Great Flame Commandment', 'all-enemies', 1.5, 'fire', [E('burn', 0.25, 2)]),
-    ], 'https://one-piece.com/character/ace/index.html'),
-  C('sabo', 'Sabo', 'Flame Emperor', 5, 'Striker', 'fire', 'The Revolutionary Army’s chief of staff combines Dragon Claw martial arts with flame.',
-    P('Revolutionary Resolve', 'execute', 0.22, 'Deal 22% more damage to enemies below half health.'), [
-      S('Dragon Claw', 'enemy', 1.05, 'punch'),
-      S('Dragon’s Breath', 'all-enemies', 1.1, 'earth', [E('weaken', 0.2, 2)]),
-      S('Flame Dragon King', 'enemy', 2.5, 'fire', [E('burn', 0.3, 2)]),
-    ]),
-  C('law', 'Trafalgar Law', 'Surgeon of Death', 6, 'Tactician', 'light', 'ROOM turns the battlefield into an operating theater governed by the Op-Op Fruit.',
-    P('Surgical Precision', 'pierce', 0.35, 'Ignore 35% of enemy defense.'), [
-      S('Kikoku Cut', 'enemy', 1.0, 'slash'),
-      S('ROOM: Shambles', 'ally', 0, 'heal', [E('heal', 1.8), E('cleanse'), E('shield', 0.7)]),
-      S('K-ROOM: Shock Wille', 'enemy', 2.5, 'lightning', [E('pierce'), E('weaken', 0.25, 2)]),
-    ], 'https://one-piece.com/character/law/index.html'),
+  C('bellamy', 'Bellamy', 'The Hyena', 3, 'Striker', 'spring', 'The Spring-Spring Fruit coils his limbs into springs for powerful punches and ricocheting rushes.',
+    P('Gathering Momentum', 'focus', 0.035, 'Each attack raises damage by 3.5%, up to 21% per battle.'), [
+      S('Spring Punch', 'enemy', 1.0, 'punch'),
+      S('Spring Snipe', 'enemy', 1.7, 'punch', [E('stun', 0, 1, { chance: 0.4 })]),
+      S('Spring Hopper', 'all-enemies', 1.45, 'punch', [E('weaken', 0.15, 2)]),
+    ], 'https://one-piece.com/character/bellamy/index.html'),
+  C('gin', 'Gin', 'Krieg’s Combat Commander', 2, 'Guardian', 'steel', 'The Krieg Pirates’ relentless combat commander fights at close range with two weighted iron-ball tonfa.',
+    P('Unbroken Resolve', 'low-health-defense', 0.25, 'Take 25% less direct damage while below half health.'), [
+      S('Twin Tonfa', 'enemy', 1.0, 'punch'),
+      S('Iron-Ball Crush', 'enemy', 1.7, 'punch', [E('pierce')]),
+      S('Spinning Tonfa', 'all-enemies', 1.35, 'punch', [E('stun', 0, 1, { chance: 0.35 })]),
+    ], 'https://one-piece.com/character/Gin/index.html'),
+  C('mr3', 'Galdino · Mr. 3', 'Waxwork Tactician', 3, 'Controller', 'wax', 'The Wax-Wax Fruit shapes hardened wax into weapons, protective walls and traps that immobilize enemies.',
+    P('Hardened Wax', 'shield-start', 0.12, 'Begin battle with a shield worth 12% maximum health.'), [
+      S('Wax Harpoon', 'enemy', 0.9, 'earth', [E('slow', 0.12, 1)]),
+      S('Candle Wall', 'ally', 0, 'shield', [E('shield', 1.7), E('guard', 0.15, 2)], 25),
+      S('Giant Candle Set', 'all-enemies', 1.05, 'earth', [E('slow', 0.3, 3), E('stun', 0, 1, { chance: 0.4 })]),
+    ], 'https://one-piece.com/character/Galdino/index.html'),
   C('kid', 'Eustass Kid', 'Captain of Steel', 5, 'Striker', 'magnet', 'Magnetism assembles scrap metal into crushing mechanical weapons.',
     P('Scrap Collector', 'shield-on-hit', 0.12, 'After dealing direct damage, gain a shield worth 12% of attack.'), [
       S('Metal Arm', 'enemy', 1.08, 'magnet'),
@@ -291,12 +304,12 @@ export const CHARACTERS = [
       S('Blue Flame Recovery', 'all-allies', 0, 'heal', [E('heal', 1.35), E('cleanse')], 35),
       S('Phoenix Rescue', 'fallen-ally', 0, 'revive', [E('revive', 0.5)], 60),
     ], 'https://one-piece.com/character/marco/index.html'),
-  C('king', 'King', 'The Conflagration', 5, 'Guardian', 'fire', 'Lunarian flames and an ancient pteranodon form combine endurance with aerial power.',
-    P('Lunarian Flame', 'burn-immune', 1, 'Immune to burn damage and the burn status.'), [
-      S('Imperial Wing', 'enemy', 1.08, 'slash'),
-      S('Imperial Flame', 'enemy', 1.65, 'fire', [E('burn', 0.3, 2)]),
-      S('Great Imperial Flaming Wings', 'all-enemies', 1.65, 'dragon', [E('burn', 0.22, 2)]),
-    ]),
+  C('kuro', 'Captain Kuro', 'Of a Hundred Plans', 2, 'Trickster', 'steel', 'The Black Cat Pirates’ calculating former captain combines silent footwork with long Cat Claws blades.',
+    P('Silent Footwork', 'speed', 0.18, 'Gain 18% speed, shortening the interval between automatic attacks.'), [
+      S('Cat Claws', 'enemy', 1.0, 'slash'),
+      S('Silent Step Cut', 'enemy', 1.55, 'slash', [], 25, 1),
+      S('Shakushi', 'all-enemies', 1.65, 'slash', [E('weaken', 0.18, 2)]),
+    ], 'https://one-piece.com/character/Kuro/index.html'),
   C('queen', 'Queen', 'The Plague', 5, 'Controller', 'machine', 'A brachiosaurus cyborg equipped with lasers and dangerous engineered toxins.',
     P('Mechanical Bulk', 'shield-start', 0.2, 'Begin battle with a shield worth 20% maximum health.'), [
       S('Brachio Slam', 'enemy', 1.08, 'earth'),
@@ -384,10 +397,10 @@ export const CHARACTERS = [
 ];
 
 const VERIFIED_PROFILE_SLUGS = {
-  luffy: 'luffy', zoro: 'zoro', nami: 'nami', brook: 'brook', wyper: 'Wyper', ace: 'ace', sabo: 'sabo', law: 'law', kid: 'kid', killer: 'killer',
+  luffy: 'luffy', zoro: 'zoro', nami: 'nami', brook: 'brook', wyper: 'Wyper', bellamy: 'bellamy', gin: 'Gin', mr3: 'Galdino', kid: 'kid', killer: 'killer',
   kalifa: 'Kalifa', hatchan: 'Hacchan', crocodile: 'Crocodile', doflamingo: 'doflamingo', buggy: 'Buggy', smoker: 'smoker', tashigi: 'tashigi',
   koby: 'Coby', donkrieg: 'Don_Krieg', paulie: 'Paulie', hina: 'Hina', aokiji: 'kuzan', fujitora: 'fujitora', ryokugyu: 'Aramaki',
-  kaku: 'Kaku', wapol: 'Wapol', katakuri: 'Charlotte_Katakuri', marco: 'marco', king: 'King', queen: 'Queen', jack: 'Jack',
+  kaku: 'Kaku', wapol: 'Wapol', katakuri: 'Charlotte_Katakuri', marco: 'marco', kuro: 'Kuro', queen: 'Queen', jack: 'Jack',
   lucci: 'Rob_Lucci', perona: 'Perona', bartolomeo: 'bartolomeo', bonclay: 'Bon_Clay_Mr2', carrot: 'carrot', vivi: 'Nefeltari_Vivi', arlong: 'Arlong',
   magellan: 'Magellan', kaido: 'Kaido', whitebeard: 'edward_newgate', akainu: 'Sakazuki',
 };
@@ -399,13 +412,13 @@ for (const character of CHARACTERS) {
 }
 export const CHARACTER_BY_ID = Object.assign(Object.create(null), Object.fromEntries(CHARACTERS.map(c => [c.id, c])));
 export const ENCOUNTERS = [
-  { id: 1, name: 'Orange Town', chapter: 'EAST BLUE', description: 'A small pirate crew makes a gentle first test.', enemies: ['buggy', 'tashigi', 'vivi'], scale: 0.72 },
+  { id: 1, name: 'Orange Town', chapter: 'EAST BLUE', description: 'A small pirate crew and swift claw strikes make a gentle first test.', enemies: ['buggy', 'kuro', 'vivi'], scale: 0.72 },
   { id: 2, name: 'Arlong Park', chapter: 'EAST BLUE', description: 'Break a siege of sawteeth, six swords and concealed weapons.', enemies: ['arlong', 'hatchan', 'donkrieg'], scale: 0.83 },
-  { id: 3, name: 'Alabasta Crossroads', chapter: 'PARADISE', description: 'Sandstorms and iron restraints test your support skills.', enemies: ['crocodile', 'bonclay', 'hina', 'tashigi'], scale: 0.82 },
+  { id: 3, name: 'Alabasta Crossroads', chapter: 'PARADISE', description: 'Sandstorms, wax traps and iron restraints test your support skills.', enemies: ['crocodile', 'bonclay', 'hina', 'mr3'], scale: 0.82 },
   { id: 4, name: 'Skypiea Storm', chapter: 'PARADISE', description: 'Read the initiative order to survive lightning, flame and rope snares.', enemies: ['enel', 'wyper', 'usopp', 'paulie'], scale: 0.9 },
   { id: 5, name: 'Enies Lobby', chapter: 'PARADISE', description: 'Careful healing and focused attacks overcome Six Powers and soap tricks.', enemies: ['lucci', 'kaku', 'kalifa', 'tashigi', 'franky'], scale: 0.89 },
   { id: 6, name: 'Impel Down', chapter: 'NEW WORLD', description: 'Cleanse venom and break through a scrap-armored blockade.', enemies: ['magellan', 'crocodile', 'wapol', 'queen', 'perona'], scale: 0.98 },
-  { id: 7, name: 'New World Crossfire', chapter: 'NEW WORLD', description: 'Mochi, swordplay and soap snares demand a coordinated five-card crew.', enemies: ['katakuri', 'kaku', 'kalifa', 'king', 'sabo'], scale: 1.03 },
-  { id: 8, name: 'Onigashima', chapter: 'APEX', description: 'Face the Beast and his All-Stars. Merge duplicates to strengthen your crew.', enemies: ['kaido', 'king', 'queen', 'jack', 'yamato'], scale: 1.09 },
+  { id: 7, name: 'New World Crossfire', chapter: 'NEW WORLD', description: 'Spring rushes, iron-ball tonfa and soap snares demand a coordinated crew.', enemies: ['katakuri', 'kaku', 'kalifa', 'bellamy', 'gin'], scale: 1.03 },
+  { id: 8, name: 'Onigashima', chapter: 'APEX', description: 'Face the Beast, ancient Zoans and a swift claw ambusher in this dream match. Merge duplicates to strengthen your crew.', enemies: ['kaido', 'kuro', 'queen', 'jack', 'yamato'], scale: 1.09 },
   { id: 9, name: 'Clash at Marineford', chapter: 'APEX', description: 'An original dream-match finale against tremors, magma, gravity, ice and living forests.', enemies: ['whitebeard', 'akainu', 'fujitora', 'aokiji', 'ryokugyu'], scale: 1.15 },
 ];

@@ -56,7 +56,7 @@ try {
     const initial = await open(), url = new URL(await page.locator('iframe').getAttribute('src'));
     assert.equal(initial.questionCount, 3); assert.equal(initial.available, true); assert.match(initial.profileKey, /^p[0-9a-f]{16}$/);
     assert.equal(url.searchParams.get('profile'), initial.profileKey); assert.equal(url.searchParams.get('subject'), subject.toLowerCase()); assert.ok(!url.href.includes('private-account'));
-    assert.equal(url.searchParams.get('v'), '3.2.0');
+    assert.equal(url.searchParams.get('v'), '3.3.0');
     assert.equal(await page.locator('.grand-line-portal').getAttribute('aria-label'), 'Crew Defense');
     assert.match(await page.locator('.grand-line-stage iframe').getAttribute('title'), /Crew Defense/);
     assert.match(await page.locator('.grand-line-status').textContent(), /three questions after every wave/);
@@ -183,7 +183,7 @@ try {
     const unlocked = await message('GLTCG_ADMIN_RESULT', 2); assert.equal(unlocked.action, 'unlock-all');
     assert.equal(Object.keys(unlocked.collection.cards).length, 50); assert.equal(unlocked.wallet.balance, 0);
     assert.deepEqual(unlocked.collection.team, adminReady.collection.team); assert.equal(unlocked.collection.stats.packsOpened, 3);
-    for (const id of ['shanks','blackbeard','bigmom','kizaru','sengoku','garp','mihawk','hancock']) assert.equal(unlocked.collection.cards[id], undefined);
+    for (const id of ['shanks','blackbeard','bigmom','kizaru','sengoku','garp','mihawk','hancock','ace','sabo','law','king']) assert.equal(unlocked.collection.cards[id], undefined);
     const beforeUnlockReplay = await page.evaluate(() => writes.length);
     await game.evaluate(() => send({ type: 'GLTCG_ADMIN_REQUEST', requestId: 'unlock-retry', sessionId, action: 'unlock-all' }));
     assert.deepEqual((await message('GLTCG_ADMIN_RESULT', 3)).collection.cards, unlocked.collection.cards);

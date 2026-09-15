@@ -1,30 +1,5 @@
 [
   {
-    "id": "ace",
-    "file": "ace.webp",
-    "width": 1448,
-    "height": 1086,
-    "hasAlpha": true,
-    "artRect": {
-      "x": 0,
-      "y": 0,
-      "w": 0.56353591160221,
-      "h": 1
-    },
-    "avatarRect": {
-      "x": 0.56353591160221,
-      "y": 0,
-      "w": 0.43646408839779005,
-      "h": 1
-    },
-    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of PORTGAS D. ACE from One Piece: athletic adult pirate with black hair and freckles, orange cowboy hat with blue bead emblems, red bead necklace, bare chest, black shorts, belt and black boots, fire coiling around right hand. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Blazing desert port at dusk, swirling orange flame wings, ruined stone arches and glowing embers.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with generous transparent padding. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
-    "tool": "built-in image_gen",
-    "sourceFile": "ace.png",
-    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
-    "sha256": "928d4683fe7a2dd4510bfb5b06fe6cb42b9fa3eff4e2fdafe8b5e1ceaad6140e",
-    "sourceSha256": "309cee52e20d816cefd2f0d9ae6a2dacbd84531da3c5f359eaf7e6fcce0023cf"
-  },
-  {
     "id": "akainu",
     "file": "akainu.webp",
     "width": 1448,
@@ -123,6 +98,31 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "671beda712da506474b2f8f6092f0d9983a48ae43ee8ddf85ad9f3c6858a6350",
     "sourceSha256": "867b2eff36dc5f9a2c3261e5b15fc7d2a271e7886734242038dd3c55889474cd"
+  },
+  {
+    "id": "bellamy",
+    "file": "bellamy.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5593922651933702,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5593922651933702,
+      "y": 0,
+      "w": 0.44060773480662985,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Production One Piece TCG character asset, WIDE LANDSCAPE 4:3 canvas, at least 1440 by 1080 pixels. Exactly TWO vertical panels with a clean straight boundary at the center and NO divider. LEFT HALF: full-bleed portrait-format collectible card ART ONLY, detailed painted anime realism, recognizable character, dynamic readable pose, cinematic lighting, rich atmospheric background. RIGHT HALF: matching FULL-BODY battle avatar of the SAME character, identical costume and face, facing slightly left in a clear battle-ready stance on ACTUAL ALPHA TRANSPARENCY. Entire head, feet and equipment comfortably inside right half, generous clear padding. Left scene is fully opaque; right background fully transparent, no painted checkerboard. No text, labels, typography, card frame, border, UI, watermark or extra panels. No other characters. This is a lower-tier crew card, no galaxy or gold-apex decoration. Subject: BELLAMY THE HYENA from One Piece, original Jaya-era pirate, muscular adult man, short spiky blond hair, unmistakable broad toothy grin, open pink short-sleeve pirate shirt, dark cropped trousers and boots. Spring-Spring Fruit: show one bent lower leg becoming a compressed metal-like coil spring on the LEFT art, a coiled arm winding into a bouncing punch; right avatar remains mostly humanoid, with one subtle spring forearm and both feet visible. Background only left: weathered Jaya harbor rooftops and wooden planks at bright sea-blue dusk, energetic spring-bounce motion arcs, no flame powers.",
+    "tool": "built-in image_gen",
+    "sourceFile": "bellamy.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "e36a37d8d135d156c6c3587185e63754636e4dcfc163ee0b5d83bd155dfadc06",
+    "sourceSha256": "2773fd9e15623f61bf3a22c2f097199ebe82e936d327e27c77d2b552c48a7771"
   },
   {
     "id": "bonclay",
@@ -401,6 +401,31 @@
     "sourceSha256": "5ba917655b75b716fdfc23498c4ca5de45d445dc248738327f6ac842835c12d5"
   },
   {
+    "id": "gin",
+    "file": "gin.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5331491712707183,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5331491712707183,
+      "y": 0,
+      "w": 0.46685082872928174,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Production One Piece TCG character asset, WIDE LANDSCAPE 4:3 canvas, at least 1440 by 1080 pixels. Exactly TWO vertical panels with a clean straight boundary at the center and NO divider. LEFT HALF: full-bleed portrait-format collectible card ART ONLY, detailed painted anime realism, recognizable character, dynamic readable pose, cinematic lighting, rich atmospheric background. RIGHT HALF: matching FULL-BODY battle avatar of the SAME character, identical costume and face, facing slightly left in a clear battle-ready stance on ACTUAL ALPHA TRANSPARENCY. Entire head, feet and equipment comfortably inside right half, generous clear padding. Left scene is fully opaque; right background fully transparent, no painted checkerboard. No text, labels, typography, card frame, border, UI, watermark or extra panels. No other characters. This is a lower-tier crew card, no galaxy or gold-apex decoration. Subject: GIN THE MAN-DEMON from One Piece, Krieg Pirates combat commander, lean wiry adult man, short dark hair under a blue headband, stern tired face, white jacket with red trim over a dark green shirt and loose trousers. Signature TWO METAL TONFA held one in each hand, each with a prominent heavy round iron ball at its striking end. Show a grounded tonfa fighting stance with both weapons clearly readable and uncut. Background only left: stormy sea and the worn wooden deck of the Baratie, muted teal and iron-gray palette, sparks from a heavy tonfa swing, no magic powers.",
+    "tool": "built-in image_gen",
+    "sourceFile": "gin.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "b6bf5c67aaefa4b9e9f1b1e8deff19a9767cb9acadf1a449674a90dd735eddfe",
+    "sourceSha256": "c59bfe9d8424f56a93c9bca1760752545c37a3a29e5c6bbfb8d80b725d0727ea"
+  },
+  {
     "id": "hatchan",
     "file": "hatchan.webp",
     "width": 1448,
@@ -655,31 +680,6 @@
     "sourceSha256": "edf982801f872a4cfdfe21c5b5f206843e4f76de71a44b5f16de09b69cb5548b"
   },
   {
-    "id": "king",
-    "file": "king.webp",
-    "width": 1448,
-    "height": 1086,
-    "hasAlpha": true,
-    "artRect": {
-      "x": 0,
-      "y": 0,
-      "w": 0.5,
-      "h": 1
-    },
-    "avatarRect": {
-      "x": 0.5,
-      "y": 0,
-      "w": 0.5,
-      "h": 1
-    },
-    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of KING THE WILDFIRE from One Piece: towering adult Lunarian warrior with dark skin, long silver hair, black leather armor, large black feathered wings and flame behind shoulders, massive katana. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Burning Onigashima battlements under red moon, falling ash, black wings rimmed by orange fire.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with generous transparent padding. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
-    "tool": "built-in image_gen",
-    "sourceFile": "king.png",
-    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
-    "sha256": "b272d69aa7396ac7e5fd6709ef7e80509732c405846b9a8998894abeb17a380b",
-    "sourceSha256": "302469c3990de99b44cabdbf030f211901f4992c7b71ab2e6da5ba25ce3aa70c"
-  },
-  {
     "id": "koby",
     "file": "koby.webp",
     "width": 1448,
@@ -705,29 +705,29 @@
     "sourceSha256": "ffa439c0bd388cd8cd3f18efc9ea2ec94a5b97c7e7e1186417739ec8b111ee75"
   },
   {
-    "id": "law",
-    "file": "law.webp",
+    "id": "kuro",
+    "file": "kuro.webp",
     "width": 1448,
     "height": 1086,
     "hasAlpha": true,
     "artRect": {
       "x": 0,
       "y": 0,
-      "w": 0.5455801104972375,
+      "w": 0.5,
       "h": 1
     },
     "avatarRect": {
-      "x": 0.5455801104972375,
+      "x": 0.5,
       "y": 0,
-      "w": 0.45441988950276246,
+      "w": 0.5,
       "h": 1
     },
-    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of TRAFALGAR D. WATER LAW from One Piece: slender adult swordsman with short dark facial hair, white spotted fur hat, dark long captain coat over yellow hoodie, tattooed hands and large nodachi Kikoku. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Cold moonlit submarine harbor, glowing translucent blue surgical energy sphere, floating stones and steel decks.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with generous transparent padding. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
+    "prompt": "Use case: stylized-concept. Production One Piece TCG character asset, WIDE LANDSCAPE 4:3 canvas, at least 1440 by 1080 pixels. Exactly TWO vertical panels with a clean straight boundary at the center and NO divider. LEFT HALF: full-bleed portrait-format collectible card ART ONLY, detailed painted anime realism, recognizable character, dynamic readable pose, cinematic lighting, rich atmospheric background. RIGHT HALF: matching FULL-BODY battle avatar of the SAME character, identical costume and face, facing slightly left in a clear battle-ready stance on ACTUAL ALPHA TRANSPARENCY. Entire head, feet and equipment comfortably inside right half, generous clear padding. Left scene is fully opaque; right background fully transparent, no painted checkerboard. No text, labels, typography, card frame, border, UI, watermark or extra panels. No other characters. This is a lower-tier crew card, no galaxy or gold-apex decoration. Subject: CAPTAIN KURO of One Piece, former Black Cat Pirates captain disguised as a butler, slim tall adult man with slicked-back black hair, small round spectacles, fitted black butler suit, white shirt and dark tie. Signature BLACK CAT CLAW GLOVES on both hands, each with five very long narrow silver sword-like claw blades. Both full weapons and the full body stay inside their panel. Cool calculating expression, elegant crouched high-speed slashing stance. Background only left: moonlit Syrup Village mansion garden and woodland path, dark emerald and silver-blue moonlight, clean speed streaks and narrow claw slash trails, no supernatural powers.",
     "tool": "built-in image_gen",
-    "sourceFile": "law.png",
+    "sourceFile": "kuro.png",
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
-    "sha256": "46005dc5e8a44640c0970432f6089956cbc5c92b5e13060a3c546e4991ee9627",
-    "sourceSha256": "6dff53cb10f18fa10aab841aedfd3c0c8e8609500cecc68d22a7eddd74daa209"
+    "sha256": "b629e39d902a7c4939a2c932d94667d95980c9731a653ff23756bb1fe19e5d90",
+    "sourceSha256": "dd53d6a7f5cc934d82db53ec3d0d26edff4cbf3a9e92d01a4844216259b7ea6a"
   },
   {
     "id": "lucci",
@@ -828,6 +828,31 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "7c6a8d62389671bdd23de026625533be602fef2868e18ef609698d2b86167cc3",
     "sourceSha256": "1887364ca9b0e9081cc7e40fa334f63e61ff139431a622e0053a8ac5c6a9cf0b"
+  },
+  {
+    "id": "mr3",
+    "file": "mr3.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5421270718232044,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5421270718232044,
+      "y": 0,
+      "w": 0.4578729281767956,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Production One Piece TCG character asset, WIDE LANDSCAPE 4:3 canvas, at least 1440 by 1080 pixels. Exactly TWO vertical panels with a clean straight boundary at the center and NO divider. LEFT HALF: full-bleed portrait-format collectible card ART ONLY, detailed painted anime realism, recognizable character, dynamic readable pose, cinematic lighting, rich atmospheric background. RIGHT HALF: matching FULL-BODY battle avatar of the SAME character, identical costume and face, facing slightly left in a clear battle-ready stance on ACTUAL ALPHA TRANSPARENCY. Entire head, feet and equipment comfortably inside right half, generous clear padding. Left scene is fully opaque; right background fully transparent, no painted checkerboard. No text, labels, typography, card frame, border, UI, watermark or extra panels. No other characters. This is a lower-tier crew card, no galaxy or gold-apex decoration. Subject: GALDINO, MR. 3 from One Piece, recognizable slim adult man with spectacles and distinctive tall black hairstyle curled into the shape of the numeral THREE. The shape is hair, not printed text. Classic Baroque Works-era striped shirt and trousers, sly calculating expression. Candle wax manipulation: pale ivory molten wax curling from one hand into a sturdy shield and forming short restraining wax columns around the other hand. Background only left: tropical prehistoric Little Garden jungle with giant tree roots and glowing candle wax sculptures, warm ivory with forest-green shadows. Right avatar: entire man with small solid wax shield, no large scenery, clearly transparent around body.",
+    "tool": "built-in image_gen",
+    "sourceFile": "mr3.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "fff19e40c297a2446c3a88fef8e32c42f13f5d5868f250b0f2bd7e7324bff7ce",
+    "sourceSha256": "01304df0f313cef8256407f40700057e9efd1699235cb0bb0713a894bb908201"
   },
   {
     "id": "nami",
@@ -979,31 +1004,6 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "6e43e83cca97965941b0ae98547f782e51d04e314a258fb997d6fd4cc72ef6d4",
     "sourceSha256": "d831b7605756d7f39c74af02b40b4fed3dec0efcd93d9571a19386bbe7d060c8"
-  },
-  {
-    "id": "sabo",
-    "file": "sabo.webp",
-    "width": 1448,
-    "height": 1086,
-    "hasAlpha": true,
-    "artRect": {
-      "x": 0,
-      "y": 0,
-      "w": 0.5262430939226519,
-      "h": 1
-    },
-    "avatarRect": {
-      "x": 0.5262430939226519,
-      "y": 0,
-      "w": 0.4737569060773481,
-      "h": 1
-    },
-    "prompt": "Use case: stylized-concept. Premium One Piece TCG game asset, WIDE LANDSCAPE 4:3 image, exactly TWO EQUAL VERTICAL PANELS with clean center boundary, no divider. LEFT HALF: full painted portrait-format collectible card ART ONLY of SABO from One Piece: blond adult revolutionary with scar around left eye, black top hat with blue goggles, blue coat and white cravat, black gloves and boots, long metal staff and blazing flame fist. Highly detailed premium painted anime realism, dynamic dramatic pose, face recognizable, luminous rim lighting, rich texture and depth. Revolutionary city's cobbled street at dawn with damaged tower, curling orange fire and blue-grey smoke.. RIGHT HALF: separate matching FULL-BODY character battle avatar, identical costume and face, facing slightly left, neutral strong battle stance, isolated on ACTUAL ALPHA TRANSPARENCY. Full head, feet and equipment entirely inside right half with generous transparent padding. Left art fills entire left half. Right avatar never crosses center. No text, no typography, no card border, no frame, no watermark, no checkerboard, no extra panels, no UI. Right half true transparent RGBA; left half opaque painted scene. Both depictions recognizable as same character.",
-    "tool": "built-in image_gen",
-    "sourceFile": "sabo.png",
-    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
-    "sha256": "cbd3590f6e2968f034aadadf2dcfe902a56c8ea741a08415e2dcfb5e1c3dcb32",
-    "sourceSha256": "48e4551255f9fdbb23edbcba641d1d8d9f4d14bb822712f3eeea41b255d1296a"
   },
   {
     "id": "sanji",

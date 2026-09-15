@@ -344,12 +344,13 @@ test('shield absorbs direct damage; taunt restricts single-target attacks but no
 });
 
 test('burn, poison and freeze immunities apply to the matching canonical power users', () => {
-  for (const [attacker, immuneId, status] of [['ace', 'ace', 'burn'], ['ace', 'akainu', 'burn'], ['magellan', 'magellan', 'poison'], ['aokiji', 'aokiji', 'freeze']]) {
+  for (const [attacker, immuneId, status] of [['sanji', 'akainu', 'burn'], ['akainu', 'akainu', 'burn'], ['magellan', 'magellan', 'poison'], ['aokiji', 'aokiji', 'freeze']]) {
     const b = fixture(attacker);
     const actor = getActiveUnit(b);
     const immune = b.enemies[0];
     immune.passive = CHARACTER_BY_ID[immuneId].passive;
-    act(b, actor.skills[1].id, immune.id);
+    assert.ok(actor.skills[1].effects.some(effect => effect.type === status), `${attacker} skill applies ${status}`);
+    assert.equal(act(b, actor.skills[1].id, immune.id), true);
     assert.ok(!immune.statuses.some(s => s.type === status), `${immuneId} resists ${status}`);
   }
 });
