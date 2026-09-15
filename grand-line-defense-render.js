@@ -1,6 +1,6 @@
-import { DEFENSE_PATH, DEFENSE_PADS, DEFENSE_GRID, getDefenseAttackPreview, getDefenseProfile, getMazePlacementPreview } from './grand-line-defense.js?v=3.0.1';
-import { CHARACTER_BY_ID } from './grand-line-data.js?v=3.0.1';
-import { createDefenseVfxManager, getVfxSpec } from './grand-line-vfx.js?v=3.0.1';
+import { DEFENSE_PATH, DEFENSE_PADS, DEFENSE_GRID, getDefenseAttackPreview, getDefenseProfile, getMazePlacementPreview } from './grand-line-defense.js?v=3.1.0';
+import { CHARACTER_BY_ID } from './grand-line-data.js?v=3.1.0';
+import { createDefenseVfxManager, getVfxSpec } from './grand-line-vfx.js?v=3.1.0';
 
 const WORLD_W = 1120, WORLD_H = 630, TAU = Math.PI * 2;
 const MAP_PALETTES = [
@@ -132,6 +132,7 @@ export function createDefenseRenderer(canvas, art, { vfx: suppliedVfx } = {}) {
   }
 
   function activePlacement(b, options) {
+    if (options.placementArmed === false) return null;
     const cellId = options.hoverPadId || options.selectedPadId;
     if (!cellId || b.status === 'running') return null;
     const supplied = options.placementPreview;
@@ -647,6 +648,20 @@ export function createDefenseRenderer(canvas, art, { vfx: suppliedVfx } = {}) {
     return `cell-${Math.floor((x - origin.x) / cellSize)}-${Math.floor((y - origin.y) / cellSize)}`;
   }
 
-  return { resize, draw, pickPad, getVfxStats() { return { ...vfxStats, tintCacheEntries: tintCache.size, tintCacheLimit, budget: { ...vfxStats.budget } }; },
+  function pickDefender(clientX, clientY, battle) {
+    if (destroyed || !battle?.allies?.length) return null;
+    const box = canvas.getBoundingClientRect(), s = Math.min(box.width / WORLD_W, box.height / WORLD_H);
+    if (!s || clientX < box.left || clientX >= box.right || clientY < box.top || clientY >= box.bottom) return null;
+    const x = (clientX - box.left - (box.width - WORLD_W * s) / 2) / s;
+    const y = (clientY - box.top - (box.height - WORLD_H * s) / 2) / s;
+    // Match the rendered avatar, including its body above the cell anchor.
+    for (const unit of [...battle.allies].sort((a, b) => b.y - a.y)) {
+      const bounds = art?.load(unit.characterId)?.bounds, width = bounds?.h ? 49 * bounds.w / bounds.h : 30;
+      if (Math.abs(x - unit.x) <= Math.max(15, width / 2) && y >= unit.y - 49 && y <= unit.y + 8) return unit.id;
+    }
+    return null;
+  }
+
+  return { resize, draw, pickPad, pickDefender, getVfxStats() { return { ...vfxStats, tintCacheEntries: tintCache.size, tintCacheLimit, budget: { ...vfxStats.budget } }; },
     destroy() { destroyed = true; observer?.disconnect(); animations = []; floats = []; seen.clear(); unitPositions.clear(); tintCache.clear(); preloadedIds.clear(); placementCache = null; lastPlacementPreview = null; backdrop = null; if (!suppliedVfx) vfx.destroy(); } };
 }

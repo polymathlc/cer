@@ -87,11 +87,38 @@ async function defenseState(frame) {
     enemies:__grandLine.battle.enemies.map(e=>({id:e.id,x:e.x,y:e.y,hp:e.hp}))}));
 }
 async function selectCell(frame,id) {
+  if(!await frame.locator('#keyboard-placement').evaluate(element=>element.open))await frame.locator('#keyboard-placement summary').click();
   const [,column,row]=id.split('-');
   await frame.locator('#grid-column').selectOption({value:column});
   await frame.locator('#grid-row').selectOption({value:row});
   assert.equal(await frame.locator('#selected-cell').textContent(),String.fromCharCode(65+Number(column))+(Number(row)+1),'Coordinate selectors choose the exact requested cell');
 }
+
+async function cellPoint(frame,id,{reveal=true}={}) {
+  if(reveal)await frame.locator('#map-viewport').scrollIntoViewIfNeeded();
+  const position=await frame.locator('#map-viewport').evaluate((viewport,id)=>{
+    const pad=__grandLine.DEFENSE_PADS.find(p=>p.id===id);if(!pad)throw Error('Unknown test cell '+id);
+    const canvas=viewport.querySelector('canvas'),scale=Math.min(canvas.clientWidth/1120,canvas.clientHeight/630);
+    const x=(canvas.clientWidth-1120*scale)/2+pad.x*scale,y=(canvas.clientHeight-630*scale)/2+pad.y*scale;
+    if(x<viewport.scrollLeft+10||x>viewport.scrollLeft+viewport.clientWidth-10)viewport.scrollLeft=x-viewport.clientWidth/2;
+    if(y<viewport.scrollTop+10||y>viewport.scrollTop+viewport.clientHeight-10)viewport.scrollTop=y-viewport.clientHeight/2;
+    return {x,y};
+  },id);
+  const box=await frame.locator('#battle-canvas').boundingBox();
+  return {x:box.x+position.x,y:box.y+position.y};
+}
+async function clickCell(page,frame,id) { const point=await cellPoint(frame,id);await page.mouse.click(point.x,point.y); }
+async function placementState(frame) {
+  return frame.evaluate(()=>({supplies:__grandLine.battle.supplies,revision:__grandLine.battle.routeRevision,
+    route:[...__grandLine.battle.routeCellIds],towers:__grandLine.battle.mazeTowers.map(t=>({id:t.id,cellId:t.cellId})),
+    allies:__grandLine.battle.allies.map(a=>({id:a.id,padId:a.padId}))}));
+}
+async function pointerDrag(page,from,to,{release=true}={}) {
+  await page.mouse.move(from.x,from.y);await page.mouse.down();
+  await page.mouse.move(to.x,to.y,{steps:8});if(release)await page.mouse.up();
+}
+async function center(locator) { const r=await locator.boundingBox();assert.ok(r,'Pointer source is visible');return {x:r.x+r.width/2,y:r.y+r.height/2}; }
+async function openAbilities(frame) { if(!await frame.locator('#defender-abilities').evaluate(element=>element.open))await frame.locator('#defender-abilities summary').click(); }
 
 // APEX_HOVER_REGRESSION_START
 // Focused regression for the featured fan: the interactive button itself must
@@ -166,13 +193,13 @@ async function checkMazeBuilder() {
   assert.deepEqual(await page.evaluate(()=>__grandLine.battle.route),preview.route);
   assert.ok(await page.evaluate(revision=>__grandLine.battle.routeRevision>revision,original.revision));
   assert.equal(await page.locator('#cell-apply').isDisabled(),true,'The occupied tower cell cannot be built twice');
-  await page.locator('#sell-toggle').click();await selectCell(page,'cell-12-6');
+  await clickCell(page,page,'cell-12-6');await page.locator('#tower-selection').waitFor({state:'visible'});
   assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),95,'Sale selection is only a preview');
-  await page.locator('#cell-apply').click();
+  await page.locator('#sell-selected-tower').click();
   assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),98);
   assert.deepEqual(await page.evaluate(()=>__grandLine.battle.route),original.route);
-  assert.equal(await page.evaluate(()=>__grandLine.applyCellAction()),false,'A sold tower cannot pay its refund twice');
-  check('Tower placement previews a rerouted maze before confirmation, charges five supplies once, and sale restores the route for a bounded three-supply refund');
+  assert.equal(await page.locator('#tower-selection').isHidden(),true,'A sold tower no longer exposes a refund action');
+  check('Keyboard placement previews a rerouted maze before confirmation, charges five supplies once, and contextual sale restores the route for a bounded three-supply refund');
 
   await page.locator('#build-toggle').click();
   for(let row=0;row<13;row++)if(row!==6){await selectCell(page,`cell-1-${row}`);await page.locator('#cell-apply').click();}
@@ -225,6 +252,128 @@ async function checkTenCrew() {
   assert.deepEqual(deployed.ids,ten);assert.equal(new Set(deployed.pads).size,10);assert.deepEqual(deployed.paid,Array(10).fill(0));assert.equal(deployed.supplies,100);
   await screenshot(host,'desktop-ten-crew-maze');await host.close();
   check('Ten distinct owned crew members save through the parent and reload into ten free defenders; failed saves, duplicate slots, unowned cards and an eleventh slot are rejected');
+}
+
+async function checkDirectPlacement() {
+  const page=await browser.newPage({viewport:{width:1440,height:1100}});observe(page);await standalone(page);
+  await page.locator('[data-view="campaign"]').click();await page.locator('#campaign-map button').first().click();
+  assert.equal(await page.locator('#keyboard-placement').evaluate(element=>element.open),false,'Precise keyboard placement is available without crowding the default view');
+  assert.equal(await page.locator('#move-toggle,#sell-toggle').count(),0);
+  await page.locator('#build-toggle').click();await clickCell(page,page,'cell-12-6');
+  assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),95);
+  await clickCell(page,page,'cell-13-6');
+  assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),90,'The tower palette remains armed for repeated placements, with one charge per click');
+  await clickCell(page,page,'cell-13-6');await page.locator('#tower-selection').waitFor({state:'visible'});
+  assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),90,'Selecting an existing tower cannot buy it again');
+  await page.locator('#sell-selected-tower').click();assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),93);
+
+  const drop=await cellPoint(page,'cell-14-6'),tile=await center(page.locator('#build-toggle')),beforeDrag=await placementState(page);
+  await pointerDrag(page,tile,drop,{release:false});await frames(page,3);
+  assert.deepEqual(await placementState(page),beforeDrag,'Dragging previews the tower without changing supplies or the route');
+  await page.mouse.up();await frames(page,3);
+  assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),88,'Pointer-up and its compatibility click cause exactly one five-supply placement');
+  assert.equal(await page.evaluate(()=>__grandLine.battle.mazeTowers.filter(t=>t.cellId==='cell-14-6').length),1);
+  const crew=await page.evaluate(()=>__grandLine.battle.allies.slice(0,2).map(a=>({id:a.id,padId:a.padId})));
+  let target=await cellPoint(page,'cell-4-9'),source=await center(page.locator('#defender-buttons [data-ally="'+crew[0].id+'"]'));
+  const beforeCrew=await placementState(page);await pointerDrag(page,source,target,{release:false});assert.deepEqual(await placementState(page),beforeCrew);
+  await page.mouse.up();assert.equal(await page.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).padId,crew[0].id),'cell-4-9');
+  source=await cellPoint(page,'cell-4-9');target=await cellPoint(page,'cell-10-3');
+  source.y-=35*(await page.locator('#battle-canvas').boundingBox()).width/1120;
+  assert.notEqual(await page.evaluate(p=>__grandLine.renderer.pickPad(p.x,p.y),source),'cell-4-9','The drag begins on the upper avatar body, above its grid cell');
+  const beforeCanvas=await placementState(page);await pointerDrag(page,source,target,{release:false});assert.deepEqual(await placementState(page),beforeCanvas);
+  await page.mouse.up();assert.equal(await page.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).padId,crew[0].id),'cell-10-3');
+  await clickCell(page,page,crew[1].padId);await clickCell(page,page,'cell-16-9');
+  assert.equal(await page.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).padId,crew[1].id),'cell-16-9');
+  assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),88,'Moving deployed crew from a thumbnail or the map is free');
+  check('Mouse clicks place repeated towers once, contextual sales refund once, and palette or canvas crew drags commit only on release');
+
+  await page.locator('#build-toggle').click();await page.locator('#placement-cancel').click();
+  const cancelled=await placementState(page);await clickCell(page,page,'cell-15-6');assert.deepEqual(await placementState(page),cancelled);
+  for(const reason of ['outside','escape','blur','cancel']) {
+    target=await cellPoint(page,'cell-15-6');source=await center(page.locator('#build-toggle'));
+    const before=await placementState(page);await pointerDrag(page,source,target,{release:false});
+    if(reason==='outside')await page.mouse.move(1,1,{steps:4});
+    if(reason==='escape')await page.keyboard.press('Escape');
+    if(reason==='blur')await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
+    if(reason==='cancel')await page.locator('#placement-palette').dispatchEvent('pointercancel',{pointerId:1,pointerType:'mouse',isPrimary:true,bubbles:true});
+    await page.mouse.up();await frames(page,2);assert.deepEqual(await placementState(page),before,reason+' cancels the drag without a charge or move');
+  }
+  for(const id of ['cell-0-6','cell-25-6','cell-5-1']) {
+    await page.locator('#build-toggle').click();const before=await placementState(page);await clickCell(page,page,id);assert.deepEqual(await placementState(page),before,'Blocked cells never debit supplies');
+  }
+  // Use real keyboard activation after pointer cancellation: focus remains on
+  // the canvas while arrow navigation previews and Enter commits exactly once.
+  await page.locator('#build-toggle').click();await selectCell(page,'cell-20-8');
+  await page.locator('#battle-canvas').focus();const beforeKeyboard=await placementState(page);
+  await page.keyboard.press('ArrowRight');assert.deepEqual(await placementState(page),beforeKeyboard);
+  assert.equal(await page.locator('#selected-cell').textContent(),'V9');
+  await page.keyboard.press('Escape');assert.equal(await page.locator('#cell-apply').isDisabled(),true);
+  await page.keyboard.press('Enter');assert.deepEqual(await placementState(page),beforeKeyboard,'Enter after Escape cannot apply the cancelled keyboard placement');
+  assert.equal(await page.evaluate(()=>__grandLine.applyCellAction()),false);
+  await page.locator('#build-toggle').click();await page.locator('#battle-canvas').focus();await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(()=>document.activeElement.id),'battle-canvas');
+  assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),beforeKeyboard.supplies-5);
+  check('Outside drops, Escape, focus loss, cancelled pointers and blocked cells leave the maze untouched; keyboard placement retains focus and charges once');
+
+  await page.locator('#defender-buttons [data-ally="'+crew[0].id+'"]').click();await openAbilities(page);
+  const recalled=await page.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).characterId,crew[0].id);await page.locator('#recall-defender').click();
+  await page.locator('#summon-toggle').click();await page.locator('#summon-search').fill(recalled);
+  // Scroll the whole adjacent map/palette region into view before recording
+  // the pointer coordinates. The held card remains valid through re-renders.
+  await page.locator('#keyboard-placement summary').click();
+  await page.locator('#summon-roster [data-summon="'+recalled+'"]').scrollIntoViewIfNeeded();
+  target=await cellPoint(page,'cell-23-5',{reveal:false});source=await center(page.locator('#summon-roster [data-summon="'+recalled+'"]'));
+  const beforeSummon=await placementState(page);await pointerDrag(page,source,target,{release:false});assert.deepEqual(await placementState(page),beforeSummon);
+  await page.mouse.up();await frames(page,3);
+  const summoned=await page.evaluate(id=>__grandLine.battle.allies.find(a=>a.characterId===id),recalled);
+  assert.ok(summoned);assert.equal(summoned.padId,'cell-23-5');assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),beforeSummon.supplies-summoned.summonCost);
+  assert.equal(await page.evaluate(id=>__grandLine.battle.allies.filter(a=>a.characterId===id).length,recalled),1);
+  await page.locator('#start-wave').click();await page.locator('#defense-pause').click();
+  const running=await placementState(page);source=await cellPoint(page,'cell-23-5');target=await cellPoint(page,'cell-20-3');
+  await pointerDrag(page,source,target);assert.deepEqual(await placementState(page),running,'Paused combat still forbids moving deployed defenders');
+  await clearWave(page);const learning=await placementState(page);
+  await page.locator('#battle-canvas').dispatchEvent('pointerdown',{pointerId:99,pointerType:'mouse',clientX:target.x,clientY:target.y,button:0,buttons:1,bubbles:true});
+  await page.locator('#battle-canvas').dispatchEvent('pointerup',{pointerId:99,pointerType:'mouse',clientX:target.x,clientY:target.y,button:0,buttons:0,bubbles:true});
+  assert.deepEqual(await placementState(page),learning,'The learning gate cannot be edited by forwarded canvas events');
+  await page.close();check('An owned reserve card drags into battle with one charge; running and three-question gates reject map edits');
+}
+
+async function checkTouchPlacement() {
+  const page=await browser.newPage({viewport:{width:390,height:1000},isMobile:true,hasTouch:true});observe(page);await standalone(page);
+  await page.locator('[data-view="campaign"]').tap();await page.locator('#campaign-map button').first().tap();
+  const cdp=await page.context().newCDPSession(page);
+  const point=(p,id=1)=>({x:p.x,y:p.y,id,radiusX:2,radiusY:2,force:1});
+  const touch=(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points});
+  const move=async(from,to)=>{for(let i=1;i<=8;i++)await touch('touchMove',[point({x:from.x+(to.x-from.x)*i/8,y:from.y+(to.y-from.y)*i/8})]);};
+  let target=await cellPoint(page,'cell-12-6'),source=await center(page.locator('#build-toggle'));
+  const before=await placementState(page);await touch('touchStart',[point(source)]);await move(source,target);await frames(page,2);
+  assert.deepEqual(await placementState(page),before,'A real touch drag previews without spending');
+  await touch('touchEnd',[]);await frames(page,3);assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),95);
+  assert.equal(await page.evaluate(()=>__grandLine.battle.mazeTowers.filter(t=>t.cellId==='cell-12-6').length),1,'A touch drop and synthetic click never duplicate the tower');
+  source=await cellPoint(page,'cell-2-5');target=await cellPoint(page,'cell-4-9');source.y-=35*(await page.locator('#battle-canvas').boundingBox()).width/1120;
+  const beforeCrew=await placementState(page);await touch('touchStart',[point(source)]);await move(source,target);assert.deepEqual(await placementState(page),beforeCrew);
+  await touch('touchEnd',[]);assert.equal(await page.evaluate(()=>__grandLine.battle.allies[0].padId),'cell-4-9','Touch can drag the visible upper avatar body, not only its cell anchor');
+  assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),95);
+  for(const mode of ['cancel','second-pointer']) {
+    target=await cellPoint(page,'cell-14-6');source=await center(page.locator('#build-toggle'));
+    const unchanged=await placementState(page);await touch('touchStart',[point(source)]);await move(source,target);
+    if(mode==='cancel')await touch('touchCancel',[]);
+    else {await touch('touchStart',[point(target),point({x:target.x+25,y:target.y+20},2)]);await touch('touchEnd',[]);}
+    await frames(page,3);assert.deepEqual(await placementState(page),unchanged,mode+' aborts the placement without committing either pointer');
+  }
+  if(await page.locator('#placement-cancel').isVisible())await page.locator('#placement-cancel').tap();
+  await page.locator('#map-zoom').tap();
+  target=await cellPoint(page,'cell-10-8');await page.locator('#map-viewport').evaluate(e=>{e.scrollLeft=0;});target=await cellPoint(page,'cell-10-8');
+  const beforePan=await placementState(page),scrollBefore=await page.locator('#map-viewport').evaluate(e=>e.scrollLeft);
+  source=target;target={x:source.x-70,y:source.y};await touch('touchStart',[point(source)]);await move(source,target);await touch('touchEnd',[]);
+  assert.ok(await page.locator('#map-viewport').evaluate((e,before)=>e.scrollLeft>before+30,scrollBefore),'Dragging an empty zoomed map pans instead of placing');
+  assert.deepEqual(await placementState(page),beforePan);await noOverflow(page);
+  await page.locator('#build-toggle').tap();target=await cellPoint(page,'cell-19-8');
+  await touch('touchStart',[point(target)]);await touch('touchEnd',[]);await frames(page,3);
+  assert.equal(await page.evaluate(()=>__grandLine.battle.mazeTowers.some(t=>t.cellId==='cell-19-8')),true,'An armed tap on the panned, zoomed map uses the transformed cell coordinates');
+  assert.equal(await page.evaluate(()=>__grandLine.battle.supplies),90);
+  await screenshot(page,'phone-direct-placement-zoom');await cdp.detach();await page.close();
+  check('Real touch drags charge once, cancellation and multiple fingers abort safely, and zoomed empty-map panning preserves placement coordinates');
 }
 
 async function checkAdministratorShop() {
@@ -692,7 +841,7 @@ try {
   await game.locator('#summon-roster [data-summon="'+nonteam+'"]').click();
   await selectCell(game,summonPad);
   assert.equal(await game.evaluate(()=>__grandLine.battle.supplies),100,'Selecting an owned summon and pad never spends supplies');
-  await game.locator('#summon-confirm').click();
+  await game.locator('#cell-apply').click();
   const summoned=await game.evaluate(id=>__grandLine.battle.allies.find(a=>a.characterId===id),nonteam);
   assert.ok(summoned);assert.equal(summoned.padId,summonPad);assert.equal(summoned.level,1);
   assert.equal(await game.evaluate(()=>__grandLine.battle.supplies),100-summoned.summonCost);
@@ -705,11 +854,11 @@ try {
     await game.locator('#defense-priority').selectOption(priority);
     assert.equal(await game.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).priority,summoned.id),priority);
   }
-  await game.locator('#recall-defender').click();
+  await openAbilities(game);await game.locator('#recall-defender').click();
   assert.equal(await game.evaluate(id=>__grandLine.battle.allies.some(a=>a.id===id),summoned.id),false);
   const afterRecall=await game.evaluate(()=>__grandLine.battle.supplies);
   assert.ok(afterRecall>100-summoned.summonCost&&afterRecall<=100,'Recalling returns only a bounded portion of the paid summon');
-  await game.locator('#move-toggle').click();await game.locator('#defender-buttons [data-ally="'+firstDefender.id+'"]').click();
+  await game.locator('#defender-buttons [data-ally="'+firstDefender.id+'"]').click();
   check('Six dense waves offer owned summons outside the saved crew, explicit supply spending, bounded recall and defender targeting priorities');
 
   await game.locator('#defense-speed').selectOption('1');
@@ -779,7 +928,7 @@ try {
   await game.locator('#upgrade-defender').click();
   assert.equal(await game.evaluate(()=>__grandLine.battle.trainingPoints),1);
   assert.equal(await game.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).level,firstDefender.id),3);
-  await game.locator('#specialize-reach').click();
+  await openAbilities(game);await game.locator('#specialize-reach').click();
   assert.equal(await game.evaluate(id=>__grandLine.battle.allies.find(a=>a.id===id).specialization,firstDefender.id),'reach');
   assert.ok(await game.evaluate(({id,range})=>__grandLine.battle.allies.find(a=>a.id===id).range>range,{id:firstDefender.id,range:trainingBase.range}));
   assert.equal(await game.evaluate(()=>__grandLine.specializeSelected('power')),false);
@@ -843,7 +992,7 @@ try {
   assert.equal(await page.locator('#future-characters li').count(),8);
   check('Current collection preserves all eight replacements and clearly reserves future seven-star expansions');
   await page.locator('[data-view="campaign"]').click();await page.locator('#campaign-map button').first().click();
-  await page.locator('#defender-skills [data-skill-preview="luffy-2"]').click();
+  await page.locator('#defender-buttons [data-ally]').first().click();await openAbilities(page);await page.locator('#defender-skills [data-skill-preview="luffy-2"]').click();
   assert.equal(await page.locator('#defender-skills [data-skill-preview="luffy-2"]').getAttribute('aria-pressed'),'true');
   assert.equal(await page.locator('#defender-skills [data-skill-preview="luffy-0"]').getAttribute('aria-pressed'),'false');
   await page.evaluate(()=>{const draw=__grandLine.renderer.draw;__grandLine.renderer.draw=(b,now,options)=>{window.lastPreviewSkill=options.previewSkillId;return draw(b,now,options);};});
@@ -891,7 +1040,9 @@ try {
     assert.equal(await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),originalPad);
     await mobile.locator('#cell-apply').tap();
     assert.equal(await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),lastPad.id);
+    await mobile.locator('#defender-buttons [data-ally]').first().tap();
     await selectCell(mobile,originalPad);await mobile.locator('#cell-apply').tap();
+    await mobile.locator('#defender-buttons [data-ally]').first().tap();
     await mobile.locator('#map-viewport').scrollIntoViewIfNeeded();await frames(mobile);
     const canvasBox=await mobile.locator('#battle-canvas').boundingBox();
     assert.ok(canvasBox.width<=viewport.width,'The defense canvas fits the configured viewport');
@@ -899,9 +1050,8 @@ try {
     await mobile.touchscreen.tap(canvasBox.x+(canvasBox.width-1120*scale)/2+lastPad.x*scale,
       canvasBox.y+(canvasBox.height-630*scale)/2+lastPad.y*scale);
     assert.equal(await mobile.locator('#selected-cell').textContent(),lastPad.name,'The touched cell responds at its actual fitted canvas coordinates');
-    assert.equal(await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),originalPad,'A map tap selects without accidentally moving or spending');
-    await mobile.locator('#cell-apply').tap();
-    assert.equal(await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),lastPad.id);
+    assert.equal(await mobile.evaluate(()=>__grandLine.battle.allies[0].padId),lastPad.id,'A map tap immediately moves the selected crew member once');
+    assert.equal(await mobile.evaluate(()=>__grandLine.battle.supplies),100,'Moving an existing crew member never costs supplies');
     await mobile.locator('#map-zoom').tap();assert.equal(await mobile.locator('#map-zoom').getAttribute('aria-pressed'),'true');
     await mobile.locator('#map-viewport').scrollIntoViewIfNeeded();await frames(mobile,3);
     const pan=await mobile.locator('#map-viewport').evaluate((element,pad)=>{
@@ -910,20 +1060,19 @@ try {
       return {left:element.scrollLeft,overflow:element.scrollWidth>element.clientWidth,touch:getComputedStyle(canvas).touchAction};
     },lastPad);
     assert.ok(pan.overflow&&pan.left>0,'Zoomed grid can pan horizontally without widening the page');
-    assert.ok(['auto','manipulation'].includes(pan.touch)||(pan.touch.includes('pan-x')&&pan.touch.includes('pan-y')),'Canvas permits browser panning on both axes');
     await noOverflow(mobile);
     const zoomBox=await mobile.locator('#battle-canvas').boundingBox(),zoomScale=Math.min(zoomBox.width/1120,zoomBox.height/630);
     await mobile.touchscreen.tap(zoomBox.x+lastPad.x*zoomScale,zoomBox.y+lastPad.y*zoomScale);
     assert.equal(await mobile.locator('#selected-cell').textContent(),lastPad.name,'Panned canvas touch picking preserves grid coordinates');
     await screenshot(mobile,name+'-maze-zoom');await mobile.locator('#map-zoom').tap();
     const recalled=await mobile.evaluate(()=>({id:__grandLine.battle.allies[0].id,characterId:__grandLine.battle.allies[0].characterId}));
-    await mobile.locator('#recall-defender').tap();assert.equal(await mobile.evaluate(()=>__grandLine.battle.supplies),100);
+    await openAbilities(mobile);await mobile.locator('#recall-defender').tap();assert.equal(await mobile.evaluate(()=>__grandLine.battle.supplies),100);
     await mobile.locator('#summon-toggle').tap();await mobile.locator('#summon-panel').waitFor({state:'visible'});
     await mobile.locator('#summon-search').fill(recalled.characterId);
     await mobile.locator('#summon-roster [data-summon="'+recalled.characterId+'"]').tap();
     await selectCell(mobile,lastPad.id);
     await noOverflow(mobile);await screenshot(mobile,name+'-summon-preview');
-    await mobile.locator('#summon-confirm').tap();
+    await mobile.locator('#cell-apply').tap();
     assert.equal(await mobile.evaluate(id=>__grandLine.battle.allies.find(a=>a.characterId===id)?.padId,recalled.characterId),lastPad.id);
     await mobile.locator('#defense-priority').selectOption('cluster');
     assert.equal(await mobile.evaluate(id=>__grandLine.battle.allies.find(a=>a.characterId===id).priority,recalled.characterId),'cluster');
@@ -932,15 +1081,17 @@ try {
     await mobile.locator('#map-zoom').tap();
     await mobile.locator('#start-wave').tap();await mobile.waitForFunction(()=>__grandLine.battle.status==='running');
     await mobile.locator('#defense-pause').tap();await noOverflow(mobile);await screenshot(mobile,name+'-defense-running');
-    for(const id of ['defense-pause','defense-speed','build-toggle','sell-toggle','move-toggle','summon-toggle','map-zoom','grid-column','grid-row','cell-apply'])assert.ok((await mobile.locator('#'+id).boundingBox()).height>=44,'Defense touch controls remain usable: '+id);
+    for(const id of ['defense-pause','defense-speed','build-toggle','summon-toggle','map-zoom','grid-column','grid-row','cell-apply'])assert.ok((await mobile.locator('#'+id).boundingBox()).height>=44,'Defense touch controls remain usable: '+id);
     await clearWave(mobile);await mobile.locator('#map-viewport').scrollIntoViewIfNeeded();await frames(mobile,3);
     const gate=await mobile.locator('#study-button').boundingBox(),visibleMap=await mobile.locator('#map-viewport').boundingBox();
     assert.ok(gate.x>=visibleMap.x-1&&gate.x+gate.width<=visibleMap.x+visibleMap.width+1&&gate.y>=visibleMap.y-1&&gate.y+gate.height<=visibleMap.y+visibleMap.height+1,'The three-question button stays fully reachable after a zoomed wave');
     await mobile.locator('#study-button').tap();assert.equal(await mobile.locator('.question-count').count(),1);
     await mobile.close();
   }
-  check('Collection, ten-slot crew controls, precise maze selection, confirmed placement, zoom/panning and running defense fit portrait and landscape phones');
+  check('Collection, ten-slot crews, direct map taps, keyboard placement, zoom/panning and running defense fit portrait and landscape phones');
   await checkMazeBuilder();
+  await checkDirectPlacement();
+  await checkTouchPlacement();
   await checkTenCrew();
   await checkAdministratorShop();
   if(process.env.GRAND_LINE_REQUIRE_ART==='1')await checkGeneratedDefenseVfx();

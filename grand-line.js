@@ -1,8 +1,9 @@
-import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam} from './grand-line-core.js?v=3.0.1';
-import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS} from './grand-line-data.js?v=3.0.1';
-import {createArtManager} from './grand-line-render.js?v=3.0.1';
-import {DEFENSE_GRID,DEFENSE_PADS,DEFENSE_DEFAULT_PADS,buildMazeTower,sellMazeTower,getMazePlacementPreview,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning,getDefenseProfile,getDefenseSkillProfile,getDefenseWavePreview,summonDefender,recallDefender,upgradeDefender,specializeDefender,setDefensePriority} from './grand-line-defense.js?v=3.0.1';
-import {createDefenseRenderer} from './grand-line-defense-render.js?v=3.0.1';
+import {CHARACTERS,CHARACTER_BY_ID,ENCOUNTERS,STARTER_IDS,PACK_ODDS,createCollection,normalizeCollection,statsFor,setTeam} from './grand-line-core.js?v=3.1.0';
+import {FUTURE_EXPANSION_CHARACTERS,RETIRED_CHARACTER_REPLACEMENTS} from './grand-line-data.js?v=3.1.0';
+import {createArtManager} from './grand-line-render.js?v=3.1.0';
+import {DEFENSE_GRID,DEFENSE_PADS,DEFENSE_DEFAULT_PADS,buildMazeTower,sellMazeTower,getMazePlacementPreview,DEFENSE_STAGES,createDefense,placeDefender as placeDefenseUnit,startDefenseWave,advanceDefense,completeDefenseLearning,getDefenseProfile,getDefenseSkillProfile,getDefenseWavePreview,summonDefender,recallDefender,upgradeDefender,specializeDefender,setDefensePriority} from './grand-line-defense.js?v=3.1.0';
+import {createDefenseRenderer} from './grand-line-defense-render.js?v=3.1.0';
+import {installPlacementInput} from './grand-line-placement-input.js?v=3.1.0';
 const DEFENSE_SPEEDS=[1,2,4];
 const $=id=>document.getElementById(id);
 const embedded=parent!==window,params=new URLSearchParams(location.search),origin=location.origin;
@@ -25,6 +26,7 @@ let subject=params.get('subject')?.toLowerCase()==='science'?'Science':'Math',sc
 let settings={muted:false,reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches,battleSpeed:2};
 let defensePaused=false,selectedAllyId='',selectedPadId='',selectedSummonId='',selectedPreviewSkillId='',summonMode=false,hoverPadId='',lastFrame=0,lastHud=0;
 let buildMode='crew',placementPreview=null,placementPreviewKey='',mapZoom=1;
+let placementArmed=false,selectedTowerCell='',placementNotice='',rosterOpen=false,placementInput=null;
 let view='collection',dialog='',battle=null,selectedSlot=null,busyUntil=0;
 let lastOutcome='',bannerUntil=0,bridgeRound=0,learningPending=null,savePending=null,purchasePending=null;
 let selectedPack='spark',toastTimer=0,helloTimer=0,audioContext=null,questionSession=null,initialFocus=null,unsavedLearning=false;
@@ -85,9 +87,10 @@ function go(next){
   view=next;for(const n of document.querySelectorAll('.view'))n.hidden=n.id!==`${next}-view`;
   for(const n of document.querySelectorAll('[data-view]')){if(n.dataset.view===next)n.setAttribute('aria-current','page');else n.removeAttribute('aria-current');}
   $('game-footer').hidden=next==='battle';if(next==='collection')renderCollection();if(next==='crew')renderCrew();if(next==='campaign')renderCampaign();if(next==='packs')renderPacks();
-  if(next==='battle'){renderer.resize();renderBattle();}window.scrollTo({top:0,behavior:'instant'});
+  if(next==='battle'){renderer.resize();renderBattle();$('battle-view').scrollIntoView({block:'start',behavior:'instant'});}else window.scrollTo({top:0,behavior:'instant'});
 }
 function openDialog(kind,title){
+  placementInput?.cancel();
   if(!dialog)initialFocus=document.activeElement;dialog=kind;$('dialog-layer').hidden=false;const panel=$('dialog-panel');panel.className='dialog-panel';panel.replaceChildren();const h=el('h1','',title);h.id='dialog-title';panel.append(h);
   if(kind!=='question')panel.append(button('×',closeDialog,'dialog-close'));
   requestAnimationFrame(()=>panel.querySelector('button:not(:disabled)')?.focus());return panel;
@@ -190,12 +193,12 @@ function persistCollection(){
 }
 function beginBattle(encounter){
   if(purchasePending){toast('Resume your pending purchase in the Card shop before starting a defense.');return;}if(!current()||adminPending||savePending||unsavedLearning)return;const next=createDefense(collection,{encounter,seed:uuid('defense')});if(!next){toast('Choose up to ten unlocked crew members and an available harbor.');return;}
-  battle=next;lastOutcome='';buildMode='crew';placementPreviewKey='';placementPreview=null;selectedPreviewSkillId='';selectedAllyId=next.allies[0]?.id||'';selectedPadId='';selectedSummonId='';summonMode=false;hoverPadId='';defensePaused=false;busyUntil=0;lastFrame=0;lastHud=0;learningPending=null;go('battle');sound();
+  placementInput?.cancel();battle=next;lastOutcome='';buildMode='crew';placementArmed=false;selectedTowerCell='';placementNotice='';rosterOpen=false;placementPreviewKey='';placementPreview=null;selectedPreviewSkillId='';selectedAllyId=next.allies[0]?.id||'';selectedPadId='';selectedSummonId='';summonMode=false;hoverPadId='';defensePaused=false;busyUntil=0;lastFrame=0;lastHud=0;learningPending=null;go('battle');sound();
 }
-function startWave(){if(!battle||busy()||learningPending?.waiting)return false;const result=startDefenseWave(battle);if(result){summonMode=false;buildMode='crew';placementPreviewKey='';placementPreview=null;selectedPreviewSkillId='';defensePaused=false;lastFrame=0;sound();renderBattle();}return result;}
-function selectDefender(id){if(!battle?.allies.some(u=>u.id===id))return;selectedAllyId=id;selectedPreviewSkillId='';summonMode=false;buildMode='crew';placementPreviewKey='';selectedPadId=battle.allies.find(u=>u.id===id).padId;renderBattle();}
+function startWave(){if(!battle||busy()||learningPending?.waiting)return false;placementInput?.cancel();const result=startDefenseWave(battle);if(result){clearPlacement();rosterOpen=false;selectedPreviewSkillId='';defensePaused=false;lastFrame=0;sound();renderBattle();}return result;}
+function selectDefender(id){if(!battle?.allies.some(u=>u.id===id))return;selectedAllyId=id;selectedPreviewSkillId='';selectedTowerCell='';placementNotice='';summonMode=false;buildMode='crew';placementArmed=canPrepare();placementPreviewKey='';selectedPadId=battle.allies.find(u=>u.id===id).padId;renderBattle();}
 function placeDefender(allyId,padId){if(!battle||!['setup','learning'].includes(battle.status)||busy()||learningPending)return false;const result=placeDefenseUnit(battle,allyId,padId);if(result){selectedAllyId=allyId;renderBattle();sound();}return result;}
-function canPrepare(){return !!battle&&battle.status==='setup'&&!busy()&&!learningPending&&!purchasePending;}
+function canPrepare(){return view==='battle'&&!!battle&&battle.status==='setup'&&!busy()&&!learningPending&&!purchasePending;}
 const cellLabel=id=>{const p=DEFENSE_PADS.find(c=>c.id===id);return p?String.fromCharCode(65+(p.col??p.column??Number(id.split('-')[1])))+((p.row??Number(id.split('-')[2]))+1):'Choose a cell';};
 function choosePad(padId){
   if(!battle||!DEFENSE_PADS.some(p=>p.id===padId))return false;
@@ -203,28 +206,44 @@ function choosePad(padId){
   if(battle.status==='running'){const unit=battle.allies.find(u=>u.padId===padId);if(unit)selectDefender(unit.id);}
   renderPlacement();return true;
 }
-function setBuildMode(mode){if(!canPrepare())return;buildMode=mode;summonMode=false;selectedPreviewSkillId='';placementPreviewKey='';renderPlacement();}
+function setBuildMode(mode){if(!canPrepare()||!['tower','crew','sell'].includes(mode))return;buildMode=mode;placementArmed=true;selectedTowerCell='';placementNotice='';summonMode=false;selectedPreviewSkillId='';placementPreviewKey='';renderPlacement();}
+function clearPlacement(message=''){
+  placementArmed=false;selectedTowerCell='';placementNotice=message;summonMode=false;selectedSummonId='';buildMode='crew';hoverPadId='';placementPreviewKey='';placementPreview=null;
+  $('placement-drag-ghost').hidden=true;if(battle)renderPlacement();
+}
+function cancelPlacement(){placementInput?.cancel();clearPlacement('Placement cancelled.');}
 function updatePlacementPreview(){
-  if(!battle||battle.status!=='setup'){placementPreview=null;return;}
+  if(!battle||battle.status!=='setup'||!placementArmed){placementPreview=null;return;}
   const cellId=hoverPadId||selectedPadId,kind=buildMode==='tower'?'tower':'crew';
   const key=[battle.id,battle.routeRevision,battle.supplies,cellId,kind,buildMode,summonMode,selectedAllyId].join(':');
   if(key===placementPreviewKey)return;placementPreviewKey=key;
   placementPreview=cellId?getMazePlacementPreview(battle,cellId,{kind,remove:buildMode==='sell',...(buildMode==='crew'&&!summonMode?{allyId:selectedAllyId}:{})}):null;
 }
 function applyCellAction(){
-  if(!canPrepare()||!selectedPadId)return false;
+  if(!canPrepare()||!placementArmed||!selectedPadId)return false;
   const id=selectedPadId;let ok=false;
   if(buildMode==='tower')ok=buildMazeTower(battle,id);
   else if(buildMode==='sell')ok=sellMazeTower(battle,id);
   else if(summonMode)return summonCharacter();
   else ok=placeDefenseUnit(battle,selectedAllyId,id);
-  if(ok){placementPreviewKey='';sound();renderBattle();}else{const preview=getMazePlacementPreview(battle,id,{kind:buildMode==='tower'?'tower':'crew',remove:buildMode==='sell',...(buildMode==='crew'&&!summonMode?{allyId:selectedAllyId}:{})});toast(preview?.reason||'That placement is unavailable. Keep an open route to the exit.');}return ok;
+  if(ok){placementNotice=buildMode==='tower'?'Tower built at '+cellLabel(id)+'. Click another cell to build again.':buildMode==='sell'?'Tower sold. 3 supplies returned.':'Crew moved to '+cellLabel(id)+'.';if(buildMode!=='tower')placementArmed=false;selectedTowerCell='';hoverPadId='';placementPreviewKey='';sound();renderBattle();}else{const preview=getMazePlacementPreview(battle,id,{kind:buildMode==='tower'?'tower':'crew',remove:buildMode==='sell',...(buildMode==='crew'&&!summonMode?{allyId:selectedAllyId}:{})});placementNotice=preview?.reason||'That placement is unavailable. Keep an open route to the exit.';toast(placementNotice);renderPlacement();}return ok;
 }
-function selectSummon(id){if(!canPrepare()||!collection.cards[id]?.copies)return false;buildMode='crew';summonMode=true;selectedSummonId=id;placementPreviewKey='';renderPlacement();return true;}
+function selectSummon(id){if(!canPrepare()||!collection.cards[id]?.copies)return false;buildMode='crew';summonMode=true;placementArmed=true;selectedTowerCell='';placementNotice='';selectedSummonId=id;placementPreviewKey='';renderPlacement();return true;}
 function summonCharacter(id=selectedSummonId,padId=selectedPadId){
   if(!canPrepare())return false;const ok=summonDefender(battle,id,padId);
-  if(ok){selectedAllyId=battle.allies.find(u=>u.characterId===id).id;summonMode=false;selectedSummonId='';selectedPadId=padId;toast(displayName(CHARACTER_BY_ID[id])+' joins the defense.');sound();renderBattle();}return ok;
+  if(ok){selectedAllyId=battle.allies.find(u=>u.characterId===id).id;summonMode=false;placementArmed=false;selectedSummonId='';selectedPadId=padId;hoverPadId='';placementNotice=displayName(CHARACTER_BY_ID[id])+' joins the defense.';toast(placementNotice);sound();renderBattle();}else{placementNotice=getMazePlacementPreview(battle,padId,{kind:'crew'})?.reason||'Choose an owned character, an open cell, and enough supplies.';toast(placementNotice);renderPlacement();}return ok;
 }
+function selectedPlacementItem(){return !placementArmed?null:buildMode==='tower'?{kind:'tower'}:summonMode?{kind:'summon',characterId:selectedSummonId}:{kind:'crew',allyId:selectedAllyId,characterId:battle?.allies.find(u=>u.id===selectedAllyId)?.characterId};}
+function selectPlacementItem(item){if(!item)return;if(item.kind==='tower')setBuildMode('tower');else if(item.kind==='crew')selectDefender(item.allyId);else if(item.kind==='summon')selectSummon(item.characterId);}
+function dropPlacementItem(item,cellId){if(!canPrepare()||!item||!cellId)return false;selectPlacementItem(item);choosePad(cellId);return applyCellAction();}
+function clickBattleCell(cellId,point){
+  if(!battle||!current()||dialog)return;
+  const hit=point&&renderer.pickDefender(point.clientX,point.clientY,battle),unit=battle.allies.find(u=>hit?u.id===hit:u.padId===cellId);if(unit){selectDefender(unit.id);return;}
+  const tower=battle.mazeTowers?.find(t=>t.cellId===cellId);
+  if(tower){placementArmed=false;summonMode=false;selectedTowerCell=cellId;selectedPadId=cellId;hoverPadId='';placementNotice='Maze tower at '+cellLabel(cellId)+'.';placementPreviewKey='';renderPlacement();return;}
+  selectedTowerCell='';choosePad(cellId);if(canPrepare()&&placementArmed)applyCellAction();else renderPlacement();
+}
+function sellSelectedTower(){if(!canPrepare()||!selectedTowerCell)return false;const ok=sellMazeTower(battle,selectedTowerCell);if(ok){clearPlacement('Tower sold. 3 supplies returned.');sound();renderBattle();}return ok;}
 function recallSelected(){if(!canPrepare())return false;const ok=recallDefender(battle,selectedAllyId);if(ok){selectedAllyId=battle.allies[0]?.id||'';selectedPadId='';renderBattle();}return ok;}
 function upgradeSelected(){if(!canPrepare())return false;const ok=upgradeDefender(battle,selectedAllyId);if(ok){sound('reveal');renderBattle();}return ok;}
 function specializeSelected(branch){if(!canPrepare())return false;const ok=specializeDefender(battle,selectedAllyId,branch);if(ok){sound('reveal');renderBattle();}return ok;}
@@ -235,7 +254,7 @@ function renderBattle(){
   if(waiting&&mapZoom!==1)setMapZoom(1);
   $('battle-chapter').textContent=`CREW DEFENSE · HARBOR ${e.id}`;$('battle-title').textContent=e.name;$('round-label').textContent=`Wave ${b.round} / ${b.waveCount}`;
   $('defense-state').textContent=locked?'SAVING / STUDYING':setup?'BUILD YOUR DEFENSE':waiting?'WAVE COMPLETE':b.status==='running'?defensePaused?'DEFENSE PAUSED':`DEFENDING · ${settings.battleSpeed}×`:'DEFENSE COMPLETE';
-  $('defense-description').textContent=setup?'Scout the wave. Summon from your collection, line up your attacks, and spend training points before starting.':waiting?'The battlefield is paused for three questions.':defensePaused?'Take a breather. Resume when you are ready.':'Your defenders attack automatically. Change target priority to catch runners, focus armor, or punish a cluster.';
+  $('defense-description').textContent=setup?'Click a tile, then a grid square — or drag it into place.':waiting?'The battlefield is paused for three questions.':defensePaused?'Take a breather. Resume when you are ready.':'Your crew attacks automatically. Select a hero to adjust their targeting.';
   $('start-wave').hidden=!setup;$('start-wave').textContent=`Start wave ${b.round} →`;$('start-wave').disabled=locked||!!dialog||!b.allies.length;
   $('defense-pause').hidden=setup||waiting||['victory','defeat'].includes(b.status);$('defense-pause').disabled=locked;$('defense-pause').textContent=defensePaused?'Resume defense':'Pause defense';$('defense-pause').setAttribute('aria-pressed',String(defensePaused));$('defense-speed').value=String(settings.battleSpeed);$('defense-speed').disabled=locked;
   $('ship-health').textContent=`${Math.max(0,Math.ceil(b.ship.hp))} / ${b.ship.maxHp}`;$('ship-meter').value=b.ship.hp;$('ship-meter').max=b.ship.maxHp;
@@ -261,26 +280,33 @@ function renderWavePreview(){
   $('wave-preview-types').replaceChildren(...(Array.isArray(rows)?rows:Object.entries(rows).map(([type,count])=>({type,count}))).map(r=>{const n=el('span','enemy-type');n.append(el('strong','',String(r.count??r.amount??'')),document.createTextNode(r.label||r.name||r.type||''));return n;}));
 }
 function renderPlacement(){
-  if(!battle)return;const b=battle,setup=b.status==='setup',locked=!setup||!!savePending||!!adminPending||!!learningPending||unsavedLearning||!current()||!!dialog;
+  if(!battle)return;const b=battle,setup=b.status==='setup',locked=!setup||!!savePending||!!adminPending||!!learningPending||!!purchasePending||unsavedLearning||!current()||!!dialog;
+  placementInput?.refresh();
   $('battle-supplies').textContent=format(b.supplies);$('training-points').textContent=format(b.trainingPoints);$('deployed-count').textContent=b.allies.length+' / 10';
   const rosterKey=b.id+':'+b.allies.map(u=>u.id).join(',');
   if($('defender-buttons').dataset.battle!==rosterKey){$('defender-buttons').dataset.battle=rosterKey;$('defender-buttons').replaceChildren(...b.allies.map(u=>{const c=CHARACTER_BY_ID[u.characterId],n=button('',()=>selectDefender(u.id),'defender-chip');n.dataset.ally=u.id;const face=el('span','defender-face card-art');art.attach(face,c.id,true);n.append(face,el('strong','',displayName(c)),el('small'),el('progress'));return n;}));}
-  for(const n of $('defender-buttons').children){const u=b.allies.find(u=>u.id===n.dataset.ally);n.setAttribute('aria-pressed',String(!summonMode&&u.id===selectedAllyId));n.querySelector('small').textContent='Lv '+(u.level||1)+' · '+cellLabel(u.padId)+' · '+Math.ceil(u.hp)+' HP';const meter=n.querySelector('progress');meter.value=u.hp;meter.max=u.maxHp;}
+  for(const n of $('defender-buttons').children){const u=b.allies.find(u=>u.id===n.dataset.ally);n.setAttribute('aria-pressed',String(!summonMode&&buildMode==='crew'&&u.id===selectedAllyId&&!!selectedPadId&&!selectedTowerCell));n.setAttribute('aria-label',displayName(CHARACTER_BY_ID[u.characterId])+', level '+(u.level||1)+'. '+(setup?'Drag to move, or select and click a grid square.':'Select to view targeting.'));n.querySelector('small').textContent='Lv '+(u.level||1)+' · '+cellLabel(u.padId);const meter=n.querySelector('progress');meter.value=u.hp;meter.max=u.maxHp;}
   let selected=b.allies.find(u=>u.id===selectedAllyId)||b.allies[0];if(selected)selectedAllyId=selected.id;
   updatePlacementPreview();const selectedPreview=selectedPadId?getSelectedPlacementPreview():null;
-  for(const [id,active]of[['move-toggle',buildMode==='crew'&&!summonMode],['summon-toggle',summonMode],['build-toggle',buildMode==='tower'],['sell-toggle',buildMode==='sell']]){$(id).setAttribute('aria-pressed',String(active));$(id).disabled=id==='move-toggle'?false:locked;}
-  $('summon-panel').hidden=!summonMode;
+  $('build-toggle').setAttribute('aria-pressed',String(placementArmed&&buildMode==='tower'));$('build-toggle').disabled=locked||b.supplies<5;
+  $('summon-toggle').setAttribute('aria-expanded',String(rosterOpen));$('summon-toggle').setAttribute('aria-pressed',String(rosterOpen));$('summon-toggle').disabled=locked;
+  $('summon-panel').hidden=!rosterOpen;
+  $('placement-cancel').hidden=!placementArmed;
+  $('tower-selection').hidden=!selectedTowerCell;$('sell-selected-tower').disabled=locked;
   $('maze-tower-count').textContent=(b.mazeTowers?.length||0)+' / 80 towers';
   $('route-length').textContent=Math.round((b.routeLength||0)/DEFENSE_GRID.cellSize)+' cells to exit';
   $('selected-cell').textContent=cellLabel(selectedPadId);
-  $('cell-feedback').textContent=selectedPreview?.reason||(selectedPadId?'Ready to place.':'Tap a cell on the map or use the grid controls.');
+  $('cell-feedback').textContent=selectedPreview?.reason||(selectedPadId?'Ready to place.':'Choose a column and row.');
   $('cell-feedback').dataset.valid=String(selectedPreview?.valid!==false);
   $('cell-apply').textContent=buildMode==='tower'?'Build here · 5 supplies':buildMode==='sell'?'Sell here · +3 supplies':summonMode?'Summon here':'Move crew here';
-  $('cell-apply').disabled=locked||!selectedPadId||!selectedPreview?.valid||(summonMode&&!selectedSummonId);
+  $('cell-apply').disabled=locked||!placementArmed||!selectedPadId||!selectedPreview?.valid||(summonMode&&!selectedSummonId);
   const selectedCell=DEFENSE_PADS.find(p=>p.id===selectedPadId);if(selectedCell){$('grid-column').value=String(selectedCell.col??selectedCell.column??Number(selectedPadId.split('-')[1]));$('grid-row').value=String(selectedCell.row??Number(selectedPadId.split('-')[2]));}
-  $('placement-hint').textContent=!setup?'Building pauses during combat. Select a crew member to change targeting.':buildMode==='tower'?'Build small towers for 5 supplies. Shape the path into chokepoints beside your splash heroes.':buildMode==='sell'?'Sell a basic tower for 3 supplies to reopen or reshape a passage.':summonMode?'Select an owned character and an empty grid cell, then summon.':'Select a crew member, choose a cell, then Move crew here. Crew also blocks the route.';
-  if(summonMode)renderSummons(locked);
-  const detail=document.querySelector('.defender-detail');detail.hidden=!selected||summonMode||buildMode!=='crew';if(!selected)return;
+  $('placement-hint').textContent=!setup?'Your crew defends automatically. Rearrange your maze between waves.':placementArmed&&buildMode==='tower'?'Click grid squares to build · 5 supplies each · Escape to cancel':summonMode?'Drag the chosen character onto the grid, or click an empty square.':placementArmed?'Drag your crew on the map, or click an empty square to move.':'Click a tower or crew tile, then a grid square — or drag it into place.';
+  $('placement-feedback').textContent=placementInput?.dragging?(hoverPadId?placementPreview?.reason||'Release to place at '+cellLabel(hoverPadId)+'.':'Release outside the grid to cancel.'):placementNotice||(!setup?'Placement is available between waves.':placementArmed?'Green cells are valid. Keep a path to the exit.':'Select a placed tower to sell it.');
+  $('placement-feedback').dataset.valid=String(!placementInput?.dragging||!!placementPreview?.valid);
+  if($('placement-supplies'))$('placement-supplies').textContent=format(b.supplies);
+  if(rosterOpen)renderSummons(locked);
+  const detail=document.querySelector('.defender-detail');detail.hidden=!selected||!selectedPadId||!!selectedTowerCell||summonMode||buildMode!=='crew';if(!selected)return;
   const c=CHARACTER_BY_ID[selected.characterId],p=getDefenseProfile(c.id),level=selected.level||1;
   $('defender-name').textContent=displayName(c)+' · Level '+level;$('defender-role').textContent=(p.label||PATTERN_LABELS[profilePattern(p)]||c.role).toUpperCase()+' · RANGE '+Math.round(selected.range);
   $('defender-pattern').textContent=profileText(p);$('defender-passive').textContent=c.passive.name+' · '+passiveDescription(c.passive);
@@ -305,7 +331,7 @@ function renderSummons(locked){
   const c=CHARACTER_BY_ID[selectedSummonId],pad=DEFENSE_PADS.find(p=>p.id===selectedPadId),occupied=b.allies.some(u=>u.padId===selectedPadId),cost=c?20+5*c.stars:0,preview=pad?getMazePlacementPreview(b,pad.id,{kind:'crew'}):null;
   $('summon-choice').textContent=c?(displayName(c)+' · '+(profileText(getDefenseProfile(c.id)))+' '+(pad?(occupied?'That position is occupied. Choose an empty spot.':cellLabel(pad.id)):'Choose an empty grid cell.')):rows.length?'Select an unlocked character to see their attack style.':'No owned characters match. Open packs to expand your options.';
   $('summon-confirm').textContent=c?'Summon '+displayName(c)+' · '+cost+' supplies':'Choose a character and cell';$('summon-confirm').disabled=locked||!c||!pad||occupied||b.supplies<cost||b.allies.some(u=>u.characterId===selectedSummonId)||b.allies.length>=10||!preview?.valid;
-  $('cell-apply').disabled=$('summon-confirm').disabled;
+  if(summonMode)$('cell-apply').disabled=!placementArmed||$('summon-confirm').disabled;
 }
 function retreat(after){if(learningPending?.waiting||savePending||unsavedLearning){toast('Finish the current questions and save before leaving the defense.');return;}if(!battle){after?.();return;}if(['victory','defeat'].includes(battle.status)){battle=null;after?.();return;}const panel=openDialog('retreat','Leave this defense?');panel.append(el('p','', 'This defense will end. Your cards and completed question records are retained. Finish all six waves and their questions to open the next harbor.'));const actions=el('div','dialog-actions');actions.append(button('Keep defending',closeDialog,'gold-button'),button('Retreat',()=>{learningPending=null;questionSession=null;closeDialog();battle=null;go('campaign');after?.();}));panel.append(actions);}
 function ending(){if(!battle)return;const win=battle.status==='victory',panel=openDialog('ending',win?'The harbor is safe.':'Regroup. Return stronger.');panel.classList.add('battle-result');panel.insertBefore(el('p','eyebrow',win?'DEFENSE COMPLETE':'CREW DEFENSE'),panel.firstChild);panel.append(el('p','',win?(battle.encounter.id===9?'Your crew protected every harbor. Replay a defense with a new crew or formation.':'Your crew held the route. A new harbor is ready to defend.'):'Move attackers near bends in the route, cover them with a healer, and strengthen the next wave with correct answers.'));
@@ -340,7 +366,7 @@ function previewQuestion(){
 function help(){
   const panel=openDialog('settings','Build. Summon. Defend.');panel.append(el('p','', 'Collect fifty One Piece characters and deploy up to ten matching avatars on the maze grid. Build cheap towers to steer enemies through their attacks on the way from the left entrance to the right exit.'));
   const options=el('div','settings-options');for(const [key,label]of[['muted','Mute sound'],['reducedMotion','Reduce animation']]){const n=el('label'),input=el('input');input.type='checkbox';input.checked=settings[key];input.onchange=()=>{settings[key]=input.checked;settingsUI();savePreferences();};n.append(input,document.createTextNode(label));options.append(n);}panel.append(options);
-  const rules=el('ol','rules-list');for(const text of ['Choose up to ten free starting defenders in My crew. Summon any other owned card onto an empty position using battle supplies. Each character can be deployed once, up to ten at a time.','Build a maze with cheap 5-supply towers. Tap a square cell, then Build here. Towers and crew block the route; the preview shows the new path and sealed paths are rejected. Place splash heroes beside chokepoints. Sell towers for 3 supplies between waves.','Start a wave and watch the crew defend automatically. Line, cone, surrounding area, splash, and chain attacks hit different groups. Target First, Strongest, or Cluster; healers, shields, freezing, poison, and character passives support the crew. Enemies reaching the ship damage its life.','Each harbor has six waves. After every wave, including the last or a defeat, answer exactly three Math or Science questions. Spend your training points to level up defenders, choose Power or Reach at level 3, and summon reinforcements before starting the next wave.','Each correct answer gives the next wave +10% attack, +5 percentage points critical chance, and +8% defense. Three correct answers give +30%, +15 percentage points, and +24%. Boosts refresh and do not stack between waves.','Pause any time; choose 1×, 2×, or 4× speed. Keyboard: 1–9 and 0 select a defender and Space starts or pauses a wave. Focus the map and use arrow keys to select a cell, then Enter to apply the selected build tool. Grid column and row controls provide precise phone placement.','Packs cost your platform’s existing reward points at its current TCG rates. Every pack contains exactly one card. Duplicate copies merge at 2, 4, 8, 16… copies up to rank 10, adding 12% base life, attack, and defense per rank.','The current seven-star cards are Kaido the Beast, Whitebeard, and Admiral Akainu. Eight reserved legends, including Sengoku, remain unavailable until future expansions.','Gameplay pauses in hidden tabs, menus, questions, and pending saves. There are no offline rewards. Previously unlocked harbors, cards, and pack receipts carry over.'])rules.append(el('li','',text));panel.append(rules);panel.append(button('Ready to defend',closeDialog,'gold-button'));
+  const rules=el('ol','rules-list');for(const text of ['Choose up to ten free starting defenders in My crew. Summon any other owned card onto an empty position using battle supplies. Each character can be deployed once, up to ten at a time.','Build a maze with cheap 5-supply towers. Select the Maze tower tile and click grid squares to build, or drag the tile onto the map. Towers and crew block the route; the preview shows the new path and sealed paths are rejected. Place splash heroes beside chokepoints. Select a placed tower to sell it for 3 supplies between waves. Drag a crew member from their tile or their map avatar to reposition them, or select them and click a destination.','Start a wave and watch the crew defend automatically. Line, cone, surrounding area, splash, and chain attacks hit different groups. Target First, Strongest, or Cluster; healers, shields, freezing, poison, and character passives support the crew. Enemies reaching the ship damage its life.','Each harbor has six waves. After every wave, including the last or a defeat, answer exactly three Math or Science questions. Spend your training points to level up defenders, choose Power or Reach at level 3, and summon reinforcements before starting the next wave.','Each correct answer gives the next wave +10% attack, +5 percentage points critical chance, and +8% defense. Three correct answers give +30%, +15 percentage points, and +24%. Boosts refresh and do not stack between waves.','Pause any time; choose 1×, 2×, or 4× speed. Keyboard: 1–9 and 0 select a defender and Space starts or pauses a wave. Focus the map and use arrow keys to select a cell, then Enter to place your selection. Escape cancels placement. Open Keyboard placement for precise column and row controls. On touch screens, drag empty map space to pan while zoomed.','Packs cost your platform’s existing reward points at its current TCG rates. Every pack contains exactly one card. Duplicate copies merge at 2, 4, 8, 16… copies up to rank 10, adding 12% base life, attack, and defense per rank.','The current seven-star cards are Kaido the Beast, Whitebeard, and Admiral Akainu. Eight reserved legends, including Sengoku, remain unavailable until future expansions.','Gameplay pauses in hidden tabs, menus, questions, and pending saves. There are no offline rewards. Previously unlocked harbors, cards, and pack receipts carry over.'])rules.append(el('li','',text));panel.append(rules);panel.append(button('Ready to defend',closeDialog,'gold-button'));
 }
 function hello(){if(!embedded)return;clearTimeout(helloTimer);helloId=uuid('hello');post({type:'GLTCG_HELLO',requestId:helloId});helloTimer=setTimeout(()=>{if(!ready)connection('The portal connection is taking longer than expected. Close and reopen Grand Line Chronicles from the portal to try again.');},12000);}
 window.addEventListener('message',event=>{
@@ -377,7 +403,7 @@ function frame(now){
   if(battle&&view==='battle'){
     const previous=battle.status;
     if(!busy()&&!defensePaused&&battle.status==='running')advanceDefense(battle,delta*settings.battleSpeed);
-    updatePlacementPreview();const events=renderer.draw(battle,now,{selectedAllyId,selectedPadId,hoverPadId,buildMode,placementPreview,summonCharacterId:summonMode?selectedSummonId:'',previewSkillId:selectedPreviewSkillId,reducedMotion:settings.reducedMotion})||[];
+    updatePlacementPreview();const events=renderer.draw(battle,now,{selectedAllyId:selectedPadId&&!selectedTowerCell?selectedAllyId:'',selectedPadId,hoverPadId,buildMode,placementArmed,placementPreview,summonCharacterId:summonMode?selectedSummonId:'',previewSkillId:selectedPreviewSkillId,reducedMotion:settings.reducedMotion})||[];
     if(events.length){const text=(events.find(e=>e.skillId&&e.text)||events.find(e=>e.text))?.text||'';$('action-banner').textContent=text;bannerUntil=now+1100;}
     if(bannerUntil&&now>bannerUntil){$('action-banner').textContent='';bannerUntil=0;}
     if(previous!==battle.status||now-lastHud>250){renderBattle();lastHud=now;}
@@ -394,9 +420,43 @@ $('start-wave').onclick=startWave;$('defense-pause').onclick=toggleDefensePause;
 $('defense-speed').onchange=()=>{const value=Number($('defense-speed').value);if(DEFENSE_SPEEDS.includes(value))settings.battleSpeed=value;lastFrame=0;savePreferences();renderBattle();};
 $('future-characters').replaceChildren(...FUTURE_EXPANSION_CHARACTERS.map(c=>el('li','',`${c.name} · 7★ future expansion`)));
 $('roster-conversions').textContent=FUTURE_EXPANSION_CHARACTERS.map(c=>`${c.name} → ${CHARACTER_BY_ID[RETIRED_CHARACTER_REPLACEMENTS[c.id]]?.name}`).join(' · ');
-$('battle-canvas').addEventListener('click',e=>{const id=renderer.pickPad(e.clientX,e.clientY);if(id)choosePad(id);});
-$('battle-canvas').addEventListener('pointermove',e=>{hoverPadId=renderer.pickPad(e.clientX,e.clientY)||'';});
-$('battle-canvas').addEventListener('pointerleave',()=>{hoverPadId='';});
+function paletteItem(target){
+  const tile=target.closest?.('#build-toggle,[data-ally],[data-summon]');if(!tile||tile.disabled)return null;
+  if(tile.id==='build-toggle')return {kind:'tower'};
+  if(tile.dataset.ally){const unit=battle?.allies.find(u=>u.id===tile.dataset.ally);return unit?{kind:'crew',allyId:unit.id,characterId:unit.characterId}:null;}
+  return {kind:'summon',characterId:tile.dataset.summon};
+}
+function dragGhost(item,point){
+  const ghost=$('placement-drag-ghost');if(ghost.hidden||!point)return;
+  ghost.style.left=point.clientX+'px';ghost.style.top=point.clientY+'px';
+}
+function previewPointerCell(cellId,item,point){
+  hoverPadId=cellId||'';placementPreviewKey='';updatePlacementPreview();
+  if(!item){$('placement-feedback').textContent=placementNotice||'Drag empty map space to pan. Tap a cell to place your selection.';return;}
+  const message=cellId?placementPreview?.reason||'Release to place at '+cellLabel(cellId)+'.':'Release outside the grid to cancel.';
+  $('placement-feedback').textContent=message;$('placement-feedback').dataset.valid=String(!!placementPreview?.valid);
+  $('placement-drag-ghost').dataset.valid=String(!!placementPreview?.valid);dragGhost(item,point);
+}
+placementInput=installPlacementInput({
+  canvas:$('battle-canvas'),palette:$('placement-palette'),viewport:$('map-viewport'),pickCell:(x,y)=>{
+    const viewport=$('map-viewport').getBoundingClientRect();if(x<viewport.left||x>viewport.right||y<viewport.top||y>viewport.bottom)return null;
+    return renderer.pickPad(x,y);
+  },canEdit:canPrepare,isPlacementArmed:()=>placementArmed,
+  getCanvasItem:(cellId,point)=>{const hit=renderer.pickDefender(point.clientX,point.clientY,battle),unit=battle?.allies.find(u=>hit?u.id===hit:u.padId===cellId);return unit?{kind:'crew',allyId:unit.id,characterId:unit.characterId}:null;},
+  getPaletteItem:paletteItem,onSelect:selectPlacementItem,onCellClick:clickBattleCell,onDrop:dropPlacementItem,
+  onPreview:previewPointerCell,onCancel:()=>clearPlacement('Placement cancelled.'),
+  onDragState:state=>{
+    const ghost=$('placement-drag-ghost');ghost.hidden=!state.dragging;
+    document.querySelectorAll('#placement-palette .is-dragging').forEach(n=>n.classList.remove('is-dragging'));
+    if(state.dragging){const item=state.item;ghost.replaceChildren();ghost.className='placement-drag-ghost';
+      const visual=el('span',item.kind==='tower'?'maze-tower-icon':'card-art');if(item.kind==='tower')visual.setAttribute('aria-hidden','true');else art.attach(visual,item.characterId,true);
+      ghost.append(visual,el('strong','',item.kind==='tower'?'Maze tower':displayName(CHARACTER_BY_ID[item.characterId])));
+      const tile=item.kind==='tower'?$('build-toggle'):document.querySelector(item.kind==='crew'?'[data-ally="'+item.allyId+'"]':'[data-summon="'+item.characterId+'"]');tile?.classList.add('is-dragging');dragGhost(item,state);
+    }else{hoverPadId='';placementPreviewKey='';}
+  }
+});
+$('battle-canvas').addEventListener('pointermove',e=>{if(!placementInput.dragging&&placementArmed&&canPrepare()){hoverPadId=renderer.pickPad(e.clientX,e.clientY)||'';placementPreviewKey='';}});
+$('battle-canvas').addEventListener('pointerleave',()=>{if(!placementInput.dragging)hoverPadId='';});
 for(let c=0;c<26;c++){$('grid-column').append(new Option(String.fromCharCode(65+c),String(c)));}for(let r=0;r<13;r++)$('grid-row').append(new Option(String(r+1),String(r)));
 function selectGridControl(){choosePad('cell-'+$('grid-column').value+'-'+$('grid-row').value);}
 $('grid-column').onchange=selectGridControl;$('grid-row').onchange=selectGridControl;
@@ -404,8 +464,8 @@ for(const n of document.querySelectorAll('[data-grid-step]'))n.onclick=()=>{cons
 function setMapZoom(value){mapZoom=value===2?2:1;const viewport=$('map-viewport');viewport.classList.toggle('map-zoomed',mapZoom===2);if(mapZoom===1){viewport.scrollLeft=0;viewport.scrollTop=0;}$('map-zoom').setAttribute('aria-pressed',String(mapZoom===2));$('map-zoom').textContent=mapZoom===2?'Fit map':'Zoom map';requestAnimationFrame(()=>renderer.resize());}
 $('map-zoom').onclick=()=>setMapZoom(mapZoom===1?2:1);
 $('battle-canvas').onkeydown=event=>{const moves={ArrowLeft:'-1,0',ArrowRight:'1,0',ArrowUp:'0,-1',ArrowDown:'0,1'};if(moves[event.key]){event.preventDefault();document.querySelector('[data-grid-step="'+moves[event.key]+'"]').click();}if(event.key==='Enter'){event.preventDefault();applyCellAction();}};
-$('summon-toggle').onclick=()=>{if(!canPrepare())return;buildMode='crew';summonMode=true;placementPreviewKey='';selectedPadId='';renderPlacement();};
-$('move-toggle').onclick=()=>setBuildMode('crew');$('build-toggle').onclick=()=>setBuildMode('tower');$('sell-toggle').onclick=()=>setBuildMode('sell');$('cell-apply').onclick=applyCellAction;
+$('summon-toggle').onclick=()=>{if(!canPrepare())return;rosterOpen=!rosterOpen;clearPlacement();renderPlacement();};
+$('build-toggle').onclick=()=>setBuildMode('tower');$('cell-apply').onclick=applyCellAction;$('placement-cancel').onclick=cancelPlacement;$('sell-selected-tower').onclick=sellSelectedTower;
 $('summon-search').oninput=()=>renderPlacement();$('summon-pattern').onchange=()=>renderPlacement();
 $('summon-confirm').onclick=()=>summonCharacter();$('upgrade-defender').onclick=upgradeSelected;$('recall-defender').onclick=recallSelected;
 $('specialize-power').onclick=()=>specializeSelected('power');$('specialize-reach').onclick=()=>specializeSelected('reach');$('defense-priority').onchange=e=>setPriority(e.target.value);
@@ -414,9 +474,10 @@ $('rift-button').onclick=()=>{if(adminPending||learningPending?.waiting||unsaved
 window.addEventListener('keydown',event=>{
   if(event.ctrlKey||event.metaKey||event.altKey||event.target.closest?.('input,textarea,select'))return;
   if(dialog){if(event.key==='Escape'&&dialog!=='question'){event.preventDefault();closeDialog();}if(event.key==='Tab'){const nodes=[...$('dialog-panel').querySelectorAll('button:not(:disabled),input,select,a[href]')];if(nodes.length&&event.shiftKey&&document.activeElement===nodes[0]){event.preventDefault();nodes.at(-1).focus();}else if(nodes.length&&!event.shiftKey&&document.activeElement===nodes.at(-1)){event.preventDefault();nodes[0].focus();}}return;}
+  if(view==='battle'&&event.key==='Escape'){event.preventDefault();cancelPlacement();return;}
   if(view!=='battle'||!battle||event.repeat||event.target.closest?.('button,a'))return;if(/^[0-9]$/.test(event.key)){const unit=battle.allies[(Number(event.key)||10)-1];if(unit){event.preventDefault();selectDefender(unit.id);}}if(event.code==='Space'){event.preventDefault();battle.status==='setup'?startWave():toggleDefensePause();}
 });
-window.addEventListener('pagehide',()=>{savePreferences();audioContext?.suspend().catch(()=>{});});document.addEventListener('visibilitychange',()=>{lastFrame=0;if(document.hidden)audioContext?.suspend().catch(()=>{});else if(battle&&view==='battle')renderBattle();});
+window.addEventListener('pagehide',()=>{placementInput?.cancel();savePreferences();audioContext?.suspend().catch(()=>{});});document.addEventListener('visibilitychange',()=>{lastFrame=0;placementInput?.refresh();if(document.hidden)audioContext?.suspend().catch(()=>{});else if(battle&&view==='battle')renderBattle();});
 
 window.addEventListener('error',()=>{if(!document.querySelector('.tcg-card'))$('fatal').hidden=false;});
 loadPreferences();renderCounters();renderCollection();if(!embedded)connection('Crew Defense preview · Questions are local examples. Sign in through Math or Science to purchase cards with platform reward points.');else{connection('Connecting to your portal, learning profile and reward-point wallet…');hello();}

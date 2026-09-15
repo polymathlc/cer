@@ -38,13 +38,19 @@ Crew Defense is a real-time tower-defense game. Each of nine harbors contains **
 
 ### Build a maze
 
-Use **Build towers**, select a cell, then **Build here**. Each basic disruptor tower costs **5 battle supplies**; selling it returns **3**. Up to 80 can be placed. These small structures block a cell, deal modest damage, and briefly slow enemies. Their main purpose is to form corridors and chokepoints around your crew's line, radial and splash attacks. Nine distinct fixed-terrain layouts provide different starting puzzles.
+Select the **Maze tower** tile in the placement grid, then click battlefield cells to build repeatedly. Alternatively, drag the tile onto a valid cell. Each basic disruptor tower costs **5 battle supplies**; selling it returns **3**. Up to 80 can be placed. These small structures block a cell, deal modest damage, and briefly slow enemies. Their main purpose is to form corridors and chokepoints around your crew's line, radial and splash attacks. Nine distinct fixed-terrain layouts provide different starting puzzles.
 
 Towers and crew both block movement. The map previews the proposed route before a placement; building, moving or summoning is rejected without spending supplies if it would seal the exit. Entrance, exit, fixed terrain and occupied cells cannot receive towers. Routes use orthogonal steps, so enemies cannot cut diagonally through blocked corners. Build, sell, summon and move between waves; attacks run automatically during waves.
 
-Choose **one to ten different owned characters** in My crew. They deploy free at the start; existing five-member crews carry over. Empty crew slots can be filled as more cards unlock. During preparation, any other **owned card** can be summoned if fewer than ten characters are deployed. Select an empty grid cell and confirm the summon. Locked and future-expansion cards cannot be summoned. Swapping two deployed crew members is free and preserves the same blockers.
+Choose **one to ten different owned characters** in My crew. They deploy free at the start; existing five-member crews carry over. Empty crew slots can be filled as more cards unlock. During preparation, any other **owned card** can be summoned if fewer than ten characters are deployed. Open **More crew**, then drag an owned character onto an empty grid cell, or select their tile and click the cell. Deployed crew can be dragged directly by their map avatars or palette tiles; selecting a crew member and clicking a destination also moves them. Locked and future-expansion cards cannot be summoned. Swapping two deployed crew members is free and preserves the same blockers.
 
 Each defense starts with 100 battle supplies. A crew summon costs 20 + 5 × the card's stars; defeating enemies and finishing waves adds supplies. These supplies belong only to the current defense and never debit, award, or replace Math or Science reward points. Recalls refund half the supplies actually paid, rounded down. Free starting defenders refund zero. A recalled character keeps its training and specialization for this defense, but returning costs the normal summon price.
+
+### Direct placement controls
+
+The map keeps Start wave, Pause, speed and zoom together. The compact placement grid contains a 5-supply tower tile and the deployed crew. Selecting a placed tower reveals its **Sell tower · +3** action. Crew selection reveals targeting and level-up controls; skills, specialization and recall are grouped inside **Skills & upgrades**. Exact column/row selectors remain in the collapsed **Keyboard placement** panel.
+
+Pointer previews never spend supplies. A drag commits only once, on release over a valid visible grid cell. Blocked cells, releases outside the map, Escape, lost capture, a second touch, hidden windows, and a change out of preparation cancel safely. During preparation, dragging empty map space pans a zoomed viewport without placing anything. Mouse, pen and touch use the same game rules.
 
 ### Automatic school level
 
@@ -52,7 +58,7 @@ Opening Crew Defense launches it with the student's saved portal level. There is
 
 ### Attack shapes and target priority
 
-Every character has a defense profile, and each of their three skills has a real attack shape. Crew coverage appears in Move crew mode during preparation; skill buttons toggle a specific attack-area preview, which clears when a wave starts. Attacks resolve with travel or wind-up time; their damage uses the actual line, cone, impact area, chain, or surrounding radius.
+Every character has a defense profile, and each of their three skills has a real attack shape. Crew coverage appears when a crew member is selected during preparation; skill buttons toggle a specific attack-area preview, which clears when a wave starts. Attacks resolve with travel or wind-up time; their damage uses the actual line, cone, impact area, chain, or surrounding radius.
 
 | Pattern | Tactical use |
 |---|---|
