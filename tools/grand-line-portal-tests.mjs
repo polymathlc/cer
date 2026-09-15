@@ -9,15 +9,15 @@ const { chromium } = await import(path.isAbsolute(pw) ? pathToFileURL(pw).href :
 const fixture = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="overflow:auto"><main id="app"><button id="launch">Grand Line</button></main><aside id="already-inert" inert>Other tool</aside><script type="module">
 import {installGrandLinePortal} from '/grand-line-portal.js';
 import {createGrandLineEconomy,createGrandLineRpgCommit} from '/grand-line-economy.js';
-window.user={uid:'private-account',role:'student'};window.level='P6';window.child='learner-a';window.notices=[];window.shown=[];window.records=[];window.writes=[];window.riftOpened=0;
+window.user={uid:'private-account',role:'student'};window.level='P6';window.previewLevel='P6';window.child='learner-a';window.notices=[];window.shown=[];window.records=[];window.writes=[];window.riftOpened=0;window.startedLevels=[];window.questionLevels=[];window.snapshotLevels=[];
 window.rpg={gold:2000};window.remote=false;window.delayGrade=false;window.failSave=false;window.delaySave=false;
 window.makeRows=()=>[1,2,3,4,5].map(i=>({id:'bank-'+i,topic:'Authored question '+i,html:'<p>Compare the <b>labelled table</b>.</p><table><tr><th>Material</th><th>Temperature</th></tr><tr><td>Metal</td><td>15 °C</td></tr></table><p><span class="math-frac"><span class="num">3</span><span class="den">4</span></span> of the sample.</p><script>window.evil=true<\\/script>',options:['Wood','Metal','Air'],answer:1}));
 window.rows=makeRows();
 const economy=createGrandLineEconomy({getUser:()=>user,getState:()=>rpg,getPacks:()=>[{id:'spark',name:'Bronze Pack',cost:120,odds:{1:40,2:30,3:17,4:8,5:3.5,6:1.2,7:.3}},{id:'nova',name:'Silver Pack',cost:320,bonusOdds:{3:62,4:25,5:9,6:3,7:1}},{id:'galaxy',name:'Gold Pack',cost:750,bonusOdds:{4:68,5:22,6:8,7:2}}],random:()=>0,
  isCurrent:ctx=>portal.isCurrent(ctx),commit:createGrandLineRpgCommit({getUser:()=>user,getState:()=>rpg,setState:s=>{rpg=s;},isCurrent:ctx=>portal.isCurrent(ctx),writeState:async(s,uid)=>{if(delaySave)await new Promise(resolve=>window.finishSave=resolve);if(failSave)throw Error('offline');writes.push({state:structuredClone(s),uid});}})});
-window.portal=installGrandLinePortal({subject:new URLSearchParams(location.search).get('subject'),getUser:()=>user,getLevel:()=>level,getProfileKey:()=>child,levels:['P3','P4','P5','P6'],isLevel:v=>/^P[3-6]$/.test(v||''),notify:m=>notices.push(m),
+window.portal=installGrandLinePortal({subject:new URLSearchParams(location.search).get('subject'),getUser:()=>user,getLevel:()=>level,getPreviewLevel:()=>previewLevel,getProfileKey:()=>child,isLevel:v=>/^P[3-6]$/.test(v||''),notify:m=>notices.push(m),onStart:ctx=>startedLevels.push(ctx.level),
  getRiftFrame:()=>document.querySelector('#rift'),beforeOpen:()=>document.querySelector('#rift')?.remove(),openRift:()=>riftOpened++,
- ...economy,getQuestions:()=>rows.map(q=>remote?{...q,grading:'remote',answer:null}:q),markShown:q=>shown.push(q.id),recordAnswer:r=>{records.push(r);rpg.gold+=r.correct?10:0;},
+ ...economy,getSnapshot:ctx=>{snapshotLevels.push(ctx.level);return economy.getSnapshot(ctx);},getQuestions:ctx=>{questionLevels.push(ctx.level);return rows.map(q=>remote?{...q,grading:'remote',answer:null}:q);},markShown:q=>shown.push(q.id),recordAnswer:r=>{records.push(r);rpg.gold+=r.correct?10:0;},
  gradeQuestion:async({choice})=>{if(delayGrade)await new Promise(resolve=>window.finishGrade=resolve);return {correct:choice===1,answer:1};}});
 document.querySelector('#launch').onclick=()=>portal.open();window.ready=true;
 </script></body></html>`;
@@ -56,24 +56,33 @@ try {
     const initial = await open(), url = new URL(await page.locator('iframe').getAttribute('src'));
     assert.equal(initial.questionCount, 3); assert.equal(initial.available, true); assert.match(initial.profileKey, /^p[0-9a-f]{16}$/);
     assert.equal(url.searchParams.get('profile'), initial.profileKey); assert.equal(url.searchParams.get('subject'), subject.toLowerCase()); assert.ok(!url.href.includes('private-account'));
-    assert.equal(url.searchParams.get('v'), '2.1.0');
+    assert.equal(url.searchParams.get('v'), '3.0.0');
     assert.equal(await page.locator('.grand-line-portal').getAttribute('aria-label'), 'Crew Defense');
     assert.match(await page.locator('.grand-line-stage iframe').getAttribute('title'), /Crew Defense/);
     assert.match(await page.locator('.grand-line-status').textContent(), /three questions after every wave/);
     assert.equal(initial.collection.packs, 0); assert.equal(initial.wallet.balance, 2000);
     assert.equal(await page.locator('#app').evaluate(el => el.inert), true);
-    assert.equal(await page.locator('select').isDisabled(), true);
+    assert.equal(await page.locator('.grand-line-portal select').count(), 0);
+    assert.equal(await page.locator('.grand-line-portal [data-start]').count(), 0);
+    assert.equal(await page.locator('.grand-line-level').textContent(), 'School level · P6');
+    assert.deepEqual(await page.evaluate(() => startedLevels), ['P6']);
+    assert.deepEqual(await page.evaluate(() => snapshotLevels), ['P6']);
     const bounds = await page.locator('iframe').boundingBox(); assert.ok(bounds.width <= 390 && bounds.height > 500);
     await page.evaluate(() => {
+      const forgedSelect=document.createElement('select');forgedSelect.innerHTML='<option value="P3">P3</option>';
+      document.querySelector('.grand-line-portal header').append(forgedSelect);forgedSelect.dispatchEvent(new Event('change',{bubbles:true}));forgedSelect.remove();
       window.dispatchEvent(new MessageEvent('message', { origin: location.origin, source: window, data: { type: 'GLTCG_HELLO', requestId: 'forged' } }));
       window.dispatchEvent(new MessageEvent('message', { origin: 'https://evil.test', source: portal.getFrame().contentWindow, data: { type: 'GLTCG_HELLO', requestId: 'forged' } }));
     });
+    await game.evaluate(() => send({ type:'GLTCG_LEVEL_CHANGE',requestId:'forged-level',sessionId,level:'P3',admin:true }));
     assert.equal(await game.evaluate(() => messages.length), 1);
+    assert.deepEqual(await page.evaluate(() => startedLevels), ['P6']);
     assert.deepEqual(initial.admin, { available: false, unlimitedGold: false }); assert.equal(initial.wallet.unlimitedGold, false);
     await game.evaluate(() => send({ type: 'GLTCG_ADMIN_REQUEST', requestId: 'student-forged', sessionId, action: 'unlock-all', admin: true, role: 'admin', cards: { kaido: 999 } }));
     assert.equal((await message('GLTCG_ADMIN_BLOCKED')).retryable, false); assert.equal(await page.evaluate(() => writes.length), 0);
     assert.equal(await page.evaluate(() => rpg.gold), 2000);
-    await game.locator('#round').click(); await page.getByText('Question 1 of 3', { exact: true }).waitFor();
+    await game.evaluate(() => send({type:'GLTCG_ROUND_REQUEST',requestId:'round-1',sessionId,round:1,level:'P3'})); await page.getByText('Question 1 of 3', { exact: true }).waitFor();
+    assert.deepEqual(await page.evaluate(() => questionLevels), ['P6']);
     await page.getByText(subject + ' · Wave', { exact: true }).waitFor();
     assert.equal(await page.locator('.grand-line-learning-stem table').count(), 1); assert.equal(await page.locator('.grand-line-learning-stem .math-frac').count(), 1);
     assert.equal(await page.evaluate(() => window.evil), undefined); assert.equal(await page.locator('.grand-line-learning-stem script').count(), 0);
@@ -121,12 +130,37 @@ try {
     assert.equal(legacy.grant.characterId, 'wyper'); assert.equal(legacy.grant.copies, 6); assert.equal(legacy.grant.stars, 4);
     assert.equal(await page.evaluate(() => writes.length), beforeMigrationWrites);
     await page.getByRole('button', { name: 'Close', exact: true }).click();
+    const beforeMissing = await page.evaluate(() => ({writes:writes.length,questions:questionLevels.length,snapshots:snapshotLevels.length,starts:startedLevels.length}));
+    for(const missing of ['', 'S9']){
+      await page.evaluate(value=>{level=value;portal.open();},missing);
+      assert.equal(await page.locator('.grand-line-portal select').count(),0);
+      assert.equal(await page.locator('iframe').count(),0);
+      assert.match(await page.locator('.grand-line-intro').textContent(),/saved school level is missing or unavailable/);
+      assert.match(await page.locator('.grand-line-status').textContent(),/saved school level is required/);
+      assert.deepEqual(await page.evaluate(()=>({writes:writes.length,questions:questionLevels.length,snapshots:snapshotLevels.length,starts:startedLevels.length})),beforeMissing);
+      await page.getByRole('button',{name:'Close',exact:true}).click();
+    }
+    await page.evaluate(()=>{level='P4';});
+    const updatedStudent=await open();
+    assert.equal(await page.locator('.grand-line-level').textContent(),'School level · P4');
+    assert.notEqual(updatedStudent.profileKey,sibling.profileKey);
+    const beforeLevelChange=await page.evaluate(()=>records.length);
+    await page.evaluate(()=>{rows=makeRows();remote=true;delayGrade=true;delete window.finishGrade;});
+    await game.locator('#round').click();await page.locator('.grand-line-learning-option').nth(1).click();
+    await page.waitForFunction(()=>typeof finishGrade==='function');
+    await page.evaluate(()=>{level='P5';finishGrade();});
+    await page.waitForTimeout(50);
+    assert.equal(await page.evaluate(()=>records.length),beforeLevelChange);
+    assert.equal(await game.evaluate(()=>messages.some(m=>m.type==='GLTCG_ROUND_RESULT')),false);
+    await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+    assert.equal(await page.locator('iframe').count(),0);
+    assert.equal(await page.locator('.grand-line-portal').count(),0);
     for (const denied of [null, { uid: 'employee', role: 'employee' }, { uid: 'other', role: 'unknown' }, { role: 'student' }]) {
       assert.equal(await page.evaluate(user => { window.user = user; return portal.open(); }, denied), false); assert.equal(await page.locator('iframe').count(), 0);
     }
     await page.evaluate(() => { user = { uid: 'private-admin', role: 'admin' }; rpg = { gold: 0 }; level = ''; portal.open(); });
-    assert.equal(await page.locator('iframe').count(), 0); assert.equal(await page.locator('select').isDisabled(), false);
-    await page.locator('select').selectOption('P5'); await page.getByRole('button', { name: 'Start game', exact: true }).click();
+    assert.equal(await page.locator('.grand-line-portal select').count(),0);
+    assert.equal(await page.locator('.grand-line-level').textContent(),'Preview · P6');
     assert.equal(await page.locator('iframe').count(), 1);
     game = await (await page.locator('.grand-line-stage iframe').elementHandle()).contentFrame();
     const adminReady = await message('GLTCG_READY'); assert.deepEqual(adminReady.admin, { available: true, unlimitedGold: false });
@@ -154,7 +188,10 @@ try {
     await game.evaluate(() => send({ type: 'GLTCG_ADMIN_REQUEST', requestId: 'unlock-retry', sessionId, action: 'unlock-all' }));
     assert.deepEqual((await message('GLTCG_ADMIN_RESULT', 3)).collection.cards, unlocked.collection.cards);
     assert.equal(await page.evaluate(() => writes.length), beforeUnlockReplay);
-    await page.locator('select').selectOption('P6'); await page.getByRole('button', { name: 'Start game', exact: true }).click();
+    await page.evaluate(()=>{level='P5';portal.sync();});
+    assert.equal(await page.locator('iframe').count(),0);
+    await page.locator('#launch').click();
+    assert.equal(await page.locator('.grand-line-level').textContent(),'School level · P5');
     game = await (await page.locator('.grand-line-stage iframe').elementHandle()).contentFrame();
     const otherLevel = await message('GLTCG_READY'); assert.notEqual(otherLevel.profileKey, adminReady.profileKey);
     assert.equal(otherLevel.admin.unlimitedGold, true); assert.equal(Object.keys(otherLevel.collection.cards).length, 5);
@@ -186,5 +223,5 @@ try {
     await game.evaluate(() => send({ type: 'GLTCG_OPEN_RIFT' })); await page.waitForFunction(() => riftOpened === 1); assert.equal(await page.locator('.grand-line-portal').count(), 0);
     assert.deepEqual(errors, []); await page.close();
   }
-  console.log('Grand Line Math/Science browser checks passed: real parent rendering, three answers, private grading, wallet purchases/replay, admin zero-balance packs/all 50 cards, role guards, crew saves, mobile access, profile invalidation and companion navigation.');
+  console.log('Grand Line Math/Science browser checks passed: automatic saved school level, no level selector, missing-level blocking, forged-level and live-level guards, real parent rendering, three answers, private grading, wallet purchases/replay, admin zero-balance packs/all 50 cards, role guards, crew saves, mobile access, profile invalidation and companion navigation.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

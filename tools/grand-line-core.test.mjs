@@ -110,16 +110,25 @@ test('normalization rejects malformed saves, bounds counters, and repairs a five
   assert.equal(c.stats.correctAnswers, 4);
 });
 
-test('team selection requires exactly five different owned heroes and rejects a locked campaign', () => {
+test('team selection accepts one to ten different owned heroes and rejects a locked campaign', () => {
   const c = createCollection();
   assert.equal(setTeam(c, ['luffy', 'luffy', 'zoro', 'nami', 'chopper']), false);
   assert.equal(setTeam(c, ['wyper', 'zoro', 'nami', 'usopp', 'chopper']), false);
-  assert.equal(setTeam(c, ['luffy']), false);
+  assert.equal(setTeam(c, []), false);
+  assert.equal(setTeam(c, ['luffy']), true);
+  assert.deepEqual(normalizeCollection(c).team, ['luffy']);
   assert.equal(createBattle(c, { encounter: 2 }), null);
   assert.equal(createBattle(c, { encounter: 10 }), null);
   addCard(c, 'wyper');
   assert.equal(setTeam(c, ['wyper', 'zoro', 'nami', 'usopp', 'chopper']), true);
   assert.ok(createBattle(c, { seed: 42 }));
+  for (const hero of CHARACTERS.slice(0, 11)) addCard(c, hero.id);
+  const ten = CHARACTERS.slice(0, 10).map(hero => hero.id);
+  assert.equal(setTeam(c, ten), true);
+  assert.deepEqual(normalizeCollection(c).team, ten, 'All ten saved members survive normalization');
+  const before = structuredClone(c);
+  assert.equal(setTeam(c, CHARACTERS.slice(0, 11).map(hero => hero.id)), false);
+  assert.deepEqual(c, before, 'An eleventh member cannot mutate the saved crew');
 });
 
 test('battle initiative and units are reproducible and snapshot owned-card stats', () => {

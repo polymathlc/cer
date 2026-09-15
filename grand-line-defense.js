@@ -1,26 +1,14 @@
-import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS } from './grand-line-data.js?v=2.1.0';
-import { statsFor } from './grand-line-core.js?v=2.1.0';
-import { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=2.1.0';
-export { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=2.1.0';
-
-export const DEFENSE_PATH = Object.freeze([
-  { x: 20, y: 110 }, { x: 250, y: 110 }, { x: 250, y: 300 },
-  { x: 545, y: 300 }, { x: 545, y: 485 }, { x: 925, y: 485 },
-]);
-export const DEFENSE_PADS = Object.freeze([
-  { id: 'lookout', x: 140, y: 230, name: 'Lookout' },
-  { id: 'crossroads', x: 350, y: 195, name: 'Crossroads' },
-  { id: 'inner-bend', x: 445, y: 405, name: 'Inner bend' },
-  { id: 'ship-watch', x: 765, y: 380, name: 'Ship watch' },
-  { id: 'medical-post', x: 320, y: 425, name: 'Central post' },
-  { id: 'entrance', x: 125, y: 65, name: 'Harbor entrance' },
-  { id: 'high-ground', x: 415, y: 85, name: 'High ground' },
-  { id: 'east-bank', x: 665, y: 205, name: 'East bank' },
-  { id: 'last-bend', x: 630, y: 570, name: 'Last bend' },
-  { id: 'dock', x: 930, y: 365, name: 'Final dock' },
-]);
+import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS } from './grand-line-data.js?v=3.0.0';
+import { statsFor } from './grand-line-core.js?v=3.0.0';
+import { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.0.0';
+export { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.0.0';
+import { DEFENSE_GRID, DEFENSE_PATH, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_TERRAIN, defenseCell,
+  pointOnDefenseRoute, commitDefenseRoute, planDefenseRoute, getMazePlacementPreview,
+  MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.0.0';
+export { DEFENSE_GRID, DEFENSE_PATH, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_TERRAIN,
+  getDefenseRoute, getMazePlacementPreview, MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.0.0';
 export const DEFENSE_STAGES = Object.freeze(ENCOUNTERS.map(encounter => ({
-  ...encounter, waveCount: 6, description: `Defend ${encounter.name} through six waves. Summon owned cards, cover the road with different attack shapes, and train your defenders after three questions each wave.`,
+  ...encounter, waveCount: 6, description: `Build a maze at ${encounter.name}. Slow the swarm, summon your collection and train your crew after three questions each wave.`,
 })));
 
 const STEP = 0.05;
@@ -28,8 +16,6 @@ const negative = new Set(['stun', 'freeze', 'burn', 'poison', 'weaken', 'slow'])
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const alive = unit => unit.hp > 0 && !unit.escaped;
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-const segments = DEFENSE_PATH.slice(1).map((point, index) => distance(point, DEFENSE_PATH[index]));
-const routeLength = segments.reduce((sum, value) => sum + value, 0);
 const teamOf = (b, unit) => unit.side === 'ally' ? b.allies : b.enemies;
 const foesOf = (b, unit) => unit.side === 'ally' ? b.enemies : b.allies;
 const has = (unit, type) => unit.statuses.some(status => status.type === type && status.duration > 0);
@@ -39,21 +25,11 @@ const random = b => clamp(Number(b.rng()) || 0, 0, 0.999999999999);
 
 export const defenseSkillCooldown = skill => skill.cooldown ? Math.max(2.5, skill.cooldown * 2.5) : 0;
 export const defenseStatusDuration = effect => Math.max(0, Number(effect.duration) || 0) * 2;
-export function defensePointAt(progress) {
-  let remaining = clamp(Number(progress) || 0, 0, 1) * routeLength;
-  for (let i = 0; i < segments.length; i++) {
-    if (remaining <= segments[i]) {
-      const t = remaining / segments[i], a = DEFENSE_PATH[i], z = DEFENSE_PATH[i + 1];
-      return { x: a.x + (z.x - a.x) * t, y: a.y + (z.y - a.y) * t };
-    }
-    remaining -= segments[i];
-  }
-  return { ...DEFENSE_PATH.at(-1) };
-}
-export function defenseEnemyPointAt(progress, laneOffset = 0) {
-  const point = defensePointAt(progress);
+export function defensePointAt(progress, battle) { return pointOnDefenseRoute(progress, battle); }
+export function defenseEnemyPointAt(progress, laneOffset = 0, battle) {
+  const point = defensePointAt(progress, battle);
   if (!laneOffset) return point;
-  const before = defensePointAt(progress - .001), after = defensePointAt(progress + .001);
+  const before = defensePointAt(progress - .001, battle), after = defensePointAt(progress + .001, battle);
   const length = distance(before, after) || 1;
   return { x: point.x - (after.y - before.y) / length * laneOffset,
     y: point.y + (after.x - before.x) / length * laneOffset };
@@ -91,34 +67,36 @@ function makeUnit(characterId, side, copies = 1) {
 
 export function createDefense(collection, options = {}) {
   const encounterId = options.encounter ?? 1;
-  if (!collection?.cards || !Array.isArray(collection?.team) || collection.team.length > 5 || new Set(collection.team).size !== collection.team.length ||
+  if (!collection?.cards || !Array.isArray(collection?.team) || collection.team.length < 1 || collection.team.length > 10 || new Set(collection.team).size !== collection.team.length ||
       !collection.team.every(id => typeof id === 'string' && Object.hasOwn(CHARACTER_BY_ID, id) && collection.cards?.[id]?.copies >= 1) ||
       !Number.isInteger(encounterId) || encounterId < 1 || encounterId > 9 || encounterId > collection.unlockedEncounter) return null;
   const seed = options.seed ?? 1;
   const b = { id: `crew-defense-${encounterId}-${seed}`, seed, rng: seeded(seed), collection,
     encounter: DEFENSE_STAGES[encounterId - 1], round: 1, waveCount: 6, status: 'setup',
     allies: collection.team.map(id => makeUnit(id, 'ally', collection.cards[id].copies)), enemies: [],
-    ship: { id: 'ship', x: 950, y: 485, hp: 360, maxHp: 360, color: '#e1c087' },
-    elapsed: 0, waveTime: 0, accumulator: 0, spawnTotal: 32, spawned: 0, remainingToSpawn: 32,
+    ship: { id: 'ship', x: 1100, y: 310, hp: 360, maxHp: 360, color: '#e1c087' },
+    mazeTowers: [], terrain: [...DEFENSE_TERRAIN[encounterId - 1]], route: [], routeCellIds: [], routeRevision: 0,
+    elapsed: 0, waveTime: 0, accumulator: 0, spawnTotal: 80, spawned: 0, remainingToSpawn: 80,
     spawnTimer: 0, defeatedThisWave: 0, leakedThisWave: 0, waveProgress: 0,
     effects: [], projectiles: [], supplies: 100, trainingPoints: 0, reserve: {}, log: [], eventSequence: 0, pendingOutcome: null, learning: null, learningBoost: null,
     rewardedRounds: [], roundResults: [], outcomeCommitted: false,
     stats: { damageDealt: 0, kills: 0, leaks: 0, skillsUsed: 0, turns: 0, waves: 0, rounds: 0, simulatedSeconds: 0 } };
-  for (let i = 0; i < b.allies.length; i++) Object.assign(b.allies[i], pointOf(DEFENSE_PADS[i]), { padId: DEFENSE_PADS[i].id });
+  for (let i = 0; i < b.allies.length; i++) Object.assign(b.allies[i], pointOf(DEFENSE_DEFAULT_PADS[i]), { padId: DEFENSE_DEFAULT_PADS[i].id });
+  if (!commitDefenseRoute(b)) return null;
   for (const unit of b.allies) {
     if (unit.passive.type === 'shield-start') unit.shield += Math.round(unit.maxHp * unit.passive.value);
     if (['all-shield', 'apex-whitebeard'].includes(unit.passive.type)) for (const ally of b.allies) ally.shield += Math.round(ally.maxHp * unit.passive.value);
   }
-  log(b, 'Your saved crew deploys free. Spend supplies to summon any owned card into an empty position.');
+  log(b, 'Build 5-supply towers to bend the enemy route. Your saved crew deploys free; every placement must leave an exit.');
   return b;
 }
 
 const editable = b => b?.status === 'setup' && !b.pendingOutcome;
 export function summonDefender(b, characterId, padId) {
   if (!editable(b) || !Object.hasOwn(CHARACTER_BY_ID, characterId) || !(b.collection.cards?.[characterId]?.copies >= 1) ||
-      b.allies.length >= DEFENSE_PADS.length || b.allies.some(unit => unit.characterId === characterId || unit.padId === padId)) return false;
+      b.allies.length >= 10 || b.allies.some(unit => unit.characterId === characterId || unit.padId === padId)) return false;
   const pad = DEFENSE_PADS.find(entry => entry.id === padId), cost = 20 + CHARACTER_BY_ID[characterId].stars * 5;
-  if (!pad || b.supplies < cost) return false;
+  if (!pad || b.supplies < cost || !getMazePlacementPreview(b, padId, { kind: 'crew' }).valid) return false;
   const previous = b.reserve[characterId], unit = previous || makeUnit(characterId, 'ally', b.collection.cards[characterId].copies);
   delete b.reserve[characterId];
   Object.assign(unit, pointOf(pad), { padId, paidSupplies: cost });
@@ -129,6 +107,7 @@ export function summonDefender(b, characterId, padId) {
     if (['all-shield', 'apex-whitebeard'].includes(unit.passive.type)) for (const ally of [...b.allies, unit]) ally.shield = Math.min(ally.maxHp, ally.shield + Math.round(ally.maxHp * unit.passive.value));
   }
   b.allies.push(unit);
+  commitDefenseRoute(b);
   log(b, `${unit.name} summoned for ${cost} supplies.`);
   return true;
 }
@@ -138,8 +117,30 @@ export function recallDefender(b, allyId) {
   if (index < 0) return false;
   const [unit] = b.allies.splice(index, 1), refund = Math.floor(unit.paidSupplies / 2);
   b.supplies += refund; unit.padId = null; unit.paidSupplies = 0; b.reserve[unit.characterId] = unit;
+  commitDefenseRoute(b);
   log(b, `${unit.name} recalled. ${refund} supplies returned; training is kept for this defense.`);
   return true;
+}
+export function buildMazeTower(b, cellId) {
+  const preview = getMazePlacementPreview(b, cellId);
+  if (!preview.valid) return false;
+  const cell = preview.cell;
+  b.mazeTowers.push({ id: `maze-${cellId}`, cellId, padId: cellId, x: cell.x, y: cell.y, name: 'Disruptor tower',
+    side: 'ally', characterId: null, isMazeTower: true, color: '#9bb7a6', hp: 100, maxHp: 100, shield: 0,
+    attack: 5, defense: 0, range: 108, attackInterval: 2.8, actionTimer: 0, slow: .12, statuses: [],
+    passive: { type: 'none', value: 0 }, attacksMade: 0, energy: 0, alive: true, escaped: false,
+    paidSupplies: MAZE_TOWER_COST, attackGeometry: { shape: 'single', speed: 380, rangeMultiplier: 1, width: 8, radius: 8 },
+    towerSkill: { id: 'maze-bolt', name: 'Disruptor bolt', kind: 'wind', animation: 'maze-bolt', power: 1,
+      effects: [{ type: 'slow', amount: .12, duration: .65 }] } });
+  b.supplies -= MAZE_TOWER_COST; commitDefenseRoute(b);
+  log(b, `Basic tower built for 5 supplies. Enemy route: ${b.routeCellIds.length} cells.`);
+  return true;
+}
+export function sellMazeTower(b, cellId) {
+  if (!getMazePlacementPreview(b, cellId, { remove: true }).valid) return false;
+  const index = b.mazeTowers.findIndex(tower => tower.cellId === cellId);
+  b.mazeTowers.splice(index, 1); b.supplies += MAZE_TOWER_REFUND; commitDefenseRoute(b);
+  log(b, 'Basic tower sold. 3 supplies returned.'); return true;
 }
 function refreshTrainingStats(unit) {
   const base = unit.baseStats, healthRatio = unit.hp / unit.maxHp;
@@ -174,12 +175,12 @@ export function setDefensePriority(b, allyId, priority) {
 }
 
 const WAVE_PLANS = Object.freeze([
-  { name: 'Landing party', pattern: ['swarm', 'swarm', 'raider', 'runner'], count: 32, tip: 'Line attacks cover straight roads. Splash damage catches tightly packed landing parties.' },
-  { name: 'Runner rush', pattern: ['runner', 'runner', 'swarm', 'raider'], count: 40, tip: 'Fast runners need slow, freeze or a defender watching the final bend.' },
-  { name: 'Iron convoy', pattern: ['armored', 'swarm', 'swarm', 'raider'], count: 48, tip: 'Armored raiders resist ordinary hits. Use piercing skills or a Power specialist.' },
-  { name: 'Crowded assault', pattern: ['swarm', 'swarm', 'swarm', 'runner', 'armored'], count: 56, tip: 'Radial attacks cover bends; chains and splash attacks punish dense packs.' },
-  { name: 'Siege crossfire', pattern: ['armored', 'runner', 'raider', 'swarm'], count: 64, tip: 'Pair area damage with a Strongest-priority armor breaker and nearby healing.' },
-  { name: 'Captain’s armada', pattern: ['armored', 'swarm', 'runner', 'raider'], count: 72, tip: 'The captain arrives with the main fleet. Keep armor penetration on the captain while area towers clear escorts.' },
+  { name: 'Landing party', pattern: ['swarm', 'swarm', 'swarm', 'raider', 'runner'], count: 80, tip: 'Build a detour beside your crew. Piercing lines and splash attacks clear the packed landing party.' },
+  { name: 'Runner rush', pattern: ['runner', 'runner', 'swarm', 'swarm', 'raider'], count: 105, tip: 'Lengthen the route and use disruptor towers, slow or freeze to catch runners.' },
+  { name: 'Iron convoy', pattern: ['armored', 'swarm', 'swarm', 'swarm', 'raider'], count: 130, tip: 'Keep armored enemies beside your Power specialists. Basic towers delay them but barely penetrate armor.' },
+  { name: 'Crowded assault', pattern: ['swarm', 'swarm', 'swarm', 'runner', 'swarm', 'armored'], count: 160, tip: 'Create a winding corridor through radial and splash coverage. Leave a complete exit route.' },
+  { name: 'Siege crossfire', pattern: ['armored', 'runner', 'swarm', 'raider', 'swarm'], count: 190, tip: 'Separate armor-breaking and cluster-clearing duties, with healers behind the maze.' },
+  { name: 'Captain’s armada', pattern: ['armored', 'swarm', 'runner', 'swarm', 'raider'], count: 230, tip: 'A huge escort protects the captain. Aim Strongest at the captain and keep the maze inside your area attacks.' },
 ]);
 function typeForWave(round, index, count) {
   if (round === 6 && index === Math.floor(count * .55)) return 'captain';
@@ -196,7 +197,7 @@ export function getDefenseWavePreview(b) {
 }
 
 export function placeDefender(b, allyId, padId) {
-  if (!b || !['setup', 'learning'].includes(b.status) || b.pendingOutcome) return false;
+  if (!editable(b) || !getMazePlacementPreview(b, padId, { kind: 'crew', allyId }).valid) return false;
   const unit = b.allies.find(ally => ally.id === allyId), pad = DEFENSE_PADS.find(entry => entry.id === padId);
   if (!unit || !pad) return false;
   const occupied = b.allies.find(ally => ally !== unit && ally.padId === padId);
@@ -206,6 +207,7 @@ export function placeDefender(b, allyId, padId) {
     Object.assign(occupied, pointOf(previous), { padId: previous.id });
   }
   Object.assign(unit, pointOf(pad), { padId: pad.id });
+  commitDefenseRoute(b);
   return true;
 }
 
@@ -213,6 +215,7 @@ export function startDefenseWave(b) {
   if (!b || b.status !== 'setup' || b.ship.hp <= 0 || b.round > b.waveCount || b.allies.length < 1 || b.allies.length > 10 ||
       new Set(b.allies.map(unit => unit.padId)).size !== b.allies.length ||
       !b.allies.every(unit => DEFENSE_PADS.some(pad => pad.id === unit.padId))) return false;
+  if (!planDefenseRoute(b) || !commitDefenseRoute(b)) return false;
   b.status = 'running'; b.waveTime = 0; b.accumulator = 0; b.spawned = 0;
   b.spawnTotal = getDefenseWavePreview(b).total; b.remainingToSpawn = b.spawnTotal;
   b.spawnTimer = 0.6; b.enemies = []; b.projectiles = []; b.defeatedThisWave = 0; b.leakedThisWave = 0; b.waveProgress = 0;
@@ -235,19 +238,19 @@ function spawnEnemy(b) {
   const unit = makeUnit(id, 'enemy');
   const scale = b.encounter.scale * (1 + (b.round - 1) * 0.18);
   unit.id = `raider-${b.round}-${index}-${id}`;
-  unit.maxHp = unit.hp = Math.round(unit.maxHp * scale * ({ swarm: .55, runner: .7, armored: 1.5, raider: .92, captain: 4.2 }[enemyType]));
-  unit.attack = Math.round(unit.attack * scale * (boss ? .38 : enemyType === 'raider' ? .17 : .09));
-  unit.defense = Math.round(unit.defense * scale * (enemyType === 'armored' ? 4.8 : boss ? 2 : 1));
+  unit.maxHp = unit.hp = Math.round(unit.maxHp * scale * ({ swarm: .19, runner: .27, armored: .95, raider: .42, captain: 4.2 }[enemyType]));
+  unit.attack = Math.round(unit.attack * scale * (boss ? .32 : enemyType === 'raider' ? .07 : .025));
+  unit.defense = Math.round(unit.defense * scale * (enemyType === 'armored' ? 4 : boss ? 2 : .5));
   unit.armor = enemyType === 'armored' ? .42 : boss ? .2 : 0;
-  unit.range = boss ? 245 : enemyType === 'raider' ? 200 : 110;
-  unit.attackInterval = boss ? 2.4 : 3.6;
+  unit.range = boss ? 195 : enemyType === 'raider' ? 120 : 65;
+  unit.attackInterval = boss ? 2.8 : 4.2;
   unit.actionTimer = 0.7; unit.energy = boss ? 65 : 30;
-  unit.moveSpeed = ({ swarm: 60, runner: 99, armored: 40, raider: 53, captain: 36 }[enemyType]) * (1 + (b.encounter.id - 1) * .012);
-  unit.boss = boss; unit.enemyType = unit.archetype = enemyType; unit.radius = boss ? 28 : enemyType === 'swarm' ? 14 : 19;
-  unit.laneOffset = boss ? 0 : [-16, 8, -8, 16, 0][index % 5];
-  unit.leakDamage = boss ? 95 : enemyType === 'armored' ? 16 : enemyType === 'runner' ? 9 : 7;
+  unit.moveSpeed = ({ swarm: 70, runner: 112, armored: 48, raider: 63, captain: 40 }[enemyType]) * (1 + (b.encounter.id - 1) * .012);
+  unit.boss = boss; unit.enemyType = unit.archetype = enemyType; unit.radius = boss ? 12 : enemyType === 'swarm' ? 5 : 7;
+  unit.laneOffset = boss ? 0 : [-7, 4, -4, 7, 0][index % 5];
+  unit.leakDamage = boss ? 95 : enemyType === 'armored' ? 10 : enemyType === 'runner' ? 5 : 3;
   unit.suppliesReward = boss ? 15 : enemyType === 'armored' ? 2 : 1;
-  Object.assign(unit, defenseEnemyPointAt(0, unit.laneOffset));
+  Object.assign(unit, defenseEnemyPointAt(0, unit.laneOffset, b));
   if (unit.passive.type === 'shield-start') unit.shield = Math.round(unit.maxHp * unit.passive.value);
   b.enemies.push(unit); b.spawned++; b.remainingToSpawn = Math.max(0, b.spawnTotal - b.spawned);
   if (boss) { log(b, `${unit.name} leads the final assault!`); emit(b, 'boss', unit, [unit], 'Captain incoming', { life: 2 }); }
@@ -276,7 +279,7 @@ function knockedOut(b, unit, source) {
   emit(b, 'knockout', source, [unit], unit.side === 'enemy' ? 'Stopped' : 'Crew down');
 }
 function damage(b, source, target, amount, direct = true) {
-  if (!alive(target)) return 0;
+  if (!alive(target) || target.isMazeTower) return 0;
   let total = Math.max(0, Math.round(amount * (source?.side === 'ally' ? boostOf(b)?.attackMultiplier || 1 : 1)));
   if (direct && target.shield > 0) {
     const absorbed = Math.min(total, target.shield); target.shield -= absorbed; total -= absorbed;
@@ -423,7 +426,7 @@ export function getDefenseAreaTargets(b, actor, skill, aimTarget) {
 export function getDefenseAttackPreview(b, actor, skill = actor?.skills?.[0]) {
   if (!b || !actor || !skill) return null;
   const geometry = getDefenseSkillProfile(actor, skill), source = pointOf(actor);
-  const aim = priorityTarget(b, actor, skill) || actor.lastAim || [...DEFENSE_PATH].sort((a, z) => distance(a, actor) - distance(z, actor))[0];
+  const aim = priorityTarget(b, actor, skill) || actor.lastAim || [...(b.route || DEFENSE_PATH)].sort((a, z) => distance(a, actor) - distance(z, actor))[0];
   return { shape: geometry.shape, geometry, source, target: pointOf(aim), aimTargetId: aim.id || null, range: actor.range * geometry.rangeMultiplier,
     width: geometry.width, radius: Math.min(actor.range * geometry.rangeMultiplier, geometry.radius), angle: geometry.angle,
     targetIds: getDefenseAreaTargets(b, actor, skill, aim).map(unit => unit.id) };
@@ -479,16 +482,27 @@ function attack(b, actor) {
 }
 
 function launchProjectile(b, actor, skill, target) {
-  const geometry = getDefenseSkillProfile(actor, skill), start = pointOf(actor), axis = direction(start, target);
+  const geometry = actor.attackGeometry || getDefenseSkillProfile(actor, skill), start = pointOf(actor), axis = direction(start, target);
   const range = actor.range * geometry.rangeMultiplier;
   const end = ['line', 'cone'].includes(geometry.shape) ? { x: start.x + axis.x * range, y: start.y + axis.y * range } : pointOf(target);
   const travel = geometry.shape === 'radial' ? Math.min(range, geometry.radius) : distance(start, end);
   const p = { id: `${b.id}-projectile-${++b.eventSequence}`, sourceId: actor.id, characterId: actor.characterId,
-    skillId: skill.id, kind: skill.kind, animation: skill.animation, color: skill.color || actor.color,
+    skillId: skill.id, kind: skill.kind, animation: skill.animation, color: skill.color || actor.color, mazeTower: !!actor.isMazeTower,
     ...geometry, geometry, start, end, x: start.x, y: start.y, age: 0, duration: Math.max(.12, travel / geometry.speed),
     range, targetId: target.id, hitIds: [], actor, skill, damageTotal: 0, finished: false };
   actor.lastAim = pointOf(target); b.projectiles.push(p);
   emit(b, skill.kind, actor, [target], skill.name, { projectileId: p.id, skillId: skill.id, animation: skill.animation, color: p.color, life: .6 });
+}
+function tickMazeTowers(b) {
+  for (const tower of b.mazeTowers) {
+    tower.actionTimer = Math.max(0, tower.actionTimer - STEP);
+    if (tower.actionTimer > 1e-9) continue;
+    let target = null;
+    for (const enemy of b.enemies) if (alive(enemy) && distance(tower, enemy) <= tower.range && (!target || enemy.progress > target.progress)) target = enemy;
+    if (!target) continue;
+    tower.actionTimer = tower.attackInterval; tower.attacksMade++;
+    launchProjectile(b, tower, tower.towerSkill, target);
+  }
 }
 function projectileHit(b, p, targets) {
   const fresh = targets.filter(target => alive(target) && !p.hitIds.includes(target.id));
@@ -565,7 +579,7 @@ function tickUnit(b, unit) {
       status.tickTimer -= STEP;
       if (status.tickTimer <= 1e-9) {
         status.tickTimer += 1;
-        const source = [...b.allies, ...b.enemies].find(candidate => candidate.id === status.sourceId);
+        const source = [...b.allies, ...b.mazeTowers, ...b.enemies].find(candidate => candidate.id === status.sourceId);
         if (status.type === 'regen') heal(b, source || unit, unit, status.amount);
         else damage(b, source, unit, status.amount, false);
       }
@@ -589,19 +603,19 @@ function fixedStep(b) {
   if (b.spawned < b.spawnTotal && b.spawnTimer <= 1e-9) {
     // Closely spaced volleys create actual clusters for area damage instead
     // of feeding one isolated enemy to the crew every few seconds.
-    for (let i = 0; i < 4 && b.spawned < b.spawnTotal; i++) {
+    for (let i = 0; i < 8 && b.spawned < b.spawnTotal; i++) {
       spawnEnemy(b);
       const enemy = b.enemies.at(-1);
-      enemy.progress = i * .006;
-      Object.assign(enemy, defenseEnemyPointAt(enemy.progress, enemy.laneOffset));
+      enemy.progress = i * 3 / b.routeLength;
+      Object.assign(enemy, defenseEnemyPointAt(enemy.progress, enemy.laneOffset, b));
     }
-    b.spawnTimer += b.round === 2 ? .7 : .9;
+    b.spawnTimer += b.round === 2 ? .32 : .38;
   }
   for (const unit of [...b.allies, ...b.enemies]) tickUnit(b, unit);
   for (const enemy of b.enemies.filter(alive)) {
     if (has(enemy, 'stun') || has(enemy, 'freeze')) continue;
-    enemy.progress = Math.min(1, enemy.progress + enemy.moveSpeed * (1 - Math.min(0.8, valueOf(enemy, 'slow'))) * STEP / routeLength);
-    Object.assign(enemy, defenseEnemyPointAt(enemy.progress, enemy.moveSpeed > 0 ? enemy.laneOffset : 0));
+    enemy.progress = Math.min(1, enemy.progress + enemy.moveSpeed * (1 - Math.min(0.8, valueOf(enemy, 'slow'))) * STEP / b.routeLength);
+    Object.assign(enemy, defenseEnemyPointAt(enemy.progress, enemy.moveSpeed > 0 ? enemy.laneOffset : 0, b));
     if (enemy.progress >= 1) {
       enemy.escaped = true; enemy.alive = false;
       b.ship.hp = Math.max(0, b.ship.hp - enemy.leakDamage); b.stats.leaks++; b.leakedThisWave++;
@@ -610,6 +624,7 @@ function fixedStep(b) {
     }
   }
   tickProjectiles(b);
+  tickMazeTowers(b);
   for (const unit of [...b.allies, ...b.enemies]) if (alive(unit) && unit.actionTimer <= 1e-9 && !has(unit, 'stun') && !has(unit, 'freeze')) attack(b, unit);
   b.remainingToSpawn = Math.max(0, b.spawnTotal - b.spawned);
   const resolved = b.enemies.filter(enemy => !alive(enemy)).length;

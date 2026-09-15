@@ -133,6 +133,20 @@ test('profiles have separate collections while sharing only their existing accou
   await f.economy.buyPack({ packId: 'spark', purchaseId: 'one' }, sibling);
   assert.equal(Object.keys(f.state().grandLine.profiles).length, 2);
 });
+test('ten owned crew members save and reload without granting cards or changing the wallet', async () => {
+  const f = fixture(), snapshot = f.economy.getSnapshot(f.ctx), team = CHARACTERS.slice(0, 10).map(c => c.id);
+  for (const id of team) snapshot.collection.cards[id] = { copies: 1 };
+  f.state().grandLine = { profiles: { [f.ctx.profileKey]: { collection: snapshot.collection } } };
+  const result = await f.economy.saveCollection({ team }, f.ctx);
+  assert.deepEqual(result.collection.team, team);
+  assert.deepEqual(f.economy.getSnapshot(f.ctx).collection.team, team);
+  assert.equal(result.wallet.balance, 2000);
+  const before = JSON.stringify(f.state());
+  await assert.rejects(f.economy.saveCollection({ team: [...team, CHARACTERS[10].id] }, f.ctx), /ten/);
+  await assert.rejects(f.economy.saveCollection({ team: [...team.slice(0, 9), team[0]] }, f.ctx), /ten/);
+  assert.equal(JSON.stringify(f.state()), before);
+});
+
 test('insufficient funds and client-selected cards, costs or ownership cannot alter the wallet', async () => {
   const f = fixture(); f.state().gold = 119;
   await assert.rejects(f.economy.buyPack({ packId: 'spark', purchaseId: 'one', cost: 0, characterId: 'kaido' }, f.ctx), /120/);

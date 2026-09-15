@@ -7,9 +7,10 @@ const dataUrl = moduleUrl(await readFile(new URL('../grand-line-data.js', import
 const replaceImport = (source, name, url) => source.replace(new RegExp(`(['"])\\./${name}\\.js(?:\\?v=[^'"]+)?\\1`, 'g'), JSON.stringify(url));
 const coreUrl = moduleUrl(replaceImport(await readFile(new URL('../grand-line-core.js', import.meta.url), 'utf8'), 'grand-line-data', dataUrl));
 const profilesUrl = moduleUrl(await readFile(new URL('../grand-line-defense-profiles.js', import.meta.url), 'utf8'));
-const source = replaceImport(replaceImport(replaceImport(await readFile(new URL('../grand-line-defense.js', import.meta.url), 'utf8'), 'grand-line-data', dataUrl), 'grand-line-core', coreUrl), 'grand-line-defense-profiles', profilesUrl);
+const gridUrl = moduleUrl(await readFile(new URL('../grand-line-defense-grid.js', import.meta.url), 'utf8'));
+const source = replaceImport(replaceImport(replaceImport(replaceImport(await readFile(new URL('../grand-line-defense.js', import.meta.url), 'utf8'), 'grand-line-data', dataUrl), 'grand-line-core', coreUrl), 'grand-line-defense-profiles', profilesUrl), 'grand-line-defense-grid', gridUrl);
 const { createCollection, addCard, setTeam } = await import(coreUrl);
-const { CHARACTERS, DEFENSE_PATH, DEFENSE_PADS, DEFENSE_STAGES, createDefense, placeDefender, startDefenseWave,
+const { CHARACTERS, DEFENSE_PATH, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_STAGES, createDefense, placeDefender, startDefenseWave,
   advanceDefense, completeDefenseLearning, defenseSkillCooldown, defenseStatusDuration, defensePointAt, defenseEnemyPointAt, getDefenseTargets,
   getDefenseProfile, getDefenseSkillProfile, getDefenseWavePreview, getDefenseAreaTargets, getDefenseAttackPreview,
   summonDefender, recallDefender, upgradeDefender, specializeDefender, setDefensePriority } = await import(moduleUrl(source));
@@ -39,6 +40,7 @@ function fixture(id = 'luffy') {
   startDefenseWave(b); step(b, 0.6); b.rng = () => 0.5;
   b.spawned = b.spawnTotal; b.remainingToSpawn = 0; b.effects = [];
   const actor = b.allies.find(unit => unit.characterId === id), enemy = b.enemies[0];
+  b.enemies = [enemy];
   for (const unit of b.allies) {
     unit.x = 260; unit.y = 200; unit.hp = unit.maxHp; unit.shield = 0; unit.statuses = [];
     unit.actionTimer = 0; unit.energy = 100; unit.cooldowns = {};
@@ -80,10 +82,10 @@ test('defense starts with five unique owned defenders, nine harbors and valid ro
   assert.equal(b.status, 'setup'); assert.equal(b.waveCount, 6); assert.equal(b.round, 1);
   assert.equal(b.supplies, 100); assert.equal(b.trainingPoints, 0); assert.deepEqual(b.projectiles, []);
   assert.equal(b.allies.length, 5); assert.equal(new Set(b.allies.map(unit => unit.padId)).size, 5);
-  assert.equal(DEFENSE_STAGES.length, 9); assert.equal(DEFENSE_PADS.length, 10);
+  assert.equal(DEFENSE_STAGES.length, 9); assert.equal(DEFENSE_PADS.length, 338); assert.equal(DEFENSE_DEFAULT_PADS.length, 10);
   assert.ok(DEFENSE_STAGES.every(stage => stage.waveCount === 6));
   assert.ok(b.allies.every(ally => ally.level === 1 && ally.specialization === null && ally.priority === 'first'));
-  for (const point of [...DEFENSE_PATH, ...DEFENSE_PADS]) assert.ok(point.x >= 0 && point.x <= 1000 && point.y >= 0 && point.y <= 600);
+  for (const point of [...DEFENSE_PATH, ...DEFENSE_PADS]) assert.ok(point.x >= 0 && point.x <= 1120 && point.y >= 0 && point.y <= 630);
   assert.deepEqual(defensePointAt(0), DEFENSE_PATH[0]); assert.deepEqual(defensePointAt(1), DEFENSE_PATH.at(-1));
   assert.deepEqual(collection, before);
   assert.equal(createDefense({ ...collection, team: ['luffy', 'luffy', 'nami', 'usopp', 'chopper'] }), null);
@@ -113,7 +115,7 @@ test('summons use any owned card independently of the saved five and reject dupl
   forceGate(b); assert.equal(summonDefender(b, 'kaido', DEFENSE_PADS[6].id), false);
 });
 
-test('all ten pads can be filled, recalls refund only a bounded paid cost and repeated recalls cannot mint supplies', () => {
+test('all ten crew slots can be filled, recalls refund only a bounded paid cost and repeated recalls cannot mint supplies', () => {
   const collection = createCollection();
   const extras = CHARACTERS.filter(c => !collection.cards[c.id]).slice(0, 6);
   for (const c of extras) addCard(collection, c.id);
@@ -183,7 +185,8 @@ test('placement swaps occupied pads, rejects invalid choices, and locks during a
   assert.equal(placeDefender(b, a.id, '__proto__'), false);
   assert.equal(startDefenseWave(b), true); assert.equal(startDefenseWave(b), false);
   assert.equal(placeDefender(b, a.id, old), false);
-  forceGate(b); assert.equal(placeDefender(b, a.id, old), true);
+  forceGate(b); assert.equal(placeDefender(b, a.id, old), false);
+  completeDefenseLearning(b, { round: 1, total: 3, correct: 3 }); assert.equal(placeDefender(b, a.id, old), true);
 });
 
 test('time advances only while running and large or invalid deltas cannot jump a wave', () => {
@@ -211,8 +214,8 @@ test('enemies in a dense burst use distinct actual road lanes instead of unreada
   assert.ok(b.enemies.length >= 4);
   assert.equal(new Set(b.enemies.map(e => `${e.x},${e.y}`)).size, b.enemies.length);
   for (const enemy of b.enemies) {
-    assert.ok(Math.abs(enemy.laneOffset) <= 16);
-    const position = defenseEnemyPointAt(enemy.progress, enemy.laneOffset);
+    assert.ok(Math.abs(enemy.laneOffset) <= 7);
+    const position = defenseEnemyPointAt(enemy.progress, enemy.laneOffset, b);
     assert.ok(Math.abs(enemy.x - position.x) < 1e-8 && Math.abs(enemy.y - position.y) < 1e-8);
   }
 });
@@ -272,7 +275,7 @@ test('first, strongest and cluster priorities choose materially different valid 
 
 test('projectile travel is authoritative: distant enemies keep full life until the moving attack reaches them', () => {
   const f = fixture('zoro'); f.b.enemies = [f.enemy]; f.b.projectiles = [];
-  Object.assign(f.actor, { x: 20, y: 110 }); f.actor.skills = [f.actor.skills[0]];
+  Object.assign(f.actor, { x: 20, y: 310 }); f.actor.skills = [f.actor.skills[0]];
   f.enemy.progress = .13; Object.assign(f.enemy, defensePointAt(f.enemy.progress));
   const hp = f.enemy.hp; advanceDefense(f.b, .05);
   assert.ok(f.b.projectiles.length > 0); assert.equal(f.enemy.hp, hp, 'Launching is not an immediate hit');
@@ -282,8 +285,8 @@ test('projectile travel is authoritative: distant enemies keep full life until t
   settleProjectiles(f.b); assert.ok(f.enemy.hp < hp, 'Impact applies actual damage after travel');
 });
 
-test('dense waves keep thirty-plus enemies, varied threats and an actual area-damage advantage over one-target shots', () => {
-  const b = createDefense(createCollection()), counts = [32,40,48,56,64,72], types = new Set();
+test('dense waves send eighty to two-hundred-thirty enemies with an actual area-damage advantage over one-target shots', () => {
+  const b = createDefense(createCollection()), counts = [80,105,130,160,190,230], types = new Set();
   for (let wave = 1; wave <= 6; wave++) {
     const preview = getDefenseWavePreview(b); assert.equal(preview.total, counts[wave - 1]);
     assert.equal(preview.groups.reduce((sum, g) => sum + g.count, 0), preview.total);
@@ -292,13 +295,13 @@ test('dense waves keep thirty-plus enemies, varied threats and an actual area-da
   }
   for (const type of ['swarm','runner','armored','captain']) assert.ok(types.has(type));
   const crowdDamage = (id, index) => {
-    const f = fixture(id); f.b.projectiles = []; Object.assign(f.actor, { x: 20, y: 110, attack: 100, range: 300, priority: 'strongest' });
+    const f = fixture(id); f.b.projectiles = []; Object.assign(f.actor, { x: 20, y: 310, attack: 100, range: 300, priority: 'strongest' });
     f.actor.skills = [{ ...CHARACTERS.find(c => c.id === id).skills[index], power: 1, effects: [], cost: 0 }];
     f.b.enemies = Array.from({ length: 32 }, (_, i) => {
       const e = structuredClone(f.enemy); Object.assign(e, { id: 'crowd-'+i, hp: 10000, maxHp: 10000, progress: .045 + i * .0025 });
       return Object.assign(e, defensePointAt(e.progress));
     });
-    const outside = Object.assign(structuredClone(f.enemy), { id: 'outside-footprint', hp: 9000, maxHp: 9000, progress: .24 });
+    const outside = Object.assign(structuredClone(f.enemy), { id: 'outside-footprint', hp: 9000, maxHp: 9000, progress: .4 });
     Object.assign(outside, defensePointAt(outside.progress)); f.b.enemies.push(outside);
     castOnce(f); assert.equal(outside.hp, outside.maxHp, `${id}-${index} leaves an enemy outside the real footprint unharmed`);
     return { hits: f.b.enemies.filter(e => e.hp < e.maxHp).length, damage: f.b.enemies.reduce((sum,e) => sum + e.maxHp - e.hp, 0) };
@@ -473,7 +476,7 @@ test('natural starter voyages are winnable with useful wave pacing and stronger 
     const collection = createCollection(); collection.unlockedEncounter = 9;
     const { b, waves } = voyage(collection, encounter, seed);
     assert.equal(b.status, 'victory', `starter harbor ${encounter}, seed ${seed}`);
-    assert.equal(waves.length, 6); assert.ok(waves.every(seconds => seconds >= 10 && seconds < 100));
+    assert.equal(waves.length, 6); assert.ok(waves.every(seconds => seconds >= 5 && seconds < 100));
     assert.ok(b.stats.damageDealt > 0 && b.stats.skillsUsed > 0 && b.stats.kills > 0);
     assert.ok(b.effects.length <= 80 && b.log.length <= 14);
   }

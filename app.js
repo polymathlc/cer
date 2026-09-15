@@ -1,8 +1,8 @@
 import { installHadesDisplay } from "./hades-display.js";
 import { installPirateRiftPortal } from "./pirate-rift-portal.js?v=1.0.0";
-import { installGrandLinePortal } from "./grand-line-portal.js?v=2.1.0";
-import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=2.1.0";
-import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from "./grand-line-economy.js?v=2.1.0";
+import { installGrandLinePortal } from "./grand-line-portal.js?v=3.0.0";
+import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=3.0.0";
+import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from "./grand-line-economy.js?v=3.0.0";
 const grandLineRpgSaveGate = createGrandLineRpgSaveGate({getUser:()=>currentUser,flush:()=>rpgSave()});
 const grandLinePortal=installGrandLinePortal({
   ...createGrandLineEconomy({
@@ -14,7 +14,7 @@ const grandLinePortal=installGrandLinePortal({
         :Promise.resolve(localStorage.setItem('scienceQuestRpg:'+uid,JSON.stringify(state)))})
   }),
   subject:'Science',getUser:()=>currentUser,getLevel:_scienceFeedGameLevel,getProfileKey:()=>JSON.stringify([_scienceFeedKey(),familyProfile.activeStudent]),
-  levels:()=>TOPIC_LEVELS,isLevel:isLevelCode,notify:message=>showToast(message,'error'),
+  getPreviewLevel:()=>LEVEL_DEFAULT_CAP,isLevel:isLevelCode,notify:message=>showToast(message,'error'),
   beforeOpen:()=>{pirateRiftPortal.close();if(document.getElementById('page-hades')?.classList.contains('active'))navigateTo('arcade');else _hadesResetLearning('Grand Line Chronicles was opened.');},
   openRift:()=>openPirateRift(),getRiftFrame:()=>document.querySelector('.pirate-rift-portal iframe'),
   ...createGrandLineScienceAdapter({getBank:()=>questionBank,isReleased:qReleased,isInSyllabus:qInSyllabus,extractMcq:_sdExtractMcq,
@@ -3849,7 +3849,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.386.3';
+const APP_VERSION = 'v1.387.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)

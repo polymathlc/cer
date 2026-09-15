@@ -1,6 +1,6 @@
 // Purchases use the portal's existing reward-point wallet. The iframe cannot
 // choose its card, price, odds, ownership or balance, and receives no ledger.
-import { CHARACTERS, CHARACTER_BY_ID, currentCharacterId, createCollection, normalizeCollection, addCard, setTeam } from './grand-line-core.js?v=2.1.0';
+import { CHARACTERS, CHARACTER_BY_ID, currentCharacterId, createCollection, normalizeCollection, addCard, setTeam } from './grand-line-core.js?v=3.0.0';
 
 const token = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
 const number = (value, max = 1000000) => Number.isSafeInteger(value) && value >= 0 ? Math.min(max, value) : 0;
@@ -159,7 +159,7 @@ export function createGrandLineEconomy(env) {
     async saveCollection({ team, progress }, ctx) {
       if (saving) throw new Error('Your wallet is still saving. Retry in a moment.');
       const state = current(ctx), saved = record(state, ctx), collection = normalizeCollection(saved.collection);
-      if (team !== undefined && !setTeam(collection, team)) throw new Error('Choose five different characters that you own.');
+      if (team !== undefined && !setTeam(collection, team)) throw new Error('Choose one to ten different characters that you own.');
       // Battle progression is non-financial. Never accept cards, pack balances,
       // purchase counts, points or arbitrary properties from the game frame.
       if (progress && typeof progress === 'object' && !Array.isArray(progress)) {
