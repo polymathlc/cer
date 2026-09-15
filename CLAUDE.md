@@ -5850,7 +5850,113 @@ rewrite box under it.
   write from anyone else is refused by the rule itself and named in the toast.
 - Run **`node tools/mistake-bank-tests.mjs`** after touching any of it.
 
+## 🐾 The mistake analysis that FOLLOWS a sidekick (v1.393.0)
+
+`science-mistakes.js` (`prepareMistakeAnalysis` / `mountMistakeAnalysis` /
+`resetMistakeAnalysis`), `science-mistake-art.js` (`MISTAKE_ANIMAL_ART_IDS` /
+`renderMistakeAnimalAvatar` / `mistakeAnimalAccent`), the exported
+`scienceCoachMotion` in `science-coaches.js`, and in `app.js` —
+`_mistakeAnalysisFor` / `_mcqChoiceLabel` (beside `_showScienceCoachFeedback`,
+search `const _scienceCoachEpochs`), `MISTAKE_ANIMAL_RULE` spliced into all
+THREE marking prompts with the `mistake` / `mistakeWhy` reply fields, and
+`_mkFigure` / `_mkMotion` on the student's 🐾 Learn-from-mistakes page — plus
+the `.sc-mistake-*` / `.sc-question*` / `.mk-figure*` CSS in `index.html`.
+
+A Science Sidekick (Evidence Ellen, Context Connie…) says what a stronger
+answer needs NEXT. Directly under it, on a wrong or partly-right answer, the
+**🐾 Mistake analysis** card now says which of the ten mistake animals the
+answer showed — the Parrot repeated the question, the Sloth stopped halfway —
+drawn as the SAME kind of animated figure, standing beside the ACTUAL question
+(its title, its wording, its part label, its pictures) and what the student
+wrote, with the animal's lesson under it. The same figures animate on each
+animal's card of the student's Learn-from-mistakes page.
+
+- **IT RIDES THE SAME MARKING CALL, never a second one.** `MISTAKE_ANIMAL_RULE`
+  is appended to the whole-question, per-part and annotation prompts and the
+  reply carries `mistake` / `mistakeWhy` beside the coach issues it already
+  returned. No extra cost, and no way for the habit and the verdict to come
+  from two different readings. `_mistakeAnalysisFor` resolves the model's word
+  through `mistakeAnimalNormalize` → `mistakeAnimal`, and **"none" is a real
+  answer**: an unknown, invented or unsure animal draws NO card rather than the
+  nearest one — a wrong label teaches a wrong lesson with a straight face.
+- **IT FOLLOWS THE SIDEKICK, and the sidekick's root is the anchor.**
+  `_showScienceCoachFeedback` mounts the coach first and hands its root to
+  `mountMistakeAnalysis(host, coachRoot || host, analysis)`, which inserts
+  `afterend`. With no coach (a partial answer with no issue the coaches speak
+  to) it follows the feedback line itself. The browser harness pins the ORDER
+  by measuring the two boxes — a card that mounted above the coach would look
+  perfectly fine and be the wrong way round.
+- **THE ACTUAL QUESTION TRAVELS WITH IT.** `_mistakeAnalysisFor(result,
+  context, q)` reads the question's own title, the part's wording, its label
+  and up to two of its pictures, and what the student wrote — an MCQ pick is
+  spelled out through `_mcqChoiceLabel` rather than shown as a bare letter.
+  A question with no wording says so on the card rather than drawing an empty
+  box. Every string is clipped (`LIMITS`) and escaped, and a picture is drawn
+  only from a scheme a question's own figure can come from (`safeUrl`): a
+  classmate's words and a model's sentence are DATA, and the harness pins that
+  nothing in them runs.
+- **`prepareMistakeAnalysis` IS THE ONE DOOR and it REFUSES rather than
+  guesses**: a correct or blank verdict, an animal not in
+  `MISTAKE_ANIMAL_ART_IDS`, a taxonomy entry missing its words, or a
+  non-object all come back `null` and nothing is mounted. It takes the
+  TAXONOMY entry, never the model's string, so the words on the card are the
+  centre's own.
+- **ONE MOTION PREFERENCE FOR BOTH CARDS.** `scienceCoachMotion` is exported
+  from `science-coaches.js` and the mistake card imports it rather than keeping
+  a second flag: both wear `data-sc-mount`, so *Pause motion* on either pauses
+  both, `prefers-reduced-motion` stills both, and both are `display: none` on
+  paper. Two flags would disagree the first time one was pressed.
+- **EVERY RESET SWEEPS BOTH.** `_resetOpenScienceCoaches` and
+  `_captureScienceCoachTarget` call `resetMistakeAnalysis` beside
+  `resetScienceCoaches`, each in its own try/catch: a re-check clears the old
+  analysis before the new mark lands, and a reset of the question takes both
+  cards with it. A stale card under a fresh mark is a lesson about the wrong
+  answer.
+- **A FAILURE NEVER BLOCKS MARKING.** Both mounts are wrapped: a card that
+  could not be drawn costs the student a card, not their mark.
+- **`science-mistake-art.js` is its OWN sheet of ten**, one avatar per animal
+  id, each self-contained (no shared `id`, no external reference) so ten on the
+  Learn-from-mistakes page do not cross-reference each other — the same rule
+  the Sidekick art and Chung GPT's face follow. `mistakeAnimalAccent` is the
+  ONE place an animal's accent colour comes from, so the card and the roster
+  agree.
+- **The `MISTAKE_ANIMALS` block is untouched.** It is shared byte for byte with
+  `polymathlc/scan` and `polymathlc/anskey`; this feature reads it and adds
+  nothing to it, so the three apps still agree.
+- Run **`node --test tools/science-coach-core-tests.mjs
+  tools/science-coach-integration-tests.mjs tools/science-mistake-tests.mjs`**,
+  `node tools/mistake-bank-tests.mjs`, `node tools/teaching-notes-tests.mjs`
+  and the Playwright harness `tools/science-coach-browser-tests.mjs` (locally:
+  `COACH_PLAYWRIGHT_MODULE=/opt/node22/lib/node_modules/playwright/index.mjs node
+  tools/science-coach-browser-tests.mjs`; it runs in the `science-coaches.yml`
+  workflow) after touching any of it.
+
 ## House rules
+- After touching **🐾 the mistake analysis that follows a sidekick**
+  (`_mistakeAnalysisFor`, `_mcqChoiceLabel`, the `mistake` / `mistakeWhy`
+  fields or `MISTAKE_ANIMAL_RULE` in any of the three marking prompts,
+  `prepareMistakeAnalysis`, `mountMistakeAnalysis`, `resetMistakeAnalysis`,
+  `scienceCoachMotion`, `renderMistakeAnimalAvatar`, `MISTAKE_ANIMAL_ART_IDS`,
+  `mistakeAnimalAccent`, `_mkFigure` / `_mkMotion`, or the mount and reset
+  calls in `_showScienceCoachFeedback` / `_resetOpenScienceCoaches` /
+  `_captureScienceCoachTarget`), run
+  `node --test tools/science-coach-core-tests.mjs tools/science-coach-integration-tests.mjs tools/science-mistake-tests.mjs`,
+  `node tools/mistake-bank-tests.mjs`, `node tools/teaching-notes-tests.mjs`
+  **and the Playwright harness** `tools/science-coach-browser-tests.mjs`. Every
+  failure is silent and the answer is still marked. Let `prepareMistakeAnalysis`
+  accept an animal off the list and the card names a habit nobody can act on;
+  let it draw on a correct or blank verdict and a child is told they made a
+  mistake they did not make. Mount it BEFORE the coach and the two cards read
+  the wrong way round — the harness measures the boxes because the source
+  cannot see it. Keep a second motion flag and one Pause button pauses one
+  card and not the other. Drop `resetMistakeAnalysis` from either reset and a
+  re-check leaves last answer's lesson under this answer's mark. Write the
+  question or the student's words into the card unescaped, or draw a picture
+  from any scheme, and a classmate's sentence runs in another child's page.
+  Ask for the habit in a SECOND call and the animal and the verdict come from
+  two different readings. And let the taxonomy block drift from
+  `polymathlc/scan` and `polymathlc/anskey` and the same habit wears three
+  animals in three apps.
 - After touching **🐾 the mistake bank** (`MISTAKE_ANIMALS`, `mistakeAnimalNormalize`,
   `MISTAKE_ANIMAL_RULE`, `_mkEntryFromAnalysis`, `_mkCandidatesFrom`, `_mkVisibleToStudent`,
   `_mkQuizOptions`, `_mkAnalysePrompt`, `mkAnalyseCandidate`, `mkGenerateOne`, `mkApprove`,

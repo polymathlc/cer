@@ -95,6 +95,11 @@ const prelude = `
   function showConfirm(t, m, fn) { fn(); }
   const document = { getElementById: () => null, querySelector: () => null };
   const CSS = { escape: s => s };
+  // The animated figure and the shared motion preference are imported from
+  // the sidekick modules; here they are stubs, because this harness checks
+  // the bank and the quiz, never a drawing.
+  const renderMistakeAnimalAvatar = (id, opts) => '<svg data-animal="' + id + '"' + (opts && opts.animated === false ? ' data-still' : '') + '></svg>';
+  const scienceCoachMotion = { load() {}, allowed: () => true };
 `;
 const api = new Function('scienceQuestionContentKey',prelude + block + `
   return {

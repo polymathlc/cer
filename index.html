@@ -9108,6 +9108,37 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 }
 @media (prefers-reduced-motion:reduce) { .sc-coach-mount *, .sc-coach-mount *::before { animation:none !important; transition:none !important; } }
 @media print { .sc-coach-mount { display:none !important; } }
+/* 🐾 THE MISTAKE ANALYSIS CARD — follows a sidekick, wears the same shell.
+   The root carries BOTH .sc-coach-mount (shell, motion, print rules) and
+   .sc-mistake-mount (its own accent per animal, set inline from the art
+   module, and the question row). Colours here are only the fallback for an
+   animal the art module has no palette for. */
+.sc-mistake-mount { --sc-accent:#8a4b12; --sc-wash:#fff1e3; }
+.sc-coach-mount + .sc-mistake-mount { margin-top:-4px; }
+.sc-signal--mistake { background:var(--sc-accent); box-shadow:0 0 0 3px #0000000f; }
+.sc-mistake-mount .sc-reopen::before { content:'🐾'; font-size:14px; }
+.sc-mistake-mount .sc-step-star { font-size:22px; line-height:1.5; }
+.sc-mistake-mount .sc-observation { white-space:pre-line; }
+.sc-question { grid-column:1/-1; position:relative; border:1px dashed #d3dbe6; border-radius:14px; background:#fff; padding:14px 16px 15px; margin-top:6px; }
+.sc-question-label { display:block; text-transform:uppercase; font-size:9px; letter-spacing:.1em; font-weight:800; color:#6b7589; margin:0 0 5px; }
+.sc-question-wrote + .sc-question-label, .sc-question-text + .sc-question-label, .sc-question-pics + .sc-question-label { margin-top:13px; }
+.sc-question-title { display:block; font-size:14px; font-weight:800; color:#25304c; line-height:1.4; margin:0 0 4px; overflow-wrap:anywhere; }
+.sc-question-text { margin:0; font-size:13px; line-height:1.65; color:#3d4961; white-space:pre-line; overflow-wrap:anywhere; }
+.sc-question-none { color:#6b7589; font-style:italic; }
+.sc-question-pics { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+.sc-question-pics img { display:block; max-width:min(100%,260px); max-height:200px; width:auto; height:auto; border-radius:10px; border:1px solid #e5e9f0; background:#fff; }
+.sc-question-wrote { margin:0; font-size:13px; line-height:1.6; color:#25304c; font-weight:600; border-left:3px solid var(--sc-accent); padding:0 0 0 11px; white-space:pre-line; overflow-wrap:anywhere; }
+.sc-mistake-mount .sc-next-move { margin-top:12px; }
+.sc-mistake-mount .sc-bottomline { padding-top:2px; }
+.sc-mistake-mount .sc-count { font-size:11px; line-height:1.6; color:#58617a; }
+.sc-team-grid--mistake { grid-template-columns:repeat(5,minmax(0,1fr)); }
+.sc-team-member--here { border-color:var(--sc-accent); background:var(--sc-wash); box-shadow:0 0 0 2px var(--sc-wash); }
+.sc-team-member--here h4 { color:var(--sc-accent); }
+@media (max-width:480px) {
+  .sc-question { padding:12px; margin-top:2px; }
+  .sc-question-pics img { max-width:100%; }
+  .sc-team-grid--mistake { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
 /* SCIENCE COACHES END */
 </style>
 <link rel="stylesheet" href="arcade-ui.css?v=2">
@@ -10538,6 +10569,18 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           .mk-lesson-verdict{ font-size:0.95rem; margin-bottom:6px; }
           .mk-lesson-why{ font-size:0.88rem; line-height:1.7; }
           .mk-lesson-hint{ font-size:0.82rem; color:var(--text-muted); line-height:1.6; margin-top:6px; }
+          /* the animated mistake animal beside the lesson — the same figure the 🐾 card wears after a marked answer */
+          .mk-lesson.has-figure{ display:grid; grid-template-columns:124px minmax(0,1fr); gap:6px 18px; align-items:center; }
+          .mk-figure{ position:relative; text-align:center; align-self:center; }
+          .mk-figure svg{ display:block; width:124px; height:124px; overflow:visible; margin:0 auto; }
+          .mk-lesson-text{ min-width:0; }
+          .mk-figure[data-motion="on"] .sc-avatar-float{ animation:sc-float 3.5s ease-in-out 3; transform-origin:center; }
+          .mk-figure[data-motion="on"] .sc-avatar-blink{ animation:sc-blink 4.3s ease-in-out 3; transform-box:fill-box; transform-origin:center; }
+          .mk-figure[data-motion="on"] .sc-avatar-hand{ animation:sc-wave 1.3s ease-in-out 3; transform-box:fill-box; transform-origin:bottom center; }
+          .mk-figure[data-motion="on"] .sc-avatar-spark{ animation:sc-spark 2.1s ease-in-out 4; transform-box:fill-box; transform-origin:center; }
+          .mk-animal-figure svg{ display:block; width:96px; height:96px; margin:0 auto 4px; overflow:visible; }
+          @media (max-width:480px){ .mk-lesson.has-figure{ grid-template-columns:84px minmax(0,1fr); gap:6px 12px; } .mk-figure svg{ width:84px; height:84px; } }
+          @media (prefers-reduced-motion:reduce){ .mk-figure *{ animation:none !important; } }
           .mk-fix textarea{ width:100%; font:inherit; font-size:0.92rem; line-height:1.6; padding:10px 12px; border:1px solid var(--border); border-radius:10px; resize:vertical; box-sizing:border-box; }
           .mk-fix-btns{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
           .mk-check{ margin-top:12px; padding:12px 14px; border-radius:10px; font-size:0.88rem; line-height:1.65; border:1px solid var(--border); }

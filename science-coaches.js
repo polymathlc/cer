@@ -33,6 +33,23 @@ function loadPreference() {
   media?.addEventListener?.('change', syncMotion);
 }
 
+/* The ONE motion preference, shared with the 🐾 mistake analysis card that
+   follows a coach: both wear data-sc-mount, so one "Pause motion" pauses
+   both, and the mistake card imports this rather than keeping a second
+   flag that could disagree with the first. */
+export const scienceCoachMotion = Object.freeze({
+  load: loadPreference,
+  allowed: motionAllowed,
+  reduced: () => !!media?.matches,
+  sync: syncMotion,
+  toggle() {
+    if (media?.matches) return;
+    motion = !motion;
+    try { localStorage.setItem(MOTION_KEY, motion ? 'on' : 'off'); } catch { /* Optional device preference. */ }
+    syncMotion();
+  }
+});
+
 /** Clear only the presentation belonging to this rendered question. */
 export function resetScienceCoaches(container) {
   mounts.get(container)?.remove();
@@ -121,12 +138,7 @@ export function mountScienceCoach(feedback, result, context = {}) {
     reopen.hidden = true;
     root.querySelector('[data-sc-close]').focus({preventScroll:true});
   });
-  root.querySelector('[data-sc-motion]').addEventListener('click', () => {
-    if (media?.matches) return;
-    motion = !motion;
-    try { localStorage.setItem(MOTION_KEY, motion ? 'on' : 'off'); } catch { /* Optional device preference. */ }
-    syncMotion();
-  });
+  root.querySelector('[data-sc-motion]').addEventListener('click', () => scienceCoachMotion.toggle());
   const team = root.querySelector('.sc-team');
   team.addEventListener('toggle', () => {
     const grid = root.querySelector('.sc-team-grid');
