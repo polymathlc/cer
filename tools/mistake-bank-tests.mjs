@@ -108,12 +108,37 @@ const prelude = `
   // the bank and the quiz, never a drawing.
   const renderMistakeAnimalAvatar = (id, opts) => '<svg data-animal="' + id + '"' + (opts && opts.animated === false ? ' data-still' : '') + '></svg>';
   const scienceCoachMotion = { load() {}, allowed: () => true };
+  // The question renderers a card draws a bank question with. Each is the real
+  // function's shape and nothing more — this harness checks WHICH blocks are
+  // drawn and what is never drawn, not how a table or a part label looks.
+  function qPartMap(blocks) { const m = new Map(); (blocks || []).forEach(b => { if (b && b.part) m.set(b, b.part); }); return m; }
+  function qBlockOpensKey(b, map) { return (b && b.part) || ''; }
+  function qPartLabel(p) { return p ? '(' + p + ')' : ''; }
+  function qPartBodyHtml(b) { return (b && b.content) || ''; }
+  function imgSizeStyle(b) { return 'height:auto;max-width:70%'; }
+  function renderTableReadonly(b, cls) { if (b && b.boom) throw new Error('the table renderer blew up'); return '<table><tr><td>' + escapeHtml((b && b.cell) || '') + '</td></tr></table>'; }
+  function _fbSegments(text) {
+    // No regex literal: this stub is inside a template literal, where a
+    // backslash is the template's before it is the pattern's.
+    const out = []; let rest = String(text || '');
+    while (rest.length) {
+      const i = rest.indexOf('[[');
+      if (i < 0) { out.push({ type: 'text', text: rest }); break; }
+      if (i > 0) out.push({ type: 'text', text: rest.slice(0, i) });
+      const j = rest.indexOf(']]', i);
+      if (j < 0) { out.push({ type: 'text', text: rest.slice(i) }); break; }
+      out.push({ type: 'blank', answer: rest.slice(i + 2, j) });
+      rest = rest.slice(j + 2);
+    }
+    return out;
+  }
 `;
 const api = new Function('scienceQuestionContentKey',prelude + block + `
   return {
     MISTAKE_ANIMALS, mistakeAnimal, mistakeAnimalNormalize, mistakeAnimalLabel, mistakeAnimalIds, MISTAKE_ANIMAL_RULE,
     MK_HARVEST_MAX, MK_MIN_ANSWER_WORDS, MK_QUIZ_OPTIONS, MK_SESSION_MAX, MK_COLLECTION,
     _mkEntryFromAnalysis, _mkCandidatesFrom, _mkSort, _mkVisibleToStudent, _mkQuizOptions, _mkModelAnswer,
+    _mkQuestionHtml, _mkQuestionBlocksHtml, MK_Q_BLOCKS,
     _mkAnalysePrompt, _mkGenPrompt, mkAnalyseCandidate, mkGenerateOne, _mkStudentPool, _mkLogQuiz,
     _mkMarkedEntry, _mkFileMarked, _mkHarvestNote, mkHarvest, _mkOwnEntries, _mkOwnSectionHtml, MK_FILED_MARKING, MK_FILED_AI,
     setAttempts: a => { attemptDocs = a; }, setLog: l => { mistakeLog = l; }, state: () => _mk, _mkNormaliseEntry, loadAdmin: () => mkLoad(true),
@@ -429,6 +454,99 @@ ok('…and must read as an honest attempt', /Never a parody, never obviously sil
   ok('with nothing named yet the section says so and the button is disabled', /none yet/.test(empty) && /disabled/.test(empty) && !/mk-own-card/.test(empty));
   const many = Array.from({ length: 9 }, (_, i) => Object.assign({}, m1, { id: 'own:x' + i, at: '2026-09-0' + (i + 1) }));
   ok('only the newest MK_OWN_SHOWN cards are drawn and the rest are counted', (api._mkOwnSectionHtml(many).match(/mk-own-card/g) || []).length === 6 && /Showing your newest 6 of 9/.test(api._mkOwnSectionHtml(many)));
+}
+
+/* ---------- 🐾 THE QUESTION ON A CARD IS THE QUESTION OUT OF THE BANK (v1.395.0) ----------
+   `e.question` is the wording flattened for a PROMPT, so a card built on it
+   reads as one grey paragraph — stem, statements and options run together —
+   with the figure dumped underneath. The card draws the bank question instead.
+   Two ways that goes wrong and neither throws: it stops drawing (the card is a
+   paragraph again, and nobody reports a card that has always looked like
+   that), or it draws a block that carries the ANSWER — on a card read BEFORE
+   the child rewrites it, which hands them the very thing they are being asked
+   to write. */
+{
+  const qW = {
+    id: 'qW', title: 'Effect of Removing Food-Carrying Tubes', topic: 'Heat',
+    blocks: [
+      { type: 'text', content: '<p>The diagram shows a plant.</p>' },
+      { type: 'image', url: 'https://x/plant.png', caption: 'The plant at W' },
+      { type: 'text', content: '<p>What will be the effect(s) of removing food-carrying tubes from location W?</p>' },
+      { type: 'mcq', id: 'm1', correctId: 'o2', options: [
+        { id: 'o1', text: 'A only' }, { id: 'o2', text: 'B only' },
+        { id: 'o3', text: 'A and B only' }, { id: 'o4', text: 'B and C only' } ] },
+      { type: 'plainanswer', content: 'The flowers die because no food reaches them.' },
+      { type: 'answerKey', text: '(2) B only is the answer' },
+      { type: 'explanation', content: 'Food-carrying tubes move food from the leaves.' },
+      { type: 'workingSpace', lines: 4, answerKey: 'flowers die' },
+      { type: 'answerLine', label: 'Answer', answer: 'the second option' }
+    ]
+  };
+  api.setBank([qW]);
+  const e = { id: 'mk1', questionId: 'qW', animal: 'reasoning', status: 'approved',
+    studentAnswer: '(3) A and B only. The flowers die, so food cannot be transported past W to them.',
+    question: 'Effect of Removing Food-Carrying Tubes The diagram shows a plant. [Question figure 1] What will be the effect(s)? Option 1: A only Option 2: B only',
+    images: ['https://x/plant.png'] };
+  const before = JSON.stringify(e);
+  const drawn = api._mkQuestionHtml(e);
+  ok('the card DRAWS the bank question, never the wording flattened for a prompt',
+     /mk-qbody/.test(drawn) && /The diagram shows a plant/.test(drawn)
+     && !/\[Question figure 1\]/.test(drawn) && !/Option 1: A only/.test(drawn));
+  ok('the figure is drawn where the question prints it — in block order, not in a row underneath',
+     drawn.indexOf('plant.png') > drawn.indexOf('The diagram shows a plant')
+     && drawn.indexOf('plant.png') < drawn.indexOf('What will be the effect')
+     && !/mk-q-imgs/.test(drawn) && /The plant at W/.test(drawn));
+  ok('the choices are a READ-ONLY numbered list: no radios, and the right one is never marked',
+     /mk-qb-opts/.test(drawn) && /<b>3<\/b><span>A and B only<\/span>/.test(drawn)
+     && !/<input/.test(drawn) && !/o2/.test(drawn) && !/correct/i.test(drawn));
+  ok('THE ALLOWLIST IS THE ANSWER-LEAK GUARD — nothing carrying an answer is drawn at all',
+     !/no food reaches them/.test(drawn) && !/\(2\) B only is the answer/.test(drawn)
+     && !/Food-carrying tubes move food/.test(drawn) && !/the second option/.test(drawn)
+     && !/ws-working|ws-open-lines/.test(drawn));
+  ok('the allowlist names only the block types a question ASKS with',
+     JSON.stringify(api.MK_Q_BLOCKS) === JSON.stringify(['text', 'part', 'image', 'table', 'mcq', 'fillblank']));
+  ok('drawing a card writes nothing to the entry — it is a render, not a re-store', JSON.stringify(e) === before);
+  ok('a picture on a drawn card is eager only where a child is looking at it now',
+     /loading="eager"/.test(api._mkQuestionHtml(e, { eager: true })) && /loading="lazy"/.test(drawn));
+
+  api.setBank([{ id: 'qF', title: 'Blanks', blocks: [{ type: 'fillblank', text: 'Water [[evaporates]] when it is heated.' }] }]);
+  const fb = api._mkQuestionHtml({ questionId: 'qF', question: 'Water ____ when it is heated.' });
+  ok('a fill-in-the-blank is drawn BLANK — the review rendering every other student surface shares puts the answer in the slot',
+     /mk-qb-blank/.test(fb) && /when it is heated/.test(fb) && !/evaporates/.test(fb));
+
+  api.setBank([{ id: 'qT', title: 'Table', blocks: [{ type: 'table', cell: 'Beaker A' }] }]);
+  ok('a table is drawn as a table', /<table>/.test(api._mkQuestionHtml({ questionId: 'qT', question: 'TABLE: Beaker A' })));
+
+  api.setBank([{ id: 'qA', title: 'Only answers', blocks: [{ type: 'plainanswer', content: 'the model answer' }] }]);
+  const none = api._mkQuestionHtml({ questionId: 'qA', question: 'the stored wording' });
+  ok('a question with nothing a student is shown falls back rather than drawing an empty box',
+     !/mk-qbody/.test(none) && /the stored wording/.test(none) && !/the model answer/.test(none));
+
+  const gone = api._mkQuestionHtml({ questionId: 'not-in-the-bank', question: 'A question that has left the bank.', images: ['https://x/fig.png'] });
+  ok('a question that has LEFT the bank still reads, on the wording and pictures the entry carries',
+     !/mk-qbody/.test(gone) && /A question that has left the bank/.test(gone) && /mk-q-imgs/.test(gone) && /fig\.png/.test(gone));
+  ok('the fallback wording is escaped', /&lt;b&gt;/.test(api._mkQuestionHtml({ questionId: 'gone', question: '<b>x</b>' })));
+
+  // The console.warn this prints is the point of the case: the renderer caught
+  // a throw and fell back, rather than taking the practice card down with it.
+  api.setBank([{ id: 'qB', title: 'Boom', blocks: [{ type: 'table', boom: true }] }]);
+  const boom = api._mkQuestionHtml({ questionId: 'qB', question: 'The stored wording stands.' });
+  ok('a failure to draw is the stored wording, never a practice card that breaks',
+     /The stored wording stands/.test(boom) && !/mk-qbody/.test(boom));
+
+  const sess = block.slice(block.indexOf('function _mkRenderSession'), block.indexOf('function mkPick'));
+  ok('the practice card draws the question through the ONE renderer',
+     /_mkQuestionHtml\(e, \{ eager: true \}\)/.test(sess) && !/escapeHtml\(e\.question\)/.test(sess));
+  const teacher = block.slice(block.indexOf('function _mkCardHtml'), block.indexOf('function _mkReadCard'));
+  ok('the teacher’s card opens on the same drawing, so what is approved is what the class reads',
+     /_mkQuestionHtml\(e\)/.test(teacher));
+  const renderers = block.slice(block.indexOf('function _mkQuestionBlocksHtml'), block.indexOf('function _mkModelAnswer'));
+  ok('no −/+ picture pill reaches a mistake card — the thing being vetted is the lesson, not the question',
+     !/pvsBarHtml\(|pvsWrapAttrs\(/.test(renderers));
+  ok('the feed content key still comes off the STORED wording, or every mistake already met is served again',
+     /function _mkFeedQuestion\(e\) \{\s*return \{ id: 'mistake:' \+ e\.id, blocks: \[\{ type: 'text', content: e\.question \|\| '' \}/.test(block));
+  ok('the drawn question has its stylesheet',
+     /\.mk-qbody\b/.test(html) && /\.mk-qb-opts\b/.test(html) && /\.mk-qb-blank\b/.test(html) && /\.mk-qb-fig\b/.test(html) && /\.mk-qtoggle\b/.test(html));
 }
 
 /* ---------- 🐾 An entry stored under the OLD list still reads (v1.394.0) ---------- */
