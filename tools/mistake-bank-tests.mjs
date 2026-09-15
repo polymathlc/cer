@@ -126,6 +126,17 @@ const prelude = `
   function qSubNormalize(v) { const t = String(v == null ? '' : v).trim().toLowerCase().replace(/[()\\s.]/g, ''); return ['i','ii','iii','iv','v','vi','vii','viii'].indexOf(t) >= 0 ? t : ''; }
   function qPartKey(letter, sub) { return letter && sub ? letter + '.' + sub : (letter || (sub ? '.' + sub : '')); }
   function qPartKeyIn(key, want) { const k = String(key || ''), w = String(want || ''); if (!w) return !k; return qPartSubOf(w) ? k === w : qPartLetterOf(k) === w; }
+  const QPART_ASSIGN = 'abcdefghjklmnopqrstuvwxyz';
+  function qPartNormalize(v) {
+    const raw = String(v == null ? '' : v).trim().toLowerCase();
+    const dot = raw.indexOf('.');
+    if (dot >= 0) {
+      const L = qPartLetterNormalize(raw.slice(0, dot));
+      const S = qSubNormalize(raw.slice(dot + 1));
+      if (S && (L || !raw.slice(0, dot).trim())) return qPartKey(L, S);
+    }
+    return qPartLetterNormalize(raw);
+  }
   function qPartLabel(p) { const L = qPartLetterOf(p), S = qPartSubOf(p); return (L ? '(' + L + ')' : '') + (S ? '(' + S + ')' : ''); }
   function qPartBodyHtml(b) { return (b && b.content) || ''; }
   function imgSizeStyle(b) { return 'height:auto;max-width:70%'; }
@@ -153,6 +164,7 @@ const api = new Function('scienceQuestionContentKey',prelude + block + `
     _mkEntryFromAnalysis, _mkCandidatesFrom, _mkSort, _mkVisibleToStudent, _mkQuizOptions, _mkModelAnswer,
     _mkQuestionHtml, _mkQuestionBlocksHtml, MK_Q_BLOCKS,
     _mkPartKey, _mkPartWhat, _mkPartNote, _mkCardHtml,
+    MK_RUN_MIN, _mkAnswerRuns, _mkAnswerFor, _mkSpansParts, _mkShownAnswer, _mkPartNamed,
     MK_STATUS_ALL, _mkVisible, _mkHaystack, _mkPruneSelection, _mkDeleteMany,
     mkTogglePick, mkPickAll, mkDeleteSelected, mkDeleteAllShown, mkSetStatus, mkSetAnimal, mkDelete,
     picked: () => _mkPicked, deletes, confirms,
@@ -787,6 +799,167 @@ ok('…and must read as an honest attempt', /Never a parody, never obviously sil
     student: 'a wrong answer here', expected: 'the model', part: '(b) Claim' }], id => id === 'qP' ? { id: 'qP', title: 'Three parts', blocks: [{ type: 'text', part: 'b', content: 'Part b wording' }, { type: 'plainanswer', content: 'the model' }] } : null);
   ok('a child studying their OWN mistake is told which part it was',
      own.length === 1 && own[0].part === '(b) Claim' && api._mkPartNote(own[0]) === 'part (b) · Claim');
+}
+
+/* ---------- 🐾 ONE PART'S ANSWER, AND NOT THE REST (v1.398.0) ----------
+   The whole question is drawn on a card; what reached the class beside it was
+   the whole question's ANSWER. Both directions here are silent and the card
+   still paints: leave it whole and a lesson about (b) opens with a paragraph
+   of (a) that is right and is never mentioned again, cut it in the wrong
+   place and the lesson is served with half its science missing. ------- */
+{
+  const runs = api._mkAnswerRuns('(a) E. It can make its own food. (b) The population of C will increase.');
+  ok('an answer that carries its own part markers splits on them',
+     runs.length === 2 && runs[0].key === 'a' && runs[1].key === 'b');
+  ok('AN UPPERCASE LETTER IS PROSE — "E." is the organism the answer names, not part (e)',
+     !!(runs[0] && /E\. It can make its own food/.test(runs[0].text)) &&
+     api._mkAnswerRuns('A. First thing here. B. Second thing here.').length === 0);
+  ok('a run KEEPS ITS OWN LABEL, so the child is not told which part in a second sentence',
+     runs[0].text.startsWith('(a) ') && runs[1].text.startsWith('(b) '));
+
+  ok('ONE marker is prose, not a split', api._mkAnswerRuns('(b) The population will increase.').length === 0);
+  ok('a letter that does not follow the one before it is prose',
+     api._mkAnswerRuns('(a) first thing (d) second thing').length === 0);
+  ok('a bare "b)" with no white space behind it is prose',
+     api._mkAnswerRuns('a)first b)second').length === 0);
+  ok('a bare form WITH white space is read', api._mkAnswerRuns('a) first thing b) second thing').length === 2);
+  ok('the " | " the model answer is joined with is not left on a run',
+     api._mkAnswerRuns('(a) first | (b) second').every(r => !/\|/.test(r.text)));
+  ok('a lead with no marker keeps no part', (() => {
+     const r = api._mkAnswerRuns('Both parts: (a) first thing (b) second thing');
+     return r.length === 3 && r[0].key === '' && /Both parts/.test(r[0].text);
+  })());
+  ok('MK_RUN_MIN is what "several" means, in one place', api.MK_RUN_MIN === 2);
+
+  // …and the cutter itself.
+  const both = '(a) E is the producer. (b) C will increase because fewer D and F feed on it.';
+  ok('the answer is CUT to the part the lesson is in — the rest is left OUT, not shortened',
+     api._mkAnswerFor(both, 'b') === '(b) C will increase because fewer D and F feed on it.');
+  ok('A KEY THAT NAMES NOTHING IN THE ANSWER CUTS NOTHING', api._mkAnswerFor(both, 'z') === both);
+  ok('no key cuts nothing', api._mkAnswerFor(both, '') === both && api._mkAnswerFor(both, null) === both);
+  ok('IT IS IDEMPOTENT — one run has one marker, which is prose',
+     api._mkAnswerFor(api._mkAnswerFor(both, 'b'), 'b') === api._mkAnswerFor(both, 'b'));
+  ok('a bare letter takes its own roman sub-parts with it', (() => {
+     const t = '(b)(i) first bit (b)(ii) second bit';
+     return api._mkAnswerFor(t, 'b') === '(b)(i) first bit (b)(ii) second bit' && api._mkAnswerFor(t, 'b.ii') === '(b)(ii) second bit';
+  })());
+  ok('prose is handed back exactly as it arrived',
+     api._mkAnswerFor('It gains heat and melts.', 'b') === 'It gains heat and melts.');
+
+  /* ---- the model answer, two ways, because a paper answers two ways ---- */
+  const perPart = { id: 'qpp', blocks: [
+    { type: 'text', part: 'a', content: 'a?' }, { type: 'plainanswer', part: 'a', content: 'E is the producer.' },
+    { type: 'text', part: 'b', content: 'b?' }, { type: 'plainanswer', part: 'b', content: 'C will increase.' }
+  ] };
+  ok('a part whose own block carries the answer is read off that block',
+     api._mkModelAnswer(perPart, false, 'b') === 'C will increase.');
+  ok('with NO part it is what it always was', api._mkModelAnswer(perPart) === 'E is the producer. | C will increase.');
+  const oneBox = { id: 'qob', blocks: [
+    { type: 'text', content: 'both parts?' },
+    { type: 'plainanswer', content: '(a) E is the producer. (b) C will increase.' }
+  ] };
+  ok('a question that answers every part in ONE box is cut by the markers typed into it',
+     api._mkModelAnswer(oneBox, false, 'b') === '(b) C will increase.');
+  ok('a part that names no block AND no marker hands back the whole answer rather than nothing',
+     api._mkModelAnswer(oneBox, false, 'z') === '(a) E is the producer. (b) C will increase.');
+  ok('the OPEN-ended predicate is unchanged — it still asks with the mcq branch off and no part',
+     /function _mkOpenAnswer\(q\) \{ return _mkModelAnswer\(q, true\); \}/.test(block));
+
+  /* ---- the ONE builder cuts every answer field ---- */
+  const cutEntry = api._mkEntryFromAnalysis(
+    { worth: true, cleaned: '(a) E is the producer. (b) C will decrease.', animal: 'reasoning', why: 'w', fixed: '(a) E is the producer. (b) C will increase.', hint: 'h' },
+    { source: 'student', questionId: 'qob', part: '(b) Answer', question: 'q', expected: '(a) E is the producer. (b) C will increase.', raw: '(a) E is the producer. (b) C will decrease.' });
+  ok('THE ONE BUILDER stores the answer, the correct answer and the raw answer cut to the part',
+     cutEntry.studentAnswer === '(b) C will decrease.' && cutEntry.fixed === '(b) C will increase.' &&
+     cutEntry.expected === '(b) C will increase.' && cutEntry.raw === '(b) C will decrease.');
+  const wholeEntry = api._mkEntryFromAnalysis(
+    { worth: true, cleaned: 'it loses heat and melts', animal: 'reasoning', why: 'w', fixed: 'it gains heat', hint: 'h' },
+    { source: 'student', questionId: 'q1', part: 'Answer', question: 'q', expected: 'it gains heat', raw: 'it loses heat and melts' });
+  ok('an entry whose answer covers one part is byte-for-byte what it always was',
+     wholeEntry.studentAnswer === 'it loses heat and melts' && wholeEntry.fixed === 'it gains heat');
+
+  /* ---- the candidate, so the PROMPT sees the cut answer too ---- */
+  const cutCands = api._mkCandidatesFrom([{ id: 'ap', questionId: 'qob', answers: [
+    { label: '(b) Answer', verdict: 'wrong', student: '(a) E is the producer. (b) C will decrease.', expected: '(a) E is the producer. (b) C will increase.' }
+  ] }], new Set(), () => oneBox);
+  ok('a candidate is cut BEFORE the ✨ prompt is built — handed both parts the model corrects both',
+     cutCands.length === 1 && cutCands[0].raw === '(b) C will decrease.' && cutCands[0].expected === '(b) C will increase.');
+  ok('the word floor reads the CUT answer, not the one that arrived',
+     /const student = _mkAnswerFor\(String\(ans\.student \|\| ''\)\.trim\(\), pkey\);\s*\n\s*if \(_mkWords\(student\) < MK_MIN_ANSWER_WORDS\) return;/.test(block));
+
+  /* ---- a marked candidate the marking cannot place is left for ✨ ---- */
+  const spanCand = { fromAttempt: 'z:0', questionId: 'qob', q: oneBox, part: 'Answer', verdict: 'wrong',
+                     raw: '(a) E is the producer. (b) C will decrease.', expected: '(a) E is the producer. (b) C will increase.',
+                     mistake: 'reasoning', mistakeWhy: 'backwards' };
+  ok('an answer that spans several parts under a label naming none is SPOTTED', api._mkSpansParts(spanCand) === true);
+  ok('…and it is left for ✨ rather than filed pointing at a guess', api._mkMarkedEntry(spanCand) === null);
+  ok('a label that DOES name a part is never "spanning" — it has already been cut',
+     api._mkSpansParts(Object.assign({}, spanCand, { part: '(b) Answer' })) === false);
+  const placed = api._mkMarkedEntry(Object.assign({}, spanCand, { part: '(b) Answer', raw: '(b) C will decrease.', expected: '(b) C will increase.' }));
+  ok('…and it is filed by the marking exactly as before', placed && placed.filedBy === api.MK_FILED_MARKING && placed.studentAnswer === '(b) C will decrease.');
+  ok('an ordinary one-part candidate is still filed from the marking',
+     api._mkSpansParts({ part: 'Answer', raw: 'it loses heat and melts', expected: 'it gains heat' }) === false);
+
+  /* ---- the ✨ prompt asks WHICH part, and only when it has to ---- */
+  const pSpan = api._mkAnalysePrompt(spanCand, 'the question', 'the model');
+  ok('the analysis is asked which part the mistake is in when the answer covers several',
+     /"part":"…"/.test(pSpan) && /- "part": the answer above covers MORE THAN ONE/.test(pSpan));
+  ok('…and told to leave the other parts OUT rather than shorten them',
+     /leave them out completely rather than shortening them/.test(pSpan) && /THAT PART ALONE/.test(pSpan));
+  ok('a model asked for a letter answers with a letter, and it is read as one',
+     api._mkPartNamed('b') === 'b' && api._mkPartNamed('(b)') === 'b' && api._mkPartNamed('b(i)') === 'b.i' && api._mkPartNamed('b.ii') === 'b.ii');
+  ok('…and anything that is not a part names NOTHING rather than a guess',
+     ['', 'none', 'unsure', 'the whole question', 'Answer', 'i'].every(v => api._mkPartNamed(v) === ''));
+  const pPlain = api._mkAnalysePrompt({ part: '(b)', raw: 'the ice loses heat', verdict: 'wrong' }, 'Q', 'M');
+  ok('an ordinary candidate\'s prompt is byte-for-byte what it always was',
+     !/"part"/.test(pPlain) && /Do five things/.test(pPlain) && /Do six things/.test(pSpan));
+
+  /* ---- and the analysis's answer is written where every reader already looks ---- */
+  api.setUser({ uid: 'admin1', email: 'chungzhikai@gmail.com', name: 'Mr Chung', role: 'admin' });
+  api.resetBank();
+  api.setBank([oneBox]);
+  api.setReply(JSON.stringify({ worth: true, part: 'b', cleaned: 'C will decrease because X eats it.', animal: 'reasoning', why: 'Backwards.', fixed: 'C will increase.', hint: 'Check the arrows.' }));
+  const nBefore = api.writes.length;
+  await api.mkAnalyseCandidate(spanCand);
+  const nw = api.writes[api.writes.length - 1];
+  ok('the part the analysis named is written into `part`, so every reader this app already has picks it up',
+     api.writes.length === nBefore + 1 && nw.part === '(b)' && api._mkPartNote(nw) === 'part (b)');
+  ok('…and the correct answer is re-read for THAT part rather than the whole question',
+     nw.expected === '(b) C will increase.');
+  ok('the entry is otherwise an ordinary entry', nw.status === 'pending' && nw.animal === 'reasoning');
+  api.setReply(JSON.stringify({ worth: true, part: 'a', cleaned: 'the ice loses heat and melts', animal: 'reasoning', why: 'w', fixed: 'it gains heat', hint: 'h' }));
+  const knownCand = { fromAttempt: 'z:9', questionId: 'qob', q: oneBox, part: '(b) Answer', verdict: 'wrong',
+                      raw: 'the ice loses heat and melts', expected: 'it gains heat' };
+  await api.mkAnalyseCandidate(knownCand);
+  const kw = api.writes[api.writes.length - 1];
+  ok('a part the MARKING already named is never overwritten by the model\'s', kw.part === '(b) Answer');
+
+  /* ---- what the cards show ---- */
+  const stored = { id: 'e-cut', status: 'pending', animal: 'reasoning', part: '(b) Answer',
+                   questionId: 'qob', questionTitle: 'Food web', topic: 'Cycles', level: 'P5',
+                   question: 'both parts?', images: [], expected: '(a) E is the producer. (b) C will increase.',
+                   studentAnswer: '(a) E is the producer. (b) C will decrease.', raw: '(a) E is the producer. (b) C will decrease.',
+                   why: 'Backwards.', fixed: '(a) E is the producer. (b) C will increase.', hint: 'h' };
+  ok('an entry filed BEFORE this shipped is cut on the next paint, without being rewritten',
+     api._mkShownAnswer(stored, 'studentAnswer') === '(b) C will decrease.' && api._mkShownAnswer(stored, 'fixed') === '(b) C will increase.');
+  const card = api._mkCardHtml(stored);
+  ok('the teacher vets the answer the class is served, not the one still in the database',
+     card.includes('(b) C will decrease.') && !card.includes('E is the producer. (b) C will decrease.'));
+  ok('…and the card SAYS it was cut, so saving it is not a silent rewrite',
+     /mk-cut/.test(card) && /left out rather than shortened/.test(card));
+  ok('a card that needed no cut says nothing about one',
+     !/mk-cut/.test(api._mkCardHtml(Object.assign({}, stored, { studentAnswer: 'it loses heat', fixed: 'it gains heat', raw: 'it loses heat' }))));
+  ok('the practice card reads the same cut', /escapeHtml\(_mkShownAnswer\(e, 'studentAnswer'\)\)/.test(block) && /escapeHtml\(_mkShownAnswer\(e, 'fixed'\)\)/.test(block));
+  ok('the marker of a rewrite is given the CUT correct answer, or it marks a right answer down for being short',
+     /_mkShownAnswer\(e, 'fixed'\) \|\| _mkShownAnswer\(e, 'expected'\)/.test(block));
+  ok('the cut note has its stylesheet', /\.mk-cut\b/.test(html));
+
+  /* ---- and the child's own log, which does not go through the builder ---- */
+  const ownCut = api._mkOwnEntries([{ id: 'r9', qId: 'qob', kind: 'open', mistake: 'reasoning', part: '(b) Answer',
+    student: '(a) E is the producer. (b) C will decrease.', expected: '(a) E is the producer. (b) C will increase.' }], id => id === 'qob' ? oneBox : null);
+  ok('a child studying their OWN mistake reads one part too',
+     ownCut.length === 1 && ownCut[0].studentAnswer === '(b) C will decrease.' && ownCut[0].expected === '(b) C will increase.');
+  api.setUser({ uid: 'admin1', email: 'chungzhikai@gmail.com', name: 'Mr Chung', role: 'admin' });
 }
 
 /* ---------- 🗑 The teacher reads the bank and clears it (v1.396.0) ----------
