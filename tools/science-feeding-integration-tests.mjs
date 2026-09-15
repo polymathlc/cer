@@ -398,9 +398,25 @@ test('a cached game question uses the latest teacher-edited stem and answer', as
   assert.match(row.html,/heat insulator/);assert.equal(row.a,1);assert.equal(row.feedSource,current);
 });
 
-test('a pending real per-part grade cannot record results for a sibling after the shared login changes', async () => {
-  let finish;const state={writes:0,completed:0,started:false};
-  const api=new Function('state','wait',`
+/* THE SHARED FAMILY iPAD. markQuestionPart captures who it is grading for and
+   re-checks it TWICE — after the question input is assembled (app.js:33681) and
+   after the AI answers (app.js:33722) — because a parent can hand the device to
+   a sibling while a grade is still in flight, and a result written then is
+   written against the wrong child.
+
+   ONE factory, because the guard has THREE separate things to pin and a single
+   test pins none of them individually: switching the identity AND clearing the
+   stores at once trips either clause, so neither is held on its own, and a
+   switch made after the AI call has started never exercises the earlier guard
+   at all. Measured — with only the original test, deleting app.js:33681
+   outright, dropping the identity clause, and dropping the store clauses were
+   all UNCAUGHT. */
+function partGradeHarness() {
+  let releaseInput, releaseAi;
+  const state = {writes:0, completed:0, started:false, inputDone:false};
+  const inputWait = new Promise(resolve => {releaseInput = resolve});
+  const aiWait = new Promise(resolve => {releaseAi = resolve});
+  const api = new Function('state','inputWait','aiWait',`
     let currentUser={uid:'family',name:'Older',level:'P6',role:'student'};
     const q={id:'p6',topic:'Forces',blocks:[]};
     let _openQStore={'#q':q},_openSurfaceCfg={'#q':{}},_openPhoto={};
@@ -408,15 +424,59 @@ test('a pending real per-part grade cannot record results for a sibling after th
     const fb={innerHTML:''};const area={value:'A force',style:{},closest:()=>({querySelector:()=>fb})};
     const document={querySelector:sel=>sel.includes('.open-answer')?area:fb};
     const window={__aiReady:()=>true},showToast=()=>{},_captureScienceCoachTarget=()=>null,_showScienceCoachFeedback=()=>{};
-    const _gradingQuestionInput=async()=>({text:'Question',note:'',media:[]}),_markingPreamble=()=>'',SCIENCE_COACH_INSTRUCTIONS='',MISTAKE_ANIMAL_RULE='';
-    const askGemini=async()=>{state.started=true;await wait;return JSON.stringify({verdict:'correct',feedback:'Good'})};
+    const _gradingQuestionInput=async()=>{await inputWait;state.inputDone=true;return{text:'Question',note:'',media:[]}};
+    const _markingPreamble=()=>'',SCIENCE_COACH_INSTRUCTIONS='',MISTAKE_ANIMAL_RULE='';
+    const askGemini=async()=>{state.started=true;await aiWait;return JSON.stringify({verdict:'correct',feedback:'Good'})};
     const _parseAIJson=JSON.parse,escapeHtml=String,qKeyPlainHtml=(q,v)=>v;
     const _setPartResult=()=>state.writes++,_checkAllPartsMarked=()=>state.completed++;
     ${fn('markQuestionPart',true)}
-    return {mark:()=>markQuestionPart('#q','open','0',{innerHTML:'Check'}),switch:()=>{currentUser={uid:'family',name:'Mika',level:'P4',role:'student'};_openQStore={};_openSurfaceCfg={};}};
-  `)(state,new Promise(resolve=>finish=resolve));
-  const pending=api.mark();await new Promise(resolve=>setTimeout(resolve,0));assert.equal(state.started,true);
-  api.switch();finish();await pending;assert.equal(state.writes,0);assert.equal(state.completed,0);
+    return {mark:()=>markQuestionPart('#q','open','0',{innerHTML:'Check'}),
+      identity:()=>{currentUser={uid:'family',name:'Mika',level:'P4',role:'student'}},
+      stores:()=>{_openQStore={};_openSurfaceCfg={}}};
+  `)(state, inputWait, aiWait);
+  const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+  return {api, state, releaseInput, releaseAi, settle};
+}
+
+test('a pending real per-part grade cannot record results for a sibling after the shared login changes', async () => {
+  const h = partGradeHarness();
+  const pending = h.api.mark();
+  h.releaseInput(); await h.settle(); assert.equal(h.state.started, true);
+  h.api.identity(); h.api.stores(); h.releaseAi(); await pending;
+  assert.equal(h.state.writes, 0); assert.equal(h.state.completed, 0);
+});
+
+test('the sibling switch is caught on the IDENTITY alone, with the open question left exactly as it was', async () => {
+  const h = partGradeHarness();
+  const pending = h.api.mark();
+  h.releaseInput(); await h.settle(); assert.equal(h.state.started, true);
+  h.api.identity(); h.releaseAi(); await pending;
+  assert.equal(h.state.writes, 0, 'a grade for the older child was written against the younger one');
+  assert.equal(h.state.completed, 0);
+});
+
+test('…and on the OPEN QUESTION alone, with the same child still signed in', async () => {
+  const h = partGradeHarness();
+  const pending = h.api.mark();
+  h.releaseInput(); await h.settle(); assert.equal(h.state.started, true);
+  h.api.stores(); h.releaseAi(); await pending;
+  assert.equal(h.state.writes, 0, 'a grade landed on a question the surface had already moved off');
+  assert.equal(h.state.completed, 0);
+});
+
+/* The EARLIER window, which nothing pinned at all: the switch happens while the
+   question input is still being assembled, so the guard that has to catch it is
+   app.js:33681 and not the one after the AI call. The AI must never be asked —
+   paying for a call whose answer can only be thrown away is the cheap half of
+   the failure; the expensive half is that with 33681 gone the only thing left
+   standing between a sibling and a wrong grade is one guard. */
+test('a switch DURING the question input is caught before the AI is asked at all', async () => {
+  const h = partGradeHarness();
+  const pending = h.api.mark();
+  h.api.identity(); h.api.stores();
+  h.releaseInput(); h.releaseAi(); await pending;
+  assert.equal(h.state.started, false, 'the AI was asked for a grade nobody can use');
+  assert.equal(h.state.writes, 0); assert.equal(h.state.completed, 0);
 });
 
 test('an active Hades page reopens for the newly selected learner after invalidation', async () => {
