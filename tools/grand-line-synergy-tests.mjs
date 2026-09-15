@@ -26,7 +26,7 @@ function defenseFixture(ids = ['yasopp', 'bigmom7', 'whitebeard', 'kaido', 'garp
   const enemy = battle.enemies[0];
   Object.assign(enemy, { hp: 100000, maxHp: 100000, shield: 0, defense: 0, armor: 0, progress: .15,
     moveSpeed: 0, statuses: [], skills: [], passive: { type: 'none', value: 0 }, escaped: false, alive: true });
-  Object.assign(enemy, defensePointAt(enemy.progress, battle));
+  Object.assign(enemy, defensePointAt(enemy.progress, battle, enemy.entryId));
   battle.enemies = [enemy];
   for (const ally of battle.allies) Object.assign(ally, { x: enemy.x - 30, y: enemy.y, skills: [],
     statuses: [], shield: 0, actionTimer: 1, energy: 100, cooldowns: {}, attacksMade: 0 });

@@ -1,13 +1,13 @@
-import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS, MAX_CREW_SIZE } from './grand-line-data.js?v=3.4.0';
-import { statsFor, getCrewSynergies, getCaptainAuras } from './grand-line-core.js?v=3.4.0';
-export { getCaptainAuras } from './grand-line-core.js?v=3.4.0';
-import { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.4.0';
-export { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.4.0';
-import { DEFENSE_GRID, DEFENSE_PATH, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_TERRAIN, defenseCell,
+import { CHARACTERS, CHARACTER_BY_ID, ENCOUNTERS, MAX_CREW_SIZE } from './grand-line-data.js?v=3.5.0';
+import { statsFor, getCrewSynergies, getCaptainAuras } from './grand-line-core.js?v=3.5.0';
+export { getCaptainAuras } from './grand-line-core.js?v=3.5.0';
+import { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.5.0';
+export { getDefenseProfile, getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.5.0';
+import { DEFENSE_GRID, DEFENSE_ENTRIES, DEFENSE_PATH, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_TERRAIN, defenseCell,
   pointOnDefenseRoute, commitDefenseRoute, planDefenseRoute, getMazePlacementPreview,
-  MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.4.0';
-export { DEFENSE_GRID, DEFENSE_PATH, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_TERRAIN,
-  getDefenseRoute, getMazePlacementPreview, MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.4.0';
+  MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.5.0';
+export { DEFENSE_GRID, DEFENSE_ENTRIES, DEFENSE_PATH, DEFENSE_PADS, DEFENSE_DEFAULT_PADS, DEFENSE_TERRAIN,
+  getDefenseRoute, getMazePlacementPreview, MAZE_TOWER_COST, MAZE_TOWER_REFUND, MAX_MAZE_TOWERS } from './grand-line-defense-grid.js?v=3.5.0';
 export const DEFENSE_STAGES = Object.freeze(ENCOUNTERS.map(encounter => ({
   ...encounter, waveCount: 6, description: `Build a maze at ${encounter.name}. Slow the swarm, summon your collection and train your crew after three questions each wave.`,
 })));
@@ -26,15 +26,18 @@ const random = b => clamp(Number(b.rng()) || 0, 0, 0.999999999999);
 
 export const defenseSkillCooldown = skill => skill.cooldown ? Math.max(2.5, skill.cooldown * 2.5) : 0;
 export const defenseStatusDuration = effect => Math.max(0, Number(effect.duration) || 0) * 2;
-export function defensePointAt(progress, battle) { return pointOnDefenseRoute(progress, battle); }
-export function defenseEnemyPointAt(progress, laneOffset = 0, battle) {
-  const point = defensePointAt(progress, battle);
+export function defensePointAt(progress, battle, entryId) { return pointOnDefenseRoute(progress, battle, entryId); }
+export function defenseEnemyPointAt(progress, laneOffset = 0, battle, entryId) {
+  const point = defensePointAt(progress, battle, entryId);
   if (!laneOffset) return point;
-  const before = defensePointAt(progress - .001, battle), after = defensePointAt(progress + .001, battle);
+  const before = defensePointAt(progress - .001, battle, entryId), after = defensePointAt(progress + .001, battle, entryId);
   const length = distance(before, after) || 1;
   return { x: point.x - (after.y - before.y) / length * laneOffset,
     y: point.y + (after.x - before.x) / length * laneOffset };
 }
+const routeLengthFor = (b, entryId) => b?.routes?.[entryId]?.length || b?.routeLength || 1080;
+export const defenseEnemyRemainingDistance = (enemy, battle) =>
+  (1 - clamp(Number(enemy.progress) || 0, 0, 1)) * routeLengthFor(battle, enemy.entryId);
 
 function seeded(seed) {
   let state = 2166136261;
@@ -77,7 +80,7 @@ export function createDefense(collection, options = {}) {
     encounter: DEFENSE_STAGES[encounterId - 1], round: 1, waveCount: 6, status: 'setup',
     allies: collection.team.map(id => makeUnit(id, 'ally', collection.cards[id].copies)), enemies: [],
     ship: { id: 'ship', x: 1100, y: 310, hp: 360, maxHp: 360, color: '#e1c087' },
-    mazeTowers: [], terrain: [...DEFENSE_TERRAIN[encounterId - 1]], route: [], routeCellIds: [], routeRevision: 0,
+    mazeTowers: [], terrain: [...DEFENSE_TERRAIN[encounterId - 1]], route: [], routes: {}, routeCellIds: [], routeRevision: 0,
     elapsed: 0, waveTime: 0, accumulator: 0, spawnTotal: 80, spawned: 0, remainingToSpawn: 80,
     spawnTimer: 0, defeatedThisWave: 0, leakedThisWave: 0, waveProgress: 0,
     effects: [], projectiles: [], supplies: 100, trainingPoints: 0, reserve: {}, log: [], eventSequence: 0, pendingOutcome: null, learning: null, learningBoost: null,
@@ -86,11 +89,13 @@ export function createDefense(collection, options = {}) {
   for (let i = 0; i < b.allies.length; i++) Object.assign(b.allies[i], pointOf(DEFENSE_DEFAULT_PADS[i]), { padId: DEFENSE_DEFAULT_PADS[i].id });
   refreshCrewStats(b);
   if (!commitDefenseRoute(b)) return null;
+  const opening = getDefenseWavePreview(b);
+  b.waveEntrances = opening.entrances; b.activeEntryIds = opening.activeEntryIds;
   for (const unit of b.allies) {
     if (unit.passive.type === 'shield-start') unit.shield += Math.round(unit.maxHp * unit.passive.value);
     if (['all-shield', 'apex-whitebeard'].includes(unit.passive.type)) for (const ally of b.allies) ally.shield += Math.round(ally.maxHp * unit.passive.value);
   }
-  log(b, 'Build 5-supply towers to bend the enemy route. Your saved crew deploys free; every placement must leave an exit.');
+  log(b, 'Build 5-supply towers to bend enemy routes. Your saved crew deploys free; all three entrances must reach the exit.');
   return b;
 }
 
@@ -208,14 +213,21 @@ function typeForWave(round, index, count) {
   if (round === 6 && index === Math.floor(count * .55)) return 'captain';
   const plan = WAVE_PLANS[round - 1]; return plan.pattern[index % plan.pattern.length];
 }
+function waveEntrances(b, total) {
+  const count = 1 + (b.round - 1) % 3;
+  const first = b.round === 1 ? 1 : ((b.encounter?.id || 1) + Math.floor((b.round - 1) / 3)) % 3;
+  const chosen = Array.from({ length: count }, (_, index) => DEFENSE_ENTRIES[(first + index) % 3]).sort((a, z) => a.row - z.row);
+  return chosen.map((entry, index) => ({ ...entry, count: Math.floor(total / count) + (index < total % count ? 1 : 0) }));
+}
 export function getDefenseWavePreview(b) {
   if (!b || !Number.isInteger(b.round) || b.round < 1 || b.round > 6) return null;
   const plan = WAVE_PLANS[b.round - 1], counts = { swarm: 0, runner: 0, armored: 0, raider: 0, captain: 0 };
   for (let i = 0; i < plan.count; i++) counts[typeForWave(b.round, i, plan.count)]++;
   const labels = { swarm: 'Swarm', runner: 'Runners', armored: 'Armored', raider: 'Raiders', captain: 'Captain' };
   const groups = Object.entries(counts).filter(([, count]) => count).map(([type, count]) => ({ type, label: labels[type], count }));
+  const entrances = waveEntrances(b, plan.count);
   return { round: b.round, waveCount: 6, name: plan.name, title: plan.name, total: plan.count, count: plan.count, counts, tip: plan.tip,
-    enemies: groups, groups };
+    enemies: groups, groups, entrances, activeEntryIds: entrances.map(entry => entry.id) };
 }
 
 export function placeDefender(b, allyId, padId) {
@@ -239,7 +251,9 @@ export function startDefenseWave(b) {
       !b.allies.every(unit => DEFENSE_PADS.some(pad => pad.id === unit.padId))) return false;
   if (!planDefenseRoute(b) || !commitDefenseRoute(b)) return false;
   b.status = 'running'; b.waveTime = 0; b.accumulator = 0; b.spawned = 0;
-  b.spawnTotal = getDefenseWavePreview(b).total; b.remainingToSpawn = b.spawnTotal;
+  const preview = getDefenseWavePreview(b);
+  b.spawnTotal = preview.total; b.remainingToSpawn = b.spawnTotal;
+  b.waveEntrances = preview.entrances; b.activeEntryIds = preview.activeEntryIds;
   b.spawnTimer = 0.6; b.enemies = []; b.projectiles = []; b.defeatedThisWave = 0; b.leakedThisWave = 0; b.waveProgress = 0;
   b.learning = null; b.pendingOutcome = null;
   for (const unit of b.allies) {
@@ -247,7 +261,7 @@ export function startDefenseWave(b) {
     if (unit.passive.type === 'all-regen' && alive(unit)) for (const ally of b.allies.filter(alive)) heal(b, unit, ally, ally.maxHp * unit.passive.value);
     if (unit.passive.type === 'all-energy' && alive(unit)) for (const ally of b.allies.filter(alive)) ally.energy = Math.min(100, ally.energy + unit.passive.value);
   }
-  log(b, `Wave ${b.round} of ${b.waveCount}: ${b.spawnTotal} enemies incoming${b.round === 6 ? ', including the captain' : ''}.`);
+  log(b, `Wave ${b.round} of ${b.waveCount}: ${b.spawnTotal} enemies from ${b.waveEntrances.map(entry => entry.label.toLowerCase()).join(', ')}${b.round === 6 ? ', including the captain' : ''}.`);
   return true;
 }
 
@@ -258,6 +272,7 @@ function spawnEnemy(b) {
   const roster = b.encounter.enemies;
   const id = boss ? roster[0] : roster[(index + b.round - 1) % roster.length];
   const unit = makeUnit(id, 'enemy');
+  unit.entryId = b.waveEntrances[index % b.waveEntrances.length].id;
   const scale = b.encounter.scale * (1 + (b.round - 1) * 0.18);
   unit.id = `raider-${b.round}-${index}-${id}`;
   unit.maxHp = unit.hp = Math.round(unit.maxHp * scale * ({ swarm: .19, runner: .27, armored: .95, raider: .42, captain: 4.2 }[enemyType]));
@@ -272,7 +287,7 @@ function spawnEnemy(b) {
   unit.laneOffset = boss ? 0 : [-7, 4, -4, 7, 0][index % 5];
   unit.leakDamage = boss ? 95 : enemyType === 'armored' ? 10 : enemyType === 'runner' ? 5 : 3;
   unit.suppliesReward = boss ? 15 : enemyType === 'armored' ? 2 : 1;
-  Object.assign(unit, defenseEnemyPointAt(0, unit.laneOffset, b));
+  Object.assign(unit, defenseEnemyPointAt(0, unit.laneOffset, b, unit.entryId));
   if (unit.passive.type === 'shield-start') unit.shield = Math.round(unit.maxHp * unit.passive.value);
   b.enemies.push(unit); b.spawned++; b.remainingToSpawn = Math.max(0, b.spawnTotal - b.spawned);
   if (boss) { log(b, `${unit.name} leads the final assault!`); emit(b, 'boss', unit, [unit], 'Captain incoming', { life: 2 }); }
@@ -432,9 +447,10 @@ function areaTargets(b, actor, skill, aim) {
 }
 function priorityTarget(b, actor, skill, valid = getDefenseTargets(b, actor, skill)) {
   const ordered = [...valid];
-  if (actor.priority === 'strongest') ordered.sort((a, z) => z.maxHp - a.maxHp || z.progress - a.progress);
-  else if (actor.priority === 'cluster') ordered.sort((a, z) => areaTargets(b, actor, skill, z).length - areaTargets(b, actor, skill, a).length || z.progress - a.progress);
-  else ordered.sort((a, z) => (z.progress || 0) - (a.progress || 0) || a.id.localeCompare(z.id));
+  const first = (a, z) => defenseEnemyRemainingDistance(a, b) - defenseEnemyRemainingDistance(z, b) || a.id.localeCompare(z.id);
+  if (actor.priority === 'strongest') ordered.sort((a, z) => z.maxHp - a.maxHp || first(a, z));
+  else if (actor.priority === 'cluster') ordered.sort((a, z) => areaTargets(b, actor, skill, z).length - areaTargets(b, actor, skill, a).length || first(a, z));
+  else ordered.sort(first);
   return ordered[0] || null;
 }
 export function getDefenseAreaTargets(b, actor, skill, aimTarget) {
@@ -448,7 +464,8 @@ export function getDefenseAreaTargets(b, actor, skill, aimTarget) {
 export function getDefenseAttackPreview(b, actor, skill = actor?.skills?.[0]) {
   if (!b || !actor || !skill) return null;
   const geometry = getDefenseSkillProfile(actor, skill), source = pointOf(actor);
-  const aim = priorityTarget(b, actor, skill) || actor.lastAim || [...(b.route || DEFENSE_PATH)].sort((a, z) => distance(a, actor) - distance(z, actor))[0];
+  const roads = waveEntrances(b, 0).flatMap(entry => b.routes?.[entry.id]?.points || b.route || DEFENSE_PATH);
+  const aim = priorityTarget(b, actor, skill) || actor.lastAim || roads.sort((a, z) => distance(a, actor) - distance(z, actor))[0];
   return { shape: geometry.shape, geometry, source, target: pointOf(aim), aimTargetId: aim.id || null, range: actor.range * geometry.rangeMultiplier,
     width: geometry.width, radius: Math.min(actor.range * geometry.rangeMultiplier, geometry.radius), angle: geometry.angle,
     targetIds: getDefenseAreaTargets(b, actor, skill, aim).map(unit => unit.id) };
@@ -466,7 +483,7 @@ function chooseSkill(b, actor) {
       if (skill.power) for (const enemy of targets) {
         const expected = Math.max(3, actor.attack * skill.power - enemy.defense * 0.45);
         const hpDamage = Math.max(0, expected - enemy.shield);
-        score += Math.min(enemy.hp + enemy.shield, expected) * (actor.side === 'ally' ? 1 + enemy.progress * 0.7 : 1);
+        score += Math.min(enemy.hp + enemy.shield, expected) * (actor.side === 'ally' ? 1 + clamp(1 - defenseEnemyRemainingDistance(enemy, b) / routeLengthFor(b), 0, 1) * 0.7 : 1);
         if (hpDamage >= enemy.hp) score += actor.attack;
       }
       for (const effect of skill.effects) for (const recipient of effectRecipients(b, actor, targets, effect)) {
@@ -520,7 +537,7 @@ function tickMazeTowers(b) {
     tower.actionTimer = Math.max(0, tower.actionTimer - STEP);
     if (tower.actionTimer > 1e-9) continue;
     let target = null;
-    for (const enemy of b.enemies) if (alive(enemy) && distance(tower, enemy) <= tower.range && (!target || enemy.progress > target.progress)) target = enemy;
+    for (const enemy of b.enemies) if (alive(enemy) && distance(tower, enemy) <= tower.range && (!target || defenseEnemyRemainingDistance(enemy, b) < defenseEnemyRemainingDistance(target, b))) target = enemy;
     if (!target) continue;
     tower.actionTimer = tower.attackInterval; tower.attacksMade++;
     launchProjectile(b, tower, tower.towerSkill, target);
@@ -628,16 +645,16 @@ function fixedStep(b) {
     for (let i = 0; i < 8 && b.spawned < b.spawnTotal; i++) {
       spawnEnemy(b);
       const enemy = b.enemies.at(-1);
-      enemy.progress = i * 3 / b.routeLength;
-      Object.assign(enemy, defenseEnemyPointAt(enemy.progress, enemy.laneOffset, b));
+      enemy.progress = Math.floor(i / b.waveEntrances.length) * 3 / routeLengthFor(b, enemy.entryId);
+      Object.assign(enemy, defenseEnemyPointAt(enemy.progress, enemy.laneOffset, b, enemy.entryId));
     }
     b.spawnTimer += b.round === 2 ? .32 : .38;
   }
   for (const unit of [...b.allies, ...b.enemies]) tickUnit(b, unit);
   for (const enemy of b.enemies.filter(alive)) {
     if (has(enemy, 'stun') || has(enemy, 'freeze')) continue;
-    enemy.progress = Math.min(1, enemy.progress + enemy.moveSpeed * (1 - Math.min(0.8, valueOf(enemy, 'slow'))) * STEP / b.routeLength);
-    Object.assign(enemy, defenseEnemyPointAt(enemy.progress, enemy.moveSpeed > 0 ? enemy.laneOffset : 0, b));
+    enemy.progress = Math.min(1, enemy.progress + enemy.moveSpeed * (1 - Math.min(0.8, valueOf(enemy, 'slow'))) * STEP / routeLengthFor(b, enemy.entryId));
+    Object.assign(enemy, defenseEnemyPointAt(enemy.progress, enemy.moveSpeed > 0 ? enemy.laneOffset : 0, b, enemy.entryId));
     if (enemy.progress >= 1) {
       enemy.escaped = true; enemy.alive = false;
       b.ship.hp = Math.max(0, b.ship.hp - enemy.leakDamage); b.stats.leaks++; b.leakedThisWave++;
@@ -702,7 +719,9 @@ export function completeDefenseLearning(b, answer = {}) {
   }
   b.ship.hp = Math.min(b.ship.maxHp, b.ship.hp + answer.correct * 6);
   b.round++; b.status = 'setup'; b.accumulator = 0; b.learning = null;
-  b.spawnTotal = getDefenseWavePreview(b).total; b.remainingToSpawn = b.spawnTotal; b.spawned = 0; b.waveProgress = 0;
+  const preview = getDefenseWavePreview(b);
+  b.spawnTotal = preview.total; b.remainingToSpawn = b.spawnTotal; b.spawned = 0; b.waveProgress = 0;
+  b.waveEntrances = preview.entrances; b.activeEntryIds = preview.activeEntryIds;
   log(b, `${answer.correct}/3 correct: +${trainingGranted} training and +${suppliesGranted} supplies. Train, summon and reposition before wave ${b.round}.`);
   return result;
 }

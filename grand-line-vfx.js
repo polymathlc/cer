@@ -1,5 +1,5 @@
-import { CHARACTER_BY_ID } from './grand-line-data.js?v=3.4.0';
-import { getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.4.0';
+import { CHARACTER_BY_ID } from './grand-line-data.js?v=3.5.0';
+import { getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.5.0';
 
 export const PREMIUM_VFX_CHARACTERS = Object.freeze([
   'kaido', 'whitebeard', 'akainu', 'luffy', 'aokiji', 'fujitora', 'ryokugyu',

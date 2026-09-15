@@ -1,6 +1,6 @@
-import { DEFENSE_PATH, DEFENSE_PADS, DEFENSE_GRID, getDefenseAttackPreview, getDefenseProfile, getMazePlacementPreview } from './grand-line-defense.js?v=3.4.0';
-import { CHARACTER_BY_ID } from './grand-line-data.js?v=3.4.0';
-import { createDefenseVfxManager, getVfxSpec } from './grand-line-vfx.js?v=3.4.0';
+import { DEFENSE_PATH, DEFENSE_PADS, DEFENSE_GRID, DEFENSE_ENTRIES, getDefenseWavePreview, getDefenseAttackPreview, getDefenseProfile, getMazePlacementPreview } from './grand-line-defense.js?v=3.5.0';
+import { CHARACTER_BY_ID } from './grand-line-data.js?v=3.5.0';
+import { createDefenseVfxManager, getVfxSpec } from './grand-line-vfx.js?v=3.5.0';
 
 const WORLD_W = 1120, WORLD_H = 630, TAU = Math.PI * 2;
 const MAP_PALETTES = [
@@ -35,6 +35,15 @@ function polygon(g, points, fill, outline) {
 function rounded(g, x, y, w, h, r, color) {
   g.fillStyle = color; g.beginPath(); g.roundRect(x, y, w, h, r); g.fill();
 }
+// One compound stroke paints a shared road once, including junctions.
+function routeSegments(routes) {
+  const segments = new Map();
+  for (const route of routes) for (let i = 1; i < (route?.length || 0); i++) {
+    const a = route[i - 1], z = route[i], from = `${a.x},${a.y}`, to = `${z.x},${z.y}`;
+    if (from !== to) segments.set([from, to].sort().join('|'), { a, z });
+  }
+  return segments;
+}
 function closestRoutePoint(p) {
   let closest = DEFENSE_PATH[0] || p, distance = Infinity;
   for (let i = 1; i < DEFENSE_PATH.length; i++) {
@@ -56,6 +65,7 @@ export function createDefenseRenderer(canvas, art, { vfx: suppliedVfx } = {}) {
   const tintCache = new Map(), tintCacheLimit = 24, imageKeys = new WeakMap(), preloadedIds = new Set();
   let nextImageKey = 0, deployedSignature = '';
   let placementCache = null, placementCacheKey = '', lastPlacementPreview = null;
+  let routeCacheKey = '', activeRoads = new Map(), entrancePreview = null;
 
   function resize() {
     if (destroyed) return;
@@ -147,18 +157,22 @@ export function createDefenseRenderer(canvas, art, { vfx: suppliedVfx } = {}) {
     return placementCache;
   }
 
-  function drawRoute(route, { preview = false, reducedMotion = false, now = 0 } = {}) {
-    if (!route?.length) return;
+  function drawRoutes(segments, { preview = false, reducedMotion = false, now = 0 } = {}) {
+    if (!segments.size) return;
     ctx.save();
+    ctx.beginPath();
+    for (const { a, z } of segments.values()) { ctx.moveTo(a.x, a.y); ctx.lineTo(z.x, z.y); }
     if (preview) {
-      ctx.setLineDash([7, 7]); stroke(ctx, route, '#d9ffbf', 5); ctx.setLineDash([]);
+      ctx.setLineDash([7, 7]); ctx.strokeStyle = '#d9ffbfbd'; ctx.lineWidth = 4; ctx.stroke(); ctx.setLineDash([]);
     } else {
-      stroke(ctx, route, '#244d4480', 15);
-      stroke(ctx, route, '#d8d5a7a6', 10);
-      stroke(ctx, route, '#edf0c557', 3);
+      ctx.strokeStyle = '#244d4480'; ctx.lineWidth = 15; ctx.stroke();
+      ctx.strokeStyle = '#d8d5a7a6'; ctx.lineWidth = 10; ctx.stroke();
+      ctx.strokeStyle = '#edf0c557'; ctx.lineWidth = 3; ctx.stroke();
     }
-    for (let i = 1; i < route.length; i += preview ? 4 : 3) {
-      const a = route[i - 1], z = route[i], dx = z.x - a.x, dy = z.y - a.y;
+    let i = 0;
+    for (const { a, z } of segments.values()) {
+      if (i++ % (preview ? 4 : 3)) continue;
+      const dx = z.x - a.x, dy = z.y - a.y;
       if (!dx && !dy) continue;
       const t = reducedMotion || preview ? .5 : .25 + now % 1000 / 2000;
       const x = a.x + dx * t, y = a.y + dy * t;
@@ -208,7 +222,12 @@ export function createDefenseRenderer(canvas, art, { vfx: suppliedVfx } = {}) {
       for (let d = -40; d < 50; d += 9) stroke(ctx, [{ x: cell.x + d, y: cell.y - half }, { x: cell.x + d + 40, y: cell.y + half }], '#f2a29680', 1);
     }
     ctx.restore();
-    if (preview?.valid && preview.route) drawRoute(preview.route, { preview: true });
+    if (preview?.valid && preview.route) {
+      const changed = routeSegments(preview.routes ? Object.values(preview.routes).map(r => r.points) : [preview.route]);
+      const original = routeSegments(b.routes ? Object.values(b.routes).map(r => r.points) : [b.route || DEFENSE_PATH]);
+      for (const key of original.keys()) changed.delete(key);
+      drawRoutes(changed, { preview: true });
+    }
     if (b.status !== 'running') {
       const column = Math.round((cell.x - DEFENSE_GRID.origin.x - half) / DEFENSE_GRID.cellSize), row = Math.round((cell.y - DEFENSE_GRID.origin.y - half) / DEFENSE_GRID.cellSize);
       const address = `${String.fromCharCode(65 + column)}${row + 1}`;
@@ -218,18 +237,26 @@ export function createDefenseRenderer(canvas, art, { vfx: suppliedVfx } = {}) {
   }
 
   function drawShip(ship = {}) {
-    const entrance = DEFENSE_PADS.find(p => p.id === DEFENSE_GRID.entryId), exit = DEFENSE_PADS.find(p => p.id === DEFENSE_GRID.exitId);
-    if (!entrance || !exit) return;
+    const exit = DEFENSE_PADS.find(p => p.id === DEFENSE_GRID.exitId);
+    if (!exit) return;
     ctx.save();
-    ctx.fillStyle = '#8fc99f'; ctx.fillRect(7, entrance.y - 3, 30, 6);
-    polygon(ctx, [[30, entrance.y - 8], [40, entrance.y], [30, entrance.y + 8]], '#c9eab0');
+    for (const entrance of DEFENSE_ENTRIES) {
+      const incoming = entrancePreview?.entrances.find(e => e.id === entrance.id), active = !!incoming;
+      const color = active ? '#fff0a1' : '#688b88';
+      ctx.fillStyle = active ? '#334b3e' : '#153b43'; ctx.fillRect(2, entrance.y - 28, 35, 58);
+      ctx.strokeStyle = color; ctx.lineWidth = active ? 2 : 1;
+      ctx.strokeRect(DEFENSE_GRID.origin.x + 2, entrance.y - 18, 36, 36);
+      ctx.fillStyle = color; ctx.fillRect(7, entrance.y - (active ? 3 : 1), 26, active ? 6 : 2);
+      polygon(ctx, [[29, entrance.y - 8], [39, entrance.y], [29, entrance.y + 8]], color);
+      label(entrance.label.toUpperCase(), 20, entrance.y - 14, { size: entrance.label === 'Middle' || entrance.label === 'Bottom' ? 8 : 10, pad: 1, color, background: active ? '#334b3e' : '#153b43' });
+      label(active ? String(incoming.count) : '—', 20, entrance.y + 22, { size: 11, pad: 2, color, background: active ? '#334b3e' : '#153b43' });
+    }
     ctx.fillStyle = '#e5c58d'; ctx.fillRect(exit.x + 19, exit.y - 3, 30, 6);
     polygon(ctx, [[exit.x + 43, exit.y - 8], [exit.x + 53, exit.y], [exit.x + 43, exit.y + 8]], '#f0dca1');
     for (const dy of [-21, 15]) {
       ctx.fillStyle = '#435958'; ctx.fillRect(exit.x + 20, exit.y + dy, 19, 10);
       ctx.fillStyle = '#bec4a3'; ctx.fillRect(exit.x + 20, exit.y + dy, 19, 3);
     }
-    label('IN', 18, entrance.y - 14, { size: 10, pad: 2, color: '#ceefba', background: '#163d49' });
     label('OUT', WORLD_W - 18, exit.y - 34, { size: 10, pad: 2, color: '#f0d5a1', background: '#163d49' });
     const ratio = clamp(finite(ship.hp) / Math.max(1, finite(ship.maxHp, 1)), 0, 1);
     ctx.fillStyle = '#082e38'; ctx.fillRect(WORLD_W - 140, 587, 99, 8);
@@ -586,6 +613,7 @@ export function createDefenseRenderer(canvas, art, { vfx: suppliedVfx } = {}) {
     if (key !== battleKey) {
       battleKey = key; seen.clear(); animations = []; floats = [];
       deployedSignature = ''; backdrop = null; placementCacheKey = ''; placementCache = null;
+      routeCacheKey = '';
     }
     if (width < 2 || height < 2) resize();
     if (!backdrop) makeBackdrop(b);
@@ -610,7 +638,12 @@ export function createDefenseRenderer(canvas, art, { vfx: suppliedVfx } = {}) {
     ctx.save(); ctx.translate(offsetX, offsetY); ctx.scale(scale, scale);
     ctx.beginPath(); ctx.rect(0, 0, WORLD_W, WORLD_H); ctx.clip(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.drawImage(backdrop, 0, 0, WORLD_W, WORLD_H); drawWater(now, options.reducedMotion);
-    drawRoute(b.route || DEFENSE_PATH, { now, reducedMotion: options.reducedMotion });
+    const roadsKey = `${b.id}:${b.routeRevision}:${b.round}`;
+    if (routeCacheKey !== roadsKey) {
+      routeCacheKey = roadsKey; entrancePreview = getDefenseWavePreview(b);
+      activeRoads = routeSegments(entrancePreview?.activeEntryIds.map(id => b.routes?.[id]?.points || b.route || DEFENSE_PATH) || [b.route || DEFENSE_PATH]);
+    }
+    drawRoutes(activeRoads, { now, reducedMotion: options.reducedMotion });
     const rangeUnit = options.summonCharacterId ? preview : allies.find(u => u.id === options.selectedAllyId);
     const crewMode = !['tower', 'sell'].includes(options.buildMode);
     if ((crewMode || options.showAttackArea === true || options.previewSkillId) && (b.status !== 'running' || options.showAttackArea === true || options.previewSkillId)) {
@@ -629,7 +662,7 @@ export function createDefenseRenderer(canvas, art, { vfx: suppliedVfx } = {}) {
     paintProjectiles(b, options);
     paintEffects(now, options);
     const state = b.status || b.state || b.phase;
-    const caption = { setup: 'BUILD A MAZE · KEEP AN OPEN ROUTE', running: `WAVE ${b.round} · ${enemies.filter(u => u.hp > 0 && !u.escaped).length} RAIDERS`, learning: 'TRAIN YOUR CREW · 3 QUESTIONS', victory: 'DEFENSE SECURED', defeat: 'BASE LOST' }[state];
+    const caption = { setup: 'BUILD A MAZE · KEEP ALL 3 ENTRANCES OPEN', running: `WAVE ${b.round} · ${enemies.filter(u => u.hp > 0 && !u.escaped).length} RAIDERS`, learning: 'TRAIN YOUR CREW · 3 QUESTIONS', victory: 'DEFENSE SECURED', defeat: 'BASE LOST' }[state];
     if (caption) label(caption, 490, 26, { size: 13, background: '#163d49', color: state === 'defeat' ? '#ffc2ac' : '#dce9c3' });
     ctx.restore();
     return fresh;

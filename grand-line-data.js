@@ -1,5 +1,5 @@
 /* Original fan-game rules; names and power themes are anchored to official character profiles. */
-export const VERSION = '3.4.0';
+export const VERSION = '3.5.0';
 // Retired collection IDs migrate to these current cards; future seven-star
 // editions use separate IDs, so replaying an old receipt never grants a new legend.
 export const RETIRED_CHARACTER_REPLACEMENTS = {

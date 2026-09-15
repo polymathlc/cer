@@ -1,6 +1,9 @@
 export const DEFENSE_GRID = Object.freeze({ columns: 26, rows: 13, cellSize: 40,
   origin: Object.freeze({ x: 40, y: 50 }), width: 1120, height: 630,
-  entryId: 'cell-0-6', exitId: 'cell-25-6' });
+  entryId: 'cell-0-6', entryIds: Object.freeze(['cell-0-2', 'cell-0-6', 'cell-0-10']), exitId: 'cell-25-6' });
+export const DEFENSE_ENTRIES = Object.freeze(DEFENSE_GRID.entryIds.map((id, index) => Object.freeze({
+  id, label: ['Top', 'Middle', 'Bottom'][index], row: [2, 6, 10][index], x: 20, y: 150 + index * 160,
+})));
 export const DEFENSE_PADS = Object.freeze(Array.from({ length: 26 * 13 }, (_, index) => {
   const col = index % 26, row = Math.floor(index / 26);
   return Object.freeze({ id: `cell-${col}-${row}`, col, row, x: 60 + col * 40, y: 70 + row * 40,
@@ -20,7 +23,7 @@ function terrainFor(stage) {
   const blocked = new Set(), defaults = new Set(DEFENSE_DEFAULT_PADS.map(cell => cell.id));
   const add = (col, row) => {
     const id = `cell-${col}-${row}`;
-    if (cells.has(id) && !defaults.has(id) && id !== DEFENSE_GRID.entryId && id !== DEFENSE_GRID.exitId) blocked.add(id);
+    if (cells.has(id) && !defaults.has(id) && !DEFENSE_GRID.entryIds.includes(id) && id !== DEFENSE_GRID.exitId) blocked.add(id);
   };
   const wall = (col, gaps) => { for (let row = 0; row < 13; row++) if (!gaps.includes(row)) add(col, row); };
   const rock = (col, row) => { add(col, row); add(col + 1, row); add(col, row + 1); };
@@ -41,10 +44,10 @@ export const DEFENSE_TERRAIN = Object.freeze(Array.from({ length: 9 }, (_, index
 
 // Fixed orthogonal neighbour order makes every route deterministic. No diagonal
 // links exist, so even a one-cell-wide maze cannot cut through blocked corners.
-export function findDefenseGridRoute(blockedIds) {
+export function findDefenseGridRoute(blockedIds, entryId = DEFENSE_GRID.entryId) {
   const blocked = blockedIds instanceof Set ? blockedIds : new Set(blockedIds || []);
-  const { entryId, exitId } = DEFENSE_GRID;
-  if (blocked.has(entryId) || blocked.has(exitId)) return null;
+  const { exitId } = DEFENSE_GRID, entrance = DEFENSE_ENTRIES.find(entry => entry.id === entryId);
+  if (!entrance || blocked.has(entryId) || blocked.has(exitId)) return null;
   const queue = [entryId], parent = new Map([[entryId, null]]);
   for (let next = 0; next < queue.length; next++) {
     const id = queue[next];
@@ -60,7 +63,7 @@ export function findDefenseGridRoute(blockedIds) {
   const cellIds = [];
   for (let id = exitId; id !== null; id = parent.get(id)) cellIds.push(id);
   cellIds.reverse();
-  return { cellIds, points: [{ x: 20, y: 310 }, ...cellIds.map(id => ({ x: cells.get(id).x, y: cells.get(id).y })), { x: 1100, y: 310 }] };
+  return { cellIds, points: [{ x: entrance.x, y: entrance.y }, ...cellIds.map(id => ({ x: cells.get(id).x, y: cells.get(id).y })), { x: 1100, y: 310 }] };
 }
 export function defenseRouteMetrics(points) {
   const cumulative = [0];
@@ -68,8 +71,9 @@ export function defenseRouteMetrics(points) {
   return { cumulative, length: cumulative.at(-1) || 0 };
 }
 const defaultMetrics = defenseRouteMetrics(DEFENSE_PATH);
-export function pointOnDefenseRoute(progress, battle) {
-  const route = battle?.route || DEFENSE_PATH, metrics = battle?.routeMetrics || defaultMetrics;
+export function pointOnDefenseRoute(progress, battle, entryId = DEFENSE_GRID.entryId) {
+  const selected = battle?.routes?.[entryId];
+  const route = selected?.points || battle?.route || DEFENSE_PATH, metrics = selected?.metrics || battle?.routeMetrics || defaultMetrics;
   const travelled = Math.max(0, Math.min(1, Number(progress) || 0)) * metrics.length;
   let low = 1, high = route.length - 1;
   while (low < high) {
@@ -96,7 +100,14 @@ export function planDefenseRoute(b, proposal) {
   let cache = previewCaches.get(b);
   if (!cache) { cache = new Map(); previewCaches.set(b, cache); }
   if (cache.has(key)) return cache.get(key);
-  const route = findDefenseGridRoute(blocked);
+  const routes = {};
+  let route = null;
+  for (const entry of DEFENSE_ENTRIES) {
+    const path = findDefenseGridRoute(blocked, entry.id);
+    if (!path) break;
+    routes[entry.id] = path;
+  }
+  if (Object.keys(routes).length === DEFENSE_ENTRIES.length) route = { ...routes[DEFENSE_GRID.entryId], routes };
   // The cache is independent of the battle save. Pointer previews stay pure
   // and bounded while repeated draws can reuse the same proposal immediately.
   if (cache.size >= 360) cache.delete(cache.keys().next().value);
@@ -107,6 +118,10 @@ export function commitDefenseRoute(b) {
   if (!route) return false;
   b.route = route.points; b.routeCellIds = route.cellIds;
   b.routeMetrics = defenseRouteMetrics(route.points); b.routeLength = b.routeMetrics.length;
+  b.routes = Object.fromEntries(Object.entries(route.routes).map(([id, path]) => {
+    const metrics = defenseRouteMetrics(path.points);
+    return [id, { ...path, metrics, length: metrics.length }];
+  }));
   b.routeRevision = (b.routeRevision || 0) + 1;
   return true;
 }
@@ -117,10 +132,10 @@ export function getDefenseRoute(b, proposal) {
 export function getMazePlacementPreview(b, cellId, options = {}) {
   const cell = defenseCell(cellId), kind = options.kind || 'tower', remove = !!options.remove;
   const cost = remove ? -MAZE_TOWER_REFUND : kind === 'tower' ? MAZE_TOWER_COST : 0;
-  const result = { valid: false, reason: '', cell, cellId, cost, route: b?.route || null, kind, remove };
+  const result = { valid: false, reason: '', cell, cellId, cost, route: b?.route || null, routes: b?.routes || null, kind, remove };
   const invalid = reason => ({ ...result, reason });
   if (!b || b.status !== 'setup' || b.pendingOutcome) return invalid('Build and move between waves.');
-  if (!cell || [DEFENSE_GRID.entryId, DEFENSE_GRID.exitId].includes(cellId)) return invalid('Keep the entrance and exit open.');
+  if (!cell || [...DEFENSE_GRID.entryIds, DEFENSE_GRID.exitId].includes(cellId)) return invalid('Keep all three entrances and the exit open.');
   if (!['tower', 'crew'].includes(kind)) return invalid('Choose a tower or a crew member.');
   if ((b.terrain || []).includes(cellId)) return invalid('This cell contains fixed terrain.');
   const tower = (b.mazeTowers || []).find(entry => entry.cellId === cellId);
@@ -138,6 +153,6 @@ export function getMazePlacementPreview(b, cellId, options = {}) {
   }
   // Swapping two crew members does not change the set of blocked cells.
   const plan = occupied && moving ? planDefenseRoute(b) : planDefenseRoute(b, { cellId, allyId: moving?.id, remove });
-  if (!plan) return invalid('Leave at least one complete route to the exit.');
-  return { ...result, valid: true, reason: remove ? 'Selling opens this cell and returns 3 supplies.' : 'A complete route remains open.', route: plan.points };
+  if (!plan) return invalid('Leave a complete route from every entrance to the exit.');
+  return { ...result, valid: true, reason: remove ? 'Selling opens this cell and returns 3 supplies.' : 'All three entrances still reach the exit.', route: plan.points, routes: plan.routes };
 }

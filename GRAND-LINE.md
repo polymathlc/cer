@@ -1,4 +1,4 @@
-# Grand Line Chronicles · 3.4.0
+# Grand Line Chronicles · 3.5.0
 
 A One Piece collectible card and ship-defense game alongside Pirate Rift. Open **Crew Defense** in the Math or Science portal to use the signed-in learner's real question bank and existing reward-point wallet. A direct visit to `grand-line.html` provides a clearly labeled local preview without platform purchases or reward points.
 
@@ -66,13 +66,13 @@ These controls are unavailable to students and standalone previews. The portal c
 
 ## Crew Defense and learning
 
-Crew Defense is a real-time tower-defense game. Each of nine harbors contains **six waves** of enemies that follow a route toward the ship. Every map is a 16:9 landscape grid of 26 × 13 square cells. Enemies enter at the left and travel to the right exit through the shortest open orthogonal route. The six waves contain **80, 105, 130, 160, 190, and 230 enemies**, with smaller swarms, fast runners, armored enemies, ranged pressure, and captains demanding different counters. The scout report shows the next wave and a tactical suggestion before it begins.
+Crew Defense is a real-time tower-defense game. Each of nine harbors contains **six waves** of enemies that follow routes toward the ship. Every map is a 16:9 landscape grid of 26 × 13 square cells. Three entrances sit on the left edge: **Top, Middle and Bottom**. Waves use one, two or all three entrances; the scout report and map highlight the active entrances before the wave starts. Enemies split across those entrances and follow their own shortest open orthogonal routes to the right exit. Their movement speed stays consistent even when the routes have different lengths. The six waves still contain **80, 105, 130, 160, 190, and 230 enemies**, with smaller swarms, fast runners, armored enemies, ranged pressure, and captains demanding different counters.
 
 ### Build a maze
 
 Select the **Maze tower** tile in the placement grid, then click battlefield cells to build repeatedly. Alternatively, drag the tile onto a valid cell. Each basic disruptor tower costs **5 battle supplies**; selling it returns **3**. Up to 80 can be placed. These small structures block a cell, deal modest damage, and briefly slow enemies. Their main purpose is to form corridors and chokepoints around your crew's line, radial and splash attacks. Nine distinct fixed-terrain layouts provide different starting puzzles.
 
-Towers and crew both block movement. The map previews the proposed route before a placement; building, moving or summoning is rejected without spending supplies if it would seal the exit. Entrance, exit, fixed terrain and occupied cells cannot receive towers. Routes use orthogonal steps, so enemies cannot cut diagonally through blocked corners. Build, sell, summon and move between waves; attacks run automatically during waves.
+Towers and crew both block movement. The map previews the proposed routes before a placement; building, moving or summoning is rejected without spending supplies if it would cut off **any of the three entrances**, including one inactive this wave. Entrances, the exit, fixed terrain and occupied cells cannot receive towers. Routes use orthogonal steps, so enemies cannot cut diagonally through blocked corners. Funnel separate approaches into a shared chokepoint to make splash attacks effective. Build, sell, summon and move between waves; attacks run automatically during waves.
 
 Choose **one to seven different owned characters** in My crew. They deploy free at the start; existing five-member crews carry over with two open slots. Empty crew slots can be filled as more cards unlock. During preparation, any other **owned card** can be summoned if fewer than seven characters are deployed. Open **More crew**, then drag an owned character onto an empty grid cell, or select their tile and click the cell. Deployed crew can be dragged directly by their map avatars or palette tiles; selecting a crew member and clicking a destination also moves them. Locked and future-expansion cards cannot be summoned. Swapping two deployed crew members is free and preserves the same blockers.
 
