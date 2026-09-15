@@ -1,8 +1,8 @@
 import { installHadesDisplay } from "./hades-display.js";
 import { installPirateRiftPortal } from "./pirate-rift-portal.js?v=1.0.0";
-import { installGrandLinePortal } from "./grand-line-portal.js?v=3.3.0";
-import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=3.3.0";
-import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from "./grand-line-economy.js?v=3.3.0";
+import { installGrandLinePortal } from "./grand-line-portal.js?v=3.4.0";
+import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=3.4.0";
+import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from "./grand-line-economy.js?v=3.4.0";
 const grandLineRpgSaveGate = createGrandLineRpgSaveGate({getUser:()=>currentUser,flush:()=>rpgSave()});
 const grandLinePortal=installGrandLinePortal({
   ...createGrandLineEconomy({
@@ -3849,7 +3849,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.390.0';
+const APP_VERSION = 'v1.391.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)

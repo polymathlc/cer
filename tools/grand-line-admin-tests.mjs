@@ -130,8 +130,8 @@ test('unlock-all grants only missing current cards and preserves copies, team, p
   profile.collection.unlockedEncounter = 5; profile.collection.completed = [1, 2, 3, 4];
   profile.purchases.paid = { packId: 'galaxy', cost: 750, grant: { characterId: 'kaido', copies: 8 } };
   const before = structuredClone(profile), result = await f.economy.adminAction({ action: 'unlock-all' }, f.ctx);
-  assert.equal(result.unlockedCount, 44); assert.equal(result.changed, true);
-  assert.equal(Object.keys(result.collection.cards).length, 50);
+  assert.equal(result.unlockedCount, 94); assert.equal(result.changed, true);
+  assert.equal(Object.keys(result.collection.cards).length, 100);
   assert.deepEqual(Object.keys(result.collection.cards).sort(), CHARACTERS.map(character => character.id).sort());
   for (const id of Object.keys(RETIRED_CHARACTER_REPLACEMENTS)) assert.equal(result.collection.cards[id], undefined);
   assert.equal(result.collection.cards.luffy.copies, 16); assert.equal(result.collection.cards.kaido.copies, 8);
@@ -144,13 +144,14 @@ test('unlock-all grants only missing current cards and preserves copies, team, p
   assert.equal(repeated.unlockedCount, 0); assert.equal(repeated.changed, false); assert.deepEqual(f.state(), state); assert.equal(f.writes.length, 1);
 });
 
-test('unlock-all converts the four reserved legends without replacing paid copies or restoring retired IDs', async () => {
+test('unlock-all converts four retired editions, preserves paid copies and unlocks new cards only once', async () => {
   const f=fixture(),profile=f.state().grandLine.profiles[f.ctx.profileKey],entries=[['ace','bellamy'],['sabo','gin'],['law','mr3'],['king','kuro']];
   for(const [i,[oldId,newId]]of entries.entries()){profile.collection.cards[oldId]={copies:8+i};profile.collection.cards[newId]={copies:2};}
   profile.collection.cards.kaido={copies:1};profile.collection.team=[...entries.map(([id])=>id),...STARTER_IDS,'kaido'];profile.collection.stats.packsOpened=29;
   const result=await f.economy.adminAction({action:'unlock-all'},f.ctx);
-  assert.equal(Object.keys(result.collection.cards).length,50);assert.equal(result.unlockedCount,40);assert.equal(result.wallet.balance,0);
-  assert.deepEqual(result.collection.team,[...entries.map(([,id])=>id),...STARTER_IDS,'kaido']);assert.equal(result.collection.stats.packsOpened,29);
+  assert.equal(Object.keys(result.collection.cards).length,100);assert.equal(result.unlockedCount,90);assert.equal(result.wallet.balance,0);
+  assert.deepEqual(result.collection.team,[...entries.map(([,id])=>id),...STARTER_IDS,'kaido'].slice(0,7));assert.equal(result.collection.stats.packsOpened,29);
+  for(const id of ['bigmom7','garp7','sabo7'])assert.equal(result.collection.cards[id].copies,1,'Admin action explicitly unlocks each new edition once');
   for(const [i,[oldId,newId]]of entries.entries()){assert.equal(result.collection.cards[oldId],undefined);assert.equal(result.collection.cards[newId].copies,10+i);}
   for(const id of Object.keys(RETIRED_CHARACTER_REPLACEMENTS))assert.equal(result.collection.cards[id],undefined);
   const again=await f.economy.adminAction({action:'unlock-all'},f.ctx);assert.deepEqual(again.collection,result.collection);assert.equal(again.changed,false);assert.equal(f.writes.length,1);
@@ -178,7 +179,7 @@ test('unlocking one learner does not grant cards to another learner and toggling
   assert.equal(Object.keys(f.economy.getSnapshot(otherCtx).collection.cards).length, 5);
   await f.economy.adminAction({ action: 'set-unlimited-gold', enabled: true }, otherCtx);
   f.setProfile('learner-a');
-  assert.equal(Object.keys(f.economy.getSnapshot(f.ctx).collection.cards).length, 50);
+  assert.equal(Object.keys(f.economy.getSnapshot(f.ctx).collection.cards).length, 100);
   assert.equal(f.economy.getSnapshot(f.ctx).wallet.unlimitedGold, true);
 });
 
@@ -211,7 +212,7 @@ test('ordinary earnings flush after a successful admin save without losing metad
   const pending = f.economy.adminAction({ action: 'unlock-all' }, f.ctx); f.earn(29);
   f.settle().resolve(); const result = await pending;
   assert.equal(result.wallet.balance, 40); assert.equal(f.durable().gold, 40);
-  assert.equal(Object.keys(f.durable().grandLine.profiles[f.ctx.profileKey].collection.cards).length, 50);
+  assert.equal(Object.keys(f.durable().grandLine.profiles[f.ctx.profileKey].collection.cards).length, 100);
   assert.equal(f.durable().grandLine.accountNote, 'keep me'); assert.equal(f.ordinaryWrites.length, 1);
 });
 
@@ -252,7 +253,7 @@ test('account and learner changes suppress pending admin replies without touchin
   const p = fixture(); p.hold(); const changed = p.economy.adminAction({ action: 'unlock-all' }, p.ctx);
   p.setProfile('other-learner'); p.settle().resolve(); await assert.rejects(changed, /Administrator/);
   const fresh = p.economy.getSnapshot({ ...p.ctx, profileKey: 'other-learner' });
-  assert.equal(Object.keys(fresh.collection.cards).length, 5); assert.equal(Object.keys(p.durable().grandLine.profiles['learner-a'].collection.cards).length, 50);
+  assert.equal(Object.keys(fresh.collection.cards).length, 5); assert.equal(Object.keys(p.durable().grandLine.profiles['learner-a'].collection.cards).length, 100);
 });
 
 test('a role change after pack selection is checked again before any zero-cost mutation', async () => {

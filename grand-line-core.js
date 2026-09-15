@@ -1,5 +1,5 @@
-import { CHARACTERS, CHARACTER_BY_ID, STARTER_IDS, PACK_ODDS, ENCOUNTERS, LORE_SOURCES, RETIRED_CHARACTER_REPLACEMENTS } from './grand-line-data.js?v=3.3.0';
-export { CHARACTERS, CHARACTER_BY_ID, STARTER_IDS, PACK_ODDS, ENCOUNTERS, LORE_SOURCES, RETIRED_CHARACTER_REPLACEMENTS };
+import { CHARACTERS, CHARACTER_BY_ID, STARTER_IDS, PACK_ODDS, ENCOUNTERS, LORE_SOURCES, RETIRED_CHARACTER_REPLACEMENTS, MAX_CREW_SIZE, CREWS } from './grand-line-data.js?v=3.4.0';
+export { CHARACTERS, CHARACTER_BY_ID, STARTER_IDS, PACK_ODDS, ENCOUNTERS, LORE_SOURCES, RETIRED_CHARACTER_REPLACEMENTS, MAX_CREW_SIZE, CREWS };
 
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const integer = (v, fallback = 0, max = 1000000) => Number.isFinite(v) ? clamp(Math.floor(v), 0, max) : fallback;
@@ -9,7 +9,7 @@ const side = (b, unit) => unit.side === 'ally' ? b.allies : b.enemies;
 const opponents = (b, unit) => unit.side === 'ally' ? b.enemies : b.allies;
 const negative = new Set(['stun', 'freeze', 'burn', 'poison', 'weaken', 'slow']);
 const roll = rng => clamp(Number(rng()) || 0, 0, 0.999999999999);
-const validTeam = c => Array.isArray(c?.team) && c.team.length >= 1 && c.team.length <= 10 && new Set(c.team).size === c.team.length && c.team.every(id => typeof id === 'string' && CHARACTER_BY_ID[id] && c.cards?.[id]?.copies >= 1);
+const validTeam = c => Array.isArray(c?.team) && c.team.length >= 1 && c.team.length <= MAX_CREW_SIZE && new Set(c.team).size === c.team.length && c.team.every(id => typeof id === 'string' && CHARACTER_BY_ID[id] && c.cards?.[id]?.copies >= 1);
 const rankFor = copies => Math.min(10, Math.floor(Math.log2(Math.max(1, integer(copies, 1, 1000000000)))));
 const maxCopies = Number.MAX_SAFE_INTEGER;
 
@@ -39,10 +39,10 @@ export function normalizeCollection(raw) {
   c.unlockedEncounter = clamp(integer(raw.unlockedEncounter, 1), 1, 9);
   c.completed = Array.isArray(raw.completed) ? [...new Set(raw.completed.filter(n => Number.isInteger(n) && n >= 1 && n <= 9))].sort((a, b) => a - b) : [];
   const team = Array.isArray(raw.team) ? raw.team.map(currentCharacterId).filter(id => id && c.cards[id]) : [];
-  c.team = [...new Set(team)].slice(0, 10);
+  c.team = [...new Set(team)].slice(0, MAX_CREW_SIZE);
   // A valid small crew is intentional. Malformed legacy teams still receive
   // the five owned starters so a broken save cannot prevent play.
-  const intact = Array.isArray(raw.team) && raw.team.length > 0 && raw.team.length <= 10 && team.length === raw.team.length && new Set(team).size === team.length;
+  const intact = Array.isArray(raw.team) && raw.team.length > 0 && team.length === raw.team.length && new Set(team).size === team.length;
   if (!intact) for (const id of STARTER_IDS) if (c.team.length < 5 && !c.team.includes(id)) c.team.push(id);
   for (const key of Object.keys(c.stats)) c.stats[key] = integer(raw.stats?.[key]);
   return c;
@@ -78,12 +78,49 @@ export function openPack(collection, rng = Math.random) {
 }
 
 export function setTeam(collection, ids) {
-  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 10 || new Set(ids).size !== ids.length || !ids.every(id => typeof id === 'string' && CHARACTER_BY_ID[id] && collection?.cards?.[id]?.copies >= 1)) return false;
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > MAX_CREW_SIZE || new Set(ids).size !== ids.length || !ids.every(id => typeof id === 'string' && CHARACTER_BY_ID[id] && collection?.cards?.[id]?.copies >= 1)) return false;
   collection.team = [...ids];
   return true;
 }
 
-export function statsFor(characterId, copies = 1, level = 1) {
+export const CREW_SYNERGY_THRESHOLDS = Object.freeze([
+  Object.freeze({ count: 2, bonus: .06 }), Object.freeze({ count: 3, bonus: .1 }), Object.freeze({ count: 5, bonus: .16 }),
+]);
+export const CREW_SYNERGY_CAP = .3;
+export function getCrewSynergies(teamIds = []) {
+  const ids = [...new Set((Array.isArray(teamIds) ? teamIds : []).filter(id => typeof id === 'string' && Object.hasOwn(CHARACTER_BY_ID, id)))].slice(0, MAX_CREW_SIZE);
+  const groups = Object.values(CREWS).map(crew => {
+    const members = ids.filter(id => CHARACTER_BY_ID[id].allegiances.includes(crew.id));
+    const reached = CREW_SYNERGY_THRESHOLDS.filter(tier => members.length >= tier.count).at(-1);
+    return { ...crew, count: members.length, members, captains: members.filter(id => CHARACTER_BY_ID[id].captainOf.includes(crew.id)),
+      active: !!reached, bonus: reached?.bonus || 0, nextThreshold: CREW_SYNERGY_THRESHOLDS.find(tier => tier.count > members.length)?.count || null };
+  }).filter(crew => crew.count > 0);
+  const byCharacter = Object.fromEntries(ids.map(id => {
+    const matching = groups.filter(crew => crew.active && crew.members.includes(id));
+    return [id, { bonus: Math.min(CREW_SYNERGY_CAP, Math.round(matching.reduce((sum, crew) => sum + crew.bonus, 0) * 100) / 100), groups: matching.map(crew => crew.id) }];
+  }));
+  return { groups, byCharacter, cap: CREW_SYNERGY_CAP };
+}
+
+// Both battle engines use this query. Defense is spatial; the turn-based arena
+// has no placement, so its living leaders cover the whole friendly side.
+export function getCaptainAuras(battle, unit) {
+  const result = { attackBonus: 0, speedBonus: 0, sources: [] };
+  // Enemy sprites borrow character artwork, not the player's formation bonuses.
+  if (!battle || !unit || unit.side !== 'ally' || unit.hp <= 0 || unit.escaped || unit.isMazeTower) return result;
+  const team = battle.allies;
+  for (const leader of team || []) {
+    const spec = CHARACTER_BY_ID[leader.characterId]?.aura;
+    if (!spec || leader.hp <= 0 || leader.escaped) continue;
+    if (Array.isArray(battle.mazeTowers) && Math.hypot(unit.x - leader.x, unit.y - leader.y) > spec.range) continue;
+    result.sources.push({ id: leader.id, name: leader.name, ...spec });
+    const key = spec.stat === 'attack' ? 'attackBonus' : 'speedBonus';
+    result[key] = Math.min(.12, Math.max(result[key], spec.amount));
+  }
+  return result;
+}
+
+export function statsFor(characterId, copies = 1, level = 1, teamIds = []) {
   const c = CHARACTER_BY_ID[characterId];
   if (!c) return null;
   const rank = rankFor(copies);
@@ -91,9 +128,12 @@ export function statsFor(characterId, copies = 1, level = 1) {
   const roleHp = c.role === 'Guardian' ? 1.18 : c.role === 'Healer' ? 0.96 : c.role === 'Controller' ? 0.98 : 1;
   const roleAttack = c.role === 'Healer' ? 0.9 : c.role === 'Guardian' ? 0.96 : 1;
   const hp = Math.round((140 + c.stars * 18) * roleHp * growth);
-  return { hp, maxHp: hp, attack: Math.round((27 + c.stars * 4) * roleAttack * growth), defense: Math.round((8 + c.stars * 2 + (c.role === 'Guardian' ? 7 : 0)) * growth),
+  const base = { hp, maxHp: hp, attack: Math.round((27 + c.stars * 4) * roleAttack * growth), defense: Math.round((8 + c.stars * 2 + (c.role === 'Guardian' ? 7 : 0)) * growth),
     speed: Math.round((42 + c.stars * 2 + (['Controller', 'Trickster'].includes(c.role) ? 8 : c.role === 'Healer' ? 4 : 0)) * (c.passive.type === 'speed' ? 1 + c.passive.value : 1)),
     rank, maxEnergy: 100 };
+  const synergyBonus = getCrewSynergies(teamIds).byCharacter[characterId]?.bonus || 0;
+  for (const key of ['hp', 'maxHp', 'attack', 'defense', 'speed']) base[key] = Math.round(base[key] * (1 + synergyBonus));
+  return { ...base, synergyBonus };
 }
 
 function seeded(value) {
@@ -113,14 +153,15 @@ function emit(b, kind, source, targets, text, extra = {}) {
   if (b.effects.length > 80) b.effects.splice(0, b.effects.length - 80);
 }
 
-function makeUnit(characterId, sideName, copies, scale, index = 0) {
+function makeUnit(characterId, sideName, copies, scale, index = 0, teamIds = []) {
   const c = CHARACTER_BY_ID[characterId];
-  const stats = statsFor(characterId, copies);
+  const stats = statsFor(characterId, copies, 1, teamIds);
   const hp = Math.round(stats.maxHp * scale);
   return { id: sideName === 'ally' ? `ally-${characterId}` : `enemy-${index}-${characterId}`, characterId, name: c.name, stars: c.stars, side: sideName,
     hp, maxHp: hp, attack: Math.round(stats.attack * scale), defense: Math.round(stats.defense * scale), speed: stats.speed,
     rank: stats.rank, energy: 45, maxEnergy: 100, shield: 0, statuses: [], cooldowns: Object.fromEntries(c.skills.map(s => [s.id, 0])),
-    skills: c.skills, passive: c.passive, alive: true, color: c.color, turnsStarted: 0, passiveUsed: false, attacksMade: 0 };
+    skills: c.skills, passive: c.passive, allegiances: c.allegiances, captainOf: c.captainOf, aura: c.aura, synergyBonus: stats.synergyBonus,
+    alive: true, color: c.color, turnsStarted: 0, passiveUsed: false, attacksMade: 0 };
 }
 
 export function createBattle(collection, options = {}) {
@@ -129,7 +170,7 @@ export function createBattle(collection, options = {}) {
   const encounter = ENCOUNTERS[encounterId - 1];
   const seed = options.seed ?? Math.floor(Math.random() * 4294967296);
   const b = { id: `grand-line-${encounterId}-${seed}`, seed, rng: seeded(seed), collection, encounter, round: 1,
-    status: 'player', allies: collection.team.map(id => makeUnit(id, 'ally', collection.cards[id].copies, 1)),
+    status: 'player', allies: collection.team.map(id => makeUnit(id, 'ally', collection.cards[id].copies, 1, 0, collection.team)), synergies: getCrewSynergies(collection.team),
     enemies: encounter.enemies.map((id, i) => makeUnit(id, 'enemy', 1, encounter.scale, i)),
     turnOrder: [], activeId: null, log: [], effects: [], pendingOutcome: null, learning: null, learningBoost: null, rewardedRounds: [], roundResults: [],
     stats: { damageDealt: 0, turns: 0, rounds: 0 }, eventSequence: 0, turnIndex: 0, outcomeCommitted: false };
@@ -210,7 +251,7 @@ function directDamage(b, actor, target, skill) {
     emit(b, 'wind', target, [target], 'Evaded');
     return 0;
   }
-  let multiplier = 1 + statusValue(actor, 'attack-up') - statusValue(actor, 'weaken');
+  let multiplier = 1 + statusValue(actor, 'attack-up') - statusValue(actor, 'weaken') + getCaptainAuras(b, actor).attackBonus;
   for (const ally of side(b, actor)) if (living(ally) && ally.passive.type === 'all-attack') multiplier += ally.passive.value;
   if (actor.passive.type === 'execute' && target.hp < target.maxHp * 0.5) multiplier *= 1 + actor.passive.value;
   if (actor.passive.type === 'focus') multiplier *= 1 + Math.min(6, actor.attacksMade) * actor.passive.value;
@@ -367,7 +408,7 @@ function startRound(b) {
     if (unit.passive.type === 'all-regen') for (const ally of team.filter(living)) heal(b, ally, ally.maxHp * unit.passive.value, unit);
     if (unit.passive.type === 'all-energy') for (const ally of team.filter(living)) ally.energy = Math.min(ally.maxEnergy, ally.energy + unit.passive.value);
   }
-  b.turnOrder = allUnits(b).filter(living).map(unit => ({ id: unit.id, speed: unit.speed * (1 - statusValue(unit, 'slow')), tie: roll(b.rng) }))
+  b.turnOrder = allUnits(b).filter(living).map(unit => ({ id: unit.id, speed: unit.speed * (1 + getCaptainAuras(b, unit).speedBonus) * (1 - statusValue(unit, 'slow')), tie: roll(b.rng) }))
     .sort((a, z) => z.speed - a.speed || a.tie - z.tie).map(entry => entry.id);
   log(b, `Round ${b.round}: initiative set.`);
   selectNext(b);

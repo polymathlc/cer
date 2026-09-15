@@ -38,14 +38,14 @@ function finishRound(b, limit = 100) {
   assert.equal(b.status, 'learning');
 }
 
-test('catalog contains exactly fifty unique characters, 150 distinct moves, and only three apex cards', () => {
-  assert.equal(CHARACTERS.length, 50);
-  assert.equal(new Set(CHARACTERS.map(c => c.id)).size, 50);
-  assert.deepEqual(CHARACTERS.filter(c => c.stars === 7).map(c => c.name), ['Kaido the Beast', 'Whitebeard', 'Admiral Akainu']);
+test('catalog contains exactly one hundred unique characters, 300 distinct moves, and six apex cards', () => {
+  assert.equal(CHARACTERS.length, 100);
+  assert.equal(new Set(CHARACTERS.map(c => c.id)).size, 100);
+  assert.deepEqual(CHARACTERS.filter(c => c.stars === 7).map(c => c.name), ['Kaido the Beast', 'Whitebeard', 'Admiral Akainu', 'Charlotte Linlin · Big Mom', 'Monkey D. Garp', 'Sabo']);
   const skills = CHARACTERS.flatMap(c => c.skills);
-  assert.equal(skills.length, 150);
-  assert.equal(new Set(skills.map(s => s.id)).size, 150);
-  assert.equal(new Set(skills.map(s => s.animation)).size, 150);
+  assert.equal(skills.length, 300);
+  assert.equal(new Set(skills.map(s => s.id)).size, 300);
+  assert.equal(new Set(skills.map(s => s.animation)).size, 300);
   for (const character of CHARACTERS) {
     assert.ok(character.stars >= 1 && character.stars <= 7);
     assert.equal(character.skills[0].cost, 0);
@@ -110,7 +110,7 @@ test('normalization rejects malformed saves, bounds counters, and repairs a five
   assert.equal(c.stats.correctAnswers, 4);
 });
 
-test('team selection accepts one to ten different owned heroes and rejects a locked campaign', () => {
+test('team selection accepts one to seven different owned heroes and rejects a locked campaign', () => {
   const c = createCollection();
   assert.equal(setTeam(c, ['luffy', 'luffy', 'zoro', 'nami', 'chopper']), false);
   assert.equal(setTeam(c, ['wyper', 'zoro', 'nami', 'usopp', 'chopper']), false);
@@ -122,13 +122,13 @@ test('team selection accepts one to ten different owned heroes and rejects a loc
   addCard(c, 'wyper');
   assert.equal(setTeam(c, ['wyper', 'zoro', 'nami', 'usopp', 'chopper']), true);
   assert.ok(createBattle(c, { seed: 42 }));
-  for (const hero of CHARACTERS.slice(0, 11)) addCard(c, hero.id);
-  const ten = CHARACTERS.slice(0, 10).map(hero => hero.id);
-  assert.equal(setTeam(c, ten), true);
-  assert.deepEqual(normalizeCollection(c).team, ten, 'All ten saved members survive normalization');
+  for (const hero of CHARACTERS.slice(0, 8)) addCard(c, hero.id);
+  const seven = CHARACTERS.slice(0, 7).map(hero => hero.id);
+  assert.equal(setTeam(c, seven), true);
+  assert.deepEqual(normalizeCollection(c).team, seven, 'All seven saved members survive normalization');
   const before = structuredClone(c);
-  assert.equal(setTeam(c, CHARACTERS.slice(0, 11).map(hero => hero.id)), false);
-  assert.deepEqual(c, before, 'An eleventh member cannot mutate the saved crew');
+  assert.equal(setTeam(c, CHARACTERS.slice(0, 8).map(hero => hero.id)), false);
+  assert.deepEqual(c, before, 'An eighth member cannot mutate the saved crew');
 });
 
 test('battle initiative and units are reproducible and snapshot owned-card stats', () => {
@@ -384,6 +384,8 @@ test('campaign has nine valid encounters, replay is allowed, and final unlock is
 
 function learningFixture(correct) {
   const b = fixture('nami');
+  // Keep this fixture about graded-answer multipliers; aura combat has its own tests.
+  b.allies = b.allies.filter(unit => !CHARACTER_BY_ID[unit.characterId].aura);
   for (const u of [...b.allies, ...b.enemies]) { u.passive = { type: 'none', value: 0 }; u.shield = 0; u.statuses = []; }
   b.status = 'learning'; b.learning = { round: b.round, required: 3, completed: false };
   const result = completeLearning(b, { correct, total: 3, round: b.round });

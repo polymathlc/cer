@@ -1,8 +1,9 @@
-import { CHARACTER_BY_ID } from './grand-line-data.js?v=3.3.0';
-import { getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.3.0';
+import { CHARACTER_BY_ID } from './grand-line-data.js?v=3.4.0';
+import { getDefenseSkillProfile } from './grand-line-defense-profiles.js?v=3.4.0';
 
 export const PREMIUM_VFX_CHARACTERS = Object.freeze([
   'kaido', 'whitebeard', 'akainu', 'luffy', 'aokiji', 'fujitora', 'ryokugyu',
+  'bigmom7', 'garp7', 'sabo7', 'rayleigh', 'oden',
 ]);
 const premiumCharacters = new Set(PREMIUM_VFX_CHARACTERS);
 export const VFX_ATLAS_SPECS = Object.freeze([...PREMIUM_VFX_CHARACTERS, 'generic'].map(id => Object.freeze({

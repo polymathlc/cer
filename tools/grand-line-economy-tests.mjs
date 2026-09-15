@@ -49,7 +49,7 @@ test('each pack can reach a seven-star apex and duplicates strengthen the same o
   assert.equal(second.grant.copies, first.grant.copies + 1); assert.equal(second.grant.duplicate, true);
 });
 
-test('paid pack odds can grant every current card and never reintroduce any of the twelve reserved legends', async () => {
+test('two fifty-pack purchases reach all hundred current cards without reintroducing retired edition IDs', async () => {
   const draws=[],f=fixture({random:()=>{assert.ok(draws.length);return draws.shift();}}),offer=f.economy.getSnapshot(f.ctx).wallet.offers.find(p=>p.id==='spark');
   const weighted=Object.entries(offer.odds),total=weighted.reduce((sum,[,weight])=>sum+weight,0);
   for(const character of CHARACTERS){
@@ -57,10 +57,14 @@ test('paid pack odds can grant every current card and never reintroduce any of t
     draws.push((before+offer.odds[character.stars]/2)/total);
     const pool=CHARACTERS.filter(c=>c.stars===character.stars);draws.push((pool.findIndex(c=>c.id===character.id)+.5)/pool.length);
   }
-  f.state().gold=offer.cost*50;const result=await f.economy.buyPack({purchaseId:'complete-current-pool',packId:'spark',quantity:50},f.ctx);
-  assert.deepEqual(result.grants.map(g=>g.characterId),CHARACTERS.map(c=>c.id));assert.equal(draws.length,0);
-  assert.equal(new Set(result.grants.map(g=>g.characterId)).size,50);assert.equal(result.wallet.balance,0);assert.equal(f.writes.length,1);
-  for(const id of Object.keys(RETIRED_CHARACTER_REPLACEMENTS))assert.ok(!result.grants.some(g=>g.characterId===id));
+  f.state().gold=offer.cost*100;
+  const first=await f.economy.buyPack({purchaseId:'current-pool-first-half',packId:'spark',quantity:50},f.ctx);
+  const second=await f.economy.buyPack({purchaseId:'current-pool-second-half',packId:'spark',quantity:50},f.ctx);
+  const grants=[...first.grants,...second.grants];
+  assert.equal(first.quantity,50);assert.equal(second.quantity,50);
+  assert.deepEqual(grants.map(g=>g.characterId),CHARACTERS.map(c=>c.id));assert.equal(draws.length,0);
+  assert.equal(new Set(grants.map(g=>g.characterId)).size,100);assert.equal(second.wallet.balance,0);assert.equal(f.writes.length,2);
+  for(const id of Object.keys(RETIRED_CHARACTER_REPLACEMENTS))assert.ok(!grants.some(g=>g.characterId===id));
 });
 test('durable purchase IDs make retries and reopened sessions idempotent', async () => {
   const f = fixture(), request = { packId: 'spark', purchaseId: 'persisted-id' };
@@ -114,7 +118,26 @@ test('a failed migration save keeps the paid receipt and retries without another
   assert.equal(result.collection.cards.wyper.copies, 3); assert.equal(f.writes.length, 0);
 });
 
-test('a paid batch containing all four newly reserved cards replays at zero gold without rolls, writes or new copies', async () => {
+test('new apex receipts stay separate from legacy receipts for Big Mom, Garp and Sabo', async () => {
+  for (const [oldId, replacement, edition] of [['bigmom','wapol','bigmom7'],['garp','donkrieg','garp7'],['sabo','gin','sabo7']]) {
+    const f=fixture({random:()=>{throw Error('A receipt replay cannot roll a new card');}}),collection=createCollection();
+    collection.cards[oldId]={copies:3};collection.cards[replacement]={copies:2};collection.cards[edition]={copies:4};
+    collection.team=[oldId,edition];collection.stats.packsOpened=7;
+    const purchases={old:{packId:'galaxy',cost:750,grant:{characterId:oldId,copies:3,duplicate:true,stars:5}},
+      apex:{packId:'galaxy',cost:750,grant:{characterId:edition,copies:4,duplicate:true,stars:7}}};
+    f.state().gold=0;f.state().grandLine={profiles:{[f.ctx.profileKey]:{collection,purchases}}};
+    const before=structuredClone(f.state());
+    const legacy=await f.economy.buyPack({packId:'galaxy',purchaseId:'old'},f.ctx);
+    const apex=await f.economy.buyPack({packId:'galaxy',purchaseId:'apex'},f.ctx);
+    assert.equal(legacy.grant.characterId,replacement);assert.equal(legacy.grant.copies,5);
+    assert.equal(apex.grant.characterId,edition);assert.equal(apex.grant.copies,4);assert.equal(apex.grant.stars,7);
+    assert.deepEqual(legacy.collection,apex.collection);assert.deepEqual(apex.collection.team,[replacement,edition]);
+    assert.equal(apex.collection.cards[edition].copies,4);assert.equal(apex.collection.stats.packsOpened,7);
+    assert.equal(apex.wallet.balance,0);assert.equal(f.writes.length,0);assert.deepEqual(f.state(),before);
+  }
+});
+
+test('a paid batch containing four retired edition IDs replays at zero gold without rolls, writes or new copies', async () => {
   const f=fixture({random:()=>{throw Error('Receipt replay must never roll another card');}}),c=createCollection();
   const entries=[['ace','bellamy'],['sabo','gin'],['law','mr3'],['king','kuro']];c.cards.kaido={copies:1};
   for(const [i,[oldId,newId]]of entries.entries()){c.cards[oldId]={copies:4+i};c.cards[newId]={copies:2};}
@@ -125,7 +148,7 @@ test('a paid batch containing all four newly reserved cards replays at zero gold
   const result=await f.economy.buyPack(request,f.ctx);assert.equal(result.replayed,true);assert.equal(result.quantity,4);assert.equal(result.grant,undefined);
   assert.equal(result.wallet.balance,0);assert.equal(result.collection.stats.packsOpened,24);assert.equal(result.collection.packs,0);
   assert.deepEqual(result.grants,entries.map(([,characterId],i)=>({characterId,copies:6+i,duplicate:true,stars:CHARACTER_BY_ID[characterId].stars})));
-  assert.deepEqual(result.collection.team,[...entries.map(([,id])=>id),...STARTER_IDS,'kaido']);
+  assert.deepEqual(result.collection.team,[...entries.map(([,id])=>id),...STARTER_IDS,'kaido'].slice(0,7));
   assert.equal(totalCopies(result.collection),totalCopies(c));assert.equal(f.writes.length,0);assert.deepEqual(f.state(),original);
   assert.deepEqual(await createGrandLineEconomy(f.env).buyPack(request,f.ctx),result);assert.equal(f.writes.length,0);
   await f.economy.saveCollection({team:result.collection.team},f.ctx);assert.equal(f.writes.length,1);
@@ -166,8 +189,8 @@ test('profiles have separate collections while sharing only their existing accou
   await f.economy.buyPack({ packId: 'spark', purchaseId: 'one' }, sibling);
   assert.equal(Object.keys(f.state().grandLine.profiles).length, 2);
 });
-test('ten owned crew members save and reload without granting cards or changing the wallet', async () => {
-  const f = fixture(), snapshot = f.economy.getSnapshot(f.ctx), team = CHARACTERS.slice(0, 10).map(c => c.id);
+test('seven owned crew members save and reload without granting cards or changing the wallet', async () => {
+  const f = fixture(), snapshot = f.economy.getSnapshot(f.ctx), team = CHARACTERS.slice(0, 7).map(c => c.id);
   for (const id of team) snapshot.collection.cards[id] = { copies: 1 };
   f.state().grandLine = { profiles: { [f.ctx.profileKey]: { collection: snapshot.collection } } };
   const result = await f.economy.saveCollection({ team }, f.ctx);
@@ -175,8 +198,8 @@ test('ten owned crew members save and reload without granting cards or changing 
   assert.deepEqual(f.economy.getSnapshot(f.ctx).collection.team, team);
   assert.equal(result.wallet.balance, 2000);
   const before = JSON.stringify(f.state());
-  await assert.rejects(f.economy.saveCollection({ team: [...team, CHARACTERS[10].id] }, f.ctx), /ten/);
-  await assert.rejects(f.economy.saveCollection({ team: [...team.slice(0, 9), team[0]] }, f.ctx), /ten/);
+  await assert.rejects(f.economy.saveCollection({ team: [...team, CHARACTERS[7].id] }, f.ctx), /seven/);
+  await assert.rejects(f.economy.saveCollection({ team: [...team.slice(0, 6), team[0]] }, f.ctx), /seven/);
   assert.equal(JSON.stringify(f.state()), before);
 });
 

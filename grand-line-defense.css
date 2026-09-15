@@ -35,10 +35,6 @@
 /* Question controls belong to the visible viewport, including landscape zoom. */
 .map-viewport{position:relative}.map-viewport>.round-gate{z-index:3}
 
-/* Keep the battlefield and its placement tray together on desktop screens. */
-@media(min-width:761px){
-  .map-viewport:not(.map-zoomed) .defense-stage{width:min(100%,max(480px,calc((100dvh - 480px) * 16 / 9)));margin-inline:auto}
-}
 
 /* Place directly from the map's compact tower and crew tray. */
 .map-command-bar.defense-controls{padding:10px 14px;gap:16px}
@@ -195,3 +191,179 @@
   .keyboard-placement .maze-cell-choice{grid-template-columns:1fr}
   .keyboard-placement .maze-cell-choice #cell-apply{grid-column:1;grid-row:auto;width:100%;margin-top:5px}
 }
+
+/* Give the map the main stage; keep placement and upgrades beside it. */
+.defense-view{width:100%;max-width:none;padding:12px 16px 30px}
+.defense-view .battle-top{margin-bottom:9px;gap:12px}
+.defense-view .battle-top h1{font-size:25px}
+.defense-view .battle-top .eyebrow{margin-bottom:3px}
+.defense-hud{gap:8px;margin-bottom:9px}
+.defense-hud>div{padding:8px 12px;gap:5px 10px}
+.defense-hud small{display:none}
+.defense-hud strong{font-size:14px}
+.maze-map-panel{overflow:visible}
+.map-viewport{max-height:none;border-radius:0 0 0 11px}
+.map-viewport:not(.map-zoomed) .defense-stage{width:100%;margin:0}
+.map-viewport.map-zoomed{max-height:70dvh}
+.map-command-bar.defense-controls{border-radius:11px 11px 0 0;padding:8px 12px;gap:10px}
+.map-command-bar .map-state .eyebrow{font-size:11px}
+.placement-dock{padding:10px 12px;border-radius:0 0 11px 11px}
+.placement-instructions{flex-wrap:wrap;gap:7px}
+.placement-instructions #placement-hint{flex-basis:100%;font-size:11px;line-height:1.45}
+.placement-feedback{font-size:10px;line-height:1.4;margin-bottom:5px}
+.placement-instructions #placement-cancel{margin-left:auto;min-height:36px;font-size:11px;padding:6px 9px}
+.placement-dock #defender-detail{border-top:1px solid #829e7755;padding:13px 0 0;margin-top:12px}
+.placement-dock .defender-overview{display:block}
+.placement-dock .defender-overview h2{font-size:22px;line-height:1.2}
+.placement-dock .defender-overview .tower-controls{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;margin-top:10px}
+.placement-dock .defender-overview .tower-controls label{font-size:11px}
+.placement-dock .defender-overview .tower-controls select{max-width:none;width:100%;font-size:12px}
+.placement-dock .defender-overview .tower-controls button{font-size:12px;width:100%;min-height:44px}
+.placement-dock .defender-skills{grid-template-columns:1fr}
+.placement-dock .specialization-panel{padding:10px;display:grid;gap:8px}
+.placement-dock .specialization-panel p{min-width:0}
+.placement-dock .specialization-panel button{font-size:11px}
+.placement-dock .defender-abilities>p{font-size:11px}
+.placement-dock .defense-skill{padding:10px}
+.placement-dock .defense-skill strong{font-size:16px}
+.placement-dock .defense-skill span{font-size:11px}
+.crew-slots{gap:12px;padding-bottom:22px;grid-template-columns:repeat(5,minmax(0,1fr))}
+.crew-slot{border:1px solid #77938655;border-radius:7px;background:#162d32;overflow:hidden;min-height:112px;padding:8px}
+.crew-slot.selected{outline-offset:2px;border-color:#e5c984;background:#304837}
+.crew-slot .crew-member-preview{width:100%;display:flex;align-items:center;gap:8px;text-align:left;padding:0;min-height:55px}
+.crew-member-face.card-art{position:relative;inset:auto;display:block;width:40px;height:49px;flex-shrink:0;border:1px solid #7f95734d;border-radius:5px}
+.crew-member-face.card-art:after{display:none}
+.crew-member-copy{min-width:0;display:grid;gap:3px}
+.crew-member-copy small{font-size:8px;color:#b2bd9d;letter-spacing:.6px}
+.crew-member-copy strong{font-size:12px;line-height:1.2;color:#f1dab0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.crew-member-copy>span{font-size:9px;color:#a5c2b7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crew-member-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
+.crew-member-actions button{font-size:11px;min-height:44px;padding:7px 4px}
+.empty-crew-slot{min-height:112px;gap:5px;padding:9px;background:#11272c}
+.empty-slot-number{font-size:20px}
+.empty-crew-slot strong{font-size:11px}
+.empty-crew-slot>button{font-size:11px;min-height:44px;padding:7px}
+@media(min-width:1001px){
+  .maze-map-panel{display:grid;grid-template-columns:minmax(0,1fr) clamp(262px,18vw,340px);align-items:start}
+  .map-command-bar{grid-column:1/-1;grid-row:1}
+  .map-viewport{grid-column:1;grid-row:2;min-width:0}
+  .placement-dock{grid-column:2;grid-row:2;min-width:0;position:sticky;top:8px;max-height:calc(100dvh - 24px);overflow:auto;overscroll-behavior:contain;border-top:0;border-left:1px solid #62847666;border-radius:0 0 11px 0;scrollbar-color:#91ad89 #102a2c}
+  .placement-dock .placement-tray{grid-template-columns:1fr 1fr;gap:7px}
+  .placement-tray #build-toggle{grid-column:1;grid-row:1}
+  .placement-tray #summon-toggle{grid-column:2;grid-row:1}
+  .placement-dock .placement-tray .placement-tile{min-height:61px;padding:6px;display:grid;grid-template-columns:27px 1fr;column-gap:5px;text-align:left}
+  .placement-dock .placement-tray .placement-tile>span{grid-row:1/3;grid-column:1}
+  .placement-dock .placement-tray .placement-tile strong{font-size:11px}
+  .placement-dock .placement-tray .placement-tile small{grid-column:2;font-size:10px}
+  .defense-board-layout .placement-tray .defender-buttons{grid-column:1/-1;grid-row:2;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .defense-board-layout .placement-tray .defender-chip{min-height:62px;display:grid;grid-template-columns:32px minmax(0,1fr);gap:1px 6px;text-align:left;padding:7px 6px}
+  .defense-board-layout .placement-tray .defender-chip .defender-face{grid-row:1/3;grid-column:1;width:32px;height:36px;margin:0}
+  .defense-board-layout .placement-tray .defender-chip strong{font-size:11px;align-self:end}
+  .defense-board-layout .placement-tray .defender-chip small{font-size:9px;margin:0}
+  .placement-tray .defender-chip progress{grid-column:1/-1;margin-top:4px}
+  .placement-dock .placement-footer{flex-wrap:wrap;gap:0;margin-top:7px;padding-top:4px}
+  .placement-dock .keyboard-placement{flex-basis:100%}
+  .placement-dock .keyboard-placement>summary{text-align:left}
+  .placement-dock .maze-route-stats{font-size:10px}
+  .placement-dock .summon-panel h2{font-size:21px}
+  .placement-dock .summon-filters{flex-wrap:wrap}
+  .placement-dock .summon-filters label{flex-basis:100%}
+  .placement-dock .summon-filters select{width:100%}
+  .defense-board-layout .placement-dock .summon-roster{grid-template-columns:repeat(2,minmax(0,1fr));max-height:290px}
+  .placement-dock .summon-card{display:flex;flex-direction:column;text-align:center}
+}
+@media(max-width:1000px){
+  .defense-view{padding-inline:10px}
+  .maze-map-panel{display:block}
+  .map-viewport{border-radius:0}
+  .placement-instructions{flex-wrap:nowrap}
+  .placement-instructions #placement-hint{flex-basis:auto}
+  .placement-dock .defender-overview{display:flex}
+  .placement-dock .defender-overview .tower-controls{grid-template-columns:1fr;min-width:200px}
+  .crew-slots{grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+  .crew-slot{padding:6px}
+  .crew-member-face.card-art{width:32px;height:42px}
+  .crew-member-copy>span{display:none}
+}
+@media(max-width:760px){
+  .defense-view{padding:9px 8px 24px}
+  .defense-view .battle-top h1{font-size:22px}
+  .defense-view .battle-top .eyebrow{font-size:8px}
+  .defense-hud>div{padding:7px 8px;gap:4px}
+  .defense-hud strong{font-size:12px}
+  .defense-hud span{font-size:8px}
+  .map-command-bar.defense-controls{padding:8px;gap:7px}
+  .map-command-bar .map-state p:not(.eyebrow){display:none}
+  .map-command-bar.defense-controls>.map-state{flex-basis:100%}
+  .map-command-bar .map-state .eyebrow{margin:0;font-size:11px}
+  .map-play-controls select,.map-play-controls #map-zoom{font-size:12px;min-height:44px}
+  .map-command-bar #start-wave,.map-command-bar #defense-pause{font-size:13px;min-height:44px}
+  .map-viewport.map-zoomed{max-height:56dvh}
+  .map-viewport.map-zoomed .defense-stage{width:max(190%,960px)}
+  .placement-dock{padding:9px}
+  .placement-instructions #placement-hint{font-size:11px}
+  .placement-instructions{flex-wrap:wrap}
+  .placement-feedback{font-size:10px}
+  .placement-palette{margin-top:6px}
+  .defense-board-layout .placement-tray .defender-buttons{display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin;padding-bottom:5px;overscroll-behavior-x:contain}
+  .defense-board-layout .placement-tray .defender-chip{flex:0 0 74px;min-height:73px;padding:5px 3px}
+  .defense-board-layout .placement-tray .defender-chip .defender-face{width:29px;height:29px}
+  .defense-board-layout .placement-tray .defender-chip strong{font-size:11px}
+  .defense-board-layout .placement-tray .defender-chip small{font-size:9px}
+  .placement-dock .defender-overview{display:block}
+  .placement-dock .defender-overview .tower-controls{min-width:0;grid-template-columns:minmax(0,1fr) minmax(110px,.8fr);align-items:end}
+  .placement-dock .defender-overview .tower-controls button{font-size:11px}
+  .crew-slots{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .crew-member-actions{gap:3px}
+  .crew-slot .crew-member-preview{gap:6px}
+}
+@media(max-width:480px){
+  .crew-slots{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .crew-slot{min-height:106px}
+  .crew-member-face.card-art{width:36px;height:43px}
+  .crew-member-copy>span{display:block;font-size:8px}
+  .crew-member-copy strong{font-size:12px}
+  .crew-member-actions{margin-top:3px}
+  .empty-crew-slot{min-height:106px}
+  .placement-footer .maze-route-stats{font-size:10px}
+  .keyboard-placement{font-size:11px}
+}
+
+/* Seven defenders stay visible; dragging never doubles as tray scrolling. */
+.crew-slots{grid-template-columns:repeat(4,minmax(0,1fr))}
+.placement-tray .defender-chip[data-captain=true]:after{content:"♛";position:absolute;right:3px;top:2px;font-size:11px;line-height:1;color:#efd499;text-shadow:0 1px 3px #000}
+.placement-dock #defender-detail{border:1px solid #9bae7559;background:#1c3732;border-radius:7px;padding:10px;margin:8px 0}
+.placement-dock .defender-overview .eyebrow{font-size:8px}
+.placement-dock .defender-overview h2{font-size:21px}
+.placement-dock #defender-pattern{font-size:10px;line-height:1.4}
+.placement-dock .defender-overview .tower-controls{margin-top:8px;gap:7px}
+.placement-dock .defender-abilities{margin-top:7px}
+.battle-synergies{font-size:11px;border-bottom:1px solid #82987544;margin-bottom:8px}
+.battle-synergies>summary{font-size:12px;color:#dcc98c;min-height:36px;cursor:pointer;line-height:20px;padding:7px 0}
+.battle-synergies .synergy-heading{display:block;margin-bottom:9px}
+.battle-synergies .synergy-heading strong{font-size:13px;display:block}
+.battle-synergies .synergy-heading span{font-size:10px;display:block;margin-top:5px}
+.battle-synergies .synergy-groups{grid-template-columns:1fr 1fr;gap:6px}
+.battle-synergies .synergy-group{padding:7px}
+.battle-synergies .synergy-group strong{font-size:10px}
+.battle-synergies .synergy-group span{font-size:10px}
+.battle-synergies .synergy-group small{font-size:9px}
+.battle-synergies .synergy-rules p{font-size:10px}
+.defender-synergies .allegiance-badges{gap:4px;margin:6px 0}
+.defender-synergies .allegiance-badge{font-size:9px;padding:4px 5px}
+.defender-synergies p{font-size:10px;line-height:1.5;margin:6px 0}
+.captain-aura-own{color:#e1d2a6}
+.captain-aura-status{color:#adc3b3}
+.captain-aura-status[data-active=true]{color:#c4e5a8}
+@media(max-width:760px){
+  .defense-board-layout .placement-tray .defender-buttons{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));overflow:visible;gap:5px;padding:0}
+  .defense-board-layout .placement-tray .defender-chip{min-width:0;min-height:70px;padding:5px 3px}
+  .placement-dock #defender-detail{padding:9px}
+  .defender-synergies .allegiance-badges{margin:5px 0}
+  .defender-synergies .captain-aura-own{font-size:10px}
+  .crew-slots{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:480px){.crew-slots{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.defender-bonus-summary{font-size:10px;line-height:1.5;color:#c5dfab;margin:5px 0 0;max-width:600px}
+.placement-dock .defender-abilities>summary{font-size:11px;min-height:36px}
+.placement-dock .defender-abilities #defender-pattern{margin:10px 0 8px;font-size:11px}

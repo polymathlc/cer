@@ -44,20 +44,25 @@ function use(fixture, index, target = fixture.target) {
 }
 const status = (unit, type) => unit.statuses.find(effect => effect.type === type);
 
-test('twelve future apex cards remain outside the fifty-card obtainable roster', () => {
-  assert.equal(data.VERSION, '3.3.0');
+test('nine future apex cards remain outside the hundred-card roster while three new editions become obtainable', () => {
+  assert.equal(data.VERSION, '3.4.0');
   assert.deepEqual(RETIRED_CHARACTER_REPLACEMENTS, replacements);
-  assert.equal(CHARACTERS.length, 50);
-  assert.equal(new Set(CHARACTERS.map(character => character.id)).size, 50);
-  assert.equal(FUTURE_EXPANSION_CHARACTERS.length, 12);
-  assert.deepEqual(FUTURE_EXPANSION_CHARACTERS.map(character => character.id).sort(), Object.keys(replacements).sort());
+  assert.equal(CHARACTERS.length, 100);
+  assert.equal(new Set(CHARACTERS.map(character => character.id)).size, 100);
+  assert.equal(FUTURE_EXPANSION_CHARACTERS.length, 9);
+  assert.deepEqual(FUTURE_EXPANSION_CHARACTERS.map(character => character.id).sort(), Object.keys(replacements).filter(id => !['bigmom', 'garp', 'sabo'].includes(id)).sort());
   for (const future of FUTURE_EXPANSION_CHARACTERS) {
     assert.equal(future.stars, 7);
     assert.ok(future.name.length > 2);
     assert.deepEqual(Object.keys(future).sort(), ['id', 'name', 'stars']);
     assert.equal(CHARACTER_BY_ID[future.id], undefined);
   }
-  assert.deepEqual(CHARACTERS.filter(character => character.stars === 7).map(character => character.id), ['kaido', 'whitebeard', 'akainu']);
+  assert.deepEqual(CHARACTERS.filter(character => character.stars === 7).map(character => character.id), ['kaido', 'whitebeard', 'akainu', 'bigmom7', 'garp7', 'sabo7']);
+  for (const [oldId, edition] of [['bigmom', 'bigmom7'], ['garp', 'garp7'], ['sabo', 'sabo7']]) {
+    assert.equal(CHARACTER_BY_ID[oldId], undefined, 'Retired IDs remain unavailable to old clients');
+    assert.equal(CHARACTER_BY_ID[edition].stars, 7);
+    assert.equal(CHARACTER_BY_ID[edition].expansion, 2);
+  }
   assert.deepEqual(replacementIds.map(id => CHARACTER_BY_ID[id].stars), [4, 4, 2, 3, 3, 3, 2, 3, 3, 2, 3, 2]);
 });
 
@@ -75,7 +80,28 @@ test('all nine encounters use obtainable enemies and introduce every replacement
   for (const id of replacementIds) assert.ok(introduced.has(id), `${id} has no campaign appearance`);
 });
 
-test('each replacement has a specific official primary profile and a documented reservation', async () => {
+test('the three new apex editions use distinct lore powers and the exact premium animation skill order', () => {
+  const expected = {
+    bigmom7: [['Napoleon: Cognac','slash'],['Ikoku Sovereignty','slash'],['Misery: Homie Fusion','lightning']],
+    garp7: [['Iron Fist','punch'],['Blue Hole','punch'],['Galaxy Impact','earth']],
+    sabo7: [['Dragon Claw Fist','punch'],['Fire Fist','fire'],['Flame Dragon King','fire']],
+  };
+  for (const [id, skills] of Object.entries(expected)) {
+    const character = CHARACTER_BY_ID[id];
+    assert.equal(character.stars, 7);
+    assert.deepEqual(character.skills.map(skill => [skill.name, skill.kind]), skills);
+    assert.equal(character.skills[2].cost, 65);
+  }
+  assert.equal(CHARACTER_BY_ID.garp7.element, 'haki');
+  assert.equal(CHARACTER_BY_ID.sabo7.passive.type, 'burn-immune');
+  assert.ok(CHARACTER_BY_ID.bigmom7.skills[2].effects.some(effect => effect.type === 'burn'));
+  assert.ok(CHARACTER_BY_ID.bigmom7.skills[2].effects.some(effect => effect.type === 'stun'));
+  const f = fixture('garp7');use(f, 1);
+  assert.equal(status(f.target,'stun').duration,1);
+  assert.ok(f.target.hp < f.target.maxHp);
+});
+
+test('each legacy replacement retains its specific official primary profile and documented history', async () => {
   const expectedSlugs = { wyper: 'Wyper', kaku: 'Kaku', wapol: 'Wapol', hina: 'Hina', paulie: 'Paulie', donkrieg: 'Don_Krieg', hatchan: 'Hacchan', kalifa: 'Kalifa', bellamy: 'bellamy', gin: 'Gin', mr3: 'Galdino', kuro: 'Kuro' };
   const lore = await readFile(new URL('../LORE-SOURCES.md', import.meta.url), 'utf8');
   for (const [id, slug] of Object.entries(expectedSlugs)) {
@@ -83,7 +109,8 @@ test('each replacement has a specific official primary profile and a documented 
     assert.ok(lore.includes(CHARACTER_BY_ID[id].source));
     assert.ok(lore.includes(`| ${CHARACTER_BY_ID[id].name} |`));
   }
-  assert.match(lore, /future seven-star expansions, with no release dates announced/);
+  assert.match(lore, /Nine\*\* characters remain reserved for future seven-star expansions/);
+  assert.match(lore, /no announced release dates/);
 });
 
 test('all thirty-six replacement moves execute and emit a distinct supported animation', () => {

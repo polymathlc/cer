@@ -50,6 +50,32 @@
     "sourceSha256": "9f61f6d067445204292244f835d29ef237982063b07b9b8421e133666cd758fa"
   },
   {
+    "id": "apoo",
+    "file": "apoo.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5020718232044199,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5020718232044199,
+      "y": 0,
+      "w": 0.4979281767955801,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Scratchmen Apoo from One Piece. LEFT SCENE AND CAMERA: Tall longarm man with two elbow joints, black long ponytail, square teeth and headphones, red martial-arts robe. Worm's-eye view striking piano teeth and chest drum; bold visual sound rings cross party-lit rooftops. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "7e5019096c1349330f36584a698e31526fdffde281aa8d85070ae20245986635",
+    "sourceFile": "apoo.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "bb4e1dea5c18165951fde587d20725bd9081615d2fd3e1052a303bdeda014100"
+  },
+  {
     "id": "arlong",
     "file": "arlong.webp",
     "width": 1448,
@@ -73,6 +99,32 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "c0f45c6123ad2c4b6c8e6b612c879b3d56e394e2fe656d23d6e0fbfd31ca00d7",
     "sourceSha256": "1c8bfb089df0fa3a3d1d6a2a2a06ed09caa4d49bed5e082de8eb1586b3158adb"
+  },
+  {
+    "id": "ashura",
+    "file": "ashura.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5006906077348067,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5006906077348067,
+      "y": 0,
+      "w": 0.49930939226519333,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Ashura Doji from One Piece. LEFT SCENE AND CAMERA: Huge broad samurai with wild pink hair tied on top, short beard and pink patterned kimono, long sword. Low side view drawing blade through foggy mountain bandit camp. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "beabd4a39cc9c680cda38cd623801e1903ec3987ee28450d77574d69ec0ac511",
+    "sourceFile": "ashura.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "d202674f7a5a8e5b234102ca6c6a40446215718d62f287e7c4c36ad4303e9d76"
   },
   {
     "id": "bartolomeo",
@@ -100,6 +152,32 @@
     "sourceSha256": "867b2eff36dc5f9a2c3261e5b15fc7d2a271e7886734242038dd3c55889474cd"
   },
   {
+    "id": "bege",
+    "file": "bege.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5006906077348067,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5006906077348067,
+      "y": 0,
+      "w": 0.49930939226519333,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Capone Bege from One Piece. LEFT SCENE AND CAMERA: Short stocky mafia captain with slicked-back black hair, cigar, striped suit and fur-trimmed cape. Eye-level profile opening tiny castle cannon gates in body, fortress silhouette and cannon smoke behind. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "a2842336a5738cb40e442d98521d5d83387dcea6bfad0617dd7b4308712735af",
+    "sourceFile": "bege.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "24da8370994bd711f3cbd88ccac10c802f2177f4b1a36cc22ed1fbb111025ffb"
+  },
+  {
     "id": "bellamy",
     "file": "bellamy.webp",
     "width": 1448,
@@ -123,6 +201,136 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "e36a37d8d135d156c6c3587185e63754636e4dcfc163ee0b5d83bd155dfadc06",
     "sourceSha256": "2773fd9e15623f61bf3a22c2f097199ebe82e936d327e27c77d2b552c48a7771"
+  },
+  {
+    "id": "belobetty",
+    "file": "belobetty.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Belo Betty from One Piece. LEFT SCENE AND CAMERA: Adult purple-haired revolutionary in red hat and sunglasses, red cropped military jacket over a modest white top and skirt, cigarette and large revolutionary flag. Heroic low-angle flag wave with rising crowd silhouettes. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "a1c12b85fdb101c90f04048529120d0b601764acce7ae0e8ca7fb703f983a156",
+    "sourceFile": "belobetty.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "da5273cbdaae4271de25a24e2da833fd90732219e6905e32986e1d96036f2128"
+  },
+  {
+    "id": "bennbeckman",
+    "file": "bennbeckman.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5303867403314917,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5303867403314917,
+      "y": 0,
+      "w": 0.4696132596685083,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Benn Beckman from One Piece. LEFT SCENE AND CAMERA: Older tall stern man with slicked-back gray hair, facial scar, dark shirt and cloak, cigarette and long flintlock rifle held across shoulder. Calm three-quarter waist portrait from ship rail at stormy dusk. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "20596101d9ad61d42f8f6d6ef10cdc51296e9d6fa757e813fff8ef13e08d238f",
+    "sourceFile": "bennbeckman.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "006160a59403ad6ad23e31d3aebf647bbc1bb792d13a610a13f318474e4949eb"
+  },
+  {
+    "id": "bepo",
+    "file": "bepo.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5006906077348067,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5006906077348067,
+      "y": 0,
+      "w": 0.49930939226519333,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Bepo from One Piece. LEFT SCENE AND CAMERA: Anthropomorphic white polar bear Mink in orange Heart Pirates jumpsuit, paw gloves and black boots. Crouched three-quarter martial-arts stance with blue Electro sparks on snowy submarine deck. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "b9d79dff90e659734a0ea97c8291313e28492b3f3e25eee7184243fd966c5047",
+    "sourceFile": "bepo.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "55056fdc731da97e97aff9386b715239bcc5b08fc321bad626415ff9c395b3b3"
+  },
+  {
+    "id": "bigmom7",
+    "file": "bigmom7.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5283149171270718,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5283149171270718,
+      "y": 0,
+      "w": 0.4716850828729282,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Production asset for a premium One Piece collectible game. WIDE LANDSCAPE 4:3 canvas at least1440×1080. Exactly TWO vertical equal panels with crisp straight center boundary and no divider. LEFT HALF is a full-bleed portrait collectible CARD PAINTING ONLY with intricate painted anime realism, atmospheric background, memorable cinematic composition. RIGHT HALF is matching FULL-BODY battle avatar of the SAME character in same costume, facing slightly left, entire head, feet and equipment inside the panel with generous clear padding on ACTUAL ALPHA TRANSPARENCY. Left scene opaque, right background fully transparent, never checkerboard. No printed text, no frame, no stars, no typography, no watermark, no extra panels. Gold galaxy foil frame is added by the game, so paint the dramatic illustration and transparent avatar only. The two halves have different purposes: left epic cinematic scene, right clean readable sprite. LEFT COMPOSITION: extremely low worm's-eye view from a ruined candy palace roof, enormous CHARLOTTE LINLIN, BIG MOM, towering diagonally over the viewer, an imposing older heavyset giant woman with wild pink hair, broad menacing grin, pink polka-dot dress and ornate pirate bicorne NAPOLEON transforming into a vast curved sword. She rides HERA, a dark purple living thundercloud; blazing sun homie PROMETHEUS flares behind her shoulder. Soul-Soul power; lightning interlaces fire around the sword in a golden-magenta heavenly storm. Powerful asymmetrical silhouette, tiny crumbling palace architecture far below, sweeping foreshortened sword, opulent menacing spectacle, many light layers but unmistakable face. RIGHT avatar: Big Mom insamepinkdress/bicorne, curvedsword and smallcontained flame/cloud accents, wholebody clear; no background or giant storm outside silhouette.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "c1ae0c905899a0484c44a7501406f698770abe798a9138c0eac0e0892f84ad8a",
+    "sourceFile": "bigmom7.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "6e6e5968dca0390e34c1fa3f08382951c5d0cba75163fead92ff10227b865fee"
+  },
+  {
+    "id": "blackmaria",
+    "file": "blackmaria.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5020718232044199,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5020718232044199,
+      "y": 0,
+      "w": 0.4979281767955801,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Black Maria from One Piece. LEFT SCENE AND CAMERA: Towering adult blonde horned woman, elegant black-red Wano kimono, spider motif and long tobacco pipe. Bird's-eye view weaving golden spiderweb traps across a shadowed banquet chamber, fully clothed. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "f3b655819b2fcc694019ef5dcce76ecc355d22c77670df300c84afb1edf57e88",
+    "sourceFile": "blackmaria.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "ba3124ebf09b3d51dc5659c757ef202d5c1f603b45c9e6b71a80319283171e4a"
   },
   {
     "id": "bonclay",
@@ -150,6 +358,32 @@
     "sourceSha256": "b96755960e9f37e1413606588113e349fc554d7083ab76952286239dff8282ef"
   },
   {
+    "id": "bonney",
+    "file": "bonney.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5006906077348067,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5006906077348067,
+      "y": 0,
+      "w": 0.49930939226519333,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Jewelry Bonney from One Piece. LEFT SCENE AND CAMERA: Pink-haired pirate with green jeweled cap and white fur-lined jacket in modest adventure clothing, energetic rounded boots. Dynamic high-angle hand reaching through colorful age-distortion ribbons in seaside market; nonsexual, age-appropriate. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "51eb0ac4fb21c9d613a9809abdb78798e56765e1e80839138c6301304c5f6332",
+    "sourceFile": "bonney.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "af107c4600cf4f8990b63a9ac4c9f862b95826fe5c56ce3a5a02b426b490e8ca"
+  },
+  {
     "id": "brook",
     "file": "brook.webp",
     "width": 1448,
@@ -173,6 +407,32 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "e076f98f1e00d5713342ca84ca5163d1f37344002d2bcaef902ce5292c00b131",
     "sourceSha256": "4bb339a5a742b58075dd50660d9f1e4cbc8c7b38a72c2529da7250a6ce168fbe"
+  },
+  {
+    "id": "brulee",
+    "file": "brulee.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.518646408839779,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.518646408839779,
+      "y": 0,
+      "w": 0.48135359116022103,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Charlotte Brulee from One Piece. LEFT SCENE AND CAMERA: Very tall witch-like woman with long violet hair, hooked nose and facial scar, pink dress. Full profile stepping through ornate silver mirror, eerie mirrored forest reflecting endless versions of her. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "2fee567800b17f5d68f58ed39b852f7bb671f3b3f1253b5ba39624185c106f11",
+    "sourceFile": "brulee.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "c37329abb0ae32ba1b1e1126a97f6205ea97d072991f216330d5963a270f8642"
   },
   {
     "id": "buggy",
@@ -250,6 +510,32 @@
     "sourceSha256": "fb31a2e02adaf5e4000ec04d22059a584d27e85740a52ccc5e7a9f60b377f6db"
   },
   {
+    "id": "cracker",
+    "file": "cracker.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5234806629834254,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5234806629834254,
+      "y": 0,
+      "w": 0.47651933701657456,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Charlotte Cracker from One Piece. LEFT SCENE AND CAMERA: Lean muscular warrior with purple hair swept into three points, scar over right eye, bare chest and pink cape, large sword Pretzel. Side view with giant ornate biscuit-armored soldiers forming in a cracker-dust battlefield. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "de057bcb18261f18c58908ad054eadd1b264d90f0c71545c0576cf159f1218f2",
+    "sourceFile": "cracker.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "dd292df7f7b08af29d3713797705de363ffd396961163023a1ca230cf6c4f099"
+  },
+  {
     "id": "crocodile",
     "file": "crocodile.webp",
     "width": 1448,
@@ -275,6 +561,58 @@
     "sourceSha256": "e308dc0112a2a9ee5c9e19319baa8aac0175976e6adb193bb1c3fc2a46aa34d2"
   },
   {
+    "id": "daifuku",
+    "file": "daifuku.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5013812154696132,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5013812154696132,
+      "y": 0,
+      "w": 0.49861878453038677,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Charlotte Daifuku from One Piece. LEFT SCENE AND CAMERA: Large blond man with short flat hair, dark blue cape and yellow sash, rubbing belt to summon giant blue smoke genie with long polearm. Side silhouette composition with genie dominating upper sky. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "190b9c66a9c87310611ae541a0974089c6e55a1e83dc140601fdcfd27b9d3a32",
+    "sourceFile": "daifuku.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "3fc1666cff7a55a4950dc28f157a93a0adbf67887578f40d8a6de2ab806dd60b"
+  },
+  {
+    "id": "denjiro",
+    "file": "denjiro.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Denjiro from One Piece. LEFT SCENE AND CAMERA: Tall samurai with swept blue pompadour hair, narrow eyes, pale green patterned kimono and curved katana. Extreme three-quarter closeup with blade reflected in lantern rain. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "d8c0977ae4dc2fa409dcdbbec6f33de8e8eee68c1e711b921f68c9fbce931cdc",
+    "sourceFile": "denjiro.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "8f8efee6041bff9183c99fc59ab30f50a7d6fdaddab9583850e1eaab0e769880"
+  },
+  {
     "id": "doflamingo",
     "file": "doflamingo.webp",
     "width": 1448,
@@ -298,6 +636,32 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "0ea05af670c74106d3ea0de49d59f51c527a61dacbe9f93c40a9c4f7d490a92c",
     "sourceSha256": "4c9acabca994c7374e6de3a93e2ca16dfb915d86ea97c4446624b442f12bb059"
+  },
+  {
+    "id": "doll",
+    "file": "doll.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.524171270718232,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.524171270718232,
+      "y": 0,
+      "w": 0.475828729281768,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Doll from One Piece. LEFT SCENE AND CAMERA: Adult Marine vice admiral with short black hair, bangs, dark lipstick, tattoos, white Marine coat over black shirt and trousers. Ground-level side view delivering a powerful straight kick across industrial naval base. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "cb9ccf2f0408b6537d120dd74d894eb8a34bb79ce744a090d8f86c25d22095ee",
+    "sourceFile": "doll.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "7e9c3aab7ec79e7f255debb4db40df086b886e2baf72a497ff2b223585cc4286"
   },
   {
     "id": "donkrieg",
@@ -401,6 +765,32 @@
     "sourceSha256": "5ba917655b75b716fdfc23498c4ca5de45d445dc248738327f6ac842835c12d5"
   },
   {
+    "id": "garp7",
+    "file": "garp7.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5027624309392266,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5027624309392266,
+      "y": 0,
+      "w": 0.49723756906077343,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Production asset for a premium One Piece collectible game. WIDE LANDSCAPE 4:3 canvas at least1440×1080. Exactly TWO vertical equal panels with crisp straight center boundary and no divider. LEFT HALF is a full-bleed portrait collectible CARD PAINTING ONLY with intricate painted anime realism, atmospheric background, memorable cinematic composition. RIGHT HALF is matching FULL-BODY battle avatar of the SAME character in same costume, facing slightly left, entire head, feet and equipment inside the panel with generous clear padding on ACTUAL ALPHA TRANSPARENCY. Left scene opaque, right background fully transparent, never checkerboard. No printed text, no frame, no stars, no typography, no watermark, no extra panels. Gold galaxy foil frame is added by the game, so paint the dramatic illustration and transparent avatar only. The two halves have different purposes: left epic cinematic scene, right clean readable sprite. LEFT COMPOSITION: dramatic steep HIGH three-quarter aerial view of MONKEY D. GARP, THE MARINE HERO, muscular elderly man, short spiky white hair, square white beard, scar beside left eye, openwhiteMarine officercoat withgold epaulettes over darkshirt/lighttrousers. He leaps downward from sky above a pirate fortress and throws GALAXY IMPACT: right fist thrust downward toward lens in bold foreshortening, clenched black Haki-coated fist emitting blazing orange-gold shockwave dome and jagged red-black lightning, cityroofs and ocean stretchingawaybeneathhim. The fist/face silhouette isreadable, cameraaboveandtoone side, coatbillowsin a whitecrescent. This is enormous physical Haki punch power, NOT gravity magic, no planets. RIGHTavatar: recognizableGarp, confident groundedboxingstance, bothfists visiblewithsmallgoldHakiaccent, entirecoattails+feet withinpanel ontransparent.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "d1445fe9c70b610fead6dd44731e171a315d83059f9c1ec73926ac31706cd4df",
+    "sourceFile": "garp7.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "a14b70cdbcf7a03e51a30c6dda61b51c50bb51885c762c72cd9235747861535a"
+  },
+  {
     "id": "gin",
     "file": "gin.webp",
     "width": 1448,
@@ -452,6 +842,58 @@
     "sourceSha256": "7ba868a3d0e2a22f81c294fcec7ed19fa0f09c2fa5f4831c179bff53a0b3942d"
   },
   {
+    "id": "hawkins",
+    "file": "hawkins.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5006906077348067,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5006906077348067,
+      "y": 0,
+      "w": 0.49930939226519333,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Basil Hawkins from One Piece. LEFT SCENE AND CAMERA: Tall pale blond man with long straight hair and vertical forehead markings, open white shirt, dark fur cape and sword. High-angle ritual reading tarot as straw effigies rise among windswept wheat. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "bf833e00c8fd87629a266b1a3eeff5c2773bbdbf5113d716f62f910634f9386e",
+    "sourceFile": "hawkins.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "2df9432c839f376c7aa981c2b8d3f8f323a30dda9159746140479374ebcf9484"
+  },
+  {
+    "id": "helmeppo",
+    "file": "helmeppo.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Helmeppo from One Piece. LEFT SCENE AND CAMERA: Blond Marine officer with bowl-cut bangs, sunglasses, white Marine jacket and two kukri knives. Eye-level three-quarter training lunge across sunny Marine courtyard. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "796ac8d466297be924241f0d8f128cdeb03da0e68b367d2ed129aaf1295f846c",
+    "sourceFile": "helmeppo.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "6f9ecf0c3d97028d5e3b9c1234488f179174b440900e47cfc8a6b10aa832b271"
+  },
+  {
     "id": "hina",
     "file": "hina.webp",
     "width": 1448,
@@ -476,6 +918,84 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "ca8abf58c38f24a7ddcf2d6e461be712f09e73b089a51def7b2001c71f1e8d4f",
     "sourceSha256": "13709621352166ac984ba4408b91cd0b7889db51bc0e26a3e339d13a56b67ebf"
+  },
+  {
+    "id": "inuarashi",
+    "file": "inuarashi.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5020718232044199,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5020718232044199,
+      "y": 0,
+      "w": 0.4979281767955801,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Inuarashi from One Piece. LEFT SCENE AND CAMERA: Tall anthropomorphic brown dog Mink with dark floppy ears, musketeer cape and sword, one prosthetic sword leg. Dramatic side charge with Electro through ancient tree city. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "fea20adf90087da6724f0d6bd91239dacf5d268c90bc0867db56c2495dda62c5",
+    "sourceFile": "inuarashi.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "1f7b350f692ce13fd166873e6d84d5e7e8afe61b3d7c4e820d8e587a14c38740"
+  },
+  {
+    "id": "ivankov",
+    "file": "ivankov.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5773480662983426,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5773480662983426,
+      "y": 0,
+      "w": 0.42265193370165743,
+      "h": 1
+    },
+    "prompt": "Create a landscape 4:3 RGBA asset at least1440x1080 for a One Piece collectible adventure game, two equal vertical halves. Left half: opaque cinematic character painting and background. Right half: same complete head-to-boots character sprite on true transparent alpha, generously padded inside its half. Character is EMPORIO IVANKOV, an adult exuberant revolutionary from One Piece: enormous purple afro, small ornate crown, recognizable broad face with theatrical star eye makeup, joyful powerful expression. Wear a fully clothed regal purple military coat with gold embroidery, closed high neckline, long sleeves, white gloves, opaque full-length matching trousers, tall black boots, and a sweeping orange cape. Costume covers torso and legs completely. LEFT SCENE: dramatic low-angle perspective as Ivankov performs Death Wink, one eye winking and clear concentric air pressure shockwaves bursting through purple and orange theater smoke in a heroic revolutionary courtyard. Colorful expressive anime realism, detailed illustrated paint, recognizable face and afro. RIGHT: standing grounded theatrical combat pose, same coat/crown/cape and full body, small air pressure ring near hand, no background. No typography, no stars, no card frames, no watermarks. Left opaque scene; right background actual alpha=0.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "32b014069f6660106faa6f4f0a4dcaa2bded0e66e28c3726b8ab054426af1d18",
+    "sourceFile": "ivankov.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "8387dbf2986fdb328f58cd0829f22ce5780c5095e8d9e004618fc11b43b06d2d"
+  },
+  {
+    "id": "izo",
+    "file": "izo.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5214088397790055,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5214088397790055,
+      "y": 0,
+      "w": 0.47859116022099446,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Izo from One Piece. LEFT SCENE AND CAMERA: Elegant adult male gunfighter with traditional black Japanese updo, red lipstick, pink kimono with shoulder exposed, two flintlock pistols. Side-view midair twist firing across lantern-lit wooden bridge. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "4d0b2e7a741d62605e8bded918b82eeb2ad4b295b9118faa2bfbeb4ab500f5d5",
+    "sourceFile": "izo.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "0b1240f88241aeddb9f947473a6fb136c70bcf17c7fd96c8f6b6de5503d86f19"
   },
   {
     "id": "jack",
@@ -526,6 +1046,32 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "1df3e0d2ef0f65573002a1f00dbd589e3b9f2b5f876819913ede52cb9f1d9cb6",
     "sourceSha256": "8d0589dde154049516741da4aeced1b35b353d80e275dd73d27d66c23142f363"
+  },
+  {
+    "id": "jozu",
+    "file": "jozu.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Jozu from One Piece. LEFT SCENE AND CAMERA: Massive dark-skinned square-jawed man with close-cut black hair, armored diamond shoulder and forearm, brown studded outfit. Low frontal shoulder charge through sparkling diamond shards on icy bay. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "7c82ee41a61efe2fe39ba6c8c567d8c57fa0962144e95862562e9f51821436c9",
+    "sourceFile": "jozu.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "93f870132209e5dff692786d259a4b89ef4c5ffeff4b15b9f9d829a38ea59d7b"
   },
   {
     "id": "kaido",
@@ -605,6 +1151,32 @@
     "sourceSha256": "7c6db48810d2ea4d9572b50dd53f988669f730a9744de94729666861c1483403"
   },
   {
+    "id": "karasu",
+    "file": "karasu.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Karasu from One Piece. LEFT SCENE AND CAMERA: Tall bald revolutionary in black feathered coat and plague-doctor beak mask, soot-black gloved arms dissolving into a flock of crows. Rear angle against moon as black soot wings scatter above stone battlements. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "6fe7021c303a3820b980d554c21c4a4a349654dae46d88ef4437958ddbb3f4db",
+    "sourceFile": "karasu.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "438297431c2192aa2a13bdb921598aef299ce2210d518e091c69120a559a3eab"
+  },
+  {
     "id": "katakuri",
     "file": "katakuri.webp",
     "width": 1448,
@@ -628,6 +1200,32 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "b600a47e8633fcb10943a9ff6caa253cf6f56aed4f08a2caffbeb22a1c4e8e5a",
     "sourceSha256": "e8cc84a3da24e23cf12937455391bd0256a2adc3f86b1a69c51240a2c70de43b"
+  },
+  {
+    "id": "kawamatsu",
+    "file": "kawamatsu.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Kawamatsu from One Piece. LEFT SCENE AND CAMERA: Round orange-haired fish-man samurai resembling kappa, green skin, yellow straw hat and kimono, short sword. Ground-level sweeping sumo stance beside lotus pond, water splashing. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "83c372fedc3216edc2f11da6f8dcd319f66cbb02d821c6083950fd5aef4e3138",
+    "sourceFile": "kawamatsu.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "bce04a17c9f9c4864f4d6666debc9be51cbcf7439be515d8682bae13f67de4c7"
   },
   {
     "id": "kid",
@@ -655,6 +1253,32 @@
     "sourceSha256": "40383b02e55ffd6d0c9491c70be406babe86e0d76f0d00cb2f3c912136cf5822"
   },
   {
+    "id": "kiku",
+    "file": "kiku.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5006906077348067,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5006906077348067,
+      "y": 0,
+      "w": 0.49930939226519333,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Kikunojo from One Piece. LEFT SCENE AND CAMERA: Tall graceful woman samurai with long black hair and blue kimono, red demon mask held or worn, long katana. Side-back view turning in falling snow by Wano paper doors, dignified fully clothed. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "96df57be59800d3e04f4d316b8aaf209bf0f78b7ae79bf84859127f9cbc832d8",
+    "sourceFile": "kiku.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "fdf72ef5229261f3cbf339d9d3c2c8926e9202383e04a93ef2ad5f7bbeb0aa67"
+  },
+  {
     "id": "killer",
     "file": "killer.webp",
     "width": 1448,
@@ -678,6 +1302,58 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "16536ffd84e7fd331fc945cf282af3af607feaac0388b44e556624207a651869",
     "sourceSha256": "edf982801f872a4cfdfe21c5b5f206843e4f76de71a44b5f16de09b69cb5548b"
+  },
+  {
+    "id": "kinemon",
+    "file": "kinemon.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5013812154696132,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5013812154696132,
+      "y": 0,
+      "w": 0.49861878453038677,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Kin'emon from One Piece. LEFT SCENE AND CAMERA: Adult samurai with black topknot, pointed beard, black-white kimono and flame-pattern coat. Profile stepping forward with two swords cleaving a wave of fire on red bridge. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "deabf9b69cbd6d90c271d03ec582a2d943c321b11c7ea8e861ac2834827feda9",
+    "sourceFile": "kinemon.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "08c48539efa4c151a2dfc96c959bc67c9471eede548fbf8954a05a56760106bc"
+  },
+  {
+    "id": "koala",
+    "file": "koala.webp",
+    "width": 1447,
+    "height": 1087,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5314443676572218,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5314443676572218,
+      "y": 0,
+      "w": 0.4685556323427782,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Koala from One Piece. LEFT SCENE AND CAMERA: Adult auburn-haired woman revolutionary with red newsboy cap, goggles and maroon outfit with shorts and tights. Side view in disciplined Fish-Man Karate palm stance sending water-pressure ripple through blue harbor mist. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "07ca14652b285e3a6200562a62392ba3e37c6f23b093614eaba0a50a0a36c98c",
+    "sourceFile": "koala.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "47a3e3ac5f87bfd4381d81dc63dab3dd72df8b6a9d88e328facb2280dfd98090"
   },
   {
     "id": "koby",
@@ -730,6 +1406,32 @@
     "sourceSha256": "dd53d6a7f5cc934d82db53ec3d0d26edff4cbf3a9e92d01a4844216259b7ea6a"
   },
   {
+    "id": "lindbergh",
+    "file": "lindbergh.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Lindbergh from One Piece. LEFT SCENE AND CAMERA: Small cat Mink inventor in orange top hat with goggles and green coat, jetpack and improvised freeze gun. High angled aerial view spraying sparkling icy pellets above steampunk rooftops. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "42102530144c474f6f2e99f59187a1ad4ce5c4159d63d4b0850f3bf9cde4a373",
+    "sourceFile": "lindbergh.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "e123b902db2d7492e66a2e962f9298b713550e0244a858c955d4d5df54d73c14"
+  },
+  {
     "id": "lucci",
     "file": "lucci.webp",
     "width": 1448,
@@ -753,6 +1455,32 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "97d138f52f9bec4ea42ce4df26bff756785697fdebda10c2deca36f0cb2e9aea",
     "sourceSha256": "4f9990040f41f63b14efe65f056d73bceeafcc4e2390b7d2bf9ff9e7f3b165d2"
+  },
+  {
+    "id": "luckyroux",
+    "file": "luckyroux.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Lucky Roux from One Piece. LEFT SCENE AND CAMERA: Very round cheerful pirate in green-and-white striped shirt, green bandana and round goggles, meat leg in one hand and small flintlock in other. Low side angle bounding from Red Force deck, sea spray. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "d6be896fd940cc3399320b57b9936e8c4e1ab28293eda0658efda23f359e314d",
+    "sourceFile": "luckyroux.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "494b3a50dc451786b1d7697fb6d37abc55cb2e409e24dace9c20a8e66e3bb8ba"
   },
   {
     "id": "luffy",
@@ -830,6 +1558,32 @@
     "sourceSha256": "1887364ca9b0e9081cc7e40fa334f63e61ff139431a622e0053a8ac5c6a9cf0b"
   },
   {
+    "id": "morley",
+    "file": "morley.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5069060773480663,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5069060773480663,
+      "y": 0,
+      "w": 0.49309392265193375,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Morley from One Piece. LEFT SCENE AND CAMERA: Gentle enormous bearded giant revolutionary in plaid skirt and cape, small helmet and goggles, carrying giant trident. Low lateral view pushing the earth aside like soft clay to open a tunnel, nonsexual costume. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "491376aeac77b24f95f70762a012b3f7406d5aa357cfe5c5383617537a00e336",
+    "sourceFile": "morley.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "a1ab29173629b64f6f3d9f7fa968330400bcf37526a28d9cf0a85d6bbb6e3e2e"
+  },
+  {
     "id": "mr3",
     "file": "mr3.webp",
     "width": 1448,
@@ -880,6 +1634,110 @@
     "sourceSha256": "84fd888b40b7a808618e746b3a49721b9d56b89598fba1ab03b773c4eb58d9b5"
   },
   {
+    "id": "nekomamushi",
+    "file": "nekomamushi.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Nekomamushi from One Piece. LEFT SCENE AND CAMERA: Huge round yellow cat Mink with striped face, thick orange mane and pipe, yellow-orange robe and prosthetic gun hand. Above-shoulder view leaping with crackling Electro at moonlit forest ruins. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "70f8f94a092db82a585a74ca301cf397129299adaccdebfa998130f1ad21f2b1",
+    "sourceFile": "nekomamushi.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "c11180cf7eb758f1909cd9d0d9d623a71cc4c6a0aee298adb9046d1ee87a8030"
+  },
+  {
+    "id": "oden",
+    "file": "oden.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Premium mythic-quality art, exceptional atmosphere and fine detail. Subject: Kozuki Oden from One Piece. LEFT SCENE AND CAMERA: Tall muscular samurai, black flat-topped hair with long side locks, orange kimono and enormous purple-white rope loop on back, two swords Enma and Ame no Habakiri. Ground-level diagonal charge, two crossing Haki slashes above Wano red torii and raging waterfall. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "7d125628e0082270fb628f7ea5f872367cfae2fd2e107b2e5720cefc47f0eef1",
+    "sourceFile": "oden.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "5b1c03fcecc2c36d9c5b6a9a194def5b207cad421a5efbe089a54bed800b1bbf"
+  },
+  {
+    "id": "oven",
+    "file": "oven.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5317679558011049,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5317679558011049,
+      "y": 0,
+      "w": 0.4682320441988951,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Charlotte Oven from One Piece. LEFT SCENE AND CAMERA: Huge muscular orange-red-haired man with flame-shaped hair and beard, orange cape and gloves. Low close three-quarter view thrusting glowing heated hands into steaming sea, orange heat shimmer. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "211e9b6afe9ad87171fc58a95599b626b303727672a8628ab692a2a8d0f4ca5c",
+    "sourceFile": "oven.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "6035f35ff3cec5661b6ccef79b15fabfeb53631b035b2b6556ccabfe5b3389fe"
+  },
+  {
+    "id": "pageone",
+    "file": "pageone.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Page One from One Piece. LEFT SCENE AND CAMERA: Young male pirate with purple hair covering an eye, black spiked hat and mask, purple-spotted spinosaurus hybrid claws and tail. Overhead diagonal crouching ambush in ruined Wano alley. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "36c8ecd6343bcecd635a2f3818ae7ad46f8df0432e5a70648707b84b3da8dc73",
+    "sourceFile": "pageone.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "08ca8b1c31e21a94654b5767036ff7ee50ef39588f47d63a44e24476b5ed9329"
+  },
+  {
     "id": "paulie",
     "file": "paulie.webp",
     "width": 1448,
@@ -904,6 +1762,32 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "90063f1ad9d477a393d38d0b529570efa04352c58104891cd82518c5bfad13a5",
     "sourceSha256": "ded6c26d583283e11c62fc14322b4f02f597d7bd70e8ff739d58bfb32d97b5a7"
+  },
+  {
+    "id": "penguin",
+    "file": "penguin.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Penguin from One Piece. LEFT SCENE AND CAMERA: Young male Heart Pirate wearing white boiler suit with yellow Heart emblem and round penguin-themed cap. Side view swimming and propelling a pressurized water strike near yellow submarine. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "64312ad0c317ce4215b3b23f1dc23bd2a55540f427827e394ff0d89c53172721",
+    "sourceFile": "penguin.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "bb5ac68ecbfef588bb776191024ab67ef481f5019722958deca287e7c888791c"
   },
   {
     "id": "perona",
@@ -931,6 +1815,84 @@
     "sourceSha256": "38298d7f66d3f0d96b8d84091d025566d06fb1e13f6d012b0ac6951131f42380"
   },
   {
+    "id": "perospero",
+    "file": "perospero.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5469613259668509,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5469613259668509,
+      "y": 0,
+      "w": 0.4530386740331491,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Charlotte Perospero from One Piece. LEFT SCENE AND CAMERA: Tall thin candy minister with long nose and tongue, large striped top hat and candy-pattern yellow coat, candy cane staff and translucent candy hand. Upward profile forming an amber candy staircase above sugary harbor. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "2ff238c75096f495011206cef2303b7b666db13c59e81b29994fea039e321fe3",
+    "sourceFile": "perospero.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "3293805e75f83de2ca9a87fc882bb265b003c6df52c76f4c836f954e0d600f47"
+  },
+  {
+    "id": "princegrus",
+    "file": "princegrus.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Prince Grus from One Piece. LEFT SCENE AND CAMERA: Tall muscular Marine with reddish hair, oversized blue camouflage cap with very long visor, white Marine coat and open patterned shirt. Overhead view raising clay soldier golems from earth on island plaza. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "451d5d64ddb0ee6975c4488ae2dbe4a2018d4f9f02ef2e217f486a1fa4478279",
+    "sourceFile": "princegrus.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "8aef6723b2cd57ea3fd4ee6995e1b1d531973daf020c97cd720014f276127055"
+  },
+  {
+    "id": "pudding",
+    "file": "pudding.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5179558011049724,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5179558011049724,
+      "y": 0,
+      "w": 0.4820441988950276,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Charlotte Pudding from One Piece. LEFT SCENE AND CAMERA: Young adult three-eyed woman with brown twin ponytails, pink dress and expressive eyes, third forehead eye visible. Intimate high-angle view holding luminous curled memory film amid a warm candy cafe, no sexualization. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "0ff0574cb0f6dfbb8317f68323d7ef5494731a4e23edda96fc767487beb011ec",
+    "sourceFile": "pudding.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "dbaf945c42b32f4770b3e585f4cf407ff70d453b97b015d6eaa549fbf500bc14"
+  },
+  {
     "id": "queen",
     "file": "queen.webp",
     "width": 1448,
@@ -954,6 +1916,58 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "09eea9d07ccd9cbb32572c67a945dca95e69b9160a2201cea5561afe36e818e5",
     "sourceSha256": "790ef2871df2426b13b9758a8c47a00b163b42ef729d292dcd80d4e44fdcfcae"
+  },
+  {
+    "id": "raizo",
+    "file": "raizo.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Raizo from One Piece. LEFT SCENE AND CAMERA: Stocky ninja with oversized broad head, dark spiky topknot and spiral eyebrows, ninja robes and giant scroll. Low oblique view opening scroll to release a swirling torrent of stored water. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "3a0d8973cea4485bbe15bdf94c329e5a01a1c09bd0a9cedca109ad978034f073",
+    "sourceFile": "raizo.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "acf5e0caed04e949e9c4608d49c20d77da298d7efbc3a925c517c9418fc1ce91"
+  },
+  {
+    "id": "rayleigh",
+    "file": "rayleigh.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5200276243093923,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5200276243093923,
+      "y": 0,
+      "w": 0.4799723756906077,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Premium mythic-quality art, exceptional atmosphere and fine detail. Subject: Silvers Rayleigh from One Piece. LEFT SCENE AND CAMERA: Elderly athletic swordsman with long swept-back silver hair, small round glasses, short silver beard and vertical eye scar, pale hooded cape and patterned shorts. Three-quarter rear view turning with sword, blue-black Haki arc across mangrove-root moonlit harbor. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "f173364759512275dd5a42d8609d00ce52b7003a24616ca2c889ce9822b7f511",
+    "sourceFile": "rayleigh.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "1f427cc9798d482ab8795ac0a7aa37115297214b3634195eb92e5549e4a1b41f"
   },
   {
     "id": "robin",
@@ -1006,6 +2020,32 @@
     "sourceSha256": "d831b7605756d7f39c74af02b40b4fed3dec0efcd93d9571a19386bbe7d060c8"
   },
   {
+    "id": "sabo7",
+    "file": "sabo7.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5759668508287292,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5759668508287292,
+      "y": 0,
+      "w": 0.4240331491712708,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Production asset for a premium One Piece collectible game. WIDE LANDSCAPE 4:3 canvas at least1440×1080. Exactly TWO vertical equal panels with crisp straight center boundary and no divider. LEFT HALF is a full-bleed portrait collectible CARD PAINTING ONLY with intricate painted anime realism, atmospheric background, memorable cinematic composition. RIGHT HALF is matching FULL-BODY battle avatar of the SAME character in same costume, facing slightly left, entire head, feet and equipment inside the panel with generous clear padding on ACTUAL ALPHA TRANSPARENCY. Left scene opaque, right background fully transparent, never checkerboard. No printed text, no frame, no stars, no typography, no watermark, no extra panels. Gold galaxy foil frame is added by the game, so paint the dramatic illustration and transparent avatar only. The two halves have different purposes: left epic cinematic scene, right clean readable sprite. LEFT COMPOSITION: cinematic rear THREE-QUARTER over-the-shoulder view of SABO THE FLAME EMPEROR, head turned enough to clearly see his distinctive scar surrounding theleft eye, wavyblondhair, tallblacktophat withbluegoggles, royalblue coat, whitecravat, darkgloves andtrousers. Hisfarrightfist unleashes a huge blazing fire stream curling into a sunrise-like inferno over a harbor, hisnearhand grips thefamiliar blackmetal pipe. Lowhorizon, widegold/orangefirelight silhouetting flutteringbluecoat, emerald night sea; viewerlooks pastSabointotheepicpower. Flame-Flame fruit andDragonClawmartialarts, noliteraldragonbody. RIGHTavatar: completeSabo in matchinghat/goggles/bluesuit, pipeheld diagonallyandonehandaflame incleanready stance, feetandhatandpipenotcropped, transparentbackground.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "c1b8a89e070536ee8f2723744f6b5433d2f53da13e49a80275f1d7de1bc4ac5a",
+    "sourceFile": "sabo7.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "c60d6eff1aa3c661f443b55041ae47dcafaafb35450cd7776afef7907c13c557"
+  },
+  {
     "id": "sanji",
     "file": "sanji.webp",
     "width": 1448,
@@ -1029,6 +2069,58 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "c54253215693f4e4cdbfb3fb4509db92ee922242062316e4322cff475dbac9e8",
     "sourceSha256": "26a3e90c8a38a3829ef50da36a8072ce159530adca3d83f6d7bc433d4d6b3db4"
+  },
+  {
+    "id": "sasaki",
+    "file": "sasaki.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5020718232044199,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5020718232044199,
+      "y": 0,
+      "w": 0.4979281767955801,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Sasaki from One Piece. LEFT SCENE AND CAMERA: Broad green-haired horned fish-man pirate with fangs, white coat and striped sash, triceratops hybrid armored shoulders and rotating neck frill. Front-oblique charge across dusty Wano street. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "2152cb08256469ca3545822ebc05c4e7e17ccf1eae14e671d9269b1ef54ad997",
+    "sourceFile": "sasaki.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "de826368dd0cfecbb3f396579e504fabdc1bfd783466a6fb4bc33e30e0a93110"
+  },
+  {
+    "id": "shachi",
+    "file": "shachi.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Shachi from One Piece. LEFT SCENE AND CAMERA: Orange-haired young male Heart Pirate wearing sunglasses, white boiler suit and cap with small animal ears. Overhead view launching a water spray from churning sea beside yellow submarine. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "07fe5272b99e1bb8cccee919945b712f0b222664714c4361fc691ad1b0e11db7",
+    "sourceFile": "shachi.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "7d5b2235584dc54f215f49fc3fcbe3afc93b40f3d594055ab811adc13bdf98af"
   },
   {
     "id": "smoker",
@@ -1056,6 +2148,32 @@
     "sourceSha256": "fd0328694aaa8a82f561cb793d2bcb82e5e834957b85f913c96d075f9e55d44a"
   },
   {
+    "id": "smoothie",
+    "file": "smoothie.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5006906077348067,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5006906077348067,
+      "y": 0,
+      "w": 0.49930939226519333,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Charlotte Smoothie from One Piece. LEFT SCENE AND CAMERA: Charlotte Smoothie, an adult female swordswoman, white hair covering one eye and a white fur-trimmed hat. Wear a practical fully closed high-collar long-sleeve purple naval tunic, full-length dark trousers, gloves and boots. Fully clothed, no cleavage or exposed midriff. Dynamic eye-level side view of a sword swing releasing a huge translucent liquid crescent over a ship deck. Emphasize the sword, liquid arc, determined face and naval atmosphere. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "16db63bedaf9a1dd4b4939a0f309d951a01861bb312e61babef97c3801edccef",
+    "sourceFile": "smoothie.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "ce7092a15526f4389152bbd0ec331eb93b737c03f44af64b855ca4b64c8d49d4"
+  },
+  {
     "id": "tashigi",
     "file": "tashigi.webp",
     "width": 1448,
@@ -1081,6 +2199,84 @@
     "sourceSha256": "34ef1c7a3f3299f263d30454b95682d87b0d30859c9ca31ec1306592025c2194"
   },
   {
+    "id": "tbone",
+    "file": "tbone.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5006906077348067,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5006906077348067,
+      "y": 0,
+      "w": 0.49930939226519333,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: T Bone from One Piece. LEFT SCENE AND CAMERA: Extremely gaunt skull-faced but kind Marine swordsman with white Marine cap and coat, gray hair and heavy straight sword. Low three-quarter view launching right-angled sword shockwave over stormy sea train tracks. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "4dc2f7cc4a44cb8f9698145a24d4adab5f37be6f41a013eaa8b0903458ba59ec",
+    "sourceFile": "tbone.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "b9b5a6f3520c704be73a379d3ee0c09690bc2632976369f57df165069540834b"
+  },
+  {
+    "id": "ulti",
+    "file": "ulti.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Ulti from One Piece. LEFT SCENE AND CAMERA: Young adult blue-haired horned woman with pink streaks, pink face mask, blue cape and modest pink outfit; pachycephalosaurus transformation hints. Very low-angle charging headbutt, cracked tiles flying. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "33b77dde1b66ddaf0202238cefc761a0def7ed8d298e86ad2efd07afd3c773ef",
+    "sourceFile": "ulti.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "c87a4d46d24cbfcf79705312e92c32b40f4c0c1c55e23b6052ce479aadf54537"
+  },
+  {
+    "id": "urouge",
+    "file": "urouge.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Urouge from One Piece. LEFT SCENE AND CAMERA: Huge smiling dark-skinned bald monk with black beard, little white sky wings, prayer beads and black robe, enormous iron pillar. Low-angle side view swelling with power to lift pillar against ruined sky temple. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "47125269d90048f18bb2fecf8e9aeddc69d50f6908da47f9311c53613d1c6a71",
+    "sourceFile": "urouge.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "5b0c57f4d68ff78ba903bb7cfbaac83056322668ef24754aaeb51eb9793bb9c8"
+  },
+  {
     "id": "usopp",
     "file": "usopp.webp",
     "width": 1448,
@@ -1104,6 +2300,32 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "9029000fca54f59ceeb8fb49b7b41424e8ff02c0799b72bd6e2c725326d68882",
     "sourceSha256": "15396a76fd8850249a5c811cfd41b20cb1da6fa004e4834224afa340e39dcb06"
+  },
+  {
+    "id": "vista",
+    "file": "vista.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5006906077348067,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5006906077348067,
+      "y": 0,
+      "w": 0.49930939226519333,
+      "h": 1
+    },
+    "prompt": "Create a landscape 4:3 RGBA game asset at least1440x1080 with two equal vertical halves. The left half is an opaque cinematic portrait painting; the right half is an isolated full-body character cutout on a completely transparent alpha background. The subject in both halves is Vista, the adult Whitebeard Pirates swordsman from One Piece: strong broad-chested man with curled black moustache, black top hat, blue-purple formal shirt, dark cape, light blue trousers, gloves, two curved sabers. LEFT: dynamic high three-quarter sword dance, dramatic foreshortened saber, red rose petals across a burning harbor with ship masts at sunset. Rich painterly anime realism. RIGHT: same Vista in a grounded standing battle pose facing slightly left, entirely visible head to boots and both blades inside its half with generous empty transparent padding. Real transparency behind the right figure, alpha=0, like a PNG sprite cutout. Left scene fills the entire left half. Two halves only, no frame, no text, no borders, no labels, no patterns behind the right avatar.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "2c135526542699b898e2bcc84183744fda138a7fbdfe6189f5afd595dce72dd2",
+    "sourceFile": "vista.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "2556eb9e7a165f184654250877a0b8bc6332c2c68731679b2dd11d90e1678249"
   },
   {
     "id": "vivi",
@@ -1182,6 +2404,32 @@
     "sourceSha256": "4a93bbd0d70d59eae0b8402d9041cff88584a2e1ecf39359009476878ac78d5c"
   },
   {
+    "id": "whoswho",
+    "file": "whoswho.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5,
+      "y": 0,
+      "w": 0.5,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Who's-Who from One Piece. LEFT SCENE AND CAMERA: Tall muscular pink-haired man with red horned helmet and eye motif, dark red suit, saber-toothed tiger hybrid fangs and claws. Tight side angle preparing clawing rush in moonlit torii courtyard. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "ecd6d267aff51862ceee9579b0137af7d1b0fb195c179bc9ddf6302d1f03f3ef",
+    "sourceFile": "whoswho.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "7a6f3933ad73709d3663f7221cec02e94e6bb2b5b12bd55a8fd9a8016f70b48f"
+  },
+  {
     "id": "wyper",
     "file": "wyper.webp",
     "width": 1448,
@@ -1208,6 +2456,32 @@
     "sourceSha256": "311a13ba1a6a09e1811319260bf7121bee4add01c540b79413412bd13db5b54d"
   },
   {
+    "id": "xdrake",
+    "file": "xdrake.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5338397790055248,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5338397790055248,
+      "y": 0,
+      "w": 0.4661602209944752,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: X Drake from One Piece. LEFT SCENE AND CAMERA: Muscular red-haired pirate in black feathered hat and cape, X scar on chest, sword and four-bladed axe, allosaurus silhouette. Rear three-quarter defensive stance between Marines and pirates at foggy harbor. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "d65947682595c31aa634d3b34734c85ab46eda57af50cef60db761676236b552",
+    "sourceFile": "xdrake.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "268a91b041506094898a450424615a379e835a664ded3771d11013fb9381090d"
+  },
+  {
     "id": "yamato",
     "file": "yamato.webp",
     "width": 1448,
@@ -1231,6 +2505,32 @@
     "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
     "sha256": "90119ff9c2761717548694a939e95e30acbe940974dddc9ba60101c4de5405ff",
     "sourceSha256": "2780057f86e728c2c5abc2f82345bf6bb07653d93dd7e18a078bdab8fd99f67a"
+  },
+  {
+    "id": "yasopp",
+    "file": "yasopp.webp",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "artRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0.5317679558011049,
+      "h": 1
+    },
+    "avatarRect": {
+      "x": 0.5317679558011049,
+      "y": 0,
+      "w": 0.4682320441988951,
+      "h": 1
+    },
+    "prompt": "Use case: stylized-concept. Create an original production One Piece collectible game asset, wide landscape 4:3 canvas, at least 1440 by1080 pixels. Exactly TWO equal vertical panels. LEFT HALF: detailed full-bleed portrait-format character card painting with atmospheric background and cinematic illustrated anime realism. RIGHT HALF: a matching FULL-BODY battle avatar of the SAME character, same face/costume/weapons, entire head, hands, feet and equipment comfortably within the right panel with at least30px clear padding, facing slightly left in a grounded battle-ready stance. The LEFT scene is fully opaque. The RIGHT background is ACTUAL ALPHA TRANSPARENCY, with no painted checkerboard, no solid background and no scenery. Clean straight division at center, no divider. Card frames/labels are rendered separately: NO text, letters, typography, stars, borders, watermarks or UI. Left is expressive varied-angle artwork; right is a clean readable sprite, no giant effects obscuring the silhouette. Avoid cropping character's body at panel boundaries. Polished collectible character painting. Subject: Yasopp from One Piece. LEFT SCENE AND CAMERA: Lean tan sniper with long blond dreadlocks, loose cape and checked sash, long-barreled rifle. Over-shoulder aiming point of view along rifle toward distant mast, sunny sea cliffs. RIGHT AVATAR: matching complete character, use normal recognizable humanoid form when transformations complicate silhouette, with iconic weapon or a small contained hint of that character's powers. No other characters in the right half.",
+    "tool": "built-in image_gen",
+    "expansion": 2,
+    "sourceSha256": "8f9a7eb2183e2bce5f133dbfb1c0726c82a88d65f606fd56139c9da855b7009e",
+    "sourceFile": "yasopp.png",
+    "encoding": "lossless WebP; visible pixels and alpha verified identical to generated PNG",
+    "sha256": "5f383477d227ddb972a71646a955e52549d6063ecd2cbd22766059b8121417d9"
   },
   {
     "id": "zoro",

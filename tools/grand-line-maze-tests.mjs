@@ -43,15 +43,15 @@ test('the landscape grid contains 338 square cells and every harbor has distinct
   }
 });
 
-test('one through ten unique owned crew members deploy for free and all nine terrain layouts remain passable', () => {
+test('one through seven unique owned crew members deploy for free and all nine terrain layouts remain passable', () => {
   const c = createCollection(); c.unlockedEncounter = 9;
-  for (const character of CHARACTERS.slice(0, 11)) if (!c.cards[character.id]) addCard(c, character.id);
-  for (let size = 1; size <= 10; size++) for (let stage = 1; stage <= 9; stage++) {
+  for (const character of CHARACTERS.slice(0, 8)) if (!c.cards[character.id]) addCard(c, character.id);
+  for (let size = 1; size <= 7; size++) for (let stage = 1; stage <= 9; stage++) {
     c.team = CHARACTERS.slice(0, size).map(character => character.id);
     const b = createDefense(c, { encounter: stage }); assert.ok(b); assert.equal(b.allies.length, size);
     assert.ok(b.allies.every(u => u.paidSupplies === 0)); assert.equal(b.supplies, 100); assertRoute(b);
   }
-  for (const team of [[], CHARACTERS.slice(0, 11).map(c => c.id), ['luffy', 'luffy'], ['shanks']]) assert.equal(createDefense({ ...c, team }), null);
+  for (const team of [[], CHARACTERS.slice(0, 8).map(c => c.id), ['luffy', 'luffy'], ['shanks']]) assert.equal(createDefense({ ...c, team }), null);
 });
 
 test('placement previews are pure, reject fixed terrain and portals, and show the exact committed detour and sale refund', () => {
