@@ -35,7 +35,7 @@ const functions=[
   'famApplyActiveStudent','_hadesResetLearning','_tcgBankQuestions','_sdExtractMcq','_sdStemHtml','_sdBreakStatements','_sdZoomBtns','_sdSeedElo',
   'buildDefenderQuestions','_sdSeenStats','_sdQuestionsPayload','_gqKey','_gqLoad','_gqSave','_gqRealId','_gqMark','_gqFilterPool'
 ].map(fn).join('\n');
-const moduleFiles=new Set(['science-feed-core.js','science-feed-variety.js','science-feed-mastery.js','science-feed-quality.js','science-feed-bridge.js']);
+const moduleFiles=new Set(['student-question-history.js','science-feed-core.js','science-feed-variety.js','science-feed-mastery.js','science-feed-quality.js','science-feed-bridge.js']);
 const errors=[],network=[];
 const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_BROWSER_CHANNEL?{channel:process.env.PLAYWRIGHT_BROWSER_CHANNEL}:{})});
 const page=await browser.newPage({viewport:{width:1120,height:920}});
@@ -44,7 +44,8 @@ const fixture=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta 
 body{display:block;overflow:auto}main{max-width:940px;margin:20px auto;padding:0 12px}.page{display:none!important}#page-quickpractice{display:block!important}.main-content{margin-left:0!important}.qp-part{min-width:0}</style></head><body><main>${markup}</main>
 <div id="practiceContainer"></div><div id="tpContainer"></div><div id="tcgqBody"></div><div id="duelQuiz"></div><div id="emsQuizBody"></div><div id="elgQuiz"></div>
 <script type="module">
-import {buildScienceFeedContext,planScienceQuestions,evaluateScienceFit,scienceQuestionLevel} from '/science-feed-core.js';
+import {buildScienceFeedContext,planScienceQuestions,evaluateScienceFit,scienceQuestionLevel,scienceQuestionContentKey} from '/science-feed-core.js';
+import {createStudentQuestionHistory} from '/student-question-history.js';
 import {evaluateQuestionQuality,buildQuestionQualitySummary,questionQualitySignature,questionHasUnresolvedStudentFlag} from '/science-feed-quality.js';
 let currentUser={uid:'fixture-family',name:'Older child',role:'student',level:'P6',adminLevel:'P6'};
 let child={name:'Older child',level:'P6'},questionBank=[],customTopics={},loData={objectives:[],map:{}};
@@ -54,6 +55,7 @@ const LEVEL_ORDER={P3:3,P4:4,P5:5,P6:6,S1:7};
 const isLevelCode=l=>TOPIC_LEVELS.includes(l),isSecondaryLevel=l=>String(l).startsWith('S'),getLevelNumber=l=>LEVEL_ORDER[l]||6;
 const getTopicLevel=t=>topicLevelMap[t]||LEVEL_MAX,famActive=()=>child;
 let _qAttemptStats={},_qAttemptStatsUid='',_qAttemptStatsAt=0,flaggedQuestions=[];
+let _scienceQpLoading=false,_scienceTpLoading=false;
 let qpQueue=[],qpIndex=-1,qpAnswered=0,qpSessionResults=[],qpSubmitted=false,qpLevel='P4';
 let tpQueue=[],tpIndex=-1,tpAnswered=0,tpSessionResults=[],_questRun=null,_ainsteinQuiz=null,currentPracticeQ=null;
 let _tcgQuiz=null,duelRun=null,emsRun=null,elgRun=null;
@@ -82,6 +84,13 @@ const _resetOpenScienceCoaches=()=>{},openPhotoBarHtml=()=>'',_partActionsHtml=(
 const _openSection=(items,label,model,bg,fg,selector,source)=>{items.push({label,model,block:source.block,field:source.field});return '<label>'+escapeHtml(label)+'<textarea class="open-answer"></textarea></label>';};
 const questionHasMarkableAnswer=q=>(q.blocks||[]).some(b=>['answer','plainanswer','mcq','workingSpace','openLines'].includes(b.type));
 const COMMON_MISTAKE_COLORS={teal:'#15837b'},_wsBlockLines=(value,fallback)=>Number(value)||fallback;
+const cloud=new Map(),watchers=new Map();
+const doc=(base,...parts)=>({path:[base?.path,...parts].filter(Boolean).join('/')});
+const collection=doc,query=ref=>ref,where=(...args)=>args;
+const cloudSnap=path=>({forEach:visit=>{for(const [key,value] of cloud)if(key.startsWith(path+'/'))visit({data:()=>value});}});
+const getDocs=async ref=>cloudSnap(ref.path);
+const onSnapshot=(ref,next)=>{watchers.set(ref.path,next);queueMicrotask(()=>next(cloudSnap(ref.path)));return()=>watchers.delete(ref.path);};
+const runTransaction=async(db,task)=>{const writes=[];const result=await task({get:async ref=>({exists:()=>cloud.has(ref.path),data:()=>cloud.get(ref.path)}),set:(ref,value)=>writes.push([ref.path,value])});writes.forEach(([key,value])=>cloud.set(key,value));watchers.forEach((next,path)=>next(cloudSnap(path)));return result;};
 const _htmlPlainText=stripHtmlToText,db={},_qRef=id=>id,setDoc=async(...args)=>writes.push(args);
 const qpMarkServed=id=>_scienceFeedMark(id),resetQpOpenAnswers=()=>{},openFlagDialog=()=>{};
 ${feed}
@@ -90,7 +99,7 @@ ${gameMessages}
 Object.assign(window,{loadNextQpQuestion,markMcqChoice,resetQpOpenAnswers,openFlagDialog,navigateTo});
 window.feedFixture={
  setup(bank,level='P4',name='Learner'){questionBank=structuredClone(bank);child={name,level};currentUser={uid:'fixture-family',name,role:'student',level,adminLevel:'P6'};localStorage.clear();_qAttemptStats={};_qAttemptStatsUid=_scienceFeedKey();_scienceFeedIdentity='';_scienceFeedImageFailures=new Map();qpQueue=[];qpIndex=-1;qpSessionResults=[];qpAnswered=0;_openQStore={};_openItemsStore={};_openMcqStore={};_openSurfaceCfg={};_openPartResults={};_openFinalized={};_scienceFeedRefreshFrames();document.getElementById('qpContainer').innerHTML='';document.getElementById('qpLevelSelect').value=level||'P6';},
- start:()=>startQuickPractice(),next:()=>loadNextQpQuestion(),finish:()=>_qpAllPartsMarked({score:1,total:1,mistakes:[]}),
+ readyHistory:()=>_scienceFeedEnsure(),start:()=>startQuickPractice(),next:()=>loadNextQpQuestion(),finish:()=>_qpAllPartsMarked({score:1,total:1,mistakes:[]}),
  state:()=>({id:_openQStore['#qpContainer']?.id||null,queue:qpQueue.map(q=>q.id),index:qpIndex,level:_scienceFeedLevel(),key:_scienceFeedKey(),writes:writes.length,notices,navigation,pirateProfileSyncs,grandLineProfileSyncs,history:_scienceFeedStoreRead('history'),served:_scienceFeedStoreRead('served')}),
  plan:(manual=false)=>_scienceFeedPlan(questionBank,{manual}).questions.map(q=>q.id),
  direct:id=>{document.getElementById('qpContainer').innerHTML=buildOpenBody(questionBank.find(q=>q.id===id),'#qpContainer',{});},
@@ -126,7 +135,7 @@ await page.route('**/*',async route=>{
 });
 const q=(id,{level='P4',title='Question '+id,stem='Explain observation '+id+'.',blocks,...extra}={})=>({id,level,title,topic:'Plant Systems',category:'Explanation',status:'approved',blocks:blocks||[
   {id:'stem',type:'text',content:'<p>'+stem+'</p>'},{id:'choices',type:'mcq',correctId:'o1',options:[{id:'o1',text:'The roots take in water.'},{id:'o2',text:'The roots release light.'}]}],...extra});
-const setup=async(bank,level='P4',name='Learner')=>{await page.goto('https://science-feed.test/');await page.waitForFunction(()=>window.ready);await page.evaluate(({bank,level,name})=>feedFixture.setup(bank,level,name),{bank,level,name});};
+const setup=async(bank,level='P4',name='Learner')=>{await page.goto('https://science-feed.test/');await page.waitForFunction(()=>window.ready);await page.evaluate(({bank,level,name})=>feedFixture.setup(bank,level,name),{bank,level,name});await page.evaluate(()=>feedFixture.readyHistory());};
 const state=()=>page.evaluate(()=>feedFixture.state());
 const openGame=async(id='raidersFrame')=>{
   await page.evaluate(id=>feedFixture.openGame(id),id);
@@ -179,7 +188,7 @@ try{
   pass('exact copies and story variants remain spaced across practice and games');
 
   await setup([q('suspect',{importWarning:'The crop needs review.'}),q('broken',{blocks:[]})]);await page.evaluate(()=>feedFixture.start());
-  assert.equal(await page.locator('#qpContainer input[type=radio]').count(),0);assert.match(await page.locator('#qpContainer').innerText(),/No suitable fresh questions/);
+  assert.equal(await page.locator('#qpContainer input[type=radio]').count(),0);assert.match(await page.locator('#qpContainer').innerText(),/No suitable unseen questions/);
   pass('suspect-only and malformed pools pause without fallback');
 
   await setup(bank,'P6','Older child');await page.evaluate(()=>feedFixture.start());assert.equal((await state()).id,'p6');
@@ -221,7 +230,7 @@ try{
   assert.ok(selected.pool.every(id=>currentFamily(id)!==firstFamily));
   selected=await gameNext(game);assert.equal(selected.id,'electrical-revision');
   selected=await gameNext(game);assert.equal(selected.id,null);
-  assert.match(await game.locator('#question').innerText(),/No suitable fresh questions/);
+  assert.match(await game.locator('#question').innerText(),/No suitable unseen questions/);
   pass('fresh embedded requests space question families, use nearby revision next and pause before basic P3 fallback');
 
   await setup(mixedGrades,'P6','Same child');game=await openGame();
@@ -235,7 +244,7 @@ try{
 
   await setup([tooBasic],'P6','Older child');game=await openGame();
   assert.equal((await gameNext(game)).id,null);
-  assert.match(await game.locator('#question').innerText(),/No suitable fresh questions/);
+  assert.match(await game.locator('#question').innerText(),/No suitable unseen questions/);
   pass('a P3-only database pauses a P6 game instead of filling the run with unsuitable easy questions');
 
   await setup(mixedGrades,'P6','Older child');

@@ -123,9 +123,9 @@ test('CER beta integration uses real bank, explicit level, release and shared sa
     _hadesUnavailableContent:new Map(),questionQualitySignature:q=>q.id,
     questionBank:[...rows,{id:'pending',status:'pending'},{id:'future'},{id:'retired'}],
     qReleased:q=>q.id!=='future',qInSyllabus:q=>q.id!=='retired',_sdExtractMcq:q=>({...question(q.id)}),
-    _scienceFeedContext:(profile,level)=>({profile,level}),_scienceFeedPlan:(candidates,options)=>{captured={candidates,options};return {questions:candidates};}});
+    _scienceFeedTake:async(candidates,options)=>{captured={candidates,options};return candidates;}});
   return vm.runInContext(code+';_hadesScienceQuestions()',context).then(result=>{
-    assert.equal(result.length,5);assert.equal(captured.options.context.level,'P6');assert.equal(captured.options.game,true);
+    assert.equal(result.length,5);assert.equal(captured.options.profile.level,'P6');assert.equal(captured.options.game,true);assert.equal(captured.options.requireFull,true);
     assert.equal(captured.options.randomize,true);assert.equal(captured.options.onePerFamily,true);assert.equal(captured.options.limit,5);
     assert.match(app,/page === 'hades' && !_hadesAllowed\(\)/);assert.match(app,/ARCADE_GAMES\.filter\(g => !g\.adminOnly \|\| _isAdmin\(\)\)/);
     assert.match(html,/class="nav-item" data-page="hades"/);assert.match(html,/id="hadesFrame"/);
@@ -142,7 +142,7 @@ test('the actual CER beta adapter prioritizes fresh P6 bank families and rejects
     _hadesUnavailableContent:new Map(),questionQualitySignature:q=>q.id,
     questionBank:bank,qReleased:q=>!q.future,qInSyllabus:()=>true,_sdExtractMcq:q=>({...question(q.id)}),
     _scienceFeedContext:()=>buildScienceFeedContext({bank,studentLevel:'P6',served,now:Date.now()}),
-    _scienceFeedPlan:(candidates,options)=>planScienceQuestions(candidates,options)});
+    _scienceFeedTake:async(candidates,options)=>planScienceQuestions(candidates,{...options,context:buildScienceFeedContext({bank,studentLevel:'P6',served,now:Date.now()})}).questions});
   const result=await vm.runInContext(app.slice(start,stop)+';_hadesScienceQuestions()',context);
   assert.equal(result.length,5);assert.ok(result.every(q=>q.id.startsWith('p6-') && q.id!=='p6-0'));
 });
@@ -155,12 +155,12 @@ test('student Hades uses the learner level, shared history and keeps beta access
     _scienceFeedLevel:()=> 'P6',document:{getElementById:()=>({value:'P3'})},
     questionBank:Array.from({length:5},(_,i)=>({id:'student-'+i})),qReleased:()=>true,qInSyllabus:()=>true,
     questionQualitySignature:q=>q.id,_sdExtractMcq:q=>question(q.id),_scienceFeedContext:(profile,level)=>({profile,level}),
-    _scienceFeedPlan:(rows,opts)=>{options=opts;return {questions:rows};}});
+    _scienceFeedTake:async(rows,opts)=>{options=opts;return rows;}});
   vm.runInContext(app.slice(start,stop),context);
   assert.equal(vm.runInContext('_hadesAllowed()',context),true);
   assert.equal(vm.runInContext('_hadesPreviewLevel()',context),'P6','DOM preview cannot change a student level');
   assert.equal(vm.runInContext('_hadesPreviewProfile()',context),undefined,'student history is not a preview profile');
   assert.equal((await vm.runInContext('_hadesScienceQuestions()',context)).length,5);
-  assert.equal(options.context.level,'P6');assert.equal(options.profile,undefined);
+  assert.equal(options.requireFull,true);assert.equal(options.profile,undefined);
   context.currentUser=null;assert.equal(vm.runInContext('_hadesAllowed()',context),false);
 });

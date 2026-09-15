@@ -2,7 +2,7 @@
 // The grade/mastery and spacing algorithms match the Math portal; this adapter
 // reads Science's own topic metadata, rich-text blocks and per-child history.
 import { parsePracticeLevel, practiceQuestionLevel, buildPracticeMasteryContext, evaluatePracticeFit } from './science-feed-mastery.js';
-import { PRACTICE_FAMILY_COOLDOWN_MS, buildPracticeCatalog, planPracticeQuestions } from './science-feed-variety.js';
+import { PRACTICE_FAMILY_COOLDOWN_MS, buildPracticeCatalog, planPracticeQuestions, practiceContentKey } from './science-feed-variety.js';
 import { evaluateQuestionQuality, questionHasUnresolvedStudentFlag } from './science-feed-quality.js';
 
 export { parsePracticeLevel as parseScienceLevel, PRACTICE_FAMILY_COOLDOWN_MS as SCIENCE_FEED_COOLDOWN_MS };
@@ -103,6 +103,11 @@ export function scienceQuestionLevel(question, options = {}) {
   return practiceQuestionLevel(normalizeQuestion(question, meta), { syllabusById: meta.objectives });
 }
 
+// Persist visible question identity, never private answers or changing bank titles.
+export function scienceQuestionContentKey(question) {
+  return practiceContentKey(normalizeQuestion(question, metadata()));
+}
+
 function progressRecord(id, record, now) {
   if (!record || typeof record !== 'object') return null;
   const at = time(record.lastAttemptAt ?? record.last);
@@ -137,6 +142,19 @@ export function buildScienceFeedContext(options = {}) {
     const value = progressRecord(id, record, now); if (value) progress[id] = value;
   }
   const bank = [...normalizedById.values()], catalog = buildPracticeCatalog(bank);
+  const seenIds = new Set(Object.keys(options.seen || {}));
+  const seenContentKeys = new Set(options.seenContentKeys || []);
+  for (const [id, value] of Object.entries(options.served || {})) {
+    const at = time(value && typeof value === 'object' ? value.at : value);
+    if (at > 0) seenIds.add(id);
+  }
+  for (const [id, record] of Object.entries(options.progress || {})) {
+    if (record && (time(record.lastAttemptAt ?? record.last) > 0 || Number(record.n) > 0 || Number(record.attempts) > 0)) seenIds.add(id);
+  }
+  for (const id of seenIds) {
+    const item = normalizedById.get(id);
+    if (item) { const key = practiceContentKey(item); if (key) seenContentKeys.add(key); }
+  }
   const mastery = buildPracticeMasteryContext({ bank, catalog, now, progress, studentLevel: options.studentLevel,
     syllabusById: meta.objectives, excludeEvidenceIds });
   const served = Object.entries(options.served || {}).flatMap(([id, value]) => {
@@ -144,7 +162,7 @@ export function buildScienceFeedContext(options = {}) {
     return at > 0 && at <= now && now - at < PRACTICE_FAMILY_COOLDOWN_MS ? [{ id, at }] : [];
   });
   return { meta, options, now, bank, sourceById, normalizedById, qualityById, catalog, mastery, progress,
-    run: { uid: 'science', served }, excludeEvidenceIds, unavailableImageIds };
+    run: { uid: 'science', served }, seenIds, seenContentKeys, excludeEvidenceIds, unavailableImageIds };
 }
 
 export function evaluateScienceFit(question, options = {}) {
@@ -203,6 +221,7 @@ export function planScienceQuestions(candidates, options = {}) {
     const quality = context.qualityById.get(id) || evaluateQuestionQuality(q, context.options.qualityOptions?.(q) || {});
     const retired = retiredQuestion(q);
     const reason = !id ? 'question-id-required' : !fit.eligible ? fit.reason
+      : !options.manual && (context.seenIds.has(id) || context.seenContentKeys.has(scienceQuestionContentKey(q))) ? 'already-seen'
       : retired && !(options.manual && options.allowRetired) ? 'outside-syllabus'
       : !quality.eligible || context.unavailableImageIds.has(id)
         ? 'question-blocked' : !options.manual && quality.tier !== 'sound' ? 'question-review' : '';

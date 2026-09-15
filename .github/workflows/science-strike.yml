@@ -1,10 +1,10 @@
 name: Non-TCG gameplay checks
 on:
   pull_request:
-    paths: ['fps.html', 'science-*.html', 'app.js', 'index.html', 'science-strike*.js', 'science-feed*.js', 'rpg-*.js', 'spire-svg-art.js', 'tools/science-strike*.mjs', 'tools/game-*.mjs', 'tools/rpg-*.mjs', '.github/workflows/science-strike.yml']
+    paths: ['fps.html', 'science-*.html', 'app.js', 'index.html', 'science-strike*.js', 'science-feed*.js', 'student-question-history.js', 'rpg-*.js', 'spire-svg-art.js', 'tools/science-strike*.mjs', 'tools/game-*.mjs', 'tools/rpg-*.mjs', '.github/workflows/science-strike.yml']
   push:
     branches: [main]
-    paths: ['fps.html', 'science-*.html', 'app.js', 'index.html', 'science-strike*.js', 'science-feed*.js', 'rpg-*.js', 'spire-svg-art.js', 'tools/science-strike*.mjs', 'tools/game-*.mjs', 'tools/rpg-*.mjs', '.github/workflows/science-strike.yml']
+    paths: ['fps.html', 'science-*.html', 'app.js', 'index.html', 'science-strike*.js', 'science-feed*.js', 'student-question-history.js', 'rpg-*.js', 'spire-svg-art.js', 'tools/science-strike*.mjs', 'tools/game-*.mjs', 'tools/rpg-*.mjs', '.github/workflows/science-strike.yml']
 permissions:
   contents: read
 jobs:

@@ -30,7 +30,11 @@ test('both sidebar and game hub launch the new adventure while Hades remains ava
 });
 
 test('authentication, navigation and learner changes dispose or invalidate the active frame', () => {
-  assert.match(app, /onAuthStateChanged\(auth, (?:async )?\(user\) => \{\s*(?:hadesMathBeta.close\(\);\s*)?pirateRiftPortal\.close\(\)/);
+  const authStart = app.search(/onAuthStateChanged\(auth, (?:async )?\(user\) => \{/);
+  const authBranch = app.indexOf('if (user)', authStart);
+  assert.ok(authStart >= 0 && authBranch > authStart);
+  assert.match(app.slice(authStart, authBranch), /pirateRiftPortal\.close\(\)/,
+    'the adventure closes before either account branch, alongside history cleanup');
   assert.match(app, /function navigateTo\(page\) \{\s*vetPrintPeekHide\(\);\s*(?:hadesMathBeta.close\(\);\s*)?pirateRiftPortal\.close\(\)/);
   if (science) {
     assert.match(app, /function configureSidebarForRole\(role\) \{\s*pirateRiftPortal\.close\(\)/);
@@ -58,7 +62,7 @@ if (science) test('Science navigation launches the overlay without entering a mi
   assert.ok(start > 0 && end > start);
   const prefix = app.slice(start, end + "if (page === 'pirate-rift') { openPirateRift(); return; }".length);
   let opened = 0, closed = 0;
-  const context = vm.createContext({ vetPrintPeekHide() {}, grandLinePortal: { close() {} }, pirateRiftPortal: { close() { closed++; } },
+  const context = vm.createContext({ vetPrintPeekHide() {}, pirateRiftPortal: { close() { closed++; } },
     _isEmployee: () => false, EMPLOYEE_PAGES: ['create'], openPirateRift() { opened++; } });
   vm.runInContext(prefix + '\nthrow new Error("unhandled page");\n}', context);
   vm.runInContext('navigateTo("pirate-rift")', context);

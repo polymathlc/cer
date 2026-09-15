@@ -24,7 +24,7 @@
 //    be on every management surface, and the date has to survive an edit.
 import fs from 'fs';
 
-const APP = new URL('../app.js', import.meta.url).pathname;
+const APP = new URL('../app.js', import.meta.url);
 const src = fs.readFileSync(APP, 'utf8');
 
 const cut = (from, to, what) => {

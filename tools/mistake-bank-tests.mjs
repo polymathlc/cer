@@ -20,10 +20,11 @@
 //  • THE SHARED LIST DRIFTING from `polymathlc/scan` and `polymathlc/anskey`
 //    — the same mistake wearing a different animal in each app.
 import fs from 'fs';
+import { scienceQuestionContentKey } from '../science-feed-core.js';
 
-const APP = new URL('../app.js', import.meta.url).pathname;
+const APP = new URL('../app.js', import.meta.url);
 const src = fs.readFileSync(APP, 'utf8');
-const html = fs.readFileSync(new URL('../index.html', import.meta.url).pathname, 'utf8');
+const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 const cut = (from, to, what) => {
   const a = src.indexOf(from);
@@ -58,6 +59,12 @@ const prelude = `
   let currentUser = { uid: 'admin1', email: 'chungzhikai@gmail.com', name: 'Mr Chung', role: 'admin' };
   let adminUid = 'admin1';
   let questionBank = [];
+  const shown=new Map();
+  function _scienceFeedKey(){return JSON.stringify([currentUser?.uid,currentUser?.name]);}
+  function _scienceFeedHistoryClient(){return {has:(id,key)=>shown.get(_scienceFeedKey())?.has(id)||shown.get(_scienceFeedKey())?.has(key)};}
+  async function _scienceFeedEnsure(){return true;}
+  function _scienceFeedMessage(){return 'No fresh questions';}
+  async function _scienceFeedClaim(rows,profile,manual=false){const key=_scienceFeedKey();if(!shown.has(key))shown.set(key,new Set());const seen=shown.get(key);if(!manual&&rows.some(q=>seen.has(q.id)))return false;rows.forEach(q=>{seen.add(q.id);seen.add(scienceQuestionContentKey(q));});return true;}
   function _isAdmin() { return currentUser && currentUser.role === 'admin'; }
   function _isEmployee() { return currentUser && currentUser.role === 'employee'; }
   function _canAuthor() { return _isAdmin() || _isEmployee(); }
@@ -89,18 +96,19 @@ const prelude = `
   const document = { getElementById: () => null, querySelector: () => null };
   const CSS = { escape: s => s };
 `;
-const api = new Function(prelude + block + `
+const api = new Function('scienceQuestionContentKey',prelude + block + `
   return {
     MISTAKE_ANIMALS, mistakeAnimal, mistakeAnimalNormalize, mistakeAnimalLabel, mistakeAnimalIds, MISTAKE_ANIMAL_RULE,
     MK_HARVEST_MAX, MK_MIN_ANSWER_WORDS, MK_QUIZ_OPTIONS, MK_SESSION_MAX, MK_COLLECTION,
     _mkEntryFromAnalysis, _mkCandidatesFrom, _mkSort, _mkVisibleToStudent, _mkQuizOptions, _mkModelAnswer,
     _mkAnalysePrompt, _mkGenPrompt, mkAnalyseCandidate, mkGenerateOne, _mkStudentPool, _mkLogQuiz,
     writes, merges, prompts, groundings, toasts,
+    start:mkStart,session:()=>_mkSess,seen:()=>shown.get(_scienceFeedKey()),
     setUser: u => { currentUser = u; }, setBank: b => { questionBank = b; }, setDocs: d => { bankDocs = d; },
     setReply: r => { askReply = r; }, setGates: g => { released = g.released; inSyllabus = g.inSyllabus; withinLevel = g.withinLevel; },
     loadStudent: () => mkStudentLoad(true), bank: () => _mk.bank, resetBank: () => { _mk.bank = []; _mk.loaded = false; }
   };
-`)();
+`)(scienceQuestionContentKey);
 
 let fails = 0, ran = 0;
 function ok(name, cond, extra) {
@@ -302,6 +310,10 @@ ok('…and must read as an honest attempt', /Never a parody, never obviously sil
   ok('the quiz is logged under the mistakes mode with the standard attempt shape',
      lw && lw.mode === 'mistakes' && lw.score === 1 && lw.totalBlanks === 1 && lw.questionId === 'q1' && lw.uid === 's1' && lw.ms === 1200);
   ok('the log never names the animal a classmate’s answer was filed under', lw && !('animal' in lw));
+  await api.start('', 'quiz');
+  ok('mistake tasks are reserved before their first session and cannot repeat in another mistake mode', api.seen().has('mistake:e1') && api._mkStudentPool('').length === 0);
+  api.setUser({uid:'s2',role:'student',name:'Other child'});
+  ok('a separate child keeps their own untouched mistake pool',api._mkStudentPool('').length===1);
   api.setUser({ uid: 'admin1', role: 'admin', email: 'a@x', name: 'A' });
   api._mkLogQuiz({ questionId: 'q1' }, true, 10);
   ok('the teacher is never logged', api.writes.length === before + 1);

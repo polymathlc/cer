@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildScienceFeedContext, evaluateScienceFit, planScienceQuestions, scienceQuestionLevel } from '../science-feed-core.js';
+import { buildScienceFeedContext, evaluateScienceFit, planScienceQuestions, scienceQuestionLevel, scienceQuestionContentKey } from '../science-feed-core.js';
 const now = Date.parse('2026-09-14T03:00:00Z');
 const topicLevels = { 'Plant life': 'P4', 'Electricity': 'P5', 'Forces': 'P6', 'Cells': 'S1', 'Magnets': 'P3' };
 const q = (id, extra = {}) => ({ id, title: 'Question', topic: 'Plant life', category: 'Explanation',
@@ -184,12 +184,25 @@ test('same-story variants contribute mastery evidence once and stay spaced betwe
   assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{served:{p3:now-1000}}))),['fresh']);
 });
 
-test('automatic reviews respect latest result delays and explicit saved due dates', () => {
+test('automatic feeds never recycle any completed question even after its old review date', () => {
   const bank=[q('correct'),q('partial'),q('wrong'),q('due'),q('future')];
   const progress={correct:{latestFrac:1,last:now-1000},partial:{latestFrac:0.5,last:now-1000},wrong:{latestFrac:0,last:now-1000},
     due:{latestFrac:0,last:now-3600000},future:{latestFrac:0,last:now-3600000,nextReviewAt:now+86400000}};
-  assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{progress}))),['due']);
+  assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{progress}))),[]);
   assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{progress,manual:true}))),bank.map(item=>item.id));
+});
+
+test('abandoned questions and exact copies stay excluded across years and removed originals', () => {
+  const original=q('old'),copy=q('copy',{blocks:structuredClone(original.blocks)}),fresh=q('new');
+  const bank=[original,copy,fresh],served={old:now-800*86400000};
+  assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{served}))),['new']);
+  assert.deepEqual(ids(planScienceQuestions([copy,fresh],opts([copy,fresh],{seenContentKeys:[scienceQuestionContentKey(original)]}))),['new']);
+  assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{served,manual:true}))),['old','copy','new']);
+});
+
+test('old outcome counters and account history records migrate even without a recent timestamp', () => {
+  const bank=[q('answered'),q('shown'),q('fresh')];
+  assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{progress:{answered:{n:1}},seen:{shown:{at:1}}}))),['fresh']);
 });
 
 test('a tiny bank never fills with above-level, too hard or far too easy questions', () => {

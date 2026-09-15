@@ -36,8 +36,8 @@ const bank = [
 const firestore = `
 const snap = value => ({exists:()=>value!==undefined,data:()=>value});
 export const getFirestore = () => ({});
-export const doc = (_, ...p) => ({path:p.join('/'),kind:'doc'});
-export const collection = (_, ...p) => ({path:p.join('/')});
+export const doc = (base, ...p) => ({path:[base?.path,...p].filter(Boolean).join('/'),kind:'doc'});
+export const collection = (base, ...p) => ({path:[base?.path,...p].filter(Boolean).join('/')});
 export const query = (ref, ...filters) => ({...ref,filters});
 export const where = (...args) => args;
 export const increment = n => ({increment:n});
@@ -55,8 +55,14 @@ export async function getDoc(ref){
 export async function getDocs(ref){
  const m=window.__mock;
  if(ref.path==='users/teacher/questions' && m.bankPending)await new Promise(r=>m.releaseBank=r);
+ if(ref.path.includes('/questionHistory/'))return {forEach:fn=>Object.entries(m.history||{}).filter(([key])=>key.startsWith(ref.path+'/')).forEach(([key,v])=>fn({id:key,data:()=>v}))};
  const rows=ref.path==='users/teacher/questions'?m.bank:ref.path==='questionAttempts'?m.attempts:ref.path==='flaggedQuestions'?m.reports:[];
  return {forEach:fn=>rows.forEach((v,i)=>fn({id:v.id||String(i),data:()=>v}))};
+}
+export async function runTransaction(db,task){
+ const m=window.__mock,history=m.history||=( {} ),writes=[];
+ const result=await task({get:async ref=>snap(history[ref.path]),set:(ref,value)=>writes.push([ref.path,value])});
+ writes.forEach(([key,value])=>history[key]=value);return result;
 }
 export async function setDoc(ref,value,options){window.__mock.writes.push({path:ref.path,value,options});}
 export async function addDoc(ref,value){window.__mock.writes.push({path:ref.path,value});return {id:'attempt'};}
@@ -114,7 +120,7 @@ async function pageFor({ bankRows = bank, pending = false, lock = 'success', mob
       html = html.slice(0, closing) + seam + html.slice(closing);
       return route.fulfill({ contentType: 'text/html', body: html });
     }
-    if (/^(?:science-feed-(core|mastery|variety|quality)|science-strike-feed)\.js$/.test(file))
+    if (/^(?:science-feed-(core|mastery|variety|quality)|science-strike-feed|student-question-history)\.js$/.test(file))
       return route.fulfill({ contentType: 'application/javascript', body: fs.readFileSync(new URL(file, root), 'utf8') });
     return route.abort();
   });
@@ -127,11 +133,11 @@ async function pageFor({ bankRows = bank, pending = false, lock = 'success', mob
 }
 async function shot(page, name) { if (screens) await page.screenshot({ path: path.join(screens, `${name}.png`), fullPage: true }); }
 async function seededTake(page, seed, count=1) {
-  return page.evaluate(({seed,count})=>{
+  return page.evaluate(async ({seed,count})=>{
     const original=Math.random;
     Math.random=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let value=Math.imul(seed^seed>>>15,1|seed);
       value=value+Math.imul(value^value>>>7,61|value)^value;return ((value^value>>>14)>>>0)/4294967296;};
-    try{return Array.from({length:count},()=>window.__strikeQA.take()?.id||null);}
+    try{const rows=[];for(let i=0;i<count;i++)rows.push((await window.__strikeQA.take())?.id||null);return rows;}
     finally{Math.random=original;}
   },{seed,count});
 }
@@ -380,7 +386,7 @@ try {
 
   const memory=await pageFor({bankRows:[fresh,copied,available]});
   await memory.page.evaluate(()=>{Storage.prototype.getItem=()=>{throw Error('Storage blocked');};Storage.prototype.setItem=()=>{throw Error('Storage blocked');};});
-  const selected=await memory.page.evaluate(()=>[window.__strikeQA.take()?.id,window.__strikeQA.take()?.id,window.__strikeQA.take()]);
+  const selected=await memory.page.evaluate(async()=>[(await window.__strikeQA.take())?.id,(await window.__strikeQA.take())?.id,await window.__strikeQA.take()]);
   const selectedFamilies=selected.slice(0,2).map(id=>['saved-mcq','copied-mcq'].includes(id)?'fruit':id);
   check(new Set(selectedFamilies).size===2&&selectedFamilies.includes('fruit')&&selectedFamilies.includes('other-saved')&&selected[2]===null,'Blocked browser storage cannot cause repeated questions or copies');
   await memory.page.evaluate(()=>{const entries=window.__mock.listeners['questionAttempts'].filter(e=>e.active);entries[0].onError(new Error('test history unavailable'));});
