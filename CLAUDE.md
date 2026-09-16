@@ -4469,6 +4469,78 @@ are missing which, and takes the author straight to them.
   read as one family of tools.
 - Run **`node tools/paper-format-tests.mjs`** after touching any of it.
 
+## 🅐 ✍️ One HALF of a past paper — practise or print just the MCQ, or just the OEQ (v1.400.0)
+
+`PP_KINDS` / `ppKindDef` / **`ppKindOf`** / `ppKindFilter` / `ppKindBankQs` /
+`ppKindCounts` / `ppKindTitle` / `ppPaperHitIds` (in `app.js`, search
+`ONE HALF OF A PAPER`), the `kind` argument on **`ppPracticeYear`** and
+**`ppPrintYear`**, the 🅐 / ✍️ tiers inside the *Practise the papers* card and
+their `.pp-pr-kind*` / `.pp-pr-main` / `.pp-pr-kinds` CSS.
+
+A PSLE paper is two different exams stapled together: Booklet A is thirty
+multiple-choice questions answered on a separate sheet, Booklet B is written
+answers on ruled lines. A class revising them wants one or the other — a quick
+run at the multiple choice, or a whole sitting on the open-ended questions,
+where most of the marks and all of the writing are. The only portions on offer
+were **this whole paper** and **every paper**, so a teacher who wanted thirty
+MCQs had to hand out a paper with the written half attached to it.
+
+Each paper now carries a tier per half — **▶ Practice · 👁 Preview · 🖨 Print** —
+and so does **📚 All years**, which is what "practise every PSLE paper's MCQ"
+means.
+
+- **`ppKindOf(bq)` IS THE ONE PLACE A QUESTION'S HALF IS DECIDED**, and it asks
+  `qIsMcqOnly` — THE app's own test — on the ATTACHED BANK QUESTION's own
+  blocks. The tier's count, the practice queue, the preview and the printed
+  sheet all read it, so a tier that says "28 questions" cannot sit over a sheet
+  that prints 30. Two readings drift, and a count that disagrees with its own
+  sheet is only ever found after the printing.
+- **THE PAPER ROW'S BOOKLET IS DELIBERATELY NOT READ.** A past-paper row carries
+  a `bk` ('A' / 'B') and a `type` — and `type` is a SKILL (`PP_SKILL`, where
+  `open` means "open-ended explanation"), not a question shape; `ppCreateForAssign`
+  reads the pair to pick a starting CATEGORY. But what is practised and what is
+  printed is the **bank question**, and the two can disagree: a Booklet A row
+  whose attached question was authored with a writing box is an open-ended
+  question however the paper numbered it. Reading the booklet would file it
+  behind ▶ Practise the multiple choice, where a child is handed a question they
+  cannot answer by picking an option — **and the button would look exactly as
+  though it had worked**. The booklet is the paper's record of how the paper was
+  printed (what the whole-paper editor edits, what the hover card shows), never
+  a fact about the question being served.
+- **NO KIND — OR ONE NOBODY RECOGNISES — MEANS THE WHOLE PORTION, untouched.**
+  That is what every caller predating this already does, and the direction is
+  chosen on purpose: a stray kind can then only ever print MORE than was asked
+  for, never turn a button into one that silently does nothing.
+- **`ppPrintYear('')` NOW MEANS EVERY PAPER.** It filtered `String(q.year) === ''`
+  and so matched nothing, which is why the All-years row had no print button at
+  all. `ppPaperHitIds(year)` is the shared row list and sorts by **year then
+  number**, the order `ppAttachedBankQs` already returns — so a printed sheet and
+  the practice queue built from the same portion run in the same sequence. Within
+  one year the year key compares equal, so a single-year print is byte-for-byte
+  what it always was, title and cover included.
+- **`missing` IS CARRIED THROUGH UNFILTERED.** A row with nothing attached has no
+  blocks, so it belongs to neither half — *"skipped N with no attached question"*
+  is the same true statement about the paper whichever half was asked for, and
+  filtering it to the half would hide a real gap.
+- **A HALF NAMES ITSELF ON THE SHEET AND ON THE COVER** (`ppKindTitle`), and
+  deliberately **never names a booklet**: the half was read off the questions, so
+  putting "Booklet A" on a cover would claim something this never checked.
+- **AN EMPTY HALF REFUSES AND SAYS WHICH HALF.** "No multiple choice question is
+  attached for 2018 yet" — never an empty sheet, and never an empty practice
+  session.
+- **THE TIERS ARE GENERATED FROM `PP_KINDS`**, never written out by hand, so a
+  half added to that table gets its three buttons without being told. A half with
+  **no** questions draws no tier at all — a row of disabled buttons is the row
+  that makes the live ones get scrolled past — and the **breakdown line names
+  every half, zeros included**, so an empty one is stated rather than hidden.
+- **STUDENTS GET ALL OF IT.** The tiers carry no role test: a student already
+  previews and prints a whole past paper from this card, so a half of one is the
+  same exposure and the same button. ✏️ Edit all questions stays `_canAuthor()`.
+- Nothing new is needed downstream: `printFromPreview` and `_wsPreviewSnapshot`
+  both carry `_wsPreviewPaper.items` — the already-filtered list — so 🖨 from
+  inside a half's preview prints that half, and the edit round-trip reopens it.
+- Run **`node tools/paper-halves-tests.mjs`** after touching any of it.
+
 ## ⏳ A batch with a RELEASE DATE on it (v1.354.0)
 
 `RELEASE_TZ` / `RELEASE_DAY_RE` / `releaseDayKey` / `releaseToday` /
@@ -6732,6 +6804,26 @@ shortened**.
   very surface it was scheduled to be built on, which reads as a save that
   failed. A locked question SILENTLY dropped is the third way: a numbered sheet
   with a hole in it, which reads as a printing fault.
+- After touching **🅐 ✍️ one half of a past paper** (`PP_KINDS`, `ppKindDef`,
+  `ppKindOf`, `ppKindFilter`, `ppKindBankQs`, `ppKindCounts`, `ppKindTitle`,
+  `ppPaperHitIds`, the `kind` argument on `ppPracticeYear` / `ppPrintYear`, or
+  the 🅐 / ✍️ tiers in the *Practise the papers* card), run
+  `node tools/paper-halves-tests.mjs`. Every failure is silent — the button
+  works, a sheet comes out, a session starts, and it is simply the wrong half.
+  **Reading the paper row's `bk` or `type` instead of the attached bank
+  question's blocks is the worst of them**: a Booklet A row can perfectly well
+  have an open-ended question attached, so a child is handed a question they
+  cannot answer by picking an option, behind a button that looks as though it
+  worked. Write a second reading of the half anywhere — in the filter, in the
+  counts, at a call site — and the tier says "28 questions" over a sheet that
+  prints 30, which is found after the printing. Let a stray kind filter the
+  portion away instead of leaving it whole and the button silently does nothing.
+  Put `ppPrintYear('')` back to one year and every All-years tier prints an empty
+  paper. Filter `missing` to the half and a row with nothing attached — which
+  belongs to neither half — stops being reported at all. Name a booklet on the
+  cover and the sheet claims something the code never checked. And gate the tiers
+  on `_canAuthor()` and the students who can already print a whole past paper
+  from that card can no longer print half of one.
 - After touching **📋 the format check** (`PF_KINDS`, `pfPartsWithoutMarks`,
   `pfPartsWithoutExplanation`, `pfTakesKeywords`, `pfCheckQuestion`,
   `pfCheckItems`, `pfSummary`, `pfRunOn`, `pfEditOne`, `pfEditFlagged`, or the

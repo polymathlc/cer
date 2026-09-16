@@ -3867,7 +3867,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.399.0';
+const APP_VERSION = 'v1.400.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -70274,27 +70274,52 @@ function ppRenderBody(){
   // --- practise the papers (all years + each year, on the system or in a game) ---
   const pRows = [{ y: '', avail: ppAttachedBankQs('').length }]
     .concat(years.slice().reverse().map(y => ({ y, avail: ppAttachedBankQs(y).length })));
-  const practiceRows = pRows.map(r => `
-    <div class="pp-pr-row">
-      <div class="pp-pr-info"><div class="pp-pr-title">${r.y ? '📄 PSLE ' + escapeHtml(r.y) : '📚 All years'}</div><div class="pp-pr-sub">${r.avail} question${r.avail === 1 ? '' : 's'} ready to practise</div></div>
-      <div class="pp-pr-btns">
-        <button class="pp-add" ${r.avail ? '' : 'disabled'} title="Practise ${r.y ? 'the ' + escapeHtml(r.y) + ' paper' : 'every attached past-paper question'} on the system — MCQ and open-ended, marked as usual" onclick="ppPracticeYear('${escapeHtml(r.y)}')">▶ ${r.y ? 'Practice now' : 'Practice all'}</button>
-        <button class="pp-add pp-gamebtn" ${r.avail ? '' : 'disabled'} title="Load ${r.y ? 'the ' + escapeHtml(r.y) + ' paper' : 'all past-paper questions'} into a mini-game — every question answered there counts ×2 on the leaderboards" onclick="ppGameMenuOpen(event,'${escapeHtml(r.y)}')">🎮 Practice in a game <span style="font-size:0.72em;">▾</span></button>
-        ${r.y ? `<button class="pp-add" ${r.avail ? '' : 'disabled'} title="Live A4 preview of the whole ${escapeHtml(r.y)} paper — fix any answer or explanation on the key before printing" onclick="ppPrintYear('${escapeHtml(r.y)}','preview')">👁 Preview</button>` : ''}
-        ${r.y && _canAuthor() ? `<button class="pp-add" ${r.avail ? '' : 'disabled'} title="Editing mode \u2014 every question on this paper in one scroll, each block condensed to a strip with its controls as icons down the left. Fix what you find, then Save once." onclick="ppPrintYear('${escapeHtml(r.y)}','edit')">✏️ Edit all questions</button>` : ''}
-        ${r.y ? `<button class="pp-add" ${r.avail ? '' : 'disabled'} title="Print the whole ${escapeHtml(r.y)} paper as a worksheet — answer key on the last pages" onclick="ppPrintYear('${escapeHtml(r.y)}')">🖨 Print paper</button>` : ''}
+  const practiceRows = pRows.map(r => {
+    const counts = ppKindCounts(r.y);
+    // The breakdown names EVERY half, zeros included, so a paper whose
+    // open-ended questions are not attached yet says so rather than simply
+    // not offering a tier and reading as a paper that has none.
+    const breakdown = PP_KINDS.map(k => counts[k.kind] + ' ' + k.lower).join(' &middot; ');
+    // 🅐 / ✍️ — one tier per half, and only for a half that HAS questions: a
+    // tier of disabled buttons is a row nobody can act on, which is what makes
+    // the live ones get scrolled past. The breakdown above covers the rest.
+    const kindTiers = PP_KINDS.filter(k => counts[k.kind]).map(k => {
+      const n = counts[k.kind];
+      const what = n + ' ' + k.lower + ' question' + (n === 1 ? '' : 's')
+        + (r.y ? ' from the ' + escapeHtml(r.y) + ' paper' : ' across every past paper');
+      return `<div class="pp-pr-kind">
+          <div class="pp-pr-kind-info"><span class="pp-pr-kind-name">${k.icon} ${escapeHtml(k.name)}</span><span class="pp-pr-kind-n">${n} question${n === 1 ? '' : 's'}</span></div>
+          <div class="pp-pr-kind-btns">
+            <button class="pp-mini" title="Practise only the ${what} on the system — marked as usual" onclick="ppPracticeYear('${escapeHtml(r.y)}','${k.kind}')">&#9654; Practice</button>
+            <button class="pp-mini" title="Live A4 preview of just the ${what} — check the sheet and the answer key before it goes to the printer" onclick="ppPrintYear('${escapeHtml(r.y)}','preview','${k.kind}')">&#128065; Preview</button>
+            <button class="pp-mini" title="Print just the ${what} as a worksheet — answer key on the last pages" onclick="ppPrintYear('${escapeHtml(r.y)}','','${k.kind}')">&#128424; Print</button>
+          </div>
+        </div>`;
+    }).join('');
+    return `<div class="pp-pr-row">
+      <div class="pp-pr-main">
+        <div class="pp-pr-info"><div class="pp-pr-title">${r.y ? '📄 PSLE ' + escapeHtml(r.y) : '📚 All years'}</div><div class="pp-pr-sub">${r.avail} question${r.avail === 1 ? '' : 's'} ready to practise${r.avail ? ' &middot; ' + breakdown : ''}</div></div>
+        <div class="pp-pr-btns">
+          <button class="pp-add" ${r.avail ? '' : 'disabled'} title="Practise ${r.y ? 'the ' + escapeHtml(r.y) + ' paper' : 'every attached past-paper question'} on the system — MCQ and open-ended, marked as usual" onclick="ppPracticeYear('${escapeHtml(r.y)}')">▶ ${r.y ? 'Practice now' : 'Practice all'}</button>
+          <button class="pp-add pp-gamebtn" ${r.avail ? '' : 'disabled'} title="Load ${r.y ? 'the ' + escapeHtml(r.y) + ' paper' : 'all past-paper questions'} into a mini-game — every question answered there counts ×2 on the leaderboards" onclick="ppGameMenuOpen(event,'${escapeHtml(r.y)}')">🎮 Practice in a game <span style="font-size:0.72em;">▾</span></button>
+          ${r.y ? `<button class="pp-add" ${r.avail ? '' : 'disabled'} title="Live A4 preview of the whole ${escapeHtml(r.y)} paper — fix any answer or explanation on the key before printing" onclick="ppPrintYear('${escapeHtml(r.y)}','preview')">👁 Preview</button>` : ''}
+          ${r.y && _canAuthor() ? `<button class="pp-add" ${r.avail ? '' : 'disabled'} title="Editing mode — every question on this paper in one scroll, each block condensed to a strip with its controls as icons down the left. Fix what you find, then Save once." onclick="ppPrintYear('${escapeHtml(r.y)}','edit')">✏️ Edit all questions</button>` : ''}
+          ${r.y ? `<button class="pp-add" ${r.avail ? '' : 'disabled'} title="Print the whole ${escapeHtml(r.y)} paper as a worksheet — answer key on the last pages" onclick="ppPrintYear('${escapeHtml(r.y)}')">🖨 Print paper</button>` : ''}
+        </div>
       </div>
-    </div>`).join('');
+      ${kindTiers ? `<div class="pp-pr-kinds">${kindTiers}</div>` : ''}
+    </div>`;
+  }).join('');
   const practiceCard = `
     <div class="pp-card">
       <h3 class="pp-h">Practise the papers</h3>
-      <p class="pp-sub">Do the attached questions right here on the system — the whole set or one year's paper — or load them into a mini-game (MCQ and open-ended). <b>Game bonus: every past-paper question answered inside a game counts ×2 on the Questions and PSLE Papers leaderboards.</b></p>
+      <p class="pp-sub">Do the attached questions right here on the system — the whole set or one year's paper — or load them into a mini-game (MCQ and open-ended). Under each paper you can also take just <b>🅐 the multiple choice</b> or just <b>✍️ the open-ended questions</b>, on screen or printed. <b>Game bonus: every past-paper question answered inside a game counts ×2 on the Questions and PSLE Papers leaderboards.</b></p>
       ${practiceRows}
     </div>`;
 
   const toggle = admin ? `<button class="pp-editbtn ${edit ? 'on' : ''}" onclick="ppToggleEdit()">${edit ? '✓ Done editing' : '✎ Add / edit questions'}</button>` : '';
   const roleLine = !admin
-    ? 'Tap any highlighted question to practise it. Hover to preview. Greyed-out questions have not been added yet. Use “Practise the papers” below to do a whole year in one go — or play it inside a game, where every question counts ×2 on the leaderboards! The 🖨 buttons print a year or a concept as a worksheet, with the answer key on the last pages.'
+    ? 'Tap any highlighted question to practise it. Hover to preview. Greyed-out questions have not been added yet. Use “Practise the papers” below to do a whole year in one go — or just its 🅐 multiple choice or just its ✍️ open-ended questions, and the same two halves across <strong>every</strong> paper at once — or play it inside a game, where every question counts ×2 on the leaderboards! The 🖨 buttons print a year, a half of it, or a concept as a worksheet, with the answer key on the last pages.'
     : (edit
       ? 'Editing: use <strong>🗂 Edit whole paper</strong> on any year to edit every question in that paper on one screen (and change many at once) — or <strong>+ Add question</strong> to key in a single new past-paper question yourself. <strong>+ Add a paper / question in a new year</strong> starts a new year. Click a question or concept to change its details, or × to remove it. Turn editing off to attach bank questions.'
       : 'Click any question to attach one from your bank — or create a brand-new question for it on the spot — and to set its difficulty (🟢/🟡/🔴, colours the chip on this page only); students can then practise it. Hover a question to preview. Need to fix a whole paper? <strong>🗂 Edit whole paper</strong> on any year opens all of its questions on one screen, with bulk topic / skill / difficulty / marks changes and one Save — no clicking question by question. Use the 🖨 buttons to print a concept or a whole year (answer key on the last pages), and the checkboxes to print several concepts together.');
@@ -70715,6 +70740,80 @@ async function ppConsumePendingAttach(bankQ, toVetting){
   }
 }
 
+// =====================================================================
+// 🅐 ✍️  ONE HALF OF A PAPER — practise or print the MCQ, or the OEQ
+// =====================================================================
+// A PSLE paper is two different exams stapled together: Booklet A is thirty
+// multiple-choice questions answered on a separate sheet, Booklet B is written
+// answers on ruled lines. A class revising them wants one or the other — a
+// quick run at the multiple choice, or a whole sitting spent on the open-ended
+// questions, which is where most of the marks are and all of the writing is —
+// and the only portions on offer were "this whole paper" and "every paper".
+//
+// **`ppKindOf(bq)` IS THE ONE PLACE A QUESTION'S HALF IS DECIDED**, and it asks
+// `qIsMcqOnly` — THE app's own test — on the ATTACHED BANK QUESTION's own
+// blocks. Three things follow, and each is why it is not written another way:
+//
+//  • **IT READS WHAT THE CHILD WILL ACTUALLY MEET.** A past-paper row carries a
+//    `bk` ('A' / 'B') and a `type`, and `type` is a SKILL (`PP_SKILL`, where
+//    `open` means "open-ended explanation") rather than a question shape;
+//    `ppCreateForAssign` reads the pair to pick a starting CATEGORY. But what
+//    is practised and what is printed is the bank question, and the two can
+//    disagree — a Booklet A row whose attached question was authored with a
+//    writing box is an open-ended question however the paper numbered it.
+//    Reading the booklet would file it behind ▶ Practise the multiple choice,
+//    where a child is handed a question they cannot answer by picking an
+//    option, and the button would look exactly as though it had worked.
+//  • **SO THE BOOKLET IS DELIBERATELY NOT READ HERE.** It is the paper's own
+//    record of how the paper was printed — what the whole-paper editor edits
+//    and what the hover card shows — not a fact about the question being
+//    served. Reading it as one is the silent half of the failure above.
+//  • **AND THE COUNT ON THE CARD READS THIS SAME FUNCTION.** The tier that says
+//    "28 questions" and the sheet that prints cannot then come out different
+//    lengths. Two readings drift, and a count that disagrees with its own sheet
+//    is only ever found after the printing.
+const PP_KINDS = [
+  { kind: 'mcq', icon: '🅐',  name: 'Multiple choice', lower: 'multiple choice' },
+  { kind: 'oeq', icon: '✍️', name: 'Open-ended',      lower: 'open-ended' }
+];
+function ppKindDef(kind){ return PP_KINDS.find(k => k.kind === kind) || null; }
+function ppKindOf(bq){ return qIsMcqOnly(bq && bq.blocks) ? 'mcq' : 'oeq'; }
+// No kind — or one nobody recognises — means THE WHOLE PORTION, untouched:
+// exactly what every caller that predates this already does. That direction is
+// chosen on purpose, because a stray kind can then only ever print MORE than
+// was asked for, never silently print nothing at all.
+function ppKindFilter(bqs, kind){
+  if (!ppKindDef(kind)) return (bqs || []).slice();
+  return (bqs || []).filter(bq => ppKindOf(bq) === kind);
+}
+function ppKindBankQs(year, kind){ return ppKindFilter(ppAttachedBankQs(year), kind); }
+// { mcq: n, oeq: n } for a year ('' = every year). Every kind gets a key even
+// when it is empty, so the breakdown line can say "0 open-ended" rather than
+// leaving a half unmentioned and reading as one nobody has counted.
+function ppKindCounts(year){
+  const out = {};
+  PP_KINDS.forEach(k => { out[k.kind] = 0; });
+  ppAttachedBankQs(year).forEach(bq => { const k = ppKindOf(bq); out[k] = (out[k] || 0) + 1; });
+  return out;
+}
+// "PSLE Science 2017 — Multiple choice". Deliberately NOT "Booklet A": the half
+// is read off the questions rather than off the paper's booklet letter, so
+// naming the booklet would put on the cover something this never checked.
+function ppKindTitle(base, kind){
+  const d = ppKindDef(kind);
+  return d ? base + ' — ' + d.name : base;
+}
+// The past-paper rows of one year ('' = EVERY year), in paper order — the same
+// order `ppAttachedBankQs` returns, so a printed sheet and the practice queue
+// built from the same portion run in the same sequence. Within one year the
+// year key compares equal, so this is byte-for-byte the old single-year sort.
+function ppPaperHitIds(year){
+  return ppQuestions()
+    .filter(q => !year || String(q.year) === String(year))
+    .sort((a,b) => String(a.year).localeCompare(String(b.year)) || (Number(a.n)||0) - (Number(b.n)||0))
+    .map(q => q.id);
+}
+
 // -------- printing: concepts & whole years --------
 // Prints the ATTACHED bank questions (questions first, answer key on the
 // last pages) via the shared worksheet print pipeline. Past-paper questions
@@ -70792,11 +70891,25 @@ function ppPrintConcept(id, go){
   const { items, missing } = ppCollectPrintable(c.hits);
   _ppGo(go)(items, missing, c.concept || 'Recurring concept');
 }
-function ppPrintYear(y, go){
-  const hitIds = ppQuestions().filter(q => String(q.year) === String(y))
-    .sort((a,b) => (Number(a.n)||0) - (Number(b.n)||0)).map(q => q.id);
-  const { items, missing } = ppCollectPrintable(hitIds);
-  _ppGo(go)(items, missing, 'PSLE Science ' + y, { coverTitle: 'PSLE ' + y + ' Science Paper' });
+// `y` is one year, or '' for EVERY past paper. `kind` is 'mcq' / 'oeq' to print
+// just that half of it (see PP_KINDS) and absent for the whole thing.
+function ppPrintYear(y, go, kind){
+  const { items, missing } = ppCollectPrintable(ppPaperHitIds(y));
+  // The half is chosen on the ITEMS, never on the paper rows: `ppKindOf` reads
+  // the attached bank question, which is the thing that will be printed.
+  const d = ppKindDef(kind);
+  const picked = d ? items.filter(it => ppKindOf(it.bq) === kind) : items;
+  if (d && !picked.length) {
+    showToast('No ' + d.lower + ' question is attached' + (y ? ' for ' + y : '') + ' yet', 'error');
+    return;
+  }
+  // `missing` is carried through UNFILTERED, and that is deliberate: a row with
+  // nothing attached has no blocks, so it belongs to neither half — "skipped N
+  // with no attached question" is the same true statement about the paper
+  // whichever half was asked for, and dropping it would hide a real gap.
+  const base  = y ? 'PSLE Science ' + y : 'PSLE Science — every past paper';
+  const cover = y ? 'PSLE ' + y + ' Science Paper' : 'PSLE Science — Every Past Paper';
+  _ppGo(go)(picked, missing, ppKindTitle(base, kind), { coverTitle: ppKindTitle(cover, kind) });
 }
 function ppPrintSelected(go){
   const chosen = ppRecurring().filter(c => _ppPrintSel.has(c.id));
@@ -71120,9 +71233,15 @@ function ppYearLabel(year){ return year ? 'PSLE ' + year : 'All past papers'; }
 
 // ▶ Practice on the system: run the portion's attached questions (MCQ + OEQ,
 // AI-marked as usual) through Quick Practice.
-function ppPracticeYear(year){
-  const bqs = ppAttachedBankQs(year);
-  if (!bqs.length) { showToast('No questions are attached ' + (year ? 'for ' + year : '') + ' yet', 'error'); return; }
+// `kind` is 'mcq' / 'oeq' to run just that half of the portion (see PP_KINDS),
+// and absent for all of it.
+function ppPracticeYear(year, kind){
+  const bqs = ppKindBankQs(year, kind);
+  if (!bqs.length) {
+    const d = ppKindDef(kind);
+    showToast('No ' + (d ? d.lower + ' ' : '') + 'questions are attached' + (year ? ' for ' + year : '') + ' yet', 'error');
+    return;
+  }
   ppHoverHide();
   launchWorksheetPractice(bqs, undefined, { allowRetired: true });
 }
@@ -71883,13 +72002,23 @@ function ppStyles(){
   .pp-print-check:hover { border-color:var(--primary,#0b6b4f); }
   .pp-print-check input { width:15px; height:15px; margin:0; accent-color:var(--primary,#0b6b4f); cursor:pointer; }
   .pp-add:disabled { opacity:0.5; cursor:not-allowed; }
-  .pp-pr-row { display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding:13px 2px; }
+  .pp-pr-row { display:flex; flex-direction:column; gap:13px; padding:15px 2px; }
   .pp-pr-row + .pp-pr-row { border-top:1px solid var(--border); }
+  .pp-pr-main { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
   .pp-pr-info { flex:1; min-width:150px; }
   .pp-pr-title { font-size:0.95rem; font-weight:700; }
-  .pp-pr-sub { font-size:0.76rem; color:var(--text-muted); margin-top:3px; }
+  .pp-pr-sub { font-size:0.76rem; color:var(--text-muted); margin-top:3px; line-height:1.5; }
   .pp-pr-btns { display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
   .pp-pr-btns .pp-add { padding:8px 14px; }
+  /* One tier per half of the paper (multiple choice / open-ended), set apart
+     from the whole-paper buttons above them by a dashed rule and indented, so
+     the two levels read as different sizes of portion. */
+  .pp-pr-kinds { display:flex; flex-direction:column; gap:10px; margin-left:4px; padding-top:12px; border-top:1px dashed var(--border); }
+  .pp-pr-kind { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .pp-pr-kind-info { flex:1; min-width:150px; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .pp-pr-kind-name { font-size:0.87rem; font-weight:600; }
+  .pp-pr-kind-n { font-size:0.74rem; color:var(--text-muted); }
+  .pp-pr-kind-btns { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   .pp-gamebtn { border-style:solid; background:#fdf4e3; border-color:#c08a2e; color:#7a5410; }
   .pp-year-head .pp-tools { margin-left:auto; }
   .pp-year { padding:12px 0; }
