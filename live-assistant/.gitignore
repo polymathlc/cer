@@ -1,0 +1,7 @@
+functions/node_modules/
+*-debug.log
+.firebase/
+.env*
+.secret*
+!functions/package.json
+!functions/package-lock.json

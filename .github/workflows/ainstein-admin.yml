@@ -1,0 +1,45 @@
+name: Ainstein voice and Rapid Add checks
+on:
+  pull_request:
+    paths: ['app.js', 'index.html', 'ainstein-*.js', 'rapid-duplicates.js', 'live-assistant/**', 'tools/ainstein-*.mjs', 'tools/rapid-duplicates*.mjs', '.github/workflows/ainstein-admin.yml']
+  push:
+    branches: [main]
+    paths: ['app.js', 'index.html', 'ainstein-*.js', 'rapid-duplicates.js', 'live-assistant/**', 'tools/ainstein-*.mjs', 'tools/rapid-duplicates*.mjs', '.github/workflows/ainstein-admin.yml']
+permissions:
+  contents: read
+jobs:
+  assistant:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check application and assistant syntax
+        run: |
+          node --check app.js
+          node --check ainstein-live.js
+          node --check ainstein-admin-agent.js
+          node --check rapid-duplicates.js
+      - name: Check actions, live transport, duplicate safety and grounding
+        run: |
+          node --test tools/ainstein-admin-tests.mjs tools/ainstein-live-tests.mjs tools/ainstein-voice-context-tests.mjs tools/rapid-duplicates-tests.mjs tools/cer-live-server-rules-tests.mjs
+          node tools/teaching-notes-tests.mjs
+          node tools/syllabus-tests.mjs
+      - run: npm ci --prefix live-assistant/functions --no-audit --no-fund
+      - run: npm test --prefix live-assistant/functions
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: Check desktop, mobile, microphone shutdown and duplicate review
+        run: |
+          node tools/ainstein-live-browser.mjs
+          node tools/rapid-duplicates-browser.mjs
+        env:
+          AINSTEIN_QA_DIR: artifacts/ainstein
+          RAPID_SCREENSHOTS: artifacts/ainstein
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ainstein-voice-previews
+          path: artifacts/ainstein
+          if-no-files-found: ignore

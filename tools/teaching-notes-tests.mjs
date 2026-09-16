@@ -14,7 +14,7 @@
 // bug that is impossible to spot from either side.
 import fs from 'fs';
 
-const APP = new URL('../app.js', import.meta.url).pathname;
+const APP = new URL('../app.js', import.meta.url);
 const src = fs.readFileSync(APP, 'utf8');
 const a = src.indexOf('// ---- Which notes belong to THIS app ----');
 const b = src.indexOf('// ---- Teaching Notes page (admin only) ----', a);
