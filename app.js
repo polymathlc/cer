@@ -4342,9 +4342,9 @@ async function loadAdminQuestions() {
 }
 
 onAuthStateChanged(auth, (user) => {
-  ainsteinStopAdminWork();
   pirateRiftPortal.close();
   grandLinePortal.close();
+  ainsteinStopAdminWork();
   if (user) {
     enterApp(user);
   } else {
