@@ -7526,3 +7526,8 @@ restore the preview banner, rollback controls or remote release flag. Preserve
 auth cleanup, subject-specific motion preferences, keyboard navigation and the
 screen-only CSS scope. Keep the shared module and styles in sync with Math.
 Run `node tools/interface-studio-tests.mjs` when changing this integration.
+
+
+## Ai-nstein admin voice and Rapid Add duplicate review (v1.399.0)
+
+The portal imports three bounded modules from app.js: ainstein-live.js for live voice lifecycle/UI, ainstein-admin-agent.js for the named admin action registry and bounded specialist search, and rapid-duplicates.js for conservative bulk-delete matching. Keep these files deployed beside app.js. The app adapter owns all existing navigation, preview and Firestore operations. See AINSTEIN-ADMIN.md and live-assistant/README.md for user behavior, admin-only access, budgets, separate backend deployment and tests. No assistant executes model-generated code. Never weaken the identity checks, practice-as exclusion, duplicate transaction revalidation, or published-bank keeper rule.

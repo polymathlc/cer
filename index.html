@@ -757,6 +757,22 @@ option {
    questions invisible to the whole school, so it says so in its own colour
    rather than borrowing the level picker's. */
 .rapid-level.rapid-release.on { border-color: #6366f1; background: #eef2ff; }
+.rapid-duplicates { margin-top: 18px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; text-align: left; }
+.rapid-duplicates[hidden], .rapid-duplicates [hidden] { display: none !important; }
+.rapid-duplicates h4 { margin: 0 0 8px; font-size: 0.94rem; }
+.rapid-duplicates p { margin: 8px 0 12px; font-size: 0.82rem; line-height: 1.6; }
+.rapid-duplicate-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.rapid-duplicate-controls label { display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; flex: 1 1 140px; }
+.rapid-duplicate-controls input, .rapid-duplicate-controls select { width: 100%; min-width: 0; padding: 9px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface); }
+#rapidDuplicateStatus { margin-top: 12px; font-size: 0.82rem; line-height: 1.6; }
+#rapidDuplicateResults { max-height: 340px; overflow: auto; margin-top: 10px; }
+.rapid-duplicate-pair { border-top: 1px solid var(--border); padding: 12px 0; font-size: 0.8rem; overflow-wrap: anywhere; }
+.rapid-duplicate-pair summary { cursor: pointer; line-height: 1.6; }
+.rapid-duplicate-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+.rapid-duplicate-sides > div { min-width: 0; padding: 10px; border-radius: 8px; background: var(--bg-soft, #f7f9fc); }
+.rapid-duplicate-sides small { color: var(--text-muted); }
+#rapidDuplicateDelete { margin-top: 12px; color: #a1261b; border-color: #d9a19c; }
+@media (max-width: 560px) { .rapid-duplicate-sides { grid-template-columns: 1fr; } }
 /* 🚦 The auto-check switch. A bare checkbox renders as an invisible
    white box — Tailwind's preflight sets `appearance: none` on form controls —
    so it has to ask for its own back, the same trap `.vet-pick` carries. */
@@ -12729,6 +12745,25 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <p id="rapidCloudNote" style="margin:8px 0;line-height:1.6;font-size:0.84rem;" role="status">Checking online processing availability…</p>
       <details><summary>Online PDF jobs</summary><div id="rapidCloudJobs" style="max-height:220px;overflow:auto;" aria-live="polite"></div></details>
     </div>
+    <section id="rapidDuplicates" class="rapid-duplicates" hidden aria-labelledby="rapidDuplicateTitle">
+      <h4 id="rapidDuplicateTitle">Remove duplicate questions</h4>
+      <p>Find extra copies in vetting. Your published question bank is used for comparison and always kept. One original in each matched group stays.</p>
+      <div class="rapid-duplicate-controls">
+        <label for="rapidDuplicatePercent">Minimum similarity (%)
+          <input id="rapidDuplicatePercent" type="number" min="50" max="100" step="1" value="90" onchange="rapidDuplicateSettingsChanged()">
+        </label>
+        <label for="rapidDuplicateScope">Look for extra copies in
+          <select id="rapidDuplicateScope" onchange="rapidDuplicateSettingsChanged()">
+            <option value="vetting">All vetting questions</option>
+            <option value="session">This Rapid Add session</option>
+          </select>
+        </label>
+        <button id="rapidDuplicateScan" type="button" class="btn btn-outline" onclick="rapidDuplicateScan()">Scan duplicates</button>
+      </div>
+      <div id="rapidDuplicateStatus" role="status" aria-live="polite">Choose a percentage, then review the matches before deleting. Different diagrams, answers, numbers and negation are kept for manual review.</div>
+      <div id="rapidDuplicateResults"></div>
+      <button id="rapidDuplicateDelete" type="button" class="btn btn-outline" onclick="rapidDuplicateDelete()" hidden>Delete duplicates</button>
+    </section>
     <div id="rapidStatus" style="margin-top:12px;font-size:0.84rem;color:var(--text-muted);min-height:1.2em;">Click the box above, then paste.</div>
     <div class="btn-group" style="justify-content:space-between;align-items:center;margin-top:14px;">
       <span style="font-size:0.82rem;color:var(--text-muted);">Added <b id="rapidAddedCount" style="color:var(--primary);">0</b> · Processing <b id="rapidProcCount" style="color:var(--accent-orange);">0</b></span>

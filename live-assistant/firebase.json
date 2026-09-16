@@ -1,0 +1,9 @@
+{
+  "functions": [{
+    "source": "functions",
+    "codebase": "cer-ainstein-live",
+    "runtime": "nodejs22",
+    "ignore": ["node_modules", ".git", "*-debug.log", "test", ".env*", ".secret*"],
+    "predeploy": ["npm --prefix \"$RESOURCE_DIR\" test"]
+  }]
+}
