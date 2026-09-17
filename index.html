@@ -4614,6 +4614,33 @@ option {
   gap: 12px;
   padding-top: 10px;
 }
+/* The worksheet builder's own bar sits ABOVE the question list and sticks
+   there, so the controls are neither at the bottom of a hundred questions nor
+   scrolled away the moment you start ticking. --ws-tools-top is measured from
+   the page header rather than guessed per breakpoint (wsSyncToolsTop): the
+   header is two lines of text and its height moves with the font, the wrap and
+   the viewport, and a hard-coded offset is silently wrong at one of them. It
+   sits BELOW the header's z-index 50 and above the cards. Scoped to this page:
+   .ws-question-grid is reused by the community quest picker, which scrolls
+   inside itself and must not gain a sticky bar. */
+#page-worksheet .ws-actions-bar {
+  position: sticky;
+  top: var(--ws-tools-top, 0px);
+  z-index: 20;
+  /* It BLEEDS into .page-body's own side padding, or the question cards scroll
+     visibly through the gutters beside an opaque bar, which reads as broken.
+     --ws-gutter tracks that padding at each breakpoint. */
+  margin: 0 calc(var(--ws-gutter, 36px) * -1) 4px;
+  padding: 12px var(--ws-gutter, 36px) 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+@media (max-width: 768px) { #page-worksheet .ws-actions-bar { --ws-gutter: 12px; } }
+@media (max-width: 640px) {
+  /* Six buttons wrap to three rows on a phone, which would eat most of the
+     screen. There it scrolls with the page, still above the list. */
+  #page-worksheet .ws-actions-bar { position: static; margin-inline: 0; padding-inline: 0; }
+}
 .ws-selected-count {
   font-family: 'Space Mono', monospace;
   font-size: 0.78rem;
@@ -11021,40 +11048,6 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <input type="text" id="wsSearch" placeholder="Search questions..." oninput="renderWsQuestions()">
         </div>
 
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85rem;font-weight:500;">
-            <input type="checkbox" id="wsSelectAll" onchange="toggleWsSelectAll(this.checked)" style="width:16px;height:16px;accent-color:var(--primary);">
-            Select All
-          </label>
-          <span class="ws-selected-count" id="wsSelectedCount">0 selected</span>
-        </div>
-
-        <div class="ws-question-grid" id="wsQuestionGrid"></div>
-
-        <div style="display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;justify-content:center;margin:18px auto 14px;padding:16px 24px;border:1.5px solid var(--border);border-radius:12px;background:var(--surface);max-width:720px;">
-          <span style="font-size:0.78rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">Extras</span>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Add an elegant Polymath cover page with the worksheet title and name / date fields as page 1">
-            <input type="checkbox" id="wsIncludeCover" style="width:16px;height:16px;accent-color:var(--primary);">
-            📄 Cover page
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print the blank Name / Date / Class lines. Turn it off for a clean sheet with no student fields at all.">
-            <input type="checkbox" id="wsIncludeFields" checked style="width:16px;height:16px;accent-color:var(--primary);">
-            ✍️ Name / Date / Class fields
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment.">
-            <input type="checkbox" id="wsIncludeWhy" style="width:16px;height:16px;accent-color:var(--primary);">
-            &#9432; Why the other options are wrong
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print each question's explanation on the answer key, under its answer. Write and edit them from the preview with ✏️ edit answer.">
-            <input type="checkbox" id="wsIncludeExpl" style="width:16px;height:16px;accent-color:var(--primary);">
-            &#128161; Explanations on the answer key
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print a blank rounded box at the foot of every question for the student to write their own learning objectives in. A question that already has a 🎯 Learning Objectives block keeps its own box instead.">
-            <input type="checkbox" id="wsIncludeObjBox" style="width:16px;height:16px;accent-color:var(--primary);">
-            &#127919; Learning-objectives box on every question
-          </label>
-        </div>
-
         <div class="ws-actions-bar">
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn btn-outline" onclick="openWorksheetPreview()" id="wsPreviewBtn" title="Live A4 preview — add page breaks, then print or export PDF">
@@ -11082,6 +11075,40 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             </button>
           </div>
         </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;justify-content:center;margin:18px auto 14px;padding:16px 24px;border:1.5px solid var(--border);border-radius:12px;background:var(--surface);max-width:720px;">
+          <span style="font-size:0.78rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">Extras</span>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Add an elegant Polymath cover page with the worksheet title and name / date fields as page 1">
+            <input type="checkbox" id="wsIncludeCover" style="width:16px;height:16px;accent-color:var(--primary);">
+            📄 Cover page
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print the blank Name / Date / Class lines. Turn it off for a clean sheet with no student fields at all.">
+            <input type="checkbox" id="wsIncludeFields" checked style="width:16px;height:16px;accent-color:var(--primary);">
+            ✍️ Name / Date / Class fields
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment.">
+            <input type="checkbox" id="wsIncludeWhy" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#9432; Why the other options are wrong
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print each question's explanation on the answer key, under its answer. Write and edit them from the preview with ✏️ edit answer.">
+            <input type="checkbox" id="wsIncludeExpl" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#128161; Explanations on the answer key
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print a blank rounded box at the foot of every question for the student to write their own learning objectives in. A question that already has a 🎯 Learning Objectives block keeps its own box instead.">
+            <input type="checkbox" id="wsIncludeObjBox" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#127919; Learning-objectives box on every question
+          </label>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85rem;font-weight:500;">
+            <input type="checkbox" id="wsSelectAll" onchange="toggleWsSelectAll(this.checked)" style="width:16px;height:16px;accent-color:var(--primary);">
+            Select All
+          </label>
+          <span class="ws-selected-count" id="wsSelectedCount">0 selected</span>
+        </div>
+
+        <div class="ws-question-grid" id="wsQuestionGrid"></div>
+
       </div>
     </div>
 
