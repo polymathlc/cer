@@ -6534,7 +6534,103 @@ the card shut at no fixed moment, with nothing on any screen to explain it.
   🎯 objective picker and the attach picker are fixed with the bank.
 - Run **`node tools/hover-preview-tests.mjs`** after touching any of it.
 
+## ✨ ▲▼ ✅ The vetting preview does the rest — enhance, reorder, approve (v1.403.0)
+
+`_pvcOneButtonHtml` / `pvcRun(qid, bid, colour)` / `job.colour` and the
+`'enhance'` recheck reason (in the ✨🎨 block, search `REGENERATE A PICTURE
+FROM A PREVIEW`); `pvoWrapOpen` / **`pvoMove`** / `_pvoSyncEditor` /
+`_pvoRerender` / `_pvoTarget` / `pvoKeydown` / `pvoSelect` /
+**`pvoDecorateDoc`** (search `THE ORDER OF A QUESTION'S ELEMENTS`), the
+`blockTags` option on `buildWorksheetHtml` and the `pvoDecorateDoc(doc)` at the
+foot of `_wsPreviewPack`; `pvsFlushSettled` / `_pvsFlushP`;
+**`vetPrintPeekApprove`** / `_vetPrintPeekRefresh` / `_vetPrintPeekRender` and
+the `data-peek-act` foot buttons in the 👁 peek.
+
+The 👁 hover on a vetting card showed the exported sheet and offered two
+things: open it bigger, or leave for the editor. Three of the commonest fixes
+now happen on the sheet itself, and the card is approved from there.
+
+- **✨ BLACK-AND-WHITE ENHANCE SITS BESIDE 🎨 COLOUR, and they are ONE
+  pipeline.** `_pvcButtonHtml` draws the pair, `pvcRun` takes a third argument
+  (`true` is the 🎨 button, anything else the ✨ one), and `_pvcWork` asks
+  `imgEnhancePrompt(job.colour === true, '')` — the same two prompts the block
+  editor's bar sends, in the same order (✨ first, 🎨 last). **ONE JOB PER
+  PICTURE, WHICHEVER BUTTON STARTED IT**: while a picture is being redrawn the
+  button that started it shows ⏳ and the other is disabled, because two models
+  redrawing one picture is two writes racing for one block. The original is
+  kept on `preColourUrl` either way (the field keeps its name — it is what
+  `pvcRevert` and the queue banner already read), and the recheck says which
+  it was (`why: 'enhance'` / `'colour'`) so ✅ Check Questions does not call an
+  enhance a colourisation.
+- **▲▼ MOVES AN ELEMENT, AND `q.blocks` IS THE ORDER.** `pvoMove` swaps two
+  entries of the question's own array — there is no second list, so the sheet,
+  the practice render and the editor all read the new order on their next
+  paint. It rides the SAME dirty map and flush as the picture size
+  (`_pvsMark` → `pvsFlush`): written when the preview closes, or PVS_IDLE_MS
+  after the last press, or on pagehide, through `saveQuestion` /
+  `saveVettingQuestion`. A second flush would be a second thing to forget on a
+  preview's close.
+  - **THE WRAPPER IS `display:contents`** (`pvoWrapOpen`), so it generates NO
+    box: the planner measures exactly the page it measures without it, and the
+    printed sheet — which never asks for `blockTags` — cannot disagree with the
+    preview over a wrapper only the preview carries. The bar is hung on the
+    element's own first box, absolutely positioned, so it adds no height. Only
+    two call sites pass `blockTags` (the A4 preview and the peek) and the
+    harness counts them.
+  - **THE PREVIEW IS REDRAWN FROM THE QUESTION after a move**, never shuffled
+    in the DOM: the packer decided the page breaks from the old order. The peek
+    rewrites its frame (`_vetPrintPeekRefresh`, same frame, scroll kept, serial
+    bumped so a late callback from the previous render is dropped); the A4
+    preview re-plans.
+  - **↑ / ↓ MOVE THE SELECTED (or hovered) ELEMENT, only while it is on a
+    screen** (`_pvoTarget`). A selection made in a preview closed an hour ago
+    must not move a block from the arrow keys somebody presses to scroll the
+    bank; a press that moved nothing (the top element, ↑) leaves the page free
+    to scroll; a key pressed in a text field is typing.
+  - **THE EDITOR FOLLOWS ONLY WHEN IT HOLDS THIS QUESTION AND ✏️ EDITING MODE
+    IS OFF** (`_pvoSyncEditor`). Duplicated questions share block ids, so a
+    match on the block id alone reorders a different question; in editing mode
+    the global `blocks` is the WHOLE PAPER.
+- **✅ ADD TO QUESTION BANK IS THE CARD'S OWN APPROVE**, reached from the
+  peek: `approveVetting`, the same status stamp, bank write and vetting delete.
+  **THE ORDER IS THE WHOLE FUNCTION.** The peek's own edits sit in `_pvsDirty`
+  waiting for the close to flush them through `saveVettingQuestion`, and the
+  approve deletes the vetting document — a flush landing after that delete puts
+  the document straight back, a question then in the bank AND in vetting. So
+  the question's dirty entry is dropped (the approve's `saveQuestion` writes the
+  whole question, edits included), a flush already in flight is WAITED for
+  (`pvsFlushSettled`), and only then is the card approved. Vetting only: a 🗂️
+  Custom Paper question reaches the bank on Send, held back, never one at a
+  time, so its peek draws no such button and the handler refuses the scope.
+- **THE FOOT IS BOUND BY ACTION** (`data-peek-act`), never by position — a
+  vetting question's peek has one more button than a paper's, and an index
+  re-points its neighbours the day one is added.
+- Run **`node tools/preview-picture-size-tests.mjs`** and
+  **`node tools/vetting-export-hover-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **✨ ▲▼ ✅ the vetting preview's own tools** (`_pvcOneButtonHtml`,
+  `pvcRun`'s third argument, `job.colour`, `pvoWrapOpen`, `pvoMove`,
+  `_pvoSyncEditor`, `_pvoRerender`, `_pvoTarget`, `pvoKeydown`, `pvoSelect`,
+  `pvoDecorateDoc`, the `blockTags` option or its two call sites,
+  `pvsFlushSettled`, `vetPrintPeekApprove`, `_vetPrintPeekRefresh`,
+  `_vetPrintPeekRender`, or the `data-peek-act` foot), run
+  `node tools/preview-picture-size-tests.mjs` **and**
+  `node tools/vetting-export-hover-tests.mjs`. Every failure is silent and the
+  preview still looks right. Let ✨ and 🎨 each run their own job and two models
+  redraw one picture at once, the second write landing on the first; send the
+  colour prompt from the ✨ button and a teacher who asked for black-and-white
+  gets a coloured picture that looks like the feature working. Make the ▲▼
+  wrapper a real box and the planner paginates a page the printer never prints.
+  Pass `blockTags` from a print path and the printed sheet carries it too.
+  Shuffle the DOM instead of redrawing from `q.blocks` and a picture moved
+  above a page break is shown on the wrong page. Let the keys act on a stale
+  selection and scrolling the bank with ↓ moves a block on a question nobody
+  has open. Sync the editor by block id alone and a duplicated question is
+  reordered through another's preview. And on the APPROVE: approve before the
+  flush has settled — or leave the dirty entry in — and the vetting document
+  the approve just deleted is written straight back, a question in the bank
+  and in vetting at once, which is only found on the next sign-in.
 - After touching **👁 the hover preview** (`_ppHoverKey`, `_ppHoverOver`,
   `_ppHoverHasPointer`, `PP_HOVER_GRACE_MS`, `ppHoverEl`'s listeners,
   `_ppHoverOpen`, `ppHoverExpand`'s `settled`, `ppHoverChipLeave`,

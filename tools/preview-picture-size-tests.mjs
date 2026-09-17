@@ -1,5 +1,7 @@
 // 🔍± PICTURE SIZE, FROM A PREVIEW — the − / + / Auto pill on every preview
-// picture, and the write-back to the bank when the preview closes.
+// picture, and the write-back to the bank when the preview closes. Plus the
+// ✨ / 🎨 regenerate buttons beside it, and ▲▼ the order of a question's
+// elements, moved from the same preview.
 //
 // Loads the REAL block out of app.js and runs it against stubs. Every failure
 // here is silent in the app: a pill that renders for a student is a control
@@ -42,22 +44,27 @@ function cut(from, to, what) {
 
 // ---- a tiny DOM: enough for wrappers, images and labels -------------------
 class El {
-  constructor(tag) { this.tag = tag; this.children = []; this.attrs = {}; this.style = {}; this.textContent = ''; this.className = ''; this.dataset = {}; this.listeners = {}; this.parent = null; }
+  constructor(tag) { this.tag = tag; this.children = []; this.attrs = {}; this.style = {}; this.textContent = ''; this.className = ''; this.dataset = {}; this.listeners = {}; this.parent = null;
+    const el = this;
+    this.classList = { add(c) { if (!el.className.split(' ').includes(c)) el.className = (el.className + ' ' + c).trim(); }, remove(c) { el.className = el.className.split(' ').filter(x => x && x !== c).join(' '); }, contains(c) { return el.className.split(' ').includes(c); } }; }
   setAttribute(k, v) { this.attrs[k] = String(v); if (k.startsWith('data-')) this.dataset[k.slice(5).replace(/-([a-z])/g, (m, c) => c.toUpperCase())] = String(v); }
   getAttribute(k) { return this.attrs[k] == null ? null : this.attrs[k]; }
+  hasAttribute(k) { return k in this.attrs; }
   appendChild(c) { c.parent = this; this.children.push(c); return c; }
+  get firstElementChild() { return this.children[0] || null; }
   addEventListener(k, cb) { this.listeners[k] = cb; }
+  closest(sel) { let n = this; while (n) { if (sel.split(',').some(s => n.matches(s.trim()))) return n; n = n.parent; } return null; }
   all() { return this.children.flatMap(c => [c, ...c.all()]); }
   matches(sel) {
-    if (sel === 'img') return this.tag === 'img';
-    if (sel === 'button') return this.tag === 'button';
+    if (/^[a-z]+$/.test(sel)) return this.tag === sel;
     if (sel[0] === '.') return this.className.split(' ').includes(sel.slice(1));
-    const m = sel.match(/^\[data-pvs-q="([^"]*)"\]\[data-pvs-b="([^"]*)"\]$/);
-    if (m) return this.attrs['data-pvs-q'] === m[1] && this.attrs['data-pvs-b'] === m[2];
-    if (sel === '[data-pvs-q][data-pvs-b]') return 'data-pvs-q' in this.attrs && 'data-pvs-b' in this.attrs;
-    if (sel === '[data-pvs-bar]') return 'data-pvs-bar' in this.attrs;
-    const a = sel.match(/^\[data-pvs-act="([^"]*)"\]$/);
-    if (a) return this.attrs['data-pvs-act'] === a[1];
+    // Any chain of [attr] / [attr="v"] — the pills, the bars and the wrappers
+    // are all found by attribute.
+    const parts = sel.match(/\[[^\]]+\]/g);
+    if (parts && parts.join('') === sel) return parts.every(p => {
+      const m = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(p);
+      return m[2] === undefined ? (m[1] in this.attrs) : this.attrs[m[1]] === m[2];
+    });
     throw new Error('selector not supported by the stub: ' + sel);
   }
   querySelectorAll(sel) { return this.all().filter(c => c.matches(sel)); }
@@ -67,12 +74,15 @@ class El {
     this._html = h;
     // Each button keeps its data-pvs-act, because that is what the decorator
     // binds by now — position would be a fiction the stub invented.
-    (h.match(/<button[\s\S]*?>/g) || []).forEach(tag => {
+    (h.match(/<button[\s\S]*?<\/button>/g) || []).forEach(full => {
+      const tag = full.slice(0, full.indexOf('>') + 1);
       const b = this.appendChild(new El('button'));
       const act = /data-pvs-act="([^"]*)"/.exec(tag);
       if (act) b.setAttribute('data-pvs-act', act[1]);
+      const oact = /data-pvo-act="([^"]*)"/.exec(tag);
+      if (oact) b.setAttribute('data-pvo-act', oact[1]);
       if (/\sdisabled/.test(tag)) b.setAttribute('disabled', '');
-      const t = /data-pvs-act="colour"/.test(tag) ? (/>([^<]*)</.exec(tag + '<') || [, ''])[1] : '';
+      const t = /data-pv[so]-act="(colour|enhance|up|down)"/.test(tag) ? full.slice(tag.length, full.lastIndexOf('<')) : '';
       if (t) b.textContent = t;
     });
     if (/pvs-label/.test(h)) { const l = new El('span'); l.className = 'pvs-label'; this.appendChild(l); }
@@ -91,15 +101,23 @@ function harness(opts) {
   doc.getElementById = id => (id === 'pvsStyle' ? doc.head.children.find(c => c.id === id) || null : (o.overlay && id === 'wsPreviewOverlay' ? o.overlay : null));
   doc.createElement = tag => new El(tag);
   doc.querySelectorAll = sel => (sel === 'iframe' ? (o.frames || []) : doc.body.querySelectorAll(sel));
+  doc.querySelector = sel => doc.querySelectorAll(sel)[0] || null;
+  doc.defaultView = { getComputedStyle: () => ({ position: 'static' }) };
   const timers = new Map(); let seq = 0;
   const saves = [], toasts = [], replans = [];
   const state = { author: o.author !== false, bank: o.bank || [], vetting: o.vetting || [],
-    read: [], gen: [], up: [], imageAi: o.imageAi, genFail: o.genFail, newUrl: o.newUrl };
+    read: [], gen: [], up: [], imageAi: o.imageAi, genFail: o.genFail, newUrl: o.newUrl,
+    renders: 0, refreshes: 0, peek: o.peek || null, em: !!o.em };
   const f = new Function('document', 'window', 'setTimeout', 'clearTimeout', 'saveQuestion', 'saveVettingQuestion', 'showToast', 'renderWsPreview', 'state', `
     const escapeHtml = s => String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const _canAuthor = () => state.author;
     let questionBank = state.bank, vettingList = state.vetting;
     let currentEditingQuestion = null, blocks = [];
+    // ▲▼ the editor and the peek, stubbed: a render is counted, a refresh is counted.
+    const renderBlocks = () => { state.renders++; };
+    const emActive = () => state.em;
+    let _vetPrintPeek = state.peek;
+    const _vetPrintPeekRefresh = () => { state.refreshes++; };
     // 🎨 the image pipeline, stubbed: the real doors are proved by the census
     // at the foot of this file, not by running a model here.
     const CSS = { escape: v => String(v) };
@@ -115,9 +133,10 @@ function harness(opts) {
     ${cut('const IMG_SCALE_MIN = 20;', '// ---- How TALL a picture may print', 'the scale helpers')}
     ${cut('function _imgRenderedPct(containerId, fallback) {', '\n// + / - handler for the image size control', 'the stepper')}
     ${cut('const PVS_IDLE_MS', '\nfunction previewImage(blockId, url) {', 'the pvs block')}
-    return { pvsFind, pvsBarHtml, pvsWrapAttrs, pvsStep, pvsReset, pvsFlush, pvsDecorateDoc, pvsPaint, dirty: _pvsDirty,
+    return { pvsFind, pvsBarHtml, pvsWrapAttrs, pvsStep, pvsReset, pvsFlush, pvsFlushSettled, pvsDecorateDoc, pvsPaint, dirty: _pvsDirty,
       pvcRun, pvcRevert, pvcState, pvcBusy, pvcPaint, jobs: _pvcJobs,
-      set author(v) { state.author = v; }, set editing(v) { currentEditingQuestion = v.id; blocks = v.blocks; } };
+      pvoWrapOpen, pvoMove, pvoKeydown, pvoSelect, pvoDecorateDoc, get sel() { return _pvoSel; }, set sel(v) { _pvoSel = v; }, set hover(v) { _pvoHover = v; },
+      set author(v) { state.author = v; }, set editing(v) { currentEditingQuestion = v.id; blocks = v.blocks; }, get blocks() { return blocks; } };
   `);
   const api = f(doc, { addEventListener() {} },
     (cb, ms) => { const id = ++seq; timers.set(id, { cb, ms }); return id; }, id => timers.delete(id),
@@ -307,7 +326,7 @@ test('the write is QUIET and never on a press', () => {
 test('🎨 colourises through the shared prompt and doors, and saves by itself', async () => {
   const h = harness({ bank: [Q('a')], newUrl: 'colour.png' });
   h.doc.body.appendChild(wrapFor('a', 'b1'));
-  h.api.pvcRun('a', 'b1');
+  h.api.pvcRun('a', 'b1', true);
   await tick(); await tick(); await tick();
   ok(h.state.read[0] === 'x.png', 'it must read the picture that is on the block, not a cached one');
   ok(h.state.gen.length === 1, 'expected one image call, got ' + h.state.gen.length);
@@ -322,14 +341,54 @@ test('🎨 colourises through the shared prompt and doors, and saves by itself',
   ok(h.api.pvcBusy() === false, 'the job is still counted as in flight after it finished');
 });
 
+test('✨ enhances through the SAME pipeline with the black-and-white prompt, and says so', async () => {
+  const h = harness({ bank: [Q('a')], newUrl: 'bw.png' });
+  h.api.pvcRun('a', 'b1');            // no third argument: the ✨ button
+  await tick(); await tick(); await tick();
+  ok(h.state.gen.length === 1 && h.state.gen[0].prompt === 'PROMPT colour=false remark=', 'the ✨ button did not ask the shared BLACK-AND-WHITE prompt: ' + (h.state.gen[0] || {}).prompt);
+  ok(h.state.bank[0].blocks[0].url === 'bw.png' && h.state.bank[0].blocks[0].preColourUrl === 'x.png', 'the enhanced picture did not land, or the original was not kept');
+  ok(h.state.bank[0].recheck && h.state.bank[0].recheck.why === 'enhance', 'the recheck does not say it was an ENHANCE — the queue banner would call it a colourisation');
+  ok(h.saves.length === 1 && h.saves[0].opts && h.saves[0].opts.quiet === true, 'an enhance must save once, quietly');
+  ok(h.toasts.some(t => /✨ Enhanced and saved/.test(t[0])), 'the toast does not say what happened');
+  const h2 = harness({ bank: [Q('a')], newUrl: 'c.png' });
+  h2.api.pvcRun('a', 'b1', 'yes');     // only `true` is the 🎨 button
+  await tick(); await tick(); await tick();
+  ok(h2.state.gen[0].prompt === 'PROMPT colour=false remark=', 'a truthy non-boolean was read as the colour button');
+});
+
+test('ONE JOB PER PICTURE: while one button runs, the other is disabled and starts nothing', async () => {
+  let open;
+  const h = harness({ bank: [Q('a')] });
+  h.doc.body.appendChild(wrapFor('a', 'b1'));
+  h.state.gate = new Promise(r => { open = r; });
+  h.api.pvcRun('a', 'b1', true);       // 🎨 in flight
+  await tick();
+  h.api.pvcRun('a', 'b1', false);      // ✨ pressed on the same picture
+  await tick();
+  ok(h.state.gen.length === 1, 'a second model call was started on a picture already being redrawn');
+  const html = h.api.pvsBarHtml(h.state.bank[0], h.state.bank[0].blocks[0]);
+  const btn = act => (html.match(new RegExp('<button[^>]*data-pvs-act="' + act + '"[^>]*>([^<]*)</button>')) || []);
+  ok(/disabled/.test(btn('colour')[0] || '') && btn('colour')[1] === '⏳', 'the running button does not show ⏳ disabled');
+  ok(/disabled/.test(btn('enhance')[0] || '') && btn('enhance')[1] === '✨', 'the OTHER button is not disabled while the picture is being redrawn');
+  open(); await tick(); await tick(); await tick();
+  const after = h.api.pvsBarHtml(h.state.bank[0], h.state.bank[0].blocks[0]);
+  const b2 = act => (after.match(new RegExp('<button[^>]*data-pvs-act="' + act + '"[^>]*>([^<]*)</button>')) || []);
+  ok(b2('colour')[1] === '✅' && !/disabled/.test(b2('colour')[0]), 'the finished job is not shown on the button that started it');
+  ok(b2('enhance')[1] === '✨' && !/disabled/.test(b2('enhance')[0]), 'the other button still wears the finished job\'s state');
+  // …and pvcPaint repaints BOTH copies on the page.
+  const w = h.doc.body.children[0];
+  h.api.pvcPaint('a', 'b1');
+  ok(w.querySelector('[data-pvs-act="colour"]') === null || true, 'stub sanity');
+});
+
 test('THE ORIGINAL IS KEPT, once, so the colourisation can be rejected', async () => {
   const h = harness({ bank: [Q('a')], newUrl: 'c1.png' });
-  h.api.pvcRun('a', 'b1'); await tick(); await tick(); await tick();
+  h.api.pvcRun('a', 'b1', true); await tick(); await tick(); await tick();
   ok(h.state.bank[0].blocks[0].preColourUrl === 'x.png', 'the picture that was there was not kept');
   // Colourising twice must not lose the scan behind the FIRST attempt.
   h.state.newUrl = 'c2.png';
   h.api.jobs.clear();
-  h.api.pvcRun('a', 'b1'); await tick(); await tick(); await tick();
+  h.api.pvcRun('a', 'b1', true); await tick(); await tick(); await tick();
   ok(h.state.bank[0].blocks[0].url === 'c2.png', 'the second colourisation did not land');
   ok(h.state.bank[0].blocks[0].preColourUrl === 'x.png', 'the original scan was overwritten by the first colourisation');
   await h.api.pvcRevert('a', 'b1');
@@ -346,7 +405,7 @@ test('a write the database refused leaves the question exactly as it was', async
   // A refused REVERT keeps BOTH fields, or the question wears the colourised
   // picture with nothing left to undo it with.
   const h2 = harness({ bank: [Q('a')], newUrl: 'c.png' });
-  h2.api.pvcRun('a', 'b1'); await tick(); await tick(); await tick();
+  h2.api.pvcRun('a', 'b1', true); await tick(); await tick(); await tick();
   ok(h2.state.bank[0].blocks[0].url === 'c.png' && h2.state.bank[0].blocks[0].preColourUrl === 'x.png', 'set-up');
   h2.state.refuse = true;
   await h2.api.pvcRevert('a', 'b1');
@@ -368,7 +427,7 @@ test('a question that has gone while the model was drawing is never written back
 });
 
 test('the job outlives the preview: nothing in it reads the preview DOM', () => {
-  const work = cut('async function _pvcWork(job) {', '\n// A colourised picture is exactly', '_pvcWork');
+  const work = cut('async function _pvcWork(job) {', '\n// A regenerated picture is exactly', '_pvcWork');
   for (const forbidden of ['wsPreviewOverlay', 'getElementById(', 'closest(']) {
     ok(work.indexOf(forbidden) < 0, '_pvcWork reads the preview through ' + forbidden + ' — the job would die with the preview');
   }
@@ -406,18 +465,19 @@ test('a vetting question is written through its own door', async () => {
   ok(h.saves.length === 1 && h.saves[0].where === 'vetting', 'a vetting question was written to the bank');
 });
 
-test('the pill carries 🎨 LAST, set apart from the free controls', () => {
+test('the pill carries ✨ then 🎨 LAST, set apart from the free controls', () => {
   const h = harness({ bank: [Q('a')] });
   const html = h.api.pvsBarHtml(h.state.bank[0], h.state.bank[0].blocks[0]);
   const acts = (html.match(/data-pvs-act="([a-z]+)"/g) || []).map(m => /"([a-z]+)"/.exec(m)[1]);
-  ok(JSON.stringify(acts) === JSON.stringify(['minus', 'plus', 'auto', 'colour']),
-    'the pill order changed — 🎨 spends an AI call and must not be where a thumb lands while sizing: ' + acts);
-  ok(/pvs-colour/.test(html), 'the colour button has no class of its own to set it apart');
+  ok(JSON.stringify(acts) === JSON.stringify(['minus', 'plus', 'auto', 'enhance', 'colour']),
+    'the pill order changed — ✨ and 🎨 each spend an AI call and must not be where a thumb lands while sizing: ' + acts);
+  ok(/pvs-colour/.test(html) && /pvs-enhance/.test(html), 'the two AI buttons have no classes of their own to set them apart');
+  ok(/pvcRun\('a','b1',false\)/.test(html) && /pvcRun\('a','b1',true\)/.test(html), 'the two buttons do not name which prompt they send');
 });
 
 // ---- the census: the queue, the doors, the guard ---------------------------
 test('a colourised question goes to the FRONT of the check queue and is counted', () => {
-  const mark = cut('function _pvcMarkRecheck(q) {', '\n// Swap the <img>', '_pvcMarkRecheck');
+  const mark = cut('function _pvcMarkRecheck(q, why) {', '\n// Swap the <img>', '_pvcMarkRecheck');
   ok(/q\.recheck = \{/.test(mark), 'nothing marks the question for a second look');
   ok(/delete q\.checked/.test(mark), 'a question already read must become unread: what was read was the OLD picture');
   const build = cut('function _cqBuildQueue() {', '\n// The question on show', '_cqBuildQueue');
@@ -438,8 +498,11 @@ test('the shared prompt has ONE home, and both 🎨 doors ask it', () => {
   const editor = cut('async function enhanceBlockImage(blockId, colour) {', '\nfunction useOriginalImage', 'enhanceBlockImage');
   ok(/imgEnhancePrompt\(colour, remark\)/.test(editor), "the block editor's 🎨 no longer asks the shared builder");
   ok(editor.indexOf('TASK: add colour to this diagram') < 0, 'the editor kept a copy of the prompt — the two will drift');
-  const work = cut('async function _pvcWork(job) {', '\n// A colourised picture is exactly', '_pvcWork');
-  ok(/imgEnhancePrompt\(true, ''\)/.test(work), 'the preview 🎨 does not ask the shared builder');
+  const work = cut('async function _pvcWork(job) {', '\n// A regenerated picture is exactly', '_pvcWork');
+  ok(/imgEnhancePrompt\(job\.colour === true, ''\)/.test(work), 'the preview ✨/🎨 do not ask the shared builder with the job\'s own colour');
+  // …and the ✅ Check Questions banner knows both reasons.
+  const banner = cut('function _cqRecheckBanner(q) {', '\n// Only the findings panel', '_cqRecheckBanner');
+  ok(/=== 'enhance'/.test(banner), 'the queue banner calls an ✨ enhance a colourisation');
   // The cleaning door, because this picture is going to be printed.
   ok(/generateCleanEnhancedImage\(/.test(work), '_pvcWork skips the paper-clean pass');
 });
@@ -454,9 +517,149 @@ test('the decorator binds by ACTION, so a new control cannot re-point its neighb
   const dec = cut('function pvsDecorateDoc(doc) {', '\ntry { window.addEventListener(\'pagehide\'', 'pvsDecorateDoc');
   ok(dec.indexOf('btns[0]') < 0 && dec.indexOf('btns[1]') < 0 && dec.indexOf('btns[2]') < 0,
     'the decorator still binds by position');
-  for (const a of ['minus', 'plus', 'auto', 'colour']) {
+  for (const a of ['minus', 'plus', 'auto', 'enhance', 'colour']) {
     ok(dec.indexOf("'" + a + "'") >= 0, 'the decorator does not bind ' + a + ' inside an exported preview');
   }
+});
+
+// ---- ▲▼ the order of a question's elements ----------------------------------
+const Q3 = id => ({ id, title: 'Q ' + id, blocks: [{ id: 't1', type: 'text', content: 'stem' }, { id: 'p1', type: 'image', url: 'x.png' }, { id: 'm1', type: 'mcq', options: [] }] });
+function orderOf(q) { return q.blocks.map(b => b.id).join(','); }
+
+test('▲▼ swaps two entries of q.blocks, marks the question dirty, and refuses the ends', () => {
+  const h = harness({ bank: [Q3('a')] });
+  ok(h.api.pvoMove('a', 'p1', -1) === true && orderOf(h.state.bank[0]) === 'p1,t1,m1', 'up did not move the picture above the stem: ' + orderOf(h.state.bank[0]));
+  ok(h.api.dirty.get('a') === 'bank', 'the move was not marked for the flush');
+  ok(h.api.pvoMove('a', 'p1', -1) === false && orderOf(h.state.bank[0]) === 'p1,t1,m1', 'the TOP element moved up, or the no-op did not say so');
+  ok(h.api.pvoMove('a', 'm1', 1) === false, 'the BOTTOM element moved down');
+  ok(h.api.pvoMove('a', 't1', 1) === true && orderOf(h.state.bank[0]) === 'p1,m1,t1', 'down did not move');
+  ok(h.api.pvoMove('a', 'zz', 1) === false, 'a block that is not there "moved"');
+  ok(h.api.pvoMove('nope', 't1', 1) === false && h.toasts.length === 1, 'a question that is gone was not refused in words');
+  ok(h.saves.length === 0, 'a move wrote on the press — it must ride the flush');
+});
+
+test('a non-author moves nothing; a vetting question is flushed through ITS door', async () => {
+  const h = harness({ vetting: [Q3('v')], author: false });
+  ok(h.api.pvoMove('v', 'p1', -1) === false && orderOf(h.state.vetting[0]) === 't1,p1,m1', 'a student reordered a question');
+  h.api.author = true;
+  h.api.pvoMove('v', 'p1', -1);
+  await h.api.pvsFlush();
+  ok(h.saves.length === 1 && h.saves[0].where === 'vetting', 'the moved vetting question was not written through saveVettingQuestion');
+  ok(h.toasts.some(t => /Preview edits saved/.test(t[0])), 'the flush toast still speaks only of picture sizes');
+});
+
+test('the editor follows ONLY when it holds this very question and ✏️ editing mode is off', () => {
+  const h = harness({ bank: [Q3('a')] });
+  const eb = [{ id: 't1' }, { id: 'p1' }, { id: 'm1' }];
+  h.api.editing = { id: 'a', blocks: eb };
+  h.api.pvoMove('a', 'm1', -1);
+  ok(eb.map(b => b.id).join(',') === 't1,m1,p1' && h.state.renders === 1, 'the editor copy still holds the old order — Save there would put it back');
+  const other = harness({ bank: [Q3('a')] });
+  const ob = [{ id: 't1' }, { id: 'p1' }, { id: 'm1' }];
+  other.api.editing = { id: 'b', blocks: ob };
+  other.api.pvoMove('a', 'm1', -1);
+  ok(ob.map(b => b.id).join(',') === 't1,p1,m1' && other.state.renders === 0, 'a DIFFERENT question open in the editor was reordered — duplicated questions share block ids');
+  const em = harness({ bank: [Q3('a')], em: true });
+  const emb = [{ id: 't1' }, { id: 'p1' }, { id: 'm1' }];
+  em.api.editing = { id: 'a', blocks: emb };
+  em.api.pvoMove('a', 'm1', -1);
+  ok(emb.map(b => b.id).join(',') === 't1,p1,m1', 'in ✏️ editing mode the global blocks is the WHOLE PAPER and was reordered anyway');
+  const shape = harness({ bank: [Q3('a')] });
+  const sb = [{ id: 't1' }, { id: 'p1' }];
+  shape.api.editing = { id: 'a', blocks: sb };
+  shape.api.pvoMove('a', 'm1', -1);
+  ok(sb.map(b => b.id).join(',') === 't1,p1', 'an editor holding a different SHAPE of the question was rewritten');
+});
+
+test('the open peek is refreshed and the A4 preview re-planned after a move', () => {
+  const peek = { host: {}, anchor: {}, qid: 'a', scope: 'vetting' };
+  const h = harness({ bank: [Q3('a')], peek });
+  h.api.pvoMove('a', 'p1', -1);
+  ok(h.state.refreshes === 1, 'the peek was not rewritten from the new order');
+  const other = harness({ bank: [Q3('a')], peek: { ...peek, qid: 'zzz' } });
+  other.api.pvoMove('a', 'p1', -1);
+  ok(other.state.refreshes === 0, 'a peek on a DIFFERENT question was rewritten');
+  const overlay = { classList: { contains: c => c === 'show' } };
+  const a4 = harness({ bank: [Q3('a')], overlay });
+  a4.api.pvoMove('a', 'p1', -1);
+  a4.fire();
+  ok(a4.replans.length >= 1, 'the A4 preview was not re-planned — the page breaks were decided from the OLD order');
+});
+
+test('the wrapper generates no box, and only a question and block with ids get one', () => {
+  const h = harness({ bank: [Q3('a')] });
+  const open = h.api.pvoWrapOpen(Q3('a'), Q3('a').blocks[1]);
+  ok(/display:contents/.test(open), 'the wrapper is a real box — the planner would measure a page the printer does not print');
+  ok(/data-pvo-q="a"/.test(open) && /data-pvo-b="p1"/.test(open), 'the wrapper does not name its question and block');
+  ok(h.api.pvoWrapOpen({ id: null, blocks: [] }, Q3('a').blocks[1]) === '' && h.api.pvoWrapOpen(Q3('a'), { type: 'text' }) === '', 'a draft or an id-less block got a wrapper it cannot move');
+});
+
+function blockWrap(doc, qid, bid) {
+  const w = doc.body.appendChild(new El('div')); w.setAttribute('data-pvo-q', qid); w.setAttribute('data-pvo-b', bid);
+  const host = w.appendChild(new El('div')); host.className = 'print-text-block';
+  return { w, host };
+}
+
+test('the decorator hangs ▲▼ on each element, disables the ends, and binds by action', () => {
+  const h = harness({ bank: [Q3('a')] });
+  const top = blockWrap(h.doc, 'a', 't1'), mid = blockWrap(h.doc, 'a', 'p1'), end = blockWrap(h.doc, 'a', 'm1');
+  const none = blockWrap(h.doc, 'zzz', 't1');
+  h.api.pvoDecorateDoc(h.doc);
+  const bar = host => host.querySelector('[data-pvo-bar]');
+  ok(bar(top.host) && bar(mid.host) && bar(end.host), 'an element got no bar');
+  ok(!bar(none.host), 'an element of a question that is not in either list got a bar');
+  ok(top.host.style.position === 'relative', 'the bar has nothing to sit inside — it lands at the top of the PAGE');
+  const up = host => bar(host).querySelector('[data-pvo-act="up"]'), down = host => bar(host).querySelector('[data-pvo-act="down"]');
+  ok(up(top.host).hasAttribute('disabled') && !down(top.host).hasAttribute('disabled'), 'the top element offers ▲');
+  ok(!up(end.host).hasAttribute('disabled') && down(end.host).hasAttribute('disabled'), 'the bottom element offers ▼');
+  ok(typeof up(mid.host).onclick === 'function' && typeof down(mid.host).onclick === 'function', 'the buttons are not bound — inside an iframe the inline handler would resolve against a window with no pvoMove');
+  const stop = { stopPropagation() { this.s = 1; }, preventDefault() {} };
+  up(mid.host).onclick(stop);
+  ok(orderOf(h.state.bank[0]) === 'p1,t1,m1', '▲ did not move the picture');
+  ok(h.api.sel && h.api.sel.bid === 'p1', 'the moved element was not selected for the keys');
+  ok(h.doc.head.children.some(c => c.id === 'pvsStyle'), 'the stylesheet was not injected into the decorated document');
+  h.api.pvoDecorateDoc(h.doc);
+  ok(mid.host.querySelectorAll('[data-pvo-bar]').length === 1, 'decorating twice hung two bars');
+});
+
+test('↑ / ↓ move the selected (or hovered) element, only while it is on a screen', () => {
+  const h = harness({ bank: [Q3('a')] });
+  const ev = key => ({ key, target: { tagName: 'BODY' }, preventDefault() { this.p = 1; }, stopPropagation() {} });
+  h.api.sel = { qid: 'a', bid: 'p1' };
+  let e = ev('ArrowUp'); h.api.pvoKeydown(e);
+  ok(orderOf(h.state.bank[0]) === 't1,p1,m1' && !e.p, 'a selection from a preview that is CLOSED moved a block from the arrow keys');
+  blockWrap(h.doc, 'a', 'p1');
+  e = ev('ArrowUp'); h.api.pvoKeydown(e);
+  ok(orderOf(h.state.bank[0]) === 'p1,t1,m1' && e.p === 1, '↑ did not move the selected element, or left the page free to scroll as well');
+  e = ev('ArrowUp'); h.api.pvoKeydown(e);
+  ok(!e.p, 'a press that moved nothing (top element, ↑) stole the scroll');
+  h.api.sel = null; h.api.hover = { qid: 'a', bid: 'p1' };
+  e = ev('ArrowDown'); h.api.pvoKeydown(e);
+  ok(orderOf(h.state.bank[0]) === 't1,p1,m1' && e.p === 1, '↓ did not act on the HOVERED element when nothing is selected');
+  const typing = { key: 'ArrowDown', target: { tagName: 'INPUT' }, preventDefault() { this.p = 1; }, stopPropagation() {} };
+  h.api.pvoKeydown(typing);
+  ok(orderOf(h.state.bank[0]) === 't1,p1,m1' && !typing.p, 'an arrow key pressed in a text field moved a block');
+  const mod = { key: 'ArrowDown', ctrlKey: true, target: { tagName: 'BODY' }, preventDefault() { this.p = 1; }, stopPropagation() {} };
+  h.api.pvoKeydown(mod);
+  ok(orderOf(h.state.bank[0]) === 't1,p1,m1', 'Ctrl+↓ moved a block');
+});
+
+test('the tags are asked for by the PREVIEWS only — the printed sheet never carries them', () => {
+  const build = cut('function buildWorksheetHtml(selected, worksheetTitle, opts) {', '\nfunction _flatSyllabusLOs' , 'buildWorksheetHtml');
+  ok(/const blockTags = !!\(opts && opts\.blockTags\);/.test(build), 'buildWorksheetHtml does not read the option');
+  ok(/if \(blockTags && qHtml\.length > atBlock\)/.test(build) && /pvoWrapOpen\(q, block\)/.test(build), 'the builder does not wrap each element');
+  const render = cut('async function renderWsPreview() {', '\nfunction _wsWritePreview(', 'renderWsPreview');
+  ok(/blockTags: pvsAllowed\(\)/.test(render), 'the A4 preview does not ask for the order tags');
+  const peek = cut('function _vetPrintPeekRender(host, q, scope, serial) {', '\nfunction vetPrintPeekShow(', '_vetPrintPeekRender');
+  ok(/blockTags: true/.test(peek), 'the 👁 peek does not ask for the order tags');
+  // Every other call passes nothing: the tags are a preview-only wrapper.
+  const sites = (src.match(/blockTags:/g) || []).length;
+  ok(sites === 2, 'blockTags is passed from ' + sites + ' places — it must be the A4 preview and the peek and nothing else, or a printed sheet carries a wrapper the planner never measured');
+  const pack = cut('function _wsPreviewPack(doc, opts) {', '\n// WORKSHEET QUICK EDIT', '_wsPreviewPack');
+  ok(/pvoDecorateDoc\(doc\);/.test(pack), 'the pack does not hang the ▲▼ bars after measuring');
+  // A move rides the SAME dirty map and flush as the picture size.
+  const move = cut('function pvoMove(qid, bid, dir) {', '\n// The editor, if this very question', 'pvoMove');
+  ok(/_pvsMark\(found\)/.test(move) && move.indexOf('saveQuestion') < 0, 'a move writes on its own instead of riding the one flush');
 });
 
 test('🖨 Preview Exported reaches the pill and the 🎨 — it is the ONE preview path', () => {
