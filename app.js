@@ -3867,7 +3867,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.401.0';
+const APP_VERSION = 'v1.402.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -9255,6 +9255,11 @@ const PVS_CSS = `
 .pvs-btn{width:22px;height:22px;border:0;border-radius:999px;background:transparent;font-family:inherit;font-size:14px;font-weight:700;line-height:1;color:#333;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
 .pvs-btn:hover{background:rgba(0,0,0,.08)}
 .pvs-btn.pvs-auto{width:auto;padding:0 7px;font-size:10px;font-weight:600;color:#555}
+/* 🎨 is separated by a hairline and set apart, because the three controls to
+   its left are instant and free and this one spends an AI call. It must not be
+   what a thumb lands on while sizing a picture. */
+.pvs-btn.pvs-colour{margin-left:3px;padding-left:5px;border-left:1px solid rgba(0,0,0,.14);border-radius:0 999px 999px 0;width:26px;font-size:13px}
+.pvs-btn.pvs-colour[disabled]{opacity:.65;cursor:progress}
 .pvs-label{min-width:34px;text-align:center;font-variant-numeric:tabular-nums}
 @media print{.pvs-bar{display:none!important}}`;
 function pvsAllowed() { try { return !!_canAuthor(); } catch (_) { return false; } }
@@ -9286,10 +9291,11 @@ function pvsEnsureCss(doc) {
 }
 function _pvsButtonsHtml(qid, bid, block) {
   const q = escapeHtml(String(qid)), b = escapeHtml(String(bid));
-  return `<button type="button" class="pvs-btn" aria-label="Smaller picture" title="Smaller (−5%)" onclick="event.stopPropagation();pvsStep('${q}','${b}',-1)">−</button>
+  return `<button type="button" class="pvs-btn" data-pvs-act="minus" aria-label="Smaller picture" title="Smaller (−5%)" onclick="event.stopPropagation();pvsStep('${q}','${b}',-1)">−</button>
     <span class="pvs-label">${escapeHtml(imgSizeLabelText(block))}</span>
-    <button type="button" class="pvs-btn" aria-label="Larger picture" title="Larger (+5%)" onclick="event.stopPropagation();pvsStep('${q}','${b}',1)">+</button>
-    <button type="button" class="pvs-btn pvs-auto" aria-label="Back to automatic size" title="Back to Auto" onclick="event.stopPropagation();pvsReset('${q}','${b}')">Auto</button>`;
+    <button type="button" class="pvs-btn" data-pvs-act="plus" aria-label="Larger picture" title="Larger (+5%)" onclick="event.stopPropagation();pvsStep('${q}','${b}',1)">+</button>
+    <button type="button" class="pvs-btn pvs-auto" data-pvs-act="auto" aria-label="Back to automatic size" title="Back to Auto" onclick="event.stopPropagation();pvsReset('${q}','${b}')">Auto</button>
+    ${_pvcButtonHtml(qid, bid)}`;
 }
 // The pill as rendered INTO a preview's own markup. Empty for anyone who is not
 // an author, for a question with no id (an editor draft) and for a block with
@@ -9434,10 +9440,15 @@ function pvsDecorateDoc(doc) {
       bar.innerHTML = _pvsButtonsHtml(qid, bid, block);
       // The inline onclick above resolves against the IFRAME's window, which
       // has no pvsStep — so the handlers are bound here, to this document's.
-      const btns = bar.querySelectorAll('button');
-      btns[0].onclick = e => { e.stopPropagation(); pvsStep(qid, bid, -1); };
-      btns[1].onclick = e => { e.stopPropagation(); pvsStep(qid, bid, 1); };
-      btns[2].onclick = e => { e.stopPropagation(); pvsReset(qid, bid); };
+      // By ACTION, never by position: the pill has four controls now, and
+      // binding by index re-points its neighbours' handlers the day a fifth is
+      // added, which is a button that quietly does somebody else's job.
+      const act = name => bar.querySelector('[data-pvs-act="' + name + '"]');
+      const bind = (name, fn) => { const el = act(name); if (el) el.onclick = e => { e.stopPropagation(); fn(); }; };
+      bind('minus', () => pvsStep(qid, bid, -1));
+      bind('plus', () => pvsStep(qid, bid, 1));
+      bind('auto', () => pvsReset(qid, bid));
+      bind('colour', () => pvcRun(qid, bid));
       bar.addEventListener('pointerdown', e => e.stopPropagation());
       const view = doc.defaultView;
       if (view && view.getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
@@ -9448,6 +9459,230 @@ function pvsDecorateDoc(doc) {
   } catch (e) { console.warn('preview picture pills', e); }
 }
 try { window.addEventListener('pagehide', () => { pvsFlush(); }); } catch (_) {}
+
+// =====================================================================
+// 🎨 COLOURISE A PICTURE FROM A PREVIEW — in the background, saved by itself
+// ---------------------------------------------------------------------
+// Beside the − / + / Auto size pill, every preview carries a 🎨 button that
+// regenerates that picture in colour. It is the same job the block editor's
+// 🎨 Enhance with colour does, reached without opening the question at all —
+// which is the whole point: a teacher reading a sheet can fix the pictures on
+// it from where they are reading.
+//
+// - IT RUNS IN THE BACKGROUND AND SURVIVES THE PREVIEW CLOSING. An image call
+//   is 10–25 seconds and a preview is a thing you glance at, so a job that
+//   needed the preview to stay open would be cancelled by the very next click.
+//   Nothing in `_pvcWork` touches the preview's DOM: the repaint is best
+//   effort, the WRITE is not.
+// - THE QUESTION IS RE-RESOLVED BY ID AT WRITE TIME (`pvsFind`), never held
+//   across the await. `questionBank` is re-read and re-assigned wholesale
+//   elsewhere, so an object captured before a 20-second call can be writing
+//   into an array nothing renders any more.
+// - IT IS THE SAME PROMPT (`imgEnhancePrompt`) AND THE SAME DOORS as the
+//   editor's button: `generateCleanEnhancedImage` (which takes the paper-clean
+//   pass, because this picture is going to be printed), `uploadImageDataUrl`,
+//   and `saveQuestion` / `saveVettingQuestion`. A second pipeline here would
+//   drift from the editor's, and the symptom is one picture coming back two
+//   different ways depending on which button was pressed.
+// - THE ORIGINAL IS KEPT ON THE BLOCK (`preColourUrl`) — that is what makes
+//   "vet the colourised image" mean anything. Without it, rejecting a bad
+//   colourisation means finding and re-uploading the original by hand.
+//   Uploads are content-addressed and nothing in this app deletes one, so the
+//   old URL keeps working. It is set ONCE: colourising twice must not lose the
+//   scan behind the first attempt.
+// - AND THE QUESTION GOES TO THE FRONT OF ✅ CHECK QUESTIONS (`q.recheck`).
+//   A picture redrawn by a model is exactly the thing a person has to look at,
+//   and a queue ordered newest-first would bury it under every question added
+//   since. See `_cqBuildQueue`.
+// - ONLY AN AUTHOR, CHECKED IN THE HANDLER. A student's device renders the
+//   very same preview, and a hidden button is never the lock.
+// =====================================================================
+const PVC_PAR = 2;               // image calls in flight at once
+const _pvcJobs = new Map();      // 'qid|bid' -> { qid, bid, state, error }
+let _pvcRunning = 0;
+const _pvcWaiting = [];
+function _pvcKey(qid, bid) { return String(qid) + '|' + String(bid); }
+function pvcState(qid, bid) { return (_pvcJobs.get(_pvcKey(qid, bid)) || {}).state || ''; }
+// What the unload guard asks: a job still in flight is the ONE way this loses
+// work, because the picture exists only in a model's reply until it is written.
+function pvcBusy() { return _pvcRunning > 0 || _pvcWaiting.length > 0; }
+
+// The button as it sits inside the pill. It is deliberately the LAST control:
+// − / + / Auto are instant and free, and this one spends an AI call, so it
+// must not be the thing a thumb lands on while sizing a picture.
+function _pvcButtonHtml(qid, bid) {
+  const q = escapeHtml(String(qid)), b = escapeHtml(String(bid));
+  const st = pvcState(qid, bid);
+  const label = st === 'running' ? '⏳' : (st === 'done' ? '✅' : (st === 'error' ? '⚠️' : '🎨'));
+  const title = st === 'running' ? 'Colourising this picture… it finishes even if you close this preview'
+    : st === 'done' ? 'Colourised and saved — it is waiting at the top of ✅ Check Questions'
+    : st === 'error' ? 'That colourisation failed — press to try again'
+    : 'Regenerate this picture in colour. It runs in the background, saves itself, and goes to the front of ✅ Check Questions.';
+  return `<button type="button" class="pvs-btn pvs-colour" data-pvs-act="colour"${st === 'running' ? ' disabled' : ''}
+    aria-label="Colourise this picture" title="${escapeHtml(title)}"
+    onclick="event.stopPropagation();pvcRun('${q}','${b}')">${label}</button>`;
+}
+
+// Repaint the button on EVERY copy of this picture on the page, the app's own
+// document and any exported-preview iframe alike, so a job started in the
+// hover and the A4 sheet underneath it cannot show two different states.
+function pvcPaint(qid, bid) {
+  const sel = `[data-pvs-q="${CSS && CSS.escape ? CSS.escape(String(qid)) : String(qid)}"][data-pvs-b="${CSS && CSS.escape ? CSS.escape(String(bid)) : String(bid)}"]`;
+  const docs = [document];
+  try {
+    document.querySelectorAll('iframe').forEach(f => {
+      try { if (f.contentDocument) docs.push(f.contentDocument); } catch (_) {}
+    });
+  } catch (_) {}
+  const fresh = _pvcButtonHtml(qid, bid);
+  docs.forEach(d => {
+    try {
+      d.querySelectorAll(sel).forEach(wrap => {
+        wrap.querySelectorAll('[data-pvs-act="colour"]').forEach(btn => {
+          const tmp = d.createElement('div');
+          tmp.innerHTML = fresh;
+          const next = tmp.firstElementChild;
+          if (!next) return;
+          btn.textContent = next.textContent;
+          btn.title = next.title;
+          btn.disabled = next.hasAttribute('disabled');
+        });
+      });
+    } catch (_) {}
+  });
+}
+
+function pvcRun(qid, bid) {
+  if (!pvsAllowed()) { showToast('Only an author can change a question\'s picture', 'error'); return; }
+  const key = _pvcKey(qid, bid);
+  const job = _pvcJobs.get(key);
+  if (job && (job.state === 'running' || job.state === 'queued')) return;   // already on its way
+  const found = pvsFind(qid);
+  const block = _pvsBlock(found, bid);
+  if (!block || !block.url) { showToast('That picture is no longer on this question', 'error'); return; }
+  if (!imageAiReady()) { showToast('Image AI is not available in this project', 'error'); return; }
+  _pvcJobs.set(key, { qid: String(qid), bid: String(bid), state: 'queued' });
+  _pvcWaiting.push(key);
+  pvcPaint(qid, bid);
+  showToast('🎨 Colourising in the background — you can close this preview', 'info');
+  _pvcPump();
+}
+
+function _pvcPump() {
+  while (_pvcRunning < PVC_PAR && _pvcWaiting.length) {
+    const key = _pvcWaiting.shift();
+    const job = _pvcJobs.get(key);
+    if (!job || job.state !== 'queued') continue;
+    job.state = 'running';
+    _pvcRunning++;
+    pvcPaint(job.qid, job.bid);
+    _pvcWork(job)
+      .then(() => { job.state = 'done'; job.error = ''; })
+      .catch(e => {
+        console.warn('preview colourise:', e);
+        job.state = 'error';
+        job.error = (e && e.message) || String(e);
+        showToast('Colourise failed: ' + job.error, 'error');
+      })
+      .finally(() => {
+        _pvcRunning--;
+        pvcPaint(job.qid, job.bid);
+        _pvcPump();
+      });
+  }
+}
+
+async function _pvcWork(job) {
+  const before = pvsFind(job.qid);
+  const beforeBlock = _pvsBlock(before, job.bid);
+  if (!beforeBlock || !beforeBlock.url) throw new Error('that picture is no longer on the question');
+  const sourceUrl = beforeBlock.url;
+
+  const dataUrl = await _urlToDataUrlRobust(transformImageUrl(sourceUrl));
+  const parsed = _parseImageDataUrl(dataUrl);
+  if (!parsed) throw new Error('could not read the picture');
+  // Through the cleaning door: the model's decoder leaves a faint weave on the
+  // white it paints, and this picture is going to be printed.
+  const outDataUrl = await generateCleanEnhancedImage(imgEnhancePrompt(true, ''),
+    [{ mimeType: parsed.mime, data: dataUrl.split(',')[1] || '' }]);
+  const url = await uploadImageDataUrl(outDataUrl);
+
+  // Re-resolve: twenty seconds have passed, and `questionBank` is re-assigned
+  // wholesale elsewhere. Writing into the object captured above would be a
+  // write nothing on screen ever reflects.
+  const found = pvsFind(job.qid);
+  const block = _pvsBlock(found, job.bid);
+  if (!found || !block) throw new Error('that question has gone since the colourising started');
+  // Set ONCE — colourising twice must not lose the original scan.
+  if (!block.preColourUrl && sourceUrl) block.preColourUrl = sourceUrl;
+  block.url = url;
+  _pvcMarkRecheck(found.q);
+
+  const ok = found.where === 'vetting'
+    ? await saveVettingQuestion(found.q)
+    : await saveQuestion(found.q, { quiet: true });
+  if (ok === false) {
+    block.url = sourceUrl;   // the screen must not claim a picture the database refused
+    throw new Error('the colourised picture could not be saved');
+  }
+  try { pvsPaint(job.qid, job.bid, block); } catch (_) {}
+  try { _pvcSwapImages(job.qid, job.bid, url); } catch (_) {}
+  try { _cqUpdateBadge(); } catch (_) {}
+  showToast('🎨 Colourised and saved — it is at the top of ✅ Check Questions', 'success');
+}
+
+// A colourised picture is exactly the thing a person has to look at, so the
+// question goes to the FRONT of the check queue rather than to the back of a
+// newest-first one, where everything added since would bury it.
+function _pvcMarkRecheck(q) {
+  if (!q) return;
+  q.recheck = {
+    at: new Date().toISOString(),
+    why: 'colour',
+    by: (currentUser && currentUser.uid) || ''
+  };
+  // A question already read is unread again: what was read was the old picture.
+  delete q.checked;
+}
+
+// Swap the <img> on every copy on the page, here and in any exported-preview
+// iframe. The write has already landed, so this is only so the teacher sees it
+// without reopening anything.
+function _pvcSwapImages(qid, bid, url) {
+  const esc = v => (CSS && CSS.escape ? CSS.escape(String(v)) : String(v));
+  const sel = `[data-pvs-q="${esc(qid)}"][data-pvs-b="${esc(bid)}"] img`;
+  const docs = [document];
+  try { document.querySelectorAll('iframe').forEach(f => { try { if (f.contentDocument) docs.push(f.contentDocument); } catch (_) {} }); } catch (_) {}
+  const next = transformImageUrl(url);
+  docs.forEach(d => { try { d.querySelectorAll(sel).forEach(img => { img.src = next; }); } catch (_) {} });
+}
+
+// ↩ Put the original back. The colourisation is the thing being vetted, so
+// rejecting it has to be one press — and it is what `preColourUrl` is for.
+async function pvcRevert(qid, bid) {
+  if (!pvsAllowed()) return;
+  const found = pvsFind(qid);
+  const block = _pvsBlock(found, bid);
+  if (!found || !block || !block.preColourUrl) { showToast('There is no earlier picture to go back to', 'error'); return; }
+  const colourised = block.url, original = block.preColourUrl;
+  block.url = original;
+  delete block.preColourUrl;
+  const ok = found.where === 'vetting'
+    ? await saveVettingQuestion(found.q)
+    : await saveQuestion(found.q, { quiet: true });
+  if (ok === false) {
+    // BOTH fields go back. Restoring only the url would leave the question
+    // wearing the colourised picture with nothing left to revert it with.
+    block.url = colourised;
+    block.preColourUrl = original;
+    showToast('Could not put the original picture back — try again', 'error');
+    return;
+  }
+  _pvcJobs.delete(_pvcKey(qid, bid));
+  try { pvcPaint(qid, bid); _pvcSwapImages(qid, bid, block.url); } catch (_) {}
+  showToast('Original picture restored', 'success');
+}
+
 
 function previewImage(blockId, url) {
   const container = document.getElementById('imgPreview_' + blockId);
@@ -11040,6 +11275,21 @@ document.addEventListener('click', function (e) {
   _startVoice(mic, target);
 });
 
+// The ONE prompt both 🎨 doors ask for. The block editor's ✨/🎨 bar and the
+// 🎨 button on every PREVIEW send the identical words, or the same picture
+// comes back two different ways depending on which button was pressed — and
+// nothing on any screen would say which one produced what is on the page.
+// Both open with SCAN_SOURCE_PROMPT so the model repairs the scan instead of
+// faithfully redrawing its defects. "Same diagram", not "same pixels".
+function imgEnhancePrompt(colour, remark) {
+  let prompt = SCAN_SOURCE_PROMPT + ' ' + (colour
+    ? 'TASK: add colour to this diagram. Keep the SAME line drawing — identical shapes, labels, text, proportions and positions — repair the scanning damage described above, then fill the existing shapes with flat, natural colours like a clean textbook illustration. Do NOT make it photo-realistic, do NOT add shading, gradients, 3D rendering, textures or a new style, and do NOT restyle, rearrange, add or remove anything. Output only the image, same aspect ratio.'
+    : 'TASK: clean this up into a sharp BLACK-AND-WHITE line diagram — crisp black line-work and clearly legible black text on a clean white background, like a freshly printed textbook figure rather than a photocopy. Keep the SAME diagram: every shape, label, text, proportion and position stays where it is, with the scanning damage described above repaired. Do NOT make it photo-realistic, do NOT add shading, gradients, rendering, textures, colour or a new style, and do NOT restyle, rearrange, add or remove anything. Output only the image, same aspect ratio.');
+  const extra = String(remark == null ? '' : remark).trim();
+  if (extra) prompt += ' IMPORTANT — also follow these specific instructions from the teacher for this regeneration (apply them even where they relax the rules above, but still keep it the SAME diagram and the same aspect ratio, and output only the image): ' + extra;
+  return prompt;
+}
+
 function _setEnhanceRemark(blockId, val) { (_imgEnhanceState[blockId] = _imgEnhanceState[blockId] || {}).remark = val; }
 async function enhanceBlockImage(blockId, colour) {
   // Read the optional teacher remark BEFORE the bar is replaced by the spinner.
@@ -11061,10 +11311,7 @@ async function enhanceBlockImage(blockId, colour) {
     // Both prompts open with SCAN_SOURCE_PROMPT so the model repairs the scan
     // instead of faithfully redrawing its defects. "Same diagram", not "same
     // pixels" — the wording has to leave room for that repair.
-    let prompt = SCAN_SOURCE_PROMPT + ' ' + (colour
-      ? 'TASK: add colour to this diagram. Keep the SAME line drawing — identical shapes, labels, text, proportions and positions — repair the scanning damage described above, then fill the existing shapes with flat, natural colours like a clean textbook illustration. Do NOT make it photo-realistic, do NOT add shading, gradients, 3D rendering, textures or a new style, and do NOT restyle, rearrange, add or remove anything. Output only the image, same aspect ratio.'
-      : 'TASK: clean this up into a sharp BLACK-AND-WHITE line diagram — crisp black line-work and clearly legible black text on a clean white background, like a freshly printed textbook figure rather than a photocopy. Keep the SAME diagram: every shape, label, text, proportion and position stays where it is, with the scanning damage described above repaired. Do NOT make it photo-realistic, do NOT add shading, gradients, rendering, textures, colour or a new style, and do NOT restyle, rearrange, add or remove anything. Output only the image, same aspect ratio.');
-    if (remark) prompt += ' IMPORTANT — also follow these specific instructions from the teacher for this regeneration (apply them even where they relax the rules above, but still keep it the SAME diagram and the same aspect ratio, and output only the image): ' + remark;
+    const prompt = imgEnhancePrompt(colour, remark);
     // Through the cleaning door: the model's decoder leaves a faint weave on
     // the white it paints, and this picture is going to be printed.
     const dataUrl = await generateCleanEnhancedImage(prompt, [media]);
@@ -29008,6 +29255,9 @@ function _xtWorkInFlight() {
   if (_inflightOps > 0) return true;
   try { if (rapidJobs.some(j => j && j.status === 'processing')) return true; } catch (e) {}
   try { if (_epBusy) return true; } catch (e) {}
+  // 🎨 A picture being colourised exists only in a model's reply until it is
+  // written, so closing the tab mid-call is the one way that work is lost.
+  try { if (pvcBusy()) return true; } catch (e) {}
   return false;
 }
 
@@ -43679,6 +43929,14 @@ let _cqLastChecked = '';         // id the last ✓ marked — for Undo
 let _cqDeleted = null;           // { at, q } — the last deletion, for Undo
 
 // ---- reading a question -------------------------------------------------
+// 🎨 A RECHECK JUMPS THE QUEUE. A picture a model has just redrawn is exactly
+// the thing a person has to look at, and this queue is newest-first — so
+// without a front of its own a colourised question is buried under every
+// question added since, which is the same as not queueing it at all.
+// `q.recheck` is set by `_pvcMarkRecheck` and cleared by ✓ / ⏭, never by an
+// ordinary edit: opening a question is not the same as looking at its picture.
+function _cqRecheckAt(q) { return (q && q.recheck && q.recheck.at) || ''; }
+function _cqRecheckWhy(q) { return (q && q.recheck && q.recheck.why) || ''; }
 function _cqCheckedAt(q) { return (q && q.checked && q.checked.at) || ''; }
 function _cqAddedAt(q) { return String((q && q.createdAt) || ''); }
 function _cqRecentCut() { return new Date(Date.now() - CQ_RECENT_DAYS * 864e5).toISOString(); }
@@ -43693,7 +43951,15 @@ function _cqUnchecked() {
 function _cqRecentUncheckedCount() {
   const cut = _cqRecentCut();
   return (Array.isArray(questionBank) ? questionBank : [])
-    .filter(q => q && q.id && !_cqCheckedAt(q) && _cqAddedAt(q) >= cut).length;
+    .filter(q => q && q.id && !_cqCheckedAt(q) && (_cqRecheckAt(q) || _cqAddedAt(q) >= cut)).length;
+}
+// Waiting on a person for a named reason, however old the question is. A
+// recheck on a question from last term is outside the recent window and is the
+// MOST urgent thing in the bank, so it can never be filtered out by age.
+function _cqRechecks() {
+  return (Array.isArray(questionBank) ? questionBank : [])
+    .filter(q => q && q.id && !_cqCheckedAt(q) && _cqRecheckAt(q))
+    .sort((a, b) => _cqRecheckAt(b).localeCompare(_cqRecheckAt(a)));
 }
 function _cqBuildQueue() {
   const all = _cqUnchecked();
@@ -43702,7 +43968,12 @@ function _cqBuildQueue() {
   // Recent first — but a bank whose newest question predates the window still
   // gets a queue, or the page sits empty while nothing has ever been read.
   const list = recent.length >= CQ_MIN_QUEUE ? recent : all.slice(0, Math.max(CQ_MIN_QUEUE, recent.length));
-  _cqQueue = list.map(q => q.id);
+  // 🎨 …and anything waiting on a person for a named reason goes in FRONT of
+  // all of it, newest recheck first. Deduped by id, or a recently added
+  // question that was also colourised would be offered twice.
+  const first = _cqRechecks().map(q => q.id);
+  const seen = new Set(first);
+  _cqQueue = first.concat(list.map(q => q.id).filter(id => !seen.has(id)));
   _cqPos = 0;
 }
 // The question on show. Anything deleted or checked since the queue was built
@@ -44004,6 +44275,7 @@ function _cqCardHtml(q) {
         <div class="cq-title">${escapeHtml(q.title || 'Untitled question')}</div>
         <div class="cq-meta">${meta}</div>
       </div>
+      ${_cqRecheckBanner(q)}
       <div class="cq-find" id="cqFindings"></div>
       <div class="cq-preview"><div class="cq-preview-inner">${renderQuestionPreviewHtml(q.id, { tryIt: false })}</div></div>
       <div class="cq-actions">
@@ -44021,6 +44293,26 @@ function _cqCardHtml(q) {
       </div>
     </div>`;
 }
+// 🎨 Why this question is at the front of the queue, and the one press that
+// rejects it. A colourised picture arriving with no explanation reads as the
+// queue having gone wrong; and "vet the colourised image" means nothing if
+// saying no to it takes finding and re-uploading the original by hand.
+function _cqRecheckBanner(q) {
+  if (!q || !_cqRecheckAt(q)) return '';
+  const reverts = ((q.blocks) || []).filter(b => b && b.type === 'image' && b.preColourUrl);
+  const when = (() => { try { return new Date(_cqRecheckAt(q)).toLocaleString(); } catch (_) { return ''; } })();
+  const why = _cqRecheckWhy(q) === 'colour'
+    ? '🎨 A picture on this question was regenerated in colour from a preview.'
+    : '🔁 This question was put back in the queue for a second look.';
+  const undo = reverts.map(b =>
+    `<button class="btn btn-outline" style="font-size:0.8rem;padding:6px 12px;" title="Put the picture that was there before the colourising back"
+      onclick="pvcRevert('${escapeHtml(String(q.id))}','${escapeHtml(String(b.id))}')">↩ Use the original picture</button>`).join(' ');
+  return `<div class="cq-note" style="display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;">
+    <span>${why} Check the labels and the lines read correctly${when ? ' · ' + escapeHtml(when) : ''}.</span>
+    ${undo}
+  </div>`;
+}
+
 // Only the findings panel is repainted when the AI answers — rebuilding the
 // whole card would re-fetch every diagram in the preview underneath it.
 function _cqRenderFindings() {
@@ -44126,6 +44418,11 @@ async function cqLooksFine(id) {
     by: (currentUser && currentUser.uid) || '',
     name: (currentUser && (currentUser.name || currentUser.email)) || ''
   };
+  // ✓ is the ONE act that settles a recheck: it is somebody saying they have
+  // looked at the picture. Left on, the question sits at the front of the
+  // queue for ever, and the badge counts it whatever its age.
+  const hadRecheck = q.recheck;
+  delete q.recheck;
   _cqLastChecked = id;
   _cqPos++;
   _cqRender();
@@ -44134,6 +44431,7 @@ async function cqLooksFine(id) {
   const ok = await saveQuestion(q, { quiet: true });
   if (!ok) {
     delete q.checked;
+    if (hadRecheck) q.recheck = hadRecheck;
     _cqLastChecked = '';
     _cqPos = Math.max(0, _cqQueue.indexOf(id) >= 0 ? _cqQueue.indexOf(id) : _cqPos - 1);
     showToast('Could not save that check — try again', 'error');
@@ -77424,6 +77722,8 @@ window.adjustImgScale = adjustImgScale;
 window.pvsStep = pvsStep;
 window.pvsReset = pvsReset;
 window.pvsFlush = pvsFlush;
+window.pvcRun = pvcRun;
+window.pvcRevert = pvcRevert;
 window.resetImgScale = resetImgScale;
 window.handleImagePaste = handleImagePaste;
 window.handleImageDrop = handleImageDrop;
