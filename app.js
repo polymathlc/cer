@@ -3867,7 +3867,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.402.0';
+const APP_VERSION = 'v1.402.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -18530,9 +18530,21 @@ function _qThumbUrl(q) {
 
 function renderQuestionBank() {
   const container = document.getElementById('questionBankGrid');
-  // A preview left open would be pointing at a tile that is about to be replaced.
-  qbTileHoverLeave();
-  ppHoverHide();
+  // THE PENDING PREVIEW IS CANCELLED; AN OPEN ONE IS NOT.
+  //
+  // This used to call qbTileHoverLeave() + ppHoverHide() outright, and that is
+  // the whole "the preview keeps closing by itself": this function runs on
+  // plenty of things the teacher never did — the usage backfill finishing, a
+  // question synced from another tab (_xtFlushQuestions), the auto-tagger, a
+  // release sweep — so a card being read vanished a second or two after it
+  // opened, at no fixed moment, with nothing on any screen to explain it.
+  //
+  // The card is a child of <body> holding a rendered COPY of the question; it
+  // does not point at the tile at all, so a rebuilt grid is no reason to close
+  // it. What must go is the pending dwell, which is aimed at a tile that is
+  // about to be replaced — and a card whose question has really left the bank.
+  qbTileHoverCancelPending();
+  if (_ppHoverKey.indexOf('bank:') === 0 && !_docQById(_ppHoverKey.slice(5))) ppHoverHide();
   // Keep the tag list current — a tag typed a moment ago should be selectable now.
   // Not while it has focus: rebuilding the options under an open dropdown closes it.
   if (document.activeElement !== document.getElementById('bankFilterTag')) populateTagFilter();
@@ -18669,13 +18681,30 @@ let _bankHoverTimer = null;
 let _bankHoverId = null;    // the tile the pending preview belongs to
 let _bankHoverPt = null;    // latest cursor position, so the card opens where the cursor IS
 
+// Cancelling what is PENDING and closing what is OPEN are two different things,
+// and keeping them apart is what lets a re-render do the first without the
+// second. The re-anchor has a timer of its own for the same reason: cancelling
+// a pending open must not also cancel the measurement that puts an already-open
+// card back on the screen.
+let _bankHoverAnchorTimer = null;
+function qbTileHoverCancelPending() {
+  clearTimeout(_bankHoverTimer);
+  _bankHoverId = null;
+}
+
 function qbTileHoverEnter(ev, qid) {
   // Touch devices synthesise a mouseenter on tap — there is no "resting" there,
   // and a card that opens under the finger just gets in the way.
   if (window.matchMedia && !window.matchMedia('(hover: hover)').matches) return;
+  _bankHoverPt = { clientX: ev.clientX, clientY: ev.clientY };
+  // THE CARD IS ALREADY OPEN ON THIS VERY QUESTION. A re-render replaces the
+  // tile under a cursor that never moved, so this fires again on the new one —
+  // and restarting the dwell would close the card (the old tile's leave grace
+  // is already running) and make the teacher wait another 2.5 seconds for the
+  // card they were reading. Keep it, and cancel that grace.
+  if (_ppHoverLocked && _ppHoverKey === 'bank:' + qid) { clearTimeout(_ppHoverGrace); return; }
   clearTimeout(_bankHoverTimer);
   _bankHoverId = qid;
-  _bankHoverPt = { clientX: ev.clientX, clientY: ev.clientY };
   _bankHoverTimer = setTimeout(() => {
     if (_bankHoverId !== qid) return;
     ppHoverShowBank(_bankHoverPt || { clientX: 0, clientY: 0 }, qid,
@@ -18683,8 +18712,10 @@ function qbTileHoverEnter(ev, qid) {
     ppHoverExpand();   // the wait was deliberate — open it read-to-the-end, not a teaser
     // The diagram inside is still loading when we first measure, so the card
     // grows after it is placed. Anchor it again once it has its real height,
-    // or it hangs off the bottom of the screen.
-    _bankHoverTimer = setTimeout(ppHoverExpand, 420);
+    // or it hangs off the bottom of the screen. It leaves a card the cursor is
+    // already inside exactly where it is — see ppHoverExpand.
+    clearTimeout(_bankHoverAnchorTimer);
+    _bankHoverAnchorTimer = setTimeout(ppHoverExpand, 420);
   }, BANK_HOVER_MS);
 }
 
@@ -18694,8 +18725,7 @@ function qbTileHoverMove(ev) {
 }
 
 function qbTileHoverLeave() {
-  clearTimeout(_bankHoverTimer);
-  _bankHoverId = null;
+  qbTileHoverCancelPending();
   ppHoverChipLeave();   // keeps the card open long enough to move into it
 }
 
@@ -70756,8 +70786,25 @@ function ppHoverEl(){
     _ppHoverEl.id = 'ppHover';
     // Once the preview is locked open, the cursor can enter it: keep it open
     // while inside, and close shortly after the cursor leaves it.
-    _ppHoverEl.addEventListener('mouseenter', () => { clearTimeout(_ppHoverGrace); });
-    _ppHoverEl.addEventListener('mouseleave', () => { if (_ppHoverLocked) ppHoverHide(); });
+    _ppHoverEl.addEventListener('mouseenter', () => { _ppHoverOver = true; clearTimeout(_ppHoverGrace); });
+    // The pointer's position is otherwise only ever read from the TILE's own
+    // mousemove, which stops the moment the cursor moves into the card — so
+    // without this the card believes the pointer is still out on the tile and
+    // happily re-anchors itself out from under the reader.
+    _ppHoverEl.addEventListener('mousemove', ev => { _ppHoverLast = { x: ev.clientX, y: ev.clientY }; });
+    // THE SAME GRACE THE CHIP'S LEAVE USES, and it is not a nicety. An expanded
+    // card animates its own `top` and `left` over half a second, and is
+    // re-anchored again once its diagram has loaded — so the card slides out
+    // from under a cursor that has not moved, fires mouseleave at itself, and a
+    // straight ppHoverHide() closes the preview the teacher is reading with
+    // nothing on screen to explain it. The grace is cancelled by the mouseenter
+    // above the moment the card catches up with the pointer.
+    _ppHoverEl.addEventListener('mouseleave', () => {
+      _ppHoverOver = false;
+      if (!_ppHoverLocked) return;
+      clearTimeout(_ppHoverGrace);
+      _ppHoverGrace = setTimeout(ppHoverHide, PP_HOVER_GRACE_MS);
+    });
     document.body.appendChild(_ppHoverEl);
   }
   return _ppHoverEl;
@@ -70805,11 +70852,34 @@ let _ppHoverTimer = null;         // fires the "expand to full preview" after a 
 let _ppHoverLast = null;          // last pointer position, so we can re-anchor on expand
 let _ppHoverLocked = false;       // true once expanded: the card is interactive & scrollable
 let _ppHoverGrace = null;         // brief delay when leaving a chip, so the cursor can reach the card
+// WHAT IS ON SHOW, as 'bank:<id>' or 'paper:<id>'. Without it nothing can tell
+// "the card is already open on this very question" from "a card is open", and
+// a list that re-renders under the cursor restarts the whole dwell on the card
+// the teacher is in the middle of reading.
+let _ppHoverKey = '';
+let _ppHoverOver = false;         // the pointer is inside the card right now
 const PP_HOVER_EXPAND_MS = 2000;  // dwell time before the preview blooms open
-function _ppHoverOpen(html, ev){
+const PP_HOVER_GRACE_MS = 260;    // travel time between a chip/tile and the card
+
+// Is the pointer inside the card as it stands? Used to leave a settled card
+// exactly where it is: moving it would slide it out from under the reader.
+function _ppHoverHasPointer() {
+  const el = _ppHoverEl, p = _ppHoverLast;
+  if (!el || el.style.display !== 'block') return false;
+  if (_ppHoverOver) return true;   // it said so itself
+  // …and the geometry, for the case the card has just grown over a cursor that
+  // has not moved since: no mouseenter fires until the pointer moves again.
+  if (!p) return false;
+  try {
+    const r = el.getBoundingClientRect();
+    return p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom;
+  } catch (_) { return false; }
+}
+function _ppHoverOpen(html, ev, key){
   const el = ppHoverEl();
   clearTimeout(_ppHoverGrace);
   _ppHoverLocked = false;
+  _ppHoverKey = key || '';
   el.innerHTML = html;
   el.classList.remove('pp-hv-expanded');   // start collapsed every time
   el.style.display = 'block';
@@ -70819,7 +70889,7 @@ function _ppHoverOpen(html, ev){
   clearTimeout(_ppHoverTimer);
   _ppHoverTimer = setTimeout(ppHoverExpand, PP_HOVER_EXPAND_MS);
 }
-function ppHoverShow(ev, id){ _ppHoverOpen(ppHoverHtml(id), ev); }
+function ppHoverShow(ev, id){ _ppHoverOpen(ppHoverHtml(id), ev, 'paper:' + id); }
 // Same hover preview for a BANK question — used in the "attach a question"
 // picker so the teacher can read the full question before selecting it.
 function ppBankHoverHtml(qid, note){
@@ -70836,7 +70906,7 @@ function ppBankHoverHtml(qid, note){
 // `note` lets a caller say what clicking actually does here — the same preview
 // is used to attach a question (Past Papers), tick one (Learning Objectives)
 // and practise one, and a wrong instruction is worse than none.
-function ppHoverShowBank(ev, qid, note){ _ppHoverOpen(ppBankHoverHtml(qid, note), ev); }
+function ppHoverShowBank(ev, qid, note){ _ppHoverOpen(ppBankHoverHtml(qid, note), ev, 'bank:' + qid); }
 function ppHoverMove(ev){
   const el = _ppHoverEl; if (!el || el.style.display !== 'block') return;
   _ppHoverLast = { x: ev.clientX, y: ev.clientY };
@@ -70853,6 +70923,11 @@ function ppHoverMove(ev){
 // stays fully on-screen (both moves are CSS-transitioned for a premium feel).
 function ppHoverExpand(){
   const el = _ppHoverEl; if (!el || el.style.display !== 'block') return;
+  // Expanding a card that is ALREADY expanded is the second pass that runs once
+  // its diagram has loaded. That one may re-measure the height and must not
+  // MOVE a card the cursor is already inside: the move is CSS-transitioned, so
+  // it slides away under a still pointer and the card closes itself.
+  const settled = el.classList.contains('pp-hv-expanded') && _ppHoverHasPointer();
   el.classList.add('pp-hv-expanded');
   _ppHoverLocked = true;   // now interactive & scrollable — the cursor can move into it
   // A one-time hint that the card can be scrolled, if the content overflows.
@@ -70865,6 +70940,7 @@ function ppHoverExpand(){
   requestAnimationFrame(() => {
     const hint = el.querySelector('.pp-hv-scrollhint');
     if (hint) hint.style.display = (el.scrollHeight > el.clientHeight + 4) ? 'block' : 'none';
+    if (settled) return;
     const p = _ppHoverLast || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     const pad = 14, w = el.offsetWidth || 400;
     const targetH = Math.min(el.scrollHeight + 4, Math.round(window.innerHeight * 0.86));
@@ -70886,7 +70962,7 @@ function ppHoverEditAttached(ppId, bankId){
 // A chip's mouse-leave: while the preview is locked open, don't close instantly —
 // give the cursor a moment to travel into the card (which cancels the close).
 function ppHoverChipLeave(){
-  if (_ppHoverLocked) { clearTimeout(_ppHoverGrace); _ppHoverGrace = setTimeout(ppHoverHide, 260); return; }
+  if (_ppHoverLocked) { clearTimeout(_ppHoverGrace); _ppHoverGrace = setTimeout(ppHoverHide, PP_HOVER_GRACE_MS); return; }
   ppHoverHide();
 }
 function ppHoverHide(){
@@ -70894,6 +70970,8 @@ function ppHoverHide(){
   clearTimeout(_ppHoverTimer);
   clearTimeout(_ppHoverGrace);
   _ppHoverLocked = false;
+  _ppHoverKey = '';
+  _ppHoverOver = false;
   if (_ppHoverEl) { _ppHoverEl.style.display = 'none'; _ppHoverEl.classList.remove('pp-hv-expanded'); }
 }
 // Esc closes a locked preview; a click anywhere outside it does too.

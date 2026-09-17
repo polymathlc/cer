@@ -6479,7 +6479,81 @@ pictures on it from where they are reading.
   very same preview.
 - Run **`node tools/preview-picture-size-tests.mjs`** after touching any of it.
 
+## 👁 The hover preview stays open (v1.402.1)
+
+`_ppHoverKey` / `_ppHoverOver` / `PP_HOVER_GRACE_MS` / `_ppHoverHasPointer` /
+the card's own `mouseenter` / `mousemove` / `mouseleave` listeners in
+`ppHoverEl` / the `settled` guard in `ppHoverExpand` (search `hover preview`),
+plus `qbTileHoverCancelPending` and the first two lines of
+`renderQuestionBank`.
+
+*"Sometimes it's unstable and keeps closing the preview window by itself."* It
+was — **four separate causes, all with the same symptom**, and that is what
+made it read as flakiness rather than as a bug anyone could report precisely:
+the card shut at no fixed moment, with nothing on any screen to explain it.
+
+- **A BACKGROUND RE-RENDER WAS CLOSING IT, and this is the big one.**
+  `renderQuestionBank` opened with `qbTileHoverLeave(); ppHoverHide();` — and it
+  runs on plenty of things the teacher never did: the usage backfill finishing,
+  a question synced from another tab (`_xtFlushQuestions`), the auto-tagger, a
+  release sweep. So a card opened after a deliberate 2.5-second rest vanished a
+  second later. **The card is a child of `<body>` holding a rendered COPY of the
+  question — it does not point at the tile at all**, so a rebuilt grid is no
+  reason to close it. What must go is the **pending dwell**, which is aimed at a
+  tile about to be replaced. `qbTileHoverCancelPending` exists to make that
+  split possible, and it must never call `ppHoverHide` / `ppHoverChipLeave`.
+  A card whose question really has left the bank is still closed —
+  `_ppHoverKey` is what lets that be asked.
+- **THE REPLACEMENT TILE RESTARTED THE DWELL.** A re-render swaps the tile under
+  a cursor that never moved, so `qbTileHoverEnter` fires again on the new one.
+  Restarting the 2.5s wait closed the card (the old tile's leave grace was
+  already running) and made the teacher wait again for the card they were
+  reading. `_ppHoverKey === 'bank:' + qid` is the guard; moving to a DIFFERENT
+  tile still starts a fresh dwell.
+- **THE CARD CLOSED ITSELF WHEN IT MOVED.** An expanded card animates its own
+  `top` and `left` over half a second and is re-anchored **again** 420ms later,
+  once its diagram has loaded and it has a real height. So it slides out from
+  under a still cursor, fires `mouseleave` at itself, and the old handler called
+  `ppHoverHide()` **with no grace at all**. It now uses the same
+  `PP_HOVER_GRACE_MS` the chip's leave uses, which the card's `mouseenter`
+  cancels the moment it catches up with the pointer.
+- **…AND THE SECOND RE-ANCHOR MUST NOT MOVE A SETTLED CARD** (`settled` in
+  `ppHoverExpand`). The FIRST expand always places it — a grown card that was
+  never placed hangs off the screen — but a re-expand of an already-expanded
+  card the pointer is inside leaves it exactly where it is.
+- **`_ppHoverOver` IS THE TRUTH, AND THE RECTANGLE IS ONLY THE BACKSTOP.**
+  `_ppHoverLast` was written only by the TILE's `mousemove`, which stops the
+  moment the cursor moves into the card — so the card believed the pointer was
+  still out on the tile. The card now tracks its own pointer. Geometry alone is
+  not enough: while the card is travelling its rectangle is somewhere between
+  where it was and where it is going, and need not contain the pointer the
+  browser still counts as hovering it. Geometry alone is not useless either —
+  it covers a card that has just grown over a cursor which has not moved, where
+  no `mouseenter` fires until the pointer moves again.
+- Every one of these is in the SHARED machinery, so the past-paper chips, the
+  🎯 objective picker and the attach picker are fixed with the bank.
+- Run **`node tools/hover-preview-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **👁 the hover preview** (`_ppHoverKey`, `_ppHoverOver`,
+  `_ppHoverHasPointer`, `PP_HOVER_GRACE_MS`, `ppHoverEl`'s listeners,
+  `_ppHoverOpen`, `ppHoverExpand`'s `settled`, `ppHoverChipLeave`,
+  `ppHoverHide`, `qbTileHoverCancelPending`, `qbTileHoverEnter`, or
+  `renderQuestionBank`'s first two lines), run
+  `node tools/hover-preview-tests.mjs`. Every failure here has the SAME symptom
+  and none of them throws: the card closes by itself, at no fixed moment, so it
+  reads as the app being flaky rather than as anything reportable. Put
+  `qbTileHoverLeave(); ppHoverHide();` back at the top of `renderQuestionBank`
+  and a background re-render — the usage backfill, a cross-tab sync, the
+  auto-tagger — takes away the card a teacher is mid-way through reading, which
+  is exactly what it was reported for. Let `qbTileHoverCancelPending` close an
+  OPEN card and the split that fixes it is undone. Drop the
+  already-open-on-this-question guard and the replacement tile restarts the
+  2.5-second dwell on a card that is already up. Go back to an instant
+  `ppHoverHide()` on the card's own `mouseleave` and the card's own CSS slide
+  closes it. Drop `settled` and the 420ms re-measure yanks it out from under
+  the reader. And trust the rectangle alone and a card mid-transition decides
+  the pointer is elsewhere at precisely the moment it is about to move again.
 - After touching **🎨 colourise from a preview** (`imgEnhancePrompt`, `pvcRun`,
   `_pvcPump`, `_pvcWork`, `_pvcMarkRecheck`, `pvcRevert`, `pvcBusy`,
   `_pvcButtonHtml`, `preColourUrl`, `q.recheck`, `_cqRechecks`,
