@@ -6404,7 +6404,104 @@ again.
 - **Select All stays beside the grid it governs**, below the controls.
 - Run **`node tools/worksheet-controls-tests.mjs`** after touching any of it.
 
+## 🎨 Colourise a picture from a preview, in the background (v1.402.0)
+
+`imgEnhancePrompt` / `PVC_PAR` / `_pvcJobs` / `pvcState` / `pvcBusy` /
+`_pvcButtonHtml` / `pvcPaint` / **`pvcRun`** / `_pvcPump` / **`_pvcWork`** /
+`_pvcMarkRecheck` / `_pvcSwapImages` / `pvcRevert` (search `COLOURISE A PICTURE
+FROM A PREVIEW`), the `colour` control inside `_pvsButtonsHtml`, the
+`_cqRecheckAt` / `_cqRechecks` half of ✅ Check Questions, and `pvcBusy()` in
+`_xtWorkInFlight`.
+
+Beside the 🔍± size pill, **every preview** now carries a 🎨 that regenerates
+that picture in colour — the same job the block editor's 🎨 does, reached
+without opening the question at all. A teacher reading a sheet fixes the
+pictures on it from where they are reading.
+
+- **`_pvsButtonsHtml` IS THE ONE PLACE IT IS ADDED**, so every surface that
+  already had − / + / Auto got 🎨 without being told: 🖨 Preview Exported, the
+  A4 preview, the 👁 vetting hover, the ⇄ duplicate comparison, the ✎ Questions
+  drawer and both print builders through `pvsDecorateDoc`. A button added per
+  surface is a button that reaches some of them and misses the rest.
+- **IT SURVIVES THE PREVIEW CLOSING.** An image call is 10–25 seconds and a
+  preview is a thing you glance at, so a job needing the preview to stay open
+  would be cancelled by the very next click. **Nothing in `_pvcWork` reads the
+  preview's DOM** — the repaint is best effort, the WRITE is not — and the
+  harness pins that (`getElementById`, `closest`, `wsPreviewOverlay` are all
+  refused inside it).
+- **THE QUESTION IS RE-RESOLVED AFTER THE CALL, never held across it.**
+  `questionBank` is re-read and re-assigned wholesale elsewhere, so an object
+  captured twenty seconds earlier writes into an array nothing renders. The
+  harness pins that the re-resolve comes *after* the image call, or it is not a
+  re-resolve at all.
+- **`imgEnhancePrompt(colour, remark)` IS THE ONE PROMPT**, extracted out of
+  `enhanceBlockImage`. Two copies is one picture coming back two different ways
+  depending on which button was pressed, with nothing on any screen to say
+  which produced what. It goes through `generateCleanEnhancedImage` for the
+  same reason the editor's does: the model's decoder leaves a faint weave on
+  the white it paints, and this picture is going to be printed.
+- **THE ORIGINAL IS KEPT ON THE BLOCK (`preColourUrl`), ONCE.** That is what
+  makes "vet the colourised image" mean anything — without it, rejecting a bad
+  colourisation means finding and re-uploading the scan by hand. Set once, so
+  colourising twice does not lose the scan behind the first attempt. Uploads
+  are content-addressed and nothing here deletes one, so the old URL keeps
+  working, and `collectQuestionData`'s deep clone carries the field through an
+  editor save.
+- **A REFUSED WRITE PUTS THE PICTURE BACK**, in both directions: the colourise
+  restores `block.url`, and a refused **revert** restores `url` **and**
+  `preColourUrl` — restoring only the url would leave the question wearing the
+  colourised picture with nothing left to undo it with.
+- **AND IT GOES TO THE FRONT OF ✅ CHECK QUESTIONS** (`q.recheck`). That queue
+  is newest-first, so without a front of its own a colourised question is
+  buried under every question added since, which is the same as not queueing it
+  at all. `_cqRechecks` is deliberately **not** filtered by
+  `CQ_RECENT_DAYS` — a colourised question from last term is the most urgent
+  thing in the bank — the badge counts rechecks whatever their age, the queue
+  dedupes by id, and `_pvcMarkRecheck` **clears `q.checked`**: what was read
+  was the OLD picture. ✓ **Looks fine** is the ONE act that settles it (and
+  puts it back on a refused save); an ordinary edit does not, because
+  `recheck` is outside `EDITOR_OWNED_QUESTION_FIELDS` — opening a question is
+  not the same as looking at its picture.
+- **The card SAYS why it is at the front** (`_cqRecheckBanner`) and carries
+  ↩ Use the original picture. A colourised question arriving with no
+  explanation reads as the queue having gone wrong.
+- **`pvcBusy()` is in `_xtWorkInFlight`.** A picture being colourised exists
+  only in a model's reply until it is written, so closing the tab mid-call is
+  the one way this loses work.
+- **`pvsDecorateDoc` BINDS BY ACTION, NOT BY POSITION** (`data-pvs-act`). The
+  pill has four controls now; binding by index re-points its neighbours'
+  handlers the day a fifth is added, which is a button that quietly does
+  somebody else's job.
+- **🎨 IS LAST IN THE PILL AND SET APART.** The three controls to its left are
+  instant and free and this one spends an AI call, so it must not be what a
+  thumb lands on while sizing a picture.
+- **Only an author, checked in the HANDLER.** A student's device renders the
+  very same preview.
+- Run **`node tools/preview-picture-size-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🎨 colourise from a preview** (`imgEnhancePrompt`, `pvcRun`,
+  `_pvcPump`, `_pvcWork`, `_pvcMarkRecheck`, `pvcRevert`, `pvcBusy`,
+  `_pvcButtonHtml`, `preColourUrl`, `q.recheck`, `_cqRechecks`,
+  `_cqBuildQueue`, `_cqRecheckBanner`, `cqLooksFine`'s clear, or the `colour`
+  control in `_pvsButtonsHtml` / `pvsDecorateDoc`), run
+  `node tools/preview-picture-size-tests.mjs`. This button spends money and
+  overwrites the picture a class is served, and every way it goes wrong is
+  silent. Read the preview's DOM inside `_pvcWork` and the job dies with the
+  preview it was started from — which is the one thing it promised not to do.
+  Hold the question across the image call instead of re-resolving and the write
+  lands in an array nothing renders. Drop the `preColourUrl` set-once guard and
+  colourising twice throws the original scan away for good; restore only the
+  url on a refused revert and the question keeps the colourised picture with
+  nothing left to undo it with. Keep a second copy of the prompt and the editor
+  and the preview return different pictures from the same button. Stop putting
+  rechecks at the FRONT of the check queue — or filter them by
+  `CQ_RECENT_DAYS` — and a colourised question is buried under everything added
+  since, which is the same as never queueing it. Leave `q.checked` set and it
+  is never offered at all. Drop `pvcBusy()` from `_xtWorkInFlight` and closing
+  the tab mid-call loses a picture that exists nowhere else yet. And bind the
+  decorator by index again and the next control added re-points its
+  neighbours' handlers.
 - After touching **🛠 the worksheet builder's controls** (`wsSyncToolsTop`,
   `_wsToolsInit`, the `#page-worksheet .ws-actions-bar` rules, `--ws-gutter`, or
   the order of the blocks in `#page-worksheet`'s `.page-body`), run
