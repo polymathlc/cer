@@ -2,6 +2,11 @@
 
 Guidance for Claude when working in this repo.
 
+## Public home page identity
+- Keep the official Polymath Learning Centre logo at the top left of the public home page. Use `assets/branding/polymath-learning-centre.png`, preserving the full artwork and aspect ratio; do not replace it with a monogram or invented wordmark. See `assets/branding/README.md` for provenance.
+- Keep the About Us navigation link visible on desktop and phones. Its centre-services content is in `#lp-about`; programme and enrolment links point to the official `polymathlc.com.sg` site.
+- Base programme, contact and trial details on the centre's current official pages. The public sample, portal account creation and centre class enquiries are different actions; keep their labels clear. Do not invent results, awards, testimonials or free-trial offers.
+
 ## Apps
 - `index.html` + `app.js` — **"Science Learning Portal"** (the product name shown in the sidebar, the `<title>` and the footer; it was "Keywords Learning Portal" until v1.181.0). "Science Quest" is NOT the portal — it is the RPG/dungeon game layer inside it, and the name used in the login / password-reset / prize emails. Keep the two distinct. The CER science-quiz app: admin question authoring (block editor, AI build-from-screenshot, image crop/touch-up, vetting → bank) + student practice + an RPG/dungeon game layer. **The markup and CSS live in `index.html`; ALL of the application JavaScript lives in `app.js`**, loaded as `<script type="module" src="app.js">`. They ship together — `index.html` is useless without `app.js` next to it, so deploy the directory, never the single file.
   - Functions referenced from inline `onclick`/`on*` handlers MUST be assigned to `window` near the bottom of `app.js` (search `window.navigateTo =`), because the module has its own scope.
