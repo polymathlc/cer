@@ -6615,7 +6615,73 @@ now happen on the sheet itself, and the card is approved from there.
 - Run **`node tools/preview-picture-size-tests.mjs`** and
   **`node tools/vetting-export-hover-tests.mjs`** after touching any of it.
 
+## 🗑 An element can be taken OFF a question, from a preview (v1.407.0)
+
+`PVO_UNDO_MAX` / `_pvoUndo` / **`pvoRemove`** / `_pvoForgetKeys` / **`pvoUndo`** /
+`_pvoSyncEditorRemove` / `_pvoSyncEditorRestore` / `_pvoCanUndo` /
+`_pvoQuestionShown`, the `del` / `undo` buttons `pvoDecorateDoc` hangs on every
+▲▼ bar, the `Delete` and `Ctrl/⌘+Z` branches of `pvoKeydown`, and the
+`.pvo-del` / `.pvo-undo` rules in `PVS_CSS`.
+
+▲▼ (v1.403.0) let a teacher MOVE an element of a question from the exported
+preview. The next commonest structural fix is to LOSE one — a stray picture the
+reader cropped twice, a second copy of the options, an empty answer box the
+model invented — and that still meant ✏️ Edit: open the editor, find the block,
+🗑, Save, find the way back. Every preview bar now carries a 🗑, and the selected
+element goes with the Delete key.
+
+- **IT IS THE SAME SPLICE `removeBlock` MAKES, on `q.blocks`**, riding the SAME
+  dirty map and flush as a move and a picture size (`_pvsMark` → `pvsFlush`):
+  written when the preview closes, or PVS_IDLE_MS after the last press, or on
+  pagehide, through `saveQuestion` / `saveVettingQuestion`. Nothing here writes
+  on the press, and the harness pins that.
+- **A QUESTION MAY NEVER BE EMPTIED.** `pvoRemove` refuses the last block, in
+  words, and the bar draws that 🗑 disabled — the rule `emMayRemove` carries in
+  ✏️ editing mode. A question with no blocks renders as nothing, prints as a
+  numbered gap and cannot be answered.
+- **THE KEYWORDS AND BLANKS GO WITH IT** (`_pvoForgetKeys`). `q.answerKeywords`
+  is keyed `<bid>` / `<bid>_<field>` and a CER block keeps three keys; an
+  orphan left behind comes back on a later block given the same id, which is
+  why `kwForgetBlock` exists in the editor. The match is `k === bid` or
+  `k.startsWith(bid + '_')` — `p10` is not `p1_`.
+- **IT CAN BE UNDONE, and that is what makes a one-tap delete safe on a
+  surface that writes to the bank.** The block, its position, its keywords and
+  its blanks are kept on `_pvoUndo` (capped at `PVO_UNDO_MAX`); ↩ appears on
+  every bar of that question the moment there is something to put back, and
+  Ctrl/⌘+Z with the pointer over (or a selection on) the question does the
+  same. A restore is clamped to the list's length, never doubled when the
+  block came back some other way, and marks the question dirty again.
+- **THE EDITOR FOLLOWS ON THE SAME TERMS AS A MOVE**: only when it holds THIS
+  question and ✏️ editing mode is off (in editing mode the global `blocks` is
+  the whole paper). A restore hands the editor a **COPY** of the block — the
+  editor's array must never share an object with the bank's, or a keystroke
+  there edits the bank before Save.
+- **Delete, not Backspace**, and only on an element that is on a screen
+  (`_pvoTarget`) and never in a text field. Ctrl+Z is claimed only when there
+  is something to undo on a question that is on a screen
+  (`_pvoQuestionShown`) — otherwise it is left to whatever else wanted it.
+- **Only an author, checked in the HANDLER.** A student's device renders the
+  very same preview.
+- Run **`node tools/preview-picture-size-tests.mjs`** and
+  **`node tools/vetting-export-hover-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🗑 removing an element from a preview** (`pvoRemove`,
+  `_pvoForgetKeys`, `pvoUndo`, `_pvoUndo`, `_pvoSyncEditorRemove`,
+  `_pvoSyncEditorRestore`, `_pvoCanUndo`, `_pvoQuestionShown`, the `del` /
+  `undo` buttons in `pvoDecorateDoc`, or the Delete / Ctrl+Z branches of
+  `pvoKeydown`), run `node tools/preview-picture-size-tests.mjs` **and**
+  `node tools/vetting-export-hover-tests.mjs`. Every failure is silent and the
+  preview still looks right. Drop the last-block guard and a question is
+  emptied by one tap, prints as a numbered gap and cannot be answered. Leave
+  the keyword marks behind and they come back on the next block given that id.
+  Match keys by prefix without the `_` and removing `p1` takes `p10`'s
+  keywords too. Write on the press and a mis-tap on 🗑 is in the bank before
+  the toast has faded — it must ride the one flush, with ↩ in front of it.
+  Hand the editor the bank's own block object on undo and a keystroke there
+  edits the bank before Save. Let Backspace delete and a teacher who thought a
+  text field had focus loses a figure. And claim Ctrl+Z with nothing to undo
+  and the editor's own undo stops working under an open preview.
 - After touching **✨ ▲▼ ✅ the vetting preview's own tools** (`_pvcOneButtonHtml`,
   `pvcRun`'s third argument, `job.colour`, `pvoWrapOpen`, `pvoMove`,
   `_pvoSyncEditor`, `_pvoRerender`, `_pvoTarget`, `pvoKeydown`, `pvoSelect`,
