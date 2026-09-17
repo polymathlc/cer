@@ -2956,17 +2956,33 @@ window.copyResetCredentials = copyResetCredentials;
 // PAGE NAVIGATION (Landing / Login / Register / App)
 // =====================================================================
 function showPage(pageId) {
+  // Public entry links should not trap a visitor on auth after returning home
+  // or signing in. Keep game and section deep links intact.
+  if ((pageId === 'landingPage' || pageId === 'appWrapper')
+      && ['#login', '#register'].includes(window.location.hash)) {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+  // A late signed-out callback must preserve the visitor's reading position.
+  const keepLandingPosition = pageId === 'landingPage'
+    && document.getElementById('landingPage')?.style.display !== 'none';
   ['landingPage', 'loginPage', 'registerPage', 'appWrapper'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = id === pageId ? (id === 'appWrapper' ? 'flex' : '') : 'none';
   });
   // A CTA near the bottom of the public home must open auth at the top.
-  if (pageId !== 'appWrapper') window.scrollTo(0, 0);
+  if (pageId !== 'appWrapper' && !keepLandingPosition) window.scrollTo(0, 0);
   // Clear error states when switching
   document.querySelectorAll('.auth-error').forEach(e => e.style.display = 'none');
   document.querySelectorAll('.auth-loading').forEach(e => e.classList.remove('active'));
   const fp = document.getElementById('forgotPassInfo');
   if (fp) fp.style.display = 'none';
+}
+
+function signedOutEntryPage() {
+  // Respect a visitor who selected an auth form while Firebase was connecting.
+  const selected = ['loginPage', 'registerPage'].find(id =>
+    document.getElementById(id)?.style.display !== 'none');
+  return selected || ({ '#login': 'loginPage', '#register': 'registerPage' }[window.location.hash]) || 'landingPage';
 }
 
 // =====================================================================
@@ -3869,7 +3885,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.405.0';
+const APP_VERSION = 'v1.406.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -4371,7 +4387,7 @@ onAuthStateChanged(auth, (user) => {
     _mistakeLogAt = 0;
     try { _fcGapSel.clear(); } catch (_) {}
     try { fcPaintDueBadge(); } catch (_) {}
-    showPage('landingPage');
+    showPage(signedOutEntryPage());
   }
 });
 

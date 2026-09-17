@@ -4,7 +4,9 @@ Guidance for Claude when working in this repo.
 
 ## Public home page identity
 - Keep the official Polymath Learning Centre logo at the top left of the public home page. Use `assets/branding/polymath-learning-centre.png`, preserving the full artwork and aspect ratio; do not replace it with a monogram or invented wordmark. See `assets/branding/README.md` for provenance.
-- Keep the About Us navigation link visible on desktop and phones. Its centre-services content is in `#lp-about`; programme and enrolment links point to the official `polymathlc.com.sg` site.
+- Keep the header logo compact and aligned with the two-line “Polymath Learning Centre” name. Label the public sign-in action “Polymath Online”.
+- Keep About Us and Enquire navigation visible on desktop and phones. Centre-services content is in `#lp-about`; class enquiries go to `enquiry.html`. Science is offered for P3–Secondary 1, and Mathematics for P4–P6.
+- `enquiry.html`, `enquiry.css`, `enquiry.js` and `enquiry-core.mjs` provide the public enquiry form. Its server endpoint fixes the two centre recipients, validates fields, and protects stored contacts. Never replace server-confirmed acceptance with a pretend-success message or a mailto-only submission.
 - Base programme, contact and trial details on the centre's current official pages. The public sample, portal account creation and centre class enquiries are different actions; keep their labels clear. Do not invent results, awards, testimonials or free-trial offers.
 
 ## Apps

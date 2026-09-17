@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Science Learning Portal — Polymath Learning Centre</title>
+<title>Polymath Learning Centre — Mathematics &amp; Science</title>
 <meta name="description" content="Build confident science answers with guided CER practice, AI feedback, personalised revision, PSLE past papers, and learning adventures at Polymath.">
 <link rel="preconnect" href="https://dl.dropboxusercontent.com" crossorigin>
 <link rel="dns-prefetch" href="https://dl.dropboxusercontent.com">
@@ -14,7 +14,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-<link rel="modulepreload" href="app.js?v=1.405.0">
+<link rel="modulepreload" href="app.js?v=1.406.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -9180,9 +9180,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 </style>
 <style>
 /* Official centre identity and public About Us navigation. */
-#landingPage .lp-brand-logo { display:block; width:122px; height:89px; object-fit:contain; flex-shrink:0; }
-#landingPage .lp-brand-caption { max-width:92px; font-size:10px; line-height:1.6; letter-spacing:1px; font-weight:600; text-transform:uppercase; color:var(--lp-muted); }
-#landingPage .lp-nav { min-height:104px; }
+#landingPage .lp-brand-logo { display:block; width:60px; height:44px; object-fit:contain; flex-shrink:0; }
+#landingPage .lp-brand-caption { max-width:144px; font-size:14px; line-height:1.35; letter-spacing:-.2px; font-weight:600; color:var(--lp-ink); }
+#landingPage .lp-brand-caption span { display:block; font-size:11px; font-weight:400; letter-spacing:.3px; color:var(--lp-muted); }
+#landingPage .lp-nav { min-height:82px; }
 #landingPage .lp-nav-links { gap:23px; }
 #landingPage .lp-nav-links a { min-height:44px; display:inline-flex; align-items:center; }
 #landingPage .lp-nav-links .lp-about-link { color:var(--lp-green); font-weight:700; }
@@ -9219,7 +9220,6 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 #landingPage .lp-about-contact-actions { display:grid; gap:12px; min-width:240px; }
 #landingPage .lp-about-contact-actions .lp-text-link { justify-content:center; margin-top:0; }
 @media (max-width:1100px) {
-  #landingPage .lp-brand-caption { display:none; }
   #landingPage .lp-nav-links { gap:18px; }
   #landingPage .lp-nav-links a:last-child { display:inline-flex; }
   #landingPage .lp-nav-links a[href="#lp-families"] { display:none; }
@@ -9230,7 +9230,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
   #landingPage .lp-nav-links { display:flex; order:3; flex-basis:100%; justify-content:space-between; gap:12px; border-top:1px solid var(--lp-line); }
   #landingPage .lp-nav-links a { font-size:11px; min-height:40px; }
   #landingPage .lp-nav-links a[href="#lp-families"] { display:inline-flex; }
-  #landingPage .lp-section { scroll-margin-top:164px; }
+  #landingPage .lp-section { scroll-margin-top:140px; }
   #landingPage .lp-about-story { grid-template-columns:1fr; gap:33px; }
   #landingPage .lp-about-method { gap:20px; }
   #landingPage .lp-about-contact { gap:30px; padding:30px; }
@@ -9238,11 +9238,16 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
   #landingPage .lp-programme-compact { flex-direction:column; gap:0; }
 }
 @media (max-width:620px) {
-  #landingPage .lp-brand-logo { width:107px; height:78px; }
-  #landingPage .lp-nav { min-height:0; }
+  #landingPage .lp-brand-logo { width:52px; height:40px; }
+  #landingPage .lp-brand { gap:5px; }
+  #landingPage .lp-brand-caption { max-width:112px; font-size:12px; }
+  #landingPage .lp-brand-caption span { font-size:10px; letter-spacing:0; }
+  #landingPage .lp-nav { min-height:0; padding-top:12px; }
+  #landingPage .lp-nav-actions .lp-button-small { display:none; }
+  #landingPage .lp-nav-actions .lp-login { font-size:11px; padding-inline:6px; }
   #landingPage .lp-nav-links { gap:8px; }
   #landingPage .lp-nav-links a { font-size:10px; }
-  #landingPage .lp-section { scroll-margin-top:150px; }
+  #landingPage .lp-section { scroll-margin-top:120px; }
   #landingPage .lp-about { padding-top:55px; }
   #landingPage .lp-about-story { padding:28px; }
   #landingPage .lp-about-purpose h3 { font-size:29px; }
@@ -9383,18 +9388,18 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
   <a class="lp-skip" href="#lp-main">Skip to content</a>
   <header class="lp-header">
     <nav class="lp-wrap lp-nav" aria-label="Main navigation">
-      <a class="lp-brand" href="#landingPage" aria-label="Polymath Science Learning Portal home">
+      <a class="lp-brand" href="#landingPage" aria-label="Polymath Learning Centre home">
         <img class="lp-brand-logo" src="assets/branding/polymath-learning-centre.png" width="2681" height="1957" alt="Polymath Learning Centre" loading="eager" fetchpriority="high">
-        <span class="lp-brand-caption">Science Learning Portal</span>
+        <span class="lp-brand-caption">Polymath <span>Learning Centre</span></span>
       </a>
       <div class="lp-nav-links">
         <a href="#lp-features">The experience</a>
         <a href="#lp-demo">How it works</a>
-        <a href="#lp-families">For families</a>
         <a class="lp-about-link" href="#lp-about">About Us</a>
+        <a href="enquiry.html">Enquire</a>
       </div>
       <div class="lp-nav-actions">
-        <button class="lp-login" type="button" onclick="showPage('loginPage')">Log in</button>
+        <button class="lp-login" type="button" onclick="showPage('loginPage')">Polymath Online</button>
         <button class="lp-button lp-button-small" type="button" onclick="showPage('registerPage')">Get started</button>
       </div>
     </nav>
@@ -9554,7 +9559,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="lp-wrap">
         <div class="lp-section-head">
           <div><div class="lp-eyebrow">About Polymath Learning Centre</div><h2 id="lp-about-title">Small breakthroughs.<br><em>Bigger possibilities.</em></h2></div>
-          <p>Primary Mathematics and Science, taught with purpose. We help children understand the ideas, build better learning habits, and find the confidence to tackle the next challenge.</p>
+          <p>Mathematics and Science, taught with purpose. With Science from P3 to Secondary 1 and Mathematics from P4 to P6, we help children understand the ideas and find the confidence to tackle the next challenge.</p>
         </div>
         <div class="lp-about-story">
           <div class="lp-about-purpose">
@@ -9573,7 +9578,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         <div class="lp-about-programmes" aria-label="Our classes and learning resources">
           <article class="lp-programme">
             <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-atom"/></svg></div>
-            <span class="lp-about-kicker">PRIMARY SCIENCE</span>
+            <span class="lp-about-kicker">SCIENCE · P3 TO SECONDARY 1</span>
             <h3>Turn science knowledge<br> into stronger answers.</h3>
             <p>Knowing the topic is only the beginning. Our Science programme helps students analyse the question, identify the important concepts and keywords, and explain their thinking clearly in open-ended answers.</p>
             <p class="lp-programme-benefit">For learners who want to bridge the gap between “I know this” and “I can explain this”.</p>
@@ -9581,7 +9586,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           </article>
           <article class="lp-programme">
             <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-target"/></svg></div>
-            <span class="lp-about-kicker">PRIMARY MATHEMATICS</span>
+            <span class="lp-about-kicker">MATHEMATICS · P4 TO P6</span>
             <h3>See the problem.<br> Find a way through.</h3>
             <p>Build the thinking behind the method. Through model drawing, heuristics, and targeted practice, students learn to choose a suitable strategy and work through unfamiliar problems with greater clarity.</p>
             <p class="lp-programme-benefit">For learners building firm foundations or developing their problem-solving skills for the PSLE.</p>
@@ -9599,7 +9604,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         <div class="lp-about-contact">
           <div><div class="lp-eyebrow">Let’s find the right fit</div><h3>Your child’s next chapter<br> starts with a conversation.</h3><p>Tell us your child’s level and what they find challenging. Ask about suitable classes, current fees, and a paid trial lesson.</p></div>
           <div class="lp-about-contact-actions">
-            <a class="lp-button" href="https://www.polymathlc.com.sg/sign-up-here.html" target="_blank" rel="noopener noreferrer">Enquire about classes <svg class="lp-icon" aria-hidden="true"><use href="#lp-arrow"/></svg></a>
+            <a class="lp-button" href="enquiry.html">Enquire about classes <svg class="lp-icon" aria-hidden="true"><use href="#lp-arrow"/></svg></a>
             <a class="lp-button lp-button-secondary" href="https://wa.me/6590223314" target="_blank" rel="noopener noreferrer">WhatsApp +65 9022 3314</a>
             <a class="lp-text-link" href="https://www.polymathlc.com.sg/contact-us.html" target="_blank" rel="noopener noreferrer">Visit us in Clementi <svg class="lp-icon" aria-hidden="true"><use href="#lp-arrow"/></svg></a>
           </div>
@@ -9622,12 +9627,12 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     <section class="lp-closing" aria-labelledby="lp-closing-title">
       <div class="lp-wrap lp-closing-inner">
         <div><h2 id="lp-closing-title">The next “I get it!”<br><em>starts here.</em></h2><p>Make room for curiosity. Build the confidence to explain.</p></div>
-        <div class="lp-closing-actions"><button class="lp-button" type="button" onclick="showPage('registerPage')">Create your account <svg class="lp-icon" aria-hidden="true"><use href="#lp-arrow"/></svg></button><small>Already part of Polymath? <button class="lp-login" type="button" onclick="showPage('loginPage')">Log in</button></small></div>
+        <div class="lp-closing-actions"><button class="lp-button" type="button" onclick="showPage('registerPage')">Create your account <svg class="lp-icon" aria-hidden="true"><use href="#lp-arrow"/></svg></button><small>Already part of Polymath? <button class="lp-login" type="button" onclick="showPage('loginPage')">Polymath Online</button></small></div>
       </div>
     </section>
   </main>
   <footer class="lp-footer">
-    <div class="lp-wrap lp-footer-inner"><div><strong>Science Learning Portal</strong><p>© 2026 Polymath Learning Centre. A place for curious minds.</p></div><div class="lp-footer-links"><a href="#lp-about">About Us</a><a href="#lp-features">Explore the experience</a><a href="#lp-demo">Try a sample</a><a href="#lp-faq">Common questions</a><a href="#landingPage">Back to top ↑</a></div></div>
+    <div class="lp-wrap lp-footer-inner"><div><strong>Polymath Learning Centre</strong><p>© 2026 Polymath Learning Centre. A place for curious minds.</p></div><div class="lp-footer-links"><a href="#lp-about">About Us</a><a href="enquiry.html">Enquire</a><a href="#lp-features">Explore the experience</a><a href="#lp-demo">Try a sample</a><a href="#lp-faq">Common questions</a><a href="#landingPage">Back to top ↑</a></div></div>
   </footer>
   <noscript><p class="lp-noscript">Enable JavaScript to try the interactive sample, create an account, or sign in to the Science Learning Portal.</p></noscript>
 </div>
@@ -15455,6 +15460,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
-<script type="module" src="app.js?v=1.405.0"></script>
+<script type="module" src="app.js?v=1.406.0"></script>
 </body>
 </html>
