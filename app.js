@@ -3867,7 +3867,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.402.1';
+const APP_VERSION = 'v1.403.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -9249,19 +9249,33 @@ const PVS_REPLAN_MS = 900;     // the A4 preview re-paginates this long after th
 const _pvsDirty = new Map();   // qid -> 'bank' | 'vetting'
 let _pvsIdleTimer = null;
 let _pvsReplanTimer = null;
+let _pvsFlushP = null;         // the flush in flight, for anyone who must wait for it
 const PVS_CSS = `
 .pvs-bar{display:inline-flex;align-items:center;gap:2px;margin:4px 0 0;padding:2px 4px;border-radius:999px;background:rgba(255,255,255,.94);border:1px solid rgba(0,0,0,.14);box-shadow:0 1px 4px rgba(0,0,0,.12);font-family:inherit;font-size:11px;font-weight:600;line-height:1;color:#333;pointer-events:auto;user-select:none;vertical-align:top}
 .pvs-bar.pvs-over{position:absolute;left:6px;top:6px;margin:0;z-index:5}
 .pvs-btn{width:22px;height:22px;border:0;border-radius:999px;background:transparent;font-family:inherit;font-size:14px;font-weight:700;line-height:1;color:#333;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
 .pvs-btn:hover{background:rgba(0,0,0,.08)}
 .pvs-btn.pvs-auto{width:auto;padding:0 7px;font-size:10px;font-weight:600;color:#555}
-/* 🎨 is separated by a hairline and set apart, because the three controls to
-   its left are instant and free and this one spends an AI call. It must not be
-   what a thumb lands on while sizing a picture. */
-.pvs-btn.pvs-colour{margin-left:3px;padding-left:5px;border-left:1px solid rgba(0,0,0,.14);border-radius:0 999px 999px 0;width:26px;font-size:13px}
-.pvs-btn.pvs-colour[disabled]{opacity:.65;cursor:progress}
+/* ✨ and 🎨 are separated from the free controls by a hairline and set apart,
+   because the three controls to their left are instant and free and these two
+   each spend an AI call. Neither must be what a thumb lands on while sizing a
+   picture. ✨ (black-and-white) opens the pair, 🎨 (colour) closes the pill. */
+.pvs-btn.pvs-ai{width:26px;font-size:13px}
+.pvs-btn.pvs-enhance{margin-left:3px;padding-left:5px;border-left:1px solid rgba(0,0,0,.14);border-radius:0}
+.pvs-btn.pvs-colour{border-radius:0 999px 999px 0}
+.pvs-btn.pvs-ai[disabled]{opacity:.65;cursor:progress}
 .pvs-label{min-width:34px;text-align:center;font-variant-numeric:tabular-nums}
-@media print{.pvs-bar{display:none!important}}`;
+/* ▲▼ the order bar: one per ELEMENT of the question, hung by pvoDecorateDoc on
+   the element's first box. Absolute, so it takes no layout height on a page the
+   planner has already measured; faint until hovered or the element is selected,
+   so a sheet of ten elements is not a sheet of ten toolbars. */
+.pvo-bar{position:absolute;right:6px;top:2px;z-index:6;display:inline-flex;flex-direction:column;gap:1px;padding:2px;border-radius:8px;background:rgba(255,255,255,.94);border:1px solid rgba(0,0,0,.14);box-shadow:0 1px 4px rgba(0,0,0,.12);pointer-events:auto;user-select:none;opacity:.55;transition:opacity .12s}
+.pvo-bar:hover,.pvo-sel>.pvo-bar{opacity:1}
+.pvo-btn{width:20px;height:18px;border:0;border-radius:6px;background:transparent;font-family:inherit;font-size:11px;line-height:1;color:#333;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.pvo-btn:hover{background:rgba(0,0,0,.08)}
+.pvo-btn[disabled]{opacity:.3;cursor:default}
+.pvo-sel{outline:2px solid #4a7c59;outline-offset:2px;border-radius:4px}
+@media print{.pvs-bar,.pvo-bar{display:none!important}.pvo-sel{outline:none}}`;
 function pvsAllowed() { try { return !!_canAuthor(); } catch (_) { return false; } }
 // The ONE resolver: bank first, then the vetting list. Anything else (a Custom
 // Paper's unsaved question, an editor draft) has no document to write to, so
@@ -9397,10 +9411,23 @@ function pvsReset(qid, bid) {
   _pvsMark(found);
   pvsPaint(qid, bid, block);
 }
-// Write every question touched since the last flush. Called from every
-// preview's close, from the idle timer and from pagehide. A write that did not
-// land keeps the question dirty for the next flush and says so.
-async function pvsFlush() {
+// Write every question touched since the last flush — a picture resized, or
+// an element moved with ▲▼. Called from every preview's close, from the idle
+// timer and from pagehide. A write that did not land keeps the question dirty
+// for the next flush and says so.
+//
+// The run is kept as `_pvsFlushP` so that ✅ Add to question bank can WAIT for a
+// flush already in flight: it deletes the vetting document, and a
+// saveVettingQuestion landing after that delete would put the document
+// straight back — the ordering hazard the merge dialog documents.
+function pvsFlush() {
+  _pvsFlushP = _pvsFlushRun();
+  return _pvsFlushP;
+}
+function pvsFlushSettled() {
+  return _pvsFlushP ? _pvsFlushP.catch(() => {}) : Promise.resolve();
+}
+async function _pvsFlushRun() {
   clearTimeout(_pvsIdleTimer);
   if (!_pvsDirty.size) return;
   const entries = Array.from(_pvsDirty.entries());
@@ -9416,8 +9443,8 @@ async function pvsFlush() {
     if (ok === false) { failed++; if (!_pvsDirty.has(qid)) _pvsDirty.set(qid, found.where); }
     else n++;
   }
-  if (failed) showToast('⚠ Could not save ' + failed + ' picture size' + (failed === 1 ? '' : 's') + ' — it will be tried again', 'error');
-  else if (n) showToast('🖼 Picture size saved' + (n > 1 ? ' on ' + n + ' questions' : ''), 'success');
+  if (failed) showToast('⚠ Could not save the preview edits on ' + failed + ' question' + (failed === 1 ? '' : 's') + ' — they will be tried again', 'error');
+  else if (n) showToast('💾 Preview edits saved' + (n > 1 ? ' on ' + n + ' questions' : ''), 'success');
 }
 // Hang a pill on every picture inside an EXPORTED preview (an iframe written
 // by _wsWritePreview). Those pages were measured by the planner before this
@@ -9448,7 +9475,8 @@ function pvsDecorateDoc(doc) {
       bind('minus', () => pvsStep(qid, bid, -1));
       bind('plus', () => pvsStep(qid, bid, 1));
       bind('auto', () => pvsReset(qid, bid));
-      bind('colour', () => pvcRun(qid, bid));
+      bind('enhance', () => pvcRun(qid, bid, false));
+      bind('colour', () => pvcRun(qid, bid, true));
       bar.addEventListener('pointerdown', e => e.stopPropagation());
       const view = doc.defaultView;
       if (view && view.getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
@@ -9461,13 +9489,19 @@ function pvsDecorateDoc(doc) {
 try { window.addEventListener('pagehide', () => { pvsFlush(); }); } catch (_) {}
 
 // =====================================================================
-// 🎨 COLOURISE A PICTURE FROM A PREVIEW — in the background, saved by itself
+// ✨🎨 REGENERATE A PICTURE FROM A PREVIEW — in the background, saved by itself
 // ---------------------------------------------------------------------
-// Beside the − / + / Auto size pill, every preview carries a 🎨 button that
-// regenerates that picture in colour. It is the same job the block editor's
-// 🎨 Enhance with colour does, reached without opening the question at all —
-// which is the whole point: a teacher reading a sheet can fix the pictures on
-// it from where they are reading.
+// Beside the − / + / Auto size pill, every preview carries TWO buttons that
+// regenerate that picture: ✨ redraws it as a clean BLACK-AND-WHITE line
+// diagram (the block editor's ✨ Enhance), 🎨 redraws it in COLOUR (the
+// editor's 🎨 Enhance with colour). Both are reached without opening the
+// question at all — which is the whole point: a teacher reading a sheet can
+// fix the pictures on it from where they are reading.
+//
+// - ONE JOB PER PICTURE, WHICHEVER BUTTON STARTED IT. The two buttons are two
+//   prompts through one pipeline (`job.colour` is the only difference), so a
+//   picture being redrawn has BOTH buttons disabled: two models redrawing the
+//   same picture at once is two writes racing for one block.
 //
 // - IT RUNS IN THE BACKGROUND AND SURVIVES THE PREVIEW CLOSING. An image call
 //   is 10–25 seconds and a preview is a thing you glance at, so a job that
@@ -9507,20 +9541,36 @@ function pvcState(qid, bid) { return (_pvcJobs.get(_pvcKey(qid, bid)) || {}).sta
 // work, because the picture exists only in a model's reply until it is written.
 function pvcBusy() { return _pvcRunning > 0 || _pvcWaiting.length > 0; }
 
-// The button as it sits inside the pill. It is deliberately the LAST control:
-// − / + / Auto are instant and free, and this one spends an AI call, so it
-// must not be the thing a thumb lands on while sizing a picture.
+// The two buttons as they sit inside the pill. They are deliberately the LAST
+// controls: − / + / Auto are instant and free, and each of these spends an AI
+// call, so neither must be the thing a thumb lands on while sizing a picture.
+// ✨ (black-and-white) first, 🎨 (colour) last — the order the block editor's
+// own bar has always used.
 function _pvcButtonHtml(qid, bid) {
+  return _pvcOneButtonHtml(qid, bid, false) + _pvcOneButtonHtml(qid, bid, true);
+}
+// One of the pair. A job is per PICTURE, so while one is running the button
+// that started it shows ⏳ and the other is disabled with a title saying why;
+// done / error are shown only on the button whose job it was.
+function _pvcOneButtonHtml(qid, bid, colour) {
   const q = escapeHtml(String(qid)), b = escapeHtml(String(bid));
-  const st = pvcState(qid, bid);
-  const label = st === 'running' ? '⏳' : (st === 'done' ? '✅' : (st === 'error' ? '⚠️' : '🎨'));
-  const title = st === 'running' ? 'Colourising this picture… it finishes even if you close this preview'
-    : st === 'done' ? 'Colourised and saved — it is waiting at the top of ✅ Check Questions'
-    : st === 'error' ? 'That colourisation failed — press to try again'
-    : 'Regenerate this picture in colour. It runs in the background, saves itself, and goes to the front of ✅ Check Questions.';
-  return `<button type="button" class="pvs-btn pvs-colour" data-pvs-act="colour"${st === 'running' ? ' disabled' : ''}
-    aria-label="Colourise this picture" title="${escapeHtml(title)}"
-    onclick="event.stopPropagation();pvcRun('${q}','${b}')">${label}</button>`;
+  const job = _pvcJobs.get(_pvcKey(qid, bid)) || {};
+  const st = job.state || '';
+  const mine = !!st && (!!job.colour === !!colour);
+  const busy = st === 'running' || st === 'queued';
+  const idle = colour ? '🎨' : '✨';
+  const what = colour ? 'Colourise' : 'Enhance';
+  const label = !mine ? idle : (busy ? '⏳' : (st === 'done' ? '✅' : (st === 'error' ? '⚠️' : idle)));
+  const title = busy
+    ? (mine ? (colour ? 'Colourising' : 'Enhancing') + ' this picture… it finishes even if you close this preview'
+            : 'This picture is already being regenerated — wait for that to finish')
+    : (mine && st === 'done') ? (colour ? 'Colourised' : 'Enhanced') + ' and saved — it is waiting at the top of ✅ Check Questions'
+    : (mine && st === 'error') ? 'That ' + what.toLowerCase() + ' failed — press to try again'
+    : colour ? 'Regenerate this picture in colour. It runs in the background, saves itself, and goes to the front of ✅ Check Questions.'
+             : 'Regenerate this picture as a clean black-and-white line diagram — no colour. It runs in the background, saves itself, and goes to the front of ✅ Check Questions.';
+  return `<button type="button" class="pvs-btn pvs-ai ${colour ? 'pvs-colour' : 'pvs-enhance'}" data-pvs-act="${colour ? 'colour' : 'enhance'}"${busy ? ' disabled' : ''}
+    aria-label="${colour ? 'Colourise' : 'Enhance'} this picture" title="${escapeHtml(title)}"
+    onclick="event.stopPropagation();pvcRun('${q}','${b}',${colour ? 'true' : 'false'})">${label}</button>`;
 }
 
 // Repaint the button on EVERY copy of this picture on the page, the app's own
@@ -9534,37 +9584,40 @@ function pvcPaint(qid, bid) {
       try { if (f.contentDocument) docs.push(f.contentDocument); } catch (_) {}
     });
   } catch (_) {}
-  const fresh = _pvcButtonHtml(qid, bid);
-  docs.forEach(d => {
-    try {
-      d.querySelectorAll(sel).forEach(wrap => {
-        wrap.querySelectorAll('[data-pvs-act="colour"]').forEach(btn => {
-          const tmp = d.createElement('div');
-          tmp.innerHTML = fresh;
-          const next = tmp.firstElementChild;
-          if (!next) return;
-          btn.textContent = next.textContent;
-          btn.title = next.title;
-          btn.disabled = next.hasAttribute('disabled');
+  // Both buttons, each from its own fresh markup: one job disables the pair.
+  [['enhance', _pvcOneButtonHtml(qid, bid, false)], ['colour', _pvcOneButtonHtml(qid, bid, true)]].forEach(([act, fresh]) => {
+    docs.forEach(d => {
+      try {
+        d.querySelectorAll(sel).forEach(wrap => {
+          wrap.querySelectorAll('[data-pvs-act="' + act + '"]').forEach(btn => {
+            const tmp = d.createElement('div');
+            tmp.innerHTML = fresh;
+            const next = tmp.firstElementChild;
+            if (!next) return;
+            btn.textContent = next.textContent;
+            btn.title = next.title;
+            btn.disabled = next.hasAttribute('disabled');
+          });
         });
-      });
-    } catch (_) {}
+      } catch (_) {}
+    });
   });
 }
 
-function pvcRun(qid, bid) {
+// `colour` true is the 🎨 button, anything else the ✨ black-and-white one.
+function pvcRun(qid, bid, colour) {
   if (!pvsAllowed()) { showToast('Only an author can change a question\'s picture', 'error'); return; }
   const key = _pvcKey(qid, bid);
   const job = _pvcJobs.get(key);
-  if (job && (job.state === 'running' || job.state === 'queued')) return;   // already on its way
+  if (job && (job.state === 'running' || job.state === 'queued')) return;   // already on its way — whichever button started it
   const found = pvsFind(qid);
   const block = _pvsBlock(found, bid);
   if (!block || !block.url) { showToast('That picture is no longer on this question', 'error'); return; }
   if (!imageAiReady()) { showToast('Image AI is not available in this project', 'error'); return; }
-  _pvcJobs.set(key, { qid: String(qid), bid: String(bid), state: 'queued' });
+  _pvcJobs.set(key, { qid: String(qid), bid: String(bid), colour: colour === true, state: 'queued' });
   _pvcWaiting.push(key);
   pvcPaint(qid, bid);
-  showToast('🎨 Colourising in the background — you can close this preview', 'info');
+  showToast((colour === true ? '🎨 Colourising' : '✨ Enhancing') + ' in the background — you can close this preview', 'info');
   _pvcPump();
 }
 
@@ -9582,7 +9635,7 @@ function _pvcPump() {
         console.warn('preview colourise:', e);
         job.state = 'error';
         job.error = (e && e.message) || String(e);
-        showToast('Colourise failed: ' + job.error, 'error');
+        showToast((job.colour ? 'Colourise' : 'Enhance') + ' failed: ' + job.error, 'error');
       })
       .finally(() => {
         _pvcRunning--;
@@ -9603,7 +9656,7 @@ async function _pvcWork(job) {
   if (!parsed) throw new Error('could not read the picture');
   // Through the cleaning door: the model's decoder leaves a faint weave on the
   // white it paints, and this picture is going to be printed.
-  const outDataUrl = await generateCleanEnhancedImage(imgEnhancePrompt(true, ''),
+  const outDataUrl = await generateCleanEnhancedImage(imgEnhancePrompt(job.colour === true, ''),
     [{ mimeType: parsed.mime, data: dataUrl.split(',')[1] || '' }]);
   const url = await uploadImageDataUrl(outDataUrl);
 
@@ -9616,29 +9669,30 @@ async function _pvcWork(job) {
   // Set ONCE — colourising twice must not lose the original scan.
   if (!block.preColourUrl && sourceUrl) block.preColourUrl = sourceUrl;
   block.url = url;
-  _pvcMarkRecheck(found.q);
+  _pvcMarkRecheck(found.q, job.colour === true ? 'colour' : 'enhance');
 
   const ok = found.where === 'vetting'
     ? await saveVettingQuestion(found.q)
     : await saveQuestion(found.q, { quiet: true });
   if (ok === false) {
     block.url = sourceUrl;   // the screen must not claim a picture the database refused
-    throw new Error('the colourised picture could not be saved');
+    throw new Error('the regenerated picture could not be saved');
   }
   try { pvsPaint(job.qid, job.bid, block); } catch (_) {}
   try { _pvcSwapImages(job.qid, job.bid, url); } catch (_) {}
   try { _cqUpdateBadge(); } catch (_) {}
-  showToast('🎨 Colourised and saved — it is at the top of ✅ Check Questions', 'success');
+  showToast((job.colour === true ? '🎨 Colourised' : '✨ Enhanced') + ' and saved — it is at the top of ✅ Check Questions', 'success');
 }
 
-// A colourised picture is exactly the thing a person has to look at, so the
+// A regenerated picture is exactly the thing a person has to look at, so the
 // question goes to the FRONT of the check queue rather than to the back of a
-// newest-first one, where everything added since would bury it.
-function _pvcMarkRecheck(q) {
+// newest-first one, where everything added since would bury it. `why` is
+// 'colour' (🎨) or 'enhance' (✨) and is what the queue's banner reads.
+function _pvcMarkRecheck(q, why) {
   if (!q) return;
   q.recheck = {
     at: new Date().toISOString(),
-    why: 'colour',
+    why: why || 'colour',
     by: (currentUser && currentUser.uid) || ''
   };
   // A question already read is unread again: what was read was the old picture.
@@ -9681,6 +9735,203 @@ async function pvcRevert(qid, bid) {
   _pvcJobs.delete(_pvcKey(qid, bid));
   try { pvcPaint(qid, bid); _pvcSwapImages(qid, bid, block.url); } catch (_) {}
   showToast('Original picture restored', 'success');
+}
+
+
+// =====================================================================
+// ▲▼ THE ORDER OF A QUESTION'S ELEMENTS, FROM A PREVIEW
+// ---------------------------------------------------------------------
+// Every element of a question in an exported preview — a text block, a
+// picture, an option list, an answer box — carries a small ▲▼ bar, and the
+// element a teacher has clicked (or is hovering) moves with the ↑ / ↓ keys.
+// Reordering used to mean ✏️ Edit: open the editor, find the block, press the
+// arrow on its card, Save, find the way back — for the commonest structural
+// fix there is, a picture that landed under the options instead of above them.
+//
+// - `q.blocks` IS THE ORDER, and this swaps two entries of it. There is no
+//   second list: the printed sheet, the practice render and the editor all
+//   read that array, so a swap here is a swap everywhere on the next paint.
+// - THE WRITE RIDES THE SAME DIRTY MAP AS THE PICTURE SIZE (`_pvsMark` /
+//   `pvsFlush`): saved when the preview closes, or PVS_IDLE_MS after the last
+//   press, or on pagehide, through the two doors every committed question
+//   already goes through. A second flush would be a second thing to forget on
+//   a preview's close.
+// - THE WRAPPER IS `display:contents` (`pvoWrapOpen`), so it generates NO box:
+//   the planner measures exactly the page it measures without it, and the
+//   printed sheet — which never asks for the tags — cannot disagree with the
+//   preview over a wrapper the preview alone carries. The bar is hung on the
+//   element's own first box, absolutely positioned, so it adds no height.
+// - THE PREVIEW IS REDRAWN FROM THE QUESTION after a move rather than the DOM
+//   being shuffled: the packer decided the page breaks from the old order, and
+//   a picture moved above a page break changes where that break falls.
+// - THE QUESTION OPEN IN THE EDITOR FOLLOWS, or pressing Save there a minute
+//   later puts the old order straight back. Only when the editor holds THIS
+//   question and ✏️ editing mode is off — in editing mode the global `blocks`
+//   is the WHOLE PAPER, and a reorder applied to it moves a different
+//   question's element.
+// - THE KEYS ACT ONLY ON AN ELEMENT THAT IS ON A SCREEN (`_pvoTarget`). A
+//   selection made in a preview closed an hour ago must not move a block from
+//   the arrow keys somebody presses to scroll the bank.
+// - ONLY AN AUTHOR, CHECKED IN THE HANDLER. A student's device renders the very
+//   same preview.
+// =====================================================================
+const PVO_REPLAN_MS = 120;     // the A4 preview re-paginates this soon after a move
+let _pvoSel = null;            // { qid, bid } — the element last clicked in a preview
+let _pvoHover = null;          // { qid, bid } — the element the pointer is over
+
+// The opening tag of one element's wrapper, as `buildWorksheetHtml` emits it
+// when asked to (`opts.blockTags`). Empty for a question or block with no id —
+// a bar that cannot name what it moves is a button that does nothing.
+function pvoWrapOpen(q, block) {
+  if (!q || q.id == null || q.id === '' || !block || !block.id) return '';
+  return `<div class="pvo-blk" style="display:contents" data-pvo-q="${escapeHtml(String(q.id))}" data-pvo-b="${escapeHtml(String(block.id))}">`;
+}
+
+// One move. Returns true when something actually moved, so a key press that
+// did nothing (the top element, ↑) leaves the page free to scroll.
+function pvoMove(qid, bid, dir) {
+  if (!pvsAllowed()) return false;
+  const found = pvsFind(qid);
+  if (!found) { showToast('That question is no longer here', 'error'); return false; }
+  const list = Array.isArray(found.q.blocks) ? found.q.blocks : [];
+  const i = list.findIndex(b => b && String(b.id) === String(bid));
+  const j = i + (dir > 0 ? 1 : -1);
+  if (i < 0 || j < 0 || j >= list.length) return false;
+  [list[i], list[j]] = [list[j], list[i]];
+  _pvsMark(found);
+  _pvoSyncEditor(qid, list);
+  _pvoRerender(qid);
+  return true;
+}
+
+// The editor, if this very question is open in it: its own array is put in
+// the same order, so Save there cannot put the old order back. Never in ✏️
+// editing mode, where `blocks` is the whole paper, and never when the two
+// arrays do not hold the same ids (an edit in progress there has a different
+// shape, and this pass is not the one to reconcile them).
+function _pvoSyncEditor(qid, order) {
+  try {
+    if (typeof currentEditingQuestion === 'undefined' || !currentEditingQuestion || String(currentEditingQuestion) !== String(qid)) return;
+    if (typeof emActive === 'function' && emActive()) return;
+    if (!Array.isArray(blocks) || blocks.length !== order.length) return;
+    const byId = new Map(blocks.map(b => [String(b && b.id), b]));
+    const ids = order.map(b => String(b && b.id));
+    if (ids.some(id => !byId.has(id)) || new Set(ids).size !== ids.length) return;
+    const next = ids.map(id => byId.get(id));
+    blocks.length = 0;
+    next.forEach(b => blocks.push(b));
+    if (typeof renderBlocks === 'function') renderBlocks();
+  } catch (_) {}
+}
+
+// Every surface showing this question redraws from `q.blocks`: the 👁 peek
+// rewrites its frame, the A4 preview re-plans.
+function _pvoRerender(qid) {
+  try {
+    if (typeof _vetPrintPeek !== 'undefined' && _vetPrintPeek && _vetPrintPeek.qid != null && String(_vetPrintPeek.qid) === String(qid) && typeof _vetPrintPeekRefresh === 'function') _vetPrintPeekRefresh();
+  } catch (e) { console.warn('peek re-render', e); }
+  try {
+    const ov = document.getElementById('wsPreviewOverlay');
+    if (ov && ov.classList.contains('show') && typeof renderWsPreview === 'function') {
+      clearTimeout(_pvsReplanTimer);
+      _pvsReplanTimer = setTimeout(() => { try { renderWsPreview(); } catch (e) { console.warn('preview re-plan', e); } }, PVO_REPLAN_MS);
+    }
+  } catch (_) {}
+}
+
+// The element the ↑ / ↓ keys act on: the one clicked, else the one under the
+// pointer — and only while that element is actually on a screen.
+function _pvoTarget() {
+  const cand = _pvoSel || _pvoHover;
+  if (!cand) return null;
+  const esc = v => String(v).replace(/"/g, '\\"');
+  const sel = '[data-pvo-q="' + esc(cand.qid) + '"][data-pvo-b="' + esc(cand.bid) + '"]';
+  const shown = pvsDocs().some(d => { try { return !!d.querySelector(sel); } catch (_) { return false; } });
+  return shown ? cand : null;
+}
+
+function pvoKeydown(e) {
+  if (!e || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  const t = e.target;
+  const tag = t && t.tagName ? String(t.tagName).toUpperCase() : '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+  const pick = _pvoTarget();
+  if (!pick) return;
+  if (pvoMove(pick.qid, pick.bid, e.key === 'ArrowDown' ? 1 : -1)) { e.preventDefault(); e.stopPropagation(); }
+}
+
+// Registering the SAME named listener twice is a no-op in the DOM, and that
+// is relied on: a refresh rewrites the peek's document with document.open(),
+// which drops every listener the document had, so a "bound once" guard on the
+// document object would leave the keys dead after the first move.
+function _pvoBindKeys(doc) {
+  try { if (doc) doc.addEventListener('keydown', pvoKeydown); } catch (_) {}
+}
+
+// Click an element to select it: the outline says which one the keys will
+// move. Clicking the selected one again clears it.
+function pvoSelect(doc, qid, bid) {
+  const same = _pvoSel && String(_pvoSel.qid) === String(qid) && String(_pvoSel.bid) === String(bid);
+  _pvoSel = same ? null : { qid: String(qid), bid: String(bid) };
+  pvsDocs().forEach(d => { try { d.querySelectorAll('.pvo-sel').forEach(el => el.classList.remove('pvo-sel')); } catch (_) {} });
+  if (_pvoSel) {
+    const esc = v => String(v).replace(/"/g, '\\"');
+    const sel = '[data-pvo-q="' + esc(qid) + '"][data-pvo-b="' + esc(bid) + '"]';
+    pvsDocs().forEach(d => { try { d.querySelectorAll(sel).forEach(w => { const h = w.firstElementChild; if (h) h.classList.add('pvo-sel'); }); } catch (_) {} });
+  }
+}
+
+// Hang a ▲▼ bar on every element inside an EXPORTED preview (an iframe written
+// by _wsWritePreview), after the planner has measured the pages — the bar is
+// absolute and takes no layout height. The inline handlers are bound HERE, to
+// this document's functions, because the iframe's own window has none of them.
+function pvoDecorateDoc(doc) {
+  if (!doc || !pvsAllowed()) return;
+  try {
+    let any = false;
+    doc.querySelectorAll('[data-pvo-q][data-pvo-b]').forEach(wrap => {
+      const qid = wrap.getAttribute('data-pvo-q'), bid = wrap.getAttribute('data-pvo-b');
+      const host = wrap.firstElementChild;
+      if (!host || host.querySelector('[data-pvo-bar]')) return;
+      const found = pvsFind(qid);
+      const list = (found && Array.isArray(found.q.blocks)) ? found.q.blocks : [];
+      const i = list.findIndex(b => b && String(b.id) === String(bid));
+      if (i < 0) return;
+      const view = doc.defaultView;
+      if (view && view.getComputedStyle(host).position === 'static') host.style.position = 'relative';
+      const bar = doc.createElement('div');
+      bar.className = 'pvo-bar';
+      bar.setAttribute('data-pvo-bar', '1');
+      bar.title = 'Move this element up or down — saved when this preview closes. Click an element and press ↑ / ↓ to move it from the keyboard.';
+      bar.innerHTML = `<button type="button" class="pvo-btn" data-pvo-act="up" aria-label="Move this element up" title="Move up (↑)"${i === 0 ? ' disabled' : ''}>▲</button>` +
+        `<button type="button" class="pvo-btn" data-pvo-act="down" aria-label="Move this element down" title="Move down (↓)"${i >= list.length - 1 ? ' disabled' : ''}>▼</button>`;
+      const bind = (name, dir) => {
+        const el = bar.querySelector('[data-pvo-act="' + name + '"]');
+        if (el) el.onclick = e => { e.stopPropagation(); e.preventDefault(); _pvoSel = { qid: String(qid), bid: String(bid) }; pvoMove(qid, bid, dir); };
+      };
+      bind('up', -1);
+      bind('down', 1);
+      bar.addEventListener('pointerdown', e => e.stopPropagation());
+      host.appendChild(bar);
+      host.addEventListener('pointerenter', () => { _pvoHover = { qid: String(qid), bid: String(bid) }; });
+      host.addEventListener('pointerleave', () => { if (_pvoHover && _pvoHover.qid === String(qid) && _pvoHover.bid === String(bid)) _pvoHover = null; });
+      host.addEventListener('click', e => {
+        // A press on a pill or on the bar itself is its own action, not a select.
+        if (e.target && e.target.closest && e.target.closest('[data-pvs-bar],[data-pvo-bar]')) return;
+        pvoSelect(doc, qid, bid);
+      });
+      if (_pvoSel && _pvoSel.qid === String(qid) && _pvoSel.bid === String(bid)) host.classList.add('pvo-sel');
+      any = true;
+    });
+    if (any) {
+      pvsEnsureCss(doc);
+      _pvoBindKeys(doc);
+      // …and the app's own document: the pointer is over a block in the
+      // iframe while the keyboard focus is still out here.
+      _pvoBindKeys(document);
+    }
+  } catch (e) { console.warn('preview block order', e); }
 }
 
 
@@ -35696,6 +35947,10 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   // question's own title + category/topic meta (used for PSLE-paper prints so
   // the sheet shows just the question number, not the database title).
   const plainNums = !!(opts && opts.plainNumbers);
+  // blockTags — wrap every element of a question in its ▲▼ order wrapper
+  // (`pvoWrapOpen`, display:contents — no box, so nothing measured changes).
+  // Only a PREVIEW asks for it; the printed sheet never carries the tags.
+  const blockTags = !!(opts && opts.blockTags);
   // sectionHtmlById: map of question id → learning-objective banner HTML. The
   // banner is emitted as its OWN chunk immediately before that question, so the
   // packer can key a forced page break on it (data-qid "__lo__<qid>") — used by
@@ -35776,6 +36031,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
       q.blocks.forEach(block => {
         const bPart = qPartOf(qParts, block);
         _pushAnnotAnswerKey(qSections, block, bPart);
+        const atBlock = qHtml.length;   // ▲▼ where this element's markup starts
         switch (block.type) {
           case 'text': {
             const textHtml = escapeHtmlKeepLines(qPartBodyHtml(block));
@@ -35864,6 +36120,12 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             _pushBlockAnswerKey(qSections, block, bPart, qWhy);
             break;
           }
+        }
+        // ▲▼ Wrap whatever this element put on the SHEET (an explanation or an
+        // answer key pushes to the key, not here, and gets no bar).
+        if (blockTags && qHtml.length > atBlock) {
+          const open = pvoWrapOpen(q, block);
+          if (open) qHtml = qHtml.slice(0, atBlock) + open + qHtml.slice(atBlock) + '</div>';
         }
       });
 
@@ -36752,7 +37014,8 @@ function vetPrintPeekLeave() {
 }
 
 function vetPrintPeekHide() {
-  pvsFlush();   // 🔍± a picture resized in the peek is written as it closes
+  pvsFlush();   // 🔍± a picture resized — or ▲▼ an element moved — in the peek is written as it closes
+  _pvoSel = null;
   clearTimeout(_vetPrintPeekOpenTimer);
   clearTimeout(_vetPrintPeekCloseTimer);
   _vetPrintPeekSerial++;
@@ -36788,6 +37051,89 @@ function vetPrintPeekEdit(id, scope) {
   editQuestion(id);
 }
 
+// ✅ Add to question bank, from the peek itself. It is the vetting card's own
+// approve (`approveVetting`) — the same status stamp, the same bank write, the
+// same vetting delete — reached without closing the preview to find the card.
+//
+// THE ORDER IS THE WHOLE FUNCTION. The peek's own edits (a picture resized, an
+// element moved) sit in `_pvsDirty` waiting for the close to flush them
+// through saveVettingQuestion; the approve deletes the vetting document. A
+// flush landing AFTER that delete puts the vetting document straight back — a
+// question then in the bank AND in vetting. So this question's dirty entry is
+// dropped (the approve's own saveQuestion writes the whole question, edits
+// included), a flush already in flight is WAITED for, and only then is the
+// card approved. Vetting only: a 🗂️ Custom Paper question reaches the bank on
+// Send, held back, and never one at a time.
+async function vetPrintPeekApprove(id, scope) {
+  if (!_canAuthor() || scope === 'cpb') return;
+  const q = _vetPeekQuestion(id, 'vetting');
+  if (!q) { showToast('That question is no longer in the vetting list', 'error'); return; }
+  try { _pvsDirty.delete(String(id)); } catch (_) {}
+  vetPrintPeekHide();
+  try { await pvsFlushSettled(); } catch (_) {}
+  if (!_vetPeekQuestion(id, 'vetting')) return;   // approved or deleted while we waited
+  approveVetting(id);
+}
+
+// Rewrite the open peek's frame from the question as it now is — ▲▼ moved an
+// element, and the packer has to decide the page breaks again. The scroll
+// position and the selected element survive; the serial moves on so a late
+// callback from the previous render is dropped.
+function _vetPrintPeekRefresh() {
+  if (!_vetPrintPeek) return;
+  const { host, scope, qid } = _vetPrintPeek;
+  const q = _vetPeekQuestion(qid, scope);
+  if (!q || !host.isConnected) return;
+  const serial = ++_vetPrintPeekSerial;
+  _vetPrintPeekRender(host, q, scope, serial);
+}
+
+// The frame, written from the question. Shared by the open and the refresh so
+// the two cannot render different sheets.
+function _vetPrintPeekRender(host, q, scope, serial) {
+  const stage = host.querySelector('.vet-print-peek-stage');
+  const frame = host.querySelector('iframe');
+  const status = host.querySelector('.vet-print-peek-status');
+  // Scale the FRAME, not the measured document: A4 geometry and pagination
+  // stay identical to the full export, including on a narrow viewport.
+  const scale = Math.min(1, stage.clientWidth / 850);
+  frame.style.width = '850px';
+  frame.style.height = Math.ceil(stage.clientHeight / scale) + 'px';
+  frame.style.transform = 'scale(' + scale + ')';
+  let keepY = 0;
+  try { keepY = (frame.contentWindow && frame.contentWindow.scrollY) || 0; } catch (_) {}
+  try {
+    const copy = JSON.parse(JSON.stringify(q));
+    const html = buildWorksheetHtml([copy], q.title || 'Question', {
+      frontHtml: '', plainNumbers: true, noStudentFields: true,
+      whyNotes: _wnyCachedNotes([copy], wnyPrintOn('bank')),
+      answerKeyExtras: akxPrintOn('bank'),
+      // …and the 🎯 box, off the SAME `bank` switches the two lines above
+      // already read. `previewOneQuestionPrint` — the FULL preview this
+      // hover's own "Open full preview" opens, on the very same question —
+      // reads it through `_wsPreviewCtx`'s adhoc branch, so leaving it out
+      // here is the hover and the full preview showing two different sheets
+      // for one question.
+      objectivesBoxAll: objBoxPrintOn('bank'),
+      // ▲▼ every element wears its order tags, so the pack can hang the move
+      // buttons on it. A display:contents wrapper: no box, same pagination.
+      blockTags: true
+    });
+    _wsWritePreview(frame, html, { readOnly: true,
+      isCurrent: () => serial === _vetPrintPeekSerial && host.isConnected,
+      onReady: () => {
+        if (status) status.hidden = true;
+        if (keepY) { try { frame.contentWindow.scrollTo(0, keepY); } catch (_) {} }
+      },
+      onError: () => { if (status) status.textContent = 'Preview could not load. Try Open full preview.'; }
+    });
+    frame.contentDocument.addEventListener('keydown', vetPrintPeekKeydown);
+  } catch (e) {
+    console.warn('exported hover preview:', e);
+    if (status) status.textContent = 'Preview could not load. Try Open full preview.';
+  }
+}
+
 function vetPrintPeekShow(anchor, event) {
   if (!_canAuthor() || (event && event.pointerType === 'touch')) return;
   vetPrintPeekBind();
@@ -36807,56 +37153,32 @@ function vetPrintPeekShow(anchor, event) {
     host.innerHTML = `<div class="vet-print-peek-head"><strong></strong><button type="button" class="qb-action-btn" aria-label="Close exported preview">×</button></div>
       <div class="vet-print-peek-status" role="status">Preparing exported preview…</div>
       <div class="vet-print-peek-stage"><iframe title="Exported question and answer pages"></iframe></div>
-      <div class="vet-print-peek-foot"><span>Scroll to see all pages</span><button type="button" class="btn btn-outline">Open full preview</button><button type="button" class="btn btn-primary">Edit question</button></div>`;
+      <div class="vet-print-peek-foot"><span>Scroll to see all pages · click an element and press ↑ ↓ to move it</span><button type="button" class="btn btn-outline" data-peek-act="full">Open full preview</button><button type="button" class="btn btn-outline" data-peek-act="edit">Edit question</button>${scope === 'cpb' ? '' : '<button type="button" class="btn btn-primary" data-peek-act="approve">✅ Add to question bank</button>'}</div>`;
     host.querySelector('strong').textContent = q.title || 'Untitled question';
+    // Bound by ACTION, never by position: the foot has three buttons on a
+    // vetting question and two on a paper's, and an index re-points its
+    // neighbours the day one is added.
     const buttons = host.querySelectorAll('button');
     buttons[0].onclick = vetPrintPeekDismiss;
-    buttons[1].onclick = () => vetPrintPeekFull(q.id, scope);
-    buttons[2].onclick = () => vetPrintPeekEdit(q.id, scope);
+    const act = name => Array.from(buttons).find(b => b.getAttribute && b.getAttribute('data-peek-act') === name) || null;
+    const bind = (name, fn) => { const el = act(name); if (el) el.onclick = fn; };
+    bind('full', () => vetPrintPeekFull(q.id, scope));
+    bind('edit', () => vetPrintPeekEdit(q.id, scope));
+    bind('approve', () => vetPrintPeekApprove(q.id, scope));
     host.addEventListener('pointerenter', vetPrintPeekKeep);
     host.addEventListener('pointerleave', vetPrintPeekLeave);
     host.addEventListener('focusin', vetPrintPeekKeep);
     host.addEventListener('focusout', vetPrintPeekLeave);
     document.body.appendChild(host);
     anchor.setAttribute('aria-expanded', 'true');
-    _vetPrintPeek = { host, anchor };
+    // `qid` and `scope` ride along so a ▲▼ move can rewrite this very frame.
+    _vetPrintPeek = { host, anchor, qid: String(q.id), scope };
     const rect = anchor.getBoundingClientRect();
     const width = host.offsetWidth, height = host.offsetHeight;
     const left = rect.left >= width + 20 ? rect.left - width - 10 : Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
     const top = Math.max(12, Math.min(rect.top, window.innerHeight - height - 12));
     host.style.left = left + 'px'; host.style.top = top + 'px';
-    const stage = host.querySelector('.vet-print-peek-stage');
-    const frame = host.querySelector('iframe');
-    // Scale the FRAME, not the measured document: A4 geometry and pagination
-    // stay identical to the full export, including on a narrow viewport.
-    const scale = Math.min(1, stage.clientWidth / 850);
-    frame.style.width = '850px';
-    frame.style.height = Math.ceil(stage.clientHeight / scale) + 'px';
-    frame.style.transform = 'scale(' + scale + ')';
-    try {
-      const copy = JSON.parse(JSON.stringify(q));
-      const html = buildWorksheetHtml([copy], q.title || 'Question', {
-        frontHtml: '', plainNumbers: true, noStudentFields: true,
-        whyNotes: _wnyCachedNotes([copy], wnyPrintOn('bank')),
-        answerKeyExtras: akxPrintOn('bank'),
-        // …and the 🎯 box, off the SAME `bank` switches the two lines above
-        // already read. `previewOneQuestionPrint` — the FULL preview this
-        // hover's own "Open full preview" opens, on the very same question —
-        // reads it through `_wsPreviewCtx`'s adhoc branch, so leaving it out
-        // here is the hover and the full preview showing two different sheets
-        // for one question.
-        objectivesBoxAll: objBoxPrintOn('bank')
-      });
-      _wsWritePreview(frame, html, { readOnly: true,
-        isCurrent: () => serial === _vetPrintPeekSerial && host.isConnected,
-        onReady: () => { host.querySelector('.vet-print-peek-status').hidden = true; },
-        onError: () => { host.querySelector('.vet-print-peek-status').textContent = 'Preview could not load. Try Open full preview.'; }
-      });
-      frame.contentDocument.addEventListener('keydown', vetPrintPeekKeydown);
-    } catch (e) {
-      console.warn('exported hover preview:', e);
-      host.querySelector('.vet-print-peek-status').textContent = 'Preview could not load. Try Open full preview.';
-    }
+    _vetPrintPeekRender(host, q, scope, serial);
   }, event ? 180 : 0);
 }
 
@@ -37024,7 +37346,10 @@ async function renderWsPreview() {
     frontHtml, plainNumbers: true, noStudentFields: ctx.noFields,
     whyNotes: _wnyCachedNotes(selected, wnyPrintOn(ctx.where)),
     answerKeyExtras: !!ctx.akExtras,
-    objectivesBoxAll: !!ctx.objBoxAll
+    objectivesBoxAll: !!ctx.objBoxAll,
+    // ▲▼ the order tags — a preview-only wrapper that generates no box, so
+    // the pagination is still exactly what will print.
+    blockTags: pvsAllowed()
   }, ctx.buildOpts || {}));   // exactly what will print
   _wsWritePreview(frame, html, { ctxBreaks: ctx.forcedBreakIds || null });
 }
@@ -37239,6 +37564,8 @@ function _wsPreviewPack(doc, opts) {
   if (cnt) cnt.textContent = '· ' + totalPages + ' page' + (totalPages === 1 ? '' : 's');
   // 🔍± the picture-size pills, hung AFTER the planner has measured the pages.
   pvsDecorateDoc(doc);
+  // ▲▼ the element-order bars, the same way and for the same reason.
+  pvoDecorateDoc(doc);
   return true;
 }
 
@@ -44333,9 +44660,11 @@ function _cqRecheckBanner(q) {
   const when = (() => { try { return new Date(_cqRecheckAt(q)).toLocaleString(); } catch (_) { return ''; } })();
   const why = _cqRecheckWhy(q) === 'colour'
     ? '🎨 A picture on this question was regenerated in colour from a preview.'
-    : '🔁 This question was put back in the queue for a second look.';
+    : _cqRecheckWhy(q) === 'enhance'
+      ? '✨ A picture on this question was redrawn as a black-and-white line diagram from a preview.'
+      : '🔁 This question was put back in the queue for a second look.';
   const undo = reverts.map(b =>
-    `<button class="btn btn-outline" style="font-size:0.8rem;padding:6px 12px;" title="Put the picture that was there before the colourising back"
+    `<button class="btn btn-outline" style="font-size:0.8rem;padding:6px 12px;" title="Put the picture that was there before the regeneration back"
       onclick="pvcRevert('${escapeHtml(String(q.id))}','${escapeHtml(String(b.id))}')">↩ Use the original picture</button>`).join(' ');
   return `<div class="cq-note" style="display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;">
     <span>${why} Check the labels and the lines read correctly${when ? ' · ' + escapeHtml(when) : ''}.</span>
@@ -77977,6 +78306,8 @@ window.previewEditorPrint = previewEditorPrint;
 window.vetPrintPeekShow = vetPrintPeekShow;
 window.vetPrintPeekLeave = vetPrintPeekLeave;
 window.vetPrintPeekFull = vetPrintPeekFull;
+window.vetPrintPeekApprove = vetPrintPeekApprove;
+window.pvoMove = pvoMove;
 window.tlStopMany = tlStopMany;
 window.tlJumpToProblem = tlJumpToProblem;
 window.akeAddExplanation = akeAddExplanation;

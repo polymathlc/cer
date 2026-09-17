@@ -19,6 +19,7 @@ class El {
     this.classList = { toggle() {} };
   }
   setAttribute(k, v) { this.attrs[k] = v; }
+  getAttribute(k) { return this.attrs[k] == null ? null : this.attrs[k]; }
   addEventListener(k, cb) { this.listeners[k] = cb; }
   appendChild(x) { this.children.push(x); return x; }
   remove() { this.isConnected = false; }
@@ -41,7 +42,14 @@ function harness() {
       Object.defineProperty(host, 'innerHTML', {set(html) {
         host.markup = html;
         host.appendChild(new El('strong'));
-        for (let i=0;i<3;i++) host.appendChild(new El('button'));
+        // One button per <button> in the markup, carrying its data-peek-act —
+        // the foot is bound by ACTION now, and a vetting question has one
+        // more button than a paper's.
+        (html.match(/<button[^>]*>/g) || []).forEach(tag => {
+          const b = host.appendChild(new El('button'));
+          const m = /data-peek-act="([^"]*)"/.exec(tag);
+          if (m) b.setAttribute('data-peek-act', m[1]);
+        });
         const status=host.appendChild(new El()); status.className='vet-print-peek-status';
         const stage=host.appendChild(new El()); stage.className='vet-print-peek-stage';
         stage.clientWidth=680; stage.clientHeight=450;
@@ -59,12 +67,18 @@ function harness() {
     const editQuestion=id=>actions.push(['edit',id]);
     const cpbPreviewQuestion=id=>actions.push(['cpb-full',id]);
     const cpbEditQuestion=id=>actions.push(['cpb-edit',id]);
-    // 🔍± the picture-size pills: a hover that closes writes the sizes back.
+    const approveVetting=id=>actions.push(['approve',id]);
+    const showToast=(m,t)=>actions.push(['toast',m]);
+    // 🔍± the picture-size pills: a hover that closes writes the sizes back —
+    // and ✅ Add to question bank waits for a flush already in flight.
     let pvsFlushes=0; const pvsFlush=()=>{pvsFlushes++;};
+    const _pvsDirty=new Map(); let _pvoSel=null;
+    let flushWaits=0; const pvsFlushSettled=async()=>{flushWaits++; actions.push(['flush-settled']);};
     ${hover}
     return {show:vetPrintPeekShow,leave:vetPrintPeekLeave,keep:vetPrintPeekKeep,hide:vetPrintPeekHide,
       dismiss:vetPrintPeekDismiss,key:vetPrintPeekKeydown,button:vetPrintPeekButton,
-      full:vetPrintPeekFull,edit:vetPrintPeekEdit,resolve:_vetPeekQuestion,
+      full:vetPrintPeekFull,edit:vetPrintPeekEdit,approve:vetPrintPeekApprove,refresh:_vetPrintPeekRefresh,resolve:_vetPeekQuestion,
+      dirty:_pvsDirty,get flushWaits(){return flushWaits},
       get state(){return _vetPrintPeek},get flushes(){return pvsFlushes},set list(x){vettingList=x},set paper(x){_cpbQuestions=x}};
   `);
   const api = factory(document, window, (cb,ms)=>{const id=++timerSeq;timers.set(id,{cb,ms});return id;}, id=>timers.delete(id), ()=>author,
@@ -138,7 +152,7 @@ test('hover renders the current Vetting copy with the export options and isolate
   const edited={...q,title:'Latest edit'};h.api.list=[edited]; h.flush();
   const r=h.rendered[0]; assert.equal(r.title,'Latest edit'); assert.deepEqual(r.qs,[edited]);
   assert.notEqual(r.qs[0],edited); assert.notEqual(r.qs[0].blocks,edited.blocks);
-  assert.deepEqual(r.opts,{frontHtml:'',plainNumbers:true,noStudentFields:true,whyNotes:{cached:true},answerKeyExtras:true,objectivesBoxAll:true});
+  assert.deepEqual(r.opts,{frontHtml:'',plainNumbers:true,noStudentFields:true,whyNotes:{cached:true},answerKeyExtras:true,objectivesBoxAll:true,blockTags:true});
   assert.equal(h.written[0].opts.readOnly,true); assert.equal(h.written[0].frame.style.width,'850px');
   assert.equal(h.written[0].frame.style.transform,'scale(0.8)');
   assert.equal(a.attrs['aria-expanded'],'true'); assert.deepEqual(h.actions,[]);
@@ -206,6 +220,7 @@ function packHarness(readOnly) {
     const PRINT_PAGE_PX=1000, _canAuthor=()=>true, _wsPreviewIsDraft=()=>false;
     const _wsPreviewSaved={id:'existing-worksheet'};
     const pvsDecorateDoc=()=>{};   // 🔍± the picture-size pills hung after packing
+    const pvoDecorateDoc=()=>{};   // ▲▼ the element-order bars, hung the same way
     // The REAL front-sheet placement, so the hover preview is exercised with
     // the same rule the printer uses rather than a stub that cannot disagree
     // with it. Every front page here is unanchored, which is every front page
@@ -234,6 +249,50 @@ test('read-only pack uses the same pages and answer key without worksheet tools 
   assert.deepEqual([...full.seen[0].forcedBreakIds],['stored-break']);
   assert.deepEqual([...full.forced],['stored-break']);
   assert.equal(full.seen[0].mergeUpIds,full.merged);
+});
+
+test('✅ Add to question bank approves from the peek, in the ONE order that cannot resurrect the card', async () => {
+  const h=harness(); h.api.list=[Q('a')]; const a=h.anchor('a'); h.show(a); h.flush();
+  const host=h.api.state.host;
+  const btn=host.children.filter(c=>c.tag==='button');
+  assert.equal(btn.length,4,'close, full, edit, approve');
+  assert.equal(btn[3].attrs['data-peek-act'],'approve');
+  assert.match(host.markup,/Add to question bank/);
+  h.api.dirty.set('a','vetting');       // a picture resized / an element moved in this peek
+  await btn[3].onclick();
+  // the dirty entry is dropped (the approve writes the whole question), the
+  // peek is closed, a flush in flight is waited for, THEN the card is approved
+  assert.equal(h.api.dirty.has('a'),false,'a pending flush would write the vetting doc back after the approve deleted it');
+  assert.equal(h.api.state,null);
+  assert.deepEqual(h.actions.filter(x=>x[0]!=='toast'),[['flush-settled'],['approve','a']]);
+  // a question approved or deleted while we waited is not approved twice
+  const h2=harness(); h2.api.list=[Q('b')]; h2.show(h2.anchor('b')); h2.flush();
+  const p=h2.api.approve('b','vetting'); h2.api.list=[]; await p;
+  assert.ok(!h2.actions.some(x=>x[0]==='approve'),'approved a card that had already gone');
+  // …and never for a student, never for a 🗂️ Custom Paper question
+  const h3=harness(); h3.api.list=[Q('c')]; h3.author=false; await h3.api.approve('c','vetting');
+  assert.ok(!h3.actions.some(x=>x[0]==='approve'),'a student approved a question from a hover');
+  const h4=harness(); h4.api.paper=[Q('p')]; h4.show(h4.anchor('p','cpb'),{pointerType:'mouse'}); h4.flush();
+  assert.ok(!/Add to question bank/.test(h4.api.state.host.markup),'a paper question offers a button that would file it one at a time');
+  await h4.api.approve('p','cpb');
+  assert.ok(!h4.actions.some(x=>x[0]==='approve'));
+  assert.ok(src.includes('window.vetPrintPeekApprove = vetPrintPeekApprove;'));
+});
+
+test('▲▼ a move rewrites the open peek from the question, on the same frame, and drops the old render', () => {
+  const h=harness(); h.api.list=[Q('a')]; const a=h.anchor('a'); h.show(a); h.flush();
+  assert.equal(h.written.length,1);
+  const first=h.written[0];
+  assert.equal(h.api.state.qid,'a'); assert.equal(h.api.state.scope,'vetting');
+  h.api.list=[{...Q('a'),title:'moved'}];
+  h.api.refresh();
+  assert.equal(h.written.length,2,'the refresh did not rewrite the frame');
+  assert.equal(h.written[1].frame,first.frame,'the refresh wrote into a different frame');
+  assert.equal(h.rendered[1].title,'moved','the refresh did not re-read the question');
+  assert.equal(first.opts.isCurrent(),false,'a late callback from the previous render would still paint');
+  assert.equal(h.written[1].opts.isCurrent(),true);
+  assert.ok(h.api.state,'the refresh closed the peek');
+  h.api.hide(); h.api.refresh(); assert.equal(h.written.length,2,'a refresh with no peek open rendered something');
 });
 
 test('closing the peek writes any picture resized inside it back (pvsFlush)', () => {
