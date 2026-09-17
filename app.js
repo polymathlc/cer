@@ -2960,6 +2960,8 @@ function showPage(pageId) {
     const el = document.getElementById(id);
     if (el) el.style.display = id === pageId ? (id === 'appWrapper' ? 'flex' : '') : 'none';
   });
+  // A CTA near the bottom of the public home must open auth at the top.
+  if (pageId !== 'appWrapper') window.scrollTo(0, 0);
   // Clear error states when switching
   document.querySelectorAll('.auth-error').forEach(e => e.style.display = 'none');
   document.querySelectorAll('.auth-loading').forEach(e => e.classList.remove('active'));
@@ -3867,7 +3869,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.403.0';
+const APP_VERSION = 'v1.404.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -39984,35 +39986,49 @@ function loadSampleData() {
 // LANDING DEMO (student-facing scaffolding preview)
 // =====================================================================
 let landingDemoMode = 'blanks';
+// This public sample is local only: no account, grading request, or saved progress.
+const landingDemoDraft = { claim: '', evidence: '', answer: '' };
 
 function renderLandingDemo() {
   const body = document.getElementById('landingDemoBody');
   if (!body) return;
-  const btnBlanks = document.getElementById('landingDemoBtnBlanks');
-  const btnOpen = document.getElementById('landingDemoBtnOpen');
-  if (btnBlanks) btnBlanks.classList.toggle('active', landingDemoMode === 'blanks');
-  if (btnOpen) btnOpen.classList.toggle('active', landingDemoMode === 'open');
-
+  for (const [id, mode] of [['landingDemoBtnBlanks', 'blanks'], ['landingDemoBtnOpen', 'open']]) {
+    const button = document.getElementById(id);
+    if (!button) continue;
+    button.classList.toggle('active', landingDemoMode === mode);
+    button.setAttribute('aria-pressed', String(landingDemoMode === mode));
+  }
   if (landingDemoMode === 'blanks') {
     body.innerHTML = `
       <div class="landing-demo-question">
-        The metal spoon feels <input class="landing-demo-blank" placeholder="answer"> than the wooden spoon after 1 minute in hot water, so metal is a better conductor of heat.
+        <label for="landingDemoClaim">Claim:</label> Metal is a
+        <input id="landingDemoClaim" class="landing-demo-blank" aria-label="Complete the claim: metal is a blank conductor of heat" placeholder="which word?" autocomplete="off">
+        conductor of heat than wood.
       </div>
       <div class="landing-demo-question">
-        Evidence: The temperature rise was <input class="landing-demo-blank" placeholder="answer"> in metal than in wood.
+        <label for="landingDemoEvidence">Evidence:</label> The metal handle’s temperature rose by
+        <input id="landingDemoEvidence" class="landing-demo-blank" aria-label="Temperature rise of the metal handle in degrees Celsius" placeholder="how much?" autocomplete="off"> °C, compared with 2°C for wood.
       </div>
-      <div class="landing-demo-note">Scaffolded mode helps students focus on key vocabulary and structure first.</div>
+      <div class="landing-demo-note">Hint: compare the starting and final temperatures. Then connect the difference to heat transfer.</div>
     `;
+    // Assign values as properties so typed text can never become markup.
+    document.getElementById('landingDemoClaim').value = landingDemoDraft.claim;
+    document.getElementById('landingDemoEvidence').value = landingDemoDraft.evidence;
   } else {
     body.innerHTML = `
-      <div class="landing-demo-question"><strong>Write a complete CER response:</strong> Which spoon is a better conductor of heat? Use claim, evidence, and reasoning.</div>
-      <textarea class="landing-demo-open" placeholder="Type your full open-ended answer here..."></textarea>
-      <div class="landing-demo-note">Open-ended mode builds independent writing and exam readiness.</div>
+      <div class="landing-demo-question"><label for="landingDemoAnswer">Explain your answer using claim, evidence, and reasoning.</label></div>
+      <textarea id="landingDemoAnswer" class="landing-demo-open" placeholder="Metal is a better conductor of heat because…"></textarea>
+      <div class="landing-demo-note">Use the measurements above as evidence, then explain how heat moves from the hot water to the handle.</div>
     `;
+    document.getElementById('landingDemoAnswer').value = landingDemoDraft.answer;
   }
 }
 
 function setLandingDemoMode(mode) {
+  for (const [id, key] of [['landingDemoClaim', 'claim'], ['landingDemoEvidence', 'evidence'], ['landingDemoAnswer', 'answer']]) {
+    const field = document.getElementById(id);
+    if (field) landingDemoDraft[key] = field.value;
+  }
   landingDemoMode = mode === 'open' ? 'open' : 'blanks';
   renderLandingDemo();
 }

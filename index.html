@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Science Learning Portal — Polymath Learning Centre</title>
+<meta name="description" content="Build confident science answers with guided CER practice, AI feedback, personalised revision, PSLE past papers, and learning adventures at Polymath.">
 <link rel="preconnect" href="https://dl.dropboxusercontent.com" crossorigin>
 <link rel="dns-prefetch" href="https://dl.dropboxusercontent.com">
 <link rel="preconnect" href="https://drive.google.com" crossorigin>
@@ -13,7 +14,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-<link rel="modulepreload" href="app.js?v=1.394.0">
+<link rel="modulepreload" href="app.js?v=1.404.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -57,16 +58,6 @@
 [type='checkbox'], [type='radio'] { color: var(--primary, #0b6b4f); }
 [type='checkbox']:focus, [type='radio']:focus { --tw-ring-color: var(--primary, #0b6b4f); }
 </style><style>
-/* ========== NEW LANDING PAGE HELPERS ========== */
-@media (min-width: 768px) { .lp-desktop-nav { display: flex !important; } }
-@media (max-width: 767px) {
-  #landingPage section { padding-left: 1rem !important; padding-right: 1rem !important; }
-  #landingPage section > div > div[style*="grid-template-columns:1fr 1fr"] { grid-template-columns: 1fr !important; }
-  #landingPage section > div > div[style*="grid-template-columns:repeat(12"] { grid-template-columns: 1fr !important; }
-  #landingPage section > div > div[style*="grid-template-columns:repeat(12"] > div[style*="grid-column:span 8"],
-  #landingPage section > div > div[style*="grid-template-columns:repeat(12"] > div[style*="grid-column:span 4"],
-  #landingPage section > div > div[style*="grid-template-columns:repeat(12"] > div[style*="grid-column:span 12"] { grid-column: span 1 !important; }
-}
 /* These seven icons used to cost 1.1 MB: the Material Symbols variable webfont
    was downloaded in full to draw eight glyphs. They are inline SVG now and the
    font request is gone. The class name is kept so every icon's existing inline
@@ -134,16 +125,6 @@
   flex: none;
 }
 .material-symbols-outlined > svg { display: block; width: 100%; height: 100%; fill: currentColor; }
-.lp-asymmetric-blob { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
-/* Demo toggle active/inactive state for new landing page */
-#landingPage #landingDemoBtnBlanks.active,
-#landingPage #landingDemoBtnOpen.active {
-  background: #0b6b4f !important; color: #ffffff !important; box-shadow: 0 2px 8px rgba(49,99,66,0.25) !important;
-}
-#landingPage #landingDemoBtnBlanks:not(.active),
-#landingPage #landingDemoBtnOpen:not(.active) {
-  background: transparent !important; color: #65625e !important; box-shadow: none !important;
-}
 /* ========== CSS VARIABLES & RESET ========== */
 :root {
   /* ---- Ink & Emerald ----------------------------------------------------
@@ -2340,235 +2321,11 @@ option {
   display: none;
 }
 
-/* ========== LANDING PAGE ========== */
-.landing-page {
-  min-height: 100vh;
-  background: linear-gradient(135deg, var(--bg) 0%, #e4f1ec 50%, var(--bg) 100%);
-  display: flex;
-  flex-direction: column;
-}
-.landing-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 40px;
-  max-width: 1200px;
-  width: 100%;
-  margin: 0 auto;
-}
-.landing-nav .brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.landing-nav .brand-icon {
-  width: 40px; height: 40px;
-  background: var(--primary);
-  border-radius: var(--radius-md);
-  display: flex; align-items: center; justify-content: center;
-}
-.landing-nav .brand-icon svg { width: 22px; height: 22px; color: #fff; }
-.landing-nav .brand-text h1 {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -0.02em;
-}
-.landing-nav .brand-text span {
-  font-family: 'Space Mono', monospace;
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-.landing-nav .nav-actions {
-  display: flex;
-  gap: 12px;
-}
-.landing-hero {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
-}
-.landing-hero-inner {
-  max-width: 680px;
-  text-align: center;
-}
-.landing-hero-inner h2 {
-  font-size: 2.8rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-  color: var(--text);
-  margin-bottom: 18px;
-}
-.landing-hero-inner h2 .highlight {
-  color: var(--primary);
-}
-.landing-hero-inner p {
-  font-size: 1.1rem;
-  color: var(--text-muted);
-  line-height: 1.7;
-  margin-bottom: 36px;
-  max-width: 520px;
-  margin-left: auto;
-  margin-right: auto;
-}
-.landing-cta-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
+/* Shared large action button used inside the signed-in portal. */
 .btn-lg {
   padding: 14px 32px;
   font-size: 1rem;
   border-radius: var(--radius-md);
-}
-.landing-features {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  max-width: 800px;
-  margin: 50px auto 0;
-}
-.feature-card {
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 24px 20px;
-  text-align: center;
-  transition: all var(--transition);
-}
-.feature-card:hover {
-  border-color: var(--primary);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-2px);
-}
-.feature-card .feature-icon {
-  width: 44px; height: 44px;
-  border-radius: var(--radius-md);
-  display: flex; align-items: center; justify-content: center;
-  margin: 0 auto 14px;
-}
-.feature-card .feature-icon svg { width: 22px; height: 22px; }
-.feature-card h4 {
-  font-size: 0.95rem;
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-.feature-card p {
-  font-size: 0.82rem;
-  color: var(--text-muted);
-  line-height: 1.5;
-}
-.landing-student-demo {
-  margin: 34px auto 0;
-  max-width: 760px;
-  text-align: left;
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-}
-.landing-demo-head {
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-alt);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.landing-demo-head h4 {
-  font-size: 0.92rem;
-  font-weight: 700;
-}
-.landing-demo-toggle {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.landing-demo-toggle button {
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 1.5px solid var(--border);
-  background: var(--surface);
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-.landing-demo-toggle button.active {
-  border-color: var(--primary);
-  background: var(--primary-light);
-  color: var(--primary);
-}
-.landing-demo-body {
-  padding: 16px 18px 18px;
-}
-.landing-demo-question {
-  font-size: 0.92rem;
-  line-height: 1.7;
-  color: var(--text);
-  margin-bottom: 14px;
-}
-.landing-demo-blank {
-  width: 120px;
-  border: none;
-  border-bottom: 2px solid var(--border);
-  background: transparent;
-  border-radius: 0;
-  padding: 4px 3px;
-  font-size: 0.88rem;
-  margin: 0 2px;
-  outline: none;
-  transition: border-color var(--transition), background var(--transition);
-}
-.landing-demo-open {
-  width: 100%;
-  min-height: 120px;
-  border: none;
-  border-bottom: 2px solid var(--border);
-  border-radius: 0;
-  font-family: inherit;
-  font-size: 0.9rem;
-  padding: 10px 0;
-  resize: vertical;
-  outline: none;
-  background: transparent;
-  transition: border-color var(--transition), background var(--transition);
-}
-.landing-demo-open:focus,
-.landing-demo-blank:focus {
-  border-color: var(--primary);
-  background: rgba(74, 124, 89, 0.05);
-}
-.landing-demo-note {
-  margin-top: 10px;
-  font-size: 0.78rem;
-  color: var(--text-light);
-}
-.landing-footer {
-  padding: 24px 40px;
-  text-align: center;
-  font-size: 0.78rem;
-  color: var(--text-light);
-  font-family: 'Space Mono', monospace;
-}
-@media (max-width: 768px) {
-  .landing-hero-inner h2 { font-size: 1.8rem; }
-  .landing-features { grid-template-columns: 1fr; max-width: 360px; }
-  .landing-nav { padding: 16px 20px; }
-  .landing-hero { padding: 20px; }
-  .landing-demo-head { padding: 12px 14px; }
-  .landing-demo-body { padding: 12px 14px 14px; }
 }
 
 /* ========== AUTH PAGES (Login & Register) ========== */
@@ -9186,6 +8943,247 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 </style>
 <link rel="stylesheet" href="arcade-ui.css?v=2">
 <link rel="stylesheet" href="./tcg-upgrade.css?v=1.383.0">
+<style>
+/* Public home page. Deliberately scoped so signed-in tools retain their styles. */
+#landingPage {
+  --lp-ink:#162e2a; --lp-green:#126149; --lp-muted:#5e6f67;
+  --lp-line:#dce4db; --lp-paper:#f8f9f3;
+  min-height:100vh; background:var(--lp-paper); color:var(--lp-ink);
+  font-family:'Plus Jakarta Sans',sans-serif; line-height:1.65;
+}
+#landingPage .lp-wrap { width:min(1200px,calc(100% - 96px)); margin-inline:auto; }
+#landingPage a { color:inherit; text-decoration:none; }
+#landingPage button, #landingPage input, #landingPage textarea { font:inherit; }
+#landingPage button, #landingPage summary { cursor:pointer; }
+#landingPage a, #landingPage button, #landingPage summary { -webkit-tap-highlight-color:transparent; }
+#landingPage :is(a,button,input,textarea,summary):focus-visible { outline:3px solid #b18a35; outline-offset:5px; }
+#landingPage .lp-icon { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
+#landingPage .lp-skip { position:absolute; top:-80px; left:20px; z-index:100; background:white; padding:12px 20px; border:1px solid var(--lp-green); border-radius:8px; }
+#landingPage .lp-skip:focus { top:12px; }
+#landingPage .lp-header { position:sticky; top:0; z-index:50; background:rgba(248,249,243,.95); border-bottom:1px solid var(--lp-line); backdrop-filter:blur(16px); }
+#landingPage .lp-nav { min-height:88px; display:flex; gap:28px; align-items:center; justify-content:space-between; }
+#landingPage .lp-brand { display:flex; gap:12px; align-items:center; flex-shrink:0; }
+#landingPage .lp-brand-mark { width:40px; height:44px; display:grid; place-items:center; border:1px solid var(--lp-green); border-radius:13px 13px 13px 3px; color:var(--lp-green); font-family:Georgia,serif; font-size:30px; font-style:italic; }
+#landingPage .lp-brand strong { display:block; font-family:'Space Grotesk',sans-serif; font-size:25px; letter-spacing:-1px; line-height:1.1; }
+#landingPage .lp-brand small { display:block; font-size:8px; font-weight:700; letter-spacing:1.8px; margin-top:5px; text-transform:uppercase; }
+#landingPage .lp-nav-links { display:flex; gap:27px; align-items:center; font-size:12px; font-weight:600; color:var(--lp-muted); }
+#landingPage .lp-nav-links a:hover, #landingPage .lp-footer a:hover { color:var(--lp-green); text-decoration:underline; text-underline-offset:5px; }
+#landingPage .lp-nav-actions { display:flex; align-items:center; gap:10px; }
+#landingPage .lp-button { display:inline-flex; justify-content:center; align-items:center; gap:12px; min-height:51px; padding:13px 24px; border-radius:8px; border:1px solid var(--lp-green); background:var(--lp-green); color:white; font-size:13px; font-weight:700; line-height:1.4; transition:background .2s,box-shadow .2s,transform .2s; }
+#landingPage .lp-button:hover { background:#0a4936; box-shadow:0 7px 18px #123d241a; transform:translateY(-2px); }
+#landingPage .lp-button .lp-icon { width:17px; height:17px; }
+#landingPage .lp-button-secondary { background:transparent; color:var(--lp-ink); border-color:#bdcbbd; }
+#landingPage .lp-button-secondary:hover { background:#eef1e8; }
+#landingPage .lp-button-small { min-height:42px; padding:11px 18px; font-size:12px; }
+#landingPage .lp-login { min-height:44px; padding:10px 13px; background:none; border:0; color:var(--lp-ink); font-size:12px; font-weight:700; }
+#landingPage .lp-login:hover { color:var(--lp-green); text-decoration:underline; }
+#landingPage .lp-hero { padding:86px 0 68px; position:relative; }
+#landingPage .lp-hero-grid { display:grid; grid-template-columns:1.05fr 1fr; gap:64px; align-items:center; }
+#landingPage .lp-eyebrow { display:flex; align-items:center; gap:9px; color:var(--lp-green); font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; margin-bottom:22px; }
+#landingPage .lp-eyebrow::before { content:''; width:6px; height:6px; background:currentColor; border-radius:50%; flex-shrink:0; }
+#landingPage h1 { font-family:'Space Grotesk',sans-serif; font-size:clamp(43px,4.65vw,66px); font-weight:500; line-height:1.07; letter-spacing:-3.5px; margin:0; }
+#landingPage h1 em, #landingPage h2 em { font-family:Georgia,'Times New Roman',serif; font-weight:400; color:var(--lp-green); }
+#landingPage .lp-hero-copy > p { max-width:440px; color:var(--lp-muted); font-size:15px; line-height:1.85; margin:27px 0; }
+#landingPage .lp-hero-actions { display:flex; flex-wrap:wrap; gap:12px; }
+#landingPage .lp-hero-note { display:flex; align-items:center; gap:8px; font-size:10px; color:var(--lp-muted); margin-top:21px; }
+#landingPage .lp-hero-note .lp-icon { width:15px; height:15px; color:var(--lp-green); }
+#landingPage .lp-preview-stage { padding:28px 19px 28px 0; position:relative; isolation:isolate; }
+#landingPage .lp-preview-stage::before { content:''; position:absolute; inset:0 -14px 0 28px; border-radius:50% 50% 16px 16px; background:#e9eee1; z-index:-1; }
+#landingPage .lp-orbit { position:absolute; right:-26px; top:-8px; width:93px; height:93px; border:1px solid #bcc9b5; border-radius:50%; display:grid; place-items:center; background:var(--lp-paper); transform:rotate(12deg); }
+#landingPage .lp-orbit .lp-icon { width:48px; height:48px; color:var(--lp-green); stroke-width:1; }
+#landingPage .lp-preview { background:white; border:1px solid #d9e1d7; border-radius:14px; box-shadow:0 25px 60px #183e2810,0 2px 8px #183e2806; overflow:hidden; transform:rotate(-1.5deg); }
+#landingPage .lp-preview-top { padding:17px 22px; display:flex; gap:12px; align-items:center; justify-content:space-between; border-bottom:1px solid #e8ede5; font-size:10px; font-weight:700; }
+#landingPage .lp-preview-top > span:first-child { display:flex; align-items:center; gap:8px; }
+#landingPage .lp-preview-top .lp-icon { width:17px; height:17px; color:var(--lp-green); }
+#landingPage .lp-preview-label { color:#61736a; border:1px solid #dbe5d7; padding:3px 7px; border-radius:4px; font-size:8px; text-transform:uppercase; letter-spacing:.7px; }
+#landingPage .lp-preview-content { padding:23px; }
+#landingPage .lp-preview-meta { display:flex; justify-content:space-between; gap:15px; color:var(--lp-muted); font-size:9px; margin-bottom:13px; }
+#landingPage .lp-preview-content h2 { font-size:18px; font-weight:600; letter-spacing:-.5px; line-height:1.5; margin:0 0 19px; }
+#landingPage .lp-cer-row { display:flex; gap:12px; margin-top:10px; padding:12px 13px; border-radius:7px; background:#f7f9f4; font-size:11px; line-height:1.7; }
+#landingPage .lp-cer-row > b { display:grid; place-items:center; width:25px; height:25px; border-radius:50%; background:#e6eddf; color:var(--lp-green); flex-shrink:0; font-size:10px; }
+#landingPage .lp-cer-row small { display:block; font-size:8px; font-weight:700; color:var(--lp-muted); letter-spacing:1.1px; text-transform:uppercase; margin-bottom:3px; }
+#landingPage mark { color:var(--lp-green); background:#deebd3; padding:1px 3px; border-radius:2px; }
+#landingPage .lp-preview-foot { display:flex; justify-content:space-between; gap:12px; border-top:1px solid #e8ede5; padding:14px 23px; font-size:9px; color:var(--lp-muted); }
+#landingPage .lp-preview-foot b { color:var(--lp-green); }
+#landingPage .lp-feedback-float { display:flex; gap:13px; align-items:center; position:relative; width:85%; margin:-1px -15px 0 auto; padding:16px 18px; background:#143f33; border:1px solid #305a4c; color:white; border-radius:10px; box-shadow:0 14px 22px #133d2820; transform:rotate(2deg); font-size:11px; }
+#landingPage .lp-feedback-float .lp-icon { width:25px; height:25px; color:#d8e8ae; }
+#landingPage .lp-feedback-float small { display:block; color:#bfcec0; font-size:9px; margin-top:3px; }
+#landingPage .lp-capabilities { border-block:1px solid var(--lp-line); padding:24px 0; }
+#landingPage .lp-capabilities .lp-wrap { display:flex; justify-content:space-between; gap:22px; flex-wrap:wrap; align-items:center; }
+#landingPage .lp-capabilities span { display:flex; gap:10px; align-items:center; font-size:11px; font-weight:600; color:#496053; }
+#landingPage .lp-capabilities .lp-icon { width:19px; height:19px; }
+#landingPage .lp-section { padding:88px 0; scroll-margin-top:105px; }
+#landingPage .lp-section-head { display:flex; justify-content:space-between; gap:42px; align-items:flex-end; margin-bottom:38px; }
+#landingPage .lp-section-head .lp-eyebrow, #landingPage .lp-demo-copy .lp-eyebrow { margin-bottom:15px; }
+#landingPage h2 { font-family:'Space Grotesk',sans-serif; font-size:clamp(30px,3.1vw,43px); font-weight:500; line-height:1.17; letter-spacing:-1.7px; }
+#landingPage .lp-section-head > p { color:var(--lp-muted); font-size:13px; max-width:340px; line-height:1.8; }
+#landingPage .lp-feature-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+#landingPage .lp-feature { background:#fff; padding:29px; border:1px solid var(--lp-line); border-radius:12px; }
+#landingPage .lp-feature-icon { width:39px; height:39px; display:grid; place-items:center; border-radius:10px; background:#f0f4e9; color:var(--lp-green); margin-bottom:26px; }
+#landingPage .lp-feature h3 { font-family:'Space Grotesk',sans-serif; font-size:19px; font-weight:500; letter-spacing:-.6px; line-height:1.3; margin-bottom:12px; }
+#landingPage .lp-feature p { color:var(--lp-muted); font-size:12px; line-height:1.85; }
+#landingPage .lp-feature-tag { display:block; margin-top:21px; font-size:9px; color:var(--lp-green); font-weight:700; letter-spacing:.4px; }
+#landingPage .lp-feature-dark { background:#173f34; color:white; border-color:#173f34; }
+#landingPage .lp-feature-dark .lp-feature-icon { color:#ddebba; background:#2b5042; }
+#landingPage .lp-feature-dark p { color:#c0cfc5; }
+#landingPage .lp-feature-dark .lp-feature-tag { color:#deebba; }
+#landingPage .lp-demo-section { background:#eef2e8; border-block:1px solid var(--lp-line); }
+#landingPage .lp-demo-grid { display:grid; grid-template-columns:.82fr 1.18fr; gap:76px; align-items:center; }
+#landingPage .lp-demo-copy > p { font-size:13px; color:var(--lp-muted); line-height:1.9; margin:24px 0; }
+#landingPage .lp-steps { list-style:none; display:grid; gap:22px; margin-top:29px; }
+#landingPage .lp-steps li { display:flex; gap:16px; align-items:flex-start; }
+#landingPage .lp-steps li > span { border:1px solid #bccab7; width:28px; height:28px; display:grid; place-items:center; border-radius:50%; font-size:10px; color:var(--lp-green); flex-shrink:0; margin-top:1px; }
+#landingPage .lp-steps strong { font-size:12px; font-weight:700; }
+#landingPage .lp-steps p { color:var(--lp-muted); font-size:11px; margin-top:3px; }
+#landingPage .lp-demo { padding:27px; background:#fff; border-radius:14px; border:1px solid #d8e1d2; box-shadow:0 15px 35px #23442608; }
+#landingPage .lp-demo-title { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:18px; }
+#landingPage .lp-demo-title h3 { font-size:12px; font-weight:700; letter-spacing:0; }
+#landingPage .lp-demo-title > span { color:var(--lp-green); background:#edf3e7; border-radius:5px; padding:4px 8px; font-size:8px; letter-spacing:.6px; font-weight:700; }
+#landingPage .lp-demo-toggle { display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:4px; background:#f0f3ec; border-radius:8px; margin-bottom:22px; }
+#landingPage .lp-demo-toggle button { padding:10px 6px; min-height:43px; border:0; border-radius:5px; color:var(--lp-muted); background:none; font-size:10px; font-weight:700; }
+#landingPage .lp-demo-toggle button.active { background:var(--lp-green); color:#fff; box-shadow:0 2px 5px #173d2312; }
+#landingPage .lp-experiment { font-size:11px; color:var(--lp-muted); line-height:1.8; }
+#landingPage .lp-experiment strong { color:var(--lp-ink); }
+#landingPage .lp-data { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0 5px; }
+#landingPage .lp-data > div { background:#f7f8f3; border:1px solid #e4e9dd; padding:10px 14px; border-radius:6px; }
+#landingPage .lp-data span { display:block; font-size:9px; color:var(--lp-muted); }
+#landingPage .lp-data strong { font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:500; }
+#landingPage .lp-data small { font-size:9px; color:var(--lp-muted); }
+#landingPage .lp-data-note { color:var(--lp-muted); font-size:8px; margin-bottom:19px; }
+#landingPage .landing-demo-question { font-size:12px; color:var(--lp-ink); line-height:2.15; margin:0 0 15px; }
+#landingPage .landing-demo-question label, #landingPage .landing-demo-question > strong { font-weight:700; }
+#landingPage .landing-demo-blank { display:inline-block; width:100px; max-width:100%; min-height:38px; padding:4px 7px; border:0; border-bottom:1px solid #59876b; border-radius:3px 3px 0 0; background:#f0f5e9; color:var(--lp-green); font-size:12px; text-align:center; vertical-align:baseline; }
+#landingPage .landing-demo-open { display:block; width:100%; min-height:146px; resize:vertical; border:1px solid #c7d3be; border-radius:7px; padding:13px; font-size:12px; line-height:1.9; color:var(--lp-ink); background:#fafbf7; }
+#landingPage .landing-demo-note { margin-top:12px; color:var(--lp-muted); font-size:10px; line-height:1.8; }
+#landingPage .lp-worked { margin-top:20px; border-top:1px solid var(--lp-line); padding-top:16px; font-size:11px; }
+#landingPage .lp-worked summary { color:var(--lp-green); font-weight:700; padding:6px 0; }
+#landingPage .lp-worked p { margin-top:12px; color:var(--lp-muted); line-height:1.85; }
+#landingPage .lp-worked b { color:var(--lp-ink); }
+#landingPage .lp-extras { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+#landingPage .lp-game-card { background:#152f29; border-radius:14px; padding:36px; color:white; overflow:hidden; }
+#landingPage .lp-game-card .lp-eyebrow { color:#d8e8af; }
+#landingPage .lp-game-card h3, #landingPage .lp-teacher-card h3 { font-family:'Space Grotesk',sans-serif; font-size:28px; line-height:1.2; font-weight:500; letter-spacing:-1px; margin-bottom:18px; }
+#landingPage .lp-game-card > p { color:#c5d2c8; font-size:12px; line-height:1.9; max-width:380px; }
+#landingPage .lp-game-art { display:flex; justify-content:center; gap:12px; padding:29px 5px 16px; }
+#landingPage .lp-game-art figure { width:29%; max-width:130px; padding:5px; background:#2c4438; border:1px solid #5c7052; border-radius:9px; transform:rotate(-8deg) translateY(9px); box-shadow:0 8px 20px #0003; }
+#landingPage .lp-game-art figure:nth-child(2) { transform:translateY(-2px); background:#425536; }
+#landingPage .lp-game-art figure:nth-child(3) { transform:rotate(8deg) translateY(9px); }
+#landingPage .lp-game-art img { display:block; width:100%; height:auto; aspect-ratio:1; border-radius:5px; }
+#landingPage .lp-game-art figcaption { color:#e0e7d5; font-size:8px; text-align:center; padding:7px 0 3px; }
+#landingPage .lp-game-caption { text-align:center; color:#b9caba; font-size:9px; margin-top:8px; }
+#landingPage .lp-teacher-card { background:#ecefdf; border:1px solid #dce1ce; border-radius:14px; padding:36px; }
+#landingPage .lp-teacher-card > p { color:var(--lp-muted); font-size:12px; line-height:1.9; }
+#landingPage .lp-teacher-list { list-style:none; display:grid; gap:0; margin-top:22px; }
+#landingPage .lp-teacher-list li { display:flex; gap:14px; padding:16px 0; border-top:1px solid #d3dcc7; font-size:11px; line-height:1.8; color:#52634e; }
+#landingPage .lp-teacher-list .lp-icon { width:18px; height:18px; color:var(--lp-green); margin-top:2px; }
+#landingPage .lp-teacher-list strong { display:block; color:var(--lp-ink); font-size:12px; }
+#landingPage .lp-teacher-note { font-size:9px; color:var(--lp-muted); margin-top:5px; }
+#landingPage .lp-faq { padding-top:0; }
+#landingPage .lp-faq-grid { display:grid; grid-template-columns:.8fr 1.2fr; gap:70px; }
+#landingPage .lp-faq-intro p { font-size:12px; color:var(--lp-muted); margin-top:18px; }
+#landingPage .lp-faq-list details { border-top:1px solid var(--lp-line); padding:0 0 18px; }
+#landingPage .lp-faq-list details:last-child { border-bottom:1px solid var(--lp-line); }
+#landingPage .lp-faq-list summary { font-size:13px; font-weight:600; padding:19px 22px 1px 0; }
+#landingPage .lp-faq-list p { font-size:12px; color:var(--lp-muted); line-height:1.85; padding:15px 0 3px; }
+#landingPage .lp-closing { padding:0 0 65px; }
+#landingPage .lp-closing-inner { border:1px solid #d6dfcc; background:#e9eedf; border-radius:14px; padding:47px 50px; display:flex; align-items:center; justify-content:space-between; gap:35px; }
+#landingPage .lp-closing h2 { font-size:34px; }
+#landingPage .lp-closing p { color:var(--lp-muted); font-size:12px; margin-top:13px; }
+#landingPage .lp-closing-actions { flex-shrink:0; text-align:center; }
+#landingPage .lp-closing-actions small { display:block; font-size:9px; color:var(--lp-muted); margin-top:11px; }
+#landingPage .lp-footer { border-top:1px solid var(--lp-line); padding:31px 0; }
+#landingPage .lp-footer-inner { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:24px; }
+#landingPage .lp-footer p { color:var(--lp-muted); font-size:9px; margin-top:5px; }
+#landingPage .lp-footer strong { font-size:12px; }
+#landingPage .lp-footer-links { display:flex; flex-wrap:wrap; align-items:center; gap:24px; font-size:10px; color:var(--lp-muted); }
+#landingPage .lp-noscript { margin:20px auto; padding:15px; max-width:700px; border:1px solid var(--lp-line); }
+@media (min-width:1500px) { #landingPage .lp-hero { padding-top:104px; padding-bottom:86px; } }
+@media (max-width:1100px) {
+  #landingPage .lp-wrap { width:calc(100% - 64px); }
+  #landingPage .lp-nav-links { gap:18px; }
+  #landingPage .lp-nav-links a:last-child { display:none; }
+  #landingPage .lp-hero-grid { gap:38px; }
+  #landingPage h1 { letter-spacing:-2.5px; }
+  #landingPage .lp-hero { padding-top:66px; }
+  #landingPage .lp-demo-grid { gap:36px; }
+  #landingPage .lp-orbit { right:-15px; width:73px; height:73px; }
+  #landingPage .lp-feature { padding:24px; }
+}
+@media (max-width:820px) {
+  #landingPage .lp-nav-links { display:none; }
+  #landingPage .lp-hero-grid { grid-template-columns:1fr 1fr; gap:30px; }
+  #landingPage h1 { font-size:44px; }
+  #landingPage .lp-hero-copy > p { font-size:13px; }
+  #landingPage .lp-hero-actions .lp-button { padding:12px 16px; font-size:11px; }
+  #landingPage .lp-preview-stage { padding-right:5px; }
+  #landingPage .lp-preview-content { padding:18px; }
+  #landingPage .lp-preview-content h2 { font-size:16px; }
+  #landingPage .lp-preview-top { padding:14px; }
+  #landingPage .lp-preview-label { display:none; }
+  #landingPage .lp-feedback-float { width:95%; margin-right:0; }
+  #landingPage .lp-feature-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #landingPage .lp-demo-grid { grid-template-columns:1fr; gap:35px; }
+  #landingPage .lp-steps { grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+  #landingPage .lp-steps li { gap:10px; }
+  #landingPage .lp-extras { gap:16px; }
+  #landingPage .lp-game-card, #landingPage .lp-teacher-card { padding:27px; }
+  #landingPage .lp-faq-grid { grid-template-columns:1fr 1.3fr; gap:35px; }
+  #landingPage .lp-closing-inner { padding:35px; }
+  #landingPage .lp-closing h2 { font-size:28px; }
+}
+@media (max-width:620px) {
+  #landingPage .lp-wrap { width:calc(100% - 40px); }
+  #landingPage .lp-nav { min-height:76px; gap:12px; }
+  #landingPage .lp-brand { gap:8px; }
+  #landingPage .lp-brand-mark { width:31px; height:36px; font-size:24px; border-radius:10px 10px 10px 3px; }
+  #landingPage .lp-brand strong { font-size:21px; }
+  #landingPage .lp-brand small { font-size:6px; letter-spacing:1px; }
+  #landingPage .lp-nav-actions { gap:2px; }
+  #landingPage .lp-login { padding:10px; font-size:11px; }
+  #landingPage .lp-nav-actions .lp-button-small { font-size:10px; min-height:40px; padding:10px 12px; }
+  #landingPage .lp-hero { padding:47px 0 36px; }
+  #landingPage .lp-hero-grid { grid-template-columns:1fr; gap:30px; }
+  #landingPage h1 { font-size:clamp(42px,10.7vw,62px); letter-spacing:-2.5px; max-width:480px; }
+  #landingPage .lp-eyebrow { font-size:8px; letter-spacing:1.6px; margin-bottom:18px; }
+  #landingPage .lp-hero-copy > p { font-size:13px; max-width:420px; margin:22px 0; }
+  #landingPage .lp-hero-actions .lp-button { padding:14px 19px; font-size:12px; }
+  #landingPage .lp-hero-note { font-size:9px; margin-top:17px; }
+  #landingPage .lp-preview-stage { margin:0 10px; padding:25px 8px 15px 0; }
+  #landingPage .lp-preview-stage::before { right:0; }
+  #landingPage .lp-preview-content { padding:21px; }
+  #landingPage .lp-preview-content h2 { font-size:18px; }
+  #landingPage .lp-preview-label { display:block; }
+  #landingPage .lp-preview-top { padding:15px 20px; }
+  #landingPage .lp-preview-foot { padding-inline:20px; }
+  #landingPage .lp-orbit { top:0; right:-5px; }
+  #landingPage .lp-capabilities { padding:20px 0; }
+  #landingPage .lp-capabilities .lp-wrap { display:grid; grid-template-columns:1fr 1fr; gap:18px 12px; }
+  #landingPage .lp-capabilities span { font-size:10px; gap:8px; }
+  #landingPage .lp-section { padding:57px 0; scroll-margin-top:90px; }
+  #landingPage .lp-section-head { flex-direction:column; align-items:flex-start; gap:17px; margin-bottom:27px; }
+  #landingPage h2 { font-size:32px; letter-spacing:-1.3px; }
+  #landingPage .lp-section-head > p { max-width:100%; font-size:12px; }
+  #landingPage .lp-feature-grid { grid-template-columns:1fr; gap:12px; }
+  #landingPage .lp-feature { padding:25px; }
+  #landingPage .lp-feature-icon { margin-bottom:19px; }
+  #landingPage .lp-feature h3 { font-size:21px; }
+  #landingPage .lp-feature-tag { margin-top:16px; }
+  #landingPage .lp-steps { grid-template-columns:1fr; gap:17px; }
+  #landingPage .lp-demo { padding:21px; }
+  #landingPage .lp-extras { grid-template-columns:1fr; }
+  #landingPage .lp-game-card, #landingPage .lp-teacher-card { padding:28px; }
+  #landingPage .lp-faq { padding-top:0; }
+  #landingPage .lp-faq-grid { grid-template-columns:1fr; gap:28px; }
+  #landingPage .lp-closing { padding-bottom:42px; }
+  #landingPage .lp-closing-inner { padding:29px 25px; flex-direction:column; align-items:flex-start; gap:26px; }
+  #landingPage .lp-closing-actions { text-align:left; }
+  #landingPage .lp-footer-links { gap:18px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  #landingPage *, #landingPage *::before, #landingPage *::after { transition:none!important; animation:none!important; scroll-behavior:auto!important; }
+}
+
+</style>
 </head>
 <body>
 
@@ -9294,169 +9292,216 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 </div>
 
 <!-- ==================== LANDING PAGE ==================== -->
-<div id="landingPage" style="min-height:100vh;background:#fafbfa;font-family:'Plus Jakarta Sans',sans-serif;color:#14161a;">
-
-  <!-- Top Nav -->
-  <header style="position:sticky;top:0;width:100%;z-index:50;background:rgba(252,249,244,0.85);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);">
-    <nav style="display:flex;justify-content:space-between;align-items:center;max-width:1280px;margin:0 auto;padding:0 2rem;height:80px;">
-      <div style="display:flex;align-items:center;gap:2rem;">
-        <img src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Science Learning Portal logo" style="height:48px;width:auto;object-fit:contain;" loading="eager" fetchpriority="high" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 48 48%22%3E%3Crect width=%2248%22 height=%2248%22 rx=%228%22 fill=%22%23316342%22/%3E%3Ctext x=%2224%22 y=%2234%22 font-family=%22sans-serif%22 font-size=%2228%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
-        <div style="display:none;gap:1.5rem;align-items:center;" class="lp-desktop-nav">
-          <a href="#" style="font-family:'Space Grotesk',sans-serif;font-weight:500;color:#4a5158;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#0b6b4f'" onmouseout="this.style.color='#4a5158'">Courses</a>
-          <a href="#" style="font-family:'Space Grotesk',sans-serif;font-weight:500;color:#4a5158;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#0b6b4f'" onmouseout="this.style.color='#4a5158'">Library</a>
-          <a href="#" style="font-family:'Space Grotesk',sans-serif;font-weight:500;color:#4a5158;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#0b6b4f'" onmouseout="this.style.color='#4a5158'">About</a>
-          <a href="#" style="font-family:'Space Grotesk',sans-serif;font-weight:500;color:#4a5158;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#0b6b4f'" onmouseout="this.style.color='#4a5158'">Pricing</a>
-        </div>
+<div id="landingPage">
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute;overflow:hidden;">
+    <defs>
+      <symbol id="lp-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+      <symbol id="lp-book" viewBox="0 0 24 24"><path d="M12 6v15m0-15C9 3 5 3 2 4v15c4-1 7 0 10 2 3-2 6-3 10-2V4c-3-1-7-1-10 2Z"/></symbol>
+      <symbol id="lp-spark" viewBox="0 0 24 24"><path d="m12 3 2.3 6.7L21 12l-6.7 2.3L12 21l-2.3-6.7L3 12l6.7-2.3L12 3Zm7-2v4m-2-2h4"/></symbol>
+      <symbol id="lp-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+      <symbol id="lp-repeat" viewBox="0 0 24 24"><path d="M4 9a8 8 0 0 1 14-3l2 2M20 3v5h-5M20 15a8 8 0 0 1-14 3l-2-2m0 5v-5h5"/></symbol>
+      <symbol id="lp-camera" viewBox="0 0 24 24"><path d="M8 5 6 8H3v12h18V8h-3l-2-3H8Z"/><circle cx="12" cy="13" r="3"/></symbol>
+      <symbol id="lp-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+      <symbol id="lp-chart" viewBox="0 0 24 24"><path d="M4 3v17h17M8 15l4-4 4 2 5-7M17 6h4v4"/></symbol>
+      <symbol id="lp-pencil" viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14l-1 7 6-2"/></symbol>
+      <symbol id="lp-game" viewBox="0 0 24 24"><path d="M7 7h10c3 0 5 11 3 12-2 1-5-4-5-4H9s-3 5-5 4S4 7 7 7ZM7 9v5m-2.5-2.5h5M16 10h.01M18 13h.01"/></symbol>
+      <symbol id="lp-atom" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="10" ry="4"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(120 12 12)"/><circle cx="12" cy="12" r="1"/></symbol>
+    </defs>
+  </svg>
+  <a class="lp-skip" href="#lp-main">Skip to content</a>
+  <header class="lp-header">
+    <nav class="lp-wrap lp-nav" aria-label="Main navigation">
+      <a class="lp-brand" href="#landingPage" aria-label="Polymath Science Learning Portal home">
+        <span class="lp-brand-mark" aria-hidden="true">p</span>
+        <span><strong>polymath</strong><small>Science Learning Portal</small></span>
+      </a>
+      <div class="lp-nav-links">
+        <a href="#lp-features">The experience</a>
+        <a href="#lp-demo">How it works</a>
+        <a href="#lp-families">For families</a>
       </div>
-      <div style="display:flex;align-items:center;gap:1rem;">
-        <button onclick="showPage('loginPage')" style="padding:8px 20px;color:#4a5158;font-family:'Plus Jakarta Sans',sans-serif;font-weight:500;background:none;border:none;cursor:pointer;transition:opacity 0.2s;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">Log In</button>
-        <button onclick="showPage('registerPage')" style="padding:10px 24px;background:linear-gradient(135deg,#0b6b4f,#0b6b4f);color:#ffffff;border:none;border-radius:12px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:0.875rem;cursor:pointer;box-shadow:0 2px 8px rgba(49,99,66,0.2);transition:all 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">Get Started</button>
+      <div class="lp-nav-actions">
+        <button class="lp-login" type="button" onclick="showPage('loginPage')">Log in</button>
+        <button class="lp-button lp-button-small" type="button" onclick="showPage('registerPage')">Get started</button>
       </div>
     </nav>
   </header>
 
-  <!-- Hero Section -->
-  <section style="position:relative;overflow:hidden;padding:6rem 2rem 5rem;">
-    <div style="max-width:1280px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center;">
-      <div style="display:flex;flex-direction:column;gap:2rem;">
-        <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:9999px;background:#eef1ef;color:#65625e;font-size:0.75rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;width:fit-content;">
-          <span class="material-symbols-outlined" style="font-size:16px;"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z"/></svg></span>
-          Sage Academic Methodology
+  <main id="lp-main" tabindex="-1">
+    <section class="lp-hero" aria-labelledby="lp-hero-title">
+      <div class="lp-wrap lp-hero-grid">
+        <div class="lp-hero-copy">
+          <div class="lp-eyebrow">A little curiosity. A world of possibility.</div>
+          <h1 id="lp-hero-title">Understand it.<br>Explain it.<br><em>Make it yours.</em></h1>
+          <p>Science clicks when you can explain the why. Build confident answers with guided practice, personal feedback, and adventures that make learning worth coming back to.</p>
+          <div class="lp-hero-actions">
+            <button class="lp-button" type="button" onclick="showPage('registerPage')">Start your journey <svg class="lp-icon" aria-hidden="true"><use href="#lp-arrow"/></svg></button>
+            <a class="lp-button lp-button-secondary" href="#lp-demo">Try a sample <svg class="lp-icon" aria-hidden="true"><use href="#lp-pencil"/></svg></a>
+          </div>
+          <div class="lp-hero-note"><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg> From primary science foundations to PSLE preparation</div>
         </div>
-        <h1 style="font-family:'Space Grotesk',sans-serif;font-size:clamp(2.5rem,5vw,4.5rem);font-weight:700;letter-spacing:-0.03em;line-height:1.1;color:#14161a;margin:0;">
-          Learn Science Better with <span style="color:#0b6b4f;font-style:italic;">Scaffolded Practice</span>
-        </h1>
-        <p style="font-size:1.1rem;color:#414942;max-width:36rem;line-height:1.7;margin:0;opacity:0.9;">
-          Students start with guided fill-in-the-blanks, then switch to fully open-ended answers as confidence grows. Master the language of science through iterative mastery.
-        </p>
-        <div style="display:flex;flex-wrap:wrap;gap:1rem;padding-top:1rem;">
-          <button onclick="showPage('registerPage')" style="display:inline-flex;align-items:center;gap:8px;padding:14px 32px;background:linear-gradient(135deg,#0b6b4f,#0b6b4f);color:#ffffff;border:none;border-radius:12px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:1.1rem;cursor:pointer;box-shadow:0 4px 16px rgba(49,99,66,0.25);transition:all 0.2s;" onmouseover="this.style.transform='scale(0.98)'" onmouseout="this.style.transform='scale(1)'">
-            Start Student Account
-            <span class="material-symbols-outlined" style="font-size:20px;"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg></span>
-          </button>
-          <button onclick="showPage('loginPage')" style="padding:14px 32px;background:#eef1ef;color:#14161a;border:none;border-radius:12px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:1.1rem;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='#e3e6e4'" onmouseout="this.style.background='#eef1ef'">
-            Student Sign In
-          </button>
-        </div>
-      </div>
-      <div style="position:relative;">
-        <div class="lp-asymmetric-blob" style="position:absolute;top:-3rem;right:-3rem;width:16rem;height:16rem;background:rgba(157,211,170,0.25);filter:blur(48px);z-index:0;pointer-events:none;"></div>
-        <div style="position:relative;background:#ffffff;padding:1.5rem;border-radius:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.1);border:1px solid rgba(193,201,191,0.1);z-index:1;">
-          <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBpLdETx2ck_doEsZQdHyErJn22XDpN5x6v07Lp__2czakCz0y7N6dI6v9-EicNp8lRl_F14TAp0HeBcXSpcsFKFnno9m9_X0Vgh6uMPKKHLL0YEpOY37kB7po2oxD07i7i8D4k7C2yuedRzHoxkB9ztvhOOjyJx3YdAk7BSyIdPcjDzByK3racP_9jfGtFxEitQKWdhBHD5kNd66SiOVgtOHBkMMY2nv8bpwoOqYjHmw1XP5Sk3qr-VGkQV5Ckazl_GD8j1PlbQmI" alt="Student using science learning portal" style="width:100%;height:20rem;object-fit:cover;border-radius:12px;" onerror="this.style.display='none'">
-          <div style="margin-top:1.5rem;display:flex;align-items:center;gap:1rem;">
-            <div style="height:8px;flex:1;background:#eef1ef;border-radius:9999px;overflow:hidden;">
-              <div style="height:100%;width:75%;background:#0b6b4f;border-radius:9999px;transition:width 1s;"></div>
+        <div class="lp-preview-stage" aria-label="Illustrative guided science answer preview">
+          <div class="lp-orbit" aria-hidden="true"><svg class="lp-icon"><use href="#lp-atom"/></svg></div>
+          <div class="lp-preview">
+            <div class="lp-preview-top"><span><svg class="lp-icon" aria-hidden="true"><use href="#lp-book"/></svg> Your next lightbulb moment</span><span class="lp-preview-label">Practice preview</span></div>
+            <div class="lp-preview-content">
+              <div class="lp-preview-meta"><span>ENERGY · HEAT</span><span>Claim. Evidence. Reasoning.</span></div>
+              <h2>Why does ice melt faster<br>on a metal tray?</h2>
+              <div class="lp-cer-row"><b>C</b><div><small>Make a claim</small>Metal is a <mark>better conductor of heat</mark> than wood.</div></div>
+              <div class="lp-cer-row"><b>E</b><div><small>Use the evidence</small>The ice on the metal tray <mark>melts in less time</mark>.</div></div>
+              <div class="lp-cer-row"><b>R</b><div><small>Connect the science</small>Heat transfers from the warmer tray to the ice <mark>more quickly</mark>.</div></div>
             </div>
-            <span style="font-size:0.75rem;font-weight:700;color:#0b6b4f;white-space:nowrap;">75% Mastery</span>
+            <div class="lp-preview-foot"><span>Same-sized ice cubes. Trays at room temperature.</span><b>One clear explanation.</b></div>
           </div>
+          <div class="lp-feedback-float"><svg class="lp-icon" aria-hidden="true"><use href="#lp-spark"/></svg><div>Learn the thinking behind the answer.<small>Guided keywords → independent explanations</small></div></div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Interactive Demo Section -->
-  <section style="background:#f7f9f8;padding:6rem 2rem;position:relative;">
-    <div style="max-width:56rem;margin:0 auto;">
-      <div style="text-align:center;margin-bottom:3rem;">
-        <h2 style="font-family:'Space Grotesk',sans-serif;font-size:clamp(1.75rem,3vw,2.5rem);font-weight:700;letter-spacing:-0.02em;color:#14161a;margin:0 0 1rem;">Experience the Scaffold</h2>
-        <p style="color:#414942;margin:0;">Switch modes to see how we transition learners from guidance to independence.</p>
-      </div>
-      <div style="background:#ffffff;border-radius:1.5rem;padding:2.5rem 3rem;box-shadow:0 2px 8px rgba(0,0,0,0.05);border:1px solid rgba(193,201,191,0.08);">
-        <!-- Toggle -->
-        <div style="display:flex;justify-content:center;margin-bottom:3rem;">
-          <div style="display:inline-flex;padding:6px;background:#eef1ef;border-radius:9999px;gap:2px;">
-            <button id="landingDemoBtnBlanks" onclick="setLandingDemoMode('blanks')" class="active" style="padding:8px 24px;border-radius:9999px;background:#0b6b4f;color:#ffffff;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:0.875rem;border:none;cursor:pointer;transition:all 0.2s;box-shadow:0 2px 8px rgba(49,99,66,0.25);">
-              Guided Blanks
-            </button>
-            <button id="landingDemoBtnOpen" onclick="setLandingDemoMode('open')" style="padding:8px 24px;border-radius:9999px;background:transparent;color:#65625e;font-family:'Plus Jakarta Sans',sans-serif;font-weight:500;font-size:0.875rem;border:none;cursor:pointer;transition:all 0.2s;">
-              Fully Open Ended
-            </button>
-          </div>
-        </div>
-        <!-- Dynamic Demo Content -->
-        <div style="display:flex;align-items:flex-start;gap:1rem;">
-          <div style="flex-shrink:0;width:40px;height:40px;border-radius:50%;background:rgba(49,99,66,0.1);color:#0b6b4f;display:flex;align-items:center;justify-content:center;font-weight:700;font-family:'Space Grotesk',sans-serif;">Q</div>
-          <div style="flex:1;">
-            <h3 style="font-size:1.1rem;font-weight:600;color:#14161a;margin:0 0 1.5rem;font-family:'Plus Jakarta Sans',sans-serif;">Sample Question: Comparing Heat Conductivity</h3>
-            <div id="landingDemoBody"></div>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:2rem;">
-          <div style="padding:1rem;border-radius:12px;background:#eef1ef;display:flex;align-items:center;gap:1rem;opacity:0.7;">
-            <span class="material-symbols-outlined" style="color:#0b6b4f;font-size:20px;"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg></span>
-            <span style="font-size:0.875rem;font-weight:500;color:#14161a;">Scaffolding Active: Concept Reinforcement</span>
-          </div>
-          <div style="padding:1rem;border-radius:12px;background:#eef1ef;display:flex;align-items:center;gap:1rem;opacity:0.7;">
-            <span class="material-symbols-outlined" style="color:#0b6b4f;font-size:20px;"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/></svg></span>
-            <span style="font-size:0.875rem;font-weight:500;color:#14161a;">Keywords identified: Conductor, Heat, Evidence</span>
-          </div>
-        </div>
+    <div class="lp-capabilities" aria-label="Learning tools">
+      <div class="lp-wrap">
+        <span><svg class="lp-icon" aria-hidden="true"><use href="#lp-pencil"/></svg> Guided CER practice</span>
+        <span><svg class="lp-icon" aria-hidden="true"><use href="#lp-spark"/></svg> AI marking &amp; feedback</span>
+        <span><svg class="lp-icon" aria-hidden="true"><use href="#lp-book"/></svg> PSLE past papers</span>
+        <span><svg class="lp-icon" aria-hidden="true"><use href="#lp-game"/></svg> Play-powered motivation</span>
       </div>
     </div>
-  </section>
 
-  <!-- Bento Grid Feature Section -->
-  <section style="padding:6rem 2rem;background:#fafbfa;">
-    <div style="max-width:1280px;margin:0 auto;">
-      <div style="display:grid;grid-template-columns:repeat(12,1fr);grid-template-rows:auto;gap:1.5rem;">
-        <!-- Large Card -->
-        <div style="grid-column:span 8;grid-row:span 2;position:relative;overflow:hidden;background:#f2f4f3;border-radius:1.5rem;padding:2.5rem;display:flex;flex-direction:column;justify-content:flex-end;min-height:400px;">
-          <div style="position:absolute;inset:0;opacity:0.1;overflow:hidden;">
-            <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5rfmdMOZjbqSmrFa1Q0yqJYhuMrMN1frw_l3ytkgbYOGdP5SbrUP2PNgWtW957a0H0LvfeDFLPO5Ey3TnAPNShcw7rniICvJgQZ9fjDcgNwrGA--YeB8BxYMFvz69TTMJBEAcTjCsf6Pl2RBeaRq87SYZ1N4GHCf3jH_4GIiXiemkb9DGdOM7_sLbXF_1-mNS-L4_Y9vG13IJkZJMErhilNnQ-jfvgML9fVbiLwze1FRhn4nIENhlpcXnSxVcWgrfgubA3V88JLE" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">
-          </div>
-          <div style="position:relative;z-index:1;max-width:32rem;">
-            <h3 style="font-family:'Space Grotesk',sans-serif;font-size:2.25rem;font-weight:700;letter-spacing:-0.02em;color:#14161a;margin:0 0 1rem;">Adaptive Algorithms</h3>
-            <p style="color:#414942;margin:0 0 1.25rem;line-height:1.6;">Our system tracks every answer to predict which concepts need more reinforcement, automatically adjusting the scaffold level.</p>
-            <a href="#" style="display:inline-flex;align-items:center;gap:8px;color:#0b6b4f;font-weight:700;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
-              Explore Analytics <span class="material-symbols-outlined" style="font-size:16px;"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6.4 18 5 16.6 14.6 7H6V5h12v12h-2V8.4z"/></svg></span>
-            </a>
-          </div>
+    <section class="lp-section" id="lp-features" aria-labelledby="lp-features-title">
+      <div class="lp-wrap">
+        <div class="lp-section-head">
+          <div><div class="lp-eyebrow">More than getting it right</div><h2 id="lp-features-title">Everything a curious<br>mind needs to <em>grow.</em></h2></div>
+          <p>From the first “I think…” to a well-reasoned answer. A connected set of tools for understanding, practice, and progress.</p>
         </div>
-        <!-- PSLE Card -->
-        <div style="grid-column:span 4;background:#0b6b4f;color:#ffffff;border-radius:1.5rem;padding:2rem;display:flex;flex-direction:column;justify-content:space-between;min-height:190px;">
-          <span class="material-symbols-outlined" style="font-size:2.5rem;font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M23 12l-2.44-2.79.34-3.69-3.61-.82-1.89-3.2L12 2.96 8.6 1.5 6.71 4.69 3.1 5.5l.34 3.7L1 12l2.44 2.79-.34 3.7 3.61.82L8.6 22.5l3.4-1.47 3.4 1.46 1.89-3.19 3.61-.82-.34-3.69L23 12zm-12.91 4.72l-3.8-3.81 1.48-1.48 2.32 2.33 5.85-5.87 1.48 1.48-7.33 7.35z"/></svg></span>
-          <div>
-            <h4 style="font-family:'Space Grotesk',sans-serif;font-size:1.5rem;font-weight:700;color:#ffffff;margin:0 0 0.5rem;">PSLE Ready</h4>
-            <p style="font-size:0.875rem;color:#b9efc5;margin:0;">Content curated specifically for MOE syllabus excellence.</p>
-          </div>
-        </div>
-        <!-- Efficiency Card -->
-        <div style="grid-column:span 4;background:#eef1ef;border-radius:1.5rem;padding:2rem;display:flex;flex-direction:column;justify-content:space-between;min-height:190px;border:1px solid rgba(193,201,191,0.3);">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span class="material-symbols-outlined" style="color:#615e5a;font-size:20px;"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 1H9v2h6V1zm-4 13h2V8h-2v6zm8.03-6.61 1.42-1.42c-.43-.51-.9-.99-1.41-1.41l-1.42 1.42A8.962 8.962 0 0 0 12 4c-4.97 0-9 4.03-9 9s4.02 9 9 9a8.994 8.994 0 0 0 7.03-14.61zM12 20c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg></span>
-            <span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#615e5a;">Efficiency</span>
-          </div>
-          <h4 style="font-size:1.25rem;font-weight:700;color:#14161a;margin:0;font-family:'Space Grotesk',sans-serif;">30% Faster Concept Recall</h4>
-        </div>
-        <!-- CTA Banner -->
-        <div style="grid-column:span 12;background:#f7f9f8;border-radius:1.5rem;padding:2rem 2.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1.5rem;border:1px solid rgba(193,201,191,0.3);">
-          <div>
-            <h3 style="font-family:'Space Grotesk',sans-serif;font-size:1.5rem;font-weight:700;color:#14161a;margin:0 0 0.25rem;">Ready to transform your Science results?</h3>
-            <p style="color:#414942;margin:0;font-size:0.95rem;">Join over 2,000 students mastering keywords today.</p>
-          </div>
-          <button onclick="showPage('registerPage')" style="padding:14px 40px;background:#0b6b4f;color:#ffffff;border:none;border-radius:12px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;box-shadow:0 4px 16px rgba(49,99,66,0.2);white-space:nowrap;transition:all 0.2s;" onmouseover="this.style.background='#0b6b4f'" onmouseout="this.style.background='#0b6b4f'">Create Account</button>
+        <div class="lp-feature-grid">
+          <article class="lp-feature lp-feature-dark">
+            <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-pencil"/></svg></div>
+            <h3>The words. Then the why.</h3>
+            <p>Start with guided keyword blanks, then move to full answers. Build a clear Claim, support it with Evidence, and connect it with scientific Reasoning.</p>
+            <span class="lp-feature-tag">GUIDED PRACTICE → INDEPENDENT THINKING</span>
+          </article>
+          <article class="lp-feature">
+            <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-spark"/></svg></div>
+            <h3>A nudge in the right direction.</h3>
+            <p>Get AI marking and feedback on your answers. Ask Ai-nstein for a clue, then let Science Sidekicks help sharpen evidence, comparisons, and reasoning.</p>
+            <span class="lp-feature-tag">AI FEEDBACK &amp; SCIENCE COACHES</span>
+          </article>
+          <article class="lp-feature">
+            <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-target"/></svg></div>
+            <h3>Your next step, made clearer.</h3>
+            <p>Smart Practice uses your level and progress to select questions. Revisit weaker topics and see your strengths and focus areas in My Report.</p>
+            <span class="lp-feature-tag">PERSONALISED PRACTICE &amp; PROGRESS</span>
+          </article>
+          <article class="lp-feature">
+            <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-repeat"/></svg></div>
+            <h3>Make mistakes work for you.</h3>
+            <p>Turn missed questions into revision cards with spaced review. Learn to spot common science mistakes, then rewrite answers with better reasoning.</p>
+            <span class="lp-feature-tag">REVISION CARDS &amp; MISTAKE PRACTICE</span>
+          </article>
+          <article class="lp-feature">
+            <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-camera"/></svg></div>
+            <h3>Pen on paper. Feedback online.</h3>
+            <p>Keep the freedom of handwriting. Upload a photo or PDF with Snap &amp; Mark to match your work to questions in the bank and get feedback.</p>
+            <span class="lp-feature-tag">SNAP &amp; MARK</span>
+          </article>
+          <article class="lp-feature">
+            <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-book"/></svg></div>
+            <h3>A bigger picture of science.</h3>
+            <p>Connect topics with textbooks, mindmaps, keyword recall, and learning objectives. Bring it all together with PSLE past papers and focused practice.</p>
+            <span class="lp-feature-tag">TOPIC REVISION &amp; EXAM PREPARATION</span>
+          </article>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Footer -->
-  <footer style="background:#f7f9f8;padding:3rem 2rem;">
-    <div style="max-width:1280px;margin:0 auto;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:1.5rem;">
-      <div style="display:flex;flex-direction:column;gap:0.5rem;">
-        <img src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Science Learning Portal logo" style="height:40px;width:auto;object-fit:contain;" onerror="this.style.display='none'">
-        <p style="font-family:'Inter',sans-serif;font-size:0.875rem;color:#4a5158;margin:0;">© 2026 Science Learning Portal. Polymath Learning Centre.</p>
+    <section class="lp-section lp-demo-section" id="lp-demo" aria-labelledby="lp-demo-heading">
+      <div class="lp-wrap lp-demo-grid">
+        <div class="lp-demo-copy">
+          <div class="lp-eyebrow">A small question. A real discovery.</div>
+          <h2 id="lp-demo-heading">From “I know it”<br>to <em>“I can explain it.”</em></h2>
+          <p>Try the two practice modes for yourself. A little structure helps you find the right words. Then take the training wheels off.</p>
+          <ol class="lp-steps">
+            <li><span>01</span><div><strong>Find the key idea</strong><p>Use guided blanks to focus on the science.</p></div></li>
+            <li><span>02</span><div><strong>Make the connection</strong><p>Link what you observe to what you know.</p></div></li>
+            <li><span>03</span><div><strong>Put it in your own words</strong><p>Switch modes and write a complete answer.</p></div></li>
+          </ol>
+        </div>
+        <div class="lp-demo">
+          <div class="lp-demo-title"><h3>Your turn: which spoon?</h3><span>NO LOGIN NEEDED</span></div>
+          <div class="lp-demo-toggle" role="group" aria-label="Sample answer mode">
+            <button id="landingDemoBtnBlanks" type="button" class="active" aria-pressed="true" aria-controls="landingDemoBody" onclick="setLandingDemoMode('blanks')">01 · Guided blanks</button>
+            <button id="landingDemoBtnOpen" type="button" aria-pressed="false" aria-controls="landingDemoBody" onclick="setLandingDemoMode('open')">02 · Write it yourself</button>
+          </div>
+          <p class="lp-experiment">A metal spoon and a wooden spoon of the same size sit in hot water for the same time. Both handles start at 28°C. <strong>Which material conducts heat better?</strong></p>
+          <div class="lp-data"><div><span>METAL HANDLE</span><strong>44°C</strong> <small>after heating</small></div><div><span>WOODEN HANDLE</span><strong>30°C</strong> <small>after heating</small></div></div>
+          <p class="lp-data-note">Illustrative measurements for this sample question.</p>
+          <div id="landingDemoBody" aria-live="polite"></div>
+          <details class="lp-worked">
+            <summary>Explore a worked answer</summary>
+            <p><b>Claim:</b> Metal is a better conductor of heat than wood.</p>
+            <p><b>Evidence:</b> In the same time, the metal handle rose by 16°C, while the wooden handle rose by only 2°C.</p>
+            <p><b>Reasoning:</b> Heat transferred from the hot water along the metal spoon to its handle faster than through the wooden spoon.</p>
+            <p>This sample lets you explore the answer structure. Sign in for marking and feedback on your practice.</p>
+          </details>
+        </div>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:2rem;">
-        <a href="#" style="color:#4a5158;opacity:0.7;font-family:'Inter',sans-serif;font-size:0.875rem;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#0b6b4f';this.style.opacity='1'" onmouseout="this.style.color='#4a5158';this.style.opacity='0.7'">Privacy Policy</a>
-        <a href="#" style="color:#4a5158;opacity:0.7;font-family:'Inter',sans-serif;font-size:0.875rem;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#0b6b4f';this.style.opacity='1'" onmouseout="this.style.color='#4a5158';this.style.opacity='0.7'">Terms of Service</a>
-        <a href="#" style="color:#4a5158;opacity:0.7;font-family:'Inter',sans-serif;font-size:0.875rem;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#0b6b4f';this.style.opacity='1'" onmouseout="this.style.color='#4a5158';this.style.opacity='0.7'">Help Center</a>
-        <a href="#" style="color:#4a5158;opacity:0.7;font-family:'Inter',sans-serif;font-size:0.875rem;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#0b6b4f';this.style.opacity='1'" onmouseout="this.style.color='#4a5158';this.style.opacity='0.7'">Contact Us</a>
+    </section>
+
+    <section class="lp-section" id="lp-families" aria-labelledby="lp-families-title">
+      <div class="lp-wrap">
+        <div class="lp-section-head"><div><div class="lp-eyebrow">Made for the whole learning journey</div><h2 id="lp-families-title">Motivation for them.<br><em>Clarity for you.</em></h2></div><p>Good learning is a habit. Give students a reason to return, and the adults around them a clearer view of their progress.</p></div>
+        <div class="lp-extras">
+          <article class="lp-game-card">
+            <div class="lp-eyebrow">Meet Science Quest</div>
+            <h3>A little practice.<br>A new adventure.</h3>
+            <p>Build streaks, earn points, collect characters, and explore the arcade. Science questions are part of the adventure, and practice earns more game credits.</p>
+            <div class="lp-game-art" aria-label="Characters from Realm of Embers">
+              <figure><img src="assets/realm-of-embers/card-art/c002-nimue-the-dewborn.webp" width="512" height="512" loading="lazy" decoding="async" alt="Nimue, a water creature from Realm of Embers"><figcaption>THE DEWBORN</figcaption></figure>
+              <figure><img src="assets/realm-of-embers/card-art/c001-pyrrik-the-cinderwhelp.webp" width="512" height="512" loading="lazy" decoding="async" alt="Pyrrik, a fiery creature from Realm of Embers"><figcaption>THE CINDERWHELP</figcaption></figure>
+              <figure><img src="assets/realm-of-embers/card-art/c003-voltas-the-stormseed.webp" width="512" height="512" loading="lazy" decoding="async" alt="Voltas, a lightning creature from Realm of Embers"><figcaption>THE STORMSEED</figcaption></figure>
+            </div>
+            <div class="lp-game-caption">Real characters. Learning-powered adventures.</div>
+          </article>
+          <article class="lp-teacher-card">
+            <div class="lp-eyebrow">For families &amp; educators</div>
+            <h3>See the effort.<br>Support the next step.</h3>
+            <p>Make learning progress easier to understand, and meaningful practice easier to prepare.</p>
+            <ul class="lp-teacher-list">
+              <li><svg class="lp-icon" aria-hidden="true"><use href="#lp-chart"/></svg><div><strong>Progress you can talk about</strong>Review accuracy, strengths, and focus areas in My Report. Family profiles keep multiple children organised under one login.</div></li>
+              <li><svg class="lp-icon" aria-hidden="true"><use href="#lp-pencil"/></svg><div><strong>Tools for thoughtful teaching</strong>Teachers can build worksheets, curate and vet questions, and prepare practice from the question bank.</div></li>
+              <li><svg class="lp-icon" aria-hidden="true"><use href="#lp-target"/></svg><div><strong>Understand the work behind the score</strong>Teacher activity reports show attempts and performance across practice modes, so support starts with the detail.</div></li>
+            </ul>
+            <div class="lp-teacher-note">Teaching and administration tools require the appropriate account access.</div>
+          </article>
+        </div>
       </div>
-    </div>
+    </section>
+
+    <section class="lp-section lp-faq" id="lp-faq" aria-labelledby="lp-faq-title">
+      <div class="lp-wrap lp-faq-grid">
+        <div class="lp-faq-intro"><div class="lp-eyebrow">Good questions welcome</div><h2 id="lp-faq-title">A few things<br>you might be <em>wondering.</em></h2><p>A clearer start to your learning journey.</p></div>
+        <div class="lp-faq-list">
+          <details><summary>Who is the portal for?</summary><p>The Science Learning Portal supports students building primary science foundations and preparing for the PSLE. Choose the learner’s level for suitable practice. Family profiles let multiple children use one login.</p></details>
+          <details><summary>Does my child need to write full answers already?</summary><p>No. Guided blanks help students practise key science vocabulary before they choose fully open-ended answers. Both modes support the move towards independent explanations.</p></details>
+          <details><summary>How do the games support learning?</summary><p>Science questions are woven into the games, while daily goals, points, collections, and game credits give students reasons to keep practising. Science Quest is the game layer within the Science Learning Portal.</p></details>
+          <details><summary>Can we try it before signing in?</summary><p>Yes. The sample above works without an account. Saved progress, AI marking, reports, and the full learning experience require sign-in. Access for students who are not enrolled at Polymath is subject to the monthly fee and terms presented on entry; creating an account does not make portal access free.</p></details>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-closing" aria-labelledby="lp-closing-title">
+      <div class="lp-wrap lp-closing-inner">
+        <div><h2 id="lp-closing-title">The next “I get it!”<br><em>starts here.</em></h2><p>Make room for curiosity. Build the confidence to explain.</p></div>
+        <div class="lp-closing-actions"><button class="lp-button" type="button" onclick="showPage('registerPage')">Create your account <svg class="lp-icon" aria-hidden="true"><use href="#lp-arrow"/></svg></button><small>Already part of Polymath? <button class="lp-login" type="button" onclick="showPage('loginPage')">Log in</button></small></div>
+      </div>
+    </section>
+  </main>
+  <footer class="lp-footer">
+    <div class="lp-wrap lp-footer-inner"><div><strong>Science Learning Portal</strong><p>© 2026 Polymath Learning Centre. A place for curious minds.</p></div><div class="lp-footer-links"><a href="#lp-features">Explore the experience</a><a href="#lp-demo">Try a sample</a><a href="#lp-faq">Common questions</a><a href="#landingPage">Back to top ↑</a></div></div>
   </footer>
-
+  <noscript><p class="lp-noscript">Enable JavaScript to try the interactive sample, create an account, or sign in to the Science Learning Portal.</p></noscript>
 </div>
+
 
 <!-- ==================== LOGIN PAGE ==================== -->
 <div id="loginPage" class="auth-page" style="display:none;">
@@ -15280,6 +15325,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
-<script type="module" src="app.js?v=1.394.0"></script>
+<script type="module" src="app.js?v=1.404.0"></script>
 </body>
 </html>
