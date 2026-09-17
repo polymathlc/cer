@@ -3867,7 +3867,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.400.0';
+const APP_VERSION = 'v1.401.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5266,6 +5266,42 @@ function applyMcqCategory(q) {
 // =====================================================================
 // NAVIGATION
 // =====================================================================
+// =====================================================================
+// 🛠 THE WORKSHEET BUILDER'S CONTROLS SIT ON TOP, AND STAY THERE
+// Preview / Save / Print / Practice used to be BELOW the question list, so with
+// a hundred questions on screen the only way to reach them was to scroll past
+// every one. They are above the grid now and stick under the page header while
+// the list scrolls, which is the other half of the fix: on top is worth little
+// if ticking a few questions pushes them away again.
+//
+// The offset is MEASURED rather than written per breakpoint. `.page-header` is
+// sticky at z-index 50 and two lines of text tall, so a bar sticking at top:0
+// slides underneath it and is invisible exactly when it is wanted — and the
+// header's height moves with the font, the wrap and the viewport, so a
+// hard-coded number is silently wrong at one size and right at the rest. A
+// ResizeObserver on the header fires on first layout and on every change, so
+// there is no navigation hook to forget.
+// =====================================================================
+function wsSyncToolsTop() {
+  try {
+    const page = document.getElementById('page-worksheet');
+    const head = page && page.querySelector('.page-header');
+    if (!page || !head) return;
+    page.style.setProperty('--ws-tools-top', Math.round(head.getBoundingClientRect().height) + 'px');
+  } catch (_) {}
+}
+try {
+  const _wsToolsInit = () => {
+    const head = document.querySelector('#page-worksheet .page-header');
+    if (!head) return;
+    wsSyncToolsTop();
+    if (typeof ResizeObserver === 'function') new ResizeObserver(wsSyncToolsTop).observe(head);
+    else window.addEventListener('resize', wsSyncToolsTop);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _wsToolsInit, { once: true });
+  else _wsToolsInit();
+} catch (_) {}
+
 function navigateTo(page) {
   vetPrintPeekHide();
   pirateRiftPortal.close();

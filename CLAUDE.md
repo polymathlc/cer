@@ -6371,7 +6371,53 @@ shortened**.
   that happened silently would be a rewrite nobody asked for.
 - Run **`node tools/mistake-bank-tests.mjs`** after touching any of it.
 
+## 🛠 The worksheet builder's controls are on TOP (v1.401.0)
+
+`wsSyncToolsTop` / `_wsToolsInit` (search `THE WORKSHEET BUILDER'S CONTROLS SIT
+ON TOP`), the `#page-worksheet .ws-actions-bar` rules in `index.html`, and the
+order of the blocks inside `#page-worksheet`'s `.page-body`.
+
+Preview / Save Worksheet / Print / Generate PDF / Practice / Fill in the blanks
+sat BELOW `#wsQuestionGrid`, so on a bank of a hundred questions the only way to
+reach them was to scroll past every one. They are above the grid now — actions,
+then the print Extras, then Select All, then the grid — and the actions bar
+**sticks** under the page header while the list scrolls, which is the other half
+of the fix: on top is worth little if ticking a few questions pushes it away
+again.
+
+- **THE OFFSET IS MEASURED, NEVER WRITTEN PER BREAKPOINT.** `.page-header` is
+  `position: sticky; z-index: 50` and two lines of text tall, so a bar sticking
+  at `top: 0` slides underneath it and is invisible exactly when it is wanted.
+  Its height moves with the font, the wrap and the viewport, so a hard-coded
+  number is right at one size and silently wrong at the rest. A
+  **ResizeObserver on the header** fires on first layout and on every change, so
+  there is no navigation hook to forget when a page is added.
+- **THE RULE IS SCOPED TO `#page-worksheet`.** `.ws-question-grid` is reused by
+  the community quest picker (`#commQuestPickList`), which scrolls inside itself
+  and has no room for a sticky bar. Making the bare class sticky would put one
+  there.
+- **IT BLEEDS INTO `.page-body`'s SIDE PADDING** (`--ws-gutter`, tracking that
+  padding at each breakpoint). Without it the question cards scroll visibly
+  through the 36px gutters beside an opaque bar, which reads as broken.
+- **A PHONE GETS IT STATIC.** Six buttons wrap to three rows under 640px and a
+  sticky bar would eat most of the screen; it is still above the list.
+- **Select All stays beside the grid it governs**, below the controls.
+- Run **`node tools/worksheet-controls-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🛠 the worksheet builder's controls** (`wsSyncToolsTop`,
+  `_wsToolsInit`, the `#page-worksheet .ws-actions-bar` rules, `--ws-gutter`, or
+  the order of the blocks in `#page-worksheet`'s `.page-body`), run
+  `node tools/worksheet-controls-tests.mjs`. Every failure is silent and the
+  page renders perfectly: put the bar back below `#wsQuestionGrid` and Print is
+  a hundred questions away again, which is what it was reported for. Make the
+  BARE `.ws-actions-bar` sticky and the community quest picker — which reuses
+  this markup inside its own scroller — gains a bar it has no room for. Give it
+  a z-index of 50 or more and it covers the page header instead of sliding
+  under it; give it `top: 0` and it hides beneath one. Hard-code the offset and
+  it is right on a laptop and wrong on a tablet. Drop the gutter bleed and the
+  cards scroll through the margins beside it. And leave it sticky on a phone and
+  three rows of buttons eat the screen the list is meant to fill.
 - After touching **🐾 one part's answer** (`MK_RUN_MIN`, `MK_RUN_RE`,
   `_mkAnswerRuns`, `_mkAnswerFor`, `_mkPartNamed`, `_mkSpansParts`,
   `_mkShownAnswer`, `_mkModelAnswer`'s `part` argument, the `cut` in
