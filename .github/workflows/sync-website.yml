@@ -1,0 +1,70 @@
+name: Sync website from CER
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-polymath-website
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Read the latest CER website
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          path: source
+          persist-credentials: false
+
+      - name: Open the website repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: polymathlc/website
+          ref: main
+          path: target
+          token: ${{ secrets.WEBSITE_SYNC_TOKEN }}
+
+      - name: Copy website files and preserve domain settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f source/index.html
+          test -d target/.git
+          # Exclusions also protect these paths from deletion in the target.
+          # Only fresh, committed source files are copied; no local secrets.
+          rsync -a --delete-delay \
+            --exclude='/.git/' \
+            --exclude='/.github/' \
+            --exclude='/CNAME' \
+            --exclude='/enquiry-function/' \
+            --exclude='/live-assistant/' \
+            --exclude='/rapid-import/' \
+            --exclude='/reminders-function/' \
+            --exclude='/tools/' \
+            source/ target/
+          touch target/.nojekyll
+
+      - name: Publish changed files
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_commit=$(git -C source rev-parse HEAD)
+          cd target
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Website already matches CER."
+            exit 0
+          fi
+          git commit -m "Sync website from cer ${source_commit:0:12}"
+          git push origin HEAD:main
