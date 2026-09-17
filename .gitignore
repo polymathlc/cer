@@ -6,6 +6,14 @@ package-lock.json
 !rapid-import/functions/package.json
 !rapid-import/functions/package-lock.json
 
+!enquiry-function/functions/package.json
+!enquiry-function/functions/package-lock.json
+enquiry-function/.firebase/
+enquiry-function/firebase-debug.log
+enquiry-function/functions/.env*
+enquiry-function/functions/.secret*
+firebase-debug*.log
+
 # Playwright screenshot output — every browser harness in tools/ writes here.
 # 37 MB of PNGs after one sweep, so one `git add -A` commits the lot.
 test-results/

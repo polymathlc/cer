@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Enquire about Primary Science and Mathematics classes at Polymath Learning Centre. Tell us your child’s level and let us help you find the right next step.">
+  <title>Enquire — Polymath Learning Centre</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="enquiry.css">
+  <script type="module" src="enquiry.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#enquiryForm">Skip to enquiry form</a>
+  <header class="site-header">
+    <nav class="wrap navigation" aria-label="Main navigation">
+      <a class="brand" href="index.html" aria-label="Polymath Learning Centre home">
+        <img src="assets/branding/polymath-learning-centre.png" width="58" height="44" alt="">
+        <span>Polymath <small>Learning Centre</small></span>
+      </a>
+      <div class="navigation-links"><a href="index.html">Home</a><a href="index.html#lp-about">About Us</a><a href="enquiry.html" aria-current="page">Enquire</a></div>
+      <a class="online-link" href="index.html#login">Polymath Online <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+
+  <main class="wrap enquiry-layout" id="main">
+    <section class="introduction" aria-labelledby="pageTitle">
+      <div class="eyebrow">A thoughtful start</div>
+      <h1 id="pageTitle">Let’s find<br> your child’s<br><em>next step.</em></h1>
+      <p class="lead">Every learner starts somewhere different. Tell us a little about what you’re looking for, and we’ll help you explore the right support.</p>
+      <div class="subject-ranges" aria-label="Available class levels">
+        <div><span class="subject-symbol" aria-hidden="true">✳</span><p><strong>Science</strong><span>Primary 3 – Secondary 1</span></p></div>
+        <div><span class="subject-symbol" aria-hidden="true">＋</span><p><strong>Mathematics</strong><span>Primary 4 – Primary 6</span></p></div>
+      </div>
+    </section>
+
+    <section class="form-card" aria-labelledby="formTitle">
+      <form id="enquiryForm" method="post" novalidate aria-describedby="formIntroduction">
+        <div class="form-heading"><span class="eyebrow">Start a conversation</span><span class="account-note">No account needed</span></div>
+        <h2 id="formTitle">How can we help?</h2>
+        <p id="formIntroduction" class="form-introduction">Share your contact details and your child’s level. Fields marked <span aria-hidden="true">*</span> are required.</p>
+        <fieldset id="enquiryFields" class="form-fields">
+          <legend class="visually-hidden">Your enquiry details</legend>
+          <div class="field-grid">
+            <div class="field"><label for="parentName">Your name <span class="optional">Optional</span></label><input id="parentName" name="parentName" type="text" autocomplete="name" maxlength="100" placeholder="Parent or guardian" aria-describedby="parentNameError"><p class="field-error" id="parentNameError" hidden></p></div>
+            <div class="field"><label for="email">Email address <span aria-hidden="true">*</span></label><input id="email" name="email" type="email" required autocomplete="email" maxlength="254" inputmode="email" placeholder="you@example.com" aria-describedby="emailError"><p class="field-error" id="emailError" hidden></p></div>
+            <div class="field"><label for="phone">Contact number <span aria-hidden="true">*</span></label><input id="phone" name="phone" type="tel" required autocomplete="tel" maxlength="32" inputmode="tel" placeholder="e.g. +65 9123 4567" aria-describedby="phoneError"><p class="field-error" id="phoneError" hidden></p></div>
+            <div class="field"><label for="childLevel">Child’s current level <span aria-hidden="true">*</span></label><select id="childLevel" name="childLevel" required aria-describedby="childLevelError"><option value="">Choose a level</option><option value="P3">Primary 3</option><option value="P4">Primary 4</option><option value="P5">Primary 5</option><option value="P6">Primary 6</option><option value="S1">Secondary 1</option></select><p class="field-error" id="childLevelError" hidden></p></div>
+          </div>
+          <fieldset class="subjects-fieldset" aria-describedby="subjectGuidance subjectsError">
+            <legend>Interested in <span aria-hidden="true">*</span><span class="optional">Choose one or both</span></legend>
+            <div class="subject-options">
+              <label class="subject-option"><input id="subjectScience" name="subjects" type="checkbox" value="science" disabled><span><strong>Science</strong><small>Primary 3 – Secondary 1</small></span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-6 10a1.5 1.5 0 0 0 1.3 2h13.4a1.5 1.5 0 0 0 1.3-2L14 9V3M8 14h8"/></svg></label>
+              <label class="subject-option"><input id="subjectMath" name="subjects" type="checkbox" value="math" disabled><span><strong>Mathematics</strong><small>Primary 4 – Primary 6</small></span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h6M7 4v6M15 7h5M4 17h6M15 15h5M15 19h5"/></svg></label>
+            </div>
+            <p class="field-hint" id="subjectGuidance" aria-live="polite">Choose your child’s level to see the available subjects.</p>
+            <p class="field-error" id="subjectsError" hidden></p>
+          </fieldset>
+          <div class="field message-field"><label for="message">Anything you’d like us to know? <span class="optional">Optional</span></label><textarea id="message" name="message" rows="3" maxlength="2000" placeholder="For example, a topic they find challenging or the kind of support you’re looking for." aria-describedby="messageHint messageError"></textarea><p class="field-hint" id="messageHint">Please leave out your child’s name, school, and other personal details.</p><p class="field-error" id="messageError" hidden></p></div>
+        </fieldset>
+        <p class="privacy-note"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span>We’ll use your contact details to reply to this enquiry and discuss suitable support. Sending this form does not sign you up for marketing.</span></p>
+        <div id="enquiryStatus" class="form-status" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" hidden></div>
+        <button class="button submit-button" type="submit" id="submitEnquiry" disabled><span id="submitLabel">Send enquiry</span><svg id="submitArrow" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></svg><span class="spinner" id="submitSpinner" hidden aria-hidden="true"></span></button>
+        <p class="form-footnote">A conversation about the right fit. No enrolment commitment.</p>
+        <noscript><p class="noscript-message">Please enable JavaScript to send this form, or <a href="https://www.polymathlc.com.sg/contact-us.html" target="_blank" rel="noopener noreferrer">contact Polymath directly</a>.</p></noscript>
+      </form>
+      <section id="enquirySuccess" class="success-panel" tabindex="-1" aria-labelledby="successTitle" hidden>
+        <div class="success-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></div>
+        <div class="eyebrow">The conversation starts here</div>
+        <h2 id="successTitle">Thank you.<br><em>We’ve received your enquiry.</em></h2>
+        <p>Our team will reply using the contact details you shared. We look forward to learning more about how we can help.</p>
+        <a class="button" href="index.html">Back to home <span aria-hidden="true">→</span></a>
+        <button class="text-button" id="anotherEnquiry" type="button">Send another enquiry</button>
+      </section>
+    </section>
+
+    <aside class="next-steps" aria-labelledby="nextStepsTitle">
+      <h2 id="nextStepsTitle">A clearer way forward.</h2>
+      <ol><li><span>01</span><div><strong>Tell us where they are.</strong><p>A level, a subject, a little context.</p></div></li><li><span>02</span><div><strong>Explore the right support.</strong><p>We’ll discuss suitable classes and your questions.</p></div></li><li><span>03</span><div><strong>Choose the next step.</strong><p>Decide what feels right for your family.</p></div></li></ol>
+    </aside>
+  </main>
+  <footer class="site-footer"><div class="wrap footer-inner"><p>© 2026 Polymath Learning Centre</p><a href="index.html#lp-about">Small breakthroughs. Bigger possibilities. <span aria-hidden="true">↗</span></a></div></footer>
+</body>
+</html>

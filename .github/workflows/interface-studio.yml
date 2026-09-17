@@ -1,10 +1,10 @@
 name: Interface preview and release
 on:
   pull_request:
-    paths: ['index.html', 'app.js', 'arcade-ui.css', 'interface-studio.mjs', 'tools/interface-studio-tests.mjs', '.github/workflows/interface-studio.yml']
+    paths: ['index.html', 'app.js', 'enquiry.html', 'enquiry.css', 'enquiry.js', 'enquiry-core.mjs', 'arcade-ui.css', 'interface-studio.mjs', 'tools/interface-studio-tests.mjs', 'tools/landing-page-tests.mjs', 'tools/enquiry-tests.mjs', '.github/workflows/interface-studio.yml']
   push:
     branches: [main]
-    paths: ['index.html', 'app.js', 'arcade-ui.css', 'interface-studio.mjs', 'tools/interface-studio-tests.mjs', '.github/workflows/interface-studio.yml']
+    paths: ['index.html', 'app.js', 'enquiry.html', 'enquiry.css', 'enquiry.js', 'enquiry-core.mjs', 'arcade-ui.css', 'interface-studio.mjs', 'tools/interface-studio-tests.mjs', 'tools/landing-page-tests.mjs', 'tools/enquiry-tests.mjs', '.github/workflows/interface-studio.yml']
 permissions:
   contents: read
 jobs:
@@ -16,6 +16,8 @@ jobs:
         with:
           node-version: '20'
       - run: node tools/interface-studio-tests.mjs
+      - run: node tools/landing-page-tests.mjs
+      - run: node tools/enquiry-tests.mjs
       - name: Check application module syntax
         run: |
           if [ -f app.js ]; then
