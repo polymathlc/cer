@@ -82,7 +82,7 @@ class El {
       const oact = /data-pvo-act="([^"]*)"/.exec(tag);
       if (oact) b.setAttribute('data-pvo-act', oact[1]);
       if (/\sdisabled/.test(tag)) b.setAttribute('disabled', '');
-      const t = /data-pv[so]-act="(colour|enhance|up|down)"/.test(tag) ? full.slice(tag.length, full.lastIndexOf('<')) : '';
+      const t = /data-pv[so]-act="(colour|enhance|up|down|del|undo)"/.test(tag) ? full.slice(tag.length, full.lastIndexOf('<')) : '';
       if (t) b.textContent = t;
     });
     if (/pvs-label/.test(h)) { const l = new El('span'); l.className = 'pvs-label'; this.appendChild(l); }
@@ -112,7 +112,8 @@ function harness(opts) {
     const escapeHtml = s => String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const _canAuthor = () => state.author;
     let questionBank = state.bank, vettingList = state.vetting;
-    let currentEditingQuestion = null, blocks = [];
+    let currentEditingQuestion = null, blocks = [], editorKeywords = {};
+    const kwForgetBlock = id => { state.forgot = (state.forgot || []).concat([String(id)]); };
     // ▲▼ the editor and the peek, stubbed: a render is counted, a refresh is counted.
     const renderBlocks = () => { state.renders++; };
     const emActive = () => state.em;
@@ -135,7 +136,7 @@ function harness(opts) {
     ${cut('const PVS_IDLE_MS', '\nfunction previewImage(blockId, url) {', 'the pvs block')}
     return { pvsFind, pvsBarHtml, pvsWrapAttrs, pvsStep, pvsReset, pvsFlush, pvsFlushSettled, pvsDecorateDoc, pvsPaint, dirty: _pvsDirty,
       pvcRun, pvcRevert, pvcState, pvcBusy, pvcPaint, jobs: _pvcJobs,
-      pvoWrapOpen, pvoMove, pvoKeydown, pvoSelect, pvoDecorateDoc, get sel() { return _pvoSel; }, set sel(v) { _pvoSel = v; }, set hover(v) { _pvoHover = v; },
+      pvoWrapOpen, pvoMove, pvoRemove, pvoUndo, pvoKeydown, pvoSelect, pvoDecorateDoc, get sel() { return _pvoSel; }, set sel(v) { _pvoSel = v; }, set hover(v) { _pvoHover = v; }, get undo() { return _pvoUndo; }, get kw() { return editorKeywords; },
       set author(v) { state.author = v; }, set editing(v) { currentEditingQuestion = v.id; blocks = v.blocks; }, get blocks() { return blocks; } };
   `);
   const api = f(doc, { addEventListener() {} },
@@ -679,6 +680,127 @@ test('🖨 Preview Exported reaches the pill and the 🎨 — it is the ONE prev
   // and miss another.
   const buttons = cut('function _pvsButtonsHtml(qid, bid, block) {', '\n// The pill as rendered INTO', '_pvsButtonsHtml');
   ok(/_pvcButtonHtml\(qid, bid\)/.test(buttons), 'the colour button is not in the shared pill — it would reach some previews and not others');
+});
+
+// ---- 🗑 taking an element off, from a preview ---------------------------------
+const Q3K = id => Object.assign(Q3(id), { answerKeywords: { p1: { 2: true }, p1_claim: { 0: true }, t1: { 1: true }, p10: { 3: true } }, blanks: { p1: { 2: true }, t1: {} } });
+
+test('🗑 splices the block out of q.blocks, takes its keywords and blanks with it, and rides the flush', () => {
+  const h = harness({ bank: [Q3K('a')] });
+  ok(h.api.pvoRemove('a', 'p1') === true && orderOf(h.state.bank[0]) === 't1,m1', 'the picture did not leave the question: ' + orderOf(h.state.bank[0]));
+  ok(h.api.dirty.get('a') === 'bank', 'the removal was not marked for the flush');
+  ok(h.saves.length === 0, 'a removal wrote on the press — it must ride the flush');
+  const kw = h.state.bank[0].answerKeywords;
+  ok(!('p1' in kw) && !('p1_claim' in kw), 'the removed block\'s keyword marks were left behind — they come back on the next block given that id');
+  ok(('t1' in kw) && ('p10' in kw), 'another block\'s keywords were taken (p10 is not p1_)');
+  ok(!('p1' in h.state.bank[0].blanks) && ('t1' in h.state.bank[0].blanks), 'the blanks were not scoped to the removed block');
+  ok(h.api.pvoRemove('a', 'zz') === false, 'a block that is not there was "removed"');
+  ok(h.api.pvoRemove('nope', 't1') === false, 'a question that is gone was not refused');
+  ok(h.toasts.some(t => /no longer here/.test(t[0])), 'a question that is gone was not refused in words');
+});
+
+test('a question is never EMPTIED, and a non-author removes nothing', () => {
+  const h = harness({ bank: [Q3('a')] });
+  ok(h.api.pvoRemove('a', 't1') && h.api.pvoRemove('a', 'p1'), 'two removals refused');
+  ok(h.api.pvoRemove('a', 'm1') === false && orderOf(h.state.bank[0]) === 'm1', 'the LAST block was removed — a question with no blocks prints as a numbered gap');
+  ok(h.toasts.some(t => /at least one element/.test(t[0])), 'the refusal was silent');
+  const s = harness({ bank: [Q3('a')], author: false });
+  ok(s.api.pvoRemove('a', 'p1') === false && orderOf(s.state.bank[0]) === 't1,p1,m1', 'a student removed an element');
+});
+
+test('↩ puts the removed element back where it was, keywords and blanks included, once', () => {
+  const h = harness({ bank: [Q3K('a')] });
+  h.api.pvoRemove('a', 'p1');
+  ok(h.api.undo.length === 1 && h.api.undo[0].index === 1, 'the removal was not remembered with its position');
+  ok(h.api.pvoUndo('a') === true && orderOf(h.state.bank[0]) === 't1,p1,m1', 'undo did not put the picture back in the middle: ' + orderOf(h.state.bank[0]));
+  ok(h.state.bank[0].answerKeywords.p1 && h.state.bank[0].answerKeywords.p1_claim, 'the keywords did not come back with the block');
+  ok(h.state.bank[0].blanks.p1, 'the blanks did not come back with the block');
+  ok(h.api.undo.length === 0 && h.api.pvoUndo('a') === false, 'the same removal could be undone twice');
+  ok(h.api.dirty.get('a') === 'bank', 'the undo was not marked for the flush');
+  // Removed from the END, undone after the list shrank further: clamped, never past the end.
+  const e = harness({ bank: [Q3('b')] });
+  e.api.pvoRemove('b', 'm1'); e.api.pvoRemove('b', 'p1');
+  ok(e.api.pvoUndo() === true && orderOf(e.state.bank[0]) === 't1,p1', 'undo with no qid did not take the most recent removal');
+  ok(e.api.pvoUndo('b') === true && orderOf(e.state.bank[0]) === 't1,p1,m1', 'the earlier removal did not come back at its own position');
+  // A block that came back some other way is not doubled.
+  const d = harness({ bank: [Q3('c')] });
+  d.api.pvoRemove('c', 'p1');
+  d.state.bank[0].blocks.push({ id: 'p1', type: 'image' });
+  ok(d.api.pvoUndo('c') === false && orderOf(d.state.bank[0]) === 't1,m1,p1', 'an element already back on the question was put back a second time');
+});
+
+test('the editor drops and restores the same block, only when it holds this question and ✏️ editing mode is off', () => {
+  const h = harness({ bank: [Q3('a')] });
+  const eb = [{ id: 't1' }, { id: 'p1' }, { id: 'm1' }];
+  h.api.editing = { id: 'a', blocks: eb };
+  h.api.pvoRemove('a', 'p1');
+  ok(eb.map(b => b.id).join(',') === 't1,m1' && h.state.renders === 1, 'the editor copy still holds the block — Save there would put it back');
+  ok((h.state.forgot || []).includes('p1'), 'the editor\'s own keyword marks for the block were not forgotten');
+  h.api.pvoUndo('a');
+  ok(eb.map(b => b.id).join(',') === 't1,p1,m1', 'the editor did not get the block back on undo');
+  ok(eb[1] !== h.state.bank[0].blocks[1], 'the editor and the bank SHARE the restored block object — a keystroke there edits the bank before Save');
+  const other = harness({ bank: [Q3('a')] });
+  const ob = [{ id: 't1' }, { id: 'p1' }, { id: 'm1' }];
+  other.api.editing = { id: 'b', blocks: ob };
+  other.api.pvoRemove('a', 'p1');
+  ok(ob.length === 3 && other.state.renders === 0, 'a DIFFERENT question open in the editor lost a block — duplicated questions share block ids');
+  const em = harness({ bank: [Q3('a')], em: true });
+  const emb = [{ id: 't1' }, { id: 'p1' }, { id: 'm1' }];
+  em.api.editing = { id: 'a', blocks: emb };
+  em.api.pvoRemove('a', 'p1');
+  ok(emb.length === 3, 'in ✏️ editing mode the global blocks is the WHOLE PAPER and lost a block anyway');
+});
+
+test('the bar carries 🗑 (disabled on a lone block) and ↩ only once something was removed; Delete and Ctrl+Z work the keys', () => {
+  const h = harness({ bank: [Q3('a')] });
+  const mid = blockWrap(h.doc, 'a', 'p1');
+  h.api.pvoDecorateDoc(h.doc);
+  const bar = mid.host.querySelector('[data-pvo-bar]');
+  const del = bar.querySelector('[data-pvo-act="del"]');
+  ok(del && typeof del.onclick === 'function' && !del.hasAttribute('disabled'), 'no bound 🗑 on the bar');
+  ok(!bar.querySelector('[data-pvo-act="undo"]'), '↩ offered with nothing to put back');
+  del.onclick({ stopPropagation() {}, preventDefault() {} });
+  ok(orderOf(h.state.bank[0]) === 't1,m1', '🗑 did not remove the element');
+  ok(h.api.sel === null, 'the removed element stayed selected for the keys');
+  // Redecorate (the preview is redrawn from q.blocks): ↩ now appears on the question's bars.
+  const stem = blockWrap(h.doc, 'a', 't1');
+  h.api.pvoDecorateDoc(h.doc);
+  const undo = stem.host.querySelector('[data-pvo-act="undo"]');
+  ok(undo && typeof undo.onclick === 'function', '↩ is missing from a bar of a question with a removal to undo');
+  undo.onclick({ stopPropagation() {}, preventDefault() {} });
+  ok(orderOf(h.state.bank[0]) === 't1,p1,m1', '↩ on the bar did not put the element back');
+  // A lone block's 🗑 is disabled.
+  const lone = harness({ bank: [{ id: 'l', blocks: [{ id: 'only', type: 'text' }] }] });
+  const lw = blockWrap(lone.doc, 'l', 'only');
+  lone.api.pvoDecorateDoc(lone.doc);
+  ok(lw.host.querySelector('[data-pvo-act="del"]').hasAttribute('disabled'), 'the only element of a question offers 🗑');
+  // Keys.
+  const k = harness({ bank: [Q3('k')] });
+  const ev = (key, extra) => Object.assign({ key, target: { tagName: 'BODY' }, preventDefault() { this.p = 1; }, stopPropagation() {} }, extra || {});
+  k.api.sel = { qid: 'k', bid: 'p1' };
+  let e = ev('Delete'); k.api.pvoKeydown(e);
+  ok(orderOf(k.state.bank[0]) === 't1,p1,m1' && !e.p, 'Delete acted on an element that is not on any screen');
+  blockWrap(k.doc, 'k', 'p1'); blockWrap(k.doc, 'k', 't1');
+  e = ev('Delete'); k.api.pvoKeydown(e);
+  ok(orderOf(k.state.bank[0]) === 't1,m1' && e.p === 1, 'Delete did not remove the selected element');
+  e = ev('Backspace'); k.api.pvoKeydown(e);
+  ok(orderOf(k.state.bank[0]) === 't1,m1' && !e.p, 'Backspace removed an element');
+  k.api.hover = { qid: 'k', bid: 't1' };
+  e = ev('z', { ctrlKey: true }); k.api.pvoKeydown(e);
+  ok(orderOf(k.state.bank[0]) === 't1,p1,m1' && e.p === 1, 'Ctrl+Z did not put the element back');
+  e = ev('z', { ctrlKey: true }); k.api.pvoKeydown(e);
+  ok(!e.p, 'Ctrl+Z with nothing to undo was swallowed');
+  const typing = ev('Delete', { target: { tagName: 'INPUT' } }); k.api.sel = { qid: 'k', bid: 'p1' }; k.api.pvoKeydown(typing);
+  ok(orderOf(k.state.bank[0]) === 't1,p1,m1' && !typing.p, 'Delete pressed in a text field removed an element');
+});
+
+test('a removal rides the same flush, and the harness pins the write-free press', () => {
+  const rm = cut('function pvoRemove(qid, bid) {', '\n// The keyword marks and the blanks', 'pvoRemove');
+  ok(/_pvsMark\(found\)/.test(rm) && rm.indexOf('saveQuestion') < 0, 'a removal writes on its own instead of riding the one flush');
+  ok(/list\.length <= 1/.test(rm), 'the last-block guard is gone');
+  const dec = cut('function pvoDecorateDoc(doc) {', '\n\nfunction previewImage(blockId, url) {', 'pvoDecorateDoc');
+  ok(/data-pvo-act="del"/.test(dec) && /'\[data-pvo-act="del"\]'/.test(dec), 'the decorator does not bind 🗑 by action');
+  ok(/pvoRemove/.test(dec) && /pvoUndo/.test(dec), 'the decorator binds no handler for 🗑 / ↩');
 });
 
 runAll();

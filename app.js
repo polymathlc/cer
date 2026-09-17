@@ -3885,7 +3885,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.406.0';
+const APP_VERSION = 'v1.407.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -9292,6 +9292,10 @@ const PVS_CSS = `
 .pvo-btn{width:20px;height:18px;border:0;border-radius:6px;background:transparent;font-family:inherit;font-size:11px;line-height:1;color:#333;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
 .pvo-btn:hover{background:rgba(0,0,0,.08)}
 .pvo-btn[disabled]{opacity:.3;cursor:default}
+.pvo-del{color:#b42318;margin-top:2px;border-top:1px solid rgba(0,0,0,.1);border-radius:0 0 6px 6px}
+.pvo-del:hover{background:rgba(180,35,24,.1)}
+.pvo-undo{color:#1d4ed8}
+.pvo-undo:hover{background:rgba(29,78,216,.1)}
 .pvo-sel{outline:2px solid #4a7c59;outline-offset:2px;border-radius:4px}
 @media print{.pvs-bar,.pvo-bar{display:none!important}.pvo-sel{outline:none}}`;
 function pvsAllowed() { try { return !!_canAuthor(); } catch (_) { return false; } }
@@ -9792,10 +9796,33 @@ async function pvcRevert(qid, bid) {
 //   the arrow keys somebody presses to scroll the bank.
 // - ONLY AN AUTHOR, CHECKED IN THE HANDLER. A student's device renders the very
 //   same preview.
+//
+// 🗑 …AND AN ELEMENT CAN BE TAKEN OFF (v1.407.0). The same bar carries a 🗑,
+// and the selected element goes with the Delete key. A stray picture, a second
+// copy of the options, an empty answer box the reader invented — the commonest
+// fix after "move it" is "lose it", and it went through ✏️ Edit the same way.
+// - IT IS THE SAME SPLICE `removeBlock` MAKES, on `q.blocks`, and it rides the
+//   SAME dirty map and flush. Nothing here writes on the press.
+// - A QUESTION MAY NEVER BE EMPTIED (`pvoRemove` refuses the last block, the
+//   rule `emMayRemove` carries): a question with no blocks renders as nothing,
+//   prints as a numbered gap, and cannot be answered.
+// - THE KEYWORDS AND BLANKS GO WITH IT (`_pvoForgetKeys`). `q.answerKeywords`
+//   is keyed by block id, and a CER block keeps three keys — an orphan left
+//   behind comes back on a later block given the same id, which is the rule
+//   `kwForgetBlock` carries in the editor.
+// - IT CAN BE UNDONE (`_pvoUndo` / `pvoUndo`), because a preview writes to the
+//   bank when it closes and a mis-tap on a 🗑 must not cost a question its
+//   figure: the block, its position, its keywords and its blanks are kept, and
+//   ↩ on any bar of that question — or Ctrl/⌘+Z with the pointer over it —
+//   puts them back at the same place. Capped at PVO_UNDO_MAX per sitting.
+// - THE EDITOR FOLLOWS on the same terms as a move (`_pvoSyncEditorRemove`):
+//   only when it holds THIS question and ✏️ editing mode is off.
 // =====================================================================
 const PVO_REPLAN_MS = 120;     // the A4 preview re-paginates this soon after a move
+const PVO_UNDO_MAX = 20;       // removed elements kept for ↩, newest last
 let _pvoSel = null;            // { qid, bid } — the element last clicked in a preview
 let _pvoHover = null;          // { qid, bid } — the element the pointer is over
+let _pvoUndo = [];             // [{ qid, index, block, kw, blanks }] — removed elements, oldest first
 
 // The opening tag of one element's wrapper, as `buildWorksheetHtml` emits it
 // when asked to (`opts.blockTags`). Empty for a question or block with no id —
@@ -9842,6 +9869,128 @@ function _pvoSyncEditor(qid, order) {
   } catch (_) {}
 }
 
+// 🗑 One removal. Returns true when a block really left the question, so a
+// Delete key that did nothing leaves the page alone.
+function pvoRemove(qid, bid) {
+  if (!pvsAllowed()) return false;
+  const found = pvsFind(qid);
+  if (!found) { showToast('That question is no longer here', 'error'); return false; }
+  const list = Array.isArray(found.q.blocks) ? found.q.blocks : [];
+  const i = list.findIndex(b => b && String(b.id) === String(bid));
+  if (i < 0) return false;
+  if (list.length <= 1) {
+    showToast('A question must keep at least one element — delete the whole question from the bank instead', 'error');
+    return false;
+  }
+  const [block] = list.splice(i, 1);
+  const kept = _pvoForgetKeys(found.q, bid);
+  _pvoUndo.push({ qid: String(qid), index: i, block, kw: kept.kw, blanks: kept.blanks });
+  while (_pvoUndo.length > PVO_UNDO_MAX) _pvoUndo.shift();
+  if (_pvoSel && _pvoSel.qid === String(qid) && _pvoSel.bid === String(bid)) _pvoSel = null;
+  if (_pvoHover && _pvoHover.qid === String(qid) && _pvoHover.bid === String(bid)) _pvoHover = null;
+  _pvsMark(found);
+  _pvoSyncEditorRemove(qid, bid);
+  _pvoRerender(qid);
+  showToast('Element removed — ↩ on the question puts it back (saved when this preview closes)', 'success');
+  return true;
+}
+
+// The keyword marks and the blanks keyed by this block come off the QUESTION
+// and are handed back for the undo. `kwFieldKey` writes `<bid>` for a plain
+// box and `<bid>_<field>` for a CER field, so both shapes are matched.
+function _pvoForgetKeys(q, bid) {
+  const out = { kw: {}, blanks: null };
+  const id = String(bid);
+  try {
+    const kw = q && q.answerKeywords;
+    if (kw && typeof kw === 'object') {
+      Object.keys(kw).forEach(k => {
+        if (k === id || k.indexOf(id + '_') === 0) { out.kw[k] = kw[k]; delete kw[k]; }
+      });
+    }
+    const bl = q && q.blanks;
+    if (bl && typeof bl === 'object' && Object.prototype.hasOwnProperty.call(bl, id)) { out.blanks = bl[id]; delete bl[id]; }
+  } catch (_) {}
+  return out;
+}
+
+// ↩ Put the most recently removed element of this question back where it was.
+// With no qid, the most recent removal of any question. Returns true when
+// something was restored.
+function pvoUndo(qid) {
+  if (!pvsAllowed()) return false;
+  let k = -1;
+  for (let n = _pvoUndo.length - 1; n >= 0; n--) {
+    if (qid == null || String(_pvoUndo[n].qid) === String(qid)) { k = n; break; }
+  }
+  if (k < 0) return false;
+  const entry = _pvoUndo[k];
+  const found = pvsFind(entry.qid);
+  if (!found) { _pvoUndo.splice(k, 1); showToast('That question is no longer here', 'error'); return false; }
+  const list = Array.isArray(found.q.blocks) ? found.q.blocks : (found.q.blocks = []);
+  // The block may have come back some other way (an edit saved meanwhile) —
+  // a second copy of it is worse than a lost undo.
+  if (entry.block && entry.block.id != null && list.some(b => b && String(b.id) === String(entry.block.id))) {
+    _pvoUndo.splice(k, 1);
+    showToast('That element is already back on the question', 'info');
+    return false;
+  }
+  const at = Math.max(0, Math.min(entry.index, list.length));
+  list.splice(at, 0, entry.block);
+  try {
+    if (entry.kw && Object.keys(entry.kw).length) {
+      if (!found.q.answerKeywords || typeof found.q.answerKeywords !== 'object') found.q.answerKeywords = {};
+      Object.assign(found.q.answerKeywords, entry.kw);
+    }
+    if (entry.blanks != null) {
+      if (!found.q.blanks || typeof found.q.blanks !== 'object') found.q.blanks = {};
+      found.q.blanks[String(entry.block.id)] = entry.blanks;
+    }
+  } catch (_) {}
+  _pvoUndo.splice(k, 1);
+  _pvsMark(found);
+  _pvoSyncEditorRestore(entry.qid, entry, at);
+  _pvoRerender(entry.qid);
+  showToast('Element put back', 'success');
+  return true;
+}
+
+// The editor, if this very question is open in it, drops the same block — and
+// its keyword marks, through the editor's own `kwForgetBlock`. Same terms as
+// a move: never in ✏️ editing mode, where `blocks` is the whole paper.
+function _pvoSyncEditorRemove(qid, bid) {
+  try {
+    if (typeof currentEditingQuestion === 'undefined' || !currentEditingQuestion || String(currentEditingQuestion) !== String(qid)) return;
+    if (typeof emActive === 'function' && emActive()) return;
+    if (!Array.isArray(blocks)) return;
+    const i = blocks.findIndex(b => b && String(b.id) === String(bid));
+    if (i < 0 || blocks.length <= 1) return;
+    blocks.splice(i, 1);
+    if (typeof kwForgetBlock === 'function') kwForgetBlock(bid);
+    if (typeof renderBlocks === 'function') renderBlocks();
+  } catch (_) {}
+}
+
+// …and gets the block back on an undo, as a COPY: the editor's own array must
+// never share an object with the bank's, or a keystroke there edits the bank
+// before Save.
+function _pvoSyncEditorRestore(qid, entry, at) {
+  try {
+    if (typeof currentEditingQuestion === 'undefined' || !currentEditingQuestion || String(currentEditingQuestion) !== String(qid)) return;
+    if (typeof emActive === 'function' && emActive()) return;
+    if (!Array.isArray(blocks) || !entry || !entry.block) return;
+    if (blocks.some(b => b && String(b.id) === String(entry.block.id))) return;
+    blocks.splice(Math.max(0, Math.min(at, blocks.length)), 0, JSON.parse(JSON.stringify(entry.block)));
+    if (entry.kw && typeof editorKeywords === 'object' && editorKeywords) Object.assign(editorKeywords, JSON.parse(JSON.stringify(entry.kw)));
+    if (typeof renderBlocks === 'function') renderBlocks();
+  } catch (_) {}
+}
+
+// Whether ↩ has anything to offer on this question's bars.
+function _pvoCanUndo(qid) {
+  return _pvoUndo.some(e => String(e.qid) === String(qid));
+}
+
 // Every surface showing this question redraws from `q.blocks`: the 👁 peek
 // rewrites its frame, the A4 preview re-plans.
 function _pvoRerender(qid) {
@@ -9869,14 +10018,41 @@ function _pvoTarget() {
 }
 
 function pvoKeydown(e) {
-  if (!e || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
-  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  if (!e || !e.key) return;
   const t = e.target;
   const tag = t && t.tagName ? String(t.tagName).toUpperCase() : '';
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+  const key = String(e.key);
+  // Ctrl/⌘+Z: put the last removed element of the question under the pointer
+  // (or the selected one) back. Only while that question is on a screen, and
+  // only when there is something to put back — otherwise the key is left to
+  // whatever else wanted it.
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (key === 'z' || key === 'Z')) {
+    const cand = _pvoSel || _pvoHover;
+    if (!cand || !_pvoCanUndo(cand.qid) || !_pvoQuestionShown(cand.qid)) return;
+    if (pvoUndo(cand.qid)) { e.preventDefault(); e.stopPropagation(); }
+    return;
+  }
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  if (key === 'Delete') {
+    const pick = _pvoTarget();
+    if (!pick) return;
+    if (pvoRemove(pick.qid, pick.bid)) { e.preventDefault(); e.stopPropagation(); }
+    return;
+  }
+  if (key !== 'ArrowUp' && key !== 'ArrowDown') return;
   const pick = _pvoTarget();
   if (!pick) return;
-  if (pvoMove(pick.qid, pick.bid, e.key === 'ArrowDown' ? 1 : -1)) { e.preventDefault(); e.stopPropagation(); }
+  if (pvoMove(pick.qid, pick.bid, key === 'ArrowDown' ? 1 : -1)) { e.preventDefault(); e.stopPropagation(); }
+}
+
+// Whether any element of this question is on a screen right now — the undo
+// key's own version of `_pvoTarget`, which asks about one BLOCK (and the
+// removed block is, by definition, no longer there).
+function _pvoQuestionShown(qid) {
+  const esc = v => String(v).replace(/"/g, '\\"');
+  const sel = '[data-pvo-q="' + esc(qid) + '"]';
+  return pvsDocs().some(d => { try { return !!d.querySelector(sel); } catch (_) { return false; } });
 }
 
 // Registering the SAME named listener twice is a no-op in the DOM, and that
@@ -9921,15 +10097,22 @@ function pvoDecorateDoc(doc) {
       const bar = doc.createElement('div');
       bar.className = 'pvo-bar';
       bar.setAttribute('data-pvo-bar', '1');
-      bar.title = 'Move this element up or down — saved when this preview closes. Click an element and press ↑ / ↓ to move it from the keyboard.';
+      bar.title = 'Move this element up or down, or take it off the question — saved when this preview closes. Click an element and press ↑ / ↓ to move it, or Delete to remove it, from the keyboard.';
+      const canUndo = _pvoCanUndo(qid);
       bar.innerHTML = `<button type="button" class="pvo-btn" data-pvo-act="up" aria-label="Move this element up" title="Move up (↑)"${i === 0 ? ' disabled' : ''}>▲</button>` +
-        `<button type="button" class="pvo-btn" data-pvo-act="down" aria-label="Move this element down" title="Move down (↓)"${i >= list.length - 1 ? ' disabled' : ''}>▼</button>`;
+        `<button type="button" class="pvo-btn" data-pvo-act="down" aria-label="Move this element down" title="Move down (↓)"${i >= list.length - 1 ? ' disabled' : ''}>▼</button>` +
+        `<button type="button" class="pvo-btn pvo-del" data-pvo-act="del" aria-label="Remove this element from the question" title="Remove this element (Delete)"${list.length <= 1 ? ' disabled' : ''}>🗑</button>` +
+        (canUndo ? `<button type="button" class="pvo-btn pvo-undo" data-pvo-act="undo" aria-label="Put the last removed element back" title="Put the last removed element back (Ctrl+Z)">↩</button>` : '');
       const bind = (name, dir) => {
         const el = bar.querySelector('[data-pvo-act="' + name + '"]');
         if (el) el.onclick = e => { e.stopPropagation(); e.preventDefault(); _pvoSel = { qid: String(qid), bid: String(bid) }; pvoMove(qid, bid, dir); };
       };
       bind('up', -1);
       bind('down', 1);
+      const del = bar.querySelector('[data-pvo-act="del"]');
+      if (del) del.onclick = e => { e.stopPropagation(); e.preventDefault(); pvoRemove(qid, bid); };
+      const undo = bar.querySelector('[data-pvo-act="undo"]');
+      if (undo) undo.onclick = e => { e.stopPropagation(); e.preventDefault(); pvoUndo(qid); };
       bar.addEventListener('pointerdown', e => e.stopPropagation());
       host.appendChild(bar);
       host.addEventListener('pointerenter', () => { _pvoHover = { qid: String(qid), bid: String(bid) }; });
@@ -78340,6 +78523,8 @@ window.vetPrintPeekLeave = vetPrintPeekLeave;
 window.vetPrintPeekFull = vetPrintPeekFull;
 window.vetPrintPeekApprove = vetPrintPeekApprove;
 window.pvoMove = pvoMove;
+window.pvoRemove = pvoRemove;
+window.pvoUndo = pvoUndo;
 window.tlStopMany = tlStopMany;
 window.tlJumpToProblem = tlJumpToProblem;
 window.akeAddExplanation = akeAddExplanation;
