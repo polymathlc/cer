@@ -9260,6 +9260,53 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
   #landingPage .lp-about-contact-actions .lp-button { padding-inline:16px; font-size:12px; }
 }
 
+/* Why Polymath — the tuition offer and its seven selling points. */
+#landingPage .lp-why { background:#eef2e8; border-block:1px solid var(--lp-line); }
+#landingPage .lp-why-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+#landingPage .lp-why-card { background:#fff; border:1px solid var(--lp-line); border-radius:12px; padding:29px; display:flex; flex-direction:column; }
+#landingPage .lp-why-card .lp-feature-icon { margin-bottom:22px; }
+#landingPage .lp-why-card h3 { font-family:'Space Grotesk',sans-serif; font-size:19px; font-weight:500; letter-spacing:-.6px; line-height:1.3; margin-bottom:12px; }
+#landingPage .lp-why-card p { color:var(--lp-muted); font-size:12px; line-height:1.85; }
+#landingPage .lp-why-card .lp-feature-tag { margin-top:auto; padding-top:21px; }
+#landingPage .lp-why-card .lp-text-link { margin-top:auto; padding-top:10px; }
+#landingPage .lp-why-card-wide { grid-column:span 2; }
+#landingPage .lp-why-card-wide p { max-width:560px; }
+#landingPage .lp-why-card-lead { grid-column:span 2; background:#173f34; color:#fff; border-color:#173f34; padding:38px 40px; }
+#landingPage .lp-why-card-lead .lp-about-kicker { color:#d8e8af; }
+#landingPage .lp-why-card-lead h3 { font-size:30px; letter-spacing:-1px; }
+#landingPage .lp-why-card-lead p { color:#c5d2c8; font-size:13px; max-width:560px; }
+#landingPage .lp-why-list { list-style:none; display:grid; gap:10px; margin-top:22px; padding-top:20px; border-top:1px solid #ffffff24; font-size:12px; color:#e2ebdf; }
+#landingPage .lp-why-list li { display:flex; gap:10px; align-items:center; }
+#landingPage .lp-why-list .lp-icon { width:17px; height:17px; color:#dfebb8; }
+#landingPage .lp-why-modes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-top:24px; }
+#landingPage .lp-why-mode { background:#e3ead8; border:1px solid #d3dcc7; border-radius:12px; padding:29px; }
+#landingPage .lp-why-mode h3 { font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:500; letter-spacing:-.6px; line-height:1.3; margin-bottom:11px; }
+#landingPage .lp-why-mode p { color:#4b5f52; font-size:12px; line-height:1.85; }
+#landingPage .lp-why-mode-cta { background:#fff; display:flex; flex-direction:column; }
+#landingPage .lp-why-mode-cta .lp-button { margin-top:auto; align-self:flex-start; }
+#landingPage .lp-why-mode-cta p { margin-bottom:20px; }
+#landingPage .lp-hero-note { max-width:520px; line-height:1.7; align-items:flex-start; }
+#landingPage .lp-hero-note .lp-icon { margin-top:2px; }
+@media (max-width:1100px) {
+  #landingPage .lp-why-card { padding:24px; }
+  #landingPage .lp-why-card-lead { padding:30px; }
+}
+@media (max-width:820px) {
+  #landingPage .lp-why-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #landingPage .lp-why-modes { grid-template-columns:1fr; gap:14px; }
+  #landingPage .lp-why-card-lead h3 { font-size:26px; }
+  #landingPage .lp-why-card-wide { grid-column:auto; }
+}
+@media (max-width:620px) {
+  #landingPage .lp-why-grid { grid-template-columns:1fr; gap:12px; }
+  #landingPage .lp-why-card, #landingPage .lp-why-mode { padding:25px; }
+  #landingPage .lp-why-card-lead { grid-column:auto; padding:28px; }
+  #landingPage .lp-why-card-lead h3 { font-size:25px; }
+  #landingPage .lp-why-card h3 { font-size:20px; }
+  #landingPage .lp-hero-note { font-size:9px; }
+  #landingPage .lp-nav-links a[href="#lp-features"] { display:none; }
+}
+
 </style>
 </head>
 <body>
@@ -9393,6 +9440,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         <span class="lp-brand-caption">Polymath <span>Learning Centre</span></span>
       </a>
       <div class="lp-nav-links">
+        <a href="#lp-why">Why Polymath</a>
         <a href="#lp-features">The experience</a>
         <a href="#lp-demo">How it works</a>
         <a class="lp-about-link" href="#lp-about">About Us</a>
@@ -9409,14 +9457,14 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     <section class="lp-hero" aria-labelledby="lp-hero-title">
       <div class="lp-wrap lp-hero-grid">
         <div class="lp-hero-copy">
-          <div class="lp-eyebrow">A little curiosity. A world of possibility.</div>
+          <div class="lp-eyebrow">Primary Science &amp; Mathematics tuition · Online and in Clementi</div>
           <h1 id="lp-hero-title">Understand it.<br>Explain it.<br><em>Make it yours.</em></h1>
-          <p>Science clicks when you can explain the why. Build confident answers with guided practice, personal feedback, and adventures that make learning worth coming back to.</p>
+          <p>Small-group Science and Mathematics classes for P3 to P6, taught in person at our Clementi centre or live online. Every student also gets our complimentary online learning suite, so the practice, feedback and motivation carry on between lessons.</p>
           <div class="lp-hero-actions">
-            <button class="lp-button" type="button" onclick="showPage('registerPage')">Start your journey <svg class="lp-icon" aria-hidden="true"><use href="#lp-arrow"/></svg></button>
-            <a class="lp-button lp-button-secondary" href="#lp-demo">Try a sample <svg class="lp-icon" aria-hidden="true"><use href="#lp-pencil"/></svg></a>
+            <a class="lp-button" href="enquiry.html">Enquire about classes <svg class="lp-icon" aria-hidden="true"><use href="#lp-arrow"/></svg></a>
+            <a class="lp-button lp-button-secondary" href="#lp-why">Why Polymath <svg class="lp-icon" aria-hidden="true"><use href="#lp-spark"/></svg></a>
           </div>
-          <div class="lp-hero-note"><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg> From primary science foundations to PSLE preparation</div>
+          <div class="lp-hero-note"><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg> Curriculum endorsed by Raffles teachers · Instructor with 20 years of experience · Featured on Channel News Asia</div>
         </div>
         <div class="lp-preview-stage" aria-label="Illustrative guided science answer preview">
           <div class="lp-orbit" aria-hidden="true"><svg class="lp-icon"><use href="#lp-atom"/></svg></div>
@@ -9438,18 +9486,93 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 
     <div class="lp-capabilities" aria-label="Learning tools">
       <div class="lp-wrap">
-        <span><svg class="lp-icon" aria-hidden="true"><use href="#lp-pencil"/></svg> Guided CER practice</span>
-        <span><svg class="lp-icon" aria-hidden="true"><use href="#lp-spark"/></svg> AI marking &amp; feedback</span>
-        <span><svg class="lp-icon" aria-hidden="true"><use href="#lp-book"/></svg> PSLE past papers</span>
-        <span><svg class="lp-icon" aria-hidden="true"><use href="#lp-game"/></svg> Play-powered motivation</span>
+        <span><svg class="lp-icon" aria-hidden="true"><use href="#lp-atom"/></svg> Science &amp; Mathematics · P3 to P6</span>
+        <span><svg class="lp-icon" aria-hidden="true"><use href="#lp-target"/></svg> Physical classes in Clementi</span>
+        <span><svg class="lp-icon" aria-hidden="true"><use href="#lp-camera"/></svg> Live online classes</span>
+        <span><svg class="lp-icon" aria-hidden="true"><use href="#lp-spark"/></svg> Complimentary online learning suite</span>
       </div>
     </div>
+
+    <section class="lp-section lp-why" id="lp-why" aria-labelledby="lp-why-title">
+      <div class="lp-wrap">
+        <div class="lp-section-head">
+          <div><div class="lp-eyebrow">Why families choose Polymath</div><h2 id="lp-why-title">Science and Maths tuition<br>with <em>substance.</em></h2></div>
+          <p>Online or at our Clementi centre, every class is built on the same curriculum, the same frameworks and the same teacher. Here is what sets it apart.</p>
+        </div>
+        <div class="lp-why-grid">
+          <article class="lp-why-card lp-why-card-lead">
+            <span class="lp-about-kicker">THE CURRICULUM</span>
+            <h3>Endorsed by Raffles teachers.</h3>
+            <p>Our Science and Mathematics curriculum is endorsed by Raffles teachers. Every lesson follows a planned sequence that builds from foundations to PSLE-level questions, so nothing your child is tested on is left to chance.</p>
+            <ul class="lp-why-list">
+              <li><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg> Science for P3 to P6, Mathematics for P4 to P6</li>
+              <li><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg> Built from foundations up to PSLE-level questions</li>
+              <li><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg> The same programme in person and online</li>
+            </ul>
+          </article>
+          <article class="lp-why-card">
+            <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-target"/></svg></div>
+            <h3>Proprietary TCQ-CER and Heuristics frameworks.</h3>
+            <p>In Science, our TCQ-CER framework teaches students to read the question, pin down the concept, and answer with a clear Claim, Evidence and Reasoning. In Mathematics, our Heuristics framework gives them a repeatable way to choose a strategy for an unfamiliar problem.</p>
+            <span class="lp-feature-tag">A METHOD FOR EVERY QUESTION TYPE</span>
+          </article>
+          <article class="lp-why-card">
+            <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-spark"/></svg></div>
+            <h3>A complimentary online learning suite.</h3>
+            <p>Every enrolled student gets the full Polymath Online suite at no extra cost: guided practice, AI marking and feedback, revision cards, PSLE past papers, progress reports and Science Quest. Holistic learning that continues between lessons.</p>
+            <span class="lp-feature-tag">INCLUDED WITH EVERY CLASS</span>
+          </article>
+          <article class="lp-why-card">
+            <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-game"/></svg></div>
+            <h3>Highly motivational.</h3>
+            <p>Children work hardest when they want to come back. Streaks, points, collections, leaderboards and adventures turn practice into something students ask for, and small-group lessons keep every child seen and encouraged.</p>
+            <span class="lp-feature-tag">MOTIVATION BUILT INTO EVERY LESSON</span>
+          </article>
+          <article class="lp-why-card">
+            <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-pencil"/></svg></div>
+            <h3>An instructor with 20 years of experience.</h3>
+            <p>Classes are taught by an instructor with two decades of experience teaching primary Science and Mathematics. That experience is what turns a marking scheme into an explanation a ten-year-old can actually use.</p>
+            <span class="lp-feature-tag">TWENTY YEARS IN THE CLASSROOM</span>
+          </article>
+          <article class="lp-why-card">
+            <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-camera"/></svg></div>
+            <h3>Featured on Channel News Asia.</h3>
+            <p>Polymath Learning Centre and its approach to teaching have been featured on Channel News Asia. We are glad to share the feature with families who ask.</p>
+            <span class="lp-feature-tag">AS SEEN ON CNA</span>
+          </article>
+          <article class="lp-why-card lp-why-card-wide">
+            <div class="lp-feature-icon"><svg class="lp-icon" aria-hidden="true"><use href="#lp-book"/></svg></div>
+            <h3>Publisher of Science flashcards, guidebooks and past-year papers.</h3>
+            <p>We write and publish our own PSLE Science flashcards, revision guidebook and past-year paper collections. The same materials are used in class and are available for families who want to revise at home.</p>
+            <a class="lp-text-link" href="https://www.polymathlc.com.sg/products---buy-now.html" target="_blank" rel="noopener noreferrer">See our publications <svg class="lp-icon" aria-hidden="true"><use href="#lp-arrow"/></svg></a>
+          </article>
+        </div>
+        <div class="lp-why-modes" aria-label="Ways to learn with Polymath">
+          <article class="lp-why-mode">
+            <span class="lp-about-kicker">IN PERSON · CLEMENTI</span>
+            <h3>Physical classes at the centre.</h3>
+            <p>Small groups, a teacher in the room, and worksheets marked in front of your child. Classes are grouped by level and subject; ask us for the current timetable.</p>
+          </article>
+          <article class="lp-why-mode">
+            <span class="lp-about-kicker">LIVE ONLINE</span>
+            <h3>Online classes, the same lesson.</h3>
+            <p>Join the same class live from home, with the same curriculum, frameworks and teacher. Work is submitted through Polymath Online and marked with feedback.</p>
+          </article>
+          <article class="lp-why-mode lp-why-mode-cta">
+            <span class="lp-about-kicker">NEXT STEP</span>
+            <h3>Find the right class.</h3>
+            <p>Tell us your child’s level and subject, and ask about the current timetable, fees and a paid trial lesson.</p>
+            <a class="lp-button" href="enquiry.html">Enquire now <svg class="lp-icon" aria-hidden="true"><use href="#lp-arrow"/></svg></a>
+          </article>
+        </div>
+      </div>
+    </section>
 
     <section class="lp-section" id="lp-features" aria-labelledby="lp-features-title">
       <div class="lp-wrap">
         <div class="lp-section-head">
-          <div><div class="lp-eyebrow">More than getting it right</div><h2 id="lp-features-title">Everything a curious<br>mind needs to <em>grow.</em></h2></div>
-          <p>From the first “I think…” to a well-reasoned answer. A connected set of tools for understanding, practice, and progress.</p>
+          <div><div class="lp-eyebrow">The complimentary online learning suite</div><h2 id="lp-features-title">Everything a curious<br>mind needs to <em>grow.</em></h2></div>
+          <p>Included with every Polymath class at no extra cost. From the first “I think…” to a well-reasoned answer, a connected set of tools for understanding, practice, and progress.</p>
         </div>
         <div class="lp-feature-grid">
           <article class="lp-feature lp-feature-dark">
@@ -9559,7 +9682,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="lp-wrap">
         <div class="lp-section-head">
           <div><div class="lp-eyebrow">About Polymath Learning Centre</div><h2 id="lp-about-title">Small breakthroughs.<br><em>Bigger possibilities.</em></h2></div>
-          <p>Mathematics and Science, taught with purpose. With Science from P3 to Secondary 1 and Mathematics from P4 to P6, we help children understand the ideas and find the confidence to tackle the next challenge.</p>
+          <p>Mathematics and Science, taught with purpose, in person in Clementi and live online. With Science from P3 to Secondary 1 and Mathematics from P4 to P6, we help children understand the ideas and find the confidence to tackle the next challenge.</p>
         </div>
         <div class="lp-about-story">
           <div class="lp-about-purpose">
@@ -9616,6 +9739,8 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="lp-wrap lp-faq-grid">
         <div class="lp-faq-intro"><div class="lp-eyebrow">Good questions welcome</div><h2 id="lp-faq-title">A few things<br>you might be <em>wondering.</em></h2><p>A clearer start to your learning journey.</p></div>
         <div class="lp-faq-list">
+          <details><summary>Do you teach online, in person, or both?</summary><p>Both. Science and Mathematics classes run at our Clementi centre and live online, following the same curriculum, the same TCQ-CER and Heuristics frameworks and the same teacher. Every enrolled student receives the online learning suite as part of their class.</p></details>
+          <details><summary>What is included in the complimentary online learning suite?</summary><p>Guided practice, AI marking and feedback, revision cards, PSLE past papers, progress reports and Science Quest. It is included with every Polymath class at no extra cost, so practice and feedback continue between lessons.</p></details>
           <details><summary>Who is the portal for?</summary><p>The Science Learning Portal supports students building primary science foundations and preparing for the PSLE. Choose the learner’s level for suitable practice. Family profiles let multiple children use one login.</p></details>
           <details><summary>Does my child need to write full answers already?</summary><p>No. Guided blanks help students practise key science vocabulary before they choose fully open-ended answers. Both modes support the move towards independent explanations.</p></details>
           <details><summary>How do the games support learning?</summary><p>Science questions are woven into the games, while daily goals, points, collections, and game credits give students reasons to keep practising. Science Quest is the game layer within the Science Learning Portal.</p></details>
@@ -9632,7 +9757,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     </section>
   </main>
   <footer class="lp-footer">
-    <div class="lp-wrap lp-footer-inner"><div><strong>Polymath Learning Centre</strong><p>© 2026 Polymath Learning Centre. A place for curious minds.</p></div><div class="lp-footer-links"><a href="#lp-about">About Us</a><a href="enquiry.html">Enquire</a><a href="#lp-features">Explore the experience</a><a href="#lp-demo">Try a sample</a><a href="#lp-faq">Common questions</a><a href="#landingPage">Back to top ↑</a></div></div>
+    <div class="lp-wrap lp-footer-inner"><div><strong>Polymath Learning Centre</strong><p>© 2026 Polymath Learning Centre. A place for curious minds.</p></div><div class="lp-footer-links"><a href="#lp-why">Why Polymath</a><a href="#lp-about">About Us</a><a href="enquiry.html">Enquire</a><a href="#lp-features">Explore the experience</a><a href="#lp-demo">Try a sample</a><a href="#lp-faq">Common questions</a><a href="#landingPage">Back to top ↑</a></div></div>
   </footer>
   <noscript><p class="lp-noscript">Enable JavaScript to try the interactive sample, create an account, or sign in to the Science Learning Portal.</p></noscript>
 </div>
