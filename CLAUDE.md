@@ -231,7 +231,7 @@ Guidance for Claude when working in this repo.
   - **The realm has its own THEME** (`body.realm-embers`, v1.254.0). Opening Realm of Embers swaps the portal's white theme for gold-on-galaxy across the whole screen, sidebar included; leaving puts it back. `navigateTo` toggles ONE class and everything else is CSS — which is what makes the swap instant and impossible to leave half-applied.
     - The mechanism is the **design tokens**, not a forked component set: redefining `--surface` / `--border` / `--text` / `--primary` inside `#page-tcg` re-skins every `.tcg-*` surface that was already using them, and only the few rules that hardcode a colour (the page header, the active tab, `.btn-primary`'s white label) are named explicitly. Keep it that way — a themed copy of a component is a component that will drift.
     - The galaxy and its starfield are `body.realm-embers::before` / `::after`, both `position: fixed` and `pointer-events: none`, so they never scroll, reflow or swallow a click; `.main-content` takes `z-index: 1` to sit over them. Both honour `prefers-reduced-motion`.
-    - **The nav item is the DOOR**, so it deliberately does not look like the other nav items: gold border, galaxy-blue slab, and a tiling starfield (`#navTcg::before`, `background-size` per layer — a handful of gradients make a FIELD rather than seven lonely dots) that brightens and drifts on hover. For a **student** the whole wrap is moved to sit directly under 🏛️ Community by `_tcgPlaceNavItem()`, where they will actually find it; for an admin it stays among the game tools. `#navTcgHome` is the empty anchor it is put back to if the role changes (an admin previewing as a student and back).
+    - **The nav item is the DOOR**, so it deliberately does not look like the other nav items: gold border, galaxy-blue slab, and a tiling starfield (`#navTcg::before`, `background-size` per layer — a handful of gradients make a FIELD rather than seven lonely dots) that brightens and drifts on hover. Since v1.409.0 it sits inside the 🎮 **Games** group for EVERY role, parked at the `#navTcgHome` anchor by `_tcgPlaceNavItem()` — it used to be moved up under 🏛️ Community for a student, and the collapsible group is what makes it findable there now (see **🗂 The sidebar is a handful of collapsible groups** below).
   - **Realm of Embers rulebook** — the 📘 How to Play tab (`tcgGuideHtml`) is meant to document EVERY mechanic. It reads its numbers out of the game's own constants (`TCG_PACKS`, `TCG_SKILLS`, `TCG_AFFINITY`, `TCG_ARTIFACTS`, `TCG_LVL_STEP`, `TCG_MERGE_GAIN`, `GAME_Q_POINTS*`, `EMS_*`) instead of hard-coding them, so tuning a pack or a skill updates the guide too — keep it that way, and add a section whenever you add a mechanic.
 - **Science Quest SVG artwork (v1.385.0).** The owner retired pre-generated avatar/items and requested elaborate SVG artwork for the full catalogue. All 143 equipment items, base/evolved pets and both hero genders now render as SVG for every account. The generated-art beta panel is removed. Do not restore the old beta or raster priorities.
   - `rpg-svg-art.js` exposes `RpgSvgArt.item(it,{stage})` and explicit profiles for all stable item IDs. It returns self-contained vector fragments in the existing item coordinates. `rpg-hero-svg.js` exposes `RpgHeroSvg.lower/arms/head/grip`. Load both deferred scripts before `app.js`; neither requires network artwork or an AI service.
@@ -6665,7 +6665,78 @@ element goes with the Delete key.
 - Run **`node tools/preview-picture-size-tests.mjs`** and
   **`node tools/vetting-export-hover-tests.mjs`** after touching any of it.
 
+## 🗂 The sidebar is a handful of collapsible groups (v1.409.0)
+
+`navGroupsRestore` / `navGroupsSync` / `navGroupReveal` / `navGroupsWatch` /
+`_navOriginals` / `_navOriginal` / `NAV_GROUP_BADGE_SKIP` (in `app.js`, search
+`COLLAPSIBLE NAV GROUPS`), the `<details class="nav-group" data-group="…">`
+blocks in `index.html`'s sidebar and the `.nav-group*` CSS beside `.nav-item`.
+**`polymathlc/math` carries the same block — ship a change to both.**
+
+The sidebar ran to forty-odd items for an admin, and eleven of them were
+games. Every item now sits inside ONE of a few native `<details>` groups —
+✏️ **Questions**, 📄 **Papers & Worksheets**, ✍️ **Practice** (student),
+📚 **Syllabus & Papers**, 👥 **Students**, 🎮 **Games**, 👤 **My Account**
+(student), ⚙️ **Tools & Settings** — so the menu reads as a few lines until a
+group is opened. Home and Community stay top-level.
+
+- **A NAV ITEM'S OWN MARKUP DID NOT MOVE, ONLY ITS PLACE.** Every role gate
+  still acts on the ITEM — `admin-only` / `student-only`, the employee sweep,
+  `rpg-el`, `_navAllowed`, `tcgApplyNavVisibility`, `fpsApplyNavVisibility` —
+  and four harnesses pin items by their exact class strings. A group is a
+  wrapper the gates know nothing about, which is what let this land without
+  touching any of them.
+- **A GROUP WHOSE EVERY ITEM IS HIDDEN IS HIDDEN WITH IT**, by the CLASS
+  `nav-group-empty` (with `!important`) and never by inline style: the role
+  code writes `display` on the `admin-only` / `student-only` groups themselves,
+  and two writers of one inline style fight. That is what stops a heading
+  standing over nothing — which is the fault the old employee code hid every
+  `.nav-section-label` to avoid.
+- **LATE SHOWS ARE CAUGHT BY ONE MutationObserver, not by hooking each of
+  them.** The hero doc resolves seconds after the sidebar is locked down and
+  `rpgApplyVisibility` turns the game items on then; the Realm of Embers and
+  Science Strike doors and every badge count arrive later still. Hooking each
+  is how the next one is missed, so `navGroupsWatch` watches the sidebar and
+  re-syncs on the next frame. **It ignores its own writes** (`_navGroupsOwn
+  Mutation`, plus the `_navGroupsSyncing` guard), or it answers itself for ever.
+- **WHICH GROUPS ARE OPEN IS REMEMBERED PER ACCOUNT** (`navGroups:{uid}`),
+  and only an explicit click is saved. `navigateTo` opens the group around the
+  page it lit up so the active page is never behind a closed head, but that is
+  transient — a bookmark or a deep link must not pin a group open for good.
+  Every group is closed by default except the student's ✍️ Practice
+  (`data-default-open`), because a child must always see their modes.
+- **THE HEAD SUMS ITS VISIBLE ITEMS' BADGES** — vetting, flagged, unread
+  messages — so a collapsed group still says there is something inside worth
+  opening for. `NAV_GROUP_BADGE_SKIP` keeps the bank COUNT off it: a bank of
+  three thousand is a size, not something needing attention.
+- **AN EMPLOYEE'S MENU IS FLATTENED** (`nav-flat`): five items under three
+  heads is worse than five items, so the heads go and the groups are forced
+  open — and a forced open state is never RECORDED as a choice.
+- **THE BOOKMARK SELECTORS HAD TO CHANGE**, and this is the silent one. They
+  were written as `.sidebar-nav > .nav-item` — DIRECT children — so the
+  moment an item sat inside a group every star vanished and the bookmark band
+  emptied, with nothing thrown. `_navOriginals()` is the ONE reader now:
+  every `.nav-item` in the sidebar that is not a mirrored copy in
+  `#navBookmarksList`. `_navOriginal(page)` prefers the copy this role can
+  SEE, because the admin and the student each carry a Create Worksheet.
+- **`toggle` does not bubble**, so the listener that records a choice is bound
+  in CAPTURE on the nav.
+- Run **`node tools/nav-groups-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🗂 the collapsible sidebar groups** (`navGroupsRestore`,
+  `navGroupsSync`, `navGroupReveal`, `navGroupsWatch`, `_navOriginals`,
+  `_navOriginal`, `NAV_GROUP_BADGE_SKIP`, `_tcgPlaceNavItem`, the `<details
+  class="nav-group">` blocks or the `.nav-group*` CSS), run
+  `node tools/nav-groups-tests.mjs`. Every failure is silent and the sidebar
+  still paints: a game left outside 🎮 Games is the mess this was asked to end;
+  a selector written as a DIRECT child of `.sidebar-nav` finds nothing once the
+  items are grouped, so every star vanishes and the bookmark band empties; hide
+  an empty group by inline style and the role code fights it; drop the reveal
+  from `navigateTo` and the active page sits behind a closed head; let the
+  observer see its own writes and it re-syncs for ever; and move the Realm of
+  Embers door back out under Community and it is the one game outside the
+  group again.
 - After touching **🗑 removing an element from a preview** (`pvoRemove`,
   `_pvoForgetKeys`, `pvoUndo`, `_pvoUndo`, `_pvoSyncEditorRemove`,
   `_pvoSyncEditorRestore`, `_pvoCanUndo`, `_pvoQuestionShown`, the `del` /
