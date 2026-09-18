@@ -14,7 +14,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-<link rel="modulepreload" href="app.js?v=1.408.1">
+<link rel="modulepreload" href="app.js?v=1.410.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -10039,6 +10039,18 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           </div>
         </div>
       </details>
+      <!-- 🧭 Polymath Apps — the centre's other two apps, each opened INSIDE this portal on its own page (an iframe on the sibling folder; the sign-in carries, since every app shares one Firebase project on one origin). Both are plain pages, so every role gate acts on the item as usual. -->
+      <details class="nav-group" data-group="apps">
+        <summary class="nav-group-head"><span class="ico">🧭</span> <span class="nav-group-label">Polymath Apps</span><span class="badge nav-group-badge" style="display:none;">0</span><span class="nav-group-chev" aria-hidden="true"></span></summary>
+        <div class="nav-group-body">
+          <div class="nav-item" data-page="tutor" onclick="navigateTo('tutor')" title="Study Buddy — write on a worksheet with a stylus, keyboard or your voice while Chung GPT hints rather than answers; when you are done it marks the paper and files every mistake with a picture of the question. Every worksheet exported from this portal can be opened here.">
+            <span class="ico">📖</span> Study Buddy
+          </div>
+          <div class="nav-item" data-page="anskey" onclick="navigateTo('anskey')" title="Ans Key — the PDF worksheet annotator: mark a worksheet up, generate answers and note cards, and share it with a class.">
+            <span class="ico">🔑</span> Ans Key
+          </div>
+        </div>
+      </details>
       <!-- ✍️ Practice — the student's own modes (open by default so a child can always see them) -->
       <details class="nav-group student-only" data-group="practice" data-default-open="1">
         <summary class="nav-group-head"><span class="ico">✍️</span> <span class="nav-group-label">Practice</span><span class="badge nav-group-badge" style="display:none;">0</span><span class="nav-group-chev" aria-hidden="true"></span></summary>
@@ -11462,6 +11474,9 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
               Print / Save PDF
             </button>
+            <button class="btn btn-outline" onclick="tsendFromBuilder()" id="wsTutorBtn" title="Send the ticked questions to Study Buddy as a PDF worksheet and open it there — to write on, get hints, be marked and keep a mistake book">
+              📖 Study Buddy
+            </button>
             <button class="btn btn-primary" onclick="generateSyllabusPdf()" id="wsSyllabusBtn" style="background:var(--primary-dark,#3a6347);" title="Sort the selected questions into MOE syllabus learning objectives, each with a short intro, and print as a PDF">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h5"/></svg>
               Generate PDF (by syllabus)
@@ -11513,6 +11528,44 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     </div>
 
     <!-- ===== PAGE: MY WORKSHEETS (Students) ===== -->
+    <!-- 🧭 Study Buddy, embedded. The frame's src is set on first open (appEmbedOnNavigate), never at first paint. -->
+    <div class="page app-embed-page" id="page-tutor">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>📖 Study Buddy</h2>
+          </div>
+          <div class="subtitle">Write on a worksheet with Chung GPT hinting, marking and keeping your mistake book — every worksheet exported from this portal opens here.</div>
+        </div>
+        <div class="app-embed-actions">
+          <button class="btn btn-outline" type="button" onclick="appEmbedReload('tutor')" title="Reload Study Buddy">↻ Reload</button>
+          <button class="btn btn-outline" type="button" onclick="appEmbedOpenTab('tutor')" title="Open Study Buddy on its own, full screen">⧉ Open in a new tab</button>
+        </div>
+      </div>
+      <div class="app-embed-body">
+        <iframe id="appEmbedFrame-tutor" class="app-embed-frame" title="Study Buddy" allow="camera; microphone; clipboard-read; clipboard-write; fullscreen" referrerpolicy="same-origin"></iframe>
+      </div>
+    </div>
+    <!-- 🧭 Ans Key, embedded. The frame's src is set on first open (appEmbedOnNavigate), never at first paint. -->
+    <div class="page app-embed-page" id="page-anskey">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>🔑 Ans Key</h2>
+          </div>
+          <div class="subtitle">The PDF worksheet annotator — mark up, generate answers and share with a class.</div>
+        </div>
+        <div class="app-embed-actions">
+          <button class="btn btn-outline" type="button" onclick="appEmbedReload('anskey')" title="Reload Ans Key">↻ Reload</button>
+          <button class="btn btn-outline" type="button" onclick="appEmbedOpenTab('anskey')" title="Open Ans Key on its own, full screen">⧉ Open in a new tab</button>
+        </div>
+      </div>
+      <div class="app-embed-body">
+        <iframe id="appEmbedFrame-anskey" class="app-embed-frame" title="Ans Key" allow="camera; microphone; clipboard-read; clipboard-write; fullscreen" referrerpolicy="same-origin"></iframe>
+      </div>
+    </div>
     <div class="page" id="page-myworksheets">
       <div class="page-header">
         <div>
@@ -13289,6 +13342,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     </label>
     <button class="btn btn-outline" type="button" id="wsPreviewEmBtn" style="display:none;" onclick="emOpenFromPreview()" title="Editing mode — every question on this sheet in one scroll, each block condensed to a strip with its controls as tiny icons down the left. Fix what you find, then Save once.">✏️ Editing mode</button>
     <button class="btn btn-outline" type="button" id="wsPreviewEditBtn" style="display:none;" onclick="wseOpenFromPreview()" title="Add or remove questions on this saved worksheet">✎ Questions</button>
+    <button class="btn btn-outline" type="button" onclick="tsendFromPreview()" title="Send these pages to Study Buddy as a PDF and open them there — to write on, get hints, be marked and keep a mistake book">📖 Study Buddy</button>
     <button class="btn btn-primary" type="button" onclick="printFromPreview()">🖨️ Print / Save PDF</button>
   </div>
   <div class="wspv-stage"><iframe id="wsPreviewFrame" title="Worksheet preview"></iframe></div>
@@ -15426,6 +15480,31 @@ body.lore-reading { overflow: hidden; }
 .subject-opt.here b { color: var(--primary-dark, var(--primary)); font-weight: 700; }
 .subject-opt .subject-tick { margin-left: auto; padding-left: 8px; font-size: 0.72rem; color: var(--primary);
   font-weight: 700; white-space: nowrap; }   /* nowrap: wrapped onto two lines it squeezes the subject's own name */
+.subject-menu-title-tools { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 10px; }
+/* 🧭 An embedded app fills the page below its header — the frame IS the page. */
+.app-embed-page { display: none; flex-direction: column; }
+.app-embed-page.active { display: flex; }
+.app-embed-page .page-header { flex: 0 0 auto; }
+.app-embed-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.app-embed-body { flex: 1 1 auto; min-height: 0; padding: 0; background: var(--surface-alt, #f4f4f2); }
+.app-embed-frame { display: block; width: 100%; height: 100%; min-height: calc(100vh - 92px); border: 0; background: #fff; }
+/* 📖 Send to Study Buddy */
+.tsend-sub { font-size: 0.86rem; color: var(--text-muted); margin: 0 0 8px; }
+.tsend-note { font-size: 0.84rem; color: var(--text-muted); line-height: 1.55; margin: 0 0 16px; }
+.tsend-field { display: block; margin: 0 0 14px; }
+.tsend-field > span { display: block; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 0.02em; }
+.tsend-field input[type="text"], .tsend-field select { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; font: inherit; background: var(--surface); color: var(--text); }
+.tsend-grades { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tsend-grade { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; background: var(--surface); }
+.tsend-grade input { position: absolute; opacity: 0; width: 0; height: 0; }
+.tsend-grade b { font-size: 0.86rem; }
+.tsend-grade span { font-size: 0.74rem; color: var(--text-muted); line-height: 1.4; }
+.tsend-grade.on { border-color: var(--primary); background: var(--primary-light); }
+.tsend-check { display: block; font-size: 0.84rem; line-height: 1.5; margin: 12px 0 0; }
+.tsend-check input { width: 15px; height: 15px; accent-color: var(--primary); -webkit-appearance: auto; appearance: auto; vertical-align: -2px; margin-right: 4px; }
+.tsend-check-sub { margin-left: 24px; margin-top: 6px; }
+.tsend-status { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: var(--primary-light); color: var(--primary-dark, var(--primary)); font-size: 0.84rem; font-weight: 600; }
+@media (max-width: 640px) { .tsend-grades { grid-template-columns: 1fr; } .app-embed-frame { min-height: calc(100vh - 120px); } }
 .subject-menu-foot {
   padding: 9px 11px 5px;
   margin-top: 4px;
@@ -15516,6 +15595,30 @@ body.lore-reading { overflow: hidden; }
     <div class="overlay-head"><h3>🔍 Answer key cross-check</h3><button class="close" onclick="akcClose()" type="button">×</button></div>
     <div class="overlay-body" style="text-align:left;" id="akcBody"></div>
     <div class="overlay-foot" id="akcFoot"></div>
+  </div>
+</div>
+
+<!-- ==================== 📖 SEND TO STUDY BUDDY ==================== -->
+<div class="overlay" id="tsendOverlay">
+  <div class="overlay-card" style="max-width:600px;">
+    <div class="overlay-head"><h3>📖 Send to Study Buddy</h3><button class="close" onclick="tsendClose()" type="button">×</button></div>
+    <div class="overlay-body" style="text-align:left;">
+      <p class="tsend-sub" id="tsendSub"></p>
+      <p class="tsend-note">The pages are photographed exactly as the preview lays them out — cover, breaks and all — into a PDF that opens in Study Buddy, where it can be written on, hinted, marked and filed into a mistake book.</p>
+      <label class="tsend-field"><span>Name in Study Buddy</span><input type="text" id="tsendName" maxlength="120" autocomplete="off"></label>
+      <label class="tsend-field"><span>Level</span><select id="tsendLevel"></select></label>
+      <div class="tsend-field"><span>How much help Chung GPT may give</span><div class="tsend-grades" id="tsendGrades"></div></div>
+      <label class="tsend-check"><input type="checkbox" id="tsendKey" checked> <b>Include the answer key</b> — the key pages go into the file <em>hidden from the student</em>, so Chung GPT marks against the real thing.</label>
+      <div id="tsendSetWrap" style="display:none;">
+        <label class="tsend-check"><input type="checkbox" id="tsendSet" checked> <b>📌 Set it for my students</b> — every student sees it under “Set for you” in Study Buddy and starts their own copy.</label>
+        <label class="tsend-check tsend-check-sub"><input type="checkbox" id="tsendLock" checked> 🔒 Lock the help level for the class (they cannot raise it).</label>
+      </div>
+      <div class="tsend-status" id="tsendStatus" style="display:none;"></div>
+    </div>
+    <div class="overlay-foot">
+      <button class="btn btn-ghost" onclick="tsendClose()" type="button">Cancel</button>
+      <button class="btn btn-primary" id="tsendGo" onclick="tsendSend()" type="button">📖 Send to Study Buddy</button>
+    </div>
   </div>
 </div>
 
@@ -15680,6 +15783,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
-<script type="module" src="app.js?v=1.408.1"></script>
+<script type="module" src="app.js?v=1.410.0"></script>
 </body>
 </html>
