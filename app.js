@@ -3886,7 +3886,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.410.0';
+const APP_VERSION = 'v1.410.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -37104,6 +37104,14 @@ const WS_PREVIEW_CSS = `
   #wsPages{ padding:22px 0; }
   .wspv-sheet{ position:relative; width:210mm; min-height:297mm; box-sizing:border-box; padding:18mm 16mm 20mm; background:#fff; margin:0 auto 20px; box-shadow:0 3px 16px rgba(0,0,0,.45); }
   .wspv-content{ position:relative; }
+  /* html2canvas parks its working iframe directly under <body>, and the app's
+     print CSS (unwrapped above) hides EVERY child of body but #printOutput —
+     so that iframe was laid out at zero size, every "photograph" for Study
+     Buddy came back 0×0, and pdf-lib refused the empty bytes with "Offset is
+     outside the bounds of the DataView". Two :not(#…) lift the specificity
+     over the print rule's own :not(#printOutput). Harmless on the live
+     preview, which never photographs anything. */
+  body > .html2canvas-container:not(#h2c-a):not(#h2c-b){ display:block !important; visibility:hidden; }
   .wspv-pageno{ position:absolute; left:0; right:0; bottom:7mm; text-align:center; font-size:8pt; color:#b3b3b3; }
   .print-question-chunk{ position:relative; }
   /* The answer-key rows carry an ✏️ button too, so they need to be a
@@ -37458,11 +37466,17 @@ async function _tsendSheetToJpeg(win, sheet) {
   return canvas;
 }
 function _tsendCanvasToJpegBytes(canvas, q) {
+  // A canvas with no pixels answers toDataURL with "data:," — no bytes at all —
+  // and pdf-lib then dies on its first read with a message about a DataView
+  // that names nothing a teacher can act on. Say what really happened.
+  if (!canvas || !canvas.width || !canvas.height) throw new Error('the page came out blank when it was photographed (nothing to put in the PDF)');
   const dataUrl = canvas.toDataURL('image/jpeg', q);
   const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  // SOI marker: anything else is not a JPEG this PDF can carry.
+  if (out.length < 4 || out[0] !== 0xff || out[1] !== 0xd8) throw new Error('the photograph of the page could not be encoded as a JPEG (' + (canvas.width + '×' + canvas.height) + ')');
   return { bytes: out, dataUrl };
 }
 function _tsendCoverFrom(canvas) {
