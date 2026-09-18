@@ -56,6 +56,19 @@ ok('the packer marks the key sheets', /sh\.dataset\.kind = 'key'/.test(pack));
 ok('the pills and bars are not hung on a noTools frame', /if \(!noTools\) pvsDecorateDoc\(doc\);/.test(pack) && /if \(!noTools\) pvoDecorateDoc\(doc\);/.test(pack));
 ok('the live preview page count is not overwritten by the hidden frame', /\(readOnly \|\| noTools\) \? null : document\.getElementById\('wsPreviewPageCount'\)/.test(pack));
 ok('a zoomed sheet is photographed through a transform on width 100%/zoom', /content\.style\.transform = 'scale\(' \+ z \+ '\)';/.test(js) && /content\.style\.width = \(100 \/ z\) \+ '%';/.test(js));
+// html2canvas parks its working iframe under <body>, and the app's own print
+// CSS (unwrapped into the frame) hides every child of body but #printOutput —
+// a zero-size iframe, a 0×0 photograph of every page, and pdf-lib refusing the
+// empty bytes with "Offset is outside the bounds of the DataView". The print
+// rule is :not(#printOutput), which is id-level specificity, so the lift needs
+// two :not(#…) of its own to win.
+const pvCss = cut('const WS_PREVIEW_CSS = `', '`;', 'WS_PREVIEW_CSS');
+ok('the preview CSS lifts html2canvas\'s working iframe out of the print CSS\'s body-wide hide',
+  /body > \.html2canvas-container:not\(#[\w-]+\):not\(#[\w-]+\)\{ display:block !important/.test(pvCss));
+ok('the print CSS still hides everything but #printOutput (the rule the lift exists for)', /body > \*:not\(#printOutput\) \{\s*display: none !important;/.test(html));
+const jpg = cut('function _tsendCanvasToJpegBytes(', '\n}', '_tsendCanvasToJpegBytes');
+ok('a blank photograph is refused IN WORDS before pdf-lib sees it', /!canvas\.width \|\| !canvas\.height\) throw new Error/.test(jpg));
+ok('the bytes are checked for a JPEG SOI marker', /out\[0\] !== 0xff \|\| out\[1\] !== 0xd8\) throw new Error/.test(jpg));
 ok('a sheet is pinned to ONE A4 with overflow hidden', /sheet\.style\.height = '297mm'/.test(js) && /sheet\.style\.overflow = 'hidden'/.test(js));
 ok('the key pages travel by page number and the rows off the rendered key', /keyPages\.push\(i \+ 1\)/.test(send) && /_tsendKeyRows\(rdoc\)/.test(send));
 ok('the frame document never shadows Firestore\'s doc()', !/const doc = frame\.contentDocument/.test(send) && /setDoc\(doc\(db, TSEND_COLLECTION/.test(send));

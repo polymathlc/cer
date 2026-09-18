@@ -6724,6 +6724,15 @@ PDF and opened there, to be written on, hinted, marked and filed into a mistake 
   fitted at 92% runs off the bottom of the sheet. `_tsendPrepSheet` swaps it for
   `transform: scale(z)` on a width of `100%/z` (wraps identically) and pins the sheet to exactly
   one A4 with `overflow: hidden`.
+- **THE PRINT CSS HIDES EVERY CHILD OF `<body>` BUT `#printOutput`, AND html2canvas PARKS ITS
+  WORKING IFRAME UNDER `<body>`** (v1.410.1). The app's `@media print` block is unwrapped into the
+  hidden frame, so that iframe was laid out at zero size, every page was photographed as 0×0,
+  `toDataURL` answered `data:,`, and pdf-lib refused the empty bytes with *"Offset is outside
+  the bounds of the DataView"* — which is exactly what was reported. `WS_PREVIEW_CSS` lifts
+  `body > .html2canvas-container` back to `display:block` with two `:not(#…)` of its own,
+  because the print rule's `:not(#printOutput)` is id-level specificity and a plain class rule
+  loses to it. `_tsendCanvasToJpegBytes` refuses a blank canvas and a non-JPEG **in words**, so
+  the next fault of this shape names the page rather than a DataView.
 - **THE LIBRARIES LOAD ON DEMAND**, from two CDNs, the day the button is first pressed:
   html2canvas into the hidden frame's OWN document (so it photographs with the frame's fonts and
   print CSS), pdf-lib into this window. Nothing new is in `index.html`'s head.
