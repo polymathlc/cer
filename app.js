@@ -3885,7 +3885,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.408.1';
+const APP_VERSION = 'v1.409.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -4151,6 +4151,7 @@ function configureSidebarForRole(role) {
     document.querySelectorAll('.nav-section-label').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     try { navBookmarksInit(); } catch (e) { console.warn('bookmarks', e); }
+    try { navGroupsRestore(); navGroupsWatch(); } catch (e) { console.warn('nav groups', e); }
     navigateTo('create');
     return;
   }
@@ -4178,6 +4179,9 @@ function configureSidebarForRole(role) {
   // Stars go on AFTER the role has decided which items exist, so a bookmark can
   // never resurrect an item this account isn't allowed to see.
   try { navBookmarksInit(); } catch (e) { console.warn('bookmarks', e); }
+  // The groups come AFTER the role and the stars, for the same reason the stars
+  // come after the role: which groups are empty depends on which items exist.
+  try { navGroupsRestore(); navGroupsWatch(); } catch (e) { console.warn('nav groups', e); }
   // Students land on their simple Home screen; admins keep Community. Also
   // start the realtime quest watch so the countdown chip works on every page.
   try { commStartGlobalWatch(); } catch (_) {}
@@ -4239,7 +4243,7 @@ function navBookmarksRender() {
   // An item hidden by role (or by the "hide game" toggle) must not come back
   // through the bookmark band.
   const sources = saved
-    .map(p => ({ page: p, el: document.querySelector('.sidebar-nav > .nav-item[data-page="' + CSS.escape(p) + '"]') }))
+    .map(p => ({ page: p, el: _navOriginal(p) }))
     .filter(x => x.el && x.el.style.display !== 'none');
 
   list.innerHTML = '';
@@ -4261,27 +4265,153 @@ function navBookmarksRender() {
   wrap.classList.toggle('show', sources.length > 0);
 
   // Light up the stars on the originals.
-  document.querySelectorAll('.sidebar-nav > .nav-item > .nav-star').forEach(s => {
+  _navOriginals().forEach(item => item.querySelectorAll(':scope > .nav-star').forEach(s => {
     const on = saved.includes(s.getAttribute('data-star'));
     s.classList.toggle('on', on);
     s.textContent = on ? '★' : '☆';
     s.setAttribute('aria-label', on ? 'Remove from Bookmarks' : 'Bookmark this');
-  });
+  }));
   _navBmSyncActive();
 }
 // Keep the mirrored copy highlighted along with its original.
 function _navBmSyncActive() {
-  const cur = document.querySelector('.sidebar-nav > .nav-item.active');
+  const cur = _navOriginals().find(el => el.classList.contains('active'));
   const page = cur ? cur.getAttribute('data-page') : '';
   document.querySelectorAll('#navBookmarksList .nav-item').forEach(c => {
     c.classList.toggle('active', !!page && c.getAttribute('data-page') === page);
   });
 }
 function navBookmarksInit() {
-  document.querySelectorAll('.sidebar-nav > .nav-item[data-page]').forEach(item => {
-    _navBmAddStar(item, item.getAttribute('data-page'));
+  _navOriginals().forEach(item => {
+    if (item.hasAttribute('data-page')) _navBmAddStar(item, item.getAttribute('data-page'));
   });
   navBookmarksRender();
+}
+// The ORIGINAL nav items — every .nav-item in the sidebar that is not a
+// mirrored bookmark copy. They used to be found as DIRECT children of
+// .sidebar-nav; since v1.409.0 most of them sit inside a collapsible group,
+// so "not in the bookmark band" is the honest test rather than depth.
+function _navOriginals() {
+  return Array.from(document.querySelectorAll('.sidebar-nav .nav-item')).filter(el => !el.closest('#navBookmarksList'));
+}
+// The original for a page. Two items can carry one page (the admin's and the
+// student's Create Worksheet, say), so the one this role can SEE wins.
+function _navOriginal(page) {
+  const all = _navOriginals().filter(el => el.getAttribute('data-page') === page);
+  return all.find(el => el.style.display !== 'none') || all[0] || null;
+}
+
+// =====================================================================
+// COLLAPSIBLE NAV GROUPS (v1.409.0)
+//
+// The sidebar ran to forty-odd items for an admin and the games alone were
+// eleven of them. They live in a handful of native <details> groups now —
+// ✏️ Questions, 📄 Papers & Worksheets, ✍️ Practice, 📚 Syllabus & Papers,
+// 👥 Students, 🎮 Games, 👤 My Account, ⚙️ Tools & Settings — so the menu
+// reads as a few lines until one is opened.
+//
+// - A nav item's own markup, class and handler are UNCHANGED; only where it
+//   sits moved. Every role gate (`admin-only` / `student-only` / the
+//   employee sweep / rpg-el / _navAllowed) still acts on the ITEM.
+// - Which groups are open is remembered per account (`navGroups:{uid}`), and
+//   only an explicit click is saved: the group holding the active page is
+//   opened on every navigation but that is transient, so a bookmark or a deep
+//   link never pins a group open for good.
+// - A group whose every item is hidden for this role is hidden with it
+//   (`nav-group-empty`, a CLASS so the inline display the role code writes on
+//   `admin-only` / `student-only` groups is never fought over).
+// - An employee's five-item menu is flattened (`nav-flat`): the heads go and
+//   the items read as the one list they always were.
+// - Several subsystems switch nav items on LATE (rpgApplyVisibility once the
+//   hero resolves, the Realm of Embers and Science Strike doors, every badge
+//   count). Rather than hook each of them, ONE MutationObserver on the
+//   sidebar re-syncs — mutations this code makes itself are ignored, or it
+//   would answer its own writes for ever.
+// =====================================================================
+const NAV_GROUP_BADGE_SKIP = ['bankCount'];   // a bank of 3,000 is a count, not something needing attention
+function _navGroupsKey() { return 'navGroups:' + ((currentUser && currentUser.uid) || 'anon'); }
+function _navGroupsLoad() {
+  try { const o = JSON.parse(localStorage.getItem(_navGroupsKey()) || '{}'); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; } catch (_) { return {}; }
+}
+function _navGroupsSave(o) { try { localStorage.setItem(_navGroupsKey(), JSON.stringify(o)); } catch (_) {} }
+function navGroupsAll() { return Array.from(document.querySelectorAll('.sidebar-nav details.nav-group')); }
+function navGroupOf(el) { return (el && el.closest) ? el.closest('details.nav-group') : null; }
+// Open the group an item sits in, so the active page is never behind a closed head.
+function navGroupReveal(el) { const g = navGroupOf(el); if (g && !g.open) g.open = true; }
+function navGroupsRestore() {
+  const saved = _navGroupsLoad();
+  navGroupsAll().forEach(g => {
+    const id = g.dataset.group || '';
+    const known = Object.prototype.hasOwnProperty.call(saved, id);
+    g.open = known ? !!saved[id] : g.dataset.defaultOpen === '1';
+  });
+  navGroupReveal(_navOriginals().find(el => el.classList.contains('active')));
+  navGroupsSync();
+}
+let _navGroupsSyncing = false;
+function navGroupsSync() {
+  if (_navGroupsSyncing) return;
+  _navGroupsSyncing = true;
+  try {
+    const flat = (typeof _isEmployee === 'function') && _isEmployee();
+    navGroupsAll().forEach(g => {
+      const items = Array.from(g.querySelectorAll('.nav-item'));
+      const visible = items.filter(el => el.style.display !== 'none');
+      const empty = visible.length === 0;
+      if (g.classList.contains('nav-group-empty') !== empty) g.classList.toggle('nav-group-empty', empty);
+      if (g.classList.contains('nav-flat') !== flat) g.classList.toggle('nav-flat', flat);
+      if (flat && !g.open) g.open = true;
+      const hasActive = items.some(el => el.classList.contains('active'));
+      if (g.classList.contains('has-active') !== hasActive) g.classList.toggle('has-active', hasActive);
+      // The head carries the SUM of its visible items' badges — the vetting
+      // count, the flagged count, the unread messages — so a collapsed group
+      // still says there is something inside it worth opening for.
+      let n = 0;
+      visible.forEach(el => el.querySelectorAll('.badge').forEach(b => {
+        if (b.style.display === 'none' || NAV_GROUP_BADGE_SKIP.includes(b.id)) return;
+        const v = parseInt(String(b.textContent || '').replace(/[^0-9]/g, ''), 10);
+        if (v > 0) n += v;
+      }));
+      const badge = g.querySelector(':scope > summary .nav-group-badge');
+      if (badge) {
+        const txt = String(n);
+        if (badge.textContent !== txt) badge.textContent = txt;
+        const disp = n > 0 ? '' : 'none';
+        if (badge.style.display !== disp) badge.style.display = disp;
+      }
+    });
+  } finally { _navGroupsSyncing = false; }
+}
+function _navGroupsOwnMutation(rec) {
+  let node = rec.target;
+  if (node && node.nodeType === 3) node = node.parentNode;
+  if (!node || !node.closest) return false;
+  return !!(node.closest('summary.nav-group-head') || (node.matches && node.matches('details.nav-group')));
+}
+let _navGroupsWatching = false;
+let _navGroupsRaf = 0;
+function navGroupsWatch() {
+  if (_navGroupsWatching) return;
+  const nav = document.querySelector('.sidebar-nav');
+  if (!nav || typeof MutationObserver === 'undefined') return;
+  _navGroupsWatching = true;
+  nav.addEventListener('toggle', ev => {
+    const g = ev.target;
+    if (!g || !g.matches || !g.matches('details.nav-group')) return;
+    // A flattened group is forced open by the sync, not chosen — don't record it.
+    if (g.classList.contains('nav-flat')) return;
+    const saved = _navGroupsLoad();
+    saved[g.dataset.group || ''] = !!g.open;
+    _navGroupsSave(saved);
+    navGroupsSync();
+  }, true);
+  const mo = new MutationObserver(records => {
+    if (_navGroupsSyncing) return;
+    if (!records.some(r => !_navGroupsOwnMutation(r))) return;
+    if (_navGroupsRaf) return;
+    _navGroupsRaf = requestAnimationFrame(() => { _navGroupsRaf = 0; navGroupsSync(); });
+  });
+  mo.observe(nav, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['style', 'class'] });
 }
 
 // Every admin account's uid, primary admin (config/admin) first. Approved
@@ -5376,6 +5506,7 @@ function navigateTo(page) {
   const navItem = document.querySelector(`.nav-item[data-page="${page}"]`) ||
     (['defenders', 'raiders', 'spire', 'legends', 'slayers'].includes(page) ? document.querySelector('.nav-item[data-page="arcade"]') : null);
   if (navItem) navItem.classList.add('active');
+  try { navGroupReveal(navItem); navGroupsSync(); } catch (_) {}   // …and its group opens around it
   try { _navBmSyncActive(); } catch (_) {}   // the mirrored copy lights up too
   // Close sidebar on mobile after navigation
   const sidebar = document.getElementById('sidebar');
@@ -55616,22 +55747,18 @@ function tcgApplyNavVisibility() {
   try { tcgApplyLogo(); } catch (_) {}   // the door wears the crest
   try { tcgNavPrizeBadges(); } catch (_) {}
 }
-// Where the realm's door sits in the sidebar. For a STUDENT it belongs
-// directly under 🏛️ Community, near the top, where they will actually find it
-// — not buried at the bottom of the Game section under five other games. For
-// an admin it stays where it has always been, among the game tools, which is
-// where they expect to go looking for it. `navTcgHome` is an empty anchor left
-// behind at the original position so the move can be undone (the role can
-// change under us — an admin previewing as a student and back again).
+// Where the realm's door sits in the sidebar. Until v1.409.0 a STUDENT's door
+// was moved up to sit directly under 🏛️ Community, because at the bottom of a
+// flat Game section under five other games nobody found it. Every game now
+// lives behind the ONE 🎮 Games group, which is the door students open to
+// find any of them — so the wrap stays parked at `navTcgHome` for every
+// role, inside that group. The anchor and this function are kept so the
+// position is stated in one place rather than assumed by the markup.
 function _tcgPlaceNavItem() {
   const wrap = document.getElementById('navTcgWrap');
   const home = document.getElementById('navTcgHome');
-  const comm = document.querySelector('.nav-item[data-page="community"]');
   if (!wrap || !home) return;
-  const wantComm = !_isAdmin() && !!comm;
-  const parked = wrap.previousElementSibling === comm;
-  if (wantComm && !parked) comm.insertAdjacentElement('afterend', wrap);
-  else if (!wantComm && wrap.previousElementSibling !== home) home.insertAdjacentElement('afterend', wrap);
+  if (wrap.previousElementSibling !== home) home.insertAdjacentElement('afterend', wrap);
 }
 
 // ---- Release announcement ------------------------------------------

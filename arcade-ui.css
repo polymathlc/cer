@@ -44,6 +44,21 @@ body:not(.arcade-ui) .arcade-prize-details > summary { display: none; }
   body.arcade-ui .nav-item:hover { background: #263d65; color: #fff; transform: translateX(3px); }
   body.arcade-ui .nav-item.active { background: #ffdb47; border-color: #07142b; color: #14213d; box-shadow: 0 4px 0 #07142b; }
   body.arcade-ui .nav-item .ico { font-size: 19px; }
+  /* The collapsible group heads wear the same slab the items do, so a closed
+     group reads as one more button rather than as a stray heading. */
+  body.arcade-ui .nav-group-head {
+    color: #dfeaff; font-size: 14px; font-weight: 800; line-height: 1.4;
+    min-height: 46px; padding: 11px 12px; margin-bottom: 7px;
+    border: 2px solid #30476d; border-radius: 12px; background: #1d3155;
+    transition: background .18s ease, box-shadow .18s ease;
+  }
+  body.arcade-ui .nav-group-head:hover { background: #263d65; color: #fff; }
+  body.arcade-ui .nav-group[open] > .nav-group-head { border-color: #4a6a9e; }
+  body.arcade-ui .nav-group.has-active:not([open]) > .nav-group-head { border-color: #ffdb47; box-shadow: 0 3px 0 #07142b; }
+  body.arcade-ui .nav-group-head .ico { font-size: 19px; }
+  body.arcade-ui .nav-group-head:focus-visible { outline: 3px solid #74e1ff; outline-offset: 2px; }
+  body.arcade-ui .nav-group-body { border-left-color: #30476d; }
+  body.arcade-ui .nav-group-badge { background: #ffdb47; color: #14213d; font-weight: 700; }
   body.arcade-ui .nav-item:focus-visible { outline: 3px solid #74e1ff; outline-offset: 2px; }
   body.arcade-ui :is(.sidebar-footer, .sidebar-foot) { background: #10203b; border-top: 2px solid #30476d; }
   body.arcade-ui :is(.sidebar-user, .sidebar-user b) { color: #dbe7ff; }
