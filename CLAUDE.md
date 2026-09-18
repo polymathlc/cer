@@ -6801,7 +6801,140 @@ group is opened. Home and Community stay top-level.
   in CAPTURE on the nav.
 - Run **`node tools/nav-groups-tests.mjs`** after touching any of it.
 
+## 🧠 The corrections loop reads the master profile and records every generation (v1.411.0)
+
+`STYLE_MASTER_COL` / `STYLE_VERSION` / `STYLE_SUBJECT` / `STYLE_SRC` /
+`STYLE_TRIM_MARK` / `_akStyle` / `_akStyleAttach` / `_akStyleDetach` /
+`_styleLvlOf` / `_styleBucket` / `_styleSubOk` / **`styleEditsAll`** /
+**`styleProfilePick`** / `_styleProfileBits` / **`styleExemplarsFor`** /
+`styleExistingLessons` / **`_styleStamp`** / **`_styleStampBlocks`** /
+`_styleGenFor` / `styleWriteFactNote` / **`stylePromoteLesson`** /
+`_styleMergeEdits` / `_styleSeen` / `_styleDropped` (all in the 🧠 section,
+search `TWO DOCUMENTS, ONE WRITER EACH`), the `_styleStampBlocks` call at the
+foot of `buildBlocksFromAi`, the `_styleStamp` in `aiWritePartExplanations`,
+the `quiet` flag both save doors hand `styleHarvestQuestion`, the `q` every
+`aiGrounding('answer' | 'teach', …)` call site now passes, `_notesLedger.style`,
+and the ×N / 📌 rows on the 🧠 panel. **The data contract is shared with
+`polymathlc/anskey`, `polymathlc/scan` and `polymathlc/tutor` — ship a change
+to the shape to all four.**
+
+v1.353.0 built the loop and it ran, and five things about it were quietly
+wrong. Every one of them is silent: the app answered fluently either way.
+
+- **THE RETRIEVAL WAS DEAD.** `styleBlock(kind, topic, q)` retrieved the raw
+  corrections for `q` — and the two buttons that were the whole reason for it
+  passed no `q` at all, so every answer was served whatever correction happened
+  to be newest. Both buttons now build `askedAbout` BEFORE the grounding call
+  and hand it over, and **every other `'answer'` / `'teach'` call site that has
+  a question in hand passes it** (the vetting builder, the annotation key,
+  ✂️ Shorten and ✍️ AI complete pass the text in the box, the hint, the
+  feedback, 🔎 Why not, the widget builder, Ai-nstein). The ones that have no
+  single question — a report, a flashcard deck, a session summary — pass
+  nothing, on purpose.
+- **ONLY THE TWO BUTTONS RECORDED A GENERATION.** ⚡ Rapid add, 📄 Exam Paper,
+  the bulk import, 🗂️ Custom Paper, the per-part filler and the auto-check
+  repair all wrote answers the teacher then rewrote on the vetting card — and
+  `styleGen` was memory-only, so the rewrite compared against nothing.
+  **`block.aiWrote[field] = { q, wrote, at }` is the durable record**, stamped by
+  `_styleStampBlocks` from inside `buildBlocksFromAi` — the ONE function every
+  AI authoring path goes through, so a path added later is covered — by
+  `aiWritePartExplanations` on the note it places, and by `styleNoteGenerated`
+  itself. `_styleStamp` is the ONE writer. `styleHarvestQuestion` reads the
+  session's `styleGen` first and falls back to the block's own stamp. It is a
+  BLOCK field: `collectQuestionData`'s deep clone carries it, and
+  `EDITOR_OWNED_QUESTION_FIELDS` — a list of QUESTION fields — never sees it.
+- **CER NEVER READ ANS KEY'S PROFILE.** Document A
+  (`users/{adminUid}/aiTraining/answerStyle`) holds the answers the teacher
+  wrote on their own worksheets and the profiles distilled from them. It is
+  READ here now, live (`_akStyleAttach`, an `onSnapshot` beside the C read on
+  the admin, employee and student paths, torn down in `stopAnswerStyle`), and
+  **never written** — the harness pins that no `setDoc` names it. A denied
+  read is a `console.warn` and nothing on screen.
+  - **`styleProfilePick` is the contract's chain**: the level's own bucket
+    (`p5:science`) only when ≥ `STYLE_BUCKET_MIN` of A's samples sit in it
+    (this app holds `samples`, so it COUNTS; a reader that did not would read
+    `profile.n`), else `any:science`, else `_global` / `profile`.
+  - **`markingStandards` is never rendered.** It is INFERRED from the
+    teacher's answers, typed by nobody, and the block only ever reaches
+    `'answer'` and `'teach'` anyway — but a standard nobody typed must not
+    reach even those.
+  - **Exemplars are RETRIEVED for `q`** (`styleExemplarsFor`: bucket first,
+    then Jaccard, newest breaking a tie; the profile's frozen `exemplars`
+    stand in when A holds no samples), **and a maths sample or a maths edit is
+    never served** (`_styleSubOk`: `science` or nothing). The union of
+    corrections (`styleEditsAll`) is C's edits keyed `cer:` + slot plus A's
+    science ones.
+  - **`_styleOverlap` is JACCARD now**, shared over the union. Over the
+    shorter side (what it was) "conductor" and "insulator" answers scored as
+    agreeing.
+  - **No early return on a missing profile**: the exemplars, the lessons and
+    the pairs come out of the corpus and are current the moment the teacher
+    saves; only the description waits for Ans Key's next distil. Order:
+    rules, phrasing, keywords, exemplars, fixes, lessons, pairs — pairs LAST.
+- **`styleSave` WAS A WHOLE-DOCUMENT OVERWRITE**, so two admin tabs erased
+  each other's corrections. It is READ-MERGE-WRITE now (`_styleMergeEdits`):
+  union by `slot`, the newer `at` wins, a tie goes to the copy carrying a
+  lesson. **A slot forgotten here is not put back by the other tab**
+  (`_styleDropped`, and `clearedAt` for Forget everything). Document C is
+  `{ v: 2, edits, updatedAt }` and every edit carries `lvl` (off
+  `getTopicLevel(topic)`, lowercased, read at CALL time — it is declared far
+  below the block — and `''` for an empty topic rather than that function's
+  P6 default), `sub: 'science'` and `src: 'cer'`.
+- **A LESSON IS ONE OF THREE KINDS**, and the model is asked which
+  (`{lesson, kind, sameAs}`). `style` is kept as the lesson. **`fact` is not a
+  lesson about wording — it is written to the TEACHING NOTES**
+  (`styleWriteFactNote`: `quickNoteSave`'s shape, `keyFacts: 'Q: …\nCorrect
+  answer: …'`, `noteKind: 'correction'`, `sourceQuestion`, `source: 'cer'`,
+  `subjects: ['science']`, `levels: ['P5']` when known, `guidance: ''`), where
+  it reaches every prompt as a key fact and never the marker; the style
+  prompt keeps NOTHING of it, or the model is told a fact as a habit.
+  `cosmetic` is no lesson. **`sameAs`** — the call is shown the distinct
+  lessons already learned (≤ `STYLE_EXISTING_MAX`) and a correction teaching
+  the same thing is filed under the EXACT existing text, so counting by text
+  gives recurrence rather than three paraphrases.
+- **RECURRENCE → HOUSE RULE.** The 🧠 panel groups corrections by lesson,
+  shows `×N`, and at N ≥ 2 offers 📌 **Make it a house rule**
+  (`stylePromoteLesson`): a quick note (`guidance: <lesson>`, `noteKind:
+  'guidance'`) — the standing instruction that reaches EVERY prompt, marking
+  included — and those edits are marked `promoted`, so the button goes and
+  **the style block stops repeating what the guidance now says**. Refused in
+  the handler for a non-admin.
+- **THE HARVEST HAS TWO GUARDS**: only the admin, and never on a QUIET save
+  (`saveQuestion` passes `quiet || _wkSuppress > 0`, `saveVettingQuestion`
+  passes `!wkLog`). The usage backfill, the auto-tagger, a bulk re-file are
+  housekeeping; nothing in them is the teacher rewriting an answer.
+- **`styleTrim` cuts on a word and SAYS so** (`STYLE_TRIM_MARK`), and **the
+  block is on the ledger** (`_notesLedger.style`, `notesLedgerCounts().style`),
+  so the Teaching Notes page names what the teacher's own style adds to a
+  prompt beside what the notes add — a cost quietly added to every answer
+  prompt is a cost nobody can see.
+- Run **`node tools/answer-learning-tests.mjs`** and
+  **`node tools/teaching-notes-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🧠 the master profile, the block stamps or the merge**
+  (`_akStyleAttach`, `styleProfilePick`, `_styleProfileBits`,
+  `styleExemplarsFor`, `styleEditsAll`, `_styleSubOk`, `_styleOverlap`,
+  `_styleStamp`, `_styleStampBlocks`, `_styleGenFor`, `styleWriteFactNote`,
+  `stylePromoteLesson`, `_styleMergeEdits`, `styleTrim`, the `q` a call site
+  passes to `aiGrounding`, the `quiet` flag on either save door, or the
+  `_styleStampBlocks` call in `buildBlocksFromAi`), run
+  `node tools/answer-learning-tests.mjs` **and**
+  `node tools/teaching-notes-tests.mjs`. Every failure is silent and the app
+  answers fluently either way. Drop the `q` from a button and the exemplars
+  and the raw corrections go back to being whatever is newest, which is the
+  retrieval quietly dead again. Take the stamp out of `buildBlocksFromAi` and
+  a vetting card rewritten tomorrow teaches nothing — the reported fault.
+  Render the profile's `markingStandards` and a standard nobody typed reaches
+  a prompt; serve a `sub: 'math'` sample or edit and a maths answer is the
+  voice a science answer is written in. Write document A from here and two
+  apps are writing one document. Put `styleSave` back to a whole-document
+  overwrite and two admin tabs erase each other's corrections; union without
+  `_styleDropped` and a ✕ pressed here is undone by the copy the other tab
+  holds. Keep a `fact` as a style lesson and the model is told a fact as a
+  habit; keep a `sameAs` reply's rewording instead of the exact existing text
+  and ×N never counts past 1. And harvest on a quiet save and the auto-tagger's
+  forty writes are read as forty things the teacher rewrote.
 - After touching **🧭 the apps under one roof or 📖 the Study Buddy export** (`POLYMATH_TOOLS`,
   `subjectRenderMenu`'s tools half, `appEmbed*`, `#page-tutor` / `#page-anskey`, `TSEND_*`,
   `tsendSend`, `_tsendRenderPages`, `_tsendPrepSheet`, `_tsendKeyRows`, `_wsPreviewBuildHtml`,
