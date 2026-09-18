@@ -6665,6 +6665,75 @@ element goes with the Delete key.
 - Run **`node tools/preview-picture-size-tests.mjs`** and
   **`node tools/vetting-export-hover-tests.mjs`** after touching any of it.
 
+## 🧭 All the apps under one roof, and 📖 a worksheet sent to Study Buddy (v1.410.0)
+
+`POLYMATH_TOOLS` / `polymathToolFor` and the tools half of `subjectRenderMenu` (search
+`ALL THE APPS UNDER ONE ROOF`), `APP_EMBED_TOOLS` / `appEmbedOnNavigate` / **`appEmbedOpen`** /
+`appEmbedReload` / `appEmbedOpenTab` (search `THE OTHER APPS, INSIDE THIS ONE`), the 🧭 **Polymath
+Apps** sidebar group with `#page-tutor` / `#page-anskey` in `index.html`, and the export —
+`TSEND_*` / `tsendFromPreview` / `tsendFromBuilder` / `tsendFromSaved` / `tsendOpen` /
+**`tsendSend`** / `_tsendRenderPages` / `_tsendPrepSheet` / `_tsendKeyRows` (search `SEND A
+WORKSHEET TO STUDY BUDDY`), `_wsPreviewBuildHtml`, the `noTools` posture of `_wsPreviewPack`, the
+📖 buttons on the A4 preview bar, the Custom Worksheet actions bar and every My Worksheets card,
+and `#tsendOverlay`.
+
+The centre has six apps and they had four doors between them. 🔑 Ans Key and 📖 Study Buddy are
+inside this portal now — a sidebar group of their own, each on a page that is an `<iframe>` on
+the sibling folder — and every worksheet this portal prints can be **sent to Study Buddy** as a
+PDF and opened there, to be written on, hinted, marked and filed into a mistake book.
+
+- **ONE TABLE, EVERY APP.** `SUBJECT_APPS` (four subjects) + `POLYMATH_TOOLS` (two tools) is
+  what the switcher renders — *Your subjects*, then *Your tools*. Math and English carry the
+  same two blocks byte for byte; Ans Key and Study Buddy carry the six rows as one
+  `POLYMATH_APPS`. Same keys, same RELATIVE urls, the folder is the REPO name. Ship a change to
+  all of them: a menu that differs between two apps is a menu one of them has let drift.
+- **A TOOL ROW IS STILL A LINK.** The href is the standalone app; a plain left-click opens the
+  embedded page instead, and a modified click (middle, ⌘/Ctrl, shift) is left to the browser.
+  Math and English carry the identical handler and have no embedded page, so there the row
+  stays the link it is — that is what lets the block be the same text in all four.
+- **THE FRAME'S `src` IS SET ON FIRST OPEN, NEVER AT FIRST PAINT** (`appEmbedOnNavigate`, called
+  from `navigateTo` for every page). Two whole apps loading behind the landing page is exactly
+  the weight "Keep the page fast" refuses. The sign-in carries — one Firebase project, one
+  origin, one session — so nobody signs in twice; a link followed inside the frame goes to
+  `_top` (their side), so it is never a portal inside a portal.
+- **THE SHEET THAT GOES TO STUDY BUDDY IS THE SHEET THAT WAS PREVIEWED.** `tsendSend` takes the
+  `_wsPreviewCtx()` shape, builds it through **`_wsPreviewBuildHtml`** — the ONE builder the A4
+  preview now reads too — and paginates it with `_wsWritePreview` → `_wsPreviewPack` in a hidden
+  frame with **`noTools`**: the teacher's own ⬆ ⤓ breaks apply, nothing is hung on the pages
+  (no ⬆ ⤓ ✏️ ✕, no ✏️ edit answer, no pills, no order bars — a button painted onto page 3 of a
+  child's worksheet is exactly what nobody notices until a class has it), and the live
+  preview's page count is not overwritten. `readOnly` is the isolated hover's posture and
+  ignores the teacher's breaks on purpose; it is NOT this one.
+- **IT WRITES STUDY BUDDY'S OWN SHAPE INTO STUDY BUDDY'S OWN COLLECTIONS**: the PDF under
+  `tutor-worksheets/{id}.pdf`, a `tutorWorksheets/{id}` document owned by whoever pressed the
+  button, and — when an ADMIN ticks it, checked in the handler — an `active`
+  `tutorAssignments/{id}` document so every student sees it under *Set for you*. The PDF goes up
+  BEFORE either document is written. Every constant (`TSEND_COLLECTION`, `TSEND_STORAGE_DIR`,
+  the grade keys, the levels, the teacher's display name) is pinned against Study Buddy's own
+  file by **`tools/tutor-bridge-tests.mjs`** when that repo is checked out beside this one —
+  a renamed field on either side throws nothing: the key pages simply show, or the class never
+  gets the sheet.
+- **THE ANSWER KEY IS HIDDEN FROM THE STUDENT AND HANDED TO THE BUDDY.** The packer marks every
+  key sheet `data-kind="key"`; their page numbers travel as `keyPages` (Study Buddy never
+  renders, marks or photographs those) and the rows are read off the rendered
+  `.print-ak-question`s, so what the buddy is told is byte-for-byte what the key prints, with
+  `key.scanned: true` so it never spends AI calls transcribing a key this app wrote. Untick the
+  key and those sheets are left out of the photograph entirely.
+- **A ZOOMED PAGE IS PHOTOGRAPHED THROUGH A TRANSFORM.** html2canvas does not honour CSS
+  `zoom`, which is what the planner shrinks an over-full page with — photographed as-is, a page
+  fitted at 92% runs off the bottom of the sheet. `_tsendPrepSheet` swaps it for
+  `transform: scale(z)` on a width of `100%/z` (wraps identically) and pins the sheet to exactly
+  one A4 with `overflow: hidden`.
+- **THE LIBRARIES LOAD ON DEMAND**, from two CDNs, the day the button is first pressed:
+  html2canvas into the hidden frame's OWN document (so it photographs with the frame's fonts and
+  print CSS), pdf-lib into this window. Nothing new is in `index.html`'s head.
+- **`_tsendLevelOf` reads the level off the questions** the way every level here is read
+  (`qLevelNum` → `levelFromNumber`); a sheet whose questions declare none is filed at none, and
+  Study Buddy shows an unlevelled worksheet to its owner regardless.
+- Run **`node tools/tutor-bridge-tests.mjs`** after touching any of it — and
+  `node tools/preview-picture-size-tests.mjs`, which pins that `blockTags` is asked for by the
+  two previews and nothing else, and `node tools/nav-groups-tests.mjs`.
+
 ## 🗂 The sidebar is a handful of collapsible groups (v1.409.0)
 
 `navGroupsRestore` / `navGroupsSync` / `navGroupReveal` / `navGroupsWatch` /
@@ -6724,6 +6793,21 @@ group is opened. Home and Community stay top-level.
 - Run **`node tools/nav-groups-tests.mjs`** after touching any of it.
 
 ## House rules
+- After touching **🧭 the apps under one roof or 📖 the Study Buddy export** (`POLYMATH_TOOLS`,
+  `subjectRenderMenu`'s tools half, `appEmbed*`, `#page-tutor` / `#page-anskey`, `TSEND_*`,
+  `tsendSend`, `_tsendRenderPages`, `_tsendPrepSheet`, `_tsendKeyRows`, `_wsPreviewBuildHtml`,
+  or `_wsPreviewPack`'s `noTools`), run `node tools/tutor-bridge-tests.mjs` with the `tutor` repo
+  checked out beside this one, plus `node tools/preview-picture-size-tests.mjs` and
+  `node tools/nav-groups-tests.mjs`. Every failure is silent and the export still "works": rename
+  a field on either side and the worksheet opens in Study Buddy with its marking scheme showing
+  to the student, or the class never sees the sheet the teacher set; build the export's sheet
+  anywhere but `_wsPreviewBuildHtml` and the student writes on a sheet the teacher never
+  previewed; pack it without `noTools` and a ⤓ button is photographed onto page 3; photograph a
+  zoomed page without the transform swap and it runs off the bottom of the sheet; write the
+  documents before the PDF is up and a refused upload leaves a worksheet card that opens on
+  nothing; let a non-admin's tick set a worksheet for the class and a student has pushed work to
+  the whole school; and set a frame's `src` at first paint and two whole apps load behind the
+  landing page on a school connection.
 - After touching **🗂 the collapsible sidebar groups** (`navGroupsRestore`,
   `navGroupsSync`, `navGroupReveal`, `navGroupsWatch`, `_navOriginals`,
   `_navOriginal`, `NAV_GROUP_BADGE_SKIP`, `_tcgPlaceNavItem`, the `<details

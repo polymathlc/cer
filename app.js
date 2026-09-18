@@ -101,6 +101,7 @@ import {
   onSnapshot,
   writeBatch,
   runTransaction,
+  serverTimestamp,
   Timestamp
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 // App Check (protects the Gemini quota from abuse) + Firebase AI Logic (free-tier Gemini)
@@ -108,7 +109,7 @@ import { initializeAppCheck, ReCaptchaV3Provider, getToken as getAppCheckToken }
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
 import { getAI, getGenerativeModel, GoogleAIBackend, ResponseModality } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
 // Cloud Storage — paste/drop images upload here instead of needing a Dropbox link
-import { getStorage, ref as storageRef, uploadString, getDownloadURL, listAll, getMetadata } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
+import { getStorage, ref as storageRef, uploadString, uploadBytes, getDownloadURL, listAll, getMetadata } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -3885,7 +3886,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.409.0';
+const APP_VERSION = 'v1.410.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -3925,6 +3926,28 @@ const SUBJECT_APPS = [
   { key: 'chinese', ico: '📗', label: 'Chinese', sub: '华文 · Chinese Portal',     url: '../chinese/' },
   { key: 'science', ico: '🔬', label: 'Science', sub: 'Science Learning Portal',  url: '../cer/' }
 ];
+// =====================================================================
+// ALL THE APPS UNDER ONE ROOF (v1.410.0)
+//
+// The four SUBJECT portals above are one family; the two TOOLS below are the
+// other half of the same centre — 🔑 Ans Key (the teacher's PDF annotator,
+// where a class's worksheets are marked up and shared) and 📖 Study Buddy
+// (where a student writes on a worksheet with Chung GPT hinting, marking and
+// keeping a mistake book). Every Polymath app carries this SAME table, so the
+// menu a student opens reads the same wherever they are standing — that is
+// what "synced" means here: one list, copied byte for byte, never a menu
+// each app writes for itself and lets drift.
+//
+// The rules are the subject table's: RELATIVE urls (sibling folders on one
+// GitHub Pages host, and the same on a checkout with the repos side by side),
+// the repo name as the folder, and never a host baked into the page. `here`
+// is never true for a tool in this app — this app is a subject — but the
+// shared renderer in Ans Key and Study Buddy marks its own row with it.
+const POLYMATH_TOOLS = [
+  { key: 'anskey', ico: '🔑', label: 'Ans Key',     sub: 'Mark up & share PDF worksheets',        url: '../anskey/', page: 'anskey' },
+  { key: 'tutor',  ico: '📖', label: 'Study Buddy', sub: 'Hints, marking & a mistake book',       url: '../tutor/',  page: 'tutor' }
+];
+function polymathToolFor(key) { return POLYMATH_TOOLS.find(t => t.key === key) || null; }
 
 function subjectCurrent() {
   return SUBJECT_APPS.find(s => s.key === SUBJECT_KEY) || SUBJECT_APPS[0];
@@ -3950,10 +3973,35 @@ function subjectRenderMenu() {
       ? `<div class="subject-opt here" role="menuitem" aria-current="page">${body}</div>`
       : `<a class="subject-opt" role="menuitem" href="${escapeHtml(s.url)}">${body}</a>`;
   }).join('');
+  // The tools sit under the subjects, in the SAME menu: one roof, one list.
+  // A tool that this app can show INSIDE itself (an embedded page, see
+  // `appEmbed*`) is opened there — a student stays in the portal, with the
+  // sidebar and their session around them — and the row's title says the
+  // standalone address is one middle-click away.
+  const tools = POLYMATH_TOOLS.map(t => {
+    const body =
+      `<span class="subject-ico" aria-hidden="true">${t.ico}</span>` +
+      `<span><b>${escapeHtml(t.label)}</b><br><span style="font-size:0.74rem;color:var(--text-muted);">${escapeHtml(t.sub)}</span></span>`;
+    return `<a class="subject-opt" role="menuitem" href="${escapeHtml(t.url)}" data-tool="${escapeHtml(t.key)}" title="Opens inside this portal. Middle-click or ⌘/Ctrl-click for the standalone app.">${body}</a>`;
+  }).join('');
   menu.innerHTML =
     `<div class="subject-menu-title">Your subjects</div>${rows}` +
+    `<div class="subject-menu-title subject-menu-title-tools">Your tools</div>${tools}` +
     `<div class="subject-menu-foot">Each subject keeps its own questions, progress and worksheets. You stay signed in.</div>`;
 }
+// A plain left-click on a tool row opens the tool's embedded page; every
+// other way of following the link (middle-click, ⌘/Ctrl-click, right-click →
+// open in new tab, a keyboard-activated link with a modifier) is left to the
+// browser, because it IS still a link — the standalone app is the href.
+document.addEventListener('click', e => {
+  const a = e.target && e.target.closest ? e.target.closest('.subject-opt[data-tool]') : null;
+  if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const tool = polymathToolFor(a.dataset.tool);
+  if (!tool || !tool.page || !document.getElementById('page-' + tool.page)) return;
+  e.preventDefault();
+  subjectClose();
+  try { navigateTo(tool.page); } catch (err) { console.warn('tool page', err); window.open(tool.url, '_blank', 'noopener'); }
+});
 
 function subjectToggle(e) {
   if (e) e.stopPropagation();
@@ -5496,6 +5544,8 @@ function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
+  // 🧭 An embedded app's frame is pointed at the app the first time its page opens.
+  try { appEmbedOnNavigate(page); } catch (e) { console.warn('embed', e); }
   // 🔥 Realm of Embers takes the whole app with it: stepping into the realm
   // swaps the portal's white theme for the gold-on-galaxy one, and stepping
   // out puts it back. One class on <body>; everything else is CSS, which is
@@ -35685,6 +35735,9 @@ function renderSavedWorksheets() {
         </button>
         ${_canAuthor() ? `<button class="btn btn-outline" onclick="emOpenSaved('${ws.id}')" title="Editing mode — every question on this worksheet in one scroll, each block condensed to a strip with its controls as icons down the left. Fix what you find, then Save once.">✏️ Edit questions</button>` : ''}
         ${_canAuthor() ? `<button class="btn btn-outline" onclick="akcCheckWorksheet('${ws.id}')" title="ChatGPT and Gemini each answer every question on this sheet from scratch, at the same time, and the report compares their answers with your own answer key.">🔍 Check answer keys</button>` : ''}
+        <button class="btn btn-outline" onclick="tsendFromSaved('${ws.id}')" title="Send this worksheet to Study Buddy as a PDF and open it there — to write on, get hints, be marked and keep a mistake book" style="color:#7c3aed;border-color:#c4b5fd;">
+          📖 Study Buddy
+        </button>
         <button class="btn btn-outline" onclick="reprintWorksheet('${ws.id}')" title="Print">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           Print
@@ -37150,6 +37203,497 @@ function _wsPreviewIsDraft() {
   return src === 'editor' || src === 'custompaper' || src === 'cpbq';
 }
 
+// =====================================================================
+// 📖 SEND A WORKSHEET TO STUDY BUDDY — and open it there (v1.410.0)
+//
+// The centre's Study Buddy (`polymathlc/tutor`, served beside this app as
+// `../tutor/`) is where a student WRITES on a worksheet: with a stylus, with a
+// keyboard or out loud, with Chung GPT hinting rather than answering, and with
+// every question they get wrong filed into a mistake book with a picture of
+// the question. It takes a PDF. Everything this portal prints — a custom
+// worksheet, a saved worksheet, a past paper, a 🗂️ Custom Paper, a handful of
+// bank questions previewed — comes out of ONE builder and ONE planner as A4
+// sheets, so the export is those very sheets, photographed page by page into
+// a PDF and filed where Study Buddy already looks.
+//
+// THE SHEET THAT GOES ACROSS IS THE SHEET THAT WAS PREVIEWED. `tsendSend` takes
+// the same context object the A4 preview reads (`_wsPreviewCtx()` shape), builds
+// it through `_wsPreviewBuildHtml` — the ONE builder — and paginates it with
+// `_wsWritePreview` → `_wsPreviewPack`, the SAME planner, in a hidden frame
+// with `noTools` so nothing is hung on the pages. The teacher's own ⬆ ⤓ page
+// breaks apply, the cover applies, the answer-key switches apply. A second
+// path assembling its own sheet is a second sheet, and the student would be
+// writing on something the teacher never saw.
+//
+// IT WRITES WHERE STUDY BUDDY READS, IN STUDY BUDDY'S OWN SHAPE:
+//   • the PDF to Storage under `tutor-worksheets/{id}.pdf` (that app's
+//     STORAGE_DIR — its `openWorksheet` fetches exactly that path);
+//   • ONE `tutorWorksheets/{id}` document (its COLLECTION) owned by whoever
+//     pressed the button, with the body its `applyWorksheetBody` reads —
+//     empty ink, and the answer KEY already read (`key.scanned: true`), so
+//     it never spends AI calls transcribing a marking scheme this app wrote;
+//   • and, when the teacher ticks it, ONE `tutorAssignments/{id}` document
+//     (its ASSIGN_COLLECTION), `active: true`, in the shape its `pushWorksheet`
+//     writes — so every student sees it under 📌 Set for you and starts their
+//     own copy from the one PDF. `pushed: true` is stamped on the teacher's
+//     copy, exactly as that app stamps it.
+//   Rename a field on either side and nothing throws: the worksheet opens with
+//   its key showing, or the class never sees it. `tools/tutor-bridge-tests.mjs`
+//   reads BOTH repositories and fails on a name that has drifted.
+//
+// THE ANSWER KEY IS HIDDEN FROM THE STUDENT AND HANDED TO THE BUDDY. The
+// printed key sheets go into the PDF — that is what lets Chung GPT mark against
+// the real thing — but their page numbers travel as `keyPages`, which Study
+// Buddy never renders, never marks and never puts in a mistake picture. The
+// rows (`keyRows`) are read off the rendered key itself (`.print-ak-question`),
+// one per question, number and answer, so what the buddy is told the answer is
+// is byte-for-byte what the key prints. A student who does not want the key in
+// the file at all can untick it; the buddy then works from the question alone.
+//
+// THE LIBRARIES ARE LOADED ON DEMAND, from two CDNs, the day the button is
+// first pressed — never at first paint (see "Keep the page fast" in
+// CLAUDE.md). html2canvas is injected into the hidden frame's OWN document and
+// called there, so the fonts and stylesheet it photographs are the frame's;
+// pdf-lib is loaded into this window. A blocked CDN is a toast that says so,
+// not a silent nothing.
+//
+// A ZOOMED PAGE IS PHOTOGRAPHED THROUGH A TRANSFORM. The planner shrinks an
+// over-full page with CSS `zoom`, which html2canvas does not honour — a page
+// the planner fitted at 92% would be photographed at 100% and run off the
+// bottom of the sheet. `_tsendPrepSheet` swaps the zoom for
+// `transform: scale()` on a width of 100%/zoom, which wraps identically and
+// which html2canvas does honour, and pins the sheet to exactly one A4 with
+// overflow hidden so the photograph is the page and nothing more.
+//
+// ONLY A SIGNED-IN ACCOUNT CAN SEND, and only an ADMIN can SET FOR THE CLASS —
+// checked in the handler, never only on the tick box. A student sending their
+// own worksheet gets their own copy in Study Buddy and nothing else.
+// =====================================================================
+const TSEND_COLLECTION = 'tutorWorksheets';       // Study Buddy's COLLECTION
+const TSEND_ASSIGN_COLLECTION = 'tutorAssignments'; // its ASSIGN_COLLECTION
+const TSEND_STORAGE_DIR = 'tutor-worksheets';      // its STORAGE_DIR
+const TSEND_SUBJECT = 'science';                   // this portal's subject, in its SUBJECTS list
+const TSEND_TEACHER_NAME = 'Mr Chung';             // its ADMIN_DISPLAY_NAME — what a class card says
+const TSEND_SCALE = 2;                              // device pixels per CSS px when a sheet is photographed
+const TSEND_JPEG_Q = 0.84;                          // page JPEG quality — print-sharp, a few hundred KB a page
+const TSEND_COVER_W = 260;                          // its COVER_W
+const TSEND_COVER_Q = 0.62;                         // its COVER_Q
+const TSEND_COVER_MAX = 60000;                      // its COVER_MAX — a cover past this is not stored
+const TSEND_KEY_ROWS_MAX = 400;                     // its ASSIGN_ROWS_MAX
+const TSEND_KEY_ANSWER_CHARS = 600;                 // what its key reader keeps of one answer
+const TSEND_PAGES_MAX = 60;                         // a worksheet longer than this is a book
+const TSEND_A4 = [595.28, 841.89];                  // points
+// The help CEILING the buddy may climb to — Study Buddy's GUIDANCE_GRADES, in
+// its own key strings, because the value is written into its document.
+const TSEND_GRADES = [
+  { key: 'nudge',    label: 'Nudges only',         blurb: 'A push in the right direction and nothing more.' },
+  { key: 'concepts', label: 'Concepts & keywords', blurb: 'What is being tested and the words the answer needs.' },
+  { key: 'method',   label: 'Show me how',         blurb: 'The steps to follow, without the answer worked out.' },
+  { key: 'answer',   label: 'Full answers',        blurb: 'The full worked answer, once everything else has been tried.' }
+];
+const TSEND_GRADE_DEFAULT = 'method';               // its HINT_DEFAULT
+const TSEND_LEVELS = ['P3', 'P4', 'P5', 'P6', 'S1']; // its LEVELS
+const TSEND_LIBS = {
+  html2canvas: ['https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'],
+  pdflib:      ['https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js']
+};
+
+let _tsend = null;        // the send in progress: { ctx, id, busy }
+let _tsendPendingCtx = null;
+
+// Load a classic script into a WINDOW (this one, or the hidden frame's) from
+// the first CDN that answers. `globalName` is what the script leaves on that
+// window; it is what says the load worked.
+function _tsendLoadScript(win, urls, globalName) {
+  if (win[globalName]) return Promise.resolve(win[globalName]);
+  return (async () => {
+    let lastErr = null;
+    for (const url of urls) {
+      try {
+        await new Promise((res, rej) => {
+          const d = win.document;
+          const sc = d.createElement('script');
+          sc.src = url; sc.async = true;
+          sc.onload = () => res();
+          sc.onerror = () => rej(new Error('blocked: ' + url));
+          (d.head || d.documentElement).appendChild(sc);
+          setTimeout(() => rej(new Error('timed out: ' + url)), 25000);
+        });
+        if (win[globalName]) return win[globalName];
+        lastErr = new Error(globalName + ' did not load from ' + url);
+      } catch (e) { lastErr = e; console.warn('Study Buddy export library', e); }
+    }
+    throw new Error('could not load ' + globalName + ' — check the internet connection and try again' + (lastErr ? ' (' + lastErr.message + ')' : ''));
+  })();
+}
+
+// The level the sheet is filed at in Study Buddy, read off the questions the
+// way every other level in this app is: the highest level any of them
+// declares. A sheet whose questions declare nothing is filed at no level, and
+// Study Buddy shows an unlevelled worksheet to its owner regardless.
+function _tsendLevelOf(selected) {
+  let max = -Infinity;
+  (selected || []).forEach(q => { const n = qLevelNum(q); if (Number.isFinite(n) && n > max) max = n; });
+  if (!Number.isFinite(max)) return '';
+  const lv = levelFromNumber(max);
+  return TSEND_LEVELS.includes(lv) ? lv : '';
+}
+
+// The preview context for a SAVED worksheet — the same object `_wsPreviewCtx`
+// makes when that worksheet is on the A4 preview, so the card's 📖 button and
+// the preview bar's 📖 button send exactly the same sheet.
+function _tsendCtxSaved(id) {
+  const ws = savedWorksheets.find(w => w.id === id);
+  if (!ws) return null;
+  return {
+    saved: true, savedId: id,
+    selected: _wsSavedQuestions(ws),
+    title: ws.title || 'CER Worksheet',
+    cover: !!document.getElementById('mwIncludeCover')?.checked,
+    noFields: !_wsStudentFieldsOn('saved'),
+    where: 'saved',
+    akExtras: akxPrintOn('saved'),
+    objBoxAll: objBoxPrintOn('saved')
+  };
+}
+
+// ---- The three doors ----
+// From the A4 preview bar: whatever is on the preview (builder selection,
+// saved worksheet, past paper, ad-hoc set, a Custom Paper).
+function tsendFromPreview() {
+  const ctx = _wsPreviewCtx();
+  if (_wsPreviewSaved) ctx.savedId = _wsPreviewSaved.id;
+  tsendOpen(ctx);
+}
+// From the Custom Worksheet page: the ticked questions.
+function tsendFromBuilder() {
+  if (!wsSelectedIds.size) { showToast('Select at least one question first', 'error'); return; }
+  _wsPreviewSaved = null; _wsPreviewPaper = null; _wsPreviewAdhoc = null;
+  tsendOpen(_wsPreviewCtx());
+}
+// From a My Worksheets card.
+function tsendFromSaved(id) {
+  const ctx = _tsendCtxSaved(id);
+  if (!ctx) { showToast('That worksheet could not be found', 'error'); return; }
+  tsendOpen(ctx);
+}
+
+// The dialog. Nothing is rendered, uploaded or written until Send.
+function tsendOpen(ctx) {
+  if (!currentUser) { showToast('Sign in first', 'error'); return; }
+  if (!ctx || !ctx.selected || !ctx.selected.length) { showToast('There is nothing to send — the sheet has no questions', 'error'); return; }
+  _tsendPendingCtx = ctx;
+  const ov = document.getElementById('tsendOverlay');
+  if (!ov) return;
+  const n = ctx.selected.length;
+  const nameEl = document.getElementById('tsendName');
+  if (nameEl) nameEl.value = ctx.title || 'CER Worksheet';
+  const lvl = document.getElementById('tsendLevel');
+  if (lvl) {
+    lvl.innerHTML = `<option value="">Any level</option>` + TSEND_LEVELS.map(l => `<option value="${l}">${l === 'S1' ? 'Sec 1' : l}</option>`).join('');
+    lvl.value = _tsendLevelOf(ctx.selected);
+  }
+  const grades = document.getElementById('tsendGrades');
+  if (grades) {
+    grades.innerHTML = TSEND_GRADES.map(g =>
+      `<label class="tsend-grade${g.key === TSEND_GRADE_DEFAULT ? ' on' : ''}"><input type="radio" name="tsendGrade" value="${g.key}"${g.key === TSEND_GRADE_DEFAULT ? ' checked' : ''}><b>${escapeHtml(g.label)}</b><span>${escapeHtml(g.blurb)}</span></label>`).join('');
+    grades.querySelectorAll('input').forEach(inp => inp.addEventListener('change', () => {
+      grades.querySelectorAll('.tsend-grade').forEach(l => l.classList.toggle('on', l.querySelector('input').checked));
+    }));
+  }
+  const admin = _isAdmin();
+  const setWrap = document.getElementById('tsendSetWrap');
+  if (setWrap) setWrap.style.display = admin ? '' : 'none';
+  const setBox = document.getElementById('tsendSet');
+  if (setBox) setBox.checked = admin;
+  const lockBox = document.getElementById('tsendLock');
+  if (lockBox) lockBox.checked = true;
+  const keyBox = document.getElementById('tsendKey');
+  if (keyBox) keyBox.checked = true;
+  const sub = document.getElementById('tsendSub');
+  if (sub) sub.textContent = `${n} question${n === 1 ? '' : 's'} · the pages exactly as the preview lays them out` +
+    (ctx.paper ? ' · past paper' : ctx.saved ? ' · saved worksheet' : '');
+  const status = document.getElementById('tsendStatus');
+  if (status) { status.textContent = ''; status.style.display = 'none'; }
+  const go = document.getElementById('tsendGo');
+  if (go) { go.disabled = false; go.textContent = '📖 Send to Study Buddy'; }
+  ov.classList.add('show');
+  setTimeout(() => { try { if (nameEl) { nameEl.focus(); nameEl.select(); } } catch (_) {} }, 50);
+}
+function tsendClose() {
+  if (_tsend && _tsend.busy) return;   // an upload in flight is not something to walk away from
+  const ov = document.getElementById('tsendOverlay');
+  if (ov) ov.classList.remove('show');
+  _tsendPendingCtx = null;
+}
+function _tsendStatus(msg) {
+  const status = document.getElementById('tsendStatus');
+  if (status) { status.textContent = msg; status.style.display = msg ? '' : 'none'; }
+  const go = document.getElementById('tsendGo');
+  if (go && msg) go.textContent = '⏳ ' + msg;
+}
+
+// Photograph one packed sheet. See the header: zoom → transform, one A4, overflow hidden.
+function _tsendPrepSheet(sheet) {
+  sheet.style.height = '297mm'; sheet.style.minHeight = '297mm'; sheet.style.maxHeight = '297mm';
+  sheet.style.overflow = 'hidden'; sheet.style.margin = '0'; sheet.style.boxShadow = 'none';
+  const content = sheet.querySelector('.wspv-content');
+  if (content) {
+    const z = parseFloat(content.style.zoom) || 0;
+    if (z && Math.abs(z - 1) > 0.0001) {
+      content.style.zoom = '';
+      content.style.transformOrigin = 'top left';
+      content.style.transform = 'scale(' + z + ')';
+      content.style.width = (100 / z) + '%';
+    }
+  }
+}
+async function _tsendSheetToJpeg(win, sheet) {
+  const canvas = await win.html2canvas(sheet, {
+    scale: TSEND_SCALE, useCORS: true, allowTaint: false, backgroundColor: '#ffffff',
+    logging: false, imageTimeout: 20000, removeContainer: true
+  });
+  return canvas;
+}
+function _tsendCanvasToJpegBytes(canvas, q) {
+  const dataUrl = canvas.toDataURL('image/jpeg', q);
+  const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return { bytes: out, dataUrl };
+}
+function _tsendCoverFrom(canvas) {
+  try {
+    const c = document.createElement('canvas');
+    const w = TSEND_COVER_W, h = Math.max(1, Math.round(canvas.height * (w / canvas.width)));
+    c.width = w; c.height = h;
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+    g.drawImage(canvas, 0, 0, w, h);
+    const url = c.toDataURL('image/jpeg', TSEND_COVER_Q);
+    return url.length <= TSEND_COVER_MAX ? url : '';
+  } catch (e) { return ''; }
+}
+// The key rows, read off the rendered key: one per `.print-ak-question`.
+function _tsendKeyRows(doc) {
+  const rows = [];
+  Array.from(doc.querySelectorAll('.wspv-sheet .print-ak-question')).forEach((row, i) => {
+    const h = row.querySelector('h4');
+    const numM = h ? String(h.textContent || '').match(/(\d+[a-z]?)/i) : null;
+    const number = numM ? numM[1] : String(i + 1);
+    const body = row.querySelector('.print-ak-fulltext') || row;
+    const answer = String(body.textContent || '').replace(/\s+/g, ' ').trim().slice(0, TSEND_KEY_ANSWER_CHARS);
+    if (!answer) return;
+    if (rows.length >= TSEND_KEY_ROWS_MAX) return;
+    rows.push({ number, answer, working: '' });
+  });
+  return rows;
+}
+
+// Render the context's sheet into a hidden frame and resolve with the frame
+// once the planner has packed it.
+function _tsendRenderPages(ctx) {
+  return new Promise((resolve, reject) => {
+    let frame = document.getElementById('tsendRenderFrame');
+    if (frame) frame.remove();
+    frame = document.createElement('iframe');
+    frame.id = 'tsendRenderFrame';
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = 'position:fixed;left:-4000px;top:0;width:900px;height:1200px;border:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(frame);
+    const html = _wsPreviewBuildHtml(ctx, { noTags: true });
+    let settled = false;
+    const finish = (fn) => { if (settled) return; settled = true; fn(); };
+    try {
+      _wsWritePreview(frame, html, {
+        noTools: true,
+        ctxBreaks: ctx.forcedBreakIds || null,
+        onReady: () => finish(() => resolve(frame)),
+        onError: () => finish(() => reject(new Error('the pages could not be laid out')))
+      });
+    } catch (e) { finish(() => reject(e)); }
+    setTimeout(() => finish(() => reject(new Error('laying the pages out took too long'))), 60000);
+  });
+}
+
+async function tsendSend() {
+  const ctx = _tsendPendingCtx;
+  if (!ctx) { tsendClose(); return; }
+  if (!currentUser) { showToast('Sign in first', 'error'); return; }
+  if (_tsend && _tsend.busy) return;
+  const name = (document.getElementById('tsendName')?.value || '').trim() || ctx.title || 'CER Worksheet';
+  const level = document.getElementById('tsendLevel')?.value || '';
+  const grade = (document.querySelector('input[name="tsendGrade"]:checked')?.value) || TSEND_GRADE_DEFAULT;
+  // The class tick is honoured for an ADMIN only, whatever the box says.
+  const setForClass = _isAdmin() && !!document.getElementById('tsendSet')?.checked;
+  const locked = !!document.getElementById('tsendLock')?.checked;
+  const includeKey = !!document.getElementById('tsendKey')?.checked;
+  const go = document.getElementById('tsendGo');
+  _tsend = { ctx, busy: true, id: null };
+  if (go) go.disabled = true;
+  let frame = null;
+  try {
+    _tsendStatus('Loading the page tools…');
+    const PDFLib = await _tsendLoadScript(window, TSEND_LIBS.pdflib, 'PDFLib');
+    _tsendStatus('Laying the pages out…');
+    // The sheet is laid out WITH its key: with the key unticked, the key
+    // sheets (marked `data-kind="key"` by the packer) are simply left out of
+    // the photograph below, so the question pages paginate exactly as they
+    // did on the preview either way.
+    frame = await _tsendRenderPages(ctx);
+    // `rdoc`, never `doc`: that name is Firestore's document reference below.
+    const rdoc = frame.contentDocument;
+    const win = frame.contentWindow;
+    let sheets = Array.from(rdoc.querySelectorAll('#wsPages .wspv-sheet'));
+    if (!sheets.length) throw new Error('no pages came out of the layout');
+    if (!includeKey) sheets = sheets.filter(sh => sh.dataset.kind !== 'key');
+    if (sheets.length > TSEND_PAGES_MAX) throw new Error('that is ' + sheets.length + ' pages — Study Buddy takes up to ' + TSEND_PAGES_MAX + ' at once');
+    const keyPages = [];
+    sheets.forEach((sh, i) => { if (sh.dataset.kind === 'key') keyPages.push(i + 1); });
+    const keyRows = includeKey ? _tsendKeyRows(rdoc) : [];
+    await _tsendLoadScript(win, TSEND_LIBS.html2canvas, 'html2canvas');
+    // Every sheet is prepared BEFORE the first photograph: a transform on one
+    // sheet must not reflow its neighbour half way through the run.
+    sheets.forEach(_tsendPrepSheet);
+    await new Promise(r => win.requestAnimationFrame(() => win.requestAnimationFrame(r)));
+    const pdf = await PDFLib.PDFDocument.create();
+    pdf.setTitle(name);
+    pdf.setProducer('Polymath Science Learning Portal');
+    let cover = '';
+    for (let i = 0; i < sheets.length; i++) {
+      _tsendStatus('Photographing page ' + (i + 1) + ' of ' + sheets.length + '…');
+      const canvas = await _tsendSheetToJpeg(win, sheets[i]);
+      if (i === 0 && (!keyPages.length || keyPages[0] !== 1)) cover = _tsendCoverFrom(canvas);
+      const { bytes } = _tsendCanvasToJpegBytes(canvas, TSEND_JPEG_Q);
+      const img = await pdf.embedJpg(bytes);
+      const page = pdf.addPage(TSEND_A4);
+      page.drawImage(img, { x: 0, y: 0, width: TSEND_A4[0], height: TSEND_A4[1] });
+    }
+    _tsendStatus('Making the PDF…');
+    const pdfBytes = await pdf.save();
+    const docId = collectionDocId();
+    const storagePath = TSEND_STORAGE_DIR + '/' + docId + '.pdf';
+    _tsendStatus('Uploading ' + Math.round(pdfBytes.length / 1024) + ' KB…');
+    await uploadBytes(storageRef(storage, storagePath), pdfBytes, { contentType: 'application/pdf' });
+    _tsendStatus('Filing it in Study Buddy…');
+    const body = JSON.stringify({
+      annotations: [], hints: [], marking: { items: [] }, chat: [],
+      key: { pages: keyPages, rows: keyRows, path: '', name: '', scanned: true, shared: false }
+    });
+    const wsDoc = {
+      name, level, subject: TSEND_SUBJECT, guidance: grade,
+      guidanceLocked: false,
+      ownerUid: currentUser.uid,
+      ownerEmail: currentUser.email || '',
+      ownerName: currentUser.displayName || '',
+      storagePath,
+      pageCount: sheets.length,
+      keyPages, keyPath: '', keyAnswers: keyRows.length,
+      cover,
+      body, bodyPath: '',
+      score: { correct: 0, attempted: 0 },
+      pushed: setForClass,
+      // Where it came from, so Study Buddy's card can say so and the two
+      // apps can be walked back to one another.
+      source: 'cer', sourceApp: 'Science Learning Portal',
+      sourceWorksheetId: ctx.savedId || '',
+      sourceQuestionIds: (ctx.selected || []).map(q => q && q.id).filter(Boolean).slice(0, 400),
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+    };
+    await setDoc(doc(db, TSEND_COLLECTION, docId), wsDoc);
+    if (setForClass) {
+      await setDoc(doc(db, TSEND_ASSIGN_COLLECTION, docId), {
+        name, level, subject: TSEND_SUBJECT,
+        guidance: grade, guidanceLocked: locked,
+        storagePath, keyPath: '', keyName: '',
+        keyPages, keyRows,
+        pageCount: sheets.length,
+        cover,
+        byUid: currentUser.uid,
+        byName: TSEND_TEACHER_NAME,
+        active: true,
+        source: 'cer', sourceApp: 'Science Learning Portal',
+        sourceWorksheetId: ctx.savedId || '',
+        createdAt: serverTimestamp()
+      });
+    }
+    _tsend.id = docId;
+    _tsend.busy = false;
+    const ov = document.getElementById('tsendOverlay');
+    if (ov) ov.classList.remove('show');
+    _tsendPendingCtx = null;
+    showToast('📖 “' + name + '” is in Study Buddy' + (setForClass ? ' and set for your students' : '') + ' — opening it…', 'success');
+    appEmbedOpen('tutor', { ws: docId });
+  } catch (e) {
+    console.error('Study Buddy export', e);
+    _tsend.busy = false;
+    if (go) { go.disabled = false; go.textContent = '📖 Send to Study Buddy'; }
+    const denied = /permission|insufficient|PERMISSION_DENIED|unauthorized|403/i.test(String((e && e.message) || e));
+    _tsendStatus('');
+    showToast(denied
+      ? 'Study Buddy would not take it — the Firestore or Storage rules for ' + TSEND_COLLECTION + ' / ' + TSEND_STORAGE_DIR + ' do not allow this account to write there.'
+      : 'Could not send it: ' + ((e && e.message) || e), 'error');
+  } finally {
+    if (frame) { try { frame.remove(); } catch (_) {} }
+  }
+}
+// A fresh Firestore document id, minted the way the SDK mints one.
+function collectionDocId() { return doc(collection(db, TSEND_COLLECTION)).id; }
+
+// =====================================================================
+// 🧭 THE OTHER APPS, INSIDE THIS ONE (v1.410.0)
+//
+// 📖 Study Buddy and 🔑 Ans Key are each a page of this portal now — an
+// `<iframe>` on `#page-tutor` / `#page-anskey` pointed at the sibling folder,
+// with the sidebar and the subject switcher still round it. The sign-in
+// carries: all the apps share one Firebase project on one origin, so the
+// session in the frame is the session in the portal and nobody signs in twice.
+//
+// The frame's `src` is set the FIRST time its page is opened, never at first
+// paint — two whole apps loading behind a landing page would be exactly the
+// weight "Keep the page fast" exists to refuse. `appEmbedOpen(page, params)`
+// is the ONE door: it navigates and, when params are given (a worksheet id
+// Study Buddy should open straight away), (re)points the frame at them.
+// =====================================================================
+// `var`, not `const`: navigateTo runs during module evaluation and asks
+// appEmbedOnNavigate on every page, long before this line has been reached.
+var APP_EMBED_TOOLS = { tutor: 'tutor', anskey: 'anskey' };   // page → POLYMATH_TOOLS key
+function _appEmbedFrame(page) { return document.getElementById('appEmbedFrame-' + page); }
+function _appEmbedUrl(page, params) {
+  const tool = polymathToolFor(APP_EMBED_TOOLS[page]);
+  if (!tool) return '';
+  let url = tool.url;
+  const q = [];
+  Object.keys(params || {}).forEach(k => { if (params[k] != null && params[k] !== '') q.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k])); });
+  if (q.length) url += (url.includes('?') ? '&' : '?') + q.join('&');
+  return url;
+}
+// Called from navigateTo for EVERY page: a page that is not an embed is a no-op.
+function appEmbedOnNavigate(page) {
+  if (!APP_EMBED_TOOLS || !APP_EMBED_TOOLS[page]) return;
+  const frame = _appEmbedFrame(page);
+  if (!frame) return;
+  if (!frame.getAttribute('src')) frame.setAttribute('src', _appEmbedUrl(page));
+}
+function appEmbedOpen(page, params) {
+  const frame = _appEmbedFrame(page);
+  const url = _appEmbedUrl(page, params);
+  if (frame && url && params && Object.keys(params).length) frame.setAttribute('src', url);
+  try { navigateTo(page); } catch (e) { console.warn('embed page', e); if (url) window.open(url, '_blank', 'noopener'); }
+}
+function appEmbedReload(page) {
+  const frame = _appEmbedFrame(page);
+  if (frame) frame.setAttribute('src', _appEmbedUrl(page));
+}
+function appEmbedOpenTab(page) {
+  const frame = _appEmbedFrame(page);
+  const url = (frame && frame.getAttribute('src')) || _appEmbedUrl(page);
+  if (url) window.open(url, '_blank', 'noopener');
+}
+
 function _wsPreviewCtx() {
   if (_wsPreviewPaper) {
     return {
@@ -37669,23 +38213,33 @@ async function renderWsPreview() {
   const frame = document.getElementById('wsPreviewFrame');
   if (!frame) return;
   const ctx = _wsPreviewCtx();
+  const html = _wsPreviewBuildHtml(ctx);   // exactly what will print
+  _wsWritePreview(frame, html, { ctxBreaks: ctx.forcedBreakIds || null });
+}
+
+// The sheet a preview CONTEXT describes, as HTML — exactly what will print.
+// ONE builder for the live A4 preview and for the 📖 Study Buddy export, so the
+// worksheet a student opens over there is the worksheet the teacher previewed
+// here, breaks and options and all; a second assembly of these arguments would
+// be a second sheet.
+function _wsPreviewBuildHtml(ctx, opts) {
+  const o = opts || {};
   const selected = ctx.selected;
   const title = ctx.title;
   // A past paper brings its own cover; a worksheet's is the checkbox's.
   const frontHtml = ctx.frontHtml != null ? ctx.frontHtml
     : (ctx.cover ? _wsCoverHtml(title, undefined, undefined, ctx.noFields) : '');
-  const html = buildWorksheetHtml(selected, title, Object.assign({
+  return buildWorksheetHtml(selected, title, Object.assign({
     frontHtml, plainNumbers: true, noStudentFields: ctx.noFields,
     whyNotes: _wnyCachedNotes(selected, wnyPrintOn(ctx.where)),
     answerKeyExtras: !!ctx.akExtras,
     objectivesBoxAll: !!ctx.objBoxAll,
     // ▲▼ the order tags — a preview-only wrapper that generates no box, so
-    // the pagination is still exactly what will print.
-    blockTags: pvsAllowed()
-  }, ctx.buildOpts || {}));   // exactly what will print
-  _wsWritePreview(frame, html, { ctxBreaks: ctx.forcedBreakIds || null });
+    // the pagination is still exactly what will print. The export passes
+    // `noTags`: nothing may be hung on a page that is about to be photographed.
+    blockTags: pvsAllowed() && !o.noTags
+  }, ctx.buildOpts || {}));
 }
-
 // Shared by the full exported view and the Vetting eye. The hover supplies an
 // isolated read-only context, so it cannot change the open worksheet's tools,
 // page count or manual breaks. Late image/font callbacks must not revive it.
@@ -37745,6 +38299,14 @@ function _wsPreviewWhenReady(doc, cb) {
 
 function _wsPreviewPack(doc, opts) {
   const readOnly = !!(opts && opts.readOnly);
+  // `noTools` is the third posture: the teacher's own breaks and merges apply
+  // (this is THEIR sheet, not the isolated hover), but nothing is hung on the
+  // pages — no ⬆ ⤓ ✏️ ✕, no ✏️ edit answer, no picture pills, no order bars —
+  // because the pages are about to be photographed into a PDF for Study Buddy
+  // and a button painted onto page 3 of a student's worksheet is exactly the
+  // kind of thing nobody notices until a class has it.
+  const noTools = !!(opts && opts.noTools);
+  const drawTools = !readOnly && !noTools;
   const measure = doc.getElementById('wsMeasure');
   const pagesEl = doc.getElementById('wsPages');
   if (!measure || !pagesEl) return false;
@@ -37816,7 +38378,7 @@ function _wsPreviewPack(doc, opts) {
       const qid = chunk.dataset.qid;
       const tools = doc.createElement('div');
       tools.className = 'wspv-tools';
-      if (!readOnly && idx !== 0) { // nothing precedes the very first question
+      if (drawTools && idx !== 0) { // nothing precedes the very first question
         const btn = doc.createElement('button');
         btn.type = 'button';
         if (pos === 0) { // this question starts a page — offer to pull it onto the previous one
@@ -37836,7 +38398,7 @@ function _wsPreviewPack(doc, opts) {
       // spotting the diagram that printed too small, and the fix used to mean
       // leaving the page for the bank and finding your way back. Admins only:
       // this writes to the shared question bank.
-      if (!readOnly && qid && qid.indexOf('__lo__') !== 0 && _canAuthor() && !_wsPreviewIsDraft()) {
+      if (drawTools && qid && qid.indexOf('__lo__') !== 0 && _canAuthor() && !_wsPreviewIsDraft()) {
         const eb = doc.createElement('button');
         eb.type = 'button';
         eb.className = 'wspv-brk edit';
@@ -37848,7 +38410,7 @@ function _wsPreviewPack(doc, opts) {
       // Take the question OFF the sheet — the preview is where you notice that
       // it does not belong. Saved worksheets only: the builder's selection is
       // the tick boxes on the page behind the preview, not a stored list.
-      if (!readOnly && qid && qid.indexOf('__lo__') !== 0 && _wsPreviewSaved) {
+      if (drawTools && qid && qid.indexOf('__lo__') !== 0 && _wsPreviewSaved) {
         const rb = doc.createElement('button');
         rb.type = 'button';
         rb.className = 'wspv-brk del';
@@ -37868,7 +38430,7 @@ function _wsPreviewPack(doc, opts) {
   // as anyone could get. Added AFTER planning, exactly as the question tools
   // are, and `.wspv-tools` is absolutely positioned, so nothing here changes a
   // measured height and the preview still shows the pagination that will print.
-  if (!readOnly && _canAuthor() && !_wsPreviewIsDraft()) {
+  if (drawTools && _canAuthor() && !_wsPreviewIsDraft()) {
     answerKeys.forEach(ak => {
       Array.from(ak.querySelectorAll('.print-ak-question')).forEach(row => {
         const qid = row.dataset.qid;
@@ -37892,12 +38454,17 @@ function _wsPreviewPack(doc, opts) {
   akSheets.forEach((sh, si) => addSheet(akSpans[si],
     content => content.appendChild(_printAkPageEl(sh.ak, akRows[sh.ai], sh.p.rows, sh.gi, doc)),
     sh.p.zoom));
-  const cnt = readOnly ? null : document.getElementById('wsPreviewPageCount');
+  const cnt = (readOnly || noTools) ? null : document.getElementById('wsPreviewPageCount');
   if (cnt) cnt.textContent = '· ' + totalPages + ' page' + (totalPages === 1 ? '' : 's');
   // 🔍± the picture-size pills, hung AFTER the planner has measured the pages.
-  pvsDecorateDoc(doc);
+  if (!noTools) pvsDecorateDoc(doc);
   // ▲▼ the element-order bars, the same way and for the same reason.
-  pvoDecorateDoc(doc);
+  if (!noTools) pvoDecorateDoc(doc);
+  // A sheet made of answer-key rows is a KEY sheet. Marked here, once, so a
+  // consumer that has to tell the two apart (the Study Buddy export hides the
+  // key from the student and hands it to the buddy) reads a flag rather than
+  // guessing from the markup.
+  Array.from(pagesEl.querySelectorAll('.wspv-sheet')).forEach(sh => { if (sh.querySelector('.print-ak-question')) sh.dataset.kind = 'key'; });
   return true;
 }
 
@@ -78589,6 +79156,15 @@ window.closeWorksheetPreview = closeWorksheetPreview;
 window.wsBreakBefore = wsBreakBefore;
 window.wsPullUp = wsPullUp;
 window.printFromPreview = printFromPreview;
+window.tsendFromPreview = tsendFromPreview;
+window.tsendFromBuilder = tsendFromBuilder;
+window.tsendFromSaved = tsendFromSaved;
+window.tsendOpen = tsendOpen;
+window.tsendClose = tsendClose;
+window.tsendSend = tsendSend;
+window.appEmbedOpen = appEmbedOpen;
+window.appEmbedReload = appEmbedReload;
+window.appEmbedOpenTab = appEmbedOpenTab;
 window.previewSavedWorksheet = previewSavedWorksheet;
 window.wsQuickEdit = wsQuickEdit;
 window.closeWsQuickEdit = closeWsQuickEdit;
