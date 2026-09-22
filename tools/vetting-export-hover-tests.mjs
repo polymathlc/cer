@@ -63,6 +63,8 @@ function harness() {
     let vettingList=[], _cpbQuestions=[];
     const escapeHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;');
     const _wnyCachedNotes=()=>({cached:true}), wnyPrintOn=()=>false, akxPrintOn=()=>true, objBoxPrintOn=()=>true;
+    // 🗂️ the pool the eye's own scope names, so a paper's pill writes to the paper
+    const PVS_POOL_CPB='cpb';
     const previewOneQuestionPrint=(id,where)=>actions.push(['full',id,where]);
     const editQuestion=id=>actions.push(['edit',id]);
     const cpbPreviewQuestion=id=>actions.push(['cpb-full',id]);
@@ -132,6 +134,9 @@ test('the Custom Paper eye reads the paper, and routes to the paper\'s own doors
   const a=h.anchor('p1','cpb'); h.show(a,{pointerType:'mouse'}); h.flush();
   assert.equal(h.rendered.length,1);
   assert.equal(h.rendered[0].title,'Question p1');
+  // …and the sheet is built for the PAPER's pool, so the − / + pill, 🎨 / ✨ and
+  // the ▲▼ bars hung on it write to the paper and never into the bank.
+  assert.equal(h.rendered[0].opts.pvsPool,'cpb');
   // both foot buttons go to the paper's doors, never the bank's
   h.api.state.host.children.filter(c=>c.tag==='button')[1].onclick();
   h.show(h.anchor('p1','cpb'),{pointerType:'mouse'}); h.flush();
@@ -152,7 +157,7 @@ test('hover renders the current Vetting copy with the export options and isolate
   const edited={...q,title:'Latest edit'};h.api.list=[edited]; h.flush();
   const r=h.rendered[0]; assert.equal(r.title,'Latest edit'); assert.deepEqual(r.qs,[edited]);
   assert.notEqual(r.qs[0],edited); assert.notEqual(r.qs[0].blocks,edited.blocks);
-  assert.deepEqual(r.opts,{frontHtml:'',plainNumbers:true,noStudentFields:true,whyNotes:{cached:true},answerKeyExtras:true,objectivesBoxAll:true,blockTags:true});
+  assert.deepEqual(r.opts,{frontHtml:'',plainNumbers:true,noStudentFields:true,whyNotes:{cached:true},answerKeyExtras:true,objectivesBoxAll:true,blockTags:true,pvsPool:''});
   assert.equal(h.written[0].opts.readOnly,true); assert.equal(h.written[0].frame.style.width,'850px');
   assert.equal(h.written[0].frame.style.transform,'scale(0.8)');
   assert.equal(a.attrs['aria-expanded'],'true'); assert.deepEqual(h.actions,[]);
