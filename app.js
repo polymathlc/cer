@@ -4395,7 +4395,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.411.0';
+const APP_VERSION = 'v1.412.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -9992,17 +9992,60 @@ const PVS_CSS = `
 .pvo-sel{outline:2px solid #4a7c59;outline-offset:2px;border-radius:4px}
 @media print{.pvs-bar,.pvo-bar{display:none!important}.pvo-sel{outline:none}}`;
 function pvsAllowed() { try { return !!_canAuthor(); } catch (_) { return false; } }
-// The ONE resolver: bank first, then the vetting list. Anything else (a Custom
-// Paper's unsaved question, an editor draft) has no document to write to, so
-// it gets no pill.
-function pvsFind(qid) {
+// 🗂️ THE POOL A PICTURE BELONGS TO, and why it is not guessed.
+//
+// A picture on a preview is identified by its question id and its block id —
+// and on a 🗂️ Custom Paper those two are NOT enough, because `cpbBankAdd`
+// deep-copies a bank question onto the paper and KEEPS ITS ID. So one id can
+// name two different objects at once: the live bank question, and the paper's
+// own copy of it. Resolving bank-first would write a size chosen on a paper
+// straight into the question every worksheet, quest and game in the school is
+// serving — the one thing that page exists never to do. Resolving cpb-first
+// would do the mirror image from an ordinary bank preview.
+//
+// So the pool is not inferred: it travels IN THE MARKUP, on the wrapper, beside
+// `data-pvs-q` / `data-pvs-b` — decided at the moment the sheet was built from
+// that question, by the surface that knows which pool it was reading. Absent
+// means the bank chain, which is every preview that existed before this.
+const PVS_POOL_CPB = 'cpb';
+function pvsPoolOf(v) { return String(v == null ? '' : v) === PVS_POOL_CPB ? PVS_POOL_CPB : ''; }
+// The ONE resolver. `pool` 'cpb' is an unsent 🗂️ Custom Paper's own question
+// list; anything else is bank first, then the vetting list — byte-for-byte what
+// it always was. An editor draft is in none of them and still gets no pill.
+function pvsFind(qid, pool) {
   const id = String(qid == null ? '' : qid);
   if (!id) return null;
+  if (pvsPoolOf(pool) === PVS_POOL_CPB) {
+    // `_cpbQuestions` is a `let` declared far below this block, so it is in its
+    // temporal dead zone during module evaluation — and `typeof` on a `let` in
+    // its TDZ THROWS rather than answering 'undefined'. Read at call time, in a
+    // try, which is the rule this file already carries for a mid-module const.
+    let list = [];
+    try { if (Array.isArray(_cpbQuestions)) list = _cpbQuestions; } catch (_) { return null; }
+    const c = list.find(x => x && String(x.id) === id);
+    return c ? { q: c, where: PVS_POOL_CPB } : null;
+  }
   let q = (questionBank || []).find(x => x && String(x.id) === id);
   if (q) return { q, where: 'bank' };
   q = (vettingList || []).find(x => x && String(x.id) === id);
   if (q) return { q, where: 'vetting' };
   return null;
+}
+// A wrapper selector that cannot cross pools: the attribute is absent for the
+// bank chain, so the default half has to be a `:not()` rather than a match.
+function _pvsPoolSel(pool, attr) {
+  return pvsPoolOf(pool) === PVS_POOL_CPB ? '[' + attr + '="cpb"]' : ':not([' + attr + '])';
+}
+// Whether the block editor is holding THIS question out of THIS pool. Both ids
+// can be the same string, so the id alone would let a size chosen on the paper
+// be written into an editor that is holding the bank's copy of it.
+function _pvsEditorHolds(qid, pool) {
+  try {
+    if (typeof currentEditingQuestion === 'undefined' || !currentEditingQuestion) return false;
+    if (String(currentEditingQuestion) !== String(qid)) return false;
+    const cpbEdit = typeof _cpbEditActive === 'function' && _cpbEditActive();
+    return (pvsPoolOf(pool) === PVS_POOL_CPB) === !!cpbEdit;
+  } catch (_) { return false; }
 }
 function _pvsBlock(found, bid) {
   return ((found && found.q && found.q.blocks) || []).find(b => b && b.type === 'image' && String(b.id) === String(bid)) || null;
@@ -10018,28 +10061,33 @@ function pvsEnsureCss(doc) {
     d.head.appendChild(st);
   } catch (_) {}
 }
-function _pvsButtonsHtml(qid, bid, block) {
-  const q = escapeHtml(String(qid)), b = escapeHtml(String(bid));
-  return `<button type="button" class="pvs-btn" data-pvs-act="minus" aria-label="Smaller picture" title="Smaller (−5%)" onclick="event.stopPropagation();pvsStep('${q}','${b}',-1)">−</button>
+function _pvsButtonsHtml(qid, bid, block, pool) {
+  const q = escapeHtml(String(qid)), b = escapeHtml(String(bid)), p = escapeHtml(pvsPoolOf(pool));
+  return `<button type="button" class="pvs-btn" data-pvs-act="minus" aria-label="Smaller picture" title="Smaller (−5%)" onclick="event.stopPropagation();pvsStep('${q}','${b}',-1,'${p}')">−</button>
     <span class="pvs-label">${escapeHtml(imgSizeLabelText(block))}</span>
-    <button type="button" class="pvs-btn" data-pvs-act="plus" aria-label="Larger picture" title="Larger (+5%)" onclick="event.stopPropagation();pvsStep('${q}','${b}',1)">+</button>
-    <button type="button" class="pvs-btn pvs-auto" data-pvs-act="auto" aria-label="Back to automatic size" title="Back to Auto" onclick="event.stopPropagation();pvsReset('${q}','${b}')">Auto</button>
-    ${_pvcButtonHtml(qid, bid)}`;
+    <button type="button" class="pvs-btn" data-pvs-act="plus" aria-label="Larger picture" title="Larger (+5%)" onclick="event.stopPropagation();pvsStep('${q}','${b}',1,'${p}')">+</button>
+    <button type="button" class="pvs-btn pvs-auto" data-pvs-act="auto" aria-label="Back to automatic size" title="Back to Auto" onclick="event.stopPropagation();pvsReset('${q}','${b}','${p}')">Auto</button>
+    ${_pvcButtonHtml(qid, bid, pool)}`;
 }
 // The pill as rendered INTO a preview's own markup. Empty for anyone who is not
 // an author, for a question with no id (an editor draft) and for a block with
 // none — a pill that cannot name what it changes is a button that does nothing.
-function pvsBarHtml(q, block) {
+function pvsBarHtml(q, block, pool) {
   if (!q || q.id == null || q.id === '' || !block || !block.id || !pvsAllowed()) return '';
   pvsEnsureCss(document);
-  return `<div class="pvs-bar" data-pvs-bar="1" onclick="event.stopPropagation()" title="Picture size — saved to the question bank when this preview closes">${_pvsButtonsHtml(q.id, block.id, block)}</div>`;
+  const cpb = pvsPoolOf(pool) === PVS_POOL_CPB;
+  const tip = cpb ? 'Picture size — kept on this paper (nothing is written to the question bank until you press Send)'
+                  : 'Picture size — saved to the question bank when this preview closes';
+  return `<div class="pvs-bar" data-pvs-bar="1" onclick="event.stopPropagation()" title="${escapeHtml(tip)}">${_pvsButtonsHtml(q.id, block.id, block, pool)}</div>`;
 }
 // `data-pvs-q` / `data-pvs-b` on the wrapper is what lets every copy of a
 // picture be found and repainted together, and what the iframe decorator hangs
 // its pill on.
-function pvsWrapAttrs(q, block) {
+function pvsWrapAttrs(q, block, pool) {
   if (!q || q.id == null || !block || !block.id) return '';
-  return ` data-pvs-q="${escapeHtml(String(q.id))}" data-pvs-b="${escapeHtml(String(block.id))}"`;
+  const p = pvsPoolOf(pool);
+  return ` data-pvs-q="${escapeHtml(String(q.id))}" data-pvs-b="${escapeHtml(String(block.id))}"` +
+    (p ? ` data-pvs-pool="${escapeHtml(p)}"` : '');
 }
 // Every document a preview can be showing in: the app's own, and any
 // same-origin iframe (the 👁 exported hover, the A4 preview).
@@ -10050,8 +10098,9 @@ function pvsDocs() {
   });
   return docs;
 }
-function pvsWraps(qid, bid) {
-  const sel = '[data-pvs-q="' + String(qid).replace(/"/g, '\\"') + '"][data-pvs-b="' + String(bid).replace(/"/g, '\\"') + '"]';
+function pvsWraps(qid, bid, pool) {
+  const sel = '[data-pvs-q="' + String(qid).replace(/"/g, '\\"') + '"][data-pvs-b="' + String(bid).replace(/"/g, '\\"') + '"]'
+    + _pvsPoolSel(pool, 'data-pvs-pool');
   const out = [];
   pvsDocs().forEach(d => { try { d.querySelectorAll(sel).forEach(w => out.push(w)); } catch (_) {} });
   return out;
@@ -10059,10 +10108,10 @@ function pvsWraps(qid, bid) {
 // Repaint every copy of ONE picture from the block: only the width properties
 // move, so a preview's own border-radius or print class is left exactly as it
 // was. The label follows on every pill at once.
-function pvsPaint(qid, bid, block) {
+function pvsPaint(qid, bid, block, pool) {
   const set = imgHasScale(block);
   const pct = set ? Math.round(imgScale(block) * 100) : 0;
-  pvsWraps(qid, bid).forEach(wrap => {
+  pvsWraps(qid, bid, pool).forEach(wrap => {
     const img = wrap.querySelector('img');
     if (img) {
       img.style.height = 'auto';
@@ -10074,7 +10123,7 @@ function pvsPaint(qid, bid, block) {
   // The editor, if this very question is open in it: the block card's own
   // label and preview, so Save there does not put the old size back.
   try {
-    if (typeof currentEditingQuestion !== 'undefined' && currentEditingQuestion && String(currentEditingQuestion) === String(qid) && Array.isArray(blocks)) {
+    if (_pvsEditorHolds(qid, pool) && Array.isArray(blocks)) {
       const eb = blocks.find(b => b && b.type === 'image' && String(b.id) === String(bid));
       if (eb && eb !== block) {
         if (set) eb.scale = block.scale; else delete eb.scale;
@@ -10087,7 +10136,10 @@ function pvsPaint(qid, bid, block) {
   } catch (_) {}
 }
 function _pvsMark(found) {
-  _pvsDirty.set(String(found.q.id), found.where);
+  // Keyed by pool AND id: a bank question and a 🗂️ Custom Paper's copy of it
+  // share an id, and one entry for the two would flush whichever was written
+  // last into whichever pool was recorded first.
+  _pvsDirty.set(found.where + '|' + String(found.q.id), found.where);
   clearTimeout(_pvsIdleTimer);
   _pvsIdleTimer = setTimeout(() => { pvsFlush(); }, PVS_IDLE_MS);
   // The A4 preview measured its pages before the picture changed size, so it
@@ -10103,28 +10155,28 @@ function _pvsMark(found) {
 // One press of − or +. Steps from the size that is SET, or from the size the
 // picture is rendered at when none is — the first press moves from what the
 // teacher is looking at rather than jumping to a notional default.
-function pvsStep(qid, bid, dir) {
+function pvsStep(qid, bid, dir, pool) {
   if (!pvsAllowed()) return;
-  const found = pvsFind(qid);
+  const found = pvsFind(qid, pool);
   if (!found) { showToast('That question is no longer here', 'error'); return; }
   const block = _pvsBlock(found, bid);
   if (!block) return;
-  const next = imgScaleStep(block, dir > 0 ? 1 : -1, pvsWraps(qid, bid)[0] || null);
+  const next = imgScaleStep(block, dir > 0 ? 1 : -1, pvsWraps(qid, bid, pool)[0] || null);
   block.scale = next / 100;
   _pvsMark(found);
-  pvsPaint(qid, bid, block);
+  pvsPaint(qid, bid, block, pool);
 }
 // Back to Auto: the field is DELETED, never set to 0 — `imgHasScale` asks
 // whether the field is there at all.
-function pvsReset(qid, bid) {
+function pvsReset(qid, bid, pool) {
   if (!pvsAllowed()) return;
-  const found = pvsFind(qid);
+  const found = pvsFind(qid, pool);
   if (!found) return;
   const block = _pvsBlock(found, bid);
   if (!block || !imgHasScale(block)) return;
   delete block.scale;
   _pvsMark(found);
-  pvsPaint(qid, bid, block);
+  pvsPaint(qid, bid, block, pool);
 }
 // Write every question touched since the last flush — a picture resized, or
 // an element moved with ▲▼. Called from every preview's close, from the idle
@@ -10147,19 +10199,31 @@ async function _pvsFlushRun() {
   if (!_pvsDirty.size) return;
   const entries = Array.from(_pvsDirty.entries());
   _pvsDirty.clear();
-  let n = 0, failed = 0;
-  for (const [qid] of entries) {
-    const found = pvsFind(qid);
+  let n = 0, failed = 0, paper = 0;
+  for (const [key, where] of entries) {
+    const qid = key.slice(String(where).length + 1);
+    const found = pvsFind(qid, where);
     if (!found) continue;   // deleted since — nothing left to write
+    // 🗂️ A Custom Paper's question is NOT in the bank and must not be put
+    // there: `_cpbCommit` is the only writer that page has, and it is what
+    // stamps `holdBack` on Send. The edit is already on `_cpbQuestions` — the
+    // paper itself — so the durable half is the draft mirror and nothing else.
+    // Deliberately no `cpbRender()`: it rebuilds the page's rows and hides an
+    // open 👁 peek, which is the very surface the teacher pressed the button on.
+    if (where === PVS_POOL_CPB) {
+      try { _cpbDraftSave(); paper++; } catch (e) { console.warn('custom paper preview edit:', e); }
+      continue;
+    }
     let ok = false;
     try {
-      ok = found.where === 'vetting' ? await saveVettingQuestion(found.q) : await saveQuestion(found.q, { quiet: true });
+      ok = where === 'vetting' ? await saveVettingQuestion(found.q) : await saveQuestion(found.q, { quiet: true });
     } catch (e) { console.warn('preview picture size:', e); ok = false; }
-    if (ok === false) { failed++; if (!_pvsDirty.has(qid)) _pvsDirty.set(qid, found.where); }
+    if (ok === false) { failed++; if (!_pvsDirty.has(key)) _pvsDirty.set(key, where); }
     else n++;
   }
   if (failed) showToast('⚠ Could not save the preview edits on ' + failed + ' question' + (failed === 1 ? '' : 's') + ' — they will be tried again', 'error');
   else if (n) showToast('💾 Preview edits saved' + (n > 1 ? ' on ' + n + ' questions' : ''), 'success');
+  else if (paper) showToast('💾 Kept on this paper' + (paper > 1 ? ' — ' + paper + ' questions' : '') + ' · nothing goes to the question bank until you press Send', 'success');
 }
 // Hang a pill on every picture inside an EXPORTED preview (an iframe written
 // by _wsWritePreview). Those pages were measured by the planner before this
@@ -10171,15 +10235,20 @@ function pvsDecorateDoc(doc) {
     doc.querySelectorAll('[data-pvs-q][data-pvs-b]').forEach(wrap => {
       if (wrap.querySelector('[data-pvs-bar]')) return;
       const qid = wrap.getAttribute('data-pvs-q'), bid = wrap.getAttribute('data-pvs-b');
-      const found = pvsFind(qid);
+      // The pool the sheet was built from, read off the picture's own wrapper
+      // rather than inferred — see PVS_POOL_CPB.
+      const pool = pvsPoolOf(wrap.getAttribute('data-pvs-pool'));
+      const found = pvsFind(qid, pool);
       const block = _pvsBlock(found, bid);
       const img = wrap.querySelector('img');
       if (!block || !img) return;
       const bar = doc.createElement('div');
       bar.className = 'pvs-bar pvs-over';
       bar.setAttribute('data-pvs-bar', '1');
-      bar.title = 'Picture size — saved to the question bank when this preview closes';
-      bar.innerHTML = _pvsButtonsHtml(qid, bid, block);
+      bar.title = pool === PVS_POOL_CPB
+        ? 'Picture size — kept on this paper (nothing is written to the question bank until you press Send)'
+        : 'Picture size — saved to the question bank when this preview closes';
+      bar.innerHTML = _pvsButtonsHtml(qid, bid, block, pool);
       // The inline onclick above resolves against the IFRAME's window, which
       // has no pvsStep — so the handlers are bound here, to this document's.
       // By ACTION, never by position: the pill has four controls now, and
@@ -10187,11 +10256,11 @@ function pvsDecorateDoc(doc) {
       // added, which is a button that quietly does somebody else's job.
       const act = name => bar.querySelector('[data-pvs-act="' + name + '"]');
       const bind = (name, fn) => { const el = act(name); if (el) el.onclick = e => { e.stopPropagation(); fn(); }; };
-      bind('minus', () => pvsStep(qid, bid, -1));
-      bind('plus', () => pvsStep(qid, bid, 1));
-      bind('auto', () => pvsReset(qid, bid));
-      bind('enhance', () => pvcRun(qid, bid, false));
-      bind('colour', () => pvcRun(qid, bid, true));
+      bind('minus', () => pvsStep(qid, bid, -1, pool));
+      bind('plus', () => pvsStep(qid, bid, 1, pool));
+      bind('auto', () => pvsReset(qid, bid, pool));
+      bind('enhance', () => pvcRun(qid, bid, false, pool));
+      bind('colour', () => pvcRun(qid, bid, true, pool));
       bar.addEventListener('pointerdown', e => e.stopPropagation());
       const view = doc.defaultView;
       if (view && view.getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
@@ -10250,8 +10319,11 @@ const PVC_PAR = 2;               // image calls in flight at once
 const _pvcJobs = new Map();      // 'qid|bid' -> { qid, bid, state, error }
 let _pvcRunning = 0;
 const _pvcWaiting = [];
-function _pvcKey(qid, bid) { return String(qid) + '|' + String(bid); }
-function pvcState(qid, bid) { return (_pvcJobs.get(_pvcKey(qid, bid)) || {}).state || ''; }
+// Keyed by pool as well as id: a bank question and a 🗂️ Custom Paper's copy of
+// it share an id, and one key for the two would show a job running on a picture
+// that is not being regenerated.
+function _pvcKey(qid, bid, pool) { return pvsPoolOf(pool) + '|' + String(qid) + '|' + String(bid); }
+function pvcState(qid, bid, pool) { return (_pvcJobs.get(_pvcKey(qid, bid, pool)) || {}).state || ''; }
 // What the unload guard asks: a job still in flight is the ONE way this loses
 // work, because the picture exists only in a model's reply until it is written.
 function pvcBusy() { return _pvcRunning > 0 || _pvcWaiting.length > 0; }
@@ -10261,15 +10333,15 @@ function pvcBusy() { return _pvcRunning > 0 || _pvcWaiting.length > 0; }
 // call, so neither must be the thing a thumb lands on while sizing a picture.
 // ✨ (black-and-white) first, 🎨 (colour) last — the order the block editor's
 // own bar has always used.
-function _pvcButtonHtml(qid, bid) {
-  return _pvcOneButtonHtml(qid, bid, false) + _pvcOneButtonHtml(qid, bid, true);
+function _pvcButtonHtml(qid, bid, pool) {
+  return _pvcOneButtonHtml(qid, bid, false, pool) + _pvcOneButtonHtml(qid, bid, true, pool);
 }
 // One of the pair. A job is per PICTURE, so while one is running the button
 // that started it shows ⏳ and the other is disabled with a title saying why;
 // done / error are shown only on the button whose job it was.
-function _pvcOneButtonHtml(qid, bid, colour) {
-  const q = escapeHtml(String(qid)), b = escapeHtml(String(bid));
-  const job = _pvcJobs.get(_pvcKey(qid, bid)) || {};
+function _pvcOneButtonHtml(qid, bid, colour, pool) {
+  const q = escapeHtml(String(qid)), b = escapeHtml(String(bid)), p = escapeHtml(pvsPoolOf(pool));
+  const job = _pvcJobs.get(_pvcKey(qid, bid, pool)) || {};
   const st = job.state || '';
   const mine = !!st && (!!job.colour === !!colour);
   const busy = st === 'running' || st === 'queued';
@@ -10279,20 +10351,26 @@ function _pvcOneButtonHtml(qid, bid, colour) {
   const title = busy
     ? (mine ? (colour ? 'Colourising' : 'Enhancing') + ' this picture… it finishes even if you close this preview'
             : 'This picture is already being regenerated — wait for that to finish')
-    : (mine && st === 'done') ? (colour ? 'Colourised' : 'Enhanced') + ' and saved — it is waiting at the top of ✅ Check Questions'
+    // 🗂️ On a Custom Paper the picture is kept on the PAPER, so neither the
+    // "saved" nor the ✅ Check Questions half of that wording is true there.
+    : (mine && st === 'done') ? (colour ? 'Colourised' : 'Enhanced') + (pvsPoolOf(pool) === PVS_POOL_CPB ? ' — kept on this paper' : ' and saved — it is waiting at the top of ✅ Check Questions')
     : (mine && st === 'error') ? 'That ' + what.toLowerCase() + ' failed — press to try again'
+    : pvsPoolOf(pool) === PVS_POOL_CPB
+      ? (colour ? 'Regenerate this picture in colour. It runs in the background and is kept on this paper — nothing reaches the question bank until you press Send.'
+                : 'Regenerate this picture as a clean black-and-white line diagram — no colour. It runs in the background and is kept on this paper — nothing reaches the question bank until you press Send.')
     : colour ? 'Regenerate this picture in colour. It runs in the background, saves itself, and goes to the front of ✅ Check Questions.'
              : 'Regenerate this picture as a clean black-and-white line diagram — no colour. It runs in the background, saves itself, and goes to the front of ✅ Check Questions.';
   return `<button type="button" class="pvs-btn pvs-ai ${colour ? 'pvs-colour' : 'pvs-enhance'}" data-pvs-act="${colour ? 'colour' : 'enhance'}"${busy ? ' disabled' : ''}
     aria-label="${colour ? 'Colourise' : 'Enhance'} this picture" title="${escapeHtml(title)}"
-    onclick="event.stopPropagation();pvcRun('${q}','${b}',${colour ? 'true' : 'false'})">${label}</button>`;
+    onclick="event.stopPropagation();pvcRun('${q}','${b}',${colour ? 'true' : 'false'},'${p}')">${label}</button>`;
 }
 
 // Repaint the button on EVERY copy of this picture on the page, the app's own
 // document and any exported-preview iframe alike, so a job started in the
 // hover and the A4 sheet underneath it cannot show two different states.
-function pvcPaint(qid, bid) {
-  const sel = `[data-pvs-q="${CSS && CSS.escape ? CSS.escape(String(qid)) : String(qid)}"][data-pvs-b="${CSS && CSS.escape ? CSS.escape(String(bid)) : String(bid)}"]`;
+function pvcPaint(qid, bid, pool) {
+  const sel = `[data-pvs-q="${CSS && CSS.escape ? CSS.escape(String(qid)) : String(qid)}"][data-pvs-b="${CSS && CSS.escape ? CSS.escape(String(bid)) : String(bid)}"]`
+    + _pvsPoolSel(pool, 'data-pvs-pool');
   const docs = [document];
   try {
     document.querySelectorAll('iframe').forEach(f => {
@@ -10300,7 +10378,7 @@ function pvcPaint(qid, bid) {
     });
   } catch (_) {}
   // Both buttons, each from its own fresh markup: one job disables the pair.
-  [['enhance', _pvcOneButtonHtml(qid, bid, false)], ['colour', _pvcOneButtonHtml(qid, bid, true)]].forEach(([act, fresh]) => {
+  [['enhance', _pvcOneButtonHtml(qid, bid, false, pool)], ['colour', _pvcOneButtonHtml(qid, bid, true, pool)]].forEach(([act, fresh]) => {
     docs.forEach(d => {
       try {
         d.querySelectorAll(sel).forEach(wrap => {
@@ -10320,18 +10398,19 @@ function pvcPaint(qid, bid) {
 }
 
 // `colour` true is the 🎨 button, anything else the ✨ black-and-white one.
-function pvcRun(qid, bid, colour) {
+function pvcRun(qid, bid, colour, pool) {
   if (!pvsAllowed()) { showToast('Only an author can change a question\'s picture', 'error'); return; }
-  const key = _pvcKey(qid, bid);
+  const p = pvsPoolOf(pool);
+  const key = _pvcKey(qid, bid, p);
   const job = _pvcJobs.get(key);
   if (job && (job.state === 'running' || job.state === 'queued')) return;   // already on its way — whichever button started it
-  const found = pvsFind(qid);
+  const found = pvsFind(qid, p);
   const block = _pvsBlock(found, bid);
   if (!block || !block.url) { showToast('That picture is no longer on this question', 'error'); return; }
   if (!imageAiReady()) { showToast('Image AI is not available in this project', 'error'); return; }
-  _pvcJobs.set(key, { qid: String(qid), bid: String(bid), colour: colour === true, state: 'queued' });
+  _pvcJobs.set(key, { qid: String(qid), bid: String(bid), pool: p, colour: colour === true, state: 'queued' });
   _pvcWaiting.push(key);
-  pvcPaint(qid, bid);
+  pvcPaint(qid, bid, p);
   showToast((colour === true ? '🎨 Colourising' : '✨ Enhancing') + ' in the background — you can close this preview', 'info');
   _pvcPump();
 }
@@ -10343,7 +10422,7 @@ function _pvcPump() {
     if (!job || job.state !== 'queued') continue;
     job.state = 'running';
     _pvcRunning++;
-    pvcPaint(job.qid, job.bid);
+    pvcPaint(job.qid, job.bid, job.pool);
     _pvcWork(job)
       .then(() => { job.state = 'done'; job.error = ''; })
       .catch(e => {
@@ -10354,14 +10433,14 @@ function _pvcPump() {
       })
       .finally(() => {
         _pvcRunning--;
-        pvcPaint(job.qid, job.bid);
+        pvcPaint(job.qid, job.bid, job.pool);
         _pvcPump();
       });
   }
 }
 
 async function _pvcWork(job) {
-  const before = pvsFind(job.qid);
+  const before = pvsFind(job.qid, job.pool);
   const beforeBlock = _pvsBlock(before, job.bid);
   if (!beforeBlock || !beforeBlock.url) throw new Error('that picture is no longer on the question');
   const sourceUrl = beforeBlock.url;
@@ -10378,12 +10457,25 @@ async function _pvcWork(job) {
   // Re-resolve: twenty seconds have passed, and `questionBank` is re-assigned
   // wholesale elsewhere. Writing into the object captured above would be a
   // write nothing on screen ever reflects.
-  const found = pvsFind(job.qid);
+  const found = pvsFind(job.qid, job.pool);
   const block = _pvsBlock(found, job.bid);
   if (!found || !block) throw new Error('that question has gone since the colourising started');
   // Set ONCE — colourising twice must not lose the original scan.
   if (!block.preColourUrl && sourceUrl) block.preColourUrl = sourceUrl;
   block.url = url;
+
+  // 🗂️ A Custom Paper's question is not in the bank, so there is no document to
+  // write and no ✅ Check Questions queue to go to the front of: `_cpbCommit`
+  // is that page's only writer and the picture rides the paper to it. The
+  // draft mirror is the durable half; the paper in memory already has it.
+  if (found.where === PVS_POOL_CPB) {
+    try { _cpbDraftSave(); } catch (e) { console.warn('custom paper draft:', e); }
+    try { pvsPaint(job.qid, job.bid, block, job.pool); } catch (_) {}
+    try { _pvcSwapImages(job.qid, job.bid, url, job.pool); } catch (_) {}
+    showToast((job.colour === true ? '🎨 Colourised' : '✨ Enhanced') + ' — kept on this paper', 'success');
+    return;
+  }
+
   _pvcMarkRecheck(found.q, job.colour === true ? 'colour' : 'enhance');
 
   const ok = found.where === 'vetting'
@@ -10393,8 +10485,8 @@ async function _pvcWork(job) {
     block.url = sourceUrl;   // the screen must not claim a picture the database refused
     throw new Error('the regenerated picture could not be saved');
   }
-  try { pvsPaint(job.qid, job.bid, block); } catch (_) {}
-  try { _pvcSwapImages(job.qid, job.bid, url); } catch (_) {}
+  try { pvsPaint(job.qid, job.bid, block, job.pool); } catch (_) {}
+  try { _pvcSwapImages(job.qid, job.bid, url, job.pool); } catch (_) {}
   try { _cqUpdateBadge(); } catch (_) {}
   showToast((job.colour === true ? '🎨 Colourised' : '✨ Enhanced') + ' and saved — it is at the top of ✅ Check Questions', 'success');
 }
@@ -10417,9 +10509,9 @@ function _pvcMarkRecheck(q, why) {
 // Swap the <img> on every copy on the page, here and in any exported-preview
 // iframe. The write has already landed, so this is only so the teacher sees it
 // without reopening anything.
-function _pvcSwapImages(qid, bid, url) {
+function _pvcSwapImages(qid, bid, url, pool) {
   const esc = v => (CSS && CSS.escape ? CSS.escape(String(v)) : String(v));
-  const sel = `[data-pvs-q="${esc(qid)}"][data-pvs-b="${esc(bid)}"] img`;
+  const sel = `[data-pvs-q="${esc(qid)}"][data-pvs-b="${esc(bid)}"]` + _pvsPoolSel(pool, 'data-pvs-pool') + ' img';
   const docs = [document];
   try { document.querySelectorAll('iframe').forEach(f => { try { if (f.contentDocument) docs.push(f.contentDocument); } catch (_) {} }); } catch (_) {}
   const next = transformImageUrl(url);
@@ -10428,14 +10520,21 @@ function _pvcSwapImages(qid, bid, url) {
 
 // ↩ Put the original back. The colourisation is the thing being vetted, so
 // rejecting it has to be one press — and it is what `preColourUrl` is for.
-async function pvcRevert(qid, bid) {
+async function pvcRevert(qid, bid, pool) {
   if (!pvsAllowed()) return;
-  const found = pvsFind(qid);
+  const found = pvsFind(qid, pool);
   const block = _pvsBlock(found, bid);
   if (!found || !block || !block.preColourUrl) { showToast('There is no earlier picture to go back to', 'error'); return; }
   const colourised = block.url, original = block.preColourUrl;
   block.url = original;
   delete block.preColourUrl;
+  if (found.where === PVS_POOL_CPB) {
+    try { _cpbDraftSave(); } catch (e) { console.warn('custom paper draft:', e); }
+    _pvcJobs.delete(_pvcKey(qid, bid, pool));
+    try { pvcPaint(qid, bid, pool); _pvcSwapImages(qid, bid, block.url, pool); } catch (_) {}
+    showToast('Original picture restored', 'success');
+    return;
+  }
   const ok = found.where === 'vetting'
     ? await saveVettingQuestion(found.q)
     : await saveQuestion(found.q, { quiet: true });
@@ -10447,8 +10546,8 @@ async function pvcRevert(qid, bid) {
     showToast('Could not put the original picture back — try again', 'error');
     return;
   }
-  _pvcJobs.delete(_pvcKey(qid, bid));
-  try { pvcPaint(qid, bid); _pvcSwapImages(qid, bid, block.url); } catch (_) {}
+  _pvcJobs.delete(_pvcKey(qid, bid, pool));
+  try { pvcPaint(qid, bid, pool); _pvcSwapImages(qid, bid, block.url, pool); } catch (_) {}
   showToast('Original picture restored', 'success');
 }
 
@@ -10520,16 +10619,18 @@ let _pvoUndo = [];             // [{ qid, index, block, kw, blanks }] — remove
 // The opening tag of one element's wrapper, as `buildWorksheetHtml` emits it
 // when asked to (`opts.blockTags`). Empty for a question or block with no id —
 // a bar that cannot name what it moves is a button that does nothing.
-function pvoWrapOpen(q, block) {
+function pvoWrapOpen(q, block, pool) {
   if (!q || q.id == null || q.id === '' || !block || !block.id) return '';
-  return `<div class="pvo-blk" style="display:contents" data-pvo-q="${escapeHtml(String(q.id))}" data-pvo-b="${escapeHtml(String(block.id))}">`;
+  const p = pvsPoolOf(pool);
+  return `<div class="pvo-blk" style="display:contents" data-pvo-q="${escapeHtml(String(q.id))}" data-pvo-b="${escapeHtml(String(block.id))}"`
+    + (p ? ` data-pvo-pool="${escapeHtml(p)}"` : '') + `>`;
 }
 
 // One move. Returns true when something actually moved, so a key press that
 // did nothing (the top element, ↑) leaves the page free to scroll.
-function pvoMove(qid, bid, dir) {
+function pvoMove(qid, bid, dir, pool) {
   if (!pvsAllowed()) return false;
-  const found = pvsFind(qid);
+  const found = pvsFind(qid, pool);
   if (!found) { showToast('That question is no longer here', 'error'); return false; }
   const list = Array.isArray(found.q.blocks) ? found.q.blocks : [];
   const i = list.findIndex(b => b && String(b.id) === String(bid));
@@ -10537,8 +10638,8 @@ function pvoMove(qid, bid, dir) {
   if (i < 0 || j < 0 || j >= list.length) return false;
   [list[i], list[j]] = [list[j], list[i]];
   _pvsMark(found);
-  _pvoSyncEditor(qid, list);
-  _pvoRerender(qid);
+  _pvoSyncEditor(qid, list, pool);
+  _pvoRerender(qid, pool);
   return true;
 }
 
@@ -10547,9 +10648,9 @@ function pvoMove(qid, bid, dir) {
 // editing mode, where `blocks` is the whole paper, and never when the two
 // arrays do not hold the same ids (an edit in progress there has a different
 // shape, and this pass is not the one to reconcile them).
-function _pvoSyncEditor(qid, order) {
+function _pvoSyncEditor(qid, order, pool) {
   try {
-    if (typeof currentEditingQuestion === 'undefined' || !currentEditingQuestion || String(currentEditingQuestion) !== String(qid)) return;
+    if (!_pvsEditorHolds(qid, pool)) return;
     if (typeof emActive === 'function' && emActive()) return;
     if (!Array.isArray(blocks) || blocks.length !== order.length) return;
     const byId = new Map(blocks.map(b => [String(b && b.id), b]));
@@ -10564,9 +10665,9 @@ function _pvoSyncEditor(qid, order) {
 
 // 🗑 One removal. Returns true when a block really left the question, so a
 // Delete key that did nothing leaves the page alone.
-function pvoRemove(qid, bid) {
+function pvoRemove(qid, bid, pool) {
   if (!pvsAllowed()) return false;
-  const found = pvsFind(qid);
+  const found = pvsFind(qid, pool);
   if (!found) { showToast('That question is no longer here', 'error'); return false; }
   const list = Array.isArray(found.q.blocks) ? found.q.blocks : [];
   const i = list.findIndex(b => b && String(b.id) === String(bid));
@@ -10577,13 +10678,13 @@ function pvoRemove(qid, bid) {
   }
   const [block] = list.splice(i, 1);
   const kept = _pvoForgetKeys(found.q, bid);
-  _pvoUndo.push({ qid: String(qid), index: i, block, kw: kept.kw, blanks: kept.blanks });
+  _pvoUndo.push({ qid: String(qid), pool: pvsPoolOf(pool), index: i, block, kw: kept.kw, blanks: kept.blanks });
   while (_pvoUndo.length > PVO_UNDO_MAX) _pvoUndo.shift();
   if (_pvoSel && _pvoSel.qid === String(qid) && _pvoSel.bid === String(bid)) _pvoSel = null;
   if (_pvoHover && _pvoHover.qid === String(qid) && _pvoHover.bid === String(bid)) _pvoHover = null;
   _pvsMark(found);
-  _pvoSyncEditorRemove(qid, bid);
-  _pvoRerender(qid);
+  _pvoSyncEditorRemove(qid, bid, pool);
+  _pvoRerender(qid, pool);
   showToast('Element removed — ↩ on the question puts it back (saved when this preview closes)', 'success');
   return true;
 }
@@ -10610,15 +10711,18 @@ function _pvoForgetKeys(q, bid) {
 // ↩ Put the most recently removed element of this question back where it was.
 // With no qid, the most recent removal of any question. Returns true when
 // something was restored.
-function pvoUndo(qid) {
+function pvoUndo(qid, pool) {
   if (!pvsAllowed()) return false;
+  const want = pvsPoolOf(pool);
   let k = -1;
   for (let n = _pvoUndo.length - 1; n >= 0; n--) {
-    if (qid == null || String(_pvoUndo[n].qid) === String(qid)) { k = n; break; }
+    // The pool is part of the identity: a bank question and a 🗂️ Custom Paper's
+    // copy of it share an id, so ↩ on one must not put the other's block back.
+    if ((qid == null || String(_pvoUndo[n].qid) === String(qid)) && pvsPoolOf(_pvoUndo[n].pool) === want) { k = n; break; }
   }
   if (k < 0) return false;
   const entry = _pvoUndo[k];
-  const found = pvsFind(entry.qid);
+  const found = pvsFind(entry.qid, entry.pool);
   if (!found) { _pvoUndo.splice(k, 1); showToast('That question is no longer here', 'error'); return false; }
   const list = Array.isArray(found.q.blocks) ? found.q.blocks : (found.q.blocks = []);
   // The block may have come back some other way (an edit saved meanwhile) —
@@ -10642,8 +10746,8 @@ function pvoUndo(qid) {
   } catch (_) {}
   _pvoUndo.splice(k, 1);
   _pvsMark(found);
-  _pvoSyncEditorRestore(entry.qid, entry, at);
-  _pvoRerender(entry.qid);
+  _pvoSyncEditorRestore(entry.qid, entry, at, entry.pool);
+  _pvoRerender(entry.qid, entry.pool);
   showToast('Element put back', 'success');
   return true;
 }
@@ -10651,9 +10755,9 @@ function pvoUndo(qid) {
 // The editor, if this very question is open in it, drops the same block — and
 // its keyword marks, through the editor's own `kwForgetBlock`. Same terms as
 // a move: never in ✏️ editing mode, where `blocks` is the whole paper.
-function _pvoSyncEditorRemove(qid, bid) {
+function _pvoSyncEditorRemove(qid, bid, pool) {
   try {
-    if (typeof currentEditingQuestion === 'undefined' || !currentEditingQuestion || String(currentEditingQuestion) !== String(qid)) return;
+    if (!_pvsEditorHolds(qid, pool)) return;
     if (typeof emActive === 'function' && emActive()) return;
     if (!Array.isArray(blocks)) return;
     const i = blocks.findIndex(b => b && String(b.id) === String(bid));
@@ -10667,9 +10771,9 @@ function _pvoSyncEditorRemove(qid, bid) {
 // …and gets the block back on an undo, as a COPY: the editor's own array must
 // never share an object with the bank's, or a keystroke there edits the bank
 // before Save.
-function _pvoSyncEditorRestore(qid, entry, at) {
+function _pvoSyncEditorRestore(qid, entry, at, pool) {
   try {
-    if (typeof currentEditingQuestion === 'undefined' || !currentEditingQuestion || String(currentEditingQuestion) !== String(qid)) return;
+    if (!_pvsEditorHolds(qid, pool)) return;
     if (typeof emActive === 'function' && emActive()) return;
     if (!Array.isArray(blocks) || !entry || !entry.block) return;
     if (blocks.some(b => b && String(b.id) === String(entry.block.id))) return;
@@ -10680,13 +10784,19 @@ function _pvoSyncEditorRestore(qid, entry, at) {
 }
 
 // Whether ↩ has anything to offer on this question's bars.
-function _pvoCanUndo(qid) {
-  return _pvoUndo.some(e => String(e.qid) === String(qid));
+function _pvoCanUndo(qid, pool) {
+  const want = pvsPoolOf(pool);
+  return _pvoUndo.some(e => String(e.qid) === String(qid) && pvsPoolOf(e.pool) === want);
 }
 
 // Every surface showing this question redraws from `q.blocks`: the 👁 peek
 // rewrites its frame, the A4 preview re-plans.
-function _pvoRerender(qid) {
+function _pvoRerender(qid, pool) {
+  // 🗂️ On a Custom Paper the change is on the paper itself, so the draft mirror
+  // is the durable half — `_cpbCommit` is still the only thing that reaches the
+  // bank. Deliberately no `cpbRender()`: it rebuilds the rows and hides an open
+  // 👁 peek, which is the surface the button was pressed on.
+  if (pvsPoolOf(pool) === PVS_POOL_CPB) { try { _cpbDraftSave(); } catch (e) { console.warn('custom paper draft:', e); } }
   try {
     if (typeof _vetPrintPeek !== 'undefined' && _vetPrintPeek && _vetPrintPeek.qid != null && String(_vetPrintPeek.qid) === String(qid) && typeof _vetPrintPeekRefresh === 'function') _vetPrintPeekRefresh();
   } catch (e) { console.warn('peek re-render', e); }
@@ -10705,7 +10815,7 @@ function _pvoTarget() {
   const cand = _pvoSel || _pvoHover;
   if (!cand) return null;
   const esc = v => String(v).replace(/"/g, '\\"');
-  const sel = '[data-pvo-q="' + esc(cand.qid) + '"][data-pvo-b="' + esc(cand.bid) + '"]';
+  const sel = '[data-pvo-q="' + esc(cand.qid) + '"][data-pvo-b="' + esc(cand.bid) + '"]' + _pvsPoolSel(cand.pool, 'data-pvo-pool');
   const shown = pvsDocs().some(d => { try { return !!d.querySelector(sel); } catch (_) { return false; } });
   return shown ? cand : null;
 }
@@ -10722,29 +10832,29 @@ function pvoKeydown(e) {
   // whatever else wanted it.
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (key === 'z' || key === 'Z')) {
     const cand = _pvoSel || _pvoHover;
-    if (!cand || !_pvoCanUndo(cand.qid) || !_pvoQuestionShown(cand.qid)) return;
-    if (pvoUndo(cand.qid)) { e.preventDefault(); e.stopPropagation(); }
+    if (!cand || !_pvoCanUndo(cand.qid, cand.pool) || !_pvoQuestionShown(cand.qid, cand.pool)) return;
+    if (pvoUndo(cand.qid, cand.pool)) { e.preventDefault(); e.stopPropagation(); }
     return;
   }
   if (e.altKey || e.ctrlKey || e.metaKey) return;
   if (key === 'Delete') {
     const pick = _pvoTarget();
     if (!pick) return;
-    if (pvoRemove(pick.qid, pick.bid)) { e.preventDefault(); e.stopPropagation(); }
+    if (pvoRemove(pick.qid, pick.bid, pick.pool)) { e.preventDefault(); e.stopPropagation(); }
     return;
   }
   if (key !== 'ArrowUp' && key !== 'ArrowDown') return;
   const pick = _pvoTarget();
   if (!pick) return;
-  if (pvoMove(pick.qid, pick.bid, key === 'ArrowDown' ? 1 : -1)) { e.preventDefault(); e.stopPropagation(); }
+  if (pvoMove(pick.qid, pick.bid, key === 'ArrowDown' ? 1 : -1, pick.pool)) { e.preventDefault(); e.stopPropagation(); }
 }
 
 // Whether any element of this question is on a screen right now — the undo
 // key's own version of `_pvoTarget`, which asks about one BLOCK (and the
 // removed block is, by definition, no longer there).
-function _pvoQuestionShown(qid) {
+function _pvoQuestionShown(qid, pool) {
   const esc = v => String(v).replace(/"/g, '\\"');
-  const sel = '[data-pvo-q="' + esc(qid) + '"]';
+  const sel = '[data-pvo-q="' + esc(qid) + '"]' + _pvsPoolSel(pool, 'data-pvo-pool');
   return pvsDocs().some(d => { try { return !!d.querySelector(sel); } catch (_) { return false; } });
 }
 
@@ -10758,13 +10868,14 @@ function _pvoBindKeys(doc) {
 
 // Click an element to select it: the outline says which one the keys will
 // move. Clicking the selected one again clears it.
-function pvoSelect(doc, qid, bid) {
-  const same = _pvoSel && String(_pvoSel.qid) === String(qid) && String(_pvoSel.bid) === String(bid);
-  _pvoSel = same ? null : { qid: String(qid), bid: String(bid) };
+function pvoSelect(doc, qid, bid, pool) {
+  const p = pvsPoolOf(pool);
+  const same = _pvoSel && String(_pvoSel.qid) === String(qid) && String(_pvoSel.bid) === String(bid) && pvsPoolOf(_pvoSel.pool) === p;
+  _pvoSel = same ? null : { qid: String(qid), bid: String(bid), pool: p };
   pvsDocs().forEach(d => { try { d.querySelectorAll('.pvo-sel').forEach(el => el.classList.remove('pvo-sel')); } catch (_) {} });
   if (_pvoSel) {
     const esc = v => String(v).replace(/"/g, '\\"');
-    const sel = '[data-pvo-q="' + esc(qid) + '"][data-pvo-b="' + esc(bid) + '"]';
+    const sel = '[data-pvo-q="' + esc(qid) + '"][data-pvo-b="' + esc(bid) + '"]' + _pvsPoolSel(p, 'data-pvo-pool');
     pvsDocs().forEach(d => { try { d.querySelectorAll(sel).forEach(w => { const h = w.firstElementChild; if (h) h.classList.add('pvo-sel'); }); } catch (_) {} });
   }
 }
@@ -10779,9 +10890,10 @@ function pvoDecorateDoc(doc) {
     let any = false;
     doc.querySelectorAll('[data-pvo-q][data-pvo-b]').forEach(wrap => {
       const qid = wrap.getAttribute('data-pvo-q'), bid = wrap.getAttribute('data-pvo-b');
+      const pool = pvsPoolOf(wrap.getAttribute('data-pvo-pool'));
       const host = wrap.firstElementChild;
       if (!host || host.querySelector('[data-pvo-bar]')) return;
-      const found = pvsFind(qid);
+      const found = pvsFind(qid, pool);
       const list = (found && Array.isArray(found.q.blocks)) ? found.q.blocks : [];
       const i = list.findIndex(b => b && String(b.id) === String(bid));
       if (i < 0) return;
@@ -10790,32 +10902,35 @@ function pvoDecorateDoc(doc) {
       const bar = doc.createElement('div');
       bar.className = 'pvo-bar';
       bar.setAttribute('data-pvo-bar', '1');
-      bar.title = 'Move this element up or down, or take it off the question — saved when this preview closes. Click an element and press ↑ / ↓ to move it, or Delete to remove it, from the keyboard.';
-      const canUndo = _pvoCanUndo(qid);
+      bar.title = (pool === PVS_POOL_CPB
+        ? 'Move this element up or down, or take it off the question — kept on this paper (nothing reaches the question bank until you press Send).'
+        : 'Move this element up or down, or take it off the question — saved when this preview closes.')
+        + ' Click an element and press ↑ / ↓ to move it, or Delete to remove it, from the keyboard.';
+      const canUndo = _pvoCanUndo(qid, pool);
       bar.innerHTML = `<button type="button" class="pvo-btn" data-pvo-act="up" aria-label="Move this element up" title="Move up (↑)"${i === 0 ? ' disabled' : ''}>▲</button>` +
         `<button type="button" class="pvo-btn" data-pvo-act="down" aria-label="Move this element down" title="Move down (↓)"${i >= list.length - 1 ? ' disabled' : ''}>▼</button>` +
         `<button type="button" class="pvo-btn pvo-del" data-pvo-act="del" aria-label="Remove this element from the question" title="Remove this element (Delete)"${list.length <= 1 ? ' disabled' : ''}>🗑</button>` +
         (canUndo ? `<button type="button" class="pvo-btn pvo-undo" data-pvo-act="undo" aria-label="Put the last removed element back" title="Put the last removed element back (Ctrl+Z)">↩</button>` : '');
       const bind = (name, dir) => {
         const el = bar.querySelector('[data-pvo-act="' + name + '"]');
-        if (el) el.onclick = e => { e.stopPropagation(); e.preventDefault(); _pvoSel = { qid: String(qid), bid: String(bid) }; pvoMove(qid, bid, dir); };
+        if (el) el.onclick = e => { e.stopPropagation(); e.preventDefault(); _pvoSel = { qid: String(qid), bid: String(bid), pool }; pvoMove(qid, bid, dir, pool); };
       };
       bind('up', -1);
       bind('down', 1);
       const del = bar.querySelector('[data-pvo-act="del"]');
-      if (del) del.onclick = e => { e.stopPropagation(); e.preventDefault(); pvoRemove(qid, bid); };
+      if (del) del.onclick = e => { e.stopPropagation(); e.preventDefault(); pvoRemove(qid, bid, pool); };
       const undo = bar.querySelector('[data-pvo-act="undo"]');
-      if (undo) undo.onclick = e => { e.stopPropagation(); e.preventDefault(); pvoUndo(qid); };
+      if (undo) undo.onclick = e => { e.stopPropagation(); e.preventDefault(); pvoUndo(qid, pool); };
       bar.addEventListener('pointerdown', e => e.stopPropagation());
       host.appendChild(bar);
-      host.addEventListener('pointerenter', () => { _pvoHover = { qid: String(qid), bid: String(bid) }; });
+      host.addEventListener('pointerenter', () => { _pvoHover = { qid: String(qid), bid: String(bid), pool }; });
       host.addEventListener('pointerleave', () => { if (_pvoHover && _pvoHover.qid === String(qid) && _pvoHover.bid === String(bid)) _pvoHover = null; });
       host.addEventListener('click', e => {
         // A press on a pill or on the bar itself is its own action, not a select.
         if (e.target && e.target.closest && e.target.closest('[data-pvs-bar],[data-pvo-bar]')) return;
-        pvoSelect(doc, qid, bid);
+        pvoSelect(doc, qid, bid, pool);
       });
-      if (_pvoSel && _pvoSel.qid === String(qid) && _pvoSel.bid === String(bid)) host.classList.add('pvo-sel');
+      if (_pvoSel && _pvoSel.qid === String(qid) && _pvoSel.bid === String(bid) && pvsPoolOf(_pvoSel.pool) === pool) host.classList.add('pvo-sel');
       any = true;
     });
     if (any) {
@@ -36868,6 +36983,11 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   // (`pvoWrapOpen`, display:contents — no box, so nothing measured changes).
   // Only a PREVIEW asks for it; the printed sheet never carries the tags.
   const blockTags = !!(opts && opts.blockTags);
+  // 🗂️ Which POOL these questions were read out of, stamped onto every picture
+  // wrapper and every ▲▼ wrapper so the pill and the bar write back to the
+  // object the sheet was built from. Absent (the ordinary case) is the bank
+  // chain and the markup is byte-for-byte what it was — see PVS_POOL_CPB.
+  const pvsPool = pvsPoolOf(opts && opts.pvsPool);
   // sectionHtmlById: map of question id → learning-objective banner HTML. The
   // banner is emitted as its OWN chunk immediately before that question, so the
   // packer can key a forced page break on it (data-qid "__lo__<qid>") — used by
@@ -36959,7 +37079,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             break;
           }
           case 'image': {
-            if (block.url) qHtml += `<div class="print-text-block"${pvsWrapAttrs(q, block)}><img${imgPrintAttr(block, bigImgs)} src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="${imgSizeStyle(block)}"></div>`;
+            if (block.url) qHtml += `<div class="print-text-block"${pvsWrapAttrs(q, block, pvsPool)}><img${imgPrintAttr(block, bigImgs)} src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="${imgSizeStyle(block)}"></div>`;
             break;
           }
           case 'answer': {
@@ -37041,7 +37161,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
         // ▲▼ Wrap whatever this element put on the SHEET (an explanation or an
         // answer key pushes to the key, not here, and gets no bar).
         if (blockTags && qHtml.length > atBlock) {
-          const open = pvoWrapOpen(q, block);
+          const open = pvoWrapOpen(q, block, pvsPool);
           if (open) qHtml = qHtml.slice(0, atBlock) + open + qHtml.slice(atBlock) + '</div>';
         }
       });
@@ -38257,10 +38377,16 @@ function _wsPreviewCtx() {
     };
   }
   if (_wsPreviewAdhoc) {
+    const src = _wsPreviewAdhoc.source;
     return {
       saved: false, adhoc: true,
-      selected: _wsPreviewAdhoc.questions || [],
+      selected: _wsAdhocQuestions(_wsPreviewAdhoc),
       title: _wsPreviewAdhoc.title || 'Preview',
+      // 🗂️ `custompaper` is the whole unsent paper and `cpbq` is one question
+      // off it; both are drawn from `_cpbQuestions`, so the pill and the bars
+      // must write there — never into the bank, which nothing on that page may
+      // touch until Send.
+      pool: (src === 'custompaper' || src === 'cpbq') ? PVS_POOL_CPB : '',
       // No cover and no name/date/class strip: this is a proof of one question
       // or a handful, not a worksheet being handed out.
       cover: false, noFields: true,
@@ -38318,6 +38444,28 @@ function openWorksheetPreview() {
 // `custompaper`, which means the WHOLE paper and is what `printFromPreview`
 // sends back to `cpbPrint()` — collapse the two and pressing 🖨 on a proof of
 // question 7 prints all forty, covers and all.
+// 🗂️ The questions an ad-hoc preview should actually RENDER and PRINT.
+//
+// `cpbPreviewQuestion` deep-copies before it previews, so the preview can never
+// write back into the paper by rendering. That copy is frozen the moment it is
+// taken — and the − / + pill, 🎨 / ✨ and the ▲▼ bars all edit the LIVE question
+// on `_cpbQuestions`. Rendering the copy would show the change nowhere: the
+// re-plan would redraw the old size and 🖨 would print it.
+//
+// So a cpb preview is resolved by id at render time, exactly as the 👁 peek
+// already resolves through `_vetPeekQuestion` on every refresh. A question that
+// has since left the paper keeps the held copy — it is still a true picture of
+// what was previewed, where an empty sheet would read as a failure.
+function _wsAdhocQuestions(a) {
+  const list = (a && a.questions) || [];
+  const src = a && a.source;
+  if (src !== 'cpbq' && src !== 'custompaper') return list;
+  return list.map(q => {
+    if (!q || q.id == null) return q;
+    const found = pvsFind(q.id, PVS_POOL_CPB);
+    return found ? found.q : q;
+  });
+}
 function previewQuestionsPrint(questions, title, source) {
   const list = (questions || []).filter(Boolean);
   if (!list.length) { showToast('There is nothing to preview', 'error'); return; }
@@ -38539,7 +38687,10 @@ function _vetPrintPeekRender(host, q, scope, serial) {
       objectivesBoxAll: objBoxPrintOn('bank'),
       // ▲▼ every element wears its order tags, so the pack can hang the move
       // buttons on it. A display:contents wrapper: no box, same pagination.
-      blockTags: true
+      blockTags: true,
+      // 🗂️ The eye's own scope decides the pool: `cpb` is a 🗂️ Custom Paper's
+      // question, which lives on the paper and not in the bank.
+      pvsPool: scope === 'cpb' ? PVS_POOL_CPB : ''
     });
     _wsWritePreview(frame, html, { readOnly: true,
       isCurrent: () => serial === _vetPrintPeekSerial && host.isConnected,
@@ -38739,7 +38890,7 @@ function printFromPreview() {
     // the WHOLE-paper source alone: 'cpbq' is one question off that paper and
     // must fall through, or its 🖨 prints the entire booklet set instead.
     if (a.source === 'custompaper') { cpbPrint(); return; }
-    printQuestionsDirect(a.questions, a.title);
+    printQuestionsDirect(_wsAdhocQuestions(a), a.title);
     return;
   }
   if (_wsPreviewSaved) { reprintWorksheet(_wsPreviewSaved.id); return; }
@@ -38784,7 +38935,11 @@ function _wsPreviewBuildHtml(ctx, opts) {
     // the pagination is still exactly what will print. The export passes
     // `noTags`: nothing may be hung on a page that is about to be photographed.
     blockTags: pvsAllowed() && !o.noTags
-  }, ctx.buildOpts || {}));
+    // 🗂️ …and which pool the questions came out of, so a Custom Paper's own
+    // question is edited on the PAPER rather than in the bank. It goes AFTER
+    // `ctx.buildOpts`, which is assigned over this base: the pool decides which
+    // object a press writes to, so it is not a preference a caller may override.
+  }, ctx.buildOpts || {}, { pvsPool: ctx.pool || '' }));
 }
 // Shared by the full exported view and the Vetting eye. The hover supplies an
 // isolated read-only context, so it cannot change the open worksheet's tools,

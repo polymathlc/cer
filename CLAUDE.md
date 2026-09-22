@@ -5794,6 +5794,81 @@ PREVIEWS a question — the past-paper hover, the bank hover in the attach picke
   question somewhere.
 - Run **`node tools/preview-picture-size-tests.mjs`** after touching any of it.
 
+## 🗂️ WHICH POOL A PICTURE BELONGS TO — the preview controls on a Custom Paper (v1.412.0)
+
+`PVS_POOL_CPB` / `pvsPoolOf` / **`pvsFind(qid, pool)`** / `_pvsPoolSel` /
+**`_pvsEditorHolds`**, the `pool` argument on `pvsWrapAttrs` / `pvoWrapOpen` /
+`pvsBarHtml` / `_pvsButtonsHtml` / `pvsWraps` / `pvsPaint` / `pvsStep` /
+`pvsReset` / `_pvcKey` / `pvcPaint` / `pvcRun` / `pvcRevert` / `_pvcSwapImages` /
+`pvoMove` / `pvoRemove` / `pvoUndo` / `_pvoCanUndo` / `pvoSelect` / `_pvoTarget`
+/ `_pvoQuestionShown` / the three `_pvoSyncEditor*`, the `where === PVS_POOL_CPB`
+branch of **`_pvsFlushRun`** and of **`_pvcWork`**, `opts.pvsPool` on
+**`buildWorksheetHtml`**, `ctx.pool` in **`_wsPreviewCtx`**, the `pvsPool` in
+`_wsPreviewBuildHtml` and in `_vetPrintPeekRender`, and **`_wsAdhocQuestions`**
+(search `WHICH POOL A PICTURE BELONGS TO`).
+
+🔍± the size pill, 🎨 / ✨ the regenerate buttons and ▲▼ the order bars now reach
+a 🗂️ **Custom Paper**'s previews — the 👁 one-question peek, the `cpbq` full
+preview and the whole-paper one — and everything they change is kept **on the
+paper**. They were absent because `pvsFind` resolved the bank and the vetting
+list only, and a paper's question is in neither until Send.
+
+- **A QUESTION ID DOES NOT NAME ONE OBJECT, and that is the whole reason for the
+  pool.** `cpbBankAdd` deep-copies a bank question onto a paper and **KEEPS ITS
+  ID**, so one id names the live bank question AND the paper's own copy of it.
+  Resolving bank-first would send a size chosen on a paper straight into the
+  question every worksheet, quest and game in the school is serving — the one
+  thing 🗂️ Custom Paper exists never to do. Resolving cpb-first would do the
+  mirror image from an ordinary bank preview. **Neither ordering is right**, so
+  the pool is not inferred at all.
+- **IT TRAVELS IN THE MARKUP, beside `data-pvs-q` / `data-pvs-b`.**
+  `pvsWrapAttrs` and `pvoWrapOpen` stamp `data-pvs-pool` / `data-pvo-pool` when
+  the sheet was built from a paper, and the two decorators read it back off the
+  wrapper. It is decided at the moment the sheet is BUILT, by the surface that
+  knows which list it read — the same mechanism the question and block ids
+  already use, and one that cannot drift the way a call-time guess would.
+- **ABSENT IS THE BANK CHAIN, so every preview that existed before this is
+  byte-for-byte what it was** — no attribute, same markup, same measured
+  pagination, and an unknown pool falls back to that chain rather than to
+  nothing. `_pvsPoolSel` is why the default half of every wrapper selector is a
+  `:not([…])`.
+- **NOTHING ON A CUSTOM PAPER REACHES THE BANK, AND BOTH WRITERS SAY SO IN ONE
+  BRANCH EACH.** `_pvsFlushRun` and `_pvcWork` take the `PVS_POOL_CPB` branch
+  **before any write**: the edit is already on `_cpbQuestions` — the paper
+  itself — so the durable half is `_cpbDraftSave()` and nothing else.
+  `_cpbCommit` is still that page's only writer and is what stamps `holdBack` on
+  Send. A colourise there also raises **no `recheck`**: ✅ Check Questions reads
+  the bank, so queueing a question that is not in it is a card nobody can ever
+  reach.
+- **AND NO `cpbRender()` FROM EITHER.** It rebuilds the page's rows and calls
+  `vetPrintPeekHide()` — which is the very surface the button was pressed on.
+  The paper in memory is already correct; the draft is the crash net.
+- **A JOB, A DIRTY ENTRY AND AN UNDO ARE ALL KEYED BY POOL.** One `_pvcJobs` key
+  for two pools shows ⏳ on a picture nobody is regenerating; one `_pvsDirty` key
+  flushes whichever was written last into whichever pool was recorded first; one
+  `_pvoUndo` entry puts a paper's removed element back on the bank's question.
+- **`_pvsEditorHolds` IS THE ONE EDITOR TEST.** `currentEditingQuestion` is an
+  id, and both pools can hold that id — so it asks `_cpbEditActive()` as well,
+  and the editor follows a press only when it is holding that question out of
+  that pool.
+- **A CUSTOM PAPER PREVIEW RENDERS THE LIVE QUESTION** (`_wsAdhocQuestions`).
+  `cpbPreviewQuestion` deep-copies before it previews — so rendering can never
+  write back into the paper — and that copy is frozen, while the pill edits the
+  live `_cpbQuestions` entry. Rendering the copy would redraw the OLD size on
+  every re-plan and 🖨 would print it, so both `_wsPreviewCtx` and
+  `printFromPreview` resolve by id at the moment they are used, exactly as the
+  👁 peek already resolves through `_vetPeekQuestion` on every refresh. A
+  question that has since left the paper keeps the held copy.
+- **THE POOL IS ASSIGNED AFTER `ctx.buildOpts`**, which is assigned over the
+  base: it decides which object a press writes to, so it is not a preference a
+  caller may override.
+- **▲▼ AND 🗑 CAME WITH THEM, and had to.** They share `pvsFind`, so extending
+  it at all would have put those bars on a paper's preview writing into the
+  bank. They are pool-aware for exactly that reason, not as a separate feature.
+- Run **`node tools/preview-picture-size-tests.mjs`**,
+  **`node tools/custom-paper-tests.mjs`** and
+  **`node tools/vetting-export-hover-tests.mjs`** after touching any of it.
+
 ## 🏷 Every search box reads the TAGS (v1.377.0)
 
 `extractQuestionSearchText` already put `qTagList(q)` into the haystack the
@@ -7201,6 +7276,35 @@ wrong. Every one of them is silent: the app answered fluently either way.
   `rpgAwardGameQuestion` and a four-option guess is a points farm. And let the taxonomy drift
   from `polymathlc/scan` and `polymathlc/anskey` and the same habit wears three different
   animals in three apps that were meant to agree.
+- After touching **🗂️ which pool a picture belongs to** (`PVS_POOL_CPB`,
+  `pvsPoolOf`, `pvsFind`'s `pool`, `_pvsPoolSel`, `_pvsEditorHolds`, the `pool`
+  argument on any `pvs*` / `pvc*` / `pvo*` function, the `PVS_POOL_CPB` branch of
+  `_pvsFlushRun` or `_pvcWork`, `opts.pvsPool` on `buildWorksheetHtml`,
+  `ctx.pool` in `_wsPreviewCtx`, the `pvsPool` in `_wsPreviewBuildHtml` or
+  `_vetPrintPeekRender`, or `_wsAdhocQuestions`), run
+  `node tools/preview-picture-size-tests.mjs`, `node tools/custom-paper-tests.mjs`
+  **and** `node tools/vetting-export-hover-tests.mjs`. **A question id names TWO
+  objects here** — `cpbBankAdd` keeps the bank id on the paper's copy — so every
+  failure is a write landing on the wrong one, silently, with the picture
+  resizing and the sheet rendering exactly as it should. Resolve bank-first for
+  a paper and a size, a colourise or a ▲▼ move chosen while building next term's
+  mock paper **rewrites the live question every worksheet, quest and game in the
+  school is serving**; resolve cpb-first and an ordinary bank preview edits a
+  draft paper instead. Infer the pool at call time rather than reading it off
+  the wrapper and the two drift the day a fourth surface is added. Let the
+  `PVS_POOL_CPB` branch of `_pvsFlushRun` or `_pvcWork` come after a write — or
+  go — and 🗂️ Custom Paper's one promise is broken: a question reaches the bank
+  before Send, un-held-back. Raise a `recheck` on a paper question and ✅ Check
+  Questions queues a card nobody can open. Call `cpbRender()` from either and the
+  rows rebuild under the teacher, taking the open 👁 peek with them. Share one
+  `_pvcJobs`, `_pvsDirty` or `_pvoUndo` key across the two pools and a button
+  shows ⏳ for a picture nobody is regenerating, a flush files an edit under the
+  wrong pool, or ↩ puts a paper's element back on the bank's question. Drop
+  `_pvsEditorHolds` back to an id comparison and a press on a paper is written
+  into an editor holding the bank's copy of it. And stop resolving a Custom Paper
+  preview live (`_wsAdhocQuestions`) and the pill edits one object while the
+  sheet redraws a frozen copy of another — the size changes nowhere, and 🖨
+  prints the old one.
 - After touching **🔍± the preview picture size** (`pvsFind`, `pvsBarHtml`, `pvsWrapAttrs`,
   `pvsPaint`, `pvsStep`, `pvsReset`, `pvsFlush`, `pvsDecorateDoc`, `imgScaleStep`,
   `_imgRenderedPct`, the image branch of `renderQuestionBodyPreviewHtml`, either print

@@ -60,6 +60,15 @@ class El {
     if (sel[0] === '.') return this.className.split(' ').includes(sel.slice(1));
     // Any chain of [attr] / [attr="v"] — the pills, the bars and the wrappers
     // are all found by attribute.
+    // …optionally closed by the pool's own `:not([data-pv?-pool])`, which is
+    // how "the bank chain" is written: the attribute is ABSENT there, so the
+    // default half of every selector has to be a negation.
+    const not = /:not\(\[([\w-]+)\]\)$/.exec(sel);
+    if (not) {
+      if (not[1] in this.attrs) return false;
+      sel = sel.slice(0, sel.length - not[0].length);
+      if (!sel) return true;
+    }
     const parts = sel.match(/\[[^\]]+\]/g);
     if (parts && parts.join('') === sel) return parts.every(p => {
       const m = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(p);
@@ -88,8 +97,9 @@ class El {
     if (/pvs-label/.test(h)) { const l = new El('span'); l.className = 'pvs-label'; this.appendChild(l); }
   }
 }
-function wrapFor(qid, bid) {
+function wrapFor(qid, bid, pool) {
   const w = new El('div'); w.setAttribute('data-pvs-q', qid); w.setAttribute('data-pvs-b', bid);
+  if (pool) w.setAttribute('data-pvs-pool', pool);
   const img = w.appendChild(new El('img')); img.offsetWidth = 300; w.clientWidth = 500;
   const l = w.appendChild(new El('span')); l.className = 'pvs-label';
   return w;
@@ -107,7 +117,8 @@ function harness(opts) {
   const saves = [], toasts = [], replans = [];
   const state = { author: o.author !== false, bank: o.bank || [], vetting: o.vetting || [],
     read: [], gen: [], up: [], imageAi: o.imageAi, genFail: o.genFail, newUrl: o.newUrl,
-    renders: 0, refreshes: 0, peek: o.peek || null, em: !!o.em };
+    renders: 0, refreshes: 0, peek: o.peek || null, em: !!o.em,
+    paper: o.paper || [], drafts: 0, cpbEdit: !!o.cpbEdit };
   const f = new Function('document', 'window', 'setTimeout', 'clearTimeout', 'saveQuestion', 'saveVettingQuestion', 'showToast', 'renderWsPreview', 'state', `
     const escapeHtml = s => String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const _canAuthor = () => state.author;
@@ -131,12 +142,18 @@ function harness(opts) {
     const uploadImageDataUrl = async d => { state.up.push(d); return state.newUrl || 'colour.png'; };
     const imgEnhancePrompt = (colour, remark) => 'PROMPT colour=' + !!colour + ' remark=' + (remark || '');
     const _cqUpdateBadge = () => {};
+    // 🗂️ the Custom Paper pool: its own question list, its draft mirror and the
+    // editor-scope predicate the pool-aware editor sync asks.
+    let _cpbQuestions = state.paper;
+    const _cpbDraftSave = () => { state.drafts++; };
+    const _cpbEditActive = () => !!state.cpbEdit;
     ${cut('const IMG_SCALE_MIN = 20;', '// ---- How TALL a picture may print', 'the scale helpers')}
     ${cut('function _imgRenderedPct(containerId, fallback) {', '\n// + / - handler for the image size control', 'the stepper')}
     ${cut('const PVS_IDLE_MS', '\nfunction previewImage(blockId, url) {', 'the pvs block')}
     return { pvsFind, pvsBarHtml, pvsWrapAttrs, pvsStep, pvsReset, pvsFlush, pvsFlushSettled, pvsDecorateDoc, pvsPaint, dirty: _pvsDirty,
       pvcRun, pvcRevert, pvcState, pvcBusy, pvcPaint, jobs: _pvcJobs,
       pvoWrapOpen, pvoMove, pvoRemove, pvoUndo, pvoKeydown, pvoSelect, pvoDecorateDoc, get sel() { return _pvoSel; }, set sel(v) { _pvoSel = v; }, set hover(v) { _pvoHover = v; }, get undo() { return _pvoUndo; }, get kw() { return editorKeywords; },
+      pvsPoolOf, PVS_POOL_CPB,
       set author(v) { state.author = v; }, set editing(v) { currentEditingQuestion = v.id; blocks = v.blocks; }, get blocks() { return blocks; } };
   `);
   const api = f(doc, { addEventListener() {} },
@@ -154,7 +171,7 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 test('the pill renders for an author on a saved question, and for nobody else', () => {
   const h = harness({ bank: [Q('a')] });
   const html = h.api.pvsBarHtml(Q('a'), Q('a').blocks[0]);
-  ok(/pvsStep\('a','b1',-1\)/.test(html) && /pvsStep\('a','b1',1\)/.test(html) && /pvsReset\('a','b1'\)/.test(html), 'the three buttons are not wired');
+  ok(/pvsStep\('a','b1',-1,''\)/.test(html) && /pvsStep\('a','b1',1,''\)/.test(html) && /pvsReset\('a','b1',''\)/.test(html), 'the three buttons are not wired');
   ok(/event\.stopPropagation\(\)/.test(html), 'a press would also fire the chip or tile the preview sits on');
   ok(h.api.pvsBarHtml({ id: null, blocks: [] }, Q('a').blocks[0]) === '', 'a draft with no id got a pill it cannot write for');
   ok(h.api.pvsBarHtml(Q('a'), { type: 'image', url: 'x' }) === '', 'a block with no id got a pill');
@@ -181,7 +198,7 @@ test('+ and − write block.scale through the ONE stepper, and Auto DELETES the 
   ok(Math.abs(h.state.bank[0].blocks[0].scale - 0.55) < 1e-9, '− did not step back');
   h.api.pvsReset('a', 'b1');
   ok(!('scale' in h.state.bank[0].blocks[0]), 'Auto left the field behind — 0 reads as "no size chosen" to one caller and as a number to the next');
-  ok(h.api.dirty.get('a') === 'bank', 'the question was not marked dirty for the flush');
+  ok(h.api.dirty.get('bank|a') === 'bank', 'the question was not marked dirty for the flush');
 });
 
 test('with no size set the first press steps from the size ON SCREEN, floored and capped', () => {
@@ -243,7 +260,7 @@ test('a write that did not land keeps the question dirty and says so', async () 
   const h = harness({ bank: [Q('a', 0.5)], saveOk: false });
   h.api.pvsStep('a', 'b1', 1);
   await h.api.pvsFlush(); await tick();
-  ok(h.api.dirty.get('a') === 'bank', 'a refused write was forgotten — the size the teacher chose is gone on the next reload');
+  ok(h.api.dirty.get('bank|a') === 'bank', 'a refused write was forgotten — the size the teacher chose is gone on the next reload');
   ok(h.toasts.some(t => t[1] === 'error'), 'a refused write was not reported');
 });
 
@@ -303,7 +320,7 @@ test('BOTH print builders tag every picture, so the exported previews can hang a
   const a = cut('function doPrintWorksheetOpen(', '\nfunction buildWorksheetHtml(', 'doPrintWorksheetOpen');
   const b = cut('function buildWorksheetHtml(', '\nasync function _wnyRunPrepare', 'buildWorksheetHtml');
   ok(a.indexOf('class="print-text-block"${pvsWrapAttrs(q, block)}') >= 0, 'doPrintWorksheetOpen does not tag its pictures');
-  ok(b.indexOf('class="print-text-block"${pvsWrapAttrs(q, block)}') >= 0, 'buildWorksheetHtml does not tag its pictures — the 👁 hover and the A4 preview carry no pill');
+  ok(b.indexOf('class="print-text-block"${pvsWrapAttrs(q, block, pvsPool)}') >= 0, 'buildWorksheetHtml does not tag its pictures — the 👁 hover and the A4 preview carry no pill');
   ok(/pvsDecorateDoc\(doc\)/.test(cut('function _wsPreviewPack(', '\n// WORKSHEET QUICK EDIT', '_wsPreviewPack')), '_wsPreviewPack does not decorate the packed pages');
 });
 
@@ -434,8 +451,8 @@ test('the job outlives the preview: nothing in it reads the preview DOM', () => 
   }
   // It re-resolves rather than holding the question across the await, because
   // questionBank is re-read and re-assigned wholesale elsewhere.
-  ok(/const found = pvsFind\(job\.qid\);/.test(work), '_pvcWork does not re-resolve the question after the image call');
-  ok(work.indexOf('await generateCleanEnhancedImage') < work.indexOf('const found = pvsFind(job.qid)'),
+  ok(/const found = pvsFind\(job\.qid, job\.pool\);/.test(work), '_pvcWork does not re-resolve the question after the image call');
+  ok(work.indexOf('await generateCleanEnhancedImage') < work.indexOf('const found = pvsFind(job.qid, job.pool)'),
     'the re-resolve must come AFTER the image call, or it is not a re-resolve at all');
 });
 
@@ -473,7 +490,7 @@ test('the pill carries ✨ then 🎨 LAST, set apart from the free controls', ()
   ok(JSON.stringify(acts) === JSON.stringify(['minus', 'plus', 'auto', 'enhance', 'colour']),
     'the pill order changed — ✨ and 🎨 each spend an AI call and must not be where a thumb lands while sizing: ' + acts);
   ok(/pvs-colour/.test(html) && /pvs-enhance/.test(html), 'the two AI buttons have no classes of their own to set them apart');
-  ok(/pvcRun\('a','b1',false\)/.test(html) && /pvcRun\('a','b1',true\)/.test(html), 'the two buttons do not name which prompt they send');
+  ok(/pvcRun\('a','b1',false,''\)/.test(html) && /pvcRun\('a','b1',true,''\)/.test(html), 'the two buttons do not name which prompt they send');
 });
 
 // ---- the census: the queue, the doors, the guard ---------------------------
@@ -530,7 +547,7 @@ function orderOf(q) { return q.blocks.map(b => b.id).join(','); }
 test('▲▼ swaps two entries of q.blocks, marks the question dirty, and refuses the ends', () => {
   const h = harness({ bank: [Q3('a')] });
   ok(h.api.pvoMove('a', 'p1', -1) === true && orderOf(h.state.bank[0]) === 'p1,t1,m1', 'up did not move the picture above the stem: ' + orderOf(h.state.bank[0]));
-  ok(h.api.dirty.get('a') === 'bank', 'the move was not marked for the flush');
+  ok(h.api.dirty.get('bank|a') === 'bank', 'the move was not marked for the flush');
   ok(h.api.pvoMove('a', 'p1', -1) === false && orderOf(h.state.bank[0]) === 'p1,t1,m1', 'the TOP element moved up, or the no-op did not say so');
   ok(h.api.pvoMove('a', 'm1', 1) === false, 'the BOTTOM element moved down');
   ok(h.api.pvoMove('a', 't1', 1) === true && orderOf(h.state.bank[0]) === 'p1,m1,t1', 'down did not move');
@@ -648,7 +665,7 @@ test('↑ / ↓ move the selected (or hovered) element, only while it is on a sc
 test('the tags are asked for by the PREVIEWS only — the printed sheet never carries them', () => {
   const build = cut('function buildWorksheetHtml(selected, worksheetTitle, opts) {', '\nfunction _flatSyllabusLOs' , 'buildWorksheetHtml');
   ok(/const blockTags = !!\(opts && opts\.blockTags\);/.test(build), 'buildWorksheetHtml does not read the option');
-  ok(/if \(blockTags && qHtml\.length > atBlock\)/.test(build) && /pvoWrapOpen\(q, block\)/.test(build), 'the builder does not wrap each element');
+  ok(/if \(blockTags && qHtml\.length > atBlock\)/.test(build) && /pvoWrapOpen\(q, block, pvsPool\)/.test(build), 'the builder does not wrap each element');
   const render = cut('async function renderWsPreview() {', '\nfunction _wsWritePreview(', 'renderWsPreview');
   ok(/blockTags: pvsAllowed\(\)/.test(render), 'the A4 preview does not ask for the order tags');
   const peek = cut('function _vetPrintPeekRender(host, q, scope, serial) {', '\nfunction vetPrintPeekShow(', '_vetPrintPeekRender');
@@ -659,7 +676,7 @@ test('the tags are asked for by the PREVIEWS only — the printed sheet never ca
   const pack = cut('function _wsPreviewPack(doc, opts) {', '\n// WORKSHEET QUICK EDIT', '_wsPreviewPack');
   ok(/pvoDecorateDoc\(doc\);/.test(pack), 'the pack does not hang the ▲▼ bars after measuring');
   // A move rides the SAME dirty map and flush as the picture size.
-  const move = cut('function pvoMove(qid, bid, dir) {', '\n// The editor, if this very question', 'pvoMove');
+  const move = cut('function pvoMove(qid, bid, dir, pool) {', '\n// The editor, if this very question', 'pvoMove');
   ok(/_pvsMark\(found\)/.test(move) && move.indexOf('saveQuestion') < 0, 'a move writes on its own instead of riding the one flush');
 });
 
@@ -678,8 +695,8 @@ test('🖨 Preview Exported reaches the pill and the 🎨 — it is the ONE prev
   }
   // …and the 🎨 rides in the SAME pill builder, so it cannot reach one surface
   // and miss another.
-  const buttons = cut('function _pvsButtonsHtml(qid, bid, block) {', '\n// The pill as rendered INTO', '_pvsButtonsHtml');
-  ok(/_pvcButtonHtml\(qid, bid\)/.test(buttons), 'the colour button is not in the shared pill — it would reach some previews and not others');
+  const buttons = cut('function _pvsButtonsHtml(qid, bid, block, pool) {', '\n// The pill as rendered INTO', '_pvsButtonsHtml');
+  ok(/_pvcButtonHtml\(qid, bid, pool\)/.test(buttons), 'the colour button is not in the shared pill — it would reach some previews and not others');
 });
 
 // ---- 🗑 taking an element off, from a preview ---------------------------------
@@ -688,7 +705,7 @@ const Q3K = id => Object.assign(Q3(id), { answerKeywords: { p1: { 2: true }, p1_
 test('🗑 splices the block out of q.blocks, takes its keywords and blanks with it, and rides the flush', () => {
   const h = harness({ bank: [Q3K('a')] });
   ok(h.api.pvoRemove('a', 'p1') === true && orderOf(h.state.bank[0]) === 't1,m1', 'the picture did not leave the question: ' + orderOf(h.state.bank[0]));
-  ok(h.api.dirty.get('a') === 'bank', 'the removal was not marked for the flush');
+  ok(h.api.dirty.get('bank|a') === 'bank', 'the removal was not marked for the flush');
   ok(h.saves.length === 0, 'a removal wrote on the press — it must ride the flush');
   const kw = h.state.bank[0].answerKeywords;
   ok(!('p1' in kw) && !('p1_claim' in kw), 'the removed block\'s keyword marks were left behind — they come back on the next block given that id');
@@ -716,7 +733,7 @@ test('↩ puts the removed element back where it was, keywords and blanks includ
   ok(h.state.bank[0].answerKeywords.p1 && h.state.bank[0].answerKeywords.p1_claim, 'the keywords did not come back with the block');
   ok(h.state.bank[0].blanks.p1, 'the blanks did not come back with the block');
   ok(h.api.undo.length === 0 && h.api.pvoUndo('a') === false, 'the same removal could be undone twice');
-  ok(h.api.dirty.get('a') === 'bank', 'the undo was not marked for the flush');
+  ok(h.api.dirty.get('bank|a') === 'bank', 'the undo was not marked for the flush');
   // Removed from the END, undone after the list shrank further: clamped, never past the end.
   const e = harness({ bank: [Q3('b')] });
   e.api.pvoRemove('b', 'm1'); e.api.pvoRemove('b', 'p1');
@@ -795,12 +812,173 @@ test('the bar carries 🗑 (disabled on a lone block) and ↩ only once somethin
 });
 
 test('a removal rides the same flush, and the harness pins the write-free press', () => {
-  const rm = cut('function pvoRemove(qid, bid) {', '\n// The keyword marks and the blanks', 'pvoRemove');
+  const rm = cut('function pvoRemove(qid, bid, pool) {', '\n// The keyword marks and the blanks', 'pvoRemove');
   ok(/_pvsMark\(found\)/.test(rm) && rm.indexOf('saveQuestion') < 0, 'a removal writes on its own instead of riding the one flush');
   ok(/list\.length <= 1/.test(rm), 'the last-block guard is gone');
   const dec = cut('function pvoDecorateDoc(doc) {', '\n\nfunction previewImage(blockId, url) {', 'pvoDecorateDoc');
   ok(/data-pvo-act="del"/.test(dec) && /'\[data-pvo-act="del"\]'/.test(dec), 'the decorator does not bind 🗑 by action');
   ok(/pvoRemove/.test(dec) && /pvoUndo/.test(dec), 'the decorator binds no handler for 🗑 / ↩');
+});
+
+// ---- 🗂️ THE POOL — a Custom Paper's own question, edited from its preview ----
+//
+// `cpbBankAdd` deep-copies a bank question onto a paper and KEEPS ITS ID, so one
+// id names two objects at once. Every case below is a way of getting that wrong,
+// and every one of them is silent: the picture resizes, the sheet renders, and
+// the wrong object was written.
+
+const QP = id => ({ id, title: 'paper ' + id, blocks: [{ id: 'b1', type: 'image', url: 'paper.png' }, { id: 'b2', type: 'text', content: 'hi' }] });
+
+test('the pool decides WHICH object a preview writes to, and a shared id cannot cross', () => {
+  // The same id in both pools — a question picked out of the bank onto a paper.
+  const h = harness({ bank: [Q('a')], paper: [QP('a')] });
+  ok(h.api.pvsFind('a').where === 'bank', 'no pool must still be the bank chain');
+  ok(h.api.pvsFind('a', 'cpb').where === 'cpb', 'the cpb pool did not reach the paper');
+  ok(h.api.pvsFind('a', 'cpb').q !== h.api.pvsFind('a').q, 'the two pools resolved to ONE object — a size chosen on the paper would rewrite the live bank question');
+  ok(h.api.pvsFind('a', 'nonsense').where === 'bank', 'an unknown pool must fall back to the bank chain, not to nothing');
+  // …and a paper-only question is in NO other pool, which is why it had no pill.
+  const only = harness({ bank: [], paper: [QP('z')] });
+  ok(only.api.pvsFind('z') === null && only.api.pvsFind('z', 'cpb').where === 'cpb', 'a paper-only question resolved outside its pool');
+});
+
+test('a size chosen on a Custom Paper preview is written to the PAPER and never to the bank', async () => {
+  const h = harness({ bank: [Q('a')], paper: [QP('a')] });
+  h.doc.body.appendChild(wrapFor('a', 'b1', 'cpb'));
+  h.api.pvsStep('a', 'b1', 1, 'cpb');
+  ok(h.state.paper[0].blocks[0].scale === 0.65, 'the paper picture did not resize: ' + h.state.paper[0].blocks[0].scale);
+  ok(h.state.bank[0].blocks[0].scale === undefined, 'THE BANK QUESTION WAS RESIZED — a paper must never write to the bank');
+  ok(h.api.dirty.get('cpb|a') === 'cpb', 'the paper edit was not marked for the flush under its own pool');
+  ok(h.api.dirty.get('bank|a') === undefined, 'the bank was marked dirty by a paper edit');
+  await h.api.pvsFlush();
+  ok(h.saves.length === 0, 'the flush WROTE TO THE BANK — nothing on a Custom Paper may reach it until Send: ' + JSON.stringify(h.saves));
+  ok(h.state.drafts > 0, 'the paper draft was not mirrored, so a reload would lose the size');
+  ok(h.toasts.some(t => /paper/i.test(t[0])), 'the flush did not say the edit stayed on the paper');
+});
+
+test('a bank question in the same preview still writes to the bank', async () => {
+  const h = harness({ bank: [Q('a')], paper: [QP('a')] });
+  h.doc.body.appendChild(wrapFor('a', 'b1'));
+  h.api.pvsStep('a', 'b1', 1, '');
+  ok(h.state.bank[0].blocks[0].scale === 0.65 && h.state.paper[0].blocks[0].scale === undefined, 'the bank press reached the paper');
+  await h.api.pvsFlush();
+  ok(h.saves.length === 1 && h.saves[0].where === 'bank', 'the bank write did not happen');
+});
+
+test('the pill and the wrapper carry the pool, so the decorator can read it back', () => {
+  const h = harness({ bank: [Q('a')], paper: [QP('a')] });
+  const attrs = h.api.pvsWrapAttrs(QP('a'), QP('a').blocks[0], 'cpb');
+  ok(/data-pvs-pool="cpb"/.test(attrs), 'the wrapper does not name its pool — the decorator would resolve in the bank');
+  ok(h.api.pvsWrapAttrs(Q('a'), Q('a').blocks[0]).indexOf('data-pvs-pool') < 0, 'the bank wrapper grew a pool attribute — every preview that existed before must be byte-for-byte what it was');
+  const html = h.api.pvsBarHtml(QP('a'), QP('a').blocks[0], 'cpb');
+  ok(/pvsStep\('a','b1',1,'cpb'\)/.test(html) && /pvsReset\('a','b1','cpb'\)/.test(html), 'the size buttons lost the pool');
+  ok(/pvcRun\('a','b1',true,'cpb'\)/.test(html) && /pvcRun\('a','b1',false,'cpb'\)/.test(html), 'the 🎨 / ✨ buttons lost the pool');
+  ok(/paper/i.test(html), 'the paper pill does not say the edit stays on the paper');
+});
+
+test('the decorator reads the pool off each wrapper and binds it into every handler', () => {
+  const h = harness({ bank: [Q('a')], paper: [QP('a')] });
+  const w = wrapFor('a', 'b1', 'cpb');
+  h.doc.body.appendChild(w);
+  h.api.pvsDecorateDoc(h.doc);
+  const bar = w.querySelector('[data-pvs-bar]');
+  ok(!!bar, 'no pill was hung on a Custom Paper picture — which is exactly the reported fault');
+  bar.querySelector('[data-pvs-act="plus"]').onclick({ stopPropagation() {} });
+  ok(h.state.paper[0].blocks[0].scale === 0.65 && h.state.bank[0].blocks[0].scale === undefined, '+ in the decorated pill wrote to the bank');
+});
+
+test('🎨 / ✨ on a Custom Paper keeps the picture on the paper — no bank write, no ✅ recheck', async () => {
+  const h = harness({ bank: [Q('a')], paper: [QP('a')], newUrl: 'colour.png' });
+  h.doc.body.appendChild(wrapFor('a', 'b1', 'cpb'));
+  h.api.pvcRun('a', 'b1', true, 'cpb');
+  await tick(); await tick(); await tick(); await tick();
+  ok(h.state.paper[0].blocks[0].url === 'colour.png', 'the paper picture was not replaced: ' + h.state.paper[0].blocks[0].url);
+  ok(h.state.paper[0].blocks[0].preColourUrl === 'paper.png', 'the original was not kept, so ↩ could never put it back');
+  ok(h.state.bank[0].blocks[0].url === 'x.png', 'THE BANK PICTURE WAS REPLACED by a colourise run from a paper');
+  ok(h.saves.length === 0, 'the colourise wrote to the bank: ' + JSON.stringify(h.saves));
+  ok(!h.state.paper[0].recheck, 'a paper question was queued into ✅ Check Questions, which only reads the bank');
+  ok(h.state.paper[0].checked === undefined, 'a paper question was marked unchecked against a queue it is not in');
+  ok(h.state.drafts > 0, 'the regenerated picture was not mirrored to the draft');
+});
+
+test('a job is per POOL, so one id being regenerated does not disable the other', () => {
+  const h = harness({ bank: [Q('a')], paper: [QP('a')] });
+  h.api.pvcRun('a', 'b1', true, 'cpb');
+  ok(h.api.pvcState('a', 'b1', 'cpb') !== '', 'the paper job was not recorded');
+  ok(h.api.pvcState('a', 'b1', '') === '', 'the BANK button was disabled by a job on the paper — one key for two pools');
+});
+
+test('↩ Use the original picture puts a paper picture back without touching the bank', async () => {
+  const h = harness({ bank: [Q('a')], paper: [QP('a')] });
+  h.state.paper[0].blocks[0].url = 'colour.png';
+  h.state.paper[0].blocks[0].preColourUrl = 'paper.png';
+  await h.api.pvcRevert('a', 'b1', 'cpb');
+  ok(h.state.paper[0].blocks[0].url === 'paper.png' && h.state.paper[0].blocks[0].preColourUrl === undefined, 'the revert did not restore the paper picture');
+  ok(h.saves.length === 0, 'the revert wrote to the bank');
+});
+
+test('▲▼ and 🗑 on a Custom Paper move the PAPER question, and ↩ cannot cross pools', () => {
+  const h = harness({ bank: [Q3('a')], paper: [Q3('a')] });
+  ok(h.api.pvoMove('a', 'p1', -1, 'cpb') === true, 'the paper question did not reorder');
+  ok(orderOf(h.state.paper[0]) === 'p1,t1,m1', 'the paper order is wrong: ' + orderOf(h.state.paper[0]));
+  ok(orderOf(h.state.bank[0]) === 't1,p1,m1', 'THE BANK QUESTION WAS REORDERED by a paper preview');
+  ok(h.api.dirty.get('cpb|a') === 'cpb' && h.api.dirty.get('bank|a') === undefined, 'the move was marked under the wrong pool');
+  ok(h.api.pvoRemove('a', 'p1', 'cpb') === true && orderOf(h.state.paper[0]) === 't1,m1', 'the paper removal did not happen');
+  ok(orderOf(h.state.bank[0]) === 't1,p1,m1', 'the bank question lost an element to a paper removal');
+  // ↩ is pool-scoped: the bank has nothing removed, so its undo must find none.
+  ok(h.api.pvoUndo('a', '') === false, '↩ on the bank put the PAPER\'s removed element back');
+  ok(h.api.pvoUndo('a', 'cpb') === true && orderOf(h.state.paper[0]) === 'p1,t1,m1', '↩ on the paper did not restore its own element');
+});
+
+test('the editor is only synced when it holds THIS question out of THIS pool', () => {
+  const h = harness({ bank: [Q3('a')], paper: [Q3('a')], cpbEdit: false });
+  // The editor is holding the BANK's copy (cpbEdit false), so a cpb press must
+  // leave it alone — the two objects share an id and nothing else.
+  h.api.editing = { id: 'a', blocks: JSON.parse(JSON.stringify(Q3('a').blocks)) };
+  h.api.pvoMove('a', 'p1', -1, 'cpb');
+  ok(h.api.blocks.map(b => b.id).join(',') === 't1,p1,m1', 'the editor followed a paper press while it was holding the bank question');
+  const c = harness({ bank: [Q3('a')], paper: [Q3('a')], cpbEdit: true });
+  c.api.editing = { id: 'a', blocks: JSON.parse(JSON.stringify(Q3('a').blocks)) };
+  c.api.pvoMove('a', 'p1', -1, 'cpb');
+  ok(c.api.blocks.map(b => b.id).join(',') === 'p1,t1,m1', 'the editor did NOT follow a paper press while it was holding that very paper question');
+});
+
+test('the Custom Paper surfaces name the pool, and every other preview still does not', () => {
+  // The pool is declared where the sheet is BUILT, by the surface that knows
+  // which list it read — not guessed from an id that two pools can share.
+  const ctx = cut('function _wsPreviewCtx() {', '\nfunction _wsShowPreviewOverlay', '_wsPreviewCtx');
+  ok(/pool: \(src === 'custompaper' \|\| src === 'cpbq'\) \? PVS_POOL_CPB : ''/.test(ctx),
+    'the ad-hoc preview no longer names the Custom Paper pool — its pill would write into the bank');
+  const build = cut('function _wsPreviewBuildHtml(ctx, opts) {', '\nfunction _wsWritePreview(', '_wsPreviewBuildHtml');
+  ok(/pvsPool: ctx\.pool \|\| ''/.test(build), 'the one preview builder does not pass the pool on');
+  // …AFTER ctx.buildOpts, which is assigned over the base. The pool decides
+  // which object a press writes to, so it is not a caller's to override.
+  ok(build.indexOf("ctx.buildOpts || {}") < build.indexOf("pvsPool: ctx.pool"),
+    'the pool can be overridden by a caller\'s buildOpts — a Custom Paper option could send its own presses to the bank');
+  const peek = cut('function _vetPrintPeekRender(host, q, scope, serial) {', '\nfunction vetPrintPeekShow', 'peek');
+  ok(/pvsPool: scope === 'cpb' \? PVS_POOL_CPB : ''/.test(peek), 'the 👁 peek does not name the pool its scope already knows');
+  // …and a Custom Paper preview renders the LIVE question, or the pill would
+  // edit one object while the sheet redrew a frozen copy of another.
+  const resolve = cut('function _wsAdhocQuestions(a) {', '\nfunction previewQuestionsPrint(', '_wsAdhocQuestions');
+  ok(/pvsFind\(q\.id, PVS_POOL_CPB\)/.test(resolve), 'a Custom Paper preview no longer re-resolves live — a resize would redraw the old size');
+  ok(/if \(src !== 'cpbq' && src !== 'custompaper'\) return list;/.test(resolve), 'the live re-resolve reaches a pool it was not written for');
+  // …and that guard is the ONLY way out with the held list. An earlier bare
+  // `return list` leaves the guard sitting there reading perfectly while every
+  // Custom Paper preview renders the frozen copy again — which is the fault
+  // this function exists to fix, undone in a line nobody would notice.
+  ok((resolve.match(/return list;/g) || []).length === 1, 'a Custom Paper preview hands back the held copy before the live re-resolve can run');
+  const print = cut('function printFromPreview() {', '\n// The printer for an ad-hoc set', 'printFromPreview');
+  ok(/printQuestionsDirect\(_wsAdhocQuestions\(a\), a\.title\)/.test(print), '🖨 from a Custom Paper preview prints the frozen copy rather than what is on screen');
+});
+
+test('the flush can never put a Custom Paper question into the bank', () => {
+  // The source pin behind the behaviour above: one branch, before any write.
+  const flush = cut('async function _pvsFlushRun() {', '\n// Hang a pill on every picture', '_pvsFlushRun');
+  ok(/if \(where === PVS_POOL_CPB\)/.test(flush), 'the flush has no Custom Paper branch — it would call saveQuestion on a paper');
+  const before = flush.indexOf('if (where === PVS_POOL_CPB)');
+  ok(before >= 0 && before < flush.indexOf('saveVettingQuestion'), 'the Custom Paper branch comes AFTER a write — the bank would already have it');
+  const work = cut('async function _pvcWork(job) {', '\n// A regenerated picture is exactly', '_pvcWork');
+  const cpb = work.indexOf('if (found.where === PVS_POOL_CPB)');
+  ok(cpb >= 0 && cpb < work.indexOf('_pvcMarkRecheck'), 'the colourise marks a paper question for ✅ Check Questions, or writes it to the bank');
 });
 
 runAll();
