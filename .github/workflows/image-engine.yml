@@ -1,0 +1,27 @@
+name: Image generation checks
+
+on:
+  pull_request:
+    paths: ['app.js', 'index.html', 'mistakes.html', 'tools/image-engine-tests.mjs', 'tools/ai-routes-tests.mjs', 'tools/auto-diagram-tests.mjs', 'tools/paper-clean-tests.mjs', '.github/workflows/image-engine.yml']
+  push:
+    branches: [main]
+    paths: ['app.js', 'index.html', 'mistakes.html', 'tools/image-engine-tests.mjs', 'tools/ai-routes-tests.mjs', 'tools/auto-diagram-tests.mjs', 'tools/paper-clean-tests.mjs', '.github/workflows/image-engine.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  image-generation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check image routing and diagram preservation
+        run: |
+          node --check app.js
+          node tools/image-engine-tests.mjs
+          node tools/ai-routes-tests.mjs
+          node tools/auto-diagram-tests.mjs
+          node tools/paper-clean-tests.mjs

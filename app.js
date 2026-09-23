@@ -919,13 +919,12 @@ function aiRouteReport() {
      toggle. It defaults to ChatGPT Images; "Gemini image model" is there
      for the day the OpenAI account is out of credit.
 
-   THE MODEL. OpenAI released two: `gpt-image-2.5-flare` — its own default
-   choice for most applications, higher quality than gpt-image-2 at half the
-   latency — and `gpt-image-2.5-sunburst`, built for premium visual work that
-   benefits from tighter control across edits, at the cost of longer
-   generation. Both cost the same (image output US$30 / 1M tokens, image
-   input US$8 / 1M, text input US$5 / 1M). Flare is the default here; the
-   dropdown offers Sunburst for the admin who wants it on a lore plate.
+   THE MODEL. Automatic uses Sunburst for teaching diagrams and faithful
+   edits, and Flare for routine game artwork. Callers name the purpose;
+   reference pictures alone cannot identify it because artwork uses them too.
+   A concrete model chosen in settings overrides Automatic on this device.
+   Both models have the same published token rates, but that does not mean
+   an equal cost per picture. Compare quality, latency and actual usage.
 
    WHAT THE 2.5 MODELS TAKE, from OpenAI's published API spec: `quality` in
    low / medium / high / xhigh / max / auto (xhigh and max are new), a
@@ -940,26 +939,26 @@ function aiRouteReport() {
    and to no other. Every edit in this app is "keep this exact thing and
    change one aspect of it", which is what the 2.x default already does.
 
-   A DEFAULT NOBODY CHOSE IS NOT A CHOICE. The image model is written to
-   localStorage every time the AI Engine dialog is saved, so every device
-   that ever opened it is carrying `gpt-image-1` pinned in its own settings —
-   and a new default would reach none of them. `OPENAI_IMAGE_SUPERSEDED` is
-   lifted to Flare ONCE per device (`OPENAI_IMAGE_GEN`), exactly as the chat
-   model's lift works; a deliberate re-pick of a legacy model afterwards
-   sticks, because it is still in the dropdown and choosing it has to mean
-   something.
+   A DEFAULT NOBODY CHOSE IS NOT A CHOICE. Saving unrelated settings also
+   saved Flare. Move that former default to Automatic once per device, while
+   preserving Sunburst, dated snapshots and legacy re-picks made after the
+   original 2.5 migration. Historical deliberate Flare picks cannot be told
+   apart from the former default; a Flare re-pick after this migration sticks.
 
-   `polymathlc/math` and `polymathlc/anskey` carry the same block — ship a
-   change to all three together. Run tools/image-engine-tests.mjs.
+   The transport contract is shared with Maths and Anskey. This purpose
+   policy is CER-specific and sends existing supported model IDs; it needs
+   no shared callable or sibling-app change. Run tools/image-engine-tests.mjs.
    ===================================================================== */
 const OPENAI_IMAGE_DEFAULT_MODEL = 'gpt-image-2.5-flare';
+const OPENAI_IMAGE_EDUCATION_MODEL = 'gpt-image-2.5-sunburst';
+const OPENAI_IMAGE_AUTO = 'auto';
 /* The dropdown, in the order it is offered. The two 2.5 models lead; the
    older generations stay so a picture drawn under one can be redrawn under
    the same one, and because a model an admin can see in the list is a model
    they can deliberately choose. */
 const OPENAI_IMAGE_MODELS = [
-  { id: 'gpt-image-2.5-flare', label: 'ChatGPT Images 2.5 Flare — newest, fastest (recommended)' },
-  { id: 'gpt-image-2.5-sunburst', label: 'ChatGPT Images 2.5 Sunburst — extra precision on edits, slower' },
+  { id: 'gpt-image-2.5-flare', label: 'ChatGPT Images 2.5 Flare — fast artwork and drafts' },
+  { id: 'gpt-image-2.5-sunburst', label: 'ChatGPT Images 2.5 Sunburst — detailed images and precise edits' },
   { id: 'gpt-image-2', label: 'gpt-image-2 — the previous generation' },
   { id: 'gpt-image-1', label: 'gpt-image-1 — legacy' },
   { id: 'gpt-image-1-mini', label: 'gpt-image-1-mini — legacy, cheaper' }
@@ -968,13 +967,16 @@ const OPENAI_IMAGE_MODELS = [
 const OPENAI_IMAGE_25_RE = /^gpt-image-2\.5-(flare|sunburst)(-\d{4}-\d{2}-\d{2})?$/;
 /* Every image model that was only ever a DEFAULT before 2.5. */
 const OPENAI_IMAGE_SUPERSEDED = ['gpt-image-1', 'gpt-image-1-mini', 'gpt-image-1.5', 'gpt-image-2', 'gpt-image-2-2026-04-21'];
-const OPENAI_IMAGE_GEN = 'images25';
+const OPENAI_IMAGE_GEN = 'images25-purpose-v1';
 (function _openAiImageLiftDefaultOnce() {
   try {
-    if (localStorage.getItem(AI_ENGINE_STORE.imageGen) === OPENAI_IMAGE_GEN) return;
-    localStorage.setItem(AI_ENGINE_STORE.imageGen, OPENAI_IMAGE_GEN);
+    const previous = localStorage.getItem(AI_ENGINE_STORE.imageGen);
+    if (previous === OPENAI_IMAGE_GEN) return;
     const m = (localStorage.getItem(AI_ENGINE_STORE.imageModel) || '').trim();
-    if (m && OPENAI_IMAGE_SUPERSEDED.indexOf(m) >= 0) localStorage.setItem(AI_ENGINE_STORE.imageModel, OPENAI_IMAGE_DEFAULT_MODEL);
+    if (m === OPENAI_IMAGE_DEFAULT_MODEL || (previous !== 'images25' && OPENAI_IMAGE_SUPERSEDED.includes(m))) {
+      localStorage.setItem(AI_ENGINE_STORE.imageModel, OPENAI_IMAGE_AUTO);
+    }
+    localStorage.setItem(AI_ENGINE_STORE.imageGen, OPENAI_IMAGE_GEN);
   } catch (e) { /* private browsing: nothing is stored, so there is nothing to lift */ }
 })();
 /* A stored id the dropdown no longer offers is the DEFAULT, not a 404 on
@@ -984,17 +986,26 @@ function openAiImageModelKnown(id) {
   const s = String(id || '').trim();
   return OPENAI_IMAGE_MODELS.some(m => m.id === s) || OPENAI_IMAGE_25_RE.test(s);
 }
-function getOpenAiImageModel() {
+function getOpenAiImageModelChoice() {
   try {
     const m = (localStorage.getItem(AI_ENGINE_STORE.imageModel) || '').trim();
-    return openAiImageModelKnown(m) ? m : OPENAI_IMAGE_DEFAULT_MODEL;
-  } catch (e) { return OPENAI_IMAGE_DEFAULT_MODEL; }
+    return openAiImageModelKnown(m) ? m : OPENAI_IMAGE_AUTO;
+  } catch (e) { return OPENAI_IMAGE_AUTO; }
+}
+function getOpenAiImageModel(opts) {
+  const o = opts || {};
+  if (o.model && openAiImageModelKnown(o.model)) return String(o.model).trim();
+  const choice = getOpenAiImageModelChoice();
+  if (choice !== OPENAI_IMAGE_AUTO) return choice;
+  return o.purpose === 'education' ? OPENAI_IMAGE_EDUCATION_MODEL : OPENAI_IMAGE_DEFAULT_MODEL;
 }
 /* The <select> is BUILT from the list rather than typed into index.html, so
    the ids on screen and the ids the code accepts cannot drift apart. */
 function openAiImageModelOptionsHtml(selected) {
-  const cur = selected || getOpenAiImageModel();
-  return OPENAI_IMAGE_MODELS.map(m =>
+  const cur = selected || getOpenAiImageModelChoice();
+  const models = OPENAI_IMAGE_MODELS.slice();
+  if (openAiImageModelKnown(cur) && !models.some(m => m.id === cur)) models.push({ id: cur, label: cur + ' — saved snapshot' });
+  return '<option value="auto"' + (cur === OPENAI_IMAGE_AUTO ? ' selected' : '') + '>Automatic — Sunburst for teaching images; Flare for artwork (recommended)</option>' + models.map(m =>
     '<option value="' + m.id + '"' + (m.id === cur ? ' selected' : '') + '>' + escapeHtml(m.label) + '</option>').join('');
 }
 
@@ -1040,13 +1051,13 @@ function imageOpenAiPossible() {
   return !(aiEngineIsDown('imgServer') && /not-?found|failed-?precondition|not configured/i.test(_aiWhy.imgServer || ''));
 }
 /* What the Card Art tab and every "Draw N pictures with …" confirm print. */
-function imageEngineLabel() {
+function imageEngineLabel(opts) {
   const order = imageEngineOrder();
   if (!order.length) return 'no image model';
-  return order[0] === 'imgGemini' ? 'Gemini image model' : 'ChatGPT Images · ' + getOpenAiImageModel();
+  return order[0] === 'imgGemini' ? 'Gemini image model' : 'ChatGPT Images · ' + getOpenAiImageModel(opts);
 }
 /* Backwards-compatible name: the Card Art tab has always asked this. */
-function _tcgArtEngineLabel() { return imageEngineLabel(); }
+function _tcgArtEngineLabel() { return imageEngineLabel({ purpose: 'art' }); }
 
 /* ── The reference pictures, whatever shape they arrive in ─────────────
    `refDataUrl` (one data URL), `refDataUrls` (several), or `media` — the
@@ -1130,7 +1141,7 @@ function _imgQualityFor(model, quality) {
 async function openAiGenerateImageDataUrl(prompt, opts) {
   const o = opts || {};
   if (!getOpenAiKey()) throw new Error('No OpenAI API key saved on this device');
-  const model = o.model && openAiImageModelKnown(o.model) ? o.model : getOpenAiImageModel();
+  const model = getOpenAiImageModel(o);
   _imgRouteModel = model; // the id this browser's key is about to ask for
   const refs = _imgRefsFrom(o);
   const transparent = !!o.transparent;
@@ -1185,7 +1196,7 @@ async function openAiImageServer(prompt, opts) {
   if (!_aiFns) _aiFns = getFunctions(app);
   const call = httpsCallable(_aiFns, 'openAiImage', { timeout: 240000 });
   const refs = _imgRefsFrom(o);
-  const model = getOpenAiImageModel();
+  const model = getOpenAiImageModel(o);
   const res = await call({
     prompt: String(prompt == null ? '' : prompt),
     images: _imgRefsToMedia(refs),
@@ -1273,19 +1284,23 @@ function _imgRouteFault(e) {
 }
 /* Returns a data: URL. `opts`: refDataUrl | refDataUrls | media (the
    reference pictures — any of them makes this an EDIT), transparent, size,
-   quality, model, skipOpenAi. Tries every route in `imageEngineOrder` and,
+   quality, model, purpose ('education' or 'art'), skipOpenAi. Tries every
+   route in `imageEngineOrder` and,
    when all of them refuse, throws an error naming what EVERY route said —
    "Gemini refused" alone would send the teacher to the Google console when
    what actually needs doing is deploying the image function. */
 async function generateImageDataUrl(prompt, opts) {
-  const order = imageEngineOrder(opts);
+  // Resolve once: changing settings while a request is pending must not
+  // change the model when the browser-key route takes over from the server.
+  const o = Object.assign({}, opts, { model: getOpenAiImageModel(opts) });
+  const order = imageEngineOrder(o);
   if (!order.length) throw new Error('No image model is available — neither ChatGPT Images nor a Gemini image model could be reached');
   let first = null, firstRoute = '';
   for (let i = 0; i < order.length; i++) {
     const route = order[i];
     try {
       _imgRouteModel = ''; // never let a route that REFUSED leave its model on the badge
-      const out = await _imgRun(route, prompt, opts);
+      const out = await _imgRun(route, prompt, o);
       if (typeof out !== 'string' || !/^data:image\//i.test(out)) throw new Error('the image model returned no picture');
       _aiMarkUp(route);
       imageLastCall = { route, fellBack: i > 0, error: first ? _imgRefusalText(first) : '', model: _imgRouteModel, engine: route === 'imgGemini' ? 'gemini' : 'openai',
@@ -1332,7 +1347,9 @@ function imageRouteReport() {
   }
   return {
     order: order.map(r => AI_IMAGE_ROUTE_LABEL[r] || r),
-    model: getOpenAiImageModel(),
+    model: getOpenAiImageModelChoice() === OPENAI_IMAGE_AUTO
+      ? 'Automatic · Sunburst for teaching images and edits · Flare for artwork'
+      : getOpenAiImageModel(),
     setting: aiImageEngineSetting(),
     shared: !!_aiSharedImageEngine,
     notes
@@ -1532,7 +1549,7 @@ function openAiEngineSettings() {
   modelSel.value = getOpenAiModel();
   if (!modelSel.value) modelSel.value = OPENAI_DEFAULT_MODEL;   // stored model no longer offered
   const imgSel = document.getElementById('aiEngineImageModel');
-  if (imgSel) imgSel.innerHTML = openAiImageModelOptionsHtml(getOpenAiImageModel());
+  if (imgSel) imgSel.innerHTML = openAiImageModelOptionsHtml(getOpenAiImageModelChoice());
   const imgEng = aiImageEngineSetting();
   document.querySelectorAll('input[name="aiImageEngineChoice"]').forEach(r => { r.checked = r.value === imgEng; });
   document.getElementById('aiEngineKey').value = getOpenAiKey();
@@ -1627,7 +1644,7 @@ async function saveAiEngineSettings() {
   const key = (document.getElementById('aiEngineKey').value || '').trim();
   const model = document.getElementById('aiEngineModel').value || OPENAI_DEFAULT_MODEL;
   const imgSelEl = document.getElementById('aiEngineImageModel');
-  const imageModel = (imgSelEl && imgSelEl.value) || OPENAI_IMAGE_DEFAULT_MODEL;
+  const imageModel = (imgSelEl && imgSelEl.value) || OPENAI_IMAGE_AUTO;
   const kimiKeyEl = document.getElementById('aiEngineKimiKey');
   const kimiModelEl = document.getElementById('aiEngineKimiModel');
   const kimiKey = ((kimiKeyEl && kimiKeyEl.value) || '').trim();
@@ -4395,7 +4412,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.412.0';
+const APP_VERSION = 'v1.413.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -11157,7 +11174,7 @@ async function _diagramDraw(q, buildPrompt, currentUrl, regen) {
     catch (e) { console.warn('auto diagram: could not read the current diagram, drawing fresh', e); }
   }
   if (!ref) { ref = await _akdQuestionFigure(q); kind = ref ? 'question' : 'none'; }
-  const dataUrl = await generateImageDataUrl(buildPrompt(kind), { refDataUrl: ref });
+  const dataUrl = await generateImageDataUrl(buildPrompt(kind), { refDataUrl: ref, purpose: 'education' });
   // Straight through the shared paper cleaner, exactly as an enhanced scan is:
   // an image model has no flat white, so it leaves the faint weave that prints
   // as a grey wash. A refusal there hands the picture back untouched.
@@ -12204,7 +12221,7 @@ async function generateEnhancedImageDataUrl(prompt, media) {
   if (!imageAiReady()) throw new Error('AI image enhancement is not configured yet');
   const list = Array.isArray(media) ? media : [media];
   if (!list.length || !list[0] || !list[0].data) throw new Error('no image to enhance');
-  return await generateImageDataUrl(prompt, { media: list });
+  return await generateImageDataUrl(prompt, { media: list, purpose: 'education' });
 }
 
 // THE RAW GEMINI ROUTE — text only (draw something new) or text + reference
@@ -58263,7 +58280,7 @@ function _tcgTransientError(e) {
   return (e && (e.status === 429 || e.status >= 500)) || /rate limit|429|timeout|timed out|temporarily|overloaded|failed to fetch|network|503|500/i.test(msg);
 }
 async function _tcgGenOnce(prompt, refDataUrl, transparent) {
-  return await generateImageDataUrl(prompt, { refDataUrl: refDataUrl || null, transparent: !!transparent });
+  return await generateImageDataUrl(prompt, { refDataUrl: refDataUrl || null, transparent: !!transparent, purpose: 'art' });
 }
 // The words that make an image model paint the very thing we are trying to
 // avoid. "Transparent" makes it paint the editor's chequerboard; naming the
