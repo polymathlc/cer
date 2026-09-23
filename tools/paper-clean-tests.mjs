@@ -19,7 +19,7 @@
 //                kept.
 import fs from 'fs';
 
-const APP = new URL('../app.js', import.meta.url).pathname;
+const APP = new URL('../app.js', import.meta.url);
 const src = fs.readFileSync(APP, 'utf8');
 const cut = (from, to, what) => {
   const a = src.indexOf(from);
@@ -204,7 +204,7 @@ test('_BW_ENHANCE_PROMPT is never called raw', () => {
 test('the manual 🧻 tool is on the toolbar and exported to window', () => {
   // The module has its own scope, so an inline onclick with no window
   // assignment is a button that throws ReferenceError and looks dead.
-  const html = fs.readFileSync(new URL('../index.html', import.meta.url).pathname, 'utf8');
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   ok(html.indexOf('annotCleanPaper()') >= 0, 'no 🧻 button in the Touch up toolbar');
   ok(src.indexOf('window.annotCleanPaper = annotCleanPaper;') >= 0, 'annotCleanPaper is not on window');
 });

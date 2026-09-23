@@ -5,11 +5,10 @@
 // picture that came out of the wrong model looks exactly like one that did
 // not:
 //
-//  • the default model is gpt-image-2.5-flare, the dropdown leads with it,
-//    and an id the dropdown no longer offers falls back to it (not a 404 on
-//    every picture);
-//  • the one-shot LIFT: a device carrying yesterday's default (gpt-image-1)
-//    is moved to Flare ONCE, and a deliberate re-pick afterwards sticks;
+//  • automatic selection uses Sunburst for teaching diagrams and faithful
+//    edits, Flare for artwork, and honors explicit model choices;
+//  • the one-shot LIFT moves the former Flare default to automatic, keeps
+//    saved Sunburst/snapshots/legacy re-picks, and preserves later choices;
 //  • the ORDER: ChatGPT Images by the server's key, then a key in this
 //    browser, then Gemini — regardless of the TEXT engine; and Gemini first
 //    only when the admin chose it;
@@ -28,9 +27,10 @@
 //    setting is written and read, and mistakes.html has the server route.
 import fs from 'node:fs';
 
-const src = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
-const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const mistakes = fs.readFileSync(new URL('../mistakes.html', import.meta.url), 'utf8');
+const readSource = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const src = readSource('../app.js');
+const html = readSource('../index.html');
+const mistakes = readSource('../mistakes.html');
 
 function section(from, to) {
   const a = src.indexOf(from);
@@ -68,10 +68,11 @@ function _parseImageDataUrl(u) {
 }
 var app = {}, _aiFns = null;
 function getFunctions() { return {}; }
-var serverMode = 'ok', serverCalls = [];
+var serverMode = 'ok', serverCalls = [], serverOnCall = null;
 function httpsCallable(_f, name) {
   return async function (payload) {
     serverCalls.push({ name: name, payload: payload });
+    if (serverOnCall) serverOnCall(payload);
     if (serverMode === 'precondition') { var e = new Error('functions/failed-precondition: No OpenAI key is configured on the server.'); e.code = 'functions/failed-precondition'; throw e; }
     if (serverMode === 'bad') { var e2 = new Error('functions/invalid-argument: Image size 100x100: width and height must both be divisible by 16.'); e2.code = 'functions/invalid-argument'; throw e2; }
     if (serverMode === 'empty') return { data: {} };
@@ -104,6 +105,7 @@ return {
   set shared(v) { _aiSharedImageEngine = v; },
   set gemini(v) { geminiImageModels = v ? [{}] : []; },
   set serverMode(v) { serverMode = v; },
+  set serverOnCall(v) { serverOnCall = v; },
   set fetchMode(v) { fetchMode = v; },
   set geminiMode(v) { geminiMode = v; },
   get serverCalls() { return serverCalls; },
@@ -112,8 +114,8 @@ return {
   get last() { return imageLastCall; },
   get down() { return _aiDown; },
   resetDown: function () { Object.keys(_aiDown).forEach(function (k) { _aiDown[k] = 0; }); serverCalls.length = 0; fetchCalls.length = 0; geminiCalls.length = 0; },
-  OPENAI_IMAGE_DEFAULT_MODEL, OPENAI_IMAGE_MODELS, OPENAI_IMAGE_25_RE, OPENAI_IMAGE_SUPERSEDED, OPENAI_IMAGE_GEN,
-  getOpenAiImageModel, openAiImageModelKnown, openAiImageModelOptionsHtml, aiImageEngineSetting,
+  OPENAI_IMAGE_DEFAULT_MODEL, OPENAI_IMAGE_EDUCATION_MODEL, OPENAI_IMAGE_AUTO, OPENAI_IMAGE_MODELS, OPENAI_IMAGE_25_RE, OPENAI_IMAGE_SUPERSEDED, OPENAI_IMAGE_GEN,
+  getOpenAiImageModel, getOpenAiImageModelChoice, openAiImageModelKnown, openAiImageModelOptionsHtml, aiImageEngineSetting,
   imageEngineOrder, imageOpenAiPossible, imageEngineLabel, _tcgArtEngineLabel, _imgRefsFrom, _imgQualityFor,
   openAiGenerateImageDataUrl, openAiImageServer, generateImageDataUrl, imageRouteReport, _imgRouteFault,
   _isUnsupportedImageParam, _imgFidelityFor, _imgSizeField
@@ -132,22 +134,37 @@ const run = (name, fn) => Promise.resolve().then(fn).catch(e => { fail++; consol
 /* ---------- the model ---------- */
 await run('model', () => {
   const api = build();
-  ok('the default image model is ChatGPT Images 2.5 Flare', api.OPENAI_IMAGE_DEFAULT_MODEL === 'gpt-image-2.5-flare');
-  ok('the dropdown leads with Flare and offers Sunburst second',
-     api.OPENAI_IMAGE_MODELS[0].id === 'gpt-image-2.5-flare' && api.OPENAI_IMAGE_MODELS[1].id === 'gpt-image-2.5-sunburst');
+  ok('routine art keeps Flare and educational work defaults to Sunburst',
+     api.OPENAI_IMAGE_DEFAULT_MODEL === 'gpt-image-2.5-flare' && api.OPENAI_IMAGE_EDUCATION_MODEL === 'gpt-image-2.5-sunburst');
+  ok('both 2.5 models remain available as explicit choices',
+     ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].every(id => api.OPENAI_IMAGE_MODELS.some(m => m.id === id)));
   ok('the family regex takes both 2.5 models and their dated snapshots',
      ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'gpt-image-2.5-flare-2026-09-08', 'gpt-image-2.5-sunburst-2026-09-08'].every(id => api.OPENAI_IMAGE_25_RE.test(id)));
   ok('…and refuses everything outside it', ['gpt-image-2', 'gpt-image-1', 'gpt-image-2.5', 'gpt-image-3-flare', 'chatgpt-image-latest'].every(id => !api.OPENAI_IMAGE_25_RE.test(id)));
-  ok('with nothing stored the model is the default', api.getOpenAiImageModel() === 'gpt-image-2.5-flare');
+  ok('with nothing stored the choice is automatic', api.getOpenAiImageModelChoice() === api.OPENAI_IMAGE_AUTO);
+  ok('automatic routes by purpose, not by the presence of a reference',
+     api.getOpenAiImageModel({ purpose: 'education' }) === 'gpt-image-2.5-sunburst' &&
+     api.getOpenAiImageModel({ purpose: 'art', refDataUrl: 'data:image/png;base64,QUJD' }) === 'gpt-image-2.5-flare' &&
+     api.getOpenAiImageModel() === 'gpt-image-2.5-flare');
   api.store.x_openai_image_model = 'gpt-image-9-nova';
-  ok('an id the dropdown no longer offers is the DEFAULT, not a 404 on every picture', api.getOpenAiImageModel() === 'gpt-image-2.5-flare');
+  ok('unknown stored ids fall back to automatic for both purposes',
+     api.getOpenAiImageModelChoice() === api.OPENAI_IMAGE_AUTO && api.getOpenAiImageModel() === 'gpt-image-2.5-flare' &&
+     api.getOpenAiImageModel({ purpose: 'education' }) === 'gpt-image-2.5-sunburst');
   api.store.x_openai_image_model = 'gpt-image-2.5-sunburst';
-  ok('a deliberate Sunburst pick is honoured', api.getOpenAiImageModel() === 'gpt-image-2.5-sunburst');
+  ok('a deliberate Sunburst pick is honoured for art too', api.getOpenAiImageModel({ purpose: 'art' }) === 'gpt-image-2.5-sunburst');
+  api.store.x_openai_image_model = 'gpt-image-2.5-flare';
+  ok('a deliberate Flare pick is honoured for education too', api.getOpenAiImageModel({ purpose: 'education' }) === 'gpt-image-2.5-flare');
+  ok('a valid per-call model outranks the stored choice', api.getOpenAiImageModel({ model: 'gpt-image-2.5-sunburst', purpose: 'art' }) === 'gpt-image-2.5-sunburst');
+  ok('an invalid per-call model cannot reach the API', api.getOpenAiImageModel({ model: 'gpt-image-9-nova', purpose: 'education' }) === 'gpt-image-2.5-flare');
   api.store.x_openai_image_model = 'gpt-image-2.5-flare-2026-09-08';
   ok('a dated snapshot is honoured too', api.getOpenAiImageModel() === 'gpt-image-2.5-flare-2026-09-08');
   const opts = api.openAiImageModelOptionsHtml('gpt-image-2.5-sunburst');
-  ok('the <select> is BUILT from the list', (opts.match(/<option/g) || []).length === api.OPENAI_IMAGE_MODELS.length);
+  ok('the <select> includes automatic and every available model',
+     /<option value="auto"/.test(opts) && api.OPENAI_IMAGE_MODELS.every(m => opts.includes('value="' + m.id + '"')));
   ok('…with the stored model selected', /value="gpt-image-2.5-sunburst" selected/.test(opts));
+  ok('automatic is the first option and can be selected', /^<option value="auto" selected>/.test(api.openAiImageModelOptionsHtml('auto')));
+  ok('a saved snapshot has a selected option, so opening and saving cannot replace it',
+     /value="gpt-image-2.5-flare-2026-09-08" selected/.test(api.openAiImageModelOptionsHtml('gpt-image-2.5-flare-2026-09-08')));
   ok('every legacy default is on the superseded list', ['gpt-image-1', 'gpt-image-1-mini', 'gpt-image-2'].every(id => api.OPENAI_IMAGE_SUPERSEDED.includes(id)));
   ok('…and neither 2.5 model is', !api.OPENAI_IMAGE_SUPERSEDED.some(id => api.OPENAI_IMAGE_25_RE.test(id)));
 });
@@ -155,14 +172,27 @@ await run('model', () => {
 /* ---------- the one-shot lift ---------- */
 await run('lift', () => {
   let api = build({ x_openai_image_model: 'gpt-image-1' });
-  ok('a device carrying yesterday\'s default is lifted to Flare', api.store.x_openai_image_model === 'gpt-image-2.5-flare');
+  ok('a device carrying the pre-2.5 default is lifted to automatic', api.getOpenAiImageModelChoice() === 'auto');
   ok('…and the lift is recorded', api.store.x_openai_image_gen === api.OPENAI_IMAGE_GEN);
+  ok('the new lift has its own marker', api.OPENAI_IMAGE_GEN === 'images25-purpose-v1');
+  for (const marker of [undefined, 'images25']) {
+    api = build({ x_openai_image_model: 'gpt-image-2.5-flare', ...(marker ? { x_openai_image_gen: marker } : {}) });
+    ok('the former Flare default becomes automatic with marker ' + marker,
+       api.getOpenAiImageModelChoice() === 'auto' && api.getOpenAiImageModel({ purpose: 'education' }) === 'gpt-image-2.5-sunburst');
+    api = build(api.store);
+    ok('automatic remains automatic on the next load with marker ' + marker, api.getOpenAiImageModelChoice() === 'auto');
+  }
   api = build({ x_openai_image_model: 'gpt-image-1', x_openai_image_gen: 'images25' });
   ok('a deliberate re-pick of a legacy model AFTER the lift sticks', api.store.x_openai_image_model === 'gpt-image-1');
-  api = build({ x_openai_image_model: 'gpt-image-2.5-sunburst' });
-  ok('a 2.5 pick is never touched by the lift', api.store.x_openai_image_model === 'gpt-image-2.5-sunburst');
+  for (const id of ['gpt-image-2.5-sunburst', 'gpt-image-2.5-sunburst-2026-09-08', 'gpt-image-2.5-flare-2026-09-08']) {
+    api = build({ x_openai_image_model: id, x_openai_image_gen: 'images25' });
+    ok('a saved Sunburst or snapshot choice survives migration: ' + id, api.getOpenAiImageModelChoice() === id);
+  }
+  api = build({ x_openai_image_model: 'gpt-image-2.5-flare', x_openai_image_gen: 'images25-purpose-v1' });
+  api = build(api.store);
+  ok('a deliberate Flare re-pick after this lift survives reload', api.getOpenAiImageModel({ purpose: 'education' }) === 'gpt-image-2.5-flare');
   api = build({});
-  ok('an empty slot stays empty (the default is read at call time)', !api.store.x_openai_image_model && api.getOpenAiImageModel() === 'gpt-image-2.5-flare');
+  ok('an empty slot resolves automatically without pinning a concrete model', api.getOpenAiImageModelChoice() === 'auto');
 });
 
 /* ---------- the order ---------- */
@@ -191,7 +221,11 @@ await run('order', () => {
   api.gemini = true;
   ok('skipOpenAi is Gemini and nothing else', api.imageEngineOrder({ skipOpenAi: true }).join() === 'imgGemini');
   ok('the label names ChatGPT Images and the model', /ChatGPT Images · gpt-image-2\.5-flare/.test(api.imageEngineLabel()));
+  ok('the teaching-image label names the educational model', /ChatGPT Images · gpt-image-2\.5-sunburst/.test(api.imageEngineLabel({ purpose: 'education' })));
   ok('…and the Card Art tab\'s old name still answers', api._tcgArtEngineLabel() === api.imageEngineLabel());
+  ok('the automatic chooser describes both purpose defaults', /Sunburst/i.test(api.imageRouteReport().model) && /Flare/i.test(api.imageRouteReport().model));
+  api.store.x_openai_image_model = 'gpt-image-2.5-sunburst';
+  ok('the chooser reports an explicit model as that model', api.imageRouteReport().model === 'gpt-image-2.5-sunburst');
   api.store.x_ai_image_engine = 'gemini';
   ok('…and says Gemini when Gemini leads', api.imageEngineLabel() === 'Gemini image model');
 });
@@ -245,6 +279,108 @@ await run('door', async () => {
 });
 
 /* ---------- the request shape ---------- */
+await run('purpose routing on server and browser key', async () => {
+  const ref = 'data:image/png;base64,QUJD';
+  const cases = [
+    { name: 'fresh teaching diagram', opts: { purpose: 'education' }, model: 'gpt-image-2.5-sunburst', edit: false },
+    { name: 'faithful figure edit', opts: { purpose: 'education', refDataUrl: ref }, model: 'gpt-image-2.5-sunburst', edit: true },
+    { name: 'fresh artwork', opts: { purpose: 'art' }, model: 'gpt-image-2.5-flare', edit: false },
+    { name: 'artwork with a reference', opts: { purpose: 'art', refDataUrl: ref }, model: 'gpt-image-2.5-flare', edit: true },
+    { name: 'explicit Sunburst for art', opts: { purpose: 'art', model: 'gpt-image-2.5-sunburst' }, model: 'gpt-image-2.5-sunburst', edit: false },
+    { name: 'explicit Flare for an educational edit', opts: { purpose: 'education', model: 'gpt-image-2.5-flare', refDataUrl: ref }, model: 'gpt-image-2.5-flare', edit: true },
+    { name: 'unknown per-call id with automatic education', opts: { purpose: 'education', model: 'gpt-image-9-nova' }, model: 'gpt-image-2.5-sunburst', edit: false }
+  ];
+  for (const c of cases) {
+    const originalOpts = JSON.stringify(c.opts);
+    const api = build();
+    api.key = 'sk-test';
+    await api.generateImageDataUrl(c.name, c.opts);
+    ok(c.name + ': the server receives the resolved model', api.serverCalls[0].payload.model === c.model);
+    ok(c.name + ': the server preserves generation/edit shape', api.serverCalls[0].payload.images.length === (c.edit ? 1 : 0));
+    ok(c.name + ': the success badge names the resolved model', api.last.model === c.model);
+    api.resetDown(); api.serverMode = 'precondition';
+    await api.generateImageDataUrl(c.name, c.opts);
+    const call = api.fetchCalls[0];
+    const model = c.edit ? call.init.body.get('model') : JSON.parse(call.init.body).model;
+    ok(c.name + ': fallback uses the same model as the server', api.serverCalls[0].payload.model === c.model && model === c.model);
+    ok(c.name + ': fallback retains the right API operation', call.url.endsWith(c.edit ? '/images/edits' : '/images/generations'));
+    ok(c.name + ': the caller options are unchanged', JSON.stringify(c.opts) === originalOpts);
+  }
+
+  const api = build();
+  api.key = 'sk-test';
+  for (const method of ['openAiImageServer', 'openAiGenerateImageDataUrl']) {
+    api.resetDown();
+    await api[method]('educational edit', { purpose: 'education', refDataUrl: ref });
+    const model = method === 'openAiImageServer' ? api.serverCalls[0].payload.model : api.fetchCalls[0].init.body.get('model');
+    ok(method + ' resolves educational purpose itself', model === 'gpt-image-2.5-sunburst');
+    api.resetDown();
+    await api[method]('explicit art model', { purpose: 'art', model: 'gpt-image-2.5-sunburst' });
+    const explicit = method === 'openAiImageServer' ? api.serverCalls[0].payload.model : JSON.parse(api.fetchCalls[0].init.body).model;
+    ok(method + ' honors the same per-call override', explicit === 'gpt-image-2.5-sunburst');
+  }
+  api.resetDown(); api.serverMode = 'precondition';
+  api.serverOnCall = () => { api.store.x_openai_image_model = 'gpt-image-2.5-flare'; };
+  const opts = { purpose: 'education', refDataUrl: ref };
+  await api.generateImageDataUrl('setting changes while server request is pending', opts);
+  ok('one picture keeps its resolved model across fallback even if settings change meanwhile',
+     api.serverCalls[0].payload.model === 'gpt-image-2.5-sunburst' && api.fetchCalls[0].init.body.get('model') === 'gpt-image-2.5-sunburst');
+  ok('resolving one picture does not mutate its caller options', !Object.hasOwn(opts, 'model'));
+});
+
+await run('actual image callers carry their purpose', async () => {
+  const functionSource = (text, name) => {
+    const start = text.indexOf('async function ' + name + '(');
+    const end = text.indexOf('\n}', start);
+    if (start < 0 || end < 0) throw new Error('missing function ' + name);
+    return text.slice(start, end + 2);
+  };
+  const api = build();
+  const callers = new Function('generateImageDataUrl', `
+    function imageAiReady() { return true; }
+    async function _akdQuestionFigure(q) { return q.ref || null; }
+    async function _urlToDataUrlRobust(u) { return u; }
+    function transformImageUrl(u) { return u; }
+    async function _paperCleanDataUrl(u) { return { url: u }; }
+    async function uploadImageDataUrl(u) { return u; }
+    ${functionSource(src, '_diagramDraw')}
+    ${functionSource(src, 'generateEnhancedImageDataUrl')}
+    ${functionSource(src, '_tcgGenOnce')}
+    return { _diagramDraw, generateEnhancedImageDataUrl, _tcgGenOnce };
+  `)(api.generateImageDataUrl);
+  const ref = 'data:image/png;base64,QUJD';
+  for (const q of [{}, { ref }]) {
+    api.resetDown();
+    await callers._diagramDraw(q, kind => 'diagram from ' + kind, null, false);
+    ok('the actual teaching-diagram wrapper chooses Sunburst ' + (q.ref ? 'with' : 'without') + ' a reference', api.serverCalls[0].payload.model === 'gpt-image-2.5-sunburst');
+  }
+  api.resetDown();
+  await callers._diagramDraw({}, kind => 'regenerate ' + kind, ref, true);
+  ok('the actual diagram regenerate path keeps the current diagram as its Sunburst reference',
+     api.serverCalls[0].payload.model === 'gpt-image-2.5-sunburst' && api.serverCalls[0].payload.images[0].data === 'QUJD');
+  api.resetDown();
+  await callers.generateEnhancedImageDataUrl('preserve the printed values', { mimeType: 'image/png', data: 'QUJD' });
+  ok('the actual enhancement wrapper chooses Sunburst for faithful edits', api.serverCalls[0].payload.model === 'gpt-image-2.5-sunburst');
+  api.resetDown();
+  await callers._tcgGenOnce('an avatar', ref, true);
+  ok('the actual artwork wrapper retains Flare with reference and transparency',
+     api.serverCalls[0].payload.model === 'gpt-image-2.5-flare' && api.serverCalls[0].payload.background === 'transparent');
+
+  let cleanupPayload;
+  const cleanFigure = new Function('httpsCallable', `
+    let fns = {}, app = {};
+    function getFunctions() { return {}; }
+    function cleanPrompt(kind) { return 'preserve printed content: ' + kind; }
+    function imageAnnounce() {}
+    ${functionSource(mistakes, 'cleanFigureChatGpt')}
+    return cleanFigureChatGpt;
+  `)(() => async payload => { cleanupPayload = payload; return { data: { b64: 'QUJD', model: payload.model } }; });
+  await cleanFigure(ref, 'figure');
+  ok('the standalone Try-again cleaner explicitly requests Sunburst', cleanupPayload.model === 'gpt-image-2.5-sunburst');
+  ok('the standalone cleaner preserves its source, shape and supported request fields',
+     cleanupPayload.images[0].data === 'QUJD' && cleanupPayload.size === 'auto' && cleanupPayload.inputFidelity === undefined);
+});
+
 await run('request shape', async () => {
   const api = build();
   api.key = 'sk-test'; api.gemini = true; api.serverMode = 'precondition';
@@ -325,12 +461,12 @@ await run('request shape', async () => {
   ok('the Realm of Embers art generator goes through the door', /generateImageDataUrl\(prompt, \{ refDataUrl/.test(tcg) && !/openAiActive\(\)/.test(tcg));
   const dd = src.indexOf('async function _diagramDraw');
   const diag = src.slice(dd, src.indexOf('\n}\n', dd));
-  ok('the teaching-diagram core goes through the door', /generateImageDataUrl\(buildPrompt\(kind\), \{ refDataUrl: ref \}\)/.test(diag));
+  ok('the teaching-diagram core goes through the door', /generateImageDataUrl\(buildPrompt\(kind\),/.test(diag));
   const en = src.indexOf('async function generateEnhancedImageDataUrl');
   const enh = src.slice(en, src.indexOf('\n}\n', en));
-  ok('every enhance path goes through the door', /return await generateImageDataUrl\(prompt, \{ media: list \}\)/.test(enh));
+  ok('every enhance path goes through the door', /return await generateImageDataUrl\(prompt,/.test(enh));
   ok('the chat toggle no longer decides who draws', !/openAiActive\(\) \? 'ChatGPT · '/.test(src));
-  ok('the Card Art label reads the image engine', /function _tcgArtEngineLabel\(\) \{ return imageEngineLabel\(\); \}/.test(src));
+  ok('the Card Art label resolves the art purpose', /function _tcgArtEngineLabel\(\) \{ return imageEngineLabel\(\{ purpose: 'art' \}\); \}/.test(src));
   ok('imageAiReady counts ChatGPT Images as an image model', /const imageAiReady = \(\) => geminiImageModels\.length > 0 \|\| \(function \(\) \{ try \{ return imageOpenAiPossible\(\);/.test(src));
   ok('the callable is the function the Maths repo deploys', /httpsCallable\(_aiFns, 'openAiImage'/.test(src));
   ok('no API key is committed', !/sk-[A-Za-z0-9]{20,}/.test(src) && !/sk-[A-Za-z0-9]{20,}/.test(html) && !/sk-[A-Za-z0-9]{20,}/.test(mistakes));
@@ -351,9 +487,10 @@ await run('request shape', async () => {
 {
   ok('the dialog offers the picture engine, ChatGPT Images checked', /name="aiImageEngineChoice" value="openai" checked/.test(html) && /name="aiImageEngineChoice" value="gemini"/.test(html));
   ok('…previewing the order as the radios change', /aiEngineImageChoicePreview\('gemini'\)/.test(html) && /window\.aiEngineImageChoicePreview = aiEngineImageChoicePreview;/.test(src));
-  ok('the dropdown in the markup leads with Flare, selected', /<option value="gpt-image-2\.5-flare" selected>/.test(html) && /<option value="gpt-image-2\.5-sunburst">/.test(html));
+  ok('the dropdown in the markup selects automatic and offers Sunburst', /<option value="auto" selected>/.test(html) && /<option value="gpt-image-2\.5-sunburst">/.test(html));
   ok('…and the markup lists no id the code does not know', ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'gpt-image-2', 'gpt-image-1', 'gpt-image-1-mini'].every(id => html.indexOf('<option value="' + id + '"') >= 0));
-  ok('the dropdown is rebuilt from the list when the dialog opens', /imgSel\.innerHTML = openAiImageModelOptionsHtml\(getOpenAiImageModel\(\)\);/.test(src));
+  ok('the dropdown opens with the saved choice, not a resolved concrete model', /imgSel\.innerHTML = openAiImageModelOptionsHtml\(getOpenAiImageModelChoice\(\)\);/.test(src));
+  ok('a missing dropdown falls back to automatic when saving', /const imageModel = \(imgSelEl && imgSelEl\.value\) \|\| OPENAI_IMAGE_AUTO;/.test(src));
   ok('the Try-again sheet cleans figures with ChatGPT Images by the server key, sending no input_fidelity', /httpsCallable\(fns, 'openAiImage'/.test(mistakes) && !/inputFidelity/.test(mistakes));
   ok('no client sends input_fidelity unconditionally any more', !/fd\.append\('input_fidelity', 'high'\)/.test(src) && !/inputFidelity: refs\.length \? 'high'/.test(src));
   ok('…with Gemini as the fallback, not the plan', /falling back to Gemini/.test(mistakes) && /if \(!imageModels\.length\) throw first/.test(mistakes));

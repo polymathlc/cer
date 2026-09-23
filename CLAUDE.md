@@ -5565,6 +5565,32 @@ pupil writes, in their own words, what they were learning.
   names, same two switches. Ship a change to both together.
 - Run **`node tools/objectives-box-tests.mjs`** after touching any of it.
 
+## 🖼 Automatic image models by purpose (v1.413.0)
+
+CER defaults to **Automatic**: Sunburst for teaching diagrams and faithful
+edits; Flare for routine game artwork. The original transport architecture
+below still applies, with this policy replacing its Flare-only default.
+
+- `getOpenAiImageModelChoice` reads the saved choice, including `auto`.
+  `getOpenAiImageModel(opts)` resolves an explicit request model, then a saved
+  concrete model, then the purpose default. Both server and browser-key routes
+  use it. The shared door freezes the resolved model across retries/fallbacks.
+- `_diagramDraw` and `generateEnhancedImageDataUrl` pass
+  `purpose: 'education'`; `_tcgGenOnce` passes `purpose: 'art'`. Do not infer
+  purpose from reference pictures: routine artwork has references too.
+- `mistakes.html` requests Sunburst explicitly for Try-again figure cleanup.
+- The former exact Flare default moves to Automatic once per device.
+  Historical intentional Flare picks cannot be distinguished from defaults;
+  choosing Flare again after migration sticks. Sunburst, dated snapshots and
+  legacy re-picks made after the original `images25` migration are preserved.
+- A saved snapshot stays selectable when the settings dialog opens. Automatic
+  is a setting, never a model ID sent to either image API.
+- This is a CER-specific caller policy using the existing callable contract.
+  No Maths/Anskey change or backend deployment is needed. Cross-repository
+  changes to the shared transport contract must still be coordinated.
+- Run the four image-related harnesses listed in House rules. The
+  `image-engine.yml` workflow runs them on relevant pull requests and pushes.
+
 ## 🖼 The image engine — ChatGPT Images 2.5 for EVERY picture (v1.372.0)
 
 `OPENAI_IMAGE_DEFAULT_MODEL` / `OPENAI_IMAGE_MODELS` / `OPENAI_IMAGE_25_RE` /

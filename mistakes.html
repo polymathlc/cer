@@ -257,7 +257,7 @@ import { getStorage, ref as sRef, uploadString, getDownloadURL }
 import { getFunctions, httpsCallable }
   from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
 
-const APP_VERSION = 'v1.6.1';
+const APP_VERSION = 'v1.6.2';
 document.getElementById('verTag').textContent = APP_VERSION;
 
 /* The one collection this page reads, and the one folder it writes. Named
@@ -412,6 +412,7 @@ async function cleanFigureChatGpt(dataUrl, kind) {
   const mime = (/^data:([^;,]+)/.exec(dataUrl) || [])[1] || 'image/jpeg';
   const res = await httpsCallable(fns, 'openAiImage', { timeout: 240000 })({
     prompt: cleanPrompt(kind),
+    model: 'gpt-image-2.5-sunburst',
     images: [{ mimeType: mime, data: dataUrl.split(',')[1] || '' }],
     size: 'auto',
     quality: 'high',
@@ -420,7 +421,7 @@ async function cleanFigureChatGpt(dataUrl, kind) {
   const d = res && res.data;
   if (!d || typeof d.b64 !== 'string' || !d.b64) throw new Error('the server image route returned no picture');
   // The server names the model it really drew with — that is what the badge says.
-  imageAnnounce('ChatGPT Images · ' + ((typeof d.model === 'string' && d.model) || 'gpt-image-2.5') + ' · server key');
+  imageAnnounce('ChatGPT Images · ' + ((typeof d.model === 'string' && d.model) || 'gpt-image-2.5-sunburst') + ' · server key');
   return 'data:' + (d.mimeType || 'image/png') + ';base64,' + d.b64;
 }
 /* 🖼 THE GREEN BOX — bottom right, every time a figure is cleaned up here,
