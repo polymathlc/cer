@@ -31,7 +31,7 @@
 import fs from 'fs';
 
 const SRC = ['../app.js', '../index.html']
-  .map(p => new URL(p, import.meta.url).pathname)
+  .map(p => new URL(p, import.meta.url))
   .find(p => fs.existsSync(p));
 if (!SRC) throw new Error('neither app.js nor index.html found beside tools/');
 const src = fs.readFileSync(SRC, 'utf8');
