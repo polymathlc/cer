@@ -4283,6 +4283,30 @@ grid — cells, merged headings, alignment — and fills the block in.
   merges laid over a 6×5 one read as formatting nobody chose.
 - Run **`node tools/table-editor-tests.mjs`** after touching any of it.
 
+## Approved question repair plans (v1.414.0)
+
+The traffic-light checker automatically prepares a separate repair plan when a
+visible question has findings. `question-repair-core.mjs` validates bounded
+targeted edits; the `tlRepair*` adapter in app.js handles review, images and saves.
+The existing checker and verdict rules are unchanged. Planning does not edit a
+question. The teacher must click **Implement changes**, **Give new instruction**
+or **Cancel**. Revised instructions produce another plan for review.
+
+Text is applied exactly as displayed; diagram redraws use the original picture
+as a reference. New diagrams use the education image route. Every action must
+finish before any question is replaced. Bank/vetting repairs await their own
+save; create and worksheet editors retain unsaved changes for their normal Save
+flow. IDs, marks, metadata, unrelated fields and inline images survive. Only
+changed answer fields lose obsolete word-position selections. Every application
+checks the account, document owner, scope and full current question again.
+Cancel and close invalidate unfinished work. Undo restores the prior question
+only while the repaired copy remains unchanged. Follow-up findings produce a
+new plan that requires a new approval, never an automatic repair loop.
+
+Run `node tools/question-repair-core-tests.mjs`,
+`node tools/question-repair-tests.mjs`, and
+`node tools/question-repair-browser.mjs` (Playwright) for the focused tests.
+
 ## 🚦 The traffic light — one question's health at a glance (v1.343.0)
 
 `tl*` / `TL_*` (in `app.js`, search `THE TRAFFIC LIGHT`), plus the `.tl-*` CSS

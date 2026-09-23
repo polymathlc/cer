@@ -1,0 +1,38 @@
+name: Question repair checks
+
+on:
+  pull_request:
+    paths: ['app.js', 'index.html', 'question-repair-core.mjs', 'tools/question-repair*.mjs', 'tools/traffic-light-tests.mjs', 'tools/editing-mode-tests.mjs', 'tools/auto-check-tests.mjs', 'tools/ai-command-tests.mjs', '.github/workflows/question-repair.yml']
+  push:
+    branches: [main]
+    paths: ['app.js', 'index.html', 'question-repair-core.mjs', 'tools/question-repair*.mjs', 'tools/traffic-light-tests.mjs', 'tools/editing-mode-tests.mjs', 'tools/auto-check-tests.mjs', 'tools/ai-command-tests.mjs', '.github/workflows/question-repair.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  approved-repairs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check repair safety and existing authoring workflows
+        run: |
+          node --check app.js
+          node tools/question-repair-core-tests.mjs
+          node tools/question-repair-tests.mjs
+          node tools/traffic-light-tests.mjs
+          node tools/editing-mode-tests.mjs
+          node tools/auto-check-tests.mjs
+          node tools/ai-command-tests.mjs
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/repair-browser" playwright@1.62.1
+          "$RUNNER_TEMP/repair-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Check desktop and mobile repair controls
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/repair-browser/node_modules/playwright
+          QUESTION_REPAIR_QA_DIR: ${{ runner.temp }}/repair-screenshots
+        run: node tools/question-repair-browser.mjs
