@@ -14,7 +14,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-<link rel="modulepreload" href="app.js?v=1.414.0">
+<link rel="modulepreload" href="app.js?v=1.415.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -5150,6 +5150,22 @@ body.em-editing #printProgress { z-index: 470; }
   padding: 28px 22px;
 }
 .tl-overlay.show { display: flex; }
+.tl-crop-tools { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.tl-crop-tools[hidden], #cropSourceWrap[hidden] { display:none !important; }
+.tl-crop-tools p { flex-basis:100%; margin:0; font-size:0.85rem; }
+.tl-crop-tools button { white-space:normal; min-height:44px; text-align:left; }
+.tl-crop-preview { display:block; max-width:100%; max-height:180px; object-fit:contain; margin-top:8px; border:1px solid var(--border); }
+.crop-original-upload { display:flex; flex-wrap:wrap; gap:8px; max-width:100%; box-sizing:border-box; cursor:pointer; white-space:normal; }
+.crop-original-upload input { display:block; width:100%; min-width:0; max-width:100%; box-sizing:border-box; }
+#cropSourceSelect { width:100%; min-width:0; max-width:100%; }
+@media(max-width:520px) {
+  #cropOverlay { padding:8px; }
+  #cropOverlay .overlay-card { max-width:100% !important; width:100% !important; }
+  #cropOverlay .overlay-body { padding:12px; }
+  #cropOverlay .overlay-foot { flex-wrap:wrap; }
+  #cropOverlay .overlay-foot button { flex:1 1 120px; min-height:44px; white-space:normal; }
+  #cropOverlay #cropImg { max-width:calc(100vw - 56px); max-height:48vh; }
+}
 .tl-panel {
   display: flex;
   flex-direction: column;
@@ -13502,6 +13518,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="tl-repair-summary" id="tlRepairSummary" role="status" aria-live="polite"></div>
       <ol class="tl-repair-actions" id="tlRepairActions"></ol>
       <p class="tl-repair-notes" id="tlRepairNotes"></p>
+      <div id="tlRepairCropTools" class="tl-crop-tools" hidden></div>
       <div class="tl-repair-instruction" id="tlRepairInstructionWrap" hidden>
         <label for="tlRepairInstruction">Your instructions</label>
         <textarea id="tlRepairInstruction" maxlength="2000" placeholder="Tell the checker what to change or keep." oninput="tlRepairDraftChanged(this.value)"></textarea>
@@ -15640,24 +15657,30 @@ body.lore-reading { overflow: hidden; }
 </div>
 
 <!-- ==================== IMAGE CROP / REPOSITION ==================== -->
-<div class="overlay" id="cropOverlay">
+<div class="overlay" id="cropOverlay" style="z-index:600;" role="dialog" aria-modal="true" aria-label="Crop image">
   <div class="overlay-card" style="max-width:94vw;width:auto;">
     <div class="overlay-head"><h3>✂️ Crop &amp; reposition</h3><button class="close" onclick="closeCropTool()" type="button">×</button></div>
     <div class="overlay-body" style="text-align:center;">
+      <div id="cropSourceWrap" hidden style="text-align:left;max-width:680px;margin:0 auto 14px;">
+        <label for="cropSourceSelect">Crop from</label>
+        <select id="cropSourceSelect" class="form-select" onchange="tlRepairCropSourceChanged(this.value)"></select>
+        <p id="cropSourceHelp" role="status" aria-live="polite" style="font-size:0.85rem;line-height:1.5;"></p>
+        <label class="btn btn-outline crop-original-upload">Select original image<input id="cropOriginalFile" type="file" accept="image/png,image/jpeg,image/webp" onchange="tlRepairCropUpload(this.files[0]);this.value=''"></label>
+      </div>
       <div id="cropStage">
-        <img id="cropImg" alt="">
+        <img id="cropImg" alt="Source image for cropping">
         <div id="cropBox">
           <span class="crop-h" data-h="nw"></span><span class="crop-h" data-h="n"></span><span class="crop-h" data-h="ne"></span>
           <span class="crop-h" data-h="w"></span><span class="crop-h" data-h="e"></span>
           <span class="crop-h" data-h="sw"></span><span class="crop-h" data-h="s"></span><span class="crop-h" data-h="se"></span>
         </div>
       </div>
-      <p class="hint" style="margin-top:10px;">Drag the box to move it; drag a handle to resize. Then tap Apply crop.</p>
+      <p class="hint" style="margin-top:10px;">Drag the box to move it; drag a handle to resize. Use the button below to confirm your selection.</p>
     </div>
     <div class="overlay-foot">
       <button class="btn btn-ghost" onclick="closeCropTool()" type="button">Cancel</button>
       <button class="btn btn-outline" onclick="cropToolReset()" type="button">⤢ Whole image</button>
-      <button class="btn btn-primary" onclick="applyCropTool()" type="button">✂️ Apply crop</button>
+      <button class="btn btn-primary" id="cropApplyBtn" onclick="applyCropTool()" type="button">✂️ Apply crop</button>
     </div>
   </div>
 </div>
@@ -15863,6 +15886,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
-<script type="module" src="app.js?v=1.414.0"></script>
+<script type="module" src="app.js?v=1.415.0"></script>
 </body>
 </html>

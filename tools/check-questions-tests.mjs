@@ -13,7 +13,7 @@
 // page exists to catch never gets flagged at all. Neither throws.
 import fs from 'fs';
 
-const APP = new URL('../app.js', import.meta.url).pathname;
+const APP = new URL('../app.js', import.meta.url);
 const src = fs.readFileSync(APP, 'utf8');
 const a = src.indexOf('// ---- the tables an option list can be repeating');
 const b = src.indexOf('// ---- the AI pass: the question AND its diagrams', a);

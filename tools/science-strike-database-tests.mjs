@@ -62,6 +62,30 @@ test('edits beyond the signature prefix invalidate stored checks while metadata-
   assert.equal(strikeQuestionQualityOptions(circular).importSignature, '');
 });
 
+test('answer-key image changes invalidate visual checks in both portal and Strike', () => {
+  const q = question('answer-picture', { answerKeyImage: 'https://images.test/key-before.png' });
+  q.autoCheck = { state: 'red', sig: portal.tlSig(q), findings: [] };
+  assert.equal(strikeQuestionQualityOptions(q).checkedState.state, 'red');
+  assert.equal(strikeQuestionQualityOptions(q).importSignature, q.autoCheck.sig);
+  q.answerKeyImage = 'https://images.test/key-after.png';
+  const changed = strikeQuestionQualityOptions(q);
+  assert.deepEqual(changed.checkedState, plain(portal.tlStateOf(q)));
+  assert.equal(changed.checkedState.state, 'stale');
+  assert.equal(changed.importSignature, portal.tlSig(q));
+});
+
+test('checks made before the crop audit stay stale in Strike as in the portal', () => {
+  const q = question('legacy-check');
+  const raw = JSON.stringify({ t: q.title || '', p: q.topic || '', c: q.category || '',
+    a: !!q.annotation, b: q.blocks || [] });
+  // The cloud importer intentionally still uses this older signature until
+  // the portal has run the strict visual audit of every current picture.
+  q.autoCheck = { state: 'green', sig: raw.length + ':' + portal._aiHash(raw) + ':' + raw.slice(0, 4000), findings: [] };
+  const result = strikeQuestionQualityOptions(q);
+  assert.deepEqual(result.checkedState, plain(portal.tlStateOf(q)));
+  assert.equal(result.checkedState.state, 'stale');
+});
+
 test('fresh stored red and amber checks block feeding, while edited checks are not falsely reused', () => {
   const bank = ['red', 'amber', 'edited', 'clean'].map(id => question(id));
   for (const q of bank.slice(0, 3)) q.autoCheck = { state: q.id === 'amber' ? 'amber' : 'red', sig: portal.tlSig(q) };

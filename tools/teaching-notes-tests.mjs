@@ -377,6 +377,7 @@ const UNGROUNDED_BY_DESIGN = {
 
   // ---- pictures: no science words come back ----
   _aiRefineCrop: 'returns a rectangle, not words',
+  tlRepairAutoCrop: 'selects a rectangle from original pixels and verifies that its crop is complete; it does not author or mark science content',
   tcgArtRescueIdentify: 'names which card a picture shows',
   generateCleanEnhancedImage: 'redraws a diagram',
 

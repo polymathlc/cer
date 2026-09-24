@@ -3,7 +3,9 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import * as core from '../question-repair-core.mjs';
+import * as repairCore from '../question-repair-core.mjs';
+import * as cropCore from '../question-crop-core.mjs';
+const core={...repairCore,...cropCore};
 
 export const appSource = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 export const htmlSource = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -38,12 +40,12 @@ export function deferred() {
   return { promise, resolve, reject };
 }
 
-export function harnessBody(section = controllerSection()) {
+export function harnessBody(section = controllerSection(), cropperSection = '') {
   return `
 const { ${Object.keys(core).join(', ')} } = core;
 const clone = value => JSON.parse(JSON.stringify(value));
-const H = { ai: [], image: [], uploads: [], saves: [], checks: [], events: [],
-  aiReply: env.plan, aiImpl: null, imageImpl: null, mediaImpl: null, saveImpl: null, author: true, owner: 'teacher',
+const H = { ai: [], image: [], uploads: [], saves: [], checks: [], events: [], cropPixels: [], loadedImages: [], cropOpen: null,
+  aiReply: env.plan, aiImpl: null, imageImpl: null, mediaImpl: null, loadImageImpl: null, saveImpl: null, author: true, owner: 'teacher',
   verdict: {state:'red',findings:env.findings}, recheckResult: {state:'green',findings:[]}, recheckImpl: null,
   bank: [clone(env.question)], vetting: [Object.assign(clone(env.question), {status:'pending'})],
   fields: {title:env.question.title,topic:env.question.topic,category:env.question.category},
@@ -63,9 +65,14 @@ const elements={};
 const document=env.document || {activeElement:null,getElementById(id) {
   return elements[id] ||= {id,hidden:false,value:'',textContent:'',innerHTML:'',disabled:false,style:{},dataset:{},
     classList:{add(){},remove(){},contains(c){return c==='active'},toggle(){}},
-    focus(){document.activeElement=this},scrollIntoView(){},querySelectorAll(){return []}};
-},querySelectorAll(){return []}};
+    focus(){document.activeElement=this},scrollIntoView(){},removeAttribute(name){delete this[name];},querySelectorAll(){return []}};
+},querySelectorAll(){return []},createElement(tag){
+  if(tag==='canvas')return {width:0,height:0,getContext(){return {fillStyle:'',fillRect(){},drawImage(...args){H.cropPixels.push(args);}}},toDataURL(){return 'data:image/png;base64,Y3JvcA==';}};
+  return {};
+}};
 const window=env.window || {};
+${cropperSection ? '' : 'let _cropper=null, _cropOpenEpoch=0;'}
+const FileReader=env.FileReader || class {readAsDataURL(file){this.result=file.data || 'data:image/png;base64,dXBsb2Fk';this.onload();}};
 window.__aiReady=()=>H.author;
 for(const [field,id] of [['title','questionTitle'],['topic','topicSelect'],['category','categorySelect']]){
   let input=document.getElementById(id);
@@ -118,10 +125,13 @@ function emAdoptOwners(){}
 function generateBlockId(){return 'new_'+(++H.seq);}
 function _parseAIJson(v){return typeof v==='string'?JSON.parse(v):v;}
 function _cqRepr(q){return JSON.stringify(q);}
-async function askGemini(prompt,opts){H.ai.push({prompt,opts,media:[]});return H.aiImpl?await H.aiImpl(prompt):clone(H.aiReply);}
-async function askGeminiVision(prompt,media,opts){H.ai.push({prompt,media,opts});return H.aiImpl?await H.aiImpl(prompt):clone(H.aiReply);}
+async function askGemini(prompt,opts){H.ai.push({prompt,opts,media:[]});return H.aiImpl?await H.aiImpl(prompt,[],opts):clone(H.aiReply);}
+async function askGeminiVision(prompt,media,opts){H.ai.push({prompt,media,opts});return H.aiImpl?await H.aiImpl(prompt,media,opts):clone(H.aiReply);}
 function transformImageUrl(url){return url;}
 async function _urlToDataUrlRobust(url){H.events.push(['readImage',url]);return H.mediaImpl?await H.mediaImpl(url):'data:image/png;base64,ZmFrZQ==';}
+async function _loadImageEl(url){H.loadedImages.push(url);return H.loadImageImpl?await H.loadImageImpl(url):env.loadImage?await env.loadImage(url):{naturalWidth:1000,naturalHeight:800,width:1000,height:800};}
+async function openCropTool(id,options){H.cropOpen={id,options};_cropper={srcUrl:options.srcUrl};document.getElementById('cropApplyBtn').disabled=false;}
+function closeCropTool(){H.cropOpen=null;_cropper=null;if(typeof tlRepairCropClosed==='function')tlRepairCropClosed(false);}
 function _parseImageDataUrl(){return {mime:'image/png'};}
 function imageAiReady(){return true;}
 function qcmdDiagramPrompt(instruction){return instruction;}
@@ -132,6 +142,7 @@ function tableDataToFirestore(rows){return Object.fromEntries(rows.map((r,i)=>[S
 async function saveQuestion(q,opts){if(opts?.guard && !opts.guard())return false;H.saves.push({scope:'bank',q:clone(q),opts});return H.saveImpl?await H.saveImpl(q,opts):true;}
 async function saveVettingQuestion(q,opts){if(opts?.guard && !opts.guard())return false;H.saves.push({scope:'vet',q:clone(q),opts});return H.saveImpl?await H.saveImpl(q,opts):true;}
 ${section}
+${cropperSection}
 return {H,document,elements,auth,
   tlRepairRefresh,tlRepairPrepare,tlRepairApply,tlRepairRevise,tlRepairDraftChanged,tlRepairCancel,tlRepairUndo,tlRepairReset,tlRepairRender,tlRepairRead,tlRepairCurrent,tlRepairCommit,
   get session(){return _tlRepairSession;},get epoch(){return _tlRepairEpoch;},
@@ -143,6 +154,9 @@ return {H,document,elements,auth,
   set panelId(v){_tlPanelId=v;},set practice(v){_practiceAs=v;},
   get em(){return _em;},get owners(){return _ownerUidByQuestionId;},get vetOwners(){return _ownerUidByVettingId;},
   get editorKeywords(){return editorKeywords;},get selectedBlanks(){return selectedBlanks;},
+  ...(typeof tlRepairAutoCrop==='function'?{tlRepairAutoCrop,tlRepairCropPixels,tlRepairManualCrop,tlRepairCropSourceChanged,tlRepairCropUpload,tlRepairCropClosed}:{}),
+  get picker(){return typeof _tlCropPicker==='undefined'?null:_tlCropPicker;},get cropper(){return typeof _cropper==='undefined'?null:_cropper;},
+  applyCropTool:typeof applyCropTool==='function'?applyCropTool:undefined,cropToolReset:typeof cropToolReset==='function'?cropToolReset:undefined,closeCropTool,
 };`;
 }
 export function harness(options = {}) {

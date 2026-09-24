@@ -4283,6 +4283,35 @@ grid — cells, merged headings, alignment — and fills the block in.
   merges laid over a 6×5 one read as formatting nobody chose.
 - Run **`node tools/table-editor-tests.mjs`** after touching any of it.
 
+## Checker crop audits and recropping (v1.415.0)
+
+The checker must inspect every attached picture's crop, including inline MCQ,
+table and answer images. It requires an explicit per-target image audit for all
+pictures (up to 12). Missing, unreadable, skipped or incomplete audits are check
+failures, never green. Visibly clipped flowchart nodes, labels or arrows and
+stray/duplicated question sentences are Crop findings. Only the abbreviated text
+representation is exempt from speculative truncation complaints. The signature's
+cropAudit revision invalidates older verdicts; cloud checks without this visual
+audit intentionally remain stale until the browser performs a fresh check.
+
+Approved recrop_image actions select and verify exact original pixels; they do
+not call image generation or the import crop's expansion/trimming heuristics.
+The original source must actually contain clipped material. Without it, the
+teacher can select an original image in Crop manually. Manual crops are previews
+until Implement changes; source choice, cancellation, undo, save scope and stale
+question/account guards use the same repair session as wording corrections.
+
+Persist block.cropSource={url,imageUrl,box_2d?,page?} for imported image sources.
+Non-url/inline pictures use the owning block's cropSources[target] map. imageUrl
+binds the source to the displayed picture; unrelated replacements invalidate it.
+Pixel-only trims preserve known originals and discard coordinates that refer to
+the previous cropped image. Original sources survive reload and ordinary crop
+editing. Existing cloud imports can use their stored sourcePages as alternatives.
+
+Focused tests: checker-image-audit, question-crop-core, question-crop-repair,
+crop-provenance, and question-crop-repair-browser under tools/. Keep the existing
+repair, traffic-light, import-worker and crop-pixel regressions passing.
+
 ## Approved question repair plans (v1.414.0)
 
 The traffic-light checker automatically prepares a separate repair plan when a

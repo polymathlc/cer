@@ -104,6 +104,20 @@ test('inline-only edit keeps all surrounding HTML and untouched image tags exact
   assert.equal(result.blocks[0].content, '<p>Compare ' + imageOne + ' with <img src="https://example.test/new.png" alt=\'second > first\'>.</p>');
 });
 
+test('wording that swaps inline images moves their recovery metadata together', () => {
+  const q = fixture();
+  const first = 'block:stem:content:inline:1', second = 'block:stem:content:inline:2';
+  const a = { url: 'https://example.test/page-a.png', imageUrl: 'https://example.test/first.png' };
+  const b = { url: 'https://example.test/page-b.png', imageUrl: 'https://example.test/second.png' };
+  q.blocks[0].cropSources = { [first]: a, [second]: b, unrelated: { keep: true } };
+  q.imageSources = { [first]: a, [second]: b };
+  const before = structuredClone(q);
+  const result = apply(q, [action('replace_text', 'block:stem:content', { value: '[[IMAGE_2]] before [[IMAGE_1]]' })]).question;
+  assert.deepEqual(result.blocks[0].cropSources, { [first]: b, [second]: a, unrelated: { keep: true } });
+  assert.deepEqual(result.imageSources, { [first]: b, [second]: a });
+  assert.deepEqual(q, before);
+});
+
 test('inline source extraction ignores src-like strings inside other attributes', () => {
   const q = fixture();
   q.blocks[0].content = '<img alt="A label with src=\'https://wrong.test/alt.png\'" data-src="https://wrong.test/lazy.png" src="https://example.test/right.png">';
@@ -246,6 +260,38 @@ test('generation cannot bypass the reference edit of an existing picture', () =>
   assert.throws(() => normalized(q, [action('generate_image', 'block:stem:content:inline:1', { instruction: 'Draw a new picture.' })]), /must use a redraw/);
   q.blocks[1].url = '';
   assert.throws(() => normalized(q, [action('redraw_image', 'block:figure:url', { instruction: 'Edit the missing picture.' })]), /needs an existing picture/);
+});
+
+test('approved recrops apply prepared pixels and preserve image and question metadata', () => {
+  const q = fixture(), before = structuredClone(q);
+  const actions = [action('recrop_image', 'block:figure:url', { instruction: 'Restore the complete flowchart top from the original page.' })];
+  const plan = normalized(q, actions);
+  assert.equal(plan.actions[0].kind, 'recrop_image');
+  const result = applyQuestionRepairPlan(q, plan, { a1: 'https://example.test/recropped.png' }).question;
+  assert.deepEqual(result.blocks[1], { ...q.blocks[1], url: 'https://example.test/recropped.png' });
+  assert.deepEqual(q, before);
+  assert.throws(() => apply(q, actions), /picture/);
+});
+
+test('inline recrops and wording changes preserve the exact original image tags except src', () => {
+  const q = fixture();
+  const result = apply(q, [
+    action('recrop_image', 'block:stem:content:inline:1', { instruction: 'Exclude the duplicated question sentence beneath the ring.' }),
+    action('replace_text', 'block:stem:content', { value: 'Read [[IMAGE_2]], then [[IMAGE_1]].' }),
+  ], { a1: 'https://example.test/ring-only.png' }).question;
+  assert.equal(result.blocks[0].content, 'Read ' + imageTwo + ', then <img class="diagram" data-src="ignore" src="https://example.test/ring-only.png" width="150">.');
+});
+
+test('recrop plans cannot inject source URLs, rectangles, new blocks or missing image targets', () => {
+  const q = fixture();
+  const crop = action('recrop_image', 'block:figure:url', { instruction: 'Trim the repeated wording.' });
+  for (const extra of [{ value: 'https://model.test/source.png' }, { url: 'https://model.test/source.png' },
+    { source: 'https://model.test/source.png' }, { box: [0, 0, 1000, 1000] }, { box_2d: [0, 0, 1000, 1000] }]) {
+    assert.throws(() => normalized(q, [{ ...crop, ...extra }]), /Repair plan:/);
+  }
+  assert.throws(() => normalized(q, [{ ...crop, target: 'new:image' }]), /not a picture/);
+  q.blocks[1].url = '';
+  assert.throws(() => normalized(q, [crop]), /needs an existing picture/);
 });
 
 test('normalizer does not mutate source action objects and reassigns deterministic IDs', () => {
