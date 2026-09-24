@@ -438,7 +438,8 @@ const AUTHORING_FUNCTIONS = [
   'aiGenerateBlockAnswer',    // 🤖 AI answer
   'aiGenerateBlockExplanation', // 📝 AI explanation
   'aiWritePartExplanations',  // one explanation per part
-  'autoChkRun'                // 🚦 the auto-check and its repair
+  'autoChkRun',               // 🚦 the auto-check and its repair
+  'tlRepairAutoCrop'          // teacher-approved recropping and visual verification of the repaired image
 ];
 /* A top-level function OWNS its lines until the `}` in column 1 that closes
    it — not until the next `function` keyword. Tracking only the keyword

@@ -17,7 +17,8 @@ export const STRIKE_DEFAULT_OBJECTIVES = Object.freeze([
 function checkSignature(question) {
   if (!question) return '';
   try {
-    const raw = JSON.stringify({ t: question.title || '', p: question.topic || '', c: question.category || '',
+    const raw = JSON.stringify({ cropAudit: 1, keyImage: question.answerKeyImage || '',
+      t: question.title || '', p: question.topic || '', c: question.category || '',
       a: !!question.annotation, b: question.blocks || [] });
     let hash = 5381;
     for (let i = 0; i < raw.length; i++) hash = ((hash << 5) + hash + raw.charCodeAt(i)) | 0;
