@@ -80,6 +80,8 @@ input:focus,select:focus,textarea:focus { border-color:#4d795a; }
 .form-footnote { margin-top:11px; text-align:center; color:var(--muted); font-size:8px; }
 .form-status { color:var(--error); font-size:11px; line-height:1.8; padding:12px 14px; border:1px solid #e8c9c2; background:#fcf4f0; border-radius:6px; margin-top:18px; }
 .form-status[data-state=pending] { background:#f0f5e9; border-color:#cedbc2; color:var(--green); }
+.form-status a { font-weight:700; white-space:nowrap; text-decoration:underline; text-underline-offset:3px; }
+.form-status a:hover { text-decoration-thickness:2px; }
 .spinner { width:16px; height:16px; border:2px solid #ffffff60; border-top-color:white; border-radius:50%; animation:spin .8s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
 .success-panel { padding:46px 8px; text-align:center; }

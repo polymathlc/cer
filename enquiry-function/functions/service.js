@@ -1,7 +1,13 @@
 'use strict';
 
 const { createHash } = require('node:crypto');
-const ORIGINS = Object.freeze(['https://polymathlc.github.io']);
+// Every page that serves enquiry.html, matched exactly. The public site is the
+// polymathlc/website mirror on its custom domain (that repository's CNAME, which the
+// CER sync preserves); the same page also ships at polymathlc.github.io/cer/. An
+// origin missing here gets a 403 with no CORS headers, which the browser reports to
+// the form as a plain network failure, so the parent is told to check a connection
+// that is fine. Changing this list only takes effect once this codebase is redeployed.
+const ORIGINS = Object.freeze(['https://polymathlc.com.sg', 'https://www.polymathlc.com.sg', 'https://polymathlc.github.io']);
 const LIMITS = Object.freeze({ bodyBytes: 8192, perIpHour: 5, perEmailDay: 3, globalDay: 100 });
 const DAY = 86400000;
 const RETENTION_MS = 7 * DAY;

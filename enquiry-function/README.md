@@ -1,9 +1,21 @@
 # Public class enquiries
 
 This isolated `polymath-enquiry` Firebase codebase accepts public parent enquiries
-from `https://polymathlc.github.io`. It does not require portal sign-in.
+from every page that serves `enquiry.html`: `https://polymathlc.com.sg` (the
+`polymathlc/website` mirror's custom domain, from that repository's `CNAME`),
+`https://www.polymathlc.com.sg`, and `https://polymathlc.github.io` (the page at
+`/cer/`). It does not require portal sign-in.
 
 Endpoint: `https://us-central1-mathgen--app.cloudfunctions.net/submitPolymathEnquiry`
+
+**If the site moves domain, add the new origin to `ORIGINS` in `service.js` and
+redeploy.** A page on an unlisted origin gets a 403 with no CORS headers, which the
+browser hides from the page. The form then sees only a failed `fetch()`, which is
+the same thing it sees when the service is down. That is how the form broke on
+`polymathlc.com.sg` while it still worked on `polymathlc.github.io`. The form now
+says "We couldn't reach our enquiry service" in that case and offers the centre's
+WhatsApp line. It only tells a parent to check their connection when the browser
+reports itself offline.
 
 POST JSON fields: `submissionId` (UUID), `parentName`, `email`, `phone`,
 `childLevel` (`P3`, `P4`, `P5`, `P6`, `S1`), `subjects` (`science`, `math`), and
@@ -62,7 +74,10 @@ Both `submitPolymathEnquiry` and `cleanupPolymathEnquiries` must be deployed.
 The rules migration reads and tests the current production rules, refuses
 unrecognized rules, checks for concurrent edits and changes only its own
 protected paths. Never deploy an app-local replacement for shared rules.
-GitHub Pages deployment does not deploy this backend.
+GitHub Pages deployment does not deploy this backend, and neither does merging.
+A change to `service.js`, such as the list of accepted origins, takes effect only
+after the `firebase deploy` line above is run. The rules steps are not needed when
+the change is code only.
 
 Production smoke checks can exercise OPTIONS and invalid requests without
 queuing mail. A real delivery test contacts both recipients and should be

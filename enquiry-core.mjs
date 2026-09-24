@@ -58,7 +58,40 @@ function submissionError(kind) {
   return error;
 }
 
-export async function sendEnquiry(payload, { fetchImpl = globalThis.fetch, timeoutMs = 15000, endpoint = ENQUIRY_ENDPOINT } = {}) {
+// The centre's own published direct line — the same WhatsApp link the home page's
+// About Us offers. It is shown beside a failure the parent may not be able to retry
+// past, never instead of the server's confirmation.
+export const DIRECT_CONTACT = Object.freeze({
+  lead: 'If this keeps happening, you can also reach us directly on',
+  label: 'WhatsApp +65 9022 3314',
+  href: 'https://wa.me/6590223314'
+});
+
+// What the parent is told for each failure kind. Only `offline` may mention their
+// connection: a server that refuses the page's origin, is down, or is blocked on
+// the way looks exactly like a dead connection to fetch(), and telling a parent
+// with working internet to check it sends them looking in the wrong place.
+const FAILURES = Object.freeze({
+  'rate-limit': { contact: true, text: 'We’re receiving several enquiries right now. Please wait a little, then try again. Your details are still here.' },
+  unavailable: { contact: true, text: 'We couldn’t send your enquiry right now. Please try again in a little while. Your details are still here.' },
+  validation: { contact: false, text: 'We couldn’t accept those details. Please check your email, contact number, child’s level, and subjects, then try again.' },
+  timeout: { contact: true, text: 'We haven’t received confirmation yet. Your enquiry may have reached us. Please try again using the same details; we’ll use the same enquiry reference to avoid sending it twice.' },
+  offline: { contact: false, text: 'Your device seems to be offline, so your enquiry wasn’t sent. Check your internet connection, then try again. Your details are still here, and retrying will use the same enquiry reference.' },
+  network: { contact: true, text: 'We couldn’t reach our enquiry service just now, so your enquiry hasn’t been confirmed. Please try again in a moment. Your details are still here, and retrying will use the same enquiry reference.' },
+  unknown: { contact: true, text: 'We couldn’t confirm that your enquiry was received. Please try again. Your details are still here, and retrying will use the same enquiry reference.' }
+});
+
+export function failureMessage(kind) {
+  return FAILURES[typeof kind === 'string' && Object.hasOwn(FAILURES, kind) ? kind : 'unknown'];
+}
+
+// Only an explicit false is offline: navigator.onLine can report true without a
+// working network, but never false with one.
+function browserOnline() {
+  return globalThis.navigator?.onLine !== false;
+}
+
+export async function sendEnquiry(payload, { fetchImpl = globalThis.fetch, timeoutMs = 15000, endpoint = ENQUIRY_ENDPOINT, isOnline = browserOnline } = {}) {
   const controller = new AbortController();
   let timer;
   const deadline = new Promise((_, reject) => {
@@ -81,6 +114,9 @@ export async function sendEnquiry(payload, { fetchImpl = globalThis.fetch, timeo
   try { return await Promise.race([request, deadline]); }
   catch (error) {
     if (error?.kind) throw error;
-    throw submissionError(controller.signal.aborted ? 'timeout' : 'network');
+    if (controller.signal.aborted) throw submissionError('timeout');
+    let offline = false;
+    try { offline = isOnline() === false; } catch { /* unknown counts as online */ }
+    throw submissionError(offline ? 'offline' : 'network');
   } finally { clearTimeout(timer); }
 }

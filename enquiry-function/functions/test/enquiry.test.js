@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { validateEnquiry, buildSubmission, createService, recipientConfiguration, EnquiryError, RETENTION_MS,
-  REQUEST_COLLECTION, LIMIT_COLLECTION, MAIL_PREFIX } = require('../service');
+  REQUEST_COLLECTION, LIMIT_COLLECTION, MAIL_PREFIX, ORIGINS } = require('../service');
 const { createRepository } = require('../repository');
 
 const RECIPIENTS = recipientConfiguration('centre-one@example.test,centre-two@example.test');
@@ -160,6 +160,45 @@ test('public HTTP boundary accepts only allowed JSON POSTs and handles CORS pref
   assert.equal(first.statusCode, 202); assert.equal(retry.statusCode, 200);
   assert.deepEqual(first.body, { accepted: true, submissionId: input.submissionId });
   assert.equal(first.headers['Access-Control-Allow-Origin'], 'https://polymathlc.github.io');
+});
+// Every page that serves enquiry.html. The public site is the polymathlc/website
+// mirror on the custom domain in that repository's CNAME (the CER sync preserves
+// it); the same page also ships at polymathlc.github.io/cer/. An origin missing
+// here is answered 403 with no CORS headers, so the browser hides the reply and the
+// form can only report a dead connection. That is how the form broke on
+// polymathlc.com.sg while the parent's internet was fine.
+const SITE_ORIGINS = ['https://polymathlc.com.sg', 'https://www.polymathlc.com.sg', 'https://polymathlc.github.io'];
+test('every page that serves the form gets CORS headers on the preflight and the POST', async () => {
+  for (const origin of SITE_ORIGINS) {
+    const db = database(), h = requestHarness(repositoryFor(db));
+    const preflight = await h.request(sample(), { method: 'OPTIONS', headers: { origin } });
+    assert.equal(preflight.statusCode, 204, origin);
+    assert.equal(preflight.headers['Access-Control-Allow-Origin'], origin);
+    assert.match(preflight.headers['Access-Control-Allow-Methods'], /\bPOST\b/);
+    assert.match(preflight.headers['Access-Control-Allow-Headers'], /\bContent-Type\b/i);
+    assert.equal(db.rows.size, 0, 'a preflight never writes');
+    const input = sample(), posted = await h.request(input, { headers: { origin } });
+    assert.equal(posted.statusCode, 202, origin);
+    assert.equal(posted.headers['Access-Control-Allow-Origin'], origin);
+    assert.deepEqual(posted.body, { accepted: true, submissionId: input.submissionId });
+  }
+  // Nothing beyond the pages themselves: an origin is a browser control, and the
+  // list stays exactly the production pages.
+  assert.deepEqual([...ORIGINS].sort(), [...SITE_ORIGINS].sort());
+  assert.equal(Object.isFrozen(ORIGINS), true);
+});
+test('origins match exactly: lookalikes, plain http, ports and opaque origins get no CORS headers', async () => {
+  const db = database(), h = requestHarness(repositoryFor(db));
+  for (const origin of ['http://polymathlc.com.sg', 'http://www.polymathlc.com.sg', 'https://polymathlc.com.sg.attacker.example',
+    'https://attacker-polymathlc.com.sg', 'https://polymathlc.com.sg:8443', 'https://polymathlc.com.sg/',
+    'https://polymathlc.github.io.attacker.example', 'https://attacker.github.io', 'null', '']) {
+    for (const method of ['OPTIONS', 'POST']) {
+      const response = await h.request(sample(), { method, headers: { origin } });
+      assert.equal(response.statusCode, 403, `${method} from ${JSON.stringify(origin)}`);
+      assert.equal(response.headers['Access-Control-Allow-Origin'], undefined);
+    }
+  }
+  assert.equal(db.rows.size, 0, 'a refused origin never writes');
 });
 test('storage failure never reports success or logs parent data', async () => {
   const h = requestHarness({ reserve: async () => { throw new Error('sensitive provider text'); } });
