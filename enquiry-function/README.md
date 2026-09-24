@@ -51,10 +51,47 @@ Acceptance confirms a durable queue write, not arrival in an inbox.
 - Request data and provider error text are never application-logged. No email
   is sent to the parent, and no confirmation address can be used as a relay.
 
-## Tests and deployment
+## Redeploying (no terminal needed)
 
-Use the existing authorized Firebase CLI account for `mathgen--app`, Node 22,
-and never print CLI credential/configuration values.
+The server is redeployed by the **Deploy enquiry service** GitHub Actions workflow
+(`.github/workflows/deploy-enquiry.yml`). It runs by itself whenever
+`enquiry-function/functions/**` or `enquiry-function/firebase.json` changes on main.
+To redeploy by hand, open the repository on GitHub, then go to **Actions**, then
+**Deploy enquiry service**, then **Run workflow** (this also works from a phone).
+
+Each run tests the service and the form, deploys `--only functions:polymath-enquiry`,
+and then proves the live endpoint works. It sends a CORS preflight from every origin
+in `ORIGINS` and one from an unlisted origin, never a POST, so no email is sent. The
+run's summary page says whether the form's server is live. It deploys nothing else:
+no other codebase, no `--force`, and never the Firestore or Storage rules, which every
+Polymath app shares.
+
+One-time setup, in **Settings → Secrets and variables → Actions → New repository
+secret**:
+
+- `FIREBASE_SERVICE_ACCOUNT`: the JSON key of a service account that can deploy
+  Cloud Functions to `mathgen--app`. The maths repository's deploy already uses
+  such an account. GitHub never shows a saved secret again, so create a fresh key
+  for that same account in the Google Cloud console (**IAM & Admin → Service
+  Accounts →** the account **→ Keys → Add key → JSON**) and paste the whole file.
+  The daily cleanup is a scheduled function, so the account also needs Cloud
+  Scheduler access. If only that part fails, the run says so, and the form itself
+  can still be live.
+- `POLYMATH_ENQUIRY_RECIPIENTS`: the centre's two inboxes, comma-separated. They
+  are checked with the service's own rule before anything deploys, written only to
+  the ignored `functions/.env.mathgen--app` on the runner, and never printed.
+
+The run also reports whether the enquiry-mail protection is installed in the shared
+Firestore rules. If it is not, run the workflow again with **Also install the
+enquiry-mail protection** ticked. That box is the only way the workflow changes
+rules, and `tools/enquiry-rules.mjs` then touches nothing but its own paths.
+
+## Tests and deployment from a terminal
+
+The workflow above does all of this. By hand, use any computer, or Google Cloud
+Shell, where the Firebase CLI is signed in to the account that owns
+`mathgen--app` (`firebase login`). Work from a checkout of this repository with
+Node 22, and never print CLI credential/configuration values.
 Set `POLYMATH_ENQUIRY_RECIPIENTS` to the two authorized comma-separated recipient
 addresses in the ignored `functions/.env.mathgen--app` deployment file. Do not
 commit recipient addresses or copy them into browser code. Missing or invalid
@@ -64,6 +101,7 @@ server recipient configuration prevents the function from starting.
 npm ci --prefix enquiry-function/functions
 npm test --prefix enquiry-function/functions
 node --test tools/enquiry-rules-tests.mjs
+node tools/enquiry-deploy-tests.mjs
 node tools/enquiry-rules.mjs --firebase-tools /path/to/firebase-tools
 node tools/enquiry-rules.mjs --firebase-tools /path/to/firebase-tools --apply
 firebase deploy --project mathgen--app --config enquiry-function/firebase.json --only functions:polymath-enquiry --non-interactive
@@ -74,11 +112,11 @@ Both `submitPolymathEnquiry` and `cleanupPolymathEnquiries` must be deployed.
 The rules migration reads and tests the current production rules, refuses
 unrecognized rules, checks for concurrent edits and changes only its own
 protected paths. Never deploy an app-local replacement for shared rules.
-GitHub Pages deployment does not deploy this backend, and neither does merging.
-A change to `service.js`, such as the list of accepted origins, takes effect only
-after the `firebase deploy` line above is run. The rules steps are not needed when
-the change is code only.
+GitHub Pages deployment does not deploy this backend. A change to `service.js`,
+such as the list of accepted origins, takes effect only once the codebase is
+redeployed: by the workflow when the change is merged, or by the `firebase deploy`
+line above. The rules steps are not needed when the change is code only.
 
 Production smoke checks can exercise OPTIONS and invalid requests without
-queuing mail. A real delivery test contacts both recipients and should be
+queuing mail; `node tools/enquiry-smoke.mjs` is the OPTIONS check the workflow runs. A real delivery test contacts both recipients and should be
 explicitly labelled and authorized; inspect only its delivery metadata.
