@@ -1,0 +1,114 @@
+name: Deploy enquiry service
+
+# Publishes ONLY the isolated polymath-enquiry Functions codebase
+# (submitPolymathEnquiry and cleanupPolymathEnquiries) to mathgen--app, then proves
+# the live endpoint answers every page that serves enquiry.html.
+#
+# It runs by itself when the function's source changes on main, and on demand from
+# Actions → Deploy enquiry service → Run workflow — which is how to redeploy with no
+# terminal at all.
+#
+# It never runs `firebase deploy` for Firestore or Storage rules: those rules are
+# shared by every Polymath app. The narrow enquiry-mail protection is only changed
+# by tools/enquiry-rules.mjs, and only when a person ticks the box on a manual run.
+#
+# One-time setup: two repository secrets (Settings → Secrets and variables → Actions)
+#   FIREBASE_SERVICE_ACCOUNT     the JSON key of a service account that can deploy
+#                                Cloud Functions to mathgen--app
+#   POLYMATH_ENQUIRY_RECIPIENTS  the centre's two inboxes, comma-separated
+# See enquiry-function/README.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'enquiry-function/functions/**'
+      - 'enquiry-function/firebase.json'
+  workflow_dispatch:
+    inputs:
+      protect_rules:
+        description: 'Also install the enquiry-mail protection in the shared Firestore rules if it is missing'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-polymath-enquiry
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Only reviewed code on main is ever deployed, and never from a fork.
+    if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIREBASE_PROJECT: mathgen--app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: enquiry-function/functions/package-lock.json
+
+      - name: Test the service and the form
+        run: |
+          npm ci --prefix enquiry-function/functions --no-audit --no-fund
+          npm test --prefix enquiry-function/functions
+          node tools/enquiry-tests.mjs
+          node tools/enquiry-deploy-tests.mjs
+
+      - name: Prepare credentials and recipients
+        id: prepare
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          POLYMATH_ENQUIRY_RECIPIENTS: ${{ secrets.POLYMATH_ENQUIRY_RECIPIENTS }}
+        run: node tools/enquiry-deploy-setup.mjs
+
+      - name: Install the Firebase CLI
+        run: npm install -g firebase-tools --no-audit --no-fund
+
+      - name: Deploy the polymath-enquiry codebase
+        id: deploy
+        run: firebase deploy --project "$FIREBASE_PROJECT" --config enquiry-function/firebase.json --only functions:polymath-enquiry --non-interactive
+
+      # Runs even when the deploy reports an error: a failure to update the daily
+      # cleanup can leave the form itself working, and this says which it is.
+      - name: Prove the live service answers every page
+        if: always() && steps.prepare.outcome == 'success'
+        run: node tools/enquiry-smoke.mjs
+
+      # Changes the SHARED rules, so it never runs by itself: only on a manual run
+      # with the box ticked. The tool refuses rules it does not recognise, tests the
+      # result against every app's expectations first, and touches nothing else.
+      - name: Install the enquiry-mail protection (only when asked)
+        if: always() && steps.prepare.outcome == 'success' && github.event_name == 'workflow_dispatch' && inputs.protect_rules
+        run: node tools/enquiry-rules.mjs --firebase-tools "$(npm root -g)/firebase-tools" --apply
+
+      - name: Check the enquiry-mail protection in the shared rules
+        if: always() && steps.prepare.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if ! out=$(node tools/enquiry-rules.mjs --firebase-tools "$(npm root -g)/firebase-tools" --read); then
+            echo "::warning::Could not read the shared Firestore rules with this service account; the protection was not checked."
+            echo "Enquiry-mail protection: not checked (this service account cannot read the Firestore rules)." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "$out"
+          if [ "$(jq -r '.changeNeeded' <<<"$out")" = "false" ]; then
+            echo "Enquiry-mail protection: installed in the shared Firestore rules." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::The enquiry-mail protection is not installed in the shared Firestore rules. Run this workflow again with the box ticked."
+            echo "Enquiry-mail protection: **not installed**. Run this workflow again with the box ticked." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Remove the key and the recipients from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json" enquiry-function/functions/.env.mathgen--app

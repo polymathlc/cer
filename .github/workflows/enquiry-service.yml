@@ -1,10 +1,10 @@
 name: Public enquiry service
 on:
   pull_request:
-    paths: ['enquiry-function/**', 'tools/enquiry-rules.mjs', 'tools/enquiry-rules-tests.mjs', '.github/workflows/enquiry-service.yml']
+    paths: ['enquiry-function/**', 'tools/enquiry-rules.mjs', 'tools/enquiry-rules-tests.mjs', 'tools/enquiry-deploy-setup.mjs', 'tools/enquiry-smoke.mjs', 'tools/enquiry-deploy-tests.mjs', 'enquiry-core.mjs', '.github/workflows/enquiry-service.yml', '.github/workflows/deploy-enquiry.yml']
   push:
     branches: [main]
-    paths: ['enquiry-function/**', 'tools/enquiry-rules.mjs', 'tools/enquiry-rules-tests.mjs', '.github/workflows/enquiry-service.yml']
+    paths: ['enquiry-function/**', 'tools/enquiry-rules.mjs', 'tools/enquiry-rules-tests.mjs', 'tools/enquiry-deploy-setup.mjs', 'tools/enquiry-smoke.mjs', 'tools/enquiry-deploy-tests.mjs', 'enquiry-core.mjs', '.github/workflows/enquiry-service.yml', '.github/workflows/deploy-enquiry.yml']
 permissions:
   contents: read
 jobs:
@@ -21,3 +21,4 @@ jobs:
       - run: npm test --prefix enquiry-function/functions
       - run: node --test tools/enquiry-rules-tests.mjs
       - run: node --check enquiry-function/functions/index.js
+      - run: node tools/enquiry-deploy-tests.mjs
