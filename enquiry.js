@@ -1,4 +1,4 @@
-import { eligibleSubjects, validateEnquiry, createSubmissionTracker, sendEnquiry } from './enquiry-core.mjs';
+import { eligibleSubjects, validateEnquiry, createSubmissionTracker, sendEnquiry, failureMessage, DIRECT_CONTACT } from './enquiry-core.mjs';
 
 const form = document.getElementById('enquiryForm');
 const fields = document.getElementById('enquiryFields');
@@ -32,8 +32,17 @@ function clearErrors() {
   form.querySelectorAll('[aria-invalid]').forEach(node => node.removeAttribute('aria-invalid'));
 }
 
-function showStatus(message, state = 'error') {
-  status.textContent = message;
+// Built from nodes rather than markup: only the fixed direct line is ever a link.
+function showStatus(message, state = 'error', offerContact = false) {
+  status.replaceChildren(message);
+  if (offerContact) {
+    const link = document.createElement('a');
+    link.href = DIRECT_CONTACT.href;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = DIRECT_CONTACT.label;
+    status.append(' ' + DIRECT_CONTACT.lead + ' ', link, '.');
+  }
   status.dataset.state = state;
   status.hidden = false;
 }
@@ -93,15 +102,8 @@ form.addEventListener('submit', async event => {
     success.hidden = false;
     success.focus();
   } catch (error) {
-    const messages = {
-      'rate-limit': 'We’re receiving several enquiries right now. Please wait a little, then try again. Your details are still here.',
-      unavailable: 'We couldn’t send your enquiry right now. Please try again in a little while. Your details are still here.',
-      validation: 'We couldn’t accept those details. Please check your email, contact number, child’s level, and subjects, then try again.',
-      timeout: 'We haven’t received confirmation yet. Your enquiry may have reached us. Please try again using the same details; we’ll use the same enquiry reference to avoid sending it twice.',
-      network: 'We couldn’t confirm your enquiry. Check your connection and try again. Your details are still here, and retrying will use the same enquiry reference.',
-      unknown: 'We couldn’t confirm that your enquiry was received. Please try again. Your details are still here, and retrying will use the same enquiry reference.'
-    };
-    showStatus(messages[error?.kind] || messages.unknown);
+    const failure = failureMessage(error?.kind);
+    showStatus(failure.text, 'error', failure.contact);
     status.focus();
   } finally { setPending(false); }
 });

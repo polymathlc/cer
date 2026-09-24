@@ -1,10 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   eligibleSubjects,
   validateEnquiry,
   createSubmissionTracker,
-  sendEnquiry
+  sendEnquiry,
+  failureMessage,
+  DIRECT_CONTACT
 } from '../enquiry-core.mjs';
 
 const fixture = (overrides = {}) => ({
@@ -305,4 +308,80 @@ test('transport times out, aborts the request, and reports an uncertain timeout'
     error => error instanceof Error && error.kind === 'timeout'
   );
   assert.equal(signal.aborted, true);
+});
+
+// ── A refused service is not the visitor's internet ──────────────────────────
+// fetch() rejects with the same bare TypeError whether the device is offline or the
+// server refused the page's origin (CORS), is down, or was blocked on the way. The
+// form used to call every one of them "check your connection", which is what a
+// parent on polymathlc.com.sg was told while the server was rejecting that domain.
+// navigator.onLine === false is the only honest sign the device itself is offline.
+const failedFetch = async () => { throw new TypeError('Failed to fetch'); };
+
+test('an unreachable or refusing service while online is a network failure, not an offline visitor', async () => {
+  await assert.rejects(sendEnquiry(transportPayload(), { isOnline: () => true, fetchImpl: failedFetch }),
+    error => error instanceof Error && error.kind === 'network');
+  await assert.rejects(sendEnquiry(transportPayload(), { isOnline: () => false, fetchImpl: failedFetch }),
+    error => error instanceof Error && error.kind === 'offline');
+});
+
+test('an unreadable online flag counts as online, never as a reason to blame the connection', async () => {
+  for (const isOnline of [() => undefined, () => 'unknown', () => { throw new Error('no navigator'); }]) {
+    await assert.rejects(sendEnquiry(transportPayload(), { isOnline, fetchImpl: failedFetch }),
+      error => error instanceof Error && error.kind === 'network');
+  }
+});
+
+test('HTTP answers and timeouts keep their own kind whatever the online flag says', { timeout: 1000 }, async () => {
+  await assert.rejects(sendEnquiry(transportPayload(), { isOnline: () => false, fetchImpl: async () => response(503, {}) }),
+    error => error.kind === 'unavailable');
+  await assert.rejects(sendEnquiry(transportPayload(), {
+    isOnline: () => false, timeoutMs: 10,
+    fetchImpl: (_url, options) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+    })
+  }), error => error.kind === 'timeout');
+});
+
+test('only a browser that reports itself offline is told to check its connection', () => {
+  const blamesTheVisitor = /connection|internet|offline|wi-?fi|network/i;
+  for (const kind of ['network', 'unavailable', 'unknown', 'timeout', 'rate-limit', 'validation',
+    undefined, null, '', 'nonsense', '__proto__', 'constructor', 'toString']) {
+    const failure = failureMessage(kind);
+    assert.equal(typeof failure?.text, 'string', String(kind));
+    assert.ok(failure.text.length > 40, String(kind));
+    assert.doesNotMatch(failure.text, blamesTheVisitor, String(kind));
+  }
+  assert.match(failureMessage('offline').text, /offline/i);
+  assert.match(failureMessage('offline').text, /connection/i);
+  assert.equal(failureMessage('nonsense'), failureMessage('unknown'));
+});
+
+test('a failure that retrying may not fix offers the centre’s direct line; offline and bad details do not', () => {
+  for (const kind of ['network', 'unavailable', 'unknown', 'timeout', 'rate-limit'])
+    assert.equal(failureMessage(kind).contact, true, kind);
+  // Offline, the link cannot load either; a validation error means the details need fixing.
+  for (const kind of ['offline', 'validation'])
+    assert.equal(failureMessage(kind).contact, false, kind);
+});
+
+test('a parent who can simply retry is told their details are still on the form', () => {
+  for (const kind of ['network', 'unavailable', 'unknown', 'rate-limit', 'offline'])
+    assert.match(failureMessage(kind).text, /details are still here/i, kind);
+});
+
+test('the fallback is the WhatsApp line the home page already publishes', async () => {
+  const home = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(DIRECT_CONTACT.href, /^https:\/\/wa\.me\/\d{8,15}$/);
+  assert.ok(home.includes(`href="${DIRECT_CONTACT.href}"`), 'the home page no longer links this number');
+  assert.ok(home.includes(DIRECT_CONTACT.label), 'the home page no longer shows this label');
+  assert.ok(DIRECT_CONTACT.lead.trim().length > 10);
+  assert.equal(Object.isFrozen(DIRECT_CONTACT), true);
+});
+
+test('the page takes its failure wording from the one table rather than a copy of its own', async () => {
+  const page = await readFile(new URL('../enquiry.js', import.meta.url), 'utf8');
+  assert.match(page, /failureMessage\(/);
+  assert.match(page, /DIRECT_CONTACT/);
+  assert.doesNotMatch(page, /check your connection/i);
 });
