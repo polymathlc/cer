@@ -218,11 +218,12 @@ export function normalizeQuestionRepairPlan(raw, q) {
       if (has('instruction') || has('afterBlockId')) fail('Option selections cannot carry other instructions.');
       action.value = text(item.value, 'Correct option', 200, false);
       if (!destination.optionIds.has(action.value)) fail('The selected option does not exist.');
-    } else if (kind === 'redraw_image' || kind === 'generate_image') {
+    } else if (kind === 'redraw_image' || kind === 'generate_image' || kind === 'recrop_image') {
       if (!['image', 'inline'].includes(destination.kind)) fail('This target is not a picture.');
       if (has('value') || has('afterBlockId')) fail('Image actions cannot set URLs or other values.');
       const entry = catalog.entries.find(e => e.id === target);
       if (kind === 'redraw_image' && !entry.value) fail('A redraw needs an existing picture.');
+      if (kind === 'recrop_image' && !entry.value) fail('A recrop needs an existing picture.');
       if (kind === 'generate_image' && entry.value) fail('An existing picture must use a redraw to preserve its original details.');
       action.instruction = plain(item.instruction, 'Image instruction', MAX_INSTRUCTION, false).trim();
     } else if (kind === 'add_block') {
@@ -308,7 +309,7 @@ export function applyQuestionRepairPlan(q, rawPlan, imageResults = {}, makeId) {
       if (d.blockId) clearChangedWordPositions(question, d.blockId, d.field);
     } else if (action.kind === 'select_option') {
       b.correctId = action.value;
-    } else if (action.kind === 'redraw_image' || action.kind === 'generate_image') {
+    } else if (action.kind === 'redraw_image' || action.kind === 'generate_image' || action.kind === 'recrop_image') {
       const url = generatedImage(imageResults, action.id);
       if (d.kind === 'inline') inlineActions.push({ d, url });
       else b[d.field] = url;
@@ -338,6 +339,26 @@ export function applyQuestionRepairPlan(q, rawPlan, imageResults = {}, makeId) {
     if (textAction) imageIndex = [...textAction.value.matchAll(IMAGE_TOKEN)].findIndex(m => Number(m[1]) === d.imageIndex + 1);
     if (!originalImages[d.imageIndex]) fail('The original inline picture is missing.');
     setInlineFieldValue(b, d, replaceImageSource(String(inlineFieldValue(b, d) || ''), imageIndex, url));
+  }
+  // Source records belong to an image, not its former position in a text box.
+  // Move all records together from the original maps so swapping two tokens
+  // cannot overwrite the second picture's recovery source with the first's.
+  for (const action of plan.actions) {
+    if (action.kind !== 'replace_text') continue;
+    const d = destinations.get(action.target);
+    if (!d.images?.length) continue;
+    const order = [...action.value.matchAll(IMAGE_TOKEN)].map(match => Number(match[1]));
+    const prefix = action.target + ':inline:';
+    const remap = (originalMap, nextMap) => {
+      if (!record(originalMap) || !record(nextMap)) return;
+      for (let i = 1; i <= d.images.length; i++) delete nextMap[prefix + i];
+      order.forEach((originalIndex, position) => {
+        const from = prefix + originalIndex;
+        if (OWN(originalMap, from)) nextMap[prefix + (position + 1)] = JSON.parse(JSON.stringify(originalMap[from]));
+      });
+    };
+    remap(q.blocks[d.index].cropSources, question.blocks[d.index].cropSources);
+    remap(q.imageSources, question.imageSources);
   }
   // Maintain plan order when several different block kinds use the same anchor.
   const tails = new Map();

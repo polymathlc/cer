@@ -34,6 +34,17 @@ export function normaliseQuestion(payload, id, job, page, sourceUrl, imageUrls =
       if (Number.isInteger(b.marks) && b.marks > 0 && b.marks <= 20) out.marks = b.marks;
     } else if (type === 'image') {
       out = { id: bid, type, url: imageUrls[imageIndex++] || sourceUrl, caption: String(b.caption || '') };
+      // Persist the untouched page, not only the crop, so a later review can
+      // recover clipped labels even after the importer and browser are gone.
+      out.cropSource = { url: sourceUrl, imageUrl: out.url };
+      if (Number.isInteger(page) && page > 0) out.cropSource.page = page;
+      const candidate = b.box_2d ?? b.box;
+      if (out.url !== sourceUrl && Array.isArray(candidate) && candidate.length === 4
+          && candidate.every(v => typeof v === 'number' || (typeof v === 'string' && v.trim() !== ''))) {
+        const box = candidate.map(Number);
+        if (box.every(v => Number.isFinite(v) && v >= 0 && v <= 1000)
+            && box[2] > box[0] && box[3] > box[1]) out.cropSource.box_2d = box;
+      }
     } else if (type === 'mcq') {
       if (!Array.isArray(b.options) || b.options.length < 2) throw new Error('Incomplete multiple-choice options.');
       const options = b.options.map((s,i) => ({id: bid + '_' + i, text: String(s)}));

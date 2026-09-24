@@ -19,6 +19,7 @@ const end=htmlSource.indexOf('<!-- ==================== 🎯 RE-FILE',start);
 assert.ok(start>=0 && end>start,'Question check dialog exists');
 const modal=htmlSource.slice(start,end);
 const coreSource=fs.readFileSync(new URL('../question-repair-core.mjs',import.meta.url),'utf8');
+const cropSource=fs.readFileSync(new URL('../question-crop-core.mjs',import.meta.url),'utf8');
 const body=harnessBody();
 const results=[];
 
@@ -28,11 +29,12 @@ async function fixture(width){
   page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/*',route=>{
     if(route.request().url().endsWith('/question-repair-core.mjs'))return route.fulfill({contentType:'text/javascript',body:coreSource});
+    if(route.request().url().endsWith('/question-crop-core.mjs'))return route.fulfill({contentType:'text/javascript',body:cropSource});
     return route.fulfill({contentType:'text/html; charset=utf-8',body:'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style></head><body>'+modal+'</body></html>'});
   });
   await page.goto('https://question-repair.test/');
   await page.evaluate(async ({body,question,findings,plan})=>{
-    const core=await import('/question-repair-core.mjs');
+    const core={...await import('/question-repair-core.mjs'),...await import('/question-crop-core.mjs')};
     const h=window.qa=new Function('core','env',body)(core,{question,findings,plan,document,window,scope:'create'});
     for(const [name,fn] of Object.entries(h))if(typeof fn==='function' && name.startsWith('tlRepair'))window[name]=fn;
     window.tlClosePanel=()=>{h.tlRepairReset();document.getElementById('tlOverlay').classList.remove('show');};

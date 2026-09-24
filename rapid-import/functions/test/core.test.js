@@ -63,3 +63,35 @@ test('mixed-case image blocks keep their own crop or fallback and original part 
 test('question signature changes after an answer edit',()=>{
   const a=q('a',1), before=signature(a);a.blocks[0].content='changed';assert.notEqual(signature(a),before);
 });
+
+test('each imported figure keeps the raw source and its own crop identity after JSON persistence',()=>{
+  const result=normaliseQuestion({blocks:[
+    {type:'image',box_2d:[100,200,400,700]},
+    {type:'image',box:['200','300','600','800']},
+    {type:'image',box_2d:[0,0,1000,1000]}
+  ]},'crop-q',{topics:[]},3,'raw-page',['crop-one','crop-two','raw-page']);
+  assert.deepEqual(JSON.parse(JSON.stringify(result)).blocks.map(b=>b.cropSource),[
+    {url:'raw-page',imageUrl:'crop-one',page:3,box_2d:[100,200,400,700]},
+    {url:'raw-page',imageUrl:'crop-two',page:3,box_2d:[200,300,600,800]},
+    {url:'raw-page',imageUrl:'raw-page',page:3}
+  ]);
+});
+
+test('invalid metadata rectangles never become trusted source coordinates',()=>{
+  for(const box of [[900,200,100,700],[-1,200,400,700],[100,200,1001,700],[100,'',400,700],[100,200,NaN,700],null]) {
+    const result=normaliseQuestion({blocks:[{type:'image',box_2d:box}]},'invalid-q',{topics:[]},1,'raw-page',['crop-url']);
+    assert.deepEqual(result.blocks[0].cropSource,{url:'raw-page',imageUrl:'crop-url',page:1});
+  }
+});
+
+test('page continuations preserve the original page for every figure',()=>{
+  const make=(id,page)=>normaliseQuestion({sourceQuestionNumber:'8',blocks:[
+    {type:'text',text:'(a) Figure'}, {type:'image',box_2d:[100,200,400,700]}
+  ]},id,{topics:[]},page,'raw-page-'+page,['crop-'+page]);
+  const first=make('first',1), second=make('second',2);
+  const joined=assemblePage(first,[{q:second,continuation:true}],true).ready[0];
+  assert.deepEqual(JSON.parse(JSON.stringify(joined)).blocks.filter(b=>b.type==='image').map(b=>b.cropSource),[
+    {url:'raw-page-1',imageUrl:'crop-1',page:1,box_2d:[100,200,400,700]},
+    {url:'raw-page-2',imageUrl:'crop-2',page:2,box_2d:[100,200,400,700]}
+  ]);
+});
