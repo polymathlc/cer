@@ -1,3 +1,5 @@
+import './worksheet-art.js?v=1';
+import './worksheet-art-editor.js?v=1';
 import { cropSourcesFor, normalizeCropBox, cropPixelRect, cropSourceUpdate } from './question-crop-core.mjs?v=1';
 import { questionRepairTargets, normalizeQuestionRepairPlan, applyQuestionRepairPlan } from './question-repair-core.mjs?v=2';
 import { findRapidDuplicates, rapidDuplicateThreshold, rapidDuplicateFingerprint, rapidDuplicatePairCurrent } from './rapid-duplicates.js';
@@ -4414,7 +4416,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.415.2';
+const APP_VERSION = 'v1.416.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5068,6 +5070,7 @@ async function loadAdminQuestions() {
 onAuthStateChanged(auth, (user) => {
   pirateRiftPortal.close();
   grandLinePortal.close();
+  wsArtResetForUser(user);
   ainsteinStopAdminWork();
   if (user) {
     enterApp(user);
@@ -26397,6 +26400,7 @@ const CPB_META_DEFAULTS = {
   // switching back keeps every setting on both sides — nothing a teacher has
   // typed is thrown away by pressing the other button.
   targetQuestions: CPB_TARGET_QUESTIONS,
+  artwork: null,       // optional colour elements; stored with this paper
   wsIntro: '',         // one instruction line printed above question 1
   wsFields: true,      // print the Name / Class / Date strip
 };
@@ -27796,6 +27800,7 @@ function _cpbWorksheetOpts() {
     frontHtml: '',
     forcedBreakIds: new Set(),
     buildOpts: {
+      artwork: _cpbMeta.artwork || [],
       plainNumbers: true,
       noStudentFields: !_cpbMetaGet('wsFields'),
       answerKeyExtras: true,
@@ -28197,6 +28202,7 @@ function cpbRender() {
     return;
   }
   el.innerHTML = _cpbIntroHtml() + _cpbDraftOfferHtml() + _cpbLibHtml() + _cpbSetupHtml()
+    + (cpbIsWorksheet() ? '<div class="cpb-card"><button type="button" class="btn btn-outline" onclick="wsArtEdit(\'cpb\')">🎨 Colour &amp; tutor characters</button><p class="cpb-lead">Optional science illustrations and speech bubbles with hints, reminders or tips. Included in previews, saved worksheets and printed copies.</p></div>' : '')
     + _cpbZoneHtml() + _cpbPaperCardHtml();
   // Every mutation on this page ends in a render, so mirroring the draft from
   // here is the one hook that cannot be forgotten.
@@ -36051,6 +36057,64 @@ async function snapMarkQuestion(q, photoIdx) {
 // STUDENT WORKSHEET CREATOR
 // =====================================================================
 let wsSelectedIds = new Set();
+let wsArtwork = [];
+let _wsArtworkOwner = null;
+
+function wsArtResetForUser(user) {
+  const uid = user && user.uid || null;
+  if (uid === _wsArtworkOwner) return;
+  _wsArtworkOwner = uid;
+  wsArtwork = [];
+  // Saved artwork is private to the worksheet owner; the next sign-in loads
+  // its own documents asynchronously, so do not expose the old list meanwhile.
+  savedWorksheets = [];
+  const label = document.getElementById('wsArtworkCount');
+  if (label) label.textContent = '';
+  // A shared device must not leave the previous account's draft in a modal.
+  document.querySelectorAll('dialog.worksheet-art-editor').forEach(dialog => dialog.close());
+}
+
+// Art belongs to a worksheet, never to its shared bank questions.
+function wsArtEdit(scope, id) {
+  if (!currentUser || !['builder', 'saved', 'cpb'].includes(scope)) return;
+  const saved = scope === 'saved' ? savedWorksheets.find(w => w.id === id) : null;
+  if (scope === 'saved' && !saved) return;
+  if (scope === 'cpb' && !_canAuthor()) return;
+  const owner = currentUser && currentUser.uid;
+  const meta = scope === 'cpb' ? _cpbMeta : null;
+  const questions = meta ? _cpbPrintOrder() : saved ? _wsSavedQuestions(saved) : questionBank.filter(q => wsSelectedIds.has(q.id));
+  const title = meta ? _cpbPaperTitle() : saved ? saved.title : (document.getElementById('wsTitle')?.value || 'Science worksheet');
+  window.WorksheetArtEditor.open(meta ? meta.artwork : saved ? saved.artwork : wsArtwork, {
+    questions,
+    context: [title, ...questions.slice(0, 8).map(q => [q.topic, q.title].filter(Boolean).join(': '))].join('; '),
+    askAI: worksheetArtAskAI,
+    onSave: async artwork => {
+      if ((currentUser && currentUser.uid) !== owner) throw new Error('Your account changed. Reopen the worksheet before saving.');
+      if (meta) {
+        if (meta !== _cpbMeta) throw new Error('A different worksheet is open. Reopen its colour controls.');
+        meta.artwork = artwork; cpbRender();
+      } else if (saved) {
+        if (!savedWorksheets.includes(saved)) throw new Error('This worksheet is no longer open.');
+        if (!currentUser) throw new Error('Sign in before saving worksheet changes.');
+        // Await the write so a failed save keeps the editor open with its draft.
+        await setDoc(_wsRef(saved.id), { artwork, updatedAt: new Date().toISOString() }, { merge: true });
+        if (!currentUser || currentUser.uid !== owner || !savedWorksheets.includes(saved)) return;
+        saved.artwork = artwork; renderSavedWorksheets();
+      } else wsArtwork = artwork;
+      const label = document.getElementById('wsArtworkCount');
+      if (label) label.textContent = wsArtwork.length ? ' (' + wsArtwork.length + ')' : '';
+      showToast('Worksheet elements updated', 'success');
+      if (document.getElementById('wsPreviewOverlay')?.classList.contains('show')) renderWsPreview();
+    }
+  });
+}
+async function worksheetArtAskAI(prompt) {
+  if (!currentUser) throw new Error('Sign in before using AI.');
+  if (!window.__aiReady || !window.__aiReady()) throw new Error('AI is not ready yet. Try again in a moment.');
+  return askGemini(prompt + '\n' + aiGrounding('teach', '', prompt), { maxOutputTokens: 250, temperature: 0.3 });
+}
+window.wsArtEdit = wsArtEdit;
+window.worksheetArtAskAI = worksheetArtAskAI;
 let wsManualBreaks = new Set(); // question ids forced to start a new page (preview + print)
 let wsMergeUp = new Set();       // question ids forced to stay on the previous page
 let savedWorksheets = [];
@@ -36373,6 +36437,7 @@ async function confirmSaveWorksheet() {
     id: 'ws_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     title: title,
     questionIds: Array.from(wsSelectedIds),
+    artwork: window.WorksheetArtEditor.normalize(wsArtwork),
     format: 'open',
     createdAt: new Date().toISOString()
   };
@@ -36403,6 +36468,7 @@ function _wsNormalise(ws, id) {
     id: String(wsId),
     title: typeof ws.title === 'string' && ws.title.trim() ? ws.title : 'Untitled worksheet',
     questionIds: Array.isArray(ws.questionIds) ? ws.questionIds.filter(x => x != null).map(String) : [],
+    artwork: Array.isArray(ws.artwork) ? ws.artwork : [],
     createdAt: typeof ws.createdAt === 'string' ? ws.createdAt : '',
   });
 }
@@ -36450,6 +36516,7 @@ function renderSavedWorksheets() {
         <p>${ids.length} question${ids.length !== 1 ? 's' : ''}${shut.length ? ` &middot; <span style="color:#4338ca;" title="Held back until ${escapeHtml(qReleaseLabel(shutOn))}. They stay on this worksheet and appear by themselves on the day.">🔒 ${shut.length} not open yet</span>` : ''}${date ? ' &middot; ' + date : ''}</p>
       </div>
       <div class="ws-saved-actions">
+        <button class="btn btn-outline" onclick="wsArtEdit('saved','${ws.id}')">🎨 Colour &amp; characters</button>
         <button class="btn btn-outline" onclick="previewSavedWorksheet('${ws.id}')" title="Preview the printed pages — and edit any question from there">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           Preview
@@ -36510,7 +36577,7 @@ async function reprintWorksheet(id) {
   const noFields = !_wsStudentFieldsOn('saved');
   const wantCover = !!document.getElementById('mwIncludeCover')?.checked;
   const why = await _wnyRunPrepare(selected, wnyPrintOn('saved'));
-  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields) : '', noFields, why, akxPrintOn('saved'), objBoxPrintOn('saved'));
+  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields) : '', noFields, why, akxPrintOn('saved'), objBoxPrintOn('saved'), ws.artwork);
 }
 
 // The questions of a saved worksheet, in the order they were chosen — the ids
@@ -37010,7 +37077,7 @@ async function printStudentWorksheet() {
   const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
   const frontHtml = await _wsFrontHtml(selected, title);
   const why = await _wnyRunPrepare(selected, wnyPrintOn('builder'));
-  await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why, akxPrintOn('builder'), objBoxPrintOn('builder'));
+  await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why, akxPrintOn('builder'), objBoxPrintOn('builder'), wsArtwork);
 }
 
 // Worksheet title banner + name/date/class strip printed at the top of page 1.
@@ -37123,6 +37190,11 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
 
     if (qIndex === 0 && !secHtml) {
       qHtml += _wsHeaderHtml(worksheetTitle, hasCover, noFields);
+    }
+
+    if (opts && Array.isArray(opts.artwork) && opts.artwork.length) {
+      if (qIndex === 0) qHtml += window.WorksheetArtEditor.render(opts.artwork, '');
+      qHtml += window.WorksheetArtEditor.render(opts.artwork, q.id);
     }
 
     // On a paper the number sits in the left gutter BESIDE the first line, the
@@ -37311,12 +37383,12 @@ async function _wnyRunPrepare(selected, on) {
   return notes;
 }
 
-async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes, akExtras, objBoxAll) {
+async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes, akExtras, objBoxAll, artwork) {
   const output = document.getElementById('printOutput');
   // plainNumbers: a worksheet is numbered "Question 1, 2, 3…" for the student.
   // The bank's own title and its category/topic line are internal filing —
   // useful in the admin's bank, meaningless (and a giveaway) on a printed sheet.
-  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields, whyNotes: whyNotes || null, answerKeyExtras: !!akExtras, objectivesBoxAll: !!objBoxAll });
+  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields, whyNotes: whyNotes || null, answerKeyExtras: !!akExtras, objectivesBoxAll: !!objBoxAll, artwork: artwork || [] });
   autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp });
 }
 
@@ -37797,7 +37869,7 @@ async function generateSyllabusPdf() {
   _printProgressUpdate('Laying out pages…', 0.85, 'Building your syllabus worksheet');
   const frontHtml = await _wsFrontHtml(selected, title);
   const output = document.getElementById('printOutput');
-  output.innerHTML = buildWorksheetHtml(orderedQs, title, { frontHtml, sectionHtmlById, plainNumbers: true });
+  output.innerHTML = buildWorksheetHtml(orderedQs, title, { frontHtml, sectionHtmlById, plainNumbers: true, artwork: wsArtwork });
   autoscaleAndPrint(output, { forcedBreakIds: forced });
 }
 
@@ -38087,6 +38159,7 @@ function _tsendCtxSaved(id) {
   if (!ws) return null;
   return {
     saved: true, savedId: id,
+    artwork: ws.artwork || [],
     selected: _wsSavedQuestions(ws),
     title: ws.title || 'CER Worksheet',
     cover: !!document.getElementById('mwIncludeCover')?.checked,
@@ -38486,6 +38559,7 @@ function _wsPreviewCtx() {
     const ws = savedWorksheets.find(w => w.id === _wsPreviewSaved.id);
     return {
       saved: true,
+      artwork: ws && ws.artwork || [],
       selected: ws ? _wsSavedQuestions(ws) : [],
       title: (ws && ws.title) || _wsPreviewSaved.title || 'CER Worksheet',
       cover: !!document.getElementById('mwIncludeCover')?.checked,
@@ -38497,6 +38571,7 @@ function _wsPreviewCtx() {
   }
   return {
     saved: false,
+    artwork: wsArtwork,
     selected: questionBank.filter(q => wsSelectedIds.has(q.id)),
     title: (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet',
     cover: !!document.getElementById('wsIncludeCover')?.checked,
@@ -39009,6 +39084,7 @@ function _wsPreviewBuildHtml(ctx, opts) {
     whyNotes: _wnyCachedNotes(selected, wnyPrintOn(ctx.where)),
     answerKeyExtras: !!ctx.akExtras,
     objectivesBoxAll: !!ctx.objBoxAll,
+    artwork: ctx.artwork || [],
     // ▲▼ the order tags — a preview-only wrapper that generates no box, so
     // the pagination is still exactly what will print. The export passes
     // `noTags`: nothing may be hung on a page that is about to be photographed.
