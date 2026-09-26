@@ -1,0 +1,35 @@
+name: Question apps and worksheet QR codes
+on:
+  pull_request:
+    paths: ['app.js', 'index.html', 'question-app*', 'vendor/qrcode-generator*', 'tools/widget-*.mjs', 'tools/question-apps*.mjs', '.github/workflows/question-apps.yml']
+  push:
+    branches: [main]
+    paths: ['app.js', 'index.html', 'question-app*', 'vendor/qrcode-generator*', 'tools/widget-*.mjs', 'tools/question-apps*.mjs', '.github/workflows/question-apps.yml']
+permissions:
+  contents: read
+jobs:
+  question-apps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check app generation, publishing and print integration
+        run: |
+          node --check app.js
+          node tools/question-apps-tests.mjs
+          node tools/widget-generation-tests.mjs
+          node tools/widget-editor-tests.mjs
+          node tools/widget-save-tests.mjs
+          node tools/widget-print-tests.mjs
+          node tools/editing-mode-tests.mjs
+          node tools/ai-routes-tests.mjs
+      - run: npm install --no-save --package-lock=false playwright@1.62.1 jsqr@1.4.0
+      - run: npx playwright install --with-deps chromium
+      - name: Check editor and public viewer in a browser
+        env:
+          JSQR_SCRIPT: node_modules/jsqr/dist/jsQR.js
+        run: |
+          node tools/question-apps-browser-tests.mjs
+          node tools/widget-editor-browser-tests.mjs

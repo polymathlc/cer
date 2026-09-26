@@ -1,5 +1,7 @@
 import './worksheet-art.js?v=1';
 import './worksheet-art-editor.js?v=1';
+import './vendor/qrcode-generator.js';
+import './question-apps.js?v=1';
 import { cropSourcesFor, normalizeCropBox, cropPixelRect, cropSourceUpdate } from './question-crop-core.mjs?v=1';
 import { questionRepairTargets, normalizeQuestionRepairPlan, applyQuestionRepairPlan } from './question-repair-core.mjs?v=2';
 import { findRapidDuplicates, rapidDuplicateThreshold, rapidDuplicateFingerprint, rapidDuplicatePairCurrent } from './rapid-duplicates.js';
@@ -4416,7 +4418,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.416.0';
+const APP_VERSION = 'v1.417.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -6366,7 +6368,9 @@ function createBlock(type) {
       block.html = '';         // the generated single-file widget document
       block.comments = '';     // the admin's extra instructions to the builder
       block.engine = 'gemini'; // 'gemini' | 'openai'
-      block.effort = 'high';   // 'standard' | 'high' | 'pro'
+      block.effort = 'standard'; // low-cost default; every effort respects maxTokens
+      block.maxTokens = 4096;
+      block.title = 'Explore this question';
       block.height = 480;      // iframe height (px) when shown to the student
       break;
     case 'video':
@@ -8157,7 +8161,7 @@ function renderBlocks() {
       case 'widget':
         badgeClass = 'video-badge';
         badgeIcon = '🧩';
-        badgeLabel = 'Interactive Widget (AI)';
+        badgeLabel = 'Interactive app';
         break;
       case 'table':
         badgeClass = 'table-badge';
@@ -8452,7 +8456,7 @@ function makeBlockInsertBar(index) {
       <button type="button" class="block-insert-btn" onclick="addBlockAt('answer', ${index})">🧪 CER Answer</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('plainanswer', ${index})">✅ Answer</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('explanation', ${index})">💡 Explanation</button>
-      <button type="button" class="block-insert-btn" onclick="addBlockAt('widget', ${index})">🧩 Widget (AI)</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('widget', ${index})">🧩 Interactive app</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('image', ${index})">🖼️ Image</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('video', ${index})">🎬 Video</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('table', ${index})">▦ Table</button>
@@ -8482,12 +8486,119 @@ function makeBlockInsertBar(index) {
 // =====================================================================
 const WIDGET_HTML_MAX = 300000;   // ~300 KB — a question doc must stay well under Firestore's 1 MB
 const WIDGET_EFFORTS = {
-  // 'pro' is deliberately uncapped: no output-token ceiling, maximum thinking.
+  // Effort is separate from the per-request token ceiling. No unlimited mode.
   standard: { label: 'Standard', gem: { thinkingLevel: AI_THINK_MIN, maxOutputTokens: 16384 }, oa: { effort: 'low',    maxTokens: 16384 } },
   high:     { label: 'High',     gem: { thinkingLevel: 'high',    maxOutputTokens: 32768 }, oa: { effort: 'medium', maxTokens: 32768 } },
-  pro:      { label: 'Pro — no limits', gem: { thinkingLevel: 'high' },                    oa: { effort: 'high' } },
+  pro:      { label: 'Pro', gem: { thinkingLevel: 'high' }, oa: { effort: 'high' } },
 };
 let _widgetBusy = {};             // blockId -> true while a build is running
+const _widgetPublishing = new Map();
+let _widgetEditorSaving = false;
+function _widgetHasApp(q) { return (q.blocks || []).some(b => b.type === 'widget'); }
+function _widgetEditorStamp() {
+  const snapshot = collectQuestionData();
+  delete snapshot.id; delete snapshot.createdAt;
+  return JSON.stringify(snapshot);
+}
+async function _widgetCommitEditor(q, save) {
+  if (_widgetEditorSaving) return false;
+  _widgetEditorSaving = true;
+  const original = blocks, before = _widgetEditorStamp(), uid = currentUser?.uid, editing = currentEditingQuestion;
+  try {
+    if (!await save()) return false;
+    if (currentUser?.uid !== uid || blocks !== original || currentEditingQuestion !== editing || _widgetEditorStamp() !== before) {
+      showToast('The earlier version was saved. Your newer editor changes have been kept.', 'info');
+      return false;
+    }
+    return true;
+  } finally { _widgetEditorSaving = false; }
+}
+
+function widgetSetTokenLimit(blockId, input) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || !_canAuthor() || _widgetBusy[blockId]) return;
+  block.maxTokens = window.QuestionApps.normalizeTokenLimit(input.value);
+  input.value = block.maxTokens;
+}
+function widgetPreview() { if (_canAuthor()) renderBlocks(); }
+function widgetSetHtml(blockId, html) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || !_canAuthor() || _widgetBusy[blockId]) return;
+  block.html = String(html || '');
+  const status = document.getElementById('widgetStatus_' + blockId);
+  if (status) status.textContent = 'HTML updated. Preview the app, then save your question.';
+}
+async function widgetImportHtml(blockId, input) {
+  const block = blocks.find(b => b.id === blockId), file = input.files?.[0];
+  if (!block || !file || !_canAuthor() || _widgetBusy[blockId]) return;
+  const uid = currentUser?.uid, before = block.html;
+  try {
+    if (file.size > WIDGET_HTML_MAX) throw new Error('Use an HTML file smaller than 300 KB');
+    const html = await file.text();
+    if (!_canAuthor() || currentUser?.uid !== uid || !blocks.includes(block) || block.html !== before) return;
+    if (!/<(?:!doctype|html|body|div|main|section|script|canvas)\b/i.test(html)) throw new Error('This file does not contain an HTML app');
+    widgetSetHtml(blockId, html);
+    renderBlocks();
+    showToast('HTML imported. Try the preview, then save your question.', 'success');
+  } catch (error) { showToast(error.message, 'error'); }
+}
+
+// Public snapshots contain app content only. An immutable SHA-256 URL means
+// already-printed worksheets keep working when the teacher later edits an app.
+async function _widgetPublishBlock(block) {
+  if (!block || block.type !== 'widget' || !String(block.html || '').trim()) return;
+  if (window.QuestionApps.publishedUrl(block)) return;
+  if (!_canAuthor()) throw new Error('Ask a question author to publish this app before printing');
+  const uid = currentUser?.uid, html = String(block.html), title = String(block.title || 'Explore this question').slice(0,120);
+  const height = window.QuestionApps.normalizeHeight(block.height);
+  if (new TextEncoder().encode(html).length > WIDGET_HTML_MAX) throw new Error('The app exceeds 300 KB. Use a smaller HTML file');
+  const payload = JSON.stringify({version:1,title,html,height}), bytes = new TextEncoder().encode(payload);
+  if (bytes.length > window.QuestionApps.MAX_PAYLOAD_BYTES) throw new Error('The encoded app is too large. Use a smaller HTML file');
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const id = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2,'0')).join('');
+  if (!_canAuthor() || currentUser?.uid !== uid) throw new Error('Account changed. Publish the app again');
+  if (!_widgetPublishing.has(id)) {
+    const task = (async () => {
+      const reference = storageRef(storage, 'cer-images/question-app-' + id + '.json');
+      let download;
+      try { download = await getDownloadURL(reference); }
+      catch (error) {
+        if (error.code !== 'storage/object-not-found') throw error;
+        if (!_canAuthor() || currentUser?.uid !== uid) throw new Error('Account changed. Publish the app again');
+        await uploadBytes(reference, bytes, {contentType:'application/json',cacheControl:'public,max-age=31536000,immutable'});
+        download = await getDownloadURL(reference);
+      }
+      const url = new URL(download), token = url.searchParams.get('token');
+      const link = window.QuestionApps.viewerUrl(id, token);
+      if (!link) throw new Error('Storage did not return a shareable app link');
+      // Verify the published snapshot through the same public read students use.
+      const check = await fetch(window.QuestionApps.storageUrlFromHash(new URL(link).hash), {credentials:'omit',referrerPolicy:'no-referrer'});
+      if (!check.ok || await check.text() !== payload) throw new Error('The published app could not be verified. Please try again');
+      return link;
+    })();
+    _widgetPublishing.set(id, task);
+    task.finally(() => _widgetPublishing.delete(id)).catch(() => {});
+  }
+  const appUrl = await _widgetPublishing.get(id);
+  if (!_canAuthor() || currentUser?.uid !== uid || block.html !== html || String(block.title || 'Explore this question').slice(0,120) !== title || window.QuestionApps.normalizeHeight(block.height) !== height) throw new Error('The app changed while publishing. Please publish again');
+  block.appUrl = appUrl;
+  block.appSourceHash = window.QuestionApps.sourceHash(block);
+}
+async function _widgetEnsurePublished(questions) {
+  for (const q of questions || []) {
+    for (const block of q.blocks || []) await _widgetPublishBlock(block);
+  }
+}
+async function widgetPublish(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || !_canAuthor() || _widgetBusy[blockId]) return;
+  _widgetBusy[blockId] = true; renderBlocks();
+  try {
+    await _widgetPublishBlock(block);
+    showToast('App link and QR code ready. Save the question to keep the link.', 'success');
+  } catch (error) { showToast('Could not publish app: ' + error.message, 'error'); }
+  finally { delete _widgetBusy[blockId]; renderBlocks(); }
+}
 
 // srcdoc attribute value: only & and " need escaping inside a quoted attribute.
 function _widgetSrcdocAttr(html) {
@@ -8496,14 +8607,14 @@ function _widgetSrcdocAttr(html) {
 
 function renderWidgetBlockEditor(block) {
   const busy = !!_widgetBusy[block.id];
-  const eff = WIDGET_EFFORTS[block.effort] ? block.effort : 'high';
-  const hasKey = !!getOpenAiKey();
+  const eff = WIDGET_EFFORTS[block.effort] ? block.effort : 'standard';
   const has = !!(block.html || '').trim();
+  const published = window.QuestionApps.publishedUrl(block);
   const engineSel = `
     <select class="form-input" style="width:auto;min-width:130px;" ${busy ? 'disabled' : ''}
             onchange="saveBlockField('${block.id}', 'engine', this.value)">
       <option value="gemini" ${block.engine !== 'openai' ? 'selected' : ''}>✨ Gemini</option>
-      <option value="openai" ${block.engine === 'openai' ? 'selected' : ''} ${hasKey ? '' : 'disabled'}>🤖 ChatGPT${hasKey ? '' : ' — add key in AI Engine'}</option>
+      <option value="openai" ${block.engine === 'openai' ? 'selected' : ''}>🤖 ChatGPT</option>
     </select>`;
   const effortSel = `
     <select class="form-input" style="width:auto;min-width:150px;" ${busy ? 'disabled' : ''}
@@ -8514,28 +8625,41 @@ function renderWidgetBlockEditor(block) {
   return `
     <div class="block-body">
       <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">
-        🧩 Builds a <b>one-window interactive widget</b> (interactive graph, simulator, explorable model…) shown to the student
-        <b>after they answer</b> this question, to help them understand the concept. Students never see this builder.
+        🧩 Paste an HTML app or generate one for this question. Students can explore it <b>after their answer is marked</b>.
+        Saving or exporting publishes a shareable app link for the worksheet QR code.
       </div>
+      <label>App title<input class="form-input" maxlength="120" value="${escapeHtml(block.title || 'Explore this question')}" ${busy ? 'disabled' : ''} oninput="saveBlockField('${block.id}', 'title', this.value)"></label>
+      <details style="margin:12px 0;" ${has ? '' : 'open'}><summary style="cursor:pointer;font-weight:600;">Paste HTML or import an HTML file</summary>
+        <label style="display:block;margin-top:10px;">HTML code<textarea aria-label="App HTML code" class="form-input" style="font-family:monospace;min-height:160px;" rows="8" spellcheck="false" ${busy ? 'disabled' : ''} oninput="widgetSetHtml('${block.id}', this.value)">${escapeHtml(block.html || '')}</textarea></label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <button type="button" class="btn btn-outline" ${busy ? 'disabled' : ''} onclick="widgetPreview()">Preview pasted app</button>
+          <label class="btn btn-outline">Import .html <input type="file" accept=".html,.htm,text/html" style="max-width:210px;" ${busy ? 'disabled' : ''} onchange="widgetImportHtml('${block.id}', this)"></label>
+        </div><p style="font-size:0.8rem;color:var(--text-muted);">Use a complete, self-contained HTML file with inline CSS and JavaScript (up to 300 KB). External scripts, images and network requests are blocked.</p>
+      </details>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
         <label style="font-size:0.82rem;color:var(--text-muted);">Engine</label>${engineSel}
         <label style="font-size:0.82rem;color:var(--text-muted);">Effort</label>${effortSel}
+        <label style="font-size:0.82rem;">Maximum output tokens <input class="form-input" aria-label="Maximum output tokens" type="number" min="1024" max="32000" step="1" value="${window.QuestionApps.normalizeTokenLimit(block.maxTokens)}" style="width:120px;" ${busy ? 'disabled' : ''} onchange="widgetSetTokenLimit('${block.id}', this)"></label>
       </div>
+      <p style="font-size:0.8rem;color:var(--text-muted);">Default 4,096; allowed 1,024–32,000 per request, including refinement. Input tokens cost extra. A small limit may produce an incomplete app; no automatic retry or extra AI call is made. Effort applies to Gemini; ChatGPT uses the centre's configured model.</p>
       <textarea class="form-input" rows="3" ${busy ? 'disabled' : ''} placeholder="Additional comments for the builder — what should the widget show or let the student do? e.g. “a slider for the spring load that stretches the spring and plots extension against load”"
                 oninput="saveBlockField('${block.id}', 'comments', this.value)">${escapeHtml(block.comments || '')}</textarea>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
         <button type="button" class="btn btn-primary" ${busy ? 'disabled' : ''} onclick="widgetGenerate('${block.id}', this)">
-          ${busy ? '⏳ Building…' : (has ? '✨ Rebuild from scratch' : '✨ Generate widget')}
+          ${busy ? '⏳ Building…' : (has ? '✨ Regenerate app' : '✨ Generate app for this question')}
         </button>
         ${has ? `<button type="button" class="btn btn-outline" ${busy ? 'disabled' : ''} onclick="widgetClear('${block.id}')">🗑 Discard widget</button>` : ''}
-        <span id="widgetStatus_${block.id}" style="font-size:0.82rem;color:var(--text-muted);">${busy ? 'The AI is writing the widget — this can take a minute on Pro.' : (has ? 'Widget ready — try it below.' : '')}</span>
+        <span id="widgetStatus_${block.id}" role="status" style="font-size:0.82rem;color:var(--text-muted);">${busy ? 'Working…' : (has ? 'Preview the app, then save your question.' : '')}</span>
       </div>
       ${has ? `
       <div style="margin-top:14px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
-        <iframe sandbox="allow-scripts" csp="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:"
-                srcdoc="${_widgetSrcdocAttr(block.html)}"
-                style="display:block;width:100%;height:${Math.max(240, Math.min(900, Number(block.height) || 480))}px;border:0;background:#fff;"></iframe>
+        ${window.QuestionApps.frame(block)}
       </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <button type="button" class="btn btn-outline" ${busy ? 'disabled' : ''} onclick="widgetPublish('${block.id}', this)">${published ? 'Refresh app link' : 'Publish app & QR code'}</button>
+        ${published ? `<a class="btn btn-outline" href="${escapeHtml(published)}" target="_blank" rel="noopener noreferrer">Open student app ↗</a>` : '<span style="font-size:0.8rem;">QR code will be ready when you save or publish.</span>'}
+      </div>
+      ${published ? window.QuestionApps.printBlock(block) : ''}
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;">
         <label style="font-size:0.82rem;color:var(--text-muted);">Window height</label>
         <input class="form-input" type="number" min="240" max="900" step="20" value="${Math.max(240, Math.min(900, Number(block.height) || 480))}"
@@ -8599,62 +8723,48 @@ function _widgetSpecPrompt(block) {
   ].join('\n');
 }
 
-// One call, on the engine and at the effort the admin chose for THIS block.
-// No cross-engine fallback here (unlike askGemini): the admin picked the
-// engine on purpose, and silently swapping it would misattribute the result.
-async function _widgetAskAI(engine, effortKey, prompt) {
+// One paid request, bounded by the teacher's output-token ceiling. Never
+// retry a truncated build automatically: even a failed build can cost money.
+async function _widgetAskAI(engine, effortKey, prompt, maxTokens = 4096, media = []) {
   const eff = WIDGET_EFFORTS[effortKey] || WIDGET_EFFORTS.high;
+  const limit = window.QuestionApps.normalizeTokenLimit(maxTokens);
+  const pictures = (Array.isArray(media) ? media : []).filter(m => m && m.data && /^image\//.test(m.mimeType || '')).slice(0, 3);
   if (engine === 'openai') {
-    const key = getOpenAiKey();
-    if (!key) throw new Error('No ChatGPT key — add one under AI Engine in the sidebar, or switch to Gemini');
-    const model = getOpenAiModel();
-    const body = { model, messages: [{ role: 'user', content: prompt }] };
-    if (eff.oa.maxTokens) body.max_completion_tokens = eff.oa.maxTokens;
-    // Reasoning models take an effort knob; older chat models 400 on it.
-    if (OPENAI_REASONING_RE.test(model)) body.reasoning_effort = eff.oa.effort;
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) {
-      let detail = '';
-      try { const ej = await res.json(); detail = ej && ej.error ? ej.error.message : ''; } catch (e) { /* non-JSON body */ }
-      throw new Error('ChatGPT error ' + res.status + (detail ? ': ' + detail : ''));
-    }
-    const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content;
-    if (typeof text !== 'string' || !text.trim()) throw new Error('ChatGPT returned an empty reply');
-    return text;
+    // The shared server already owns the API key and honours 1024–32000.
+    // It does not expose a reasoning-effort option. The same hard output
+    // ceiling still applies to every effort setting, including legacy Pro.
+    return askOpenAiServer(prompt, pictures, { maxOutputTokens: limit, temperature: 0.4, json: false });
   }
   if (!geminiModel) throw new Error('Gemini is not configured yet');
-  const generationConfig = { temperature: 0.4, thinkingConfig: { thinkingLevel: eff.gem.thinkingLevel } };
-  if (eff.gem.maxOutputTokens) generationConfig.maxOutputTokens = eff.gem.maxOutputTokens;
+  const generationConfig = {
+    maxOutputTokens: limit,
+    temperature: 0.4,
+    thinkingConfig: { thinkingLevel: eff.gem.thinkingLevel }
+  };
   const res = await geminiModel.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    contents: [{ role: 'user', parts: [{ text: prompt }].concat(pictures.map(m => ({ inlineData: { mimeType: m.mimeType, data: m.data } }))) }],
     generationConfig
   });
+  if (res.response?.candidates?.some(c => c.finishReason === 'MAX_TOKENS')) {
+    throw new Error('The token limit was reached before the app was complete. Simplify the app or raise Maximum output tokens and try again.');
+  }
   const text = (res.response.text() || '').trim();
   if (!text) throw new Error('Gemini returned an empty reply');
   return text;
 }
 
-// Pull the HTML document out of the reply: strip code fences, cut from the
-// first <!doctype/<html to the last </html>. A bare fragment gets wrapped so
-// a model that skipped the boilerplate still produces a working widget.
+// A cut-off reply must never overwrite an existing working app. Require the
+// complete document requested by the builder instead of wrapping fragments
+// and accidentally making a truncated response look successful.
 function _widgetExtractHtml(raw) {
   let s = String(raw || '').trim();
   s = s.replace(/^```(?:html)?\s*/i, '').replace(/```\s*$/, '').trim();
   const start = s.search(/<!doctype\s+html|<html[\s>]/i);
-  if (start >= 0) {
-    s = s.slice(start);
-    const end = s.toLowerCase().lastIndexOf('</html>');
-    if (end >= 0) s = s.slice(0, end + 7);
-  } else if (/<\w+[\s>]/.test(s)) {
-    s = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">' + s + '</body></html>';
-  } else {
-    throw new Error('the reply contained no HTML');
-  }
+  if (start < 0) throw new Error('The reply did not contain a complete HTML app. Simplify the app or raise Maximum output tokens and try again.');
+  s = s.slice(start);
+  const end = s.toLowerCase().lastIndexOf('</html>');
+  if (end < 0) throw new Error('The app was incomplete, possibly because the token limit was reached. Your previous app is unchanged. Simplify the app or raise Maximum output tokens and try again.');
+  s = s.slice(0, end + 7);
   if (s.length > WIDGET_HTML_MAX) throw new Error('the widget came out too large (' + Math.round(s.length / 1024) + ' KB) — ask for something simpler');
   return s;
 }
@@ -8664,14 +8774,26 @@ async function _widgetRun(blockId, btn, buildPrompt) {
   const block = blocks.find(b => b.id === blockId);
   if (!block || block.type !== 'widget') return;
   if (_widgetBusy[blockId]) return;
+  syncEditorDomToBlocks();
+  const uid = currentUser?.uid, before = JSON.stringify(block), prompt = buildPrompt(block);
+  const questionBefore = JSON.stringify(emScope(blockId) || []);
+  const pictureUrls = (emScope(blockId) || []).filter(b => b.type === 'image' && b.url).slice(0,3).map(b => b.url);
   _widgetBusy[blockId] = true;
   renderBlocks();
   try {
+    const media = [];
+    for (const url of pictureUrls) {
+      const dataUrl = await _urlToDataUrlRobust(transformImageUrl(url));
+      const parsed = _parseImageDataUrl(dataUrl);
+      if (!parsed || !parsed.mime.startsWith('image/')) throw new Error('A question picture could not be read');
+      media.push({mimeType:parsed.mime,data:dataUrl.split(',')[1]});
+    }
+    if (!_canAuthor() || currentUser?.uid !== uid || blocks.find(b => b.id === blockId) !== block || JSON.stringify(emScope(blockId) || []) !== questionBefore) return;
     const html = _widgetExtractHtml(await _widgetAskAI(block.engine === 'openai' ? 'openai' : 'gemini',
-      block.effort, buildPrompt(block)));
+      block.effort, prompt, block.maxTokens, media));
     // The build outlived the render — the admin may have deleted the block.
     const live = blocks.find(b => b.id === blockId);
-    if (!live || live.type !== 'widget') return;
+    if (!_canAuthor() || currentUser?.uid !== uid || live !== block || JSON.stringify(live) !== before || JSON.stringify(emScope(blockId) || []) !== questionBefore) return;
     live.html = html;
     showToast('🧩 Widget ready — try it in the preview, then iterate if needed', 'success');
   } catch (e) {
@@ -8706,9 +8828,10 @@ function widgetIterate(blockId, btn) {
 
 function widgetClear(blockId) {
   const block = blocks.find(b => b.id === blockId);
-  if (!block || block.type !== 'widget') return;
+  if (!block || block.type !== 'widget' || !_canAuthor() || _widgetBusy[blockId]) return;
   if (!confirm('Discard this widget? The generated widget is deleted; the block and your comments stay.')) return;
   block.html = '';
+  delete block.appUrl; delete block.appSourceHash;
   renderBlocks();
 }
 
@@ -19181,12 +19304,14 @@ function setEditMode(isEditing) {
   tlRenderCreateBar();
 }
 
-function addToBank() {
+async function addToBank() {
   if (blocks.length === 0) {
     showToast('Add some blocks before saving', 'error');
     return;
   }
   const q = collectQuestionData();
+  const appSaved = _widgetHasApp(q);
+  if (appSaved && !await _widgetCommitEditor(q, () => saveQuestion(q))) return;
   questionBank.push(q);
   updateCounts();
   // Reset form right away so user cannot double-add
@@ -19199,7 +19324,7 @@ function addToBank() {
   showToast('Question added to bank ✓', 'success');
   if (window.ppHasPendingAttach && window.ppHasPendingAttach()) ppConsumePendingAttach(q, false);
   else navigateTo('bank');
-  saveQuestion(q); // async, non-blocking
+  if (!appSaved) saveQuestion(q); // app-bearing questions were saved before clearing
 }
 
 // Everything collectQuestionData() builds from the editor form. Anything else
@@ -19250,7 +19375,10 @@ function saveEditedQuestion() {
   _dupGateSave(q, () => _saveEditedQuestionConfirmed(q));
 }
 
-function _saveEditedQuestionConfirmed(q) {
+async function _saveEditedQuestionConfirmed(q) {
+  const appSaved = _widgetHasApp(q);
+  const inVetting = !questionBank.some(x => x.id === q.id) && vettingList.some(x => x.id === q.id);
+  if (appSaved && !await _widgetCommitEditor(q, () => inVetting ? saveVettingQuestion(q) : saveQuestion(q))) return;
   let savedToVetting = false;
   const qIdx = questionBank.findIndex(qb => qb.id === currentEditingQuestion);
   if (qIdx !== -1) {
@@ -19271,8 +19399,10 @@ function _saveEditedQuestionConfirmed(q) {
   renderQuestionBank();
   showToast('Question saved ✓', 'success');
   _afterEditNavigate();
-  if (savedToVetting) saveVettingQuestion(q);
-  else saveQuestion(q);
+  if (!appSaved) {
+    if (savedToVetting) saveVettingQuestion(q);
+    else saveQuestion(q);
+  }
 }
 
 // Edit mode: commit the current edits straight into the Question Bank (the live
@@ -19293,6 +19423,16 @@ function saveEditToBank() {
 async function _saveEditToBankConfirmed(q, id) {
 
   const wasVetting = vettingList.some(v => v.id === id);
+  const appSaved = _widgetHasApp(q);
+  if (appSaved) {
+    const previousOwner = _ownerUidByQuestionId[id];
+    if (wasVetting && _ownerUidByVettingId[id]) _ownerUidByQuestionId[id] = _ownerUidByVettingId[id];
+    if (!await _widgetCommitEditor(q, () => saveQuestion(q, {fromVetting:wasVetting}))) {
+      if (previousOwner) _ownerUidByQuestionId[id] = previousOwner;
+      else delete _ownerUidByQuestionId[id];
+      return;
+    }
+  }
   if (wasVetting) {
     vettingList = vettingList.filter(v => v.id !== id);
     // Keep an approved question in its original owner's bank, like approveVetting.
@@ -19313,8 +19453,10 @@ async function _saveEditToBankConfirmed(q, id) {
   renderVettingList();
   showToast('Saved to question bank ✓', 'success');
   _afterEditNavigate();
-  saveQuestion(q);                       // upsert into the questions subcollection
-  if (wasVetting) deleteVettingDoc(id);  // remove from the vetting subcollection
+  if (!appSaved) {
+    saveQuestion(q);                      // app-bearing moves were committed atomically above
+    if (wasVetting) deleteVettingDoc(id);
+  }
 }
 
 function cancelEdit() {
@@ -19349,7 +19491,9 @@ function addToVetting() {
   _dupGateSave(q, () => _addToVettingConfirmed(q));
 }
 
-function _addToVettingConfirmed(q) {
+async function _addToVettingConfirmed(q) {
+  const appSaved = _widgetHasApp(q);
+  if (appSaved && !await _widgetCommitEditor(q, () => saveVettingQuestion(q))) return;
   vettingList.push(q);
   updateCounts();
   // Reset form right away so user cannot double-add
@@ -19362,7 +19506,7 @@ function _addToVettingConfirmed(q) {
   showToast('Question added to vetting list ✓', 'success');
   if (window.ppHasPendingAttach && window.ppHasPendingAttach()) ppConsumePendingAttach(q, true);
   else navigateTo('vetting');
-  saveVettingQuestion(q); // async, non-blocking
+  if (!appSaved) saveVettingQuestion(q);
 }
 
 function clearForm() {
@@ -21890,6 +22034,9 @@ function showPrintPreview(qid, btnEl) {
       case 'video':
         if (block.url) html += `<div class="preview-block" style="font-style:italic;color:var(--text-muted);">Video: ${escapeHtml(block.url)}</div>`;
         break;
+      case 'widget':
+        html += window.QuestionApps.printBlock(block);
+        break;
       default:
         html += `<div class="preview-block">${renderImportedBlockStudent(block)}</div>`;
         break;
@@ -21924,6 +22071,8 @@ async function printWorksheet() {
     return;
   }
   const selected = questionBank.filter(q => printSelectedIds.has(q.id));
+  try { if (typeof _widgetEnsurePublished === 'function') await _widgetEnsurePublished(selected); }
+  catch (e) { _printProgressHide(); showToast('Could not publish app QR: ' + (e.message || e), 'error'); return; }
   const why = await _wnyRunPrepare(selected, wnyPrintOn('bank'));
   doPrintWorksheetOpen(why);
 }
@@ -23789,6 +23938,13 @@ function doPrintWorksheetOpen(whyNotes) {
           if (block.url) {
             qHtml += `<div class="print-text-block" style="font-style:italic;color:#666;">Video: ${escapeHtml(block.url)}</div>`;
           }
+          break;
+        }
+        // The app itself opens after the question is done; paper carries its
+        // public link and a locally drawn QR code. Keep both print paths on
+        // the same renderer so saved worksheets and direct prints agree.
+        case 'widget': {
+          qHtml += window.QuestionApps.printBlock(block);
           break;
         }
         case 'table': {
@@ -27855,6 +28011,8 @@ async function cpbPrint() {
   const selected = _cpbPrintOrder();
   const output = document.getElementById('printOutput');
   _printProgressShow('Preparing the ' + cpbThing() + '…', 'Starting…');
+  try { if (typeof _widgetEnsurePublished === 'function') await _widgetEnsurePublished(selected); }
+  catch (e) { _printProgressHide(); showToast('Could not publish app QR: ' + (e.message || e), 'error'); return; }
   const urls = [];
   selected.forEach(q => {
     if (q.answerKeyImage) urls.push(transformImageUrl(q.answerKeyImage));
@@ -30315,6 +30473,8 @@ async function saveQuestion(q, opts) {
     if (_inflightOps === 0) _setSaveStatus(ok ? 'saved' : 'error');
     return ok;
   };
+  try { if (typeof _widgetEnsurePublished === 'function') await _widgetEnsurePublished([q]); }
+  catch (error) { _saveQuestionLastError = 'app-publication'; if (!quiet) showToast('Could not save app link: ' + error.message, 'error'); return done(false); }
   // Firestore rejects nested arrays. A LOADED table block carries data as
   // array-of-arrays and colWidths as an array (normalizeLoadedQuestion restores
   // them for the editor), so a save from a held object — the tag passes, the
@@ -30397,6 +30557,7 @@ async function saveVettingQuestion(q, opts) {
   while (attempts < 3) {
     if (opts?.guard && !opts.guard()) { _inflightOps--; if (_inflightOps === 0) _setSaveStatus('error'); return false; }
     try {
+      if (typeof _widgetEnsurePublished === 'function') await _widgetEnsurePublished([q]);
       await setDoc(_vRef(q.id), q);
       if (wkLog) _wkLogQuestion(q, 'vetting');
       try { styleHarvestQuestion(q, { quiet: !wkLog }); } catch (e) { console.warn('answer style harvest', e); }
@@ -37252,6 +37413,13 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             break;
           }
           case 'table': { qHtml += renderTableReadonly(block, 'print-table'); break; }
+          // Also feeds Custom Paper, the A4 preview and Study Buddy's PDF.
+          // Never fall through to the screen renderer, which hides the app
+          // until marking and cannot put a usable link on a worksheet.
+          case 'widget': {
+            qHtml += window.QuestionApps.printBlock(block);
+            break;
+          }
           case 'explanation': {
             // `bPart` matters now that explanations can be filed per part from
             // the preview: without it the key prints (b)'s explanation under
@@ -37384,6 +37552,8 @@ async function _wnyRunPrepare(selected, on) {
 }
 
 async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes, akExtras, objBoxAll, artwork) {
+  try { if (typeof _widgetEnsurePublished === 'function') await _widgetEnsurePublished(selected); }
+  catch (e) { _printProgressHide(); showToast('Could not publish app QR: ' + (e.message || e), 'error'); return; }
   const output = document.getElementById('printOutput');
   // plainNumbers: a worksheet is numbered "Question 1, 2, 3…" for the student.
   // The bank's own title and its category/topic line are internal filing —
@@ -37868,6 +38038,8 @@ async function generateSyllabusPdf() {
 
   _printProgressUpdate('Laying out pages…', 0.85, 'Building your syllabus worksheet');
   const frontHtml = await _wsFrontHtml(selected, title);
+  try { if (typeof _widgetEnsurePublished === 'function') await _widgetEnsurePublished(selected); }
+  catch (e) { _printProgressHide(); showToast('Could not publish app QR: ' + (e.message || e), 'error'); return; }
   const output = document.getElementById('printOutput');
   output.innerHTML = buildWorksheetHtml(orderedQs, title, { frontHtml, sectionHtmlById, plainNumbers: true, artwork: wsArtwork });
   autoscaleAndPrint(output, { forcedBreakIds: forced });
@@ -38353,6 +38525,7 @@ async function tsendSend() {
   if (go) go.disabled = true;
   let frame = null;
   try {
+    if (typeof _widgetEnsurePublished === 'function') await _widgetEnsurePublished(ctx.selected);
     _tsendStatus('Loading the page tools…');
     const PDFLib = await _tsendLoadScript(window, TSEND_LIBS.pdflib, 'PDFLib');
     _tsendStatus('Laying the pages out…');
@@ -39369,7 +39542,7 @@ function _wsQeBlockSummary(b) {
     case 'answerLine': return 'Answer line';
     case 'fillblank': return 'Fill in the blanks';
     case 'explanation': return 'Explanation (answer key)';
-    case 'widget': return 'Interactive widget (screen-only, not printed)';
+    case 'widget': return 'Interactive app · published apps print a QR code';
     case 'answerKey': return 'Answer key';
     case 'commonMistake': return 'Common mistake note';
     case 'studentAnswer': return "Student's answer";
@@ -43041,19 +43214,14 @@ function showExplanation(containerSel, q, aiText, scoreElId, modelAnswer) {
       explDiagrams.map(d => `<img src="${escapeHtml(transformImageUrl(d.url))}" alt="Diagram of the explanation" onerror="handleImgError(this)" loading="lazy" decoding="async" style="display:block;margin:0 auto 6px;border-radius:8px;border:1px solid var(--border);background:#fff;${d.style}">`).join('') +
       `</div>`;
   }
-  // Interactive widget(s) authored on the question: revealed only here, after
-  // the answer, in a sandboxed iframe. allow-scripts WITHOUT allow-same-origin
-  // means the widget cannot reach storage, Firebase or the parent DOM; the csp
-  // attribute additionally blocks outbound requests where the browser supports
-  // embedded enforcement (the prompt forbids them everywhere).
+  // Reveal apps only after marking. The shared renderer injects an enforced
+  // CSP into srcdoc and keeps the app in an opaque-origin sandbox.
   ((q && q.blocks) || []).filter(b => b && b.type === 'widget' && (b.html || '').trim()).forEach(b => {
     cards +=
       `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-orange,#c77b28);background:var(--accent-orange-light,#f8efe2);border-radius:10px;">
         <div style="font-weight:700;color:var(--accent-orange,#c77b28);margin-bottom:8px;">🧩 Explore it — interactive</div>
         <div style="border-radius:8px;overflow:hidden;border:1px solid var(--border);">
-          <iframe sandbox="allow-scripts" csp="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:"
-                  srcdoc="${_widgetSrcdocAttr(b.html)}"
-                  style="display:block;width:100%;height:${Math.max(240, Math.min(900, Number(b.height) || 480))}px;border:0;background:#fff;" loading="lazy"></iframe>
+          ${window.QuestionApps.frame(b)}
         </div></div>`;
   });
   if (!cards) return;
@@ -73936,6 +74104,8 @@ async function ppDoPrint(items, missing, title, opts){
   // Preload every image first (progress shown), so measurement is accurate
   // (no questions cut across pages) and the wait is visible, not a dead click.
   _printProgressShow('Preparing worksheet…', 'Starting…');
+  try { if (typeof _widgetEnsurePublished === 'function') await _widgetEnsurePublished(selected); }
+  catch (e) { _printProgressHide(); showToast('Could not publish app QR: ' + (e.message || e), 'error'); return; }
   const urls = [];
   selected.forEach(q => { if (q.answerKeyImage) urls.push(transformImageUrl(q.answerKeyImage)); (q.blocks || []).forEach(b => { if (b && b.url && (b.type === 'image' || b.type === 'answerKey')) urls.push(transformImageUrl(b.url)); }); });
   await _preloadImageUrls(urls, (done, tot) => _printProgressUpdate('Loading question images…', 0.05 + 0.7 * (done / tot), done + '/' + tot + ' images'));
@@ -80830,6 +81000,11 @@ window.saveBlockNum = saveBlockNum;
 window.widgetGenerate = widgetGenerate;
 window.widgetIterate = widgetIterate;
 window.widgetClear = widgetClear;
+window.widgetSetHtml = widgetSetHtml;
+window.widgetImportHtml = widgetImportHtml;
+window.widgetSetTokenLimit = widgetSetTokenLimit;
+window.widgetPublish = widgetPublish;
+window.widgetPreview = widgetPreview;
 window.setPrintLines = setPrintLines;
 window.toggleWorkingAnnotate = toggleWorkingAnnotate;
 // Student Home screen actions
@@ -81112,6 +81287,8 @@ async function loPrint(id) {
   const output = document.getElementById('printOutput');
   if (!output) return;
   _printProgressShow('Preparing worksheet…', 'Starting…');
+  try { if (typeof _widgetEnsurePublished === 'function') await _widgetEnsurePublished(qs); }
+  catch (e) { _printProgressHide(); showToast('Could not publish app QR: ' + (e.message || e), 'error'); return; }
   const urls = [];
   qs.forEach(q => {
     if (q.answerKeyImage) urls.push(transformImageUrl(q.answerKeyImage));
