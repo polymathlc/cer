@@ -1048,7 +1048,7 @@ ok('…and its save path refuses too',
   /async function saveEditorRelease\(\) \{\n  if \(_cpbEditActive\(\)\) return false;/.test(src));
 
 // Leaving the editor by ANY route ends the paper edit.
-const sem = cut('function setEditMode(isEditing) {', '\nfunction addToBank()', 'setEditMode');
+const sem = cut('function setEditMode(isEditing) {', '\nasync function addToBank()', 'setEditMode');
 ok('setEditMode(false) clears the paper question — the one route out they all take',
   /_cpbEdit = null;\n  \}/.test(sem));
 ok('…and the ordinary edit row is swapped for the paper one', /cpbEditActions/.test(sem));
