@@ -4418,7 +4418,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.417.0';
+const APP_VERSION = 'v1.417.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -18755,35 +18755,27 @@ function handleDragEnd() {
 // STUDENT PREVIEW (how students see the question in practice mode)
 // =====================================================================
 function previewAsStudent() {
+  if (typeof emActive === 'function' && emActive()) { showToast('Close editing mode first', 'info'); return; }
   if (blocks.length === 0) {
     showToast('Add some blocks first before previewing', 'error');
     return;
   }
 
-  // Sync DOM content to blocks
-  document.querySelectorAll('.content-editable[data-block-id]').forEach(el => {
-    const bid = el.dataset.blockId;
-    const field = el.dataset.field;
-    const block = blocks.find(b => b.id === bid);
-    if (block && field) block[field] = el.innerHTML;
-  });
-  document.querySelectorAll('[data-table-block]').forEach(table => {
-    const bid = table.dataset.tableBlock;
-    const block = blocks.find(b => b.id === bid);
-    if (!block) return;
-    table.querySelectorAll('td[data-row][data-col]').forEach(cell => {
-      const r = parseInt(cell.dataset.row);
-      const c = parseInt(cell.dataset.col);
-      if (block.data[r]) block.data[r][c] = cell.innerHTML;
-    });
-  });
-
+  syncEditorDomToBlocks();
+  // Keep the live table arrays and every student-facing field. Serialising for
+  // Firestore here would change the table shape before the practice renderer.
+  const val = id => document.getElementById(id)?.value || '';
   _studentPreviewQ = {
     id: 'preview',
-    title: document.getElementById('questionTitle').value || 'Untitled Question',
-    category: document.getElementById('categorySelect').value,
-    topic: document.getElementById('topicSelect').value,
-    markingGuide: (document.getElementById('questionMarkingGuide')?.value || '').trim(),
+    title: val('questionTitle') || 'Untitled Question',
+    category: normalizeCategoryValue(val('categorySelect')),
+    topic: val('topicSelect'),
+    annotation: !!document.getElementById('questionAnnotation')?.checked,
+    markingGuide: val('questionMarkingGuide').trim(),
+    answerKeyNote: val('questionAnswerKeyNote').trim(),
+    answerKeyImage: val('questionAnswerKeyImage').trim(),
+    answerKeywords: JSON.parse(JSON.stringify(editorKeywords || {})),
+    blanks: JSON.parse(JSON.stringify(selectedBlanks || {})),
     blocks: JSON.parse(JSON.stringify(blocks))
   };
   renderStudentPreviewBody();
@@ -18792,30 +18784,43 @@ function previewAsStudent() {
 
 let _studentPreviewQ = null;
 
+function clearStudentPreviewPads() {
+  document.querySelectorAll('#studentPreviewBody .dgn-pad[data-annot]').forEach(pad => {
+    const pid = pad.getAttribute('data-annot');
+    _annotPads[pid]?.ro?.disconnect();
+    delete _annotPads[pid];
+  });
+}
+
 function renderStudentPreviewBody() {
   const q = _studentPreviewQ;
   if (!q) return;
-  let html = `<div class="student-view-card" style="border:none;box-shadow:none;">`;
-  html += `<div class="student-card-header" style="padding:0 0 12px;">
-    <h3 style="font-size:1.1rem;">${escapeHtml(q.title)}</h3>
-    <div style="display:flex;gap:8px;">
-      <span class="qb-tag category">${escapeHtml(q.category)}</span>
-      <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
-    </div>
-  </div>`;
-  html += `<div class="student-card-body" style="padding:0;">`;
-  // The same open-ended answer boxes students get in practice — every part has
-  // its own Check answer + Hint buttons.
-  html += buildOpenBody(q, '#studentPreviewBody', {
+  clearStudentPreviewPads();
+  const body = buildOpenBody(q, '#studentPreviewBody', {
     scoreElId: 'studentPreviewResult', scorePrefix: 'AI Score', mode: 'preview'
   });
-  html += `</div></div>`;
-  document.getElementById('studentPreviewBody').innerHTML = html;
-  document.getElementById('studentPreviewResult').innerHTML = '';
+  document.getElementById('studentPreviewBody').innerHTML = renderPracticeCard(q, body, `
+    <div class="practice-score" id="studentPreviewResult"></div>
+    <button class="btn btn-outline" onclick="renderStudentPreviewBody()">Reset</button>`);
+}
+
+// Preview the student's completed screen without inventing a mark or requiring
+// an AI call. The question stays above the same answer and app cards students see.
+function previewStudentCompleted() {
+  if (!_studentPreviewQ) return;
+  showExplanation('#studentPreviewBody', _studentPreviewQ, '', 'studentPreviewResult', '');
+  document.querySelector('#studentPreviewBody .post-explanation')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function closeStudentPreview() {
   document.getElementById('studentPreviewOverlay').classList.remove('active');
+  clearStudentPreviewPads();
+  _resetOpenScienceCoaches('#studentPreviewBody');
+  imgWaitStop('#studentPreviewBody');
+  document.getElementById('studentPreviewBody').innerHTML = '';
+  delete _openQStore['#studentPreviewBody'];
+  delete _openSurfaceCfg['#studentPreviewBody'];
+  _studentPreviewQ = null;
 }
 
 // Schedule release from either editor action row. Nothing is written until
@@ -32649,7 +32654,7 @@ function _bankOwnerUid() {
 }
 
 function _adminAnswerToolHtml(containerSel, oidx, model) {
-  if (!_isAdmin()) return '';
+  if (!_isAdmin() || _openSurfaceCfg[containerSel]?.mode === 'preview') return '';
   const has = (model || '').trim();
   return `<div class="admin-ans-tool" data-aatool="${containerSel}" data-aoidx="${oidx}" style="margin-top:6px;padding:8px 10px;border:1px dashed var(--accent-blue,#2d6ca8);border-radius:8px;background:rgba(37,99,235,0.05);font-size:0.82rem;">
       <div class="admin-ans-view" style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">
@@ -32787,6 +32792,9 @@ document.addEventListener('click', function (e) {
 // part of the question has been marked.
 function buildOpenBody(q, containerSel, markCfg) {
   _resetOpenScienceCoaches(containerSel);
+  // Answer boxes consult the mode while rendering, before the stores below
+  // are populated, so an admin's student preview must install it first.
+  _openSurfaceCfg[containerSel] = markCfg || {};
   // Last guard for direct links, photo matching, previews and newly added callers.
   // It does not schedule a second question or change the normal marking writes.
   if (currentUser?.role === 'student' && !_scienceFeedAllowed(q, { manual: true, allowRetired: true })) {
@@ -33513,7 +33521,7 @@ async function annotAiCheck(containerSel, pid, btn) {
     if (allChecked && !_openFinalized[containerSel]) {
       _openFinalized[containerSel] = true;
       const finalScore = agg.s + typedScore, finalTotal = agg.t + typedTotal;
-      if (currentUser && currentUser.role === 'student') {
+      if (cfg.mode !== 'preview' && currentUser && currentUser.role === 'student') {
         addDoc(collection(db, 'questionAttempts'), {
           uid: currentUser.uid,
           email: currentUser.email,
@@ -34176,6 +34184,7 @@ async function fbCheck(containerSel, blockId, btn) {
   const c = document.querySelector(containerSel); if (!c) return;
   const store = (_fbStore[containerSel] || []).find(x => x.blockId === blockId); if (!store) return;
   const q = _openQStore[containerSel];
+  const cfg = _openSurfaceCfg[containerSel];
   const fb = c.querySelector('[data-fb-fb="' + blockId + '"]');
   const coachTarget = _captureScienceCoachTarget(containerSel, q, fb);
   const rows = store.oidxs.map((oidx, i) => {
@@ -34206,6 +34215,7 @@ async function fbCheck(containerSel, blockId, btn) {
     } catch (e) { console.warn('fill-blank AI mark', e); }
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
+  if (_openQStore[containerSel] !== q || _openSurfaceCfg[containerSel] !== cfg) return;
   const coachHasVerdicts = rows.every(r => ['correct', 'incorrect'].includes(r.verdict));
   let correct = 0;
   rows.forEach(r => {
@@ -34484,6 +34494,22 @@ function startNewPracticeSession() {
   loadRandomPracticeQuestion();
 }
 
+// Both author preview and practice use this shell as well as buildOpenBody,
+// keeping question spacing, answer controls and completed app cards in step.
+function renderPracticeCard(q, bodyHtml, actionsHtml) {
+  return `<div class="practice-card">
+      <div class="practice-card-header">
+        <h3>${escapeHtml(q.title)}</h3>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span class="qb-tag category">${escapeHtml(q.category)}</span>
+          <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+        </div>
+      </div>
+      <div class="practice-card-body">${bodyHtml}</div>
+      <div class="practice-actions">${actionsHtml}</div>
+    </div>`;
+}
+
 function renderPracticeQuestion(q, student) {
   if (!_scienceFeedAllowed(q, { profile: student })) { document.getElementById('practiceContainer').innerHTML = _scienceFeedEmptyHtml(student); return; }
   currentPracticeQ = q;
@@ -34493,21 +34519,9 @@ function renderPracticeQuestion(q, student) {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       ${escapeHtml(student.name)} &mdash; Level ${escapeHtml(student.level)}
       <span style="margin-left:auto;font-size:0.78rem;color:var(--text-muted);">Topic: ${escapeHtml(q.topic)}</span>
-    </div>
-    <div class="practice-card">
-      <div class="practice-card-header">
-        <h3>${escapeHtml(q.title)}</h3>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <span class="qb-tag category">${escapeHtml(q.category)}</span>
-          <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
-        </div>
-      </div>
-      <div class="practice-card-body">`;
+    </div>`;
 
-  html += renderOpenPracticeBody(q);
-
-  html += `</div>
-      <div class="practice-actions">
+  html += renderPracticeCard(q, renderOpenPracticeBody(q), `
         <div class="practice-score" id="practiceScoreDisplay"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
           <button class="btn btn-outline" onclick="resetOpenAnswers()">
@@ -34518,9 +34532,7 @@ function renderPracticeQuestion(q, student) {
           <button class="btn btn-primary" onclick="loadRandomPracticeQuestion()">
             Next Question &rarr;
           </button>
-        </div>
-      </div>
-    </div>`;
+        </div>`);
 
   document.getElementById('practiceContainer').innerHTML = html;
 }
@@ -35362,7 +35374,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
   // The student's written (open) answers — used to fingerprint the attempt and
   // to enforce "unique answers" for the monthly questions-done leaderboard.
   const answerText = entries.filter(e => e.kind === 'open').map(e => e.student || '').join(' ¶ ');
-  if (currentUser && currentUser.role === 'student' && q) {
+  if (mode !== 'preview' && currentUser && currentUser.role === 'student' && q) {
     addDoc(collection(db, 'questionAttempts'), {
       uid: currentUser.uid,
       email: currentUser.email,
@@ -35578,7 +35590,7 @@ function _checkAllPartsMarked(containerSel) {
   _openFinalized[containerSel] = true;
   const q = _openQStore[containerSel];
   const answerText = Object.values(results || {}).map(r => (r && r.student) || '').join(' ¶ ');
-  if (currentUser && currentUser.role === 'student' && q) {
+  if (cfg.mode !== 'preview' && currentUser && currentUser.role === 'student' && q) {
     addDoc(collection(db, 'questionAttempts'), {
       uid: currentUser.uid,
       email: currentUser.email,
@@ -35618,6 +35630,7 @@ function _checkAllPartsMarked(containerSel) {
 async function _genAndShowExplanation(containerSel, q, results, scoreElId) {
   const entries = Object.entries(results || {});
   if (!entries.length || !q) return;
+  const cfg = _openSurfaceCfg[containerSel];
   // MCQ-only questions show the bank's stored explanation (no AI). Only generate
   // an answer-specific AI explanation when there's at least one open answer.
   const hasOpen = entries.some(([key]) => key.indexOf('open') === 0);
@@ -35638,6 +35651,8 @@ async function _genAndShowExplanation(containerSel, q, results, scoreElId) {
       aiText = (await askGemini(prompt, { maxOutputTokens: 320, temperature: 0.3 }) || '').trim();
     }
   } catch (e) { console.warn('explanation gen failed', e); }
+  // A reset, closed preview or next question invalidates an in-flight reply.
+  if (_openQStore[containerSel] !== q || _openSurfaceCfg[containerSel] !== cfg) return;
   try { showExplanation(containerSel, q, aiText, scoreElId, ''); } catch (e) { console.warn('showExplanation', e); }
 }
 
@@ -35793,6 +35808,7 @@ async function hintQuestionPart(containerSel, kind, pid, btn) {
     return;
   }
   const q = _openQStore[containerSel];
+  const cfg = _openSurfaceCfg[containerSel];
   const ctx = q ? _questionContext(q) : '';
   const box = document.querySelector(containerSel + ' .part-hint-box[data-hint-for="' + kind + ':' + pid + '"]');
 
@@ -35817,12 +35833,13 @@ async function hintQuestionPart(containerSel, kind, pid, btn) {
       `Give ONE short hint (1-2 sentences, max 35 words) addressed to "you" that nudges the student toward the answer — point at the science concept to think about or where in the question to look. ` +
       `Do NOT state the answer, the model answer's wording, or the correct option number. Return ONLY the hint text — no preamble.`;
     const raw = await askGemini(prompt, { maxOutputTokens: 200, temperature: 0.5 });
+    if (_openQStore[containerSel] !== q || _openSurfaceCfg[containerSel] !== cfg) return;
     const hint = (raw || '').trim();
     if (box) {
       box.style.display = '';
       box.innerHTML = `<strong style="color:var(--accent-orange);">💡 Hint:</strong> ${escapeHtml(hint || 'Re-read the question and think about which science idea it is testing.')}`;
     }
-    rpgNoteHintUsed(); // hint used → reduced battle damage this question
+    if (cfg?.mode !== 'preview') rpgNoteHintUsed(); // hint used → reduced battle damage this question
   } catch (e) {
     console.error('Hint error:', e);
     showToast('Could not get a hint: ' + (e && e.message ? e.message : e), 'error');
@@ -42113,6 +42130,7 @@ async function loadCerPerf() {
 }
 // Called after EVERY marking so the report always reflects the latest work.
 function recordCerPerformance(q, score, total, mode, answerText) {
+  if (mode === 'preview') return;
   try { rpgOnMarked(q, score, total, { mode, answerText }); } catch (e) { console.warn('rpg reward', e); }
   if (!currentUser || currentUser.role !== 'student' || !q || !total) return;
   if (!cerPerf) cerPerf = _emptyPerf();
@@ -80523,6 +80541,8 @@ window.removeBlock = removeBlock;
 window.moveBlock = moveBlock;
 window.duplicateBlock = duplicateBlock;
 window.previewAsStudent = previewAsStudent;
+window.renderStudentPreviewBody = renderStudentPreviewBody;
+window.previewStudentCompleted = previewStudentCompleted;
 window.closeStudentPreview = closeStudentPreview;
 window.resetStudentViewAnswers = resetStudentViewAnswers;
 window.openScheduleFromCreate = openScheduleFromCreate;

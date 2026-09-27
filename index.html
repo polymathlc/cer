@@ -1659,6 +1659,16 @@ option {
 .preview-body {
   padding: 28px 28px 36px;
 }
+#studentPreviewOverlay .preview-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 80px);
+}
+#studentPreviewOverlay .preview-panel > :not(.preview-body) { flex-shrink: 0; }
+#studentPreviewBody { min-height: 0; overflow-y: auto; }
+@media (max-width: 768px) {
+  #studentPreviewOverlay { padding: 0; }
+}
 .preview-question-title {
   font-size: 1.1rem;
   font-weight: 700;
@@ -13677,17 +13687,17 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
   <div class="preview-panel" style="max-width:800px;">
     <div class="preview-header" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9);">
       <h3 style="display:flex;align-items:center;gap:8px;">&#x1F393; Student Preview</h3>
-      <button class="preview-close" onclick="closeStudentPreview()">
+      <button class="preview-close" onclick="closeStudentPreview()" aria-label="Close student preview">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <div style="padding:10px 28px 4px;background:var(--surface-alt);border-bottom:1px solid var(--border);font-size:0.8rem;color:var(--text-muted);">
-      This is exactly how students will see this question in practice mode — each part has its own 💡 Hint and ✓ Check answer buttons, so try answering yourself.
+      Answer the question as a student would. After checking all parts, the saved app appears below the question. You can also preview the completed question directly.
     </div>
     <div class="preview-body" id="studentPreviewBody" style="padding:20px 28px;"></div>
-    <div style="padding:0 28px 20px;display:flex;gap:10px;justify-content:space-between;align-items:center;">
-      <div id="studentPreviewResult" style="font-size:0.85rem;font-weight:600;"></div>
+    <div style="padding:0 28px 20px;display:flex;gap:10px;justify-content:flex-end;align-items:center;">
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-outline" onclick="previewStudentCompleted()">Preview completed question</button>
         <button class="btn btn-primary" onclick="closeStudentPreview()">&#x274C; Close</button>
       </div>
     </div>
