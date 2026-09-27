@@ -19,6 +19,7 @@ jobs:
         run: |
           node --check app.js
           node tools/question-apps-tests.mjs
+          node tools/question-apps-preview-tests.mjs
           node tools/widget-generation-tests.mjs
           node tools/widget-editor-tests.mjs
           node tools/widget-save-tests.mjs
@@ -32,4 +33,5 @@ jobs:
           JSQR_SCRIPT: node_modules/jsqr/dist/jsQR.js
         run: |
           node tools/question-apps-browser-tests.mjs
+          node tools/question-apps-preview-browser-tests.mjs
           node tools/widget-editor-browser-tests.mjs
