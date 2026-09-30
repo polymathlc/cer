@@ -13280,8 +13280,11 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="rapid-release-row">
         <label class="rapid-autochk-switch">
           <input type="checkbox" id="rapidAutoChk" checked onchange="toggleAutoChk(this.checked)">
-          <span>Read it back, and fix what the checker finds (up to 3 tries)</span>
+          <span>Read it back and, if it is red or yellow, fix it ONCE (re-cut a bad picture, correct the wording) and check again</span>
         </label>
+      </div>
+      <div class="rapid-release-row">
+        <button type="button" class="btn btn-outline" id="rapidAutoFixedBtn" onclick="autoFixedShow()">🔧 Auto-fixed (0)</button>
       </div>
       <div class="rapid-release-row">
         <label class="rapid-autochk-switch">

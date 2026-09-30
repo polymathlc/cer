@@ -4792,7 +4792,7 @@ questions was forty questions to read.
 
 `autoChkRun` closes that loop. Every question built by the pad is checked, and
 one that comes back 🟡 or 🔴 is handed the checker's own findings and asked to
-fix itself, up to `AUTOCHK_TRIES` (3) times. Green ones reach Vetting clean;
+fix itself ONCE (`AUTOCHK_TRIES` is 2: read, fix, read). Green ones reach Vetting clean;
 anything still amber or red reaches Vetting **wearing its lamp and its
 findings**, so the author's attention goes to the handful that need it.
 
@@ -7069,6 +7069,25 @@ wrong. Every one of them is silent: the app answered fluently either way.
   prompt is a cost nobody can see.
 - Run **`node tools/answer-learning-tests.mjs`** and
   **`node tools/teaching-notes-tests.mjs`** after touching any of it.
+
+## 🔧 One fix, a re-crop, and the red → yellow/green record (v1.420.0)
+
+`AUTOCHK_TRIES` (2) / `autoChkRecrop` / `_autoChkIsCropFinding` / `q.autoCheck.improved` /
+`autoChkAnnounce` / `autoFixedList` / `autoFixedShow` / `autoFixSweep` (search `AUTO-FIXED`),
+the 🔧 Auto-fixed button on the ⚡ Rapid add pad and the 🔴→🟢/🟡 card badge.
+
+- **ONE REPAIR ONLY.** The auto-check reads, repairs once, reads again. It never keeps trying.
+- **A Crop finding is RE-CUT, not reworded**: `autoChkRecrop` asks `_jevRecropBox` where the figure is
+  on the ORIGINAL page (`block.cropSource.url`) and cuts the pixels with the import's own code. No
+  original kept → skipped and said. It runs before the wording repair so the repair carries the new
+  crop; the re-read audits every picture again, and a re-crop that came back worse is put back with
+  the rest of that attempt.
+- **`improved` is recorded only when the KEPT question went red → yellow/green** (the first read was
+  red and the fixed attempt won). It is stamped durably (findings before, fixes, findings after) and
+  the 🔧 list is derived from it across Vetting and the bank — there is no second store.
+- **The sweep** gives recent Vetting questions that arrived by another route (the online PDF worker)
+  the same read-fix-read once: admin only, capped, never one open in the editor, quiet writes.
+- Run `node tools/auto-check-tests.mjs` and `node tools/jev-review-tests.mjs`.
 
 ## House rules
 - After touching **🧠 the master profile, the block stamps or the merge**

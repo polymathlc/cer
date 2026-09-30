@@ -182,7 +182,7 @@ await test('⚡ Rapid add: Jev is advisory: a yes never skips the AI (JEV_MAY_SK
 });
 await test('the AI check keeps carrying crop findings through every attempt but never asks a wording repair to fix them', () => {
   const r = src.slice(src.indexOf('async function autoChkRun'));
-  assert(/o\.figureFindings/.test(r) && /f\.type !== 'Crop'/.test(r));
+  assert(/o\.figureFindings/.test(r) && /!_autoChkIsCropFinding\(f\)/.test(r) && /autoChkRecrop\(q, cropF/.test(r), 'crop findings are re-cut from the original page; only the rest reaches the wording repair');
 });
 await test('a Jev-cleared question is stamped honestly, not as an AI read', () => {
   assert(/if \(res\.jev\) q\.autoCheck\.jev = true;/.test(src));
