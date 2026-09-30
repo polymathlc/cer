@@ -4419,7 +4419,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.419.0';
+const APP_VERSION = 'v1.420.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -17836,7 +17836,7 @@ async function _rapidCloudRefresh() {
           if(!q.rapidImportId) return;
           const i=vettingList.findIndex(x=>x.id===q.id);
           if(change.type==='removed'){if(i>=0){vettingList.splice(i,1);changed=true;}}
-          else if(i<0){vettingList.unshift(normalizeLoadedQuestion(q));_rapidJustAdded.add(q.id);changed=true;}
+          else if(i<0){vettingList.unshift(normalizeLoadedQuestion(q));_rapidJustAdded.add(q.id);changed=true;_autoFixSweepRan=false;autoFixSweepSoon();}
         });
         if(changed){updateCounts();renderVettingList();}
       },()=>{_rapidCloudWatchUid=null;});
@@ -18159,9 +18159,11 @@ function startRapidJob(file, level, opts) {
 //    question worse than the one it was given.
 // =====================================================================
 
-// Three tries, as asked for: enough to fix a wrong option list or a blank
-// answer, and few enough that a bad question cannot spend a paper's budget.
-const AUTOCHK_TRIES = 3;
+// TWO READS AND ONE REPAIR, as asked for: check, fix once, check again. A loop
+// that keeps trying is a loop that keeps spending — and a question the single
+// repair could not cure reaches Vetting wearing its lamp for a person to look
+// at, which is what the lamp is for. (It was three tries until v1.420.0.)
+const AUTOCHK_TRIES = 2;
 // The switch is a preference about how the pad WORKS, not a fact about this
 // pile of screenshots — so it lives in localStorage, unlike the batch level and
 // the batch release date, which are one sitting each and live in sessionStorage.
@@ -18200,7 +18202,7 @@ function _autoChkPaint() {
       : 'Questions land unchecked — press 🚦 on a card, or use 🚦 Check questions on the vetting list, to read them.';
   }
 }
-function _autoChkSetup() { _autoChkPaint(); _jevPaint(); }
+function _autoChkSetup() { _autoChkPaint(); _jevPaint(); try { autoFixedPaint(); } catch (e) { /* pad not open yet */ } }
 function toggleAutoChk(on) { setAutoChkOn(!!on); }
 
 // ---- reading a verdict ---------------------------------------------------
@@ -18373,6 +18375,60 @@ function _autoChkApply(q, payload) {
   return true;
 }
 
+// ---- the re-crop ---------------------------------------------------------
+// A Crop finding (the figure is cut off, or carries stray question text) cannot
+// be cured by rewording, so the repair step re-cuts the picture instead — from
+// the ORIGINAL PAGE the import kept (`block.cropSource.url`), never by drawing
+// anything. The AI is only asked WHERE the figure is on that page
+// (`_jevRecropBox`, told what was wrong); the pixels are cut by the same code
+// the import used. The re-read that follows is the check on the result: it
+// audits every picture again, and a re-cut that came back worse is thrown away
+// with the rest of that attempt.
+function _autoChkIsCropFinding(f) { return !!f && (f.type === 'Crop' || f.fix === 'cropImage'); }
+function _autoChkCropTarget(block) { return 'block:' + encodeURIComponent(block.id) + ':url'; }
+async function autoChkRecrop(q, findings, say) {
+  const out = { done: [], skipped: [] };
+  const list = (findings || []).filter(_autoChkIsCropFinding);
+  if (!q || !list.length) return out;
+  const imgs = ((q.blocks) || []).filter(b => b && b.type === 'image' && b.url);
+  const targeted = list.filter(f => f.target);
+  for (let i = 0; i < imgs.length; i++) {
+    const b = imgs[i];
+    const tid = _autoChkCropTarget(b);
+    // A finding naming a picture belongs to that picture; one naming none
+    // (Jev's) belongs to every picture — unless something else named them.
+    const mine = list.filter(f => f.target === tid || (!f.target && !targeted.length) || (!f.target && targeted.length && !targeted.some(t => imgs.some(x => _autoChkCropTarget(x) === t.target))));
+    if (!mine.length) continue;
+    const label = 'picture ' + (i + 1);
+    const src = b.cropSource && b.cropSource.url;
+    if (!src) { out.skipped.push(label + ' (the original page was not kept)'); continue; }
+    if (say) say('re-cutting ' + label + ' from the original page…');
+    try {
+      const pageData = await _urlToDataUrlRobust(transformImageUrl(src));
+      const parsed = _parseImageDataUrl(pageData);
+      if (!parsed) { out.skipped.push(label + ' (the original page could not be read)'); continue; }
+      const cur = await _urlToDataUrlRobust(transformImageUrl(b.url)).catch(() => '');
+      const reasons = mine.map(f => String(f.title || '') + (f.detail ? ' — ' + f.detail : '')).map(t => t.slice(0, 300));
+      const box = await _jevRecropBox(parsed.mime, pageData.split(',')[1] || '', cur, reasons);
+      if (!box) { out.skipped.push(label + ' (the figure could not be located)'); continue; }
+      const ex = await _cropBoxFromScreenshotEx(pageData, box, { marginScale: 1.6 });
+      if (!ex || !ex.dataUrl) { out.skipped.push(label + ' (the new crop was unusable)'); continue; }
+      let dataUrl = ex.dataUrl;
+      try { dataUrl = await _aiRefineCrop(dataUrl); } catch (e) { /* the sharp crop stands */ }
+      const url = await uploadImageDataUrl(dataUrl);
+      const page = b.cropSource && b.cropSource.page;
+      b.url = url;
+      _rememberCropSource(b, src, box, page);
+      _imgEnhanceState[b.id] = { originalDataUrl: pageData, originalUrl: src, currentDataUrl: dataUrl };
+      out.done.push(label);
+    } catch (e) {
+      console.warn('auto-check: the re-crop failed', e);
+      out.skipped.push(label + ' (' + ((e && e.message) || 'error') + ')');
+    }
+  }
+  return out;
+}
+
 // ---- the loop ------------------------------------------------------------
 // Read → repair → read again, at most `AUTOCHK_TRIES` times, stopping the
 // moment it is green. `onStep` is how the Rapid add card says what is
@@ -18382,11 +18438,15 @@ async function autoChkRun(q, opts) {
   const o = opts || {};
   const tries = Math.max(1, o.tries || AUTOCHK_TRIES);
   const say = typeof o.onStep === 'function' ? o.onStep : () => {};
-  let best = null, bestBlocks = null, used = 0;
+  let best = null, bestBlocks = null, bestAttempt = 0, used = 0;
+  // What the FIRST read said (the "before" of a red → yellow/green story) and
+  // what the single repair did about it.
+  let first = null;
+  const fixes = [];
 
   for (let attempt = 1; attempt <= tries; attempt++) {
     used = attempt;
-    say(attempt === 1 ? 'checking the question…' : `checking the question again (try ${attempt} of ${tries})…`);
+    say(attempt === 1 ? 'checking the question…' : 'checking the fixed question again…');
     // Attempt 1 carries what Jev flagged. After a repair the QUESTION is
     // measured again by the same code (no second Jev call), so a defect the
     // repair cured is not still reported; a crop the AI could not make clean
@@ -18403,8 +18463,10 @@ async function autoChkRun(q, opts) {
     const read = await autoChkRead(q, extra.concat(o.figureFindings || []));
     const state = autoChkState(read);
     const now = { state, findings: read.findings, error: read.error };
+    if (attempt === 1) first = { state, findings: read.findings.slice() };
     if (autoChkBetter(now, best)) {
       best = now;
+      bestAttempt = attempt;
       // A repair that came back WORSE is thrown away, so the blocks that
       // earned the best verdict have to be kept alongside it.
       try { bestBlocks = JSON.parse(JSON.stringify({ blocks: q.blocks, blanks: q.blanks, title: q.title, topic: q.topic, category: q.category })); }
@@ -18416,27 +18478,49 @@ async function autoChkRun(q, opts) {
     if (state === 'error') break;
     if (attempt >= tries) break;
 
-    say(`fixing ${read.findings.length} thing${read.findings.length === 1 ? '' : 's'} the checker found (try ${attempt} of ${tries})…`);
-    let payload = null;
-    try {
-      const media = await _cqMedia(q);
-      // A wording repair cannot re-cut a picture, so crop findings are not put in its hands.
-      const prompt = _autoChkRepairPrompt(q, read.findings.filter(f => f.type !== 'Crop'), o.level);
-      const raw = media.length
-        ? await askGeminiVision(prompt, media, { maxOutputTokens: AUTOCHK_TOKENS, json: true, authoring: true })
-        : await askGemini(prompt, { maxOutputTokens: AUTOCHK_TOKENS, temperature: 0.2, json: true, authoring: true });
-      payload = _parseAIJson(raw);
-    } catch (e) {
-      console.warn('auto-check: the repair call failed', e);
-      break;   // the question keeps the verdict it has and goes to vetting with it
+    const cropF = read.findings.filter(_autoChkIsCropFinding);
+    const otherF = read.findings.filter(f => !_autoChkIsCropFinding(f));
+    say('fixing ' + read.findings.length + ' thing' + (read.findings.length === 1 ? '' : 's') + ' the checker found (one fix only)…');
+    let changed = false;
+
+    // (a) A picture that is cut off, or carries stray question text, is
+    //     re-cut from the original page. Done BEFORE the wording repair so the
+    //     repair's positional picture re-attach carries the NEW crop.
+    if (cropF.length) {
+      try {
+        const rc = await autoChkRecrop(q, cropF, say);
+        if (rc.done.length) { changed = true; fixes.push('re-cut ' + rc.done.join(', ')); }
+        if (rc.skipped.length) fixes.push('could not re-cut ' + rc.skipped.join(', '));
+      } catch (e) { console.warn('auto-check: the re-crop step failed', e); }
     }
-    if (!_autoChkApply(q, payload)) break;
-    // The batch's level is applied AGAIN, because a repair may have moved the
-    // topic — and the level in this app is read off the topic, so a repair that
-    // quietly re-filed the question would undo the batch level the author set.
-    // The release date is never touched: `_autoChkApply` replaces blocks and
-    // meta only, so `releaseOn` survives on its own.
-    try { _rapidApplyLevel(q, o.level); } catch (e) { console.warn('auto-check: re-applying the batch level', e); }
+
+    // (b) Everything else goes to the model as a correction. A wording repair
+    //     cannot re-cut a picture, so crop findings are not put in its hands.
+    if (otherF.length) {
+      try {
+        const media = await _cqMedia(q);
+        const prompt = _autoChkRepairPrompt(q, otherF, o.level);
+        const raw = media.length
+          ? await askGeminiVision(prompt, media, { maxOutputTokens: AUTOCHK_TOKENS, json: true, authoring: true })
+          : await askGemini(prompt, { maxOutputTokens: AUTOCHK_TOKENS, temperature: 0.2, json: true, authoring: true });
+        const payload = _parseAIJson(raw);
+        if (_autoChkApply(q, payload)) {
+          changed = true;
+          fixes.push('corrected ' + otherF.length + ' wording/answer issue' + (otherF.length === 1 ? '' : 's'));
+          // The batch's level is applied AGAIN, because a repair may have moved
+          // the topic — and the level in this app is read off the topic, so a
+          // repair that quietly re-filed the question would undo the batch
+          // level the author set. The release date is never touched:
+          // `_autoChkApply` replaces blocks and meta only.
+          try { _rapidApplyLevel(q, o.level); } catch (e) { console.warn('auto-check: re-applying the batch level', e); }
+        }
+      } catch (e) {
+        console.warn('auto-check: the repair call failed', e);
+      }
+    }
+    // Nothing changed, so a second read would only repeat the first: the
+    // question keeps the verdict it has and goes to vetting with it.
+    if (!changed) break;
   }
 
   // Finish on the BEST question seen, not the last one produced.
@@ -18449,7 +18533,17 @@ async function autoChkRun(q, opts) {
       q.category = bestBlocks.category;
     } catch (e) { console.warn('auto-check: keeping the best version', e); }
   }
-  return { state: (best && best.state) || 'error', tries: used, findings: (best && best.findings) || [], error: (best && best.error) || '' };
+  const finalState = (best && best.state) || 'error';
+  // The story only counts when the fixed question is the one that was KEPT
+  // (bestAttempt > 1) and it really moved down the lamp: red → amber / green.
+  const kept = bestAttempt > 1;
+  const improved = !!(first && first.state === 'red' && kept && (finalState === 'amber' || finalState === 'green'));
+  return {
+    state: finalState, tries: used,
+    findings: (best && best.findings) || [], error: (best && best.error) || '',
+    from: first ? first.state : '', fromFindings: first ? first.findings : [],
+    fixes: kept ? fixes : [], improved
+  };
 }
 
 // ---- what the author sees -----------------------------------------------
@@ -18497,6 +18591,21 @@ function autoChkStamp(q, res) {
   if (res.error) q.autoCheck.error = String(res.error).slice(0, 160);
   // Jev cleared it with no AI read: the card says so, honestly (see autoChkCardHtml).
   if (res.jev) q.autoCheck.jev = true;
+  // A question the single repair took from RED down to amber or green keeps the
+  // story of it, durably, so it can be reviewed later: what was wrong, what was
+  // done, and where it ended up. This is what the 🔧 Auto-fixed list reads.
+  if (res.improved) {
+    q.autoCheck.improved = {
+      from: res.from || 'red', to: res.state,
+      before: (res.fromFindings || []).slice(0, 8).map(f => ({
+        type: String(f.type || 'Check').slice(0, 18), severity: String(f.severity || 'med'),
+        title: String(f.title || '').slice(0, 160), detail: String(f.detail || '').slice(0, 300)
+      })),
+      fixes: (res.fixes || []).slice(0, 6).map(x => String(x).slice(0, 200)),
+      after: (res.findings || []).length,
+      at: q.autoCheck.at
+    };
+  }
   try {
     if (typeof _tlCache !== 'undefined' && _tlCache && typeof tlSig === 'function') {
       _tlCache.set(String(q.id), {
@@ -18521,6 +18630,10 @@ function autoChkCardHtml(q) {
   if (!a || !a.state) return '';
   if (a.sig && typeof tlSig === 'function' && a.sig !== tlSig(q)) return '<span class="qb-tag" title="This question needs a fresh check, including its image crops. Press the traffic light.">○ Check again</span>';
   const look = AUTOCHK_CARD_LOOK[a.state] || AUTOCHK_CARD_LOOK.error;
+  if (a.improved && (a.state === 'green' || a.state === 'amber')) {
+    const tip = 'The first check found this question RED. The auto-check fixed it once (' + (a.improved.fixes || []).join('; ') + ') and it now reads ' + (a.state === 'green' ? 'green' : 'yellow') + '. Press 🔧 Auto-fixed on the ⚡ Rapid add pad to review what changed.';
+    return `<span class="qb-tag" style="background:${look.bg};color:${look.fg};border:1px solid ${look.bd};" title="${escapeHtml(tip)}">🔴→${a.state === 'green' ? '🟢' : '🟡'} Auto-fixed</span>`;
+  }
   const fixed = (a.tries || 1) > 1 ? ` · fixed ${(a.tries || 1) - 1}×` : '';
   const found = (a.found != null) ? a.found : ((a.findings || []).length || 0);
   if (a.jev && a.state === 'green') {
@@ -18549,9 +18662,22 @@ async function autoChkAfterMerge(q, level) {
   try {
     const res = await autoChkRun(q, { level });
     autoChkStamp(q, res);
+    autoChkAnnounce(q);
     await saveVettingQuestion(q);
   } catch (e) { console.warn('auto-check after a page-break stitch skipped', e); }
   try { renderVettingList(); } catch (e) { /* the card is on screen either way */ }
+}
+
+// Say it out loud when the single repair took a question from RED to yellow or
+// green — that is the number the author wants to check the feature by, so it
+// is never left to be discovered on a card.
+function autoChkAnnounce(q) {
+  const im = q && q.autoCheck && q.autoCheck.improved;
+  if (!im) return;
+  try {
+    showToast('🔴→' + (im.to === 'green' ? '🟢' : '🟡') + ' Auto-fixed "' + String(q.title || 'question').slice(0, 60) + '" — ' + ((im.fixes || []).join('; ') || 'repaired'), 'success');
+  } catch (e) { /* a toast is never worth a failed check */ }
+  try { autoFixedPaint(); } catch (e) { /* the pad may not be open */ }
 }
 
 // How a batch came out, in one clause on the toast the pad already shows.
@@ -18576,6 +18702,8 @@ function autoChkBatchNote(list) {
   if (t.amber) bits.push(t.amber + ' 🟡');
   if (t.red) bits.push(t.red + ' 🔴');
   if (t.error) bits.push(t.error + ' ⚠');
+  const fixedN = (list || []).filter(q => q && q.autoCheck && q.autoCheck.improved).length;
+  if (fixedN) bits.push(fixedN + ' fixed 🔴→🟢/🟡');
   return bits.length ? ' · 🚦 ' + bits.join(' ') : '';
 }
 
@@ -18779,6 +18907,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
               figureFindings: gate ? gate.figureFindings : _jevFigureFindings(jevRun.figures.filter(f => f.state === 'flagged'))
             });
             autoChkStamp(q, res);
+            autoChkAnnounce(q);
             // Jev is advisory: keep what it said beside what the AI found, so
             // the two can be compared before Jev is ever allowed to skip a read.
             if (gate && gate.available) {
@@ -18841,6 +18970,148 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
     _failRapidJob(jobId, err);
   }
 }
+
+
+// =====================================================================
+// 🔧 AUTO-FIXED — the list of questions the auto-check took from RED to
+// yellow or green (search `AUTO-FIXED`), and the background sweep that gives
+// questions added by any OTHER route (the online PDF worker, a save from the
+// editor) the same read-fix-read once.
+//
+//  • THE LIST IS DERIVED, NOT KEPT. Every entry is read off `q.autoCheck.improved`
+//    on the questions themselves (vetting AND bank), which is stamped durably
+//    with the question. There is no second store to fall out of step with the
+//    questions, and no Firestore rule to add.
+//  • IT SHOWS BEFORE AND AFTER: what the first check found wrong, what the one
+//    repair did, and where the question ended up — so the author can open a few
+//    and judge whether the fix was really a fix.
+//  • THE SWEEP IS BOUNDED. Recent (SWEEP_DAYS) vetting questions only, never one
+//    that is open in the editor or already carries a current verdict, at most
+//    SWEEP_MAX per load, one at a time. It never withholds or deletes anything.
+// =====================================================================
+const AUTOFIX_SWEEP_DAYS = 3;
+const AUTOFIX_SWEEP_MAX = 8;
+let _autoFixSweepRan = false;
+let _autoFixSweeping = false;
+
+function autoFixedList() {
+  const seen = new Set(), out = [];
+  const take = (q, where) => {
+    if (!q || !q.autoCheck || !q.autoCheck.improved) return;
+    const id = String(q.id);
+    if (seen.has(id)) return;
+    seen.add(id);
+    out.push({ q, where, im: q.autoCheck.improved });
+  };
+  (vettingList || []).forEach(q => take(q, 'vetting'));
+  (questionBank || []).forEach(q => take(q, 'bank'));
+  return out.sort((a, b) => String(b.im.at || '').localeCompare(String(a.im.at || '')));
+}
+function autoFixedPaint() {
+  const btn = document.getElementById('rapidAutoFixedBtn');
+  if (!btn) return;
+  const n = autoFixedList().length;
+  btn.textContent = '🔧 Auto-fixed (' + n + ')';
+  btn.title = n ? 'Questions the auto-check took from red to yellow or green' : 'No red question has been fixed yet';
+}
+function autoFixedRowHtml(e) {
+  const q = e.q, im = e.im;
+  const dot = im.to === 'green' ? '🟢' : '🟡';
+  const before = (im.before || []).map(f =>
+    '<li><b>' + escapeHtml(f.severity === 'high' ? 'High' : f.severity === 'low' ? 'Low' : 'Medium') + '</b> · ' +
+    escapeHtml(f.type || 'Check') + ' — ' + escapeHtml(f.title || '') +
+    (f.detail ? '<div style="color:var(--text-2,#64748b);font-size:12px;margin-top:2px;">' + escapeHtml(f.detail) + '</div>' : '') + '</li>').join('');
+  const fixes = (im.fixes || []).map(x => '<li>' + escapeHtml(x) + '</li>').join('');
+  return '<div style="border:1px solid var(--border,#e2e8f0);border-radius:12px;padding:16px 18px;margin:0 0 14px;">' +
+    '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px;">' +
+      '<div><div style="font-weight:700;font-size:15px;line-height:1.4;">' + escapeHtml(q.title || 'Untitled question') + '</div>' +
+      '<div style="font-size:12px;color:var(--text-2,#64748b);margin-top:4px;">' + (e.where === 'vetting' ? 'In Vetting' : 'In the bank') + ' · ' + escapeHtml(q.topic || 'no topic') + '</div></div>' +
+      '<div style="font-weight:700;white-space:nowrap;">🔴 → ' + dot + '</div></div>' +
+    '<div style="font-size:12px;font-weight:700;margin:6px 0 4px;">What the first check found</div><ul style="margin:0 0 10px 18px;line-height:1.55;">' + (before || '<li>—</li>') + '</ul>' +
+    '<div style="font-size:12px;font-weight:700;margin:6px 0 4px;">What the one fix did</div><ul style="margin:0 0 10px 18px;line-height:1.55;">' + (fixes || '<li>—</li>') + '</ul>' +
+    '<div style="font-size:12px;color:var(--text-2,#64748b);margin-bottom:12px;">After the fix the check found ' + (im.after || 0) + ' thing' + ((im.after || 0) === 1 ? '' : 's') + '.</div>' +
+    '<button type="button" class="btn btn-outline" onclick="autoFixedOpen(\'' + escapeHtml(String(q.id)).replace(/'/g, '') + '\')">✏️ Open this question</button>' +
+  '</div>';
+}
+function autoFixedOpen(id) {
+  autoFixedClose();
+  try { editQuestion(id); } catch (e) { console.warn('auto-fixed: could not open the question', e); }
+}
+function autoFixedClose() {
+  const o = document.getElementById('autoFixedOverlay');
+  if (o) o.classList.remove('show');
+}
+function autoFixedShow() {
+  if (!_canAuthor()) return;
+  let o = document.getElementById('autoFixedOverlay');
+  if (!o) {
+    o = document.createElement('div');
+    o.id = 'autoFixedOverlay';
+    o.className = 'qm-overlay';
+    o.setAttribute('onclick', 'if(event.target===this)autoFixedClose()');
+    o.innerHTML = '<div class="qm-panel" role="dialog" aria-label="Questions the auto-check fixed">' +
+      '<div class="qm-head"><div><h3>🔧 Auto-fixed: red → yellow / green</h3><div class="qm-headsub" id="autoFixedSub"></div></div>' +
+      '<button class="wse-close" type="button" onclick="autoFixedClose()" aria-label="Close">✕</button></div>' +
+      '<div class="qm-bodywrap" id="autoFixedBody" style="padding:18px 22px 24px;"></div>' +
+      '<div class="qm-foot"><button class="btn btn-outline" type="button" onclick="autoFixedClose()">Close</button></div></div>';
+    document.body.appendChild(o);
+  }
+  const list = autoFixedList();
+  const g = list.filter(e => e.im.to === 'green').length;
+  document.getElementById('autoFixedSub').textContent = list.length
+    ? list.length + ' question' + (list.length === 1 ? '' : 's') + ' fixed with one repair · ' + g + ' green · ' + (list.length - g) + ' yellow'
+    : 'Nothing yet';
+  document.getElementById('autoFixedBody').innerHTML = list.length
+    ? list.map(autoFixedRowHtml).join('')
+    : '<p style="line-height:1.6;">No red question has been fixed yet. When the auto-check takes a red question to yellow or green with its one repair, it is listed here with what was wrong and what changed.</p>';
+  o.classList.add('show');
+}
+
+// ---- the sweep: questions that arrived by another route ------------------
+function _autoFixSweepCandidates() {
+  const cutoff = Date.now() - AUTOFIX_SWEEP_DAYS * 86400000;
+  return (vettingList || []).filter(q => {
+    if (!q || !q.id || q.autoCheck && q.autoCheck.improved) return false;
+    if (currentEditingQuestion && String(currentEditingQuestion) === String(q.id)) return false;
+    let t = NaN;
+    try { t = Date.parse(_vetAddedAt(q)); } catch (e) { /* undated */ }
+    if (isNaN(t) || t < cutoff) return false;
+    if (!(q.blocks || []).length) return false;
+    // Already carries a verdict that still describes the question: leave it.
+    if (q.autoCheck && q.autoCheck.state && q.autoCheck.sig && q.autoCheck.sig === tlSig(q)) return false;
+    return true;
+  });
+}
+async function autoFixSweep(force) {
+  if (_autoFixSweeping || (!force && _autoFixSweepRan)) return;
+  if (!autoChkOn() || !_canAuthor() || !(window.__aiReady && window.__aiReady())) return;
+  _autoFixSweepRan = true;
+  _autoFixSweeping = true;
+  try {
+    const todo = _autoFixSweepCandidates().slice(0, AUTOFIX_SWEEP_MAX);
+    for (const q of todo) {
+      // The list is re-read each time: an object replaced or removed while
+      // earlier ones were being checked is not ours to write over.
+      if (!vettingList.includes(q) || (currentEditingQuestion && String(currentEditingQuestion) === String(q.id))) continue;
+      try {
+        const res = await autoChkRun(q, { level: '' });
+        if (!vettingList.includes(q)) continue;
+        autoChkStamp(q, res);
+        autoChkAnnounce(q);
+        await saveVettingQuestion(q, { quiet: true });
+        try { renderVettingList(); } catch (e) { /* not on that page */ }
+      } catch (e) { console.warn('auto-fix sweep: one question skipped', e); }
+    }
+  } finally {
+    _autoFixSweeping = false;
+    try { autoFixedPaint(); } catch (e) { /* pad not open */ }
+  }
+}
+function autoFixSweepSoon() {
+  if (_autoFixSweepRan) return;
+  setTimeout(() => { autoFixSweep(false).catch(e => console.warn('auto-fix sweep', e)); }, 8000);
+}
+Object.assign(window, { autoFixedShow, autoFixedClose, autoFixedOpen, autoFixSweep });
 
 // A failure must always leave a card behind: a screenshot that silently
 // vanished reads as "that one worked". Both the read itself and the prep in
@@ -31165,6 +31436,7 @@ async function loadFromStorage() {
   }
   updateCounts();
   populateTopicFilter();
+  try { autoFixSweepSoon(); } catch (e) { /* the sweep is a convenience */ }
   _scienceFeedPublishSummaries().catch(e => console.warn('Quality summary refresh', e));
 }
 

@@ -77,6 +77,16 @@ function _partsPromptRules() { return '- PARTS RULES\\n'; }
 function aiGrounding() { return 'GROUNDED\\n'; }
 function _serializeQuestionForRegen(q) { return 'SERIALISED ' + (q.title || ''); }
 function _rapidApplyLevel(q, level) { HOOK.levels.push(level); }
+// the re-crop's world: an original page that can be re-cut, counted.
+HOOK.recrops = 0; HOOK.recropBox = [100, 100, 500, 500]; HOOK.recropFail = false;
+function transformImageUrl(u) { return u; }
+async function _urlToDataUrlRobust(u) { return 'data:image/png;base64,QUJD'; }
+function _parseImageDataUrl(d) { return /^data:/.test(d) ? { mime: 'image/png', ext: 'png', bytes: [] } : null; }
+async function _jevRecropBox() { HOOK.recrops++; return HOOK.recropFail ? null : HOOK.recropBox; }
+async function _cropBoxFromScreenshotEx() { return { dataUrl: 'data:image/png;base64,Q1JPUA==' }; }
+async function _aiRefineCrop(d) { return d; }
+async function uploadImageDataUrl() { return 'https://pic/recut.png'; }
+function _rememberCropSource(b, url, box, page) { b.cropSource = { url, imageUrl: b.url, box_2d: box, page }; }
 
 // The two layers of the real checker, driven by HOOK.plan: one entry per read,
 // each a list of findings. The AI half throws when the entry says 'throw'.
@@ -121,9 +131,9 @@ const M = new Function(
   cut('function tlVerdict(findings) {', '\nfunction tlSig', 'tlVerdict') +
   cut('const QMARKS_MAX = 99;', '\n// …and put one back', 'marks core') +
   cut('const AI_MARKS_MAX_LIFT = 20;', '\n// The rectangle-selection', 'marks lifter') +
-  cut('const AUTOCHK_TRIES = 3;', '\nasync function processRapidJob', 'auto-check core') +
+  cut('const AUTOCHK_TRIES = 2;', '\nasync function processRapidJob', 'auto-check core') +
   `\nreturn { HOOK, tlVerdict, autoChkOn, setAutoChkOn, autoChkRead, autoChkState, autoChkBetter,
-    autoChkRun, autoChkStamp, autoChkCardHtml, autoChkTally, autoChkBatchNote,
+    autoChkRun, autoChkRecrop, autoChkStamp, autoChkCardHtml, autoChkTally, autoChkBatchNote,
     _autoChkApply, _autoChkRepairPrompt, _aiLiftMarks, _aiMarksSane, _tlCache, _imgEnhanceState,
     AUTOCHK_TRIES };\n`
 )();
@@ -131,7 +141,7 @@ const M = new Function(
 const { HOOK } = M;
 const reset = (plan, replies) => {
   HOOK.reads = 0; HOOK.repairs = 0; HOOK.aiChecks = 0; HOOK.media = 0;
-  HOOK.levels = []; HOOK.prompts = []; HOOK.warned = []; HOOK.aiOn = true;
+  HOOK.levels = []; HOOK.recrops = 0; HOOK.recropFail = false; HOOK.prompts = []; HOOK.warned = []; HOOK.aiOn = true;
   HOOK.plan = plan || [[]];
   HOOK.replies = replies || [];
 };
@@ -204,13 +214,13 @@ test('red → repaired → green stops at green and keeps the repair', async () 
   eq(q.blocks[0].content, 'Fixed wording', 'the repaired blocks are the ones kept');
 });
 
-test('a question still red after three tries is RETURNED, never dropped', async () => {
+test('a question still red after its ONE fix is RETURNED, never dropped', async () => {
   reset([[F('high')], [F('high')], [F('high')]],
     [reply([{ type: 'text', text: 'v2' }, { type: 'image' }]), reply([{ type: 'text', text: 'v3' }, { type: 'image' }])]);
   const q = Q();
   const res = await M.autoChkRun(q);
   eq(res.state, 'red');
-  eq(res.tries, M.AUTOCHK_TRIES, 'it used its three tries');
+  eq(res.tries, M.AUTOCHK_TRIES, 'it used its two reads');
   eq(HOOK.repairs, M.AUTOCHK_TRIES - 1, 'and repaired between them, never after the last read');
   ok(q.blocks.length, 'the question still exists — it goes to vetting wearing its lamp');
 });
@@ -428,7 +438,7 @@ test('nothing in the loop withholds a question or writes one', () => {
   // inside is what saves. The ONE exception is `autoChkAfterMerge`, which
   // re-saves a question the merge has ALREADY written — so it is cut away and
   // named rather than quietly permitted.
-  const block = cut('const AUTOCHK_TRIES = 3;', '\nasync function autoChkAfterMerge', 'auto-check loop');
+  const block = cut('const AUTOCHK_TRIES = 2;', '\nasync function autoChkAfterMerge', 'auto-check loop');
   ok(!/saveVettingQuestion|saveQuestion|setDoc|deleteDoc/.test(block), 'the loop READS a question; the pipeline saves it');
   ok(!/vettingList/.test(block), 'and it never reaches into the list itself');
   ok(!/return null|continue;/.test(block.slice(block.indexOf('async function autoChkRun'))),
@@ -438,7 +448,7 @@ test('nothing in the loop withholds a question or writes one', () => {
 });
 
 test('it calls the SAME checker, never a second prompt of its own', () => {
-  const block = cut('const AUTOCHK_TRIES = 3;', '\nasync function processRapidJob', 'auto-check core');
+  const block = cut('const AUTOCHK_TRIES = 2;', '\nasync function processRapidJob', 'auto-check core');
   ok(/_cqAiCheck\(q\)/.test(block), "✅ Check Questions' own AI pass");
   ok(/_cqLocalFindings\(q, ran\)/.test(block), 'and its own instant checks');
   ok(/tlVerdict\(findings\)/.test(block), "and 🚦 the traffic light's own plain-code colour");
@@ -468,7 +478,7 @@ test('a merged question loses its verdict — neither half describes what now ex
 test('every build prompt asks for the marks, and the shared parts fragment says how', () => {
   // The repair prompt asks for it too and lives inside the auto-check block, so
   // that one is cut away before the four BUILD prompts are counted.
-  const block = cut('const AUTOCHK_TRIES = 3;', '\nasync function processRapidJob', 'auto-check core');
+  const block = cut('const AUTOCHK_TRIES = 2;', '\nasync function processRapidJob', 'auto-check core');
   const builds = src.replace(block, '');
   eq((builds.match(/include "marks" ONLY when/g) || []).length, 5,
     'Build from screenshot, ⚡ Rapid add / the bulk import, 🔄 Regenerate, the exam paper builder and 🗂️ Custom Paper');
@@ -481,6 +491,98 @@ test('the lift is wired into the ONE door every AI authoring path goes through',
   const fn = cut('function buildBlocksFromAi(data) {', '\nfunction _aiSuggestedTags', 'buildBlocksFromAi');
   ok(/_aiLiftMarks\(txt, b && b\.marks\)/.test(fn), 'in the text branch');
   ok(/if \(mk\.marks\) blk\.marks = mk\.marks;/.test(fn), 'and a block with none is left exactly as it was');
+});
+
+
+// ── one fix only, re-crop, and the red → yellow/green record ───────────────
+
+test('there is ONE repair only: two reads, however red it stays', async () => {
+  reset([[F('high')], [F('high')], [F('high')], [F('high')]],
+    [reply([{ type: 'text', text: 'v2' }, { type: 'image' }]), reply([{ type: 'text', text: 'v3' }, { type: 'image' }])]);
+  const res = await M.autoChkRun(Q());
+  eq(M.AUTOCHK_TRIES, 2, 'check, fix once, check again');
+  eq(res.tries, 2);
+  eq(HOOK.repairs, 1, 'exactly one repair call');
+  eq(HOOK.reads, 2, 'and exactly two reads');
+});
+
+test('red → fixed → yellow is RECORDED as an improvement, with before and fixes', async () => {
+  reset([[F('high')], [F('med')]], [reply([{ type: 'text', text: 'Fixed' }, { type: 'image' }])]);
+  const q = Q();
+  const res = await M.autoChkRun(q);
+  eq(res.state, 'amber');
+  eq(res.from, 'red');
+  eq(res.improved, true, 'a red question the fix took to yellow');
+  ok(res.fixes.length >= 1, 'and it says what was done');
+  M.autoChkStamp(q, res);
+  eq(q.autoCheck.improved.from, 'red');
+  eq(q.autoCheck.improved.to, 'amber');
+  eq(q.autoCheck.improved.before.length, 1, 'the first check\'s findings are kept for review');
+  ok(/Auto-fixed/.test(M.autoChkCardHtml(q)), 'and the card wears it');
+});
+
+test('red → green is recorded; a question that was never red is not', async () => {
+  reset([[F('high')], []], [reply([{ type: 'text', text: 'Fixed' }, { type: 'image' }])]);
+  const a = await M.autoChkRun(Q());
+  eq(a.improved, true); eq(a.state, 'green');
+  reset([[F('med')], []], [reply([{ type: 'text', text: 'Fixed' }, { type: 'image' }])]);
+  const b = await M.autoChkRun(Q());
+  eq(b.state, 'green'); eq(b.improved, false, 'yellow → green is not the red → fixed story');
+});
+
+test('a repair thrown away as WORSE is never claimed as an improvement', async () => {
+  reset([[F('high')], [F('high'), F('high')]], [reply([{ type: 'text', text: 'WORSE' }, { type: 'image' }])]);
+  const res = await M.autoChkRun(Q());
+  eq(res.state, 'red'); eq(res.improved, false); eq(res.fixes.length, 0);
+});
+
+test('a Crop finding is re-cut from the ORIGINAL page, not reworded', async () => {
+  const crop = { type: 'Crop', severity: 'high', title: 'Part of the picture is cut off', detail: 'd', fix: 'cropImage', ai: true };
+  reset([[crop], []]);
+  const q = Q();
+  q.blocks[1].cropSource = { url: 'https://page/orig.png', imageUrl: 'https://pic/1.png', box_2d: [1, 1, 2, 2] };
+  const res = await M.autoChkRun(q);
+  eq(HOOK.recrops, 1, 'the figure was located again on the original page');
+  eq(HOOK.repairs, 0, 'and no wording repair was paid for');
+  eq(q.blocks[1].url, 'https://pic/recut.png', 'the picture is the new crop');
+  eq(res.state, 'green'); eq(res.improved, true);
+  ok(res.fixes.some(f => /re-cut/.test(f)), 'named in the record');
+});
+
+test('a Crop finding with no original page kept is skipped and SAID', async () => {
+  const crop = { type: 'Crop', severity: 'high', title: 'cut off', fix: 'cropImage', ai: true };
+  reset([[crop], [crop]]);
+  const q = Q();
+  const res = await M.autoChkRun(q);
+  eq(HOOK.recrops, 0);
+  eq(res.state, 'red', 'still red, returned, never dropped');
+  eq(q.blocks[1].url, 'https://pic/1.png', 'the picture is untouched');
+});
+
+test('a re-crop that comes back WORSE is put back with the rest of that attempt', async () => {
+  const crop = { type: 'Crop', severity: 'med', title: 'cut off', fix: 'cropImage', ai: true };
+  reset([[crop], [crop, F('high')]]);
+  const q = Q();
+  q.blocks[1].cropSource = { url: 'https://page/orig.png', imageUrl: 'https://pic/1.png' };
+  const res = await M.autoChkRun(q);
+  eq(res.state, 'amber');
+  eq(q.blocks[1].url, 'https://pic/1.png', 'the original crop is restored');
+});
+
+test('the improvement is announced and the list is derived from the questions', () => {
+  ok(/function autoChkAnnounce\(q\)/.test(src) && /q\.autoCheck\.improved/.test(src));
+  ok(/autoChkAnnounce\(q\);\s*\n\s*\/\/ Jev is advisory/.test(src), 'announced right after the stamp in the Rapid add pipeline');
+  const list = cut('function autoFixedList() {', '\nfunction autoFixedPaint', 'auto-fixed list');
+  ok(/vettingList/.test(list) && /questionBank/.test(list), 'read off both lists — no second store');
+  ok(!/setDoc|saveQuestion|saveVettingQuestion/.test(list), 'and read-only');
+});
+
+test('the sweep is bounded, admin-only and never touches a question being edited', () => {
+  const sweep = cut('function _autoFixSweepCandidates() {', '\nfunction autoFixSweepSoon', 'sweep');
+  ok(/AUTOFIX_SWEEP_MAX/.test(sweep) && /AUTOFIX_SWEEP_DAYS/.test(sweep));
+  ok(/currentEditingQuestion/.test(sweep), 'never one open in the editor');
+  ok(/_canAuthor\(\)/.test(sweep) && /autoChkOn\(\)/.test(sweep));
+  ok(/quiet: true/.test(sweep), 'housekeeping writes stay out of the work-session log');
 });
 
 // ── runner ──────────────────────────────────────────────────────────────────
