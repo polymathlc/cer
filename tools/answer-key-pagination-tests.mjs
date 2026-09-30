@@ -28,8 +28,8 @@
 //    under the wrong question number, and nothing anywhere saying so.
 import fs from 'fs';
 
-const APP = new URL('../app.js', import.meta.url).pathname;
-const HTML = new URL('../index.html', import.meta.url).pathname;
+const APP = new URL('../app.js', import.meta.url);
+const HTML = new URL('../index.html', import.meta.url);
 const src = fs.readFileSync(APP, 'utf8');
 const html = fs.readFileSync(HTML, 'utf8');
 

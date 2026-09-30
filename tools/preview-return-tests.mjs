@@ -30,8 +30,8 @@
 //    delivers the preview (or the reverse) is a button nobody trusts twice.
 import fs from 'fs';
 
-const APP = new URL('../app.js', import.meta.url).pathname;
-const src = fs.readFileSync(APP, 'utf8');
+const APP = new URL('../app.js', import.meta.url);
+const src = fs.readFileSync(APP, 'utf8').replace(/\r\n/g, '\n');
 
 const cut = (from, to, what) => {
   const a = src.indexOf(from);

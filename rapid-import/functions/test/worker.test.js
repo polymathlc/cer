@@ -23,11 +23,17 @@ mock.module('firebase-functions/v2/https',{namedExports:{onCall:(opts,fn)=>fn,Ht
 mock.module('firebase-functions/v2/firestore',{namedExports:{onDocumentWritten:(opts,fn)=>fn}});
 mock.module('firebase-functions/v2/tasks',{namedExports:{onTaskDispatched:(opts,fn)=>fn}});
 mock.module('firebase-functions/params',{namedExports:{defineSecret:()=>({value:()=>''}),defineString:(name,opts)=>({value:()=>opts.default})}});
-let aiPages=[], aiPrompts=[];
+let aiPages=[], aiPrompts=[], modelResponse=null;
 mock.module('@google/genai',{namedExports:{GoogleGenAI:class {
   models={generateContent:async request=>{
     aiPrompts.push(request.contents[0].parts[0].text);
-    const page=Number(/CURRENT page (\d+)/.exec(request.contents[0].parts[0].text)?.[1]);
+    if(modelResponse) {const response=await modelResponse(request);if(response)return response;}
+    const text=request.contents[0].parts[0].text;
+    if(text.startsWith('Check this science question')) {
+      const q=JSON.parse(text.split('Question:\n').at(-1));
+      return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({findings:[],repairs:[],imageAudits:q.blocks.filter(b=>b.type==='image').map(b=>({blockId:b.id,complete:true,faithful:true,issues:[]}))})};
+    }
+    const page=Number(/CURRENT page (\d+)/.exec(text)?.[1]);
     return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({questions:aiPages[page-1]||[]})};
   }};
 }}});
@@ -35,7 +41,7 @@ const api=await import('../index.js');
 const auth={uid:'teacher',token:{admin:true,name:'Teacher'}};
 const makeJob=(id='job')=>({id,ownerUid:'teacher',name:'paper.pdf',status:'queued',phase:'publish',publishIndex:0,nextPage:3,total:2,added:0,generation:0,autoCheck:false,checkpoint:'checkpoint',updatedAt:new Date().toISOString()});
 const question={id:'q_rapid_job_1_0',title:'A',blocks:[],sourcePages:[]};
-function setup(j=makeJob()){docs.clear();files.clear();tasks.length=0;aiPrompts=[];docs.set('cerRapidImports/'+j.id,j);files.set('checkpoint',Buffer.from(JSON.stringify({pending:null,ready:[question]})));return j;}
+function setup(j=makeJob()){docs.clear();files.clear();tasks.length=0;aiPrompts=[];modelResponse=null;docs.set('cerRapidImports/'+j.id,j);files.set('checkpoint',Buffer.from(JSON.stringify({pending:null,ready:[question]})));return j;}
 test('duplicate delivery publishes once, atomically with checkpoint progress',async()=>{
  setup();const request={data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0},retryCount:0};
  await api.rapidImportPage(request);await api.rapidImportPage(request);
@@ -103,7 +109,7 @@ test('full upload and real PDF rendering continue entirely server-side across th
   // No client calls after this point: only durable server transitions.
   for(let i=0;i<10;i++) {
     const j=docs.get('cerRapidImports/realpdf');if(j.status==='completed')break;
-    await api.rapidImportPage({data:{id:j.id,page:j.nextPage,generation:j.generation,phase:j.phase,publishIndex:j.publishIndex},retryCount:0});
+    await api.rapidImportPage({data:{id:j.id,page:j.nextPage,generation:j.generation,phase:j.phase,publishIndex:j.publishIndex,figureIndex:j.figureIndex},retryCount:0});
   }
   const j=docs.get('cerRapidImports/realpdf');assert.equal(j.status,'completed');assert.equal(j.added,2);
   const questions=[...docs].filter(([k])=>k.includes('/vetting/')).map(([,q])=>q);
@@ -164,4 +170,134 @@ test('real PDF worker keeps failed crops and mixed-case figures in the correct w
   assert.match(aiPrompts[0],/complete labels/);
   assert.match(aiPrompts[0],/Exclude surrounding question prose/);
   assert.equal(docs.get('cerRapidImports/figures').status,'completed');
+});
+
+const reply=value=>({candidates:[{finishReason:'STOP'}],text:JSON.stringify(value)});
+const imageUrl=path=>'https://firebasestorage.googleapis.com/v0/b/test/o/'+encodeURIComponent(path)+'?alt=media';
+function savedFigure(kind='diagram') {
+  const j=setup({...makeJob(),autoCheck:true,engineOrder:['gemini'],jev:false,enhanceImages:true});
+  const path='cer-rapid/teacher/job/images/raw/crop.jpg',url=imageUrl(path);
+  const canvas=createCanvas(120,90),ctx=canvas.getContext('2d');
+  ctx.fillStyle='white';ctx.fillRect(0,0,120,90);ctx.fillStyle='#c02010';ctx.fillRect(15,15,75,55);
+  const bytes=canvas.toBuffer('image/jpeg');files.set(path,bytes);
+  const q={id:'q_rapid_job_1_0',title:'Observe the figure',topic:'Heat',blocks:[
+    {id:'stem',type:'text',content:'Observe this figure and explain what happens to the water.'},
+    {id:'figure',type:'image',url,originalCropUrl:url,preColourUrl:url,figureKind:kind,cropSource:{url:imageUrl('cer-rapid/teacher/job/images/raw/page.jpg'),imageUrl:url}},
+    {id:'answer',type:'plainanswer',content:'The water gains heat.'},
+    {id:'explanation',type:'explanation',content:'Heat transfers from the warmer object to the water.'}
+  ],sourcePages:[],rapidImportId:'job',status:'pending'};
+  docs.set('users/teacher/vetting/'+q.id,q);
+  return {j,q,url,bytes};
+}
+const imageModelReply=bytes=>({candidates:[{finishReason:'STOP',content:{parts:[{inlineData:{mimeType:'image/jpeg',data:bytes.toString('base64')}}]}}]});
+test('new uploads cannot disable automatic checks or enhancement',async()=>{
+  setup();docs.clear();
+  await api.rapidImportBegin({auth,data:{id:'required',size:20,prompt:'Read the paper',autoCheck:false,enhanceImages:false}});
+  const j=docs.get('cerRapidImports/required');assert.equal(j.autoCheck,true);assert.equal(j.enhanceImages,true);
+  assert.deepEqual((await api.rapidImportStatus({auth})).capabilities,{imageEditing:true,automaticChecks:true,automaticEnhancement:true});
+});
+test('verified table enhancement is monochrome and repeated requests always use the immutable original',async()=>{
+  const {q,url,bytes}=savedFigure('table');let generations=0;
+  modelResponse=request=>{
+    if(request.config.responseModalities) {
+      generations++;assert.match(request.contents[0].parts[0].text,/BLACK AND WHITE/);
+      assert.equal(request.contents[0].parts[1].inlineData.data,bytes.toString('base64'));
+      return imageModelReply(bytes);
+    }
+    if(request.contents[0].parts[0].text.startsWith('Compare image 1'))return reply({faithful:true,differences:[]});
+  };
+  const first=await api.rapidVettingImage({auth,data:{questionId:q.id,blockId:'figure',mode:'colour',expectedUrl:url}});
+  const figure=first.question.blocks[1];assert.notEqual(figure.url,url);assert.equal(figure.originalCropUrl,url);assert.equal(figure.preColourUrl,url);assert.equal(figure.cropSource.imageUrl,figure.url);assert.equal(figure.enhancement.mode,'bw');
+  const enhanced=await loadImage(files.get(decodeURIComponent(new URL(figure.url).pathname.split('/o/')[1])));
+  const canvas=createCanvas(enhanced.width,enhanced.height),ctx=canvas.getContext('2d');ctx.drawImage(enhanced,0,0);
+  const pixel=[...ctx.getImageData(40,40,1,1).data];assert.ok(Math.max(...pixel.slice(0,3))-Math.min(...pixel.slice(0,3))<=2);
+  await api.rapidVettingImage({auth,data:{questionId:q.id,blockId:'figure',mode:'bw',expectedUrl:figure.url}});
+  assert.equal(generations,2);assert.ok(aiPrompts.some(p=>p.includes('Displayed figure figure')),'checker reads the resulting figure');
+});
+test('unfaithful regeneration cannot replace the saved figure or lose the original',async()=>{
+  const {q,url,bytes}=savedFigure();
+  modelResponse=request=>request.config.responseModalities?imageModelReply(bytes):reply({faithful:false,differences:['Arrow reversed']});
+  await assert.rejects(api.rapidVettingImage({auth,data:{questionId:q.id,blockId:'figure',mode:'colour',expectedUrl:url}}),/not verified/);
+  assert.deepEqual(docs.get('users/teacher/vetting/'+q.id),q);
+});
+test('concurrent teacher changes abort regeneration instead of overwriting their question',async()=>{
+  const {q,url,bytes}=savedFigure();
+  modelResponse=request=>{
+    if(request.config.responseModalities) {
+      docs.get('users/teacher/vetting/'+q.id).blocks[0].content='Teacher changed the question while generation was running.';
+      return imageModelReply(bytes);
+    }
+    if(request.contents[0].parts[0].text.startsWith('Compare image 1'))return reply({faithful:true,differences:[]});
+  };
+  await assert.rejects(api.rapidVettingImage({auth,data:{questionId:q.id,blockId:'figure',mode:'colour',expectedUrl:url}}),e=>e.code==='aborted');
+  const saved=docs.get('users/teacher/vetting/'+q.id);assert.match(saved.blocks[0].content,/Teacher changed/);assert.equal(saved.blocks[1].url,url);
+});
+test('resize guards role, owner, displayed URL and current scale',async()=>{
+  const {q,url}=savedFigure();
+  const data={questionId:q.id,blockId:'figure',expectedUrl:url,expectedScale:null,scale:.7};
+  await assert.rejects(api.rapidVettingImage({auth:{uid:'student',token:{}},data}),/administrator/);
+  await assert.rejects(api.rapidVettingImage({auth:{uid:'other',token:{admin:true}},data}),/not found/);
+  await assert.rejects(api.rapidVettingImage({auth,data:{...data,scale:100}}),/Invalid/);
+  const r=await api.rapidVettingImage({auth,data});assert.equal(r.question.blocks[1].scale,.7);
+  await assert.rejects(api.rapidVettingImage({auth,data}),e=>e.code==='aborted');
+});
+test('durable enhancement checkpoints each figure once and fences replayed image tasks',async()=>{
+  const {q,bytes}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);
+  const j={...docs.get('cerRapidImports/job'),phase:'enhance',figureIndex:1};docs.set('cerRapidImports/job',j);
+  q.blocks.splice(2,0,{...q.blocks[1],id:'second'});files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
+  let count=0;modelResponse=request=>{
+    if(request.config.responseModalities){count++;return imageModelReply(bytes);}
+    if(request.contents[0].parts[0].text.startsWith('Compare image 1'))return reply({faithful:true,differences:[]});
+  };
+  const first={data:{id:'job',page:3,generation:0,phase:'enhance',publishIndex:0,figureIndex:1},retryCount:0};
+  await api.rapidImportPage(first);await api.rapidImportPage(first);
+  assert.equal(count,1);assert.equal(docs.get('cerRapidImports/job').figureIndex,2);assert.equal(docs.has('users/teacher/vetting/'+q.id),false);
+  await api.rapidImportPage({...first,data:{...first.data,figureIndex:2}});
+  await api.rapidImportPage({...first,data:{...first.data,phase:'publish',figureIndex:0}});
+  assert.equal(count,2);assert.equal(docs.get('cerRapidImports/job').status,'completed');assert.equal(docs.get('cerRapidImports/job').added,1);
+});
+test('unverified enhancement is published with its original and a visible finding, never a green light',async()=>{
+  const {q,url,bytes}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);
+  docs.set('cerRapidImports/job',{...docs.get('cerRapidImports/job'),phase:'enhance',figureIndex:1});
+  files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
+  modelResponse=request=>{
+    if(request.config.responseModalities)return imageModelReply(bytes);
+    if(request.contents[0].parts[0].text.startsWith('Compare image 1'))return reply({faithful:false,differences:['Label lost']});
+  };
+  await api.rapidImportPage({data:{id:'job',page:3,generation:0,phase:'enhance',publishIndex:0,figureIndex:1},retryCount:0});
+  await api.rapidImportPage({data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0,figureIndex:0},retryCount:0});
+  const saved=docs.get('users/teacher/vetting/'+q.id);assert.equal(saved.blocks[1].url,url);assert.equal(saved.autoCheck.state,'amber');assert.match(saved.autoCheck.findings[0].detail,/Label lost/);
+});
+test('safe answer repairs are rechecked and audited; a worse or unavailable recheck restores the original answer',async()=>{
+  for(const result of ['better','worse','failure']) {
+    const {q}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);
+    files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));let n=0;
+    modelResponse=request=>{
+      if(!request.contents[0].parts[0].text.startsWith('Check this science question'))return;
+      n++;
+      const imageAudits=[{blockId:'figure',complete:true,faithful:true,issues:[]}];
+      if(n===1)return reply({imageAudits,findings:[{severity:'medium',title:'Incomplete answer',detail:'Missing reason',fix:'Explain the energy transfer.'}],repairs:[{id:'answer',content:'The water gains heat from the warmer object.',reason:'Completes the direction of heat transfer.'},{id:'stem',content:'Injected source wording'}]});
+      if(result==='failure')throw new Error('Provider unavailable');
+      return reply({imageAudits,findings:result==='better'?[]:[{severity:'high',title:'Worse answer',detail:'Incorrect'}],repairs:[]});
+    };
+    await api.rapidImportPage({data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0},retryCount:0});
+    const saved=docs.get('users/teacher/vetting/'+q.id);assert.equal(saved.blocks[0].content,q.blocks[0].content);
+    assert.equal(saved.blocks[2].content,result==='better'?'The water gains heat from the warmer object.':q.blocks[2].content);
+    assert.equal(saved.autoCheck.repairs.length,result==='better'?1:0);
+    assert.equal(saved.autoCheck.state,result==='better'?'green':result==='failure'?'error':'amber');
+    if(result!=='better')assert.match(saved.autoCheck.findings[0].fix,/Explain/);
+  }
+});
+
+test('missing or partial per-figure audits cannot produce a fresh green import stamp',async()=>{
+  for(const imageAudits of [undefined,[{blockId:'figure',complete:true,faithful:true,issues:[]}]]) {
+    const {q}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);
+    q.blocks.push({...q.blocks[1],id:'second'});
+    files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
+    modelResponse=request=>request.contents[0].parts[0].text.startsWith('Check this science question')?reply({findings:[],repairs:[],imageAudits}):undefined;
+    await api.rapidImportPage({data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0},retryCount:0});
+    const saved=docs.get('users/teacher/vetting/'+q.id);
+    assert.equal(saved.autoCheck.state,'error');assert.match(saved.autoCheck.error,/every displayed figure/);
+    assert.equal(saved.blocks.filter(b=>b.type==='image').length,2);
+  }
 });

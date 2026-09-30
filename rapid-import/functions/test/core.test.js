@@ -64,6 +64,19 @@ test('question signature changes after an answer edit',()=>{
   const a=q('a',1), before=signature(a);a.blocks[0].content='changed';assert.notEqual(signature(a),before);
 });
 
+test('imported signatures survive Firestore key ordering and include answer-key images',()=>{
+  const a={...q('a',1),rapidImportId:'job'};
+  const b={...a,blocks:[{content:'a',type:'text',id:'a_b'}]};
+  assert.equal(signature(a),signature(b));
+  assert.match(signature(a),/"cropAudit":1,"keyImage":""/);
+  assert.notEqual(signature(a),signature({...a,answerKeyImage:'new-answer-image'}));
+});
+test('worker categories already match CER normalisation before the check is stamped',()=>{
+  const make=(category,blocks)=>normaliseQuestion({category,blocks},'q',{topics:[]},1,'source');
+  assert.equal(make('MCQ',[{type:'mcq',options:['A','B'],correctIndex:0}]).category,'Multiple Choice Question');
+  for(const category of ['CER (Open Ended)','CER (Fill in Blanks)','CER (MCQ)','Open Ended','MCQ']) assert.equal(make(category,[{type:'text',text:'Question'}]).category,'CER');
+});
+
 test('each imported figure keeps the raw source and its own crop identity after JSON persistence',()=>{
   const result=normaliseQuestion({blocks:[
     {type:'image',box_2d:[100,200,400,700]},

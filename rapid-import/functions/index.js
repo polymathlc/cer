@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
@@ -8,11 +8,12 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { getFunctions } from 'firebase-admin/functions';
 import { GoogleGenAI } from '@google/genai';
-import { createCanvas, DOMMatrix, ImageData, Path2D } from '@napi-rs/canvas';
+import { createCanvas, loadImage, DOMMatrix, ImageData, Path2D } from '@napi-rs/canvas';
 import { MAX_PDF_BYTES, CHUNK_BYTES, MAX_PAGES, parseReply, blockType, normaliseQuestion, assemblePage, signature, html } from './core.js';
 import { cropDiagramEx } from './crop.js';
 import { jevReview, jevAllow, JevUnavailable } from './jev.js';
-import { figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, JEV_MAY_SKIP } from './jev-review-core.js';
+import { figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons } from './jev-review-core.js';
+import { FIGURE_KINDS, figureMode, imageInstruction, originalImageUrl, storageImagePath, enhancementFindings, nextImageIndex, requireImageAudits } from './image-core.js';
 
 initializeApp();
 Object.assign(globalThis, {DOMMatrix, ImageData, Path2D});
@@ -24,6 +25,7 @@ const openaiKey = defineSecret('OPENAI_API_KEY');
 const jevKey = defineSecret('JEV_API_KEY');
 const openaiModel = defineString('RAPID_IMPORT_OPENAI_MODEL', {default:'gpt-6-astra'});
 const model = defineString('RAPID_IMPORT_MODEL', {default:'gemini-2.5-flash'});
+const imageModel = defineString('RAPID_IMPORT_IMAGE_MODEL', {default:'gemini-3.1-flash-image'});
 const JOBS = 'cerRapidImports';
 const callOpts = {region:'us-central1', timeoutSeconds:120, memory:'512MiB', maxInstances:4};
 const validId = id => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(id);
@@ -51,6 +53,7 @@ export const rapidImportStatus = onCall(callOpts, async request => {
   // Single-field query needs no new index; sort after the bounded read.
   const snaps = await db.collection(JOBS).where('ownerUid','==',a.uid).get();
   return {available:true,maxBytes:MAX_PDF_BYTES,maxPages:MAX_PAGES,chunkBytes:CHUNK_BYTES,
+    capabilities:{imageEditing:true,automaticChecks:true,automaticEnhancement:true},
     jobs:snaps.docs.map(s=>publicJob(s.data())).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)).slice(0,100)};
 });
 // Jev, for the browser importer. The browser sends measured FACTS about a crop
@@ -81,8 +84,8 @@ export const rapidImportBegin = onCall(callOpts, async request => {
     }
     tx.create(ref,{id:d.id,ownerUid:a.uid,size:d.size,name:String(d.name||'PDF').slice(0,180),status:'uploading',
       prompt:d.prompt,engineOrder:Array.isArray(d.engineOrder)?d.engineOrder.filter(e=>['openai','gemini'].includes(e)):['openai','gemini'],grounding:String(d.grounding||'').slice(0,80000),topics:Array.isArray(d.topics)?d.topics.slice(0,100).map(String):[],
-      level:String(d.level||''),release,autoCheck:d.autoCheck!==false,createdBy:String(a.token.name||a.token.email||'Admin'),
-      createdAt:now,updatedAt:now,nextPage:1,added:0,generation:0,phase:'page',publishIndex:0});
+      level:String(d.level||''),release,autoCheck:true,enhanceImages:true,createdBy:String(a.token.name||a.token.email||'Admin'),
+      createdAt:now,updatedAt:now,nextPage:1,added:0,generation:0,phase:'page',publishIndex:0,figureIndex:0});
   });
   return {id:d.id};
 });
@@ -129,10 +132,10 @@ export const rapidImportRetry = onCall(callOpts, async request=>{
 export const rapidImportDispatch = onDocumentWritten({document:JOBS+'/{id}',region:'us-central1',retry:true},async event=>{
   const j=event.data?.after.data(), old=event.data?.before.data();
   if(!j || j.status!=='queued') return;
-  if(old?.status==='queued' && old.nextPage===j.nextPage && old.generation===j.generation && old.phase===j.phase && old.publishIndex===j.publishIndex) return;
+  if(old?.status==='queued' && old.nextPage===j.nextPage && old.generation===j.generation && old.phase===j.phase && old.publishIndex===j.publishIndex && old.figureIndex===j.figureIndex) return;
   try {
-    await getFunctions().taskQueue('rapidImportPage').enqueue({id:j.id,page:j.nextPage,generation:j.generation,phase:j.phase,publishIndex:j.publishIndex},
-      {id:`${j.id}-${j.generation}-${j.nextPage}-${j.phase}-${j.publishIndex}`,dispatchDeadlineSeconds:540});
+    await getFunctions().taskQueue('rapidImportPage').enqueue({id:j.id,page:j.nextPage,generation:j.generation,phase:j.phase,publishIndex:j.publishIndex,...(j.figureIndex!==undefined?{figureIndex:j.figureIndex}:{})},
+      {id:`${j.id}-${j.generation}-${j.nextPage}-${j.phase}-${j.publishIndex}-${j.figureIndex||0}`,dispatchDeadlineSeconds:540});
   } catch(e) { if(e.code!=='functions/task-already-exists' && e.code!=='already-exists' && Number(e.code)!==6) throw e; }
 });
 
@@ -178,6 +181,95 @@ async function ask(prompt,images,job) {
   }
   throw lastError || new Error('No online AI engine available.');
 }
+
+async function storedImage(url, ownerUid) {
+  const path=storageImagePath(url,bucket().name,ownerUid);
+  const bytes=(await bucket().file(path).download())[0];
+  if(bytes.length>16*1024*1024) throw new Error('The source image is too large to process safely.');
+  return bytes;
+}
+async function enhanceImage(block, job, requested='colour') {
+  const original=originalImageUrl(block);
+  if(!original || original===block.cropSource?.url) throw new Error('A complete figure crop is required. The original page has been kept for manual cropping.');
+  const bytes=await storedImage(original,job.ownerUid), source=await loadImage(bytes);
+  const sourceBase64=bytes.toString('base64'), auxiliary={...job,engineOrder:['gemini']};
+  let kind=block.figureKind;
+  if(!FIGURE_KINDS.includes(kind)) {
+    const r=await ask('Classify this scanned science figure. Return JSON {"kind":"diagram|table|flowchart|graph"}. A data table, graph or flowchart is never a pictorial diagram.',[sourceBase64],auxiliary);
+    kind=JSON.parse(r.text).kind;
+    if(!FIGURE_KINDS.includes(kind)) throw new Error('The figure type could not be determined safely.');
+  }
+  const mode=figureMode(kind,requested);
+  const r=await new GoogleGenAI({apiKey:key.value()}).models.generateContent({model:imageModel.value(),
+    contents:[{role:'user',parts:[{text:imageInstruction(kind,mode)},{inlineData:{mimeType:'image/jpeg',data:sourceBase64}}]}],
+    config:{responseModalities:['IMAGE'],httpOptions:{timeout:120000}}});
+  const candidate=r.candidates?.[0];
+  if(candidate?.finishReason!=='STOP') throw new Error('Figure enhancement was incomplete.');
+  const generated=candidate.content?.parts?.find(p=>p.inlineData?.data)?.inlineData;
+  if(!generated || !['image/png','image/jpeg','image/webp'].includes(generated.mimeType)) throw new Error('The enhancement service did not return an image.');
+  const output=Buffer.from(generated.data,'base64');
+  if(output.length>16*1024*1024) throw new Error('The enhanced image is too large.');
+  const picture=await loadImage(output);
+  if(picture.width<24 || picture.height<24 || picture.width*picture.height>16000000 || Math.abs((picture.width/picture.height)/(source.width/source.height)-1)>0.22) throw new Error('The enhanced image changed the source proportions.');
+  const canvas=createCanvas(picture.width,picture.height),ctx=canvas.getContext('2d');
+  ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(picture,0,0);
+  if(mode==='bw') {
+    // Enforce monochrome even if an image model adds an unintended colour tint.
+    const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
+    for(let i=0;i<pixels.data.length;i+=4) { const v=Math.round(.2126*pixels.data[i]+.7152*pixels.data[i+1]+.0722*pixels.data[i+2]); pixels.data[i]=pixels.data[i+1]=pixels.data[i+2]=v; }
+    ctx.putImageData(pixels,0,0);
+  }
+  const checked=await ask('Compare image 1, the ORIGINAL scan, with image 2, the proposed cleaned figure. Verify every label, spelling, numeral, symbol, unit, object, arrow direction, connection, table cell value, graph point, and relative position. Check that no content is invented, lost or clipped. Colour and font improvements are permitted. Return JSON {"faithful":true|false,"differences":["specific issue"]}. Only faithful:true with no differences permits replacement.',[sourceBase64,canvas.toBuffer('image/jpeg').toString('base64')],auxiliary);
+  const verdict=JSON.parse(checked.text);
+  if(verdict.faithful!==true || !Array.isArray(verdict.differences) || verdict.differences.length) throw new Error('Enhancement was not verified against the original: '+(verdict.differences||['verification unavailable']).slice(0,3).map(String).join('; ').slice(0,250));
+  const url=await storeImage(job,randomUUID(),'enhanced-'+mode,canvas);
+  return {...block,url,originalCropUrl:original,preColourUrl:original,figureKind:kind,
+    width:canvas.width,height:canvas.height,
+    ...(block.cropSource?{cropSource:{...block.cropSource,imageUrl:url}}:{}),
+    enhancement:{state:'done',mode,at:new Date().toISOString()}};
+}
+const fullRevision=q=>createHash('sha256').update(JSON.stringify(q)).digest('hex');
+export const rapidVettingImage = onCall({...callOpts,secrets:[key,openaiKey,jevKey],timeoutSeconds:540,memory:'2GiB'},async request=>{
+  const a=admin(request),d=request.data||{};
+  const validQuestionPart=id=>typeof id==='string'&&/^[a-zA-Z0-9_-]{1,220}$/.test(id);
+  if(!validQuestionPart(d.questionId)||!validQuestionPart(d.blockId)||typeof d.expectedUrl!=='string') throw new HttpsError('invalid-argument','Select a saved figure first.');
+  const resizing=Object.hasOwn(d,'scale');
+  if(resizing ? (typeof d.scale!=='number'||!Number.isFinite(d.scale)||d.scale<0.25||d.scale>2) : !['colour','bw','original'].includes(d.mode)) throw new HttpsError('invalid-argument','Invalid figure size or mode.');
+  const ref=db.doc(`users/${a.uid}/vetting/${d.questionId}`),snap=await ref.get();
+  if(!snap.exists) throw new HttpsError('not-found','Vetting question not found.');
+  const q=snap.data(),revision=fullRevision(q),index=q.blocks?.findIndex(b=>b.id===d.blockId&&b.type==='image');
+  if(index===undefined||index<0) throw new HttpsError('not-found','Figure not found.');
+  const block=q.blocks[index];
+  if(block.url!==d.expectedUrl || (resizing&&(block.scale??null)!==(d.expectedScale??null))) throw new HttpsError('aborted','This figure changed. Refresh and try again.');
+  const next=structuredClone(q);
+  if(resizing) next.blocks[index].scale=d.scale;
+  else if(d.mode==='original') {
+    const original=originalImageUrl(block);
+    if(!original) throw new HttpsError('failed-precondition','The preserved original crop is unavailable.');
+    const originalBytes=await storedImage(original,a.uid),picture=await loadImage(originalBytes);
+    next.blocks[index]={...block,url:original,originalCropUrl:original,preColourUrl:original,width:picture.width,height:picture.height,
+      ...(block.cropSource?{cropSource:{...block.cropSource,imageUrl:original}}:{}),enhancement:{state:'done',mode:'original',at:new Date().toISOString()}};
+  } else {
+    if(!validId(q.rapidImportId)) throw new HttpsError('failed-precondition','This figure has no durable import source.');
+    const importJob=(await jobRef(q.rapidImportId).get()).data();
+    if(!importJob||importJob.ownerUid!==a.uid) throw new HttpsError('not-found','Original import not found.');
+    try { next.blocks[index]=await enhanceImage(block,importJob,d.mode); }
+    catch(e) { throw new HttpsError('failed-precondition',String(e.message||e).slice(0,350)); }
+  }
+  // Resizing leaves scientific content unchanged. Regenerated/restored figures
+  // are re-read with their actual pixels before the shared record is replaced.
+  if(!resizing) {
+    const importJob=validId(q.rapidImportId)?(await jobRef(q.rapidImportId).get()).data():null;
+    await checkQuestion(next,{...(importJob?.ownerUid===a.uid?importJob:{}),ownerUid:a.uid,autoCheck:true,maxCheckTries:1});
+  } else if(next.autoCheck?.sig===signature(q)) next.autoCheck.sig=signature(next);
+  next.updatedAt=new Date().toISOString();
+  await db.runTransaction(async tx=>{
+    const latest=await tx.get(ref);
+    if(!latest.exists||fullRevision(latest.data())!==revision) throw new HttpsError('aborted','This question changed while the figure was processing. Refresh and try again.');
+    tx.update(ref,{blocks:next.blocks,...(next.autoCheck?{autoCheck:next.autoCheck}:{}),updatedAt:next.updatedAt});
+  });
+  return {question:next,changed:true};
+});
 
 
 // ---- Jev in the worker --------------------------------------------------------
@@ -241,77 +333,104 @@ async function reviewCrops(imageBlocks, canvas, job) {
 
 async function checkQuestion(q,job) {
   if(!job.autoCheck) return;
-  // 1) JEV FIRST. A confident yes on the wording and structure, with no crop
-  //    still flagged, is what lets the slower AI read be skipped. A no goes to
-  //    the AI check-and-fix below with Jev's reasons attached. Jev unavailable
-  //    changes nothing: every question is AI-checked exactly as before.
+  // Jev contributes measured findings; the current cropAudit signature may
+  // only be stamped after the AI reads the actual source and displayed pixels.
   let known=[], shadow=null;
   if(jevOn(job)) {
     const qf=questionFacts(q), verdicts=await jevAsk({scope:'question',question:qf}).catch(()=>null);
     const flaggedFigs=(q.jevFigures||[]).filter(f=>f.state==='flagged');
     if(verdicts) {
       const d=decideReview({verdicts,figures:[],question:qf});
-      if(JEV_MAY_SKIP&&d.confident&&!flaggedFigs.length) {
-        q.autoCheck={state:'green',tries:0,found:0,findings:[],jev:true,sig:signature(q),at:new Date().toISOString()};
-        return;
-      }
       known=failuresToFindings(d.failures);
       shadow={yes:!known.length,confident:d.confident&&!flaggedFigs.length};
     }
   }
   const flaggedFigures=(q.jevFigures||[]).filter(f=>f.state==='flagged').flatMap(f=>failuresToFindings((f.reasons.length?f.reasons:['the crop could not be made complete and clean']).map(r=>({key:'figure_'+f.index,index:f.index,code:'jev_no',reason:r,by:'jev'}))));
-  const images=[];
-  for(const source of q.sourcePages){
-    // URLs here were minted by this worker, never supplied by the model.
-    const path=decodeURIComponent(new URL(source.url).pathname.split('/o/')[1]);
-    images.push((await bucket().file(path).download())[0].toString('base64'));
-  }
-  let findings=[], tries=0, error='', best=null;
+  const images=[], imageLabels=[];
+  let findings=[], tries=0, error='', best=null, applied=[];
   const started=Date.now();
   try {
-    for(tries=1;tries<=4;tries++) {
+    // Read what the pupil will see as well as the source, so a faithful page
+    // cannot hide a clipped or incorrectly regenerated displayed figure.
+    // Browser-added inline pictures have a broader URL contract than durable
+    // imports. Refuse an incomplete audit rather than stamping them green.
+    if((q.blocks||[]).some(b=>['content','claim','evidence','reasoning'].some(k=>/<img\b/i.test(String(b[k]||''))))) throw new Error('Inline pictures require a fresh check in CER.');
+    const sources=[...(q.sourcePages||[]).map(p=>({url:p.url,label:`Original PDF page ${p.page}`})),
+      ...(q.blocks||[]).filter(b=>b.type==='image').flatMap(b=>[
+        ...(b.originalCropUrl?[{url:b.originalCropUrl,label:`Original figure crop ${b.id}`}]:[]),
+        {url:b.url,label:`Displayed figure ${b.id}`}
+      ]),...(q.blocks||[]).filter(b=>b.answerImg).map(b=>({url:b.answerImg,label:`Annotated answer figure ${b.id}`})),
+      ...(q.answerKeyImage?[{url:q.answerKeyImage,label:'Answer key image'}]:[])];
+    const auditTargets=[...(q.blocks||[]).filter(b=>b.type==='image').map(b=>b.id),
+      ...(q.blocks||[]).filter(b=>b.answerImg).map(b=>b.id+':answerImg'),...(q.answerKeyImage?['$answerKey']:[])];
+    if(sources.length>24) throw new Error('Too many source images for one safe automatic check. Review this question manually.');
+    for(const source of sources) {images.push((await storedImage(source.url,job.ownerUid)).toString('base64'));imageLabels.push(`Image ${images.length}: ${source.label}`);}
+    const limit=job.maxCheckTries===1?1:2;
+    for(tries=1;tries<=limit;tries++) {
       if(tries>1 && Date.now()-started>240000) break;
-      const r=await ask(`Check this science question and answers against its source pages. ${job.grounding}\nCheck scientific accuracy, missing parts, correct options, complete model answers, explanations per part and diagram references. Return JSON {"findings":[{"severity":"high|medium|low","title":"problem","detail":"reason"}],"repairs":[{"id":"block id","content":"corrected plain text","claim":"...","evidence":"...","reasoning":"...","correctIndex":0}]}. Only repair answer, plainanswer, explanation or mcq blocks. Do not alter the source wording or invent missing information. Empty findings means correct.${known.length?` Problems already flagged by Jev (confirm, and repair where the repair types allow): ${known.map(k=>k.title).join('; ')}.`:''} Question:\n${JSON.stringify(q)}`,images,job);
+      const r=await ask(`Check this science question and answers against its source pages. ${job.grounding||''}\n${imageLabels.join('\n')}\nCheck scientific accuracy, missing parts, correct options, complete model answers, explanations per part and diagram references. Compare every displayed figure with its original: complete labels, correct values, arrows, cells and cropping. Return JSON {"findings":[{"severity":"high|medium|low","title":"problem","detail":"reason","fix":"specific suggested correction"}],"imageAudits":[{"blockId":"target id","complete":true,"faithful":true,"issues":[]}],"repairs":[{"id":"block id","content":"corrected plain text","claim":"...","evidence":"...","reasoning":"...","correctIndex":0,"reason":"why this correction is justified"}]}. You MUST return one explicit imageAudits entry for EACH target in ${JSON.stringify(auditTargets)}. Set complete:false if any target could not be inspected, faithful:false and specific issues for incorrect or clipped content; never claim an unread figure is correct. Target $answerKey is the answer-key image and suffix :answerImg is an annotated answer. Only repair answer, plainanswer, explanation or mcq blocks. Do not alter the source wording or invent missing information. Empty findings means correct only when all visual audits also pass.${known.length?` Problems already flagged by Jev (confirm, and repair where the repair types allow): ${known.map(k=>k.title).join('; ')}.`:''} Question:\n${JSON.stringify(q)}`,images,job);
       if(r.candidates?.[0]?.finishReason!=='STOP') throw new Error('Checker response was incomplete.');
       const reply=JSON.parse(r.text);
       if(!Array.isArray(reply.findings)) throw new Error('Invalid checker response.');
-      findings=reply.findings.slice(0,20).map(f=>({type:'Check',severity:f.severity==='high'?'high':f.severity==='low'?'low':'med',title:String(f.title||'Check required').slice(0,160),detail:String(f.detail||'').slice(0,400),fix:'',ai:true}));
+      findings=reply.findings.slice(0,20).map(f=>({type:'Check',severity:f.severity==='high'?'high':f.severity==='low'?'low':'med',title:String(f.title||'Check required').slice(0,160),detail:String(f.detail||'').slice(0,400),fix:String(f.fix||'Review against the original source.').slice(0,400),ai:true}));
+      findings.push(...requireImageAudits(reply.imageAudits,auditTargets));
       const score=findings.reduce((n,f)=>n+(f.severity==='high'?100:f.severity==='med'?10:1),0);
-      if(!best || score<best.score) best={score,findings:structuredClone(findings),blocks:structuredClone(q.blocks)};
-      if(!findings.length || tries===4) break;
+      if(!best || score<best.score) best={score,findings:structuredClone(findings),blocks:structuredClone(q.blocks),repairs:structuredClone(applied)};
+      if(!findings.length || tries===limit) break;
       let changed=false;
-      for(const fix of reply.repairs||[]) {
+      for(const fix of Array.isArray(reply.repairs)?reply.repairs.slice(0,40):[]) {
         const b=q.blocks.find(b=>b.id===fix.id);
         if(!b) continue;
-        if(['plainanswer','explanation'].includes(b.type)&&typeof fix.content==='string') { b.content=html(fix.content); changed=true; }
-        if(b.type==='answer') for(const field of ['claim','evidence','reasoning']) if(typeof fix[field]==='string'){b[field]=html(fix[field]);changed=true;}
-        if(b.type==='mcq'&&Number.isInteger(fix.correctIndex)&&b.options[fix.correctIndex]){b.correctId=b.options[fix.correctIndex].id;changed=true;}
+        const before=JSON.stringify(b);
+        const safeText=v=>typeof v==='string'&&v.trim()&&v.length<=12000;
+        if(['plainanswer','explanation'].includes(b.type)&&safeText(fix.content)) b.content=html(fix.content);
+        if(b.type==='answer') for(const field of ['claim','evidence','reasoning']) if(safeText(fix[field])) b[field]=html(fix[field]);
+        if(b.type==='mcq'&&Number.isInteger(fix.correctIndex)&&b.options?.[fix.correctIndex]) b.correctId=b.options[fix.correctIndex].id;
+        if(JSON.stringify(b)!==before) {changed=true;applied.push({blockId:b.id,type:b.type,reason:String(fix.reason||'Automatic correction from checker findings.').slice(0,400)});}
       }
       if(!changed) break;
     }
   } catch(e){error=String(e.message).slice(0,160);}
-  if(best){q.blocks=best.blocks;findings=best.findings;}
+  if(best){q.blocks=best.blocks;findings=best.findings;applied=best.repairs;}
   // Whatever Jev flagged and the repair did not cure is still true of the
   // question as it now stands, so it is re-measured (no second Jev call) and kept.
-  if(jevOn(job)) {
+  {
     const now=questionHardIssues(questionFacts(q)), still=[];
     now.wording.forEach(is=>still.push({key:'wording',code:is.code,reason:is.detail,by:'code'}));
     now.structure.forEach(is=>still.push({key:'structure',code:is.code,reason:is.detail,by:'code'}));
-    findings=findings.concat(failuresToFindings(still),flaggedFigures).slice(0,20);
+    findings=findings.concat(failuresToFindings(still),flaggedFigures,enhancementFindings(q)).slice(0,40);
   }
   if(q.importWarning) findings.push({type:'Other',severity:'high',title:'Check page continuation',detail:q.importWarning,fix:'',ai:false});
-  q.autoCheck={state:error?'error':findings.some(f=>f.severity==='high')?'red':findings.length?'amber':'green',tries,found:findings.length,findings,sig:signature(q),at:new Date().toISOString()};
+  q.autoCheck={state:error?'error':findings.some(f=>f.severity==='high')?'red':findings.length?'amber':'green',tries,found:findings.length,findings,repairs:applied,sig:signature(q),at:new Date().toISOString()};
   if(error) q.autoCheck.error=error;
   if(shadow) q.jevShadow={...shadow,ai:q.autoCheck.state,found:q.autoCheck.found};
 }
 export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[key,openaiKey,jevKey],timeoutSeconds:540,memory:'2GiB',cpu:1,
   retryConfig:{maxAttempts:5,minBackoffSeconds:60,maxBackoffSeconds:300},rateLimits:{maxConcurrentDispatches:2},maxInstances:2},async request=>{
-  const {id,page,generation,phase,publishIndex}=request.data||{};
+  const {id,page,generation,phase,publishIndex,figureIndex}=request.data||{};
   if(!validId(id)||!Number.isInteger(page)) throw new Error('Invalid task.');
   const ref=jobRef(id), job=(await ref.get()).data();
-  if(!job || job.status!=='queued' || job.nextPage!==page || job.generation!==generation || job.phase!==phase || job.publishIndex!==publishIndex) return;
+  const matches=j=>j&&j.status==='queued'&&j.nextPage===page&&j.generation===generation&&j.phase===phase&&j.publishIndex===publishIndex&&(phase!=='enhance'||j.figureIndex===figureIndex);
+  if(!matches(job)) return;
   let doc;
   try {
+    if(phase==='enhance') {
+      const checkpoint=JSON.parse((await bucket().file(job.checkpoint).download())[0].toString());
+      const q=checkpoint.ready[publishIndex],block=q?.blocks?.[figureIndex];
+      if(block?.type!=='image') throw new Error('Missing figure checkpoint.');
+      try { q.blocks[figureIndex]=await enhanceImage(block,job); }
+      catch(e) { q.blocks[figureIndex]={...block,enhancement:{state:'error',mode:figureMode(block.figureKind),error:String(e.message||e).slice(0,350),at:new Date().toISOString()}}; }
+      // One figure per task bounds image-model latency. Each successful (or
+      // visibly flagged) result is checkpointed before advancing the outbox.
+      const path=`cer-rapid/${job.ownerUid}/${id}/checkpoints/${randomUUID()}.json`;
+      await bucket().file(path).save(JSON.stringify(checkpoint),{resumable:false,contentType:'application/json'});
+      const next=nextImageIndex(q,figureIndex);
+      await db.runTransaction(async tx=>{
+        if(!matches((await tx.get(ref)).data())) return;
+        tx.update(ref,{checkpoint:path,phase:next<0?'publish':'enhance',figureIndex:next<0?0:next,error:'',updatedAt:new Date().toISOString()});
+      });
+      return;
+    }
     if(phase==='publish') {
       const checkpoint=JSON.parse((await bucket().file(job.checkpoint).download())[0].toString());
       const q=checkpoint.ready[publishIndex];
@@ -320,10 +439,11 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
       if(Buffer.byteLength(JSON.stringify(q))>800000) throw new Error('Question too large to save safely.');
       await db.runTransaction(async tx=>{
         const latest=(await tx.get(ref)).data();
-        if(latest.status!=='queued'||latest.nextPage!==page||latest.generation!==generation||latest.phase!==phase||latest.publishIndex!==publishIndex) return;
+        if(!matches(latest)) return;
         tx.create(db.doc(`users/${job.ownerUid}/vetting/${q.id}`),q);
         const more=publishIndex+1<checkpoint.ready.length;
-        tx.update(ref,{added:latest.added+1,publishIndex:more?publishIndex+1:0,phase:more?'publish':'page',
+        const next=more&&job.enhanceImages?nextImageIndex(checkpoint.ready[publishIndex+1]):-1;
+        tx.update(ref,{added:latest.added+1,publishIndex:more?publishIndex+1:0,phase:more?(next<0?'publish':'enhance'):'page',figureIndex:next<0?0:next,
           status:!more&&page>job.total?'completed':'queued',error:'',updatedAt:new Date().toISOString()});
       });
       return;
@@ -336,7 +456,7 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
     const canvas=await render(doc,page), image=canvas.toBuffer('image/jpeg').toString('base64');
     const reference=page>1?(await render(doc,page-1)).toBuffer('image/jpeg').toString('base64'):null;
     const boundary=`\nPDF BOUNDARY RULES (override single-image assumptions): image 1 is the CURRENT page ${page}. ${reference?'Image 2 is the PREVIOUS page for context only; NEVER extract it again.':''} Extract ALL and ONLY questions/parts printed on image 1. Add sourceQuestionNumber to each entry (original main number, no part suffix). The first entry may have continuation:true if it belongs to the last question on the previous page, including repeated numbers with (continued), a new diagram for an existing question, a stem split mid-sentence, or later lettered parts. A repeated number or a continuation diagram does NOT start a new question. All other entries have continuation:false. Never renumber lettered parts. Use previous-page context to answer continuation parts. A continuation-only page is NOT blank. All image rectangles refer to image 1. Last held question: ${pending?JSON.stringify({number:pending.sourceQuestionNumber,blocks:pending.blocks}).slice(0,35000):'none; do not guess a preceding question'}.`;
-    const figures='\nFIGURE RULES: Keep text and image blocks in source reading order, at the exact point each figure belongs among the stem and lettered parts. Use one image block per figure or complete table, and retain every figure needed to answer the question. Each box_2d is [ymin,xmin,ymax,xmax], 0-1000 on CURRENT image 1 only, never on the previous context page or on an already cropped image. Include complete labels, units, arrows, legends, captions, table headers and borders belonging to the figure; check the last letter on every side and leave clear whitespace beyond it. Exclude surrounding question prose, question numbers, ordinary written options and answer lines; put that wording in text or mcq blocks instead. Keep picture answer choices together in one image including their option labels. Do not use a whole-page rectangle as a figure. If you cannot locate a required figure, keep its image block with box_2d:null in its original position so its source page can be retained for review.';
+    const figures='\nFIGURE RULES: Keep text and image blocks in source reading order, at the exact point each figure belongs among the stem and lettered parts. Use one image block per figure or complete table, and retain every figure needed to answer the question. Give every image block figureKind:"diagram", "table", "flowchart" or "graph". Tables, flowcharts and graphs must be classified accurately so they stay black and white; only diagrams with pictured objects receive colour. Each box_2d is [ymin,xmin,ymax,xmax], 0-1000 on CURRENT image 1 only, never on the previous context page or on an already cropped image. Include complete labels, units, arrows, legends, captions, table headers and borders belonging to the figure; check the last letter on every side and leave clear whitespace beyond it. Exclude surrounding question prose, question numbers, ordinary written options and answer lines; put that wording in text or mcq blocks instead. Keep picture answer choices together in one image including their option labels. Do not use a whole-page rectangle as a figure. If you cannot locate a required figure, keep its image block with box_2d:null in its original position so its source page can be retained for review.';
     const payloads=parseReply(await ask(job.prompt+boundary+figures,reference?[image,reference]:[image],job));
     if(payloads.length>60) throw new Error('Too many questions on one page; review this PDF.');
     const token=randomUUID(), sourceUrl=await storeImage(job,token,`page-${page}`,canvas), entries=[];
@@ -363,8 +483,9 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
     await bucket().file(checkpoint).save(JSON.stringify(assembled),{resumable:false,contentType:'application/json'});
     await db.runTransaction(async tx=>{
       const latest=(await tx.get(ref)).data();
-      if(latest.status!=='queued'||latest.nextPage!==page||latest.generation!==generation||latest.phase!==phase||latest.publishIndex!==publishIndex) return;
-      tx.update(ref,{checkpoint,nextPage:page+1,total:doc.numPages,phase:assembled.ready.length?'publish':'page',publishIndex:0,
+      if(!matches(latest)) return;
+      const first=assembled.ready.length&&job.enhanceImages?nextImageIndex(assembled.ready[0]):-1;
+      tx.update(ref,{checkpoint,nextPage:page+1,total:doc.numPages,phase:assembled.ready.length?(first<0?'publish':'enhance'):'page',publishIndex:0,figureIndex:first<0?0:first,
         status:page===doc.numPages&&!assembled.ready.length?'completed':'queued',error:'',updatedAt:new Date().toISOString()});
     });
   } catch(e) {
@@ -372,7 +493,7 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
     // Earlier committed pages and the held question stay intact.
     await db.runTransaction(async tx=>{
       const latest=(await tx.get(ref)).data();
-      if(latest?.nextPage!==page||latest.generation!==generation||latest.status!=='queued'||latest.phase!==phase||latest.publishIndex!==publishIndex) return;
+      if(!matches(latest)) return;
       tx.update(ref,{error:String(e.message||e).slice(0,300),...(request.retryCount>=4?{status:'failed'}:{}),updatedAt:new Date().toISOString()});
     });
     throw e;

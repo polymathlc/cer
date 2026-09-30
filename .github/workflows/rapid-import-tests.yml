@@ -22,3 +22,13 @@ jobs:
       - run: npm test --prefix rapid-import/functions
       - run: node tools/crop-tighten-tests.mjs
       - run: node tools/jev-review-tests.mjs
+      - name: Check shared Add preview and existing import controls
+        run: |
+          node tools/rapid-preview-tests.mjs
+          node tools/rapid-preview-concurrency-tests.mjs
+          node tools/rapid-cloud-tests.mjs
+          node tools/rapid-pdf-tests.mjs
+          node tools/question-merge-tests.mjs
+          node tools/preview-picture-size-tests.mjs
+          node tools/preview-return-tests.mjs
+          node tools/hover-preview-tests.mjs

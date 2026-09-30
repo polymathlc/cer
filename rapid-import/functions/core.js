@@ -34,6 +34,11 @@ export function normaliseQuestion(payload, id, job, page, sourceUrl, imageUrls =
       if (Number.isInteger(b.marks) && b.marks > 0 && b.marks <= 20) out.marks = b.marks;
     } else if (type === 'image') {
       out = { id: bid, type, url: imageUrls[imageIndex++] || sourceUrl, caption: String(b.caption || '') };
+      // The original crop is immutable even after repeated colour/B&W redraws.
+      // preColourUrl also keeps CER's existing restore-original control working.
+      out.originalCropUrl = out.url;
+      out.preColourUrl = out.url;
+      if (['diagram','table','flowchart','graph'].includes(b.figureKind)) out.figureKind = b.figureKind;
       // Persist the untouched page, not only the crop, so a later review can
       // recover clipped labels even after the importer and browser are gone.
       out.cropSource = { url: sourceUrl, imageUrl: out.url };
@@ -59,9 +64,11 @@ export function normaliseQuestion(payload, id, job, page, sourceUrl, imageUrls =
   }
   if (!blocks.length) throw new Error('Empty question.');
   const topics = job.topics || [];
+  const category=String(payload.category||'Explanation');
+  const canonicalCategory=['CER (Open Ended)','CER (Fill in Blanks)','CER (MCQ)','Open Ended','MCQ'].includes(category)?'CER':category;
   const q = {
     id, title: String(payload.title || 'Untitled'), topic: topics.includes(payload.topic) ? payload.topic : topics[0] || 'Heat',
-    category: blocks.some(b => b.type === 'mcq') ? 'MCQ' : String(payload.category || 'Explanation'),
+    category: blocks.some(b => b.type === 'mcq') ? 'Multiple Choice Question' : canonicalCategory,
     tags: Array.isArray(payload.tags) ? payload.tags.slice(0,20).map(String) : [],
     blocks, blanks: {}, markingGuide: '', status: 'pending',
     createdAt: job.createdAt, createdBy: job.createdBy,
@@ -85,6 +92,7 @@ export function assemblePage(pending, entries, isLast) {
       const tail=q.blocks.map(b=>!b.part&&inheritedPart?{...b,part:inheritedPart}:b);
       carry = {...carry, blocks: [...carry.blocks, ...tail], sourcePages: [...carry.sourcePages, ...q.sourcePages],
         ...(carry.diagramWhole||q.diagramWhole?{diagramWhole:true}:{}),
+        ...((carry.jevFigures?.length || q.jevFigures?.length) ? {jevFigures:[...(carry.jevFigures||[]), ...(q.jevFigures||[]).map(f=>({...f,index:f.index+carry.blocks.filter(b=>b.type==='image').length}))]} : {}),
         ...(q.importWarning?{importWarning:q.importWarning}:{})};
     } else {
       if (carry) ready.push(carry);
@@ -98,7 +106,11 @@ export function assemblePage(pending, entries, isLast) {
   return {ready, pending: carry};
 }
 export function signature(q) {
-  const raw = JSON.stringify({t:q.title||'',p:q.topic||'',c:q.category||'',a:!!q.annotation,b:q.blocks||[]});
+  // Match CER tlSig and Add exactly, including the current visual-audit
+  // revision. Firestore map-key ordering must not invalidate a checked import.
+  const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'
+    ?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
+  const raw = JSON.stringify({cropAudit:1,keyImage:q.answerKeyImage||'',t:q.title||'',p:q.topic||'',c:q.category||'',a:!!q.annotation,b:q.rapidImportId?canonical(q.blocks||[]):q.blocks||[]});
   let h=5381; for (let i=0;i<raw.length;i++) h=((h<<5)+h+raw.charCodeAt(i))|0;
   return raw.length + ':ai:' + (h>>>0).toString(36) + ':' + raw.slice(0,4000);
 }
