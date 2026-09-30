@@ -12,7 +12,7 @@ import { createCanvas, DOMMatrix, ImageData, Path2D } from '@napi-rs/canvas';
 import { MAX_PDF_BYTES, CHUNK_BYTES, MAX_PAGES, parseReply, blockType, normaliseQuestion, assemblePage, signature, html } from './core.js';
 import { cropDiagramEx } from './crop.js';
 import { jevReview, jevAllow, JevUnavailable } from './jev.js';
-import { figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons } from './jev-review-core.js';
+import { figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, JEV_MAY_SKIP } from './jev-review-core.js';
 
 initializeApp();
 Object.assign(globalThis, {DOMMatrix, ImageData, Path2D});
@@ -245,17 +245,18 @@ async function checkQuestion(q,job) {
   //    still flagged, is what lets the slower AI read be skipped. A no goes to
   //    the AI check-and-fix below with Jev's reasons attached. Jev unavailable
   //    changes nothing: every question is AI-checked exactly as before.
-  let known=[];
+  let known=[], shadow=null;
   if(jevOn(job)) {
     const qf=questionFacts(q), verdicts=await jevAsk({scope:'question',question:qf}).catch(()=>null);
     const flaggedFigs=(q.jevFigures||[]).filter(f=>f.state==='flagged');
     if(verdicts) {
       const d=decideReview({verdicts,figures:[],question:qf});
-      if(d.confident&&!flaggedFigs.length) {
+      if(JEV_MAY_SKIP&&d.confident&&!flaggedFigs.length) {
         q.autoCheck={state:'green',tries:0,found:0,findings:[],jev:true,sig:signature(q),at:new Date().toISOString()};
         return;
       }
       known=failuresToFindings(d.failures);
+      shadow={yes:!known.length,confident:d.confident&&!flaggedFigs.length};
     }
   }
   const flaggedFigures=(q.jevFigures||[]).filter(f=>f.state==='flagged').flatMap(f=>failuresToFindings((f.reasons.length?f.reasons:['the crop could not be made complete and clean']).map(r=>({key:'figure_'+f.index,index:f.index,code:'jev_no',reason:r,by:'jev'}))));
@@ -301,6 +302,7 @@ async function checkQuestion(q,job) {
   if(q.importWarning) findings.push({type:'Other',severity:'high',title:'Check page continuation',detail:q.importWarning,fix:'',ai:false});
   q.autoCheck={state:error?'error':findings.some(f=>f.severity==='high')?'red':findings.length?'amber':'green',tries,found:findings.length,findings,sig:signature(q),at:new Date().toISOString()};
   if(error) q.autoCheck.error=error;
+  if(shadow) q.jevShadow={...shadow,ai:q.autoCheck.state,found:q.autoCheck.found};
 }
 export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[key,openaiKey,jevKey],timeoutSeconds:540,memory:'2GiB',cpu:1,
   retryConfig:{maxAttempts:5,minBackoffSeconds:60,maxBackoffSeconds:300},rateLimits:{maxConcurrentDispatches:2},maxInstances:2},async request=>{

@@ -22,6 +22,10 @@
 
 export const JEV_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 export const JEV_MIN_CONFIDENCE = 0.6;    // a "yes" below this is "not sure", and not sure is a no
+// ADVISORY BY DEFAULT: Jev sees measured facts, never the picture or the science,
+// so a yes from it may not remove the AI read until its yes has been compared
+// with the AI's own verdicts (q.jevShadow) and found to lose nothing.
+export const JEV_MAY_SKIP = false;
 export const JEV_SKIP_CONFIDENCE = 0.8;   // the AI read is skipped only at or above this
 export const JEV_MAX_FIGURES = 8;
 export const JEV_EXCERPT_CHARS = 1400;

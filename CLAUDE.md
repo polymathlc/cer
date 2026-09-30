@@ -8462,6 +8462,9 @@ wrong. Every one of them is silent: the app answered fluently either way.
 - `.rpg-tabs` must keep `flex-wrap: wrap` and `.rpg-tab` its `flex: 0 0 auto; white-space: nowrap`. Without them eleven leaderboard tabs get squeezed until each label breaks over three lines, the pill goes square, `border-radius: 999px` renders it as a circle, and the emoji on the first line sits outside the curve.
 - Commit messages and pushed artifacts must not contain the model identifier.
 
+## 🧭 Jev is ADVISORY (v1.419.0)
+`JEV_MAY_SKIP` in `jev-review-core.mjs` is **false**: a Jev yes no longer skips the AI read. Jev sees measured facts, never the picture or the science, so it may only ADD findings and trigger the AI re-cut. Its verdict is recorded as `q.jevShadow = { yes, confident, ai, found }` (browser and worker) so Jev can be compared with the AI's own verdicts; flip the constant only once that comparison shows a confident yes never hides a finding. The code-side crop measurement and the AI re-cut are the real value and are unaffected. The rest of the section below still describes the mechanics; read "a confident yes skips the AI read" as gated by this constant.
+
 ## 🧭 Jev review — every automatic import is judged, and a NO is fixed by the AI (v1.418.0)
 
 `jev-review-core.mjs` (shared, pure) · `JEV REVIEW` in `app.js`

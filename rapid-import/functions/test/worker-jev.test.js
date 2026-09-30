@@ -97,14 +97,15 @@ test('a crop Jev never accepts is retried twice, then kept and flagged rather th
   assert.ok(q.autoCheck.findings.some(f=>f.type==='Crop'&&f.cropStatus==='unclear'),'the flag reaches the vetting card as a Crop finding');
   assert.notEqual(q.autoCheck.state,'green');
 });
-test('a confident clean pass from Jev skips the slow AI check; a no on the wording sends it to the AI with Jev\'s reason',async()=>{
+test('Jev is advisory: a confident yes still gets the AI read and the comparison is recorded; a no on the wording sends it to the AI with Jev\'s reason',async()=>{
   start(true);jevPlan=()=>({});
   let q=await run('fig');
-  assert.equal(checks.length,0,'no AI read when Jev is sure');
-  assert.deepEqual([q.autoCheck.state,q.autoCheck.jev],['green',true]);
+  assert.equal(checks.length,1,'the AI still reads the question when Jev says yes');
+  assert.ok(!q.autoCheck.jev,'not stamped as a Jev-only pass');
+  assert.equal(q.jevShadow.yes,true);assert.equal(q.jevShadow.confident,true);assert.ok(q.jevShadow.ai);
   start(true);jevPlan=keys=>keys.includes('wording')?{wording:['no',.9]}:{};
   q=await run('fig');
-  assert.equal(checks.length,1);assert.match(checks[0],/Problems already flagged by Jev/);
+  assert.equal(checks.length,1);assert.equal(q.jevShadow.yes,false);assert.match(checks[0],/Problems already flagged by Jev/);
 });
 test('Jev unavailable changes nothing: every question is AI-checked exactly as before',async()=>{
   start(true);const real=globalThis.fetch;globalThis.fetch=async()=>({ok:false,status:503});
