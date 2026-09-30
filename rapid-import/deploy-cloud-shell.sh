@@ -29,7 +29,7 @@ fi
 gcloud projects describe "$RAPID_PROJECT" --format='value(projectId)' >/dev/null
 rapid_billing=$(gcloud billing projects describe "$RAPID_PROJECT" --format='value(billingEnabled)')
 [[ "${rapid_billing,,}" == true ]] || fail 'Billing must already be enabled for mathgen--app. No billing account has been changed.'
-for rapid_secret in GEMINI_API_KEY OPENAI_API_KEY; do
+for rapid_secret in GEMINI_API_KEY OPENAI_API_KEY JEV_API_KEY; do
   # Metadata only: never download or print either API key.
   rapid_state=$(gcloud secrets versions describe latest --secret="$rapid_secret" --project="$RAPID_PROJECT" --format='value(state)')
   [[ "$rapid_state" == ENABLED ]] || fail "$rapid_secret needs an enabled latest version in Secret Manager."
@@ -60,7 +60,7 @@ echo 'Deploying the isolated cer-rapid-import codebase...'
 gcloud services enable cloudtasks.googleapis.com --project="$RAPID_PROJECT"
 rapid_firebase deploy --project "$RAPID_PROJECT" --config "$PWD/firebase.json" --only functions:cer-rapid-import --non-interactive
 
-rapid_functions=(rapidImportStatus rapidImportBegin rapidImportChunk rapidImportFinish rapidImportRetry rapidImportDispatch rapidImportPage)
+rapid_functions=(rapidImportStatus rapidImportBegin rapidImportChunk rapidImportFinish rapidImportRetry rapidImportDispatch rapidImportPage cerJevReview)
 for rapid_function in "${rapid_functions[@]}"; do
   rapid_state=$(gcloud functions describe "$rapid_function" --gen2 --region="$RAPID_REGION" --project="$RAPID_PROJECT" --format='value(state)')
   [[ "$rapid_state" == ACTIVE ]] || fail "$rapid_function is not ACTIVE ($rapid_state)."

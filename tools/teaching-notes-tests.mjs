@@ -347,6 +347,7 @@ ok('the corrected answer reaches an ANSWER, never the marker',
    somebody made, rather than one nobody noticed.
    ================================================================== */
 const UNGROUNDED_BY_DESIGN = {
+  _jevRecropBox: 'locates a figure on a page — pixels and a rectangle, not science said to anybody, and a locator told what the answer should say would find a picture that supports it',
   // ---- transport: they carry a prompt somebody else built ----
   _aiRun: 'the dispatcher — it is handed a finished prompt',
   _aiAsk: 'the failover loop — it is handed a finished prompt',
