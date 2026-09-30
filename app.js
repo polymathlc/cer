@@ -4,7 +4,7 @@ import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
 import { cropSourcesFor, normalizeCropBox, cropPixelRect, cropSourceUpdate } from './question-crop-core.mjs?v=1';
 import { questionRepairTargets, normalizeQuestionRepairPlan, applyQuestionRepairPlan } from './question-repair-core.mjs?v=2';
-import { measureCrop, figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons } from './jev-review-core.mjs?v=1';
+import { measureCrop, figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, JEV_MAY_SKIP } from './jev-review-core.mjs?v=2';
 import { findRapidDuplicates, rapidDuplicateThreshold, rapidDuplicateFingerprint, rapidDuplicatePairCurrent } from './rapid-duplicates.js';
 import { installHadesDisplay } from "./hades-display.js";
 import { mountAinsteinLive, awaitAinsteinVoice } from "./ainstein-live.js?v=1.399.0";
@@ -4419,7 +4419,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.418.0';
+const APP_VERSION = 'v1.419.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -18195,7 +18195,7 @@ function _autoChkPaint() {
   if (note) {
     note.textContent = autoChkOn()
       ? (jevGateOn()
-        ? 'Jev judges every crop and question first. A confident yes lands clean with no AI read; a no is re-cut or repaired by the AI, and anything still wrong arrives with its lamp lit and the findings on the card.'
+        ? 'Jev judges every crop and question first as a second opinion; the AI still reads every question. A no is re-cut or repaired by the AI, and anything still wrong arrives with its lamp lit and the findings on the card.'
         : 'Every question is read back by the AI before it lands. Green ones arrive clean; the rest arrive with their lamp lit and the findings on the card.')
       : 'Questions land unchecked — press 🚦 on a card, or use 🚦 Check questions on the vetting list, to read them.';
   }
@@ -18769,7 +18769,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
             step('asking Jev whether it is right…');
             try { gate = await jevGateQuestion(q, jevRun); } catch (e) { console.warn('rapid Jev gate skipped', e); }
           }
-          if (gate && gate.confident) {
+          if (gate && gate.confident && JEV_MAY_SKIP) {
             autoChkStamp(q, { state: 'green', tries: 0, findings: [], error: '', jev: true });
           } else {
             const res = await autoChkRun(q, {
@@ -18779,6 +18779,11 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
               figureFindings: gate ? gate.figureFindings : _jevFigureFindings(jevRun.figures.filter(f => f.state === 'flagged'))
             });
             autoChkStamp(q, res);
+            // Jev is advisory: keep what it said beside what the AI found, so
+            // the two can be compared before Jev is ever allowed to skip a read.
+            if (gate && gate.available) {
+              q.jevShadow = { yes: !gate.findings.length, confident: !!gate.confident, ai: res.state, found: (res.findings || []).length };
+            }
           }
         } catch (e) { console.warn('rapid auto-check skipped', e); }
       }

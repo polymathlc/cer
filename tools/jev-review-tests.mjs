@@ -169,10 +169,13 @@ await test('the crop review runs BEFORE the "nothing usable" early return, so an
   const f = src.slice(src.indexOf('async function _fillBlocksFromAiBoxes'));
   assert(f.indexOf('_jevGateFigures(') > 0 && f.indexOf('_jevGateFigures(') < f.indexOf('if (!crops.some(Boolean)) return 0;'));
 });
-await test('⚡ Rapid add: a confident Jev yes skips the AI, everything else goes to autoChkRun with Jev\'s findings', () => {
+await test('⚡ Rapid add: Jev is advisory: a yes never skips the AI (JEV_MAY_SKIP off) and the comparison is recorded; everything else goes to autoChkRun with Jev\'s findings', () => {
   const s = src.slice(src.indexOf('🧭 JEV DECIDES WHO GETS THE AI'));
   const sk = s.indexOf('gate.confident'), run = s.indexOf('autoChkRun(q, {');
   assert(sk > 0 && run > sk, 'the skip must be conditional on gate.confident, with autoChkRun as the else');
+  assert(/gate\.confident && JEV_MAY_SKIP/.test(s), 'the skip is behind JEV_MAY_SKIP');
+  assert(/q\.jevShadow = /.test(s), 'the Jev-vs-AI comparison is recorded');
+  assert(/JEV_MAY_SKIP = false/.test(core), 'advisory by default');
   assert(/extraFindings: gate \? gate\.findings/.test(s) && /figureFindings:/.test(s));
   assert(/if \(!filled\)/.test(src.slice(src.indexOf('async function processRapidJob'))), 'the whole-page backup is still there');
   assert(/\{ jev: jevRun \}/.test(src), 'the question hands the crop review an out-parameter it reads at 2c');
