@@ -78,12 +78,28 @@ test('checks made before the crop audit stay stale in Strike as in the portal', 
   const q = question('legacy-check');
   const raw = JSON.stringify({ t: q.title || '', p: q.topic || '', c: q.category || '',
     a: !!q.annotation, b: q.blocks || [] });
-  // The cloud importer intentionally still uses this older signature until
-  // the portal has run the strict visual audit of every current picture.
+  // Old cloud imports predate the current source-and-displayed-image audit;
+  // their stamps must remain stale until checked under the current contract.
   q.autoCheck = { state: 'green', sig: raw.length + ':' + portal._aiHash(raw) + ':' + raw.slice(0, 4000), findings: [] };
   const result = strikeQuestionQualityOptions(q);
   assert.deepEqual(result.checkedState, plain(portal.tlStateOf(q)));
   assert.equal(result.checkedState.state, 'stale');
+});
+
+test('imported checker signatures survive stored map ordering and keep unsafe imports out of gameplay', () => {
+  const q = question('imported', {rapidImportId: 'pdf-job', category: 'Multiple Choice Question'});
+  const reorder = value => Array.isArray(value) ? value.map(reorder) : value && typeof value === 'object'
+    ? Object.fromEntries(Object.keys(value).reverse().map(key => [key, reorder(value[key])])) : value;
+  for (const state of ['red', 'amber', 'green', 'error']) {
+    q.autoCheck = {state, sig: portal.tlSig(q), findings: [], at: new Date(now).toISOString(), error: 'test'};
+    const loaded = reorder(q), options = strikeQuestionQualityOptions(loaded);
+    assert.equal(options.importSignature, q.autoCheck.sig);
+    assert.deepEqual(options.checkedState, plain(portal.tlStateOf(loaded)));
+    const context = buildScienceFeedContext({bank:[loaded], now, studentLevel:'P4', topicLevels:{'Plant Systems':'P4'}, qualityOptions:strikeQuestionQualityOptions});
+    if (state === 'red' || state === 'amber') assert.equal(planScienceQuestions([loaded], {context}).questions.length, 0);
+  }
+  q.blocks[0].content += ' Corrected wording.';
+  assert.equal(strikeQuestionQualityOptions(q).checkedState.state, 'stale');
 });
 
 test('fresh stored red and amber checks block feeding, while edited checks are not falsely reused', () => {

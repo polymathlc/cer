@@ -354,14 +354,17 @@ async function checkQuestion(q,job) {
     // cannot hide a clipped or incorrectly regenerated displayed figure.
     // Browser-added inline pictures have a broader URL contract than durable
     // imports. Refuse an incomplete audit rather than stamping them green.
-    if((q.blocks||[]).some(b=>['content','claim','evidence','reasoning'].some(k=>/<img\b/i.test(String(b[k]||''))))) throw new Error('Inline pictures require a fresh check in CER.');
+    // Include nested MCQ choices/table cells and any future rich-text fields,
+    // not only the top-level stem and answer strings.
+    if(/<img\b/i.test(JSON.stringify(q.blocks||[]))) throw new Error('Inline pictures require a fresh check in CER.');
+    const displayed=(q.blocks||[]).filter(b=>b.type==='image'||(['explanation','answerKey'].includes(b.type)&&b.url));
     const sources=[...(q.sourcePages||[]).map(p=>({url:p.url,label:`Original PDF page ${p.page}`})),
-      ...(q.blocks||[]).filter(b=>b.type==='image').flatMap(b=>[
+      ...displayed.flatMap(b=>[
         ...(b.originalCropUrl?[{url:b.originalCropUrl,label:`Original figure crop ${b.id}`}]:[]),
         {url:b.url,label:`Displayed figure ${b.id}`}
       ]),...(q.blocks||[]).filter(b=>b.answerImg).map(b=>({url:b.answerImg,label:`Annotated answer figure ${b.id}`})),
       ...(q.answerKeyImage?[{url:q.answerKeyImage,label:'Answer key image'}]:[])];
-    const auditTargets=[...(q.blocks||[]).filter(b=>b.type==='image').map(b=>b.id),
+    const auditTargets=[...displayed.map(b=>b.id),
       ...(q.blocks||[]).filter(b=>b.answerImg).map(b=>b.id+':answerImg'),...(q.answerKeyImage?['$answerKey']:[])];
     if(sources.length>24) throw new Error('Too many source images for one safe automatic check. Review this question manually.');
     for(const source of sources) {images.push((await storedImage(source.url,job.ownerUid)).toString('base64'));imageLabels.push(`Image ${images.length}: ${source.label}`);}

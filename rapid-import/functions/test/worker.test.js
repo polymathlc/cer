@@ -301,3 +301,28 @@ test('missing or partial per-figure audits cannot produce a fresh green import s
     assert.equal(saved.blocks.filter(b=>b.type==='image').length,2);
   }
 });
+
+test('nested inline pictures added in CER cannot escape the server visual audit',async()=>{
+  for(const extra of [
+    {id:'choices',type:'mcq',options:[{id:'a',text:'<img src="https://example.test/choice.png">'},{id:'b',text:'B'}],correctId:'a'},
+    {id:'cells',type:'table',data:[['<img src="https://example.test/cell.png">']]}
+  ]) {
+    const {q}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);q.blocks.push(extra);
+    files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
+    await api.rapidImportPage({data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0},retryCount:0});
+    const saved=docs.get('users/teacher/vetting/'+q.id);
+    assert.equal(saved.autoCheck.state,'error');assert.match(saved.autoCheck.error,/Inline pictures/);
+    assert.equal(aiPrompts.length,0,'do not pretend to run a complete check with missing pixels');
+  }
+});
+
+test('later explanation and answer-key diagrams participate in the strict image audit',async()=>{
+  for(const type of ['explanation','answerKey']) {
+    const {q}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);
+    q.blocks.push({id:'additional-picture',type,url:'https://example.test/uncaptured.png'});
+    files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
+    await api.rapidImportPage({data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0},retryCount:0});
+    assert.equal(docs.get('users/teacher/vetting/'+q.id).autoCheck.state,'error');
+    assert.equal(aiPrompts.length,0,'an unread additional picture must stop the audit');
+  }
+});

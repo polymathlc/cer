@@ -31,6 +31,30 @@ test('both sidebar and game hub launch the new adventure while Hades remains ava
 
 test('authentication, navigation and learner changes dispose or invalidate the active frame', () => {
   assert.match(app, /onAuthStateChanged\(auth, (?:async )?\(user\) => \{\s*(?:hadesMathBeta.close\(\);\s*)?pirateRiftPortal\.close\(\)/);
+  if (science) {
+    // Execute the actual listener as well as preserving the close-first source
+    // contract: both auth paths must close the frame before entering the next
+    // account or showing the signed-out page.
+    const listener = app.match(/onAuthStateChanged\(auth, (?:async )?\(user\) => \{[\s\S]*?\n\}\);/)?.[0];
+    assert.ok(listener, 'the main authentication listener exists');
+    let callback;
+    const events = [], noop = () => {};
+    vm.runInNewContext(listener, {
+      auth: {}, onAuthStateChanged: (_auth, fn) => { callback = fn; },
+      rapidPreviewReset: noop, pirateRiftPortal: { close: () => events.push('close') },
+      grandLinePortal: { close: noop }, wsArtResetForUser: noop, ainsteinStopAdminWork: noop,
+      enterApp: () => events.push('enter'), currentUser: {uid: 'previous-account'},
+      _hadesResetLearning: noop, interfaceStudio: {setUser: noop}, rpgOnSignOut: noop,
+      stopTeachingNotes: noop, stopAnswerStyle: noop, _fcGapSel: new Set(), fcPaintDueBadge: noop,
+      signedOutEntryPage: () => 'login', showPage: () => events.push('signed-out')
+    });
+    assert.equal(typeof callback, 'function');
+    callback({uid: 'next-account'});
+    assert.deepEqual(events, ['close', 'enter'], 'account changes dispose the frame before entry');
+    events.length = 0;
+    callback(null);
+    assert.deepEqual(events, ['close', 'signed-out'], 'sign-out disposes the frame before returning to login');
+  }
   assert.match(app, /function navigateTo\(page\) \{\s*vetPrintPeekHide\(\);\s*(?:hadesMathBeta.close\(\);\s*)?pirateRiftPortal\.close\(\)/);
   if (science) {
     assert.match(app, /function configureSidebarForRole\(role\) \{\s*pirateRiftPortal\.close\(\)/);

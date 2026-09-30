@@ -5076,9 +5076,9 @@ async function loadAdminQuestions() {
 }
 
 onAuthStateChanged(auth, (user) => {
-  rapidPreviewReset();
   pirateRiftPortal.close();
   grandLinePortal.close();
+  rapidPreviewReset();
   wsArtResetForUser(user);
   ainsteinStopAdminWork();
   if (user) {
