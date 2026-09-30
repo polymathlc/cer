@@ -13,7 +13,7 @@ import { MAX_PDF_BYTES, CHUNK_BYTES, MAX_PAGES, parseReply, blockType, normalise
 import { cropDiagramEx } from './crop.js';
 import { jevReview, jevAllow, JevUnavailable } from './jev.js';
 import { figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons } from './jev-review-core.js';
-import { FIGURE_KINDS, figureMode, imageInstruction, originalImageUrl, storageImagePath, enhancementFindings, nextImageIndex, requireImageAudits } from './image-core.js';
+import { FIGURE_KINDS, CLASSIFY_FIGURE_PROMPT, figureMode, imageInstruction, originalImageUrl, adoptOriginal, figureFixTargets, storageImagePath, enhancementFindings, nextImageIndex, requireImageAudits } from './image-core.js';
 
 initializeApp();
 Object.assign(globalThis, {DOMMatrix, ImageData, Path2D});
@@ -188,14 +188,15 @@ async function storedImage(url, ownerUid) {
   if(bytes.length>16*1024*1024) throw new Error('The source image is too large to process safely.');
   return bytes;
 }
-async function enhanceImage(block, job, requested='colour') {
+async function enhanceImage(block, job, requested='colour', pageUrls=[]) {
+  block=adoptOriginal(block,pageUrls);
   const original=originalImageUrl(block);
   if(!original || original===block.cropSource?.url) throw new Error('A complete figure crop is required. The original page has been kept for manual cropping.');
   const bytes=await storedImage(original,job.ownerUid), source=await loadImage(bytes);
   const sourceBase64=bytes.toString('base64'), auxiliary={...job,engineOrder:['gemini']};
   let kind=block.figureKind;
   if(!FIGURE_KINDS.includes(kind)) {
-    const r=await ask('Classify this scanned science figure. Return JSON {"kind":"diagram|table|flowchart|graph"}. A data table, graph or flowchart is never a pictorial diagram.',[sourceBase64],auxiliary);
+    const r=await ask(CLASSIFY_FIGURE_PROMPT,[sourceBase64],auxiliary);
     kind=JSON.parse(r.text).kind;
     if(!FIGURE_KINDS.includes(kind)) throw new Error('The figure type could not be determined safely.');
   }
@@ -244,7 +245,7 @@ export const rapidVettingImage = onCall({...callOpts,secrets:[key,openaiKey,jevK
   const next=structuredClone(q);
   if(resizing) next.blocks[index].scale=d.scale;
   else if(d.mode==='original') {
-    const original=originalImageUrl(block);
+    const original=originalImageUrl(adoptOriginal(block,(q.sourcePages||[]).map(p=>p.url)));
     if(!original) throw new HttpsError('failed-precondition','The preserved original crop is unavailable.');
     const originalBytes=await storedImage(original,a.uid),picture=await loadImage(originalBytes);
     next.blocks[index]={...block,url:original,originalCropUrl:original,preColourUrl:original,width:picture.width,height:picture.height,
@@ -253,7 +254,7 @@ export const rapidVettingImage = onCall({...callOpts,secrets:[key,openaiKey,jevK
     if(!validId(q.rapidImportId)) throw new HttpsError('failed-precondition','This figure has no durable import source.');
     const importJob=(await jobRef(q.rapidImportId).get()).data();
     if(!importJob||importJob.ownerUid!==a.uid) throw new HttpsError('not-found','Original import not found.');
-    try { next.blocks[index]=await enhanceImage(block,importJob,d.mode); }
+    try { next.blocks[index]=await enhanceImage(block,importJob,d.mode,(q.sourcePages||[]).map(p=>p.url)); }
     catch(e) { throw new HttpsError('failed-precondition',String(e.message||e).slice(0,350)); }
   }
   // Resizing leaves scientific content unchanged. Regenerated/restored figures
@@ -331,6 +332,53 @@ async function reviewCrops(imageBlocks, canvas, job) {
   return out;
 }
 
+// One bounded attempt to repair figures the visual audit rejected. The page the
+// figure came from is kept in Storage, so the AI is shown the page plus the bad
+// crop, cuts again, and the new crop is redrawn (colour for pictured diagrams,
+// black and white Century Gothic for tables, graphs and word diagrams). When no
+// better crop can be cut, a regenerated figure falls back to its original crop.
+const FIGURE_FIX_MAX = 3;
+async function fixFigures(q, findings, job, applied) {
+  const targets=figureFixTargets(findings,q.blocks).slice(0,FIGURE_FIX_MAX);
+  let any=false;
+  const pageUrls=(q.sourcePages||[]).map(p=>p.url);
+  for(const id of targets) {
+    const index=q.blocks.findIndex(b=>b.id===id);
+    let block=adoptOriginal(q.blocks[index],pageUrls);
+    const reasons=findings.filter(f=>f.blockId===id).map(f=>f.detail||f.title).slice(0,4);
+    let next=null, how='';
+    const pageUrl=block.cropSource?.url;
+    if(pageUrl) {
+      try {
+        const page=await loadImage(await storedImage(pageUrl,job.ownerUid)), canvas=createCanvas(page.width,page.height);
+        canvas.getContext('2d').drawImage(page,0,0);
+        const current=block.originalCropUrl&&block.originalCropUrl!==pageUrl?await loadImage(await storedImage(block.originalCropUrl,job.ownerUid)):null;
+        const box=await recropBox(canvas,current?{canvas:(()=>{const c=createCanvas(current.width,current.height);c.getContext('2d').drawImage(current,0,0);return c;})()}:null,reasons,job);
+        const made=box&&cropDiagramEx(canvas,box,createCanvas,{marginScale:1.6});
+        if(made&&made.canvas) {
+          const url=await storeImage(job,randomUUID(),`refit-${id}`,made.canvas);
+          next={...block,url,originalCropUrl:url,preColourUrl:url,width:made.canvas.width,height:made.canvas.height,
+            cropSource:{...block.cropSource,imageUrl:url,box_2d:box},enhancement:undefined};
+          delete next.enhancement;how='re-cut';
+          try { next=await enhanceImage(next,job,'colour',pageUrls);how='re-cut and redrawn'; } catch {}
+        }
+      } catch {}
+    }
+    if(!next) {
+      const original=originalImageUrl(block);
+      if(original&&original!==block.url) {
+        next={...block,url:original,cropSource:block.cropSource?{...block.cropSource,imageUrl:original}:block.cropSource,
+          enhancement:{state:'done',mode:'original',at:new Date().toISOString()}};how='restored to its original crop';
+      }
+    }
+    if(next) {
+      q.blocks[index]=next;any=true;
+      applied.push({blockId:id,type:'image',reason:`Automatic figure fix (${how}) after the traffic-light check found: ${reasons.join('; ').slice(0,250)}`});
+    }
+  }
+  return any;
+}
+
 async function checkQuestion(q,job) {
   if(!job.autoCheck) return;
   // Jev contributes measured findings; the current cropAudit signature may
@@ -347,7 +395,7 @@ async function checkQuestion(q,job) {
   }
   const flaggedFigures=(q.jevFigures||[]).filter(f=>f.state==='flagged').flatMap(f=>failuresToFindings((f.reasons.length?f.reasons:['the crop could not be made complete and clean']).map(r=>({key:'figure_'+f.index,index:f.index,code:'jev_no',reason:r,by:'jev'}))));
   const images=[], imageLabels=[];
-  let findings=[], tries=0, error='', best=null, applied=[];
+  let findings=[], tries=0, error='', best=null, applied=[], figuresFixed=false;
   const started=Date.now();
   try {
     // Read what the pupil will see as well as the source, so a faithful page
@@ -357,20 +405,26 @@ async function checkQuestion(q,job) {
     // Include nested MCQ choices/table cells and any future rich-text fields,
     // not only the top-level stem and answer strings.
     if(/<img\b/i.test(JSON.stringify(q.blocks||[]))) throw new Error('Inline pictures require a fresh check in CER.');
-    const displayed=(q.blocks||[]).filter(b=>b.type==='image'||(['explanation','answerKey'].includes(b.type)&&b.url));
-    const sources=[...(q.sourcePages||[]).map(p=>({url:p.url,label:`Original PDF page ${p.page}`})),
-      ...displayed.flatMap(b=>[
-        ...(b.originalCropUrl?[{url:b.originalCropUrl,label:`Original figure crop ${b.id}`}]:[]),
-        {url:b.url,label:`Displayed figure ${b.id}`}
-      ]),...(q.blocks||[]).filter(b=>b.answerImg).map(b=>({url:b.answerImg,label:`Annotated answer figure ${b.id}`})),
-      ...(q.answerKeyImage?[{url:q.answerKeyImage,label:'Answer key image'}]:[])];
-    const auditTargets=[...displayed.map(b=>b.id),
-      ...(q.blocks||[]).filter(b=>b.answerImg).map(b=>b.id+':answerImg'),...(q.answerKeyImage?['$answerKey']:[])];
-    if(sources.length>24) throw new Error('Too many source images for one safe automatic check. Review this question manually.');
-    for(const source of sources) {images.push((await storedImage(source.url,job.ownerUid)).toString('base64'));imageLabels.push(`Image ${images.length}: ${source.label}`);}
+    let auditTargets=[];
+    const gather=async()=>{
+      images.length=0;imageLabels.length=0;
+      const displayed=(q.blocks||[]).filter(b=>b.type==='image'||(['explanation','answerKey'].includes(b.type)&&b.url));
+      const sources=[...(q.sourcePages||[]).map(p=>({url:p.url,label:`Original PDF page ${p.page}`})),
+        ...displayed.flatMap(b=>[
+          ...(b.originalCropUrl?[{url:b.originalCropUrl,label:`Original figure crop ${b.id}`}]:[]),
+          {url:b.url,label:`Displayed figure ${b.id}`}
+        ]),...(q.blocks||[]).filter(b=>b.answerImg).map(b=>({url:b.answerImg,label:`Annotated answer figure ${b.id}`})),
+        ...(q.answerKeyImage?[{url:q.answerKeyImage,label:'Answer key image'}]:[])];
+      auditTargets=[...displayed.map(b=>b.id),
+        ...(q.blocks||[]).filter(b=>b.answerImg).map(b=>b.id+':answerImg'),...(q.answerKeyImage?['$answerKey']:[])];
+      if(sources.length>24) throw new Error('Too many source images for one safe automatic check. Review this question manually.');
+      for(const source of sources) {images.push((await storedImage(source.url,job.ownerUid)).toString('base64'));imageLabels.push(`Image ${images.length}: ${source.label}`);}
+    };
+    await gather();
     const limit=job.maxCheckTries===1?1:2;
     for(tries=1;tries<=limit;tries++) {
       if(tries>1 && Date.now()-started>240000) break;
+      if(tries>1 && figuresFixed) await gather();
       const r=await ask(`Check this science question and answers against its source pages. ${job.grounding||''}\n${imageLabels.join('\n')}\nCheck scientific accuracy, missing parts, correct options, complete model answers, explanations per part and diagram references. Compare every displayed figure with its original: complete labels, correct values, arrows, cells and cropping. Return JSON {"findings":[{"severity":"high|medium|low","title":"problem","detail":"reason","fix":"specific suggested correction"}],"imageAudits":[{"blockId":"target id","complete":true,"faithful":true,"issues":[]}],"repairs":[{"id":"block id","content":"corrected plain text","claim":"...","evidence":"...","reasoning":"...","correctIndex":0,"reason":"why this correction is justified"}]}. You MUST return one explicit imageAudits entry for EACH target in ${JSON.stringify(auditTargets)}. Set complete:false if any target could not be inspected, faithful:false and specific issues for incorrect or clipped content; never claim an unread figure is correct. Target $answerKey is the answer-key image and suffix :answerImg is an annotated answer. Only repair answer, plainanswer, explanation or mcq blocks. Do not alter the source wording or invent missing information. Empty findings means correct only when all visual audits also pass.${known.length?` Problems already flagged by Jev (confirm, and repair where the repair types allow): ${known.map(k=>k.title).join('; ')}.`:''} Question:\n${JSON.stringify(q)}`,images,job);
       if(r.candidates?.[0]?.finishReason!=='STOP') throw new Error('Checker response was incomplete.');
       const reply=JSON.parse(r.text);
@@ -381,6 +435,12 @@ async function checkQuestion(q,job) {
       if(!best || score<best.score) best={score,findings:structuredClone(findings),blocks:structuredClone(q.blocks),repairs:structuredClone(applied)};
       if(!findings.length || tries===limit) break;
       let changed=false;
+      // ONE automatic figure fix per question, on the first read only: re-cut
+      // from the preserved page, then redraw in house style. Never repeated.
+      if(!figuresFixed && job.enhanceImages!==false) {
+        try { figuresFixed=await fixFigures(q,findings,job,applied); } catch {}
+        if(figuresFixed) changed=true;
+      }
       for(const fix of Array.isArray(reply.repairs)?reply.repairs.slice(0,40):[]) {
         const b=q.blocks.find(b=>b.id===fix.id);
         if(!b) continue;
@@ -421,7 +481,7 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
       const checkpoint=JSON.parse((await bucket().file(job.checkpoint).download())[0].toString());
       const q=checkpoint.ready[publishIndex],block=q?.blocks?.[figureIndex];
       if(block?.type!=='image') throw new Error('Missing figure checkpoint.');
-      try { q.blocks[figureIndex]=await enhanceImage(block,job); }
+      try { q.blocks[figureIndex]=await enhanceImage(block,job,'colour',(q.sourcePages||[]).map(p=>p.url)); }
       catch(e) { q.blocks[figureIndex]={...block,enhancement:{state:'error',mode:figureMode(block.figureKind),error:String(e.message||e).slice(0,350),at:new Date().toISOString()}}; }
       // One figure per task bounds image-model latency. Each successful (or
       // visibly flagged) result is checkpointed before advancing the outbox.
@@ -459,7 +519,7 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
     const canvas=await render(doc,page), image=canvas.toBuffer('image/jpeg').toString('base64');
     const reference=page>1?(await render(doc,page-1)).toBuffer('image/jpeg').toString('base64'):null;
     const boundary=`\nPDF BOUNDARY RULES (override single-image assumptions): image 1 is the CURRENT page ${page}. ${reference?'Image 2 is the PREVIOUS page for context only; NEVER extract it again.':''} Extract ALL and ONLY questions/parts printed on image 1. Add sourceQuestionNumber to each entry (original main number, no part suffix). The first entry may have continuation:true if it belongs to the last question on the previous page, including repeated numbers with (continued), a new diagram for an existing question, a stem split mid-sentence, or later lettered parts. A repeated number or a continuation diagram does NOT start a new question. All other entries have continuation:false. Never renumber lettered parts. Use previous-page context to answer continuation parts. A continuation-only page is NOT blank. All image rectangles refer to image 1. Last held question: ${pending?JSON.stringify({number:pending.sourceQuestionNumber,blocks:pending.blocks}).slice(0,35000):'none; do not guess a preceding question'}.`;
-    const figures='\nFIGURE RULES: Keep text and image blocks in source reading order, at the exact point each figure belongs among the stem and lettered parts. Use one image block per figure or complete table, and retain every figure needed to answer the question. Give every image block figureKind:"diagram", "table", "flowchart" or "graph". Tables, flowcharts and graphs must be classified accurately so they stay black and white; only diagrams with pictured objects receive colour. Each box_2d is [ymin,xmin,ymax,xmax], 0-1000 on CURRENT image 1 only, never on the previous context page or on an already cropped image. Include complete labels, units, arrows, legends, captions, table headers and borders belonging to the figure; check the last letter on every side and leave clear whitespace beyond it. Exclude surrounding question prose, question numbers, ordinary written options and answer lines; put that wording in text or mcq blocks instead. Keep picture answer choices together in one image including their option labels. Do not use a whole-page rectangle as a figure. If you cannot locate a required figure, keep its image block with box_2d:null in its original position so its source page can be retained for review.';
+    const figures='\nFIGURE RULES: Keep text and image blocks in source reading order, at the exact point each figure belongs among the stem and lettered parts. Use one image block per figure or complete table, and retain every figure needed to answer the question. Give every image block figureKind:"diagram", "table", "flowchart" or "graph". Tables, graphs and every WORD diagram (boxes, circles or brackets holding only words or numbers joined by lines or arrows: flow charts, classification trees, concept maps, cycles) must be classified accurately (table, graph or flowchart) so they are redrawn in black and white; only a figure with pictured objects, apparatus or organisms is a diagram and receives colour. Each box_2d is [ymin,xmin,ymax,xmax], 0-1000 on CURRENT image 1 only, never on the previous context page or on an already cropped image. Include complete labels, units, arrows, legends, captions, table headers and borders belonging to the figure; check the last letter on every side and leave clear whitespace beyond it. Exclude surrounding question prose, question numbers, ordinary written options and answer lines; put that wording in text or mcq blocks instead. Keep picture answer choices together in one image including their option labels. Do not use a whole-page rectangle as a figure. If you cannot locate a required figure, keep its image block with box_2d:null in its original position so its source page can be retained for review.';
     const payloads=parseReply(await ask(job.prompt+boundary+figures,reference?[image,reference]:[image],job));
     if(payloads.length>60) throw new Error('Too many questions on one page; review this PDF.');
     const token=randomUUID(), sourceUrl=await storeImage(job,token,`page-${page}`,canvas), entries=[];

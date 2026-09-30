@@ -326,3 +326,58 @@ test('later explanation and answer-key diagrams participate in the strict image 
     assert.equal(aiPrompts.length,0,'an unread additional picture must stop the audit');
   }
 });
+
+test('a figure imported before originals were preserved can still be regenerated and restored',async()=>{
+  const {q,url,bytes}=savedFigure('diagram');
+  const legacy=docs.get('users/teacher/vetting/'+q.id);
+  delete legacy.blocks[1].originalCropUrl;delete legacy.blocks[1].preColourUrl;legacy.blocks[1].cropSource={url:imageUrl('cer-rapid/teacher/job/images/raw/page.jpg'),imageUrl:'older'};
+  legacy.sourcePages=[{page:1,url:imageUrl('cer-rapid/teacher/job/images/raw/page.jpg')}];
+  modelResponse=request=>{
+    if(request.config.responseModalities)return imageModelReply(bytes);
+    if(request.contents[0].parts[0].text.startsWith('Compare image 1'))return reply({faithful:true,differences:[]});
+  };
+  const first=await api.rapidVettingImage({auth,data:{questionId:q.id,blockId:'figure',mode:'colour',expectedUrl:url}});
+  const figure=first.question.blocks[1];assert.equal(figure.originalCropUrl,url);assert.notEqual(figure.url,url);
+  const back=await api.rapidVettingImage({auth,data:{questionId:q.id,blockId:'figure',mode:'original',expectedUrl:figure.url}});
+  assert.equal(back.question.blocks[1].url,url);
+});
+test('the automatic check re-cuts and redraws a rejected figure exactly once, then rechecks',async()=>{
+  const {q,url,bytes}=savedFigure('flowchart');docs.delete('users/teacher/vetting/'+q.id);
+  const page=createCanvas(400,300),pctx=page.getContext('2d');pctx.fillStyle='white';pctx.fillRect(0,0,400,300);pctx.fillStyle='black';pctx.fillRect(100,80,200,120);
+  files.set('cer-rapid/teacher/job/images/raw/page.jpg',page.toBuffer('image/jpeg'));
+  files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
+  let reads=0,recrops=0,generations=0;
+  modelResponse=request=>{
+    const text=request.contents[0].parts[0].text;
+    if(request.config.responseModalities){generations++;return imageModelReply(bytes);}
+    if(text.startsWith('Image 1 is a whole page')){recrops++;return reply({box_2d:[200,200,800,800]});}
+    if(text.startsWith('Compare image 1'))return reply({faithful:true,differences:[]});
+    if(text.startsWith('Check this science question')){
+      reads++;const audit=reads===1?{blockId:'figure',complete:true,faithful:false,issues:['Right-hand box is clipped']}:{blockId:'figure',complete:true,faithful:true,issues:[]};
+      return reply({findings:[],repairs:[],imageAudits:[audit]});
+    }
+  };
+  await api.rapidImportPage({data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0,figureIndex:0},retryCount:0});
+  const saved=docs.get('users/teacher/vetting/'+q.id);
+  assert.equal(recrops,1);assert.equal(generations,1);assert.equal(reads,2);
+  assert.notEqual(saved.blocks[1].url,url);assert.equal(saved.blocks[1].enhancement.mode,'bw');
+  assert.ok(saved.blocks[1].originalCropUrl&&saved.blocks[1].originalCropUrl!==saved.blocks[1].url);
+  assert.ok(saved.autoCheck.repairs.some(r=>r.blockId==='figure'&&/Automatic figure fix/.test(r.reason)));
+  assert.equal(saved.autoCheck.state,'green');
+});
+test('a figure that stays rejected is fixed only once and still ends up flagged, not retried',async()=>{
+  const {q}=savedFigure('diagram');docs.delete('users/teacher/vetting/'+q.id);
+  const page=createCanvas(400,300),pctx=page.getContext('2d');pctx.fillStyle='white';pctx.fillRect(0,0,400,300);pctx.fillStyle='black';pctx.fillRect(100,80,200,120);
+  files.set('cer-rapid/teacher/job/images/raw/page.jpg',page.toBuffer('image/jpeg'));
+  files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
+  let recrops=0,reads=0;
+  modelResponse=request=>{
+    const text=request.contents[0].parts[0].text;
+    if(request.config.responseModalities)return {candidates:[{finishReason:'OTHER'}]};
+    if(text.startsWith('Image 1 is a whole page')){recrops++;return reply({box_2d:[200,200,800,800]});}
+    if(text.startsWith('Check this science question')){reads++;return reply({findings:[],repairs:[],imageAudits:[{blockId:'figure',complete:true,faithful:false,issues:['Label missing']}]});}
+  };
+  await api.rapidImportPage({data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0,figureIndex:0},retryCount:0});
+  const saved=docs.get('users/teacher/vetting/'+q.id);
+  assert.equal(recrops,1);assert.equal(reads,2);assert.equal(saved.autoCheck.state,'red');
+});

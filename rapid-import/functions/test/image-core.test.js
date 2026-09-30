@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {figureMode,originalImageUrl,storageImagePath,requireImageAudits} from '../image-core.js';
+import {figureMode,originalImageUrl,storageImagePath,requireImageAudits,imageInstruction,CLASSIFY_FIGURE_PROMPT,adoptOriginal,figureFixTargets} from '../image-core.js';
 import {normaliseQuestion,assemblePage} from '../core.js';
 
 test('table, flowchart and graph requests remain monochrome; diagrams can use either mode',()=>{
@@ -36,4 +36,32 @@ test('visual audit requires every distinct target to be explicitly inspected',()
   for(const audits of [[],[clean,clean],[clean,{...clean,blockId:'second',complete:false}]]) assert.throws(()=>requireImageAudits(audits,['first','second']));
   const findings=requireImageAudits([{...clean,faithful:false,issues:['Number changed']}],['first']);
   assert.equal(findings[0].severity,'high');assert.equal(findings[0].blockId,'first');
+});
+
+test('regenerated figures are briefed in Century Gothic with straight lines; pictures may use colour',()=>{
+  for(const kind of ['table','flowchart','graph']) {
+    const text=imageInstruction(kind,figureMode(kind,'colour'));
+    assert.match(text,/Century Gothic/);assert.match(text,/BLACK AND WHITE/);assert.match(text,/perfectly STRAIGHT/);
+  }
+  const colour=imageInstruction('diagram','colour');
+  assert.match(colour,/Century Gothic/);assert.match(colour,/restrained educational colour/);assert.doesNotMatch(colour,/Use only BLACK AND WHITE/);
+});
+test('a word diagram such as a classification tree is classified as monochrome',()=>{
+  assert.match(CLASSIFY_FIGURE_PROMPT,/classification trees/);
+  assert.match(CLASSIFY_FIGURE_PROMPT,/ONLY a picture of real objects/);
+  assert.equal(figureMode('flowchart','colour'),'bw');
+});
+test('a legacy figure with no preserved original adopts its untouched crop, but never a page or a redraw',()=>{
+  const legacy={type:'image',url:'crop',cropSource:{url:'page',page:1}};
+  const adopted=adoptOriginal(legacy,['page']);
+  assert.equal(adopted.originalCropUrl,'crop');assert.equal(adopted.preColourUrl,'crop');assert.equal(adopted.cropSource.imageUrl,'crop');
+  assert.equal(originalImageUrl(adopted),'crop');
+  assert.equal(adoptOriginal({...legacy,url:'page'},['page']).originalCropUrl,undefined);
+  assert.equal(adoptOriginal({...legacy,enhancement:{state:'done',mode:'bw'}},['page']).originalCropUrl,undefined);
+  const kept={...legacy,originalCropUrl:'first'};assert.equal(adoptOriginal(kept,['page']),kept);
+});
+test('only crop or figure findings on real image blocks are auto-fixed',()=>{
+  const blocks=[{id:'a',type:'image'},{id:'b',type:'text'},{id:'c',type:'image'}];
+  const f=[{type:'Crop',blockId:'a'},{type:'Crop',blockId:'a'},{type:'Check',blockId:'c'},{type:'Crop',blockId:'b'},{type:'Diagram',blockId:'c'}];
+  assert.deepEqual(figureFixTargets(f,blocks),['a','c']);
 });
