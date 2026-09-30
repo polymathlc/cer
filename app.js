@@ -4419,7 +4419,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.420.0';
+const APP_VERSION = 'v1.421.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -31315,6 +31315,8 @@ function _xtWorkInFlight() {
   // 🎨 A picture being colourised exists only in a model's reply until it is
   // written, so closing the tab mid-call is the one way that work is lost.
   try { if (pvcBusy()) return true; } catch (e) {}
+  // 🔧 Fix all: a repaired question exists only in memory until it is written.
+  try { if (vbrBusy()) return true; } catch (e) {}
   return false;
 }
 
@@ -47606,6 +47608,14 @@ function tlRepairRead(scope, id) {
   return copy;
 }
 function tlRepairCurrent(s, { sync = true } = {}) {
+  // A background (batch) repair has no panel, so it is judged on the account,
+  // the document owner and the question itself — never on what is on screen.
+  if (s && s.headless) {
+    if (s.cancelled || !_canAuthor() || !currentUser || currentUser.uid !== s.uid || auth.currentUser?.uid !== s.uid
+        || _bankOwnerUid() !== s.owner || _vOwner(s.id) !== s.writeOwner) return false;
+    const q = tlRepairRead('vet', s.id);
+    return !!q && JSON.stringify(q) === s.signature;
+  }
   if (!s || s !== _tlRepairSession || s.epoch !== _tlRepairEpoch || !_canAuthor()
       || !currentUser || currentUser.uid !== s.uid || auth.currentUser?.uid !== s.uid || _bankOwnerUid() !== s.owner
       || (s.scope === 'bank' && _qOwner(s.id) !== s.writeOwner) || (s.scope === 'vet' && _vOwner(s.id) !== s.writeOwner)
@@ -47644,11 +47654,9 @@ function tlRepairRefresh(q, verdict) {
   };
   tlRepairPrepare(s);
 }
-async function tlRepairPrepare(s) {
-  s.manualCrops = {};
-  s.stage = 'planning'; s.plan = null; s.message = 'Preparing a suggested action plan…';
-  tlRepairRender();
-  try {
+// The ONE planner: the panel and the background batch both ask it, so they
+// can never disagree about what a repair plan is. Read-only.
+async function tlRepairPlan(s) {
     const targets = questionRepairTargets(s.snapshot);
     const images = targets.filter(t => t.kind === 'image' && t.value);
     if (images.length > 12) throw new Error('This question has too many pictures for one repair plan. Edit it manually in smaller parts.');
@@ -47685,14 +47693,22 @@ EDITABLE CATALOG: ${JSON.stringify(catalog)}`;
     const opts = { maxOutputTokens: 6000, json: true, authoring: true };
     const reply = media.length ? await askGeminiVision(prompt, media, opts) : await askGemini(prompt, opts);
     if (!tlRepairCurrent(s)) throw new Error('The question or account changed. Check again for a new plan.');
-    s.plan = tlRepairCropActions(normalizeQuestionRepairPlan(_parseAIJson(reply), s.snapshot), s);
-    for (const action of s.plan.actions) {
+    const plan = tlRepairCropActions(normalizeQuestionRepairPlan(_parseAIJson(reply), s.snapshot), s);
+    for (const action of plan.actions) {
       const inputId = { 'q:topic': 'topicSelect', 'q:category': 'categorySelect' }[action.target];
       if (!inputId) continue;
       const input = document.getElementById(inputId);
       if (!Array.from(input?.options || []).some(option => option.value === action.value && !option.value.startsWith('__')))
         throw new Error('A proposed topic or question type is not available. Give a new instruction using an existing choice.');
     }
+    return plan;
+}
+async function tlRepairPrepare(s) {
+  s.manualCrops = {};
+  s.stage = 'planning'; s.plan = null; s.message = 'Preparing a suggested action plan…';
+  tlRepairRender();
+  try {
+    s.plan = await tlRepairPlan(s);
     s.stage = 'ready';
     s.message = s.plan.actions.length ? 'Review these actions, then implement them or give a new instruction.' : 'No automatic changes are proposed. Review the notes or give a new instruction.';
   } catch (err) {
@@ -47855,17 +47871,16 @@ async function tlRepairRecheck(s, propose = true) {
     if (s === _tlRepairSession) { s.message += ' The follow-up check could not finish. Use Check again.'; tlRepairRender(); }
   }
 }
-async function tlRepairApply() {
-  const s = _tlRepairSession;
-  if (!s || s.stage !== 'ready' || s.revising || !s.plan?.actions.length) return;
-  if (!tlRepairCurrent(s)) { s.stage = 'error'; s.message = 'The question or account changed. Check again for a new plan.'; tlRepairRender(); return; }
-  s.stage = 'applying'; s.message = 'Preparing the approved changes. Your original stays in place until every action succeeds…'; tlRepairRender();
-  const before = tlRepairClone(s.snapshot);
-  try {
-    const plan = normalizeQuestionRepairPlan(s.plan, before);
-    const targets = questionRepairTargets(before), images = {}, crops = {};
-    for (const action of plan.actions) {
-      if (!tlRepairCurrent(s)) throw new Error('The question or account changed. Check again for a new plan.');
+// Turns an approved plan into the repaired question WITHOUT writing anything.
+// `tolerant` (the background batch) drops an action that could not be carried
+// out — a crop with no original page, an image call that failed — and keeps
+// the rest, reporting what it skipped; the panel stays all-or-nothing.
+async function tlRepairBuildNext(s, before, { tolerant = false } = {}) {
+  let plan = normalizeQuestionRepairPlan(s.plan, before);
+  const targets = questionRepairTargets(before), images = {}, crops = {}, skipped = [];
+  for (const action of plan.actions) {
+    if (!tlRepairCurrent(s)) throw new Error('The question or account changed. Check again for a new plan.');
+    try {
       if (action.kind === 'recrop_image') {
         const crop = s.manualCrops?.[action.target] || await tlRepairAutoCrop(s, action);
         tlRepairCropGuard(s);
@@ -47879,11 +47894,41 @@ async function tlRepairApply() {
       } else if (action.kind === 'generate_image' || (action.kind === 'add_block' && action.target === 'new:image')) {
         images[action.id] = await tlRepairNewImage(action.instruction);
       }
+    } catch (err) {
+      if (!tolerant || !tlRepairCurrent(s)) throw err;
+      skipped.push({ action, error: (err && err.message) || 'failed' });
     }
-    if (!tlRepairCurrent(s)) throw new Error('The question or account changed. Check again for a new plan.');
-    const result = applyQuestionRepairPlan(before, plan, images, () => 'repair_' + crypto.randomUUID());
-    if (!result.changedTargets.length) throw new Error('The plan contains no changes. Give a new instruction.');
-    for (const [target, crop] of Object.entries(crops)) result.question = cropSourceUpdate(result.question, target, crop.source, crop.url, crop.box);
+  }
+  if (skipped.length) {
+    // Re-index what is left: the core numbers actions by position.
+    const gone = new Set(skipped.map(x => x.action.id));
+    const kept = plan.actions.filter(a => !gone.has(a.id));
+    const remapped = {}, recropped = {};
+    kept.forEach((a, i) => {
+      if (images[a.id] !== undefined) remapped[a.id === 'a' + (i + 1) ? a.id : 'a' + (i + 1)] = images[a.id];
+    });
+    for (const k of Object.keys(crops)) if (!skipped.some(x => x.action.target === k)) recropped[k] = crops[k];
+    plan = normalizeQuestionRepairPlan({ actions: kept.map(({ id, ...rest }) => rest), notes: plan.notes }, before);
+    Object.keys(images).forEach(k => delete images[k]);
+    Object.assign(images, remapped);
+    Object.keys(crops).forEach(k => delete crops[k]);
+    Object.assign(crops, recropped);
+  }
+  if (!tlRepairCurrent(s)) throw new Error('The question or account changed. Check again for a new plan.');
+  const result = applyQuestionRepairPlan(before, plan, images, () => 'repair_' + crypto.randomUUID());
+  if (!result.changedTargets.length) throw new Error('The plan contains no changes. Give a new instruction.');
+  for (const [target, crop] of Object.entries(crops)) result.question = cropSourceUpdate(result.question, target, crop.source, crop.url, crop.box);
+  result.skipped = skipped;
+  return result;
+}
+async function tlRepairApply() {
+  const s = _tlRepairSession;
+  if (!s || s.stage !== 'ready' || s.revising || !s.plan?.actions.length) return;
+  if (!tlRepairCurrent(s)) { s.stage = 'error'; s.message = 'The question or account changed. Check again for a new plan.'; tlRepairRender(); return; }
+  s.stage = 'applying'; s.message = 'Preparing the approved changes. Your original stays in place until every action succeeds…'; tlRepairRender();
+  const before = tlRepairClone(s.snapshot);
+  try {
+    const result = await tlRepairBuildNext(s, before);
     await tlRepairCommit(s, result.question);
     s.undo = before; s.stage = 'applied';
     s.message = ['create', 'em'].includes(s.scope)
@@ -47911,6 +47956,206 @@ async function tlRepairUndo() {
 }
 Object.assign(window, { tlRepairApply, tlRepairRevise, tlRepairDraftChanged, tlRepairCancel, tlRepairUndo });
 // ── End approved question repairs ──
+
+
+// =====================================================================
+// 🔧 FIX ALL — repair every 🔴 / 🟡 vetting question in the BACKGROUND (`vbr*`)
+// =====================================================================
+// The panel's repair is one question at a time and holds the teacher on that
+// page while the plan loads and again while it is applied. For a paper of
+// forty questions that is forty visits. This is the same repair, run for
+// every red or yellow question in the vetting list at once, with nothing on
+// screen to wait for.
+//
+//  • IT IS THE SAME REPAIR, NOT A SECOND ONE. It calls `tlRepairPlan` and
+//    `tlRepairBuildNext` — the functions the panel's Implement button runs —
+//    so the prompt, the validation, the crop rules and the "original stays
+//    until every action succeeds" guarantee are shared. The only difference is
+//    `tolerant`: one action that cannot be done (a crop with no original page)
+//    is skipped and named rather than abandoning the whole question.
+//  • THE TEACHER'S "IMPLEMENT" IS THE BUTTON'S CONFIRM. A plan is applied
+//    without being read, so the confirm says so in as many words, and every
+//    change is written to the vetting card only — never the bank.
+//  • ONE FIX PASS, THEN ONE RE-CHECK. Each question is repaired once and then
+//    re-lit by the ordinary traffic-light check (`tlRun`). A question that is
+//    still amber or red is NOT repaired again: a loop that keeps rewriting
+//    against a model's own opinion drifts away from the paper.
+//  • A QUESTION THAT CHANGED UNDER IT IS LEFT ALONE. The headless session is
+//    judged on a signature of the question (`tlRepairCurrent`), so an edit in
+//    the editor — or the panel's own Implement — makes the batch skip it
+//    rather than overwrite the teacher's work. A question open in the editor
+//    or in the 🚦 panel is skipped up front.
+//  • NOTHING IS WITHHELD AND NOTHING IS LOST. A failure on one question never
+//    stops the others, and the ones needing a person are listed with a
+//    one-click way back to their 🚦 panel.
+//  • THE WRITES ARE QUIET (`_wkSuppress`, raised only around the save call —
+//    it is read before the first await) so repairs never land in a
+//    work-session log, and the tab guard (`_xtWorkInFlight`) warns before a
+//    close, because a repaired question exists only in memory until written.
+const VBR_PAR = 2;        // questions being repaired at once (each is several AI calls)
+const VBR_MAX = 100;      // one press
+var _vbr = null;          // { total, done, fixed, partial, stillBad, needsYou, stop, running, items[] }
+var _vbrRenderAt = 0, _vbrListTimer = null;
+
+function vbrCandidates(list) {
+  const src = list || (typeof qbulkUnlit === 'function' ? qbulkUnlit('vetting') : (vettingList || []));
+  return (src || []).filter(q => {
+    if (!q || !q.id || !(q.blocks || []).length) return false;
+    const st = tlStateOf(q);
+    return (st.state === 'red' || st.state === 'amber') && (st.findings || []).length > 0;
+  });
+}
+function vbrBusy() { return !!(_vbr && _vbr.running); }
+function vbrBarHtml(unlit) {
+  if (vbrBusy()) {
+    const v = _vbr;
+    return `<button type="button" class="btn btn-outline btn-sm" onclick="vbrStop()"
+      title="Stop after the repairs already in flight — everything already fixed is kept.">⏹ Stop fixing</button>
+      <span class="qbulk-count" title="Running in the background — you can move to another page, but do not close this tab.">🔧 Fixing ${v.done}/${v.total}…</span>`;
+  }
+  const n = vbrCandidates(unlit).length;
+  return `<button class="btn btn-outline btn-sm" onclick="vbrStart()" ${n ? '' : 'disabled'}
+      title="Apply the suggested fix to every 🔴 and 🟡 question shown here, then check them again — all in the background, so you are never stuck on one question.">🔧 Fix all 🔴🟡${n ? ' (' + n + ')' : ''}</button>`;
+}
+function vbrSummaryHtml() {
+  const v = _vbr;
+  if (!v || v.running) return '';
+  const need = v.items.filter(i => i.outcome === 'needs' || i.outcome === 'failed' || i.outcome === 'still');
+  const parts = [];
+  if (v.fixed) parts.push(`✅ ${v.fixed} fixed`);
+  if (v.stillBad) parts.push(`🟡/🔴 ${v.stillBad} still flagged after the fix`);
+  if (v.needsYou) parts.push(`✋ ${v.needsYou} need${v.needsYou === 1 ? 's' : ''} you`);
+  if (!parts.length) parts.push('nothing changed');
+  const rows = need.map(i => `<li><a href="#" onclick="event.preventDefault();tlClick('vet','${escapeHtml(String(i.id))}')">${escapeHtml(i.title || 'Untitled question')}</a> — ${escapeHtml(i.message || '')}</li>`).join('');
+  return `<div class="qbulk-tally" style="flex-wrap:wrap;">
+    <span class="tl-count idle">🔧 Fix all finished: ${parts.join(' · ')}</span>
+    <button type="button" class="btn btn-outline btn-sm" onclick="vbrDismiss()">Dismiss</button>
+    ${rows ? `<details style="flex-basis:100%;margin-top:6px;"><summary style="cursor:pointer;">Questions that still need a look (${need.length})</summary><ul style="margin:8px 0 0 18px;line-height:1.7;">${rows}</ul></details>` : ''}
+  </div>`;
+}
+function vbrDismiss() { if (vbrBusy()) return; _vbr = null; try { qbulkRenderBar('vetting'); } catch (e) {} }
+function vbrStop() {
+  if (!vbrBusy()) return;
+  _vbr.stop = true;
+  showToast('Stopping after the repairs already in flight…', 'info');
+}
+function _vbrPaint(listToo) {
+  try { qbulkRenderBar('vetting'); } catch (e) {}
+  if (!listToo) return;
+  // The cards show the repaired wording and pictures, so the list itself has to
+  // be redrawn — but at most every 1.5 s, or forty repairs are forty redraws.
+  if (_vbrListTimer) return;
+  _vbrListTimer = setTimeout(() => {
+    _vbrListTimer = null;
+    try { if (document.querySelector('#page-vetting.active')) renderVettingList(); } catch (e) {}
+  }, 1500);
+}
+async function vbrCommitOne(s, next) {
+  const payload = tlRepairClone(next);
+  payload.blocks.forEach(b => {
+    if (b.type !== 'table') return;
+    if (Array.isArray(b.data)) b.data = tableDataToFirestore(b.data);
+    if (Array.isArray(b.colWidths)) b.colWidths = Object.fromEntries(b.colWidths.map((w, i) => [String(i), w]).filter(([, w]) => w != null));
+  });
+  // `_wkSuppress` is read synchronously, before saveVettingQuestion's first
+  // await, so it is raised only for that synchronous start and released BEFORE
+  // the network wait — a repair stays out of the work-session log without
+  // silencing anything the teacher authors while it is being written.
+  let pending;
+  _wkSuppress++;
+  try { pending = saveVettingQuestion(payload, { guard: () => tlRepairCurrent(s) }); }
+  finally { _wkSuppress--; }
+  const saved = await pending;
+  if (!saved) throw new Error('The changes could not be saved, so the question was not replaced.');
+  const i = vettingList.findIndex(q => String(q.id) === s.id);
+  if (i < 0) throw new Error('The question left the vetting list while it was being saved.');
+  vettingList[i] = tlRepairClone(next);
+  for (const b of next.blocks) {
+    const old = s.snapshot.blocks.find(x => x.id === b.id);
+    if (old && old.url !== b.url) delete _imgEnhanceState[b.id];
+  }
+}
+async function vbrRepairOne(q, item) {
+  const id = String(q.id);
+  if (String(currentEditingQuestion) === id) { item.outcome = 'needs'; item.message = 'open in the editor — left alone'; return; }
+  if (_tlPanelId === id) { item.outcome = 'needs'; item.message = 'open in its 🚦 panel — left alone'; return; }
+  const snapshot = tlRepairRead('vet', id);
+  if (!snapshot) { item.outcome = 'failed'; item.message = 'could not be read'; return; }
+  const st = tlStateOf(snapshot);
+  if (!['red', 'amber'].includes(st.state) || !(st.findings || []).length) { item.outcome = 'skipped'; item.message = 'no longer flagged'; return; }
+  item.before = st.state;
+  const s = {
+    headless: true, id, scope: 'vet', uid: currentUser.uid, owner: _bankOwnerUid(), writeOwner: _vOwner(id),
+    snapshot, signature: JSON.stringify(snapshot), findings: tlRepairClone(st.findings),
+    instruction: '', manualCrops: {}, plan: null, stop: false,
+  };
+  try {
+    s.plan = await tlRepairPlan(s);
+    if (!s.plan.actions.length) { item.outcome = 'needs'; item.message = (s.plan.notes || []).join(' ') || 'no safe automatic fix was found'; return; }
+    const before = tlRepairClone(snapshot);
+    const result = await tlRepairBuildNext(s, before, { tolerant: true });
+    await vbrCommitOne(s, result.question);
+    item.skipped = (result.skipped || []).length;
+    _vbrPaint(true);
+  } catch (err) {
+    item.outcome = 'failed';
+    item.message = (err && err.message) || 'the repair stopped';
+    return;
+  }
+  // The ordinary traffic-light check, in the background, on the saved question.
+  try {
+    const fresh = tlQuestionFor('vet', id);
+    _tlCache.delete(id); tlRepaint(id);
+    await tlRun(fresh);
+    item.after = tlStateOf(tlQuestionFor('vet', id)).state;
+  } catch (err) { item.after = 'error'; }
+  if (item.after === 'green') { item.outcome = 'fixed'; item.message = 'fixed — 🟢 nothing flagged'; }
+  else if (item.after === 'amber' || item.after === 'red') { item.outcome = 'still'; item.message = 'fixed what it could, but the check still flags it'; }
+  else { item.outcome = 'fixed'; item.message = 'fixed — the follow-up check could not finish'; }
+  if (item.skipped) item.message += ` (${item.skipped} action${item.skipped === 1 ? '' : 's'} skipped)`;
+}
+async function vbrStart() {
+  if (!_canAuthor()) { showToast('Only an author can fix questions', 'error'); return; }
+  if (vbrBusy()) { showToast('Fix all is already running', 'info'); return; }
+  const list = vbrCandidates().slice(0, VBR_MAX);
+  if (!list.length) { showToast('No 🔴 or 🟡 questions to fix — run 🚦 Check first', 'info'); return; }
+  if (!confirm('Fix ' + list.length + ' flagged question' + (list.length === 1 ? '' : 's') + ' automatically?\n\n'
+      + 'Each one gets the AI\'s suggested fix applied WITHOUT you reading the plan first (wording, options, answers and pictures may change), and is then checked again with 🚦. '
+      + 'It runs in the background — you can carry on in the app, but do not close this tab until it finishes.\n\n'
+      + 'Changes are saved to the vetting cards only, never to the question bank. Each question is fixed once, and one that changed while it was being fixed is left alone.')) return;
+  const items = list.map(q => ({ id: String(q.id), title: q.title || '', outcome: '', message: '', before: '', after: '' }));
+  _vbr = { total: items.length, done: 0, fixed: 0, partial: 0, stillBad: 0, needsYou: 0, stop: false, running: true, items };
+  const v = _vbr;
+  _vbrPaint(false);
+  let next = 0;
+  const worker = async () => {
+    while (!v.stop) {
+      const i = next++;
+      if (i >= list.length) return;
+      const item = items[i];
+      try { await vbrRepairOne(tlQuestionFor('vet', item.id) || list[i], item); }
+      catch (err) { item.outcome = 'failed'; item.message = (err && err.message) || 'unexpected error'; }
+      v.done++;
+      if (item.outcome === 'fixed') v.fixed++;
+      else if (item.outcome === 'still') { v.fixed++; v.stillBad++; }
+      else if (item.outcome === 'needs' || item.outcome === 'failed') v.needsYou++;
+      _vbrPaint(false);
+    }
+  };
+  try { await Promise.all(Array.from({ length: Math.min(VBR_PAR, list.length) }, worker)); }
+  finally {
+    v.running = false;
+    items.forEach(it => { if (!it.outcome) { it.outcome = 'skipped'; it.message = 'not reached — stopped'; } });
+    if (_vbrListTimer) { clearTimeout(_vbrListTimer); _vbrListTimer = null; }
+    try { renderVettingList(); } catch (e) {}
+    try { updateCounts(); } catch (e) {}
+    _vbrPaint(false);
+  }
+  const summary = `${v.fixed} fixed` + (v.stillBad ? `, ${v.stillBad} still flagged` : '') + (v.needsYou ? `, ${v.needsYou} need you` : '');
+  showToast('🔧 Fix all finished — ' + summary, v.needsYou || v.stillBad ? 'info' : 'success');
+}
+Object.assign(window, { vbrStart, vbrStop, vbrDismiss });
+// ── End fix all ──
 
 
 // 🚦 THE TRAFFIC LIGHT — one question's health at a glance (`tl*`)
@@ -48817,9 +49062,10 @@ function qbulkRenderBar(where) {
            title="Re-file these questions under the right topic — the level a question is served at is read off its TOPIC, so this is how a paper filed at the wrong level is put right.">🎯 Re-file topics</button>
          <button class="btn btn-outline btn-sm" onclick="qbulkCheck('${w}')" ${n && !running ? '' : 'disabled'}
            title="Ask the AI to read each of these questions and light it 🔴 🟡 🟢 — the same check ✅ Check Questions runs, one call per question.">🚦 Check ${n ? n : ''}</button>
+         ${w === 'vetting' ? vbrBarHtml(unlit) : ''}
          <button class="btn btn-outline btn-sm" onclick="qbulkPreviewPrint('${w}')" ${n ? '' : 'disabled'}
            title="See these questions exactly as they print — the same A4 preview, the same builder and the same PDF a saved worksheet produces.">🖨 Preview printed</button>
-       </div>` + qbulkTallyHtml(w, unlit, running);
+       </div>` + qbulkTallyHtml(w, unlit, running) + (w === 'vetting' ? vbrSummaryHtml() : '');
   } catch (e) { /* the module is still evaluating */ }
 }
 // The tallies COUNT THE LIGHTS STANDING NOW rather than the run's own totals,

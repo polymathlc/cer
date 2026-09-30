@@ -4341,6 +4341,35 @@ Run `node tools/question-repair-core-tests.mjs`,
 `node tools/question-repair-tests.mjs`, and
 `node tools/question-repair-browser.mjs` (Playwright) for the focused tests.
 
+## 🔧 Fix all — repair every red/yellow vetting question in the background (v1.421.0)
+
+`vbr*` / `VBR_PAR` / `VBR_MAX` / `vbrCandidates` / `vbrStart` / `vbrStop` / `vbrRepairOne` /
+`vbrCommitOne` (in `app.js`, after the approved-repairs section, search `FIX ALL`), plus
+`tlRepairPlan` and `tlRepairBuildNext` extracted from the panel's prepare/apply, and the
+headless branch of `tlRepairCurrent`. The button is **🔧 Fix all 🔴🟡 (N)** on the Vetting
+tools bar (`qbulkRenderBar('vetting')`).
+
+The 🚦 panel repairs ONE question and holds the teacher on that page while the plan loads and
+again while it is applied. This runs the same repair for every red/yellow question shown in
+Vetting, in the background, then re-lights each with the ordinary traffic-light check.
+
+- **SAME REPAIR, NOT A SECOND ONE.** The batch calls `tlRepairPlan` / `tlRepairBuildNext` — the
+  functions the panel's Implement button uses — so prompt, validation and crop rules cannot
+  drift. The only difference is `tolerant`: one action that cannot be done (a crop with no
+  original page, a failed image call) is skipped and counted, and the rest still land.
+- **The confirm IS the approval** — plans are applied unread, and the confirm says so. Writes go
+  to the **vetting card only, never the bank**.
+- **One fix pass, then one re-check (`tlRun`).** A question still amber/red afterwards is listed,
+  never re-repaired in a loop.
+- **A question that changed under it is left alone**: the headless session is judged on the
+  account, owner and a signature of the question (`tlRepairCurrent`), and a question open in the
+  editor or its 🚦 panel is skipped up front.
+- **Quiet writes**: `_wkSuppress` is raised only for the synchronous start of each save (it is
+  read before the first await), so repairs never land in a work-session log. `_xtWorkInFlight`
+  warns before the tab is closed. Failures on one question never stop the rest.
+- Run **`node tools/question-repair-batch-tests.mjs`** (plus the existing repair suites) after
+  touching any of it.
+
 ## 🚦 The traffic light — one question's health at a glance (v1.343.0)
 
 `tl*` / `TL_*` (in `app.js`, search `THE TRAFFIC LIGHT`), plus the `.tl-*` CSS
