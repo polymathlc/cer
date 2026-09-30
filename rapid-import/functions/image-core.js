@@ -4,11 +4,21 @@ export function figureMode(kind, requested = 'colour') {
   if (!['colour','bw','original'].includes(requested)) throw new Error('Choose colour, black and white, or original.');
   return requested === 'original' ? 'original' : ['table','flowchart','graph'].includes(kind) ? 'bw' : requested;
 }
+// One house style for every regenerated figure. An image model cannot load a
+// font file, but it follows a named typeface and a clear geometric description.
+export const FIGURE_FONT = 'Century Gothic';
+export const FIGURE_FONT_STYLE = `Typeset EVERY label, heading and number in ${FIGURE_FONT}: a smooth, clean geometric sans-serif with perfectly round letter bowls, single-storey "a", even stroke weight and generous letter spacing. Never use a handwritten, serif, condensed or decorative face.`;
+// A "word diagram" (classification tree, concept map, flow chart, cycle of
+// boxes and arrows) has no pictured objects, so it is monochrome like a table.
+export const CLASSIFY_FIGURE_PROMPT = 'Classify this scanned science figure. Return JSON {"kind":"diagram|table|flowchart|graph"}. "table" is any grid of rows and columns. "graph" is any chart or plot with axes, bars, lines or pie sectors. "flowchart" is ANY word diagram: boxes, circles or brackets containing only words, numbers or symbols joined by lines or arrows (flow charts, classification trees, concept maps, cycles, grouping diagrams). "diagram" is ONLY a picture of real objects, apparatus, organisms or scenes, with or without labels. If it has no pictured objects it is never a "diagram".';
 export function imageInstruction(kind, mode) {
+  const words = ['table','flowchart','graph'].includes(kind);
   return `Clean the supplied original scanned ${kind} into a precise textbook figure on a pure white background. ` +
-    (mode === 'bw' ? 'Use only BLACK AND WHITE. ' : 'Use restrained educational colour for pictured objects, keeping all text and arrows black. Never use colour to add or reveal an answer. ') +
+    (mode === 'bw' ? 'Use only BLACK AND WHITE: pure black lines and text on pure white, no grey fills and no colour. ' : 'Use restrained educational colour for pictured objects, keeping all text and arrows black. Never use colour to add or reveal an answer. ') +
+    (words ? 'Redraw every border, box, table rule, axis, connector and arrow as a perfectly STRAIGHT, crisp, evenly weighted line with square corners, exactly horizontal or vertical unless the original is clearly diagonal; no wobble, no sketchy or hand-drawn strokes, no double lines. ' : 'Redraw every ruled line, label leader and arrow as a smooth, clean, evenly weighted line; straighten any line that was meant to be straight. ') +
+    FIGURE_FONT_STYLE + ' ' +
     'Keep EXACTLY every original label, word, number, unit, symbol, object, arrow direction, connection, proportion, and relative position. ' +
-    'Repair scanning noise, straighten ruled borders and flowchart connectors, and typeset labels in a clear readable sans-serif font. ' +
+    'Repair scanning noise and remove specks and stray marks. ' +
     'Preserve table row and column counts, cell values and empty cells, graph values and scales, and flowchart topology. ' +
     'Do not solve, reinterpret, invent, omit, rearrange or clip any content. Leave whitespace around all labels. Preserve the aspect ratio. Output only the image.';
 }
@@ -46,4 +56,20 @@ export function requireImageAudits(audits, targets) {
       detail:(audit.issues.join('; ')||'The checker could not verify that every source detail was preserved.').slice(0,400),
       fix:'Compare with the preserved original crop and regenerate or recrop this figure.',ai:true}];
   });
+}
+
+// Figures imported before originalCropUrl existed carry no preserved original,
+// so every later regeneration refused. Their current picture IS the untouched
+// crop provided it was never regenerated and is not merely the whole page.
+export function adoptOriginal(block, pageUrls = []) {
+  if (!block || block.type !== 'image' || !block.url || originalImageUrl(block)) return block;
+  const regenerated = block.enhancement && block.enhancement.mode !== 'original';
+  if (regenerated || pageUrls.includes(block.url) || block.url === block.cropSource?.url) return block;
+  return {...block, originalCropUrl: block.url, preColourUrl: block.url,
+    ...(block.cropSource ? {cropSource: {...block.cropSource, imageUrl: block.url}} : {})};
+}
+// Findings the automatic fix can act on by re-cutting / regenerating a figure.
+export function figureFixTargets(findings, blocks = []) {
+  const ids = new Set(blocks.filter(b => b.type === 'image').map(b => b.id));
+  return [...new Set((findings || []).filter(f => f && ids.has(f.blockId) && ['Crop','Diagram'].includes(f.type)).map(f => f.blockId))];
 }

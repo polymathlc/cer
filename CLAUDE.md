@@ -8558,6 +8558,32 @@ answers a choice with a confidence and probabilities, never prose.
 - Run **`node tools/jev-review-tests.mjs`** and `npm test --prefix
   rapid-import/functions` after touching any of it.
 
+## Durable imports: house-style figures and ONE automatic fix (2026-09-30)
+
+`rapid-import/functions` — `image-core.js` (`FIGURE_FONT`, `imageInstruction`,
+`CLASSIFY_FIGURE_PROMPT`, `adoptOriginal`, `figureFixTargets`) and `index.js`
+(`fixFigures`, the `gather()` closure and first-read fix in `checkQuestion`).
+
+- **Every figure is redrawn automatically** (`enhanceImages` is always on):
+  tables, graphs and WORD diagrams (classification trees, concept maps, flow
+  charts — boxes of words joined by lines) are black and white with perfectly
+  straight lines; only a figure of pictured objects is coloured. All labels are
+  briefed in Century Gothic. A word diagram is a `flowchart`, never a `diagram`:
+  the classifier prompt and the page FIGURE RULES both say so.
+- **The original crop is always kept** (`originalCropUrl` / `preColourUrl`), and
+  Restore original / Regenerate always start from it. `adoptOriginal` rescues
+  figures imported before those fields existed (the current picture is the
+  untouched crop unless it was regenerated or is merely the whole page) — that
+  gap was the "A complete figure crop is required" error.
+- **The traffic-light check runs on every import and fixes ONCE.** On the first
+  read only, figures the visual audit rejected (`Crop` / `Diagram` findings, at
+  most `FIGURE_FIX_MAX`) are re-cut from the stored page and redrawn; if no
+  better crop can be cut a redrawn figure is restored to its original. Answer
+  text repairs ride the same single pass, then the question is read once more.
+  Nothing is retried, so a hard question costs a bounded number of calls and is
+  left flagged. User-initiated regeneration (`maxCheckTries:1`) never auto-fixes.
+- Run `npm test --prefix rapid-import/functions` after touching any of it.
+
 ## Durable Rapid Add PDFs (v1.360.0, CER only)
 
 `rapid-import/` is an isolated Firebase Functions codebase. Read its README
