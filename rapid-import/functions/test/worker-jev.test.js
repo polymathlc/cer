@@ -29,7 +29,7 @@ mock.module('@google/genai',{namedExports:{GoogleGenAI:class {
     aiPrompts.push(request.contents[0].parts[0].text);
     const text=request.contents[0].parts[0].text;
     if(/judged wrong|No crop could be cut/.test(text)) {recrops.push(text);return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({box_2d:recropBox})};}
-    if(/Check this science question/.test(text)) {checks.push(text);return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({findings:[],repairs:[]})};}
+    if(/Check this science question/.test(text)) {checks.push(text);const q=JSON.parse(text.split('Question:\n').at(-1));return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({findings:[],repairs:[],imageAudits:q.blocks.filter(b=>b.type==='image').map(b=>({blockId:b.id,complete:true,faithful:true,issues:[]}))})};}
     const page=Number(/CURRENT page (\d+)/.exec(text)?.[1]);
     return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({questions:aiPages[page-1]||[]})};
   }};

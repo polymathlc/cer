@@ -17,9 +17,13 @@ export const STRIKE_DEFAULT_OBJECTIVES = Object.freeze([
 function checkSignature(question) {
   if (!question) return '';
   try {
+    // Imported checks use the same map-key canonicalisation as CER and its
+    // worker, so Firestore's field ordering cannot expire a valid verdict.
+    const canonical = value => Array.isArray(value) ? value.map(canonical)
+      : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
     const raw = JSON.stringify({ cropAudit: 1, keyImage: question.answerKeyImage || '',
       t: question.title || '', p: question.topic || '', c: question.category || '',
-      a: !!question.annotation, b: question.blocks || [] });
+      a: !!question.annotation, b: question.rapidImportId ? canonical(question.blocks || []) : question.blocks || [] });
     let hash = 5381;
     for (let i = 0; i < raw.length; i++) hash = ((hash << 5) + hash + raw.charCodeAt(i)) | 0;
     return raw.length + ':ai:' + (hash >>> 0).toString(36) + ':' + raw.slice(0, CHECK_SIGNATURE_HEAD);
@@ -35,7 +39,7 @@ export function strikeQuestionQualityOptions(question) {
     if (!importSignature || stamp.sig !== importSignature)
       checkedState = { state: 'stale', findings, stale: true, error: stamp.error || '' };
     else if (stamp.state === 'error')
-      checkedState = { state: 'error', findings, stale: false, error: stamp.error || '' };
+      checkedState = { state: 'error', findings, stale: false, error: stamp.error || '', at: Date.parse(stamp.at || '') || 0 };
     else checkedState = { state: stamp.state, findings, stale: false, at: Date.parse(stamp.at || '') || 0 };
   }
   return { checkedState, importSignature };

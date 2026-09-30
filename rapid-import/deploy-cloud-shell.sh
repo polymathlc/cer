@@ -60,7 +60,7 @@ echo 'Deploying the isolated cer-rapid-import codebase...'
 gcloud services enable cloudtasks.googleapis.com --project="$RAPID_PROJECT"
 rapid_firebase deploy --project "$RAPID_PROJECT" --config "$PWD/firebase.json" --only functions:cer-rapid-import --non-interactive
 
-rapid_functions=(rapidImportStatus rapidImportBegin rapidImportChunk rapidImportFinish rapidImportRetry rapidImportDispatch rapidImportPage cerJevReview)
+rapid_functions=(rapidImportStatus rapidImportBegin rapidImportChunk rapidImportFinish rapidImportRetry rapidImportDispatch rapidImportPage cerJevReview rapidVettingImage)
 for rapid_function in "${rapid_functions[@]}"; do
   rapid_state=$(gcloud functions describe "$rapid_function" --gen2 --region="$RAPID_REGION" --project="$RAPID_PROJECT" --format='value(state)')
   [[ "$rapid_state" == ACTIVE ]] || fail "$rapid_function is not ACTIVE ($rapid_state)."
@@ -96,6 +96,6 @@ if status != 'UNAUTHENTICATED':
     raise SystemExit('Status endpoint did not return the expected Firebase authentication response.')
 PY
 
-echo 'Deployment checks passed: seven active functions, running queue, scoped task permissions and an authenticated status endpoint.'
+echo 'Deployment checks passed: nine active functions, running queue, scoped task permissions and an authenticated status endpoint.'
 echo 'Now sign in to https://polymathlc.github.io/cer/ and perform the two-PDF acceptance check in rapid-import/README.md.'
 echo 'Background PDF processing is not end-to-end verified until that check passes.'

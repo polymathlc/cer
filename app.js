@@ -4310,7 +4310,7 @@ async function enterApp(user) {
     // images show instantly (non-blocking, idle-scheduled).
     warmImageCacheInBackground(questionBank);
     // Prompt student setup only once per user account
-    if (!studentSetupSeen) {
+    if (!studentSetupSeen && !rapidPreviewEmbedded()) {
       setTimeout(() => openStudentSetup(), 600);
     }
   } else if (isEmployee) {
@@ -4414,12 +4414,17 @@ async function enterApp(user) {
     loadFlashcardDecks().then(fcPaintDueBadge).catch(e => console.warn('flashcards init', e));
   }
 
+  if (_canAuthor()) {
+    // The Add website and this page read the same vetting documents.
+    _rapidCloudRefresh();
+    rapidPreviewReady();
+  }
   showToast('Welcome, ' + displayName + '!', 'success');
 }
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.421.0';
+const APP_VERSION = 'v1.422.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5073,6 +5078,7 @@ async function loadAdminQuestions() {
 onAuthStateChanged(auth, (user) => {
   pirateRiftPortal.close();
   grandLinePortal.close();
+  rapidPreviewReset();
   wsArtResetForUser(user);
   ainsteinStopAdminWork();
   if (user) {
@@ -10104,6 +10110,8 @@ function resetImgScale(blockId) {
 const PVS_IDLE_MS = 3500;      // a surface with no close: write this long after the last press
 const PVS_REPLAN_MS = 900;     // the A4 preview re-paginates this long after the last press
 const _pvsDirty = new Map();   // qid -> 'bank' | 'vetting'
+const _pvsBefore = new Map();  // imported question before its first preview edit
+const _pvsSaving = new Set();
 let _pvsIdleTimer = null;
 let _pvsReplanTimer = null;
 let _pvsFlushP = null;         // the flush in flight, for anyone who must wait for it
@@ -10112,6 +10120,7 @@ const PVS_CSS = `
 .pvs-bar.pvs-over{position:absolute;left:6px;top:6px;margin:0;z-index:5}
 .pvs-btn{width:22px;height:22px;border:0;border-radius:999px;background:transparent;font-family:inherit;font-size:14px;font-weight:700;line-height:1;color:#333;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
 .pvs-btn:hover{background:rgba(0,0,0,.08)}
+.pvs-btn[disabled]{opacity:.45;cursor:default}
 .pvs-btn.pvs-auto{width:auto;padding:0 7px;font-size:10px;font-weight:600;color:#555}
 /* ✨ and 🎨 are separated from the free controls by a hairline and set apart,
    because the three controls to their left are instant and free and these two
@@ -10281,6 +10290,14 @@ function pvsPaint(qid, bid, block, pool) {
     }
   } catch (_) {}
 }
+function _pvsRemember(found) {
+  if (found?.where !== 'vetting' || !found.q?.rapidImportId) return;
+  const key = 'vetting|' + found.q.id;
+  if (!_pvsBefore.has(key)) _pvsBefore.set(key, JSON.parse(JSON.stringify(found.q)));
+}
+function _pvsLocked(qid, pool) {
+  return pvsPoolOf(pool) !== PVS_POOL_CPB && _pvsSaving.has('vetting|' + qid);
+}
 function _pvsMark(found) {
   // Keyed by pool AND id: a bank question and a 🗂️ Custom Paper's copy of it
   // share an id, and one entry for the two would flush whichever was written
@@ -10303,11 +10320,14 @@ function _pvsMark(found) {
 // teacher is looking at rather than jumping to a notional default.
 function pvsStep(qid, bid, dir, pool) {
   if (!pvsAllowed()) return;
+  if (_pvsLocked(qid, pool)) return;
+  if (_pvcQuestionBusy(qid, pool)) { showToast('Wait for this question’s picture to finish, then resize it', 'info'); return; }
   const found = pvsFind(qid, pool);
   if (!found) { showToast('That question is no longer here', 'error'); return; }
   const block = _pvsBlock(found, bid);
   if (!block) return;
   const next = imgScaleStep(block, dir > 0 ? 1 : -1, pvsWraps(qid, bid, pool)[0] || null);
+  _pvsRemember(found);
   block.scale = next / 100;
   _pvsMark(found);
   pvsPaint(qid, bid, block, pool);
@@ -10316,10 +10336,13 @@ function pvsStep(qid, bid, dir, pool) {
 // whether the field is there at all.
 function pvsReset(qid, bid, pool) {
   if (!pvsAllowed()) return;
+  if (_pvsLocked(qid, pool)) return;
+  if (_pvcQuestionBusy(qid, pool)) return;
   const found = pvsFind(qid, pool);
   if (!found) return;
   const block = _pvsBlock(found, bid);
   if (!block || !imgHasScale(block)) return;
+  _pvsRemember(found);
   delete block.scale;
   _pvsMark(found);
   pvsPaint(qid, bid, block, pool);
@@ -10334,7 +10357,9 @@ function pvsReset(qid, bid, pool) {
 // saveVettingQuestion landing after that delete would put the document
 // straight back — the ordering hazard the merge dialog documents.
 function pvsFlush() {
-  _pvsFlushP = _pvsFlushRun();
+  if (_pvsFlushP) return _pvsFlushP.then(() => _pvsDirty.size ? pvsFlush() : undefined);
+  const pending = _pvsFlushRun().finally(() => { if (_pvsFlushP === pending) _pvsFlushP = null; });
+  _pvsFlushP = pending;
   return _pvsFlushP;
 }
 function pvsFlushSettled() {
@@ -10349,7 +10374,7 @@ async function _pvsFlushRun() {
   for (const [key, where] of entries) {
     const qid = key.slice(String(where).length + 1);
     const found = pvsFind(qid, where);
-    if (!found) continue;   // deleted since — nothing left to write
+    if (!found) { _pvsBefore.delete(key); continue; }   // deleted since — nothing left to write
     // 🗂️ A Custom Paper's question is NOT in the bank and must not be put
     // there: `_cpbCommit` is the only writer that page has, and it is what
     // stamps `holdBack` on Send. The edit is already on `_cpbQuestions` — the
@@ -10362,10 +10387,20 @@ async function _pvsFlushRun() {
     }
     let ok = false;
     try {
-      ok = where === 'vetting' ? await saveVettingQuestion(found.q) : await saveQuestion(found.q, { quiet: true });
+      if (where === 'vetting' && found.q.rapidImportId) {
+        _pvsSaving.add(key);
+        const result = await _pvsSaveImported(found.q, _pvsBefore.get(key));
+        if (result?.conflict) {
+          _pvsBefore.delete(key);
+          showToast('This question changed elsewhere. The latest version is shown; apply your preview edit again.', 'info');
+          continue;
+        }
+        ok = result !== false;
+      } else ok = where === 'vetting' ? await saveVettingQuestion(found.q) : await saveQuestion(found.q, { quiet: true });
     } catch (e) { console.warn('preview picture size:', e); ok = false; }
+    finally { _pvsSaving.delete(key); }
     if (ok === false) { failed++; if (!_pvsDirty.has(key)) _pvsDirty.set(key, where); }
-    else n++;
+    else { _pvsBefore.delete(key); n++; }
   }
   if (failed) showToast('⚠ Could not save the preview edits on ' + failed + ' question' + (failed === 1 ? '' : 's') + ' — they will be tried again', 'error');
   else if (n) showToast('💾 Preview edits saved' + (n > 1 ? ' on ' + n + ' questions' : ''), 'success');
@@ -10407,6 +10442,7 @@ function pvsDecorateDoc(doc) {
       bind('auto', () => pvsReset(qid, bid, pool));
       bind('enhance', () => pvcRun(qid, bid, false, pool));
       bind('colour', () => pvcRun(qid, bid, true, pool));
+      bind('original', () => pvcRevert(qid, bid, pool));
       bar.addEventListener('pointerdown', e => e.stopPropagation());
       const view = doc.defaultView;
       if (view && view.getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
@@ -10473,6 +10509,70 @@ function pvcState(qid, bid, pool) { return (_pvcJobs.get(_pvcKey(qid, bid, pool)
 // What the unload guard asks: a job still in flight is the ONE way this loses
 // work, because the picture exists only in a model's reply until it is written.
 function pvcBusy() { return _pvcRunning > 0 || _pvcWaiting.length > 0; }
+function _pvcQuestionBusy(qid, pool) {
+  return [..._pvcJobs.values()].some(job => String(job.qid) === String(qid) && pvsPoolOf(job.pool) === pvsPoolOf(pool)
+    && (job.state === 'running' || job.state === 'queued'));
+}
+// A resize is a patch to the latest saved block, never a whole-document write
+// from an old preview. Structural edits are safe only while its blocks and
+// annotation keys still match the version the author actually saw.
+function _pvsMergeImported(before, local, remote) {
+  if (!before || !remote || !Array.isArray(remote.blocks)) return null;
+  const ordered = value => Array.isArray(value) ? value.map(ordered)
+    : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, ordered(value[key])])) : value;
+  const same = (a, b) => JSON.stringify(ordered(a ?? null)) === JSON.stringify(ordered(b ?? null));
+  const withoutScale = blocks => (blocks || []).map(block => { const copy = { ...block }; delete copy.scale; return copy; });
+  const onlyScale = same(withoutScale(before.blocks), withoutScale(local.blocks))
+    && same(before.answerKeywords, local.answerKeywords) && same(before.blanks, local.blanks);
+  const next = JSON.parse(JSON.stringify(remote));
+  if (onlyScale) {
+    for (let i = 0; i < local.blocks.length; i++) {
+      const old = before.blocks[i], changed = local.blocks[i];
+      if (same(old.scale, changed.scale)) continue;
+      const block = next.blocks.find(b => String(b.id) === String(changed.id));
+      if (!block || block.type !== 'image' || !same(block.scale, old.scale)) return null;
+      if (changed.scale == null) delete block.scale; else block.scale = changed.scale;
+    }
+    // A width change does not change the science or source pixels. Carry a
+    // current check across this proven scale-only patch, just as /add does.
+    if (remote.autoCheck?.sig === tlSig(remote)) next.autoCheck.sig = tlSig(next);
+  } else {
+    if (!same(before.blocks, remote.blocks) || !same(before.answerKeywords, remote.answerKeywords) || !same(before.blanks, remote.blanks)) return null;
+    next.blocks = JSON.parse(JSON.stringify(local.blocks));
+    next.answerKeywords = JSON.parse(JSON.stringify(local.answerKeywords || {}));
+    next.blanks = JSON.parse(JSON.stringify(local.blanks || {}));
+  }
+  return next;
+}
+async function _pvsSaveImported(local, before) {
+  if (!before) return false;
+  const uid = currentUser?.uid, ref = _vRef(local.id);
+  let conflict = false;
+  const saved = await runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(ref);
+    const raw = snapshot.exists() ? snapshot.data() : null;
+    if (!raw?.rapidImportId || raw.rapidImportId !== before.rapidImportId || String(raw.id) !== String(local.id) || currentUser?.uid !== uid) { conflict = true; return raw; }
+    const remote = normalizeLoadedQuestion(JSON.parse(JSON.stringify(raw)));
+    const next = _pvsMergeImported(before, local, remote);
+    if (!next) { conflict = true; return remote; }
+    const payload = JSON.parse(JSON.stringify(next));
+    payload.blocks.forEach(block => {
+      if (block.type !== 'table') return;
+      if (Array.isArray(block.data)) block.data = tableDataToFirestore(block.data);
+      if (Array.isArray(block.colWidths)) block.colWidths = Object.fromEntries(block.colWidths.flatMap((value, i) => value == null ? [] : [[String(i), value]]));
+    });
+    transaction.update(ref, { blocks: payload.blocks, answerKeywords: payload.answerKeywords || {}, blanks: payload.blanks || {}, ...(payload.autoCheck ? {autoCheck: payload.autoCheck} : {}) });
+    return next;
+  });
+  if (currentUser?.uid !== uid) return false;
+  const i = vettingList.findIndex(q => String(q.id) === String(local.id));
+  if (i >= 0) {
+    if (saved?.rapidImportId) vettingList[i] = normalizeLoadedQuestion(saved);
+    else vettingList.splice(i, 1);
+  }
+  _pvoRerender(local.id);
+  return { conflict };
+}
 
 // The two buttons as they sit inside the pill. They are deliberately the LAST
 // controls: − / + / Auto are instant and free, and each of these spends an AI
@@ -10480,7 +10580,20 @@ function pvcBusy() { return _pvcRunning > 0 || _pvcWaiting.length > 0; }
 // ✨ (black-and-white) first, 🎨 (colour) last — the order the block editor's
 // own bar has always used.
 function _pvcButtonHtml(qid, bid, pool) {
-  return _pvcOneButtonHtml(qid, bid, false, pool) + _pvcOneButtonHtml(qid, bid, true, pool);
+  return _pvcOriginalButtonHtml(qid, bid, pool) + _pvcOneButtonHtml(qid, bid, false, pool) + _pvcOneButtonHtml(qid, bid, true, pool);
+}
+function _pvcOriginalUrl(block) { return (block && (block.originalCropUrl || block.preColourUrl)) || ''; }
+function _pvcOriginalButtonHtml(qid, bid, pool) {
+  const block = _pvsBlock(pvsFind(qid, pool), bid), original = _pvcOriginalUrl(block);
+  const state = pvcState(qid, bid, pool);
+  const disabled = !original || original === block?.url || state === 'running' || state === 'queued';
+  return `<button type="button" class="pvs-btn pvs-auto" data-pvs-act="original"${disabled ? ' disabled' : ''}
+    aria-label="Restore original scanned crop" title="Restore the original scanned crop. It is kept when you regenerate in colour or black and white."
+    onclick="event.stopPropagation();pvcRevert('${escapeHtml(String(qid))}','${escapeHtml(String(bid))}','${escapeHtml(pvsPoolOf(pool))}')">↩ Scan</button>`;
+}
+// Tables, graphs and flowcharts must retain monochrome lines and labels.
+function _pvcColourFor(block, colour) {
+  return colour === true && !['table', 'flowchart', 'graph'].includes(String(block?.figureKind || '').toLowerCase());
 }
 // One of the pair. A job is per PICTURE, so while one is running the button
 // that started it shows ⏳ and the other is disabled with a title saying why;
@@ -10491,10 +10604,11 @@ function _pvcOneButtonHtml(qid, bid, colour, pool) {
   const st = job.state || '';
   const mine = !!st && (!!job.colour === !!colour);
   const busy = st === 'running' || st === 'queued';
+  const monoOnly = colour && !_pvcColourFor(_pvsBlock(pvsFind(qid, pool), bid), true);
   const idle = colour ? '🎨' : '✨';
   const what = colour ? 'Colourise' : 'Enhance';
   const label = !mine ? idle : (busy ? '⏳' : (st === 'done' ? '✅' : (st === 'error' ? '⚠️' : idle)));
-  const title = busy
+  const title = monoOnly ? 'Tables, graphs and flowcharts stay black and white. Use Enhance for straight lines and clean labels.' : busy
     ? (mine ? (colour ? 'Colourising' : 'Enhancing') + ' this picture… it finishes even if you close this preview'
             : 'This picture is already being regenerated — wait for that to finish')
     // 🗂️ On a Custom Paper the picture is kept on the PAPER, so neither the
@@ -10506,7 +10620,7 @@ function _pvcOneButtonHtml(qid, bid, colour, pool) {
                 : 'Regenerate this picture as a clean black-and-white line diagram — no colour. It runs in the background and is kept on this paper — nothing reaches the question bank until you press Send.')
     : colour ? 'Regenerate this picture in colour. It runs in the background, saves itself, and goes to the front of ✅ Check Questions.'
              : 'Regenerate this picture as a clean black-and-white line diagram — no colour. It runs in the background, saves itself, and goes to the front of ✅ Check Questions.';
-  return `<button type="button" class="pvs-btn pvs-ai ${colour ? 'pvs-colour' : 'pvs-enhance'}" data-pvs-act="${colour ? 'colour' : 'enhance'}"${busy ? ' disabled' : ''}
+  return `<button type="button" class="pvs-btn pvs-ai ${colour ? 'pvs-colour' : 'pvs-enhance'}" data-pvs-act="${colour ? 'colour' : 'enhance'}"${busy || monoOnly ? ' disabled' : ''}
     aria-label="${colour ? 'Colourise' : 'Enhance'} this picture" title="${escapeHtml(title)}"
     onclick="event.stopPropagation();pvcRun('${q}','${b}',${colour ? 'true' : 'false'},'${p}')">${label}</button>`;
 }
@@ -10524,7 +10638,7 @@ function pvcPaint(qid, bid, pool) {
     });
   } catch (_) {}
   // Both buttons, each from its own fresh markup: one job disables the pair.
-  [['enhance', _pvcOneButtonHtml(qid, bid, false, pool)], ['colour', _pvcOneButtonHtml(qid, bid, true, pool)]].forEach(([act, fresh]) => {
+  [['enhance', _pvcOneButtonHtml(qid, bid, false, pool)], ['colour', _pvcOneButtonHtml(qid, bid, true, pool)], ['original', _pvcOriginalButtonHtml(qid, bid, pool)]].forEach(([act, fresh]) => {
     docs.forEach(d => {
       try {
         d.querySelectorAll(sel).forEach(wrap => {
@@ -10553,8 +10667,9 @@ function pvcRun(qid, bid, colour, pool) {
   const found = pvsFind(qid, p);
   const block = _pvsBlock(found, bid);
   if (!block || !block.url) { showToast('That picture is no longer on this question', 'error'); return; }
-  if (!imageAiReady()) { showToast('Image AI is not available in this project', 'error'); return; }
-  _pvcJobs.set(key, { qid: String(qid), bid: String(bid), pool: p, colour: colour === true, state: 'queued' });
+  if (!imageAiReady() && !_pvcCloudEligible(found)) { showToast('Image AI is not available in this project', 'error'); return; }
+  colour = _pvcColourFor(block, colour);
+  _pvcJobs.set(key, { qid: String(qid), bid: String(bid), pool: p, colour, state: 'queued' });
   _pvcWaiting.push(key);
   pvcPaint(qid, bid, p);
   showToast((colour === true ? '🎨 Colourising' : '✨ Enhancing') + ' in the background — you can close this preview', 'info');
@@ -10589,7 +10704,9 @@ async function _pvcWork(job) {
   const before = pvsFind(job.qid, job.pool);
   const beforeBlock = _pvsBlock(before, job.bid);
   if (!beforeBlock || !beforeBlock.url) throw new Error('that picture is no longer on the question');
-  const sourceUrl = beforeBlock.url;
+  if (_pvcCloudEligible(before)) return _pvcCloudWork(job, job.colour ? 'colour' : 'bw');
+  const currentUrl = beforeBlock.url;
+  const sourceUrl = _pvcOriginalUrl(beforeBlock) || currentUrl;
 
   const dataUrl = await _urlToDataUrlRobust(transformImageUrl(sourceUrl));
   const parsed = _parseImageDataUrl(dataUrl);
@@ -10606,6 +10723,7 @@ async function _pvcWork(job) {
   const found = pvsFind(job.qid, job.pool);
   const block = _pvsBlock(found, job.bid);
   if (!found || !block) throw new Error('that question has gone since the colourising started');
+  if (block.url !== currentUrl) throw new Error('the picture changed while it was being regenerated — preview it and try again');
   // Set ONCE — colourising twice must not lose the original scan.
   if (!block.preColourUrl && sourceUrl) block.preColourUrl = sourceUrl;
   block.url = url;
@@ -10628,13 +10746,45 @@ async function _pvcWork(job) {
     ? await saveVettingQuestion(found.q)
     : await saveQuestion(found.q, { quiet: true });
   if (ok === false) {
-    block.url = sourceUrl;   // the screen must not claim a picture the database refused
+    block.url = currentUrl;   // the screen must not claim a picture the database refused
     throw new Error('the regenerated picture could not be saved');
   }
   try { pvsPaint(job.qid, job.bid, block, job.pool); } catch (_) {}
   try { _pvcSwapImages(job.qid, job.bid, url, job.pool); } catch (_) {}
   try { _cqUpdateBadge(); } catch (_) {}
   showToast((job.colour === true ? '🎨 Colourised' : '✨ Enhanced') + ' and saved — it is at the top of ✅ Check Questions', 'success');
+}
+
+function _pvcCloudEligible(found) {
+  try {
+    return found?.where === 'vetting' && !!found.q.rapidImportId && _isAdmin()
+      && _vOwner(found.q.id) === currentUser?.uid && _rapidCloudCapabilities.imageEditing === true;
+  } catch (_) { return false; }
+}
+async function _pvcCloudWork(job, mode) {
+  // Settle size/order edits before the server takes its revision snapshot.
+  await pvsFlushSettled();
+  await pvsFlush();
+  if (_pvsDirty.has('vetting|' + job.qid)) throw new Error('save the preview edits before regenerating');
+  const before = pvsFind(job.qid, job.pool), block = _pvsBlock(before, job.bid);
+  if (!_pvcCloudEligible(before) || !block) throw new Error('that imported question is no longer available');
+  const uid = currentUser.uid;
+  const result = await httpsCallable(getFunctions(app), 'rapidVettingImage', { timeout: 540000 })({
+    questionId: job.qid, blockId: job.bid, mode, expectedUrl: block.url
+  });
+  if (currentUser?.uid !== uid) return;
+  const q = result.data?.question;
+  if (!q || String(q.id) !== String(job.qid)) throw new Error('the image service did not return the saved question');
+  const i = vettingList.findIndex(x => String(x.id) === String(job.qid));
+  if (i < 0) return; // approved/deleted while the request was in flight
+  vettingList[i] = normalizeLoadedQuestion(q);
+  const saved = _pvsBlock(pvsFind(job.qid, job.pool), job.bid);
+  if (saved) {
+    pvsPaint(job.qid, job.bid, saved, job.pool);
+    _pvcSwapImages(job.qid, job.bid, saved.url, job.pool);
+  }
+  _pvoRerender(job.qid, job.pool);
+  showToast(mode === 'original' ? 'Original scan restored and checked' : 'Picture regenerated, saved and checked', 'success');
 }
 
 // A regenerated picture is exactly the thing a person has to look at, so the
@@ -10662,16 +10812,37 @@ function _pvcSwapImages(qid, bid, url, pool) {
   try { document.querySelectorAll('iframe').forEach(f => { try { if (f.contentDocument) docs.push(f.contentDocument); } catch (_) {} }); } catch (_) {}
   const next = transformImageUrl(url);
   docs.forEach(d => { try { d.querySelectorAll(sel).forEach(img => { img.src = next; }); } catch (_) {} });
+  try {
+    if (_pvsEditorHolds(qid, pool)) {
+      const live = _pvsBlock(pvsFind(qid, pool), bid);
+      const edited = blocks.find(b => b?.type === 'image' && String(b.id) === String(bid));
+      if (edited && live && edited !== live) {
+        ['url', 'preColourUrl', 'originalCropUrl', 'cropSource', 'figureKind'].forEach(k => {
+          if (live[k] == null) delete edited[k]; else edited[k] = JSON.parse(JSON.stringify(live[k]));
+        });
+      }
+    }
+  } catch (_) {}
 }
 
 // ↩ Put the original back. The colourisation is the thing being vetted, so
 // rejecting it has to be one press — and it is what `preColourUrl` is for.
 async function pvcRevert(qid, bid, pool) {
   if (!pvsAllowed()) return;
+  if (['running', 'queued'].includes(pvcState(qid, bid, pool))) return;
   const found = pvsFind(qid, pool);
   const block = _pvsBlock(found, bid);
-  if (!found || !block || !block.preColourUrl) { showToast('There is no earlier picture to go back to', 'error'); return; }
-  const colourised = block.url, original = block.preColourUrl;
+  if (!found || !block || !_pvcOriginalUrl(block)) { showToast('There is no earlier picture to go back to', 'error'); return; }
+  if (_pvcCloudEligible(found)) {
+    const job = { qid: String(qid), bid: String(bid), pool: pvsPoolOf(pool), state: 'running' };
+    const key = _pvcKey(qid, bid, pool);
+    _pvcJobs.set(key, job); _pvcRunning++; pvcPaint(qid, bid, pool);
+    try { await _pvcCloudWork(job, 'original'); _pvcJobs.delete(key); }
+    catch (e) { job.state = 'error'; showToast('Could not restore the scan: ' + e.message, 'error'); }
+    finally { _pvcRunning--; pvcPaint(qid, bid, pool); _pvcPump(); }
+    return;
+  }
+  const colourised = block.url, original = _pvcOriginalUrl(block), earlier = block.preColourUrl;
   block.url = original;
   delete block.preColourUrl;
   if (found.where === PVS_POOL_CPB) {
@@ -10688,7 +10859,7 @@ async function pvcRevert(qid, bid, pool) {
     // BOTH fields go back. Restoring only the url would leave the question
     // wearing the colourised picture with nothing left to revert it with.
     block.url = colourised;
-    block.preColourUrl = original;
+    if (earlier) block.preColourUrl = earlier; else delete block.preColourUrl;
     showToast('Could not put the original picture back — try again', 'error');
     return;
   }
@@ -10775,6 +10946,8 @@ function pvoWrapOpen(q, block, pool) {
 // One move. Returns true when something actually moved, so a key press that
 // did nothing (the top element, ↑) leaves the page free to scroll.
 function pvoMove(qid, bid, dir, pool) {
+  if (_pvsLocked(qid, pool)) return false;
+  if (_pvcQuestionBusy(qid, pool)) return;
   if (!pvsAllowed()) return false;
   const found = pvsFind(qid, pool);
   if (!found) { showToast('That question is no longer here', 'error'); return false; }
@@ -10782,6 +10955,7 @@ function pvoMove(qid, bid, dir, pool) {
   const i = list.findIndex(b => b && String(b.id) === String(bid));
   const j = i + (dir > 0 ? 1 : -1);
   if (i < 0 || j < 0 || j >= list.length) return false;
+  _pvsRemember(found);
   [list[i], list[j]] = [list[j], list[i]];
   _pvsMark(found);
   _pvoSyncEditor(qid, list, pool);
@@ -10812,6 +10986,8 @@ function _pvoSyncEditor(qid, order, pool) {
 // 🗑 One removal. Returns true when a block really left the question, so a
 // Delete key that did nothing leaves the page alone.
 function pvoRemove(qid, bid, pool) {
+  if (_pvsLocked(qid, pool)) return false;
+  if (_pvcQuestionBusy(qid, pool)) return;
   if (!pvsAllowed()) return false;
   const found = pvsFind(qid, pool);
   if (!found) { showToast('That question is no longer here', 'error'); return false; }
@@ -10822,6 +10998,7 @@ function pvoRemove(qid, bid, pool) {
     showToast('A question must keep at least one element — delete the whole question from the bank instead', 'error');
     return false;
   }
+  _pvsRemember(found);
   const [block] = list.splice(i, 1);
   const kept = _pvoForgetKeys(found.q, bid);
   _pvoUndo.push({ qid: String(qid), pool: pvsPoolOf(pool), index: i, block, kw: kept.kw, blanks: kept.blanks });
@@ -10858,6 +11035,8 @@ function _pvoForgetKeys(q, bid) {
 // With no qid, the most recent removal of any question. Returns true when
 // something was restored.
 function pvoUndo(qid, pool) {
+  if (_pvsLocked(qid, pool)) return false;
+  if (_pvcQuestionBusy(qid, pool)) return;
   if (!pvsAllowed()) return false;
   const want = pvsPoolOf(pool);
   let k = -1;
@@ -10879,6 +11058,7 @@ function pvoUndo(qid, pool) {
     return false;
   }
   const at = Math.max(0, Math.min(entry.index, list.length));
+  _pvsRemember(found);
   list.splice(at, 0, entry.block);
   try {
     if (entry.kw && Object.keys(entry.kw).length) {
@@ -17775,6 +17955,7 @@ async function _rapidPrepFile(file) {
 //    this one" a question that has an answer.
 // Durable PDF imports. Uploads need this tab; acknowledged jobs do not.
 let _rapidCloudReady = false;
+let _rapidCloudCapabilities = {};
 let _rapidCloudOwner = null;
 let _rapidCloudTimer = null;
 let _rapidCloudUploading = 0;
@@ -17809,10 +17990,11 @@ function _rapidCloudPaint() {
 }
 async function _rapidCloudRefresh() {
   clearTimeout(_rapidCloudTimer);
+  _rapidCloudWatchVetting();
   const uid = currentUser?.uid;
   const note = document.getElementById('rapidCloudNote'), box = document.getElementById('rapidCloudMode');
   if (!uid || !_isAdmin()) {
-    _rapidCloudReady=false;
+    _rapidCloudReady=false; _rapidCloudCapabilities={};
     if(box){box.checked=false;box.disabled=true;}
     if(note) note.textContent='Online PDF processing requires an administrator account. Browser mode needs this tab to stay open.';
     return;
@@ -17822,31 +18004,53 @@ async function _rapidCloudRefresh() {
     if(currentUser?.uid!==uid) return;
     const first=!_rapidCloudReady || _rapidCloudOwner!==uid;
     _rapidCloudReady=r.available===true; _rapidCloudOwner=uid; _rapidCloudJobs=r.jobs||[];
+    _rapidCloudCapabilities=r.capabilities||{};
     if(box){box.disabled=!_rapidCloudReady;if(first) box.checked=_rapidCloudReady;}
     if(note) note.textContent='PDFs: keep the tab open during upload. After “Stored online — safe to close”, processing continues even with your browser closed. Screenshots still need an open tab.';
     _rapidCloudPaint();
-    if (_rapidCloudWatchUid !== uid) {
-      if (_rapidCloudUnsub) _rapidCloudUnsub();
-      _rapidCloudWatchUid=uid;
-      _rapidCloudUnsub=onSnapshot(_vCol(), snapshot => {
-        if(currentUser?.uid!==uid) return;
-        let changed=false;
-        snapshot.docChanges().forEach(change=>{
-          const q=change.doc.data();
-          if(!q.rapidImportId) return;
-          const i=vettingList.findIndex(x=>x.id===q.id);
-          if(change.type==='removed'){if(i>=0){vettingList.splice(i,1);changed=true;}}
-          else if(i<0){vettingList.unshift(normalizeLoadedQuestion(q));_rapidJustAdded.add(q.id);changed=true;_autoFixSweepRan=false;autoFixSweepSoon();}
-        });
-        if(changed){updateCounts();renderVettingList();}
-      },()=>{_rapidCloudWatchUid=null;});
-    }
   } catch(e) {
-    _rapidCloudReady=false;
+    _rapidCloudReady=false; _rapidCloudCapabilities={};
     if(box){box.disabled=true;box.checked=false;}
     if(note) note.textContent='Online PDF worker unavailable. Browser mode still works, but you must keep this tab open. Server deployment or connection needs attention.';
   }
   if(document.getElementById('rapidAddOverlay')?.classList.contains('active')) _rapidCloudTimer=setTimeout(_rapidCloudRefresh,10000);
+}
+// Imports and edits from /add sync without opening CER's Rapid Add pad.
+// Modified documents matter just as much as new ones: an enhanced picture
+// would otherwise remain the old scan until the teacher signs in again.
+function _rapidCloudWatchVetting() {
+  const uid = currentUser?.uid, owner = _bankOwnerUid();
+  if (!uid || !_canAuthor() || !owner || _rapidCloudWatchUid === uid + '|' + owner) return;
+  if (_rapidCloudUnsub) _rapidCloudUnsub();
+  _rapidCloudWatchUid = uid + '|' + owner;
+  _rapidCloudUnsub = onSnapshot(_vCol(), snapshot => {
+    if (currentUser?.uid !== uid || _bankOwnerUid() !== owner) return;
+    let changed = false;
+    snapshot.docChanges().forEach(change => {
+      const q = change.doc.data();
+      const id = String(q.id || change.doc.id || '');
+      const i = vettingList.findIndex(x => String(x.id) === id);
+      if (!q.rapidImportId || !q.id) {
+        if (i >= 0 && vettingList[i].rapidImportId) { vettingList.splice(i, 1); changed = true; }
+        return;
+      }
+      if (change.type === 'removed') {
+        if (i >= 0) { vettingList.splice(i, 1); changed = true; }
+      } else if (i < 0) {
+        vettingList.unshift(normalizeLoadedQuestion(q)); _rapidJustAdded.add(q.id); changed = true;
+        _autoFixSweepRan = false; autoFixSweepSoon();
+      } else if (!_pvsBefore.has('vetting|' + q.id) && !_pvsSaving.has('vetting|' + q.id) && JSON.stringify(vettingList[i]) !== JSON.stringify(normalizeLoadedQuestion(q))) {
+        vettingList[i] = normalizeLoadedQuestion(q); changed = true;
+      }
+    });
+    if (changed) {
+      updateCounts(); renderVettingList();
+      if (_wsPreviewAdhoc?.source === 'vetting' && document.getElementById('wsPreviewOverlay')?.classList.contains('show')) {
+        clearTimeout(_pvsReplanTimer);
+        _pvsReplanTimer = setTimeout(renderWsPreview, PVS_REPLAN_MS);
+      }
+    }
+  }, error => { _rapidCloudWatchUid = null; console.warn('Rapid Add vetting sync', error); });
 }
 function _rapidUploadPdf(file, level, release) {
   // Capture all authoring settings before waiting behind another upload.
@@ -21387,6 +21591,8 @@ function renderVettingList() {
   // Live "processing" / "failed" placeholders from Rapid add, shown on top.
   const jobCards = rapidJobs.map(_rapidJobCardHtml).join('');
   _vetPruneSelection();
+  const previewAll = document.getElementById('vetPreviewAllBtn');
+  if (previewAll) previewAll.disabled = !_vetVisibleQuestions().length;
 
   if (vettingList.length === 0 && rapidJobs.length === 0) {
     _vetRenderBulkBar([]);
@@ -39303,6 +39509,7 @@ function openWorksheetPreview() {
 function _wsAdhocQuestions(a) {
   const list = (a && a.questions) || [];
   const src = a && a.source;
+  if (src === 'vetting') return list.map(q => vettingList.find(x => String(x.id) === String(q?.id)) || q);
   if (src !== 'cpbq' && src !== 'custompaper') return list;
   return list.map(q => {
     if (!q || q.id == null) return q;
@@ -39375,6 +39582,61 @@ function previewOneQuestionPrint(id, where) {
   if (!q) { showToast('That question is no longer here', 'error'); return; }
   previewQuestionsPrint([q], q.title || 'Question', where);
 }
+
+function previewAllVetting() {
+  if (!_canAuthor()) return;
+  const questions = _vetVisibleQuestions();
+  previewQuestionsPrint(questions, 'Vetting · ' + questions.length + ' questions', 'vetting');
+}
+
+// /add embeds the real export preview, so tables, answer boxes, image sizing
+// and A4 page breaks are exactly those of a CER worksheet. Only a same-origin
+// parent can request it, and only IDs already readable by this author resolve.
+var _rapidPreviewLoadedUid = null;
+function rapidPreviewEmbedded() {
+  return window.parent !== window && new URLSearchParams(location.search).get('rapidPreview') === '1';
+}
+function rapidPreviewPost(type, extra = {}) {
+  if (rapidPreviewEmbedded()) window.parent.postMessage({ type, ...extra }, location.origin);
+}
+function rapidPreviewReset() {
+  _rapidPreviewLoadedUid = null;
+  try { if (_rapidCloudUnsub) _rapidCloudUnsub(); _rapidCloudUnsub = null; _rapidCloudWatchUid = null; } catch (_) {}
+  try { _rapidCloudCapabilities = {}; } catch (_) {}
+  if (rapidPreviewEmbedded()) {
+    document.getElementById('wsPreviewOverlay')?.classList.remove('show');
+    rapidPreviewPost('cer-rapid-preview-auth');
+  }
+}
+function rapidPreviewReady() {
+  if (!rapidPreviewEmbedded() || !_canAuthor()) return;
+  _rapidPreviewLoadedUid = currentUser.uid;
+  navigateTo('vetting');
+  rapidPreviewPost('cer-rapid-preview-ready');
+}
+function rapidPreviewMessage(event) {
+  if (!rapidPreviewEmbedded() || event.source !== window.parent || event.origin !== location.origin) return;
+  if (event.data?.type === 'cer-rapid-preview-close-request') {
+    closeWorksheetPreview();
+    return;
+  }
+  if (event.data?.type === 'cer-rapid-preview-ping') {
+    if (_rapidPreviewLoadedUid === currentUser?.uid && _canAuthor()) rapidPreviewPost('cer-rapid-preview-ready');
+    return;
+  }
+  if (event.data?.type !== 'cer-rapid-preview' || !_canAuthor() || _rapidPreviewLoadedUid !== currentUser?.uid) return;
+  const ids = event.data.ids;
+  if (!Array.isArray(ids) || !ids.length || ids.length > 500 || ids.some(id => typeof id !== 'string' || id.length > 200)) return;
+  const unique = [...new Set(ids)], byId = new Map(vettingList.map(q => [String(q.id), q]));
+  const questions = unique.map(id => byId.get(id)).filter(Boolean);
+  if (!questions.length) {
+    rapidPreviewPost('cer-rapid-preview-error', { message: 'These questions are no longer in this account’s vetting list. Refresh Add and try again.' });
+    return;
+  }
+  previewQuestionsPrint(questions, 'Vetting · ' + questions.length + ' questions', 'vetting');
+  rapidPreviewPost('cer-rapid-preview-opened', { count: questions.length });
+}
+window.addEventListener?.('message', rapidPreviewMessage);
 
 // 👁 EXPORTED HOVER — one lazy iframe, using the PDF's own renderer.
 // Resolve against the list each time: these questions are not in the bank, and
@@ -39697,7 +39959,20 @@ function _wsShowPreviewOverlay() {
 }
 
 function closeWorksheetPreview() {
+  if (rapidPreviewEmbedded()) {
+    // The outer Add dialog must not disappear until the save really landed.
+    // Leave the existing preview open on failure, so another Close can retry.
+    pvsFlushSettled().then(() => pvsFlush()).then(() => {
+      if (_pvsDirty.size) { rapidPreviewPost('cer-rapid-preview-error', { message: 'Some preview edits could not be saved. Keep this preview open and try again.' }); return; }
+      _closeWorksheetPreviewNow();
+      rapidPreviewPost('cer-rapid-preview-close');
+    }).catch(() => rapidPreviewPost('cer-rapid-preview-error', { message: 'The preview edits could not be saved. Keep the preview open and try again.' }));
+    return;
+  }
   pvsFlush();   // 🔍± a picture resized on the A4 preview is written as it closes
+  _closeWorksheetPreviewNow();
+}
+function _closeWorksheetPreviewNow() {
   clearTimeout(_pvsReplanTimer);
   const ov = document.getElementById('wsPreviewOverlay');
   if (ov) ov.classList.remove('show');
@@ -48251,6 +48526,12 @@ function tlVerdict(findings) {
 function tlSig(q) {
   if (!q) return '';
   try {
+    // Firestore sorts map keys when it reads a stored import. Preserve array
+    // order but canonicalise nested maps, so storage alone cannot expire a
+    // completed worker check. Existing non-imported question stamps keep
+    // their long-standing representation.
+    const canonical = value => Array.isArray(value) ? value.map(canonical)
+      : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
     const raw = JSON.stringify({
       cropAudit: 1,
       keyImage: q.answerKeyImage || '',
@@ -48258,7 +48539,7 @@ function tlSig(q) {
       p: q.topic || '',
       c: q.category || '',
       a: !!q.annotation,
-      b: q.blocks || [],
+      b: q.rapidImportId ? canonical(q.blocks || []) : q.blocks || [],
     });
     // A question carrying a pasted picture is a data URL megabytes long, and
     // one signature per question is held for as long as the page lives — so
@@ -48295,7 +48576,7 @@ function _tlFromStamp(q) {
   const findings = Array.isArray(a.findings) ? a.findings : [];
   const stale = a.sig !== tlSig(q);
   if (stale) return { state: 'stale', findings, stale: true, error: a.error || '' };
-  if (a.state === 'error') return { state: 'error', findings, stale: false, error: a.error || '' };
+  if (a.state === 'error') return { state: 'error', findings, stale: false, error: a.error || '', at: Date.parse(a.at || '') || 0 };
   return { state: a.state, findings, stale: false, at: Date.parse(a.at || '') || 0 };
 }
 function tlStateOf(q) {
@@ -48306,6 +48587,10 @@ function tlStateOf(q) {
   if (!rec) return _tlFromStamp(q) || { state: 'idle', findings: [], stale: false };
   if (rec.state === 'running') return { state: 'running', findings: [], stale: false };
   const stale = rec.sig !== tlSig(q);
+  // A fresh worker result may arrive from /add while this tab remembers an
+  // older read. A stale session cache must not hide a current persisted check.
+  const stamped = _tlFromStamp(q);
+  if (stamped && !stamped.stale && (stale || (stamped.at || 0) > (rec.at || 0))) return stamped;
   if (stale) return { state: 'stale', findings: rec.findings || [], stale: true, error: rec.error || '' };
   if (rec.state === 'error') return { state: 'error', findings: rec.findings || [], stale: false, error: rec.error || '' };
   return { state: rec.verdict || 'green', findings: rec.findings || [], stale: false, at: rec.at || 0 };
@@ -81591,6 +81876,7 @@ window.qbulkTopicsUndo = qbulkTopicsUndo;
 window.qbulkPreviewPrint = qbulkPreviewPrint;
 window.previewQuestionsPrint = previewQuestionsPrint;
 window.previewOneQuestionPrint = previewOneQuestionPrint;
+window.previewAllVetting = previewAllVetting;
 window.previewEditorPrint = previewEditorPrint;
 window.vetPrintPeekShow = vetPrintPeekShow;
 window.vetPrintPeekLeave = vetPrintPeekLeave;

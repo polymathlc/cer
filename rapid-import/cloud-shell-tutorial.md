@@ -20,7 +20,7 @@ The script checks access, billing and existing AI secret metadata; selects
 Node 22; runs the worker tests; and deploys the `cer-rapid-import` codebase.
 It grants the deployed dispatcher permission to enqueue on the Rapid Add queue,
 act as its own task identity, and invoke the Rapid Add worker. It checks all
-seven functions, the queue and the status endpoint before reporting success.
+nine functions, the queue and the status endpoint before reporting success.
 No API key is printed, and no service-account key is created.
 
 Keep this setup terminal open until the command finishes. If it stops, resolve

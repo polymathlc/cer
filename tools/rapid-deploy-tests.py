@@ -153,7 +153,8 @@ class DeployTests(unittest.TestCase):
         self.assertIn('functions:cer-rapid-import', deploys[0])
         self.assertIn('mathgen--app', deploys[0])
         self.assertNotIn('--force', deploys[0])
-        self.assertEqual(sum('--format=value(state)' in c and c[1:3] == ['functions', 'describe'] for c in commands), 7)
+        checked_functions = {c[3] for c in commands if '--format=value(state)' in c and c[1:3] == ['functions', 'describe']}
+        self.assertEqual(checked_functions, {'rapidImportStatus', 'rapidImportBegin', 'rapidImportChunk', 'rapidImportFinish', 'rapidImportRetry', 'rapidImportDispatch', 'rapidImportPage', 'cerJevReview', 'rapidVettingImage'})
         bindings = [c for c in commands if 'add-iam-policy-binding' in c]
         self.assertEqual(len(bindings), 3)
         self.assertTrue(all('projects' not in c and '--member=allUsers' not in c for c in bindings))

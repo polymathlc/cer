@@ -32,8 +32,8 @@
 //    be a mistake too.
 import fs from 'fs';
 
-const APP = new URL('../app.js', import.meta.url).pathname;
-const src = fs.readFileSync(APP, 'utf8');
+const APP = new URL('../app.js', import.meta.url);
+const src = fs.readFileSync(APP, 'utf8').replace(/\r\n/g, '\n');
 
 // Every cut ends with a NEWLINE: a window that stops mid-comment glues the next
 // window's first line onto a `//` and comments the declaration out.
@@ -788,7 +788,7 @@ test('a draft has no come-back-here snapshot', () => {
 });
 
 test('🖨 Preview Exported sits beside 🎓 Preview as Student in EVERY action row', () => {
-  const html = fs.readFileSync(new URL('../index.html', import.meta.url).pathname, 'utf8');
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   // Create mode, edit mode and a 🗂️ Custom Paper question are three separate
   // rows; a button added to one of them is a button that is simply not there
   // two thirds of the time. Counted per ROW rather than over the file, so a

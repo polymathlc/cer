@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(here, '..', 'app.js'), 'utf8');
+const src = readFileSync(join(here, '..', 'app.js'), 'utf8').replace(/\r\n/g, '\n');
 
 let passed = 0, failed = 0;
 const tests = [];
@@ -118,7 +118,7 @@ function harness(opts) {
   const state = { author: o.author !== false, bank: o.bank || [], vetting: o.vetting || [],
     read: [], gen: [], up: [], imageAi: o.imageAi, genFail: o.genFail, newUrl: o.newUrl,
     renders: 0, refreshes: 0, peek: o.peek || null, em: !!o.em,
-    paper: o.paper || [], drafts: 0, cpbEdit: !!o.cpbEdit };
+    paper: o.paper || [], drafts: 0, cpbEdit: !!o.cpbEdit, cloud: o.cloud, cloudCalls: [] };
   const f = new Function('document', 'window', 'setTimeout', 'clearTimeout', 'saveQuestion', 'saveVettingQuestion', 'showToast', 'renderWsPreview', 'state', `
     const escapeHtml = s => String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const _canAuthor = () => state.author;
@@ -142,6 +142,15 @@ function harness(opts) {
     const uploadImageDataUrl = async d => { state.up.push(d); return state.newUrl || 'colour.png'; };
     const imgEnhancePrompt = (colour, remark) => 'PROMPT colour=' + !!colour + ' remark=' + (remark || '');
     const _cqUpdateBadge = () => {};
+    const _isAdmin = () => true;
+    const _vOwner = () => 'teacher';
+    const _rapidCloudCapabilities = { imageEditing: !!state.cloud };
+    const app = {}, getFunctions = () => ({});
+    const normalizeLoadedQuestion = q => q;
+    const httpsCallable = (_app, name, options) => async input => {
+      state.cloudCalls.push({ name, options, input });
+      return { data: { question: state.cloud.question } };
+    };
     // 🗂️ the Custom Paper pool: its own question list, its draft mirror and the
     // editor-scope predicate the pool-aware editor sync asks.
     let _cpbQuestions = state.paper;
@@ -487,7 +496,7 @@ test('the pill carries ✨ then 🎨 LAST, set apart from the free controls', ()
   const h = harness({ bank: [Q('a')] });
   const html = h.api.pvsBarHtml(h.state.bank[0], h.state.bank[0].blocks[0]);
   const acts = (html.match(/data-pvs-act="([a-z]+)"/g) || []).map(m => /"([a-z]+)"/.exec(m)[1]);
-  ok(JSON.stringify(acts) === JSON.stringify(['minus', 'plus', 'auto', 'enhance', 'colour']),
+  ok(JSON.stringify(acts) === JSON.stringify(['minus', 'plus', 'auto', 'original', 'enhance', 'colour']),
     'the pill order changed — ✨ and 🎨 each spend an AI call and must not be where a thumb lands while sizing: ' + acts);
   ok(/pvs-colour/.test(html) && /pvs-enhance/.test(html), 'the two AI buttons have no classes of their own to set them apart');
   ok(/pvcRun\('a','b1',false,''\)/.test(html) && /pvcRun\('a','b1',true,''\)/.test(html), 'the two buttons do not name which prompt they send');
@@ -979,6 +988,59 @@ test('the flush can never put a Custom Paper question into the bank', () => {
   const work = cut('async function _pvcWork(job) {', '\n// A regenerated picture is exactly', '_pvcWork');
   const cpb = work.indexOf('if (found.where === PVS_POOL_CPB)');
   ok(cpb >= 0 && cpb < work.indexOf('_pvcMarkRecheck'), 'the colourise marks a paper question for ✅ Check Questions, or writes it to the bank');
+});
+
+test('imported pictures regenerate from the immutable crop and restore it from every toolbar', async () => {
+  const q = Q('imported');
+  Object.assign(q.blocks[0], { url: 'colour.png', preColourUrl: 'old-enhancement.png', originalCropUrl: 'raw-scan.png' });
+  const h = harness({ vetting: [q], newUrl: 'clean-bw.png' });
+  h.api.pvcRun(q.id, 'b1', false); await tick(); await tick(); await tick();
+  ok(h.state.read[0] === 'raw-scan.png', 'BW was derived from a generated picture instead of the original crop');
+  ok(q.blocks[0].originalCropUrl === 'raw-scan.png', 'regeneration replaced the immutable crop');
+  const toolbar = h.api.pvsBarHtml(q, q.blocks[0]);
+  ok(toolbar.includes('data-pvs-act="original"') && toolbar.includes('pvcRevert'), 'the exported toolbar cannot restore its scan');
+  await h.api.pvcRevert(q.id, 'b1');
+  ok(q.blocks[0].url === 'raw-scan.png' && q.blocks[0].originalCropUrl === 'raw-scan.png', 'restoring deleted or replaced the original crop');
+});
+
+test('a failed second regeneration restores the current picture, not the source scan', async () => {
+  const q = Q('imported');
+  Object.assign(q.blocks[0], { url: 'colour.png', originalCropUrl: 'raw-scan.png' });
+  const h = harness({ vetting: [q], saveOk: false });
+  h.api.pvcRun(q.id, 'b1', false); await tick(); await tick(); await tick();
+  ok(q.blocks[0].url === 'colour.png', 'a refused save changed the screen to its input scan');
+});
+
+test('tables, graphs and flowcharts stay monochrome even through a direct colour handler', async () => {
+  for (const figureKind of ['table', 'graph', 'flowchart']) {
+    const q = Q(figureKind); q.blocks[0].figureKind = figureKind;
+    const h = harness({ vetting: [q] });
+    h.api.pvcRun(q.id, 'b1', true); await tick(); await tick(); await tick();
+    ok(h.state.gen[0].prompt.includes('colour=false'), figureKind + ' was colourised');
+  }
+});
+
+test('a picture being regenerated cannot lose concurrent local size or order edits', async () => {
+  const q = Q('a'), h = harness({ vetting: [q] });
+  let finish; h.state.gate = new Promise(resolve => { finish = resolve; });
+  h.api.pvcRun('a', 'b1', true); await tick();
+  h.api.pvsStep('a', 'b1', 1); h.api.pvoMove('a', 'b1', 1); h.api.pvoRemove('a', 'b1');
+  ok(q.blocks[0].id === 'b1' && q.blocks.length === 2 && q.blocks[0].scale == null, 'local edits raced the regeneration snapshot');
+  finish(); await tick(); await tick();
+});
+
+test('deployed imported-image editing uses the server revision guard and saved checked question', async () => {
+  const q = Q('imported'); q.rapidImportId = 'job-1';
+  q.blocks[0].originalCropUrl = 'scan.png';
+  const saved = structuredClone(q); saved.blocks[0].url = 'server-bw.png'; saved.autoCheck = { state: 'green' };
+  const h = harness({ vetting: [q], cloud: { question: saved } });
+  h.api.pvcRun(q.id, 'b1', false); await tick(); await tick(); await tick();
+  ok(h.state.gen.length === 0 && h.state.cloudCalls.length === 1, 'an imported picture bypassed its checked server editor');
+  const call = h.state.cloudCalls[0];
+  ok(call.name === 'rapidVettingImage' && call.input.mode === 'bw' && call.input.expectedUrl === 'x.png', 'the server receives no mode or expected revision');
+  ok(call.options.timeout === 540000, 'the browser gives up before the server enhancement can finish');
+  ok(h.state.vetting[0].blocks[0].url === 'server-bw.png' && h.state.vetting[0].autoCheck.state === 'green', 'the server-saved checked question was not adopted');
+  ok(h.saves.length === 0, 'the browser overwrites the authoritative server check with a second whole-question save');
 });
 
 runAll();

@@ -1,4 +1,4 @@
-# Durable Rapid Add PDF imports — v1.360.0
+# Durable Rapid Add PDF imports
 
 This is a separate Firebase Functions **codebase**, for `polymathlc/cer` only.
 It uses the existing `mathgen--app` Firebase project, Auth, Storage, Gemini
@@ -43,7 +43,7 @@ It does not grant project-wide IAM roles, change billing, replace live rules,
 or create service-account keys. Existing Firestore/Storage permissions and AI
 provider access still need to pass the live acceptance check below.
 
-Success requires all seven functions to be ACTIVE, the queue to be RUNNING,
+Success requires all nine functions to be ACTIVE, the queue to be RUNNING,
 and an unauthenticated status probe to return Firebase's UNAUTHENTICATED error.
 These deployment checks do not submit PDFs or establish end-to-end processing.
 Keep the setup terminal open until it finishes; then run the live check below.
@@ -161,10 +161,80 @@ wording readable, do parts/options/answers hang together. The pure logic is
   what was wrong, up to twice, and Jev is asked again; a question goes to the
   existing check-and-repair loop with Jev's reasons attached. A crop that still
   fails is kept and flagged as a Crop finding on the vetting card.
-* **A confident clean yes (>= 0.8, nothing flagged) skips the slow AI read**
-  and stamps the question `autoCheck.jev`.
+* **Jev is advisory**: a confident clean yes still gets the visual AI read,
+  and its agreement is recorded for comparison with the checked result.
 * **Jev unavailable changes nothing**: every question is AI-checked as before.
 * Only measurements and short excerpts are sent; nothing is stored beyond
   per-admin counters (`cerJevLimits`). The key is a Firebase secret.
 
 Deploying `cer-rapid-import` deploys `cerJevReview` with it. It needs no other setup.
+
+## Automatic figure preparation and checked repairs
+
+New `rapidImportBegin` jobs always enable automatic checks and figure enhancement.
+`autoCheck:false` from an older client cannot disable the new-job check. Existing
+already-queued jobs retain their saved settings. Upload acknowledgement remains
+`rapidImportFinish` returning `queued:true`; the upload must finish before closing
+the page. Processing after that acknowledgement does not need a browser.
+
+The extraction saves the original PDF page and the untouched figure crop. Image
+blocks retain `originalCropUrl` permanently, plus `preColourUrl` for CER's existing
+restore control. `cropSource.url` is the original page, while `cropSource.imageUrl`
+tracks the currently displayed image. `figureKind` is `diagram`, `table`,
+`flowchart` or `graph`. Diagrams use colour by default; tables, flowcharts and
+graphs always use monochrome, straight rules and legible typeset labels.
+
+A durable `enhance` task processes one figure, verifies the generated output
+against the original crop, writes an immutable checkpoint, and atomically
+advances the outbox. Its `figureIndex` participates in delivery fencing and task
+identity. Repeated deliveries cannot replace a later checkpoint or duplicate a
+published question. An unavailable service, changed label or failed crop keeps
+the original and records an enhancement finding rather than dropping the question.
+`RAPID_IMPORT_IMAGE_MODEL` defaults to `gemini-3.1-flash-image`, using the
+existing `GEMINI_API_KEY` secret; no new API key is required.
+
+The checker reads both the original pages and the actual displayed figures.
+Every displayed figure must have an explicit complete visual audit in the reply;
+missing, duplicate or unread-target audits fail the check rather than granting a
+clean stamp. Annotation and answer-key images participate in that same audit.
+It suggests corrections for findings, automatically applies bounded answer,
+explanation and correct-option changes, then checks once more. Source wording,
+question IDs, figures, marks and unrelated fields are not model-editable. The
+best verified result wins; a worse or unavailable recheck restores the earlier
+answer. `autoCheck.repairs` records only corrections retained in the saved result.
+Failures remain `error`, unresolved defects remain amber/red, and every question
+still reaches Vetting. AI checks reduce review work but do not establish an
+error-free question bank or approve questions into the bank.
+
+## Shared Add / CER figure controls
+
+Both websites read the same `users/{authenticated admin uid}/vetting` documents.
+`rapidImportStatus.capabilities` advertises `imageEditing`, `automaticChecks` and
+`automaticEnhancement` only after this backend is deployed. Gate the corresponding
+UI on those flags, not merely on the presence of an older import endpoint.
+
+The admin-only `rapidVettingImage` callable in `us-central1` accepts either:
+
+```js
+// Regenerate from the preserved crop, or restore that exact original.
+{questionId, blockId, mode: 'colour' /* 'bw' | 'original' */, expectedUrl}
+// Resize using CER's existing block.scale ratio (not a percentage).
+{questionId, blockId, scale: 0.7, expectedUrl, expectedScale: null}
+```
+
+Use a 540-second callable timeout for generation. Success returns
+`{question, changed:true}` after the shared question is saved. The server derives
+the owner from Auth, accepts only the owner's imported Storage images, and never
+fetches arbitrary URLs. It rejects stale image URLs/scales and compares the full
+question again in the saving transaction, so a concurrent teacher edit is never
+overwritten. `aborted` means refresh the question before retrying. Generation
+failure leaves the saved question unchanged. Tables/flowcharts/graphs stay black
+and white even when a client requests colour. Regenerated/restored images receive
+a fresh automatic check; resizing keeps the scientific content and existing
+verdict intact.
+
+Additional backend regressions cover image provenance and owner isolation,
+monochrome enforcement, inaccurate generation rejection, concurrent teacher
+edits, enhancement replay fencing, continuation figure findings, and retaining
+the best answer after automatic repair. These use real canvas pixels with mocked
+Firebase and model services; perform the live acceptance test after deployment.

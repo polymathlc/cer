@@ -14,7 +14,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-<link rel="modulepreload" href="app.js?v=1.419.0">
+<link rel="modulepreload" href="app.js?v=1.422.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -10956,6 +10956,8 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <div class="subtitle">Questions pending review before adding to the bank</div>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
+          <a class="btn btn-outline" href="https://polymathlc.github.io/add/" target="_blank" rel="noopener">Upload PDFs</a>
+          <button class="btn btn-outline" id="vetPreviewAllBtn" onclick="previewAllVetting()" title="Preview all questions matching the filters as exported A4 pages. Resize pictures, regenerate in colour or black and white, or restore the original scan in the preview.">👁 Preview all</button>
           <button class="btn btn-primary" id="aiAutoVetBtn" onclick="aiAutoVetAll()" title="Use AI to classify each pending question's topic & category, write or fix the model answers, add any missing question wording, then approve them all into the bank.">✨ AI Auto-Vet All</button>
           <button class="btn btn-outline vet-danger-btn" id="vetDeleteAllBtn" onclick="vetDeleteAllVisible()" title="Delete every question listed below. The search box narrows that list, so only the cards you can actually see are deleted.">🗑 Delete all</button>
         </div>
@@ -15906,6 +15908,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
-<script type="module" src="app.js?v=1.419.0"></script>
+<script type="module" src="app.js?v=1.422.0"></script>
 </body>
 </html>
