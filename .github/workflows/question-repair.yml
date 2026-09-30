@@ -23,6 +23,7 @@ jobs:
           node --check app.js
           node tools/question-repair-core-tests.mjs
           node tools/question-repair-tests.mjs
+          node tools/question-repair-batch-tests.mjs
           node tools/question-crop-core-tests.mjs
           node tools/checker-image-audit-tests.mjs
           node tools/crop-provenance-tests.mjs
