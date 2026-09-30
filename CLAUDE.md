@@ -8462,6 +8462,51 @@ wrong. Every one of them is silent: the app answered fluently either way.
 - `.rpg-tabs` must keep `flex-wrap: wrap` and `.rpg-tab` its `flex: 0 0 auto; white-space: nowrap`. Without them eleven leaderboard tabs get squeezed until each label breaks over three lines, the pill goes square, `border-radius: 999px` renders it as a circle, and the emoji on the first line sits outside the curve.
 - Commit messages and pushed artifacts must not contain the model identifier.
 
+## 🧭 Jev review — every automatic import is judged, and a NO is fixed by the AI (v1.418.0)
+
+`jev-review-core.mjs` (shared, pure) · `JEV REVIEW` in `app.js`
+(`jevGateOn` / `jevReviewCall` / `_jevGateFigures` / `_jevRecropBox` /
+`jevGateQuestion`, plus `_cropBoxFromScreenshotEx`, the gate in
+`_fillBlocksFromAiBoxes` and step 2c of `processRapidJob`) · the worker's
+`cerJevReview` / `reviewCrops` / Jev-first `checkQuestion` in
+`rapid-import/functions`. Jev is the typed-decision service **Ans Key** uses to
+route voice commands (`polymathlc/anskey`, `functions/jev-provider.js`): it
+answers a choice with a confidence and probabilities, never prose.
+
+- **JEV IS SHOWN FACTS, NOT PICTURES.** Measured in code: does drawing run on
+  past a crop's edge (`measureCrop`, checked against the SOURCE page), is it
+  blank or the whole page, did the AI clean-up cut sentences off it; is the
+  wording garbled or cut off; do options, part letters, answers and pictures
+  hang together (`questionFacts`). Jev answers yes/no per figure, for the
+  wording and for the structure.
+- **A NO GOES TO THE AI TO CHECK AND FIX.** A crop is re-cut by the AI
+  (`_jevRecropBox`, given the whole page, the bad crop and the reasons) up to
+  `JEV_RECROP_TRIES` (2) times, judged again each time; a question goes to
+  `autoChkRun` with Jev's findings in `extraFindings`. **A defect the code finds
+  itself outranks a Jev yes** (`figureHardIssues` / `questionHardIssues`) and
+  triggers the same fix — a clipped crop is re-cut whether or not Jev is up.
+- **A CONFIDENT CLEAN YES IS WHAT SKIPS THE AI READ** (`JEV_SKIP_CONFIDENCE`
+  0.8, no failures, no crop still flagged). A lukewarm yes (`JEV_MIN_CONFIDENCE`
+  0.6) is a no. The skipped question is stamped `autoCheck.jev` and the card
+  reads **Jev ✓**, not "AI read": Jev does not judge the science, and the tip
+  says so and points at 🚦.
+- **JEV UNAVAILABLE CHANGES NOTHING.** No key, not an admin (an employee never
+  reaches it), busy, offline: `jevReviewCall` returns null, the gate is "not
+  confident", and every question is AI-checked exactly as before. A refused Jev
+  is not asked again for 2–30 minutes. **Nothing is ever withheld**: a crop the
+  AI could not fix is kept (best attempt) and raised as a `Crop` finding.
+- **BOTH IMPORTERS.** The browser (⚡ Rapid add, PDF add, the exam-paper /
+  custom-paper readers — everything through `_fillBlocksFromAiBoxes`) and the
+  durable worker (`reviewCrops` at the page phase, Jev first in `checkQuestion`
+  at the publish phase). The two copies of the core are **byte-identical**.
+- **`cerJevReview` is administrator-only**, bounded (`clipDeep`), counted per
+  admin (`cerJevLimits`, counters only) and stores no question content. It binds
+  the existing `JEV_API_KEY` secret; deploying `cer-rapid-import` deploys it.
+- `_jevRecropBox` locates a rectangle — metadata, not science — so it is in the
+  census exemptions (`UNGROUNDED_BY_DESIGN`) and in `AUTHORING_FUNCTIONS`.
+- Run **`node tools/jev-review-tests.mjs`** and `npm test --prefix
+  rapid-import/functions` after touching any of it.
+
 ## Durable Rapid Add PDFs (v1.360.0, CER only)
 
 `rapid-import/` is an isolated Firebase Functions codebase. Read its README

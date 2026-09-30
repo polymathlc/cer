@@ -10,7 +10,9 @@ import { getFunctions } from 'firebase-admin/functions';
 import { GoogleGenAI } from '@google/genai';
 import { createCanvas, DOMMatrix, ImageData, Path2D } from '@napi-rs/canvas';
 import { MAX_PDF_BYTES, CHUNK_BYTES, MAX_PAGES, parseReply, blockType, normaliseQuestion, assemblePage, signature, html } from './core.js';
-import { cropDiagram } from './crop.js';
+import { cropDiagramEx } from './crop.js';
+import { jevReview, jevAllow, JevUnavailable } from './jev.js';
+import { figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons } from './jev-review-core.js';
 
 initializeApp();
 Object.assign(globalThis, {DOMMatrix, ImageData, Path2D});
@@ -18,6 +20,8 @@ const db = getFirestore();
 const bucket = () => getStorage().bucket('mathgen--app.firebasestorage.app');
 const key = defineSecret('GEMINI_API_KEY');
 const openaiKey = defineSecret('OPENAI_API_KEY');
+// The same project secret Ans Key's Jev functions use; bound here only for the review calls.
+const jevKey = defineSecret('JEV_API_KEY');
 const openaiModel = defineString('RAPID_IMPORT_OPENAI_MODEL', {default:'gpt-6-astra'});
 const model = defineString('RAPID_IMPORT_MODEL', {default:'gemini-2.5-flash'});
 const JOBS = 'cerRapidImports';
@@ -48,6 +52,19 @@ export const rapidImportStatus = onCall(callOpts, async request => {
   const snaps = await db.collection(JOBS).where('ownerUid','==',a.uid).get();
   return {available:true,maxBytes:MAX_PDF_BYTES,maxPages:MAX_PAGES,chunkBytes:CHUNK_BYTES,
     jobs:snaps.docs.map(s=>publicJob(s.data())).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)).slice(0,100)};
+});
+// Jev, for the browser importer. The browser sends measured FACTS about a crop
+// or a question and gets typed verdicts back; the decision is made in the page
+// with the same shared core. Administrator only, counted, and never persisted.
+export const cerJevReview = onCall({...callOpts, timeoutSeconds:30, memory:'256MiB', secrets:[jevKey]}, async request => {
+  const a = admin(request);
+  if (!await jevAllow(db, a.uid)) throw new HttpsError('resource-exhausted','Jev has reached its allowance. The AI will check instead.');
+  try { return {available:true, verdicts: await jevReview(request.data, {apiKey:()=>jevKey.value()})}; }
+  catch(e) {
+    if (!(e instanceof JevUnavailable)) throw e;
+    if (e.code==='invalid') throw new HttpsError('invalid-argument',e.message);
+    throw new HttpsError(e.code==='not_configured'?'failed-precondition':'unavailable',e.message);
+  }
 });
 export const rapidImportBegin = onCall(callOpts, async request => {
   const a=admin(request), d=request.data||{};
@@ -162,8 +179,86 @@ async function ask(prompt,images,job) {
   throw lastError || new Error('No online AI engine available.');
 }
 
+
+// ---- Jev in the worker --------------------------------------------------------
+// Jev answers yes/no on facts measured here. Unavailable (no key, busy, offline)
+// is never a failure of the import: the question simply takes the ordinary path.
+const jevOn = job => job.jev !== false;
+async function jevAsk(input) {
+  try { return await jevReview(input,{apiKey:()=>jevKey.value()}); }
+  catch(e) { if(e instanceof JevUnavailable) return null; throw e; }
+}
+const JEV_RECROP_TRIES = 2;
+function parseBox(text) {
+  try {
+    const p=JSON.parse(text), b=p.box_2d??p.box;
+    return Array.isArray(b)&&b.length===4&&b.every(v=>Number.isFinite(Number(v)))?b.map(Number):null;
+  } catch { return null; }
+}
+// Ask the AI where the figure really is, told exactly what was wrong with the last attempt.
+async function recropBox(canvas, made, reasons, job) {
+  const images=[canvas.toBuffer('image/jpeg').toString('base64')];
+  if(made) images.push(made.canvas.toBuffer('image/jpeg').toString('base64'));
+  const prompt=`Image 1 is a whole page of a primary-school science paper. ${made?'Image 2 is the crop that was cut for one figure and was judged wrong.':'No crop could be cut for one figure.'}\nProblems found: ${reasons.join('; ')||'the crop is not the complete, clean figure'}.\nLocate the ONE figure (diagram, graph, table or experimental set-up) this crop was meant to be. Reply ONLY with JSON {"box_2d":[ymin,xmin,ymax,xmax]} in integers 0-1000 measured on IMAGE 1. Include every label, arrow, axis title, unit, legend, caption and table border belonging to the figure, with clear whitespace beyond the last of them. Exclude sentences of question text, question numbers and ordinary written options. Never use the whole page.`;
+  const r=await ask(prompt,images,job);
+  return parseBox(r.text);
+}
+// Cut, judge, and re-cut with the AI until Jev and the pixel checks agree.
+// Returns one entry per image block: { made, state, tries, reasons }.
+async function reviewCrops(imageBlocks, canvas, job) {
+  const made=imageBlocks.map(b=>cropDiagramEx(canvas,b.box_2d??b.box,createCanvas));
+  if(!jevOn(job)||!imageBlocks.length) return made.map(m=>({made:m,state:'ok',tries:0,reasons:[]}));
+  const factsOf=(m,i)=>figureFacts({index:i,source:m?'ai-box':'none',refused:!m,width:m?.canvas.width,height:m?.canvas.height,pageShare:m?.pageShare,measure:m?.measure});
+  const facts=made.map(factsOf);
+  const verdicts=await jevAsk({scope:'figures',figures:facts});
+  // Jev unavailable is not "no Jev": the pixel checks still stand on their own,
+  // and a crop they call clipped or blank is re-cut all the same.
+  const decision=decideReview({verdicts,figures:facts,question:null});
+  const out=[];
+  for(let i=0;i<made.length;i++) {
+    const own=decision.failures.filter(f=>f.key==='figure_'+i);
+    if(!own.length) {out.push({made:made[i],state:'ok',tries:0,reasons:[]});continue;}
+    let best={made:made[i],score:own.length,reasons:own.map(f=>f.reason)}, reasons=best.reasons, tries=0, fixed=false;
+    while(tries<JEV_RECROP_TRIES) {
+      tries++;
+      let box=null;
+      try { box=await recropBox(canvas,best.made,reasons,job); } catch { break; }
+      if(!box) break;
+      const m2=cropDiagramEx(canvas,box,createCanvas,{marginScale:tries===1?1.6:2.2});
+      const f2=factsOf(m2,i), hard=figureHardIssues(f2);
+      let v2=null;
+      if(!hard.length) v2=await jevAsk({scope:'figures',figures:[f2]});
+      const d2=decideReview({verdicts:v2?{figure_0:v2.figure_0}:null,figures:[f2],question:null});
+      const score=d2.failures.length;
+      reasons=d2.failures.map(f=>f.reason);
+      if(m2&&score<best.score) {best={made:m2,score,reasons};imageBlocks[i].box_2d=box;}
+      if(!score&&m2) {fixed=true;break;}
+    }
+    out.push({made:best.made,state:fixed?'fixed':'flagged',tries,reasons:fixed?[]:best.reasons});
+  }
+  return out;
+}
+
 async function checkQuestion(q,job) {
   if(!job.autoCheck) return;
+  // 1) JEV FIRST. A confident yes on the wording and structure, with no crop
+  //    still flagged, is what lets the slower AI read be skipped. A no goes to
+  //    the AI check-and-fix below with Jev's reasons attached. Jev unavailable
+  //    changes nothing: every question is AI-checked exactly as before.
+  let known=[];
+  if(jevOn(job)) {
+    const qf=questionFacts(q), verdicts=await jevAsk({scope:'question',question:qf}).catch(()=>null);
+    const flaggedFigs=(q.jevFigures||[]).filter(f=>f.state==='flagged');
+    if(verdicts) {
+      const d=decideReview({verdicts,figures:[],question:qf});
+      if(d.confident&&!flaggedFigs.length) {
+        q.autoCheck={state:'green',tries:0,found:0,findings:[],jev:true,sig:signature(q),at:new Date().toISOString()};
+        return;
+      }
+      known=failuresToFindings(d.failures);
+    }
+  }
+  const flaggedFigures=(q.jevFigures||[]).filter(f=>f.state==='flagged').flatMap(f=>failuresToFindings((f.reasons.length?f.reasons:['the crop could not be made complete and clean']).map(r=>({key:'figure_'+f.index,index:f.index,code:'jev_no',reason:r,by:'jev'}))));
   const images=[];
   for(const source of q.sourcePages){
     // URLs here were minted by this worker, never supplied by the model.
@@ -175,7 +270,7 @@ async function checkQuestion(q,job) {
   try {
     for(tries=1;tries<=4;tries++) {
       if(tries>1 && Date.now()-started>240000) break;
-      const r=await ask(`Check this science question and answers against its source pages. ${job.grounding}\nCheck scientific accuracy, missing parts, correct options, complete model answers, explanations per part and diagram references. Return JSON {"findings":[{"severity":"high|medium|low","title":"problem","detail":"reason"}],"repairs":[{"id":"block id","content":"corrected plain text","claim":"...","evidence":"...","reasoning":"...","correctIndex":0}]}. Only repair answer, plainanswer, explanation or mcq blocks. Do not alter the source wording or invent missing information. Empty findings means correct. Question:\n${JSON.stringify(q)}`,images,job);
+      const r=await ask(`Check this science question and answers against its source pages. ${job.grounding}\nCheck scientific accuracy, missing parts, correct options, complete model answers, explanations per part and diagram references. Return JSON {"findings":[{"severity":"high|medium|low","title":"problem","detail":"reason"}],"repairs":[{"id":"block id","content":"corrected plain text","claim":"...","evidence":"...","reasoning":"...","correctIndex":0}]}. Only repair answer, plainanswer, explanation or mcq blocks. Do not alter the source wording or invent missing information. Empty findings means correct.${known.length?` Problems already flagged by Jev (confirm, and repair where the repair types allow): ${known.map(k=>k.title).join('; ')}.`:''} Question:\n${JSON.stringify(q)}`,images,job);
       if(r.candidates?.[0]?.finishReason!=='STOP') throw new Error('Checker response was incomplete.');
       const reply=JSON.parse(r.text);
       if(!Array.isArray(reply.findings)) throw new Error('Invalid checker response.');
@@ -195,11 +290,19 @@ async function checkQuestion(q,job) {
     }
   } catch(e){error=String(e.message).slice(0,160);}
   if(best){q.blocks=best.blocks;findings=best.findings;}
+  // Whatever Jev flagged and the repair did not cure is still true of the
+  // question as it now stands, so it is re-measured (no second Jev call) and kept.
+  if(jevOn(job)) {
+    const now=questionHardIssues(questionFacts(q)), still=[];
+    now.wording.forEach(is=>still.push({key:'wording',code:is.code,reason:is.detail,by:'code'}));
+    now.structure.forEach(is=>still.push({key:'structure',code:is.code,reason:is.detail,by:'code'}));
+    findings=findings.concat(failuresToFindings(still),flaggedFigures).slice(0,20);
+  }
   if(q.importWarning) findings.push({type:'Other',severity:'high',title:'Check page continuation',detail:q.importWarning,fix:'',ai:false});
   q.autoCheck={state:error?'error':findings.some(f=>f.severity==='high')?'red':findings.length?'amber':'green',tries,found:findings.length,findings,sig:signature(q),at:new Date().toISOString()};
   if(error) q.autoCheck.error=error;
 }
-export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[key,openaiKey],timeoutSeconds:540,memory:'2GiB',cpu:1,
+export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[key,openaiKey,jevKey],timeoutSeconds:540,memory:'2GiB',cpu:1,
   retryConfig:{maxAttempts:5,minBackoffSeconds:60,maxBackoffSeconds:300},rateLimits:{maxConcurrentDispatches:2},maxInstances:2},async request=>{
   const {id,page,generation,phase,publishIndex}=request.data||{};
   if(!validId(id)||!Number.isInteger(page)) throw new Error('Invalid task.');
@@ -237,8 +340,9 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
     const token=randomUUID(), sourceUrl=await storeImage(job,token,`page-${page}`,canvas), entries=[];
     for(let i=0;i<payloads.length;i++) {
       const payload=payloads[i], urls=[];
-      for(const block of payload.blocks.filter(b=>blockType(b)==='image')) {
-        const crop=cropDiagram(canvas,block.box_2d??block.box,createCanvas);
+      const reviewed=await reviewCrops(payload.blocks.filter(b=>blockType(b)==='image'),canvas,job);
+      for(const r of reviewed) {
+        const crop=r.made&&r.made.canvas;
         // Reserve one result for every image block, including refused crops,
         // so later figures never slide into an earlier figure's position.
         if(!crop) {urls.push(sourceUrl);continue;}
@@ -246,6 +350,9 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
       }
       const q=normaliseQuestion(payload,`q_rapid_${id}_${page}_${i}`,job,page,sourceUrl,urls);
       if(q.blocks.some(b=>b.type==='image'&&b.url===sourceUrl)) q.diagramWhole=true;
+      // What Jev and the AI recrop did, kept so the publish step can raise anything still wrong.
+      const flagged=reviewed.map((r,n)=>({index:n,state:r.state,tries:r.tries,reasons:(r.reasons||[]).slice(0,4)})).filter(r=>r.state!=='ok'||r.tries);
+      if(flagged.length) q.jevFigures=flagged;
       entries.push({q,continuation:payload.continuation===true});
     }
     const assembled=assemblePage(pending,entries,page===doc.numPages);

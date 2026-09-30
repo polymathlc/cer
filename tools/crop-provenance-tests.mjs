@@ -26,6 +26,8 @@ function world({ ready = false, crops = [], imageBlocks = [] } = {}) {
     function saveBlockContent(id, field, value) { blocks.find(b => b.id === id)[field] = value; }
     function imageAiReady() { return H.ready; }
     async function _cropBoxFromScreenshot() { return H.crops.shift() || null; }
+    async function _cropBoxFromScreenshotEx() { const c = H.crops.shift(); return c ? { dataUrl: c } : null; }
+    function jevGateOn() { return false; } function _canAuthor() { return true; }
     async function _aiRefineCrop(value) { return value; }
     async function generateCleanEnhancedImage() { return H.enhanced; }
     async function uploadImageDataUrl(value) { const url = 'https://images.test/' + (++seq); H.images.set(url, value); return url; }

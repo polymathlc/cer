@@ -3,7 +3,16 @@
 // No network calls, model redraws or Firebase dependencies: labels and fine
 // lines come from the original page. A refused crop uses the caller's source
 // page fallback and must remain visibly marked as needing manual cropping.
+import { measureCrop } from './jev-review-core.js';
+
+// The crop and what was learnt while making it. Jev is asked about the
+// measurements, so they are taken from the SAME rectangle that was cut.
+// `opts.marginScale` widens the breathing margin for a second attempt.
 export function cropDiagram(canvas, box, createCanvas) {
+  const made = cropDiagramEx(canvas, box, createCanvas);
+  return made ? made.canvas : null;
+}
+export function cropDiagramEx(canvas, box, createCanvas, opts = {}) {
   if (!Array.isArray(box) || box.length !== 4) return null;
   if (!box.every(v => typeof v === 'number' || (typeof v === 'string' && v.trim() !== ''))) return null;
   const values = box.map(Number);
@@ -15,14 +24,16 @@ export function cropDiagram(canvas, box, createCanvas) {
   if (!W || !H) return null;
   // Clamp the two edges independently so a box beside the page edge does not
   // accidentally gain the clipped margin on its opposite edge.
-  let r = { x: Math.max(0, xmin / 1000 * W - W * 0.02),
-    y: Math.max(0, ymin / 1000 * H - H * 0.018) };
-  r.w = Math.min(W, xmax / 1000 * W + W * 0.02) - r.x;
-  r.h = Math.min(H, ymax / 1000 * H + H * 0.018) - r.y;
+  const ms = Number.isFinite(opts.marginScale) && opts.marginScale > 0 ? opts.marginScale : 1;
+  let r = { x: Math.max(0, xmin / 1000 * W - W * 0.02 * ms),
+    y: Math.max(0, ymin / 1000 * H - H * 0.018 * ms) };
+  r.w = Math.min(W, xmax / 1000 * W + W * 0.02 * ms) - r.x;
+  r.h = Math.min(H, ymax / 1000 * H + H * 0.018 * ms) - r.y;
   if (r.w < 24 || r.h < 24) return null;
+  let thr = 190;
   try {
     const ctx = canvas.getContext('2d');
-    const thr = _inkThreshold(ctx, W, H, r);
+    thr = _inkThreshold(ctx, W, H, r);
     r = _expandRectToWhitespace(ctx, W, H, r, thr);
     r = _trimBlankEdges(ctx, W, H, r, thr, 'x') || r;
     r = _trimEdgeTextLines(ctx, W, H, r, thr);
@@ -42,7 +53,9 @@ export function cropDiagram(canvas, box, createCanvas) {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, out.width, out.height);
   ctx.drawImage(canvas, r.x, r.y, r.w, r.h, pad, pad, w, h);
-  return out;
+  let measure = null;
+  try { measure = measureCrop(canvas.getContext('2d'), W, H, r, thr); } catch { measure = null; }
+  return { canvas: out, rect: { x: r.x, y: r.y, w: r.w, h: r.h }, measure, pageShare: (r.w * r.h) / (W * H) };
 }
 const INK_RATIO = 0.74;
 const INK_FLOOR = 48;    // never call almost-black-only "ink"

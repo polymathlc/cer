@@ -59,7 +59,7 @@ npm ci --prefix rapid-import/functions
 npx firebase-tools deploy --project mathgen--app --config rapid-import/firebase.json --only functions:cer-rapid-import
 ```
 
-Use the existing `GEMINI_API_KEY` and `OPENAI_API_KEY` Secret Manager secrets. If either secret has not
+Use the existing `GEMINI_API_KEY`, `OPENAI_API_KEY` and `JEV_API_KEY` Secret Manager secrets (`JEV_API_KEY` is the one Ans Key's Jev functions already use). If either secret has not
 been set, provision it with `firebase functions:secrets:set GEMINI_API_KEY
 --project mathgen--app`; never put a provider key in frontend code. The default
 OpenAI worker model is `gpt-6-astra` (`RAPID_IMPORT_OPENAI_MODEL`), with
@@ -145,3 +145,26 @@ Live acceptance after deployment: sign in as admin, select two small PDFs
 close the entire browser, and confirm server progress/completion in logs.
 Reopen the portal and verify the questions, part order and source-page links.
 Then retry a deliberately failed import and confirm no duplicate questions.
+
+
+## Jev review (v1.418.0)
+
+`cerJevReview` (callable, administrators only) and the worker's own gate ask
+Jev — the typed-decision service Ans Key uses for voice commands — yes/no
+questions about measured facts: is each figure crop complete and clean, is the
+wording readable, do parts/options/answers hang together. The pure logic is
+`jev-review-core.js`, **byte-identical** to `../jev-review-core.mjs`
+(`tools/jev-review-tests.mjs` fails if they differ).
+
+* **A no — or a defect the code finds itself (clipped, blank, whole-page,
+  refused crop) — sends the item to the AI.** A crop is re-cut by the AI, told
+  what was wrong, up to twice, and Jev is asked again; a question goes to the
+  existing check-and-repair loop with Jev's reasons attached. A crop that still
+  fails is kept and flagged as a Crop finding on the vetting card.
+* **A confident clean yes (>= 0.8, nothing flagged) skips the slow AI read**
+  and stamps the question `autoCheck.jev`.
+* **Jev unavailable changes nothing**: every question is AI-checked as before.
+* Only measurements and short excerpts are sent; nothing is stored beyond
+  per-admin counters (`cerJevLimits`). The key is a Firebase secret.
+
+Deploying `cer-rapid-import` deploys `cerJevReview` with it. It needs no other setup.
