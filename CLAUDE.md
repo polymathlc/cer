@@ -8616,3 +8616,20 @@ Run `node tools/interface-studio-tests.mjs` when changing this integration.
 ## Ai-nstein admin voice and Rapid Add duplicate review (v1.399.0)
 
 The portal imports three bounded modules from app.js: ainstein-live.js for live voice lifecycle/UI, ainstein-admin-agent.js for the named admin action registry and bounded specialist search, and rapid-duplicates.js for conservative bulk-delete matching. Keep these files deployed beside app.js. The app adapter owns all existing navigation, preview and Firestore operations. See AINSTEIN-ADMIN.md and live-assistant/README.md for user behavior, admin-only access, budgets, separate backend deployment and tests. No assistant executes model-generated code. Never weaken the identity checks, practice-as exclusion, duplicate transaction revalidation, or published-bank keeper rule.
+
+
+## Model policy (v1.423.0)
+
+GPT `gpt-6.1-sol` is the default for text, vision and thinking. Gemini and Kimi
+are the automatic backups; dated teacher provider choices remain explicit.
+Migrate former automatic model defaults once with `sol61`; record deliberate
+picker changes separately. Shared callables live in the Maths Functions repo.
+Reasoning requests omit unsupported sampling parameters and use supported
+effort values. Widget ceilings use `exactOutputBudget`. Kimi K3 uses
+`max_completion_tokens` and low/high/max `reasoning_effort`, without K2.x
+`thinking` or sampling overrides. Speech and generated images retain their
+modality-specific models. Standalone teaching pages use `portal-model-router.mjs`.
+
+Verify with model-defaults, ai-routes, portal-model-router, bar-model-model-default,
+answer-key-check and question-apps tests, plus the rapid-import Functions suite.
+The isolated worker deployment runs from `.github/workflows/deploy-rapid-import.yml`.

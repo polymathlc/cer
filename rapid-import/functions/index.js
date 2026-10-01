@@ -14,8 +14,9 @@ import { cropDiagramEx } from './crop.js';
 import { jevReview, jevAllow, JevUnavailable } from './jev.js';
 import { figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons } from './jev-review-core.js';
 import { FIGURE_KINDS, CLASSIFY_FIGURE_PROMPT, figureMode, imageInstruction, originalImageUrl, adoptOriginal, figureFixTargets, storageImagePath, enhancementFindings, nextImageIndex, requireImageAudits } from './image-core.js';
+import { rapidAiOrder, createRapidAiRouter, createOptionalKimiKeyReader } from './ai-routing.js';
 
-initializeApp();
+const firebaseApp = initializeApp();
 Object.assign(globalThis, {DOMMatrix, ImageData, Path2D});
 const db = getFirestore();
 const bucket = () => getStorage().bucket('mathgen--app.firebasestorage.app');
@@ -23,7 +24,8 @@ const key = defineSecret('GEMINI_API_KEY');
 const openaiKey = defineSecret('OPENAI_API_KEY');
 // The same project secret Ans Key's Jev functions use; bound here only for the review calls.
 const jevKey = defineSecret('JEV_API_KEY');
-const openaiModel = defineString('RAPID_IMPORT_OPENAI_MODEL', {default:'gpt-6-astra'});
+const openaiModel = defineString('RAPID_IMPORT_OPENAI_MODEL', {default:'gpt-6.1-sol'});
+const kimiModel = defineString('RAPID_IMPORT_KIMI_MODEL', {default:'kimi-k3'});
 const model = defineString('RAPID_IMPORT_MODEL', {default:'gemini-2.5-flash'});
 const imageModel = defineString('RAPID_IMPORT_IMAGE_MODEL', {default:'gemini-3.1-flash-image'});
 const JOBS = 'cerRapidImports';
@@ -83,7 +85,7 @@ export const rapidImportBegin = onCall(callOpts, async request => {
       return;
     }
     tx.create(ref,{id:d.id,ownerUid:a.uid,size:d.size,name:String(d.name||'PDF').slice(0,180),status:'uploading',
-      prompt:d.prompt,engineOrder:Array.isArray(d.engineOrder)?d.engineOrder.filter(e=>['openai','gemini'].includes(e)):['openai','gemini'],grounding:String(d.grounding||'').slice(0,80000),topics:Array.isArray(d.topics)?d.topics.slice(0,100).map(String):[],
+      prompt:d.prompt,engineOrder:rapidAiOrder(d.engineOrder),grounding:String(d.grounding||'').slice(0,80000),topics:Array.isArray(d.topics)?d.topics.slice(0,100).map(String):[],
       level:String(d.level||''),release,autoCheck:true,enhanceImages:true,createdBy:String(a.token.name||a.token.email||'Admin'),
       createdAt:now,updatedAt:now,nextPage:1,added:0,generation:0,phase:'page',publishIndex:0,figureIndex:0});
   });
@@ -156,31 +158,16 @@ async function storeImage(job,token,name,canvas) {
   await bucket().file(path).save(canvas.toBuffer('image/jpeg'),{resumable:false,metadata:{contentType:'image/jpeg',metadata:{firebaseStorageDownloadTokens:downloadToken}}});
   return `https://firebasestorage.googleapis.com/v0/b/${bucket().name}/o/${encodeURIComponent(path)}?alt=media&token=${downloadToken}`;
 }
-async function ask(prompt,images,job) {
-  const order=[...new Set([...(job.engineOrder||['openai','gemini']),'gemini'])];
-  let lastError;
-  for(const engine of order) {
-    try {
-      if(engine==='openai') {
-        const response=await fetch('https://api.openai.com/v1/chat/completions',{
-          method:'POST',headers:{Authorization:'Bearer '+openaiKey.value(),'Content-Type':'application/json'},
-          signal:AbortSignal.timeout(90000),body:JSON.stringify({model:openaiModel.value(),max_completion_tokens:24000,
-            reasoning_effort:'medium',response_format:{type:'json_object'},messages:[{role:'user',content:[
-              {type:'text',text:prompt},...images.map(data=>({type:'image_url',image_url:{url:'data:image/jpeg;base64,'+data}}))]}]})});
-        if(!response.ok) throw new Error('OpenAI request failed ('+response.status+').');
-        const body=await response.json(),choice=body.choices?.[0];
-        if(choice?.finish_reason!=='stop'||!choice.message?.content) throw new Error('OpenAI response was incomplete.');
-        return {text:choice.message.content,candidates:[{finishReason:'STOP'}]};
-      }
-      const result=await new GoogleGenAI({apiKey:key.value()}).models.generateContent({model:model.value(),
-        contents:[{role:'user',parts:[{text:prompt},...images.map(data=>({inlineData:{mimeType:'image/jpeg',data}}))]}],
-        config:{responseMimeType:'application/json',maxOutputTokens:16000,httpOptions:{timeout:90000}}});
-      if(result.candidates?.[0]?.finishReason!=='STOP') throw new Error('Gemini response was incomplete.');
-      return result;
-    } catch(e){lastError=e;}
-  }
-  throw lastError || new Error('No online AI engine available.');
-}
+const getKimiKey = createOptionalKimiKeyReader({
+  projectId:process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || firebaseApp.options?.projectId || 'mathgen--app',
+  getAccessToken:() => firebaseApp.options?.credential?.getAccessToken()
+});
+const ask = createRapidAiRouter({openaiKey:() => openaiKey.value(), openaiModel:() => openaiModel.value(),
+  getKimiKey, kimiModel:() => kimiModel.value(), generateGemini:(prompt, images, timeout) =>
+    new GoogleGenAI({apiKey:key.value()}).models.generateContent({model:model.value(),
+      contents:[{role:'user',parts:[{text:prompt},...images.map(data=>({inlineData:{mimeType:'image/jpeg',data}}))]}],
+      config:{responseMimeType:'application/json',maxOutputTokens:16000,httpOptions:{timeout}}})
+});
 
 async function storedImage(url, ownerUid) {
   const path=storageImagePath(url,bucket().name,ownerUid);
@@ -193,10 +180,12 @@ async function enhanceImage(block, job, requested='colour', pageUrls=[]) {
   const original=originalImageUrl(block);
   if(!original || original===block.cropSource?.url) throw new Error('A complete figure crop is required. The original page has been kept for manual cropping.');
   const bytes=await storedImage(original,job.ownerUid), source=await loadImage(bytes);
-  const sourceBase64=bytes.toString('base64'), auxiliary={...job,engineOrder:['gemini']};
+  const sourceBase64=bytes.toString('base64'), auxiliary=job;
   let kind=block.figureKind;
   if(!FIGURE_KINDS.includes(kind)) {
-    const r=await ask(CLASSIFY_FIGURE_PROMPT,[sourceBase64],auxiliary);
+    const r=await ask(CLASSIFY_FIGURE_PROMPT,[sourceBase64],auxiliary,result=>{
+      if(!FIGURE_KINDS.includes(JSON.parse(result.text).kind)) throw new Error('The figure type could not be determined safely.');
+    });
     kind=JSON.parse(r.text).kind;
     if(!FIGURE_KINDS.includes(kind)) throw new Error('The figure type could not be determined safely.');
   }
@@ -220,7 +209,10 @@ async function enhanceImage(block, job, requested='colour', pageUrls=[]) {
     for(let i=0;i<pixels.data.length;i+=4) { const v=Math.round(.2126*pixels.data[i]+.7152*pixels.data[i+1]+.0722*pixels.data[i+2]); pixels.data[i]=pixels.data[i+1]=pixels.data[i+2]=v; }
     ctx.putImageData(pixels,0,0);
   }
-  const checked=await ask('Compare image 1, the ORIGINAL scan, with image 2, the proposed cleaned figure. Verify every label, spelling, numeral, symbol, unit, object, arrow direction, connection, table cell value, graph point, and relative position. Check that no content is invented, lost or clipped. Colour and font improvements are permitted. Return JSON {"faithful":true|false,"differences":["specific issue"]}. Only faithful:true with no differences permits replacement.',[sourceBase64,canvas.toBuffer('image/jpeg').toString('base64')],auxiliary);
+  const checked=await ask('Compare image 1, the ORIGINAL scan, with image 2, the proposed cleaned figure. Verify every label, spelling, numeral, symbol, unit, object, arrow direction, connection, table cell value, graph point, and relative position. Check that no content is invented, lost or clipped. Colour and font improvements are permitted. Return JSON {"faithful":true|false,"differences":["specific issue"]}. Only faithful:true with no differences permits replacement.',[sourceBase64,canvas.toBuffer('image/jpeg').toString('base64')],auxiliary,result=>{
+    const verdict=JSON.parse(result.text);
+    if(typeof verdict.faithful!=='boolean'||!Array.isArray(verdict.differences)) throw new Error('Figure verification was incomplete.');
+  });
   const verdict=JSON.parse(checked.text);
   if(verdict.faithful!==true || !Array.isArray(verdict.differences) || verdict.differences.length) throw new Error('Enhancement was not verified against the original: '+(verdict.differences||['verification unavailable']).slice(0,3).map(String).join('; ').slice(0,250));
   const url=await storeImage(job,randomUUID(),'enhanced-'+mode,canvas);
@@ -293,7 +285,9 @@ async function recropBox(canvas, made, reasons, job) {
   const images=[canvas.toBuffer('image/jpeg').toString('base64')];
   if(made) images.push(made.canvas.toBuffer('image/jpeg').toString('base64'));
   const prompt=`Image 1 is a whole page of a primary-school science paper. ${made?'Image 2 is the crop that was cut for one figure and was judged wrong.':'No crop could be cut for one figure.'}\nProblems found: ${reasons.join('; ')||'the crop is not the complete, clean figure'}.\nLocate the ONE figure (diagram, graph, table or experimental set-up) this crop was meant to be. Reply ONLY with JSON {"box_2d":[ymin,xmin,ymax,xmax]} in integers 0-1000 measured on IMAGE 1. Include every label, arrow, axis title, unit, legend, caption and table border belonging to the figure, with clear whitespace beyond the last of them. Exclude sentences of question text, question numbers and ordinary written options. Never use the whole page.`;
-  const r=await ask(prompt,images,job);
+  const r=await ask(prompt,images,job,result=>{
+    if(!parseBox(result.text)) throw new Error('The crop location response was incomplete.');
+  });
   return parseBox(r.text);
 }
 // Cut, judge, and re-cut with the AI until Jev and the pixel checks agree.
@@ -425,7 +419,9 @@ async function checkQuestion(q,job) {
     for(tries=1;tries<=limit;tries++) {
       if(tries>1 && Date.now()-started>240000) break;
       if(tries>1 && figuresFixed) await gather();
-      const r=await ask(`Check this science question and answers against its source pages. ${job.grounding||''}\n${imageLabels.join('\n')}\nCheck scientific accuracy, missing parts, correct options, complete model answers, explanations per part and diagram references. Compare every displayed figure with its original: complete labels, correct values, arrows, cells and cropping. Return JSON {"findings":[{"severity":"high|medium|low","title":"problem","detail":"reason","fix":"specific suggested correction"}],"imageAudits":[{"blockId":"target id","complete":true,"faithful":true,"issues":[]}],"repairs":[{"id":"block id","content":"corrected plain text","claim":"...","evidence":"...","reasoning":"...","correctIndex":0,"reason":"why this correction is justified"}]}. You MUST return one explicit imageAudits entry for EACH target in ${JSON.stringify(auditTargets)}. Set complete:false if any target could not be inspected, faithful:false and specific issues for incorrect or clipped content; never claim an unread figure is correct. Target $answerKey is the answer-key image and suffix :answerImg is an annotated answer. Only repair answer, plainanswer, explanation or mcq blocks. Do not alter the source wording or invent missing information. Empty findings means correct only when all visual audits also pass.${known.length?` Problems already flagged by Jev (confirm, and repair where the repair types allow): ${known.map(k=>k.title).join('; ')}.`:''} Question:\n${JSON.stringify(q)}`,images,job);
+      const r=await ask(`Check this science question and answers against its source pages. ${job.grounding||''}\n${imageLabels.join('\n')}\nCheck scientific accuracy, missing parts, correct options, complete model answers, explanations per part and diagram references. Compare every displayed figure with its original: complete labels, correct values, arrows, cells and cropping. Return JSON {"findings":[{"severity":"high|medium|low","title":"problem","detail":"reason","fix":"specific suggested correction"}],"imageAudits":[{"blockId":"target id","complete":true,"faithful":true,"issues":[]}],"repairs":[{"id":"block id","content":"corrected plain text","claim":"...","evidence":"...","reasoning":"...","correctIndex":0,"reason":"why this correction is justified"}]}. You MUST return one explicit imageAudits entry for EACH target in ${JSON.stringify(auditTargets)}. Set complete:false if any target could not be inspected, faithful:false and specific issues for incorrect or clipped content; never claim an unread figure is correct. Target $answerKey is the answer-key image and suffix :answerImg is an annotated answer. Only repair answer, plainanswer, explanation or mcq blocks. Do not alter the source wording or invent missing information. Empty findings means correct only when all visual audits also pass.${known.length?` Problems already flagged by Jev (confirm, and repair where the repair types allow): ${known.map(k=>k.title).join('; ')}.`:''} Question:\n${JSON.stringify(q)}`,images,job,result=>{
+        if(!Array.isArray(JSON.parse(result.text).findings)) throw new Error('Invalid checker response.');
+      });
       if(r.candidates?.[0]?.finishReason!=='STOP') throw new Error('Checker response was incomplete.');
       const reply=JSON.parse(r.text);
       if(!Array.isArray(reply.findings)) throw new Error('Invalid checker response.');
@@ -520,7 +516,7 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
     const reference=page>1?(await render(doc,page-1)).toBuffer('image/jpeg').toString('base64'):null;
     const boundary=`\nPDF BOUNDARY RULES (override single-image assumptions): image 1 is the CURRENT page ${page}. ${reference?'Image 2 is the PREVIOUS page for context only; NEVER extract it again.':''} Extract ALL and ONLY questions/parts printed on image 1. Add sourceQuestionNumber to each entry (original main number, no part suffix). The first entry may have continuation:true if it belongs to the last question on the previous page, including repeated numbers with (continued), a new diagram for an existing question, a stem split mid-sentence, or later lettered parts. A repeated number or a continuation diagram does NOT start a new question. All other entries have continuation:false. Never renumber lettered parts. Use previous-page context to answer continuation parts. A continuation-only page is NOT blank. All image rectangles refer to image 1. Last held question: ${pending?JSON.stringify({number:pending.sourceQuestionNumber,blocks:pending.blocks}).slice(0,35000):'none; do not guess a preceding question'}.`;
     const figures='\nFIGURE RULES: Keep text and image blocks in source reading order, at the exact point each figure belongs among the stem and lettered parts. Use one image block per figure or complete table, and retain every figure needed to answer the question. Give every image block figureKind:"diagram", "table", "flowchart" or "graph". Tables, graphs and every WORD diagram (boxes, circles or brackets holding only words or numbers joined by lines or arrows: flow charts, classification trees, concept maps, cycles) must be classified accurately (table, graph or flowchart) so they are redrawn in black and white; only a figure with pictured objects, apparatus or organisms is a diagram and receives colour. Each box_2d is [ymin,xmin,ymax,xmax], 0-1000 on CURRENT image 1 only, never on the previous context page or on an already cropped image. Include complete labels, units, arrows, legends, captions, table headers and borders belonging to the figure; check the last letter on every side and leave clear whitespace beyond it. Exclude surrounding question prose, question numbers, ordinary written options and answer lines; put that wording in text or mcq blocks instead. Keep picture answer choices together in one image including their option labels. Do not use a whole-page rectangle as a figure. If you cannot locate a required figure, keep its image block with box_2d:null in its original position so its source page can be retained for review.';
-    const payloads=parseReply(await ask(job.prompt+boundary+figures,reference?[image,reference]:[image],job));
+    const payloads=parseReply(await ask(job.prompt+boundary+figures,reference?[image,reference]:[image],job,parseReply));
     if(payloads.length>60) throw new Error('Too many questions on one page; review this PDF.');
     const token=randomUUID(), sourceUrl=await storeImage(job,token,`page-${page}`,canvas), entries=[];
     for(let i=0;i<payloads.length;i++) {

@@ -7,11 +7,24 @@ or replace the Maths functions, Firestore rules, or Storage rules.
 
 ## Deployment (required once before closing tabs is supported)
 
-Merging the website does **not** deploy Firebase functions. The website checks
+Website-only merges do **not** deploy Firebase functions. Merges that change
+`rapid-import/` trigger the automatic worker deployment described below. The website checks
 `rapidImportStatus` and enables online mode only when it answers successfully.
 Until then, the multi-file picker and browser importer work, with an explicit
 keep-the-tab-open notice. Do not advertise background processing as live until
 the deployment and the live acceptance check below pass.
+
+### Automatic redeployment from GitHub
+
+The **Deploy Rapid Add worker** workflow runs on reviewed `main` changes under
+`rapid-import/`, and can also be run on demand. It uses the existing
+`FIREBASE_SERVICE_ACCOUNT` repository secret to deploy only `cer-rapid-import`.
+It tests the worker first and verifies the live callable's sign-in requirement
+afterwards. Shared Firestore/Storage rules and Maths functions are not deployed.
+If the existing `MOONSHOT_API_KEY` secret is visible, it grants only that secret's
+accessor role to the two discovered worker execution identities. Missing backup
+credentials or permission do not prevent the OpenAI/Gemini deployment. The
+workflow reports whether optional backup access could be established.
 
 ### Guided Google Cloud Shell setup
 
@@ -62,9 +75,24 @@ npx firebase-tools deploy --project mathgen--app --config rapid-import/firebase.
 Use the existing `GEMINI_API_KEY`, `OPENAI_API_KEY` and `JEV_API_KEY` Secret Manager secrets (`JEV_API_KEY` is the one Ans Key's Jev functions already use). If either secret has not
 been set, provision it with `firebase functions:secrets:set GEMINI_API_KEY
 --project mathgen--app`; never put a provider key in frontend code. The default
-OpenAI worker model is `gpt-6-astra` (`RAPID_IMPORT_OPENAI_MODEL`), with
-`gemini-2.5-flash` (`RAPID_IMPORT_MODEL`) as backup. The queued authoring order
-is honoured for OpenAI/Gemini; Kimi is not included in this isolated worker.
+OpenAI worker model is `gpt-6.1-sol` (`RAPID_IMPORT_OPENAI_MODEL`) for reading,
+vision and reasoning, with `gemini-2.5-flash` (`RAPID_IMPORT_MODEL`) and then
+`kimi-k3` (`RAPID_IMPORT_KIMI_MODEL`) as backups. Explicit queued authoring
+choices are honoured, and missing backups are appended for existing jobs too.
+Empty, truncated, malformed JSON and incomplete question lists trigger the
+next provider. Figure generation keeps its dedicated image model; figure
+classification and fidelity checks use the same reading/vision order.
+Each reading provider has a 60-second deadline, leaving time for failover,
+figure generation and verification within the existing task deadline.
+
+Kimi optionally reuses the existing project `MOONSHOT_API_KEY` secret. It is
+read lazily with the worker's server identity only if failover reaches Kimi;
+it is never returned to the browser. The worker's execution identity needs
+`roles/secretmanager.secretAccessor` on that secret. A missing secret or missing
+access skips Kimi safely, without blocking deployment or normal OpenAI/Gemini
+processing. A server-only `MOONSHOT_API_KEY` environment value is also supported.
+The automatic deployment applies model and routing changes to durable jobs when
+`rapid-import/` changes are merged. Website-only merges do not update the worker.
 
 The project needs billing enabled and the Cloud Tasks API. On first deployment,
 Firebase provisions the task queue. The executing service identity needs

@@ -37,9 +37,10 @@ function section(from, to) {
 const block = section('const AI_DOWN_MS =', 'function aiRouteReport(');
 
 const api = new Function(`
-var _pref = 'gemini', _key = '', _gemini = true, _kimiKey = '', _kimiOk = true;
+var _pref = 'gemini', _key = '', _gemini = true, _kimiKey = '', _kimiOk = true, _openaiOk = true;
 function getAiEngine() { return _pref; }
 function getOpenAiKey() { return _key; }
+function getOpenAiModel() { return "gpt-6.1-sol"; }
 var _author = '';
 var localStorage = {
   getItem: function (k) { return /kimi_key/.test(k) ? _kimiKey : (/author/.test(k) ? _author : ''); },
@@ -55,7 +56,7 @@ var geminiModel = { generateContent: () => ({ response: { text: () => 'gemini sa
 Object.defineProperty(globalThis, 'x', { value: 1, configurable: true });
 var app = {}, AI_THINK_MIN = 'low';
 function getFunctions() { return {}; }
-function httpsCallable(_f, name) { return async () => ({ data: { text: name === 'askKimi' ? 'kimi server said so' : 'server said so' } }); }
+function httpsCallable(_f, name) { return async () => { if (name === 'askOpenAi' && !_openaiOk) throw new Error('OpenAI unavailable'); return { data: { text: name === 'askKimi' ? 'kimi server said so' : 'server said so' } }; }; }
 async function askOpenAI() { return 'device key said so'; }
 var console = { warn: function () {} };
 var CONFIG_COL = 'config';
@@ -73,6 +74,7 @@ return {
   set key(v) { _key = v; },
   set kimiKey(v) { _kimiKey = v; },
   set kimiOk(v) { _kimiOk = v; },
+  set openaiOk(v) { _openaiOk = v; },
   set gemini(v) { geminiModel = v ? { generateContent: () => ({ response: { text: () => 'gemini said so' } }) } : null; },
   set author(v) { _author = v; },
   resetDown: function () { Object.keys(_aiDown).forEach(function (k) { _aiDown[k] = 0; }); },
@@ -80,7 +82,7 @@ return {
   get last() { return aiLastCall; },
   AI_DOWN_MS, aiEngineOrder, aiEngineIsDown, _aiAsk, _aiRun, askChatGpt, askKimi, askOpenAiServer,
   askKimiDirect, askKimiServer, kimiListModels, getKimiModel, KIMI_DEFAULT_MODEL,
-  aiAuthorEngine, aiAuthorSetting, AI_AUTHOR_DEFAULT, AI_AUTHOR_FOLLOW, _aiAuthorFromDoc
+  aiAuthorEngine, aiAuthorSetting, AI_AUTHOR_DEFAULT, AI_AUTHOR_FOLLOW, _aiAuthorFromDoc, _aiEngineFromDoc
 };
 `)();
 
@@ -90,6 +92,14 @@ function ok(name, cond, extra) {
   fail++;
   console.log('  FAIL ' + name + (extra ? '\n       ' + extra : ''));
 }
+
+ok('unmarked legacy settings default to ChatGPT', api._aiEngineFromDoc({aiEngine: 'gemini'}) === 'openai');
+ok('dated teacher preference survives migration', api._aiEngineFromDoc({aiEngine: 'gemini', aiEngineAt: '2026-09-01'}) === 'gemini');
+ok('missing shared settings default to ChatGPT', api._aiEngineFromDoc(null) === 'openai');
+api.pref = 'openai'; api.openaiOk = false; api.gemini = false;
+const backup = await api._aiAsk('vision question', [{mimeType:'image/png',data:'x'}], {reasoningEffort:'high'}, api.aiEngineOrder());
+ok('Kimi answers after OpenAI and Gemini become unavailable', backup === 'kimi server said so' && api.last.engine === 'kimi' && api.last.fellBack);
+api.openaiOk = true; api.gemini = true; api.resetDown();
 
 /* ---------- the order ---------- */
 api.pref = 'gemini'; api.key = ''; api.kimiKey = ''; api.gemini = true;
@@ -117,15 +127,15 @@ ok('choosing ChatGPT with no device key still works — the server has one',
    Kimi has to be reachable as a first choice and reachable as a last resort. */
 api.pref = 'kimi'; api.kimiKey = 'sk-k';
 ok('choosing Kimi puts it first and keeps the others behind it',
-   api.aiEngineOrder().join() === 'kimi,kimiKey,gemini,openai', api.aiEngineOrder().join());
+   api.aiEngineOrder().join() === 'kimi,kimiKey,openai,gemini', api.aiEngineOrder().join());
 api.kimiKey = '';
 ok('choosing Kimi with no device key still works — the server has one',
-   api.aiEngineOrder().join() === 'kimi,gemini,openai', api.aiEngineOrder().join());
+   api.aiEngineOrder().join() === 'kimi,openai,gemini', api.aiEngineOrder().join());
 /* An engine nobody has heard of must not empty the list: a stale word in the
    shared setting would otherwise take the AI off every device at once. */
 api.pref = 'nosuchengine';
 ok('an unknown preference still leaves every route on the list',
-   api.aiEngineOrder().join() === 'gemini,openai,kimi', api.aiEngineOrder().join());
+   api.aiEngineOrder().join() === 'openai,gemini,kimi', api.aiEngineOrder().join());
 
 api.pref = 'gemini'; api.gemini = false;
 ok('a Firebase project that would not start still has routes',
@@ -298,10 +308,10 @@ ok('the callable is still there as the fallback', /httpsCallable\(_aiFns, 'aiEng
 ok('it is a live listener', /_aiCfgStop = onSnapshot\(_aiCfgRef\(\)/.test(src));
 ok('…that comes down with the account, or one account governs the next',
    /async function handleLogout\(\) \{[\s\S]{0,220}aiEngineStopShared\(\);/.test(src));
-ok('…and an unset field means Gemini, so a centre that never touches it is unaffected',
-   /AI_ENGINES\.includes\(eng\) \? eng : 'gemini'/.test(src));
+ok('…and an unset field means ChatGPT for text, vision and thinking',
+   /_aiSharedEngine = _aiEngineFromDoc\(snap.exists\(\) && snap.data\(\)\);/.test(src));
 ok('…and the shared setting knows all three engines',
-   /const AI_ENGINES = \['gemini', 'openai', 'kimi'\];/.test(src));
+   /const AI_ENGINES = \['openai', 'gemini', 'kimi'\];/.test(src));
 // Check the shared prelude before any role can branch/return. Additional
 // sign-in cleanup and comments must not break an arbitrary character window.
 const sharedSignInPrelude = section('function configureSidebarForRole(role) {', "  if (role === 'employee') {");
