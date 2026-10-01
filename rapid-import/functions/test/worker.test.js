@@ -194,7 +194,13 @@ test('new uploads cannot disable automatic checks or enhancement',async()=>{
   setup();docs.clear();
   await api.rapidImportBegin({auth,data:{id:'required',size:20,prompt:'Read the paper',autoCheck:false,enhanceImages:false}});
   const j=docs.get('cerRapidImports/required');assert.equal(j.autoCheck,true);assert.equal(j.enhanceImages,true);
+  assert.deepEqual(j.engineOrder,['openai','gemini','kimi']);
   assert.deepEqual((await api.rapidImportStatus({auth})).capabilities,{imageEditing:true,automaticChecks:true,automaticEnhancement:true});
+});
+test('new imports preserve an explicitly selected backup and store every failover engine',async()=>{
+  setup();docs.clear();
+  await api.rapidImportBegin({auth,data:{id:'selected',size:20,prompt:'Read the paper',engineOrder:['kimi','unknown','kimi']}});
+  assert.deepEqual(docs.get('cerRapidImports/selected').engineOrder,['kimi','openai','gemini']);
 });
 test('verified table enhancement is monochrome and repeated requests always use the immutable original',async()=>{
   const {q,url,bytes}=savedFigure('table');let generations=0;

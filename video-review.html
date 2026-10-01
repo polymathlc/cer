@@ -508,6 +508,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
 import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
+import { createPortalModelRouter } from "./portal-model-router.mjs";
 
 const APP_VERSION = 'v1.3.1';
 document.getElementById('appVersionBadge').textContent = APP_VERSION;
@@ -532,6 +534,10 @@ const LESSONS_COL = 'videoLessons';   // shared lesson library (admin writes, st
 const PROFILES_COL = 'videoProfiles'; // per-student name / level / subject
 
 const app = initializeApp(firebaseConfig);
+const askPortal = createPortalModelRouter({
+  call: async (name, data) => (await httpsCallable(getFunctions(app), name, {timeout:240000})(data)).data?.text,
+  gemini: () => geminiModel
+});
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
@@ -982,7 +988,6 @@ function fileToB64(file){
 }
 
 document.getElementById('aiTsBtn').addEventListener('click', () => {
-  if(!geminiModel){ setNotice('err', 'AI is not available right now.', tsNotice); return; }
   document.getElementById('aiTsFile').click();
 });
 
@@ -1003,19 +1008,7 @@ document.getElementById('aiTsFile').addEventListener('change', async e => {
       'Extract every pair you can read. Normalise labels to the form "Q18d" (capital Q, number, lowercase part letter, no spaces or brackets). ' +
       'If an entry has a time but no readable label, use the nearest question number context or "Q?" as the label. ' +
       'Respond with ONLY a JSON array like: [{"label":"Q18d","time":"1:18:25"}] — no other text.';
-    const res = await geminiModel.generateContent({
-      contents: [{ role: 'user', parts: [
-        { text: prompt },
-        { inlineData: { mimeType: file.type || 'image/jpeg', data: b64 } }
-      ]}],
-      generationConfig: {
-        maxOutputTokens: 2048,
-        temperature: 0.1,
-        responseMimeType: 'application/json',
-        thinkingConfig: { thinkingLevel: AI_THINK_MIN }
-      }
-    });
-    let raw = (res.response.text() || '').trim();
+    let raw = await askPortal(prompt, [{mimeType:file.type || 'image/jpeg', data:b64}], {maxOutputTokens:2048, json:true});
     raw = raw.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
     const start = raw.search(/\[/);
     if(start > 0) raw = raw.slice(start);

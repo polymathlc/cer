@@ -9,7 +9,7 @@ function harness(failFinish=false) {
   const calls=[],statuses=[],subscriptions=[],storage=new Map(),elements={rapidCloudMode:{checked:true},rapidCloudNote:{},rapidCloudJobs:{querySelectorAll:()=>[]}};
   let acknowledge;
   const gate=new Promise(r=>acknowledge=r);
-  const context={crypto:webcrypto,localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
+  const context={crypto:webcrypto,AI_ENGINES:['openai','gemini','kimi'],localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
     setTimeout,clearTimeout,currentUser:{uid:'teacher'},app:{},getFunctions:()=>({}),
     httpsCallable:(f,name)=>async data=>{calls.push({name,data});if(name==='rapidImportFinish'){await gate;if(failFinish)throw new Error('No acknowledgement');}return {data:name==='rapidImportStatus'?{available:true,jobs:[]}: {}};},
     document:{getElementById:id=>elements[id]},currentTopicsByLevel:()=>({P5:['Heat'],P6:['Energy']}),currentTopics:()=>['Heat'],

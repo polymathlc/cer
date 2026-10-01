@@ -521,6 +521,8 @@ import { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc }
   from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
 import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
+import { createPortalModelRouter } from "./portal-model-router.mjs";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
 const firebaseConfig = {
@@ -551,16 +553,13 @@ if (RECAPTCHA_SITE_KEY && !RECAPTCHA_SITE_KEY.startsWith("PASTE_")) {
 let geminiModel = null;
 try { geminiModel = getGenerativeModel(getAI(app, { backend: new GoogleAIBackend() }), { model: AI_MODEL }); }
 catch (e) { console.warn("Firebase AI init failed:", e); }
-const aiReady = () => !!geminiModel;
-
-async function askGeminiVision(prompt, media, { maxOutputTokens = 1024, json = true } = {}) {
-  if (!geminiModel) throw new Error("AI is not configured yet");
-  const parts = [{ text: prompt }];
-  (media || []).forEach(m => parts.push({ inlineData: { mimeType: m.mimeType, data: m.data } }));
-  const generationConfig = { maxOutputTokens, temperature: 0.2, thinkingConfig: { thinkingLevel: AI_THINK_MIN } };
-  if (json) generationConfig.responseMimeType = "application/json";
-  const res = await geminiModel.generateContent({ contents: [{ role: "user", parts }], generationConfig });
-  return (res.response.text() || "").trim();
+const askPortal = createPortalModelRouter({
+  call: async (name, data) => (await httpsCallable(getFunctions(app), name, {timeout:240000})(data)).data?.text,
+  gemini: () => geminiModel
+});
+const aiReady = () => true;
+async function askGeminiVision(prompt, media, opts = {}) {
+  return askPortal(prompt, media || [], opts);
 }
 function parseAIJson(raw) {
   let s = (raw || "").trim();

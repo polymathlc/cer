@@ -7,20 +7,16 @@
 
 <!--
   ═══════════════════════════════════════════════════════════════════
-  POLYMATH BAR MODEL STUDIO  ·  v1.4
+  POLYMATH BAR MODEL STUDIO  ·  v1.11
   ───────────────────────────────────────────────────────────────────
   Students receive a randomly generated PSLE-style word problem for a
   chosen bar-model concept, draw their own bar model on the canvas
   using the drawing toolbar, and submit it for AI marking.
 
-  Marking stack: SAME as the main Science CER app (index.html) —
-  Firebase AI Logic (Gemini 3.8 Flash, vision) on the shared Polymath
-  Firebase project "mathgen--app", protected by App Check (reCAPTCHA
-  v3). No backend server, no exposed secret key — only the public
-  Firebase config ships here. Calls keep Gemini "thinking" minimal
-  (the lowest level 3.8 Flash accepts) and request strict JSON, exactly like the CER
-  app's AI marking, and responses go through the same tolerant JSON
-  repair parser.
+  Marking stack: authenticated ChatGPT gpt-6.1-sol via the shared Polymath
+  Firebase project "mathgen--app", with Gemini and Kimi automatic backups.
+  Server keys remain in the shared Cloud Functions. Low reasoning keeps
+  marking responsive; strict JSON uses the existing tolerant repair parser.
 
   Concept coverage:
     1. Comparison (× times as much)        5. One subject unchanged
@@ -1722,19 +1718,23 @@ input, button, select, textarea { font-family: inherit; }
       <div class="admin-field">
         <label>Marking engine</label>
         <div class="admin-engine-row" id="engineRow">
-          <div class="admin-engine-option selected" data-engine="gemini" role="button" tabindex="0">
+          <div class="admin-engine-option" data-engine="gemini" role="button" tabindex="0">
             Gemini 3.8 Flash
-            <span class="engine-note">Firebase AI Logic &middot; same as CER app &middot; no key needed</span>
+            <span class="engine-note">Automatic backup &middot; Firebase AI Logic</span>
           </div>
-          <div class="admin-engine-option" data-engine="openai" role="button" tabindex="0">
+          <div class="admin-engine-option selected" data-engine="openai" role="button" tabindex="0">
             ChatGPT
-            <span class="engine-note">OpenAI API &middot; key required</span>
+            <span class="engine-note">gpt-6.1-sol &middot; default &middot; server key</span>
+          </div>
+          <div class="admin-engine-option" data-engine="kimi" role="button" tabindex="0">
+            Kimi
+            <span class="engine-note">Second automatic backup &middot; server key</span>
           </div>
         </div>
       </div>
 
       <div class="admin-field">
-        <label for="openaiKeyInput">OpenAI API key</label>
+        <label for="openaiKeyInput">Optional browser backup key</label>
         <div class="admin-key-row">
           <input type="password" id="openaiKeyInput" placeholder="sk-..." autocomplete="off" spellcheck="false" />
           <button class="admin-eye-btn" id="toggleKeyVisibilityBtn" type="button" title="Show / hide key" aria-label="Show or hide key">&#128065;</button>
@@ -1744,7 +1744,8 @@ input, button, select, textarea { font-family: inherit; }
       <div class="admin-field">
         <label for="openaiModelSelect">ChatGPT model</label>
         <select id="openaiModelSelect">
-          <option value="gpt-6-astra" selected>gpt-6-astra &mdash; newest (recommended)</option>
+          <option value="gpt-6.1-sol" selected>gpt-6.1-sol &mdash; default (recommended)</option>
+          <option value="gpt-6-astra">gpt-6-astra</option>
           <option value="gpt-6-astra-fast">gpt-6-astra-fast &mdash; same model, quicker</option>
           <option value="gpt-5.6-sol">gpt-5.6-sol &mdash; the previous flagship</option>
           <option value="gpt-4o-mini">gpt-4o-mini &mdash; fast &amp; cheap</option>
@@ -1765,27 +1766,25 @@ input, button, select, textarea { font-family: inherit; }
         <strong>Security note:</strong> the key is saved only in this browser (localStorage) on this device
         and is sent directly to OpenAI. Anyone with access to this device&rsquo;s developer tools could read it,
         so use a low-limit key and enter it only on machines you control (e.g. the centre&rsquo;s laptop).
-        Student devices without a key automatically use Gemini.
+        Signed-in students use the server key. Gemini and Kimi are automatic backups.
       </div>
     </div>
   </div>
 </div>
 
-<div class="version-badge" id="versionBadge">Bar Model Studio v1.10</div>
+<div class="version-badge" id="versionBadge">Bar Model Studio v1.11</div>
 
 <!-- ══════════════════════════════════════════════════════════════════
-     FIREBASE AI LOGIC (Gemini) — module script
-     Same AI marking stack as the main Science CER app (index.html):
-     shared Polymath Firebase project "mathgen--app", App Check with
-     reCAPTCHA v3 protecting the Gemini quota, and the same
-     gemini-3.8-flash model with the lowest thinking level it accepts
-     so the whole token budget goes to the marking itself. Only the
-     public config ships to the client; no secret key, no backend.
+     SHARED AI ROUTES — module script
+     ChatGPT gpt-6.1-sol is first for text, vision and thinking; Gemini and
+     Kimi are automatic backups. The shared authenticated callables hold
+     the server keys. Speech keeps its specialised transcription model.
      ══════════════════════════════════════════════════════════════════ -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
   import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
   import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
+  import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
   import {
     getAuth,
     GoogleAuthProvider,
@@ -1834,7 +1833,7 @@ input, button, select, textarea { font-family: inherit; }
   } catch (e) {
     console.warn("Firebase AI init failed (AI marking disabled):", e);
   }
-  window.__aiReady = () => !!geminiModel;
+  window.__aiReady = () => true; // authenticated server routes do not require Gemini to initialise
 
   /* ── 🎙️ Transcription: its own model, exposed as one door ────────
      Speech is its own job, so `gemini-3.5-transcribe` reads the mic here
@@ -1900,7 +1899,7 @@ input, button, select, textarea { font-family: inherit; }
    * the lowest thinking level, and strict-JSON response mode by default.
    * options: { maxOutputTokens?: number, json?: boolean }
    */
-  window.askGeminiVision = async function (promptText, imageBase64, mimeType, options) {
+  async function barGeminiVision(promptText, imageBase64, mimeType, options) {
     if (!geminiModel) throw new Error("AI is not configured yet");
     options = options || {};
     const parts = [{ text: promptText }];
@@ -1918,6 +1917,48 @@ input, button, select, textarea { font-family: inherit; }
       generationConfig
     });
     return (result.response.text() || "").trim();
+  }
+
+  // One route for text, vision and thinking. Keys stay in the authenticated
+  // callables; a browser key is optional and never required on student devices.
+  const barAiFunctions = getFunctions(firebaseApp);
+  const BAR_AI_ORDER = ['openai', 'gemini', 'kimi'];
+  const barAiDown = {};
+  window.barAiLastCall = { engine: '', fellBack: false };
+  window.askGeminiVision = async function (promptText, imageBase64, mimeType, options) {
+    options = options || {};
+    const pref = getStoredMarkingEngine();
+    const engines = BAR_AI_ORDER.includes(pref) ? [pref].concat(BAR_AI_ORDER.filter(e => e !== pref)) : BAR_AI_ORDER.slice();
+    const routes = engines.flatMap(e => e === 'openai' && getStoredOpenAiKey() ? ['openai', 'openaiKey'] : [e]);
+    routes.sort((a, b) => (barAiDown[a] > Date.now() ? 1 : 0) - (barAiDown[b] > Date.now() ? 1 : 0));
+    const errors = [];
+    for (const engine of routes) {
+      try {
+        let text;
+        if (engine === 'gemini') text = await barGeminiVision(promptText, imageBase64, mimeType, options);
+        else if (engine === 'openaiKey') text = await askOpenAiVision(promptText, imageBase64, getStoredOpenAiKey(), mimeType, options);
+        else {
+          const payload = {
+            prompt: String(promptText || ''),
+            media: imageBase64 ? [{ mimeType: mimeType || 'image/png', data: imageBase64 }] : [],
+            json: options.json !== false,
+            maxOutputTokens: options.maxOutputTokens || 1200
+          };
+          if (engine === 'openai') { payload.model = getStoredOpenAiModel(); payload.reasoningEffort = 'low'; }
+          const result = await httpsCallable(barAiFunctions, engine === 'kimi' ? 'askKimi' : 'askOpenAi', { timeout: 240000 })(payload);
+          text = result && result.data && result.data.text;
+        }
+        if (typeof text !== 'string' || !text.trim()) throw new Error('AI returned an empty reply.');
+        barAiDown[engine] = 0;
+        window.barAiLastCall = { engine, fellBack: errors.length > 0 };
+        return text.trim();
+      } catch (error) {
+        barAiDown[engine] = Date.now() + 10 * 60 * 1000;
+        errors.push(engine + ': ' + ((error && error.message) || error));
+      }
+    }
+    window.barAiLastCall = { engine: '', fellBack: false };
+    throw new Error(errors.join(' · '));
   };
 
   /* ── Admin auth bridge ──────────────────────────────────────────
@@ -3846,36 +3887,10 @@ async function runAiCheck() {
     var pngBase64 = await snapshotCanvasAsPng();
     var prompt = buildMarkingPrompt();
 
-    /* Engine routing:
-       - "openai" + a saved key  → ChatGPT vision marking
-       - anything else           → Gemini 3.8 Flash via Firebase AI
-         Logic (the same engine + App Check protection as the Science
-         CER app's AI marking).
-       If ChatGPT fails (bad key, quota, network), fall back to Gemini
-       so a student never gets stuck because of an admin setting.     */
-    var engineUsed = '';
-    var rawResponse = '';
-    var openaiKey = getStoredOpenAiKey();
-    var wantOpenAi = getStoredMarkingEngine() === 'openai' && !!openaiKey;
-    var geminiReady = window.__aiReady && window.__aiReady();
-
-    if (!wantOpenAi && !geminiReady) {
-      throw new Error('AI is not configured yet');
-    }
-
-    if (wantOpenAi) {
-      try {
-        rawResponse = await askOpenAiVision(prompt, pngBase64, openaiKey);
-        engineUsed = 'ChatGPT (' + getStoredOpenAiModel() + ')';
-      } catch (openAiError) {
-        console.warn('ChatGPT marking failed, falling back to Gemini:', openAiError);
-        rawResponse = await window.askGeminiVision(prompt, pngBase64, 'image/png', { maxOutputTokens: 1200, json: true });
-        engineUsed = 'Gemini 3.8 Flash (ChatGPT unavailable — fell back)';
-      }
-    } else {
-      rawResponse = await window.askGeminiVision(prompt, pngBase64, 'image/png', { maxOutputTokens: 1200, json: true });
-      engineUsed = 'Gemini 3.8 Flash';
-    }
+    var rawResponse = await window.askGeminiVision(prompt, pngBase64, 'image/png', { maxOutputTokens: 1200, json: true });
+    var route = window.barAiLastCall || {};
+    var labels = { openai: 'ChatGPT (server)', openaiKey: 'ChatGPT (browser backup)', gemini: 'Gemini 3.8 Flash', kimi: 'Kimi' };
+    var engineUsed = (labels[route.engine] || 'AI') + (route.fellBack ? ' (backup)' : '');
 
     var result = parseMarkingResponse(rawResponse);
     var markedByNote = document.getElementById('markedByNote');
@@ -4128,9 +4143,9 @@ renderAllElements();
    Settings live in localStorage on THIS device only:
      pbms_openai_key      — the OpenAI API key (never synced anywhere)
      pbms_openai_model    — which ChatGPT model marks the drawings
-     pbms_marking_engine  — 'gemini' (default) or 'openai'
-   Devices without a saved key always mark with Gemini (the CER app's
-   engine), so student machines keep working with zero setup.
+     pbms_marking_engine  — 'openai' (default), 'gemini' or 'kimi'
+   Signed-in devices use the authenticated server key, with Gemini and Kimi
+   behind it. A browser key is only an optional device-local backup.
    ════════════════════════════════════════════════════════════════════ */
 
 var ADMIN_EMAIL = 'chungzhikai@gmail.com';
@@ -4138,8 +4153,22 @@ var ADMIN_EMAIL = 'chungzhikai@gmail.com';
 var STORAGE_KEYS = {
   openaiKey: 'pbms_openai_key',
   openaiModel: 'pbms_openai_model',
-  markingEngine: 'pbms_marking_engine'
+  markingEngine: 'pbms_marking_engine',
+  modelGen: 'pbms_openai_model_gen',
+  modelChoice: 'pbms_openai_model_choice',
+  engineChoice: 'pbms_marking_engine_choice'
 };
+
+(function () {
+  try {
+    if (localStorage.getItem(STORAGE_KEYS.modelGen) === 'sol61') return;
+    var oldModel = localStorage.getItem(STORAGE_KEYS.openaiModel);
+    if (['gpt-5.6-sol', 'gpt-6-astra'].indexOf(oldModel) >= 0 && localStorage.getItem(STORAGE_KEYS.modelChoice) !== 'manual') {
+      localStorage.setItem(STORAGE_KEYS.openaiModel, 'gpt-6.1-sol');
+    }
+    localStorage.setItem(STORAGE_KEYS.modelGen, 'sol61');
+  } catch (e) { /* a blocked store has no persisted default to migrate */ }
+})();
 
 /* ── Settings accessors (used by runAiCheck in the main script) ──── */
 
@@ -4149,20 +4178,23 @@ function getStoredOpenAiKey() {
 }
 
 function getStoredOpenAiModel() {
-  try { return localStorage.getItem(STORAGE_KEYS.openaiModel) || 'gpt-6-astra'; }
-  catch (e) { return 'gpt-6-astra'; }
+  try { return localStorage.getItem(STORAGE_KEYS.openaiModel) || 'gpt-6.1-sol'; }
+  catch (e) { return 'gpt-6.1-sol'; }
 }
 
 function getStoredMarkingEngine() {
-  try { return localStorage.getItem(STORAGE_KEYS.markingEngine) || 'gemini'; }
-  catch (e) { return 'gemini'; }
+  try {
+    var engine = localStorage.getItem(STORAGE_KEYS.markingEngine);
+    return !engine || (engine === 'gemini' && localStorage.getItem(STORAGE_KEYS.engineChoice) !== 'manual') ? 'openai' : engine;
+  } catch (e) { return 'openai'; }
 }
 
 /* ── ChatGPT vision marking call ─────────────────────────────────── */
 
-async function askOpenAiVision(promptText, pngBase64, apiKey) {
+async function askOpenAiVision(promptText, pngBase64, apiKey, mimeType, options) {
+  options = options || {};
   var model = getStoredOpenAiModel();
-  // A REASONING MODEL IS A FAMILY, NOT ONE ID: gpt-5.x and gpt-6-astra both
+  // A REASONING MODEL IS A FAMILY, NOT ONE ID: gpt-5.x and gpt-6.1-sol both
   // take max_completion_tokens and both refuse a temperature, so a test that
   // named only gpt-5 would send the newer model a request it 400s on.
   var isReasoning = /^(gpt-[5-9]|o[1-9])/.test(model);
@@ -4187,9 +4219,12 @@ async function askOpenAiVision(promptText, pngBase64, apiKey) {
   };
   // A reasoning model rejects max_tokens and a non-default temperature — it
   // takes max_completion_tokens and always runs at its own default temperature
-  if (isReasoning) { body.max_completion_tokens = 1200; }
+  if (isReasoning) { body.max_completion_tokens = Math.min(32000, Math.max(4096, (options.maxOutputTokens || 1200) + 4096)); body.reasoning_effort = 'low'; }
   else { body.max_tokens = 900; body.temperature = 0.2; }
 
+  if (!pngBase64) body.messages[0].content.pop();
+  else body.messages[0].content[1].image_url.url = 'data:' + (mimeType || 'image/png') + ';base64,' + pngBase64;
+  if (options.json === false) delete body.response_format;
   var response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -4364,13 +4399,7 @@ adminSaveBtn.addEventListener('click', function () {
 
   var key = openaiKeyInput.value.trim();
   var selectedOption = engineRow.querySelector('.admin-engine-option.selected');
-  var engine = selectedOption ? selectedOption.getAttribute('data-engine') : 'gemini';
-
-  if (engine === 'openai' && !key) {
-    adminSaveStatus.textContent = 'ChatGPT is selected but no API key is entered.';
-    adminSaveStatus.classList.add('error');
-    return;
-  }
+  var engine = selectedOption ? selectedOption.getAttribute('data-engine') : 'openai';
   if (key && key.indexOf('sk-') !== 0) {
     adminSaveStatus.textContent = 'That does not look like an OpenAI key (should start with "sk-").';
     adminSaveStatus.classList.add('error');
@@ -4381,11 +4410,14 @@ adminSaveBtn.addEventListener('click', function () {
     if (key) { localStorage.setItem(STORAGE_KEYS.openaiKey, key); }
     else { localStorage.removeItem(STORAGE_KEYS.openaiKey); }
     localStorage.setItem(STORAGE_KEYS.openaiModel, openaiModelSelect.value);
+    if (openaiModelSelect.value !== 'gpt-6.1-sol') localStorage.setItem(STORAGE_KEYS.modelChoice, 'manual');
+    else localStorage.removeItem(STORAGE_KEYS.modelChoice);
     localStorage.setItem(STORAGE_KEYS.markingEngine, engine);
+    localStorage.setItem(STORAGE_KEYS.engineChoice, 'manual');
     adminSaveStatus.classList.remove('error');
     adminSaveStatus.textContent = engine === 'openai'
-      ? 'Saved — marking on this device now uses ' + openaiModelSelect.value + '.'
-      : 'Saved — marking on this device uses Gemini 3.8 Flash.';
+      ? 'Saved — ChatGPT is first, with Gemini and Kimi backups.'
+      : 'Saved — ' + (engine === 'kimi' ? 'Kimi' : 'Gemini') + ' is first, with automatic backups.';
   } catch (error) {
     adminSaveStatus.textContent = 'Could not save — localStorage is blocked in this browser.';
     adminSaveStatus.classList.add('error');
@@ -4395,12 +4427,11 @@ adminSaveBtn.addEventListener('click', function () {
 adminClearKeyBtn.addEventListener('click', function () {
   try {
     localStorage.removeItem(STORAGE_KEYS.openaiKey);
-    localStorage.setItem(STORAGE_KEYS.markingEngine, 'gemini');
   } catch (e) { /* ignore */ }
   openaiKeyInput.value = '';
   populateAdminSettingsForm();
   adminSaveStatus.classList.remove('error');
-  adminSaveStatus.textContent = 'Key removed — this device is back on Gemini.';
+  adminSaveStatus.textContent = 'Browser key removed — server marking remains available.';
 });
 </script>
 

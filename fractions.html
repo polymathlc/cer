@@ -271,17 +271,25 @@ const AI_MODEL = "gemini-3.8-flash";
 // took, with a 400, so "low" is the cheapest level it will accept.
 const AI_THINK_MIN = "low";
 
-let geminiModel = null;
-const aiReady = () => !!geminiModel;
+let geminiModel = null, askPortal = null;
+const aiReady = () => !!askPortal;
 (async () => {
   const CDN = "https://www.gstatic.com/firebasejs/11.10.0/";
   try {
-    const [{ initializeApp }, appCheckMod, { getAI, getGenerativeModel, GoogleAIBackend }] = await Promise.all([
+    const [{ initializeApp }, appCheckMod, { getAI, getGenerativeModel, GoogleAIBackend }, { getFunctions, httpsCallable }, { getAuth }, { createPortalModelRouter }] = await Promise.all([
       import(CDN + "firebase-app.js"),
       import(CDN + "firebase-app-check.js"),
       import(CDN + "firebase-ai.js"),
+      import(CDN + "firebase-functions.js"),
+      import(CDN + "firebase-auth.js"),
+      import("./portal-model-router.mjs"),
     ]);
     const app = initializeApp(firebaseConfig);
+    getAuth(app); // Reuse the learner's existing signed-in portal session.
+    askPortal = createPortalModelRouter({
+      call: async (name, data) => (await httpsCallable(getFunctions(app), name, {timeout:240000})(data)).data?.text,
+      gemini: () => geminiModel
+    });
     try { appCheckMod.initializeAppCheck(app, { provider: new appCheckMod.ReCaptchaV3Provider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true }); }
     catch (e) { console.warn("App Check init failed:", e); }
     geminiModel = getGenerativeModel(getAI(app, { backend: new GoogleAIBackend() }), { model: AI_MODEL });
@@ -290,13 +298,9 @@ const aiReady = () => !!geminiModel;
   }
 })();
 
-async function askGemini(prompt, { maxOutputTokens = 700, temperature = 0.4 } = {}) {
-  if (!geminiModel) throw new Error("AI is not available right now");
-  const res = await geminiModel.generateContent({
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens, temperature, responseMimeType: "application/json", thinkingConfig: { thinkingLevel: AI_THINK_MIN } }
-  });
-  return (res.response.text() || "").trim();
+async function askGemini(prompt, {maxOutputTokens=700, temperature=0.4} = {}) {
+  if (!askPortal) throw new Error("AI is not available right now");
+  return askPortal(prompt, [], {maxOutputTokens, temperature, json:true});
 }
 function parseAIJson(raw) {
   let s = (raw || "").trim();

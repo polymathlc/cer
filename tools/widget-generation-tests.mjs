@@ -1,5 +1,5 @@
 // The app builder must never turn a small token budget into an uncapped call,
-// retry a billable request, or replace a working app with a truncated reply.
+// repeat a failed provider, or replace a working app with a truncated reply.
 // Run: node tools/widget-generation-tests.mjs
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
@@ -16,25 +16,40 @@ function section(start, end) {
 const complete = '<!DOCTYPE html><html><head></head><body><button>Try me</button></body></html>';
 const api = new Function('complete', 'helpers', `
   const AI_THINK_MIN = 'low';
+  const AI_ENGINES = ['openai', 'gemini', 'kimi'];
+  const AI_ROUTE_LABEL = { openai: 'OpenAI', gemini: 'Gemini', kimi: 'Kimi' };
+  let aiLastCall = {}, _aiWhy = {};
+  function _aiMarkUp() {}
+  function _aiMarkDown(engine, why) { _aiWhy[engine] = why; }
+  function getOpenAiKey() { return ''; }
+  function getKimiKey() { return ''; }
   const WIDGET_HTML_MAX = 300000;
   ${section('const WIDGET_EFFORTS =', 'let _widgetBusy =')}
-  let reply = complete, finishReason = 'STOP', calls = [], fail = false;
+  let reply = complete, finishReason = 'STOP', calls = [], failEngines = new Set();
   const window = { QuestionApps: helpers };
   async function askOpenAiServer(prompt, media, options) {
     calls.push({ engine: 'openai', prompt, media, options });
-    if (fail) throw new Error('Server unavailable');
+    if (failEngines.has('openai')) throw new Error('Server unavailable');
     return reply;
   }
   let geminiModel = { async generateContent(request) {
     calls.push({ engine: 'gemini', request });
-    if (fail) throw new Error('Gemini unavailable');
+    if (failEngines.has('gemini')) throw new Error('Gemini unavailable');
     return { response: { candidates: [{ finishReason }], text: () => reply } };
   } };
+  async function askKimiServer(prompt, media, options) {
+    calls.push({ engine: 'kimi', prompt, media, options });
+    if (failEngines.has('kimi')) throw new Error('Kimi unavailable');
+    return reply;
+  }
+  ${section('function _aiRoutesFor(', '/* ⚡ QUESTION ADDING')}
+  ${section('function _aiRun(', '/* ChatGPT by whichever route')}
+  ${section('async function askGeminiDirect(', '/* What the chooser prints.')}
   ${section('async function _widgetAskAI(', 'async function _widgetRun(')}
   return {
     ask: _widgetAskAI, extract: _widgetExtractHtml,
     get calls() { return calls; },
-    reset(options = {}) { calls = []; reply = options.reply ?? complete; finishReason = options.finishReason || 'STOP'; fail = !!options.fail; }
+    reset(options = {}) { calls = []; _aiWhy = {}; reply = options.reply ?? complete; finishReason = options.finishReason || 'STOP'; failEngines = new Set(options.fail ? AI_ENGINES : (options.failEngines || [])); }
   };
 `)(complete, helpers);
 
@@ -59,7 +74,11 @@ for (const engine of ['openai', 'gemini']) {
   assert.equal(engine === 'openai' ? api.calls[0].options.maxOutputTokens : api.calls[0].request.generationConfig.maxOutputTokens, 4096, 'Old blocks receive a capped default');
   api.reset({ fail: true });
   await assert.rejects(api.ask(engine, 'pro', 'Build a simulation', 2048), /unavailable/);
-  assert.equal(api.calls.length, 1, 'Failure does not trigger another billable request');
+  assert.deepEqual(api.calls.map(c => c.engine), [engine, ...['openai', 'gemini', 'kimi'].filter(e => e !== engine)], 'Failures try each configured provider once');
+  for (const call of api.calls) {
+    assert.equal(call.engine === 'gemini' ? call.request.generationConfig.maxOutputTokens : call.options.maxOutputTokens, 2048, 'Every fallback retains the selected token ceiling');
+    if (call.engine !== 'gemini') assert.equal(call.options.exactOutputBudget, true);
+  }
   api.reset();
   const pictures = [
     { mimeType: 'image/png', data: 'diagram' },
@@ -74,12 +93,21 @@ for (const engine of ['openai', 'gemini']) {
 }
 
 api.reset({ finishReason: 'MAX_TOKENS' });
-await assert.rejects(api.ask('gemini', 'pro', 'Build a simulation', 1024), /token limit was reached/i);
-assert.equal(api.calls.length, 1, 'A truncated result never retries automatically');
+assert.equal(await api.ask('gemini', 'pro', 'Build a simulation', 1024), complete);
+assert.deepEqual(api.calls.map(c => c.engine), ['gemini', 'openai'], 'A truncated provider falls back without repeating that provider');
+assert.equal(api.calls[1].options.maxOutputTokens, 1024);
+api.reset({ failEngines: ['openai', 'gemini'] });
+const backupPictures = [{ mimeType: 'image/png', data: 'fallback-diagram' }];
+assert.equal(await api.ask('openai', 'pro', 'Keep this prompt', 2048, backupPictures), complete);
+assert.deepEqual(api.calls.map(c => c.engine), ['openai', 'gemini', 'kimi']);
+assert.equal(api.calls[2].prompt, 'Keep this prompt');
+assert.deepEqual(api.calls[2].media, backupPictures);
+assert.equal(api.calls[2].options.reasoningEffort, 'high');
+assert.equal(api.calls[2].options.exactOutputBudget, true);
 assert.equal(api.extract('```html\n' + complete + '\n```'), complete);
 assert.equal(api.extract('Here is the app:\n' + complete + '\nDone.'), complete);
 for (const incomplete of ['', 'some text', '<button>Partial app</button>', '<!DOCTYPE html><html><body><script>function draw() {']) {
   assert.throws(() => api.extract(incomplete), /complete|incomplete/i, 'Incomplete AI reply is refused');
 }
 assert.throws(() => api.extract('<html><body>' + 'x'.repeat(300000) + '</body></html>'), /too large/i);
-console.log('App generation: token caps, one-call failures and incomplete-output protection passed.');
+console.log('App generation: token caps, provider backups and incomplete-output protection passed.');
