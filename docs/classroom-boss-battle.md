@@ -1,41 +1,24 @@
-# Classroom boss battle hero sync
+# Independent classroom heroes
 
-Students open **Your Hero → Classroom boss battle role** and choose Warrior,
-Ranger, Mage or Healer. This choice is free and independent of the existing
-Science Quest skill class: it never refunds skills, removes gear or creates
-another character. Existing rogue heroes start as Rangers, mages as Mages and
-other heroes as Warriors until a classroom role is chosen.
+The anskey classroom battle now owns its pixel heroes, Warrior/Ranger/Mage/Cleric
+roles, skill trees, inventory and encounter rewards. These characters do not
+read or write CER's Science Quest hero, equipment, stats or currency.
 
-The existing Firebase account UID remains the identity in both applications.
-`users/{uid}/settings/scienceRpg.battleRole` stores the choice. All ordinary RPG
-saves also refresh the existing `scienceGameLeaderboard/{uid}` document with
-`merge: true`, retaining leaderboard and other game data. Role choices publish
-immediately; ordinary changes share the existing 1.2-second debounce. A queued
-publication checks its original UID again before writing. Existing students
-publish the new snapshot the next time they sign in to CER.
+CER's **Your Hero** page continues to manage Science Quest's avatar, equipment
+and skill class. The former classroom role selector and classroom sync messages
+have been removed. A previously saved `battleRole` preference is discarded when
+the CER save is hydrated; all other existing CER progression is preserved.
 
-The `battleHero` version-1 snapshot contains:
+Normal CER saves still publish the existing leaderboard summary using
+`merge: true`, preserving Science Strike and other games' leaderboard fields.
+Each publication deletes the retired `battleHero` field from that student's
+`scienceGameLeaderboard/{uid}` document. No avatar snapshot is built or exported.
+Old snapshots disappear when their owners next publish; anskey does not depend
+on that cleanup and ignores them immediately. Debounced writes retain their
+original account check.
 
-- `uid`, `role`, `gender`, `level` and `updatedAt`.
-- `equipment`: the six existing equipped item IDs, including the pet.
-- `stats`: finite numeric output from the existing `rpgPlayerStats()` function,
-  including attack, defence, maximum HP, critical chance/multiplier, spell power,
-  dodge, cooldown, poison, thorns and leech. Existing level, gear upgrades, sets,
-  skill passives, pet bonds and rebirths therefore remain represented.
-- `avatarDataUrl`: the existing SVG paper doll, including equipped gear and pet
-  evolution, encoded as a self-contained image URL. External images, references,
-  scripts and active markup are rejected. Consumers must use `<img src>` and
-  never insert snapshot data as raw HTML.
-
-No private inventory, question history or credentials are added to this public
-snapshot. anskey subscribes to these existing leaderboard documents by student
-UID and owns classroom balancing, encounter health, action transactions and
-teacher/class-scoped persistence. Missing or unavailable snapshots must appear
-as a labelled fallback in anskey. The CER page reports successful publication or
-an error that asks the student to reconnect and refresh; a failed cloud hero load
-retains the existing protection against replacing saved progress.
-
-Run `node --test tools/rpg-battle-hero-tests.mjs tools/rpg-hero-svg-tests.mjs
-tools/rpg-svg-catalog-tests.mjs tools/rpg-avatar-art-tests.mjs` for snapshot,
-role persistence, account-switch isolation, every collectible and existing art
-regression coverage. The non-TCG gameplay CI also includes these checks.
+Run `node --test tools/rpg-battle-hero-tests.mjs` to verify separation, legacy
+role migration, preserved CER progression/leaderboard fields and account-switch
+isolation. The existing SVG art tests and browser checks continue to cover CER's
+own avatars. The obsolete classroom role browser fixture has been removed from
+the non-TCG gameplay CI.
