@@ -14,7 +14,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-<link rel="modulepreload" href="app.js?v=1.423.0">
+<link rel="modulepreload" href="app.js?v=1.423.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -6897,6 +6897,15 @@ body.em-editing #printProgress { z-index: 470; }
 .rpg-gender-btn { flex: 0 1 120px; padding: 7px 10px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: #fff; color: var(--text); font-weight: 600; font-size: 0.82rem; cursor: pointer; transition: all var(--transition); }
 .rpg-gender-btn:hover { border-color: var(--text-light); }
 .rpg-gender-btn.on { border-color: var(--accent-orange, #f59e0b); background: var(--accent-orange, #f59e0b); color: #fff; }
+.rpg-battle-role-panel { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }
+.rpg-battle-role-panel h3 { font-size: .95rem; margin: 0 0 6px; }
+.rpg-battle-role-panel p { font-size: .78rem; color: var(--text-muted); line-height: 1.5; margin: 6px 0 10px; }
+.rpg-battle-role-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.rpg-battle-role { min-height: 118px; padding: 10px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface, #fff); color: var(--text); cursor: pointer; text-align: left; font-family: inherit; }
+.rpg-battle-role b, .rpg-battle-role span { display: block; }
+.rpg-battle-role span { margin-top: 6px; font-size: .72rem; line-height: 1.4; }
+.rpg-battle-role.selected { border-color: #0f766e; background: #e6f6f1; color: #134e4a; }
+.rpg-battle-role:focus-visible { outline: 3px solid #0f766e; outline-offset: 2px; }
 .rpg-art-beta-panel { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 10px 0 2px; padding: 10px; border: 1px dashed #7c3aed; border-radius: var(--radius-md); background: #f5f3ff; color: #4c1d95; font-size: 0.78rem; }
 .rpg-art-beta-panel[hidden] { display: none; }
 .rpg-art-beta-panel > div { display: grid; gap: 2px; margin-right: auto; }
@@ -12318,6 +12327,13 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
               <button class="btn btn-ghost btn-sm" id="rpgRestBtn" type="button">🛏️ Rest &amp; heal</button>
               <button class="btn btn-ghost btn-sm" id="rpgToBattleBtn" type="button">⚔️ Go battle</button>
             </div>
+            <section class="rpg-battle-role-panel" aria-labelledby="rpgBattleRoleTitle">
+              <h3 id="rpgBattleRoleTitle">Classroom boss battle role</h3>
+              <p>Choose how your existing hero helps the class. Change role freely; your equipment and skill tree stay yours.</p>
+              <div class="rpg-battle-role-grid" id="rpgBattleRoles" role="group" aria-label="Choose your classroom role"></div>
+              <p>Attack strengthens damage and healing. HP and defence help you survive. Critical chance and spell power boost your role. Classroom battles balance these stats so everyone can contribute.</p>
+              <p id="rpgBattleSyncStatus" role="status" aria-live="polite">Your saved hero syncs with your teacher’s anskey wheel when you sign in.</p>
+            </section>
           </div>
           <div class="card card-pad rpg-inv-card">
             <div class="rpg-tabs">
@@ -15909,6 +15925,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
-<script type="module" src="app.js?v=1.423.0"></script>
+<script type="module" src="app.js?v=1.423.1"></script>
 </body>
 </html>

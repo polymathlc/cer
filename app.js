@@ -1,4 +1,5 @@
 import './worksheet-art.js?v=1';
+import { BATTLE_ROLES, battleRole, buildBattleHero } from './rpg-battle-hero.mjs?v=1';
 import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
@@ -4453,7 +4454,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.423.0';
+const APP_VERSION = 'v1.423.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -51357,7 +51358,7 @@ let rpgShopSlot = "all";
 function rpgStorageKey() { return "scienceQuestRpg:" + (currentUser ? currentUser.uid : "anon"); }
 function rpgDefaults() {
   return {
-    v: 2, gold: 60, xp: 0, hp: null, hidden: false, battleMin: false, gender: null,
+    v: 2, gold: 60, xp: 0, hp: null, hidden: false, battleMin: false, gender: null, battleRole: null,
     monthKey: null, monthXp: 0, lastMonthKey: null, lastMonthXp: 0, advRuns: null, dungeonFloor: 1,
     monthQ: 0, lastMonthQ: 0, monthQids: {}, monthPrints: {}, prizeAck: {},
     duelQ: 0, duelCorrect: 0,          // 🎴 Ember Duel board: questions done and got right
@@ -51393,6 +51394,7 @@ function rpgHydrate(saved) {
   const st = Object.assign(rpgDefaults(), saved || {});
   st.inventory = Object.assign({}, (saved && saved.inventory) || rpgDefaults().inventory);
   st.equipment = Object.assign(rpgDefaults().equipment, (saved && saved.equipment) || {});
+  st.battleRole = battleRole(st.battleRole, st.clazz);
   st.spireCards = Object.assign({}, (saved && saved.spireCards) || {});
   st.spireDeck = Array.isArray(saved && saved.spireDeck) ? saved.spireDeck.slice(0, 60) : [];
   st.stats = Object.assign(rpgDefaults().stats, (saved && saved.stats) || {});
@@ -51464,6 +51466,23 @@ function rpgSave() {
     rpgWriteLocal();
   }
   rpgRenderSide();
+  // Includes gender, equipment, upgrades, skill changes and level gains, so
+  // the teacher's live wheel follows this existing character automatically.
+  rpgPublishLeaderboard();
+}
+function rpgSetBattleRole(role) {
+  if (!rpgState || !Object.hasOwn(BATTLE_ROLES, role)) return;
+  rpgState.battleRole = role;
+  rpgSave();
+  rpgPublishLeaderboard(true);
+  rpgRenderCharacterPage();
+}
+function rpgRenderBattleRoles() {
+  const el = $("rpgBattleRoles");
+  if (!el || !rpgState) return;
+  const selected = battleRole(rpgState.battleRole, rpgState.clazz);
+  el.innerHTML = Object.entries(BATTLE_ROLES).map(([id, role]) =>
+    `<button type="button" class="rpg-battle-role${id === selected ? ' selected' : ''}" data-battle-role="${id}" aria-pressed="${id === selected}"><b>${role.icon} ${role.name}</b><span>${role.description}</span></button>`).join('');
 }
 function rpgSetGender(g) {
   if (!rpgState) return;
@@ -53204,6 +53223,7 @@ function rpgShowLevelUp(newLevel) {
 // ---- UI: character page ----
 function rpgRenderCharacterPage() {
   if (!rpgState) return;
+  rpgRenderBattleRoles();
   const stats = rpgPlayerStats();
   const info = rpgLevelInfo();
   rpgState.hp = Math.min(rpgState.hp, stats.maxHp);
@@ -53630,11 +53650,17 @@ function rpgGameBoardData(key) {
   };
 }
 let rpgPublishTimer = null;
-function rpgPublishLeaderboard() {
+function rpgPublishLeaderboard(immediate = false) {
   if (!rpgState || !currentUser || currentUser.role !== "student" || RPG_STORAGE_MODE !== "firestore") return;
   clearTimeout(rpgPublishTimer);
-  rpgPublishTimer = setTimeout(() => {
-    if (!rpgState || !currentUser) return;
+  const uid = currentUser.uid;
+  const publish = () => {
+    // An account change while a debounced publication is waiting must not
+    // publish the old student's hero into the newly signed-in account.
+    if (!rpgState || !currentUser || currentUser.uid !== uid || currentUser.role !== "student") return;
+    const battleHero = buildBattleHero({ uid, state: rpgState, stats: rpgPlayerStats(), svg: rpgAvatarSvg() });
+    const syncStatus = $("rpgBattleSyncStatus");
+    if (syncStatus) syncStatus.textContent = "Syncing your hero with the classroom wheel…";
     // merge:true — Science Strike (fps.html) stores its leaderboard stats in a
     // `fps` field on this same doc; a plain overwrite would wipe them.
     setDoc(doc(db, "scienceGameLeaderboard", currentUser.uid), {
@@ -53688,6 +53714,7 @@ function rpgPublishLeaderboard() {
       clazz: rpgState.clazz || null,
       gender: rpgState.gender || null,
       equipment: rpgState.equipment,
+      battleHero,
       td: rpgGameBoardData("defenders"),
       raid: rpgGameBoardData("raiders"),
       spire: rpgGameBoardData("spire"),
@@ -53718,8 +53745,15 @@ function rpgPublishLeaderboard() {
         losses: ((rpgState.tcg && rpgState.tcg.duel) || {}).losses | 0
       },
       updatedAt: new Date().toISOString()
-    }, { merge: true }).catch(e => console.warn("leaderboard publish", e));
-  }, 1200);
+    }, { merge: true }).then(() => {
+      if (currentUser?.uid === uid && syncStatus) syncStatus.textContent = "Hero, equipment and role synced with the classroom wheel.";
+    }).catch(e => {
+      console.warn("leaderboard publish", e);
+      if (currentUser?.uid === uid && syncStatus) syncStatus.textContent = "Hero sync could not finish. Reconnect and refresh CER to retry.";
+    });
+  };
+  if (immediate) publish();
+  else rpgPublishTimer = setTimeout(publish, 1200);
 }
 // ---- Class raid boss: one shared weekly HP pool the whole class chips away ----
 const RAID_MAX_HP = 20000, RAID_BOUNTY = 250;
@@ -56556,6 +56590,11 @@ function rpgWireStaticEvents() {
   wire("rpgToBattleBtn", () => {
     navigateTo(rpgPracticePage());
     if (rpgState && !rpgState.battle) rpgStartBattle();
+  });
+  const battleRoles = $("rpgBattleRoles");
+  if (battleRoles) battleRoles.addEventListener("click", e => {
+    const button = e.target.closest("[data-battle-role]");
+    if (button) rpgSetBattleRole(button.dataset.battleRole);
   });
   document.querySelectorAll(".rpg-tab[data-rpgtab]").forEach(b => b.addEventListener("click", () => { rpgCharTab = b.dataset.rpgtab; rpgRenderTab(); }));
   const tabBody = $("rpgTabBody");
