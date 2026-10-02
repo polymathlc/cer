@@ -215,10 +215,11 @@ test('insufficient funds and client-selected cards, costs or ownership cannot al
   assert.equal(result.collection.unlockedEncounter, 9); assert.deepEqual(result.collection.completed, [1]); assert.equal(result.collection.stats.correctAnswers, 3);
 });
 function concurrentSaveFixture() {
-  let cloud = null, settle, hold = true, profile = 'p-fixture'; const ordinaryWrites = [];
+  let cloud = null, settle, hold = true, profile = 'p-fixture'; const ordinaryWrites = [], publications = [];
   const context = vm.createContext({ currentUser: { uid: 'fixture-account' }, rpgState: { gold: 1000 },
     RPG_STORAGE_MODE: 'firestore', db: {}, doc: (...parts) => parts, rpgRenderSide() {}, rpgWriteLocal() {}, console,
     setDoc: async (ref, state) => { const accepted = { ref, state: structuredClone(state) }; ordinaryWrites.push(accepted); cloud = accepted.state; } });
+  context.rpgPublishLeaderboard = () => publications.push({ uid: context.currentUser.uid, state: structuredClone(context.rpgState) });
   const saveGate = createGrandLineRpgSaveGate({ getUser: () => context.currentUser, flush: () => context.rpgSave() });
   context.grandLineRpgSaveGate = saveGate;
   const start = app.indexOf('function rpgSave() {'), end = app.indexOf('\n}', start);
@@ -227,7 +228,7 @@ function concurrentSaveFixture() {
     isCurrent: ctx => context.currentUser?.uid === 'fixture-account' && ctx.profileKey === profile, getPacks: () => packs, random: () => 0, saveGate,
     writeState: async next => { const snapshot = structuredClone(next); if (hold) await new Promise((resolve, reject) => { settle = { resolve, reject }; }); cloud = snapshot; } };
   const economy = createGrandLineEconomy({ ...env, commit: createGrandLineRpgCommit(env) });
-  return { context, economy, ordinaryWrites, cloud: () => cloud, settle: () => settle, noHold: () => { hold = false; },
+  return { context, economy, ordinaryWrites, publications, cloud: () => cloud, settle: () => settle, noHold: () => { hold = false; },
     switchProfile: value => { profile = value; }, ctx: { profileKey: 'p-fixture' } };
 }
 test('actual ordinary RPG save defers provisional receipts, then flushes rollback and safely retries the same purchase', async () => {
@@ -235,8 +236,10 @@ test('actual ordinary RPG save defers provisional receipts, then flushes rollbac
   const pending = f.economy.buyPack(request, f.ctx);
   f.context.rpgState.gold += 8; f.context.rpgSave();
   assert.equal(f.ordinaryWrites.length, 0, 'an ordinary grading save must not persist an unconfirmed debit or receipt');
+  assert.equal(f.publications.length, 0, 'an unconfirmed purchase cannot publish a provisional hero');
   f.settle().reject(new Error('purchase save rejected')); await assert.rejects(pending, /could not be saved/);
   assert.equal(f.ordinaryWrites.length, 1); assert.equal(f.cloud().gold, 1008); assert.equal(f.cloud().grandLine, undefined);
+  assert.equal(f.publications.length, 1); assert.equal(f.publications[0].state.gold, 1008);
   f.noHold(); const retried = await f.economy.buyPack(request, f.ctx);
   assert.equal(retried.wallet.balance, 888); assert.equal(f.cloud().gold, 888); assert.equal(retried.collection.stats.packsOpened, 1);
   assert.equal(f.cloud().grandLine.profiles[f.ctx.profileKey].purchases[request.purchaseId].cost, 120);
@@ -253,9 +256,11 @@ test('queued ordinary saves never flush into a different signed-in account', asy
   f.context.rpgState.gold += 8; f.context.rpgSave();
   f.context.currentUser = { uid: 'new-account' }; f.context.rpgState = { gold: 50 }; f.context.rpgSave();
   assert.equal(f.ordinaryWrites.length, 1, 'the new account can save its own state normally');
+  assert.deepEqual(f.publications.map(p => p.uid), ['new-account']);
   f.settle().reject(new Error('old purchase rejected')); await assert.rejects(pending);
   assert.equal(f.ordinaryWrites.length, 1); assert.equal(f.context.rpgState.gold, 50);
   assert.equal(f.ordinaryWrites[0].ref[2], 'new-account'); assert.equal(f.ordinaryWrites[0].state.grandLine, undefined);
+  assert.deepEqual(f.publications.map(p => p.uid), ['new-account'], 'the old queued save cannot publish into the new account');
 });
 test('same-account learner changes preserve ordinary points but keep the receipt in its original learner collection', async () => {
   const f = concurrentSaveFixture(), pending = f.economy.buyPack({ packId: 'spark', purchaseId: 'original-learner' }, f.ctx);
