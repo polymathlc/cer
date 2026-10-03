@@ -1,0 +1,38 @@
+name: Shape snap and pen select checks
+
+# Hold-to-snap shapes (pdf-annotator, bar-model, student annotation pads, the
+# touch-up editor) and the touch-up editor's Pen select tool. shape-snap.js is
+# byte-for-byte the same file in polymathlc/book and polymathlc/anskey.
+on:
+  pull_request:
+    paths: ['shape-snap.js', 'app.js', 'index.html', 'bar-model.html', 'pdf-annotator.html', 'tools/shape-snap-*', 'tools/touchup-snap-pen-tests.mjs', 'tools/pdf-annotator-snap-tests.mjs', 'tools/bar-model-snap-browser.mjs', '.github/workflows/shape-snap.yml']
+  push:
+    branches: [main]
+    paths: ['shape-snap.js', 'app.js', 'index.html', 'bar-model.html', 'pdf-annotator.html', 'tools/shape-snap-*', 'tools/touchup-snap-pen-tests.mjs', 'tools/pdf-annotator-snap-tests.mjs', 'tools/bar-model-snap-browser.mjs', '.github/workflows/shape-snap.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  shape-snap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax
+        run: |
+          cp app.js "$RUNNER_TEMP/app.mjs" && node --check "$RUNNER_TEMP/app.mjs"
+          node --check shape-snap.js
+      - name: Recogniser, touch-up editor and annotation pads
+        run: node --test tools/shape-snap-tests.mjs tools/touchup-snap-pen-tests.mjs tools/pdf-annotator-snap-tests.mjs
+      - name: Install isolated browser runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pw" --no-audit --no-fund playwright@1.62.1
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Bar Model Studio pen in a real browser
+        env:
+          PW: ${{ runner.temp }}/pw/node_modules/playwright/index.mjs
+        run: node tools/bar-model-snap-browser.mjs

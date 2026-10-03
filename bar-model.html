@@ -1772,7 +1772,7 @@ input, button, select, textarea { font-family: inherit; }
   </div>
 </div>
 
-<div class="version-badge" id="versionBadge">Bar Model Studio v1.11</div>
+<div class="version-badge" id="versionBadge">Bar Model Studio v1.12</div>
 
 <!-- ══════════════════════════════════════════════════════════════════
      SHARED AI ROUTES — module script
@@ -1780,6 +1780,7 @@ input, button, select, textarea { font-family: inherit; }
      Kimi are automatic backups. The shared authenticated callables hold
      the server keys. Speech keeps its specialised transcription model.
      ══════════════════════════════════════════════════════════════════ -->
+<script defer src="shape-snap.js"></script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
   import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
@@ -2768,12 +2769,20 @@ function penInkOf(swatchColor) {
   return map[swatchColor] || '#37474F';
 }
 
-function buildPenPathData(points) {
+function buildPenPathData(points, sharp) {
   if (!points || points.length === 0) { return ''; }
   var d = 'M' + points[0].x.toFixed(1) + ' ' + points[0].y.toFixed(1);
   if (points.length === 1) {
     // A tap: draw a tiny dot-length segment so something is visible
     d += ' l0.5 0.5';
+    return d;
+  }
+  if (sharp) {
+    // A stroke that snapped to a shape keeps its corners: smoothing through
+    // midpoints would round every corner of a rectangle or triangle.
+    for (var k = 1; k < points.length; k++) {
+      d += ' L' + points[k].x.toFixed(1) + ' ' + points[k].y.toFixed(1);
+    }
     return d;
   }
   // Quadratic smoothing through midpoints keeps hand strokes from
@@ -2791,7 +2800,7 @@ function buildPenPathData(points) {
 
 function renderPenElement(element) {
   var group = makeNode('g', { 'data-id': element.id, 'data-type': 'pen' });
-  var pathData = buildPenPathData(element.points);
+  var pathData = buildPenPathData(element.points, element.sharp);
 
   group.appendChild(makeNode('path', {
     d: pathData,
@@ -3028,6 +3037,7 @@ canvasSvg.addEventListener('pointerdown', function (event) {
       points: [{ x: point.x, y: point.y }],
       ink: penInkOf(appState.activeColor)
     };
+    penSnapBegin(event);
     drawPreviewPen(pointerSession.points, pointerSession.ink);
   } else if (tool === 'brace') {
     pointerSession = { mode: 'drawBrace', startX: snap(point.x), startY: snap(point.y) };
@@ -3096,6 +3106,14 @@ canvasSvg.addEventListener('pointermove', function (event) {
   if (pointerSession.mode === 'drawBar') {
     drawPreviewRect(pointerSession.startX, pointerSession.startY, snap(point.x), snap(point.y));
   } else if (pointerSession.mode === 'drawPen') {
+    if (pointerSession.hold) { pointerSession.hold.move(event.clientX, event.clientY); }   // a real move restarts the wait
+    if (pointerSession.snap) {
+      // Snapped: the pen now adjusts the SHAPE (a line's end, a circle's radius…).
+      pointerSession.snap = window.ShapeSnap.drag(pointerSession.snap, point);
+      pointerSession.points = window.ShapeSnap.toPoints(pointerSession.snap);
+      drawPreviewPen(pointerSession.points, pointerSession.ink, true);
+      return;
+    }
     var lastPoint = pointerSession.points[pointerSession.points.length - 1];
     var distX = point.x - lastPoint.x;
     var distY = point.y - lastPoint.y;
@@ -3149,6 +3167,7 @@ canvasSvg.addEventListener('pointerup', function (event) {
       renderAllElements();
     }
   } else if (pointerSession.mode === 'drawPen') {
+    if (pointerSession.hold) { pointerSession.hold.cancel(); }
     // Commit only strokes with a bit of substance — a stray tap of
     // less than ~6px total travel is discarded as noise.
     var travelled = 0;
@@ -3158,12 +3177,14 @@ canvasSvg.addEventListener('pointerup', function (event) {
     }
     if (pointerSession.points.length >= 2 && travelled >= 6) {
       pushUndoSnapshot();
-      appState.elements.push({
+      var penElement = {
         id: newElementId(), type: 'pen',
         points: pointerSession.points,
         ink: pointerSession.ink,
         width: 2.6
-      });
+      };
+      if (pointerSession.snap) { penElement.sharp = true; }   // keep a snapped shape's corners crisp
+      appState.elements.push(penElement);
       renderAllElements();
     }
   } else if (pointerSession.mode === 'drawBrace') {
@@ -3284,11 +3305,43 @@ function applyMove(element, original, dx, dy) {
   }
 }
 
+/* ✨ HOLD TO SNAP. Draw freehand and keep the pen still before lifting: the
+   stroke becomes the neat shape it looks like — straight line, arc, smooth
+   curve, circle, ellipse, rectangle, square, triangle, pentagon or hexagon —
+   and dragging on adjusts it. shape-snap.js is byte-for-byte the same file in
+   polymathlc/book, cer and anskey. The result is still an ordinary pen
+   element (with `sharp` so its corners are not smoothed away), so undo, move,
+   erase and the AI marking all work as before. If the script did not load the
+   pen simply stays freehand. */
+function penSnapUnit() {
+  var m = canvasSvg.getScreenCTM();
+  return (m && m.a) ? 1 / m.a : 1;              // viewBox units per screen pixel
+}
+function penSnapBegin(event) {
+  var S = window.ShapeSnap;
+  if (!S || !S.createHold || !pointerSession || pointerSession.mode !== 'drawPen') { return; }
+  pointerSession.snap = null;
+  pointerSession.hold = S.createHold({ onHold: penSnapFire });
+  pointerSession.hold.start(event.clientX, event.clientY);
+}
+function penSnapFire() {
+  var S = window.ShapeSnap, session = pointerSession;
+  if (!S || !session || session.mode !== 'drawPen' || session.snap) { return; }
+  var rec = S.recognize(session.points, { unit: penSnapUnit() });
+  if (!rec) { return; }
+  session.snap = rec;
+  session.points = S.toPoints(rec);
+  drawPreviewPen(session.points, session.ink, true);
+}
+canvasSvg.addEventListener('pointercancel', function () {
+  if (pointerSession && pointerSession.hold) { pointerSession.hold.cancel(); }
+});
+
 /* Preview shapes while dragging */
-function drawPreviewPen(points, ink) {
+function drawPreviewPen(points, ink, sharp) {
   clearPreview();
   previewLayer.appendChild(makeNode('path', {
-    d: buildPenPathData(points),
+    d: buildPenPathData(points, sharp),
     fill: 'none',
     stroke: ink,
     'stroke-width': 2.6,
