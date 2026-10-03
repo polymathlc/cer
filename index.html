@@ -14,7 +14,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-<link rel="modulepreload" href="app.js?v=1.423.2">
+<link rel="modulepreload" href="app.js?v=1.424.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -15767,7 +15767,7 @@ body.lore-reading { overflow: hidden; }
       <div class="annot-tools">
         <button type="button" class="annot-tool" data-atool="erase" title="Paint white over words to erase them — Photoshop style: click a point then Shift-click another to join them with a straight line; Shift-drag locks to horizontal / vertical">🩹 Erase</button>
         <button type="button" class="annot-tool" id="annotEraseTo" onclick="annotToggleEraseTo()" title="What Erase, the paint bucket and Delete leave behind: white (for rubbing a word off a scanned question) or transparent (for card art and sprites, which stand on nothing)">⬜ Erase to: <b>white</b></button>
-        <button type="button" class="annot-tool" data-atool="paint" title="Paint over with the chosen colour — Photoshop style: click a point then Shift-click another to join them with a straight line; Shift-drag locks to horizontal / vertical">🖌️ Paint</button>
+        <button type="button" class="annot-tool" data-atool="paint" title="Paint over with the chosen colour — Photoshop style: click a point then Shift-click another to join them with a straight line; Shift-drag locks to horizontal / vertical. Draw freehand and HOLD STILL before lifting: the stroke snaps to the neat shape it looks like — straight line, arc, smooth curve, circle, ellipse, rectangle, square, triangle, pentagon or hexagon — and you can keep dragging to adjust it. ↶ Undo takes the whole stroke back.">🖌️ Paint</button>
         <button type="button" class="annot-tool" data-atool="fill" title="Paint bucket (G) — click inside a shape or area to flood it with the chosen colour. The strip at the bottom of the bucket is the colour that will be poured.">
           <svg class="annot-bucket" viewBox="0 0 24 26" aria-hidden="true">
             <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
@@ -15780,7 +15780,8 @@ body.lore-reading { overflow: hidden; }
         <button type="button" class="annot-tool" data-atool="clone" title="Clone stamp (S): click to set a source point, then drag to copy that part of the picture elsewhere. Alt+click to re-set the source.">🧬 Clone</button>
         <button type="button" class="annot-tool" data-atool="history" title="History brush (Y) — brush the ORIGINAL picture back wherever you drag, undoing your edits by hand, one stroke at a time">🕘 History</button>
         <button type="button" class="annot-tool" data-atool="select" title="Rectangle select (M): drag a box around an area, then fill it, move it, or use AI content-aware fill">⬚ Select</button>
-        <button type="button" class="annot-tool" data-atool="lasso" title="Lasso select (L): draw freehand around an area, then fill it, move it, or use AI content-aware fill">➰ Lasso</button>
+        <button type="button" class="annot-tool" data-atool="lasso" title="Lasso select (L): draw freehand around an area, then fill it, move it, or use AI content-aware fill. Hold still before lifting and the outline snaps to the neat shape it looks like (circle, ellipse, rectangle, triangle…) — keep dragging to adjust.">➰ Lasso</button>
+        <button type="button" class="annot-tool" data-atool="penselect" title="Pen select (P) — Photoshop's pen, for a precise selection. Click to place corner points; click and DRAG to pull out a smooth curve; click the first point (or press Enter, or double-click) to close it into a selection. Drag a point or its handle to adjust it; Backspace removes the last point; Esc cancels. Alt-drag a handle bends one side only; Shift locks to 45°.">🖊️ Pen select</button>
         <button type="button" class="annot-tool" data-atool="wand" title="Magic wand (W): click a colour to select every pixel like it. Alt+click selects that colour across the WHOLE picture, not just the patch you clicked. Use the ± slider to widen or tighten what counts as the same colour.">🪄 Wand</button>
         <button type="button" class="annot-tool" data-atool="move" title="Move (V): drag inside a selection to cut it out and drop it anywhere — hold Alt to copy instead of cut. Also drags text labels around.">✥ Move</button>
         <button type="button" class="annot-tool" data-atool="rotate" title="Rotate (R): drag on the image to turn it — hold Shift to snap to 15°. With an area selected it turns just that object; with nothing selected it straightens the whole picture. Use 📐 Straighten to trace a crooked edge and level it automatically.">🔄 Rotate</button>
@@ -15909,6 +15910,7 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
-<script type="module" src="app.js?v=1.423.2"></script>
+<script defer src="shape-snap.js"></script>
+<script type="module" src="app.js?v=1.424.0"></script>
 </body>
 </html>

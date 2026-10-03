@@ -2,6 +2,43 @@
 
 Guidance for Claude when working in this repo.
 
+## ✨ Hold-to-snap shapes and 🖊️ Pen select (v1.424.0)
+
+`shape-snap.js` (loaded with `<script defer>` before `app.js`, and by `bar-model.html` / `pdf-annotator.html`)
+is **byte-for-byte the same file in `polymathlc/book`, `polymathlc/anskey` and here — ship a change to all three**,
+along with `tools/shape-snap-tests.mjs` and `tools/shape-snap-fixtures.mjs`. It is pure and dependency-free:
+`ShapeSnap.recognize(points, {unit})` decides what a freehand stroke was meant to be (line, arc, smooth curve,
+circle, ellipse, rectangle/square, triangle, pentagon/hexagon), `toPoints` samples it, `drag` keeps it adjustable while
+the pen is still down, `createHold` is the rest-detector, and `flattenAnchors` / `setSmoothHandles` / `hitAnchors`
+are the Photoshop pen's maths. `unit` is one SCREEN pixel in the caller's coordinates, so the small floors scale with zoom.
+
+**Hold to snap** — draw, keep the pointer still ~0.55 s (7 px of jitter allowed), and the stroke becomes the neat
+shape; keep dragging to adjust, lift to keep it. It is wired into four places, each keeping its own stroke format:
+- **Touch-up editor** (`_annotSnap*`, in app.js beside `_annotBrushLine`): 🖌️ Paint repaints the shape over the picture
+  *restored from the history step pushed at pointer-down* (so ↶ Undo is still one step and nothing underneath is lost);
+  ➰ Lasso snaps only to a CLOSED outline; 🧽 Erase, Clone, History and the rest are deliberately never snapped — an
+  eraser pass is a decision about what to destroy and a guessed shape would rub out the wrong place.
+- **Student annotation pads** (`_annotPadSnap*`): strokes are stored as 0..1 fractions of the pad, so recognition runs
+  in CSS pixels (a circle on a wide, short pad must stay round) and the result is converted back.
+- **`bar-model.html`**: the pen element gains `sharp: true` when snapped, because `buildPenPathData` otherwise smooths
+  through midpoints and would round every corner of a rectangle.
+- **`pdf-annotator.html`**: pen / highlighter strokes; still ordinary strokes, so save/print/erase are unchanged.
+If `shape-snap.js` failed to load every one of them degrades to plain ink and never throws.
+
+**Pen select** (`penselect`, key **P**, 🖊️ in the touch-up toolbar) — Photoshop's pen, used to make a selection: click for
+a corner anchor, click-and-drag for a smooth anchor with symmetric Bezier handles, click the first anchor (or Enter, or
+double-click) to close. Drag an anchor or handle to adjust it (Alt breaks one handle's symmetry, Shift locks 45°),
+Backspace removes the last anchor, Esc drops the path. The path is flattened to a polygon and becomes the ordinary
+`_annot.sel = {pts}`, so fill / delete / move / resize / rotate / AI fill all work on it unchanged. Things that fail quietly:
+Enter must never fall through to "save the whole picture" while a path is open; Esc must back out of the path before
+the selection; grab radii are in SCREEN pixels (divide by zoom); the preview must `save()`/`restore()` the shared
+selection context or its line caps change the marching ants; a tool switch has to cancel an open path.
+
+Run `node --test tools/shape-snap-tests.mjs tools/touchup-snap-pen-tests.mjs tools/pdf-annotator-snap-tests.mjs` and, for the real pen on a real page,
+`PW=/path/to/playwright/index.mjs node tools/bar-model-snap-browser.mjs` after touching any of it. The touch-up tests
+cut the SHIPPED functions out of app.js (including the real `_annotDown/_annotMove/_annotUp`), so they fail if the
+hooks inside those handlers are reordered.
+
 ## Public home page identity
 - Keep the official Polymath Learning Centre logo at the top left of the public home page. Use `assets/branding/polymath-learning-centre.png`, preserving the full artwork and aspect ratio; do not replace it with a monogram or invented wordmark. See `assets/branding/README.md` for provenance.
 - Keep the header logo compact and aligned with the two-line “Polymath Learning Centre” name. Label the public sign-in action “Polymath Online”.

@@ -624,12 +624,13 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="shape-snap.js"></script>
 
 <script>
 'use strict';
 
 /* ================= Constants ================= */
-var APP_VERSION = 'v1.5.0';
+var APP_VERSION = 'v1.6.0';
 var ADMIN_EMAIL = 'chungzhikai@gmail.com';
 var COLLECTION = 'pdfAnnotator';
 var STORAGE_DIR = 'pdf-annotator';
@@ -1201,6 +1202,7 @@ function attachOverlayHandlers(p) {
     }
     drawing = { ann: ann, page: p, svgNode: null };
     redrawTemp();
+    if (ann.type === 'pen' || ann.type === 'highlight') snapBegin(e);
   });
 
   svg.addEventListener('pointermove', function (e) {
@@ -1216,6 +1218,14 @@ function attachOverlayHandlers(p) {
     var pt2 = eventPoint(e, p);
     var a = drawing.ann;
     if (a.type === 'pen' || a.type === 'highlight') {
+      if (drawing.hold) drawing.hold.move(e.clientX, e.clientY);   // a real move restarts the wait
+      if (drawing.snap) {
+        // Snapped: the pen now adjusts the SHAPE (a line's end, a circle's radius…).
+        drawing.snap = window.ShapeSnap.drag(drawing.snap, pt2);
+        a.points = window.ShapeSnap.toPoints(drawing.snap);
+        redrawTemp();
+        return;
+      }
       var last = a.points[a.points.length - 1];
       if (Math.abs(pt2.x - last.x) + Math.abs(pt2.y - last.y) >= 1) a.points.push(pt2);
     } else if (a.type === 'rect' || a.type === 'ellipse') {
@@ -1246,6 +1256,7 @@ function attachOverlayHandlers(p) {
       return;
     }
     if (!drawing || drawing.page !== p) return;
+    if (drawing.hold) drawing.hold.cancel();
     var a2 = drawing.ann;
     drawing = null;
     if (a2.type === 'text') {
@@ -1270,7 +1281,34 @@ function attachOverlayHandlers(p) {
     renderOverlay(p);
   }
   svg.addEventListener('pointerup', finishPointer);
-  svg.addEventListener('pointercancel', function () { drawing = null; draggingSel = null; renderOverlay(p); });
+  svg.addEventListener('pointercancel', function () { if (drawing && drawing.hold) drawing.hold.cancel(); drawing = null; draggingSel = null; renderOverlay(p); });
+
+  /* ✨ HOLD TO SNAP. Draw with the pen or highlighter and keep still before
+     lifting: the stroke becomes the neat shape it looks like — straight line,
+     arc, smooth curve, circle, ellipse, rectangle, square, triangle, pentagon
+     or hexagon — and dragging on adjusts it. shape-snap.js is byte-for-byte
+     the same file in polymathlc/book, cer and anskey. The result is still an
+     ordinary pen/highlight stroke, so saving, printing, erasing and undo are
+     unchanged; if the script did not load the pen simply stays freehand. */
+  function snapBegin(e) {
+    var S = window.ShapeSnap;
+    if (!S || !S.createHold || !drawing) return;
+    drawing.snap = null;
+    drawing.hold = S.createHold({ onHold: snapFire });
+    drawing.hold.start(e.clientX, e.clientY);
+  }
+  function snapFire() {
+    var S = window.ShapeSnap;
+    if (!S || !drawing || drawing.page !== p || drawing.snap || drawing.isText) return;
+    var a = drawing.ann;
+    if (a.type !== 'pen' && a.type !== 'highlight') return;
+    var rect = p.svg.getBoundingClientRect();
+    var rec = S.recognize(a.points, { unit: p.baseW / (rect.width || 1) });   // page units per screen pixel
+    if (!rec) return;
+    drawing.snap = rec;
+    a.points = S.toPoints(rec);
+    redrawTemp();
+  }
 
   /* Double-click a text annotation (any tool except keyword-marking) to edit it */
   svg.addEventListener('dblclick', function (e) {
@@ -1771,7 +1809,7 @@ document.addEventListener('keydown', function (e) {
   }
   if (e.key === '+' || e.key === '=') { zoomBy(1.2); return; }
   if (e.key === '-') { zoomBy(1 / 1.2); return; }
-  if (e.key === 'Escape') { drawing = null; selectedId = null; renderAllOverlays(); return; }
+  if (e.key === 'Escape') { if (drawing && drawing.hold) drawing.hold.cancel(); drawing = null; selectedId = null; renderAllOverlays(); return; }
   var toolKeys = { v: 'select', p: 'pen', h: 'highlight', t: 'text', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow', k: 'keyword' };
   if (!e.ctrlKey && !e.metaKey && !e.altKey && toolKeys[e.key.toLowerCase()]) setTool(toolKeys[e.key.toLowerCase()]);
 });
