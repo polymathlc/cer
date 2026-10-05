@@ -1,5 +1,6 @@
 // Exercise the real app marking and coach lifecycle against controlled DOM/AI
 // boundaries. Grading remains the app's existing per-part implementation.
+import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -115,6 +116,7 @@ function harness() {
     const askGemini = (prompt, options) => read('text', prompt, options);
     const askGeminiVision = (prompt, media, options) => read('vision', prompt, options, media);
     ${sourceDependencies}
+    ${mcqLabelSrc(src, { norm: false, display: false })}
     ${sourceHelpers}
     ${taxonomy}
     ${helpers}
@@ -324,7 +326,7 @@ test('source HTML pictures and visible options retain order while blank answers 
   assert.match(source.text, /\(a\) Compare A and B/);
   assert.match(source.text, /Label A/);
   assert.match(source.text, /Label B/);
-  assert.match(source.text, /Option 1: One/);
+  assert.match(source.text, /(?:^|\n)1\) One(?:\n|$)/);
   assert.match(source.text, /Fruit is ____ and has ____/);
   assert.doesNotMatch(source.text, /dull|green|odour|correctId|o2/);
 });

@@ -23,6 +23,7 @@
 //    picture instead.
 //  • THE PHOTO EDITOR IS NOT ADMIN-ONLY. It is an admin tool on a page a
 //    student must not reach, and a hidden nav item is not a lock.
+import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import fs from 'fs';
 
 const APP = new URL('../app.js', import.meta.url);
@@ -46,6 +47,7 @@ const M = new Function(`
   // The end marker keeps its `async`: cutting at the bare `function` leaves a
   // dangling `async ` on the end of the region, which silently makes the NEXT
   // helper concatenated after it an async function.
+  mcqLabelSrc(src) +
   cut('const AKD_NOTE_MAX', '\nasync function _akdQuestionFigure', 'auto diagram core') + '\n' +
   cut('function _peCleanName(n) {', '\nfunction _peReadFile', 'photo editor name') + `
 return { NOTE_MAX: AKD_NOTE_MAX, RULES: AKD_PRINT_RULES, clip: _akdClipNote,

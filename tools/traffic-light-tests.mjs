@@ -31,6 +31,7 @@
 //    the whole sheet in `blocks`; letting a verdict formed on one draft stand
 //    over the next; and lighting an EMPTY editor green, which is the whole
 //    feature inverted by pressing the button on a blank page.
+import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import fs from 'fs';
 
 const APP = new URL('../app.js', import.meta.url);
@@ -103,7 +104,7 @@ const document = {
 };
 `;
 
-const M = new Function(preamble + section + `
+const M = new Function(preamble + mcqLabelSrc(src, { display: false }) + section + `
 return {
   HOOK,
   TL_PAR, TL_LOOKS,

@@ -471,7 +471,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v1.9.3</div>
+<div id="versionBadge">Science Strike v1.9.4</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -804,6 +804,22 @@ function fpsTableHtml(block) {
   }
   return html+'</tbody></table></div>';
 }
+// 🔤 MCQ option labels — the same rule as index.html's mcqLabelStyle: the
+// question's own override (q.mcqLabels), else letters when either topic is at
+// a secondary level. A bracketed "(3)" option is drawn as that label.
+function fpsMcqLabelStyle(q) {
+  const own = q && q.mcqLabels;
+  if (own === 'letters' || own === 'numbers') return own;
+  const sec = t => { try { return !!t && topicLevelNum(String(t).trim()) >= LEVEL_SECONDARY_MIN; } catch (e) { return false; } };
+  return q && (sec(q.topic) || sec(q.topic2)) ? 'letters' : 'numbers';
+}
+function fpsMcqLabelOf(i, style) { return style === 'letters' && i < 26 ? String.fromCharCode(65 + i) : String(i + 1); }
+function fpsMcqOptionText(text, i, style) {
+  const m = String(text).replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim().match(/^\(\s*([1-9]|[A-Ha-h])\s*\)$/);
+  if (!m) return text;
+  const n = /\d/.test(m[1]) ? +m[1] : m[1].toUpperCase().charCodeAt(0) - 64;
+  return n === i + 1 ? '(' + fpsMcqLabelOf(i, style) + ')' : text;
+}
 function extractMcq(q) {
   // One malformed database document must not strand the rest of the bank.
   try { return fpsExtractMcq(q); } catch (_) { return null; }
@@ -837,7 +853,8 @@ function fpsExtractMcq(q) {
   if (!stemHtml.trim()) return null;
   return {
     id: q.id, title: q.title || '', topic: q.topic || 'Science', feedSource:q,
-    stemHtml, options: mcq.options.map(o => String(o.text || '')), answer,
+    stemHtml, options: mcq.options.map((o, i) => fpsMcqOptionText(String(o.text || ''), i, fpsMcqLabelStyle(q))), answer,
+    labels: mcq.options.map((_, i) => fpsMcqLabelOf(i, fpsMcqLabelStyle(q))),
     explain: (() => { const ex = blocks.find(b => b.type === 'explanation'); return ex ? stripHtml(ex.content || '') : ''; })()
   };
 }
@@ -2769,7 +2786,7 @@ async function openQuestion() {
   q.options.forEach((opt, i) => {
     const b = document.createElement('button');
     b.className = 'qopt';
-    b.innerHTML = '<span>(' + (i + 1) + ')</span> ' + opt;   // Preserve authored diagrams, tables and superscripts.
+    b.innerHTML = '<span>(' + String((q.labels && q.labels[i]) || (i + 1)).replace(/[<>&"]/g, '') + ')</span> ' + opt;   // Preserve authored diagrams, tables and superscripts.
     b.addEventListener('click', () => answerQuestion(i, b));
     host.appendChild(b);
   });
@@ -2825,7 +2842,7 @@ function answerQuestion(i, btn) {
   } else {
     sfx.qBad();
     G.streak = 0;
-    verdict.textContent = '✘ Not quite. The correct choice is ' + (q.answer + 1) + '. Read it again, then try the next challenge. Your streak will start again.';
+    verdict.textContent = '✘ Not quite. The correct choice is ' + ((q.labels && q.labels[q.answer]) || (q.answer + 1)) + '. Read it again, then try the next challenge. Your streak will start again.';
     verdict.style.color = 'var(--bad)';
   }
   explain.textContent = q.explain || '';
