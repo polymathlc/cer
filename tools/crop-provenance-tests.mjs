@@ -29,6 +29,7 @@ function world({ ready = false, crops = [], imageBlocks = [] } = {}) {
     async function _cropBoxFromScreenshotEx() { const c = H.crops.shift(); return c ? { dataUrl: c } : null; }
     function jevGateOn() { return false; } function _canAuthor() { return true; }
     async function _aiRefineCrop(value) { return value; }
+    function _cropWordingOf() { return ''; }
     async function generateCleanEnhancedImage() { return H.enhanced; }
     async function uploadImageDataUrl(value) { const url = 'https://images.test/' + (++seq); H.images.set(url, value); return url; }
     function normalizeCategoryValue(value) { return value; }

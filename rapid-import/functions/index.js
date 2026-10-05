@@ -10,7 +10,7 @@ import { getFunctions } from 'firebase-admin/functions';
 import { GoogleGenAI } from '@google/genai';
 import { createCanvas, loadImage, DOMMatrix, ImageData, Path2D } from '@napi-rs/canvas';
 import { MAX_PDF_BYTES, CHUNK_BYTES, MAX_PAGES, parseReply, blockType, normaliseQuestion, assemblePage, signature, html } from './core.js';
-import { cropDiagramEx } from './crop.js';
+import { cropDiagramEx, cropWordingOf, refinePrompt, subCrop } from './crop.js';
 import { jevReview, jevAllow, JevUnavailable } from './jev.js';
 import { figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons } from './jev-review-core.js';
 import { FIGURE_KINDS, CLASSIFY_FIGURE_PROMPT, figureMode, imageInstruction, originalImageUrl, adoptOriginal, figureFixTargets, storageImagePath, enhancementFindings, nextImageIndex, requireImageAudits } from './image-core.js';
@@ -290,12 +290,28 @@ async function recropBox(canvas, made, reasons, job) {
   });
   return parseBox(r.text);
 }
+// SECOND-CHANCE CLEANUP, as in the browser (app.js `_aiRefineCrop`): the crop
+// is shown back to the AI with the question's own TYPED wording, and anything
+// in the picture that is also in that list — the stem over a table, the parts
+// and answer lines under it — is cut off. This pass did not exist in the
+// worker, so a durable PDF import shipped whatever the pixel trim left. Any
+// failure keeps the crop exactly as it was.
+async function refineCrop(made, wording, job) {
+  if(!made||!made.canvas) return made;
+  try {
+    const r=await ask(refinePrompt(wording),[made.canvas.toBuffer('image/jpeg').toString('base64')],job);
+    const p=JSON.parse(r.text);
+    if(!p||p.clean===true||!Array.isArray(p.box_2d)) return made;
+    return subCrop(made,p.box_2d,createCanvas)||made;
+  } catch { return made; }
+}
 // Cut, judge, and re-cut with the AI until Jev and the pixel checks agree.
 // Returns one entry per image block: { made, state, tries, reasons }.
-async function reviewCrops(imageBlocks, canvas, job) {
-  const made=imageBlocks.map(b=>cropDiagramEx(canvas,b.box_2d??b.box,createCanvas));
+async function reviewCrops(imageBlocks, canvas, job, wording='') {
+  const made=[];
+  for(const b of imageBlocks) made.push(await refineCrop(cropDiagramEx(canvas,b.box_2d??b.box,createCanvas),wording,job));
   if(!jevOn(job)||!imageBlocks.length) return made.map(m=>({made:m,state:'ok',tries:0,reasons:[]}));
-  const factsOf=(m,i)=>figureFacts({index:i,source:m?'ai-box':'none',refused:!m,width:m?.canvas.width,height:m?.canvas.height,pageShare:m?.pageShare,measure:m?.measure});
+  const factsOf=(m,i)=>figureFacts({index:i,source:m?'ai-box':'none',refused:!m,width:m?.canvas.width,height:m?.canvas.height,pageShare:m?.pageShare,measure:m?.measure,refine:{changed:!!m?.refined}});
   const facts=made.map(factsOf);
   const verdicts=await jevAsk({scope:'figures',figures:facts});
   // Jev unavailable is not "no Jev": the pixel checks still stand on their own,
@@ -311,7 +327,7 @@ async function reviewCrops(imageBlocks, canvas, job) {
       let box=null;
       try { box=await recropBox(canvas,best.made,reasons,job); } catch { break; }
       if(!box) break;
-      const m2=cropDiagramEx(canvas,box,createCanvas,{marginScale:tries===1?1.6:2.2});
+      const m2=await refineCrop(cropDiagramEx(canvas,box,createCanvas,{marginScale:tries===1?1.6:2.2}),wording,job);
       const f2=factsOf(m2,i), hard=figureHardIssues(f2);
       let v2=null;
       if(!hard.length) v2=await jevAsk({scope:'figures',figures:[f2]});
@@ -515,13 +531,13 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
     const canvas=await render(doc,page), image=canvas.toBuffer('image/jpeg').toString('base64');
     const reference=page>1?(await render(doc,page-1)).toBuffer('image/jpeg').toString('base64'):null;
     const boundary=`\nPDF BOUNDARY RULES (override single-image assumptions): image 1 is the CURRENT page ${page}. ${reference?'Image 2 is the PREVIOUS page for context only; NEVER extract it again.':''} Extract ALL and ONLY questions/parts printed on image 1. Add sourceQuestionNumber to each entry (original main number, no part suffix). The first entry may have continuation:true if it belongs to the last question on the previous page, including repeated numbers with (continued), a new diagram for an existing question, a stem split mid-sentence, or later lettered parts. A repeated number or a continuation diagram does NOT start a new question. All other entries have continuation:false. Never renumber lettered parts. Use previous-page context to answer continuation parts. A continuation-only page is NOT blank. All image rectangles refer to image 1. Last held question: ${pending?JSON.stringify({number:pending.sourceQuestionNumber,blocks:pending.blocks}).slice(0,35000):'none; do not guess a preceding question'}.`;
-    const figures='\nFIGURE RULES: Keep text and image blocks in source reading order, at the exact point each figure belongs among the stem and lettered parts. Use one image block per figure or complete table, and retain every figure needed to answer the question. Give every image block figureKind:"diagram", "table", "flowchart" or "graph". Tables, graphs and every WORD diagram (boxes, circles or brackets holding only words or numbers joined by lines or arrows: flow charts, classification trees, concept maps, cycles) must be classified accurately (table, graph or flowchart) so they are redrawn in black and white; only a figure with pictured objects, apparatus or organisms is a diagram and receives colour. Each box_2d is [ymin,xmin,ymax,xmax], 0-1000 on CURRENT image 1 only, never on the previous context page or on an already cropped image. Include complete labels, units, arrows, legends, captions, table headers and borders belonging to the figure; check the last letter on every side and leave clear whitespace beyond it. Exclude surrounding question prose, question numbers, ordinary written options and answer lines; put that wording in text or mcq blocks instead. Keep picture answer choices together in one image including their option labels. Do not use a whole-page rectangle as a figure. If you cannot locate a required figure, keep its image block with box_2d:null in its original position so its source page can be retained for review.';
+    const figures='\nFIGURE RULES: Keep text and image blocks in source reading order, at the exact point each figure belongs among the stem and lettered parts. Use one image block per figure or complete table, and retain every figure needed to answer the question. Give every image block figureKind:"diagram", "table", "flowchart" or "graph". Tables, graphs and every WORD diagram (boxes, circles or brackets holding only words or numbers joined by lines or arrows: flow charts, classification trees, concept maps, cycles) must be classified accurately (table, graph or flowchart) so they are redrawn in black and white; only a figure with pictured objects, apparatus or organisms is a diagram and receives colour. Each box_2d is [ymin,xmin,ymax,xmax], 0-1000 on CURRENT image 1 only, never on the previous context page or on an already cropped image. Include complete labels, units, arrows, legends, captions, table headers and borders belonging to the figure; check the last letter on every side and leave clear whitespace beyond it. Exclude surrounding question prose, question numbers, ordinary written options and answer lines; put that wording in text or mcq blocks instead. A table rectangle runs from its top border to its bottom border (plus a title printed on it): never the sentence that introduces it, the lettered parts printed under it such as "(a) State..." or "(i) Substance 1", marks such as [2], blank answer lines, or the end of the previous question. Keep picture answer choices together in one image including their option labels. Do not use a whole-page rectangle as a figure. If you cannot locate a required figure, keep its image block with box_2d:null in its original position so its source page can be retained for review.';
     const payloads=parseReply(await ask(job.prompt+boundary+figures,reference?[image,reference]:[image],job,parseReply));
     if(payloads.length>60) throw new Error('Too many questions on one page; review this PDF.');
     const token=randomUUID(), sourceUrl=await storeImage(job,token,`page-${page}`,canvas), entries=[];
     for(let i=0;i<payloads.length;i++) {
       const payload=payloads[i], urls=[];
-      const reviewed=await reviewCrops(payload.blocks.filter(b=>blockType(b)==='image'),canvas,job);
+      const reviewed=await reviewCrops(payload.blocks.filter(b=>blockType(b)==='image'),canvas,job,cropWordingOf(payload.blocks));
       for(const r of reviewed) {
         const crop=r.made&&r.made.canvas;
         // Reserve one result for every image block, including refused crops,

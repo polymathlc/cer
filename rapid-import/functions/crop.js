@@ -127,11 +127,45 @@ function _expandRectToWhitespace(ctx, W, H, r, thr) {
 //     "Diagram 1" and axis titles are narrow, so they survive),
 //   - not solid like a border (max row fill < 60%),
 //   - separated from the remaining content by clear whitespace.
-// Trims at most 3 bands and ~20% of the crop per side, keeps ≥ 50% of it.
+// Trims at most 3 bands and ~20% of the crop per side, keeps ≥ 50% of it —
+// unless it walks into a FIGURE BODY, which is the stop it can trust (below).
 const MAXRUN_FRAC = 0.30;  // a run of ink longer than this much of a band is a STROKE
 const RUNS_MIN = 6;        // …and a line of print breaks into at least this many pieces
 const RULE_FRAC = 0.55;    // a row carrying a run this wide is a printed RULE
 const RULE_GROUPS = 4;     // …and this many of them is a framed table: hands off
+// ---- PAST THE TABLE: a figure body is a place the walk can STOP ------------
+// The trim above used to stand down completely the moment a crop held four
+// printed rules — which is every bordered TABLE. So a table cropped with its
+// stem above it and its lettered parts, marks and answer lines below it came
+// back exactly as loose as the model drew it, the wording printed twice: once
+// in the picture and once typed underneath. Every one of those lines was
+// trimmable; the guard was protecting the table's own rows, and a bordered
+// table is ONE band (its vertical borders join every row), so it never needed
+// protecting from a band-by-band walk at all.
+//
+// So the crop is cut into bands once, and a band that is plainly a FIGURE
+// BODY — taller than a line of print and not shaped like print, or carrying a
+// stroke across most of its width (a table's rules, a graph's axis) — becomes
+// a place the walk stops. With one in the crop:
+//   · the walk may take up to TRIM_BANDS_MAX lines off a side rather than 3,
+//     and the 20% / 50% caps go — the body it stops at is what is kept;
+//   · an ANSWER LINE (a thin rule with writing space above it) is walked
+//     through, but only beside a line of print, never as the first thing met
+//     on its own — a lone stroke above a drawing can be part of the drawing;
+//   · a SHORT line of print ("(ii) Substance 2") counts as wording when it
+//     sticks out past the body's own left or right edge — a figure's labels
+//     and its "Diagram 1" caption sit within it;
+//   · the line touching the body is cut however small the gap, because the
+//     two are different kinds of thing and the band split already proves
+//     there is clear paper between them.
+// The four-rule guard still applies, to the rules OUTSIDE every figure body
+// that are not answer lines — a table drawn with horizontal rules only is a
+// stack of thin bands and must still never be eaten row by row. With no
+// figure body at all, everything is exactly what it was.
+const ANSWER_LINE_GAP = 2;   // an answer line has at least this many gapMin of writing space above it
+const STRONG_BAND = 2.5;     // a band this many line-heights tall is a figure body
+const TRIM_BANDS_MAX = 12;   // lines one side may lose when a figure body is reached
+const STICK_OUT = 0.02;      // past the body's own edge by this share of the crop = wording
 function _trimEdgeTextLines(ctx, W, H, r, thr) {
   const TH_INK = (thr == null ? INK_DEFAULT : thr);
   const x = Math.round(r.x), w = Math.round(r.w);
@@ -161,15 +195,17 @@ function _trimEdgeTextLines(ctx, W, H, r, thr) {
   const maxBandH = Math.round(H * 0.028);              // taller = part of the figure, keep it
   const maxTrim = h * 0.20, minKeep = h * 0.50;
 
-  // Scan from `from` in direction `dir` (+1 top / −1 bottom): the first ink
-  // band plus the whitespace gap that follows it.
-  const band = (from, dir, limit) => {
-    let s = from;
-    while (s !== limit && !inked(s)) s += dir;
-    if (s === limit) return null;
-    let e = s, gap = 0, minX = w, maxX = 0, maxFrac = 0, maxRun = 0;
+  // Every band in the crop, top to bottom, with the clear paper either side.
+  // Joining across gaps is symmetric, so these are the same bands a walk from
+  // either edge would find.
+  const bands = [];
+  for (let ry = 0; ry < h;) {
+    while (ry < h && !inked(ry)) ry++;
+    if (ry >= h) break;
+    const s = ry;
+    let e = ry, gap = 0, minX = w, maxX = 0, maxFrac = 0, maxRun = 0;
     const runList = [];
-    for (let ry = s; ry !== limit; ry += dir) {
+    for (; ry < h; ry++) {
       if (inked(ry)) {
         e = ry; gap = 0;
         if (rows[ry].minX < minX) minX = rows[ry].minX;
@@ -179,12 +215,16 @@ function _trimEdgeTextLines(ctx, W, H, r, thr) {
         runList.push(rows[ry].runs);
       } else if (++gap > joinGap) break;
     }
-    let after = 0;
-    for (let ry = e + dir; ry !== limit && !inked(ry); ry += dir) after++;
+    ry = e + 1;
     runList.sort((a, b) => a - b);
-    return { end: e, size: Math.abs(e - s) + 1, inkW: maxX - minX + 1, maxFrac, maxRun,
-             medRuns: runList.length ? runList[runList.length >> 1] : 0, after };
-  };
+    bands.push({ s, e, size: e - s + 1, minX, maxX, inkW: maxX - minX + 1, maxFrac, maxRun,
+                 medRuns: runList.length ? runList[runList.length >> 1] : 0 });
+  }
+  if (!bands.length) return r;
+  bands.forEach((b, i) => {
+    b.above = i ? b.s - bands[i - 1].e - 1 : b.s;
+    b.below = i < bands.length - 1 ? bands[i + 1].s - b.e - 1 : h - 1 - b.e;
+  });
   // A band is a line of PRINT, not part of the figure, on five counts. The
   // last two are what stop a table or a graph being eaten a row at a time:
   //   · NO LONG STROKE in it. Every scanline through print crosses letters, so
@@ -195,46 +235,76 @@ function _trimEdgeTextLines(ctx, W, H, r, thr) {
   //     "not solid" test passes it happily and the top comes off the table.
   //   · MADE OF MANY SHORT PIECES. A line of print breaks into dozens of runs;
   //     a stroke or a blob is one or two.
+  const printLike = b => b.maxFrac <= 0.6 && b.maxRun <= b.inkW * MAXRUN_FRAC && b.medRuns >= RUNS_MIN;
   const isProse = b => !!b && b.size >= minBandH && b.size <= maxBandH
-    && b.inkW >= w * 0.55 && b.maxFrac <= 0.6
-    && b.maxRun <= b.inkW * MAXRUN_FRAC && b.medRuns >= RUNS_MIN;
+    && b.inkW >= w * 0.55 && printLike(b);
+  const isLine = b => !!b && b.size < minBandH && b.inkW >= w * 0.45
+    && b.above >= gapMin * ANSWER_LINE_GAP;
+  const isStrong = b => b.size > maxBandH * 1.5
+    && (b.maxRun >= b.inkW * 0.5 || (b.size >= maxBandH * STRONG_BAND && !printLike(b)));
+  const strong = bands.map(isStrong);
+  const coreMode = strong.some(Boolean);
 
   // A FRAMED TABLE IS THE FIGURE, and every one of its rows reads as prose on
   // its own. Trimmed row by row it comes back as its own bottom two thirds —
   // the one wrong crop that looks completely convincing. Four rules and not
   // three: an ordinary boxed diagram is a rule top, a rule bottom and a
   // divider across the middle, and at three this would stand down on half the
-  // figures it was written to clean.
+  // figures it was written to clean. In core mode only the rules OUTSIDE a
+  // figure body, and that are not answer lines, are counted — see above.
+  const skipRow = new Uint8Array(h);
+  if (coreMode) bands.forEach((b, i) => {
+    if (strong[i] || isLine(b)) for (let ry = b.s; ry <= b.e; ry++) skipRow[ry] = 1;
+  });
   let ruleGroups = 0, inRule = 0;
   for (let ry = 0; ry < h; ry++) {
-    const isRule = rows[ry].maxRun >= w * RULE_FRAC;
+    const isRule = !skipRow[ry] && rows[ry].maxRun >= w * RULE_FRAC;
     if (isRule && !inRule) ruleGroups++;
     inRule = isRule ? 1 : 0;
   }
   if (ruleGroups >= RULE_GROUPS) return r;
 
+  // Walk the bands from one edge. `order` lists band indices outward-in.
   // A RUN OF CONSECUTIVE LINES goes together. Two lines of a question sit a
   // few pixels apart — far less than the clear band that separates the
   // wording from the figure — so insisting on clear paper after the FIRST
   // line finds none, stops, and leaves both lines on the picture. The cut is
-  // remembered only where a run reached real whitespace, so a band with
-  // nothing but figure after it is still never touched.
-  const eat = (from, dir, limit) => {
-    let at = from, cut = null;
-    for (let k = 0; k < 3; k++) {
-      const b = band(at, dir, limit);
-      if (!isProse(b)) break;
-      if (b.after >= gapMin) cut = b.end + dir * (1 + Math.min(b.after, gapMin));
-      at = b.end + dir;
-      if (dir > 0 ? at >= limit : at <= limit) break;
+  // remembered only where a run reached real whitespace (or the figure body
+  // itself), so a band with nothing but figure after it is still never touched.
+  const walk = (order, dir) => {
+    let core = -1;
+    if (coreMode) for (const i of order) if (strong[i]) { core = i; break; }
+    const C = core >= 0 ? bands[core] : null;
+    const sticksOut = b => !!C && b.size >= minBandH && b.size <= maxBandH && printLike(b)
+      && (b.minX < C.minX - w * STICK_OUT || b.maxX > C.maxX + w * STICK_OUT);
+    const words = b => isProse(b) || sticksOut(b);
+    let cut = null, eaten = 0;
+    const max = C ? TRIM_BANDS_MAX : 3;
+    for (let k = 0; k < order.length && eaten < max; k++) {
+      const i = order[k], b = bands[i];
+      if (i === core) break;
+      const next = k + 1 < order.length ? bands[order[k + 1]] : null;
+      const ok = words(b) || (C && isLine(b) && (eaten > 0 || (next && order[k + 1] !== core && words(next))));
+      if (!ok) break;
+      eaten++;
+      const after = dir > 0 ? b.below : b.above;
+      const end = dir > 0 ? b.e : b.s;
+      if (after >= gapMin || (next && order[k + 1] === core)) cut = end + dir * (1 + Math.min(after, gapMin));
     }
-    return cut;
+    return { cut, core: C };
   };
   let top = 0, bot = h - 1;
-  const t = eat(0, 1, h);
-  if (t !== null && t <= maxTrim && bot - t + 1 >= minKeep) top = t;
-  const b2 = eat(h - 1, -1, top - 1);
-  if (b2 !== null && (h - 1 - b2) <= maxTrim && b2 - top + 1 >= minKeep) bot = b2;
+  const up = walk(bands.map((_, i) => i), 1);
+  if (up.cut !== null) {
+    if (up.core) top = up.cut;
+    else if (up.cut <= maxTrim && bot - up.cut + 1 >= minKeep) top = up.cut;
+  }
+  const lower = bands.map((_, i) => i).reverse().filter(i => bands[i].s >= top);
+  const dn = walk(lower, -1);
+  if (dn.cut !== null) {
+    if (dn.core) { if (dn.cut >= top) bot = dn.cut; }
+    else if ((h - 1 - dn.cut) <= maxTrim && dn.cut - top + 1 >= minKeep) bot = dn.cut;
+  }
 
   // The blank paper this exposes is pulled in by _trimBlankEdges, which is
   // now the ONE door for "shrink to the ink" — it does the LEFT and RIGHT
@@ -323,3 +393,83 @@ function _trimBlankEdges(ctx, W, H, r, thr, axes) {
   return out;
 }
 
+
+// ---- THE QUESTION'S OWN WORDING, for the AI clean-up pass -------------------
+// Kept in step with app.js's `_cropWordingOf`: the sentences already TYPED into
+// the question, so the clean-up is a matching job ("this line is the question
+// twice") rather than a judgement about what belongs to a table.
+export const CROP_WORDING_CHARS = 1600;
+export function cropWordingOf(blocks) {
+  const out = [];
+  const plain = v => String(v == null ? '' : v)
+    .replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ').trim();
+  (Array.isArray(blocks) ? blocks : []).forEach(b => {
+    if (!b || typeof b !== 'object') return;
+    const t = String(b.type || '').toLowerCase();
+    if (t === 'text' || t === 'part') {
+      const v = plain(b.text != null ? b.text : b.content);
+      if (v) out.push(v);
+    } else if (t === 'mcq') {
+      const st = plain(b.question || b.stem || b.text);
+      if (st) out.push(st);
+      (Array.isArray(b.options) ? b.options : []).forEach(o => {
+        const v = plain(o && typeof o === 'object' ? (o.text != null ? o.text : o.content) : o);
+        if (v) out.push(v);
+      });
+    }
+  });
+  let text = '';
+  for (const line of out) {
+    if (text.length + line.length + 3 > CROP_WORDING_CHARS) break;
+    text += (text ? '\n' : '') + '- ' + line;
+  }
+  return text;
+}
+
+// The prompt the clean-up pass sends with ONE cropped figure. Kept in step
+// with app.js's `_aiRefineCrop`.
+export function refinePrompt(wording) {
+  const typed = String(wording || '').trim();
+  return 'The attached image is an auto-cropped figure for a primary-school science exam question. It should contain ONE figure (diagram / graph / experimental set-up / data table) and NOTHING else.\n' +
+    'Sometimes the crop wrongly includes question text above, below or beside the figure: the sentence that introduces it, lettered parts such as "(a) State the…" or "(i) Substance 1", question numbers, marks such as [2], blank answer lines, or the end of the previous question.\n' +
+    (typed ? 'These sentences are ALREADY TYPED in the question, so none of them may stay in the picture — if any of them (or the start or end of one) appears in the image, it is stray text:\n' + typed + '\n' : '') +
+    'Reply ONLY with JSON:\n' +
+    '- If the image is already clean (only the figure): {"clean":true}\n' +
+    '- Otherwise: {"clean":false,"box_2d":[ymin,xmin,ymax,xmax]} — integers 0-1000 measured on THIS image, the rectangle around the figure/table only.\n' +
+    'Rules for box_2d:\n' +
+    '- INCLUDE everything that belongs to the figure: labels, pointer lines, axis titles, axis numbers, units, table headers and borders, and short captions like "Diagram 1".\n' +
+    '- EXCLUDE full sentences / paragraphs of question text, and the part labels, marks, answer lines and question numbers that go with them.\n' +
+    '- A TABLE runs from its top border to its bottom border — never the sentence above it or the parts below it.\n' +
+    '- Never cut through a word that belongs to the figure — when unsure, keep it.';
+}
+
+// Cut the rectangle the clean-up pass returned out of the crop itself, with
+// the same guards as the browser: a sliver, the whole image, or a box that
+// would throw away almost all of the crop is not trusted and the crop is kept.
+// Returns a NEW made-shaped object, or null to keep the crop as it was.
+export function subCrop(made, box, createCanvas) {
+  if (!made || !made.canvas || !Array.isArray(box) || box.length !== 4) return null;
+  const [ymin, xmin, ymax, xmax] = box.map(Number);
+  if (![ymin, xmin, ymax, xmax].every(v => Number.isFinite(v) && v >= 0 && v <= 1000)) return null;
+  if (ymax - ymin < 100 || xmax - xmin < 150) return null;
+  if (ymax - ymin > 960 && xmax - xmin > 960) return null;
+  const src = made.canvas, W = src.width, H = src.height;
+  if (!W || !H) return null;
+  const mx = W * 0.012, my = H * 0.012;
+  const x = Math.max(0, xmin / 1000 * W - mx), y = Math.max(0, ymin / 1000 * H - my);
+  const w = Math.min(W - x, (xmax - xmin) / 1000 * W + mx * 2);
+  const h = Math.min(H - y, (ymax - ymin) / 1000 * H + my * 2);
+  if (w < 24 || h < 24 || (w * h) / (W * H) < 0.12) return null;
+  const pad = Math.round(Math.max(16, Math.max(w, h) * 0.035));
+  const out = createCanvas(Math.round(w) + pad * 2, Math.round(h) + pad * 2), ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(src, x, y, w, h, pad, pad, Math.round(w), Math.round(h));
+  // The measurements were taken on the page rectangle and still describe its
+  // edges; the share of the page shrinks with what was cut away.
+  return { ...made, canvas: out, pageShare: (made.pageShare || 0) * ((w * h) / (W * H)), refined: true };
+}

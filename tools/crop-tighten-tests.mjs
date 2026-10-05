@@ -36,7 +36,7 @@ const M = new Function(
   cut('const INK_RATIO', 'async function _cropBoxFromScreenshot', 'crop pixel passes')
   + '\nreturn { _inkThreshold, _expandRectToWhitespace, _trimEdgeTextLines, _trimBlankEdges,'
   + ' INK_DEFAULT, INK_RATIO, EDGE_INK_MIN, EDGE_SPECK_RUN, MAXRUN_FRAC, RUNS_MIN,'
-  + ' RULE_FRAC, RULE_GROUPS };')();
+  + ' RULE_FRAC, RULE_GROUPS, STRONG_BAND, TRIM_BANDS_MAX };')();
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -262,6 +262,146 @@ test('a FRAMED TABLE is still never trimmed, and is still tightened', () => {
   const out = M._trimBlankEdges(p.ctx, p.W, p.H, kept, thr, 'xy');
   near(out.x, 120, 2, 'the table was not tightened to its own frame');
   near(out.x + out.w, 280, 2, 'the table was not tightened to its own frame');
+});
+
+// ---- PAST THE TABLE (v1.425.0) ----------------------------------------------
+// The reported crop: a table filed with the end of the previous question, its
+// answer line and the stem above it, and part (a), (i), its answer line and
+// (ii) below it. The four-rule guard used to stand down on the whole crop
+// because the TABLE had four rules, so none of it came off.
+const fullTrim = (p, r) => {
+  const thr = thrOf(p);
+  r = M._trimBlankEdges(p.ctx, p.W, p.H, r, thr, 'x') || r;
+  r = M._trimEdgeTextLines(p.ctx, p.W, p.H, r, thr);
+  return M._trimBlankEdges(p.ctx, p.W, p.H, r, thr, 'xy');
+};
+function borderedTable(p, x0, y0, x1, rows, pitch) {
+  for (let k = 0; k <= rows; k++) p.rect(x0, y0 + k * pitch, x1 - x0, 2);           // horizontal rules
+  for (const x of [x0, x0 + 120, x0 + 250, x0 + 380, x1 - 2]) p.rect(x, y0, 2, rows * pitch + 2); // vertical rules
+  for (let k = 0; k < rows; k++) p.prose(x0 + 10, y0 + k * pitch + 12, x1 - x0 - 20, 8); // a row of cells
+  return y0 + rows * pitch + 2;
+}
+function reportedPage() {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 40, 640, 10);                                   // "…equipment?  [1]" — the previous question
+  p.rect(80, 85, 600, 2);                                     // its answer line
+  p.prose(30, 130, 600, 10);                                  // "The table shows three different substances…"
+  const tableBottom = borderedTable(p, 100, 160, 600, 4, 35); // the table itself
+  p.prose(30, 320, 620, 10);                                  // "(a) State the physical state…"
+  p.prose(70, 345, 120, 10).prose(640, 345, 25, 10);          // "(i) Substance 1          [2]"
+  p.rect(70, 395, 600, 2);                                    // its answer line
+  p.prose(70, 420, 120, 10).prose(640, 420, 25, 10);          // "(ii) Substance 2         [2]"
+  return { p, tableBottom };
+}
+
+test('THE REPORTED CROP: stem, parts, marks and answer lines all come off a table', () => {
+  const { p, tableBottom } = reportedPage();
+  const out = fullTrim(p, { x: 20, y: 30, w: 670, h: 410 });
+  ok(out, 'the table came back as blank paper');
+  near(out.y, 160, 2, 'the stem / the previous question was left on top of the table');
+  near(out.y + out.h, tableBottom, 2, 'the lettered parts and answer lines were left under the table');
+  near(out.x, 100, 2, 'the crop is wider than the table on the left');
+  near(out.x + out.w, 600, 2, 'the crop is wider than the table on the right');
+});
+
+test('…and a SHORT part line that sticks out past the table is wording too', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 130, 600, 10);
+  const tableBottom = borderedTable(p, 100, 160, 600, 4, 35);
+  p.prose(70, 330, 120, 10);                                  // "(ii) Substance 2" — narrow, but it starts left of the table
+  const out = fullTrim(p, { x: 20, y: 120, w: 670, h: 230 });
+  near(out.y + out.h, tableBottom, 2, 'a short part line under the table was kept');
+});
+
+test('the table itself is never eaten — every row, both borders', () => {
+  const { p } = reportedPage();
+  const out = fullTrim(p, { x: 20, y: 150, w: 670, h: 170 });   // a crop that is ONLY the table
+  near(out.y, 160, 2, 'the top border came off');
+  near(out.y + out.h, 302, 2, 'the bottom border came off');
+});
+
+test('a table ruled with HORIZONTAL lines only is still never eaten row by row', () => {
+  // No vertical borders, so every rule and every row is its own band and none
+  // of them is a figure body: the four-rule guard must still stand down.
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 100, 600, 10);
+  for (let k = 0; k <= 4; k++) p.rect(100, 140 + k * 40, 500, 2);
+  for (let k = 0; k < 4; k++) p.prose(110, 140 + k * 40 + 16, 480, 8);
+  const r = { x: 20, y: 90, w: 670, h: 260 };
+  const kept = M._trimEdgeTextLines(p.ctx, p.W, p.H, r, thrOf(p));
+  ok(kept.y === r.y && kept.h === r.h, 'a horizontally-ruled table was trimmed');
+});
+
+test('a THREE-LINE table keeps its top rule; only the stem above it goes', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 100, 600, 10);                                  // the stem
+  p.rect(100, 140, 500, 2);                                   // top rule
+  p.prose(110, 148, 480, 8);                                  // header row
+  p.rect(100, 162, 500, 2);                                   // mid rule
+  for (let k = 0; k < 4; k++) p.prose(110, 172 + k * 22, 480, 8);
+  p.rect(100, 262, 500, 2);                                   // bottom rule
+  const out = fullTrim(p, { x: 20, y: 90, w: 670, h: 190 });
+  ok(out.y > 112 && out.y <= 140, 'the stem stayed, or the top rule went (y=' + out.y + ')');
+  ok(out.y + out.h >= 263, 'the bottom rule went');
+});
+
+test('a lone stroke above a drawing is part of the drawing, not an answer line', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(150, 150, 400, 2);                                   // e.g. a water surface, well above the rest
+  p.rect(250, 230, 200, 140);                                 // the drawing
+  const out = fullTrim(p, { x: 100, y: 100, w: 500, h: 300 });
+  near(out.y, 150, 2, 'a stroke belonging to the figure was trimmed as an answer line');
+});
+
+test('an answer line on its own beside a figure, with no print, is left alone', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(250, 150, 200, 140);                                 // the drawing
+  p.rect(150, 330, 400, 2);                                   // a line below it — nothing to say it is an answer line
+  const out = fullTrim(p, { x: 100, y: 100, w: 500, h: 260 });
+  near(out.y + out.h, 332, 2, 'a lone line below a figure was trimmed without any print beside it');
+});
+
+test('a caption inside the figure\'s width ("Diagram 1") survives under it', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(200, 150, 300, 160);                                 // the drawing
+  p.prose(310, 330, 80, 10);                                  // "Diagram 1", centred under it
+  const out = fullTrim(p, { x: 100, y: 100, w: 500, h: 260 });
+  near(out.y + out.h, 340, 2, 'the caption under the figure was trimmed');
+});
+
+test('with NO figure body, a loose crop is trimmed exactly as before (3 lines, 20%)', () => {
+  // A borderless list of words in rows: nothing in it is a figure body, so
+  // the old caps hold and it is never eaten wholesale.
+  const p = page(700, 1000, { paper: 250 });
+  for (let k = 0; k < 8; k++) p.prose(100, 100 + k * 30, 500, 10);
+  const r = { x: 90, y: 90, w: 520, h: 250 };
+  const out = M._trimEdgeTextLines(p.ctx, p.W, p.H, r, thrOf(p));
+  ok(out.h >= r.h * 0.5, 'a borderless block of rows was eaten past the old 50% floor');
+});
+
+test('the worker carries the SAME trim, byte for byte', () => {
+  const worker = fs.readFileSync(new URL('../rapid-import/functions/crop.js', import.meta.url), 'utf8');
+  const pick = (text, from, to) => { const a = text.indexOf(from), b = text.indexOf(to, a); return a >= 0 && b > a ? text.slice(a, b) : null; };
+  const mine = pick(src, 'const MAXRUN_FRAC', '// ---- AND THEN THE BLANK PAPER ITSELF');
+  const theirs = pick(worker, 'const MAXRUN_FRAC', '// ---- AND THEN THE BLANK PAPER ITSELF');
+  ok(mine && theirs, 'the trim was not found in one of the two files');
+  ok(mine === theirs, 'app.js and rapid-import/functions/crop.js have drifted apart — a PDF import and a pasted screenshot would crop differently');
+  const wordA = pick(src, 'const CROP_WORDING_CHARS', 'async function _aiRefineCrop');
+  const wordB = pick(worker, 'export const CROP_WORDING_CHARS', '// The prompt the clean-up pass');
+  ok(wordA && wordB && wordA.replace(/^const /, '').replace('function _cropWordingOf', 'function cropWordingOf').trim()
+    === wordB.replace(/^export const /, '').replace('export function cropWordingOf', 'function cropWordingOf').trim(),
+    'the two lists of the question\'s typed wording have drifted apart');
+});
+
+test('the clean-up pass is handed the question\'s own wording, at every crop', () => {
+  const fill = cut('async function _fillBlocksFromAiBoxes', '\n// Editor flow', 'fill fn');
+  ok(fill.indexOf('_aiRefineCrop(c, opts && opts.wording)') >= 0, 'the wording never reaches the clean-up pass');
+  const calls = src.split('_fillBlocksFromAiBoxes(').length - 2;  // minus the definition
+  const withWording = (src.match(/_fillBlocksFromAiBoxes\((?:(?!_fillBlocksFromAiBoxes\()[\s\S]){0,400}?wording: _cropWordingOf\(/g) || []).length;
+  ok(calls >= 4 && withWording === calls, 'a crop path calls the clean-up without the question\'s wording (' + withWording + ' of ' + calls + ')');
+  const refine = cut('async function _aiRefineCrop(', '\n// =====', 'refine');
+  ok(/ALREADY TYPED in the question/.test(refine), 'the clean-up prompt never mentions the typed wording');
+  ok(/TABLE runs from its top border to its bottom border/.test(refine), 'the clean-up prompt has no table rule');
 });
 
 // ---- the census: one door, and it is actually wired in ---------------------
