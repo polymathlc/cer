@@ -178,7 +178,7 @@ await test('⚡ Rapid add: Jev is advisory: a yes never skips the AI (JEV_MAY_SK
   assert(/JEV_MAY_SKIP = false/.test(core), 'advisory by default');
   assert(/extraFindings: gate \? gate\.findings/.test(s) && /figureFindings:/.test(s));
   assert(/if \(!filled\)/.test(src.slice(src.indexOf('async function processRapidJob'))), 'the whole-page backup is still there');
-  assert(/\{ jev: jevRun \}/.test(src), 'the question hands the crop review an out-parameter it reads at 2c');
+  assert(/\{ jev: jevRun[,}]/.test(src), 'the question hands the crop review an out-parameter it reads at 2c');
 });
 await test('the AI check keeps carrying crop findings through every attempt but never asks a wording repair to fix them', () => {
   const r = src.slice(src.indexOf('async function autoChkRun'));

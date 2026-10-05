@@ -112,7 +112,8 @@ function aiGrounding() { return ""; }
 const compareBlock = cut('const AKC_PAR = 3;', '// ---- running a batch', 'cross-check comparison block');
 const entryBlock = cut('// ---- the two ways in', '// Shown only to an author', 'cross-check entry points');
 
-const mk = () => new Function(FIXTURE + sanitize + keyPushers + snapTokens + compareBlock + entryBlock + `
+const mcqLabels = cut('function _normMcqChoice(raw) {', '\nfunction normalizeCategoryValue', 'mcq labels');
+const mk = () => new Function(FIXTURE + sanitize + keyPushers + mcqLabels + snapTokens + compareBlock + entryBlock + `
 return {
   agree: akcAnswersAgree,
   overlap: akcTextOverlap,

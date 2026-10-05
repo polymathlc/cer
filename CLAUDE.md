@@ -4385,6 +4385,80 @@ Run `node tools/question-repair-core-tests.mjs`,
 `node tools/question-repair-tests.mjs`, and
 `node tools/question-repair-browser.mjs` (Playwright) for the focused tests.
 
+## 🔤 MCQ option labels — (A)(B)(C)(D) for Secondary 1 (v1.425.0)
+
+`MCQ_LABEL_STYLES` / `mcqLabelOverride` / **`mcqLabelStyle`** / `mcqLabelOf` /
+`mcqLabelForNum` / `MCQ_BARE_RE` / `mcqOptionText` / `editorMcqLabels` /
+`editorMcqLabelStyle` / `setEditorMcqLabels` / `mcqLabelPickerHtml` (search `MCQ
+LABELS`), `_mcqLab` / `_mcqLabOf`, the **Option labels** picker in the MCQ
+block, and `q.mcqLabels`.
+
+The primary papers number their options; Secondary 1 science letters them.
+
+- **`mcqLabelStyle(q)` is the ONE decision.** The question's own override
+  (`q.mcqLabels`: `'letters'` | `'numbers'`) wins; absent means AUTO, which is
+  letters when either topic is at a secondary level (`getTopicLevel`). So
+  choosing a Sec 1 topic letters the options with nothing stored, and the
+  editor repaints on a topic change (`_mcqLabelsRefresh`).
+- **The canonical choice is still the NUMBER.** The marking store keeps
+  `letter: "2"` for every comparison and adds `label: "B"` for drawing;
+  `_normMcqChoice` already reads an AI's "B" as 2, and the 🔎 Why-not cache is
+  keyed on numbers. A letter-keyed identity beside it would be two answers to
+  "which option did they pick" — and children marked wrong.
+- **Every surface draws through the helpers and is handed the question**: the
+  editor (in ✏️ editing mode from the block's OWN question, with no picker),
+  practice, both print paths (`_printMcqBlockHtml(block, part, q)`), the answer
+  key (`_pushBlockAnswerKey(…, why, q)`), marking feedback, the AI marking
+  prompts, the Why-not card and the 🐾 mistake card. The census in the harness
+  fails on a render call that does not pass `q`.
+- **A bare marker is drawn as the label** (`mcqOptionText`): a picture option
+  stored as "(3)" reads "(C)" on a Sec 1 question, so nobody retypes four
+  options. Real wording, and a marker naming a different option, are left alone.
+- Only an explicit choice is stored, and `mcqLabels` is in
+  `EDITOR_OWNED_QUESTION_FIELDS`, or setting it back to Auto would be undone.
+- Run **`node tools/mcq-labels-tests.mjs`** after touching any of it.
+
+## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0)
+
+`STRONG_BAND` / `TRIM_BANDS_MAX` / `ANSWER_LINE_GAP` / `STICK_OUT` and the band
+walk inside `_trimEdgeTextLines` (app.js and `rapid-import/functions/crop.js`,
+**byte-identical — the harness compares them**), `_cropWordingOf` /
+`CROP_WORDING_CHARS` and the `wording` argument to `_aiRefineCrop`, the worker's
+`refineCrop` / `refinePrompt` / `subCrop` / `cropWordingOf`, the TABLE rule in
+`_rectangleRules()` and the worker's FIGURE RULES, and the faint `.pvs-over` pill.
+
+A table was cropped with the end of the previous question, its answer line and
+the stem above it, and part (a), (i), (ii), their marks and answer lines below
+it — so the question was printed twice, once in the picture. The cause was the
+four-rule guard: any crop holding four printed rules was handed back untrimmed,
+and **every bordered table has four rules**.
+
+- **The crop is cut into bands once, and a FIGURE BODY is where a walk stops.**
+  A body is taller than a line of print and not shaped like print, or carries a
+  stroke across most of its width. A bordered table is ONE band (its vertical
+  borders join every row), so it can never be eaten row by row by this walk.
+- **With a body in the crop** the walk may take up to `TRIM_BANDS_MAX` lines off
+  a side instead of 3, without the 20% / 50% caps; it walks through an ANSWER
+  LINE (thin, with writing space above) only beside a line of print — a lone
+  stroke above a drawing can belong to it; a SHORT line counts as wording when
+  it sticks out past the body's own edges (a "Diagram 1" caption sits within
+  them); and the line touching the body is cut however small the gap.
+- **With no body, everything is exactly what it was.** The four-rule guard still
+  stands down on rules OUTSIDE every body that are not answer lines, so a table
+  drawn with horizontal rules only is never eaten.
+- **The AI clean-up is handed the question's own TYPED wording**
+  (`_cropWordingOf`, at all four crop call sites), so "is there question text
+  here?" becomes a matching job. **The worker had no clean-up pass at all**; it
+  now runs the same prompt (`refinePrompt`) on every crop, including Jev re-cuts.
+  Any failure keeps the crop as it was.
+- **The size/regenerate pill is faint until the picture is pointed at** (and
+  readable on touch screens), because at full strength it covered exactly the
+  first words a teacher is checking the crop for.
+- **Tables stay pictures**, deliberately: the `DATA TABLES` rule is unchanged,
+  because a transcribed table can silently change a value.
+- Run **`node tools/crop-tighten-tests.mjs`** and `npm test --prefix
+  rapid-import/functions` after touching any of it.
+
 ## 🔧 Fix all — repair every red/yellow vetting question in the background (v1.421.0)
 
 `vbr*` / `VBR_PAR` / `VBR_MAX` / `vbrCandidates` / `vbrStart` / `vbrStop` / `vbrRepairOne` /

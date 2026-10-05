@@ -88,3 +88,35 @@ test('photographed paper and isolated specks do not defeat tightening',()=>{
   const crop=cropDiagram(canvas,[100,100,800,900],createCanvas);
   assert.ok(crop);assert.equal(crop.width,232);assert.equal(crop.height,192);
 });
+// v1.425.0 — the reported crop: a bordered table filed with the stem above it
+// and the lettered parts, marks and answer lines below it. The four-rule guard
+// used to stand down on the whole crop because the TABLE had four rules.
+test('stem, parts, marks and answer lines come off a bordered table',()=>{
+  const canvas=createCanvas(700,1000), ctx=canvas.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,700,1000);
+  const prose=(x,y,w,h)=>{for(let xx=x;xx<x+w;xx+=6)rect(ctx,xx,y,2,h);};
+  prose(30,40,640,10);rect(ctx,80,85,600,2);prose(30,130,600,10);
+  for(let k=0;k<=4;k++)rect(ctx,100,160+k*35,500,2);
+  for(const x of [100,220,350,480,598])rect(ctx,x,160,2,142);
+  for(let k=0;k<4;k++)prose(110,172+k*35,480,8);
+  prose(30,320,620,10);prose(70,345,120,10);prose(640,345,25,10);rect(ctx,70,395,600,2);prose(70,420,120,10);prose(640,420,25,10);
+  const crop=cropDiagram(canvas,[40,40,430,980],createCanvas);
+  assert.ok(crop);
+  // The table is 500×142; doubled (≤2× upscale) plus the white frame.
+  const scale=Math.min(2,1600/500), pad=Math.round(Math.max(16,Math.round(500*scale)*0.035));
+  assert.ok(Math.abs(crop.width-(Math.round(500*scale)+pad*2))<=6,'width '+crop.width);
+  assert.ok(Math.abs(crop.height-(Math.round(142*scale)+pad*2))<=6,'height '+crop.height);
+});
+test('the question\'s typed wording is listed for the clean-up pass, clipped',async()=>{
+  const {cropWordingOf,refinePrompt,subCrop}=await import('../crop.js');
+  const w=cropWordingOf([{type:'text',text:'The table shows <b>three</b> substances.'},{type:'image'},{type:'mcq',options:['solid',{text:'liquid'}]}]);
+  assert.equal(w,'- The table shows three substances.\n- solid\n- liquid');
+  assert.ok(cropWordingOf([{type:'text',text:'x'.repeat(5000)}]).length<=1600);
+  assert.match(refinePrompt(w),/ALREADY TYPED in the question/);
+  assert.doesNotMatch(refinePrompt(''),/ALREADY TYPED/);
+  const made={canvas:createCanvas(400,300),pageShare:.5};
+  assert.equal(subCrop(made,[0,0,1000,1000],createCanvas),null,'the whole image is not a cut');
+  assert.equal(subCrop(made,[100,100,150,900],createCanvas),null,'a sliver is not trusted');
+  const s=subCrop(made,[200,100,800,900],createCanvas);
+  assert.ok(s&&s.refined&&s.pageShare<.5);
+});

@@ -54,7 +54,7 @@ const M = new Function(`
   cut('function _normMcqChoice(raw) {', '\nfunction normalizeCategoryValue', 'normMcqChoice') +
   cut('const WNY_HOVER_MS', 'function _wnyPrompt(q, opts)', 'why-not core') +
   cut('function _wnyPrintJobs(selected) {', '\n// The pre-pass', 'print jobs') +
-  cut('function _wnyKeyRows(block, why, ci) {', '\n// =====', 'key rows') +
+  cut('function _wnyKeyRows(block, why, ci, style) {', '\n// =====', 'key rows') +
   // …and the REAL answer-key pusher on top of it, so the section it builds is
   // tested as the printed key actually assembles it, not as a mock of it.
   "const QPART_ASSIGN = " + /const QPART_ASSIGN = ('[a-z]*')/.exec(src)[1] + ';\n' +
@@ -299,7 +299,7 @@ test('both print paths pass the notes to the ONE key pusher', () => {
   // The two switches had already drifted over the MCQ answer once. A key that
   // carries the reasons from one print button and not the other is that same
   // fault wearing a new hat.
-  ok(/function _pushBlockAnswerKey\(sections, block, part, why\)/.test(src), 'the pusher does not take the notes');
+  ok(/function _pushBlockAnswerKey\(sections, block, part, why(, q)?\)/.test(src), 'the pusher does not take the notes');
   const calls = src.match(/_pushBlockAnswerKey\(qSections, block, bPart[^)]*\)/g) || [];
   eq(calls.length, 4, 'both print paths have an mcq case and a default case');
   calls.forEach(c => ok(/qWhy/.test(c), 'a print path is not passing the notes: ' + c));

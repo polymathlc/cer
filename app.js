@@ -5258,6 +5258,86 @@ function _normMcqChoice(raw) {
   return ch;
 }
 
+// =====================================================================
+// 🔤 MCQ LABELS — (1) (2) (3) (4), or (A) (B) (C) (D) (search `MCQ LABELS`)
+//
+// The primary papers number their options; Secondary 1 science letters them.
+// A question's labels are decided in ONE place, `mcqLabelStyle(q)`:
+//   · the question's own override, `q.mcqLabels` ('letters' | 'numbers'),
+//     chosen in the editor — absent means AUTO;
+//   · AUTO is LETTERS when the question's level (its topic, or its second
+//     topic, read through `getTopicLevel`) is secondary, numbers otherwise.
+// So picking a Sec 1 topic is what turns (1)(2)(3)(4) into (A)(B)(C)(D), with
+// nothing stored, and a question re-filed back to a primary topic turns back.
+//
+// THE CANONICAL CHOICE IS STILL THE NUMBER. Every comparison, the marking
+// store's `.letter`, the AI's "chosen" (via `_normMcqChoice`, which already
+// reads "B" as 2) and the 🔎 Why-not cache are untouched: only what is DRAWN
+// goes through `mcqLabelOf`. A second, letter-keyed identity would be two
+// answers to "which option did they pick" and the drift would mark children
+// wrong.
+//
+// An option whose whole text is a bare marker — the "(1)" a picture option is
+// given, the "(2)" the ＃ button writes — is drawn as the question's own label
+// (`mcqOptionText`), so a picture question filed at Sec 1 reads (A)…(D)
+// without anybody retyping four options.
+// =====================================================================
+const MCQ_LABEL_STYLES = ['', 'numbers', 'letters'];   // '' = auto, by level
+function mcqLabelOverride(q) {
+  const v = q && q.mcqLabels;
+  return v === 'letters' || v === 'numbers' ? v : '';
+}
+function mcqLabelStyle(q) {
+  const own = mcqLabelOverride(q);
+  if (own) return own;
+  try {
+    // Either topic: a level is read off the TOPIC here, and a Sec 1 second
+    // topic is enough to make it a Sec 1 question (`qLevelNum` takes the max).
+    const sec = t => !!t && isSecondaryLevel(getTopicLevel(t));
+    if (q && (sec(q.topic) || sec(q.topic2))) return 'letters';
+  } catch (e) { /* a level that cannot be read is a primary question */ }
+  return 'numbers';
+}
+function mcqLabelOf(i, style) {
+  const k = Math.max(0, i | 0);
+  return style === 'letters' && k < 26 ? String.fromCharCode(65 + k) : String(k + 1);
+}
+// The label a canonical number ("2") is drawn as.
+function mcqLabelForNum(num, style) {
+  const n = parseInt(num, 10);
+  return Number.isFinite(n) && n >= 1 ? mcqLabelOf(n - 1, style) : String(num == null ? '' : num);
+}
+const MCQ_BARE_RE = /^\s*\(?\s*([1-9]|[A-Ha-h])\s*[).]?\s*$/;
+// An option's text as it is drawn: a bare marker naming THIS option ("(3)" on
+// the third option, or "(C)") becomes the question's own label; anything else
+// — real wording, or a marker naming some other option — is left exactly as
+// written, because rewriting an author's words is not a labelling decision.
+function mcqOptionText(text, i, style) {
+  const raw = String(text == null ? '' : text);
+  const plain = raw.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+  const m = plain.match(MCQ_BARE_RE);
+  if (!m || _normMcqChoice(m[1]) !== String((i | 0) + 1)) return raw;
+  return '(' + mcqLabelOf(i, style) + ')';
+}
+// The editor's own question, for the labels: the override held in the editor
+// plus the topics on screen — so choosing a Sec 1 topic relabels at once.
+var editorMcqLabels = '';
+function editorMcqLabelStyle() {
+  const t1 = document.getElementById('topicSelect'), t2 = document.getElementById('topicSelect2');
+  return mcqLabelStyle({ topic: t1 ? t1.value : '', topic2: t2 ? t2.value : '', mcqLabels: editorMcqLabels });
+}
+function setEditorMcqLabels(v) {
+  editorMcqLabels = (v === 'letters' || v === 'numbers') ? v : '';
+  if (typeof renderBlocks === 'function') renderBlocks();
+}
+function mcqLabelPickerHtml() {
+  const auto = mcqLabelStyle({ topic: (document.getElementById('topicSelect') || {}).value || '',
+    topic2: (document.getElementById('topicSelect2') || {}).value || '' }) === 'letters' ? 'A B C D' : '1 2 3 4';
+  const opt = (v, label) => `<option value="${v}"${editorMcqLabels === v ? ' selected' : ''}>${label}</option>`;
+  return `<label class="mcq-label-pick" title="How this question's options are labelled — on screen, on the printed sheet and on the answer key. Auto follows the level: Secondary topics use A B C D.">Option labels
+    <select class="form-select" onchange="setEditorMcqLabels(this.value)">${opt('', 'Auto (' + auto + ')')}${opt('numbers', '1 2 3 4')}${opt('letters', 'A B C D')}</select></label>`;
+}
+
 function normalizeCategoryValue(category) {
   const legacyCER = new Set([
     'CER (Open Ended)',
@@ -6159,6 +6239,7 @@ function navigateTo(page) {
       if (nisEl) nisEl.checked = false;
       if (typeof setQuestionTagsField === 'function') setQuestionTagsField(null);
       if (typeof loEditorSet === 'function') loEditorSet([]);
+      editorMcqLabels = '';
       renderBlocks();
       setEditMode(false);
       if (window.ppCancelPendingAttach) window.ppCancelPendingAttach();
@@ -6313,7 +6394,13 @@ document.getElementById('topicSelect').addEventListener('change', function() {
   } else {
     _lastTopicValue = this.value;
   }
+  // 🔤 A Sec 1 topic letters the options (A)(B)(C)(D); repaint them now.
+  _mcqLabelsRefresh();
 });
+function _mcqLabelsRefresh() {
+  try { if (Array.isArray(blocks) && blocks.some(b => b && b.type === 'mcq')) renderBlocks(); } catch (e) { /* not ready yet */ }
+}
+document.getElementById('topicSelect2')?.addEventListener('change', () => _mcqLabelsRefresh());
 
 let _lastCategoryValue = 'CER';
 document.getElementById('categorySelect').addEventListener('change', function() {
@@ -9646,11 +9733,16 @@ function renderImportedBlockEditorBody(block) {
                oninput="saveBlockContent('${id}','content',this.innerHTML)">${block.content || ''}</div>
         </div>`;
     case 'mcq': {
+      // 🔤 In ✏️ editing mode the create page's topic fields belong to some
+      // other question, so the labels come from the question this block is ON
+      // (and its override is that question's, not the editor's — no picker).
+      const emOwner = (typeof emOwnerQuestion === 'function') ? emOwnerQuestion(id) : null;
+      const lab = emOwner ? mcqLabelStyle(emOwner) : editorMcqLabelStyle();
       const opts = (block.options || []).map((o, i) => `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;" data-mic-wrap>
           <input type="radio" class="mcq-correct-radio" name="mcqedit_${id}" ${block.correctId === o.id ? 'checked' : ''}
                  title="Mark as correct answer" onchange="mcqSetCorrect('${id}','${o.id}')">
-          <span style="font-weight:600;width:18px;">${i + 1}.</span>
+          <span style="font-weight:600;width:18px;">${mcqLabelOf(i, lab)}.</span>
           <input class="form-input" type="text" style="flex:1;" placeholder="Option text"
                  value="${escapeHtml(o.text || '')}" oninput="mcqSetOptionText('${id}','${o.id}',this.value)">
           ${micButtonHtml('', 'Speak this option')}
@@ -9661,7 +9753,8 @@ function renderImportedBlockEditorBody(block) {
           <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">Select the radio next to the correct option.</div>
           ${opts}
           <button class="btn btn-outline" style="margin-top:4px;" onclick="mcqAddOption('${id}')">+ Add option</button>
-          <button class="btn btn-outline" style="margin-top:4px;margin-left:8px;" onclick="mcqNumberOptions('${id}')" title="Set all options to (1) (2) (3) (4)…">＃ Make (1)(2)(3)(4)</button>
+          <button class="btn btn-outline" style="margin-top:4px;margin-left:8px;" onclick="mcqNumberOptions('${id}')" title="Set every option to just its label — for options that are in the picture">＃ Make ${lab === 'letters' ? '(A)(B)(C)(D)' : '(1)(2)(3)(4)'}</button>
+          ${emOwner ? '' : mcqLabelPickerHtml()}
         </div>`;
     }
     case 'answerLine':
@@ -9872,11 +9965,12 @@ function renderImportedBlockStudent(block, q) {
       return `<div style="margin:10px 0 4px;font-weight:600;">${block.label ? escapeHtml(block.label) + ' ' : ''}<span style="font-weight:400;">${block.content || ''}</span></div>`;
     case 'mcq': {
       const name = 'mcq_' + block.id;
+      const lab = mcqLabelStyle(q);
       let h = `<div class="mcq-block" data-block="${block.id}" style="margin:10px 0;">`;
       (block.options || []).forEach((o, i) => {
         h += `<label style="display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">
           <input type="radio" name="${name}" value="${o.id}" onchange="markMcqChoice(this)">
-          <span><b>${i + 1}.</b> ${o.text || ''}</span></label>`;
+          <span><b>${mcqLabelOf(i, lab)}.</b> ${mcqOptionText(o.text || '', i, lab)}</span></label>`;
       });
       h += `</div>`;
       return h;
@@ -10126,7 +10220,14 @@ let _pvsReplanTimer = null;
 let _pvsFlushP = null;         // the flush in flight, for anyone who must wait for it
 const PVS_CSS = `
 .pvs-bar{display:inline-flex;align-items:center;gap:2px;margin:4px 0 0;padding:2px 4px;border-radius:999px;background:rgba(255,255,255,.94);border:1px solid rgba(0,0,0,.14);box-shadow:0 1px 4px rgba(0,0,0,.12);font-family:inherit;font-size:11px;font-weight:600;line-height:1;color:#333;pointer-events:auto;user-select:none;vertical-align:top}
-.pvs-bar.pvs-over{position:absolute;left:6px;top:6px;margin:0;z-index:5}
+.pvs-bar.pvs-over{position:absolute;left:6px;top:6px;margin:0;z-index:5;opacity:.18;transition:opacity .12s}
+/* The pill sits OVER the picture's corner, so at full strength it hid the
+   first words of every figure under it — on a table, the column heading, and
+   on a crop, exactly the stray text a teacher is looking at the preview to
+   find. It is faint until the picture is pointed at; a touch screen has no
+   pointer to point with, so there it stays readable. */
+[data-pvs-q]:hover .pvs-bar.pvs-over,.pvs-bar.pvs-over:hover,.pvs-bar.pvs-over:focus-within{opacity:1}
+@media (hover:none){.pvs-bar.pvs-over{opacity:.9}}
 .pvs-btn{width:22px;height:22px;border:0;border-radius:999px;background:transparent;font-family:inherit;font-size:14px;font-weight:700;line-height:1;color:#333;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
 .pvs-btn:hover{background:rgba(0,0,0,.08)}
 .pvs-btn[disabled]{opacity:.45;cursor:default}
@@ -16067,7 +16168,7 @@ async function _cropPageImagesInto(imgBlocks, qd, page, onStatus) {
     .filter(b => String((b && b.type) || '').toLowerCase() === 'image')
     .map(b => (b && (b.box_2d || b.box)) || null);
   let filled = 0;
-  try { filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, page.mimeType, page.data, onStatus, { maxEnhance: 0 }); }
+  try { filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, page.mimeType, page.data, onStatus, { maxEnhance: 0, wording: _cropWordingOf(qd && qd.blocks) }); }
   catch (e) { console.warn('bulk crop failed', e); }
   if (!filled) {
     try {
@@ -16543,7 +16644,8 @@ function _rectangleRules() {
     `  6. If two sub-figures belong to one reference (e.g. "Diagram 1 and Diagram 2" shown side by side), one rectangle around both is fine; otherwise use one "image" block per figure.\n` +
     `  7. Only if you genuinely cannot locate the figure, omit box_2d.\n` +
     `- PICTURE ANSWER OPTIONS: rule 3 says to leave the answer options out, and that is right when they are WORDS or numbers — they are held separately and printed under the question. When the options are PICTURES (four little diagrams, four graphs, four shapes, one per choice) they cannot be written out at all, so give them ONE "image" block with ONE rectangle around ALL of them together, including the (1) (2) (3) (4) labels printed with them, placed LAST. NEVER one rectangle per option: four separate pictures lose the row they were printed in, come out at four different sizes, and stop reading as a set of choices — a student answering "(3)" cannot see which one (3) was.\n` +
-    `- DATA TABLES: do NOT transcribe a data table into a text block. Treat EVERY data table as its own "image" block, with box_2d drawn around the whole table including its header row and borders — it will be captured as a picture.\n`;
+    `- DATA TABLES: do NOT transcribe a data table into a text block. Treat EVERY data table as its own "image" block, with box_2d drawn around the whole table including its header row and borders — it will be captured as a picture.\n` +
+    `- A TABLE'S RECTANGLE RUNS FROM ITS TOP BORDER TO ITS BOTTOM BORDER and from its left border to its right border, plus a title printed directly on it ("Table 1"). It NEVER includes the sentence that introduces the table ("The table shows…"), the lettered parts printed under it ("(a) State…", "(i) Substance 1"), marks such as [2], blank answer lines, or any line of the question before it — every one of those is already a text block, and inside the picture it would be printed twice.\n`;
 }
 
 // The prompt used to clean a whole screenshot into a crisp black-and-white figure.
@@ -17061,11 +17163,45 @@ function _expandRectToWhitespace(ctx, W, H, r, thr) {
 //     "Diagram 1" and axis titles are narrow, so they survive),
 //   - not solid like a border (max row fill < 60%),
 //   - separated from the remaining content by clear whitespace.
-// Trims at most 3 bands and ~20% of the crop per side, keeps ≥ 50% of it.
+// Trims at most 3 bands and ~20% of the crop per side, keeps ≥ 50% of it —
+// unless it walks into a FIGURE BODY, which is the stop it can trust (below).
 const MAXRUN_FRAC = 0.30;  // a run of ink longer than this much of a band is a STROKE
 const RUNS_MIN = 6;        // …and a line of print breaks into at least this many pieces
 const RULE_FRAC = 0.55;    // a row carrying a run this wide is a printed RULE
 const RULE_GROUPS = 4;     // …and this many of them is a framed table: hands off
+// ---- PAST THE TABLE: a figure body is a place the walk can STOP ------------
+// The trim above used to stand down completely the moment a crop held four
+// printed rules — which is every bordered TABLE. So a table cropped with its
+// stem above it and its lettered parts, marks and answer lines below it came
+// back exactly as loose as the model drew it, the wording printed twice: once
+// in the picture and once typed underneath. Every one of those lines was
+// trimmable; the guard was protecting the table's own rows, and a bordered
+// table is ONE band (its vertical borders join every row), so it never needed
+// protecting from a band-by-band walk at all.
+//
+// So the crop is cut into bands once, and a band that is plainly a FIGURE
+// BODY — taller than a line of print and not shaped like print, or carrying a
+// stroke across most of its width (a table's rules, a graph's axis) — becomes
+// a place the walk stops. With one in the crop:
+//   · the walk may take up to TRIM_BANDS_MAX lines off a side rather than 3,
+//     and the 20% / 50% caps go — the body it stops at is what is kept;
+//   · an ANSWER LINE (a thin rule with writing space above it) is walked
+//     through, but only beside a line of print, never as the first thing met
+//     on its own — a lone stroke above a drawing can be part of the drawing;
+//   · a SHORT line of print ("(ii) Substance 2") counts as wording when it
+//     sticks out past the body's own left or right edge — a figure's labels
+//     and its "Diagram 1" caption sit within it;
+//   · the line touching the body is cut however small the gap, because the
+//     two are different kinds of thing and the band split already proves
+//     there is clear paper between them.
+// The four-rule guard still applies, to the rules OUTSIDE every figure body
+// that are not answer lines — a table drawn with horizontal rules only is a
+// stack of thin bands and must still never be eaten row by row. With no
+// figure body at all, everything is exactly what it was.
+const ANSWER_LINE_GAP = 2;   // an answer line has at least this many gapMin of writing space above it
+const STRONG_BAND = 2.5;     // a band this many line-heights tall is a figure body
+const TRIM_BANDS_MAX = 12;   // lines one side may lose when a figure body is reached
+const STICK_OUT = 0.02;      // past the body's own edge by this share of the crop = wording
 function _trimEdgeTextLines(ctx, W, H, r, thr) {
   const TH_INK = (thr == null ? INK_DEFAULT : thr);
   const x = Math.round(r.x), w = Math.round(r.w);
@@ -17095,15 +17231,17 @@ function _trimEdgeTextLines(ctx, W, H, r, thr) {
   const maxBandH = Math.round(H * 0.028);              // taller = part of the figure, keep it
   const maxTrim = h * 0.20, minKeep = h * 0.50;
 
-  // Scan from `from` in direction `dir` (+1 top / −1 bottom): the first ink
-  // band plus the whitespace gap that follows it.
-  const band = (from, dir, limit) => {
-    let s = from;
-    while (s !== limit && !inked(s)) s += dir;
-    if (s === limit) return null;
-    let e = s, gap = 0, minX = w, maxX = 0, maxFrac = 0, maxRun = 0;
+  // Every band in the crop, top to bottom, with the clear paper either side.
+  // Joining across gaps is symmetric, so these are the same bands a walk from
+  // either edge would find.
+  const bands = [];
+  for (let ry = 0; ry < h;) {
+    while (ry < h && !inked(ry)) ry++;
+    if (ry >= h) break;
+    const s = ry;
+    let e = ry, gap = 0, minX = w, maxX = 0, maxFrac = 0, maxRun = 0;
     const runList = [];
-    for (let ry = s; ry !== limit; ry += dir) {
+    for (; ry < h; ry++) {
       if (inked(ry)) {
         e = ry; gap = 0;
         if (rows[ry].minX < minX) minX = rows[ry].minX;
@@ -17113,12 +17251,16 @@ function _trimEdgeTextLines(ctx, W, H, r, thr) {
         runList.push(rows[ry].runs);
       } else if (++gap > joinGap) break;
     }
-    let after = 0;
-    for (let ry = e + dir; ry !== limit && !inked(ry); ry += dir) after++;
+    ry = e + 1;
     runList.sort((a, b) => a - b);
-    return { end: e, size: Math.abs(e - s) + 1, inkW: maxX - minX + 1, maxFrac, maxRun,
-             medRuns: runList.length ? runList[runList.length >> 1] : 0, after };
-  };
+    bands.push({ s, e, size: e - s + 1, minX, maxX, inkW: maxX - minX + 1, maxFrac, maxRun,
+                 medRuns: runList.length ? runList[runList.length >> 1] : 0 });
+  }
+  if (!bands.length) return r;
+  bands.forEach((b, i) => {
+    b.above = i ? b.s - bands[i - 1].e - 1 : b.s;
+    b.below = i < bands.length - 1 ? bands[i + 1].s - b.e - 1 : h - 1 - b.e;
+  });
   // A band is a line of PRINT, not part of the figure, on five counts. The
   // last two are what stop a table or a graph being eaten a row at a time:
   //   · NO LONG STROKE in it. Every scanline through print crosses letters, so
@@ -17129,46 +17271,76 @@ function _trimEdgeTextLines(ctx, W, H, r, thr) {
   //     "not solid" test passes it happily and the top comes off the table.
   //   · MADE OF MANY SHORT PIECES. A line of print breaks into dozens of runs;
   //     a stroke or a blob is one or two.
+  const printLike = b => b.maxFrac <= 0.6 && b.maxRun <= b.inkW * MAXRUN_FRAC && b.medRuns >= RUNS_MIN;
   const isProse = b => !!b && b.size >= minBandH && b.size <= maxBandH
-    && b.inkW >= w * 0.55 && b.maxFrac <= 0.6
-    && b.maxRun <= b.inkW * MAXRUN_FRAC && b.medRuns >= RUNS_MIN;
+    && b.inkW >= w * 0.55 && printLike(b);
+  const isLine = b => !!b && b.size < minBandH && b.inkW >= w * 0.45
+    && b.above >= gapMin * ANSWER_LINE_GAP;
+  const isStrong = b => b.size > maxBandH * 1.5
+    && (b.maxRun >= b.inkW * 0.5 || (b.size >= maxBandH * STRONG_BAND && !printLike(b)));
+  const strong = bands.map(isStrong);
+  const coreMode = strong.some(Boolean);
 
   // A FRAMED TABLE IS THE FIGURE, and every one of its rows reads as prose on
   // its own. Trimmed row by row it comes back as its own bottom two thirds —
   // the one wrong crop that looks completely convincing. Four rules and not
   // three: an ordinary boxed diagram is a rule top, a rule bottom and a
   // divider across the middle, and at three this would stand down on half the
-  // figures it was written to clean.
+  // figures it was written to clean. In core mode only the rules OUTSIDE a
+  // figure body, and that are not answer lines, are counted — see above.
+  const skipRow = new Uint8Array(h);
+  if (coreMode) bands.forEach((b, i) => {
+    if (strong[i] || isLine(b)) for (let ry = b.s; ry <= b.e; ry++) skipRow[ry] = 1;
+  });
   let ruleGroups = 0, inRule = 0;
   for (let ry = 0; ry < h; ry++) {
-    const isRule = rows[ry].maxRun >= w * RULE_FRAC;
+    const isRule = !skipRow[ry] && rows[ry].maxRun >= w * RULE_FRAC;
     if (isRule && !inRule) ruleGroups++;
     inRule = isRule ? 1 : 0;
   }
   if (ruleGroups >= RULE_GROUPS) return r;
 
+  // Walk the bands from one edge. `order` lists band indices outward-in.
   // A RUN OF CONSECUTIVE LINES goes together. Two lines of a question sit a
   // few pixels apart — far less than the clear band that separates the
   // wording from the figure — so insisting on clear paper after the FIRST
   // line finds none, stops, and leaves both lines on the picture. The cut is
-  // remembered only where a run reached real whitespace, so a band with
-  // nothing but figure after it is still never touched.
-  const eat = (from, dir, limit) => {
-    let at = from, cut = null;
-    for (let k = 0; k < 3; k++) {
-      const b = band(at, dir, limit);
-      if (!isProse(b)) break;
-      if (b.after >= gapMin) cut = b.end + dir * (1 + Math.min(b.after, gapMin));
-      at = b.end + dir;
-      if (dir > 0 ? at >= limit : at <= limit) break;
+  // remembered only where a run reached real whitespace (or the figure body
+  // itself), so a band with nothing but figure after it is still never touched.
+  const walk = (order, dir) => {
+    let core = -1;
+    if (coreMode) for (const i of order) if (strong[i]) { core = i; break; }
+    const C = core >= 0 ? bands[core] : null;
+    const sticksOut = b => !!C && b.size >= minBandH && b.size <= maxBandH && printLike(b)
+      && (b.minX < C.minX - w * STICK_OUT || b.maxX > C.maxX + w * STICK_OUT);
+    const words = b => isProse(b) || sticksOut(b);
+    let cut = null, eaten = 0;
+    const max = C ? TRIM_BANDS_MAX : 3;
+    for (let k = 0; k < order.length && eaten < max; k++) {
+      const i = order[k], b = bands[i];
+      if (i === core) break;
+      const next = k + 1 < order.length ? bands[order[k + 1]] : null;
+      const ok = words(b) || (C && isLine(b) && (eaten > 0 || (next && order[k + 1] !== core && words(next))));
+      if (!ok) break;
+      eaten++;
+      const after = dir > 0 ? b.below : b.above;
+      const end = dir > 0 ? b.e : b.s;
+      if (after >= gapMin || (next && order[k + 1] === core)) cut = end + dir * (1 + Math.min(after, gapMin));
     }
-    return cut;
+    return { cut, core: C };
   };
   let top = 0, bot = h - 1;
-  const t = eat(0, 1, h);
-  if (t !== null && t <= maxTrim && bot - t + 1 >= minKeep) top = t;
-  const b2 = eat(h - 1, -1, top - 1);
-  if (b2 !== null && (h - 1 - b2) <= maxTrim && b2 - top + 1 >= minKeep) bot = b2;
+  const up = walk(bands.map((_, i) => i), 1);
+  if (up.cut !== null) {
+    if (up.core) top = up.cut;
+    else if (up.cut <= maxTrim && bot - up.cut + 1 >= minKeep) top = up.cut;
+  }
+  const lower = bands.map((_, i) => i).reverse().filter(i => bands[i].s >= top);
+  const dn = walk(lower, -1);
+  if (dn.cut !== null) {
+    if (dn.core) { if (dn.cut >= top) bot = dn.cut; }
+    else if ((h - 1 - dn.cut) <= maxTrim && dn.cut - top + 1 >= minKeep) bot = dn.cut;
+  }
 
   // The blank paper this exposes is pulled in by _trimBlankEdges, which is
   // now the ONE door for "shrink to the ink" — it does the LEFT and RIGHT
@@ -17335,25 +17507,68 @@ async function _cropBoxFromScreenshotEx(fullDataUrl, box, opts) {
 // just the figure/table. On this small, already-roughly-right image that is a
 // far easier task than on the full page, so leftover sentences above/below
 // the figure get cut dependably. Any failure returns the crop unchanged.
-async function _aiRefineCrop(dataUrl) {
+//
+// IT IS TOLD WHAT THE QUESTION ALREADY SAYS (`wording`, v1.425.0). Asked only
+// "is there question text in this?", a model looking at a table with its stem
+// above it and its parts below can reasonably say the whole thing is the
+// figure — nothing in the picture says otherwise. Handed the sentences that
+// are already TYPED into the question, it is a matching job instead of a
+// judgement: anything in the picture that is also in that list is the
+// question twice, and comes out. `_cropWordingOf` is the ONE place that list
+// is built, from the raw reply or from built blocks alike.
+const CROP_WORDING_CHARS = 1600;
+function _cropWordingOf(blocks) {
+  const out = [];
+  const plain = v => String(v == null ? '' : v)
+    .replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ').trim();
+  (Array.isArray(blocks) ? blocks : []).forEach(b => {
+    if (!b || typeof b !== 'object') return;
+    const t = String(b.type || '').toLowerCase();
+    if (t === 'text' || t === 'part') {
+      const v = plain(b.text != null ? b.text : b.content);
+      if (v) out.push(v);
+    } else if (t === 'mcq') {
+      const st = plain(b.question || b.stem || b.text);
+      if (st) out.push(st);
+      (Array.isArray(b.options) ? b.options : []).forEach(o => {
+        const v = plain(o && typeof o === 'object' ? (o.text != null ? o.text : o.content) : o);
+        if (v) out.push(v);
+      });
+    }
+  });
+  let text = '';
+  for (const line of out) {
+    if (text.length + line.length + 3 > CROP_WORDING_CHARS) break;
+    text += (text ? '\n' : '') + '- ' + line;
+  }
+  return text;
+}
+async function _aiRefineCrop(dataUrl, wording) {
   try {
     const b64 = dataUrl.split(',')[1] || '';
+    const typed = String(wording || '').trim();
     const prompt =
       'The attached image is an auto-cropped figure for a primary-school science exam question. It should contain ONE figure (diagram / graph / experimental set-up / data table) and NOTHING else.\n' +
-      'Sometimes the crop wrongly includes full sentences of question text above or below the figure.\n' +
+      'Sometimes the crop wrongly includes question text above, below or beside the figure: the sentence that introduces it, lettered parts such as "(a) State the…" or "(i) Substance 1", question numbers, marks such as [2], blank answer lines, or the end of the previous question.\n' +
+      (typed
+        ? 'These sentences are ALREADY TYPED in the question, so none of them may stay in the picture — if any of them (or the start or end of one) appears in the image, it is stray text:\n' + typed + '\n'
+        : '') +
       'Reply ONLY with JSON:\n' +
-      '- If the image is already clean (no sentences of question text): {"clean":true}\n' +
+      '- If the image is already clean (only the figure): {"clean":true}\n' +
       '- Otherwise: {"clean":false,"box_2d":[ymin,xmin,ymax,xmax]} — integers 0-1000 measured on THIS image, the rectangle around the figure/table only.\n' +
       'Rules for box_2d:\n' +
-      '- INCLUDE everything that belongs to the figure: labels, pointer lines, axis titles, axis numbers, units, and short captions like "Diagram 1".\n' +
-      '- EXCLUDE full sentences / paragraphs of question or explanation text.\n' +
+      '- INCLUDE everything that belongs to the figure: labels, pointer lines, axis titles, axis numbers, units, table headers and borders, and short captions like "Diagram 1".\n' +
+      '- EXCLUDE full sentences / paragraphs of question text, and the part labels, marks, answer lines and question numbers that go with them.\n' +
+      '- A TABLE runs from its top border to its bottom border — never the sentence above it or the parts below it.\n' +
       '- Never cut through a word that belongs to the figure — when unsure, keep it.';
-    const raw = await askGeminiVision(prompt, [{ mimeType: 'image/png', data: b64 }], { maxOutputTokens: 128, json: true });
+    const raw = await askGeminiVision(prompt, [{ mimeType: 'image/png', data: b64 }], { maxOutputTokens: 160, json: true });
     const p = _parseAIJson(raw) || {};
     if (p.clean === true || !Array.isArray(p.box_2d) || p.box_2d.length !== 4) return dataUrl;
     const [ymin, xmin, ymax, xmax] = p.box_2d.map(Number);
     if (![ymin, xmin, ymax, xmax].every(v => isFinite(v) && v >= 0 && v <= 1000)) return dataUrl;
-    if (ymax - ymin < 150 || xmax - xmin < 150) return dataUrl;   // suspiciously small → don't trust it
+    if (ymax - ymin < 100 || xmax - xmin < 150) return dataUrl;   // suspiciously small → don't trust it
     if (ymax - ymin > 960 && xmax - xmin > 960) return dataUrl;   // ≈ whole image → nothing to cut
     const img = await _loadImageEl(dataUrl);
     const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
@@ -17362,7 +17577,10 @@ async function _aiRefineCrop(dataUrl) {
     const x = Math.max(0, xmin / 1000 * W - mx), y = Math.max(0, ymin / 1000 * H - my);
     const w = Math.min(W - x, (xmax - xmin) / 1000 * W + mx * 2);
     const h = Math.min(H - y, (ymax - ymin) / 1000 * H + my * 2);
-    if (w < 24 || h < 24 || (w * h) / (W * H) < 0.2) return dataUrl; // would discard >80% of the crop → refuse
+    // A short table under a long stem and four lettered parts is a small
+    // share of a loose crop, so the floor sits at 12% rather than 20% — still
+    // far above the sliver a confused reply would hand back.
+    if (w < 24 || h < 24 || (w * h) / (W * H) < 0.12) return dataUrl; // would discard >88% of the crop → refuse
     const pad = Math.round(Math.max(16, Math.max(w, h) * 0.035));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(w) + pad * 2;
@@ -17560,7 +17778,7 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
     let refineChanged = false;
     if (c) {
       if (onStatus) onStatus(`Checking picture ${i + 1} for stray question text…`);
-      const refined = await _aiRefineCrop(c);
+      const refined = await _aiRefineCrop(c, opts && opts.wording);
       refineChanged = refined !== c;
       c = refined;
     }
@@ -17635,7 +17853,7 @@ async function _autoFillDiagramsFromBoxes(parsed, pages) {
   let filled = 0, enhanceLeft = 3;
   for (const [pg, g] of groups) {
     try {
-      const n = await _fillBlocksFromAiBoxes(g.blks, g.boxes, pages[pg].mimeType, pages[pg].data, m => showToast('🖼️ ' + m, 'info'), { maxEnhance: enhanceLeft, page: pg + 1 });
+      const n = await _fillBlocksFromAiBoxes(g.blks, g.boxes, pages[pg].mimeType, pages[pg].data, m => showToast('🖼️ ' + m, 'info'), { maxEnhance: enhanceLeft, page: pg + 1, wording: _cropWordingOf(parsed && parsed.blocks) });
       filled += n;
       enhanceLeft = Math.max(0, enhanceLeft - n);
       if (!n && pages.length > 1) {
@@ -19311,7 +19529,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
             .map(b => (b && (b.box_2d || b.box)) || null);
           let filled = 0;
           try {
-            filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, file.type, b64, m => { _setRapidJobState(jobId, { sub: m }); renderVettingList(); }, { jev: jevRun });
+            filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, file.type, b64, m => { _setRapidJobState(jobId, { sub: m }); renderVettingList(); }, { jev: jevRun, wording: _cropWordingOf((payload && payload.blocks) || q.blocks) });
           } catch (e) { console.warn('rapid AI rectangle flow failed', e); }
           if (!filled) {
             // BACKUP — the WHOLE PAGE, prepared once above. An EMPTY picture
@@ -20253,6 +20471,9 @@ function collectQuestionData() {
     // a question's objectives always read the way the syllabus does rather than
     // the order they happened to be ticked in.
     los: (typeof _loOrderIds === 'function') ? _loOrderIds(editorLos || []) : (editorLos || []).slice(),
+    // 🔤 Only an explicit choice is stored — absent means AUTO (by level), so a
+    // question re-filed between primary and Sec 1 relabels itself.
+    ...(editorMcqLabels ? { mcqLabels: editorMcqLabels } : {}),
     blocks: blocksClone,
     blanks: JSON.parse(JSON.stringify(selectedBlanks)),
     // 🔑 The keywords a PERSON marked. Never written by any AI path — see the
@@ -20338,6 +20559,8 @@ const EDITOR_OWNED_QUESTION_FIELDS = new Set([
   'id', 'title', 'category', 'category2', 'topic', 'topic2', 'markingGuide',
   'answerKeyNote', 'answerKeyImage', 'answerKeyDiagramNote', 'annotation', 'notInSyllabus', 'tags', 'los',
   'blocks', 'blanks', 'answerKeywords', 'createdAt', 'createdBy',
+  // 🔤 Owned, or setting it back to Auto would be undone by the carry-over.
+  'mcqLabels',
 ]);
 
 // An edited question is rebuilt from scratch by collectQuestionData(), so every
@@ -20530,6 +20753,7 @@ function clearForm() {
     if (nisEl) nisEl.checked = false;
     setQuestionTagsField(null);
     if (typeof loEditorSet === 'function') loEditorSet([]);
+    editorMcqLabels = '';
     _hideDupBanner();
     renderBlocks();
     setEditMode(false);
@@ -21362,6 +21586,7 @@ function _editorLoadQuestion(q) {
   if (nisEl) nisEl.checked = !!q.notInSyllabus;
   setQuestionTagsField(q);
   if (typeof loEditorSet === 'function') loEditorSet(qLos(q));
+  editorMcqLabels = mcqLabelOverride(q);
 
   // Try to set topic, handle custom topics
   const topicSelect = document.getElementById('topicSelect');
@@ -23039,7 +23264,7 @@ function showPrintPreview(qid, btnEl) {
         html += window.QuestionApps.printBlock(block);
         break;
       default:
-        html += `<div class="preview-block">${renderImportedBlockStudent(block)}</div>`;
+        html += `<div class="preview-block">${renderImportedBlockStudent(block, q)}</div>`;
         break;
     }
   });
@@ -24657,7 +24882,7 @@ function _pushAnswerKeySection(sections, label, content, part) {
 // switch, for the reason the pusher exists at all: the two paths had already
 // drifted over the MCQ answer once, and a key that carries the reasons from one
 // print button and not the other is the same fault wearing a new hat.
-function _pushBlockAnswerKey(sections, block, part, why) {
+function _pushBlockAnswerKey(sections, block, part, why, q) {
   if (!block) return;
   const p = qPartNormalize(part);
   switch (block.type) {
@@ -24666,12 +24891,14 @@ function _pushBlockAnswerKey(sections, block, part, why) {
       const ci = mo.findIndex(o => o && o.id === block.correctId);
       // No correct option ticked is an authoring gap, not an answer — the
       // "no answer recorded" placeholder below is what surfaces it.
-      if (ci >= 0) sections.push({ label: 'Answer', content: `<b>${ci + 1}.</b> ` + sanitizeAnswerKeyHtml(mo[ci].text || ''), part: p });
+      // 🔤 The question's own labels: an S1 key says "B.", never "2.".
+      const lab = mcqLabelStyle(q);
+      if (ci >= 0) sections.push({ label: 'Answer', content: `<b>${mcqLabelOf(ci, lab)}.</b> ` + sanitizeAnswerKeyHtml(mcqOptionText(mo[ci].text || '', ci, lab)), part: p });
       // …and, when asked for, why each of the others is not. Only ever BESIDE
       // a real answer: these are teaching notes, and a key that offered
       // reasons where it could not name the answer would be the wrong way up.
       if (ci >= 0 && why) {
-        const rows = _wnyKeyRows(block, why[block.id], ci);
+        const rows = _wnyKeyRows(block, why[block.id], ci, lab);
         if (rows) sections.push({ label: 'Why the other options are wrong', content: rows, part: p });
       }
       break;
@@ -24804,8 +25031,8 @@ function printAnswerLines(block, text) {
 // The box is sized and placed like the paper's: one line, right-aligned under
 // the options, so it reads as belonging to the question above it and never
 // competes with an open-ended writing box for the eye.
-function _printMcqBlockHtml(block, part) {
-  const html = renderImportedBlockStudent(block);
+function _printMcqBlockHtml(block, part, q) {
+  const html = renderImportedBlockStudent(block, q);
   // A box on a question with NO options is a mark the student can never earn:
   // there is nothing to choose, so there is nothing to write in it. Same rule
   // as `syStudentHtml` refusing a block with nothing given.
@@ -24978,18 +25205,18 @@ function doPrintWorksheetOpen(whyNotes) {
         // `buildWorksheetHtml` carries the identical case — keep the two in
         // step, which is what `_printMcqBlockHtml` is for.
         case 'mcq': {
-          qHtml += _printMcqBlockHtml(block, bPart);
-          _pushBlockAnswerKey(qSections, block, bPart, qWhy);
+          qHtml += _printMcqBlockHtml(block, bPart, q);
+          _pushBlockAnswerKey(qSections, block, bPart, qWhy, q);
           break;
         }
         default: {
-          qHtml += renderImportedBlockStudent(block);
+          qHtml += renderImportedBlockStudent(block, q);
           // The correct option, an answer line's answer and a 🔑 answer-key
           // block all belong on the key. Without them an MCQ-only question
           // produced NO sections at all and was dropped from the key entirely,
           // so a mostly-MCQ paper printed a key that silently skipped most of
           // its questions.
-          _pushBlockAnswerKey(qSections, block, bPart, qWhy);
+          _pushBlockAnswerKey(qSections, block, bPart, qWhy, q);
           break;
         }
       }
@@ -26599,7 +26826,7 @@ async function _epCropInto(imgBlocks, qd, shots, onStatus, budget) {
     const left = (budget && Number.isFinite(budget.left)) ? Math.max(0, budget.left) : 0;
     try {
       n = await _fillBlocksFromAiBoxes(g.blks, g.boxes, shot.mimeType, shot.data, onStatus,
-        { maxEnhance: left, page: pg + 1, onEnhance: () => { if (budget) budget.left = Math.max(0, (budget.left || 0) - 1); } });
+        { maxEnhance: left, page: pg + 1, wording: _cropWordingOf(qd && qd.blocks), onEnhance: () => { if (budget) budget.left = Math.max(0, (budget.left || 0) - 1); } });
     }
     catch (err) { console.warn('exam paper: crop failed', err); }
     filled += n;
@@ -33569,10 +33796,19 @@ function _mistakeAnalysisFor(result, context = {}, q = null) {
     roster: MISTAKE_ANIMALS
   };
 }
+// 🔤 What an option is CALLED on screen — its label ("B" on a Sec 1 question)
+// when the marking store carries one, else the canonical number. Display only:
+// every comparison keeps reading `.letter` (see MCQ LABELS).
+function _mcqLab(o) { return o ? String(o.label || o.letter || '') : ''; }
+function _mcqLabOf(options, letter) {
+  if (letter == null || letter === '') return '';
+  const o = (Array.isArray(options) ? options : []).find(x => x && String(x.letter) === String(letter));
+  return o ? _mcqLab(o) : String(letter);
+}
 /* "2) A is smaller" — the option a student chose, as the card quotes it. */
 function _mcqChoiceLabel(options, letter) {
   const chosen = (Array.isArray(options) ? options : []).find(o => o && String(o.letter) === String(letter));
-  return chosen ? chosen.letter + ') ' + String(chosen.text || '').replace(/<[^>]*>/g, '').trim() : String(letter || '');
+  return chosen ? _mcqLab(chosen) + ') ' + String(chosen.text || '').replace(/<[^>]*>/g, '').trim() : String(letter || '');
 }
 
 // Hint + Check answer buttons for ONE part of a question (an answer box or an MCQ),
@@ -33840,7 +34076,9 @@ function buildOpenBody(q, containerSel, markCfg) {
         );
         mcqItems.push({
           blockId: block.id,
-          options: (block.options || []).map((o, idx) => ({ letter: String(idx + 1), text: stripHtml(o.text || ''), id: o.id, correct: block.correctId === o.id }))
+          // `letter` stays the canonical NUMBER every comparison uses; `label`
+          // is what is DRAWN — "B" on a Sec 1 question (see MCQ LABELS).
+          options: (block.options || []).map((o, idx) => ({ letter: String(idx + 1), label: mcqLabelOf(idx, mcqLabelStyle(q)), text: stripHtml(mcqOptionText(o.text || '', idx, mcqLabelStyle(q))), id: o.id, correct: block.correctId === o.id }))
         });
         break;
       case 'text':
@@ -35780,6 +36018,7 @@ function _wnyOpts(src) {
   }
   return list.map((o, i) => ({
     letter: String((o && o.letter) != null ? o.letter : i + 1),
+    ...(o && o.label ? { label: String(o.label) } : {}),
     text: stripHtml((o && o.text) || '').replace(/\s+/g, ' ').trim(),
     correct: !!(o && o.correct)
   }));
@@ -35965,7 +36204,7 @@ function _wnyCardHtml(opt, why, state, chosen, pinned) {
   const yours = (chosen && String(chosen) === String(opt.letter)) ? `<span class="wny-yours">you chose this</span>` : '';
   const close = pinned ? `<button type="button" class="wny-close" data-wny-close aria-label="Close">✕</button>` : '';
   const head =
-    `<div class="wny-head"><span class="wny-num">${escapeHtml(String(opt.letter))}</span>` +
+    `<div class="wny-head"><span class="wny-num">${escapeHtml(String(opt.label || opt.letter))}</span>` +
     `<span class="wny-word">${escapeHtml(opt.text || '')}</span>${yours}${close}</div>` +
     (opt.correct
       ? `<div class="wny-verdict ok">✓ This one is right</div>`
@@ -36045,7 +36284,7 @@ function wnyArm(containerSel, blockId, options, chosenLetter) {
     b.className = 'wny-badge';
     b.textContent = 'ⓘ';
     b.title = 'Why is this one wrong?';
-    b.setAttribute('aria-label', 'Why option ' + o.letter + ' is wrong');
+    b.setAttribute('aria-label', 'Why option ' + (o.label || o.letter) + ' is wrong');
     // The badge sits INSIDE the <label>, so a plain click would also tick the
     // radio: reading why an option is wrong would silently change the answer.
     // preventDefault on the click is what stops that, and on the mousedown is
@@ -36200,12 +36439,12 @@ function _wnyCachedNotes(selected, on) {
 // The rows for one MCQ block: every option that is NOT the answer, in the order
 // they are printed, each with the reason it is wrong. `ci` is the correct
 // option's index, so the answer is never listed among the reasons it is not.
-function _wnyKeyRows(block, why, ci) {
+function _wnyKeyRows(block, why, ci, style) {
   if (!block || !why) return '';
   return (block.options || []).map((o, i) => {
     if (i === ci) return '';
     const t = _wnyClean(why[String(i + 1)]);
-    return t ? `<div class="ak-why"><b>${i + 1}.</b> ${escapeHtml(t)}</div>` : '';
+    return t ? `<div class="ak-why"><b>${mcqLabelOf(i, style)}.</b> ${escapeHtml(t)}</div>` : '';
   }).join('');
 }
 
@@ -36221,7 +36460,7 @@ function _fallbackExplanation(entries) {
       return `Your "${e.label || 'answer'}" ${verb[v] || verb.incorrect}.${v === 'correct' ? '' : tail}`;
     }
     const correct = e.mcq.options.find(o => o.correct);
-    const tail = correct ? ` The correct option is ${correct.letter}) ${correct.text}.` : '';
+    const tail = correct ? ` The correct option is ${_mcqLab(correct)}) ${correct.text}.` : '';
     return `Your multiple-choice answer ${verb[v] || verb.incorrect}.${v === 'correct' ? '' : tail}`;
   }).filter(Boolean);
   if (!parts.length) return 'Compare your response with the model answers shown above to see where the key marks are.';
@@ -36315,9 +36554,9 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         if (e.kind === 'open') {
           return `${i}. [${e.label}] type=open expected="${e.model}" student="${e.student || (photo ? '(see attached photo)' : '(blank)')}"`;
         }
-        const opts = e.mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ');
+        const opts = e.mcq.options.map(o => `${_mcqLab(o)}) ${o.text}`).join(' | ');
         const correct = e.mcq.options.find(o => o.correct);
-        return `${i}. [Multiple choice] type=mcq options=[${opts}] correct=${correct ? correct.letter : '?'} studentSelected="${e.studentLetter || (photo ? '(read from photo)' : '(blank)')}"`;
+        return `${i}. [Multiple choice] type=mcq options=[${opts}] correct=${correct ? _mcqLab(correct) : '?'} studentSelected="${_mcqLabOf(e.mcq.options, e.studentLetter) || (photo ? '(read from photo)' : '(blank)')}"`;
       }).join('\n');
       const prompt =
         `You are a science teacher marking a student's answers. ` +
@@ -36388,15 +36627,15 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       const correctOpt = m.options.find(o => o.correct);
       const chosenLetter = (v && v.chosen) ? _normMcqChoice(v.chosen) : e.studentLetter;
       e.chosenLetter = chosenLetter;
-      if (verdict !== 'correct') mistakes.push({ expected: correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', student: chosenLetter });
+      if (verdict !== 'correct') mistakes.push({ expected: correctOpt ? (_mcqLab(correctOpt) + ') ' + correctOpt.text) : '', student: _mcqLabOf(m.options, chosenLetter) });
       _mcqPaintResult(containerSel, m.blockId, m.options, chosenLetter);
       const fb = document.querySelector(containerSel + ' [data-mcq-fb="' + m.blockId + '"]');
       if (fb) {
-        let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(chosenLetter)})</span>` : '');
-        if (verdict !== 'correct' && correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
+        let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(_mcqLabOf(m.options, chosenLetter))})</span>` : '');
+        if (verdict !== 'correct' && correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(_mcqLab(correctOpt))}) ${escapeHtml(correctOpt.text)}</div>`;
         fb.innerHTML = inner;
       }
-      _setPartResult(containerSel, 'mcq:' + m.blockId, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter, v);
+      _setPartResult(containerSel, 'mcq:' + m.blockId, verdict, pts, correctOpt ? (_mcqLab(correctOpt) + ') ' + correctOpt.text) : '', _mcqLabOf(m.options, chosenLetter), v);
       _showScienceCoachFeedback(e.coachTarget, v, { kind: 'mcq', ...(chosenLetter ? { student: _mcqChoiceLabel(m.options, chosenLetter) } : {}) });
     }
   });
@@ -36445,7 +36684,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         return `${i + 1}. ${e.label || 'Answer'} — marked ${verdict}. Model answer: ${e.model || '(not provided)'}. The student wrote: "${e.student || '(blank)'}"`;
       }
       const correct = e.mcq.options.find(o => o.correct);
-      return `${i + 1}. Multiple choice — marked ${verdict}. Correct answer: ${correct ? correct.letter + ') ' + correct.text : '(unknown)'}. The student chose: ${e.chosenLetter || '(blank)'}`;
+      return `${i + 1}. Multiple choice — marked ${verdict}. Correct answer: ${correct ? _mcqLab(correct) + ') ' + correct.text : '(unknown)'}. The student chose: ${_mcqLabOf(e.mcq.options, e.chosenLetter) || '(blank)'}`;
     }).join('\n');
     const expPrompt =
       `You are a science teacher giving feedback to a student on the answer they just gave. ` +
@@ -36738,10 +36977,10 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     if (fbEl) {
       let inner = `<span style="color:${color};font-weight:600;font-size:0.85rem;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span>` +
         (studentLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(studentLetter)})</span>` : '');
-      if (correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
+      if (correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(_mcqLab(correctOpt))}) ${escapeHtml(correctOpt.text)}</div>`;
       fbEl.innerHTML = inner;
     }
-    _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', studentLetter);
+    _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (_mcqLab(correctOpt) + ') ' + correctOpt.text) : '', _mcqLabOf(mcq.options, studentLetter));
     _showScienceCoachFeedback(coachTarget, { verdict }, { kind: 'mcq' });
     _checkAllPartsMarked(containerSel);
     return;
@@ -36764,8 +37003,8 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     if (kind === 'open') {
       item = `Part: [${label}] type=open expected="${model || '(none provided — work out the correct answer from the question context)'}" student="${student || '(see attached photo)'}"`;
     } else {
-      const optsTxt = mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ');
-      item = `Part: [Multiple choice] type=mcq options=[${optsTxt}] correct=${correctOpt ? correctOpt.letter : '?'} studentSelected="${studentLetter || '(read from photo)'}"`;
+      const optsTxt = mcq.options.map(o => `${_mcqLab(o)}) ${o.text}`).join(' | ');
+      item = `Part: [Multiple choice] type=mcq options=[${optsTxt}] correct=${correctOpt ? _mcqLab(correctOpt) : '?'} studentSelected="${_mcqLabOf(mcq.options, studentLetter) || '(read from photo)'}"`;
     }
     const prompt =
       `You are a science teacher marking ONE part of a student's answer to a question. ` +
@@ -36826,11 +37065,11 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     mcqChoice = chosenLetter ? _mcqChoiceLabel(mcq.options, chosenLetter) : '';
     _mcqPaintResult(containerSel, pid, mcq.options, chosenLetter);
     if (fbEl) {
-      let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(chosenLetter)})</span>` : '');
-      if (correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
+      let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(_mcqLabOf(mcq.options, chosenLetter))})</span>` : '');
+      if (correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(_mcqLab(correctOpt))}) ${escapeHtml(correctOpt.text)}</div>`;
       fbEl.innerHTML = inner;
     }
-    _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter, parsed);
+    _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (_mcqLab(correctOpt) + ') ' + correctOpt.text) : '', _mcqLabOf(mcq.options, chosenLetter), parsed);
   }
   _showScienceCoachFeedback(coachTarget, parsed, { kind, label,
     ...(kind === 'open' && !photo ? { student } : {}),
@@ -36857,7 +37096,7 @@ async function hintQuestionPart(containerSel, kind, pid, btn) {
     const mcq = (_openMcqStore[containerSel] || []).find(m => m.blockId === pid);
     if (!mcq) return;
     const correct = mcq.options.find(o => o.correct);
-    partDesc = `The part is a multiple-choice question with options: ${mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ')}. The correct option (do NOT reveal it or its number): ${correct ? correct.letter : '?'}.`;
+    partDesc = `The part is a multiple-choice question with options: ${mcq.options.map(o => `${_mcqLab(o)}) ${o.text}`).join(' | ')}. The correct option (do NOT reveal it or its number): ${correct ? _mcqLab(correct) : '?'}.`;
   }
 
   const orig = btn ? btn.innerHTML : '';
@@ -37542,7 +37781,7 @@ function renderQuestionBodyPreviewHtml(q) {
       case 'explanation':
         break;
       default:
-        html += renderImportedBlockStudent(block);
+        html += renderImportedBlockStudent(block, q);
         break;
     }
   });
@@ -38514,19 +38753,19 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             // under the options is a box nobody writes in. The KEY is pushed
             // either way — the answer is never optional.
             qHtml += (noBracketIds && noBracketIds.has(q.id))
-              ? renderImportedBlockStudent(block)
-              : _printMcqBlockHtml(block, bPart);
-            _pushBlockAnswerKey(qSections, block, bPart, qWhy);
+              ? renderImportedBlockStudent(block, q)
+              : _printMcqBlockHtml(block, bPart, q);
+            _pushBlockAnswerKey(qSections, block, bPart, qWhy, q);
             break;
           }
           default: {
-            qHtml += renderImportedBlockStudent(block);
+            qHtml += renderImportedBlockStudent(block, q);
             // Unconditional, exactly as doPrintWorksheetOpen does it: an MCQ's
             // correct option is the answer to that question, not an optional
             // extra, and gating it behind `answerKeyExtras` meant every
             // ordinary worksheet printed a key listing only its open-ended
             // questions.
-            _pushBlockAnswerKey(qSections, block, bPart, qWhy);
+            _pushBlockAnswerKey(qSections, block, bPart, qWhy, q);
             break;
           }
         }
@@ -80396,8 +80635,9 @@ function _mkQuestionBlocksHtml(q, opts) {
       case 'mcq': {
         const opts2 = (b.options || []).filter(Boolean);
         if (!opts2.length) break;
+        const lab = mcqLabelStyle(q);
         html += '<div class="' + cls + '">' + tag + flag + '<ol class="mk-qb-opts">' + opts2.map((o, i) =>
-          '<li class="mk-qb-opt"><b>' + (i + 1) + '</b><span>' + (o.text || '') + '</span></li>').join('') + '</ol></div>';
+          '<li class="mk-qb-opt"><b>' + mcqLabelOf(i, lab) + '</b><span>' + mcqOptionText(o.text || '', i, lab) + '</span></li>').join('') + '</ol></div>';
         break;
       }
       case 'fillblank':
