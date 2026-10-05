@@ -30,7 +30,11 @@ const M = new Function(`
   function isSecondaryLevel(v) { return getLevelNumber(v) >= LEVEL_ORDER.S1 && isLevelCode(v); }
   ${cut('function _normMcqChoice(raw) {', '\nfunction normalizeCategoryValue', 'mcq labels')}
   ${cut('function _mcqLab(o)', '/* "2) A is smaller"', 'display label helpers')}
-  return { mcqLabelStyle, mcqLabelOverride, mcqLabelOf, mcqLabelForNum, mcqOptionText, _mcqLab, _mcqLabOf, _normMcqChoice };
+  ${cut('function _cpbChoiceWords(aList) {', '\nfunction _cpbBookletLeadHtml', 'custom paper choice words')}
+  function _ainsteinSharesRun() { return false; }
+  ${cut('function _ainsteinLeaksAnswer(reply, guard) {', '\nconst AINSTEIN_BLOCKED_CLUE', 'ainstein leak guard')}
+  return { mcqLabelStyle, mcqLabelOverride, mcqLabelOf, mcqLabelForNum, mcqOptionText, mcqOptionIsBare, mcqMarkers,
+    _mcqLab, _mcqLabOf, _normMcqChoice, _cpbChoiceWords, _ainsteinLeaksAnswer };
 `)();
 
 const cases = [];
@@ -68,6 +72,40 @@ test('a bare marker naming THIS option is drawn as the question\'s own label', (
   eq(M.mcqOptionText('(1)', 0, 'numbers'), '(1)', 'a primary picture option is unchanged');
 });
 
+test('ONLY a bracketed marker is a label — a bare "A" or "3" is the author\'s own option', () => {
+  eq(['A', 'B', 'C', 'D'].map((t, i) => M.mcqOptionText(t, i, 'numbers')).join(''), 'ABCD', '"Which part, A, B, C or D…" options survive on a primary question');
+  eq(['1', '2', '3', '4'].map((t, i) => M.mcqOptionText(t, i, 'letters')).join(''), '1234', '"How many…" options survive on a Sec 1 question');
+  eq(M.mcqOptionText('3.', 2, 'letters'), '3.', 'a number with a stop is wording');
+  ok(M.mcqOptionIsBare('(c)', 2) && !M.mcqOptionIsBare('(c)', 1), 'the bare test names its own option only');
+  eq(M.mcqMarkers('letters', ''), '(A)(B)(C)(D)', 'markers, compact');
+});
+
+test('an AI reply naming a lettered option reads back as its NUMBER', () => {
+  const cases = { '(B)': '2', 'B)': '2', 'B.': '2', 'Option B': '2', 'Ans: B': '2', 'B) 4 cm': '2', '[C]': '3',
+    '(2)': '2', 'Option 2': '2', '2) 4 cm': '2', 'b': '2', 'empty': '', 'none': '', '': '' };
+  Object.entries(cases).forEach(([raw, want]) => eq(M._normMcqChoice(raw), want, JSON.stringify(raw)));
+});
+
+test('Custom Paper names the labels Booklet A actually prints', () => {
+  const s1 = { topic: 'Physical Quantities' }, p5 = { topic: 'Heat' };
+  eq(M._cpbChoiceWords([s1, s1]), 'Make your choice (A, B, C or D)', 'a Sec 1 booklet');
+  eq(M._cpbChoiceWords([p5]), 'Make your choice (1, 2, 3 or 4)', 'a primary booklet');
+  eq(M._cpbChoiceWords([s1, p5]), 'Make your choice', 'a mixed booklet makes no promise half of it breaks');
+  const sheet = cut('function _cpbAnswerSheetHtml(aList) {', '\n// ---- Assembling the paper', 'answer sheet');
+  ok(/mcqLabelOf\(o, mcqLabelStyle\(aList\[i - 1\]\)\)/.test(sheet) && !/\[1, 2, 3, 4\]/.test(sheet), 'the answer sheet still shades 1–4');
+  ok(/_cpbAnswerSheetHtml\(a\)/.test(src) && /_cpbBookletLeadHtml\('a', marks\.a, 1, a\.length, a\)/.test(src), 'the paper does not hand Booklet A to its sheet');
+});
+
+test('Ai-nstein will not say the answer is "B" on a lettered question', () => {
+  const g = { correctNo: 2, correctLabel: 'B', correctText: '', modelAnswer: '' };
+  ok(M._ainsteinLeaksAnswer('Yes — the answer is B.', g), '"the answer is B"');
+  ok(M._ainsteinLeaksAnswer('Pick option (B)!', g), '"option (B)"');
+  ok(M._ainsteinLeaksAnswer('It is B', g), '"It is B" at the end');
+  ok(!M._ainsteinLeaksAnswer('Think about what a plant needs. Is it a gas?', g), 'an ordinary clue is not a leak');
+  ok(!M._ainsteinLeaksAnswer('Option A is wrong because…', { correctNo: 2, correctLabel: 'B' }), 'a DIFFERENT letter is not the answer');
+  ok(M._ainsteinLeaksAnswer('the answer is 2', { correctNo: 2, correctLabel: '2' }), 'numbers still guarded');
+});
+
 test('real wording, and a marker naming ANOTHER option, are never rewritten', () => {
   eq(M.mcqOptionText('A and B only', 0, 'letters'), 'A and B only', 'wording that happens to start with A');
   eq(M.mcqOptionText('(2)', 0, 'letters'), '(2)', 'a "(2)" written on the FIRST option is the author\'s, not a label');
@@ -103,7 +141,7 @@ test('the drawn labels go through the helpers, not `i + 1`', () => {
   const store = cut("        mcqItems.push({", '        break;', 'marking store');
   ok(/letter: String\(idx \+ 1\)/.test(store), 'the canonical number moved off `letter`');
   ok(/label: mcqLabelOf\(idx, mcqLabelStyle\(q\)\)/.test(store), 'the marking store has no label to draw');
-  ok(!/you chose \$\{escapeHtml\(chosenLetter\)\}/.test(src), 'feedback still says "you chose 2" on a lettered question');
+  ok(!/you chose \$\{escapeHtml\((?!_mcqLabOf\()[^)]*\)\}/.test(src), 'feedback still says "you chose 2" on a lettered question');
   ok(!/Correct answer:<\/strong> \$\{escapeHtml\(correctOpt\.letter\)\}/.test(src), 'feedback still names the correct option by number');
 });
 
@@ -116,6 +154,43 @@ test('the editor stores only an explicit choice, owns it, and relabels on a topi
     'choosing a Sec 1 topic does not relabel the options on screen');
   const ed = cut("      const emOwner = (typeof emOwnerQuestion === 'function') ? emOwnerQuestion(id) : null;", "    case 'answerLine':", 'editor block');
   ok(/emOwner \? mcqLabelStyle\(emOwner\) : editorMcqLabelStyle\(\)/.test(ed), 'editing mode reads the create page\'s topic instead of the question\'s own');
+});
+
+test('the dropdown works: every inline handler in the label block is on window', () => {
+  const block = cut('const MCQ_LABEL_STYLES', '\nfunction normalizeCategoryValue', 'label block');
+  const handlers = [...block.matchAll(/on[a-z]+="([A-Za-z_$][\w$]*)\(/g)].map(m => m[1]);
+  ok(handlers.length, 'no inline handler found — has the picker moved?');
+  handlers.forEach(h => ok(new RegExp('window\\.' + h + ' = ' + h + ';').test(src), h + ' is called from an inline handler but never assigned to window — a dead control'));
+});
+
+test('every preview of the open question carries its second topic and its choice', () => {
+  ok((src.match(/\.\.\.\(typeof editorMcqLabelFields === 'function' \? editorMcqLabelFields\(\) : \{\}\)/g) || []).length >= 3,
+    'a draft preview (student / exported / compare) labels differently from the editor');
+  ok(/function editorMcqLabelStyle\(\) \{ return mcqLabelStyle\(editorMcqLabelFields\(\)\); \}/.test(src), 'the editor and its previews read different fields');
+});
+
+test('the key, the drawer, the cross-check and the AI writers all use the labels', () => {
+  ok(/mcqLabelOf\(i, _akeLabels\)/.test(src) && /_akeLabels = mcqLabelStyle\(q\);/.test(src), 'the ✏️ edit-answer drawer numbers a lettered key');
+  ok(/_pushBlockAnswerKey\(sections, b, p, null, q\)/.test(src), 'the cross-check reads a key that prints differently');
+  ok(/Number\(_normMcqChoice\(res\.optionNumber\)\)/.test(src), 'a lettered optionNumber from an engine is dropped');
+  const grade = cut('function _gradingQuestionSource(q) {', '\n}\n', 'grading source');
+  ok(!/'Option ' \+ \(index \+ 1\)/.test(grade), 'the marker is shown "Option 1:" beside lettered items');
+  ['aiGenerateBlockAnswer', 'aiGenerateBlockExplanation', 'aiAnswerAndExplain'].forEach(n => {
+    const at = src.indexOf('function ' + n + '(');
+    const body = src.slice(at, src.indexOf('\n}\n', at));
+    ok(/mcqPromptOpt\(/.test(body) && /mcqStyleForBlock\(/.test(body), n + ' writes about options by number');
+  });
+  ok(/function _partExplSection\(blocks, pmap, letter, style\)/.test(src), 'the per-part filler numbers options');
+});
+
+test('every game shows the question\'s own labels', () => {
+  const ex = cut('function _sdExtractMcq(q) {', '\n// Starting difficulty', 'game row');
+  ok(/labels/.test(ex) && /mcqOptionText\(/.test(ex), 'the game row carries no labels');
+  ok(!/\(q\.a \+ 1\)/.test(src) && !/String\.fromCharCode\(65 \+ \(q\.a/.test(src), 'a game reveal still numbers (or letters) the answer itself');
+  ['science-spire.html', 'grand-line-learning-parent.js', 'hades-learning-parent.js', 'fps.html'].forEach(f => {
+    const t = fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+    ok(/labels/.test(t), f + ' ignores the question\'s labels');
+  });
 });
 
 const only = process.argv[2];

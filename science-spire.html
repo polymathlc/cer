@@ -793,7 +793,9 @@ async function askQuestion(){
   $('qContinueBtn').style.display='none';
   q.options.forEach(function(opt,i){
     var b=document.createElement('button'); b.className='q-opt';
-    b.innerHTML = '<b>'+(i+1)+'.</b> ' + (usingBank ? opt : escapeText(opt));
+    // A bank row carries the question's own option labels (A–D on a Sec 1 question).
+    var lab = (q.labels && typeof q.labels[i] === 'string' && q.labels[i]) || String(i+1);
+    b.innerHTML = '<b>'+escapeText(lab)+'.</b> ' + (usingBank ? opt : escapeText(opt));
     b.onclick=function(){ if(G===run && qState.current===q) answerQuestion(i,b); };
     opts.appendChild(b);
   });

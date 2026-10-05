@@ -4453,7 +4453,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.425.0';
+const APP_VERSION = 'v1.425.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5248,14 +5248,18 @@ function backToPapers() { cancelEdit(); }
 // MCQ options are numbered 1,2,3,4 everywhere (matching the mini-games). The
 // AI (or a student's handwritten paper) may still answer with a legacy letter
 // — normalise "B" → "2", "(3)" → "3", etc.
+// A LEADING label is read first — "(B)", "B)", "Option B", "Ans: B" — because
+// a Sec 1 question shows the model lettered options and an echo of one comes
+// back lettered: digits-first read "B) 4 cm" as 4 and "(B)" as "(". Junk is
+// '' (no choice), never a stray character mistaken for an option.
 function _normMcqChoice(raw) {
-  const s = String(raw || '').trim().toUpperCase();
+  let s = String(raw || '').trim().toUpperCase();
   if (!s) return '';
+  s = s.replace(/^(?:THE\s+)?(?:OPTION|CHOICE|ANSWER|ANS|CHOSEN)\b[\s:.#-]{0,12}/, '').replace(/^[\s(\[{]+/, '');
+  const lead = s.match(/^(\d+|[A-H])(?![A-Z0-9])/);
+  if (lead) return /\d/.test(lead[1]) ? lead[1] : String(lead[1].charCodeAt(0) - 64); // A→1 … H→8
   const digits = s.match(/\d+/);
-  if (digits) return digits[0];
-  const ch = s.charAt(0);
-  if (ch >= 'A' && ch <= 'H') return String(ch.charCodeAt(0) - 64); // A→1 … H→8
-  return ch;
+  return digits ? digits[0] : '';
 }
 
 // =====================================================================
@@ -5307,24 +5311,55 @@ function mcqLabelForNum(num, style) {
   const n = parseInt(num, 10);
   return Number.isFinite(n) && n >= 1 ? mcqLabelOf(n - 1, style) : String(num == null ? '' : num);
 }
-const MCQ_BARE_RE = /^\s*\(?\s*([1-9]|[A-Ha-h])\s*[).]?\s*$/;
+// BRACKETED, both sides: "(3)" is the marker the ＃ button writes; a bare "A"
+// or "3" is the author's own option ("Which part, A, B, C or D…").
+const MCQ_BARE_RE = /^\s*\(\s*([1-9]|[A-Ha-h])\s*\)\s*$/;
 // An option's text as it is drawn: a bare marker naming THIS option ("(3)" on
 // the third option, or "(C)") becomes the question's own label; anything else
 // — real wording, or a marker naming some other option — is left exactly as
 // written, because rewriting an author's words is not a labelling decision.
+// Is this option nothing but the bracketed marker that names it — "(3)" or
+// "(C)" on the third option? The ONE predicate the drawing and the ✅ checks
+// share, so a question is never offered a fix that would draw nothing new.
+function mcqOptionIsBare(text, i) {
+  const plain = String(text == null ? '' : text).replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+  const m = plain.match(MCQ_BARE_RE);
+  return !!m && _normMcqChoice(m[1]) === String((i | 0) + 1);
+}
 function mcqOptionText(text, i, style) {
   const raw = String(text == null ? '' : text);
-  const plain = raw.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
-  const m = plain.match(MCQ_BARE_RE);
-  if (!m || _normMcqChoice(m[1]) !== String((i | 0) + 1)) return raw;
-  return '(' + mcqLabelOf(i, style) + ')';
+  return mcqOptionIsBare(raw, i) ? '(' + mcqLabelOf(i, style) + ')' : raw;
+}
+// "(1) (2) (3) (4)" or "(A) (B) (C) (D)" — for the wording of a finding, a
+// button or a toast. `sep` '' gives the compact "(A)(B)(C)(D)".
+function mcqMarkers(style, sep) {
+  return [0, 1, 2, 3].map(i => '(' + mcqLabelOf(i, style) + ')').join(sep == null ? ' ' : sep);
 }
 // The editor's own question, for the labels: the override held in the editor
 // plus the topics on screen — so choosing a Sec 1 topic relabels at once.
 var editorMcqLabels = '';
-function editorMcqLabelStyle() {
-  const t1 = document.getElementById('topicSelect'), t2 = document.getElementById('topicSelect2');
-  return mcqLabelStyle({ topic: t1 ? t1.value : '', topic2: t2 ? t2.value : '', mcqLabels: editorMcqLabels });
+// The fields the label decision reads, off the editor — the ONE builder, so
+// the editor rows and every draft preview (🎓 student, 🖨 exported, ⇄ compare)
+// resolve their labels from exactly the same things.
+function editorMcqLabelFields() {
+  const v = id => (document.getElementById(id) || {}).value || '';
+  return { topic: v('topicSelect'), topic2: v('topicSelect2'), ...(editorMcqLabels ? { mcqLabels: editorMcqLabels } : {}) };
+}
+function editorMcqLabelStyle() { return mcqLabelStyle(editorMcqLabelFields()); }
+// The style for a block being authored: in ✏️ editing mode the block's OWN
+// question (the create page's topic belongs to some other question), else the
+// editor's fields. The same rule the MCQ block renderer follows.
+function mcqStyleForBlock(blockId) {
+  const em = (typeof emOwnerQuestion === 'function') ? emOwnerQuestion(blockId) : null;
+  return em ? mcqLabelStyle(em) : editorMcqLabelStyle();
+}
+// ONE option as an AI prompt quotes it — "(B) the iron rod" — label and
+// wording relabelled together, so a prompt never reads "(B) (2)". Every AI
+// writer whose words reach a student (an explanation, a model answer, a
+// regenerated copy, the marker's own context) goes through it, or it writes
+// "option 2 is correct" under a key that says "B.".
+function mcqPromptOpt(o, i, style) {
+  return '(' + mcqLabelOf(i, style) + ') ' + stripHtml(mcqOptionText((o && o.text) || '', i, style));
 }
 function setEditorMcqLabels(v) {
   editorMcqLabels = (v === 'letters' || v === 'numbers') ? v : '';
@@ -8228,7 +8263,12 @@ function renderBlocks() {
   // ✏️ Editing mode rebuilds the WHOLE sheet on every render, and an emptied
   // list clamps its scroller to the top — so opening a keyword panel at
   // question 30 would throw the author back to question 1.
-  if (emActive()) emStashScroll();
+  if (emActive()) {
+    emStashScroll();
+    // 🔤 Owners first, so a block inserted a moment ago already knows its
+    // question when its own case reads it (the MCQ labels, the part picker).
+    try { emAdoptOwners(); } catch (e) { console.warn('em adopt before render', e); } // the adopt after the render still runs
+  }
   container.innerHTML = '';
 
   blocks.forEach((block, index) => {
@@ -8978,8 +9018,15 @@ function mcqSetCorrect(blockId, optId) {
 function mcqSetOptionText(blockId, optId, text) {
   const b = blocks.find(x => x.id === blockId);
   if (!b) return;
-  const o = (b.options || []).find(o => o.id === optId);
-  if (o) o.text = text;
+  const i = (b.options || []).findIndex(o => o.id === optId);
+  const o = i >= 0 ? b.options[i] : null;
+  if (!o) return;
+  // 🔤 The box SHOWS a marker option as the question's label — "(C)" on a Sec
+  // 1 question — so it is stored back as the canonical "(3)". The ✅ checks and
+  // the ＃ fixes all read the stored form, and a question re-filed to a primary
+  // topic then shows "(3)" again rather than a stray "(C)".
+  const m = String(text || '').trim().match(MCQ_BARE_RE);
+  o.text = (m && _normMcqChoice(m[1]) === String(i + 1)) ? `(${i + 1})` : text;
 }
 function mcqAddOption(blockId) {
   const b = blocks.find(x => x.id === blockId);
@@ -9193,7 +9240,7 @@ async function aiGenerateBlockAnswer(blockId, btn) {
     else if (b.type === 'part' && ((b.label || '') + stripHtml(b.content || '')).trim()) ctxBits.push(((b.label || '') + ' ' + stripHtml(b.content || '')).trim());
     else if (b.type === 'image' && b.url) { ctxBits.push('[diagram — attached as an image]'); if (media.length < 3) { try { media.push(await _blockImageToInline(b.id)); } catch (e) { console.warn('AI answer: diagram skipped', e); } } }
     else if (b.type === 'table') { try { ctxBits.push('[table] ' + (b.data || []).map(row => (row || []).map(c => stripHtml(String(c || ''))).join(' | ')).join(' ; ')); } catch (e) {} }
-    else if (b.type === 'mcq') ctxBits.push('[multiple-choice options] ' + (b.options || []).map((o, i) => (i + 1) + ') ' + stripHtml(o.text || '')).join(' '));
+    else if (b.type === 'mcq') ctxBits.push('[multiple-choice options] ' + (b.options || []).map((o, i) => mcqPromptOpt(o, i, mcqStyleForBlock(blockId))).join(' '));
     else if (b.type === 'answer' || b.type === 'plainanswer') { ansN++; ctxBits.push(b.id === blockId ? `>>> ANSWER BOX ${ansN} — WRITE THIS ONE <<<` : `[answer box ${ansN} — belongs to another part, do not answer it]`); }
   }
   // The question this box belongs to — in ✏️ editing mode the create page's own
@@ -9316,7 +9363,7 @@ async function aiGenerateBlockExplanation(blockId, btn, level) {
     else if (b.type === 'mcq') {
       const opts = b.options || [];
       const ci = opts.findIndex(o => o.id === b.correctId);
-      ctxBits.push('[multiple-choice options] ' + opts.map((o, i) => (i + 1) + ') ' + stripHtml(o.text || '') + (i === ci ? ' <-- CORRECT ANSWER' : '')).join(' '));
+      ctxBits.push('[multiple-choice options] ' + opts.map((o, i) => mcqPromptOpt(o, i, mcqStyleForBlock(blockId)) + (i === ci ? ' <-- CORRECT ANSWER' : '')).join(' '));
     }
     else if (b.type === 'answer') ctxBits.push('[model answer] Claim: ' + stripHtml(b.claim || '') + ' | Evidence: ' + stripHtml(b.evidence || '') + ' | Reasoning: ' + stripHtml(b.reasoning || ''));
     else if (b.type === 'plainanswer') ctxBits.push('[model answer] ' + stripHtml(b.content || ''));
@@ -9744,7 +9791,7 @@ function renderImportedBlockEditorBody(block) {
                  title="Mark as correct answer" onchange="mcqSetCorrect('${id}','${o.id}')">
           <span style="font-weight:600;width:18px;">${mcqLabelOf(i, lab)}.</span>
           <input class="form-input" type="text" style="flex:1;" placeholder="Option text"
-                 value="${escapeHtml(o.text || '')}" oninput="mcqSetOptionText('${id}','${o.id}',this.value)">
+                 value="${escapeHtml(mcqOptionText(o.text || '', i, lab))}" oninput="mcqSetOptionText('${id}','${o.id}',this.value)">
           ${micButtonHtml('', 'Speak this option')}
           <button class="block-action-btn delete" title="Remove option" onclick="mcqRemoveOption('${id}','${o.id}')">✕</button>
         </div>`).join('');
@@ -11562,7 +11609,7 @@ function _akdAnswerText(q, note) {
     if (b.type === 'explanation') { const t = stripHtml(b.content || ''); if (t) out.push('Explanation: ' + t); }
     if (b.type === 'mcq') {
       const i = (b.options || []).findIndex(o => o && o.id === b.correctId);
-      if (i >= 0) out.push('The correct option is (' + (i + 1) + ') ' + stripHtml(b.options[i].text || ''));
+      if (i >= 0) out.push('The correct option is ' + mcqPromptOpt(b.options[i], i, mcqLabelStyle(q)));
     }
   });
   return _docClip(out.join('\n'), 1600);
@@ -16325,7 +16372,7 @@ async function aiAnswerAndExplain() {
     for (const b of blocks) {
       if (b.type === 'text') { const t = stripHtml(b.content || '').trim(); if (t) parts.push(t); }
       else if (b.type === 'part') { const t = ((b.label || '') + ' ' + stripHtml(b.content || '')).trim(); if (t) parts.push(t); }
-      else if (b.type === 'mcq') { mcqBlock = b; parts.push('Options:\n' + (b.options || []).map((o, i) => `(${i + 1}) ${stripHtml(o.text || '')}`).join('\n')); }
+      else if (b.type === 'mcq') { mcqBlock = b; parts.push('Options:\n' + (b.options || []).map((o, i) => mcqPromptOpt(o, i, mcqStyleForBlock(b.id))).join('\n')); }
       else if (b.type === 'image') {
         parts.push('[a diagram is shown' + (b.caption ? ': ' + b.caption : '') + ']');
         // Attach the diagrams (multimodal) so the AI can read them.
@@ -16882,6 +16929,8 @@ function _dupEditorQuestion() {
   return {
     id: currentEditingQuestion || null,
     title: (document.getElementById('questionTitle')?.value || ''),
+    // 🔤 The ⇄ side-by-side draws this draft — with the editor's own labels.
+    ...(typeof editorMcqLabelFields === 'function' ? editorMcqLabelFields() : {}),
     blocks: blocks
   };
 }
@@ -19983,6 +20032,9 @@ function previewAsStudent() {
     title: val('questionTitle') || 'Untitled Question',
     category: normalizeCategoryValue(val('categorySelect')),
     topic: val('topicSelect'),
+    // 🔤 The second topic and the label override too, or 🎓 Preview as
+    // Student numbers what the editor letters.
+    ...(typeof editorMcqLabelFields === 'function' ? editorMcqLabelFields() : {}),
     annotation: !!document.getElementById('questionAnnotation')?.checked,
     markingGuide: val('questionMarkingGuide').trim(),
     answerKeyNote: val('questionAnswerKeyNote').trim(),
@@ -21509,7 +21561,7 @@ function getQuestionPreview(q) {
     if (block.type === 'text' && block.content) return clean(block.content).substring(0, 150);
     if (block.type === 'part' && block.content) return clean((block.label || '') + ' ' + block.content).substring(0, 150);
     if (block.type === 'mcq' && (block.options || []).some(o => o.text)) {
-      return clean('Multiple choice: ' + (block.options || []).map(o => o.text).join(' / ')).substring(0, 150);
+      return clean('Multiple choice: ' + (block.options || []).map((o, i) => mcqOptionText(o.text, i, mcqLabelStyle(q))).join(' / ')).substring(0, 150);
     }
     if (block.type === 'fillblank' && (block.text || '').trim()) {
       return clean('Fill in the blanks: ' + _fbSegments(block.text).map(p => p.type === 'blank' ? '____' : p.text).join('')).substring(0, 150);
@@ -21702,7 +21754,7 @@ function _serializeQuestionForRegen(q) {
       const opts = (b.options || []);
       const correct = opts.findIndex(o => o.id === b.correctId);
       lines.push(`${n}. MCQ options:`);
-      opts.forEach((o, oi) => lines.push(`     (${oi + 1}) ${stripHtml(o.text || '')}${oi === correct ? '  <-- correct' : ''}`));
+      opts.forEach((o, oi) => lines.push(`     ${mcqPromptOpt(o, oi, mcqLabelStyle(q))}${oi === correct ? '  <-- correct' : ''}`));
     }
     else if (b.type === 'answer') lines.push(`${n}. ANSWER${tag} (Claim/Evidence/Reasoning): Claim: ${stripHtml(b.claim || '')} | Evidence: ${stripHtml(b.evidence || '')} | Reasoning: ${stripHtml(b.reasoning || '')}`);
     else if (b.type === 'plainanswer') lines.push(`${n}. PLAIN ANSWER${tag}: ${stripHtml(b.content || b.text || '')}`);
@@ -24168,7 +24220,7 @@ const PART_EXPL_MAX = 8;
 // reused rather than re-derived, so "does this part already have an answer"
 // and "does this part ask the pupil to explain" mean here exactly what they
 // mean on the 🤖 button.
-function _partExplSection(blocks, pmap, letter) {
+function _partExplSection(blocks, pmap, letter, style) {
   const bits = [];
   (blocks || []).forEach(b => {
     if (!b || !qPartKeyIn(qPartOf(pmap, b), letter)) return;
@@ -24179,7 +24231,7 @@ function _partExplSection(blocks, pmap, letter) {
     else if (b.type === 'mcq') {
       const opts = b.options || [];
       const ci = opts.findIndex(o => o && o.id === b.correctId);
-      bits.push('[options] ' + opts.map((o, i) => (i + 1) + ') ' + stripHtml(o.text || '') + (i === ci ? ' <-- CORRECT' : '')).join('  '));
+      bits.push('[options] ' + opts.map((o, i) => mcqPromptOpt(o, i, style) + (i === ci ? ' <-- CORRECT' : '')).join('  '));
     }
     else if (b.type === 'answer') bits.push('[model answer] Claim: ' + stripHtml(b.claim || '') + ' | Evidence: ' + stripHtml(b.evidence || '') + ' | Reasoning: ' + stripHtml(b.reasoning || ''));
     else if (b.type === 'plainanswer') bits.push('[model answer] ' + stripHtml(b.content || ''));
@@ -24196,7 +24248,7 @@ function _partExplPrompt(q, missing, blocks, pmap, hasMedia) {
   // The shared stem — anything printed above the first part. It is what the
   // parts are all about, so a part read without it explains nothing; and it
   // is what the teacher's exemplars are retrieved for.
-  const stem = _partExplSection(blocks, pmap, '');
+  const stem = _partExplSection(blocks, pmap, '', mcqLabelStyle(q));
   const notesDb = aiGrounding('teach', topic, ((q && q.title) ? q.title + ' — ' : '') + stem);
   const qLv = getTopicLevel(topic || '');
   const parts = qPartsUsed(blocks);
@@ -24206,7 +24258,7 @@ function _partExplPrompt(q, missing, blocks, pmap, hasMedia) {
   const body = parts.map(p => {
     const want = missing.indexOf(p) >= 0;
     return `--- PART (${p})${want ? '  <<< WRITE AN EXPLANATION FOR THIS ONE' : '  [already has its explanation — context only, do not write one]'}\n`
-      + (_partExplSection(blocks, pmap, p) || '(nothing was transcribed for this part)');
+      + (_partExplSection(blocks, pmap, p, mcqLabelStyle(q)) || '(nothing was transcribed for this part)');
   }).join('\n\n');
   // The depth rule, from the ONE function the 🤖 button reads. Always the
   // DEFAULT tier: a build path may never reach the expanded ones.
@@ -24266,7 +24318,7 @@ async function aiWritePartExplanations(q, opts) {
       qStripOwnPartMarker(nb);
       // 🧠 What the AI wrote, on the block — so a rewrite of this note on the
       // vetting card is a correction this app learns from.
-      try { if (typeof _styleStamp === 'function') _styleStamp(nb, 'content', _partExplSection(blocks, pmap, p), nb.content); } catch (e) {}
+      try { if (typeof _styleStamp === 'function') _styleStamp(nb, 'content', _partExplSection(blocks, pmap, p, mcqLabelStyle(q)), nb.content); } catch (e) {}
       done.push(p);
     }
   });
@@ -29044,9 +29096,20 @@ function _cpbCoverB(marks, from, to, anchor) {
 // (through `sectionHtmlById`) and forced onto a new page, so it always sits at
 // the top of the booklet's first sheet rather than at the foot of the one
 // before it.
-function _cpbBookletLeadHtml(book, marks, from, to) {
+// 🔤 The labels the instruction names are the ones Booklet A actually prints:
+// "(A, B, C or D)" when every question in it is lettered, "(1, 2, 3 or 4)"
+// when every one is numbered, and a neutral wording for a mixed booklet rather
+// than a promise half the questions break.
+function _cpbChoiceWords(aList) {
+  const styles = new Set((aList || []).map(q => mcqLabelStyle(q)));
+  if (styles.size > 1) return 'Make your choice';
+  const st = styles.size ? [...styles][0] : 'numbers';
+  const l = [0, 1, 2, 3].map(i => mcqLabelOf(i, st));
+  return `Make your choice (${l[0]}, ${l[1]}, ${l[2]} or ${l[3]})`;
+}
+function _cpbBookletLeadHtml(book, marks, from, to, aList) {
   const txt = book === 'a'
-    ? `For each question from ${from} to ${to}, four options are given. One of them is the correct answer. Make your choice (1, 2, 3 or 4) and ${_cpbMetaGet('mcqOnPaper') ? 'write it in the bracket provided' : 'shade your answer on the Answer Sheet'}.`
+    ? `For each question from ${from} to ${to}, four options are given. One of them is the correct answer. ${_cpbChoiceWords(aList)} and ${_cpbMetaGet('mcqOnPaper') ? 'write it in the bracket provided' : 'shade your answer on the Answer Sheet'}.`
     : `For questions ${from} to ${to}, write your answers in this booklet. The number of marks available is shown in brackets [ ] at the end of each question or part question.`;
   return `<div class="cpb-lead"><p>${escapeHtml(txt)}</p><div class="cpb-lead-marks">(${escapeHtml(String(marks))} marks)</div></div>`;
 }
@@ -29062,7 +29125,8 @@ function _cpbBookletLeadHtml(book, marks, from, to) {
 // is paginated, footed and numbered like every other sheet, and the forced
 // break on its own qid is what keeps it on a sheet of its own.
 const CPB_ANSWER_SHEET_QID = '__cpb_answersheet__';
-function _cpbAnswerSheetHtml(nA) {
+function _cpbAnswerSheetHtml(aList) {
+  const nA = (aList || []).length;
   if (!nA) return '';
   // Two columns, numbered DOWN each one — 1…14 on the left and 15…28 on the
   // right, the way an answer sheet is read. Laid out across instead, a child
@@ -29070,7 +29134,9 @@ function _cpbAnswerSheetHtml(nA) {
   const half = Math.ceil(nA / 2);
   const cell = i => (i > nA ? '<div class="cpb-as-row cpb-as-blank"></div>'
     : `<div class="cpb-as-row"><span class="cpb-as-n">${i}</span>`
-      + [1, 2, 3, 4].map(o => `<span class="cpb-as-o">${o}</span>`).join('')
+      // 🔤 Each row is shaded with ITS question's own labels, so a Sec 1
+      // question answered "B" is shaded B — never a 1–4 grid against A–D.
+      + [0, 1, 2, 3].map(o => `<span class="cpb-as-o">${mcqLabelOf(o, mcqLabelStyle(aList[i - 1]))}</span>`).join('')
       + `</div>`);
   let rows = '';
   for (let i = 1; i <= half; i++) rows += cell(i) + cell(i + half);
@@ -29101,7 +29167,7 @@ function _cpbPaperOpts() {
   const forced = new Set();
   // Booklet A's lead line, forced to the top of its own page.
   if (a.length) {
-    sectionHtmlById[a[0].id] = _cpbBookletLeadHtml('a', marks.a, 1, a.length);
+    sectionHtmlById[a[0].id] = _cpbBookletLeadHtml('a', marks.a, 1, a.length, a);
     forced.add('__lo__' + a[0].id);
   }
   if (b.length) {
@@ -29141,7 +29207,7 @@ function _cpbPaperOpts() {
         // Booklet A carries no bracket when it is answered on the answer
         // sheet. Booklet B's questions are open-ended and have none anyway.
         noBracketIds: onPaper ? null : new Set(a.map(q => q.id)),
-        tailHtml: wantSheet ? _cpbAnswerSheetHtml(a.length) : '',
+        tailHtml: wantSheet ? _cpbAnswerSheetHtml(a) : '',
       },
     },
   };
@@ -35906,7 +35972,7 @@ function _gradingQuestionSource(q) {
       Object.values(block.data || {}).forEach(row => Object.values(row || {}).forEach(inlinePictures));
     } else if (block.type === 'mcq') {
       (block.options || []).forEach((option, index) => {
-        lines.push(prefix + 'Option ' + (index + 1) + ': ' + plain(option.text));
+        lines.push(prefix + mcqLabelOf(index, mcqLabelStyle(q)) + ') ' + plain(mcqOptionText(option.text, index, mcqLabelStyle(q))));
         inlinePictures(option.text);
       });
     } else if (block.type === 'fillblank') {
@@ -36074,8 +36140,16 @@ function _wnyNormItems(parsed, opts) {
   return out;
 }
 function _wnyPrompt(q, opts) {
-  const printed = opts.map(o => `(${o.letter}) ${o.text || '(blank)'}`).join('\n');
-  const correct = opts.find(o => o.correct) || opts[0];
+  // 🔤 The options as the student SAW them — "(C)" on a Sec 1 question — and
+  // normalised here rather than by the caller, so the hover (marking store,
+  // already relabelled) and the printed key (raw block, "(3)") build the SAME
+  // prompt and therefore share one cache entry. `_wnyNormItems` reads a "C"
+  // back as option 3, so the canonical numbers underneath are untouched.
+  const st = mcqLabelStyle(q);
+  const shown = opts.map((o, i) => ({ letter: mcqLabelOf(i, st), correct: !!(o && o.correct),
+    text: stripHtml(mcqOptionText((o && o.text) || '', i, st)).replace(/\s+/g, ' ').trim() }));
+  const printed = shown.map(o => `(${o.letter}) ${o.text || '(blank)'}`).join('\n');
+  const correct = shown.find(o => o.correct) || shown[0];
   const printedQ = _cqRepr(q);
   const ground = aiGrounding('teach', q && q.topic, printedQ);
   return `You are a patient Singapore primary-school science teacher (PSLE). A student has just answered the multiple-choice question below and has been told which option was right. They are now going through the options one at a time asking "why is that one wrong?".\n\n` +
@@ -36085,10 +36159,10 @@ function _wnyPrompt(q, opts) {
     `Option (${correct.letter}) is the correct one.\n\n` +
     `Any diagram, food web, circuit, table or graph in this question is ATTACHED to this message as a picture. Read it. Most of these options are wrong because of something the picture or the table actually shows, and a reason that does not point at that evidence is no use to the student.\n\n` +
     `For EVERY option write "why", addressed to the student as "you":\n` +
-    `- For a WRONG option: say what is actually TRUE — naming the things, counting them, quoting the row or the label — and then why that makes this option wrong. "There are only 2 populations of producer, arrowhead and water lily, so 3 is wrong." "The bulb at X still lights, so that part of the circuit is not broken." Never write only "this is incorrect" or "this does not match the diagram": name what it should have been.\n` +
+    `- For a WRONG option: say what is actually TRUE — naming the things, counting them, quoting the row or the label — and then why that makes this option wrong. "There are only 2 populations of producer, arrowhead and water lily, so this one is wrong." "The bulb at X still lights, so that part of the circuit is not broken." Never write only "this is incorrect" or "this does not match the diagram": name what it should have been.\n` +
     `- For the CORRECT option: one sentence on why it IS right, on the same evidence.\n` +
     `Max 40 words each. Plain sentences a 10-year-old reads. No markdown, no bullet characters, no mention of any option number other than the one the entry is about, and never open with "The answer is".\n\n` +
-    `Return ONLY JSON: {"options":[{"n":"1","why":"..."},{"n":"2","why":"..."}]} — one entry per option, in order, "n" being the option number exactly as printed above.`;
+    `Return ONLY JSON: {"options":[{"n":"${shown[0] ? shown[0].letter : '1'}","why":"..."},{"n":"${shown[1] ? shown[1].letter : '2'}","why":"..."}]} — one entry per option, in order, "n" being the option label exactly as printed above.`;
 }
 
 // ---- the AI call, cached per option list -----------------------------------
@@ -36976,7 +37050,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     _mcqPaintResult(containerSel, pid, mcq.options, studentLetter);
     if (fbEl) {
       let inner = `<span style="color:${color};font-weight:600;font-size:0.85rem;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span>` +
-        (studentLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(studentLetter)})</span>` : '');
+        (studentLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(_mcqLabOf(mcq.options, studentLetter))})</span>` : '');
       if (correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(_mcqLab(correctOpt))}) ${escapeHtml(correctOpt.text)}</div>`;
       fbEl.innerHTML = inner;
     }
@@ -40131,6 +40205,8 @@ function previewEditorPrint() {
     title: val('questionTitle') || 'Untitled question',
     category: normalizeCategoryValue(val('categorySelect')),
     topic: val('topicSelect'),
+    // 🔤 …or the exported proof numbers what the editor and the PDF letter.
+    ...(typeof editorMcqLabelFields === 'function' ? editorMcqLabelFields() : {}),
     annotation: on('questionAnnotation'),
     markingGuide: (val('questionMarkingGuide') || '').trim(),
     answerKeyNote: (val('questionAnswerKeyNote') || '').trim(),
@@ -41154,6 +41230,7 @@ function _wsQeReopenPreview() {
 // =====================================================================
 let _akeQid = null;     // id of the question in the drawer
 let _akeDraft = null;   // working copy; discarded unless Save is pressed
+let _akeLabels = 'numbers'; // 🔤 the question's own option labels — the drawer must read like the key row it was opened from
 
 // One editable row per answer FIELD, in the order the key prints them. The
 // `kind` decides how it is drawn and read back.
@@ -41205,6 +41282,7 @@ function akeOpen(qid) {
   if (!q) { showToast('That question is no longer in the bank', 'error'); return; }
   _akeQid = String(q.id);
   _akeDraft = JSON.parse(JSON.stringify({ blocks: q.blocks || [] }));
+  _akeLabels = mcqLabelStyle(q);
   const sub = document.getElementById('akeSub');
   if (sub) sub.textContent = [q.title, q.topic].filter(Boolean).join(' · ');
   _akeRender();
@@ -41256,7 +41334,7 @@ function _akeRender() {
         ${opts.map((o, i) => `<label class="ake-opt">
             <input type="radio" name="akeMcq_${bid}" ${o.id === r.block.correctId ? 'checked' : ''}
                    onchange="akeSetCorrect('${bid}','${escapeHtml(String(o.id))}')">
-            <span><b>${i + 1}.</b> ${o.text || '<i>(empty option)</i>'}</span>
+            <span><b>${mcqLabelOf(i, _akeLabels)}.</b> ${o.text ? mcqOptionText(o.text, i, _akeLabels) : '<i>(empty option)</i>'}</span>
           </label>`).join('')}
       </div>`;
     }
@@ -47346,9 +47424,10 @@ function _docAiRepr(q, num) {
   let s = '#' + num + ' [' + (q.topic || 'no topic') + ' / ' + (normalizeCategoryValue(q.category) || 'no category') + '] Title: ' + (q.title || '(untitled)');
   if (p.text) s += ' | Q: ' + _docClip(p.text, 500);
   if (p.mcq) {
-    const opts = (p.mcq.options || []).map((o, i) => (i + 1) + ') ' + stripHtml(o.text || '')).join('  ');
+    const lab = mcqLabelStyle(q);
+    const opts = (p.mcq.options || []).map((o, i) => mcqPromptOpt(o, i, lab)).join('  ');
     const c = (p.mcq.options || []).findIndex(o => o.id === p.mcq.correctId);
-    s += ' | Options: ' + opts + ' | Marked correct: ' + (c >= 0 ? (c + 1) : 'NONE');
+    s += ' | Options: ' + opts + ' | Marked correct: ' + (c >= 0 ? mcqLabelOf(c, lab) : 'NONE');
   }
   p.answers.forEach(a => { s += a.kind === 'cer' ? ' | Model: ' + _docClip([a.claim, a.evidence, a.reasoning].filter(Boolean).join('; '), 400) : ' | Answer: ' + _docClip(a.text, 400); });
   if (p.hasImage) s += ' | NOTE: this question DOES include a diagram/image (you cannot see it — assume it is present and fine).';
@@ -47665,7 +47744,8 @@ function _cqMcqBlock(q) { return ((q && q.blocks) || []).find(b => b && b.type =
 const CQ_NUMBERISH_RE = /^[\s([]*\d{1,2}[\s)\].:-]*$/;
 function _cqOptsAreBareNumbers(mcq) {
   const t = ((mcq && mcq.options) || []).map(_cqOptText);
-  return t.length > 0 && t.every(s => !s || CQ_NUMBERISH_RE.test(s));
+  // 🔤 "(C)" on the third option of a Sec 1 question is bare too.
+  return t.length > 0 && t.every((s, i) => !s || CQ_NUMBERISH_RE.test(s) || mcqOptionIsBare(s, i));
 }
 // Can the one-tap fix be offered at all? Only for a real option list that is
 // not already numbered — the button must never be a no-op.
@@ -47681,12 +47761,19 @@ function _cqWords(s) {
 }
 // A table that labels its own rows 1..n IS the option list — the strongest
 // signal there is, and it needs no wording match at all.
-function _cqTableLabelsChoices(tables, n) {
+// A Sec 1 question letters its choices, so its table may label them A, B, C,
+// D — counted ONLY when the question itself uses letters (`style`), because
+// a primary table's "A" and "B" are objects in an experiment, not choices.
+function _cqTableLabelsChoices(tables, n, style) {
   if (n < 2) return false;
   const nums = new Set();
   tables.forEach(b => _cqTableCells(b).forEach(c => {
     const m = c.match(/^\(?\s*(\d{1,2})\s*\)?[.)]?$/);
     if (m) nums.add(Number(m[1]));
+    else if (style === 'letters') {
+      const l = c.match(/^\(?\s*([A-H])\s*\)?[.)]?$/);
+      if (l) nums.add(l[1].charCodeAt(0) - 64);
+    }
   }));
   for (let i = 1; i <= n; i++) if (!nums.has(i)) return false;
   return true;
@@ -47711,9 +47798,12 @@ function _cqLocalFindings(q, aiAnswered) {
     const opts = (mcq.options || []).map(_cqOptText);
     const real = opts.filter(Boolean);
     const fixable = !!_cqMcqFixable(q);
+    // 🔤 The question's own markers — what the fix would write.
+    const lab = mcqLabelStyle(q);
+    const mk = mcqMarkers(lab, ' ');
     // ── THE HEADLINE CHECK, decidable half ──────────────────────────────
     if (fixable && tables.length && real.length >= 2) {
-      const labelled = _cqTableLabelsChoices(tables, opts.length);
+      const labelled = _cqTableLabelsChoices(tables, opts.length, lab);
       const cellWords = new Set(tables.flatMap(b => _cqTableCells(b)).flatMap(_cqWords));
       const echoed = real.filter(t => {
         const w = _cqWords(t);
@@ -47723,8 +47813,8 @@ function _cqLocalFindings(q, aiAnswered) {
       if (labelled || mostEchoed) {
         out.push(_cqFinding('Options', 'high', 'The table already shows the choices — the options repeat it',
           labelled
-            ? 'The table in this question labels its rows 1, 2, 3… so the table IS the list of choices. The options underneath should read just (1) (2) (3) (4) and let the table do the work.'
-            : `${echoed} of the ${real.length} options are already written out in the table. Where the table shows the choice, the option only needs to be its number — (1) (2) (3) (4).`,
+            ? `The table in this question labels its rows ${lab === 'letters' ? 'A, B, C' : '1, 2, 3'}… so the table IS the list of choices. The options underneath should read just ${mk} and let the table do the work.`
+            : `${echoed} of the ${real.length} options are already written out in the table. Where the table shows the choice, the option only needs to be its label — ${mk}.`,
           'numberOptions'));
       }
     }
@@ -47734,7 +47824,7 @@ function _cqLocalFindings(q, aiAnswered) {
       const avg = real.reduce((n, t) => n + t.length, 0) / real.length;
       if (avg >= CQ_LONG_OPTION) {
         out.push(_cqFinding('Options', 'low', 'Wordy options next to a diagram — does the picture already show them?',
-          'If the diagram already labels each choice, the options should be just (1) (2) (3) (4) rather than repeating the picture in words. The AI check below reads the diagram and will say.'));
+          `If the diagram already labels each choice, the options should be just ${mk} rather than repeating the picture in words. The AI check below reads the diagram and will say.`));
       }
     }
     const correct = (mcq.options || []).find(o => o.id === mcq.correctId);
@@ -47829,9 +47919,12 @@ function _cqRepr(q) {
           : '[an EMPTY picture placeholder — no picture has been added]');
         break;
       case 'mcq': {
-        const opts = (b.options || []).map((o, i) => '  (' + (i + 1) + ') ' + (_cqOptText(o) || '(blank)'));
+        // 🔤 The question's own labels, so a finding the teacher reads names
+        // the option the way the sheet does — "(C)" on a Sec 1 question.
+        const lab = mcqLabelStyle(q);
+        const opts = (b.options || []).map((o, i) => '  (' + mcqLabelOf(i, lab) + ') ' + (stripHtml(mcqOptionText(_cqOptText(o), i, lab)) || '(blank)'));
         const c = (b.options || []).findIndex(o => o.id === b.correctId);
-        lines.push('OPTIONS exactly as they are written now:\n' + opts.join('\n') + '\nMarked correct: ' + (c >= 0 ? '(' + (c + 1) + ')' : 'NONE'));
+        lines.push('OPTIONS exactly as they are written now:\n' + opts.join('\n') + '\nMarked correct: ' + (c >= 0 ? '(' + mcqLabelOf(c, lab) + ')' : 'NONE'));
         break;
       }
       case 'answer':
@@ -47988,7 +48081,7 @@ function _cqCardHtml(q) {
       <div class="cq-preview"><div class="cq-preview-inner">${renderQuestionPreviewHtml(q.id, { tryIt: false })}</div></div>
       <div class="cq-actions">
         <button class="btn btn-primary" style="${btn}" onclick="cqLooksFine('${id}')">✓ Looks fine</button>
-        ${_cqMcqFixable(q) ? `<button class="btn btn-outline" style="${btn}" title="Set every option to its own number and let the table or diagram show the choices" onclick="cqNumberOptions('${id}')">＃ Make options (1)(2)(3)(4)</button>` : ''}
+        ${_cqMcqFixable(q) ? `<button class="btn btn-outline" style="${btn}" title="Set every option to just its own label and let the table or diagram show the choices" onclick="cqNumberOptions('${id}')">＃ Make options ${mcqMarkers(mcqLabelStyle(q), '')}</button>` : ''}
         <button class="btn btn-outline" style="${btn}" onclick="cqOpenEditor('${id}')">✏️ Open in editor</button>
         <button class="btn btn-outline" style="${btn}" onclick="cqSkip()">⏭ Skip for now</button>
         <button class="btn btn-outline" style="${btn}margin-left:auto;" onclick="cqRecheck()">🤖 Check with AI</button>
@@ -48056,6 +48149,13 @@ function _cqRenderFindings() {
 function _cqFindingHtml(f, qid, scope) {
   const color = f.severity === 'high' ? '#dc2626' : f.severity === 'med' ? '#d97706' : '#6b7280';
   const bg = f.severity === 'high' ? '#fef2f2' : f.severity === 'med' ? '#fffbeb' : '#f3f4f6';
+  // 🔤 The button names what it will write: (A)(B)(C)(D) on a Sec 1 question.
+  let fixMk = '(1)(2)(3)(4)';
+  try {
+    const lq = scope === 'create' ? null
+      : ((questionBank || []).find(x => x && String(x.id) === String(qid)) || (vettingList || []).find(x => x && String(x.id) === String(qid)));
+    fixMk = mcqMarkers(scope === 'create' ? editorMcqLabelStyle() : mcqLabelStyle(lq), '');
+  } catch (e) { fixMk = '(1)(2)(3)(4)'; } // the numbers are always a safe label
   const fixCall = scope === 'create' ? 'tlFixCreateOptions()'
     : scope === 'vet' ? `tlFixVetOptions('${escapeHtml(qid)}')`
     : `cqNumberOptions('${escapeHtml(qid)}')`;
@@ -48064,7 +48164,7 @@ function _cqFindingHtml(f, qid, scope) {
       <div style="flex:1;min-width:0;">
         <div class="cq-find-title">${escapeHtml(f.title)}</div>
         ${f.detail ? `<div class="cq-find-detail">${escapeHtml(f.detail)}</div>` : ''}
-        ${f.fix === 'numberOptions' ? `<div class="cq-find-fix"><button class="btn btn-outline" style="font-size:0.8rem;padding:6px 12px;" onclick="${fixCall}">＃ Make options (1)(2)(3)(4)</button></div>` : ''}
+        ${f.fix === 'numberOptions' ? `<div class="cq-find-fix"><button class="btn btn-outline" style="font-size:0.8rem;padding:6px 12px;" onclick="${fixCall}">＃ Make options ${fixMk}</button></div>` : ''}
       </div>
     </div>`;
 }
@@ -48226,7 +48326,7 @@ async function cqNumberOptions(id) {
   // which would spend another AI call re-reading a question we just fixed.
   const rev = _cqReviews.get(id);
   if (rev) rev.findings = (rev.findings || []).filter(f => f.fix !== 'numberOptions');
-  showToast('Options are now (1) (2) (3) (4) — the picture shows the choices', 'success');
+  showToast('Options are now ' + mcqMarkers(mcqLabelStyle(q), ' ') + ' — the picture shows the choices', 'success');
   if (document.querySelector('#page-bank.active')) renderQuestionBank();
   _cqRender();
 }
@@ -49620,7 +49720,7 @@ function tlFixCreateOptions() {
   if (rec) rec.findings = (rec.findings || []).filter(f => f.fix !== 'numberOptions');
   tlRepaint();
   tlRenderPanel();
-  showToast('Options are now (1) (2) (3) (4) — nothing is saved until you press Save', 'success');
+  showToast('Options are now ' + mcqMarkers(editorMcqLabelStyle(), ' ') + ' — nothing is saved until you press Save', 'success');
 }
 
 // ── 🚦 Check all, in ✏️ editing mode ────────────────────────────────────────
@@ -49644,7 +49744,7 @@ async function tlFixVetOptions(id) {
   if (rec) rec.findings = (rec.findings || []).filter(f => f.fix !== 'numberOptions');
   renderVettingList();
   tlRenderPanel();
-  showToast('Options are now (1) (2) (3) (4) — the picture shows the choices', 'success');
+  showToast('Options are now ' + mcqMarkers(mcqLabelStyle(q), ' ') + ' — the picture shows the choices', 'success');
 }
 
 async function tlCheckSheet() {
@@ -50439,7 +50539,7 @@ function akcKeySections(q) {
         break;
       default:
         // MCQ, answer lines and 🔑 answer-key blocks all live here.
-        _pushBlockAnswerKey(sections, b, p);
+        _pushBlockAnswerKey(sections, b, p, null, q);
         break;
     }
   });
@@ -50621,8 +50721,8 @@ function akcPrompt(q, imageNote) {
   const mcq = akcMcqBlock(q);
   const opts = mcq
     ? '\nThis is a multiple-choice question. The options, as the student sees them:\n'
-      + (mcq.options || []).map((o, i) => `(${i + 1}) ${stripHtml(o.text || '')}`).join('\n')
-      + '\nGive the option NUMBER you would choose in "optionNumber".\n'
+      + (mcq.options || []).map((o, i) => mcqPromptOpt(o, i, mcqLabelStyle(q))).join('\n')
+      + '\nGive the POSITION of the option you would choose as a number in "optionNumber" (1 = the first option' + (mcqLabelStyle(q) === 'letters' ? ', A' : '') + ', 2 = the second, and so on).\n'
     : '';
   const isCer = blocks.some(b => b && b.type === 'answer');
   const cerNote = isCer
@@ -50685,7 +50785,8 @@ async function akcAskEngine(engine, prompt, media) {
     // ChatGPT selected, or both columns are the same model.
     : await askGeminiVision(prompt, media, { maxOutputTokens: 3072, json: true, skipOpenAi: true });
   const res = _parseAIJson(raw) || {};
-  const num = Number(res.optionNumber);
+  // A model shown lettered options may answer "B" anyway — read it as 2.
+  const num = Number(_normMcqChoice(res.optionNumber));
   return {
     engine: engine.id, label: engine.label, model: engine.model, ok: true,
     answer: String(res.answer == null ? '' : res.answer).trim(),
@@ -57271,7 +57372,12 @@ function _sdExtractMcq(q) {
   if (!html.trim()) return null; // nothing to show
   if (!q.id) return null;        // need a stable id to record responses / no-repeat
   // Options keep their authored formatting; require each to have real text.
-  const optionsHtml = mcq.options.map(o => String(o.text || '').trim());
+  // 🔤 A bracketed marker option ("(3)") is shown as the question's own label,
+  // and `labels` carries those labels to every game, so a Sec 1 question reads
+  // A–D in a game exactly as it does in practice.
+  const lab = mcqLabelStyle(q);
+  const optionsHtml = mcq.options.map((o, i) => mcqOptionText(String(o.text || '').trim(), i, lab));
+  const labels = mcq.options.map((_, i) => mcqLabelOf(i, lab));
   if (optionsHtml.length < 2 || mcq.options.some(o => !stripHtmlToText(o.text || '').trim())) return null;
   const exB = blocks.find(b => b.type === 'explanation');
   const explainHtml = exB && exB.content ? String(exB.content) : '';
@@ -57282,9 +57388,15 @@ function _sdExtractMcq(q) {
   const mediaCount = blocks.filter(b => b.type === 'image' || b.type === 'table').length;
   const optChars = optionsHtml.reduce((n, o) => n + stripHtmlToText(o).length, 0);
   const len = qtext.length + optChars + mediaCount * 220 + optionsHtml.length * 8;
-  return { id: q.id, q: qtext, html, options: optionsHtml, answer, explain, explainHtml, topic: (q.topic || 'Science'), seedElo: _sdSeedElo(q), len: len };
+  return { id: q.id, q: qtext, html, options: optionsHtml, labels, answer, explain, explainHtml, topic: (q.topic || 'Science'), seedElo: _sdSeedElo(q), len: len };
 }
 // Starting difficulty rating for a question's Elo (it then evolves with play).
+// 🔤 What a game calls option i: the question's own label when the bank row
+// carried one, else its number — built-in game questions carry none.
+function _gameLab(q, i) {
+  const k = i | 0;
+  return (q && Array.isArray(q.labels) && typeof q.labels[k] === 'string' && q.labels[k]) || String(k + 1);
+}
 function _sdSeedElo(q) {
   const d = q && (q.difficulty || q.d);
   if (typeof d === 'number' && isFinite(d)) return Math.max(800, Math.min(1800, d));
@@ -64718,7 +64830,7 @@ function _tcgBankQuestions() {
     if (!q || !qInSyllabus(q) || !qAvailableToViewer(q) || !qWithinStudentLevel(q)) continue;
     const row = _sdExtractMcq(q);
     if (!row) continue;
-    out.push({ id: q.id, html: row.html, opts: row.options.map(_htmlPlainText), optsHtml: row.options,
+    out.push({ id: q.id, html: row.html, opts: row.options.map(_htmlPlainText), optsHtml: row.options, labels: row.labels,
       a: row.answer, ex: row.explain, db: true, feedSource: q });
   }
   return out;
@@ -64806,7 +64918,7 @@ async function _tcgQuizRender() {
   body.innerHTML = '<div class="tcg-quiz-q">' + (q.html || escapeHtml(q.q || '')) + '</div>'
     + '<div class="tcg-quiz-opts">'
     + q.opts.map((o, idx) => '<button type="button" class="tcg-quiz-opt" data-i="' + idx + '" onclick="_tcgQuizAnswer(' + idx + ')">'
-        + '<span class="tcg-quiz-let">' + (idx + 1) + '</span>' + (q.optsHtml?.[idx] || escapeHtml(o)) + '</button>').join('')
+        + '<span class="tcg-quiz-let">' + escapeHtml(_gameLab(q, idx)) + '</span>' + (q.optsHtml?.[idx] || escapeHtml(o)) + '</button>').join('')
     + '</div>'
     + '<div class="tcg-quiz-fb" id="tcgqFb"></div>';
   } finally { run.loading = false; }
@@ -64841,7 +64953,7 @@ function _tcgQuizAnswer(idx) {
       msg = '<div class="tcg-fb-ok">✅ Correct! ' + (res ? res.progress : 0) + ' / ' + TCG_LVL_STEP + ' toward the next level.' + ptsBit + '</div>';
     }
   } else {
-    msg = '<div class="tcg-fb-no">❌ Not quite — the correct answer is <b>(' + (q.a + 1) + ')</b>. Keep going, the next one counts!' + ptsBit + '</div>';
+    msg = '<div class="tcg-fb-no">❌ Not quite — the correct answer is <b>(' + escapeHtml(_gameLab(q, q.a)) + ')</b>. Keep going, the next one counts!' + ptsBit + '</div>';
   }
   if (q.ex) msg += '<div class="tcg-fb-ex">' + escapeHtml(q.ex) + '</div>';
   msg += '<div style="margin-top:14px;text-align:center;"><button class="btn btn-primary" type="button" onclick="_tcgQuizNext()">Next question ▶</button></div>';
@@ -68811,7 +68923,7 @@ async function duelOpenQuiz() {
     + '<div class="duel-quiz-q">' + q.html + '</div>'
     + '<div class="duel-quiz-opts">'
     + q.opts.map((o, i) => '<button type="button" class="duel-quiz-opt" onclick="duelAnswer(' + i + ')">'
-        + '<b>' + (i + 1) + '</b> ' + (q.optsHtml?.[i] || escapeHtml(o)) + '</button>').join('')
+        + '<b>' + escapeHtml(_gameLab(q, i)) + '</b> ' + (q.optsHtml?.[i] || escapeHtml(o)) + '</button>').join('')
     + '</div><div class="duel-quiz-foot" id="duelQuizFoot"></div></div>';
   host.appendChild(box);
   r.insightUsed = true;             // spent on OPENING it, so the button cannot re-arm
@@ -68847,7 +68959,7 @@ function duelAnswer(i) {
       + (ups.length ? ' <b>🎓 ' + ups.map(u => escapeHtml(tcgShortName(u.card)) + ' reached Lv ' + u.level
           + (u.level % DUEL_RANK_EVERY === 0 ? ' — ⬆ RANK UP!' : '')).join(', ') + '</b>' : '');
   } else {
-    note = '<b class="no">❌ Not this time.</b> The right answer is <b>' + String.fromCharCode(65 + (q.a | 0)) + '</b>.';
+    note = '<b class="no">❌ Not this time.</b> The right answer is <b>' + escapeHtml(_gameLab(q, q.a | 0)) + '</b>.';
   }
   if (q.ex) note += '<div class="duel-quiz-ex">💡 ' + escapeHtml(q.ex) + '</div>';
   const foot = document.getElementById('duelQuizFoot');
@@ -70099,7 +70211,7 @@ async function emsNextQuestion() {
   body.innerHTML = '<div class="ems-quiz-q">' + (q.html || escapeHtml(q.q || '')) + '</div>'
     + '<div class="ems-quiz-opts">'
     + q.opts.map((o, i) => '<button type="button" class="ems-quiz-opt" data-i="' + i + '" onclick="emsAnswer(' + i + ')">'
-        + '<span class="ems-quiz-let">' + (i + 1) + '</span>' + (q.optsHtml?.[i] || escapeHtml(o)) + '</button>').join('')
+        + '<span class="ems-quiz-let">' + escapeHtml(_gameLab(q, i)) + '</span>' + (q.optsHtml?.[i] || escapeHtml(o)) + '</button>').join('')
     + '</div>'
     + '<div class="ems-quiz-fb" id="emsQuizFb">' + (r.roundTotal
         ? '⏸ The battle is paused and there is no timer — read carefully, every correct answer pays full mana.'
@@ -70164,7 +70276,7 @@ function emsAnswer(i) {
     : (correct && r.defenders.length ? ' · 🎓 your defenders trained' : '');
   if (fb) fb.innerHTML = correct
     ? '<span class="ok">✅ Correct — <b>⚡ +' + gain + ' mana</b>' + ptsBit + trainBit + '</span>'
-    : '<span class="no">❌ The answer was <b>(' + (q.a + 1) + ')</b> — only ⚡ +' + gain + ' mana' + ptsBit + '. Streak reset.</span>';
+    : '<span class="no">❌ The answer was <b>(' + escapeHtml(_gameLab(q, q.a)) + ')</b> — only ⚡ +' + gain + ' mana' + ptsBit + '. Streak reset.</span>';
   emsQuizStreakHud();
   // A fixed round ends itself (with a small bonus for finishing all five);
   // the open-ended panel just rolls on to the next question.
@@ -71491,7 +71603,7 @@ async function elgNextQuestion() {
     + '<div class="elg-quiz-head">⏸ Battle paused · answer for <b>✦ ' + ELG_SP_CORRECT + ' skill point</b></div>'
     + '<div class="elg-quiz-q">' + (q.html || escapeHtml(q.q || '')) + '</div>'
     + '<div class="elg-quiz-opts">' + q.opts.map((o, i) =>
-        '<button type="button" class="elg-quiz-opt" data-i="' + i + '" onclick="elgAnswer(' + i + ')"><span>' + (i + 1) + '</span>' + (q.optsHtml?.[i] || escapeHtml(o)) + '</button>').join('')
+        '<button type="button" class="elg-quiz-opt" data-i="' + i + '" onclick="elgAnswer(' + i + ')"><span>' + escapeHtml(_gameLab(q, i)) + '</span>' + (q.optsHtml?.[i] || escapeHtml(o)) + '</button>').join('')
     + '</div>'
     + '<div class="elg-quiz-fb" id="elgQuizFb"></div>'
     + '</div>';
@@ -71523,7 +71635,7 @@ function elgAnswer(i) {
   const fb = document.getElementById('elgQuizFb');
   if (fb) fb.innerHTML = (correct
     ? '<span class="ok">✅ Correct — <b>✦ +' + ELG_SP_CORRECT + ' skill point</b>' + (pts ? ' · 🪙 +' + pts : '') + extra + '</span>'
-    : '<span class="no">❌ The answer was <b>(' + (q.a + 1) + ')</b>' + (pts ? ' · 🪙 +' + pts : '') + '</span>')
+    : '<span class="no">❌ The answer was <b>(' + escapeHtml(_gameLab(q, q.a)) + ')</b>' + (pts ? ' · 🪙 +' + pts : '') + '</span>')
     + (q.ex ? '<div class="elg-quiz-ex">' + escapeHtml(q.ex) + '</div>' : '')
     + '<button type="button" class="btn btn-primary elg-quiz-go" onclick="elgCloseQuiz()">▶ Back to the fight</button>';
   elgHud();
@@ -75566,6 +75678,10 @@ function ppCreateForAssign(){
 
   // Fresh editor, prefilled from the past-paper question
   blocks = []; selectedBlanks = {}; editorKeywords = {}; currentEditingQuestion = null;
+  // 🔤 …and nothing of the last question opened: its label choice and its
+  // objectives would otherwise be saved onto this new one.
+  editorMcqLabels = '';
+  if (typeof loEditorSet === 'function') loEditorSet([]);
   const cs2 = document.getElementById('categorySelect2'); if (cs2) cs2.value = '';
   const ts2 = document.getElementById('topicSelect2'); if (ts2) ts2.value = '';
   if (typeof _setAnswerKeyFields === 'function') _setAnswerKeyFields('', '');
@@ -77372,9 +77488,10 @@ function _ainsteinQBrief(q) {
     if (caps.length) out.pictureCaptions = caps.map(c => _docClip(c, 160));
   }
   if (p.mcq) {
-    out.options = (p.mcq.options || []).map((o, i) => (i + 1) + '. ' + _docClip(stripHtml(o.text || ''), 160));
+    const lab = mcqLabelStyle(q);
+    out.options = (p.mcq.options || []).map((o, i) => mcqLabelOf(i, lab) + '. ' + _docClip(stripHtml(mcqOptionText(o.text || '', i, lab)), 160));
     const correct = (p.mcq.options || []).findIndex(o => o.id === p.mcq.correctId);
-    if (correct >= 0) out.correctOption = correct + 1;
+    if (correct >= 0) out.correctOption = lab === 'letters' ? mcqLabelOf(correct, lab) : correct + 1;
   }
   p.answers.forEach(a => {
     if (a.kind === 'cer') out.modelAnswer = _docClip([a.claim, a.evidence, a.reasoning].filter(Boolean).join(' '), 700);
@@ -77394,7 +77511,7 @@ function _ainsteinGuardFor(q) {
   const g = { correctNo: 0, correctText: '', modelAnswer: '' };
   if (p.mcq) {
     const i = (p.mcq.options || []).findIndex(o => o.id === p.mcq.correctId);
-    if (i >= 0) { g.correctNo = i + 1; g.correctText = stripHtml((p.mcq.options[i] || {}).text || ''); }
+    if (i >= 0) { g.correctNo = i + 1; g.correctLabel = mcqLabelOf(i, mcqLabelStyle(q)); g.correctText = stripHtml((p.mcq.options[i] || {}).text || ''); }
   }
   p.answers.forEach(a => {
     g.modelAnswer = a.kind === 'cer'
@@ -77509,6 +77626,15 @@ function _ainsteinLeaksAnswer(reply, guard) {
     // "option 3", "answer is (3)", "choice number 3", "… is 3."
     if (new RegExp('\\b(option|answer|choice|number)\\s*(is|:)?\\s*\\(?' + n + '\\)?\\b', 'i').test(reply)) return true;
     if (new RegExp('\\bis\\s*\\(?' + n + '\\)?\\s*[.!]?\\s*$', 'i').test(reply.trim())) return true;
+  }
+  // 🔤 A lettered question's answer leaks as a LETTER: "the answer is B",
+  // "option (B)". Matched UPPERCASE only, so the article "a" or a pronoun "I"
+  // in ordinary prose is never read as a leak.
+  const L = guard.correctLabel;
+  if (L && /^[A-Z]$/.test(L)) {
+    if (new RegExp('\\b(?:[Oo]ption|[Aa]nswer|[Cc]hoice|[Ll]etter|OPTION|ANSWER|CHOICE)\\s*(?:is|IS|:)?\\s*\\(?' + L + '\\)?(?![A-Za-z0-9])').test(reply)) return true;
+    if (new RegExp('\\b(?:is|IS)\\s*\\(?' + L + '\\)?\\s*[.!]?\\s*$').test(reply.trim())) return true;
+    if (new RegExp('^\\(?' + L + '\\)?\\s+(?:is|IS)\\s+(?:right|correct|RIGHT|CORRECT)').test(reply.trim())) return true;
   }
   // 5 words of the correct option, or 8 of the model answer, quoted verbatim.
   if (_ainsteinSharesRun(reply, guard.correctText, 5)) return true;
@@ -80695,7 +80821,7 @@ function _mkModelAnswer(q, openOnly, part) {
       else if (b.type === 'answerKey') { const t = stripHtml(b.text || ''); if (t) bits.push(t); }
       else if (b.type === 'mcq' && !openOnly) {
         const i = (b.options || []).findIndex(o => o && o.id === b.correctId);
-        if (i >= 0) bits.push('(' + (i + 1) + ') ' + stripHtml((b.options[i] && b.options[i].text) || ''));
+        if (i >= 0) bits.push(mcqPromptOpt(b.options[i], i, mcqLabelStyle(q)));
       }
     });
     return bits.join(' | ');
@@ -82652,6 +82778,7 @@ window.mcqSetCorrect = mcqSetCorrect;
 window.mcqSetOptionText = mcqSetOptionText;
 window.mcqAddOption = mcqAddOption;
 window.mcqNumberOptions = mcqNumberOptions;
+window.setEditorMcqLabels = setEditorMcqLabels;
 window.mcqRemoveOption = mcqRemoveOption;
 window.markMcqChoice = markMcqChoice;
 window.enhanceBlockImage = enhanceBlockImage;

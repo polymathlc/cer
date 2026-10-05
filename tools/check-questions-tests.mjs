@@ -11,6 +11,7 @@
 // the table — one tap and the wording of all four is gone, with the ＃ button
 // looking like it did the right thing. Too tight and the one problem the whole
 // page exists to catch never gets flagged at all. Neither throws.
+import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import fs from 'fs';
 
 const APP = new URL('../app.js', import.meta.url);
@@ -34,7 +35,7 @@ function questionHasMarkableAnswer(q) {
 }
 `;
 
-const M = new Function(preamble + src.slice(a, b) +
+const M = new Function(preamble + mcqLabelSrc(src, { display: false }) + src.slice(a, b) +
   '\nreturn { _cqTableRows, _cqTableCells, _cqOptsAreBareNumbers, _cqMcqFixable, _cqTableLabelsChoices, _cqWords, _cqLocalFindings };')();
 
 const cases = [];

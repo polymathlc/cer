@@ -1,6 +1,7 @@
 // The shipped checker must account for every picture before a green verdict.
 // These tests exercise its real prompt, media packet and report validation;
 // model replies and downloads are deterministic, with no paid calls.
+import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import * as repairCore from '../question-repair-core.mjs';
@@ -29,6 +30,7 @@ function harness(){
     function report(){return H.reply!==undefined?H.reply:{findings:[],imageAudits:_cqImageTargets(H.current).map(t=>({target:t.id,status:'complete',detail:''}))};}
     async function askGemini(prompt,opts){H.calls.push({prompt,opts,media:[]});return report();}
     async function askGeminiVision(prompt,media,opts){H.calls.push({prompt,media,opts});return report();}
+    ${mcqLabelSrc(source, { display: false })}
     ${section}
     return {H,check:async q=>{H.current=q;return _cqAiCheck(q);},packet:_cqImagePacket,media:_cqMedia,repr:_cqRepr,norm:_cqNormFinding,targets:_cqImageTargets};
   `)(repairCore);
