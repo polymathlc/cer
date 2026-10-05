@@ -17507,6 +17507,7 @@ async function _cropBoxFromScreenshotEx(fullDataUrl, box, opts) {
   r.w = Math.min(W - r.x, (xmax - xmin) / 1000 * W + mx * 2);
   r.h = Math.min(H - r.y, (ymax - ymin) / 1000 * H + my * 2);
   if (r.w < 24 || r.h < 24) return null;
+  let thr = INK_DEFAULT;
   // Grow the rectangle out of any content it cuts through (clipped labels).
   try {
     const probe = document.createElement('canvas');
@@ -17517,7 +17518,7 @@ async function _cropBoxFromScreenshotEx(fullDataUrl, box, opts) {
     // see _inkThreshold. On a screenshot it lands on the old 190; on a phone
     // photograph of the same page it lands far lower, which is the whole
     // difference between these two passes working and silently doing nothing.
-    const thr = _inkThreshold(pctx, W, H, r);
+    thr = _inkThreshold(pctx, W, H, r);
     r = _expandRectToWhitespace(pctx, W, H, r, thr);
     // Pull the SIDES in first, so the sentence-trim below measures a band
     // against the figure's own width rather than against the blank paper the
@@ -17533,10 +17534,20 @@ async function _cropBoxFromScreenshotEx(fullDataUrl, box, opts) {
     r = tight;
     try { measure = measureCrop(pctx, W, H, r, thr); } catch (e) { measure = null; }
   } catch (e) { console.warn('edge expansion skipped', e); }
+  const drawn = _cropRenderRect(img, r);
+  // `scale`, `pad` and `thr` travel with the crop, so a rectangle the clean-up
+  // pass draws on THIS picture can be mapped back onto the page
+  // (_cropRefineOnPage) and measured there.
+  return { dataUrl: drawn.dataUrl, rect: { x: r.x, y: r.y, w: r.w, h: r.h }, W, H, measure, width: drawn.width, height: drawn.height,
+           pageShare: (r.w * r.h) / (W * H), scale: drawn.scale, pad: drawn.pad, thr };
+}
+// The page rectangle `r`, upscaled (≤2×, ≤~1600px) and set in ONE white
+// frame — guaranteed breathing space, so content never sits flush against the
+// edge even when the whitespace expansion stopped right at the last inked
+// pixel (or the figure touches the page edge). The first cut and the
+// clean-up's re-cut both go through it, so they can never be framed apart.
+function _cropRenderRect(img, r) {
   const scale = Math.max(1, Math.min(2, 1600 / Math.max(r.w, r.h))); // upscale small crops (≤2×, ≤~1600px)
-  // Guaranteed breathing space: a white frame around the crop, so content
-  // never sits flush against the edge even when the whitespace expansion
-  // stopped right at the last inked pixel (or the figure touches the page edge).
   const pad = Math.round(Math.max(16, Math.max(r.w, r.h) * scale * 0.035));
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(r.w * scale) + pad * 2;
@@ -17547,7 +17558,39 @@ async function _cropBoxFromScreenshotEx(fullDataUrl, box, opts) {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(img, r.x, r.y, r.w, r.h, pad, pad, Math.round(r.w * scale), Math.round(r.h * scale));
-  return { dataUrl: canvas.toDataURL('image/png'), rect: { x: r.x, y: r.y, w: r.w, h: r.h }, W, H, measure, width: canvas.width, height: canvas.height, pageShare: (r.w * r.h) / (W * H) };
+  return { dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height, scale, pad };
+}
+// THE CLEAN-UP IS CUT FROM THE PAGE, NOT OUT OF THE CROP. `c` is the rectangle
+// the clean-up pass drew, in the crop's own pixels; it is mapped back onto the
+// page (inside the first cut, never past it), cut with ONE fresh frame and
+// MEASURED again. Cut out of the crop instead, the result kept the first cut's
+// measurements — so a clean-up that sliced a table in half was invisible to
+// the clipped check and to Jev — and wore a second white frame. A cut that
+// leaves drawing running off an edge the first cut did not is refused (null):
+// the clean-up has cut into the figure rather than trimmed text off it.
+async function _cropRefineOnPage(ex, page, c) {
+  const R = ex && ex.rect, s = ex && ex.scale, p = ex && ex.pad;
+  if (!R || !(s > 0) || !Number.isFinite(p) || !page) return null;
+  const inX = v => Math.max(R.x, Math.min(R.x + R.w, v)), inY = v => Math.max(R.y, Math.min(R.y + R.h, v));
+  const x0 = inX(R.x + (c.x - p) / s), x1 = inX(R.x + (c.x + c.w - p) / s);
+  const y0 = inY(R.y + (c.y - p) / s), y1 = inY(R.y + (c.y + c.h - p) / s);
+  const r = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  if (r.w < 12 || r.h < 12) return null;
+  const img = await _loadImageEl(page);
+  const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+  if (!W || !H) return null;
+  const probe = document.createElement('canvas');
+  probe.width = W; probe.height = H;
+  const pctx = probe.getContext('2d', { willReadFrequently: true });
+  pctx.drawImage(img, 0, 0);
+  const thr = ex.thr != null ? ex.thr : INK_DEFAULT;
+  const measure = measureCrop(pctx, W, H, r, thr);
+  if (!measure || measure.unreadable) return null;
+  const before = (ex.measure && ex.measure.clipped) || [];
+  if (measure.clipped.some(side => before.indexOf(side) < 0)) return null;
+  const drawn = _cropRenderRect(img, r);
+  return { dataUrl: drawn.dataUrl, rect: r, W, H, measure, width: drawn.width, height: drawn.height,
+           pageShare: (r.w * r.h) / (W * H), scale: drawn.scale, pad: drawn.pad, thr };
 }
 
 // SECOND-CHANCE CLEANUP (AI verify pass). Pixel heuristics can't reliably
@@ -17572,29 +17615,47 @@ function _cropWordingOf(blocks) {
     .replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, ' ')
     .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/\s+/g, ' ').trim();
+  // A line of fewer than three words is not a SENTENCE. Listed, a bare "(a)"
+  // or a one-word line invites the clean-up to cut that same word off the
+  // figure, where it is a label.
+  const add = v => { if (v && v.split(' ').length >= 3) out.push(v); };
   (Array.isArray(blocks) ? blocks : []).forEach(b => {
     if (!b || typeof b !== 'object') return;
-    const t = String(b.type || '').toLowerCase();
-    if (t === 'text' || t === 'part') {
-      const v = plain(b.text != null ? b.text : b.content);
-      if (v) out.push(v);
-    } else if (t === 'mcq') {
-      const st = plain(b.question || b.stem || b.text);
-      if (st) out.push(st);
-      (Array.isArray(b.options) ? b.options : []).forEach(o => {
-        const v = plain(o && typeof o === 'object' ? (o.text != null ? o.text : o.content) : o);
-        if (v) out.push(v);
-      });
-    }
+    const t = String(b.type || '').trim().toLowerCase();
+    if (t === 'text' || t === 'part') add(plain(b.text != null ? b.text : b.content));
+    // An MCQ lends its STEM only. Its options are what a picture option's
+    // labels and a table's cells say, so listing them told the clean-up to
+    // cut the figure's own words off it.
+    else if (t === 'mcq') add(plain(b.question || b.stem || b.text));
   });
+  // Every line gets its turn. One that does not fit is CLIPPED (on a word,
+  // with "…") instead of ending the list, and room is held back for the lines
+  // still to come (up to 160 characters each): a long stem must never crowd
+  // out the short part lines printed under a table, which are exactly the
+  // lines that end up in a crop. When everything fits, nothing is clipped.
   let text = '';
-  for (const line of out) {
-    if (text.length + line.length + 3 > CROP_WORDING_CHARS) break;
-    text += (text ? '\n' : '') + '- ' + line;
-  }
+  out.forEach((line, i) => {
+    const left = CROP_WORDING_CHARS - text.length - (text ? 3 : 2);
+    const later = out.slice(i + 1).reduce((n, l) => n + 3 + Math.min(l.length, 160), 0);
+    const room = Math.min(left, Math.max(40, left - later));
+    let v = line;
+    if (v.length > room) {
+      if (room < 40) return;
+      let at = v.lastIndexOf(' ', room - 1);
+      if (at < room * 0.6) at = room - 1;
+      v = v.slice(0, at).replace(/[\s,;:]+$/, '') + '…';
+    }
+    text += (text ? '\n- ' : '- ') + v;
+  });
   return text;
 }
-async function _aiRefineCrop(dataUrl, wording) {
+async function _aiRefineCrop(dataUrl, wording, src) {
+  // `src` (optional) = { ex, page }: the crop's own record from
+  // _cropBoxFromScreenshotEx and the page it was cut from. Given it, the
+  // clean-up's rectangle is cut from the PAGE and re-measured there
+  // (_cropRefineOnPage) — a cut into the figure is refused — and `src.ex` is
+  // replaced by the cleaned cut's record, so whatever reads the measurements
+  // next (Jev, the caller) is reading the picture it is about to store.
   try {
     const b64 = dataUrl.split(',')[1] || '';
     const typed = String(wording || '').trim();
@@ -17602,7 +17663,8 @@ async function _aiRefineCrop(dataUrl, wording) {
       'The attached image is an auto-cropped figure for a primary-school science exam question. It should contain ONE figure (diagram / graph / experimental set-up / data table) and NOTHING else.\n' +
       'Sometimes the crop wrongly includes question text above, below or beside the figure: the sentence that introduces it, lettered parts such as "(a) State the…" or "(i) Substance 1", question numbers, marks such as [2], blank answer lines, or the end of the previous question.\n' +
       (typed
-        ? 'These sentences are ALREADY TYPED in the question, so none of them may stay in the picture — if any of them (or the start or end of one) appears in the image, it is stray text:\n' + typed + '\n'
+        ? 'These sentences are ALREADY TYPED in the question. A whole line or sentence from this list that sits OUTSIDE the figure is stray text and must be left out, and so is the start or end of such a sentence cut off at the edge of the crop:\n' + typed + '\n' +
+          'BUT a single word or short phrase INSIDE the figure — a label, an axis title, a legend entry, a row or column heading, a table cell, or the (1) (2) (3) (4) / (A) (B) (C) (D) label of a picture option — belongs to the figure even if the same word is in the list above: keep it.\n'
         : '') +
       'Reply ONLY with JSON:\n' +
       '- If the image is already clean (only the figure): {"clean":true}\n' +
@@ -17630,6 +17692,15 @@ async function _aiRefineCrop(dataUrl, wording) {
     // share of a loose crop, so the floor sits at 12% rather than 20% — still
     // far above the sliver a confused reply would hand back.
     if (w < 24 || h < 24 || (w * h) / (W * H) < 0.12) return dataUrl; // would discard >88% of the crop → refuse
+    if (src) {
+      // Cut from the PAGE and measured there. Refused — the crop is kept as it
+      // was — when that would leave the figure running off an edge.
+      const ex2 = await _cropRefineOnPage(src.ex, src.page, { x, y, w, h });
+      if (!ex2) return dataUrl;
+      src.ex = ex2;
+      return ex2.dataUrl;
+    }
+    // No page to cut from: the old cut out of the crop itself.
     const pad = Math.round(Math.max(16, Math.max(w, h) * 0.035));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(w) + pad * 2;
@@ -17718,6 +17789,7 @@ async function _jevRecropBox(mimeType, b64, currentDataUrl, reasons) {
     'Locate the ONE figure (diagram, graph, table or experimental set-up) that crop was meant to be. Reply ONLY with JSON {"box_2d":[ymin,xmin,ymax,xmax]} — integers 0-1000 measured on IMAGE 1.\n' +
     '- INCLUDE every label, arrow, pointer line, axis title, axis number, unit, legend, caption and table border belonging to the figure, and leave clear whitespace beyond the last of them.\n' +
     '- EXCLUDE sentences of question text, the question number and ordinary written answer options.\n' +
+    '- A table runs from its top border to its bottom border (plus a title printed on it): never the sentence that introduces it, the lettered parts printed under it such as "(a) State..." or "(i) Substance 1", marks such as [2], blank answer lines, or the end of the previous question.\n' +
     '- Never use the whole page.';
   const raw = await askGeminiVision(prompt, media, { maxOutputTokens: 256, json: true, authoring: true });
   const p = _parseAIJson(raw) || {};
@@ -17727,11 +17799,19 @@ async function _jevRecropBox(mimeType, b64, currentDataUrl, reasons) {
   return box.every(v => Number.isFinite(v) && v >= 0 && v <= 1000) && box[2] > box[0] && box[3] > box[1] ? box : null;
 }
 
-// Cut → judge → (AI re-cut → judge)… for every figure of one screenshot.
-// items[i] = { ex, refineChanged, dataUrl, box }. Returns one result per item:
+// Cut → judge → (AI re-cut → clean-up → judge)… for every figure of one
+// screenshot. items[i] = { ex, dataUrl, box }, where `ex` is the record of the
+// picture as it now stands (after its clean-up). `wording` is the question's
+// typed wording, so a re-cut gets the same clean-up the first cut had — or the
+// stem it was rejected for comes straight back. Returns one result per item:
 // { dataUrl, ex, box, state: 'ok'|'fixed'|'flagged', tries, reasons }.
-async function _jevGateFigures(items, mimeType, b64, fullDataUrl, onStatus) {
-  const facts = items.map((it, i) => _jevFigureFacts(i, it.ex, it.refineChanged));
+//
+// A clean-up that WORKED is never reported to Jev as stray text: the picture
+// Jev is shown is the cleaned one, measured on the page. Saying "the AI saw
+// stray text" made Jev say no to every cleaned crop and sent each one round
+// the re-cut loop (the durable worker carries the same rule).
+async function _jevGateFigures(items, mimeType, b64, fullDataUrl, onStatus, wording) {
+  const facts = items.map((it, i) => _jevFigureFacts(i, it.ex, false));
   const verdicts = await jevReviewCall({ scope: 'figures', figures: facts });
   const decision = decideReview({ verdicts, figures: facts, question: null });
   const out = [];
@@ -17751,6 +17831,13 @@ async function _jevGateFigures(items, mimeType, b64, fullDataUrl, onStatus) {
       let ex2 = null;
       try { ex2 = await _cropBoxFromScreenshotEx(fullDataUrl, box, { marginScale: tries === 1 ? 1.6 : 2.2 }); }
       catch (e) { console.warn('Jev recrop: the crop failed', e); }
+      if (ex2 && ex2.dataUrl) {
+        try {
+          const src = { ex: ex2, page: fullDataUrl };
+          await _aiRefineCrop(ex2.dataUrl, wording, src);
+          if (src.ex && src.ex.dataUrl) ex2 = src.ex;
+        } catch (e) { console.warn('Jev recrop: the clean-up was skipped', e); }
+      }
       const f2 = _jevFigureFacts(i, ex2, false);
       const hard = figureHardIssues(f2);
       const v2 = hard.length ? null : await jevReviewCall({ scope: 'figures', figures: [f2] });
@@ -17824,15 +17911,16 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
   for (let i = 0; i < imgBlocks.length; i++) {
     let c = null, ex = null;
     try { ex = await _cropBoxFromScreenshotEx(fullDataUrl, boxes[i]); c = ex && ex.dataUrl; } catch (e) { console.warn('AI rectangle crop failed', e); }
-    let refineChanged = false;
     if (c) {
       if (onStatus) onStatus(`Checking picture ${i + 1} for stray question text…`);
-      const refined = await _aiRefineCrop(c, opts && opts.wording);
-      refineChanged = refined !== c;
-      c = refined;
+      // Given the page, the clean-up is cut from the page and re-measured, so
+      // `ex` (what Jev is shown) describes the picture that will be stored.
+      const src = { ex, page: fullDataUrl };
+      c = await _aiRefineCrop(c, opts && opts.wording, src);
+      ex = src.ex;
     }
     crops.push(c);
-    gateItems.push({ ex, refineChanged, dataUrl: c, box: boxes[i] });
+    gateItems.push({ ex, dataUrl: c, box: boxes[i] });
   }
   // 🧭 Jev judges every crop; a NO (or a clipped / blank / whole-page crop the
   // code finds itself) has the AI cut it again. It runs BEFORE the "nothing
@@ -17840,7 +17928,7 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
   // the case the AI is best placed to locate.
   if (jevRun !== false && jevGateOn() && _canAuthor() && gateItems.length) {
     try {
-      const gated = await _jevGateFigures(gateItems, mimeType, b64, fullDataUrl, onStatus);
+      const gated = await _jevGateFigures(gateItems, mimeType, b64, fullDataUrl, onStatus, opts && opts.wording);
       crops = gated.map(g => g.dataUrl || null);
       gated.forEach((g, i) => { if (g.box && g.box !== boxes[i]) boxes[i] = g.box; });
       if (jevRun) gated.forEach((g, i) => jevRun.figures.push({ index: (jevRun.figures.length), state: g.state, tries: g.tries, reasons: g.reasons }));
@@ -19178,7 +19266,10 @@ async function autoChkRecrop(q, findings, say) {
       const ex = await _cropBoxFromScreenshotEx(pageData, box, { marginScale: 1.6 });
       if (!ex || !ex.dataUrl) { out.skipped.push(label + ' (the new crop was unusable)'); continue; }
       let dataUrl = ex.dataUrl;
-      try { dataUrl = await _aiRefineCrop(dataUrl); } catch (e) { /* the sharp crop stands */ }
+      // The same clean-up the import's own cut had: told the question's typed
+      // wording (or the stem the crop was rejected for comes straight back),
+      // and cut from the original page, where a cut into the figure is refused.
+      try { dataUrl = await _aiRefineCrop(dataUrl, _cropWordingOf(q.blocks), { ex, page: pageData }); } catch (e) { /* the sharp crop stands */ }
       const url = await uploadImageDataUrl(dataUrl);
       const page = b.cropSource && b.cropSource.page;
       b.url = url;

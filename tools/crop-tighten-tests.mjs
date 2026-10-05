@@ -395,13 +395,151 @@ test('the worker carries the SAME trim, byte for byte', () => {
 
 test('the clean-up pass is handed the question\'s own wording, at every crop', () => {
   const fill = cut('async function _fillBlocksFromAiBoxes', '\n// Editor flow', 'fill fn');
-  ok(fill.indexOf('_aiRefineCrop(c, opts && opts.wording)') >= 0, 'the wording never reaches the clean-up pass');
+  ok(fill.indexOf('_aiRefineCrop(c, opts && opts.wording, src)') >= 0, 'the wording never reaches the clean-up pass');
+  ok(fill.indexOf('_jevGateFigures(gateItems, mimeType, b64, fullDataUrl, onStatus, opts && opts.wording)') >= 0,
+    'the Jev re-cut is not handed the wording, so its clean-up puts the stem straight back');
   const calls = src.split('_fillBlocksFromAiBoxes(').length - 2;  // minus the definition
   const withWording = (src.match(/_fillBlocksFromAiBoxes\((?:(?!_fillBlocksFromAiBoxes\()[\s\S]){0,400}?wording: _cropWordingOf\(/g) || []).length;
   ok(calls >= 4 && withWording === calls, 'a crop path calls the clean-up without the question\'s wording (' + withWording + ' of ' + calls + ')');
   const refine = cut('async function _aiRefineCrop(', '\n// =====', 'refine');
   ok(/ALREADY TYPED in the question/.test(refine), 'the clean-up prompt never mentions the typed wording');
   ok(/TABLE runs from its top border to its bottom border/.test(refine), 'the clean-up prompt has no table rule');
+});
+
+// Every argument list of every call, read with brackets and strings respected.
+function callArgs(text, name) {
+  const calls = [];
+  let at = 0;
+  while ((at = text.indexOf(name + '(', at)) >= 0) {
+    const isDef = /function\s+$/.test(text.slice(Math.max(0, at - 20), at));
+    let i = at + name.length + 1, depth = 0, cur = '', q = null;
+    const args = [];
+    for (; i < text.length; i++) {
+      const ch = text[i];
+      if (q) { cur += ch; if (ch === '\\') { cur += text[++i]; continue; } if (ch === q) q = null; continue; }
+      if (ch === '\'' || ch === '"' || ch === '`') { q = ch; cur += ch; continue; }
+      if ('([{'.includes(ch)) depth++;
+      if (')]}'.includes(ch)) { if (!depth) break; depth--; }
+      if (ch === ',' && !depth) { args.push(cur.trim()); cur = ''; continue; }
+      cur += ch;
+    }
+    if (cur.trim()) args.push(cur.trim());
+    if (!isDef) calls.push({ at, args, line: text.slice(0, at).split('\n').length });
+    at = i;
+  }
+  return calls;
+}
+
+test('CENSUS: every clean-up call is handed the wording AND the page', () => {
+  const calls = callArgs(src, '_aiRefineCrop');
+  ok(calls.length >= 3, 'the clean-up calls were not found (' + calls.length + ')');
+  const empty = /^(?:undefined|null|''|""|``)?$/;
+  for (const c of calls) {
+    ok(c.args.length >= 2 && !empty.test(c.args[1]),
+      'app.js:' + c.line + ' calls the clean-up without the question\'s wording — it then cuts the stem as figure, or the figure as stem');
+    ok(c.args.length >= 3 && !empty.test(c.args[2]),
+      'app.js:' + c.line + ' calls the clean-up without the page — its cut keeps the first cut\'s measurements and a second white frame');
+  }
+  const recrop = cut('async function autoChkRecrop', '\n// ---- the loop', 'autoChkRecrop');
+  ok(/_aiRefineCrop\(dataUrl, _cropWordingOf\(q\.blocks\)/.test(recrop), 'the auto-check re-cut is cleaned without the question\'s wording');
+  const gate = cut('async function _jevGateFigures', '\n// The question as a whole', 'gate');
+  ok(/_aiRefineCrop\(ex2\.dataUrl, wording, src\)/.test(gate), 'the Jev re-cut is never cleaned up');
+  ok(/_jevFigureFacts\(i, ex2, false\)/.test(gate) && /_jevFigureFacts\(i, it\.ex, false\)/.test(gate),
+    'a clean-up that worked is reported to Jev as stray text, which sends every cleaned crop round the re-cut loop');
+});
+
+test('the clean-up keeps a figure\'s own words — in both copies of the prompt', () => {
+  const worker = fs.readFileSync(new URL('../rapid-import/functions/crop.js', import.meta.url), 'utf8');
+  const browser = cut('async function _aiRefineCrop(', '\n// =====', 'refine');
+  const prompt = worker.slice(worker.indexOf('export function refinePrompt'), worker.indexOf('export function subCrop'));
+  for (const [who, text] of [['app.js', browser], ['crop.js', prompt]]) {
+    ok(/sits OUTSIDE the figure is stray text/.test(text), who + ': the rule for whole lines outside the figure is missing');
+    ok(/belongs to the figure even if the same word is in the list above: keep it/.test(text),
+      who + ': nothing tells the clean-up that a label INSIDE the figure stays, so a table loses its row headings');
+    ok(/row or column heading, a table cell/.test(text) && /\(A\) \(B\) \(C\) \(D\) label of a picture option/.test(text),
+      who + ': the clause no longer names table headings, cells and picture-option labels');
+    ok(!/none of them may stay in the picture/.test(text), who + ': the old blanket rule (cut every listed word) is back');
+  }
+});
+
+test('the typed wording lists sentences, never an MCQ\'s options, and never drops a later line', () => {
+  const W = new Function(cut('const CROP_WORDING_CHARS', 'async function _aiRefineCrop', 'wording')
+    + '\nreturn { _cropWordingOf, CROP_WORDING_CHARS };')();
+  const w = W._cropWordingOf([
+    { type: 'text', content: '<p>The table shows the <b>state</b> of three substances.</p>' },
+    { type: ' MCQ ', question: 'Which substance is a liquid at room temperature?', options: [{ text: 'Substance 1' }, 'liquid', { content: 'a gas and a liquid' }] },
+    { type: 'text', text: '(a)' }, { type: 'text', text: 'Substance 2' }, { type: 'part', text: '(i) Substance 1' }]);
+  ok(w === '- The table shows the state of three substances.\n- Which substance is a liquid at room temperature?\n- (i) Substance 1',
+    'the list is not what was expected:\n' + w);
+  ok(!/a gas and a liquid|\n- liquid/.test(w), 'an MCQ option reached the list');
+  const stem = ('The mass of each substance was measured every minute and recorded. '.repeat(40)).trim();
+  const long = W._cropWordingOf([{ type: 'text', text: stem },
+    { type: 'text', text: '(b) Explain why the mass of the beaker fell over the ten minutes.' }]);
+  ok(long.length <= W.CROP_WORDING_CHARS, 'over budget: ' + long.length);
+  ok(/…\n- \(b\) Explain why the mass of the beaker fell over the ten minutes\.$/.test(long),
+    'a stem over the whole budget pushed the part line under the table off the list (or clipped it)');
+  const head = long.split('\n')[0].slice(2, -1);
+  ok(stem.startsWith(head) && /[\s,;:]/.test(stem[head.length]), 'the long line was not clipped on a word: …' + head.slice(-20));
+  // Everything that fits is listed whole, in order.
+  const fits = W._cropWordingOf([{ type: 'text', text: 'one two three' }, { type: 'text', text: 'four five six' }]);
+  ok(fits === '- one two three\n- four five six', 'a list that fits was changed: ' + fits);
+});
+
+// ---- the clean-up is cut from the PAGE, in the browser too ------------------
+// The REAL _cropBoxFromScreenshotEx / _cropRefineOnPage / _aiRefineCrop, run
+// over a synthetic page with a stand-in canvas that records what was drawn.
+const { measureCrop } = await import(new URL('../jev-review-core.mjs', import.meta.url));
+function browserCrop(p) {
+  const reg = new Map(), PAGE = 'data:image/png;base64,PAGE';
+  let n = 0;
+  const document = { createElement: () => {
+    const c = { width: 0, height: 0, drawn: null };
+    c.getContext = () => ({
+      drawImage: (img, ...a) => { c.drawn = { img, a }; },
+      getImageData: (...a) => c.drawn.img.page.ctx.getImageData(...a),
+      fillRect() {}
+    });
+    c.toDataURL = () => { const u = 'data:image/png;base64,CUT' + (++n); reg.set(u, c); return u; };
+    return c;
+  } };
+  const _loadImageEl = async url => url === PAGE ? { naturalWidth: p.W, naturalHeight: p.H, page: p }
+    : { naturalWidth: reg.get(url).width, naturalHeight: reg.get(url).height };
+  const ai = { prompts: [], reply: null };
+  const askGeminiVision = async prompt => { ai.prompts.push(prompt); return ai.reply; };
+  const B = new Function('document', '_loadImageEl', 'measureCrop', 'askGeminiVision', '_parseAIJson', 'console',
+    cut('const INK_RATIO', '\n// SECOND-CHANCE CLEANUP', 'browser crop')
+    + cut('const CROP_WORDING_CHARS', '\n// =====', 'browser refine')
+    + '\nreturn { _cropBoxFromScreenshotEx, _aiRefineCrop };')(
+    document, _loadImageEl, measureCrop, askGeminiVision, v => v, { warn() {} });
+  return { ...B, reg, ai, PAGE };
+}
+test('the browser clean-up is cut from the PAGE, re-measured, and refused when it cuts into the figure', async () => {
+  const p = page(700, 700);
+  p.rect(150, 60, 400, 40);                                          // a block above, then a clear gap
+  for (const y of [200, 260, 320, 380]) p.rect(150, y, 400, 4);      // a bordered table
+  for (const x of [150, 250, 350, 450, 546]) p.rect(x, 200, 4, 184);
+  const B = browserCrop(p);
+  const ex = await B._cropBoxFromScreenshotEx(B.PAGE, [60, 190, 580, 820]);
+  ok(ex && ex.scale >= 1 && ex.pad >= 16 && ex.thr > 0, 'the crop does not carry what maps it back to the page');
+  ok(ex.rect.y < 80 && ex.rect.y + ex.rect.h >= 380 && !ex.measure.clipped.length, 'the first cut is not the block and the table');
+  const onCrop = (y0, y1) => [Math.round((ex.pad + (y0 - ex.rect.y) * ex.scale) / ex.height * 1000), Math.round(ex.pad / ex.width * 1000),
+    Math.round((ex.pad + (y1 - ex.rect.y) * ex.scale) / ex.height * 1000), Math.round((ex.width - ex.pad) / ex.width * 1000)];
+  // Removing the block above the gap: kept.
+  B.ai.reply = { clean: false, box_2d: onCrop(200, 384) };
+  const src = { ex, page: B.PAGE };
+  const out = await B._aiRefineCrop(ex.dataUrl, '- The table shows three substances.', src);
+  ok(/ALREADY TYPED[\s\S]*The table shows three substances\./.test(B.ai.prompts[0]), 'the wording never reached the prompt');
+  ok(out !== ex.dataUrl && src.ex !== ex && src.ex.dataUrl === out, 'a clean-up off a clear gap was not kept');
+  const drawn = B.reg.get(out).drawn;
+  ok(drawn.img.page === p, 'the clean-up was cut out of the CROP, not the page — it keeps the first cut\'s measurements and a second frame');
+  ok(drawn.a[1] > 110 && drawn.a[1] <= 200 && drawn.a[1] >= ex.rect.y, 'the cut does not start below the block: ' + drawn.a[1]);
+  ok(src.ex.rect.y === drawn.a[1] && src.ex.measure !== ex.measure && !src.ex.measure.clipped.length, 'the cleaned cut is not measured on its own');
+  ok(src.ex.height === Math.round(src.ex.rect.h * src.ex.scale) + src.ex.pad * 2, 'the cleaned cut is not in ONE white frame');
+  // Slicing the table in half: the borders run off the bottom — refused.
+  B.ai.reply = { clean: false, box_2d: onCrop(200, 290) };
+  const src2 = { ex, page: B.PAGE };
+  const out2 = await B._aiRefineCrop(ex.dataUrl, '- The table shows three substances.', src2);
+  ok(out2 === ex.dataUrl && src2.ex === ex, 'a clean-up that cuts the table in half was kept');
 });
 
 // ---- the census: one door, and it is actually wired in ---------------------
@@ -439,7 +577,7 @@ const only = process.argv[2];
 let pass = 0, fail = 0;
 for (const c of cases) {
   if (only && c.name.indexOf(only) < 0) continue;
-  try { c.fn(); pass++; console.log('  ok   ' + c.name); }
+  try { await c.fn(); pass++; console.log('  ok   ' + c.name); }
   catch (e) { fail++; console.log('  FAIL ' + c.name + '\n       ' + e.message); }
 }
 console.log((fail ? '❌ ' : '✅ ') + pass + ' passed, ' + fail + ' failed');

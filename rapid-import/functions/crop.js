@@ -44,6 +44,18 @@ export function cropDiagramEx(canvas, box, createCanvas, opts = {}) {
     return null;
   }
   if (r.w < 24 || r.h < 24) return null;
+  const drawn = renderRect(canvas, r, createCanvas);
+  let measure = null;
+  try { measure = measureCrop(canvas.getContext('2d'), W, H, r, thr); } catch { measure = null; }
+  // `scale`, `pad` and `thr` travel with the crop, so a rectangle the clean-up
+  // pass draws on THIS picture can be mapped back onto the page (subCrop).
+  return { canvas: drawn.canvas, rect: { x: r.x, y: r.y, w: r.w, h: r.h }, measure, pageShare: (r.w * r.h) / (W * H),
+           scale: drawn.scale, pad: drawn.pad, thr };
+}
+// The page rectangle `r`, upscaled like every crop (≤2×, ≤~1600px) and set in
+// ONE white frame. The first cut and the clean-up's re-cut both go through it,
+// so the two can never be framed or scaled differently.
+function renderRect(canvas, r, createCanvas) {
   const scale = Math.max(1, Math.min(2, 1600 / Math.max(r.w, r.h)));
   const w = Math.round(r.w * scale), h = Math.round(r.h * scale);
   const pad = Math.round(Math.max(16, Math.max(w, h) * 0.035));
@@ -53,9 +65,7 @@ export function cropDiagramEx(canvas, box, createCanvas, opts = {}) {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, out.width, out.height);
   ctx.drawImage(canvas, r.x, r.y, r.w, r.h, pad, pad, w, h);
-  let measure = null;
-  try { measure = measureCrop(canvas.getContext('2d'), W, H, r, thr); } catch { measure = null; }
-  return { canvas: out, rect: { x: r.x, y: r.y, w: r.w, h: r.h }, measure, pageShare: (r.w * r.h) / (W * H) };
+  return { canvas: out, scale, pad };
 }
 const INK_RATIO = 0.74;
 const INK_FLOOR = 48;    // never call almost-black-only "ink"
@@ -405,26 +415,38 @@ export function cropWordingOf(blocks) {
     .replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, ' ')
     .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/\s+/g, ' ').trim();
+  // A line of fewer than three words is not a SENTENCE. Listed, a bare "(a)"
+  // or a one-word line invites the clean-up to cut that same word off the
+  // figure, where it is a label.
+  const add = v => { if (v && v.split(' ').length >= 3) out.push(v); };
   (Array.isArray(blocks) ? blocks : []).forEach(b => {
     if (!b || typeof b !== 'object') return;
-    const t = String(b.type || '').toLowerCase();
-    if (t === 'text' || t === 'part') {
-      const v = plain(b.text != null ? b.text : b.content);
-      if (v) out.push(v);
-    } else if (t === 'mcq') {
-      const st = plain(b.question || b.stem || b.text);
-      if (st) out.push(st);
-      (Array.isArray(b.options) ? b.options : []).forEach(o => {
-        const v = plain(o && typeof o === 'object' ? (o.text != null ? o.text : o.content) : o);
-        if (v) out.push(v);
-      });
-    }
+    const t = String(b.type || '').trim().toLowerCase();
+    if (t === 'text' || t === 'part') add(plain(b.text != null ? b.text : b.content));
+    // An MCQ lends its STEM only. Its options are what a picture option's
+    // labels and a table's cells say, so listing them told the clean-up to
+    // cut the figure's own words off it.
+    else if (t === 'mcq') add(plain(b.question || b.stem || b.text));
   });
+  // Every line gets its turn. One that does not fit is CLIPPED (on a word,
+  // with "…") instead of ending the list, and room is held back for the lines
+  // still to come (up to 160 characters each): a long stem must never crowd
+  // out the short part lines printed under a table, which are exactly the
+  // lines that end up in a crop. When everything fits, nothing is clipped.
   let text = '';
-  for (const line of out) {
-    if (text.length + line.length + 3 > CROP_WORDING_CHARS) break;
-    text += (text ? '\n' : '') + '- ' + line;
-  }
+  out.forEach((line, i) => {
+    const left = CROP_WORDING_CHARS - text.length - (text ? 3 : 2);
+    const later = out.slice(i + 1).reduce((n, l) => n + 3 + Math.min(l.length, 160), 0);
+    const room = Math.min(left, Math.max(40, left - later));
+    let v = line;
+    if (v.length > room) {
+      if (room < 40) return;
+      let at = v.lastIndexOf(' ', room - 1);
+      if (at < room * 0.6) at = room - 1;
+      v = v.slice(0, at).replace(/[\s,;:]+$/, '') + '…';
+    }
+    text += (text ? '\n- ' : '- ') + v;
+  });
   return text;
 }
 
@@ -434,7 +456,8 @@ export function refinePrompt(wording) {
   const typed = String(wording || '').trim();
   return 'The attached image is an auto-cropped figure for a primary-school science exam question. It should contain ONE figure (diagram / graph / experimental set-up / data table) and NOTHING else.\n' +
     'Sometimes the crop wrongly includes question text above, below or beside the figure: the sentence that introduces it, lettered parts such as "(a) State the…" or "(i) Substance 1", question numbers, marks such as [2], blank answer lines, or the end of the previous question.\n' +
-    (typed ? 'These sentences are ALREADY TYPED in the question, so none of them may stay in the picture — if any of them (or the start or end of one) appears in the image, it is stray text:\n' + typed + '\n' : '') +
+    (typed ? 'These sentences are ALREADY TYPED in the question. A whole line or sentence from this list that sits OUTSIDE the figure is stray text and must be left out, and so is the start or end of such a sentence cut off at the edge of the crop:\n' + typed + '\n' +
+      'BUT a single word or short phrase INSIDE the figure — a label, an axis title, a legend entry, a row or column heading, a table cell, or the (1) (2) (3) (4) / (A) (B) (C) (D) label of a picture option — belongs to the figure even if the same word is in the list above: keep it.\n' : '') +
     'Reply ONLY with JSON:\n' +
     '- If the image is already clean (only the figure): {"clean":true}\n' +
     '- Otherwise: {"clean":false,"box_2d":[ymin,xmin,ymax,xmax]} — integers 0-1000 measured on THIS image, the rectangle around the figure/table only.\n' +
@@ -445,31 +468,48 @@ export function refinePrompt(wording) {
     '- Never cut through a word that belongs to the figure — when unsure, keep it.';
 }
 
-// Cut the rectangle the clean-up pass returned out of the crop itself, with
-// the same guards as the browser: a sliver, the whole image, or a box that
-// would throw away almost all of the crop is not trusted and the crop is kept.
-// Returns a NEW made-shaped object, or null to keep the crop as it was.
-export function subCrop(made, box, createCanvas) {
-  if (!made || !made.canvas || !Array.isArray(box) || box.length !== 4) return null;
+// Cut the rectangle the clean-up pass returned — drawn on the CROP — out of the
+// PAGE the crop came from, with the same guards as the browser: a sliver, the
+// whole image, or a box that would throw away almost all of the crop is not
+// trusted and the crop is kept. Returns a NEW made-shaped object, or null to
+// keep the crop as it was.
+//
+// IT IS CUT FROM THE PAGE AND MEASURED THERE, never cut out of the crop. Cut
+// out of the crop, the result kept the FIRST cut's measurements — so a
+// clean-up that sliced a table in half was invisible to the clipped check and
+// to Jev — and it wore the crop's white frame inside a second one. Here the
+// box is mapped back onto the page (inside the first cut, never past it), cut
+// with ONE fresh frame, and measured again; a cut that leaves drawing running
+// off an edge the first cut did not is refused, because the clean-up has cut
+// into the figure rather than trimmed question text off it.
+export function subCrop(made, box, createCanvas, page) {
+  if (!made || !made.canvas || !made.rect || !page || !Array.isArray(box) || box.length !== 4) return null;
+  if (!(made.scale > 0) || !Number.isFinite(made.pad)) return null;
   const [ymin, xmin, ymax, xmax] = box.map(Number);
   if (![ymin, xmin, ymax, xmax].every(v => Number.isFinite(v) && v >= 0 && v <= 1000)) return null;
   if (ymax - ymin < 100 || xmax - xmin < 150) return null;
   if (ymax - ymin > 960 && xmax - xmin > 960) return null;
-  const src = made.canvas, W = src.width, H = src.height;
-  if (!W || !H) return null;
-  const mx = W * 0.012, my = H * 0.012;
-  const x = Math.max(0, xmin / 1000 * W - mx), y = Math.max(0, ymin / 1000 * H - my);
-  const w = Math.min(W - x, (xmax - xmin) / 1000 * W + mx * 2);
-  const h = Math.min(H - y, (ymax - ymin) / 1000 * H + my * 2);
-  if (w < 24 || h < 24 || (w * h) / (W * H) < 0.12) return null;
-  const pad = Math.round(Math.max(16, Math.max(w, h) * 0.035));
-  const out = createCanvas(Math.round(w) + pad * 2, Math.round(h) + pad * 2), ctx = out.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, out.width, out.height);
-  ctx.drawImage(src, x, y, w, h, pad, pad, Math.round(w), Math.round(h));
-  // The measurements were taken on the page rectangle and still describe its
-  // edges; the share of the page shrinks with what was cut away.
-  return { ...made, canvas: out, pageShare: (made.pageShare || 0) * ((w * h) / (W * H)), refined: true };
+  const CW = made.canvas.width, CH = made.canvas.height, W = page.width, H = page.height;
+  if (!CW || !CH || !W || !H) return null;
+  // The box on the crop, with the same small margin the browser keeps…
+  const mx = CW * 0.012, my = CH * 0.012;
+  const cx0 = Math.max(0, xmin / 1000 * CW - mx), cy0 = Math.max(0, ymin / 1000 * CH - my);
+  const cx1 = Math.min(CW, xmax / 1000 * CW + mx), cy1 = Math.min(CH, ymax / 1000 * CH + my);
+  if (cx1 - cx0 < 24 || cy1 - cy0 < 24 || ((cx1 - cx0) * (cy1 - cy0)) / (CW * CH) < 0.12) return null;
+  // …and on the page: undo the frame and the upscale, and stay inside the first cut.
+  const R = made.rect, s = made.scale, p = made.pad;
+  const inX = v => Math.max(R.x, Math.min(R.x + R.w, v)), inY = v => Math.max(R.y, Math.min(R.y + R.h, v));
+  const x0 = inX(R.x + (cx0 - p) / s), x1 = inX(R.x + (cx1 - p) / s);
+  const y0 = inY(R.y + (cy0 - p) / s), y1 = inY(R.y + (cy1 - p) / s);
+  const r = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  if (r.w < 12 || r.h < 12) return null;
+  let measure;
+  try { measure = measureCrop(page.getContext('2d'), W, H, r, made.thr != null ? made.thr : INK_DEFAULT); }
+  catch { return null; }
+  if (!measure || measure.unreadable) return null;
+  const before = (made.measure && made.measure.clipped) || [];
+  if (measure.clipped.some(side => before.indexOf(side) < 0)) return null;
+  const drawn = renderRect(page, r, createCanvas);
+  return { ...made, canvas: drawn.canvas, rect: r, scale: drawn.scale, pad: drawn.pad, measure,
+           pageShare: (r.w * r.h) / (W * H), refined: true };
 }

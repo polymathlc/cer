@@ -34,7 +34,7 @@ assert(a > 0 && b > a, 'the Jev block could not be found in app.js');
 const block = src.slice(a, b);
 
 function world(over = {}) {
-  const calls = { jev: [], recrop: [], cut: [] };
+  const calls = { jev: [], recrop: [], cut: [], refine: [] };
   const store = {};
   const env = {
     console, Date, JSON, Number, Array, Math, Set, String, Object, Error, Promise,
@@ -46,6 +46,9 @@ function world(over = {}) {
     _rapidCloudCall: async (name, data) => { calls.jev.push({ name, data }); return over.jev ? over.jev(data, calls.jev.length) : { available: false }; },
     _cropBoxFromScreenshotEx: async (full, box, opts) => { calls.cut.push({ box, opts }); return over.cut ? over.cut(box, opts, calls.cut.length) : null; },
     askGeminiVision: async (prompt, media) => { calls.recrop.push({ prompt, media }); return over.recrop ? over.recrop(prompt, media, calls.recrop.length) : '{}'; },
+    // The crop clean-up: by default it finds nothing to cut. `over.refine`
+    // may replace src.ex the way the real one does when its cut is kept.
+    _aiRefineCrop: async (dataUrl, wording, src) => { calls.refine.push({ dataUrl, wording, src }); return over.refine ? over.refine(dataUrl, wording, src) : dataUrl; },
     _parseAIJson: raw => { try { return JSON.parse(raw); } catch (e) { return null; } },
     ...over.env
   };
@@ -109,6 +112,23 @@ await test('the AI answering nonsense, or failing, leaves the original crop in p
     const out = await x._jevGateFigures([{ ex: good(), dataUrl: 'data:image/png;base64,ORIG', box: [1, 1, 2, 2] }], 'image/png', 'P', 'data:image/png;base64,P');
     assert(out[0].dataUrl.endsWith('ORIG') && out[0].state === 'flagged');
   }
+});
+await test('an AI re-cut gets the same clean-up as the first cut — told the wording, cut from the page — and Jev sees the cleaned cut', async () => {
+  const { x, calls } = world({
+    jev: (data, n) => ({ available: true, verdicts: n === 1 ? { figure_0: no() } : { figure_0: yes() } }),
+    cut: () => good({ dataUrl: 'data:image/png;base64,RECUT', height: 400 }),
+    recrop: () => JSON.stringify({ box_2d: [100, 100, 400, 500] }),
+    refine: (d, w, src) => { src.ex = good({ dataUrl: 'data:image/png;base64,CLEAN', height: 250 }); return src.ex.dataUrl; }
+  });
+  const out = await x._jevGateFigures([{ ex: good(), dataUrl: 'data:image/png;base64,OLD', box: [1, 1, 2, 2] }],
+    'image/png', 'PAGE', 'data:image/png;base64,PAGE', null, '- The table shows three substances.');
+  eq(calls.refine.length, 1, 'the re-cut is cleaned up once');
+  eq(calls.refine[0].wording, '- The table shows three substances.', 'with the question\'s typed wording');
+  eq(calls.refine[0].src.page, 'data:image/png;base64,PAGE', 'and the page it is cut from');
+  assert(out[0].dataUrl.endsWith('CLEAN') && out[0].ex.height === 250, 'the cleaned cut is the one kept');
+  eq(calls.jev[1].data.figures[0].height, 250, 'Jev is asked about the cleaned cut, not the raw one');
+  assert(calls.jev.every(c => c.data.figures.every(f => f.aiSawStrayText === false)),
+    'a clean-up that worked is never reported to Jev as stray text');
 });
 await test('a clean crop costs no AI call at all', async () => {
   const { x, calls } = world({ jev: () => ({ available: true, verdicts: { figure_0: yes() } }) });
