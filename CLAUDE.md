@@ -4429,8 +4429,10 @@ The primary papers number their options; Secondary 1 science letters them.
   that says "B.". Ai-nstein's leak guard also blocks the LETTER (uppercase only).
 - **Games**: `_sdExtractMcq` carries `labels` on every bank row and `_gameLab`
   draws them in the TCG trainer, Ember Duel, Siege and Legends; Science Spire,
-  Grand Line, Hades and Science Strike (`fpsMcqLabelStyle`, its own copy of the
-  rule) read them too. Keyboard hotkeys stay keys.
+  Grand Line and Science Strike (`fpsMcqLabelStyle`, its own copy of the rule)
+  read them too. Keyboard hotkeys stay keys. **The Hades Sanctuary still
+  numbers**: `hades-learning-parent.js` is pinned by SHA-256 in
+  `hades-game.manifest.json`, so it changes only with a Hades release.
 - **🗂️ Custom Paper**: Booklet A's answer sheet shades each row with ITS
   question's labels, and the instruction line names them ("(A, B, C or D)"),
   with neutral wording for a mixed booklet.
