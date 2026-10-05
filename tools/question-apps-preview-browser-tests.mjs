@@ -40,11 +40,15 @@ const functions = [
   'renderPracticeCard', 'renderPracticeQuestion', 'renderOpenPracticeBody', 'buildOpenBody', '_qpTextHtml',
   '_openSection', '_partActionsHtml', '_adminAnswerToolHtml', '_isAdmin', 'micButtonHtml',
   'renderImportedBlockStudent', 'markMcqChoice', 'renderTableReadonly', 'ensureTableMigrated', '_tblCellCss',
+  '_normMcqChoice', '_mcqLab', '_mcqLabOf', '_mcqChoiceLabel',
   '_openPhotoKey', 'openPhotoBarHtml', '_imgWaitBarId', 'imgWaitBarHtml',
   '_annotPadId', '_workingPadSvgUrl', 'annotationPadHtml', '_annotLinkifyDiagramRefs',
   'markQuestionPart', '_mcqPaintResult', '_setPartResult', '_partMistakeOf', '_checkAllPartsMarked', '_genAndShowExplanation', 'recordCerPerformance',
   '_deriveModelAnswer', '_qAnswerDiagrams', '_qExplanationDiagrams', 'showExplanation'
 ].map(fn).join('\n');
+// 🔤 MCQ LABELS (cer#739): the option labels the renderers and the marker now
+// draw through, cut out whole so the label rule tested here is the shipped one.
+const mcqLabels = section(source, 'const MCQ_LABEL_STYLES =', "// The editor's own question, for the labels");
 const keywords = section(source, 'const KW_WORD_RE =', '// ---- rendering: the blanks a student fills in');
 const annotation = section(source, 'function _scheduleAnnotInit(', '// Flatten diagram + pen strokes + text labels into a base64 JPEG for the AI.');
 const clicks = section(source, "document.addEventListener('click', function (e) {\n  const take =", "document.addEventListener('change', function (e) {\n  const t = e.target;");
@@ -71,9 +75,11 @@ const fixtureCode = `
   const Timestamp = {now:()=>0}, rpgAnswerFingerprint = () => 'fixture', _attemptAnswers = () => [];
   const noteAttemptLocally = () => {}, fcNoteMistakes = () => {};
   const _questionContext = q => q.title, aiGrounding = () => '';
+  const getTopicLevel = () => 'P5', isSecondaryLevel = level => /^S/.test(String(level || ''));
   let explanationResolve = null, explanationTask = null;
   const askGemini = () => new Promise(resolve => { explanationResolve = resolve; });
   window.__aiReady = () => false;
+  ${mcqLabels}
   ${keywords}
   ${annotation}
   ${functions}
