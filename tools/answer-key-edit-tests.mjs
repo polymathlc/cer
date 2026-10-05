@@ -55,6 +55,7 @@ const M = new Function(SHIM +
   cut('const QPART_LETTERS', 'function qPartsUsed', 'part core') +
   cut('function qPartOf(map, block)', '\n// The next unused letter', 'partOf+opens+hasParts') +
   cut('function _pushAnswerKeySection(sections, label, content, part) {', '\n// A question with no answer-bearing block', 'key pushers') +
+  cut('function _normMcqChoice(raw) {', '\nfunction normalizeCategoryValue', 'mcq labels') +
   cut('let _akeQid = null;', 'function akeOpen(', 'ake rows') +
   cut('function _akeKey(bid, field)', 'function _akeSyncFromDom', 'ake keys') +
   cut('function _akeNewExplanation(blocks, id) {', '\nfunction akeAddExplanation', 'new explanation') + `

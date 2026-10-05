@@ -39,7 +39,7 @@ function harness() {
     let currentUser = {role:'admin', email:'chungzhikai@gmail.com'};
     let currentEditingQuestion = null, blocks = [{id:'b', type:'text', content:'Edited question'}];
     let _cpbEdit = null;
-    let selectedBlanks = {}, editorKeywords = {b:['energy']}, editorLos = [];
+    let selectedBlanks = {}, editorKeywords = {b:['energy']}, editorLos = [], editorMcqLabels = '';
     let questionBank = [], vettingList = [], saved = [], events = [], saveImpl = async () => true;
     let duplicateAllowed = true;
     const _ownerUidByQuestionId = {}, _ownerUidByVettingId = {}, _rapidJustAdded = new Set();

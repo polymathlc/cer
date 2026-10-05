@@ -4378,6 +4378,39 @@ Run `node tools/question-repair-core-tests.mjs`,
 `node tools/question-repair-tests.mjs`, and
 `node tools/question-repair-browser.mjs` (Playwright) for the focused tests.
 
+## 🔤 MCQ option labels — (A)(B)(C)(D) for Secondary 1 (v1.425.0)
+
+`MCQ_LABEL_STYLES` / `mcqLabelOverride` / **`mcqLabelStyle`** / `mcqLabelOf` /
+`mcqLabelForNum` / `MCQ_BARE_RE` / `mcqOptionText` / `editorMcqLabels` /
+`editorMcqLabelStyle` / `setEditorMcqLabels` / `mcqLabelPickerHtml` (search `MCQ
+LABELS`), `_mcqLab` / `_mcqLabOf`, the **Option labels** picker in the MCQ
+block, and `q.mcqLabels`.
+
+The primary papers number their options; Secondary 1 science letters them.
+
+- **`mcqLabelStyle(q)` is the ONE decision.** The question's own override
+  (`q.mcqLabels`: `'letters'` | `'numbers'`) wins; absent means AUTO, which is
+  letters when either topic is at a secondary level (`getTopicLevel`). So
+  choosing a Sec 1 topic letters the options with nothing stored, and the
+  editor repaints on a topic change (`_mcqLabelsRefresh`).
+- **The canonical choice is still the NUMBER.** The marking store keeps
+  `letter: "2"` for every comparison and adds `label: "B"` for drawing;
+  `_normMcqChoice` already reads an AI's "B" as 2, and the 🔎 Why-not cache is
+  keyed on numbers. A letter-keyed identity beside it would be two answers to
+  "which option did they pick" — and children marked wrong.
+- **Every surface draws through the helpers and is handed the question**: the
+  editor (in ✏️ editing mode from the block's OWN question, with no picker),
+  practice, both print paths (`_printMcqBlockHtml(block, part, q)`), the answer
+  key (`_pushBlockAnswerKey(…, why, q)`), marking feedback, the AI marking
+  prompts, the Why-not card and the 🐾 mistake card. The census in the harness
+  fails on a render call that does not pass `q`.
+- **A bare marker is drawn as the label** (`mcqOptionText`): a picture option
+  stored as "(3)" reads "(C)" on a Sec 1 question, so nobody retypes four
+  options. Real wording, and a marker naming a different option, are left alone.
+- Only an explicit choice is stored, and `mcqLabels` is in
+  `EDITOR_OWNED_QUESTION_FIELDS`, or setting it back to Auto would be undone.
+- Run **`node tools/mcq-labels-tests.mjs`** after touching any of it.
+
 ## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0)
 
 `STRONG_BAND` / `TRIM_BANDS_MAX` / `ANSWER_LINE_GAP` / `STICK_OUT` and the band

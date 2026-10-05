@@ -32,7 +32,8 @@ const section = [
   // The explanation as it reaches the key — its words plus the 🖼 diagram
   // drawn from them. Both print paths and the fallback section go through it.
   cut('function _explKeyContentHtml(block) {', '\n}\n', 'explanation key content') + '\n}\n',
-  cut('function _pushAnnotAnswerKey', '// How many ruled lines a printed answer box gets', 'answer-key pushers')
+  cut('function _pushAnnotAnswerKey', '// How many ruled lines a printed answer box gets', 'answer-key pushers'),
+  cut('function _normMcqChoice(raw) {', '\nfunction normalizeCategoryValue', 'mcq labels')
 ].join('\n');
 
 const M = new Function(section + '\nreturn { _pushBlockAnswerKey, _pushAnswerKeySection, _pushAnnotAnswerKey,'
@@ -84,7 +85,7 @@ test('an answer line puts its answer on the key', () => {
   // The 4th is `why` — the ⓘ "why each other option is wrong" notes, threaded
   // through this ONE pusher rather than added to each print path's own switch,
   // for the reason the pusher exists at all. See tools/why-not-tests.mjs.
-  eq(M._pushBlockAnswerKey.length, 4, 'signature is (sections, block, part, why)');
+  eq(M._pushBlockAnswerKey.length, 5, 'signature is (sections, block, part, why, q) — q decides the MCQ labels');
   eq(push({ type: 'answerLine', answer: 'Oxygen' })[0].label, 'Answer', 'unlabelled falls back');
   eq(push({ type: 'answerLine', label: 'Ans:', answer: '   ' }).length, 0, 'a blank answer is not an answer');
 });

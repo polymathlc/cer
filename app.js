@@ -5258,6 +5258,86 @@ function _normMcqChoice(raw) {
   return ch;
 }
 
+// =====================================================================
+// 🔤 MCQ LABELS — (1) (2) (3) (4), or (A) (B) (C) (D) (search `MCQ LABELS`)
+//
+// The primary papers number their options; Secondary 1 science letters them.
+// A question's labels are decided in ONE place, `mcqLabelStyle(q)`:
+//   · the question's own override, `q.mcqLabels` ('letters' | 'numbers'),
+//     chosen in the editor — absent means AUTO;
+//   · AUTO is LETTERS when the question's level (its topic, or its second
+//     topic, read through `getTopicLevel`) is secondary, numbers otherwise.
+// So picking a Sec 1 topic is what turns (1)(2)(3)(4) into (A)(B)(C)(D), with
+// nothing stored, and a question re-filed back to a primary topic turns back.
+//
+// THE CANONICAL CHOICE IS STILL THE NUMBER. Every comparison, the marking
+// store's `.letter`, the AI's "chosen" (via `_normMcqChoice`, which already
+// reads "B" as 2) and the 🔎 Why-not cache are untouched: only what is DRAWN
+// goes through `mcqLabelOf`. A second, letter-keyed identity would be two
+// answers to "which option did they pick" and the drift would mark children
+// wrong.
+//
+// An option whose whole text is a bare marker — the "(1)" a picture option is
+// given, the "(2)" the ＃ button writes — is drawn as the question's own label
+// (`mcqOptionText`), so a picture question filed at Sec 1 reads (A)…(D)
+// without anybody retyping four options.
+// =====================================================================
+const MCQ_LABEL_STYLES = ['', 'numbers', 'letters'];   // '' = auto, by level
+function mcqLabelOverride(q) {
+  const v = q && q.mcqLabels;
+  return v === 'letters' || v === 'numbers' ? v : '';
+}
+function mcqLabelStyle(q) {
+  const own = mcqLabelOverride(q);
+  if (own) return own;
+  try {
+    // Either topic: a level is read off the TOPIC here, and a Sec 1 second
+    // topic is enough to make it a Sec 1 question (`qLevelNum` takes the max).
+    const sec = t => !!t && isSecondaryLevel(getTopicLevel(t));
+    if (q && (sec(q.topic) || sec(q.topic2))) return 'letters';
+  } catch (e) { /* a level that cannot be read is a primary question */ }
+  return 'numbers';
+}
+function mcqLabelOf(i, style) {
+  const k = Math.max(0, i | 0);
+  return style === 'letters' && k < 26 ? String.fromCharCode(65 + k) : String(k + 1);
+}
+// The label a canonical number ("2") is drawn as.
+function mcqLabelForNum(num, style) {
+  const n = parseInt(num, 10);
+  return Number.isFinite(n) && n >= 1 ? mcqLabelOf(n - 1, style) : String(num == null ? '' : num);
+}
+const MCQ_BARE_RE = /^\s*\(?\s*([1-9]|[A-Ha-h])\s*[).]?\s*$/;
+// An option's text as it is drawn: a bare marker naming THIS option ("(3)" on
+// the third option, or "(C)") becomes the question's own label; anything else
+// — real wording, or a marker naming some other option — is left exactly as
+// written, because rewriting an author's words is not a labelling decision.
+function mcqOptionText(text, i, style) {
+  const raw = String(text == null ? '' : text);
+  const plain = raw.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+  const m = plain.match(MCQ_BARE_RE);
+  if (!m || _normMcqChoice(m[1]) !== String((i | 0) + 1)) return raw;
+  return '(' + mcqLabelOf(i, style) + ')';
+}
+// The editor's own question, for the labels: the override held in the editor
+// plus the topics on screen — so choosing a Sec 1 topic relabels at once.
+var editorMcqLabels = '';
+function editorMcqLabelStyle() {
+  const t1 = document.getElementById('topicSelect'), t2 = document.getElementById('topicSelect2');
+  return mcqLabelStyle({ topic: t1 ? t1.value : '', topic2: t2 ? t2.value : '', mcqLabels: editorMcqLabels });
+}
+function setEditorMcqLabels(v) {
+  editorMcqLabels = (v === 'letters' || v === 'numbers') ? v : '';
+  if (typeof renderBlocks === 'function') renderBlocks();
+}
+function mcqLabelPickerHtml() {
+  const auto = mcqLabelStyle({ topic: (document.getElementById('topicSelect') || {}).value || '',
+    topic2: (document.getElementById('topicSelect2') || {}).value || '' }) === 'letters' ? 'A B C D' : '1 2 3 4';
+  const opt = (v, label) => `<option value="${v}"${editorMcqLabels === v ? ' selected' : ''}>${label}</option>`;
+  return `<label class="mcq-label-pick" title="How this question's options are labelled — on screen, on the printed sheet and on the answer key. Auto follows the level: Secondary topics use A B C D.">Option labels
+    <select class="form-select" onchange="setEditorMcqLabels(this.value)">${opt('', 'Auto (' + auto + ')')}${opt('numbers', '1 2 3 4')}${opt('letters', 'A B C D')}</select></label>`;
+}
+
 function normalizeCategoryValue(category) {
   const legacyCER = new Set([
     'CER (Open Ended)',
@@ -6159,6 +6239,7 @@ function navigateTo(page) {
       if (nisEl) nisEl.checked = false;
       if (typeof setQuestionTagsField === 'function') setQuestionTagsField(null);
       if (typeof loEditorSet === 'function') loEditorSet([]);
+      editorMcqLabels = '';
       renderBlocks();
       setEditMode(false);
       if (window.ppCancelPendingAttach) window.ppCancelPendingAttach();
@@ -6313,7 +6394,13 @@ document.getElementById('topicSelect').addEventListener('change', function() {
   } else {
     _lastTopicValue = this.value;
   }
+  // 🔤 A Sec 1 topic letters the options (A)(B)(C)(D); repaint them now.
+  _mcqLabelsRefresh();
 });
+function _mcqLabelsRefresh() {
+  try { if (Array.isArray(blocks) && blocks.some(b => b && b.type === 'mcq')) renderBlocks(); } catch (e) { /* not ready yet */ }
+}
+document.getElementById('topicSelect2')?.addEventListener('change', () => _mcqLabelsRefresh());
 
 let _lastCategoryValue = 'CER';
 document.getElementById('categorySelect').addEventListener('change', function() {
@@ -9646,11 +9733,16 @@ function renderImportedBlockEditorBody(block) {
                oninput="saveBlockContent('${id}','content',this.innerHTML)">${block.content || ''}</div>
         </div>`;
     case 'mcq': {
+      // 🔤 In ✏️ editing mode the create page's topic fields belong to some
+      // other question, so the labels come from the question this block is ON
+      // (and its override is that question's, not the editor's — no picker).
+      const emOwner = (typeof emOwnerQuestion === 'function') ? emOwnerQuestion(id) : null;
+      const lab = emOwner ? mcqLabelStyle(emOwner) : editorMcqLabelStyle();
       const opts = (block.options || []).map((o, i) => `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;" data-mic-wrap>
           <input type="radio" class="mcq-correct-radio" name="mcqedit_${id}" ${block.correctId === o.id ? 'checked' : ''}
                  title="Mark as correct answer" onchange="mcqSetCorrect('${id}','${o.id}')">
-          <span style="font-weight:600;width:18px;">${i + 1}.</span>
+          <span style="font-weight:600;width:18px;">${mcqLabelOf(i, lab)}.</span>
           <input class="form-input" type="text" style="flex:1;" placeholder="Option text"
                  value="${escapeHtml(o.text || '')}" oninput="mcqSetOptionText('${id}','${o.id}',this.value)">
           ${micButtonHtml('', 'Speak this option')}
@@ -9661,7 +9753,8 @@ function renderImportedBlockEditorBody(block) {
           <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">Select the radio next to the correct option.</div>
           ${opts}
           <button class="btn btn-outline" style="margin-top:4px;" onclick="mcqAddOption('${id}')">+ Add option</button>
-          <button class="btn btn-outline" style="margin-top:4px;margin-left:8px;" onclick="mcqNumberOptions('${id}')" title="Set all options to (1) (2) (3) (4)…">＃ Make (1)(2)(3)(4)</button>
+          <button class="btn btn-outline" style="margin-top:4px;margin-left:8px;" onclick="mcqNumberOptions('${id}')" title="Set every option to just its label — for options that are in the picture">＃ Make ${lab === 'letters' ? '(A)(B)(C)(D)' : '(1)(2)(3)(4)'}</button>
+          ${emOwner ? '' : mcqLabelPickerHtml()}
         </div>`;
     }
     case 'answerLine':
@@ -9872,11 +9965,12 @@ function renderImportedBlockStudent(block, q) {
       return `<div style="margin:10px 0 4px;font-weight:600;">${block.label ? escapeHtml(block.label) + ' ' : ''}<span style="font-weight:400;">${block.content || ''}</span></div>`;
     case 'mcq': {
       const name = 'mcq_' + block.id;
+      const lab = mcqLabelStyle(q);
       let h = `<div class="mcq-block" data-block="${block.id}" style="margin:10px 0;">`;
       (block.options || []).forEach((o, i) => {
         h += `<label style="display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">
           <input type="radio" name="${name}" value="${o.id}" onchange="markMcqChoice(this)">
-          <span><b>${i + 1}.</b> ${o.text || ''}</span></label>`;
+          <span><b>${mcqLabelOf(i, lab)}.</b> ${mcqOptionText(o.text || '', i, lab)}</span></label>`;
       });
       h += `</div>`;
       return h;
@@ -20377,6 +20471,9 @@ function collectQuestionData() {
     // a question's objectives always read the way the syllabus does rather than
     // the order they happened to be ticked in.
     los: (typeof _loOrderIds === 'function') ? _loOrderIds(editorLos || []) : (editorLos || []).slice(),
+    // 🔤 Only an explicit choice is stored — absent means AUTO (by level), so a
+    // question re-filed between primary and Sec 1 relabels itself.
+    ...(editorMcqLabels ? { mcqLabels: editorMcqLabels } : {}),
     blocks: blocksClone,
     blanks: JSON.parse(JSON.stringify(selectedBlanks)),
     // 🔑 The keywords a PERSON marked. Never written by any AI path — see the
@@ -20462,6 +20559,8 @@ const EDITOR_OWNED_QUESTION_FIELDS = new Set([
   'id', 'title', 'category', 'category2', 'topic', 'topic2', 'markingGuide',
   'answerKeyNote', 'answerKeyImage', 'answerKeyDiagramNote', 'annotation', 'notInSyllabus', 'tags', 'los',
   'blocks', 'blanks', 'answerKeywords', 'createdAt', 'createdBy',
+  // 🔤 Owned, or setting it back to Auto would be undone by the carry-over.
+  'mcqLabels',
 ]);
 
 // An edited question is rebuilt from scratch by collectQuestionData(), so every
@@ -20654,6 +20753,7 @@ function clearForm() {
     if (nisEl) nisEl.checked = false;
     setQuestionTagsField(null);
     if (typeof loEditorSet === 'function') loEditorSet([]);
+    editorMcqLabels = '';
     _hideDupBanner();
     renderBlocks();
     setEditMode(false);
@@ -21486,6 +21586,7 @@ function _editorLoadQuestion(q) {
   if (nisEl) nisEl.checked = !!q.notInSyllabus;
   setQuestionTagsField(q);
   if (typeof loEditorSet === 'function') loEditorSet(qLos(q));
+  editorMcqLabels = mcqLabelOverride(q);
 
   // Try to set topic, handle custom topics
   const topicSelect = document.getElementById('topicSelect');
@@ -23163,7 +23264,7 @@ function showPrintPreview(qid, btnEl) {
         html += window.QuestionApps.printBlock(block);
         break;
       default:
-        html += `<div class="preview-block">${renderImportedBlockStudent(block)}</div>`;
+        html += `<div class="preview-block">${renderImportedBlockStudent(block, q)}</div>`;
         break;
     }
   });
@@ -24781,7 +24882,7 @@ function _pushAnswerKeySection(sections, label, content, part) {
 // switch, for the reason the pusher exists at all: the two paths had already
 // drifted over the MCQ answer once, and a key that carries the reasons from one
 // print button and not the other is the same fault wearing a new hat.
-function _pushBlockAnswerKey(sections, block, part, why) {
+function _pushBlockAnswerKey(sections, block, part, why, q) {
   if (!block) return;
   const p = qPartNormalize(part);
   switch (block.type) {
@@ -24790,12 +24891,14 @@ function _pushBlockAnswerKey(sections, block, part, why) {
       const ci = mo.findIndex(o => o && o.id === block.correctId);
       // No correct option ticked is an authoring gap, not an answer — the
       // "no answer recorded" placeholder below is what surfaces it.
-      if (ci >= 0) sections.push({ label: 'Answer', content: `<b>${ci + 1}.</b> ` + sanitizeAnswerKeyHtml(mo[ci].text || ''), part: p });
+      // 🔤 The question's own labels: an S1 key says "B.", never "2.".
+      const lab = mcqLabelStyle(q);
+      if (ci >= 0) sections.push({ label: 'Answer', content: `<b>${mcqLabelOf(ci, lab)}.</b> ` + sanitizeAnswerKeyHtml(mcqOptionText(mo[ci].text || '', ci, lab)), part: p });
       // …and, when asked for, why each of the others is not. Only ever BESIDE
       // a real answer: these are teaching notes, and a key that offered
       // reasons where it could not name the answer would be the wrong way up.
       if (ci >= 0 && why) {
-        const rows = _wnyKeyRows(block, why[block.id], ci);
+        const rows = _wnyKeyRows(block, why[block.id], ci, lab);
         if (rows) sections.push({ label: 'Why the other options are wrong', content: rows, part: p });
       }
       break;
@@ -24928,8 +25031,8 @@ function printAnswerLines(block, text) {
 // The box is sized and placed like the paper's: one line, right-aligned under
 // the options, so it reads as belonging to the question above it and never
 // competes with an open-ended writing box for the eye.
-function _printMcqBlockHtml(block, part) {
-  const html = renderImportedBlockStudent(block);
+function _printMcqBlockHtml(block, part, q) {
+  const html = renderImportedBlockStudent(block, q);
   // A box on a question with NO options is a mark the student can never earn:
   // there is nothing to choose, so there is nothing to write in it. Same rule
   // as `syStudentHtml` refusing a block with nothing given.
@@ -25102,18 +25205,18 @@ function doPrintWorksheetOpen(whyNotes) {
         // `buildWorksheetHtml` carries the identical case — keep the two in
         // step, which is what `_printMcqBlockHtml` is for.
         case 'mcq': {
-          qHtml += _printMcqBlockHtml(block, bPart);
-          _pushBlockAnswerKey(qSections, block, bPart, qWhy);
+          qHtml += _printMcqBlockHtml(block, bPart, q);
+          _pushBlockAnswerKey(qSections, block, bPart, qWhy, q);
           break;
         }
         default: {
-          qHtml += renderImportedBlockStudent(block);
+          qHtml += renderImportedBlockStudent(block, q);
           // The correct option, an answer line's answer and a 🔑 answer-key
           // block all belong on the key. Without them an MCQ-only question
           // produced NO sections at all and was dropped from the key entirely,
           // so a mostly-MCQ paper printed a key that silently skipped most of
           // its questions.
-          _pushBlockAnswerKey(qSections, block, bPart, qWhy);
+          _pushBlockAnswerKey(qSections, block, bPart, qWhy, q);
           break;
         }
       }
@@ -33693,10 +33796,19 @@ function _mistakeAnalysisFor(result, context = {}, q = null) {
     roster: MISTAKE_ANIMALS
   };
 }
+// 🔤 What an option is CALLED on screen — its label ("B" on a Sec 1 question)
+// when the marking store carries one, else the canonical number. Display only:
+// every comparison keeps reading `.letter` (see MCQ LABELS).
+function _mcqLab(o) { return o ? String(o.label || o.letter || '') : ''; }
+function _mcqLabOf(options, letter) {
+  if (letter == null || letter === '') return '';
+  const o = (Array.isArray(options) ? options : []).find(x => x && String(x.letter) === String(letter));
+  return o ? _mcqLab(o) : String(letter);
+}
 /* "2) A is smaller" — the option a student chose, as the card quotes it. */
 function _mcqChoiceLabel(options, letter) {
   const chosen = (Array.isArray(options) ? options : []).find(o => o && String(o.letter) === String(letter));
-  return chosen ? chosen.letter + ') ' + String(chosen.text || '').replace(/<[^>]*>/g, '').trim() : String(letter || '');
+  return chosen ? _mcqLab(chosen) + ') ' + String(chosen.text || '').replace(/<[^>]*>/g, '').trim() : String(letter || '');
 }
 
 // Hint + Check answer buttons for ONE part of a question (an answer box or an MCQ),
@@ -33964,7 +34076,9 @@ function buildOpenBody(q, containerSel, markCfg) {
         );
         mcqItems.push({
           blockId: block.id,
-          options: (block.options || []).map((o, idx) => ({ letter: String(idx + 1), text: stripHtml(o.text || ''), id: o.id, correct: block.correctId === o.id }))
+          // `letter` stays the canonical NUMBER every comparison uses; `label`
+          // is what is DRAWN — "B" on a Sec 1 question (see MCQ LABELS).
+          options: (block.options || []).map((o, idx) => ({ letter: String(idx + 1), label: mcqLabelOf(idx, mcqLabelStyle(q)), text: stripHtml(mcqOptionText(o.text || '', idx, mcqLabelStyle(q))), id: o.id, correct: block.correctId === o.id }))
         });
         break;
       case 'text':
@@ -35904,6 +36018,7 @@ function _wnyOpts(src) {
   }
   return list.map((o, i) => ({
     letter: String((o && o.letter) != null ? o.letter : i + 1),
+    ...(o && o.label ? { label: String(o.label) } : {}),
     text: stripHtml((o && o.text) || '').replace(/\s+/g, ' ').trim(),
     correct: !!(o && o.correct)
   }));
@@ -36089,7 +36204,7 @@ function _wnyCardHtml(opt, why, state, chosen, pinned) {
   const yours = (chosen && String(chosen) === String(opt.letter)) ? `<span class="wny-yours">you chose this</span>` : '';
   const close = pinned ? `<button type="button" class="wny-close" data-wny-close aria-label="Close">✕</button>` : '';
   const head =
-    `<div class="wny-head"><span class="wny-num">${escapeHtml(String(opt.letter))}</span>` +
+    `<div class="wny-head"><span class="wny-num">${escapeHtml(String(opt.label || opt.letter))}</span>` +
     `<span class="wny-word">${escapeHtml(opt.text || '')}</span>${yours}${close}</div>` +
     (opt.correct
       ? `<div class="wny-verdict ok">✓ This one is right</div>`
@@ -36169,7 +36284,7 @@ function wnyArm(containerSel, blockId, options, chosenLetter) {
     b.className = 'wny-badge';
     b.textContent = 'ⓘ';
     b.title = 'Why is this one wrong?';
-    b.setAttribute('aria-label', 'Why option ' + o.letter + ' is wrong');
+    b.setAttribute('aria-label', 'Why option ' + (o.label || o.letter) + ' is wrong');
     // The badge sits INSIDE the <label>, so a plain click would also tick the
     // radio: reading why an option is wrong would silently change the answer.
     // preventDefault on the click is what stops that, and on the mousedown is
@@ -36324,12 +36439,12 @@ function _wnyCachedNotes(selected, on) {
 // The rows for one MCQ block: every option that is NOT the answer, in the order
 // they are printed, each with the reason it is wrong. `ci` is the correct
 // option's index, so the answer is never listed among the reasons it is not.
-function _wnyKeyRows(block, why, ci) {
+function _wnyKeyRows(block, why, ci, style) {
   if (!block || !why) return '';
   return (block.options || []).map((o, i) => {
     if (i === ci) return '';
     const t = _wnyClean(why[String(i + 1)]);
-    return t ? `<div class="ak-why"><b>${i + 1}.</b> ${escapeHtml(t)}</div>` : '';
+    return t ? `<div class="ak-why"><b>${mcqLabelOf(i, style)}.</b> ${escapeHtml(t)}</div>` : '';
   }).join('');
 }
 
@@ -36345,7 +36460,7 @@ function _fallbackExplanation(entries) {
       return `Your "${e.label || 'answer'}" ${verb[v] || verb.incorrect}.${v === 'correct' ? '' : tail}`;
     }
     const correct = e.mcq.options.find(o => o.correct);
-    const tail = correct ? ` The correct option is ${correct.letter}) ${correct.text}.` : '';
+    const tail = correct ? ` The correct option is ${_mcqLab(correct)}) ${correct.text}.` : '';
     return `Your multiple-choice answer ${verb[v] || verb.incorrect}.${v === 'correct' ? '' : tail}`;
   }).filter(Boolean);
   if (!parts.length) return 'Compare your response with the model answers shown above to see where the key marks are.';
@@ -36439,9 +36554,9 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         if (e.kind === 'open') {
           return `${i}. [${e.label}] type=open expected="${e.model}" student="${e.student || (photo ? '(see attached photo)' : '(blank)')}"`;
         }
-        const opts = e.mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ');
+        const opts = e.mcq.options.map(o => `${_mcqLab(o)}) ${o.text}`).join(' | ');
         const correct = e.mcq.options.find(o => o.correct);
-        return `${i}. [Multiple choice] type=mcq options=[${opts}] correct=${correct ? correct.letter : '?'} studentSelected="${e.studentLetter || (photo ? '(read from photo)' : '(blank)')}"`;
+        return `${i}. [Multiple choice] type=mcq options=[${opts}] correct=${correct ? _mcqLab(correct) : '?'} studentSelected="${_mcqLabOf(e.mcq.options, e.studentLetter) || (photo ? '(read from photo)' : '(blank)')}"`;
       }).join('\n');
       const prompt =
         `You are a science teacher marking a student's answers. ` +
@@ -36512,15 +36627,15 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       const correctOpt = m.options.find(o => o.correct);
       const chosenLetter = (v && v.chosen) ? _normMcqChoice(v.chosen) : e.studentLetter;
       e.chosenLetter = chosenLetter;
-      if (verdict !== 'correct') mistakes.push({ expected: correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', student: chosenLetter });
+      if (verdict !== 'correct') mistakes.push({ expected: correctOpt ? (_mcqLab(correctOpt) + ') ' + correctOpt.text) : '', student: _mcqLabOf(m.options, chosenLetter) });
       _mcqPaintResult(containerSel, m.blockId, m.options, chosenLetter);
       const fb = document.querySelector(containerSel + ' [data-mcq-fb="' + m.blockId + '"]');
       if (fb) {
-        let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(chosenLetter)})</span>` : '');
-        if (verdict !== 'correct' && correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
+        let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(_mcqLabOf(m.options, chosenLetter))})</span>` : '');
+        if (verdict !== 'correct' && correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(_mcqLab(correctOpt))}) ${escapeHtml(correctOpt.text)}</div>`;
         fb.innerHTML = inner;
       }
-      _setPartResult(containerSel, 'mcq:' + m.blockId, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter, v);
+      _setPartResult(containerSel, 'mcq:' + m.blockId, verdict, pts, correctOpt ? (_mcqLab(correctOpt) + ') ' + correctOpt.text) : '', _mcqLabOf(m.options, chosenLetter), v);
       _showScienceCoachFeedback(e.coachTarget, v, { kind: 'mcq', ...(chosenLetter ? { student: _mcqChoiceLabel(m.options, chosenLetter) } : {}) });
     }
   });
@@ -36569,7 +36684,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         return `${i + 1}. ${e.label || 'Answer'} — marked ${verdict}. Model answer: ${e.model || '(not provided)'}. The student wrote: "${e.student || '(blank)'}"`;
       }
       const correct = e.mcq.options.find(o => o.correct);
-      return `${i + 1}. Multiple choice — marked ${verdict}. Correct answer: ${correct ? correct.letter + ') ' + correct.text : '(unknown)'}. The student chose: ${e.chosenLetter || '(blank)'}`;
+      return `${i + 1}. Multiple choice — marked ${verdict}. Correct answer: ${correct ? _mcqLab(correct) + ') ' + correct.text : '(unknown)'}. The student chose: ${_mcqLabOf(e.mcq.options, e.chosenLetter) || '(blank)'}`;
     }).join('\n');
     const expPrompt =
       `You are a science teacher giving feedback to a student on the answer they just gave. ` +
@@ -36862,10 +36977,10 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     if (fbEl) {
       let inner = `<span style="color:${color};font-weight:600;font-size:0.85rem;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span>` +
         (studentLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(studentLetter)})</span>` : '');
-      if (correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
+      if (correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(_mcqLab(correctOpt))}) ${escapeHtml(correctOpt.text)}</div>`;
       fbEl.innerHTML = inner;
     }
-    _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', studentLetter);
+    _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (_mcqLab(correctOpt) + ') ' + correctOpt.text) : '', _mcqLabOf(mcq.options, studentLetter));
     _showScienceCoachFeedback(coachTarget, { verdict }, { kind: 'mcq' });
     _checkAllPartsMarked(containerSel);
     return;
@@ -36888,8 +37003,8 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     if (kind === 'open') {
       item = `Part: [${label}] type=open expected="${model || '(none provided — work out the correct answer from the question context)'}" student="${student || '(see attached photo)'}"`;
     } else {
-      const optsTxt = mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ');
-      item = `Part: [Multiple choice] type=mcq options=[${optsTxt}] correct=${correctOpt ? correctOpt.letter : '?'} studentSelected="${studentLetter || '(read from photo)'}"`;
+      const optsTxt = mcq.options.map(o => `${_mcqLab(o)}) ${o.text}`).join(' | ');
+      item = `Part: [Multiple choice] type=mcq options=[${optsTxt}] correct=${correctOpt ? _mcqLab(correctOpt) : '?'} studentSelected="${_mcqLabOf(mcq.options, studentLetter) || '(read from photo)'}"`;
     }
     const prompt =
       `You are a science teacher marking ONE part of a student's answer to a question. ` +
@@ -36950,11 +37065,11 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     mcqChoice = chosenLetter ? _mcqChoiceLabel(mcq.options, chosenLetter) : '';
     _mcqPaintResult(containerSel, pid, mcq.options, chosenLetter);
     if (fbEl) {
-      let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(chosenLetter)})</span>` : '');
-      if (correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
+      let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(_mcqLabOf(mcq.options, chosenLetter))})</span>` : '');
+      if (correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(_mcqLab(correctOpt))}) ${escapeHtml(correctOpt.text)}</div>`;
       fbEl.innerHTML = inner;
     }
-    _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter, parsed);
+    _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (_mcqLab(correctOpt) + ') ' + correctOpt.text) : '', _mcqLabOf(mcq.options, chosenLetter), parsed);
   }
   _showScienceCoachFeedback(coachTarget, parsed, { kind, label,
     ...(kind === 'open' && !photo ? { student } : {}),
@@ -36981,7 +37096,7 @@ async function hintQuestionPart(containerSel, kind, pid, btn) {
     const mcq = (_openMcqStore[containerSel] || []).find(m => m.blockId === pid);
     if (!mcq) return;
     const correct = mcq.options.find(o => o.correct);
-    partDesc = `The part is a multiple-choice question with options: ${mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ')}. The correct option (do NOT reveal it or its number): ${correct ? correct.letter : '?'}.`;
+    partDesc = `The part is a multiple-choice question with options: ${mcq.options.map(o => `${_mcqLab(o)}) ${o.text}`).join(' | ')}. The correct option (do NOT reveal it or its number): ${correct ? _mcqLab(correct) : '?'}.`;
   }
 
   const orig = btn ? btn.innerHTML : '';
@@ -37666,7 +37781,7 @@ function renderQuestionBodyPreviewHtml(q) {
       case 'explanation':
         break;
       default:
-        html += renderImportedBlockStudent(block);
+        html += renderImportedBlockStudent(block, q);
         break;
     }
   });
@@ -38638,19 +38753,19 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             // under the options is a box nobody writes in. The KEY is pushed
             // either way — the answer is never optional.
             qHtml += (noBracketIds && noBracketIds.has(q.id))
-              ? renderImportedBlockStudent(block)
-              : _printMcqBlockHtml(block, bPart);
-            _pushBlockAnswerKey(qSections, block, bPart, qWhy);
+              ? renderImportedBlockStudent(block, q)
+              : _printMcqBlockHtml(block, bPart, q);
+            _pushBlockAnswerKey(qSections, block, bPart, qWhy, q);
             break;
           }
           default: {
-            qHtml += renderImportedBlockStudent(block);
+            qHtml += renderImportedBlockStudent(block, q);
             // Unconditional, exactly as doPrintWorksheetOpen does it: an MCQ's
             // correct option is the answer to that question, not an optional
             // extra, and gating it behind `answerKeyExtras` meant every
             // ordinary worksheet printed a key listing only its open-ended
             // questions.
-            _pushBlockAnswerKey(qSections, block, bPart, qWhy);
+            _pushBlockAnswerKey(qSections, block, bPart, qWhy, q);
             break;
           }
         }
@@ -80520,8 +80635,9 @@ function _mkQuestionBlocksHtml(q, opts) {
       case 'mcq': {
         const opts2 = (b.options || []).filter(Boolean);
         if (!opts2.length) break;
+        const lab = mcqLabelStyle(q);
         html += '<div class="' + cls + '">' + tag + flag + '<ol class="mk-qb-opts">' + opts2.map((o, i) =>
-          '<li class="mk-qb-opt"><b>' + (i + 1) + '</b><span>' + (o.text || '') + '</span></li>').join('') + '</ol></div>';
+          '<li class="mk-qb-opt"><b>' + mcqLabelOf(i, lab) + '</b><span>' + mcqOptionText(o.text || '', i, lab) + '</span></li>').join('') + '</ol></div>';
         break;
       }
       case 'fillblank':

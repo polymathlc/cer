@@ -157,7 +157,8 @@ const prelude = `
     return out;
   }
 `;
-const api = new Function('scienceQuestionContentKey',prelude + block + `
+const mcqLabels = cut('function _normMcqChoice(raw) {', '\nfunction normalizeCategoryValue', 'mcq labels');
+const api = new Function('scienceQuestionContentKey',prelude + mcqLabels + block + `
   return {
     MISTAKE_ANIMALS, mistakeAnimal, mistakeAnimalNormalize, mistakeAnimalLabel, mistakeAnimalIds, MISTAKE_ANIMAL_RULE,
     MK_HARVEST_MAX, MK_MIN_ANSWER_WORDS, MK_QUIZ_OPTIONS, MK_SESSION_MAX, MK_COLLECTION,
