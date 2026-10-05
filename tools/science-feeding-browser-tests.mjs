@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 
 const moduleName=process.env.PLAYWRIGHT_MODULE || 'playwright';
@@ -26,13 +27,9 @@ const fn=name=>{
 const css=[...html.slice(0,html.indexOf('</head>')).matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map(m=>m[1]).join('\n');
 const markup=section(html,'    <div class="page" id="page-quickpractice">','    <!-- ===== PAGE: TOPICAL PRACTICE');
 const feed=section(source,'// ---- Student feeding: one local policy','function getQuestionsForLevel(');
-// 🔤 MCQ LABELS (cer#739): the option labels both renderers now draw through.
-// One cut, from the style table to the editor-only helpers, so the label rule
-// tested here is the shipped one (getTopicLevel/isSecondaryLevel are stubbed below).
-const mcqLabels=section(source,'const MCQ_LABEL_STYLES =',"// The editor's own question, for the labels");
 const gameMessages=section(source,"window.addEventListener('message', function (ev) {\n  const d = ev && ev.data;\n  if (!d) return;\n  if (d.type === 'SD_REQUEST_QUESTIONS')",'\n\n// =====================================================================\n// SCIENCE LEGENDS');
 const functions=[
-  'buildOpenBody','renderImportedBlockStudent','renderTableReadonly','ensureTableMigrated','_tblCellCss','markMcqChoice','_normMcqChoice',
+  'buildOpenBody','renderImportedBlockStudent','renderTableReadonly','ensureTableMigrated','_tblCellCss','markMcqChoice',
   'buildQpQueue','qpHasWritten','qpHasMcq','qpMatchesType','qpFilters','startQuickPractice','loadNextQpQuestion','renderQpQuestion',
   'updateQpProgress','_qpAllPartsMarked','_recordQpResult','renderQpSummary','renderPracticeReport','_reportColor','_fmtScore',
   'qLevelNum','qWithinStudentLevel','qInLevelBand','levelBandMin','studentCapLevel','studentCapNum',
@@ -98,7 +95,7 @@ const runTransaction=async(db,task)=>{const writes=[];const result=await task({g
 const _htmlPlainText=stripHtmlToText,db={},_qRef=id=>id,setDoc=async(...args)=>writes.push(args);
 const qpMarkServed=id=>_scienceFeedMark(id),resetQpOpenAnswers=()=>{},openFlagDialog=()=>{};
 ${feed}
-${mcqLabels}
+${mcqLabelSrc(source)}
 ${functions}
 ${gameMessages}
 Object.assign(window,{loadNextQpQuestion,markMcqChoice,resetQpOpenAnswers,openFlagDialog,navigateTo});
