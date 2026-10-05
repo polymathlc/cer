@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createCanvas} from '@napi-rs/canvas';
-import {cropDiagram} from '../crop.js';
+import {cropDiagram,cropDiagramEx} from '../crop.js';
 
 function page(paper='#fff') {
   const canvas=createCanvas(600,400), ctx=canvas.getContext('2d');
@@ -106,6 +106,37 @@ test('stem, parts, marks and answer lines come off a bordered table',()=>{
   const scale=Math.min(2,1600/500), pad=Math.round(Math.max(16,Math.round(500*scale)*0.035));
   assert.ok(Math.abs(crop.width-(Math.round(500*scale)+pad*2))<=6,'width '+crop.width);
   assert.ok(Math.abs(crop.height-(Math.round(142*scale)+pad*2))<=6,'height '+crop.height);
+});
+// v1.426.0 — figure furniture is never wording. The (1) (2) (3) (4) under four
+// picture options read as a sentence and were cut off, with the stem above
+// them; the stem must still go.
+test('the labels under picture options survive; the stem above them goes',()=>{
+  for(const gap of [5,12,20]) {
+    const canvas=createCanvas(700,1000), ctx=canvas.getContext('2d');
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,700,1000);
+    const prose=(x,y,w,h)=>{for(let xx=x;xx<x+w;xx+=6)rect(ctx,xx,y,2,h);};
+    prose(30,80,620,10);
+    const xs=[90,250,410,570];
+    for(const x of xs)rect(ctx,x,130,80,80);
+    for(const x of xs)prose(x+28,210+gap,24,10);
+    const crop=cropDiagramEx(canvas,[75,40,250,980],createCanvas);
+    assert.ok(crop,'gap '+gap);
+    assert.ok(crop.rect.y>=90,'the stem stayed (gap '+gap+', y '+crop.rect.y+')');
+    assert.ok(crop.rect.y+crop.rect.h>=220+gap,'the option labels were cut off (gap '+gap+')');
+  }
+});
+// …and a table ruled with horizontal lines only, under a drawing in the same
+// crop, is a body of its own rather than a pile of answer lines to eat.
+test('a horizontally-ruled table under a drawing is kept whole',()=>{
+  const canvas=createCanvas(700,1000), ctx=canvas.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,700,1000);
+  const prose=(x,y,w,h)=>{for(let xx=x;xx<x+w;xx+=6)rect(ctx,xx,y,2,h);};
+  rect(ctx,250,110,200,100);
+  for(let k=0;k<=4;k++)rect(ctx,100,240+k*40,500,2);
+  for(let k=0;k<4;k++)prose(110,256+k*40,480,8);
+  const crop=cropDiagramEx(canvas,[110,40,402,960],createCanvas);
+  assert.ok(crop);
+  assert.ok(crop.rect.y+crop.rect.h>=400,'the table under the drawing was eaten');
 });
 test('the question\'s typed wording is listed for the clean-up pass, clipped',async()=>{
   const {cropWordingOf,refinePrompt}=await import('../crop.js');

@@ -169,6 +169,19 @@ test('…and the two halves of the rule each do their own half', () => {
   near(b.y, 70, 2, 'a real mark in the margin was trimmed away as noise');
 });
 
+test('the faint TIP of a stroke is kept — a "T" keeps its crossbar', () => {
+  // The leftmost columns of a T's crossbar carry two pixels each: too few for
+  // the speck guard, but they touch the stroke it stopped at.
+  const p = page(400, 300);
+  p.rect(100, 100, 24, 2).rect(110, 100, 4, 20);              // "T": a 2px crossbar over its stem
+  p.rect(140, 100, 120, 60);                                  // the rest of the figure
+  p.rect(30, 250, 1, 1);                                      // a speck, well clear of it all
+  const out = tight(p, { x: 20, y: 60, w: 300, h: 220 }, 'xy');
+  ok(out, 'a page with a figure on it came back as blank paper');
+  near(out.x, 100, 1, 'the tip of the crossbar was shaved off as if it were a speck');
+  ok(out.y + out.h <= 162, 'the speck below was pulled into the crop');
+});
+
 test('a 1px HAIRLINE is real ink and survives', () => {
   // An axis, a table border and a leader line are all one pixel across at
   // source resolution. Trimming one away takes the frame off a table.
@@ -304,13 +317,26 @@ test('THE REPORTED CROP: stem, parts, marks and answer lines all come off a tabl
   near(out.x + out.w, 600, 2, 'the crop is wider than the table on the right');
 });
 
-test('…and a SHORT part line that sticks out past the table is wording too', () => {
+test('…and a SHORT part label beside the answer line it labels is wording too', () => {
   const p = page(700, 1000, { paper: 250 });
   p.prose(30, 130, 600, 10);
   const tableBottom = borderedTable(p, 100, 160, 600, 4, 35);
-  p.prose(70, 330, 120, 10);                                  // "(ii) Substance 2" — narrow, but it starts left of the table
-  const out = fullTrim(p, { x: 20, y: 120, w: 670, h: 230 });
-  near(out.y + out.h, tableBottom, 2, 'a short part line under the table was kept');
+  p.prose(30, 320, 620, 10);                                  // "(a) State the physical state…"
+  p.prose(70, 345, 120, 10);                                  // "(i) Substance 1" — no mark, narrow
+  p.rect(70, 395, 600, 2);                                    // its answer line
+  p.prose(70, 420, 120, 10).prose(640, 420, 25, 10);          // "(ii) Substance 2         [2]"
+  const out = fullTrim(p, { x: 20, y: 120, w: 670, h: 320 });
+  near(out.y + out.h, tableBottom, 2, 'a short part label under the table was kept');
+});
+
+test('…but a short line with NOTHING to say it is wording stays — it may be the caption', () => {
+  // Sticking out past the body is not evidence: "Table 1" set at the page
+  // margin under a centred table sticks out exactly the same way.
+  const p = page(700, 1000, { paper: 250 });
+  borderedTable(p, 200, 160, 500, 4, 35);
+  p.prose(60, 320, 60, 10);                                   // "Table 1", at the margin
+  const out = fullTrim(p, { x: 40, y: 150, w: 620, h: 190 });
+  ok(out.y + out.h >= 330, 'a caption under the table was trimmed as if it were wording');
 });
 
 test('the table itself is never eaten — every row, both borders', () => {
@@ -320,16 +346,17 @@ test('the table itself is never eaten — every row, both borders', () => {
   near(out.y + out.h, 302, 2, 'the bottom border came off');
 });
 
-test('a table ruled with HORIZONTAL lines only is still never eaten row by row', () => {
-  // No vertical borders, so every rule and every row is its own band and none
-  // of them is a figure body: the four-rule guard must still stand down.
+test('a table ruled with HORIZONTAL lines only is a body too — never eaten row by row', () => {
+  // No vertical borders, so every rule and every row is its own band. Rules
+  // sharing one extent with table rows between them are ONE table, and the
+  // stem above it comes off like any other.
   const p = page(700, 1000, { paper: 250 });
   p.prose(30, 100, 600, 10);
   for (let k = 0; k <= 4; k++) p.rect(100, 140 + k * 40, 500, 2);
   for (let k = 0; k < 4; k++) p.prose(110, 140 + k * 40 + 16, 480, 8);
-  const r = { x: 20, y: 90, w: 670, h: 260 };
-  const kept = M._trimEdgeTextLines(p.ctx, p.W, p.H, r, thrOf(p));
-  ok(kept.y === r.y && kept.h === r.h, 'a horizontally-ruled table was trimmed');
+  const out = fullTrim(p, { x: 20, y: 90, w: 670, h: 260 });
+  near(out.y, 140, 2, 'the stem stayed, or the top rule went');
+  near(out.y + out.h, 302, 2, 'the table lost its bottom rows');
 });
 
 test('a THREE-LINE table keeps its top rule; only the stem above it goes', () => {
@@ -377,6 +404,191 @@ test('with NO figure body, a loose crop is trimmed exactly as before (3 lines, 2
   const r = { x: 90, y: 90, w: 520, h: 250 };
   const out = M._trimEdgeTextLines(p.ctx, p.W, p.H, r, thrOf(p));
   ok(out.h >= r.h * 0.5, 'a borderless block of rows was eaten past the old 50% floor');
+});
+
+// ---- FIGURE FURNITURE IS NEVER WORDING (v1.426.0) ---------------------------
+// v1.425.0 walked to the body and took everything on the way, and every one of
+// these went with it. Nothing downstream can put any of it back — the AI
+// clean-up only crops further — so each loss reads as a perfectly clean crop.
+const labelRow = (p, xs, y, w = 24, h = 10) => { for (const x of xs) p.prose(x, y, w, h); return p; };
+function pictureOptions(gap, where = 'below') {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 80, 620, 10);                                   // the stem
+  const xs = [90, 250, 410, 570];
+  for (const x of xs) p.rect(x, 130, 80, 80);                  // four drawn options
+  if (where === 'below') labelRow(p, xs.map(x => x + 28), 210 + gap);
+  else labelRow(p, xs.map(x => x + 28), 120 - gap - 10);
+  return p;
+}
+for (const gap of [5, 12, 20]) {
+  test('the (1) (2) (3) (4) under four picture options stay — gap ' + gap, () => {
+    const p = pictureOptions(gap);
+    const out = fullTrim(p, { x: 20, y: 70, w: 670, h: 200 });
+    ok(out.y + out.h >= 220 + gap, 'the option labels were cut off (bottom ' + (out.y + out.h) + ')');
+    ok(out.y >= 90, 'the stem above the options stayed');
+  });
+}
+test('…and the same labels ABOVE the pictures stay too', () => {
+  const p = page(700, 1000, { paper: 250 });
+  const xs = [90, 250, 410, 570];
+  labelRow(p, xs.map(x => x + 28), 110);
+  for (const x of xs) p.rect(x, 130, 80, 80);
+  const out = fullTrim(p, { x: 20, y: 90, w: 670, h: 140 });
+  ok(out.y <= 110, 'the labels over the options were cut off (top ' + out.y + ')');
+});
+test('"Set-up A   Set-up B" under two set-ups stay, even close to them', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(120, 140, 160, 120).rect(420, 140, 160, 120);
+  labelRow(p, [160, 460], 265, 70);                            // 5px under the drawings
+  p.prose(30, 300, 620, 10);                                  // "(a) Which set-up…"
+  const out = fullTrim(p, { x: 20, y: 130, w: 670, h: 190 });
+  ok(out.y + out.h >= 275, 'the set-up captions were cut off (bottom ' + (out.y + out.h) + ')');
+  ok(out.y + out.h < 300, 'the part line under them stayed');
+});
+function graph(p, { yTitle = true, ticks = 6, xTitle = 'none', grid = false } = {}) {
+  p.rect(150, 150, 2, 200).rect(150, 350, 450, 2);            // the axes
+  for (let k = 0; k < 5; k++) p.prose(122, 160 + k * 40, 18, 8); // y tick labels
+  for (let k = 0; k < 9; k++) p.rect(160 + k * 50, 340 - k * 20, 6, 6); // the plotted points
+  if (grid) for (let k = 0; k < 5; k++) p.rect(152, 160 + k * 40, 448, 1);
+  if (yTitle) p.prose(100, 128, 100, 10);                     // "Temperature (°C)" over the axis
+  if (ticks) labelRow(p, Array.from({ length: ticks }, (_, k) => 145 + k * 88), 356, 14, 8);
+  if (xTitle === 'centre') p.prose(330, 378, 90, 10);
+  if (xTitle === 'right') p.prose(560, 356, 80, 10);
+  return p;
+}
+for (const grid of [false, true]) {
+  test('a graph keeps its y-title, tick numbers and x-title' + (grid ? ' (gridded)' : ''), () => {
+    const p = graph(page(700, 1000, { paper: 250 }), { grid, xTitle: 'centre' });
+    p.prose(30, 90, 620, 10);                                 // the stem
+    p.prose(30, 420, 620, 10);                                // "(a) …"
+    const out = fullTrim(p, { x: 20, y: 80, w: 670, h: 360 });
+    ok(out.y <= 128, 'the y-axis title over the axis was cut off (top ' + out.y + ')');
+    ok(out.y > 100, 'the stem stayed');
+    ok(out.y + out.h >= 388, 'the x-axis title or the tick numbers were cut off (bottom ' + (out.y + out.h) + ')');
+    ok(out.y + out.h < 420, 'the part line stayed');
+  });
+}
+test('…and with no axis title, the tick numbers are the last thing kept', () => {
+  const p = graph(page(700, 1000, { paper: 250 }), { yTitle: false });
+  p.prose(30, 400, 620, 10);
+  const out = fullTrim(p, { x: 20, y: 140, w: 670, h: 280 });
+  ok(out.y + out.h >= 364, 'the tick numbers were cut off (bottom ' + (out.y + out.h) + ')');
+  ok(out.y + out.h < 400, 'the part line stayed');
+});
+test('…and an x-axis title at the RIGHT end of the axis stays', () => {
+  const p = graph(page(700, 1000, { paper: 250 }), { yTitle: false, ticks: 5, xTitle: 'right' });
+  const out = fullTrim(p, { x: 20, y: 140, w: 670, h: 240 });
+  ok(out.y + out.h >= 366 && out.x + out.w >= 636, 'the x-axis title at the end of the axis was cut off');
+});
+test('"Table 1" at the margin over a centred table stays; the stem over it goes', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(60, 100, 600, 10);                                  // the stem, at the margin
+  p.prose(60, 140, 50, 10);                                   // "Table 1", at the margin too
+  borderedTable(p, 200, 160, 500, 4, 35);
+  const out = fullTrim(p, { x: 40, y: 90, w: 620, h: 220 });
+  ok(out.y <= 140, 'the caption over the table was cut off (top ' + out.y + ')');
+  ok(out.y > 110, 'the stem stayed');
+});
+test('a HORIZONTALLY-ruled table under a drawing in the same crop is never eaten', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(250, 110, 200, 100);                                 // the drawing — a figure body
+  for (let k = 0; k <= 4; k++) p.rect(100, 240 + k * 40, 500, 2);
+  for (let k = 0; k < 4; k++) p.prose(110, 240 + k * 40 + 16, 480, 8);
+  const out = fullTrim(p, { x: 20, y: 100, w: 670, h: 320 });
+  ok(out.y + out.h >= 400, 'the table under the drawing was eaten (bottom ' + (out.y + out.h) + ')');
+});
+test('a six-line KEY over a row of drawings stays, and so do their letters', () => {
+  const p = page(700, 1000, { paper: 250 });
+  for (let k = 0; k < 6; k++) p.prose(100, 100 + k * 20, 500, 10);   // "1a Has wings ……… go to 2"
+  const xs = [100, 240, 380, 520];
+  for (const x of xs) p.rect(x, 240, 80, 80);
+  labelRow(p, xs.map(x => x + 34), 326, 12);                   // A B C D
+  const out = fullTrim(p, { x: 90, y: 90, w: 520, h: 250 });
+  ok(out.y <= 100, 'the key over the drawings was eaten (top ' + out.y + ')');
+  ok(out.y + out.h >= 336, 'the letters under the drawings were cut off');
+});
+test('a caption wider than a NARROW drawing, close under it, stays', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(330, 120, 40, 200);                                  // a thermometer
+  p.prose(280, 324, 140, 10);                                 // "Thermometer X", 4px under it
+  const out = fullTrim(p, { x: 260, y: 110, w: 180, h: 240 });
+  ok(out.y + out.h >= 334, 'the caption under the thermometer was cut off');
+});
+
+// ---- …AND MORE OF THE WORDING NOW COMES OFF (v1.426.0) ----------------------
+function tablePage(parts) {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 130, 600, 10);
+  const tableBottom = borderedTable(p, 100, 160, 600, 4, 35);
+  p.prose(30, 320, 620, 10);                                  // "(a) …"
+  parts(p);
+  return { p, tableBottom };
+}
+test('two and three answer lines per part all come off', () => {
+  for (const n of [2, 3]) {
+    const { p, tableBottom } = tablePage(p => {
+      let y = 345;
+      for (const lab of ['(i)', '(ii)']) {
+        p.prose(70, y, 120, 10).prose(640, y, 25, 10);
+        for (let k = 0; k < n; k++) { y += 36; p.rect(70, y, 600, 2); }
+        y += 30;
+      }
+    });
+    const out = fullTrim(p, { x: 20, y: 120, w: 670, h: 600 });
+    near(out.y + out.h, tableBottom, 2, n + ' answer lines a part were left under the table');
+  }
+});
+test('a part with its answer blank ruled on the same line comes off', () => {
+  const { p, tableBottom } = tablePage(p => {
+    p.prose(70, 345, 120, 10).rect(200, 353, 420, 2).prose(640, 345, 25, 10);   // "(i) Substance 1 ______ [2]"
+    p.prose(70, 380, 120, 10).rect(200, 388, 420, 2).prose(640, 380, 25, 10);
+  });
+  const out = fullTrim(p, { x: 20, y: 120, w: 670, h: 280 });
+  near(out.y + out.h, tableBottom, 2, 'an underlined part line was left under the table');
+});
+test('the short last line of a wrapped stem comes off a table as wide as the column', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(100, 100, 500, 10);                                 // "The table shows … their respective"
+  p.prose(100, 116, 150, 10);                                 // "physical properties."
+  const tableBottom = borderedTable(p, 100, 150, 600, 4, 35);
+  const out = fullTrim(p, { x: 80, y: 90, w: 540, h: 210 });
+  near(out.y, 150, 2, 'the tail of the wrapped stem was left on the table');
+  near(out.y + out.h, tableBottom, 2, 'the table lost its bottom');
+});
+test('an answer line cut by the crop’s top edge still counts as one', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(80, 104, 600, 2);                                    // the previous question's answer line
+  p.prose(30, 130, 600, 10);                                  // the stem
+  borderedTable(p, 100, 160, 600, 4, 35);
+  const out = fullTrim(p, { x: 20, y: 100, w: 670, h: 210 });
+  near(out.y, 160, 2, 'the stem under an edge answer line was left on the table');
+});
+test('two single-spaced lines that run together come off as one', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 90, 620, 14).prose(30, 106, 300, 14);           // 2px apart: one band, taller than a line
+  borderedTable(p, 100, 160, 600, 4, 35);
+  const out = fullTrim(p, { x: 20, y: 80, w: 670, h: 230 });
+  near(out.y, 160, 2, 'the run-together stem was left on the table');
+});
+test('a 1px table is ONE body — its 1px rules no longer let it fall apart', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 100, 600, 10);
+  for (let k = 0; k <= 4; k++) p.rect(100, 140 + k * 40, 500, 1);
+  for (const x of [100, 599]) p.rect(x, 140, 1, 161);               // two 1px sides: too faint to count as ink
+  for (let k = 0; k < 4; k++) { p.prose(140, 140 + k * 40 + 16, 60, 8); p.prose(400, 140 + k * 40 + 16, 60, 8); }
+  p.prose(30, 330, 620, 10);
+  const out = fullTrim(p, { x: 20, y: 90, w: 670, h: 260 });
+  near(out.y, 140, 2, 'the stem stayed over a 1px table');
+  near(out.y + out.h, 301, 2, 'the part line stayed under a 1px table');
+});
+test('a stroke running the WHOLE crop never bridges — a page frame is not a figure', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(25, 0, 1, 1000);                                     // the page's margin rule
+  p.prose(30, 100, 600, 10);
+  borderedTable(p, 100, 140, 600, 4, 35);
+  p.prose(30, 300, 620, 10);
+  const out = fullTrim(p, { x: 20, y: 90, w: 670, h: 230 });
+  ok(out.y >= 120 && out.y + out.h <= 290, 'the frame line joined the stem and the parts to the table');
 });
 
 test('the worker carries the SAME trim, byte for byte', () => {
@@ -555,13 +767,31 @@ test('_trimEdgeTextLines no longer carries a pull-in of its own', () => {
 test('the crop really calls it, on both axes, in the right order', () => {
   const fn = cut('async function _cropBoxFromScreenshot', '\n// SECOND-CHANCE CLEANUP', 'crop fn');
   const xAt = fn.indexOf("_trimBlankEdges(pctx, W, H, r, thr, 'x')");
-  const trimAt = fn.indexOf('_trimEdgeTextLines(pctx, W, H, r, thr)');
+  const trimAt = fn.indexOf('_trimEdgeTextLines(pctx, W, H, r, thr, { y0: ymin / 1000 * H, y1: ymax / 1000 * H })');
   const xyAt = fn.indexOf("_trimBlankEdges(pctx, W, H, r, thr, 'xy')");
   ok(xAt > 0, 'the sides are not pulled in before the sentence trim');
   ok(trimAt > xAt, 'the sentence trim runs before the sides are pulled in');
   ok(xyAt > trimAt, 'the final tighten does not run after the sentence trim');
   ok(fn.indexOf('if (tight === null) return null;') > 0,
     'a crop that held no ink is still shipped as a white rectangle');
+  const worker = fs.readFileSync(new URL('../rapid-import/functions/crop.js', import.meta.url), 'utf8');
+  ok(worker.indexOf('_trimEdgeTextLines(ctx, W, H, r, thr, { y0: ymin / 1000 * H, y1: ymax / 1000 * H })') > 0,
+    'the worker no longer tells the trim where the model put the figure');
+});
+
+test('a body is only where the MODEL put the figure — a neighbour dragged in is not one', () => {
+  // The model boxed a borderless block of three rows; the margin and the
+  // expansion reached a drawing below it. Without the hint that drawing is the
+  // body, the three rows read as a stem reaching it from above, and the figure
+  // the model asked for is thrown away.
+  const p = page(700, 1000, { paper: 250 });
+  for (let k = 0; k < 3; k++) p.prose(110, 110 + k * 20, 480, 10);
+  p.rect(250, 190, 200, 90);                                  // a neighbouring drawing
+  const thr = thrOf(p), r = { x: 20, y: 95, w: 670, h: 200 };
+  const free = M._trimEdgeTextLines(p.ctx, p.W, p.H, r, thr);
+  ok(free.y > 150, 'the case no longer exercises the hint (the rows were kept without it)');
+  const out = M._trimEdgeTextLines(p.ctx, p.W, p.H, r, thr, { y0: 105, y1: 162 });
+  ok(out.y <= 110, 'the rows the model boxed were thrown away for a neighbour\'s sake');
 });
 
 test('the whole-page backup is what a refused crop falls to', () => {
