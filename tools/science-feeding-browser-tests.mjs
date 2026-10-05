@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 
 const moduleName=process.env.PLAYWRIGHT_MODULE || 'playwright';
@@ -94,6 +95,7 @@ const runTransaction=async(db,task)=>{const writes=[];const result=await task({g
 const _htmlPlainText=stripHtmlToText,db={},_qRef=id=>id,setDoc=async(...args)=>writes.push(args);
 const qpMarkServed=id=>_scienceFeedMark(id),resetQpOpenAnswers=()=>{},openFlagDialog=()=>{};
 ${feed}
+${mcqLabelSrc(source)}
 ${functions}
 ${gameMessages}
 Object.assign(window,{loadNextQpQuestion,markMcqChoice,resetQpOpenAnswers,openFlagDialog,navigateTo});

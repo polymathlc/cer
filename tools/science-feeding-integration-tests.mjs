@@ -1,4 +1,5 @@
 // Real Science feeding handlers with controlled storage, DOM and Firebase edges.
+import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -107,6 +108,7 @@ function harness(bank = [], random = () => 0.5, cloud = null) {
     const _htmlPlainText=stripHtmlToText;
     const _sdBreakStatements=v=>v,_sdZoomBtns=()=>'',imgSizeStyle=()=>'',_sdSeedElo=()=>1200;
     const renderTableReadonly=b=>'<table>'+Object.values(b.data).map(row=>'<tr>'+Object.values(row).map(cell=>'<td>'+cell+'</td>').join('')+'</tr>').join('')+'</table>';
+    ${mcqLabelSrc(source)}
     ${helpers}
     ${fn('qInLevelBand')}
     ${fn('qLevelNum')}

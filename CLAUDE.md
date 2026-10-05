@@ -4411,9 +4411,35 @@ The primary papers number their options; Secondary 1 science letters them.
   key (`_pushBlockAnswerKey(…, why, q)`), marking feedback, the AI marking
   prompts, the Why-not card and the 🐾 mistake card. The census in the harness
   fails on a render call that does not pass `q`.
-- **A bare marker is drawn as the label** (`mcqOptionText`): a picture option
-  stored as "(3)" reads "(C)" on a Sec 1 question, so nobody retypes four
-  options. Real wording, and a marker naming a different option, are left alone.
+- **A BRACKETED marker is drawn as the label** (`mcqOptionIsBare` /
+  `mcqOptionText`): a picture option stored as "(3)" reads "(C)" on a Sec 1
+  question, so nobody retypes four options. A bare "A" or "3" is the author's
+  own option ("Which part, A, B, C or D…") and is never rewritten; nor is real
+  wording, or a marker naming a different option. The editor's box SHOWS
+  "(C)" and `mcqSetOptionText` stores it back as the canonical "(3)".
+- **`_normMcqChoice` reads a LEADING label first** — "(B)", "B)", "Option B",
+  "Ans: B", "B) 4 cm" all read as 2 — because a lettered question shows the AI
+  lettered options and its echo comes back lettered. Junk is '' (no choice),
+  never a stray character. Keep `*/` out of its regex: the editing-mode census
+  strips comments naively and a stray `*/` re-pairs them across the file.
+- **Every AI prompt that quotes options uses `mcqPromptOpt`** (the 🤖 answer and
+  explanation buttons, the per-part filler, 🔄 regenerate, the marker's own
+  context, the cross-check, the Doctor, ✅ Check Questions, 🔎 Why-not, Ai-nstein,
+  the mistake card), or the explanation it writes says "option 2" under a key
+  that says "B.". Ai-nstein's leak guard also blocks the LETTER (uppercase only).
+- **Games**: `_sdExtractMcq` carries `labels` on every bank row and `_gameLab`
+  draws them in the TCG trainer, Ember Duel, Siege and Legends; Science Spire,
+  Grand Line and Science Strike (`fpsMcqLabelStyle`, its own copy of the rule)
+  read them too. Keyboard hotkeys stay keys. **The Hades Sanctuary still
+  numbers**: `hades-learning-parent.js` is pinned by SHA-256 in
+  `hades-game.manifest.json`, so it changes only with a Hades release.
+- **🗂️ Custom Paper**: Booklet A's answer sheet shades each row with ITS
+  question's labels, and the instruction line names them ("(A, B, C or D)"),
+  with neutral wording for a mixed booklet.
+- **The dropdown is an inline `onchange`**, so `setEditorMcqLabels` must stay on
+  `window` — the harness fails on any inline handler in the block that is not.
+- The harnesses that rebuild app.js sections take the helpers from
+  `tools/mcq-labels-src.mjs` rather than pasting them.
 - Only an explicit choice is stored, and `mcqLabels` is in
   `EDITOR_OWNED_QUESTION_FIELDS`, or setting it back to Auto would be undone.
 - Run **`node tools/mcq-labels-tests.mjs`** after touching any of it.

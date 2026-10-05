@@ -33,6 +33,7 @@
 //  • BOTH PRINT PATHS. They had already drifted over the MCQ answer once; a key
 //    that carries the picture from one print button and not the other is that
 //    same fault wearing a new hat.
+import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import fs from 'fs';
 
 const APP = new URL('../app.js', import.meta.url).pathname;
@@ -84,6 +85,7 @@ const SHIM = [
 
 const M = new Function([
   SHIM,
+  mcqLabelSrc(src),
   cut('const QPART_LETTERS', 'function qPartsUsed', 'part core'),
   cut('function qPartsUsed', 'function qPartOf(map, block)', 'part spans + the AI part passes + the explanation filler'),
   cut('function qPartOf(map, block)', '\n// The next unused letter', 'partOf + opens + hasParts'),

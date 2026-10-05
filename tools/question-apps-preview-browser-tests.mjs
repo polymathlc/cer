@@ -2,6 +2,7 @@
 // shipped CSS/overlay. Account writes and paid AI are isolated at their edges.
 // Set WIDGET_PLAYWRIGHT_MODULE / WIDGET_BROWSER_EXECUTABLE if needed.
 import assert from 'node:assert/strict';
+import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -74,6 +75,7 @@ const fixtureCode = `
   let explanationResolve = null, explanationTask = null;
   const askGemini = () => new Promise(resolve => { explanationResolve = resolve; });
   window.__aiReady = () => false;
+  ${mcqLabelSrc(source)}
   ${keywords}
   ${annotation}
   ${functions}

@@ -1,6 +1,9 @@
 // Shared GrandLine learning bridge. The portal owns the question bank, answer keys,
 // grading and history. The embedded game receives only a completed round score.
 export const GRAND_LINE_QUESTION_COUNT = 3;
+// The question's own option label (A–D on a Sec 1 question), carried on the
+// bank row; a row without labels is numbered as before.
+const optionLabel = (q, i) => (q && Array.isArray(q.labels) && typeof q.labels[i] === 'string' && q.labels[i].length <= 3 && q.labels[i]) || String(i + 1);
 const token = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
 const validRound = value => Number.isSafeInteger(value) && value > 0;
 export function grandLineLearningReward(correct) {
@@ -262,7 +265,7 @@ export function installGrandLineLearningParent(config) {
       const buttons = q.options.map((html, choice) => {
         const button = make('button','grand-line-learning-option'); button.type = 'button';
         const content = make('span'); content.innerHTML = sanitizeGrandLineQuestionHtml(html,doc);
-        button.append(make('span','grand-line-learning-number',String(choice + 1)),content);
+        button.append(make('span','grand-line-learning-number',optionLabel(q, choice)),content);
         button.onclick = async () => {
           if (selected || failed || !isCurrent()) return;
           selected = true; buttons.forEach(b => { b.disabled = true; });
@@ -278,7 +281,7 @@ export function installGrandLineLearningParent(config) {
           if (!answer || !isCurrent()) { close(); return; }
           if (answer.correct) score++;
           buttons[answer.answer].dataset.correct = 'true'; if (!answer.correct) button.dataset.wrong = 'true';
-          feedback.textContent = answer.correct ? 'Correct. ' : `The correct answer is ${answer.answer + 1}. `;
+          feedback.textContent = answer.correct ? 'Correct. ' : `The correct answer is ${optionLabel(q, answer.answer)}. `;
           if (answer.explainHtml) { const explanation = make('div'); explanation.innerHTML = sanitizeGrandLineQuestionHtml(answer.explainHtml,doc); feedback.append(explanation); }
           if (index === 2) feedback.append(make('p','grand-line-learning-reward',grandLineLearningRewardSummary(score)));
           next.hidden = false; next.focus();

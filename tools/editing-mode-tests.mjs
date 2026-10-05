@@ -512,7 +512,7 @@ test('CENSUS: every per-block function resolves its question through emScope', (
     for (let j = a; j < b; j++) {
       const line = lines[j];
       if (!/(?<![.\w])blocks(?![\w])/.test(line)) continue;
-      if (/blocks\.(find|findIndex|some|indexOf)\s*\(/.test(line)) continue;  // a lookup by unique id
+      if (/blocks\.(find|findIndex|some|indexOf|includes)\s*\(/.test(line)) continue;  // a lookup by unique id, or a membership test
       bad.push(j + 1);
     }
     if (!bad.length) continue;
