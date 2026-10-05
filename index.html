@@ -14,7 +14,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-<link rel="modulepreload" href="app.js?v=1.424.0">
+<link rel="modulepreload" href="app.js?v=1.425.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -9098,8 +9098,8 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 <style>
 /* Public home page. Deliberately scoped so signed-in tools retain their styles. */
 #landingPage {
-  --lp-ink:#162e2a; --lp-green:#126149; --lp-muted:#5e6f67;
-  --lp-line:#dce4db; --lp-paper:#f8f9f3;
+  --lp-ink:#10303a; --lp-teal:#2e9ca6; --lp-aqua:#56c4d0; --lp-deep:#056c76; --lp-pink:#ec008c; --lp-plum:#b51f6b; --lp-green:#0d5c66; --lp-muted:#5e6d6f;
+  --lp-line:#d1eaee; --lp-paper:#f2f9fa;
   min-height:100vh; background:var(--lp-paper); color:var(--lp-ink);
   font-family:'Plus Jakarta Sans',sans-serif; line-height:1.65;
 }
@@ -9108,21 +9108,21 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 #landingPage button, #landingPage input, #landingPage textarea { font:inherit; }
 #landingPage button, #landingPage summary { cursor:pointer; }
 #landingPage a, #landingPage button, #landingPage summary { -webkit-tap-highlight-color:transparent; }
-#landingPage :is(a,button,input,textarea,summary):focus-visible { outline:3px solid #b18a35; outline-offset:5px; }
+#landingPage :is(a,button,input,textarea,summary):focus-visible { outline:3px solid #bb1b81; outline-offset:5px; }
 #landingPage .lp-icon { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
 #landingPage .lp-skip { position:absolute; top:-80px; left:20px; z-index:100; background:white; padding:12px 20px; border:1px solid var(--lp-green); border-radius:8px; }
 #landingPage .lp-skip:focus { top:12px; }
-#landingPage .lp-header { position:sticky; top:0; z-index:50; background:rgba(248,249,243,.95); border-bottom:1px solid var(--lp-line); backdrop-filter:blur(16px); }
+#landingPage .lp-header { position:sticky; top:0; z-index:50; background:rgba(242,249,250,.95); border-bottom:1px solid var(--lp-line); backdrop-filter:blur(16px); }
 #landingPage .lp-nav { min-height:88px; display:flex; gap:28px; align-items:center; justify-content:space-between; }
 #landingPage .lp-brand { display:flex; gap:12px; align-items:center; flex-shrink:0; }
 #landingPage .lp-nav-links { display:flex; gap:27px; align-items:center; font-size:12px; font-weight:600; color:var(--lp-muted); }
 #landingPage .lp-nav-links a:hover, #landingPage .lp-footer a:hover { color:var(--lp-green); text-decoration:underline; text-underline-offset:5px; }
 #landingPage .lp-nav-actions { display:flex; align-items:center; gap:10px; }
 #landingPage .lp-button { display:inline-flex; justify-content:center; align-items:center; gap:12px; min-height:51px; padding:13px 24px; border-radius:8px; border:1px solid var(--lp-green); background:var(--lp-green); color:white; font-size:13px; font-weight:700; line-height:1.4; transition:background .2s,box-shadow .2s,transform .2s; }
-#landingPage .lp-button:hover { background:#0a4936; box-shadow:0 7px 18px #123d241a; transform:translateY(-2px); }
+#landingPage .lp-button:hover { background:#09424a; box-shadow:0 7px 18px #093f461a; transform:translateY(-2px); }
 #landingPage .lp-button .lp-icon { width:17px; height:17px; }
-#landingPage .lp-button-secondary { background:transparent; color:var(--lp-ink); border-color:#bdcbbd; }
-#landingPage .lp-button-secondary:hover { background:#eef1e8; }
+#landingPage .lp-button-secondary { background:transparent; color:var(--lp-ink); border-color:#bdc9cb; }
+#landingPage .lp-button-secondary:hover { background:#e4f3f5; }
 #landingPage .lp-button-small { min-height:42px; padding:11px 18px; font-size:12px; }
 #landingPage .lp-login { min-height:44px; padding:10px 13px; background:none; border:0; color:var(--lp-ink); font-size:12px; font-weight:700; }
 #landingPage .lp-login:hover { color:var(--lp-green); text-decoration:underline; }
@@ -9137,29 +9137,29 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 #landingPage .lp-hero-note { display:flex; align-items:center; gap:8px; font-size:10px; color:var(--lp-muted); margin-top:21px; }
 #landingPage .lp-hero-note .lp-icon { width:15px; height:15px; color:var(--lp-green); }
 #landingPage .lp-preview-stage { padding:28px 19px 28px 0; position:relative; isolation:isolate; }
-#landingPage .lp-preview-stage::before { content:''; position:absolute; inset:0 -14px 0 28px; border-radius:50% 50% 16px 16px; background:#e9eee1; z-index:-1; }
-#landingPage .lp-orbit { position:absolute; right:-26px; top:-8px; width:93px; height:93px; border:1px solid #bcc9b5; border-radius:50%; display:grid; place-items:center; background:var(--lp-paper); transform:rotate(12deg); }
+#landingPage .lp-preview-stage::before { content:''; position:absolute; inset:0 -14px 0 28px; border-radius:50% 50% 16px 16px; background:#ddf0f2; z-index:-1; }
+#landingPage .lp-orbit { position:absolute; right:-26px; top:-8px; width:93px; height:93px; border:1px solid #b5c7c9; border-radius:50%; display:grid; place-items:center; background:var(--lp-paper); transform:rotate(12deg); }
 #landingPage .lp-orbit .lp-icon { width:48px; height:48px; color:var(--lp-green); stroke-width:1; }
-#landingPage .lp-preview { background:white; border:1px solid #d9e1d7; border-radius:14px; box-shadow:0 25px 60px #183e2810,0 2px 8px #183e2806; overflow:hidden; transform:rotate(-1.5deg); }
-#landingPage .lp-preview-top { padding:17px 22px; display:flex; gap:12px; align-items:center; justify-content:space-between; border-bottom:1px solid #e8ede5; font-size:10px; font-weight:700; }
+#landingPage .lp-preview { background:white; border:1px solid #cce8ec; border-radius:14px; box-shadow:0 25px 60px #09454d10,0 2px 8px #09454d06; overflow:hidden; transform:rotate(-1.5deg); }
+#landingPage .lp-preview-top { padding:17px 22px; display:flex; gap:12px; align-items:center; justify-content:space-between; border-bottom:1px solid #dff1f3; font-size:10px; font-weight:700; }
 #landingPage .lp-preview-top > span:first-child { display:flex; align-items:center; gap:8px; }
 #landingPage .lp-preview-top .lp-icon { width:17px; height:17px; color:var(--lp-green); }
-#landingPage .lp-preview-label { color:#61736a; border:1px solid #dbe5d7; padding:3px 7px; border-radius:4px; font-size:8px; text-transform:uppercase; letter-spacing:.7px; }
+#landingPage .lp-preview-label { color:#617173; border:1px solid #cfe9ed; padding:3px 7px; border-radius:4px; font-size:8px; text-transform:uppercase; letter-spacing:.7px; }
 #landingPage .lp-preview-content { padding:23px; }
 #landingPage .lp-preview-meta { display:flex; justify-content:space-between; gap:15px; color:var(--lp-muted); font-size:9px; margin-bottom:13px; }
 #landingPage .lp-preview-content h2 { font-size:18px; font-weight:600; letter-spacing:-.5px; line-height:1.5; margin:0 0 19px; }
-#landingPage .lp-cer-row { display:flex; gap:12px; margin-top:10px; padding:12px 13px; border-radius:7px; background:#f7f9f4; font-size:11px; line-height:1.7; }
-#landingPage .lp-cer-row > b { display:grid; place-items:center; width:25px; height:25px; border-radius:50%; background:#e6eddf; color:var(--lp-green); flex-shrink:0; font-size:10px; }
+#landingPage .lp-cer-row { display:flex; gap:12px; margin-top:10px; padding:12px 13px; border-radius:7px; background:#f3f9fa; font-size:11px; line-height:1.7; }
+#landingPage .lp-cer-row > b { display:grid; place-items:center; width:25px; height:25px; border-radius:50%; background:#dbeff1; color:var(--lp-green); flex-shrink:0; font-size:10px; }
 #landingPage .lp-cer-row small { display:block; font-size:8px; font-weight:700; color:var(--lp-muted); letter-spacing:1.1px; text-transform:uppercase; margin-bottom:3px; }
-#landingPage mark { color:var(--lp-green); background:#deebd3; padding:1px 3px; border-radius:2px; }
-#landingPage .lp-preview-foot { display:flex; justify-content:space-between; gap:12px; border-top:1px solid #e8ede5; padding:14px 23px; font-size:9px; color:var(--lp-muted); }
+#landingPage mark { color:var(--lp-green); background:#d1eaed; padding:1px 3px; border-radius:2px; }
+#landingPage .lp-preview-foot { display:flex; justify-content:space-between; gap:12px; border-top:1px solid #dff1f3; padding:14px 23px; font-size:9px; color:var(--lp-muted); }
 #landingPage .lp-preview-foot b { color:var(--lp-green); }
-#landingPage .lp-feedback-float { display:flex; gap:13px; align-items:center; position:relative; width:85%; margin:-1px -15px 0 auto; padding:16px 18px; background:#143f33; border:1px solid #305a4c; color:white; border-radius:10px; box-shadow:0 14px 22px #133d2820; transform:rotate(2deg); font-size:11px; }
-#landingPage .lp-feedback-float .lp-icon { width:25px; height:25px; color:#d8e8ae; }
-#landingPage .lp-feedback-float small { display:block; color:#bfcec0; font-size:9px; margin-top:3px; }
+#landingPage .lp-feedback-float { display:flex; gap:13px; align-items:center; position:relative; width:85%; margin:-1px -15px 0 auto; padding:16px 18px; background:#09424a; border:1px solid #0f6e7b; color:white; border-radius:10px; box-shadow:0 14px 22px #09404720; transform:rotate(2deg); font-size:11px; }
+#landingPage .lp-feedback-float .lp-icon { width:25px; height:25px; color:#aee1e8; }
+#landingPage .lp-feedback-float small { display:block; color:#bfccce; font-size:9px; margin-top:3px; }
 #landingPage .lp-capabilities { border-block:1px solid var(--lp-line); padding:24px 0; }
 #landingPage .lp-capabilities .lp-wrap { display:flex; justify-content:space-between; gap:22px; flex-wrap:wrap; align-items:center; }
-#landingPage .lp-capabilities span { display:flex; gap:10px; align-items:center; font-size:11px; font-weight:600; color:#496053; }
+#landingPage .lp-capabilities span { display:flex; gap:10px; align-items:center; font-size:11px; font-weight:600; color:#138796; }
 #landingPage .lp-capabilities .lp-icon { width:19px; height:19px; }
 #landingPage .lp-section { padding:88px 0; scroll-margin-top:105px; }
 #landingPage .lp-section-head { display:flex; justify-content:space-between; gap:42px; align-items:flex-end; margin-bottom:38px; }
@@ -9168,62 +9168,62 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 #landingPage .lp-section-head > p { color:var(--lp-muted); font-size:13px; max-width:340px; line-height:1.8; }
 #landingPage .lp-feature-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
 #landingPage .lp-feature { background:#fff; padding:29px; border:1px solid var(--lp-line); border-radius:12px; }
-#landingPage .lp-feature-icon { width:39px; height:39px; display:grid; place-items:center; border-radius:10px; background:#f0f4e9; color:var(--lp-green); margin-bottom:26px; }
+#landingPage .lp-feature-icon { width:39px; height:39px; display:grid; place-items:center; border-radius:10px; background:#e7f4f6; color:var(--lp-green); margin-bottom:26px; }
 #landingPage .lp-feature h3 { font-family:'Space Grotesk',sans-serif; font-size:19px; font-weight:500; letter-spacing:-.6px; line-height:1.3; margin-bottom:12px; }
 #landingPage .lp-feature p { color:var(--lp-muted); font-size:12px; line-height:1.85; }
 #landingPage .lp-feature-tag { display:block; margin-top:21px; font-size:9px; color:var(--lp-green); font-weight:700; letter-spacing:.4px; }
-#landingPage .lp-feature-dark { background:#173f34; color:white; border-color:#173f34; }
-#landingPage .lp-feature-dark .lp-feature-icon { color:#ddebba; background:#2b5042; }
-#landingPage .lp-feature-dark p { color:#c0cfc5; }
-#landingPage .lp-feature-dark .lp-feature-tag { color:#deebba; }
-#landingPage .lp-demo-section { background:#eef2e8; border-block:1px solid var(--lp-line); }
+#landingPage .lp-feature-dark { background:#09454d; color:white; border-color:#09454d; }
+#landingPage .lp-feature-dark .lp-feature-icon { color:#bae5eb; background:#0e626d; }
+#landingPage .lp-feature-dark p { color:#c0cdcf; }
+#landingPage .lp-feature-dark .lp-feature-tag { color:#bae5eb; }
+#landingPage .lp-demo-section { background:#e5f3f5; border-block:1px solid var(--lp-line); }
 #landingPage .lp-demo-grid { display:grid; grid-template-columns:.82fr 1.18fr; gap:76px; align-items:center; }
 #landingPage .lp-demo-copy > p { font-size:13px; color:var(--lp-muted); line-height:1.9; margin:24px 0; }
 #landingPage .lp-steps { list-style:none; display:grid; gap:22px; margin-top:29px; }
 #landingPage .lp-steps li { display:flex; gap:16px; align-items:flex-start; }
-#landingPage .lp-steps li > span { border:1px solid #bccab7; width:28px; height:28px; display:grid; place-items:center; border-radius:50%; font-size:10px; color:var(--lp-green); flex-shrink:0; margin-top:1px; }
+#landingPage .lp-steps li > span { border:1px solid #b7c8ca; width:28px; height:28px; display:grid; place-items:center; border-radius:50%; font-size:10px; color:var(--lp-green); flex-shrink:0; margin-top:1px; }
 #landingPage .lp-steps strong { font-size:12px; font-weight:700; }
 #landingPage .lp-steps p { color:var(--lp-muted); font-size:11px; margin-top:3px; }
-#landingPage .lp-demo { padding:27px; background:#fff; border-radius:14px; border:1px solid #d8e1d2; box-shadow:0 15px 35px #23442608; }
+#landingPage .lp-demo { padding:27px; background:#fff; border-radius:14px; border:1px solid #c9e6ea; box-shadow:0 15px 35px #0b525c08; }
 #landingPage .lp-demo-title { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:18px; }
 #landingPage .lp-demo-title h3 { font-size:12px; font-weight:700; letter-spacing:0; }
-#landingPage .lp-demo-title > span { color:var(--lp-green); background:#edf3e7; border-radius:5px; padding:4px 8px; font-size:8px; letter-spacing:.6px; font-weight:700; }
-#landingPage .lp-demo-toggle { display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:4px; background:#f0f3ec; border-radius:8px; margin-bottom:22px; }
+#landingPage .lp-demo-title > span { color:var(--lp-green); background:#e5f3f5; border-radius:5px; padding:4px 8px; font-size:8px; letter-spacing:.6px; font-weight:700; }
+#landingPage .lp-demo-toggle { display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:4px; background:#e9f5f6; border-radius:8px; margin-bottom:22px; }
 #landingPage .lp-demo-toggle button { padding:10px 6px; min-height:43px; border:0; border-radius:5px; color:var(--lp-muted); background:none; font-size:10px; font-weight:700; }
-#landingPage .lp-demo-toggle button.active { background:var(--lp-green); color:#fff; box-shadow:0 2px 5px #173d2312; }
+#landingPage .lp-demo-toggle button.active { background:var(--lp-green); color:#fff; box-shadow:0 2px 5px #09434b12; }
 #landingPage .lp-experiment { font-size:11px; color:var(--lp-muted); line-height:1.8; }
 #landingPage .lp-experiment strong { color:var(--lp-ink); }
 #landingPage .lp-data { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0 5px; }
-#landingPage .lp-data > div { background:#f7f8f3; border:1px solid #e4e9dd; padding:10px 14px; border-radius:6px; }
+#landingPage .lp-data > div { background:#f1f9fa; border:1px solid #d6edf0; padding:10px 14px; border-radius:6px; }
 #landingPage .lp-data span { display:block; font-size:9px; color:var(--lp-muted); }
 #landingPage .lp-data strong { font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:500; }
 #landingPage .lp-data small { font-size:9px; color:var(--lp-muted); }
 #landingPage .lp-data-note { color:var(--lp-muted); font-size:8px; margin-bottom:19px; }
 #landingPage .landing-demo-question { font-size:12px; color:var(--lp-ink); line-height:2.15; margin:0 0 15px; }
 #landingPage .landing-demo-question label, #landingPage .landing-demo-question > strong { font-weight:700; }
-#landingPage .landing-demo-blank { display:inline-block; width:100px; max-width:100%; min-height:38px; padding:4px 7px; border:0; border-bottom:1px solid #59876b; border-radius:3px 3px 0 0; background:#f0f5e9; color:var(--lp-green); font-size:12px; text-align:center; vertical-align:baseline; }
-#landingPage .landing-demo-open { display:block; width:100%; min-height:146px; resize:vertical; border:1px solid #c7d3be; border-radius:7px; padding:13px; font-size:12px; line-height:1.9; color:var(--lp-ink); background:#fafbf7; }
+#landingPage .landing-demo-blank { display:inline-block; width:100px; max-width:100%; min-height:38px; padding:4px 7px; border:0; border-bottom:1px solid #598287; border-radius:3px 3px 0 0; background:#e8f5f6; color:var(--lp-green); font-size:12px; text-align:center; vertical-align:baseline; }
+#landingPage .landing-demo-open { display:block; width:100%; min-height:146px; resize:vertical; border:1px solid #bed1d3; border-radius:7px; padding:13px; font-size:12px; line-height:1.9; color:var(--lp-ink); background:#f6fbfc; }
 #landingPage .landing-demo-note { margin-top:12px; color:var(--lp-muted); font-size:10px; line-height:1.8; }
 #landingPage .lp-worked { margin-top:20px; border-top:1px solid var(--lp-line); padding-top:16px; font-size:11px; }
 #landingPage .lp-worked summary { color:var(--lp-green); font-weight:700; padding:6px 0; }
 #landingPage .lp-worked p { margin-top:12px; color:var(--lp-muted); line-height:1.85; }
 #landingPage .lp-worked b { color:var(--lp-ink); }
 #landingPage .lp-extras { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-#landingPage .lp-game-card { background:#152f29; border-radius:14px; padding:36px; color:white; overflow:hidden; }
-#landingPage .lp-game-card .lp-eyebrow { color:#d8e8af; }
+#landingPage .lp-game-card { background:#07363d; border-radius:14px; padding:36px; color:white; overflow:hidden; }
+#landingPage .lp-game-card .lp-eyebrow { color:#afe1e8; }
 #landingPage .lp-game-card h3, #landingPage .lp-teacher-card h3 { font-family:'Space Grotesk',sans-serif; font-size:28px; line-height:1.2; font-weight:500; letter-spacing:-1px; margin-bottom:18px; }
-#landingPage .lp-game-card > p { color:#c5d2c8; font-size:12px; line-height:1.9; max-width:380px; }
+#landingPage .lp-game-card > p { color:#c5d0d2; font-size:12px; line-height:1.9; max-width:380px; }
 #landingPage .lp-game-art { display:flex; justify-content:center; gap:12px; padding:29px 5px 16px; }
-#landingPage .lp-game-art figure { width:29%; max-width:130px; padding:5px; background:#2c4438; border:1px solid #5c7052; border-radius:9px; transform:rotate(-8deg) translateY(9px); box-shadow:0 8px 20px #0003; }
-#landingPage .lp-game-art figure:nth-child(2) { transform:translateY(-2px); background:#425536; }
+#landingPage .lp-game-art figure { width:29%; max-width:130px; padding:5px; background:#0c5964; border:1px solid #526c70; border-radius:9px; transform:rotate(-8deg) translateY(9px); box-shadow:0 8px 20px #0003; }
+#landingPage .lp-game-art figure:nth-child(2) { transform:translateY(-2px); background:#0f6f7c; }
 #landingPage .lp-game-art figure:nth-child(3) { transform:rotate(8deg) translateY(9px); }
 #landingPage .lp-game-art img { display:block; width:100%; height:auto; aspect-ratio:1; border-radius:5px; }
-#landingPage .lp-game-art figcaption { color:#e0e7d5; font-size:8px; text-align:center; padding:7px 0 3px; }
-#landingPage .lp-game-caption { text-align:center; color:#b9caba; font-size:9px; margin-top:8px; }
-#landingPage .lp-teacher-card { background:#ecefdf; border:1px solid #dce1ce; border-radius:14px; padding:36px; }
+#landingPage .lp-game-art figcaption { color:#cfe9ed; font-size:8px; text-align:center; padding:7px 0 3px; }
+#landingPage .lp-game-caption { text-align:center; color:#b9c8ca; font-size:9px; margin-top:8px; }
+#landingPage .lp-teacher-card { background:#dceff2; border:1px solid #c6e5e9; border-radius:14px; padding:36px; }
 #landingPage .lp-teacher-card > p { color:var(--lp-muted); font-size:12px; line-height:1.9; }
 #landingPage .lp-teacher-list { list-style:none; display:grid; gap:0; margin-top:22px; }
-#landingPage .lp-teacher-list li { display:flex; gap:14px; padding:16px 0; border-top:1px solid #d3dcc7; font-size:11px; line-height:1.8; color:#52634e; }
+#landingPage .lp-teacher-list li { display:flex; gap:14px; padding:16px 0; border-top:1px solid #bde1e6; font-size:11px; line-height:1.8; color:#138d9e; }
 #landingPage .lp-teacher-list .lp-icon { width:18px; height:18px; color:var(--lp-green); margin-top:2px; }
 #landingPage .lp-teacher-list strong { display:block; color:var(--lp-ink); font-size:12px; }
 #landingPage .lp-teacher-note { font-size:9px; color:var(--lp-muted); margin-top:5px; }
@@ -9235,7 +9235,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 #landingPage .lp-faq-list summary { font-size:13px; font-weight:600; padding:19px 22px 1px 0; }
 #landingPage .lp-faq-list p { font-size:12px; color:var(--lp-muted); line-height:1.85; padding:15px 0 3px; }
 #landingPage .lp-closing { padding:0 0 65px; }
-#landingPage .lp-closing-inner { border:1px solid #d6dfcc; background:#e9eedf; border-radius:14px; padding:47px 50px; display:flex; align-items:center; justify-content:space-between; gap:35px; }
+#landingPage .lp-closing-inner { border:1px solid #c3e4e8; background:#dbeff2; border-radius:14px; padding:47px 50px; display:flex; align-items:center; justify-content:space-between; gap:35px; }
 #landingPage .lp-closing h2 { font-size:34px; }
 #landingPage .lp-closing p { color:var(--lp-muted); font-size:12px; margin-top:13px; }
 #landingPage .lp-closing-actions { flex-shrink:0; text-align:center; }
@@ -9331,6 +9331,34 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 
 </style>
 <style>
+/* Scroll-driven motion for the public home page; see landing-motion.js. */
+#landingPage.lp-motion [data-lp-reveal] { opacity:0; transform:translateY(28px); transition:opacity .7s cubic-bezier(.16,1,.3,1), transform .7s cubic-bezier(.16,1,.3,1); transition-delay:calc(var(--lp-i,0) * 80ms); will-change:opacity,transform; }
+#landingPage.lp-motion [data-lp-reveal].lp-in { opacity:1; transform:none; will-change:auto; }
+#landingPage .lp-progress { position:fixed; top:0; left:0; right:0; height:3px; z-index:60; background:linear-gradient(90deg,#56c4d0,#2e9ca6 45%,#ec008c); transform:scaleX(0); transform-origin:0 50%; pointer-events:none; }
+#landingPage .lp-header { transition:box-shadow .3s ease, background .3s ease; }
+#landingPage .lp-header.lp-scrolled { box-shadow:0 8px 28px rgba(9,69,77,.10); }
+#landingPage .lp-why-card, #landingPage .lp-feature, #landingPage .lp-programme { transition:transform .35s cubic-bezier(.16,1,.3,1), box-shadow .35s ease; }
+#landingPage .lp-why-card:hover, #landingPage .lp-feature:hover, #landingPage .lp-programme:hover { transform:translateY(-4px); box-shadow:0 14px 34px rgba(9,69,77,.10); }
+/* Logo palette accents (the logo-shards layer is below, see landing-motion.js). */
+#landingPage .lp-eyebrow, #landingPage .lp-about-kicker { color:var(--lp-plum); }
+#landingPage .lp-about-story .lp-about-kicker, #landingPage .lp-why-card-lead .lp-about-kicker { color:#ffb3dc; }
+#landingPage h1 em, #landingPage h2 em { color:var(--lp-pink); font-style:italic; }
+#landingPage .lp-button { background:linear-gradient(135deg,var(--lp-deep),var(--lp-teal)); border-color:var(--lp-deep); transition:transform .25s ease, box-shadow .25s ease, background .25s ease; }
+#landingPage .lp-button:hover { background:linear-gradient(135deg,var(--lp-plum),var(--lp-pink)); border-color:var(--lp-plum); box-shadow:0 10px 26px rgba(236,0,140,.28); transform:translateY(-2px); }
+#landingPage .lp-button-secondary { background:transparent; border-color:var(--lp-teal); color:var(--lp-ink); }
+#landingPage .lp-button-secondary:hover { color:#fff; }
+#landingPage .lp-why, #landingPage .lp-demo-section { background:rgba(233,245,246,.72); }
+#landingPage main, #landingPage .lp-footer { position:relative; z-index:1; }
+/* Logo shards (landing-motion.js): two canvas strips exactly as wide as the side
+   gutters, above the section bands (z 1) and under the sticky header (z 50). */
+#landingPage .lp-shards { position:fixed; top:0; z-index:2; display:none; pointer-events:none; }
+#landingPage .lp-shards-l { left:0; }
+#landingPage .lp-shards-r { right:0; }
+html { scroll-behavior:smooth; }
+@media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } #landingPage .lp-progress { display:none; } #landingPage .lp-shards { display:none!important; } }
+@media print { #landingPage .lp-shards { display:none!important; } }
+</style>
+<style>
 /* Official centre identity and public About Us navigation. */
 #landingPage .lp-brand-logo { display:block; width:60px; height:44px; object-fit:contain; flex-shrink:0; }
 #landingPage .lp-brand-caption { max-width:144px; font-size:14px; line-height:1.35; letter-spacing:-.2px; font-weight:600; color:var(--lp-ink); }
@@ -9341,33 +9369,33 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 #landingPage .lp-nav-links .lp-about-link { color:var(--lp-green); font-weight:700; }
 #landingPage .lp-section { scroll-margin-top:128px; }
 #landingPage .lp-about { border-top:1px solid var(--lp-line); padding-top:76px; }
-#landingPage .lp-about-story { display:grid; grid-template-columns:1.15fr 1fr; gap:65px; background:#173f34; color:white; border:1px solid #173f34; border-radius:14px; padding:44px; margin-bottom:24px; }
+#landingPage .lp-about-story { display:grid; grid-template-columns:1.15fr 1fr; gap:65px; background:#09454d; color:white; border:1px solid #09454d; border-radius:14px; padding:44px; margin-bottom:24px; }
 #landingPage .lp-about-kicker { display:block; font-size:9px; font-weight:700; letter-spacing:1.7px; color:var(--lp-green); margin-bottom:15px; }
-#landingPage .lp-about-story .lp-about-kicker { color:#d8e8af; }
+#landingPage .lp-about-story .lp-about-kicker { color:#afe1e8; }
 #landingPage .lp-about h3 { font-family:'Space Grotesk',sans-serif; font-size:28px; font-weight:500; line-height:1.25; letter-spacing:-1px; margin-bottom:19px; }
 #landingPage .lp-about-purpose h3 { font-size:34px; }
-#landingPage .lp-about-purpose h3 em { font-family:Georgia,serif; font-weight:400; color:#dfebb8; }
-#landingPage .lp-about-purpose p { font-size:13px; line-height:1.9; color:#cedacf; margin-top:17px; }
+#landingPage .lp-about-purpose h3 em { font-family:Georgia,serif; font-weight:400; color:#b8e5eb; }
+#landingPage .lp-about-purpose p { font-size:13px; line-height:1.9; color:#c1e3e7; margin-top:17px; }
 #landingPage .lp-text-link { display:inline-flex; gap:12px; align-items:center; min-height:44px; font-size:12px; font-weight:700; color:var(--lp-green); margin-top:18px; text-underline-offset:5px; }
 #landingPage .lp-text-link:hover { text-decoration:underline; }
 #landingPage .lp-text-link .lp-icon { width:17px; height:17px; }
-#landingPage .lp-about-purpose .lp-text-link { color:#dfebb8; }
+#landingPage .lp-about-purpose .lp-text-link { color:#b8e5eb; }
 #landingPage .lp-about-method { list-style:none; display:grid; align-content:center; gap:24px; }
 #landingPage .lp-about-method li { display:flex; gap:18px; padding-bottom:24px; border-bottom:1px solid #ffffff24; }
 #landingPage .lp-about-method li:last-child { border-bottom:0; padding-bottom:0; }
-#landingPage .lp-about-method li > span { display:grid; place-items:center; width:34px; height:34px; flex-shrink:0; border:1px solid #718675; border-radius:50%; color:#dfebb8; font-size:11px; }
+#landingPage .lp-about-method li > span { display:grid; place-items:center; width:34px; height:34px; flex-shrink:0; border:1px solid #718486; border-radius:50%; color:#b8e5eb; font-size:11px; }
 #landingPage .lp-about-method strong { font-size:14px; }
-#landingPage .lp-about-method p { font-size:12px; line-height:1.9; color:#c0cfc5; margin-top:7px; }
+#landingPage .lp-about-method p { font-size:12px; line-height:1.9; color:#c0cdcf; margin-top:7px; }
 #landingPage .lp-about-programmes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
 #landingPage .lp-programme { background:white; border:1px solid var(--lp-line); border-radius:12px; padding:34px; }
 #landingPage .lp-programme .lp-feature-icon { margin-bottom:22px; }
 #landingPage .lp-programme p { font-size:13px; line-height:1.9; color:var(--lp-muted); }
-#landingPage .lp-programme .lp-programme-benefit { border-top:1px solid var(--lp-line); padding-top:17px; margin-top:21px; font-size:12px; color:#415f4f; }
-#landingPage .lp-programme-compact { display:flex; gap:20px; background:#f0f3e9; }
-#landingPage .lp-programme-compact .lp-feature-icon { flex-shrink:0; background:#e3ead8; }
+#landingPage .lp-programme .lp-programme-benefit { border-top:1px solid var(--lp-line); padding-top:17px; margin-top:21px; font-size:12px; color:#12808e; }
+#landingPage .lp-programme-compact { display:flex; gap:20px; background:#e6f4f6; }
+#landingPage .lp-programme-compact .lp-feature-icon { flex-shrink:0; background:#d3ebee; }
 #landingPage .lp-programme-compact h3 { font-size:20px; letter-spacing:-.6px; }
 #landingPage .lp-programme-compact p { font-size:12px; }
-#landingPage .lp-about-contact { display:grid; grid-template-columns:1fr auto; align-items:center; gap:60px; padding:38px 42px; margin-top:24px; border:1px solid #d6dfcc; background:#e9eedf; border-radius:14px; }
+#landingPage .lp-about-contact { display:grid; grid-template-columns:1fr auto; align-items:center; gap:60px; padding:38px 42px; margin-top:24px; border:1px solid #c3e4e8; background:#dbeff2; border-radius:14px; }
 #landingPage .lp-about-contact p { max-width:560px; color:var(--lp-muted); font-size:13px; line-height:1.9; }
 #landingPage .lp-about-contact-actions { display:grid; gap:12px; min-width:240px; }
 #landingPage .lp-about-contact-actions .lp-text-link { justify-content:center; margin-top:0; }
@@ -9413,7 +9441,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 }
 
 /* Why Polymath — the tuition offer and its seven selling points. */
-#landingPage .lp-why { background:#eef2e8; border-block:1px solid var(--lp-line); }
+#landingPage .lp-why { background:#e5f3f5; border-block:1px solid var(--lp-line); }
 #landingPage .lp-why-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
 #landingPage .lp-why-card { background:#fff; border:1px solid var(--lp-line); border-radius:12px; padding:29px; display:flex; flex-direction:column; }
 #landingPage .lp-why-card .lp-feature-icon { margin-bottom:22px; }
@@ -9423,17 +9451,17 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 #landingPage .lp-why-card .lp-text-link { margin-top:auto; padding-top:10px; }
 #landingPage .lp-why-card-wide { grid-column:span 2; }
 #landingPage .lp-why-card-wide p { max-width:560px; }
-#landingPage .lp-why-card-lead { grid-column:span 2; background:#173f34; color:#fff; border-color:#173f34; padding:38px 40px; }
-#landingPage .lp-why-card-lead .lp-about-kicker { color:#d8e8af; }
+#landingPage .lp-why-card-lead { grid-column:span 2; background:#09454d; color:#fff; border-color:#09454d; padding:38px 40px; }
+#landingPage .lp-why-card-lead .lp-about-kicker { color:#afe1e8; }
 #landingPage .lp-why-card-lead h3 { font-size:30px; letter-spacing:-1px; }
-#landingPage .lp-why-card-lead p { color:#c5d2c8; font-size:13px; max-width:560px; }
-#landingPage .lp-why-list { list-style:none; display:grid; gap:10px; margin-top:22px; padding-top:20px; border-top:1px solid #ffffff24; font-size:12px; color:#e2ebdf; }
+#landingPage .lp-why-card-lead p { color:#c5d0d2; font-size:13px; max-width:560px; }
+#landingPage .lp-why-list { list-style:none; display:grid; gap:10px; margin-top:22px; padding-top:20px; border-top:1px solid #ffffff24; font-size:12px; color:#d9eef1; }
 #landingPage .lp-why-list li { display:flex; gap:10px; align-items:center; }
-#landingPage .lp-why-list .lp-icon { width:17px; height:17px; color:#dfebb8; }
+#landingPage .lp-why-list .lp-icon { width:17px; height:17px; color:#b8e5eb; }
 #landingPage .lp-why-modes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-top:24px; }
-#landingPage .lp-why-mode { background:#e3ead8; border:1px solid #d3dcc7; border-radius:12px; padding:29px; }
+#landingPage .lp-why-mode { background:#d3ebee; border:1px solid #bde1e6; border-radius:12px; padding:29px; }
 #landingPage .lp-why-mode h3 { font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:500; letter-spacing:-.6px; line-height:1.3; margin-bottom:11px; }
-#landingPage .lp-why-mode p { color:#4b5f52; font-size:12px; line-height:1.85; }
+#landingPage .lp-why-mode p { color:#138897; font-size:12px; line-height:1.85; }
 #landingPage .lp-why-mode-cta { background:#fff; display:flex; flex-direction:column; }
 #landingPage .lp-why-mode-cta .lp-button { margin-top:auto; align-self:flex-start; }
 #landingPage .lp-why-mode-cta p { margin-bottom:20px; }
@@ -9467,7 +9495,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 <div id="fpsAnnounce" style="display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:1200;width:min(660px,calc(100vw - 28px));background:linear-gradient(135deg,#1a2440,#141926);border:1px solid #3d5490;border-radius:16px;padding:20px 24px;box-shadow:0 18px 48px rgba(0,0,0,0.45);color:#e8ecf5;font-family:'DM Sans',system-ui,sans-serif;">
   <button id="fpsAnnounceClose" title="Dismiss" style="position:absolute;top:10px;right:12px;background:none;border:none;color:#93a0b8;font-size:1.1rem;cursor:pointer;padding:4px;">✕</button>
   <div style="font-weight:800;font-size:1.05rem;letter-spacing:0.01em;margin-bottom:8px;">🎉 NEW GAME RELEASED — 🔫 Science Strike!</div>
-  <div style="color:#b9c4da;font-size:0.9rem;line-height:1.6;margin-bottom:14px;">An open-world shooter where science questions power up your loot — now <b>out of beta and open to everyone</b>. Its leaderboard lives on the <b>Leaderboard</b> page under the <b>🔫 Strike</b> tab, ranked by correct answers, and the <b style="color:#ffd76a;">top 3 students each win a $10 voucher</b>. Good luck!</div>
+  <div style="color:#b9c4da;font-size:0.9rem;line-height:1.6;margin-bottom:14px;">An open-world shooter where science questions power up your loot — now <b>out of beta and open to everyone</b>. Its leaderboard lives on the <b>Leaderboard</b> page under the <b>🔫 Strike</b> tab, ranked by correct answers, and the <b style="color:#f475c5;">top 3 students each win a $10 voucher</b>. Good luck!</div>
   <div style="display:flex;gap:10px;flex-wrap:wrap;">
     <button onclick="openFpsGame()" style="background:#5b8cff;color:#fff;border:none;border-radius:10px;padding:11px 22px;font-weight:700;font-size:0.92rem;cursor:pointer;">🔫 Play Science Strike</button>
     <button id="fpsAnnounceLater" style="background:transparent;color:#93a0b8;border:1px solid #2a3550;border-radius:10px;padding:11px 18px;font-weight:600;font-size:0.92rem;cursor:pointer;">Later</button>
@@ -9480,16 +9508,16 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
      This one has its OWN key: bump TCG_NEWS_VERSION in app.js and the whole roster meets it
      once, on their next visit. It wears the realm's own gold-on-galaxy, not the ember brown,
      because that is what they are about to walk into. -->
-<div id="tcgExpAnnounce" style="display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:1201;width:min(680px,calc(100vw - 28px));background:radial-gradient(120% 100% at 50% -30%,rgba(240,205,122,0.18),transparent 60%),linear-gradient(150deg,#16264f,#0b1230 60%,#080c1e);border:1px solid rgba(240,205,122,0.55);border-radius:18px;padding:26px 28px;box-shadow:0 22px 60px rgba(0,0,0,0.55);color:#f4ecd8;font-family:'DM Sans',system-ui,sans-serif;">
+<div id="tcgExpAnnounce" style="display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:1201;width:min(680px,calc(100vw - 28px));background:radial-gradient(120% 100% at 50% -30%,rgba(240,122,197,0.18),transparent 60%),linear-gradient(150deg,#16264f,#0b1230 60%,#080c1e);border:1px solid rgba(240,122,197,0.55);border-radius:18px;padding:26px 28px;box-shadow:0 22px 60px rgba(0,0,0,0.55);color:#f4d8ea;font-family:'DM Sans',system-ui,sans-serif;">
   <button id="tcgExpAnnounceClose" title="Dismiss" style="position:absolute;top:10px;right:12px;background:none;border:none;color:#93a4cd;font-size:1.1rem;cursor:pointer;padding:4px;">✕</button>
-  <div style="font-family:'Cinzel',Georgia,serif;font-size:0.66rem;letter-spacing:0.28em;text-transform:uppercase;color:rgba(240,205,122,0.9);margin-bottom:10px;">New expansion · Realm of Embers</div>
+  <div style="font-family:'Cinzel',Georgia,serif;font-size:0.66rem;letter-spacing:0.28em;text-transform:uppercase;color:rgba(240,122,197,0.9);margin-bottom:10px;">New expansion · Realm of Embers</div>
   <!-- The emoji sits OUTSIDE the gradient span: -webkit-text-fill-color:transparent
        applies to it too, and a gradient-filled 🦁 comes out as a pale blob. -->
-  <div style="font-family:'Cinzel',Georgia,serif;font-weight:700;font-size:1.3rem;line-height:1.3;margin-bottom:12px;"><span style="margin-right:8px;">🦁</span><span style="background:linear-gradient(100deg,#fff5da,#f0cd7a 48%,#b9891f);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;">The Lionheart Legion has arrived</span></div>
-  <div style="color:#c3d1f2;font-size:0.92rem;line-height:1.7;margin-bottom:20px;"><b style="color:#f5e6bd;">50 brand-new human heroes</b> — knights, paladins, mages, sorceresses, warlocks and necromancers — join the dex, led by two 7★ legends: <b style="color:#f5e6bd;">Kaelen Draxmoor, the Dragon Slayer</b> and <b style="color:#f5e6bd;">Ariselle, the Snow Queen</b>. Choose which set you open, watch the packet <b>tear open</b> in your hands, and read their whole story in the new <b>📜 Chronicle of Embers</b>.<br><br>Your points are already waiting. <b style="color:#f0cd7a;">Go and open a pack.</b></div>
+  <div style="font-family:'Cinzel',Georgia,serif;font-weight:700;font-size:1.3rem;line-height:1.3;margin-bottom:12px;"><span style="margin-right:8px;">🦁</span><span style="background:linear-gradient(100deg,#fcddf1,#f07ac5 48%,#bb1b81);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;">The Lionheart Legion has arrived</span></div>
+  <div style="color:#c3d1f2;font-size:0.92rem;line-height:1.7;margin-bottom:20px;"><b style="color:#f5bde0;">50 brand-new human heroes</b> — knights, paladins, mages, sorceresses, warlocks and necromancers — join the dex, led by two 7★ legends: <b style="color:#f5bde0;">Kaelen Draxmoor, the Dragon Slayer</b> and <b style="color:#f5bde0;">Ariselle, the Snow Queen</b>. Choose which set you open, watch the packet <b>tear open</b> in your hands, and read their whole story in the new <b>📜 Chronicle of Embers</b>.<br><br>Your points are already waiting. <b style="color:#f07ac5;">Go and open a pack.</b></div>
   <div style="display:flex;gap:12px;flex-wrap:wrap;">
-    <button id="tcgExpAnnounceOpen" style="background:linear-gradient(135deg,#f0cd7a,#c9a227);color:#14161a;border:none;border-radius:10px;padding:12px 22px;font-weight:800;font-size:0.92rem;cursor:pointer;">🎁 Open a Lionheart pack</button>
-    <button id="tcgExpAnnounceLore" style="background:transparent;color:#e7dfc8;border:1px solid rgba(240,205,122,0.5);border-radius:10px;padding:12px 18px;font-weight:600;font-size:0.92rem;cursor:pointer;">📜 Read the story</button>
+    <button id="tcgExpAnnounceOpen" style="background:linear-gradient(135deg,#f07ac5,#bb1b81);color:#14161a;border:none;border-radius:10px;padding:12px 22px;font-weight:800;font-size:0.92rem;cursor:pointer;">🎁 Open a Lionheart pack</button>
+    <button id="tcgExpAnnounceLore" style="background:transparent;color:#e7c8dc;border:1px solid rgba(240,122,197,0.5);border-radius:10px;padding:12px 18px;font-weight:600;font-size:0.92rem;cursor:pointer;">📜 Read the story</button>
     <button id="tcgExpAnnounceLater" style="background:transparent;color:#93a4cd;border:1px solid rgba(147,164,205,0.35);border-radius:10px;padding:12px 18px;font-weight:600;font-size:0.92rem;cursor:pointer;">Later</button>
   </div>
 </div>
@@ -9497,13 +9525,13 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 <!-- ==================== NEW GAME ANNOUNCEMENT (Realm of Embers TCG release) ====================
      Shown to every signed-in student the moment the admin presses "Release to students",
      and on every login after that until they dismiss it. Re-releasing announces it again. -->
-<div id="tcgAnnounce" style="display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:1200;width:min(660px,calc(100vw - 28px));background:linear-gradient(135deg,#2a1608,#160d06);border:1px solid #8a5a1e;border-radius:16px;padding:24px 26px;box-shadow:0 18px 48px rgba(0,0,0,0.45);color:#f6ecdc;font-family:'DM Sans',system-ui,sans-serif;">
-  <button id="tcgAnnounceClose" title="Dismiss" style="position:absolute;top:10px;right:12px;background:none;border:none;color:#b79b74;font-size:1.1rem;cursor:pointer;padding:4px;">✕</button>
+<div id="tcgAnnounce" style="display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:1200;width:min(660px,calc(100vw - 28px));background:linear-gradient(135deg,#2a1608,#160d06);border:1px solid #931565;border-radius:16px;padding:24px 26px;box-shadow:0 18px 48px rgba(0,0,0,0.45);color:#f6dcec;font-family:'DM Sans',system-ui,sans-serif;">
+  <button id="tcgAnnounceClose" title="Dismiss" style="position:absolute;top:10px;right:12px;background:none;border:none;color:#bb1b81;font-size:1.1rem;cursor:pointer;padding:4px;">✕</button>
   <div style="font-weight:800;font-size:1.05rem;letter-spacing:0.01em;margin-bottom:10px;">🃏 NEW GAME RELEASED — the Realm of Embers Trading Card Game!</div>
-  <div style="color:#d6c3a6;font-size:0.9rem;line-height:1.65;margin-bottom:18px;">Collect <b>every card in the dex</b>. Spend the points you earn answering questions on <b>booster packs</b>, level your monsters up, build a team of 5 and battle other trainers in the <b>Arena</b> — then take on the infinite <b style="color:#f0b542;">Dungeon</b>. Find it in your sidebar under <b>🃏 Realm of Embers</b>.</div>
+  <div style="color:#d6a6c4;font-size:0.9rem;line-height:1.65;margin-bottom:18px;">Collect <b>every card in the dex</b>. Spend the points you earn answering questions on <b>booster packs</b>, level your monsters up, build a team of 5 and battle other trainers in the <b>Arena</b> — then take on the infinite <b style="color:#c61083;">Dungeon</b>. Find it in your sidebar under <b>🃏 Realm of Embers</b>.</div>
   <div style="display:flex;gap:12px;flex-wrap:wrap;">
-    <button id="tcgAnnounceOpen" style="background:linear-gradient(135deg,#e08a2b,#c2691a);color:#fff;border:none;border-radius:10px;padding:12px 22px;font-weight:700;font-size:0.92rem;cursor:pointer;">🃏 Open my first pack</button>
-    <button id="tcgAnnounceLater" style="background:transparent;color:#b79b74;border:1px solid #5a3f1c;border-radius:10px;padding:12px 18px;font-weight:600;font-size:0.92rem;cursor:pointer;">Later</button>
+    <button id="tcgAnnounceOpen" style="background:linear-gradient(135deg,#bb1b81,#bd1981);color:#fff;border:none;border-radius:10px;padding:12px 22px;font-weight:700;font-size:0.92rem;cursor:pointer;">🃏 Open my first pack</button>
+    <button id="tcgAnnounceLater" style="background:transparent;color:#bb1b81;border:1px solid #670f47;border-radius:10px;padding:12px 18px;font-weight:600;font-size:0.92rem;cursor:pointer;">Later</button>
   </div>
 </div>
 
@@ -15907,10 +15935,11 @@ body.lore-reading { overflow: hidden; }
      of the document means the HTML parser no longer has to walk through it
      before the page can paint, and the browser fetches and compiles it in
      parallel with the markup instead of afterwards. -->
+<script defer src="landing-motion.js"></script>
 <script defer src="rpg-svg-art.js"></script>
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-<script type="module" src="app.js?v=1.424.0"></script>
+<script type="module" src="app.js?v=1.425.0"></script>
 </body>
 </html>
