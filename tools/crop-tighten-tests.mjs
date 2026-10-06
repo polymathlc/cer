@@ -1064,6 +1064,29 @@ test('…but a y-axis title starting at the crop\'s edge, with blank margin beyo
   const out = trimBox(p, { x: 114, y: 100, w: 540, h: 270 }, { y0: 150, y1: 352 });   // the model boxed the plot only
   ok(out.y <= 120, 'the y-axis title was cut as a line from the margin (top ' + out.y + ')');
 });
+// …nor is a stroke that runs on ABOVE and BELOW the line: a page border, a
+// margin rule, a cell's side or a photographed page's dark edge passes
+// straight through it, and the rest of a line never does.
+for (const [what, edge] of [['a page border', p => p.rect(84, 20, 2, 960)], ['a dark photo edge', p => p.rect(0, 0, 90, 1000, 60)]]) {
+  test('…nor with ' + what + ' just beyond the margin', () => {
+    const p = page(700, 1000, { paper: 250 });
+    edge(p);
+    p.prose(118, 120, 140, 12);                               // "Temperature (°C)", out past the axis
+    for (let k = 0; k < 5; k++) p.prose(138, 160 + k * 40, 18, 8);
+    p.rect(165, 150, 2, 200).rect(165, 350, 450, 2);
+    for (let k = 0; k < 9; k++) p.rect(175 + k * 50, 340 - k * 20, 6, 6);
+    const out = trimBox(p, { x: 114, y: 100, w: 540, h: 270 }, { y0: 150, y1: 352 });
+    ok(out.y <= 120, 'the y-axis title was cut as a line from the margin (top ' + out.y + ')');
+  });
+}
+test('…while a line running in from the margin still comes off with a page border beyond it', () => {
+  const p = page(800, 1000, { paper: 250 });
+  p.rect(14, 20, 2, 960);                                     // the page border
+  const bottom = borderedTable(p, 100, 120, 650, 4, 35);
+  p.prose(30, bottom + 30, 18, 12).prose(68, bottom + 30, 300, 12);
+  const out = trimBox(p, { x: 66, y: 110, w: 620, h: bottom - 50 }, { y0: 120, y1: bottom });
+  near(out.y + out.h, bottom, 3, 'the line cut off at the crop\'s left edge was kept');
+});
 test('"(a) … [1]" under a graph that starts at the text indent comes off, inside the box', () => {
   const p = graph(page(700, 1000, { paper: 250 }), { xTitle: 'centre' });
   p.prose(30, 90, 620, 10);                                   // the stem
@@ -1071,6 +1094,62 @@ test('"(a) … [1]" under a graph that starts at the text indent comes off, insi
   const out = trimBox(p, { x: 20, y: 80, w: 670, h: 345 }, { y0: 128, y1: 420 });
   ok(out.y + out.h >= 386, 'the x-axis title was cut (bottom ' + (out.y + out.h) + ')');
   ok(out.y + out.h <= 395, 'the part line was kept as a caption (bottom ' + (out.y + out.h) + ')');
+});
+// A legend's key symbol (● ▲ ■) is ONE shape; a part marker — "(a)", "1." —
+// is two glyphs or more. Laid out the same way, only the second is a part line.
+test('a legend row the model left out — "●  Plant A    ▲  Plant B" — stays under its graph', () => {
+  const p = graph(page(700, 1000, { paper: 250 }), { xTitle: 'centre' });
+  p.prose(30, 90, 620, 10);                                   // the stem
+  p.rect(152, 410, 9, 9).prose(172, 408, 60, 12);             // ●  Plant A, under the axis
+  p.rect(280, 410, 9, 9).prose(300, 408, 60, 12);             // ▲  Plant B
+  const out = trimBox(p, { x: 20, y: 80, w: 670, h: 350 }, { y0: 128, y1: 390 });
+  ok(out.y + out.h >= 420, 'the legend was cut as a part line (bottom ' + (out.y + out.h) + ')');
+});
+test('…and so does a one-entry legend line, its key symbol and its words', () => {
+  const p = graph(page(700, 1000, { paper: 250 }), { xTitle: 'centre' });
+test('a key row at the drawings\' edge — "■  with fertiliser   □  without fertiliser" — stays', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 90, 620, 10);                                   // the stem
+  p.rect(150, 150, 160, 200).rect(390, 150, 160, 200);        // two set-ups
+  p.rect(160, 372, 8, 12).prose(180, 372, 70, 12).rect(300, 372, 8, 12).prose(320, 372, 80, 12);
+  const out = trimBox(p, { x: 20, y: 80, w: 670, h: 320 }, { y0: 150, y1: 352 });
+  ok(out.y + out.h >= 382, 'the key row was cut as a part line (bottom ' + (out.y + out.h) + ')');
+});
+// "(a)" IS a part marker — so a row of SUB-FIGURE captions is told apart by
+// the marker coming again after a tab, with words after it.
+test('"(a) Before heating     (b) After heating" centred under the figure stays', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 90, 620, 10);                                   // the stem
+  p.rect(150, 150, 400, 200);                                 // the figure
+  p.prose(180, 372, 18, 12).prose(208, 372, 110, 12).prose(400, 372, 18, 12).prose(428, 372, 100, 12);
+  const out = trimBox(p, { x: 20, y: 80, w: 670, h: 320 }, { y0: 150, y1: 352 });
+  ok(out.y + out.h >= 382, 'the sub-figure captions were cut as a part line (bottom ' + (out.y + out.h) + ')');
+});
+// A ONE-glyph marker counts only out in the margin, a full line height left of
+// the figure. A key letter hugging the figure's own left edge is a key.
+test('a key the model left out — "P  tap water" / "Q  salt water" — at the figure\'s left edge stays', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 90, 620, 10);                                   // the stem
+  p.rect(150, 150, 400, 200);                                 // the figure
+  p.rect(140, 372, 8, 12).prose(160, 372, 80, 12);            // P  tap water
+  p.rect(140, 394, 8, 12).prose(160, 394, 90, 12);            // Q  salt water
+  const out = trimBox(p, { x: 20, y: 80, w: 670, h: 340 }, { y0: 150, y1: 352 });
+  ok(out.y + out.h >= 406, 'the key was cut as a question line (bottom ' + (out.y + out.h) + ')');
+});
+// …and the other side: a ONE-GLYPH question number out in the margin still
+// marks its stem as a question line, though a lone symbol under a figure no
+// longer does.
+test('a stem opening with a one-glyph question number, left of the table, still comes off', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(36, 100, 8, 12).prose(70, 100, 520, 12);             // "4   The table below shows …"
+  const bottom = borderedTable(p, 120, 130, 640, 4, 35);
+  const out = trimBox(p, { x: 20, y: 90, w: 660, h: bottom - 80 }, { y0: 130, y1: bottom });
+  ok(out.y >= 128, 'the stem was kept as a caption (top ' + out.y + ')');
+});
+  p.prose(30, 90, 620, 10);                                   // the stem
+  p.rect(152, 410, 9, 9).prose(172, 408, 200, 12);            // ■  Height of the plant grown in sunlight
+  const out = trimBox(p, { x: 20, y: 80, w: 670, h: 350 }, { y0: 128, y1: 390 });
+  ok(out.y + out.h >= 420, 'the legend line was cut as a part line (bottom ' + (out.y + out.h) + ')');
 });
 
 // ---- A REFUSED CLEAN-UP STAYS REFUSED, AND SAYS NOTHING ----------------------

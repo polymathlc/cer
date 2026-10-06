@@ -4452,7 +4452,7 @@ The primary papers number their options; Secondary 1 science letters them.
   `EDITOR_OWNED_QUESTION_FIELDS`, or setting it back to Auto would be undone.
 - Run **`node tools/mcq-labels-tests.mjs`** after touching any of it.
 
-## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0, held to evidence v1.426.0, reviews v1.426.2–v1.426.3)
+## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0, held to evidence v1.426.0, reviews v1.426.2–v1.426.4)
 
 `STRONG_BAND` / `TRIM_BANDS_MAX` / `ANSWER_LINE_GAP` / `LABEL_GAP` /
 `LABEL_LONGEST` / `TABLE_RULES_MIN` and the band walk inside `_trimEdgeTextLines`
@@ -4556,10 +4556,11 @@ and **every bordered table has four rules**.
   every label, title, caption, key and ruled table case must be KEPT, and every
   stem, part, mark and answer line case must COME OFF.
 
-### …and what the second, third and final reviews found (v1.426.2–v1.426.3)
+### …and what the second, third and final reviews found (v1.426.2–v1.426.4)
 
 `numbered` / `captionLike` / `stroke` / both `segs` cuts / the part-line test
-in `isLabelRow` / the frame wipe at the top of `_trimEdgeTextLines`. Every one
+in `isLabelRow` / `partMarked`'s `glyphs` and `leftOf` / the frame wipe at the
+top of `_trimEdgeTextLines`. Every one
 of these was silent: the crop still came back, looking either perfectly clean
 (a figure part gone) or merely loose.
 
@@ -4602,8 +4603,28 @@ of these was silent: the crop still came back, looking either perfectly clean
   is set clearly in (the margin fell outside the crop, so the "(a)" that would
   have marked it is not even in the picture). Merely STARTING at the crop's
   edge is not enough: the edge is pulled in to the leftmost ink, so a y-axis
-  title out past its axis starts there too, with only blank margin beyond.
-  Still never a label row and never a centred line.
+  title out past its axis starts there too, with only blank margin beyond. Nor
+  is ink beyond that runs on ABOVE and BELOW the line as well (v1.426.4) — a
+  page border, a margin rule, a table cell's side, a photographed page's dark
+  edge passes straight through the line, and the rest of a line never does; a
+  bordered worksheet otherwise lost every y-axis title that starts at the
+  crop's edge. Still never a label row and never a centred line.
+- **A LEGEND IS NOT A PART LINE** (v1.426.4). "●  Plant A    ▲  Plant B", "■
+  with fertiliser", "→  direction of heat flow" and "P  tap water" are laid out
+  exactly like "(a)  Name the process": a narrow marker, a tab, then words. Read
+  as a question line, a legend the model left out of its box was removed by
+  `spill`, and one under a figure was walked through by the below rule — the
+  graph kept, nothing left to say which line is which plant. So `partMarked`
+  asks two more things. **A part marker is two glyphs or more** (`glyphs`,
+  8-connected pieces of 2px or more) — "(a)", "1.", "Q1" — where a key symbol or
+  a key letter is ONE shape. **A one-glyph marker counts only when it ends a
+  full line height LEFT of the figure** (`leftOf` = the body's left edge), out
+  in the margin where a question number like "6" hangs before its stem; a key
+  letter hugging the figure's own left edge is a key. And **a marker that comes
+  AGAIN after a wide gap, with words after it, makes the line a row of
+  captions or a key** — "(a) Before heating     (b) After heating" under two
+  set-ups — never a part line, which carries one marker and at most a lone mark
+  at its end.
 - **A row of labels sits over its parts, and the body is cut into parts TWO
   ways**: as it is (an outline beaker is one piece, its walls joined by its
   base) and with its strokes left out (a bench joins two beakers, and they are
@@ -4660,6 +4681,10 @@ of these was silent: the crop still came back, looking either perfectly clean
   - **A single unnumbered line centred over a figure wider than the text block
     reads as the figure's title** and is kept — geometry alone cannot tell "Ali
     then repeated the experiment, as shown below." from a centred title.
+  - **A stacked key at the TEXT MARGIN, left of an indented figure, is cut**
+    when the model left it out of its box: "P  tap water" starting where the
+    stem starts is exactly the shape of a stem's own lines (`spill`'s first
+    clause), and every version back to v1.426.2 cuts it too.
   - **A label row ABOVE narrow objects whose middle label is far wider than its
     object** ("P   Q (a ball of plasticine)   R" packed over test tubes) can be
     read as the stem's next line and cut; ec8c4b3 cut it too. Matching labels
@@ -8713,8 +8738,14 @@ the 🔧 Auto-fixed button on the ⚡ Rapid add pad and the 🔴→🟢/🟡 car
   let the frame wipe take a stroke that does not run on past the crop and a
   framed figure on a pasted image loses its border, title and caption; let it
   take a THICK one and a photograph is wiped out of the measurement; drop the
-  stroke-included `segs` and every label under an outline drawing is cut. Do
-  not bring back the sliver painting or the refused-clean-up report.
+  stroke-included `segs` and every label under an outline drawing is cut. Let
+  `partMarked` count a ONE-glyph marker again — or drop its line-height margin
+  in `leftOf`, or the repeat rule — and every graph legend, drawing key and row
+  of sub-figure captions the model leaves out of its box is cut as a part line,
+  so the graph comes back with nothing to say which line is which. Let
+  `runsOffLeft` count a stroke that runs on above and below the line and every
+  y-axis title on a bordered worksheet is cut. Do not bring back the sliver
+  painting or the refused-clean-up report.
 - After touching **the crop's pixel passes** (`_inkThreshold`, `INK_RATIO`,
   `_expandRectToWhitespace`, `_trimEdgeTextLines`, **`_trimBlankEdges`**,
   `EDGE_INK_MIN` / `EDGE_INK_FRAC` / `EDGE_SPECK_RUN`, `MAXRUN_FRAC`,

@@ -4453,7 +4453,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.426.3';
+const APP_VERSION = 'v1.426.4';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -17632,12 +17632,46 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
   // and a tab — "(b)   Siti said…" — or ends in a lone mark far out to the
   // right — "…heat?        [1]". A caption does neither, so a ragged part
   // line that happens to sit centred under a wide table is not one.
-  const partMarked = b => {
+  // A part marker is two glyphs or more — "(a)", "1.", "Q1" — where a
+  // legend's key symbol (● ▲ ■ □ ×) is ONE shape: "●  Plant A" is not a
+  // part line, however much it is laid out like one. A single glyph still
+  // counts when it ends a full line height LEFT of the figure (`leftOf`) —
+  // out in the margin, where a question number like "4" sits. A key letter
+  // or symbol hugging the figure's own left edge ("P  tap water" under a
+  // bar chart) is a key, however close to the margin. And a marker that comes
+  // AGAIN after a tab, with words after it, makes the line a row of
+  // captions or a key — "(a) Before heating     (b) After heating" — never a
+  // part line, which has one marker and at most a lone mark at its end.
+  const glyphs = c => {
+    const cw = c[1] - c[0] + 1, ch = c[3] - c[2] + 1, seen = new Uint8Array(cw * ch);
+    let n = 0;
+    for (let q0 = 0; q0 < cw * ch; q0++) {
+      if (seen[q0] || !ink[(c[2] + ((q0 / cw) | 0)) * w + c[0] + q0 % cw]) continue;
+      let px = 0;
+      const st = [q0];
+      seen[q0] = 1;
+      while (st.length) {
+        const q = st.pop(), qy = (q / cw) | 0, qx = q - qy * cw;
+        px++;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const ny = qy + dy, nx = qx + dx, nq = ny * cw + nx;
+          if (ny < 0 || ny >= ch || nx < 0 || nx >= cw || seen[nq] || !ink[(c[2] + ny) * w + c[0] + nx]) continue;
+          seen[nq] = 1;
+          st.push(nq);
+        }
+      }
+      if (px >= 2) n++;
+    }
+    return n;
+  };
+  const partMarked = (b, leftOf) => {
     if (!lineH(b)) return false;
     const p = b.pm || (b.pm = piecesX(b, Math.max(2, Math.round(b.size * 0.45)))
       .filter(c => c[3] - c[2] + 1 >= b.size * 0.35));
     return p.length >= 2 && p[0][1] - p[0][0] + 1 <= b.size * 1.8
-      && p[1][0] - p[0][1] - 1 >= b.size * 0.6 && p[1][1] - p[1][0] + 1 >= b.size * 3;
+      && p[1][0] - p[0][1] - 1 >= b.size * 0.6 && p[1][1] - p[1][0] + 1 >= b.size * 3 && (p[0][1] < leftOf - b.size || glyphs(p[0]) >= 2)
+      && !p.some((c, i) => i >= 2 && i + 1 < p.length && c[1] - c[0] + 1 <= b.size * 1.8
+        && c[0] - p[i - 1][1] - 1 >= b.size * 2 && p[i + 1][0] - c[1] - 1 >= b.size * 0.6);
   };
   const markEnd = b => {
     if (!lineH(b)) return false;
@@ -17646,7 +17680,7 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
     const a = p[p.length - 2], z = p[p.length - 1];
     return z[1] - z[0] + 1 <= b.size * 1.6 && z[0] - a[1] - 1 >= b.size * 3 && a[1] - a[0] + 1 >= b.size * 4;
   };
-  const questionLine = b => partMarked(b) || markEnd(b);
+  const questionLine = (b, leftOf) => partMarked(b, leftOf) || markEnd(b);
   // A body must be where the model said the figure is.
   const inBox = b => !aiBox || !(aiBox.y1 > aiBox.y0)
     || (Math.min(y0 + b.e, aiBox.y1) - Math.max(y0 + b.s, aiBox.y0) + 1) >= Math.min(b.size, aiBox.y1 - aiBox.y0) * 0.5;
@@ -17732,7 +17766,7 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
     // its edges. A stem starts out at the text margin; a caption sits under
     // (or over) its figure, inside it — so it stays, model box or no.
     const capTol = Math.max(gapMin, w * 0.03);
-    const captionLike = b => !!C && centred(b) && b.minX > C.minX + capTol && b.maxX < C.maxX - capTol && !questionLine(b);
+    const captionLike = b => !!C && centred(b) && b.minX > C.minX + capTol && b.maxX < C.maxX - capTol && !questionLine(b, C.minX);
     // A band the MODEL left out of its own box.
     const outBox = b => !!aiBox && aiBox.y1 > aiBox.y0 && !(y0 + b.e >= aiBox.y0 && y0 + b.s <= aiBox.y1);
     // The short last line of a wrapped sentence: left-aligned under (or over)
@@ -17785,24 +17819,41 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
     // left edge — more of it on the page just beyond, where an axis title has
     // only blank margin — with the body set clearly in, has come from there.
     // And a QUESTION line the model left out is one wherever it starts.
+    // Ink that runs on ABOVE and BELOW the line as well — a page border, a
+    // margin rule, a table cell's side, a photographed page's dark edge — is
+    // not the rest of the line: those pass straight through it, and the words
+    // never do. Without this a y-axis title starting at the crop's edge with
+    // a border a little beyond it read as a part line cut off by the margin.
     const runsOffLeft = b => {
       if (b.minX > 1 || x < 2) return false;
       const reach = Math.min(x, Math.round(b.size * 3)), x0 = x - reach;
-      let d; try { d = ctx.getImageData(x0, y0 + b.s, reach, b.e - b.s + 1).data; } catch (e) { return false; }
+      const pad = Math.max(2, Math.round(b.size * 0.75));
+      const t0 = Math.max(0, y0 + b.s - pad), t1 = Math.min(H - 1, y0 + b.e + pad), th = t1 - t0 + 1;
+      let d; try { d = ctx.getImageData(x0, t0, reach, th).data; } catch (e) { return false; }
+      const inkAt = (cx, ry) => {
+        const i = (ry * reach + cx) * 4;
+        return d[i + 3] > 60 && d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 < TH_INK;
+      };
+      const r0 = y0 + b.s - t0, r1 = y0 + b.e - t0;
+      const through = cx => {
+        for (let ry = 0; ry < th; ry++) {
+          let any = false;
+          for (let dx = -1; dx <= 1 && !any; dx++) if (cx + dx >= 0 && cx + dx < reach && inkAt(cx + dx, ry)) any = true;
+          if (!any) return false;
+        }
+        return true;
+      };
       for (let cx = 0; cx < reach - 1; cx++) {
         let n = 0;
-        for (let ry = 0; ry <= b.e - b.s; ry++) {
-          const i = (ry * reach + cx) * 4;
-          if (d[i + 3] > 60 && d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 < TH_INK) n++;
-        }
-        if (n >= Math.max(2, b.size * 0.25)) return true;
+        for (let ry = r0; ry <= r1; ry++) if (inkAt(cx, ry)) n++;
+        if (n >= Math.max(2, b.size * 0.25) && !through(cx)) return true;
       }
       return false;
     };
     const spill = k => {
       const b = B(k);
       if (!C || !outBox(b) || !lineH(b) || label(b) || centred(b)) return false;
-      return b.minX < C.minX - Math.max(gapMin * 2, w * 0.05) || questionLine(b)
+      return b.minX < C.minX - Math.max(gapMin * 2, w * 0.05) || questionLine(b, C.minX)
         || (C.minX >= Math.max(gapMin * 2, w * 0.03) && b.maxX < C.maxX && runsOffLeft(b));
     };
     const words = k => k < m && (plain(B(k)) || tail(k) || partLabel(k) || spill(k));
@@ -17836,7 +17887,7 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
       // an answer line already walked, the model leaving it out of its box, or
       // starting out at the text margin LEFT of the figure (a part line does; a
       // caption sits under its figure). Not above: there it is usually the stem.
-      if (C && dir < 0 && !asLine && !ev && k + 1 < m && !outBox(b) && !questionLine(b)
+      if (C && dir < 0 && !asLine && !ev && k + 1 < m && !outBox(b) && !questionLine(b, C.minX)
         && b.minX >= C.minX - Math.max(gapMin, b.size)) {
         let j = k + 1;
         while (j < m && (label(B(j)) || captionLike(B(j)))) j++;
