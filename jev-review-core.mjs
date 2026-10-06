@@ -92,6 +92,109 @@ export function measureCrop(ctx, W, H, rect, thr) {
   return out;
 }
 
+// A SLIVER OF A SENTENCE, NOT THE FIGURE. On a page photographed a fraction of
+// a degree off square a line of question text runs slantwise, so a clean-up
+// rectangle that stops just above a table still cuts through the END of the
+// stem line beside it — and measureCrop rightly reports ink running off that
+// edge (and off the side it slants out through). Refusing then keeps the whole
+// stem. So the ink crossing a newly cut side is looked at: letters are joined
+// into words along the line (sideways only, so a gap between two lines is
+// never bridged), and each piece that crosses is a sliver when what of it lies
+// INSIDE sits within about a line's height of the top or the bottom edge AND
+// most of it lies OUTSIDE. Anything deeper is the figure itself; anything
+// mostly inside is something the rectangle cut in half. Either answer is null
+// — refuse, exactly as before. Otherwise the inside pixels of the slivers are
+// handed back as horizontal runs on the page, to be painted white.
+export const SLIVER_SHARE = 0.4;            // a piece with more of itself inside than this is not a sliver
+export function edgeSlivers(ctx, W, H, rect, thr, sides) {
+  try {
+    const x0 = Math.max(0, Math.floor(rect.x)), y0 = Math.max(0, Math.floor(rect.y));
+    const x1 = Math.min(W, Math.floor(rect.x + rect.w)) - 1, y1 = Math.min(H, Math.floor(rect.y + rect.h)) - 1;
+    if (x1 - x0 < 4 || y1 - y0 < 4 || !sides || !sides.length) return null;
+    const D = Math.max(10, Math.round(Math.max(W, H) * 0.022));
+    const s = Math.max(2, Math.round(Math.min(x1 - x0 + 1, y1 - y0 + 1) * 0.012));
+    const ex = Math.max(D, Math.round((x1 - x0 + 1) / 2));
+    const bx = Math.max(0, x0 - ex), by = Math.max(0, y0 - D);
+    const bw = Math.min(W - 1, x1 + ex) - bx + 1, bh = Math.min(H - 1, y1 + D) - by + 1;
+    const d = ctx.getImageData(bx, by, bw, bh).data;
+    const N = bw * bh, ink = new Uint8Array(N), joined = new Uint8Array(N);
+    for (let i = 0; i < N; i++) if (isInk(d, i * 4, thr)) ink[i] = 1;
+    const g = Math.max(2, Math.round(D * 0.35));        // letters into words, along the line only
+    for (let y = 0; y < bh; y++) {
+      let last = -1e9;
+      for (let x = 0; x < bw; x++) if (ink[y * bw + x]) {
+        if (x - last <= g) for (let t = last + 1; t < x; t++) joined[y * bw + t] = 1;
+        joined[y * bw + x] = 1; last = x;
+      }
+    }
+    const fresh = new Set(sides), seen = new Uint8Array(N), keep = [];
+    const inside = (x, y) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+    for (let start = 0; start < N; start++) {
+      if (!joined[start] || seen[start]) continue;
+      const stack = [start], cells = [];
+      seen[start] = 1;
+      let nIn = 0, nOut = 0, inTop = Infinity, inBot = -Infinity, crosses = false;
+      const near = { top: false, bottom: false, left: false, right: false };
+      const beyond = { top: false, bottom: false, left: false, right: false };
+      while (stack.length) {
+        const c = stack.pop(), cy = (c / bw) | 0, cx = c - cy * bw, x = bx + cx, y = by + cy;
+        cells.push(c);
+        if (ink[c]) {
+          if (inside(x, y)) {
+            nIn++; if (y < inTop) inTop = y; if (y > inBot) inBot = y;
+            if (y < y0 + s) near.top = true; if (y > y1 - s) near.bottom = true;
+            if (x < x0 + s) near.left = true; if (x > x1 - s) near.right = true;
+          } else {
+            nOut++;
+            if (y < y0) beyond.top = true; if (y > y1) beyond.bottom = true;
+            if (x < x0) beyond.left = true; if (x > x1) beyond.right = true;
+          }
+        }
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const yy = cy + dy, xx = cx + dx;
+          if (yy < 0 || yy >= bh || xx < 0 || xx >= bw) continue;
+          const n = yy * bw + xx;
+          if (joined[n] && !seen[n]) { seen[n] = 1; stack.push(n); }
+        }
+      }
+      for (const side of fresh) if (near[side] && beyond[side]) crosses = true;
+      if (!crosses) continue;                            // does not cross a newly cut side
+      const shallow = inBot < y0 + D || inTop > y1 - D;  // within a line of the top, or of the bottom
+      if (!shallow || nIn > (nIn + nOut) * SLIVER_SHARE) return null;
+      for (const c of cells) {
+        if (!ink[c]) continue;
+        const cy = (c / bw) | 0, cx = c - cy * bw;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const x = bx + cx + dx, y = by + cy + dy;
+          if (inside(x, y)) keep.push(y * W + x);
+        }
+      }
+    }
+    // as horizontal runs, row by row
+    const list = [...new Set(keep)].sort((p, q) => p - q), runs = [];
+    for (const v of list) {
+      const y = Math.floor(v / W), x = v - y * W, last = runs[runs.length - 1];
+      if (last && last.y === y && last.x1 === x - 1) last.x1 = x; else runs.push({ y, x0: x, x1: x });
+    }
+    return { runs, pixels: list.length };
+  } catch (e) {
+    return null;
+  }
+}
+// Paint the slivers white on a picture drawn from `r` at `scale` inside `pad`.
+export function paintSlivers(ctx, sl, r, scale, pad) {
+  if (!sl || !sl.runs || !sl.runs.length) return;
+  const kx = Math.round(r.w * scale) / r.w, ky = Math.round(r.h * scale) / r.h;
+  ctx.save();
+  ctx.fillStyle = '#fff';
+  for (const { y, x0, x1 } of sl.runs) {
+    const cx0 = Math.floor(pad + (x0 - r.x) * kx), cx1 = Math.ceil(pad + (x1 + 1 - r.x) * kx);
+    const cy0 = Math.floor(pad + (y - r.y) * ky), cy1 = Math.ceil(pad + (y + 1 - r.y) * ky);
+    ctx.fillRect(cx0, cy0, cx1 - cx0, cy1 - cy0);
+  }
+  ctx.restore();
+}
+
 const round = (n, p = 3) => Math.round(n * 10 ** p) / 10 ** p;
 
 // The facts about ONE figure, in the words Jev is asked about.

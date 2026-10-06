@@ -4452,7 +4452,7 @@ The primary papers number their options; Secondary 1 science letters them.
   `EDITOR_OWNED_QUESTION_FIELDS`, or setting it back to Auto would be undone.
 - Run **`node tools/mcq-labels-tests.mjs`** after touching any of it.
 
-## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0, held to evidence v1.426.0)
+## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0, held to evidence v1.426.0, second review v1.426.1)
 
 `STRONG_BAND` / `TRIM_BANDS_MAX` / `ANSWER_LINE_GAP` / `LABEL_GAP` /
 `LABEL_LONGEST` / `TABLE_RULES_MIN` and the band walk inside `_trimEdgeTextLines`
@@ -4555,6 +4555,72 @@ and **every bordered table has four rules**.
   rapid-import/functions` after touching any of it. Both directions are pinned:
   every label, title, caption, key and ruled table case must be KEPT, and every
   stem, part, mark and answer line case must COME OFF.
+
+### …and what the second review found (v1.426.1)
+
+`numbered` / `stroke` / the `segs` filter / `edgeSlivers` / `paintSlivers` /
+`SLIVER_SHARE` / `refineRefused`, and the frame wipe at the top of
+`_trimEdgeTextLines`. Every one of these was silent: the crop still came back,
+looking either perfectly clean (a figure part gone) or merely loose.
+
+- **A figure made only of TEXT threw.** A word equation or a food chain written
+  as words has no body, and `touching` read the body's edges anyway, so the
+  browser crop threw on most boxes and the worker returned null. `touching`
+  needs a body (`!!C`).
+- **A line touching the body is cut only on evidence** — the model left it out
+  of its box, it opens with a question number out in the margin left of the
+  body (`numbered`), it is the last line of a sentence already eaten, or an
+  answer line has already been walked through and it starts out at the text
+  margin left of the body (a part line, not a caption). A caption hanging off
+  one side of an off-centre drawing has none of these and stays. Centring is
+  measured on the body's whole extent AND its widest stroke, which must span
+  half the body: the frame of ONE picture in a row of four is not where the
+  figure sits, and taking it for that kept MCQ question lines as captions.
+- **Lines of different lengths sharing one centre are a TITLE**, however wide
+  (`stackCentred` on prose too); a stem never is — its lines share a margin.
+- **A row of labels must sit OVER its parts — each piece contained in one part
+  of the body** (start and end, within a little). Matching by the middle let an
+  MCQ option row starting at the margin and a part line ending in its mark read
+  as labels. The body's parts leave out its strokes, and a table's VERTICAL
+  rules are strokes too (thin, full height): a label never names a border.
+  Three pieces count as labels only when none is far longer than the next.
+- **A three-line table with more than six data rows** is still folded into one
+  table body (up to 40 tabular rows), so its header and top rule are not eaten
+  as a stem.
+- **A slanted arrow is not an answer line**: a line band must be thin in EVERY
+  column (`colSpan`); an arrowhead is several strokes deep.
+- **An axis title is not the tail of the stem** unless it sits at least twice
+  as close to the stem as to the body.
+- **The caps lift for a long run only when it lies wholly OUTSIDE the model's
+  box and reaches the body from above**; at most three lines need only one of
+  the two.
+- **A page frame or margin rule is WIPED before anything is measured**, followed
+  down the crop a pixel either side at a time — a page shot a fraction of a
+  degree off square walks a rule one column over every few hundred rows, so no
+  single column runs edge to edge, and anti-aliasing then made every row count
+  as inked: the whole crop was one block and nothing came off. Only a THIN
+  stroke (≤ 4px at nine rows in ten) reaching both the top and the bottom edge
+  is wiped; a photograph reaching both edges is not thin and is left alone.
+- **The clean-up on a tilted page** cut through the slanting END of the stem
+  beside the table, `measureCrop` reported ink running off that edge, and the
+  whole clean-up was refused — keeping the whole stem. `edgeSlivers` (shared,
+  in `jev-review-core`) joins letters into words along the line and looks at
+  each piece crossing a newly cut side: a piece whose inside part sits within a
+  line's height of the top or bottom edge and lies mostly OUTSIDE
+  (`SLIVER_SHARE`) is a sliver, painted white on the picture (`paintSlivers`,
+  both the worker's `subCrop` and the browser's `_cropRenderRect`). Anything
+  deeper (the figure) or mostly inside (a word cut in half) still refuses.
+- **A clean-up that is still refused is REPORTED**: the crop is kept and marked
+  `refineRefused`, and Jev is told the AI saw text on it that could not come
+  off (`aiSawStrayText`). A clean-up that worked is still never reported.
+- **Accepted costs, written down so nobody "fixes" them back:** a short line at
+  the margin right above a figure the model boxed tightly (a wrapped stem's
+  last words, or a part line under picture options) is kept, because it is
+  geometrically the same thing as a caption at the figure's edge — a stray line
+  is recoverable by the AI clean-up, a lost caption is not. A one-line caption
+  set at the page margin, a clear gap away from an indented table and outside
+  the model's box, is still cut (`spill`): measured over every corpus, spill
+  removes far more stray stems than it costs captions.
 
 ## 🔧 Fix all — repair every red/yellow vetting question in the background (v1.421.0)
 
@@ -8596,7 +8662,14 @@ the 🔧 Auto-fixed button on the ⚡ Rapid add pad and the 🔴→🟢/🟡 car
   afterwards, but a label, a tick number, a caption or a table row cut off it is
   gone for good — the clean-up only crops further — and the crop looks
   perfectly clean. Loosen any one of the evidence rules and a picture-option
-  question loses the (1) (2) (3) (4) a child needs to answer it.
+  question loses the (1) (2) (3) (4) a child needs to answer it. The same goes
+  for `numbered`, the stroke-span rule in `centred`, the `segs` rule filter, the
+  frame wipe, `edgeSlivers` / `paintSlivers` (shared in `jev-review-core`, so
+  `node tools/jev-review-tests.mjs` too) and `refineRefused`: drop the `!!C` in
+  `touching` and every text-only figure throws; let the frame wipe take a
+  THICK stroke and a photograph is wiped out of the measurement; let
+  `edgeSlivers` accept a piece that reaches deep or lies mostly inside and a
+  table border or half a figure label is painted white.
 - After touching **the crop's pixel passes** (`_inkThreshold`, `INK_RATIO`,
   `_expandRectToWhitespace`, `_trimEdgeTextLines`, **`_trimBlankEdges`**,
   `EDGE_INK_MIN` / `EDGE_INK_FRAC` / `EDGE_SPECK_RUN`, `MAXRUN_FRAC`,

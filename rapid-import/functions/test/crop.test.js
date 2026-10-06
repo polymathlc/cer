@@ -204,3 +204,35 @@ test('subCrop cuts the clean-up\'s box from the PAGE, re-measures it, and refuse
   // Slicing the table in half leaves its borders running off the bottom: refused.
   assert.equal(subCrop(made,onCrop(200,290),createCanvas,page),null,'a clean-up that cuts the table in half is refused');
 });
+// A page shot a fraction of a degree off square: the stem runs slantwise, so a
+// clean-up that stops just above the table still cuts through the END of it.
+function slantPage() {
+  const canvas=createCanvas(700,700), ctx=canvas.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,700,700);
+  for(let x=40;x<640;x++)if(x%6<2)rect(ctx,x,128+Math.floor((x-40)/30),1,10);   // the stem, dipping to the right
+  for(let y=160;y<=300;y+=35)rect(ctx,300,y,300,2);                            // a table, right of centre
+  for(const x of [300,450,598])rect(ctx,x,160,2,142);
+  return canvas;
+}
+test('subCrop paints the slanting end of a sentence out instead of refusing the clean-up',async()=>{
+  const {cropDiagramEx,subCrop}=await import('../crop.js');
+  const page=slantPage();
+  const made=cropDiagramEx(page,[150,30,450,930],createCanvas);
+  assert.ok(made&&made.rect.y<=128,'the first cut no longer holds the stem (nothing to test)');
+  const CW=made.canvas.width, CH=made.canvas.height;
+  const onCrop=(y0,y1,x0,x1)=>[Math.round((made.pad+(y0-made.rect.y)*made.scale)/CH*1000),Math.round((made.pad+(x0-made.rect.x)*made.scale)/CW*1000),
+    Math.round((made.pad+(y1-made.rect.y)*made.scale)/CH*1000),Math.round((made.pad+(x1-made.rect.x)*made.scale)/CW*1000)];
+  const kept=subCrop(made,onCrop(152,303,285,612),createCanvas,page);
+  assert.ok(kept&&kept.refined,'the clean-up was refused for a sliver of the stem');
+  assert.ok(kept.measure.slivers&&kept.measure.slivers.includes('top')&&!kept.measure.clipped.includes('top'),'the sliver is not reported as painted out');
+  // Where the stem's end crossed the top edge, the picture is white now.
+  const c=kept.canvas.getContext('2d'), k=Math.round(kept.rect.w*kept.scale)/kept.rect.w;
+  let dark=0;
+  for(let x=Math.ceil(kept.rect.x);x<Math.min(640,kept.rect.x+kept.rect.w);x++)for(let y=Math.ceil(kept.rect.y);y<Math.min(158,kept.rect.y+kept.rect.h);y++){
+    const d=c.getImageData(Math.round(kept.pad+(x-kept.rect.x)*k),Math.round(kept.pad+(y-kept.rect.y)*k),1,1).data;
+    if(d[0]<150)dark++;
+  }
+  assert.equal(dark,0,'the stem\'s end is still on the picture');
+  // A cut through the table is still refused.
+  assert.equal(subCrop(made,onCrop(200,303,285,612),createCanvas,page),null,'a cut through the table was taken for a sliver');
+});

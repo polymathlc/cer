@@ -309,7 +309,9 @@ async function refineCrop(made, wording, job, page, until=Infinity) {
     const r=await ask(refinePrompt(wording),[made.canvas.toBuffer('image/jpeg').toString('base64')],job);
     const p=JSON.parse(r.text);
     if(!p||p.clean===true||!Array.isArray(p.box_2d)) return made;
-    return subCrop(made,p.box_2d,createCanvas,page)||made;
+    // Refused (it would cut into the figure): the crop is kept as it was, and
+    // it is said that the AI saw question text on it that could not come off.
+    return subCrop(made,p.box_2d,createCanvas,page)||{...made,refineRefused:true};
   } catch { return made; }
 }
 // A few at a time, results in the order they were asked for.
@@ -334,7 +336,9 @@ async function reviewCrops(imageBlocks, canvas, job, wording='', until=Infinity)
   // A clean-up that WORKED is not stray text left on the crop: the crop Jev is
   // shown is the cleaned one, re-measured. Telling Jev "the AI saw stray text"
   // made it say no to every cleaned crop and sent each round the re-cut loop.
-  const factsOf=(m,i)=>figureFacts({index:i,source:m?'ai-box':'none',refused:!m,width:m?.canvas.width,height:m?.canvas.height,pageShare:m?.pageShare,measure:m?.measure,refine:{changed:false}});
+  // A clean-up that was REFUSED is the opposite: the text the AI saw is still
+  // on the crop, and Jev is told so.
+  const factsOf=(m,i)=>figureFacts({index:i,source:m?'ai-box':'none',refused:!m,width:m?.canvas.width,height:m?.canvas.height,pageShare:m?.pageShare,measure:m?.measure,refine:{changed:!!m?.refineRefused}});
   const facts=made.map(factsOf);
   const verdicts=await jevAsk({scope:'figures',figures:facts});
   // Jev unavailable is not "no Jev": the pixel checks still stand on their own,

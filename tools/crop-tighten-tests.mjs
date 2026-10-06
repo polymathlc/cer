@@ -697,10 +697,213 @@ test('the typed wording lists sentences, never an MCQ\'s options, and never drop
   ok(fits === '- one two three\n- four five six', 'a list that fits was changed: ' + fits);
 });
 
+// ---- THE SECOND REVIEW (v1.426.1) --------------------------------------------
+// Each of these is a way the band walk went wrong after v1.426.0, in one
+// direction or the other. Both directions are silent: a stray line reads as a
+// loose crop, and a lost caption or header reads as a perfectly clean one.
+const trimBox = (p, r, box) => {
+  const thr = thrOf(p);
+  r = M._trimBlankEdges(p.ctx, p.W, p.H, r, thr, 'x') || r;
+  r = M._trimEdgeTextLines(p.ctx, p.W, p.H, r, thr, box);
+  return M._trimBlankEdges(p.ctx, p.W, p.H, r, thr, 'xy');
+};
+
+test('a figure made only of TEXT, its last line a few px from the edge, never throws', () => {
+  // A word equation, or a food chain written as words: there is no body, and
+  // the last line sits closer to the crop's edge than a paragraph gap.
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(100, 100, 500, 10).prose(100, 150, 500, 10);
+  const r = { x: 90, y: 90, w: 520, h: 74 };                  // ends 3px under the last line
+  let out = null;
+  try { out = M._trimEdgeTextLines(p.ctx, p.W, p.H, r, thrOf(p), { y0: 95, y1: 162 }); }
+  catch (e) { throw new Error('the trim threw on a text-only crop: ' + e.message); }
+  ok(out && out.h > 0, 'a text-only crop came back empty');
+});
+
+test('a caption centred under an off-centre drawing stays, even touching it', () => {
+  // Leader labels off one side pull the drawing's ink extent sideways; the
+  // caption is centred on the drawing's own widest stroke, not on that extent.
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(200, 150, 260, 160);                                 // the drawing
+  p.rect(470, 200, 70, 2); p.prose(545, 195, 55, 10);         // a leader line and its label
+  p.prose(215, 315, 230, 10);                                 // the caption, 5px under it
+  const out = trimBox(p, { x: 150, y: 120, w: 500, h: 230 }, { y0: 150, y1: 310 });
+  ok(out.y + out.h >= 325, 'the caption under the drawing was cut as a stray sentence');
+});
+
+test('a two-line title centred over a drawing stays — run together, it is still a title', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(170, 120, 360, 10).prose(200, 132, 300, 10);        // two lines, 2px apart, centred
+  p.rect(150, 152, 400, 150);                                 // the drawing, 10px below
+  const out = trimBox(p, { x: 100, y: 100, w: 500, h: 220 }, { y0: 152, y1: 302 });
+  ok(out.y <= 120, 'a centred title over the drawing was cut as the stem');
+});
+
+test('a three-line table with EIGHT data rows keeps its header and its top rule', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 80, 600, 10);                                   // the stem
+  p.rect(100, 120, 500, 2); p.prose(110, 134, 480, 8); p.rect(100, 154, 500, 2);   // padded rows
+  for (let k = 0; k < 8; k++) p.prose(110, 168 + k * 24, 480, 8);
+  p.rect(100, 366, 500, 2);
+  p.rect(200, 400, 300, 120);                                 // a drawing below it in the same crop
+  const out = trimBox(p, { x: 20, y: 70, w: 670, h: 460 }, { y0: 120, y1: 520 });
+  ok(out.y > 92 && out.y <= 120, 'the top rule and header were cut, or the stem stayed (y=' + out.y + ')');
+});
+
+test('a slanted arrow under a drawing is part of the drawing, not an answer line', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(200, 150, 300, 140);                                 // the drawing
+  for (let x = 150; x < 540; x++) p.rect(x, 340 + Math.floor((x - 150) / 70), 1, 2);   // a shallow slant
+  for (let k = 0; k < 5; k++) p.rect(540 - k, 340 + k, 1, 11 - 2 * k);                  // its head, several strokes deep
+  p.prose(30, 385, 620, 10);                                  // the question, below
+  const out = trimBox(p, { x: 20, y: 130, w: 670, h: 275 }, { y0: 150, y1: 360 });
+  ok(out.y + out.h >= 350, 'the arrow under the drawing was trimmed as an answer line');
+});
+
+test('a y-axis title just over the axis is not the tail of the stem above it', () => {
+  const p = page(700, 1000, { paper: 250 });
+  // Closer to the stem than to the axis, but not TWICE as close: it sits
+  // with the figure it names, not under the sentence above it.
+  p.prose(30, 100, 620, 10);                                  // the stem
+  p.prose(60, 122, 140, 10);                                  // "Temperature (°C)", 12px under it
+  p.rect(110, 150, 2, 230); p.rect(110, 378, 450, 2);         // the axes, 18px under the title
+  for (let k = 0; k < 5; k++) p.prose(80, 160 + k * 40, 20, 8);    // tick numbers
+  const out = trimBox(p, { x: 20, y: 90, w: 670, h: 310 }, { y0: 122, y1: 380 });
+  ok(out.y <= 122, 'the axis title was cut with the stem');
+});
+
+function wideTablePage(partLine) {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 100, 600, 10);                                  // the stem
+  for (let k = 0; k <= 4; k++) p.rect(30, 130 + k * 35, 640, 2);
+  for (const x of [30, 250, 450, 668]) p.rect(x, 130, 2, 142);
+  for (let k = 0; k < 4; k++) for (const x of [60, 280, 480]) p.prose(x, 130 + k * 35 + 12, 140, 8);
+  partLine(p);
+  return p;
+}
+test('a part line under a WIDE table is not a row of labels over its columns', () => {
+  const p = wideTablePage(q => {
+    q.prose(30, 290, 600, 10);                                // "(a) State the physical state…"
+    q.prose(70, 315, 120, 10).prose(640, 315, 25, 10);        // "(i) Substance 1      [2]"
+    q.rect(70, 360, 600, 2);                                  // its answer line
+    q.prose(70, 385, 120, 10).prose(640, 385, 25, 10);        // "(ii) Substance 2     [2]"
+  });
+  const out = trimBox(p, { x: 20, y: 90, w: 670, h: 315 }, { y0: 90, y1: 400 });
+  near(out.y + out.h, 272, 3, 'the lettered parts under a wide table were kept as labels');
+});
+
+test('"(a) State…  [1]" is a part line, never a row of labels', () => {
+  const p = page(700, 1000, { paper: 250 });
+  const bottom = borderedTable(p, 100, 160, 600, 4, 35);
+  p.prose(30, 320, 20, 10).prose(70, 320, 240, 10).prose(640, 320, 25, 10);   // (a) · words · [1]
+  p.rect(70, 365, 600, 2);                                    // its answer line
+  const out = trimBox(p, { x: 20, y: 150, w: 670, h: 230 }, { y0: 150, y1: 370 });
+  near(out.y + out.h, bottom, 3, 'a part line with its mark was kept as labels');
+});
+
+test('a FIVE-line stem the model left out of its box comes off', () => {
+  const p = page(700, 1000, { paper: 250 });
+  for (let k = 0; k < 5; k++) p.prose(30, 60 + k * 18, 620, 10);
+  const bottom = borderedTable(p, 100, 160, 600, 4, 35);
+  const out = trimBox(p, { x: 20, y: 50, w: 670, h: 260 }, { y0: 160, y1: bottom });
+  near(out.y, 160, 3, 'a long stem outside the box was kept');
+});
+
+test('parts the model DID put in its box come off — answer lines ruled from a tab further in', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 130, 600, 10);                                  // the stem
+  const bottom = borderedTable(p, 100, 160, 600, 4, 35);
+  p.prose(30, 320, 620, 10);                                  // "(a) State the physical state…"
+  p.prose(70, 345, 120, 10); p.rect(110, 380, 560, 2);        // "(i) Substance 1", its line from a tab
+  p.prose(70, 405, 120, 10); p.rect(110, 440, 560, 2);        // "(ii) Substance 2", its line from a tab
+  const out = trimBox(p, { x: 20, y: 120, w: 670, h: 330 }, { y0: 120, y1: 445 });
+  near(out.y + out.h, bottom, 3, 'the parts inside the model box were kept');
+});
+
+test('MCQ options under a row of pictures are options, not labels of the pictures', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 80, 620, 10);                                   // the stem
+  for (const x of [90, 250, 410, 570]) p.rect(x, 120, 80, 80);
+  p.prose(30, 222, 400, 10);                                  // "Which objects were attracted?"
+  p.prose(30, 245, 170, 10).prose(360, 245, 170, 10);         // "(1) P and Q only    (2) P and S only"
+  p.prose(30, 268, 170, 10).prose(360, 268, 170, 10);         // "(3) …                (4) …"
+  const out = trimBox(p, { x: 20, y: 110, w: 670, h: 175 }, { y0: 120, y1: 200 });
+  near(out.y + out.h, 200, 3, 'the question line and options were kept as labels of the pictures');
+});
+
+test('a stem touching the table, with its question number in the margin, comes off', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 145, 10, 10).prose(70, 145, 560, 10);           // "5   The table shows…", 5px above
+  const bottom = borderedTable(p, 150, 160, 600, 4, 35);
+  const out = trimBox(p, { x: 20, y: 120, w: 670, h: 200 }, { y0: 140, y1: bottom });
+  near(out.y, 160, 3, 'a numbered stem touching the table was kept');
+});
+
+test('a margin rule on a page shot a fraction of a degree off square glues nothing together', () => {
+  // The rule walks one column over every 150 rows and is 3px wide, so no single
+  // column runs edge to edge and every row counts as inked until it is wiped.
+  const p = page(700, 1000, { paper: 250 });
+  for (let y = 0; y < 1000; y++) p.rect(660 + Math.floor(y / 150), y, 3, 1);
+  p.prose(30, 100, 600, 10);                                  // the stem
+  const bottom = borderedTable(p, 100, 160, 600, 4, 35);
+  p.prose(30, 320, 600, 10);                                  // a part under it
+  const out = trimBox(p, { x: 20, y: 90, w: 670, h: 250 }, { y0: 90, y1: 340 });
+  // (The rule itself is ink on every row, so the blank-paper pull-in that runs
+  // afterwards stops short of the table — paper, not words, and as before.)
+  ok(out.y > 110 && out.y <= 160, 'the stem stayed — the rule glued the crop into one block (y=' + out.y + ')');
+  ok(out.y + out.h >= bottom && out.y + out.h < 320, 'the part stayed — the rule glued the crop into one block');
+});
+
+test('a photograph reaching both edges of the crop is NOT wiped as a frame', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(150, 0, 400, 1000);                                  // a dark photo, edge to edge
+  p.prose(30, 100, 100, 10);
+  const out = trimBox(p, { x: 20, y: 80, w: 670, h: 300 }, { y0: 80, y1: 380 });
+  ok(out.y <= 80 && out.y + out.h >= 380, 'the photograph was treated as a page frame and trimmed through');
+});
+
+// ---- THE TILTED-PAGE CLEAN-UP: a sliver of a sentence is not the figure ------
+function slantPage() {
+  const p = page(700, 1000, { paper: 250 });
+  // the stem, sloping down to the right: its right end dips below y = 150
+  for (let x = 40; x < 640; x++) if (x % 6 < 2) p.rect(x, 128 + Math.floor((x - 40) / 30), 1, 10);
+  for (let y = 160; y <= 300; y += 35) p.rect(300, y, 300, 2);     // a bordered table, right of centre
+  for (const x of [300, 450, 598]) p.rect(x, 160, 2, 142);
+  return p;
+}
+test('the slanting end of a sentence across a clean-up edge is a sliver — painted out, not refused', () => {
+  const p = slantPage();
+  const r = { x: 280, y: 150, w: 340, h: 170 };
+  const m = measureCrop(p.ctx, p.W, p.H, r, 190);
+  ok(m.clipped.indexOf('top') >= 0, 'the case no longer cuts through the sentence (nothing to test)');
+  const sl = edgeSlivers(p.ctx, p.W, p.H, r, 190, ['top']);
+  ok(sl && sl.runs.length && sl.runs.every(u => u.y >= 150 && u.y < 160 && u.x0 >= 280),
+    'the sliver of the stem was refused, or a run lands outside the strip it came from');
+});
+test('…but a table cut through, or a word cut in HALF, is still refused', () => {
+  const p = slantPage();
+  ok(edgeSlivers(p.ctx, p.W, p.H, { x: 280, y: 200, w: 340, h: 120 }, 190, ['top']) === null,
+    'a cut through the table was taken for a sliver');
+  const q = page(700, 1000, { paper: 250 });
+  q.prose(300, 140, 200, 20);                                 // a label, 20px tall
+  q.rect(280, 175, 300, 100);
+  ok(edgeSlivers(q.ctx, q.W, q.H, { x: 260, y: 150, w: 340, h: 140 }, 190, ['top']) === null,
+    'a label cut in half was taken for a sliver and would be painted out');
+});
+test('the worker and the browser BOTH paint slivers rather than refuse', () => {
+  const worker = fs.readFileSync(new URL('../rapid-import/functions/crop.js', import.meta.url), 'utf8');
+  const sub = worker.slice(worker.indexOf('export function subCrop'));
+  ok(/edgeSlivers\(/.test(sub) && /paintSlivers\(/.test(sub), 'the worker clean-up refuses every sliver');
+  const fn = cut('async function _cropRefineOnPage', '\n// SECOND-CHANCE CLEANUP', 'browser refine-on-page');
+  ok(/edgeSlivers\(/.test(fn) && /_cropRenderRect\(img, r, sl\)/.test(fn), 'the browser clean-up refuses every sliver');
+  const idx = fs.readFileSync(new URL('../rapid-import/functions/index.js', import.meta.url), 'utf8');
+  ok(/refineRefused:true/.test(idx) && /changed:!!m\?\.refineRefused/.test(idx), 'the worker never tells Jev a clean-up was refused');
+});
+
 // ---- the clean-up is cut from the PAGE, in the browser too ------------------
 // The REAL _cropBoxFromScreenshotEx / _cropRefineOnPage / _aiRefineCrop, run
 // over a synthetic page with a stand-in canvas that records what was drawn.
-const { measureCrop } = await import(new URL('../jev-review-core.mjs', import.meta.url));
+const { measureCrop, edgeSlivers, paintSlivers } = await import(new URL('../jev-review-core.mjs', import.meta.url));
 function browserCrop(p) {
   const reg = new Map(), PAGE = 'data:image/png;base64,PAGE';
   let n = 0;
@@ -709,7 +912,7 @@ function browserCrop(p) {
     c.getContext = () => ({
       drawImage: (img, ...a) => { c.drawn = { img, a }; },
       getImageData: (...a) => c.drawn.img.page.ctx.getImageData(...a),
-      fillRect() {}
+      fillRect(...a) { (c.painted = c.painted || []).push(a); }, save() {}, restore() {}
     });
     c.toDataURL = () => { const u = 'data:image/png;base64,CUT' + (++n); reg.set(u, c); return u; };
     return c;
@@ -718,12 +921,13 @@ function browserCrop(p) {
     : { naturalWidth: reg.get(url).width, naturalHeight: reg.get(url).height };
   const ai = { prompts: [], reply: null };
   const askGeminiVision = async prompt => { ai.prompts.push(prompt); return ai.reply; };
-  const B = new Function('document', '_loadImageEl', 'measureCrop', 'askGeminiVision', '_parseAIJson', 'console',
+  const warns = [];
+  const B = new Function('document', '_loadImageEl', 'measureCrop', 'edgeSlivers', 'paintSlivers', 'askGeminiVision', '_parseAIJson', 'console',
     cut('const INK_RATIO', '\n// SECOND-CHANCE CLEANUP', 'browser crop')
     + cut('const CROP_WORDING_CHARS', '\n// =====', 'browser refine')
     + '\nreturn { _cropBoxFromScreenshotEx, _aiRefineCrop };')(
-    document, _loadImageEl, measureCrop, askGeminiVision, v => v, { warn() {} });
-  return { ...B, reg, ai, PAGE };
+    document, _loadImageEl, measureCrop, edgeSlivers, paintSlivers, askGeminiVision, v => v, { warn: (...a) => warns.push(a) });
+  return { ...B, reg, ai, PAGE, warns };
 }
 test('the browser clean-up is cut from the PAGE, re-measured, and refused when it cuts into the figure', async () => {
   const p = page(700, 700);
@@ -752,6 +956,8 @@ test('the browser clean-up is cut from the PAGE, re-measured, and refused when i
   const src2 = { ex, page: B.PAGE };
   const out2 = await B._aiRefineCrop(ex.dataUrl, '- The table shows three substances.', src2);
   ok(out2 === ex.dataUrl && src2.ex === ex, 'a clean-up that cuts the table in half was kept');
+  ok(ex.refineRefused === true, 'a refused clean-up is not reported — Jev is never told the AI saw text it could not take off');
+  ok(!B.warns.length, 'the clean-up threw and was swallowed: ' + B.warns.map(w => String(w[1] && w[1].message || w[0])).join('; '));
 });
 
 // ---- the census: one door, and it is actually wired in ---------------------
