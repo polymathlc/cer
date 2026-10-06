@@ -24,6 +24,8 @@ mock.module('firebase-functions/v2/firestore',{namedExports:{onDocumentWritten:(
 mock.module('firebase-functions/v2/tasks',{namedExports:{onTaskDispatched:(opts,fn)=>fn}});
 mock.module('firebase-functions/params',{namedExports:{defineSecret:()=>({value:()=>''}),defineString:(name,opts)=>({value:()=>opts.default})}});
 let aiPages=[], aiPrompts=[], modelResponse=null;
+// The crop clean-up pass answers "already clean" unless a test sets a box.
+globalThis.REFINE={n:0,box:null};
 mock.module('@google/genai',{namedExports:{GoogleGenAI:class {
   models={generateContent:async request=>{
     aiPrompts.push(request.contents[0].parts[0].text);
@@ -33,6 +35,11 @@ mock.module('@google/genai',{namedExports:{GoogleGenAI:class {
       const q=JSON.parse(text.split('Question:\n').at(-1));
       return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({findings:[],repairs:[],imageAudits:q.blocks.filter(b=>b.type==='image').map(b=>({blockId:b.id,complete:true,faithful:true,issues:[]}))})};
     }
+    if(/auto-cropped figure/.test(text)) {
+      const R=globalThis.REFINE;R.n++;
+      const box=typeof R.box==='function'?await R.box(request.contents[0].parts[1].inlineData.data):R.box;
+      return {candidates:[{finishReason:'STOP'}],text:JSON.stringify(box?{clean:false,box_2d:box}:{clean:true})};
+    }
     const page=Number(/CURRENT page (\d+)/.exec(text)?.[1]);
     return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({questions:aiPages[page-1]||[]})};
   }};
@@ -41,7 +48,7 @@ const api=await import('../index.js');
 const auth={uid:'teacher',token:{admin:true,name:'Teacher'}};
 const makeJob=(id='job')=>({id,ownerUid:'teacher',name:'paper.pdf',status:'queued',phase:'publish',publishIndex:0,nextPage:3,total:2,added:0,generation:0,autoCheck:false,checkpoint:'checkpoint',updatedAt:new Date().toISOString()});
 const question={id:'q_rapid_job_1_0',title:'A',blocks:[],sourcePages:[]};
-function setup(j=makeJob()){docs.clear();files.clear();tasks.length=0;aiPrompts=[];modelResponse=null;docs.set('cerRapidImports/'+j.id,j);files.set('checkpoint',Buffer.from(JSON.stringify({pending:null,ready:[question]})));return j;}
+function setup(j=makeJob()){docs.clear();files.clear();tasks.length=0;aiPrompts=[];modelResponse=null;globalThis.REFINE={n:0,box:null};docs.set('cerRapidImports/'+j.id,j);files.set('checkpoint',Buffer.from(JSON.stringify({pending:null,ready:[question]})));return j;}
 test('duplicate delivery publishes once, atomically with checkpoint progress',async()=>{
  setup();const request={data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0},retryCount:0};
  await api.rapidImportPage(request);await api.rapidImportPage(request);
@@ -366,6 +373,8 @@ test('the automatic check re-cuts and redraws a rejected figure exactly once, th
   await api.rapidImportPage({data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0,figureIndex:0},retryCount:0});
   const saved=docs.get('users/teacher/vetting/'+q.id);
   assert.equal(recrops,1);assert.equal(generations,1);assert.equal(reads,2);
+  assert.equal(globalThis.REFINE.n,1,'the re-cut gets the same clean-up the import\'s own cut had');
+  assert.ok(aiPrompts.some(p=>/auto-cropped figure/.test(p)&&/Observe this figure and explain what happens to the water\./.test(p)),'…told the question\'s typed wording');
   assert.notEqual(saved.blocks[1].url,url);assert.equal(saved.blocks[1].enhancement.mode,'bw');
   assert.ok(saved.blocks[1].originalCropUrl&&saved.blocks[1].originalCropUrl!==saved.blocks[1].url);
   assert.ok(saved.autoCheck.repairs.some(r=>r.blockId==='figure'&&/Automatic figure fix/.test(r.reason)));

@@ -24,13 +24,23 @@ mock.module('firebase-functions/v2/firestore',{namedExports:{onDocumentWritten:(
 mock.module('firebase-functions/v2/tasks',{namedExports:{onTaskDispatched:(opts,fn)=>fn}});
 mock.module('firebase-functions/params',{namedExports:{defineSecret:()=>({value:()=>'k'}),defineString:(name,opts)=>({value:()=>opts.default})}});
 let aiPages=[], aiPrompts=[], recrops=[], checks=[], recropBox=[130,80,280,390];
+// The crop clean-up pass: clean by default. A test sets globalThis.REFINE.box
+// (a box, or a function of the crop it was shown) to have it cut something off;
+// REFINE.n counts the calls, so how many clean-ups ran is visible.
+globalThis.REFINE={n:0,box:null};
 mock.module('@google/genai',{namedExports:{GoogleGenAI:class {
   models={generateContent:async request=>{
     aiPrompts.push(request.contents[0].parts[0].text);
     const text=request.contents[0].parts[0].text;
     if(/judged wrong|No crop could be cut/.test(text)) {recrops.push(text);return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({box_2d:recropBox})};}
     if(/Check this science question/.test(text)) {checks.push(text);const q=JSON.parse(text.split('Question:\n').at(-1));return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({findings:[],repairs:[],imageAudits:q.blocks.filter(b=>b.type==='image').map(b=>({blockId:b.id,complete:true,faithful:true,issues:[]}))})};}
+    if(/auto-cropped figure/.test(text)) {
+      const R=globalThis.REFINE;R.n++;
+      const box=typeof R.box==='function'?await R.box(request.contents[0].parts[1].inlineData.data):R.box;
+      return {candidates:[{finishReason:'STOP'}],text:JSON.stringify(box?{clean:false,box_2d:box}:{clean:true})};
+    }
     const page=Number(/CURRENT page (\d+)/.exec(text)?.[1]);
+    if(globalThis.AFTER_PAGE_READ) globalThis.AFTER_PAGE_READ();
     return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({questions:aiPages[page-1]||[]})};
   }};
 }}});
@@ -70,7 +80,7 @@ const fig=[{title:'Fig',sourceQuestionNumber:'1',blocks:[{type:'text',text:'(a) 
 function start(autoCheck=false){
   const pdf=pdfFixture(1,['1 0 0 rg 20 220 50 35 re f\n']);
   const j=setup({...makeJob('fig'),phase:'page',nextPage:1,total:1,checkpoint:null,path:'o.pdf',engineOrder:['gemini'],prompt:'Read',autoCheck});
-  files.set(j.path,pdf);aiPages=[fig];jevCalls=[];recrops=[];checks=[];return j;
+  files.set(j.path,pdf);aiPages=[fig];jevCalls=[];recrops=[];checks=[];globalThis.REFINE={n:0,box:null};return j;
 }
 const run=async id=>{
   await api.rapidImportPage({data:{id,page:1,generation:0,phase:'page',publishIndex:0},retryCount:0});
@@ -86,12 +96,14 @@ test('Jev says no to a crop: the AI is asked to re-cut it, Jev is asked again, a
   assert.equal(jevCalls.filter(b=>Object.keys(b.questions).join()==='figure_0').length,2);
   assert.deepEqual(q.jevFigures,[{index:0,state:'fixed',tries:1,reasons:[]}]);
   assert.deepEqual(q.blocks.find(b=>b.type==='image').cropSource.box_2d,[140,90,270,380]);
+  assert.equal(globalThis.REFINE.n,2,'one clean-up for the first cut and one for the re-cut');
 });
 test('a crop Jev never accepts is retried twice, then kept and flagged rather than lost',async()=>{
   start(true);
   jevPlan=keys=>keys.includes('figure_0')&&keys.length===1?{figure_0:['no',.9]}:{};
   const q=await run('fig');
   assert.equal(recrops.length,2,'two AI re-cuts, no more');
+  assert.equal(globalThis.REFINE.n,3,'the clean-up runs once per cut: 1 + the 2 re-cuts');
   assert.equal(q.jevFigures[0].state,'flagged');
   assert.ok(q.blocks.find(b=>b.type==='image').url,'the picture is still there');
   assert.ok(q.autoCheck.findings.some(f=>f.type==='Crop'&&f.cropStatus==='unclear'),'the flag reaches the vetting card as a Crop finding');
@@ -120,4 +132,95 @@ test('the browser review endpoint is administrator only and returns typed verdic
   const r=await api.cerJevReview({auth,data:{scope:'question',question:facts}});
   assert.equal(r.available,true);assert.equal(r.verdicts.wording.ok,true);
   await assert.rejects(api.cerJevReview({auth,data:{scope:'question',question:'nope'}}),/Invalid/);
+});
+
+// ---- the crop clean-up, through the real page task --------------------------
+// Pages are drawn in RENDERED pixels (the 200×300pt page renders at 400×600).
+const px=(x,y,w,h,rgb='0 0 0')=>`${rgb} rg ${x/2} ${(600-y-h)/2} ${w/2} ${h/2} re f\n`;
+async function decode(b64OrBytes){
+  const img=await loadImage(typeof b64OrBytes==='string'?Buffer.from(b64OrBytes,'base64'):b64OrBytes);
+  const c=createCanvas(img.width,img.height),ctx=c.getContext('2d');ctx.drawImage(img,0,0);
+  return {W:img.width,H:img.height,d:ctx.getImageData(0,0,img.width,img.height).data};
+}
+// Where on a decoded picture the pixels `hit` accepts lie (y1 -1: none).
+function boxIn({W,H,d},hit){
+  let y0=H,y1=-1,x0=W,x1=-1;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=(y*W+x)*4;if(hit(d[i],d[i+1],d[i+2])){if(y<y0)y0=y;if(y>y1)y1=y;if(x<x0)x0=x;if(x>x1)x1=x;}}
+  return {y0,y1,x0,x1,W,H};
+}
+// The clean-up's reply: a box (0-1000 on the crop it was shown) round those
+// pixels, or round the top `share` of them.
+const refineTo=(hit,share=1)=>async b64=>{
+  const r=boxIn(await decode(b64),hit);
+  return [r.y0/r.H*1000,r.x0/r.W*1000,(r.y0+(r.y1-r.y0)*share)/r.H*1000,r.x1/r.W*1000].map(Math.round);
+};
+const red=(r,g,b)=>r>150&&g<90&&b<90, dark=(r,g,b)=>r<110&&g<110&&b<110;
+function startPage(stream,box){
+  const j=start();files.set(j.path,pdfFixture(1,[stream]));
+  aiPages=[[{title:'Fig',sourceQuestionNumber:'1',blocks:[{type:'text',text:'Study the figure and answer the question.'},{type:'image',caption:'F',box_2d:box},{type:'plainanswer',text:'Answer'}]}]];
+  return j;
+}
+async function storedFigure(q){
+  const b=q.blocks.find(b=>b.type==='image');
+  const pic=await decode(files.get(decodeURIComponent(new URL(b.url).pathname.split('/o/')[1])));
+  return {W:pic.W,H:pic.H,pic,block:b};
+}
+// A block standing in for question text, a clear gap, then the figure. The
+// pixel pass keeps the block (it is not shaped like a line of print), so these
+// tests exercise the clean-up and not the trim.
+const STEM=px(110,200,180,30);
+const STEM_PAGE=STEM+px(100,280,200,120,'1 0 0');
+const STEM_BOX=[300,230,700,770];
+// …and the figure a bordered red table with empty cells: four rules, four verticals.
+const TABLE_PAGE=STEM+[280,330,380,430].map(y=>px(100,y,244,4,'1 0 0')).join('')+[100,180,260,340].map(x=>px(x,280,4,154,'1 0 0')).join('');
+const TABLE_BOX=[300,220,750,880];
+
+test('the clean-up\'s box is cut from the PAGE: a cut that removes text above a gap is kept and re-measured',async()=>{
+  jevPlan=()=>({});
+  startPage(STEM_PAGE,STEM_BOX);
+  const plain=await storedFigure(await run('fig'));
+  assert.equal(globalThis.REFINE.n,1,'exactly one clean-up for one figure');
+  assert.ok(boxIn(plain.pic,dark).y1>=0,'without a clean-up the block above stays in the picture');
+  startPage(STEM_PAGE,STEM_BOX);globalThis.REFINE.box=refineTo(red);
+  const q=await run('fig'), cleaned=await storedFigure(q);
+  assert.equal(globalThis.REFINE.n,1,'1 + no re-cuts');
+  assert.ok(cleaned.H<plain.H-40,`the stored figure is the cleaned cut (${cleaned.H} vs ${plain.H})`);
+  assert.equal(boxIn(cleaned.pic,dark).y1,-1,'nothing of the block above the gap is left in the picture');
+  assert.ok(boxIn(cleaned.pic,red).y1>0,'and the figure is all there');
+  assert.deepEqual(cleaned.block.cropSource.box_2d,STEM_BOX,'the page-level box is still the one recorded');
+  const facts=jevCalls.find(b=>b.state&&b.state.figures).state.figures[0];
+  assert.equal(facts.aiSawStrayText,false,'a clean-up that worked is not reported to Jev as stray text');
+  assert.deepEqual(facts.clippedSides,[],'Jev is shown the cleaned cut\'s own measurements');
+  assert.ok(facts.height<plain.H-40,'…its own size, not the first cut\'s');
+  assert.equal(recrops.length,0,'no re-cut loop for a cleaned crop');
+});
+test('a clean-up that slices a bordered table in half is refused and the unrefined crop is kept',async()=>{
+  jevPlan=()=>({});
+  startPage(TABLE_PAGE,TABLE_BOX);
+  const plain=await storedFigure(await run('fig'));
+  // Control: on this very page, a clean-up round the whole table is taken.
+  startPage(TABLE_PAGE,TABLE_BOX);globalThis.REFINE.box=refineTo(red);
+  const whole=await storedFigure(await run('fig'));
+  assert.ok(whole.H<plain.H-40&&boxIn(whole.pic,dark).y1===-1,'the block above the table comes off');
+  // Half the table: its borders would run off the bottom edge — refused.
+  startPage(TABLE_PAGE,TABLE_BOX);globalThis.REFINE.box=refineTo(red,0.5);
+  const q=await run('fig'), kept=await storedFigure(q);
+  assert.equal(globalThis.REFINE.n,1);
+  assert.deepEqual([kept.W,kept.H],[plain.W,plain.H],'the unrefined crop is kept, table whole');
+  assert.deepEqual(kept.block.cropSource.box_2d,TABLE_BOX);
+  assert.deepEqual(jevCalls.find(b=>b.state&&b.state.figures).state.figures[0].clippedSides,[]);
+});
+test('past the page task\'s deadline no clean-up or re-cut is started; the crop is kept and flagged',async()=>{
+  const realNow=Date.now;let skew=0;
+  Date.now=()=>realNow()+skew;
+  globalThis.AFTER_PAGE_READ=()=>{skew=301000;};   // a page read that took five minutes
+  try {
+    startPage(STEM_PAGE,STEM_BOX);globalThis.REFINE.box=[600,0,1000,1000];
+    jevPlan=keys=>keys.includes('figure_0')?{figure_0:['no',.9]}:{};
+    const q=await run('fig');
+    assert.equal(globalThis.REFINE.n,0,'no clean-up started after the deadline');
+    assert.equal(recrops.length,0,'no AI re-cut started after the deadline');
+    assert.equal(q.jevFigures[0].state,'flagged','the crop Jev objected to is kept and flagged for a person');
+    assert.ok(q.blocks.find(b=>b.type==='image').url,'the picture is still there');
+  } finally {Date.now=realNow;globalThis.AFTER_PAGE_READ=null;}
 });

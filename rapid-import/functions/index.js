@@ -284,7 +284,7 @@ function parseBox(text) {
 async function recropBox(canvas, made, reasons, job) {
   const images=[canvas.toBuffer('image/jpeg').toString('base64')];
   if(made) images.push(made.canvas.toBuffer('image/jpeg').toString('base64'));
-  const prompt=`Image 1 is a whole page of a primary-school science paper. ${made?'Image 2 is the crop that was cut for one figure and was judged wrong.':'No crop could be cut for one figure.'}\nProblems found: ${reasons.join('; ')||'the crop is not the complete, clean figure'}.\nLocate the ONE figure (diagram, graph, table or experimental set-up) this crop was meant to be. Reply ONLY with JSON {"box_2d":[ymin,xmin,ymax,xmax]} in integers 0-1000 measured on IMAGE 1. Include every label, arrow, axis title, unit, legend, caption and table border belonging to the figure, with clear whitespace beyond the last of them. Exclude sentences of question text, question numbers and ordinary written options. Never use the whole page.`;
+  const prompt=`Image 1 is a whole page of a primary-school science paper. ${made?'Image 2 is the crop that was cut for one figure and was judged wrong.':'No crop could be cut for one figure.'}\nProblems found: ${reasons.join('; ')||'the crop is not the complete, clean figure'}.\nLocate the ONE figure (diagram, graph, table or experimental set-up) this crop was meant to be. Reply ONLY with JSON {"box_2d":[ymin,xmin,ymax,xmax]} in integers 0-1000 measured on IMAGE 1. Include every label, arrow, axis title, unit, legend, caption and table border belonging to the figure, with clear whitespace beyond the last of them. Exclude sentences of question text, question numbers and ordinary written options. A table runs from its top border to its bottom border (plus a title printed on it): never the sentence that introduces it, the lettered parts printed under it such as "(a) State..." or "(i) Substance 1", marks such as [2], blank answer lines, or the end of the previous question. Never use the whole page.`;
   const r=await ask(prompt,images,job,result=>{
     if(!parseBox(result.text)) throw new Error('The crop location response was incomplete.');
   });
@@ -296,22 +296,45 @@ async function recropBox(canvas, made, reasons, job) {
 // and answer lines under it — is cut off. This pass did not exist in the
 // worker, so a durable PDF import shipped whatever the pixel trim left. Any
 // failure keeps the crop exactly as it was.
-async function refineCrop(made, wording, job) {
-  if(!made||!made.canvas) return made;
+//
+// The clean-up's rectangle is cut from the PAGE (`page`, the canvas the crop
+// came from) and measured again there (subCrop), so a clean-up that cuts into
+// the figure is refused rather than shipped. `until` is the page task's
+// deadline: past it the crop is kept as it is rather than spending another
+// model call the task may not live to finish.
+async function refineCrop(made, wording, job, page, until=Infinity) {
+  if(!made||!made.canvas||!page) return made;
+  if(Date.now()>until) return made;
   try {
     const r=await ask(refinePrompt(wording),[made.canvas.toBuffer('image/jpeg').toString('base64')],job);
     const p=JSON.parse(r.text);
     if(!p||p.clean===true||!Array.isArray(p.box_2d)) return made;
-    return subCrop(made,p.box_2d,createCanvas)||made;
+    return subCrop(made,p.box_2d,createCanvas,page)||made;
   } catch { return made; }
+}
+// A few at a time, results in the order they were asked for.
+const REFINE_PARALLEL = 3;
+// How far into a page task new crop clean-ups and AI re-cuts may still start.
+// A model call already running may take its full router time past this, and
+// the page still has to store its figures and checkpoint before 540 seconds.
+const PAGE_REFINE_MS = 300000;
+async function inOrder(items, n, fn) {
+  const out=new Array(items.length);
+  let next=0;
+  await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{
+    while(next<items.length){const i=next++;out[i]=await fn(items[i],i);}
+  }));
+  return out;
 }
 // Cut, judge, and re-cut with the AI until Jev and the pixel checks agree.
 // Returns one entry per image block: { made, state, tries, reasons }.
-async function reviewCrops(imageBlocks, canvas, job, wording='') {
-  const made=[];
-  for(const b of imageBlocks) made.push(await refineCrop(cropDiagramEx(canvas,b.box_2d??b.box,createCanvas),wording,job));
+async function reviewCrops(imageBlocks, canvas, job, wording='', until=Infinity) {
+  const made=await inOrder(imageBlocks,REFINE_PARALLEL,b=>refineCrop(cropDiagramEx(canvas,b.box_2d??b.box,createCanvas),wording,job,canvas,until));
   if(!jevOn(job)||!imageBlocks.length) return made.map(m=>({made:m,state:'ok',tries:0,reasons:[]}));
-  const factsOf=(m,i)=>figureFacts({index:i,source:m?'ai-box':'none',refused:!m,width:m?.canvas.width,height:m?.canvas.height,pageShare:m?.pageShare,measure:m?.measure,refine:{changed:!!m?.refined}});
+  // A clean-up that WORKED is not stray text left on the crop: the crop Jev is
+  // shown is the cleaned one, re-measured. Telling Jev "the AI saw stray text"
+  // made it say no to every cleaned crop and sent each round the re-cut loop.
+  const factsOf=(m,i)=>figureFacts({index:i,source:m?'ai-box':'none',refused:!m,width:m?.canvas.width,height:m?.canvas.height,pageShare:m?.pageShare,measure:m?.measure,refine:{changed:false}});
   const facts=made.map(factsOf);
   const verdicts=await jevAsk({scope:'figures',figures:facts});
   // Jev unavailable is not "no Jev": the pixel checks still stand on their own,
@@ -323,11 +346,12 @@ async function reviewCrops(imageBlocks, canvas, job, wording='') {
     if(!own.length) {out.push({made:made[i],state:'ok',tries:0,reasons:[]});continue;}
     let best={made:made[i],score:own.length,reasons:own.map(f=>f.reason)}, reasons=best.reasons, tries=0, fixed=false;
     while(tries<JEV_RECROP_TRIES) {
+      if(Date.now()>until) break;
       tries++;
       let box=null;
       try { box=await recropBox(canvas,best.made,reasons,job); } catch { break; }
       if(!box) break;
-      const m2=await refineCrop(cropDiagramEx(canvas,box,createCanvas,{marginScale:tries===1?1.6:2.2}),wording,job);
+      const m2=await refineCrop(cropDiagramEx(canvas,box,createCanvas,{marginScale:tries===1?1.6:2.2}),wording,job,canvas,until);
       const f2=factsOf(m2,i), hard=figureHardIssues(f2);
       let v2=null;
       if(!hard.length) v2=await jevAsk({scope:'figures',figures:[f2]});
@@ -348,7 +372,7 @@ async function reviewCrops(imageBlocks, canvas, job, wording='') {
 // black and white Century Gothic for tables, graphs and word diagrams). When no
 // better crop can be cut, a regenerated figure falls back to its original crop.
 const FIGURE_FIX_MAX = 3;
-async function fixFigures(q, findings, job, applied) {
+async function fixFigures(q, findings, job, applied, until=Infinity) {
   const targets=figureFixTargets(findings,q.blocks).slice(0,FIGURE_FIX_MAX);
   let any=false;
   const pageUrls=(q.sourcePages||[]).map(p=>p.url);
@@ -364,7 +388,9 @@ async function fixFigures(q, findings, job, applied) {
         canvas.getContext('2d').drawImage(page,0,0);
         const current=block.originalCropUrl&&block.originalCropUrl!==pageUrl?await loadImage(await storedImage(block.originalCropUrl,job.ownerUid)):null;
         const box=await recropBox(canvas,current?{canvas:(()=>{const c=createCanvas(current.width,current.height);c.getContext('2d').drawImage(current,0,0);return c;})()}:null,reasons,job);
-        const made=box&&cropDiagramEx(canvas,box,createCanvas,{marginScale:1.6});
+        // The re-cut gets the same clean-up the import's own cut had, told the
+        // question's typed wording, or the stem it was rejected for comes back.
+        const made=box&&await refineCrop(cropDiagramEx(canvas,box,createCanvas,{marginScale:1.6}),cropWordingOf(q.blocks),job,canvas,until);
         if(made&&made.canvas) {
           const url=await storeImage(job,randomUUID(),`refit-${id}`,made.canvas);
           next={...block,url,originalCropUrl:url,preColourUrl:url,width:made.canvas.width,height:made.canvas.height,
@@ -450,7 +476,7 @@ async function checkQuestion(q,job) {
       // ONE automatic figure fix per question, on the first read only: re-cut
       // from the preserved page, then redraw in house style. Never repeated.
       if(!figuresFixed && job.enhanceImages!==false) {
-        try { figuresFixed=await fixFigures(q,findings,job,applied); } catch {}
+        try { figuresFixed=await fixFigures(q,findings,job,applied,started+240000); } catch {}
         if(figuresFixed) changed=true;
       }
       for(const fix of Array.isArray(reply.repairs)?reply.repairs.slice(0,40):[]) {
@@ -482,6 +508,10 @@ async function checkQuestion(q,job) {
 }
 export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[key,openaiKey,jevKey],timeoutSeconds:540,memory:'2GiB',cpu:1,
   retryConfig:{maxAttempts:5,minBackoffSeconds:60,maxBackoffSeconds:300},rateLimits:{maxConcurrentDispatches:2},maxInstances:2},async request=>{
+  // Taken before anything is read: the crop clean-up stops starting new model
+  // calls PAGE_REFINE_MS in, so a page full of figures still finishes, stores
+  // and checkpoints inside the 540-second task instead of being killed mid-way.
+  const started=Date.now();
   const {id,page,generation,phase,publishIndex,figureIndex}=request.data||{};
   if(!validId(id)||!Number.isInteger(page)) throw new Error('Invalid task.');
   const ref=jobRef(id), job=(await ref.get()).data();
@@ -537,7 +567,7 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
     const token=randomUUID(), sourceUrl=await storeImage(job,token,`page-${page}`,canvas), entries=[];
     for(let i=0;i<payloads.length;i++) {
       const payload=payloads[i], urls=[];
-      const reviewed=await reviewCrops(payload.blocks.filter(b=>blockType(b)==='image'),canvas,job,cropWordingOf(payload.blocks));
+      const reviewed=await reviewCrops(payload.blocks.filter(b=>blockType(b)==='image'),canvas,job,cropWordingOf(payload.blocks),started+PAGE_REFINE_MS);
       for(const r of reviewed) {
         const crop=r.made&&r.made.canvas;
         // Reserve one result for every image block, including refused crops,

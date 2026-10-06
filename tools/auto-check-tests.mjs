@@ -84,7 +84,9 @@ async function _urlToDataUrlRobust(u) { return 'data:image/png;base64,QUJD'; }
 function _parseImageDataUrl(d) { return /^data:/.test(d) ? { mime: 'image/png', ext: 'png', bytes: [] } : null; }
 async function _jevRecropBox() { HOOK.recrops++; return HOOK.recropFail ? null : HOOK.recropBox; }
 async function _cropBoxFromScreenshotEx() { return { dataUrl: 'data:image/png;base64,Q1JPUA==' }; }
-async function _aiRefineCrop(d) { return d; }
+HOOK.refines = [];
+async function _aiRefineCrop(d, wording, src) { HOOK.refines.push({ wording, src }); return d; }
+function _cropWordingOf(blocks) { return '- the wording of ' + ((blocks || []).length) + ' blocks'; }
 async function uploadImageDataUrl() { return 'https://pic/recut.png'; }
 function _rememberCropSource(b, url, box, page) { b.cropSource = { url, imageUrl: b.url, box_2d: box, page }; }
 
@@ -142,6 +144,7 @@ const { HOOK } = M;
 const reset = (plan, replies) => {
   HOOK.reads = 0; HOOK.repairs = 0; HOOK.aiChecks = 0; HOOK.media = 0;
   HOOK.levels = []; HOOK.recrops = 0; HOOK.recropFail = false; HOOK.prompts = []; HOOK.warned = []; HOOK.aiOn = true;
+  HOOK.refines = [];
   HOOK.plan = plan || [[]];
   HOOK.replies = replies || [];
 };
@@ -543,6 +546,9 @@ test('a Crop finding is re-cut from the ORIGINAL page, not reworded', async () =
   q.blocks[1].cropSource = { url: 'https://page/orig.png', imageUrl: 'https://pic/1.png', box_2d: [1, 1, 2, 2] };
   const res = await M.autoChkRun(q);
   eq(HOOK.recrops, 1, 'the figure was located again on the original page');
+  eq(HOOK.refines.length, 1, 'the re-cut gets the same clean-up the import\'s own cut had');
+  ok(/^- the wording of \d+ blocks$/.test(HOOK.refines[0].wording), 'told the question\'s typed wording, or the stem comes straight back');
+  ok(HOOK.refines[0].src && /^data:/.test(HOOK.refines[0].src.page), 'and cut from the original page, where a cut into the figure is refused');
   eq(HOOK.repairs, 0, 'and no wording repair was paid for');
   eq(q.blocks[1].url, 'https://pic/recut.png', 'the picture is the new crop');
   eq(res.state, 'green'); eq(res.improved, true);
