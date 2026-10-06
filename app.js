@@ -4453,7 +4453,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.426.4';
+const APP_VERSION = 'v1.426.5';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -17673,14 +17673,22 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
       && !p.some((c, i) => i >= 2 && i + 1 < p.length && c[1] - c[0] + 1 <= b.size * 1.8
         && c[0] - p[i - 1][1] - 1 >= b.size * 2 && p[i + 1][0] - c[1] - 1 >= b.size * 0.6);
   };
-  const markEnd = b => {
+  const markEnd = (b, strict) => {
     if (!lineH(b)) return false;
     const p = wordPieces(b);
     if (p.length < 2) return false;
     const a = p[p.length - 2], z = p[p.length - 1];
-    return z[1] - z[0] + 1 <= b.size * 1.6 && z[0] - a[1] - 1 >= b.size * 3 && a[1] - a[0] + 1 >= b.size * 4;
+    return z[1] - z[0] + 1 <= b.size * 1.6 && z[0] - a[1] - 1 >= b.size * 3 && a[1] - a[0] + 1 >= b.size * 4
+      && (!strict || glyphs(z) >= 3);
   };
   const questionLine = (b, leftOf) => partMarked(b, leftOf) || markEnd(b);
+  // What can never be a CAPTION is narrower still, because a caption that is
+  // lost cannot come back. A mark is "[1]" — three shapes — where a caption
+  // may end in a unit or a point letter ("…  °C", "…  P"). And a part line
+  // that is not one line with its mark is the first line of a longer
+  // question, run out across the text block; "(a)  Before heating" under
+  // its own drawing is a sub-figure's caption.
+  const notCaption = (b, leftOf) => markEnd(b, true) || (partMarked(b, leftOf) && b.inkW >= W * 0.5);
   // A body must be where the model said the figure is.
   const inBox = b => !aiBox || !(aiBox.y1 > aiBox.y0)
     || (Math.min(y0 + b.e, aiBox.y1) - Math.max(y0 + b.s, aiBox.y0) + 1) >= Math.min(b.size, aiBox.y1 - aiBox.y0) * 0.5;
@@ -17766,7 +17774,7 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
     // its edges. A stem starts out at the text margin; a caption sits under
     // (or over) its figure, inside it — so it stays, model box or no.
     const capTol = Math.max(gapMin, w * 0.03);
-    const captionLike = b => !!C && centred(b) && b.minX > C.minX + capTol && b.maxX < C.maxX - capTol && !questionLine(b, C.minX);
+    const captionLike = b => !!C && centred(b) && b.minX > C.minX + capTol && b.maxX < C.maxX - capTol && !notCaption(b, C.minX);
     // A band the MODEL left out of its own box.
     const outBox = b => !!aiBox && aiBox.y1 > aiBox.y0 && !(y0 + b.e >= aiBox.y0 && y0 + b.s <= aiBox.y1);
     // The short last line of a wrapped sentence: left-aligned under (or over)
@@ -17887,7 +17895,7 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
       // an answer line already walked, the model leaving it out of its box, or
       // starting out at the text margin LEFT of the figure (a part line does; a
       // caption sits under its figure). Not above: there it is usually the stem.
-      if (C && dir < 0 && !asLine && !ev && k + 1 < m && !outBox(b) && !questionLine(b, C.minX)
+      if (C && dir < 0 && !asLine && !ev && k + 1 < m && !outBox(b) && !notCaption(b, C.minX)
         && b.minX >= C.minX - Math.max(gapMin, b.size)) {
         let j = k + 1;
         while (j < m && (label(B(j)) || captionLike(B(j)))) j++;

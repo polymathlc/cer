@@ -1136,6 +1136,27 @@ test('a key the model left out — "P  tap water" / "Q  salt water" — at the f
   const out = trimBox(p, { x: 20, y: 80, w: 670, h: 340 }, { y0: 150, y1: 352 });
   ok(out.y + out.h >= 406, 'the key was cut as a question line (bottom ' + (out.y + out.h) + ')');
 });
+// What can never be a CAPTION is narrower than what is a question line: a
+// sub-figure's own "(a)  Before heating" is short, and a caption may end in a
+// unit or a point letter — a mark is "[1]", three shapes.
+test('"(a)  Before heating" centred under its own drawing, inside the box, stays', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 90, 620, 10);                                   // the stem
+  p.rect(250, 150, 200, 200);                                 // the drawing
+  p.prose(270, 372, 18, 12).prose(300, 372, 130, 12);         // (a)  Before heating
+  p.prose(30, 470, 620, 10);                                  // the part below
+  const out = trimBox(p, { x: 20, y: 130, w: 670, h: 270 }, { y0: 150, y1: 386 });
+  ok(out.y + out.h >= 384, 'the sub-figure caption was cut as a part line (bottom ' + (out.y + out.h) + ')');
+});
+test('a centred caption ending in a lone unit — "Temperature of the water   °C" — stays', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 90, 620, 10);
+  p.rect(150, 150, 400, 200);
+  p.prose(230, 372, 180, 12).prose(458, 372, 12, 12);         // the caption · its unit, far right
+  p.prose(30, 470, 620, 10);
+  const out = trimBox(p, { x: 20, y: 130, w: 670, h: 270 }, { y0: 150, y1: 386 });
+  ok(out.y + out.h >= 384, 'the caption was cut as a line ending in a mark (bottom ' + (out.y + out.h) + ')');
+});
 // …and the other side: a ONE-GLYPH question number out in the margin still
 // marks its stem as a question line, though a lone symbol under a figure no
 // longer does.

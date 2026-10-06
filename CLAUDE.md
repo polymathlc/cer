@@ -4452,7 +4452,7 @@ The primary papers number their options; Secondary 1 science letters them.
   `EDITOR_OWNED_QUESTION_FIELDS`, or setting it back to Auto would be undone.
 - Run **`node tools/mcq-labels-tests.mjs`** after touching any of it.
 
-## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0, held to evidence v1.426.0, reviews v1.426.2–v1.426.4)
+## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0, held to evidence v1.426.0, reviews v1.426.2–v1.426.5)
 
 `STRONG_BAND` / `TRIM_BANDS_MAX` / `ANSWER_LINE_GAP` / `LABEL_GAP` /
 `LABEL_LONGEST` / `TABLE_RULES_MIN` and the band walk inside `_trimEdgeTextLines`
@@ -4556,7 +4556,7 @@ and **every bordered table has four rules**.
   every label, title, caption, key and ruled table case must be KEPT, and every
   stem, part, mark and answer line case must COME OFF.
 
-### …and what the second, third and final reviews found (v1.426.2–v1.426.4)
+### …and what the second, third and final reviews found (v1.426.2–v1.426.5)
 
 `numbered` / `captionLike` / `stroke` / both `segs` cuts / the part-line test
 in `isLabelRow` / `partMarked`'s `glyphs` and `leftOf` / the frame wipe at the
@@ -4594,7 +4594,15 @@ of these was silent: the crop still came back, looking either perfectly clean
   read as a caption and stopped the walk, so the `(a)` line, its answer line and
   the `(b)` line all stayed — the reported layout exactly. The same test stops
   the below-the-figure rule protecting a part line under a figure that starts
-  at the text indent.
+  at the text indent. **But what may never be a caption is narrower than what
+  is a question line** (`notCaption`, v1.426.5), because a caption that is cut
+  cannot come back: the end token must be a real mark, "[1]" — THREE shapes —
+  where a caption may end in a unit or a point letter ("…   °C", "…   P"); and a
+  part marker counts only on a line that runs out across half the page, which
+  is what the first line of a longer part does. "(a)  Before heating" under its
+  own drawing is a sub-figure's caption, and stays. `spill` still uses the full
+  question-line test, because a line the model left out of its box is on less
+  evidence of being the figure's.
 - **A line the MODEL LEFT OUT of its box comes off on less** (`spill`): out at
   the text margin well left of the body, as before — or a QUESTION line
   wherever it starts (a part line flush with the table's own left edge has
@@ -8744,8 +8752,11 @@ the 🔧 Auto-fixed button on the ⚡ Rapid add pad and the 🔴→🟢/🟡 car
   of sub-figure captions the model leaves out of its box is cut as a part line,
   so the graph comes back with nothing to say which line is which. Let
   `runsOffLeft` count a stroke that runs on above and below the line and every
-  y-axis title on a bordered worksheet is cut. Do not bring back the sliver
-  painting or the refused-clean-up report.
+  y-axis title on a bordered worksheet is cut. Put `captionLike` or the
+  below-the-figure rule back on the full question-line test instead of
+  `notCaption` and a sub-figure's "(a)  Before heating" or a caption ending in
+  "°C" is cut as a part line. Do not bring back the sliver painting or the
+  refused-clean-up report.
 - After touching **the crop's pixel passes** (`_inkThreshold`, `INK_RATIO`,
   `_expandRectToWhitespace`, `_trimEdgeTextLines`, **`_trimBlankEdges`**,
   `EDGE_INK_MIN` / `EDGE_INK_FRAC` / `EDGE_SPECK_RUN`, `MAXRUN_FRAC`,
