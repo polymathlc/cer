@@ -4452,7 +4452,7 @@ The primary papers number their options; Secondary 1 science letters them.
   `EDITOR_OWNED_QUESTION_FIELDS`, or setting it back to Auto would be undone.
 - Run **`node tools/mcq-labels-tests.mjs`** after touching any of it.
 
-## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0, held to evidence v1.426.0, reviews v1.426.2–v1.426.5)
+## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0, held to evidence v1.426.0, reviews v1.426.2–v1.426.6)
 
 `STRONG_BAND` / `TRIM_BANDS_MAX` / `ANSWER_LINE_GAP` / `LABEL_GAP` /
 `LABEL_LONGEST` / `TABLE_RULES_MIN` and the band walk inside `_trimEdgeTextLines`
@@ -4556,7 +4556,7 @@ and **every bordered table has four rules**.
   every label, title, caption, key and ruled table case must be KEPT, and every
   stem, part, mark and answer line case must COME OFF.
 
-### …and what the second, third and final reviews found (v1.426.2–v1.426.5)
+### …and what the second, third and final reviews found (v1.426.2–v1.426.6)
 
 `numbered` / `captionLike` / `stroke` / both `segs` cuts / the part-line test
 in `isLabelRow` / `partMarked`'s `glyphs` and `leftOf` / the frame wipe at the
@@ -4627,8 +4627,12 @@ of these was silent: the crop still came back, looking either perfectly clean
   8-connected pieces of 2px or more) — "(a)", "1.", "Q1" — where a key symbol or
   a key letter is ONE shape. **A one-glyph marker counts only when it ends a
   full line height LEFT of the figure** (`leftOf` = the body's left edge), out
-  in the margin where a question number like "6" hangs before its stem; a key
-  letter hugging the figure's own left edge is a key. And **a marker that comes
+  in the margin where a question number like "6" hangs before its stem, **and
+  is narrower than it is tall**, as every digit is (v1.426.6); a key letter
+  hugging the figure's own left edge is a key, and a key SYMBOL (■ ● □ ○ →) is
+  as wide as it is tall wherever it hangs — "■  with fertiliser" with its words
+  starting at the chart's edge is otherwise exactly a numbered stem. And **a
+  marker that comes
   AGAIN after a wide gap, with words after it, makes the line a row of
   captions or a key** — "(a) Before heating     (b) After heating" under two
   set-ups — never a part line, which carries one marker and at most a lone mark
@@ -4689,6 +4693,10 @@ of these was silent: the crop still came back, looking either perfectly clean
   - **A single unnumbered line centred over a figure wider than the text block
     reads as the figure's title** and is kept — geometry alone cannot tell "Ali
     then repeated the experiment, as shown below." from a centred title.
+  - **A y-axis title with a lone "(b)" just left of it on the same row is cut**
+    when the model left it out of its box and the "(b)" fell outside the crop:
+    that is exactly a part line whose marker the margin left out
+    (`runsOffLeft`), and nothing in the pixels tells the two apart.
   - **A stacked key at the TEXT MARGIN, left of an indented figure, is cut**
     when the model left it out of its box: "P  tap water" starting where the
     stem starts is exactly the shape of a stem's own lines (`spill`'s first

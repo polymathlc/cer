@@ -1136,6 +1136,17 @@ test('a key the model left out — "P  tap water" / "Q  salt water" — at the f
   const out = trimBox(p, { x: 20, y: 80, w: 670, h: 340 }, { y0: 150, y1: 352 });
   ok(out.y + out.h >= 406, 'the key was cut as a question line (bottom ' + (out.y + out.h) + ')');
 });
+// A key SYMBOL hanging out left of the figure's edge, its words starting
+// AT that edge, is laid out exactly like a question number before its stem —
+// but a symbol is as wide as it is tall, and a digit never is.
+test('a key the model left out — "■  with fertiliser", the ■ hanging left of the chart — stays', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 90, 620, 10);                                   // the stem
+  p.rect(150, 150, 400, 200);                                 // the chart
+  p.rect(124, 372, 12, 12).prose(150, 372, 120, 12);          // ■  with fertiliser
+  const out = trimBox(p, { x: 20, y: 80, w: 670, h: 320 }, { y0: 150, y1: 352 });
+  ok(out.y + out.h >= 382, 'the key was cut as a numbered stem (bottom ' + (out.y + out.h) + ')');
+});
 // What can never be a CAPTION is narrower than what is a question line: a
 // sub-figure's own "(a)  Before heating" is short, and a caption may end in a
 // unit or a point letter — a mark is "[1]", three shapes.

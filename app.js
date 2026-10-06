@@ -4453,7 +4453,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.426.5';
+const APP_VERSION = 'v1.426.6';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -17636,9 +17636,11 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
   // legend's key symbol (● ▲ ■ □ ×) is ONE shape: "●  Plant A" is not a
   // part line, however much it is laid out like one. A single glyph still
   // counts when it ends a full line height LEFT of the figure (`leftOf`) —
-  // out in the margin, where a question number like "4" sits. A key letter
-  // or symbol hugging the figure's own left edge ("P  tap water" under a
-  // bar chart) is a key, however close to the margin. And a marker that comes
+  // out in the margin, where a question number like "4" sits — and is
+  // narrower than it is tall, as every digit is. A key letter or symbol
+  // hugging the figure's own left edge ("P  tap water" under a bar chart) is
+  // a key, however close to the margin, and a key SYMBOL (■ ● □ ○ →) is as
+  // wide as it is tall, wherever it hangs. And a marker that comes
   // AGAIN after a tab, with words after it, makes the line a row of
   // captions or a key — "(a) Before heating     (b) After heating" — never a
   // part line, which has one marker and at most a lone mark at its end.
@@ -17669,7 +17671,7 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
     const p = b.pm || (b.pm = piecesX(b, Math.max(2, Math.round(b.size * 0.45)))
       .filter(c => c[3] - c[2] + 1 >= b.size * 0.35));
     return p.length >= 2 && p[0][1] - p[0][0] + 1 <= b.size * 1.8
-      && p[1][0] - p[0][1] - 1 >= b.size * 0.6 && p[1][1] - p[1][0] + 1 >= b.size * 3 && (p[0][1] < leftOf - b.size || glyphs(p[0]) >= 2)
+      && p[1][0] - p[0][1] - 1 >= b.size * 0.6 && p[1][1] - p[1][0] + 1 >= b.size * 3 && ((p[0][1] < leftOf - b.size && p[0][1] - p[0][0] + 1 < (p[0][3] - p[0][2] + 1) * 0.85) || glyphs(p[0]) >= 2)
       && !p.some((c, i) => i >= 2 && i + 1 < p.length && c[1] - c[0] + 1 <= b.size * 1.8
         && c[0] - p[i - 1][1] - 1 >= b.size * 2 && p[i + 1][0] - c[1] - 1 >= b.size * 0.6);
   };
