@@ -4452,7 +4452,7 @@ The primary papers number their options; Secondary 1 science letters them.
   `EDITOR_OWNED_QUESTION_FIELDS`, or setting it back to Auto would be undone.
 - Run **`node tools/mcq-labels-tests.mjs`** after touching any of it.
 
-## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0, held to evidence v1.426.0, second review v1.426.1)
+## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0, held to evidence v1.426.0, second and third reviews v1.426.2)
 
 `STRONG_BAND` / `TRIM_BANDS_MAX` / `ANSWER_LINE_GAP` / `LABEL_GAP` /
 `LABEL_LONGEST` / `TABLE_RULES_MIN` and the band walk inside `_trimEdgeTextLines`
@@ -4556,71 +4556,79 @@ and **every bordered table has four rules**.
   every label, title, caption, key and ruled table case must be KEPT, and every
   stem, part, mark and answer line case must COME OFF.
 
-### …and what the second review found (v1.426.1)
+### …and what the second and third reviews found (v1.426.2)
 
-`numbered` / `stroke` / the `segs` filter / `edgeSlivers` / `paintSlivers` /
-`SLIVER_SHARE` / `refineRefused`, and the frame wipe at the top of
-`_trimEdgeTextLines`. Every one of these was silent: the crop still came back,
-looking either perfectly clean (a figure part gone) or merely loose.
+`numbered` / `captionLike` / `stroke` / both `segs` cuts / the part-line test
+in `isLabelRow` / the frame wipe at the top of `_trimEdgeTextLines`. Every one
+of these was silent: the crop still came back, looking either perfectly clean
+(a figure part gone) or merely loose.
 
 - **A figure made only of TEXT threw.** A word equation or a food chain written
-  as words has no body, and `touching` read the body's edges anyway, so the
-  browser crop threw on most boxes and the worker returned null. `touching`
+  as words has no body, and `touching` read the body's edges anyway. `touching`
   needs a body (`!!C`).
 - **A line touching the body is cut only on evidence** — the model left it out
   of its box, it opens with a question number out in the margin left of the
-  body (`numbered`), it is the last line of a sentence already eaten, or an
-  answer line has already been walked through and it starts out at the text
-  margin left of the body (a part line, not a caption). A caption hanging off
-  one side of an off-centre drawing has none of these and stays. Centring is
-  measured on the body's whole extent AND its widest stroke, which must span
-  half the body: the frame of ONE picture in a row of four is not where the
-  figure sits, and taking it for that kept MCQ question lines as captions.
-- **Lines of different lengths sharing one centre are a TITLE**, however wide
-  (`stackCentred` on prose too); a stem never is — its lines share a margin.
-- **A row of labels must sit OVER its parts — each piece contained in one part
-  of the body** (start and end, within a little). Matching by the middle let an
-  MCQ option row starting at the margin and a part line ending in its mark read
-  as labels. The body's parts leave out its strokes, and a table's VERTICAL
-  rules are strokes too (thin, full height): a label never names a border.
-  Three pieces count as labels only when none is far longer than the next.
-- **A three-line table with more than six data rows** is still folded into one
-  table body (up to 40 tabular rows), so its header and top rule are not eaten
-  as a stem.
-- **A slanted arrow is not an answer line**: a line band must be thin in EVERY
-  column (`colSpan`); an arrowhead is several strokes deep.
-- **An axis title is not the tail of the stem** unless it sits at least twice
-  as close to the stem as to the body.
-- **The caps lift for a long run only when it lies wholly OUTSIDE the model's
-  box and reaches the body from above**; at most three lines need only one of
-  the two.
-- **A page frame or margin rule is WIPED before anything is measured**, followed
-  down the crop a pixel either side at a time — a page shot a fraction of a
-  degree off square walks a rule one column over every few hundred rows, so no
-  single column runs edge to edge, and anti-aliasing then made every row count
-  as inked: the whole crop was one block and nothing came off. Only a THIN
-  stroke (≤ 4px at nine rows in ten) reaching both the top and the bottom edge
-  is wiped; a photograph reaching both edges is not thin and is left alone.
-- **The clean-up on a tilted page** cut through the slanting END of the stem
-  beside the table, `measureCrop` reported ink running off that edge, and the
-  whole clean-up was refused — keeping the whole stem. `edgeSlivers` (shared,
-  in `jev-review-core`) joins letters into words along the line and looks at
-  each piece crossing a newly cut side: a piece whose inside part sits within a
-  line's height of the top or bottom edge and lies mostly OUTSIDE
-  (`SLIVER_SHARE`) is a sliver, painted white on the picture (`paintSlivers`,
-  both the worker's `subCrop` and the browser's `_cropRenderRect`). Anything
-  deeper (the figure) or mostly inside (a word cut in half) still refuses.
-- **A clean-up that is still refused is REPORTED**: the crop is kept and marked
-  `refineRefused`, and Jev is told the AI saw text on it that could not come
-  off (`aiSawStrayText`). A clean-up that worked is still never reported.
-- **Accepted costs, written down so nobody "fixes" them back:** a short line at
-  the margin right above a figure the model boxed tightly (a wrapped stem's
-  last words, or a part line under picture options) is kept, because it is
-  geometrically the same thing as a caption at the figure's edge — a stray line
-  is recoverable by the AI clean-up, a lost caption is not. A one-line caption
-  set at the page margin, a clear gap away from an indented table and outside
-  the model's box, is still cut (`spill`): measured over every corpus, spill
-  removes far more stray stems than it costs captions.
+  body (`numbered`), it is the wrapped tail of a sentence already eaten, or an
+  answer line has already been walked and it starts out at the text margin left
+  of the body. Centring is measured on the body's whole extent AND its widest
+  stroke, which must span half the body: the frame of ONE picture in a row of
+  four is not where the figure sits.
+- **A CAPTION stays.** Lines of different lengths sharing one centre are a title
+  however wide (`stackCentred`, prose too). A single line centred on the body
+  AND set in from both its edges is a caption, inside the model's box or not
+  (`captionLike`). And BELOW a figure, the line just past its own label row or
+  inset caption is a caption unless something says otherwise — an answer line
+  walked, the model leaving it out of its box, or starting at the text margin
+  LEFT of the figure (a part line does). Not above: there it is the stem.
+- **A WRAPPED LINE is a tail when it sits one line's leading under the sentence
+  and starts exactly where the sentence's WORDS start** (after a question
+  number, if there is one). Anything else — an axis title over its axis, a
+  caption a paragraph gap away — is a tail only when it sits twice as close to
+  the sentence as to the body.
+- **A row of labels sits over its parts, and the body is cut into parts TWO
+  ways**: as it is (an outline beaker is one piece, its walls joined by its
+  base) and with its strokes left out (a bench joins two beakers, and they are
+  still two things — there a table's thin full-height vertical rules are
+  dropped, because a label never names a border). A label may sit over a part
+  of EITHER. Each piece must be CONTAINED in its part: matching by the middle
+  let MCQ option rows and part lines under wide tables read as labels.
+- **"(a)  Explain your answer.  [1]" is a part line, not three labels**: three
+  pieces, the long one in the MIDDLE, between a short marker at (or past) the
+  body's left edge and/or a short mark at (or past) its right. A row of labels
+  — "X   Y   switch (open)", "P   Q   R (control)" — keeps its long one last.
+- A three-line table with more than six data rows still folds into one body; a
+  slanted arrow is not an answer line (`colSpan`); the caps lift for a long run
+  only when it lies wholly OUTSIDE the model's box and reaches the body from
+  above.
+- **A page frame or margin rule is WIPED before anything is measured** — a thin
+  stroke (≤ 4px at nine rows in ten) reaching both the top and the bottom of the
+  crop, followed down a pixel either side at a time (a page shot a fraction of a
+  degree off square walks a rule one column over every few hundred rows, and
+  anti-aliasing then made every row count as inked, so nothing came off). **It
+  must be seen RUNNING ON past the crop on the page** (`FRAME_RUN` rows beyond
+  both edges) and drift no more than ~2°: the side of a framed figure turning
+  into its border, a table's rule on a pasted image exactly the table's height,
+  or a ray at 17° is the figure's own, and so is anything when the crop meets
+  the page's top or bottom. A photograph reaching both edges is not thin.
+- **Tried and taken back out, so nobody puts them back:** painting out "a sliver
+  of a sentence" crossing a refused clean-up's edge (it could not tell a slanting
+  stem from a figure's own label, axis title or table row, and dropped truly
+  clipped sides), and telling Jev about every refused clean-up (a refusal is the
+  safeguard protecting the figure, and the worker also counted boxes it merely
+  did not trust). A clean-up that clips a new side is refused, the crop kept as
+  it was, and nothing is said.
+- **Accepted costs, written down so nobody "fixes" them back:**
+  - **A short line at the margin right above a tightly boxed figure is kept**:
+    a wrapped stem's last words, or MCQ options starting at the figure's own
+    left edge. It looks exactly like a caption at the figure's edge. A stray
+    line can still be removed by the AI clean-up; a lost caption cannot be
+    recovered.
+  - **A one-line caption at the page margin is still cut** (`spill`) when it
+    sits a clear gap away from an indented table and outside the model's box.
+    Measured over every corpus, spill removes far more stray stems than it
+    costs captions.
+  - **On a tilted page, a clean-up that cuts through the slanting end of the
+    stem is refused**, so the stem stays.
 
 ## 🔧 Fix all — repair every red/yellow vetting question in the background (v1.421.0)
 
@@ -8663,13 +8671,14 @@ the 🔧 Auto-fixed button on the ⚡ Rapid add pad and the 🔴→🟢/🟡 car
   gone for good — the clean-up only crops further — and the crop looks
   perfectly clean. Loosen any one of the evidence rules and a picture-option
   question loses the (1) (2) (3) (4) a child needs to answer it. The same goes
-  for `numbered`, the stroke-span rule in `centred`, the `segs` rule filter, the
-  frame wipe, `edgeSlivers` / `paintSlivers` (shared in `jev-review-core`, so
-  `node tools/jev-review-tests.mjs` too) and `refineRefused`: drop the `!!C` in
-  `touching` and every text-only figure throws; let the frame wipe take a
-  THICK stroke and a photograph is wiped out of the measurement; let
-  `edgeSlivers` accept a piece that reaches deep or lies mostly inside and a
-  table border or half a figure label is painted white.
+  for `numbered`, `captionLike`, the tail's leading-and-alignment shortcut, the
+  stroke-span rule in `centred`, either `segs` cut, the part-line test and the
+  frame wipe: drop the `!!C` in `touching` and every text-only figure throws;
+  let the frame wipe take a stroke that does not run on past the crop and a
+  framed figure on a pasted image loses its border, title and caption; let it
+  take a THICK one and a photograph is wiped out of the measurement; drop the
+  stroke-included `segs` and every label under an outline drawing is cut. Do
+  not bring back the sliver painting or the refused-clean-up report.
 - After touching **the crop's pixel passes** (`_inkThreshold`, `INK_RATIO`,
   `_expandRectToWhitespace`, `_trimEdgeTextLines`, **`_trimBlankEdges`**,
   `EDGE_INK_MIN` / `EDGE_INK_FRAC` / `EDGE_SPECK_RUN`, `MAXRUN_FRAC`,

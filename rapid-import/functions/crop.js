@@ -3,7 +3,7 @@
 // No network calls, model redraws or Firebase dependencies: labels and fine
 // lines come from the original page. A refused crop uses the caller's source
 // page fallback and must remain visibly marked as needing manual cropping.
-import { measureCrop, edgeSlivers, paintSlivers } from './jev-review-core.js';
+import { measureCrop } from './jev-review-core.js';
 
 // The crop and what was learnt while making it. Jev is asked about the
 // measurements, so they are taken from the SAME rectangle that was cut.
@@ -210,14 +210,33 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
       if (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114 < TH_INK && data[i + 3] > 60) ink[ry * w + rx] = 1;
     }
   }
-  // A THIN stroke that runs the WHOLE crop, edge to edge, is a page frame or
-  // a margin rule, not a figure: it is wiped out before anything is measured,
-  // or it bridges every gap and, thickened by anti-aliasing on a page shot a
-  // fraction of a degree off square, makes every row count as inked. It is
-  // followed down from the top edge a pixel either side at a time, because a
-  // tilted rule walks one column over every few hundred rows. A filled area
-  // reaching both edges — a photograph — is not thin, and is left alone.
+  // A THIN stroke that runs the WHOLE crop, edge to edge, AND RUNS ON PAST IT
+  // on the page, is a page frame or a margin rule, not a figure: it is wiped
+  // out before anything is measured, or it bridges every gap and, thickened by
+  // anti-aliasing on a page shot a fraction of a degree off square, makes every
+  // row count as inked. It is followed down from the top edge a pixel either
+  // side at a time, because a tilted rule walks one column over every few
+  // hundred rows — but only a degree or two, never a ray at 17°. A stroke that
+  // stops at the crop — the side of a framed figure turning into its border, a
+  // table's rule on a pasted image exactly the table's height — is the
+  // figure's own, and so is anything when the crop meets the page's top or
+  // bottom: there is nothing beyond to show it runs on. A filled area reaching
+  // both edges — a photograph — is not thin, and is left alone.
   const FRAME_W = 4;
+  const FRAME_RUN = Math.max(12, Math.round(H * 0.012));    // rows it must run on beyond each edge
+  const runsOn = (yStart, dirY, cx0) => {
+    let cx = cx0, got = 0;
+    for (let k = 1; k <= FRAME_RUN; k++) {
+      const yy = yStart + dirY * k;
+      if (yy < 0 || yy >= H) return false;
+      const d = ctx.getImageData(x + cx - 2, yy, 5, 1).data;
+      const on = j => d[j * 4 + 3] > 60 && d[j * 4] * 0.299 + d[j * 4 + 1] * 0.587 + d[j * 4 + 2] * 0.114 < TH_INK;
+      const nx = on(2) ? 0 : on(1) ? -1 : on(3) ? 1 : null;
+      if (nx === null) continue;
+      cx += nx; got++;
+    }
+    return got >= FRAME_RUN * 0.9;
+  };
   const frameAt = new Int32Array(h);
   for (let sx = 0; sx < w; sx++) {
     if (!ink[sx]) continue;
@@ -233,6 +252,8 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
       if (z - a + 1 <= FRAME_W) thin++;
     }
     if (hits < h * 0.95 || frameAt[h - 1] < 0 || thin < hits * 0.9) continue;
+    if (Math.abs(frameAt[h - 1] - sx) > Math.max(6, h * 0.035)) continue;           // ~2°: not a ray
+    if (!runsOn(y0, -1, frameAt[0]) || !runsOn(y0 + h - 1, 1, frameAt[h - 1])) continue;
     for (let ry = 0; ry < h; ry++) {
       const x = frameAt[ry];
       if (x < 0) continue;
@@ -483,11 +504,21 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
   // or two or more pieces each sitting under its own part of the body.
   // Three pieces where ONE is far the widest is a part line, not labels:
   // "(a)", a tab, a short question, and "[1]" at the right margin.
-  const isLabelRow = (b, segs) => {
+  // `body` is the figure's ink extent [minX, maxX], when there is one.
+  const isLabelRow = (b, segs, body) => {
     if (!b || b.size > maxBandH * 1.5) return false;
     const cl = wordPieces(b);
     const wd = cl.map(c => c[1] - c[0] + 1).sort((p, q) => q - p);
-    if (cl.length >= 3 && wd[0] <= b.inkW * LABEL_LONGEST && (cl.length >= 4 || wd[0] <= wd[1] * 2.5)) return true;
+    if (cl.length >= 3 && wd[0] <= b.inkW * LABEL_LONGEST) {
+      // "(a)  State the …  [1]" is three pieces too: one far the widest, in
+      // the MIDDLE, between a short part marker at (or out past) the body's
+      // left edge and a short mark at (or past) its right. A row of labels —
+      // "X   Y   switch (open)" — sits over the body, its long one last.
+      const big = cl.findIndex(c => c[1] - c[0] + 1 === wd[0]), nar = c => c[1] - c[0] + 1 <= b.size * 2.5;
+      const partLike = !!body && cl.length < 4 && wd[0] > wd[1] * 2.5 && big > 0 && big < cl.length - 1
+        && ((nar(cl[0]) && cl[0][0] <= body[0] + b.size) || (nar(cl[cl.length - 1]) && cl[cl.length - 1][1] >= body[1] - b.size));
+      if (!partLike) return true;
+    }
     // Each piece sits OVER its own part of the body, within a little of it.
     if (segs && segs.length >= 2 && cl.length >= 2) {
       const slack = b.size * 2, hit = new Set();
@@ -542,12 +573,17 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
     if (coreMode) for (const i of order) if (strong[i]) { core = i; break; }
     const C = core >= 0 ? bands[core] : null;
     const m = core >= 0 ? order.indexOf(core) : order.length;
-    // The body's separate parts, with its STROKES left out: a bench or a base
-    // line joins two beakers into one piece, and they are still two things.
-    // A table's vertical rules are strokes too — a thin piece running the
-    // body's whole height is a border, not a thing a label could name.
-    const segs = C ? piecesX(C, Math.max(gapMin, Math.round(w * 0.02)), true)
+    // The body's separate parts, cut two ways, and a label may sit over a part
+    // of either: as they are (an outline beaker is one piece, its walls joined
+    // by its base), and with the STROKES left out (a bench or a base line joins
+    // two beakers into one piece, and they are still two things). With the
+    // strokes out, a thin piece running the body's whole height is a table's
+    // vertical rule — a border, not a thing a label could name.
+    const sJoin = Math.max(gapMin, Math.round(w * 0.02));
+    const segs = C ? piecesX(C, sJoin) : null;
+    const segsFree = C ? piecesX(C, sJoin, true)
       .filter(p => !(p[1] - p[0] + 1 <= minBandH && p[3] - p[2] + 1 >= C.size * 0.8)) : null;
+    const body = C ? [C.minX, C.maxX] : null;
     const B = k => bands[order[k]];
     const gapIn = b => (dir > 0 ? b.below : b.above);    // toward the body
     const gapOut = b => (dir > 0 ? b.above : b.below);   // toward the crop edge
@@ -559,11 +595,12 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
       return !!n && isLine(n) && n.s - b.e - 1 <= Math.max(b.size * 4, gapMin * 4)
         && n.minX >= b.minX - b.size && n.minX <= b.minX + w * 0.12;
     };
-    const label = b => isLabelRow(b, segs) && !ruledUnder(b);
+    const label = b => (isLabelRow(b, segs, body) || isLabelRow(b, segsFree, body)) && !ruledUnder(b);
     // Lines of different lengths sharing ONE centre are set centred — a
     // title, however wide — and a stem never is: its lines share a margin.
     const plain = b => !!b && ((isProse(b) && !(C && stackCentred(b)))
-      || (!!C && ((isStacked(b) && !stackCentred(b)) || (isUnderlined(b) && b.inkW >= w * 0.55)))) && !label(b);
+      || (!!C && ((isStacked(b) && !stackCentred(b)) || (isUnderlined(b) && b.inkW >= w * 0.55)))) && !label(b)
+      && !(captionLike(b) && !numbered(b));
     // Where the body sits: its whole ink extent, and its widest STROKE — a
     // beaker's base, a bench, an axis — which leader labels or tick numbers
     // hanging off one side do not pull over. A line centred on either is
@@ -575,6 +612,11 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
       for (let ry = C.s; ry <= C.e; ry++) if (rows[ry].maxRun > best) { best = rows[ry].maxRun; stroke = [rows[ry].maxRunX, rows[ry].maxRunX + best - 1]; }
     }
     const centred = b => !!C && [[C.minX, C.maxX], stroke].some(z => !!z && Math.abs((b.minX + b.maxX) - (z[0] + z[1])) / 2 <= w * 0.03);
+    // A one-line caption or title: centred on the body AND set in from both
+    // its edges. A stem starts out at the text margin; a caption sits under
+    // (or over) its figure, inside it — so it stays, model box or no.
+    const capTol = Math.max(gapMin, w * 0.03);
+    const captionLike = b => !!C && centred(b) && b.minX > C.minX + capTol && b.maxX < C.maxX - capTol;
     // A band the MODEL left out of its own box.
     const outBox = b => !!aiBox && aiBox.y1 > aiBox.y0 && !(y0 + b.e >= aiBox.y0 && y0 + b.s <= aiBox.y1);
     // The short last line of a wrapped sentence: left-aligned under (or over)
@@ -586,8 +628,18 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
       const by = (j, gap) => {
         if (j < 0 || j >= m) return false;
         const n = B(j);
-        return isProse(n) && !label(n) && gap <= Math.max(gapMin, b.size * 1.5) && gap * 2 <= toCore(b)
-          && b.minX >= n.minX - b.size && b.minX <= n.minX + b.size * 5;
+        if (!(isProse(n) && !label(n) && gap <= Math.max(gapMin, b.size * 1.5))) return false;
+        // A wrapped line sits one line's LEADING under the sentence and starts
+        // exactly where its WORDS start — after a question number hanging in
+        // the margin, if there is one. A caption is a paragraph gap away, and
+        // an axis title sits over its axis instead, so anything else is a tail
+        // only when it is at least twice as close to the sentence as to the
+        // body.
+        const p = wordPieces(n), tol = Math.max(4, b.size * 0.5);
+        const words = p.length >= 2 && p[0][1] - p[0][0] + 1 <= n.size * 2 && p[1][0] - p[0][1] - 1 >= n.size ? p[1][0] : n.minX;
+        if (gap <= Math.max(4, Math.min(n.size, b.size) * 0.8)
+          && (Math.abs(b.minX - words) <= tol || Math.abs(b.minX - n.minX) <= tol)) return true;
+        return gap * 2 <= toCore(b) && b.minX >= n.minX - b.size && b.minX <= n.minX + b.size * 5;
       };
       return by(k - 1, gapOut(b)) || by(k + 1, gapIn(b));
     };
@@ -643,6 +695,17 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
       const asLine = lineOk(k);
       const ok = asLine || (C ? words(k) : (isProse(b) && !label(b)));
       if (!ok) break;
+      // BELOW a figure, the line just beyond its own row of labels (or its
+      // own inset caption) is a caption too, unless something says otherwise —
+      // an answer line already walked, the model leaving it out of its box, or
+      // starting out at the text margin LEFT of the figure (a part line does; a
+      // caption sits under its figure). Not above: there it is usually the stem.
+      if (C && dir < 0 && !asLine && !ev && k + 1 < m && !outBox(b)
+        && b.minX >= C.minX - Math.max(gapMin, b.size)) {
+        let j = k + 1;
+        while (j < m && (label(B(j)) || captionLike(B(j)))) j++;
+        if (j === m) break;
+      }
       eaten++;
       if (asLine || (C && isUnderlined(b))) ev = true;
       if (aiBox && y0 + b.e >= aiBox.y0 && y0 + b.s <= aiBox.y1) outside = false;
@@ -658,9 +721,9 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
       // line, not a caption). Anything else hugging the figure is left for
       // the AI clean-up, which is handed the question's wording — a stray line
       // can still come off there, a cut caption cannot come back.
-      const touching = !!C && k + 1 === m && after < gapMin && after > 0 && plain(b) && !centred(b)
-        && (outBox(b) || numbered(b) || (ev && b.minX < C.minX - Math.max(gapMin * 2, w * 0.05))
-          || (k > 0 && isProse(B(k - 1)) && Math.abs(B(k - 1).minX - b.minX) <= b.size));
+      const touching = !!C && k + 1 === m && after < gapMin && after > 0 && !centred(b)
+        && ((plain(b) && (outBox(b) || numbered(b) || (ev && b.minX < C.minX - Math.max(gapMin * 2, w * 0.05))
+          || (k > 0 && isProse(B(k - 1)) && Math.abs(B(k - 1).minX - b.minX) <= b.size))) || tail(k));
       if (after >= gapMin || touching) {
         cut = end + dir * (1 + Math.min(after, gapMin));
         if (eaten <= 3) capped = cut;
@@ -917,19 +980,9 @@ export function subCrop(made, box, createCanvas, page) {
   try { measure = measureCrop(page.getContext('2d'), W, H, r, made.thr != null ? made.thr : INK_DEFAULT); }
   catch { return null; }
   if (!measure || measure.unreadable) return null;
-  // A side the first cut did not clip but this one does has cut into the
-  // figure — unless what crosses it is only the slanting end of a sentence
-  // (edgeSlivers), which is painted out instead of refusing the clean-up.
   const before = (made.measure && made.measure.clipped) || [];
-  const fresh = measure.clipped.filter(side => before.indexOf(side) < 0);
-  let sl = null;
-  if (fresh.length) {
-    sl = edgeSlivers(page.getContext('2d'), W, H, r, made.thr != null ? made.thr : INK_DEFAULT, fresh);
-    if (!sl) return null;
-    measure = { ...measure, clipped: measure.clipped.filter(side => fresh.indexOf(side) < 0), slivers: fresh };
-  }
+  if (measure.clipped.some(side => before.indexOf(side) < 0)) return null;
   const drawn = renderRect(page, r, createCanvas);
-  if (sl) paintSlivers(drawn.canvas.getContext('2d'), sl, r, drawn.scale, drawn.pad);
   return { ...made, canvas: drawn.canvas, rect: r, scale: drawn.scale, pad: drawn.pad, measure,
            pageShare: (r.w * r.h) / (W * H), refined: true };
 }
