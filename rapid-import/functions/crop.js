@@ -211,7 +211,8 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
     }
   }
   // A THIN stroke that runs the WHOLE crop, edge to edge, AND RUNS ON PAST IT
-  // on the page, is a page frame or a margin rule, not a figure: it is wiped
+  // on the page — for most of the page, or to its margin — is a page frame or a
+  // margin rule, not a figure: it is wiped
   // out before anything is measured, or it bridges every gap and, thickened by
   // anti-aliasing on a page shot a fraction of a degree off square, makes every
   // row count as inked. It is followed down from the top edge a pixel either
@@ -224,18 +225,33 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
   // both edges — a photograph — is not thin, and is left alone.
   const FRAME_W = 4;
   const FRAME_RUN = Math.max(12, Math.round(H * 0.012));    // rows it must run on beyond each edge
+  const FRAME_LONG = Math.round(H * 0.08);                  // …and how far, unless it runs to the page margin
+  const FRAME_MARGIN = Math.round(H * 0.06);
+  // Follows the stroke beyond the crop until it stops. A page frame or margin
+  // rule runs on for most of the page, or to the page's own margin; the frame
+  // of a figure turns into its border a padding's width beyond the box.
   const runsOn = (yStart, dirY, cx0) => {
-    let cx = cx0, got = 0;
-    for (let k = 1; k <= FRAME_RUN; k++) {
+    const span = dirY < 0 ? yStart : H - 1 - yStart;
+    if (span < FRAME_RUN) return false;
+    const half = 50, sx0 = Math.max(0, x + cx0 - half), sw = Math.min(W, x + cx0 + half + 1) - sx0;
+    const top = dirY < 0 ? 0 : yStart + 1;
+    let d;
+    try { d = ctx.getImageData(sx0, top, sw, span).data; } catch (e) { return false; }
+    const on = (cx, yy) => {
+      const lx = cx - sx0, ly = yy - top;
+      if (lx < 0 || lx >= sw) return false;
+      const i = (ly * sw + lx) * 4;
+      return d[i + 3] > 60 && d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 < TH_INK;
+    };
+    let cx = x + cx0, run = 0, miss = 0, last = 0;
+    for (let k = 1; k <= span; k++) {
       const yy = yStart + dirY * k;
-      if (yy < 0 || yy >= H) return false;
-      const d = ctx.getImageData(x + cx - 2, yy, 5, 1).data;
-      const on = j => d[j * 4 + 3] > 60 && d[j * 4] * 0.299 + d[j * 4 + 1] * 0.587 + d[j * 4 + 2] * 0.114 < TH_INK;
-      const nx = on(2) ? 0 : on(1) ? -1 : on(3) ? 1 : null;
-      if (nx === null) continue;
-      cx += nx; got++;
+      const nx = on(cx, yy) ? 0 : on(cx - 1, yy) ? -1 : on(cx + 1, yy) ? 1 : null;
+      if (nx === null) { if (++miss > 3) break; continue; }
+      cx += nx; miss = 0; run++; last = k;
     }
-    return got >= FRAME_RUN * 0.9;
+    if (run < FRAME_RUN * 0.9) return false;
+    return last >= FRAME_LONG || span - last <= FRAME_MARGIN;
   };
   const frameAt = new Int32Array(h);
   for (let sx = 0; sx < w; sx++) {
@@ -509,14 +525,20 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
     if (!b || b.size > maxBandH * 1.5) return false;
     const cl = wordPieces(b);
     const wd = cl.map(c => c[1] - c[0] + 1).sort((p, q) => q - p);
-    if (cl.length >= 3 && wd[0] <= b.inkW * LABEL_LONGEST) {
+    // Spread out with every gap more than a tab wide ("A    switch S (closed)
+    // B" under a circuit) it is labels even with one long label in it.
+    const spread = cl.length >= 3 && wd[0] <= b.inkW * 0.6
+      && cl.every((c, i) => i === 0 || c[0] - cl[i - 1][1] - 1 > b.size * 3);
+    if (cl.length >= 3 && (wd[0] <= b.inkW * LABEL_LONGEST || spread)) {
       // "(a)  State the …  [1]" is three pieces too: one far the widest, in
-      // the MIDDLE, between a short part marker at (or out past) the body's
-      // left edge and a short mark at (or past) its right. A row of labels —
-      // "X   Y   switch (open)" — sits over the body, its long one last.
+      // the MIDDLE, after a short part marker at (or out past) the body's left
+      // edge. A row of labels — "X   Y   switch (open)", "A   B (with salt)
+      // C" — sits over the body.
+      // The marker's words start one TAB after it; a row of labels is spread
+      // out with gaps of several line heights between its pieces.
       const big = cl.findIndex(c => c[1] - c[0] + 1 === wd[0]), nar = c => c[1] - c[0] + 1 <= b.size * 2.5;
-      const partLike = !!body && cl.length < 4 && wd[0] > wd[1] * 2.5 && big > 0 && big < cl.length - 1
-        && ((nar(cl[0]) && cl[0][0] <= body[0] + b.size) || (nar(cl[cl.length - 1]) && cl[cl.length - 1][1] >= body[1] - b.size));
+      const partLike = !!body && cl.length < 4 && wd[0] > wd[1] * 2.5 && big === 1
+        && nar(cl[0]) && cl[0][0] <= body[0] + b.size && cl[1][0] - cl[0][1] - 1 <= b.size * 3;
       if (!partLike) return true;
     }
     // Each piece sits OVER its own part of the body, within a little of it.
@@ -531,6 +553,25 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
     }
     return false;
   };
+  // A QUESTION LINE, whatever it lines up with: it opens with a part marker
+  // and a tab — "(b)   Siti said…" — or ends in a lone mark far out to the
+  // right — "…heat?        [1]". A caption does neither, so a ragged part
+  // line that happens to sit centred under a wide table is not one.
+  const partMarked = b => {
+    if (!lineH(b)) return false;
+    const p = b.pm || (b.pm = piecesX(b, Math.max(2, Math.round(b.size * 0.45)))
+      .filter(c => c[3] - c[2] + 1 >= b.size * 0.35));
+    return p.length >= 2 && p[0][1] - p[0][0] + 1 <= b.size * 1.8
+      && p[1][0] - p[0][1] - 1 >= b.size * 0.6 && p[1][1] - p[1][0] + 1 >= b.size * 3;
+  };
+  const markEnd = b => {
+    if (!lineH(b)) return false;
+    const p = wordPieces(b);
+    if (p.length < 2) return false;
+    const a = p[p.length - 2], z = p[p.length - 1];
+    return z[1] - z[0] + 1 <= b.size * 1.6 && z[0] - a[1] - 1 >= b.size * 3 && a[1] - a[0] + 1 >= b.size * 4;
+  };
+  const questionLine = b => partMarked(b) || markEnd(b);
   // A body must be where the model said the figure is.
   const inBox = b => !aiBox || !(aiBox.y1 > aiBox.y0)
     || (Math.min(y0 + b.e, aiBox.y1) - Math.max(y0 + b.s, aiBox.y0) + 1) >= Math.min(b.size, aiBox.y1 - aiBox.y0) * 0.5;
@@ -616,7 +657,7 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
     // its edges. A stem starts out at the text margin; a caption sits under
     // (or over) its figure, inside it — so it stays, model box or no.
     const capTol = Math.max(gapMin, w * 0.03);
-    const captionLike = b => !!C && centred(b) && b.minX > C.minX + capTol && b.maxX < C.maxX - capTol;
+    const captionLike = b => !!C && centred(b) && b.minX > C.minX + capTol && b.maxX < C.maxX - capTol && !questionLine(b);
     // A band the MODEL left out of its own box.
     const outBox = b => !!aiBox && aiBox.y1 > aiBox.y0 && !(y0 + b.e >= aiBox.y0 && y0 + b.s <= aiBox.y1);
     // The short last line of a wrapped sentence: left-aligned under (or over)
@@ -631,13 +672,14 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
         if (!(isProse(n) && !label(n) && gap <= Math.max(gapMin, b.size * 1.5))) return false;
         // A wrapped line sits one line's LEADING under the sentence and starts
         // exactly where its WORDS start — after a question number hanging in
-        // the margin, if there is one. A caption is a paragraph gap away, and
-        // an axis title sits over its axis instead, so anything else is a tail
-        // only when it is at least twice as close to the sentence as to the
-        // body.
+        // the margin, if there is one. That alone is enough only for a line
+        // the MODEL left out of its box: a "Table 1" caption, a y-axis title
+        // or a "Diagram 1" can sit exactly there, and the model boxes those.
+        // Anything else is a tail only when it is at least twice as close to
+        // the sentence as to the body.
         const p = wordPieces(n), tol = Math.max(4, b.size * 0.5);
         const words = p.length >= 2 && p[0][1] - p[0][0] + 1 <= n.size * 2 && p[1][0] - p[0][1] - 1 >= n.size ? p[1][0] : n.minX;
-        if (gap <= Math.max(4, Math.min(n.size, b.size) * 0.8)
+        if (outBox(b) && gap <= Math.max(4, Math.min(n.size, b.size) * 0.8)
           && (Math.abs(b.minX - words) <= tol || Math.abs(b.minX - n.minX) <= tol)) return true;
         return gap * 2 <= toCore(b) && b.minX >= n.minX - b.size && b.minX <= n.minX + b.size * 5;
       };
@@ -663,11 +705,30 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
     // stem or a part line beside an indented figure. Being outside the box is
     // not enough on its own: the margin is there because a box is often a
     // little tight, and an axis title over its axis or a caption at the
-    // figure's own edge is exactly what a tight box leaves out.
+    // figure's own edge is exactly what a tight box leaves out. When the
+    // margin itself fell outside the crop, a line that runs on OFF the crop's
+    // left edge — more of it on the page just beyond, where an axis title has
+    // only blank margin — with the body set clearly in, has come from there.
+    // And a QUESTION line the model left out is one wherever it starts.
+    const runsOffLeft = b => {
+      if (b.minX > 1 || x < 2) return false;
+      const reach = Math.min(x, Math.round(b.size * 3)), x0 = x - reach;
+      let d; try { d = ctx.getImageData(x0, y0 + b.s, reach, b.e - b.s + 1).data; } catch (e) { return false; }
+      for (let cx = 0; cx < reach - 1; cx++) {
+        let n = 0;
+        for (let ry = 0; ry <= b.e - b.s; ry++) {
+          const i = (ry * reach + cx) * 4;
+          if (d[i + 3] > 60 && d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 < TH_INK) n++;
+        }
+        if (n >= Math.max(2, b.size * 0.25)) return true;
+      }
+      return false;
+    };
     const spill = k => {
       const b = B(k);
       if (!C || !outBox(b) || !lineH(b) || label(b) || centred(b)) return false;
-      return b.minX < C.minX - Math.max(gapMin * 2, w * 0.05);
+      return b.minX < C.minX - Math.max(gapMin * 2, w * 0.05) || questionLine(b)
+        || (C.minX >= Math.max(gapMin * 2, w * 0.03) && b.maxX < C.maxX && runsOffLeft(b));
     };
     const words = k => k < m && (plain(B(k)) || tail(k) || partLabel(k) || spill(k));
     // A sentence above the body that opens with a question number: a narrow
@@ -700,7 +761,7 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
       // an answer line already walked, the model leaving it out of its box, or
       // starting out at the text margin LEFT of the figure (a part line does; a
       // caption sits under its figure). Not above: there it is usually the stem.
-      if (C && dir < 0 && !asLine && !ev && k + 1 < m && !outBox(b)
+      if (C && dir < 0 && !asLine && !ev && k + 1 < m && !outBox(b) && !questionLine(b)
         && b.minX >= C.minX - Math.max(gapMin, b.size)) {
         let j = k + 1;
         while (j < m && (label(B(j)) || captionLike(B(j)))) j++;
@@ -723,7 +784,7 @@ function _trimEdgeTextLines(ctx, W, H, r, thr, aiBox) {
       // can still come off there, a cut caption cannot come back.
       const touching = !!C && k + 1 === m && after < gapMin && after > 0 && !centred(b)
         && ((plain(b) && (outBox(b) || numbered(b) || (ev && b.minX < C.minX - Math.max(gapMin * 2, w * 0.05))
-          || (k > 0 && isProse(B(k - 1)) && Math.abs(B(k - 1).minX - b.minX) <= b.size))) || tail(k));
+          || (k > 0 && isProse(B(k - 1)) && Math.abs(B(k - 1).minX - b.minX) <= b.size))) || (tail(k) && outBox(b)));
       if (after >= gapMin || touching) {
         cut = end + dir * (1 + Math.min(after, gapMin));
         if (eaten <= 3) capped = cut;

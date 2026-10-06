@@ -948,6 +948,131 @@ test('"(a)  Explain your answer.  [1]" under a FULL-WIDTH table is a part line',
   near(out.y + out.h, bottom, 3, 'the part line under a full-width table was kept as labels');
 });
 
+// ---- THE FINAL REVIEW (v1.426.3) ---------------------------------------------
+// The tail SHORTCUT (a line one leading under a sentence, starting where its
+// words start) is evidence only for a line the MODEL LEFT OUT: a "Table 1", a
+// y-axis title or a "Diagram 1" sits exactly there, and the model boxes those.
+test('"Table 1" on the line under the stem, at the table\'s edge and in the box, stays', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 100, 600, 12);                                  // the stem
+  p.prose(30, 118, 120, 12);                                  // "Table 1: Mass of each object", one leading under
+  const bottom = borderedTable(p, 30, 140, 600, 4, 35);      // the table, 10px under it, at the same edge
+  const out = trimBox(p, { x: 20, y: 90, w: 670, h: bottom - 70 }, { y0: 118, y1: bottom });
+  ok(out.y <= 118, 'the caption was cut as the tail of the stem (top ' + out.y + ')');
+});
+test('a y-axis title one line under a two-line stem, over its axis, stays', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 80, 10, 12).prose(70, 80, 560, 12);             // "4   Ahmad heated some water …"
+  p.prose(70, 98, 400, 12);                                   // "…and recorded its temperature."
+  p.prose(70, 116, 120, 12);                                  // "Temperature (°C)", at the indent
+  p.rect(110, 138, 2, 200).rect(110, 338, 450, 2);            // the axes, 10px under the title
+  for (let k = 0; k < 5; k++) p.prose(80, 145 + k * 40, 18, 8);
+  for (let k = 0; k < 9; k++) p.rect(120 + k * 50, 330 - k * 20, 6, 6);
+  const out = trimBox(p, { x: 20, y: 70, w: 670, h: 290 }, { y0: 116, y1: 345 });
+  ok(out.y <= 116, 'the y-axis title was cut as the tail of the stem (top ' + out.y + ')');
+});
+test('a two-line figure title after a paragraph gap stays whole', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 80, 10, 12).prose(70, 80, 560, 12);             // the stem
+  p.prose(70, 120, 520, 12);                                  // "Graph 1: Temperature of the water in the cup over"
+  p.prose(70, 138, 200, 12);                                  // "a period of 10 minutes", one leading under
+  p.rect(110, 154, 2, 200).rect(110, 354, 450, 2);            // the graph, 4px under it
+  for (let k = 0; k < 9; k++) p.rect(120 + k * 50, 346 - k * 20, 6, 6);
+  const out = trimBox(p, { x: 20, y: 70, w: 670, h: 300 }, { y0: 120, y1: 356 });
+  ok(out.y <= 120, 'the figure title lost a line (top ' + out.y + ')');
+});
+test('a caption UNDER a table is not the "tail" of the part line below it', () => {
+  const p = page(700, 1000, { paper: 250 });
+  const bottom = borderedTable(p, 30, 120, 600, 4, 35);
+  p.prose(30, bottom + 10, 220, 12);                          // "Table 1: Mass of each object"
+  p.prose(30, bottom + 28, 560, 12);                          // "(a) Which object …", one leading under
+  const out = trimBox(p, { x: 20, y: 110, w: 670, h: bottom - 70 }, { y0: 120, y1: bottom + 22 });
+  ok(out.y + out.h >= bottom + 22, 'the caption under the table was cut (bottom ' + (out.y + out.h) + ')');
+});
+// A part line opens with a marker and a TAB; a row of labels is spread out.
+test('"A   B (iron nail in oil)   C" under three narrow tubes stays', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 80, 620, 12);                                   // the stem
+  for (const x of [150, 330, 510]) p.rect(x, 120, 30, 150);  // three narrow test tubes
+  p.prose(160, 284, 10, 14).prose(275, 284, 140, 14).prose(520, 284, 10, 14);   // A · B (…) · C
+  const out = trimBox(p, { x: 20, y: 110, w: 670, h: 200 }, { y0: 120, y1: 298 });
+  ok(out.y + out.h >= 296, 'the label row with a long middle label was cut as a part line');
+});
+test('column headings over a table ruled with horizontal lines only stay', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(30, 100, 10, 12).prose(70, 100, 560, 12);           // "9   The table below shows …"
+  p.prose(70, 132, 18, 12).prose(270, 132, 222, 12).prose(650, 132, 24, 12);   // Day · Height of plant (cm) · pH
+  for (let k = 0; k <= 4; k++) p.rect(60, 164 + k * 35, 620, 2);
+  for (let k = 0; k < 4; k++) p.prose(70, 176 + k * 35, 14, 8).prose(270, 176 + k * 35, 40, 8).prose(650, 176 + k * 35, 18, 8);
+  const out = trimBox(p, { x: 20, y: 90, w: 670, h: 220 }, { y0: 132, y1: 306 });
+  ok(out.y <= 132, 'the column headings were cut with the stem (top ' + out.y + ')');
+});
+test('"A   switch S (closed)   B" spread under a circuit stays, though its middle label is long', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(150, 150, 400, 3).rect(150, 297, 400, 3).rect(150, 150, 3, 150).rect(547, 150, 3, 150);   // the circuit
+  p.prose(152, 314, 10, 14).prose(240, 314, 220, 14).prose(538, 314, 10, 14);  // A · switch S (closed) · B
+  const out = trimBox(p, { x: 20, y: 130, w: 670, h: 220 }, { y0: 150, y1: 328 });
+  ok(out.y + out.h >= 326, 'the spread label row was cut (bottom ' + (out.y + out.h) + ')');
+});
+// A framed figure's own frame runs a short way past a crop of what is INSIDE
+// it, then turns into its border. A page frame or margin rule runs on.
+test('a framed figure with ~1 cm of padding keeps its frame — and its caption', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.rect(100, 190, 500, 2).rect(100, 760, 500, 2).rect(100, 190, 2, 572).rect(598, 190, 2, 572);   // the frame
+  p.prose(160, 250, 380, 12);                                 // its title
+  p.rect(220, 300, 260, 340);                                 // the drawing
+  p.prose(130, 690, 440, 12);                                 // its caption, wider than the drawing
+  const out = trimBox(p, { x: 90, y: 230, w: 520, h: 492 }, { y0: 250, y1: 702 });
+  ok(out.y <= 250 && out.y + out.h >= 702, 'the frame was wiped as a page frame and the title or caption cut ('
+    + out.y + '..' + (out.y + out.h) + ')');
+});
+// A QUESTION LINE is never a caption: it opens with a part marker and a tab,
+// or ends in a lone mark far out to the right.
+test('part lines under a table WIDER than the text block come off — the reported layout', () => {
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(40, 100, 10, 12).prose(70, 100, 560, 12);           // "5   The table below shows …"
+  const bottom = borderedTable(p, 30, 130, 680, 4, 35);      // wider than the text, both sides
+  p.prose(70, bottom + 28, 18, 12).prose(108, bottom + 28, 380, 12).prose(655, bottom + 28, 16, 12);   // (a) … [1]
+  p.rect(108, bottom + 73, 520, 2);                           // its answer line
+  p.prose(70, bottom + 98, 18, 12).prose(108, bottom + 98, 517, 12);   // "(b) Siti said …", ragged, centred-ish
+  const out = trimBox(p, { x: 20, y: 90, w: 670, h: bottom + 30 }, { y0: 100, y1: bottom + 110 });
+  near(out.y + out.h, bottom, 3, 'the part lines under the wide table were kept as a caption');
+  ok(out.y >= 128, 'the stem was kept (top ' + out.y + ')');
+});
+test('a part line the model left out comes off, though it starts at the table\'s own edge', () => {
+  const p = page(700, 1000, { paper: 250 });
+  const bottom = borderedTable(p, 30, 120, 600, 4, 35);
+  p.prose(30, bottom + 30, 18, 12).prose(68, bottom + 30, 200, 12);   // "(a)  On which day …", short
+  const out = trimBox(p, { x: 20, y: 110, w: 600, h: bottom - 50 }, { y0: 120, y1: bottom });
+  near(out.y + out.h, bottom, 3, 'the part line at the table\'s edge was kept');
+});
+test('a line running in from a margin the crop left out comes off, with the body set in', () => {
+  const p = page(800, 1000, { paper: 250 });
+  const bottom = borderedTable(p, 100, 120, 650, 4, 35);
+  p.prose(30, bottom + 30, 18, 12).prose(68, bottom + 30, 300, 12);   // "(a)" out at the margin, its words
+  const out = trimBox(p, { x: 66, y: 110, w: 620, h: bottom - 50 }, { y0: 120, y1: bottom });   // the crop starts at the words
+  near(out.y + out.h, bottom, 3, 'the line cut off at the crop\'s left edge was kept');
+});
+test('…but a y-axis title starting at the crop\'s edge, with blank margin beyond, stays', () => {
+  // The crop's edge is pulled in to the leftmost ink, so the title STARTS
+  // there too — only a line that runs on off the crop has come from outside.
+  const p = page(700, 1000, { paper: 250 });
+  p.prose(118, 120, 140, 12);                                 // "Temperature (°C)", out past the axis
+  for (let k = 0; k < 5; k++) p.prose(138, 160 + k * 40, 18, 8);   // tick numbers, just in from it
+  p.rect(165, 150, 2, 200).rect(165, 350, 450, 2);            // the axes
+  for (let k = 0; k < 9; k++) p.rect(175 + k * 50, 340 - k * 20, 6, 6);
+  const out = trimBox(p, { x: 114, y: 100, w: 540, h: 270 }, { y0: 150, y1: 352 });   // the model boxed the plot only
+  ok(out.y <= 120, 'the y-axis title was cut as a line from the margin (top ' + out.y + ')');
+});
+test('"(a) … [1]" under a graph that starts at the text indent comes off, inside the box', () => {
+  const p = graph(page(700, 1000, { paper: 250 }), { xTitle: 'centre' });
+  p.prose(30, 90, 620, 10);                                   // the stem
+  p.prose(130, 410, 16, 10).prose(160, 410, 380, 10).prose(650, 410, 16, 10);   // (a) · words · [1]
+  const out = trimBox(p, { x: 20, y: 80, w: 670, h: 345 }, { y0: 128, y1: 420 });
+  ok(out.y + out.h >= 386, 'the x-axis title was cut (bottom ' + (out.y + out.h) + ')');
+  ok(out.y + out.h <= 395, 'the part line was kept as a caption (bottom ' + (out.y + out.h) + ')');
+});
+
 // ---- A REFUSED CLEAN-UP STAYS REFUSED, AND SAYS NOTHING ----------------------
 // v1.426.1 painted out a "sliver of a sentence" crossing a clean-up edge and
 // told Jev about every refused clean-up. A review found the sliver test could

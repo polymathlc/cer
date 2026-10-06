@@ -4452,7 +4452,7 @@ The primary papers number their options; Secondary 1 science letters them.
   `EDITOR_OWNED_QUESTION_FIELDS`, or setting it back to Auto would be undone.
 - Run **`node tools/mcq-labels-tests.mjs`** after touching any of it.
 
-## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0, held to evidence v1.426.0, second and third reviews v1.426.2)
+## ✂️ Past the table — a crop stops at the FIGURE BODY, not at four rules (v1.425.0, held to evidence v1.426.0, reviews v1.426.2–v1.426.3)
 
 `STRONG_BAND` / `TRIM_BANDS_MAX` / `ANSWER_LINE_GAP` / `LABEL_GAP` /
 `LABEL_LONGEST` / `TABLE_RULES_MIN` and the band walk inside `_trimEdgeTextLines`
@@ -4556,7 +4556,7 @@ and **every bordered table has four rules**.
   every label, title, caption, key and ruled table case must be KEPT, and every
   stem, part, mark and answer line case must COME OFF.
 
-### …and what the second and third reviews found (v1.426.2)
+### …and what the second, third and final reviews found (v1.426.2–v1.426.3)
 
 `numbered` / `captionLike` / `stroke` / both `segs` cuts / the part-line test
 in `isLabelRow` / the frame wipe at the top of `_trimEdgeTextLines`. Every one
@@ -4580,11 +4580,30 @@ of these was silent: the crop still came back, looking either perfectly clean
   inset caption is a caption unless something says otherwise — an answer line
   walked, the model leaving it out of its box, or starting at the text margin
   LEFT of the figure (a part line does). Not above: there it is the stem.
-- **A WRAPPED LINE is a tail when it sits one line's leading under the sentence
-  and starts exactly where the sentence's WORDS start** (after a question
-  number, if there is one). Anything else — an axis title over its axis, a
-  caption a paragraph gap away — is a tail only when it sits twice as close to
-  the sentence as to the body.
+- **A WRAPPED LINE one line's leading under a sentence, starting exactly where
+  the sentence's WORDS start, is a tail ONLY when the model left it out of its
+  box** (`outBox`), and `touching` cuts on a tail only then too. A "Table 1"
+  caption, a y-axis title, a "Diagram 1" or the second line of a figure's own
+  title sits exactly there — and the model boxes those. Anything else is a tail
+  only when it sits twice as close to the sentence as to the body.
+- **A QUESTION LINE is never a caption** (`questionLine`): it opens with a part
+  marker and a TAB — "(b)   Siti said…" — or ends in a lone mark far out to the
+  right — "…heat?        [1]". A caption does neither. Without it a ragged part
+  line that happened to sit centred under a table wider than the text block
+  read as a caption and stopped the walk, so the `(a)` line, its answer line and
+  the `(b)` line all stayed — the reported layout exactly. The same test stops
+  the below-the-figure rule protecting a part line under a figure that starts
+  at the text indent.
+- **A line the MODEL LEFT OUT of its box comes off on less** (`spill`): out at
+  the text margin well left of the body, as before — or a QUESTION line
+  wherever it starts (a part line flush with the table's own left edge has
+  nothing else to give it away), or a line that runs on OFF the crop's left
+  edge — more ink on the page just beyond it, on the same rows — while the body
+  is set clearly in (the margin fell outside the crop, so the "(a)" that would
+  have marked it is not even in the picture). Merely STARTING at the crop's
+  edge is not enough: the edge is pulled in to the leftmost ink, so a y-axis
+  title out past its axis starts there too, with only blank margin beyond.
+  Still never a label row and never a centred line.
 - **A row of labels sits over its parts, and the body is cut into parts TWO
   ways**: as it is (an outline beaker is one piece, its walls joined by its
   base) and with its strokes left out (a bench joins two beakers, and they are
@@ -4593,9 +4612,13 @@ of these was silent: the crop still came back, looking either perfectly clean
   of EITHER. Each piece must be CONTAINED in its part: matching by the middle
   let MCQ option rows and part lines under wide tables read as labels.
 - **"(a)  Explain your answer.  [1]" is a part line, not three labels**: three
-  pieces, the long one in the MIDDLE, between a short marker at (or past) the
-  body's left edge and/or a short mark at (or past) its right. A row of labels
-  — "X   Y   switch (open)", "P   Q   R (control)" — keeps its long one last.
+  pieces, the long one in the MIDDLE, after a NARROW marker at (or past) the
+  body's left edge with its words one TAB after it. A row of labels is spread
+  out — "A   B (iron nail in oil)   C" under three test tubes, "Day   Height of
+  plant (cm)   pH" over a table — so the gap is what tells them apart, wherever
+  the long label sits. And three or more pieces with EVERY gap wider than a tab
+  are labels even when one is longer than the 40% `LABEL_LONGEST` share ("A
+  switch S (closed)   B" spread under a circuit).
 - A three-line table with more than six data rows still folds into one body; a
   slanted arrow is not an answer line (`colSpan`); the caps lift for a long run
   only when it lies wholly OUTSIDE the model's box and reaches the body from
@@ -4605,11 +4628,14 @@ of these was silent: the crop still came back, looking either perfectly clean
   crop, followed down a pixel either side at a time (a page shot a fraction of a
   degree off square walks a rule one column over every few hundred rows, and
   anti-aliasing then made every row count as inked, so nothing came off). **It
-  must be seen RUNNING ON past the crop on the page** (`FRAME_RUN` rows beyond
-  both edges) and drift no more than ~2°: the side of a framed figure turning
-  into its border, a table's rule on a pasted image exactly the table's height,
-  or a ray at 17° is the figure's own, and so is anything when the crop meets
-  the page's top or bottom. A photograph reaching both edges is not thin.
+  must be seen RUNNING ON past the crop on the page**, beyond both edges, and is
+  followed until it stops: it is a page frame only if it runs `FRAME_LONG` (8%
+  of the page) or ends within `FRAME_MARGIN` (6%) of the page's edge, and it
+  drifts no more than ~2°. The side of a framed figure with a centimetre of
+  padding runs a short way past a crop of what is INSIDE it and then turns into
+  its border; a table's rule on a pasted image is exactly the table's height; a
+  ray at 17° is the figure's own; and so is anything when the crop meets the
+  page's top or bottom. A photograph reaching both edges is not thin.
 - **Tried and taken back out, so nobody puts them back:** painting out "a sliver
   of a sentence" crossing a refused clean-up's edge (it could not tell a slanting
   stem from a figure's own label, axis title or table row, and dropped truly
@@ -4628,7 +4654,17 @@ of these was silent: the crop still came back, looking either perfectly clean
     Measured over every corpus, spill removes far more stray stems than it
     costs captions.
   - **On a tilted page, a clean-up that cuts through the slanting end of the
-    stem is refused**, so the stem stays.
+    stem is refused**, so the stem stays. A page frame or margin rule on a phone
+    photo more than ~2° off square is not wiped either (the drift guard is what
+    keeps a figure's own slanted strokes), so its stem stays as it did before.
+  - **A single unnumbered line centred over a figure wider than the text block
+    reads as the figure's title** and is kept — geometry alone cannot tell "Ali
+    then repeated the experiment, as shown below." from a centred title.
+  - **A label row ABOVE narrow objects whose middle label is far wider than its
+    object** ("P   Q (a ball of plasticine)   R" packed over test tubes) can be
+    read as the stem's next line and cut; ec8c4b3 cut it too. Matching labels
+    by their MIDDLE instead of containment was tried in review 2 and read MCQ
+    option rows and part lines under wide tables as labels.
 
 ## 🔧 Fix all — repair every red/yellow vetting question in the background (v1.421.0)
 
