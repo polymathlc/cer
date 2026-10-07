@@ -185,7 +185,6 @@
       <button class="tab" data-tab="products" onclick="showTab('products')">Products</button>
     </nav>
     <div class="admin-chip" id="admin-chip"></div>
-    <button class="btn small" id="admin-login-top" onclick="adminSignIn()">🔐 Teacher sign in</button>
   </div>
 </header>
 
@@ -276,7 +275,7 @@
 
   <div class="footer">
     Polymath Learning Centre · WhatsApp +65 9645 0588 ·
-    <button class="link-btn" id="admin-login-link" onclick="adminSignIn()">Admin login</button>
+    <button class="link-btn" id="admin-login-link" onclick="adminSignIn()">Teacher login</button>
   </div>
 </main>
 
@@ -1047,10 +1046,37 @@ async function adminSignIn() {
       alert('Access denied. ' + who + ' is not an admin account.');
     }
   } catch (e) {
-    if (e && e.code === 'auth/popup-closed-by-user') return;
+    if (e && (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request')) return;
+    if (e && e.code === 'auth/popup-blocked') { showAdminPrompt(); return; }
     alert('Sign-in failed: ' + (e.message || e));
   }
 }
+// #admin opens Google sign-in without a click, which many browsers block as an
+// unrequested pop-up. When that happens this small prompt asks for the one
+// click the browser needs; it is only ever shown to someone who typed #admin.
+function showAdminPrompt() {
+  if (document.getElementById('admin-prompt')) return;
+  const d = document.createElement('div');
+  d.id = 'admin-prompt';
+  d.className = 'modal-bg show';
+  d.innerHTML = '<div class="modal" style="max-width:360px;text-align:center">'
+    + '<h2>Teacher login</h2><div class="sub">Sign in with your Google account to edit the schedule.</div>'
+    + '<button class="btn" id="admin-prompt-go">Continue with Google</button> '
+    + '<button class="btn ghost" id="admin-prompt-x">Cancel</button></div>';
+  document.body.appendChild(d);
+  d.querySelector('#admin-prompt-go').onclick = () => { d.remove(); adminSignIn(); };
+  d.querySelector('#admin-prompt-x').onclick = () => d.remove();
+}
+// The saved sign-in is only known once Firebase has answered, so wait for it
+// rather than asking somebody who is already signed in to sign in again.
+const _authReady = new Promise(r => { const off = auth.onAuthStateChanged(() => { off(); r(); }); });
+async function maybeAdminFromHash() {
+  if (location.hash !== '#admin') return;
+  history.replaceState(null, '', location.pathname + location.search);
+  await _authReady;
+  if (!auth.currentUser || auth.currentUser.email !== ADMIN_EMAIL) adminSignIn();
+}
+window.addEventListener('hashchange', maybeAdminFromHash);
 async function adminSignOut() { await auth.signOut(); }
 function requireAdmin() {
   const u = auth.currentUser;
@@ -1064,7 +1090,6 @@ auth.onAuthStateChanged(user => {
   ['admin-schedule-banner', 'admin-trial-card', 'admin-bookings-card', 'admin-product-card']
     .forEach(id => document.getElementById(id).classList.toggle('hidden', !isAdmin));
   document.getElementById('admin-login-link').classList.toggle('hidden', isAdmin);
-  document.getElementById('admin-login-top').classList.toggle('hidden', isAdmin);
   document.getElementById('admin-chip').innerHTML = isAdmin
     ? 'Admin: ' + escapeHtml(user.email) + ' <button class="link-btn" onclick="adminSignOut()">Sign out</button>'
     : '';
@@ -1088,7 +1113,7 @@ auth.onAuthStateChanged(user => {
 
 // ─── Init ───
 if (location.hash === '#products') showTab('products');
-if (location.hash === '#admin') { history.replaceState(null, '', location.pathname); adminSignIn(); }
+maybeAdminFromHash();
 renderHero();
 renderSchedule();
 </script>
