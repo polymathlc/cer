@@ -184,6 +184,7 @@
       <button class="tab" data-tab="products" onclick="showTab('products')">Products</button>
     </nav>
     <div class="admin-chip" id="admin-chip"></div>
+    <button class="btn small" id="admin-login-top" onclick="adminSignIn()">🔐 Teacher sign in</button>
   </div>
 </header>
 
@@ -1062,6 +1063,7 @@ auth.onAuthStateChanged(user => {
   ['admin-schedule-banner', 'admin-trial-card', 'admin-bookings-card', 'admin-product-card']
     .forEach(id => document.getElementById(id).classList.toggle('hidden', !isAdmin));
   document.getElementById('admin-login-link').classList.toggle('hidden', isAdmin);
+  document.getElementById('admin-login-top').classList.toggle('hidden', isAdmin);
   document.getElementById('admin-chip').innerHTML = isAdmin
     ? 'Admin: ' + escapeHtml(user.email) + ' <button class="link-btn" onclick="adminSignOut()">Sign out</button>'
     : '';
