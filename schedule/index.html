@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polymath Learning Centre — Class Schedule & Shop</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --white:#fff; --gray-50:#fafafa; --gray-100:#f5f5f5; --gray-200:#e5e5e5; --gray-300:#d4d4d4;
+    --gray-400:#a3a3a3; --gray-500:#737373; --gray-600:#525252; --gray-700:#404040; --gray-900:#171717; --black:#000;
+    --success:#16a34a; --success-bg:#f0fdf4; --success-border:#bbf7d0;
+    --danger:#dc2626; --danger-bg:#fef2f2; --danger-border:#fecaca;
+    --warn:#b45309; --warn-bg:#fffbeb; --warn-border:#fde68a;
+    --font:'Century Gothic','CenturyGothic','AppleGothic','Gill Sans','Gill Sans MT',sans-serif;
+    --radius:12px; --radius-sm:8px;
+    --shadow:0 1px 3px rgba(0,0,0,0.08),0 1px 2px rgba(0,0,0,0.06);
+    --shadow-lg:0 10px 25px rgba(0,0,0,0.08),0 4px 10px rgba(0,0,0,0.04);
+  }
+  body { font-family:var(--font); background:var(--gray-100); color:var(--gray-900); line-height:1.6; -webkit-font-smoothing:antialiased; }
+  button, input, select, textarea { font-family:inherit; font-size:14px; }
+
+  /* ─── Top bar & tabs ─── */
+  .topbar { position:sticky; top:0; z-index:50; background:var(--white); border-bottom:1px solid var(--gray-200); }
+  .topbar-inner { max-width:960px; margin:0 auto; padding:0 16px; display:flex; align-items:center; gap:16px; min-height:60px; flex-wrap:wrap; }
+  .brand { font-weight:700; letter-spacing:0.04em; font-size:15px; }
+  .tabs { display:flex; gap:4px; flex:1; }
+  .tab { background:none; border:none; padding:18px 14px; cursor:pointer; color:var(--gray-500); font-weight:700; border-bottom:2px solid transparent; }
+  .tab.active { color:var(--black); border-bottom-color:var(--black); }
+  .admin-chip { font-size:12px; color:var(--gray-500); display:flex; align-items:center; gap:8px; }
+  .link-btn { background:none; border:none; color:var(--gray-600); text-decoration:underline; cursor:pointer; font-size:12px; }
+
+  .wrap { max-width:960px; margin:0 auto; padding:24px 16px 80px; }
+  .hero { background:var(--white); border:1px solid var(--gray-200); border-radius:var(--radius); padding:28px 24px; margin-bottom:20px; }
+  .hero h1 { font-size:24px; margin-bottom:6px; }
+  .hero p { color:var(--gray-600); font-size:14px; white-space:pre-line; }
+  .price-pill { display:inline-block; margin-top:12px; background:var(--black); color:var(--white); padding:6px 14px; border-radius:999px; font-weight:700; font-size:14px; }
+
+  .card { background:var(--white); border:1px solid var(--gray-200); border-radius:var(--radius); padding:20px; margin-bottom:20px; }
+  .card h2 { font-size:16px; margin-bottom:12px; }
+
+  /* ─── Filters ─── */
+  .filters { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .field label { display:block; font-size:12px; font-weight:700; color:var(--gray-700); margin-bottom:4px; }
+  .field input, .field select, .field textarea { width:100%; padding:10px 12px; border:1px solid var(--gray-300); border-radius:var(--radius-sm); background:var(--white); color:var(--gray-900); }
+  .field textarea { min-height:90px; resize:vertical; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline:none; border-color:var(--black); }
+  .req { color:var(--danger); }
+
+  /* ─── Schedule grid ─── */
+  .day-block { margin-bottom:18px; }
+  .day-title { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--gray-500); margin-bottom:8px; }
+  .slot-row { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .slot { background:var(--white); border:1px solid var(--gray-200); border-radius:var(--radius-sm); padding:14px; display:flex; flex-direction:column; gap:6px; min-height:140px; }
+  .slot.dim { opacity:0.35; }
+  .slot-time { font-weight:700; font-size:15px; }
+  .tags { display:flex; flex-wrap:wrap; gap:4px; }
+  .tag { font-size:11px; padding:2px 8px; border-radius:999px; background:var(--gray-100); border:1px solid var(--gray-200); color:var(--gray-700); }
+  .tag.math { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
+  .tag.sci { background:#f0fdf4; border-color:#bbf7d0; color:#15803d; }
+  .slot-note { font-size:12px; color:var(--gray-600); }
+  .slot-empty { font-size:12px; color:var(--gray-400); font-style:italic; }
+  .slot .spacer { flex:1; }
+  .btn { display:inline-flex; justify-content:center; align-items:center; gap:6px; background:var(--black); color:var(--white); border:1px solid var(--black); padding:10px 14px; border-radius:var(--radius-sm); font-weight:700; cursor:pointer; }
+  .btn:hover { background:var(--gray-700); }
+  .btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .btn.ghost { background:var(--white); color:var(--black); border-color:var(--gray-300); }
+  .btn.ghost:hover { background:var(--gray-100); }
+  .btn.danger { background:var(--white); color:var(--danger); border-color:var(--danger-border); }
+  .btn.small { padding:6px 10px; font-size:12px; }
+  .status-full { font-size:12px; font-weight:700; color:var(--danger); text-align:center; padding:8px; border:1px dashed var(--danger-border); border-radius:var(--radius-sm); }
+
+  /* Admin slot editor */
+  .slot-edit { display:grid; gap:6px; }
+  .slot-edit select, .slot-edit input { width:100%; padding:6px 8px; border:1px solid var(--gray-300); border-radius:6px; font-size:12px; }
+  .admin-banner { background:var(--warn-bg); border:1px solid var(--warn-border); color:var(--warn); padding:10px 14px; border-radius:var(--radius-sm); font-size:13px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+  /* Bookings list (admin) */
+  .booking { display:grid; grid-template-columns:90px 1fr auto; gap:14px; padding:14px 0; border-top:1px solid var(--gray-200); align-items:start; }
+  .booking:first-child { border-top:none; }
+  .booking img { width:90px; height:120px; object-fit:cover; border-radius:6px; border:1px solid var(--gray-200); cursor:zoom-in; background:var(--gray-100); }
+  .booking .meta { font-size:13px; color:var(--gray-700); }
+  .booking .meta b { color:var(--black); }
+  .badge { font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; }
+  .badge.pending { background:var(--warn-bg); color:var(--warn); border:1px solid var(--warn-border); }
+  .badge.confirmed { background:var(--success-bg); color:var(--success); border:1px solid var(--success-border); }
+  .booking-actions { display:flex; flex-direction:column; gap:6px; }
+
+  /* ─── Products ─── */
+  .products { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
+  .product { background:var(--white); border:1px solid var(--gray-200); border-radius:var(--radius); padding:20px; display:flex; flex-direction:column; gap:8px; }
+  .product h3 { font-size:17px; }
+  .product .desc { font-size:13px; color:var(--gray-600); white-space:pre-line; flex:1; }
+  .product .price { font-size:22px; font-weight:700; }
+  .empty { text-align:center; color:var(--gray-500); padding:40px 16px; font-size:14px; }
+
+  /* ─── Modal ─── */
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,0.45); display:none; align-items:flex-start; justify-content:center; z-index:100; overflow-y:auto; padding:24px 12px; }
+  .modal-bg.show { display:flex; }
+  .modal { background:var(--white); border-radius:var(--radius); max-width:560px; width:100%; padding:24px; box-shadow:var(--shadow-lg); position:relative; }
+  .modal h2 { font-size:18px; margin-bottom:4px; }
+  .modal .sub { color:var(--gray-600); font-size:13px; margin-bottom:16px; }
+  .modal .close { position:absolute; top:12px; right:14px; background:none; border:none; font-size:22px; cursor:pointer; color:var(--gray-500); }
+  .form-grid { display:grid; gap:12px; }
+  .pay-box { background:var(--gray-50); border:1px solid var(--gray-200); border-radius:var(--radius-sm); padding:16px; text-align:center; }
+  .pay-box .qr { display:inline-block; padding:8px; background:var(--white); border:1px solid var(--gray-200); border-radius:8px; }
+  .pay-box .qr img, .pay-box .qr canvas { display:block; }
+  .pay-info { font-size:13px; color:var(--gray-600); margin-top:8px; }
+  .pay-info b { color:var(--black); }
+  .upload { border:1px dashed var(--gray-400); border-radius:var(--radius-sm); padding:16px; text-align:center; cursor:pointer; font-size:13px; color:var(--gray-600); }
+  .upload.has { border-style:solid; border-color:var(--success); background:var(--success-bg); color:var(--success); }
+  .upload img { max-height:140px; margin-top:8px; border-radius:6px; }
+  .payimg-preview { max-width:100%; border:1px solid var(--gray-200); border-radius:8px; }
+  .success-box { text-align:center; padding:12px 0; }
+  .success-box .tick { font-size:44px; }
+
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(120px); background:var(--black); color:var(--white); padding:12px 18px; border-radius:var(--radius-sm); font-size:13px; transition:transform 0.25s ease; z-index:200; max-width:90vw; }
+  .toast.show { transform:translateX(-50%) translateY(0); }
+  .toast.err { background:var(--danger); }
+  .hidden { display:none !important; }
+  .footer { text-align:center; font-size:12px; color:var(--gray-500); margin-top:32px; }
+
+  @media (max-width:720px) {
+    .slot-row { grid-template-columns:1fr; }
+    .filters { grid-template-columns:1fr; }
+    .grid-2 { grid-template-columns:1fr; }
+    .booking { grid-template-columns:70px 1fr; }
+    .booking img { width:70px; height:94px; }
+    .booking-actions { grid-column:1 / -1; flex-direction:row; flex-wrap:wrap; }
+    .tab { padding:14px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">POLYMATH</div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="schedule" onclick="showTab('schedule')">Schedule</button>
+      <button class="tab" data-tab="products" onclick="showTab('products')">Products</button>
+    </nav>
+    <div class="admin-chip" id="admin-chip"></div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ═════════════════ SCHEDULE TAB ═════════════════ -->
+  <section id="tab-schedule">
+    <div id="admin-schedule-banner" class="admin-banner hidden">
+      <span>Admin mode — edit each slot below, then press <b>Save schedule</b>. Visitors only see the published version.</span>
+      <button class="btn small" onclick="saveSchedule()" id="save-schedule-btn">Save schedule</button>
+    </div>
+
+    <div class="hero">
+      <h1 id="trial-title">Trial Class</h1>
+      <p id="trial-details">Loading…</p>
+      <span class="price-pill" id="trial-price-pill">—</span>
+    </div>
+
+    <div id="admin-trial-card" class="card hidden">
+      <h2>Trial lesson settings</h2>
+      <div class="form-grid">
+        <div class="grid-2">
+          <div class="field"><label>Title</label><input id="cfg-title" type="text"></div>
+          <div class="field"><label>Trial price (SGD)</label><input id="cfg-price" type="number" min="0" step="0.01"></div>
+        </div>
+        <div class="field"><label>Trial lesson details (shown to visitors)</label><textarea id="cfg-details"></textarea></div>
+        <div><button class="btn" onclick="saveTrialSettings()" id="save-trial-btn">Save trial settings</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Find a slot</h2>
+      <div class="filters">
+        <div class="field"><label>Level</label>
+          <select id="f-level" onchange="renderSchedule()">
+            <option value="">All levels</option>
+            <option>P3</option><option>P4</option><option>P5</option><option>P6</option>
+          </select>
+        </div>
+        <div class="field"><label>Subject</label>
+          <select id="f-subject" onchange="renderSchedule()">
+            <option value="">Math & Science</option>
+            <option>Math</option><option>Science</option>
+          </select>
+        </div>
+        <div class="field"><label>Mode</label>
+          <select id="f-mode" onchange="renderSchedule()">
+            <option value="">Online & Physical</option>
+            <option>Online</option><option>Physical</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div id="schedule-grid"><div class="empty">Loading schedule…</div></div>
+
+    <div id="admin-bookings-card" class="card hidden">
+      <h2>Trial bookings <span id="bookings-count" class="badge pending">0</span></h2>
+      <div id="bookings-list"></div>
+    </div>
+  </section>
+
+  <!-- ═════════════════ PRODUCTS TAB ═════════════════ -->
+  <section id="tab-products" class="hidden">
+    <div class="hero">
+      <h1>Products</h1>
+      <p>Choose a product and tap <b>Buy</b>. We'll generate a PayNow payment image with the amount and reference filled in — save it, then scan it in your banking app to pay.</p>
+    </div>
+
+    <div id="admin-product-card" class="card hidden">
+      <h2 id="product-form-title">Add product</h2>
+      <div class="form-grid">
+        <input type="hidden" id="p-id">
+        <div class="grid-2">
+          <div class="field"><label>Product name <span class="req">*</span></label><input id="p-name" type="text" maxlength="80"></div>
+          <div class="field"><label>Price (SGD) <span class="req">*</span></label><input id="p-price" type="number" min="0" step="0.01"></div>
+        </div>
+        <div class="field"><label>Description</label><textarea id="p-desc"></textarea></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn" onclick="saveProduct()" id="save-product-btn">Save product</button>
+          <button class="btn ghost hidden" onclick="resetProductForm()" id="cancel-product-btn">Cancel edit</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="products-grid" class="products"><div class="empty">Loading products…</div></div>
+  </section>
+
+  <div class="footer">
+    Polymath Learning Centre · WhatsApp +65 9645 0588 ·
+    <button class="link-btn" id="admin-login-link" onclick="adminSignIn()">Admin login</button>
+  </div>
+</main>
+
+<!-- ═════════════════ BOOKING MODAL ═════════════════ -->
+<div class="modal-bg" id="booking-modal">
+  <div class="modal">
+    <button class="close" onclick="closeModal('booking-modal')" aria-label="Close">×</button>
+    <div id="booking-form-wrap">
+      <h2>Book a trial class</h2>
+      <div class="sub" id="booking-slot-label"></div>
+      <div class="form-grid">
+        <div class="grid-2">
+          <div class="field"><label>Parent name <span class="req">*</span></label><input id="b-parent" type="text" oninput="refreshBookingQR()"></div>
+          <div class="field"><label>Child's name <span class="req">*</span></label><input id="b-child" type="text"></div>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label>Child's level in 2027 <span class="req">*</span></label>
+            <select id="b-level">
+              <option value="">Select level</option>
+              <option>Primary 3</option><option>Primary 4</option><option>Primary 5</option><option>Primary 6</option>
+            </select>
+          </div>
+          <div class="field" id="b-mode-wrap"><label>Attend <span class="req">*</span></label>
+            <select id="b-mode"><option>Physical</option><option>Online</option></select>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label>Email <span class="req">*</span></label><input id="b-email" type="email" placeholder="you@example.com"></div>
+          <div class="field"><label>WhatsApp number <span class="req">*</span></label><input id="b-wa" type="tel" placeholder="9123 4567"></div>
+        </div>
+
+        <div class="pay-box">
+          <div style="font-weight:700;margin-bottom:8px;">Pay via PayNow</div>
+          <div class="qr" id="booking-qr"></div>
+          <div class="pay-info">
+            Amount: <b id="booking-amount">—</b><br>
+            UEN: <b>T16LL2365E</b> (Polymath Learning Centre)<br>
+            Reference: <b id="booking-ref">—</b>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Upload PayNow screenshot <span class="req">*</span></label>
+          <div class="upload" id="b-upload" onclick="document.getElementById('b-file').click()">
+            Tap to upload your payment screenshot
+          </div>
+          <input type="file" id="b-file" accept="image/*,application/pdf" class="hidden" onchange="onReceiptPicked(this)">
+        </div>
+
+        <button class="btn" id="booking-submit" onclick="submitBooking()">Confirm booking</button>
+      </div>
+    </div>
+    <div id="booking-success" class="success-box hidden">
+      <div class="tick">✓</div>
+      <h2>Booking received!</h2>
+      <p class="sub" id="booking-success-text"></p>
+      <button class="btn" onclick="closeModal('booking-modal')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════════════ PRODUCT PAYMENT MODAL ═════════════════ -->
+<div class="modal-bg" id="pay-modal">
+  <div class="modal">
+    <button class="close" onclick="closeModal('pay-modal')" aria-label="Close">×</button>
+    <h2 id="pay-title">Pay</h2>
+    <div class="sub">Optional: enter your name so we can match your payment. Then save the image and scan it with your banking app.</div>
+    <div class="field" style="margin-bottom:12px;"><label>Your name</label><input id="pay-name" type="text" oninput="renderPaymentImage()"></div>
+    <img id="pay-image" class="payimg-preview" alt="PayNow payment image">
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+      <button class="btn" onclick="downloadPaymentImage()">Save image</button>
+      <button class="btn ghost" onclick="sharePaymentImage()">Share…</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden QR render target for the product payment image -->
+<div id="offscreen-qr" style="position:absolute;left:-9999px;top:-9999px;"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// Firebase (same project as the workshop registration page)
+// ═══════════════════════════════════════════════════════════
+firebase.initializeApp({
+  apiKey: "AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo",
+  authDomain: "mathgen--app.firebaseapp.com",
+  projectId: "mathgen--app",
+  storageBucket: "mathgen--app.firebasestorage.app",
+  messagingSenderId: "165654161198",
+  appId: "1:165654161198:web:16c8bd60eb3a2aa7edbcbf",
+  measurementId: "G-0MWZFG211D"
+});
+const db = firebase.firestore();
+const storageService = firebase.storage();
+const auth = firebase.auth();
+
+const ADMIN_EMAIL = 'chungzhikai@gmail.com';
+// Every trial booking emails these addresses via the "Trigger Email"
+// extension (documents added to the `mail` collection are sent).
+const NOTIFICATION_EMAILS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg'];
+
+const PAYNOW_UEN = 'T16LL2365E';
+const MERCHANT_NAME = 'POLYMATH LEARNING';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const CONFIG_DOC = db.collection('schedule_config').doc('main');
+const BOOKINGS = db.collection('schedule_bookings');
+const PRODUCTS = db.collection('shop_products');
+
+// ─── Fixed weekly timetable ───
+const WEEKDAY_TIMES = [
+  { n: 1, label: '3:00pm – 4:45pm' },
+  { n: 2, label: '5:00pm – 6:45pm' },
+  { n: 3, label: '7:00pm – 8:45pm' }
+];
+const SATURDAY_TIMES = [
+  { n: 1, label: '9:00am – 10:45am' },
+  { n: 2, label: '11:00am – 12:45pm' },
+  { n: 3, label: '1:00pm – 2:45pm' }
+];
+const DAYS = [
+  { code: 'MON', name: 'Monday', times: WEEKDAY_TIMES },
+  { code: 'TUE', name: 'Tuesday', times: WEEKDAY_TIMES },
+  { code: 'WED', name: 'Wednesday', times: WEEKDAY_TIMES },
+  { code: 'THU', name: 'Thursday', times: WEEKDAY_TIMES },
+  { code: 'FRI', name: 'Friday', times: WEEKDAY_TIMES },
+  { code: 'SAT', name: 'Saturday', times: SATURDAY_TIMES }
+];
+const LEVELS = ['P3', 'P4', 'P5', 'P6'];
+const SUBJECTS = ['Math', 'Science'];
+const MODES = ['Online', 'Physical', 'Both'];
+const MODE_LABEL = { Online: 'Online', Physical: 'Physical', Both: 'Online & Physical' };
+// open = bookable, full = shown but not bookable, closed = hidden from visitors
+const STATUSES = ['open', 'full', 'closed'];
+
+function slotId(day, n) { return day + '-' + n; }
+function slotLabel(id) {
+  const [code, n] = id.split('-');
+  const day = DAYS.find(d => d.code === code);
+  const t = day && day.times.find(x => String(x.n) === n);
+  return day && t ? day.name + ' ' + t.label : id;
+}
+
+const DEFAULT_CONFIG = {
+  trialTitle: 'Book a Trial Class',
+  trialDetails: 'Experience a full 1h 45min lesson with Polymath Learning Centre.\nSmall groups, Primary 3 to Primary 6 Math and Science, online or at our Clementi centre.',
+  trialPrice: 30,
+  slots: {}
+};
+
+let config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+let draftSlots = null;      // admin's unsaved edits
+let products = [];
+let bookings = [];
+let isAdmin = false;
+let bookingsUnsub = null;
+
+// ═══════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════
+function escapeHtml(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+function money(n) { return '$' + Number(n || 0).toFixed(2); }
+function toast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+function normalizeSgMobile(input) {
+  const d = String(input || '').replace(/\D/g, '');
+  return d.length === 10 && d.startsWith('65') ? d.slice(2) : d;
+}
+function isValidSgMobile(input) { return /^[89]\d{7}$/.test(normalizeSgMobile(input)); }
+function fmtWa(n) { return n && n.length === 8 ? n.slice(0, 4) + ' ' + n.slice(4) : n; }
+function fmtTime(ts) {
+  const d = ts && ts.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
+  if (!d) return '';
+  return d.toLocaleString('en-SG', { timeZone: 'Asia/Singapore', hour12: true });
+}
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+// ═══════════════════════════════════════════════════════════
+// PayNow QR payload (EMV / SGQR)
+// ═══════════════════════════════════════════════════════════
+function tlv(tag, value) { return tag + value.length.toString().padStart(2, '0') + value; }
+function crc16(str) {
+  let crc = 0xFFFF;
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) { crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1; crc &= 0xFFFF; }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, '0');
+}
+function cleanRef(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+// PayNow reference is capped at 25 printable chars.
+function buildRef(prefix, name) {
+  const p = cleanRef(prefix);
+  const n = cleanRef(name).slice(0, Math.max(0, 24 - p.length)).trim();
+  return (n ? p + ' ' + n : p).slice(0, 25);
+}
+function buildPayNow(amount, reference) {
+  const mai = tlv('00', 'SG.PAYNOW') + tlv('01', '2') + tlv('02', PAYNOW_UEN) + tlv('03', '0');
+  let p = tlv('00', '01') + tlv('01', '12') + tlv('26', mai) + tlv('52', '0000') + tlv('53', '702')
+        + tlv('54', Number(amount).toFixed(2)) + tlv('58', 'SG') + tlv('59', MERCHANT_NAME)
+        + tlv('60', 'Singapore') + tlv('62', tlv('05', reference || 'POLYMATH')) + '6304';
+  return p + crc16(p);
+}
+function renderQR(el, text, size) {
+  el.innerHTML = '';
+  if (typeof QRCode === 'undefined') { el.textContent = 'QR unavailable — please pay to UEN ' + PAYNOW_UEN; return; }
+  new QRCode(el, { text, width: size, height: size, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.M });
+}
+
+// ═══════════════════════════════════════════════════════════
+// Tabs
+// ═══════════════════════════════════════════════════════════
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.getElementById('tab-schedule').classList.toggle('hidden', name !== 'schedule');
+  document.getElementById('tab-products').classList.toggle('hidden', name !== 'products');
+  const hash = name === 'products' ? '#products' : '';
+  if (location.hash !== hash) history.replaceState(null, '', location.pathname + location.search + hash);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Schedule
+// ═══════════════════════════════════════════════════════════
+function getSlot(id) {
+  const src = draftSlots || config.slots || {};
+  return Object.assign({ level: '', subject: '', mode: 'Both', status: 'closed', note: '' }, src[id] || {});
+}
+
+function matchesFilters(s) {
+  const lv = document.getElementById('f-level').value;
+  const sb = document.getElementById('f-subject').value;
+  const md = document.getElementById('f-mode').value;
+  if (lv && s.level !== lv) return false;
+  if (sb && s.subject !== sb) return false;
+  if (md && !(s.mode === md || s.mode === 'Both')) return false;
+  return true;
+}
+
+function renderHero() {
+  document.getElementById('trial-title').textContent = config.trialTitle || DEFAULT_CONFIG.trialTitle;
+  document.getElementById('trial-details').textContent = config.trialDetails || '';
+  document.getElementById('trial-price-pill').textContent = 'Trial: ' + money(config.trialPrice);
+  if (isAdmin && document.activeElement && !document.activeElement.id.startsWith('cfg-')) {
+    document.getElementById('cfg-title').value = config.trialTitle || '';
+    document.getElementById('cfg-price').value = config.trialPrice;
+    document.getElementById('cfg-details').value = config.trialDetails || '';
+  }
+}
+
+function options(list, current, labels) {
+  return list.map(v => '<option value="' + v + '"' + (v === current ? ' selected' : '') + '>'
+    + escapeHtml(labels ? labels[v] || v : v) + '</option>').join('');
+}
+
+function renderAdminSlot(id, s, timeLabel) {
+  const on = (f) => 'onchange="editSlot(\'' + id + '\',\'' + f + '\',this.value)"';
+  return '<div class="slot">'
+    + '<div class="slot-time">' + escapeHtml(timeLabel) + '</div>'
+    + '<div class="slot-edit">'
+    +   '<select ' + on('status') + '>' + options(STATUSES, s.status, { open: 'Open for booking', full: 'Full', closed: 'Closed (hidden)' }) + '</select>'
+    +   '<select ' + on('level') + '><option value="">Level…</option>' + options(LEVELS, s.level) + '</select>'
+    +   '<select ' + on('subject') + '><option value="">Subject…</option>' + options(SUBJECTS, s.subject) + '</select>'
+    +   '<select ' + on('mode') + '>' + options(MODES, s.mode, MODE_LABEL) + '</select>'
+    +   '<input type="text" placeholder="Note (optional)" value="' + escapeHtml(s.note) + '" '
+    +     'oninput="editSlot(\'' + id + '\',\'note\',this.value)">'
+    + '</div></div>';
+}
+
+function renderPublicSlot(id, s, timeLabel) {
+  const visible = s.status !== 'closed' && s.level && s.subject;
+  if (!visible) {
+    return '<div class="slot dim"><div class="slot-time">' + escapeHtml(timeLabel) + '</div>'
+      + '<div class="slot-empty">No class</div></div>';
+  }
+  const dim = matchesFilters(s) ? '' : ' dim';
+  const subjClass = s.subject === 'Math' ? 'math' : 'sci';
+  const action = s.status === 'full'
+    ? '<div class="status-full">Full</div>'
+    : '<button class="btn" onclick="openBooking(\'' + id + '\')"' + (dim ? ' disabled' : '') + '>Book trial · ' + money(config.trialPrice) + '</button>';
+  return '<div class="slot' + dim + '">'
+    + '<div class="slot-time">' + escapeHtml(timeLabel) + '</div>'
+    + '<div class="tags">'
+    +   '<span class="tag">' + escapeHtml(s.level.replace('P', 'Primary ')) + '</span>'
+    +   '<span class="tag ' + subjClass + '">' + escapeHtml(s.subject) + '</span>'
+    +   '<span class="tag">' + escapeHtml(MODE_LABEL[s.mode] || s.mode) + '</span>'
+    + '</div>'
+    + (s.note ? '<div class="slot-note">' + escapeHtml(s.note) + '</div>' : '')
+    + '<div class="spacer"></div>' + action
+    + '</div>';
+}
+
+function renderSchedule() {
+  const grid = document.getElementById('schedule-grid');
+  let html = '';
+  let shown = 0;
+  DAYS.forEach(day => {
+    let row = '';
+    day.times.forEach(t => {
+      const id = slotId(day.code, t.n);
+      const s = getSlot(id);
+      if (!isAdmin && s.status !== 'closed' && s.level && s.subject && matchesFilters(s)) shown++;
+      row += isAdmin ? renderAdminSlot(id, s, t.label) : renderPublicSlot(id, s, t.label);
+    });
+    html += '<div class="day-block"><div class="day-title">' + day.name + '</div><div class="slot-row">' + row + '</div></div>';
+  });
+  if (!isAdmin && shown === 0) {
+    html = '<div class="card empty">No classes match your selection yet. Try another level, subject or mode — or WhatsApp us at +65 9645 0588.</div>' + html;
+  }
+  grid.innerHTML = html;
+}
+
+function editSlot(id, field, value) {
+  if (!draftSlots) draftSlots = JSON.parse(JSON.stringify(config.slots || {}));
+  draftSlots[id] = Object.assign(getSlot(id), { [field]: value });
+  const btn = document.getElementById('save-schedule-btn');
+  btn.textContent = 'Save schedule *';
+}
+
+async function saveSchedule() {
+  if (!requireAdmin()) return;
+  const btn = document.getElementById('save-schedule-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const slots = draftSlots || config.slots || {};
+    await CONFIG_DOC.set({ slots, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    draftSlots = null;
+    toast('Schedule saved and published');
+    btn.textContent = 'Save schedule';
+  } catch (e) {
+    console.error(e); toast('Save failed: ' + (e.message || e), true); btn.textContent = 'Save schedule *';
+  } finally { btn.disabled = false; }
+}
+
+async function saveTrialSettings() {
+  if (!requireAdmin()) return;
+  const price = parseFloat(document.getElementById('cfg-price').value);
+  if (!(price >= 0)) { toast('Please enter a valid price', true); return; }
+  const btn = document.getElementById('save-trial-btn');
+  btn.disabled = true;
+  try {
+    await CONFIG_DOC.set({
+      trialTitle: document.getElementById('cfg-title').value.trim() || DEFAULT_CONFIG.trialTitle,
+      trialDetails: document.getElementById('cfg-details').value.trim(),
+      trialPrice: Math.round(price * 100) / 100
+    }, { merge: true });
+    toast('Trial settings saved');
+  } catch (e) { console.error(e); toast('Save failed: ' + (e.message || e), true); }
+  finally { btn.disabled = false; }
+}
+
+CONFIG_DOC.onSnapshot(snap => {
+  config = Object.assign(JSON.parse(JSON.stringify(DEFAULT_CONFIG)), snap.exists ? snap.data() : {});
+  renderHero();
+  if (!draftSlots) renderSchedule();
+}, err => {
+  console.error('Schedule load failed', err);
+  renderHero(); renderSchedule();
+});
+
+// ═══════════════════════════════════════════════════════════
+// Trial booking
+// ═══════════════════════════════════════════════════════════
+let currentSlotId = null;
+let receiptFile = null;
+
+function openBooking(id) {
+  const s = getSlot(id);
+  if (s.status !== 'open') return;
+  currentSlotId = id;
+  receiptFile = null;
+  ['b-parent', 'b-child', 'b-email', 'b-wa'].forEach(x => document.getElementById(x).value = '');
+  const lvlMap = { P3: 'Primary 3', P4: 'Primary 4', P5: 'Primary 5', P6: 'Primary 6' };
+  document.getElementById('b-level').value = lvlMap[s.level] || '';
+  document.getElementById('b-file').value = '';
+  const up = document.getElementById('b-upload');
+  up.className = 'upload'; up.innerHTML = 'Tap to upload your payment screenshot';
+
+  const modeSel = document.getElementById('b-mode');
+  const pref = document.getElementById('f-mode').value;
+  if (s.mode === 'Both') {
+    modeSel.disabled = false;
+    modeSel.value = pref || 'Physical';
+  } else {
+    modeSel.value = s.mode; modeSel.disabled = true;
+  }
+
+  document.getElementById('booking-slot-label').textContent =
+    slotLabel(id) + ' · ' + s.level.replace('P', 'Primary ') + ' ' + s.subject + ' · ' + (MODE_LABEL[s.mode] || s.mode);
+  document.getElementById('booking-amount').textContent = money(config.trialPrice);
+  document.getElementById('booking-form-wrap').classList.remove('hidden');
+  document.getElementById('booking-success').classList.add('hidden');
+  const btn = document.getElementById('booking-submit');
+  btn.disabled = false; btn.textContent = 'Confirm booking';
+  refreshBookingQR();
+  document.getElementById('booking-modal').classList.add('show');
+}
+
+function bookingRef() {
+  return buildRef('TRIAL ' + (currentSlotId || '').replace('-', ''), document.getElementById('b-parent').value);
+}
+
+let qrTimer = null;
+function refreshBookingQR() {
+  clearTimeout(qrTimer);
+  qrTimer = setTimeout(() => {
+    const ref = bookingRef();
+    document.getElementById('booking-ref').textContent = ref;
+    renderQR(document.getElementById('booking-qr'), buildPayNow(config.trialPrice, ref), 180);
+  }, 200);
+}
+
+function onReceiptPicked(input) {
+  const f = input.files && input.files[0];
+  const up = document.getElementById('b-upload');
+  if (!f) return;
+  if (f.size > 10 * 1024 * 1024) { toast('File too large (max 10MB)', true); input.value = ''; return; }
+  receiptFile = f;
+  up.className = 'upload has';
+  up.innerHTML = '✓ ' + escapeHtml(f.name);
+  if (f.type.startsWith('image/')) {
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(f);
+    up.appendChild(document.createElement('br'));
+    up.appendChild(img);
+  }
+}
+
+async function submitBooking() {
+  const s = getSlot(currentSlotId);
+  const parentName = document.getElementById('b-parent').value.trim();
+  const childName = document.getElementById('b-child').value.trim();
+  const childLevel2027 = document.getElementById('b-level').value;
+  const email = document.getElementById('b-email').value.trim();
+  const waRaw = document.getElementById('b-wa').value;
+  const mode = document.getElementById('b-mode').value;
+
+  if (!parentName) return toast('Please enter the parent name', true);
+  if (!childName) return toast("Please enter your child's name", true);
+  if (!childLevel2027) return toast("Please select your child's level in 2027", true);
+  if (!EMAIL_RE.test(email)) return toast('Please enter a valid email', true);
+  if (!isValidSgMobile(waRaw)) return toast('Please enter a valid 8-digit Singapore mobile number', true);
+  if (!receiptFile) return toast('Please upload your PayNow screenshot', true);
+
+  const btn = document.getElementById('booking-submit');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    const whatsapp = normalizeSgMobile(waRaw);
+    const safe = receiptFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const ref = storageService.ref('schedule_receipts/' + currentSlotId + '/' + Date.now() + '_' + safe);
+    await ref.put(receiptFile);
+    const receiptURL = await ref.getDownloadURL();
+
+    const booking = {
+      slot: currentSlotId,
+      slotLabel: slotLabel(currentSlotId),
+      classLevel: s.level, subject: s.subject, slotMode: s.mode, mode,
+      parentName, childName, childLevel2027, email, whatsapp,
+      price: Number(config.trialPrice),
+      paymentRef: bookingRef(),
+      receiptURL, receiptFilename: receiptFile.name,
+      status: 'pending',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    await BOOKINGS.add(booking);
+
+    try { await sendBookingEmails(booking); } catch (mailErr) { console.error('Email error', mailErr); }
+
+    document.getElementById('booking-success-text').textContent =
+      'Thank you, ' + parentName + '! ' + childName + "'s trial on " + booking.slotLabel
+      + ' (' + s.subject + ', ' + mode + ') has been received. We will confirm via WhatsApp/email after checking your payment.';
+    document.getElementById('booking-form-wrap').classList.add('hidden');
+    document.getElementById('booking-success').classList.remove('hidden');
+  } catch (e) {
+    console.error(e);
+    toast('Booking failed: ' + (e.message || 'please try again'), true);
+    btn.disabled = false; btn.textContent = 'Confirm booking';
+  }
+}
+
+async function sendBookingEmails(b) {
+  const rows = [
+    ['Slot', b.slotLabel],
+    ['Class', b.classLevel.replace('P', 'Primary ') + ' ' + b.subject],
+    ['Attending', b.mode],
+    ['Child', b.childName],
+    ["Child's level in 2027", b.childLevel2027],
+    ['Parent', b.parentName],
+    ['Email', b.email],
+    ['WhatsApp', '+65 ' + fmtWa(b.whatsapp)],
+    ['Amount', money(b.price)],
+    ['PayNow reference', b.paymentRef]
+  ];
+  const table = rows.map(([k, v]) =>
+    '<tr><td style="padding:8px 12px;border:1px solid #e5e5e5;background:#f5f5f5;font-weight:700;width:38%;">' + escapeHtml(k)
+    + '</td><td style="padding:8px 12px;border:1px solid #e5e5e5;">' + escapeHtml(v) + '</td></tr>').join('');
+  const text = rows.map(([k, v]) => k + ': ' + v).join('\n');
+  const attachment = [{ filename: b.receiptFilename || 'paynow-screenshot', path: b.receiptURL }];
+
+  await db.collection('mail').add({
+    to: NOTIFICATION_EMAILS,
+    message: {
+      subject: 'New Trial Booking: ' + b.childName + ' — ' + b.slotLabel + ' (' + b.subject + ')',
+      html: '<div style="font-family:Arial,sans-serif;color:#171717;max-width:640px;">'
+        + '<h2>New Trial Class Booking</h2>'
+        + '<table style="border-collapse:collapse;font-size:14px;width:100%;">' + table + '</table>'
+        + '<p style="margin-top:16px;"><a href="' + escapeHtml(b.receiptURL) + '">View payment screenshot</a> (also attached)</p>'
+        + '<p><a href="https://wa.me/65' + escapeHtml(b.whatsapp) + '">WhatsApp parent</a></p></div>',
+      text: text + '\n\nPayment screenshot: ' + b.receiptURL,
+      attachments: attachment
+    }
+  });
+
+  await db.collection('mail').add({
+    to: [b.email],
+    message: {
+      subject: 'Trial Class Booking Received — ' + b.slotLabel,
+      html: '<div style="font-family:Arial,sans-serif;color:#171717;max-width:640px;">'
+        + '<h2>Thank you for booking a trial class!</h2>'
+        + '<p>Dear ' + escapeHtml(b.parentName) + ', we have received your booking and payment screenshot. '
+        + 'We will verify the payment and confirm with you shortly.</p>'
+        + '<table style="border-collapse:collapse;font-size:14px;width:100%;">' + table + '</table>'
+        + '<p style="margin-top:16px;">Questions? WhatsApp +65 9645 0588</p><p>Polymath Learning Centre</p></div>',
+      text: 'Dear ' + b.parentName + ',\n\nWe have received your trial booking.\n\n' + text
+        + '\n\nQuestions? WhatsApp +65 9645 0588\nPolymath Learning Centre'
+    }
+  });
+}
+
+// ─── Admin: bookings list ───
+function renderBookings() {
+  const list = document.getElementById('bookings-list');
+  document.getElementById('bookings-count').textContent = bookings.filter(b => b.status !== 'confirmed').length + ' pending';
+  if (!bookings.length) { list.innerHTML = '<div class="empty">No trial bookings yet.</div>'; return; }
+  list.innerHTML = bookings.map(b => {
+    const isImg = !/\.pdf$/i.test(b.receiptFilename || '');
+    const thumb = isImg
+      ? '<a href="' + escapeHtml(b.receiptURL) + '" target="_blank" rel="noopener"><img src="' + escapeHtml(b.receiptURL) + '" alt="Receipt"></a>'
+      : '<a class="btn ghost small" href="' + escapeHtml(b.receiptURL) + '" target="_blank" rel="noopener">PDF</a>';
+    return '<div class="booking">' + thumb
+      + '<div class="meta">'
+      +   '<div><b>' + escapeHtml(b.childName) + '</b> (' + escapeHtml(b.childLevel2027) + ' in 2027) '
+      +   '<span class="badge ' + (b.status === 'confirmed' ? 'confirmed' : 'pending') + '">' + escapeHtml(b.status || 'pending') + '</span></div>'
+      +   '<div>' + escapeHtml(b.slotLabel) + ' · ' + escapeHtml((b.classLevel || '') + ' ' + (b.subject || '')) + ' · ' + escapeHtml(b.mode) + '</div>'
+      +   '<div>Parent: ' + escapeHtml(b.parentName) + ' · <a href="mailto:' + escapeHtml(b.email) + '">' + escapeHtml(b.email) + '</a> · '
+      +   '<a href="https://wa.me/65' + escapeHtml(b.whatsapp) + '" target="_blank" rel="noopener">+65 ' + escapeHtml(fmtWa(b.whatsapp)) + '</a></div>'
+      +   '<div>' + money(b.price) + ' · Ref ' + escapeHtml(b.paymentRef || '') + ' · ' + escapeHtml(fmtTime(b.createdAt)) + '</div>'
+      + '</div>'
+      + '<div class="booking-actions">'
+      +   (b.status === 'confirmed'
+            ? '<button class="btn ghost small" onclick="setBookingStatus(\'' + b._id + '\',\'pending\')">Mark pending</button>'
+            : '<button class="btn small" onclick="setBookingStatus(\'' + b._id + '\',\'confirmed\')">Payment OK</button>')
+      +   '<button class="btn danger small" onclick="deleteBooking(\'' + b._id + '\')">Delete</button>'
+      + '</div></div>';
+  }).join('');
+}
+
+async function setBookingStatus(id, status) {
+  if (!requireAdmin()) return;
+  try { await BOOKINGS.doc(id).update({ status }); }
+  catch (e) { toast('Update failed: ' + (e.message || e), true); }
+}
+async function deleteBooking(id) {
+  if (!requireAdmin()) return;
+  const b = bookings.find(x => x._id === id);
+  if (!b || !confirm('Delete booking for ' + b.childName + ' (' + b.slotLabel + ')? This cannot be undone.')) return;
+  try { await BOOKINGS.doc(id).delete(); toast('Booking deleted'); }
+  catch (e) { toast('Delete failed: ' + (e.message || e), true); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// Products
+// ═══════════════════════════════════════════════════════════
+function renderProducts() {
+  const grid = document.getElementById('products-grid');
+  const visible = products.filter(p => isAdmin || p.active !== false);
+  if (!visible.length) { grid.innerHTML = '<div class="empty" style="grid-column:1/-1;">No products available yet.</div>'; return; }
+  grid.innerHTML = visible.map(p => '<div class="product">'
+    + '<h3>' + escapeHtml(p.name) + (p.active === false ? ' <span class="badge pending">hidden</span>' : '') + '</h3>'
+    + '<div class="desc">' + escapeHtml(p.description || '') + '</div>'
+    + '<div class="price">' + money(p.price) + '</div>'
+    + '<button class="btn" onclick="openPayment(\'' + p._id + '\')">Buy · get PayNow image</button>'
+    + (isAdmin
+        ? '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+          + '<button class="btn ghost small" onclick="editProduct(\'' + p._id + '\')">Edit</button>'
+          + '<button class="btn ghost small" onclick="toggleProduct(\'' + p._id + '\')">' + (p.active === false ? 'Show' : 'Hide') + '</button>'
+          + '<button class="btn danger small" onclick="deleteProduct(\'' + p._id + '\')">Delete</button></div>'
+        : '')
+    + '</div>').join('');
+}
+
+PRODUCTS.orderBy('createdAt', 'asc').onSnapshot(snap => {
+  products = snap.docs.map(d => Object.assign({ _id: d.id }, d.data()));
+  renderProducts();
+}, err => {
+  console.error('Products load failed', err);
+  document.getElementById('products-grid').innerHTML = '<div class="empty" style="grid-column:1/-1;">Could not load products.</div>';
+});
+
+function resetProductForm() {
+  ['p-id', 'p-name', 'p-price', 'p-desc'].forEach(x => document.getElementById(x).value = '');
+  document.getElementById('product-form-title').textContent = 'Add product';
+  document.getElementById('cancel-product-btn').classList.add('hidden');
+}
+function editProduct(id) {
+  const p = products.find(x => x._id === id); if (!p) return;
+  document.getElementById('p-id').value = id;
+  document.getElementById('p-name').value = p.name || '';
+  document.getElementById('p-price').value = p.price;
+  document.getElementById('p-desc').value = p.description || '';
+  document.getElementById('product-form-title').textContent = 'Edit product';
+  document.getElementById('cancel-product-btn').classList.remove('hidden');
+  document.getElementById('admin-product-card').scrollIntoView({ behavior: 'smooth' });
+}
+async function saveProduct() {
+  if (!requireAdmin()) return;
+  const id = document.getElementById('p-id').value;
+  const name = document.getElementById('p-name').value.trim();
+  const price = parseFloat(document.getElementById('p-price').value);
+  const description = document.getElementById('p-desc').value.trim();
+  if (!name) return toast('Please enter a product name', true);
+  if (!(price >= 0)) return toast('Please enter a valid price', true);
+  const btn = document.getElementById('save-product-btn');
+  btn.disabled = true;
+  try {
+    const data = { name, description, price: Math.round(price * 100) / 100 };
+    if (id) await PRODUCTS.doc(id).update(data);
+    else await PRODUCTS.add(Object.assign(data, { active: true, createdAt: firebase.firestore.FieldValue.serverTimestamp() }));
+    toast(id ? 'Product updated' : 'Product added');
+    resetProductForm();
+  } catch (e) { console.error(e); toast('Save failed: ' + (e.message || e), true); }
+  finally { btn.disabled = false; }
+}
+async function toggleProduct(id) {
+  if (!requireAdmin()) return;
+  const p = products.find(x => x._id === id); if (!p) return;
+  try { await PRODUCTS.doc(id).update({ active: p.active === false }); }
+  catch (e) { toast('Update failed: ' + (e.message || e), true); }
+}
+async function deleteProduct(id) {
+  if (!requireAdmin()) return;
+  const p = products.find(x => x._id === id);
+  if (!p || !confirm('Delete "' + p.name + '"?')) return;
+  try { await PRODUCTS.doc(id).delete(); toast('Product deleted'); }
+  catch (e) { toast('Delete failed: ' + (e.message || e), true); }
+}
+
+// ─── Product payment image (QR + details baked into one PNG) ───
+let payProduct = null;
+let payImageURL = '';
+
+function openPayment(id) {
+  payProduct = products.find(p => p._id === id);
+  if (!payProduct) return;
+  document.getElementById('pay-title').textContent = payProduct.name + ' — ' + money(payProduct.price);
+  document.getElementById('pay-name').value = '';
+  renderPaymentImage();
+  document.getElementById('pay-modal').classList.add('show');
+}
+
+function productRef() {
+  const code = cleanRef(payProduct.name).replace(/ /g, '').slice(0, 10) || 'ITEM';
+  return buildRef(code, document.getElementById('pay-name').value);
+}
+
+function wrapLines(ctx, text, maxWidth) {
+  const out = [];
+  String(text || '').split('\n').forEach(para => {
+    let line = '';
+    para.split(' ').forEach(word => {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxWidth && line) { out.push(line); line = word; }
+      else line = test;
+    });
+    out.push(line);
+  });
+  return out;
+}
+
+function renderPaymentImage() {
+  if (!payProduct) return;
+  const ref = productRef();
+  const holder = document.getElementById('offscreen-qr');
+  renderQR(holder, buildPayNow(payProduct.price, ref), 420);
+  const qrCanvas = holder.querySelector('canvas');
+
+  const W = 720, PAD = 48;
+  const c = document.createElement('canvas');
+  const ctx = c.getContext('2d');
+  ctx.font = '22px Arial';
+  const descLines = wrapLines(ctx, payProduct.description, W - PAD * 2).slice(0, 6);
+  const H = 1060 + descLines.length * 30;
+  c.width = W; c.height = H;
+
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, 110);
+  ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center';
+  ctx.font = 'bold 34px Arial'; ctx.fillText('POLYMATH LEARNING CENTRE', W / 2, 52);
+  ctx.font = '20px Arial'; ctx.fillText('PayNow Payment', W / 2, 86);
+
+  let y = 170;
+  ctx.fillStyle = '#000'; ctx.font = 'bold 34px Arial';
+  wrapLines(ctx, payProduct.name, W - PAD * 2).slice(0, 2).forEach(l => { ctx.fillText(l, W / 2, y); y += 42; });
+  ctx.fillStyle = '#525252'; ctx.font = '22px Arial';
+  descLines.forEach(l => { ctx.fillText(l, W / 2, y); y += 30; });
+  y += 10;
+  ctx.fillStyle = '#000'; ctx.font = 'bold 56px Arial';
+  ctx.fillText(money(payProduct.price), W / 2, y + 44); y += 80;
+
+  if (qrCanvas) {
+    ctx.strokeStyle = '#e5e5e5'; ctx.lineWidth = 2;
+    ctx.strokeRect((W - 460) / 2, y, 460, 460);
+    ctx.drawImage(qrCanvas, (W - 420) / 2, y + 20, 420, 420);
+  }
+  y += 500;
+
+  ctx.textAlign = 'left';
+  const rowsDetail = [['Pay to', 'Polymath Learning Centre'], ['UEN', PAYNOW_UEN], ['Amount', money(payProduct.price)], ['Reference', ref]];
+  rowsDetail.forEach(([k, v]) => {
+    ctx.fillStyle = '#737373'; ctx.font = '22px Arial'; ctx.fillText(k, PAD + 40, y);
+    ctx.fillStyle = '#000'; ctx.font = 'bold 22px Arial'; ctx.fillText(v, PAD + 200, y);
+    y += 36;
+  });
+  ctx.textAlign = 'center'; ctx.fillStyle = '#737373'; ctx.font = '18px Arial';
+  ctx.fillText('Save this image → open your banking app → Scan QR from gallery', W / 2, H - 40);
+
+  payImageURL = c.toDataURL('image/png');
+  document.getElementById('pay-image').src = payImageURL;
+}
+
+function payFileName() {
+  return 'PayNow_Polymath_' + (cleanRef(payProduct ? payProduct.name : 'item').replace(/ /g, '_') || 'item') + '.png';
+}
+function downloadPaymentImage() {
+  if (!payImageURL) return;
+  const a = document.createElement('a');
+  a.href = payImageURL; a.download = payFileName();
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('Payment image saved');
+}
+async function sharePaymentImage() {
+  try {
+    const blob = await (await fetch(payImageURL)).blob();
+    const file = new File([blob], payFileName(), { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'PayNow — Polymath' });
+    } else { downloadPaymentImage(); }
+  } catch (e) { if (e.name !== 'AbortError') downloadPaymentImage(); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// Admin auth (Google sign-in, only ADMIN_EMAIL gets edit rights)
+// ═══════════════════════════════════════════════════════════
+async function adminSignIn() {
+  try {
+    const res = await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    if (!res.user || res.user.email !== ADMIN_EMAIL) {
+      const who = res.user ? res.user.email : 'unknown';
+      await auth.signOut();
+      alert('Access denied. ' + who + ' is not an admin account.');
+    }
+  } catch (e) {
+    if (e && e.code === 'auth/popup-closed-by-user') return;
+    alert('Sign-in failed: ' + (e.message || e));
+  }
+}
+async function adminSignOut() { await auth.signOut(); }
+function requireAdmin() {
+  const u = auth.currentUser;
+  if (!u || u.email !== ADMIN_EMAIL) { alert('Admin sign-in required.'); return false; }
+  return true;
+}
+
+auth.onAuthStateChanged(user => {
+  isAdmin = !!(user && user.email === ADMIN_EMAIL);
+  draftSlots = null;
+  ['admin-schedule-banner', 'admin-trial-card', 'admin-bookings-card', 'admin-product-card']
+    .forEach(id => document.getElementById(id).classList.toggle('hidden', !isAdmin));
+  document.getElementById('admin-login-link').classList.toggle('hidden', isAdmin);
+  document.getElementById('admin-chip').innerHTML = isAdmin
+    ? 'Admin: ' + escapeHtml(user.email) + ' <button class="link-btn" onclick="adminSignOut()">Sign out</button>'
+    : '';
+
+  if (bookingsUnsub) { bookingsUnsub(); bookingsUnsub = null; }
+  bookings = [];
+  if (isAdmin) {
+    document.getElementById('cfg-title').value = config.trialTitle || '';
+    document.getElementById('cfg-price').value = config.trialPrice;
+    document.getElementById('cfg-details').value = config.trialDetails || '';
+    bookingsUnsub = BOOKINGS.orderBy('createdAt', 'desc').onSnapshot(snap => {
+      bookings = snap.docs.map(d => Object.assign({ _id: d.id }, d.data()));
+      renderBookings();
+    }, err => { console.error(err); toast('Could not load bookings: ' + err.message, true); });
+  } else {
+    document.getElementById('bookings-list').innerHTML = '';
+  }
+  renderSchedule();
+  renderProducts();
+});
+
+// ─── Init ───
+if (location.hash === '#products') showTab('products');
+if (location.hash === '#admin') { history.replaceState(null, '', location.pathname); adminSignIn(); }
+renderHero();
+renderSchedule();
+</script>
+</body>
+</html>
