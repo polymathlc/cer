@@ -85,8 +85,11 @@ test('Jev says no, or the code finds a hard defect: the AI must check and fix. O
 });
 test('the provider sends the secret only as a bearer header and never leaks an error body',async()=>{
   const body=questionFacts(good);let seen;
-  const okFetch=async(url,init)=>{seen={url,init};return {ok:true,json:async()=>({answers:{wording:answer('yes',.9,.9),structure:answer('yes',.9,.9)}})};};
+  const wire=answers=>({answers:Object.entries(answers).map(([name,a])=>({...a,name,probabilities:Object.entries(a.probabilities).map(([value,probability])=>({value,probability}))}))});
+  const okFetch=async(url,init)=>{seen={url,init};return {ok:true,json:async()=>wire({wording:answer('yes',.9,.9),structure:answer('yes',.9,.9)})};};
   const v=await jevReview({scope:'question',question:body},{apiKey:'sekret',fetchImpl:okFetch});
+  assert.equal(seen.url,'https://api.openai.com/v1/decisions');
+  const sent=JSON.parse(seen.init.body);assert.equal(sent.model,'gpt-6-luna');assert.deepEqual(sent.questions.map(q=>q.name),['wording','structure']);assert.ok(JSON.parse(sent.input).question);assert.equal(sent.state,undefined);
   assert.equal(v.wording.ok,true);assert.equal(seen.init.headers.Authorization,'Bearer sekret');assert.ok(!seen.init.body.includes('sekret'));
   await assert.rejects(jevReview({scope:'question',question:body},{apiKey:'',fetchImpl:okFetch}),e=>e instanceof JevUnavailable&&e.code==='not_configured');
   await assert.rejects(jevReview({scope:'question',question:body},{apiKey:'k',fetchImpl:async()=>({ok:false,status:429,text:async()=>'SECRET'})}),e=>e.code==='busy'&&!/SECRET/.test(e.message));

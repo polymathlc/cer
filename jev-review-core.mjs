@@ -20,7 +20,7 @@
 // jev-review-core.js (the durable worker cannot import from the site root);
 // tools/jev-review-tests.mjs fails if the two ever differ.
 
-export const JEV_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
+export const JEV_ENDPOINT = 'https://api.openai.com/v1/decisions';
 export const JEV_MIN_CONFIDENCE = 0.6;    // a "yes" below this is "not sure", and not sure is a no
 // ADVISORY BY DEFAULT: Jev sees measured facts, never the picture or the science,
 // so a yes from it may not remove the AI read until its yes has been compared
@@ -294,7 +294,7 @@ export function buildReviewRequest({ question, figures, scope = 'all' }) {
       }
     };
   });
-  return { model: 'jev-latest', state, questions };
+  return { model: 'gpt-6-luna', state, questions };
 }
 
 function readChoice(answer, criteria) {
