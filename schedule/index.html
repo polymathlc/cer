@@ -172,6 +172,74 @@
   .field input:focus, .field select:focus, .field textarea:focus { border-color:var(--teal); box-shadow:0 0 0 3px rgba(46,156,166,.15); }
   .modal { border-top:5px solid var(--teal); }
   .footer { padding-top:20px; border-top:1px solid var(--line); }
+  /* ─── Fees & Master Class ─── */
+  .fee-pills { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .fee-pills .price-pill { margin-top:0; }
+  .hero .price-pill.ghost { background:rgba(255,255,255,.16); color:#fff; box-shadow:none; border:1px solid rgba(255,255,255,.45); }
+  .fee-line { font-size:13px; font-weight:700; color:var(--plum); }
+  .fee-line span { font-weight:400; color:var(--gray-500); }
+  .master-hero { position:relative; overflow:hidden; border-radius:var(--radius); padding:30px 32px; margin-bottom:20px; color:#fdf6e3;
+    background:radial-gradient(circle at 90% 0%,rgba(230,190,110,.35),transparent 50%),linear-gradient(135deg,#1c1530,#3a2350 55%,#5a2a5e); box-shadow:0 12px 30px rgba(40,20,60,.28); }
+  .master-hero .mh-badge { display:inline-block; font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#1c1530;
+    background:linear-gradient(135deg,#f5d98b,#d4a64a); padding:4px 12px; border-radius:999px; }
+  .master-hero h2 { font-size:26px; margin:10px 0 6px; color:#fff; letter-spacing:-.3px; }
+  .master-hero p { color:rgba(253,246,227,.88); font-size:15px; white-space:pre-line; max-width:640px; }
+  .master-hero .price-pill { background:linear-gradient(135deg,#f5d98b,#d4a64a); color:#1c1530; box-shadow:none; }
+  .master-hero .price-pill.ghost { background:transparent; color:#f5d98b; border:1px solid rgba(245,217,139,.6); }
+  .slot.master { border-top-color:#d4a64a; background:linear-gradient(180deg,#fffaf0,#fff 60%); }
+  .slot.master .btn { background:linear-gradient(135deg,#3a2350,#1c1530); color:#f5d98b; }
+  .tag.master { background:linear-gradient(135deg,#f5d98b,#d4a64a); border-color:#d4a64a; color:#1c1530; font-weight:700; }
+  .badge.master { background:#fdf3d7; color:#7a5a12; border:1px solid #e9cf86; }
+  .settings-split { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .settings-box { border:1px solid var(--line); border-radius:12px; padding:14px; display:grid; gap:10px; }
+  .settings-box h3 { font-size:14px; color:var(--deep); }
+  .settings-box.master { border-color:#e9cf86; background:#fffaf0; }
+  .settings-box.master h3 { color:#7a5a12; }
+  .muted-note { font-size:12px; color:var(--gray-500); }
+  /* ─── Find a class: view switch, level chips, level & subject view ─── */
+  .finder-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+  .finder-head h2 { margin-bottom:0; }
+  .view-toggle { display:inline-flex; background:var(--paper); border:1px solid var(--line); border-radius:999px; padding:4px; gap:4px; }
+  .view-toggle button { border:none; background:transparent; padding:8px 16px; border-radius:999px; font-weight:700; font-size:13px; color:var(--gray-600); cursor:pointer; font-family:inherit; white-space:nowrap; }
+  .view-toggle button:hover { color:var(--deep); }
+  .view-toggle button.on { background:linear-gradient(135deg,var(--teal),var(--deep)); color:#fff; box-shadow:0 4px 10px rgba(5,108,118,.2); }
+  .view-toggle button:focus-visible, .lv-chip:focus-visible { outline:3px solid rgba(46,156,166,.35); outline-offset:2px; }
+  .lv-chips { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:16px; }
+  .lv-chips .lbl { font-size:12px; font-weight:700; color:var(--gray-700); margin-right:4px; }
+  .lv-chip { border:1px solid var(--line); background:#fff; border-radius:999px; padding:6px 16px; font-weight:700; font-size:13px; color:var(--deep); cursor:pointer; font-family:inherit; transition:background .15s, color .15s; }
+  .lv-chip:hover { border-color:var(--teal); }
+  .lv-chip.on { background:var(--deep); color:#fff; border-color:var(--deep); }
+  .lv-preview-note { font-size:13px; color:#7a5a12; background:#fffaf0; border:1px solid #e9cf86; border-radius:12px; padding:10px 14px; margin-bottom:14px; }
+  .lv-block { background:#fff; border:1px solid var(--line); border-radius:16px; padding:20px; margin-bottom:16px; box-shadow:0 2px 10px rgba(5,108,118,.05); }
+  .lv-head { display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+  .lv-badge { flex:0 0 auto; width:48px; height:48px; border-radius:14px; display:grid; place-items:center; font-weight:800; font-size:16px; color:#fff; background:linear-gradient(135deg,var(--pink),var(--plum)); box-shadow:0 6px 14px rgba(181,31,107,.25); }
+  .lv-head h3 { font-size:19px; color:var(--deep); line-height:1.2; letter-spacing:-.2px; }
+  .lv-days { font-size:13px; color:var(--gray-500); margin-top:2px; }
+  .lv-days b { color:var(--ink); }
+  .lv-subjects { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .lv-subjects.one { grid-template-columns:1fr; }
+  .lv-subj { display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .lv-subj-title { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; padding:7px 12px; border-radius:10px; }
+  .lv-subj-title span { margin-left:auto; font-weight:600; font-size:12px; text-transform:none; letter-spacing:0; opacity:.8; }
+  .lv-subj.math .lv-subj-title { background:#eff6ff; color:#1d4ed8; }
+  .lv-subj.sci .lv-subj-title { background:#f0fdf4; color:#15803d; }
+  .lv-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:12px 14px; background:#fff; border:1px solid var(--line); border-left:4px solid var(--aqua); border-radius:12px; transition:transform .15s, box-shadow .15s; }
+  .lv-row:hover { transform:translateY(-1px); box-shadow:0 8px 18px rgba(5,108,118,.10); }
+  .lv-when { display:flex; align-items:center; gap:8px; flex:1 1 100%; }
+  .lv-day { font-weight:800; font-size:12px; letter-spacing:.06em; text-transform:uppercase; background:var(--deep); color:#fff; border-radius:8px; padding:3px 9px; }
+  .lv-time { font-weight:700; font-size:15px; color:var(--ink); white-space:nowrap; }
+  .lv-info { flex:1 1 140px; display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .lv-act { margin-left:auto; }
+  .lv-act .btn { white-space:nowrap; background:linear-gradient(135deg,var(--pink),var(--plum)); }
+  .lv-act .status-full { padding:6px 12px; }
+  .lv-row.master { border-left-color:#d4a64a; background:linear-gradient(90deg,#fffaf0,#fff 70%); }
+  .lv-row.master .lv-day { background:linear-gradient(135deg,#3a2350,#1c1530); color:#f5d98b; }
+  .lv-row.master .lv-act .btn { background:linear-gradient(135deg,#3a2350,#1c1530); color:#f5d98b; }
+  .lv-row.full { opacity:.7; }
+  .lv-none { font-size:13px; color:var(--gray-500); padding:14px; border:1px dashed var(--line); border-radius:12px; line-height:1.5; }
+  .lv-none a { color:var(--deep); font-weight:700; }
+  @media (max-width:720px){ .lv-subjects{grid-template-columns:1fr} .finder-head{align-items:stretch} .view-toggle{width:100%} .view-toggle button{flex:1; padding:8px 10px} .lv-block{padding:16px} }
+  @media (max-width:720px){ .settings-split{grid-template-columns:1fr} .master-hero{padding:24px 20px} .filters{grid-template-columns:1fr} }
   @media (max-width:720px){ .brand-name{display:none} .hero{padding:28px 20px} .hero h1{font-size:24px} }
 </style>
 </head>
@@ -200,25 +268,52 @@
     <div class="hero">
       <h1 id="trial-title">Trial Class</h1>
       <p id="trial-details">Loading…</p>
-      <span class="price-pill" id="trial-price-pill">—</span>
+      <div class="fee-pills" id="hero-pills"><span class="price-pill" id="trial-price-pill">—</span></div>
+    </div>
+
+    <div class="master-hero hidden" id="master-hero">
+      <span class="mh-badge">✦ Master Class · Physical only</span>
+      <h2 id="master-title">Master Class</h2>
+      <p id="master-details"></p>
+      <div class="fee-pills" id="master-pills"></div>
     </div>
 
     <div id="admin-trial-card" class="card hidden">
-      <h2>Trial lesson settings</h2>
+      <h2>Fees &amp; trial settings</h2>
       <div class="form-grid">
-        <div class="grid-2">
-          <div class="field"><label>Title</label><input id="cfg-title" type="text"></div>
-          <div class="field"><label>Trial price (SGD)</label><input id="cfg-price" type="number" min="0" step="0.01"></div>
-        </div>
+        <div class="field"><label>Page title</label><input id="cfg-title" type="text"></div>
         <div class="field"><label>Trial lesson details (shown to visitors)</label><textarea id="cfg-details"></textarea></div>
-        <div><button class="btn" onclick="saveTrialSettings()" id="save-trial-btn">Save trial settings</button></div>
+        <div class="settings-split">
+          <div class="settings-box">
+            <h3>Regular classes</h3>
+            <div class="field"><label>Trial price (SGD)</label><input id="cfg-price" type="number" min="0" step="0.01"></div>
+            <div class="field"><label>Monthly fee (SGD) — blank hides it</label><input id="cfg-monthly" type="number" min="0" step="0.01"></div>
+          </div>
+          <div class="settings-box master">
+            <h3>✦ Master Class (physical only)</h3>
+            <div class="field"><label>Trial price (SGD) — blank uses the regular trial price</label><input id="cfg-mprice" type="number" min="0" step="0.01"></div>
+            <div class="field"><label>Monthly fee (SGD) — blank hides it</label><input id="cfg-mmonthly" type="number" min="0" step="0.01"></div>
+            <div class="field"><label>Master Class title</label><input id="cfg-mtitle" type="text"></div>
+            <div class="field"><label>Master Class description (shown to visitors)</label><textarea id="cfg-mdetails"></textarea></div>
+          </div>
+        </div>
+        <div class="muted-note">A slot can also have its own monthly fee, set on the slot below. It overrides these defaults.</div>
+        <div><button class="btn" onclick="saveTrialSettings()" id="save-trial-btn">Save fees &amp; settings</button></div>
       </div>
     </div>
 
-    <div class="card">
-      <h2>Find a slot</h2>
+    <div class="card finder">
+      <div class="finder-head">
+        <h2>Find a class</h2>
+        <div class="view-toggle" role="group" aria-label="How to show the timetable">
+          <button type="button" id="view-level" aria-pressed="true" onclick="setScheduleView('level')">📚 By level &amp; subject</button>
+          <button type="button" id="view-day" aria-pressed="false" onclick="setScheduleView('day')">📅 By day</button>
+        </div>
+      </div>
+      <div class="lv-chips" id="lv-chips"></div>
       <div class="filters">
-        <div class="field"><label>Level</label>
+        <div class="field hidden"><label>Level</label>
+          <!-- set by the level chips above; kept as the one place the level filter lives -->
           <select id="f-level" onchange="renderSchedule()">
             <option value="">All levels</option>
             <option>P3</option><option>P4</option><option>P5</option><option>P6</option>
@@ -228,6 +323,13 @@
           <select id="f-subject" onchange="renderSchedule()">
             <option value="">Math & Science</option>
             <option>Math</option><option>Science</option>
+          </select>
+        </div>
+        <div class="field"><label>Class type</label>
+          <select id="f-type" onchange="renderSchedule()">
+            <option value="">All classes</option>
+            <option value="regular">Regular</option>
+            <option value="master">✦ Master Class</option>
           </select>
         </div>
         <div class="field"><label>Mode</label>
@@ -421,10 +523,29 @@ function slotLabel(id) {
   return day && t ? day.name + ' ' + t.label : id;
 }
 
+// A fee left blank means "not shown". Every price is read through these so a
+// slot card, the booking form, the QR code and the emails can never disagree.
+function feeNum(v) { const n = parseFloat(v); return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0; }
+function isMaster(s) { return !!s && s.type === 'master'; }
+function slotMode(s) { return isMaster(s) ? 'Physical' : s.mode; }   // Master Class is physical only
+function trialPriceFor(s) {
+  if (isMaster(s) && feeNum(config.masterTrialPrice)) return feeNum(config.masterTrialPrice);
+  return Number(config.trialPrice) || 0;
+}
+function monthlyFeeFor(s) {
+  if (s && feeNum(s.fee)) return feeNum(s.fee);
+  return isMaster(s) ? feeNum(config.masterMonthlyFee) : feeNum(config.monthlyFee);
+}
+
 const DEFAULT_CONFIG = {
   trialTitle: 'Book a Trial Class',
   trialDetails: 'Experience a full 1h 45min lesson with Polymath Learning Centre.\nSmall groups, Primary 3 to Primary 6 Math and Science, online or at our Clementi centre.',
   trialPrice: 30,
+  monthlyFee: '',
+  masterTrialPrice: '',
+  masterMonthlyFee: '',
+  masterTitle: 'Master Class',
+  masterDetails: 'Our premium programme, taught in person at our Clementi centre. Smaller groups, deeper exam technique and closer attention to every child.',
   slots: {}
 };
 
@@ -510,28 +631,54 @@ function showTab(name) {
 // ═══════════════════════════════════════════════════════════
 function getSlot(id) {
   const src = draftSlots || config.slots || {};
-  return Object.assign({ level: '', subject: '', mode: 'Both', status: 'closed', note: '' }, src[id] || {});
+  return Object.assign({ level: '', subject: '', mode: 'Both', status: 'closed', note: '', type: 'regular', fee: '' }, src[id] || {});
 }
 
 function matchesFilters(s) {
   const lv = document.getElementById('f-level').value;
   const sb = document.getElementById('f-subject').value;
   const md = document.getElementById('f-mode').value;
+  const ty = document.getElementById('f-type').value;
+  const m = slotMode(s);
   if (lv && s.level !== lv) return false;
   if (sb && s.subject !== sb) return false;
-  if (md && !(s.mode === md || s.mode === 'Both')) return false;
+  if (ty && (ty === 'master') !== isMaster(s)) return false;
+  if (md && !(m === md || m === 'Both')) return false;
   return true;
 }
 
 function renderHero() {
   document.getElementById('trial-title').textContent = config.trialTitle || DEFAULT_CONFIG.trialTitle;
   document.getElementById('trial-details').textContent = config.trialDetails || '';
-  document.getElementById('trial-price-pill').textContent = 'Trial: ' + money(config.trialPrice);
-  if (isAdmin && document.activeElement && !document.activeElement.id.startsWith('cfg-')) {
-    document.getElementById('cfg-title').value = config.trialTitle || '';
-    document.getElementById('cfg-price').value = config.trialPrice;
-    document.getElementById('cfg-details').value = config.trialDetails || '';
-  }
+  const reg = { type: 'regular' }, mst = { type: 'master' };
+  let pills = '<span class="price-pill">Trial: ' + money(trialPriceFor(reg)) + '</span>';
+  if (monthlyFeeFor(reg)) pills += '<span class="price-pill ghost">' + money(monthlyFeeFor(reg)) + ' / month</span>';
+  document.getElementById('hero-pills').innerHTML = pills;
+
+  // The Master Class banner shows once at least one master slot is published
+  // (or always to the admin, so the description can be checked).
+  const slots = config.slots || {};
+  const anyMaster = Object.keys(slots).some(k => { const x = slots[k]; return isMaster(x) && x.status !== 'closed' && x.level && x.subject; });
+  document.getElementById('master-hero').classList.toggle('hidden', !(anyMaster || isAdmin));
+  document.getElementById('master-title').textContent = config.masterTitle || DEFAULT_CONFIG.masterTitle;
+  document.getElementById('master-details').textContent = config.masterDetails || '';
+  let mp = '<span class="price-pill">Trial: ' + money(trialPriceFor(mst)) + '</span>';
+  if (monthlyFeeFor(mst)) mp += '<span class="price-pill ghost">' + money(monthlyFeeFor(mst)) + ' / month</span>';
+  document.getElementById('master-pills').innerHTML = mp;
+
+  if (isAdmin && document.activeElement && !document.activeElement.id.startsWith('cfg-')) fillSettingsForm();
+}
+
+function fillSettingsForm() {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : v; };
+  set('cfg-title', config.trialTitle || '');
+  set('cfg-price', config.trialPrice);
+  set('cfg-details', config.trialDetails || '');
+  set('cfg-monthly', feeNum(config.monthlyFee) || '');
+  set('cfg-mprice', feeNum(config.masterTrialPrice) || '');
+  set('cfg-mmonthly', feeNum(config.masterMonthlyFee) || '');
+  set('cfg-mtitle', config.masterTitle || DEFAULT_CONFIG.masterTitle);
+  set('cfg-mdetails', config.masterDetails || '');
 }
 
 function options(list, current, labels) {
@@ -541,13 +688,18 @@ function options(list, current, labels) {
 
 function renderAdminSlot(id, s, timeLabel) {
   const on = (f) => 'onchange="editSlot(\'' + id + '\',\'' + f + '\',this.value)"';
-  return '<div class="slot">'
+  return '<div class="slot' + (isMaster(s) ? ' master' : '') + '">'
     + '<div class="slot-time">' + escapeHtml(timeLabel) + '</div>'
     + '<div class="slot-edit">'
     +   '<select ' + on('status') + '>' + options(STATUSES, s.status, { open: 'Open for booking', full: 'Full', closed: 'Closed (hidden)' }) + '</select>'
+    +   '<select ' + on('type') + '>' + options(['regular', 'master'], s.type, { regular: 'Regular class', master: '✦ Master Class' }) + '</select>'
     +   '<select ' + on('level') + '><option value="">Level…</option>' + options(LEVELS, s.level) + '</select>'
     +   '<select ' + on('subject') + '><option value="">Subject…</option>' + options(SUBJECTS, s.subject) + '</select>'
-    +   '<select ' + on('mode') + '>' + options(MODES, s.mode, MODE_LABEL) + '</select>'
+    +   (isMaster(s)
+          ? '<select disabled title="Master Class is physical only"><option>Physical only</option></select>'
+          : '<select ' + on('mode') + '>' + options(MODES, s.mode, MODE_LABEL) + '</select>')
+    +   '<input type="number" min="0" step="0.01" placeholder="Fee / month (default ' + (monthlyFeeFor(Object.assign({}, s, { fee: '' })) ? money(monthlyFeeFor(Object.assign({}, s, { fee: '' }))) : 'none') + ')" value="' + escapeHtml(s.fee) + '" '
+    +     'oninput="editSlot(\'' + id + '\',\'fee\',this.value)">'
     +   '<input type="text" placeholder="Note (optional)" value="' + escapeHtml(s.note) + '" '
     +     'oninput="editSlot(\'' + id + '\',\'note\',this.value)">'
     + '</div></div>';
@@ -563,20 +715,152 @@ function renderPublicSlot(id, s, timeLabel) {
   const subjClass = s.subject === 'Math' ? 'math' : 'sci';
   const action = s.status === 'full'
     ? '<div class="status-full">Full</div>'
-    : '<button class="btn" onclick="openBooking(\'' + id + '\')"' + (dim ? ' disabled' : '') + '>Book trial · ' + money(config.trialPrice) + '</button>';
-  return '<div class="slot' + dim + '">'
+    : '<button class="btn" onclick="openBooking(\'' + id + '\')"' + (dim ? ' disabled' : '') + '>Book trial · ' + money(trialPriceFor(s)) + '</button>';
+  const fee = monthlyFeeFor(s);
+  return '<div class="slot' + (isMaster(s) ? ' master' : '') + dim + '">'
     + '<div class="slot-time">' + escapeHtml(timeLabel) + '</div>'
     + '<div class="tags">'
+    +   (isMaster(s) ? '<span class="tag master">✦ Master Class</span>' : '')
     +   '<span class="tag">' + escapeHtml(s.level.replace('P', 'Primary ')) + '</span>'
     +   '<span class="tag ' + subjClass + '">' + escapeHtml(s.subject) + '</span>'
-    +   '<span class="tag">' + escapeHtml(MODE_LABEL[s.mode] || s.mode) + '</span>'
+    +   '<span class="tag">' + escapeHtml(MODE_LABEL[slotMode(s)] || slotMode(s)) + '</span>'
     + '</div>'
+    + (fee ? '<div class="fee-line">' + money(fee) + ' <span>/ month</span></div>' : '')
     + (s.note ? '<div class="slot-note">' + escapeHtml(s.note) + '</div>' : '')
     + '<div class="spacer"></div>' + action
     + '</div>';
 }
 
+// ─── Two ways to read the timetable ───
+// 'level' groups every class under its level, Math beside Science, so a parent
+// sees at a glance which days their child's level runs. 'day' is the weekly
+// grid the admin edits in. Nothing chosen yet → parents get 'level', the admin
+// gets 'day'. The choice is a per-browser convenience, so storage may fail.
+const VIEW_KEY = 'pl_schedule_view';
+let scheduleView = (() => { try { return localStorage.getItem(VIEW_KEY) || ''; } catch (e) { return ''; } })();
+const LEVEL_NAME = { P3: 'Primary 3', P4: 'Primary 4', P5: 'Primary 5', P6: 'Primary 6' };
+const SUBJECT_ICON = { Math: '🔢', Science: '🔬' };
+const WA_LINK = 'https://wa.me/6596450588';
+
+function currentView() {
+  if (scheduleView === 'level' || scheduleView === 'day') return scheduleView;
+  return isAdmin ? 'day' : 'level';
+}
+
+function setScheduleView(v) {
+  scheduleView = v === 'day' ? 'day' : 'level';
+  try { localStorage.setItem(VIEW_KEY, scheduleView); } catch (e) {}
+  renderSchedule();
+}
+
+function setLevelChip(v) {
+  document.getElementById('f-level').value = v;
+  renderSchedule();
+}
+
+function renderViewControls() {
+  const view = currentView();
+  [['view-level', 'level'], ['view-day', 'day']].forEach(([id, v]) => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.classList.toggle('on', view === v);
+    b.setAttribute('aria-pressed', view === v ? 'true' : 'false');
+  });
+  const chips = document.getElementById('lv-chips');
+  if (!chips) return;
+  const cur = document.getElementById('f-level').value;
+  chips.innerHTML = '<span class="lbl">Child\'s level in 2027:</span>'
+    + [['', 'All levels']].concat(LEVELS.map(l => [l, LEVEL_NAME[l] || l])).map(([v, label]) =>
+        '<button type="button" class="lv-chip' + (cur === v ? ' on' : '') + '" aria-pressed="' + (cur === v) + '" '
+        + 'onclick="setLevelChip(\'' + v + '\')">' + escapeHtml(label) + '</button>').join('');
+}
+
+// Every published class (open or full, with a level and a subject), in
+// timetable order: Monday first, earliest slot first.
+function publishedSlots() {
+  const out = [];
+  DAYS.forEach((day, di) => day.times.forEach(t => {
+    const id = slotId(day.code, t.n);
+    const s = getSlot(id);
+    if (s.status !== 'closed' && s.level && s.subject) out.push({ id, s, day, t, order: di * 10 + t.n });
+  }));
+  return out;
+}
+
+function renderLevelRow(x) {
+  const s = x.s;
+  const master = isMaster(s);
+  const fee = monthlyFeeFor(s);
+  let action;
+  if (s.status === 'full') action = '<div class="status-full">Full</div>';
+  else if (isAdmin) action = '<button class="btn small" disabled title="Preview — parents book from here">Book trial · ' + money(trialPriceFor(s)) + '</button>';
+  else action = '<button class="btn small" onclick="openBooking(\'' + x.id + '\')">Book trial · ' + money(trialPriceFor(s)) + '</button>';
+  return '<div class="lv-row' + (master ? ' master' : '') + (s.status === 'full' ? ' full' : '') + '">'
+    + '<div class="lv-when"><span class="lv-day" title="' + escapeHtml(x.day.name) + '">' + escapeHtml(x.day.name.slice(0, 3)) + '</span>'
+    +   '<span class="lv-time">' + escapeHtml(x.t.label) + '</span></div>'
+    + '<div class="lv-info"><div class="tags">'
+    +   (master ? '<span class="tag master">✦ Master Class</span>' : '')
+    +   '<span class="tag">' + escapeHtml(MODE_LABEL[slotMode(s)] || slotMode(s)) + '</span>'
+    + '</div>'
+    +   (fee ? '<div class="fee-line">' + money(fee) + ' <span>/ month</span></div>' : '')
+    +   (s.note ? '<div class="slot-note">' + escapeHtml(s.note) + '</div>' : '')
+    + '</div>'
+    + '<div class="lv-act">' + action + '</div>'
+    + '</div>';
+}
+
+function renderLevelView() {
+  const lvF = document.getElementById('f-level').value;
+  const sbF = document.getElementById('f-subject').value;
+  const levels = lvF ? [lvF] : LEVELS;
+  const subjects = sbF ? [sbF] : SUBJECTS;
+  const all = publishedSlots().filter(x => matchesFilters(x.s));
+  let total = 0;
+  let html = '';
+  if (isAdmin) html += '<div class="lv-preview-note">This is what parents see first. Switch to <b>📅 By day</b> to edit the slots.</div>';
+  levels.forEach(lv => {
+    const name = LEVEL_NAME[lv] || lv;
+    const mine = all.filter(x => x.s.level === lv && subjects.includes(x.s.subject));
+    total += mine.length;
+    const days = [];
+    mine.slice().sort((a, b) => a.order - b.order).forEach(x => { const d = x.day.name.slice(0, 3); if (!days.includes(d)) days.push(d); });
+    const summary = mine.length
+      ? mine.length + (mine.length === 1 ? ' class' : ' classes') + ' · on <b>' + days.join(' · ') + '</b>'
+      : 'No classes yet';
+    let cols = '';
+    subjects.forEach(sb => {
+      const rows = mine.filter(x => x.s.subject === sb).sort((a, b) => a.order - b.order);
+      cols += '<div class="lv-subj ' + (sb === 'Math' ? 'math' : 'sci') + '">'
+        + '<div class="lv-subj-title">' + (SUBJECT_ICON[sb] || '') + ' ' + escapeHtml(sb)
+        +   '<span>' + (rows.length ? rows.length + (rows.length === 1 ? ' class' : ' classes') : 'none yet') + '</span></div>'
+        + (rows.length
+            ? rows.map(renderLevelRow).join('')
+            : '<div class="lv-none">No ' + escapeHtml(name) + ' ' + escapeHtml(sb) + ' class on the timetable yet. '
+              + '<a href="' + WA_LINK + '" target="_blank" rel="noopener">WhatsApp us</a> and we\'ll let you know when one opens.</div>')
+        + '</div>';
+    });
+    html += '<div class="lv-block">'
+      + '<div class="lv-head"><span class="lv-badge">' + escapeHtml(lv) + '</span>'
+      +   '<div><h3>' + escapeHtml(name) + '</h3><div class="lv-days">' + summary + '</div></div></div>'
+      + '<div class="lv-subjects' + (subjects.length === 1 ? ' one' : '') + '">' + cols + '</div>'
+      + '</div>';
+  });
+  if (!total) {
+    html = '<div class="card empty">No classes match your selection yet. Try another level, subject, class type or mode — or WhatsApp us at +65 9645 0588.</div>' + html;
+  }
+  return html;
+}
+
 function renderSchedule() {
+  renderViewControls();
+  if (currentView() === 'level') {
+    document.getElementById('schedule-grid').innerHTML = renderLevelView();
+    return;
+  }
+  renderDayView();
+}
+
+function renderDayView() {
   const grid = document.getElementById('schedule-grid');
   let html = '';
   let shown = 0;
@@ -591,16 +875,19 @@ function renderSchedule() {
     html += '<div class="day-block"><div class="day-title">' + day.name + '</div><div class="slot-row">' + row + '</div></div>';
   });
   if (!isAdmin && shown === 0) {
-    html = '<div class="card empty">No classes match your selection yet. Try another level, subject or mode — or WhatsApp us at +65 9645 0588.</div>' + html;
+    html = '<div class="card empty">No classes match your selection yet. Try another level, subject, class type or mode — or WhatsApp us at +65 9645 0588.</div>' + html;
   }
   grid.innerHTML = html;
 }
 
 function editSlot(id, field, value) {
   if (!draftSlots) draftSlots = JSON.parse(JSON.stringify(config.slots || {}));
-  draftSlots[id] = Object.assign(getSlot(id), { [field]: value });
+  const next = Object.assign(getSlot(id), { [field]: value });
+  if (field === 'type' && value === 'master') next.mode = 'Physical';   // Master Class is physical only
+  draftSlots[id] = next;
   const btn = document.getElementById('save-schedule-btn');
   btn.textContent = 'Save schedule *';
+  if (field === 'type') renderSchedule();
 }
 
 async function saveSchedule() {
@@ -608,7 +895,8 @@ async function saveSchedule() {
   const btn = document.getElementById('save-schedule-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
-    const slots = draftSlots || config.slots || {};
+    const slots = JSON.parse(JSON.stringify(draftSlots || config.slots || {}));
+    Object.keys(slots).forEach(k => { if (isMaster(slots[k])) slots[k].mode = 'Physical'; });
     await CONFIG_DOC.set({ slots, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
     draftSlots = null;
     toast('Schedule saved and published');
@@ -621,16 +909,32 @@ async function saveSchedule() {
 async function saveTrialSettings() {
   if (!requireAdmin()) return;
   const price = parseFloat(document.getElementById('cfg-price').value);
-  if (!(price >= 0)) { toast('Please enter a valid price', true); return; }
+  if (!(price >= 0)) { toast('Please enter a valid trial price', true); return; }
+  const optFee = (id, label) => {
+    const raw = document.getElementById(id).value.trim();
+    if (raw === '') return '';
+    const n = parseFloat(raw);
+    if (!(n >= 0)) throw new Error('Please enter a valid ' + label);
+    return Math.round(n * 100) / 100;
+  };
+  let monthlyFee, masterTrialPrice, masterMonthlyFee;
+  try {
+    monthlyFee = optFee('cfg-monthly', 'monthly fee');
+    masterTrialPrice = optFee('cfg-mprice', 'Master Class trial price');
+    masterMonthlyFee = optFee('cfg-mmonthly', 'Master Class monthly fee');
+  } catch (e) { toast(e.message, true); return; }
   const btn = document.getElementById('save-trial-btn');
   btn.disabled = true;
   try {
     await CONFIG_DOC.set({
       trialTitle: document.getElementById('cfg-title').value.trim() || DEFAULT_CONFIG.trialTitle,
       trialDetails: document.getElementById('cfg-details').value.trim(),
-      trialPrice: Math.round(price * 100) / 100
+      trialPrice: Math.round(price * 100) / 100,
+      monthlyFee, masterTrialPrice, masterMonthlyFee,
+      masterTitle: document.getElementById('cfg-mtitle').value.trim() || DEFAULT_CONFIG.masterTitle,
+      masterDetails: document.getElementById('cfg-mdetails').value.trim()
     }, { merge: true });
-    toast('Trial settings saved');
+    toast('Fees & settings saved');
   } catch (e) { console.error(e); toast('Save failed: ' + (e.message || e), true); }
   finally { btn.disabled = false; }
 }
@@ -664,16 +968,20 @@ function openBooking(id) {
 
   const modeSel = document.getElementById('b-mode');
   const pref = document.getElementById('f-mode').value;
-  if (s.mode === 'Both') {
+  if (isMaster(s)) {
+    modeSel.value = 'Physical'; modeSel.disabled = true;
+  } else if (s.mode === 'Both') {
     modeSel.disabled = false;
     modeSel.value = pref || 'Physical';
   } else {
     modeSel.value = s.mode; modeSel.disabled = true;
   }
 
+  const fee = monthlyFeeFor(s);
   document.getElementById('booking-slot-label').textContent =
-    slotLabel(id) + ' · ' + s.level.replace('P', 'Primary ') + ' ' + s.subject + ' · ' + (MODE_LABEL[s.mode] || s.mode);
-  document.getElementById('booking-amount').textContent = money(config.trialPrice);
+    (isMaster(s) ? '✦ Master Class · ' : '') + slotLabel(id) + ' · ' + s.level.replace('P', 'Primary ') + ' ' + s.subject
+    + ' · ' + (MODE_LABEL[slotMode(s)] || slotMode(s)) + (fee ? ' · ' + money(fee) + '/month after the trial' : '');
+  document.getElementById('booking-amount').textContent = money(trialPriceFor(s));
   document.getElementById('booking-form-wrap').classList.remove('hidden');
   document.getElementById('booking-success').classList.add('hidden');
   const btn = document.getElementById('booking-submit');
@@ -683,7 +991,8 @@ function openBooking(id) {
 }
 
 function bookingRef() {
-  return buildRef('TRIAL ' + (currentSlotId || '').replace('-', ''), document.getElementById('b-parent').value);
+  const kind = isMaster(getSlot(currentSlotId)) ? 'MASTER ' : 'TRIAL ';
+  return buildRef(kind + (currentSlotId || '').replace('-', ''), document.getElementById('b-parent').value);
 }
 
 let qrTimer = null;
@@ -692,7 +1001,7 @@ function refreshBookingQR() {
   qrTimer = setTimeout(() => {
     const ref = bookingRef();
     document.getElementById('booking-ref').textContent = ref;
-    renderQR(document.getElementById('booking-qr'), buildPayNow(config.trialPrice, ref), 180);
+    renderQR(document.getElementById('booking-qr'), buildPayNow(trialPriceFor(getSlot(currentSlotId)), ref), 180);
   }, 200);
 }
 
@@ -719,7 +1028,7 @@ async function submitBooking() {
   const childLevel2027 = document.getElementById('b-level').value;
   const email = document.getElementById('b-email').value.trim();
   const waRaw = document.getElementById('b-wa').value;
-  const mode = document.getElementById('b-mode').value;
+  const mode = isMaster(s) ? 'Physical' : document.getElementById('b-mode').value;
 
   if (!parentName) return toast('Please enter the parent name', true);
   if (!childName) return toast("Please enter your child's name", true);
@@ -740,9 +1049,11 @@ async function submitBooking() {
     const booking = {
       slot: currentSlotId,
       slotLabel: slotLabel(currentSlotId),
-      classLevel: s.level, subject: s.subject, slotMode: s.mode, mode,
+      classLevel: s.level, subject: s.subject, slotMode: slotMode(s), mode,
+      classType: isMaster(s) ? 'master' : 'regular',
+      monthlyFee: monthlyFeeFor(s) || null,
       parentName, childName, childLevel2027, email, whatsapp,
-      price: Number(config.trialPrice),
+      price: trialPriceFor(s),
       paymentRef: bookingRef(),
       receiptURL, receiptFilename: receiptFile.name,
       status: 'pending',
@@ -753,7 +1064,7 @@ async function submitBooking() {
     try { await sendBookingEmails(booking); } catch (mailErr) { console.error('Email error', mailErr); }
 
     document.getElementById('booking-success-text').textContent =
-      'Thank you, ' + parentName + '! ' + childName + "'s trial on " + booking.slotLabel
+      'Thank you, ' + parentName + '! ' + childName + "'s " + (isMaster(s) ? 'Master Class trial' : 'trial') + ' on ' + booking.slotLabel
       + ' (' + s.subject + ', ' + mode + ') has been received. We will confirm via WhatsApp/email after checking your payment.';
     document.getElementById('booking-form-wrap').classList.add('hidden');
     document.getElementById('booking-success').classList.remove('hidden');
@@ -767,6 +1078,7 @@ async function submitBooking() {
 async function sendBookingEmails(b) {
   const rows = [
     ['Slot', b.slotLabel],
+    ['Class type', b.classType === 'master' ? 'Master Class (physical)' : 'Regular class'],
     ['Class', b.classLevel.replace('P', 'Primary ') + ' ' + b.subject],
     ['Attending', b.mode],
     ['Child', b.childName],
@@ -774,7 +1086,8 @@ async function sendBookingEmails(b) {
     ['Parent', b.parentName],
     ['Email', b.email],
     ['WhatsApp', '+65 ' + fmtWa(b.whatsapp)],
-    ['Amount', money(b.price)],
+    ['Trial fee paid', money(b.price)],
+    ['Monthly fee after trial', b.monthlyFee ? money(b.monthlyFee) + ' / month' : '—'],
     ['PayNow reference', b.paymentRef]
   ];
   const table = rows.map(([k, v]) =>
@@ -786,7 +1099,7 @@ async function sendBookingEmails(b) {
   await db.collection('mail').add({
     to: NOTIFICATION_EMAILS,
     message: {
-      subject: 'New Trial Booking: ' + b.childName + ' — ' + b.slotLabel + ' (' + b.subject + ')',
+      subject: (b.classType === 'master' ? 'New MASTER CLASS Trial: ' : 'New Trial Booking: ') + b.childName + ' — ' + b.slotLabel + ' (' + b.subject + ')',
       html: '<div style="font-family:Arial,sans-serif;color:#171717;max-width:640px;">'
         + '<h2>New Trial Class Booking</h2>'
         + '<table style="border-collapse:collapse;font-size:14px;width:100%;">' + table + '</table>'
@@ -826,11 +1139,12 @@ function renderBookings() {
     return '<div class="booking">' + thumb
       + '<div class="meta">'
       +   '<div><b>' + escapeHtml(b.childName) + '</b> (' + escapeHtml(b.childLevel2027) + ' in 2027) '
-      +   '<span class="badge ' + (b.status === 'confirmed' ? 'confirmed' : 'pending') + '">' + escapeHtml(b.status || 'pending') + '</span></div>'
+      +   '<span class="badge ' + (b.status === 'confirmed' ? 'confirmed' : 'pending') + '">' + escapeHtml(b.status || 'pending') + '</span>'
+      +   (b.classType === 'master' ? ' <span class="badge master">✦ Master Class</span>' : '') + '</div>'
       +   '<div>' + escapeHtml(b.slotLabel) + ' · ' + escapeHtml((b.classLevel || '') + ' ' + (b.subject || '')) + ' · ' + escapeHtml(b.mode) + '</div>'
       +   '<div>Parent: ' + escapeHtml(b.parentName) + ' · <a href="mailto:' + escapeHtml(b.email) + '">' + escapeHtml(b.email) + '</a> · '
       +   '<a href="https://wa.me/65' + escapeHtml(b.whatsapp) + '" target="_blank" rel="noopener">+65 ' + escapeHtml(fmtWa(b.whatsapp)) + '</a></div>'
-      +   '<div>' + money(b.price) + ' · Ref ' + escapeHtml(b.paymentRef || '') + ' · ' + escapeHtml(fmtTime(b.createdAt)) + '</div>'
+      +   '<div>' + money(b.price) + (b.monthlyFee ? ' trial · ' + money(b.monthlyFee) + '/month' : '') + ' · Ref ' + escapeHtml(b.paymentRef || '') + ' · ' + escapeHtml(fmtTime(b.createdAt)) + '</div>'
       + '</div>'
       + '<div class="booking-actions">'
       +   (b.status === 'confirmed'
@@ -1097,9 +1411,7 @@ auth.onAuthStateChanged(user => {
   if (bookingsUnsub) { bookingsUnsub(); bookingsUnsub = null; }
   bookings = [];
   if (isAdmin) {
-    document.getElementById('cfg-title').value = config.trialTitle || '';
-    document.getElementById('cfg-price').value = config.trialPrice;
-    document.getElementById('cfg-details').value = config.trialDetails || '';
+    fillSettingsForm();
     bookingsUnsub = BOOKINGS.orderBy('createdAt', 'desc').onSnapshot(snap => {
       bookings = snap.docs.map(d => Object.assign({ _id: d.id }, d.data()));
       renderBookings();
