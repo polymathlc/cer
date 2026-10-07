@@ -243,6 +243,20 @@
   .lv-none { font-size:13px; color:var(--gray-500); padding:14px; border:1px dashed var(--line); border-radius:12px; line-height:1.5; }
   .lv-none a { color:var(--deep); font-weight:700; }
   @media (max-width:720px){ .lv-subjects{grid-template-columns:1fr} .finder-head{align-items:stretch} .view-toggle{width:100%} .view-toggle button{flex:1; padding:8px 10px} .lv-block{padding:16px} }
+  /* ─── Enrol directly (no trial) ─── */
+  .hero-note { position:relative; z-index:1; margin-top:16px; max-width:660px; font-size:14px; line-height:1.6; color:rgba(255,255,255,.92);
+    background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.28); border-radius:12px; padding:12px 16px; }
+  .hero-note b { color:#fff; }
+  .slot-actions { display:flex; flex-direction:column; gap:6px; }
+  .lv-act { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; }
+  .btn.enrol, .slot .btn.enrol, .lv-act .btn.enrol { background:#fff; color:var(--plum); border:1.5px solid var(--plum); }
+  .btn.enrol:hover, .slot .btn.enrol:hover, .lv-act .btn.enrol:hover { background:#fdf0f7; color:var(--plum); }
+  .slot.master .btn.enrol, .lv-row.master .lv-act .btn.enrol { background:#fff; color:#3a2350; border-color:#d4a64a; }
+  .slot.master .btn.enrol:hover, .lv-row.master .lv-act .btn.enrol:hover { background:#fffaf0; color:#3a2350; }
+  .enrol-note { background:#fff7ec; border:1px solid #f3d2a2; color:#6b430b; border-radius:12px; padding:12px 14px; font-size:13px; line-height:1.6; }
+  .enrol-note b { color:#4a2d05; }
+  .badge.enrol { background:#fdf0f7; color:var(--plum); border:1px solid #f5c6dd; }
+  .badge.trial { background:#eef8f9; color:var(--deep); border:1px solid var(--line); }
   @media (max-width:720px){ .settings-split{grid-template-columns:1fr} .master-hero{padding:24px 20px} .filters{grid-template-columns:1fr} }
   @media (max-width:720px){ .brand-name{display:none} .hero{padding:28px 20px} .hero h1{font-size:24px} }
 </style>
@@ -273,6 +287,7 @@
       <h1 id="trial-title">Trial Class</h1>
       <p id="trial-details">Loading…</p>
       <div class="fee-pills" id="hero-pills"><span class="price-pill" id="trial-price-pill">—</span></div>
+      <div class="hero-note hidden" id="hero-join"></div>
     </div>
 
     <div class="master-hero hidden" id="master-hero">
@@ -355,7 +370,7 @@
     <div id="schedule-grid"><div class="empty">Loading schedule…</div></div>
 
     <div id="admin-bookings-card" class="card hidden">
-      <h2>Trial bookings <span id="bookings-count" class="badge pending">0</span></h2>
+      <h2>Bookings &amp; enrolments <span id="bookings-count" class="badge pending">0</span></h2>
       <div id="bookings-list"></div>
     </div>
   </section>
@@ -397,9 +412,10 @@
   <div class="modal">
     <button class="close" onclick="closeModal('booking-modal')" aria-label="Close">×</button>
     <div id="booking-form-wrap">
-      <h2>Book a trial class</h2>
+      <h2 id="booking-title">Book a trial class</h2>
       <div class="sub" id="booking-slot-label"></div>
       <div class="form-grid">
+        <div class="enrol-note hidden" id="enrol-note"></div>
         <div class="grid-2">
           <div class="field"><label>Parent name <span class="req">*</span></label><input id="b-parent" type="text" oninput="refreshBookingQR()"></div>
           <div class="field"><label>Child's name <span class="req">*</span></label><input id="b-child" type="text"></div>
@@ -421,10 +437,10 @@
         </div>
 
         <div class="pay-box">
-          <div style="font-weight:700;margin-bottom:8px;">Pay via PayNow</div>
+          <div style="font-weight:700;margin-bottom:8px;" id="pay-title">Pay via PayNow</div>
           <div class="qr" id="booking-qr"></div>
           <div class="pay-info">
-            Amount: <b id="booking-amount">—</b><br>
+            <span id="booking-amount-label">Amount</span>: <b id="booking-amount">—</b><br>
             UEN: <b>T16LL2365E</b> (Polymath Learning Centre)<br>
             Reference: <b id="booking-ref">—</b>
           </div>
@@ -443,7 +459,7 @@
     </div>
     <div id="booking-success" class="success-box hidden">
       <div class="tick">✓</div>
-      <h2>Booking received!</h2>
+      <h2 id="booking-success-title">Booking received!</h2>
       <p class="sub" id="booking-success-text"></p>
       <button class="btn" onclick="closeModal('booking-modal')">Done</button>
     </div>
@@ -582,6 +598,13 @@ function feeLinesHtml(s) {
   if (rows.length > 1 && rows.every(r => r[1] === rows[0][1])) return line(rows[0][1], '');
   return rows.map(r => line(r[1], multi ? r[0] : '')).join('');
 }
+// Enrolling directly (no trial) means paying the first month's fees, so a
+// class can only be enrolled into in a mode that has a monthly fee set.
+// Subsequent months are collected by the admin staff, not on this page.
+function enrolModes(s) { return slotModes(s).filter(m => monthlyFeeFor(s, m) > 0); }
+function canEnrol(s) { return !!s && s.status === 'open' && !!s.level && !!s.subject && enrolModes(s).length > 0; }
+const ENROL_ACROSS = "From the second month onwards, our admin staff will contact you to collect the monthly fees, so there is nothing more to pay on this page.";
+
 // "Trial: $40" when both modes cost the same, otherwise both are named.
 function pairPill(cls, lead, phys, onl, suffix) {
   if (!phys && !onl) return '';
@@ -711,6 +734,12 @@ function renderHero() {
     + pairPill(' ghost', '', monthlyFeeFor(reg, 'Physical'), monthlyFeeFor(reg, 'Online'), ' / month');
   document.getElementById('hero-pills').innerHTML = pills;
 
+  const join = document.getElementById('hero-join');
+  const joinable = publishedSlots().some(x => canEnrol(x.s));
+  join.innerHTML = '<b>Two ways to join.</b> Book a trial lesson first, or skip the trial and <b>enrol directly</b>: '
+    + 'pay the first month\'s fees when you sign up, and from the second month our admin staff will collect the monthly fees with you.';
+  join.classList.toggle('hidden', !joinable);
+
   // The Master Class banner shows once at least one master slot is published
   // (or always to the admin, so the description can be checked).
   const slots = config.slots || {};
@@ -787,7 +816,10 @@ function renderPublicSlot(id, s, timeLabel) {
   const subjClass = s.subject === 'Math' ? 'math' : 'sci';
   const action = s.status === 'full'
     ? '<div class="status-full">Full</div>'
-    : '<button class="btn" onclick="openBooking(\'' + id + '\')"' + (dim ? ' disabled' : '') + '>Book trial · ' + trialButtonPrice(s) + '</button>';
+    : '<div class="slot-actions">'
+      + '<button class="btn" onclick="openBooking(\'' + id + '\')"' + (dim ? ' disabled' : '') + '>Book trial · ' + trialButtonPrice(s) + '</button>'
+      + (canEnrol(s) ? '<button class="btn enrol" onclick="openBooking(\'' + id + '\',\'enrol\')"' + (dim ? ' disabled' : '') + '>Enrol now</button>' : '')
+      + '</div>';
   return '<div class="slot' + (isMaster(s) ? ' master' : '') + dim + '">'
     + '<div class="slot-time">' + escapeHtml(timeLabel) + '</div>'
     + '<div class="tags">'
@@ -863,8 +895,11 @@ function renderLevelRow(x) {
   const master = isMaster(s);
   let action;
   if (s.status === 'full') action = '<div class="status-full">Full</div>';
-  else if (isAdmin) action = '<button class="btn small" disabled title="Preview — parents book from here">Book trial · ' + trialButtonPrice(s) + '</button>';
-  else action = '<button class="btn small" onclick="openBooking(\'' + x.id + '\')">Book trial · ' + trialButtonPrice(s) + '</button>';
+  else {
+    const off = isAdmin ? ' disabled title="Preview — parents book from here"' : '';
+    action = '<button class="btn small" onclick="openBooking(\'' + x.id + '\')"' + off + '>Book trial · ' + trialButtonPrice(s) + '</button>'
+      + (canEnrol(s) ? '<button class="btn small enrol" onclick="openBooking(\'' + x.id + '\',\'enrol\')"' + off + '>Enrol now</button>' : '');
+  }
   return '<div class="lv-row' + (master ? ' master' : '') + (s.status === 'full' ? ' full' : '') + '">'
     + '<div class="lv-when"><span class="lv-day" title="' + escapeHtml(x.day.name) + '">' + escapeHtml(x.day.name.slice(0, 3)) + '</span>'
     +   '<span class="lv-time">' + escapeHtml(x.t.label) + '</span></div>'
@@ -1025,10 +1060,14 @@ CONFIG_DOC.onSnapshot(snap => {
 // ═══════════════════════════════════════════════════════════
 let currentSlotId = null;
 let receiptFile = null;
+let bookingKind = 'trial';      // 'trial' or 'enrol' (straight in, first month paid)
 
-function openBooking(id) {
+function openBooking(id, kind) {
   const s = getSlot(id);
   if (s.status !== 'open') return;
+  const enrol = kind === 'enrol';
+  if (enrol && !canEnrol(s)) return;
+  bookingKind = enrol ? 'enrol' : 'trial';
   currentSlotId = id;
   receiptFile = null;
   ['b-parent', 'b-child', 'b-email', 'b-wa'].forEach(x => document.getElementById(x).value = '');
@@ -1038,24 +1077,39 @@ function openBooking(id) {
   const up = document.getElementById('b-upload');
   up.className = 'upload'; up.innerHTML = 'Tap to upload your payment screenshot';
 
+  // Enrolling is only offered in a mode that has a monthly fee to pay.
   const modeSel = document.getElementById('b-mode');
   const pref = document.getElementById('f-mode').value;
+  const allowed = enrol ? enrolModes(s) : slotModes(s);
+  Array.from(modeSel.options).forEach(o => { o.disabled = !allowed.includes(o.value); });
   if (isMaster(s)) {
     modeSel.value = 'Physical'; modeSel.disabled = true;
   } else if (s.mode === 'Both') {
-    modeSel.disabled = false;
-    modeSel.value = pref || 'Physical';
+    modeSel.disabled = allowed.length < 2;
+    modeSel.value = allowed.includes(pref) ? pref : allowed[0];
   } else {
     modeSel.value = s.mode; modeSel.disabled = true;
   }
 
+  document.getElementById('booking-title').textContent = enrol
+    ? (isMaster(s) ? 'Enrol in the Master Class' : 'Enrol in this class')
+    : (isMaster(s) ? 'Book a Master Class trial' : 'Book a trial class');
+  document.getElementById('pay-title').textContent = enrol ? "Pay the first month's fees via PayNow" : 'Pay the trial fee via PayNow';
+  document.getElementById('booking-amount-label').textContent = enrol ? "First month's fees" : 'Trial fee';
   updateBookingPrice(true);
   document.getElementById('booking-form-wrap').classList.remove('hidden');
   document.getElementById('booking-success').classList.add('hidden');
   const btn = document.getElementById('booking-submit');
-  btn.disabled = false; btn.textContent = 'Confirm booking';
+  btn.disabled = false; btn.textContent = submitLabel();
   refreshBookingQR();
   document.getElementById('booking-modal').classList.add('show');
+}
+
+function submitLabel() { return bookingKind === 'enrol' ? 'Confirm enrolment' : 'Confirm booking'; }
+
+// What is being paid now: the trial fee, or the first month's fees.
+function bookingAmount(s, mode) {
+  return bookingKind === 'enrol' ? monthlyFeeFor(s, mode) : trialPriceFor(s, mode);
 }
 
 function bookingMode(s) {
@@ -1069,15 +1123,22 @@ function updateBookingPrice(skipQR) {
   const s = getSlot(currentSlotId);
   const mode = bookingMode(s);
   const fee = monthlyFeeFor(s, mode);
+  const enrol = bookingKind === 'enrol';
   document.getElementById('booking-slot-label').textContent =
     (isMaster(s) ? '✦ Master Class · ' : '') + slotLabel(currentSlotId) + ' · ' + s.level.replace('P', 'Primary ') + ' ' + s.subject
-    + ' · ' + mode + (fee ? ' · ' + money(fee) + '/month after the trial' : '');
-  document.getElementById('booking-amount').textContent = money(trialPriceFor(s, mode));
+    + ' · ' + mode + (fee ? ' · ' + money(fee) + (enrol ? '/month' : '/month after the trial') : '');
+  document.getElementById('booking-amount').textContent = money(bookingAmount(s, mode));
+  const note = document.getElementById('enrol-note');
+  note.classList.toggle('hidden', !enrol);
+  if (enrol) {
+    note.innerHTML = '<b>Enrolling without a trial.</b> Pay the first month\'s fees of <b>' + money(fee) + '</b> below to secure '
+      + escapeHtml(s.level.replace('P', 'Primary ')) + ' ' + escapeHtml(s.subject) + '. ' + ENROL_ACROSS;
+  }
   if (!skipQR) refreshBookingQR();
 }
 
 function bookingRef() {
-  const kind = isMaster(getSlot(currentSlotId)) ? 'MASTER ' : 'TRIAL ';
+  const kind = bookingKind === 'enrol' ? 'ENROL ' : isMaster(getSlot(currentSlotId)) ? 'MASTER ' : 'TRIAL ';
   return buildRef(kind + (currentSlotId || '').replace('-', ''), document.getElementById('b-parent').value);
 }
 
@@ -1088,7 +1149,7 @@ function refreshBookingQR() {
     const ref = bookingRef();
     document.getElementById('booking-ref').textContent = ref;
     const s = getSlot(currentSlotId);
-    renderQR(document.getElementById('booking-qr'), buildPayNow(trialPriceFor(s, bookingMode(s)), ref), 180);
+    renderQR(document.getElementById('booking-qr'), buildPayNow(bookingAmount(s, bookingMode(s)), ref), 180);
   }, 200);
 }
 
@@ -1123,6 +1184,9 @@ async function submitBooking() {
   if (!EMAIL_RE.test(email)) return toast('Please enter a valid email', true);
   if (!isValidSgMobile(waRaw)) return toast('Please enter a valid 8-digit Singapore mobile number', true);
   if (!receiptFile) return toast('Please upload your PayNow screenshot', true);
+  const enrol = bookingKind === 'enrol';
+  const amount = bookingAmount(s, mode);
+  if (enrol && !(amount > 0)) return toast('Enrolment is not available for this class — please WhatsApp us', true);
 
   const btn = document.getElementById('booking-submit');
   btn.disabled = true; btn.textContent = 'Submitting…';
@@ -1138,9 +1202,10 @@ async function submitBooking() {
       slotLabel: slotLabel(currentSlotId),
       classLevel: s.level, subject: s.subject, slotMode: slotMode(s), mode,
       classType: isMaster(s) ? 'master' : 'regular',
+      kind: enrol ? 'enrol' : 'trial',
       monthlyFee: monthlyFeeFor(s, mode) || null,
       parentName, childName, childLevel2027, email, whatsapp,
-      price: trialPriceFor(s, mode),
+      price: amount,
       paymentRef: bookingRef(),
       receiptURL, receiptFilename: receiptFile.name,
       status: 'pending',
@@ -1150,20 +1215,27 @@ async function submitBooking() {
 
     try { await sendBookingEmails(booking); } catch (mailErr) { console.error('Email error', mailErr); }
 
-    document.getElementById('booking-success-text').textContent =
-      'Thank you, ' + parentName + '! ' + childName + "'s " + (isMaster(s) ? 'Master Class trial' : 'trial') + ' on ' + booking.slotLabel
-      + ' (' + s.subject + ', ' + mode + ') has been received. We will confirm via WhatsApp/email after checking your payment.';
+    document.getElementById('booking-success-title').textContent = enrol ? 'Enrolment received!' : 'Booking received!';
+    document.getElementById('booking-success-text').textContent = enrol
+      ? 'Thank you, ' + parentName + '! We have received ' + childName + "'s enrolment in " + (isMaster(s) ? 'the Master Class' : 'the class')
+        + ' on ' + booking.slotLabel + ' (' + s.subject + ', ' + mode + ') with the first month\'s fees of ' + money(amount) + '. '
+        + 'We will confirm via WhatsApp/email after checking your payment. ' + ENROL_ACROSS
+      : 'Thank you, ' + parentName + '! ' + childName + "'s " + (isMaster(s) ? 'Master Class trial' : 'trial') + ' on ' + booking.slotLabel
+        + ' (' + s.subject + ', ' + mode + ') has been received. We will confirm via WhatsApp/email after checking your payment.';
     document.getElementById('booking-form-wrap').classList.add('hidden');
     document.getElementById('booking-success').classList.remove('hidden');
   } catch (e) {
     console.error(e);
-    toast('Booking failed: ' + (e.message || 'please try again'), true);
-    btn.disabled = false; btn.textContent = 'Confirm booking';
+    toast((enrol ? 'Enrolment' : 'Booking') + ' failed: ' + (e.message || 'please try again'), true);
+    btn.disabled = false; btn.textContent = submitLabel();
   }
 }
 
 async function sendBookingEmails(b) {
+  const enrol = b.kind === 'enrol';
+  const master = b.classType === 'master';
   const rows = [
+    ['Booking', enrol ? 'Enrolment (no trial)' : 'Trial class'],
     ['Slot', b.slotLabel],
     ['Class type', b.classType === 'master' ? 'Master Class (physical)' : 'Regular class'],
     ['Class', b.classLevel.replace('P', 'Primary ') + ' ' + b.subject],
@@ -1173,10 +1245,11 @@ async function sendBookingEmails(b) {
     ['Parent', b.parentName],
     ['Email', b.email],
     ['WhatsApp', '+65 ' + fmtWa(b.whatsapp)],
-    ['Trial fee paid', money(b.price)],
-    ['Monthly fee after trial', b.monthlyFee ? money(b.monthlyFee) + ' / month' : '—'],
+    enrol ? ["First month's fees paid", money(b.price)] : ['Trial fee paid', money(b.price)],
+    [enrol ? 'Monthly fee' : 'Monthly fee after trial', b.monthlyFee ? money(b.monthlyFee) + ' / month' : '—'],
     ['PayNow reference', b.paymentRef]
   ];
+  if (enrol) rows.push(['Subsequent months', 'Collected by Polymath admin staff']);
   const table = rows.map(([k, v]) =>
     '<tr><td style="padding:8px 12px;border:1px solid #e5e5e5;background:#f5f5f5;font-weight:700;width:38%;">' + escapeHtml(k)
     + '</td><td style="padding:8px 12px;border:1px solid #e5e5e5;">' + escapeHtml(v) + '</td></tr>').join('');
@@ -1186,9 +1259,11 @@ async function sendBookingEmails(b) {
   await db.collection('mail').add({
     to: NOTIFICATION_EMAILS,
     message: {
-      subject: (b.classType === 'master' ? 'New MASTER CLASS Trial: ' : 'New Trial Booking: ') + b.childName + ' — ' + b.slotLabel + ' (' + b.subject + ')',
+      subject: (enrol ? (master ? 'New MASTER CLASS ENROLMENT: ' : 'New ENROLMENT: ') : (master ? 'New MASTER CLASS Trial: ' : 'New Trial Booking: '))
+        + b.childName + ' — ' + b.slotLabel + ' (' + b.subject + ')',
       html: '<div style="font-family:Arial,sans-serif;color:#171717;max-width:640px;">'
-        + '<h2>New Trial Class Booking</h2>'
+        + '<h2>' + (enrol ? 'New Enrolment (no trial)' : 'New Trial Class Booking') + '</h2>'
+        + (enrol ? '<p>First month\'s fees paid. Please follow up to collect fees from the second month onwards.</p>' : '')
         + '<table style="border-collapse:collapse;font-size:14px;width:100%;">' + table + '</table>'
         + '<p style="margin-top:16px;"><a href="' + escapeHtml(b.receiptURL) + '">View payment screenshot</a> (also attached)</p>'
         + '<p><a href="https://wa.me/65' + escapeHtml(b.whatsapp) + '">WhatsApp parent</a></p></div>',
@@ -1200,15 +1275,19 @@ async function sendBookingEmails(b) {
   await db.collection('mail').add({
     to: [b.email],
     message: {
-      subject: 'Trial Class Booking Received — ' + b.slotLabel,
+      subject: (enrol ? 'Enrolment Received — ' : 'Trial Class Booking Received — ') + b.slotLabel,
       html: '<div style="font-family:Arial,sans-serif;color:#171717;max-width:640px;">'
-        + '<h2>Thank you for booking a trial class!</h2>'
-        + '<p>Dear ' + escapeHtml(b.parentName) + ', we have received your booking and payment screenshot. '
-        + 'We will verify the payment and confirm with you shortly.</p>'
+        + '<h2>' + (enrol ? 'Thank you for enrolling!' : 'Thank you for booking a trial class!') + '</h2>'
+        + '<p>Dear ' + escapeHtml(b.parentName) + ', we have received your ' + (enrol ? 'enrolment and the payment screenshot for the first month\'s fees' : 'booking and payment screenshot')
+        + '. We will verify the payment and confirm with you shortly.</p>'
+        + (enrol ? '<p><b>About the monthly fees:</b> you have paid the first month\'s fees. From the second month onwards, our admin staff will contact you to collect the monthly fees.</p>' : '')
         + '<table style="border-collapse:collapse;font-size:14px;width:100%;">' + table + '</table>'
         + '<p style="margin-top:16px;">Questions? WhatsApp +65 9645 0588</p><p>Polymath Learning Centre</p></div>',
-      text: 'Dear ' + b.parentName + ',\n\nWe have received your trial booking.\n\n' + text
-        + '\n\nQuestions? WhatsApp +65 9645 0588\nPolymath Learning Centre'
+      text: 'Dear ' + b.parentName + ',\n\n'
+        + (enrol
+            ? 'We have received your enrolment and the first month\'s fees. From the second month onwards, our admin staff will contact you to collect the monthly fees.'
+            : 'We have received your trial booking.')
+        + '\n\n' + text + '\n\nQuestions? WhatsApp +65 9645 0588\nPolymath Learning Centre'
     }
   });
 }
@@ -1217,7 +1296,7 @@ async function sendBookingEmails(b) {
 function renderBookings() {
   const list = document.getElementById('bookings-list');
   document.getElementById('bookings-count').textContent = bookings.filter(b => b.status !== 'confirmed').length + ' pending';
-  if (!bookings.length) { list.innerHTML = '<div class="empty">No trial bookings yet.</div>'; return; }
+  if (!bookings.length) { list.innerHTML = '<div class="empty">No bookings or enrolments yet.</div>'; return; }
   list.innerHTML = bookings.map(b => {
     const isImg = !/\.pdf$/i.test(b.receiptFilename || '');
     const thumb = isImg
@@ -1227,11 +1306,15 @@ function renderBookings() {
       + '<div class="meta">'
       +   '<div><b>' + escapeHtml(b.childName) + '</b> (' + escapeHtml(b.childLevel2027) + ' in 2027) '
       +   '<span class="badge ' + (b.status === 'confirmed' ? 'confirmed' : 'pending') + '">' + escapeHtml(b.status || 'pending') + '</span>'
+      +   (b.kind === 'enrol' ? ' <span class="badge enrol">Enrolment</span>' : ' <span class="badge trial">Trial</span>')
       +   (b.classType === 'master' ? ' <span class="badge master">✦ Master Class</span>' : '') + '</div>'
       +   '<div>' + escapeHtml(b.slotLabel) + ' · ' + escapeHtml((b.classLevel || '') + ' ' + (b.subject || '')) + ' · ' + escapeHtml(b.mode) + '</div>'
       +   '<div>Parent: ' + escapeHtml(b.parentName) + ' · <a href="mailto:' + escapeHtml(b.email) + '">' + escapeHtml(b.email) + '</a> · '
       +   '<a href="https://wa.me/65' + escapeHtml(b.whatsapp) + '" target="_blank" rel="noopener">+65 ' + escapeHtml(fmtWa(b.whatsapp)) + '</a></div>'
-      +   '<div>' + money(b.price) + (b.monthlyFee ? ' trial · ' + money(b.monthlyFee) + '/month' : '') + ' · Ref ' + escapeHtml(b.paymentRef || '') + ' · ' + escapeHtml(fmtTime(b.createdAt)) + '</div>'
+      +   '<div>' + money(b.price) + (b.kind === 'enrol' ? ' first month paid' : ' trial')
+      +     (b.monthlyFee ? ' · ' + money(b.monthlyFee) + '/month' : '')
+      +     (b.kind === 'enrol' ? ' · collect from month 2' : '')
+      +     ' · Ref ' + escapeHtml(b.paymentRef || '') + ' · ' + escapeHtml(fmtTime(b.createdAt)) + '</div>'
       + '</div>'
       + '<div class="booking-actions">'
       +   (b.status === 'confirmed'
