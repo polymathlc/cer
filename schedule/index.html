@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>/* HTTPS UPGRADE — a page opened over plain http:// on the custom domain moves to https://, but only after a probe proves the secure address answers (a failed TLS handshake rejects; any HTTP reply, even a 404, resolves). If https is broken the page stays put rather than locking anybody out. */(function(){var l=location;if(l.protocol!=='http:'||!/(^|\.)polymathlc\.com\.sg$/i.test(l.hostname))return;try{fetch('https://'+l.host+'/?https-check='+Date.now(),{mode:'no-cors',cache:'no-store'}).then(function(){l.replace('https://'+l.host+l.pathname+l.search+l.hash)},function(){})}catch(e){}})();</script>
-<title>Polymath Learning Centre — Class Schedule & Shop</title>
+<title>Polymath Learning Centre — Schedule, Sample Materials & Shop</title>
+<link rel="stylesheet" href="sample-materials.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="../assets/branding/polymath-learning-centre.png">
@@ -379,6 +380,7 @@
     <a class="brand" href="../"><img src="../assets/branding/polymath-learning-centre.png" alt="Polymath Learning Centre logo"><div class="brand-name">Polymath<span>Learning Centre</span></div></a>
     <nav class="tabs" role="tablist">
       <button class="tab active" data-tab="schedule" onclick="showTab('schedule')">Schedule</button>
+      <button class="tab" data-tab="sample-materials" onclick="showTab('sample-materials')">Sample Materials</button>
       <button class="tab" data-tab="products" onclick="showTab('products')">Products</button>
     </nav>
     <div class="admin-chip" id="admin-chip"></div>
@@ -506,6 +508,15 @@
       <h2>Bookings &amp; enrolments <span id="bookings-count" class="badge pending">0</span></h2>
       <div id="bookings-list"></div>
     </div>
+  </section>
+
+  <section id="tab-sample-materials" class="hidden" aria-label="Sample Materials">
+    <div class="hero">
+      <h1>Sample Materials</h1>
+      <p>Explore our online learning suite. Try a few Math or Science questions, then work through a sample worksheet with our live tutor. No student account needed.</p>
+    </div>
+    <div id="sample-materials-content"><div class="empty">Loading sample materials…</div></div>
+    <div id="sample-materials-admin" class="card hidden"></div>
   </section>
 
   <!-- ═════════════════ PRODUCTS TAB ═════════════════ -->
@@ -831,10 +842,18 @@ function renderQR(el, text, size) {
 // Tabs
 // ═══════════════════════════════════════════════════════════
 function showTab(name) {
+  if (!['schedule', 'sample-materials', 'products'].includes(name)) name = 'schedule';
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.getElementById('tab-schedule').classList.toggle('hidden', name !== 'schedule');
+  document.getElementById('tab-sample-materials').classList.toggle('hidden', name !== 'sample-materials');
   document.getElementById('tab-products').classList.toggle('hidden', name !== 'products');
-  const hash = name === 'products' ? '#products' : '';
+  document.querySelectorAll('.tab').forEach(t => {
+    t.setAttribute('role', 'tab');
+    t.setAttribute('aria-selected', String(t.dataset.tab === name));
+    t.setAttribute('aria-controls', 'tab-' + t.dataset.tab);
+  });
+  if (window.SampleMaterials) window.SampleMaterials.setActive(name === 'sample-materials');
+  const hash = name === 'schedule' ? '' : '#' + name;
   if (location.hash !== hash) history.replaceState(null, '', location.pathname + location.search + hash);
 }
 
@@ -1829,10 +1848,14 @@ auth.onAuthStateChanged(user => {
 });
 
 // ─── Init ───
-if (location.hash === '#products') showTab('products');
+if (['#products', '#sample-materials'].includes(location.hash)) showTab(location.hash.slice(1));
+window.addEventListener('hashchange', () => {
+  if (['', '#schedule', '#products', '#sample-materials'].includes(location.hash)) showTab(location.hash.slice(1));
+});
 maybeAdminFromHash();
 renderHero();
 renderSchedule();
 </script>
+<script src="sample-materials.js"></script>
 </body>
 </html>
