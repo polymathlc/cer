@@ -3,6 +3,8 @@
 // never sent to a browser. Jev returns typed decisions, never prose.
 import { JEV_ENDPOINT, JEV_BODY_LIMIT, buildReviewRequest, readReview } from './jev-review-core.js';
 
+import { decisionRequest, decisionAnswers } from './decisions-wire.js';
+
 export class JevUnavailable extends Error {
   constructor(code, message) { super(message); this.code = code; }
 }
@@ -39,9 +41,9 @@ export function cleanInput(input) {
 
 export async function jevReview(input, { apiKey, fetchImpl = fetch, timeoutMs = 9000 }) {
   const key = typeof apiKey === 'function' ? apiKey() : apiKey;
-  if (typeof key !== 'string' || !key.trim()) throw new JevUnavailable('not_configured', 'Jev is not configured yet.');
+  if (typeof key !== 'string' || !key.trim()) throw new JevUnavailable('not_configured', 'Decisions is not configured yet.');
   const body = buildReviewRequest(cleanInput(input));
-  const text = JSON.stringify(body);
+  const text = JSON.stringify(decisionRequest(body));
   if (text.length > JEV_BODY_LIMIT) throw new JevUnavailable('invalid', 'The review request is too large.');
   let response;
   try {
@@ -50,14 +52,14 @@ export async function jevReview(input, { apiKey, fetchImpl = fetch, timeoutMs = 
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: text, signal: AbortSignal.timeout(timeoutMs)
     });
-  } catch { throw new JevUnavailable('unavailable', 'Jev could not be reached.'); }
+  } catch { throw new JevUnavailable('unavailable', 'Decisions could not be reached.'); }
   // Upstream error bodies can contain secrets: never read or return them.
   if (!response.ok) {
-    if (response.status === 429 || response.status === 529) throw new JevUnavailable('busy', 'Jev is busy.');
-    throw new JevUnavailable('unavailable', 'Jev could not check this.');
+    if (response.status === 429 || response.status === 529) throw new JevUnavailable('busy', 'Decisions is busy.');
+    throw new JevUnavailable('unavailable', 'Decisions could not check this.');
   }
-  try { return readReview(await response.json(), body); }
-  catch { throw new JevUnavailable('invalid_response', 'Jev returned an unreadable answer.'); }
+  try { return readReview(decisionAnswers(await response.json(), body), body); }
+  catch { throw new JevUnavailable('invalid_response', 'Decisions returned an unreadable answer.'); }
 }
 
 export const JEV_LIMITS = Object.freeze({ perMinute: 90, perDay: 4000 });

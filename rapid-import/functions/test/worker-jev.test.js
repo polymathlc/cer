@@ -59,17 +59,19 @@ function pdfFixture(pageCount,streams=[]) {
   pdf+='trailer\n<< /Size '+offsets.length+' /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF';return Buffer.from(pdf);
 }
 
-// Jev is the TypeSafe endpoint: scripted per test.
+// OpenAI Decisions response arrays, scripted per test.
 let jevCalls=[], jevPlan=()=>({});
 globalThis.fetch=async(url,init)=>{
-  const body=JSON.parse(init.body);jevCalls.push(body);
+  assert.equal(url,'https://api.openai.com/v1/decisions');
+  const wire=JSON.parse(init.body);assert.equal(wire.model,'gpt-6-luna');
+  const body={state:JSON.parse(wire.input),questions:Object.fromEntries(wire.questions.map(q=>[q.name,q]))};jevCalls.push(body);
   const plan=jevPlan(Object.keys(body.questions),jevCalls.length,body);
   const answers={};
   for(const key of Object.keys(body.questions)) {
     const [choice,conf]=plan[key]||['yes',.95];
     answers[key]={type:'choice',choice,confidence:conf,probabilities:choice==='yes'?{yes:conf,no:1-conf}:{yes:1-conf,no:conf}};
   }
-  return {ok:true,json:async()=>({answers})};
+  return {ok:true,json:async()=>({answers:Object.entries(answers).map(([name,a])=>({...a,name,probabilities:Object.entries(a.probabilities).map(([value,probability])=>({value,probability}))}))})};
 };
 const api=await import('../index.js');
 const auth={uid:'teacher',token:{admin:true,name:'Teacher'}};

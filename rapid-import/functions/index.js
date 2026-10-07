@@ -22,8 +22,7 @@ const db = getFirestore();
 const bucket = () => getStorage().bucket('mathgen--app.firebasestorage.app');
 const key = defineSecret('GEMINI_API_KEY');
 const openaiKey = defineSecret('OPENAI_API_KEY');
-// The same project secret Ans Key's Jev functions use; bound here only for the review calls.
-const jevKey = defineSecret('JEV_API_KEY');
+// Review decisions use the shared OpenAI secret; legacy function names remain compatible.
 const openaiModel = defineString('RAPID_IMPORT_OPENAI_MODEL', {default:'gpt-6.1-sol'});
 const kimiModel = defineString('RAPID_IMPORT_KIMI_MODEL', {default:'kimi-k3'});
 const model = defineString('RAPID_IMPORT_MODEL', {default:'gemini-2.5-flash'});
@@ -61,10 +60,10 @@ export const rapidImportStatus = onCall(callOpts, async request => {
 // Jev, for the browser importer. The browser sends measured FACTS about a crop
 // or a question and gets typed verdicts back; the decision is made in the page
 // with the same shared core. Administrator only, counted, and never persisted.
-export const cerJevReview = onCall({...callOpts, timeoutSeconds:30, memory:'256MiB', secrets:[jevKey]}, async request => {
+export const cerJevReview = onCall({...callOpts, timeoutSeconds:30, memory:'256MiB', secrets:[openaiKey]}, async request => {
   const a = admin(request);
   if (!await jevAllow(db, a.uid)) throw new HttpsError('resource-exhausted','Jev has reached its allowance. The AI will check instead.');
-  try { return {available:true, verdicts: await jevReview(request.data, {apiKey:()=>jevKey.value()})}; }
+  try { return {available:true, verdicts: await jevReview(request.data, {apiKey:()=>openaiKey.value()})}; }
   catch(e) {
     if (!(e instanceof JevUnavailable)) throw e;
     if (e.code==='invalid') throw new HttpsError('invalid-argument',e.message);
@@ -222,7 +221,7 @@ async function enhanceImage(block, job, requested='colour', pageUrls=[]) {
     enhancement:{state:'done',mode,at:new Date().toISOString()}};
 }
 const fullRevision=q=>createHash('sha256').update(JSON.stringify(q)).digest('hex');
-export const rapidVettingImage = onCall({...callOpts,secrets:[key,openaiKey,jevKey],timeoutSeconds:540,memory:'2GiB'},async request=>{
+export const rapidVettingImage = onCall({...callOpts,secrets:[key,openaiKey],timeoutSeconds:540,memory:'2GiB'},async request=>{
   const a=admin(request),d=request.data||{};
   const validQuestionPart=id=>typeof id==='string'&&/^[a-zA-Z0-9_-]{1,220}$/.test(id);
   if(!validQuestionPart(d.questionId)||!validQuestionPart(d.blockId)||typeof d.expectedUrl!=='string') throw new HttpsError('invalid-argument','Select a saved figure first.');
@@ -270,7 +269,7 @@ export const rapidVettingImage = onCall({...callOpts,secrets:[key,openaiKey,jevK
 // is never a failure of the import: the question simply takes the ordinary path.
 const jevOn = job => job.jev !== false;
 async function jevAsk(input) {
-  try { return await jevReview(input,{apiKey:()=>jevKey.value()}); }
+  try { return await jevReview(input,{apiKey:()=>openaiKey.value()}); }
   catch(e) { if(e instanceof JevUnavailable) return null; throw e; }
 }
 const JEV_RECROP_TRIES = 2;
@@ -506,7 +505,7 @@ async function checkQuestion(q,job) {
   if(error) q.autoCheck.error=error;
   if(shadow) q.jevShadow={...shadow,ai:q.autoCheck.state,found:q.autoCheck.found};
 }
-export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[key,openaiKey,jevKey],timeoutSeconds:540,memory:'2GiB',cpu:1,
+export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[key,openaiKey],timeoutSeconds:540,memory:'2GiB',cpu:1,
   retryConfig:{maxAttempts:5,minBackoffSeconds:60,maxBackoffSeconds:300},rateLimits:{maxConcurrentDispatches:2},maxInstances:2},async request=>{
   // Taken before anything is read: the crop clean-up stops starting new model
   // calls PAGE_REFINE_MS in, so a page full of figures still finishes, stores

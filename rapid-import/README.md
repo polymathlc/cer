@@ -72,7 +72,7 @@ npm ci --prefix rapid-import/functions
 npx firebase-tools deploy --project mathgen--app --config rapid-import/firebase.json --only functions:cer-rapid-import
 ```
 
-Use the existing `GEMINI_API_KEY`, `OPENAI_API_KEY` and `JEV_API_KEY` Secret Manager secrets (`JEV_API_KEY` is the one Ans Key's Jev functions already use). If either secret has not
+Use the existing `GEMINI_API_KEY` and `OPENAI_API_KEY` Secret Manager secrets (OpenAI also supplies typed review decisions). If either secret has not
 been set, provision it with `firebase functions:secrets:set GEMINI_API_KEY
 --project mathgen--app`; never put a provider key in frontend code. The default
 OpenAI worker model is `gpt-6.1-sol` (`RAPID_IMPORT_OPENAI_MODEL`) for reading,
@@ -175,10 +175,10 @@ Reopen the portal and verify the questions, part order and source-page links.
 Then retry a deliberately failed import and confirm no duplicate questions.
 
 
-## Jev review (v1.418.0)
+## OpenAI Decisions review (legacy Jev interfaces)
 
 `cerJevReview` (callable, administrators only) and the worker's own gate ask
-Jev — the typed-decision service Ans Key uses for voice commands — yes/no
+OpenAI Decisions (`gpt-6-luna`) — also used by Ans Key for voice commands — yes/no
 questions about measured facts: is each figure crop complete and clean, is the
 wording readable, do parts/options/answers hang together. The pure logic is
 `jev-review-core.js`, **byte-identical** to `../jev-review-core.mjs`
