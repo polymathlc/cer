@@ -119,6 +119,28 @@
       reader.readAsDataURL(file);
     });
   }
+  let pdfReaderPromise;
+  async function validatePdf(file) {
+    if (!window.pdfjsLib) {
+      if (!pdfReaderPromise) pdfReaderPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        script.onload = resolve;
+        script.onerror = () => { pdfReaderPromise = null; script.remove(); reject(new Error('The PDF reader could not load. Please try again.')); };
+        document.head.append(script);
+      });
+      await pdfReaderPromise;
+    }
+    if (!window.pdfjsLib) throw new Error('The PDF reader could not load. Please try again.');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    let pdf;
+    try {
+      pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
+      if (pdf.numPages > 30) throw new Error('Choose a sample worksheet with no more than 30 pages.');
+    } catch (error) {
+      throw new Error(pdf ? error.message : 'That PDF could not be read. Choose a valid PDF without a password.');
+    } finally { if (pdf) await pdf.destroy(); }
+  }
   async function upload(subject) {
     if (state.busy) return;
     const file = byId('sample-pdf-' + subject).files[0];
@@ -127,8 +149,10 @@
     if (file.size > 10 * 1024 * 1024 || file.size === 0) { status(subject, 'Choose a PDF no larger than 10 MB.', true); return; }
     const signature = await file.slice(0, 5).text();
     if (signature !== '%PDF-') { status(subject, 'That file is not a PDF.', true); return; }
-    setBusy(true); status(subject, 'Uploading and publishing worksheet…');
+    setBusy(true); status(subject, 'Checking PDF…');
     try {
+      await validatePdf(file);
+      status(subject, 'Uploading and publishing worksheet…');
       await adminCall('uploadWorksheet', { subject, title, pdfBase64: await fileBase64(file) });
       byId('sample-pdf-' + subject).value = '';
       status(subject, 'Worksheet published. Students can now try it.');
