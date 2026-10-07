@@ -191,7 +191,11 @@
   .tag.master { background:linear-gradient(135deg,#f5d98b,#d4a64a); border-color:#d4a64a; color:#1c1530; font-weight:700; }
   .badge.master { background:#fdf3d7; color:#7a5a12; border:1px solid #e9cf86; }
   .settings-split { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-  .settings-box { border:1px solid var(--line); border-radius:12px; padding:14px; display:grid; gap:10px; }
+  .settings-box { border:1px solid var(--line); border-radius:12px; padding:16px; display:grid; gap:12px; align-content:start; }
+  .settings-box .grid-2 { gap:12px; }
+  .fee-line .fm { display:inline-block; min-width:62px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--gray-500); }
+  .price-pill .pm { font-weight:600; opacity:.75; margin-right:2px; }
+  .slot-edit .fee-pair { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
   .settings-box h3 { font-size:14px; color:var(--deep); }
   .settings-box.master { border-color:#e9cf86; background:#fffaf0; }
   .settings-box.master h3 { color:#7a5a12; }
@@ -286,18 +290,25 @@
         <div class="settings-split">
           <div class="settings-box">
             <h3>Regular classes</h3>
-            <div class="field"><label>Trial price (SGD)</label><input id="cfg-price" type="number" min="0" step="0.01"></div>
-            <div class="field"><label>Monthly fee (SGD) — blank hides it</label><input id="cfg-monthly" type="number" min="0" step="0.01"></div>
+            <div class="grid-2">
+              <div class="field"><label>Trial price · Physical (SGD)</label><input id="cfg-price" type="number" min="0" step="0.01"></div>
+              <div class="field"><label>Trial price · Online (SGD)</label><input id="cfg-price-online" type="number" min="0" step="0.01" placeholder="Same as physical"></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label>Monthly fee · Physical (SGD)</label><input id="cfg-monthly" type="number" min="0" step="0.01" placeholder="Blank hides it"></div>
+              <div class="field"><label>Monthly fee · Online (SGD)</label><input id="cfg-monthly-online" type="number" min="0" step="0.01" placeholder="Same as physical"></div>
+            </div>
+            <div class="muted-note">An Online price left blank uses the Physical price. For a class set to "Online &amp; Physical", parents choose how they attend when they book, and pay that mode's price.</div>
           </div>
           <div class="settings-box master">
             <h3>✦ Master Class (physical only)</h3>
-            <div class="field"><label>Trial price (SGD) — blank uses the regular trial price</label><input id="cfg-mprice" type="number" min="0" step="0.01"></div>
+            <div class="field"><label>Trial price (SGD) — blank uses the regular physical trial price</label><input id="cfg-mprice" type="number" min="0" step="0.01"></div>
             <div class="field"><label>Monthly fee (SGD) — blank hides it</label><input id="cfg-mmonthly" type="number" min="0" step="0.01"></div>
             <div class="field"><label>Master Class title</label><input id="cfg-mtitle" type="text"></div>
             <div class="field"><label>Master Class description (shown to visitors)</label><textarea id="cfg-mdetails"></textarea></div>
           </div>
         </div>
-        <div class="muted-note">A slot can also have its own monthly fee, set on the slot below. It overrides these defaults.</div>
+        <div class="muted-note">A slot can also have its own monthly fees (physical and online), set on the slot below. They override these defaults.</div>
         <div><button class="btn" onclick="saveTrialSettings()" id="save-trial-btn">Save fees &amp; settings</button></div>
       </div>
     </div>
@@ -401,7 +412,7 @@
             </select>
           </div>
           <div class="field" id="b-mode-wrap"><label>Attend <span class="req">*</span></label>
-            <select id="b-mode"><option>Physical</option><option>Online</option></select>
+            <select id="b-mode" onchange="updateBookingPrice()"><option>Physical</option><option>Online</option></select>
           </div>
         </div>
         <div class="grid-2">
@@ -528,13 +539,56 @@ function slotLabel(id) {
 function feeNum(v) { const n = parseFloat(v); return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0; }
 function isMaster(s) { return !!s && s.type === 'master'; }
 function slotMode(s) { return isMaster(s) ? 'Physical' : s.mode; }   // Master Class is physical only
-function trialPriceFor(s) {
-  if (isMaster(s) && feeNum(config.masterTrialPrice)) return feeNum(config.masterTrialPrice);
-  return Number(config.trialPrice) || 0;
+// Online and Physical are priced separately. A class offered as "Online &
+// Physical" is ONE class: the parent picks how they attend and pays that
+// mode's price. A blank Online price falls back to the Physical one.
+// The Master Class is physical only, so it has one price of each kind.
+function slotModes(s) {
+  const m = s ? slotMode(s) : '';
+  return m === 'Both' ? ['Physical', 'Online'] : [m === 'Online' ? 'Online' : 'Physical'];
 }
-function monthlyFeeFor(s) {
-  if (s && feeNum(s.fee)) return feeNum(s.fee);
-  return isMaster(s) ? feeNum(config.masterMonthlyFee) : feeNum(config.monthlyFee);
+function trialPriceFor(s, mode) {
+  const phys = Number(config.trialPrice) || 0;
+  if (isMaster(s)) return feeNum(config.masterTrialPrice) || phys;
+  if ((mode || slotModes(s)[0]) === 'Online') return feeNum(config.trialPriceOnline) || phys;
+  return phys;
+}
+function monthlyFeeFor(s, mode) {
+  const own = k => (s ? feeNum(s[k]) : 0);
+  if (isMaster(s)) return own('fee') || feeNum(config.masterMonthlyFee);
+  const phys = own('fee') || feeNum(config.monthlyFee);
+  if ((mode || slotModes(s)[0]) === 'Online') return own('feeOnline') || feeNum(config.monthlyFeeOnline) || phys;
+  return phys;
+}
+// The modes a card prices: the slot's own, narrowed to the parent's Mode
+// filter when they picked one the slot offers.
+function pricedModes(s) {
+  const ms = slotModes(s);
+  const el = document.getElementById('f-mode');
+  const f = el ? el.value : '';
+  return f && ms.includes(f) ? [f] : ms;
+}
+function trialButtonPrice(s) {
+  const ps = pricedModes(s).map(m => trialPriceFor(s, m));
+  const lo = Math.min.apply(null, ps);
+  return (ps.some(p => p !== lo) ? 'from ' : '') + money(lo);
+}
+function feeLinesHtml(s) {
+  const ms = pricedModes(s);
+  const rows = ms.map(m => [m, monthlyFeeFor(s, m)]).filter(r => r[1]);
+  if (!rows.length) return '';
+  const line = (v, m) => '<div class="fee-line">' + (m ? '<span class="fm">' + m + '</span>' : '') + money(v) + ' <span>/ month</span></div>';
+  const multi = slotModes(s).length > 1;
+  if (rows.length > 1 && rows.every(r => r[1] === rows[0][1])) return line(rows[0][1], '');
+  return rows.map(r => line(r[1], multi ? r[0] : '')).join('');
+}
+// "Trial: $40" when both modes cost the same, otherwise both are named.
+function pairPill(cls, lead, phys, onl, suffix) {
+  if (!phys && !onl) return '';
+  if (phys === onl || !onl) return '<span class="price-pill' + cls + '">' + lead + money(phys) + suffix + '</span>';
+  if (!phys) return '<span class="price-pill' + cls + '">' + lead + '<span class="pm">Online</span> ' + money(onl) + suffix + '</span>';
+  return '<span class="price-pill' + cls + '">' + lead + '<span class="pm">Physical</span> ' + money(phys)
+    + ' · <span class="pm">Online</span> ' + money(onl) + suffix + '</span>';
 }
 
 const DEFAULT_CONFIG = {
@@ -542,6 +596,8 @@ const DEFAULT_CONFIG = {
   trialDetails: 'Experience a full 1h 45min lesson with Polymath Learning Centre.\nSmall groups, Primary 3 to Primary 6 Math and Science, online or at our Clementi centre.',
   trialPrice: 30,
   monthlyFee: '',
+  trialPriceOnline: '',
+  monthlyFeeOnline: '',
   masterTrialPrice: '',
   masterMonthlyFee: '',
   masterTitle: 'Master Class',
@@ -631,7 +687,7 @@ function showTab(name) {
 // ═══════════════════════════════════════════════════════════
 function getSlot(id) {
   const src = draftSlots || config.slots || {};
-  return Object.assign({ level: '', subject: '', mode: 'Both', status: 'closed', note: '', type: 'regular', fee: '' }, src[id] || {});
+  return Object.assign({ level: '', subject: '', mode: 'Both', status: 'closed', note: '', type: 'regular', fee: '', feeOnline: '' }, src[id] || {});
 }
 
 function matchesFilters(s) {
@@ -651,8 +707,8 @@ function renderHero() {
   document.getElementById('trial-title').textContent = config.trialTitle || DEFAULT_CONFIG.trialTitle;
   document.getElementById('trial-details').textContent = config.trialDetails || '';
   const reg = { type: 'regular' }, mst = { type: 'master' };
-  let pills = '<span class="price-pill">Trial: ' + money(trialPriceFor(reg)) + '</span>';
-  if (monthlyFeeFor(reg)) pills += '<span class="price-pill ghost">' + money(monthlyFeeFor(reg)) + ' / month</span>';
+  const pills = pairPill('', 'Trial: ', trialPriceFor(reg, 'Physical'), trialPriceFor(reg, 'Online'), '')
+    + pairPill(' ghost', '', monthlyFeeFor(reg, 'Physical'), monthlyFeeFor(reg, 'Online'), ' / month');
   document.getElementById('hero-pills').innerHTML = pills;
 
   // The Master Class banner shows once at least one master slot is published
@@ -675,6 +731,8 @@ function fillSettingsForm() {
   set('cfg-price', config.trialPrice);
   set('cfg-details', config.trialDetails || '');
   set('cfg-monthly', feeNum(config.monthlyFee) || '');
+  set('cfg-price-online', feeNum(config.trialPriceOnline) || '');
+  set('cfg-monthly-online', feeNum(config.monthlyFeeOnline) || '');
   set('cfg-mprice', feeNum(config.masterTrialPrice) || '');
   set('cfg-mmonthly', feeNum(config.masterMonthlyFee) || '');
   set('cfg-mtitle', config.masterTitle || DEFAULT_CONFIG.masterTitle);
@@ -698,11 +756,25 @@ function renderAdminSlot(id, s, timeLabel) {
     +   (isMaster(s)
           ? '<select disabled title="Master Class is physical only"><option>Physical only</option></select>'
           : '<select ' + on('mode') + '>' + options(MODES, s.mode, MODE_LABEL) + '</select>')
-    +   '<input type="number" min="0" step="0.01" placeholder="Fee / month (default ' + (monthlyFeeFor(Object.assign({}, s, { fee: '' })) ? money(monthlyFeeFor(Object.assign({}, s, { fee: '' }))) : 'none') + ')" value="' + escapeHtml(s.fee) + '" '
-    +     'oninput="editSlot(\'' + id + '\',\'fee\',this.value)">'
+    +   slotFeeInputs(id, s)
     +   '<input type="text" placeholder="Note (optional)" value="' + escapeHtml(s.note) + '" '
     +     'oninput="editSlot(\'' + id + '\',\'note\',this.value)">'
     + '</div></div>';
+}
+
+// A slot can override the monthly fee for each mode it runs in. The
+// placeholder shows what it falls back to when left blank.
+function slotFeeInputs(id, s) {
+  const ms = slotModes(s);
+  const box = (field, mode, label) => {
+    const dflt = monthlyFeeFor(Object.assign({}, s, { [field]: '' }), mode);
+    return '<input type="number" min="0" step="0.01" title="' + label + ' monthly fee for this class only" '
+      + 'placeholder="' + label + ' $/month (' + (dflt ? money(dflt) : 'none') + ')" value="' + escapeHtml(s[field] || '') + '" '
+      + 'oninput="editSlot(\'' + id + '\',\'' + field + '\',this.value)">';
+  };
+  if (isMaster(s)) return box('fee', 'Physical', 'Fee');
+  const html = ms.map(m => m === 'Online' ? box('feeOnline', 'Online', 'Online') : box('fee', 'Physical', 'Physical')).join('');
+  return ms.length > 1 ? '<div class="fee-pair">' + html + '</div>' : html;
 }
 
 function renderPublicSlot(id, s, timeLabel) {
@@ -715,8 +787,7 @@ function renderPublicSlot(id, s, timeLabel) {
   const subjClass = s.subject === 'Math' ? 'math' : 'sci';
   const action = s.status === 'full'
     ? '<div class="status-full">Full</div>'
-    : '<button class="btn" onclick="openBooking(\'' + id + '\')"' + (dim ? ' disabled' : '') + '>Book trial · ' + money(trialPriceFor(s)) + '</button>';
-  const fee = monthlyFeeFor(s);
+    : '<button class="btn" onclick="openBooking(\'' + id + '\')"' + (dim ? ' disabled' : '') + '>Book trial · ' + trialButtonPrice(s) + '</button>';
   return '<div class="slot' + (isMaster(s) ? ' master' : '') + dim + '">'
     + '<div class="slot-time">' + escapeHtml(timeLabel) + '</div>'
     + '<div class="tags">'
@@ -725,7 +796,7 @@ function renderPublicSlot(id, s, timeLabel) {
     +   '<span class="tag ' + subjClass + '">' + escapeHtml(s.subject) + '</span>'
     +   '<span class="tag">' + escapeHtml(MODE_LABEL[slotMode(s)] || slotMode(s)) + '</span>'
     + '</div>'
-    + (fee ? '<div class="fee-line">' + money(fee) + ' <span>/ month</span></div>' : '')
+    + feeLinesHtml(s)
     + (s.note ? '<div class="slot-note">' + escapeHtml(s.note) + '</div>' : '')
     + '<div class="spacer"></div>' + action
     + '</div>';
@@ -790,11 +861,10 @@ function publishedSlots() {
 function renderLevelRow(x) {
   const s = x.s;
   const master = isMaster(s);
-  const fee = monthlyFeeFor(s);
   let action;
   if (s.status === 'full') action = '<div class="status-full">Full</div>';
-  else if (isAdmin) action = '<button class="btn small" disabled title="Preview — parents book from here">Book trial · ' + money(trialPriceFor(s)) + '</button>';
-  else action = '<button class="btn small" onclick="openBooking(\'' + x.id + '\')">Book trial · ' + money(trialPriceFor(s)) + '</button>';
+  else if (isAdmin) action = '<button class="btn small" disabled title="Preview — parents book from here">Book trial · ' + trialButtonPrice(s) + '</button>';
+  else action = '<button class="btn small" onclick="openBooking(\'' + x.id + '\')">Book trial · ' + trialButtonPrice(s) + '</button>';
   return '<div class="lv-row' + (master ? ' master' : '') + (s.status === 'full' ? ' full' : '') + '">'
     + '<div class="lv-when"><span class="lv-day" title="' + escapeHtml(x.day.name) + '">' + escapeHtml(x.day.name.slice(0, 3)) + '</span>'
     +   '<span class="lv-time">' + escapeHtml(x.t.label) + '</span></div>'
@@ -802,7 +872,7 @@ function renderLevelRow(x) {
     +   (master ? '<span class="tag master">✦ Master Class</span>' : '')
     +   '<span class="tag">' + escapeHtml(MODE_LABEL[slotMode(s)] || slotMode(s)) + '</span>'
     + '</div>'
-    +   (fee ? '<div class="fee-line">' + money(fee) + ' <span>/ month</span></div>' : '')
+    +   feeLinesHtml(s)
     +   (s.note ? '<div class="slot-note">' + escapeHtml(s.note) + '</div>' : '')
     + '</div>'
     + '<div class="lv-act">' + action + '</div>'
@@ -887,7 +957,7 @@ function editSlot(id, field, value) {
   draftSlots[id] = next;
   const btn = document.getElementById('save-schedule-btn');
   btn.textContent = 'Save schedule *';
-  if (field === 'type') renderSchedule();
+  if (field === 'type' || field === 'mode') renderSchedule();
 }
 
 async function saveSchedule() {
@@ -917,9 +987,11 @@ async function saveTrialSettings() {
     if (!(n >= 0)) throw new Error('Please enter a valid ' + label);
     return Math.round(n * 100) / 100;
   };
-  let monthlyFee, masterTrialPrice, masterMonthlyFee;
+  let monthlyFee, trialPriceOnline, monthlyFeeOnline, masterTrialPrice, masterMonthlyFee;
   try {
-    monthlyFee = optFee('cfg-monthly', 'monthly fee');
+    monthlyFee = optFee('cfg-monthly', 'physical monthly fee');
+    trialPriceOnline = optFee('cfg-price-online', 'online trial price');
+    monthlyFeeOnline = optFee('cfg-monthly-online', 'online monthly fee');
     masterTrialPrice = optFee('cfg-mprice', 'Master Class trial price');
     masterMonthlyFee = optFee('cfg-mmonthly', 'Master Class monthly fee');
   } catch (e) { toast(e.message, true); return; }
@@ -930,7 +1002,7 @@ async function saveTrialSettings() {
       trialTitle: document.getElementById('cfg-title').value.trim() || DEFAULT_CONFIG.trialTitle,
       trialDetails: document.getElementById('cfg-details').value.trim(),
       trialPrice: Math.round(price * 100) / 100,
-      monthlyFee, masterTrialPrice, masterMonthlyFee,
+      monthlyFee, trialPriceOnline, monthlyFeeOnline, masterTrialPrice, masterMonthlyFee,
       masterTitle: document.getElementById('cfg-mtitle').value.trim() || DEFAULT_CONFIG.masterTitle,
       masterDetails: document.getElementById('cfg-mdetails').value.trim()
     }, { merge: true });
@@ -977,17 +1049,31 @@ function openBooking(id) {
     modeSel.value = s.mode; modeSel.disabled = true;
   }
 
-  const fee = monthlyFeeFor(s);
-  document.getElementById('booking-slot-label').textContent =
-    (isMaster(s) ? '✦ Master Class · ' : '') + slotLabel(id) + ' · ' + s.level.replace('P', 'Primary ') + ' ' + s.subject
-    + ' · ' + (MODE_LABEL[slotMode(s)] || slotMode(s)) + (fee ? ' · ' + money(fee) + '/month after the trial' : '');
-  document.getElementById('booking-amount').textContent = money(trialPriceFor(s));
+  updateBookingPrice(true);
   document.getElementById('booking-form-wrap').classList.remove('hidden');
   document.getElementById('booking-success').classList.add('hidden');
   const btn = document.getElementById('booking-submit');
   btn.disabled = false; btn.textContent = 'Confirm booking';
   refreshBookingQR();
   document.getElementById('booking-modal').classList.add('show');
+}
+
+function bookingMode(s) {
+  return isMaster(s) ? 'Physical' : document.getElementById('b-mode').value;
+}
+
+// The label, the amount and the PayNow QR all follow the mode being booked,
+// because Online and Physical are priced separately.
+function updateBookingPrice(skipQR) {
+  if (!currentSlotId) return;
+  const s = getSlot(currentSlotId);
+  const mode = bookingMode(s);
+  const fee = monthlyFeeFor(s, mode);
+  document.getElementById('booking-slot-label').textContent =
+    (isMaster(s) ? '✦ Master Class · ' : '') + slotLabel(currentSlotId) + ' · ' + s.level.replace('P', 'Primary ') + ' ' + s.subject
+    + ' · ' + mode + (fee ? ' · ' + money(fee) + '/month after the trial' : '');
+  document.getElementById('booking-amount').textContent = money(trialPriceFor(s, mode));
+  if (!skipQR) refreshBookingQR();
 }
 
 function bookingRef() {
@@ -1001,7 +1087,8 @@ function refreshBookingQR() {
   qrTimer = setTimeout(() => {
     const ref = bookingRef();
     document.getElementById('booking-ref').textContent = ref;
-    renderQR(document.getElementById('booking-qr'), buildPayNow(trialPriceFor(getSlot(currentSlotId)), ref), 180);
+    const s = getSlot(currentSlotId);
+    renderQR(document.getElementById('booking-qr'), buildPayNow(trialPriceFor(s, bookingMode(s)), ref), 180);
   }, 200);
 }
 
@@ -1051,9 +1138,9 @@ async function submitBooking() {
       slotLabel: slotLabel(currentSlotId),
       classLevel: s.level, subject: s.subject, slotMode: slotMode(s), mode,
       classType: isMaster(s) ? 'master' : 'regular',
-      monthlyFee: monthlyFeeFor(s) || null,
+      monthlyFee: monthlyFeeFor(s, mode) || null,
       parentName, childName, childLevel2027, email, whatsapp,
-      price: trialPriceFor(s),
+      price: trialPriceFor(s, mode),
       paymentRef: bookingRef(),
       receiptURL, receiptFilename: receiptFile.name,
       status: 'pending',
