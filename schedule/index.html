@@ -259,6 +259,117 @@
   .badge.trial { background:#eef8f9; color:var(--deep); border:1px solid var(--line); }
   @media (max-width:720px){ .settings-split{grid-template-columns:1fr} .master-hero{padding:24px 20px} .filters{grid-template-columns:1fr} }
   @media (max-width:720px){ .brand-name{display:none} .hero{padding:28px 20px} .hero h1{font-size:24px} }
+  /* ─── Programme cards: Regular lessons & Master Class, side by side ─── */
+  .programmes { display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; margin-bottom:20px; }
+  .programmes.single { grid-template-columns:1fr; }
+  .programmes > .prog { margin-bottom:0; }
+  .prog { position:relative; display:flex; flex-direction:column; min-height:var(--prog-min, 0px); cursor:pointer;
+    transition:box-shadow .25s ease, transform .25s ease; -webkit-tap-highlight-color:transparent; }
+  .prog.static { cursor:default; }
+  .prog > * { position:relative; z-index:1; }
+  .prog.hero { padding:32px 28px 24px; }
+  .prog.master-hero { padding:32px 28px 24px; }
+  .prog .prog-badge { align-self:flex-start; display:inline-block; font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+    color:#fff; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35); padding:4px 12px; border-radius:999px; }
+  .prog .mh-badge { align-self:flex-start; }
+  .prog.hero h1, .prog.master-hero h2 { font-size:28px; line-height:1.15; letter-spacing:-.4px; margin:12px 0 8px; }
+  .prog .prog-tag { font-size:17px; font-weight:600; line-height:1.45; color:#fff; white-space:pre-line; max-width:none; }
+  .prog.master-hero .prog-tag { color:#fdf6e3; }
+  .prog .fee-pills { margin-top:16px; }
+  .prog-more { display:grid; grid-template-rows:0fr; opacity:0; transition:grid-template-rows .35s ease, opacity .3s ease; }
+  .prog-more-in { overflow:hidden; min-height:0; }
+  .prog-text { padding-top:16px; font-size:15px; line-height:1.65; color:rgba(255,255,255,.92); }
+  .master-hero .prog-text { color:rgba(253,246,227,.9); }
+  .prog-text .pt-gap { height:.75em; }
+  .prog-text .pt-bullet { position:relative; padding-left:1.25em; }
+  .prog-text .pt-bullet::before { content:'•'; position:absolute; left:.25em; top:0; font-weight:700; }
+  .prog.open .prog-more { grid-template-rows:1fr; opacity:1; }
+  .prog-foot { margin-top:auto; padding-top:18px; }
+  .prog-hint { display:inline-flex; align-items:center; gap:8px; min-height:40px; padding:8px 16px; border-radius:999px; cursor:pointer;
+    font:inherit; font-size:13px; font-weight:700; color:#fff; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.4);
+    transition:background .2s; }
+  .prog-hint:hover { background:rgba(255,255,255,.24); }
+  .prog-hint:focus-visible { outline:3px solid rgba(255,255,255,.75); outline-offset:2px; }
+  .master-hero .prog-hint { color:#f5d98b; border-color:rgba(245,217,139,.55); background:rgba(245,217,139,.10); }
+  .master-hero .prog-hint:hover { background:rgba(245,217,139,.2); }
+  .master-hero .prog-hint:focus-visible { outline-color:rgba(245,217,139,.8); }
+  .prog-hint .chev { display:inline-block; transition:transform .3s ease; }
+  .prog-hint .t-pin, .prog-hint .t-less { display:none; }
+  .prog.open .prog-hint .t-more, .prog.open .prog-hint .t-pin { display:none; }
+  .prog.open .prog-hint .t-less { display:inline; }
+  .prog.open .prog-hint .chev { transform:rotate(180deg); }
+  .prog.static .prog-foot { display:none; }
+  /* A computer with a mouse opens a card on hover (after a short pause, so a
+     pointer passing over does not flick it open); a click pins it open.
+     Phones and tablets have no hover, so there a tap opens and closes it. */
+  @media (hover:hover) and (pointer:fine) {
+    .prog:not(.static):hover { transform:translateY(-3px); }
+    .prog.hero:not(.static):hover { box-shadow:0 18px 40px rgba(5,108,118,.30); }
+    .prog.master-hero:not(.static):hover { box-shadow:0 18px 40px rgba(40,20,60,.36); }
+    .prog:not(.static):hover .prog-more { grid-template-rows:1fr; opacity:1; transition-delay:.12s; }
+    .prog:not(.static):not(.open):hover .prog-hint .t-more { display:none; }
+    .prog:not(.static):not(.open):hover .prog-hint .t-pin { display:inline; }
+    .prog:not(.static):not(.open):hover .prog-hint .chev { transform:rotate(180deg); }
+  }
+  @media (prefers-reduced-motion:reduce) {
+    .prog, .prog-more, .prog-hint .chev { transition:none !important; }
+    .prog:hover { transform:none !important; }
+  }
+  .join-strip { display:flex; gap:12px; align-items:flex-start; background:#fff; border:1px solid var(--line); border-left:5px solid var(--pink);
+    border-radius:14px; padding:14px 18px; margin-bottom:20px; font-size:14px; line-height:1.6; color:var(--gray-700);
+    box-shadow:0 2px 10px rgba(5,108,118,.05); }
+  .join-strip .js-icon { flex:0 0 auto; font-size:20px; line-height:1.3; }
+  .join-strip b { color:var(--deep); }
+  @media (max-width:720px) {
+    .programmes { grid-template-columns:1fr; gap:14px; }
+    .prog { min-height:0; }
+    .prog.hero, .prog.master-hero { padding:24px 20px 18px; }
+    .prog.hero h1, .prog.master-hero h2 { font-size:24px; }
+    .prog .prog-tag { font-size:16px; }
+    .prog .prog-badge, .prog .mh-badge { font-size:11px; letter-spacing:.08em; }
+    .hero .price-pill, .master-hero .price-pill { font-size:13px; padding:6px 14px; }
+    .join-strip { padding:12px 14px; font-size:13px; }
+  }
+
+  /* ─── Phones: comfortable to read and tap ─── */
+  .toast { visibility:hidden; transition:transform .25s ease, visibility 0s linear .25s; }
+  .toast.show { visibility:visible; transition:transform .25s ease, visibility 0s; }
+  @media (max-width:720px) {
+    /* 16px stops iPhones zooming the page whenever a box is tapped */
+    .field input, .field select, .field textarea, .slot-edit select, .slot-edit input { font-size:16px; }
+    .topbar-inner { gap:8px; min-height:56px; padding:0 12px; }
+    .brand img { width:46px; height:36px; }
+    .tabs { gap:0; }
+    .tab { padding:16px 12px; font-size:15px; }
+    .admin-chip { width:100%; justify-content:space-between; padding-bottom:8px; }
+    .wrap { padding:16px 12px 64px; }
+    .card { padding:16px; }
+    .filters { grid-template-columns:1fr 1fr; gap:10px; }
+    .filters .field:last-child { grid-column:1 / -1; }
+    .lv-chip { padding:8px 14px; min-height:40px; }
+    .lv-chips { gap:6px; }
+    .lv-chips .lbl { flex-basis:100%; }
+    .view-toggle button { min-height:40px; }
+    .lv-row { padding:12px; }
+    .lv-act { width:100%; justify-content:stretch; }
+    .lv-act .btn { flex:1 1 0; min-height:42px; }
+    .lv-act .status-full { flex:1; }
+    .slot-actions .btn, .slot .btn { min-height:42px; }
+    .btn.small { min-height:36px; }
+    .modal-bg { padding:12px 8px; }
+    .modal { padding:20px 16px; border-radius:16px; }
+    .modal .close { width:44px; height:44px; top:6px; right:6px; }
+    .pay-box { padding:14px 10px; }
+    .admin-banner { flex-direction:column; align-items:stretch; }
+    .admin-banner .btn { width:100%; min-height:42px; }
+    .products { grid-template-columns:1fr; }
+    .footer { padding-left:8px; padding-right:8px; }
+  }
+  @media (max-width:380px) {
+    .filters { grid-template-columns:1fr; }
+    .filters .field:last-child { grid-column:auto; }
+    .tab { padding:16px 8px; }
+  }
 </style>
 </head>
 <body>
@@ -283,25 +394,47 @@
       <button class="btn small" onclick="saveSchedule()" id="save-schedule-btn">Save schedule</button>
     </div>
 
-    <div class="hero">
-      <h1 id="trial-title">Trial Class</h1>
-      <p id="trial-details">Loading…</p>
-      <div class="fee-pills" id="hero-pills"><span class="price-pill" id="trial-price-pill">—</span></div>
-      <div class="hero-note hidden" id="hero-join"></div>
+    <!-- The two programmes, side by side and collapsed to their headline.
+         Hover (computer) or tap (phone) a card to open the full description;
+         a click keeps it open. Text comes from the Fees & settings card. -->
+    <div class="programmes single" id="programmes">
+      <article class="prog hero" id="prog-regular">
+        <span class="prog-badge">● Online &amp; physical lessons</span>
+        <h1 id="trial-title">Trial Class</h1>
+        <p class="prog-tag" id="trial-tag">Loading…</p>
+        <div class="fee-pills" id="hero-pills"><span class="price-pill" id="trial-price-pill">—</span></div>
+        <div class="prog-more" id="trial-more"><div class="prog-more-in"><div class="prog-text" id="trial-details"></div></div></div>
+        <div class="prog-foot">
+          <button type="button" class="prog-hint" aria-expanded="false" aria-controls="trial-more">
+            <span class="t-more">More details</span><span class="t-pin">Click to keep open</span><span class="t-less">Show less</span>
+            <span class="chev" aria-hidden="true">▾</span>
+          </button>
+        </div>
+      </article>
+
+      <article class="prog master-hero hidden" id="master-hero">
+        <span class="mh-badge">✦ Master Class · Physical only</span>
+        <h2 id="master-title">Master Class</h2>
+        <p class="prog-tag" id="master-tag"></p>
+        <div class="fee-pills" id="master-pills"></div>
+        <div class="prog-more" id="master-more"><div class="prog-more-in"><div class="prog-text" id="master-details"></div></div></div>
+        <div class="prog-foot">
+          <button type="button" class="prog-hint" aria-expanded="false" aria-controls="master-more">
+            <span class="t-more">More details</span><span class="t-pin">Click to keep open</span><span class="t-less">Show less</span>
+            <span class="chev" aria-hidden="true">▾</span>
+          </button>
+        </div>
+      </article>
     </div>
 
-    <div class="master-hero hidden" id="master-hero">
-      <span class="mh-badge">✦ Master Class · Physical only</span>
-      <h2 id="master-title">Master Class</h2>
-      <p id="master-details"></p>
-      <div class="fee-pills" id="master-pills"></div>
-    </div>
+    <div class="join-strip hidden" id="hero-join"></div>
 
     <div id="admin-trial-card" class="card hidden">
       <h2>Fees &amp; trial settings</h2>
       <div class="form-grid">
         <div class="field"><label>Page title</label><input id="cfg-title" type="text"></div>
-        <div class="field"><label>Trial lesson details (shown to visitors)</label><textarea id="cfg-details"></textarea></div>
+        <div class="field"><label>Regular lessons description (shown to visitors)</label><textarea id="cfg-details"></textarea></div>
+        <div class="muted-note">In both descriptions the <b>first paragraph is the headline</b> parents see on the card; leave a blank line after it. Everything below opens when they hover over or tap the card. Start a line with • or - to make a bullet.</div>
         <div class="settings-split">
           <div class="settings-box">
             <h3>Regular classes</h3>
@@ -726,9 +859,96 @@ function matchesFilters(s) {
   return true;
 }
 
+// A description is shown as a one-line headline (always visible) and the rest
+// (opened by hover or tap). The headline is the first paragraph — the text up
+// to the first blank line — or, failing that, the first line, or the first
+// sentence of a long single paragraph.
+function splitProgText(text) {
+  const t = String(text || '').replace(/\r\n?/g, '\n').trim();
+  if (!t) return { tag: '', more: '' };
+  const blank = t.match(/\n[ \t]*\n/);
+  if (blank) return { tag: t.slice(0, blank.index).trim(), more: t.slice(blank.index).trim() };
+  const nl = t.indexOf('\n');
+  if (nl > -1) return { tag: t.slice(0, nl).trim(), more: t.slice(nl + 1).trim() };
+  if (t.length > 140) {
+    const m = t.match(/^([\s\S]{20,220}?[.!?])\s+([\s\S]+)$/);
+    if (m) return { tag: m[1].trim(), more: m[2].trim() };
+  }
+  return { tag: t, more: '' };
+}
+
+function fillProg(cardId, tagId, moreId, text) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  const parts = splitProgText(text);
+  document.getElementById(tagId).textContent = parts.tag;
+  document.getElementById(tagId).classList.toggle('hidden', !parts.tag);
+  fillProgText(document.getElementById(moreId), parts.more);
+  const expandable = !!parts.more;
+  card.classList.toggle('static', !expandable);
+  if (!expandable) setProgOpen(card, false);
+}
+
+// The opened text keeps the admin's line breaks and blank lines, and a line
+// starting with •, - or * becomes a bullet whose wrapped lines stay indented.
+// Built from text nodes only, so nothing typed in the settings can become HTML.
+function fillProgText(el, text) {
+  el.textContent = '';
+  const BUL = /^[•\-*·▪●]\s*/;
+  String(text || '').split('\n').forEach(line => {
+    const t = line.trim();
+    const d = document.createElement('div');
+    if (!t) d.className = 'pt-gap';
+    else if (BUL.test(t)) { d.className = 'pt-bullet'; d.textContent = t.replace(BUL, ''); }
+    else d.textContent = t;
+    el.appendChild(d);
+  });
+}
+
+function setProgOpen(card, open) {
+  card.classList.toggle('open', !!open);
+  const b = card.querySelector('.prog-hint');
+  if (b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+// Click or tap anywhere on a card opens or closes it. Links inside it still
+// work, and selecting text to copy it does not count as a click.
+function bindProgCards() {
+  document.querySelectorAll('.prog').forEach(card => {
+    if (card.dataset.bound) return;
+    card.dataset.bound = '1';
+    card.addEventListener('click', e => {
+      if (card.classList.contains('static')) return;
+      if (e.target.closest('a')) return;
+      const sel = window.getSelection && window.getSelection();
+      if (sel && String(sel).trim() && card.contains(sel.anchorNode)) return;
+      setProgOpen(card, !card.classList.contains('open'));
+    });
+  });
+}
+
+// Side by side, both cards start the same height: a card is never shorter than
+// the taller one's closed height, while each still opens on its own.
+function syncProgHeights() {
+  const wrap = document.getElementById('programmes');
+  if (!wrap) return;
+  wrap.style.setProperty('--prog-min', '0px');
+  const cards = [...wrap.querySelectorAll('.prog')].filter(c => !c.classList.contains('hidden'));
+  if (cards.length < 2 || getComputedStyle(wrap).gridTemplateColumns.split(' ').length < 2) return;
+  const closed = cards.map(c => {
+    const more = c.querySelector('.prog-more');
+    return c.offsetHeight - (more ? more.offsetHeight : 0);
+  });
+  wrap.style.setProperty('--prog-min', Math.ceil(Math.max(...closed)) + 'px');
+}
+let _progResizeT = null;
+window.addEventListener('resize', () => { clearTimeout(_progResizeT); _progResizeT = setTimeout(syncProgHeights, 120); });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncProgHeights).catch(() => {});
+
 function renderHero() {
+  bindProgCards();
   document.getElementById('trial-title').textContent = config.trialTitle || DEFAULT_CONFIG.trialTitle;
-  document.getElementById('trial-details').textContent = config.trialDetails || '';
+  fillProg('prog-regular', 'trial-tag', 'trial-details', config.trialDetails || '');
   const reg = { type: 'regular' }, mst = { type: 'master' };
   const pills = pairPill('', 'Trial: ', trialPriceFor(reg, 'Physical'), trialPriceFor(reg, 'Online'), '')
     + pairPill(' ghost', '', monthlyFeeFor(reg, 'Physical'), monthlyFeeFor(reg, 'Online'), ' / month');
@@ -736,20 +956,23 @@ function renderHero() {
 
   const join = document.getElementById('hero-join');
   const joinable = publishedSlots().some(x => canEnrol(x.s));
-  join.innerHTML = '<b>Two ways to join.</b> Book a trial lesson first, or skip the trial and <b>enrol directly</b>: '
-    + 'pay the first month\'s fees when you sign up, and from the second month our admin staff will collect the monthly fees with you.';
+  join.innerHTML = '<span class="js-icon" aria-hidden="true">🎟️</span><div><b>Two ways to join.</b> Book a trial lesson first, or skip the trial and <b>enrol directly</b>: '
+    + 'pay the first month\'s fees when you sign up, and from the second month our admin staff will collect the monthly fees with you.</div>';
   join.classList.toggle('hidden', !joinable);
 
   // The Master Class banner shows once at least one master slot is published
   // (or always to the admin, so the description can be checked).
   const slots = config.slots || {};
   const anyMaster = Object.keys(slots).some(k => { const x = slots[k]; return isMaster(x) && x.status !== 'closed' && x.level && x.subject; });
-  document.getElementById('master-hero').classList.toggle('hidden', !(anyMaster || isAdmin));
+  const showMaster = anyMaster || isAdmin;
+  document.getElementById('master-hero').classList.toggle('hidden', !showMaster);
+  document.getElementById('programmes').classList.toggle('single', !showMaster);
   document.getElementById('master-title').textContent = config.masterTitle || DEFAULT_CONFIG.masterTitle;
-  document.getElementById('master-details').textContent = config.masterDetails || '';
+  fillProg('master-hero', 'master-tag', 'master-details', config.masterDetails || '');
   let mp = '<span class="price-pill">Trial: ' + money(trialPriceFor(mst)) + '</span>';
   if (monthlyFeeFor(mst)) mp += '<span class="price-pill ghost">' + money(monthlyFeeFor(mst)) + ' / month</span>';
   document.getElementById('master-pills').innerHTML = mp;
+  requestAnimationFrame(syncProgHeights);
 
   if (isAdmin && document.activeElement && !document.activeElement.id.startsWith('cfg-')) fillSettingsForm();
 }
@@ -933,6 +1156,17 @@ function renderLevelView() {
       ? mine.length + (mine.length === 1 ? ' class' : ' classes') + ' · on <b>' + days.join(' · ') + '</b>'
       : 'No classes yet';
     let cols = '';
+    if (!mine.length && subjects.length > 1) {
+      // No classes at all for this level: one short line instead of an empty
+      // box per subject, which on a phone was a long scroll of "none yet".
+      html += '<div class="lv-block lv-empty">'
+        + '<div class="lv-head"><span class="lv-badge">' + escapeHtml(lv) + '</span>'
+        +   '<div><h3>' + escapeHtml(name) + '</h3><div class="lv-days">No classes yet</div></div></div>'
+        + '<div class="lv-none">No ' + escapeHtml(name) + ' Math or Science class on the timetable yet. '
+        +   '<a href="' + WA_LINK + '" target="_blank" rel="noopener">WhatsApp us</a> and we\'ll let you know when one opens.</div>'
+        + '</div>';
+      return;
+    }
     subjects.forEach(sb => {
       const rows = mine.filter(x => x.s.subject === sb).sort((a, b) => a.order - b.order);
       cols += '<div class="lv-subj ' + (sb === 'Math' ? 'math' : 'sci') + '">'
@@ -1589,6 +1823,7 @@ auth.onAuthStateChanged(user => {
   } else {
     document.getElementById('bookings-list').innerHTML = '';
   }
+  renderHero();      // the Master Class card is shown to the admin even before one is published
   renderSchedule();
   renderProducts();
 });
