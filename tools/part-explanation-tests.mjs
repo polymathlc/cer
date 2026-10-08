@@ -36,7 +36,7 @@
 import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import fs from 'fs';
 
-const APP = new URL('../app.js', import.meta.url).pathname;
+const APP = new URL('../app.js', import.meta.url);
 const src = fs.readFileSync(APP, 'utf8');
 
 const cut = (from, to, what) => {
@@ -65,6 +65,7 @@ const SHIM = [
   "function sanitizeAnswerKeyHtml(c) { return String(c || '').replace(/<script[\\s\\S]*?<\\/script>/gi, ''); }",
   // The AI doors, recorded so a test can count the calls and answer them.
   "let _calls = []; let _reply = null;",
+  "let _styleStamps = []; function _styleStamp(block, field, context, value) { _styleStamps.push({block, field, context, value}); }",
   "async function askGemini(prompt, o) { _calls.push({ kind: 'text', prompt, o }); if (_reply instanceof Error) throw _reply; return _reply; }",
   "async function askGeminiVision(prompt, media, o) { _calls.push({ kind: 'vision', prompt, media, o }); if (_reply instanceof Error) throw _reply; return _reply; }",
   "var window = { __aiReady: () => true };",
@@ -101,7 +102,8 @@ const M = new Function([
             imgScaleStep, imgHasScale, imgScale,
             IMG_SCALE_MIN, IMG_SCALE_MAX, IMG_SCALE_STEP,
             setBlocks: v => { blocks = v; }, getBlocks: () => blocks,
-            reply: v => { _reply = v; }, calls: () => _calls, resetCalls: () => { _calls = []; },
+            reply: v => { _reply = v; }, calls: () => _calls, resetCalls: () => { _calls = []; _styleStamps = []; },
+            styleStamps: () => _styleStamps,
             grounded: () => _grounded };`,
 ].join('\n'))();
 
@@ -238,6 +240,27 @@ test('each part carries its own wording AND its own model answer', () => {
   ok(/\[model answer\] Cover the beaker\./.test(p), "part (c)'s own answer");
 });
 
+test('attached source pages preserve every pending figure position and caption before crops finish uploading', () => {
+  const pending = [txt('', 'Study the shared beaker.'),
+    {id:'shared-figure', type:'image', url:'', caption:'Shared beaker'},
+    txt('a', 'Compare the first set-up.'),
+    {id:'part-figure', type:'image', url:'', caption:'Set-up A'}, ans('Evaporation.'),
+    txt('b', 'Explain the change.'), ans('The water evaporated.')];
+  const ready = pending.map(block => block.type === 'image' ? {...block, url:'https://images.test/' + block.id} : {...block});
+  const q = {title:'Observe the beakers', topic:'Water'};
+  const prompt = blocks => M.prompt(q, M.missing(blocks), blocks, M.map(blocks), true);
+  eq(prompt(pending), prompt(ready), 'same wording, answers, teaching notes, diagram hints and instruction budgets');
+  ok(/SHARED WORDING[\s\S]*\[a diagram is printed here: Shared beaker\][\s\S]*THE PARTS:/.test(prompt(pending)), 'the shared figure remains above the parts');
+  ok(/PART \(a\)[\s\S]*\[a diagram is printed here: Set-up A\][\s\S]*PART \(b\)/.test(prompt(pending)), 'the part-specific figure stays in its own part');
+});
+
+test('without source media an unavailable image does not claim a diagram is visible', () => {
+  const blocks = [txt('', 'Study the question.'), {id:'missing', type:'image', url:'', caption:'Unavailable figure'}, txt('a', 'Name the process.'), ans('Evaporation.')];
+  ok(!promptFor(blocks).includes('a diagram is printed here'), 'missing images provide no unsupported visual context');
+  blocks[1].url = 'https://images.test/ready';
+  ok(promptFor(blocks).includes('[a diagram is printed here: Unavailable figure]'), 'a saved diagram retains its existing hint');
+});
+
 test('it is grounded in the teaching notes, as TEACHING', () => {
   const before = M.grounded().length;
   const p = promptFor(threeParts());
@@ -282,6 +305,23 @@ test('the pages go along, so the note is written from the FIGURE', async () => {
   reply({ explanations: { a: 'x', b: 'y', c: 'z' } });
   await M.write({ blocks: bs }, { media: [{ mimeType: 'image/png', data: 'AAA' }] });
   eq(M.calls()[0].kind, 'vision', 'with a page attached it must be a vision call');
+});
+
+test('the real explanation writer carries pending diagram context and original media while retaining written notes', async () => {
+  const blocks = [txt('', 'Study the beaker.'), {id:'pending', type:'image', url:'', caption:'Original beaker'},
+    txt('a', 'Name the process.'), ans('Evaporation.'), expl('a', 'Keep the author’s own explanation.'),
+    txt('b', 'Explain the change.'), {id:'pending-part', type:'image', url:'', caption:'Part B beaker'}, ans('The water evaporated.')];
+  const originalImage = blocks[1], media = [{mimeType:'image/png', data:'ORIGINAL_PAGE'}];
+  M.resetCalls(); reply({explanations:{a:'Do not replace this.', b:'The water changed into water vapour.'}});
+  deep(await M.write({title:'Beaker', topic:'Water', blocks}, {media}), ['b']);
+  eq(M.calls().length, 1); eq(M.calls()[0].kind, 'vision');
+  deep(M.calls()[0].media, media, 'the untouched page still reaches the vision model');
+  ok(M.calls()[0].prompt.includes('[a diagram is printed here: Original beaker]'));
+  eq(M.calls()[0].o.maxOutputTokens, 2400); eq(M.calls()[0].o.authoring, true);
+  ok(blocks.includes(originalImage) && originalImage.url === '', 'the explanation pass retains the pending image object for the crop worker');
+  ok(blocks.some(block => block.type === 'explanation' && block.content === 'Keep the author’s own explanation.'));
+  eq(M.styleStamps().length, 1, 'only the new explanation creates lesson context');
+  ok(M.styleStamps()[0].context.includes('[a diagram is printed here: Part B beaker]'), 'lesson context retains the same pending figure hint as the explanation prompt');
 });
 
 test('NOTHING already written is replaced', async () => {

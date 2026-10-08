@@ -9053,6 +9053,24 @@ never prose.
   left flagged. User-initiated regeneration (`maxCheckTries:1`) never auto-fixes.
 - Run `npm test --prefix rapid-import/functions` after touching any of it.
 
+## Faster Rapid Add (v1.426.9)
+
+Browser PDF uploads use two indexed chunks; finalisation waits for every started
+write and errors stop new chunks. Source upload reuse is per page only and retries
+a failed original upload. Figure preparation shares three crop chains and two
+enhancement/upload chains globally through `_rapidFigureMap`; reserve enhancement
+budgets in source order and drain started work before falling back. Explanation
+writing overlaps figure preparation, but the visual check waits for both.
+
+The worker reads four upload chunks in order, prepares three page questions with
+a shared three-crop/four-write limit, and enhances two figures of one question
+together. Both full fidelity checks finish before the immutable checkpoint and
+cursor advance. Keep the starting figure cursor/retry-generation fence, sequential
+page-boundary assembly, original images, provider budgets and full visual audits.
+Run `tools/rapid-add-performance-tests.mjs`, `tools/rapid-cloud-tests.mjs`,
+`tools/crop-provenance-tests.mjs`, `tools/decisions-review-tests.mjs`,
+`tools/part-explanation-tests.mjs`, the PDF/merge/auto-check suites and worker tests.
+
 ## Durable Rapid Add PDFs (v1.360.0, CER only)
 
 `rapid-import/` is an isolated Firebase Functions codebase. Read its README

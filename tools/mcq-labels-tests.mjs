@@ -28,12 +28,13 @@ const M = new Function(`
   const topicLevelMap = { 'Heat': 'P5', 'Matter': 'P3', 'Physical Quantities': 'S1', 'Light': 'P5' };
   function getTopicLevel(t) { return customTopics[t] || topicLevelMap[t] || 'P6'; }
   function isSecondaryLevel(v) { return getLevelNumber(v) >= LEVEL_ORDER.S1 && isLevelCode(v); }
+  ${cut('function stripHtml(content) {', '\n}\n', 'strip html')}\n}
   ${cut('function _normMcqChoice(raw) {', '\nfunction normalizeCategoryValue', 'mcq labels')}
   ${cut('function _mcqLab(o)', '/* "2) A is smaller"', 'display label helpers')}
   ${cut('function _cpbChoiceWords(aList) {', '\nfunction _cpbBookletLeadHtml', 'custom paper choice words')}
   function _ainsteinSharesRun() { return false; }
   ${cut('function _ainsteinLeaksAnswer(reply, guard) {', '\nconst AINSTEIN_BLOCKED_CLUE', 'ainstein leak guard')}
-  return { mcqLabelStyle, mcqLabelOverride, mcqLabelOf, mcqLabelForNum, mcqOptionText, mcqOptionIsBare, mcqMarkers,
+  return { mcqLabelStyle, mcqLabelOverride, mcqLabelOf, mcqLabelForNum, mcqOptionText, mcqOptionIsBare, mcqMarkers, mcqPromptOpt,
     _mcqLab, _mcqLabOf, _normMcqChoice, _cpbChoiceWords, _ainsteinLeaksAnswer };
 `)();
 
@@ -180,7 +181,18 @@ test('the key, the drawer, the cross-check and the AI writers all use the labels
     const body = src.slice(at, src.indexOf('\n}\n', at));
     ok(/mcqPromptOpt\(/.test(body) && /mcqStyleForBlock\(/.test(body), n + ' writes about options by number');
   });
-  ok(/function _partExplSection\(blocks, pmap, letter, style\)/.test(src), 'the per-part filler numbers options');
+  // Verify the emitted labels, allowing the filler to accept optional visual
+  // context without making its exact parameter list the label contract.
+  const perPart = new Function('mcqPromptOpt', `
+    const qPartKeyIn = () => true, qPartOf = () => '', stripHtml = value => String(value || '');
+    const _docClip = value => value, PART_EXPL_CTX_CHARS = 4500;
+    ${cut('function _partExplSection(', '\n}\n', 'per-part context')}\n}
+    return _partExplSection;
+  `)(M.mcqPromptOpt);
+  const options = [{id:'a', text:'First'}, {id:'b', text:'Second'}];
+  const question = [{type:'mcq', options, correctId:'b'}];
+  ok(perPart(question, null, '', 'letters').includes('(B) Second <-- CORRECT'), 'the per-part filler lost the lettered correct option');
+  ok(perPart(question, null, '', 'numbers').includes('(2) Second <-- CORRECT'), 'the per-part filler lost the numbered correct option');
 });
 
 test('every game shows the question\'s own labels', () => {

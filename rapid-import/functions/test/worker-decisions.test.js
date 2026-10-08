@@ -34,7 +34,7 @@ mock.module('@google/genai',{namedExports:{GoogleGenAI:class {
   models={generateContent:async request=>{
     aiPrompts.push(request.contents[0].parts[0].text);
     const text=request.contents[0].parts[0].text;
-    if(/judged wrong|No crop could be cut/.test(text)) {recrops.push(text);return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({box_2d:recropBox})};}
+    if(/judged wrong|No crop could be cut/.test(text)) {recrops.push(text);if(globalThis.RECROP_WAIT)await globalThis.RECROP_WAIT();return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({box_2d:recropBox})};}
     if(/Check this science question/.test(text)) {checks.push(text);const q=JSON.parse(text.split('Question:\n').at(-1));return {candidates:[{finishReason:'STOP'}],text:JSON.stringify({findings:[],repairs:[],imageAudits:q.blocks.filter(b=>b.type==='image').map(b=>({blockId:b.id,complete:true,faithful:true,issues:[]}))})};}
     if(/auto-cropped figure/.test(text)) {
       const R=globalThis.REFINE;R.n++;
@@ -85,7 +85,7 @@ const fig=[{title:'Fig',sourceQuestionNumber:'1',blocks:[{type:'text',text:'(a) 
 function start(autoCheck=false){
   const pdf=pdfFixture(1,['1 0 0 rg 20 220 50 35 re f\n']);
   const j=setup({...makeJob('fig'),phase:'page',nextPage:1,total:1,checkpoint:null,path:'o.pdf',engineOrder:['gemini'],prompt:'Read',autoCheck});
-  files.set(j.path,pdf);aiPages=[fig];decisionsCalls=[];recrops=[];checks=[];globalThis.REFINE={n:0,box:null};return j;
+  files.set(j.path,pdf);aiPages=[fig];decisionsCalls=[];recrops=[];checks=[];globalThis.REFINE={n:0,box:null};globalThis.RECROP_WAIT=null;return j;
 }
 const run=async id=>{
   await api.rapidImportPage({data:{id,page:1,generation:0,phase:'page',publishIndex:0},retryCount:0});
@@ -113,6 +113,28 @@ test('a crop Decisions never accepts is retried twice, then kept and flagged rat
   assert.ok(q.blocks.find(b=>b.type==='image').url,'the picture is still there');
   assert.ok(q.autoCheck.findings.some(f=>f.type==='Crop'&&f.cropStatus==='unclear'),'the flag reaches the vetting card as a Crop finding');
   assert.notEqual(q.autoCheck.state,'green');
+});
+test('rejected figures on independent questions overlap under one three-chain page limit and retain every ordered verdict',async()=>{
+  const j=start();recropBox=[140,90,270,380];
+  aiPages=[Array.from({length:3},(_,i)=>({title:'Question '+i,sourceQuestionNumber:String(i+1),blocks:[
+    {type:'text',text:'Observe these two figures.'},{type:'image',box_2d:[130,80,280,390]},
+    {type:'image',box_2d:[130,80,280,390]},{type:'plainanswer',text:'Answer'}]}))];
+  decisionsPlan=keys=>keys.length===2?{figure_0:['no',.9],figure_1:['no',.9]}:{};
+  let release,active=0,peak=0;
+  const held=new Promise(resolve=>{release=resolve;});
+  globalThis.RECROP_WAIT=async()=>{active++;peak=Math.max(peak,active);await held;active--;};
+  const running=api.rapidImportPage({data:{id:j.id,page:1,generation:0,phase:'page',publishIndex:0},retryCount:0});
+  for(let i=0;i<1000&&active<3;i++)await new Promise(resolve=>setImmediate(resolve));
+  try {assert.equal(active,3,'three different figure recrop chains must start before any finishes');assert.equal(docs.get('cerRapidImports/'+j.id).checkpoint,null);}
+  finally {release();}
+  await running;
+  assert.equal(peak,3);assert.equal(active,0);assert.equal(recrops.length,6);
+  const checkpoint=JSON.parse(files.get(docs.get('cerRapidImports/'+j.id).checkpoint));
+  assert.deepEqual(checkpoint.ready.map(q=>q.sourceQuestionNumber),['1','2','3']);
+  for(const q of checkpoint.ready) {
+    assert.deepEqual(q.decisionsFigures,[{index:0,state:'fixed',tries:1,reasons:[]},{index:1,state:'fixed',tries:1,reasons:[]}]);
+    assert.deepEqual(q.blocks.filter(b=>b.type==='image').map(b=>b.cropSource.box_2d),[[140,90,270,380],[140,90,270,380]]);
+  }
 });
 test('Decisions is advisory: a confident yes still gets the AI read and the comparison is recorded; a no on the wording sends it to the AI with Decisions\'s reason',async()=>{
   start(true);decisionsPlan=()=>({});

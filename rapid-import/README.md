@@ -121,10 +121,12 @@ rules over the project's live rules.
 
 - An admin can choose/drop/paste multiple PDFs. The picker is visible on desktop
   and mobile. Images continue through the existing screenshot engine.
-- Each PDF uploads in 3 MiB chunks (40 MiB/file maximum). All uploads are queued
+- Each PDF uploads two 3 MiB chunks concurrently (40 MiB/file maximum). Files are queued
   immediately and receive individual progress. Keep the tab open until each
   file is acknowledged as stored online. Selecting an interrupted file again
   resumes its import ID in the same browser; chunks are create-only/idempotent.
+  Progress counts acknowledged bytes, and finalisation waits for every started
+  chunk. The worker reads four chunks at a time in their original index order.
 - Once finalised, the durable Firestore change enqueues work independently of
   the browser. One task reads a page, and separate tasks check/publish each
   complete question, keeping large papers within per-task runtime limits.
@@ -138,8 +140,8 @@ rules over the project's live rules.
   and trim blank margins while preserving diagram labels and table borders.
   Invalid, blank or whole-page selections retain the source page in the same
   image block and mark the question as needing cropping; later figures keep
-  their own positions. Figures preserve the PDF's original appearance; they
-  do not use the screenshot engine's optional generative B&W enhancement.
+  their own positions. The original PDF appearance is kept for restoration;
+  the displayed redraw must pass the fidelity checks described below.
   These protections apply to pages processed after the worker is deployed;
   previously saved questions and existing checkpoints are not rewritten.
 - The authoring engine order, reading prompt, teaching-note grounding, level/topics, release date and
@@ -243,14 +245,29 @@ tracks the currently displayed image. `figureKind` is `diagram`, `table`,
 `flowchart` or `graph`. Diagrams use colour by default; tables, flowcharts and
 graphs always use monochrome, straight rules and legible typeset labels.
 
-A durable `enhance` task processes one figure, verifies the generated output
-against the original crop, writes an immutable checkpoint, and atomically
-advances the outbox. Its `figureIndex` participates in delivery fencing and task
+A durable `enhance` task starts up to two figures from the same question together,
+verifies each generated output against its original crop, writes an immutable
+checkpoint after both settle, and atomically advances the outbox. Both start
+immediately and keep their existing provider/fidelity budgets inside the
+540-second task. Its starting `figureIndex` participates in delivery fencing and task
 identity. Repeated deliveries cannot replace a later checkpoint or duplicate a
 published question. An unavailable service, changed label or failed crop keeps
 the original and records an enhancement finding rather than dropping the question.
 `RAPID_IMPORT_IMAGE_MODEL` defaults to `gemini-3.1-flash-image`, using the
 existing `GEMINI_API_KEY` secret; no new API key is required.
+
+Page preparation overlaps three independent questions while sharing a maximum
+of three crop/refine/recut chains and four Storage writes. Every figure's retries
+remain sequential and bounded; results retain their source question and image
+order. Source-page preservation runs alongside crop preparation. Started work
+settles before failure handling, checkpointing or PDF/canvas destruction.
+
+Browser imports likewise share limits of three crop chains and two enhancement/
+upload chains across simultaneous pages. They retain the same first eligible
+enhancement budget, every original and whole-page fallback. Questions from one
+page share its untouched upload, and missing explanations are written alongside
+figure preparation. The final visual check waits for both stages. Provider models,
+thinking/token budgets, image resolution and quality checks are unchanged.
 
 The checker reads both the original pages and the actual displayed figures.
 Every displayed figure must have an explicit complete visual audit in the reply;
