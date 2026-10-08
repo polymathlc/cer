@@ -1,10 +1,10 @@
 name: Schedule page checks
 on:
   pull_request:
-    paths: ['schedule/**', 'tools/schedule-timetable-*.mjs', '.github/workflows/schedule-page.yml']
+    paths: ['schedule/**', 'tools/schedule-timetable-*.mjs', 'tools/schedule-samples-*.mjs', '.github/workflows/schedule-page.yml']
   push:
     branches: [main]
-    paths: ['schedule/**', 'tools/schedule-timetable-*.mjs', '.github/workflows/schedule-page.yml']
+    paths: ['schedule/**', 'tools/schedule-timetable-*.mjs', 'tools/schedule-samples-*.mjs', '.github/workflows/schedule-page.yml']
 permissions:
   contents: read
 jobs:
@@ -21,6 +21,10 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Check the timetable, the notice and booking at desktop and phone widths
         run: node tools/schedule-timetable-browser.mjs
+        env:
+          SCHEDULE_SCREENSHOTS: artifacts/schedule
+      - name: Check automatic sample question previews and demo lifecycle
+        run: node tools/schedule-samples-browser.mjs
         env:
           SCHEDULE_SCREENSHOTS: artifacts/schedule
       - uses: actions/upload-artifact@v4

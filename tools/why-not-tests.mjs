@@ -26,12 +26,12 @@
 //    wearing them before it is answered points straight at the right one.
 import fs from 'fs';
 
-const APP = new URL('../app.js', import.meta.url).pathname;
+const APP = new URL('../app.js', import.meta.url);
 const src = fs.readFileSync(APP, 'utf8');
 // The switches live in the markup, so the wiring check reads both files: a
 // wnyPrintOn('saved') pointing at a checkbox nobody put on the page is a
 // toggle that is always off, which looks exactly like a feature that is off.
-const html = fs.readFileSync(new URL('../index.html', import.meta.url).pathname, 'utf8');
+const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 const cut = (from, to, what) => {
   const a = src.indexOf(from);

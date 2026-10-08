@@ -9,7 +9,7 @@
     science: 'https://polymathlc.github.io/cer/sample-materials.html',
     tutor: 'https://polymathlc.github.io/tutor/sample.html'
   };
-  const state = { materials: {}, admin: false, active: location.hash === '#sample-materials', loaded: false, frame: null, banks: {}, selections: {}, busy: false };
+  const state = { materials: {}, admin: false, active: location.hash === '#sample-materials', loaded: false, frames: new Map(), banks: {}, selections: {}, busy: false };
   const byId = id => document.getElementById(id);
   const esc = escapeHtml;
   const value = subject => state.materials[subject] || {};
@@ -18,20 +18,33 @@
     const node = byId('sample-status-' + subject);
     if (node) { node.textContent = message; node.classList.toggle('error', !!error); }
   }
-  function closeDemo() {
-    if (state.frame) {
-      state.frame.src = 'about:blank';
-      state.frame.closest('.sample-embed').remove();
-      state.frame = null;
+  function closeDemo(subject) {
+    for (const [key, frame] of state.frames) {
+      if (subject && key !== subject) continue;
+      frame.src = 'about:blank';
+      frame.closest('.sample-embed').remove();
+      state.frames.delete(key);
     }
   }
-  function renderPublic() {
-    closeDemo();
-    byId('sample-materials-content').innerHTML = SUBJECTS.map(subject => {
+  function loadPreviews(subjects = SUBJECTS) {
+    if (!state.active || !state.loaded) return;
+    for (const subject of subjects) {
+      if (selectedIds(subject).length && !state.frames.has(subject)) openDemo(subject, 'questions', { scroll: false });
+    }
+  }
+  function renderPublic(previous) {
+    const content = byId('sample-materials-content');
+    const changed = [];
+    if (!content.querySelector('.sample-subject')) content.replaceChildren();
+    SUBJECTS.forEach(subject => {
       const sample = value(subject);
+      const existing = byId('sample-subject-' + subject);
+      if (existing && JSON.stringify(previous?.[subject] || {}) === JSON.stringify(sample)) return;
+      changed.push(subject);
+      closeDemo(subject);
       const count = selectedIds(subject).length;
       const worksheet = sample.worksheet;
-      return '<section class="sample-subject" id="sample-subject-' + subject + '" aria-labelledby="sample-heading-' + subject + '">' +
+      const html = '<section class="sample-subject" id="sample-subject-' + subject + '" aria-labelledby="sample-heading-' + subject + '">' +
         '<h2 id="sample-heading-' + subject + '">' + LABEL[subject] + '</h2><div class="sample-options">' +
         '<article class="card sample-option"><h3>' + (subject === 'math' ? 'Math practice' : 'Science CER practice') + '</h3>' +
         '<p>' + (subject === 'math' ? 'Try a few selected questions with our interactive Math app.' : 'Build your answer using Claim, Evidence and Reasoning in our Science app.') + '</p>' +
@@ -41,14 +54,17 @@
         '<p>Write on a sample PDF worksheet and get help from our live tutor, enabled when you begin. Allow microphone access to speak with the tutor.</p>' +
         '<p>' + (worksheet ? esc(worksheet.title || LABEL[subject] + ' sample worksheet') : 'A sample worksheet will appear here when our teacher uploads it.') + '</p>' +
         '<button class="btn" data-demo="worksheet" data-subject="' + subject + '"' + (!worksheet ? ' disabled' : '') + '>Try worksheet</button></article></div></section>';
-    }).join('');
-    byId('sample-materials-content').querySelectorAll('[data-demo]').forEach(button => button.addEventListener('click', () => openDemo(button.dataset.subject, button.dataset.demo)));
+      if (existing) existing.outerHTML = html;
+      else content.insertAdjacentHTML('beforeend', html);
+      byId('sample-subject-' + subject).querySelectorAll('[data-demo]').forEach(button => button.addEventListener('click', () => openDemo(button.dataset.subject, button.dataset.demo)));
+    });
+    loadPreviews(changed);
   }
-  function openDemo(subject, kind) {
+  function openDemo(subject, kind, { scroll = true } = {}) {
     if (!state.active || !SUBJECTS.includes(subject)) return;
     const sample = value(subject);
     if (kind === 'worksheet' ? !sample.worksheet : !selectedIds(subject).length) return;
-    closeDemo();
+    closeDemo(subject);
     const wrap = document.createElement('div');
     wrap.className = 'sample-embed';
     const toolbar = document.createElement('div');
@@ -56,7 +72,7 @@
     const title = document.createElement('strong');
     title.textContent = LABEL[subject] + (kind === 'worksheet' ? ' worksheet & live tutor' : ' sample questions');
     const close = document.createElement('button');
-    close.className = 'btn small ghost'; close.textContent = 'Close demo'; close.addEventListener('click', closeDemo);
+    close.className = 'btn small ghost'; close.textContent = 'Close demo'; close.addEventListener('click', () => closeDemo(subject));
     toolbar.append(title, close);
     const frame = document.createElement('iframe');
     frame.className = 'sample-frame'; frame.title = title.textContent;
@@ -67,8 +83,8 @@
     frame.src = url.href;
     wrap.append(toolbar, frame);
     byId('sample-subject-' + subject).append(wrap);
-    state.frame = frame;
-    wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    state.frames.set(subject, frame);
+    if (scroll) wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   async function adminCall(action, payload) {
     if (!state.admin || !auth.currentUser) throw new Error('Teacher sign-in required.');
@@ -214,12 +230,18 @@
     } catch (error) { status(subject, error.message, true); }
     finally { setBusy(false); }
   }
-  window.SampleMaterials = { setActive(active) { state.active = active; if (!active) closeDemo(); } };
+  window.SampleMaterials = { setActive(active) {
+    const wasActive = state.active;
+    state.active = !!active;
+    if (!state.active) closeDemo();
+    else if (!wasActive) loadPreviews();
+  } };
   CONFIG_DOC.onSnapshot(snapshot => {
     const next = snapshot.exists ? snapshot.data().sampleMaterials || {} : {};
     if (!state.loaded || JSON.stringify(next) !== JSON.stringify(state.materials)) {
+      const previous = state.materials;
       state.materials = next; state.loaded = true;
-      renderPublic();
+      renderPublic(previous);
       if (!state.busy) renderAdmin();
     }
   }, () => {
@@ -229,5 +251,5 @@
     state.admin = !!(user && user.email === ADMIN_EMAIL);
     renderAdmin();
   });
-  window.addEventListener('pagehide', closeDemo);
+  window.addEventListener('pagehide', () => closeDemo());
 })();
