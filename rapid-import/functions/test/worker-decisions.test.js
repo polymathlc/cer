@@ -7,6 +7,7 @@ const clone=x=>x===undefined?undefined:structuredClone(x);
 const snap=path=>({exists:docs.has(path),data:()=>clone(docs.get(path))});
 const ref=path=>({path,id:path.split('/').pop(),get:async()=>snap(path)});
 let failCommit=false;
+let beforeDownload=null;
 const db={doc:ref,collection:name=>({doc:id=>ref(name+'/'+id),where:()=>({get:async()=>({docs:[...docs].filter(([k])=>k.startsWith(name+'/')).map(([k])=>snap(k))})})}),
  runTransaction:async fn=>{
    const writes=[];
@@ -15,7 +16,7 @@ const db={doc:ref,collection:name=>({doc:id=>ref(name+'/'+id),where:()=>({get:as
    for(const [op,path] of writes) if(op==='create'&&docs.has(path)) throw new Error('already exists');
    for(const [op,path,value] of writes) docs.set(path,op==='update'?{...docs.get(path),...value}:value);
  }};
-const bucket={name:'test',file:path=>({save:async b=>files.set(path,Buffer.from(b)),download:async()=>{if(!files.has(path))throw new Error('Missing upload');return [files.get(path)];}})};
+const bucket={name:'test',file:path=>({save:async b=>files.set(path,Buffer.from(b)),download:async()=>{if(beforeDownload)await beforeDownload(path);if(!files.has(path))throw new Error('Missing upload');return [files.get(path)];}})};
 mock.module('firebase-admin/app',{namedExports:{initializeApp:()=>({})}});
 mock.module('firebase-admin/firestore',{namedExports:{getFirestore:()=>db}});
 mock.module('firebase-admin/storage',{namedExports:{getStorage:()=>({bucket:()=>bucket})}});
@@ -67,7 +68,7 @@ globalThis.fetch=async(url,init)=>{
   assert.equal(init.headers.Authorization,'Bearer secret:OPENAI_API_KEY');
   const wire=JSON.parse(init.body);assert.equal(wire.model,'gpt-6-luna');
   const body={state:JSON.parse(wire.input),questions:Object.fromEntries(wire.questions.map(q=>[q.name,q]))};decisionsCalls.push(body);
-  const plan=decisionsPlan(Object.keys(body.questions),decisionsCalls.length,body);
+  const plan=await decisionsPlan(Object.keys(body.questions),decisionsCalls.length,body);
   const answers={};
   for(const key of Object.keys(body.questions)) {
     const [choice,conf]=plan[key]||['yes',.95];
@@ -78,7 +79,7 @@ globalThis.fetch=async(url,init)=>{
 const api=await import('../index.js');
 const auth={uid:'teacher',token:{admin:true,name:'Teacher'}};
 const makeJob=(id='job')=>({id,ownerUid:'teacher',name:'paper.pdf',status:'queued',phase:'publish',publishIndex:0,nextPage:3,total:2,added:0,generation:0,autoCheck:false,checkpoint:'checkpoint',updatedAt:new Date().toISOString()});
-function setup(j=makeJob()){docs.clear();files.clear();tasks.length=0;aiPrompts=[];docs.set('cerRapidImports/'+j.id,j);return j;}
+function setup(j=makeJob()){docs.clear();files.clear();tasks.length=0;aiPrompts=[];beforeDownload=null;docs.set('cerRapidImports/'+j.id,j);return j;}
 
 const fig=[{title:'Fig',sourceQuestionNumber:'1',blocks:[{type:'text',text:'(a) Look at the figure.'},{type:'image',caption:'F',box_2d:[130,80,280,390]},{type:'plainanswer',text:'Answer'},{type:'explanation',text:'Because'}]}];
 function start(autoCheck=false){
@@ -127,6 +128,37 @@ test('Decisions unavailable changes nothing: every question is AI-checked exactl
   start(true);const real=globalThis.fetch;globalThis.fetch=async()=>({ok:false,status:503});
   try{const q=await run('fig');assert.equal(checks.length,1);assert.equal(recrops.length,0);assert.ok(q.autoCheck);}
   finally{globalThis.fetch=real;}
+});
+test('question Decisions runs during Storage preparation and its flagged reasons still reach the visual AI',async()=>{
+  start(true);
+  let releaseReview,reviewStarted,downloads=0;
+  const started=new Promise(resolve=>{reviewStarted=resolve;});
+  decisionsPlan=async keys=>{
+    if(!keys.includes('wording'))return {};
+    reviewStarted();await new Promise(resolve=>{releaseReview=resolve;});
+    return {wording:['no',.9]};
+  };
+  beforeDownload=async path=>{if(path.includes('/images/'))downloads++;};
+  const running=run('fig');
+  await started;
+  try {
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.ok(downloads>0,'Storage downloads must begin before the Decisions answer arrives');
+    assert.equal(checks.length,0,'the visual AI waits for the advisory reasons after images are ready');
+  } finally {releaseReview();}
+  const q=await running;
+  assert.equal(checks.length,1);assert.match(checks[0],/Problems already flagged by Decisions/);
+  assert.equal(q.decisionsShadow.yes,false);
+});
+test('a failed Storage preparation keeps the Decisions shadow and an error stamp without a partial visual read',async()=>{
+  const j=start(true);decisionsPlan=()=>({});
+  await api.rapidImportPage({data:{id:j.id,page:1,generation:0,phase:'page',publishIndex:0},retryCount:0});
+  for(const path of files.keys())if(path.includes('/images/'))files.delete(path);
+  const next=docs.get('cerRapidImports/'+j.id);
+  await api.rapidImportPage({data:{id:j.id,page:next.nextPage,generation:0,phase:next.phase,publishIndex:0},retryCount:0});
+  const q=[...docs].find(([path])=>path.includes('/vetting/'))[1];
+  assert.equal(checks.length,0);assert.equal(q.autoCheck.state,'error');assert.match(q.autoCheck.error,/Missing upload/);
+  assert.equal(q.decisionsShadow.yes,true);assert.equal(q.decisionsShadow.ai,'error');
 });
 test('the review callable binds only the shared OpenAI key and defines no other provider secret',()=>{
   assert.deepEqual(definedSecrets.map(secret=>secret.name).sort(),['GEMINI_API_KEY','OPENAI_API_KEY']);

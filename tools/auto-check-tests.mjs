@@ -54,7 +54,19 @@ ${migrateDecisionsReviewState.toString()}
 const HOOK = {
   reads: 0, repairs: 0, aiChecks: 0, media: 0, levels: [],
   prompts: [], warned: [], aiOn: true, plan: [], replies: [],
+  gateCalls: 0, gateOn: true, author: true, gateResult: null,
+  gateWait: null, gateError: null, aiWait: null, readQuestions: [],
 };
+const DECISIONS_MAY_SKIP = false;
+function decisionsGateOn() { return HOOK.gateOn; }
+function _canAuthor() { return HOOK.author; }
+function _decisionsPaint() {}
+async function decisionsGateQuestion(q, run) {
+  HOOK.gateCalls++;
+  if (HOOK.gateWait) await HOOK.gateWait;
+  if (HOOK.gateError) throw HOOK.gateError;
+  return HOOK.gateResult;
+}
 let _idSeq = 0;
 function generateBlockId() { return 'gen_' + (++_idSeq); }
 const console = { warn: (...a) => HOOK.warned.push(a.join(' ')), error: (...a) => HOOK.warned.push(a.join(' ')) };
@@ -97,6 +109,8 @@ function _rememberCropSource(b, url, box, page) { b.cropSource = { url, imageUrl
 function _sevRank(s) { return s === 'high' ? 0 : s === 'med' ? 1 : 2; }
 async function _cqAiCheck(q) {
   HOOK.aiChecks++;
+  HOOK.readQuestions.push(JSON.parse(JSON.stringify(q)));
+  if (HOOK.aiWait) await HOOK.aiWait;
   const step = HOOK.plan[Math.min(HOOK.reads, HOOK.plan.length - 1)];
   if (step === 'throw') throw new Error('model refused');
   return (step || []).filter(f => f.ai);
@@ -137,6 +151,7 @@ const M = new Function(
   cut('const AI_MARKS_MAX_LIFT = 20;', '\n// The rectangle-selection', 'marks lifter') +
   cut('const AUTOCHK_TRIES = 2;', '\nasync function processRapidJob', 'auto-check core') +
   `\nreturn { HOOK, tlVerdict, autoChkOn, setAutoChkOn, autoChkRead, autoChkState, autoChkBetter,
+    autoChkPrepareReview, _autoChkMergeRead,
     autoChkRun, autoChkRecrop, autoChkStamp, autoChkCardHtml, autoChkTally, autoChkBatchNote,
     _autoChkApply, _autoChkRepairPrompt, _aiLiftMarks, _aiMarksSane, _tlCache, _imgEnhanceState,
     AUTOCHK_TRIES };\n`
@@ -147,6 +162,9 @@ const reset = (plan, replies) => {
   HOOK.reads = 0; HOOK.repairs = 0; HOOK.aiChecks = 0; HOOK.media = 0;
   HOOK.levels = []; HOOK.recrops = 0; HOOK.recropFail = false; HOOK.prompts = []; HOOK.warned = []; HOOK.aiOn = true;
   HOOK.refines = [];
+  HOOK.gateCalls = 0; HOOK.gateOn = true; HOOK.author = true;
+  HOOK.gateResult = null; HOOK.gateWait = null; HOOK.gateError = null;
+  HOOK.aiWait = null; HOOK.readQuestions = [];
   HOOK.plan = plan || [[]];
   HOOK.replies = replies || [];
 };
@@ -166,6 +184,11 @@ const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
 const ok = (c, m) => { if (!c) throw new Error(m || 'expected true'); };
 const eq = (a, b, m) => { if (a !== b) throw new Error((m || 'mismatch') + ': got ' + JSON.stringify(a) + ', want ' + JSON.stringify(b)); };
+const deferred = () => {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
+};
 
 // ── the verdict, and what "green" is allowed to mean ────────────────────────
 
@@ -208,6 +231,117 @@ test('the verdict is the traffic light’s own plain code, not a second opinion'
 });
 
 // ── the loop ────────────────────────────────────────────────────────────────
+
+test('Rapid add starts the visual read and advisory Decisions together', async () => {
+  reset([[]]);
+  const ai = deferred(), gate = deferred();
+  HOOK.aiWait = ai.promise;
+  HOOK.gateWait = gate.promise;
+  HOOK.gateResult = { available: true, confident: true, findings: [], figureFindings: [] };
+  const q = Q();
+  let completed = false;
+  const pending = M.autoChkPrepareReview(q, { figures: [] }, () => {}).then(result => {
+    completed = true;
+    return result;
+  });
+  eq(HOOK.aiChecks, 1, 'the full visual read starts before Decisions finishes');
+  eq(HOOK.gateCalls, 1, 'Decisions also starts while the visual read is pending');
+  gate.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  eq(completed, false, 'a clean advisory verdict cannot bypass the pending visual audit');
+  ai.resolve();
+  const prepared = await pending;
+  eq(prepared.gate, HOOK.gateResult);
+  eq(prepared.firstRead.verdict, 'green');
+  eq(prepared.firstRead.ran, true, 'the actual visual checker ran');
+  const result = await M.autoChkRun(q, { firstRead: prepared.firstRead });
+  eq(result.state, 'green');
+  eq(HOOK.aiChecks, 1, 'the completed first read is reused, not paid for twice');
+  eq(HOOK.reads, 1);
+});
+
+test('unavailable Decisions still returns the complete visual first read', async () => {
+  reset([[F('high', true)]]);
+  HOOK.gateResult = null;
+  const prepared = await M.autoChkPrepareReview(Q(), null);
+  eq(prepared.gate, null);
+  eq(prepared.firstRead.verdict, 'red');
+  eq(prepared.firstRead.findings.length, 1);
+  eq(HOOK.aiChecks, 1);
+  eq(HOOK.reads, 1, 'the instant structural checks ran too');
+});
+
+test('a refused advisory Decisions call does not discard the visual read', async () => {
+  reset([[]]);
+  HOOK.gateError = new Error('Decisions unavailable');
+  const prepared = await M.autoChkPrepareReview(Q(), null);
+  eq(prepared.gate, null);
+  eq(prepared.firstRead.verdict, 'green');
+  eq(prepared.firstRead.error, '');
+  eq(prepared.firstRead.ran, true);
+  eq(HOOK.aiChecks, 1);
+});
+
+test('a gate finding repairs a clean prepared read, then checks the repaired question afresh', async () => {
+  reset([[], []], [reply([{ type: 'text', text: 'Corrected after the advisory finding' }, { type: 'image' }, { type: 'plainanswer', text: 'It absorbed heat.' }])]);
+  const finding = { type: 'Wording', severity: 'high', title: 'Ambiguous question', detail: 'Name the object that melted.', ai: false };
+  HOOK.gateResult = { available: true, confident: false, findings: [finding], figureFindings: [] };
+  const q = Q();
+  const prepared = await M.autoChkPrepareReview(q, null);
+  eq(prepared.firstRead.verdict, 'green', 'the visual read was clean before the advisory finding');
+  const result = await M.autoChkRun(q, {
+    firstRead: prepared.firstRead, extraFindings: prepared.gate.findings,
+    figureFindings: prepared.gate.figureFindings,
+  });
+  eq(result.from, 'red', 'the advisory defect still participates in the first verdict');
+  eq(result.state, 'green');
+  eq(result.tries, 2);
+  eq(HOOK.repairs, 1);
+  ok(HOOK.prompts[0].includes(finding.title), 'the advisory evidence reaches the repair');
+  eq(HOOK.aiChecks, 2, 'one prepared read plus one fresh read after repair');
+  eq(HOOK.gateCalls, 1, 'the advisory call is not repeated after repair');
+  eq(HOOK.readQuestions[0].blocks[0].content, 'Why did it melt?');
+  eq(HOOK.readQuestions[1].blocks[0].content, 'Corrected after the advisory finding', 'the new read inspects the changed blocks');
+});
+
+test('prepared reads retain unresolved figure findings without duplicating the AI check', async () => {
+  reset([[]]);
+  const crop = { type: 'Crop', severity: 'high', title: 'The figure is clipped', detail: 'Recover the full source.', fix: 'cropImage', ai: false };
+  const prepared = await M.autoChkPrepareReview(Q(), null);
+  const result = await M.autoChkRun(Q(), { firstRead: prepared.firstRead, figureFindings: [crop] });
+  eq(result.state, 'red');
+  eq(result.findings.length, 1);
+  eq(result.findings[0].title, crop.title);
+  eq(HOOK.aiChecks, 1, 'no changed crop means no redundant second visual read');
+  eq(HOOK.repairs, 0, 'a wording repair cannot recover missing figure pixels');
+});
+
+test('a failed prepared visual read stays an error even when Decisions says clean', async () => {
+  reset(['throw']);
+  HOOK.gateResult = { available: true, confident: true, findings: [], figureFindings: [] };
+  const q = Q();
+  const prepared = await M.autoChkPrepareReview(q, null);
+  const result = await M.autoChkRun(q, { firstRead: prepared.firstRead });
+  eq(result.state, 'error');
+  eq(result.error, 'model refused');
+  eq(HOOK.aiChecks, 1, 'the failed first read is not silently retried');
+  eq(HOOK.repairs, 0);
+});
+
+test('merging advisory evidence deduplicates titles and preserves a failed read', () => {
+  reset();
+  const first = { findings: [{ ...F('med', true), title: 'Repeated defect' }], verdict: 'amber', error: 'model refused', ran: false };
+  const merged = M._autoChkMergeRead(first, [
+    { ...F('high'), title: 'REPEATED DEFECT' },
+    { ...F('high'), title: 'Missing answer' },
+  ]);
+  eq(merged.findings.length, 2, 'the same problem named by two reviews stays one row');
+  eq(merged.findings[0].title, 'Missing answer', 'the resulting findings retain severity ordering');
+  eq(merged.verdict, 'red');
+  eq(merged.error, 'model refused', 'extra evidence does not manufacture a completed visual audit');
+  eq(M.autoChkState(merged), 'error');
+});
 
 test('red → repaired → green stops at green and keeps the repair', async () => {
   reset([[F('high')], []], [reply([{ type: 'text', text: 'Fixed wording' }, { type: 'image' }, { type: 'plainanswer', text: 'It absorbed heat.' }])]);
@@ -352,11 +486,21 @@ test('an errored check never seeds a colour', () => {
 test('a stamp survives the session it was made in', () => {
   // `_tlCache` dies with the tab. A card opened the next morning must not wear
   // a red badge over a grey lamp with nothing behind it.
-  const fn = cut('function _tlFromStamp(q) {', '\nfunction tlFresh', 'stamp adopter + tlStateOf');
-  ok(/q\.autoCheck/.test(fn), 'tlStateOf reads the verdict off the question');
-  ok(/a\.sig !== tlSig\(q\)/.test(fn), 'and reports it stale once the question has changed');
-  ok(/if \(!rec\) return _tlFromStamp\(q\)/.test(fn), 'a live check always outranks a remembered one');
-  ok(/state: 'error'/.test(fn), 'and a failed check is remembered as a failure, never as a colour');
+  const fn = cut('function _tlFromStamp(', '\nfunction tlFresh', 'stamp adopter + tlStateOf');
+  const stateOf = new Function('migrateDecisionsReviewState', 'tlSig', '_tlCache', fn + '\nreturn tlStateOf;')(
+    migrateDecisionsReviewState, q => 'sig:' + JSON.stringify((q && q.blocks) || []).length, M._tlCache,
+  );
+  const q = Q();
+  M.autoChkStamp(q, { state: 'amber', tries: 1, findings: [F('med')], error: '' });
+  M._tlCache.clear();
+  eq(stateOf(q).state, 'amber', 'a new session adopts the persisted verdict');
+  eq(stateOf(q).findings.length, 1, 'the finding remains readable');
+  q.blocks[0].content += ' Edited wording';
+  eq(stateOf(q).state, 'stale', 'an edited question cannot inherit the old verdict');
+  M.autoChkStamp(q, { state: 'error', tries: 1, findings: [], error: 'model refused' });
+  M._tlCache.clear();
+  eq(stateOf(q).state, 'error', 'a failed check remains a failure after reload');
+  eq(stateOf(q).error, 'model refused');
 });
 
 test('the findings kept on the question are capped and trimmed', () => {

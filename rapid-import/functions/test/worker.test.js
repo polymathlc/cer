@@ -6,6 +6,7 @@ const clone=x=>x===undefined?undefined:structuredClone(x);
 const snap=path=>({exists:docs.has(path),data:()=>clone(docs.get(path))});
 const ref=path=>({path,get:async()=>snap(path)});
 let failCommit=false;
+let beforeDownload=null;
 const db={doc:ref,collection:name=>({doc:id=>ref(name+'/'+id),where:()=>({get:async()=>({docs:[...docs].filter(([k])=>k.startsWith(name+'/')).map(([k])=>snap(k))})})}),
  runTransaction:async fn=>{
    const writes=[];
@@ -14,7 +15,7 @@ const db={doc:ref,collection:name=>({doc:id=>ref(name+'/'+id),where:()=>({get:as
    for(const [op,path] of writes) if(op==='create'&&docs.has(path)) throw new Error('already exists');
    for(const [op,path,value] of writes) docs.set(path,op==='update'?{...docs.get(path),...value}:value);
  }};
-const bucket={name:'test',file:path=>({save:async b=>files.set(path,Buffer.from(b)),download:async()=>{if(!files.has(path))throw new Error('Missing upload');return [files.get(path)];}})};
+const bucket={name:'test',file:path=>({save:async b=>files.set(path,Buffer.from(b)),download:async()=>{if(beforeDownload)await beforeDownload(path);if(!files.has(path))throw new Error('Missing upload');return [files.get(path)];}})};
 mock.module('firebase-admin/app',{namedExports:{initializeApp:()=>({})}});
 mock.module('firebase-admin/firestore',{namedExports:{getFirestore:()=>db}});
 mock.module('firebase-admin/storage',{namedExports:{getStorage:()=>({bucket:()=>bucket})}});
@@ -48,7 +49,7 @@ const api=await import('../index.js');
 const auth={uid:'teacher',token:{admin:true,name:'Teacher'}};
 const makeJob=(id='job')=>({id,ownerUid:'teacher',name:'paper.pdf',status:'queued',phase:'publish',publishIndex:0,nextPage:3,total:2,added:0,generation:0,autoCheck:false,checkpoint:'checkpoint',updatedAt:new Date().toISOString()});
 const question={id:'q_rapid_job_1_0',title:'A',blocks:[],sourcePages:[]};
-function setup(j=makeJob()){docs.clear();files.clear();tasks.length=0;aiPrompts=[];modelResponse=null;globalThis.REFINE={n:0,box:null};docs.set('cerRapidImports/'+j.id,j);files.set('checkpoint',Buffer.from(JSON.stringify({pending:null,ready:[question]})));return j;}
+function setup(j=makeJob()){docs.clear();files.clear();tasks.length=0;aiPrompts=[];modelResponse=null;beforeDownload=null;globalThis.REFINE={n:0,box:null};docs.set('cerRapidImports/'+j.id,j);files.set('checkpoint',Buffer.from(JSON.stringify({pending:null,ready:[question]})));return j;}
 test('duplicate delivery publishes once, atomically with checkpoint progress',async()=>{
  setup();const request={data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0},retryCount:0};
  await api.rapidImportPage(request);await api.rapidImportPage(request);
@@ -197,6 +198,70 @@ function savedFigure(kind='diagram') {
   return {j,q,url,bytes};
 }
 const imageModelReply=bytes=>({candidates:[{finishReason:'STOP',content:{parts:[{inlineData:{mimeType:'image/jpeg',data:bytes.toString('base64')}}]}}]});
+test('audit image reads overlap with a four-download bound, share duplicate paths and keep every image label in source order',async()=>{
+  const {q}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);
+  const paths=Array.from({length:6},(_,i)=>`cer-rapid/teacher/job/images/raw/audit-${i}.jpg`);
+  paths.forEach((path,i)=>files.set(path,Buffer.from('pixels-'+i)));
+  q.sourcePages=paths.map((path,i)=>({page:i+1,url:imageUrl(path)}));
+  q.blocks[1].originalCropUrl=imageUrl(paths[0]);q.blocks[1].url=imageUrl(paths[0])+'&token=another-token';
+  q.blocks[2].answerImg=imageUrl(paths[1]);q.answerKeyImage=imageUrl(paths[2]);
+  files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
+  let active=0,maximum=0;
+  const reads=[];
+  beforeDownload=async path=>{
+    if(!path.includes('/images/'))return;
+    reads.push(path);active++;maximum=Math.max(maximum,active);
+    await new Promise(resolve=>setImmediate(resolve));active--;
+  };
+  modelResponse=request=>{
+    if(!request.contents[0].parts[0].text.startsWith('Check this science question'))return;
+    const parts=request.contents[0].parts,prompt=parts[0].text;
+    const expected=[0,1,2,3,4,5,0,0,1,2];
+    assert.deepEqual(parts.slice(1).map(p=>p.inlineData.data),expected.map(i=>Buffer.from('pixels-'+i).toString('base64')));
+    for(let i=0;i<6;i++)assert.ok(prompt.includes(`Image ${i+1}: Original PDF page ${i+1}`));
+    assert.ok(prompt.includes('Image 7: Original figure crop figure'));
+    assert.ok(prompt.includes('Image 8: Displayed figure figure'));
+    assert.ok(prompt.includes('Image 9: Annotated answer figure answer'));
+    assert.ok(prompt.includes('Image 10: Answer key image'));
+    return reply({findings:[],repairs:[],imageAudits:['figure','answer:answerImg','$answerKey'].map(blockId=>({blockId,complete:true,faithful:true,issues:[]}))});
+  };
+  await api.rapidImportPage({data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0},retryCount:0});
+  assert.equal(maximum,4,'four independent Storage reads, not serial or unbounded');
+  assert.equal(reads.length,6,'ten labelled inputs require only six unique Storage reads');
+  assert.deepEqual([...reads].sort(),[...paths].sort());
+  assert.notEqual(docs.get('users/teacher/vetting/'+q.id).autoCheck.state,'error');
+});
+test('one unreadable image in a parallel batch keeps the check in error and never invokes the visual AI',async()=>{
+  const {q}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);
+  q.sourcePages=[{page:1,url:imageUrl('cer-rapid/teacher/job/images/raw/missing.jpg')}];
+  files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
+  await api.rapidImportPage({data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0},retryCount:0});
+  const saved=docs.get('users/teacher/vetting/'+q.id);
+  assert.equal(saved.autoCheck.state,'error');assert.match(saved.autoCheck.error,/Missing upload/);
+  assert.equal(aiPrompts.length,0,'missing pixels must never receive a fresh visual audit stamp');
+});
+test('a repaired figure is rechecked with its current pixels while unchanged source paths are read once',async()=>{
+  const {q,url}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);
+  const changedPath='cer-rapid/teacher/job/images/raw/changed.jpg';files.set(changedPath,Buffer.from('changed pixels'));
+  q.blocks[1].url=imageUrl(changedPath);delete q.blocks[1].cropSource;
+  q.sourcePages=[{page:1,url}];
+  files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
+  const reads=[];beforeDownload=async path=>{if(path.includes('/images/'))reads.push(path);};
+  let checks=0;
+  modelResponse=request=>{
+    if(!request.contents[0].parts[0].text.startsWith('Check this science question'))return;
+    checks++;
+    const images=request.contents[0].parts.slice(1).map(part=>part.inlineData.data);
+    if(checks===1)assert.equal(images[2],Buffer.from('changed pixels').toString('base64'));
+    else assert.equal(images[2],images[1],'the restored current figure must be audited, not the cached rejected display');
+    return reply({findings:[],repairs:[],imageAudits:[{blockId:'figure',complete:true,faithful:checks>1,issues:checks===1?['The proposed display lost a label.']:[]}]});
+  };
+  await api.rapidImportPage({data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0},retryCount:0});
+  const saved=docs.get('users/teacher/vetting/'+q.id);
+  assert.equal(checks,2);assert.equal(saved.blocks[1].url,url);assert.equal(saved.autoCheck.state,'green');
+  assert.equal(reads.length,2,'both visual passes reuse one read per original immutable path');
+  assert.ok(saved.autoCheck.repairs.some(repair=>repair.blockId==='figure'));
+});
 test('new uploads cannot disable automatic checks or enhancement',async()=>{
   setup();docs.clear();
   await api.rapidImportBegin({auth,data:{id:'required',size:20,prompt:'Read the paper',autoCheck:false,enhanceImages:false}});

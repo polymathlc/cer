@@ -46,7 +46,7 @@ const cut = (from, to, what) => {
   return src.slice(a, b);
 };
 
-const section = cut('const TL_PAR = 3;', '// 🧰 ACTING ON MANY QUESTIONS AT ONCE', 'traffic light');
+const section = cut('const TL_PAR = 6;', '// 🧰 ACTING ON MANY QUESTIONS AT ONCE', 'traffic light');
 
 // ---- the world the section runs in -----------------------------------------
 // Everything it borrows, stubbed, plus the hooks a case needs to steer:
@@ -69,6 +69,9 @@ function _canAuthor() { return true; }
 function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function showToast(msg, kind) { HOOK.toasts.push({ msg, kind }); }
 function normalizeCategoryValue(v) { return String(v || ''); }
+function aiGrounding() { return ''; }
+function getTopicLevel(topic) { return topic === 'Secondary science' ? 'Sec 1' : 'P5'; }
+function isSecondaryLevel(level) { return /^Sec/.test(String(level || '')); }
 function _aiHash(str) { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return 'ai:' + (h >>> 0).toString(36); }
 function editQuestion() { HOOK.editQuestionCalls = (HOOK.editQuestionCalls || 0) + 1; }
 function _cqFindingHtml(f) { return '<div class="cq-find-row">' + escapeHtml(f.title) + '</div>'; }
@@ -109,7 +112,7 @@ const M = new Function('migrateDecisionsReviewState', preamble + mcqLabelSrc(src
 return {
   HOOK,
   TL_PAR, TL_LOOKS,
-  tlVerdict, tlSig, tlStateOf, tlFresh, tlRun, tlCheckMany, tlStopMany,
+  tlVerdict, tlSig, tlStateOf, tlFresh, tlRun, tlCheckMany, tlStopMany, tlCheckSheet,
   tlLightHtml, tlTipFor, tlLookFor, tlEmQuestion, tlHeadline, tlWordFor,
   tlCreateActive, tlCreateQuestion, tlDraftId, tlRenderCreateBar,
   tlFixCreateOptions, tlQuestionFor, tlClick, tlRepaint,
@@ -162,6 +165,12 @@ const reset = () => {
   M.HOOK.dom['tlCreateBar'].style = {};
 };
 const TEXT = html => ({ id: 'b1', type: 'text', content: '<p>' + html + '</p>' });
+const deferred = () => {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+};
+const settle = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 
 // ---- the verdict is plain code ---------------------------------------------
 test('a high finding is RED, anything else is AMBER, nothing is GREEN', () => {
@@ -303,6 +312,127 @@ test('the AI is told whether it has answered, so its nudges can stand down', asy
 });
 
 // ---- the whole sheet at once -----------------------------------------------
+test('identical concurrent requests await the same completed check', async () => {
+  reset();
+  const gate = deferred(), q = Q();
+  M.HOOK.ai = () => gate.promise;
+  const first = M.tlRun(q);
+  let secondDone = false;
+  const second = M.tlRun(JSON.parse(JSON.stringify(q))).then(rec => { secondDone = true; return rec; });
+  await settle();
+  eq(M.HOOK.calls, 1, 'one paid call for the same id and signature');
+  eq(secondDone, false, 'another caller must wait rather than receive a running record');
+  gate.resolve([F('med', 'Review the wording')]);
+  const [a, b] = await Promise.all([first, second]);
+  eq(a.state, 'done', 'the first read finished');
+  eq(b.state, 'done', 'the shared read finished');
+  eq(b.verdict, 'amber', 'the second caller receives the real verdict');
+});
+
+test('a check reads an immutable snapshot while its original is edited', async () => {
+  reset();
+  const gate = deferred(), q = Q();
+  const original = q.blocks[0].content;
+  let seenAi, seenLocal;
+  M.HOOK.ai = async snapshot => { await gate.promise; seenAi = snapshot.blocks[0].content; return []; };
+  M.HOOK.local = snapshot => { seenLocal = snapshot.blocks[0].content; return []; };
+  const checking = M.tlRun(q);
+  q.blocks[0].content = '<p>Edited during the review</p>';
+  gate.resolve();
+  await checking;
+  eq(seenAi, original, 'AI continues to read the original snapshot');
+  eq(seenLocal, original, 'instant findings correspond to that same snapshot');
+  eq(M.tlStateOf(q).state, 'stale', 'a verdict for the old text cannot cover the edit');
+});
+
+test('an edited question starts a new read and a slow old read cannot replace it', async () => {
+  reset();
+  const oldGate = deferred(), newGate = deferred(), q = Q();
+  const original = q.blocks[0].content;
+  M.HOOK.ai = snapshot => snapshot.blocks[0].content === original ? oldGate.promise : newGate.promise;
+  const oldRead = M.tlRun(q);
+  q.blocks[0].content = '<p>Corrected wording</p>';
+  const newRead = M.tlRun(q);
+  await settle();
+  eq(M.HOOK.calls, 2, 'a changed signature gets its own read immediately');
+  newGate.resolve([]);
+  await newRead;
+  eq(M.tlStateOf(q).state, 'green', 'newest question has its own completed verdict');
+  oldGate.resolve([F('high', 'Old wording was wrong')]);
+  await oldRead;
+  eq(M.tlStateOf(q).state, 'green', 'late old findings cannot replace the newer verdict');
+  eq(M.tlStateOf(q).findings.length, 0, 'the cache still belongs to the newer wording');
+});
+
+test('overlapping numbered and lettered variants receive distinct checks despite the durable signature matching', async () => {
+  for (const labelChange of [{ mcqLabels: 'letters' }, { topic2: 'Secondary science' }]) {
+    reset();
+    const gates = [deferred(), deferred()], seen = [];
+    const numbered = Q(), lettered = { ...numbered, ...labelChange };
+    eq(M.tlSig(numbered), M.tlSig(lettered), 'durable worker signature remains compatible');
+    M.HOOK.ai = snapshot => { seen.push(snapshot); return gates[seen.length - 1].promise; };
+    const before = M.tlRun(numbered), after = M.tlRun(lettered);
+    await settle();
+    eq(M.HOOK.calls, 2, 'a label-style change receives a separate read');
+    eq(seen.length, 2, 'both distinct snapshots reach the checker');
+    gates[1].resolve([]);await after;
+    gates[0].resolve([F('high', 'Old numbered variant finding')]);await before;
+    eq(M.tlStateOf(lettered).state, 'green', 'the old variant cannot replace the newer labels verdict');
+  }
+});
+
+test('batch checks await a question already in flight and count its completed verdict', async () => {
+  reset();
+  const gate = deferred(), q = Q();
+  M.HOOK.ai = () => gate.promise;
+  const single = M.tlRun(q);
+  let batchDone = false;
+  const batch = M.tlCheckMany([q], {}).then(rec => { batchDone = true; return rec; });
+  await settle();
+  eq(M.HOOK.calls, 1, 'the batch shares the single-question provider call');
+  eq(batchDone, false, 'it must wait for the completed read');
+  gate.resolve([F('high', 'Marked answer is wrong')]);
+  const [, result] = await Promise.all([single, batch]);
+  eq([result.done, result.red, result.error], [1, 1, 0], 'the real red verdict is counted');
+});
+
+test('clearing a question while it is being checked prevents its old verdict from returning', async () => {
+  reset();
+  const gate = deferred(), q = Q();
+  M.HOOK.ai = () => gate.promise;
+  const checking = M.tlRun(q);
+  q.blocks = [];
+  eq(await M.tlRun(q), null, 'an emptied editor has no question to check');
+  gate.resolve([]);
+  await checking;
+  eq(M.tlStateOf(q).state, 'idle', 'the old completion must leave the empty editor unlit');
+  eq(M.cache().has(q.id), false, 'an obsolete read cannot repopulate the cache');
+});
+
+test('a question edited during a batch is counted as unchecked instead of a fresh green', async () => {
+  reset();
+  const gate = deferred(), q = Q();
+  M.HOOK.ai = () => gate.promise;
+  const checking = M.tlCheckMany([q], {});
+  q.blocks[0].content = '<p>New question text that was never checked</p>';
+  gate.resolve([]);
+  const result = await checking;
+  eq([result.done, result.green, result.error], [1, 0, 1], 'an old clean read is not a verdict for the edited wording');
+  eq(M.tlStateOf(q).state, 'stale', 'the actual question still requests a fresh check');
+});
+
+test('batch checks count fresh durable verdicts without needing a session cache', async () => {
+  reset();
+  const list = ['green', 'amber', 'red'].map(state => {
+    const q = Q();
+    q.autoCheck = { state, sig: M.tlSig(q), findings: state === 'green' ? [] : [F(state === 'red' ? 'high' : 'med')], at: new Date().toISOString() };
+    return q;
+  });
+  const result = await M.tlCheckMany(list, {});
+  eq(M.HOOK.calls, 0, 'stored current results need no paid recheck');
+  eq([result.done, result.green, result.amber, result.red, result.error], [3, 1, 1, 1, 0], 'each saved colour is counted correctly');
+});
+
 test('every question is its own call, TL_PAR at a time', async () => {
   reset();
   M.HOOK.ai = () => new Promise(r => setTimeout(() => r([]), 5));
@@ -350,6 +480,45 @@ test('a run never reads more than TL_MANY_MAX questions', async () => {
   const huge = Array.from({ length: 400 }, () => Q());
   const m = await M.tlCheckMany(huge, {});
   ok(m.total <= 200, 'a single press cannot spend hundreds of calls: ' + m.total);
+});
+
+test('sheet completion reports AI failures as unchecked rather than all clear', async () => {
+  reset();
+  const q = Q();
+  M.setBank([q]);
+  M.setEm(true, [{ id: q.id, title: q.title }], { [q.id]: q.blocks });
+  M.HOOK.ai = () => { throw new Error('Provider unavailable'); };
+  await M.tlCheckSheet();
+  const toast = M.HOOK.toasts.at(-1);
+  eq(toast.kind, 'error', 'a failed check is an error notification');
+  ok(/could not be checked/i.test(toast.msg), 'the author is asked to retry: ' + toast.msg);
+  ok(!/nothing flagged/i.test(toast.msg), 'failed checks cannot claim all clear');
+});
+
+test('sheet completion reports a fully checked clean sheet as success', async () => {
+  reset();
+  const q = Q();
+  M.setBank([q]);
+  M.setEm(true, [{ id: q.id, title: q.title }], { [q.id]: q.blocks });
+  await M.tlCheckSheet();
+  const toast = M.HOOK.toasts.at(-1);
+  eq(toast.kind, 'success', 'a completed clean check gets its success notification');
+  ok(/nothing flagged/i.test(toast.msg), 'the clean sheet reports its real verdict');
+});
+
+test('stopping a sheet check reports partial progress without claiming all clear', async () => {
+  reset();
+  const list = Array.from({ length: 12 }, () => Q());
+  M.setBank(list);
+  M.setEm(true, list.map(q => ({ id: q.id, title: q.title })), Object.fromEntries(list.map(q => [q.id, q.blocks])));
+  let first = true;
+  M.HOOK.ai = () => { if (first) { first = false; M.tlStopMany(); } return []; };
+  await M.tlCheckSheet();
+  const toast = M.HOOK.toasts.at(-1);
+  eq(toast.kind, 'info', 'stopping produces an informational progress message');
+  ok(/^Stopped/.test(toast.msg), 'the message explicitly reports the incomplete run');
+  ok(!/nothing flagged/i.test(toast.msg), 'remaining unread questions cannot receive an all-clear message');
+  ok(M.HOOK.calls < list.length, 'the stop leaves some questions unchecked');
 });
 
 // ---- editing mode reads what is ON SCREEN ----------------------------------

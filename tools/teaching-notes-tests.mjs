@@ -409,11 +409,31 @@ const UNGROUNDED_BY_DESIGN = {
     bodyOf[f.name] = lines.slice(f.line, end).join('\n');
   });
   const groundedBody = n => /aiGrounding\s*\(|_markingPreamble\s*\(|_genPreamble\s*\(/.test(bodyOf[n] || '');
+  // The shared checker captures the notes before it queues a request, then
+  // supplies that exact grounding to its prompt builder. Recognise this
+  // reverse direction only after checking the whole injection contract;
+  // the model-call helper is not an exemption from the teaching notes.
+  const checkerCaller = bodyOf._cqAiCheck || '';
+  const checkerHelper = bodyOf._cqAiCheckNow || '';
+  const captureGrounding = /const\s+grounding\s*=\s*aiGrounding\(\s*['"]check['"]\s*,\s*snapshot\.topic\s*\)\s*\|\|\s*['"]['"]/.test(checkerCaller)
+    && (checkerCaller.match(/\baiGrounding\s*\(/g) || []).length === 1;
+  const passGrounding = /\b_cqAiCheckNow\(\s*snapshot\s*,\s*grounding\s*,\s*labels\s*\)/.test(checkerCaller)
+    && /async\s+function\s+_cqAiCheckNow\(\s*q\s*,\s*grounding\s*,\s*labels\s*\)/.test(checkerHelper);
+  const promptStart = checkerHelper.indexOf('const prompt =');
+  const promptEnd = checkerHelper.indexOf('const opts =', promptStart);
+  const useGrounding = promptStart >= 0 && promptEnd > promptStart
+    && /\bgrounding\s*\+/.test(checkerHelper.slice(promptStart, promptEnd))
+    && /\baskGeminiVision\(\s*prompt\s*,/.test(checkerHelper)
+    && /\baskGemini\(\s*prompt\s*,/.test(checkerHelper);
+  ok('the shared checker captures its topic teaching notes exactly once', captureGrounding);
+  ok('the shared checker passes its captured notes into the model-call helper', passGrounding);
+  ok('both visual and text checker calls use the prompt containing those notes', useGrounding);
+  const capturedGrounding = new Set(captureGrounding && passGrounding && useGrounding ? ['_cqAiCheckNow'] : []);
   // ONE HOP: a call site whose prompt is built by another top-level function
   // is grounded when THAT function is. Any deeper and the rule stops being
   // checkable by reading.
   const grounded = n => {
-    if (groundedBody(n)) return true;
+    if (groundedBody(n) || capturedGrounding.has(n)) return true;
     const body = bodyOf[n] || '';
     return fns.some(f => f.name !== n && groundedBody(f.name) &&
       new RegExp('\\b' + f.name.replace(/\$/g, '\\$') + '\\s*\\(').test(body));

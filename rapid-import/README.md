@@ -199,6 +199,10 @@ wording readable, do parts/options/answers hang together. The pure logic is
   fails is kept and flagged as a Crop finding on the vetting card.
 * **Decisions is advisory**: a confident clean yes still gets the visual AI read,
   and its agreement is recorded for comparison with the checked result.
+  The worker prepares images alongside this review, with up to four Storage
+  downloads at once. It keeps every source/display label and audit target in
+  order, and reads a repeated path only once within the question's check and
+  repair recheck. A repaired picture at a new path is downloaded again.
 * **Decisions unavailable changes nothing**: every question is AI-checked as before.
 * Only measurements and short excerpts are sent; nothing is stored beyond
   per-admin counters (`cerDecisionsLimits`). The shared `OPENAI_API_KEY` is a

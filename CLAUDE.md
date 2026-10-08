@@ -4851,6 +4851,15 @@ question came round. A lamp answers both at a glance — 🔴 something is wrong
   together" means checking each of them at once, the same shape 🔍 Answer key
   cross-check uses. A verdict that already stands is not paid for twice,
   `TL_MANY_MAX` bounds one press, and ⏹ Stop is honoured between questions.
+  Since v1.426.8, `TL_PAR` is six and `_cqAiCheck` has a shared six-read limit
+  across traffic lights, the queue and browser imports. It shares in-flight
+  reads by immutable question signature and captured grounding, releases slots
+  on failure, and never caches a completed image read across later checks.
+  `_cqImagePacket` loads four images concurrently and deduplicates downloads
+  only within that packet; separate manifest positions still require separate
+  audits. `tlRun` joins identical pending work and an older revision cannot
+  paint over a newer one. Batch tallies reuse current persisted stamps, and
+  per-question painting avoids repeatedly rebuilding every lamp on the sheet.
 - **The summary bar counts the lamps standing NOW, not the run's own tally**, so
   a question fixed after the run drops out of the count instead of sitting
   there red. It must set `display: 'flex'` and never `''` — `.em-tlbar` is

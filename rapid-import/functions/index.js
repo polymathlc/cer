@@ -421,15 +421,20 @@ async function checkQuestion(q,job) {
   // Decisions contributes measured findings; the current cropAudit signature may
   // only be stamped after the AI reads the actual source and displayed pixels.
   let known=[], shadow=null;
-  if(decisionsOn(job)) {
-    const qf=questionFacts(q), verdicts=await decisionsAsk({scope:'question',question:qf}).catch(()=>null);
-    const flaggedFigs=(q.decisionsFigures||[]).filter(f=>f.state==='flagged');
+  // The measured-facts review and Storage reads do not depend on each other.
+  // Start both together, but keep Decisions' findings in the visual AI prompt.
+  const qf=decisionsOn(job)?questionFacts(q):null;
+  const review=qf?decisionsAsk({scope:'question',question:qf}).catch(()=>null):Promise.resolve(null);
+  let reviewed=false;
+  const captureReview=async()=>{
+    const verdicts=await review;
+    reviewed=true;
     if(verdicts) {
       const d=decideReview({verdicts,figures:[],question:qf});
       known=failuresToFindings(d.failures);
-      shadow={yes:!known.length,confident:d.confident&&!flaggedFigs.length};
+      shadow={yes:!known.length,confident:d.confident&&!(q.decisionsFigures||[]).some(f=>f.state==='flagged')};
     }
-  }
+  };
   const flaggedFigures=(q.decisionsFigures||[]).filter(f=>f.state==='flagged').flatMap(f=>failuresToFindings((f.reasons.length?f.reasons:['the crop could not be made complete and clean']).map(r=>({key:'figure_'+f.index,index:f.index,code:'decisions_no',reason:r,by:'decisions'}))));
   const images=[], imageLabels=[];
   let findings=[], tries=0, error='', best=null, applied=[], figuresFixed=false;
@@ -443,6 +448,15 @@ async function checkQuestion(q,job) {
     // not only the top-level stem and answer strings.
     if(/<img\b/i.test(JSON.stringify(q.blocks||[]))) throw new Error('Inline pictures require a fresh check in CER.');
     let auditTargets=[];
+    // Request-local only: source objects are immutable during this check. A
+    // repaired figure has a new path and is read again; unchanged originals
+    // stay available for the recheck without another download/encoding pass.
+    const imageReads=new Map();
+    const readImage=url=>{
+      const path=storageImagePath(url,bucket().name,job.ownerUid);
+      if(!imageReads.has(path)) imageReads.set(path,storedImage(url,job.ownerUid).then(bytes=>bytes.toString('base64')));
+      return imageReads.get(path);
+    };
     const gather=async()=>{
       images.length=0;imageLabels.length=0;
       const displayed=(q.blocks||[]).filter(b=>b.type==='image'||(['explanation','answerKey'].includes(b.type)&&b.url));
@@ -455,9 +469,12 @@ async function checkQuestion(q,job) {
       auditTargets=[...displayed.map(b=>b.id),
         ...(q.blocks||[]).filter(b=>b.answerImg).map(b=>b.id+':answerImg'),...(q.answerKeyImage?['$answerKey']:[])];
       if(sources.length>24) throw new Error('Too many source images for one safe automatic check. Review this question manually.');
-      for(const source of sources) {images.push((await storedImage(source.url,job.ownerUid)).toString('base64'));imageLabels.push(`Image ${images.length}: ${source.label}`);}
+      const prepared=await inOrder(sources,4,source=>readImage(source.url));
+      images.push(...prepared);
+      imageLabels.push(...sources.map((source,i)=>`Image ${i+1}: ${source.label}`));
     };
     await gather();
+    await captureReview();
     const limit=job.maxCheckTries===1?1:2;
     for(tries=1;tries<=limit;tries++) {
       if(tries>1 && Date.now()-started>240000) break;
@@ -493,6 +510,9 @@ async function checkQuestion(q,job) {
       if(!changed) break;
     }
   } catch(e){error=String(e.message).slice(0,160);}
+  // Even an unreadable picture retains the measured-facts comparison, as it
+  // did before these independent operations overlapped.
+  if(!reviewed) await captureReview();
   if(best){q.blocks=best.blocks;findings=best.findings;applied=best.repairs;}
   // Whatever Decisions flagged and the repair did not cure is still true of the
   // question as it now stands, so it is re-measured (no second Decisions call) and kept.

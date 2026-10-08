@@ -97,7 +97,7 @@ test('the transaction updates existing records only and never resurrects approva
   assert.deepEqual(Object.keys(h.state.updates[0].payload).sort(),['answerKeywords','blanks','blocks']);
 });
 test('a fresh persisted worker check outranks a stale session verdict', () => {
-  const code=cut('function _tlFromStamp(q) {','function tlFresh(q) {');
+  const code=cut('function _tlFromStamp(', 'function tlFresh(q) {');
   const cache=new Map(),q=base();q.autoCheck={state:'green',sig:tlSig(q),at:'2026-10-01T00:00:00Z'};
   cache.set(q.id,{sig:'older-content',state:'done',verdict:'red',at:1});
   const read=new Function('tlSig','_tlCache','migrateDecisionsReviewState',code+'\nreturn tlStateOf;')(tlSig,cache,migrateDecisionsReviewState);

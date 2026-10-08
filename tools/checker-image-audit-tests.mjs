@@ -17,10 +17,13 @@ function harness(){
   return new Function('core',`
     const {questionRepairTargets}=core;
     const CQ_AI_IMAGES=3;
-    const H={calls:[],downloads:[],reply:undefined,fetchImpl:null,fixable:false,current:null};
+    const H={calls:[],downloads:[],reply:undefined,fetchImpl:null,modelImpl:null,fixable:false,current:null,live:0,inflight:0,grounding:''};
     const console={warn(){}};
     function stripHtml(v){return String(v || '').replace(/<[^>]*>/g,' ').replace(/&nbsp;/g,' ').replace(/\\s+/g,' ').trim();}
-    const normalizeCategoryValue=v=>v,aiGrounding=()=>'',transformImageUrl=v=>v;
+    const normalizeCategoryValue=v=>v,aiGrounding=()=>H.grounding,transformImageUrl=v=>v;
+    const tlSig=q=>JSON.stringify({t:q.title || '',p:q.topic || '',c:q.category || '',a:!!q.annotation,b:q.blocks || [],keyImage:q.answerKeyImage || ''});
+    const getTopicLevel=topic=>topic==='Secondary science'?'Sec 1':'P5';
+    const isSecondaryLevel=level=>/^Sec/.test(String(level || ''));
     function _docClip(s,n){return s.length>n?s.slice(0,n)+'…':s;}
     function _cqTableRows(b){return Object.values(b.data || {}).map(row=>Object.values(row || {}).map(stripHtml));}
     function _cqOptText(o){return stripHtml(typeof o==='string'?o:o?.text);}
@@ -28,9 +31,18 @@ function harness(){
     function _parseAIJson(v){return typeof v==='string'?JSON.parse(v):v;}
     function _parseImageDataUrl(v){const m=/^data:(image\\/[a-z+]+);base64,([^,]+)$/.exec(v || '');return m?{mime:m[1]}:null;}
     async function _urlToDataUrlRobust(url){H.downloads.push(url);return H.fetchImpl?await H.fetchImpl(url):'data:image/png;base64,ZmFrZQ==';}
-    function report(){return H.reply!==undefined?H.reply:{findings:[],imageAudits:_cqImageTargets(H.current).map(t=>({target:t.id,status:'complete',detail:''}))};}
-    async function askGemini(prompt,opts){H.calls.push({prompt,opts,media:[]});return report();}
-    async function askGeminiVision(prompt,media,opts){H.calls.push({prompt,media,opts});return report();}
+    function report(call){
+      if(H.reply!==undefined)return H.reply;
+      const line=call.prompt.split('\\n').find(line=>line.startsWith('ATTACHMENT MANIFEST ('));
+      const manifest=line?JSON.parse(line.slice(line.indexOf(': ')+2)):[];
+      return {findings:[],imageAudits:manifest.map(t=>({target:t.target,status:'complete',detail:''}))};
+    }
+    async function respond(call){
+      H.calls.push(call);H.live++;H.inflight=Math.max(H.inflight,H.live);
+      try{return H.modelImpl?await H.modelImpl(call):report(call);}finally{H.live--;}
+    }
+    async function askGemini(prompt,opts){return respond({prompt,opts,media:[]});}
+    async function askGeminiVision(prompt,media,opts){return respond({prompt,media,opts});}
     ${mcqLabelSrc(source, { display: false })}
     ${section}
     return {H,check:async q=>{H.current=q;return _cqAiCheck(q);},packet:_cqImagePacket,media:_cqMedia,repr:_cqRepr,norm:_cqNormFinding,targets:_cqImageTargets};
@@ -43,6 +55,11 @@ const twoPictures=()=>question([words,picture('flowchart'),picture('duplicate-pr
 const complete=q=>({findings:[],imageAudits:repairCore.questionRepairTargets(q).filter(t=>t.kind==='image'&&t.value).map(t=>({target:t.id,status:'complete',detail:''}))});
 const cases=[];
 const test=(name,run)=>cases.push({name,run});
+const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};};
+const until=async(predicate,message)=>{
+  for(let i=0;i<40;i++){if(predicate())return;await new Promise(setImmediate);}
+  assert.ok(predicate(),message);
+};
 
 test('a clipped flowchart and stray repeated wording produce separate targeted crop findings',async()=>{
   const h=harness();h.H.reply={findings:[],imageAudits:[
@@ -123,7 +140,119 @@ test('media catalog includes option, table, answer and top-level answer-key pict
 test('duplicate URLs retain distinct target identities for the two visible image positions',async()=>{
   const h=harness(),q=question([picture('first','https://fixtures.test/shared.png'),picture('second','https://fixtures.test/shared.png')]);
   const packet=await h.packet(q);assert.equal(packet.targets.length,2);
-  assert.notEqual(packet.targets[0].id,packet.targets[1].id);await h.check(q);assert.equal(h.H.calls[0].media.length,2);
+  assert.notEqual(packet.targets[0].id,packet.targets[1].id);
+  assert.equal(h.H.downloads.length,1,'The repeated URL is downloaded only once within the packet');
+  await h.check(q);assert.equal(h.H.calls[0].media.length,2);
+  assert.equal(h.H.downloads.length,2,'A later check rereads the remote URL rather than caching old pixels');
+});
+
+test('image downloads overlap in a bounded pool and retain attachment order',async()=>{
+  const h=harness(),q=question(Array.from({length:8},(_,i)=>picture('pool-'+i)));
+  const gates=new Map();let live=0,peak=0;
+  h.H.fetchImpl=async url=>{
+    const gate=deferred();gates.set(url,gate);live++;peak=Math.max(peak,live);
+    try{return await gate.promise;}finally{live--;}
+  };
+  const reading=h.packet(q);
+  await until(()=>h.H.downloads.length===4,'The first four downloads should overlap');
+  assert.equal(peak,4,'The pool starts four concurrent image reads');
+  gates.get('https://fixtures.test/pool-3.png').resolve('data:image/png;base64,cGlj3==');
+  await until(()=>h.H.downloads.length===5,'Finishing one image should refill the download pool');
+  for(let i=0;i<8;i++){
+    const url='https://fixtures.test/pool-'+i+'.png';
+    await until(()=>gates.has(url),'Every image gets its turn in the bounded pool');
+    gates.get(url).resolve('data:image/png;base64,cGlj'+i+'==');
+  }
+  const packet=await reading;
+  assert.ok(peak<=4,'Image reads stay bounded while the pool refills');
+  assert.deepEqual(packet.targets.map(t=>t.id),Array.from({length:8},(_,i)=>'block:pool-'+i+':url'));
+  assert.deepEqual(packet.media.map(m=>m.data),Array.from({length:8},(_,i)=>'cGlj'+i+'=='),'Completion order cannot reorder attachments');
+});
+
+test('one failed concurrent image read prevents the provider check and names its target',async()=>{
+  const h=harness(),q=question([picture('first'),picture('missing'),picture('third')]);
+  h.H.fetchImpl=async url=>{if(url.endsWith('/missing.png'))throw Error('Unavailable');return 'data:image/png;base64,cGlj==';};
+  await assert.rejects(h.check(q),/could not read.*missing|could not read.*picture/i);
+  assert.equal(h.H.calls.length,0,'No paid check may omit the failed picture');
+});
+
+test('simultaneous identical checks share in-flight work but completed checks reread',async()=>{
+  const h=harness(),q=twoPictures(),gate=deferred();
+  h.H.modelImpl=async()=>{await gate.promise;return complete(q);};
+  const first=h.check(q),second=h.check(JSON.parse(JSON.stringify(q)));
+  await until(()=>h.H.calls.length===1,'The shared checker should reach its provider');
+  assert.equal(h.H.downloads.length,2,'The shared review prepares each distinct picture once');
+  gate.resolve();
+  assert.deepEqual(await first,[]);assert.deepEqual(await second,[]);
+  assert.equal(h.H.calls.length,1,'Identical simultaneous checks share one provider call');
+  await h.check(q);
+  assert.equal(h.H.calls.length,2,'An explicit later review receives a fresh provider read');
+  assert.equal(h.H.downloads.length,4,'Remote image bytes are read again after completion');
+});
+
+test('a queued review preserves its snapshot and edits start distinct checks',async()=>{
+  const h=harness(),q=question([{...words}]),gate=deferred();
+  const original=q.blocks[0].content;
+  h.H.modelImpl=async()=>{await gate.promise;return {findings:[],imageAudits:[]};};
+  const before=h.check(q);
+  q.blocks[0].content='Completely changed wording after the check began.';
+  const after=h.check(q);
+  await until(()=>h.H.calls.length===2,'Changed wording requires another checker call');
+  assert.ok(h.H.calls.some(c=>c.prompt.includes(original)),'The original review reads its own snapshot');
+  assert.ok(h.H.calls.some(c=>c.prompt.includes(q.blocks[0].content)),'The edited review reads the new wording');
+  gate.resolve();await Promise.all([before,after]);
+});
+
+test('changed science grounding does not share an already-running check',async()=>{
+  const h=harness(),q=question([words]),gate=deferred();
+  h.H.modelImpl=async()=>{await gate.promise;return {findings:[],imageAudits:[]};};
+  h.H.grounding='FIRST SCIENCE GROUNDING\n';const first=h.check(q);
+  h.H.grounding='UPDATED SCIENCE GROUNDING\n';const second=h.check(q);
+  await until(()=>h.H.calls.length===2,'Different grounding must receive a separate read');
+  assert.equal(h.H.calls.filter(call=>call.prompt.includes('FIRST SCIENCE GROUNDING')).length,1,'The old request retains the grounding used in its sharing key');
+  assert.equal(h.H.calls.filter(call=>call.prompt.includes('UPDATED SCIENCE GROUNDING')).length,1,'The new request receives its own captured grounding');
+  gate.resolve();await Promise.all([first,second]);
+});
+
+test('numbered and lettered variants keep separate in-flight calls and prompt labels',async()=>{
+  for(const labelChange of [{mcqLabels:'letters'},{topic2:'Secondary science'}]){
+    const h=harness(),gate=deferred();
+    const numbered=question([{id:'choice',type:'mcq',correctId:'a',options:[{id:'a',text:'Iron'},{id:'b',text:'Plastic'}]}]);
+    const lettered={...numbered,...labelChange};
+    h.H.modelImpl=async()=>{await gate.promise;return {findings:[],imageAudits:[]};};
+    const first=h.check(numbered),second=h.check(lettered);
+    await until(()=>h.H.calls.length===2,'Different effective option labels require independent reports');
+    assert.equal(h.H.calls.filter(call=>/Marked correct: \(1\)/.test(call.prompt)).length,1,'The original check retains numbered option labels');
+    assert.equal(h.H.calls.filter(call=>/Marked correct: \(A\)/.test(call.prompt)).length,1,'The other check reads lettered option labels');
+    gate.resolve();await Promise.all([first,second]);
+  }
+});
+
+test('provider concurrency is bounded globally across independent checker callers',async()=>{
+  const h=harness(),gates=[];
+  h.H.modelImpl=async()=>{const gate=deferred();gates.push(gate);await gate.promise;return {findings:[],imageAudits:[]};};
+  const reads=Array.from({length:14},(_,i)=>h.check(question([{...words,content:'Unique question '+i}],{id:'global-'+i})));
+  await until(()=>h.H.calls.length===6,'The checker should start six independent provider reads');
+  assert.equal(h.H.live,6,'The six calls overlap');
+  await new Promise(setImmediate);
+  assert.equal(h.H.calls.length,6,'Further entry points wait for an available global slot');
+  for(let i=0;i<14;i++){
+    await until(()=>gates[i],'A released slot permits the next provider read');
+    gates[i].resolve();
+  }
+  await Promise.all(reads);
+  assert.equal(h.H.calls.length,14,'Every question still receives its own report');
+  assert.equal(h.H.inflight,6,'The shared global bound applies throughout the queue');
+});
+
+test('a rejected provider read releases its global slot and permits a later retry',async()=>{
+  const h=harness(),q=question([words]);
+  h.H.modelImpl=async()=>{throw Error('Provider unavailable');};
+  await assert.rejects(h.check(q),/Provider unavailable/);
+  assert.equal(h.H.live,0,'Rejected calls free their occupied slot');
+  h.H.modelImpl=async()=>({findings:[],imageAudits:[]});
+  assert.deepEqual(await h.check(q),[],'Failures are not kept as reusable results');
+  assert.equal(h.H.calls.length,2);
 });
 test('other authoring callers still receive a best-effort array with the existing cap',async()=>{
   const h=harness();h.H.fetchImpl=async url=>{if(url.endsWith('bad.png'))throw Error('download failure');return 'data:image/png;base64,ZmFrZQ==';};
