@@ -7,6 +7,7 @@
   const nav = document.getElementById('sampleNav'), card = document.getElementById('sampleQuestion');
   let questions = [], token = '', selected = 0, pending = false, loadEpoch = 0;
   const attempts = new Map();
+  let annotationPads = new Map();
   function element(tag, className, content) {
     const node = document.createElement(tag); if (className) node.className = className;
     if (content != null) node.textContent = content; return node;
@@ -30,13 +31,13 @@
   }
   async function request(body) {
     const response = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
+      body: JSON.stringify(body), signal: AbortSignal.timeout(body.action === 'check' ? 110000 : 60000) });
     let result; try { result = await response.json(); } catch { throw new Error('The sample service did not reply. Please try again.'); }
     if (!response.ok) throw new Error(result.message || result.error?.message || 'The sample is unavailable right now. Please try again.');
     return result;
   }
   function attempt(q) {
-    if (!attempts.has(q.id)) attempts.set(q.id, { responses: {}, result: null });
+    if (!attempts.has(q.id)) attempts.set(q.id, { responses: {}, result: null, annotations: {} });
     return attempts.get(q.id);
   }
   function clearReview(q) {
@@ -60,8 +61,23 @@
   function optionLabel(q, index, text) {
     const letters = (q.labelStyle || q.mcqLabels) === 'letters' || (!(q.labelStyle || q.mcqLabels) && /^(?:sec|secondary|s[1-5]\b)/i.test(q.level || ''));
     const label = letters ? String.fromCharCode(65 + index) : String(index + 1);
-    const copy = String(text || '').replace(/^\s*\(?[A-H1-8]\)?[.)]\s+/, '');
-    return /^\s*\(?[A-H1-8]\)?[.)]?\s*$/.test(copy) ? '(' + label + ')' : '(' + label + ') ' + copy;
+    const copy = String(text || ''), bare = copy.match(/^\s*\(\s*([1-9]|[A-Ha-h])\s*\)\s*$/);
+    const number = bare && (/^[a-h]$/i.test(bare[1]) ? bare[1].toUpperCase().charCodeAt(0) - 64 : Number(bare[1]));
+    return !copy || number === index + 1 ? '(' + label + ')' : '(' + label + ') ' + copy;
+  }
+  function imageSize(node, block) {
+    const chosen = Number(block.scale) > 0;
+    node.style.maxWidth = chosen ? '100%' : '70%';
+    if (chosen) node.style.width = Math.max(20, Math.min(100, Number(block.scale) * 100)) + '%';
+  }
+  function annotation(q, block) {
+    const state = attempt(q); state.annotations[block.id] ||= {};
+    const pad = window.SampleAnnotations.create({block,state:state.annotations[block.id],disabled:pending,onChange() {
+      delete state.responses[block.id]; clearReview(q);
+    }});
+    if (block.type === 'image') imageSize(pad.node.querySelector('.annotation-canvas'), block);
+    annotationPads.set(block.id, pad); card.append(pad.node);
+    if (block.caption) card.append(element('p', 'diagram-caption', block.caption));
   }
   let whyPopup, whyAnchor, whyPinned = false, whyTimer, whyHideTimer, whyId = 0;
   function hideWhy() {
@@ -156,7 +172,7 @@
   }
   function render() {
     const q = questions[selected]; if (!q) return;
-    const state = attempt(q), review = markedReview(state); hideWhy(); card.replaceChildren(); nav.replaceChildren();
+    const state = attempt(q), review = markedReview(state); hideWhy(); card.replaceChildren(); nav.replaceChildren(); annotationPads = new Map();
     questions.forEach((item, index) => {
       const button = element('button', '', String(index + 1)); button.type = 'button';
       button.setAttribute('aria-label', 'Question ' + (index + 1)); button.setAttribute('aria-current', String(index === selected));
@@ -171,8 +187,13 @@
         if (block.label) paragraph.append(element('strong', '', block.label));
         const copy = element('span', 'question-text'); mathText(copy, block.text); paragraph.append(copy); card.append(paragraph);
       } else if (block.type === 'image') {
+        if (block.annotate) { annotation(q, block); continue; }
         const image = element('img', 'diagram'); image.src = block.url; image.alt = block.label || 'Question diagram';
+        imageSize(image, block);
         image.addEventListener('error', () => { image.replaceWith(element('p', 'diagram-error', 'This question’s diagram could not load. Try loading the sample again.')); }); card.append(image);
+        if (block.caption) card.append(element('p', 'diagram-caption', block.caption));
+      } else if (block.type === 'annotation') {
+        annotation(q, block);
       } else if (block.type === 'table') {
         const wrap = element('div', 'table-wrap'), table = element('table');
         if (block.caption) table.append(element('caption', '', block.caption));
@@ -219,11 +240,15 @@
   async function mark(q) {
     if (pending) return;
     const state = attempt(q);
-    if (!Object.values(state.responses).some(value => String(value).trim())) {
+    const pads = [...annotationPads.entries()];
+    if (!Object.values(state.responses).some(value => String(value).trim()) && !pads.some(([, pad]) => pad.hasMarks())) {
       state.result = { feedback: 'Write an answer or choose an option first.' }; render(); return;
     }
     pending = true; render();
-    try { state.result = await request({ action: 'check', subject, token, questionId: q.id, responses: { ...state.responses } }); }
+    try {
+      for (const [id, pad] of pads) { const png = await pad.exportPNG(); if (png) state.responses[id] = png; else delete state.responses[id]; }
+      state.result = await request({ action: 'check', subject, token, questionId: q.id, responses: { ...state.responses } });
+    }
     catch (error) { state.result = { verdict: 'uncertain', feedback: error.message }; }
     finally {
       pending = false; render();
