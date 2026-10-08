@@ -1,0 +1,31 @@
+name: Schedule page checks
+on:
+  pull_request:
+    paths: ['schedule/**', 'tools/schedule-timetable-*.mjs', '.github/workflows/schedule-page.yml']
+  push:
+    branches: [main]
+    paths: ['schedule/**', 'tools/schedule-timetable-*.mjs', '.github/workflows/schedule-page.yml']
+permissions:
+  contents: read
+jobs:
+  schedule:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check the trial notice dates and the timetable model
+        run: node --test tools/schedule-timetable-tests.mjs
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: Check the timetable, the notice and booking at desktop and phone widths
+        run: node tools/schedule-timetable-browser.mjs
+        env:
+          SCHEDULE_SCREENSHOTS: artifacts/schedule
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: schedule-page-previews
+          path: artifacts/schedule
+          if-no-files-found: ignore

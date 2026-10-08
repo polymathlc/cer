@@ -371,6 +371,119 @@
     .filters .field:last-child { grid-column:auto; }
     .tab { padding:16px 8px; }
   }
+
+  /* ─── 🗓 Weekly timetable view ───
+     The week as one grid: days across, lesson times down in the order they
+     happen in a day, so a parent sees at a glance which day and time each class
+     runs. It is a real <table>, so a screen reader announces the day and the
+     time of every class. On a phone each class shrinks to its level and a
+     subject icon, and a tap opens the full details. */
+  .sr-only { position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  .vt-short, .tt-ds, .tt-star { display:none; }
+  .tt-card { background:#fff; border:1px solid var(--line); border-radius:16px; padding:22px 20px 18px; margin-bottom:16px; box-shadow:0 2px 10px rgba(5,108,118,.05); }
+  .tt-top { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 16px; margin-bottom:14px; }
+  .tt-sum { font-size:14px; line-height:1.5; color:var(--gray-600); }
+  .tt-sum b { color:var(--ink); }
+  .tt-legend { display:flex; flex-wrap:wrap; gap:6px; }
+  .tt-key { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--gray-700); background:#fff; border:1px solid var(--line); border-radius:999px; padding:3px 10px 3px 8px; white-space:nowrap; }
+  .tt-key i { display:inline-block; width:12px; height:12px; border-radius:4px; }
+  .tt-key.math i { background:#dbeafe; border:1px solid #60a5fa; }
+  .tt-key.sci i { background:#dcfce7; border:1px solid #4ade80; }
+  .tt-key.master i { background:linear-gradient(135deg,#f5d98b,#d4a64a); border:1px solid #b88a2e; }
+  .tt-key.full i { background:var(--danger-bg); border:1px solid var(--danger); }
+  .tt-key.off i { background:repeating-linear-gradient(135deg,rgba(5,108,118,.35) 0 1px,transparent 1px 4px); border:1px solid var(--line); }
+  .tt-empty-note { margin-bottom:12px; }
+  .tt-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .tt { width:100%; table-layout:fixed; border-collapse:separate; border-spacing:6px; }
+  .tt-col-time { width:104px; }
+  .tt thead th { padding:0 2px 4px; text-align:center; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--deep); }
+  .tt thead th.wkend { color:var(--plum); }
+  .tt tbody th { padding:0 8px 0 0; text-align:right; vertical-align:middle; white-space:nowrap; line-height:1.25; }
+  .tt-t1 { display:block; font-size:14px; font-weight:800; color:var(--ink); }
+  .tt-t2 { display:block; font-size:12px; font-weight:600; color:var(--gray-500); }
+  /* height:1px lets a class block fill its cell, so every block in a row is as tall as the tallest one */
+  .tt td { height:1px; padding:0; vertical-align:top; }
+  .tt td.tt-off { border-radius:12px; background:repeating-linear-gradient(135deg,rgba(5,108,118,.08) 0 1px,transparent 1px 9px); }
+  .tt-blank { display:flex; align-items:center; justify-content:center; height:100%; min-height:72px; border:1.5px dashed var(--line); border-radius:12px; color:var(--gray-400); font-weight:700; }
+  .tt-class { --acc:#3b82f6; --bd:#bfdbfe; --bg:#eff6ff; --fg:#1e3a8a;
+    display:flex; flex-direction:column; align-items:flex-start; gap:3px; width:100%; height:100%; min-height:72px; padding:9px 10px;
+    font:inherit; text-align:left; color:var(--fg); background:var(--bg); border:1px solid var(--bd); border-left:4px solid var(--acc); border-radius:12px;
+    cursor:pointer; transition:transform .15s, box-shadow .15s, opacity .2s, filter .2s; -webkit-tap-highlight-color:transparent; }
+  .tt-class.sci { --acc:#16a34a; --bd:#bbf7d0; --bg:#f0fdf4; --fg:#14532d; }
+  .tt-class.master { --acc:#d4a64a; --bd:#e9cf86; --bg:linear-gradient(180deg,#fffaf0,#fdf3d7); --fg:#3a2350; }
+  .tt-class:hover { transform:translateY(-2px); box-shadow:0 8px 18px rgba(5,108,118,.14); }
+  .tt-class:focus-visible { outline:3px solid rgba(46,156,166,.5); outline-offset:2px; }
+  .tt-class.dim { opacity:.3; filter:grayscale(.7); }
+  .tt-class.dim:hover, .tt-class.dim:focus-visible { opacity:.75; filter:none; }
+  .tt-class.full { --bg:#fafafa; }
+  .tt-lv { font-size:15px; font-weight:800; line-height:1.15; }
+  .tt-sb { display:flex; align-items:center; gap:4px; font-size:13px; font-weight:700; line-height:1.2; }
+  .tt-ic { font-size:14px; line-height:1; }
+  .tt-mc { font-size:11px; font-weight:800; line-height:1.25; color:#7a5a12; }
+  .tt-md { font-size:11.5px; line-height:1.3; opacity:.8; }
+  .tt-full { margin-top:auto; padding:1px 7px; font-size:10.5px; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--danger); background:var(--danger-bg); border:1px solid var(--danger-border); border-radius:999px; }
+  .tt-foot { margin-top:12px; font-size:13px; line-height:1.55; color:var(--gray-500); }
+  /* The class details sheet a timetable block opens */
+  .tt-m .tt-m-when { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 44px 10px 0; }
+  .tt-m h2 { font-size:21px; line-height:1.25; letter-spacing:-.2px; color:var(--deep); margin-bottom:10px; }
+  .tt-m .tags { margin-bottom:10px; }
+  .tt-m .fee-line { font-size:14px; }
+  .tt-m .fee-line .fm { margin-right:8px; }
+  .tt-m .slot-note { margin-top:6px; font-size:13px; }
+  .tt-m .trial-note, .tt-m .lv-none { margin-top:14px; }
+  .tt-m-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+  .tt-m-actions .btn { flex:1 1 180px; min-height:46px; background:linear-gradient(135deg,var(--pink),var(--plum)); }
+  .tt-m-actions .btn:hover { filter:brightness(1.08); }
+  .tt-m-actions .btn.enrol { background:#fff; color:var(--plum); border:1.5px solid var(--plum); }
+  .tt-m.master .tt-m-actions .btn { background:linear-gradient(135deg,#3a2350,#1c1530); color:#f5d98b; }
+  .tt-m.master .tt-m-actions .btn.enrol { background:#fff; color:#3a2350; border:1.5px solid #d4a64a; }
+  .tt-m .muted-note { margin-top:10px; }
+  .tag.open { background:var(--success-bg); border-color:var(--success-border); color:var(--success); }
+  .tag.full { background:var(--danger-bg); border-color:var(--danger-border); color:var(--danger); font-weight:700; }
+
+  /* ─── 📅 Trial notice: trials are booked at least 3 business days ahead ─── */
+  .join-strip.trial-notice { border-left-color:var(--teal); }
+  .trial-note { background:#eef8f9; border:1px solid var(--line); border-left:4px solid var(--teal); border-radius:12px; padding:12px 14px; font-size:13px; line-height:1.6; color:var(--ink); }
+  .trial-note b { color:var(--deep); }
+  .page-version { margin-left:4px; color:var(--gray-400); }
+
+  @media (max-width:720px) {
+    .vt-long { display:none; }
+    .vt-short { display:inline; }
+    .view-toggle button { padding:8px 6px; font-size:12.5px; min-width:0; }
+    .tt-card { padding:16px 8px 14px; border-radius:14px; }
+    .tt-top, .tt-foot, .tt-empty-note { margin-left:6px; margin-right:6px; }
+    .tt-sum, .tt-foot { font-size:13px; }
+    .tt { border-spacing:4px; }
+    .tt-col-time { width:50px; }
+    .tt tbody th { padding-right:2px; }
+    .tt-t1 { font-size:11px; }
+    /* Out of sight on a phone, but still read out by a screen reader */
+    .tt-t2, .tt-dl { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+    .tt-ds { display:inline; }
+    .tt thead th { font-size:11px; letter-spacing:.02em; }
+    .tt-class { align-items:center; justify-content:center; gap:2px; min-height:56px; padding:6px 2px; text-align:center;
+      border-left:1px solid var(--bd); border-top:4px solid var(--acc); }
+    .tt-sbn, .tt-md, .tt-mc { display:none; }
+    .tt-star { display:inline; }
+    .tt-lv { font-size:13px; }
+    .tt-full { margin-top:2px; padding:0 4px; font-size:9px; letter-spacing:.02em; }
+    .tt-blank { min-height:56px; }
+    .tt-m h2 { font-size:19px; }
+  }
+  @media (max-width:380px) {
+    /* Three equal thirds are too narrow for "Timetable" here; size to the labels */
+    .view-toggle button { flex:1 1 auto; padding:8px 5px; font-size:12px; }
+    .tt { border-spacing:3px; }
+    .tt-col-time { width:46px; }
+    .tt-t1 { font-size:10.5px; }
+    .tt-lv { font-size:12px; }
+  }
+  @media (prefers-reduced-motion:reduce) {
+    .tt-class { transition:none; }
+    .tt-class:hover { transform:none; }
+  }
 </style>
 </head>
 <body>
@@ -431,6 +544,10 @@
 
     <div class="join-strip hidden" id="hero-join"></div>
 
+    <!-- Trials are booked at least 3 business days ahead so the centre can
+         prepare. Filled in by renderTrialNotice(), with today's earliest date. -->
+    <div class="join-strip trial-notice" id="trial-notice" role="note"></div>
+
     <div id="admin-trial-card" class="card hidden">
       <h2>Fees &amp; trial settings</h2>
       <div class="form-grid">
@@ -467,7 +584,8 @@
       <div class="finder-head">
         <h2>Find a class</h2>
         <div class="view-toggle" role="group" aria-label="How to show the timetable">
-          <button type="button" id="view-level" aria-pressed="true" onclick="setScheduleView('level')">📚 By level &amp; subject</button>
+          <button type="button" id="view-level" aria-pressed="true" onclick="setScheduleView('level')">📚 <span class="vt-long">By level &amp; subject</span><span class="vt-short">By level</span></button>
+          <button type="button" id="view-week" aria-pressed="false" onclick="setScheduleView('week')">🗓️ <span class="vt-long">Weekly timetable</span><span class="vt-short">Timetable</span></button>
           <button type="button" id="view-day" aria-pressed="false" onclick="setScheduleView('day')">📅 By day</button>
         </div>
       </div>
@@ -548,6 +666,7 @@
   <div class="footer">
     Polymath Learning Centre · WhatsApp +65 9645 0588 ·
     <button class="link-btn" id="admin-login-link" onclick="adminSignIn()">Teacher login</button>
+    <span class="page-version hidden" id="page-version"></span>
   </div>
 </main>
 
@@ -559,6 +678,7 @@
       <h2 id="booking-title">Book a trial class</h2>
       <div class="sub" id="booking-slot-label"></div>
       <div class="form-grid">
+        <div class="trial-note hidden" id="trial-note" role="note"></div>
         <div class="enrol-note hidden" id="enrol-note"></div>
         <div class="grid-2">
           <div class="field"><label>Parent name <span class="req">*</span></label><input id="b-parent" type="text" oninput="refreshBookingQR()"></div>
@@ -610,6 +730,15 @@
   </div>
 </div>
 
+<!-- ═════════════════ TIMETABLE: CLASS DETAILS ═════════════════ -->
+<!-- Opened by a class in the weekly timetable. Filled in by openTimetableSlot(). -->
+<div class="modal-bg" id="tt-modal" role="dialog" aria-modal="true" aria-labelledby="tt-m-title">
+  <div class="modal tt-m" id="tt-m">
+    <button class="close" onclick="closeTimetableSlot()" aria-label="Close">×</button>
+    <div id="tt-m-body"></div>
+  </div>
+</div>
+
 <!-- ═════════════════ PRODUCT PAYMENT MODAL ═════════════════ -->
 <div class="modal-bg" id="pay-modal">
   <div class="modal">
@@ -646,6 +775,10 @@ firebase.initializeApp({
 const db = firebase.firestore();
 const storageService = firebase.storage();
 const auth = firebase.auth();
+
+// Shown to the signed-in teacher in the footer, so a deploy can be checked.
+// Bump it on every change to this page.
+const SCHEDULE_PAGE_VERSION = 'v1.1.0';
 
 const ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // Every trial booking emails these addresses via the "Trigger Email"
@@ -805,6 +938,136 @@ function fmtTime(ts) {
   return d.toLocaleString('en-SG', { timeZone: 'Asia/Singapore', hour12: true });
 }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+// ═══════════════════════════════════════════════════════════
+// 📅 Trial notice — trial slots are booked 3 business days ahead
+// ═══════════════════════════════════════════════════════════
+// BEGIN TRIAL DATES — pure date maths, cut out and tested by tools/schedule-timetable-tests.mjs
+// The centre needs three business days to prepare for a trial child, so a
+// trial slot must be booked at least TRIAL_NOTICE_DAYS business days before
+// the lesson. A business day is Monday to Friday and not a Singapore public
+// holiday. The day of booking does not count: booked on a Monday, the earliest
+// trial is Thursday; booked on a Wednesday, it is the next Monday — so a
+// Saturday class booked midweek is the one a week later, because the Thursday
+// and Friday in between are only two days to prepare.
+//
+// Dates are worked out in SINGAPORE time whatever the visitor's device says
+// (Singapore is UTC+8 all year, with no daylight saving) and held as plain
+// 'YYYY-MM-DD' day keys, so no time zone can move them.
+//
+// The holidays are MOM's gazetted list, with the Monday after a Sunday
+// holiday. Add the next year when MOM announces it (every June). A window the
+// list does not cover cannot be counted honestly — a holiday nobody listed
+// would make the date a day early — so every function here then answers ''
+// and the page states the rule without printing a date.
+const TRIAL_NOTICE_DAYS = 3;
+const SG_PUBLIC_HOLIDAYS = {
+  2026: ['2026-01-01', '2026-02-17', '2026-02-18', '2026-03-21', '2026-04-03', '2026-05-01', '2026-05-27',
+         '2026-05-31', '2026-06-01', '2026-08-09', '2026-08-10', '2026-11-08', '2026-11-09', '2026-12-25'],
+  2027: ['2027-01-01', '2027-02-06', '2027-02-07', '2027-02-08', '2027-03-10', '2027-03-26', '2027-05-01',
+         '2027-05-17', '2027-05-20', '2027-08-09', '2027-10-28', '2027-12-25']
+};
+const SG_UTC_OFFSET_MS = 8 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEKDAY_OF_CODE = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
+const WD_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WD_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+// Today in Singapore, as 'YYYY-MM-DD'. `now` is a Date or a time in ms.
+function sgDayKey(now) {
+  const t = now == null ? Date.now() : (now instanceof Date ? now.getTime() : Number(now));
+  return new Date(t + SG_UTC_OFFSET_MS).toISOString().slice(0, 10);
+}
+function dayKeyTime(key) {
+  const p = String(key).split('-').map(Number);
+  return Date.UTC(p[0], p[1] - 1, p[2]);
+}
+function addDays(key, n) { return new Date(dayKeyTime(key) + n * DAY_MS).toISOString().slice(0, 10); }
+function weekdayOfKey(key) { return new Date(dayKeyTime(key)).getUTCDay(); }
+function holidaysKnown(key) { return Object.prototype.hasOwnProperty.call(SG_PUBLIC_HOLIDAYS, String(key).slice(0, 4)); }
+function isPublicHoliday(key) {
+  const list = SG_PUBLIC_HOLIDAYS[String(key).slice(0, 4)];
+  return !!list && list.indexOf(key) > -1;
+}
+function isBusinessDay(key) { const w = weekdayOfKey(key); return w >= 1 && w <= 5 && !isPublicHoliday(key); }
+
+// The nth business day after `fromKey` (that day itself never counts), or ''
+// when a day it has to look at is in a year with no holiday list.
+function addBusinessDays(fromKey, n) {
+  let key = fromKey, counted = 0;
+  for (let guard = 0; counted < n && guard < 60; guard++) {
+    key = addDays(key, 1);
+    if (!holidaysKnown(key)) return '';
+    if (isBusinessDay(key)) counted++;
+  }
+  return counted >= n ? key : '';
+}
+
+// The earliest a trial booked on `todayKey` can be, whichever class it is.
+function earliestTrialDay(todayKey) { return addBusinessDays(todayKey, TRIAL_NOTICE_DAYS); }
+
+// The earliest trial date for a class held every `dayCode` ('MON' … 'SAT'):
+// its first lesson on or after earliestTrialDay(). A lesson that falls on a
+// public holiday is skipped, so the date never sends a family to a closed
+// centre. '' when it cannot be worked out honestly.
+function earliestTrialFor(dayCode, todayKey) {
+  const want = WEEKDAY_OF_CODE[dayCode];
+  const from = earliestTrialDay(todayKey);
+  if (want == null || !from) return '';
+  let key = from;
+  for (let i = 0; i < 70; i++, key = addDays(key, 1)) {
+    if (!holidaysKnown(key)) return '';
+    if (weekdayOfKey(key) === want && !isPublicHoliday(key)) return key;
+  }
+  return '';
+}
+
+// 'Tue 13 Oct', or 'Tuesday 13 October' when long. The year is added when it
+// is not the year of `todayKey`; pass '' to always show it, as an email does.
+function fmtDayKey(key, long, todayKey) {
+  if (!key) return '';
+  const d = new Date(dayKeyTime(key));
+  const y = d.getUTCFullYear();
+  return (long ? WD_LONG : WD_SHORT)[d.getUTCDay()] + ' ' + d.getUTCDate() + ' '
+    + (long ? MONTH_LONG : MONTH_SHORT)[d.getUTCMonth()]
+    + (todayKey && String(todayKey).slice(0, 4) === String(y) ? '' : ' ' + y);
+}
+// END TRIAL DATES
+
+// The rule in words, written once, so the page, the timetable, the booking
+// form, the confirmation and the email can never say different things.
+function trialNoticeRule() {
+  return 'Trial slots must be booked at least ' + TRIAL_NOTICE_DAYS + ' business days in advance, so we can prepare for your child\'s lesson';
+}
+
+// The strip above "Find a class": the rule, what a business day is, and the
+// earliest possible trial date for somebody booking today.
+function renderTrialNotice() {
+  const el = document.getElementById('trial-notice');
+  if (!el) return;
+  const today = sgDayKey();
+  const key = earliestTrialDay(today);
+  el.innerHTML = '<span class="js-icon" aria-hidden="true">📅</span><div>'
+    + '<b>Trial slots must be booked at least ' + TRIAL_NOTICE_DAYS + ' business days in advance</b>, so we can prepare for your child\'s lesson. '
+    + 'Business days are Monday to Friday, excluding public holidays.'
+    + (key ? ' Booking today? The earliest possible trial date is <b>' + escapeHtml(fmtDayKey(key, false, today)) + '</b>.' : '')
+    + '</div>';
+}
+
+// The notice for one class, as the booking form and the timetable's class
+// details show it: the rule, then this class's earliest possible trial date.
+function trialNoticeHtml(id) {
+  const today = sgDayKey();
+  const code = String(id || '').split('-')[0];
+  const day = DAYS.find(d => d.code === code);
+  const key = day ? earliestTrialFor(code, today) : '';
+  return '<b>Please note:</b> ' + escapeHtml(trialNoticeRule()) + '.'
+    + (key ? ' Booking today, the earliest possible trial for this ' + escapeHtml(day.name) + ' class is <b>'
+        + escapeHtml(fmtDayKey(key, false, today)) + '</b>.' : '')
+    + ' We\'ll confirm the date with you on WhatsApp.';
+}
 
 // ═══════════════════════════════════════════════════════════
 // PayNow QR payload (EMV / SGQR)
@@ -978,6 +1241,7 @@ function renderHero() {
   join.innerHTML = '<span class="js-icon" aria-hidden="true">🎟️</span><div><b>Two ways to join.</b> Book a trial lesson first, or skip the trial and <b>enrol directly</b>: '
     + 'pay the first month\'s fees when you sign up, and from the second month our admin staff will collect the monthly fees with you.</div>';
   join.classList.toggle('hidden', !joinable);
+  renderTrialNotice();
 
   // The Master Class banner shows once at least one master slot is published
   // (or always to the admin, so the description can be checked).
@@ -1076,24 +1340,27 @@ function renderPublicSlot(id, s, timeLabel) {
     + '</div>';
 }
 
-// ─── Two ways to read the timetable ───
+// ─── Three ways to read the timetable ───
 // 'level' groups every class under its level, Math beside Science, so a parent
-// sees at a glance which days their child's level runs. 'day' is the weekly
-// grid the admin edits in. Nothing chosen yet → parents get 'level', the admin
-// gets 'day'. The choice is a per-browser convenience, so storage may fail.
+// sees at a glance which days their child's level runs. 'week' is the weekly
+// timetable: days across, lesson times down, every class a block a parent can
+// tap. 'day' is the list of slots the admin edits in. Nothing chosen yet →
+// parents get 'level', the admin gets 'day'. The choice is a per-browser
+// convenience, so storage may fail. /schedule/#timetable opens 'week'.
 const VIEW_KEY = 'pl_schedule_view';
+const SCHEDULE_VIEWS = ['level', 'week', 'day'];
 let scheduleView = (() => { try { return localStorage.getItem(VIEW_KEY) || ''; } catch (e) { return ''; } })();
 const LEVEL_NAME = { P3: 'Primary 3', P4: 'Primary 4', P5: 'Primary 5', P6: 'Primary 6' };
 const SUBJECT_ICON = { Math: '🔢', Science: '🔬' };
 const WA_LINK = 'https://wa.me/6596450588';
 
 function currentView() {
-  if (scheduleView === 'level' || scheduleView === 'day') return scheduleView;
+  if (SCHEDULE_VIEWS.includes(scheduleView)) return scheduleView;
   return isAdmin ? 'day' : 'level';
 }
 
 function setScheduleView(v) {
-  scheduleView = v === 'day' ? 'day' : 'level';
+  scheduleView = SCHEDULE_VIEWS.includes(v) ? v : 'level';
   try { localStorage.setItem(VIEW_KEY, scheduleView); } catch (e) {}
   renderSchedule();
 }
@@ -1105,7 +1372,7 @@ function setLevelChip(v) {
 
 function renderViewControls() {
   const view = currentView();
-  [['view-level', 'level'], ['view-day', 'day']].forEach(([id, v]) => {
+  [['view-level', 'level'], ['view-week', 'week'], ['view-day', 'day']].forEach(([id, v]) => {
     const b = document.getElementById(id);
     if (!b) return;
     b.classList.toggle('on', view === v);
@@ -1209,13 +1476,225 @@ function renderLevelView() {
   return html;
 }
 
+// ─── 🗓 Weekly timetable ───
+// BEGIN TIMETABLE MODEL — cut out and tested by tools/schedule-timetable-tests.mjs
+// Minutes after midnight a lesson starts, read off its label ('3:00pm – 4:45pm'
+// → 900), so the label stays the one place a lesson time is written.
+function timeStartMin(label) {
+  const m = String(label || '').match(/(\d{1,2}):(\d{2})\s*([ap])\.?m/i);
+  if (!m) return 24 * 60;
+  return (Number(m[1]) % 12 + (m[3].toLowerCase() === 'p' ? 12 : 0)) * 60 + Number(m[2]);
+}
+
+// '3:00pm – 4:45pm' → ['3:00pm', '4:45pm']
+function ttSplitLabel(label) {
+  const parts = String(label || '').split(/\s*[–—-]\s*/);
+  return [parts[0] || '', parts[1] || ''];
+}
+
+// One row for every distinct lesson time, earliest in the day first, holding
+// the slot each day runs at that time. Saturday's morning lessons therefore sit
+// above the weekdays' after-school ones, and a day with no lesson at a time
+// has no cell there — the grid draws an empty square so every column lines up.
+function timetableRows() {
+  const rows = [];
+  DAYS.forEach(day => day.times.forEach(t => {
+    let row = rows.find(r => r.label === t.label);
+    if (!row) { row = { label: t.label, start: timeStartMin(t.label), cells: {} }; rows.push(row); }
+    row.cells[day.code] = { id: slotId(day.code, t.n), day, t };
+  }));
+  return rows.sort((a, b) => a.start - b.start);
+}
+// END TIMETABLE MODEL
+
+// A class shows on the timetable once it has a level and a subject and is not
+// closed — the same test publishedSlots() makes.
+function isLive(s) { return !!s && s.status !== 'closed' && !!s.level && !!s.subject; }
+
+function filtersActive() {
+  return ['f-level', 'f-subject', 'f-type', 'f-mode'].some(id => {
+    const el = document.getElementById(id);
+    return !!(el && el.value);
+  });
+}
+
+// 'Monday 3:00pm – 4:45pm · Primary 5 Science · Online & Physical'
+function ttClassLabel(s, day, t) {
+  return day.name + ' ' + t.label + ' · ' + (isMaster(s) ? 'Master Class · ' : '')
+    + (LEVEL_NAME[s.level] || s.level) + ' ' + s.subject + ' · ' + (MODE_LABEL[slotMode(s)] || slotMode(s))
+    + (s.status === 'full' ? ' · Full' : '');
+}
+
+// One cell of the timetable. No lesson at this time on this day → a hatched
+// square; a lesson time with no class in it → a dashed one; a class → a
+// coloured block that opens its details. A class outside the parent's level,
+// subject, type or mode is faded rather than removed, so the shape of the week
+// stays the same while they narrow it down.
+function ttCellHtml(cell) {
+  if (!cell) return '<td class="tt-off"><span class="sr-only">No lessons at this time</span></td>';
+  const s = getSlot(cell.id);
+  if (!isLive(s)) return '<td><div class="tt-blank" title="No class">–<span class="sr-only">No class</span></div></td>';
+  const master = isMaster(s);
+  const full = s.status === 'full';
+  const dim = !matchesFilters(s);
+  const label = ttClassLabel(s, cell.day, cell.t);
+  const mode = MODE_LABEL[slotMode(s)] || slotMode(s);
+  return '<td><button type="button" class="tt-class ' + (s.subject === 'Math' ? 'math' : 'sci')
+    + (master ? ' master' : '') + (full ? ' full' : '') + (dim ? ' dim' : '') + '"'
+    + ' data-slot="' + escapeHtml(cell.id) + '" onclick="openTimetableSlot(\'' + cell.id + '\')"'
+    + ' title="' + escapeHtml(label) + '" aria-label="' + escapeHtml(label + (dim ? ' (outside your selection)' : '')) + '">'
+    + '<span class="tt-lv">' + (master ? '<span class="tt-star" aria-hidden="true">✦</span>' : '') + escapeHtml(s.level) + '</span>'
+    + '<span class="tt-sb"><span class="tt-ic" aria-hidden="true">' + (SUBJECT_ICON[s.subject] || '') + '</span>'
+    +   '<span class="tt-sbn">' + escapeHtml(s.subject) + '</span></span>'
+    + (master ? '<span class="tt-mc">✦ Master Class</span>' : '')
+    + '<span class="tt-md">' + escapeHtml(mode) + '</span>'
+    + (full ? '<span class="tt-full">Full</span>' : '')
+    + '</button></td>';
+}
+
+function renderTimetableView() {
+  const rows = timetableRows();
+  const all = publishedSlots();
+  const matched = all.filter(x => matchesFilters(x.s));
+  const filtering = filtersActive();
+  const count = c => c + (c === 1 ? ' class' : ' classes');
+  const hasMaster = all.some(x => isMaster(x.s));
+  const hasFull = all.some(x => x.s.status === 'full');
+  const hasOff = rows.some(r => DAYS.some(d => !r.cells[d.code]));
+
+  let sum;
+  if (!all.length) sum = 'No classes on the timetable yet.';
+  else if (!filtering) sum = '<b>' + count(all.length) + '</b> on the timetable, at the same times every week.';
+  else if (!matched.length) sum = '<b>None of the ' + count(all.length) + '</b> match your selection.';
+  else sum = '<b>' + matched.length + ' of ' + count(all.length) + '</b> match your selection. The rest are faded.';
+  const key = (cls, label) => '<span role="listitem" class="tt-key ' + cls + '"><i aria-hidden="true"></i>' + label + '</span>';
+  const keys = key('math', '🔢 Math') + key('sci', '🔬 Science')
+    + (hasMaster ? key('master', '✦ Master Class') : '')
+    + (hasFull ? key('full', 'Full') : '')
+    + (hasOff ? key('off', 'No lessons') : '');
+
+  let html = '';
+  if (isAdmin) html += '<div class="lv-preview-note">This is the weekly timetable parents see. Switch to <b>📅 By day</b> to edit the slots.</div>';
+  html += '<div class="tt-card">'
+    + '<div class="tt-top"><div class="tt-sum">' + sum + '</div><div class="tt-legend" role="list" aria-label="Key">' + keys + '</div></div>';
+  if (!all.length || (filtering && !matched.length)) {
+    html += '<div class="lv-none tt-empty-note">'
+      + (all.length ? 'No classes match your selection yet. Try another level, subject, class type or mode, or ' : 'Our timetable is being prepared. ')
+      + '<a href="' + WA_LINK + '" target="_blank" rel="noopener">WhatsApp us</a> and we\'ll let you know when a class opens.</div>';
+  }
+  html += '<div class="tt-scroll"><table class="tt">'
+    + '<caption class="sr-only">Weekly class timetable. Days run across and lesson times run down. Select a class to see its fees and book.</caption>'
+    + '<colgroup><col class="tt-col-time">' + DAYS.map(() => '<col>').join('') + '</colgroup>'
+    + '<thead><tr><td class="tt-corner"></td>'
+    + DAYS.map(d => '<th scope="col"' + (d.code === 'SAT' ? ' class="wkend"' : '') + '>'
+        + '<span class="tt-dl">' + escapeHtml(d.name) + '</span>'
+        + '<span class="tt-ds" aria-hidden="true">' + escapeHtml(d.name.slice(0, 3)) + '</span></th>').join('')
+    + '</tr></thead><tbody>';
+  rows.forEach(r => {
+    const [from, to] = ttSplitLabel(r.label);
+    html += '<tr><th scope="row" title="' + escapeHtml(r.label) + '"><span class="tt-t1">' + escapeHtml(from) + '</span>'
+      + (to ? '<span class="tt-t2">to ' + escapeHtml(to) + '</span>' : '') + '</th>'
+      + DAYS.map(d => ttCellHtml(r.cells[d.code])).join('') + '</tr>';
+  });
+  html += '</tbody></table></div>'
+    + '<div class="tt-foot">Tap or click a class to see its times and fees, then book a trial or enrol.</div>'
+    + '</div>';
+  return html;
+}
+
+// ─── The class details sheet a timetable block opens ───
+let ttOpenId = null;      // the class whose details are showing
+let ttReturnFocus = null; // where the keyboard goes back to when it closes
+
+function ttDetailsHtml(id) {
+  const s = getSlot(id);
+  const [code, n] = String(id).split('-');
+  const day = DAYS.find(d => d.code === code);
+  const t = day && day.times.find(x => String(x.n) === n);
+  const master = isMaster(s);
+  const full = s.status === 'full';
+  const name = (LEVEL_NAME[s.level] || s.level) + ' ' + s.subject;
+  let html = '<div class="tt-m-when"><span class="lv-day">' + escapeHtml(day ? day.name : '') + '</span>'
+    + '<span class="lv-time">' + escapeHtml(t ? t.label : '') + '</span></div>'
+    + '<h2 id="tt-m-title">' + (SUBJECT_ICON[s.subject] ? SUBJECT_ICON[s.subject] + ' ' : '') + escapeHtml(name) + '</h2>'
+    + '<div class="tags">'
+    +   (master ? '<span class="tag master">✦ Master Class</span>' : '<span class="tag">Regular class</span>')
+    +   '<span class="tag">' + escapeHtml(MODE_LABEL[slotMode(s)] || slotMode(s)) + '</span>'
+    +   (full ? '<span class="tag full">Full</span>' : '<span class="tag open">Open for booking</span>')
+    + '</div>'
+    + feeLinesHtml(s)
+    + (s.note ? '<div class="slot-note">' + escapeHtml(s.note) + '</div>' : '');
+  if (full) {
+    return html + '<div class="lv-none">This class is full. <a href="' + WA_LINK + '" target="_blank" rel="noopener">WhatsApp us</a> '
+      + 'and we\'ll let you know when a place opens, or pick another class on the timetable.</div>';
+  }
+  const off = isAdmin ? ' disabled title="Preview — parents book from here"' : '';
+  html += '<div class="trial-note" role="note">' + trialNoticeHtml(id) + '</div>'
+    + '<div class="tt-m-actions">'
+    +   '<button type="button" class="btn" onclick="ttBook(\'' + id + '\')"' + off + '>Book trial · ' + trialButtonPrice(s) + '</button>'
+    +   (canEnrol(s) ? '<button type="button" class="btn enrol" onclick="ttBook(\'' + id + '\',\'enrol\')"' + off + '>Enrol now</button>' : '')
+    + '</div>';
+  if (isAdmin) html += '<div class="muted-note">Preview — parents book from here.</div>';
+  return html;
+}
+
+function openTimetableSlot(id) {
+  const s = getSlot(id);
+  if (!isLive(s)) return;
+  ttOpenId = id;
+  ttReturnFocus = document.activeElement;
+  document.getElementById('tt-m').classList.toggle('master', isMaster(s));
+  document.getElementById('tt-m-body').innerHTML = ttDetailsHtml(id);
+  const modal = document.getElementById('tt-modal');
+  modal.classList.add('show');
+  const first = modal.querySelector('.tt-m-actions .btn:not([disabled])') || modal.querySelector('.close');
+  if (first) first.focus();
+}
+
+function closeTimetableSlot() {
+  const modal = document.getElementById('tt-modal');
+  if (!modal.classList.contains('show')) return;
+  modal.classList.remove('show');
+  ttOpenId = null;
+  // The grid can be redrawn while the sheet is open (the schedule is live), so
+  // go back to that class's new block rather than one that has left the page.
+  let back = ttReturnFocus;
+  if (back && !document.contains(back)) {
+    const slot = back.dataset && back.dataset.slot;
+    back = slot ? document.querySelector('.tt-class[data-slot="' + slot + '"]') : null;
+  }
+  ttReturnFocus = null;
+  if (back && back.focus) back.focus();
+}
+
+// Booking from the sheet hands straight over to the ordinary booking form.
+function ttBook(id, kind) {
+  document.getElementById('tt-modal').classList.remove('show');
+  ttOpenId = null;
+  ttReturnFocus = null;
+  openBooking(id, kind);
+}
+
+// The sheet follows the published schedule: a class that has just filled up
+// says so, and one taken off the timetable closes it.
+function ttRefreshOpen() {
+  if (!ttOpenId) return;
+  const s = getSlot(ttOpenId);
+  if (!isLive(s)) { closeTimetableSlot(); return; }
+  document.getElementById('tt-m').classList.toggle('master', isMaster(s));
+  document.getElementById('tt-m-body').innerHTML = ttDetailsHtml(ttOpenId);
+}
+
+document.getElementById('tt-modal').addEventListener('click', e => { if (e.target.id === 'tt-modal') closeTimetableSlot(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && ttOpenId) closeTimetableSlot(); });
+
 function renderSchedule() {
   renderViewControls();
-  if (currentView() === 'level') {
-    document.getElementById('schedule-grid').innerHTML = renderLevelView();
-    return;
-  }
-  renderDayView();
+  const view = currentView();
+  if (view === 'level') document.getElementById('schedule-grid').innerHTML = renderLevelView();
+  else if (view === 'week') document.getElementById('schedule-grid').innerHTML = renderTimetableView();
+  else renderDayView();
+  ttRefreshOpen();
 }
 
 function renderDayView() {
@@ -1381,6 +1860,10 @@ function updateBookingPrice(skipQR) {
     (isMaster(s) ? '✦ Master Class · ' : '') + slotLabel(currentSlotId) + ' · ' + s.level.replace('P', 'Primary ') + ' ' + s.subject
     + ' · ' + mode + (fee ? ' · ' + money(fee) + (enrol ? '/month' : '/month after the trial') : '');
   document.getElementById('booking-amount').textContent = money(bookingAmount(s, mode));
+  // A trial needs 3 business days' notice; enrolling has no trial to prepare.
+  const trialNote = document.getElementById('trial-note');
+  trialNote.classList.toggle('hidden', enrol);
+  trialNote.innerHTML = enrol ? '' : trialNoticeHtml(currentSlotId);
   const note = document.getElementById('enrol-note');
   note.classList.toggle('hidden', !enrol);
   if (enrol) {
@@ -1440,6 +1923,10 @@ async function submitBooking() {
   const enrol = bookingKind === 'enrol';
   const amount = bookingAmount(s, mode);
   if (enrol && !(amount > 0)) return toast('Enrolment is not available for this class — please WhatsApp us', true);
+  // Worked out now, as the booking is made. It goes into the confirmation and
+  // the emails as words only: the booking document keeps exactly its fields.
+  const bookedOn = sgDayKey();
+  const earliestKey = enrol ? '' : earliestTrialFor(String(currentSlotId).split('-')[0], bookedOn);
 
   const btn = document.getElementById('booking-submit');
   btn.disabled = true; btn.textContent = 'Submitting…';
@@ -1466,7 +1953,7 @@ async function submitBooking() {
     };
     await BOOKINGS.add(booking);
 
-    try { await sendBookingEmails(booking); } catch (mailErr) { console.error('Email error', mailErr); }
+    try { await sendBookingEmails(booking, earliestKey); } catch (mailErr) { console.error('Email error', mailErr); }
 
     document.getElementById('booking-success-title').textContent = enrol ? 'Enrolment received!' : 'Booking received!';
     document.getElementById('booking-success-text').textContent = enrol
@@ -1474,7 +1961,9 @@ async function submitBooking() {
         + ' on ' + booking.slotLabel + ' (' + s.subject + ', ' + mode + ') with the first month\'s fees of ' + money(amount) + '. '
         + 'We will confirm via WhatsApp/email after checking your payment. ' + ENROL_ACROSS
       : 'Thank you, ' + parentName + '! ' + childName + "'s " + (isMaster(s) ? 'Master Class trial' : 'trial') + ' on ' + booking.slotLabel
-        + ' (' + s.subject + ', ' + mode + ') has been received. We will confirm via WhatsApp/email after checking your payment.';
+        + ' (' + s.subject + ', ' + mode + ') has been received. We will confirm via WhatsApp/email after checking your payment.'
+        + (earliestKey ? ' As trial slots need ' + TRIAL_NOTICE_DAYS + " business days' notice, the earliest possible trial date is "
+            + fmtDayKey(earliestKey, true, bookedOn) + '.' : '');
     document.getElementById('booking-form-wrap').classList.add('hidden');
     document.getElementById('booking-success').classList.remove('hidden');
   } catch (e) {
@@ -1484,12 +1973,20 @@ async function submitBooking() {
   }
 }
 
-async function sendBookingEmails(b) {
+// `earliestKey` is the trial's earliest possible date under the 3-business-day
+// notice ('YYYY-MM-DD', '' for an enrolment or when it cannot be worked out).
+// It reaches the emails as words only and is never stored on the booking.
+async function sendBookingEmails(b, earliestKey) {
   const enrol = b.kind === 'enrol';
   const master = b.classType === 'master';
+  const earliest = !enrol && earliestKey ? fmtDayKey(earliestKey, true, '') : '';
+  const noticeText = enrol ? '' : trialNoticeRule() + '.'
+    + (earliest ? ' Based on when you booked, the earliest possible trial date for this class is ' + earliest + '.' : '')
+    + ' We will confirm the exact date with you.';
   const rows = [
     ['Booking', enrol ? 'Enrolment (no trial)' : 'Trial class'],
     ['Slot', b.slotLabel],
+    earliest ? ['Earliest possible trial date', earliest + ' (' + TRIAL_NOTICE_DAYS + " business days' notice)"] : null,
     ['Class type', b.classType === 'master' ? 'Master Class (physical)' : 'Regular class'],
     ['Class', b.classLevel.replace('P', 'Primary ') + ' ' + b.subject],
     ['Attending', b.mode],
@@ -1501,7 +1998,7 @@ async function sendBookingEmails(b) {
     enrol ? ["First month's fees paid", money(b.price)] : ['Trial fee paid', money(b.price)],
     [enrol ? 'Monthly fee' : 'Monthly fee after trial', b.monthlyFee ? money(b.monthlyFee) + ' / month' : '—'],
     ['PayNow reference', b.paymentRef]
-  ];
+  ].filter(Boolean);
   if (enrol) rows.push(['Subsequent months', 'Collected by Polymath admin staff']);
   const table = rows.map(([k, v]) =>
     '<tr><td style="padding:8px 12px;border:1px solid #e5e5e5;background:#f5f5f5;font-weight:700;width:38%;">' + escapeHtml(k)
@@ -1534,12 +2031,14 @@ async function sendBookingEmails(b) {
         + '<p>Dear ' + escapeHtml(b.parentName) + ', we have received your ' + (enrol ? 'enrolment and the payment screenshot for the first month\'s fees' : 'booking and payment screenshot')
         + '. We will verify the payment and confirm with you shortly.</p>'
         + (enrol ? '<p><b>About the monthly fees:</b> you have paid the first month\'s fees. From the second month onwards, our admin staff will contact you to collect the monthly fees.</p>' : '')
+        + (noticeText ? '<p><b>Your trial date:</b> ' + escapeHtml(noticeText) + '</p>' : '')
         + '<table style="border-collapse:collapse;font-size:14px;width:100%;">' + table + '</table>'
         + '<p style="margin-top:16px;">Questions? WhatsApp +65 9645 0588</p><p>Polymath Learning Centre</p></div>',
       text: 'Dear ' + b.parentName + ',\n\n'
         + (enrol
             ? 'We have received your enrolment and the first month\'s fees. From the second month onwards, our admin staff will contact you to collect the monthly fees.'
             : 'We have received your trial booking.')
+        + (noticeText ? '\n\n' + noticeText : '')
         + '\n\n' + text + '\n\nQuestions? WhatsApp +65 9645 0588\nPolymath Learning Centre'
     }
   });
@@ -1827,6 +2326,9 @@ auth.onAuthStateChanged(user => {
   ['admin-schedule-banner', 'admin-trial-card', 'admin-bookings-card', 'admin-product-card']
     .forEach(id => document.getElementById(id).classList.toggle('hidden', !isAdmin));
   document.getElementById('admin-login-link').classList.toggle('hidden', isAdmin);
+  const version = document.getElementById('page-version');
+  version.textContent = 'Schedule page ' + SCHEDULE_PAGE_VERSION;
+  version.classList.toggle('hidden', !isAdmin);
   document.getElementById('admin-chip').innerHTML = isAdmin
     ? 'Admin: ' + escapeHtml(user.email) + ' <button class="link-btn" onclick="adminSignOut()">Sign out</button>'
     : '';
@@ -1848,13 +2350,23 @@ auth.onAuthStateChanged(user => {
 });
 
 // ─── Init ───
+// /schedule/#timetable is a link straight to the weekly timetable — the one to
+// send a parent who wants to see the whole week.
+function openTimetableFromLink() {
+  showTab('schedule');
+  setScheduleView('week');
+}
 if (['#products', '#sample-materials'].includes(location.hash)) showTab(location.hash.slice(1));
 window.addEventListener('hashchange', () => {
+  if (location.hash === '#timetable') { openTimetableFromLink(); return; }
   if (['', '#schedule', '#products', '#sample-materials'].includes(location.hash)) showTab(location.hash.slice(1));
 });
+// A page left open overnight must not keep quoting yesterday's earliest trial date.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) renderTrialNotice(); });
 maybeAdminFromHash();
 renderHero();
-renderSchedule();
+if (location.hash === '#timetable') openTimetableFromLink();
+else renderSchedule();
 </script>
 <script src="sample-materials.js"></script>
 </body>
