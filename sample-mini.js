@@ -12,7 +12,8 @@
     if (content != null) node.textContent = content; return node;
   }
   // Content is rendered as text or explicitly constructed nodes. Stored bank
-  // HTML never enters innerHTML, and answer keys are never sent by this API.
+  // HTML never enters the host document. Review content is released by the
+  // service only after checking; interactive apps reuse CER's opaque sandbox.
   function mathText(node, value) {
     const text = String(value || ''), pattern = /\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}|([_^])\(([^()]+)\)/g;
     let start = 0, match;
@@ -38,23 +39,130 @@
     if (!attempts.has(q.id)) attempts.set(q.id, { responses: {}, result: null });
     return attempts.get(q.id);
   }
+  function clearReview(q) {
+    attempt(q).result = null; hideWhy();
+    card.querySelectorAll('.feedback,.review-card,.why-note,.why-button,.retry-button').forEach(node => node.remove());
+    card.querySelectorAll('.option').forEach(node => { delete node.dataset.verdict; });
+  }
   function answerField(q, id, label) {
     const wrap = element('label', 'answer-field'), input = element('textarea');
     input.maxLength = 5000; input.rows = 4; input.disabled = pending; input.value = attempt(q).responses[id] || '';
-    input.addEventListener('input', () => { attempt(q).responses[id] = input.value; attempt(q).result = null; card.querySelector('.feedback')?.remove(); });
+    input.addEventListener('input', () => { attempt(q).responses[id] = input.value; clearReview(q); });
     wrap.append(element('span', '', label), input); return wrap;
   }
   function feedback(result) {
     const node = element('div', 'feedback', result.feedback || 'Try again.');
     node.setAttribute('role', 'status'); node.dataset.verdict = result.verdict || 'uncertain'; return node;
   }
+  function markedReview(state) {
+    return ['correct', 'incorrect', 'partly-correct'].includes(state.result?.verdict) && state.result.review && typeof state.result.review === 'object' ? state.result.review : null;
+  }
+  function optionLabel(q, index, text) {
+    const letters = (q.labelStyle || q.mcqLabels) === 'letters' || (!(q.labelStyle || q.mcqLabels) && /^(?:sec|secondary|s[1-5]\b)/i.test(q.level || ''));
+    const label = letters ? String.fromCharCode(65 + index) : String(index + 1);
+    const copy = String(text || '').replace(/^\s*\(?[A-H1-8]\)?[.)]\s+/, '');
+    return /^\s*\(?[A-H1-8]\)?[.)]?\s*$/.test(copy) ? '(' + label + ')' : '(' + label + ') ' + copy;
+  }
+  let whyPopup, whyAnchor, whyPinned = false, whyTimer, whyHideTimer, whyId = 0;
+  function hideWhy() {
+    clearTimeout(whyTimer); clearTimeout(whyHideTimer);
+    if (whyAnchor) { whyAnchor.setAttribute('aria-expanded', 'false'); whyAnchor.removeAttribute('aria-describedby'); }
+    whyAnchor = null; whyPinned = false; if (whyPopup) whyPopup.hidden = true;
+  }
+  function dismissWhy() {
+    const anchor = whyAnchor, returnFocus = whyPopup?.contains(document.activeElement);
+    hideWhy(); if (returnFocus && anchor?.isConnected) anchor.focus({ preventScroll: true });
+  }
+  function whySoon() {
+    clearTimeout(whyTimer);
+    if (!whyPinned) { clearTimeout(whyHideTimer); whyHideTimer = setTimeout(hideWhy, 160); }
+  }
+  function showWhy(button, label, reason, pinned = false) {
+    hideWhy(); whyAnchor = button; whyPinned = pinned;
+    if (!whyPopup) {
+      whyPopup = element('aside', 'why-popup'); whyPopup.id = 'sampleWhy'; whyPopup.hidden = true;
+      whyPopup.setAttribute('role', 'dialog'); whyPopup.setAttribute('aria-label', 'Why this option is wrong');
+      whyPopup.addEventListener('mouseenter', () => clearTimeout(whyHideTimer));
+      whyPopup.addEventListener('mouseleave', whySoon); document.body.append(whyPopup);
+    }
+    const close = element('button', 'why-close', '×'); close.type = 'button'; close.setAttribute('aria-label', 'Close explanation');
+    close.addEventListener('click', () => { hideWhy(); button.focus({ preventScroll: true }); });
+    whyPopup.replaceChildren(element('strong', '', label + ' — why this is wrong'), close, element('p', '', reason));
+    whyPopup.hidden = false; button.setAttribute('aria-expanded', 'true'); button.setAttribute('aria-describedby', whyPopup.id);
+    const anchor = button.getBoundingClientRect(), width = whyPopup.offsetWidth, height = whyPopup.offsetHeight;
+    const pad = 10, gap = 10;
+    let top = anchor.top - height - gap;
+    if (top < pad) top = anchor.bottom + gap;
+    whyPopup.style.left = Math.max(pad, Math.min(anchor.right - width, window.innerWidth - width - pad)) + 'px';
+    whyPopup.style.top = Math.max(pad, Math.min(top, window.innerHeight - height - pad)) + 'px';
+  }
+  function whyButton(label, reason) {
+    const button = element('button', 'why-button', 'ⓘ'); button.type = 'button'; button.id = 'sampleWhyButton-' + (++whyId);
+    button.setAttribute('aria-label', 'Why is ' + label + ' wrong?'); button.setAttribute('aria-expanded', 'false');
+    button.addEventListener('mouseenter', () => { clearTimeout(whyHideTimer); clearTimeout(whyTimer); if (!whyPinned) whyTimer = setTimeout(() => showWhy(button, label, reason), 160); });
+    button.addEventListener('mouseleave', whySoon);
+    button.addEventListener('click', () => { if (whyAnchor === button && whyPinned) hideWhy(); else showWhy(button, label, reason, true); });
+    button.addEventListener('keydown', event => { if (event.key === 'Escape') hideWhy(); });
+    return button;
+  }
+  window.addEventListener('scroll', hideWhy, true); window.addEventListener('resize', hideWhy);
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') dismissWhy(); });
+  document.addEventListener('click', event => {
+    if (whyPinned && !whyPopup?.contains(event.target) && event.target !== whyAnchor) hideWhy();
+  });
+  function reviewCard(title, text) {
+    const node = element('section', 'review-card'); node.append(element('h3', '', title));
+    if (text) { const copy = element('div', 'question-text'); mathText(copy, text); node.append(copy); }
+    return node;
+  }
+  function reviewImages(title, diagrams) {
+    const valid = (Array.isArray(diagrams) ? diagrams : []).filter(item => typeof (item?.url || item) === 'string');
+    if (!valid.length) return;
+    const node = reviewCard(title);
+    valid.forEach(item => {
+      const image = element('img', 'diagram'); image.src = item.url || item; image.alt = item.label || title; image.loading = 'lazy';
+      if (Number(item.scale) > 0) image.style.width = Math.max(20, Math.min(100, Number(item.scale) * 100)) + '%';
+      image.addEventListener('error', () => image.replaceWith(element('p', 'diagram-error', 'This explanation diagram could not load.')));
+      node.append(image);
+    }); card.append(node);
+  }
+  function showReview(review) {
+    if (review.explanation) card.append(reviewCard('Explanation', review.explanation));
+    if (review.modelAnswer) card.append(reviewCard('Model answer', review.modelAnswer));
+    reviewImages('Answer diagram', review.answerDiagrams); reviewImages('Picture it', review.explanationDiagrams);
+    for (const widget of Array.isArray(review.widgets) ? review.widgets : []) {
+      if (!String(widget?.html || '').trim() || !window.QuestionApps) continue;
+      const node = reviewCard(widget.title || 'Explore it — interactive'), holder = element('div', 'widget-holder');
+      const tools = element('div', 'widget-tools'), reset = element('button', '', 'Restart activity'), expand = element('button', '', 'Expand activity');
+      reset.type = expand.type = 'button'; expand.setAttribute('aria-expanded', 'false');
+      function start() {
+        const frame = element('iframe', 'question-app-frame'); frame.title = widget.title || 'Explore this question';
+        frame.setAttribute('sandbox', 'allow-scripts'); frame.referrerPolicy = 'no-referrer';
+        frame.style.height = window.QuestionApps.normalizeHeight(widget.height) + 'px'; frame.srcdoc = window.QuestionApps.sandboxDocument(widget.html);
+        holder.replaceChildren(frame);
+      }
+      reset.addEventListener('click', start);
+      expand.addEventListener('click', () => {
+        const expanded = node.classList.toggle('widget-expanded'); expand.textContent = expanded ? 'Restore activity size' : 'Expand activity';
+        expand.setAttribute('aria-expanded', String(expanded));
+      });
+      tools.append(reset, expand); node.append(tools, holder); card.append(node); start();
+    }
+    if (review.reasonError) { const note = element('p', 'why-note', review.reasonError); note.setAttribute('role', 'status'); card.append(note); }
+    const reset = element('button', 'retry-button', 'Try this question again'); reset.type = 'button'; reset.disabled = pending;
+    reset.addEventListener('click', () => {
+      attempts.delete(questions[selected].id); render(); card.querySelector('input,textarea')?.focus({ preventScroll: true });
+    }); card.append(reset);
+  }
   function render() {
     const q = questions[selected]; if (!q) return;
-    const state = attempt(q); card.replaceChildren(); nav.replaceChildren();
+    const state = attempt(q), review = markedReview(state); hideWhy(); card.replaceChildren(); nav.replaceChildren();
     questions.forEach((item, index) => {
       const button = element('button', '', String(index + 1)); button.type = 'button';
       button.setAttribute('aria-label', 'Question ' + (index + 1)); button.setAttribute('aria-current', String(index === selected));
-      button.addEventListener('click', () => { selected = index; render(); }); nav.append(button);
+      button.addEventListener('click', () => {
+        selected = index; render(); nav.querySelector('[aria-current=true]')?.focus({ preventScroll: true });
+      }); nav.append(button);
     });
     card.append(element('p', 'question-meta', [q.level, q.topic].filter(Boolean).join(' · ')), element('h2', '', q.title));
     for (const block of q.blocks || []) {
@@ -73,14 +181,28 @@
         }); wrap.append(table); card.append(wrap);
       } else if (block.type === 'mcq') {
         const group = element('fieldset'); group.append(element('legend', '', 'Choose your answer'));
+        const graded = review?.mcq?.find(item => item.blockId === block.id);
         (block.options || []).forEach((option, index) => {
-          const label = element('label', 'option'), input = element('input'), copy = element('span');
+          const row = element('div', 'option'), label = element('label', 'option-answer'), input = element('input'), copy = element('span');
           input.type = 'radio'; input.name = 'choice-' + block.id; input.value = String(option.id); input.disabled = pending;
           input.checked = state.responses[block.id] === String(option.id);
-          input.addEventListener('change', () => { state.responses[block.id] = input.value; state.result = null; card.querySelector('.feedback')?.remove(); });
-          const optionText = /^\s*\(?[A-D1-8]\)?[.)]?\s*$/.test(option.text || '') ? option.text : '(' + (index + 1) + ') ' + option.text;
-          mathText(copy, optionText); label.append(input, copy); group.append(label);
+          input.addEventListener('change', () => { state.responses[block.id] = input.value; clearReview(q); });
+          mathText(copy, optionLabel(q, index, option.text)); label.append(input, copy); row.append(label);
+          if (graded && graded.correctId === String(option.id)) row.dataset.verdict = 'correct';
+          else if (graded && input.checked) row.dataset.verdict = 'incorrect';
+          const why = graded?.options?.find(item => item.id === String(option.id))?.why;
+          if (why && graded.correctId !== String(option.id)) row.append(whyButton(optionLabel(q, index, ''), why));
+          group.append(row);
         }); card.append(group);
+      } else if (block.type === 'fillblank') {
+        const sentence = element('div', 'question-text blank-sentence'); let blankIndex = 0;
+        for (const segment of block.segments || []) {
+          if (segment.type !== 'blank') { mathText(sentence, segment.text); continue; }
+          const id = block.id + ':blank:' + blankIndex++, input = element('input', 'blank-input');
+          input.type = 'text'; input.maxLength = 5000; input.disabled = pending; input.value = state.responses[id] || '';
+          input.setAttribute('aria-label', 'Blank ' + blankIndex); input.autocomplete = 'off';
+          input.addEventListener('input', () => { state.responses[id] = input.value; clearReview(q); }); sentence.append(input);
+        } card.append(sentence);
       } else if (block.type === 'cer') {
         for (const [field, label] of [['claim', 'Claim — what do you conclude?'], ['evidence', 'Evidence — what in the question supports it?'], ['reasoning', 'Reasoning — explain the science linking them.']]) card.append(answerField(q, block.id + ':' + field, label));
       } else if (block.type === 'response') {
@@ -91,6 +213,7 @@
     const check = element('button', 'check-button', pending ? 'Checking your answer…' : 'Check my answer');
     check.type = 'button'; check.disabled = pending; check.addEventListener('click', () => mark(q)); card.append(check);
     if (state.result) card.append(feedback(state.result));
+    if (review) showReview(review);
     nav.hidden = false; card.hidden = false;
   }
   async function mark(q) {
@@ -102,7 +225,10 @@
     pending = true; render();
     try { state.result = await request({ action: 'check', subject, token, questionId: q.id, responses: { ...state.responses } }); }
     catch (error) { state.result = { verdict: 'uncertain', feedback: error.message }; }
-    finally { pending = false; render(); }
+    finally {
+      pending = false; render();
+      if (questions[selected]?.id === q.id) card.querySelector('.check-button')?.focus({ preventScroll: true });
+    }
   }
   async function load() {
     const epoch = ++loadEpoch; status.textContent = 'Loading the teacher’s sample questions…'; retry.hidden = true;

@@ -1,0 +1,25 @@
+name: Public sample question player
+on:
+  pull_request:
+    paths: ['sample-mini.*', 'sample-materials.html', 'question-apps.js', 'tools/sample-mini-*.mjs', 'tools/question-apps-tests.mjs', '.github/workflows/sample-player.yml']
+  push:
+    branches: [main]
+    paths: ['sample-mini.*', 'sample-materials.html', 'question-apps.js', 'tools/sample-mini-*.mjs', 'tools/question-apps-tests.mjs', '.github/workflows/sample-player.yml']
+permissions:
+  contents: read
+jobs:
+  public-player:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check shared interactive app sandbox
+        run: |
+          node --check sample-mini.js
+          node --test tools/question-apps-tests.mjs
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: Check public question review and interactive activities on desktop and mobile
+        run: node tools/sample-mini-browser-tests.mjs
