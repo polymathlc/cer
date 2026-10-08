@@ -152,9 +152,11 @@ class DeployTests(unittest.TestCase):
         self.assertEqual(len(deploys), 1)
         self.assertIn('functions:cer-rapid-import', deploys[0])
         self.assertIn('mathgen--app', deploys[0])
-        self.assertNotIn('--force', deploys[0])
+        self.assertIn('--force', deploys[0])
+        checked_secrets = {arg.split('=', 1)[1] for c in commands if c[1:4] == ['secrets', 'versions', 'describe'] for arg in c if arg.startswith('--secret=')}
+        self.assertEqual(checked_secrets, {'GEMINI_API_KEY', 'OPENAI_API_KEY'})
         checked_functions = {c[3] for c in commands if '--format=value(state)' in c and c[1:3] == ['functions', 'describe']}
-        self.assertEqual(checked_functions, {'rapidImportStatus', 'rapidImportBegin', 'rapidImportChunk', 'rapidImportFinish', 'rapidImportRetry', 'rapidImportDispatch', 'rapidImportPage', 'cerJevReview', 'rapidVettingImage'})
+        self.assertEqual(checked_functions, {'rapidImportStatus', 'rapidImportBegin', 'rapidImportChunk', 'rapidImportFinish', 'rapidImportRetry', 'rapidImportDispatch', 'rapidImportPage', 'cerDecisionsReview', 'rapidVettingImage'})
         bindings = [c for c in commands if 'add-iam-policy-binding' in c]
         self.assertEqual(len(bindings), 3)
         self.assertTrue(all('projects' not in c and '--member=allUsers' not in c for c in bindings))

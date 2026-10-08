@@ -3,9 +3,9 @@
 // No network calls, model redraws or Firebase dependencies: labels and fine
 // lines come from the original page. A refused crop uses the caller's source
 // page fallback and must remain visibly marked as needing manual cropping.
-import { measureCrop } from './jev-review-core.js';
+import { measureCrop } from './decisions-review-core.js';
 
-// The crop and what was learnt while making it. Jev is asked about the
+// The crop and what was learnt while making it. Decisions is asked about the
 // measurements, so they are taken from the SAME rectangle that was cut.
 // `opts.marginScale` widens the breathing margin for a second attempt.
 export function cropDiagram(canvas, box, createCanvas) {
@@ -1072,7 +1072,7 @@ export function refinePrompt(wording) {
 // IT IS CUT FROM THE PAGE AND MEASURED THERE, never cut out of the crop. Cut
 // out of the crop, the result kept the FIRST cut's measurements — so a
 // clean-up that sliced a table in half was invisible to the clipped check and
-// to Jev — and it wore the crop's white frame inside a second one. Here the
+// to Decisions — and it wore the crop's white frame inside a second one. Here the
 // box is mapped back onto the page (inside the first cut, never past it), cut
 // with ONE fresh frame, and measured again; a cut that leaves drawing running
 // off an edge the first cut did not is refused, because the clean-up has cut

@@ -4,7 +4,7 @@ import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
 import { cropSourcesFor, normalizeCropBox, cropPixelRect, cropSourceUpdate } from './question-crop-core.mjs?v=1';
 import { questionRepairTargets, normalizeQuestionRepairPlan, applyQuestionRepairPlan } from './question-repair-core.mjs?v=2';
-import { measureCrop, figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, JEV_MAY_SKIP } from './jev-review-core.mjs?v=2';
+import { measureCrop, figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, migrateDecisionsReviewState, DECISIONS_MAY_SKIP } from './decisions-review-core.mjs?v=2';
 import { findRapidDuplicates, rapidDuplicateThreshold, rapidDuplicateFingerprint, rapidDuplicatePairCurrent } from './rapid-duplicates.js';
 import { installHadesDisplay } from "./hades-display.js";
 import { mountAinsteinLive, awaitAinsteinVoice } from "./ainstein-live.js?v=1.399.0";
@@ -18073,7 +18073,7 @@ function _trimBlankEdges(ctx, W, H, r, thr, axes) {
   return out;
 }
 // The crop AND what was learnt cutting it (the rectangle, the page it was cut
-// from, and how much drawing runs on past each edge). Jev is judged on those
+// from, and how much drawing runs on past each edge). Decisions reviews those
 // measurements, so they must come from the very rectangle that was cut.
 // opts.marginScale widens the breathing margin for a second attempt.
 async function _cropBoxFromScreenshot(fullDataUrl, box) {
@@ -18163,7 +18163,7 @@ function _cropRenderRect(img, r) {
 // page (inside the first cut, never past it), cut with ONE fresh frame and
 // MEASURED again. Cut out of the crop instead, the result kept the first cut's
 // measurements — so a clean-up that sliced a table in half was invisible to
-// the clipped check and to Jev — and wore a second white frame. A cut that
+// the clipped check and to Decisions — and wore a second white frame. A cut that
 // leaves drawing running off an edge the first cut did not is refused (null):
 // the clean-up has cut into the figure rather than trimmed text off it.
 async function _cropRefineOnPage(ex, page, c) {
@@ -18253,7 +18253,7 @@ async function _aiRefineCrop(dataUrl, wording, src) {
   // clean-up's rectangle is cut from the PAGE and re-measured there
   // (_cropRefineOnPage) — a cut into the figure is refused — and `src.ex` is
   // replaced by the cleaned cut's record, so whatever reads the measurements
-  // next (Jev, the caller) is reading the picture it is about to store.
+  // next (Decisions, the caller) is reading the picture it is about to store.
   try {
     const b64 = dataUrl.split(',')[1] || '';
     const typed = String(wording || '').trim();
@@ -18314,59 +18314,71 @@ async function _aiRefineCrop(dataUrl, wording, src) {
 }
 
 // =====================================================================
-// 🧭 JEV REVIEW — the yes/no gate on everything an automatic import produces
-// (search `JEV REVIEW`). Shared pure logic: jev-review-core.mjs.
+// 🧭 DECISIONS REVIEW — the yes/no gate on everything an automatic import produces
+// (search `DECISIONS REVIEW`). Shared pure logic: decisions-review-core.mjs.
 //
-// Jev (the typed-decision service Ans Key already uses to route voice
-// commands) is asked about MEASURED FACTS — did the crop's drawing run on past
+// OpenAI Decisions is asked about MEASURED FACTS — did the crop's drawing run on past
 // its edge, is it blank or the whole page, is the wording garbled, do the
 // parts / options / answers hang together — and answers yes or no with a
 // confidence. The rule that follows is the whole design:
 //   • a NO, or a defect the code finds itself, sends the item to the AI to
 //     check and FIX (a crop is re-cut by the AI, told what was wrong; a
-//     question goes to the check-and-repair loop with Jev's reasons attached);
-//   • a confident clean YES is what lets the slow AI read be skipped;
-//   • Jev unavailable (no key, busy, not an admin) changes nothing: every
+//     question goes to the check-and-repair loop with the review's reasons attached);
+//   • a confident clean YES is advisory; the visual AI still reads the question;
+//   • Decisions unavailable (no key, busy, not an admin) changes nothing: every
 //     question is AI-checked exactly as it always was.
 // Nothing here ever withholds a question. Whatever is still wrong after the
 // fixes reaches Vetting as a finding on the card.
 // =====================================================================
-const JEV_KEY = 'sq_jev_gate';
-const JEV_RECROP_TRIES = 2;                 // AI re-cuts per figure, then it is flagged for a person
-let _jevDownUntil = 0;                      // a refused Jev is not asked again for a while
+const DECISIONS_KEY = 'sq_decisions_gate';
+const DECISIONS_RECROP_TRIES = 2;           // AI re-cuts per figure, then it is flagged for a person
+let _decisionsDownUntil = 0;                // an unavailable review is not asked again for a while
 
-function jevGateOn() {
-  try { return localStorage.getItem(JEV_KEY) !== '0'; } catch (e) { return true; }
+function decisionsGateOn() {
+  try {
+    let saved = localStorage.getItem(DECISIONS_KEY);
+    // One-time preference migration. Remove the old key only after storage succeeds.
+    const previous = localStorage.getItem('sq_jev_gate');
+    if (previous !== null) {
+      const migrated = saved !== null ? saved : previous;
+      try {
+        localStorage.setItem(DECISIONS_KEY, migrated);
+        localStorage.removeItem('sq_jev_gate');
+      } catch (e) { /* keep honoring the previous preference if storage is unavailable */ }
+      saved = migrated;
+    }
+    return saved !== '0';
+  } catch (e) { return true; }
 }
-function setJevGateOn(on) {
-  try { localStorage.setItem(JEV_KEY, on ? '1' : '0'); } catch (e) { /* private window */ }
-  _jevPaint();
+function setDecisionsGateOn(on) {
+  try { localStorage.setItem(DECISIONS_KEY, on ? '1' : '0'); } catch (e) { /* private window */ }
+  _decisionsPaint();
   _autoChkPaint();
 }
-function _jevPaint() {
-  const box = document.getElementById('rapidJevGate');
-  if (box) box.checked = jevGateOn();
+function _decisionsPaint() {
+  const box = document.getElementById('rapidDecisionsGate');
+  if (box) box.checked = decisionsGateOn();
 }
-function toggleJevGate(on) { setJevGateOn(!!on); }
-// The review endpoint is administrator-only, so an employee simply never has it.
-function _jevReachable() { return jevGateOn() && _canAuthor() && Date.now() >= _jevDownUntil; }
+function toggleDecisionsGate(on) { setDecisionsGateOn(!!on); }
+// The review endpoint is administrator-only; other authors use the visual AI check.
+function _decisionsReachable() { return decisionsGateOn() && _isAdmin() && Date.now() >= _decisionsDownUntil; }
 
-async function jevReviewCall(input) {
-  if (!_jevReachable()) return null;
+async function decisionsReviewCall(input) {
+  if (!_decisionsReachable()) return null;
   try {
-    const res = await _rapidCloudCall('cerJevReview', input);
+    const res = await _rapidCloudCall('cerDecisionsReview', input);
     return res && res.available && res.verdicts ? res.verdicts : null;
   } catch (e) {
     const code = String((e && e.code) || '');
     // Not deployed / not allowed: try again much later. Busy or offline: soon.
-    _jevDownUntil = Date.now() + (/permission-denied|failed-precondition|unauthenticated|not-found/.test(code) ? 30 * 60000
+    _decisionsDownUntil = Date.now() + (/permission-denied|failed-precondition|unauthenticated|not-found/.test(code) ? 30 * 60000
       : /resource-exhausted/.test(code) ? 10 * 60000 : 2 * 60000);
-    console.warn('Jev is unavailable — the AI will do the checking', e);
+    console.warn('OpenAI Decisions is unavailable — the AI will do the checking', e);
     return null;
   }
 }
 
-function _jevFigureFacts(i, ex, refineChanged) {
+function _decisionsFigureFacts(i, ex, refineChanged) {
   return figureFacts({
     index: i, source: ex ? 'ai-box' : 'none', refused: !ex,
     width: ex && ex.width, height: ex && ex.height, pageShare: ex && ex.pageShare,
@@ -18377,7 +18389,7 @@ function _jevFigureFacts(i, ex, refineChanged) {
 // Ask the AI where the figure really is, told what was wrong with the last cut.
 // It is METADATA about a picture, not science said to anybody, so it is not
 // grounded in the teaching notes (named in the census exemptions).
-async function _jevRecropBox(mimeType, b64, currentDataUrl, reasons) {
+async function _decisionsRecropBox(mimeType, b64, currentDataUrl, reasons) {
   const media = [{ mimeType, data: b64 }];
   if (currentDataUrl) media.push({ mimeType: 'image/png', data: (currentDataUrl.split(',')[1] || '') });
   const prompt =
@@ -18404,13 +18416,13 @@ async function _jevRecropBox(mimeType, b64, currentDataUrl, reasons) {
 // stem it was rejected for comes straight back. Returns one result per item:
 // { dataUrl, ex, box, state: 'ok'|'fixed'|'flagged', tries, reasons }.
 //
-// A clean-up that WORKED is never reported to Jev as stray text: the picture
-// Jev is shown is the cleaned one, measured on the page. Saying "the AI saw
-// stray text" made Jev say no to every cleaned crop and sent each one round
+// A clean-up that WORKED is never reported to Decisions as stray text: the picture
+// Decisions is shown is the cleaned one, measured on the page. Saying "the AI saw
+// stray text" made Decisions say no to every cleaned crop and sent each one round
 // the re-cut loop (the durable worker carries the same rule).
-async function _jevGateFigures(items, mimeType, b64, fullDataUrl, onStatus, wording) {
-  const facts = items.map((it, i) => _jevFigureFacts(i, it.ex, false));
-  const verdicts = await jevReviewCall({ scope: 'figures', figures: facts });
+async function _decisionsGateFigures(items, mimeType, b64, fullDataUrl, onStatus, wording) {
+  const facts = items.map((it, i) => _decisionsFigureFacts(i, it.ex, false));
+  const verdicts = await decisionsReviewCall({ scope: 'figures', figures: facts });
   const decision = decideReview({ verdicts, figures: facts, question: null });
   const out = [];
   for (let i = 0; i < items.length; i++) {
@@ -18419,26 +18431,26 @@ async function _jevGateFigures(items, mimeType, b64, fullDataUrl, onStatus, word
     if (!own.length) { out.push({ dataUrl: cur.dataUrl, ex: cur.ex, box: cur.box, state: 'ok', tries: 0, reasons: [] }); continue; }
     let best = { dataUrl: cur.dataUrl, ex: cur.ex, box: cur.box, score: own.length, reasons: own.map(f => f.reason) };
     let reasons = best.reasons, tries = 0, fixed = false;
-    while (tries < JEV_RECROP_TRIES) {
+    while (tries < DECISIONS_RECROP_TRIES) {
       tries++;
-      if (onStatus) onStatus(`Jev said picture ${i + 1} is not right — asking the AI to cut it again (try ${tries} of ${JEV_RECROP_TRIES})…`);
+      if (onStatus) onStatus(`OpenAI Decisions or the crop checks flagged picture ${i + 1} — asking the AI to cut it again (try ${tries} of ${DECISIONS_RECROP_TRIES})…`);
       let box = null;
-      try { box = await _jevRecropBox(mimeType, b64, best.dataUrl, reasons); }
-      catch (e) { console.warn('Jev recrop: the AI call failed', e); break; }
+      try { box = await _decisionsRecropBox(mimeType, b64, best.dataUrl, reasons); }
+      catch (e) { console.warn('OpenAI Decisions recrop: the AI call failed', e); break; }
       if (!box) break;
       let ex2 = null;
       try { ex2 = await _cropBoxFromScreenshotEx(fullDataUrl, box, { marginScale: tries === 1 ? 1.6 : 2.2 }); }
-      catch (e) { console.warn('Jev recrop: the crop failed', e); }
+      catch (e) { console.warn('OpenAI Decisions recrop: the crop failed', e); }
       if (ex2 && ex2.dataUrl) {
         try {
           const src = { ex: ex2, page: fullDataUrl };
           await _aiRefineCrop(ex2.dataUrl, wording, src);
           if (src.ex && src.ex.dataUrl) ex2 = src.ex;
-        } catch (e) { console.warn('Jev recrop: the clean-up was skipped', e); }
+        } catch (e) { console.warn('OpenAI Decisions recrop: the clean-up was skipped', e); }
       }
-      const f2 = _jevFigureFacts(i, ex2, false);
+      const f2 = _decisionsFigureFacts(i, ex2, false);
       const hard = figureHardIssues(f2);
-      const v2 = hard.length ? null : await jevReviewCall({ scope: 'figures', figures: [f2] });
+      const v2 = hard.length ? null : await decisionsReviewCall({ scope: 'figures', figures: [f2] });
       const d2 = decideReview({ verdicts: v2 ? { figure_0: v2.figure_0 } : null, figures: [f2], question: null });
       reasons = d2.failures.map(f => f.reason);
       if (ex2 && d2.failures.length < best.score) best = { dataUrl: ex2.dataUrl, ex: ex2, box, score: d2.failures.length, reasons };
@@ -18450,13 +18462,13 @@ async function _jevGateFigures(items, mimeType, b64, fullDataUrl, onStatus, word
 }
 
 // The question as a whole: wording, options, parts, answers, pictures.
-// { available, confident, findings } — `confident` is what skips the AI read.
-async function jevGateQuestion(q, run) {
+// { available, confident, findings } — `confident` records the advisory verdict.
+async function decisionsGateQuestion(q, run) {
   const qf = questionFacts(q);
-  const verdicts = await jevReviewCall({ scope: 'question', question: qf });
+  const verdicts = await decisionsReviewCall({ scope: 'question', question: qf });
   const flagged = ((run && run.figures) || []).filter(f => f.state === 'flagged');
   const d = decideReview({ verdicts, figures: [], question: qf });
-  const figureFindings = _jevFigureFindings(flagged);
+  const figureFindings = _decisionsFigureFindings(flagged);
   return {
     available: !!verdicts,
     confident: !!verdicts && d.confident && !flagged.length,
@@ -18464,10 +18476,10 @@ async function jevGateQuestion(q, run) {
     figureFindings
   };
 }
-function _jevFigureFindings(flagged) {
+function _decisionsFigureFindings(flagged) {
   return (flagged || []).flatMap(f => failuresToFindings(
     (f.reasons && f.reasons.length ? f.reasons : ['the crop could not be made complete and clean'])
-      .map(r => ({ key: 'figure_' + f.index, index: f.index, code: 'jev_no', reason: r, by: 'jev' }))));
+      .map(r => ({ key: 'figure_' + f.index, index: f.index, code: 'decisions_no', reason: r, by: 'decisions' }))));
 }
 
 // Fill a question's image blocks from the AI-drawn rectangles (screenshots
@@ -18500,9 +18512,9 @@ function _rememberCropSource(block, url, box, page) {
 async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus, opts) {
   const maxEnhance = (opts && Number.isFinite(opts.maxEnhance)) ? opts.maxEnhance : 3;
   const onEnhance = (opts && typeof opts.onEnhance === 'function') ? opts.onEnhance : null;
-  // opts.jev is an OUT parameter ({ figures: [] }) the caller reads afterwards;
-  // opts.jev === false switches the Jev review off for this call.
-  const jevRun = opts && opts.jev !== undefined ? opts.jev : null;
+  // opts.decisions is an OUT parameter ({ figures: [] }) the caller reads afterwards;
+  // opts.decisions === false switches the Decisions review off for this call.
+  const decisionsRun = opts && opts.decisions !== undefined ? opts.decisions : null;
   const fullDataUrl = 'data:' + mimeType + ';base64,' + b64;
   let crops = [];
   const gateItems = [];
@@ -18512,7 +18524,7 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
     if (c) {
       if (onStatus) onStatus(`Checking picture ${i + 1} for stray question text…`);
       // Given the page, the clean-up is cut from the page and re-measured, so
-      // `ex` (what Jev is shown) describes the picture that will be stored.
+      // `ex` (what Decisions is shown) describes the picture that will be stored.
       const src = { ex, page: fullDataUrl };
       c = await _aiRefineCrop(c, opts && opts.wording, src);
       ex = src.ex;
@@ -18520,17 +18532,17 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
     crops.push(c);
     gateItems.push({ ex, dataUrl: c, box: boxes[i] });
   }
-  // 🧭 Jev judges every crop; a NO (or a clipped / blank / whole-page crop the
+  // 🧭 Decisions judges every crop; a NO (or a clipped / blank / whole-page crop the
   // code finds itself) has the AI cut it again. It runs BEFORE the "nothing
   // usable" early return: a rectangle that could not be cut at all is exactly
   // the case the AI is best placed to locate.
-  if (jevRun !== false && jevGateOn() && _canAuthor() && gateItems.length) {
+  if (decisionsRun !== false && decisionsGateOn() && _canAuthor() && gateItems.length) {
     try {
-      const gated = await _jevGateFigures(gateItems, mimeType, b64, fullDataUrl, onStatus, opts && opts.wording);
+      const gated = await _decisionsGateFigures(gateItems, mimeType, b64, fullDataUrl, onStatus, opts && opts.wording);
       crops = gated.map(g => g.dataUrl || null);
       gated.forEach((g, i) => { if (g.box && g.box !== boxes[i]) boxes[i] = g.box; });
-      if (jevRun) gated.forEach((g, i) => jevRun.figures.push({ index: (jevRun.figures.length), state: g.state, tries: g.tries, reasons: g.reasons }));
-    } catch (e) { console.warn('Jev crop review skipped', e); }
+      if (decisionsRun) gated.forEach((g, i) => decisionsRun.figures.push({ index: (decisionsRun.figures.length), state: g.state, tries: g.tries, reasons: g.reasons }));
+    } catch (e) { console.warn('OpenAI Decisions crop review skipped', e); }
   }
   if (!crops.some(Boolean)) return 0;
   const fullUrl = await uploadImageDataUrl(fullDataUrl); // shared "Use original" backup
@@ -19646,13 +19658,13 @@ function _autoChkPaint() {
   const note = document.getElementById('rapidAutoChkNote');
   if (note) {
     note.textContent = autoChkOn()
-      ? (jevGateOn()
-        ? 'Jev judges every crop and question first as a second opinion; the AI still reads every question. A no is re-cut or repaired by the AI, and anything still wrong arrives with its lamp lit and the findings on the card.'
+      ? (decisionsGateOn()
+        ? 'OpenAI Decisions reviews crops, wording and structure first as a second opinion; visual AI still reads every question. Findings guide re-cutting or repair, and anything still wrong arrives with its lamp lit and the findings on the card.'
         : 'Every question is read back by the AI before it lands. Green ones arrive clean; the rest arrive with their lamp lit and the findings on the card.')
       : 'Questions land unchecked — press 🚦 on a card, or use 🚦 Check questions on the vetting list, to read them.';
   }
 }
-function _autoChkSetup() { _autoChkPaint(); _jevPaint(); try { autoFixedPaint(); } catch (e) { /* pad not open yet */ } }
+function _autoChkSetup() { _autoChkPaint(); _decisionsPaint(); try { autoFixedPaint(); } catch (e) { /* pad not open yet */ } }
 function toggleAutoChk(on) { setAutoChkOn(!!on); }
 
 // ---- reading a verdict ---------------------------------------------------
@@ -19675,7 +19687,7 @@ async function autoChkRead(q, extra) {
   let local = [];
   try { local = _cqLocalFindings(q, ran); }
   catch (e) { console.warn('auto-check: the instant checks failed', e); }
-  // `extra` is what Jev (or the crop review) already flagged: kept apart from
+  // `extra` is what Decisions (or the crop review) already flagged: kept apart from
   // the AI's own findings, and de-duplicated by title so the same problem named
   // by both is one row on the card, not two.
   const seen = new Set(local.concat(ai).map(f => String(f.title || '').toLowerCase()));
@@ -19830,7 +19842,7 @@ function _autoChkApply(q, payload) {
 // be cured by rewording, so the repair step re-cuts the picture instead — from
 // the ORIGINAL PAGE the import kept (`block.cropSource.url`), never by drawing
 // anything. The AI is only asked WHERE the figure is on that page
-// (`_jevRecropBox`, told what was wrong); the pixels are cut by the same code
+// (`_decisionsRecropBox`, told what was wrong); the pixels are cut by the same code
 // the import used. The re-read that follows is the check on the result: it
 // audits every picture again, and a re-cut that came back worse is thrown away
 // with the rest of that attempt.
@@ -19846,7 +19858,7 @@ async function autoChkRecrop(q, findings, say) {
     const b = imgs[i];
     const tid = _autoChkCropTarget(b);
     // A finding naming a picture belongs to that picture; one naming none
-    // (Jev's) belongs to every picture — unless something else named them.
+    // (from Decisions) belongs to every picture — unless something else named them.
     const mine = list.filter(f => f.target === tid || (!f.target && !targeted.length) || (!f.target && targeted.length && !targeted.some(t => imgs.some(x => _autoChkCropTarget(x) === t.target))));
     if (!mine.length) continue;
     const label = 'picture ' + (i + 1);
@@ -19859,7 +19871,7 @@ async function autoChkRecrop(q, findings, say) {
       if (!parsed) { out.skipped.push(label + ' (the original page could not be read)'); continue; }
       const cur = await _urlToDataUrlRobust(transformImageUrl(b.url)).catch(() => '');
       const reasons = mine.map(f => String(f.title || '') + (f.detail ? ' — ' + f.detail : '')).map(t => t.slice(0, 300));
-      const box = await _jevRecropBox(parsed.mime, pageData.split(',')[1] || '', cur, reasons);
+      const box = await _decisionsRecropBox(parsed.mime, pageData.split(',')[1] || '', cur, reasons);
       if (!box) { out.skipped.push(label + ' (the figure could not be located)'); continue; }
       const ex = await _cropBoxFromScreenshotEx(pageData, box, { marginScale: 1.6 });
       if (!ex || !ex.dataUrl) { out.skipped.push(label + ' (the new crop was unusable)'); continue; }
@@ -19900,8 +19912,8 @@ async function autoChkRun(q, opts) {
   for (let attempt = 1; attempt <= tries; attempt++) {
     used = attempt;
     say(attempt === 1 ? 'checking the question…' : 'checking the fixed question again…');
-    // Attempt 1 carries what Jev flagged. After a repair the QUESTION is
-    // measured again by the same code (no second Jev call), so a defect the
+    // Attempt 1 carries what Decisions flagged. After a repair the QUESTION is
+    // measured again by the same code (no second Decisions call), so a defect the
     // repair cured is not still reported; a crop the AI could not make clean
     // cannot be cured by rewording, so it is carried through every attempt.
     let extra = o.extraFindings || [];
@@ -20042,8 +20054,8 @@ function autoChkStamp(q, res) {
     at: new Date().toISOString(),
   };
   if (res.error) q.autoCheck.error = String(res.error).slice(0, 160);
-  // Jev cleared it with no AI read: the card says so, honestly (see autoChkCardHtml).
-  if (res.jev) q.autoCheck.jev = true;
+  // Only a result from the optional skip path uses this flag; the default is advisory.
+  if (res.decisions) q.autoCheck.decisions = true;
   // A question the single repair took from RED down to amber or green keeps the
   // story of it, durably, so it can be reviewed later: what was wrong, what was
   // done, and where it ended up. This is what the 🔧 Auto-fixed list reads.
@@ -20079,6 +20091,7 @@ const AUTOCHK_CARD_LOOK = {
   error: { bg: '#f1f5f9', fg: '#475569', bd: '#cbd5e1', dot: '⚠', word: 'the check could not run' },
 };
 function autoChkCardHtml(q) {
+  migrateDecisionsReviewState(q);
   const a = q && q.autoCheck;
   if (!a || !a.state) return '';
   if (a.sig && typeof tlSig === 'function' && a.sig !== tlSig(q)) return '<span class="qb-tag" title="This question needs a fresh check, including its image crops. Press the traffic light.">○ Check again</span>';
@@ -20089,8 +20102,8 @@ function autoChkCardHtml(q) {
   }
   const fixed = (a.tries || 1) > 1 ? ` · fixed ${(a.tries || 1) - 1}×` : '';
   const found = (a.found != null) ? a.found : ((a.findings || []).length || 0);
-  if (a.jev && a.state === 'green') {
-    return `<span class="qb-tag" style="background:${look.bg};color:${look.fg};border:1px solid ${look.bd};" title="${escapeHtml('Jev checked the crops, wording, options, parts and answers and was confident, so no AI read was needed. It does not judge the science — press 🚦 for a full AI read.')}">${look.dot} Jev ✓</span>`;
+  if (a.decisions && a.state === 'green') {
+    return `<span class="qb-tag" style="background:${look.bg};color:${look.fg};border:1px solid ${look.bd};" title="${escapeHtml('OpenAI Decisions checked the crops, wording, options, parts and answers from measured facts. This saved result has no visual AI read — press 🚦 for a full AI read.')}">${look.dot} OpenAI Decisions ✓</span>`;
   }
   const tip = a.state === 'green'
     ? 'The AI read this question back — with its pictures — before it landed here, and found nothing wrong.'
@@ -20227,9 +20240,9 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
     for (let pi = 0; pi < payloads.length; pi++) {
       const payload = payloads[pi];
       const q = buildQuestionFromAi(payload);
-      // What Jev and the AI recrop did to THIS question's pictures. It is read
-      // again at 2c, where it decides whether the question needs the AI read.
-      const jevRun = { figures: [] };
+      // What Decisions and the AI recrop did to THIS question's pictures. It is read
+      // again at 2c, where its findings guide the visual AI read.
+      const decisionsRun = { figures: [] };
       // The batch's level, applied to EVERY question the page held — a page of
       // five is five questions at that level, not one. The prompt already
       // narrowed the topic list; this is the guard for a reply that chose
@@ -20267,7 +20280,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
             .map(b => (b && (b.box_2d || b.box)) || null);
           let filled = 0;
           try {
-            filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, file.type, b64, m => { _setRapidJobState(jobId, { sub: m }); renderVettingList(); }, { jev: jevRun, wording: _cropWordingOf((payload && payload.blocks) || q.blocks) });
+            filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, file.type, b64, m => { _setRapidJobState(jobId, { sub: m }); renderVettingList(); }, { decisions: decisionsRun, wording: _cropWordingOf((payload && payload.blocks) || q.blocks) });
           } catch (e) { console.warn('rapid AI rectangle flow failed', e); }
           if (!filled) {
             // BACKUP — the WHOLE PAGE, prepared once above. An EMPTY picture
@@ -20329,12 +20342,12 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       //    held back because a model disliked it is one its author never finds
       //    out about, and the whole point of this pad is that nothing is lost.
       //
-      //    🧭 JEV DECIDES WHO GETS THE AI. Jev is asked, from measured facts,
+      //    🧭 DECISIONS ADDS A SECOND OPINION. Decisions is asked, from measured facts,
       //    whether the wording, options, parts, answers and pictures are all
-      //    right. A confident clean yes skips the slow AI read; a no — or any
+      //    right. A confident clean yes is advisory; a no — or any
       //    defect the code finds itself, or a crop still flagged after the AI
-      //    re-cut it — goes to the AI to check and FIX, with Jev's reasons in
-      //    its hands. Jev unavailable means the AI checks every question, as
+      //    re-cut it — goes to the AI to check and FIX, with the review's reasons in
+      //    its hands. Decisions unavailable means the AI checks every question, as
       //    it always did.
       if (autoChkOn()) {
         try {
@@ -20346,25 +20359,25 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
             renderVettingList();
           };
           let gate = null;
-          if (jevGateOn() && _canAuthor()) {
-            step('asking Jev whether it is right…');
-            try { gate = await jevGateQuestion(q, jevRun); } catch (e) { console.warn('rapid Jev gate skipped', e); }
+          if (decisionsGateOn() && _canAuthor()) {
+            step('asking OpenAI Decisions for a second opinion…');
+            try { gate = await decisionsGateQuestion(q, decisionsRun); } catch (e) { console.warn('rapid OpenAI Decisions gate skipped', e); }
           }
-          if (gate && gate.confident && JEV_MAY_SKIP) {
-            autoChkStamp(q, { state: 'green', tries: 0, findings: [], error: '', jev: true });
+          if (gate && gate.confident && DECISIONS_MAY_SKIP) {
+            autoChkStamp(q, { state: 'green', tries: 0, findings: [], error: '', decisions: true });
           } else {
             const res = await autoChkRun(q, {
               level: batchLevel,
               onStep: step,
               extraFindings: gate ? gate.findings : [],
-              figureFindings: gate ? gate.figureFindings : _jevFigureFindings(jevRun.figures.filter(f => f.state === 'flagged'))
+              figureFindings: gate ? gate.figureFindings : _decisionsFigureFindings(decisionsRun.figures.filter(f => f.state === 'flagged'))
             });
             autoChkStamp(q, res);
             autoChkAnnounce(q);
-            // Jev is advisory: keep what it said beside what the AI found, so
-            // the two can be compared before Jev is ever allowed to skip a read.
+            // Decisions is advisory: keep what it said beside what the AI found, so
+            // the two can be compared before Decisions is ever allowed to skip a read.
             if (gate && gate.available) {
-              q.jevShadow = { yes: !gate.findings.length, confident: !!gate.confident, ai: res.state, found: (res.findings || []).length };
+              q.decisionsShadow = { yes: !gate.findings.length, confident: !!gate.confident, ai: res.state, found: (res.findings || []).length };
             }
           }
         } catch (e) { console.warn('rapid auto-check skipped', e); }
@@ -21113,6 +21126,7 @@ function tableDataFromFirestore(data) {
 
 // Normalise a question loaded from Firestore back to in-memory format
 function normalizeLoadedQuestion(q) {
+  migrateDecisionsReviewState(q);
   if (!q || !Array.isArray(q.blocks)) return q;
   q.category = normalizeCategoryValue(q.category);
   applyMcqCategory(q); // MCQ questions always sit in the Multiple Choice Question category
@@ -32439,6 +32453,7 @@ function _setSaveStatus(state) {
 // log, never a popup in the admin's face.
 async function saveQuestion(q, opts) {
   if (!currentUser) return false;
+  migrateDecisionsReviewState(q);
   // Ai-nstein caches a searchable string per question (tags, title, topic, body).
   // An edit here — a tag added or removed above all — must not leave him matching
   // against the old one for the rest of the session.
@@ -32533,6 +32548,7 @@ let _saveQuestionLastError = '';
 // that quietly failed would take the question away for good.
 async function saveVettingQuestion(q, opts) {
   if (!currentUser) return false;
+  migrateDecisionsReviewState(q);
   const wkLog = _wkSuppress === 0;   // see saveQuestion — decided before the await
   _inflightOps++;
   _setSaveStatus('saving');
@@ -49929,6 +49945,7 @@ function tlSig(q) {
 // it is adopted only while `sig` still matches the question in hand — an edit
 // since puts it out exactly as it puts a live verdict out.
 function _tlFromStamp(q) {
+  migrateDecisionsReviewState(q);
   const a = q && q.autoCheck;
   if (!a || !a.state || !a.sig) return null;
   const findings = Array.isArray(a.findings) ? a.findings : [];
@@ -83404,6 +83421,7 @@ window.rapidPickFiles = rapidPickFiles;
 window.setRapidLevel = setRapidLevel;
 window.setRapidRelease = setRapidRelease;
 window.toggleAutoChk = toggleAutoChk;
+window.toggleDecisionsGate = toggleDecisionsGate;
 window.bankReleaseNow = bankReleaseNow;
 window.bankReleaseBatchNow = bankReleaseBatchNow;
 window.bankMoveRelease = bankMoveRelease;

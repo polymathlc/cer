@@ -2,6 +2,7 @@ import {test,mock} from 'node:test';
 import assert from 'node:assert/strict';
 import {createCanvas,loadImage} from '@napi-rs/canvas';
 const docs=new Map(), files=new Map(), tasks=[];
+const callableOptions=new Map(), definedSecrets=[];
 const clone=x=>x===undefined?undefined:structuredClone(x);
 const snap=path=>({exists:docs.has(path),data:()=>clone(docs.get(path))});
 const ref=path=>({path,id:path.split('/').pop(),get:async()=>snap(path)});
@@ -19,10 +20,10 @@ mock.module('firebase-admin/app',{namedExports:{initializeApp:()=>({})}});
 mock.module('firebase-admin/firestore',{namedExports:{getFirestore:()=>db}});
 mock.module('firebase-admin/storage',{namedExports:{getStorage:()=>({bucket:()=>bucket})}});
 mock.module('firebase-admin/functions',{namedExports:{getFunctions:()=>({taskQueue:()=>({enqueue:async(data,opts)=>tasks.push({data,opts})})})}});
-mock.module('firebase-functions/v2/https',{namedExports:{onCall:(opts,fn)=>fn,HttpsError:class extends Error {constructor(code,message){super(message);this.code=code;}}}});
+mock.module('firebase-functions/v2/https',{namedExports:{onCall:(opts,fn)=>{callableOptions.set(fn,opts);return fn;},HttpsError:class extends Error {constructor(code,message){super(message);this.code=code;}}}});
 mock.module('firebase-functions/v2/firestore',{namedExports:{onDocumentWritten:(opts,fn)=>fn}});
 mock.module('firebase-functions/v2/tasks',{namedExports:{onTaskDispatched:(opts,fn)=>fn}});
-mock.module('firebase-functions/params',{namedExports:{defineSecret:()=>({value:()=>'k'}),defineString:(name,opts)=>({value:()=>opts.default})}});
+mock.module('firebase-functions/params',{namedExports:{defineSecret:name=>{const secret={name,value:()=>'secret:'+name};definedSecrets.push(secret);return secret;},defineString:(name,opts)=>({value:()=>opts.default})}});
 let aiPages=[], aiPrompts=[], recrops=[], checks=[], recropBox=[130,80,280,390];
 // The crop clean-up pass: clean by default. A test sets globalThis.REFINE.box
 // (a box, or a function of the crop it was shown) to have it cut something off;
@@ -60,12 +61,13 @@ function pdfFixture(pageCount,streams=[]) {
 }
 
 // OpenAI Decisions response arrays, scripted per test.
-let jevCalls=[], jevPlan=()=>({});
+let decisionsCalls=[], decisionsPlan=()=>({});
 globalThis.fetch=async(url,init)=>{
   assert.equal(url,'https://api.openai.com/v1/decisions');
+  assert.equal(init.headers.Authorization,'Bearer secret:OPENAI_API_KEY');
   const wire=JSON.parse(init.body);assert.equal(wire.model,'gpt-6-luna');
-  const body={state:JSON.parse(wire.input),questions:Object.fromEntries(wire.questions.map(q=>[q.name,q]))};jevCalls.push(body);
-  const plan=jevPlan(Object.keys(body.questions),jevCalls.length,body);
+  const body={state:JSON.parse(wire.input),questions:Object.fromEntries(wire.questions.map(q=>[q.name,q]))};decisionsCalls.push(body);
+  const plan=decisionsPlan(Object.keys(body.questions),decisionsCalls.length,body);
   const answers={};
   for(const key of Object.keys(body.questions)) {
     const [choice,conf]=plan[key]||['yes',.95];
@@ -82,7 +84,7 @@ const fig=[{title:'Fig',sourceQuestionNumber:'1',blocks:[{type:'text',text:'(a) 
 function start(autoCheck=false){
   const pdf=pdfFixture(1,['1 0 0 rg 20 220 50 35 re f\n']);
   const j=setup({...makeJob('fig'),phase:'page',nextPage:1,total:1,checkpoint:null,path:'o.pdf',engineOrder:['gemini'],prompt:'Read',autoCheck});
-  files.set(j.path,pdf);aiPages=[fig];jevCalls=[];recrops=[];checks=[];globalThis.REFINE={n:0,box:null};return j;
+  files.set(j.path,pdf);aiPages=[fig];decisionsCalls=[];recrops=[];checks=[];globalThis.REFINE={n:0,box:null};return j;
 }
 const run=async id=>{
   await api.rapidImportPage({data:{id,page:1,generation:0,phase:'page',publishIndex:0},retryCount:0});
@@ -90,50 +92,85 @@ const run=async id=>{
   await api.rapidImportPage({data:{id,page:n.nextPage,generation:0,phase:n.phase,publishIndex:0},retryCount:0});
   return [...docs].find(([k])=>k.includes('/vetting/'))[1];
 };
-test('Jev says no to a crop: the AI is asked to re-cut it, Jev is asked again, and the fixed box is recorded',async()=>{
+test('Decisions says no to a crop: the AI is asked to re-cut it, Decisions is asked again, and the fixed box is recorded',async()=>{
   start();recropBox=[140,90,270,380];
-  jevPlan=(keys,n)=>n===1?{figure_0:['no',.9]}:{};
+  decisionsPlan=(keys,n)=>n===1?{figure_0:['no',.9]}:{};
   const q=await run('fig');
-  assert.equal(recrops.length,1);assert.match(recrops[0],/Problems found: .*Jev judged the crop/);
-  assert.equal(jevCalls.filter(b=>Object.keys(b.questions).join()==='figure_0').length,2);
-  assert.deepEqual(q.jevFigures,[{index:0,state:'fixed',tries:1,reasons:[]}]);
+  assert.equal(recrops.length,1);assert.match(recrops[0],/Problems found: .*Decisions judged the crop/);
+  assert.equal(decisionsCalls.filter(b=>Object.keys(b.questions).join()==='figure_0').length,2);
+  assert.deepEqual(q.decisionsFigures,[{index:0,state:'fixed',tries:1,reasons:[]}]);
   assert.deepEqual(q.blocks.find(b=>b.type==='image').cropSource.box_2d,[140,90,270,380]);
   assert.equal(globalThis.REFINE.n,2,'one clean-up for the first cut and one for the re-cut');
 });
-test('a crop Jev never accepts is retried twice, then kept and flagged rather than lost',async()=>{
+test('a crop Decisions never accepts is retried twice, then kept and flagged rather than lost',async()=>{
   start(true);
-  jevPlan=keys=>keys.includes('figure_0')&&keys.length===1?{figure_0:['no',.9]}:{};
+  decisionsPlan=keys=>keys.includes('figure_0')&&keys.length===1?{figure_0:['no',.9]}:{};
   const q=await run('fig');
   assert.equal(recrops.length,2,'two AI re-cuts, no more');
   assert.equal(globalThis.REFINE.n,3,'the clean-up runs once per cut: 1 + the 2 re-cuts');
-  assert.equal(q.jevFigures[0].state,'flagged');
+  assert.equal(q.decisionsFigures[0].state,'flagged');
   assert.ok(q.blocks.find(b=>b.type==='image').url,'the picture is still there');
   assert.ok(q.autoCheck.findings.some(f=>f.type==='Crop'&&f.cropStatus==='unclear'),'the flag reaches the vetting card as a Crop finding');
   assert.notEqual(q.autoCheck.state,'green');
 });
-test('Jev is advisory: a confident yes still gets the AI read and the comparison is recorded; a no on the wording sends it to the AI with Jev\'s reason',async()=>{
-  start(true);jevPlan=()=>({});
+test('Decisions is advisory: a confident yes still gets the AI read and the comparison is recorded; a no on the wording sends it to the AI with Decisions\'s reason',async()=>{
+  start(true);decisionsPlan=()=>({});
   let q=await run('fig');
-  assert.equal(checks.length,1,'the AI still reads the question when Jev says yes');
-  assert.ok(!q.autoCheck.jev,'not stamped as a Jev-only pass');
-  assert.equal(q.jevShadow.yes,true);assert.equal(q.jevShadow.confident,true);assert.ok(q.jevShadow.ai);
-  start(true);jevPlan=keys=>keys.includes('wording')?{wording:['no',.9]}:{};
+  assert.equal(checks.length,1,'the AI still reads the question when Decisions says yes');
+  assert.ok(!q.autoCheck.decisions,'not stamped as a Decisions-only pass');
+  assert.equal(q.decisionsShadow.yes,true);assert.equal(q.decisionsShadow.confident,true);assert.ok(q.decisionsShadow.ai);
+  start(true);decisionsPlan=keys=>keys.includes('wording')?{wording:['no',.9]}:{};
   q=await run('fig');
-  assert.equal(checks.length,1);assert.equal(q.jevShadow.yes,false);assert.match(checks[0],/Problems already flagged by Jev/);
+  assert.equal(checks.length,1);assert.equal(q.decisionsShadow.yes,false);assert.match(checks[0],/Problems already flagged by Decisions/);
 });
-test('Jev unavailable changes nothing: every question is AI-checked exactly as before',async()=>{
+test('Decisions unavailable changes nothing: every question is AI-checked exactly as before',async()=>{
   start(true);const real=globalThis.fetch;globalThis.fetch=async()=>({ok:false,status:503});
   try{const q=await run('fig');assert.equal(checks.length,1);assert.equal(recrops.length,0);assert.ok(q.autoCheck);}
   finally{globalThis.fetch=real;}
 });
+test('the review callable binds only the shared OpenAI key and defines no other provider secret',()=>{
+  assert.deepEqual(definedSecrets.map(secret=>secret.name).sort(),['GEMINI_API_KEY','OPENAI_API_KEY']);
+  assert.deepEqual(callableOptions.get(api.cerDecisionsReview).secrets.map(secret=>secret.name),['OPENAI_API_KEY']);
+  assert.deepEqual(Object.keys(api).filter(name=>name.startsWith('cer')&&name.endsWith('Review')),['cerDecisionsReview']);
+});
 test('the browser review endpoint is administrator only and returns typed verdicts',async()=>{
-  jevPlan=()=>({});
+  decisionsPlan=()=>({});
   const facts={excerpt:'Q',wordCount:8};
-  await assert.rejects(api.cerJevReview({auth:{uid:'s',token:{}},data:{scope:'question',question:facts}}),/administrator/);
-  await assert.rejects(api.cerJevReview({data:{scope:'question',question:facts}}),/Sign in/);
-  const r=await api.cerJevReview({auth,data:{scope:'question',question:facts}});
+  await assert.rejects(api.cerDecisionsReview({auth:{uid:'s',token:{}},data:{scope:'question',question:facts}}),/administrator/);
+  await assert.rejects(api.cerDecisionsReview({data:{scope:'question',question:facts}}),/Sign in/);
+  const r=await api.cerDecisionsReview({auth,data:{scope:'question',question:facts}});
   assert.equal(r.available,true);assert.equal(r.verdicts.wording.ok,true);
-  await assert.rejects(api.cerJevReview({auth,data:{scope:'question',question:'nope'}}),/Invalid/);
+  assert.ok(docs.has('cerDecisionsLimits/teacher'),'only counters are stored in the Decisions allowance collection');
+  await assert.rejects(api.cerDecisionsReview({auth,data:{scope:'question',question:'nope'}}),/Invalid/);
+});
+test('disabling Decisions on an import skips provider review without removing the imported question',async()=>{
+  const job=start(true);job.decisions=false;docs.set('cerRapidImports/'+job.id,job);
+  const q=await run(job.id);
+  assert.equal(decisionsCalls.length,0);
+  assert.equal(checks.length,1,'visual AI checking still runs');
+  assert.ok(q.blocks.some(block=>block.type==='image'&&block.url));
+  assert.equal(q.decisionsFigures,undefined);
+});
+test('an existing queued import preserves its disabled review preference during migration',async()=>{
+  const job=start(true);job['jev']=false;docs.set('cerRapidImports/'+job.id,job);
+  const q=await run(job.id);
+  assert.equal(decisionsCalls.length,0);
+  assert.equal(checks.length,1,'the visual check is independent of the migrated preference');
+  assert.ok(q.blocks.some(block=>block.type==='image'&&block.url));
+});
+test('publishing an existing checkpoint preserves its question and migrates stored review history',async()=>{
+  const job=setup(makeJob('history'));
+  const question={id:'saved-history',blocks:[{type:'text',content:'Keep the original wording.'}],sourcePages:[{page:1,url:'source'}],autoCheck:{state:'jev'}};
+  question['jevFigures']=[{index:0,state:'flagged',reasons:['Keep the crop warning.']}];
+  question['jevShadow']={yes:false,ai:'red',found:1};question.autoCheck['jev']=true;
+  files.set(job.checkpoint,Buffer.from(JSON.stringify({ready:[question]})));
+  await api.rapidImportPage({data:{id:job.id,page:3,generation:0,phase:'publish',publishIndex:0},retryCount:0});
+  const saved=docs.get('users/teacher/vetting/saved-history');
+  assert.deepEqual(saved.blocks,question.blocks);assert.deepEqual(saved.sourcePages,question.sourcePages);
+  assert.deepEqual(saved.decisionsFigures,question['jevFigures']);assert.deepEqual(saved.decisionsShadow,question['jevShadow']);
+  assert.equal(saved.autoCheck.state,'green');assert.equal(saved.autoCheck.decisions,true);
+  for(const key of ['jevFigures','jevShadow']) assert.equal(Object.hasOwn(saved,key),false);
+  assert.equal(Object.hasOwn(saved.autoCheck,'jev'),false);
 });
 
 // ---- the crop clean-up, through the real page task --------------------------
@@ -178,7 +215,7 @@ const TABLE_PAGE=STEM+[280,330,380,430].map(y=>px(100,y,244,4,'1 0 0')).join('')
 const TABLE_BOX=[300,220,750,880];
 
 test('the clean-up\'s box is cut from the PAGE: a cut that removes text above a gap is kept and re-measured',async()=>{
-  jevPlan=()=>({});
+  decisionsPlan=()=>({});
   startPage(STEM_PAGE,STEM_BOX);
   const plain=await storedFigure(await run('fig'));
   assert.equal(globalThis.REFINE.n,1,'exactly one clean-up for one figure');
@@ -190,14 +227,14 @@ test('the clean-up\'s box is cut from the PAGE: a cut that removes text above a 
   assert.equal(boxIn(cleaned.pic,dark).y1,-1,'nothing of the block above the gap is left in the picture');
   assert.ok(boxIn(cleaned.pic,red).y1>0,'and the figure is all there');
   assert.deepEqual(cleaned.block.cropSource.box_2d,STEM_BOX,'the page-level box is still the one recorded');
-  const facts=jevCalls.find(b=>b.state&&b.state.figures).state.figures[0];
-  assert.equal(facts.aiSawStrayText,false,'a clean-up that worked is not reported to Jev as stray text');
-  assert.deepEqual(facts.clippedSides,[],'Jev is shown the cleaned cut\'s own measurements');
+  const facts=decisionsCalls.find(b=>b.state&&b.state.figures).state.figures[0];
+  assert.equal(facts.aiSawStrayText,false,'a clean-up that worked is not reported to Decisions as stray text');
+  assert.deepEqual(facts.clippedSides,[],'Decisions is shown the cleaned cut\'s own measurements');
   assert.ok(facts.height<plain.H-40,'…its own size, not the first cut\'s');
   assert.equal(recrops.length,0,'no re-cut loop for a cleaned crop');
 });
 test('a clean-up that slices a bordered table in half is refused and the unrefined crop is kept',async()=>{
-  jevPlan=()=>({});
+  decisionsPlan=()=>({});
   startPage(TABLE_PAGE,TABLE_BOX);
   const plain=await storedFigure(await run('fig'));
   // Control: on this very page, a clean-up round the whole table is taken.
@@ -210,7 +247,7 @@ test('a clean-up that slices a bordered table in half is refused and the unrefin
   assert.equal(globalThis.REFINE.n,1);
   assert.deepEqual([kept.W,kept.H],[plain.W,plain.H],'the unrefined crop is kept, table whole');
   assert.deepEqual(kept.block.cropSource.box_2d,TABLE_BOX);
-  assert.deepEqual(jevCalls.find(b=>b.state&&b.state.figures).state.figures[0].clippedSides,[]);
+  assert.deepEqual(decisionsCalls.find(b=>b.state&&b.state.figures).state.figures[0].clippedSides,[]);
 });
 test('past the page task\'s deadline no clean-up or re-cut is started; the crop is kept and flagged',async()=>{
   const realNow=Date.now;let skew=0;
@@ -218,11 +255,11 @@ test('past the page task\'s deadline no clean-up or re-cut is started; the crop 
   globalThis.AFTER_PAGE_READ=()=>{skew=301000;};   // a page read that took five minutes
   try {
     startPage(STEM_PAGE,STEM_BOX);globalThis.REFINE.box=[600,0,1000,1000];
-    jevPlan=keys=>keys.includes('figure_0')?{figure_0:['no',.9]}:{};
+    decisionsPlan=keys=>keys.includes('figure_0')?{figure_0:['no',.9]}:{};
     const q=await run('fig');
     assert.equal(globalThis.REFINE.n,0,'no clean-up started after the deadline');
     assert.equal(recrops.length,0,'no AI re-cut started after the deadline');
-    assert.equal(q.jevFigures[0].state,'flagged','the crop Jev objected to is kept and flagged for a person');
+    assert.equal(q.decisionsFigures[0].state,'flagged','the crop Decisions objected to is kept and flagged for a person');
     assert.ok(q.blocks.find(b=>b.type==='image').url,'the picture is still there');
   } finally {Date.now=realNow;globalThis.AFTER_PAGE_READ=null;}
 });

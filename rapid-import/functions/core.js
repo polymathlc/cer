@@ -92,7 +92,7 @@ export function assemblePage(pending, entries, isLast) {
       const tail=q.blocks.map(b=>!b.part&&inheritedPart?{...b,part:inheritedPart}:b);
       carry = {...carry, blocks: [...carry.blocks, ...tail], sourcePages: [...carry.sourcePages, ...q.sourcePages],
         ...(carry.diagramWhole||q.diagramWhole?{diagramWhole:true}:{}),
-        ...((carry.jevFigures?.length || q.jevFigures?.length) ? {jevFigures:[...(carry.jevFigures||[]), ...(q.jevFigures||[]).map(f=>({...f,index:f.index+carry.blocks.filter(b=>b.type==='image').length}))]} : {}),
+        ...((carry.decisionsFigures?.length || q.decisionsFigures?.length) ? {decisionsFigures:[...(carry.decisionsFigures||[]), ...(q.decisionsFigures||[]).map(f=>({...f,index:f.index+carry.blocks.filter(b=>b.type==='image').length}))]} : {}),
         ...(q.importWarning?{importWarning:q.importWarning}:{})};
     } else {
       if (carry) ready.push(carry);

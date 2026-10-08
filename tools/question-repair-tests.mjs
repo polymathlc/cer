@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import * as repairCore from '../question-repair-core.mjs';
 import * as cropCore from '../question-crop-core.mjs';
+import { migrateDecisionsReviewState } from '../decisions-review-core.mjs';
 const core={...repairCore,...cropCore};
 
 export const appSource = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
@@ -374,7 +375,7 @@ test('unsupported topic or category suggestions remain review errors and cannot 
 test('the real bank and vetting writers stop before a stale first write or retry',async()=>{
   const begin=appSource.indexOf('async function saveQuestion(q, opts)'),end=appSource.indexOf('// Delete one question doc',begin);
   assert.ok(begin>=0 && end>begin);
-  const make=()=>new Function(`
+  const make=()=>new Function('migrateDecisionsReviewState', `
     let currentUser={uid:'teacher'},_wkSuppress=0,_inflightOps=0,allowed=true;
     const writes=[],states=[],db={};let fail=false,changeOnRetry=false;
     const _qRef=id=>'bank/'+id,_vRef=id=>'vet/'+id,_setSaveStatus=s=>states.push(s);
@@ -385,7 +386,7 @@ test('the real bank and vetting writers stop before a stale first write or retry
     ${appSource.slice(begin,end)}
     return {saveQuestion,saveVettingQuestion,writes,states,guard:()=>allowed,
       get inflight(){return _inflightOps;},set allowed(v){allowed=v;},set fail(v){fail=v;},set changeOnRetry(v){changeOnRetry=v;}};
-  `)();
+  `)(migrateDecisionsReviewState);
   for(const fn of ['saveQuestion','saveVettingQuestion']){
     const first=make();first.allowed=false;assert.equal(await first[fn]({id:'q1'},{guard:first.guard}),false);
     assert.equal(first.writes.length,0);assert.equal(first.inflight,0);

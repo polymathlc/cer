@@ -4462,7 +4462,7 @@ compares them**), its `aiBox` argument from `_cropBoxFromScreenshotEx` /
 `src` arguments to `_aiRefineCrop`, `_cropRefineOnPage` / `_cropRenderRect`, the
 worker's `refineCrop` / `refinePrompt` / `subCrop` / `cropWordingOf` /
 `PAGE_REFINE_MS`, the TABLE rule in `_rectangleRules()`, the worker's FIGURE
-RULES, `recropBox` and `_jevRecropBox`, and the faint `.pvs-over` pill.
+RULES, `recropBox` and `_decisionsRecropBox`, and the faint `.pvs-over` pill.
 
 A table was cropped with the end of the previous question, its answer line and
 the stem above it, and part (a), (i), (ii), their marks and answer lines below
@@ -4533,15 +4533,15 @@ and **every bordered table has four rules**.
   bare "(a)" is exactly what a picture's labels and a table's cells say. The
   prompt says a word INSIDE the figure is kept even when the question repeats
   it. **The worker had no clean-up pass at all**; it now runs the same prompt on
-  every crop, its Jev re-cuts and its traffic-light re-cut, and the browser's
-  Jev re-cut and `autoChkRecrop` do too.
+  every crop, its Decisions re-cuts and its traffic-light re-cut, and the browser's
+  Decisions re-cut and `autoChkRecrop` do too.
 - **The clean-up is CUT FROM THE PAGE AND MEASURED AGAIN** (`_cropRefineOnPage`
   / `subCrop(made, box, createCanvas, page)`). Cut out of the crop instead, the
   result kept the first cut's measurements — a clean-up that sliced a table in
-  half was invisible to the clipped check and to Jev — and wore a second white
+  half was invisible to the clipped check and to Decisions — and wore a second white
   frame. A cut that leaves drawing running off an edge the first did not is
   refused and the crop kept as it was. A successful clean-up is **not** reported
-  to Jev as stray text: that sent every cleaned crop round the re-cut loop.
+  to Decisions as stray text: that sent every cleaned crop round the re-cut loop.
 - **The worker's page task is BOUNDED** (`PAGE_REFINE_MS`, 300 s in, and the
   traffic-light fix's own deadline): past it no new clean-up or re-cut starts,
   and the first clean-ups run three at a time, in order. A timed-out page task
@@ -4672,7 +4672,7 @@ of these was silent: the crop still came back, looking either perfectly clean
 - **Tried and taken back out, so nobody puts them back:** painting out "a sliver
   of a sentence" crossing a refused clean-up's edge (it could not tell a slanting
   stem from a figure's own label, axis title or table row, and dropped truly
-  clipped sides), and telling Jev about every refused clean-up (a refusal is the
+  clipped sides), and telling Decisions about every refused clean-up (a refusal is the
   safeguard protecting the figure, and the worker also counted boxes it merely
   did not trust). A clean-up that clips a new side is refused, the crop kept as
   it was, and nothing is said.
@@ -7472,7 +7472,7 @@ wrong. Every one of them is silent: the app answered fluently either way.
 the 🔧 Auto-fixed button on the ⚡ Rapid add pad and the 🔴→🟢/🟡 card badge.
 
 - **ONE REPAIR ONLY.** The auto-check reads, repairs once, reads again. It never keeps trying.
-- **A Crop finding is RE-CUT, not reworded**: `autoChkRecrop` asks `_jevRecropBox` where the figure is
+- **A Crop finding is RE-CUT, not reworded**: `autoChkRecrop` asks `_decisionsRecropBox` where the figure is
   on the ORIGINAL page (`block.cropSource.url`) and cuts the pixels with the import's own code. No
   original kept → skipped and said. It runs before the wording repair so the repair carries the new
   crop; the re-read audits every picture again, and a re-crop that came back worse is put back with
@@ -7482,7 +7482,7 @@ the 🔧 Auto-fixed button on the ⚡ Rapid add pad and the 🔴→🟢/🟡 car
   the 🔧 list is derived from it across Vetting and the bank — there is no second store.
 - **The sweep** gives recent Vetting questions that arrived by another route (the online PDF worker)
   the same read-fix-read once: admin only, capped, never one open in the editor, quiet writes.
-- Run `node tools/auto-check-tests.mjs` and `node tools/jev-review-tests.mjs`.
+- Run `node tools/auto-check-tests.mjs` and `node tools/decisions-review-tests.mjs`.
 
 ## House rules
 - After touching **🧠 the master profile, the block stamps or the merge**
@@ -8903,52 +8903,66 @@ the 🔧 Auto-fixed button on the ⚡ Rapid add pad and the 🔴→🟢/🟡 car
 - `.rpg-tabs` must keep `flex-wrap: wrap` and `.rpg-tab` its `flex: 0 0 auto; white-space: nowrap`. Without them eleven leaderboard tabs get squeezed until each label breaks over three lines, the pill goes square, `border-radius: 999px` renders it as a circle, and the emoji on the first line sits outside the curve.
 - Commit messages and pushed artifacts must not contain the model identifier.
 
-## 🧭 Jev is ADVISORY (v1.419.0)
-`JEV_MAY_SKIP` in `jev-review-core.mjs` is **false**: a Jev yes no longer skips the AI read. Jev sees measured facts, never the picture or the science, so it may only ADD findings and trigger the AI re-cut. Its verdict is recorded as `q.jevShadow = { yes, confident, ai, found }` (browser and worker) so Jev can be compared with the AI's own verdicts; flip the constant only once that comparison shows a confident yes never hides a finding. The code-side crop measurement and the AI re-cut are the real value and are unaffected. The rest of the section below still describes the mechanics; read "a confident yes skips the AI read" as gated by this constant.
+## 🧭 OpenAI Decisions is ADVISORY
+`DECISIONS_MAY_SKIP` in `decisions-review-core.mjs` is **false**: a Decisions yes never skips the visual AI read. Decisions sees measured facts, never the picture or the science, so it may only ADD findings and trigger the AI re-cut. Its verdict is recorded as `q.decisionsShadow = { yes, confident, ai, found }` (browser and worker) so it can be compared with the AI's own verdicts. Visual AI checking always runs. The code-side crop measurement and the AI re-cut are unaffected.
 
-## 🧭 Jev review — every automatic import is judged, and a NO is fixed by the AI (v1.418.0)
+## 🧭 OpenAI Decisions review — every automatic import is judged, and a NO is fixed by the AI
 
-`jev-review-core.mjs` (shared, pure) · `JEV REVIEW` in `app.js`
-(`jevGateOn` / `jevReviewCall` / `_jevGateFigures` / `_jevRecropBox` /
-`jevGateQuestion`, plus `_cropBoxFromScreenshotEx`, the gate in
+`decisions-review-core.mjs` (shared, pure) · `DECISIONS REVIEW` in `app.js`
+(`decisionsGateOn` / `decisionsReviewCall` / `_decisionsGateFigures` / `_decisionsRecropBox` /
+`decisionsGateQuestion`, plus `_cropBoxFromScreenshotEx`, the gate in
 `_fillBlocksFromAiBoxes` and step 2c of `processRapidJob`) · the worker's
-`cerJevReview` / `reviewCrops` / Jev-first `checkQuestion` in
-`rapid-import/functions`. Jev is the typed-decision service **Ans Key** uses to
-route voice commands (`polymathlc/anskey`, `functions/jev-provider.js`): it
-answers a choice with a confidence and probabilities, never prose.
+`cerDecisionsReview` / `reviewCrops` / Decisions-first `checkQuestion` in
+`rapid-import/functions`. Review calls `https://api.openai.com/v1/decisions`
+using the shared server-side `OPENAI_API_KEY`. It returns typed decisions,
+never prose.
 
-- **JEV IS SHOWN FACTS, NOT PICTURES.** Measured in code: does drawing run on
+- **DECISIONS IS SHOWN FACTS, NOT PICTURES.** Measured in code: does drawing run on
   past a crop's edge (`measureCrop`, checked against the SOURCE page), is it
   blank or the whole page, did the AI clean-up cut sentences off it; is the
   wording garbled or cut off; do options, part letters, answers and pictures
-  hang together (`questionFacts`). Jev answers yes/no per figure, for the
+  hang together (`questionFacts`). Decisions answers yes/no per figure, for the
   wording and for the structure.
 - **A NO GOES TO THE AI TO CHECK AND FIX.** A crop is re-cut by the AI
-  (`_jevRecropBox`, given the whole page, the bad crop and the reasons) up to
-  `JEV_RECROP_TRIES` (2) times, judged again each time; a question goes to
-  `autoChkRun` with Jev's findings in `extraFindings`. **A defect the code finds
-  itself outranks a Jev yes** (`figureHardIssues` / `questionHardIssues`) and
-  triggers the same fix — a clipped crop is re-cut whether or not Jev is up.
-- **A CONFIDENT CLEAN YES IS WHAT SKIPS THE AI READ** (`JEV_SKIP_CONFIDENCE`
-  0.8, no failures, no crop still flagged). A lukewarm yes (`JEV_MIN_CONFIDENCE`
-  0.6) is a no. The skipped question is stamped `autoCheck.jev` and the card
-  reads **Jev ✓**, not "AI read": Jev does not judge the science, and the tip
-  says so and points at 🚦.
-- **JEV UNAVAILABLE CHANGES NOTHING.** No key, not an admin (an employee never
-  reaches it), busy, offline: `jevReviewCall` returns null, the gate is "not
-  confident", and every question is AI-checked exactly as before. A refused Jev
-  is not asked again for 2–30 minutes. **Nothing is ever withheld**: a crop the
+  (`_decisionsRecropBox`, given the whole page, the bad crop and the reasons) up to
+  `DECISIONS_RECROP_TRIES` (2) times, judged again each time; a question goes to
+  `autoChkRun` with Decisions' findings in `extraFindings`. **A defect the code finds
+  itself outranks a Decisions yes** (`figureHardIssues` / `questionHardIssues`) and
+  triggers the same fix — a clipped crop is re-cut whether or not Decisions is up.
+- **VISUAL AI CHECKING ALWAYS RUNS.** A confident clean yes
+  (`DECISIONS_SKIP_CONFIDENCE` 0.8, no failures, no crop still flagged) is
+  recorded for comparison, while `DECISIONS_MAY_SKIP` remains false. A lukewarm
+  yes (`DECISIONS_MIN_CONFIDENCE` 0.6) is a no. Decisions does not judge the science.
+- **DECISIONS UNAVAILABLE CHANGES NOTHING.** No key, not an admin (an employee never
+  reaches it), busy, offline: `decisionsReviewCall` returns null, the gate is "not
+  confident", and every question is AI-checked exactly as before. A refused
+  Decisions request is not asked again for 2–30 minutes. **Nothing is ever withheld**: a crop the
   AI could not fix is kept (best attempt) and raised as a `Crop` finding.
 - **BOTH IMPORTERS.** The browser (⚡ Rapid add, PDF add, the exam-paper /
   custom-paper readers — everything through `_fillBlocksFromAiBoxes`) and the
-  durable worker (`reviewCrops` at the page phase, Jev first in `checkQuestion`
+  durable worker (`reviewCrops` at the page phase, Decisions first in `checkQuestion`
   at the publish phase). The two copies of the core are **byte-identical**.
-- **`cerJevReview` is administrator-only**, bounded (`clipDeep`), counted per
-  admin (`cerJevLimits`, counters only) and stores no question content. It binds
-  the existing `JEV_API_KEY` secret; deploying `cer-rapid-import` deploys it.
-- `_jevRecropBox` locates a rectangle — metadata, not science — so it is in the
+- **`cerDecisionsReview` is administrator-only**, bounded (`clipDeep`), counted per
+  admin (`cerDecisionsLimits`, counters only) and stores no question content. It binds
+  the existing `OPENAI_API_KEY` secret; deploying `cer-rapid-import` deploys it.
+  No separate review-provider account or key is needed. Both isolated deployment
+  paths use `--force` to remove retired functions in this codebase. Authentication
+  probes check the status and Decisions review endpoints without calling a provider;
+  an authenticated review must succeed before provider availability is verified.
+- **PRESERVE SAVED REVIEW HISTORY.** `migrateDecisionsReviewState` converts old
+  `jevFigures`, `jevShadow`, `autoCheck.jev`, `autoCheck.state = 'jev'` and finding
+  markers to Decisions metadata. The historical skipped-read state becomes green
+  with its review flag preserved; it does not change the always-run visual check
+  for new work. Existing Decisions values win and blocks/source data stay intact.
+  Apply it when loading queued jobs, checkpoints and questions, and before normal
+  question saves; do not force whole-record writes merely because a record loaded.
+  The browser copies `sq_jev_gate` to `sq_decisions_gate` once, keeps an existing
+  new preference and removes the old key only after a successful copy. These old
+  strings are intentional data-conversion inputs, not provider interfaces.
+  New Decisions counters start fresh and bounded; historical counters remain untouched.
+- `_decisionsRecropBox` locates a rectangle — metadata, not science — so it is in the
   census exemptions (`UNGROUNDED_BY_DESIGN`) and in `AUTHORING_FUNCTIONS`.
-- Run **`node tools/jev-review-tests.mjs`** and `npm test --prefix
+- Run **`node tools/decisions-review-tests.mjs`** and `npm test --prefix
   rapid-import/functions` after touching any of it.
 
 ## Durable imports: house-style figures and ONE automatic fix (2026-09-30)

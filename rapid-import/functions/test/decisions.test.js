@@ -2,11 +2,33 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createCanvas} from '@napi-rs/canvas';
-import {measureCrop,figureFacts,figureHardIssues,questionFacts,questionHardIssues,buildReviewRequest,readReview,decideReview,failuresToFindings,JEV_MIN_CONFIDENCE} from '../jev-review-core.js';
-import {jevReview,JevUnavailable,cleanInput,jevAllow} from '../jev.js';
+import {measureCrop,figureFacts,figureHardIssues,questionFacts,questionHardIssues,buildReviewRequest,readReview,decideReview,failuresToFindings,migrateDecisionsReviewState,DECISIONS_MIN_CONFIDENCE} from '../decisions-review-core.js';
+import {decisionsReview,DecisionsUnavailable,cleanInput,decisionsAllow} from '../decisions.js';
 
 test('the worker copy of the shared core is byte-identical to the site copy',()=>{
-  assert.equal(readFileSync(new URL('../jev-review-core.js',import.meta.url),'utf8'),readFileSync(new URL('../../../jev-review-core.mjs',import.meta.url),'utf8'));
+  assert.equal(readFileSync(new URL('../decisions-review-core.js',import.meta.url),'utf8'),readFileSync(new URL('../../../decisions-review-core.mjs',import.meta.url),'utf8'));
+});
+test('stored review state migrates once without changing question content or overriding current fields',()=>{
+  const blocks=[{type:'text',content:'Keep this question.'}], sourcePages=[{page:1,url:'source'}];
+  const record={blocks,sourcePages,autoCheck:{state:'jev',findings:[{by:'jev',code:'jev_no',title:'Keep this finding.'}]}};
+  record['jevFigures']=[{index:0,state:'flagged',reasons:['Keep this crop warning.']}];
+  record['jevShadow']={yes:false,found:1};record['jev']=false;record.autoCheck['jev']=true;
+  assert.equal(migrateDecisionsReviewState(record),record);
+  assert.equal(record.blocks,blocks);assert.equal(record.sourcePages,sourcePages);
+  assert.deepEqual(record.decisionsFigures,[{index:0,state:'flagged',reasons:['Keep this crop warning.']}]);
+  assert.deepEqual(record.decisionsShadow,{yes:false,found:1});assert.equal(record.decisions,false);
+  assert.equal(record.autoCheck.state,'green');assert.equal(record.autoCheck.decisions,true);
+  assert.deepEqual(record.autoCheck.findings,[{by:'decisions',code:'decisions_no',title:'Keep this finding.'}]);
+  for(const key of ['jevFigures','jevShadow','jev']) assert.equal(Object.hasOwn(record,key),false);
+  assert.equal(Object.hasOwn(record.autoCheck,'jev'),false);
+  const once=JSON.stringify(record);migrateDecisionsReviewState(record);assert.equal(JSON.stringify(record),once);
+  const current={decisions:false,decisionsShadow:{yes:true},autoCheck:{decisions:false,state:'amber'}};
+  current['jev']=true;current['jevShadow']={yes:false};current.autoCheck['jev']=true;
+  migrateDecisionsReviewState(current);assert.equal(current.decisions,false);assert.equal(current.decisionsShadow.yes,true);
+  assert.equal(current.autoCheck.decisions,false);assert.equal(current.autoCheck.state,'amber');
+  const conflicting={autoCheck:{state:'jev',decisions:false}};
+  migrateDecisionsReviewState(conflicting);
+  assert.equal(conflicting.autoCheck.state,'green');assert.equal(conflicting.autoCheck.decisions,false);
 });
 
 function page(){const c=createCanvas(200,150),x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,200,150);x.fillStyle='#000';x.fillRect(20,30,100,50);return {c,x};}
@@ -31,7 +53,7 @@ test('figure hard issues cover clipped, blank, whole page and refused crops',()=
   assert.equal(figureHardIssues(figureFacts({...base,pageShare:0.95,measure:{ink:.2,clipped:[],bleed:{top:0,right:0,bottom:0,left:0}}}))[0].code,'whole_page');
   assert.equal(figureHardIssues(figureFacts({...base,refused:true,source:'none'}))[0].code,'no_crop');
   const strayFacts=figureFacts({...base,measure:{ink:.1,clipped:[],bleed:{top:0,right:0,bottom:0,left:0}},refine:{changed:true}});
-  assert.equal(strayFacts.aiSawStrayText,true,'Jev is told sentences had to be cut off');
+  assert.equal(strayFacts.aiSawStrayText,true,'Decisions is told sentences had to be cut off');
   assert.deepEqual(figureHardIssues(strayFacts),[],'…but the clean-up already fixed it, so it is not a defect by itself');
 });
 const good={blocks:[
@@ -65,36 +87,36 @@ test('requests are scoped and the answers are read strictly',()=>{
   const body=buildReviewRequest({question:facts,scope:'question'});
   const ok=readReview({answers:{wording:answer('yes',.95,.95),structure:answer('no',.9,.1)}},body);
   assert.equal(ok.wording.ok,true);assert.equal(ok.structure.ok,false);
-  assert.equal(readReview({answers:{wording:answer('yes',JEV_MIN_CONFIDENCE-.1,.55),structure:answer('yes',.9,.9)}},body).wording.ok,false,'a yes that is not sure is a no');
+  assert.equal(readReview({answers:{wording:answer('yes',DECISIONS_MIN_CONFIDENCE-.1,.55),structure:answer('yes',.9,.9)}},body).wording.ok,false,'a yes that is not sure is a no');
   assert.throws(()=>readReview({answers:{wording:answer('maybe',.9,.9),structure:answer('yes',.9,.9)}},body),/unreadable/);
   assert.throws(()=>readReview({answers:{wording:{type:'choice',choice:'yes',confidence:.9,probabilities:{yes:.2,no:.2}},structure:answer('yes',.9,.9)}},body),/unreadable/);
   assert.throws(()=>readReview({answers:{wording:answer('yes',.9,.9)}},body),/unreadable/);
 });
-test('Jev says no, or the code finds a hard defect: the AI must check and fix. Only a confident clean pass skips it',()=>{
+test('Decisions says no, or the code finds a hard defect: the AI must check and fix; clean confidence is recorded',()=>{
   const qf=questionFacts(good), clean={ok:true,confidence:.95}, figs=[figureFacts({index:0,source:'ai-box',width:200,height:100,pageShare:.2,measure:{ink:.1,clipped:[],bleed:{top:0,right:0,bottom:0,left:0}}})];
   let d=decideReview({verdicts:{wording:clean,structure:clean,figure_0:clean},figures:figs,question:qf});
   assert.deepEqual([d.passed,d.confident],[true,true]);
   d=decideReview({verdicts:{wording:clean,structure:{ok:true,confidence:.7},figure_0:clean},figures:figs,question:qf});
   assert.deepEqual([d.passed,d.confident],[true,false],'a lukewarm yes passes but does not skip the AI read');
   d=decideReview({verdicts:{wording:{ok:false,choice:'no',confidence:.9},structure:clean,figure_0:clean},figures:figs,question:qf});
-  assert.equal(d.passed,false);assert.equal(d.failures[0].by,'jev');
+  assert.equal(d.passed,false);assert.equal(d.failures[0].by,'decisions');
   const clipped=[{...figs[0],clippedSides:['top']}];
   d=decideReview({verdicts:{figure_0:clean},figures:clipped,question:null});
-  assert.equal(d.passed,false,'Jev saying yes cannot override a crop that visibly continues past its edge');
+  assert.equal(d.passed,false,'Decisions saying yes cannot override a crop that visibly continues past its edge');
   assert.equal(failuresToFindings(d.failures)[0].cropStatus,'clipped');
 });
 test('the provider sends the secret only as a bearer header and never leaks an error body',async()=>{
   const body=questionFacts(good);let seen;
   const wire=answers=>({answers:Object.entries(answers).map(([name,a])=>({...a,name,probabilities:Object.entries(a.probabilities).map(([value,probability])=>({value,probability}))}))});
   const okFetch=async(url,init)=>{seen={url,init};return {ok:true,json:async()=>wire({wording:answer('yes',.9,.9),structure:answer('yes',.9,.9)})};};
-  const v=await jevReview({scope:'question',question:body},{apiKey:'sekret',fetchImpl:okFetch});
+  const v=await decisionsReview({scope:'question',question:body},{apiKey:'sekret',fetchImpl:okFetch});
   assert.equal(seen.url,'https://api.openai.com/v1/decisions');
   const sent=JSON.parse(seen.init.body);assert.equal(sent.model,'gpt-6-luna');assert.deepEqual(sent.questions.map(q=>q.name),['wording','structure']);assert.ok(JSON.parse(sent.input).question);assert.equal(sent.state,undefined);
   assert.equal(v.wording.ok,true);assert.equal(seen.init.headers.Authorization,'Bearer sekret');assert.ok(!seen.init.body.includes('sekret'));
-  await assert.rejects(jevReview({scope:'question',question:body},{apiKey:'',fetchImpl:okFetch}),e=>e instanceof JevUnavailable&&e.code==='not_configured');
-  await assert.rejects(jevReview({scope:'question',question:body},{apiKey:'k',fetchImpl:async()=>({ok:false,status:429,text:async()=>'SECRET'})}),e=>e.code==='busy'&&!/SECRET/.test(e.message));
-  await assert.rejects(jevReview({scope:'question',question:body},{apiKey:'k',fetchImpl:async()=>({ok:true,json:async()=>({answers:{}})})}),e=>e.code==='invalid_response');
-  await assert.rejects(jevReview({scope:'question',question:body},{apiKey:'k',fetchImpl:async()=>{throw new Error('net');}}),e=>e.code==='unavailable');
+  await assert.rejects(decisionsReview({scope:'question',question:body},{apiKey:'',fetchImpl:okFetch}),e=>e instanceof DecisionsUnavailable&&e.code==='not_configured');
+  await assert.rejects(decisionsReview({scope:'question',question:body},{apiKey:'k',fetchImpl:async()=>({ok:false,status:429,text:async()=>'SECRET'})}),e=>e.code==='busy'&&!/SECRET/.test(e.message));
+  await assert.rejects(decisionsReview({scope:'question',question:body},{apiKey:'k',fetchImpl:async()=>({ok:true,json:async()=>({answers:{}})})}),e=>e.code==='invalid_response');
+  await assert.rejects(decisionsReview({scope:'question',question:body},{apiKey:'k',fetchImpl:async()=>{throw new Error('net');}}),e=>e.code==='unavailable');
 });
 test('input from the browser is bounded and shaped before it is forwarded',()=>{
   const c=cleanInput({scope:'question',question:{excerpt:'x'.repeat(9000),'bad key!':1,deep:{a:{b:{c:{d:{e:{f:1}}}}}}},figures:[{index:0}]});
@@ -103,9 +125,9 @@ test('input from the browser is bounded and shaped before it is forwarded',()=>{
   assert.throws(()=>cleanInput({scope:'figures',figures:[]}),/Nothing/);
 });
 test('allowance counts per minute and per day without storing content',async()=>{
-  const docs=new Map(),db={collection:()=>({doc:id=>({id})}),runTransaction:async fn=>fn({get:async r=>({data:()=>docs.get(r.id)}),set:(r,v)=>docs.set(r.id,v)})};
-  for(let i=0;i<90;i++) assert.equal(await jevAllow(db,'u',1e12),true);
-  assert.equal(await jevAllow(db,'u',1e12),false);
-  assert.equal(await jevAllow(db,'u',1e12+61000),true);
+  const docs=new Map(),db={collection:name=>{assert.equal(name,'cerDecisionsLimits');return {doc:id=>({id})};},runTransaction:async fn=>fn({get:async r=>({data:()=>docs.get(r.id)}),set:(r,v)=>docs.set(r.id,v)})};
+  for(let i=0;i<90;i++) assert.equal(await decisionsAllow(db,'u',1e12),true);
+  assert.equal(await decisionsAllow(db,'u',1e12),false);
+  assert.equal(await decisionsAllow(db,'u',1e12+61000),true);
   assert.deepEqual(Object.keys(docs.get('u')).sort(),['day','dayCount','minute','minuteCount']);
 });

@@ -19,8 +19,12 @@ the deployment and the live acceptance check below pass.
 The **Deploy Rapid Add worker** workflow runs on reviewed `main` changes under
 `rapid-import/`, and can also be run on demand. It uses the existing
 `FIREBASE_SERVICE_ACCOUNT` repository secret to deploy only `cer-rapid-import`.
-It tests the worker first and verifies the live callable's sign-in requirement
-afterwards. Shared Firestore/Storage rules and Maths functions are not deployed.
+It tests the worker first and verifies both the status and Decisions review
+callables' sign-in requirements afterwards. Shared Firestore/Storage rules and
+Maths functions are not deployed.
+The isolated deployment uses `--force` to remove retired functions from this
+codebase when callable names change. These probes do not call an AI provider;
+Decisions availability still needs an authenticated live review.
 If the existing `MOONSHOT_API_KEY` secret is visible, it grants only that secret's
 accessor role to the two discovered worker execution identities. Missing backup
 credentials or permission do not prevent the OpenAI/Gemini deployment. The
@@ -57,7 +61,8 @@ or create service-account keys. Existing Firestore/Storage permissions and AI
 provider access still need to pass the live acceptance check below.
 
 Success requires all nine functions to be ACTIVE, the queue to be RUNNING,
-and an unauthenticated status probe to return Firebase's UNAUTHENTICATED error.
+and unauthenticated status and Decisions review probes to return Firebase's
+UNAUTHENTICATED error.
 These deployment checks do not submit PDFs or establish end-to-end processing.
 Keep the setup terminal open until it finishes; then run the live check below.
 
@@ -69,12 +74,15 @@ From an authorised Firebase/Google Cloud terminal with Node 22:
 git clone https://github.com/polymathlc/cer.git
 cd cer
 npm ci --prefix rapid-import/functions
-npx firebase-tools deploy --project mathgen--app --config rapid-import/firebase.json --only functions:cer-rapid-import
+npx firebase-tools deploy --project mathgen--app --config rapid-import/firebase.json --only functions:cer-rapid-import --force
 ```
 
-Use the existing `GEMINI_API_KEY` and `OPENAI_API_KEY` Secret Manager secrets (OpenAI also supplies typed review decisions). If either secret has not
-been set, provision it with `firebase functions:secrets:set GEMINI_API_KEY
---project mathgen--app`; never put a provider key in frontend code. The default
+Use the existing `GEMINI_API_KEY` and `OPENAI_API_KEY` Secret Manager secrets
+(OpenAI also supplies typed review decisions). No separate review key is required.
+If either secret has not been set, provision the missing named secret with
+`firebase functions:secrets:set GEMINI_API_KEY --project mathgen--app` or
+`firebase functions:secrets:set OPENAI_API_KEY --project mathgen--app`; never put
+a provider key in frontend code. The default
 OpenAI worker model is `gpt-6.1-sol` (`RAPID_IMPORT_OPENAI_MODEL`) for reading,
 vision and reasoning, with `gemini-2.5-flash` (`RAPID_IMPORT_MODEL`) and then
 `kimi-k3` (`RAPID_IMPORT_KIMI_MODEL`) as backups. Explicit queued authoring
@@ -175,27 +183,46 @@ Reopen the portal and verify the questions, part order and source-page links.
 Then retry a deliberately failed import and confirm no duplicate questions.
 
 
-## OpenAI Decisions review (legacy Jev interfaces)
+## OpenAI Decisions review
 
-`cerJevReview` (callable, administrators only) and the worker's own gate ask
+`cerDecisionsReview` (callable, administrators only) and the worker's own gate ask
 OpenAI Decisions (`gpt-6-luna`) — also used by Ans Key for voice commands — yes/no
 questions about measured facts: is each figure crop complete and clean, is the
 wording readable, do parts/options/answers hang together. The pure logic is
-`jev-review-core.js`, **byte-identical** to `../jev-review-core.mjs`
-(`tools/jev-review-tests.mjs` fails if they differ).
+`decisions-review-core.js`, **byte-identical** to `../decisions-review-core.mjs`
+(`tools/decisions-review-tests.mjs` fails if they differ).
 
 * **A no — or a defect the code finds itself (clipped, blank, whole-page,
   refused crop) — sends the item to the AI.** A crop is re-cut by the AI, told
-  what was wrong, up to twice, and Jev is asked again; a question goes to the
-  existing check-and-repair loop with Jev's reasons attached. A crop that still
+  what was wrong, up to twice, and Decisions is asked again; a question goes to the
+  existing check-and-repair loop with Decisions' reasons attached. A crop that still
   fails is kept and flagged as a Crop finding on the vetting card.
-* **Jev is advisory**: a confident clean yes still gets the visual AI read,
+* **Decisions is advisory**: a confident clean yes still gets the visual AI read,
   and its agreement is recorded for comparison with the checked result.
-* **Jev unavailable changes nothing**: every question is AI-checked as before.
+* **Decisions unavailable changes nothing**: every question is AI-checked as before.
 * Only measurements and short excerpts are sent; nothing is stored beyond
-  per-admin counters (`cerJevLimits`). The key is a Firebase secret.
+  per-admin counters (`cerDecisionsLimits`). The shared `OPENAI_API_KEY` is a
+  Firebase secret.
 
-Deploying `cer-rapid-import` deploys `cerJevReview` with it. It needs no other setup.
+Saved review history and queued jobs are upgraded with the shared
+`migrateDecisionsReviewState` helper. It converts `jevFigures`, `jevShadow`,
+`autoCheck.jev`, the old `autoCheck.state` value `jev`, and old review finding
+markers to Decisions fields and markers. An old skipped-read state becomes a
+green historical result with its review flag preserved; new visual checks still
+run. Queued job preferences are also converted. Existing Decisions values win,
+and question blocks and source data are untouched. These old strings are used
+only to read saved data, never to call another provider. Browser records persist
+the converted metadata on their next ordinary save; loading alone does not
+rewrite records. New per-admin Decisions counters start with bounded allowances;
+historical counters are left untouched.
+
+The browser copies the former `sq_jev_gate` preference to `sq_decisions_gate`
+once, preserving an existing new preference. It removes the old preference only
+after the copy succeeds and keeps honoring the saved choice if storage fails.
+
+Deploying `cer-rapid-import` deploys `cerDecisionsReview` with it and removes
+retired callables in this isolated codebase. It needs no separate review setup.
+An authenticated review must succeed before provider availability is verified.
 
 ## Automatic figure preparation and checked repairs
 

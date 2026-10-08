@@ -2,10 +2,10 @@ name: PDF import crop checks
 
 on:
   pull_request:
-    paths: ['app.js', 'index.html', 'rapid-import/**', 'tools/rapid-*', 'tools/preview-*', 'tools/hover-preview-tests.mjs', 'tools/question-merge-tests.mjs', 'tools/crop-tighten-tests.mjs', 'jev-review-core.mjs', 'tools/jev-review-tests.mjs', '.github/workflows/rapid-import-tests.yml']
+    paths: ['app.js', 'index.html', 'rapid-import/**', 'tools/rapid-*', 'tools/preview-*', 'tools/hover-preview-tests.mjs', 'tools/question-merge-tests.mjs', 'tools/crop-tighten-tests.mjs', 'decisions-review-core.mjs', 'tools/decisions-review-tests.mjs', '.github/workflows/rapid-import-tests.yml']
   push:
     branches: [main]
-    paths: ['app.js', 'index.html', 'rapid-import/**', 'tools/rapid-*', 'tools/preview-*', 'tools/hover-preview-tests.mjs', 'tools/question-merge-tests.mjs', 'tools/crop-tighten-tests.mjs', 'jev-review-core.mjs', 'tools/jev-review-tests.mjs', '.github/workflows/rapid-import-tests.yml']
+    paths: ['app.js', 'index.html', 'rapid-import/**', 'tools/rapid-*', 'tools/preview-*', 'tools/hover-preview-tests.mjs', 'tools/question-merge-tests.mjs', 'tools/crop-tighten-tests.mjs', 'decisions-review-core.mjs', 'tools/decisions-review-tests.mjs', '.github/workflows/rapid-import-tests.yml']
 
 permissions:
   contents: read
@@ -22,7 +22,7 @@ jobs:
       - run: npm test --prefix rapid-import/functions
       - run: python3 tools/rapid-deploy-tests.py
       - run: node tools/crop-tighten-tests.mjs
-      - run: node tools/jev-review-tests.mjs
+      - run: node tools/decisions-review-tests.mjs
       - name: Check shared Add preview and existing import controls
         run: |
           node tools/rapid-preview-tests.mjs

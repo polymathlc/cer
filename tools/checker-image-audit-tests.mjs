@@ -5,6 +5,7 @@ import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import * as repairCore from '../question-repair-core.mjs';
+import { migrateDecisionsReviewState } from '../decisions-review-core.mjs';
 
 const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 const start=source.indexOf('// ---- the AI pass: the question AND its diagrams');
@@ -155,6 +156,7 @@ function stampHarness(){
   const fn=name=>{const a=source.indexOf('function '+name+'('),b=source.indexOf('\n}',a);assert.ok(a>=0&&b>a);return source.slice(a,b+2);};
   const looksStart=source.indexOf('const AUTOCHK_CARD_LOOK ='),looksEnd=source.indexOf('function autoChkCardHtml',looksStart);
   return new Function(`
+    ${migrateDecisionsReviewState.toString()}
     const TL_SIG_HEAD=4000,AUTOCHK_KEEP_FINDINGS=20,_tlCache=new Map();
     const escapeHtml=value=>String(value),_aiHash=value=>{let h=5381;for(let i=0;i<value.length;i++)h=((h<<5)+h+value.charCodeAt(i))|0;return 'ai:'+(h>>>0).toString(36);};
     ${fn('tlSig')+fn('_tlFromStamp')+fn('autoChkStamp')+source.slice(looksStart,looksEnd)+fn('autoChkCardHtml')}
