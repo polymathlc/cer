@@ -71,7 +71,7 @@ jobs:
         run: npm install -g firebase-tools@15.29.0 --no-audit --no-fund
 
       - name: Deploy the isolated worker
-        run: firebase deploy --project "$FIREBASE_PROJECT" --config rapid-import/firebase.json --only functions:cer-rapid-import --non-interactive
+        run: firebase deploy --project "$FIREBASE_PROJECT" --config rapid-import/firebase.json --only functions:cer-rapid-import --non-interactive --force
 
       - uses: google-github-actions/setup-gcloud@v2
 
@@ -97,19 +97,21 @@ jobs:
             echo '::warning::No enabled shared MOONSHOT_API_KEY secret is visible. OpenAI/Gemini remain available; Kimi is optional.'
           fi
 
-      - name: Verify the deployed worker authentication gate
+      - name: Verify the deployed status and Decisions review authentication gates
         run: |
           set -euo pipefail
           probe="$RUNNER_TEMP/rapid-import-probe.json"
-          status=$(curl --silent --show-error --max-time 60 --output "$probe" --write-out '%{http_code}' --header 'Content-Type: application/json' --data '{"data":{}}' "https://$RAPID_REGION-$FIREBASE_PROJECT.cloudfunctions.net/rapidImportStatus")
-          [[ "$status" == 401 ]]
-          node --input-type=module - "$probe" <<'JS'
+          for callable in rapidImportStatus cerDecisionsReview; do
+            status=$(curl --silent --show-error --max-time 60 --output "$probe" --write-out '%{http_code}' --header 'Content-Type: application/json' --data '{"data":{}}' "https://$RAPID_REGION-$FIREBASE_PROJECT.cloudfunctions.net/$callable")
+            [[ "$status" == 401 ]]
+            node --input-type=module - "$probe" <<'JS'
           import {readFileSync} from 'node:fs';
           if (JSON.parse(readFileSync(process.argv[2], 'utf8')).error?.status !== 'UNAUTHENTICATED') {
-            throw new Error('The deployed worker did not enforce the expected sign-in requirement.');
+            throw new Error('The deployed callable did not enforce the expected sign-in requirement.');
           }
           JS
-          echo 'CER Rapid Add worker redeployed. Authentication gate verified; this check does not submit PDFs or call AI providers.' >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo 'CER Rapid Add worker redeployed. Status and Decisions review authentication gates verified; this check does not submit PDFs or call AI providers. OpenAI Decisions availability is unverified until an authenticated review succeeds.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove the deployment credential
         if: always()

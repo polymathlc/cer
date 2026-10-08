@@ -27,7 +27,7 @@ function world({ ready = false, crops = [], imageBlocks = [] } = {}) {
     function imageAiReady() { return H.ready; }
     async function _cropBoxFromScreenshot() { return H.crops.shift() || null; }
     async function _cropBoxFromScreenshotEx() { const c = H.crops.shift(); return c ? { dataUrl: c } : null; }
-    function jevGateOn() { return false; } function _canAuthor() { return true; }
+    function decisionsGateOn() { return false; } function _canAuthor() { return true; }
     async function _aiRefineCrop(value) { return value; }
     function _cropWordingOf() { return ''; }
     async function generateCleanEnhancedImage() { return H.enhanced; }

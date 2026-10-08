@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { migrateDecisionsReviewState } from '../decisions-review-core.mjs';
 const helpers = createRequire(import.meta.url)('../question-apps.js');
 const source = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const start = source.indexOf('const WIDGET_HTML_MAX =');
@@ -18,7 +19,7 @@ const token = '11111111-2222-4333-8444-555555555555';
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
 function build() {
   const env = { author: true, store: new Map(), calls: [], toasts: [], block: { id: 'app1', type: 'widget', html: oldHtml, maxTokens: 2048 }, status: {}, fetchHook: null };
-  const api = new Function('env', 'helpers', 'crypto', 'token', `
+  const api = new Function('env', 'helpers', 'crypto', 'token', 'migrateDecisionsReviewState', `
     const window = { QuestionApps: helpers }, AI_THINK_MIN = 'low';
     let currentUser = { uid: 'author1' }, blocks = [env.block], geminiModel = null;
     const document = { getElementById: id => env.status[id] || null };
@@ -81,7 +82,7 @@ function build() {
       setBlocks(value) { blocks = value; },
       get blocks() { return blocks; }, get busy() { return _widgetBusy; }
     };
-  `)(env, helpers, webcrypto, token);
+  `)(env, helpers, webcrypto, token, migrateDecisionsReviewState);
   return {env, api};
 }
 let checks = 0;

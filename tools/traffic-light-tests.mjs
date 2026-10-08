@@ -33,6 +33,7 @@
 //    feature inverted by pressing the button on a blank page.
 import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import fs from 'fs';
+import { migrateDecisionsReviewState } from '../decisions-review-core.mjs';
 
 const APP = new URL('../app.js', import.meta.url);
 const src = fs.readFileSync(APP, 'utf8');
@@ -104,7 +105,7 @@ const document = {
 };
 `;
 
-const M = new Function(preamble + mcqLabelSrc(src, { display: false }) + section + `
+const M = new Function('migrateDecisionsReviewState', preamble + mcqLabelSrc(src, { display: false }) + section + `
 return {
   HOOK,
   TL_PAR, TL_LOOKS,
@@ -126,7 +127,7 @@ return {
   },
   editorBlocks: () => blocks,
   cache: () => _tlCache,
-};`)();
+};`)(migrateDecisionsReviewState);
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });

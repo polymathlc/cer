@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { migrateDecisionsReviewState } from '../decisions-review-core.mjs';
 
 const src = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -192,7 +193,7 @@ test('teacher practice and worksheets include held questions; student and practi
 
 // Exercise the actual saveQuestion writer, including its retry/permission path.
 function writerHarness() {
-  return new Function(`
+  return new Function('migrateDecisionsReviewState', `
     let currentUser={}, _wkSuppress=0, _inflightOps=0, _saveQuestionLastError='';
     let failed=false; const db={}, records=new Map([['vetting/id',{id:'id'}]]), events=[];
     const _qRef=id=>'bank/'+id, _vRef=id=>'vetting/'+id, _setSaveStatus=()=>{};
@@ -209,7 +210,7 @@ function writerHarness() {
     }
     ${cut('async function saveQuestion(q, opts)', "let _saveQuestionLastError = '';")}
     return {saveQuestion,records,events,set failed(x){failed=x}};
-  `)();
+  `)(migrateDecisionsReviewState);
 }
 test('atomic approval never removes Vetting on failure and announces both changes only after commit', async () => {
   const w=writerHarness(), q={id:'id',releaseOn:'2099-01-01'};

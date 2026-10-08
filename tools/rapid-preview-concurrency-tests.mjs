@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { signature, normaliseQuestion } from '../rapid-import/functions/core.js';
+import { migrateDecisionsReviewState } from '../decisions-review-core.mjs';
 
 const src = readFileSync(new URL('../app.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 function cut(start, end) {
@@ -99,7 +100,7 @@ test('a fresh persisted worker check outranks a stale session verdict', () => {
   const code=cut('function _tlFromStamp(q) {','function tlFresh(q) {');
   const cache=new Map(),q=base();q.autoCheck={state:'green',sig:tlSig(q),at:'2026-10-01T00:00:00Z'};
   cache.set(q.id,{sig:'older-content',state:'done',verdict:'red',at:1});
-  const read=new Function('tlSig','_tlCache',code+'\nreturn tlStateOf;')(tlSig,cache);
+  const read=new Function('tlSig','_tlCache','migrateDecisionsReviewState',code+'\nreturn tlStateOf;')(tlSig,cache,migrateDecisionsReviewState);
   assert.equal(read(q).state,'green');
   q.blocks[0].content+=' changed';assert.equal(read(q).state,'stale');
 });

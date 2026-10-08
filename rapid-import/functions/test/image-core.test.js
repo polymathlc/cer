@@ -26,9 +26,9 @@ test('image downloads reject other owners, other buckets and external endpoints'
   for(const url of [make('cer-rapid/other/job/images/crop.jpg'),make('cer-rapid/teacher/job/images/crop.jpg','other'),make('cer-rapid/teacher/job/original.pdf'),make('cer-rapid/teacher/../other/images/crop.jpg'),'https://example.com/private']) assert.throws(()=>storageImagePath(url,'test','teacher'));
 });
 test('continuation crop flags retain their correct figure indexes',()=>{
-  const q=(id,flags)=>({id,sourceQuestionNumber:'8',blocks:[{id,type:'image'}],sourcePages:[],jevFigures:flags});
+  const q=(id,flags)=>({id,sourceQuestionNumber:'8',blocks:[{id,type:'image'}],sourcePages:[],decisionsFigures:flags});
   const result=assemblePage(q('a',[{index:0,state:'fixed'}]),[{q:q('b',[{index:0,state:'flagged'}]),continuation:true}],true);
-  assert.deepEqual(result.ready[0].jevFigures,[{index:0,state:'fixed'},{index:1,state:'flagged'}]);
+  assert.deepEqual(result.ready[0].decisionsFigures,[{index:0,state:'fixed'},{index:1,state:'flagged'}]);
 });
 test('visual audit requires every distinct target to be explicitly inspected',()=>{
   const clean={blockId:'first',complete:true,faithful:true,issues:[]};

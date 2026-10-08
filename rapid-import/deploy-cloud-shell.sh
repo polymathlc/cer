@@ -29,7 +29,7 @@ fi
 gcloud projects describe "$RAPID_PROJECT" --format='value(projectId)' >/dev/null
 rapid_billing=$(gcloud billing projects describe "$RAPID_PROJECT" --format='value(billingEnabled)')
 [[ "${rapid_billing,,}" == true ]] || fail 'Billing must already be enabled for mathgen--app. No billing account has been changed.'
-for rapid_secret in GEMINI_API_KEY OPENAI_API_KEY JEV_API_KEY; do
+for rapid_secret in GEMINI_API_KEY OPENAI_API_KEY; do
   # Metadata only: never download or print either API key.
   rapid_state=$(gcloud secrets versions describe latest --secret="$rapid_secret" --project="$RAPID_PROJECT" --format='value(state)')
   [[ "$rapid_state" == ENABLED ]] || fail "$rapid_secret needs an enabled latest version in Secret Manager."
@@ -58,9 +58,9 @@ npm test --prefix functions
 
 echo 'Deploying the isolated cer-rapid-import codebase...'
 gcloud services enable cloudtasks.googleapis.com --project="$RAPID_PROJECT"
-rapid_firebase deploy --project "$RAPID_PROJECT" --config "$PWD/firebase.json" --only functions:cer-rapid-import --non-interactive
+rapid_firebase deploy --project "$RAPID_PROJECT" --config "$PWD/firebase.json" --only functions:cer-rapid-import --non-interactive --force
 
-rapid_functions=(rapidImportStatus rapidImportBegin rapidImportChunk rapidImportFinish rapidImportRetry rapidImportDispatch rapidImportPage cerJevReview rapidVettingImage)
+rapid_functions=(rapidImportStatus rapidImportBegin rapidImportChunk rapidImportFinish rapidImportRetry rapidImportDispatch rapidImportPage cerDecisionsReview rapidVettingImage)
 for rapid_function in "${rapid_functions[@]}"; do
   rapid_state=$(gcloud functions describe "$rapid_function" --gen2 --region="$RAPID_REGION" --project="$RAPID_PROJECT" --format='value(state)')
   [[ "$rapid_state" == ACTIVE ]] || fail "$rapid_function is not ACTIVE ($rapid_state)."
@@ -82,20 +82,24 @@ gcloud run services add-iam-policy-binding "$rapid_service" --region="$RAPID_REG
 rapid_queue_state=$(gcloud tasks queues describe rapidImportPage --location="$RAPID_REGION" --project="$RAPID_PROJECT" --format='value(state)')
 [[ "$rapid_queue_state" == RUNNING ]] || fail "The Rapid Add queue is $rapid_queue_state. Check why it was paused before resuming it."
 
-# Read-only check of the deployed callable's authentication gate. No PDFs/jobs created.
+# Read-only checks of the deployed callables' authentication gates. No PDFs/jobs
+# created and no AI providers called; provider availability is still unverified.
 rapid_probe=$(mktemp)
-rapid_http=$(curl --silent --show-error --max-time 60 --output "$rapid_probe" --write-out '%{http_code}' \
-  --header 'Content-Type: application/json' --data '{"data":{}}' \
-  "https://$RAPID_REGION-$RAPID_PROJECT.cloudfunctions.net/rapidImportStatus")
-[[ "$rapid_http" == 401 ]] || fail "The status endpoint returned HTTP $rapid_http; expected the admin sign-in requirement (401)."
-python3 - "$rapid_probe" <<'PY'
+for rapid_callable in rapidImportStatus cerDecisionsReview; do
+  rapid_http=$(curl --silent --show-error --max-time 60 --output "$rapid_probe" --write-out '%{http_code}' \
+    --header 'Content-Type: application/json' --data '{"data":{}}' \
+    "https://$RAPID_REGION-$RAPID_PROJECT.cloudfunctions.net/$rapid_callable")
+  [[ "$rapid_http" == 401 ]] || fail "$rapid_callable returned HTTP $rapid_http; expected the admin sign-in requirement (401)."
+  python3 - "$rapid_probe" <<'PY'
 import json, sys
 with open(sys.argv[1]) as response:
     status = json.load(response).get('error', {}).get('status')
 if status != 'UNAUTHENTICATED':
-    raise SystemExit('Status endpoint did not return the expected Firebase authentication response.')
+    raise SystemExit('Callable did not return the expected Firebase authentication response.')
 PY
+done
 
-echo 'Deployment checks passed: nine active functions, running queue, scoped task permissions and an authenticated status endpoint.'
+echo 'Deployment checks passed: nine active functions, running queue, scoped task permissions and authenticated status/Decisions review endpoints.'
+echo 'OpenAI Decisions provider availability is unverified until an authenticated review succeeds.'
 echo 'Now sign in to https://polymathlc.github.io/cer/ and perform the two-PDF acceptance check in rapid-import/README.md.'
 echo 'Background PDF processing is not end-to-end verified until that check passes.'

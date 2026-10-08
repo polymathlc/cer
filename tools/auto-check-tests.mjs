@@ -30,6 +30,7 @@
 //    this app the level is read off the topic, so a re-file silently undoes the
 //    level the author set for the whole pile.
 import fs from 'fs';
+import { migrateDecisionsReviewState } from '../decisions-review-core.mjs';
 
 const APP = new URL('../app.js', import.meta.url);
 const src = fs.readFileSync(APP, 'utf8');
@@ -49,6 +50,7 @@ const cut = (from, to, what) => {
 // counted stub — what the checker finds is pinned by its own harness; what
 // matters here is what the loop does with it.
 const preamble = `
+${migrateDecisionsReviewState.toString()}
 const HOOK = {
   reads: 0, repairs: 0, aiChecks: 0, media: 0, levels: [],
   prompts: [], warned: [], aiOn: true, plan: [], replies: [],
@@ -82,7 +84,7 @@ HOOK.recrops = 0; HOOK.recropBox = [100, 100, 500, 500]; HOOK.recropFail = false
 function transformImageUrl(u) { return u; }
 async function _urlToDataUrlRobust(u) { return 'data:image/png;base64,QUJD'; }
 function _parseImageDataUrl(d) { return /^data:/.test(d) ? { mime: 'image/png', ext: 'png', bytes: [] } : null; }
-async function _jevRecropBox() { HOOK.recrops++; return HOOK.recropFail ? null : HOOK.recropBox; }
+async function _decisionsRecropBox() { HOOK.recrops++; return HOOK.recropFail ? null : HOOK.recropBox; }
 async function _cropBoxFromScreenshotEx() { return { dataUrl: 'data:image/png;base64,Q1JPUA==' }; }
 HOOK.refines = [];
 async function _aiRefineCrop(d, wording, src) { HOOK.refines.push({ wording, src }); return d; }
@@ -577,7 +579,7 @@ test('a re-crop that comes back WORSE is put back with the rest of that attempt'
 
 test('the improvement is announced and the list is derived from the questions', () => {
   ok(/function autoChkAnnounce\(q\)/.test(src) && /q\.autoCheck\.improved/.test(src));
-  ok(/autoChkAnnounce\(q\);\s*\n\s*\/\/ Jev is advisory/.test(src), 'announced right after the stamp in the Rapid add pipeline');
+  ok(/autoChkAnnounce\(q\);\s*\n\s*\/\/ Decisions is advisory/.test(src), 'announced right after the stamp in the Rapid add pipeline');
   const list = cut('function autoFixedList() {', '\nfunction autoFixedPaint', 'auto-fixed list');
   ok(/vettingList/.test(list) && /questionBank/.test(list), 'read off both lists — no second store');
   ok(!/setDoc|saveQuestion|saveVettingQuestion/.test(list), 'and read-only');

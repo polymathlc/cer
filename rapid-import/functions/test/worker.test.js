@@ -182,7 +182,7 @@ test('real PDF worker keeps failed crops and mixed-case figures in the correct w
 const reply=value=>({candidates:[{finishReason:'STOP'}],text:JSON.stringify(value)});
 const imageUrl=path=>'https://firebasestorage.googleapis.com/v0/b/test/o/'+encodeURIComponent(path)+'?alt=media';
 function savedFigure(kind='diagram') {
-  const j=setup({...makeJob(),autoCheck:true,engineOrder:['gemini'],jev:false,enhanceImages:true});
+  const j=setup({...makeJob(),autoCheck:true,engineOrder:['gemini'],decisions:false,enhanceImages:true});
   const path='cer-rapid/teacher/job/images/raw/crop.jpg',url=imageUrl(path);
   const canvas=createCanvas(120,90),ctx=canvas.getContext('2d');
   ctx.fillStyle='white';ctx.fillRect(0,0,120,90);ctx.fillStyle='#c02010';ctx.fillRect(15,15,75,55);

@@ -608,8 +608,8 @@ test('the worker carries the SAME trim, byte for byte', () => {
 test('the clean-up pass is handed the question\'s own wording, at every crop', () => {
   const fill = cut('async function _fillBlocksFromAiBoxes', '\n// Editor flow', 'fill fn');
   ok(fill.indexOf('_aiRefineCrop(c, opts && opts.wording, src)') >= 0, 'the wording never reaches the clean-up pass');
-  ok(fill.indexOf('_jevGateFigures(gateItems, mimeType, b64, fullDataUrl, onStatus, opts && opts.wording)') >= 0,
-    'the Jev re-cut is not handed the wording, so its clean-up puts the stem straight back');
+  ok(fill.indexOf('_decisionsGateFigures(gateItems, mimeType, b64, fullDataUrl, onStatus, opts && opts.wording)') >= 0,
+    'the Decisions re-cut is not handed the wording, so its clean-up puts the stem straight back');
   const calls = src.split('_fillBlocksFromAiBoxes(').length - 2;  // minus the definition
   const withWording = (src.match(/_fillBlocksFromAiBoxes\((?:(?!_fillBlocksFromAiBoxes\()[\s\S]){0,400}?wording: _cropWordingOf\(/g) || []).length;
   ok(calls >= 4 && withWording === calls, 'a crop path calls the clean-up without the question\'s wording (' + withWording + ' of ' + calls + ')');
@@ -654,10 +654,10 @@ test('CENSUS: every clean-up call is handed the wording AND the page', () => {
   }
   const recrop = cut('async function autoChkRecrop', '\n// ---- the loop', 'autoChkRecrop');
   ok(/_aiRefineCrop\(dataUrl, _cropWordingOf\(q\.blocks\)/.test(recrop), 'the auto-check re-cut is cleaned without the question\'s wording');
-  const gate = cut('async function _jevGateFigures', '\n// The question as a whole', 'gate');
-  ok(/_aiRefineCrop\(ex2\.dataUrl, wording, src\)/.test(gate), 'the Jev re-cut is never cleaned up');
-  ok(/_jevFigureFacts\(i, ex2, false\)/.test(gate) && /_jevFigureFacts\(i, it\.ex, false\)/.test(gate),
-    'a clean-up that worked is reported to Jev as stray text, which sends every cleaned crop round the re-cut loop');
+  const gate = cut('async function _decisionsGateFigures', '\n// The question as a whole', 'gate');
+  ok(/_aiRefineCrop\(ex2\.dataUrl, wording, src\)/.test(gate), 'the Decisions re-cut is never cleaned up');
+  ok(/_decisionsFigureFacts\(i, ex2, false\)/.test(gate) && /_decisionsFigureFacts\(i, it\.ex, false\)/.test(gate),
+    'a clean-up that worked is reported to Decisions as stray text, which sends every cleaned crop round the re-cut loop');
 });
 
 test('the clean-up keeps a figure\'s own words — in both copies of the prompt', () => {
@@ -1186,7 +1186,7 @@ test('a stem opening with a one-glyph question number, left of the table, still 
 
 // ---- A REFUSED CLEAN-UP STAYS REFUSED, AND SAYS NOTHING ----------------------
 // v1.426.1 painted out a "sliver of a sentence" crossing a clean-up edge and
-// told Jev about every refused clean-up. A review found the sliver test could
+// told Decisions about every refused clean-up. A review found the sliver test could
 // not tell a slanting stem from a figure's own label, axis title or table row —
 // it painted those white and dropped a truly clipped side — and that a refusal
 // is the safeguard protecting the figure, not evidence of stray text. Both
@@ -1202,19 +1202,19 @@ test('a clean-up that clips a side is refused outright — nothing is painted on
     'the browser clean-up no longer refuses a cut that clips a new side');
   ok(!/Sliver/.test(fn), 'the browser clean-up paints on the picture again');
 });
-test('a refused clean-up is never reported to Jev as stray text', () => {
+test('a refused clean-up is never reported to Decisions as stray text', () => {
   const idx = fs.readFileSync(new URL('../rapid-import/functions/index.js', import.meta.url), 'utf8');
   ok(/subCrop\(made,p\.box_2d,createCanvas,page\)\|\|made;/.test(idx) && /refine:\{changed:false\}/.test(idx),
-    'the worker tells Jev about a clean-up it refused (or merely did not trust)');
-  const facts = cut('function _jevFigureFacts', '\n// Ask the AI where the figure really is', 'jev facts');
+    'the worker tells Decisions about a clean-up it refused (or merely did not trust)');
+  const facts = cut('function _decisionsFigureFacts', '\n// Ask the AI where the figure really is', 'decisions facts');
   ok(!/refineRefused/.test(src) && /refine: \{ changed: !!refineChanged \}/.test(facts),
-    'the browser tells Jev about a clean-up it refused');
+    'the browser tells Decisions about a clean-up it refused');
 });
 
 // ---- the clean-up is cut from the PAGE, in the browser too ------------------
 // The REAL _cropBoxFromScreenshotEx / _cropRefineOnPage / _aiRefineCrop, run
 // over a synthetic page with a stand-in canvas that records what was drawn.
-const { measureCrop } = await import(new URL('../jev-review-core.mjs', import.meta.url));
+const { measureCrop } = await import(new URL('../decisions-review-core.mjs', import.meta.url));
 function browserCrop(p) {
   const reg = new Map(), PAGE = 'data:image/png;base64,PAGE';
   let n = 0;

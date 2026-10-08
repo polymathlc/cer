@@ -1,35 +1,64 @@
-// Jev review — the pure half (no network, no DOM, no Firebase).
+// Decisions review — the pure half (no network, no DOM, no Firebase).
 //
-// Jev (the typed-decision service the Ans Key app already uses to route voice
-// commands) is asked yes/no questions about what an automatic import has just
+// OpenAI Decisions is asked yes/no questions about what an automatic import has just
 // produced: is each figure crop complete and clean, is the wording readable and
 // faithful, do the parts, options and answers hang together. It returns a
 // choice, a confidence and probabilities — never prose — so every answer is
 // checkable and the same facts always cost the same question.
 //
-// What Jev is shown is FACTS, measured in code: the crop's own pixels (does
+// What Decisions is shown is FACTS, measured in code: the crop's own pixels (does
 // content continue beyond the rectangle's edge, is it blank, is it the whole
 // page), what the reading model transcribed (garbled characters, unbalanced
 // brackets, options that are empty or repeated) and how the pieces fit
 // together (parts that skip a letter, a figure the wording mentions and the
-// question does not carry). A "no" from Jev — or a hard defect found locally —
-// sends the question to the AI to check and fix. A confident "yes" is what lets
-// the slower AI read be skipped.
+// question does not carry). A "no" from Decisions — or a hard defect found locally —
+// sends the question to the AI to check and fix. Review is advisory: the visual
+// AI read still runs after a confident "yes".
 //
 // This file is shared byte for byte with rapid-import/functions/
-// jev-review-core.js (the durable worker cannot import from the site root);
-// tools/jev-review-tests.mjs fails if the two ever differ.
+// decisions-review-core.js (the durable worker cannot import from the site root);
+// tools/decisions-review-tests.mjs fails if the two ever differ.
 
-export const JEV_ENDPOINT = 'https://api.openai.com/v1/decisions';
-export const JEV_MIN_CONFIDENCE = 0.6;    // a "yes" below this is "not sure", and not sure is a no
-// ADVISORY BY DEFAULT: Jev sees measured facts, never the picture or the science,
+export const DECISIONS_ENDPOINT = 'https://api.openai.com/v1/decisions';
+export const DECISIONS_MIN_CONFIDENCE = 0.6;    // a "yes" below this is "not sure", and not sure is a no
+// ADVISORY BY DEFAULT: Decisions sees measured facts, never the picture or the science,
 // so a yes from it may not remove the AI read until its yes has been compared
-// with the AI's own verdicts (q.jevShadow) and found to lose nothing.
-export const JEV_MAY_SKIP = false;
-export const JEV_SKIP_CONFIDENCE = 0.8;   // the AI read is skipped only at or above this
-export const JEV_MAX_FIGURES = 8;
-export const JEV_EXCERPT_CHARS = 1400;
-export const JEV_BODY_LIMIT = 60000;
+// with the AI's own verdicts (q.decisionsShadow) and found to lose nothing.
+export const DECISIONS_MAY_SKIP = false;
+export const DECISIONS_SKIP_CONFIDENCE = 0.8;   // the AI read is skipped only at or above this
+export const DECISIONS_MAX_FIGURES = 8;
+export const DECISIONS_EXCERPT_CHARS = 1400;
+export const DECISIONS_BODY_LIMIT = 60000;
+
+// One-time migration of stored review history and queued-import preferences.
+// Current Decisions fields take precedence; question content is left untouched.
+export function migrateDecisionsReviewState(record) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return record;
+  const move = (object, oldKey, newKey) => {
+    if (!Object.hasOwn(object, oldKey)) return;
+    if (!Object.hasOwn(object, newKey)) object[newKey] = object[oldKey];
+    delete object[oldKey];
+  };
+  move(record, 'jevFigures', 'decisionsFigures');
+  move(record, 'jevShadow', 'decisionsShadow');
+  move(record, 'jev', 'decisions');
+  if (record.autoCheck && typeof record.autoCheck === 'object') {
+    move(record.autoCheck, 'jev', 'decisions');
+    if (record.autoCheck.state === 'jev') {
+      record.autoCheck.state = 'green';
+      if (!Object.hasOwn(record.autoCheck, 'decisions')) record.autoCheck.decisions = true;
+    }
+  }
+  const migrateLabels = value => {
+    if (!value || typeof value !== 'object') return;
+    if (value.by === 'jev') value.by = 'decisions';
+    if (value.code === 'jev_no') value.code = 'decisions_no';
+    if (value.code === 'jev_invalid_response') value.code = 'decisions_invalid_response';
+    for (const nested of Object.values(value)) migrateLabels(nested);
+  };
+  for (const value of [record.decisionsFigures, record.decisionsShadow, record.autoCheck]) migrateLabels(value);
+  return record;
+}
 
 // A side of a crop is CLIPPED when ink runs straight on through the edge: the
 // share of the edge's inked columns that carry on outside it, and at least a
@@ -94,7 +123,7 @@ export function measureCrop(ctx, W, H, rect, thr) {
 
 const round = (n, p = 3) => Math.round(n * 10 ** p) / 10 ** p;
 
-// The facts about ONE figure, in the words Jev is asked about.
+// The facts about ONE figure, in the words Decisions is asked about.
 export function figureFacts(f) {
   const m = f.measure || null;
   return {
@@ -115,14 +144,14 @@ export function figureFacts(f) {
 }
 
 // Defects nobody needs a model to call: a blank crop, the page mistaken for a
-// figure, content cut off at an edge. These fail a figure whatever Jev says.
+// figure, content cut off at an edge. These fail a figure whatever Decisions says.
 export function figureHardIssues(fc) {
   const issues = [];
   if (fc.source === 'none' || fc.refused) issues.push({ code: 'no_crop', detail: 'the rectangle could not be cut out of the page' });
   else if (fc.source === 'whole-page' || fc.pageShare >= WHOLE_PAGE_FRAC) issues.push({ code: 'whole_page', detail: 'the picture is the whole page, not the figure' });
   if (fc.blank) issues.push({ code: 'blank', detail: 'the crop holds no drawing — it landed on blank paper' });
   if (fc.clippedSides.length) issues.push({ code: 'clipped', detail: 'drawing continues beyond the ' + fc.clippedSides.join(' and ') + ' edge' + (fc.clippedSides.length > 1 ? 's' : '') + ' of the crop, so labels or lines are cut off' });
-  // aiSawStrayText is a FACT for Jev, not a defect: the clean-up pass has already cut those sentences off.
+  // aiSawStrayText is a FACT for Decisions, not a defect: the clean-up pass has already cut those sentences off.
   return issues;
 }
 
@@ -210,7 +239,7 @@ export function questionFacts(q) {
   return {
     title: String(q && q.title || '').slice(0, 120),
     wordCount: words.length,
-    excerpt: wording.slice(0, JEV_EXCERPT_CHARS),
+    excerpt: wording.slice(0, DECISIONS_EXCERPT_CHARS),
     garble,
     startsLowercase: /^[a-z]/.test(first),
     endsMidSentence: !!last && /(?:[,;\-–]|\b(?:the|a|an|of|and|or|to|in|is|are))$/i.test(last.trim()),
@@ -254,14 +283,14 @@ export function questionHardIssues(qf) {
   return { wording, structure };
 }
 
-// ---- the request Jev is sent, and how its answer is read --------------------
+// ---- the request Decisions is sent, and how its answer is read --------------------
 const YN = Object.freeze({ yes: 'yes', no: 'no' });
 
 // scope 'figures' asks only about the crops (the page is still being cut, so the
 // question does not exist yet); 'question' asks only about the wording and the
 // structure; 'all' asks everything.
 export function buildReviewRequest({ question, figures, scope = 'all' }) {
-  const figs = scope === 'question' ? [] : (figures || []).slice(0, JEV_MAX_FIGURES);
+  const figs = scope === 'question' ? [] : (figures || []).slice(0, DECISIONS_MAX_FIGURES);
   const state = { task: 'quality review of one automatically imported science exam question' };
   if (scope !== 'figures') state.question = question;
   if (figs.length) state.figures = figs;
@@ -298,7 +327,7 @@ export function buildReviewRequest({ question, figures, scope = 'all' }) {
 }
 
 function readChoice(answer, criteria) {
-  const bad = () => { const e = new Error('Jev returned an unreadable answer.'); e.code = 'jev_invalid_response'; return e; };
+  const bad = () => { const e = new Error('Decisions returned an unreadable answer.'); e.code = 'decisions_invalid_response'; return e; };
   if (!answer || answer.type !== 'choice' || typeof answer.choice !== 'string' || !Object.hasOwn(criteria, answer.choice) ||
       typeof answer.confidence !== 'number' || !Number.isFinite(answer.confidence) || answer.confidence < 0 || answer.confidence > 1 ||
       !answer.probabilities || typeof answer.probabilities !== 'object' || Array.isArray(answer.probabilities)) throw bad();
@@ -318,14 +347,14 @@ export function readReview(payload, body) {
   for (const key of Object.keys(body.questions)) {
     const ans = readChoice(payload && payload.answers && payload.answers[key], body.questions[key].criteria);
     const pYes = ans.probabilities[YN.yes];
-    out[key] = { ok: ans.choice === YN.yes && ans.confidence >= JEV_MIN_CONFIDENCE, choice: ans.choice, confidence: ans.confidence, pYes };
+    out[key] = { ok: ans.choice === YN.yes && ans.confidence >= DECISIONS_MIN_CONFIDENCE, choice: ans.choice, confidence: ans.confidence, pYes };
   }
   return out;
 }
 
-// Jev's verdicts + the defects found locally → what happens next.
-//   failures[]   what failed, on which key, why, and whether Jev or the code said so
-//   confident    every verdict yes at JEV_SKIP_CONFIDENCE or better AND nothing found locally
+// Decisions's verdicts + the defects found locally → what happens next.
+//   failures[]   what failed, on which key, why, and whether Decisions or the code said so
+//   confident    every verdict yes at DECISIONS_SKIP_CONFIDENCE or better AND nothing found locally
 //   passed       no failures at all
 export function decideReview({ verdicts, figures, question }) {
   const failures = [];
@@ -335,7 +364,7 @@ export function decideReview({ verdicts, figures, question }) {
     const local = figureHardIssues(fc);
     local.forEach(is => failures.push({ key, index: i, code: is.code, reason: is.detail, by: 'code' }));
     const v = verdicts && verdicts[key];
-    if (v && !v.ok) failures.push({ key, index: i, code: 'jev_no', reason: 'Jev judged the crop not complete and clean' + (v.choice === 'yes' ? ' (not confident enough)' : ''), by: 'jev' });
+    if (v && !v.ok) failures.push({ key, index: i, code: 'decisions_no', reason: 'Decisions judged the crop not complete and clean' + (v.choice === 'yes' ? ' (not confident enough)' : ''), by: 'decisions' });
   });
   // A figures-only review has no built question yet: nothing to judge here.
   const qh = question ? questionHardIssues(question) : { wording: [], structure: [] };
@@ -343,10 +372,10 @@ export function decideReview({ verdicts, figures, question }) {
   qh.structure.forEach(is => failures.push({ key: 'structure', code: is.code, reason: is.detail, by: 'code' }));
   for (const key of ['wording', 'structure']) {
     const v = verdicts && verdicts[key];
-    if (v && !v.ok) failures.push({ key, code: 'jev_no', reason: 'Jev judged the ' + key + ' not complete and consistent' + (v.choice === 'yes' ? ' (not confident enough)' : ''), by: 'jev' });
+    if (v && !v.ok) failures.push({ key, code: 'decisions_no', reason: 'Decisions judged the ' + key + ' not complete and consistent' + (v.choice === 'yes' ? ' (not confident enough)' : ''), by: 'decisions' });
   }
   const all = verdicts ? Object.values(verdicts) : [];
-  const confident = !failures.length && all.length > 0 && all.every(v => v.ok && v.confidence >= JEV_SKIP_CONFIDENCE);
+  const confident = !failures.length && all.length > 0 && all.every(v => v.ok && v.confidence >= DECISIONS_SKIP_CONFIDENCE);
   return { passed: !failures.length, confident, failures };
 }
 
@@ -354,12 +383,12 @@ export function decideReview({ verdicts, figures, question }) {
 export function failuresToFindings(failures) {
   return (failures || []).map(f => {
     const fig = f.key.startsWith('figure_');
-    const crop = fig && ['clipped', 'stray_text', 'blank', 'whole_page', 'no_crop', 'jev_no'].includes(f.code);
+    const crop = fig && ['clipped', 'stray_text', 'blank', 'whole_page', 'no_crop', 'decisions_no'].includes(f.code);
     return {
       type: fig ? 'Crop' : (f.key === 'wording' ? 'Wording' : 'Structure'),
       severity: ['blank', 'whole_page', 'no_crop', 'garbled', 'no_answer', 'mcq_correct', 'mcq_options', 'picture_missing'].includes(f.code) ? 'high' : 'med',
       title: (fig ? 'Picture ' + (f.index + 1) + ': ' : '') + f.reason,
-      detail: 'Flagged ' + (f.by === 'jev' ? 'by Jev' : 'by the import checks') + ' before this question reached vetting.',
+      detail: 'Flagged ' + (f.by === 'decisions' ? 'by Decisions' : 'by the import checks') + ' before this question reached vetting.',
       fix: '',
       ...(crop && f.code === 'clipped' ? { cropStatus: 'clipped' } : {}),
       ...(crop && f.code === 'stray_text' ? { cropStatus: 'stray_text' } : {}),
