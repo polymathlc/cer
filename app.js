@@ -4453,7 +4453,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.426.8';
+const APP_VERSION = 'v1.426.9';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -18420,15 +18420,44 @@ async function _decisionsRecropBox(mimeType, b64, currentDataUrl, reasons) {
 // Decisions is shown is the cleaned one, measured on the page. Saying "the AI saw
 // stray text" made Decisions say no to every cleaned crop and sent each one round
 // the re-cut loop (the durable worker carries the same rule).
+// One shared bound across pages and simultaneous screenshot jobs. Each entry's
+// own crop/refine/review chain stays sequential; only independent figures overlap.
+// Wait for started work to finish before throwing, so callers can safely attach
+// a fallback without a late crop writing over it.
+async function _rapidFigureMap(items, kind, fn) {
+  const pools = _rapidFigureMap.pools || (_rapidFigureMap.pools = {
+    prep: { limit: 3, active: 0, waiting: [] },
+    write: { limit: 2, active: 0, waiting: [] }
+  });
+  const pool = pools[kind];
+  if (!pool) throw new Error('Unknown figure processing stage');
+  const out = new Array(items.length);
+  let next = 0, failed = false, failure;
+  await Promise.all(Array.from({ length: Math.min(pool.limit, items.length) }, async () => {
+    while (next < items.length && !failed) {
+      const i = next++;
+      if (pool.active < pool.limit) pool.active++;
+      else await new Promise(resolve => pool.waiting.push(resolve));
+      try {
+        if (!failed) out[i] = await fn(items[i], i);
+      } catch (e) { if (!failed) { failed = true; failure = e; } }
+      finally {
+        const resume = pool.waiting.shift();
+        if (resume) resume();
+        else pool.active--;
+      }
+    }
+  }));
+  if (failed) throw failure;
+  return out;
+}
 async function _decisionsGateFigures(items, mimeType, b64, fullDataUrl, onStatus, wording) {
   const facts = items.map((it, i) => _decisionsFigureFacts(i, it.ex, false));
   const verdicts = await decisionsReviewCall({ scope: 'figures', figures: facts });
   const decision = decideReview({ verdicts, figures: facts, question: null });
-  const out = [];
-  for (let i = 0; i < items.length; i++) {
+  return _rapidFigureMap(items, 'prep', async (cur, i) => {
     const own = decision.failures.filter(f => f.key === 'figure_' + i);
-    const cur = items[i];
-    if (!own.length) { out.push({ dataUrl: cur.dataUrl, ex: cur.ex, box: cur.box, state: 'ok', tries: 0, reasons: [] }); continue; }
+    if (!own.length) return { dataUrl: cur.dataUrl, ex: cur.ex, box: cur.box, state: 'ok', tries: 0, reasons: [] };
     let best = { dataUrl: cur.dataUrl, ex: cur.ex, box: cur.box, score: own.length, reasons: own.map(f => f.reason) };
     let reasons = best.reasons, tries = 0, fixed = false;
     while (tries < DECISIONS_RECROP_TRIES) {
@@ -18456,9 +18485,8 @@ async function _decisionsGateFigures(items, mimeType, b64, fullDataUrl, onStatus
       if (ex2 && d2.failures.length < best.score) best = { dataUrl: ex2.dataUrl, ex: ex2, box, score: d2.failures.length, reasons };
       if (ex2 && !d2.failures.length) { fixed = true; break; }
     }
-    out.push({ dataUrl: best.dataUrl, ex: best.ex, box: best.box, state: fixed ? 'fixed' : 'flagged', tries, reasons: fixed ? [] : best.reasons });
-  }
-  return out;
+    return { dataUrl: best.dataUrl, ex: best.ex, box: best.box, state: fixed ? 'fixed' : 'flagged', tries, reasons: fixed ? [] : best.reasons };
+  });
 }
 
 // The question as a whole: wording, options, parts, answers, pictures.
@@ -18516,9 +18544,7 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
   // opts.decisions === false switches the Decisions review off for this call.
   const decisionsRun = opts && opts.decisions !== undefined ? opts.decisions : null;
   const fullDataUrl = 'data:' + mimeType + ';base64,' + b64;
-  let crops = [];
-  const gateItems = [];
-  for (let i = 0; i < imgBlocks.length; i++) {
+  const gateItems = await _rapidFigureMap(imgBlocks, 'prep', async (blk, i) => {
     let c = null, ex = null;
     try { ex = await _cropBoxFromScreenshotEx(fullDataUrl, boxes[i]); c = ex && ex.dataUrl; } catch (e) { console.warn('AI rectangle crop failed', e); }
     if (c) {
@@ -18529,9 +18555,9 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
       c = await _aiRefineCrop(c, opts && opts.wording, src);
       ex = src.ex;
     }
-    crops.push(c);
-    gateItems.push({ ex, dataUrl: c, box: boxes[i] });
-  }
+    return { ex, dataUrl: c, box: boxes[i] };
+  });
+  let crops = gateItems.map(it => it.dataUrl);
   // 🧭 Decisions judges every crop; a NO (or a clipped / blank / whole-page crop the
   // code finds itself) has the AI cut it again. It runs BEFORE the "nothing
   // usable" early return: a rectangle that could not be cut at all is exactly
@@ -18545,21 +18571,23 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
     } catch (e) { console.warn('OpenAI Decisions crop review skipped', e); }
   }
   if (!crops.some(Boolean)) return 0;
-  const fullUrl = await uploadImageDataUrl(fullDataUrl); // shared "Use original" backup
-  let filled = 0, enhanced = 0;
-  for (let i = 0; i < imgBlocks.length; i++) {
-    const blk = imgBlocks[i];
+  const fullUrl = await (opts && typeof opts.getSourcePageUrl === 'function'
+    ? opts.getSourcePageUrl() : uploadImageDataUrl(fullDataUrl)); // shared "Use original" backup
+  // Reserve the same first eligible figures in source order before workers run.
+  // A quicker upload must never take another picture's enhancement budget.
+  let enhanced = 0;
+  const enhanceThese = crops.map(c => !!c && imageAiReady() && enhanced < maxEnhance ? (++enhanced, true) : false);
+  const filled = await _rapidFigureMap(imgBlocks, 'write', async (blk, i) => {
     if (!crops[i]) { // this rectangle failed — backup: the whole screenshot, crop by hand
       blk.url = fullUrl;
       _rememberCropSource(blk, fullUrl, null, opts && opts.page);
       _imgEnhanceState[blk.id] = { originalDataUrl: fullDataUrl, originalUrl: fullUrl, currentDataUrl: fullDataUrl };
-      continue;
+      return 0;
     }
     let dataUrl = crops[i];
-    if (imageAiReady() && enhanced < maxEnhance) {
-      enhanced++;
+    if (enhanceThese[i]) {
       if (onEnhance) onEnhance();
-      if (onStatus) onStatus(`Enhancing picture ${filled + 1} (black & white)…`);
+      if (onStatus) onStatus(`Enhancing picture ${i + 1} (black & white)…`);
       try { dataUrl = await generateCleanEnhancedImage(_BW_ENHANCE_PROMPT, [{ mimeType: 'image/png', data: crops[i].split(',')[1] || '' }]); }
       catch (e) { console.warn('crop enhance failed — keeping the sharp crop', e); dataUrl = crops[i]; }
     }
@@ -18567,10 +18595,11 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
       blk.url = await uploadImageDataUrl(dataUrl);
       _rememberCropSource(blk, fullUrl, boxes[i], opts && opts.page);
       _imgEnhanceState[blk.id] = { originalDataUrl: fullDataUrl, originalUrl: fullUrl, currentDataUrl: dataUrl };
-      filled++;
+      return 1;
     } catch (e) { console.warn('crop upload failed', e); }
-  }
-  return filled;
+    return 0;
+  });
+  return filled.reduce((n, count) => n + count, 0);
 }
 
 // Editor flow: crop the AI-selected rectangles into the freshly built
@@ -19333,20 +19362,40 @@ function _rapidUploadPdf(file, level, release) {
       if(file.size>40*1024*1024) throw new Error('PDF limit: 40 MB per file.');
       await _rapidCloudCall('rapidImportBegin',settings);
       const chunkSize=3*1024*1024;
-      for(let offset=0,index=0;offset<file.size;offset+=chunkSize,index++) {
-        if(currentUser?.uid!==uid) throw new Error('Account changed during upload.');
-        const data=await _fileToBase64(file.slice(offset,offset+chunkSize));
-        let error;
-        for(let attempt=0;attempt<3;attempt++) {
-          try {await _rapidCloudCall('rapidImportChunk',{id,index,data});error=null;break;}
-          catch(e){error=e;if(attempt<2) await new Promise(r=>setTimeout(r,1000*(attempt+1)));}
+      const chunkCount=Math.ceil(file.size/chunkSize);
+      let nextChunk=0,completedBytes=0,uploadError=null;
+      // Chunk writes are idempotent by index; Finish reassembles them in index
+      // order. Keep only two in flight and report acknowledged bytes, since a
+      // later chunk can finish first. Drain started writes before failing or
+      // asking Finish to confirm durable storage.
+      const uploadChunks=async()=>{
+        try {
+          while(!uploadError && nextChunk<chunkCount) {
+            if(currentUser?.uid!==uid) throw new Error('Account changed during upload.');
+            const index=nextChunk++,offset=index*chunkSize;
+            const data=await _fileToBase64(file.slice(offset,offset+chunkSize));
+            let error;
+            for(let attempt=0;attempt<3;attempt++) {
+              if(uploadError) return;
+              if(currentUser?.uid!==uid) throw new Error('Account changed during upload.');
+              try {await _rapidCloudCall('rapidImportChunk',{id,index,data});error=null;break;}
+              catch(e){error=e;if(attempt<2) await new Promise(r=>setTimeout(r,1000*(attempt+1)));}
+            }
+            if(error) throw error;
+            if(currentUser?.uid!==uid) throw new Error('Account changed during upload.');
+            completedBytes+=Math.min(chunkSize,file.size-offset);
+            const percent=Math.round(completedBytes/file.size*100);
+            _setRapidJobState(jobId,{sub:'Uploading '+percent+'% — keep this tab open.'});
+            _setRapidStatus('Uploading “'+settings.name+'” — '+percent+'%. Keep this tab open.');
+            renderVettingList();
+          }
+        } catch(e) {
+          if(!uploadError) uploadError=e;
         }
-        if(error) throw error;
-        const percent=Math.round(Math.min(offset+chunkSize,file.size)/file.size*100);
-        _setRapidJobState(jobId,{sub:'Uploading '+percent+'% — keep this tab open.'});
-        _setRapidStatus('Uploading “'+settings.name+'” — '+percent+'%. Keep this tab open.');
-        renderVettingList();
-      }
+      };
+      await Promise.all(Array.from({length:Math.min(2,chunkCount)},uploadChunks));
+      if(uploadError) throw uploadError;
+      if(currentUser?.uid!==uid) throw new Error('Account changed during upload.');
       _setRapidJobState(jobId,{sub:'Confirming online storage — keep this tab open.'});
       await _rapidCloudCall('rapidImportFinish',{id});
       try {localStorage.removeItem(resumeKey);} catch(e) {}
@@ -20234,6 +20283,17 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
     // a SINGLE-question source, where the picture IS the answer; on a page of
     // several the author is going to ✂️ crop it anyway, so the page goes up as
     // it is rather than spending an image-model call on something nobody keeps.
+    // The untouched source is shared by every crop and whole-page fallback on
+    // this page. Keep only a successful upload; a later question can retry a
+    // failed upload without inheriting a missing source.
+    let sourceUpload;
+    const sourcePageUrl = () => {
+      if (!sourceUpload) {
+        sourceUpload = uploadImageDataUrl('data:' + file.type + ';base64,' + b64)
+          .catch(error => { sourceUpload = null; throw error; });
+      }
+      return sourceUpload;
+    };
     let _pageBackup;
     const wholePage = async () => {
       if (_pageBackup !== undefined) return _pageBackup;
@@ -20246,7 +20306,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
         catch (imgErr) { console.warn('rapid B&W enhance failed; attaching the original screenshot', imgErr); dataUrl = original; }
       }
       try {
-        const originalUrl = await uploadImageDataUrl(original);
+        const originalUrl = await sourcePageUrl();
         _pageBackup = { url: dataUrl === original ? originalUrl : await uploadImageDataUrl(dataUrl), dataUrl, originalUrl, originalDataUrl: original };
       }
       catch (e) { console.warn('whole-page backup upload failed', e); _pageBackup = null; }
@@ -20285,7 +20345,8 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       //    image block. That backup is for a single-question page only; on a
       //    page of five it would give every one of them the same whole-page
       //    picture, which is worse than no picture at all.
-      if (isImg) {
+      const prepareFigures = async () => {
+        if (!isImg) return;
         const imgBlocks = q.blocks.filter(b => b.type === 'image');
         if (imgBlocks.length) {
           _setRapidJobState(jobId, {
@@ -20298,7 +20359,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
             .map(b => (b && (b.box_2d || b.box)) || null);
           let filled = 0;
           try {
-            filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, file.type, b64, m => { _setRapidJobState(jobId, { sub: m }); renderVettingList(); }, { decisions: decisionsRun, wording: _cropWordingOf((payload && payload.blocks) || q.blocks) });
+            filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, file.type, b64, m => { _setRapidJobState(jobId, { sub: m }); renderVettingList(); }, { decisions: decisionsRun, getSourcePageUrl: sourcePageUrl, wording: _cropWordingOf((payload && payload.blocks) || q.blocks) });
           } catch (e) { console.warn('rapid AI rectangle flow failed', e); }
           if (!filled) {
             // BACKUP — the WHOLE PAGE, prepared once above. An EMPTY picture
@@ -20325,7 +20386,7 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
             }
           }
         }
-      }
+      };
 
       // 2b) EVERY PART GETS ITS OWN EXPLANATION. The build prompt asks for one
       //    per part and a model still skips one now and then — most often on a
@@ -20335,7 +20396,8 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
       //    note is written from the figure and not from the transcription alone.
       //    A failure here changes nothing: the question goes to vetting with
       //    the notes it already had.
-      if (qHasParts(q.blocks)) {
+      const writeExplanations = async () => {
+        if (!qHasParts(q.blocks)) return;
         try {
           _setRapidJobState(jobId, {
             title: q.title || 'Question',
@@ -20344,7 +20406,13 @@ async function processRapidJob(jobId, file, batchLevel, opts) {
           renderVettingList();
           await aiWritePartExplanations(q, { media: [{ mimeType: file.type, data: b64 }] });
         } catch (e) { console.warn('rapid per-part explanations skipped', e); }
-      }
+      };
+      // Both use the untouched source page. Figure preparation changes only
+      // image blocks; explanation filling changes only missing explanations.
+      // The visual check waits for both, so it still sees the finished question.
+      const preparation = await Promise.allSettled([prepareFigures(), writeExplanations()]);
+      const failed = preparation.find(result => result.status === 'rejected');
+      if (failed) throw failed.reason;
 
       // 2c) 🚦 THE AUTO-CHECK. The question is now WHOLE — its figures
       //    cropped, uploaded and attached, its parts lettered, its answers and
@@ -24938,13 +25006,16 @@ const PART_EXPL_MAX = 8;
 // reused rather than re-derived, so "does this part already have an answer"
 // and "does this part ask the pupil to explain" mean here exactly what they
 // mean on the 🤖 button.
-function _partExplSection(blocks, pmap, letter, style) {
+function _partExplSection(blocks, pmap, letter, style, includePendingImages = false) {
   const bits = [];
   (blocks || []).forEach(b => {
     if (!b || !qPartKeyIn(qPartOf(pmap, b), letter)) return;
     if (b.type === 'text' && stripHtml(b.content || '').trim()) bits.push(stripHtml(b.content).trim());
     else if (b.type === 'part' && ((b.label || '') + stripHtml(b.content || '')).trim()) bits.push(((b.label || '') + ' ' + stripHtml(b.content || '')).trim());
-    else if (b.type === 'image' && b.url) bits.push('[a diagram is printed here' + (b.caption ? ': ' + stripHtml(b.caption) : '') + ']');
+    // Rapid Add can write explanations while crops upload. With the untouched
+    // page attached, retain the same figure position/caption hints as a ready
+    // crop. Without source media, an empty image still supplies no visual hint.
+    else if (b.type === 'image' && (b.url || includePendingImages)) bits.push('[a diagram is printed here' + (b.caption ? ': ' + stripHtml(b.caption) : '') + ']');
     else if (b.type === 'table') { try { bits.push('[table] ' + (b.data || []).map(r => (r || []).map(c => stripHtml(String(c || ''))).join(' | ')).join(' ; ')); } catch (e) {} }
     else if (b.type === 'mcq') {
       const opts = b.options || [];
@@ -24966,7 +25037,7 @@ function _partExplPrompt(q, missing, blocks, pmap, hasMedia) {
   // The shared stem — anything printed above the first part. It is what the
   // parts are all about, so a part read without it explains nothing; and it
   // is what the teacher's exemplars are retrieved for.
-  const stem = _partExplSection(blocks, pmap, '', mcqLabelStyle(q));
+  const stem = _partExplSection(blocks, pmap, '', mcqLabelStyle(q), hasMedia);
   const notesDb = aiGrounding('teach', topic, ((q && q.title) ? q.title + ' — ' : '') + stem);
   const qLv = getTopicLevel(topic || '');
   const parts = qPartsUsed(blocks);
@@ -24976,7 +25047,7 @@ function _partExplPrompt(q, missing, blocks, pmap, hasMedia) {
   const body = parts.map(p => {
     const want = missing.indexOf(p) >= 0;
     return `--- PART (${p})${want ? '  <<< WRITE AN EXPLANATION FOR THIS ONE' : '  [already has its explanation — context only, do not write one]'}\n`
-      + (_partExplSection(blocks, pmap, p, mcqLabelStyle(q)) || '(nothing was transcribed for this part)');
+      + (_partExplSection(blocks, pmap, p, mcqLabelStyle(q), hasMedia) || '(nothing was transcribed for this part)');
   }).join('\n\n');
   // The depth rule, from the ONE function the 🤖 button reads. Always the
   // DEFAULT tier: a build path may never reach the expanded ones.
@@ -25036,7 +25107,7 @@ async function aiWritePartExplanations(q, opts) {
       qStripOwnPartMarker(nb);
       // 🧠 What the AI wrote, on the block — so a rewrite of this note on the
       // vetting card is a correction this app learns from.
-      try { if (typeof _styleStamp === 'function') _styleStamp(nb, 'content', _partExplSection(blocks, pmap, p, mcqLabelStyle(q)), nb.content); } catch (e) {}
+      try { if (typeof _styleStamp === 'function') _styleStamp(nb, 'content', _partExplSection(blocks, pmap, p, mcqLabelStyle(q), !!media.length), nb.content); } catch (e) {}
       done.push(p);
     }
   });

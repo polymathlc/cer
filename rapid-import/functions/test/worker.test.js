@@ -1,12 +1,14 @@
 import {test,mock} from 'node:test';
 import assert from 'node:assert/strict';
 import {createCanvas,loadImage} from '@napi-rs/canvas';
+import {CHUNK_BYTES} from '../core.js';
 const docs=new Map(), files=new Map(), tasks=[];
 const clone=x=>x===undefined?undefined:structuredClone(x);
 const snap=path=>({exists:docs.has(path),data:()=>clone(docs.get(path))});
 const ref=path=>({path,get:async()=>snap(path)});
 let failCommit=false;
 let beforeDownload=null;
+let beforeSave=null;
 const db={doc:ref,collection:name=>({doc:id=>ref(name+'/'+id),where:()=>({get:async()=>({docs:[...docs].filter(([k])=>k.startsWith(name+'/')).map(([k])=>snap(k))})})}),
  runTransaction:async fn=>{
    const writes=[];
@@ -15,7 +17,7 @@ const db={doc:ref,collection:name=>({doc:id=>ref(name+'/'+id),where:()=>({get:as
    for(const [op,path] of writes) if(op==='create'&&docs.has(path)) throw new Error('already exists');
    for(const [op,path,value] of writes) docs.set(path,op==='update'?{...docs.get(path),...value}:value);
  }};
-const bucket={name:'test',file:path=>({save:async b=>files.set(path,Buffer.from(b)),download:async()=>{if(beforeDownload)await beforeDownload(path);if(!files.has(path))throw new Error('Missing upload');return [files.get(path)];}})};
+const bucket={name:'test',file:path=>({save:async b=>{if(beforeSave)await beforeSave(path,b);files.set(path,Buffer.from(b));},download:async()=>{if(beforeDownload)await beforeDownload(path);if(!files.has(path))throw new Error('Missing upload');return [files.get(path)];}})};
 mock.module('firebase-admin/app',{namedExports:{initializeApp:()=>({})}});
 mock.module('firebase-admin/firestore',{namedExports:{getFirestore:()=>db}});
 mock.module('firebase-admin/storage',{namedExports:{getStorage:()=>({bucket:()=>bucket})}});
@@ -49,7 +51,9 @@ const api=await import('../index.js');
 const auth={uid:'teacher',token:{admin:true,name:'Teacher'}};
 const makeJob=(id='job')=>({id,ownerUid:'teacher',name:'paper.pdf',status:'queued',phase:'publish',publishIndex:0,nextPage:3,total:2,added:0,generation:0,autoCheck:false,checkpoint:'checkpoint',updatedAt:new Date().toISOString()});
 const question={id:'q_rapid_job_1_0',title:'A',blocks:[],sourcePages:[]};
-function setup(j=makeJob()){docs.clear();files.clear();tasks.length=0;aiPrompts=[];modelResponse=null;beforeDownload=null;globalThis.REFINE={n:0,box:null};docs.set('cerRapidImports/'+j.id,j);files.set('checkpoint',Buffer.from(JSON.stringify({pending:null,ready:[question]})));return j;}
+function setup(j=makeJob()){docs.clear();files.clear();tasks.length=0;aiPrompts=[];modelResponse=null;beforeDownload=null;beforeSave=null;globalThis.REFINE={n:0,box:null};docs.set('cerRapidImports/'+j.id,j);files.set('checkpoint',Buffer.from(JSON.stringify({pending:null,ready:[question]})));return j;}
+const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};};
+async function waitFor(test) {for(let i=0;i<1000&&!test();i++)await new Promise(resolve=>setImmediate(resolve));assert.ok(test(),'the expected asynchronous work must start');}
 test('duplicate delivery publishes once, atomically with checkpoint progress',async()=>{
  setup();const request={data:{id:'job',page:3,generation:0,phase:'publish',publishIndex:0},retryCount:0};
  await api.rapidImportPage(request);await api.rapidImportPage(request);
@@ -87,6 +91,39 @@ test('missing PDF chunks cannot acknowledge safe-to-close',async()=>{
  await assert.rejects(api.rapidImportFinish({auth,data:{id:'job'}}));
  assert.equal(docs.get('cerRapidImports/job').status,'uploading');
 });
+test('PDF finalisation reads four chunks together and joins reverse completions in exact upload order',async()=>{
+ const size=CHUNK_BYTES*5+7;
+ setup({...makeJob(),status:'uploading',size,nextPage:1,phase:'page'});
+ const chunks=Array.from({length:6},(_,i)=>Buffer.alloc(Math.min(CHUNK_BYTES,size-i*CHUNK_BYTES),i+1));
+ chunks.forEach((chunk,i)=>files.set(`cer-rapid/teacher/job/chunks/${i}`,chunk));
+ let active=0,peak=0;
+ const held=[];
+ beforeDownload=async path=>{if(!path.includes('/chunks/'))return;const d=deferred();held.push(d);active++;peak=Math.max(peak,active);await d.promise;active--;};
+ const running=api.rapidImportFinish({auth,data:{id:'job'}});
+ await waitFor(()=>held.length===4);
+ assert.equal(docs.get('cerRapidImports/job').status,'uploading');
+ for(let i=3;i>=0;i--)held[i].resolve();
+ await waitFor(()=>held.length===6);
+ held[5].resolve();held[4].resolve();await running;
+ assert.equal(peak,4);assert.equal(active,0);
+ assert.deepEqual(files.get('cer-rapid/teacher/job/original.pdf'),Buffer.concat(chunks));
+ assert.equal(docs.get('cerRapidImports/job').status,'queued');
+});
+test('a missing chunk stops new reads and drains active downloads before finalisation fails',async()=>{
+ setup({...makeJob(),status:'uploading',size:CHUNK_BYTES*7,nextPage:1,phase:'page'});
+ const held=deferred(),started=[];
+ beforeDownload=async path=>{if(!path.includes('/chunks/'))return;const i=Number(path.split('/').at(-1));started.push(i);if(i===0)throw new Error('Missing first chunk');await held.promise;};
+ let settled=false;
+ const running=api.rapidImportFinish({auth,data:{id:'job'}}).then(()=>{settled=true;},error=>{settled=true;return error;});
+ await waitFor(()=>started.length===4);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(settled,false,'failure must await the already-started downloads');
+ assert.deepEqual(started,[0,1,2,3]);held.resolve();
+ const error=await running;assert.match(error.message,/Missing first chunk/);
+ assert.deepEqual(started,[0,1,2,3],'later chunks are not started after a failure');
+ assert.equal(files.has('cer-rapid/teacher/job/original.pdf'),false);
+ assert.equal(docs.get('cerRapidImports/job').status,'uploading');
+});
 test('student and cross-owner requests are rejected',async()=>{
  setup();await assert.rejects(api.rapidImportStatus({auth:{uid:'student',token:{}}}),/administrator/);
  await assert.rejects(api.rapidImportFinish({auth:{uid:'other',token:{admin:true}},data:{id:'job'}}),/not found/);
@@ -105,6 +142,65 @@ function pdfFixture(pageCount,streams=[]) {
   pdf+=offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('');
   pdf+='trailer\n<< /Size '+offsets.length+' /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF';return Buffer.from(pdf);
 }
+test('page preparation overlaps source preservation, bounds all question crop chains to three and uploads to four, preserving ordered fallback slots',async()=>{
+ const j=setup({...makeJob('parallel'),phase:'page',nextPage:1,total:1,checkpoint:null,path:'original.pdf',engineOrder:['gemini'],decisions:false,enhanceImages:false,prompt:'Read all questions'});
+ files.set(j.path,pdfFixture(1));
+ aiPages=[Array.from({length:4},(_,i)=>({title:'Question '+i,sourceQuestionNumber:String(i+1),blocks:[
+   {type:'text',text:`Question wording ${i}`},{type:'image',box_2d:[700,80,960,390]},
+   {type:'image',box_2d:i===0?[900,100,300,800]:[700,80,960,390]},{type:'plainanswer',text:'Answer'}]}))];
+ const source=deferred(),models=deferred(),uploads=deferred();
+ let sourceStarted=false,activeModels=0,modelPeak=0,activeStores=0,storePeak=0,storeStarted=0;
+ modelResponse=async request=>{
+   if(!/auto-cropped figure/.test(request.contents[0].parts[0].text))return;
+   activeModels++;modelPeak=Math.max(modelPeak,activeModels);await models.promise;activeModels--;
+   return reply({clean:true});
+ };
+ beforeSave=async path=>{
+   if(path.endsWith('/page-1.jpg')){sourceStarted=true;await source.promise;return;}
+   if(!path.includes('/images/'))return;
+   activeStores++;storeStarted++;storePeak=Math.max(storePeak,activeStores);await uploads.promise;activeStores--;
+ };
+ const running=api.rapidImportPage({data:{id:j.id,page:1,generation:0,phase:'page',publishIndex:0},retryCount:0});
+ await waitFor(()=>activeModels===3);
+ assert.equal(sourceStarted,true,'the original page is preserved while models prepare crops');
+ assert.equal(docs.get('cerRapidImports/'+j.id).checkpoint,null);
+ models.resolve();source.resolve();await waitFor(()=>storeStarted===4);
+ assert.equal(docs.get('cerRapidImports/'+j.id).nextPage,1,'no checkpoint progress before all image writes settle');
+ uploads.resolve();await running;
+ assert.equal(modelPeak,3);assert.equal(storePeak,4);assert.equal(activeModels+activeStores,0);
+ const job=docs.get('cerRapidImports/'+j.id),checkpoint=JSON.parse(files.get(job.checkpoint));
+ assert.deepEqual(checkpoint.ready.map(q=>q.sourceQuestionNumber),['1','2','3','4']);
+ assert.deepEqual(checkpoint.ready.map(q=>q.id),[0,1,2,3].map(i=>`q_rapid_parallel_1_${i}`));
+ assert.equal(checkpoint.ready[0].blocks.filter(b=>b.type==='image')[1].url,checkpoint.ready[0].sourcePages[0].url);
+ assert.equal(checkpoint.ready[0].diagramWhole,true);
+ for(let i=0;i<4;i++)for(const [n,b] of checkpoint.ready[i].blocks.filter(b=>b.type==='image').entries()) {
+   if(i===0&&n===1)continue;
+   assert.ok(decodeURIComponent(new URL(b.url).pathname).endsWith(`page-1-q${i}-figure${n}.jpg`),'each figure retains its source-order slot');
+ }
+});
+test('page upload failure drains active image writes and cannot advance or overwrite a later generation',async()=>{
+ const j=setup({...makeJob('drain'),phase:'page',nextPage:1,total:1,checkpoint:null,path:'original.pdf',engineOrder:['gemini'],decisions:false,enhanceImages:false,prompt:'Read all questions'});
+ files.set(j.path,pdfFixture(1));
+ aiPages=[[{title:'Question',sourceQuestionNumber:'1',blocks:[{type:'text',text:'Observe the figures'},
+   ...Array.from({length:6},()=>({type:'image',box_2d:[700,80,960,390]})),{type:'plainanswer',text:'Answer'}]}]];
+ const held=deferred(),writes=[];
+ beforeSave=async path=>{
+   if(!/figure\d+\.jpg$/.test(path))return;
+   const n=Number(/figure(\d+)\.jpg$/.exec(path)[1]);writes.push(n);
+   if(n===0)throw new Error('Simulated crop write failure');await held.promise;
+ };
+ let settled=false;
+ const running=api.rapidImportPage({data:{id:j.id,page:1,generation:0,phase:'page',publishIndex:0},retryCount:0})
+   .then(()=>{settled=true;},error=>{settled=true;return error;});
+ await waitFor(()=>writes.length===4);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(settled,false);assert.deepEqual(writes,[0,1,2,3]);
+ docs.set('cerRapidImports/'+j.id,{...docs.get('cerRapidImports/'+j.id),generation:1,error:'new generation owns the job'});
+ held.resolve();const error=await running;assert.match(error.message,/crop write failure/);
+ assert.deepEqual(writes,[0,1,2,3]);
+ const latest=docs.get('cerRapidImports/'+j.id);
+ assert.equal(latest.checkpoint,null);assert.equal(latest.nextPage,1);assert.equal(latest.generation,1);assert.equal(latest.error,'new generation owns the job');
+ assert.equal([...files.keys()].some(path=>path.includes('/checkpoints/')),false);
+});
 test('full upload and real PDF rendering continue entirely server-side across three pages',async()=>{
   setup();docs.clear();files.clear();
   const payload=(text,number,continuation)=>({title:'Question '+number,topic:'Heat',sourceQuestionNumber:number,continuation,
@@ -319,7 +415,7 @@ test('resize guards role, owner, displayed URL and current scale',async()=>{
   const r=await api.rapidVettingImage({auth,data});assert.equal(r.question.blocks[1].scale,.7);
   await assert.rejects(api.rapidVettingImage({auth,data}),e=>e.code==='aborted');
 });
-test('durable enhancement checkpoints each figure once and fences replayed image tasks',async()=>{
+test('durable enhancement checkpoints two complete figures together and fences replayed image tasks',async()=>{
   const {q,bytes}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);
   const j={...docs.get('cerRapidImports/job'),phase:'enhance',figureIndex:1};docs.set('cerRapidImports/job',j);
   q.blocks.splice(2,0,{...q.blocks[1],id:'second'});files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
@@ -329,10 +425,76 @@ test('durable enhancement checkpoints each figure once and fences replayed image
   };
   const first={data:{id:'job',page:3,generation:0,phase:'enhance',publishIndex:0,figureIndex:1},retryCount:0};
   await api.rapidImportPage(first);await api.rapidImportPage(first);
-  assert.equal(count,1);assert.equal(docs.get('cerRapidImports/job').figureIndex,2);assert.equal(docs.has('users/teacher/vetting/'+q.id),false);
+  assert.equal(count,2);assert.equal(docs.get('cerRapidImports/job').phase,'publish');assert.equal(docs.get('cerRapidImports/job').figureIndex,0);assert.equal(docs.has('users/teacher/vetting/'+q.id),false);
   await api.rapidImportPage({...first,data:{...first.data,figureIndex:2}});
   await api.rapidImportPage({...first,data:{...first.data,phase:'publish',figureIndex:0}});
   assert.equal(count,2);assert.equal(docs.get('cerRapidImports/job').status,'completed');assert.equal(docs.get('cerRapidImports/job').added,1);
+});
+test('three enhancement figures start only two at a time and advance after the selected pair',async()=>{
+  const {q,bytes}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);
+  docs.set('cerRapidImports/job',{...docs.get('cerRapidImports/job'),phase:'enhance',figureIndex:1});
+  q.blocks.splice(2,0,{...q.blocks[1],id:'second'},{...q.blocks[1],id:'third'});
+  files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
+  const held=[deferred(),deferred()];let calls=0,active=0,peak=0,verified=0;
+  modelResponse=async request=>{
+    if(request.config.responseModalities){const n=calls++;active++;peak=Math.max(peak,active);if(n<2)await held[n].promise;active--;return imageModelReply(bytes);}
+    if(request.contents[0].parts[0].text.startsWith('Compare image 1')){verified++;return reply({faithful:true,differences:[]});}
+  };
+  const first={data:{id:'job',page:3,generation:0,phase:'enhance',publishIndex:0,figureIndex:1},retryCount:0};
+  const running=api.rapidImportPage(first);await waitFor(()=>calls===2);
+  assert.equal(active,2,'both enhancement model calls must start immediately');
+  held[1].resolve();await waitFor(()=>verified===1);
+  assert.equal(docs.get('cerRapidImports/job').checkpoint,'checkpoint','one completed figure cannot advance the paired checkpoint');
+  held[0].resolve();await running;
+  assert.equal(peak,2);assert.equal(calls,2);
+  const next=docs.get('cerRapidImports/job');assert.equal(next.phase,'enhance');assert.equal(next.figureIndex,3);
+  const saved=JSON.parse(files.get(next.checkpoint)).ready[0];
+  assert.equal(saved.blocks[1].enhancement.state,'done');assert.equal(saved.blocks[2].enhancement.state,'done');assert.equal(saved.blocks[3].enhancement,undefined);
+  await api.rapidImportPage(first);assert.equal(calls,2,'replaying the first paired cursor is fenced');
+  await api.rapidImportPage({...first,data:{...first.data,figureIndex:3}});
+  assert.equal(calls,3);assert.equal(verified,3);assert.equal(docs.get('cerRapidImports/job').phase,'publish');
+});
+test('a paired enhancement preserves one failed original and one fully verified result with visible review findings',async()=>{
+  const {q,bytes,url}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);
+  docs.set('cerRapidImports/job',{...docs.get('cerRapidImports/job'),phase:'enhance',figureIndex:1});
+  q.blocks.splice(2,0,{...q.blocks[1],id:'second',figureKind:'table'});files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
+  let calls=0,verified=0;
+  modelResponse=request=>{
+    if(request.config.responseModalities){calls++;if(!request.contents[0].parts[0].text.includes('BLACK AND WHITE'))throw new Error('First figure service unavailable');return imageModelReply(bytes);}
+    if(request.contents[0].parts[0].text.startsWith('Compare image 1')){verified++;return reply({faithful:true,differences:[]});}
+  };
+  const first={data:{id:'job',page:3,generation:0,phase:'enhance',publishIndex:0,figureIndex:1},retryCount:0};
+  await api.rapidImportPage(first);
+  assert.equal(calls,2);assert.equal(verified,1);
+  const checkpoint=JSON.parse(files.get(docs.get('cerRapidImports/job').checkpoint));
+  assert.equal(checkpoint.ready[0].blocks[1].url,url);assert.equal(checkpoint.ready[0].blocks[1].enhancement.state,'error');
+  assert.equal(checkpoint.ready[0].blocks[2].enhancement.state,'done');assert.notEqual(checkpoint.ready[0].blocks[2].url,url);
+  await api.rapidImportPage({...first,data:{...first.data,phase:'publish',figureIndex:0}});
+  const saved=docs.get('users/teacher/vetting/'+q.id);
+  assert.equal(saved.autoCheck.state,'amber');assert.ok(saved.autoCheck.findings.some(f=>/First figure service unavailable/.test(f.detail)));
+  assert.equal(saved.blocks[1].originalCropUrl,url);assert.equal(saved.blocks[2].originalCropUrl,url);
+});
+test('paired enhancement cannot advance when its checkpoint write fails, and an in-flight retry generation owns the cursor',async()=>{
+  for(const changeGeneration of [false,true]) {
+    const {q,bytes}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);
+    docs.set('cerRapidImports/job',{...docs.get('cerRapidImports/job'),phase:'enhance',figureIndex:1});
+    q.blocks.splice(2,0,{...q.blocks[1],id:'second'});files.set('checkpoint',Buffer.from(JSON.stringify({ready:[q],pending:null})));
+    const held=deferred();let calls=0;
+    modelResponse=async request=>{
+      if(request.config.responseModalities){calls++;await held.promise;return imageModelReply(bytes);}
+      if(request.contents[0].parts[0].text.startsWith('Compare image 1'))return reply({faithful:true,differences:[]});
+    };
+    if(!changeGeneration)beforeSave=async path=>{if(path.includes('/checkpoints/'))throw new Error('Checkpoint write unavailable');};
+    const running=api.rapidImportPage({data:{id:'job',page:3,generation:0,phase:'enhance',publishIndex:0,figureIndex:1},retryCount:0});
+    const result=running.then(()=>null,error=>error);await waitFor(()=>calls===2);
+    if(changeGeneration)docs.set('cerRapidImports/job',{...docs.get('cerRapidImports/job'),generation:1,error:'new generation'});
+    held.resolve();const error=await result;
+    if(changeGeneration)assert.equal(error,null);else assert.match(error.message,/Checkpoint write unavailable/);
+    const latest=docs.get('cerRapidImports/job');
+    assert.equal(latest.checkpoint,'checkpoint');assert.equal(latest.phase,'enhance');assert.equal(latest.figureIndex,1);assert.equal(latest.added,0);
+    if(changeGeneration){assert.equal(latest.generation,1);assert.equal(latest.error,'new generation');}
+    assert.equal(docs.has('users/teacher/vetting/'+q.id),false);
+  }
 });
 test('unverified enhancement is published with its original and a visible finding, never a green light',async()=>{
   const {q,url,bytes}=savedFigure();docs.delete('users/teacher/vetting/'+q.id);

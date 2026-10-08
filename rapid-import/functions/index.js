@@ -107,8 +107,8 @@ export const rapidImportChunk = onCall(callOpts, async request => {
 export const rapidImportFinish = onCall({...callOpts,memory:'1GiB'}, async request=>{
   const {ref,job}=await owned(request);
   if(job.status!=='uploading') return {queued:true};
-  const chunks=[];
-  for(let i=0;i<Math.ceil(job.size/CHUNK_BYTES);i++) chunks.push((await bucket().file(`cer-rapid/${job.ownerUid}/${job.id}/chunks/${i}`).download())[0]);
+  const chunks=await inOrder(Array.from({length:Math.ceil(job.size/CHUNK_BYTES)},(_,i)=>i),4,
+    async i=>(await bucket().file(`cer-rapid/${job.ownerUid}/${job.id}/chunks/${i}`).download())[0]);
   const pdf=Buffer.concat(chunks);
   if(pdf.length!==job.size) throw new HttpsError('failed-precondition','The PDF upload is incomplete.');
   const path=`cer-rapid/${job.ownerUid}/${job.id}/original.pdf`;
@@ -319,16 +319,36 @@ const REFINE_PARALLEL = 3;
 const PAGE_REFINE_MS = 300000;
 async function inOrder(items, n, fn) {
   const out=new Array(items.length);
-  let next=0;
+  let next=0,failed=false,failure;
   await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{
-    while(next<items.length){const i=next++;out[i]=await fn(items[i],i);}
+    while(!failed&&next<items.length) {
+      const i=next++;
+      try {out[i]=await fn(items[i],i);}
+      catch(e) {if(!failed){failed=true;failure=e;}break;}
+    }
   }));
+  // Drain callbacks already using the page canvas or writing Storage before
+  // the caller advances its checkpoint, reports failure or destroys the PDF.
+  if(failed) throw failure;
   return out;
+}
+// Shared by every question on one page, so three question preparations do not
+// each start three crop-model chains or four Storage writes of their own.
+function limitWork(n) {
+  let active=0;
+  const waiting=[];
+  const start=()=>{
+    while(active<n&&waiting.length) {
+      const {fn,resolve,reject}=waiting.shift();active++;
+      Promise.resolve().then(fn).then(resolve,reject).finally(()=>{active--;start();});
+    }
+  };
+  return fn=>new Promise((resolve,reject)=>{waiting.push({fn,resolve,reject});start();});
 }
 // Cut, judge, and re-cut with the AI until Decisions and the pixel checks agree.
 // Returns one entry per image block: { made, state, tries, reasons }.
-async function reviewCrops(imageBlocks, canvas, job, wording='', until=Infinity) {
-  const made=await inOrder(imageBlocks,REFINE_PARALLEL,b=>refineCrop(cropDiagramEx(canvas,b.box_2d??b.box,createCanvas),wording,job,canvas,until));
+async function reviewCrops(imageBlocks, canvas, job, wording='', until=Infinity, cropWork=limitWork(REFINE_PARALLEL)) {
+  const made=await inOrder(imageBlocks,REFINE_PARALLEL,b=>cropWork(()=>refineCrop(cropDiagramEx(canvas,b.box_2d??b.box,createCanvas),wording,job,canvas,until)));
   if(!decisionsOn(job)||!imageBlocks.length) return made.map(m=>({made:m,state:'ok',tries:0,reasons:[]}));
   // A clean-up that WORKED is not stray text left on the crop: the crop Decisions is
   // shown is the cleaned one, re-measured. Telling Decisions "the AI saw stray text"
@@ -339,30 +359,32 @@ async function reviewCrops(imageBlocks, canvas, job, wording='', until=Infinity)
   // Decisions unavailable is not "no Decisions": the pixel checks still stand on their own,
   // and a crop they call clipped or blank is re-cut all the same.
   const decision=decideReview({verdicts,figures:facts,question:null});
-  const out=[];
-  for(let i=0;i<made.length;i++) {
+  return inOrder(made,REFINE_PARALLEL,async(_,i)=>{
     const own=decision.failures.filter(f=>f.key==='figure_'+i);
-    if(!own.length) {out.push({made:made[i],state:'ok',tries:0,reasons:[]});continue;}
-    let best={made:made[i],score:own.length,reasons:own.map(f=>f.reason)}, reasons=best.reasons, tries=0, fixed=false;
-    while(tries<DECISIONS_RECROP_TRIES) {
-      if(Date.now()>until) break;
-      tries++;
-      let box=null;
-      try { box=await recropBox(canvas,best.made,reasons,job); } catch { break; }
-      if(!box) break;
-      const m2=await refineCrop(cropDiagramEx(canvas,box,createCanvas,{marginScale:tries===1?1.6:2.2}),wording,job,canvas,until);
-      const f2=factsOf(m2,i), hard=figureHardIssues(f2);
-      let v2=null;
-      if(!hard.length) v2=await decisionsAsk({scope:'figures',figures:[f2]});
-      const d2=decideReview({verdicts:v2?{figure_0:v2.figure_0}:null,figures:[f2],question:null});
-      const score=d2.failures.length;
-      reasons=d2.failures.map(f=>f.reason);
-      if(m2&&score<best.score) {best={made:m2,score,reasons};imageBlocks[i].box_2d=box;}
-      if(!score&&m2) {fixed=true;break;}
-    }
-    out.push({made:best.made,state:fixed?'fixed':'flagged',tries,reasons:fixed?[]:best.reasons});
-  }
-  return out;
+    if(!own.length) return {made:made[i],state:'ok',tries:0,reasons:[]};
+    // Independent figures overlap; one figure's attempts stay sequential and
+    // keep the same best-score selection and two-recut limit.
+    return cropWork(async()=>{
+      let best={made:made[i],score:own.length,reasons:own.map(f=>f.reason)}, reasons=best.reasons, tries=0, fixed=false;
+      while(tries<DECISIONS_RECROP_TRIES) {
+        if(Date.now()>until) break;
+        tries++;
+        let box=null;
+        try { box=await recropBox(canvas,best.made,reasons,job); } catch { break; }
+        if(!box) break;
+        const m2=await refineCrop(cropDiagramEx(canvas,box,createCanvas,{marginScale:tries===1?1.6:2.2}),wording,job,canvas,until);
+        const f2=factsOf(m2,i), hard=figureHardIssues(f2);
+        let v2=null;
+        if(!hard.length) v2=await decisionsAsk({scope:'figures',figures:[f2]});
+        const d2=decideReview({verdicts:v2?{figure_0:v2.figure_0}:null,figures:[f2],question:null});
+        const score=d2.failures.length;
+        reasons=d2.failures.map(f=>f.reason);
+        if(m2&&score<best.score) {best={made:m2,score,reasons};imageBlocks[i].box_2d=box;}
+        if(!score&&m2) {fixed=true;break;}
+      }
+      return {made:best.made,state:fixed?'fixed':'flagged',tries,reasons:fixed?[]:best.reasons};
+    });
+  });
 }
 
 // One bounded attempt to repair figures the visual audit rejected. The page the
@@ -544,13 +566,20 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
       const checkpoint=JSON.parse((await bucket().file(job.checkpoint).download())[0].toString());
       const q=checkpoint.ready[publishIndex],block=q?.blocks?.[figureIndex];
       if(block?.type!=='image') throw new Error('Missing figure checkpoint.');
-      try { q.blocks[figureIndex]=await enhanceImage(block,job,'colour',(q.sourcePages||[]).map(p=>p.url)); }
-      catch(e) { q.blocks[figureIndex]={...block,enhancement:{state:'error',mode:figureMode(block.figureKind),error:String(e.message||e).slice(0,350),at:new Date().toISOString()}}; }
-      // One figure per task bounds image-model latency. Each successful (or
-      // visibly flagged) result is checkpointed before advancing the outbox.
+      const indexes=[figureIndex],second=nextImageIndex(q,figureIndex);
+      if(second>=0) indexes.push(second);
+      // Both figures start immediately, without queued model work. Each keeps
+      // its complete redraw and fidelity check within the existing task budget.
+      await Promise.all(indexes.map(async index=>{
+        const original=q.blocks[index];
+        try {q.blocks[index]=await enhanceImage(original,job,'colour',(q.sourcePages||[]).map(p=>p.url));}
+        catch(e) {q.blocks[index]={...original,enhancement:{state:'error',mode:figureMode(original.figureKind),error:String(e.message||e).slice(0,350),at:new Date().toISOString()}};}
+      }));
+      // Both successful or visibly flagged outcomes are checkpointed before
+      // advancing the original delivery cursor, so replays cannot replace them.
       const path=`cer-rapid/${job.ownerUid}/${id}/checkpoints/${randomUUID()}.json`;
       await bucket().file(path).save(JSON.stringify(checkpoint),{resumable:false,contentType:'application/json'});
-      const next=nextImageIndex(q,figureIndex);
+      const next=nextImageIndex(q,indexes.at(-1));
       await db.runTransaction(async tx=>{
         if(!matches((await tx.get(ref)).data())) return;
         tx.update(ref,{checkpoint:path,phase:next<0?'publish':'enhance',figureIndex:next<0?0:next,error:'',updatedAt:new Date().toISOString()});
@@ -585,24 +614,36 @@ export const rapidImportPage = onTaskDispatched({region:'us-central1',secrets:[k
     const figures='\nFIGURE RULES: Keep text and image blocks in source reading order, at the exact point each figure belongs among the stem and lettered parts. Use one image block per figure or complete table, and retain every figure needed to answer the question. Give every image block figureKind:"diagram", "table", "flowchart" or "graph". Tables, graphs and every WORD diagram (boxes, circles or brackets holding only words or numbers joined by lines or arrows: flow charts, classification trees, concept maps, cycles) must be classified accurately (table, graph or flowchart) so they are redrawn in black and white; only a figure with pictured objects, apparatus or organisms is a diagram and receives colour. Each box_2d is [ymin,xmin,ymax,xmax], 0-1000 on CURRENT image 1 only, never on the previous context page or on an already cropped image. Include complete labels, units, arrows, legends, captions, table headers and borders belonging to the figure; check the last letter on every side and leave clear whitespace beyond it. Exclude surrounding question prose, question numbers, ordinary written options and answer lines; put that wording in text or mcq blocks instead. A table rectangle runs from its top border to its bottom border (plus a title printed on it): never the sentence that introduces it, the lettered parts printed under it such as "(a) State..." or "(i) Substance 1", marks such as [2], blank answer lines, or the end of the previous question. Keep picture answer choices together in one image including their option labels. Do not use a whole-page rectangle as a figure. If you cannot locate a required figure, keep its image block with box_2d:null in its original position so its source page can be retained for review.';
     const payloads=parseReply(await ask(job.prompt+boundary+figures,reference?[image,reference]:[image],job,parseReply));
     if(payloads.length>60) throw new Error('Too many questions on one page; review this PDF.');
-    const token=randomUUID(), sourceUrl=await storeImage(job,token,`page-${page}`,canvas), entries=[];
-    for(let i=0;i<payloads.length;i++) {
-      const payload=payloads[i], urls=[];
-      const reviewed=await reviewCrops(payload.blocks.filter(b=>blockType(b)==='image'),canvas,job,cropWordingOf(payload.blocks),started+PAGE_REFINE_MS);
-      for(const r of reviewed) {
+    const token=randomUUID(), cropWork=limitWork(REFINE_PARALLEL), storeWork=limitWork(4);
+    // Source preservation and crop preparation are independent. Capture the
+    // write outcome immediately, then await it even when preparation fails.
+    const sourceWrite=storeWork(()=>storeImage(job,token,`page-${page}`,canvas))
+      .then(url=>({url}),error=>({error}));
+    const preparing=inOrder(payloads,3,async(payload,i)=>{
+      const reviewed=await reviewCrops(payload.blocks.filter(b=>blockType(b)==='image'),canvas,job,cropWordingOf(payload.blocks),started+PAGE_REFINE_MS,cropWork);
+      const source=await sourceWrite;
+      if(source.error) throw source.error;
+      const sourceUrl=source.url;
+      const urls=await inOrder(reviewed,4,(r,n)=>{
         const crop=r.made&&r.made.canvas;
         // Reserve one result for every image block, including refused crops,
         // so later figures never slide into an earlier figure's position.
-        if(!crop) {urls.push(sourceUrl);continue;}
-        urls.push(await storeImage(job,token,`page-${page}-q${i}-figure${urls.length}`,crop));
-      }
+        if(!crop) return sourceUrl;
+        return storeWork(()=>storeImage(job,token,`page-${page}-q${i}-figure${n}`,crop));
+      });
       const q=normaliseQuestion(payload,`q_rapid_${id}_${page}_${i}`,job,page,sourceUrl,urls);
       if(q.blocks.some(b=>b.type==='image'&&b.url===sourceUrl)) q.diagramWhole=true;
       // What Decisions and the AI recrop did, kept so the publish step can raise anything still wrong.
       const flagged=reviewed.map((r,n)=>({index:n,state:r.state,tries:r.tries,reasons:(r.reasons||[]).slice(0,4)})).filter(r=>r.state!=='ok'||r.tries);
       if(flagged.length) q.decisionsFigures=flagged;
-      entries.push({q,continuation:payload.continuation===true});
-    }
+      return {q,continuation:payload.continuation===true};
+    });
+    // Both sides settle before a failure can destroy the rendered page. The
+    // ordered results preserve question numbers, continuation and figure slots.
+    const [source,prepared]=await Promise.allSettled([sourceWrite,preparing]);
+    if(source.value.error) throw source.value.error;
+    if(prepared.status==='rejected') throw prepared.reason;
+    const entries=prepared.value;
     const assembled=assemblePage(pending,entries,page===doc.numPages);
     // Immutable checkpoint uploaded before the atomic Firestore publication.
     const checkpoint=`cer-rapid/${job.ownerUid}/${id}/checkpoints/${token}.json`;

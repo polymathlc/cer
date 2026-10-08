@@ -136,6 +136,43 @@ await test('a clean crop costs no AI call at all', async () => {
   const out = await x._decisionsGateFigures([{ ex: good(), dataUrl: 'data:image/png;base64,OK', box: [1, 1, 2, 2] }], 'image/png', 'P', 'data:image/png;base64,P');
   eq([out[0].state, calls.recrop.length], ['ok', 0]);
 });
+await test('concurrent figure reviews share three retry slots, preserve source order and keep each figure’s two-attempt limit', async () => {
+  const turn = () => new Promise(resolve => setImmediate(resolve));
+  let active = 0, maximum = 0;
+  const completed = [], attempts = new Map();
+  const { x, calls } = world({
+    decisions: data => ({ available: true, verdicts: Object.fromEntries(data.figures.map((figure, i) => ['figure_' + i,
+      data.figures.length > 1 || figure.width === 302 ? no() : yes()])) }),
+    recrop: async (prompt, media) => {
+      const i = Number(media[1].data.split('_').at(-1));
+      attempts.set(i, (attempts.get(i) || 0) + 1);
+      active++; maximum = Math.max(maximum, active);
+      await turn(); if (i % 3 === 0) await turn();
+      active--; completed.push(i);
+      if (i === 1) throw new Error('One figure cannot be located');
+      return JSON.stringify({ box_2d: [100 + i, 100, 400, 500] });
+    },
+    cut: box => good({ width: 300 + box[0] - 100, dataUrl: 'data:image/png;base64,RECUT_' + (box[0] - 100) })
+  });
+  const items = offset => Array.from({ length: 3 }, (_, i) => ({ ex: good(), dataUrl: 'data:image/png;base64,ORIGINAL_' + (i + offset), box: [i + offset, 1, 2, 3] }));
+  const [first, second] = await Promise.all([
+    x._decisionsGateFigures(items(0), 'image/png', 'P', 'data:image/png;base64,P', null, '- Study this table.'),
+    x._decisionsGateFigures(items(3), 'image/png', 'P', 'data:image/png;base64,P', null, '- Study this table.')
+  ]);
+  eq(maximum, 3, 'the bound covers simultaneous pages, not three per page');
+  assert(completed.indexOf(1) < completed.indexOf(0), 'the fixture really completed out of order');
+  eq([...attempts].sort((a, b) => a[0] - b[0]), [[0, 1], [1, 1], [2, 2], [3, 1], [4, 1], [5, 1]]);
+  eq(first.map(it => [it.state, it.tries]), [['fixed', 1], ['flagged', 1], ['flagged', 2]]);
+  assert(first[1].dataUrl.endsWith('ORIGINAL_1') && first[2].dataUrl.endsWith('ORIGINAL_2'), 'unfixed figures keep their best original');
+  eq(second.map(it => it.state), ['fixed', 'fixed', 'fixed']);
+  for (const [list, offset] of [[first, 0], [second, 3]]) list.forEach((it, i) => {
+    if (it.state === 'fixed') {
+      assert(it.dataUrl.endsWith('RECUT_' + (i + offset)));
+      eq(it.box, [100 + i + offset, 100, 400, 500], 'the matching crop coordinates stay with their source slot');
+    }
+  });
+  assert(calls.refine.every(it => it.wording === '- Study this table.' && it.src.page === 'data:image/png;base64,P'), 'every recut keeps the wording and page measurement check');
+});
 
 const goodQ = { blocks: [
   { type: 'text', content: '<p>Study the graph and answer.</p>' }, { type: 'image', url: 'u' },
