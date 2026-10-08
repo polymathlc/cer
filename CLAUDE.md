@@ -58,6 +58,49 @@ hooks inside those handlers are reordered.
   - Shards come from random-angle cracks (`cut` / `shatter`): deterministic per mark, convex, tiling each facet exactly, never thinner than the logo's own thinnest facet. The pure core is exported for the harness.
   - Run `node --test tools/landing-shards-tests.mjs` and `PW=/path/to/playwright/index.mjs node tools/landing-shards-browser.mjs` after touching any of it.
 
+## 🗓 The public schedule page — a weekly timetable, and trials booked 3 business days ahead (schedule v1.1.0)
+
+`schedule/index.html` is polymathlc.com.sg/schedule: the trial / enrolment booking page parents use. Like
+`mistakes.html` it is STANDALONE — it does not load `app.js` — and it reads one Firestore document
+(`schedule_config/main`) and writes `schedule_bookings` and `mail`. **It is mirrored to `polymathlc/website` by the
+sync like everything else, so edit it HERE**; a change made only in the mirror is erased by the next push to cer.
+
+- **Three views of the same slots** (`SCHEDULE_VIEWS`, remembered per browser under `pl_schedule_view`): 📚 *By level &
+  subject* (what a parent sees first), 🗓️ *Weekly timetable* (`renderTimetableView`) and 📅 *By day* (the list the
+  teacher edits in, and the teacher's default). `/schedule/#timetable` opens the timetable directly — the link to send
+  a parent who wants to see the whole week.
+- **The timetable is a real `<table>`**: days across, lesson times down, built by `timetableRows()` from the lesson
+  LABELS in `WEEKDAY_TIMES` / `SATURDAY_TIMES` (`timeStartMin` reads the start time), so the labels stay the one place a
+  lesson time is written and a changed time moves its row by itself. One row per distinct time, earliest first, so
+  Saturday mornings sit above the weekdays' after-school lessons. A day with no lesson at a time is a hatched square
+  (`tt-off`), a lesson time with no class a dashed one, and a class a block coloured by subject (Master Class gold) that
+  opens the class details sheet (`openTimetableSlot` → `#tt-modal`) with its fees, its trial notice and Book trial /
+  Enrol now, which hand over to the ordinary booking form (`ttBook` → `openBooking`). The level chips and the filters
+  FADE the other classes (`.dim`) rather than removing them, so the week keeps its shape while a parent narrows it.
+  On a phone each block shrinks to its level and a subject icon; the harness fails if anything overflows at 320px.
+- **📅 Trial slots must be booked at least `TRIAL_NOTICE_DAYS` (3) business days in advance**, so the centre can
+  prepare. It is stated in the strip above Find a class (`renderTrialNotice`), in every class's details and in the
+  trial booking form (`trialNoticeHtml`), in the confirmation and in both emails. `trialNoticeRule()` is the one
+  sentence they all use.
+  - A business day is Monday to Friday and not a Singapore public holiday; the day of booking never counts. Booked
+    on a Monday, the earliest trial is Thursday; booked on a Wednesday, it is the next Monday — so a Saturday class
+    booked midweek is the one a week later. `earliestTrialFor(dayCode, today)` also skips a lesson that falls on a
+    public holiday.
+  - **Counted in Singapore time** (`sgDayKey`: UTC+8, no daylight saving) whatever the device says, on plain
+    `YYYY-MM-DD` keys, so no time zone can move a date.
+  - **`SG_PUBLIC_HOLIDAYS` is MOM's gazetted list and has to be topped up every year** — MOM announces the next
+    year's dates each June. Add the year, with the Monday after any Sunday holiday (the harness checks that). A window
+    the list does not cover cannot be counted honestly, so every date function answers `''` there and the page states
+    the rule WITHOUT a date rather than print one that may be a day early.
+  - **The booking document is not changed.** The `schedule_bookings` rules live only in the Firebase console, and a
+    new field could make every booking fail, so the earliest date reaches the confirmation and the emails as words
+    and is never stored. The harness pins the exact set of booking fields.
+- `SCHEDULE_PAGE_VERSION` is shown to the signed-in teacher in the footer, so a deploy can be checked — bump it on every
+  change to this page.
+- Run `node --test tools/schedule-timetable-tests.mjs` and `SCHEDULE_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node
+  tools/schedule-timetable-browser.mjs` after touching any of it (CI: `.github/workflows/schedule-page.yml`). The browser
+  harness serves the real page with Firebase stubbed and the clock fixed, so nothing is ever booked or emailed.
+
 ## Apps
 - `index.html` + `app.js` — **"Science Learning Portal"** (the product name shown in the sidebar, the `<title>` and the footer; it was "Keywords Learning Portal" until v1.181.0). "Science Quest" is NOT the portal — it is the RPG/dungeon game layer inside it, and the name used in the login / password-reset / prize emails. Keep the two distinct. The CER science-quiz app: admin question authoring (block editor, AI build-from-screenshot, image crop/touch-up, vetting → bank) + student practice + an RPG/dungeon game layer. **The markup and CSS live in `index.html`; ALL of the application JavaScript lives in `app.js`**, loaded as `<script type="module" src="app.js">`. They ship together — `index.html` is useless without `app.js` next to it, so deploy the directory, never the single file.
   - Functions referenced from inline `onclick`/`on*` handlers MUST be assigned to `window` near the bottom of `app.js` (search `window.navigateTo =`), because the module has its own scope.
@@ -7485,6 +7528,16 @@ the 🔧 Auto-fixed button on the ⚡ Rapid add pad and the 🔴→🟢/🟡 car
 - Run `node tools/auto-check-tests.mjs` and `node tools/decisions-review-tests.mjs`.
 
 ## House rules
+- After touching **🗓 the schedule page** (`schedule/index.html`: the timetable — `timetableRows`, `timeStartMin`,
+  `renderTimetableView`, `ttCellHtml`, `openTimetableSlot` — or the trial notice — `TRIAL_NOTICE_DAYS`,
+  `SG_PUBLIC_HOLIDAYS`, `sgDayKey`, `addBusinessDays`, `earliestTrialFor`, `trialNoticeHtml`, `sendBookingEmails`),
+  run `node --test tools/schedule-timetable-tests.mjs` **and** the browser harness
+  `tools/schedule-timetable-browser.mjs`, and bump `SCHEDULE_PAGE_VERSION`. Every failure is silent and lands on a
+  parent: count a weekend or a holiday as a business day, or the booking day itself, and the page promises a trial the
+  centre has no time to prepare; read "today" off the device and a parent abroad is quoted the wrong date; let the
+  holiday list run out without the `''` fallback and the date is quietly a day early; drop a lesson LABEL's time format
+  and its row sorts to the bottom of the timetable; and add a field to the booking document and a console rule nobody
+  can see may refuse every booking.
 - After touching **🧠 the master profile, the block stamps or the merge**
   (`_akStyleAttach`, `styleProfilePick`, `_styleProfileBits`,
   `styleExemplarsFor`, `styleEditsAll`, `_styleSubOk`, `_styleOverlap`,
