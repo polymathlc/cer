@@ -30,6 +30,7 @@ jobs:
           node tools/rapid-preview-concurrency-tests.mjs
           node tools/rapid-cloud-tests.mjs
           node tools/rapid-add-performance-tests.mjs
+          node tools/mcq-labels-tests.mjs
           node tools/rapid-pdf-tests.mjs
           node tools/question-merge-tests.mjs
           node tools/preview-picture-size-tests.mjs
