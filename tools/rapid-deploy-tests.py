@@ -153,7 +153,7 @@ class DeployTests(unittest.TestCase):
         self.assertIn('functions:cer-rapid-import', deploys[0])
         self.assertIn('mathgen--app', deploys[0])
         self.assertIn('--force', deploys[0])
-        checked_secrets = {c[c.index('--secret') + 1] for c in commands if c[1:4] == ['secrets', 'versions', 'describe']}
+        checked_secrets = {arg.split('=', 1)[1] for c in commands if c[1:4] == ['secrets', 'versions', 'describe'] for arg in c if arg.startswith('--secret=')}
         self.assertEqual(checked_secrets, {'GEMINI_API_KEY', 'OPENAI_API_KEY'})
         checked_functions = {c[3] for c in commands if '--format=value(state)' in c and c[1:3] == ['functions', 'describe']}
         self.assertEqual(checked_functions, {'rapidImportStatus', 'rapidImportBegin', 'rapidImportChunk', 'rapidImportFinish', 'rapidImportRetry', 'rapidImportDispatch', 'rapidImportPage', 'cerDecisionsReview', 'rapidVettingImage'})

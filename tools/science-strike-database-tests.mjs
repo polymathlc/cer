@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { migrateDecisionsReviewState } from '../decisions-review-core.mjs';
 import { STRIKE_DEFAULT_OBJECTIVES, strikeQuestionQualityOptions, strikeAttemptProgress } from '../science-strike-feed.js';
 import { buildScienceFeedContext, planScienceQuestions } from '../science-feed-core.js';
 
@@ -11,7 +12,7 @@ function cut(start, end) {
   assert.ok(at >= 0 && stop > at, 'the real portal source section exists');
   return source.slice(at, stop);
 }
-const portal = vm.createContext({ console });
+const portal = vm.createContext({ console, migrateDecisionsReviewState });
 vm.runInContext(cut('function _aiHash(str) {', 'async function askGeminiCached(')
   + 'const TL_SIG_HEAD = 4000; const _tlCache = new Map();\n'
   + cut('function tlSig(q) {', 'function tlFresh(q) {')
