@@ -1,19 +1,22 @@
 # CER Science Learning Portal
 
-## Approved question regeneration (v1.427.1)
+## Approved question regeneration (v1.427.2)
 
-Open a question in the editor, or use its Regenerate button while editing a
-worksheet. Enter an optional command or leave it blank for the AI to propose a
-fresh variation of the same concept and difficulty. Prepare regeneration plan
-runs the traffic-light checker and proposes exact wording, answer, explanation
-and diagram changes for review. Existing diagrams serve as image references;
-crop findings use the preserved source pixels.
+Open a question in the editor, or use its Regenerate new copy button while
+editing a worksheet. Enter an optional command or leave it blank for the AI to
+propose a fresh variation of the same concept and difficulty. Duplicate & prepare
+plan first saves a new question in the bank from the question's current editor
+contents, then runs the traffic-light checker on that copy. It proposes exact
+wording, answer, explanation and diagram changes for review. Existing diagrams
+serve as image references; crop findings use the preserved source pixels.
 
-Approve regeneration plan applies only the reviewed actions to that question's
-draft, then runs the traffic-light checker again. Use Save to keep the draft.
-Remaining findings need a separate approved repair plan. Failed image generation,
-cancelled plans and edits made while a plan is running do not replace the draft.
-Undo restores the previous draft when it has not changed since regeneration.
+Approve regeneration plan applies and saves only the reviewed actions to the
+new bank question, then runs the traffic-light checker again. No additional Save
+is needed. The source question, its unsaved edits and its worksheet memberships
+stay unchanged. Failed or cancelled plans leave the saved copy available;
+changes made to the copy while a plan is running stop that plan from replacing
+them. Remaining findings need a separate approved repair plan. Undo restores
+the copy's previous contents when it has not changed since regeneration.
 
 Validation: `node tools/question-regeneration-tests.mjs` and
 `node tools/question-regeneration-browser.mjs`, alongside the question-repair

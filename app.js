@@ -4493,7 +4493,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.427.1';
+const APP_VERSION = 'v1.427.2';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -22525,8 +22525,8 @@ function duplicateQuestion(id) {
   saveQuestion(clone);
 }
 
-// ── Regenerate the current draft: an optional command, then a traffic-light
-// check and an exact plan to approve before any wording or picture changes. ──
+// ── Regenerate the current draft: save a NEW duplicate first, then check it
+// and approve an exact plan which changes only that saved new question. ─────
 let _regenSource = null;
 let _regenSourceOrigId = null;
 let _regenScope = 'create';
@@ -22540,7 +22540,7 @@ function openRegenerateModal(scope = 'create', id = '') {
   const q = scope === 'create' ? tlCreateQuestion() : tlQuestionFor(scope, id);
   if (!q || !q.blocks?.length) { showToast('Open a question first, then plan its regeneration', 'info'); return; }
   if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't set up yet", 'info'); return; }
-  const snapshot = tlRepairRead(scope, String(q.id));
+  const snapshot = qregenReadSource(scope, String(q.id));
   if (!snapshot) { showToast('That question is no longer available for editing', 'error'); return; }
   _regenSource = snapshot;
   _regenSourceOrigId = String(q.id);
@@ -22552,7 +22552,7 @@ function openRegenerateModal(scope = 'create', id = '') {
   const status = document.getElementById('regenStatus');
   if (status) status.textContent = '';
   const btn = document.getElementById('regenConfirmBtn');
-  if (btn) { btn.disabled = false; btn.textContent = 'Prepare regeneration plan'; }
+  if (btn) { btn.disabled = false; btn.textContent = 'Duplicate & prepare plan'; }
   document.getElementById('regenOverlay').classList.add('active');
   if (ta) ta.focus();
 }
@@ -42762,7 +42762,7 @@ function emQuestionHeadEl(e, empty) {
     `<span class="em-qdirty" id="emDirty_${e.key}"></span>` +
     (empty ? `<span class="em-qempty">every block was deleted — this question cannot be saved</span>` : '') +
     `<button type="button" class="em-qbtn danger" title="${escapeHtml(emDropTip())}" onclick="emRemoveQuestion('${e.key}')">${escapeHtml(emDropLabel())}</button>` +
-    `<button type="button" class="em-qbtn" title="Check this question, then review a plan to regenerate its wording and diagrams" onclick="openQuestionRegenerator('${e.key}')"${empty ? ' disabled' : ''}>🔄 Plan regeneration</button>` +
+    `<button type="button" class="em-qbtn" title="Save a new duplicate, then approve regeneration of only the new question and its diagrams" onclick="openQuestionRegenerator('${e.key}')"${empty ? ' disabled' : ''}>🔄 Regenerate new copy</button>` +
     `<button type="button" class="em-qbtn" title="Open this one question on its own in the full editor" onclick="emOpenFull('${e.key}')">↗ Full editor</button>`;
   return el;
 }
@@ -49200,6 +49200,7 @@ function _cqUpdateBadge() {
 // Planning is read-only. Only Implement changes can apply this reviewed plan.
 var _tlRepairSession = null;
 var _tlRepairEpoch = 0;
+var _qregenPending = null;
 // Question-level answer-key crop provenance is draft state, just like its URL.
 // Kept out of the bank until Save, and reset when a different editor is opened.
 var _editorImageSources = null;
@@ -49417,6 +49418,7 @@ function tlRepairRead(scope, id) {
   return copy;
 }
 function tlRepairCurrent(s, { sync = true } = {}) {
+  if (s?.sourceScope && !s.regeneratedCopy) return s === _tlRepairSession && s.epoch === _tlRepairEpoch && qregenSourceCurrent(s, sync);
   // A background (batch) repair has no panel, so it is judged on the account,
   // the document owner and the question itself — never on what is on screen.
   if (s && s.headless) {
@@ -49442,53 +49444,160 @@ function tlRepairReset() {
   tlRepairRender();
   return true;
 }
-// Regeneration is explicitly requested and may start with a green question and
-// no teacher command. It uses the SAME checker and exact-action executor as a
-// repair, with a different planning brief. No image is generated before approval.
-async function qregenStart(scope, id, command = '', expected = null) {
-  if (!_canAuthor() || !currentUser || auth.currentUser?.uid !== currentUser.uid) {
-    showToast('Only teachers can regenerate questions', 'error'); return false;
-  }
-  if (!['create', 'em'].includes(scope)) { showToast('Open this question in an editor to regenerate it', 'info'); return false; }
-  if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't set up yet", 'info'); return false; }
-  tlSyncScreen();
-  const snapshot = tlRepairRead(scope, String(id));
-  if (!snapshot?.blocks?.length) { showToast('That question is no longer available for editing', 'error'); return false; }
-  if (expected && (expected.uid !== currentUser.uid || expected.owner !== _bankOwnerUid()
-      || JSON.stringify(snapshot) !== JSON.stringify(expected.snapshot))) {
-    showToast('The question or account changed. Open a new regeneration plan.', 'error'); return false;
-  }
-  if (!tlRepairReset()) return false;
-  _tlPanelId = String(snapshot.id); _tlPanelScope = scope;
-  const writeScope = scope === 'em' || _docQById(_tlPanelId) ? 'bank'
-    : (vettingList || []).some(q => String(q.id) === _tlPanelId) ? 'vet' : '';
-  const s = _tlRepairSession = {
-    epoch: ++_tlRepairEpoch, id: _tlPanelId, scope, mode: 'regeneration',
-    uid: currentUser.uid, owner: _bankOwnerUid(), writeScope,
-    writeOwner: writeScope === 'bank' ? _qOwner(_tlPanelId) : writeScope === 'vet' ? _vOwner(_tlPanelId) : '',
-    snapshot, signature: JSON.stringify(snapshot), findings: [],
-    stage: 'checking', checkComplete: false, instruction: String(command || '').trim().slice(0, 2000), draft: String(command || '').trim().slice(0, 2000),
-    plan: null, message: 'The traffic-light checker is reading this question and its diagrams before planning…', undo: null,
+// Clone the actual authoring draft over its complete stored metadata. Volatile
+// fields from collectQuestionData are fixed to source values for stale guards;
+// only the later duplicate receives a new identity and creation timestamp.
+function qregenReadSource(scope, id) {
+  const screen = tlRepairRead(scope, id);
+  if (!screen) return null;
+  if (scope !== 'create') return screen;
+  const custom = typeof _cpbEditActive === 'function' && _cpbEditActive() && typeof _cpbQuestions !== 'undefined'
+    ? _cpbQuestions.find(q => String(q.id) === String(id)) : null;
+  const stored = custom || _docQById(String(id)) || (vettingList || []).find(q => String(q.id) === String(id));
+  const draft = collectQuestionData();
+  const source = { ...(stored || {}), ...draft, ...screen,
+    id: String(id), createdAt: stored?.createdAt || '', createdBy: stored?.createdBy || '',
   };
-  document.getElementById('tlOverlay')?.classList.add('show');
-  if (typeof tlRenderPanel === 'function') tlRenderPanel();
+  // Auto is represented by omission, so a stored explicit label style must
+  // not return after the teacher cleared that override in the live draft.
+  if (!Object.prototype.hasOwnProperty.call(draft, 'mcqLabels')) delete source.mcqLabels;
+  return tlRepairClone(source);
+}
+function qregenSourceCurrent(s, sync = true) {
+  if (!_canAuthor() || !currentUser || currentUser.uid !== s.uid || auth.currentUser?.uid !== s.uid || _bankOwnerUid() !== s.owner
+      || (s.sourceWriteScope === 'bank' && _qOwner(s.sourceId) !== s.sourceWriteOwner)
+      || (s.sourceWriteScope === 'vet' && _vOwner(s.sourceId) !== s.sourceWriteOwner)) return false;
+  if (sync) tlSyncScreen();
+  const current = qregenReadSource(s.sourceScope, s.sourceId);
+  return !!current && JSON.stringify(current) === s.sourceSignature;
+}
+function qregenDuplicate(source, sourceId) {
+  const copy = tlRepairClone(source);
+  for (const key of Object.keys(copy)) {
+    if (['usage', 'calib', 'autoCheck', 'checked', 'recheck', 'practiceQuality', '_flag', 'flag', 'flags', 'vettedAt', 'vettedBy', 'approvedAt', 'approvedBy',
+      'review', 'reviewedAt', 'reviewedBy', 'vettingAt', 'vettingReason',
+      'updatedAt', 'updatedBy', 'updatedByUid', 'rapidImportId', '_cpbFromBank'].includes(key) || /^(?:decisions|jev)/i.test(key)) delete copy[key];
+  }
+  copy.id = 'q_regen_' + crypto.randomUUID();
+  copy.title = String(source.title || 'Untitled') + ' (Regenerated copy)';
+  copy.createdAt = new Date().toISOString();
+  copy.createdBy = currentUser.name || currentUser.email || 'Admin';
+  if (Object.prototype.hasOwnProperty.call(copy, 'createdByUid')) copy.createdByUid = currentUser.uid;
+  copy.regeneratedFrom = String(sourceId);
+  copy.status = 'approved';
+  return copy;
+}
+// Once the duplicate is saved, every check, revision, approved action and Undo
+// uses its bank identity. Source editors and worksheet membership stay intact.
+async function qregenCheckCopy(s) {
+  if (!tlRepairCurrent(s)) return false;
+  const signature = s.signature, epoch = s.epoch;
+  s.stage = 'checking'; s.checkComplete = false; s.plan = null; s.revising = false;
+  s.message = 'New question copy saved in the bank. The traffic-light checker is reading it and its diagrams before planning…';
   tlRepairRender();
-  document.getElementById('tlCloseBtn')?.focus();
   try {
-    await tlRun(snapshot);
-    if (!tlRepairCurrent(s)) throw new Error('The question or account changed. Open a new regeneration plan.');
-    const verdict = tlStateOf(snapshot);
+    await tlRun(s.snapshot);
+    if (s.signature !== signature || s.epoch !== epoch || !tlRepairCurrent(s)) throw new Error('The copy or account changed. Reopen the new question to check it.');
+    const verdict = tlStateOf(s.snapshot);
     if (!['red', 'amber', 'green'].includes(verdict.state)) {
-      throw new Error('The traffic-light check could not finish. Check again before preparing a regeneration plan.');
+      throw new Error('The traffic-light check could not finish. Retry before preparing a regeneration plan.');
     }
     s.findings = tlRepairClone(verdict.findings || []);
     s.checkComplete = true;
     await tlRepairPrepare(s);
     return tlRepairCurrent(s) && s.stage === 'ready';
   } catch (err) {
-    if (s !== _tlRepairSession || s.epoch !== _tlRepairEpoch) return false;
-    s.stage = 'error'; s.message = 'No regeneration changes made. ' + (err.message || 'The question could not be checked.');
+    if (s !== _tlRepairSession || s.epoch !== _tlRepairEpoch || s.epoch !== epoch || s.signature !== signature) return false;
+    s.stage = 'error'; s.message = 'The saved duplicate is unchanged in the question bank. ' + (err.message || 'The copy could not be checked.');
     tlRepairRender(); return false;
+  }
+}
+async function qregenStart(scope, id, command = '', expected = null) {
+  if (_qregenPending) { showToast('The new question copy is still being saved', 'info'); return false; }
+  if (!_canAuthor() || !currentUser || auth.currentUser?.uid !== currentUser.uid) {
+    showToast('Only teachers can regenerate questions', 'error'); return false;
+  }
+  if (!['create', 'em'].includes(scope)) { showToast('Open this question in an editor to regenerate it', 'info'); return false; }
+  if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't set up yet", 'info'); return false; }
+  tlSyncScreen();
+  const snapshot = qregenReadSource(scope, String(id));
+  if (!snapshot?.blocks?.length) { showToast('That question is no longer available for editing', 'error'); return false; }
+  if (expected && (expected.uid !== currentUser.uid || expected.owner !== _bankOwnerUid()
+      || JSON.stringify(snapshot) !== JSON.stringify(expected.snapshot))) {
+    showToast('The question or account changed. Open a new regeneration plan.', 'error'); return false;
+  }
+  const instruction = String(command || '').trim().slice(0, 2000);
+  const active = _tlRepairSession;
+  if (active?.regeneratedCopy && active.mode === 'regeneration' && active.sourceScope === scope && active.sourceId === String(id)
+      && active.sourceSignature === JSON.stringify(snapshot) && !['applied', 'cancelled'].includes(active.stage) && tlRepairCurrent(active)) {
+    if (['checking', 'planning', 'applying', 'committing', 'cropping'].includes(active.stage)) return false;
+    active.instruction = instruction; active.draft = instruction; active.revising = false;
+    active.epoch = ++_tlRepairEpoch;
+    return active.checkComplete ? tlRepairPrepare(active) : qregenCheckCopy(active);
+  }
+  if (!tlRepairReset()) return false;
+  _tlPanelId = String(snapshot.id); _tlPanelScope = scope;
+  const sourceWriteScope = scope === 'em' || _docQById(_tlPanelId) ? 'bank'
+    : (vettingList || []).some(q => String(q.id) === _tlPanelId) ? 'vet' : '';
+  const s = _tlRepairSession = {
+    epoch: ++_tlRepairEpoch, id: _tlPanelId, scope, mode: 'regeneration',
+    uid: currentUser.uid, owner: _bankOwnerUid(), sourceScope: scope, sourceId: String(id), sourceSignature: JSON.stringify(snapshot),
+    sourceWriteScope, sourceWriteOwner: sourceWriteScope === 'bank' ? _qOwner(_tlPanelId) : sourceWriteScope === 'vet' ? _vOwner(_tlPanelId) : '',
+    snapshot, signature: JSON.stringify(snapshot), findings: [],
+    stage: 'duplicating', checkComplete: false, instruction, draft: instruction,
+    plan: null, message: 'Saving a new duplicate of your current question before regeneration…', undo: null,
+  };
+  _qregenPending = s;
+  document.getElementById('tlOverlay')?.classList.add('show');
+  if (typeof tlRenderPanel === 'function') tlRenderPanel();
+  tlRepairRender();
+  document.getElementById('tlCloseBtn')?.focus();
+  let savedDuplicate = false;
+  try {
+    const duplicate = qregenDuplicate(snapshot, id);
+    const saved = await saveQuestion(duplicate, { guard: () => tlRepairCurrent(s) });
+    if (!saved) throw new Error('The duplicate could not be saved. No regeneration was started.');
+    savedDuplicate = true;
+    // A completed write can outlive cancellation. Retain its unchanged copy
+    // only in the originating account; no late checker or plan may start.
+    if (!tlRepairCurrent(s)) {
+      if (qregenSourceCurrent(s)) {
+        questionBank.push(tlRepairClone(duplicate)); renderQuestionBank(); updateCounts();
+        showToast('Regeneration stopped. The unchanged new duplicate is saved in the question bank.', 'info');
+        const cancelled = _tlRepairSession;
+        if (cancelled?.stage === 'cancelled' && !cancelled.regeneratedCopy
+            && cancelled.sourceScope === s.sourceScope && cancelled.sourceId === s.sourceId
+            && cancelled.sourceSignature === s.sourceSignature) {
+          cancelled.id = String(duplicate.id); cancelled.scope = 'bank'; cancelled.regeneratedCopy = true;
+          cancelled.writeOwner = _qOwner(cancelled.id); cancelled.snapshot = tlRepairClone(duplicate);
+          cancelled.signature = JSON.stringify(cancelled.snapshot);
+          _tlPanelId = cancelled.id; _tlPanelScope = 'bank';
+          cancelled.message = 'Regeneration cancelled. The unchanged new duplicate remains saved in the question bank.';
+          if (typeof tlRenderPanel === 'function') tlRenderPanel();
+          tlRepairRender();
+        }
+      } else if (s === _tlRepairSession && s.epoch === _tlRepairEpoch) {
+        s.stage = 'error';
+        s.message = 'The duplicate save finished, but the source question or account changed. Regeneration stopped; reopen the bank to see the saved copy. The source question was not replaced.';
+        tlRepairRender();
+      }
+      return false;
+    }
+    questionBank.push(tlRepairClone(duplicate));
+    s.id = String(duplicate.id); s.scope = 'bank'; s.regeneratedCopy = true;
+    s.writeOwner = _qOwner(s.id); s.snapshot = tlRepairClone(duplicate); s.signature = JSON.stringify(s.snapshot);
+    _tlPanelId = s.id; _tlPanelScope = 'bank';
+    s.stage = 'checking';
+    renderQuestionBank(); updateCounts();
+    if (typeof tlRenderPanel === 'function') tlRenderPanel();
+    if (_qregenPending === s) _qregenPending = null;
+    return await qregenCheckCopy(s);
+  } catch (err) {
+    if (s !== _tlRepairSession || s.epoch !== _tlRepairEpoch) return false;
+    s.stage = 'error'; s.message = (savedDuplicate ? 'The new duplicate was saved in the question bank. Regeneration stopped and the source question is unchanged. ' : 'No new question was added. ') + (err.message || 'The duplicate could not be saved.');
+    tlRepairRender(); return false;
+  } finally {
+    if (_qregenPending === s) _qregenPending = null;
   }
 }
 function qregenChangesQuestion(plan, question) {
@@ -49594,11 +49703,11 @@ async function tlRepairPrepare(s) {
     s.plan = await tlRepairPlan(s);
     s.stage = 'ready';
     s.message = s.plan.actions.length
-      ? s.mode === 'regeneration' ? 'Review the exact wording and diagram changes, then approve this regeneration plan. Changes remain in your draft until Save.' : 'Review these actions, then implement them or give a new instruction.'
+      ? s.mode === 'regeneration' ? 'New duplicate saved in the question bank. Review these exact wording and diagram changes, then approve regeneration of only this new copy.' : 'Review these actions, then implement them or give a new instruction.'
       : 'No automatic changes are proposed. Review the notes or give a new instruction.';
   } catch (err) {
     if (s !== _tlRepairSession || s.epoch !== _tlRepairEpoch) return;
-    s.plan = null; s.stage = 'error'; s.message = 'No changes made. ' + (err.message || 'The action plan could not be prepared.');
+    s.plan = null; s.stage = 'error'; s.message = (s.regeneratedCopy ? 'The saved duplicate is unchanged in the question bank. ' : 'No changes made. ') + (err.message || 'The action plan could not be prepared.');
     try {
       const crops = tlRepairCropActions({ actions: [], notes: [] }, s);
       if (s.mode !== 'regeneration' && crops.actions.length) { s.plan = crops; s.stage = 'ready'; s.message += ' You can implement the crop fixes below or adjust them manually.'; }
@@ -49613,9 +49722,15 @@ function tlRepairRender() {
   const s = _tlRepairSession;
   area.hidden = !s || !_tlPanelId;
   const committing = s?.stage === 'committing';
-  for (const id of ['tlCloseBtn', 'tlDoneBtn', 'tlRecheckBtn', 'tlEditBtn']) if (el(id)) el(id).disabled = !!committing;
+  for (const id of ['tlCloseBtn', 'tlDoneBtn', 'tlRecheckBtn', 'tlEditBtn']) if (el(id)) el(id).disabled = !!committing
+    || (s?.stage === 'duplicating' && ['tlRecheckBtn', 'tlEditBtn'].includes(id))
+    || (s?.regeneratedCopy && ['checking', 'planning', 'applying', 'cropping'].includes(s.stage) && ['tlRecheckBtn', 'tlEditBtn'].includes(id));
+  if (el('tlEditBtn')) {
+    el('tlEditBtn').textContent = s?.regeneratedCopy ? '✏️ Edit new copy manually' : '✏️ Edit manually';
+    el('tlEditBtn').title = s?.regeneratedCopy ? 'Open only the saved new question copy in the editor' : 'Open this question to edit it yourself';
+  }
   if (!s) return;
-  const busy = ['checking', 'planning', 'applying', 'committing', 'cropping'].includes(s.stage);
+  const busy = ['duplicating', 'checking', 'planning', 'applying', 'committing', 'cropping'].includes(s.stage);
   if (el('tlRepairHeading')) el('tlRepairHeading').textContent = s.mode === 'regeneration' ? 'Regeneration plan' : 'Suggested action plan';
   el('tlRepairApplyBtn').textContent = s.mode === 'regeneration' ? 'Approve regeneration plan' : 'Implement changes';
   el('tlRepairSummary').textContent = s.message || '';
@@ -49644,22 +49759,23 @@ function tlRepairRender() {
 }
 function tlRepairDraftChanged(value) {
   const s = _tlRepairSession;
-  if (!s || ['checking', 'planning', 'applying', 'committing', 'cropping'].includes(s.stage)) return;
+  if (!s || ['duplicating', 'checking', 'planning', 'applying', 'committing', 'cropping'].includes(s.stage)) return;
   s.draft = String(value).slice(0, 2000);
   tlRepairRender();
 }
 function tlRepairRevise(submit = false) {
   const s = _tlRepairSession;
-  if (!s || ['checking', 'planning', 'applying', 'committing', 'cropping', 'applied'].includes(s.stage)) return;
+  if (!s || ['duplicating', 'checking', 'planning', 'applying', 'committing', 'cropping', 'applied'].includes(s.stage)) return;
   s.revising = true;
   if (!submit) {
     tlRepairRender(); document.getElementById('tlRepairInstruction')?.focus(); return;
   }
   if (s.mode !== 'regeneration' && !s.draft.trim()) return;
   if (!tlRepairCurrent(s)) { s.stage = 'error'; s.message = 'The question or account changed. Check again for a new plan.'; tlRepairRender(); return; }
-  if (s.mode === 'regeneration' && !s.checkComplete) return qregenStart(s.scope, s.id, s.draft);
+  if (s.mode === 'regeneration' && !s.regeneratedCopy) return qregenStart(s.sourceScope, s.sourceId, s.draft);
   s.instruction = s.draft.trim(); s.revising = false;
   s.epoch = ++_tlRepairEpoch;
+  if (s.mode === 'regeneration' && !s.checkComplete) return qregenCheckCopy(s);
   return tlRepairPrepare(s);
 }
 function tlRepairCancel() {
@@ -49669,7 +49785,10 @@ function tlRepairCancel() {
   if (_tlCropPicker) { _tlCropPicker = null; closeCropTool(); }
   // Replace the session too, so late promises cannot change this cancelled view.
   _tlRepairSession = { ...s, epoch: _tlRepairEpoch, stage: 'cancelled', plan: null, revising: false,
-    message: s.stage === 'applied' ? 'Repair finished. You can close this panel.' : 'Action plan cancelled. No further changes will be applied.' };
+    message: s.regeneratedCopy
+      ? 'Regeneration cancelled. The saved new question copy remains in the bank; the source question is unchanged.'
+      : s.stage === 'duplicating' ? 'Duplicate request cancelled. No regeneration will start.'
+      : s.stage === 'applied' ? 'Repair finished. You can close this panel.' : 'Action plan cancelled. No further changes will be applied.' };
   tlRepairRender();
 }
 async function tlRepairNewImage(instruction) {
@@ -49733,7 +49852,9 @@ async function tlRepairCommit(s, next) {
   } else throw new Error('This question cannot be repaired on this screen.');
   for (const b of next.blocks) {
     const old = s.snapshot.blocks.find(x => x.id === b.id);
-    if (old && old.url !== b.url) delete _imgEnhanceState[b.id];
+    // A duplicate retains stable block IDs, shared with the still-open source
+    // editor. Its bank redraw must not erase the source's recovery cache.
+    if (!s.regeneratedCopy && old && old.url !== b.url) delete _imgEnhanceState[b.id];
   }
   tlSyncScreen();
   s.snapshot = tlRepairRead(s.scope, s.id);
@@ -49759,9 +49880,13 @@ async function tlRepairRecheck(s, propose = true) {
       s.findings = tlRepairClone(verdict.findings);
       if (s.mode === 'regeneration') { s.mode = 'repair'; s.instruction = ''; s.draft = ''; }
       await tlRepairPrepare(s);
-      if (s.stage === 'ready') s.message = 'Changes applied. The checker found more to review; approve this new plan to make further changes.';
+      if (s.stage === 'ready') s.message = s.regeneratedCopy
+        ? 'New question saved in the bank. The checker found more to review; approve this new plan to repair only the new copy.'
+        : 'Changes applied. The checker found more to review; approve this new plan to make further changes.';
     } else if (verdict.state === 'green') {
-      s.message = ['create', 'em'].includes(s.scope) ? 'The new check found no further issues. Changes are in this draft; use Save to keep them.' : 'Changes saved. The new check found no further issues.';
+      s.message = s.regeneratedCopy
+        ? 'New question saved in the bank. The checker found no further issues; the source question and worksheet are unchanged.'
+        : ['create', 'em'].includes(s.scope) ? 'The new check found no further issues. Changes are in this draft; use Save to keep them.' : 'Changes saved. The new check found no further issues.';
     }
     tlRepairRender();
   } catch (err) {
@@ -49828,23 +49953,23 @@ async function tlRepairApply() {
     const result = await tlRepairBuildNext(s, before);
     await tlRepairCommit(s, result.question);
     s.undo = before; s.stage = 'applied';
-    s.message = ['create', 'em'].includes(s.scope)
+    s.message = s.regeneratedCopy ? 'New question saved in the bank. The checker is reviewing the regenerated copy; the source is unchanged.' : ['create', 'em'].includes(s.scope)
       ? 'Changes applied to this draft. Review the new check below, then use Save to keep them.'
       : 'Changes saved. The checker is reviewing the repaired question.';
     tlRepairRender();
     await tlRepairRecheck(s);
   } catch (err) {
     if (s !== _tlRepairSession || s.epoch !== _tlRepairEpoch) return;
-    s.stage = 'error'; s.message = 'Repair stopped. ' + (err.message || 'No changes were applied.'); tlRepairRender();
+    s.stage = 'error'; s.message = (s.regeneratedCopy ? 'Regeneration stopped. The saved copy remains in the bank and the source question is unchanged. ' : 'Repair stopped. ') + (err.message || 'No changes were applied.'); tlRepairRender();
   }
 }
 async function tlRepairUndo() {
   const s = _tlRepairSession;
-  if (!s?.undo || ['checking', 'planning', 'applying', 'committing', 'cropping'].includes(s.stage)) return;
+  if (!s?.undo || ['duplicating', 'checking', 'planning', 'applying', 'committing', 'cropping'].includes(s.stage)) return;
   if (!tlRepairCurrent(s)) { s.message = 'The question changed after the repair. Undo is unavailable; review the current question.'; tlRepairRender(); return; }
   try {
     await tlRepairCommit(s, s.undo);
-    s.undo = null; s.plan = null; s.stage = 'applied'; s.message = 'The previous question has been restored.';
+    s.undo = null; s.plan = null; s.stage = 'applied'; s.message = s.regeneratedCopy ? 'The new question copy has been restored to its saved duplicate. The source question is unchanged.' : 'The previous question has been restored.';
     tlRepairRender(); await tlRepairRecheck(s, false);
   } catch (err) {
     if (s !== _tlRepairSession) return;
@@ -50477,6 +50602,16 @@ function tlClosePanel() {
   return true;
 }
 function tlRecheck() {
+  const regeneration = _tlRepairSession;
+  if (regeneration?.regeneratedCopy && regeneration.mode === 'regeneration') {
+    if (['checking', 'planning', 'applying', 'committing', 'cropping'].includes(regeneration.stage)) return;
+    if (regeneration.stage === 'applied') {
+      regeneration.mode = 'repair'; regeneration.instruction = ''; regeneration.draft = '';
+      return tlRepairRecheck(regeneration);
+    }
+    regeneration.epoch = ++_tlRepairEpoch;
+    return qregenCheckCopy(regeneration);
+  }
   if (typeof tlRepairReset === 'function' && !tlRepairReset()) return;
   const q = tlQuestionFor(_tlPanelScope, _tlPanelId);
   if (!q) { showToast('That question is no longer here', 'error'); return; }
@@ -50488,6 +50623,8 @@ function tlRecheck() {
 function tlPanelEdit() {
   const id = _tlPanelId;
   if (!id) return;
+  if (['duplicating', 'committing'].includes(_tlRepairSession?.stage)) return;
+  const regeneratedCopy = !!_tlRepairSession?.regeneratedCopy;
   if (tlClosePanel() === false) return;
   if (_tlPanelScope === 'create') {
     // The question is ALREADY in the editor behind this panel. `editQuestion`
@@ -50502,6 +50639,12 @@ function tlPanelEdit() {
     // it rather than closing the sheet they are working through.
     tlScrollToQuestion(id);
     return;
+  }
+  if (regeneratedCopy && emActive()) {
+    // The new copy belongs to the bank, not the worksheet's editing session.
+    // Honour its existing discard guard before moving to the copy's editor.
+    emClose(false);
+    if (emActive()) return;
   }
   editQuestion(id);
 }
@@ -50527,7 +50670,7 @@ function tlRenderPanel() {
   }
   const s = tlStateOf(q);
   const look = TL_LOOKS[s.state] || TL_LOOKS.idle;
-  if (title) title.textContent = q.title || 'Untitled question';
+  if (title) title.textContent = (_tlRepairSession?.regeneratedCopy && _tlRepairSession.id === String(q.id) ? 'New question copy — ' : '') + (q.title || 'Untitled question');
   if (sub) sub.textContent = [q.topic || 'no topic', q.category ? normalizeCategoryValue(q.category) : ''].filter(Boolean).join(' · ');
   const head = `<div class="tl-verdict ${look.cls}"><span class="tl-light ${look.cls} lg">${look.dot}</span>
       <div><div class="tl-verdict-t">${escapeHtml(tlHeadline(s))}</div>
