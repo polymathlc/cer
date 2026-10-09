@@ -38611,7 +38611,7 @@ async function wbResolveQuestions(board, cardId, publishing = false) {
   for (const card of cards) {
     const q = questionBank.find(question => String(question.id) === String(card.questionId));
     if (!q || !qInSyllabus(q)) throw new Error('A whiteboard question is no longer available. Ask the teacher to update this board.');
-    if ((publishing || currentUser.role === 'student') && !qReleased(q)) throw new Error('A question is held back or scheduled for later. Release it before sharing this board.');
+    if ((publishing && !qReleased(q)) || (currentUser.role === 'student' && !qAvailableToViewer(q))) throw new Error('A question is held back or scheduled for later. Release it before sharing this board.');
     if (currentUser.role === 'student' && !qWithinStudentLevel(q)) throw new Error('A question is outside your current level. Ask your teacher to check the whiteboard.');
     if (!wbViewerCurrent(uid, key)) throw new Error('The learner changed. Open the whiteboard again.');
     if (JSON.stringify(whiteboardQuestionSnapshot(q)) !== JSON.stringify(card.question)) throw new Error('A bank question has changed since this board was saved. Remove it and add it again before practising, printing or sharing.');

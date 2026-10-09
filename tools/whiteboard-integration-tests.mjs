@@ -164,7 +164,7 @@ function shippedAppHarness(){
     const getDownloadURL=async reference=>{H.downloads.push(reference);if(H.downloadImpl)return H.downloadImpl(reference);if(!H.uploads.some(record=>record.reference===reference)){const err=Error('Missing');err.code='storage/object-not-found';throw err;}return 'https://firebasestorage.googleapis.com/object?alt=media&token=${token}';};
     const uploadBytes=async(reference,bytes,metadata)=>{H.uploads.push({reference,bytes,metadata});};
     const loadPublishedWhiteboard=async url=>{H.published.push(url);return H.publishedImpl?H.publishedImpl(url):whiteboardPublicSnapshot(H.publicBoard);};
-    const qInSyllabus=q=>!q.excluded,qReleased=q=>!q.held,qWithinStudentLevel=q=>!q.tooHigh;
+    const qInSyllabus=q=>!q.excluded,qReleased=q=>!q.held,qAvailableToViewer=q=>_canAuthor()||qReleased(q),qWithinStudentLevel=q=>!q.tooHigh;
     const window={__aiReady:()=>true,QuestionApps:{normalizeTokenLimit:value=>Math.max(1024,Math.min(32000,Math.floor(Number(value)||4096)))}};
     const document={getElementById:id=>id==='printOutput'?H.output:null};H.output={innerHTML:'',querySelectorAll:selector=>selector==='.print-answer-key-page'?[{remove:()=>H.removedAnswerKey=true}]:selector==='img'?H.images||[]:[]};
     const buildWorksheetHtml=(questions,title,options)=>{H.prints.push({questions,title,options});return '<article>Student worksheet</article><div class="print-answer-key-page">Key</div>';},autoscaleAndPrint=output=>{H.didPrint=output===H.output;};
