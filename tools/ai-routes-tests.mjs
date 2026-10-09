@@ -78,6 +78,7 @@ return {
   set openaiOk(v) { _openaiOk = v; },
   set gemini(v) { geminiModel = v ? { generateContent: () => ({ response: { text: () => 'gemini said so' } }) } : null; },
   set author(v) { _author = v; },
+  set geminiObj(v) { geminiModel = v; },
   resetDown: function () { Object.keys(_aiDown).forEach(function (k) { _aiDown[k] = 0; }); },
   set sharedAuthor(v) { _aiSharedAuthor = v; },
   get last() { return aiLastCall; },
@@ -470,6 +471,13 @@ ok('…without marking the ChatGPT route down for everybody else',
 await api._aiAsk('mark this', null, {}, ['openai', 'gemini']);
 ok('…while an ordinary refusal still does',
    api.aiEngineIsDown('openai'));
+/* …and a light job that also finds GEMINI refusing marks Gemini down as
+   usual: the named model is ChatGPT's, so it excuses nobody else. */
+api.openaiOk = true; api.resetDown();
+api.geminiObj = { generateContent: () => { throw new Error('gemini capped'); } };
+try { await api._aiAsk('tag this', null, { model: 'gpt-6-luna' }, ['gemini', 'openai']); } catch (e) {}
+ok('…and the excuse covers ChatGPT\'s routes only', api.aiEngineIsDown('gemini'));
+api.gemini = true;
 api.openaiOk = true; api.resetDown();
 
 ok('the light model is GPT-6 Luna, named once',

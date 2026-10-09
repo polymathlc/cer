@@ -852,7 +852,7 @@ async function _aiAsk(prompt, media, opts, order) {
          nothing certain about the route itself — it may only be that model
          the account will not serve — so it is not allowed to send every
          other call on this route to the back for ten minutes. */
-      if (opts && opts.model) _aiWhy[engine] = String((e && e.message) || e || '');
+      if (opts && opts.model && (engine === 'openai' || engine === 'openaiKey')) _aiWhy[engine] = String((e && e.message) || e || '');
       else _aiMarkDown(engine, String((e && e.message) || e || ''));
       if (!first) first = e;
       console.warn('AI route ' + engine + ' refused:', e);
