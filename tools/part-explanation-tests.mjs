@@ -37,7 +37,8 @@ import { mcqLabelSrc } from './mcq-labels-src.mjs';
 import fs from 'fs';
 
 const APP = new URL('../app.js', import.meta.url);
-const src = fs.readFileSync(APP, 'utf8');
+// Keep extraction boundaries identical for LF and Windows CRLF checkouts.
+const src = fs.readFileSync(APP, 'utf8').replace(/\r\n?/g, '\n');
 
 const cut = (from, to, what) => {
   const a = src.indexOf(from);

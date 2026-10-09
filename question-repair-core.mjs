@@ -102,6 +102,12 @@ function catalogFor(q) {
   for (const field of ['title', 'topic', 'category']) {
     add({ id: 'q:' + field, label: 'Question ' + field, kind: 'text', value: String(q[field] || '') }, { kind: 'question', field });
   }
+  // These author fields describe the same figures and answers as the blocks.
+  // Expose existing fields so regeneration can review their dependent edits.
+  for (const [field, label] of [['answerKeyNote', 'Question answer-key note'], ['answerKeyDiagramNote', 'Answer-key diagram instruction']]) {
+    if (OWN(q, field)) add({ id: 'q:' + field, label, kind: 'text', value: String(q[field] || '') },
+      { kind: 'question', field, optional: true });
+  }
   const blockIds = new Set();
   q.blocks.forEach((b, index) => {
     if (!record(b) || !safeId(b.id)) fail('Every question block needs a stable identifier.');
@@ -183,6 +189,8 @@ function catalogFor(q) {
       }
     }
   });
+  if (OWN(q, 'answerKeyImage')) add({ id: 'q:answerKeyImage', label: 'Question answer-key diagram', kind: 'image', value: String(q.answerKeyImage || '') },
+    { kind: 'image', field: 'answerKeyImage' });
   for (const type of ['image', 'plainanswer', 'explanation']) {
     add({ id: 'new:' + type, label: 'Add a new ' + (type === 'plainanswer' ? 'model answer' : type), kind: 'insertion', value: '' }, { kind: 'insertion', type });
   }
@@ -211,8 +219,11 @@ export function normalizeQuestionRepairPlan(raw, q) {
       if (!['question', 'field', 'optionText', 'cell'].includes(destination.kind)) fail('This target does not accept text.');
       if (has('instruction') || has('afterBlockId')) fail('Text edits cannot carry image or insertion instructions.');
       action.value = plain(item.value, 'Replacement text');
+      if (target === 'q:answerKeyDiagramNote' && action.value !== action.value.replace(/\s+/g, ' ').trim().slice(0, 400)) {
+        fail('Answer-key diagram instructions must be a single line of at most 400 characters.');
+      }
       checkTokens(action.value, destination.images || []);
-      if (destination.kind === 'question' && !action.value.trim()) fail('Question details cannot be blank.');
+      if (destination.kind === 'question' && !destination.optional && !action.value.trim()) fail('Question details cannot be blank.');
     } else if (kind === 'select_option') {
       if (destination.kind !== 'correctOption') fail('This target is not a correct-option selector.');
       if (has('instruction') || has('afterBlockId')) fail('Option selections cannot carry other instructions.');
@@ -312,6 +323,7 @@ export function applyQuestionRepairPlan(q, rawPlan, imageResults = {}, makeId) {
     } else if (action.kind === 'redraw_image' || action.kind === 'generate_image' || action.kind === 'recrop_image') {
       const url = generatedImage(imageResults, action.id);
       if (d.kind === 'inline') inlineActions.push({ d, url });
+      else if (d.index === undefined) question[d.field] = url;
       else b[d.field] = url;
     } else if (action.kind === 'add_block') {
       if (typeof makeId !== 'function') fail('Adding a block needs an identifier factory.');

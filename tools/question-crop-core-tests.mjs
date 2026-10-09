@@ -40,6 +40,25 @@ test('source enumeration cannot use stale provenance or stale session originals'
   assert.deepEqual(sources, [{ id: 'current', label: 'Current picture — trim only', url: q.blocks[1].url, original: false }]);
 });
 
+test('question answer-key diagrams retain their own crop source without changing block sources', () => {
+  const q = fixture();
+  q.answerKeyImage = 'https://example.test/key.png';
+  q.imageSources = { 'q:answerKeyImage': { url: originalUrl, imageUrl: q.answerKeyImage, box_2d: box } };
+  const before = structuredClone(q);
+  const sources = cropSourcesFor(q, 'q:answerKeyImage');
+  assert.equal(sources[0].url, originalUrl);
+  assert.equal(sources.at(-1).url, q.answerKeyImage);
+  const candidate = applyQuestionRepairPlan(q, { actions: [
+    { kind: 'recrop_image', target: 'q:answerKeyImage', reason: 'Restore the complete answer diagram.', instruction: 'Retain every label.' },
+  ] }, { a1: nextUrl }).question;
+  const result = cropSourceUpdate(candidate, 'q:answerKeyImage', sources[0], nextUrl, box);
+  assert.equal(result.answerKeyImage, nextUrl);
+  assert.equal(result.imageSources['q:answerKeyImage'].imageUrl, nextUrl);
+  assert.equal(cropSourcesFor(result, 'q:answerKeyImage')[0].url, originalUrl);
+  assert.deepEqual(result.blocks, before.blocks);
+  assert.deepEqual(q, before);
+});
+
 test('legacy source pages remain available after a redraw but are never tied to invented rectangles', () => {
   const q = fixture();
   q.blocks[1].url = 'https://example.test/later-redraw.png';

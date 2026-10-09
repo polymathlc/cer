@@ -1,5 +1,25 @@
 # CER Science Learning Portal
 
+## Approved question regeneration (v1.427.1)
+
+Open a question in the editor, or use its Regenerate button while editing a
+worksheet. Enter an optional command or leave it blank for the AI to propose a
+fresh variation of the same concept and difficulty. Prepare regeneration plan
+runs the traffic-light checker and proposes exact wording, answer, explanation
+and diagram changes for review. Existing diagrams serve as image references;
+crop findings use the preserved source pixels.
+
+Approve regeneration plan applies only the reviewed actions to that question's
+draft, then runs the traffic-light checker again. Use Save to keep the draft.
+Remaining findings need a separate approved repair plan. Failed image generation,
+cancelled plans and edits made while a plan is running do not replace the draft.
+Undo restores the previous draft when it has not changed since regeneration.
+
+Validation: `node tools/question-regeneration-tests.mjs` and
+`node tools/question-regeneration-browser.mjs`, alongside the question-repair
+workflow. Browser tests mock AI and storage; live provider responses are not
+exercised by these tests.
+
 ## ⚡ Light jobs on GPT-6 Luna (v1.427.0)
 
 Six small jobs now ask ChatGPT for **`gpt-6-luna`**, the cheapest GPT-6 tier ($0.10 / $0.50 per million tokens), instead of the full model: 🏷 tag suggestions, 🎯 topic re-filing, 🎯 objective suggestions, ✨ Improve, ✂️ Shorten and ✍️ AI complete. Each is classification or a short rewrite whose result the app already checks or the author reviews before saving. They lead with ChatGPT whatever the main engine is, and Gemini and Kimi stay behind it.

@@ -78,6 +78,37 @@ test('only changed field word-position selections are cleared', () => {
   assert.deepEqual(q.answerKeywords.cer_claim, [0]);
 });
 
+test('dependent question answer-key text and image edits are explicit and atomic', () => {
+  const q = fixture();
+  q.answerKeyNote = 'Container A has greater mass.';
+  q.answerKeyDiagramNote = 'Draw A lower than B.';
+  const before = structuredClone(q);
+  const targets = questionRepairTargets(q);
+  assert.equal(targets.find(t => t.id === 'q:answerKeyImage').value, q.answerKeyImage);
+  assert.equal(targets.find(t => t.id === 'q:answerKeyNote').value, q.answerKeyNote);
+  const actions = [
+    action('replace_text', 'q:answerKeyNote', { value: 'Container B has greater mass.' }),
+    action('replace_text', 'q:answerKeyDiagramNote', { value: 'Draw B lower than A.' }),
+    action('redraw_image', 'q:answerKeyImage', { instruction: 'Lower container B and raise container A; retain all labels.' }),
+  ];
+  assert.throws(() => apply(q, actions), /generated picture/);
+  assert.deepEqual(q, before);
+  const result = apply(q, actions, { a3: 'https://example.test/regenerated-key.png' });
+  assert.equal(result.question.answerKeyNote, 'Container B has greater mass.');
+  assert.equal(result.question.answerKeyDiagramNote, 'Draw B lower than A.');
+  assert.equal(result.question.answerKeyImage, 'https://example.test/regenerated-key.png');
+  assert.deepEqual(result.question.blocks, before.blocks);
+  assert.deepEqual(q, before);
+  assert.equal(apply(q, [action('replace_text', 'q:answerKeyNote', { value: '' })]).question.answerKeyNote, '');
+  for (const value of ['Draw B\nlower than A.', 'Draw  B lower.', 'x'.repeat(401)]) {
+    assert.throws(() => normalized(q, [action('replace_text', 'q:answerKeyDiagramNote', { value })]), /single line.*400/);
+  }
+  assert.throws(() => normalized(q, [action('replace_text', 'q:title', { value: '' })]), /cannot be blank/);
+  const absent = fixture();
+  delete absent.answerKeyImage;
+  assert.equal(questionRepairTargets(absent).some(t => t.id === 'q:answerKeyImage'), false);
+});
+
 test('an unchanged text action preserves original formatting and selections', () => {
   const q = fixture();
   const result = apply(q, [action('replace_text', 'block:cer:claim', { value: 'A is heavier.' })]);

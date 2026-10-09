@@ -1,6 +1,6 @@
 // Crop provenance and geometry only. Rectangles select existing source pixels;
 // this module never redraws a figure, fetches an image or writes a question.
-import { questionRepairTargets } from './question-repair-core.mjs';
+import { questionRepairTargets } from './question-repair-core.mjs?v=3';
 
 const MAX_SOURCES = 8;
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
@@ -21,19 +21,20 @@ function resolveTarget(q, target) {
   const id = typeof target === 'string' ? target : target?.id;
   const entry = questionRepairTargets(q).find(item => item.id === id && item.kind === 'image');
   if (!entry) fail('That picture is no longer available.');
+  if (id === 'q:answerKeyImage') return { entry, index: -1, direct: false };
   const index = q.blocks.findIndex(block => id.startsWith('block:' + encodeURIComponent(block.id) + ':'));
   if (index < 0) fail('The picture has no question item.');
   return { entry, index, direct: id === 'block:' + encodeURIComponent(q.blocks[index].id) + ':url' };
 }
 
 // Store non-primary pictures on their parent block so a draft save retains
-// them. Question-level imageSources remains a read fallback for earlier data.
+// them. Question-level pictures keep their provenance in imageSources too.
 function sourceRecords(q, resolved) {
   const { entry, index, direct } = resolved;
   const block = q.blocks[index];
   const records = [];
   if (direct && record(block.cropSource)) records.push(block.cropSource);
-  if (record(block.cropSources) && own(block.cropSources, entry.id)) records.push(block.cropSources[entry.id]);
+  if (record(block?.cropSources) && own(block.cropSources, entry.id)) records.push(block.cropSources[entry.id]);
   if (record(q.imageSources) && own(q.imageSources, entry.id)) records.push(q.imageSources[entry.id]);
   return records.filter(record);
 }
@@ -119,7 +120,10 @@ export function cropSourceUpdate(q, target, source, newUrl, box) {
   }
   const result = copy(q);
   const block = result.blocks[resolved.index];
-  if (resolved.direct) block.cropSource = provenance;
+  if (resolved.index === -1) {
+    if (!record(result.imageSources)) result.imageSources = {};
+    result.imageSources[resolved.entry.id] = provenance;
+  } else if (resolved.direct) block.cropSource = provenance;
   else {
     if (!record(block.cropSources)) block.cropSources = {};
     block.cropSources[resolved.entry.id] = provenance;
