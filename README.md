@@ -1,5 +1,25 @@
 # CER Science Learning Portal
 
+## Topic summary sheets (v1.428.0)
+
+Open Summary Sheets under Papers & Worksheets to collect questions by topic,
+or start with questions selected in the bank or worksheet builder. Add topic
+questions or choose questions manually. Prepare AI summaries suggests a short
+question, a suggested answer and guidance on how to answer for each card;
+use or discard each suggestion after reviewing it. Every original question
+image stays on its card. You can also edit the card text by hand, add more
+questions and arrange the cards before saving.
+
+Save a sheet and reopen it from its saved list. These edits belong to the
+summary sheet; the original questions stay unchanged. Present shows a clean
+view for the class, and Print / Save PDF prints two columns of cards on A4.
+Only authors can create and manage sheets; the class view is presented from
+the teacher's session.
+
+Validation: `node tools/summary-sheet-core-tests.mjs`,
+`node tools/summary-sheet-integration-tests.mjs` and
+`node tools/summary-sheet-browser.mjs`. AI and storage are mocked in these tests.
+
 ## Approved question regeneration (v1.427.2)
 
 Open a question in the editor, or use its Regenerate new copy button while

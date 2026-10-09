@@ -552,7 +552,8 @@ const AUTHORING_FUNCTIONS = [
   'aiWritePartExplanations',  // one explanation per part
   'autoChkRun',               // 🚦 the auto-check and its repair
   'tlRepairAutoCrop',         // teacher-approved recropping and visual verification of the repaired image
-  '_decisionsRecropBox'             // 🧭 the AI re-cuts a figure Decisions judged wrong, inside an import
+  '_decisionsRecropBox',      // 🧭 the AI re-cuts a figure Decisions judged wrong, inside an import
+  'ssAskAI'                  // teacher-requested summary-card suggestions; never student grading
 ];
 /* A top-level function OWNS its lines until the `}` in column 1 that closes
    it — not until the next `function` keyword. Tracking only the keyword
