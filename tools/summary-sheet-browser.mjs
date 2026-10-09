@@ -31,7 +31,7 @@ const bootstrap=`
   h.original=structuredClone(h.bank);
   h.tool=installSummarySheets({document,getUser:()=>h.user,getAuthUid:()=>h.authUid,canAuthor:()=>h.author,getBank:()=>h.bank,
     isQuestionEligible:()=>true,questionTopics:q=>[q.topic,q.topic2].filter(Boolean),sourceContext,
-    askAI:async request=>{h.ai.push(structuredClone(request));if(h.aiMode==='deferred'){h.aiGate=deferred();return h.aiGate.promise;}if(h.aiMode==='failure')throw Error('Fixture model unavailable');return {shortQuestion:'Why did the water cool?',shortAnswer:'Water loses heat to cooler surroundings.',howTo:'State the direction of heat transfer.',note:'Compare the recorded answer before using this suggestion.'};},
+    askAI:async request=>{h.ai.push(structuredClone(request));if(h.aiMode==='deferred'){h.aiGate=deferred();return h.aiGate.promise;}if(h.aiMode==='failure')throw Error('Fixture model unavailable');if(request.mode==='answer')return {shortAnswer:'Prepared current-question answer from teaching notes.',shortQuestion:'Unwanted question replacement',howTo:'Unwanted reminder replacement',note:'Check the prepared answer before using it.'};return {shortQuestion:'Why did the water cool?',shortAnswer:'Water loses heat to cooler surroundings.',howTo:'State the direction of heat transfer.',note:'Compare the recorded answer before using this suggestion.'};},
     loadSheets:async uid=>JSON.parse(localStorage.getItem('ss-fixture-'+uid)||'[]'),
     saveSheet:async (sheet,context)=>{if(!context.guard())return false;h.saves.push({uid:context.uid,sheet:structuredClone(sheet)});localStorage.setItem('ss-fixture-'+context.uid,JSON.stringify([sheet]));return true;},
     deleteSheet:async (id,context)=>{if(!context.guard())return false;localStorage.setItem('ss-fixture-'+context.uid,'[]');return true;},
@@ -94,6 +94,15 @@ try{
       const first=await page.evaluate(()=>qa.tool.state().draft.summaryCards[0].id);
       const question=page.locator('[data-ss-card="'+first+'"][data-ss-field="shortQuestion"]'),answer=page.locator('[data-ss-card="'+first+'"][data-ss-field="shortAnswer"]');
       await question.fill('Why does the hot water cool?');await answer.fill('Heat moves from hot water to its cooler surroundings.');
+      const howTo=page.locator('[data-ss-card="'+first+'"][data-ss-field="howTo"]');await howTo.fill('Teacher reminder stays intact.');
+      const prepare=action(page,'prepareAnswer',first);assert.equal(await prepare.innerText(),'AI prepare answer');
+      assert.equal(await prepare.evaluate(button=>button.closest('.ss-answer-field')?.querySelector('textarea')?.dataset.ssField),'shortAnswer','AI action sits beside its summarized answer field');
+      await prepare.click();await action(page,'applySuggestion',first).waitFor();
+      const request=await page.evaluate(()=>qa.ai.at(-1));assert.equal(request.mode,'answer');assert.equal(request.questionText,'Why does the hot water cool?');
+      assert.equal(await question.inputValue(),'Why does the hot water cool?');assert.equal(await answer.inputValue(),'Heat moves from hot water to its cooler surroundings.');assert.equal(await howTo.inputValue(),'Teacher reminder stays intact.');
+      assert.equal(await action(page,'applySuggestion',first).innerText(),'Use prepared answer');assert.match(await page.locator('#ssReview_'+first).innerText(),/Review prepared answer/);
+      await page.locator('.ss-card').first().screenshot({path:path.join(output,'summary-answer-review-'+width+'.png')});
+      await action(page,'applySuggestion',first).click();assert.equal(await answer.inputValue(),'Prepared current-question answer from teaching notes.');assert.equal(await question.inputValue(),'Why does the hot water cool?');assert.equal(await howTo.inputValue(),'Teacher reminder stays intact.');
       await action(page,'suggest',first).click();await action(page,'applySuggestion',first).waitFor();assert.equal(await question.inputValue(),'Why does the hot water cool?','AI is displayed for teacher review before changing the card');
       await action(page,'save').click();assert.equal(await page.evaluate(()=>qa.saves.length),0,'Teacher review required before saving');
       await action(page,'applySuggestion',first).click();assert.equal(await question.inputValue(),'Why did the water cool?');
@@ -111,7 +120,7 @@ try{
       assert.equal(await page.evaluate(()=>document.activeElement.id),'ssPresentationClose');await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.dataset.ssAction),'print','Presentation traps Tab inside its own controls');await page.keyboard.press('Shift+Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'ssPresentationClose');
       await page.locator('#summarySheetsPresentation').screenshot({path:path.join(output,'summary-present-'+width+'.png')});await page.keyboard.press('Escape');assert.equal(await page.locator('#summarySheetsPresentation').count(),0);assert.equal(await page.evaluate(()=>document.activeElement.id),'ssPresentBtn');
       await action(page,'print').click();assert.equal(await page.evaluate(()=>qa.prints.length),1);assert.equal(await page.evaluate(()=>qa.ai.length),0,'Reopen, presentation and print do not run AI');assert.equal(await page.evaluate(()=>qa.saves.length),0,'Presenting and printing do not autosave');
-      assert.equal(f.errors.length,0,'No browser exceptions: '+f.errors.join('; '));results.push({width,flow:'manual topic selection, review, save/reload, present, keyboard, images',cards:3,images:6});
+      assert.equal(f.errors.length,0,'No browser exceptions: '+f.errors.join('; '));results.push({width,flow:'manual topic selection, answer-only AI beside field, review, save/reload, present, keyboard, images',cards:3,images:6});
     }finally{await f.context.close();}
   }
   // A teacher keeps typing while the model is pending; both late replies and

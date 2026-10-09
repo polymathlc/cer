@@ -138,11 +138,25 @@ export function normalizeSummarySuggestion(reply) {
   return suggestion;
 }
 
+// Preparing an answer cannot revise the teacher's current question, reminder,
+// source identity or pictures, even if the model returns those extra fields.
+export function normalizeSummaryAnswerSuggestion(reply) {
+  let parsed = reply;
+  if (typeof parsed === 'string') {
+    const cleaned = parsed.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    try { parsed = JSON.parse(cleaned); } catch (_) { throw new Error('The AI reply could not be read. Your answer is unchanged.'); }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('The AI returned no usable answer suggestion.');
+  const suggestion = { shortAnswer: short(parsed.shortAnswer, SS_LIMITS.answer), note: short(parsed.note, 500) };
+  if (!suggestion.shortAnswer) throw new Error('The AI did not prepare an answer. Your existing answer is unchanged.');
+  return suggestion;
+}
+
 export function summarySheetPrintHtml(sheet, { imageUrl: transform = value => value } = {}) {
   const normalized = normalizeSummarySheet(sheet);
   if (!normalized) throw new Error('That summary sheet could not be read.');
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-    + '<title>' + escape(normalized.title) + '</title><link rel="stylesheet" href="summary-sheets.css?v=1.428.0">'
+    + '<title>' + escape(normalized.title) + '</title><link rel="stylesheet" href="summary-sheets.css?v=1.428.1">'
     + '<style>body{font-family:Arial,sans-serif;margin:0;padding:12mm;color:#182525;background:white}.ss-present-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5mm}.ss-present-card{border:1px solid #d1ddd7;border-radius:3mm;padding:4mm;break-inside:avoid;page-break-inside:avoid}.ss-images{display:flex;flex-wrap:wrap;gap:2mm}.ss-images.ss-images-multiple{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.ss-figure{margin:0;min-width:0}.ss-image{max-width:100%;max-height:45mm;object-fit:contain}.ss-image-caption{font-size:7pt}.ss-present-question{font-weight:bold}.ss-present-answer,.ss-present-howto{white-space:pre-wrap;line-height:1.45}h1{font-size:18pt;margin:0 0 6mm}@page{size:A4;margin:10mm}@media print{body{padding:0}}</style></head><body>'
     + '<h1>' + escape(normalized.title) + '</h1><main class="ss-present-grid">'
     + normalized.summaryCards.map((card, index) => '<article class="ss-present-card"><p class="ss-present-question">'

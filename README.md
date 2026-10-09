@@ -1,6 +1,6 @@
 # CER Science Learning Portal
 
-## Topic summary sheets (v1.428.0)
+## Topic summary sheets (v1.428.1)
 
 Open Summary Sheets under Papers & Worksheets to collect questions by topic,
 or start with questions selected in the bank or worksheet builder. Add topic
@@ -9,6 +9,10 @@ question, a suggested answer and guidance on how to answer for each card;
 use or discard each suggestion after reviewing it. Every original question
 image stays on its card. You can also edit the card text by hand, add more
 questions and arrange the cards before saving.
+
+Edit Very short question, then use AI prepare answer beside Summarized suggested
+answer to prepare an answer for that current wording using the topic's teaching
+notes. Review the prepared answer before using it and saving the sheet.
 
 Save a sheet and reopen it from its saved list. These edits belong to the
 summary sheet; the original questions stay unchanged. Present shows a clean

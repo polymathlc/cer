@@ -57,6 +57,10 @@
 .ss-card-head > span { display:block; margin-top:3px; color:var(--ss-muted); font-size:.75rem; }
 .ss-card-head small { color:var(--ss-muted); font-size:.75rem; }
 .ss-card-fields { display:grid; gap:12px; }
+.ss-answer-field { min-width:0; }
+.ss-field-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.ss-field-heading > label { flex:1 1 130px; min-width:0; }
+.ss-field-heading > button[data-ss-action] { flex:0 1 auto; max-width:100%; min-height:44px; padding:6px 9px; font-size:.78rem; }
 .ss-images { display:grid; gap:8px; min-width:0; }
 .ss-images.ss-images-multiple { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; }
 .ss-image { display:block; width:auto; max-width:100%; height:auto; max-height:220px; object-fit:contain; margin:0 auto; background:#fff; }

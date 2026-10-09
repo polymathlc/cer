@@ -2,7 +2,7 @@ import './worksheet-art.js?v=1';
 import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
-import { installSummarySheets } from './summary-sheets.js?v=1';
+import { installSummarySheets } from './summary-sheets.js?v=1.428.1';
 import { cropSourcesFor, normalizeCropBox, cropPixelRect, cropSourceUpdate } from './question-crop-core.mjs?v=2';
 import { questionRepairTargets, normalizeQuestionRepairPlan, applyQuestionRepairPlan } from './question-repair-core.mjs?v=3';
 import { measureCrop, figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, migrateDecisionsReviewState, DECISIONS_MAY_SKIP } from './decisions-review-core.mjs?v=2';
@@ -4494,7 +4494,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.428.0';
+const APP_VERSION = 'v1.428.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -38442,11 +38442,24 @@ function ssSourceContext(q) {
     images, answerImages,
   };
 }
-async function ssAskAI({ prompt, images, question }) {
+async function ssAskAI({ prompt, images, question, mode = 'card', questionText = '' }) {
   if (!_canAuthor() || !currentUser || auth.currentUser?.uid !== currentUser.uid) throw new Error('Sign in as a teacher to prepare summary suggestions.');
   if (!window.__aiReady?.()) throw new Error('AI is not available. You can edit the question and answer summaries yourself.');
   const uid = currentUser.uid;
   if (images.length > 12) throw new Error('This question has more than 12 pictures. Summarise it manually so no picture is skipped.');
+  const answerOnly = mode === 'answer';
+  if (answerOnly) {
+    if (!String(questionText).trim()) throw new Error('Write a very short question before preparing its answer.');
+    const notesOwner = currentUser.role === 'admin' ? uid : adminUid;
+    if (!notesOwner) throw new Error('The teacher\'s teaching notes are not available yet. Try again after the question bank loads.');
+    if (_notesWatching !== notesOwner) stopTeachingNotes();
+    await loadTeachingNotes();
+    if (!ssOwnerCurrent(uid)) throw new Error('The account changed. The answer preparation was stopped.');
+    if (!_notesLoaded || _notesWatching !== notesOwner) {
+      if (_notesWatching === notesOwner) stopTeachingNotes();
+      throw new Error('Your teaching notes could not be loaded. Try again before preparing the answer.');
+    }
+  }
   const media = [];
   for (const image of images) {
     if (!ssOwnerCurrent(uid)) throw new Error('The account changed. The summary suggestion was stopped.');
@@ -38456,9 +38469,14 @@ async function ssAskAI({ prompt, images, question }) {
     media.push({ mimeType: parsed.mime, data: dataUrl.split(',')[1] || '' });
   }
   if (!ssOwnerCurrent(uid)) throw new Error('The account changed. The summary suggestion was stopped.');
-  const grounded = prompt + '\nCOMPLETE SOURCE AND ANSWER FIELDS:\n' + ssSourceContext(question).fullContext
+  const context = ssSourceContext(question);
+  const source = answerOnly
+    ? '\nORIGINAL QUESTION BACKGROUND (for facts and diagram labels only; answer the CURRENT VERY SHORT QUESTION below):\n' + context.text
+    : '\nCOMPLETE SOURCE AND ANSWER FIELDS:\n' + context.fullContext;
+  const grounded = prompt + source
     + '\nPICTURE ATTACHMENTS IN ORDER:\n' + images.map((image, index) => (index + 1) + '. ' + image.label).join('\n')
-    + '\n' + aiGrounding('answer', question.topic, question);
+    + '\n' + aiGrounding('answer', question.topic, answerOnly ? questionText : question)
+    + (answerOnly ? '\nCURRENT VERY SHORT QUESTION — answer exactly this text using the relevant teaching notes above. Original bank wording is background, not a different question to answer:\n' + questionText : '');
   const raw = media.length
     ? await askGeminiVision(grounded, media, { maxOutputTokens: 1200, json: true, authoring: true })
     : await askGemini(grounded, { maxOutputTokens: 1200, json: true, authoring: true });
