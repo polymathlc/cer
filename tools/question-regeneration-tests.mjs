@@ -536,6 +536,33 @@ test('follow-up findings create a repair proposal which awaits separate approval
   assert.match(h.session.message, /approve this new plan/);
 });
 
+test('a late regeneration follow-up cannot revive a repair proposal after Undo restores the original', async () => {
+  const h = regenerationHarness(), followUp = deferred();
+  await start(h);
+  const regeneratedWording = h.session.plan.actions[0].value;
+  h.H.recheckImpl = async q => q.blocks[0].content === regeneratedWording
+    ? followUp.promise : { state: 'red', findings: sampleFindings() };
+  const apply = h.tlRepairApply();
+  await settle();
+  assert.equal(h.session.stage, 'applied', 'Undo is available while the regeneration follow-up is pending');
+  assert.equal(h.H.checks.length, 2);
+  assert.equal(h.blocks[0].content, regeneratedWording);
+  await h.tlRepairUndo();
+  assert.equal(h.H.checks.length, 3);
+  assert.equal(h.session.plan, null);
+  assert.equal(h.session.undo, null);
+  const restoredMessage = h.session.message;
+  followUp.resolve({ state: 'red', findings: sampleFindings() });
+  await apply;
+  await settle();
+  assert.equal(h.H.ai.length, 1, 'Findings about the undone variation cannot generate a plan for the restored original');
+  assert.equal(h.session.stage, 'applied');
+  assert.equal(h.session.plan, null);
+  assert.equal(h.session.undo, null);
+  assert.equal(h.session.message, restoredMessage);
+  unchanged(h);
+});
+
 test('Undo restores the original editor draft without regenerating or creating a new question', async () => {
   const h = regenerationHarness();
   await start(h);

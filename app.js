@@ -49740,11 +49740,14 @@ async function tlRepairCommit(s, next) {
   s.signature = JSON.stringify(s.snapshot);
 }
 async function tlRepairRecheck(s, propose = true) {
+  const signature = s.signature, epoch = s.epoch;
   _tlCache.delete(s.id);
   tlRepaint(s.id);
   try {
     await tlRun(tlQuestionFor(s.scope, s.id));
-    if (!tlRepairCurrent(s)) return;
+    // Undo or a newer plan can reuse this session while the check is pending.
+    // Its result belongs only to the exact draft that started this read.
+    if (s.signature !== signature || s.epoch !== epoch || !tlRepairCurrent(s)) return;
     const verdict = tlStateOf(tlQuestionFor(s.scope, s.id));
     if (s.scope === 'bank' && typeof _cqCurrent === 'function' && _cqCurrent()?.id === s.id) {
       _cqReviews.set(s.id, { state: verdict.state === 'error' ? 'error' : 'done', findings: (verdict.findings || []).filter(f => f.ai), error: verdict.error || '' });
@@ -49762,7 +49765,7 @@ async function tlRepairRecheck(s, propose = true) {
     }
     tlRepairRender();
   } catch (err) {
-    if (s === _tlRepairSession) { s.message += ' The follow-up check could not finish. Use Check again.'; tlRepairRender(); }
+    if (s === _tlRepairSession && s.signature === signature && s.epoch === epoch) { s.message += ' The follow-up check could not finish. Use Check again.'; tlRepairRender(); }
   }
 }
 // Turns an approved plan into the repaired question WITHOUT writing anything.
