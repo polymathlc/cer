@@ -64,6 +64,12 @@ let _hadesBridge=null, _hadesDisplay=null;
 let pirateProfileSyncs=0,grandLineProfileSyncs=0;
 const pirateRiftPortal={sync:()=>{pirateProfileSyncs++;}};
 const grandLinePortal={sync:()=>{grandLineProfileSyncs++;}};
+// Assignment subscriptions and the separate board canvas remain fixture
+// edges; the production feeding refresh still invokes their lifecycle hooks.
+let _whiteboardsProfileKey,whiteboardWatches=0,whiteboardOpens=0;
+const whiteboardResets=[];
+const _whiteboards={resetForUser:uid=>whiteboardResets.push(uid),open:()=>{whiteboardOpens++;}};
+const wbWatchAssignments=()=>{whiteboardWatches++;};
 let _openItemsStore={},_openMcqStore={},_fbStore={},_openQStore={},_openSurfaceCfg={},_openPartResults={},_annotPadScores={},_openFinalized={},_openPhoto={};
 const writes=[],notices=[],navigation=[];
 const _isAdmin=()=>false,_canAuthor=()=>false;
@@ -102,7 +108,7 @@ Object.assign(window,{loadNextQpQuestion,markMcqChoice,resetQpOpenAnswers,openFl
 window.feedFixture={
  setup(bank,level='P4',name='Learner'){questionBank=structuredClone(bank);child={name,level};currentUser={uid:'fixture-family',name,role:'student',level,adminLevel:'P6'};localStorage.clear();_qAttemptStats={};_qAttemptStatsUid=_scienceFeedKey();_scienceFeedIdentity='';_scienceFeedImageFailures=new Map();qpQueue=[];qpIndex=-1;qpSessionResults=[];qpAnswered=0;_openQStore={};_openItemsStore={};_openMcqStore={};_openSurfaceCfg={};_openPartResults={};_openFinalized={};_scienceFeedRefreshFrames();document.getElementById('qpContainer').innerHTML='';document.getElementById('qpLevelSelect').value=level||'P6';},
  readyHistory:()=>_scienceFeedEnsure(),start:()=>startQuickPractice(),next:()=>loadNextQpQuestion(),finish:()=>_qpAllPartsMarked({score:1,total:1,mistakes:[]}),
- state:()=>({id:_openQStore['#qpContainer']?.id||null,queue:qpQueue.map(q=>q.id),index:qpIndex,level:_scienceFeedLevel(),key:_scienceFeedKey(),writes:writes.length,notices,navigation,pirateProfileSyncs,grandLineProfileSyncs,history:_scienceFeedStoreRead('history'),served:_scienceFeedStoreRead('served')}),
+ state:()=>({id:_openQStore['#qpContainer']?.id||null,queue:qpQueue.map(q=>q.id),index:qpIndex,level:_scienceFeedLevel(),key:_scienceFeedKey(),writes:writes.length,notices,navigation,pirateProfileSyncs,grandLineProfileSyncs,whiteboardWatches,whiteboardOpens,whiteboardResets,history:_scienceFeedStoreRead('history'),served:_scienceFeedStoreRead('served')}),
  plan:(manual=false)=>_scienceFeedPlan(questionBank,{manual}).questions.map(q=>q.id),
  direct:id=>{document.getElementById('qpContainer').innerHTML=buildOpenBody(questionBank.find(q=>q.id===id),'#qpContainer',{});},
  switchChild(name,level){child={name,level};famApplyActiveStudent();},
@@ -196,10 +202,13 @@ try{
   await setup(bank,'P6','Older child');await page.evaluate(()=>feedFixture.start());assert.equal((await state()).id,'p6');
   const pirateSyncsBeforeSwitch=(await state()).pirateProfileSyncs;
   const grandLineSyncsBeforeSwitch=(await state()).grandLineProfileSyncs;
+  const whiteboardsBeforeSwitch=await state();
   await page.evaluate(()=>feedFixture.switchChild('Younger child','P4'));
   assert.equal((await state()).id,null);assert.deepEqual((await state()).queue,[]);assert.equal(await page.locator('#qpContainer input[type=radio]').count(),0);
   assert.equal((await state()).pirateProfileSyncs,pirateSyncsBeforeSwitch+1,'switching the child checks the standalone adventure identity once');
   assert.equal((await state()).grandLineProfileSyncs,grandLineSyncsBeforeSwitch+1,'switching the child invalidates the card-game profile once');
+  assert.equal((await state()).whiteboardWatches,whiteboardsBeforeSwitch.whiteboardWatches+1,'switching the child refreshes level-based whiteboard delivery');
+  assert.equal((await state()).whiteboardResets.length,whiteboardsBeforeSwitch.whiteboardResets.length+1,'the same-login sibling switch clears the previous whiteboard canvas');
   await page.evaluate(()=>{document.getElementById('qpLevelSelect').value='P6';return feedFixture.start();});
   assert.equal((await state()).id,'p4');assert.equal((await state()).level,'P4');
   await shot('sibling-p4-reset');pass('sibling change discards the older child’s displayed question and stale queue');
