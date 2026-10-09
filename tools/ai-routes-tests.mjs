@@ -25,8 +25,9 @@
 //    and the report reads as a clean bill of health.
 import fs from 'fs';
 
-const src = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
-const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+// Region and call-site boundaries use logical lines in either checkout format.
+const src = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
+const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 
 function section(from, to) {
   const a = src.indexOf(from);

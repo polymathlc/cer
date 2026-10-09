@@ -15,7 +15,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.427.0">
+  <link rel="modulepreload" href="app.js?v=1.427.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -4306,6 +4306,39 @@ option {
 .confirm-dialog h3 { margin-bottom: 8px; font-size: 1.05rem; }
 .confirm-dialog p { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 20px; }
 .confirm-dialog .btn-group { display: flex; gap: 10px; justify-content: center; }
+
+/* The regenerator stays usable above the sheet editor and on a small screen. */
+.confirm-dialog.regen-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-width: 560px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  text-align: left;
+}
+.regen-dialog .regen-help { margin-bottom: 16px; line-height: 1.55; }
+.regen-dialog .regen-label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; }
+.regen-dialog .regen-label span { font-weight: 400; color: var(--text-muted); }
+.regen-dialog .regen-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+  box-sizing: border-box;
+  min-height: 112px;
+}
+.regen-dialog .regen-optional-help { font-size: 0.8rem; margin: 6px 0 0; line-height: 1.45; }
+.regen-dialog .regen-status { font-size: 0.82rem; color: var(--text-muted); min-height: 18px; margin-top: 10px; overflow-wrap: anywhere; }
+.regen-dialog .btn-group { margin-top: 16px; justify-content: flex-end; flex-wrap: wrap; }
+.regen-dialog .btn { min-height: 44px; }
+@media (max-width: 480px) {
+  .confirm-dialog.regen-dialog { padding: 22px 18px; }
+  .regen-dialog .btn-group .btn { flex: 1 1 auto; }
+}
 
 /* ========== STUDENT WORKSHEET CREATOR ========== */
 .ws-filter-bar {
@@ -10387,9 +10420,9 @@ html { scroll-behavior:smooth; }
                what is on screen rather than the saved copy — see `tl*` and
                `tlCreateQuestion` in app.js. Filled in by tlRenderCreateBar(). -->
           <div class="tl-create" id="tlCreateBar" style="display:none;"></div>
-          <button class="btn btn-outline" id="regenInlineBtn" onclick="openRegenerateModal()" style="display:none;" title="Make a NEW copy of this question with AI. You give instructions on what to change, the picture is redrawn from the picture already on it when it needs to be, and the original is never overwritten.">
+          <button class="btn btn-outline" id="regenInlineBtn" type="button" onclick="openRegenerateModal()" style="display:none;" title="Prepare a regeneration plan for this question and its pictures using the traffic-light checker. Instructions are optional. Review and approve the plan, then save the regenerated draft.">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            🔄 Regenerate
+            🔄 Plan regeneration
           </button>
           <button class="btn btn-outline" id="aiAnswerBtn" onclick="aiAnswerAndExplain()" title="Read the whole question (text, picture and options) and let AI write the model answer and the explanation. Review and edit before saving.">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -14094,17 +14127,18 @@ html { scroll-behavior:smooth; }
 
 <!-- ==================== REGENERATE QUESTION OVERLAY (Admin Only) ==================== -->
 <div class="confirm-overlay" id="regenOverlay">
-  <div class="confirm-dialog" style="max-width:560px;width:96%;text-align:left;">
-    <h3 style="margin-bottom:6px;">Regenerate question</h3>
-    <p style="color:var(--text-muted);font-size:0.86rem;margin-bottom:14px;">
-      This makes a <strong>new copy</strong> of the question in the bank. The original is never changed, and the picture is <strong>redrawn from the picture already on it</strong> when your instructions mean the figure no longer fits. Tell the AI how you want the new copy to differ.
+  <div class="confirm-dialog regen-dialog" role="dialog" aria-modal="true" aria-labelledby="regenTitle" aria-describedby="regenHelp">
+    <h3 id="regenTitle">Plan question regeneration</h3>
+    <p class="regen-help" id="regenHelp">
+      The traffic-light checker reads this question and its pictures, then prepares a plan for new wording, answers, explanations and any diagrams that need redrawing from the existing reference. Review the plan and click <strong>Approve regeneration plan</strong> to apply it to your draft. The checker runs again after regeneration. Use <strong>Save</strong> when the result is ready.
     </p>
-    <label for="regenRemark" style="display:block;font-weight:600;font-size:0.85rem;margin-bottom:6px;">Instructions for the AI</label>
-    <textarea id="regenRemark" rows="5" placeholder="e.g. Change the numbers and keep the same idea, make the wording simpler, swap the context to a different animal, increase the difficulty…" style="width:100%;padding:10px 12px;border:1px solid var(--border,#d0d5dd);border-radius:8px;font-family:inherit;font-size:0.9rem;resize:vertical;box-sizing:border-box;"></textarea>
-    <div id="regenStatus" style="font-size:0.82rem;color:var(--text-muted);min-height:18px;margin-top:8px;"></div>
-    <div class="btn-group" style="margin-top:14px;">
-      <button class="btn btn-outline" id="regenCancelBtn" onclick="closeRegenerateModal()">Cancel</button>
-      <button class="btn btn-primary" id="regenConfirmBtn" onclick="confirmRegenerate()">Regenerate copy</button>
+    <label class="regen-label" for="regenRemark">Instructions for the AI <span>(optional)</span></label>
+    <textarea class="regen-input" id="regenRemark" rows="5" maxlength="2000" aria-describedby="regenOptionalHelp" placeholder="Leave blank for the AI to choose changes, or give a direction: change the numbers, simplify the wording, use a new context, increase the difficulty…"></textarea>
+    <p class="regen-optional-help" id="regenOptionalHelp">Leave this blank to let the AI propose the changes itself. Nothing is regenerated until you approve the plan.</p>
+    <div class="regen-status" id="regenStatus" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div class="btn-group">
+      <button class="btn btn-outline" id="regenCancelBtn" type="button" onclick="closeRegenerateModal()">Cancel</button>
+      <button class="btn btn-primary" id="regenConfirmBtn" type="button" onclick="confirmRegenerate()">Prepare regeneration plan</button>
     </div>
   </div>
 </div>
@@ -15944,6 +15978,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script type="module" src="app.js?v=1.427.0"></script>
+  <script type="module" src="app.js?v=1.427.1"></script>
 </body>
 </html>

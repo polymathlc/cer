@@ -28,8 +28,8 @@ async function fixture(width){
   const page=await context.newPage(),errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/*',route=>{
-    if(route.request().url().endsWith('/question-repair-core.mjs'))return route.fulfill({contentType:'text/javascript',body:coreSource});
-    if(route.request().url().endsWith('/question-crop-core.mjs'))return route.fulfill({contentType:'text/javascript',body:cropSource});
+    if(new URL(route.request().url()).pathname.endsWith('/question-repair-core.mjs'))return route.fulfill({contentType:'text/javascript',body:coreSource});
+    if(new URL(route.request().url()).pathname.endsWith('/question-crop-core.mjs'))return route.fulfill({contentType:'text/javascript',body:cropSource});
     return route.fulfill({contentType:'text/html; charset=utf-8',body:'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style></head><body>'+modal+'</body></html>'});
   });
   await page.goto('https://question-repair.test/');

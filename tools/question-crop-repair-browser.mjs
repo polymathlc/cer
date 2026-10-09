@@ -13,7 +13,7 @@ const browser=await playwright.chromium.launch({headless:true,...(executablePath
 const output=process.env.QUESTION_REPAIR_QA_DIR || fileURLToPath(new URL('../../checker-repair-qa/',import.meta.url));
 fs.mkdirSync(output,{recursive:true});
 const css=[...htmlSource.slice(0,htmlSource.indexOf('</head>')).matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map(m=>m[1]).join('\n');
-const section=(text,from,to)=>{const a=text.indexOf(from),b=text.indexOf(to,a);assert.ok(a>=0&&b>a,'Fixture section '+from);return text.slice(a,b);};
+const section=(text,from,to)=>{text=text.replace(/\r\n?/g,'\n');const a=text.indexOf(from),b=text.indexOf(to,a);assert.ok(a>=0&&b>a,'Fixture section '+from);return text.slice(a,b);};
 const modal=section(htmlSource,'<div class="tl-overlay" id="tlOverlay"','<!-- ==================== 🎯 RE-FILE');
 const cropModal=section(htmlSource,'<div class="overlay" id="cropOverlay"','<!-- ==================== SIDE-BY-SIDE DUPLICATE');
 const cropper=section(appSource,'(function injectCropStyles()','// =====================================================================\n// IMAGE TOUCH-UP');
@@ -25,7 +25,7 @@ async function fixture(width){
   const context=await browser.newContext({viewport:{width,height:900},hasTouch:width<=390,isMobile:width<=390});
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/*',route=>{
-    const name=route.request().url().split('/').at(-1);
+    const name=new URL(route.request().url()).pathname.split('/').at(-1);
     if(modules[name])return route.fulfill({contentType:'text/javascript',body:modules[name]});
     return route.fulfill({contentType:'text/html; charset=utf-8',body:'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style></head><body>'+modal+cropModal+'</body></html>'});
   });
