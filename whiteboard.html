@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Shared whiteboard · Polymath</title>
+  <link rel="stylesheet" href="whiteboards.css?v=1.429.0">
+  <style>body{margin:0;background:#f4f8fb;color:#24334c;font:16px/1.5 system-ui,sans-serif}main{max-width:1400px;margin:auto;padding:20px}h1{font-size:clamp(24px,4vw,34px);margin:8px 0}.viewer-intro{max-width:850px;color:#576e85}.viewer-link{display:inline-block;padding:10px 15px;background:white;border:1px solid #bed2dc;border-radius:9px;color:#285e55;text-decoration:none;margin-bottom:16px}.viewer-message{padding:20px;border:1px solid #bed2dc;border-radius:12px;background:white}.viewer-error{color:#9c3040;border-color:#e1b9c0}#wbResponseDialog{width:min(820px,calc(100% - 24px));max-height:90vh;border:1px solid #b6d1dc;border-radius:14px;padding:22px;color:#24334c}#wbResponseDialog::backdrop{background:#13293988}#wbResponseDialog textarea{display:block;width:100%;box-sizing:border-box;min-height:125px;padding:12px;margin:12px 0 24px;font:inherit;border:1px solid #b6d1dc;border-radius:8px;resize:vertical}#wbResponseDialog img{max-width:100%;height:auto}#wbResponseDialog button{min-height:44px;padding:10px 14px;border:1px solid #b6d1dc;border-radius:8px;background:#fff;font:inherit;cursor:pointer}#wbResponseDialog .wb-response-row{padding:16px 0;border-bottom:1px solid #d6e3e9}#wbResponseDialog table{border-collapse:collapse;width:100%}#wbResponseDialog td{border:1px solid #ccc;padding:6px}#wbResponseDialog iframe{display:none}#wbResponseStatus{min-height:1.5em}footer{font-size:13px;color:#64748b;margin-top:20px}@media(max-width:600px){main{padding:12px}.wb-canvas{min-height:430px}}</style>
+  <script src="question-apps.js?v=1" defer></script>
+  <script type="module" src="whiteboard-viewer.js?v=1.429.0"></script>
+</head>
+<body>
+  <main>
+    <div>Polymath · Science whiteboard</div>
+    <h1 id="whiteboardViewerTitle">Shared whiteboard</h1>
+    <p class="viewer-intro">Pan and zoom to explore the questions and their helper apps. Try your answers here, or sign in to CER for marked practice and progress tracking.</p>
+    <a id="whiteboardAccountLink" class="viewer-link" href="./">Practise in my student account</a>
+    <div id="whiteboardViewerStatus" class="viewer-message" role="status">Loading the shared whiteboard…</div>
+    <section id="whiteboardsRoot" aria-label="Shared question whiteboard"></section>
+    <footer>This link opens the version your teacher shared. Answers written here stay on this browser; account practice records your marked attempts.</footer>
+  </main>
+  <dialog id="wbResponseDialog" aria-labelledby="wbResponseTitle">
+    <h2 id="wbResponseTitle">My answers</h2>
+    <p>Write an answer for each question. These answers are saved on this browser. For marking, open this board in your student account.</p>
+    <div id="wbResponseQuestions"></div>
+    <p id="wbResponseStatus" role="status"></p>
+    <div class="wb-toolbar"><button id="wbResponseSave" type="button">Save my answers on this browser</button><button id="wbResponseClose" type="button">Close</button></div>
+  </dialog>
+</body>
+</html>

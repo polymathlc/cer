@@ -1,5 +1,44 @@
 # CER Science Learning Portal
 
+## Infinite whiteboards (v1.429.0)
+
+Open **Whiteboards** under Papers & Worksheets. Name a board, select questions
+from the bank, then drag their headers to arrange them. Drag the background to
+pan; use the zoom buttons, arrow keys and **Fit all questions** to navigate.
+Save as many named boards as you need and reopen them from the library. Bank
+question cards also have an **Add to whiteboard** button.
+
+Each question has **AI / paste helper app**. Give the AI optional directions
+or paste a complete HTML app with inline CSS and JavaScript. Preview it, then
+choose **Use reviewed app**. Apps run in the existing isolated question-app
+sandbox. Generated apps use your teaching notes and the recorded answer. The
+output token limit is adjustable; incomplete responses keep the previous app.
+For pasted code, choose **Preview pasted app**, then **Use pasted app**.
+
+**Create share link** publishes the current question layout and approved apps.
+Anyone with the link can explore it, write answers saved on their browser and
+export a worksheet PDF. Original marking keys and account metadata are excluded
+from shared snapshots. Reviewed helper apps may include worked answers, so check
+their preview before sharing. Shared links keep the published version; publishing
+an update makes a new link and does not revoke old links.
+
+The teacher can select P3, P4, P5, P6 or S1 and **Send to selected levels**. Matching
+students see the board under Whiteboards with a sidebar count. Receipt follows
+the currently selected family learner's effective school level. Send again after
+editing a board to update its assignment. Deleting a saved board removes its
+class assignment; previously shared links still work.
+
+Students can attempt one question or **Practice all questions**, using CER's
+existing marking, history, release and level gates. **Worksheet PDF** exports the
+questions with answer spaces through Print → Save as PDF. If a source question
+changes, remove it and add it again before practising, printing, generating or
+sharing so the question shown matches the one being answered.
+
+Validation: `node --test tools/whiteboard-core-tests.mjs`,
+`node --test tools/whiteboard-integration-tests.mjs`, and
+`node tools/whiteboard-browser.mjs`. Tests use local fixtures and mocked AI and
+storage; they do not publish student work or make paid model requests.
+
 ## Topic summary sheets (v1.428.1)
 
 Open Summary Sheets under Papers & Worksheets to collect questions by topic,
