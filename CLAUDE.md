@@ -3440,6 +3440,39 @@ cap`, on every call, on every device, until the month turns over.
   committing it** — a preview that saved would make Cancel a lie.
 - Run **`node tools/ai-routes-tests.mjs`** after touching any of it.
 
+### ⚡ …and the LIGHT JOBS answer on GPT-6 Luna (v1.427.0)
+
+`OPENAI_LIGHT_MODEL` / `AI_LIGHT_ENGINE` / `aiEngineOrder('light')`, the `light`
+option on `askGemini`, the `model` override on `askOpenAiServer` / `askOpenAI`,
+`lightOrder` in `aiRouteReport`, and the light census in
+`tools/ai-routes-tests.mjs`.
+
+Six call sites ask ChatGPT for `gpt-6-luna` (the cheapest GPT-6 tier) instead
+of the dialog's model: `aiSuggestTags`, `aiPickTopic`, `loSuggestLos`, and the
+✨ Improve / ✂️ Shorten / ✍️ AI complete click handlers. Each is classification
+or a short rewrite that the code already guards (an off-list topic is snapped
+back and flagged low; a suggestion is written only when the author saves; a
+rewrite is one undo away).
+
+- **THE CENSUS FAILS BOTH WAYS.** A light job that stops passing `light: true`
+  goes quietly back to the full model; a flag that SPREADS to marking, page
+  reading, a checker or an explanation is a silent downgrade where a smaller
+  model's mistake looks exactly like a correct answer. Adding a light job
+  means adding it to the census with a reason.
+- **A light job leads with ChatGPT whatever the main engine is**, with the
+  other engines behind it — the same shape as authoring, so a capped OpenAI
+  account is a light job answered by Gemini, never no answer.
+- **`skipOpenAi` still outranks it**, and the light branch sits after the
+  ordinary `order` line so neither the cross-check nor authoring can move.
+- **A refused NAMED model does not mark the route down.** Luna being refused
+  says nothing certain about the route; marking it down would send every
+  marking call on ChatGPT to the back for ten minutes.
+- **The server decides.** `askOpenAi` in `polymathlc/math/functions` allows
+  `gpt-6-luna` for every signed-in user (it is cheaper than the default, so a
+  student naming it cannot raise the bill); any other model stays admin-only.
+  An older server ignores the name and answers on GPT-6.1 Sol.
+- Run **`node tools/ai-routes-tests.mjs`** after touching any of it.
+
 ### ⚡ …and QUESTION ADDING leads with ChatGPT (v1.358.0)
 
 `AI_AUTHOR_DEFAULT` / `AI_AUTHOR_FOLLOW` / `getAiAuthorEngine` /
