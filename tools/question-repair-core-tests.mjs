@@ -100,6 +100,9 @@ test('dependent question answer-key text and image edits are explicit and atomic
   assert.deepEqual(result.question.blocks, before.blocks);
   assert.deepEqual(q, before);
   assert.equal(apply(q, [action('replace_text', 'q:answerKeyNote', { value: '' })]).question.answerKeyNote, '');
+  for (const value of ['Draw B\nlower than A.', 'Draw  B lower.', 'x'.repeat(401)]) {
+    assert.throws(() => normalized(q, [action('replace_text', 'q:answerKeyDiagramNote', { value })]), /single line.*400/);
+  }
   assert.throws(() => normalized(q, [action('replace_text', 'q:title', { value: '' })]), /cannot be blank/);
   const absent = fixture();
   delete absent.answerKeyImage;

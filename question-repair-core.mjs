@@ -219,6 +219,9 @@ export function normalizeQuestionRepairPlan(raw, q) {
       if (!['question', 'field', 'optionText', 'cell'].includes(destination.kind)) fail('This target does not accept text.');
       if (has('instruction') || has('afterBlockId')) fail('Text edits cannot carry image or insertion instructions.');
       action.value = plain(item.value, 'Replacement text');
+      if (target === 'q:answerKeyDiagramNote' && action.value !== action.value.replace(/\s+/g, ' ').trim().slice(0, 400)) {
+        fail('Answer-key diagram instructions must be a single line of at most 400 characters.');
+      }
       checkTokens(action.value, destination.images || []);
       if (destination.kind === 'question' && !destination.optional && !action.value.trim()) fail('Question details cannot be blank.');
     } else if (kind === 'select_option') {
