@@ -15,7 +15,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.427.2">
+  <link rel="modulepreload" href="app.js?v=1.428.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -9129,6 +9129,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 </style>
 <link rel="stylesheet" href="arcade-ui.css?v=2">
 <link rel="stylesheet" href="./tcg-upgrade.css?v=1.383.0">
+<link rel="stylesheet" href="summary-sheets.css?v=1.428.0">
 <style>
 /* Public home page. Deliberately scoped so signed-in tools retain their styles. */
 #landingPage {
@@ -10164,6 +10165,10 @@ html { scroll-behavior:smooth; }
           <div class="nav-item admin-only" data-page="worksheet" onclick="navigateTo('worksheet')" title="Custom worksheet from the question bank — filter by topic / concept / MCQ / open-ended, add questions, then practise or print / export PDF">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             Custom Worksheet
+          </div>
+          <div class="nav-item admin-only" data-page="summarysheets" onclick="navigateTo('summarysheets')" title="Collect questions by topic into revision cards, edit their short questions and suggested answers, then save, present or print the sheet">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="7" rx="1"/><rect x="13" y="3" width="8" height="7" rx="1"/><rect x="3" y="14" width="8" height="7" rx="1"/><rect x="13" y="14" width="8" height="7" rx="1"/></svg>
+            Summary Sheets
           </div>
           <div class="nav-item admin-only" data-page="myworksheets" onclick="navigateTo('myworksheets')" title="Worksheets you have saved — preview the printed pages, edit any question from there, then reprint with or without a cover page and the name / date fields">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -11626,6 +11631,9 @@ html { scroll-behavior:smooth; }
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
               Save Worksheet
             </button>
+            <button class="btn btn-outline admin-only" type="button" onclick="ssAddWorksheetSelection()" id="wsSummaryBtn" title="Make editable revision cards from the selected questions">
+              ▦ Create summary sheet
+            </button>
             <button class="btn btn-primary" onclick="printStudentWorksheet()" id="wsPrintBtn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
               Print / Save PDF
@@ -11720,6 +11728,23 @@ html { scroll-behavior:smooth; }
       </div>
       <div class="app-embed-body">
         <iframe id="appEmbedFrame-anskey" class="app-embed-frame" title="Ans Key" allow="camera; microphone; clipboard-read; clipboard-write; fullscreen" referrerpolicy="same-origin"></iframe>
+      </div>
+    </div>
+    <div class="page" id="page-summarysheets">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" type="button" onclick="toggleSidebar()" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Summary Sheets</h2>
+          </div>
+          <div class="subtitle">Short questions, original diagrams and suggested answers for topic revision.</div>
+        </div>
+      </div>
+      <div class="page-body ss-page-body">
+        <div id="summarySheetsStatus" class="ss-status" role="status" aria-live="polite" aria-atomic="true"></div>
+        <section id="summarySheetsHost" class="ss-host" aria-label="Summary sheet builder and saved sheets">
+          <div class="ss-empty"><p>Choose questions by topic, review the revision cards, then save or show your sheet.</p></div>
+        </section>
       </div>
     </div>
     <div class="page" id="page-myworksheets">
@@ -15978,6 +16003,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script type="module" src="app.js?v=1.427.2"></script>
+  <script type="module" src="app.js?v=1.428.0"></script>
 </body>
 </html>

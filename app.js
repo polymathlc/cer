@@ -2,6 +2,7 @@ import './worksheet-art.js?v=1';
 import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
+import { installSummarySheets } from './summary-sheets.js?v=1';
 import { cropSourcesFor, normalizeCropBox, cropPixelRect, cropSourceUpdate } from './question-crop-core.mjs?v=2';
 import { questionRepairTargets, normalizeQuestionRepairPlan, applyQuestionRepairPlan } from './question-repair-core.mjs?v=3';
 import { measureCrop, figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, migrateDecisionsReviewState, DECISIONS_MAY_SKIP } from './decisions-review-core.mjs?v=2';
@@ -4231,7 +4232,7 @@ const SUPER_ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // into the teacher's bank (_bankOwnerUid), because a question filed under the
 // employee's own uid is a question no student would ever be served.
 const EMPLOYEE_EMAILS = ['pkeertana21@gmail.com'];
-const EMPLOYEE_PAGES = ['create', 'exampaper', 'bank', 'vetting', 'checkq', 'worksheet', 'myworksheets', 'worksession'];
+const EMPLOYEE_PAGES = ['create', 'exampaper', 'bank', 'vetting', 'checkq', 'worksheet', 'myworksheets', 'summarysheets', 'worksession'];
 let adminUid = null; // the bank owner: loaded for student AND employee accounts
 // Maps question/vetting id -> owning admin's uid. Populated when super admin
 // loads other admins' subcollections so writes/deletes target the right doc.
@@ -4493,7 +4494,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.427.2';
+const APP_VERSION = 'v1.428.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5149,6 +5150,7 @@ onAuthStateChanged(auth, (user) => {
   grandLinePortal.close();
   rapidPreviewReset();
   wsArtResetForUser(user);
+  if (_summarySheets) _summarySheets.resetForUser(user?.uid || '');
   ainsteinStopAdminWork();
   if (user) {
     enterApp(user);
@@ -6252,6 +6254,7 @@ function navigateTo(page) {
   // `mistakebank` is deliberately not on EMPLOYEE_PAGES, and this is the guard
   // for arriving any other way. `mkRender` gates on `_canAuthor()` instead.
   if (page === 'mistakebank' && !_isAdmin()) page = rpgHomePage();
+  if (page === 'summarysheets' && !_canAuthor()) page = rpgHomePage();
   // Science Quest game pages: respect the "Hide game" toggle, and leaving
   // the dungeon abandons the current run (rewards are kept).
   if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'arcade' || page === 'defenders' || page === 'raiders' || page === 'spire' || page === 'legends' || page === 'slayers' || page === 'tcg') && rpgGameHidden()) page = rpgHomePage();
@@ -6325,6 +6328,7 @@ function navigateTo(page) {
   }
   _skipCreateReset = false;
   if (page === 'bank') renderQuestionBank();
+  if (page === 'summarysheets') ssTool().open();
   if (page === 'answerkeys') renderAnswerKeysPage();
   if (page === 'ansreview') renderAnswerReview();
   if (page === 'papers') renderPapersPage();
@@ -22199,6 +22203,7 @@ function renderQuestionBank() {
           </div>
           <div class="qb-card-actions">
             ${tlLightHtml(q, 'bank')}
+            ${_canAuthor() ? '<button type="button" class="qb-action-btn" title="Add to summary sheet" onclick="event.stopPropagation();' + escapeHtml('ssAddBankQuestion(' + JSON.stringify(String(q.id)) + ')') + '">▦</button>' : ''}
             <button class="qb-action-btn" title="Preview printed — exactly the PDF this question becomes on a worksheet" onclick="event.stopPropagation();previewOneQuestionPrint('${q.id}','bank')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
             </button>
@@ -22245,6 +22250,7 @@ function bankTileHtml(q) {
           : `<div class="qb-tile-text">${escapeHtml(preview)}</div>`}
         <span class="qb-tile-check" aria-hidden="true">✓</span>
         ${tlLightHtml(q, 'bank', { small: true })}
+        ${_canAuthor() ? '<button type="button" class="qb-tile-edit qb-tile-summary" title="Add to summary sheet" onclick="event.stopPropagation();' + escapeHtml('ssAddBankQuestion(' + JSON.stringify(String(q.id)) + ')') + '">▦</button>' : ''}
         <button class="qb-tile-edit" title="Edit this question" onclick="event.stopPropagation();editQuestion('${q.id}')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
@@ -22378,6 +22384,7 @@ function _renderBankPickBar(filtered) {
     <button class="btn btn-outline btn-sm" onclick="clearBankPicks()">Clear</button>
     <span style="flex:1;"></span>
     ${_canAuthor() ? `<button class="btn btn-outline btn-sm" onclick="openBulkTags('picked')" title="Add or remove tags on all ${n} at once, or have the AI tag each one">🏷 Tag these</button>` : ''}
+    ${_canAuthor() ? '<button type="button" class="btn btn-outline btn-sm" onclick="ssAddWorksheetSelection()">▦ Create summary sheet</button>' : ''}
     ${_canAuthor() ? `<button class="btn btn-outline btn-sm" onclick="bankMergeSelected()" ${n >= 2 ? '' : 'disabled'} title="${n >= 2 ? 'Join the ticked questions into ONE question, in the order you choose — for a question that reached the bank as two' : 'Tick at least two questions to merge them into one'}">🔗 Merge these</button>` : ''}
     <button class="btn btn-outline btn-sm" onclick="bankPicksToPractice()">✏️ Practice these</button>
     <button class="btn btn-primary btn-sm" onclick="bankPicksToWorksheet()">📄 Build worksheet</button>`;
@@ -38399,6 +38406,128 @@ async function snapMarkQuestion(q, photoIdx) {
 }
 
 // =====================================================================
+// TOPIC SUMMARY SHEETS — private, editable revision cards, never bank edits.
+// Uses the existing owner-specific worksheet collection; the kind keeps these
+// snapshot cards separate from ordered practice worksheets.
+// =====================================================================
+var _summarySheets;
+function ssOwnerCurrent(uid) {
+  return !!uid && _canAuthor() && currentUser?.uid === uid && auth.currentUser?.uid === uid;
+}
+function ssSourceContext(q) {
+  const source = _gradingQuestionSource(q);
+  const targets = questionRepairTargets(q);
+  const explanation = (q.blocks || []).filter(b => b.type === 'explanation').map(b => stripHtml(b.content || '')).join('\n');
+  const annotations = [], parts = qPartMap(q.blocks || []);
+  (q.blocks || []).forEach(block => _pushAnnotAnswerKey(annotations, block, parts.get(block) || ''));
+  const recorded = [stripHtml(q.answerKeyNote || ''), akcStatedAnswer(q), ...annotations.map(section => {
+    const words = stripHtml(section.content || '').trim();
+    return words ? [section.part ? qPartLabel(section.part) : '', section.label, words].filter(Boolean).join(' ') : '';
+  })].filter(value => value.trim()).join('\n');
+  const images = [], answerImages = [];
+  for (const target of targets.filter(t => t.kind === 'image' && t.value)) {
+    const block = (q.blocks || []).find(b => target.id.startsWith('block:' + encodeURIComponent(b.id) + ':'));
+    const field = block ? target.id.slice(('block:' + encodeURIComponent(block.id) + ':').length) : '';
+    const solutionTarget = ['answerImg', 'answerDiagram', 'answerKey'].includes(field.split(':')[0]);
+    const questionSide = block && !solutionTarget && ['text', 'part', 'fillblank', 'table', 'mcq', 'image'].includes(block.type);
+    const label = block?.type === 'mcq' ? target.label.replace(/^Choice (\d+)/,
+      (_, number) => 'Choice ' + mcqLabelOf(Number(number) - 1, mcqLabelStyle(q))) : target.label;
+    (questionSide ? images : answerImages).push({ url: target.value, label });
+  }
+  return {
+    text: source.text,
+    answer: recorded || explanation,
+    explanation,
+    fullContext: _serializeQuestionForRegen(q) + '\nComplete text fields:\n' + JSON.stringify(targets.filter(t => t.kind === 'text')),
+    images, answerImages,
+  };
+}
+async function ssAskAI({ prompt, images, question }) {
+  if (!_canAuthor() || !currentUser || auth.currentUser?.uid !== currentUser.uid) throw new Error('Sign in as a teacher to prepare summary suggestions.');
+  if (!window.__aiReady?.()) throw new Error('AI is not available. You can edit the question and answer summaries yourself.');
+  const uid = currentUser.uid;
+  if (images.length > 12) throw new Error('This question has more than 12 pictures. Summarise it manually so no picture is skipped.');
+  const media = [];
+  for (const image of images) {
+    if (!ssOwnerCurrent(uid)) throw new Error('The account changed. The summary suggestion was stopped.');
+    const dataUrl = await _urlToDataUrlRobust(transformImageUrl(image.url));
+    const parsed = _parseImageDataUrl(dataUrl);
+    if (!parsed) throw new Error('A question picture could not be read. The existing summary was kept.');
+    media.push({ mimeType: parsed.mime, data: dataUrl.split(',')[1] || '' });
+  }
+  if (!ssOwnerCurrent(uid)) throw new Error('The account changed. The summary suggestion was stopped.');
+  const grounded = prompt + '\nCOMPLETE SOURCE AND ANSWER FIELDS:\n' + ssSourceContext(question).fullContext
+    + '\nPICTURE ATTACHMENTS IN ORDER:\n' + images.map((image, index) => (index + 1) + '. ' + image.label).join('\n')
+    + '\n' + aiGrounding('answer', question.topic, question);
+  const raw = media.length
+    ? await askGeminiVision(grounded, media, { maxOutputTokens: 1200, json: true, authoring: true })
+    : await askGemini(grounded, { maxOutputTokens: 1200, json: true, authoring: true });
+  const result = _parseAIJson(raw);
+  if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('The AI did not return a usable summary. Your existing card was kept.');
+  return result;
+}
+async function ssLoadSheets(uid) {
+  if (!ssOwnerCurrent(uid)) return [];
+  const snap = await getDocs(collection(db, 'users', uid, 'worksheets'));
+  if (!ssOwnerCurrent(uid)) return [];
+  const sheets = [];
+  snap.forEach(d => { const value = d.data(); if (value?.kind === 'summary-sheet') sheets.push({ ...value, id: d.id }); });
+  return sheets;
+}
+async function ssSaveSheet(sheet, { uid, guard }) {
+  if (!ssOwnerCurrent(uid) || !guard()) return false;
+  await setDoc(doc(db, 'users', uid, 'worksheets', String(sheet.id)), sheet);
+  return true;
+}
+async function ssDeleteSheet(id, { uid, guard }) {
+  if (!ssOwnerCurrent(uid) || !guard()) return false;
+  await deleteDoc(doc(db, 'users', uid, 'worksheets', String(id)));
+  return true;
+}
+function ssPrintSheet({ html, title }) {
+  if (!_canAuthor()) return false;
+  const tab = window.open('', '_blank');
+  if (!tab) { showToast('Allow pop-ups to print or save this summary sheet as PDF.', 'info'); return false; }
+  tab.opener = null;
+  const base = new URL('.', location.href).href;
+  tab.document.write(html.replace(/<head>/i, '<head><base href="' + escapeHtml(base) + '">'));
+  tab.document.body.classList.add('ss-print-document');
+  Array.from(tab.document.images).forEach(img => { img.loading = 'eager'; });
+  tab.document.close();
+  tab.addEventListener('load', async () => {
+    await Promise.all(Array.from(tab.document.images).map(img => img.complete ? Promise.resolve() : new Promise(resolve => { img.onload = resolve; img.onerror = resolve; })));
+    if (Array.from(tab.document.images).some(img => !img.naturalWidth)) {
+      showToast('A question image could not load. Keep this preview open and retry printing after the image is available.', 'error');
+      return;
+    }
+    tab.focus(); tab.print();
+  }, { once: true });
+  return true;
+}
+function ssTool() {
+  return _summarySheets || (_summarySheets = installSummarySheets({
+    getUser: () => currentUser, getAuthUid: () => auth.currentUser?.uid || '', canAuthor: _canAuthor,
+    getBank: () => questionBank, isQuestionEligible: q => qInSyllabus(q), questionTopics: qTopicList,
+    sourceContext: ssSourceContext, askAI: ssAskAI, imageUrl: transformImageUrl,
+    loadSheets: ssLoadSheets, saveSheet: ssSaveSheet, deleteSheet: ssDeleteSheet,
+    openSource: id => previewOneQuestionPrint(id, 'bank'), navigate: navigateTo, notify: showToast, printSheet: ssPrintSheet,
+  }));
+}
+function ssAddBankQuestion(id) {
+  if (!_canAuthor()) return;
+  ssTool().addQuestions([String(id)]);
+  navigateTo('summarysheets');
+}
+function ssAddWorksheetSelection() {
+  if (!_canAuthor()) return;
+  if (!wsSelectedIds.size) { showToast('Pick questions to add to your summary sheet first.', 'info'); return; }
+  ssTool().addQuestions(Array.from(wsSelectedIds));
+  navigateTo('summarysheets');
+}
+window.ssAddBankQuestion = ssAddBankQuestion;
+window.ssAddWorksheetSelection = ssAddWorksheetSelection;
+
+// =====================================================================
 // STUDENT WORKSHEET CREATOR
 // =====================================================================
 let wsSelectedIds = new Set();
@@ -38824,6 +38953,7 @@ async function loadSavedWorksheets() {
     const snap = await getDocs(_wsCol());
     savedWorksheets = [];
     snap.forEach(d => {
+      if (d.data()?.kind === 'summary-sheet') return;
       const ws = _wsNormalise(d.data(), d.id);
       if (ws) savedWorksheets.push(ws);
     });

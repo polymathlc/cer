@@ -409,6 +409,8 @@ const UNGROUNDED_BY_DESIGN = {
     bodyOf[f.name] = lines.slice(f.line, end).join('\n');
   });
   const groundedBody = n => /aiGrounding\s*\(|_markingPreamble\s*\(|_genPreamble\s*\(/.test(bodyOf[n] || '');
+  ok('summary-sheet suggestions use the teacher topic answer notes',
+    /aiGrounding\s*\(\s*['"]answer['"]/.test(bodyOf.ssAskAI || ''));
   // The shared checker captures the notes before it queues a request, then
   // supplies that exact grounding to its prompt builder. Recognise this
   // reverse direction only after checking the whole injection contract;

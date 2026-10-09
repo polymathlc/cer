@@ -1,0 +1,47 @@
+name: Topic summary sheets
+
+on:
+  pull_request:
+    paths: ['app.js', 'index.html', 'summary-sheet*.mjs', 'summary-sheets*.mjs', 'summary-sheet*.js', 'summary-sheets*.js', 'summary-sheets.css', 'question-repair-core.mjs', 'tools/summary-sheet-*.mjs', '.github/workflows/summary-sheet.yml']
+  push:
+    branches: [main]
+    paths: ['app.js', 'index.html', 'summary-sheet*.mjs', 'summary-sheets*.mjs', 'summary-sheet*.js', 'summary-sheets*.js', 'summary-sheets.css', 'question-repair-core.mjs', 'tools/summary-sheet-*.mjs', '.github/workflows/summary-sheet.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  summary-sheets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check summary content, persistence and existing worksheet workflows
+        run: |
+          node --check app.js
+          node tools/summary-sheet-core-tests.mjs
+          node tools/summary-sheet-integration-tests.mjs
+          node tools/worksheet-controls-tests.mjs
+          node tools/worksheet-art-integration-tests.mjs
+          node tools/answer-key-tests.mjs
+          node tools/checker-image-audit-tests.mjs
+          node tools/ai-routes-tests.mjs
+          node tools/teaching-notes-tests.mjs
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/summary-browser" playwright@1.62.1
+          "$RUNNER_TEMP/summary-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Check editor, presentation and printed revision cards
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/summary-browser/node_modules/playwright
+          SUMMARY_SHEET_QA_DIR: ${{ runner.temp }}/summary-sheet-qa
+        run: node tools/summary-sheet-browser.mjs
+      - name: Keep card and print previews for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary-sheet-browser-qa
+          path: ${{ runner.temp }}/summary-sheet-qa
+          if-no-files-found: ignore
