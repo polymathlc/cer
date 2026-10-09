@@ -56,7 +56,8 @@ var geminiModel = { generateContent: () => ({ response: { text: () => 'gemini sa
 Object.defineProperty(globalThis, 'x', { value: 1, configurable: true });
 var app = {}, AI_THINK_MIN = 'low';
 function getFunctions() { return {}; }
-function httpsCallable(_f, name) { return async () => { if (name === 'askOpenAi' && !_openaiOk) throw new Error('OpenAI unavailable'); return { data: { text: name === 'askKimi' ? 'kimi server said so' : 'server said so' } }; }; }
+var _callData = null;
+function httpsCallable(_f, name) { return async (data) => { if (name === 'askOpenAi') _callData = data; if (name === 'askOpenAi' && !_openaiOk) throw new Error('OpenAI unavailable'); return { data: { text: name === 'askKimi' ? 'kimi server said so' : 'server said so' } }; }; }
 async function askOpenAI() { return 'device key said so'; }
 var console = { warn: function () {} };
 var CONFIG_COL = 'config';
@@ -77,9 +78,12 @@ return {
   set openaiOk(v) { _openaiOk = v; },
   set gemini(v) { geminiModel = v ? { generateContent: () => ({ response: { text: () => 'gemini said so' } }) } : null; },
   set author(v) { _author = v; },
+  set geminiObj(v) { geminiModel = v; },
   resetDown: function () { Object.keys(_aiDown).forEach(function (k) { _aiDown[k] = 0; }); },
   set sharedAuthor(v) { _aiSharedAuthor = v; },
   get last() { return aiLastCall; },
+  get callData() { return _callData; },
+  AI_LIGHT_ENGINE,
   AI_DOWN_MS, aiEngineOrder, aiEngineIsDown, _aiAsk, _aiRun, askChatGpt, askKimi, askOpenAiServer,
   askKimiDirect, askKimiServer, kimiListModels, getKimiModel, KIMI_DEFAULT_MODEL,
   aiAuthorEngine, aiAuthorSetting, AI_AUTHOR_DEFAULT, AI_AUTHOR_FOLLOW, _aiAuthorFromDoc, _aiEngineFromDoc
@@ -283,7 +287,7 @@ ok('the key field says it is optional and why', /You should not normally need th
    teacher switches to ChatGPT on their laptop, watches it work, and every
    student stays on the capped Gemini with the screen looking exactly right. */
 ok('the order follows the shared choice',
-   /const first = task === 'author' \? aiAuthorEngine\(\) : aiPreferredEngine\(\);/.test(src));
+   /const first = task === 'author' \? aiAuthorEngine\(\) : task === 'light' \? AI_LIGHT_ENGINE : aiPreferredEngine\(\);/.test(src));
 /* An engine nobody has heard of must never empty the list — a stale word in
    the shared setting would take the AI off every device at once. */
 ok('…and an unknown one still leaves every route on it',
@@ -430,6 +434,103 @@ ok('…and it previews without committing',
 ok('the chooser SAYS the authoring order separately',
    /Adding a question — tried in this order/.test(src) && /authorSame/.test(src),
    'an app whose question building runs on a different engine looks, from every screen, exactly like one that does not');
+
+/* =====================================================================
+   ⚡ THE LIGHT JOBS ANSWER ON GPT-6 LUNA
+   ---------------------------------------------------------------------
+   Six call sites — tags, topic re-filing, objective suggestions, ✨ Improve,
+   ✂️ Shorten, ✍️ AI complete — ask for the cheapest GPT-6 tier. Both
+   directions are silent: a light job that stops passing the flag goes back
+   to the full model and the bill does not move; a flag that SPREADS puts a
+   marking or question-building call on a smaller model, which looks exactly
+   like a correct answer.
+   ===================================================================== */
+api.pref = 'gemini'; api.key = ''; api.kimiKey = ''; api.gemini = true; api.openaiOk = true;
+api.author = ''; api.sharedAuthor = null; api.resetDown();
+ok('a light job leads with ChatGPT whatever the main engine is',
+   api.aiEngineOrder('light')[0] === 'openai' && api.AI_LIGHT_ENGINE === 'openai', api.aiEngineOrder('light').join());
+ok('…with the other engines still behind it',
+   api.aiEngineOrder('light').join() === 'openai,gemini,kimi', api.aiEngineOrder('light').join());
+ok('…and the ordinary order is untouched by it',
+   api.aiEngineOrder().join() === 'gemini,openai,kimi', api.aiEngineOrder().join());
+await api._aiAsk('tag this', null, { model: 'gpt-6-luna' }, api.aiEngineOrder('light'));
+ok('a light job asks the server for GPT-6 Luna by name',
+   api.callData && api.callData.model === 'gpt-6-luna', JSON.stringify(api.callData && api.callData.model));
+await api._aiAsk('mark this', null, {}, ['openai']);
+ok('…and an ordinary call still asks for the chosen model',
+   api.callData && api.callData.model === 'gpt-6.1-sol', JSON.stringify(api.callData && api.callData.model));
+/* A refusal of Luna by name says nothing certain about the ROUTE — it may
+   only be that model — so it must not send every marking call on ChatGPT to
+   the back of the queue for ten minutes. */
+api.openaiOk = false; api.resetDown();
+const lightFell = await api._aiAsk('tag this', null, { model: 'gpt-6-luna' }, api.aiEngineOrder('light'));
+ok('a refused light job falls through to the next engine',
+   lightFell === 'gemini said so' && api.last.fellBack, lightFell);
+ok('…without marking the ChatGPT route down for everybody else',
+   !api.aiEngineIsDown('openai'));
+await api._aiAsk('mark this', null, {}, ['openai', 'gemini']);
+ok('…while an ordinary refusal still does',
+   api.aiEngineIsDown('openai'));
+/* …and a light job that also finds GEMINI refusing marks Gemini down as
+   usual: the named model is ChatGPT's, so it excuses nobody else. */
+api.openaiOk = true; api.resetDown();
+api.geminiObj = { generateContent: () => { throw new Error('gemini capped'); } };
+try { await api._aiAsk('tag this', null, { model: 'gpt-6-luna' }, ['gemini', 'openai']); } catch (e) {}
+ok('…and the excuse covers ChatGPT\'s routes only', api.aiEngineIsDown('gemini'));
+api.gemini = true;
+api.openaiOk = true; api.resetDown();
+
+ok('the light model is GPT-6 Luna, named once',
+   /const OPENAI_LIGHT_MODEL = 'gpt-6-luna';/.test(src) && (src.match(/'gpt-6-luna'/g) || []).length === 1);
+ok('askGemini routes a light job AFTER skipOpenAi, so nothing above it moves',
+   /if \(light && !skipOpenAi\) return _aiAsk\(prompt, null, \{ maxOutputTokens, temperature, json, reasoningEffort, model: OPENAI_LIGHT_MODEL \}, aiEngineOrder\('light'\)\);/.test(src));
+ok('both OpenAI routes honour a named model',
+   /model: modelOverride \|\| getOpenAiModel\(\),/.test(src) && /const model = modelOverride \|\| getOpenAiModel\(\);/.test(src));
+ok('the chooser SAYS which jobs run on the light model',
+   /lightOrder: aiEngineOrder\('light'\)/.test(src) && /Light jobs — tags, topic and objective suggestions/.test(src));
+
+/* THE LIGHT CENSUS. Three named functions and three click handlers (found by
+   the button they answer), every one of their calls flagged — and not one
+   flag anywhere else. */
+const LIGHT_FUNCTIONS = ['aiSuggestTags', 'aiPickTopic', 'loSuggestLos'];
+const LIGHT_HANDLERS = ["closest('.improve-btn')", "closest('.shorten-btn')", "closest('.complete-btn')"];
+function _lightBody(start) {
+  const end = src.indexOf('\n});', start);
+  return src.slice(start, end < 0 ? start + 6000 : end);
+}
+const lightRegions = [];
+for (const name of LIGHT_FUNCTIONS) {
+  const m = new RegExp('^(?:async\\s+)?function ' + name + '\\(', 'm').exec(src);
+  ok('light “' + name + '” exists', !!m, 'renamed — the census is naming a function that is not there');
+  if (!m) continue;
+  const end = src.indexOf('\n}\n', m.index);
+  lightRegions.push([m.index, end]);
+  const body = src.slice(m.index, end);
+  const asks = body.match(/await askGemini(Vision)?\([\s\S]*?\}\)/g) || [];
+  ok('…asks the AI', asks.length > 0);
+  ok('…and every one of its calls is light', asks.length > 0 && asks.every(a => /light: true/.test(a)), asks.join(' | ').slice(0, 300));
+}
+for (const sel of LIGHT_HANDLERS) {
+  const at = src.indexOf(sel);
+  ok('the ' + sel + ' handler exists', at >= 0);
+  if (at < 0) continue;
+  const body = _lightBody(at);
+  lightRegions.push([at, at + body.length]);
+  const asks = body.match(/await askGemini(Vision)?\([\s\S]*?\}\)/g) || [];
+  ok('…its AI call is light', asks.length === 1 && /light: true/.test(asks[0]), asks.join(' | ').slice(0, 300));
+}
+const lightFlags = [];
+const flagRe = /light: true/g;
+let fm;
+while ((fm = flagRe.exec(src))) {
+  if (src.lastIndexOf('/*', fm.index) > src.lastIndexOf('*/', fm.index)) continue;   // inside a comment
+  lightFlags.push(fm.index);
+}
+const stray = lightFlags.filter(i => !lightRegions.some(([a, b]) => i >= a && i < b));
+ok('the light flag has not spread to any other call', stray.length === 0,
+   stray.map(i => src.slice(Math.max(0, i - 120), i + 20).replace(/\s+/g, ' ')).join('\n       ') +
+   '\n       add it to the census with a reason, or take the flag off — a smaller model there looks exactly like a correct answer');
+ok('…and exactly six calls carry it', lightFlags.length === 6, String(lightFlags.length));
 
 /* ---------- THE CENSUS ---------- */
 /* A question-building path added next month that forgets the flag is one

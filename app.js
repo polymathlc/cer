@@ -321,6 +321,23 @@ function transcribeRouteNote() {
 // browser and is read from there.
 const AI_ENGINE_STORE = { engine: 'sq_ai_engine', key: 'sq_openai_key', model: 'sq_openai_model', imageModel: 'sq_openai_image_model', kimiKey: 'sq_kimi_key', kimiModel: 'sq_kimi_model', modelGen: 'sq_openai_model_gen', modelChoice: 'sq_openai_model_choice', engineGen: 'sq_ai_engine_gen', engineChoice: 'sq_ai_engine_choice', authorEngine: 'sq_ai_author_engine', imageEngine: 'sq_ai_image_engine', imageGen: 'sq_openai_image_gen' };
 const OPENAI_DEFAULT_MODEL = 'gpt-6.1-sol';
+/* ⚡ THE LIGHT MODEL — GPT-6 Luna for the jobs a smaller model cannot get
+   wrong in a way that matters. It is the cheapest GPT-6 tier ($0.10 / $0.50
+   per million tokens) and it serves exactly SIX call sites, named in the
+   census in tools/ai-routes-tests.mjs: 🏷 tag suggestions (`aiSuggestTags`),
+   🎯 topic re-filing (`aiPickTopic`), 🎯 objective suggestions
+   (`loSuggestLos`), and the three text tools — ✨ Improve, ✂️ Shorten and
+   ✍️ AI complete. Every one of them is classification or a short rewrite
+   whose output the code already checks (an off-list topic is snapped back
+   and flagged, a suggestion is never written until the author saves, a
+   rewrite is one Ctrl+Z from gone).
+
+   NOTHING ELSE MAY USE IT. Marking, reading a page into questions, the
+   checkers, the cross-check and every explanation stay on the main model,
+   because there a smaller model's mistake looks exactly like a correct
+   answer. That is the half of the census that matters: a call that starts
+   passing `light: true` is a quiet downgrade nobody chose. */
+const OPENAI_LIGHT_MODEL = 'gpt-6-luna';
 /* A REASONING MODEL IS A FAMILY, NOT ONE ID, and this is the one place the
    family is named. gpt-5.x and gpt-6-astra behave identically where the
    request SHAPE is concerned — both take `reasoning_effort` and both REFUSE a
@@ -357,8 +374,8 @@ function getOpenAiKey() { try { return (localStorage.getItem(AI_ENGINE_STORE.key
 function getOpenAiModel() { try { return localStorage.getItem(AI_ENGINE_STORE.model) || OPENAI_DEFAULT_MODEL; } catch (e) { return OPENAI_DEFAULT_MODEL; } }
 function openAiActive() { return getAiEngine() === 'openai' && !!getOpenAiKey(); }
 
-async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, json = false, reasoningEffort = 'low', exactOutputBudget = false } = {}) {
-  const model = getOpenAiModel();
+async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, json = false, reasoningEffort = 'low', exactOutputBudget = false, model: modelOverride = '' } = {}) {
+  const model = modelOverride || getOpenAiModel();
   const content = [{ type: 'text', text: prompt }];
   (media || []).forEach((m, i) => {
     if (/^image\//.test(m.mimeType || '')) content.push({ type: 'image_url', image_url: { url: 'data:' + m.mimeType + ';base64,' + m.data, detail: 'high' } });
@@ -648,8 +665,14 @@ function aiAuthorEngine() {
 /* `task` is `'author'` for the paths that BUILD a question and nothing else.
    Everything below it is unchanged: the chosen engine's routes lead and the
    other two stay behind them, so a capped supplier is survivable either way. */
+/* The engine a light job leads with. It is a constant rather than a setting:
+   the point of the light model is the price, and the price is ChatGPT's. */
+const AI_LIGHT_ENGINE = 'openai';
 function aiEngineOrder(task) {
-  const first = task === 'author' ? aiAuthorEngine() : aiPreferredEngine();
+  // `'light'` leads with ChatGPT, whose route then answers on GPT-6 Luna —
+  // the other engines stay behind it, so an OpenAI account out of credit is
+  // a light job answered by Gemini rather than no answer at all.
+  const first = task === 'author' ? aiAuthorEngine() : task === 'light' ? AI_LIGHT_ENGINE : aiPreferredEngine();
   const engines = AI_ENGINES.includes(first)
     ? [first].concat(AI_ENGINES.filter(e => e !== first))
     : AI_ENGINES.slice();
@@ -661,7 +684,7 @@ function aiEngineOrder(task) {
    key into. Same modular app as auth and App Check, so the callable carries
    the signed-in user and the function refuses anybody it cannot name. */
 let _aiFns = null;
-async function askOpenAiServer(prompt, media, { maxOutputTokens = 512, temperature, json = false, reasoningEffort = 'low', exactOutputBudget = false } = {}) {
+async function askOpenAiServer(prompt, media, { maxOutputTokens = 512, temperature, json = false, reasoningEffort = 'low', exactOutputBudget = false, model: modelOverride = '' } = {}) {
   if (!_aiFns) _aiFns = getFunctions(app);
   const call = httpsCallable(_aiFns, 'askOpenAi', { timeout: 240000 });
   const res = await call({
@@ -670,7 +693,9 @@ async function askOpenAiServer(prompt, media, { maxOutputTokens = 512, temperatu
     json: !!json,
     maxOutputTokens,
     temperature,
-    model: getOpenAiModel(),
+    // A light job names its own model; everything else asks for the one the
+    // dialog chose. The server decides whether either is allowed.
+    model: modelOverride || getOpenAiModel(),
     reasoningEffort,
     exactOutputBudget
   });
@@ -823,7 +848,12 @@ async function _aiAsk(prompt, media, opts, order) {
       aiLastCall = { engine, fellBack: i > 0, error: first ? String(first.message || first) : '' };
       return out;
     } catch (e) {
-      _aiMarkDown(engine, String((e && e.message) || e || ''));
+      /* A refusal of a NAMED model (a light job asking for Luna) says
+         nothing certain about the route itself — it may only be that model
+         the account will not serve — so it is not allowed to send every
+         other call on this route to the back for ten minutes. */
+      if (opts && opts.model && (engine === 'openai' || engine === 'openaiKey')) _aiWhy[engine] = String((e && e.message) || e || '');
+      else _aiMarkDown(engine, String((e && e.message) || e || ''));
       if (!first) first = e;
       console.warn('AI route ' + engine + ' refused:', e);
     }
@@ -913,6 +943,11 @@ function aiRouteReport() {
     authorOrder: authorOrder.map(e => label[e] || e),
     authorSame: authorOrder.join('|') === order.join('|'),
     authorSetting: aiAuthorSetting(),
+    /* ⚡ THE LIGHT JOBS ARE PRINTED TOO, with the model they ask for: six
+       call sites quietly answering on a smaller model than the dialog names
+       would otherwise be invisible from every screen in the app. */
+    lightOrder: aiEngineOrder('light').map(e => label[e] || e),
+    lightModel: OPENAI_LIGHT_MODEL,
     notes
   };
 }
@@ -1393,12 +1428,15 @@ function imageRouteReport() {
 // goes to the actual answer (faster + cheaper for our short tasks). Gemini 3.x
 // rejects the older numeric thinkingBudget with 400 INVALID_ARGUMENT, and 3.7
 // and 3.8 reject the "minimal" level too — see AI_THINK_MIN.
-async function askGemini(prompt, { maxOutputTokens = 512, temperature = 0.3, json = false, skipOpenAi = false, authoring = false, reasoningEffort = 'low' } = {}) {
+async function askGemini(prompt, { maxOutputTokens = 512, temperature = 0.3, json = false, skipOpenAi = false, authoring = false, light = false, reasoningEffort = 'low' } = {}) {
   // skipOpenAi forces the Gemini column of the answer-key cross-check to
   // really be Gemini — without it both columns can be the same model and
   // the report reads as a clean bill of health. It OUTRANKS `authoring`:
   // a caller that named the engine it wants meant it.
   const order = skipOpenAi ? ['gemini'] : aiEngineOrder(authoring ? 'author' : '');
+  // ⚡ A light job (see OPENAI_LIGHT_MODEL) leads with ChatGPT on GPT-6 Luna.
+  // It is its own branch, after skipOpenAi, so nothing above it can move.
+  if (light && !skipOpenAi) return _aiAsk(prompt, null, { maxOutputTokens, temperature, json, reasoningEffort, model: OPENAI_LIGHT_MODEL }, aiEngineOrder('light'));
   return _aiAsk(prompt, null, { maxOutputTokens, temperature, json, reasoningEffort }, order);
 }
 
@@ -1610,6 +1648,8 @@ function renderAiEngineStatus() {
   const author = r.authorSame
     ? `<div style="margin-top:12px;color:var(--text-muted);">Adding a question uses the same order.</div>`
     : `<div style="font-weight:600;margin:14px 0 6px;">Adding a question — tried in this order</div>${list(r.authorOrder)}`;
+  const light = `<div style="font-weight:600;margin:14px 0 6px;">⚡ Light jobs — tags, topic and objective suggestions, ✨ Improve, ✂️ Shorten, ✍️ AI complete</div>${list(r.lightOrder)}` +
+    `<div style="margin-top:6px;color:var(--text-muted);">On ChatGPT these ask for <b>${escapeHtml(r.lightModel)}</b>, the cheapest GPT-6 tier. Marking, question building and checking never do.</div>`;
   const notes = r.notes.map(n => `<div style="margin-top:8px;color:var(--text-muted);">${escapeHtml(n)}</div>`).join('');
   // The mic is its own model and its own failure, so it gets its own line:
   // an app quietly transcribing on the general model looks exactly like one
@@ -1622,7 +1662,7 @@ function renderAiEngineStatus() {
   const pics = `<div style="font-weight:600;margin:14px 0 6px;">🖼 Pictures — tried in this order</div>${list(ir.order)}` +
     `<div style="margin-top:6px;color:var(--text-muted);">ChatGPT image model: <b>${escapeHtml(ir.model)}</b>${ir.shared ? ' · centre-wide setting' : ''}</div>` +
     ir.notes.map(n => `<div style="margin-top:8px;color:var(--text-muted);">${escapeHtml(n)}</div>`).join('');
-  el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">Everything else — tried in this order</div>${order}${author}${notes}${mic}${pics}`;
+  el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">Everything else — tried in this order</div>${order}${author}${light}${notes}${mic}${pics}`;
 }
 
 /* The account's own list, in one call. A hard-coded list of ids in this file
@@ -4453,7 +4493,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.426.9';
+const APP_VERSION = 'v1.427.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5624,7 +5664,7 @@ async function aiSuggestTags(q) {
     '- No punctuation, no capital letters unless it is a proper noun, no quotes inside the tag.',
   ].join('\n');
 
-  const raw = await askGemini(prompt, { maxOutputTokens: 220, temperature: 0.15, json: true });
+  const raw = await askGemini(prompt, { maxOutputTokens: 220, temperature: 0.15, json: true, light: true });
   const parsed = _parseAIJson(raw) || {};
   const proposed = Array.isArray(parsed.tags) ? parsed.tags
     : (typeof parsed.tags === 'string' ? parsed.tags.split(/[,\n;]+/) : []);
@@ -9482,7 +9522,7 @@ document.addEventListener('click', async function (e) {
   const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '✨ …';
   try {
     const prompt = 'Improve the writing of the text below (it is from a Singapore primary-school science question or its answer). Fix grammar, spelling and punctuation, and improve the sentence structure and phrasing so it reads clearly and naturally. Keep the EXACT same meaning and all science facts and keywords — do not add new information, do not answer or extend it, and do not add quotation marks, labels or commentary. Return ONLY the improved text.\n\nText:\n' + text;
-    const out = (await askGemini(prompt, { maxOutputTokens: 500, temperature: 0.3 }) || '').trim();
+    const out = (await askGemini(prompt, { maxOutputTokens: 500, temperature: 0.3, light: true }) || '').trim();
     if (out) { setText(out); showToast('Improved with AI ✓', 'success'); }
     else showToast('AI returned nothing — try again', 'error');
   } catch (err) { console.error('improve failed', err); showToast('Improve failed: ' + (err && err.message ? err.message : err), 'error'); }
@@ -9555,7 +9595,7 @@ document.addEventListener('click', async function (e) {
       '5. Keep the same order of ideas, the same paragraph/line breaks, and exam-style phrasing a P6 pupil could write.\n' +
       '6. Plain text only — no markdown, no quotation marks, no labels, no commentary, no [[brackets]].\n' +
       'Return ONLY the shortened text.\n\nText:\n' + text;
-    const out = (await askGemini(prompt, { maxOutputTokens: 700, temperature: 0.2 }) || '')
+    const out = (await askGemini(prompt, { maxOutputTokens: 700, temperature: 0.2, light: true }) || '')
       .replace(/^\s*```[a-z]*\s*|\s*```\s*$/gi, '')
       .replace(/\[\[|\]\]/g, '')
       .trim();
@@ -9725,7 +9765,7 @@ document.addEventListener('click', async function (e) {
 
   const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '✍️ …';
   try {
-    const reply = _aicUnquote((await askGemini(_aicPrompt(text), { maxOutputTokens: 400, temperature: 0.5 }) || '')
+    const reply = _aicUnquote((await askGemini(_aicPrompt(text), { maxOutputTokens: 400, temperature: 0.5, light: true }) || '')
       .replace(/^\s*```[a-z]*\s*|\s*```\s*$/gi, '')
       .replace(/\[\[|\]\]/g, '')
       .trim());
@@ -51056,7 +51096,7 @@ async function aiPickTopic(q, level) {
     '- Otherwise give "topic2" only when the question genuinely sits in two topics at once. An empty string is the right answer far more often than a stretch.',
     '- "topic2" must never be a skill topic, and never from a HIGHER year than "topic".',
   ].join('\n');
-  const raw = await askGemini(prompt, { maxOutputTokens: 120, temperature: 0.1, json: true });
+  const raw = await askGemini(prompt, { maxOutputTokens: 120, temperature: 0.1, json: true, light: true });
   const parsed = _parseAIJson(raw) || {};
   const want = String(parsed.topic || '').trim();
   // A topic that is not on the list is not an answer. Rather than dropping the
@@ -84306,7 +84346,7 @@ async function loSuggestLos(q, level) {
     'If none of them fit, return an empty list.\n\n' +
     'LEARNING OBJECTIVES (id — title: outcome)\n' + _loPromptList(level) + '\n\n' +
     'Reply with JSON only, in this exact shape: {"ids":["heat-effects"]}';
-  const raw = await askGemini(prompt, { maxOutputTokens: 500, temperature: 0.1, json: true });
+  const raw = await askGemini(prompt, { maxOutputTokens: 500, temperature: 0.1, json: true, light: true });
   let ids = [];
   try {
     const data = _parseAIJson(raw);

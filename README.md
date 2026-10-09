@@ -1,5 +1,11 @@
 # CER Science Learning Portal
 
+## ⚡ Light jobs on GPT-6 Luna (v1.427.0)
+
+Six small jobs now ask ChatGPT for **`gpt-6-luna`**, the cheapest GPT-6 tier ($0.10 / $0.50 per million tokens), instead of the full model: 🏷 tag suggestions, 🎯 topic re-filing, 🎯 objective suggestions, ✨ Improve, ✂️ Shorten and ✍️ AI complete. Each is classification or a short rewrite whose result the app already checks or the author reviews before saving. They lead with ChatGPT whatever the main engine is, and Gemini and Kimi stay behind it.
+
+Marking, reading pages into questions, the checkers, the answer-key cross-check and every explanation stay on the main model. The AI Engine dialog lists the light jobs and their order separately. Students' devices reach Luna through the shared `askOpenAi` function, which allows `gpt-6-luna` for every signed-in user once the matching Maths functions deploy has run; until then the server answers those jobs on GPT-6.1 Sol as before.
+
 ## OpenAI Decisions migration
 
 Import review calls `https://api.openai.com/v1/decisions` with `gpt-6-luna` and the shared server-side `OPENAI_API_KEY`. The administrator callable is `cerDecisionsReview`, with Decisions review fields and `cerDecisionsLimits` counters. No separate review-provider account or key is needed. Review remains advisory: visual AI checking always runs.
