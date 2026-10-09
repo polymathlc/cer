@@ -15,7 +15,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.427.1">
+  <link rel="modulepreload" href="app.js?v=1.427.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -10420,9 +10420,9 @@ html { scroll-behavior:smooth; }
                what is on screen rather than the saved copy — see `tl*` and
                `tlCreateQuestion` in app.js. Filled in by tlRenderCreateBar(). -->
           <div class="tl-create" id="tlCreateBar" style="display:none;"></div>
-          <button class="btn btn-outline" id="regenInlineBtn" type="button" onclick="openRegenerateModal()" style="display:none;" title="Prepare a regeneration plan for this question and its pictures using the traffic-light checker. Instructions are optional. Review and approve the plan, then save the regenerated draft.">
+          <button class="btn btn-outline" id="regenInlineBtn" type="button" onclick="openRegenerateModal()" style="display:none;" title="Save a new copy first, then review a plan to regenerate its question and pictures using the traffic-light checker. Instructions are optional. Approval saves changes to the new copy; the original and worksheet stay unchanged.">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            🔄 Plan regeneration
+            🔄 Regenerate new copy
           </button>
           <button class="btn btn-outline" id="aiAnswerBtn" onclick="aiAnswerAndExplain()" title="Read the whole question (text, picture and options) and let AI write the model answer and the explanation. Review and edit before saving.">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -14128,9 +14128,9 @@ html { scroll-behavior:smooth; }
 <!-- ==================== REGENERATE QUESTION OVERLAY (Admin Only) ==================== -->
 <div class="confirm-overlay" id="regenOverlay">
   <div class="confirm-dialog regen-dialog" role="dialog" aria-modal="true" aria-labelledby="regenTitle" aria-describedby="regenHelp">
-    <h3 id="regenTitle">Plan question regeneration</h3>
+    <h3 id="regenTitle">Regenerate a new question copy</h3>
     <p class="regen-help" id="regenHelp">
-      The traffic-light checker reads this question and its pictures, then prepares a plan for new wording, answers, explanations and any diagrams that need redrawing from the existing reference. Review the plan and click <strong>Approve regeneration plan</strong> to apply it to your draft. The checker runs again after regeneration. Use <strong>Save</strong> when the result is ready.
+      First, a <strong>new copy</strong> of this question is saved in the bank. The traffic-light checker reads that copy and its pictures, then prepares a plan for new wording, answers, explanations and diagrams using the existing image references. Click <strong>Approve regeneration plan</strong> to execute and save the changes to the copy. The checker then runs again automatically. Your original question and worksheet stay unchanged. If you cancel the plan or regeneration fails, the saved copy remains available.
     </p>
     <label class="regen-label" for="regenRemark">Instructions for the AI <span>(optional)</span></label>
     <textarea class="regen-input" id="regenRemark" rows="5" maxlength="2000" aria-describedby="regenOptionalHelp" placeholder="Leave blank for the AI to choose changes, or give a direction: change the numbers, simplify the wording, use a new context, increase the difficulty…"></textarea>
@@ -14138,7 +14138,7 @@ html { scroll-behavior:smooth; }
     <div class="regen-status" id="regenStatus" role="status" aria-live="polite" aria-atomic="true"></div>
     <div class="btn-group">
       <button class="btn btn-outline" id="regenCancelBtn" type="button" onclick="closeRegenerateModal()">Cancel</button>
-      <button class="btn btn-primary" id="regenConfirmBtn" type="button" onclick="confirmRegenerate()">Prepare regeneration plan</button>
+      <button class="btn btn-primary" id="regenConfirmBtn" type="button" onclick="confirmRegenerate()">Duplicate &amp; prepare plan</button>
     </div>
   </div>
 </div>
@@ -15978,6 +15978,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script type="module" src="app.js?v=1.427.1"></script>
+  <script type="module" src="app.js?v=1.427.2"></script>
 </body>
 </html>

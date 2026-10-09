@@ -1,4 +1,4 @@
-// Real optional-command modal, CSS and approval controller. Checker, AI and
+// Real copy-first optional-command modal, CSS and approval controller. Checker, AI and
 // persistence calls use deterministic fixtures, without opening an account.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -98,7 +98,9 @@ try {
       assert.equal(await page.locator('#tlRepairApplyBtn').innerText(), 'Approve regeneration plan');
       assert.equal(await page.locator('#tlRepairActions > li').count(), 2);
       assert.ok(await page.evaluate(() => qa.H.ai[0].prompt.includes('Use three sealed containers')));
-      assert.deepEqual(await page.evaluate(() => [qa.H.image.length, qa.H.uploads.length, qa.H.saves.length, qa.H.checks.length]), [0, 0, 0, 1]);
+      assert.deepEqual(await page.evaluate(() => [qa.H.image.length, qa.H.uploads.length, qa.H.saves.length, qa.H.checks.length]), [0, 0, 1, 1]);
+      assert.ok(await page.evaluate(() => qa.bank.length === 2 && qa.session.id !== 'q1' && qa.session.scope === 'bank' && qa.bank[1].regeneratedFrom === 'q1'));
+      assert.equal(await page.evaluate(() => qa.H.checks[0].id), await page.evaluate(() => qa.session.id));
       await withinViewport(page, '.tl-panel', width, height);
       await page.locator('#tlRepairReviseBtn').click();
       await page.locator('#tlRepairInstruction').fill('');
@@ -113,9 +115,10 @@ try {
       }
       await page.screenshot({ path: path.join(output, 'regeneration-plan-' + width + '-' + height + '.png'), fullPage: true });
       await page.locator('#tlRepairCancelBtn').click();
-      assert.deepEqual(await page.evaluate(() => [qa.H.image.length, qa.H.saves.length, qa.blocks[0].content]), [0, 0, sampleQuestion().blocks[0].content]);
+      assert.deepEqual(await page.evaluate(() => [qa.H.image.length, qa.H.saves.length, qa.blocks[0].content]), [0, 1, sampleQuestion().blocks[0].content]);
+      assert.equal(await page.evaluate(() => qa.bank[1].blocks[0].content), sampleQuestion().blocks[0].content);
       assert.deepEqual(f.errors, []);
-      results.push({ width, height, checks: 'optional command, modal focus and Escape, checker before planning, autonomous revision, approval-only execution, cancellation, bounds and touch targets' });
+      results.push({ width, height, checks: 'optional command, modal focus and Escape, duplicate saved before checker and plan, autonomous revision reuses copy, approval-only regeneration, cancel retains copy, bounds and touch targets' });
     } finally { await f.close(); }
   }
   const f = await fixture(1280, 900, 'em'), page = f.page;
@@ -124,21 +127,28 @@ try {
     assert.ok(await page.locator('#regenRemark').evaluate(el => { const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x + 10, r.y + 10)); }), 'The regeneration modal opens above worksheet editing mode');
     await page.locator('#regenConfirmBtn').click();
     await page.waitForFunction(() => qa.session?.stage === 'ready');
-    assert.equal(await page.evaluate(() => qa.session.scope), 'em');
+    assert.equal(await page.evaluate(() => qa.session.scope), 'bank');
+    assert.equal(await page.evaluate(() => qa.bank[1].regeneratedFrom), 'q1');
+    const copyId=await page.evaluate(() => qa.session.id);
     assert.equal(await page.evaluate(() => qa.H.checks[0].blocks.length), sampleQuestion().blocks.length);
     await page.locator('#tlRepairApplyBtn').click();
     await page.waitForFunction(() => qa.session?.stage === 'applied');
     assert.equal(await page.evaluate(() => qa.H.image.length), 1);
     assert.equal(await page.evaluate(() => qa.H.checks.length), 2);
-    assert.equal(await page.evaluate(() => qa.H.saves.length), 0);
-    assert.equal(await page.evaluate(() => qa.blocks[1].url), 'https://fixtures.test/redrawn.png');
+    assert.equal(await page.evaluate(() => qa.H.saves.length), 2);
+    assert.equal(await page.evaluate(() => qa.bank.find(q=>q.id===qa.session.id).blocks[1].url), 'https://fixtures.test/redrawn.png');
+    assert.equal(await page.evaluate(() => qa.blocks[1].url), sampleQuestion().blocks[1].url);
+    assert.deepEqual(await page.evaluate(() => qa.bank.find(q=>q.id==='q1')), sampleQuestion());
+    assert.deepEqual(await page.evaluate(() => qa.em.qs.map(q=>q.id)), ['q1','q2']);
     assert.deepEqual(await page.evaluate(() => [qa.blocks.find(b => b.id === 'other').content, qa.em.owner.other, qa.editorKeywords.other, qa.selectedBlanks.other]), ['Another question remains untouched.', 'q2', ['unrelated'], [1]]);
     await page.screenshot({ path: path.join(output, 'regeneration-worksheet-approved.png'), fullPage: true });
     await page.locator('#tlRepairUndoBtn').click();
-    await page.waitForFunction(() => qa.blocks[1].url === 'https://fixtures.test/original.png');
+    await page.waitForFunction(() => qa.bank.find(q=>q.id===qa.session.id).blocks[1].url === 'https://fixtures.test/original.png');
+    assert.equal(await page.evaluate(() => qa.session.id), copyId);
+    assert.equal(await page.evaluate(() => qa.H.saves.length), 3);
     assert.equal(await page.evaluate(() => qa.blocks[0].content), sampleQuestion().blocks[0].content);
     assert.deepEqual(f.errors, []);
-    results.push({ scope: 'em', checks: 'per-question launcher, modal stacking, blank autonomous command, approved exact wording and image, follow-up checker, other questions preserved, undo' });
+    results.push({ scope: 'em', checks: 'per-question launcher, modal stacking, saved bank duplicate, approved exact wording and image saved only to copy, follow-up checker, all worksheet members preserved, copy undo' });
   } finally { await f.close(); }
   console.log(JSON.stringify(results, null, 2));
 } finally { await browser.close(); }
