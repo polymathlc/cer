@@ -151,25 +151,69 @@ test('an older library refresh cannot resurrect a deleted sheet',async()=>{
   const h=harness();h.tool.addQuestions(['heat-1']);await h.tool.save();const saved=h.tool.state().sheets,gate=deferred();h.loadImpl=()=>gate.promise;const loading=h.tool.load();
   assert.equal(await h.tool.removeSheet(saved[0].id),true);gate.resolve(saved);assert.equal(await loading,false);assert.deepEqual(h.tool.state().sheets,[]);
 });
+test('answer-only AI uses the teacher current short question and changes only the reviewed answer',async()=>{
+  const h=harness(),bank=structuredClone(h.bank);h.tool.addQuestions(['heat-1']);const id=h.cards()[0].id;
+  h.tool.editCard(id,'shortQuestion','Why does felt keep Cup A hot longer than Cup B?');h.tool.editCard(id,'shortAnswer','Teacher answer awaiting preparation.');h.tool.editCard(id,'howTo','Teacher reminder stays.');
+  const before=h.cards()[0];h.aiImpl=()=>({shortAnswer:'Felt is a poor conductor, so Cup A loses heat more slowly.',shortQuestion:'Model must not replace the question',howTo:'Model must not replace the reminder',images:[{url:fixtureImage('invented')}],questionId:'invented'});
+  assert.equal(await h.tool.suggestAnswer(id),true);assert.deepEqual(h.cards()[0],before,'Answer is proposed for review before mutation');
+  assert.equal(h.ai[0].mode,'answer');assert.equal(h.ai[0].questionText,before.shortQuestion);assert.ok(h.ai[0].prompt.includes(before.shortQuestion));assert.deepEqual(h.ai[0].images,before.images);
+  assert.equal(await h.tool.save(),false);assert.equal(h.tool.print(),false);assert.equal(h.tool.present(),false);assert.equal(h.saves.length,0);
+  assert.equal(h.tool.applySuggestion(id),true);const after=h.cards()[0];assert.equal(after.shortAnswer,'Felt is a poor conductor, so Cup A loses heat more slowly.');
+  assert.deepEqual({...after,shortAnswer:before.shortAnswer},before,'All question, strategy, source, identity and image fields stay unchanged');assert.deepEqual(h.bank,bank);
+  assert.equal(await h.tool.save(),true);assert.deepEqual(h.saves[0].sheet.summaryCards[0],after);
+});
+test('a blank current question blocks answer preparation without a model call',async()=>{
+  const h=harness();h.tool.addQuestions(['heat-1']);const id=h.cards()[0].id;h.tool.editCard(id,'shortQuestion','   ');
+  assert.equal(await h.tool.suggestAnswer(id),false);assert.equal(h.ai.length,0);assert.deepEqual(h.tool.state().pendingSuggestions,{});
+});
+for(const change of ['shortQuestion','shortAnswer','howTo','account','new sheet','source']){
+  test('late answer-only AI rejects '+change+' changes without overwriting the current draft',async()=>{
+    const h=harness();h.tool.addQuestions(['heat-1']);const id=h.cards()[0].id,gate=deferred();h.aiImpl=()=>gate.promise;
+    const task=h.tool.suggestAnswer(id);await settle();assert.equal(h.ai.length,1);
+    if(['shortQuestion','shortAnswer','howTo'].includes(change))h.tool.editCard(id,change,'Teacher typed newer '+change);
+    if(change==='account')h.account('teacher-2');if(change==='new sheet')h.tool.newSheet('New teacher sheet');if(change==='source')h.bank[0].blocks[0].content='New source';
+    const draft=h.tool.state().draft;gate.resolve({shortAnswer:'Late model answer'});assert.equal(await task,false);assert.deepEqual(h.tool.state().draft,draft);assert.deepEqual(h.tool.state().pendingSuggestions,{});
+  });
+}
+test('answer-only failure, malformed and empty answers preserve teacher text and support discard',async()=>{
+  const h=harness();h.tool.addQuestions(['heat-1']);const before=h.cards()[0];
+  for(const response of ['invalid JSON',{shortAnswer:''}]){h.aiImpl=()=>response;assert.equal(await h.tool.suggestAnswer(before.id),false);assert.deepEqual(h.cards()[0],before);}
+  h.aiImpl=()=>{throw Error('Model unavailable');};assert.equal(await h.tool.suggestAnswer(before.id),false);assert.deepEqual(h.cards()[0],before);
+  h.aiImpl=()=>({shortAnswer:'Proposed answer'});await h.tool.suggestAnswer(before.id);h.tool.discardSuggestion(before.id);assert.deepEqual(h.cards()[0],before);assert.equal(await h.tool.save(),true);
+});
+test('answer preparation shares the per-card request guard with whole-card preparation',async()=>{
+  const h=harness();h.tool.addQuestions(['heat-1']);const id=h.cards()[0].id,gate=deferred();h.aiImpl=()=>gate.promise;
+  const task=h.tool.suggestAnswer(id);assert.equal(await h.tool.suggestAnswer(id),false);assert.equal(await h.tool.suggest(id),false);assert.equal(h.ai.length,1);gate.resolve({shortAnswer:'Prepared answer'});await task;
+});
 
 // Invoke the current app adapters, rather than duplicating their routing rules.
 const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 function cut(from,to){const a=app.indexOf(from),b=app.indexOf(to,a+from.length);assert.ok(a>=0&&b>a,'App section '+from+' exists');return app.slice(a,b);}
 function appHarness(){
   return new Function('questionRepairTargets','deps',`
-    let currentUser={uid:'teacher-1',name:'Teacher'},savedWorksheets=[];
-    const auth={currentUser:{uid:'teacher-1'}},db={},window={__aiReady:()=>true},H={author:true,documents:[],writes:[],deletes:[],downloads:[],models:[],grounding:'TEACHER ANSWER GUIDANCE',fetchImpl:null,readImpl:null};
+    let currentUser={uid:'teacher-1',name:'Teacher',role:'admin'},adminUid='',savedWorksheets=[],_notesWatching='teacher-1',_notesLoaded=true;
+    const auth={currentUser:{uid:'teacher-1'}},db={},window={__aiReady:()=>true},H={author:true,documents:[],writes:[],deletes:[],downloads:[],models:[],grounding:'TEACHER ANSWER GUIDANCE',groundingCalls:[],notesLoads:0,notesStops:0,notesListener:false,order:[],fetchImpl:null,readImpl:null,notesImpl:null,notesUnavailable:false};
+    const _isEmployee=()=>currentUser.role==='employee',stopTeachingNotes=()=>{_notesWatching='';_notesLoaded=false;H.notesListener=false;H.notesStops++;H.order.push('notes:stop');};
     const _canAuthor=()=>H.author,collection=(...path)=>path.slice(1),doc=(...path)=>path.slice(1),_wsCol=()=>collection(db,'users',currentUser.uid,'worksheets');
     const getDocs=async ref=>H.readImpl?H.readImpl(ref):{forEach:fn=>H.documents.forEach(d=>fn({id:d.id,data:()=>d.value}))};
     const setDoc=async (ref,value)=>{H.writes.push({ref,value});if(H.writeImpl)await H.writeImpl();};const deleteDoc=async ref=>{H.deletes.push(ref);};
     const _wsNormalise=(value,id)=>({id,...value}),stripHtml=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/\\s+/g,' ').trim(),normalizeCategoryValue=v=>v;
     const _docClip=(v,n)=>v.slice(0,n),getTopicLevel=()=>'',isSecondaryLevel=()=>false;
     const escapeHtml=value=>String(value||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    const transformImageUrl=v=>v,aiGrounding=()=>H.grounding,_parseAIJson=v=>typeof v==='string'?JSON.parse(v):v;
+    const transformImageUrl=v=>v,aiGrounding=(kind,topic,questionText)=>{H.order.push('ground');H.groundingCalls.push({kind,topic,questionText});return H.grounding;},_parseAIJson=v=>typeof v==='string'?JSON.parse(v):v;
+    const loadTeachingNotes=async()=>{
+      const notesOwner=_isEmployee()?currentUser.adminUid:currentUser.uid;
+      // The real loader retains its failed listener. Another attempt takes
+      // this early return until the caller retires that matching notebook.
+      if(H.notesListener&&_notesWatching===notesOwner){H.order.push('notes:cached');return;}
+      H.notesLoads++;H.notesListener=true;_notesWatching=notesOwner;H.order.push('notes:start');
+      if(H.notesImpl)await H.notesImpl();if(_notesWatching!==notesOwner)return;
+      _notesLoaded=!H.notesUnavailable;H.order.push('notes:ready');
+    };
     const _parseImageDataUrl=v=>v.startsWith('data:image/png;base64,')?{mime:'image/png'}:null;
     const _urlToDataUrlRobust=async url=>{H.downloads.push(url);return H.fetchImpl?H.fetchImpl(url):'data:image/png;base64,c291cmNl';};
-    const askGemini=async (prompt,opts)=>{H.models.push({prompt,opts,media:[]});return deps.proposal;};
-    const askGeminiVision=async (prompt,media,opts)=>{H.models.push({prompt,media,opts});return deps.proposal;};
+    const askGemini=async (prompt,opts)=>{H.order.push('model');H.models.push({prompt,opts,media:[]});return deps.proposal;};
+    const askGeminiVision=async (prompt,media,opts)=>{H.order.push('model');H.models.push({prompt,media,opts});return deps.proposal;};
     ${mcqLabelSrc(app,{display:false})}
     ${cut('const QPART_ASSIGN =','// The part each block belongs to')}
     ${cut('function qPartMap(blocks) {','// A question written flat')}
@@ -186,7 +230,7 @@ function appHarness(){
     ${cut('function ssOwnerCurrent(uid) {','function ssPrintSheet(')}
     ${cut('async function loadSavedWorksheets() {','function renderSavedWorksheets(')}
     return {H,auth,context:ssSourceContext,ask:ssAskAI,load:ssLoadSheets,save:ssSaveSheet,remove:ssDeleteSheet,loadLegacy:loadSavedWorksheets,
-      account(uid){currentUser={uid};auth.currentUser={uid};},legacy:()=>savedWorksheets};
+      account(uid){currentUser={uid,role:'admin'};auth.currentUser={uid};},employee(owner){currentUser.role='employee';currentUser.adminUid=owner;adminUid=owner;},notesOwner(value){_notesWatching=value;},notes:()=>({owner:_notesWatching,loaded:_notesLoaded}),legacy:()=>savedWorksheets};
   `)(questionRepairTargets,{proposal});
 }
 test('shipped source adapter includes question table and option images, separates answers, and preserves full source context',()=>{
@@ -234,4 +278,38 @@ test('shipped summary AI stops if a picture fails, the account switches during r
     const task=h.ask({prompt:'test',images,question:q});if(condition==='account'){h.account('teacher-2');gate.resolve('data:image/png;base64,c291cmNl');}
     await assert.rejects(()=>task);assert.equal(h.H.models.length,0);
   }
+});
+test('shipped answer preparation awaits teaching notes before grounding with the current question',async()=>{
+  const h=appHarness(),gate=deferred(),question=sampleQuestions()[0],questionText='Why does felt keep Cup A hot longer?';h.H.notesImpl=async()=>{await gate.promise;h.H.grounding='LATEST TEACHER INSULATION NOTES';};
+  const task=h.ask({prompt:'Prepare the answer for '+questionText,images:[],question,mode:'answer',questionText});await settle();
+  assert.equal(h.H.notesLoads,1);assert.equal(h.H.models.length,0);assert.equal(h.H.groundingCalls.length,0,'Grounding waits for the notes load');
+  gate.resolve();await task;assert.deepEqual(h.H.order,['notes:start','notes:ready','ground','model']);
+  assert.deepEqual(h.H.groundingCalls[0],{kind:'answer',topic:question.topic,questionText});assert.match(h.H.models[0].prompt,/LATEST TEACHER INSULATION NOTES/);assert.ok(h.H.models[0].prompt.includes(questionText));assert.equal(h.H.models[0].opts.authoring,true);
+  assert.ok(h.H.models[0].prompt.endsWith(questionText),'Current edited question is the final authoritative model instruction');
+});
+test('an account change or teaching-notes failure stops answer preparation before grounding and AI',async()=>{
+  for(const change of ['account','failure']){const h=appHarness(),gate=deferred();h.H.notesImpl=()=>gate.promise;
+    const task=h.ask({prompt:'Prepare an answer',images:[],question:sampleQuestions()[0],mode:'answer',questionText:'Current teacher question'});await settle();
+    if(change==='account'){h.account('teacher-2');gate.resolve();}else gate.reject(Error('Teacher notes unavailable'));
+    await assert.rejects(()=>task);assert.equal(h.H.models.length,0);assert.equal(h.H.groundingCalls.length,0);
+  }
+});
+test('an unreadable teaching notebook prevents answer AI and an old owner notebook is cleared before reload',async()=>{
+  const q=sampleQuestions()[0],request={prompt:'Prepare an answer',images:[],question:q,mode:'answer',questionText:'Teacher current question'};
+  const h=appHarness();h.H.notesUnavailable=true;await assert.rejects(()=>h.ask(request));assert.equal(h.H.models.length,0);assert.equal(h.H.groundingCalls.length,0);
+  assert.equal(h.H.notesStops,1,'The matching failed listener is retired so another click can reload it');assert.equal(h.H.notesListener,false);assert.equal(h.notes().owner,'');
+  h.H.notesUnavailable=false;await h.ask(request);assert.equal(h.H.notesLoads,2,'Retry starts a fresh teaching-notes load');assert.equal(h.H.models.length,1);assert.equal(h.H.groundingCalls.length,1);assert.equal(h.notes().owner,'teacher-1');
+  const fresh=appHarness();fresh.notesOwner('previous-teacher');await fresh.ask(request);assert.deepEqual(fresh.H.order,['notes:stop','notes:start','notes:ready','ground','model']);
+});
+test('failed old preparation cannot clear a newer notebook or an account that changed during loading',async()=>{
+  for(const change of ['notebook','account']){const h=appHarness(),gate=deferred();h.H.notesImpl=()=>gate.promise;h.H.notesUnavailable=true;
+    const task=h.ask({prompt:'Prepare answer',images:[],question:sampleQuestions()[0],mode:'answer',questionText:'Teacher current question'});await settle();
+    if(change==='account')h.account('teacher-2');h.notesOwner('teacher-2');gate.resolve();await assert.rejects(()=>task);
+    assert.equal(h.notes().owner,'teacher-2');assert.equal(h.H.notesStops,0,'Late cleanup preserves the newer notebook');assert.equal(h.H.models.length,0);
+  }
+});
+test('employee answer preparation loads its teacher notebook and missing teacher ownership cannot run AI',async()=>{
+  const request={prompt:'Prepare answer',images:[],question:sampleQuestions()[0],mode:'answer',questionText:'Why does felt slow heat loss?'};
+  const h=appHarness();h.employee('teacher-notebook-owner');await h.ask(request);assert.deepEqual(h.H.order,['notes:stop','notes:start','notes:ready','ground','model']);assert.equal(h.H.notesLoads,1);assert.equal(h.H.models.length,1);
+  const missing=appHarness();missing.employee('');await assert.rejects(()=>missing.ask(request));assert.equal(missing.H.notesLoads,0);assert.equal(missing.H.models.length,0);
 });

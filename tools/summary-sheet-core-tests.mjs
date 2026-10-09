@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SS_LIMITS, extractSummaryQuestionImages, summarySourceFingerprint, createSummaryCard,
-  normalizeSummarySheet, normalizeSummarySuggestion, summarySheetPrintHtml,
+  normalizeSummarySheet, normalizeSummarySuggestion, normalizeSummaryAnswerSuggestion, summarySheetPrintHtml,
 } from '../summary-sheet-core.mjs';
 import { fixtureImage, sampleQuestions, sourceContext } from './summary-sheet-fixtures.mjs';
 
@@ -59,6 +59,12 @@ test('AI suggestions normalize bounded editable fields and cannot replace source
   const bounded=normalizeSummarySuggestion({shortQuestion:'q'.repeat(2000),shortAnswer:'a'.repeat(2000),howTo:'h'.repeat(2000)});
   assert.ok(bounded.shortQuestion.length<=SS_LIMITS.question);assert.ok(bounded.shortAnswer.length<=SS_LIMITS.answer);assert.ok(bounded.howTo.length<=SS_LIMITS.howTo);
   assert.throws(()=>normalizeSummarySuggestion('not-json'));
+});
+test('answer preparation accepts an answer alone and drops every attempted question, strategy or image edit',()=>{
+  const result=normalizeSummaryAnswerSuggestion(JSON.stringify({shortAnswer:'<b>Felt</b> is a poor conductor of heat.',note:'Teacher review required.',shortQuestion:'Do not use',howTo:'Do not use',images:[fixtureImage('invented')]}));
+  assert.deepEqual(result,{shortAnswer:'Felt is a poor conductor of heat.',note:'Teacher review required.'});
+  assert.equal(normalizeSummaryAnswerSuggestion({shortAnswer:'a'.repeat(2000)}).shortAnswer.length,SS_LIMITS.answer);
+  assert.throws(()=>normalizeSummaryAnswerSuggestion({shortQuestion:'Question only'}));assert.throws(()=>normalizeSummaryAnswerSuggestion({shortAnswer:' '}));assert.throws(()=>normalizeSummaryAnswerSuggestion('not JSON'));
 });
 test('saved-sheet JSON round trips retain teacher text, card order and original image URLs', () => {
   const cards=sampleQuestions().slice(0,2).map((q,index)=>createSummaryCard(q,sourceContext(q),'card-'+index));
