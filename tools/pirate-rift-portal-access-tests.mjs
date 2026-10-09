@@ -38,20 +38,27 @@ test('authentication, navigation and learner changes dispose or invalidate the a
     const listener = app.match(/onAuthStateChanged\(auth, (?:async )?\(user\) => \{[\s\S]*?\n\}\);/)?.[0];
     assert.ok(listener, 'the main authentication listener exists');
     let callback;
-    const events = [], summaryResets = [], noop = () => {};
+    const events = [], summaryResets = [], whiteboardResets = [], noop = () => {};
+    let whiteboardStops = 0;
     vm.runInNewContext(listener, {
       auth: {}, onAuthStateChanged: (_auth, fn) => { callback = fn; },
       rapidPreviewReset: noop, pirateRiftPortal: { close: () => events.push('close') },
       grandLinePortal: { close: noop }, wsArtResetForUser: noop, ainsteinStopAdminWork: noop,
       _summarySheets: { resetForUser: uid => summaryResets.push(uid) },
+      _whiteboards: { resetForUser: uid => whiteboardResets.push(uid) },
+      wbStopAssignments: () => { whiteboardStops++; },
       enterApp: user => {
         assert.equal(summaryResets.at(-1), user.uid, 'private summary drafts reset before entering the next account');
+        assert.equal(whiteboardResets.at(-1), user.uid, 'private whiteboard drafts reset before entering the next account');
+        assert.equal(whiteboardStops, 1, 'whiteboard assignment listener stops before entering the next account');
         events.push('enter');
       }, currentUser: {uid: 'previous-account'},
       _hadesResetLearning: noop, interfaceStudio: {setUser: noop}, rpgOnSignOut: noop,
       stopTeachingNotes: noop, stopAnswerStyle: noop, _fcGapSel: new Set(), fcPaintDueBadge: noop,
       signedOutEntryPage: () => 'login', showPage: () => {
         assert.equal(summaryResets.at(-1), '', 'private summary drafts clear before the signed-out page');
+        assert.equal(whiteboardResets.at(-1), '', 'private whiteboard drafts clear before the signed-out page');
+        assert.equal(whiteboardStops, 2, 'whiteboard assignment listener stops before the signed-out page');
         events.push('signed-out');
       }
     });
@@ -62,6 +69,7 @@ test('authentication, navigation and learner changes dispose or invalidate the a
     callback(null);
     assert.deepEqual(events, ['close', 'signed-out'], 'sign-out disposes the frame before returning to login');
     assert.deepEqual(summaryResets, ['next-account', ''], 'summary-sheet state follows both authentication paths');
+    assert.deepEqual(whiteboardResets, ['next-account', ''], 'whiteboard state follows both authentication paths');
   }
   assert.match(app, /function navigateTo\(page\) \{\s*vetPrintPeekHide\(\);\s*(?:hadesMathBeta.close\(\);\s*)?pirateRiftPortal\.close\(\)/);
   if (science) {

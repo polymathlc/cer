@@ -21,7 +21,7 @@ const q = (id, extra = {}) => ({ id, title: `Heat investigation ${id}`, topic: '
     { id: 'choices', type: 'mcq', options: [{ id: 'a', text: 'Metal' }, { id: 'b', text: 'Wood' }], correctId: 'a' }], ...extra });
 
 function harness(bank = [], random = () => 0.5, cloud = null) {
-  const state = { bank, random, cloud, plans: [], toasts: [], renders: [], summaries: 0, attempts: [], nodes: new Map(), storage: new Map(), writes: [], messages: [] };
+  const state = { bank, random, cloud, plans: [], toasts: [], renders: [], summaries: 0, attempts: [], nodes: new Map(), storage: new Map(), writes: [], messages: [], whiteboardResets: [], whiteboardOpens: 0, whiteboardWatches: 0 };
   const node = id => {
     if (!state.nodes.has(id)) state.nodes.set(id, { id, innerHTML: '', value: id.includes('Level') ? 'P4' : id.includes('Type') ? 'all' : '',
       textContent: '', style: {}, contains: () => false, querySelectorAll: () => [], classList: { add() {}, remove() {}, contains() { return false; } } });
@@ -77,6 +77,11 @@ function harness(bank = [], random = () => 0.5, cloud = null) {
     const _hadesResetLearning=()=>{state.hadesInvalidations=(state.hadesInvalidations||0)+1;};
     const pirateRiftPortal={sync:()=>{state.pirateProfileSyncs=(state.pirateProfileSyncs||0)+1;}};
     const grandLinePortal={sync:()=>{state.grandLineProfileSyncs=(state.grandLineProfileSyncs||0)+1;}};
+    // Whiteboard delivery is an independent UI/data edge. Observe its profile
+    // invalidation without subscribing to a real assignment catalog here.
+    let _whiteboardsProfileKey;
+    const _whiteboards={resetForUser:uid=>state.whiteboardResets.push(uid),open:()=>{state.whiteboardOpens++;}};
+    const wbWatchAssignments=()=>{state.whiteboardWatches++;};
     const histories=new Map();
     const createStudentQuestionHistory=options=>{
       if(state.cloud)return createHistory(options);
@@ -314,6 +319,14 @@ test('learner change clears active questions, marking stores and cached queues e
   assert.equal(state.hadesInvalidations,1,'an open Hades sanctuary must retire the old learning profile');
   assert.equal(state.grandLineProfileSyncs,2,'each learning refresh checks the Grand Line learner identity');
   assert.equal(state.pirateProfileSyncs,2,'each learning refresh checks whether Pirate Rift belongs to the active profile');
+});
+
+test('learning refresh watches assignments and reopens an active whiteboard only when the learner identity changes',()=>{
+  const {api,state}=harness([q('p4')]);state.nodes.set('page-whiteboards',{classList:{contains:className=>className==='active'}});
+  api.refresh();assert.deepEqual(state.whiteboardResets,['family']);assert.equal(state.whiteboardOpens,1);assert.equal(state.whiteboardWatches,1);
+  api.refresh();assert.deepEqual(state.whiteboardResets,['family']);assert.equal(state.whiteboardOpens,1,'Repeated refresh for the same child preserves their current whiteboard');assert.equal(state.whiteboardWatches,2);
+  api.user({name:'Older',level:'P6'});api.family({students:[{name:'Older',level:'P6'}],activeStudent:0});api.refresh();
+  assert.deepEqual(state.whiteboardResets,['family','family'],'Sibling changes invalidate the board even with the same login');assert.equal(state.whiteboardOpens,2);assert.equal(state.whiteboardWatches,3);
 });
 
 test('managed pupil practice has independent served memory and cannot exceed that pupil level', async () => {

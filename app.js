@@ -3,6 +3,9 @@ import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
 import { installSummarySheets } from './summary-sheets.js?v=1.428.1';
+import { installWhiteboards } from './whiteboards.js?v=1.429.0';
+import { normalizeWhiteboard, whiteboardQuestionSnapshot, normalizeWhiteboardApp } from './whiteboard-core.mjs?v=1.429.0';
+import { whiteboardSnapshotBytes, whiteboardDigest, whiteboardViewerUrl, validWhiteboardUrl, loadPublishedWhiteboard } from './whiteboard-share.mjs?v=1.429.0';
 import { cropSourcesFor, normalizeCropBox, cropPixelRect, cropSourceUpdate } from './question-crop-core.mjs?v=2';
 import { questionRepairTargets, normalizeQuestionRepairPlan, applyQuestionRepairPlan } from './question-repair-core.mjs?v=3';
 import { measureCrop, figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, migrateDecisionsReviewState, DECISIONS_MAY_SKIP } from './decisions-review-core.mjs?v=2';
@@ -4232,7 +4235,7 @@ const SUPER_ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // into the teacher's bank (_bankOwnerUid), because a question filed under the
 // employee's own uid is a question no student would ever be served.
 const EMPLOYEE_EMAILS = ['pkeertana21@gmail.com'];
-const EMPLOYEE_PAGES = ['create', 'exampaper', 'bank', 'vetting', 'checkq', 'worksheet', 'myworksheets', 'summarysheets', 'worksession'];
+const EMPLOYEE_PAGES = ['create', 'exampaper', 'bank', 'vetting', 'checkq', 'worksheet', 'myworksheets', 'summarysheets', 'whiteboards', 'worksession'];
 let adminUid = null; // the bank owner: loaded for student AND employee accounts
 // Maps question/vetting id -> owning admin's uid. Populated when super admin
 // loads other admins' subcollections so writes/deletes target the right doc.
@@ -4489,12 +4492,13 @@ async function enterApp(user) {
     _rapidCloudRefresh();
     rapidPreviewReady();
   }
+  wbOpenSharedFromLocation().catch(error => showToast(error.message || 'The shared whiteboard could not be opened.', 'error'));
   showToast('Welcome, ' + displayName + '!', 'success');
 }
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.428.1';
+const APP_VERSION = 'v1.429.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5151,6 +5155,8 @@ onAuthStateChanged(auth, (user) => {
   rapidPreviewReset();
   wsArtResetForUser(user);
   if (_summarySheets) _summarySheets.resetForUser(user?.uid || '');
+  if (_whiteboards) _whiteboards.resetForUser(user?.uid || '');
+  wbStopAssignments();
   ainsteinStopAdminWork();
   if (user) {
     enterApp(user);
@@ -6329,6 +6335,7 @@ function navigateTo(page) {
   _skipCreateReset = false;
   if (page === 'bank') renderQuestionBank();
   if (page === 'summarysheets') ssTool().open();
+  if (page === 'whiteboards') wbTool().open();
   if (page === 'answerkeys') renderAnswerKeysPage();
   if (page === 'ansreview') renderAnswerReview();
   if (page === 'papers') renderPapersPage();
@@ -22204,6 +22211,7 @@ function renderQuestionBank() {
           <div class="qb-card-actions">
             ${tlLightHtml(q, 'bank')}
             ${_canAuthor() ? '<button type="button" class="qb-action-btn" title="Add to summary sheet" onclick="event.stopPropagation();' + escapeHtml('ssAddBankQuestion(' + JSON.stringify(String(q.id)) + ')') + '">▦</button>' : ''}
+            ${_canAuthor() ? '<button type="button" class="qb-action-btn" title="Add to whiteboard" onclick="event.stopPropagation();' + escapeHtml('wbAddBankQuestion(' + JSON.stringify(String(q.id)) + ')') + '">▧</button>' : ''}
             <button class="qb-action-btn" title="Preview printed — exactly the PDF this question becomes on a worksheet" onclick="event.stopPropagation();previewOneQuestionPrint('${q.id}','bank')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
             </button>
@@ -22251,6 +22259,7 @@ function bankTileHtml(q) {
         <span class="qb-tile-check" aria-hidden="true">✓</span>
         ${tlLightHtml(q, 'bank', { small: true })}
         ${_canAuthor() ? '<button type="button" class="qb-tile-edit qb-tile-summary" title="Add to summary sheet" onclick="event.stopPropagation();' + escapeHtml('ssAddBankQuestion(' + JSON.stringify(String(q.id)) + ')') + '">▦</button>' : ''}
+        ${_canAuthor() ? '<button type="button" class="qb-tile-edit qb-tile-whiteboard" title="Add to whiteboard" onclick="event.stopPropagation();' + escapeHtml('wbAddBankQuestion(' + JSON.stringify(String(q.id)) + ')') + '">▧</button>' : ''}
         <button class="qb-tile-edit" title="Edit this question" onclick="event.stopPropagation();editQuestion('${q.id}')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
@@ -34405,6 +34414,12 @@ function _scienceFeedRefreshFrames() {
     _scienceFeedImageFailures = new Map();
   }
   _scienceFeedIdentity = identity;
+  if (currentUser?.role === 'student') wbWatchAssignments();
+  if (_whiteboards && currentUser?.role === 'student' && _whiteboardsProfileKey !== identity) {
+    _whiteboards.resetForUser(currentUser.uid);
+    if (document.getElementById('page-whiteboards')?.classList.contains('active')) _whiteboards.open();
+  }
+  _whiteboardsProfileKey = identity;
   ['defendersFrame', 'raidersFrame', 'spireFrame', 'legendsFrame', 'slayersFrame'].forEach(id => {
     const frame = document.getElementById(id);
     try { frame?.contentWindow?.postMessage({ type: 'SD_FEED_INVALIDATE', studentKey: _scienceFeedKey(), studentLevel: _scienceFeedGameLevel() }, location.origin); } catch (_) {}
@@ -38545,6 +38560,235 @@ function ssAddWorksheetSelection() {
 window.ssAddBankQuestion = ssAddBankQuestion;
 window.ssAddWorksheetSelection = ssAddWorksheetSelection;
 
+// Named infinite whiteboards use the existing owner worksheet collection.
+// Class assignments are teacher-owned broadcast markers; never student writes.
+var _whiteboards, _wbAssignmentsUnsub, _whiteboardsProfileKey;
+function wbOwnerCurrent(uid) {
+  return !!uid && _canAuthor() && currentUser?.uid === uid && auth.currentUser?.uid === uid;
+}
+function wbViewerCurrent(uid, key) {
+  return !!uid && currentUser?.uid === uid && auth.currentUser?.uid === uid && (!key || key === _scienceFeedKey());
+}
+async function wbLoadBoards(uid) {
+  if (!wbOwnerCurrent(uid)) return [];
+  const snap = await getDocs(collection(db, 'users', uid, 'worksheets'));
+  if (!wbOwnerCurrent(uid)) return [];
+  const boards = [];
+  snap.forEach(d => { if (d.data()?.kind === 'infinite-whiteboard') boards.push({ ...d.data(), id: d.id }); });
+  return boards;
+}
+async function wbSaveBoard(board, { uid, guard }) {
+  const value = normalizeWhiteboard(board);
+  if (!value || !wbOwnerCurrent(uid) || !guard()) return false;
+  value.cards.forEach(card => card.question.blocks.forEach(block => {
+    if (block.type === 'table' && Array.isArray(block.data)) block.data = tableDataToFirestore(block.data);
+  }));
+  await setDoc(doc(db, 'users', uid, 'worksheets', value.id), { ...value, createdBy: uid });
+  return wbOwnerCurrent(uid) && guard();
+}
+async function wbDeleteBoard(id, { uid, guard }) {
+  if (!wbOwnerCurrent(uid) || !guard() || !/^[A-Za-z0-9_-]{1,120}$/.test(String(id))) return false;
+  const reference = doc(db, 'users', uid, 'worksheets', String(id));
+  if (_isAdmin()) {
+    const catalog = doc(db, 'users', uid, 'settings', 'whiteboardAssignments');
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(catalog);
+      if (!wbOwnerCurrent(uid) || !guard()) throw new Error('The account or whiteboard changed. Try again.');
+      transaction.delete(reference);
+      if (snap.exists()) { const boards = { ...(snap.data().boards || {}) }; delete boards[id]; transaction.set(catalog, { boards }, { merge: false }); }
+    });
+  } else await deleteDoc(reference);
+  return wbOwnerCurrent(uid) && guard();
+}
+async function wbResolveQuestions(board, cardId, publishing = false) {
+  const value = normalizeWhiteboard(board);
+  if (!value?.cards.length) throw new Error('Add a question to this whiteboard first.');
+  const uid = currentUser?.uid, key = _scienceFeedKey();
+  if (!wbViewerCurrent(uid, key)) throw new Error('Sign in to use this whiteboard.');
+  const cards = cardId ? value.cards.filter(card => card.id === String(cardId)) : value.cards;
+  if (!cards.length) throw new Error('This question is no longer on the whiteboard.');
+  const questions = [];
+  for (const card of cards) {
+    const q = questionBank.find(question => String(question.id) === String(card.questionId));
+    if (!q || !qInSyllabus(q)) throw new Error('A whiteboard question is no longer available. Ask the teacher to update this board.');
+    if ((publishing && !qReleased(q)) || (currentUser.role === 'student' && !qAvailableToViewer(q))) throw new Error('A question is held back or scheduled for later. Release it before sharing this board.');
+    if (currentUser.role === 'student' && !qWithinStudentLevel(q)) throw new Error('A question is outside your current level. Ask your teacher to check the whiteboard.');
+    if (!wbViewerCurrent(uid, key)) throw new Error('The learner changed. Open the whiteboard again.');
+    if (JSON.stringify(whiteboardQuestionSnapshot(q)) !== JSON.stringify(card.question)) throw new Error('A bank question has changed since this board was saved. Remove it and add it again before practising, printing or sharing.');
+    questions.push(q);
+  }
+  return questions;
+}
+async function wbShareBoard(board, { uid, guard }) {
+  if (!wbOwnerCurrent(uid) || !guard()) throw new Error('Sign in as an author to share this whiteboard.');
+  await wbResolveQuestions(board, '', true);
+  const bytes = whiteboardSnapshotBytes(board), digest = await whiteboardDigest(bytes);
+  if (!wbOwnerCurrent(uid) || !guard()) throw new Error('The whiteboard changed. Share it again.');
+  const reference = storageRef(storage, 'cer-images/whiteboard-' + digest + '.json');
+  let download;
+  try { download = await getDownloadURL(reference); }
+  catch (error) {
+    if (error.code !== 'storage/object-not-found') throw error;
+    if (!wbOwnerCurrent(uid) || !guard()) throw new Error('The account changed. Share the whiteboard again.');
+    await uploadBytes(reference, bytes, { contentType: 'application/json', cacheControl: 'public,max-age=31536000,immutable' });
+    download = await getDownloadURL(reference);
+  }
+  const url = whiteboardViewerUrl(digest, new URL(download).searchParams.get('token'));
+  if (!url) throw new Error('Storage did not return a whiteboard share link.');
+  await loadPublishedWhiteboard(url);
+  if (!wbOwnerCurrent(uid) || !guard()) throw new Error('The whiteboard changed while publishing. Share it again.');
+  return { url };
+}
+async function wbAssignBoard(board, levels, context) {
+  const uid = context.uid, chosen = Array.from(new Set(levels || []));
+  if (!_isAdmin() || !wbOwnerCurrent(uid) || !context.guard()) throw new Error('Only the teacher can assign whiteboards to student levels.');
+  if (!chosen.length || chosen.some(level => !isLevelCode(level))) throw new Error('Choose the student levels that should receive this whiteboard.');
+  const shared = await wbShareBoard(board, context);
+  const reference = doc(db, 'users', uid, 'settings', 'whiteboardAssignments');
+  await runTransaction(db, async transaction => {
+    const snap = await transaction.get(reference), boards = { ...(snap.exists() ? snap.data().boards || {} : {}) };
+    if (!_isAdmin() || !wbOwnerCurrent(uid) || !context.guard()) throw new Error('The account or whiteboard changed. Assign it again.');
+    if (!boards[board.id] && Object.keys(boards).length >= 500) throw new Error('Remove an old assigned whiteboard before assigning another.');
+    boards[board.id] = { title: board.title, url: shared.url, levels: chosen, updatedAt: new Date().toISOString() };
+    transaction.set(reference, { boards }, { merge: false });
+  });
+  if (!wbOwnerCurrent(uid) || !context.guard()) throw new Error('The account changed. Check the assignment after signing in again.');
+  return { url: shared.url, levels: chosen, message: 'Assigned to ' + chosen.join(', ') + '. Students will find it under Whiteboards.' };
+}
+async function wbLoadReceivedBoards(uid) {
+  const key = _scienceFeedKey(), teacher = adminUid, level = _scienceFeedLevel();
+  if (!wbViewerCurrent(uid, key) || currentUser.role !== 'student' || !teacher) return [];
+  if (!level) throw new Error('Choose your current learner and school level in Settings to see assigned whiteboards.');
+  const snap = await getDoc(doc(db, 'users', teacher, 'settings', 'whiteboardAssignments'));
+  if (!wbViewerCurrent(uid, key) || level !== _scienceFeedLevel() || teacher !== adminUid) return [];
+  const entries = Object.entries(snap.exists() ? snap.data().boards || {} : {}).filter(([id, entry]) =>
+    /^[A-Za-z0-9_-]{1,120}$/.test(id) && Array.isArray(entry?.levels) && entry.levels.includes(level) && validWhiteboardUrl(entry.url))
+    .sort((a, b) => String(b[1].updatedAt || '').localeCompare(String(a[1].updatedAt || '')));
+  const boards = [];
+  let refused = 0;
+  for (const [id, entry] of entries) {
+    try {
+      const board = await loadPublishedWhiteboard(entry.url);
+      if (!wbViewerCurrent(uid, key) || level !== _scienceFeedLevel()) return [];
+      boards.push({ ...board, id, sharedUrl: entry.url });
+    } catch (_) {
+      if (!wbViewerCurrent(uid, key) || level !== _scienceFeedLevel()) return [];
+      refused++;
+    }
+  }
+  if (refused && wbViewerCurrent(uid, key)) showToast(refused + ' assigned whiteboard(s) could not load. The other boards are available; use Refresh to retry.', 'error');
+  return boards;
+}
+function wbStopAssignments() {
+  if (_wbAssignmentsUnsub) _wbAssignmentsUnsub();
+  _wbAssignmentsUnsub = null;
+  const badge = document.getElementById('whiteboardsBadge');
+  if (badge) { badge.textContent = ''; badge.style.display = 'none'; }
+}
+function wbWatchAssignments() {
+  wbStopAssignments();
+  const uid = currentUser?.uid, key = _scienceFeedKey(), teacher = adminUid;
+  if (!wbViewerCurrent(uid, key) || currentUser.role !== 'student' || !teacher) return;
+  _wbAssignmentsUnsub = onSnapshot(doc(db, 'users', teacher, 'settings', 'whiteboardAssignments'), snap => {
+    if (!wbViewerCurrent(uid, key) || adminUid !== teacher) return;
+    const count = Object.values(snap.exists() ? snap.data().boards || {} : {}).filter(entry =>
+      Array.isArray(entry?.levels) && entry.levels.includes(_scienceFeedLevel()) && validWhiteboardUrl(entry.url)).length;
+    const badge = document.getElementById('whiteboardsBadge');
+    if (badge) { badge.textContent = String(count); badge.style.display = count ? '' : 'none'; }
+    if (document.getElementById('page-whiteboards')?.classList.contains('active')) wbTool().refreshReceived();
+  }, error => { if (wbViewerCurrent(uid, key)) showToast('Whiteboard assignments could not be refreshed. Open Whiteboards to retry.', 'error'); });
+}
+async function wbGenerateApp({ question, card, instruction = '', maxTokens = 4096 }) {
+  const uid = currentUser?.uid;
+  if (!wbOwnerCurrent(uid) || !window.__aiReady?.()) throw new Error('Sign in as an author with AI available to build a question app.');
+  if (!question || (card && JSON.stringify(whiteboardQuestionSnapshot(question)) !== JSON.stringify(card.question))) throw new Error('This question has changed in the bank. Remove it and add it again before generating its app.');
+  const notesOwner = currentUser.role === 'admin' ? uid : adminUid;
+  if (_notesWatching !== notesOwner) stopTeachingNotes();
+  await loadTeachingNotes();
+  if (!wbOwnerCurrent(uid)) throw new Error('The account changed. Generate the app again.');
+  if (!notesOwner || !_notesLoaded || _notesWatching !== notesOwner) {
+    if (_notesWatching === notesOwner) stopTeachingNotes();
+    throw new Error('Teaching notes could not be loaded. Try again before generating the app.');
+  }
+  const source = ssSourceContext(question);
+  if (source.images.length > 3) throw new Error('This question has more than three diagrams. Paste a complete app so no diagram is omitted from the builder.');
+  const media = [];
+  for (const image of source.images) {
+    const dataUrl = await _urlToDataUrlRobust(transformImageUrl(image.url)), parsed = _parseImageDataUrl(dataUrl);
+    if (!parsed) throw new Error('A question diagram could not be read. Try again after it loads.');
+    if (!wbOwnerCurrent(uid)) throw new Error('The account changed. Generate the app again.');
+    media.push({ mimeType: parsed.mime, data: dataUrl.split(',')[1] });
+  }
+  const prompt = [
+    'Build one complete, self-contained interactive HTML app that helps a student reason through this science question.',
+    'Use inline CSS and JavaScript only. No network, external assets, frames or dependencies. Use inline SVG/canvas for diagrams.',
+    'Make controls accessible, responsive at 360px, and usable by touch. Show hints, interactive exploration, a worked explanation and a Reset button inside the app. Never use alert/confirm/prompt.',
+    'Return only <!doctype html> through </html>, without Markdown. Teacher directions are requirements for this app.',
+    'QUESTION AND RECORDED ANSWER:\n' + source.fullContext,
+    'TEACHING NOTES:\n' + aiGrounding('teach', question.topic, question),
+    'TEACHER DIRECTIONS:\n' + (String(instruction).trim() || 'Choose a helpful interaction for the concept and teach how to answer it.'),
+  ].join('\n\n');
+  const html = _widgetExtractHtml(await _aiAsk(prompt, media, { maxOutputTokens: window.QuestionApps.normalizeTokenLimit(maxTokens), json: false, reasoningEffort: 'high', exactOutputBudget: true }, _aiRoutesFor(aiAuthorEngine())));
+  if (!wbOwnerCurrent(uid)) throw new Error('The account changed. The generated app was discarded.');
+  return normalizeWhiteboardApp({ title: ('Explore ' + (question.title || 'this question')).slice(0, 100), html, height: 560 });
+}
+async function wbPracticeBoard(board, { cardId } = {}) {
+  if (_isEmployee()) throw new Error('Open this board in a teacher or student account to practise.');
+  const questions = await wbResolveQuestions(board, cardId);
+  await launchWorksheetPractice(questions);
+  return true;
+}
+async function wbPrintBoard({ board }) {
+  const uid = currentUser?.uid, key = _scienceFeedKey();
+  const questions = await wbResolveQuestions(board);
+  if (!wbViewerCurrent(uid, key)) return false;
+  const output = document.getElementById('printOutput');
+  if (!output) throw new Error('The worksheet printer is unavailable. Reload and try again.');
+  const copies = questions.map(q => ({ ...q, blocks: (q.blocks || []).filter(block => block.type !== 'widget') }));
+  output.innerHTML = buildWorksheetHtml(copies, board.title, { plainNumbers: true });
+  output.querySelectorAll('.print-answer-key-page').forEach(page => page.remove());
+  const printSignature = output.innerHTML;
+  await Promise.all(Array.from(output.querySelectorAll('img')).map(img => new Promise((resolve, reject) => {
+    img.loading = 'eager';
+    if (img.complete) { img.naturalWidth ? resolve() : reject(new Error('A question diagram could not load. Retry the worksheet PDF after it is available.')); return; }
+    const timeout = setTimeout(() => reject(new Error('A question diagram took too long to load. Retry the worksheet PDF.')), 15000);
+    img.addEventListener('load', () => { clearTimeout(timeout); resolve(); }, { once: true });
+    img.addEventListener('error', () => { clearTimeout(timeout); reject(new Error('A question diagram could not load. Retry the worksheet PDF.')); }, { once: true });
+  })));
+  if (!wbViewerCurrent(uid, key) || output.innerHTML !== printSignature) return false;
+  autoscaleAndPrint(output);
+  return true;
+}
+function wbTool() {
+  return _whiteboards || (_whiteboards = installWhiteboards({
+    getUser: () => currentUser, getAuthUid: () => auth.currentUser?.uid || '', canAuthor: _canAuthor, canAssign: _isAdmin,
+    getProfileKey: _scienceFeedKey, getLevels: () => TOPIC_LEVELS.map(value => ({ value, label: value })),
+    getBank: () => questionBank, isQuestionEligible: q => qInSyllabus(q), questionTopics: qTopicList,
+    sourceContext: ssSourceContext, imageUrl: transformImageUrl,
+    loadBoards: wbLoadBoards, loadReceivedBoards: wbLoadReceivedBoards, saveBoard: wbSaveBoard, deleteBoard: wbDeleteBoard,
+    generateApp: wbGenerateApp, shareBoard: wbShareBoard, assignBoard: wbAssignBoard, practiceBoard: wbPracticeBoard, printBoard: wbPrintBoard,
+    openSource: id => previewOneQuestionPrint(id, 'bank'), notify: showToast,
+  }));
+}
+async function wbOpenSharedFromLocation() {
+  const raw = new URLSearchParams(location.search).get('whiteboard');
+  if (!raw) return;
+  const link = validWhiteboardUrl(raw);
+  if (!link) throw new Error('The shared whiteboard link is incomplete.');
+  const uid = currentUser?.uid, key = _scienceFeedKey();
+  const board = await loadPublishedWhiteboard(link);
+  if (!wbViewerCurrent(uid, key)) return;
+  wbTool().setPublicBoard(board);
+  navigateTo('whiteboards');
+}
+async function wbAddBankQuestion(id) {
+  if (!_canAuthor()) return;
+  if (wbTool().state().publicMode) wbTool().privateBoards();
+  await wbTool().addQuestions([String(id)]);
+  navigateTo('whiteboards');
+}
+window.wbAddBankQuestion = wbAddBankQuestion;
+
 // =====================================================================
 // STUDENT WORKSHEET CREATOR
 // =====================================================================
@@ -38971,7 +39215,7 @@ async function loadSavedWorksheets() {
     const snap = await getDocs(_wsCol());
     savedWorksheets = [];
     snap.forEach(d => {
-      if (d.data()?.kind === 'summary-sheet') return;
+      if (['summary-sheet', 'infinite-whiteboard'].includes(d.data()?.kind)) return;
       const ws = _wsNormalise(d.data(), d.id);
       if (ws) savedWorksheets.push(ws);
     });

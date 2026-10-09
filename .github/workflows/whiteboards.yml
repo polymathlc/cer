@@ -1,0 +1,45 @@
+name: Infinite question whiteboards
+
+on:
+  pull_request:
+    paths: ['app.js', 'index.html', 'whiteboard*', 'whiteboards*', 'question-apps.js', 'tools/whiteboard-*.mjs', '.github/workflows/whiteboards.yml']
+  push:
+    branches: [main]
+    paths: ['app.js', 'index.html', 'whiteboard*', 'whiteboards*', 'question-apps.js', 'tools/whiteboard-*.mjs', '.github/workflows/whiteboards.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  whiteboards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check complete snapshots, account ownership, sharing and practice routing
+        run: |
+          node --check app.js
+          node tools/whiteboard-core-tests.mjs
+          node tools/whiteboard-integration-tests.mjs
+          node tools/summary-sheet-integration-tests.mjs
+          node tools/worksheet-controls-tests.mjs
+          node tools/question-apps-tests.mjs
+          node tools/ai-routes-tests.mjs
+      - name: Install isolated browser runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/whiteboard-browser" playwright@1.62.1
+          "$RUNNER_TEMP/whiteboard-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Check whiteboard movement, student delivery, apps, attempts and print
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/whiteboard-browser/node_modules/playwright
+          WHITEBOARD_QA_DIR: ${{ runner.temp }}/whiteboard-qa
+        run: node tools/whiteboard-browser.mjs
+      - name: Keep browser previews for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: whiteboard-browser-qa
+          path: ${{ runner.temp }}/whiteboard-qa
+          if-no-files-found: ignore
