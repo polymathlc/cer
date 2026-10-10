@@ -1,0 +1,93 @@
+name: Deploy visualise AI
+
+# Publishes ONLY the isolated "visualise" Functions codebase (visualiseAi) to
+# mathgen--app, then checks the live endpoint answers a CORS preflight from
+# https://polymathlc.github.io. The OpenAI key is the existing Firebase secret
+# OPENAI_API_KEY; this workflow never reads or writes it.
+#
+# Runs when the function changes on main, or on demand from
+# Actions → Deploy visualise AI → Run workflow.
+# Needs the repository secret FIREBASE_SERVICE_ACCOUNT (already used by
+# deploy-enquiry.yml).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'visualise-function/**'
+      - '.github/workflows/deploy-visualise.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-visualise
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Only reviewed code on main is ever deployed, and never from a fork.
+    if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIREBASE_PROJECT: mathgen--app
+      FUNCTION_URL: https://us-central1-mathgen--app.cloudfunctions.net/visualiseAi
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: visualise-function/functions/package-lock.json
+
+      - name: Install and check the function
+        run: |
+          npm ci --prefix visualise-function/functions --no-audit --no-fund
+          node --check visualise-function/functions/index.js
+          node --check visualise-function/functions/prompt.js
+
+      - name: Prepare credentials
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::The FIREBASE_SERVICE_ACCOUNT secret is missing."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-sa.json"
+          node -e 'const k=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(k.type!=="service_account"||!k.private_key) {console.error("FIREBASE_SERVICE_ACCOUNT is not a service-account JSON key."); process.exit(1);}' "$RUNNER_TEMP/firebase-sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-sa.json" >> "$GITHUB_ENV"
+
+      - name: Install the Firebase CLI
+        run: npm install -g firebase-tools --no-audit --no-fund
+
+      - name: Deploy the visualise codebase
+        run: firebase deploy --project "$FIREBASE_PROJECT" --config visualise-function/firebase.json --only functions:visualise --non-interactive --force
+
+      - name: Smoke test the live endpoint
+        run: |
+          for i in $(seq 1 12); do
+            headers=$(curl -si -X OPTIONS "$FUNCTION_URL" \
+              -H 'Origin: https://polymathlc.github.io' \
+              -H 'Access-Control-Request-Method: POST' \
+              -H 'Access-Control-Request-Headers: content-type' --max-time 20 || true)
+            if printf '%s' "$headers" | grep -qi '^access-control-allow-origin:'; then
+              echo "visualiseAi answers CORS preflight from polymathlc.github.io (attempt $i)."
+              exit 0
+            fi
+            echo "Attempt $i: no access-control-allow-origin yet; retrying in 10s."
+            printf '%s\n' "$headers" | head -1
+            sleep 10
+          done
+          echo "::error::$FUNCTION_URL did not return access-control-allow-origin for https://polymathlc.github.io."
+          exit 1
+
+      - name: Remove the key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"
