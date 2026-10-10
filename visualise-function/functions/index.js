@@ -3,6 +3,8 @@
 // POST {imageDataUrl, note, mode?} ->
 //   mode 'visualiser' (default): {ok:true, result:{name, questionText, answers, hint, code}}
 //   mode 'webapp' (Snap & Play): {ok:true, result:{title, questionText, answers, hint, html}}
+// POST {mode:'tweak', html, instruction, questionText?, answers?} -> same shape as webapp
+// Optional `model` is honoured only when it is on MODEL_ALLOWLIST (prompt.js).
 // The OpenAI key lives only in the Firebase secret OPENAI_API_KEY
 // (firebase functions:secrets:set OPENAI_API_KEY). It is never sent to the browser.
 
@@ -12,6 +14,7 @@ import { logger } from 'firebase-functions';
 import {
   DEFAULT_MODEL, buildChatBody, cleanVisualiserReply,
   buildWebappChatBody, cleanWebappReply,
+  buildTweakChatBody, pickModel, WEBAPP_MAX_HTML_CHARS, TWEAK_MAX_INSTRUCTION_CHARS,
 } from './prompt.js';
 
 const openaiKey = defineSecret('OPENAI_API_KEY');
@@ -19,11 +22,16 @@ const openaiModel = defineString('VISUALISE_OPENAI_MODEL', { default: DEFAULT_MO
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_TIMEOUT_MS = 100000;
-const OPENAI_WEBAPP_TIMEOUT_MS = 170000;   // a whole web app is a much longer reply
+const OPENAI_WEBAPP_TIMEOUT_MS = 170000;
+   // a whole web app is a much longer reply
 const MODES = {
   visualiser: { build: buildChatBody, clean: cleanVisualiserReply, timeoutMs: OPENAI_TIMEOUT_MS },
   webapp: { build: buildWebappChatBody, clean: cleanWebappReply, timeoutMs: OPENAI_WEBAPP_TIMEOUT_MS },
+  // tweak: rewrite an existing app from a parent's typed instruction (no screenshot).
+  tweak: { build: buildTweakChatBody, clean: cleanWebappReply, timeoutMs: OPENAI_WEBAPP_TIMEOUT_MS, noImage: true },
 };
+// The stronger model thinks for longer; give it more time before giving up.
+const SLOW_MODEL_EXTRA_MS = 100000;
 const MAX_IMAGE_CHARS = 7 * 1024 * 1024;   // ~5 MB of base64 image data
 const MAX_NOTE_CHARS = 2000;
 const MAX_BODY_BYTES = 8 * 1024 * 1024;    // whole JSON body, checked before parsing is trusted
@@ -60,7 +68,7 @@ function fail(res, status, error, extra) {
   res.status(status).json({ ok: false, error, ...(extra || {}) });
 }
 
-async function callOpenAI({ imageDataUrl, note, mode }) {
+async function callOpenAI({ imageDataUrl, note, mode, model, html, instruction, questionText, answers }) {
   const spec = MODES[mode] || MODES.visualiser;
   const key = openaiKey.value();
   if (!key) {
@@ -73,8 +81,8 @@ async function callOpenAI({ imageDataUrl, note, mode }) {
     response = await fetch(OPENAI_URL, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(spec.timeoutMs),
-      body: JSON.stringify(spec.build({ imageDataUrl, note, model: openaiModel.value() })),
+      signal: AbortSignal.timeout(spec.timeoutMs + (model === 'gpt-6.1-sol' ? SLOW_MODEL_EXTRA_MS : 0)),
+      body: JSON.stringify(spec.build({ imageDataUrl, note, model, html, instruction, questionText, answers })),
     });
   } catch (cause) {
     const timedOut = cause && (cause.name === 'TimeoutError' || cause.name === 'AbortError');
@@ -124,7 +132,7 @@ export const visualiseAi = onRequest(
     region: 'us-central1',
     secrets: [openaiKey],
     cors: ALLOWED_ORIGINS,
-    timeoutSeconds: 200,
+    timeoutSeconds: 300,
     memory: '256MiB',
     maxInstances: 3,
     concurrency: 20,
@@ -154,20 +162,36 @@ export const visualiseAi = onRequest(
     const note = typeof body.note === 'string' ? body.note.slice(0, MAX_NOTE_CHARS) : '';
     const mode = body.mode == null || body.mode === '' ? 'visualiser' : String(body.mode);
     if (!Object.prototype.hasOwnProperty.call(MODES, mode)) { fail(res, 400, 'Unknown mode "' + mode.slice(0, 20) + '".'); return; }
+    const spec = MODES[mode];
+    const model = pickModel(body.model, openaiModel.value());
+    let html = '';
+    let instruction = '';
+    let questionText = '';
+    let answers = [];
+    if (spec.noImage) {
+      html = typeof body.html === 'string' ? body.html : '';
+      instruction = typeof body.instruction === 'string' ? body.instruction.trim().slice(0, TWEAK_MAX_INSTRUCTION_CHARS) : '';
+      questionText = typeof body.questionText === 'string' ? body.questionText.slice(0, 4000) : '';
+      answers = Array.isArray(body.answers) ? body.answers.slice(0, 12).map((a) => String(a).slice(0, 80)) : [];
+      if (!instruction) { fail(res, 400, 'Type what you want changed first.'); return; }
+      if (!html.trim()) { fail(res, 400, 'There is no app to change yet.'); return; }
+      if (html.length > WEBAPP_MAX_HTML_CHARS) { fail(res, 413, 'This app is too large to change.'); return; }
+    } else {
     if (!imageDataUrl) { fail(res, 400, 'Add a screenshot of the question first.'); return; }
     if (imageDataUrl.length > MAX_IMAGE_CHARS) { fail(res, 413, 'The screenshot is too large. Crop or shrink it and try again.'); return; }
     if (!IMAGE_DATA_URL.test(imageDataUrl.slice(0, 64)) || !/^data:image\/[a-z]+;base64,/.test(imageDataUrl)) {
       fail(res, 400, 'The screenshot must be a PNG, JPEG, WebP or GIF data URL.');
       return;
     }
+    }
 
     const started = Date.now();
     try {
-      const result = await callOpenAI({ imageDataUrl, note, mode });
-      logger.info('visualiseAi ok', { mode, ms: Date.now() - started, codeChars: (result.code || result.html || '').length });
+      const result = await callOpenAI({ imageDataUrl, note, mode, model, html, instruction, questionText, answers });
+      logger.info('visualiseAi ok', { mode, model, ms: Date.now() - started, codeChars: (result.code || result.html || '').length });
       res.status(200).json({ ok: true, result });
     } catch (err) {
-      logger.error('visualiseAi failed', { mode, ms: Date.now() - started, message: err.message });
+      logger.error('visualiseAi failed', { mode, model, ms: Date.now() - started, message: err.message });
       fail(res, err.status || 500, err.message || 'Something went wrong.');
     }
   }

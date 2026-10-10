@@ -335,3 +335,71 @@ export function cleanWebappReply(raw) {
     html: ensureFullDocument(html, title),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Models the browser may ask for. Anything else falls back to the default, so
+// a caller can never name an expensive model on the centre's bill.
+// ---------------------------------------------------------------------------
+export const MODEL_ALLOWLIST = ['gpt-6-luna', 'gpt-6.1-sol'];
+
+/** The model to use: the caller's pick when it is on the allowlist, else the fallback. */
+export function pickModel(requested, fallback) {
+  const want = String(requested || '').trim();
+  return MODEL_ALLOWLIST.includes(want) ? want : (fallback || DEFAULT_MODEL);
+}
+
+// ---------------------------------------------------------------------------
+// TWEAK mode: the parent types an instruction and the existing app is rewritten.
+// No screenshot is needed: the current app HTML is the whole brief.
+// ---------------------------------------------------------------------------
+export const TWEAK_MAX_INSTRUCTION_CHARS = 2000;
+
+export const TWEAK_SYSTEM_PROMPT = `You are a senior front-end engineer and an expert Singapore Primary 3 (P3) mathematics teacher.
+You are given a complete single-file HTML web app that helps a P3 child understand ONE maths question, plus an
+instruction from the child's parent saying how to change it.
+
+Apply the parent's instruction to the app. Rules:
+- Change only what the instruction asks for; keep everything else (the question, the maths, the layout, the
+  working buttons) exactly as it was unless the instruction says otherwise.
+- The maths must stay correct. If the instruction would make the maths wrong, keep the maths right and make the
+  closest sensible change instead.
+- The result must still be ONE self-contained HTML document: inline <style> and <script> only, no external
+  scripts, stylesheets, fonts or network requests, no localStorage, no alert/prompt/confirm.
+- Keep it friendly for a 9-year-old: large tap targets, plain words, works on a phone and a laptop.
+- Never reveal the final answer before the child has tried, unless the parent explicitly asks for that.
+
+Return ONLY a JSON object with exactly these keys:
+{
+  "title": "short friendly title for the app, max 60 chars",
+  "questionText": "the question, as before (update only if the instruction changes it)",
+  "answers": ["every accepted final answer string"],
+  "hint": "one sentence for a parent: what the model looks like, without the answer",
+  "html": "the complete updated HTML document as one string"
+}`;
+
+/** User-turn text for tweak mode. */
+export function buildTweakUserText({ html, instruction, questionText, answers }) {
+  const clean = String(instruction || '').trim().slice(0, TWEAK_MAX_INSTRUCTION_CHARS);
+  const lines = [
+    'The parent\'s instruction:',
+    clean,
+    '',
+  ];
+  if (questionText) lines.push('The question the app is about: ' + String(questionText).slice(0, 4000), '');
+  if (Array.isArray(answers) && answers.length) lines.push('Accepted answers so far: ' + answers.slice(0, 12).map(String).join(', '), '');
+  lines.push('The current app HTML:', String(html || ''));
+  return lines.join('\n');
+}
+
+/** OpenAI chat/completions body for tweak mode. */
+export function buildTweakChatBody({ html, instruction, questionText, answers, model }) {
+  return {
+    model: model || DEFAULT_MODEL,
+    response_format: { type: 'json_object' },
+    max_completion_tokens: 48000,
+    messages: [
+      { role: 'system', content: TWEAK_SYSTEM_PROMPT },
+      { role: 'user', content: buildTweakUserText({ html, instruction, questionText, answers }) },
+    ],
+  };
+}
