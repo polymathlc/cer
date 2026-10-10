@@ -4,6 +4,9 @@
 //   mode 'visualiser' (default): {ok:true, result:{name, questionText, answers, hint, code}}
 //   mode 'webapp' (Snap & Play): {ok:true, result:{title, questionText, answers, hint, html}}
 // POST {mode:'tweak', html, instruction, questionText?, answers?} -> same shape as webapp
+// POST {mode:'enhance', imageDataUrl} -> {ok:true, result:{imageDataUrl}}
+//   redraws a cropped question figure as clean black-and-white line work
+//   (the same prompt cer's Rapid add uses), via the OpenAI image edit API.
 // Optional `model` is honoured only when it is on MODEL_ALLOWLIST (prompt.js).
 // The OpenAI key lives only in the Firebase secret OPENAI_API_KEY
 // (firebase functions:secrets:set OPENAI_API_KEY). It is never sent to the browser.
@@ -15,12 +18,19 @@ import {
   DEFAULT_MODEL, buildChatBody, cleanVisualiserReply,
   buildWebappChatBody, cleanWebappReply,
   buildTweakChatBody, pickModel, WEBAPP_MAX_HTML_CHARS, TWEAK_MAX_INSTRUCTION_CHARS,
+  BW_ENHANCE_PROMPT,
 } from './prompt.js';
 
 const openaiKey = defineSecret('OPENAI_API_KEY');
 const openaiModel = defineString('VISUALISE_OPENAI_MODEL', { default: DEFAULT_MODEL });
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_IMAGE_EDIT_URL = 'https://api.openai.com/v1/images/edits';
+// The 2.5 image family reads the reference at high fidelity by itself and
+// REFUSES input_fidelity, so it is never sent; no size either (the default
+// keeps the figure's own shape).
+const IMAGE_MODEL = 'gpt-image-2.5-flare';
+const OPENAI_IMAGE_TIMEOUT_MS = 150000;
 const OPENAI_TIMEOUT_MS = 100000;
 const OPENAI_WEBAPP_TIMEOUT_MS = 170000;
    // a whole web app is a much longer reply
@@ -29,6 +39,8 @@ const MODES = {
   webapp: { build: buildWebappChatBody, clean: cleanWebappReply, timeoutMs: OPENAI_WEBAPP_TIMEOUT_MS },
   // tweak: rewrite an existing app from a parent's typed instruction (no screenshot).
   tweak: { build: buildTweakChatBody, clean: cleanWebappReply, timeoutMs: OPENAI_WEBAPP_TIMEOUT_MS, noImage: true },
+  // enhance: redraw a cropped diagram in black and white (image in, image out).
+  enhance: { enhance: true, timeoutMs: OPENAI_IMAGE_TIMEOUT_MS },
 };
 // The stronger model thinks for longer; give it more time before giving up.
 const SLOW_MODEL_EXTRA_MS = 100000;
@@ -127,6 +139,67 @@ async function callOpenAI({ imageDataUrl, note, mode, model, html, instruction, 
   }
 }
 
+function upstreamError(response, data, raw) {
+  const upstream = (data && data.error && data.error.message) || String(raw || '').slice(0, 300);
+  logger.warn('OpenAI error', { status: response.status, upstream });
+  const err = new Error(
+    response.status === 401 ? 'The server OpenAI key was rejected (401). Ask the admin to reset the secret.'
+      : response.status === 429 ? 'OpenAI is rate limited or out of credit (429). Please wait a minute and try again.'
+        : response.status === 400 ? 'OpenAI could not read this request (400): ' + upstream
+          : 'OpenAI error ' + response.status + '.'
+  );
+  err.status = response.status === 429 ? 429 : response.status === 400 ? 400 : 502;
+  return err;
+}
+
+async function callOpenAIEnhance({ imageDataUrl }) {
+  const key = openaiKey.value();
+  if (!key) {
+    const err = new Error('The server has no OpenAI key configured.');
+    err.status = 500;
+    throw err;
+  }
+  const m = /^data:(image\/(png|jpe?g|webp|gif));base64,([\s\S]+)$/.exec(imageDataUrl);
+  if (!m) {
+    const err = new Error('The picture must be a PNG, JPEG, WebP or GIF data URL.');
+    err.status = 400;
+    throw err;
+  }
+  const mime = m[1] === 'image/jpg' ? 'image/jpeg' : m[1];
+  const ext = mime.split('/')[1].replace('jpeg', 'jpg');
+  const bytes = Buffer.from(m[3].replace(/\s+/g, ''), 'base64');
+  const form = new FormData();
+  form.append('model', IMAGE_MODEL);
+  form.append('prompt', BW_ENHANCE_PROMPT);
+  form.append('image', new Blob([bytes], { type: mime }), 'figure.' + ext);
+
+  let response;
+  try {
+    response = await fetch(OPENAI_IMAGE_EDIT_URL, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + key },
+      signal: AbortSignal.timeout(OPENAI_IMAGE_TIMEOUT_MS),
+      body: form,
+    });
+  } catch (cause) {
+    const timedOut = cause && (cause.name === 'TimeoutError' || cause.name === 'AbortError');
+    const err = new Error(timedOut ? 'The image model took too long. Please try again.' : 'Could not reach OpenAI.');
+    err.status = timedOut ? 504 : 502;
+    throw err;
+  }
+  const raw = await response.text();
+  let data = null;
+  try { data = JSON.parse(raw); } catch (_) { /* non-JSON error page */ }
+  if (!response.ok) throw upstreamError(response, data, raw);
+  const b64 = data && data.data && data.data[0] && data.data[0].b64_json;
+  if (!b64) {
+    const err = new Error('The image model returned no picture.');
+    err.status = 502;
+    throw err;
+  }
+  return { imageDataUrl: 'data:image/png;base64,' + b64 };
+}
+
 export const visualiseAi = onRequest(
   {
     region: 'us-central1',
@@ -187,8 +260,10 @@ export const visualiseAi = onRequest(
 
     const started = Date.now();
     try {
-      const result = await callOpenAI({ imageDataUrl, note, mode, model, html, instruction, questionText, answers });
-      logger.info('visualiseAi ok', { mode, model, ms: Date.now() - started, codeChars: (result.code || result.html || '').length });
+      const result = spec.enhance
+        ? await callOpenAIEnhance({ imageDataUrl })
+        : await callOpenAI({ imageDataUrl, note, mode, model, html, instruction, questionText, answers });
+      logger.info('visualiseAi ok', { mode, model: spec.enhance ? IMAGE_MODEL : model, ms: Date.now() - started, codeChars: (result.code || result.html || result.imageDataUrl || '').length });
       res.status(200).json({ ok: true, result });
     } catch (err) {
       logger.error('visualiseAi failed', { mode, model, ms: Date.now() - started, message: err.message });

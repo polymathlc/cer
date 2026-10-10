@@ -241,8 +241,18 @@ Reply with ONE JSON object only, no markdown, no code fences, exactly these keys
   "questionText": "the transcribed question",
   "answers": ["every accepted final answer string, e.g. '245', '245 marbles'"],
   "hint": "one sentence for a parent: what the model looks like, without the answer",
-  "html": "the complete HTML document as one string"
-}`;
+  "html": "the complete HTML document as one string",
+  "diagram": {"present": true, "box_2d": [ymin, xmin, ymax, xmax]}
+}
+
+DIAGRAM BOX
+- If the screenshot contains a diagram, picture, table, chart, number line or bar model that the question needs,
+  set "diagram.present" to true and give "box_2d" as four integers from 0 to 1000 measured on the WHOLE screenshot
+  (0,0 is the top-left corner, 1000,1000 the bottom-right): [ymin, xmin, ymax, xmax].
+- The box must include every label, axis, unit and caption that belongs to the figure.
+- The box must NOT include the question sentences or the answer options.
+- If you are unsure where the figure ends, make the box a little larger rather than cut anything off.
+- If there is no such figure, reply "diagram": {"present": false}.`;
 
 /** User-turn text for the web app mode. */
 export function buildWebappUserText(note) {
@@ -333,8 +343,38 @@ export function cleanWebappReply(raw) {
     answers,
     hint: cleanString(obj.hint, 600),
     html: ensureFullDocument(html, title),
+    diagram: cleanDiagram(obj.diagram),
   };
 }
+
+/**
+ * Validate the figure box the AI gave: {box_2d:[ymin,xmin,ymax,xmax]} on a 0-1000 grid.
+ * Returns null when there is no usable figure, so the browser keeps whatever it already had.
+ */
+export function cleanDiagram(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  if (raw.present === false) return null;
+  const box = Array.isArray(raw.box_2d) ? raw.box_2d : Array.isArray(raw.box) ? raw.box : null;
+  if (!box || box.length !== 4) return null;
+  const nums = box.map((n) => Math.round(Number(n)));
+  if (nums.some((n) => !Number.isFinite(n))) return null;
+  const [ymin, xmin, ymax, xmax] = nums.map((n) => Math.max(0, Math.min(1000, n)));
+  if (ymax - ymin < 10 || xmax - xmin < 10) return null;
+  return { box_2d: [ymin, xmin, ymax, xmax] };
+}
+
+/**
+ * Image-edit prompt for redrawing a cropped figure as a clean black-and-white line diagram
+ * (the same clean-up cer's Rapid add gives a question's diagram).
+ */
+export const BW_ENHANCE_PROMPT = `Redraw this picture as a clean, sharp black-and-white line diagram on a plain pure-white background,
+the way a printed school maths worksheet would show it.
+- Keep EVERY element exactly where it is: every shape, line, arrow, bar, axis, tick, label, number, unit and word.
+- Copy every number and every word exactly; do not add, remove, translate or re-spell anything.
+- Solid black lines of even weight; pure white everywhere else. No grey shading, no colour, no texture,
+  no paper grain, no shadows, no gradients, no watermark.
+- Do not restyle, simplify, re-arrange or add decoration. Keep the same proportions and aspect ratio.
+- Output only the image.`;
 
 // ---------------------------------------------------------------------------
 // Models the browser may ask for. Anything else falls back to the default, so
