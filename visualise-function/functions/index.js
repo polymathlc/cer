@@ -9,6 +9,8 @@
 // POST {mode:'enhance', imageDataUrl} -> {ok:true, result:{imageDataUrl}}
 //   redraws a cropped question figure as clean black-and-white line work
 //   (the same prompt cer's Rapid add uses), via the OpenAI image edit API.
+// POST {mode:'colour', imageDataUrl} -> {ok:true, result:{imageDataUrl}}
+//   the same redraw in clean, flat, friendly colour for a primary-school child.
 // Optional `model` is honoured only when it is on MODEL_ALLOWLIST (prompt.js).
 // The OpenAI key lives only in the Firebase secret OPENAI_API_KEY
 // (firebase functions:secrets:set OPENAI_API_KEY). It is never sent to the browser.
@@ -20,7 +22,7 @@ import {
   DEFAULT_MODEL, buildChatBody, cleanVisualiserReply,
   buildWebappChatBody, cleanWebappReply,
   buildTweakChatBody, pickModel, WEBAPP_MAX_HTML_CHARS, TWEAK_MAX_INSTRUCTION_CHARS,
-  BW_ENHANCE_PROMPT,
+  BW_ENHANCE_PROMPT, COLOUR_ENHANCE_PROMPT,
   buildClassifyChatBody, cleanClassifyReply, CLASSIFY_MAX_QUESTIONS, CLASSIFY_MAX_LOS,
 } from './prompt.js';
 
@@ -43,7 +45,9 @@ const MODES = {
   // tweak: rewrite an existing app from a parent's typed instruction (no screenshot).
   tweak: { build: buildTweakChatBody, clean: cleanWebappReply, timeoutMs: OPENAI_WEBAPP_TIMEOUT_MS, noImage: true },
   // enhance: redraw a cropped diagram in black and white (image in, image out).
-  enhance: { enhance: true, timeoutMs: OPENAI_IMAGE_TIMEOUT_MS },
+  enhance: { enhance: true, prompt: BW_ENHANCE_PROMPT, timeoutMs: OPENAI_IMAGE_TIMEOUT_MS },
+  // colour: the same redraw in flat, friendly colour (image in, image out).
+  colour: { enhance: true, prompt: COLOUR_ENHANCE_PROMPT, timeoutMs: OPENAI_IMAGE_TIMEOUT_MS },
   // classify: file saved questions under syllabus learning objectives (text only).
   classify: { build: buildClassifyChatBody, clean: cleanClassifyReply, timeoutMs: OPENAI_TIMEOUT_MS, classify: true },
 };
@@ -157,7 +161,7 @@ function upstreamError(response, data, raw) {
   return err;
 }
 
-async function callOpenAIEnhance({ imageDataUrl }) {
+async function callOpenAIEnhance({ imageDataUrl, prompt = BW_ENHANCE_PROMPT }) {
   const key = openaiKey.value();
   if (!key) {
     const err = new Error('The server has no OpenAI key configured.');
@@ -175,7 +179,7 @@ async function callOpenAIEnhance({ imageDataUrl }) {
   const bytes = Buffer.from(m[3].replace(/\s+/g, ''), 'base64');
   const form = new FormData();
   form.append('model', IMAGE_MODEL);
-  form.append('prompt', BW_ENHANCE_PROMPT);
+  form.append('prompt', prompt);
   form.append('image', new Blob([bytes], { type: mime }), 'figure.' + ext);
 
   let response;
@@ -278,7 +282,7 @@ export const visualiseAi = onRequest(
     const started = Date.now();
     try {
       const result = spec.enhance
-        ? await callOpenAIEnhance({ imageDataUrl })
+        ? await callOpenAIEnhance({ imageDataUrl, prompt: spec.prompt })
         : await callOpenAI({ imageDataUrl, note, mode, model, html, instruction, questionText, answers, questions, los });
       logger.info('visualiseAi ok', { mode, model: spec.enhance ? IMAGE_MODEL : model, ms: Date.now() - started, codeChars: (result.code || result.html || result.imageDataUrl || '').length });
       res.status(200).json({ ok: true, result });

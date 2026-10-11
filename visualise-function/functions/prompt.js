@@ -376,6 +376,18 @@ the way a printed school maths worksheet would show it.
 - Do not restyle, simplify, re-arrange or add decoration. Keep the same proportions and aspect ratio.
 - Output only the image.`;
 
+// Colour version of the same redraw, for a primary-school child: identical
+// figure, flat friendly colour used only where it helps understanding.
+export const COLOUR_ENHANCE_PROMPT = `Redraw this picture as a clean, sharp diagram in flat, friendly colour on a plain pure-white background,
+the way a bright, well-designed primary-school maths worksheet would show it to a young child.
+- Keep EVERY element exactly where it is: every shape, line, arrow, bar, axis, tick, label, number, unit and word.
+- Copy every number and every word exactly; do not add, remove, translate or re-spell anything. Add no new text.
+- Keep the same layout, proportions and aspect ratio. Do not re-arrange, simplify or add decoration.
+- Use a few soft, flat colours only where they aid understanding (for example to tell different parts,
+  bars or groups apart). Lines and text stay crisp and dark enough to read easily.
+- Pure white background. No gradients, no texture, no paper grain, no shadows, no watermark.
+- Output only the image.`;
+
 // ---------------------------------------------------------------------------
 // Models the browser may ask for. Anything else falls back to the default, so
 // a caller can never name an expensive model on the centre's bill.
