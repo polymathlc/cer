@@ -4,6 +4,8 @@
 //   mode 'visualiser' (default): {ok:true, result:{name, questionText, answers, hint, code}}
 //   mode 'webapp' (Snap & Play): {ok:true, result:{title, questionText, answers, hint, html}}
 // POST {mode:'tweak', html, instruction, questionText?, answers?} -> same shape as webapp
+// POST {mode:'classify', questions:[{id,text}], los:[{id,text,topic?}]} ->
+//   {ok:true, result:{items:[{id, los:[loId]}]}} (ids filtered to what was sent)
 // POST {mode:'enhance', imageDataUrl} -> {ok:true, result:{imageDataUrl}}
 //   redraws a cropped question figure as clean black-and-white line work
 //   (the same prompt cer's Rapid add uses), via the OpenAI image edit API.
@@ -19,6 +21,7 @@ import {
   buildWebappChatBody, cleanWebappReply,
   buildTweakChatBody, pickModel, WEBAPP_MAX_HTML_CHARS, TWEAK_MAX_INSTRUCTION_CHARS,
   BW_ENHANCE_PROMPT,
+  buildClassifyChatBody, cleanClassifyReply, CLASSIFY_MAX_QUESTIONS, CLASSIFY_MAX_LOS,
 } from './prompt.js';
 
 const openaiKey = defineSecret('OPENAI_API_KEY');
@@ -41,6 +44,8 @@ const MODES = {
   tweak: { build: buildTweakChatBody, clean: cleanWebappReply, timeoutMs: OPENAI_WEBAPP_TIMEOUT_MS, noImage: true },
   // enhance: redraw a cropped diagram in black and white (image in, image out).
   enhance: { enhance: true, timeoutMs: OPENAI_IMAGE_TIMEOUT_MS },
+  // classify: file saved questions under syllabus learning objectives (text only).
+  classify: { build: buildClassifyChatBody, clean: cleanClassifyReply, timeoutMs: OPENAI_TIMEOUT_MS, classify: true },
 };
 // The stronger model thinks for longer; give it more time before giving up.
 const SLOW_MODEL_EXTRA_MS = 100000;
@@ -80,7 +85,7 @@ function fail(res, status, error, extra) {
   res.status(status).json({ ok: false, error, ...(extra || {}) });
 }
 
-async function callOpenAI({ imageDataUrl, note, mode, model, html, instruction, questionText, answers }) {
+async function callOpenAI({ imageDataUrl, note, mode, model, html, instruction, questionText, answers, questions, los }) {
   const spec = MODES[mode] || MODES.visualiser;
   const key = openaiKey.value();
   if (!key) {
@@ -94,7 +99,7 @@ async function callOpenAI({ imageDataUrl, note, mode, model, html, instruction, 
       method: 'POST',
       headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(spec.timeoutMs + (model === 'gpt-6.1-sol' ? SLOW_MODEL_EXTRA_MS : 0)),
-      body: JSON.stringify(spec.build({ imageDataUrl, note, model, html, instruction, questionText, answers })),
+      body: JSON.stringify(spec.build({ imageDataUrl, note, model, html, instruction, questionText, answers, questions, los })),
     });
   } catch (cause) {
     const timedOut = cause && (cause.name === 'TimeoutError' || cause.name === 'AbortError');
@@ -131,7 +136,7 @@ async function callOpenAI({ imageDataUrl, note, mode, model, html, instruction, 
     throw err;
   }
   try {
-    return spec.clean(content);
+    return spec.clean(content, { questions, los });
   } catch (cause) {
     const err = new Error(cause.message || 'The AI reply could not be used.');
     err.status = 502;
@@ -241,7 +246,19 @@ export const visualiseAi = onRequest(
     let instruction = '';
     let questionText = '';
     let answers = [];
-    if (spec.noImage) {
+    let questions = [];
+    let los = [];
+    if (spec.classify) {
+      const str = (v, max) => String(v == null ? '' : v).slice(0, max);
+      questions = (Array.isArray(body.questions) ? body.questions : []).slice(0, CLASSIFY_MAX_QUESTIONS)
+        .map((q) => ({ id: str(q && q.id, 80), text: str(q && q.text, 3000).trim() }))
+        .filter((q) => q.id && q.text);
+      los = (Array.isArray(body.los) ? body.los : []).slice(0, CLASSIFY_MAX_LOS)
+        .map((lo) => ({ id: str(lo && lo.id, 40), text: str(lo && lo.text, 400), topic: str(lo && lo.topic, 80) }))
+        .filter((lo) => lo.id && lo.text);
+      if (!questions.length) { fail(res, 400, 'Send at least one question to classify.'); return; }
+      if (!los.length) { fail(res, 400, 'Send the learning objectives to classify against.'); return; }
+    } else if (spec.noImage) {
       html = typeof body.html === 'string' ? body.html : '';
       instruction = typeof body.instruction === 'string' ? body.instruction.trim().slice(0, TWEAK_MAX_INSTRUCTION_CHARS) : '';
       questionText = typeof body.questionText === 'string' ? body.questionText.slice(0, 4000) : '';
@@ -262,7 +279,7 @@ export const visualiseAi = onRequest(
     try {
       const result = spec.enhance
         ? await callOpenAIEnhance({ imageDataUrl })
-        : await callOpenAI({ imageDataUrl, note, mode, model, html, instruction, questionText, answers });
+        : await callOpenAI({ imageDataUrl, note, mode, model, html, instruction, questionText, answers, questions, los });
       logger.info('visualiseAi ok', { mode, model: spec.enhance ? IMAGE_MODEL : model, ms: Date.now() - started, codeChars: (result.code || result.html || result.imageDataUrl || '').length });
       res.status(200).json({ ok: true, result });
     } catch (err) {
