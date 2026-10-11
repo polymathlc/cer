@@ -443,3 +443,59 @@ export function buildTweakChatBody({ html, instruction, questionText, answers, m
     ],
   };
 }
+
+// ---------------------------------------------------------------------------
+// classify: file each saved question under the MOE Primary Mathematics
+// syllabus learning objectives the browser sends. No image; text in, ids out.
+// ---------------------------------------------------------------------------
+export const CLASSIFY_MAX_QUESTIONS = 20;
+export const CLASSIFY_MAX_LOS = 300;
+
+export const CLASSIFY_SYSTEM_PROMPT = `You are an expert Singapore primary mathematics teacher.
+You are given a list of maths questions and the list of learning objectives from the MOE Primary Mathematics
+syllabus. For EACH question, pick the learning objectives it actually tests (1 to 3, the most specific first),
+choosing ONLY ids from the list you were given. Never invent an id. If nothing fits, return an empty list.
+
+Return ONLY a JSON object:
+{ "items": [ { "id": "the question id as given", "los": ["learning objective id", ...] } ] }`;
+
+/** User-turn text for classify mode. */
+export function buildClassifyUserText({ questions, los }) {
+  const lines = ['LEARNING OBJECTIVES (id | topic | objective):'];
+  (los || []).forEach((lo) => lines.push(lo.id + ' | ' + (lo.topic || '') + ' | ' + lo.text));
+  lines.push('', 'QUESTIONS:');
+  (questions || []).forEach((q) => lines.push('[' + q.id + '] ' + q.text.replace(/\s+/g, ' ')));
+  return lines.join('\n');
+}
+
+/** OpenAI chat/completions body for classify mode. */
+export function buildClassifyChatBody({ questions, los, model }) {
+  return {
+    model: model || DEFAULT_MODEL,
+    response_format: { type: 'json_object' },
+    max_completion_tokens: 8000,
+    messages: [
+      { role: 'system', content: CLASSIFY_SYSTEM_PROMPT },
+      { role: 'user', content: buildClassifyUserText({ questions, los }) },
+    ],
+  };
+}
+
+/** Keep only question ids that were sent and objective ids that exist. */
+export function cleanClassifyReply(raw, { questions, los } = {}) {
+  const data = parseJsonLoose(raw);
+  const qIds = new Set((questions || []).map((q) => q.id));
+  const loIds = new Set((los || []).map((lo) => lo.id));
+  const items = Array.isArray(data && data.items) ? data.items : [];
+  const out = [];
+  const seen = new Set();
+  items.forEach((it) => {
+    if (!it || typeof it !== 'object') return;
+    const id = String(it.id == null ? '' : it.id);
+    if (!qIds.has(id) || seen.has(id)) return;
+    seen.add(id);
+    const picked = (Array.isArray(it.los) ? it.los : []).map(String).filter((x) => loIds.has(x));
+    out.push({ id, los: [...new Set(picked)].slice(0, 3) });
+  });
+  return { items: out };
+}
