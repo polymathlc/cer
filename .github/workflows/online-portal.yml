@@ -1,0 +1,41 @@
+name: Polymath Online portal
+
+on:
+  pull_request:
+    paths: ['online/**', 'tools/online-portal-*', '.github/workflows/online-portal.yml']
+  push:
+    branches: [main]
+    paths: ['online/**', 'tools/online-portal-*', '.github/workflows/online-portal.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  online-portal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check releases, class visibility, reordering and invitations
+        run: |
+          node --check online/portal-core.js
+          node --check online/portal.js
+          node --test tools/online-portal-tests.mjs
+      - name: Install isolated browser runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/online-browser" playwright@1.62.1
+          "$RUNNER_TEMP/online-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Check sign-in, a class upload, an invitation, joining and live releases
+        env:
+          PW: ${{ runner.temp }}/online-browser/node_modules/playwright/index.mjs
+          ONLINE_SCREENSHOTS: ${{ runner.temp }}/online-portal-qa
+        run: node tools/online-portal-browser-check.mjs
+      - name: Keep browser previews for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: online-portal-qa
+          path: ${{ runner.temp }}/online-portal-qa
+          if-no-files-found: ignore

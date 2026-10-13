@@ -1,5 +1,32 @@
 # CER Science Learning Portal
 
+## Polymath Online, the student portal (online/, v1.0.0)
+
+**polymathlc.com.sg/online** is where students and parents find their class's
+worksheets and answer keys. It is published by the website sync, like every
+other page here.
+
+- **Admins** sign in with Google and see the admin view: chungzhikai@gmail.com,
+  elsielcr@gmail.com and admin@polymathlc.com.sg. Admins create a class (level,
+  subject, day and session) and upload its whole list of PDFs once. The files
+  go in name order, so Worksheet 2 comes before Worksheet 10. You can also add
+  worksheets already in Ans Key, and reorder, rename or remove them. Each PDF
+  becomes an ordinary Ans Key worksheet, ready for its answer key.
+- **Releases follow the lessons.** When the teacher opens worksheet *n* of a
+  class in Ans Key, the class moves to *n* and everything up to *n* + 5 is
+  released, so worksheet 3 releases up to 8. An admin can also set the class
+  position or the release by hand.
+- **Invitations.** Type one or more emails and choose student or parent, level
+  and subjects. An invitation email goes out through the project's Trigger
+  Email extension (the `mail` collection), with **Copy link** as a fallback.
+  The person joins with any Google account, and their Ans Key profile (level
+  and subject) is filled in for them.
+- **Students and parents** see only their level's and subjects' classes. Each
+  class shows where the class is, the next two worksheets with Download, Print
+  and View, and every released worksheet with an **Answer key** button that
+  opens it in Ans Key. A worksheet that has not been released is counted, not
+  named.
+
 ## Infinite whiteboards (v1.429.0)
 
 Open **Whiteboards** under Papers & Worksheets. Name a board, select questions
