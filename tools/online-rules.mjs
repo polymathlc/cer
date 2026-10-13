@@ -384,7 +384,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const request = async (path, options = {}) => {
         try { return (await client.request({ method: options.method || 'GET', path, ...(options.body ? { body: options.body } : {}),
           skipLog: { reqHeaders: true, reqBody: true, resHeaders: true, resBody: true } })).body; }
-        catch (error) { throw new Error('Rules API failed (HTTP ' + (error.status || error.statusCode || 'unknown') + ') on ' + (options.method || 'GET') + ' ' + path.replace(/rulesets\/[\w-]+/, 'rulesets/…') + '.'); }
+        catch (error) { throw new Error('Rules API failed (HTTP ' + (error.status || error.statusCode || 'unknown') + ') on ' + (options.method || 'GET') + ' ' + path.replace(/rulesets\/[\w-]+/, 'rulesets/…') + ': ' + String(error.context?.body?.error?.message || error.message || '').slice(0, 400)); }
       };
       console.log(JSON.stringify(await publishOnlineRules({ request, deploy: flags.includes('--apply'), readOnly: flags.includes('--read') }), null, 2));
     });
