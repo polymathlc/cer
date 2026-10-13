@@ -104,6 +104,7 @@ let db;
   check('admin: an invitation is saved with level and subjects', invite && invite[1].emailLower === 'ethan.parent@example.com' && invite[1].level === 'P5' && invite[1].subjects.join() === 'math,science' && invite[1].status === 'pending');
   check('admin: the invitation email is queued for the Trigger Email extension', mail && /^mail\/polymath-online-invite-/.test(mail[0]) && mail[1].to[0] === 'ethan.parent@example.com' && mail[1].message.html.includes('https://polymathlc.com.sg/online/?invite=' + invite[0].split('/')[1]));
   check('admin: the queued mail never uses the enquiry service\'s protected ids', !/polymath-enquiry-/.test(mail[0]));
+  check('admin: the invitation is sent as admin@polymathlc.com.sg', mail && mail[1].from === 'Polymath Learning Centre <admin@polymathlc.com.sg>' && mail[1].replyTo === 'admin@polymathlc.com.sg');
   await page.screenshot({ path: path.join(shots, '03-people.png'), fullPage: true });
   check('admin: no script errors', errors.length === 0);
   if (errors.length) console.log(errors);

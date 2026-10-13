@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.0.0';
+  var APP_VERSION = 'v1.0.1';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -881,14 +881,10 @@
   // `polymath-enquiry-*` documents are never touched.
   function queueInviteEmail(inviteId, invite) {
     var link = Core.inviteLink(PORTAL_URL, inviteId);
-    var fromName = Core.normalizeEmail(state.user.email) === TEACHER_EMAIL ? 'Mr Chung at Polymath Learning Centre' : 'Polymath Learning Centre';
-    var message = Core.inviteEmail(invite, link, fromName);
+    // Sent as the centre (admin@polymathlc.com.sg), whichever admin invited.
+    var message = Core.inviteEmail(invite, link, Core.SENDER_NAME);
     var id = 'polymath-online-invite-' + inviteId + '-' + Date.now();
-    return db.collection(MAIL).doc(id).set({
-      to: [invite.email],
-      message: message,
-      polymathOnline: { inviteId: inviteId, sentBy: state.user.email }
-    }).catch(function (err) {
+    return db.collection(MAIL).doc(id).set(Core.portalMail(invite.email, message, { inviteId: inviteId, sentBy: state.user.email })).catch(function (err) {
       db.collection(INVITES).doc(inviteId).set({ mailError: (err && err.message) || 'not sent' }, { merge: true }).catch(function () {});
       toast('The invitation was saved, but its email could not be queued. Use “Copy link” to send it yourself.', { error: true, ms: 8000 });
     });
