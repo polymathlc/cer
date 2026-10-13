@@ -74,13 +74,13 @@ export const ONLINE_RULE = `    // BEGIN polymath-online-v1
         && data.role == (invite.get('role', 'student') == 'parent' ? 'parent' : 'student')
         && data.subjects is list && data.subjects.size() > 0
         && data.subjects.hasOnly(invite.subjects)
-        && (resource == null
+        && (request.method == 'create'
           ? !data.keys().hasAny(['revoked', 'revokedAt'])
           : !data.diff(resource.data).affectedKeys().hasAny(['revoked', 'revokedAt']));
     }
     // A member opening the portal again only refreshes these two fields.
     function onlineTouches(uid) {
-      return request.auth != null && request.auth.uid == uid && resource != null
+      return request.auth != null && request.auth.uid == uid && request.method == 'update'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeenAt', 'photoURL']);
     }
     match /onlineCourses/{courseId} {
