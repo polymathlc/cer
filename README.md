@@ -1,6 +1,6 @@
 # CER Science Learning Portal
 
-## Polymath Online, the student portal (online/, v1.0.0)
+## Polymath Online, the student portal (online/, v1.1.0)
 
 **polymathlc.com.sg/online** is where students and parents find their class's
 worksheets and answer keys. It is published by the website sync, like every
@@ -24,11 +24,19 @@ other page here.
   admin sent the invitation (`PolymathOnlineCore.portalMail`).
   The person joins with any Google account, and their Ans Key profile (level
   and subject) is filled in for them.
-- **Students and parents** see only their level's and subjects' classes. Each
-  class shows where the class is, the next two worksheets with Download, Print
-  and View, and every released worksheet with an **Answer key** button that
-  opens it in Ans Key. A worksheet that has not been released is counted, not
-  named.
+- **Students and parents** see every class of their level and subjects. Each
+  class shows a **vertical timeline** of its released worksheets in teaching
+  order. The worksheet the class is on is highlighted as the *Current
+  worksheet*. Each worksheet shows the date it was last edited in Ans Key, or
+  the date it was uploaded if nothing has been written on it yet. Each one
+  also has **View** and **Print** buttons for the worksheet and for its
+  answer key. Worksheets with recorded lessons have a **▶ Video** button,
+  and the replay opens inside the portal. The answer key, its printing and
+  the replays all open Ans Key in a window over the portal, using
+  `../anskey/?ws=<id>&do=play|print-answers` (Ans Key v1.132.0 or later).
+  The timeline updates live as the teacher writes and records. The next two
+  worksheets keep their Download and Print tiles. A worksheet that has not
+  been released is counted, not named.
 - **Security rules.** `tools/online-rules.mjs` adds a Polymath Online block to
   the shared Firestore rules and touches nothing else. Signed-out visitors
   see nothing. Only the three admins (verified Google emails) can write

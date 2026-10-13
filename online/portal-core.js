@@ -198,6 +198,91 @@
   function inviteLink(base, inviteId) {
     return String(base || '').replace(/\/?$/, '/') + '?invite=' + encodeURIComponent(inviteId);
   }
+  /* ---- The student timeline ----
+     Each released worksheet, in teaching order, with the date the teacher
+     last changed it in Ans Key (`updatedAt`, written on every Ans Key save)
+     and the lessons recorded on it (video annotations carrying
+     `lessonRecording`, stored inside the worksheet's own annotations). */
+  function toMillis(value) {
+    if (value == null || value === '') return 0;
+    if (typeof value === 'number') return isFinite(value) ? value : 0;
+    if (typeof value.toMillis === 'function') { try { return value.toMillis(); } catch (e) { return 0; } }
+    if (typeof value.seconds === 'number') return value.seconds * 1000 + Math.floor((value.nanoseconds || 0) / 1e6);
+    if (typeof value._seconds === 'number') return value._seconds * 1000;
+    var parsed = Date.parse(value);
+    return isFinite(parsed) ? parsed : 0;
+  }
+  function editedMillis(doc) { return doc ? toMillis(doc.updatedAt) || toMillis(doc.createdAt) : 0; }
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  // "Mon 13 Oct 2026" — the year only when it is not this year.
+  function formatDay(ms, now) {
+    if (!ms) return '';
+    var d = new Date(ms), today = new Date(now || Date.now());
+    return WEEKDAYS[d.getDay()] + ' ' + d.getDate() + ' ' + MONTHS[d.getMonth()] + (d.getFullYear() !== today.getFullYear() ? ' ' + d.getFullYear() : '');
+  }
+  // "4:05 pm"
+  function formatClock(ms) {
+    if (!ms) return '';
+    var d = new Date(ms), hour = d.getHours(), minute = d.getMinutes();
+    return ((hour % 12) || 12) + ':' + (minute < 10 ? '0' : '') + minute + (hour < 12 ? ' am' : ' pm');
+  }
+  function parseAnnotations(json) {
+    if (Array.isArray(json)) return json;
+    if (typeof json !== 'string' || !json) return [];
+    try { var list = JSON.parse(json); return Array.isArray(list) ? list : []; } catch (e) { return []; }
+  }
+  // The recorded lessons on a worksheet, newest first.
+  function lessonRecordings(annotations) {
+    return parseAnnotations(annotations).filter(function (a) {
+      return a && a.type === 'video' && a.url && a.lessonRecording;
+    }).map(function (a) {
+      var rec = a.lessonRecording || {};
+      var duration = Number(rec.duration) || 0;
+      return {
+        id: String(a.id || ''),
+        // Ans Key keeps the length in milliseconds; this is seconds.
+        title: String(rec.title || (rec.video ? 'Video lesson' : 'Lesson recording')).slice(0, 80),
+        at: Number(a.ts) || 0,
+        duration: Math.round(duration / 1000),
+        video: !!rec.video,
+        page: Number(a.page) || 1
+      };
+    }).filter(function (r) { return r.id; }).sort(function (p, q) { return q.at - p.at; });
+  }
+  // "12:04" or "1:02:09", from seconds.
+  function formatDuration(seconds) {
+    seconds = Math.max(0, Math.round(Number(seconds) || 0));
+    var hrs = Math.floor(seconds / 3600), mins = Math.floor(seconds / 60) % 60, secs = seconds % 60;
+    var two = function (n) { return (n < 10 ? '0' : '') + n; };
+    return hrs ? hrs + ':' + two(mins) + ':' + two(secs) : mins + ':' + two(secs);
+  }
+  // What the Ans Key link does once the worksheet is open (anskey ≥ v1.132.0).
+  function anskeyLink(base, id, action, rec) {
+    var url = base + '?ws=' + encodeURIComponent(id);
+    if (['play', 'print-answers', 'print-worksheet'].indexOf(action) >= 0) url += '&do=' + action;
+    if (action === 'play' && rec) url += '&rec=' + encodeURIComponent(rec);
+    return url;
+  }
+  // The timeline of one class: every released worksheet in teaching order,
+  // with its state, its last-edited time and its recorded lessons.
+  function timelineItems(course, docs, recordings) {
+    docs = docs || {}; recordings = recordings || {};
+    return releasedWorksheets(course).map(function (w) {
+      var d = docs[w.id] || null;
+      return {
+        id: w.id, seq: w.seq, state: w.state,
+        name: d && d.name ? String(d.name) : 'Worksheet ' + (w.seq + 1),
+        edited: editedMillis(d),
+        // Written on in Ans Key yet? Before that, the date is just the upload.
+        marked: !!(d && (d.annotationsPath || parseAnnotations(d.annotations).length)),
+        pages: d && d.pageCount ? Number(d.pageCount) : 0,
+        recordings: recordings[w.id] || [],
+        loading: !d
+      };
+    });
+  }
+
   // Every Polymath Online email goes out as the centre's own address, whichever
   // admin pressed the button. The Trigger Email extension reads `from` and
   // `replyTo` from each mail document, so replies land in the same inbox.
@@ -281,6 +366,8 @@
     worksheetState: worksheetState, releasedWorksheets: releasedWorksheets, nextWorksheets: nextWorksheets, progressUpdate: progressUpdate, percent: percent,
     memberSees: memberSees, coursesForMember: coursesForMember, compareCourses: compareCourses,
     moveItem: moveItem, remapProgress: remapProgress,
+    toMillis: toMillis, editedMillis: editedMillis, formatDay: formatDay, formatClock: formatClock, parseAnnotations: parseAnnotations,
+    lessonRecordings: lessonRecordings, formatDuration: formatDuration, anskeyLink: anskeyLink, timelineItems: timelineItems,
     SENDER_EMAIL: SENDER_EMAIL, SENDER_NAME: SENDER_NAME, portalMail: portalMail,
     inviteLink: inviteLink, inviteEmail: inviteEmail, mailtoLink: mailtoLink, inviteStatusLabel: inviteStatusLabel,
     timeAgo: timeAgo, chunk: chunk, safeFileName: safeFileName

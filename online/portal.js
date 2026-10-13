@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.0.1';
+  var APP_VERSION = 'v1.1.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -54,6 +54,7 @@
     members: [],
     docs: {},                  // worksheet id → pdfAnnotator data
     docsLoading: {},
+    recordings: {},            // worksheet id → its recorded lessons, newest first
     adminTab: 'overview',
     courseId: null,            // the class open in the admin's class view
     preview: null,             // { level, subjects } while an admin previews the student view
@@ -165,6 +166,66 @@
       queueRender();
     });
   }
+  // The student timeline follows the teacher live: each released worksheet
+  // is watched, so a new edit date or a new recording shows up as it lands.
+  var watchedSig = '', watchedStops = [], annotationStamps = {};
+  function watchDocs(ids) {
+    ids = ids.filter(Boolean).slice().sort();
+    var sig = ids.join('|');
+    if (sig === watchedSig) return;
+    watchedSig = sig;
+    watchedStops.forEach(function (stop) { try { stop(); } catch (e) {} });
+    watchedStops = [];
+    if (!ids.length) return;
+    var path = firebase.firestore.FieldPath.documentId();
+    Core.chunk(ids, 10).forEach(function (group) {
+      var stop = db.collection(WORKSHEETS).where(path, 'in', group).onSnapshot(function (snap) {
+        var seen = {};
+        snap.forEach(function (doc) {
+          seen[doc.id] = true;
+          state.docs[doc.id] = doc.data();
+          readRecordings(doc.id, doc.data());
+        });
+        group.forEach(function (id) { if (!seen[id] && !state.docs[id]) state.docs[id] = { name: 'Worksheet unavailable', missing: true }; });
+        queueRender();
+      }, function (err) {
+        console.warn('Worksheets could not be followed', err);
+        ensureDocs(group);
+      });
+      watchedStops.push(stop);
+    });
+  }
+  function stopWatchingDocs() {
+    watchedStops.forEach(function (stop) { try { stop(); } catch (e) {} });
+    watchedStops = []; watchedSig = '';
+  }
+  // A big worksheet keeps its annotations in Storage (`annotationsPath`);
+  // a small one inline. Either way only the recorded lessons are kept here.
+  function readRecordings(id, d) {
+    if (!d) return;
+    if (!d.annotationsPath) {
+      state.recordings[id] = Core.lessonRecordings(d.annotations || '[]');
+      annotationStamps[id] = 'inline';
+      return;
+    }
+    var stamp = d.annotationsPath + '#' + (d.annotationsStamp || Core.editedMillis(d));
+    if (annotationStamps[id] === stamp) return;
+    annotationStamps[id] = stamp;
+    storage.ref(d.annotationsPath).getDownloadURL().then(function (url) {
+      return fetch(url, { cache: 'no-store' });
+    }).then(function (resp) {
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp.text();
+    }).then(function (text) {
+      if (annotationStamps[id] !== stamp) return;
+      state.recordings[id] = Core.lessonRecordings(text);
+      queueRender();
+    }).catch(function (err) {
+      console.warn('Recordings could not be read for ' + id, err);
+      if (annotationStamps[id] === stamp) delete annotationStamps[id];
+    });
+  }
+
   function pdfUrl(id) {
     var d = state.docs[id];
     if (!d || !d.storagePath) return Promise.reject(new Error('This worksheet has no PDF yet.'));
@@ -250,6 +311,7 @@
   function stopListening() {
     unsubscribers.forEach(function (fn) { try { fn(); } catch (e) {} });
     unsubscribers = [];
+    stopWatchingDocs();
     state.courses = {}; state.coursesLoaded = false; state.invites = []; state.members = [];
   }
 
@@ -569,21 +631,7 @@
       html += '</div></section>';
     }
     if (released.length) {
-      html += '<div class="ws-list">';
-      released.slice().reverse().forEach(function (w) {
-        var tag = w.state === 'current' ? '<span class="chip chip-dark">This lesson</span>' : w.state === 'next' ? '<span class="chip chip-level">Up next</span>' : '';
-        html += '<div class="ws-row' + (w.state === 'current' ? ' is-current' : w.state === 'next' ? ' is-next' : '') + '">' +
-          '<div class="ws-num" aria-hidden="true">' + (w.seq + 1) + '</div>' +
-          '<div><div class="ws-name">' + h(docName(w.id)) + '</div>' +
-            '<div class="ws-sub"><span>Worksheet ' + (w.seq + 1) + '</span>' + (pagesLabel(w.id) ? '<span>· ' + h(pagesLabel(w.id)) + '</span>' : '') + tag + '</div></div>' +
-          '<div class="ws-actions">' +
-            '<button class="btn btn-sm btn-ghost" type="button" data-action="view" data-id="' + h(w.id) + '">View</button>' +
-            '<button class="btn btn-sm" type="button" data-action="download" data-id="' + h(w.id) + '">Download</button>' +
-            '<button class="btn btn-sm" type="button" data-action="print" data-id="' + h(w.id) + '">Print</button>' +
-            '<a class="btn btn-sm btn-primary" href="' + h(answerKeyUrl(w.id)) + '" target="_blank" rel="noopener" data-tooltip="Opens in the Ans Key app">Answer key</a>' +
-          '</div></div>';
-      });
-      html += '</div>';
+      html += timelineHtml(course);
     } else {
       html += '<div class="empty" style="border-top:1px solid var(--border-subtle)"><p>No worksheets have been released yet. They appear here as your lessons begin.</p></div>';
     }
@@ -592,13 +640,107 @@
     }
     return html + '</article>';
   }
+  /* ---- The timeline: every released worksheet, top to bottom ----
+     Worksheet 1 at the top, the one the class is on highlighted, and the
+     ones released ahead of it after. Each shows when the teacher last
+     changed it in Ans Key, its recorded lessons, and the worksheet and its
+     answer key to view or print. */
+  function timelineHtml(course) {
+    var items = Core.timelineItems(course, state.docs, state.recordings);
+    var html = '<section class="timeline" aria-label="Worksheets, in the order they are taught">' +
+      '<div class="tl-head"><span class="eyebrow">Worksheet timeline</span><span class="tl-legend"><span class="dot dot-current"></span>Current worksheet<span class="dot dot-done"></span>Done<span class="dot dot-ahead"></span>Released ahead</span></div>' +
+      '<ol class="tl-list">';
+    items.forEach(function (it) {
+      var cls = it.state === 'current' ? 'is-current' : it.state === 'next' ? 'is-next' : (Core.currentIndex(course) > it.seq ? 'is-done' : 'is-ahead');
+      var tag = it.state === 'current' ? '<span class="tl-tag tag-current">Current worksheet</span>'
+        : it.state === 'next' ? '<span class="tl-tag tag-next">Up next</span>'
+        : cls === 'is-done' ? '<span class="tl-tag tag-done">Done</span>' : '<span class="tl-tag tag-ahead">Released</span>';
+      var when = it.edited
+        ? '<span class="tl-when-label">' + (it.marked ? 'Edited' : 'Uploaded') + '</span> <time datetime="' + new Date(it.edited).toISOString() + '" title="' + (it.marked ? 'Last edited in Ans Key' : 'Not written on in Ans Key yet') + '">' + h(Core.formatDay(it.edited)) + '<span class="tl-clock"> · ' + h(Core.formatClock(it.edited)) + '</span></time>'
+        : (it.loading ? '<span class="tl-muted">…</span>' : '<span class="tl-muted">Not edited yet</span>');
+      var recs = it.recordings;
+      var videoBtn = recs.length
+        ? '<button class="btn btn-sm btn-video" type="button" data-action="video" data-id="' + h(it.id) + '" data-tooltip="Watch the lesson recorded in Ans Key">▶ ' + (recs.length === 1 ? 'Video' : recs.length + ' videos') + '</button>'
+        : '';
+      html += '<li class="tl-item ' + cls + '"' + (it.state === 'current' ? ' aria-current="step"' : '') + '>' +
+        '<div class="tl-rail" aria-hidden="true"><span class="tl-node">' + (it.seq + 1) + '</span></div>' +
+        '<div class="tl-card">' +
+          '<div class="tl-date">' + when + '</div>' +
+          '<div class="tl-title-row"><div class="tl-name">' + h(it.name) + '</div>' + tag + '</div>' +
+          '<div class="tl-sub"><span>Worksheet ' + (it.seq + 1) + '</span>' + (it.pages ? '<span>· ' + it.pages + (it.pages === 1 ? ' page' : ' pages') + '</span>' : '') +
+            (recs.length ? '<span>· ' + recs.length + ' recorded lesson' + (recs.length === 1 ? '' : 's') + (recs[0].duration ? ' (' + h(Core.formatDuration(recs[0].duration)) + ')' : '') + '</span>' : '') + '</div>' +
+          '<div class="tl-actions">' +
+            videoBtn +
+            '<span class="tl-group"><span class="tl-group-label">Worksheet</span>' +
+              '<button class="btn btn-sm btn-ghost" type="button" data-action="view" data-id="' + h(it.id) + '">View</button>' +
+              '<button class="btn btn-sm btn-ghost" type="button" data-action="print" data-id="' + h(it.id) + '">Print</button></span>' +
+            '<span class="tl-group"><span class="tl-group-label">Answer key</span>' +
+              '<button class="btn btn-sm btn-primary" type="button" data-action="answer-key" data-id="' + h(it.id) + '">View</button>' +
+              '<button class="btn btn-sm" type="button" data-action="print-key" data-id="' + h(it.id) + '">Print</button></span>' +
+          '</div>' +
+        '</div></li>';
+    });
+    return html + '</ol></section>';
+  }
+
+  /* ---- Ans Key inside the portal ----
+     The answer key and the lesson replays are Ans Key's own (the writing
+     follows the voice), so they open in a window over the portal. Same site,
+     same sign-in: nothing to log into twice. */
+  function openAnskey(id, action, rec, title) {
+    var url = Core.anskeyLink(ANSKEY_URL, id, action, rec);
+    var heading = (action === 'play' ? 'Lesson video' : action === 'print-answers' ? 'Printing the answer key' : 'Answer key') + ' · ' + docName(id);
+    var hint = action === 'play' ? 'The writing follows the teacher\'s voice. Tap a question chip to jump there.'
+      : action === 'print-answers' ? 'The print window opens by itself once the answers are ready.'
+      : 'Pinch or scroll to zoom. Use Print answer key on the timeline for a paper copy.';
+    openModal(function () {
+      return '<div class="modal-head anskey-head"><div><h2>' + h(title || heading) + '</h2><p class="muted" style="margin-top:4px;font-size:var(--font-size-sm)">' + h(hint) + '</p></div>' +
+        '<div class="row"><a class="btn btn-sm btn-ghost" href="' + h(url) + '" target="_blank" rel="noopener">Open in a new tab</a>' +
+        '<button class="btn btn-sm" type="button" data-modal-close aria-label="Close">Close</button></div></div>' +
+        '<div class="anskey-frame-wrap"><div class="anskey-loading"><div class="spinner" aria-hidden="true"></div><div>Opening Ans Key…</div></div>' +
+        '<iframe class="anskey-frame" title="' + h(heading) + '" src="' + h(url) + '" allow="autoplay; fullscreen; clipboard-write" allowfullscreen></iframe></div>';
+    }, null, function () {
+      var backs = document.querySelectorAll('.modal-back');
+      if (backs.length) backs[backs.length - 1].classList.add('modal-wide');
+      var frame = document.querySelector('.anskey-frame');
+      if (frame) frame.addEventListener('load', function () { var l = document.querySelector('.anskey-loading'); if (l) l.remove(); });
+    });
+  }
+  function chooseVideo(id) {
+    var recs = state.recordings[id] || [];
+    if (!recs.length) { toast('There is no recorded lesson on this worksheet yet.'); return; }
+    if (recs.length === 1) { openAnskey(id, 'play', recs[0].id); return; }
+    var modal = openModal(function () {
+      return '<div class="modal-head"><div><h2>Recorded lessons</h2><p class="muted" style="margin-top:4px;font-size:var(--font-size-sm)">' + h(docName(id)) + '</p></div>' +
+        '<button class="btn btn-sm btn-ghost" type="button" data-modal-close aria-label="Close">✕</button></div>' +
+        '<div class="rec-list">' + recs.map(function (r, k) {
+          return '<button class="rec-row" type="button" data-rec="' + h(r.id) + '">' +
+            '<span class="rec-play" aria-hidden="true">▶</span>' +
+            '<span class="rec-text"><b>' + h(r.title) + (k === 0 ? ' <span class="tl-tag tag-next">Newest</span>' : '') + '</b>' +
+            '<span class="muted">' + h([r.at ? Core.formatDay(r.at) + ' · ' + Core.formatClock(r.at) : '', r.duration ? Core.formatDuration(r.duration) : '', r.video ? 'video' : 'voice and writing'].filter(Boolean).join(' · ')) + '</span></span></button>';
+        }).join('') + '</div>';
+    }, function (e, _rerender, close) {
+      var row = e.target.closest('[data-rec]');
+      if (!row) return;
+      close();
+      openAnskey(id, 'play', row.dataset.rec);
+    });
+    return modal;
+  }
+
   function afterStudentRender(member) {
     var ids = [];
     Core.coursesForMember(state.courses, member).forEach(function (c) {
       Core.releasedWorksheets(c).forEach(function (w) { ids.push(w.id); });
     });
-    ensureDocs(ids);
+    watchDocs(ids);
+    // The current worksheet is brought into view once, on arrival.
+    if (!scrolledToCurrent) {
+      var cur = document.querySelector('.tl-item.is-current');
+      if (cur && cur.scrollIntoView) { scrolledToCurrent = true; setTimeout(function () { cur.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 350); }
+    }
   }
+  var scrolledToCurrent = false;
   function previewBarHtml() {
     var p = state.preview;
     var levels = Core.LEVELS.map(function (l) { return '<option' + (l === p.level ? ' selected' : '') + '>' + l + '</option>'; }).join('');
@@ -1095,7 +1237,8 @@
     name = String(name || '').trim().slice(0, 120);
     if (!name || !state.docs[id] || name === state.docs[id].name) return;
     try {
-      await db.collection(WORKSHEETS).doc(id).set({ name: name, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      // Not `updatedAt`: that date is "last edited in Ans Key" on the student timeline.
+      await db.collection(WORKSHEETS).doc(id).set({ name: name, renamedAt: FieldValue.serverTimestamp() }, { merge: true });
       state.docs[id].name = name;
       toast('Renamed.');
     } catch (err) { fail('Could not rename', err); }
@@ -1319,6 +1462,9 @@
       case 'view': viewWorksheet(id, el); break;
       case 'download': downloadWorksheet(id, el); break;
       case 'print': printWorksheet(id, el); break;
+      case 'answer-key': openAnskey(id, 'view'); break;
+      case 'print-key': openAnskey(id, 'print-answers'); break;
+      case 'video': chooseVideo(id); break;
       case 'tab': state.adminTab = el.dataset.tab; state.courseId = null; render(); break;
       case 'new-course': courseForm(null); break;
       case 'open-course': state.courseId = id; state.uploads = []; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); break;
