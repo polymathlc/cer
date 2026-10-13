@@ -2,6 +2,16 @@
 
 Guidance for Claude when working in this repo.
 
+## 🎓 Polymath Online: the student portal (`online/`, v1.0.0)
+
+The portal is published at polymathlc.com.sg/online by the website sync. It is made of `online/index.html` (markup and CSS), `online/portal-core.js` (pure rules, no Firebase) and `online/portal.js` (Firebase and screens). It has its own `APP_VERSION` in `portal.js`, shown to admins in the header. Its data lives in `onlineCourses`, `onlineInvites`, `onlineMembers` and `onlineSettings/main`, plus fields on `pdfAnnotator` docs (`onlineCourseId`, `onlineSeq`, `listOrder`). Invitations go out as `mail/polymath-online-invite-*` docs for the Trigger Email extension. Never use the protected `polymath-enquiry-*` ids. On joining, a member's level and subject are written to `studentProfiles/{uid}`.
+- **The release rule belongs to Ans Key.** Opening worksheet n there (`onlineWorksheetOpened` in polymathlc/anskey) releases up to n + 5. `Core.progressUpdate` uses the same arithmetic for the admin's own controls, so keep `RELEASE_AHEAD` the same in both repos. Releases never shrink on their own. Only the admin's "Released to students" control lowers them, and never below the class position.
+- **`saveOrder` is the only code that writes a class's order.** It runs a transaction that remaps the class position to the same worksheet (`Core.remapProgress`), then rewrites every doc's `onlineSeq`. Ans Key's `canSeeDoc` hides a class worksheet past `releasedThrough` using `onlineSeq`. If a stale `onlineSeq` survives, a reorder can show students an unreleased sheet or hide a released one.
+- **Students are told counts, never names, of locked worksheets.** `Core.nextWorksheets` filters by release, and the browser check asserts that no unreleased name reaches the page.
+- Deleting a class moves its unreleased worksheets to Ans Key's Hidden category. Without that step, students would suddenly see the rest of the term there.
+
+Run `node --test tools/online-portal-tests.mjs` and `node tools/online-portal-browser-check.mjs` after touching it. The browser check runs the real page on an in-memory Firebase (`tools/online-portal-fake-firebase.js`).
+
 ## ✨ Hold-to-snap shapes and 🖊️ Pen select (v1.424.0)
 
 `shape-snap.js` (loaded with `<script defer>` before `app.js`, and by `bar-model.html` / `pdf-annotator.html`)
