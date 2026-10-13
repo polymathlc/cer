@@ -5,7 +5,7 @@
 // .github/workflows/online-rules.yml before anything is published.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addOnlineRules, ONLINE_RULE, onlineRuleTests, onlinePreservedTests, publishOnlineRules, setupCredentials } from './online-rules.mjs';
+import { addOnlineRules, describeRules, ONLINE_RULE, onlineRuleTests, onlinePreservedTests, publishOnlineRules, setupCredentials } from './online-rules.mjs';
 import { addEnquiryRules } from './enquiry-rules.mjs';
 
 const original = `rules_version = '2';
@@ -31,10 +31,28 @@ test('the patch adds one block and one predicate, on either shape of the catch-a
     assert.equal(updated.replace(ONLINE_RULE, '').replace(PREDICATE + ';', ';'), source);
     assert.equal((updated.match(/BEGIN polymath-online-v1/g) || []).length, 1);
     assert.match(updated, /&& !isPolymathOnlinePath\(\);\n    \}/);
-    // The block sits inside the documents match, before the history block.
-    assert.ok(updated.indexOf(ONLINE_RULE) < updated.indexOf('// BEGIN permanent-student-question-history-v1'));
+    // The block sits inside the documents match, right above the catch-all.
+    assert.ok(updated.includes(ONLINE_RULE + '    match /{document=**} {'));
     assert.ok(updated.indexOf(ONLINE_RULE) > updated.indexOf('match /databases/{database}/documents'));
   }
+});
+
+test('other apps\' predicates on the catch-all are kept, in any number', () => {
+  const extra = withEnquiry.replace('!isPolymathEnquiryServerPath();', '!isPolymathEnquiryServerPath() && !isTutorServerPath() && !isScanServerPath();');
+  const updated = addOnlineRules(extra);
+  assert.ok(updated.includes('!isPolymathEnquiryServerPath() && !isTutorServerPath() && !isScanServerPath() && !isPolymathOnlinePath();'));
+  assert.equal(addOnlineRules(updated), updated);
+  // Another app adding its predicate after ours later still reads as installed.
+  const later = updated.replace('!isPolymathOnlinePath();', '!isPolymathOnlinePath() && !isLaterPath();');
+  assert.equal(addOnlineRules(later), later);
+});
+
+test('a refused rules file is outlined for the log without its string values', () => {
+  const outline = describeRules(withEnquiry.replace("'cerAinsteinLiveSessions'", "'secret@example.com'"));
+  assert.equal(outline.catchAllLines, 1);
+  assert.ok(outline.markers.includes('BEGIN polymath-enquiry-server-only-v1'));
+  assert.ok(outline.catchAll.trimStart().startsWith('match /{document=**}'));
+  assert.ok(!JSON.stringify(outline).includes('secret@example.com'));
 });
 
 test('installing twice changes nothing', () => {
@@ -58,7 +76,6 @@ test('unrecognised, partial and duplicate rules fail closed', () => {
     original.replace("'cerAinsteinLiveSessions', 'cerAinsteinLiveLimits'", "'other'"),
     original.replace('// BEGIN permanent', '// BEGIN polymath-online-v1\n    // BEGIN permanent'),
     original.replace('function isLiveServerPath', 'function isOnlineAdmin() { return true; }\n    function isLiveServerPath'),
-    original.replace('    // BEGIN permanent-student-question-history-v1\n', ''),
     original.replace('match /{document=**} {', 'match /{document=**} {\n    }\n    match /{other=**} {'),
     installed.replace(ONLINE_RULE, () => ONLINE_RULE + ONLINE_RULE),
     installed.replace(PREDICATE, '')])
