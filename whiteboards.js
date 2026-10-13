@@ -1,5 +1,5 @@
 import { WB_LIMITS, newWhiteboard, createWhiteboardCard, normalizeWhiteboard, normalizeWhiteboardApp,
-  whiteboardQuestionHtml, whiteboardPrintHtml, screenToWorld, whiteboardQuestionSnapshot } from './whiteboard-core.mjs?v=1.429.0';
+  whiteboardQuestionHtml, whiteboardPrintHtml, screenToWorld, whiteboardQuestionSnapshot } from './whiteboard-core.mjs?v=1.430.0';
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

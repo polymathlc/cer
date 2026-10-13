@@ -1,6 +1,6 @@
-import { installWhiteboards } from './whiteboards.js?v=1.429.0';
-import { whiteboardQuestionHtml, escapeWhiteboardHtml, whiteboardWorksheetHtml } from './whiteboard-core.mjs?v=1.429.0';
-import { whiteboardViewerUrl, whiteboardShareParameters, loadPublishedWhiteboard, whiteboardImageUrl } from './whiteboard-share.mjs?v=1.429.0';
+import { installWhiteboards } from './whiteboards.js?v=1.430.0';
+import { whiteboardQuestionHtml, escapeWhiteboardHtml, whiteboardWorksheetHtml } from './whiteboard-core.mjs?v=1.430.0';
+import { whiteboardViewerUrl, whiteboardShareParameters, loadPublishedWhiteboard, whiteboardImageUrl } from './whiteboard-share.mjs?v=1.430.0';
 
 const status = document.getElementById('whiteboardViewerStatus');
 const dialog = document.getElementById('wbResponseDialog');

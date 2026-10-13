@@ -1,4 +1,4 @@
-import { whiteboardPublicSnapshot, normalizeWhiteboard } from './whiteboard-core.mjs?v=1.429.0';
+import { whiteboardPublicSnapshot, normalizeWhiteboard } from './whiteboard-core.mjs?v=1.430.0';
 
 export const WHITEBOARD_BUCKET = 'mathgen--app.firebasestorage.app';
 export const WHITEBOARD_VIEWER = 'https://polymathlc.github.io/cer/whiteboard.html';
