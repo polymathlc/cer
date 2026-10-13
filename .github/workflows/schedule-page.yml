@@ -1,10 +1,10 @@
 name: Schedule page checks
 on:
   pull_request:
-    paths: ['schedule/**', 'tools/schedule-timetable-*.mjs', 'tools/schedule-samples-*.mjs', '.github/workflows/schedule-page.yml']
+    paths: ['schedule/**', 'tools/schedule-timetable-*.mjs', 'tools/schedule-samples-*.mjs', 'practice-preview.js', 'tools/practice-preview-tests.mjs', '.github/workflows/schedule-page.yml']
   push:
     branches: [main]
-    paths: ['schedule/**', 'tools/schedule-timetable-*.mjs', 'tools/schedule-samples-*.mjs', '.github/workflows/schedule-page.yml']
+    paths: ['schedule/**', 'tools/schedule-timetable-*.mjs', 'tools/schedule-samples-*.mjs', 'practice-preview.js', 'tools/practice-preview-tests.mjs', '.github/workflows/schedule-page.yml']
 permissions:
   contents: read
 jobs:
@@ -17,6 +17,8 @@ jobs:
           node-version: '22'
       - name: Check the trial notice dates and the timetable model
         run: node --test tools/schedule-timetable-tests.mjs
+      - name: Check the home page card and Sample Materials share one question
+        run: node --test tools/practice-preview-tests.mjs
       - run: npm install --no-save --package-lock=false playwright@1.62.1
       - run: npx playwright install --with-deps chromium
       - name: Check the timetable, the notice and booking at desktop and phone widths

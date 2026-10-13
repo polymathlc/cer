@@ -3,9 +3,9 @@ import './worksheet-art-editor.js?v=1';
 import './vendor/qrcode-generator.js';
 import './question-apps.js?v=1';
 import { installSummarySheets } from './summary-sheets.js?v=1.428.1';
-import { installWhiteboards } from './whiteboards.js?v=1.429.0';
-import { normalizeWhiteboard, whiteboardQuestionSnapshot, normalizeWhiteboardApp } from './whiteboard-core.mjs?v=1.429.0';
-import { whiteboardSnapshotBytes, whiteboardDigest, whiteboardViewerUrl, validWhiteboardUrl, loadPublishedWhiteboard } from './whiteboard-share.mjs?v=1.429.0';
+import { installWhiteboards } from './whiteboards.js?v=1.430.0';
+import { normalizeWhiteboard, whiteboardQuestionSnapshot, normalizeWhiteboardApp } from './whiteboard-core.mjs?v=1.430.0';
+import { whiteboardSnapshotBytes, whiteboardDigest, whiteboardViewerUrl, validWhiteboardUrl, loadPublishedWhiteboard } from './whiteboard-share.mjs?v=1.430.0';
 import { cropSourcesFor, normalizeCropBox, cropPixelRect, cropSourceUpdate } from './question-crop-core.mjs?v=2';
 import { questionRepairTargets, normalizeQuestionRepairPlan, applyQuestionRepairPlan } from './question-repair-core.mjs?v=3';
 import { measureCrop, figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, migrateDecisionsReviewState, DECISIONS_MAY_SKIP } from './decisions-review-core.mjs?v=2';
@@ -4498,7 +4498,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.429.0';
+const APP_VERSION = 'v1.430.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)

@@ -15,7 +15,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.429.0">
+  <link rel="modulepreload" href="app.js?v=1.430.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- EVERY screen font in ONE request, and it does not block the first paint:
@@ -9133,7 +9133,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 <link rel="stylesheet" href="arcade-ui.css?v=2">
 <link rel="stylesheet" href="./tcg-upgrade.css?v=1.383.0">
 <link rel="stylesheet" href="summary-sheets.css?v=1.428.1">
-<link rel="stylesheet" href="whiteboards.css?v=1.429.0">
+<link rel="stylesheet" href="whiteboards.css?v=1.430.0">
 <style>
 /* Public home page. Deliberately scoped so signed-in tools retain their styles. */
 #landingPage {
@@ -9179,7 +9179,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 #landingPage .lp-preview-stage::before { content:''; position:absolute; inset:0 -14px 0 28px; border-radius:50% 50% 16px 16px; background:#ddf0f2; z-index:-1; }
 #landingPage .lp-orbit { position:absolute; right:-26px; top:-8px; width:93px; height:93px; border:1px solid #b5c7c9; border-radius:50%; display:grid; place-items:center; background:var(--lp-paper); transform:rotate(12deg); }
 #landingPage .lp-orbit .lp-icon { width:48px; height:48px; color:var(--lp-green); stroke-width:1; }
-#landingPage .lp-preview { background:white; border:1px solid #cce8ec; border-radius:14px; box-shadow:0 25px 60px #09454d10,0 2px 8px #09454d06; overflow:hidden; transform:rotate(-1.5deg); }
+#landingPage .lp-preview { background:white; border:1px solid #cce8ec; border-radius:14px; box-shadow:0 25px 60px #09454d10,0 2px 8px #09454d06; overflow:hidden; transform:rotate(var(--pp-tilt,-1.5deg)); }
 #landingPage .lp-preview-top { padding:17px 22px; display:flex; gap:12px; align-items:center; justify-content:space-between; border-bottom:1px solid #dff1f3; font-size:10px; font-weight:700; }
 #landingPage .lp-preview-top > span:first-child { display:flex; align-items:center; gap:8px; }
 #landingPage .lp-preview-top .lp-icon { width:17px; height:17px; color:var(--lp-green); }
@@ -9690,18 +9690,10 @@ html { scroll-behavior:smooth; }
         </div>
         <div class="lp-preview-stage" aria-label="Illustrative guided science answer preview">
           <div class="lp-orbit" aria-hidden="true"><svg class="lp-icon"><use href="#lp-atom"/></svg></div>
-          <div class="lp-preview">
-            <div class="lp-preview-top"><span><svg class="lp-icon" aria-hidden="true"><use href="#lp-book"/></svg> Your next lightbulb moment</span><span class="lp-preview-label">Practice preview</span></div>
-            <div class="lp-preview-content">
-              <div class="lp-preview-meta"><span>ENERGY · HEAT</span><span>Claim. Evidence. Reasoning.</span></div>
-              <h2>Why does ice melt faster<br>on a metal tray?</h2>
-              <div class="lp-cer-row"><b>C</b><div><small>Make a claim</small>Metal is a <mark>better conductor of heat</mark> than wood.</div></div>
-              <div class="lp-cer-row"><b>E</b><div><small>Use the evidence</small>The ice on the metal tray <mark>melts in less time</mark>.</div></div>
-              <div class="lp-cer-row"><b>R</b><div><small>Connect the science</small>Heat transfers from the warmer tray to the ice <mark>more quickly</mark>.</div></div>
-            </div>
-            <div class="lp-preview-foot"><span>Same-sized ice cubes. Trays at room temperature.</span><b>One clear explanation.</b></div>
-          </div>
-          <div class="lp-feedback-float"><svg class="lp-icon" aria-hidden="true"><use href="#lp-spark"/></svg><div>Learn the thinking behind the answer.<small>Guided keywords → independent explanations</small></div></div>
+          <!-- The card's question lives in practice-preview.js, shared with the schedule page's Sample Materials tab. -->
+          <div class="lp-preview" data-practice-preview></div>
+          <div class="lp-feedback-float" data-practice-float></div>
+          <script src="practice-preview.js"></script>
         </div>
       </div>
     </section>
@@ -16022,6 +16014,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script type="module" src="app.js?v=1.429.0"></script>
+  <script type="module" src="app.js?v=1.430.0"></script>
 </body>
 </html>

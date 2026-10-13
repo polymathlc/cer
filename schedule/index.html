@@ -7,7 +7,7 @@
 <title>Polymath Learning Centre — Schedule, Sample Materials & Shop</title>
 <link rel="stylesheet" href="sample-materials.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="../assets/branding/polymath-learning-centre.png">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -484,6 +484,45 @@
     .tt-class { transition:none; }
     .tt-class:hover { transform:none; }
   }
+  /* The home page's "Your next lightbulb moment" card, in the Sample Materials tab. Its question is
+     rendered by ../practice-preview.js — the same file the home page uses — so the two never drift.
+     These rules copy the home page's look; the tilt comes from --pp-tilt, set by that file. */
+  .pp-section { margin:8px 0 28px; }
+  .pp-section h2 { font-size:17px; font-weight:700; color:var(--gray-900); margin:0 0 4px; }
+  .pp-section > p { color:var(--gray-600); font-size:14px; line-height:1.6; margin:0 0 22px; }
+  .pp-stage { --lp-ink:#10303a; --lp-green:#0d5c66; --lp-muted:#5e6d6f; --lp-paper:#f2f9fa;
+    position:relative; z-index:0; max-width:470px; margin:0 auto; padding:28px 19px 28px 0;
+    font-family:'Plus Jakarta Sans',system-ui,sans-serif; color:var(--lp-ink); }
+  .pp-stage::before { content:''; position:absolute; inset:0 -14px 0 28px; border-radius:50% 50% 16px 16px; background:#ddf0f2; z-index:-1; }
+  .pp-stage .lp-icon { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; flex:0 0 auto; }
+  .pp-stage .lp-orbit { position:absolute; right:-26px; top:-8px; width:93px; height:93px; border:1px solid #b5c7c9; border-radius:50%; display:grid; place-items:center; background:var(--lp-paper); transform:rotate(12deg); }
+  .pp-stage .lp-orbit .lp-icon { width:48px; height:48px; color:var(--lp-green); stroke-width:1; }
+  .pp-stage .lp-preview { position:relative; background:#fff; border:1px solid #cce8ec; border-radius:14px; box-shadow:0 25px 60px #09454d10,0 2px 8px #09454d06; overflow:hidden; transform:rotate(var(--pp-tilt,-1.5deg)); }
+  .pp-stage .lp-preview-top { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:17px 22px; font-size:10px; font-weight:700; border-bottom:1px solid #dff1f3; }
+  .pp-stage .lp-preview-top > span:first-child { display:flex; align-items:center; gap:8px; }
+  .pp-stage .lp-preview-top .lp-icon { width:17px; height:17px; color:var(--lp-green); }
+  .pp-stage .lp-preview-label { color:#617173; border:1px solid #cfe9ed; padding:3px 7px; border-radius:4px; font-size:8px; text-transform:uppercase; letter-spacing:.7px; white-space:nowrap; }
+  .pp-stage .lp-preview-content { padding:23px; }
+  .pp-stage .lp-preview-meta { display:flex; justify-content:space-between; gap:10px; font-size:9px; color:var(--lp-muted); margin-bottom:13px; }
+  .pp-stage .lp-preview h2 { font-size:18px; font-weight:600; letter-spacing:-.5px; line-height:1.5; margin:0 0 19px; color:var(--lp-ink); }
+  .pp-stage .lp-cer-row { display:flex; gap:12px; margin-top:10px; padding:12px 13px; border-radius:7px; background:#f3f9fa; font-size:11px; line-height:1.7; }
+  .pp-stage .lp-cer-row > b { flex:0 0 25px; width:25px; height:25px; display:grid; place-items:center; border-radius:50%; background:#dbeff1; color:var(--lp-green); font-size:10px; }
+  .pp-stage .lp-cer-row small { display:block; font-size:8px; font-weight:700; color:var(--lp-muted); letter-spacing:1.1px; text-transform:uppercase; margin-bottom:3px; }
+  .pp-stage .lp-cer-row mark { color:var(--lp-green); background:#d1eaed; padding:1px 3px; border-radius:2px; }
+  .pp-stage .lp-preview-foot { display:flex; justify-content:space-between; gap:12px; border-top:1px solid #dff1f3; padding:14px 23px 9px; font-size:10px; color:var(--lp-muted); }
+  .pp-stage .lp-preview-foot b { color:var(--lp-green); }
+  .pp-stage .lp-feedback-float { display:flex; gap:13px; align-items:center; position:relative; width:85%; margin:-1px -15px 0 auto; padding:16px 18px; background:#09424a; border:1px solid #0f6e7b; color:#fff; border-radius:10px; box-shadow:0 14px 22px #09404720; transform:rotate(2deg); font-size:11px; }
+  .pp-stage .lp-feedback-float .lp-icon { width:25px; height:25px; color:#aee1e8; }
+  .pp-stage .lp-feedback-float small { display:block; color:#bfccce; font-size:9px; margin-top:3px; }
+  @media (max-width:560px) {
+    .pp-stage { padding:22px 8px 22px 0; }
+    .pp-stage::before { inset:0 -4px 0 18px; }
+    .pp-stage .lp-orbit { right:-4px; top:-4px; width:64px; height:64px; }
+    .pp-stage .lp-orbit .lp-icon { width:34px; height:34px; }
+    .pp-stage .lp-preview-content { padding:18px; }
+    .pp-stage .lp-preview h2 { font-size:16px; }
+    .pp-stage .lp-feedback-float { width:95%; margin-right:0; }
+  }
 </style>
 </head>
 <body>
@@ -633,6 +672,17 @@
       <h1>Sample Materials</h1>
       <p>Explore our online learning suite. Try a few Math or Science questions, then work through a sample worksheet with our live tutor. No student account needed.</p>
     </div>
+    <!-- The same sample question as the home page card: rendered by ../practice-preview.js, so the two stay in sync. -->
+    <div class="pp-section">
+      <h2>Try the question from our home page</h2>
+      <p>This is the same practice question visitors see on our home page. Read it, then see how a strong answer is built step by step.</p>
+      <div class="pp-stage" aria-label="Sample science question with a guided answer">
+        <div class="lp-orbit" aria-hidden="true"><svg class="lp-icon" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="10" ry="4"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(120 12 12)"/><circle cx="12" cy="12" r="1"/></svg></div>
+        <div class="lp-preview" data-practice-preview></div>
+        <div class="lp-feedback-float" data-practice-float></div>
+        <script src="../practice-preview.js"></script>
+      </div>
+    </div>
     <div id="sample-materials-content"><div class="empty">Loading sample materials…</div></div>
     <div id="sample-materials-admin" class="card hidden"></div>
   </section>
@@ -778,7 +828,7 @@ const auth = firebase.auth();
 
 // Shown to the signed-in teacher in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const SCHEDULE_PAGE_VERSION = 'v1.2.0';
+const SCHEDULE_PAGE_VERSION = 'v1.3.0';
 
 const ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // Every trial booking emails these addresses via the "Trigger Email"
