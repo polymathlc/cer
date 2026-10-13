@@ -19,6 +19,9 @@ other page here.
 - **Invitations.** Type one or more emails and choose student or parent, level
   and subjects. An invitation email goes out through the project's Trigger
   Email extension (the `mail` collection), with **Copy link** as a fallback.
+  Every portal email is sent as **Polymath Learning Centre
+  <admin@polymathlc.com.sg>**, with replies going to that address, whichever
+  admin sent the invitation (`PolymathOnlineCore.portalMail`).
   The person joins with any Google account, and their Ans Key profile (level
   and subject) is filled in for them.
 - **Students and parents** see only their level's and subjects' classes. Each

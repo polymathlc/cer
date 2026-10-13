@@ -8,6 +8,8 @@ const require = createRequire(import.meta.url);
 const Core = require('../online/portal-core.js');
 const course = (over = {}) => ({ id: 'k', level: 'P5', subject: 'math', worksheetIds: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'], currentIndex: -1, releasedThrough: -1, ...over });
 
+function plainList(value) { return JSON.parse(JSON.stringify(value)); }
+
 test('nothing is released until the class starts or an admin releases it', () => {
   const c = course();
   assert.deepEqual(Core.releasedWorksheets(c), []);
@@ -86,6 +88,18 @@ test('the invitation email carries the link and escapes what people typed', () =
   assert.match(mail.text, /your child's P5 Mathematics and Science worksheets/);
   assert.ok(mail.html.includes('&lt;b&gt;Ethan&lt;/b&gt;') && !mail.html.includes('<b>Ethan</b>'));
   assert.ok(Core.mailtoLink({ email: 'p@example.com', level: 'P5', subjects: ['math'] }, link).startsWith('mailto:p%40example.com?subject='));
+});
+
+test('every portal email is sent as admin@polymathlc.com.sg, whoever invited', () => {
+  const message = Core.inviteEmail({ role: 'student', level: 'P6', subjects: ['math'], email: 's@example.com' }, 'https://x/?invite=1', Core.SENDER_NAME);
+  const mail = Core.portalMail('s@example.com', message, { inviteId: '1', sentBy: 'elsielcr@gmail.com' });
+  assert.equal(mail.from, 'Polymath Learning Centre <admin@polymathlc.com.sg>');
+  assert.equal(mail.replyTo, 'admin@polymathlc.com.sg');
+  assert.deepEqual(plainList(mail.to), ['s@example.com']);
+  assert.equal(mail.polymathOnline.sender, 'admin@polymathlc.com.sg');
+  assert.equal(mail.polymathOnline.sentBy, 'elsielcr@gmail.com');
+  assert.match(message.text, /^Hello,\n\nPolymath Learning Centre has invited you/);
+  assert.ok(!/Mr Chung|elsie/i.test(message.text + message.html));
 });
 
 test('emails are checked and normalised', () => {

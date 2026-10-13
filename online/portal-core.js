@@ -198,6 +198,20 @@
   function inviteLink(base, inviteId) {
     return String(base || '').replace(/\/?$/, '/') + '?invite=' + encodeURIComponent(inviteId);
   }
+  // Every Polymath Online email goes out as the centre's own address, whichever
+  // admin pressed the button. The Trigger Email extension reads `from` and
+  // `replyTo` from each mail document, so replies land in the same inbox.
+  var SENDER_EMAIL = 'admin@polymathlc.com.sg';
+  var SENDER_NAME = 'Polymath Learning Centre';
+  function portalMail(to, message, meta) {
+    return {
+      to: (Array.isArray(to) ? to : [to]).filter(Boolean),
+      from: SENDER_NAME + ' <' + SENDER_EMAIL + '>',
+      replyTo: SENDER_EMAIL,
+      message: message,
+      polymathOnline: Object.assign({ sender: SENDER_EMAIL }, meta || {})
+    };
+  }
   function inviteEmail(invite, link, fromName) {
     var who = String(invite.name || '').trim();
     var greeting = who ? 'Hi ' + who + ',' : 'Hello,';
@@ -267,6 +281,7 @@
     worksheetState: worksheetState, releasedWorksheets: releasedWorksheets, nextWorksheets: nextWorksheets, progressUpdate: progressUpdate, percent: percent,
     memberSees: memberSees, coursesForMember: coursesForMember, compareCourses: compareCourses,
     moveItem: moveItem, remapProgress: remapProgress,
+    SENDER_EMAIL: SENDER_EMAIL, SENDER_NAME: SENDER_NAME, portalMail: portalMail,
     inviteLink: inviteLink, inviteEmail: inviteEmail, mailtoLink: mailtoLink, inviteStatusLabel: inviteStatusLabel,
     timeAgo: timeAgo, chunk: chunk, safeFileName: safeFileName
   };
