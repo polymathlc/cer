@@ -26,6 +26,16 @@ other page here.
   and View, and every released worksheet with an **Answer key** button that
   opens it in Ans Key. A worksheet that has not been released is counted, not
   named.
+- **Security rules.** `tools/online-rules.mjs` adds a Polymath Online block to
+  the shared Firestore rules and touches nothing else. Signed-out visitors
+  see nothing. Only the three admins (verified Google emails) can write
+  classes, invitations, members, settings and invitation emails. A member
+  can read only their own row. A member can create that row only from an
+  invitation they accepted, with its level, role and subjects. After that
+  they can only refresh `lastSeenAt` and `photoURL`. Worksheet PDFs stay
+  readable for Ans Key share links. **Actions → Polymath Online rules → Run
+  workflow** tests every permission against the live rules, and with
+  *apply* ticked it publishes the change.
 
 ## Infinite whiteboards (v1.429.0)
 
