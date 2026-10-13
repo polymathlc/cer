@@ -109,13 +109,38 @@ export const ONLINE_RULE = `    // BEGIN polymath-online-v1
 
 `;
 
-// The catch-all exists in one of two shapes, with or without the enquiry
-// protection. Either way only " && !isPolymathOnlinePath()" is appended.
-const CATCH_ALL = /allow read, write: if !isPermanentStudentHistoryPath\(\) && !isLiveServerPath\(\)( && !isPolymathEnquiryServerPath\(\))?;/g;
+// The shared catch-all is one `allow read, write: if !A() && !B() …;` line.
+// Other apps append their own `&& !isXPath()` predicates, so any number of
+// them is accepted; only " && !isPolymathOnlinePath()" is added to the end.
+// The block goes right above the catch-all's `match /{document=**}`.
+const CATCH_ALL = /allow read, write: if !isPermanentStudentHistoryPath\(\) && !isLiveServerPath\(\)((?: && !\w+\(\))*);/g;
+const CATCH_ALL_MATCH = /^([ \t]*)match\s+\/\{\w+=\*\*\}\s*\{/m;
 const PREDICATE = ' && !isPolymathOnlinePath()';
-const ANCHOR = '    // BEGIN permanent-student-question-history-v1';
 
 function count(source, pattern) { return (source.match(pattern) || []).length; }
+
+// A redacted outline of the rules for the CI log when the patch refuses them:
+// which markers exist and the catch-all block with string literals hidden.
+export function describeRules(source) {
+  if (typeof source !== 'string') return { type: typeof source };
+  const at = source.search(CATCH_ALL_MATCH);
+  let block = '';
+  if (at >= 0) {
+    let depth = 0, i = source.indexOf('{', at);
+    for (let j = i; j < source.length; j++) {
+      if (source[j] === '{') depth++;
+      if (source[j] === '}' && --depth === 0) { block = source.slice(at, j + 1); break; }
+    }
+  }
+  return {
+    length: source.length,
+    markers: source.match(/BEGIN [\w-]+/g) || [],
+    documentsMatches: count(source, /match\s+\/databases\/\{\w+\}\/documents\s*\{/g),
+    catchAllMatches: count(source, /match\s+\/\{\w+=\*\*\}/g),
+    catchAllLines: count(source, CATCH_ALL),
+    catchAll: block.replace(/'[^']*'|"[^"]*"/g, "'…'")
+  };
+}
 
 export function addOnlineRules(source) {
   if (typeof source !== 'string' || !source.includes('service cloud.firestore {')
@@ -123,17 +148,20 @@ export function addOnlineRules(source) {
       || count(source, /match\s+\/\{\w+=\*\*\}/g) !== 1
       || !source.includes("'cerAinsteinLiveSessions', 'cerAinsteinLiveLimits'"))
     throw new Error('Unrecognized current shared rules; no rules changed.');
-  const installedLine = /allow read, write: if !isPermanentStudentHistoryPath\(\) && !isLiveServerPath\(\)( && !isPolymathEnquiryServerPath\(\))? && !isPolymathOnlinePath\(\);/g;
-  if (source.includes(ONLINE_RULE) && count(source, installedLine) === 1) {
-    if (count(source, /BEGIN polymath-online-v1/g) !== 1 || count(source, /function isPolymathOnlinePath/g) !== 1)
+  const lines = source.match(CATCH_ALL) || [];
+  if (lines.length !== 1)
+    throw new Error('Expected one shared catch-all line; review changed rules first.');
+  const installed = lines[0].includes(PREDICATE + ';') || lines[0].includes(PREDICATE + ' &&');
+  if (installed) {
+    if (!source.includes(ONLINE_RULE) || count(source, /BEGIN polymath-online-v1/g) !== 1
+        || count(source, /function isPolymathOnlinePath/g) !== 1 || count(source, /isPolymathOnlinePath\(\)/g) !== 2)
       throw new Error('Ambiguous existing Polymath Online protection.');
     return source;
   }
-  if (count(source, CATCH_ALL) !== 1 || source.includes('polymath-online-v1')
-      || source.includes('isPolymathOnlinePath') || source.includes('isOnlineAdmin')
-      || count(source, new RegExp(ANCHOR.trim().replace(/[-/]/g, '\\$&'), 'g')) !== 1)
-    throw new Error('Expected the existing shared protection; review changed rules first.');
-  const updated = source.replace(ANCHOR, () => ONLINE_RULE + ANCHOR)
+  if (source.includes('polymath-online-v1') || source.includes('isPolymathOnlinePath')
+      || /function\s+(isOnlineAdmin|onlineEmail|onlineAcceptsInvite|onlineJoins|onlineTouches)\b/.test(source))
+    throw new Error('A partial Polymath Online protection is already there; review changed rules first.');
+  const updated = source.replace(CATCH_ALL_MATCH, whole => ONLINE_RULE + whole)
     .replace(CATCH_ALL, line => line.slice(0, -1) + PREDICATE + ';');
   if (updated.replace(ONLINE_RULE, '').replace(PREDICATE + ';', ';') !== source)
     throw new Error('Unrelated rules would change.');
@@ -294,7 +322,11 @@ export async function publishOnlineRules({ request, deploy = false, readOnly = f
   if (!valid(previous.rulesetName)) throw new Error('Unexpected current ruleset.');
   const production = await request(previous.rulesetName), files = production.source?.files;
   if (!Array.isArray(files) || files.length !== 1) throw new Error('Unexpected current rules files.');
-  const original = files[0].content, content = addOnlineRules(original), changed = original !== content;
+  const original = files[0].content;
+  let content;
+  try { content = addOnlineRules(original); }
+  catch (error) { error.message += ' Current rules outline: ' + JSON.stringify(describeRules(original)); throw error; }
+  const changed = original !== content;
   const sourceSha256 = createHash('sha256').update(content).digest('hex');
   if (readOnly) return { mode: 'read', changeNeeded: changed, ruleset: previous.rulesetName, sourceSha256 };
   const source = { files: [{ ...files[0], content }] }, preserved = onlinePreservedTests(original);
