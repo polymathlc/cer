@@ -109,3 +109,67 @@ test('emails are checked and normalised', () => {
   assert.equal(Core.initials('Ethan Tan'), 'ET');
   assert.equal(Core.initials('', 'mei@x.com'), 'M');
 });
+
+
+test('timeline: worksheets in teaching order, with their Ans Key edit date and recorded lessons', () => {
+  const course = { worksheetIds: ['a', 'b', 'c', 'd', 'e', 'f'], currentIndex: 2, releasedThrough: 4 };
+  const docs = {
+    a: { name: 'WS A', updatedAt: { seconds: 1760256300, nanoseconds: 0 }, pageCount: 2 },
+    b: { name: 'WS B', updatedAt: { toMillis: () => 1760342700000 } },
+    c: { name: 'WS C', createdAt: { seconds: 1760000000 }, annotations: '' }
+  };
+  const recordings = { c: Core.lessonRecordings(JSON.stringify([{ id: 'r', type: 'video', url: 'u', ts: 5, lessonRecording: { version: 1, duration: 90000 } }])) };
+  const items = plainList(Core.timelineItems(course, docs, recordings));
+  assert.deepEqual(items.map((i) => i.id), ['a', 'b', 'c', 'd', 'e']);
+  assert.deepEqual(items.map((i) => i.state), ['released', 'released', 'current', 'next', 'next']);
+  assert.equal(items[0].edited, 1760256300000);
+  assert.equal(items[1].edited, 1760342700000);
+  assert.equal(items[2].edited, 1760000000000, 'falls back to when it was uploaded');
+  assert.equal(items[3].edited, 0);
+  assert.equal(items[3].loading, true);
+  assert.equal(items[3].name, 'Worksheet 4');
+  assert.equal(items[0].pages, 2);
+  assert.equal(items[0].marked, false);
+  assert.equal(Core.timelineItems(course, { a: { annotations: '[{"id":"p","type":"pen"}]' } })[0].marked, true);
+  assert.equal(Core.timelineItems(course, { a: { annotationsPath: 'pdf-annotator/a.annotations.json' } })[0].marked, true);
+  assert.deepEqual(items[2].recordings.map((r) => [r.id, r.duration]), [['r', 90]]);
+});
+
+test('timeline: recorded lessons are only Ans Key lesson recordings, newest first', () => {
+  const list = [
+    { id: 'pen', type: 'pen' },
+    { id: 'yt', type: 'video', url: 'https://youtu.be/x' },
+    { id: 'a', type: 'video', url: 'u1', ts: 10, lessonRecording: { version: 1, duration: 724000, title: 'Q5', video: true } },
+    { id: 'b', type: 'video', url: 'u2', ts: 20, lessonRecording: { version: 1, duration: 61000 } },
+    { id: '', type: 'video', url: 'u3', ts: 30, lessonRecording: { version: 1 } }
+  ];
+  const recs = plainList(Core.lessonRecordings(JSON.stringify(list)));
+  assert.deepEqual(recs.map((r) => r.id), ['b', 'a']);
+  assert.equal(recs[1].title, 'Q5');
+  assert.equal(recs[1].video, true);
+  assert.equal(recs[0].title, 'Lesson recording');
+  assert.equal(Core.formatDuration(recs[1].duration), '12:04');
+  assert.equal(Core.formatDuration(3729), '1:02:09');
+  assert.deepEqual(plainList(Core.lessonRecordings('not json')), []);
+  assert.deepEqual(plainList(Core.lessonRecordings(null)), []);
+});
+
+test('timeline: dates read like a person wrote them', () => {
+  const ms = new Date(2026, 9, 12, 16, 5).getTime();
+  assert.equal(Core.formatDay(ms, new Date(2026, 11, 1).getTime()), 'Mon 12 Oct');
+  assert.equal(Core.formatDay(ms, new Date(2027, 0, 5).getTime()), 'Mon 12 Oct 2026');
+  assert.equal(Core.formatClock(ms), '4:05 pm');
+  assert.equal(Core.formatClock(new Date(2026, 0, 1, 0, 9).getTime()), '12:09 am');
+  assert.equal(Core.formatDay(0), '');
+  assert.equal(Core.toMillis('2026-10-12T08:05:00Z'), Date.UTC(2026, 9, 12, 8, 5));
+  assert.equal(Core.toMillis({ _seconds: 2 }), 2000);
+  assert.equal(Core.toMillis(undefined), 0);
+});
+
+test('Ans Key links: view, replay a lesson, print the answers, nothing unexpected', () => {
+  assert.equal(Core.anskeyLink('../anskey/', 'w 1'), '../anskey/?ws=w%201');
+  assert.equal(Core.anskeyLink('../anskey/', 'w1', 'play', 'rec-1'), '../anskey/?ws=w1&do=play&rec=rec-1');
+  assert.equal(Core.anskeyLink('../anskey/', 'w1', 'play'), '../anskey/?ws=w1&do=play');
+  assert.equal(Core.anskeyLink('../anskey/', 'w1', 'print-answers', 'ignored'), '../anskey/?ws=w1&do=print-answers');
+  assert.equal(Core.anskeyLink('../anskey/', 'w1', 'delete'), '../anskey/?ws=w1');
+});

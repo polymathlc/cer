@@ -4,6 +4,12 @@ Guidance for Claude when working in this repo.
 
 ## 🎓 Polymath Online: the student portal (`online/`, v1.0.0)
 
+**v1.1.0: student timeline.**
+- `timelineHtml(course)` renders `Core.timelineItems(course, state.docs, state.recordings)`. The edit date is `pdfAnnotator.updatedAt`, which Ans Key writes on every save. Renaming in the portal writes `renamedAt` rather than `updatedAt`, so that date stays "last edited in Ans Key".
+- `watchDocs` follows released worksheets live with `in` listeners in groups of 10. `readRecordings` keeps `Core.lessonRecordings` (video annotations with `lessonRecording`, newest first) from the inline `annotations` or from Storage `annotationsPath`.
+- Video, answer-key View and Print open Ans Key in `openAnskey` (a modal iframe) via `Core.anskeyLink`. They need anskey's `?ws=&do=` actions (v1.132.0).
+- Every portal email goes through `Core.portalMail` (from admin@polymathlc.com.sg).
+
 The portal is published at polymathlc.com.sg/online by the website sync. It is made of `online/index.html` (markup and CSS), `online/portal-core.js` (pure rules, no Firebase) and `online/portal.js` (Firebase and screens). It has its own `APP_VERSION` in `portal.js`, shown to admins in the header. Its data lives in `onlineCourses`, `onlineInvites`, `onlineMembers` and `onlineSettings/main`, plus fields on `pdfAnnotator` docs (`onlineCourseId`, `onlineSeq`, `listOrder`). Invitations go out as `mail/polymath-online-invite-*` docs for the Trigger Email extension. Never use the protected `polymath-enquiry-*` ids. On joining, a member's level and subject are written to `studentProfiles/{uid}`.
 - **The release rule belongs to Ans Key.** Opening worksheet n there (`onlineWorksheetOpened` in polymathlc/anskey) releases up to n + 5. `Core.progressUpdate` uses the same arithmetic for the admin's own controls, so keep `RELEASE_AHEAD` the same in both repos. Releases never shrink on their own. Only the admin's "Released to students" control lowers them, and never below the class position.
 - **`saveOrder` is the only code that writes a class's order.** It runs a transaction that remaps the class position to the same worksheet (`Core.remapProgress`), then rewrites every doc's `onlineSeq`. Ans Key's `canSeeDoc` hides a class worksheet past `releasedThrough` using `onlineSeq`. If a stale `onlineSeq` survives, a reorder can show students an unreleased sheet or hide a released one.
