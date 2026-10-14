@@ -43,3 +43,59 @@ test('both pages tilt the card the same way', () => {
   assert.match(sched, /\.lp-preview \{[^}]*rotate\(var\(--pp-tilt/);
   assert.match(PP.TILT, /^-?\d+(\.\d+)?deg$/);
 });
+
+// ── The live Sample Materials questions (the teacher picks them on the schedule page) ──
+const MCQ = { id: 'q1', title: 'Which material is the best conductor of heat?', level: 'P5', topic: 'Heat',
+  blocks: [{ type: 'mcq', options: [{ id: 'a', text: 'Wood' }, { id: 'b', text: 'Copper' }, { id: 'c', text: 'Plastic' }] },
+    { type: 'image', url: 'https://example.com/fig.png', caption: 'Figure 1' }] };
+const CER = { id: 'q2', title: 'Why did the ice melt faster?', level: 'P4', topic: 'Matter', blocks: [{ type: 'cer' }] };
+
+test('a live sample renders as the tilted card, numbered and with its options', () => {
+  const html = PP.renderSample(MCQ, { index: 1, count: 3, href: '#x' });
+  assert.ok(html.includes('Sample question 2 of 3'));
+  assert.ok(html.includes('best conductor of heat'));
+  for (const t of ['Wood', 'Copper', 'Plastic']) assert.ok(html.includes(t), t);
+  assert.equal((html.match(/data-pp-go=/g) || []).length, 3);
+  assert.ok(html.includes('Multiple choice'));
+  assert.ok(html.includes('https://example.com/fig.png'));
+  assert.ok(html.includes('Try it yourself'));
+});
+
+test('a CER sample shows Claim, Evidence and Reasoning', () => {
+  const html = PP.renderSample(CER);
+  assert.ok(/Claim/.test(html) && /Evidence/.test(html) && /Reasoning/.test(html));
+  assert.ok(html.includes('Sample question 1 of 1'));
+  assert.ok(!html.includes('data-pp-go'), 'one question needs no dots');
+});
+
+test('a sample is escaped, and only https pictures are drawn', () => {
+  const html = PP.renderSample({ title: '<script>alert(1)</script>', blocks: [{ type: 'image', url: 'javascript:alert(1)' }] });
+  assert.ok(!html.includes('<script>alert'));
+  assert.ok(!html.includes('javascript:'));
+});
+
+test('usable keeps real questions, at most five', () => {
+  const many = Array.from({ length: 8 }, (_, i) => ({ id: 'q' + i, title: 'Question ' + i, blocks: [] }));
+  assert.equal(PP.usable(many).length, 5);
+  assert.equal(PP.usable([null, {}, 'x']).length, 0);
+  assert.equal(PP.usable(undefined).length, 0);
+});
+
+test('loadLive reads science first, falls back to math, and survives a dead network', async () => {
+  const saved = globalThis.fetch;
+  try {
+    PP._reset();
+    const asked = [];
+    globalThis.fetch = async (url, init) => {
+      const subject = JSON.parse(init.body).subject; asked.push(subject);
+      return { ok: true, json: async () => ({ questions: subject === 'math' ? [MCQ] : [] }) };
+    };
+    const got = await PP.loadLive();
+    assert.deepEqual(asked, ['science', 'math']);
+    assert.equal(got.length, 1);
+
+    PP._reset();
+    globalThis.fetch = async () => { throw new Error('offline'); };
+    assert.deepEqual(await PP.loadLive(), []);
+  } finally { globalThis.fetch = saved; PP._reset(); }
+});
