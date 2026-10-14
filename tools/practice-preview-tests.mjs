@@ -58,7 +58,7 @@ test('a live sample renders as the tilted card, numbered and with its options', 
   assert.equal((html.match(/data-pp-go=/g) || []).length, 3);
   assert.ok(html.includes('Multiple choice'));
   assert.ok(html.includes('https://example.com/fig.png'));
-  assert.ok(html.includes('Try it yourself'));
+  assert.ok(html.includes('More sample questions'));
 });
 
 test('a CER sample shows Claim, Evidence and Reasoning', () => {
@@ -98,4 +98,93 @@ test('loadLive reads science first, falls back to math, and survives a dead netw
     globalThis.fetch = async () => { throw new Error('offline'); };
     assert.deepEqual(await PP.loadLive(), []);
   } finally { globalThis.fetch = saved; PP._reset(); }
+});
+
+// ── Answering in the card ──────────────────────────────────────────────────────────────────────
+const LIVE = { id: 'q9', title: 'Which material conducts heat best?', level: 'P5', topic: 'Heat',
+  blocks: [{ type: 'mcq', id: 'm1', options: [{ id: 'a', text: 'Wood' }, { id: 'b', text: 'Copper' }, { id: 'c', text: 'Plastic' }] }] };
+const REVIEW = { mcq: [{ blockId: 'm1', correctId: 'b', options: [{ id: 'a', why: 'Wood is a poor conductor of heat.' }, { id: 'c', why: 'Plastic is an insulator.' }] }],
+  explanation: 'Metals conduct heat well.', modelAnswer: 'Copper.' };
+
+test('the loading state keeps the card shape and shows no old question', () => {
+  const html = PP.renderLoading();
+  assert.ok(html.includes('Loading a sample question'));
+  assert.ok(html.includes('pp-skel'));
+  assert.ok(html.includes('role="status"'));
+  for (const line of PP.PREVIEW.question) assert.ok(!html.includes(line), 'old example leaked: ' + line);
+});
+
+test('a one-tap MCQ can be answered in the card', () => {
+  assert.equal(PP.oneTap(LIVE), true);
+  const html = PP.renderSample(LIVE, { index: 0, count: 2 });
+  assert.equal((html.match(/data-pp-opt=/g) || []).length, 3);
+  assert.ok(html.includes('Tap an answer to check it.'));
+});
+
+test('a wrong answer shows the correct one and why the others are not', () => {
+  const state = { responses: { m1: 'a' }, pending: false, result: { verdict: 'incorrect', feedback: 'Copper is a metal.', review: REVIEW } };
+  const html = PP.renderSample(LIVE, { index: 0, count: 2, state });
+  assert.ok(html.includes('Not quite.'));
+  assert.ok(html.includes('Correct answer'));
+  assert.ok(html.includes('Why not 1:') && html.includes('poor conductor'));
+  assert.ok(html.includes('Why not 3:') && html.includes('insulator'));
+  assert.ok(html.includes('Explanation') && html.includes('Metals conduct heat well.'));
+  assert.ok(html.includes('data-pp-retry'));
+  assert.ok(html.includes('Next question'));
+});
+
+test('a right answer is marked and still explains the others', () => {
+  const state = { responses: { m1: 'b' }, pending: false, result: { verdict: 'correct', feedback: '', review: REVIEW } };
+  const html = PP.renderSample(LIVE, { state });
+  assert.ok(html.includes('Correct, well done.'));
+  assert.ok(html.includes('Your answer · correct'));
+  assert.ok(html.includes('Why not 1:'));
+});
+
+test('an uncertain verdict shows no review', () => {
+  const state = { responses: { m1: 'a' }, pending: false, result: { verdict: 'uncertain', feedback: 'We could not mark that.', review: REVIEW } };
+  const html = PP.renderSample(LIVE, { state });
+  assert.ok(!html.includes('Why not'));
+  assert.ok(!html.includes('Explanation'));
+  assert.ok(!html.includes('data-pp-retry'));
+});
+
+test('checkAnswer asks the service exactly as Sample Materials does', async () => {
+  const saved = globalThis.fetch;
+  try {
+    PP._reset();
+    const bodies = [];
+    globalThis.fetch = async (url, init) => {
+      const body = JSON.parse(init.body); bodies.push(body);
+      if (body.action === 'questions') return { ok: true, json: async () => ({ token: 'tok', questions: [LIVE] }) };
+      return { ok: true, json: async () => ({ verdict: 'correct', review: REVIEW }) };
+    };
+    const r = await PP.checkAnswer(LIVE, { m1: 'b' });
+    assert.equal(r.verdict, 'correct');
+    const check = bodies.find(b => b.action === 'check');
+    assert.deepEqual(check, { action: 'check', subject: 'science', token: 'tok', questionId: 'q9', responses: { m1: 'b' } });
+  } finally { globalThis.fetch = saved; PP._reset(); }
+});
+
+test('the questions are remembered in the browser for an instant next visit', async () => {
+  const savedFetch = globalThis.fetch, savedLs = globalThis.localStorage;
+  const store = {};
+  try {
+    globalThis.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } };
+    PP._reset();
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ token: 'tok', questions: [LIVE] }) });
+    await PP.loadLive();
+    assert.ok(store[PP.CACHE_KEY], 'nothing was written');
+    const c = PP.readCache();
+    assert.equal(c.questions.length, 1);
+    assert.equal(c.token, 'tok');
+    assert.equal(c.fresh, false);
+  } finally { globalThis.fetch = savedFetch; globalThis.localStorage = savedLs; PP._reset(); }
+});
+
+test('both pages start the sample fetch from the head', () => {
+  for (const [name, src] of [['home', home], ['schedule', sched]]) {
+    assert.ok(src.includes('window.__ppEarly='), name + ' has no early fetch');
+    assert.match(src, /<link rel="preconnect" href="https:\/\/us-central1-mathgen--app\.cloudfunctions\.net"/);
+  }
 });

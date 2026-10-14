@@ -7,6 +7,10 @@
 <title>Polymath Learning Centre — Schedule, Sample Materials & Shop</title>
 <link rel="stylesheet" href="sample-materials.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
+     questions. Ask now, from the head, so the answer is usually back before the card is even drawn. -->
+<link rel="preconnect" href="https://us-central1-mathgen--app.cloudfunctions.net" crossorigin>
+<script>try{if(window.fetch){window.__ppEarly=fetch('https://us-central1-mathgen--app.cloudfunctions.net/studyBuddySample',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'questions',subject:'science'})}).then(function(r){return r.ok?r.json():null}).catch(function(){return null})}}catch(e){}</script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="../assets/branding/polymath-learning-centre.png">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -828,7 +832,7 @@ const auth = firebase.auth();
 
 // Shown to the signed-in teacher in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const SCHEDULE_PAGE_VERSION = 'v1.3.1';
+const SCHEDULE_PAGE_VERSION = 'v1.3.2';
 
 const ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // Every trial booking emails these addresses via the "Trigger Email"
