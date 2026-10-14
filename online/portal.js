@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.1.0';
+  var APP_VERSION = 'v1.2.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -494,14 +494,19 @@
   // Live updates re-draw the page; whatever the admin is typing in survives it.
   function render() {
     var active = document.activeElement;
-    var keep = active && active.id && $('app').contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)
+    // Only what someone is typing is carried across a re-render. A file
+    // picker's value can never be set back (the browser throws), and doing so
+    // used to stop an upload at "waiting" before its first file was read.
+    var keep = active && active.id && $('app').contains(active) && Core.keepsTyping(active.tagName, active.type)
       ? { id: active.id, value: active.value, start: active.selectionStart, end: active.selectionEnd } : null;
     renderInner();
     if (keep && $(keep.id)) {
       var again = $(keep.id);
-      if (again.value !== keep.value) again.value = keep.value;
-      again.focus();
-      try { if (keep.start != null) again.setSelectionRange(keep.start, keep.end); } catch (e) {}
+      try {
+        if (again.value !== keep.value) again.value = keep.value;
+        again.focus();
+        if (keep.start != null) again.setSelectionRange(keep.start, keep.end);
+      } catch (e) {}
     }
   }
   function renderInner() {
@@ -846,8 +851,8 @@
       '<div class="section-note">Upload the full list once. Files are added in name order (Worksheet 2 before Worksheet 10), after any already here.</div></div>' +
       '<button class="btn" type="button" data-action="add-existing">Add from Ans Key</button></div>' +
       '<label class="dropzone" id="dropzone" for="fileInput"><input id="fileInput" type="file" accept="application/pdf,.pdf" multiple class="visually-hidden">' +
-        '<div style="font-size:1.6rem">📄</div><div style="margin-top:6px"><b>Drop PDFs here</b> or click to choose files</div>' +
-        '<div class="small muted" style="margin-top:4px">Each one becomes a worksheet in Ans Key, ready for you to write its answer key.</div>' +
+        '<div style="font-size:1.6rem">📄</div><div style="margin-top:6px"><b>Drop PDFs here</b>, as many as you like, or click to choose files</div>' +
+        '<div class="small muted" style="margin-top:4px">Select several at once with Shift or Ctrl (⌘ on a Mac). Each one becomes a worksheet in Ans Key, ready for you to write its answer key.</div>' +
         uploadsHtml() + '</label></div>';
     html += '<div class="section"><div class="section-head"><div><h2 class="section-heading">Teaching order</h2><div class="section-note">Rename in place, reorder with the arrows, or open one in Ans Key.</div></div></div>';
     if (!total) html += '<div class="card empty"><p>No worksheets in this class yet.</p></div>';
@@ -879,20 +884,37 @@
   }
   function uploadsHtml() {
     if (!state.uploads.length) return '';
-    return '<div class="upload-list">' + state.uploads.map(function (u) {
-      return '<div class="upload-item"><span>' + h(u.name) + ' <span class="muted small">' + h(u.state) + '</span></span>' +
-        '<div class="progress"><div class="done" style="width:' + u.pct + '%"></div></div></div>';
-    }).join('') + '</div>';
+    var sum = Core.uploadSummary(state.uploads);
+    return '<div class="upload-list" aria-live="polite">' +
+      '<div class="upload-total"><span><b>' + h(sum.label) + '</b></span><span class="muted small">' + sum.pct + '%</span>' +
+        '<div class="progress"><div class="done" id="uploadTotalBar" style="width:' + sum.pct + '%"></div></div></div>' +
+      state.uploads.map(function (u) {
+        var cls = /^failed/.test(u.state) ? ' is-failed' : u.state === 'added' ? ' is-added' : '';
+        return '<div class="upload-item' + cls + '"><span>' + h(u.name) + ' <span class="muted small">' + h(Core.uploadStateLabel(u.state)) + '</span></span>' +
+          '<div class="progress"><div class="done" data-upload="' + u.key + '" style="width:' + u.pct + '%"></div></div></div>';
+      }).join('') + '</div>';
+  }
+  // Progress moves often; only the bars change, never the whole page.
+  function paintUploadBar(item) {
+    var bar = document.querySelector('.upload-item .done[data-upload="' + item.key + '"]');
+    if (bar) bar.style.width = item.pct + '%';
+    var total = $('uploadTotalBar');
+    if (total) total.style.width = Core.uploadSummary(state.uploads).pct + '%';
   }
   function afterAdminRender() {
     if (state.courseId && state.courses[state.courseId]) {
       ensureDocs(Core.courseIds(state.courses[state.courseId]));
       var input = $('fileInput'), zone = $('dropzone');
-      if (input) input.addEventListener('change', function () { uploadFiles(Array.from(input.files || [])); input.value = ''; });
+      if (input) input.addEventListener('change', function () {
+        var chosen = Array.from(input.files || []);
+        input.value = '';
+        input.blur();
+        startUpload(chosen);
+      });
       if (zone) {
         ['dragenter', 'dragover'].forEach(function (t) { zone.addEventListener(t, function (e) { e.preventDefault(); zone.classList.add('is-over'); }); });
         ['dragleave', 'drop'].forEach(function (t) { zone.addEventListener(t, function (e) { e.preventDefault(); zone.classList.remove('is-over'); }); });
-        zone.addEventListener('drop', function (e) { uploadFiles(Array.from((e.dataTransfer && e.dataTransfer.files) || [])); });
+        zone.addEventListener('drop', function (e) { startUpload(Array.from((e.dataTransfer && e.dataTransfer.files) || [])); });
       }
     }
     // A class just created is not in the live list yet: state.courseId stays
@@ -1297,9 +1319,16 @@
       return n;
     } catch (e) { return null; }
   }
+  // Several files go up at once, so a whole term's list does not wait on one
+  // PDF at a time; each batch is still added to the class in name order.
+  var UPLOAD_AT_ONCE = 3;
+  var uploadKey = 0;
+  function startUpload(files) {
+    uploadFiles(files).catch(function (err) { fail('The upload stopped', err); });
+  }
   async function uploadFiles(files) {
     var course = state.courses[state.courseId];
-    if (!course) return;
+    if (!course || !files.length) return;
     var pdfs = files.filter(function (f) { return /\.pdf$/i.test(f.name) || f.type === 'application/pdf'; });
     var refused = files.length - pdfs.length;
     if (refused) toast(refused + ' file' + (refused === 1 ? ' is' : 's are') + ' not a PDF and ' + (refused === 1 ? 'was' : 'were') + ' skipped.', { error: true });
@@ -1309,24 +1338,24 @@
     }).sort(function (a, b) { return Core.naturalCompare(a.name, b.name); });
     if (!pdfs.length) return;
     var courseId = course.id;
-    var items = pdfs.map(function (f) { return { name: f.name, pct: 0, state: 'waiting' }; });
-    state.uploads = items;
+    var items = pdfs.map(function (f) { return { key: ++uploadKey, name: f.name, pct: 0, state: 'waiting' }; });
+    // A second drop while the first is still going joins the same list.
+    state.uploads = state.uploads.filter(function (u) { return u.state !== 'added'; }).concat(items);
     render();
-    var added = [];
-    for (var i = 0; i < pdfs.length; i++) {
+    var made = new Array(pdfs.length), next = 0;
+    async function one(i) {
       var file = pdfs[i], item = items[i];
       try {
         item.state = 'reading'; render();
         var pageCount = await countPages(file);
         var ref = db.collection(WORKSHEETS).doc();
         var path = STORAGE_DIR + '/' + ref.id + '.pdf';
-        item.state = 'uploading';
+        item.state = 'uploading'; render();
         await new Promise(function (resolve, reject) {
           var task = storage.ref(path).put(file, { contentType: 'application/pdf' });
           task.on('state_changed', function (snap) {
             item.pct = snap.totalBytes ? Math.round(95 * snap.bytesTransferred / snap.totalBytes) : 50;
-            var bar = document.querySelectorAll('.upload-item .done')[i];
-            if (bar) bar.style.width = item.pct + '%';
+            paintUploadBar(item);
           }, reject, resolve);
         });
         var teacher = Core.normalizeEmail(state.user.email) === TEACHER_EMAIL;
@@ -1339,7 +1368,8 @@
           annotations: '',
           starPages: [],
           onlineCourseId: courseId,
-          onlineSeq: Core.courseIds(course).length + added.length,
+          // Its place for now; the class list below settles every number.
+          onlineSeq: Core.courseIds(course).length + i,
           onlineUploadedBy: state.user.email,
           ownerEmail: TEACHER_EMAIL,
           createdAt: FieldValue.serverTimestamp(),
@@ -1350,7 +1380,7 @@
         if (pageCount) payload.pageCount = pageCount;
         await ref.set(payload);
         state.docs[ref.id] = payload;
-        added.push(ref.id);
+        made[i] = ref.id;
         item.pct = 100; item.state = 'added';
       } catch (err) {
         item.state = 'failed: ' + ((err && err.message) || 'error');
@@ -1358,13 +1388,23 @@
       }
       render();
     }
+    async function worker() { while (next < pdfs.length) await one(next++); }
+    var workers = [];
+    for (var w = 0; w < Math.min(UPLOAD_AT_ONCE, pdfs.length); w++) workers.push(worker());
+    await Promise.all(workers);
+    var added = made.filter(Boolean);
+    var failed = pdfs.length - added.length;
     if (added.length) {
       try {
         await saveOrder(courseId, function (ids) { return ids.concat(added.filter(function (id) { return ids.indexOf(id) < 0; })); }, { quiet: true });
-        toast(added.length + ' worksheet' + (added.length === 1 ? '' : 's') + ' added to the class.');
+        toast(added.length + ' worksheet' + (added.length === 1 ? '' : 's') + ' added to the class.' + (failed ? ' ' + failed + ' could not be uploaded.' : ''), failed ? { error: true } : undefined);
       } catch (err) { fail('The files uploaded, but the class list could not be updated', err); }
-    }
-    setTimeout(function () { if (state.uploads === items) { state.uploads = []; render(); } }, 4000);
+    } else if (failed) toast('The upload failed. Check the connection and try again.', { error: true });
+    // Finished rows clear by themselves; a failed one stays so it can be seen.
+    setTimeout(function () {
+      var left = state.uploads.filter(function (u) { return items.indexOf(u) < 0 || /^failed/.test(u.state); });
+      if (left.length !== state.uploads.length) { state.uploads = left; render(); }
+    }, 4000);
   }
 
   /* ---- Adding worksheets already in Ans Key ---- */

@@ -173,3 +173,27 @@ test('Ans Key links: view, replay a lesson, print the answers, nothing unexpecte
   assert.equal(Core.anskeyLink('../anskey/', 'w1', 'print-answers', 'ignored'), '../anskey/?ws=w1&do=print-answers');
   assert.equal(Core.anskeyLink('../anskey/', 'w1', 'delete'), '../anskey/?ws=w1');
 });
+
+test('a re-render only puts back what someone is typing, never a file picker', () => {
+  for (const [tag, type] of [['INPUT', 'text'], ['INPUT', ''], ['INPUT', 'email'], ['INPUT', 'number'], ['TEXTAREA', ''], ['SELECT', 'select-one']]) {
+    assert.equal(Core.keepsTyping(tag, type), true, tag + ' ' + type);
+  }
+  for (const [tag, type] of [['INPUT', 'file'], ['INPUT', 'checkbox'], ['INPUT', 'radio'], ['INPUT', 'button'], ['BUTTON', ''], ['DIV', '']]) {
+    assert.equal(Core.keepsTyping(tag, type), false, tag + ' ' + type);
+  }
+});
+
+test('a batch of uploads reads as one line and one bar', () => {
+  assert.deepEqual(Core.uploadSummary([]), { total: 0, added: 0, failed: 0, pct: 0, label: '' });
+  const going = Core.uploadSummary([{ state: 'added', pct: 100 }, { state: 'uploading', pct: 50 }, { state: 'waiting', pct: 0 }, { state: 'waiting', pct: 0 }]);
+  assert.equal(going.label, 'Uploading 2 of 4…');
+  assert.equal(going.pct, 38);
+  assert.equal(Core.uploadSummary([{ state: 'added' }, { state: 'added' }]).label, 'All 2 uploaded');
+  assert.equal(Core.uploadSummary([{ state: 'added' }]).label, 'Uploaded');
+  const mixed = Core.uploadSummary([{ state: 'added' }, { state: 'failed: storage/unauthorized' }]);
+  assert.equal(mixed.label, '1 of 2 uploaded, 1 failed');
+  assert.equal(mixed.pct, 100);
+  assert.equal(Core.uploadStateLabel('waiting'), 'queued');
+  assert.equal(Core.uploadStateLabel('added'), '✓ added');
+  assert.equal(Core.uploadStateLabel('failed: x'), 'failed: x');
+});

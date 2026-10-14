@@ -4,6 +4,12 @@ Guidance for Claude when working in this repo.
 
 ## 🎓 Polymath Online: the student portal (`online/`, v1.0.0)
 
+- Uploads (v1.2.0):
+  - `uploadFiles` runs 3 at a time (`UPLOAD_AT_ONCE`). Each batch is added to the class in name order through `saveOrder`.
+  - `render()` restores focus only for fields where `Core.keepsTyping(tag, type)` is true. Restoring a file input's value throws, which once froze uploads at "waiting".
+  - Progress is repainted with `paintUploadBar`, not a full render.
+  - Script tags carry `?v=` so a release reaches browsers at once; bump it with APP_VERSION.
+
 **v1.1.0: student timeline.**
 - `timelineHtml(course)` renders `Core.timelineItems(course, state.docs, state.recordings)`. The edit date is `pdfAnnotator.updatedAt`, which Ans Key writes on every save. Renaming in the portal writes `renamedAt` rather than `updatedAt`, so that date stays "last edited in Ans Key".
 - `watchDocs` follows released worksheets live with `in` listeners in groups of 10. `readRecordings` keeps `Core.lessonRecordings` (video annotations with `lessonRecording`, newest first) from the inline `annotations` or from Storage `annotationsPath`.
