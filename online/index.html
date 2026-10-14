@@ -428,6 +428,10 @@
   .upload-item { display: grid; grid-template-columns: 1fr 140px; gap: var(--space-md); align-items: center; font-size: var(--font-size-sm); }
   .upload-item .progress { height: 6px; }
   .upload-item .progress .done { background: var(--ok-ink); }
+  .upload-total { display: grid; grid-template-columns: 1fr auto; gap: 6px var(--space-md); align-items: center; font-size: var(--font-size-sm); padding-bottom: 6px; border-bottom: 1px solid var(--border-subtle, rgba(0,0,0,0.06)); }
+  .upload-total .progress { grid-column: 1 / -1; height: 8px; }
+  .upload-item.is-added { opacity: 0.7; }
+  .upload-item.is-failed span .muted { color: var(--danger, #C62828); }
   .seq-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: var(--space-md); align-items: center; padding: 10px var(--space-md); border-bottom: 1px solid var(--border-subtle); }
   .seq-row:last-child { border-bottom: none; }
   .seq-row .ws-num { width: 36px; height: 36px; font-size: 0.82rem; border-radius: 10px; }
@@ -653,7 +657,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="portal-core.js"></script>
-<script src="portal.js"></script>
+<script src="portal-core.js?v=1.2.0"></script>
+<script src="portal.js?v=1.2.0"></script>
 </body>
 </html>

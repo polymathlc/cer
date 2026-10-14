@@ -355,6 +355,40 @@
     return String(name || 'Worksheet').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90) + '.pdf';
   }
 
+  // Whether a focused field is something being typed in, so a re-render puts
+  // the text back. A file picker, tick box or button never is.
+  function keepsTyping(tagName, type) {
+    var tag = String(tagName || '').toUpperCase();
+    if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (tag !== 'INPUT') return false;
+    return /^(|text|search|email|url|tel|number|password|date|time|datetime-local|month|week)$/i.test(String(type || ''));
+  }
+  // The words beside each file while a batch uploads.
+  function uploadStateLabel(state) {
+    var s = String(state || '');
+    if (s === 'waiting') return 'queued';
+    if (s === 'reading') return 'reading…';
+    if (s === 'uploading') return 'uploading…';
+    if (s === 'added') return '✓ added';
+    return s;
+  }
+  // The line above the list: how many are done, and one bar for the batch.
+  function uploadSummary(items) {
+    var list = items || [], n = list.length;
+    var added = list.filter(function (u) { return u.state === 'added'; }).length;
+    var failed = list.filter(function (u) { return /^failed/.test(String(u.state || '')); }).length;
+    var finished = added + failed;
+    var pct = n ? Math.round(list.reduce(function (sum, u) {
+      return sum + (u.state === 'added' || /^failed/.test(String(u.state || '')) ? 100 : Math.max(0, Math.min(100, Number(u.pct) || 0)));
+    }, 0) / n) : 0;
+    var label;
+    if (!n) label = '';
+    else if (finished < n) label = 'Uploading ' + (finished + 1) + ' of ' + n + '…';
+    else if (!failed) label = n === 1 ? 'Uploaded' : 'All ' + n + ' uploaded';
+    else label = added + ' of ' + n + ' uploaded, ' + failed + ' failed';
+    return { total: n, added: added, failed: failed, pct: pct, label: label };
+  }
+
   var api = {
     RELEASE_AHEAD: RELEASE_AHEAD, NEXT_COUNT: NEXT_COUNT, LEVELS: LEVELS, SUBJECTS: SUBJECTS, DAYS: DAYS, ROLES: ROLES,
     SLOTS_WEEKDAY: SLOTS_WEEKDAY, SLOTS_WEEKEND: SLOTS_WEEKEND,
@@ -370,7 +404,8 @@
     lessonRecordings: lessonRecordings, formatDuration: formatDuration, anskeyLink: anskeyLink, timelineItems: timelineItems,
     SENDER_EMAIL: SENDER_EMAIL, SENDER_NAME: SENDER_NAME, portalMail: portalMail,
     inviteLink: inviteLink, inviteEmail: inviteEmail, mailtoLink: mailtoLink, inviteStatusLabel: inviteStatusLabel,
-    timeAgo: timeAgo, chunk: chunk, safeFileName: safeFileName
+    timeAgo: timeAgo, chunk: chunk, safeFileName: safeFileName,
+    keepsTyping: keepsTyping, uploadStateLabel: uploadStateLabel, uploadSummary: uploadSummary
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.PolymathOnlineCore = api;

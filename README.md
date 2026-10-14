@@ -1,6 +1,6 @@
 # CER Science Learning Portal
 
-## Polymath Online, the student portal (online/, v1.1.0)
+## Polymath Online, the student portal (online/, v1.2.0)
 
 **polymathlc.com.sg/online** is where students and parents find their class's
 worksheets and answer keys. It is published by the website sync, like every
@@ -9,7 +9,9 @@ other page here.
 - **Admins** sign in with Google and see the admin view: chungzhikai@gmail.com,
   elsielcr@gmail.com and admin@polymathlc.com.sg. Admins create a class (level,
   subject, day and session) and upload its whole list of PDFs once. The files
-  go in name order, so Worksheet 2 comes before Worksheet 10. You can also add
+  go in name order, so Worksheet 2 comes before Worksheet 10. Drop or pick as many
+  PDFs as you like: three upload at a time under one progress line (v1.2.0,
+  which also fixed uploads that stuck at "waiting"). You can also add
   worksheets already in Ans Key, and reorder, rename or remove them. Each PDF
   becomes an ordinary Ans Key worksheet, ready for its answer key.
 - **Releases follow the lessons.** When the teacher opens worksheet *n* of a

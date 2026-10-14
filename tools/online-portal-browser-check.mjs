@@ -63,8 +63,17 @@ let db;
   await page.click('.modal [data-m="save"]');
   await page.waitForSelector('#dropzone');
   const files = Array.from({ length: 10 }, (_, i) => ({ name: `Worksheet ${10 - i}.pdf`, mimeType: 'application/pdf', buffer: pdf }));
+  // A real file picker leaves the input focused when it closes. Re-rendering
+  // used to try to put the file name back into it, which browsers refuse, and
+  // the upload stopped at "waiting" before its first file.
+  await page.focus('#fileInput');
   await page.setInputFiles('#fileInput', files);
+  await page.waitForSelector('.upload-total', { timeout: 5000 });
+  check('admin: the batch shows one line and one bar for all the files', /Uploading \d+ of 10|All 10 uploaded/.test(await page.textContent('.upload-total')));
   await page.waitForFunction(() => document.querySelectorAll('.seq-row').length === 10, null, { timeout: 15000 });
+  check('admin: a focused file picker does not stop the upload', true);
+  await page.waitForFunction(() => /All 10 uploaded/.test((document.querySelector('.upload-total') || {}).textContent || ''), null, { timeout: 5000 }).catch(() => {});
+  check('admin: the batch line says when all are uploaded', /All 10 uploaded/.test((await page.textContent('.upload-total').catch(() => '')) || '') || !(await page.$('.upload-total')));
   const names = await page.$$eval('.seq-row .name-edit', (els) => els.map((e) => e.value));
   check('admin: ten PDFs become ten worksheets in natural name order', names.join('|') === Array.from({ length: 10 }, (_, i) => `Worksheet ${i + 1}`).join('|'));
   db = await page.evaluate(() => window.__fake.db);
