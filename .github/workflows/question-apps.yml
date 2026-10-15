@@ -1,10 +1,10 @@
 name: Question apps and worksheet QR codes
 on:
   pull_request:
-    paths: ['app.js', 'index.html', 'question-app*', 'vendor/qrcode-generator*', 'tools/widget-*.mjs', 'tools/question-apps*.mjs', '.github/workflows/question-apps.yml']
+    paths: ['app.js', 'index.html', 'question-app*', 'vendor/qrcode-generator*', 'tools/widget-*.mjs', 'tools/question-apps*.mjs', 'tools/question-numbers-tests.mjs', '.github/workflows/question-apps.yml']
   push:
     branches: [main]
-    paths: ['app.js', 'index.html', 'question-app*', 'vendor/qrcode-generator*', 'tools/widget-*.mjs', 'tools/question-apps*.mjs', '.github/workflows/question-apps.yml']
+    paths: ['app.js', 'index.html', 'question-app*', 'vendor/qrcode-generator*', 'tools/widget-*.mjs', 'tools/question-apps*.mjs', 'tools/question-numbers-tests.mjs', '.github/workflows/question-apps.yml']
 permissions:
   contents: read
 jobs:
@@ -26,6 +26,7 @@ jobs:
           node tools/widget-print-tests.mjs
           node tools/editing-mode-tests.mjs
           node tools/ai-routes-tests.mjs
+          node --test tools/question-numbers-tests.mjs
       - run: npm install --no-save --package-lock=false playwright@1.62.1 jsqr@1.4.0
       - run: npx playwright install --with-deps chromium
       - name: Check editor and public viewer in a browser

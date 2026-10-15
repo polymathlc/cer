@@ -4498,7 +4498,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.432.0';
+const APP_VERSION = 'v1.433.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -21664,9 +21664,73 @@ function stripHtmlToText(html) {
     .trim();
 }
 
+/* ================= 🔢 Question numbers =================
+   Every question in the bank and in vetting carries `qno`, a whole number
+   that never changes and is never shared by two questions of the same bank.
+   It is how a question is found again: "#123" in any search box here, and
+   in Ans Key's question bank picker, finds exactly that question.
+
+   - A number is given when a question is first SAVED (`qNoEnsure`, called by
+     `saveQuestion` and `saveVettingQuestion`) and NEVER again: an edit is
+     rebuilt from the editor without `qno`, so the number is read back from
+     the stored copy with the same id before anything new is handed out.
+   - A copy of a question (a clone, a duplicate) arrives carrying its
+     source's number. The number belongs to the source, so the copy is
+     given a fresh one at its first save.
+   - Questions written by other paths (a batch, a migration, another app)
+     are numbered on the next load by `qNoBackfill`, oldest first, which
+     also settles any clash: the OLDEST question keeps the number.
+   - Numbers are per bank owner (an employee authors into the teacher's
+     bank, so they share the teacher's numbers). */
+function qNoValid(n) { return typeof n === 'number' && Number.isInteger(n) && n > 0 && n < 1e9; }
+function qNoLabel(q) { return q && qNoValid(q.qno) ? '#' + q.qno : ''; }
+// The search token for a number. `#123#` rather than `#123`, so "#12" does
+// not also find #123 — `parseSearchTokens` turns a typed #12 into #12#.
+function qNoSearchText(q) { return q && qNoValid(q.qno) ? '#' + q.qno + '#' : ''; }
+function qNoParseToken(token) {
+  const m = /^q?#(\d{1,9})#?$/i.exec(String(token || '').trim());
+  return m ? Number(m[1]) : null;
+}
+// The pure decision: which number this question should carry, given every
+// OTHER question of the same bank. `prev` is the stored copy with the same id.
+function qNoPick(q, prev, others, reserved) {
+  const taken = new Set();
+  let max = 0;
+  (others || []).forEach(o => {
+    if (!o || (q && o.id === q.id) || !qNoValid(o.qno)) return;
+    taken.add(o.qno);
+    if (o.qno > max) max = o.qno;
+  });
+  (reserved || []).forEach(n => { if (qNoValid(n) && n > max) max = n; });
+  if (prev && qNoValid(prev.qno) && !taken.has(prev.qno)) return prev.qno;
+  if (q && qNoValid(q.qno) && !taken.has(q.qno)) return q.qno;
+  return max + 1;
+}
+// Every question of one bank needs a number: the ones without one (or whose
+// number an OLDER question holds) are numbered after the highest in use,
+// oldest first. Returns [{ id, qno }] for the ones that change.
+function qNoPlanBackfill(list, recency) {
+  const age = q => { try { return recency ? recency(q) || 0 : 0; } catch (e) { return 0; } };
+  const rows = (list || []).filter(q => q && q.id).map((q, i) => ({ q, i, t: age(q) }));
+  rows.sort((a, b) => a.t - b.t || a.i - b.i);
+  const owner = new Map();
+  const need = [];
+  let max = 0;
+  rows.forEach(r => {
+    const n = r.q.qno;
+    if (qNoValid(n) && (!owner.has(n) || owner.get(n) === r.q.id)) { owner.set(n, r.q.id); if (n > max) max = n; }
+    else need.push(r);
+  });
+  const seen = new Set();
+  return need.filter(r => { if (seen.has(r.q.id)) return false; seen.add(r.q.id); return true; })
+    .map(r => ({ id: r.q.id, qno: ++max }));
+}
+/* ================= End question numbers (pure) ================= */
+
 function extractQuestionSearchText(q) {
   const parts = [q.title || '', q.topic || '', qSecondaryTopic(q), q.category || '', qSecondaryCategory(q), getTopicLevel(q.topic || ''), questionSource(q)];
   parts.push(qTagList(q).join(' '));   // searching "elastic spring" finds everything tagged with it
+  parts.push(qNoSearchText(q));        // 🔢 "#123" finds question number 123
   (q.blocks || []).forEach(block => {
     if (!block || !block.type) return;
     if (block.type === 'text') parts.push(stripHtmlToText(block.content));
@@ -21712,7 +21776,10 @@ function parseSearchTokens(raw) {
   const re = /"([^"]+)"|(\S+)/g;
   let match;
   while ((match = re.exec(raw)) !== null) {
-    const token = (match[1] || match[2] || '').trim().toLowerCase();
+    let token = (match[1] || match[2] || '').trim().toLowerCase();
+    // 🔢 "#123" is a question number: exactly that one, never #1234.
+    const qn = qNoParseToken(token);
+    if (qn != null) token = '#' + qn + '#';
     if (token) tokens.push(token);
   }
   return tokens;
@@ -22194,7 +22261,7 @@ function renderQuestionBank() {
       <div${usageCardAttrs(q) || ' class="qb-card"'} ondblclick="editQuestion('${q.id}')">
         <div class="qb-card-header">
           <div>
-            <div class="qb-card-title">${escapeHtml(q.title)}</div>
+            <div class="qb-card-title">${qNoChipHtml(q)}${escapeHtml(q.title)}</div>
             <div class="qb-card-meta">
               ${aiScore != null ? `<span class="qb-tag ai-match" title="AI relevance to your instruction">★ ${aiScore}% match</span>` : ''}
               <span class="qb-tag category">${escapeHtml(qCategory)}</span>
@@ -22268,7 +22335,7 @@ function bankTileHtml(q) {
         </button>
       </div>
       <div class="qb-tile-body">
-        <div class="qb-tile-title">${escapeHtml(q.title)}</div>
+        <div class="qb-tile-title">${qNoChipHtml(q)}${escapeHtml(q.title)}</div>
         <div class="qb-tile-meta">
           <span class="qb-tag category">${escapeHtml(qCategory)}</span>
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
@@ -22438,7 +22505,7 @@ function editQuestion(id) {
     if (vetPage && vetPage.classList.contains('active')) _vetReturnScroll = window.scrollY || 0;
   }
   _editorLoadQuestion(q);
-  showToast('Editing: ' + q.title, 'info');
+  showToast('Editing: ' + (qNoLabel(q) ? qNoLabel(q) + ' ' : '') + q.title, 'info');
 }
 
 // PUT ONE QUESTION INTO THE BLOCK EDITOR. Split out of `editQuestion` so a
@@ -23057,7 +23124,7 @@ function renderVettingList() {
       <div class="qb-card" data-vetid="${q.id}"${cardStyle}>
         <div class="qb-card-header">
           <div>
-            <div class="qb-card-title">${escapeHtml(q.title)}</div>
+            <div class="qb-card-title">${qNoChipHtml(q)}${escapeHtml(q.title)}</div>
             <div class="qb-card-meta">
               <span class="qb-tag category">${escapeHtml(q.category)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
@@ -32582,6 +32649,7 @@ function _setSaveStatus(state) {
 async function saveQuestion(q, opts) {
   if (!currentUser) return false;
   migrateDecisionsReviewState(q);
+  qNoEnsure(q);   // 🔢 before the copy below, so the bank's own object has it
   // Ai-nstein caches a searchable string per question (tags, title, topic, body).
   // An edit here — a tag added or removed above all — must not leave him matching
   // against the old one for the rest of the session.
@@ -32677,6 +32745,7 @@ let _saveQuestionLastError = '';
 async function saveVettingQuestion(q, opts) {
   if (!currentUser) return false;
   migrateDecisionsReviewState(q);
+  qNoEnsure(q);   // 🔢
   const wkLog = _wkSuppress === 0;   // see saveQuestion — decided before the await
   _inflightOps++;
   _setSaveStatus('saving');
@@ -32706,6 +32775,79 @@ async function saveVettingQuestion(q, opts) {
   }
   return false;
 }
+
+/* ================= 🔢 Question numbers — glue =================
+   Kept apart from the pure half above so tools/question-numbers-tests.mjs
+   can run that half without Firestore. */
+const _qnoReserved = new Map();   // owner uid -> numbers handed out this session
+function _qnoOwnerOf(q) {
+  if (!q || q.id == null) return _bankOwnerUid();
+  return _ownerUidByQuestionId[q.id] || _ownerUidByVettingId[q.id] || _bankOwnerUid();
+}
+function _qnoSameBank(owner) {
+  return questionBank.concat(vettingList).filter(o => o && _qnoOwnerOf(o) === owner);
+}
+// Called at the top of saveQuestion / saveVettingQuestion, BEFORE the save
+// copies the question, so the in-memory question carries its number too.
+function qNoEnsure(q) {
+  try {
+    if (!q || q.id == null) return;
+    const owner = _qnoOwnerOf(q);
+    const others = _qnoSameBank(owner);
+    const prev = others.find(o => o.id === q.id && o !== q && qNoValid(o.qno)) || null;
+    const reserved = _qnoReserved.get(owner) || [];
+    const n = qNoPick(q, prev, others.filter(o => o !== q && o.id !== q.id), reserved);
+    q.qno = n;
+    if (reserved.indexOf(n) < 0) { reserved.push(n); _qnoReserved.set(owner, reserved); }
+  } catch (e) { console.warn('question number', e); }
+}
+function qNoChipHtml(q) {
+  const label = qNoLabel(q);
+  return label ? '<span class="qb-qno" title="Question number. Search ' + label + ' to find it here or in Ans Key.">' + label + '</span>' : '';
+}
+// After a load: every question of every bank this account can author into
+// gets a number, written back as a one-field merge (no other field touched,
+// no work-session log, no announcement).
+let _qnoBackfillBusy = false;
+async function qNoBackfill() {
+  if (_qnoBackfillBusy || !currentUser || typeof _canAuthor !== 'function' || !_canAuthor()) return;
+  _qnoBackfillBusy = true;
+  try {
+    const byOwner = new Map();
+    questionBank.concat(vettingList).forEach(q => {
+      if (!q || q.id == null) return;
+      const o = _qnoOwnerOf(q);
+      if (!byOwner.has(o)) byOwner.set(o, []);
+      byOwner.get(o).push(q);
+    });
+    const writes = [];
+    byOwner.forEach(list => {
+      qNoPlanBackfill(list, _questionRecency).forEach(p => {
+        questionBank.concat(vettingList).forEach(q => {
+          if (!q || q.id !== p.id) return;
+          q.qno = p.qno;
+        });
+        const inBank = questionBank.some(q => q && q.id === p.id);
+        const inVet = vettingList.some(q => q && q.id === p.id);
+        if (inBank) writes.push([_qRef(p.id), p.qno]);
+        if (inVet) writes.push([_vRef(p.id), p.qno]);
+      });
+    });
+    for (let i = 0; i < writes.length; i += 400) {
+      const batch = writeBatch(db);
+      writes.slice(i, i + 400).forEach(([ref, qno]) => batch.set(ref, { qno }, { merge: true }));
+      await batch.commit();
+    }
+    if (writes.length) {
+      console.log('Question numbers: numbered ' + writes.length + ' question record(s).');
+      try { renderQuestionBank(); } catch (e) {}
+      try { renderVettingList(); } catch (e) {}
+    }
+  } catch (e) {
+    console.warn('Question numbers could not be saved:', e);
+  } finally { _qnoBackfillBusy = false; }
+}
+/* ================= End question numbers ================= */
 
 // Delete one question doc (fire-and-forget; failure is non-critical)
 function deleteQuestionDoc(id) {
@@ -33063,6 +33205,7 @@ async function loadFromStorage() {
   updateCounts();
   populateTopicFilter();
   try { autoFixSweepSoon(); } catch (e) { /* the sweep is a convenience */ }
+  qNoBackfill();   // 🔢 every question gets its number
   _scienceFeedPublishSummaries().catch(e => console.warn('Quality summary refresh', e));
 }
 
