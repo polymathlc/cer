@@ -15,7 +15,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.433.0">
+  <link rel="modulepreload" href="app.js?v=1.433.1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -9181,6 +9181,9 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 #landingPage .lp-eyebrow::before { content:''; width:6px; height:6px; background:currentColor; border-radius:50%; flex-shrink:0; }
 #landingPage h1 { font-family:'Space Grotesk',sans-serif; font-size:clamp(43px,4.65vw,66px); font-weight:500; line-height:1.07; letter-spacing:-3.5px; margin:0; }
 #landingPage h1 em, #landingPage h2 em { font-family:Georgia,'Times New Roman',serif; font-weight:400; color:var(--lp-green); }
+/* Hero headline: each of the three lines stays on one line, so the size follows the column width. */
+#landingPage .lp-hero-copy { container-type:inline-size; }
+#landingPage #lp-hero-title { font-size:min(66px, 8.5cqi); letter-spacing:-0.045em; }
 #landingPage .lp-hero-copy > p { max-width:440px; color:var(--lp-muted); font-size:15px; line-height:1.85; margin:27px 0; }
 #landingPage .lp-hero-actions { display:flex; flex-wrap:wrap; gap:12px; }
 #landingPage .lp-hero-note { display:flex; align-items:center; gap:8px; font-size:10px; color:var(--lp-muted); margin-top:21px; }
@@ -9690,13 +9693,13 @@ html { scroll-behavior:smooth; }
       <div class="lp-wrap lp-hero-grid">
         <div class="lp-hero-copy">
           <div class="lp-eyebrow">Primary Science &amp; Mathematics tuition · Online and in Clementi</div>
-          <h1 id="lp-hero-title">Strong foundations.<br>Confident answers.<br><em>Thinking for life.</em></h1>
-          <p>Primary Maths tuition for P4–P6 and Science tuition for P3–P6, taught in small groups at our Clementi centre or live online. Learn with Mr Chung and receive a complimentary online learning suite, so practice, feedback and motivation continue between lessons.</p>
+          <h1 id="lp-hero-title">Raffles Teacher Approved.<br>Real understanding.<br><em>Results guaranteed.</em></h1>
+          <p>Primary Maths for P4–P6 and Science for P3–P6, in small groups at our Clementi centre or live online. Mr Chung makes sure your child understands why an answer is right, not just what to memorise, so they can handle questions they have never seen before. Our online learning suite comes free with every class for practice between lessons.</p>
           <div class="lp-hero-actions">
             <a class="lp-button" href="enquiry.html">Enquire about classes <svg class="lp-icon" aria-hidden="true"><use href="#lp-arrow"/></svg></a>
             <a class="lp-button lp-button-secondary" href="#lp-why">Why Polymath <svg class="lp-icon" aria-hidden="true"><use href="#lp-spark"/></svg></a>
           </div>
-          <div class="lp-hero-note"><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg> Raffles Teacher Approved · Mr Chung: 20 years of teaching experience · Featured on Channel News Asia</div>
+          <div class="lp-hero-note"><svg class="lp-icon" aria-hidden="true"><use href="#lp-check"/></svg> Mr Chung: 20 years of teaching experience · Featured on Channel News Asia</div>
         </div>
         <div class="lp-preview-stage" aria-label="Illustrative guided science answer preview">
           <div class="lp-orbit" aria-hidden="true"><svg class="lp-icon"><use href="#lp-atom"/></svg></div>
@@ -16024,6 +16027,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script type="module" src="app.js?v=1.433.0"></script>
+  <script type="module" src="app.js?v=1.433.1"></script>
 </body>
 </html>
