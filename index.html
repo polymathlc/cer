@@ -15,7 +15,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.432.0">
+  <link rel="modulepreload" href="app.js?v=1.433.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -2015,6 +2015,12 @@ option {
   align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 8px;
+}
+.qb-qno {
+  display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px;
+  font: 600 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; vertical-align: 1px;
+  background: rgba(37, 99, 235, 0.10); color: #1d4ed8; border: 1px solid rgba(37, 99, 235, 0.25);
+  user-select: all;
 }
 .qb-card-title {
   font-size: 1rem;
@@ -10908,7 +10914,7 @@ html { scroll-behavior:smooth; }
         <div class="filter-bar">
           <div class="search-box">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="bankSearch" placeholder="Search words or \"phrases\" in title/tags/content..." oninput="renderQuestionBank()">
+            <input id="bankSearch" placeholder="Search words, \"phrases\", tags, or #123 for a question number..." oninput="renderQuestionBank()">
           </div>
           <div class="ms-filter" id="bankTopicFilter">
             <button type="button" class="ms-toggle" id="bankTopicToggle" onclick="toggleBankTopicMenu(event)"
@@ -11043,7 +11049,7 @@ html { scroll-behavior:smooth; }
         <div class="filter-bar" style="margin-bottom:16px;">
           <div class="search-box">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="vettingSearch" placeholder="Search words or \"phrases\" in title/tags/content..." oninput="renderVettingList()">
+            <input id="vettingSearch" placeholder="Search words, \"phrases\", tags, or #123 for a question number..." oninput="renderVettingList()">
           </div>
         </div>
         <!-- 🧰 The same tools bar the Question Bank carries — one renderer, so a
@@ -16018,6 +16024,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script type="module" src="app.js?v=1.432.0"></script>
+  <script type="module" src="app.js?v=1.433.0"></script>
 </body>
 </html>

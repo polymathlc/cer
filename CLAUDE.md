@@ -2,6 +2,13 @@
 
 Guidance for Claude when working in this repo.
 
+## 🔢 Question numbers (v1.433.0)
+
+- Every bank and vetting question carries `qno`, a whole number shown as `#123` (`.qb-qno` chip on the bank card, bank tile and vetting card, and in the "Editing:" toast). Search `#123` in any box that uses `parseSearchTokens` to find exactly that question (`qNoParseToken` turns `#12` into `#12#`, and `extractQuestionSearchText` carries `#N#`, so #12 never finds #123). A bare `123` stays a word search. Ans Key's question bank picker (`polymathlc/anskey`, `question-bank.js`) reads the same field and finds `#123` and `123` the same way.
+- **Given once, never changed.** `qNoEnsure(q)` runs at the top of `saveQuestion` and `saveVettingQuestion`, BEFORE the save copies the question. An edit keeps its number through `carryOverQuestionMeta` (`qno` is deliberately NOT in `EDITOR_OWNED_QUESTION_FIELDS`). A copy carrying its source's number gets a fresh one. The highest number in use + 1 is handed out, skipping numbers already handed out this session.
+- **`qNoBackfill()` after every `loadFromStorage`** numbers whatever other paths wrote without one (batches, migrations, other apps), oldest first (`_questionRecency`). It settles a clash by letting the OLDEST question keep the number, and writes a one-field `{qno}` merge. Admins and employees only; numbers are per bank owner.
+- The pure half (`qNoValid` … `qNoPlanBackfill`) sits between `🔢 Question numbers` and `End question numbers (pure)`; `tools/question-numbers-tests.mjs` cuts it out. Run `node --test tools/question-numbers-tests.mjs` (also in the question-apps workflow).
+
 ## 🎓 Polymath Online: the student portal (`online/`, v1.0.0)
 
 - Uploads (v1.2.0):
