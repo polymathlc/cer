@@ -335,6 +335,20 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
 
   <!-- ─── MANAGE VIEW (admin) ─── -->
   <section id="view-manage" class="hidden">
+    <div class="panel" id="delivery-fee-card">
+      <h2>Delivery fee</h2>
+      <div class="sub">One flat fee, charged once on every order the parent chooses to have delivered, however many items are in it. Set it to 0 for free delivery.</div>
+      <div class="form-grid">
+        <div>
+          <label class="lbl" for="df-fee">Delivery fee (S$)</label>
+          <input class="input" id="df-fee" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn" id="df-save" type="button">Save delivery fee</button>
+        <span class="sub" id="df-status" style="margin:0;"></span>
+      </div>
+    </div>
     <div class="panel" id="product-form-card">
       <h2 id="pf-title">Add a product</h2>
       <div class="sub">Every product has a SKU, a price, a quantity in stock and up to <span id="max-images-label"></span> pictures. The first picture is the cover.</div>
@@ -448,6 +462,7 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
     <div class="sub">Quantities are limited to what we have in stock.</div>
     <div id="cart-lines"></div>
     <div class="totals"><span>Total</span><strong id="cart-total">$0.00</strong></div>
+    <div class="sub" id="cart-delivery-note"></div>
     <div class="form-actions">
       <button class="btn block" id="checkout-btn" type="button">Checkout with PayNow</button>
     </div>
@@ -480,7 +495,7 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
           <label class="lbl">How would you like to receive it?</label>
           <div class="radio-row">
             <label class="radio-card on" data-ful="collect"><input type="radio" name="co-ful" value="collect" checked><span>Collect at the centre<small>We'll tell you when it's ready</small></span></label>
-            <label class="radio-card" data-ful="delivery"><input type="radio" name="co-ful" value="delivery"><span>Delivery<small>Charges, if any, confirmed on WhatsApp</small></span></label>
+            <label class="radio-card" data-ful="delivery"><input type="radio" name="co-ful" value="delivery"><span>Delivery<small id="ful-delivery-note">Free delivery</small></span></label>
           </div>
         </div>
         <div class="full hidden" id="co-address-wrap">
@@ -590,7 +605,11 @@ const PAYNOW_UEN = 'T16LL2365E';
 const MERCHANT_NAME = 'POLYMATH LEARNING';
 const PRODUCTS = db.collection('shop_products');
 const ORDERS = db.collection('shop_orders');
-const PRODUCTS_PAGE_VERSION = 'v1.0.0';
+// The flat delivery fee lives in one settings document so the admin can change it
+// without a deploy. It is charged once per delivery order, never per item.
+const SETTINGS = db.collection('shop_settings').doc('config');
+let deliveryFee = 0;
+const PRODUCTS_PAGE_VERSION = 'v1.1.0';
 const WHATSAPP_NUMBER = '6596450588';
 const CART_KEY = 'plc_shop_cart_v1';
 const CUSTOMER_KEY = 'plc_shop_customer_v1';
@@ -897,6 +916,23 @@ PRODUCTS.onSnapshot(snap => {
   renderShop();
 });
 
+SETTINGS.onSnapshot(doc => {
+  const d = doc.exists ? (doc.data() || {}) : {};
+  deliveryFee = round2(Math.max(0, Number(d.deliveryFee) || 0));
+  renderDeliveryNotes();
+  if ($('cart-modal').classList.contains('show')) renderCart();
+  if ($('checkout-modal').classList.contains('show')) renderCheckoutSummary();
+  const f = $('df-fee');
+  if (f && document.activeElement !== f) f.value = deliveryFee.toFixed(2);
+}, err => { console.warn('Shop settings load failed', err); });
+
+function renderDeliveryNotes() {
+  const txt = deliveryFee > 0 ? 'Flat ' + money(deliveryFee) + ' delivery fee, however many items' : 'Free delivery';
+  const ful = $('ful-delivery-note'); if (ful) ful.textContent = txt;
+  const cn = $('cart-delivery-note');
+  if (cn) cn.textContent = deliveryFee > 0 ? 'Delivery adds a flat ' + money(deliveryFee) + ' at checkout. Collecting at the centre is free.' : '';
+}
+
 function visibleProducts() { return products.filter(p => isAdmin || p.active !== false); }
 function productHaystack(p) { return [p.name, p.sku, p.description].map(x => String(x || '').toLowerCase()).join(' '); }
 
@@ -1072,6 +1108,7 @@ function cartLines() {
   }).filter(Boolean);
 }
 function cartTotal() { return round2(cartLines().reduce((s, l) => s + l.line, 0)); }
+function deliveryCharge(ful) { return ful === 'delivery' ? deliveryFee : 0; }
 function addToCart(id, qty) {
   const p = products.find(x => x._id === id);
   if (!p) return;
@@ -1142,6 +1179,7 @@ function renderCart() {
   }).join('');
   $('cart-total').textContent = money(cartTotal());
   $('checkout-btn').disabled = false;
+  renderDeliveryNotes();
 }
 $('cart-btn').addEventListener('click', () => { cleanCart(); renderCart(); openModal('cart-modal'); });
 $('cart-lines').addEventListener('click', e => {
@@ -1178,13 +1216,20 @@ function syncFulfilment() {
   const v = fulfilmentValue();
   document.querySelectorAll('.radio-card').forEach(c => c.classList.toggle('on', c.dataset.ful === v));
   $('co-address-wrap').classList.toggle('hidden', v !== 'delivery');
+  renderCheckoutSummary();
 }
 document.querySelectorAll('input[name="co-ful"]').forEach(r => r.addEventListener('change', syncFulfilment));
 function renderCheckoutSummary() {
   const lines = cartLines();
+  const subtotal = cartTotal();
+  const fee = deliveryCharge(fulfilmentValue());
   $('co-summary').innerHTML = lines.map(({ p, qty, line }) =>
     '<div><span>' + qty + ' × ' + esc(p.name) + '</span><span>' + money(line) + '</span></div>').join('')
-    + '<div style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px;font-weight:800;"><span>Total</span><span>' + money(cartTotal()) + '</span></div>';
+    + (fee > 0
+      ? '<div style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px;"><span>Subtotal</span><span>' + money(subtotal) + '</span></div>'
+        + '<div><span>Delivery fee (flat)</span><span>' + money(fee) + '</span></div>'
+      : '')
+    + '<div style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px;font-weight:800;"><span>Total</span><span>' + money(round2(subtotal + fee)) + '</span></div>';
 }
 $('checkout-btn').addEventListener('click', () => {
   cleanCart();
@@ -1208,13 +1253,17 @@ $('co-next').addEventListener('click', async () => {
   const lines = cartLines();
   if (!lines.length) { closeModal('checkout-modal'); toast('Your cart is empty', true); return; }
   saveCustomer({ name, phone, email });
-  const total = cartTotal();
-  // Keep the same code if the parent steps back and forward without changing the cart.
-  const sig = lines.map(l => l.p._id + ':' + l.qty + ':' + l.p.price).join('|');
+  const ful = fulfilmentValue();
+  const subtotal = cartTotal();
+  const fee = deliveryCharge(ful);
+  const total = round2(subtotal + fee);
+  // Keep the same code if the parent steps back and forward without changing the cart
+  // (or how they receive it, since that changes the delivery fee and the QR amount).
+  const sig = lines.map(l => l.p._id + ':' + l.qty + ':' + l.p.price).join('|') + '|ful:' + ful + ':' + fee;
   if (!checkout || checkout.sig !== sig) {
     const code = newOrderCode();
     checkout = {
-      sig, code, reference: buildRef('PLC', code), total,
+      sig, code, reference: buildRef('PLC', code), total, subtotal, deliveryFee: fee, ful,
       items: lines.map(({ p, qty, line }) => ({ productId: p._id, sku: p.sku || '', name: p.name || '', price: round2(p.price), qty, lineTotal: line })),
       title: lines.length === 1 ? lines[0].qty + ' × ' + lines[0].p.name : lines.length + ' items · Order ' + code
     };
@@ -1251,6 +1300,7 @@ $('pay-share').addEventListener('click', async () => {
 function orderWhatsAppText(o) {
   const lines = ['Hi Polymath, I have placed an order and paid by PayNow.', '', 'Order code: ' + o.code, 'Reference: ' + o.reference];
   o.items.forEach(i => lines.push('• ' + i.qty + ' × ' + i.name + (i.sku ? ' (' + i.sku + ')' : '') + ' — ' + money(i.lineTotal)));
+  if (o.deliveryFee) lines.push('Delivery fee (flat): ' + money(o.deliveryFee));
   lines.push('Total: ' + money(o.total), '', 'Name: ' + o.customer.name, 'WhatsApp: ' + o.customer.phone);
   if (o.customer.email) lines.push('Email: ' + o.customer.email);
   lines.push(o.fulfilment === 'delivery' ? 'Delivery to: ' + o.address : 'I will collect at the centre');
@@ -1270,9 +1320,10 @@ $('co-paid').addEventListener('click', async () => {
   const order = {
     code: checkout.code, reference: checkout.reference, status: 'pending',
     items: checkout.items, total: checkout.total,
+    subtotal: checkout.subtotal, deliveryFee: checkout.deliveryFee || 0,
     customer: { name: $('co-name').value.trim(), phone: $('co-phone').value.trim(), email: $('co-email').value.trim() },
-    fulfilment: fulfilmentValue(),
-    address: fulfilmentValue() === 'delivery' ? $('co-address').value.trim() : '',
+    fulfilment: checkout.ful || fulfilmentValue(),
+    address: (checkout.ful || fulfilmentValue()) === 'delivery' ? $('co-address').value.trim() : '',
     note: $('co-note').value.trim(),
     receiptUrl: '', receiptPath: '',
     pageVersion: PRODUCTS_PAGE_VERSION
@@ -1492,6 +1543,19 @@ async function saveProduct() {
   }
 }
 $('pf-save').addEventListener('click', saveProduct);
+$('df-save').addEventListener('click', async () => {
+  if (!requireAdmin()) return;
+  const val = round2(Number($('df-fee').value));
+  if (!isFinite(val) || val < 0) { toast('Enter a fee of 0 or more', true); return; }
+  try {
+    await SETTINGS.set({ deliveryFee: val, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    $('df-status').textContent = val > 0 ? 'Saved: flat ' + money(val) + ' on delivery orders' : 'Saved: free delivery';
+    toast('Delivery fee saved');
+  } catch (e) {
+    console.error(e);
+    toast(e && e.code === 'permission-denied' ? 'Saving needs a shop_settings rule in Firestore' : 'Could not save the delivery fee', true);
+  }
+});
 $('pf-cancel').addEventListener('click', resetProductForm);
 
 /* ═══ Admin: product list ═══ */
@@ -1607,6 +1671,7 @@ function renderOrders() {
       + '<div class="order-meta"><span>👤 ' + esc(c.name || '') + '</span><span>📱 ' + esc(c.phone || '') + '</span>'
       + (c.email ? '<span>✉️ ' + esc(c.email) + '</span>' : '')
       + '<span>' + (o.fulfilment === 'delivery' ? '🚚 Delivery' : '🏫 Collect') + '</span>'
+      + (o.deliveryFee > 0 ? '<span>Fee ' + money(o.deliveryFee) + '</span>' : '')
       + '<span>🕒 ' + esc(fmtDate(o.createdAt)) + '</span></div>'
       + (o.fulfilment === 'delivery' && o.address ? '<div class="order-note">📍 ' + esc(o.address) + '</div>' : '')
       + (o.note ? '<div class="order-note">📝 ' + esc(o.note) + '</div>' : '')
