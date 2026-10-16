@@ -264,6 +264,15 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
 .progress { height: 6px; border-radius: 999px; background: var(--gray-200); overflow: hidden; margin-top: 10px; }
 .progress > div { height: 100%; background: linear-gradient(90deg,var(--teal),var(--aqua)); width: 0; transition: width .2s ease; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+/* Marketing image */
+.mk-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 14px; }
+.mk-chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--paper); border-radius: 999px; padding: 4px 6px 4px 12px; font-size: 13px; font-weight: 600; }
+.mk-chip button { border: 0; background: var(--white); color: var(--plum); width: 24px; height: 24px; border-radius: 999px; cursor: pointer; font-weight: 800; }
+.mk-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.mk-row select, .mk-row input { flex: 1 1 220px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; background: var(--white); }
+.mk-preview { margin-top: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); padding: 12px; text-align: center; }
+.mk-preview canvas { max-width: 100%; height: auto; border-radius: 8px; box-shadow: var(--shadow); }
+.feat-tag { font-size: 11px; font-weight: 800; color: #8a5a00; background: #fff3cf; border-radius: 999px; padding: 1px 8px; }
 </style>
 </head>
 <body>
@@ -407,6 +416,27 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
         </div>
       </div>
       <div class="plist" id="plist"></div>
+    </div>
+
+    <div class="panel" id="marketing-card">
+      <h2>Marketing image</h2>
+      <div class="sub">A picture of your featured products and their prices, ready to post or send. Star a product above, or add it here.</div>
+      <div class="mk-row">
+        <label class="sr-only" for="mk-title">Image heading</label>
+        <input id="mk-title" type="text" maxlength="60" value="Our products" placeholder="Heading on the image">
+      </div>
+      <div id="mk-chips" class="mk-chips"></div>
+      <div class="mk-row">
+        <label class="sr-only" for="mk-add">Add a product to the image</label>
+        <select id="mk-add"></select>
+        <button class="btn ghost" id="mk-add-btn" type="button">Add to image</button>
+      </div>
+      <div class="mk-row">
+        <button class="btn" id="mk-gen" type="button">Generate image</button>
+        <button class="btn ghost" id="mk-dl" type="button" disabled>Download PNG</button>
+        <span class="sub" id="mk-status" style="margin:0;"></span>
+      </div>
+      <div class="mk-preview hidden" id="mk-preview"><canvas id="mk-canvas"></canvas></div>
     </div>
   </section>
 
@@ -609,7 +639,7 @@ const ORDERS = db.collection('shop_orders');
 // without a deploy. It is charged once per delivery order, never per item.
 const SETTINGS = db.collection('shop_settings').doc('config');
 let deliveryFee = 0;
-const PRODUCTS_PAGE_VERSION = 'v1.1.0';
+const PRODUCTS_PAGE_VERSION = 'v1.2.0';
 const WHATSAPP_NUMBER = '6596450588';
 const CART_KEY = 'plc_shop_cart_v1';
 const CUSTOMER_KEY = 'plc_shop_customer_v1';
@@ -886,6 +916,7 @@ auth.onAuthStateChanged(user => {
   }
   renderShop();
   renderManageList();
+  renderMarketing();
 });
 
 /* ═══ Views ═══ */
@@ -894,7 +925,7 @@ function showView(v) {
   currentView = v;
   ['shop', 'manage', 'orders'].forEach(n => $('view-' + n).classList.toggle('hidden', n !== v));
   document.querySelectorAll('#admin-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.view === v));
-  if (v === 'manage') renderManageList();
+  if (v === 'manage') { renderManageList(); renderMarketing(); }
   if (v === 'orders') renderOrders();
 }
 $('admin-tabs').addEventListener('click', e => { const t = e.target.closest('.tab'); if (t) showView(t.dataset.view); });
@@ -907,7 +938,7 @@ PRODUCTS.onSnapshot(snap => {
   products = snap.docs.map(d => Object.assign({ _id: d.id }, d.data()));
   productsLoaded = true; productsError = '';
   cleanCart();
-  renderShop(); renderManageList(); renderCartCount();
+  renderShop(); renderManageList(); renderMarketing(); renderCartCount();
   if ($('cart-modal').classList.contains('show')) renderCart();
   if (detailId && $('detail-modal').classList.contains('show')) renderDetail();
 }, err => {
@@ -1558,6 +1589,180 @@ $('df-save').addEventListener('click', async () => {
 });
 $('pf-cancel').addEventListener('click', resetProductForm);
 
+/* ═══ Admin: marketing image ═══
+   Featured is a field on the product (featured / featuredAt), so the set is
+   the same on every device the teacher signs in on. The picture is drawn on a
+   canvas; product photos are loaded as blobs (or through an image proxy) so
+   the canvas is never tainted and Download always works. */
+function featuredList() {
+  return products.filter(p => p.featured).sort((a, b) => (tsMillis(a.featuredAt) - tsMillis(b.featuredAt)) || String(a.name || '').localeCompare(String(b.name || '')));
+}
+async function setFeatured(p, on) {
+  if (!requireAdmin()) return;
+  try {
+    await PRODUCTS.doc(p._id).update({ featured: !!on, featuredAt: on ? firebase.firestore.FieldValue.serverTimestamp() : null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    toast(on ? 'Added to the marketing image' : 'Removed from the marketing image');
+  } catch (e) {
+    console.error(e);
+    toast(e && e.code === 'permission-denied' ? 'Saving needs write access to shop_products in Firestore' : 'Could not update: ' + (e.message || e), true);
+  }
+}
+function renderMarketing() {
+  if (!isAdmin || !$('mk-chips')) return;
+  const feat = featuredList();
+  $('mk-chips').innerHTML = feat.length
+    ? feat.map(p => '<span class="mk-chip">' + esc(p.name || 'Untitled') + ' · ' + money(p.price) + (p.active === false ? ' <span class="hidden-tag">Hidden</span>' : '') + '<button type="button" data-mk-rm="' + esc(p._id) + '" aria-label="Remove ' + esc(p.name || 'product') + '">✕</button></span>').join('')
+    : '<span class="sub" style="margin:0;">No featured products yet. Add one below, or press ☆ on a product above.</span>';
+  const rest = products.filter(p => !p.featured).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  $('mk-add').innerHTML = rest.length
+    ? '<option value="">Choose a product to add…</option>' + rest.map(p => '<option value="' + esc(p._id) + '">' + esc(p.name || 'Untitled') + ' — ' + money(p.price) + '</option>').join('')
+    : '<option value="">Every product is already featured</option>';
+  $('mk-add').disabled = !rest.length; $('mk-add-btn').disabled = !rest.length;
+  $('mk-gen').disabled = !feat.length;
+}
+$('mk-chips').addEventListener('click', e => {
+  const b = e.target.closest('[data-mk-rm]'); if (!b) return;
+  const p = products.find(x => x._id === b.dataset.mkRm); if (p) setFeatured(p, false);
+});
+$('mk-add-btn').addEventListener('click', () => {
+  const p = products.find(x => x._id === $('mk-add').value);
+  if (!p) { toast('Choose a product first', true); return; }
+  setFeatured(p, true);
+});
+
+function mkLoadImg(src, cors) {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    if (cors) im.crossOrigin = 'anonymous';
+    im.onload = () => res(im); im.onerror = () => rej(new Error('image load failed'));
+    im.src = src;
+  });
+}
+function mkCanvasOk(im) {
+  try { const c = document.createElement('canvas'); c.width = c.height = 2; c.getContext('2d').drawImage(im, 0, 0, 2, 2); c.toDataURL(); return true; } catch (e) { return false; }
+}
+async function mkImage(url) {
+  if (!url) return null;
+  try {
+    const r = await fetch(url, { mode: 'cors' });
+    if (r.ok) { const blob = await r.blob(); const im = await mkLoadImg(URL.createObjectURL(blob), false); if (mkCanvasOk(im)) return im; }
+  } catch (e) { /* fall through */ }
+  try { const im = await mkLoadImg(url + (url.includes('?') ? '&' : '?') + 'corscb=' + Date.now(), true); if (mkCanvasOk(im)) return im; } catch (e) { /* fall through */ }
+  try { const im = await mkLoadImg('https://wsrv.nl/?url=' + encodeURIComponent(url) + '&w=800&output=png', true); if (mkCanvasOk(im)) return im; } catch (e) { /* fall through */ }
+  return null;
+}
+function mkRound(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function mkWrap(ctx, text, maxW, maxLines) {
+  const words = String(text || '').split(/\s+/).filter(Boolean); const lines = []; let line = '';
+  for (const w of words) {
+    const t = line ? line + ' ' + w : w;
+    if (ctx.measureText(t).width <= maxW || !line) line = t; else { lines.push(line); line = w; }
+  }
+  if (line) lines.push(line);
+  if (lines.length > maxLines) {
+    const kept = lines.slice(0, maxLines); let last = kept[maxLines - 1];
+    while (last.length > 1 && ctx.measureText(last + '…').width > maxW) last = last.slice(0, -1);
+    kept[maxLines - 1] = last.replace(/\s+$/, '') + '…'; return kept;
+  }
+  return lines.map(l => { if (ctx.measureText(l).width <= maxW) return l; let t = l; while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1); return t + '…'; });
+}
+async function generateMarketingImage() {
+  if (!requireAdmin()) return;
+  const feat = featuredList();
+  if (!feat.length) { toast('Feature at least one product first', true); return; }
+  const btn = $('mk-gen'); btn.disabled = true; $('mk-dl').disabled = true;
+  $('mk-status').textContent = 'Drawing ' + feat.length + ' product' + (feat.length === 1 ? '' : 's') + '…';
+  try {
+    try { await document.fonts.ready; await Promise.all([document.fonts.load('800 40px "Plus Jakarta Sans"'), document.fonts.load('600 20px "DM Sans"')]); } catch (e) { /* system fonts are fine */ }
+    const [logo, ...imgs] = await Promise.all([mkImage('../assets/branding/polymath-learning-centre.png'), ...feat.map(p => mkImage(coverOf(p)))]);
+    const W = 1080, PAD = 60, GAP = 28;
+    const cols = feat.length === 1 ? 1 : feat.length <= 4 ? 2 : 3;
+    const cardW = Math.floor((W - PAD * 2 - GAP * (cols - 1)) / cols);
+    const imgH = cols === 1 ? 560 : cardW;
+    const textH = cols === 3 ? 118 : 132;
+    const cardH = imgH + textH;
+    const rows = Math.ceil(feat.length / cols);
+    const HEAD = 230, FOOT = 120;
+    const H = HEAD + rows * cardH + (rows - 1) * GAP + FOOT;
+    const cv = $('mk-canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    const css = getComputedStyle(document.documentElement);
+    const C = k => (css.getPropertyValue(k) || '').trim();
+    const ink = C('--ink') || '#10303a', teal = C('--teal') || '#2e9ca6', deep = C('--deep') || '#056c76', pink = C('--pink') || '#ec008c', paper = C('--paper') || '#f2f9fa', line = C('--line') || '#d1eaee';
+    const HF = '"Plus Jakarta Sans", "DM Sans", system-ui, sans-serif', BF = '"DM Sans", system-ui, sans-serif';
+    // background
+    ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H);
+    const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, deep); g.addColorStop(1, teal);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, 14);
+    // header
+    let x = PAD;
+    if (logo) { const lh = 86, lw = Math.round(logo.width * lh / logo.height); ctx.drawImage(logo, PAD, 48, lw, lh); x = PAD + lw + 22; }
+    ctx.fillStyle = ink; ctx.textBaseline = 'alphabetic';
+    ctx.font = '800 30px ' + HF; ctx.fillText('Polymath', x, 84);
+    ctx.font = '600 22px ' + BF; ctx.fillStyle = deep; ctx.fillText('Learning Centre', x, 116);
+    const title = ($('mk-title').value || '').trim() || 'Our products';
+    ctx.fillStyle = ink; ctx.font = '800 46px ' + HF;
+    ctx.fillText(mkWrap(ctx, title, W - PAD * 2, 1)[0], PAD, 200);
+    // cards
+    feat.forEach((p, i) => {
+      const r = Math.floor(i / cols), c = i % cols;
+      const inRow = Math.min(cols, feat.length - r * cols);
+      const offset = (cols - inRow) * (cardW + GAP) / 2;
+      const cx = PAD + offset + c * (cardW + GAP), cy = HEAD + r * (cardH + GAP);
+      ctx.save(); ctx.shadowColor = 'rgba(16,48,58,.10)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6;
+      mkRound(ctx, cx, cy, cardW, cardH, 22); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.restore();
+      ctx.strokeStyle = line; ctx.lineWidth = 2; mkRound(ctx, cx, cy, cardW, cardH, 22); ctx.stroke();
+      ctx.save(); mkRound(ctx, cx, cy, cardW, imgH, 22); ctx.clip();
+      ctx.fillStyle = paper; ctx.fillRect(cx, cy, cardW, imgH);
+      const im = imgs[i];
+      if (im) {
+        const s = Math.max(cardW / im.width, imgH / im.height), dw = im.width * s, dh = im.height * s;
+        ctx.drawImage(im, cx + (cardW - dw) / 2, cy + (imgH - dh) / 2, dw, dh);
+      } else {
+        ctx.fillStyle = teal; ctx.font = Math.round(imgH * 0.32) + 'px ' + BF; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('📘', cx + cardW / 2, cy + imgH / 2); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      }
+      ctx.restore();
+      ctx.fillRect && (ctx.fillStyle = line, ctx.fillRect(cx, cy + imgH, cardW, 2));
+      const tx = cx + 22, tw = cardW - 44;
+      ctx.fillStyle = ink; ctx.font = '700 ' + (cols === 3 ? 22 : 26) + 'px ' + HF;
+      const nameLines = mkWrap(ctx, p.name || 'Untitled', tw, 2);
+      const lh = cols === 3 ? 28 : 32;
+      nameLines.forEach((l, k) => ctx.fillText(l, tx, cy + imgH + 38 + k * lh));
+      ctx.fillStyle = pink; ctx.font = '800 ' + (cols === 3 ? 28 : 32) + 'px ' + HF;
+      ctx.fillText(money(p.price), tx, cy + cardH - 20);
+    });
+    // footer
+    ctx.fillStyle = ink; ctx.font = '700 26px ' + HF; ctx.textAlign = 'center';
+    ctx.fillText('Order at polymathlc.com.sg/products', W / 2, H - 64);
+    ctx.fillStyle = deep; ctx.font = '500 20px ' + BF; ctx.fillText('Pay easily with PayNow', W / 2, H - 32);
+    ctx.textAlign = 'left';
+    $('mk-preview').classList.remove('hidden');
+    let ok = true; try { cv.toDataURL('image/png'); } catch (e) { ok = false; }
+    $('mk-dl').disabled = !ok;
+    const missing = imgs.filter(x => !x).length;
+    $('mk-status').textContent = ok
+      ? (missing ? missing + ' photo' + (missing === 1 ? '' : 's') + ' could not be loaded, so ' + (missing === 1 ? 'it shows' : 'they show') + ' a book icon.' : 'Ready. Download it below.')
+      : 'The image could not be exported. Try again.';
+  } catch (e) {
+    console.error(e); $('mk-status').textContent = ''; toast('Could not draw the image: ' + (e.message || e), true);
+  } finally { btn.disabled = !featuredList().length; }
+}
+$('mk-gen').addEventListener('click', generateMarketingImage);
+$('mk-dl').addEventListener('click', () => {
+  const cv = $('mk-canvas');
+  cv.toBlob(blob => {
+    if (!blob) { toast('Could not save the image', true); return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'polymath-products-' + new Date().toISOString().slice(0, 10) + '.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }, 'image/png');
+});
+
 /* ═══ Admin: product list ═══ */
 function renderManageList() {
   const box = $('plist');
@@ -1576,12 +1781,13 @@ function renderManageList() {
     const s = stockOf(p);
     return '<div class="prow" data-id="' + esc(p._id) + '">'
       + (cover ? '<img src="' + esc(cover) + '" alt="">' : '<div class="noimg-sm">📘</div>')
-      + '<div><div class="pname">' + esc(p.name || 'Untitled') + (p.active === false ? ' <span class="hidden-tag">Hidden</span>' : '') + '</div>'
+      + '<div><div class="pname">' + esc(p.name || 'Untitled') + (p.active === false ? ' <span class="hidden-tag">Hidden</span>' : '') + (p.featured ? ' <span class="feat-tag">⭐ Featured</span>' : '') + '</div>'
       + '<div class="pmeta"><span class="sku">' + (p.sku ? 'SKU ' + esc(p.sku) : '<em>No SKU</em>') + '</span>'
       + '<span>' + money(p.price) + '</span><span>' + imagesOf(p).length + ' picture' + (imagesOf(p).length === 1 ? '' : 's') + '</span>'
       + '<span>' + (s === Infinity ? 'Unlimited stock' : s + ' in stock') + '</span></div></div>'
       + '<div class="ptools">'
       + (s === Infinity ? '' : '<span class="stockctl"><button type="button" data-pm="dec" aria-label="One fewer in stock">−</button><span>' + s + '</span><button type="button" data-pm="inc" aria-label="One more in stock">+</button></span>')
+      + '<button class="btn ghost small" type="button" data-pm="feature" aria-label="' + (p.featured ? 'Remove from the marketing image' : 'Add to the marketing image') + '" title="' + (p.featured ? 'Remove from the marketing image' : 'Add to the marketing image') + '">' + (p.featured ? '★' : '☆') + '</button>'
       + '<button class="btn ghost small" type="button" data-pm="edit">Edit</button>'
       + '<button class="btn ghost small" type="button" data-pm="toggle">' + (p.active === false ? 'Show' : 'Hide') + '</button>'
       + '<button class="btn danger small" type="button" data-pm="delete">Delete</button>'
@@ -1596,6 +1802,7 @@ $('plist').addEventListener('click', async e => {
   const act = b.dataset.pm;
   if (act === 'edit') { editProduct(id); return; }
   try {
+    if (act === 'feature') { await setFeatured(p, !p.featured); return; }
     if (act === 'toggle') {
       await PRODUCTS.doc(id).update({ active: p.active === false, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
       toast(p.active === false ? 'Now shown in the shop' : 'Hidden from the shop');
