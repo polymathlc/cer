@@ -1,0 +1,78 @@
+name: /cs Storage rules
+
+# Closes cs-files/ in the SHARED Storage rules of mathgen--app, so nobody can
+# read or list the gated /cs files round the form. tools/cs-storage-rules.mjs
+# records how today's rules answer every other folder, tries candidate patches
+# in a dry run, and only ever uses one that answers everything else exactly as
+# before. It refuses rules it does not recognise.
+#
+#   pull request        offline checks only
+#   push to main        offline checks, then a dry run against the LIVE rules (nothing changes)
+#   Run workflow        the same, and with "apply" ticked it publishes the change
+on:
+  pull_request:
+    paths: ['tools/cs-storage-rules*', '.github/workflows/cs-storage-rules.yml']
+  push:
+    branches: [main]
+    paths: ['tools/cs-storage-rules*', '.github/workflows/cs-storage-rules.yml']
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Publish the /cs protection to the shared Storage rules'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: polymath-shared-storage-rules
+  cancel-in-progress: false
+
+jobs:
+  cs-storage-rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Offline checks
+        run: |
+          node --check tools/cs-storage-rules.mjs
+          node --test tools/cs-storage-rules-tests.mjs
+
+      - name: Prepare the service-account key
+        if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node tools/cs-rules.mjs --setup
+
+      - name: Install the Firebase CLI
+        if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: npm install -g firebase-tools --no-audit --no-fund
+
+      - name: Dry run against the live Storage rules, or publish when asked
+        if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          APPLY: ${{ github.event_name == 'workflow_dispatch' && inputs.apply && '--apply' || '' }}
+        run: |
+          set -euo pipefail
+          if ! out=$(node tools/cs-storage-rules.mjs --firebase-tools "$(npm root -g)/firebase-tools" $APPLY 2>"$RUNNER_TEMP/cs-storage.err"); then
+            cat "$RUNNER_TEMP/cs-storage.err"
+            echo "::error title=/cs Storage rules::$(tail -2 "$RUNNER_TEMP/cs-storage.err" | tr '\n' ' ' | cut -c1-3500)"
+            exit 1
+          fi
+          echo "$out"
+          summary=$(jq -c '{mode, installed, changeNeeded, changed, holds, predicate, probes, allowedToday, tried}' <<<"$out")
+          echo "::notice title=/cs Storage rules::$summary"
+          echo "$summary" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json" "$RUNNER_TEMP/cs-storage.err"
