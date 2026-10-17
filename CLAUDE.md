@@ -118,6 +118,15 @@ pages, put one file in the booklet (⭐), make a 🎬 share clip, and read/expor
   plain bytes. Booklet pages are JPEGs drawn in the ADMIN's browser with pdf.js
   3.11.174 and kept in `cs-previews/{id}/` behind download-token URLs.
   `cleanPreviews` drops any preview URL outside that file's own folder.
+- **Storage is closed too** (`tools/cs-storage-rules.mjs`, `cs-storage-rules.yml`).
+  The shared Storage rules were open, so `cs-files/` could be read or LISTED
+  round the form. The patch adds one block (only the verified admin may
+  create/update `cs-files/{id}/{name}`, ≤ 100 MB) and one predicate on the
+  catch-all. It RECORDS how today's rules answer ~200 probes of other folders,
+  tries a few spellings of the predicate in a dry run, and only uses one that
+  answers all of them exactly as before. Published only by a manual run with
+  **apply** ticked. A new top-level Storage folder elsewhere is unaffected; a new
+  *recursive* catch-all would make the tool refuse until it is reviewed.
 - **The faces of the booklet must come out EVEN** so the back cover is the back
   of the last leaf — a "more inside" page fills the gap. The flipbook and the 🎬
   clip use the same rule. The clip is drawn on a canvas from pages rendered here
@@ -135,7 +144,7 @@ pages, put one file in the booklet (⭐), make a 🎬 share clip, and read/expor
   only (bottom left) — bump it on every change to the page.
 - `cs-function/` is excluded from the website sync (`sync-website.yml`).
 - Run `npm test --prefix cs-function/functions`, `node --test tools/cs-page-tests.mjs`,
-  `node --test tools/cs-rules-tests.mjs` and the browser check
+  `node --test tools/cs-rules-tests.mjs tools/cs-storage-rules-tests.mjs` and the browser check
   `tools/cs-page-browser.mjs` (needs Playwright, pdfjs-dist 3.11.174, pdf-lib)
   after touching any of it.
 

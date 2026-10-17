@@ -36,6 +36,12 @@ The shared Firestore catch-all is open, so **`tools/cs-rules.mjs` must be
 published** to lock these five collections away from every browser. Run
 *Actions → /cs rules → Run workflow* (test), then again with **apply** ticked.
 
+The shared Storage rules were open as well, so `cs-files/` could be read or
+listed directly. **`tools/cs-storage-rules.mjs`** closes that folder (only the
+verified admin may upload into it; nobody reads it except the server) after a
+dry run proves every other folder answers exactly as before:
+*Actions → /cs Storage rules → Run workflow* with **apply** ticked.
+
 ## Deploying
 
 A push to `main` that touches `cs-function/**` runs
