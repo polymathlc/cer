@@ -11,6 +11,9 @@ package-lock.json
 
 !visualise-function/functions/package.json
 !visualise-function/functions/package-lock.json
+
+!cs-function/functions/package.json
+!cs-function/functions/package-lock.json
 enquiry-function/.firebase/
 enquiry-function/firebase-debug.log
 enquiry-function/functions/.env*

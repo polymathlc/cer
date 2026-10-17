@@ -1,0 +1,34 @@
+name: /cs page and service
+
+# Offline checks for polymathlc.com.sg/cs on every pull request and push:
+# the service's own tests (validation, consent, limits, links, leads, booklet
+# pages — all against in-memory fakes) and a static check of the page.
+on:
+  pull_request:
+    paths: ['cs/**', 'cs-function/**', 'tools/cs-*', '.github/workflows/cs-page.yml']
+  push:
+    branches: [main]
+    paths: ['cs/**', 'cs-function/**', 'tools/cs-*', '.github/workflows/cs-page.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cs-function/functions/package-lock.json
+      - name: Service tests
+        run: |
+          npm ci --prefix cs-function/functions --no-audit --no-fund
+          npm test --prefix cs-function/functions
+      - name: Page checks
+        run: node --test tools/cs-page-tests.mjs

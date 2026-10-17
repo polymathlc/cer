@@ -1,0 +1,13 @@
+{
+  "name": "polymath-cs",
+  "private": true,
+  "description": "Gated downloads for polymathlc.com.sg/cs: leads with recorded marketing consent, streamed downloads, admin tools.",
+  "type": "module",
+  "main": "index.js",
+  "engines": { "node": "22" },
+  "scripts": { "test": "node --test test/*.test.js" },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.1.0"
+  }
+}
