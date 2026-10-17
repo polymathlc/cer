@@ -5,7 +5,11 @@ an animated booklet made from the file's own pages, then unlocks the download
 with their **name, email, WhatsApp number** and a **tick agreeing to marketing
 by email and WhatsApp**. The admin (chungzhikai@gmail.com) signs in on the same
 page to upload files, choose which are downloadable, choose the booklet pages,
-make a share clip, and read or export the people who signed up.
+make a share clip, make a 🖼 social post (a square, portrait or story picture for
+Instagram, Facebook and WhatsApp that sends parents to the page), and read or
+export the people who signed up. The social post is drawn entirely in the
+admin's browser and needs nothing from this codebase beyond the admin link the
+booklet already uses to read the stored file.
 
 This folder is the Cloud Functions codebase **`polymath-cs`** in the shared
 `mathgen--app` project.
@@ -56,10 +60,12 @@ repository secret. Nothing here deploys Firestore or Storage rules.
 npm test --prefix cs-function/functions        # the service, against in-memory fakes
 node --test tools/cs-page-tests.mjs             # the page's own rules vs the server's
 node --test tools/cs-rules-tests.mjs            # the rules patch
-PW=…/playwright/index.mjs PDFJS_DIR=…/pdfjs-dist@3.11.174 PDFLIB=…/pdf-lib node tools/cs-page-browser.mjs
+PW=…/playwright/index.mjs PDFJS_DIR=…/pdfjs-dist@3.11.174 PDFLIB=…/pdf-lib JSQR=…/jsqr node tools/cs-page-browser.mjs
 ```
 
 The browser check runs the real page with the real service code behind a
-Firebase stub: upload a PDF, draw the booklet, record a clip, unlock with
-consent, stream the download, read and export the lead, hide a file, and the
-360px phone layout.
+Firebase stub: upload a PDF, draw the booklet, record a clip, make and save
+the social posts in all three sizes (scanning their QR codes with jsQR when
+`JSQR` is set), unlock with consent, stream the download, read and export the
+lead, hide a file, and the 360px phone layout. The pictures it saves are left
+in `test-results/cs-page/` to be looked at.
