@@ -87,6 +87,58 @@ hooks inside those handlers are reordered.
   - Shards come from random-angle cracks (`cut` / `shatter`): deterministic per mark, convex, tiling each facet exactly, never thinner than the logo's own thinnest facet. The pure core is exported for the harness.
   - Run `node --test tools/landing-shards-tests.mjs` and `PW=/path/to/playwright/index.mjs node tools/landing-shards-browser.mjs` after touching any of it.
 
+## 📥 Free resources behind a consent form — polymathlc.com.sg/cs (cs v1.0.0)
+
+`cs/index.html` (the page, standalone like `schedule/` — it does NOT load `app.js`),
+`cs-function/` (Functions codebase **`polymath-cs`**: `csListFiles`, `csUnlock`,
+`csAdmin`, `csDownload`), `tools/cs-rules.mjs` (the narrow rules patch) and three
+workflows: `deploy-cs.yml`, `cs-rules.yml`, `cs-page.yml`. See `cs-function/README.md`.
+
+A visitor flips through an **animated booklet made from the file's own pages**,
+then unlocks the download with name, email, WhatsApp number and a tick agreeing
+to marketing by email and WhatsApp. The admin signs in on the same page (footer
+link, or `#admin`) to upload, choose what is downloadable, choose the booklet's
+pages, put one file in the booklet (⭐), make a 🎬 share clip, and read/export leads.
+
+- **The server is the authority, and the browser never writes a contact.** The
+  page loads no Firestore SDK; `csUnlock` validates, rate-limits, and writes the
+  lead through the Admin SDK into five SERVER-ONLY collections (`csFiles`,
+  `csLeads`, `csLimits`, `csGrants`, `csSettings`). The shared catch-all is open,
+  so **`tools/cs-rules.mjs` must stay published** — without it every parent's
+  number is readable with the public web config. It is applied only by a manual
+  *cs-rules* run with **apply** ticked, like the Online and enquiry patches.
+- **Consent is recorded word for word.** `CONSENT_TEXT` / `CONSENT_VERSION` live in
+  `cs-function/functions/validate.js`; the page shows what `csListFiles` sends and
+  returns the version, and a stale version is refused (`failed-precondition`)
+  with the new words. **Change one word → bump `CONSENT_VERSION`.** The box is
+  never pre-ticked, and is ticked afresh for every unlock.
+- **The file is never public; the booklet pages are.** Files live in
+  `cs-files/{id}/`, are streamed by `csDownload` from a 24-hour, 6-use link whose
+  key is stored only as a hash, and active types (`.html`, `.svg`…) are served as
+  plain bytes. Booklet pages are JPEGs drawn in the ADMIN's browser with pdf.js
+  3.11.174 and kept in `cs-previews/{id}/` behind download-token URLs.
+  `cleanPreviews` drops any preview URL outside that file's own folder.
+- **The faces of the booklet must come out EVEN** so the back cover is the back
+  of the last leaf — a "more inside" page fills the gap. The flipbook and the 🎬
+  clip use the same rule. The clip is drawn on a canvas from pages rendered here
+  (Storage images would taint it) and recorded with MediaRecorder (MP4 where the
+  browser can, WebM otherwise).
+- **CORS is a list** (`ORIGINS` in `cs-function/functions/index.js`):
+  polymathlc.com.sg, www., polymathlc.github.io and localhost. Moving the site
+  means adding the origin and redeploying — an unlisted origin reads to the page
+  as a dead network, exactly the enquiry form's bug.
+- **Uploads go straight to Storage and fall back to the server** (`uploadChunk` /
+  `uploadFinish`, 3 MB chunks composed in rounds of 32) if Storage refuses.
+- The page mirrors the server's name/email/WhatsApp rules for comfort;
+  `tools/cs-page-tests.mjs` cuts them out of the page and holds them against
+  `validate.js`, so the two cannot drift. `CS_PAGE_VERSION` is shown to the admin
+  only (bottom left) — bump it on every change to the page.
+- `cs-function/` is excluded from the website sync (`sync-website.yml`).
+- Run `npm test --prefix cs-function/functions`, `node --test tools/cs-page-tests.mjs`,
+  `node --test tools/cs-rules-tests.mjs` and the browser check
+  `tools/cs-page-browser.mjs` (needs Playwright, pdfjs-dist 3.11.174, pdf-lib)
+  after touching any of it.
+
 ## 🗓 The public schedule page — a weekly timetable, and trials booked 3 business days ahead (schedule v1.1.0)
 
 `schedule/index.html` is polymathlc.com.sg/schedule: the trial / enrolment booking page parents use. Like

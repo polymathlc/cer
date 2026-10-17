@@ -45,6 +45,7 @@ jobs:
             --exclude='/.git/' \
             --exclude='/.github/' \
             --exclude='/CNAME' \
+            --exclude='/cs-function/' \
             --exclude='/enquiry-function/' \
             --exclude='/live-assistant/' \
             --exclude='/rapid-import/' \
