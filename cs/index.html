@@ -677,6 +677,65 @@ table.leads .lt-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .consent-quote { background: var(--accent-bg); border-left: 4px solid var(--accent-base); padding: 12px 14px; border-radius: 8px; font-size: var(--font-size-sm); line-height: 1.55; }
 .admin-gate { text-align: center; padding: var(--space-xl); }
 .clip-preview { width: 100%; max-width: 420px; border-radius: 12px; box-shadow: var(--shadow-md); margin: var(--space-md) auto; display: block; background: #000; }
+.af-head-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; }
+
+/* ══════════════════════════════════════════════════════════════════
+   11b. THE SOCIAL POST — preview on the left, the words on the right
+   ══════════════════════════════════════════════════════════════════ */
+.dialog.social-dialog { max-width: 1120px; }
+.social-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(300px, 1fr); gap: 28px; align-items: start; }
+.social-stage { position: sticky; top: 0; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.social-frame {
+  position: relative; display: grid; place-items: center; padding: 16px; min-height: 260px;
+  border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);
+  background: repeating-conic-gradient(#F3F3F0 0% 25%, #FBFBF9 0% 50%) 50% / 22px 22px;
+}
+.social-frame canvas {
+  display: block; max-width: 100%; max-height: 64vh; width: auto; height: auto;
+  border-radius: 6px; box-shadow: var(--shadow-md); background: #fff;
+}
+.social-busy {
+  position: absolute; top: 26px; left: 50%; transform: translateX(-50%); z-index: 2;
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px;
+  background: rgba(26,26,26,0.82); color: #fff; font-size: var(--font-size-sm); font-weight: 700; white-space: nowrap;
+  box-shadow: var(--shadow-sm); pointer-events: none;
+}
+.social-busy::before {
+  content: ''; width: 13px; height: 13px; border-radius: 50%; flex: none;
+  border: 2px solid currentColor; border-right-color: transparent; animation: spin 0.8s linear infinite;
+}
+.social-size { text-align: center; font-size: var(--font-size-sm); color: var(--text-tertiary); }
+.social-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); justify-content: center; }
+.social-tip { font-size: var(--font-size-xs); color: var(--text-tertiary); text-align: center; line-height: 1.5; max-width: 34em; margin: 0 auto; }
+.social-controls { display: flex; flex-direction: column; min-width: 0; }
+.social-group { border: 0; margin: 0 0 var(--space-md); padding: 0; min-width: 0; }
+.social-group legend { font-weight: 700; font-size: 0.95rem; margin-bottom: 8px; padding: 0; }
+.seg { display: flex; flex-wrap: wrap; gap: 8px; }
+.seg label { position: relative; cursor: pointer; }
+.seg input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.seg label > span {
+  display: inline-flex; flex-direction: column; gap: 2px; padding: 8px 14px; border-radius: 12px;
+  border: 1px solid var(--border-medium); background: #fff; font-weight: 700; font-size: 0.9rem; line-height: 1.25;
+  transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
+}
+.seg label > span small { font-weight: 400; color: var(--text-tertiary); font-size: 0.74rem; }
+.seg label > span.seg-row { flex-direction: row; align-items: center; gap: 8px; }
+.seg input:checked + span { border-color: var(--accent-dark); background: var(--accent-bg); box-shadow: 0 0 0 3px var(--accent-light); }
+.seg input:focus-visible + span { outline: 3px solid var(--accent-dark); outline-offset: 2px; }
+.swatch { width: 20px; height: 20px; border-radius: 50%; display: inline-block; flex: none; border: 1px solid rgba(0,0,0,0.15); }
+.social-two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.social-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 14px; margin: 2px 0 var(--space-md); }
+.social-controls .field textarea { min-height: 70px; }
+.social-controls #socialTicks { min-height: 108px; }
+.social-controls #socialCaption { min-height: 168px; font-size: 0.92rem; }
+.social-caption-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.social-fit { font-size: var(--font-size-sm); }
+@media (max-width: 860px) {
+  .social-grid { grid-template-columns: 1fr; }
+  .social-stage { position: static; }
+  .social-frame canvas { max-height: 52vh; }
+  .social-two { grid-template-columns: 1fr; }
+}
 
 /* ══════════════════════════════════════════════════════════════════
    12. RESPONSIVE & MOTION
@@ -784,9 +843,12 @@ table.leads .lt-actions { display: flex; gap: 6px; flex-wrap: wrap; }
         <div class="af-top">
           <div>
             <h3>Files on the page</h3>
-            <p class="muted">Switch <strong>Downloadable</strong> on for the files visitors may unlock. ⭐ puts a file in the booklet in the middle of the page.</p>
+            <p class="muted">Switch <strong>Downloadable</strong> on for the files visitors may unlock. ⭐ puts a file in the booklet in the middle of the page. 🖼 makes a picture for Instagram, Facebook and WhatsApp that sends parents here.</p>
           </div>
-          <button type="button" class="btn btn-secondary btn-small" id="refreshAdmin">↻ Refresh</button>
+          <div class="af-head-actions">
+            <button type="button" class="btn btn-secondary btn-small" id="socialPageButton" title="One picture for Instagram, Facebook and WhatsApp showing every downloadable file">🖼 Post for the whole page</button>
+            <button type="button" class="btn btn-secondary btn-small" id="refreshAdmin">↻ Refresh</button>
+          </div>
         </div>
         <div class="admin-files" id="adminFiles" style="margin-top:16px;"></div>
       </div>
@@ -1033,6 +1095,115 @@ table.leads .lt-actions { display: flex; gap: 6px; flex-wrap: wrap; }
   </div>
 </div>
 
+<div class="overlay" id="socialOverlay" hidden>
+  <div class="dialog social-dialog" role="dialog" aria-modal="true" aria-labelledby="socialTitle">
+    <button type="button" class="icon-button dialog-close" data-close aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <h2 id="socialTitle">Social post</h2>
+    <p class="dialog-lead">A ready-made picture for Instagram, Facebook and WhatsApp that sends parents to this page for the free download. Change any of the words — the picture follows as you type.</p>
+    <div class="notice" id="socialNotice" role="status" aria-live="polite"></div>
+    <div class="social-grid">
+      <div class="social-stage">
+        <div class="social-frame" id="socialFrame">
+          <canvas id="socialCanvas" width="1080" height="1080" data-state="loading" role="img" aria-label="Preview of the picture"></canvas>
+          <div class="social-busy" id="socialBusy" hidden><span id="socialBusyText">Getting the picture ready…</span></div>
+        </div>
+        <p class="social-size" id="socialSize"></p>
+        <div class="social-actions">
+          <button type="button" class="btn btn-primary" id="socialSave">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+            <span>Save the picture</span>
+          </button>
+          <button type="button" class="btn btn-secondary" id="socialCopy">📋 Copy picture</button>
+          <button type="button" class="btn btn-secondary" id="socialShare" hidden>📤 Share…</button>
+        </div>
+        <div class="social-actions">
+          <button type="button" class="btn btn-quiet btn-small" id="socialSaveAll">⬇ Save all three sizes</button>
+          <button type="button" class="btn btn-quiet btn-small" id="socialCopyLink">🔗 Copy the link</button>
+        </div>
+        <p class="social-tip">Instagram does not let a post's words be tapped, so the address and the QR code are on the picture, and the caption carries the full link. On a phone, <strong>Share</strong> sends the picture straight to Instagram or WhatsApp.</p>
+      </div>
+
+      <form class="social-controls" id="socialForm" novalidate>
+        <fieldset class="social-group">
+          <legend>Size</legend>
+          <div class="seg" id="socialFormats"></div>
+        </fieldset>
+        <fieldset class="social-group">
+          <legend>Look</legend>
+          <div class="seg" id="socialThemes"></div>
+        </fieldset>
+        <div class="field">
+          <label for="socialLayout">Arrangement</label>
+          <select id="socialLayout" name="layout">
+            <option value="auto">Best for this size</option>
+            <option value="beside">Pages beside the words</option>
+            <option value="below">Pages below the words</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="socialHeadline">Title</label>
+          <input type="text" id="socialHeadline" name="headline" maxlength="120" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="socialSubline">Line under the title</label>
+          <textarea id="socialSubline" name="subline" maxlength="220"></textarea>
+        </div>
+        <div class="field">
+          <label for="socialTicks">Ticks — one per line, up to three</label>
+          <textarea id="socialTicks" name="ticks" maxlength="200"></textarea>
+          <span class="hint">Keep them true and short: what is inside, that it is free, that it can be looked at first.</span>
+        </div>
+        <div class="social-two">
+          <div class="field">
+            <label for="socialKicker">Label above the title</label>
+            <input type="text" id="socialKicker" name="kicker" maxlength="40" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="socialSticker">Round sticker</label>
+            <input type="text" id="socialSticker" name="sticker" maxlength="12" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="socialCta">Button</label>
+            <input type="text" id="socialCta" name="cta" maxlength="40" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="socialLinkText">Address on the picture</label>
+            <input type="text" id="socialLinkText" name="link" maxlength="60" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <div class="field">
+          <label for="socialNote">Under the address</label>
+          <input type="text" id="socialNote" name="note" maxlength="60" autocomplete="off">
+        </div>
+        <div class="field" id="socialPagesField">
+          <label for="socialPages">Pages in the picture</label>
+          <input type="text" id="socialPages" name="pages" placeholder="e.g. 1-3" autocomplete="off">
+          <span class="hint">Up to three pages of the file. The first one is in front.</span>
+        </div>
+        <div class="social-checks">
+          <label class="row-check"><input type="checkbox" name="show-qr"> QR code to this page</label>
+          <label class="row-check"><input type="checkbox" name="show-sticker"> Round sticker</label>
+          <label class="row-check"><input type="checkbox" name="show-ticks"> Ticks</label>
+          <label class="row-check"><input type="checkbox" name="show-kicker"> Label above the title</label>
+          <label class="row-check"><input type="checkbox" name="show-note"> Line under the address</label>
+        </div>
+        <p class="notice info social-fit" id="socialFitNote" hidden></p>
+        <div class="field">
+          <label for="socialCaption">Caption to paste with the picture</label>
+          <textarea id="socialCaption" name="caption" maxlength="2200"></textarea>
+          <div class="social-caption-actions">
+            <button type="button" class="btn btn-secondary btn-small" id="socialCopyCaption">📋 Copy caption</button>
+            <button type="button" class="btn btn-quiet btn-small" id="socialRebuildCaption">↻ Rebuild from the words</button>
+          </div>
+        </div>
+        <div><button type="button" class="btn btn-quiet btn-small" id="socialReset">↺ Put the words back to how they started</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="confirmOverlay" hidden>
   <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmText">
     <h2 id="confirmTitle">Are you sure</h2>
@@ -1063,7 +1234,7 @@ table.leads .lt-actions { display: flex; gap: 6px; flex-wrap: wrap; }
    ════════════════════════════════════════════════════════════════════ */
 'use strict';
 
-const CS_PAGE_VERSION = 'v1.0.0';
+const CS_PAGE_VERSION = 'v1.1.0';
 const ADMIN_EMAILS = ['chungzhikai@gmail.com'];
 const WHATSAPP_NUMBER = '6596450588';
 const FUNCTIONS_REGION = 'us-central1';
@@ -1674,6 +1845,7 @@ function closeOverlay(overlay) {
   if (!overlayStack.length) document.body.style.overflow = '';
   if (opener && typeof opener.focus === 'function' && document.contains(opener)) opener.focus();
   if (overlay === $('clipOverlay')) Clip.stop();
+  if (overlay === $('socialOverlay')) Social.close();
 }
 document.querySelectorAll('.overlay').forEach(overlay => {
   overlay.addEventListener('mousedown', e => { if (e.target === overlay && overlay.id !== 'confirmOverlay') closeOverlay(overlay); });
@@ -1988,19 +2160,20 @@ function whiteCanvas(w, h) {
   return { canvas, ctx };
 }
 
-/** Render pages of a PDF (ArrayBuffer) to canvases. */
-async function renderPdfCanvases(buffer, pageSpec, onProgress) {
+/** Render pages of a PDF (ArrayBuffer) to canvases, `width` pixels wide (the booklet's width unless asked). */
+async function renderPdfCanvases(buffer, pageSpec, onProgress, width = PREVIEW_WIDTH) {
   const pdfjs = await loadPdfJs();
   const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
   try {
     const pageCount = doc.numPages;
     const pages = parsePages(pageSpec, pageCount);
     const canvases = [];
+    const maxHeight = Math.round(2400 * width / PREVIEW_WIDTH);
     for (let i = 0; i < pages.length; i++) {
       const page = await doc.getPage(pages[i]);
       const base = page.getViewport({ scale: 1 });
-      let scale = PREVIEW_WIDTH / base.width;
-      if (base.height * scale > 2400) scale = 2400 / base.height;
+      let scale = width / base.width;
+      if (base.height * scale > maxHeight) scale = maxHeight / base.height;
       const viewport = page.getViewport({ scale });
       const { canvas, ctx } = whiteCanvas(Math.round(viewport.width), Math.round(viewport.height));
       await page.render({ canvasContext: ctx, viewport }).promise;
@@ -2139,6 +2312,7 @@ async function refreshAdmin() {
   }
 }
 $('refreshAdmin').addEventListener('click', e => { pressed(e.currentTarget); refreshAdmin(); loadList(); });
+$('socialPageButton').addEventListener('click', e => { pressed(e.currentTarget); Social.openPage(); });
 
 function renderAdminStats() {
   const s = (state.adminData && state.adminData.stats) || {};
@@ -2190,6 +2364,7 @@ function adminFileHtml(f, index, total) {
       '<div class="af-actions">' +
         '<button type="button" class="btn btn-secondary btn-small" data-act="show">👁 Show in the booklet</button>' +
         '<button type="button" class="btn btn-secondary btn-small" data-act="test">⬇ Test download</button>' +
+        '<button type="button" class="btn btn-secondary btn-small" data-act="social" title="A picture for Instagram, Facebook and WhatsApp that sends parents here for this download">🖼 Social post</button>' +
         '<button type="button" class="btn btn-secondary btn-small" data-act="clip">🎬 Make a clip</button>' +
         '<button type="button" class="btn btn-secondary btn-small" data-act="replace">⇄ Replace file</button>' +
         '<button type="button" class="btn btn-danger btn-small" data-act="delete">🗑 Delete</button>' +
@@ -2276,6 +2451,8 @@ $('adminFiles').addEventListener('click', async event => {
       const r = await admin('clearPreviews', { fileId });
       mergeAdminFile(r.file);
       await afterAdminChange();
+    } else if (act === 'social') {
+      Social.open(f);
     } else if (act === 'clip') {
       Clip.open(f);
     } else if (act === 'replace') {
@@ -2690,6 +2867,1573 @@ $('leadsCopyWa').addEventListener('click', e => {
   if (!list.length) { toast('Nobody with consent active in this view.', 'error'); return; }
   copyText(list.join('\n'), list.length + ' WhatsApp number' + (list.length === 1 ? '' : 's') + ' (consent active only)');
 });
+</script>
+
+<script>
+'use strict';
+/* ════════════════════════════════════════════════════════════════════
+   🖼 THE SOCIAL POST — a ready-made picture for Instagram, Facebook and
+   WhatsApp that sends parents to this page for the free download.
+
+   The admin opens it from a file (🖼 Social post) or for the whole page
+   (🖼 Post for the whole page). It is drawn on a canvas from the file's
+   OWN pages, rendered here with pdf.js exactly as the 🎬 clip does — the
+   booklet's preview JPEGs live on another origin and would taint the
+   canvas, and a tainted canvas cannot be saved. Nothing is sent anywhere:
+   the picture is a PNG the admin saves, copies or shares, and the words
+   are remembered on this device only.
+
+   The words must FIT. socialLayout() measures every line before anything
+   is drawn and steps the title down, then drops what matters least,
+   rather than let a long title run off the picture — tools/cs-page-tests
+   cuts it out and checks every size against long, short and Chinese
+   titles. The QR code is encoded here (makeQr) and read back by the same
+   tests, because a code that does not scan sends nobody to the page.
+   ════════════════════════════════════════════════════════════════════ */
+const SOCIAL_SITE_URL = 'https://polymathlc.com.sg/cs/';
+const SOCIAL_LINK_TEXT = 'polymathlc.com.sg/cs';
+const SOCIAL_FONT = "'RobotoQuestion', 'Century Gothic', CenturyGothic, AppleGothic, sans-serif";
+const SOCIAL_MAX_PAGES = 3;
+const SOCIAL_MAX_COVERS = 4;
+const SOCIAL_RENDER_WIDTH = 1200;
+const SOCIAL_BLOB_DELAY_MS = 450;
+const SOCIAL_PAGES_DELAY_MS = 550;
+const SOCIAL_SAVE_DELAY_MS = 400;
+const LS_SOCIAL = 'polymath-cs-social';
+const SOCIAL_KEEP = 40;
+
+// Sizes. Stories keep their words clear of the bars Instagram and WhatsApp
+// draw over the top and bottom of the picture.
+const SOCIAL_FORMATS = {
+  square: { w: 1080, h: 1080, safeTop: 0, safeBottom: 0, layout: 'beside', label: 'Square', hint: 'Instagram & Facebook posts' },
+  portrait: { w: 1080, h: 1350, safeTop: 0, safeBottom: 0, layout: 'below', label: 'Portrait', hint: 'Instagram feed, 4:5' },
+  story: { w: 1080, h: 1920, safeTop: 210, safeBottom: 250, layout: 'below', label: 'Story', hint: 'Stories & WhatsApp status' }
+};
+
+// Looks. Teal and magenta are the logo's own colours; Sunrise is this page's.
+// tools/cs-page-tests.mjs holds every pair of words and background to a
+// readable contrast, so a new look cannot ship with grey on grey.
+const SOCIAL_THEMES = {
+  sunrise: {
+    label: 'Sunrise', swatch: ['#FFE0B5', '#B8006B'],
+    bg: ['#FFFAF2', '#FFE0B5'], blobs: ['rgba(255,167,38,0.30)', 'rgba(46,156,166,0.16)'],
+    ink: '#1A1A1A', soft: '#5A4C3E', highlight: 'rgba(255,183,77,0.55)',
+    kickerBg: '#FFFFFF', kickerInk: '#9A5A00', kickerLine: 'rgba(178,106,0,0.28)', spark: '#FFA726',
+    tick: '#2E9CA6', tickInk: '#FFFFFF',
+    card: 'rgba(255,255,255,0.90)', cardLine: 'rgba(26,26,26,0.07)', cardShadow: 'rgba(120,70,0,0.16)',
+    ctaBg: '#B8006B', ctaInk: '#FFFFFF', sticker: '#2E9CA6', stickerInk: '#FFFFFF',
+    qrInk: '#1A1A1A', dots: 'rgba(178,106,0,0.22)', deco: ['#2E9CA6', '#EC008C', '#FFA726']
+  },
+  teal: {
+    label: 'Polymath teal', swatch: ['#BFE6EC', '#0C3236'],
+    bg: ['#EDFAFB', '#BFE6EC'], blobs: ['rgba(46,156,166,0.30)', 'rgba(236,0,140,0.12)'],
+    ink: '#0C3236', soft: '#3A5F63', highlight: 'rgba(88,196,208,0.45)',
+    kickerBg: '#FFFFFF', kickerInk: '#1A6A71', kickerLine: 'rgba(31,124,132,0.30)', spark: '#EC008C',
+    tick: '#D4007E', tickInk: '#FFFFFF',
+    card: 'rgba(255,255,255,0.92)', cardLine: 'rgba(12,50,54,0.08)', cardShadow: 'rgba(12,50,54,0.16)',
+    ctaBg: '#0C3236', ctaInk: '#FFFFFF', sticker: '#D4007E', stickerInk: '#FFFFFF',
+    qrInk: '#0C3236', dots: 'rgba(31,124,132,0.25)', deco: ['#2E9CA6', '#EC008C', '#58C4D0']
+  },
+  night: {
+    label: 'Night', swatch: ['#16404A', '#FFB74D'],
+    bg: ['#0F2433', '#16404A'], blobs: ['rgba(88,196,208,0.24)', 'rgba(236,0,140,0.24)'],
+    ink: '#FFFFFF', soft: '#CFE3E6', highlight: 'rgba(236,0,140,0.55)',
+    kickerBg: '#1E4A57', kickerInk: '#FFFFFF', kickerLine: 'rgba(127,214,223,0.45)', spark: '#FFB74D',
+    tick: '#58C4D0', tickInk: '#0F2433',
+    card: 'rgba(255,255,255,0.08)', cardLine: 'rgba(255,255,255,0.18)', cardShadow: 'rgba(0,0,0,0.28)',
+    ctaBg: '#FFB74D', ctaInk: '#1A1A1A', sticker: '#EC008C', stickerInk: '#FFFFFF',
+    qrInk: '#0F2433', dots: 'rgba(127,214,223,0.30)', deco: ['#58C4D0', '#EC008C', '#FFB74D']
+  },
+  berry: {
+    label: 'Berry', swatch: ['#FFD0E6', '#1F7C84'],
+    bg: ['#FFF3F9', '#FFD0E6'], blobs: ['rgba(236,0,140,0.20)', 'rgba(46,156,166,0.18)'],
+    ink: '#3A0A26', soft: '#6B3A56', highlight: 'rgba(236,0,140,0.26)',
+    kickerBg: '#FFFFFF', kickerInk: '#A0195E', kickerLine: 'rgba(181,30,107,0.28)', spark: '#2E9CA6',
+    tick: '#1F7C84', tickInk: '#FFFFFF',
+    card: 'rgba(255,255,255,0.90)', cardLine: 'rgba(58,10,38,0.08)', cardShadow: 'rgba(120,0,60,0.16)',
+    ctaBg: '#A0195E', ctaInk: '#FFFFFF', sticker: '#1F7C84', stickerInk: '#FFFFFF',
+    qrInk: '#3A0A26', dots: 'rgba(181,30,107,0.22)', deco: ['#EC008C', '#2E9CA6', '#FFB74D']
+  }
+};
+
+/* ─────────────────────────── The words (pure) ─────────────────────────── */
+
+/** The address a parent lands on: this page, opened at this very resource. */
+function socialLink(fileId) {
+  const id = String(fileId || '').replace(/[^A-Za-z0-9_-]/g, '');
+  return id ? SOCIAL_SITE_URL + '#file=' + id : SOCIAL_SITE_URL;
+}
+
+/** The first sentence of a description, clipped on a word if it runs long. */
+function socialFirstSentence(text, max = 140) {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  const m = clean.match(/^(.+?[.!?。！？])(?=\s|$)/);
+  let s = m ? m[1] : clean;
+  const chars = Array.from(s);
+  if (chars.length > max) {
+    s = chars.slice(0, max).join('');
+    const word = s.replace(/\s+\S*$/, '');
+    s = (word.length > max * 0.6 ? word : s).replace(/[\s,;:–-]+$/, '') + '…';
+  }
+  return s;
+}
+
+/** "a\nb\n\nc\nd" → up to three short, tidy lines. */
+function socialTickList(value) {
+  const list = Array.isArray(value) ? value : String(value || '').split(/\r?\n/);
+  return list.map(s => String(s).replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 3)
+    .map(s => (Array.from(s).length > 60 ? Array.from(s).slice(0, 59).join('').trimEnd() + '…' : s));
+}
+
+/** A file name from the title: ascii, dashes, short. Empty when nothing ascii is left. */
+function socialSlug(text) {
+  return String(text || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50).replace(/-+$/, '');
+}
+
+/** Which arrangement a size uses: the admin's choice, or the one that suits it. */
+function socialLayoutMode(formatKey, layout) {
+  if (layout === 'beside' || layout === 'below') return layout;
+  const format = SOCIAL_FORMATS[formatKey] || SOCIAL_FORMATS.square;
+  return format.layout || 'beside';
+}
+
+/** The words a post starts with. Every one of them is true of the file —
+ *  a page count, that it is free, that it can be looked inside first. No
+ *  results, ratings or testimonials are ever made up for an advert. */
+function socialDefaults(subject) {
+  const page = !!subject && subject.kind === 'page';
+  if (page) {
+    const files = Array.isArray(subject.files) ? subject.files : [];
+    const n = files.length;
+    const settings = subject.settings || {};
+    return {
+      kicker: 'Free for parents',
+      headline: String(settings.headline || '').trim() || 'Free learning resources',
+      subline: n > 1
+        ? n + ' free resources — look inside, then download them in a minute.'
+        : 'Look inside, then download it free in a minute.',
+      ticks: files.slice(0, 3).map(f => String(f.title || '').trim()).filter(Boolean).join('\n'),
+      cta: n > 1 ? 'Download them free' : 'Download it free',
+      link: SOCIAL_LINK_TEXT,
+      note: 'Link in bio',
+      sticker: 'FREE'
+    };
+  }
+  const f = (subject && subject.file) || {};
+  const pages = Math.max(0, Math.round(Number(f.pageCount) || 0));
+  const pdf = String(f.ext || '').toLowerCase() === 'pdf';
+  const kind = typeLabel(f.ext);
+  return {
+    kicker: 'Free download',
+    headline: String(f.title || '').trim() || 'Free resource',
+    subline: socialFirstSentence(f.description) ||
+      (pdf && pages > 1 ? 'A ' + pages + '-page PDF, ready to print and keep.' : 'Ready to print and keep.'),
+    ticks: [
+      pages > 1 ? pages + ' pages, ready to print' : (kind === 'Picture' ? 'A picture, ready to print' : kind + ' file, ready to print'),
+      'Look inside before you download',
+      'Free — yours in a minute'
+    ].join('\n'),
+    cta: 'Download it free',
+    link: SOCIAL_LINK_TEXT,
+    note: 'Link in bio',
+    sticker: 'FREE'
+  };
+}
+
+/** The small second line on the round sticker. */
+function socialStickerSub(subject) {
+  if (subject && subject.kind === 'page') {
+    const n = (subject.files || []).length;
+    return n > 1 ? n + ' resources' : 'download';
+  }
+  const f = (subject && subject.file) || {};
+  const pages = Math.max(0, Math.round(Number(f.pageCount) || 0));
+  return pages > 1 ? pages + ' pages' : typeLabel(f.ext);
+}
+
+/** A caption to paste with the picture: the same words, the full link, a few tags. */
+function socialCaption(subject, texts, link) {
+  const t = texts || {};
+  const page = !!subject && subject.kind === 'page';
+  const out = [(page ? '📚 FREE for parents: ' : '📚 FREE: ') + String(t.headline || '').trim()];
+  const sub = String(t.subline || '').trim();
+  if (sub) out.push('', sub);
+  const ticks = socialTickList(t.ticks);
+  if (ticks.length) { out.push(''); ticks.forEach(tick => out.push('✅ ' + tick)); }
+  out.push('', '👉 Download free: ' + link);
+  if (/\bbio\b/i.test(String(t.note || ''))) out.push('🔗 On Instagram? Tap the link in our bio.');
+  out.push('', '#PolymathLearningCentre #FreeDownload #SingaporeParents #PSLE');
+  return out.join('\n');
+}
+
+/* ─────────────────────────── The layout (pure) ─────────────────────────── */
+
+/** Lines of `text` no wider than maxWidth, at most maxLines, "…" when cut.
+ *  Chinese, Japanese and Korean have no spaces, so they break between characters. */
+function socialWrap(text, maxWidth, maxLines, measure) {
+  const tokenRe = /[⺀-鿿가-힯豈-﫿＀-￯]|[^\s⺀-鿿가-힯豈-﫿＀-￯]+|\s+/g;
+  const lines = [];
+  const paragraphs = String(text ?? '').replace(/\r/g, '').split('\n');
+  for (const paragraph of paragraphs) {
+    const tokens = paragraph.match(tokenRe) || [];
+    let line = '', space = false;
+    for (const token of tokens) {
+      if (/^\s+$/.test(token)) { space = line !== ''; continue; }
+      const joined = line ? line + (space ? ' ' : '') + token : token;
+      space = false;
+      if (measure(joined) <= maxWidth) { line = joined; continue; }
+      if (line) lines.push(line);
+      line = '';
+      if (measure(token) <= maxWidth) { line = token; continue; }
+      // A word too long for a line of its own is broken between letters.
+      for (const ch of Array.from(token)) {
+        if (line && measure(line + ch) > maxWidth) { lines.push(line); line = ''; }
+        line += ch;
+      }
+    }
+    if (line) lines.push(line);
+  }
+  const limit = Math.max(1, maxLines | 0);
+  if (lines.length <= limit) return { lines, cut: false };
+  const kept = lines.slice(0, limit);
+  let last = kept[limit - 1];
+  while (last && measure(last + '…') > maxWidth) last = Array.from(last).slice(0, -1).join('').trimEnd();
+  kept[limit - 1] = last.replace(/[\s,;:–-]+$/, '') + '…';
+  return { lines: kept, cut: true };
+}
+
+/** The same lines, as even as they can be made: the narrowest width that keeps
+ *  the same number of lines, so a title never ends on one lonely word. */
+function socialBalance(text, maxWidth, maxLines, measure) {
+  const full = socialWrap(text, maxWidth, maxLines, measure);
+  if (full.cut || full.lines.length < 2) return full;
+  let lo = maxWidth * 0.4, hi = maxWidth, best = full;
+  for (let i = 0; i < 12; i++) {
+    const mid = (lo + hi) / 2;
+    const tried = socialWrap(text, mid, maxLines, measure);
+    if (!tried.cut && tried.lines.length === full.lines.length) { best = tried; hi = mid; } else lo = mid;
+  }
+  return best;
+}
+
+/** Where the pages sit in the fan, in page widths: the front page last. */
+function socialFanSlots(n) {
+  const count = Math.max(1, Math.min(4, Math.round(Number(n) || 1)));
+  const sets = {
+    1: [{ dx: 0, dy: 0, rot: -3, z: 0 }],
+    2: [{ dx: -0.17, dy: 0.035, rot: -8, z: 0 }, { dx: 0.11, dy: 0, rot: 3, z: 1 }],
+    3: [{ dx: -0.2, dy: 0.045, rot: -8, z: 0 }, { dx: 0.2, dy: 0.045, rot: 7, z: 1 }, { dx: 0, dy: 0, rot: -2, z: 2 }],
+    4: [{ dx: -0.39, dy: 0.07, rot: -12, z: 0 }, { dx: -0.13, dy: 0.02, rot: -4, z: 1 },
+      { dx: 0.13, dy: 0.02, rot: 4, z: 2 }, { dx: 0.39, dy: 0.07, rot: 12, z: 3 }]
+  };
+  return sets[count].map(s => ({ ...s }));
+}
+
+/** The corners of a page centred at (cx, cy), w × h, turned by rot radians. */
+function socialCorners(cx, cy, w, h, rot) {
+  const c = Math.cos(rot), s = Math.sin(rot);
+  return [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]]
+    .map(([x, y]) => [cx + x * c - y * s, cy + x * s + y * c]);
+}
+
+/** Every box on the picture, measured before anything is drawn.
+ *  spec: { w, h, safeTop, safeBottom, mode: 'beside'|'below', texts, show, logoRatio, pageRatio, pageCount }
+ *  measureText(text, size, weight) → width in pixels. */
+function socialLayout(spec, measureText) {
+  const W = spec.w, H = spec.h, u = W / 1080;
+  const R = n => Math.max(1, Math.round(n * u));
+  const m = (text, size, weight) => measureText(String(text), size, weight || 400);
+  const show = Object.assign({ kicker: true, ticks: true, qr: true, sticker: true, note: true }, spec.show || {});
+  const t = spec.texts || {};
+  const mode = spec.mode === 'below' ? 'below' : 'beside';
+  const tall = H / W > 1.15;
+  const pad = R(64);
+  const gap = R(tall ? 40 : 30);
+  const top = pad + Math.round(spec.safeTop || 0);
+  const bottom = H - pad - Math.round(spec.safeBottom || 0);
+
+  // ── The header: the real logo and the centre's name beside it.
+  const logoH = R(tall ? 108 : 94);
+  const logoW = Math.round(logoH * (spec.logoRatio > 0 ? spec.logoRatio : 1.37));
+  const header = { x: pad, y: top, w: W - 2 * pad, h: logoH, logoW, logoH, textX: pad + logoW + R(18),
+    name: 'Polymath Learning Centre', tag: t.tag === undefined ? 'Free learning resources' : String(t.tag),
+    nameSize: R(31), tagSize: R(21) };
+  const nameRoom = W - pad - header.textX;
+  while (header.nameSize > R(14) && m(header.name, header.nameSize, 700) > nameRoom) header.nameSize--;
+  while (header.tag && header.tagSize > R(12) && m(header.tag, header.tagSize) > nameRoom) header.tagSize--;
+
+  // ── The call to action across the bottom: a button, the address, the QR code.
+  const cardW = W - 2 * pad;
+  const inner = R(28);
+  const qrSize = show.qr ? R(tall ? 212 : 172) : 0;
+  const qrCapSize = R(19);
+  const qrGap = qrSize ? R(28) : 0;
+  const textRoom = cardW - 2 * inner - qrSize - qrGap;
+  const ctaText = String(t.cta || '').trim();
+  const buttonWidth = size => m(ctaText, size, 700) + size * 1.15 + size * 0.45 + size * 1.7;
+  let btnSize = R(33);
+  while (ctaText && btnSize > R(16) && buttonWidth(btnSize) > textRoom) btnSize--;
+  const btnH = ctaText ? Math.round(btnSize * 2.15) : 0;
+  const btnW = ctaText ? Math.min(textRoom, Math.ceil(buttonWidth(btnSize))) : 0;
+  const linkText = String(t.link || '').trim();
+  let linkSize = R(tall ? 40 : 36);
+  while (linkText && linkSize > R(14) && m(linkText, linkSize, 700) > textRoom) linkSize--;
+  const linkH = linkText ? Math.round(linkSize * 1.25) : 0;
+  const noteText = show.note ? String(t.note || '').trim() : '';
+  let noteSize = R(22);
+  while (noteText && noteSize > R(12) && m(noteText, noteSize) > textRoom) noteSize--;
+  const noteH = noteText ? Math.round(noteSize * 1.4) : 0;
+  const stackGap = R(14);
+  const stackParts = [btnH, linkH, noteH].filter(Boolean);
+  const stackH = stackParts.reduce((a, b) => a + b, 0) + Math.max(0, stackParts.length - 1) * stackGap;
+  const qrBlockH = qrSize ? qrSize + R(10) + Math.round(qrCapSize * 1.35) : 0;
+  const cardH = Math.max(stackH, qrBlockH, R(56)) + 2 * inner;
+  const cta = { x: pad, y: bottom - cardH, w: cardW, h: cardH, inner, button: null, link: null, note: null, qr: null };
+  const centred = !qrSize && mode === 'below';
+  let sy = cta.y + Math.round((cardH - stackH) / 2);
+  const sx = cta.x + inner;
+  const placeX = width => (centred ? cta.x + Math.round((cardW - width) / 2) : sx);
+  if (btnH) {
+    cta.button = { x: placeX(btnW), y: sy, w: btnW, h: btnH, size: btnSize, text: ctaText };
+    sy += btnH + stackGap;
+  }
+  if (linkH) {
+    const width = Math.min(textRoom, Math.ceil(m(linkText, linkSize, 700)));
+    cta.link = { x: placeX(width), y: sy, w: width, h: linkH, size: linkSize, text: linkText };
+    sy += linkH + stackGap;
+  }
+  if (noteH) {
+    const width = Math.min(textRoom, Math.ceil(m(noteText, noteSize)));
+    cta.note = { x: placeX(width), y: sy, w: width, h: noteH, size: noteSize, text: noteText };
+  }
+  if (qrSize) {
+    const qy = cta.y + Math.round((cardH - qrBlockH) / 2);
+    cta.qr = { x: cta.x + cardW - inner - qrSize, y: qy, size: qrSize, capSize: qrCapSize,
+      capY: qy + qrSize + R(10), capH: Math.round(qrCapSize * 1.35), caption: 'Scan to download' };
+  }
+
+  // ── The words: as large as they will go in the room there is.
+  const midTop = header.y + header.h + gap;
+  const midBottom = cta.y - gap;
+  const midH = Math.max(0, midBottom - midTop);
+  const colGap = R(30);
+  const textW = mode === 'beside' ? Math.round((W - 2 * pad - colGap) * 0.52) : W - 2 * pad;
+  const maxTextH = mode === 'beside' ? midH : Math.round(midH * (tall ? 0.5 : 0.56));
+  const align = mode === 'beside' ? 'left' : 'center';
+  const kickerText = show.kicker ? String(t.kicker || '').trim().toLocaleUpperCase() : '';
+  const headText = String(t.headline || '').trim();
+  const subText = String(t.subline || '').trim();
+  const tickList = show.ticks ? socialTickList(t.ticks) : [];
+
+  const attempt = (headSize, plan) => {
+    const items = [];
+    let h = 0, cut = false;
+    if (kickerText) {
+      const spacing = R(3);
+      const kickerWidth = size => m(kickerText, size, 700) + spacing * Array.from(kickerText).length + size * 1.25 + R(22) * 2;
+      let size = R(23);
+      while (size > R(13) && kickerWidth(size) > textW) size--;
+      const kh = Math.round(size * 2.15);
+      items.push({ type: 'kicker', y: h, w: Math.min(textW, Math.ceil(kickerWidth(size))), h: kh, size, spacing, text: kickerText });
+      h += kh + R(22);
+    }
+    if (headText) {
+      const wrap = socialWrap(headText, textW, plan.headLines, s => m(s, headSize, 700));
+      const lineH = Math.round(headSize * 1.1);
+      cut = cut || wrap.cut;
+      items.push({ type: 'headline', y: h, lines: wrap.lines, widths: wrap.lines.map(l => Math.ceil(m(l, headSize, 700))),
+        size: headSize, lineH, h: lineH * wrap.lines.length });
+      h += lineH * wrap.lines.length;
+    }
+    if (subText && plan.subLines > 0) {
+      const size = Math.max(R(24), Math.min(R(34), Math.round(headSize * 0.42)));
+      const wrap = socialWrap(subText, textW, plan.subLines, s => m(s, size));
+      const lineH = Math.round(size * 1.36);
+      cut = cut || wrap.cut;
+      h += h ? R(18) : 0;
+      items.push({ type: 'subline', y: h, lines: wrap.lines, widths: wrap.lines.map(l => Math.ceil(m(l, size))),
+        size, lineH, h: lineH * wrap.lines.length });
+      h += lineH * wrap.lines.length;
+    }
+    if (plan.ticks && tickList.length) {
+      const size = Math.max(R(22), Math.min(R(30), Math.round(headSize * 0.36)));
+      const icon = Math.round(size * 1.2);
+      const iconGap = R(14);
+      const lineH = Math.round(size * 1.75);
+      h += h ? R(22) : 0;
+      for (const tick of tickList) {
+        const wrap = socialWrap(tick, textW - icon - iconGap, 1, s => m(s, size, 600));
+        cut = cut || wrap.cut;
+        const width = icon + iconGap + Math.ceil(m(wrap.lines[0] || '', size, 600));
+        items.push({ type: 'tick', y: h, w: Math.min(textW, width), h: lineH, size, icon, iconGap, text: wrap.lines[0] || '' });
+        h += lineH;
+      }
+    }
+    return { items, h, cut };
+  };
+  // Try the fullest version first and give things up in order of what matters least.
+  const plans = [
+    { headLines: 4, subLines: 3, ticks: true, min: 52, dropped: [] },
+    { headLines: 4, subLines: 2, ticks: true, min: 46, dropped: [] },
+    { headLines: 4, subLines: 2, ticks: false, min: 44, dropped: ['ticks'] },
+    { headLines: 4, subLines: 1, ticks: false, min: 40, dropped: ['ticks', 'subline'] },
+    { headLines: 4, subLines: 0, ticks: false, min: 34, dropped: ['ticks', 'subline'] }
+  ];
+  const sizes = min => {
+    const list = [];
+    for (let s = R(tall && mode === 'below' ? 96 : 86); s >= R(min); s -= R(4)) list.push(s);
+    return list.length ? list : [R(min)];
+  };
+  let chosen = null, used = plans[0];
+  for (const plan of plans) {
+    for (const s of sizes(plan.min)) {
+      const a = attempt(s, plan);
+      if (a.h <= maxTextH && !a.cut) { chosen = a; used = plan; break; }
+    }
+    if (chosen) break;
+  }
+  if (!chosen) {
+    // Nothing fits whole: the smallest title, cut short with "…", rather than words off the picture.
+    used = { headLines: 3, subLines: 0, ticks: false, min: 30, dropped: ['ticks', 'subline'] };
+    for (const lines of [3, 2, 1]) {
+      chosen = attempt(R(30), { ...used, headLines: lines });
+      if (chosen.h <= maxTextH) break;
+    }
+  }
+  const blockH = Math.min(chosen.h, Math.max(maxTextH, 0));
+  const blockY = mode === 'beside' ? midTop + Math.max(0, Math.round((midH - blockH) / 2)) : midTop;
+  const block = { x: pad, y: blockY, w: textW, h: blockH, align, items: [] };
+  for (const item of chosen.items) {
+    const placed = { ...item, y: blockY + item.y };
+    // Even out the lines that fitted, at the same size and the same number of lines.
+    if ((item.type === 'headline' || item.type === 'subline') && item.lines.length > 1) {
+      const weight = item.type === 'headline' ? 700 : 400;
+      const source = item.type === 'headline' ? headText : subText;
+      const even = socialBalance(source, textW, item.lines.length, s => m(s, item.size, weight));
+      if (!even.cut && even.lines.length === item.lines.length) {
+        placed.lines = even.lines;
+        placed.widths = even.lines.map(l => Math.ceil(m(l, item.size, weight)));
+      }
+    }
+    if (item.type === 'headline' || item.type === 'subline') {
+      placed.x = pad;
+      placed.xs = placed.widths.map(w => (align === 'center' ? pad + Math.round((textW - w) / 2) : pad));
+    } else {
+      placed.x = align === 'center' ? pad + Math.round((textW - item.w) / 2) : pad;
+    }
+    block.items.push(placed);
+  }
+  const subWanted = !!subText && used.subLines === 0;
+  const ticksWanted = tickList.length > 0 && !used.ticks;
+  const fit = { cut: !!chosen.cut, dropped: [ticksWanted ? 'ticks' : '', subWanted ? 'subline' : ''].filter(Boolean) };
+
+  // ── The pages, fanned out in the room left over.
+  const visual = mode === 'beside'
+    ? { x: pad + textW + colGap, y: midTop, w: W - pad - (pad + textW + colGap), h: midH }
+    : { x: pad, y: blockY + blockH + gap, w: W - 2 * pad, h: Math.max(0, midBottom - (blockY + blockH + gap)) };
+  const ratio = Math.min(1.8, Math.max(0.62, Number(spec.pageRatio) || 1.414));
+  const slots = socialFanSlots(spec.pageCount || 1);
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const s of slots) {
+    for (const [x, y] of socialCorners(s.dx, s.dy * ratio, 1, ratio, s.rot * Math.PI / 180)) {
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    }
+  }
+  const spanW = maxX - minX, spanH = maxY - minY;
+  const pw = Math.max(0, Math.min(visual.w * 0.95 / spanW, visual.h * 0.95 / spanH, W * 0.62));
+  const ox = visual.x + visual.w / 2 - (minX + spanW / 2) * pw;
+  const oy = visual.y + visual.h / 2 - (minY + spanH / 2) * pw;
+  const pages = slots
+    .map(s => ({ cx: ox + s.dx * pw, cy: oy + s.dy * ratio * pw, w: pw, h: pw * ratio, rot: s.rot * Math.PI / 180, z: s.z,
+      item: slots.length - 1 - s.z }))
+    .sort((a, b) => a.z - b.z);
+
+  // ── The round sticker on the corner of the front page, kept clear of the words.
+  let sticker = null;
+  const front = pages[pages.length - 1];
+  if (show.sticker && String(t.sticker || '').trim() && front && pw > 0) {
+    let r = Math.round(Math.min(R(tall ? 112 : 96), pw * 0.3, (W - 2 * pad) * 0.12));
+    r = Math.max(R(46), r);
+    const corner = socialCorners(front.cx, front.cy, front.w, front.h, front.rot)[1];
+    let cx = corner[0] - r * 0.22, cy = corner[1] + r * 0.22;
+    const margin = R(12);
+    const minCx = (mode === 'beside' ? block.x + block.w + margin : pad * 0.5) + r;
+    cx = Math.min(W - pad * 0.4 - r, Math.max(minCx, cx));
+    const minCy = header.y + header.h + margin + r;
+    const maxCy = cta.y - margin - r;
+    cy = Math.min(maxCy, Math.max(minCy, cy));
+    // In the stacked arrangement the words sit above the pages: keep the sticker below them.
+    if (mode === 'below') cy = Math.max(cy, Math.min(maxCy, block.y + block.h + margin + r));
+    sticker = { cx: Math.round(cx), cy: Math.round(cy), r, text: String(t.sticker).trim().toLocaleUpperCase(),
+      sub: String(t.stickerSub || '').trim() };
+  }
+
+  return { w: W, h: H, u, mode, pad, header, block, visual, pages, pageRatio: ratio, sticker, cta, fit };
+}
+
+/* ─────────────────────────── The QR code (pure) ─────────────────────────── */
+
+/** A QR code for `text` (byte mode, UTF-8), as rows of dark/light modules.
+ *  Self-contained on purpose: the picture is drawn on a canvas that must stay
+ *  untainted, and a code that does not scan sends nobody to the page — so the
+ *  whole encoder lives here, where tools/cs-page-tests.mjs reads it back. */
+function makeQr(text, level = 'M') {
+  const LEVEL_INDEX = { L: 0, M: 1, Q: 2, H: 3 };
+  const FORMAT_BITS = [1, 0, 3, 2];
+  // ISO/IEC 18004 table 9: error-correction codewords per block, and blocks, by level and version.
+  const ECC_PER_BLOCK = [
+    [-1, 7, 10, 15, 20, 26, 18, 20, 24, 30, 18, 20, 24, 26, 30, 22, 24, 28, 30, 28, 28, 28, 28, 30, 30, 26, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30],
+    [-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26, 26, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28],
+    [-1, 13, 22, 18, 26, 18, 24, 18, 22, 20, 24, 28, 26, 24, 20, 30, 24, 28, 28, 26, 30, 28, 30, 30, 30, 30, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30],
+    [-1, 17, 28, 22, 16, 22, 28, 26, 26, 24, 28, 24, 28, 22, 24, 24, 30, 28, 28, 26, 28, 30, 24, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30]
+  ];
+  const BLOCK_COUNT = [
+    [-1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 4, 4, 6, 6, 6, 6, 7, 8, 8, 9, 9, 10, 12, 12, 12, 13, 14, 15, 16, 17, 18, 19, 19, 20, 21, 22, 24, 25],
+    [-1, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5, 5, 8, 9, 9, 10, 10, 11, 13, 14, 16, 17, 17, 18, 20, 21, 23, 25, 26, 28, 29, 31, 33, 35, 37, 38, 40, 43, 45, 47, 49],
+    [-1, 1, 1, 2, 2, 4, 4, 6, 6, 8, 8, 8, 10, 12, 16, 12, 17, 16, 18, 21, 20, 23, 23, 25, 27, 29, 34, 34, 35, 38, 40, 43, 45, 48, 51, 53, 56, 59, 62, 65, 68],
+    [-1, 1, 1, 2, 4, 4, 4, 5, 6, 8, 8, 11, 11, 16, 16, 18, 16, 19, 21, 25, 25, 25, 34, 30, 32, 35, 37, 40, 42, 45, 48, 51, 54, 57, 60, 63, 66, 70, 74, 77, 81]
+  ];
+  const ecl = LEVEL_INDEX[String(level).toUpperCase()] ?? 1;
+  const bytes = Array.from(new TextEncoder().encode(String(text ?? '')));
+
+  const rawModules = v => {
+    let n = (16 * v + 128) * v + 64;
+    if (v >= 2) {
+      const align = Math.floor(v / 7) + 2;
+      n -= (25 * align - 10) * align - 55;
+      if (v >= 7) n -= 36;
+    }
+    return n;
+  };
+  const dataCodewords = v => Math.floor(rawModules(v) / 8) - ECC_PER_BLOCK[ecl][v] * BLOCK_COUNT[ecl][v];
+
+  // The smallest version that holds the text.
+  let version = 0;
+  for (let v = 1; v <= 40; v++) {
+    const countBits = v < 10 ? 8 : 16;
+    if (bytes.length < (1 << countBits) && 4 + countBits + bytes.length * 8 <= dataCodewords(v) * 8) { version = v; break; }
+  }
+  if (!version) throw new Error('Too much text for one QR code.');
+
+  // Bits: byte mode, the length, the bytes, a terminator, then the standard padding.
+  const bits = [];
+  const put = (value, length) => { for (let i = length - 1; i >= 0; i--) bits.push((value >>> i) & 1); };
+  put(0b0100, 4);
+  put(bytes.length, version < 10 ? 8 : 16);
+  bytes.forEach(b => put(b, 8));
+  const capacity = dataCodewords(version) * 8;
+  put(0, Math.min(4, capacity - bits.length));
+  put(0, (8 - bits.length % 8) % 8);
+  for (let pad = 0xEC; bits.length < capacity; pad ^= 0xEC ^ 0x11) put(pad, 8);
+  const data = [];
+  for (let i = 0; i < bits.length; i += 8) data.push(bits.slice(i, i + 8).reduce((acc, b) => (acc << 1) | b, 0));
+
+  // Reed–Solomon over GF(2^8) with the QR polynomial 0x11D.
+  const gfMul = (x, y) => {
+    let z = 0;
+    for (let i = 7; i >= 0; i--) {
+      z = (z << 1) ^ ((z >>> 7) * 0x11D);
+      z ^= ((y >>> i) & 1) * x;
+    }
+    return z;
+  };
+  const rsDivisor = degree => {
+    const result = new Array(degree).fill(0);
+    result[degree - 1] = 1;
+    let root = 1;
+    for (let i = 0; i < degree; i++) {
+      for (let j = 0; j < result.length; j++) {
+        result[j] = gfMul(result[j], root);
+        if (j + 1 < result.length) result[j] ^= result[j + 1];
+      }
+      root = gfMul(root, 0x02);
+    }
+    return result;
+  };
+  const rsRemainder = (block, divisor) => {
+    const result = divisor.map(() => 0);
+    for (const b of block) {
+      const factor = b ^ result.shift();
+      result.push(0);
+      divisor.forEach((coef, i) => { result[i] ^= gfMul(coef, factor); });
+    }
+    return result;
+  };
+
+  // Split into blocks, add the error correction, interleave.
+  const numBlocks = BLOCK_COUNT[ecl][version];
+  const blockEcc = ECC_PER_BLOCK[ecl][version];
+  const rawCodewords = Math.floor(rawModules(version) / 8);
+  const numShort = numBlocks - rawCodewords % numBlocks;
+  const shortLen = Math.floor(rawCodewords / numBlocks);
+  const divisor = rsDivisor(blockEcc);
+  const blocks = [];
+  for (let i = 0, k = 0; i < numBlocks; i++) {
+    const dat = data.slice(k, k + shortLen - blockEcc + (i < numShort ? 0 : 1));
+    k += dat.length;
+    const ecc = rsRemainder(dat, divisor);
+    if (i < numShort) dat.push(0);
+    blocks.push(dat.concat(ecc));
+  }
+  const codewords = [];
+  for (let i = 0; i < blocks[0].length; i++) {
+    blocks.forEach((block, j) => { if (i !== shortLen - blockEcc || j >= numShort) codewords.push(block[i]); });
+  }
+
+  // The grid, with the function patterns first.
+  const size = version * 4 + 17;
+  const modules = Array.from({ length: size }, () => new Array(size).fill(false));
+  const isFunction = Array.from({ length: size }, () => new Array(size).fill(false));
+  const setFn = (x, y, dark) => { modules[y][x] = dark; isFunction[y][x] = true; };
+  const bit = (value, i) => ((value >>> i) & 1) !== 0;
+
+  for (let i = 0; i < size; i++) { setFn(6, i, i % 2 === 0); setFn(i, 6, i % 2 === 0); }
+  const finder = (cx, cy) => {
+    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+      const x = cx + dx, y = cy + dy;
+      if (x < 0 || x >= size || y < 0 || y >= size) continue;
+      const dist = Math.max(Math.abs(dx), Math.abs(dy));
+      setFn(x, y, dist !== 2 && dist !== 4);
+    }
+  };
+  finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+  const alignPositions = [];
+  if (version > 1) {
+    const count = Math.floor(version / 7) + 2;
+    const step = Math.floor((version * 8 + count * 3 + 5) / (count * 4 - 4)) * 2;
+    alignPositions.push(6);
+    for (let pos = size - 7; alignPositions.length < count; pos -= step) alignPositions.splice(1, 0, pos);
+  }
+  const lastAlign = alignPositions.length - 1;
+  alignPositions.forEach((ay, i) => alignPositions.forEach((ax, j) => {
+    if ((i === 0 && j === 0) || (i === 0 && j === lastAlign) || (i === lastAlign && j === 0)) return;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) setFn(ax + dx, ay + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+  }));
+  const drawFormat = mask => {
+    const value = (FORMAT_BITS[ecl] << 3) | mask;
+    let rem = value;
+    for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+    const fmt = ((value << 10) | rem) ^ 0x5412;
+    for (let i = 0; i <= 5; i++) setFn(8, i, bit(fmt, i));
+    setFn(8, 7, bit(fmt, 6));
+    setFn(8, 8, bit(fmt, 7));
+    setFn(7, 8, bit(fmt, 8));
+    for (let i = 9; i < 15; i++) setFn(14 - i, 8, bit(fmt, i));
+    for (let i = 0; i < 8; i++) setFn(size - 1 - i, 8, bit(fmt, i));
+    for (let i = 8; i < 15; i++) setFn(8, size - 15 + i, bit(fmt, i));
+    setFn(8, size - 8, true);
+  };
+  drawFormat(0);
+  if (version >= 7) {
+    let rem = version;
+    for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1F25);
+    const vbits = (version << 12) | rem;
+    for (let i = 0; i < 18; i++) {
+      const a = size - 11 + i % 3, b = Math.floor(i / 3);
+      setFn(a, b, bit(vbits, i));
+      setFn(b, a, bit(vbits, i));
+    }
+  }
+
+  // The codewords, in the zig-zag up and down the columns, right to left.
+  let index = 0;
+  for (let right = size - 1; right >= 1; right -= 2) {
+    if (right === 6) right = 5;
+    for (let vert = 0; vert < size; vert++) {
+      for (let j = 0; j < 2; j++) {
+        const x = right - j;
+        const upward = ((right + 1) & 2) === 0;
+        const y = upward ? size - 1 - vert : vert;
+        if (!isFunction[y][x] && index < codewords.length * 8) {
+          modules[y][x] = bit(codewords[index >>> 3], 7 - (index & 7));
+          index++;
+        }
+      }
+    }
+  }
+
+  const MASKS = [
+    (x, y) => (x + y) % 2 === 0,
+    (x, y) => y % 2 === 0,
+    (x, y) => x % 3 === 0,
+    (x, y) => (x + y) % 3 === 0,
+    (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0,
+    (x, y) => (x * y) % 2 + (x * y) % 3 === 0,
+    (x, y) => ((x * y) % 2 + (x * y) % 3) % 2 === 0,
+    (x, y) => ((x + y) % 2 + (x * y) % 3) % 2 === 0
+  ];
+  const applyMask = mask => {
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++)
+      if (!isFunction[y][x] && MASKS[mask](x, y)) modules[y][x] = !modules[y][x];
+  };
+
+  // The penalty rules of the standard pick the mask a scanner reads best.
+  const addHistory = (run, history) => { if (history[0] === 0) run += size; history.pop(); history.unshift(run); };
+  const countFinderLike = history => {
+    const n = history[1];
+    const core = n > 0 && history[2] === n && history[3] === n * 3 && history[4] === n && history[5] === n;
+    return (core && history[0] >= n * 4 && history[6] >= n ? 1 : 0) + (core && history[6] >= n * 4 && history[0] >= n ? 1 : 0);
+  };
+  const terminate = (color, run, history) => {
+    if (color) { addHistory(run, history); run = 0; }
+    run += size;
+    addHistory(run, history);
+    return countFinderLike(history);
+  };
+  const penalty = () => {
+    let score = 0;
+    for (let pass = 0; pass < 2; pass++) {
+      for (let a = 0; a < size; a++) {
+        let color = false, run = 0;
+        const history = [0, 0, 0, 0, 0, 0, 0];
+        for (let b = 0; b < size; b++) {
+          const cell = pass === 0 ? modules[a][b] : modules[b][a];
+          if (cell === color) {
+            run++;
+            if (run === 5) score += 3;
+            else if (run > 5) score++;
+          } else {
+            addHistory(run, history);
+            if (!color) score += countFinderLike(history) * 40;
+            color = cell;
+            run = 1;
+          }
+        }
+        score += terminate(color, run, history) * 40;
+      }
+    }
+    for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) {
+      const c = modules[y][x];
+      if (c === modules[y][x + 1] && c === modules[y + 1][x] && c === modules[y + 1][x + 1]) score += 3;
+    }
+    let dark = 0;
+    modules.forEach(row => row.forEach(c => { if (c) dark++; }));
+    const total = size * size;
+    score += (Math.ceil(Math.abs(dark * 20 - total * 10) / total) - 1) * 10;
+    return score;
+  };
+  let best = 0, bestScore = Infinity;
+  for (let mask = 0; mask < 8; mask++) {
+    applyMask(mask);
+    drawFormat(mask);
+    const score = penalty();
+    if (score < bestScore) { best = mask; bestScore = score; }
+    applyMask(mask);
+  }
+  applyMask(best);
+  drawFormat(best);
+  return { version, size, mask: best, level: 'LMQH'[ecl], modules };
+}
+
+/* ─────────────────────────── Drawing and the dialog ─────────────────────────── */
+const Social = (() => {
+  const canvas = $('socialCanvas');
+  let built = false;
+  let subject = null;
+  let opts = null;
+  let generation = 0;
+  let items = [];
+  let itemsLoading = false;
+  let itemsNote = '';
+  let logo = null;
+  let logoJob = null;
+  let fontsJob = null;
+  const fileCache = new Map();
+  const qrCache = new Map();
+  let raf = 0, blobTimer = 0, saveTimer = 0, pagesTimer = 0;
+  let blob = null, blobSig = '', lastSig = '';
+  let lastPlan = null;
+
+  /* ── Assets ── */
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Could not load ' + src));
+      img.src = src;
+    });
+  }
+  function ensureLogo() {
+    if (!logoJob) logoJob = loadImage('../assets/branding/polymath-learning-centre.png').then(img => { logo = img; return img; }).catch(() => null);
+    return logoJob;
+  }
+  /** The page's own fonts, so the canvas does not fall back to a default mid-drawing. */
+  function ensureFonts() {
+    if (!fontsJob) {
+      const wanted = ['700 40px RobotoQuestion', '400 40px RobotoQuestion', '700 40px "Century Gothic"', '400 40px "Century Gothic"'];
+      const loads = document.fonts && document.fonts.load ? wanted.map(f => document.fonts.load(f, '?Aa').catch(() => [])) : [];
+      fontsJob = Promise.race([Promise.all(loads), sleep(2500)]).catch(() => null);
+    }
+    return fontsJob;
+  }
+  function qrFor(text) {
+    if (!qrCache.has(text)) {
+      try { qrCache.set(text, makeQr(text, 'M')); } catch (e) { qrCache.set(text, null); }
+    }
+    return qrCache.get(text);
+  }
+  function drawable(f) {
+    return !!f && (isPdf(f.contentType) || isPdf(f.fileName) || isPicture(f.contentType) || isPicture(f.fileName));
+  }
+  function cacheKey(f) { return [f.id, f.storagePath || '', f.size || 0, f.updatedAt || 0].join('|'); }
+
+  /** The stored file, fetched once per dialog; its pages drawn once each. */
+  async function fileEntry(f) {
+    const key = cacheKey(f);
+    let entry = fileCache.get(key);
+    if (!entry) {
+      entry = { blob: null, pageCount: f.pageCount || 0, pages: new Map(), job: null };
+      fileCache.set(key, entry);
+      // Keep only a few files' worth of pages: these canvases are large.
+      while (fileCache.size > SOCIAL_MAX_COVERS + 2) fileCache.delete(fileCache.keys().next().value);
+    }
+    if (!entry.blob) {
+      if (!entry.job) entry.job = fetchStoredFile(f.id).then(b => { entry.blob = b; return b; }).finally(() => { entry.job = null; });
+      await entry.job;
+    }
+    return entry;
+  }
+  async function pagesOf(f, wanted) {
+    const entry = await fileEntry(f);
+    const missing = wanted.filter(p => !entry.pages.has(p)).sort((a, b) => a - b);
+    if (missing.length) {
+      const pdf = isPdf(f.contentType) || isPdf(f.fileName) || isPdf(entry.blob.type);
+      const rendered = pdf
+        ? await renderPdfCanvases(await entry.blob.arrayBuffer(), pagesSpecText(missing), null, SOCIAL_RENDER_WIDTH)
+        : await renderImageCanvas(entry.blob);
+      entry.pageCount = rendered.pageCount || entry.pageCount;
+      rendered.canvases.forEach(({ canvas: c, page }) => entry.pages.set(page, c));
+    }
+    return { pageCount: entry.pageCount, canvases: wanted.map(p => entry.pages.get(p)).filter(Boolean) };
+  }
+
+  /** A made-up cover, the same as the booklet's, for files with no pages to draw. */
+  function madeCover(title, meta) {
+    const c = document.createElement('canvas');
+    c.width = 900; c.height = 1273;
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, c.width, c.height);
+    g.addColorStop(0, '#FFF3E0'); g.addColorStop(0.55, '#FFE0B2'); g.addColorStop(1, '#FFCC80');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, c.width, c.height);
+    if (logo) ctx.drawImage(logo, 90, 100, 150 * (logo.width / logo.height), 150);
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#B26A00'; ctx.font = '700 34px ' + SOCIAL_FONT;
+    ctx.fillText('POLYMATH', 92, 330);
+    ctx.fillStyle = '#1A1A1A'; ctx.font = '700 78px ' + SOCIAL_FONT;
+    socialWrap(title || 'Free resource', 720, 6, s => ctx.measureText(s).width).lines
+      .forEach((line, i) => ctx.fillText(line, 90, 480 + i * 92));
+    ctx.fillStyle = '#5C5C5C'; ctx.font = '400 34px ' + SOCIAL_FONT;
+    if (meta) ctx.fillText(meta, 92, c.height - 110);
+    return c;
+  }
+  function coverFor(f) {
+    const pages = f && f.pageCount ? f.pageCount + ' pages' : typeLabel(f && f.ext);
+    return madeCover(f && f.title, pages);
+  }
+
+  /** What the picture shows: the chosen pages of one file, or the covers of several. */
+  async function loadItems(g) {
+    itemsLoading = true;
+    itemsNote = '';
+    busy(subject.kind === 'page' ? 'Drawing the covers…' : 'Drawing the pages…');
+    try {
+      if (subject.kind === 'file') {
+        const f = subject.file;
+        if (!drawable(f)) { items = [coverFor(f)]; return; }
+        try {
+          const wanted = parsePages(opts.pages, f.pageCount || 0).slice(0, SOCIAL_MAX_PAGES);
+          const got = await pagesOf(f, wanted);
+          if (g !== generation) return;
+          items = got.canvases.length ? got.canvases : [coverFor(f)];
+        } catch (error) {
+          if (g !== generation) return;
+          items = [coverFor(f)];
+          // A server error explains itself; a drawing error (pdf.js) has no code and keeps its own words.
+          const why = error && error.code ? explainError(error).message : (error && error.message) || 'unknown';
+          itemsNote = 'The pages could not be drawn (' + why + '), so the picture shows a made-up cover.';
+        }
+      } else {
+        const list = [];
+        let failed = 0;
+        for (const f of subject.files.slice(0, SOCIAL_MAX_COVERS)) {
+          if (!drawable(f)) { list.push(coverFor(f)); continue; }
+          try {
+            const first = (f.previewPages && f.previewPages[0]) || 1;
+            const got = await pagesOf(f, [first]);
+            list.push(got.canvases[0] || coverFor(f));
+          } catch (error) { failed++; list.push(coverFor(f)); }
+          if (g !== generation) return;
+          items = list.slice();
+          schedule();
+        }
+        items = list.length ? list : [madeCover('Free learning resources', '')];
+        if (failed) itemsNote = failed + ' of the covers could not be drawn and show a made-up cover instead.';
+      }
+    } finally {
+      if (g === generation) { itemsLoading = false; busy(''); note(itemsNote, itemsNote ? 'error' : ''); schedule(); }
+    }
+  }
+
+  /* ── Settings, kept per file on this device ── */
+  function defaultsFor(subj) {
+    const d = socialDefaults(subj);
+    const firstPages = subj.kind === 'file' && subj.file.previewPages && subj.file.previewPages.length
+      ? subj.file.previewPages.slice(0, SOCIAL_MAX_PAGES) : [1, 2, 3];
+    return {
+      format: 'square', theme: 'sunrise', layout: 'auto',
+      texts: { kicker: d.kicker, headline: d.headline, subline: d.subline, ticks: d.ticks, cta: d.cta, link: d.link, note: d.note, sticker: d.sticker },
+      show: { kicker: true, ticks: true, qr: true, sticker: true, note: true },
+      pages: pagesSpecText(firstPages.slice().sort((a, b) => a - b)),
+      caption: '', captionTouched: false
+    };
+  }
+  function loadOpts(subj) {
+    const base = defaultsFor(subj);
+    const all = readStore(LS_SOCIAL, {}) || {};
+    const saved = all[subj.key];
+    if (!saved || typeof saved !== 'object') return base;
+    const merged = {
+      ...base, ...saved,
+      texts: { ...base.texts, ...(saved.texts || {}) },
+      show: { ...base.show, ...(saved.show || {}) }
+    };
+    if (!SOCIAL_FORMATS[merged.format]) merged.format = base.format;
+    if (!SOCIAL_THEMES[merged.theme]) merged.theme = base.theme;
+    if (!['auto', 'beside', 'below'].includes(merged.layout)) merged.layout = 'auto';
+    return merged;
+  }
+  function persistSoon() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(persist, SOCIAL_SAVE_DELAY_MS);
+  }
+  function persist() {
+    clearTimeout(saveTimer);
+    if (!subject || !opts) return;
+    const all = readStore(LS_SOCIAL, {}) || {};
+    all[subject.key] = { ...opts, savedAt: Date.now() };
+    const keys = Object.keys(all).sort((a, b) => (all[b].savedAt || 0) - (all[a].savedAt || 0));
+    keys.slice(SOCIAL_KEEP).forEach(k => delete all[k]);
+    writeStore(LS_SOCIAL, all);
+  }
+
+  /* ── The form ── */
+  function build() {
+    if (built) return;
+    built = true;
+    $('socialFormats').innerHTML = Object.entries(SOCIAL_FORMATS).map(([key, f]) =>
+      '<label><input type="radio" name="format" value="' + key + '"><span>' + escapeHtml(f.label) +
+      '<small>' + f.w + ' × ' + f.h + ' · ' + escapeHtml(f.hint) + '</small></span></label>').join('');
+    $('socialThemes').innerHTML = Object.entries(SOCIAL_THEMES).map(([key, th]) =>
+      '<label><input type="radio" name="theme" value="' + key + '"><span class="seg-row">' +
+      '<i class="swatch" style="background:linear-gradient(135deg,' + th.swatch[0] + ' 0 55%,' + th.swatch[1] + ' 55% 100%)"></i>' +
+      escapeHtml(th.label) + '</span></label>').join('');
+    const form = $('socialForm');
+    form.addEventListener('submit', e => e.preventDefault());
+    form.addEventListener('input', onInput);
+    form.addEventListener('change', onInput);
+    $('socialSave').addEventListener('click', e => { pressed(e.currentTarget); save(); });
+    $('socialCopy').addEventListener('click', e => { pressed(e.currentTarget); copyImage(); });
+    $('socialShare').addEventListener('click', e => { pressed(e.currentTarget); share(); });
+    $('socialSaveAll').addEventListener('click', e => { pressed(e.currentTarget); saveAll(e.currentTarget); });
+    $('socialCopyCaption').addEventListener('click', e => { pressed(e.currentTarget); copyText($('socialCaption').value, 'the caption'); });
+    $('socialCopyLink').addEventListener('click', e => { pressed(e.currentTarget); copyText(currentLink(), 'the link'); });
+    $('socialRebuildCaption').addEventListener('click', e => {
+      pressed(e.currentTarget);
+      opts.captionTouched = false;
+      refreshCaption(true);
+      persistSoon();
+    });
+    $('socialReset').addEventListener('click', e => {
+      pressed(e.currentTarget);
+      const base = defaultsFor(subject);
+      opts = { ...opts, texts: base.texts, show: base.show, pages: base.pages, caption: '', captionTouched: false };
+      fillForm();
+      refreshCaption(true);
+      persistSoon();
+      reloadPagesSoon(0);
+      schedule();
+      toast('The words are back to how they started.', 'ok', 2200);
+    });
+  }
+
+  function fillForm() {
+    const form = $('socialForm');
+    form.querySelectorAll('input[name="format"]').forEach(r => { r.checked = r.value === opts.format; });
+    form.querySelectorAll('input[name="theme"]').forEach(r => { r.checked = r.value === opts.theme; });
+    $('socialLayout').value = opts.layout;
+    ['kicker', 'headline', 'subline', 'ticks', 'cta', 'link', 'note', 'sticker'].forEach(k => {
+      const el = form.elements.namedItem(k);
+      if (el) el.value = opts.texts[k] ?? '';
+    });
+    Object.keys(opts.show).forEach(k => {
+      const el = form.elements.namedItem('show-' + k);
+      if (el) el.checked = !!opts.show[k];
+    });
+    $('socialPages').value = opts.pages || '';
+    $('socialPagesField').hidden = !(subject.kind === 'file' && drawable(subject.file));
+    $('socialCaption').value = opts.caption || '';
+  }
+
+  function readForm() {
+    const form = $('socialForm');
+    const checked = name => { const r = form.querySelector('input[name="' + name + '"]:checked'); return r ? r.value : ''; };
+    opts.format = checked('format') || opts.format;
+    opts.theme = checked('theme') || opts.theme;
+    opts.layout = $('socialLayout').value;
+    ['kicker', 'headline', 'subline', 'ticks', 'cta', 'link', 'note', 'sticker'].forEach(k => {
+      const el = form.elements.namedItem(k);
+      if (el) opts.texts[k] = el.value;
+    });
+    Object.keys(opts.show).forEach(k => {
+      const el = form.elements.namedItem('show-' + k);
+      if (el) opts.show[k] = el.checked;
+    });
+  }
+
+  function onInput(event) {
+    if (!subject) return;
+    const name = event.target && event.target.name;
+    if (name === 'caption') {
+      opts.caption = event.target.value;
+      opts.captionTouched = true;
+      persistSoon();
+      return;
+    }
+    if (name === 'pages') {
+      opts.pages = event.target.value;
+      persistSoon();
+      reloadPagesSoon(SOCIAL_PAGES_DELAY_MS);
+      return;
+    }
+    readForm();
+    refreshCaption(false);
+    persistSoon();
+    schedule();
+  }
+
+  function reloadPagesSoon(ms) {
+    if (!subject || subject.kind !== 'file' || !drawable(subject.file)) return;
+    clearTimeout(pagesTimer);
+    const g = generation;
+    pagesTimer = setTimeout(() => { if (g === generation) loadItems(g); }, ms);
+  }
+
+  function currentLink() { return subject && subject.kind === 'file' ? socialLink(subject.file.id) : socialLink(''); }
+
+  function refreshCaption(force) {
+    if (!force && opts.captionTouched) return;
+    opts.caption = socialCaption(subject, opts.texts, currentLink());
+    $('socialCaption').value = opts.caption;
+  }
+
+  /* ── Rendering ── */
+  function busy(text) {
+    $('socialBusy').hidden = !text;
+    $('socialBusyText').textContent = text || '';
+    canvas.dataset.state = text || itemsLoading ? 'loading' : 'ready';
+  }
+  function note(text, kind) {
+    const el = $('socialNotice');
+    el.className = 'notice' + (kind ? ' ' + kind : text ? ' info' : '');
+    el.textContent = text || '';
+  }
+
+  function measureWith(ctx) {
+    return (text, size, weight) => {
+      ctx.font = (weight || 400) + ' ' + size + 'px ' + SOCIAL_FONT;
+      return ctx.measureText(text).width;
+    };
+  }
+
+  function specFor(formatKey, o) {
+    const format = SOCIAL_FORMATS[formatKey] || SOCIAL_FORMATS.square;
+    const first = items[0];
+    return {
+      w: format.w, h: format.h, safeTop: format.safeTop, safeBottom: format.safeBottom,
+      mode: socialLayoutMode(formatKey, o.layout),
+      texts: { ...o.texts, ticks: socialTickList(o.texts.ticks), stickerSub: socialStickerSub(subject),
+        tag: subject.kind === 'page' ? 'Free learning resources' : 'Free for parents & students' },
+      show: o.show,
+      logoRatio: logo ? logo.width / logo.height : 1.37,
+      pageRatio: first ? first.height / first.width : 1.414,
+      pageCount: Math.max(1, items.length)
+    };
+  }
+
+  /** Draw the whole picture for one size onto ctx. Returns the layout it used. */
+  function paint(ctx, formatKey, o) {
+    const plan = socialLayout(specFor(formatKey, o), measureWith(ctx));
+    const theme = SOCIAL_THEMES[o.theme] || SOCIAL_THEMES.sunrise;
+    const qr = o.show.qr ? qrFor(currentLink()) : null;
+    drawBackground(ctx, plan, theme);
+    drawHeader(ctx, plan, theme);
+    drawPages(ctx, plan);
+    drawWords(ctx, plan, theme);
+    if (plan.sticker) drawSticker(ctx, plan, theme);
+    drawCta(ctx, plan, theme, qr);
+    return plan;
+  }
+
+  function schedule() {
+    if (!subject || raf) return;
+    raf = requestAnimationFrame(() => { raf = 0; render(); });
+  }
+
+  function render() {
+    if (!subject) return;
+    const format = SOCIAL_FORMATS[opts.format] || SOCIAL_FORMATS.square;
+    if (canvas.width !== format.w || canvas.height !== format.h) { canvas.width = format.w; canvas.height = format.h; }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    lastPlan = paint(ctx, opts.format, opts);
+    canvas.dataset.format = opts.format;
+    canvas.dataset.state = itemsLoading ? 'loading' : 'ready';
+    canvas.setAttribute('aria-label', 'Preview of the ' + format.label.toLowerCase() + ' picture: ' + (opts.texts.headline || ''));
+    $('socialSize').textContent = format.label + ' · ' + format.w + ' × ' + format.h + ' px · ' + format.hint;
+    const fit = lastPlan.fit;
+    const dropped = fit.dropped.map(d => (d === 'ticks' ? 'the ticks' : 'the line under the title'));
+    $('socialFitNote').hidden = !(fit.cut || dropped.length);
+    $('socialFitNote').textContent = (dropped.length ? 'To keep the words large enough to read, ' + dropped.join(' and ') + ' did not fit at this size. ' : '') +
+      (fit.cut ? 'Some words were shortened with “…” — a shorter title will show in full.' : '');
+    lastSig = JSON.stringify([opts.format, opts.theme, opts.layout, opts.texts, opts.show, items.length, generation, Date.now()]);
+    blob = null;
+    clearTimeout(blobTimer);
+    blobTimer = setTimeout(makeBlob, SOCIAL_BLOB_DELAY_MS);
+  }
+
+  /** The PNG is made a moment after the last change, so Share and Copy have it to hand at once. */
+  function makeBlob() {
+    const sig = lastSig;
+    canvas.toBlob(b => { if (sig === lastSig) { blob = b; blobSig = sig; } }, 'image/png');
+  }
+  function currentBlob() {
+    if (blob && blobSig === lastSig) return Promise.resolve(blob);
+    const sig = lastSig;
+    return new Promise((resolve, reject) => canvas.toBlob(b => {
+      if (!b) { reject(new Error('The picture could not be saved.')); return; }
+      if (sig === lastSig) { blob = b; blobSig = sig; }
+      resolve(b);
+    }, 'image/png'));
+  }
+
+  function fileName(formatKey) {
+    const base = socialSlug(opts.texts.headline) || socialSlug(subject.kind === 'file' ? subject.file.title : '') || 'polymath-free-download';
+    return base + '-' + formatKey + '.png';
+  }
+  function downloadBlob(b, name) {
+    const url = URL.createObjectURL(b);
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 4000);
+  }
+
+  async function save() {
+    if (!subject) return;
+    try {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; render(); }
+      const b = await currentBlob();
+      downloadBlob(b, fileName(opts.format));
+      toast('Saved ' + fileName(opts.format) + ' — ' + formatBytes(b.size) + '.', 'ok');
+    } catch (error) { toast('Could not save the picture: ' + error.message, 'error'); }
+  }
+
+  async function saveAll(button) {
+    if (!subject) return;
+    setBusy(button, true, 'Saving…');
+    try {
+      const keys = Object.keys(SOCIAL_FORMATS);
+      for (const key of keys) {
+        const format = SOCIAL_FORMATS[key];
+        const c = document.createElement('canvas');
+        c.width = format.w; c.height = format.h;
+        paint(c.getContext('2d'), key, opts);
+        const b = await new Promise((resolve, reject) => c.toBlob(x => (x ? resolve(x) : reject(new Error('The picture could not be saved.'))), 'image/png'));
+        downloadBlob(b, fileName(key));
+        await sleep(450);
+      }
+      toast('Saved all ' + keys.length + ' sizes. If your browser asks, allow it to save several files.', 'ok', 6000);
+    } catch (error) {
+      toast('Could not save the pictures: ' + error.message, 'error');
+    } finally { setBusy(button, false); }
+  }
+
+  async function copyImage() {
+    if (!subject) return;
+    try {
+      if (!(navigator.clipboard && window.ClipboardItem)) throw new Error('this browser cannot copy pictures — use Save instead');
+      if (raf) { cancelAnimationFrame(raf); raf = 0; render(); }
+      // Safari wants the ClipboardItem made in the click itself, holding a promise of the picture.
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': currentBlob() })]);
+      toast('Copied the picture. Paste it into WhatsApp, Facebook or an email.', 'ok');
+    } catch (error) {
+      toast('Could not copy the picture: ' + (error.message || error), 'error');
+    }
+  }
+
+  function shareable() {
+    try {
+      return !!(navigator.canShare && navigator.share &&
+        navigator.canShare({ files: [new File([new Uint8Array([137, 80, 78, 71])], 'x.png', { type: 'image/png' })] }));
+    } catch (e) { return false; }
+  }
+
+  async function share() {
+    if (!subject) return;
+    try {
+      const b = await currentBlob();
+      const file = new File([b], fileName(opts.format), { type: 'image/png' });
+      await navigator.share({ files: [file], title: opts.texts.headline || 'Polymath', text: $('socialCaption').value });
+    } catch (error) {
+      if (error && error.name === 'AbortError') return;
+      toast('Could not share: ' + (error.message || error) + '. Save the picture instead.', 'error');
+    }
+  }
+
+  /* ── The painters ── */
+  function roundRect(ctx, x, y, w, h, r) {
+    const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
+  function setFont(ctx, size, weight) { ctx.font = (weight || 400) + ' ' + Math.round(size) + 'px ' + SOCIAL_FONT; }
+
+  /** A tiny seeded random, so the same file always gets the same decoration. */
+  function seeded(text) {
+    let h = 2166136261;
+    for (const ch of String(text)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); }
+    return () => {
+      h += 0x6D2B79F5;
+      let x = h;
+      x = Math.imul(x ^ (x >>> 15), x | 1);
+      x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function drawBackground(ctx, plan, theme) {
+    const { w: W, h: H, u } = plan;
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, theme.bg[0]); g.addColorStop(1, theme.bg[1]);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const blob = (x, y, r, color) => {
+      const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+      rg.addColorStop(0, color); rg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    };
+    blob(W * 0.86, H * 0.16, W * 0.62, theme.blobs[0]);
+    blob(W * 0.04, H * 0.92, W * 0.7, theme.blobs[1]);
+    const rnd = seeded((subject && subject.key) || 'page');
+    // Folded shapes, after the logo's own, peeking in from the edges.
+    const folds = [
+      { x: -40 * u, y: H * (0.34 + rnd() * 0.2), s: 150 * u, rot: 0.5 + rnd() * 0.4 },
+      { x: W + 30 * u, y: H * (0.46 + rnd() * 0.2), s: 170 * u, rot: 2.4 + rnd() * 0.5 },
+      { x: W * (0.32 + rnd() * 0.3), y: -50 * u, s: 120 * u, rot: 1.3 + rnd() * 0.6 }
+    ];
+    folds.forEach((f, i) => {
+      ctx.save();
+      ctx.translate(f.x, f.y); ctx.rotate(f.rot);
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = theme.deco[i % theme.deco.length];
+      ctx.beginPath(); ctx.moveTo(-f.s / 2, -f.s / 2); ctx.lineTo(f.s / 2, -f.s * 0.2); ctx.lineTo(f.s * 0.1, f.s / 2); ctx.lineTo(-f.s * 0.6, f.s * 0.25); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 0.24;
+      ctx.beginPath(); ctx.moveTo(-f.s / 2, -f.s / 2); ctx.lineTo(f.s / 2, -f.s * 0.2); ctx.lineTo(0, 0); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    });
+    // A patch of dots in the top-right corner.
+    ctx.fillStyle = theme.dots;
+    const step = 24 * u, r = 3.2 * u;
+    const x0 = W - plan.pad - step * 6, y0 = plan.header.y + plan.header.h * 0.12;
+    for (let row = 0; row < 4; row++) for (let col = 0; col < 7; col++) {
+      if ((row + col) % 3 === 2) continue;
+      ctx.beginPath(); ctx.arc(x0 + col * step, y0 + row * step, r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  function drawHeader(ctx, plan, theme) {
+    const h = plan.header;
+    if (logo) ctx.drawImage(logo, h.x, h.y, h.logoW, h.logoH);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const mid = h.y + h.logoH / 2;
+    ctx.fillStyle = theme.ink;
+    setFont(ctx, h.nameSize, 700);
+    ctx.fillText(h.name, h.textX, h.tag ? mid - h.tagSize * 0.62 : mid);
+    if (h.tag) {
+      ctx.fillStyle = theme.soft;
+      setFont(ctx, h.tagSize, 400);
+      ctx.fillText(h.tag, h.textX, mid + h.nameSize * 0.62);
+    }
+  }
+
+  function sparkle(ctx, cx, cy, r, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4 - Math.PI / 2;
+      const rr = i % 2 === 0 ? r : r * 0.32;
+      const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawWords(ctx, plan, theme) {
+    const u = plan.u;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    for (const item of plan.block.items) {
+      if (item.type === 'kicker') {
+        ctx.save();
+        roundRect(ctx, item.x, item.y, item.w, item.h, item.h / 2);
+        ctx.fillStyle = theme.kickerBg; ctx.fill();
+        ctx.lineWidth = 2 * u; ctx.strokeStyle = theme.kickerLine; ctx.stroke();
+        ctx.restore();
+        const padX = 22 * u;
+        const sparkR = item.size * 0.5;
+        sparkle(ctx, item.x + padX + sparkR, item.y + item.h / 2, sparkR, theme.spark);
+        ctx.fillStyle = theme.kickerInk;
+        setFont(ctx, item.size, 700);
+        let x = item.x + padX + item.size * 1.25;
+        for (const ch of Array.from(item.text)) {
+          ctx.fillText(ch, x, item.y + item.h / 2 + 1);
+          x += ctx.measureText(ch).width + item.spacing;
+        }
+      } else if (item.type === 'headline') {
+        setFont(ctx, item.size, 700);
+        item.lines.forEach((line, i) => {
+          const y = item.y + i * item.lineH;
+          if (i === item.lines.length - 1) {
+            // A highlighter stroke under the last line.
+            ctx.save();
+            ctx.fillStyle = theme.highlight;
+            roundRect(ctx, item.xs[i] - 6 * u, y + item.lineH * 0.6, item.widths[i] + 12 * u, item.lineH * 0.26, 8 * u);
+            ctx.fill();
+            ctx.restore();
+          }
+          ctx.fillStyle = theme.ink;
+          ctx.fillText(line, item.xs[i], y + item.lineH / 2);
+        });
+      } else if (item.type === 'subline') {
+        ctx.fillStyle = theme.soft;
+        setFont(ctx, item.size, 400);
+        item.lines.forEach((line, i) => ctx.fillText(line, item.xs[i], item.y + i * item.lineH + item.lineH / 2));
+      } else if (item.type === 'tick') {
+        const cy = item.y + item.h / 2;
+        const r = item.icon / 2;
+        ctx.fillStyle = theme.tick;
+        ctx.beginPath(); ctx.arc(item.x + r, cy, r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = theme.tickInk; ctx.lineWidth = Math.max(2, r * 0.26); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.beginPath(); ctx.moveTo(item.x + r * 0.52, cy + r * 0.02); ctx.lineTo(item.x + r * 0.88, cy + r * 0.38); ctx.lineTo(item.x + r * 1.5, cy - r * 0.36); ctx.stroke();
+        ctx.fillStyle = theme.ink;
+        setFont(ctx, item.size, 600);
+        ctx.fillText(item.text, item.x + item.icon + item.iconGap, cy + 1);
+      }
+    }
+  }
+
+  function drawPages(ctx, plan) {
+    const u = plan.u;
+    plan.pages.forEach((slot, index) => {
+      const src = items[slot.item] || items[0];
+      if (!src || slot.w < 2) return;
+      const front = index === plan.pages.length - 1;
+      const { w, h } = slot;
+      const r = 10 * u;
+      ctx.save();
+      ctx.translate(slot.cx, slot.cy);
+      ctx.rotate(slot.rot);
+      ctx.shadowColor = 'rgba(0,0,0,' + (front ? 0.26 : 0.18) + ')';
+      ctx.shadowBlur = (front ? 38 : 26) * u;
+      ctx.shadowOffsetY = (front ? 18 : 12) * u;
+      roundRect(ctx, -w / 2, -h / 2, w, h, r);
+      ctx.fillStyle = '#FFFFFF'; ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.save();
+      roundRect(ctx, -w / 2, -h / 2, w, h, r);
+      ctx.clip();
+      const scale = Math.max(w / src.width, h / src.height);
+      ctx.drawImage(src, -src.width * scale / 2, -h / 2, src.width * scale, src.height * scale);
+      if (!front) { ctx.fillStyle = 'rgba(0,0,0,0.05)'; ctx.fillRect(-w / 2, -h / 2, w, h); }
+      // Light across the paper, and a gloss on the page in front.
+      const light = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+      light.addColorStop(0, 'rgba(0,0,0,0.10)'); light.addColorStop(0.08, 'rgba(0,0,0,0)'); light.addColorStop(1, 'rgba(0,0,0,0.03)');
+      ctx.fillStyle = light; ctx.fillRect(-w / 2, -h / 2, w, h);
+      if (front) {
+        const gloss = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+        gloss.addColorStop(0.18, 'rgba(255,255,255,0)'); gloss.addColorStop(0.3, 'rgba(255,255,255,0.22)'); gloss.addColorStop(0.42, 'rgba(255,255,255,0)');
+        ctx.fillStyle = gloss; ctx.fillRect(-w / 2, -h / 2, w, h);
+      }
+      ctx.restore();
+      roundRect(ctx, -w / 2, -h / 2, w, h, r);
+      ctx.lineWidth = 1.5 * u; ctx.strokeStyle = 'rgba(0,0,0,0.10)'; ctx.stroke();
+      ctx.restore();
+    });
+  }
+
+  function drawSticker(ctx, plan, theme) {
+    const s = plan.sticker;
+    const u = plan.u;
+    ctx.save();
+    ctx.translate(s.cx, s.cy);
+    ctx.rotate(-0.21);
+    ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 18 * u; ctx.shadowOffsetY = 8 * u;
+    ctx.fillStyle = theme.sticker;
+    ctx.beginPath();
+    const points = 22;
+    for (let i = 0; i < points * 2; i++) {
+      const a = (i * Math.PI) / points;
+      const rr = i % 2 === 0 ? s.r : s.r * 0.9;
+      if (i === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.setLineDash([5 * u, 5 * u]);
+    ctx.lineWidth = 2 * u; ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+    ctx.beginPath(); ctx.arc(0, 0, s.r * 0.76, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = theme.stickerInk;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    let big = s.r * 0.5;
+    setFont(ctx, big, 700);
+    while (big > 10 && ctx.measureText(s.text).width > s.r * 1.3) { big -= 1; setFont(ctx, big, 700); }
+    ctx.fillText(s.text, 0, s.sub ? -s.r * 0.1 : 0);
+    if (s.sub) {
+      let small = s.r * 0.2;
+      setFont(ctx, small, 700);
+      while (small > 8 && ctx.measureText(s.sub.toLocaleUpperCase()).width > s.r * 1.25) { small -= 1; setFont(ctx, small, 700); }
+      ctx.fillText(s.sub.toLocaleUpperCase(), 0, s.r * 0.34);
+    }
+    ctx.restore();
+  }
+
+  function downloadIcon(ctx, x, y, size, color) {
+    ctx.save();
+    ctx.strokeStyle = color; ctx.lineWidth = size * 0.13; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(x + size / 2, y + size * 0.1); ctx.lineTo(x + size / 2, y + size * 0.62); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + size * 0.26, y + size * 0.4); ctx.lineTo(x + size / 2, y + size * 0.64); ctx.lineTo(x + size * 0.74, y + size * 0.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + size * 0.12, y + size * 0.74); ctx.lineTo(x + size * 0.12, y + size * 0.9); ctx.lineTo(x + size * 0.88, y + size * 0.9); ctx.lineTo(x + size * 0.88, y + size * 0.74); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawCta(ctx, plan, theme, qr) {
+    const c = plan.cta;
+    const u = plan.u;
+    ctx.save();
+    ctx.shadowColor = theme.cardShadow; ctx.shadowBlur = 30 * u; ctx.shadowOffsetY = 12 * u;
+    roundRect(ctx, c.x, c.y, c.w, c.h, 30 * u);
+    ctx.fillStyle = theme.card; ctx.fill();
+    ctx.restore();
+    roundRect(ctx, c.x, c.y, c.w, c.h, 30 * u);
+    ctx.lineWidth = 2 * u; ctx.strokeStyle = theme.cardLine; ctx.stroke();
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    if (c.button) {
+      const b = c.button;
+      roundRect(ctx, b.x, b.y, b.w, b.h, b.h / 2);
+      ctx.fillStyle = theme.ctaBg; ctx.fill();
+      const icon = b.size * 1.15;
+      const contentW = icon + b.size * 0.45 + (() => { setFont(ctx, b.size, 700); return ctx.measureText(b.text).width; })();
+      const startX = b.x + Math.max(b.size * 0.85, (b.w - contentW) / 2);
+      downloadIcon(ctx, startX, b.y + (b.h - icon) / 2, icon, theme.ctaInk);
+      ctx.fillStyle = theme.ctaInk;
+      setFont(ctx, b.size, 700);
+      ctx.fillText(b.text, startX + icon + b.size * 0.45, b.y + b.h / 2 + 1);
+    }
+    if (c.link) {
+      ctx.fillStyle = theme.ink;
+      setFont(ctx, c.link.size, 700);
+      ctx.fillText(c.link.text, c.link.x, c.link.y + c.link.h / 2);
+    }
+    if (c.note) {
+      ctx.fillStyle = theme.soft;
+      setFont(ctx, c.note.size, 400);
+      ctx.fillText(c.note.text, c.note.x, c.note.y + c.note.h / 2);
+    }
+    if (c.qr && qr) {
+      const q = c.qr;
+      ctx.save();
+      roundRect(ctx, q.x, q.y, q.size, q.size, 14 * u);
+      ctx.fillStyle = '#FFFFFF'; ctx.fill();
+      ctx.lineWidth = 2 * u; ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.stroke();
+      ctx.restore();
+      // The standard quiet zone of four modules all round, and whole pixels per module so it stays crisp.
+      const cells = qr.size + 8;
+      const cell = Math.max(1, Math.floor(q.size / cells));
+      const ox = Math.round(q.x + (q.size - cell * qr.size) / 2);
+      const oy = Math.round(q.y + (q.size - cell * qr.size) / 2);
+      ctx.fillStyle = theme.qrInk;
+      for (let y = 0; y < qr.size; y++) for (let x = 0; x < qr.size; x++) {
+        if (qr.modules[y][x]) ctx.fillRect(ox + x * cell, oy + y * cell, cell, cell);
+      }
+      ctx.fillStyle = theme.soft;
+      ctx.textAlign = 'center';
+      setFont(ctx, q.capSize, 700);
+      ctx.fillText(q.caption, q.x + q.size / 2, q.capY + q.capH / 2);
+      ctx.textAlign = 'left';
+    }
+  }
+
+  /* ── Opening and closing ── */
+  async function start(subj) {
+    build();
+    const g = ++generation;
+    persist();
+    subject = subj;
+    opts = loadOpts(subj);
+    items = [];
+    itemsLoading = true;
+    fillForm();
+    refreshCaption(false);
+    $('socialTitle').textContent = subj.kind === 'page' ? 'Social post — the whole page' : 'Social post — ' + subj.file.title;
+    $('socialShare').hidden = !shareable();
+    note('');
+    $('socialFitNote').hidden = true;
+    openOverlay($('socialOverlay'));
+    busy('Getting the picture ready…');
+    await Promise.all([ensureLogo(), ensureFonts()]);
+    if (g !== generation) return;
+    // Something to look at straight away; the real pages follow.
+    items = subj.kind === 'page'
+      ? subj.files.slice(0, SOCIAL_MAX_COVERS).map(coverFor)
+      : [coverFor(subj.file)];
+    if (!items.length) items = [madeCover('Free learning resources', '')];
+    schedule();
+    await loadItems(g);
+  }
+
+  function open(file) {
+    if (!file) return;
+    start({ kind: 'file', key: file.id, file });
+  }
+
+  function openPage() {
+    const all = (state.adminData && state.adminData.files) || [];
+    const files = all.filter(f => f.published);
+    if (!files.length) { toast('Switch at least one file to Downloadable first — the post shows what parents can download.', 'error', 6000); return; }
+    // The booklet's file leads, then the rest in the order of the page.
+    const featured = files.find(f => f.featured);
+    const ordered = featured ? [featured, ...files.filter(f => f !== featured)] : files;
+    start({ kind: 'page', key: 'page', files: ordered, settings: (state.adminData && state.adminData.settings) || state.settings || {} });
+  }
+
+  function close() {
+    generation++;
+    persist();
+    cancelAnimationFrame(raf); raf = 0;
+    clearTimeout(blobTimer); clearTimeout(pagesTimer);
+    subject = null;
+  }
+
+  return { open, openPage, close, lastPlan: () => lastPlan };
+})();
 </script>
 
 <script>

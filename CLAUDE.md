@@ -98,7 +98,7 @@ A visitor flips through an **animated booklet made from the file's own pages**,
 then unlocks the download with name, email, WhatsApp number and a tick agreeing
 to marketing by email and WhatsApp. The admin signs in on the same page (footer
 link, or `#admin`) to upload, choose what is downloadable, choose the booklet's
-pages, put one file in the booklet (⭐), make a 🎬 share clip, and read/export leads.
+pages, put one file in the booklet (⭐), make a 🎬 share clip, make a 🖼 social post, and read/export leads.
 
 - **The server is the authority, and the browser never writes a contact.** The
   page loads no Firestore SDK; `csUnlock` validates, rate-limits, and writes the
@@ -145,8 +145,70 @@ pages, put one file in the booklet (⭐), make a 🎬 share clip, and read/expor
 - `cs-function/` is excluded from the website sync (`sync-website.yml`).
 - Run `npm test --prefix cs-function/functions`, `node --test tools/cs-page-tests.mjs`,
   `node --test tools/cs-rules-tests.mjs tools/cs-storage-rules-tests.mjs` and the browser check
-  `tools/cs-page-browser.mjs` (needs Playwright, pdfjs-dist 3.11.174, pdf-lib)
+  `tools/cs-page-browser.mjs` (needs Playwright, pdfjs-dist 3.11.174, pdf-lib; `JSQR=` scans the social post's QR)
   after touching any of it.
+
+### 🖼 The social post — a picture that sends parents here (cs v1.1.0)
+
+`SOCIAL_*` / `socialLink` / `socialDefaults` / `socialCaption` / `socialWrap` /
+`socialBalance` / `socialFanSlots` / **`socialLayout`** / **`makeQr`** / the
+`Social` module (in `cs/index.html`, search `🖼 THE SOCIAL POST`), the
+`#socialOverlay` dialog, 🖼 **Social post** on every admin file row and
+🖼 **Post for the whole page** beside ↻ Refresh. Admin only.
+
+A ready-made picture for Instagram, Facebook and WhatsApp: the file's own
+pages fanned out, the title, a line under it, up to three ticks, a "FREE"
+sticker, a button, the address and a QR code — in three sizes (square
+1080×1080, portrait 1080×1350, story 1080×1920) and four looks (Sunrise is
+this page's palette; teal and magenta are the logo's). A caption with the full
+link and a few tags comes with it. Save, copy, share (on a phone, straight to
+Instagram or WhatsApp) or save all three sizes at once.
+
+- **The pages are drawn HERE, with pdf.js, exactly as the 🎬 clip draws them.**
+  The booklet's preview JPEGs live on Storage's origin and would taint the
+  canvas, and a tainted canvas cannot be saved. `renderPdfCanvases` gained a
+  `width` argument for it (`SOCIAL_RENDER_WIDTH`); its default is the
+  booklet's own `PREVIEW_WIDTH` and the 2400px height cap scales with it, so
+  the booklet is byte-for-byte unchanged. The stored file is read through the
+  same `adminLink` the redraw uses — not counted as a download.
+- **Nothing is written to the server.** The picture is a PNG in the admin's
+  browser; the words are remembered per file under `polymath-cs-social` in
+  localStorage (the 40 most recent). The static test fails on any `admin(`,
+  `callFn(` or `fetch(` inside the social block.
+- **The words must FIT, and `socialLayout` is the ONE place that is decided.**
+  It is pure: every box is measured before anything is drawn. The title steps
+  down in size, then the ticks and the line under the title are given up in
+  that order, and only then is the title cut with "…" — and the dialog SAYS
+  which (`plan.fit`), because a title that silently lost its last words is
+  only found once it is posted. `tools/cs-page-tests.mjs` runs it over 432
+  combinations (every size × both arrangements × long, Chinese, unbreakable,
+  bare and one-word titles × QR/sticker on and off × 1/3/4 pages × portrait
+  and landscape pages) and fails on any line wider than its column, any box
+  off the picture, the words touching the pages or the button card, a page
+  corner outside its room, or the sticker covering the words.
+- **Stories keep clear of the bars Instagram and WhatsApp draw over them**
+  (`safeTop` 210 / `safeBottom` 250). The background still runs edge to edge.
+- **Chinese, Japanese and Korean break between characters** (`socialWrap`'s
+  token pattern), and a word wider than its column is broken between letters
+  rather than lost. `socialBalance` then evens the lines out at the same size
+  and line count, so a title never ends on one stranded word.
+- **The QR code is encoded on the page (`makeQr`, byte mode, level M) and read
+  back by the tests with an independent decoder** — format bits and their BCH
+  code, both copies, the finder and timing patterns, every block's
+  Reed–Solomon syndromes, and the payload byte for byte. A code that does not
+  scan sends nobody to the page and looks exactly like one that does. It
+  links to `https://polymathlc.com.sg/cs/#file=<id>` — the page's own `#file=`
+  reader opens that very resource — or to the page itself for the whole-page
+  post. Drawn with whole pixels per module, the standard four-module quiet
+  zone, near-black on white in every look.
+- **Every default word is TRUE of the file**: its page count, that it is free,
+  that it can be looked inside first. No results, ratings, awards or
+  testimonials are ever made up for an advert to parents; the static test
+  holds the defaults to that. The admin can write anything, but the starting
+  point is honest.
+- **Every look is held to a readable contrast** (title ≥ 7:1 on both ends of
+  the background, smaller words and the button ≥ 4.5:1, the QR ≥ 12:1 on white).
+  A new look added to `SOCIAL_THEMES` is checked without being named.
 
 ## 🗓 The public schedule page — a weekly timetable, and trials booked 3 business days ahead (schedule v1.1.0)
 
@@ -7660,6 +7722,14 @@ the 🔧 Auto-fixed button on the ⚡ Rapid add pad and the 🔴→🟢/🟡 car
 - Run `node tools/auto-check-tests.mjs` and `node tools/decisions-review-tests.mjs`.
 
 ## House rules
+- After touching **🖼 the /cs social post** (`socialLayout`, `socialWrap`, `socialBalance`, `socialFanSlots`,
+  `makeQr`, `socialDefaults`, `SOCIAL_THEMES`, the `Social` module or `renderPdfCanvases`' `width`), run
+  `node --test tools/cs-page-tests.mjs` **and** the browser check with `JSQR` set, then LOOK at the PNGs it
+  leaves in `test-results/cs-page/`. Every failure is silent and lands in front of parents: a layout change that
+  lets a long title run off the picture, or under the button, looks fine on the one title it was tried with; a
+  QR change that breaks one Reed–Solomon block still draws a perfectly convincing QR code that scans to nothing;
+  drawing the Storage preview JPEGs instead of pages rendered here taints the canvas, so Save quietly fails; and a
+  default word that claims a result nobody measured goes out under the centre's name. Bump `CS_PAGE_VERSION`.
 - After touching **🗓 the schedule page** (`schedule/index.html`: the timetable — `timetableRows`, `timeStartMin`,
   `renderTimetableView`, `ttCellHtml`, `openTimetableSlot` — or the trial notice — `TRIAL_NOTICE_DAYS`,
   `SG_PUBLIC_HOLIDAYS`, `sgDayKey`, `addBusinessDays`, `earliestTrialFor`, `trialNoticeHtml`, `sendBookingEmails`),
