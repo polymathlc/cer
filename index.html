@@ -9541,6 +9541,18 @@ html { scroll-behavior:smooth; }
   #landingPage .lp-hero-note { font-size:9px; }
   #landingPage .lp-nav-links a[href="#lp-features"] { display:none; }
 }
+/* Schedule and Products open their own pages (schedule/, products/). Keep every
+   link on one line, and drop the in-page jumps first when the row gets tight. */
+#landingPage .lp-nav-links a { white-space:nowrap; }
+@media (max-width:1100px) {
+  #landingPage .lp-nav-links a[href="#lp-features"] { display:none; }
+}
+@media (max-width:820px) {
+  #landingPage .lp-nav-links a[href="#lp-features"] { display:inline-flex; }
+}
+@media (max-width:620px) {
+  #landingPage .lp-nav-links a[href="#lp-features"], #landingPage .lp-nav-links a[href="#lp-demo"] { display:none; }
+}
 
 </style>
 </head>
@@ -9679,6 +9691,8 @@ html { scroll-behavior:smooth; }
         <a href="#lp-features">The experience</a>
         <a href="#lp-demo">How it works</a>
         <a class="lp-about-link" href="#lp-about">About Us</a>
+        <a class="lp-page-link" href="schedule/">Schedule</a>
+        <a class="lp-page-link" href="products/">Products</a>
         <a href="enquiry.html">Enquire</a>
       </div>
       <div class="lp-nav-actions">
