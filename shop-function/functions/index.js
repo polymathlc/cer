@@ -2,7 +2,6 @@
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 const { onRequest } = require('firebase-functions/v2/https');
-const { onSchedule } = require('firebase-functions/v2/scheduler');
 const logger = require('firebase-functions/logger');
 const { createService } = require('./service');
 const { createRepository } = require('./repository');
@@ -23,7 +22,3 @@ const web = { region: 'us-central1', invoker: 'public', timeoutSeconds: 30, maxI
 exports.createShopCheckout = onRequest(web, service.createCheckout);
 exports.shopCheckoutStatus = onRequest(web, service.checkoutStatus);
 exports.stripeShopWebhook = onRequest(web, service.webhook);
-exports.cleanupShopCheckouts = onSchedule({
-  region: 'us-central1', schedule: 'every day 03:30', timeZone: 'Asia/Singapore',
-  timeoutSeconds: 120, maxInstances: 1, memory: '256MiB', retryCount: 2
-}, service.cleanup);

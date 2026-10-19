@@ -427,6 +427,26 @@ test('cleanup removes old checkouts and expired limits, and leaves orders alone'
   assert.equal(h.db.rows.has('shop_orders/ABCDEF'), true);
 });
 
+test('a checkout sweeps old checkouts at most once an hour, and a sweep failure never blocks it', async () => {
+  const h = harness();
+  const calls = [];
+  h.db.rows.set('shop_checkouts/OLDONE', { code: 'OLDONE', deleteAt: NOW - 1 });
+  h.db.rows.set('shop_checkout_limits/old', { count: 1, expiresAt: NOW - 1 });
+  assert.equal((await h.create()).statusCode, 201);
+  assert.equal(h.db.rows.has('shop_checkouts/OLDONE'), false);
+  assert.equal(h.db.rows.has('shop_checkout_limits/old'), false);
+  h.db.rows.set('shop_checkouts/OLDTWO', { code: 'OLDTWO', deleteAt: NOW - 1 });
+  h.advance(60000);
+  assert.equal((await h.create()).statusCode, 201);
+  assert.equal(h.db.rows.has('shop_checkouts/OLDTWO'), true, 'not swept again within the hour');
+  h.advance(3600000);
+  const where = h.db.collection;
+  h.db.collection = name => { const c = where(name); c.where = () => { calls.push(name); throw new Error('index missing'); }; return c; };
+  assert.equal((await h.create()).statusCode, 201, 'a failed sweep still returns the checkout');
+  assert.ok(calls.length >= 1);
+  assert.ok(h.logs.includes('shop-sweep-failed'));
+});
+
 /* ─── The Stripe client ─── */
 
 test('the Stripe client sends form bodies with the key and idempotency key, and hides Stripe messages', async () => {

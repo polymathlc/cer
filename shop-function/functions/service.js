@@ -241,7 +241,21 @@ const sessionIsPaid = session => session && session.payment_status === 'paid'
 const sessionIsOurs = session => session && session.metadata && session.metadata.source === SOURCE;
 const sessionCode = session => session && (session.client_reference_id || (session.metadata && session.metadata.order_code));
 
+// Old checkouts and rate-limit counters are swept from inside createShopCheckout,
+// at most once an hour per instance and a few pages at a time, rather than by a
+// scheduled function: the deploy account may not manage Cloud Scheduler jobs.
+const SWEEP_EVERY_MS = HOUR;
+const SWEEP_PAGES = 2;
+
 function createService({ repository, stripe, webhookSecret, now = Date.now, random = randomInt, report = () => {} }) {
+  let lastSweep = -Infinity;
+  async function sweep() {
+    const at = now();
+    if (at - lastSweep < SWEEP_EVERY_MS) return;
+    lastSweep = at;
+    // Never lets a cleanup problem cost a parent their checkout.
+    try { await repository.cleanup(at, SWEEP_PAGES); } catch { report('shop-sweep-failed'); }
+  }
   function cors(req, res) {
     res.set('Cache-Control', 'no-store');
     res.set('Vary', 'Origin');
@@ -288,6 +302,7 @@ function createService({ repository, stripe, webhookSecret, now = Date.now, rand
       const session = await stripe.createCheckoutSession(sessionParams(record, priced), 'polymath-shop-' + code);
       if (!session || typeof session.url !== 'string' || typeof session.id !== 'string') throw new StripeError(502, 'stripe-error', 'no-session-url');
       await repository.attachSession(code, session.id);
+      await sweep();
       return res.status(201).json({ ok: true, code, reference: record.reference, total: record.total, url: session.url });
     } catch (error) {
       return answerError(res, error, 'shop-checkout-failed');
@@ -350,11 +365,11 @@ function createService({ repository, stripe, webhookSecret, now = Date.now, rand
     }
   }
 
-  return { createCheckout, checkoutStatus, webhook, cleanup: () => repository.cleanup(now()) };
+  return { createCheckout, checkoutStatus, webhook, cleanup: () => repository.cleanup(now()), sweep };
 }
 
 module.exports = {
-  ORIGINS, RETURN_PATH, CURRENCY, SOURCE, LIMITS, SESSION_MS, CHECKOUT_RETENTION_MS, ORDER_CODE_CHARS, PAID_EVENTS,
+  ORIGINS, RETURN_PATH, SWEEP_EVERY_MS, SWEEP_PAGES, CURRENCY, SOURCE, LIMITS, SESSION_MS, CHECKOUT_RETENTION_MS, ORDER_CODE_CHARS, PAID_EVENTS,
   CHECKOUT_COLLECTION, LIMIT_COLLECTION, ORDER_COLLECTION, PRODUCT_COLLECTION, SETTINGS_DOC,
   ShopError, validateCheckout, priceCheckout, buildCheckout, sessionParams, publicOrder, paymentFromSession,
   newOrderCode, validCode, referenceFor, toCents, unlimited, createService
