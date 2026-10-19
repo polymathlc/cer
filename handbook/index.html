@@ -1,0 +1,2703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Student Handbook · Polymath Learning Centre</title>
+<meta name="description" content="Everything a Polymath student needs to know about the Science Learning Portal (CER), the Online portal, Study Buddy, Ans Key and Rewards." />
+<link rel="icon" type="image/png" href="../assets/branding/polymath-learning-centre.png" />
+<style>
+  /* =========================================================
+     Polymath design tokens (General accent: soft orange)
+     ========================================================= */
+  :root {
+    --font-main: 'Century Gothic', CenturyGothic, AppleGothic, sans-serif;
+
+    --color-background: #FAFAFA;
+    --color-surface: #FFFFFF;
+    --color-surface-warm: #F7F7F5;
+    --color-text: #1F1F1F;
+    --color-text-soft: #555555;
+    --color-text-muted: #888888;
+    --color-border: #ECECEC;
+
+    --color-accent: #FFE0B2;
+    --color-accent-strong: #FFCC80;
+    --color-accent-ink: #8A4B00;
+
+    --color-science: #BBDEFB;
+    --color-science-strong: #90CAF9;
+    --color-math: #C8E6C9;
+    --color-geometry: #D1C4E9;
+    --color-assessment: #FFCDD2;
+
+    --color-correct: #2E7D32;
+    --color-correct-soft: #E8F5E9;
+    --color-almost: #F9A825;
+    --color-almost-soft: #FFF8E1;
+    --color-wrong: #C62828;
+    --color-wrong-soft: #FFEBEE;
+
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+    --shadow-button: 0 1px 2px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.08);
+    --shadow-hover: 0 2px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.12);
+    --shadow-elevated: 0 4px 6px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.1);
+
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 40px;
+    --space-2xl: 64px;
+
+    --radius-small: 8px;
+    --radius-medium: 14px;
+    --radius-large: 20px;
+
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+    --prose-width: 720px;
+    --widget-width: 860px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 72px; overflow-x: clip; }
+  body { overflow-x: clip; }
+
+  body {
+    margin: 0;
+    font-family: var(--font-main);
+    background: var(--color-background);
+    color: var(--color-text);
+    font-size: 1.05rem;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  img { max-width: 100%; }
+
+  a { color: var(--color-accent-ink); }
+
+  h1, h2, h3, h4 { letter-spacing: 0.015em; line-height: 1.25; margin: 0 0 var(--space-md); }
+  h1 { font-size: 2.4rem; font-weight: 700; }
+  h2 { font-size: 2rem; font-weight: 700; }
+  h3 { font-size: 1.35rem; font-weight: 700; margin-top: var(--space-xl); }
+  h4 { font-size: 1.1rem; font-weight: 700; }
+  p { margin: 0 0 var(--space-md); }
+
+  /* =========================================================
+     Header
+     ========================================================= */
+  .polymath-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-lg);
+    background: rgba(255,255,255,0.94);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .polymath-header-brand { display: flex; align-items: center; gap: var(--space-md); text-decoration: none; color: inherit; }
+  .polymath-logo { height: 56px; width: auto; display: block; }
+  .polymath-header-title { font-weight: 700; font-size: 1rem; line-height: 1.2; }
+  .polymath-header-title small { display: block; font-weight: 400; color: var(--color-text-muted); font-size: 0.8rem; }
+  .header-actions { display: flex; align-items: center; gap: var(--space-sm); }
+
+  .print-button {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-button);
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: box-shadow 0.25s ease, transform 0.25s ease;
+  }
+  .print-button:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+  .print-button:active { transform: translateY(0.5px); }
+  .print-button svg { width: 20px; height: 20px; stroke: var(--color-text); }
+
+  /* =========================================================
+     Table of contents (sticky chip bar)
+     ========================================================= */
+  .table-of-contents {
+    position: sticky;
+    top: 73px;
+    z-index: 40;
+    background: rgba(250,250,250,0.96);
+    border-bottom: 1px solid var(--color-border);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .table-of-contents::-webkit-scrollbar { display: none; }
+  .table-of-contents ol {
+    list-style: none;
+    margin: 0 auto;
+    padding: var(--space-sm) var(--space-md);
+    display: flex;
+    gap: var(--space-sm);
+    max-width: 1100px;
+    white-space: nowrap;
+  }
+  .table-of-contents a {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 999px;
+    text-decoration: none;
+    color: var(--color-text-soft);
+    font-size: 0.88rem;
+    border: 1px solid transparent;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  }
+  .table-of-contents a:hover { background: var(--color-surface); border-color: var(--color-border); color: var(--color-text); }
+  .table-of-contents a.is-active { background: var(--color-accent); color: var(--color-accent-ink); font-weight: 700; }
+
+  /* =========================================================
+     Layout
+     ========================================================= */
+  main { padding: 0 var(--space-md) var(--space-2xl); }
+  .handbook-section { max-width: var(--widget-width); margin: 0 auto; padding-top: var(--space-2xl); }
+  .prose { max-width: var(--prose-width); margin-left: auto; margin-right: auto; }
+  .section-eyebrow {
+    display: inline-flex; align-items: center; gap: var(--space-sm);
+    font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--color-text-muted); font-weight: 700; margin-bottom: var(--space-sm);
+  }
+  .section-eyebrow .eyebrow-dot { width: 10px; height: 10px; border-radius: 3px; background: var(--color-accent-strong); }
+  .section-lead { font-size: 1.15rem; color: var(--color-text-soft); }
+  .section-divider { border: none; height: 1px; background: var(--color-border); max-width: var(--widget-width); margin: var(--space-2xl) auto 0; }
+
+  /* =========================================================
+     Hero
+     ========================================================= */
+  .hero {
+    max-width: 1100px;
+    margin: var(--space-xl) auto 0;
+    background: var(--color-surface);
+    border-radius: var(--radius-large);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+  .hero-pixel-strip {
+    height: 96px;
+    background-image: url('../assets/raiders/tiny-town.png');
+    background-size: 384px auto;
+    background-repeat: repeat-x;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border-bottom: 4px solid var(--color-accent-strong);
+    position: relative;
+  }
+  .hero-pixel-strip.is-dungeon { background-image: url('../assets/raiders/tiny-dungeon.png'); border-bottom: none; border-top: 4px solid var(--color-accent-strong); height: 72px; background-size: 288px auto; }
+  .hero-body {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: var(--space-xl);
+    padding: var(--space-xl);
+    align-items: center;
+  }
+  .hero-kicker { display: inline-block; background: var(--color-accent); color: var(--color-accent-ink); padding: 4px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 700; margin-bottom: var(--space-md); }
+  .hero h1 { margin-bottom: var(--space-md); }
+  .hero p { color: var(--color-text-soft); font-size: 1.1rem; }
+  .hero-characters { position: relative; height: 300px; }
+  .hero-characters img { position: absolute; filter: drop-shadow(0 8px 14px rgba(0,0,0,0.12)); transition: transform 0.4s var(--ease-spring); }
+  .hero-characters img:hover { transform: translateY(-6px) rotate(-2deg); }
+  .hero-character-orbit { width: 44%; left: 0; bottom: 0; }
+  .hero-character-pip { width: 40%; left: 32%; bottom: 20px; z-index: 2; }
+  .hero-character-nova { width: 40%; right: 0; bottom: 0; }
+  .hero-card-peek { width: 26%; right: 6%; top: 0; transform: rotate(8deg); border-radius: 10px; }
+  .hero-card-peek:hover { transform: rotate(4deg) translateY(-6px) !important; }
+
+  .hero-stats { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-md); }
+  .hero-stat { background: var(--color-surface-warm); border-radius: var(--radius-small); padding: var(--space-sm) var(--space-md); font-size: 0.9rem; }
+  .hero-stat strong { display: block; font-size: 1.2rem; }
+
+  /* =========================================================
+     Buttons
+     ========================================================= */
+  .button {
+    font-family: inherit;
+    font-size: 0.98rem;
+    font-weight: 700;
+    border-radius: 12px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    padding: 10px 18px;
+    cursor: pointer;
+    box-shadow: var(--shadow-button);
+    transition: box-shadow 0.25s ease, transform 0.25s ease, background 0.25s ease, color 0.25s ease;
+    text-decoration: none;
+    display: inline-flex; align-items: center; gap: var(--space-sm);
+  }
+  .button:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+  .button:active { transform: translateY(0.5px); box-shadow: var(--shadow-button); }
+  .button:focus-visible { outline: 3px solid var(--color-accent-strong); outline-offset: 2px; }
+  .button-primary { background: var(--color-accent); border-color: var(--color-accent-strong); color: var(--color-accent-ink); }
+  .button-primary:hover { background: var(--color-accent-strong); }
+  .button-small { padding: 6px 12px; font-size: 0.85rem; border-radius: 10px; }
+  .button.is-bouncing { animation: buttonBounce 0.45s var(--ease-spring); }
+  .button.is-success { background: var(--color-correct-soft); border-color: #A5D6A7; color: var(--color-correct); }
+  .button-row { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-md); }
+
+  /* =========================================================
+     Cards & grids
+     ========================================================= */
+  .card {
+    background: var(--color-surface);
+    border-radius: var(--radius-medium);
+    box-shadow: var(--shadow-card);
+    padding: var(--space-lg);
+    transition: box-shadow 0.25s ease, transform 0.25s ease;
+  }
+  .card-hoverable:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+  .grid { display: grid; gap: var(--space-md); }
+  .grid-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+  .app-map-card { display: flex; flex-direction: column; gap: var(--space-sm); text-decoration: none; color: inherit; border-top: 5px solid var(--app-colour, var(--color-accent-strong)); }
+  .app-map-card .app-emoji { font-size: 2rem; line-height: 1; }
+  .app-map-card h4 { margin: 0; }
+  .app-map-card p { margin: 0; color: var(--color-text-soft); font-size: 0.93rem; }
+  .app-map-card .app-url { font-size: 0.8rem; color: var(--color-text-muted); margin-top: auto; }
+
+  .feature-list { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-sm); }
+  .feature-list li { display: grid; grid-template-columns: 34px 1fr; gap: var(--space-sm); align-items: start; padding: var(--space-sm) 0; border-bottom: 1px dashed var(--color-border); }
+  .feature-list li:last-child { border-bottom: none; }
+  .feature-list .feature-icon { font-size: 1.3rem; line-height: 1.5; text-align: center; }
+  .feature-list strong { display: block; }
+  .feature-list span.feature-text { color: var(--color-text-soft); font-size: 0.95rem; }
+
+  /* =========================================================
+     Widget shell
+     ========================================================= */
+  .widget {
+    background: var(--color-surface);
+    border-radius: var(--radius-large);
+    box-shadow: var(--shadow-card);
+    padding: var(--space-lg);
+    margin: var(--space-xl) 0;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .widget-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap; margin-bottom: var(--space-md); }
+  .widget-title { font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: var(--space-sm); }
+  .widget-tag { font-size: 0.75rem; padding: 3px 10px; border-radius: 999px; background: var(--color-science); color: #0D47A1; font-weight: 700; }
+  .widget-tag.tag-general { background: var(--color-accent); color: var(--color-accent-ink); }
+  .widget-tag.tag-math { background: var(--color-math); color: #1B5E20; }
+  .widget-tag.tag-geometry { background: var(--color-geometry); color: #4527A0; }
+  .widget-tag.tag-assessment { background: var(--color-assessment); color: #B71C1C; }
+  .widget-hint { font-size: 0.85rem; color: var(--color-text-muted); }
+
+  .question-stem { font-size: 1.08rem; margin-bottom: var(--space-md); }
+  .question-stem .question-topic { display: block; font-size: 0.8rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: var(--space-xs); }
+
+  /* MCQ options */
+  .option-list { display: grid; gap: var(--space-sm); }
+  .option-button {
+    font-family: inherit; font-size: 1rem; text-align: left;
+    display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: var(--space-sm);
+    background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px;
+    padding: 10px 14px; cursor: pointer; color: var(--color-text);
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.25s ease, box-shadow 0.25s ease;
+  }
+  .option-button:hover:not(:disabled) { border-color: var(--color-accent-strong); transform: translateY(-1px); box-shadow: var(--shadow-button); }
+  .option-button .option-letter { width: 30px; height: 30px; border-radius: 8px; background: var(--color-surface-warm); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; }
+  .option-button.is-selected { border-color: var(--color-accent-strong); background: #FFF8EE; }
+  .option-button.is-correct { border-color: #81C784; background: var(--color-correct-soft); }
+  .option-button.is-correct .option-letter { background: #A5D6A7; }
+  .option-button.is-wrong { border-color: #E57373; background: var(--color-wrong-soft); }
+  .option-button:disabled { cursor: default; }
+
+  /* Feedback */
+  .feedback-panel { display: none; grid-template-columns: 52px 1fr; gap: var(--space-md); align-items: start; margin-top: var(--space-md); padding: var(--space-md); border-radius: 12px; background: var(--color-surface-warm); }
+  .feedback-panel.is-visible { display: grid; animation: fadeSlideUp 0.4s var(--ease-smooth) both; }
+  .feedback-panel.is-correct { background: var(--color-correct-soft); }
+  .feedback-panel.is-almost { background: var(--color-almost-soft); }
+  .feedback-panel.is-wrong { background: var(--color-wrong-soft); }
+  .feedback-mark { width: 48px; height: 48px; }
+  .feedback-mark circle { fill: none; stroke-width: 3; stroke-dasharray: 151; stroke-dashoffset: 151; animation: drawStroke 0.5s ease forwards; }
+  .feedback-mark path { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 60; stroke-dashoffset: 60; animation: drawStroke 0.4s 0.35s ease forwards; }
+  .feedback-mark.mark-correct circle, .feedback-mark.mark-correct path { stroke: var(--color-correct); }
+  .feedback-mark.mark-almost circle, .feedback-mark.mark-almost path { stroke: var(--color-almost); }
+  .feedback-mark.mark-wrong circle, .feedback-mark.mark-wrong path { stroke: var(--color-wrong); }
+  .feedback-text strong { display: block; margin-bottom: 2px; }
+  .feedback-text p { margin: 0 0 var(--space-xs); font-size: 0.95rem; }
+  .feedback-text .feedback-detail { opacity: 0; animation: fadeSlideUp 0.4s 0.6s var(--ease-smooth) forwards; }
+
+  .is-shaking { animation: gentleShake 0.45s ease; }
+
+  /* CER builder */
+  .cer-builder-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-md); }
+  .cer-column { background: var(--color-surface-warm); border-radius: 14px; padding: var(--space-md); }
+  .cer-column h4 { display: flex; align-items: center; gap: var(--space-sm); font-size: 1rem; }
+  .cer-column h4 .cer-letter { width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }
+  .cer-column.column-claim .cer-letter { background: var(--color-accent); color: var(--color-accent-ink); }
+  .cer-column.column-evidence .cer-letter { background: var(--color-science); color: #0D47A1; }
+  .cer-column.column-reasoning .cer-letter { background: var(--color-math); color: #1B5E20; }
+  .cer-column .cer-prompt { font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: var(--space-sm); }
+  .cer-choice { width: 100%; font-family: inherit; font-size: 0.92rem; text-align: left; padding: 10px 12px; margin-bottom: var(--space-sm); border-radius: 10px; border: 1.5px solid var(--color-border); background: var(--color-surface); cursor: pointer; transition: border-color 0.2s ease, transform 0.25s var(--ease-spring), background 0.2s ease; color: var(--color-text); line-height: 1.45; }
+  .cer-choice:hover:not(:disabled) { border-color: var(--color-accent-strong); transform: translateY(-1px); }
+  .cer-choice.is-selected { border-color: var(--color-accent-strong); background: #FFF8EE; font-weight: 700; }
+  .cer-choice.is-correct { border-color: #81C784; background: var(--color-correct-soft); }
+  .cer-choice.is-wrong { border-color: #E57373; background: var(--color-wrong-soft); }
+  .cer-assembled { margin-top: var(--space-md); padding: var(--space-md); border-radius: 12px; border: 1.5px dashed var(--color-accent-strong); background: #FFFDF8; min-height: 64px; font-size: 0.98rem; }
+  .cer-assembled .assembled-placeholder { color: var(--color-text-muted); }
+  .cer-assembled .assembled-part { animation: fadeSlideUp 0.35s var(--ease-smooth) both; }
+
+  /* Fill in blanks */
+  .blank-sentence { font-size: 1.08rem; line-height: 2.4; }
+  .blank-slot { display: inline-flex; min-width: 110px; height: 36px; vertical-align: middle; border-bottom: 2.5px solid var(--color-accent-strong); margin: 0 4px; align-items: center; justify-content: center; padding: 0 8px; border-radius: 6px 6px 0 0; background: #FFFAF2; font-weight: 700; cursor: pointer; transition: background 0.2s ease; }
+  .blank-slot.is-empty { color: var(--color-text-muted); font-weight: 400; font-size: 0.9rem; }
+  .blank-slot.is-correct { background: var(--color-correct-soft); border-color: var(--color-correct); }
+  .blank-slot.is-wrong { background: var(--color-wrong-soft); border-color: var(--color-wrong); }
+  .keyword-bank { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-md); padding: var(--space-md); background: var(--color-surface-warm); border-radius: 12px; }
+  .keyword-chip { font-family: inherit; font-size: 0.95rem; padding: 6px 14px; border-radius: 999px; border: 1.5px solid var(--color-border); background: var(--color-surface); cursor: pointer; box-shadow: var(--shadow-button); transition: transform 0.25s var(--ease-spring), box-shadow 0.25s ease, opacity 0.2s ease; color: var(--color-text); }
+  .keyword-chip:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  .keyword-chip:disabled { opacity: 0.35; cursor: default; box-shadow: none; }
+
+  /* Spot the weak answer */
+  .answer-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-md); }
+  .answer-card { font-family: inherit; text-align: left; background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 14px; padding: var(--space-md); cursor: pointer; font-size: 0.95rem; color: var(--color-text); line-height: 1.5; transition: transform 0.25s var(--ease-spring), border-color 0.2s ease, box-shadow 0.25s ease, background 0.2s ease; }
+  .answer-card:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  .answer-card .answer-card-label { display: block; font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: var(--space-xs); }
+  .answer-card.is-correct { border-color: #81C784; background: var(--color-correct-soft); }
+  .answer-card.is-wrong { border-color: #E57373; background: var(--color-wrong-soft); }
+
+  /* Sidekicks */
+  .sidekick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-md); }
+  .sidekick-card { background: var(--color-surface); border-radius: 14px; box-shadow: var(--shadow-card); padding: var(--space-md); display: grid; grid-template-columns: 48px 1fr; gap: var(--space-sm); align-items: start; transition: transform 0.25s ease, box-shadow 0.25s ease; }
+  .sidekick-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  .sidekick-avatar { width: 48px; height: 48px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 1.6rem; background: var(--color-surface-warm); }
+  .sidekick-card strong { display: block; font-size: 0.98rem; }
+  .sidekick-card span { font-size: 0.88rem; color: var(--color-text-soft); }
+
+  /* Arcade */
+  .arcade-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-md); }
+  .arcade-tile { position: relative; background: var(--color-surface); border-radius: 14px; box-shadow: var(--shadow-card); padding: var(--space-md); overflow: hidden; transition: transform 0.25s ease, box-shadow 0.25s ease; }
+  .arcade-tile:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+  .arcade-tile::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 34px; background-image: url('../assets/raiders/tiny-dungeon.png'); background-size: 192px auto; image-rendering: pixelated; opacity: 0.85; }
+  .arcade-tile:nth-child(even)::before { background-image: url('../assets/raiders/tiny-town.png'); background-position: -40px 0; }
+  .arcade-tile-body { position: relative; margin-top: 34px; }
+  .arcade-tile .arcade-emoji { font-size: 1.7rem; }
+  .arcade-tile strong { display: block; margin: 4px 0; }
+  .arcade-tile span { font-size: 0.88rem; color: var(--color-text-soft); }
+  .arcade-badge { position: absolute; top: 44px; right: 12px; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--color-accent); color: var(--color-accent-ink); }
+  .arcade-badge.badge-free { background: var(--color-math); color: #1B5E20; }
+  .arcade-badge.badge-beta { background: var(--color-geometry); color: #4527A0; }
+
+  /* Flip cards (Realm of Embers) */
+  .flip-card-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-md); }
+  .flip-card { perspective: 1000px; cursor: pointer; aspect-ratio: 5 / 7; border: none; background: none; padding: 0; font-family: inherit; }
+  .flip-card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.7s var(--ease-spring); transform-style: preserve-3d; }
+  .flip-card.is-flipped .flip-card-inner { transform: rotateY(180deg); }
+  .flip-card-face { position: absolute; inset: 0; border-radius: 14px; overflow: hidden; backface-visibility: hidden; -webkit-backface-visibility: hidden; box-shadow: var(--shadow-card); }
+  .flip-card-back-cover { background: repeating-linear-gradient(45deg, #FFE0B2 0 10px, #FFCC80 10px 20px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-sm); color: var(--color-accent-ink); font-weight: 700; text-align: center; padding: var(--space-md); }
+  .flip-card-back-cover .cover-flame { font-size: 2.6rem; }
+  .flip-card-back-cover small { font-weight: 400; font-size: 0.8rem; }
+  .flip-card-front { transform: rotateY(180deg); background: var(--color-surface); display: flex; flex-direction: column; }
+  .flip-card-front img { width: 100%; height: 72%; object-fit: cover; display: block; }
+  .flip-card-front .card-caption { padding: 8px 10px; text-align: left; }
+  .flip-card-front .card-caption strong { display: block; font-size: 0.88rem; line-height: 1.25; }
+  .flip-card-front .card-caption span { font-size: 0.75rem; color: var(--color-text-muted); }
+  .flip-card-front .card-rarity { position: absolute; top: 8px; left: 8px; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.92); }
+
+  .pack-row { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-md); align-items: center; }
+  .pack-pill { padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: 0.88rem; }
+  .pack-bronze { background: #EFD9C4; color: #6D3F14; }
+  .pack-silver { background: #E6E9EE; color: #3D4652; }
+  .pack-gold { background: #FFF0B3; color: #7A5A00; }
+
+  .artifact-strip { display: flex; gap: var(--space-sm); flex-wrap: wrap; margin-top: var(--space-md); }
+  .artifact-strip img { width: 64px; height: 64px; border-radius: 12px; background: var(--color-surface-warm); padding: 4px; object-fit: contain; box-shadow: var(--shadow-button); transition: transform 0.25s var(--ease-spring); }
+  .artifact-strip img:hover { transform: translateY(-3px) scale(1.06); }
+
+  .hero-portrait-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-sm); margin-top: var(--space-md); }
+  .hero-portrait { text-align: center; font-size: 0.78rem; color: var(--color-text-soft); }
+  .hero-portrait img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 14px; box-shadow: var(--shadow-card); display: block; margin-bottom: 4px; transition: transform 0.25s var(--ease-spring); }
+  .hero-portrait img:hover { transform: translateY(-3px); }
+
+  /* Online timeline mock */
+  .portal-mock { background: var(--color-surface); border-radius: var(--radius-large); box-shadow: var(--shadow-elevated); overflow: hidden; }
+  .portal-mock-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; background: var(--color-surface-warm); border-bottom: 1px solid var(--color-border); font-size: 0.8rem; color: var(--color-text-muted); }
+  .portal-mock-bar .browser-dot { width: 10px; height: 10px; border-radius: 50%; background: #E0E0E0; }
+  .portal-mock-bar .browser-address { margin-left: var(--space-sm); background: var(--color-surface); padding: 2px 10px; border-radius: 999px; border: 1px solid var(--color-border); }
+  .portal-mock-body { padding: var(--space-lg); }
+  .class-tabs { display: flex; gap: var(--space-sm); flex-wrap: wrap; margin-bottom: var(--space-md); }
+  .class-tab { font-family: inherit; font-size: 0.88rem; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-surface); cursor: pointer; color: var(--color-text); }
+  .class-tab.is-active { background: var(--color-accent); border-color: var(--color-accent-strong); color: var(--color-accent-ink); font-weight: 700; }
+  .worksheet-timeline { list-style: none; margin: 0; padding: 0 0 0 26px; position: relative; }
+  .worksheet-timeline::before { content: ''; position: absolute; left: 9px; top: 6px; bottom: 6px; width: 2px; background: var(--color-border); }
+  .worksheet-timeline li { position: relative; padding: 0 0 var(--space-md); animation: fadeSlideUp 0.35s var(--ease-smooth) both; }
+  .worksheet-timeline li::before { content: ''; position: absolute; left: -22px; top: 8px; width: 12px; height: 12px; border-radius: 50%; background: var(--color-surface); border: 2px solid #BDBDBD; }
+  .worksheet-timeline li.is-current::before { background: var(--color-accent-strong); border-color: var(--color-accent-ink); box-shadow: 0 0 0 4px rgba(255,204,128,0.35); }
+  .worksheet-timeline li.is-locked { color: var(--color-text-muted); }
+  .worksheet-entry { background: var(--color-surface-warm); border-radius: 12px; padding: 10px 14px; display: flex; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap; align-items: center; }
+  .worksheet-timeline li.is-current .worksheet-entry { background: #FFF5E6; border: 1.5px solid var(--color-accent-strong); }
+  .worksheet-entry .worksheet-name { font-weight: 700; font-size: 0.95rem; }
+  .worksheet-entry .worksheet-meta { font-size: 0.78rem; color: var(--color-text-muted); display: block; font-weight: 400; }
+  .worksheet-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mini-chip { font-size: 0.75rem; padding: 3px 10px; border-radius: 999px; background: var(--color-surface); border: 1px solid var(--color-border); white-space: nowrap; }
+  .mini-chip.chip-accent { background: var(--color-accent); border-color: var(--color-accent-strong); color: var(--color-accent-ink); font-weight: 700; }
+  .mini-chip.chip-video { background: var(--color-assessment); border-color: #EF9A9A; color: #8E1B1B; }
+
+  /* Study Buddy help ladder */
+  .worksheet-paper { background: #FFFFFF; border: 1px solid var(--color-border); border-radius: 12px; padding: var(--space-md); background-image: linear-gradient(transparent 31px, #F1F1F1 32px); background-size: 100% 32px; line-height: 32px; font-size: 1rem; }
+  .ladder-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-sm); margin-top: var(--space-md); }
+  .ladder-step { font-family: inherit; font-size: 0.85rem; font-weight: 700; padding: 10px 8px; border-radius: 12px; border: 1.5px solid var(--color-border); background: var(--color-surface); cursor: pointer; color: var(--color-text); transition: transform 0.25s var(--ease-spring), background 0.2s ease, border-color 0.2s ease; position: relative; }
+  .ladder-step small { display: block; font-weight: 400; color: var(--color-text-muted); font-size: 0.72rem; }
+  .ladder-step:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--color-accent-strong); }
+  .ladder-step.is-unlocked { background: #FFF8EE; border-color: var(--color-accent-strong); }
+  .ladder-step:disabled { opacity: 0.45; cursor: not-allowed; }
+  .ladder-progress { height: 8px; border-radius: 999px; background: var(--color-surface-warm); margin-top: var(--space-md); overflow: hidden; }
+  .ladder-progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--color-accent), var(--color-accent-strong)); transition: width 0.5s var(--ease-spring); }
+  .chat-log { display: flex; flex-direction: column; gap: var(--space-sm); margin-top: var(--space-md); }
+  .chat-bubble { max-width: 88%; padding: 10px 14px; border-radius: 16px; font-size: 0.95rem; line-height: 1.5; animation: fadeSlideUp 0.35s var(--ease-smooth) both; }
+  .chat-bubble.from-buddy { background: var(--color-surface-warm); border-bottom-left-radius: 4px; align-self: flex-start; display: grid; grid-template-columns: 34px 1fr; gap: var(--space-sm); }
+  .chat-bubble.from-buddy img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: #E0F2F1; }
+  .chat-bubble.from-student { background: var(--color-accent); color: var(--color-accent-ink); border-bottom-right-radius: 4px; align-self: flex-end; }
+
+  .mark-demo-input { width: 100%; font-family: inherit; font-size: 1rem; padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--color-border); background: var(--color-surface); color: var(--color-text); transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+  .mark-demo-input:focus { outline: none; border-color: var(--color-accent-strong); box-shadow: 0 0 0 4px rgba(255,204,128,0.3); }
+  textarea.mark-demo-input { min-height: 96px; resize: vertical; line-height: 1.5; }
+  label.input-label { display: block; font-weight: 700; font-size: 0.9rem; margin: var(--space-md) 0 var(--space-xs); }
+
+  .companion-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-md); }
+  .companion-card { text-align: center; background: var(--color-surface); border-radius: 16px; box-shadow: var(--shadow-card); padding: var(--space-md); position: relative; }
+  .companion-card img { width: 120px; height: 120px; object-fit: contain; transition: transform 0.35s var(--ease-spring), filter 0.35s ease; }
+  .companion-card.is-locked img { filter: grayscale(1) brightness(1.15) opacity(0.45); }
+  .companion-card.is-locked::after { content: '🔒'; position: absolute; top: 12px; right: 14px; font-size: 1.1rem; }
+  .companion-card:not(.is-locked):hover img { transform: translateY(-4px) rotate(-3deg); }
+  .companion-card strong { display: block; }
+  .companion-card span { font-size: 0.85rem; color: var(--color-text-soft); }
+
+  /* Sliders */
+  .slider-block { margin: var(--space-md) 0; }
+  .slider-label-row { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; font-size: 0.95rem; margin-bottom: var(--space-xs); }
+  .slider-value { font-size: 1.1rem; color: var(--color-accent-ink); background: var(--color-accent); padding: 0 10px; border-radius: 8px; transition: transform 0.2s ease; display: inline-block; }
+  .slider-value.is-pulsing { animation: valuePulse 0.35s var(--ease-spring); }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 8px; border-radius: 999px; background: var(--color-surface-warm); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: var(--color-surface); border: 3px solid var(--color-accent-strong); box-shadow: var(--shadow-button); cursor: pointer; transition: transform 0.2s var(--ease-spring); }
+  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.12); }
+  input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: var(--color-surface); border: 3px solid var(--color-accent-strong); cursor: pointer; }
+  input[type=range]:focus-visible { box-shadow: 0 0 0 4px rgba(255,204,128,0.4); }
+  .print-static-value { display: none; }
+
+  .result-display { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-sm); margin-top: var(--space-md); }
+  .result-box { background: var(--color-surface-warm); border-radius: 12px; padding: var(--space-md); text-align: center; }
+  .result-box .result-number { display: block; font-size: 1.6rem; font-weight: 700; }
+  .result-box .result-label { font-size: 0.8rem; color: var(--color-text-muted); }
+  .result-box.is-pulsing { animation: valuePulse 0.35s var(--ease-spring); }
+
+  .rank-track { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: var(--space-md); }
+  .rank-step { text-align: center; padding: 10px 4px; border-radius: 12px; background: var(--color-surface-warm); font-size: 0.8rem; transition: background 0.3s ease, transform 0.35s var(--ease-spring); }
+  .rank-step .rank-emoji { font-size: 1.5rem; display: block; }
+  .rank-step strong { display: block; font-size: 0.85rem; }
+  .rank-step.is-reached { background: var(--color-accent); color: var(--color-accent-ink); }
+  .rank-step.is-current { transform: translateY(-4px); box-shadow: var(--shadow-hover); background: var(--color-accent-strong); }
+
+  .xp-bar { height: 14px; border-radius: 999px; background: var(--color-surface-warm); overflow: hidden; margin-top: var(--space-sm); }
+  .xp-bar-fill { height: 100%; background: linear-gradient(90deg, #A5D6A7, #66BB6A); width: 0; transition: width 0.5s var(--ease-spring); }
+
+  /* Shop */
+  .shop-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-sm); }
+  .shop-item { font-family: inherit; text-align: left; background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 10px 12px; cursor: pointer; transition: transform 0.25s var(--ease-spring), border-color 0.2s ease, opacity 0.2s ease; color: var(--color-text); }
+  .shop-item:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--color-accent-strong); }
+  .shop-item strong { display: block; font-size: 0.9rem; }
+  .shop-item .shop-cost { font-size: 0.8rem; color: var(--color-accent-ink); font-weight: 700; }
+  .shop-item .shop-group { font-size: 0.7rem; color: var(--color-text-muted); display: block; }
+  .shop-item:disabled { opacity: 0.4; cursor: not-allowed; }
+  .shop-item.is-bought { border-color: #81C784; background: var(--color-correct-soft); }
+  .wallet-line { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-sm); margin-bottom: var(--space-md); }
+  .wallet-amount { font-size: 1.4rem; font-weight: 700; }
+
+  /* Ans Key practice mock */
+  .practice-question { display: grid; grid-template-columns: 40px 1fr 150px; gap: var(--space-sm); align-items: center; padding: var(--space-sm) 0; border-bottom: 1px dashed var(--color-border); }
+  .practice-question:last-child { border-bottom: none; }
+  .practice-question .question-number { font-weight: 700; color: var(--color-text-muted); }
+  .practice-question input { width: 100%; }
+  .practice-status { font-size: 0.85rem; font-weight: 700; }
+  .practice-status.status-correct { color: var(--color-correct); }
+  .practice-status.status-wrong { color: var(--color-wrong); }
+  .revealed-answer { font-size: 0.85rem; color: var(--color-text-muted); }
+
+  .class-picker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-sm); }
+  .class-option { font-family: inherit; padding: var(--space-md) var(--space-sm); border-radius: 14px; border: 1.5px solid var(--color-border); background: var(--color-surface); cursor: pointer; text-align: center; transition: transform 0.25s var(--ease-spring), border-color 0.2s ease, background 0.2s ease; color: var(--color-text); }
+  .class-option:hover { transform: translateY(-2px); border-color: var(--color-accent-strong); }
+  .class-option .class-emoji { font-size: 1.9rem; display: block; }
+  .class-option.is-active { background: #FFF8EE; border-color: var(--color-accent-strong); }
+  .class-detail { margin-top: var(--space-md); padding: var(--space-md); background: var(--color-surface-warm); border-radius: 12px; }
+  .class-detail .advanced-classes { display: flex; gap: var(--space-sm); flex-wrap: wrap; margin-top: var(--space-sm); }
+
+  .rarity-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-sm); }
+  .rarity-chip { font-size: 0.78rem; padding: 3px 10px; border-radius: 999px; font-weight: 700; }
+  .rarity-common { background: #EEEEEE; color: #424242; }
+  .rarity-uncommon { background: #DCEDC8; color: #33691E; }
+  .rarity-rare { background: #BBDEFB; color: #0D47A1; }
+  .rarity-epic { background: #E1BEE7; color: #6A1B9A; }
+  .rarity-legendary { background: #FFE0B2; color: #E65100; }
+  .rarity-mythical { background: #FFCDD2; color: #B71C1C; }
+  .rarity-unique { background: #1A1A1A; color: #FFD54F; }
+
+  /* Wheel */
+  .wheel-stage { display: grid; grid-template-columns: 220px 1fr; gap: var(--space-lg); align-items: center; }
+  .wheel-wrap { position: relative; width: 220px; height: 220px; margin: 0 auto; }
+  .wheel-disc { width: 100%; height: 100%; border-radius: 50%; background: conic-gradient(#FFE0B2 0 25%, #BBDEFB 25% 50%, #C8E6C9 50% 75%, #D1C4E9 75% 100%); box-shadow: var(--shadow-elevated); transition: transform 3s cubic-bezier(0.17, 0.67, 0.21, 1); position: relative; }
+  .wheel-label { position: absolute; font-weight: 700; font-size: 1.05rem; transform: translate(-50%, -50%); }
+  .wheel-pointer { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 22px solid #1A1A1A; z-index: 2; }
+  .wheel-hub { position: absolute; inset: 40%; border-radius: 50%; background: var(--color-surface); box-shadow: var(--shadow-button); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
+
+  /* Adventure stop odds bar */
+  .odds-bar { display: flex; height: 28px; border-radius: 999px; overflow: hidden; margin-top: var(--space-sm); font-size: 0.72rem; font-weight: 700; }
+  .odds-bar span { display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; }
+
+  /* Takeaway */
+  .takeaway-box { margin: var(--space-xl) auto 0; max-width: var(--prose-width); background: #FFF8EE; border-left: 5px solid var(--color-accent-strong); border-radius: 0 14px 14px 0; padding: var(--space-md) var(--space-lg); page-break-inside: avoid; break-inside: avoid; }
+  .takeaway-box h4 { display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+  .takeaway-box ul { margin: 0; padding-left: 1.2em; }
+  .takeaway-box li { margin-bottom: 4px; }
+
+  .note-box { background: var(--color-surface-warm); border-radius: 12px; padding: var(--space-md); font-size: 0.93rem; color: var(--color-text-soft); margin: var(--space-md) 0; }
+
+  /* Steps */
+  .step-list { list-style: none; counter-reset: handbookStep; padding: 0; margin: var(--space-md) 0; display: grid; gap: var(--space-sm); }
+  .step-list li { counter-increment: handbookStep; display: grid; grid-template-columns: 36px 1fr; gap: var(--space-sm); align-items: start; background: var(--color-surface); border-radius: 12px; box-shadow: var(--shadow-card); padding: var(--space-md); }
+  .step-list li::before { content: counter(handbookStep); width: 32px; height: 32px; border-radius: 50%; background: var(--color-accent); color: var(--color-accent-ink); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+
+  /* Tables */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 0.93rem; background: var(--color-surface); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-card); }
+  .data-table th, .data-table td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+  .data-table th { background: var(--color-surface-warm); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted); }
+  .data-table tr:last-child td { border-bottom: none; }
+  .table-scroll { overflow-x: auto; }
+
+  /* FAQ */
+  .faq-item { background: var(--color-surface); border-radius: 12px; box-shadow: var(--shadow-card); margin-bottom: var(--space-sm); overflow: hidden; }
+  .faq-item summary { cursor: pointer; padding: var(--space-md) var(--space-lg); font-weight: 700; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: var(--space-md); }
+  .faq-item summary::-webkit-details-marker { display: none; }
+  .faq-item summary::after { content: '+'; font-size: 1.4rem; color: var(--color-text-muted); transition: transform 0.3s var(--ease-spring); }
+  .faq-item[open] summary::after { transform: rotate(45deg); }
+  .faq-item .faq-answer { padding: 0 var(--space-lg) var(--space-md); color: var(--color-text-soft); animation: fadeSlideUp 0.3s var(--ease-smooth) both; }
+
+  /* Quiz checklist at end */
+  .checklist-item { display: flex; gap: var(--space-sm); align-items: center; padding: 8px 0; border-bottom: 1px dashed var(--color-border); cursor: pointer; }
+  .checklist-item input { width: 20px; height: 20px; accent-color: #FB8C00; }
+  .checklist-progress-label { font-weight: 700; }
+
+  /* Footer */
+  .handbook-footer { text-align: center; color: var(--color-text-muted); font-size: 0.85rem; padding: var(--space-xl) var(--space-md); border-top: 1px solid var(--color-border); margin-top: var(--space-2xl); }
+  .handbook-footer img { height: 40px; opacity: 0.8; }
+
+  /* Tooltip */
+  [data-tooltip] { position: relative; border-bottom: 1.5px dotted var(--color-text-muted); cursor: help; }
+  [data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translate(-50%, 4px);
+    background: #1A1A1A;
+    color: #FFFFFF;
+    font-size: 0.8rem;
+    font-weight: 400;
+    line-height: 1.4;
+    padding: 6px 10px;
+    border-radius: 8px;
+    width: max-content;
+    max-width: 240px;
+    white-space: normal;
+    text-align: left;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease 0.2s, transform 0.2s ease 0.2s;
+    z-index: 60;
+  }
+  [data-tooltip]::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 2px);
+    left: 50%;
+    transform: translate(-50%, 4px);
+    border: 6px solid transparent;
+    border-top-color: #1A1A1A;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease 0.2s, transform 0.2s ease 0.2s;
+    z-index: 60;
+  }
+  [data-tooltip]:hover::after, [data-tooltip]:focus::after,
+  [data-tooltip]:hover::before, [data-tooltip]:focus::before { opacity: 1; transform: translate(-50%, 0); }
+
+  /* Confetti */
+  .confetti-piece { position: fixed; width: 9px; height: 14px; border-radius: 2px; pointer-events: none; z-index: 100; animation: confettiFall 1.1s ease-out forwards; }
+
+  /* Fade-in stagger */
+  .reveal-on-load { opacity: 0; animation: fadeSlideUp 0.6s var(--ease-smooth) forwards; }
+  .reveal-on-scroll { opacity: 0; transform: translateY(16px); transition: opacity 0.6s var(--ease-smooth), transform 0.6s var(--ease-smooth); }
+  .reveal-on-scroll.is-visible { opacity: 1; transform: none; }
+
+  /* Keyframes */
+  @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes drawStroke { to { stroke-dashoffset: 0; } }
+  @keyframes gentleShake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
+  @keyframes buttonBounce { 0% { transform: scale(1); } 35% { transform: scale(0.94); } 100% { transform: scale(1); } }
+  @keyframes valuePulse { 0% { transform: scale(1); } 45% { transform: scale(1.12); } 100% { transform: scale(1); } }
+  @keyframes confettiFall { 0% { opacity: 1; transform: translate(0,0) rotate(0deg); } 100% { opacity: 0; transform: translate(var(--confetti-x), var(--confetti-y)) rotate(var(--confetti-rotate)); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+    .reveal-on-load, .reveal-on-scroll { opacity: 1; transform: none; }
+  }
+
+  /* =========================================================
+     Responsive
+     ========================================================= */
+  @media (max-width: 900px) {
+    .grid-four, .shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .flip-card-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .arcade-grid, .sidekick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 760px) {
+    h1 { font-size: 1.9rem; }
+    h2 { font-size: 1.6rem; }
+    .hero-body { grid-template-columns: 1fr; padding: var(--space-lg); gap: var(--space-md); }
+    .hero-characters { height: 230px; }
+    .grid-two, .grid-three, .cer-builder-grid, .answer-cards, .companion-row { grid-template-columns: 1fr; }
+    .ladder-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .class-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .hero-portrait-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .wheel-stage { grid-template-columns: 1fr; }
+    .practice-question { grid-template-columns: 32px 1fr; }
+    .practice-question .practice-status { grid-column: 2; }
+    .polymath-header-title small { display: none; }
+    .table-of-contents { top: 65px; }
+    .polymath-logo { height: 48px; }
+  }
+  @media (max-width: 480px) {
+    body { font-size: 1rem; }
+    .polymath-header { padding: var(--space-sm) var(--space-md); }
+    .polymath-header-title { display: none; }
+    .arcade-grid, .sidekick-grid { grid-template-columns: 1fr; }
+    .rank-track { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .result-display { grid-template-columns: 1fr; }
+    .shop-grid { grid-template-columns: 1fr 1fr; }
+    .widget { padding: var(--space-md); }
+    .card { padding: var(--space-md); }
+    .hero-stats .hero-stat { flex: 1 1 40%; }
+  }
+
+  /* =========================================================
+     Print (A4)
+     ========================================================= */
+  @page { size: A4; margin: 15mm 20mm; }
+  @media print {
+    body { background: #FFFFFF; color: #000000; font-size: 11pt; }
+    .print-button, .table-of-contents, .button, .button-row, .keyword-bank, .ladder-steps, input[type=range], .class-tabs, .no-print, .confetti-piece { display: none !important; }
+    .polymath-header { position: static; border-bottom: 1px solid #CCCCCC; backdrop-filter: none; }
+    .polymath-logo { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .hero-pixel-strip, .arcade-tile::before { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .card, .widget, .portal-mock, .sidekick-card, .arcade-tile, .faq-item, .step-list li, .companion-card, .data-table { box-shadow: none !important; border: 1px solid #DDDDDD; }
+    .widget, .takeaway-box, .card, .sidekick-card, .arcade-tile, .step-list li, .faq-item, .flip-card, .data-table { page-break-inside: avoid; break-inside: avoid; }
+    .reveal-on-load, .reveal-on-scroll { opacity: 1 !important; transform: none !important; animation: none !important; }
+    .print-static-value { display: inline; font-weight: 700; }
+    .faq-item .faq-answer { display: block; }
+    .flip-card .flip-card-inner { transform: rotateY(180deg); }
+    .handbook-section { padding-top: 24px; }
+    a { color: #000000; text-decoration: none; }
+    [data-tooltip] { border-bottom: none; }
+    [data-tooltip]::after, [data-tooltip]::before { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="polymath-header">
+  <a class="polymath-header-brand" href="#top" aria-label="Back to the top of the handbook">
+    <img class="polymath-logo"
+         src="../assets/branding/polymath-learning-centre.png"
+         onerror="this.onerror=null;this.src='https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj';"
+         alt="Polymath Learning Centre" />
+    <span class="polymath-header-title">Student Handbook<small>Polymath Learning Centre</small></span>
+  </a>
+  <div class="header-actions">
+    <button class="print-button" type="button" onclick="window.print()" aria-label="Print this handbook" data-tooltip="Print the handbook on A4">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+    </button>
+  </div>
+</header>
+
+<nav class="table-of-contents" aria-label="Handbook sections">
+  <ol id="tableOfContentsList">
+    <li><a href="#welcome">👋 Welcome</a></li>
+    <li><a href="#getting-started">🔑 Getting started</a></li>
+    <li><a href="#cer">🔬 CER portal</a></li>
+    <li><a href="#cer-practice">✏️ Try CER</a></li>
+    <li><a href="#sidekicks">🦊 Sidekicks</a></li>
+    <li><a href="#cer-rewards">🪙 XP &amp; boards</a></li>
+    <li><a href="#arcade">🕹️ Arcade</a></li>
+    <li><a href="#embers">🔥 Realm of Embers</a></li>
+    <li><a href="#online">🗂️ Online</a></li>
+    <li><a href="#study-buddy">🤖 Study Buddy</a></li>
+    <li><a href="#anskey">🔑 Ans Key</a></li>
+    <li><a href="#rewards">🏆 Rewards</a></li>
+    <li><a href="#faq">❓ FAQ</a></li>
+    <li><a href="#checklist">✅ Checklist</a></li>
+  </ol>
+</nav>
+
+<main id="top">
+
+  <!-- =====================================================
+       HERO
+       ===================================================== -->
+  <section class="hero reveal-on-load" id="welcome" aria-labelledby="heroTitle">
+    <div class="hero-pixel-strip" role="img" aria-label="Pixel art town"></div>
+    <div class="hero-body">
+      <div>
+        <span class="hero-kicker">Polymath Student Handbook</span>
+        <h1 id="heroTitle">Everything you need to learn, practise and play at Polymath</h1>
+        <p>Welcome! This handbook walks you through the five places you will use as a Polymath student: the Science Learning Portal (CER), the Online portal, Study Buddy, Ans Key and Rewards. You can try real practice questions on this page as you read.</p>
+        <div class="hero-stats">
+          <div class="hero-stat"><strong>5</strong>apps to explore</div>
+          <div class="hero-stat"><strong>9</strong>Science Sidekicks</div>
+          <div class="hero-stat"><strong>201</strong>trading cards</div>
+          <div class="hero-stat"><strong>1</strong>Google sign-in</div>
+        </div>
+        <div class="button-row">
+          <a class="button button-primary" href="#getting-started">Start reading</a>
+          <a class="button" href="#cer-practice">Try a CER question</a>
+        </div>
+      </div>
+      <div class="hero-characters" aria-hidden="true">
+        <img class="hero-card-peek" src="../assets/realm-of-embers/card-art/c001-pyrrik-the-cinderwhelp.webp" alt="" />
+        <img class="hero-character-orbit" src="../assets/worksheet-characters/orbit-welcome.webp" alt="" />
+        <img class="hero-character-pip" src="../assets/worksheet-characters/pip-welcome.webp" alt="" />
+        <img class="hero-character-nova" src="../assets/worksheet-characters/nova-welcome.webp" alt="" />
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================================================
+       GETTING STARTED
+       ===================================================== -->
+  <section class="handbook-section reveal-on-scroll" id="getting-started" aria-labelledby="gettingStartedTitle">
+    <div class="prose">
+      <div class="section-eyebrow"><span class="eyebrow-dot"></span>Chapter 1</div>
+      <h2 id="gettingStartedTitle">Getting started</h2>
+      <p class="section-lead">Every Polymath app uses the same Google account, so once your teacher has added you, one sign-in opens everything.</p>
+      <p>Think of the five apps as rooms in one building. <strong>Online</strong> is the front desk where your worksheets and lesson videos live. <strong>Ans Key</strong> is where you check and practise those worksheets. <strong>Study Buddy</strong> sits beside you while you do homework. <strong>CER</strong> is the Science gym with practice questions and games. <strong>Rewards</strong> is the prize counter where your marks add up.</p>
+    </div>
+
+    <div class="grid grid-three" style="margin-top: var(--space-lg);">
+      <a class="card card-hoverable app-map-card" style="--app-colour: var(--color-science-strong);" href="../">
+        <span class="app-emoji">🔬</span>
+        <h4>Science Learning Portal (CER)</h4>
+        <p>Claim, Evidence, Reasoning practice, Snap &amp; Mark, revision cards, the Arcade and Realm of Embers.</p>
+        <span class="app-url">polymathlc.com.sg</span>
+      </a>
+      <a class="card card-hoverable app-map-card" href="../online/">
+        <span class="app-emoji">🗂️</span>
+        <h4>Online portal</h4>
+        <p>Your class timeline of worksheets, answer keys and recorded lesson videos.</p>
+        <span class="app-url">polymathlc.com.sg/online</span>
+      </a>
+      <a class="card card-hoverable app-map-card" style="--app-colour: #80CBC4;" href="https://polymathlc.github.io/tutor/">
+        <span class="app-emoji">🤖</span>
+        <h4>Study Buddy</h4>
+        <p>Write on your worksheet and get hints, not answers, from Chung GPT.</p>
+        <span class="app-url">Study Buddy (/tutor)</span>
+      </a>
+      <a class="card card-hoverable app-map-card" style="--app-colour: #B39DDB;" href="https://polymathlc.github.io/anskey/">
+        <span class="app-emoji">🔑</span>
+        <h4>Ans Key</h4>
+        <p>Mark your answers, watch lesson videos with chapter chips, and level up your hero.</p>
+        <span class="app-url">Ans Key (/anskey)</span>
+      </a>
+      <a class="card card-hoverable app-map-card" style="--app-colour: #A5D6A7;" href="https://polymathlc.github.io/rewards/">
+        <span class="app-emoji">🏆</span>
+        <h4>Rewards</h4>
+        <p>See your marks, climb ranks, earn badges and choose real prizes.</p>
+        <span class="app-url">Rewards (/rewards)</span>
+      </a>
+      <div class="card app-map-card" style="--app-colour: #EF9A9A;">
+        <span class="app-emoji">📖</span>
+        <h4>This handbook</h4>
+        <p>Come back any time. You can print it on A4 with the button at the top-right.</p>
+        <span class="app-url">polymathlc.com.sg/handbook</span>
+      </div>
+    </div>
+
+    <div class="prose">
+      <h3>Your first day, step by step</h3>
+      <ol class="step-list">
+        <li><div><strong>Check your invitation email.</strong> Your teacher adds your Google account to your class. The email links you to the Online portal.</div></li>
+        <li><div><strong>Sign in with Google.</strong> Use the same account on every app. Centre students can also be signed in by the teacher using <em>Practise as</em> in Study Buddy.</div></li>
+        <li><div><strong>Find your class.</strong> Online and Ans Key show the classes that match your level (P3 to P6) and subject.</div></li>
+        <li><div><strong>Open the current worksheet.</strong> It is highlighted on your class timeline. View it, print it, or practise it in Ans Key.</div></li>
+        <li><div><strong>Claim your name in Rewards.</strong> Pick your level, time slot and name, then press <em>That's me</em> so your marks are counted.</div></li>
+      </ol>
+      <div class="note-box">🔒 <strong>Privacy tip:</strong> never share your Google password with friends. If something looks wrong with your account, tell your teacher in class.</div>
+    </div>
+
+    <div class="takeaway-box">
+      <h4>🧭 Key takeaway</h4>
+      <ul>
+        <li>One Google account opens all five apps.</li>
+        <li>Online is where worksheets appear first; Ans Key is where you check them.</li>
+        <li>Rewards only counts your marks after you claim your name.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
+  <!-- =====================================================
+       CER OVERVIEW
+       ===================================================== -->
+  <section class="handbook-section reveal-on-scroll" id="cer" aria-labelledby="cerTitle">
+    <div class="prose">
+      <div class="section-eyebrow"><span class="eyebrow-dot" style="background: var(--color-science-strong);"></span>Chapter 2</div>
+      <h2 id="cerTitle">The Science Learning Portal (CER)</h2>
+      <p class="section-lead">CER stands for <span data-tooltip="The answer to the question: what do you conclude?" tabindex="0">Claim</span>, <span data-tooltip="The facts or observations in the question that support your claim." tabindex="0">Evidence</span> and <span data-tooltip="The science concept that links the evidence to the claim." tabindex="0">Reasoning</span>. It is the way strong Science answers are built.</p>
+      <p>In PSLE open-ended questions, marks go to answers that say what happens, point to what the question shows, and explain the science behind it. The portal trains exactly that. Every practice card asks you three things:</p>
+    </div>
+
+    <div class="grid grid-three" style="margin-top: var(--space-md);">
+      <div class="card"><h4>🅲 Claim</h4><p style="margin:0;color:var(--color-text-soft);">What do you conclude?</p></div>
+      <div class="card"><h4>🅴 Evidence</h4><p style="margin:0;color:var(--color-text-soft);">What in the question supports it?</p></div>
+      <div class="card"><h4>🆁 Reasoning</h4><p style="margin:0;color:var(--color-text-soft);">Explain the science linking them.</p></div>
+    </div>
+
+    <div class="prose">
+      <p style="margin-top: var(--space-lg);">When you press <strong>Check my answer</strong>, the AI marks it as correct, partly correct or incorrect. It then shows the model answer and a <strong>Picture it</strong> diagram so you can see the idea, and lets you choose <strong>Try this question again</strong> or <strong>Next question</strong>.</p>
+
+      <h3>What is in the sidebar</h3>
+    </div>
+
+    <div class="grid grid-two">
+      <div class="card">
+        <h4>📚 Learning</h4>
+        <ul class="feature-list">
+          <li><span class="feature-icon">🏠</span><div><strong>Home</strong><span class="feature-text">Your dashboard, energy bar and today's progress.</span></div></li>
+          <li><span class="feature-icon">⚡</span><div><strong>Quick Practice</strong><span class="feature-text">Fast mixed questions. The Mode menu includes 🔲 Fill-in-the-blanks keywords.</span></div></li>
+          <li><span class="feature-icon">🧪</span><div><strong>Topical Practice</strong><span class="feature-text">Choose one topic, such as Heat or Diversity, and drill it.</span></div></li>
+          <li><span class="feature-icon">📸</span><div><strong>Snap &amp; Mark</strong><span class="feature-text">Photograph a question you wrote on paper and get it marked.</span></div></li>
+          <li><span class="feature-icon">🃏</span><div><strong>Revision Cards</strong><span class="feature-text">Flashcards built from the mistakes you make most often.</span></div></li>
+          <li><span class="feature-icon">🐾</span><div><strong>Learn from Mistakes</strong><span class="feature-text">Spot which mistake animal you met, then rewrite the answer.</span></div></li>
+          <li><span class="feature-icon">📝</span><div><strong>PSLE past papers</strong><span class="feature-text">Practise or print the 🅐 MCQ half or ✍️ OEQ half on its own.</span></div></li>
+          <li><span class="feature-icon">🤖</span><div><strong>Study Buddy</strong><span class="feature-text">Opens the AI tutor (see Chapter 4).</span></div></li>
+          <li><span class="feature-icon">🧑‍🏫</span><div><strong>Whiteboards</strong><span class="feature-text">Draw and work things out during lessons.</span></div></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>🎮 Community and games</h4>
+        <ul class="feature-list">
+          <li><span class="feature-icon">🌍</span><div><strong>Community</strong><span class="feature-text">Live quests that the whole centre works on together.</span></div></li>
+          <li><span class="feature-icon">🧍</span><div><strong>Character</strong><span class="feature-text">Your avatar wardrobe and pets.</span></div></li>
+          <li><span class="feature-icon">🏅</span><div><strong>Leaderboard</strong><span class="feature-text">All-time and monthly boards with voucher prizes.</span></div></li>
+          <li><span class="feature-icon">🏰</span><div><strong>Dungeon</strong><span class="feature-text">Answer questions to push deeper.</span></div></li>
+          <li><span class="feature-icon">🕹️</span><div><strong>Arcade</strong><span class="feature-text">Science games paid for with game credits.</span></div></li>
+          <li><span class="feature-icon">🔥</span><div><strong>Realm of Embers</strong><span class="feature-text">The Polymath trading card game.</span></div></li>
+          <li><span class="feature-icon">📊</span><div><strong>My Report</strong><span class="feature-text">See your accuracy, topics and growth.</span></div></li>
+          <li><span class="feature-icon">✉️</span><div><strong>Messages</strong><span class="feature-text">Notes from your teacher.</span></div></li>
+          <li><span class="feature-icon">🔁</span><div><strong>Subject switcher</strong><span class="feature-text">Move between Math, English, Chinese and Science.</span></div></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================================================
+       CER PRACTICE (interactive)
+       ===================================================== -->
+  <section class="handbook-section reveal-on-scroll" id="cer-practice" aria-labelledby="cerPracticeTitle">
+    <div class="prose">
+      <div class="section-eyebrow"><span class="eyebrow-dot" style="background: var(--color-science-strong);"></span>Try it yourself</div>
+      <h2 id="cerPracticeTitle">Preview the CER questions</h2>
+      <p>These four questions work just like the ones in the portal. Start with a multiple-choice warm-up, then build a full CER answer, fill in the keywords, and finally hunt for a weak answer.</p>
+    </div>
+
+    <!-- Widget 1: MCQ -->
+    <article class="widget" id="mcqWidget" aria-labelledby="mcqTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="mcqTitle">⚡ Warm-up · Multiple choice</div>
+        <span class="widget-tag">Energy · Heat</span>
+      </div>
+      <p class="question-stem"><span class="question-topic">Question 1</span>Two ice cubes of the same size are placed on a metal tray and a wooden tray at room temperature. Why does the ice on the metal tray melt faster?</p>
+      <div class="option-list" id="mcqOptions">
+        <button class="option-button" type="button" data-correct="false" data-explain="Both trays are at the same room temperature, so the metal tray is not colder or warmer to start with."><span class="option-letter">A</span><span>The metal tray is colder than the wooden tray.</span></button>
+        <button class="option-button" type="button" data-correct="true" data-explain="Metal is a better conductor of heat, so heat from the surroundings flows through the tray into the ice more quickly."><span class="option-letter">B</span><span>Metal is a better conductor of heat than wood.</span></button>
+        <button class="option-button" type="button" data-correct="false" data-explain="Wood is a poor conductor of heat, so it actually slows down heat gain. It does not give out more heat."><span class="option-letter">C</span><span>Wood gives out more heat than metal.</span></button>
+        <button class="option-button" type="button" data-correct="false" data-explain="Cold is not a thing that moves. Heat moves from the warmer object to the cooler one."><span class="option-letter">D</span><span>Metal lets cold escape from the ice.</span></button>
+      </div>
+      <div class="feedback-panel" id="mcqFeedback" aria-live="polite"></div>
+      <div class="button-row no-print">
+        <button class="button button-primary" type="button" id="mcqCheckButton">Check my answer</button>
+        <button class="button" type="button" id="mcqResetButton">Try this question again</button>
+      </div>
+    </article>
+
+    <div class="prose">
+      <p>Notice option D. "Cold escaping" is one of the most common Science mistakes. Heat is what moves, and it always flows from the warmer place to the cooler place. Keep that in mind for the next question.</p>
+    </div>
+
+    <!-- Widget 2: CER builder -->
+    <article class="widget" id="cerBuilderWidget" aria-labelledby="cerBuilderTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="cerBuilderTitle">🧩 Build a CER answer</div>
+        <span class="widget-tag">Energy · Heat</span>
+      </div>
+      <p class="question-stem"><span class="question-topic">Question 2</span>Cup A is wrapped in felt. Cup B is uncovered. Both begin with water at 80°C. Which cup keeps the water hot for longer? Explain your answer.</p>
+      <p class="widget-hint">Pick one card from each column. Your answer builds itself underneath.</p>
+      <div class="cer-builder-grid">
+        <div class="cer-column column-claim" data-part="claim">
+          <h4><span class="cer-letter">C</span>Claim</h4>
+          <div class="cer-prompt">What do you conclude?</div>
+          <button class="cer-choice" type="button" data-correct="true">Cup A keeps the water hot longer.</button>
+          <button class="cer-choice" type="button" data-correct="false">Cup B keeps the water hot longer.</button>
+          <button class="cer-choice" type="button" data-correct="false">Both cups stay hot for the same time.</button>
+        </div>
+        <div class="cer-column column-evidence" data-part="evidence">
+          <h4><span class="cer-letter">E</span>Evidence</h4>
+          <div class="cer-prompt">What supports it?</div>
+          <button class="cer-choice" type="button" data-correct="false">Felt is soft and fluffy.</button>
+          <button class="cer-choice" type="button" data-correct="true">Cup A loses less heat in the same amount of time.</button>
+          <button class="cer-choice" type="button" data-correct="false">Cup B started at a higher temperature.</button>
+        </div>
+        <div class="cer-column column-reasoning" data-part="reasoning">
+          <h4><span class="cer-letter">R</span>Reasoning</h4>
+          <div class="cer-prompt">Explain the science.</div>
+          <button class="cer-choice" type="button" data-correct="false">Felt keeps the cold out of the cup.</button>
+          <button class="cer-choice" type="button" data-correct="false">Felt makes the water heavier.</button>
+          <button class="cer-choice" type="button" data-correct="true">Felt is a poor conductor of heat, so heat is lost from the water to the surroundings more slowly.</button>
+        </div>
+      </div>
+      <div class="cer-assembled" id="cerAssembled" aria-live="polite"><span class="assembled-placeholder">Your answer will appear here…</span></div>
+      <div class="feedback-panel" id="cerFeedback" aria-live="polite"></div>
+      <div class="button-row no-print">
+        <button class="button button-primary" type="button" id="cerCheckButton">Check my answer</button>
+        <button class="button" type="button" id="cerResetButton">Start again</button>
+      </div>
+    </article>
+
+    <div class="prose">
+      <p>A full-mark answer needs all three parts. A claim on its own ("Cup A") usually earns nothing, because the marker cannot see your thinking. The reasoning must name the concept, here <em>poor conductor of heat</em>, which is why keywords matter so much.</p>
+    </div>
+
+    <!-- Widget 3: Fill in the blanks -->
+    <article class="widget" id="blanksWidget" aria-labelledby="blanksTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="blanksTitle">🔲 Fill-in-the-blanks keywords</div>
+        <span class="widget-tag">Matter · Water cycle</span>
+      </div>
+      <p class="question-stem"><span class="question-topic">Question 3</span>A puddle on the playground dried up on a hot afternoon. Tap a blank, then tap a keyword to fill it.</p>
+      <p class="blank-sentence" id="blankSentence">
+        The water in the puddle <span class="blank-slot is-empty" data-answer="gained heat" tabindex="0" role="button">tap here</span> from the surroundings and
+        <span class="blank-slot is-empty" data-answer="evaporated" tabindex="0" role="button">tap here</span>, changing into
+        <span class="blank-slot is-empty" data-answer="water vapour" tabindex="0" role="button">tap here</span>. A higher temperature makes this happen
+        <span class="blank-slot is-empty" data-answer="faster" tabindex="0" role="button">tap here</span>.
+      </p>
+      <div class="keyword-bank" id="keywordBank" aria-label="Keyword bank">
+        <button class="keyword-chip" type="button">evaporated</button>
+        <button class="keyword-chip" type="button">lost heat</button>
+        <button class="keyword-chip" type="button">water vapour</button>
+        <button class="keyword-chip" type="button">faster</button>
+        <button class="keyword-chip" type="button">gained heat</button>
+        <button class="keyword-chip" type="button">condensed</button>
+        <button class="keyword-chip" type="button">slower</button>
+        <button class="keyword-chip" type="button">steam</button>
+      </div>
+      <div class="feedback-panel" id="blanksFeedback" aria-live="polite"></div>
+      <div class="button-row no-print">
+        <button class="button button-primary" type="button" id="blanksCheckButton">Check my answer</button>
+        <button class="button" type="button" id="blanksResetButton">Clear blanks</button>
+      </div>
+    </article>
+
+    <!-- Widget 4: Spot the weak answer -->
+    <article class="widget" id="weakAnswerWidget" aria-labelledby="weakAnswerTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="weakAnswerTitle">🔎 Spot the weak answer</div>
+        <span class="widget-tag">P4 · Diversity</span>
+      </div>
+      <p class="question-stem"><span class="question-topic">Question 4</span>A fruit has hooks on its surface. A student was asked how this helps the plant. Which of these answers would lose marks?</p>
+      <div class="answer-cards" id="weakAnswerCards">
+        <button class="answer-card" type="button" data-weak="false" data-explain="This names the method of dispersal and explains how the hooks make it happen."><span class="answer-card-label">Answer A</span>The hooks catch on the fur of animals, so the fruit is carried away from the parent plant.</button>
+        <button class="answer-card" type="button" data-weak="true" data-explain="Camouflage is about hiding from predators. It does not answer how the hooks help the fruit be dispersed. This is a Context Connie mistake: the answer does not fit the question."><span class="answer-card-label">Answer B</span>It is camouflaged.</button>
+        <button class="answer-card" type="button" data-weak="false" data-explain="This links the hooks to dispersal and states the benefit: less competition for space, water and sunlight."><span class="answer-card-label">Answer C</span>Animals carry it far away, so the young plants do not compete with the parent plant for water, space and sunlight.</button>
+      </div>
+      <div class="feedback-panel" id="weakAnswerFeedback" aria-live="polite"></div>
+      <div class="button-row no-print">
+        <button class="button" type="button" id="weakAnswerResetButton">Try again</button>
+      </div>
+    </article>
+
+    <div class="takeaway-box">
+      <h4>🔬 Key takeaway</h4>
+      <ul>
+        <li>Always give a Claim, the Evidence from the question, and the Reasoning (the science).</li>
+        <li>Heat moves, cold does not. It flows from warmer to cooler.</li>
+        <li>Use the exact keywords: conductor, evaporate, water vapour, dispersal.</li>
+        <li>Check that your answer fits the question being asked.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- =====================================================
+       SIDEKICKS
+       ===================================================== -->
+  <section class="handbook-section reveal-on-scroll" id="sidekicks" aria-labelledby="sidekicksTitle">
+    <div class="prose">
+      <div class="section-eyebrow"><span class="eyebrow-dot" style="background: var(--color-science-strong);"></span>Meet the team</div>
+      <h2 id="sidekicksTitle">The nine Science Sidekicks</h2>
+      <p>Each Sidekick stands for one habit that wins marks. When the portal marks your answer, it tells you which Sidekick could have helped. In <strong>Learn from Mistakes</strong> you first pick the Sidekick (the "mistake animal"), then rewrite your answer the way they would.</p>
+    </div>
+    <div class="sidekick-grid">
+      <div class="sidekick-card"><span class="sidekick-avatar">🦎</span><div><strong>Comparison Casey</strong><span>A chameleon who compares both sides: "A is more than B".</span></div></div>
+      <div class="sidekick-card"><span class="sidekick-avatar">🦦</span><div><strong>Context Connie</strong><span>A meerkat who checks the answer fits the question.</span></div></div>
+      <div class="sidekick-card"><span class="sidekick-avatar">🦊</span><div><strong>Specific Sherry</strong><span>A fox who names things exactly, not "it" or "the thing".</span></div></div>
+      <div class="sidekick-card"><span class="sidekick-avatar">🐘</span><div><strong>Evidence Ellen</strong><span>An elephant who never forgets to quote the data.</span></div></div>
+      <div class="sidekick-card"><span class="sidekick-avatar">🦜</span><div><strong>Keyword Kai</strong><span>A parrot who repeats the right Science keywords.</span></div></div>
+      <div class="sidekick-card"><span class="sidekick-avatar">🦉</span><div><strong>Concept Cora</strong><span>An owl who knows which concept is being tested.</span></div></div>
+      <div class="sidekick-card"><span class="sidekick-avatar">🐼</span><div><strong>Reasoning Ravi</strong><span>A red panda who explains the "because".</span></div></div>
+      <div class="sidekick-card"><span class="sidekick-avatar">🐱</span><div><strong>Careful Cleo</strong><span>Reads every word and catches silly slips.</span></div></div>
+      <div class="sidekick-card"><span class="sidekick-avatar">🐶</span><div><strong>Complete Cody</strong><span>Makes sure every part of the question is answered.</span></div></div>
+    </div>
+
+    <div class="prose">
+      <h3>How the mistake loop works</h3>
+      <ol class="step-list">
+        <li><div><strong>Answer a question</strong> in Quick or Topical Practice.</div></li>
+        <li><div><strong>Read the verdict.</strong> A partly correct answer names the Sidekick you missed.</div></li>
+        <li><div><strong>Open Learn from Mistakes</strong> and pick the mistake animal for that answer.</div></li>
+        <li><div><strong>Rewrite it.</strong> The improved answer is marked again.</div></li>
+        <li><div><strong>Review Revision Cards.</strong> Mistakes you repeat become flashcards so they stick.</div></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- =====================================================
+       CER REWARDS
+       ===================================================== -->
+  <section class="handbook-section reveal-on-scroll" id="cer-rewards" aria-labelledby="cerRewardsTitle">
+    <div class="prose">
+      <div class="section-eyebrow"><span class="eyebrow-dot" style="background: var(--color-science-strong);"></span>Earning in CER</div>
+      <h2 id="cerRewardsTitle">XP, points, credits and leaderboards</h2>
+      <p>In the portal, everything you earn comes from answering questions. There are no shortcuts: XP and 🪙 points only grow when you practise. Play with the slider below to see what a week of practice earns.</p>
+    </div>
+
+    <article class="widget" id="cerEarningsWidget" aria-labelledby="cerEarningsTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="cerEarningsTitle">🎟️ What does my practice earn?</div>
+        <span class="widget-tag tag-general">Calculator</span>
+      </div>
+      <div class="slider-block">
+        <div class="slider-label-row"><label for="questionsSlider">Questions answered</label><span class="slider-value" id="questionsValue">40</span></div>
+        <input type="range" id="questionsSlider" min="0" max="300" step="5" value="40" />
+        <span class="print-static-value" id="questionsPrint">40 questions</span>
+      </div>
+      <div class="slider-block">
+        <div class="slider-label-row"><label for="accuracySlider">Accuracy</label><span class="slider-value" id="accuracyValue">75%</span></div>
+        <input type="range" id="accuracySlider" min="0" max="100" step="5" value="75" />
+        <span class="print-static-value" id="accuracyPrint">75% accuracy</span>
+      </div>
+      <div class="result-display">
+        <div class="result-box" id="creditsResult"><span class="result-number" id="creditsNumber">8</span><span class="result-label">🎟️ game credits (1 per 5 questions)</span></div>
+        <div class="result-box" id="packsResult"><span class="result-number" id="packsNumber">0</span><span class="result-label">⚡ free Gold Packs (1 per 50 correct)</span></div>
+        <div class="result-box" id="scoreResult"><span class="result-number" id="scoreNumber">23</span><span class="result-label">🏅 All-Time score (questions × accuracy²)</span></div>
+      </div>
+      <p class="widget-hint" style="margin-top: var(--space-md);" id="earningsInsight"></p>
+    </article>
+
+    <div class="prose">
+      <p>The All-Time board multiplies the number of questions by your accuracy <em>squared</em>. That means accuracy matters a lot: 100 questions at 90% beats 150 questions at 70%. Rushing does not pay.</p>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Board</th><th>How you rank</th><th>Monthly prize</th></tr></thead>
+        <tbody>
+          <tr><td>All-Time</td><td>Questions × accuracy²</td><td>Bragging rights</td></tr>
+          <tr><td>Monthly boards</td><td>Practice during the month</td><td>$10 voucher for the top 3</td></tr>
+          <tr><td>Realm of Embers</td><td>Card battles</td><td>$10 voucher for the top 6</td></tr>
+          <tr><td>Science Legends</td><td>Arena survival</td><td>$10 voucher for the top 5</td></tr>
+          <tr><td>Ember Duel</td><td>Duel wins</td><td>$10 voucher for the top 3</td></tr>
+          <tr><td>Science Strike</td><td>FPS score</td><td>Voucher for the top 3</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="takeaway-box">
+      <h4>🪙 Key takeaway</h4>
+      <ul>
+        <li>Every 5 questions earns 1 🎟️ game credit. Each Arcade game costs 1 credit.</li>
+        <li>Every 50 correct answers fills the ⚡ energy bar for a free Gold Pack.</li>
+        <li>Accuracy counts twice on the All-Time board, so slow down and think.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- =====================================================
+       ARCADE
+       ===================================================== -->
+  <section class="handbook-section reveal-on-scroll" id="arcade" aria-labelledby="arcadeTitle">
+    <div class="prose">
+      <div class="section-eyebrow"><span class="eyebrow-dot" style="background: var(--color-geometry);"></span>Play</div>
+      <h2 id="arcadeTitle">The Arcade</h2>
+      <p>Games are a reward for practice, and most of them also slip Science questions into play. Spend a 🎟️ credit to start a game. Pirate Rift and Crew Defense are free.</p>
+    </div>
+    <div class="arcade-grid">
+      <div class="arcade-tile"><span class="arcade-badge">1 credit</span><div class="arcade-tile-body"><span class="arcade-emoji">🛡️</span><strong>Science Defenders</strong><span>Tower defence. Build towers and hold the line.</span></div></div>
+      <div class="arcade-tile"><span class="arcade-badge">1 credit</span><div class="arcade-tile-body"><span class="arcade-emoji">🚀</span><strong>Science Raiders</strong><span>A roguelite shooter through pixel dungeons.</span></div></div>
+      <div class="arcade-tile"><span class="arcade-badge">1 credit</span><div class="arcade-tile-body"><span class="arcade-emoji">🗼</span><strong>Science Spire</strong><span>Build a deck of cards and climb the tower.</span></div></div>
+      <div class="arcade-tile"><span class="arcade-badge badge-beta">beta</span><div class="arcade-tile-body"><span class="arcade-emoji">⚔️</span><strong>Science Legends</strong><span>Arena survival with your heroes.</span></div></div>
+      <div class="arcade-tile"><span class="arcade-badge badge-beta">beta</span><div class="arcade-tile-body"><span class="arcade-emoji">🗡️</span><strong>Science Slayers</strong><span>Fast hack-and-slash rounds.</span></div></div>
+      <div class="arcade-tile"><span class="arcade-badge badge-beta">beta</span><div class="arcade-tile-body"><span class="arcade-emoji">🏛️</span><strong>Hades Sanctuary</strong><span>5 MCQs between rooms set your healing (0–40%) and boon tier, from Fractured to Heroic.</span></div></div>
+      <div class="arcade-tile"><span class="arcade-badge badge-free">free</span><div class="arcade-tile-body"><span class="arcade-emoji">🏴‍☠️</span><strong>One Piece: Pirate Rift</strong><span>Sail the rift with your crew.</span></div></div>
+      <div class="arcade-tile"><span class="arcade-badge badge-free">free</span><div class="arcade-tile-body"><span class="arcade-emoji">⛵</span><strong>Crew Defense · Grand Line</strong><span>Defend your ship along the Grand Line.</span></div></div>
+      <div class="arcade-tile"><span class="arcade-badge">1 credit</span><div class="arcade-tile-body"><span class="arcade-emoji">🎯</span><strong>Science Strike</strong><span>A first-person shooter. The top 3 win a voucher.</span></div></div>
+    </div>
+
+    <article class="widget" id="hadesWidget" aria-labelledby="hadesTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="hadesTitle">🏛️ Hades Sanctuary: how your answers shape the run</div>
+        <span class="widget-tag tag-geometry">Explore</span>
+      </div>
+      <div class="slider-block">
+        <div class="slider-label-row"><label for="hadesSlider">Correct answers out of 5</label><span class="slider-value" id="hadesValue">3</span></div>
+        <input type="range" id="hadesSlider" min="0" max="5" step="1" value="3" />
+        <span class="print-static-value" id="hadesPrint">3 of 5 correct</span>
+      </div>
+      <div class="result-display">
+        <div class="result-box" id="hadesHealBox"><span class="result-number" id="hadesHeal">24%</span><span class="result-label">❤️ healing before the next room</span></div>
+        <div class="result-box" id="hadesBoonBox"><span class="result-number" id="hadesBoon">Rare</span><span class="result-label">✨ boon tier</span></div>
+        <div class="result-box"><span class="result-number">5</span><span class="result-label">📝 MCQs between rooms</span></div>
+      </div>
+      <p class="widget-hint" style="margin-top: var(--space-md);">Each correct answer adds 8% healing, up to 40%. The tier names here are a preview; in the game the scale runs from Fractured up to Heroic.</p>
+    </article>
+  </section>
+
+  <!-- =====================================================
+       REALM OF EMBERS
+       ===================================================== -->
+  <section class="handbook-section reveal-on-scroll" id="embers" aria-labelledby="embersTitle">
+    <div class="prose">
+      <div class="section-eyebrow"><span class="eyebrow-dot" style="background: #FF8A65;"></span>Collect</div>
+      <h2 id="embersTitle">Realm of Embers trading card game</h2>
+      <p>Realm of Embers has <strong>201 cards</strong> in two sets. <em>Primal Dominion</em> has 151 monsters (cards c001 to c151). <em>Lionheart Legion · Rise of Humanity</em> is the National Day set of 50 human heroes (c152 to c201). Tap the cards below to open them, just like tearing a booster pack.</p>
+    </div>
+
+    <article class="widget" id="flipWidget" aria-labelledby="flipTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="flipTitle">🎴 Open a preview pack</div>
+        <div class="no-print"><button class="button button-small" type="button" id="flipAllButton">Flip all</button></div>
+      </div>
+      <div class="flip-card-row" id="flipCardRow">
+        <button class="flip-card" type="button" aria-label="Flip card">
+          <div class="flip-card-inner">
+            <div class="flip-card-face flip-card-back-cover"><span class="cover-flame">🔥</span>Realm of Embers<small>Tap to open</small></div>
+            <div class="flip-card-face flip-card-front"><span class="card-rarity">c001</span><img src="../assets/realm-of-embers/card-art/c001-pyrrik-the-cinderwhelp.webp" alt="Pyrrik the Cinderwhelp" loading="lazy" /><div class="card-caption"><strong>Pyrrik the Cinderwhelp</strong><span>Primal Dominion · fire</span></div></div>
+          </div>
+        </button>
+        <button class="flip-card" type="button" aria-label="Flip card">
+          <div class="flip-card-inner">
+            <div class="flip-card-face flip-card-back-cover"><span class="cover-flame">🔥</span>Realm of Embers<small>Tap to open</small></div>
+            <div class="flip-card-face flip-card-front"><span class="card-rarity">c002</span><img src="../assets/realm-of-embers/card-art/c002-nimue-the-dewborn.webp" alt="Nimue the Dewborn" loading="lazy" /><div class="card-caption"><strong>Nimue the Dewborn</strong><span>Primal Dominion · water</span></div></div>
+          </div>
+        </button>
+        <button class="flip-card" type="button" aria-label="Flip card">
+          <div class="flip-card-inner">
+            <div class="flip-card-face flip-card-back-cover"><span class="cover-flame">🔥</span>Realm of Embers<small>Tap to open</small></div>
+            <div class="flip-card-face flip-card-front"><span class="card-rarity">c152</span><img src="../assets/realm-of-embers/card-art/c152-tam-the-shield-recruit.webp" alt="Tam the Shield Recruit" loading="lazy" /><div class="card-caption"><strong>Tam the Shield Recruit</strong><span>Lionheart Legion</span></div></div>
+          </div>
+        </button>
+        <button class="flip-card" type="button" aria-label="Flip card">
+          <div class="flip-card-inner">
+            <div class="flip-card-face flip-card-back-cover"><span class="cover-flame">🔥</span>Realm of Embers<small>Tap to open</small></div>
+            <div class="flip-card-face flip-card-front"><span class="card-rarity">c151</span><img src="../assets/realm-of-embers/card-art/c151-aeonyx-the-timeless-one.webp" alt="Aeonyx the Timeless One" loading="lazy" /><div class="card-caption"><strong>Aeonyx the Timeless One</strong><span>Primal Dominion · legendary</span></div></div>
+          </div>
+        </button>
+      </div>
+      <div class="pack-row">
+        <span class="widget-hint">Booster packs:</span>
+        <span class="pack-pill pack-bronze">Bronze</span>
+        <span class="pack-pill pack-silver">Silver</span>
+        <span class="pack-pill pack-gold">Gold</span>
+      </div>
+      <div class="no-print" style="margin-top: var(--space-md);">
+        <button class="button button-primary" type="button" id="shufflePackButton">🎁 Open another pack</button>
+      </div>
+    </article>
+
+    <div class="prose">
+      <h3>Ways to play</h3>
+    </div>
+    <div class="grid grid-two">
+      <div class="card"><h4>⚔️ Battle Arena</h4><p style="margin:0;color:var(--color-text-soft);">Pick a team of 5 and watch it auto-battle.</p></div>
+      <div class="card"><h4>🎴 Ember Duel</h4><p style="margin:0;color:var(--color-text-soft);">A Hearthstone-style duel. 30 HP, a deck of 40, and a hero with a 2-mana hero power. Cards rank up every 10 levels.</p></div>
+      <div class="card"><h4>🏟️ Ember Legends</h4><p style="margin:0;color:var(--color-text-soft);">Arena survival: how many waves can your cards last?</p></div>
+      <div class="card"><h4>🌋 Ember Siege</h4><p style="margin:0;color:var(--color-text-soft);">A squad of 3 per role. No timed questions, so you can think carefully.</p></div>
+    </div>
+
+    <div class="prose">
+      <h3>Duel heroes</h3>
+      <p>In Ember Duel you choose a hero. Each one has its own hero power.</p>
+    </div>
+    <div class="hero-portrait-row">
+      <div class="hero-portrait"><img src="../assets/realm-of-embers/heroes/ember-emberfist-rook.webp" alt="Emberfist Rook" loading="lazy" />Emberfist Rook</div>
+      <div class="hero-portrait"><img src="../assets/realm-of-embers/heroes/frost-tidecaller-nell.webp" alt="Tidecaller Nell" loading="lazy" />Tidecaller Nell</div>
+      <div class="hero-portrait"><img src="../assets/realm-of-embers/heroes/grove-sage-wren.webp" alt="Sage Wren" loading="lazy" />Sage Wren</div>
+      <div class="hero-portrait"><img src="../assets/realm-of-embers/heroes/scribe-ashen-scribe-pip.webp" alt="Ashen Scribe Pip" loading="lazy" />Ashen Scribe Pip</div>
+      <div class="hero-portrait"><img src="../assets/realm-of-embers/heroes/warden-warden-elowen.webp" alt="Warden Elowen" loading="lazy" />Warden Elowen</div>
+    </div>
+
+    <div class="prose">
+      <h3>Artifacts</h3>
+      <p>There are 30 artifacts. Duplicate copies level them up, so a spare card is never wasted. Here are a few:</p>
+      <div class="artifact-strip">
+        <img src="../assets/realm-of-embers/artifacts/ankh-eternity-ankh.webp" alt="Eternity Ankh" title="Eternity Ankh" loading="lazy" />
+        <img src="../assets/realm-of-embers/artifacts/banner-war-banner.webp" alt="War Banner" title="War Banner" loading="lazy" />
+        <img src="../assets/realm-of-embers/artifacts/battery-battery-core.webp" alt="Battery Core" title="Battery Core" loading="lazy" />
+        <img src="../assets/realm-of-embers/artifacts/bead-aegis-bead.webp" alt="Aegis Bead" title="Aegis Bead" loading="lazy" />
+        <img src="../assets/realm-of-embers/artifacts/bramble-bramble-vest.webp" alt="Bramble Vest" title="Bramble Vest" loading="lazy" />
+        <img src="../assets/realm-of-embers/artifacts/bud-spring-bud.webp" alt="Spring Bud" title="Spring Bud" loading="lazy" />
+        <img src="../assets/realm-of-embers/artifacts/bulwark-bulwark-plate.webp" alt="Bulwark Plate" title="Bulwark Plate" loading="lazy" />
+        <img src="../assets/realm-of-embers/artifacts/chalice-reaper-chalice.webp" alt="Reaper Chalice" title="Reaper Chalice" loading="lazy" />
+      </div>
+      <p style="margin-top: var(--space-md);">You will also find a 📜 <strong>Lore</strong> picture book with the story of the realm, a <strong>How to Play</strong> guide, and credits to Mr Chung, the Game Master.</p>
+    </div>
+    <div class="hero-pixel-strip is-dungeon" role="img" aria-label="Pixel art dungeon" style="border-radius: 12px; margin-top: var(--space-lg);"></div>
+
+    <div class="takeaway-box">
+      <h4>🔥 Key takeaway</h4>
+      <ul>
+        <li>201 cards across Primal Dominion and Lionheart Legion.</li>
+        <li>Free Gold Packs come from correct answers, so practice builds your collection.</li>
+        <li>Duplicates are useful: they level up your artifacts.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
+  <!-- =====================================================
+       ONLINE PORTAL
+       ===================================================== -->
+  <section class="handbook-section reveal-on-scroll" id="online" aria-labelledby="onlineTitle">
+    <div class="prose">
+      <div class="section-eyebrow"><span class="eyebrow-dot"></span>Chapter 3</div>
+      <h2 id="onlineTitle">The Online portal</h2>
+      <p class="section-lead">polymathlc.com.sg/online is your class home. It shows every worksheet your teacher has released, in order.</p>
+      <p>You join through the invitation email and sign in with Google. Each class matches your level and subject. Inside a class you see a vertical timeline. The <strong>Current worksheet</strong> is highlighted, and each worksheet shows when it was last edited. Try switching classes in the preview:</p>
+    </div>
+
+    <div class="portal-mock" style="margin-top: var(--space-lg);">
+      <div class="portal-mock-bar"><span class="browser-dot"></span><span class="browser-dot"></span><span class="browser-dot"></span><span class="browser-address">polymathlc.com.sg/online</span></div>
+      <div class="portal-mock-body">
+        <div class="class-tabs" id="classTabs" role="tablist">
+          <button class="class-tab is-active" type="button" data-class="science" role="tab">P5 Science · Sat 10am</button>
+          <button class="class-tab" type="button" data-class="math" role="tab">P5 Math · Wed 4pm</button>
+        </div>
+        <ol class="worksheet-timeline" id="worksheetTimeline"></ol>
+      </div>
+    </div>
+
+    <div class="prose">
+      <h3>What each button does</h3>
+      <ul class="feature-list">
+        <li><span class="feature-icon">👁️</span><div><strong>View</strong><span class="feature-text">Opens the worksheet or answer key in Ans Key, in a window on top of the portal.</span></div></li>
+        <li><span class="feature-icon">🖨️</span><div><strong>Print</strong><span class="feature-text">Prints the worksheet or answer key.</span></div></li>
+        <li><span class="feature-icon">▶️</span><div><strong>Video replay</strong><span class="feature-text">Watch the recorded lesson for that worksheet.</span></div></li>
+        <li><span class="feature-icon">⬇️</span><div><strong>Download / Print tiles</strong><span class="feature-text">The next two worksheets keep these so you can prepare ahead.</span></div></li>
+        <li><span class="feature-icon">🔒</span><div><strong>Locked worksheets</strong><span class="feature-text">Your teacher releases up to five worksheets ahead. Later ones are counted, but their names stay hidden until release.</span></div></li>
+      </ul>
+      <div class="note-box">👨‍👩‍👧 The timeline updates live. Your parents see the same view, so everyone knows what is due.</div>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
+  <!-- =====================================================
+       STUDY BUDDY
+       ===================================================== -->
+  <section class="handbook-section reveal-on-scroll" id="study-buddy" aria-labelledby="studyBuddyTitle">
+    <div class="prose">
+      <div class="section-eyebrow"><span class="eyebrow-dot" style="background: #80CBC4;"></span>Chapter 4</div>
+      <h2 id="studyBuddyTitle">Study Buddy</h2>
+      <p class="section-lead">Study Buddy is an AI tutor called <strong>Chung GPT</strong>. It gives you hints, not answers, so the thinking stays yours.</p>
+      <p>Family students sign in with Google. At the centre, your teacher can sign you in with <em>Practise as</em>. A session lasts 4 hours. For P3, Study Buddy covers Science only.</p>
+      <h3>How a session works</h3>
+      <ol class="step-list">
+        <li><div><strong>Open a worksheet.</strong> Pick a PDF, or one marked 📌 <em>Set for you</em> by your teacher.</div></li>
+        <li><div><strong>Write on it.</strong> Use the pen, highlighter, text, shapes and eraser right on the page.</div></li>
+        <li><div><strong>Stuck? Climb the 💡 help ladder.</strong> Each rung gives a little more help.</div></li>
+        <li><div><strong>💬 Ask your buddy</strong> anything about the question.</div></li>
+        <li><div><strong>✅ Mark my work.</strong> You get ✅ correct, 🟡 almost or ❌ not quite.</div></li>
+        <li><div><strong>📕 Mistake book.</strong> Wrong answers are saved so you can come back to them.</div></li>
+      </ol>
+      <p>Try the help ladder on a real Math question. Unlock one rung at a time and notice how the answer only comes at the very end.</p>
+    </div>
+
+    <article class="widget" id="ladderWidget" aria-labelledby="ladderTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="ladderTitle">💡 The help ladder</div>
+        <span class="widget-tag tag-math">P3 Math · Division</span>
+      </div>
+      <div class="worksheet-paper">Ali has 60 sweets. He shares them equally into 5 bags. How many sweets are in each bag?</div>
+      <div class="ladder-steps" id="ladderSteps">
+        <button class="ladder-step" type="button" data-rung="0">1 · Nudge<small>a gentle push</small></button>
+        <button class="ladder-step" type="button" data-rung="1" disabled>2 · Concept<small>&amp; keywords</small></button>
+        <button class="ladder-step" type="button" data-rung="2" disabled>3 · How to do it<small>the method</small></button>
+        <button class="ladder-step" type="button" data-rung="3" disabled>4 · The answer<small>last resort</small></button>
+      </div>
+      <div class="ladder-progress"><div class="ladder-progress-fill" id="ladderProgressFill"></div></div>
+      <div class="chat-log" id="ladderChat" aria-live="polite"></div>
+      <div class="button-row no-print"><button class="button" type="button" id="ladderResetButton">Start again</button></div>
+    </article>
+
+    <article class="widget" id="markWorkWidget" aria-labelledby="markWorkTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="markWorkTitle">✅ Mark my work</div>
+        <span class="widget-tag">Science · Heat</span>
+      </div>
+      <p class="question-stem"><span class="question-topic">Preview</span>A can of cold drink is left on the table. After a while the can feels warmer. Explain why.</p>
+      <label class="input-label" for="markWorkInput">Your answer</label>
+      <textarea class="mark-demo-input" id="markWorkInput" placeholder="Type your explanation here…"></textarea>
+      <div class="button-row no-print">
+        <button class="button button-primary" type="button" id="markWorkButton">✅ Mark my work</button>
+        <button class="button button-small" type="button" data-example="It loses cold to the air.">Try: "It loses cold"</button>
+        <button class="button button-small" type="button" data-example="The can gains heat.">Try: "It gains heat"</button>
+        <button class="button button-small" type="button" data-example="The can gains heat from the warmer surrounding air, so its temperature rises.">Try: a full answer</button>
+      </div>
+      <div class="feedback-panel" id="markWorkFeedback" aria-live="polite"></div>
+      <p class="widget-hint" style="margin-top: var(--space-sm);">This preview checks for keywords on your device. The real Study Buddy reads your whole answer.</p>
+    </article>
+
+    <div class="prose">
+      <h3>More tools inside Study Buddy</h3>
+    </div>
+    <div class="grid grid-three">
+      <div class="card"><h4>🎧 Live voice tutor</h4><p style="margin:0;color:var(--color-text-soft);">Talk it through out loud. A <em>Look here</em> card points at the part of the page that matters.</p></div>
+      <div class="card"><h4>🧩 Keyword checks</h4><p style="margin:0;color:var(--color-text-soft);">Make sure your answer uses the words markers look for.</p></div>
+      <div class="card"><h4>🎤 Speak your answer</h4><p style="margin:0;color:var(--color-text-soft);">Say it instead of typing it.</p></div>
+      <div class="card"><h4>📎 Paste photos</h4><p style="margin:0;color:var(--color-text-soft);">Add a photo of your working.</p></div>
+      <div class="card"><h4>🔑 Hidden answer key</h4><p style="margin:0;color:var(--color-text-soft);">The buddy can see the key, but you cannot, so it can guide you without spoiling it.</p></div>
+      <div class="card"><h4>🎬 Video solutions</h4><p style="margin:0;color:var(--color-text-soft);">Watch how a question is solved, step by step.</p></div>
+    </div>
+
+    <div class="prose">
+      <h3>Study Adventure</h3>
+      <p>Study Buddy has its own adventure. You start with Orbit, unlock Pip at 400 XP, and Nova at 800 XP. Slide to see who joins you.</p>
+    </div>
+
+    <article class="widget" id="adventureWidget" aria-labelledby="adventureTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="adventureTitle">🗺️ Unlock your companions</div>
+        <span class="widget-tag tag-general">Explore</span>
+      </div>
+      <div class="slider-block">
+        <div class="slider-label-row"><label for="adventureSlider">Total XP</label><span class="slider-value" id="adventureValue">250</span></div>
+        <input type="range" id="adventureSlider" min="0" max="1200" step="10" value="250" />
+        <span class="print-static-value" id="adventurePrint">250 XP</span>
+      </div>
+      <div class="companion-row">
+        <div class="companion-card" id="companionOrbit"><img src="../assets/worksheet-characters/orbit-encourage.webp" alt="Orbit the robot" /><strong>Orbit</strong><span>Your first companion · 0 XP</span></div>
+        <div class="companion-card" id="companionPip"><img src="../assets/worksheet-characters/pip-celebrate.webp" alt="Pip the fox" /><strong>Pip</strong><span>Unlocks at 400 XP</span></div>
+        <div class="companion-card" id="companionNova"><img src="../assets/worksheet-characters/nova-thinking.webp" alt="Nova the owl" /><strong>Nova</strong><span>Unlocks at 800 XP</span></div>
+      </div>
+      <div style="margin-top: var(--space-md);">
+        <div class="slider-label-row"><span id="adventureLevelLabel">Level 2</span><span class="widget-hint" id="adventureNextLabel">50 XP to next level</span></div>
+        <div class="xp-bar"><div class="xp-bar-fill" id="adventureXpFill"></div></div>
+      </div>
+    </article>
+
+    <div class="prose">
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>You do this</th><th>You earn</th></tr></thead>
+          <tbody>
+            <tr><td>First attempt at a question</td><td>10 XP, even if it is wrong</td></tr>
+            <tr><td>Fix a wrong answer</td><td>15 comeback XP</td></tr>
+            <tr><td>Daily quests</td><td>Bonus XP</td></tr>
+            <tr><td>Use a hint</td><td>Nothing is taken away. Hints never cost points.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top: var(--space-md);">You can earn up to 200 XP a day, and you go up a level every 200 XP. There is also an optional weekly league that resets every Monday. Want to look around first? The Study Buddy sample page works without signing in.</p>
+    </div>
+
+    <div class="takeaway-box">
+      <h4>🤖 Key takeaway</h4>
+      <ul>
+        <li>Climb the help ladder one rung at a time. Try before you ask for the answer.</li>
+        <li>A wrong first try still earns 10 XP, and fixing it earns 15 more.</li>
+        <li>"Loses cold" is a mistake. Say "gains heat" instead.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
+  <!-- =====================================================
+       ANS KEY
+       ===================================================== -->
+  <section class="handbook-section reveal-on-scroll" id="anskey" aria-labelledby="anskeyTitle">
+    <div class="prose">
+      <div class="section-eyebrow"><span class="eyebrow-dot" style="background: #B39DDB;"></span>Chapter 5</div>
+      <h2 id="anskeyTitle">Ans Key</h2>
+      <p class="section-lead">Ans Key is where you check worksheets, watch the lesson videos and grow your hero.</p>
+      <p>Sign in with Google and pick your level (P3 to P6) and subject. Worksheets appear in teaching order, up to five ahead. The <strong>Start here</strong> bar has three buttons: 📚 <em>My worksheets</em>, ✏️ <em>Practise this worksheet</em> and ▶ <em>Watch lesson video</em>. If you are ever unsure, press <strong>❓ What do the buttons do?</strong> for a guided tour.</p>
+      <h3>Practice mode</h3>
+      <p>Type your answers, then choose how you want them checked. Try it with these three short questions.</p>
+    </div>
+
+    <article class="widget" id="practiceWidget" aria-labelledby="practiceTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="practiceTitle">✏️ Practise this worksheet</div>
+        <span class="widget-tag tag-math">P4 Math · Fractions</span>
+      </div>
+      <div id="practiceQuestions">
+        <div class="practice-question" data-answer="3/4|0.75">
+          <span class="question-number">Q1</span>
+          <div><label for="practiceAnswer1">What is 1/2 + 1/4?</label><input class="mark-demo-input" id="practiceAnswer1" type="text" autocomplete="off" /></div>
+          <span class="practice-status" aria-live="polite"></span>
+        </div>
+        <div class="practice-question" data-answer="12">
+          <span class="question-number">Q2</span>
+          <div><label for="practiceAnswer2">What is 2/3 of 18?</label><input class="mark-demo-input" id="practiceAnswer2" type="text" autocomplete="off" /></div>
+          <span class="practice-status" aria-live="polite"></span>
+        </div>
+        <div class="practice-question" data-answer="2/5">
+          <span class="question-number">Q3</span>
+          <div><label for="practiceAnswer3">Write 4/10 in its simplest form.</label><input class="mark-demo-input" id="practiceAnswer3" type="text" autocomplete="off" /></div>
+          <span class="practice-status" aria-live="polite"></span>
+        </div>
+      </div>
+      <div class="button-row no-print">
+        <button class="button button-primary" type="button" id="markAllButton">📋 Mark all my answers</button>
+        <button class="button" type="button" id="checkOneButton">✨ Check one answer</button>
+        <button class="button" type="button" id="showAnswersButton">👁 Stop — show answers</button>
+      </div>
+      <div class="feedback-panel" id="practiceFeedback" aria-live="polite"></div>
+    </article>
+
+    <div class="prose">
+      <h3>Lesson videos</h3>
+      <p>In lesson videos, the writing appears in step with the teacher's voice. Question chips such as <span class="mini-chip">Q3 at 4:12</span> jump straight to the part you need, and English captions are available. After the video, an <strong>Up next</strong> card shows what to do next. A calculator and <strong>Ask AI</strong> are always close by.</p>
+
+      <h3>My Hero</h3>
+      <p>Claim your hero name (your teacher approves it), then choose a class and a male or female look. Hero XP is separate from your Rewards marks. Pick a class to see where it leads:</p>
+    </div>
+
+    <article class="widget" id="heroClassWidget" aria-labelledby="heroClassTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="heroClassTitle">🛡️ Choose your class</div>
+        <span class="widget-tag tag-geometry">312 skills</span>
+      </div>
+      <div class="class-picker" id="classPicker">
+        <button class="class-option is-active" type="button" data-hero-class="warrior"><span class="class-emoji">⚔️</span>Warrior</button>
+        <button class="class-option" type="button" data-hero-class="ranger"><span class="class-emoji">🏹</span>Ranger</button>
+        <button class="class-option" type="button" data-hero-class="mage"><span class="class-emoji">🔮</span>Mage</button>
+        <button class="class-option" type="button" data-hero-class="cleric"><span class="class-emoji">✨</span>Cleric</button>
+      </div>
+      <div class="class-detail" id="classDetail" aria-live="polite"></div>
+      <h4 style="margin-top: var(--space-lg);">Equipment rarity</h4>
+      <p class="widget-hint" style="margin:0;">You have 11 equipment slots, each with runes. Gear comes in seven rarities. Unique gear drops only 0.1% of the time.</p>
+      <div class="rarity-row">
+        <span class="rarity-chip rarity-common">Common</span>
+        <span class="rarity-chip rarity-uncommon">Uncommon</span>
+        <span class="rarity-chip rarity-rare">Rare</span>
+        <span class="rarity-chip rarity-epic">Epic</span>
+        <span class="rarity-chip rarity-legendary">Legendary</span>
+        <span class="rarity-chip rarity-mythical">Mythical</span>
+        <span class="rarity-chip rarity-unique">Unique</span>
+      </div>
+    </article>
+
+    <div class="prose">
+      <h3>In class with your teacher</h3>
+      <p>Your teacher runs these during lessons. You will see them on the big screen.</p>
+    </div>
+
+    <article class="widget" id="wheelWidget" aria-labelledby="wheelTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="wheelTitle">🎡 Name wheel</div>
+        <span class="widget-tag tag-general">Try a spin</span>
+      </div>
+      <div class="wheel-stage">
+        <div class="wheel-wrap">
+          <div class="wheel-pointer"></div>
+          <div class="wheel-disc" id="wheelDisc">
+            <span class="wheel-label" style="left: 70%; top: 30%;">+1</span>
+            <span class="wheel-label" style="left: 70%; top: 70%;">+2</span>
+            <span class="wheel-label" style="left: 30%; top: 70%;">+5</span>
+            <span class="wheel-label" style="left: 30%; top: 30%;">+10</span>
+          </div>
+          <div class="wheel-hub">⭐</div>
+        </div>
+        <div>
+          <p>The teacher spins the wheel to pick a student and award marks: +1, +2, +5 or +10. Those marks go to your Rewards total.</p>
+          <p class="widget-hint" id="wheelResult" aria-live="polite">Press spin to see what you would win.</p>
+          <div class="button-row no-print"><button class="button button-primary" type="button" id="wheelSpinButton">Spin the wheel</button></div>
+        </div>
+      </div>
+    </article>
+
+    <div class="grid grid-two">
+      <div class="card">
+        <h4>⚔️ Classroom battle</h4>
+        <p style="color:var(--color-text-soft);">Every correct answer powers the class attack. There are 100 bosses to defeat together.</p>
+      </div>
+      <div class="card">
+        <h4>🗺️ Pixel adventure</h4>
+        <p style="color:var(--color-text-soft);">Travel through Emerald Trail, Moonfall Ruins, Crystal Hollows and Ember Highlands. Each stop could be:</p>
+        <div class="odds-bar" role="img" aria-label="Enemy 74 percent, blessing 18 percent, rare chest 6 percent, uber boss 2 percent">
+          <span style="width:74%; background:#FFCDD2; color:#8E1B1B;">Enemy 74%</span>
+          <span style="width:18%; background:#C8E6C9; color:#1B5E20;">Blessing 18%</span>
+          <span style="width:6%; background:#FFE0B2; color:#8A4B00;" title="Rare chest 6%">6%</span>
+          <span style="width:2%; background:#1A1A1A;" title="Uber boss 2%"></span>
+        </div>
+        <p class="widget-hint" style="margin-top: var(--space-xs);">Rare chest 6% · Uber boss 2%</p>
+      </div>
+      <div class="card">
+        <h4>🎰 Mission machine</h4>
+        <p style="color:var(--color-text-soft);">The machine picks a class mission, such as 7 correct in a row, 30 minutes of quiet work, helping friends 3 times, or defeating the next enemy. Prizes include Blooket or Gimkit time, One-Punch Chung, and +5 points for everyone.</p>
+      </div>
+      <div class="card">
+        <h4>📹 Live cams</h4>
+        <p style="color:var(--color-text-soft);">In online lessons you can choose <em>Share my camera</em>. It is always your choice; nothing is shared unless you turn it on.</p>
+      </div>
+    </div>
+
+    <div class="takeaway-box">
+      <h4>🔑 Key takeaway</h4>
+      <ul>
+        <li>Use ✨ Check one answer while you work, and 📋 Mark all at the end.</li>
+        <li>Video question chips take you straight to the part you need.</li>
+        <li>Hero XP and Rewards marks are counted separately.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
+  <!-- =====================================================
+       REWARDS
+       ===================================================== -->
+  <section class="handbook-section reveal-on-scroll" id="rewards" aria-labelledby="rewardsTitle">
+    <div class="prose">
+      <div class="section-eyebrow"><span class="eyebrow-dot" style="background: #A5D6A7;"></span>Chapter 6</div>
+      <h2 id="rewardsTitle">Rewards</h2>
+      <p class="section-lead">Rewards is where your marks become ranks, badges and real prizes.</p>
+      <p>Sign in with Google, then choose your level, time slot and name and press <strong>That's me</strong>. You will see <em>Your marks</em> and a <em>My marks</em> history showing every mark you have earned.</p>
+      <h3>How to earn marks</h3>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>What you do</th><th>Marks</th></tr></thead>
+        <tbody>
+          <tr><td>Good work in class (from your teacher)</td><td>Varies</td></tr>
+          <tr><td>Upload a test paper as a PDF (10MB max)</td><td>+10</td></tr>
+          <tr><td>Join the Holiday Program</td><td>+50</td></tr>
+          <tr><td>Score AL1</td><td>+20</td></tr>
+          <tr><td>Score AL2</td><td>+10</td></tr>
+          <tr><td>Improve by one AL</td><td>+10</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="prose">
+      <h3>Ranks</h3>
+      <p>Your rank depends on your lifetime marks, so spending marks never lowers it. Slide to see where you would be.</p>
+    </div>
+
+    <article class="widget" id="rankWidget" aria-labelledby="rankTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="rankTitle">🌱 Rank calculator</div>
+        <span class="widget-tag tag-math">Explore</span>
+      </div>
+      <div class="slider-block">
+        <div class="slider-label-row"><label for="marksSlider">Lifetime marks</label><span class="slider-value" id="marksValue">120</span></div>
+        <input type="range" id="marksSlider" min="0" max="1200" step="10" value="120" />
+        <span class="print-static-value" id="marksPrint">120 lifetime marks</span>
+      </div>
+      <div class="rank-track" id="rankTrack">
+        <div class="rank-step" data-threshold="0"><span class="rank-emoji">🌱</span><strong>Novice</strong>0</div>
+        <div class="rank-step" data-threshold="100"><span class="rank-emoji">📘</span><strong>Apprentice</strong>100</div>
+        <div class="rank-step" data-threshold="300"><span class="rank-emoji">🎓</span><strong>Scholar</strong>300</div>
+        <div class="rank-step" data-threshold="600"><span class="rank-emoji">⭐</span><strong>Expert</strong>600</div>
+        <div class="rank-step" data-threshold="1000"><span class="rank-emoji">👑</span><strong>Master</strong>1000</div>
+      </div>
+      <p class="widget-hint" style="margin-top: var(--space-md);" id="rankInsight"></p>
+    </article>
+
+    <div class="prose">
+      <h3>Badges</h3>
+      <p>Collect badges along the way: <strong>First Steps</strong>, <strong>Bookworm</strong>, <strong>Century</strong>, <strong>Scholar</strong>, <strong>Big Earner</strong>, <strong>Shopper</strong>, <strong>Collector</strong> and <strong>Legend</strong>.</p>
+      <h3>Ability Shop</h3>
+      <p>Spend marks on abilities. Try spending a 100-mark wallet below. These are example items; the real shop may be different.</p>
+    </div>
+
+    <article class="widget" id="shopWidget" aria-labelledby="shopTitle">
+      <div class="widget-header">
+        <div class="widget-title" id="shopTitle">🛍️ Ability Shop preview</div>
+        <span class="widget-tag tag-general">Example items</span>
+      </div>
+      <div class="wallet-line">
+        <div>Wallet: <span class="wallet-amount" id="walletAmount">100</span> marks</div>
+        <button class="button button-small no-print" type="button" id="shopResetButton">Refill wallet</button>
+      </div>
+      <div class="shop-grid" id="shopGrid"></div>
+      <p class="widget-hint" style="margin-top: var(--space-md);" id="shopInsight">Pick anything you can afford.</p>
+    </article>
+
+    <div class="grid grid-three">
+      <div class="card"><h4>🏆 Prize leaderboard</h4><p style="margin:0;color:var(--color-text-soft);">The top 3 win vouchers worth $300, $200 and $100.</p></div>
+      <div class="card"><h4>⚔️ Boss Battle</h4><p style="margin:0;color:var(--color-text-soft);">The whole school fights one boss together.</p></div>
+      <div class="card"><h4>🎁 Choose your reward</h4><p style="margin:0;color:var(--color-text-soft);">Pick a physical prize. Your claim shows as pending, then shipped.</p></div>
+    </div>
+
+    <div class="prose">
+      <h3>Monster Codex <span class="widget-tag tag-geometry" style="vertical-align: middle;">beta</span></h3>
+      <p>The Codex has 151 monsters, from 1★ to 7★, across 8 elements. A pack costs 30 points and holds 5 cards, and the 5th card is always 3★ or better. If you are unlucky, the pity system steps in: you are guaranteed a 5★ or better by pack 10, a 6★ or better by pack 30, and a 7★ by pack 80.</p>
+      <p>Build a squad of 3 within a 12-star budget and battle up to 5 times a day. Codex battles win trophies only, not marks.</p>
+    </div>
+
+    <div class="takeaway-box">
+      <h4>🏆 Key takeaway</h4>
+      <ul>
+        <li>Upload every test paper for an easy +10.</li>
+        <li>Your rank uses lifetime marks, so spending never drops you down.</li>
+        <li>The top 3 on the prize leaderboard win vouchers.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
+  <!-- =====================================================
+       FAQ
+       ===================================================== -->
+  <section class="handbook-section reveal-on-scroll" id="faq" aria-labelledby="faqTitle">
+    <div class="prose">
+      <div class="section-eyebrow"><span class="eyebrow-dot"></span>Help</div>
+      <h2 id="faqTitle">Frequently asked questions</h2>
+      <details class="faq-item"><summary>I signed in but I cannot see my class.</summary><div class="faq-answer">Check that you used the Google account your teacher invited. If it still does not appear, tell your teacher so they can add that account to the class.</div></details>
+      <details class="faq-item"><summary>Why can I not see the name of a later worksheet?</summary><div class="faq-answer">Worksheets are released up to five ahead. Later ones are counted on your timeline, but their names stay hidden until your teacher releases them.</div></details>
+      <details class="faq-item"><summary>Will Study Buddy just give me the answer?</summary><div class="faq-answer">Only at the last rung of the help ladder. It starts with a nudge, then the concept, then the method. Most students solve it before the last rung.</div></details>
+      <details class="faq-item"><summary>Do hints cost me XP or points?</summary><div class="faq-answer">No. Hints never cost points in Study Buddy.</div></details>
+      <details class="faq-item"><summary>How do I get game credits in CER?</summary><div class="faq-answer">Answer questions. Every 5 questions gives you 1 🎟️ credit, and each Arcade game costs 1 credit. Pirate Rift and Crew Defense are free.</div></details>
+      <details class="faq-item"><summary>Are my Hero XP and Rewards marks the same thing?</summary><div class="faq-answer">No. Hero XP lives in Ans Key and grows your hero. Rewards marks are counted in the Rewards app and can be spent on prizes.</div></details>
+      <details class="faq-item"><summary>Can my parents see my work?</summary><div class="faq-answer">Yes. Parents see the same Online timeline you do, and it updates live.</div></details>
+      <details class="faq-item"><summary>Is my camera ever turned on without asking?</summary><div class="faq-answer">No. Live cams only share your camera when you choose <em>Share my camera</em>.</div></details>
+      <details class="faq-item"><summary>What file can I upload for test paper marks?</summary><div class="faq-answer">A PDF up to 10MB. Each upload earns +10 marks.</div></details>
+    </div>
+  </section>
+
+  <!-- =====================================================
+       CHECKLIST
+       ===================================================== -->
+  <section class="handbook-section reveal-on-scroll" id="checklist" aria-labelledby="checklistTitle">
+    <div class="prose">
+      <div class="section-eyebrow"><span class="eyebrow-dot"></span>Ready?</div>
+      <h2 id="checklistTitle">Your first-week checklist</h2>
+      <p>Tick these off as you go. Your ticks are saved on this device.</p>
+      <article class="widget" id="checklistWidget" aria-labelledby="checklistTitle">
+        <div class="widget-header">
+          <span class="checklist-progress-label" id="checklistProgressLabel">0 of 8 done</span>
+          <button class="button button-small no-print" type="button" id="checklistResetButton">Clear ticks</button>
+        </div>
+        <div class="ladder-progress" style="margin-top:0; margin-bottom: var(--space-md);"><div class="ladder-progress-fill" id="checklistProgressFill"></div></div>
+        <div id="checklistItems">
+          <label class="checklist-item"><input type="checkbox" data-key="signin" /> Signed in with Google on Online</label>
+          <label class="checklist-item"><input type="checkbox" data-key="worksheet" /> Opened my current worksheet</label>
+          <label class="checklist-item"><input type="checkbox" data-key="anskey" /> Marked a worksheet in Ans Key</label>
+          <label class="checklist-item"><input type="checkbox" data-key="video" /> Watched a lesson video</label>
+          <label class="checklist-item"><input type="checkbox" data-key="buddy" /> Used the help ladder in Study Buddy</label>
+          <label class="checklist-item"><input type="checkbox" data-key="cer" /> Answered 5 CER questions (1 game credit!)</label>
+          <label class="checklist-item"><input type="checkbox" data-key="rewards" /> Claimed my name in Rewards</label>
+          <label class="checklist-item"><input type="checkbox" data-key="hero" /> Chose my hero class in Ans Key</label>
+        </div>
+      </article>
+    </div>
+  </section>
+
+</main>
+
+<footer class="handbook-footer">
+  <img src="../assets/branding/polymath-learning-centre.png" alt="Polymath Learning Centre" onerror="this.style.display='none'" />
+  <p>Polymath Learning Centre · Student Handbook <span id="handbookVersionLabel"></span></p>
+  <p>Details in the apps can change. If something here does not match what you see, the app is right, and please tell your teacher.</p>
+</footer>
+
+<script>
+  const HANDBOOK_VERSION = '2026.10.19';
+
+  /* ---------------------------------------------------------
+     Shared helpers
+     --------------------------------------------------------- */
+  function buildFeedbackMark(state) {
+    const markClass = 'mark-' + state;
+    let pathData = 'M15 25 L22 32 L34 18';
+    if (state === 'wrong') { pathData = 'M17 17 L31 31 M31 17 L17 31'; }
+    if (state === 'almost') { pathData = 'M16 24 L32 24'; }
+    return '<svg class="feedback-mark ' + markClass + '" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22"></circle><path d="' + pathData + '"></path></svg>';
+  }
+
+  function showFeedback(panelElement, state, headline, bodyHtml) {
+    panelElement.classList.remove('is-visible', 'is-correct', 'is-almost', 'is-wrong');
+    void panelElement.offsetWidth;
+    panelElement.innerHTML = buildFeedbackMark(state) +
+      '<div class="feedback-text"><strong>' + headline + '</strong><div class="feedback-detail">' + bodyHtml + '</div></div>';
+    panelElement.classList.add('is-visible', 'is-' + state);
+  }
+
+  function hideFeedback(panelElement) {
+    panelElement.classList.remove('is-visible', 'is-correct', 'is-almost', 'is-wrong');
+    panelElement.innerHTML = '';
+  }
+
+  function shakeElement(element) {
+    element.classList.remove('is-shaking');
+    void element.offsetWidth;
+    element.classList.add('is-shaking');
+    setTimeout(function () { element.classList.remove('is-shaking'); }, 500);
+  }
+
+  function bounceButton(buttonElement) {
+    buttonElement.classList.remove('is-bouncing');
+    void buttonElement.offsetWidth;
+    buttonElement.classList.add('is-bouncing');
+  }
+
+  function flashSuccess(buttonElement, successText) {
+    const originalText = buttonElement.textContent;
+    buttonElement.classList.add('is-success');
+    buttonElement.textContent = successText || '✓ Done';
+    setTimeout(function () {
+      buttonElement.classList.remove('is-success');
+      buttonElement.textContent = originalText;
+    }, 1500);
+  }
+
+  function pulseElement(element) {
+    element.classList.remove('is-pulsing');
+    void element.offsetWidth;
+    element.classList.add('is-pulsing');
+  }
+
+  function launchConfetti(originElement) {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+    const confettiColours = ['#FFCC80', '#90CAF9', '#A5D6A7', '#B39DDB', '#EF9A9A', '#FFE082'];
+    const originRectangle = originElement.getBoundingClientRect();
+    const originX = originRectangle.left + originRectangle.width / 2;
+    const originY = originRectangle.top + Math.min(originRectangle.height / 2, 80);
+    for (let pieceIndex = 0; pieceIndex < 28; pieceIndex++) {
+      const confettiPiece = document.createElement('span');
+      confettiPiece.className = 'confetti-piece';
+      confettiPiece.style.left = originX + 'px';
+      confettiPiece.style.top = originY + 'px';
+      confettiPiece.style.background = confettiColours[pieceIndex % confettiColours.length];
+      const angle = Math.random() * Math.PI * 2;
+      const distance = 80 + Math.random() * 140;
+      confettiPiece.style.setProperty('--confetti-x', Math.cos(angle) * distance + 'px');
+      confettiPiece.style.setProperty('--confetti-y', (Math.sin(angle) * distance + 120) + 'px');
+      confettiPiece.style.setProperty('--confetti-rotate', (Math.random() * 720 - 360) + 'deg');
+      document.body.appendChild(confettiPiece);
+      setTimeout(function () { confettiPiece.remove(); }, 1200);
+    }
+  }
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, function (character) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character];
+    });
+  }
+
+  function safeStorageGet(key) {
+    try { return window.localStorage.getItem(key); } catch (storageError) { return null; }
+  }
+  function safeStorageSet(key, value) {
+    try { window.localStorage.setItem(key, value); } catch (storageError) { /* storage unavailable */ }
+  }
+
+  /* ---------------------------------------------------------
+     Page load stagger and scroll reveal
+     --------------------------------------------------------- */
+  document.getElementById('handbookVersionLabel').textContent = '· v' + HANDBOOK_VERSION;
+
+  const revealSections = document.querySelectorAll('.reveal-on-scroll');
+  if ('IntersectionObserver' in window) {
+    const revealObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: '0px 0px -60px 0px', threshold: 0.05 });
+    revealSections.forEach(function (section) { revealObserver.observe(section); });
+  } else {
+    revealSections.forEach(function (section) { section.classList.add('is-visible'); });
+  }
+  window.addEventListener('beforeprint', function () {
+    revealSections.forEach(function (section) { section.classList.add('is-visible'); });
+    document.querySelectorAll('.faq-item').forEach(function (faqItem) { faqItem.setAttribute('open', ''); });
+  });
+
+  /* ---------------------------------------------------------
+     Table of contents highlighting
+     --------------------------------------------------------- */
+  const tableOfContentsLinks = Array.from(document.querySelectorAll('#tableOfContentsList a'));
+  const trackedSections = tableOfContentsLinks.map(function (link) { return document.querySelector(link.getAttribute('href')); }).filter(Boolean);
+  function updateActiveTableOfContentsLink() {
+    let activeSectionId = trackedSections[0].id;
+    trackedSections.forEach(function (section) {
+      if (section.getBoundingClientRect().top < 160) { activeSectionId = section.id; }
+    });
+    tableOfContentsLinks.forEach(function (link) {
+      const isActive = link.getAttribute('href') === '#' + activeSectionId;
+      if (isActive && !link.classList.contains('is-active')) {
+        link.scrollIntoView({ block: 'nearest', inline: 'center' });
+      }
+      link.classList.toggle('is-active', isActive);
+    });
+  }
+  let tableOfContentsTicking = false;
+  window.addEventListener('scroll', function () {
+    if (!tableOfContentsTicking) {
+      window.requestAnimationFrame(function () { updateActiveTableOfContentsLink(); tableOfContentsTicking = false; });
+      tableOfContentsTicking = true;
+    }
+  }, { passive: true });
+  updateActiveTableOfContentsLink();
+
+  /* ---------------------------------------------------------
+     Widget 1: MCQ
+     --------------------------------------------------------- */
+  (function setUpMultipleChoice() {
+    const optionButtons = Array.from(document.querySelectorAll('#mcqOptions .option-button'));
+    const feedbackPanel = document.getElementById('mcqFeedback');
+    const checkButton = document.getElementById('mcqCheckButton');
+    const resetButton = document.getElementById('mcqResetButton');
+    const widgetElement = document.getElementById('mcqWidget');
+    let selectedOption = null;
+
+    optionButtons.forEach(function (optionButton) {
+      optionButton.addEventListener('click', function () {
+        optionButtons.forEach(function (otherButton) { otherButton.classList.remove('is-selected'); });
+        optionButton.classList.add('is-selected');
+        selectedOption = optionButton;
+      });
+    });
+
+    checkButton.addEventListener('click', function () {
+      bounceButton(checkButton);
+      if (!selectedOption) {
+        showFeedback(feedbackPanel, 'almost', 'Pick an option first', '<p>Tap the answer you think is right, then press Check my answer.</p>');
+        return;
+      }
+      const isCorrect = selectedOption.dataset.correct === 'true';
+      optionButtons.forEach(function (optionButton) { optionButton.disabled = true; });
+      setTimeout(function () {
+        if (isCorrect) {
+          selectedOption.classList.add('is-correct');
+          showFeedback(feedbackPanel, 'correct', 'Correct!', '<p>' + selectedOption.dataset.explain + '</p><p><strong>Model answer:</strong> Claim: metal is a better conductor of heat than wood. Evidence: the ice on the metal tray melts in less time. Reasoning: heat transfers from the warmer tray to the ice more quickly.</p>');
+          launchConfetti(widgetElement);
+          flashSuccess(checkButton, '✓ Correct');
+        } else {
+          selectedOption.classList.add('is-wrong');
+          shakeElement(selectedOption);
+          setTimeout(function () {
+            optionButtons.forEach(function (optionButton) { if (optionButton.dataset.correct === 'true') { optionButton.classList.add('is-correct'); } });
+            showFeedback(feedbackPanel, 'wrong', 'Not quite', '<p>' + selectedOption.dataset.explain + '</p><p>The answer is <strong>B</strong>: metal is a better conductor of heat.</p>');
+          }, 450);
+        }
+      }, 180);
+    });
+
+    resetButton.addEventListener('click', function () {
+      selectedOption = null;
+      optionButtons.forEach(function (optionButton) {
+        optionButton.disabled = false;
+        optionButton.classList.remove('is-selected', 'is-correct', 'is-wrong');
+      });
+      hideFeedback(feedbackPanel);
+    });
+  })();
+
+  /* ---------------------------------------------------------
+     Widget 2: CER builder
+     --------------------------------------------------------- */
+  (function setUpClaimEvidenceReasoningBuilder() {
+    const columns = Array.from(document.querySelectorAll('.cer-column'));
+    const assembledBox = document.getElementById('cerAssembled');
+    const feedbackPanel = document.getElementById('cerFeedback');
+    const checkButton = document.getElementById('cerCheckButton');
+    const resetButton = document.getElementById('cerResetButton');
+    const widgetElement = document.getElementById('cerBuilderWidget');
+    const selections = { claim: null, evidence: null, reasoning: null };
+    const partLabels = { claim: 'Claim', evidence: 'Evidence', reasoning: 'Reasoning' };
+    const sidekickForPart = {
+      claim: 'Context Connie says: read what the question asks. Which cup lost less heat?',
+      evidence: 'Evidence Ellen says: quote what happened in the experiment, not what the material feels like.',
+      reasoning: 'Keyword Kai says: use the concept. Felt is a poor conductor of heat, and heat is what moves, not cold.'
+    };
+
+    function renderAssembledAnswer() {
+      const chosenParts = ['claim', 'evidence', 'reasoning'].filter(function (part) { return selections[part]; });
+      if (chosenParts.length === 0) {
+        assembledBox.innerHTML = '<span class="assembled-placeholder">Your answer will appear here…</span>';
+        return;
+      }
+      assembledBox.innerHTML = chosenParts.map(function (part) {
+        return '<div class="assembled-part"><strong>' + partLabels[part] + ':</strong> ' + escapeHtml(selections[part].textContent) + '</div>';
+      }).join('');
+    }
+
+    columns.forEach(function (column) {
+      const part = column.dataset.part;
+      const choiceButtons = Array.from(column.querySelectorAll('.cer-choice'));
+      choiceButtons.forEach(function (choiceButton) {
+        choiceButton.addEventListener('click', function () {
+          choiceButtons.forEach(function (otherButton) { otherButton.classList.remove('is-selected', 'is-correct', 'is-wrong'); });
+          choiceButton.classList.add('is-selected');
+          selections[part] = choiceButton;
+          hideFeedback(feedbackPanel);
+          renderAssembledAnswer();
+        });
+      });
+    });
+
+    checkButton.addEventListener('click', function () {
+      bounceButton(checkButton);
+      const missingParts = ['claim', 'evidence', 'reasoning'].filter(function (part) { return !selections[part]; });
+      if (missingParts.length > 0) {
+        showFeedback(feedbackPanel, 'almost', 'Your answer is incomplete', '<p>Complete Cody says: you still need a ' + missingParts.map(function (part) { return partLabels[part]; }).join(' and ') + '.</p>');
+        shakeElement(assembledBox);
+        return;
+      }
+      const wrongParts = [];
+      ['claim', 'evidence', 'reasoning'].forEach(function (part) {
+        const isCorrect = selections[part].dataset.correct === 'true';
+        selections[part].classList.remove('is-selected');
+        selections[part].classList.add(isCorrect ? 'is-correct' : 'is-wrong');
+        if (!isCorrect) { wrongParts.push(part); }
+      });
+      if (wrongParts.length === 0) {
+        showFeedback(feedbackPanel, 'correct', 'Correct · full marks', '<p>Claim, Evidence and Reasoning all line up. This is the model answer.</p><p><strong>Picture it:</strong> 🔥 hot water → felt (slows heat flow) → cooler air.</p>');
+        launchConfetti(widgetElement);
+        flashSuccess(checkButton, '✓ Full marks');
+      } else if (wrongParts.length === 1) {
+        shakeElement(assembledBox);
+        showFeedback(feedbackPanel, 'almost', 'Partly correct', '<p>Your ' + partLabels[wrongParts[0]].toLowerCase() + ' needs work.</p><p>' + sidekickForPart[wrongParts[0]] + '</p>');
+      } else {
+        shakeElement(assembledBox);
+        showFeedback(feedbackPanel, 'wrong', 'Incorrect', '<p>' + wrongParts.map(function (part) { return sidekickForPart[part]; }).join('</p><p>') + '</p>');
+      }
+    });
+
+    resetButton.addEventListener('click', function () {
+      ['claim', 'evidence', 'reasoning'].forEach(function (part) { selections[part] = null; });
+      document.querySelectorAll('.cer-choice').forEach(function (choiceButton) { choiceButton.classList.remove('is-selected', 'is-correct', 'is-wrong'); });
+      hideFeedback(feedbackPanel);
+      renderAssembledAnswer();
+    });
+  })();
+
+  /* ---------------------------------------------------------
+     Widget 3: Fill in the blanks
+     --------------------------------------------------------- */
+  (function setUpFillInTheBlanks() {
+    const blankSlots = Array.from(document.querySelectorAll('#blankSentence .blank-slot'));
+    const keywordChips = Array.from(document.querySelectorAll('#keywordBank .keyword-chip'));
+    const feedbackPanel = document.getElementById('blanksFeedback');
+    const checkButton = document.getElementById('blanksCheckButton');
+    const resetButton = document.getElementById('blanksResetButton');
+    const widgetElement = document.getElementById('blanksWidget');
+    let activeSlot = null;
+
+    function focusSlot(slot) {
+      blankSlots.forEach(function (otherSlot) { otherSlot.style.outline = ''; });
+      activeSlot = slot;
+      if (slot) { slot.style.outline = '2px solid #FFCC80'; }
+    }
+
+    function firstEmptySlot() {
+      return blankSlots.find(function (slot) { return !slot.dataset.filled; }) || null;
+    }
+
+    function clearSlot(slot) {
+      if (slot.dataset.filled) {
+        const returnedChip = keywordChips.find(function (chip) { return chip.textContent === slot.dataset.filled; });
+        if (returnedChip) { returnedChip.disabled = false; }
+      }
+      delete slot.dataset.filled;
+      slot.textContent = 'tap here';
+      slot.classList.add('is-empty');
+      slot.classList.remove('is-correct', 'is-wrong');
+    }
+
+    blankSlots.forEach(function (slot) {
+      function activate() {
+        if (slot.dataset.filled) { clearSlot(slot); }
+        focusSlot(slot);
+        hideFeedback(feedbackPanel);
+      }
+      slot.addEventListener('click', activate);
+      slot.addEventListener('keydown', function (keyboardEvent) {
+        if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') { keyboardEvent.preventDefault(); activate(); }
+      });
+    });
+
+    keywordChips.forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        const targetSlot = (activeSlot && !activeSlot.dataset.filled) ? activeSlot : firstEmptySlot();
+        if (!targetSlot) { return; }
+        targetSlot.dataset.filled = chip.textContent;
+        targetSlot.textContent = chip.textContent;
+        targetSlot.classList.remove('is-empty', 'is-correct', 'is-wrong');
+        chip.disabled = true;
+        focusSlot(firstEmptySlot());
+      });
+    });
+
+    checkButton.addEventListener('click', function () {
+      bounceButton(checkButton);
+      const emptyCount = blankSlots.filter(function (slot) { return !slot.dataset.filled; }).length;
+      if (emptyCount > 0) {
+        showFeedback(feedbackPanel, 'almost', 'Fill every blank first', '<p>You still have ' + emptyCount + ' blank' + (emptyCount === 1 ? '' : 's') + ' to fill.</p>');
+        return;
+      }
+      let correctCount = 0;
+      blankSlots.forEach(function (slot) {
+        const isCorrect = slot.dataset.filled === slot.dataset.answer;
+        slot.classList.add(isCorrect ? 'is-correct' : 'is-wrong');
+        if (isCorrect) { correctCount++; } else { shakeElement(slot); }
+      });
+      focusSlot(null);
+      if (correctCount === blankSlots.length) {
+        showFeedback(feedbackPanel, 'correct', 'All ' + correctCount + ' keywords correct!', '<p>The water gained heat from the surroundings and evaporated, changing into water vapour. A higher temperature makes this happen faster.</p>');
+        launchConfetti(widgetElement);
+      } else {
+        showFeedback(feedbackPanel, correctCount >= 2 ? 'almost' : 'wrong', correctCount + ' of ' + blankSlots.length + ' correct', '<p>Tap a red blank to clear it and try another keyword. Remember: "steam" is not the same as water vapour, and water <em>gains</em> heat to evaporate.</p>');
+      }
+    });
+
+    resetButton.addEventListener('click', function () {
+      blankSlots.forEach(clearSlot);
+      keywordChips.forEach(function (chip) { chip.disabled = false; });
+      hideFeedback(feedbackPanel);
+      focusSlot(blankSlots[0]);
+    });
+
+    focusSlot(blankSlots[0]);
+  })();
+
+  /* ---------------------------------------------------------
+     Widget 4: Spot the weak answer
+     --------------------------------------------------------- */
+  (function setUpSpotTheWeakAnswer() {
+    const answerCards = Array.from(document.querySelectorAll('#weakAnswerCards .answer-card'));
+    const feedbackPanel = document.getElementById('weakAnswerFeedback');
+    const resetButton = document.getElementById('weakAnswerResetButton');
+    const widgetElement = document.getElementById('weakAnswerWidget');
+
+    answerCards.forEach(function (answerCard) {
+      answerCard.addEventListener('click', function () {
+        const isWeak = answerCard.dataset.weak === 'true';
+        answerCards.forEach(function (card) { card.disabled = true; });
+        if (isWeak) {
+          answerCard.classList.add('is-correct');
+          showFeedback(feedbackPanel, 'correct', 'Well spotted!', '<p>' + answerCard.dataset.explain + '</p>');
+          launchConfetti(widgetElement);
+        } else {
+          answerCard.classList.add('is-wrong');
+          shakeElement(answerCard);
+          setTimeout(function () {
+            answerCards.forEach(function (card) { if (card.dataset.weak === 'true') { card.classList.add('is-correct'); } });
+            showFeedback(feedbackPanel, 'wrong', 'That one is actually strong', '<p>' + answerCard.dataset.explain + '</p><p>The weak answer is <strong>B: "It is camouflaged."</strong> Camouflage is about hiding, not dispersal.</p>');
+          }, 450);
+        }
+      });
+    });
+
+    resetButton.addEventListener('click', function () {
+      answerCards.forEach(function (card) { card.disabled = false; card.classList.remove('is-correct', 'is-wrong'); });
+      hideFeedback(feedbackPanel);
+    });
+  })();
+
+  /* ---------------------------------------------------------
+     CER earnings calculator
+     --------------------------------------------------------- */
+  (function setUpEarningsCalculator() {
+    const questionsSlider = document.getElementById('questionsSlider');
+    const accuracySlider = document.getElementById('accuracySlider');
+    const questionsValue = document.getElementById('questionsValue');
+    const accuracyValue = document.getElementById('accuracyValue');
+    const creditsNumber = document.getElementById('creditsNumber');
+    const packsNumber = document.getElementById('packsNumber');
+    const scoreNumber = document.getElementById('scoreNumber');
+    const earningsInsight = document.getElementById('earningsInsight');
+
+    function updateEarnings(sourceSlider) {
+      const questionCount = Number(questionsSlider.value);
+      const accuracyPercent = Number(accuracySlider.value);
+      const accuracyFraction = accuracyPercent / 100;
+      const correctCount = Math.round(questionCount * accuracyFraction);
+      const credits = Math.floor(questionCount / 5);
+      const goldPacks = Math.floor(correctCount / 50);
+      const allTimeScore = Math.round(questionCount * accuracyFraction * accuracyFraction);
+
+      questionsValue.textContent = questionCount;
+      accuracyValue.textContent = accuracyPercent + '%';
+      document.getElementById('questionsPrint').textContent = questionCount + ' questions';
+      document.getElementById('accuracyPrint').textContent = accuracyPercent + '% accuracy';
+      creditsNumber.textContent = credits;
+      packsNumber.textContent = goldPacks;
+      scoreNumber.textContent = allTimeScore;
+
+      const correctToNextPack = 50 - (correctCount % 50);
+      const questionsToNextCredit = 5 - (questionCount % 5);
+      earningsInsight.textContent = 'That is ' + correctCount + ' correct answers. ' +
+        correctToNextPack + ' more correct answer' + (correctToNextPack === 1 ? '' : 's') + ' to the next free Gold Pack, and ' +
+        questionsToNextCredit + ' more question' + (questionsToNextCredit === 1 ? '' : 's') + ' to the next credit.';
+
+      if (sourceSlider) { pulseElement(sourceSlider === questionsSlider ? questionsValue : accuracyValue); }
+      ['creditsResult', 'packsResult', 'scoreResult'].forEach(function (resultId) { pulseElement(document.getElementById(resultId)); });
+    }
+
+    questionsSlider.addEventListener('input', function () { updateEarnings(questionsSlider); });
+    accuracySlider.addEventListener('input', function () { updateEarnings(accuracySlider); });
+    updateEarnings(null);
+  })();
+
+  /* ---------------------------------------------------------
+     Hades Sanctuary explorer
+     --------------------------------------------------------- */
+  (function setUpHadesExplorer() {
+    const hadesSlider = document.getElementById('hadesSlider');
+    const boonTierNames = ['Fractured', 'Worn', 'Common', 'Rare', 'Epic', 'Heroic'];
+    function updateHades() {
+      const correctCount = Number(hadesSlider.value);
+      document.getElementById('hadesValue').textContent = correctCount;
+      document.getElementById('hadesPrint').textContent = correctCount + ' of 5 correct';
+      document.getElementById('hadesHeal').textContent = (correctCount * 8) + '%';
+      document.getElementById('hadesBoon').textContent = boonTierNames[correctCount];
+      pulseElement(document.getElementById('hadesValue'));
+      pulseElement(document.getElementById('hadesHealBox'));
+      pulseElement(document.getElementById('hadesBoonBox'));
+    }
+    hadesSlider.addEventListener('input', updateHades);
+    updateHades();
+  })();
+
+  /* ---------------------------------------------------------
+     Realm of Embers flip cards
+     --------------------------------------------------------- */
+  (function setUpFlipCards() {
+    const cardArtLibrary = [
+      { file: 'c001-pyrrik-the-cinderwhelp', name: 'Pyrrik the Cinderwhelp', set: 'Primal Dominion · fire' },
+      { file: 'c002-nimue-the-dewborn', name: 'Nimue the Dewborn', set: 'Primal Dominion · water' },
+      { file: 'c003-voltas-the-stormseed', name: 'Voltas the Stormseed', set: 'Primal Dominion · storm' },
+      { file: 'c004-gorrim-the-pebblebound', name: 'Gorrim the Pebblebound', set: 'Primal Dominion · earth' },
+      { file: 'c005-thalia-the-seedmaiden', name: 'Thalia the Seedmaiden', set: 'Primal Dominion · nature' },
+      { file: 'c006-krivv-the-frostgnat', name: 'Krivv the Frostgnat', set: 'Primal Dominion · ice' },
+      { file: 'c007-ozzik-the-sludgeborn', name: 'Ozzik the Sludgeborn', set: 'Primal Dominion · poison' },
+      { file: 'c008-lyssa-the-dreammoth', name: 'Lyssa the Dreammoth', set: 'Primal Dominion · dream' },
+      { file: 'c009-lumen-the-dawnbeetle', name: 'Lumen the Dawnbeetle', set: 'Primal Dominion · light' },
+      { file: 'c010-umbrik-the-shadeling', name: 'Umbrik the Shadeling', set: 'Primal Dominion · shadow' },
+      { file: 'c011-ferrik-the-cogsworn', name: 'Ferrik the Cogsworn', set: 'Primal Dominion · metal' },
+      { file: 'c012-astrel-the-starborn', name: 'Astrel the Starborn', set: 'Primal Dominion · star' },
+      { file: 'c150-draxx-the-end-bringer', name: 'Draxx the End-Bringer', set: 'Primal Dominion · legendary' },
+      { file: 'c151-aeonyx-the-timeless-one', name: 'Aeonyx the Timeless One', set: 'Primal Dominion · legendary' },
+      { file: 'c152-tam-the-shield-recruit', name: 'Tam the Shield Recruit', set: 'Lionheart Legion' },
+      { file: 'c153-mira-the-hearth-acolyte', name: 'Mira the Hearth Acolyte', set: 'Lionheart Legion' },
+      { file: 'c195-archsorceress-nyx-the-starfall', name: 'Archsorceress Nyx the Starfall', set: 'Lionheart Legion' },
+      { file: 'c196-warmaster-thorne-the-bloodbanner', name: 'Warmaster Thorne the Bloodbanner', set: 'Lionheart Legion' },
+      { file: 'c197-lich-queen-morrigane', name: 'Lich Queen Morrigane', set: 'Lionheart Legion' },
+      { file: 'c200-kaelen-draxmoor-the-dragon-slayer', name: 'Kaelen Draxmoor the Dragon Slayer', set: 'Lionheart Legion' },
+      { file: 'c201-ariselle-the-snow-queen', name: 'Ariselle the Snow Queen', set: 'Lionheart Legion' }
+    ];
+    const flipCards = Array.from(document.querySelectorAll('#flipCardRow .flip-card'));
+    const flipAllButton = document.getElementById('flipAllButton');
+    const shufflePackButton = document.getElementById('shufflePackButton');
+
+    flipCards.forEach(function (flipCard) {
+      flipCard.addEventListener('click', function () { flipCard.classList.toggle('is-flipped'); });
+    });
+
+    flipAllButton.addEventListener('click', function () {
+      const shouldFlip = flipCards.some(function (flipCard) { return !flipCard.classList.contains('is-flipped'); });
+      flipCards.forEach(function (flipCard, cardIndex) {
+        setTimeout(function () { flipCard.classList.toggle('is-flipped', shouldFlip); }, cardIndex * 120);
+      });
+    });
+
+    shufflePackButton.addEventListener('click', function () {
+      bounceButton(shufflePackButton);
+      const shuffledCards = cardArtLibrary.slice().sort(function () { return Math.random() - 0.5; }).slice(0, flipCards.length);
+      flipCards.forEach(function (flipCard) { flipCard.classList.remove('is-flipped'); });
+      setTimeout(function () {
+        flipCards.forEach(function (flipCard, cardIndex) {
+          const cardData = shuffledCards[cardIndex];
+          const frontFace = flipCard.querySelector('.flip-card-front');
+          frontFace.querySelector('img').src = '../assets/realm-of-embers/card-art/' + cardData.file + '.webp';
+          frontFace.querySelector('img').alt = cardData.name;
+          frontFace.querySelector('.card-rarity').textContent = cardData.file.slice(0, 4);
+          frontFace.querySelector('.card-caption strong').textContent = cardData.name;
+          frontFace.querySelector('.card-caption span').textContent = cardData.set;
+          setTimeout(function () { flipCard.classList.add('is-flipped'); }, 200 + cardIndex * 160);
+        });
+      }, 600);
+    });
+  })();
+
+  /* ---------------------------------------------------------
+     Online portal timeline mock
+     --------------------------------------------------------- */
+  (function setUpPortalTimeline() {
+    const timelineData = {
+      science: [
+        { name: 'Worksheet 1 · Diversity of living things', edited: '2 Sep', state: 'done' },
+        { name: 'Worksheet 2 · Cycles in plants', edited: '9 Sep', state: 'done', video: true },
+        { name: 'Worksheet 3 · Heat and temperature', edited: '16 Sep', state: 'current', video: true },
+        { name: 'Worksheet 4 · Heat conductors', edited: '23 Sep', state: 'next' },
+        { name: 'Worksheet 5 · Changes of state', edited: '30 Sep', state: 'next' },
+        { name: '3 more worksheets coming', state: 'locked' }
+      ],
+      math: [
+        { name: 'Worksheet 1 · Whole numbers', edited: '4 Sep', state: 'done', video: true },
+        { name: 'Worksheet 2 · Fractions', edited: '11 Sep', state: 'current', video: true },
+        { name: 'Worksheet 3 · Decimals', edited: '18 Sep', state: 'next' },
+        { name: 'Worksheet 4 · Ratio', edited: '25 Sep', state: 'next' },
+        { name: '2 more worksheets coming', state: 'locked' }
+      ]
+    };
+    const timelineElement = document.getElementById('worksheetTimeline');
+    const classTabs = Array.from(document.querySelectorAll('#classTabs .class-tab'));
+
+    function renderTimeline(classKey) {
+      timelineElement.innerHTML = timelineData[classKey].map(function (worksheet, worksheetIndex) {
+        const delay = 'style="animation-delay:' + (worksheetIndex * 70) + 'ms"';
+        if (worksheet.state === 'locked') {
+          return '<li class="is-locked" ' + delay + '><div class="worksheet-entry"><span class="worksheet-name">🔒 ' + worksheet.name + '<span class="worksheet-meta">Names appear when released</span></span></div></li>';
+        }
+        let actions = '';
+        if (worksheet.state === 'next') {
+          actions = '<span class="mini-chip">⬇️ Download</span><span class="mini-chip">🖨️ Print</span>';
+        } else {
+          actions = '<span class="mini-chip">Worksheet: View / Print</span><span class="mini-chip">Answer key: View / Print</span>' +
+            (worksheet.video ? '<span class="mini-chip chip-video">▶ Video replay</span>' : '');
+        }
+        const currentChip = worksheet.state === 'current' ? '<span class="mini-chip chip-accent">Current worksheet</span>' : '';
+        return '<li class="' + (worksheet.state === 'current' ? 'is-current' : '') + '" ' + delay + '>' +
+          '<div class="worksheet-entry"><span class="worksheet-name">' + worksheet.name + '<span class="worksheet-meta">Last edited ' + worksheet.edited + '</span></span>' +
+          '<span class="worksheet-actions">' + currentChip + actions + '</span></div></li>';
+      }).join('');
+    }
+
+    classTabs.forEach(function (classTab) {
+      classTab.addEventListener('click', function () {
+        classTabs.forEach(function (otherTab) { otherTab.classList.remove('is-active'); otherTab.setAttribute('aria-selected', 'false'); });
+        classTab.classList.add('is-active');
+        classTab.setAttribute('aria-selected', 'true');
+        renderTimeline(classTab.dataset.class);
+      });
+    });
+    renderTimeline('science');
+  })();
+
+  /* ---------------------------------------------------------
+     Study Buddy help ladder
+     --------------------------------------------------------- */
+  (function setUpHelpLadder() {
+    const ladderButtons = Array.from(document.querySelectorAll('#ladderSteps .ladder-step'));
+    const chatLog = document.getElementById('ladderChat');
+    const progressFill = document.getElementById('ladderProgressFill');
+    const resetButton = document.getElementById('ladderResetButton');
+    const buddyAvatar = '../assets/worksheet-characters/orbit-thinking.webp';
+    const ladderMessages = [
+      { student: 'I am stuck. Can I have a nudge?', buddy: 'Sure! The sweets are being shared <em>equally</em>. What operation do we use when we share things equally?' },
+      { student: 'What is the concept?', buddy: 'This is <strong>division</strong>. Keywords to look for: <em>shares equally</em>, <em>each</em>. The total (60) is split into equal groups (5 bags).' },
+      { student: 'How do I do it?', buddy: 'Write the number sentence: total ÷ number of bags = sweets in each bag. So you need 60 ÷ 5. Try it: how many 5s make 60?' },
+      { student: 'Please show me the answer.', buddy: '60 ÷ 5 = <strong>12</strong>. There are 12 sweets in each bag. Check: 12 × 5 = 60 ✔️. Next time, try stopping at rung 3!' }
+    ];
+    let unlockedRung = 0;
+
+    function appendBubble(text, fromBuddy) {
+      const bubble = document.createElement('div');
+      bubble.className = 'chat-bubble ' + (fromBuddy ? 'from-buddy' : 'from-student');
+      if (fromBuddy) {
+        bubble.innerHTML = '<img src="' + buddyAvatar + '" alt="Study Buddy" /><div>' + text + '</div>';
+      } else {
+        bubble.textContent = text;
+      }
+      chatLog.appendChild(bubble);
+    }
+
+    ladderButtons.forEach(function (ladderButton) {
+      ladderButton.addEventListener('click', function () {
+        const rungIndex = Number(ladderButton.dataset.rung);
+        if (rungIndex !== unlockedRung) { return; }
+        ladderButton.classList.add('is-unlocked');
+        ladderButton.disabled = true;
+        appendBubble(ladderMessages[rungIndex].student, false);
+        setTimeout(function () { appendBubble(ladderMessages[rungIndex].buddy, true); }, 450);
+        unlockedRung++;
+        progressFill.style.width = (unlockedRung / ladderButtons.length * 100) + '%';
+        if (ladderButtons[unlockedRung]) { ladderButtons[unlockedRung].disabled = false; }
+      });
+    });
+
+    resetButton.addEventListener('click', function () {
+      unlockedRung = 0;
+      chatLog.innerHTML = '';
+      progressFill.style.width = '0';
+      ladderButtons.forEach(function (ladderButton, buttonIndex) {
+        ladderButton.classList.remove('is-unlocked');
+        ladderButton.disabled = buttonIndex !== 0;
+      });
+    });
+  })();
+
+  /* ---------------------------------------------------------
+     Study Buddy: mark my work (keyword preview)
+     --------------------------------------------------------- */
+  (function setUpMarkMyWork() {
+    const answerInput = document.getElementById('markWorkInput');
+    const markButton = document.getElementById('markWorkButton');
+    const feedbackPanel = document.getElementById('markWorkFeedback');
+    const widgetElement = document.getElementById('markWorkWidget');
+
+    document.querySelectorAll('#markWorkWidget [data-example]').forEach(function (exampleButton) {
+      exampleButton.addEventListener('click', function () {
+        answerInput.value = exampleButton.dataset.example;
+        answerInput.focus();
+        hideFeedback(feedbackPanel);
+      });
+    });
+
+    markButton.addEventListener('click', function () {
+      bounceButton(markButton);
+      const answerText = answerInput.value.toLowerCase();
+      if (answerText.trim().length === 0) {
+        showFeedback(feedbackPanel, 'almost', 'Write something first', '<p>Give it a go. Even a wrong first try earns 10 XP.</p>');
+        return;
+      }
+      const mentionsCold = /cold/.test(answerText) && /(lose|loses|lost|escape|leave|leaves)/.test(answerText);
+      const mentionsGainHeat = /(gain|gains|gained|absorb|absorbs)/.test(answerText) && /heat/.test(answerText);
+      const mentionsSource = /(air|surround|environment|warmer|room)/.test(answerText);
+      markButton.textContent = '…';
+      setTimeout(function () {
+        markButton.textContent = '✅ Mark my work';
+        if (mentionsCold) {
+          shakeElement(answerInput);
+          showFeedback(feedbackPanel, 'wrong', '❌ Not quite · +10 XP for trying', '<p>Cold does not move. Think about what moves <em>into</em> the can. Which is warmer: the drink or the air?</p>');
+        } else if (mentionsGainHeat && mentionsSource) {
+          showFeedback(feedbackPanel, 'correct', '✅ Correct · +10 XP', '<p>Great: the can gains heat from the warmer surrounding air, so its temperature rises.</p>');
+          launchConfetti(widgetElement);
+        } else if (mentionsGainHeat) {
+          showFeedback(feedbackPanel, 'almost', '🟡 Almost · +10 XP', '<p>Good keyword! Now say <em>where</em> the heat comes from (Evidence Ellen and Complete Cody would add "from the warmer surrounding air").</p>');
+        } else {
+          shakeElement(answerInput);
+          showFeedback(feedbackPanel, 'wrong', '❌ Not quite · +10 XP for trying', '<p>Keyword Kai says: use the word <em>heat</em>. What happens to heat between the can and the air?</p>');
+        }
+      }, 500);
+    });
+  })();
+
+  /* ---------------------------------------------------------
+     Study Adventure companions
+     --------------------------------------------------------- */
+  (function setUpAdventure() {
+    const adventureSlider = document.getElementById('adventureSlider');
+    const companions = [
+      { element: document.getElementById('companionOrbit'), unlockAt: 0 },
+      { element: document.getElementById('companionPip'), unlockAt: 400 },
+      { element: document.getElementById('companionNova'), unlockAt: 800 }
+    ];
+    function updateAdventure() {
+      const totalXp = Number(adventureSlider.value);
+      document.getElementById('adventureValue').textContent = totalXp;
+      document.getElementById('adventurePrint').textContent = totalXp + ' XP';
+      pulseElement(document.getElementById('adventureValue'));
+      companions.forEach(function (companion) { companion.element.classList.toggle('is-locked', totalXp < companion.unlockAt); });
+      const level = Math.floor(totalXp / 200) + 1;
+      const xpIntoLevel = totalXp % 200;
+      document.getElementById('adventureLevelLabel').textContent = 'Level ' + level;
+      document.getElementById('adventureNextLabel').textContent = (200 - xpIntoLevel) + ' XP to level ' + (level + 1) + ' · at most 200 XP a day';
+      document.getElementById('adventureXpFill').style.width = (xpIntoLevel / 200 * 100) + '%';
+    }
+    adventureSlider.addEventListener('input', updateAdventure);
+    updateAdventure();
+  })();
+
+  /* ---------------------------------------------------------
+     Ans Key practice mode
+     --------------------------------------------------------- */
+  (function setUpPracticeMode() {
+    const questionRows = Array.from(document.querySelectorAll('#practiceQuestions .practice-question'));
+    const feedbackPanel = document.getElementById('practiceFeedback');
+    const widgetElement = document.getElementById('practiceWidget');
+    let lastFocusedRow = questionRows[0];
+
+    function normaliseAnswer(text) { return String(text).trim().toLowerCase().replace(/\s+/g, ''); }
+
+    function markRow(row) {
+      const inputElement = row.querySelector('input');
+      const statusElement = row.querySelector('.practice-status');
+      const acceptedAnswers = row.dataset.answer.split('|').map(normaliseAnswer);
+      const studentAnswer = normaliseAnswer(inputElement.value);
+      statusElement.classList.remove('status-correct', 'status-wrong');
+      if (studentAnswer.length === 0) { statusElement.textContent = 'No answer yet'; return null; }
+      const isCorrect = acceptedAnswers.indexOf(studentAnswer) !== -1;
+      statusElement.textContent = isCorrect ? '✅ Correct' : '❌ Try again';
+      statusElement.classList.add(isCorrect ? 'status-correct' : 'status-wrong');
+      if (!isCorrect) { shakeElement(inputElement); }
+      return isCorrect;
+    }
+
+    questionRows.forEach(function (row) {
+      row.querySelector('input').addEventListener('focus', function () { lastFocusedRow = row; });
+      row.querySelector('input').addEventListener('keydown', function (keyboardEvent) {
+        if (keyboardEvent.key === 'Enter') { markRow(row); }
+      });
+    });
+
+    document.getElementById('markAllButton').addEventListener('click', function (clickEvent) {
+      bounceButton(clickEvent.currentTarget);
+      const results = questionRows.map(markRow);
+      const correctCount = results.filter(function (result) { return result === true; }).length;
+      if (correctCount === questionRows.length) {
+        showFeedback(feedbackPanel, 'correct', 'All ' + correctCount + ' correct!', '<p>Brilliant. In Ans Key you would now see the Up next card.</p>');
+        launchConfetti(widgetElement);
+      } else {
+        showFeedback(feedbackPanel, correctCount > 0 ? 'almost' : 'wrong', correctCount + ' of ' + questionRows.length + ' correct', '<p>Fix the ones marked ❌ and mark again. Use ✨ Check one answer to test a single fix.</p>');
+      }
+    });
+
+    document.getElementById('checkOneButton').addEventListener('click', function (clickEvent) {
+      bounceButton(clickEvent.currentTarget);
+      const result = markRow(lastFocusedRow);
+      if (result === true) { flashSuccess(clickEvent.currentTarget, '✓ That one is right'); }
+    });
+
+    document.getElementById('showAnswersButton').addEventListener('click', function () {
+      questionRows.forEach(function (row) {
+        const statusElement = row.querySelector('.practice-status');
+        statusElement.classList.remove('status-correct', 'status-wrong');
+        statusElement.innerHTML = '<span class="revealed-answer">Answer: ' + escapeHtml(row.dataset.answer.split('|')[0]) + '</span>';
+      });
+      showFeedback(feedbackPanel, 'almost', 'Answers shown', '<p>Try to use this only after you have had a real go. Understanding why is what earns marks in the exam.</p>');
+    });
+  })();
+
+  /* ---------------------------------------------------------
+     Ans Key hero class picker
+     --------------------------------------------------------- */
+  (function setUpHeroClassPicker() {
+    const heroClassData = {
+      warrior: { title: '⚔️ Warrior', description: 'Strong in the front line. Takes hits so your team can attack.', advanced: ['🛡️ Paladin', '🪓 Berserker'] },
+      ranger: { title: '🏹 Ranger', description: 'Fast and precise from a distance.', advanced: ['🎯 Sharpshooter', '🐺 Beastmaster'] },
+      mage: { title: '🔮 Mage', description: 'Powerful spells that hit many enemies at once.', advanced: ['🌌 Archmage', '⏳ Chronomancer'] },
+      cleric: { title: '✨ Cleric', description: 'Heals and protects the whole party.', advanced: ['☀️ Hierophant', '👁️ Oracle'] }
+    };
+    const classOptions = Array.from(document.querySelectorAll('#classPicker .class-option'));
+    const classDetail = document.getElementById('classDetail');
+
+    function renderClassDetail(classKey) {
+      const heroClass = heroClassData[classKey];
+      classDetail.innerHTML = '<strong>' + heroClass.title + '</strong><p style="margin: 4px 0 0;">' + heroClass.description + '</p>' +
+        '<p class="widget-hint" style="margin: var(--space-sm) 0 0;">At level 15 you choose one advanced class:</p>' +
+        '<div class="advanced-classes">' + heroClass.advanced.map(function (advancedClass) { return '<span class="mini-chip chip-accent">' + advancedClass + '</span>'; }).join('') + '</div>';
+      classDetail.style.animation = 'none';
+      void classDetail.offsetWidth;
+      classDetail.style.animation = 'fadeSlideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) both';
+    }
+
+    classOptions.forEach(function (classOption) {
+      classOption.addEventListener('click', function () {
+        classOptions.forEach(function (otherOption) { otherOption.classList.remove('is-active'); });
+        classOption.classList.add('is-active');
+        renderClassDetail(classOption.dataset.heroClass);
+      });
+    });
+    renderClassDetail('warrior');
+  })();
+
+  /* ---------------------------------------------------------
+     Name wheel
+     --------------------------------------------------------- */
+  (function setUpNameWheel() {
+    const wheelDisc = document.getElementById('wheelDisc');
+    const spinButton = document.getElementById('wheelSpinButton');
+    const wheelResult = document.getElementById('wheelResult');
+    const wheelSegments = [
+      { label: '+1', centreAngle: 45 },
+      { label: '+2', centreAngle: 135 },
+      { label: '+5', centreAngle: 225 },
+      { label: '+10', centreAngle: 315 }
+    ];
+    let currentRotation = 0;
+    let isSpinning = false;
+
+    spinButton.addEventListener('click', function () {
+      if (isSpinning) { return; }
+      isSpinning = true;
+      bounceButton(spinButton);
+      wheelResult.textContent = 'Spinning…';
+      const winningSegment = wheelSegments[Math.floor(Math.random() * wheelSegments.length)];
+      const jitter = Math.random() * 60 - 30;
+      const targetAngle = (360 - winningSegment.centreAngle + jitter + 360) % 360;
+      const currentAngle = currentRotation % 360;
+      currentRotation += 360 * 5 + ((targetAngle - currentAngle + 360) % 360);
+      wheelDisc.style.transform = 'rotate(' + currentRotation + 'deg)';
+      setTimeout(function () {
+        wheelResult.innerHTML = '🎉 <strong>' + winningSegment.label + ' marks!</strong> They go straight to your Rewards total.';
+        launchConfetti(wheelDisc);
+        isSpinning = false;
+      }, 3050);
+    });
+  })();
+
+  /* ---------------------------------------------------------
+     Rewards rank calculator
+     --------------------------------------------------------- */
+  (function setUpRankCalculator() {
+    const marksSlider = document.getElementById('marksSlider');
+    const rankSteps = Array.from(document.querySelectorAll('#rankTrack .rank-step'));
+    const rankInsight = document.getElementById('rankInsight');
+    function updateRank() {
+      const lifetimeMarks = Number(marksSlider.value);
+      document.getElementById('marksValue').textContent = lifetimeMarks;
+      document.getElementById('marksPrint').textContent = lifetimeMarks + ' lifetime marks';
+      pulseElement(document.getElementById('marksValue'));
+      let currentStep = rankSteps[0];
+      rankSteps.forEach(function (rankStep) {
+        const threshold = Number(rankStep.dataset.threshold);
+        rankStep.classList.toggle('is-reached', lifetimeMarks >= threshold);
+        rankStep.classList.remove('is-current');
+        if (lifetimeMarks >= threshold) { currentStep = rankStep; }
+      });
+      currentStep.classList.add('is-current');
+      const nextStep = rankSteps[rankSteps.indexOf(currentStep) + 1];
+      const currentName = currentStep.querySelector('strong').textContent;
+      if (nextStep) {
+        const marksNeeded = Number(nextStep.dataset.threshold) - lifetimeMarks;
+        const papersNeeded = Math.ceil(marksNeeded / 10);
+        rankInsight.textContent = 'You are ' + currentName + '. ' + marksNeeded + ' more marks to ' + nextStep.querySelector('strong').textContent + ', which is about ' + papersNeeded + ' test paper upload' + (papersNeeded === 1 ? '' : 's') + '.';
+      } else {
+        rankInsight.textContent = 'You are a Master, the highest rank. 👑';
+      }
+    }
+    marksSlider.addEventListener('input', updateRank);
+    updateRank();
+  })();
+
+  /* ---------------------------------------------------------
+     Ability Shop preview
+     --------------------------------------------------------- */
+  (function setUpAbilityShop() {
+    const shopItems = [
+      { name: 'Weekly Allowance', cost: 30, group: 'Economy' },
+      { name: 'Instant Boost', cost: 12, group: 'Economy' },
+      { name: 'Double Paper', cost: 25, group: 'Economy' },
+      { name: 'Critical Strike', cost: 20, group: 'Battle' },
+      { name: 'Battle Cry', cost: 15, group: 'Battle' },
+      { name: 'Homework Pass', cost: 40, group: 'Classroom' },
+      { name: 'Front Row Pick', cost: 18, group: 'Classroom' },
+      { name: 'Game Time', cost: 35, group: 'Classroom' },
+      { name: 'Music Break', cost: 15, group: 'Classroom' },
+      { name: 'Golden Name', cost: 25, group: 'Cosmetic' },
+      { name: 'Champion Badge', cost: 30, group: 'Cosmetic' },
+      { name: 'Mystery Box', cost: 20, group: 'Surprise' }
+    ];
+    const startingWallet = 100;
+    let walletBalance = startingWallet;
+    const purchasedItems = [];
+    const shopGrid = document.getElementById('shopGrid');
+    const walletAmount = document.getElementById('walletAmount');
+    const shopInsight = document.getElementById('shopInsight');
+
+    function renderShop() {
+      shopGrid.innerHTML = '';
+      shopItems.forEach(function (shopItem, itemIndex) {
+        const itemButton = document.createElement('button');
+        itemButton.type = 'button';
+        itemButton.className = 'shop-item';
+        const alreadyBought = purchasedItems.indexOf(itemIndex) !== -1;
+        if (alreadyBought) { itemButton.classList.add('is-bought'); }
+        itemButton.disabled = alreadyBought || shopItem.cost > walletBalance;
+        itemButton.innerHTML = '<span class="shop-group">' + shopItem.group + '</span><strong>' + shopItem.name + '</strong><span class="shop-cost">' + (alreadyBought ? '✓ Bought' : shopItem.cost + ' marks') + '</span>';
+        itemButton.addEventListener('click', function () {
+          walletBalance -= shopItem.cost;
+          purchasedItems.push(itemIndex);
+          walletAmount.textContent = walletBalance;
+          pulseElement(walletAmount);
+          shopInsight.textContent = 'You bought ' + shopItem.name + '. Spending marks never lowers your rank, because ranks use lifetime marks.';
+          renderShop();
+        });
+        shopGrid.appendChild(itemButton);
+      });
+    }
+
+    document.getElementById('shopResetButton').addEventListener('click', function () {
+      walletBalance = startingWallet;
+      purchasedItems.length = 0;
+      walletAmount.textContent = walletBalance;
+      shopInsight.textContent = 'Pick anything you can afford.';
+      renderShop();
+    });
+    renderShop();
+  })();
+
+  /* ---------------------------------------------------------
+     First-week checklist (saved locally)
+     --------------------------------------------------------- */
+  (function setUpChecklist() {
+    const storageKey = 'polymathHandbookChecklist';
+    const checkboxes = Array.from(document.querySelectorAll('#checklistItems input[type=checkbox]'));
+    const progressLabel = document.getElementById('checklistProgressLabel');
+    const progressFill = document.getElementById('checklistProgressFill');
+    let savedState = {};
+    try { savedState = JSON.parse(safeStorageGet(storageKey) || '{}') || {}; } catch (parseError) { savedState = {}; }
+
+    function updateProgress(celebrate) {
+      const doneCount = checkboxes.filter(function (checkbox) { return checkbox.checked; }).length;
+      progressLabel.textContent = doneCount + ' of ' + checkboxes.length + ' done';
+      progressFill.style.width = (doneCount / checkboxes.length * 100) + '%';
+      if (celebrate && doneCount === checkboxes.length) {
+        progressLabel.textContent = '🎉 All done! You are ready.';
+        launchConfetti(document.getElementById('checklistWidget'));
+      }
+    }
+
+    checkboxes.forEach(function (checkbox) {
+      checkbox.checked = Boolean(savedState[checkbox.dataset.key]);
+      checkbox.addEventListener('change', function () {
+        savedState[checkbox.dataset.key] = checkbox.checked;
+        safeStorageSet(storageKey, JSON.stringify(savedState));
+        updateProgress(checkbox.checked);
+      });
+    });
+
+    document.getElementById('checklistResetButton').addEventListener('click', function () {
+      checkboxes.forEach(function (checkbox) { checkbox.checked = false; });
+      savedState = {};
+      safeStorageSet(storageKey, '{}');
+      updateProgress(false);
+    });
+
+    updateProgress(false);
+  })();
+</script>
+</body>
+</html>
