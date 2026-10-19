@@ -4498,7 +4498,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.433.1';
+const APP_VERSION = 'v1.433.2';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -40066,6 +40066,9 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     // which is NOT the position in the list: the two booklets are numbered as
     // one run, and the teacher can reorder either of them.
     const paperNum = paperNums ? String(paperNums[q.id] || '') : '';
+    // Past-paper copies carry their source separately: plain numbering hides
+    // the bank title, but the student still needs the year and original number.
+    const numberedTitle = 'Question ' + (qIndex + 1) + (q._ppPrintSource ? ' — ' + q._ppPrintSource : '');
     let qHtml = `<div class="print-question-chunk${paperNum ? ' print-q-paper' : ''}" data-qid="${escapeHtml(String(q.id || ''))}"${isMcq ? ' data-mcq="1"' : ''}>`;
 
     if (qIndex === 0 && !secHtml) {
@@ -40084,7 +40087,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     qHtml += paperNum
       ? `<span class="print-q-paper-num">${escapeHtml(paperNum)}</span>`
       : (plainNums
-        ? `<div class="print-q-header print-q-header-plain"><h2>Question ${qIndex + 1}</h2></div>`
+        ? `<div class="print-q-header print-q-header-plain"><h2>${escapeHtml(numberedTitle)}</h2></div>`
         : `<div class="print-q-header">
       <h2>${escapeHtml(q.title)}</h2>
       <div class="print-q-meta">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</div>
@@ -40221,7 +40224,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
       // answer to Booklet B's question 29.
       answerKeyData.push({
         qid: q.id,
-        title: paperNum ? ('Question ' + paperNum) : (plainNums ? ('Question ' + (qIndex + 1)) : q.title),
+        title: paperNum ? ('Question ' + paperNum) : (plainNums ? numberedTitle : q.title),
         type: 'open',
         sections: qSections,
       });
@@ -77488,7 +77491,12 @@ function _ppCoverHtml(coverTitle) {
 // assembled from the identical list — a preview built any other way is a
 // preview of a different sheet.
 function _ppPrintQuestions(items){
-  return (items || []).map(it => Object.assign({}, it.bq, { title: it.refs.join(' / ') + ' — ' + (it.bq.title || 'Untitled') }));
+  return (items || []).map(it => Object.assign({}, it.bq, {
+    title: it.refs.join(' / ') + ' — ' + (it.bq.title || 'Untitled'),
+    // Print-only provenance, shared by every topic, year, concept and preview.
+    // Never infer the paper year from an editable bank title or save it back.
+    _ppPrintSource: it.refs.map(ref => 'PSLE ' + ref).join(' / '),
+  }));
 }
 async function ppDoPrint(items, missing, title, opts){
   if (!items.length) { showToast('Nothing to print — none of these questions have a bank question attached yet', 'error'); return; }
