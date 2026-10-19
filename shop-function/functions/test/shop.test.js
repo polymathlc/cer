@@ -447,6 +447,15 @@ test('a checkout sweeps old checkouts at most once an hour, and a sweep failure 
   assert.ok(h.logs.includes('shop-sweep-failed'));
 });
 
+test('with card payment switched off by the admin, no checkout or Stripe session is made', async () => {
+  const h = harness({ ...seed(), 'shop_settings/config': { deliveryFee: 4.5, cardPayments: false } });
+  const res = await h.create();
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.error, 'card-payments-off');
+  assert.equal(h.stripe.calls.length, 0);
+  assert.equal([...h.db.rows.keys()].some(key => key.startsWith('shop_checkouts/')), false);
+});
+
 /* ─── The Stripe client ─── */
 
 test('the Stripe client sends form bodies with the key and idempotency key, and hides Stripe messages', async () => {

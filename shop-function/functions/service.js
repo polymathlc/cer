@@ -292,6 +292,8 @@ function createService({ repository, stripe, webhookSecret, now = Date.now, rand
     try {
       const request = validateCheckout(req.body);
       const { products, settings } = await repository.loadCatalogue(request.items.map(item => item.productId));
+      // The admin's "Hide card payment" switch on the products page.
+      if (settings && settings.cardPayments === false) throw new ShopError(503, 'card-payments-off');
       const priced = priceCheckout(request, products, settings);
       const ip = String(req.ip || req.socket?.remoteAddress || 'unknown');
       const at = now();

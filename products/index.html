@@ -305,10 +305,10 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
   <section class="hero">
     <div>
       <h1>Learning materials from <span>Polymath</span></h1>
-      <p>Books, worksheets and revision packs prepared by our teachers. Add what you need to your cart and pay instantly with PayNow or card — we'll get in touch on WhatsApp for collection or delivery.</p>
+      <p>Books, worksheets and revision packs prepared by our teachers. Add what you need to your cart and pay instantly with PayNow<span id="hero-card-text"> or card</span> — we'll get in touch on WhatsApp for collection or delivery.</p>
       <div class="hero-badges">
         <span class="hero-badge">⚡ Instant PayNow QR</span>
-        <span class="hero-badge">💳 Credit or debit card</span>
+        <span class="hero-badge" id="hero-card-badge">💳 Credit or debit card</span>
         <span class="hero-badge">📦 Collect at the centre or delivery</span>
         <span class="hero-badge">💬 WhatsApp confirmation</span>
       </div>
@@ -363,6 +363,14 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
       <div class="form-actions">
         <button class="btn" id="df-save" type="button">Save delivery fee</button>
         <span class="sub" id="df-status" style="margin:0;"></span>
+      </div>
+    </div>
+    <div class="panel" id="card-pay-card">
+      <h2>Card payments</h2>
+      <div class="sub">Turn "Pay by card" (Stripe) on or off for parents. When it is off, checkout only offers PayNow. Use this if Stripe pauses your account.</div>
+      <div class="form-actions">
+        <button class="btn" id="cp-toggle" type="button">Hide card payment</button>
+        <span class="sub" id="cp-status" style="margin:0;"></span>
       </div>
     </div>
     <div class="panel" id="product-form-card">
@@ -659,7 +667,10 @@ const ORDERS = db.collection('shop_orders');
 // without a deploy. It is charged once per delivery order, never per item.
 const SETTINGS = db.collection('shop_settings').doc('config');
 let deliveryFee = 0;
-const PRODUCTS_PAGE_VERSION = 'v1.3.0';
+// shop_settings/config.cardPayments: false hides "Pay by card"; missing means on.
+// createShopCheckout refuses card checkouts too while it is false.
+let cardEnabled = true;
+const PRODUCTS_PAGE_VERSION = 'v1.3.1';
 const WHATSAPP_NUMBER = '6596450588';
 // Card payments (shop-function/, codebase polymath-shop). Prices are always worked
 // out again on the server; the page only sends product ids and quantities.
@@ -982,7 +993,23 @@ SETTINGS.onSnapshot(doc => {
   if ($('checkout-modal').classList.contains('show')) renderCheckoutSummary();
   const f = $('df-fee');
   if (f && document.activeElement !== f) f.value = deliveryFee.toFixed(2);
+  cardEnabled = d.cardPayments !== false;
+  renderCardOption();
 }, err => { console.warn('Shop settings load failed', err); });
+
+function renderCardOption() {
+  const label = document.querySelector('.radio-card[data-pay="card"]');
+  if (label) label.classList.toggle('hidden', !cardEnabled);
+  $('hero-card-badge').classList.toggle('hidden', !cardEnabled);
+  $('hero-card-text').classList.toggle('hidden', !cardEnabled);
+  if (!cardEnabled) {
+    const paynow = document.querySelector('input[name="co-pay"][value="paynow"]');
+    if (paynow && !paynow.checked) { paynow.checked = true; syncPayMethod(); }
+  }
+  $('cp-toggle').textContent = cardEnabled ? 'Hide card payment' : 'Show card payment';
+  $('cp-toggle').className = cardEnabled ? 'btn ghost' : 'btn';
+  $('cp-status').textContent = cardEnabled ? 'Card payment is ON: parents can pay by card or PayNow.' : 'Card payment is OFF: parents only see PayNow.';
+}
 
 function renderDeliveryNotes() {
   const txt = deliveryFee > 0 ? 'Flat ' + money(deliveryFee) + ' delivery fee, however many items' : 'Free delivery';
@@ -1738,6 +1765,18 @@ $('df-save').addEventListener('click', async () => {
     console.error(e);
     toast(e && e.code === 'permission-denied' ? 'Saving needs a shop_settings rule in Firestore' : 'Could not save the delivery fee', true);
   }
+});
+$('cp-toggle').addEventListener('click', async () => {
+  if (!requireAdmin()) return;
+  const next = !cardEnabled;
+  const btn = $('cp-toggle'); btn.disabled = true;
+  try {
+    await SETTINGS.set({ cardPayments: next, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    toast(next ? 'Card payment is now shown to parents' : 'Card payment is now hidden; parents only see PayNow');
+  } catch (e) {
+    console.error(e);
+    toast(e && e.code === 'permission-denied' ? 'Saving needs a shop_settings rule in Firestore' : 'Could not change card payment', true);
+  } finally { btn.disabled = false; }
 });
 $('pf-cancel').addEventListener('click', resetProductForm);
 
