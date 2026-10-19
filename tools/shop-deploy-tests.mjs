@@ -90,4 +90,14 @@ await check('the smoke test names an origin the service refuses', async () => {
   assert.ok(problems.length >= 2 && problems.every(problem => problem.includes('polymathlc.com.sg')));
 });
 
+await check('the deploy names every exported function, and only those', async () => {
+  const { readFileSync } = await import('node:fs');
+  const root = new URL('..', import.meta.url);
+  const exported = [...readFileSync(new URL('shop-function/functions/index.js', root), 'utf8').matchAll(/^exports\.(\w+)\s*=/gm)].map(m => m[1]).sort();
+  const only = readFileSync(new URL('.github/workflows/deploy-shop.yml', root), 'utf8').match(/--only "([^"]+)"/);
+  assert.ok(only, 'the deploy step passes --only with a quoted list');
+  const named = only[1].split(',').map(name => name.replace(/^functions:polymath-shop:/, '')).sort();
+  assert.deepEqual(named, exported);
+});
+
 console.log(`# pass ${passed}`);

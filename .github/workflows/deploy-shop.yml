@@ -75,9 +75,10 @@ jobs:
 
       - name: Deploy the polymath-shop codebase
         if: steps.prepare.outputs.ready == 'true'
-        # --force lets a function removed from the source be deleted without a prompt.
-        # It only ever reaches functions in the polymath-shop codebase.
-        run: firebase deploy --project "$FIREBASE_PROJECT" --config shop-function/firebase.json --only functions:polymath-shop --non-interactive --force
+        # Names the three functions, so the deploy never tries to delete anything else
+        # in the codebase: deleting the old scheduled cleanupShopCheckouts needs Cloud
+        # Scheduler rights this service account does not have. Add a new export here.
+        run: firebase deploy --project "$FIREBASE_PROJECT" --config shop-function/firebase.json --non-interactive --only "functions:polymath-shop:createShopCheckout,functions:polymath-shop:shopCheckoutStatus,functions:polymath-shop:stripeShopWebhook"
 
       - name: Prove the live endpoints answer the shop
         if: always() && steps.prepare.outputs.ready == 'true'
