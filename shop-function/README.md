@@ -50,8 +50,10 @@ only puts the stock back.
 
 The functions use the Admin SDK, so `shop_checkouts` and `shop_checkout_limits`
 need **no** rule; leave them unreadable to the public (the default). Nothing in the
-existing console rules has to change. The daily `cleanupShopCheckouts` removes
-checkouts a week old and expired rate-limit counters; orders are never touched.
+existing console rules has to change. `createShopCheckout` also sweeps away
+checkouts a week old and expired rate-limit counters, at most once an hour and a
+few pages at a time; orders are never touched. (This is not a scheduled function
+because the deploy account cannot manage Cloud Scheduler jobs.)
 
 ## Files
 

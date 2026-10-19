@@ -115,10 +115,10 @@ function createRepository(db, Timestamp) {
       });
     },
 
-    async cleanup(now) {
+    async cleanup(now, maxPages = 20) {
       let removedCheckouts = 0, removedLimits = 0;
       for (const [collection, field] of [[CHECKOUT_COLLECTION, 'deleteAt'], [LIMIT_COLLECTION, 'expiresAt']]) {
-        for (let page = 0; page < 20; page++) {
+        for (let page = 0; page < maxPages; page++) {
           const snapshot = await db.collection(collection).where(field, '<=', timestamp(now)).limit(200).get();
           if (snapshot.empty) break;
           const batch = db.batch();
