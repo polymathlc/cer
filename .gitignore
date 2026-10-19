@@ -14,10 +14,17 @@ package-lock.json
 
 !cs-function/functions/package.json
 !cs-function/functions/package-lock.json
+
+!shop-function/functions/package.json
+!shop-function/functions/package-lock.json
 enquiry-function/.firebase/
 enquiry-function/firebase-debug.log
 enquiry-function/functions/.env*
 enquiry-function/functions/.secret*
+shop-function/.firebase/
+shop-function/firebase-debug.log
+shop-function/functions/.env*
+shop-function/functions/.secret*
 firebase-debug*.log
 
 # Playwright screenshot output — every browser harness in tools/ writes here.
