@@ -1,0 +1,88 @@
+name: Deploy shop card payments
+
+# Publishes ONLY the isolated polymath-shop Functions codebase (createShopCheckout,
+# shopCheckoutStatus, stripeShopWebhook and cleanupShopCheckouts) to mathgen--app,
+# then proves the live endpoints answer the pages that serve /products.
+#
+# It runs by itself when the function's source changes on main, and on demand from
+# Actions → Deploy shop card payments → Run workflow, which is how to switch card
+# payments on (or change a key) with no terminal at all.
+#
+# It never touches Firestore or Storage rules: the functions use the Admin SDK, so
+# shop_checkouts and shop_checkout_limits need no public rule at all.
+#
+# Repository secrets (Settings → Secrets and variables → Actions):
+#   FIREBASE_SERVICE_ACCOUNT  already set for the enquiry service; reused here
+#   STRIPE_SECRET_KEY         Stripe → Developers → API keys → Secret key (sk_live_…)
+#   STRIPE_WEBHOOK_SECRET     Stripe → Developers → Webhooks → the endpoint for
+#                             https://us-central1-mathgen--app.cloudfunctions.net/stripeShopWebhook
+#                             → Signing secret (whsec_…)
+# Until STRIPE_SECRET_KEY exists the run skips the deploy and says so; the page then
+# keeps offering PayNow only. See shop-function/README.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'shop-function/functions/**'
+      - 'shop-function/firebase.json'
+      - 'tools/shop-*.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-polymath-shop
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Only reviewed code on main is ever deployed, and never from a fork.
+    if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIREBASE_PROJECT: mathgen--app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: shop-function/functions/package-lock.json
+
+      - name: Test the service and the deploy tools
+        run: |
+          npm ci --prefix shop-function/functions --no-audit --no-fund
+          npm test --prefix shop-function/functions
+          node tools/shop-deploy-tests.mjs
+
+      - name: Prepare credentials and Stripe keys
+        id: prepare
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+        run: node tools/shop-deploy-setup.mjs
+
+      - name: Install the Firebase CLI
+        if: steps.prepare.outputs.ready == 'true'
+        run: npm install -g firebase-tools --no-audit --no-fund
+
+      - name: Deploy the polymath-shop codebase
+        if: steps.prepare.outputs.ready == 'true'
+        run: firebase deploy --project "$FIREBASE_PROJECT" --config shop-function/firebase.json --only functions:polymath-shop --non-interactive
+
+      - name: Prove the live endpoints answer the shop
+        if: always() && steps.prepare.outputs.ready == 'true'
+        env:
+          SHOP_WEBHOOK_CONFIGURED: ${{ steps.prepare.outputs.webhook }}
+        run: node tools/shop-smoke.mjs
+
+      - name: Remove the keys from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json" shop-function/functions/.env.mathgen--app
