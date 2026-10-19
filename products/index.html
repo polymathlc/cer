@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>/* HTTPS UPGRADE */(function(){var l=location;if(l.protocol!=='http:'||!/(^|\.)polymathlc\.com\.sg$/i.test(l.hostname))return;try{fetch('https://'+l.host+'/?https-check='+Date.now(),{mode:'no-cors',cache:'no-store'}).then(function(){l.replace('https://'+l.host+l.pathname+l.search+l.hash)},function(){})}catch(e){}})();</script>
 <title>Products — Polymath Learning Centre</title>
-<meta name="description" content="Books, worksheets and learning materials from Polymath Learning Centre. Pay instantly with PayNow.">
+<meta name="description" content="Books, worksheets and learning materials from Polymath Learning Centre. Pay instantly with PayNow or card.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="../assets/branding/polymath-learning-centre.png">
@@ -236,6 +236,12 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
 .radio-card { flex: 1 1 160px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
 .radio-card.on { border-color: var(--teal); background: #eef9fa; }
 .radio-card small { display: block; color: var(--gray-500); font-size: 12px; }
+.radio-card.disabled { opacity: .55; cursor: not-allowed; }
+.pay-badge { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); background: var(--paper); color: var(--deep); }
+.pay-badge.card { background: #f3effc; border-color: #d9cdf5; color: #5b3aa6; }
+.order-flag { font-size: 12px; margin-top: 6px; color: var(--warn); background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 8px; padding: 6px 10px; }
+.confirming { text-align: center; padding: 18px 0 6px; color: var(--gray-500); font-size: 14px; }
+.confirming .spinner { margin-right: 6px; }
 .summary-box { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; font-size: 14px; }
 .summary-box div { display: flex; justify-content: space-between; gap: 10px; }
 .pay-wrap { text-align: center; }
@@ -299,9 +305,10 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
   <section class="hero">
     <div>
       <h1>Learning materials from <span>Polymath</span></h1>
-      <p>Books, worksheets and revision packs prepared by our teachers. Add what you need to your cart and pay instantly with PayNow — we'll get in touch on WhatsApp for collection or delivery.</p>
+      <p>Books, worksheets and revision packs prepared by our teachers. Add what you need to your cart and pay instantly with PayNow or card — we'll get in touch on WhatsApp for collection or delivery.</p>
       <div class="hero-badges">
         <span class="hero-badge">⚡ Instant PayNow QR</span>
+        <span class="hero-badge">💳 Credit or debit card</span>
         <span class="hero-badge">📦 Collect at the centre or delivery</span>
         <span class="hero-badge">💬 WhatsApp confirmation</span>
       </div>
@@ -494,7 +501,7 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
     <div class="totals"><span>Total</span><strong id="cart-total">$0.00</strong></div>
     <div class="sub" id="cart-delivery-note"></div>
     <div class="form-actions">
-      <button class="btn block" id="checkout-btn" type="button">Checkout with PayNow</button>
+      <button class="btn block" id="checkout-btn" type="button">Checkout</button>
     </div>
   </div>
 </div>
@@ -536,6 +543,13 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
           <label class="lbl" for="co-note">Note (optional)</label>
           <input class="input" id="co-note" maxlength="300" placeholder="e.g. student's name and class">
         </div>
+        <div class="full">
+          <label class="lbl">How would you like to pay?</label>
+          <div class="radio-row">
+            <label class="radio-card on" data-pay="paynow"><input type="radio" name="co-pay" value="paynow" checked><span>PayNow<small>Scan a QR in your banking app</small></span></label>
+            <label class="radio-card" data-pay="card"><input type="radio" name="co-pay" value="card"><span>Pay by card<small id="pay-card-note">Credit or debit card, through Stripe</small></span></label>
+          </div>
+        </div>
       </div>
       <div class="summary-box" style="margin-top:16px;" id="co-summary"></div>
       <div class="form-actions"><button class="btn block" id="co-next" type="button">Continue to payment</button></div>
@@ -569,7 +583,7 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
     <div id="co-step-3" class="hidden">
       <div class="done-badge">🎉</div>
       <h2 style="text-align:center;padding-right:0;">Order received</h2>
-      <div class="sub" style="text-align:center;">Your order code is <span class="pay-ref" id="done-code"></span></div>
+      <div class="sub" style="text-align:center;" id="done-code-line">Your order code is <span class="pay-ref" id="done-code"></span></div>
       <div id="done-body"></div>
       <div class="form-actions">
         <a class="btn block" id="done-wa" target="_blank" rel="noopener">💬 Send order to us on WhatsApp</a>
@@ -598,7 +612,10 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
    POLYMATH PRODUCTS — polymathlc.com.sg/products
    A standalone page (like schedule/ and mistakes.html — it does NOT load
    app.js). Public visitors browse products, fill a cart and pay through a
-   PayNow SGQR built in the browser. The admin (ADMIN_EMAIL, Google sign-in
+   PayNow SGQR built in the browser, or by card through Stripe Checkout
+   (shop-function/: createShopCheckout prices the cart on the server and
+   the order is written as paid by shopCheckoutStatus or the Stripe webhook,
+   never by this page). The admin (ADMIN_EMAIL, Google sign-in
    via /products/#admin) adds products with SKU, quantity and pictures, and
    works through the orders.
 
@@ -611,6 +628,9 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
                            render here as unlimited, picture-less products.
      shop_orders/{code}  { code, reference, status, items[], total, customer,
                            fulfilment, address, note, receiptUrl, ... }
+                         — card orders add payment:'card', stripeSessionId,
+                           stripePaymentIntent, amountPaid, stockShort[],
+                           paymentChecks[] and arrive already paid.
    Storage:
      shop-products/{productId}/...   product pictures (admin)
      shop-orders/{code}/...          payment screenshots (public, optional)
@@ -639,8 +659,15 @@ const ORDERS = db.collection('shop_orders');
 // without a deploy. It is charged once per delivery order, never per item.
 const SETTINGS = db.collection('shop_settings').doc('config');
 let deliveryFee = 0;
-const PRODUCTS_PAGE_VERSION = 'v1.2.0';
+const PRODUCTS_PAGE_VERSION = 'v1.3.0';
 const WHATSAPP_NUMBER = '6596450588';
+// Card payments (shop-function/, codebase polymath-shop). Prices are always worked
+// out again on the server; the page only sends product ids and quantities.
+const SHOP_API = 'https://us-central1-mathgen--app.cloudfunctions.net/';
+const CARD_CHECKOUT_URL = SHOP_API + 'createShopCheckout';
+const CARD_STATUS_URL = SHOP_API + 'shopCheckoutStatus';
+const CARD_STATUS_TRIES = 12;
+const CARD_STATUS_WAIT_MS = 2500;
 const CART_KEY = 'plc_shop_cart_v1';
 const CUSTOMER_KEY = 'plc_shop_customer_v1';
 const MAX_IMAGES = 8;
@@ -1245,11 +1272,18 @@ function saveCustomer(c) { try { localStorage.setItem(CUSTOMER_KEY, JSON.stringi
 function fulfilmentValue() { const r = document.querySelector('input[name="co-ful"]:checked'); return r ? r.value : 'collect'; }
 function syncFulfilment() {
   const v = fulfilmentValue();
-  document.querySelectorAll('.radio-card').forEach(c => c.classList.toggle('on', c.dataset.ful === v));
+  document.querySelectorAll('.radio-card[data-ful]').forEach(c => c.classList.toggle('on', c.dataset.ful === v));
   $('co-address-wrap').classList.toggle('hidden', v !== 'delivery');
   renderCheckoutSummary();
 }
 document.querySelectorAll('input[name="co-ful"]').forEach(r => r.addEventListener('change', syncFulfilment));
+function payMethod() { const r = document.querySelector('input[name="co-pay"]:checked'); return r ? r.value : 'paynow'; }
+function syncPayMethod() {
+  const v = payMethod();
+  document.querySelectorAll('.radio-card[data-pay]').forEach(c => c.classList.toggle('on', c.dataset.pay === v));
+  if (!$('co-next').disabled) $('co-next').textContent = v === 'card' ? 'Continue to card payment' : 'Continue to payment';
+}
+document.querySelectorAll('input[name="co-pay"]').forEach(r => r.addEventListener('change', syncPayMethod));
 function renderCheckoutSummary() {
   const lines = cartLines();
   const subtotal = cartTotal();
@@ -1267,7 +1301,8 @@ $('checkout-btn').addEventListener('click', () => {
   if (!cartLines().length) { renderCart(); toast('Your cart is empty', true); return; }
   closeModal('cart-modal');
   checkout = null;
-  loadCustomer(); syncFulfilment(); renderCheckoutSummary(); setStep(1);
+  loadCustomer(); syncFulfilment(); syncPayMethod(); renderCheckoutSummary(); setStep(1);
+  $('done-code-line').classList.remove('hidden');
   $('co-receipt').value = '';
   openModal('checkout-modal');
 });
@@ -1284,6 +1319,7 @@ $('co-next').addEventListener('click', async () => {
   const lines = cartLines();
   if (!lines.length) { closeModal('checkout-modal'); toast('Your cart is empty', true); return; }
   saveCustomer({ name, phone, email });
+  if (payMethod() === 'card') { await startCardCheckout(lines); return; }
   const ful = fulfilmentValue();
   const subtotal = cartTotal();
   const fee = deliveryCharge(ful);
@@ -1307,7 +1343,7 @@ $('co-next').addEventListener('click', async () => {
     console.error(e);
     $('pay-img').removeAttribute('src');
     toast('The QR could not be drawn — please pay to UEN ' + PAYNOW_UEN + ' with the reference shown', true);
-  } finally { btn.disabled = false; btn.textContent = 'Continue to payment'; }
+  } finally { btn.disabled = false; syncPayMethod(); }
   $('pay-ref').textContent = checkout.reference;
   $('pay-ref-inline').textContent = checkout.reference;
   $('pay-uen').textContent = PAYNOW_UEN;
@@ -1329,7 +1365,8 @@ $('pay-share').addEventListener('click', async () => {
 });
 
 function orderWhatsAppText(o) {
-  const lines = ['Hi Polymath, I have placed an order and paid by PayNow.', '', 'Order code: ' + o.code, 'Reference: ' + o.reference];
+  const how = o.payment === 'card' ? 'card' : 'PayNow';
+  const lines = ['Hi Polymath, I have placed an order and paid by ' + how + '.', '', 'Order code: ' + o.code, 'Reference: ' + o.reference];
   o.items.forEach(i => lines.push('• ' + i.qty + ' × ' + i.name + (i.sku ? ' (' + i.sku + ')' : '') + ' — ' + money(i.lineTotal)));
   if (o.deliveryFee) lines.push('Delivery fee (flat): ' + money(o.deliveryFee));
   lines.push('Total: ' + money(o.total), '', 'Name: ' + o.customer.name, 'WhatsApp: ' + o.customer.phone);
@@ -1371,6 +1408,8 @@ $('co-paid').addEventListener('click', async () => {
   } catch (e) { console.error('Order save failed', e); }
   btn.disabled = false; btn.textContent = "I've paid — place order";
   const wa = 'https://wa.me/' + WHATSAPP_NUMBER + '?text=' + encodeURIComponent(orderWhatsAppText(order));
+  $('done-code-line').classList.remove('hidden');
+  $('done-wa').classList.remove('hidden');
   $('done-code').textContent = order.code;
   $('done-wa').href = wa;
   $('done-body').innerHTML = saved
@@ -1381,6 +1420,119 @@ $('co-paid').addEventListener('click', async () => {
   cart = []; saveCart(); renderCartCount(); renderShop();
   setStep(3);
 });
+
+/* ═══ Card payment (Stripe Checkout) ═══
+   The page never decides a price or marks anything paid. It sends the product
+   ids, quantities and the parent's details to createShopCheckout, which prices
+   them from shop_products, adds the delivery fee, saves the checkout and answers
+   with Stripe's payment page. Stripe sends the parent back to
+   ?order=CODE&session=cs_…, and shopCheckoutStatus (or Stripe's webhook, which
+   ever is first) writes shop_orders/{code} as paid and takes the stock. */
+const CART_PROBLEM = { 'sold-out': 'is sold out', 'not-enough-stock': 'has fewer left than you asked for', unavailable: 'is no longer available' };
+async function postJson(url, body) {
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* the answer below covers it */ }
+  return { status: res.status, data: data || {} };
+}
+function cardUnavailable(message) {
+  const card = document.querySelector('.radio-card[data-pay="card"]');
+  if (card) card.classList.add('disabled');
+  $('pay-card-note').textContent = 'Not available right now — please use PayNow';
+  const paynow = document.querySelector('input[name="co-pay"][value="paynow"]');
+  if (paynow) { paynow.checked = true; syncPayMethod(); }
+  toast(message || 'Card payment is not available right now — please pay with PayNow', true);
+}
+async function startCardCheckout(lines) {
+  const btn = $('co-next');
+  if (document.querySelector('.radio-card[data-pay="card"].disabled')) { cardUnavailable(); return; }
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Opening secure card payment…';
+  const ful = fulfilmentValue();
+  const body = {
+    items: lines.map(({ p, qty }) => ({ productId: p._id, qty })),
+    customer: { name: $('co-name').value.trim(), phone: $('co-phone').value.trim(), email: $('co-email').value.trim() },
+    fulfilment: ful, address: ful === 'delivery' ? $('co-address').value.trim() : '',
+    note: $('co-note').value.trim(), returnUrl: location.origin + location.pathname, pageVersion: PRODUCTS_PAGE_VERSION
+  };
+  let answer;
+  try { answer = await postJson(CARD_CHECKOUT_URL, body); }
+  catch (e) {
+    console.error('Card checkout failed', e);
+    btn.disabled = false; syncPayMethod();
+    toast('Could not reach card payment — check your connection, or pay with PayNow', true);
+    return;
+  }
+  const d = answer.data;
+  if (answer.status === 201 && d.ok && /^https:\/\/checkout\.stripe\.com\//.test(d.url || '')) {
+    // The cart stays saved until Stripe says it is paid, so "Back" on Stripe's
+    // page finds it untouched.
+    location.assign(d.url);
+    return;
+  }
+  btn.disabled = false; syncPayMethod();
+  if (answer.status === 409 && Array.isArray(d.problems)) {
+    const names = d.problems.map(pr => {
+      const p = products.find(x => x._id === pr.productId);
+      return (p ? p.name : 'An item') + ' ' + (CART_PROBLEM[pr.reason] || 'changed');
+    });
+    d.problems.forEach(pr => {
+      if (pr.reason === 'not-enough-stock' && pr.left > 0) setCartQty(pr.productId, pr.left);
+      else setCartQty(pr.productId, 0);
+    });
+    renderCheckoutSummary();
+    toast(names.join('; ') + '. Your cart has been updated — please check it and try again.', true);
+    if (!cartLines().length) closeModal('checkout-modal');
+    return;
+  }
+  if (d.error === 'card-payments-off' || answer.status === 503 || answer.status === 502) { cardUnavailable(); return; }
+  if (answer.status === 429) { toast('Too many tries — please wait a little, or pay with PayNow', true); return; }
+  if (d.error === 'total-too-small') { toast('Card payments need an order of at least $0.50 — please use PayNow', true); return; }
+  if (d.error === 'invalid-phone') { toast('Please enter a valid WhatsApp number', true); $('co-phone').focus(); return; }
+  if (d.error === 'invalid-email') { toast('That email does not look right', true); $('co-email').focus(); return; }
+  toast('Card payment could not be started — please check your details, or pay with PayNow', true);
+}
+function showCardDone(order) {
+  $('done-code-line').classList.remove('hidden');
+  $('done-code').textContent = order.code;
+  $('done-wa').classList.remove('hidden');
+  $('done-wa').href = 'https://wa.me/' + WHATSAPP_NUMBER + '?text=' + encodeURIComponent(orderWhatsAppText(order));
+  $('done-body').innerHTML = '<div class="callout ok">Your card payment of <strong>' + money(order.total) + '</strong> went through and we have your order (reference <strong>'
+    + esc(order.reference) + '</strong>). We\'ll WhatsApp you on ' + esc(order.customer && order.customer.phone || '') + '.</div>'
+    + '<div class="callout info">Stripe emails a receipt if you gave an email address. Want a quicker reply? Send the order to us on WhatsApp too.</div>';
+  cart = []; saveCart(); renderCartCount(); renderShop();
+}
+async function resumeCardReturn() {
+  const q = new URLSearchParams(location.search);
+  const code = (q.get('order') || '').toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) return;
+  const sessionId = q.get('session') || '';
+  const cancelled = q.get('cancelled') === '1';
+  history.replaceState(null, '', location.pathname + location.hash);
+  if (cancelled || !/^cs_[A-Za-z0-9_]+$/.test(sessionId)) {
+    toast('Card payment cancelled — nothing was charged and your cart is still here');
+    if (cart.length) { renderCart(); openModal('cart-modal'); }
+    return;
+  }
+  setStep(3);
+  $('done-code-line').classList.add('hidden');
+  $('done-wa').classList.add('hidden');
+  $('done-body').innerHTML = '<div class="confirming"><span class="spinner"></span> Confirming your card payment…</div>';
+  openModal('checkout-modal');
+  for (let i = 0; i < CARD_STATUS_TRIES; i++) {
+    try {
+      const answer = await postJson(CARD_STATUS_URL, { code, sessionId });
+      if (answer.status === 200 && answer.data.paid && answer.data.order) { showCardDone(answer.data.order); return; }
+      if (answer.status === 404 || answer.status === 400) break;
+    } catch (e) { console.warn('Card status check failed', e); }
+    await new Promise(r => setTimeout(r, CARD_STATUS_WAIT_MS));
+  }
+  $('done-code-line').classList.remove('hidden');
+  $('done-code').textContent = code;
+  $('done-wa').classList.remove('hidden');
+  $('done-wa').href = 'https://wa.me/' + WHATSAPP_NUMBER + '?text=' + encodeURIComponent('Hi Polymath, I paid by card for order ' + code + ' but the page could not confirm it. Could you check?');
+  $('done-body').innerHTML = '<div class="callout warn">We could not confirm your card payment yet. If your card was charged, your order is safe: '
+    + 'it is recorded as soon as Stripe tells us. Please send us your order code <strong>' + esc(code) + '</strong> on WhatsApp so we can check.</div>';
+}
 
 /* ═══ Image handling (admin pictures and receipts) ═══ */
 function loadImageFromFile(file) {
@@ -1873,6 +2025,7 @@ function renderOrders() {
     return '<div class="order" data-code="' + esc(o._id) + '">'
       + '<div class="order-head"><span class="order-code">' + esc(o.code || o._id) + '</span>'
       + '<span class="status ' + st + '">' + esc(STATUS_LABEL[st] || st) + '</span>'
+      + (o.payment === 'card' ? '<span class="pay-badge card">💳 Card</span>' : '<span class="pay-badge">PayNow</span>')
       + '<span class="sku">Ref ' + esc(o.reference || '') + '</span>'
       + '<span class="order-total">' + money(o.total) + '</span></div>'
       + '<div class="order-meta"><span>👤 ' + esc(c.name || '') + '</span><span>📱 ' + esc(c.phone || '') + '</span>'
@@ -1882,6 +2035,10 @@ function renderOrders() {
       + '<span>🕒 ' + esc(fmtDate(o.createdAt)) + '</span></div>'
       + (o.fulfilment === 'delivery' && o.address ? '<div class="order-note">📍 ' + esc(o.address) + '</div>' : '')
       + (o.note ? '<div class="order-note">📝 ' + esc(o.note) + '</div>' : '')
+      + (Array.isArray(o.stockShort) && o.stockShort.length ? '<div class="order-flag">⚠️ Paid after stock ran out: '
+        + o.stockShort.map(x => { const p = products.find(y => y._id === x.productId); return esc((p && p.name) || x.productId) + ' (wanted ' + Number(x.wanted) + ', had ' + Number(x.had) + ')'; }).join(', ') + '</div>' : '')
+      + (Array.isArray(o.paymentChecks) && o.paymentChecks.length ? '<div class="order-flag">⚠️ Check this payment in Stripe: '
+        + esc(o.paymentChecks.join(', ')) + (o.amountPaid !== undefined ? ' · Stripe charged ' + money(o.amountPaid) : '') + '</div>' : '')
       + '<div class="order-items">' + (o.items || []).map(i =>
         '<div><span>' + i.qty + ' × ' + esc(i.name) + (i.sku ? '<span class="sku">' + esc(i.sku) + '</span>' : '') + '</span><span>' + money(i.lineTotal) + '</span></div>').join('') + '</div>'
       + '<div class="order-tools">'
@@ -1933,7 +2090,9 @@ $('orders-list').addEventListener('click', async e => {
   const code = b.closest('.order').dataset.code;
   const status = b.dataset.oa;
   if (status === 'cancelled') {
-    const ok = await confirmBox('Cancel order ' + code + '?', 'Any stock taken when it was marked paid is put back.', 'Cancel order');
+    const o = orders.find(x => x._id === code) || {};
+    const ok = await confirmBox('Cancel order ' + code + '?', 'Any stock taken when it was marked paid is put back.'
+      + (o.payment === 'card' ? ' This was paid by card: refund it in the Stripe dashboard, since cancelling here does not.' : ''), 'Cancel order');
     if (!ok) return;
   }
   b.disabled = true;
@@ -1958,6 +2117,7 @@ document.addEventListener('keydown', e => {
 $('hero-uen').textContent = PAYNOW_UEN;
 renderCartCount();
 maybeAdminFromHash();
+resumeCardReturn();
 </script>
 </body>
 </html>
