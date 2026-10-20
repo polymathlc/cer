@@ -533,8 +533,8 @@ label.lbl { display: block; font-size: 12px; font-weight: 700; color: var(--gray
           <input class="input" id="co-phone" maxlength="20" inputmode="tel" autocomplete="tel" placeholder="9123 4567">
         </div>
         <div>
-          <label class="lbl" for="co-email">Email (optional)</label>
-          <input class="input" id="co-email" maxlength="120" type="email" autocomplete="email">
+          <label class="lbl" for="co-email">Email (for your receipt)</label>
+          <input class="input" id="co-email" maxlength="120" type="email" autocomplete="email" required>
         </div>
         <div class="full">
           <label class="lbl">How would you like to receive it?</label>
@@ -670,7 +670,7 @@ let deliveryFee = 0;
 // shop_settings/config.cardPayments: false hides "Pay by card"; missing means on.
 // createShopCheckout refuses card checkouts too while it is false.
 let cardEnabled = true;
-const PRODUCTS_PAGE_VERSION = 'v1.3.1';
+const PRODUCTS_PAGE_VERSION = 'v1.3.2';
 const WHATSAPP_NUMBER = '6596450588';
 // Card payments (shop-function/, codebase polymath-shop). Prices are always worked
 // out again on the server; the page only sends product ids and quantities.
@@ -1340,7 +1340,8 @@ $('co-next').addEventListener('click', async () => {
   const email = $('co-email').value.trim();
   if (!name) { toast('Please enter your name', true); $('co-name').focus(); return; }
   if (!validPhone(phone)) { toast('Please enter a valid WhatsApp number', true); $('co-phone').focus(); return; }
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('That email does not look right', true); $('co-email').focus(); return; }
+  if (!email) { toast('Please enter your email so we can send your receipt', true); $('co-email').focus(); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('That email does not look right', true); $('co-email').focus(); return; }
   if (fulfilmentValue() === 'delivery' && !$('co-address').value.trim()) { toast('Please enter a delivery address', true); $('co-address').focus(); return; }
   cleanCart();
   const lines = cartLines();

@@ -114,8 +114,9 @@ function validateCheckout(body) {
   const phone = oneLine(customer.phone, 20, 1);
   const digits = phone.replace(/\D/g, '');
   if (!/^\+?[0-9 ()-]+$/.test(phone) || digits.length < 8 || digits.length > 15) fail('invalid-phone');
+  // Required: Stripe emails the card receipt to it.
   const email = oneLine(customer.email, 120).toLowerCase();
-  if (email && !/^[^\s@<>(),;:\\"]+@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/i.test(email)) fail('invalid-email');
+  if (!email || !/^[^\s@<>(),;:\\"]+@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/i.test(email)) fail('invalid-email');
   const fulfilment = body.fulfilment === undefined ? 'collect' : body.fulfilment;
   if (!['collect', 'delivery'].includes(fulfilment)) fail();
   const address = fulfilment === 'delivery' ? text(body.address, 300, 1) : '';
