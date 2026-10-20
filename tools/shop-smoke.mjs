@@ -16,25 +16,29 @@ export const BASE = 'https://us-central1-mathgen--app.cloudfunctions.net/';
 export const CHECKOUT_ENDPOINT = BASE + 'createShopCheckout';
 export const STATUS_ENDPOINT = BASE + 'shopCheckoutStatus';
 export const WEBHOOK_ENDPOINT = BASE + 'stripeShopWebhook';
+export const RECEIPT_ENDPOINT = BASE + 'sendShopReceipt';
 export const REFUSED_PROBE = 'https://shop-smoke.invalid';
 export const SMOKE_ATTEMPTS = 6;
 export const SMOKE_WAIT_MS = 10000;
 
 async function preflight(endpoint, origin, fetchImpl) {
   const response = await fetchImpl(endpoint, { method: 'OPTIONS', redirect: 'manual',
-    headers: { Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' } });
-  return { status: response.status, allowOrigin: response.headers.get('access-control-allow-origin') || '' };
+    headers: { Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization,content-type' } });
+  return { status: response.status, allowOrigin: response.headers.get('access-control-allow-origin') || '',
+    allowHeaders: (response.headers.get('access-control-allow-headers') || '').toLowerCase() };
 }
 
 export async function smokeProblems({ webhookExpected = true, fetchImpl = globalThis.fetch } = {}) {
   const problems = [];
-  for (const endpoint of [CHECKOUT_ENDPOINT, STATUS_ENDPOINT]) {
+  for (const endpoint of [CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT]) {
     const name = endpoint.slice(BASE.length);
     for (const origin of ORIGINS) {
       try {
         const seen = await preflight(endpoint, origin, fetchImpl);
         if (seen.status !== 204) problems.push(`${name} from ${origin}: expected 204 to the preflight, got ${seen.status}.`);
         if (seen.allowOrigin !== origin) problems.push(`${name} from ${origin}: no matching Access-Control-Allow-Origin, so the page could not reach it.`);
+        else if (endpoint === RECEIPT_ENDPOINT && !seen.allowHeaders.includes('authorization'))
+          problems.push(`${name} from ${origin}: the admin's sign-in header is not allowed, so receipts could not be sent.`);
       } catch (error) { problems.push(`${name} from ${origin}: the preflight did not complete (${error?.message || error}).`); }
     }
     try {
@@ -65,7 +69,7 @@ export async function smokeCheck({ attempts = SMOKE_ATTEMPTS, waitMs = SMOKE_WAI
 }
 
 export function summaryText(result) {
-  if (result.ok) return '### ✅ Card payments for /products are live\n\nThe checkout and status endpoints answer '
+  if (result.ok) return '### ✅ Card payments for /products are live\n\nThe checkout, status and receipt endpoints answer '
     + ORIGINS.map(origin => '`' + origin + '`').join(', ') + ', refuse an unlisted origin, and the webhook turns away unsigned calls. '
     + 'No checkout was created.\n\nStripe webhook URL: `' + WEBHOOK_ENDPOINT + '`\n';
   return '### ❌ The live card-payment service did not answer as expected\n\n' + result.problems.map(problem => '- ' + problem).join('\n') + '\n';

@@ -14,6 +14,12 @@
 //                        webhook lands (and even if the webhook is not set up).
 //   stripeShopWebhook    Stripe calls this when a payment completes; the signature
 //                        is checked against STRIPE_WEBHOOK_SECRET first.
+//   sendShopReceipt      the admin page calls this (with the admin's Firebase
+//                        sign-in) to email a paid order's receipt: a PayNow order's
+//                        when it is marked paid, or any paid order's again.
+//
+// A card order's receipt is emailed by finalize() itself (see receipt.js), from
+// Polymath Learning Centre <admin@polymathlc.com.sg>.
 //
 // Both paths end in the same idempotent repository.finalize(), which writes the
 // shop_orders/{code} order as paid and takes the stock out exactly the way the
@@ -48,6 +54,10 @@ const ORDER_COLLECTION = 'shop_orders';
 const PRODUCT_COLLECTION = 'shop_products';
 const SETTINGS_DOC = ['shop_settings', 'config'];
 const PAID_EVENTS = Object.freeze(['checkout.session.completed', 'checkout.session.async_payment_succeeded']);
+// Only this Google account may send receipts; it is the products page's ADMIN_EMAIL.
+const ADMIN_EMAIL = 'chungzhikai@gmail.com';
+// Pressing "Email receipt" twice by accident sends one email.
+const RECEIPT_GAP_MS = 60000;
 const hash = value => createHash('sha256').update(value).digest('hex');
 
 class ShopError extends Error {
@@ -248,7 +258,19 @@ const sessionCode = session => session && (session.client_reference_id || (sessi
 const SWEEP_EVERY_MS = HOUR;
 const SWEEP_PAGES = 2;
 
-function createService({ repository, stripe, webhookSecret, now = Date.now, random = randomInt, report = () => {} }) {
+// The Firebase ID token from "Authorization: Bearer …", checked by verifyIdToken
+// (firebase-admin in production). Anyone but the signed-in admin is refused.
+async function adminFrom(req, verifyIdToken) {
+  const match = /^Bearer ([A-Za-z0-9._-]{20,4096})$/.exec(req.get('authorization') || '');
+  if (!match) throw new ShopError(401, 'sign-in-required');
+  let claims;
+  try { claims = await verifyIdToken(match[1]); } catch { throw new ShopError(401, 'sign-in-required'); }
+  if (!claims || claims.email !== ADMIN_EMAIL || claims.email_verified !== true) throw new ShopError(403, 'admin-only');
+  return claims.email;
+}
+
+function createService({ repository, stripe, webhookSecret, verifyIdToken = async () => { throw new Error('no auth'); },
+  now = Date.now, random = randomInt, report = () => {} }) {
   let lastSweep = -Infinity;
   async function sweep() {
     const at = now();
@@ -264,7 +286,7 @@ function createService({ repository, stripe, webhookSecret, now = Date.now, rand
     if (!ORIGINS.includes(origin)) { res.status(403).json({ ok: false, error: 'origin-not-allowed' }); return false; }
     res.set('Access-Control-Allow-Origin', origin);
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     if (req.method === 'OPTIONS') { res.status(204).send(''); return false; }
     if (req.method !== 'POST') { res.status(405).json({ ok: false, error: 'method-not-allowed' }); return false; }
     if (!/^application\/json(?:\s*;|$)/i.test(req.get('content-type') || '')) {
@@ -276,7 +298,7 @@ function createService({ repository, stripe, webhookSecret, now = Date.now, rand
   }
   function answerError(res, error, fallback) {
     if (error instanceof ShopError) {
-      if (error.status === 429) res.set('Retry-After', '3600');
+      if (error.status === 429) res.set('Retry-After', error.code === 'receipt-just-sent' ? '60' : '3600');
       return res.status(error.status).json(Object.assign({ ok: false, error: error.code }, error.detail ? { problems: error.detail } : {}));
     }
     if (error instanceof StripeError) {
@@ -368,11 +390,27 @@ function createService({ repository, stripe, webhookSecret, now = Date.now, rand
     }
   }
 
-  return { createCheckout, checkoutStatus, webhook, cleanup: () => repository.cleanup(now()), sweep };
+  async function sendReceipt(req, res) {
+    if (!cors(req, res)) return;
+    try {
+      await adminFrom(req, verifyIdToken);
+      const body = req.body;
+      if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'code')) fail();
+      // PayNow codes are made by the page with the same alphabet; older ones may differ
+      // slightly, so any short document id of letters and digits is accepted.
+      if (typeof body.code !== 'string' || !/^[A-Z0-9]{4,12}$/.test(body.code)) fail();
+      const sent = await repository.sendReceipt(body.code, now(), RECEIPT_GAP_MS);
+      return res.status(200).json({ ok: true, sentTo: sent.to, count: sent.count, resend: sent.resend });
+    } catch (error) {
+      return answerError(res, error, 'shop-receipt-failed');
+    }
+  }
+
+  return { createCheckout, checkoutStatus, webhook, sendReceipt, cleanup: () => repository.cleanup(now()), sweep };
 }
 
 module.exports = {
-  ORIGINS, RETURN_PATH, SWEEP_EVERY_MS, SWEEP_PAGES, CURRENCY, SOURCE, LIMITS, SESSION_MS, CHECKOUT_RETENTION_MS, ORDER_CODE_CHARS, PAID_EVENTS,
+  ORIGINS, RETURN_PATH, ADMIN_EMAIL, RECEIPT_GAP_MS, SWEEP_EVERY_MS, SWEEP_PAGES, CURRENCY, SOURCE, LIMITS, SESSION_MS, CHECKOUT_RETENTION_MS, ORDER_CODE_CHARS, PAID_EVENTS,
   CHECKOUT_COLLECTION, LIMIT_COLLECTION, ORDER_COLLECTION, PRODUCT_COLLECTION, SETTINGS_DOC,
   ShopError, validateCheckout, priceCheckout, buildCheckout, sessionParams, publicOrder, paymentFromSession,
   newOrderCode, validCode, referenceFor, toCents, unlimited, createService

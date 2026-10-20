@@ -1,6 +1,7 @@
 'use strict';
 const { ShopError, CHECKOUT_COLLECTION, LIMIT_COLLECTION, ORDER_COLLECTION, PRODUCT_COLLECTION, SETTINGS_DOC,
   unlimited } = require('./service');
+const { MAIL_COLLECTION, mailId, receiptMail } = require('./receipt');
 
 const CODE_ATTEMPTS = 6;
 
@@ -9,6 +10,7 @@ function createRepository(db, Timestamp) {
   const checkouts = db.collection(CHECKOUT_COLLECTION);
   const orders = db.collection(ORDER_COLLECTION);
   const productsRef = db.collection(PRODUCT_COLLECTION);
+  const mail = db.collection(MAIL_COLLECTION);
 
   return {
     async loadCatalogue(productIds) {
@@ -74,7 +76,8 @@ function createRepository(db, Timestamp) {
     async finalize(code, payment, now) {
       const checkoutRef = checkouts.doc(code), orderRef = orders.doc(code);
       return db.runTransaction(async transaction => {
-        const [checkoutSnapshot, orderSnapshot] = await transaction.getAll(checkoutRef, orderRef);
+        const firstMailRef = mail.doc(mailId(code, 1));
+        const [checkoutSnapshot, orderSnapshot, mailSnapshot] = await transaction.getAll(checkoutRef, orderRef, firstMailRef);
         if (!checkoutSnapshot.exists) return { missing: true };
         if (orderSnapshot.exists) return { already: true, order: orderSnapshot.data() };
         const checkout = checkoutSnapshot.data();
@@ -109,9 +112,44 @@ function createRepository(db, Timestamp) {
           stockApplied: true,
           createdAt: checkout.createdAt || at, paidAt: at, updatedAt: at
         };
+        // The buyer's receipt goes out with the order, in the same transaction, so
+        // it is sent exactly once however many times Stripe or the page call in.
+        // A leftover mail document under the same id (an order deleted and its code
+        // reused) must never block recording a payment: the admin can resend instead.
+        const receipt = mailSnapshot.exists ? null : receiptMail(Object.assign({}, order, { paidAt: now }), { now });
+        if (receipt) {
+          Object.assign(order, { receiptCount: 1, receiptSentAt: at, receiptSentTo: receipt.to[0] });
+          transaction.create(firstMailRef, receipt);
+        }
         transaction.create(orderRef, order);
         transaction.update(checkoutRef, { status: 'paid', paidAt: at });
         return { order };
+      });
+    },
+
+    // The admin's receipt email for a paid order: the first one for a PayNow order
+    // when it is marked paid, or a resend of any paid order's receipt. Each send is
+    // a new numbered mail document; the order keeps the count and when it was last
+    // sent, so the same button pressed twice in a row sends one email, not two.
+    async sendReceipt(code, now, minGapMs) {
+      const orderRef = orders.doc(code);
+      return db.runTransaction(async transaction => {
+        const snapshot = await transaction.get(orderRef);
+        if (!snapshot.exists) throw new ShopError(404, 'order-not-found');
+        const order = snapshot.data();
+        const count = Math.max(0, Math.floor(Number(order.receiptCount) || 0));
+        let mailRef = mail.doc(mailId(code, count + 1));
+        if ((await transaction.get(mailRef)).exists) mailRef = mail.doc(mailId(code, count + 1) + '-' + now);
+        if (!['paid', 'collected'].includes(order.status)) throw new ShopError(409, 'order-not-paid');
+        const last = order.receiptSentAt && typeof order.receiptSentAt.toMillis === 'function' ? order.receiptSentAt.toMillis()
+          : typeof order.receiptSentAt === 'number' ? order.receiptSentAt : null;
+        if (last !== null && now - last < minGapMs) throw new ShopError(429, 'receipt-just-sent');
+        const receipt = receiptMail(Object.assign({ code }, order), { now, resend: count > 0 });
+        if (!receipt) throw new ShopError(409, 'no-email');
+        const at = timestamp(now);
+        transaction.create(mailRef, receipt);
+        transaction.update(orderRef, { receiptCount: count + 1, receiptSentAt: at, receiptSentTo: receipt.to[0] });
+        return { to: receipt.to[0], count: count + 1, resend: count > 0 };
       });
     },
 
