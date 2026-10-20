@@ -152,6 +152,7 @@ test('validation refuses bad carts, people and return pages', () => {
     cart({ items: Array.from({ length: LIMITS.lines + 1 }, (_, i) => ({ productId: 'p' + i, qty: 1 })) }),
     cart({ customer: { name: '', phone: '91234567' } }), cart({ customer: { name: 'A', phone: '123' } }),
     cart({ customer: { name: 'A', phone: '91234567', email: 'nope' } }),
+    cart({ customer: { name: 'A', phone: '91234567', email: '' } }), cart({ customer: { name: 'A', phone: '91234567' } }),
     cart({ customer: { name: 'A\nBcc: x', phone: '91234567' } }),
     cart({ customer: { name: 'A', phone: '91234567', role: 'admin' } }),
     cart({ fulfilment: 'teleport' }), cart({ fulfilment: 'delivery', address: '' }),
