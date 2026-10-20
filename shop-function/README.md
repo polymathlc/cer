@@ -31,6 +31,25 @@ the order lists it in `stockShort`; an unexpected amount is listed in
 Refunds are done in the Stripe dashboard. Cancelling a card order on the admin page
 only puts the stock back.
 
+## Receipt emails
+
+Every paid order gets a receipt email from **Polymath Learning Centre
+<admin@polymathlc.com.sg>** (replies go to that inbox), composed on the server by
+`functions/receipt.js` and written to the `mail` collection, which the project's
+Trigger Email extension sends, the same way Polymath Online invitations go out.
+
+- **Card:** written in the same transaction that records the paid order, so it
+  goes out exactly once (`mail/polymath-shop-receipt-CODE-1`).
+- **PayNow:** when the admin presses **Mark paid**, the page calls
+  `sendShopReceipt` with the admin's Google sign-in; the function checks the
+  token belongs to `chungzhikai@gmail.com` before sending.
+- **Resend:** the **Email receipt / Resend receipt** button on any paid or collected
+  order (at most one a minute per order). The order keeps `receiptCount`,
+  `receiptSentAt` and `receiptSentTo`.
+
+Email is required at checkout; PayNow orders placed before v1.3.2 may have none,
+and the button is hidden for them.
+
 ## Switching it on (no terminal needed)
 
 1. **GitHub secrets** (cer → Settings → Secrets and variables → Actions):
@@ -58,7 +77,8 @@ because the deploy account cannot manage Cloud Scheduler jobs.)
 ## Files
 
 - `functions/stripe.js`: Stripe REST calls with `fetch` (no SDK) and webhook signature checks.
-- `functions/service.js`: validation, pricing and the three HTTP handlers.
+- `functions/service.js`: validation, pricing and the four HTTP handlers.
+- `functions/receipt.js`: the receipt email (text and HTML).
 - `functions/repository.js`: Firestore reads and the transactions.
 - `functions/test/shop.test.js`: `npm test` (no network, no Firebase).
 - `../tools/shop-deploy-setup.mjs`, `../tools/shop-smoke.mjs`, `../tools/shop-deploy-tests.mjs`.

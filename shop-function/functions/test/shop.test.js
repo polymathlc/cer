@@ -5,6 +5,7 @@ const { createService, validateCheckout, priceCheckout, sessionParams, buildChec
   ShopError, LIMITS, SOURCE, ORDER_CODE_CHARS } = require('../service');
 const { createRepository } = require('../repository');
 const { createStripe, verifyWebhook, signWebhook, encodeBody, StripeError } = require('../stripe');
+const { receiptMail, mailId, SENDER_EMAIL } = require('../receipt');
 
 const NOW = Date.UTC(2026, 9, 19, 9);
 const WEBHOOK_SECRET = 'whsec_test_secret';
@@ -109,7 +110,14 @@ function harness(seedRows = seed(), options = {}) {
   const random = codes
     ? max => { const code = codes[0]; const ch = code[n++]; if (n === 6) { codes.shift(); n = 0; } return ORDER_CODE_CHARS.indexOf(ch) % max; }
     : max => Math.floor(Math.random() * max);
-  const service = createService({ repository: repositoryFor(db), stripe, webhookSecret: WEBHOOK_SECRET,
+  // Signed-in Firebase users by ID token, as getAuth().verifyIdToken would read them.
+  const users = {
+    'admin-token-0123456789': { email: 'chungzhikai@gmail.com', email_verified: true },
+    'other-token-0123456789': { email: 'someone@example.test', email_verified: true },
+    'unverified-token-01234': { email: 'chungzhikai@gmail.com', email_verified: false }
+  };
+  const verifyIdToken = async token => { if (!users[token]) throw new Error('bad token'); return users[token]; };
+  const service = createService({ repository: repositoryFor(db), stripe, webhookSecret: WEBHOOK_SECRET, verifyIdToken,
     now: () => clock, random, report: code => logs.push(code) });
   async function call(handler, body, overrides = {}) {
     const headers = { origin: ORIGIN, 'content-type': 'application/json', ...overrides.headers };
@@ -129,6 +137,8 @@ function harness(seedRows = seed(), options = {}) {
   return { db, stripe, logs, service, call, webhookCall,
     create: (body = cart(), overrides) => call(service.createCheckout, body, overrides),
     status: (body, overrides) => call(service.checkoutStatus, body, overrides),
+    receipt: (code, token = 'admin-token-0123456789') => call(service.sendReceipt, { code },
+      token ? { headers: { authorization: 'Bearer ' + token } } : {}),
     advance: ms => { clock += ms; } };
 }
 const completed = session => ({ id: 'evt_test', type: 'checkout.session.completed', data: { object: session } });
@@ -475,4 +485,111 @@ test('the Stripe client sends form bodies with the key and idempotency key, and 
     error.code === 'stripe-error' && error.message === 'invalid_request_error:resource_missing' && !/parent@/.test(error.message));
   const down = createStripe({ secretKey: 'sk_test_abc', fetchImpl: async () => { throw new Error('ECONNRESET'); } });
   await assert.rejects(down.retrieveCheckoutSession('cs_1'), error => error.code === 'stripe-unreachable');
+});
+
+/* ─── Receipts ─── */
+
+const mailRows = db => [...db.rows.keys()].filter(path => path.startsWith('mail/')).sort();
+const payNowOrder = (overrides = {}) => ({
+  code: 'PAYN0W', reference: 'PLC PAYN0W', status: 'paid', payment: undefined,
+  items: [{ productId: 'book', sku: 'SCI-P5', name: 'P5 Science Notes', price: 18.5, qty: 2, lineTotal: 37 }],
+  subtotal: 37, deliveryFee: 0, total: 37,
+  customer: { name: 'Pay Now Parent', phone: '8123 4567', email: 'paynow@example.test' },
+  fulfilment: 'collect', address: '', note: '', paidAt: NOW - 1000, ...overrides
+});
+
+test('a card payment emails one receipt from the centre, however many times it is confirmed', async () => {
+  const h = harness(seed(), { codes: ['QRSTUV'] });
+  await h.create(cart({ fulfilment: 'delivery', address: '1 Road' }));
+  const sessionId = h.db.rows.get('shop_checkouts/QRSTUV').sessionId;
+  h.stripe.pay(sessionId);
+  await h.status({ code: 'QRSTUV', sessionId });
+  await h.webhookCall(completed(await h.stripe.retrieveCheckoutSession(sessionId)));
+  await h.status({ code: 'QRSTUV', sessionId });
+  assert.deepEqual(mailRows(h.db), ['mail/' + mailId('QRSTUV', 1)]);
+  const mail = h.db.rows.get('mail/' + mailId('QRSTUV', 1));
+  assert.deepEqual(mail.to, ['parent@example.test']);
+  assert.equal(mail.from, 'Polymath Learning Centre <' + SENDER_EMAIL + '>');
+  assert.equal(mail.replyTo, 'admin@polymathlc.com.sg');
+  assert.match(mail.message.subject, /QRSTUV/);
+  assert.match(mail.message.text, /card payment of \$53\.50/);
+  assert.match(mail.message.text, /Delivery fee {2}\$4\.50/);
+  assert.match(mail.message.text, /We will deliver to: 1 Road/);
+  assert.match(mail.message.html, /PLC QRSTUV/);
+  const order = h.db.rows.get('shop_orders/QRSTUV');
+  assert.equal(order.receiptCount, 1);
+  assert.equal(order.receiptSentTo, 'parent@example.test');
+});
+
+test('a leftover mail document never stops a card payment from being recorded', async () => {
+  const rows = Object.assign(seed(), { ['mail/' + mailId('RSTUVW', 1)]: { to: ['old@example.test'] } });
+  const h = harness(rows, { codes: ['RSTUVW'] });
+  await h.create();
+  const sessionId = h.db.rows.get('shop_checkouts/RSTUVW').sessionId;
+  h.stripe.pay(sessionId);
+  assert.equal((await h.status({ code: 'RSTUVW', sessionId })).body.paid, true);
+  assert.equal(h.db.rows.get('shop_orders/RSTUVW').status, 'paid');
+  assert.equal(h.db.rows.get('shop_orders/RSTUVW').receiptCount, undefined);
+  assert.deepEqual(h.db.rows.get('mail/' + mailId('RSTUVW', 1)).to, ['old@example.test'], 'the old document is left alone');
+});
+
+test('the receipt escapes what the buyer typed and leaves out what is not there', () => {
+  const mail = receiptMail(payNowOrder({ customer: { name: '<b>Eve</b>', phone: '', email: 'eve@example.test' }, note: 'a & <script>' }), { now: NOW });
+  assert.ok(!mail.message.html.includes('<b>Eve</b>') && mail.message.html.includes('&lt;b&gt;Eve&lt;/b&gt;'));
+  assert.ok(!mail.message.html.includes('<script>') && mail.message.html.includes('a &amp; &lt;script&gt;'));
+  assert.match(mail.message.text, /PayNow payment of \$37\.00/);
+  assert.match(mail.message.text, /collect your order at Polymath Learning Centre\. We will WhatsApp you when/);
+  assert.ok(!/Delivery fee/.test(mail.message.text), 'no fee line on a collected order');
+  assert.match(mail.message.text, /UEN T16LL2365E/);
+  assert.equal(receiptMail(payNowOrder({ customer: { name: 'No Email', phone: '1', email: '' } })), null);
+  assert.equal(receiptMail(payNowOrder({ customer: { name: 'Bad', phone: '1', email: 'not an email' } })), null);
+});
+
+test('only the signed-in admin may send a receipt', async () => {
+  const h = harness(Object.assign(seed(), { 'shop_orders/PAYN0W': payNowOrder() }));
+  assert.equal((await h.receipt('PAYN0W', null)).statusCode, 401);
+  assert.equal((await h.receipt('PAYN0W', 'forged-token-0123456789')).statusCode, 401);
+  assert.equal((await h.receipt('PAYN0W', 'other-token-0123456789')).statusCode, 403);
+  assert.equal((await h.receipt('PAYN0W', 'unverified-token-01234')).statusCode, 403);
+  assert.deepEqual(mailRows(h.db), []);
+  const preflight = await h.call(h.service.sendReceipt, null, { method: 'OPTIONS' });
+  assert.equal(preflight.statusCode, 204);
+  assert.match(preflight.headers['Access-Control-Allow-Headers'], /Authorization/);
+});
+
+test('marking a PayNow order paid emails its receipt; a resend waits a minute and says "again"', async () => {
+  const h = harness(Object.assign(seed(), { 'shop_orders/PAYN0W': payNowOrder() }));
+  const first = await h.receipt('PAYN0W');
+  assert.equal(first.statusCode, 200);
+  assert.deepEqual(first.body, { ok: true, sentTo: 'paynow@example.test', count: 1, resend: false });
+  const mail = h.db.rows.get('mail/' + mailId('PAYN0W', 1));
+  assert.match(mail.message.text, /PayNow payment of \$37\.00/);
+  assert.ok(!/again/.test(mail.message.text));
+  const tooSoon = await h.receipt('PAYN0W');
+  assert.equal(tooSoon.statusCode, 429);
+  assert.equal(tooSoon.body.error, 'receipt-just-sent');
+  assert.equal(tooSoon.headers['Retry-After'], '60');
+  h.advance(61000);
+  const again = await h.receipt('PAYN0W');
+  assert.equal(again.body.count, 2);
+  assert.equal(again.body.resend, true);
+  assert.match(h.db.rows.get('mail/' + mailId('PAYN0W', 2)).message.text, /Here is your receipt again/);
+  assert.equal(h.db.rows.get('shop_orders/PAYN0W').receiptCount, 2);
+});
+
+test('receipts are refused for unpaid, unknown and email-less orders, and never overwrite a mail document', async () => {
+  const h = harness(Object.assign(seed(), {
+    'shop_orders/PENDNG': payNowOrder({ code: 'PENDNG', status: 'pending' }),
+    'shop_orders/NOMAIL': payNowOrder({ code: 'NOMAIL', customer: { name: 'Old Order', phone: '81234567' } }),
+    'shop_orders/TAKEN1': payNowOrder({ code: 'TAKEN1', status: 'collected' }),
+    ['mail/' + mailId('TAKEN1', 1)]: { to: ['old@example.test'] }
+  }));
+  assert.equal((await h.receipt('PENDNG')).body.error, 'order-not-paid');
+  assert.equal((await h.receipt('NOMAIL')).body.error, 'no-email');
+  assert.equal((await h.receipt('ZZZZZZ')).statusCode, 404);
+  assert.equal((await h.receipt('bad code')).statusCode, 400);
+  const taken = await h.receipt('TAKEN1');
+  assert.equal(taken.statusCode, 200);
+  assert.deepEqual(h.db.rows.get('mail/' + mailId('TAKEN1', 1)).to, ['old@example.test']);
+  assert.ok(mailRows(h.db).some(path => path.startsWith('mail/' + mailId('TAKEN1', 1) + '-')));
 });

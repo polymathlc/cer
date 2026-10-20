@@ -670,13 +670,16 @@ let deliveryFee = 0;
 // shop_settings/config.cardPayments: false hides "Pay by card"; missing means on.
 // createShopCheckout refuses card checkouts too while it is false.
 let cardEnabled = true;
-const PRODUCTS_PAGE_VERSION = 'v1.3.2';
+const PRODUCTS_PAGE_VERSION = 'v1.4.0';
 const WHATSAPP_NUMBER = '6596450588';
 // Card payments (shop-function/, codebase polymath-shop). Prices are always worked
 // out again on the server; the page only sends product ids and quantities.
 const SHOP_API = 'https://us-central1-mathgen--app.cloudfunctions.net/';
 const CARD_CHECKOUT_URL = SHOP_API + 'createShopCheckout';
 const CARD_STATUS_URL = SHOP_API + 'shopCheckoutStatus';
+// Emails a paid order's receipt from admin@polymathlc.com.sg (admin only; the
+// server checks the admin's Google sign-in and composes the email itself).
+const RECEIPT_URL = SHOP_API + 'sendShopReceipt';
 const CARD_STATUS_TRIES = 12;
 const CARD_STATUS_WAIT_MS = 2500;
 const CART_KEY = 'plc_shop_cart_v1';
@@ -1442,6 +1445,7 @@ $('co-paid').addEventListener('click', async () => {
   $('done-wa').href = wa;
   $('done-body').innerHTML = saved
     ? '<div class="callout ok">We have your order and will check the payment against reference <strong>' + esc(order.reference) + '</strong>. We\'ll WhatsApp you on ' + esc(order.customer.phone) + '.</div>'
+      + (order.customer.email ? '<div class="callout info">Once we have checked your payment, we\'ll email your receipt to <strong>' + esc(order.customer.email) + '</strong>.</div>' : '')
       + (receiptFailed ? '<div class="callout warn">Your payment screenshot could not be uploaded — please send it to us on WhatsApp.</div>' : '')
       + '<div class="callout info">Want a quicker reply? Send the order to us on WhatsApp too.</div>'
     : '<div class="callout warn">We could not save your order online. <strong>Please tap the WhatsApp button below</strong> to send it to us — your payment is safe, and we\'ll match it with reference <strong>' + esc(order.reference) + '</strong>.</div>';
@@ -1526,7 +1530,8 @@ function showCardDone(order) {
   $('done-wa').href = 'https://wa.me/' + WHATSAPP_NUMBER + '?text=' + encodeURIComponent(orderWhatsAppText(order));
   $('done-body').innerHTML = '<div class="callout ok">Your card payment of <strong>' + money(order.total) + '</strong> went through and we have your order (reference <strong>'
     + esc(order.reference) + '</strong>). We\'ll WhatsApp you on ' + esc(order.customer && order.customer.phone || '') + '.</div>'
-    + '<div class="callout info">Stripe emails a receipt if you gave an email address. Want a quicker reply? Send the order to us on WhatsApp too.</div>';
+    + (order.customer && order.customer.email ? '<div class="callout info">We\'ve emailed your receipt to <strong>' + esc(order.customer.email) + '</strong>. If it isn\'t there in a few minutes, check your spam folder.</div>' : '')
+    + '<div class="callout info">Want a quicker reply? Send the order to us on WhatsApp too.</div>';
   cart = []; saveCart(); renderCartCount(); renderShop();
 }
 async function resumeCardReturn() {
@@ -2088,6 +2093,8 @@ function renderOrders() {
       + (st === 'cancelled' ? '<button class="btn ghost small" type="button" data-oa="pending">Reopen</button>' : '')
       + (waNum ? '<a class="btn ghost small" target="_blank" rel="noopener" href="https://wa.me/' + waNum + '?text=' + encodeURIComponent('Hi ' + (c.name || '') + ', this is Polymath about your order ' + (o.code || '') + '.') + '">💬 WhatsApp</a>' : '')
       + (o.receiptUrl ? '<a class="btn ghost small" target="_blank" rel="noopener" href="' + esc(o.receiptUrl) + '">🧾 Payment screenshot</a>' : '')
+      + ((st === 'paid' || st === 'collected') && c.email ? '<button class="btn ghost small" type="button" data-receipt="1">✉️ ' + (o.receiptCount ? 'Resend receipt' : 'Email receipt') + '</button>' : '')
+      + (o.receiptCount ? '<span class="hint">Receipt emailed' + (o.receiptSentAt ? ' ' + esc(fmtDate(o.receiptSentAt)) : '') + '</span>' : '')
       + (o.stockApplied ? '<span class="hint">Stock taken</span>' : '')
       + '</div></div>';
   }).join('');
@@ -2125,7 +2132,38 @@ async function setOrderStatus(code, status) {
     tx.update(ref, update);
   });
 }
+/* Receipts go out from the server (sendShopReceipt), signed with the admin's
+   Google sign-in. A card order's receipt is sent the moment it is paid; a PayNow
+   order's when it is marked paid here. Failing to email never undoes "Mark paid". */
+const RECEIPT_ERROR = {
+  'no-email': 'This order has no email address',
+  'order-not-paid': 'Mark the order paid first',
+  'receipt-just-sent': 'A receipt was just sent — wait a minute before sending another',
+  'admin-only': 'Only the admin can send receipts',
+  'sign-in-required': 'Please sign in again'
+};
+async function emailReceipt(code) {
+  if (!requireAdmin()) return null;
+  const user = auth.currentUser;
+  if (!user) throw new Error('Please sign in again');
+  const token = await user.getIdToken();
+  const res = await fetch(RECEIPT_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ code }) });
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* not JSON */ }
+  if (!res.ok || !data.ok) throw new Error(RECEIPT_ERROR[data.error] || 'The receipt could not be emailed (' + res.status + ')');
+  return data;
+}
 $('orders-list').addEventListener('click', async e => {
+  const r = e.target.closest('[data-receipt]');
+  if (r) {
+    const code = r.closest('.order').dataset.code;
+    r.disabled = true;
+    try { const sent = await emailReceipt(code); if (sent) toast('Receipt emailed to ' + sent.sentTo); }
+    catch (err) { console.error(err); toast(err.message || String(err), true); }
+    r.disabled = false;
+    return;
+  }
   const b = e.target.closest('[data-oa]'); if (!b) return;
   const code = b.closest('.order').dataset.code;
   const status = b.dataset.oa;
@@ -2137,7 +2175,12 @@ $('orders-list').addEventListener('click', async e => {
   }
   b.disabled = true;
   try { await setOrderStatus(code, status); toast('Order ' + code + ': ' + (STATUS_LABEL[status] || status)); }
-  catch (err) { console.error(err); toast('Could not update the order: ' + (err.message || err), true); b.disabled = false; }
+  catch (err) { console.error(err); toast('Could not update the order: ' + (err.message || err), true); b.disabled = false; return; }
+  const o = orders.find(x => x._id === code) || {};
+  if (status === 'paid' && o.payment !== 'card' && !o.receiptCount && o.customer && o.customer.email) {
+    try { const sent = await emailReceipt(code); if (sent) toast('Order ' + code + ' paid · receipt emailed to ' + sent.sentTo); }
+    catch (err) { console.error(err); toast('Marked paid, but the receipt was not emailed: ' + (err.message || err) + '. Use “Email receipt” to try again.', true); }
+  }
 });
 
 /* ═══ Global wiring ═══ */
