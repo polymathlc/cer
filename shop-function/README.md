@@ -1,7 +1,7 @@
 # polymath-shop: card payments for /products
 
 Card payments on polymathlc.com.sg/products go through **Stripe Checkout**, on the
-Polymath Stripe account `acct_1EdAmjA59UOU3oHi`. PayNow keeps working exactly as
+Polymath Stripe account `acct_1USg162dM5Vps1NT`. PayNow keeps working exactly as
 before; "Pay by card" sits next to it.
 
 ## How a card order flows
@@ -42,7 +42,7 @@ only puts the stock back.
    - Events: `checkout.session.completed` and `checkout.session.async_payment_succeeded`
    - Copy its Signing secret (`whsec_…`) into `STRIPE_WEBHOOK_SECRET`.
 3. **Deploy**: Actions → *Deploy shop card payments* → Run workflow. The run
-   checks the key belongs to `acct_1EdAmjA59UOU3oHi`, deploys, and proves the
+   checks the key belongs to `acct_1USg162dM5Vps1NT`, deploys, and proves the
    live endpoints answer. Until `STRIPE_SECRET_KEY` exists it skips the deploy
    and says so, and the page shows card payment as unavailable, offering PayNow.
 
