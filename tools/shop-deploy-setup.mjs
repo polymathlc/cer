@@ -28,7 +28,7 @@ export { PROJECT };
 export const ENV_FILE = `shop-function/functions/.env.${PROJECT}`;
 // The Polymath Stripe account, as given by the centre. A key from any other account
 // would take the parents' money somewhere else, so it is refused.
-export const STRIPE_ACCOUNT = 'acct_1EdAmjA59UOU3oHi';
+export const STRIPE_ACCOUNT = 'acct_1USg162dM5Vps1NT';
 const SECRETS_PAGE = 'Settings → Secrets and variables → Actions → New repository secret';
 
 export function readStripeKey(value) {
