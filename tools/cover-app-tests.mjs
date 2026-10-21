@@ -59,7 +59,8 @@ test('main science covers use the shared renderer and explicit science defaults'
   state._wsCoverHtml('Plants', undefined, undefined, false);
   assert.equal(calls.render[0].subject, 'science');
   assert.equal(calls.render[0].footer, 'Primary Science');
-  assert.equal(calls.render[0].className, 'print-front-page print-cover-page');
+  assert.equal(calls.render[0].className, 'print-front-page print-cover-page print-cover-bleed', 'the cover fills its A4 sheet edge to edge');
+  assert.equal(calls.render[0].score, true, 'the score box is on until the teacher turns it off');
   state._wsCoverHtml('Plants', '', '', true, { fields: true });
   assert.equal(calls.render[1].fields, false, 'the existing global fields switch remains authoritative');
   assert.doesNotMatch(cut('let wsCoverSettings = null;', '// Blank Name / Date / Class lines print'), /<svg|<text[^>]*>π/);

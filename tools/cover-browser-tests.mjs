@@ -39,6 +39,14 @@ try {
   await page.locator('[data-wc-input=title]').fill('Photosynthesis\nand gas exchange');
   await page.locator('[data-wc-input=nameLabel]').fill('Student');
   await page.locator('[data-wc-input=dateLabel]').fill('Class');
+  assert.equal(await page.locator('[data-wc-input=classLabel]').count(),0,'The cover asks for Name and Date only');
+  assert.equal(await page.locator('[data-wc-input=score]').isChecked(),true,'The score box starts on');
+  await page.locator('[data-wc-input=score]').uncheck();
+  assert.equal(await page.locator('.wc-editor-preview .wc-score').count(),0,'Unticking it takes the score area off the preview');
+  await page.locator('[data-wc-input=fields]').uncheck();
+  assert.equal(await page.locator('[data-wc-input=score]').isDisabled(),true,'No score switch without the fields card');
+  await page.locator('[data-wc-input=fields]').check();
+  assert.equal(await page.locator('[data-wc-input=score]').isDisabled(),false);
   await page.locator('[data-wc-input=layout]').selectOption('frame');
   await page.locator('[data-wc-input=scale]').fill('1.2');
   await page.locator('[data-wc-input=opacity]').fill('0.65');
@@ -48,7 +56,7 @@ try {
   await page.screenshot({path:path.join(output,'science-editor-desktop.png'),fullPage:true});
   await page.locator('.wc-editor [type=submit]').click();
   const saved=await page.evaluate(()=>window.result);
-  assert.equal(saved.title,'Photosynthesis\nand gas exchange');assert.equal(saved.nameLabel,'Student');assert.equal(saved.dateLabel,'Class');assert.equal(saved.artworkScale,1.2);assert.equal(saved.artworkLayout,'frame');assert.equal(saved.artworkTextureOpacity,.35);
+  assert.equal(saved.title,'Photosynthesis\nand gas exchange');assert.equal(saved.nameLabel,'Student');assert.equal(saved.dateLabel,'Class');assert.equal(saved.artworkScale,1.2);assert.equal(saved.artworkLayout,'frame');assert.equal(saved.artworkTextureOpacity,.35);assert.equal(saved.score,false);
   await page.evaluate(saved=>{window.settings=saved;document.querySelector('#covers').innerHTML=WorksheetCover.render(saved);},saved);
   await ready();
   const frameCount=await page.locator('#covers .wc-icon').count();
@@ -57,6 +65,7 @@ try {
   assert.equal(await page.locator('#covers .wc-title').textContent(),saved.title);
   await page.locator('#edit').click();
   assert.equal(await page.locator('[data-wc-input=nameLabel]').inputValue(),'Student');
+  assert.equal(await page.locator('[data-wc-input=score]').isChecked(),false,'A cover saved without the score box reopens without it');
   assert.equal(await page.locator('[data-wc-input=textureOpacity]').inputValue(),'0.35');
   const title=page.locator('.wc-editor-preview .wc-title');
   await title.fill('Line one');await title.press('End');await title.press('Enter');await title.pressSequentially('Line two');

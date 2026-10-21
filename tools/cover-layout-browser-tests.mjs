@@ -124,8 +124,8 @@ async function onePage(name) {
 }
 try {
   await page.goto(origin + '/?kind=index');
-  const appFns = ['_wsCoverDefaults', '_wsCoverHtml', '_wsAppCssForPreview', '_cpbIndexGridHtml', '_cpbCoverValue', '_cpbCoverBrandHtml', '_cpbCoverInstructions', '_cpbCoverHeadHtml', '_cpbCoverFootHtml', '_cpbCoverA', '_cpbCoverB', 'cpbEditCovers'].map(name => fn(sources.app, name)).join('\n');
-  await page.addScriptTag({ content: `${escapeSource}\nconst currentUser={uid:'cover-layout-test'},CPB_MCQ_MARKS=2;let _cpbMeta={org:'Polymath Learning Centre',exam:'Practice paper',subject:'SCIENCE',level:'PRIMARY 6',year:'2026',code:'P6',duration:'1 hour 45 minutes',coverScale:1,coverOpacity:.72};function _cpbMetaGet(key){return _cpbMeta[key];}function cpbIsWorksheet(){return false;}function cpbMarks(){return {a:20,b:12};}function cpbLayout(){return {a:Array(10),list:Array(16)};}function _cpbDraftSave(){}function cpbRender(){}function _printFontLinksHtml(){return '';}\n${appFns}` });
+  const appFns = ['_wsCoverDefaults', '_wsCoverScoreDefault', '_wsCoverHtml', '_wsAppCssForPreview', '_cpbIndexGridHtml', '_cpbCoverValue', '_cpbCoverBrandHtml', '_cpbCoverInstructions', '_cpbCoverHeadHtml', '_cpbCoverFootHtml', '_cpbCoverA', '_cpbCoverB', 'cpbEditCovers'].map(name => fn(sources.app, name)).join('\n');
+  await page.addScriptTag({ content: `${escapeSource}\nconst currentUser={uid:'cover-layout-test'},CPB_MCQ_MARKS=2,WS_COVER_SCORE_KEY='cer.coverScore';let _cpbMeta={org:'Polymath Learning Centre',exam:'Practice paper',subject:'SCIENCE',level:'PRIMARY 6',year:'2026',code:'P6',duration:'1 hour 45 minutes',coverScale:1,coverOpacity:.72};function _cpbMetaGet(key){return _cpbMeta[key];}function cpbIsWorksheet(){return false;}function cpbMarks(){return {a:20,b:12};}function cpbLayout(){return {a:Array(10),list:Array(16)};}function _cpbDraftSave(){}function cpbRender(){}function _printFontLinksHtml(){return '';}\n${appFns}` });
   const previewRules = await page.addStyleTag({ content: await page.evaluate(() => _wsAppCssForPreview()) });
   await page.addStyleTag({ content: 'html,body{margin:0;padding:0}#printOutput{display:block!important;width:178mm;margin:0 auto}@media print{#printOutput{width:100%;margin:0}}' });
   await page.evaluate(() => { document.querySelector('#printOutput').innerHTML = _wsCoverHtml('Photosynthesis, leaves\n& gas exchange', 'Primary Science', 'Past Year Paper', false); });
@@ -133,7 +133,25 @@ try {
   await inside('.wc-cover', ['.wc-title', '.wc-fields', '.wc-footer']);
   await clearStudentFields(); await clearBigMText();
   await page.screenshot({ path: path.join(output, 'main-science-preview.png'), fullPage: true });
-  await page.emulateMedia({ media: 'print' }); await onePage('main-science-cover'); await page.emulateMedia({ media: 'screen' });
+  await page.emulateMedia({ media: 'print' }); await onePage('main-science-cover');
+  // The main cover is the whole A4 sheet, edge to edge: its own margin-free
+  // named page, 210mm wide and (half a millimetre short of) 297mm tall.
+  const bleed = await page.locator('.wc-cover').evaluate(el => { const box = el.getBoundingClientRect(), style = getComputedStyle(el); return { page: style.page, width: box.width, height: box.height }; });
+  const mm = 96 / 25.4;
+  assert.equal(bleed.page, 'polymath-cover', 'The cover prints on the margin-free page');
+  assert.ok(Math.abs(bleed.width - 210 * mm) < 1, `Cover spans the full A4 width: ${bleed.width}`);
+  assert.ok(bleed.height >= 296 * mm && bleed.height <= 297 * mm, `Cover spans the full A4 height: ${bleed.height}`);
+  await page.emulateMedia({ media: 'screen' });
+  // Score switched off: no score area at all, Name and Date share one row,
+  // and the icons still stay off the card.
+  await page.evaluate(() => { document.querySelector('#printOutput').innerHTML = _wsCoverHtml('PSLE 2015\nScience Paper', 'Primary Science', 'Past Year Paper', false, { score: false }); });
+  await ready();
+  assert.equal(await page.locator('.wc-score').count(), 0, 'No score box when it is off');
+  assert.equal(await page.locator('.wc-field-label').allTextContents().then(labels => labels.join(',')), 'Name,Date');
+  const row = await page.locator('.wc-fields .wc-field').evaluateAll(fields => fields.map(f => Math.round(f.getBoundingClientRect().top)));
+  assert.equal(new Set(row).size, 1, 'Name and Date sit on one row');
+  await inside('.wc-cover', ['.wc-title', '.wc-fields', '.wc-footer']);
+  await page.emulateMedia({ media: 'print' }); await onePage('main-science-cover-no-score'); await page.emulateMedia({ media: 'screen' });
   await previewRules.evaluate(el => el.remove());
 
   await page.evaluate(() => { window._editedCovers = cpbEditCovers(); });

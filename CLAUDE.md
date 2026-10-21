@@ -1947,6 +1947,20 @@ its `printStyles`, and `_wsCoverLevel` beside `_wsEditCover` in `app.js`.
   the note beside it. `subtitle`, `level`, `classLabel` and `scoreLabel` are new.
   The level pill starts from the sheet's questions (`_wsCoverLevel`); a saved
   cover's own level, even an empty one, wins.
+- **The printed cover is the whole A4 sheet, edge to edge (v1.439.0).**
+  `_wsCoverHtml` adds `print-cover-bleed`, which puts the cover on its own
+  margin-free `@page polymath-cover` (index.html print CSS) at 210 × 296.5mm,
+  with the design's padding written in mm (a % would come from the 178mm text
+  column). The pages after it keep the normal margins. The planner counts a
+  bleed cover as one sheet (`frontSpans`) and the preview gives it a
+  padding-free `.wspv-bleed` sheet, which is also what Study Buddy photographs.
+- **The card is Name and Date only; the score box is optional.** No Class
+  field (old saved `classLabel` values are ignored). `score: false` drops the
+  score area and puts Name and Date on one row (`.wc-no-score`). The editor's
+  "Include score box" tick is remembered in localStorage (`cer.coverScore`) as
+  the starting point for the next cover, so past-paper covers (held only for
+  the session) do not need unticking every print. The page-1 Name / Date strip
+  dropped Class too.
 - **A cover saved before this design takes the faint backdrop.** The editor
   stamps `coverDesign: 'big-m'`; `artOf` drops the stored icon and texture
   intensities of anything without it (they were tuned for the old, stronger
