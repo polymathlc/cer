@@ -1,0 +1,29 @@
+name: Interactive textbook checks
+on:
+  pull_request:
+    paths: ['interactive-textbook/**', 'tools/interactive-textbook-*.mjs', 'index.html', '.github/workflows/interactive-textbook.yml']
+  push:
+    branches: [main]
+    paths: ['interactive-textbook/**', 'tools/interactive-textbook-*.mjs', 'index.html', '.github/workflows/interactive-textbook.yml']
+permissions:
+  contents: read
+jobs:
+  textbook:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: Drive the topic list and the Water lesson at desktop and phone widths
+        run: node tools/interactive-textbook-browser.mjs
+        env:
+          TEXTBOOK_SCREENSHOTS: artifacts/textbook
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interactive-textbook-previews
+          path: artifacts/textbook
+          if-no-files-found: ignore

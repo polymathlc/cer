@@ -15,7 +15,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.433.2">
+  <link rel="modulepreload" href="app.js?v=1.434.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -9541,7 +9541,8 @@ html { scroll-behavior:smooth; }
   #landingPage .lp-hero-note { font-size:9px; }
   #landingPage .lp-nav-links a[href="#lp-features"] { display:none; }
 }
-/* Schedule and Products open their own pages (schedule/, products/). Keep every
+/* Schedule, Products and Interactive textbook open their own pages (schedule/,
+   products/, interactive-textbook/). Keep every
    link on one line, and drop the in-page jumps first when the row gets tight. */
 #landingPage .lp-nav-links a { white-space:nowrap; }
 @media (max-width:1100px) {
@@ -9693,6 +9694,7 @@ html { scroll-behavior:smooth; }
         <a class="lp-about-link" href="#lp-about">About Us</a>
         <a class="lp-page-link" href="schedule/">Schedule</a>
         <a class="lp-page-link" href="products/">Products</a>
+        <a class="lp-page-link" href="interactive-textbook/">Interactive textbook</a>
         <a href="enquiry.html">Enquire</a>
       </div>
       <div class="lp-nav-actions">
@@ -16041,6 +16043,6 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script type="module" src="app.js?v=1.433.2"></script>
+  <script type="module" src="app.js?v=1.434.0"></script>
 </body>
 </html>
