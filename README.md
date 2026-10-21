@@ -1,6 +1,6 @@
 # CER Science Learning Portal
 
-## 🚨 Red Light Fixer and the 💲 AI cost meter (v1.439.0)
+## 🚨 Red Light Fixer and the 💲 AI cost meter (v1.440.0)
 
 **Questions → Red Light Fixer** (admin only) checks every question you own for a
 🔴 traffic light, lists only the reds, and fixes them round by round:

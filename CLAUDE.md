@@ -4994,7 +4994,7 @@ of these was silent: the crop still came back, looking either perfectly clean
     by their MIDDLE instead of containment was tried in review 2 and read MCQ
     option rows and part lines under wide tables as labels.
 
-## 🚨 Red Light Fixer + 💲 AI cost meter (v1.439.0)
+## 🚨 Red Light Fixer + 💲 AI cost meter (v1.440.0)
 
 `rlf*` / `RLF_*` (app.js, search `RED LIGHT FIXER`, right after `End fix all`), the 💲 meter just above it
 (`aiMeter*`, `_aiMeterText`, `_aiMeterImage`, `aiPrices`, `aiPriceDialog*`, search `AI COST METER`),
