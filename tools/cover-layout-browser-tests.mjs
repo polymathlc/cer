@@ -34,7 +34,7 @@ const server = http.createServer((req, res) => {
     res.end(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css(sources[kind])}</style><script src="/worksheet-cover.js"></script></head><body><div id="printOutput"></div></body></html>`);
     return;
   }
-  if (url.pathname !== '/worksheet-cover.js' && !/^\/assets\/(worksheet-covers\/(math|science)-icons|branding\/polymath-learning-centre)\.png$/.test(url.pathname)) { res.writeHead(404).end(); return; }
+  if (url.pathname !== '/worksheet-cover.js' && !/^\/assets\/(worksheet-covers\/(math|science)-icons-v2|branding\/polymath-learning-centre)\.png$/.test(url.pathname)) { res.writeHead(404).end(); return; }
   res.setHeader('Content-Type', url.pathname.endsWith('.png') ? 'image/png' : 'text/javascript');
   res.end(fs.readFileSync(path.join(root, url.pathname.slice(1))));
 });
@@ -50,11 +50,25 @@ const escapeSource = `function escapeHtml(value){return String(value == null ? '
 async function ready() { await page.waitForFunction(() => [...document.images].every(img => img.complete && img.naturalWidth > 0)); }
 async function clips(scope = page) {
   const items = await scope.locator('.wc-icon').evaluateAll(nodes => nodes.map(el => {
-    const box = el.getBoundingClientRect(), image = el.firstElementChild.getBoundingClientRect();
-    return { w: box.width, h: box.height, iw: image.width, ih: image.height, overflow: getComputedStyle(el).overflow };
+    const style = getComputedStyle(el), element = el.firstElementChild, image = getComputedStyle(element);
+    return { id: el.dataset.icon, crop: (el.dataset.crop || '').split(',').map(Number), nw: element.naturalWidth, nh: element.naturalHeight, left: parseFloat(el.style.left), top: parseFloat(el.style.top), w: parseFloat(style.width), h: parseFloat(style.height), iw: parseFloat(image.width), ih: parseFloat(image.height), ix: parseFloat(image.left), iy: parseFloat(image.top), widthRatio: parseFloat(style.width) / parseFloat(getComputedStyle(el.parentElement).width), overflow: style.overflow };
   }));
-  assert.equal(items.length, 6);
-  items.forEach(item => { assert.ok(item.w > 10); assert.ok(Math.abs(item.w - item.h) < 1); assert.ok(Math.abs(item.iw - item.w * 3) < 1); assert.ok(Math.abs(item.ih - item.h * 2) < 1); assert.equal(item.overflow, 'hidden'); });
+  assert.ok(items.length >= 30 && items.length <= 38, 'Every cover generator uses the scattered symbol design');
+  assert.equal(new Set(items.map(item => item.id)).size, 16, 'Every cover uses all sixteen subject icons');
+  assert.equal(new Set(items.map(item => Math.floor(item.top / 25))).size, 4, 'Scatter reaches all four vertical quarters');
+  assert.ok(items.filter(item => item.left >= 20 && item.left <= 75 && item.top >= 10 && item.top <= 90).length >= 6, 'Symbols also occupy interior whitespace');
+  assert.equal(new Set(items.map(item => item.crop.join(','))).size, 16);
+  items.forEach(item => {
+    const [x, y, w, h] = item.crop;
+    assert.ok(item.crop.length === 4 && item.crop.every(Number.isInteger) && x >= 0 && y >= 0 && w > 0 && h > 0 && x + w <= item.nw && y + h <= item.nh, 'Crop metadata stays within the source atlas');
+    assert.ok(item.w > 10); assert.ok(item.widthRatio <= .08, 'Icons stay small in each legacy cover layout');
+    assert.ok(Math.abs(item.w * h / w - item.h) < 1, 'Source crop keeps its aspect ratio');
+    assert.ok(Math.abs(item.iw - item.w * item.nw / w) < 1 && Math.abs(item.ih - item.h * item.nh / h) < 1, 'Atlas scale follows the actual crop');
+    assert.ok(Math.abs(item.ix + item.w * x / w) < 1 && Math.abs(item.iy + item.h * y / h) < 1, 'Crop offsets follow source pixels');
+    assert.equal(item.overflow, 'hidden');
+  });
+  assert.ok(await scope.locator('.cover-artwork svg circle').count() >= 6, 'Cover includes bubble textures');
+  assert.ok(await scope.locator('.cover-artwork svg polygon').count() >= 4, 'Cover includes polygon textures');
 }
 async function inside(selector, parts) {
   const bounds = await page.locator(selector).evaluate((cover, parts) => {
@@ -63,9 +77,41 @@ async function inside(selector, parts) {
   }, parts);
   bounds.forEach(box => { assert.ok(box.top >= -1 && box.bottom <= box.height + 1, `${box.part} spills vertically: ${JSON.stringify(box)}`); assert.ok(box.left >= -1 && box.right <= box.width + 1, `${box.part} spills horizontally`); });
 }
+async function clearStudentFields() {
+  const collisions = await page.locator('.wc-cover').evaluateAll(covers => covers.flatMap(cover => {
+    const protectedAreas = [...cover.querySelectorAll('.wc-field-label,.wc-field-line,.wc-footer')].flatMap(el => {
+      if (el.classList.contains('wc-field-line')) return [{ part: 'student writing line', box: el.getBoundingClientRect() }];
+      const range = document.createRange(); range.selectNodeContents(el);
+      return [...range.getClientRects()].map(box => ({ part: el.classList.contains('wc-footer') ? 'footer text' : 'student field label', box }));
+    });
+    return [...cover.querySelectorAll('.wc-icon')].flatMap(icon => {
+      const box = icon.getBoundingClientRect();
+      return protectedAreas.filter(area => Math.min(box.right, area.box.right) - Math.max(box.left, area.box.left) > 1 && Math.min(box.bottom, area.box.bottom) - Math.max(box.top, area.box.top) > 1).map(area => `${icon.dataset.icon} overlaps ${area.part}`);
+    });
+  }));
+  if (collisions.length) {
+    const geometry = await page.locator('.wc-cover').evaluateAll(covers => covers.map(cover => {
+      const parent = cover.getBoundingClientRect();
+      const normal = box => ({ left: +(100 * (box.left - parent.left) / parent.width).toFixed(2), top: +(100 * (box.top - parent.top) / parent.height).toFixed(2), right: +(100 * (box.right - parent.left) / parent.width).toFixed(2), bottom: +(100 * (box.bottom - parent.top) / parent.height).toFixed(2) });
+      return { width: parent.width, height: parent.height, text: [...cover.querySelectorAll('.wc-title,.wc-subheader,.wc-field-label,.wc-field-line,.wc-footer')].map(el => ({ part: el.className, ...normal(el.getBoundingClientRect()) })), icons: [...cover.querySelectorAll('.wc-icon')].map(icon => ({ id: icon.dataset.icon, at: [icon.style.left, icon.style.top], ...normal(icon.getBoundingClientRect()) })) };
+    }));
+    console.log('Cover overlap geometry:', JSON.stringify(geometry));
+    await page.screenshot({ path: path.join(output, 'overlap-diagnostic.png'), fullPage: true });
+  }
+  assert.deepEqual(collisions, [], 'Small symbols leave student labels, writing lines and footer text clear');
+}
 async function onePage(name) {
-  const pdf = await page.pdf({ path: path.join(output, `${name}.pdf`), format: 'A4', preferCSSPageSize: true, printBackground: false });
-  assert.equal((pdf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length, 1, `${name} must fit one printed sheet`);
+  const viewport = page.viewportSize();
+  // Print-media DOM geometry needs the same 178mm content width as the PDF;
+  // a desktop viewport would stretch width:100% while keeping a fixed mm height.
+  await page.setViewportSize({ width: Math.round((210 - 32) * 96 / 25.4), height: 1200 });
+  try {
+    await clearStudentFields();
+    assert.ok(await page.locator('.cover-artwork svg').isVisible(), 'Textures print without browser background graphics');
+    await page.screenshot({ path: path.join(output, `${name}-print.png`), fullPage: true });
+    const pdf = await page.pdf({ path: path.join(output, `${name}.pdf`), format: 'A4', preferCSSPageSize: true, printBackground: false });
+    assert.equal((pdf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length, 1, `${name} must fit one printed sheet`);
+  } finally { await page.setViewportSize(viewport); }
 }
 try {
   await page.goto(origin + '/?kind=index');
@@ -76,6 +122,7 @@ try {
   await page.evaluate(() => { document.querySelector('#printOutput').innerHTML = _wsCoverHtml('Photosynthesis, leaves\n& gas exchange', 'Primary Science', 'Past Year Paper', false); });
   await ready(); await clips();
   await inside('.wc-cover', ['.wc-title', '.wc-fields', '.wc-footer']);
+  await clearStudentFields();
   await page.screenshot({ path: path.join(output, 'main-science-preview.png'), fullPage: true });
   await page.emulateMedia({ media: 'print' }); await onePage('main-science-cover'); await page.emulateMedia({ media: 'screen' });
   await previewRules.evaluate(el => el.remove());
@@ -118,9 +165,11 @@ try {
     await ready(); await clips();
     assert.equal(await page.locator('[data-cover-subject]').first().getAttribute('data-cover-subject'), subject);
     await inside('.cover-preview', ['.cover-title', '.cover-fields-grid', '.cover-footer']);
+    await clearStudentFields();
     await page.screenshot({ path: path.join(output, `${subject}-standalone-preview.png`), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await inside('.cover-preview', ['.cover-title', '.cover-fields-grid', '.cover-footer']);
+    await clearStudentFields();
     await page.setViewportSize({ width: 1280, height: 1100 });
     const exportCss = await page.evaluate(() => getCoverCss());
     await page.addStyleTag({ content: exportCss + '@page{size:A4;margin:18mm 16mm}html,body{margin:0;padding:0}#printOutput{width:100%!important;margin:0!important}' });
@@ -129,5 +178,5 @@ try {
     await page.emulateMedia({ media: 'print' }); await onePage(`${subject}-standalone-cover`); await page.emulateMedia({ media: 'screen' });
   }
   assert.deepEqual(errors, []);
-  console.log('PASS actual main, Custom Paper editor/booklets and standalone cover generators under their legacy CSS; six-cell clipping, mobile bounds, labels and one PDF page per cover');
+  console.log('PASS main, Custom Paper editor/booklets and standalone generators: small scattered sixteen-icon atlases, bubble/polygon textures, mobile bounds, labels and one PDF page per cover');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

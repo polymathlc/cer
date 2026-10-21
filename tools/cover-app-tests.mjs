@@ -21,7 +21,7 @@ function harness() {
     window: { WorksheetCover: {
       render(options) { calls.render.push({ ...options }); return '<div class="print-front-page print-cover-page wc-cover">' + options.title + '</div>'; },
       async edit(options) { calls.edit.push({ ...options }); return state.result; },
-      decoration(subject, options) { return `<div class="cover-artwork" data-subject="${subject}" data-scale="${options.scale}"></div>`; },
+      decoration(subject, options) { return `<div class="cover-artwork" data-subject="${subject}" data-scale="${options.scale}" data-layout="${options.layout}" data-texture-opacity="${options.textureOpacity}"></div>`; },
       logoUrl: 'http://localhost/assets/worksheet-covers/polymath-logo.png'
     } },
     result: { title: 'Edited cover', fields: false, subject: 'science', footer: 'Practice' },
@@ -38,7 +38,7 @@ function harness() {
     _cpbOutputOpts: () => ({ frontHtml: '<div>Edited A</div>', buildOpts: { paper: { pageHtmlById: { q1: 'Edited B' } } }, forcedBreakIds: new Set(['q1']) }),
     _ppCoverHtml: title => '<div>' + title + '</div>',
     escapeHtml: value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
-    _cpbMetaGet: key => ({ org: 'Polymath', exam: 'Mock exam', subject: 'SCIENCE', year: '2026', level: 'P6', duration: '1 h 45 min', code: '', coverScale: 1, coverOpacity: .72 })[key],
+    _cpbMetaGet: key => ({ org: 'Polymath', exam: 'Mock exam', subject: 'SCIENCE', year: '2026', level: 'P6', duration: '1 h 45 min', code: '', coverScale: 1, coverOpacity: .72, coverTextureOpacity: .65 })[key],
     CPB_MCQ_MARKS: 2,
     console
   };
@@ -142,10 +142,12 @@ test('past paper draft edits stay separate and clear on account changes', async 
 
 test('custom booklet covers keep their anchor, exam metadata and instructions while adding subject artwork', () => {
   const { state } = harness();
-  const values = { subject: 'SCIENCE', org: 'Our Centre', coverInstructionsA: 'Keep & compare.\nDraw <carefully>.' };
+  const values = { subject: 'SCIENCE', org: 'Our Centre', coverInstructionsA: 'Keep & compare.\nDraw <carefully>.', coverTextureOpacity: .3 };
   const a = state._cpbCoverA(12, 6, values);
   const b = state._cpbCoverB(8, 7, 10, '__lo__q7', values);
   assert.match(a, /data-subject="SCIENCE"/);
+  assert.match(a, /data-layout="exam"/); assert.match(b, /data-layout="exam-b"/);
+  assert.match(a, /data-texture-opacity="0.3"/); assert.match(b, /data-texture-opacity="0.3"/);
   assert.match(a, /Our Centre/);
   assert.match(a, /Keep &amp; compare/);
   assert.match(a, /Draw &lt;carefully&gt;/);

@@ -15,7 +15,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.436.0">
+  <link rel="modulepreload" href="app.js?v=1.437.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -3137,7 +3137,13 @@ option {
   .cpb-cover > :not(.cover-artwork) { position:relative; z-index:1; }
   .cpb-cover > .cover-artwork { z-index:0; }
   .cpb-cover .cpb-cv-logo { position:absolute; left:0; top:0; width:65pt; height:auto; max-height:34pt; object-fit:contain; filter:saturate(.5) opacity(.72); }
-  .cpb-cover .cpb-cv-head, .cpb-cover .cpb-cv-time, .cpb-cover .cpb-cv-ins, .cpb-cover .cpb-cv-foot { background:rgba(255,255,255,.94); }
+  .cpb-cover .cpb-cv-head, .cpb-cover .cpb-cv-time, .cpb-cover .cpb-cv-foot, .cpb-cover .cpb-cv-index { background:#fff; }
+  .cpb-cover .cpb-cv-ins { background:transparent; }
+  /* Mask only the actual instruction text, including the numbered gutter.
+     The flexed blank area below it keeps the page artwork visible. */
+  .cpb-cover .cpb-cv-ins-h, .cpb-cover .cpb-cv-ins-list, .cpb-cover .cpb-cv-ins-note { background:#fff; }
+  .cpb-cover .cpb-cv-ins-h { width:fit-content; }
+  .cpb-cover .cpb-cv-box, .cpb-cover .cpb-cv-total > span { background:#fff; }
   /* margin-left:auto rather than align-self, so the grid sits at the right in
      the flex column of a cover AND in the plain block of the answer sheet. */
   .cpb-cv-index {
@@ -16089,7 +16095,7 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script src="worksheet-cover.js?v=1.436.0"></script>
-  <script type="module" src="app.js?v=1.436.0"></script>
+  <script src="worksheet-cover.js?v=1.437.0"></script>
+  <script type="module" src="app.js?v=1.437.0"></script>
 </body>
 </html>

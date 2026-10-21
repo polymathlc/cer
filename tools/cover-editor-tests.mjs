@@ -61,21 +61,31 @@ for (const subject of ['math', 'science']) {
     const cover = api.getCover();
     assert.equal(cover.header, 'My centre'); assert.equal(cover.footer, 'Final paper'); assert.equal(cover.fields, false);
     assert.equal(cover.nameLabel, 'Name'); assert.equal(cover.dateLabel, 'Date'); assert.equal(cover.artworkOpacity, .72);
+    assert.equal(cover.artworkLayout, 'scattered'); assert.equal(cover.artworkTextureOpacity, .65);
     assert.equal(api.getCover(), cover, 'defaults must not replace the object an input handler is editing');
+  });
+
+  test(`${subject}: older corner artwork upgrades to small scattered icons without losing edits`, () => {
+    api.setState({ title:'Older paper', questions:[], cover:{enabled:true,artworkLayout:'corners',artworkScale:.8,artworkOpacity:.42,nameLabel:'Student'} });
+    const cover=api.getCover();
+    assert.equal(cover.artworkLayout,'scattered'); assert.equal(cover.artworkScale,.8); assert.equal(cover.artworkOpacity,.42); assert.equal(cover.nameLabel,'Student');
+    api.syncCoverInputs(); assert.equal(getElement('coverArtworkLayout').value,'scattered');
+    assert.match(api.buildCoverHtml(),/data-cover-layout="scattered"/);
   });
 
   test(`${subject}: saved text and subject artwork survive every cover/export route`, () => {
     api.setState({ title:'Plants & <light>\nInvestigation', questions:[], cover:{enabled:true,header:'P O L Y M A T H',subheader:'Primary '+subject,
-      footer:'Term 4',nameLabel:'Student & class',dateLabel:'Lesson date',artworkLayout:'frame',artworkScale:1.25,artworkOpacity:.42} });
+      footer:'Term 4',nameLabel:'Student & class',dateLabel:'Lesson date',artworkLayout:'frame',artworkScale:1.25,artworkOpacity:.42,artworkTextureOpacity:.35} });
     const staticCover = api.buildCoverHtml(), preview = api.buildCoverPreviewMarkup(), design = api.dvCoverPageHtml();
     for (const html of [staticCover, preview, design, api.buildPrintableHtml(), api.buildStandaloneHtml()]) {
-      assert.match(html, new RegExp(`assets/worksheet-covers/${subject}-icons\\.png`));
-      assert.doesNotMatch(html, new RegExp(`assets/worksheet-covers/${subject === 'math' ? 'science' : 'math'}-icons\\.png`));
+      assert.match(html, new RegExp(`assets/worksheet-covers/${subject}-icons-v2\\.png`));
+      assert.doesNotMatch(html, new RegExp(`assets/worksheet-covers/${subject === 'math' ? 'science' : 'math'}-icons-v2\\.png`));
       assert.match(html, /assets\/branding\/polymath-learning-centre\.png/);
       assert.doesNotMatch(html, /dropbox\.com/);
       assert.match(html, /Plants &amp; &lt;light&gt;\nInvestigation/);
       assert.match(html, /Student &amp; class/); assert.match(html, /Lesson date/);
       assert.match(html, /data-cover-layout="frame"/); assert.match(html, /--wc-art-scale:1\.25;--wc-art-opacity:0\.42/);
+      assert.match(html, /--wc-texture-opacity:0\.35/);
     }
     for (const field of ['header','title','subheader','footer','nameLabel','dateLabel']) {
       assert.ok(preview.includes(`data-cover-field="${field}"`)); assert.ok(design.includes(`data-cover-field="${field}"`));
@@ -83,18 +93,21 @@ for (const subject of ['math', 'science']) {
     assert.doesNotMatch(staticCover, /contenteditable/);
     const stored=JSON.parse(api.serializeStateForCloud(api.getState()));
     assert.equal(stored.cover.artworkLayout,'frame'); assert.equal(stored.cover.nameLabel,'Student & class'); assert.equal(stored.cover.artworkOpacity,.42);
+    assert.equal(stored.cover.artworkTextureOpacity,.35);
     assert.match(api.getCoverCss(), /\.cover-artwork\s*\{/); assert.match(api.getCoverCss(), /white-space:pre-line/);
+    assert.match(api.getCoverCss(), /\.wc-textures\s*\{[^}]*opacity:var\(--wc-texture-opacity,\s*\.65\)/);
   });
 
-  test(`${subject}: settings edits autosave and restore labels, layout, size and intensity`, () => {
+  test(`${subject}: settings edits autosave and restore labels, layout, size and both intensities`, () => {
     api.setState({title:'Editing',questions:[],cover:{enabled:true}}); api.syncCoverInputs();
-    for (const [id,value] of [['coverNameLabelInput','Candidate'],['coverDateLabelInput','Date of lesson'],['coverArtworkLayout','minimal'],['coverArtworkScale','135'],['coverArtworkOpacity','58']]) {
+    for (const [id,value] of [['coverNameLabelInput','Candidate'],['coverDateLabelInput','Date of lesson'],['coverArtworkLayout','minimal'],['coverArtworkScale','135'],['coverArtworkOpacity','58'],['coverTextureOpacity','30']]) {
       const input=getElement(id); input.value=value; input.events.input({target:input});
     }
     const cover=api.getCover(); assert.equal(cover.nameLabel,'Candidate'); assert.equal(cover.dateLabel,'Date of lesson');
     assert.equal(cover.artworkLayout,'minimal'); assert.equal(cover.artworkScale,1.35); assert.equal(cover.artworkOpacity,.58);
-    assert.ok(api.getSaved()>=5);
+    assert.equal(cover.artworkTextureOpacity,.3); assert.ok(api.getSaved()>=6);
     api.syncCoverInputs(); assert.equal(getElement('coverArtworkScale').value,135); assert.equal(getElement('coverNameLabelInput').value,'Candidate');
+    assert.equal(getElement('coverTextureOpacity').value,30);
   });
 
   test(`${subject}: inline edits preserve Enter and synchronize settings`, () => {

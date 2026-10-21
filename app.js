@@ -4498,7 +4498,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.436.0';
+const APP_VERSION = 'v1.437.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -28740,6 +28740,7 @@ const CPB_META_DEFAULTS = {
   wsFields: true,      // print the Name / Class / Date strip
   coverScale: 1,
   coverOpacity: 0.72,
+  coverTextureOpacity: 0.65,
   coverInstructionsA: '',
   coverInstructionsB: '',
 };
@@ -29905,11 +29906,12 @@ function _cpbIndexGridHtml() {
 function _cpbCoverValue(key, values) {
   return values && values[key] != null ? values[key] : _cpbMetaGet(key);
 }
-function _cpbCoverBrandHtml(values) {
+function _cpbCoverBrandHtml(values, booklet) {
   return window.WorksheetCover.decoration(_cpbCoverValue('subject', values), {
     scale: Number(_cpbCoverValue('coverScale', values)),
     opacity: Number(_cpbCoverValue('coverOpacity', values)),
-    layout: 'corners'
+    textureOpacity: Number(_cpbCoverValue('coverTextureOpacity', values)),
+    layout: booklet === 'B' ? 'exam-b' : 'exam'
   }) + `<img class="cpb-cv-logo" src="${window.WorksheetCover.logoUrl}" alt="Polymath Learning Centre">`;
 }
 function _cpbCoverInstructions(booklet, defaults, values) {
@@ -29939,6 +29941,7 @@ async function cpbEditCovers() {
       <label>Booklet B instructions <span>(one per line; leave blank for the standard instructions)</span><textarea class="form-input" name="coverInstructionsB" rows="5" maxlength="3000">${escapeHtml(values.coverInstructionsB || '')}</textarea></label>
       <label>Icon size<input type="range" name="coverScale" min="0.65" max="1.4" step="0.05" value="${Number(values.coverScale) || 1}"></label>
       <label>Icon opacity<input type="range" name="coverOpacity" min="0.25" max="1" step="0.05" value="${Number(values.coverOpacity) || 0.72}"></label>
+      <label>Bubble &amp; polygon intensity<input type="range" name="coverTextureOpacity" min="0.1" max="1" step="0.05" value="${Number(values.coverTextureOpacity) || 0.65}"></label>
     </div><div class="cpb-cover-editor-preview"><div class="cpb-cover-editor-tabs"><button type="button" class="btn btn-outline" data-booklet="A">Booklet A</button><button type="button" class="btn btn-outline" data-booklet="B">Booklet B</button></div><iframe title="Live booklet cover preview"></iframe></div></div>
     <div class="cpb-cover-editor-foot"><button type="button" class="btn btn-outline" data-cancel>Cancel</button><button type="submit" class="btn btn-primary">Use these covers</button></div>
   </form>`;
@@ -29957,7 +29960,7 @@ async function cpbEditCovers() {
   dialog.addEventListener('input', event => {
     const key = event.target.name;
     if (!key) return;
-    values[key] = key === 'coverScale' || key === 'coverOpacity' ? Number(event.target.value) : event.target.value;
+    values[key] = ['coverScale', 'coverOpacity', 'coverTextureOpacity'].includes(key) ? Number(event.target.value) : event.target.value;
     draw();
   });
   dialog.querySelectorAll('[data-booklet]').forEach(button => button.addEventListener('click', () => { booklet = button.dataset.booklet; draw(); }));
@@ -30026,7 +30029,7 @@ function _cpbCoverA(marks, nA, values) {
       : 'Use a 2B pencil to shade your answers on the Answer Sheet.',
   ];
   return `<div class="print-front-page print-cover-page cpb-cover">
-    ${_cpbCoverBrandHtml(values)}
+    ${_cpbCoverBrandHtml(values, 'A')}
     ${_cpbIndexGridHtml()}
     ${_cpbCoverHeadHtml('A', values)}
     <div class="cpb-cv-time">
@@ -30056,7 +30059,7 @@ function _cpbCoverB(marks, from, to, anchor, values) {
     'Do not use highlighter on any part of your answers.',
   ];
   return `<div class="print-front-page print-cover-page cpb-cover" data-front-before="${escapeHtml(String(anchor || ''))}" data-front-restart="1">
-    ${_cpbCoverBrandHtml(values)}
+    ${_cpbCoverBrandHtml(values, 'B')}
     ${_cpbIndexGridHtml()}
     ${_cpbCoverHeadHtml('B', values)}
     <div class="cpb-cv-time">

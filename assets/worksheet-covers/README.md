@@ -1,5 +1,9 @@
 # Worksheet cover artwork
 
+Current covers use the expanded sixteen-motif atlases and small scattered layout.
+See [README-v2.md](README-v2.md) for the current assets and exact generation prompts.
+The original six-motif files below are retained unchanged for provenance.
+
 Generated with the built-in image generation tool on 22 October 2026. These are original transparent RGBA pixel-art atlases, 1536 × 1024 pixels, with three columns and two rows. The production PNGs are kept unmodified. `worksheet-cover.js` crops each equal cell using real image elements, so artwork prints when browser background graphics are disabled.
 
 Science cells: atom, test tubes, flask / microscope, DNA, seedling.

@@ -2842,9 +2842,10 @@
             <label>First field label<input type="text" id="coverNameLabelInput" class="cover-field-input" /></label>
             <label>Second field label<input type="text" id="coverDateLabelInput" class="cover-field-input" /></label>
           </div>
-          <label class="cover-art-setting">Artwork layout<select id="coverArtworkLayout" class="cover-field-input"><option value="corners">Corner clusters</option><option value="frame">Around the border</option><option value="minimal">Minimal</option></select></label>
+          <label class="cover-art-setting">Artwork layout<select id="coverArtworkLayout" class="cover-field-input"><option value="scattered">Scattered across the page</option><option value="frame">Edge sprinkles</option><option value="minimal">Airy sprinkles</option></select></label>
           <label class="cover-art-setting">Icon size<input id="coverArtworkScale" type="range" min="60" max="140" step="5" aria-label="Cover icon size" /></label>
           <label class="cover-art-setting">Pastel intensity<input id="coverArtworkOpacity" type="range" min="20" max="100" step="2" aria-label="Cover artwork opacity" /></label>
+          <label class="cover-art-setting">Bubble &amp; polygon intensity<input id="coverTextureOpacity" type="range" min="10" max="100" step="5" aria-label="Cover bubble and polygon intensity" /></label>
         </div>
         <label class="cover-toggle" style="margin-top:6px;">
           <input type="checkbox" id="contentsEnabledToggle" /> Include contents page in exports
@@ -2995,7 +2996,7 @@
   <iframe class="dv-frame" id="dvFrame" title="A4 design surface"></iframe>
 </div>
 
-<script src="worksheet-cover.js"></script>
+<script src="worksheet-cover.js?v=1.437.0"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
@@ -3040,7 +3041,7 @@ let state = {
 
 function defaultCover() {
   return { enabled: false, header: 'Polymath Learning Centre', subheader: 'Worksheet', footer: '',
-    fields: true, nameLabel: 'Name', dateLabel: 'Date', artworkScale: 1, artworkOpacity: 0.72, artworkLayout: 'corners' };
+    fields: true, nameLabel: 'Name', dateLabel: 'Date', artworkScale: 1, artworkOpacity: 0.72, artworkTextureOpacity: 0.65, artworkLayout: 'scattered' };
 }
 // Fill missing options when an older saved worksheet is opened.
 function getCover() {
@@ -3048,6 +3049,7 @@ function getCover() {
   for (const [key, value] of Object.entries(defaultCover())) {
     if (state.cover[key] === undefined) state.cover[key] = value;
   }
+  if (state.cover.artworkLayout === 'corners') state.cover.artworkLayout = 'scattered';
   return state.cover;
 }
 function coverFieldsOn() { return getCover().fields !== false; }
@@ -6338,7 +6340,7 @@ async function exportPdf() {
    standalone exports and the Design view so they all match. */
 function coverDecoSvg() {
   const c = getCover();
-  return WorksheetCover.decoration('math', { scale: c.artworkScale, opacity: c.artworkOpacity, layout: c.artworkLayout });
+  return WorksheetCover.decoration('math', { scale: c.artworkScale, opacity: c.artworkOpacity, textureOpacity: c.artworkTextureOpacity, layout: c.artworkLayout });
 }
 function coverPageMarkup(className, editable) {
   const c = getCover();
@@ -7397,6 +7399,7 @@ function syncCoverInputs() {
   document.getElementById('coverArtworkLayout').value = c.artworkLayout;
   document.getElementById('coverArtworkScale').value = Math.round(c.artworkScale * 100);
   document.getElementById('coverArtworkOpacity').value = Math.round(c.artworkOpacity * 100);
+  document.getElementById('coverTextureOpacity').value = Math.round(c.artworkTextureOpacity * 100);
   document.getElementById('contentsEnabledToggle').checked = !!getContents().enabled;
   document.getElementById('coverFieldsToggle').checked = coverFieldsOn();
   applyCoverEnabledClass();
@@ -7417,7 +7420,7 @@ for (const [field, id] of [['header', 'coverHeaderInput'], ['subheader', 'coverS
     getCover()[field] = e.target.value; refreshCoverPreviewField(field); ensureContentsPreview(); scheduleAutoSave();
   });
 }
-for (const [field, id, numeric] of [['artworkLayout', 'coverArtworkLayout', false], ['artworkScale', 'coverArtworkScale', true], ['artworkOpacity', 'coverArtworkOpacity', true]]) {
+for (const [field, id, numeric] of [['artworkLayout', 'coverArtworkLayout', false], ['artworkScale', 'coverArtworkScale', true], ['artworkOpacity', 'coverArtworkOpacity', true], ['artworkTextureOpacity', 'coverTextureOpacity', true]]) {
   document.getElementById(id).addEventListener('input', (e) => {
     getCover()[field] = numeric ? Number(e.target.value) / 100 : e.target.value;
     ensureCoverPreview(); ensureContentsPreview(); scheduleAutoSave();
