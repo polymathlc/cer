@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Interactive Textbook — Polymath Learning Centre</title>
-<meta name="description" content="Hands-on science lessons from Polymath Learning Centre. Play with the ideas in your textbook: melt ice, boil water, dry clothes and follow the water cycle.">
+<meta name="description" content="Hands-on science lessons from Polymath Learning Centre. Explore water, heat and reproduction through interactive activities and quick checks.">
 <link rel="icon" href="../assets/branding/polymath-learning-centre.png">
 <style>
 /* ==========================================================================
@@ -203,6 +203,7 @@ main { padding: var(--space-2xl) var(--space-lg) var(--space-2xl); }
 .topic-card:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 3px; }
 .topic-art { height: 170px; background: var(--accent-bg); position: relative; overflow: hidden; }
 .topic-art svg { width: 100%; height: 100%; display: block; }
+.topic-art img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .topic-body { padding: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-sm); flex: 1; }
 .topic-meta { display: flex; flex-wrap: wrap; gap: 6px; }
 .topic-tag {
@@ -307,7 +308,7 @@ footer.page-footer a { color: var(--text-secondary); }
   <section class="page-intro cascade" aria-labelledby="pageTitle">
     <span class="page-eyebrow">Interactive textbook</span>
     <h1 class="page-title" id="pageTitle">Learn science by playing with it</h1>
-    <p class="page-subtitle">Each topic follows your textbook page by page. Read a little, then try it yourself: melt the ice, light the burner, hang out the washing and watch what happens.</p>
+    <p class="page-subtitle">Each topic follows your textbook page by page. Read a little, then try it yourself: explore water, heat and how living things reproduce.</p>
   </section>
 
   <div class="toolbar cascade">
@@ -404,10 +405,37 @@ footer.page-footer a { color: var(--text-secondary); }
         { id: 'apply', title: "Let's Apply" },
         { id: 'learnt', title: 'What I Have Learnt' }
       ]
+    },
+    {
+      id: 'reproduction',
+      href: 'reproduction/',
+      title: 'Reproduction',
+      subject: 'Science',
+      chapter: 'Reproduction · Cycles',
+      level: 'Primary 5',
+      summary: 'Explore how humans and plants reproduce. Investigate flowers, pollination, seeds, germination and spores, then explain what keeps a life cycle going.',
+      keywords: 'primary 5 reproduction cycles humans male female reproductive systems sperm egg ovary ovaries testes fertilisation birth womb flower anther stigma pollen pollination fruit seeds dispersal germination spore fungi fern',
+      art: 'reproduction',
+      progressKey: 'polymath_textbook_reproduction_progress',
+      sections: [
+        { id: 'continuity', title: 'Why reproduce?' },
+        { id: 'human-systems', title: 'Human reproductive systems' },
+        { id: 'human-development', title: 'From fertilisation to birth' },
+        { id: 'flowers', title: 'Parts of a flower' },
+        { id: 'pollination', title: 'Pollination' },
+        { id: 'fertilisation', title: 'Flowers, fruits and seeds' },
+        { id: 'dispersal', title: 'Seed dispersal' },
+        { id: 'germination', title: 'Seed germination' },
+        { id: 'spores', title: 'Reproduction by spores' },
+        { id: 'compare', title: 'Plants and humans' },
+        { id: 'apply', title: "Let's Apply" },
+        { id: 'learnt', title: 'What I Have Learnt' }
+      ]
     }
   ];
 
   var TOPIC_ART = {
+    reproduction: '<img src="reproduction/assets/reproduction-garden.webp" alt="" loading="lazy" decoding="async">',
     water:
       '<svg viewBox="0 0 320 170" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' +
         '<defs>' +

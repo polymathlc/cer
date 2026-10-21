@@ -1,0 +1,2789 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>
+      Reproduction — Interactive Textbook · Polymath Learning Centre
+    </title>
+    <meta
+      name="description"
+      content="Explore human and plant reproduction with clickable diagrams, pollination, seed dispersal and a germination experiment. Primary 5 science."
+    />
+    <link
+      rel="icon"
+      href="../../assets/branding/polymath-learning-centre.png"
+    />
+    <style>
+      :root {
+        --ink: #1a2835;
+        --muted: #526575;
+        --blue: #0d559c;
+        --pale: #eaf4fd;
+        --line: #dce5eb;
+        --green: #27674d;
+        --paper: #fff;
+        --radius: 18px;
+        font-family: "Century Gothic", CenturyGothic, AppleGothic, sans-serif;
+        color: var(--ink);
+        background: #fbfcfd;
+        line-height: 1.7;
+        font-size: 16px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      button,
+      select,
+      input {
+        font: inherit;
+      }
+      button,
+      a,
+      input,
+      select {
+        -webkit-tap-highlight-color: transparent;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.7;
+      }
+      a {
+        color: var(--blue);
+      }
+      button:focus-visible,
+      a:focus-visible,
+      input:focus-visible,
+      select:focus-visible {
+        outline: 3px solid #cf781a;
+        outline-offset: 4px;
+      }
+      button,
+      select {
+        min-height: 44px;
+      }
+      button {
+        border: 1px solid #bfd4e4;
+        border-radius: 10px;
+        background: white;
+        color: var(--blue);
+        padding: 10px 17px;
+        line-height: 1.5;
+      }
+      button:hover {
+        background: var(--pale);
+      }
+      button.primary {
+        background: var(--blue);
+        border-color: var(--blue);
+        color: white;
+      }
+      button[aria-pressed="true"] {
+        background: #dceefc;
+        box-shadow: inset 0 0 0 2px var(--blue);
+      }
+      button.correct {
+        border-color: var(--green);
+        background: #e9f5ed;
+        color: #20583c;
+      }
+      button.wrong {
+        border-color: #b85f2b;
+        background: #fff2e7;
+        color: #87431d;
+      }
+      button:disabled:hover {
+        background: inherit;
+      }
+      img {
+        max-width: 100%;
+        display: block;
+      }
+      svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      svg text {
+        font-family: inherit;
+        fill: var(--ink);
+        font-size: 15px;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0 0 16px;
+      }
+      h1 {
+        font-size: clamp(2.1rem, 5vw, 3.5rem);
+        line-height: 1.12;
+        letter-spacing: -1.5px;
+      }
+      h2 {
+        font-size: clamp(1.6rem, 4vw, 2rem);
+        line-height: 1.25;
+        letter-spacing: -0.6px;
+      }
+      h3 {
+        font-size: 1.13rem;
+        line-height: 1.5;
+      }
+      small,
+      .small {
+        font-size: 0.83rem;
+        color: var(--muted);
+      }
+      .top {
+        border-bottom: 1px solid var(--line);
+        background: white;
+      }
+      .top-inner {
+        max-width: 1120px;
+        margin: auto;
+        padding: 18px 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 20px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--ink);
+        text-decoration: none;
+        font-size: 0.85rem;
+        line-height: 1.4;
+      }
+      .brand img {
+        width: 44px;
+        height: 44px;
+        object-fit: contain;
+      }
+      .back {
+        font-size: 0.9rem;
+        text-decoration: none;
+      }
+      .wrap {
+        max-width: 1100px;
+        padding: 0 24px;
+        margin: auto;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.05fr 1fr;
+        gap: 40px;
+        align-items: center;
+        padding: 48px 0 38px;
+      }
+      .eyebrow {
+        font-size: 0.77rem;
+        text-transform: uppercase;
+        letter-spacing: 1.8px;
+        color: var(--blue);
+        font-weight: bold;
+        margin-bottom: 14px;
+      }
+      .lead {
+        font-size: 1.08rem;
+        color: var(--muted);
+        max-width: 620px;
+      }
+      .hero-art {
+        border-radius: 24px;
+        overflow: hidden;
+        background: var(--pale);
+        border: 1px solid var(--line);
+      }
+      .hero-art img {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 3/2;
+        object-fit: cover;
+      }
+      .hero-art figcaption {
+        padding: 10px 16px;
+        font-size: 0.73rem;
+        color: var(--muted);
+        background: white;
+      }
+      .hero-art {
+        margin: 0;
+      }
+      .tag {
+        display: inline-block;
+        padding: 3px 10px;
+        background: var(--pale);
+        color: var(--blue);
+        border-radius: 99px;
+        font-size: 0.77rem;
+        margin: 0 5px 8px 0;
+      }
+      .journey {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: rgba(251, 252, 253, 0.97);
+        border-block: 1px solid var(--line);
+        padding: 12px 0;
+      }
+      .journey-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 18px;
+        font-size: 0.83rem;
+        margin-bottom: 8px;
+      }
+      .track {
+        height: 5px;
+        background: #dde8f0;
+        border-radius: 5px;
+        overflow: hidden;
+        flex: 1;
+        max-width: 220px;
+      }
+      .track div {
+        height: 100%;
+        width: 0;
+        background: #4287bc;
+        transition: width 0.3s;
+      }
+      .chips {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding: 4px 2px 10px;
+        scrollbar-width: thin;
+      }
+      .nav-chip {
+        white-space: nowrap;
+        flex: 0 0 auto;
+        text-decoration: none;
+        color: var(--muted);
+        padding: 7px 12px;
+        border: 1px solid var(--line);
+        border-radius: 99px;
+        font-size: 0.76rem;
+        background: white;
+      }
+      .nav-chip.done {
+        color: var(--green);
+        background: #edf6f0;
+        border-color: #bcd6c6;
+      }
+      .nav-chip.done:before {
+        content: "✓ ";
+        font-weight: bold;
+      }
+      .section {
+        margin: 42px 0;
+        padding: 32px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: white;
+        box-shadow: 0 5px 24px #132b4305;
+        scroll-margin-top: 155px;
+      }
+      .section-head {
+        margin-bottom: 24px;
+        max-width: 760px;
+      }
+      .section-number {
+        color: var(--blue);
+        font-size: 0.76rem;
+        letter-spacing: 1.5px;
+        font-weight: bold;
+        margin-bottom: 8px;
+      }
+      .source {
+        display: block;
+        font-size: 0.74rem;
+        color: var(--muted);
+        margin: 10px 0 0;
+      }
+      .notes {
+        color: #3d5060;
+        max-width: 770px;
+      }
+      .notes strong {
+        color: var(--ink);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+        margin-top: 24px;
+        align-items: start;
+      }
+      .widget {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 24px;
+        background: #f8fbfd;
+        min-width: 0;
+      }
+      .widget.full {
+        margin-top: 24px;
+      }
+      .widget-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: var(--blue);
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        align-items: center;
+        margin: 16px 0;
+      }
+      .controls label {
+        font-size: 0.88rem;
+      }
+      .controls select,
+      select {
+        border: 1px solid #b6cbdc;
+        border-radius: 9px;
+        padding: 8px;
+        max-width: 100%;
+        background: white;
+        color: var(--ink);
+      }
+      .status {
+        background: white;
+        border-left: 3px solid #93bde0;
+        border-radius: 5px;
+        padding: 14px 16px;
+        margin-top: 16px;
+        min-height: 56px;
+        font-size: 0.9rem;
+      }
+      .hint {
+        border-left: 3px solid #d4ad69;
+        background: #fff9ee;
+        padding: 16px;
+        border-radius: 6px;
+        margin-top: 20px;
+        color: #72532b;
+        font-size: 0.9rem;
+      }
+      .quiz {
+        border: 0;
+        border-top: 1px solid var(--line);
+        padding: 22px 0 0;
+        margin: 26px 0 0;
+        min-width: 0;
+      }
+      .quiz legend {
+        padding: 0;
+        float: left;
+        width: 100%;
+        margin-bottom: 12px;
+        font-weight: bold;
+        font-size: 0.94rem;
+      }
+      .answers {
+        display: grid;
+        gap: 8px;
+        clear: both;
+      }
+      .answers button {
+        text-align: left;
+        color: var(--ink);
+        font-size: 0.88rem;
+      }
+      .feedback {
+        font-size: 0.87rem;
+        min-height: 25px;
+        margin: 12px 0 0;
+        color: var(--muted);
+      }
+      .feedback.good {
+        color: var(--green);
+      }
+      .diagram {
+        background: white;
+        border-radius: 14px;
+        border: 1px solid #e4ecf2;
+        padding: 10px;
+      }
+      .diagram svg {
+        max-height: 300px;
+      }
+      .part-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 15px;
+      }
+      .part-buttons button {
+        font-size: 0.8rem;
+        padding: 8px 12px;
+      }
+      .stage-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin: 18px 0;
+      }
+      .stage-token {
+        background: white;
+        border: 1px solid #c7dbe9;
+        border-radius: 12px;
+        padding: 12px;
+        text-align: center;
+        flex: 1;
+        min-width: 100px;
+        font-size: 0.82rem;
+      }
+      .stage-token.active {
+        background: var(--pale);
+        border-color: var(--blue);
+        color: var(--blue);
+        font-weight: bold;
+      }
+      .stage-icon {
+        font-size: 1.8rem;
+        display: block;
+        line-height: 1.5;
+      }
+      .tick-label {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin: 8px 0;
+        font-size: 0.87rem;
+      }
+      .tick-label input {
+        width: 20px;
+        height: 20px;
+        flex: 0 0 auto;
+        accent-color: var(--blue);
+      }
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--blue);
+      }
+      .tray {
+        display: flex;
+        gap: 20px;
+      }
+      .tray > div {
+        flex: 1;
+        min-width: 0;
+        text-align: center;
+      }
+      .sprout {
+        height: 148px;
+        background: linear-gradient(#f1f8fe 70%, #ddc9ac 70%);
+        position: relative;
+        overflow: hidden;
+        border-radius: 12px;
+      }
+      .seed {
+        position: absolute;
+        left: calc(50% - 9px);
+        top: 96px;
+        width: 18px;
+        height: 13px;
+        background: #9c713f;
+        border-radius: 70% 30%;
+      }
+      .root {
+        position: absolute;
+        left: calc(50% - 2px);
+        top: 107px;
+        width: 4px;
+        background: #f8f1d8;
+        height: 0;
+        border-radius: 4px;
+        transition: height 0.4s;
+      }
+      .shoot {
+        position: absolute;
+        left: calc(50% - 3px);
+        bottom: 42px;
+        width: 6px;
+        height: 0;
+        background: #69966b;
+        border-radius: 8px;
+        transition: height 0.4s;
+      }
+      .leaf {
+        position: absolute;
+        background: #6b9e65;
+        top: 3px;
+        width: 24px;
+        height: 12px;
+        border-radius: 100% 0 100% 0;
+        opacity: 0;
+      }
+      .leaf.left {
+        right: 3px;
+        transform: rotate(40deg);
+      }
+      .leaf.right {
+        left: 3px;
+        transform: rotate(-20deg);
+      }
+      .grown .leaf {
+        opacity: 1;
+      }
+      .specimen {
+        min-height: 150px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        background: white;
+        margin-bottom: 15px;
+      }
+      .specimen svg {
+        height: 150px;
+        width: 200px;
+      }
+      .method-buttons {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .method-buttons button {
+        font-size: 0.84rem;
+      }
+      .compare-table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.86rem;
+        line-height: 1.6;
+        margin: 18px 0;
+      }
+      .compare-table th,
+      .compare-table td {
+        padding: 13px 10px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+      .compare-table th {
+        color: var(--blue);
+        background: #f3f8fc;
+      }
+      .cycle-slots {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin: 18px 0;
+      }
+      .cycle-slots span {
+        font-size: 0.79rem;
+        border: 1px dashed #abc6dc;
+        padding: 12px;
+        border-radius: 10px;
+        background: white;
+        flex: 1;
+        min-width: 100px;
+      }
+      .cycle-slots span.filled {
+        border-style: solid;
+        background: #eaf5ee;
+        color: var(--green);
+      }
+      .apply-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      .apply-grid .quiz {
+        margin: 0;
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #fbfcfd;
+      }
+      .apply-grid .quiz legend {
+        float: none;
+        font-size: 0.92rem;
+      }
+      .footer {
+        border-top: 1px solid var(--line);
+        padding: 30px 0;
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+      .footer-inner {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        justify-content: space-between;
+      }
+      .footer button {
+        font-size: 0.8rem;
+      }
+      figure {
+        margin: 0;
+      }
+      .pollen-dot {
+        fill: #d99b26;
+      }
+      .pollen-moving {
+        animation: pollen-flight 1.2s ease-in-out both;
+      }
+      @keyframes pollen-flight {
+        from {
+          transform: translate(0, 0);
+        }
+        to {
+          transform: translate(144px, 8px);
+        }
+      }
+      .flash {
+        animation: pop 0.45s ease;
+      }
+      @keyframes pop {
+        50% {
+          transform: scale(1.03);
+        }
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .ovary-shape {
+        fill: #c7e0c9;
+        stroke: #528863;
+        stroke-width: 2;
+      }
+      .flower-male {
+        stroke: #c78d27;
+        fill: #f6cf75;
+      }
+      .flower-female {
+        stroke: #5e9270;
+        fill: #a5cba9;
+      }
+      .highlight-male .flower-female,
+      .highlight-female .flower-male {
+        opacity: 0.18;
+      }
+      .flower-petal {
+        fill: #f7c9cb;
+        stroke: #c98c97;
+        stroke-width: 2;
+      }
+      @media (max-width: 720px) {
+        .hero {
+          grid-template-columns: 1fr;
+          gap: 25px;
+          padding: 30px 0;
+        }
+        .hero-art {
+          max-width: 520px;
+        }
+        .grid,
+        .apply-grid {
+          grid-template-columns: 1fr;
+        }
+        .wrap {
+          padding: 0 16px;
+        }
+        .section {
+          padding: 22px 18px;
+          margin: 28px 0;
+        }
+        .widget {
+          padding: 18px;
+        }
+        .top-inner {
+          padding: 14px 16px;
+          gap: 10px;
+        }
+        .brand {
+          font-size: 0.75rem;
+        }
+        .brand img {
+          width: 34px;
+          height: 34px;
+        }
+        .back {
+          font-size: 0.76rem;
+        }
+        .hero h1 {
+          letter-spacing: -1px;
+        }
+        .journey-head {
+          font-size: 0.75rem;
+        }
+        .track {
+          max-width: 120px;
+        }
+        .section {
+          scroll-margin-top: 150px;
+        }
+        .compare-table th,
+        .compare-table td {
+          padding: 10px 5px;
+          font-size: 0.78rem;
+        }
+        .stage-token {
+          min-width: 90px;
+        }
+        .notes {
+          font-size: 0.94rem;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *:before,
+        *:after {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      @media print {
+        .top,
+        .journey,
+        .controls,
+        .part-buttons,
+        .footer button {
+          display: none;
+        }
+        .section {
+          box-shadow: none;
+          break-inside: avoid;
+        }
+        .hero {
+          padding: 15px 0;
+        }
+        .hero-art {
+          max-width: 250px;
+        }
+        .quiz {
+          break-inside: avoid;
+        }
+        .wrap {
+          max-width: none;
+          padding: 0;
+        }
+        .section {
+          margin: 20px 0;
+        }
+        .answers button {
+          color: #111;
+        }
+        .grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="top-inner">
+        <a class="brand" href="../../"
+          ><img
+            src="../../assets/branding/polymath-learning-centre.png"
+            alt="Polymath Learning Centre"
+          /><span
+            >Polymath Learning Centre<br /><strong
+              >Interactive Textbook</strong
+            ></span
+          ></a
+        ><a class="back" href="../">← All topics</a>
+      </div>
+    </header>
+    <div class="wrap">
+      <div class="hero">
+        <div>
+          <div class="eyebrow">Primary 5 Science · Cycles</div>
+          <h1>Reproduction</h1>
+          <p class="lead">
+            How does a new life begin?<br />Explore the connections between
+            cells, people, flowers and seeds.
+          </p>
+          <div>
+            <span class="tag">12 learning stops</span
+            ><span class="tag">Explore · Experiment · Apply</span>
+          </div>
+          <p class="small">
+            An interactive learning guide based on
+            <em>Reproduction in Animals and Plants</em>, textbook pp. 2–29.
+            Learning notes, models and practice explanations are Polymath
+            additions. Diagrams are simplified and not to scale.
+          </p>
+          <a href="#continuity">Begin exploring ↓</a>
+        </div>
+        <figure class="hero-art">
+          <img
+            src="assets/reproduction-garden.webp"
+            width="1536"
+            height="1024"
+            alt="A flowering hibiscus, a bee, pea pods and a young seedling, shown as separate botanical specimens"
+          />
+          <figcaption>
+            Flowers, fruits and seeds are connected by reproduction.
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+    <nav class="journey" aria-label="Lesson sections">
+      <div class="wrap">
+        <div class="journey-head">
+          <strong>Your learning journey</strong
+          ><span id="progressLabel" aria-live="polite">0 / 12 complete</span>
+          <div class="track" aria-hidden="true">
+            <div id="progressFill"></div>
+          </div>
+        </div>
+        <div class="chips" id="sectionNav"></div>
+      </div>
+    </nav>
+    <main class="wrap" id="lesson">
+      <section class="section" id="continuity" data-section="continuity">
+        <div class="section-head">
+          <div class="section-number">01 · THE BIG IDEA</div>
+          <h2>Why reproduce?</h2>
+          <span class="source">Textbook pp. 2–7 · Learning notes</span>
+        </div>
+        <div class="notes">
+          <p>
+            Reproduction produces new individuals and ensures the continuity of
+            a living thing's kind. Without new offspring, a population may
+            eventually die out as its members die.
+          </p>
+          <p>
+            <strong
+              >Cells are the basic building blocks of living things.</strong
+            >
+            Different cells have different jobs. Reproductive cells carry
+            information that is passed from parents to offspring. This helps
+            explain why offspring have characteristics similar to their parents,
+            though they are not necessarily identical.
+          </p>
+        </div>
+        <div class="grid">
+          <div class="widget">
+            <div class="widget-label">Explore · Read the explanations</div>
+            <h3>A magnified view of cells</h3>
+            <div class="diagram">
+              <svg viewBox="0 0 380 180" role="img" aria-labelledby="cellTitle">
+                <title id="cellTitle">
+                  Magnified view of cells with different shapes
+                </title>
+                <g fill="#e3f0fc" stroke="#6a9cc4" stroke-width="2">
+                  <rect x="25" y="25" width="80" height="65" rx="16" />
+                  <rect x="110" y="25" width="80" height="65" rx="16" />
+                  <rect x="25" y="96" width="80" height="65" rx="16" />
+                  <rect x="110" y="96" width="80" height="65" rx="16" />
+                  <ellipse cx="270" cy="62" rx="35" ry="31" />
+                  <ellipse cx="270" cy="135" rx="35" ry="31" />
+                </g>
+                <g fill="#7fa4c7">
+                  <circle cx="65" cy="56" r="10" />
+                  <circle cx="150" cy="56" r="10" />
+                  <circle cx="65" cy="127" r="10" />
+                  <circle cx="150" cy="127" r="10" />
+                  <circle cx="270" cy="62" r="11" />
+                  <circle cx="270" cy="135" r="11" />
+                </g>
+                <text
+                  x="327"
+                  y="95"
+                  transform="rotate(90 327 95)"
+                  text-anchor="middle"
+                >
+                  magnified view
+                </text>
+              </svg>
+            </div>
+            <div class="controls" aria-label="Cell explanations">
+              <button data-cell="body" aria-pressed="true">
+                A living thing</button
+              ><button data-cell="cells" aria-pressed="false">
+                Under a microscope</button
+              ><button data-cell="information" aria-pressed="false">
+                Information
+              </button>
+            </div>
+            <div class="status" id="cellStatus" role="status">
+              A living thing has body parts made of cells. A microscope helps us
+              see these tiny building blocks.
+            </div>
+          </div>
+          <div class="widget">
+            <div class="widget-label">Think about it</div>
+            <h3>Similar does not mean identical</h3>
+            <p>
+              A young plant may share features with its parent. Human offspring
+              may also share features with their parents.
+            </p>
+            <p>
+              Hair length, a scar or a practised skill can change during a
+              person's life. Do not assume every visible difference is
+              inherited.
+            </p>
+            <div class="hint">
+              Reproduction helps a population continue. Its survival also
+              depends on food, habitat and other conditions.
+            </div>
+          </div>
+        </div>
+        <div class="quick-mount" data-quick="continuity"></div>
+      </section>
+
+      <section class="section" id="human-systems" data-section="human-systems">
+        <div class="section-head">
+          <div class="section-number">02 · HUMAN REPRODUCTION</div>
+          <h2>Human reproductive systems</h2>
+          <span class="source">Textbook pp. 8–9 · Learning notes</span>
+        </div>
+        <p class="notes">
+          Reproductive organs produce reproductive cells or support
+          reproduction. Select a system, then explore its parts. The systems
+          mature during puberty, which happens at different ages and paces for
+          different people.
+        </p>
+        <div class="grid">
+          <div class="widget">
+            <div class="widget-label">Try it · Anatomy explorer</div>
+            <div class="controls">
+              <button data-system="female" aria-pressed="true">
+                Female system</button
+              ><button data-system="male" aria-pressed="false">
+                Male system
+              </button>
+            </div>
+            <div class="diagram" id="femaleDiagram">
+              <svg
+                viewBox="0 0 400 245"
+                role="img"
+                aria-label="Simplified female reproductive system: two ovaries beside the womb; vagina below the womb"
+              >
+                <path
+                  d="M168 72 Q115 20 71 72 M232 72 Q285 20 329 72"
+                  fill="none"
+                  stroke="#b17b91"
+                  stroke-width="15"
+                  stroke-linecap="round"
+                />
+                <ellipse
+                  cx="66"
+                  cy="84"
+                  rx="25"
+                  ry="17"
+                  fill="#d1b5d8"
+                  stroke="#88628f"
+                  stroke-width="2"
+                />
+                <ellipse
+                  cx="334"
+                  cy="84"
+                  rx="25"
+                  ry="17"
+                  fill="#d1b5d8"
+                  stroke="#88628f"
+                  stroke-width="2"
+                />
+                <path
+                  d="M165 65 Q200 88 235 65 Q260 116 215 154 L211 207 H189 L185 154 Q140 116 165 65Z"
+                  fill="#efc7d2"
+                  stroke="#a66f85"
+                  stroke-width="3"
+                />
+                <text x="200" y="116" text-anchor="middle">womb</text>
+                <text x="45" y="130">ovary</text>
+                <text x="309" y="130">ovary</text>
+                <text x="240" y="195">vagina</text>
+                <path d="M236 190 H215" stroke="#526575" />
+              </svg>
+            </div>
+            <div class="diagram" id="maleDiagram" hidden>
+              <svg
+                viewBox="0 0 400 245"
+                role="img"
+                aria-label="Simplified male reproductive system showing the testes and penis; internal ducts omitted"
+              >
+                <path
+                  d="M201 142 L257 166 Q270 176 254 185 L195 168Z"
+                  fill="#e5c9d2"
+                  stroke="#9d7b89"
+                  stroke-width="2"
+                />
+                <ellipse
+                  cx="141"
+                  cy="170"
+                  rx="20"
+                  ry="27"
+                  fill="#d1b5d8"
+                  stroke="#88628f"
+                  stroke-width="2"
+                />
+                <ellipse
+                  cx="175"
+                  cy="174"
+                  rx="20"
+                  ry="27"
+                  fill="#d1b5d8"
+                  stroke="#88628f"
+                  stroke-width="2"
+                />
+                <text x="76" y="223">testes</text>
+                <path
+                  d="M123 211 L141 198 M123 211 L175 202"
+                  fill="none"
+                  stroke="#526575"
+                />
+                <text x="287" y="180">penis</text>
+                <path d="M281 173 H264" stroke="#526575" />
+              </svg>
+            </div>
+            <div class="part-buttons" id="humanParts"></div>
+            <div class="status" id="humanInfo" role="status">
+              Ovaries produce eggs, the female reproductive cells.
+            </div>
+          </div>
+          <div class="widget">
+            <div class="widget-label">Keep the ideas separate</div>
+            <h3>An organ is not a reproductive cell</h3>
+            <table class="compare-table">
+              <thead>
+                <tr>
+                  <th>Organ</th>
+                  <th>Its role</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Testes</td>
+                  <td>Produce sperm (male reproductive cells)</td>
+                </tr>
+                <tr>
+                  <td>Ovaries</td>
+                  <td>Produce eggs (female reproductive cells)</td>
+                </tr>
+                <tr>
+                  <td>Womb</td>
+                  <td>Houses and protects a developing foetus</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="small">
+              The penis delivers sperm into the female reproductive system. The
+              vagina receives sperm and forms the birth passage.
+            </p>
+          </div>
+        </div>
+        <div class="quick-mount" data-quick="human-systems"></div>
+      </section>
+
+      <section
+        class="section"
+        id="human-development"
+        data-section="human-development"
+      >
+        <div class="section-head">
+          <div class="section-number">03 · A NEW LIFE</div>
+          <h2>From fertilisation to birth</h2>
+          <span class="source">Textbook pp. 10–11 · Learning notes</span>
+        </div>
+        <p class="notes">
+          <strong>Fertilisation</strong> is the fusion of a male reproductive
+          cell with a female reproductive cell. In humans, one sperm fuses with
+          one egg. The fertilised egg develops into an embryo and then a foetus
+          in the womb. Development before birth usually takes about 40 weeks.
+        </p>
+        <div class="grid">
+          <div class="widget">
+            <div class="widget-label">Try it · Follow the sequence</div>
+            <div class="stage-row" id="humanStages"></div>
+            <button class="primary" id="humanNext">Next stage →</button
+            ><button id="humanRestart">Restart</button>
+            <div class="status" id="humanStage" role="status"></div>
+            <div class="hint">
+              A baby develops in the womb, not in the stomach. The stomach
+              digests food.
+            </div>
+          </div>
+          <div class="widget">
+            <div class="widget-label">Try it · Compare twins</div>
+            <div class="controls">
+              <button data-twins="identical" aria-pressed="true">
+                Identical twins</button
+              ><button data-twins="fraternal" aria-pressed="false">
+                Fraternal twins
+              </button>
+            </div>
+            <div id="twinsVisual" class="stage-row"></div>
+            <div class="status" id="twinsStatus" role="status"></div>
+          </div>
+        </div>
+        <div class="quick-mount" data-quick="human-development"></div>
+      </section>
+
+      <section class="section" id="flowers" data-section="flowers">
+        <div class="section-head">
+          <div class="section-number">04 · INSIDE A FLOWER</div>
+          <h2>Parts of a flower</h2>
+          <span class="source">Textbook pp. 12–14 · Learning notes</span>
+        </div>
+        <p class="notes">
+          Flowers contain reproductive parts. The
+          <strong>anther and filament</strong> make up a male part. The
+          <strong>stigma, style and ovary</strong> make up a female part; the
+          ovary contains ovules. Explore this cutaway and trace what each part
+          contains.
+        </p>
+        <div class="grid">
+          <div class="widget">
+            <div class="widget-label">Try it · Flower explorer</div>
+            <div class="controls">
+              <button data-filter="all" aria-pressed="true">All parts</button
+              ><button data-filter="male" aria-pressed="false">
+                Male parts</button
+              ><button data-filter="female" aria-pressed="false">
+                Female parts
+              </button>
+            </div>
+            <div class="diagram" id="flowerDiagram">
+              <svg
+                viewBox="0 0 500 320"
+                role="img"
+                aria-label="Labelled flower cutaway: anther and filament are male structures; stigma, style, ovary and ovules are female structures"
+              >
+                <g transform="translate(50 0)">
+                  <path
+                    class="flower-petal"
+                    d="M197 230 Q15 140 70 48 Q152 12 198 145 Q239 5 323 49 Q381 142 204 230Z"
+                  />
+                  <path d="M200 253 V295" stroke="#578464" stroke-width="12" />
+                  <g class="flower-male" stroke-width="5">
+                    <path
+                      d="M116 213 L105 94 M151 224 L141 117 M250 223 L264 114 M282 208 L296 92"
+                      fill="none"
+                    />
+                    <ellipse cx="105" cy="90" rx="13" ry="20" />
+                    <ellipse cx="141" cy="111" rx="13" ry="20" />
+                    <ellipse cx="264" cy="107" rx="13" ry="20" />
+                    <ellipse cx="296" cy="88" rx="13" ry="20" />
+                  </g>
+                  <g class="flower-female" stroke-width="3">
+                    <path d="M195 68 H205 V211 H195Z" />
+                    <path
+                      d="M178 65 Q200 48 222 65 Q217 82 200 78 Q183 82 178 65Z"
+                    />
+                    <ellipse cx="200" cy="232" rx="44" ry="30" />
+                    <g fill="#f8f5dc">
+                      <ellipse cx="180" cy="230" rx="8" ry="12" />
+                      <ellipse cx="200" cy="241" rx="8" ry="12" />
+                      <ellipse cx="220" cy="230" rx="8" ry="12" />
+                    </g>
+                  </g>
+                </g>
+                <g fill="none" stroke="#526575" stroke-width="1.5">
+                  <path d="M65 40 H102 L145 80" />
+                  <path d="M81 166 H124 L160 157" />
+                  <path d="M57 260 H125 L223 230" />
+                  <path d="M377 35 H320 L270 65" />
+                  <path d="M378 119 H255" />
+                  <path d="M377 244 H290" />
+                </g>
+                <g style="font-size: 16px">
+                  <text x="5" y="45">Anther</text>
+                  <text x="5" y="171">Filament</text>
+                  <text x="5" y="265">Ovule</text>
+                  <text x="385" y="40">Stigma</text>
+                  <text x="385" y="124">Style</text>
+                  <text x="385" y="249">Ovary</text>
+                </g>
+              </svg>
+            </div>
+            <div class="part-buttons" id="flowerParts"></div>
+            <div class="status" id="flowerInfo" role="status">
+              Select a part to discover its job.
+            </div>
+          </div>
+          <div class="widget">
+            <div class="widget-label">Look closer</div>
+            <h3>Three levels of containment</h3>
+            <div class="status">
+              <strong>Ovary</strong><br />contains → <strong>ovules</strong
+              ><br />each ovule contains → <strong>an egg cell</strong>
+            </div>
+            <div class="status">
+              <strong>Anther</strong><br />contains →
+              <strong>pollen grains</strong><br />pollen grains contain →
+              <strong>male reproductive cells</strong>
+            </div>
+            <p class="small" style="margin-top: 16px">
+              A pollen grain is not the same thing as the male reproductive cell
+              it carries. Petals may help attract pollinators, but they do not
+              produce reproductive cells.
+            </p>
+          </div>
+        </div>
+        <div class="quick-mount" data-quick="flowers"></div>
+      </section>
+
+      <section class="section" id="pollination" data-section="pollination">
+        <div class="section-head">
+          <div class="section-number">05 · MOVING POLLEN</div>
+          <h2>Pollination</h2>
+          <span class="source">Textbook pp. 15–16 · Learning notes</span>
+        </div>
+        <p class="notes">
+          <strong
+            >Pollination is the transfer of pollen grains from an anther to a
+            stigma.</strong
+          >
+          It can occur within one flower, between flowers on the same plant, or
+          between flowers on different plants of the same kind. Animals and wind
+          can carry pollen.
+        </p>
+        <div class="grid">
+          <div class="widget">
+            <div class="widget-label">Try it · Plan a pollen journey</div>
+            <p class="small">
+              Parts shown separately to explain pollen transfer.
+            </p>
+            <div class="diagram">
+              <svg
+                viewBox="0 0 370 155"
+                role="img"
+                aria-label="Pollen travels from anther to stigma"
+              >
+                <path
+                  d="M45 132 L72 55 M220 132 L248 65"
+                  stroke="#679978"
+                  stroke-width="7"
+                />
+                <g fill="#f1bfc4">
+                  <circle cx="72" cy="55" r="26" />
+                  <circle cx="248" cy="65" r="26" />
+                </g>
+                <ellipse cx="72" cy="55" rx="9" ry="15" fill="#daa545" />
+                <ellipse cx="248" cy="65" rx="12" ry="7" fill="#6a9b70" />
+                <path
+                  d="M112 57 Q164 10 209 58"
+                  stroke="#89acc5"
+                  stroke-width="2"
+                  stroke-dasharray="5 5"
+                  fill="none"
+                />
+                <circle
+                  id="pollenDot"
+                  class="pollen-dot"
+                  cx="91"
+                  cy="49"
+                  r="5"
+                />
+                <text x="30" y="149">anther</text>
+                <text x="222" y="149">stigma</text>
+              </svg>
+            </div>
+            <div class="controls">
+              <label for="pollenSource">From</label
+              ><select id="pollenSource">
+                <option value="anther">Anther</option>
+                <option value="ovary">Ovary</option></select
+              ><label for="pollenTarget">to</label
+              ><select id="pollenTarget">
+                <option value="stigma">Stigma</option>
+                <option value="ovule">Ovule</option>
+              </select>
+            </div>
+            <label for="pollenRoute" class="small">Which route?</label
+            ><select id="pollenRoute">
+              <option>Within the same flower</option>
+              <option>Between flowers on one plant</option>
+              <option>
+                Between flowers on different plants of the same kind
+              </option>
+            </select>
+            <div class="controls">
+              <button id="pollinateButton" class="primary">
+                Carry the pollen →
+              </button>
+            </div>
+            <div class="status" id="pollinationStatus" role="status">
+              Choose the starting and receiving parts, then carry the pollen.
+            </div>
+          </div>
+          <div class="widget">
+            <div class="widget-label">Structure helps a job get done</div>
+            <h3>How does the pollen travel?</h3>
+            <div class="controls">
+              <button data-carrier="animal" aria-pressed="true">Animals</button
+              ><button data-carrier="wind" aria-pressed="false">Wind</button>
+            </div>
+            <div class="status" id="carrierStatus" role="status">
+              Colourful petals, scent and nectar attract animals. Pollen sticks
+              to their bodies and may be deposited on another stigma.
+            </div>
+            <p class="small" style="margin-top: 16px">
+              Pollination brings male reproductive cells closer to female
+              reproductive cells. The cells have not fused yet.
+            </p>
+          </div>
+        </div>
+        <div class="quick-mount" data-quick="pollination"></div>
+      </section>
+
+      <section class="section" id="fertilisation" data-section="fertilisation">
+        <div class="section-head">
+          <div class="section-number">06 · AFTER POLLINATION</div>
+          <h2>Flowers, fruits and seeds</h2>
+          <span class="source">Textbook p. 17 · Learning notes</span>
+        </div>
+        <p class="notes">
+          A pollen grain on the stigma grows a pollen tube down the style
+          towards an ovule. A male reproductive cell travels through the tube
+          and fuses with the egg cell in the ovule. This fusion is
+          <strong>fertilisation</strong>.
+        </p>
+        <div class="grid">
+          <div class="widget">
+            <div class="widget-label">Try it · Follow the cells</div>
+            <div class="diagram">
+              <svg
+                viewBox="0 0 360 245"
+                role="img"
+                aria-label="A pollen tube grows from the stigma down the style to an ovule in the ovary"
+              >
+                <path
+                  d="M174 42 H186 V156 H174Z"
+                  fill="#c7e0c9"
+                  stroke="#528863"
+                  stroke-width="2"
+                />
+                <path
+                  d="M149 40 Q180 19 211 40 Q205 57 180 51 Q155 57 149 40Z"
+                  fill="#c7e0c9"
+                  stroke="#528863"
+                  stroke-width="2"
+                />
+                <ellipse
+                  class="ovary-shape"
+                  cx="180"
+                  cy="179"
+                  rx="57"
+                  ry="43"
+                />
+                <ellipse
+                  cx="171"
+                  cy="181"
+                  rx="19"
+                  ry="25"
+                  fill="#f6efd2"
+                  stroke="#a89d67"
+                  stroke-width="2"
+                />
+                <circle cx="171" cy="189" r="7" fill="#ae90ba" />
+                <circle cx="174" cy="32" r="7" fill="#dca731" />
+                <path
+                  id="pollenTube"
+                  d="M174 39 L176 153 Q177 167 171 181"
+                  fill="none"
+                  stroke="#dba326"
+                  stroke-width="5"
+                  hidden
+                />
+                <circle
+                  id="maleCell"
+                  cx="171"
+                  cy="181"
+                  r="5"
+                  fill="#dca731"
+                  hidden
+                />
+                <text x="245" y="47">stigma</text>
+                <text x="245" y="108">style</text>
+                <text x="252" y="179">ovary</text>
+                <text x="34" y="189">ovule</text>
+                <path d="M90 184 H149" stroke="#526575" />
+              </svg>
+            </div>
+            <div class="controls">
+              <button id="plantNext" class="primary">Next stage →</button
+              ><button id="plantRestart">Restart</button>
+            </div>
+            <div class="status" id="plantStage" role="status"></div>
+          </div>
+          <div class="widget">
+            <div class="widget-label">Try it · Count the possibilities</div>
+            <h3>What does each part become?</h3>
+            <div class="stage-row">
+              <div class="stage-token">Ovary <strong>→ Fruit</strong></div>
+              <div class="stage-token">Ovule <strong>→ Seed</strong></div>
+            </div>
+            <label for="ovuleCount"
+              >Number of ovules successfully fertilised:
+              <output id="ovuleValue">4</output></label
+            ><input id="ovuleCount" type="range" min="1" max="8" value="4" />
+            <div class="status" id="seedCount" role="status"></div>
+            <p class="small" style="margin-top: 16px">
+              The model assumes every fertilised ovule develops successfully.
+              Ovules that are not fertilised do not become seeds in this model.
+            </p>
+          </div>
+        </div>
+        <div class="quick-mount" data-quick="fertilisation"></div>
+      </section>
+
+      <section class="section" id="dispersal" data-section="dispersal">
+        <div class="section-head">
+          <div class="section-number">07 · TRAVELLING SEEDS</div>
+          <h2>Seed dispersal</h2>
+          <span class="source">Textbook pp. 18–19 · Learning notes</span>
+        </div>
+        <p class="notes">
+          Dispersal spreads fruits or seeds away from the parent plant. This
+          reduces overcrowding and competition for
+          <strong>light, water, mineral salts and space</strong>. Look for a
+          structure that helps a seed travel.
+        </p>
+        <div class="grid">
+          <div class="widget">
+            <div class="widget-label">Try it · Dispersal detective</div>
+            <h3 id="specimenName"></h3>
+            <div class="specimen" id="specimenArt"></div>
+            <p id="specimenClue" class="small"></p>
+            <label for="dispersalEvidence" class="small"
+              >Choose the useful evidence</label
+            ><select id="dispersalEvidence">
+              <option value="">Select a feature…</option>
+              <option value="wings">Light seed with wings or hairs</option>
+              <option value="flesh">Juicy edible flesh or hooks</option>
+              <option value="husk">
+                Fibrous husk trapping air and waterproof covering
+              </option>
+              <option value="pod">Dry fruit that splits with force</option>
+            </select>
+            <div class="method-buttons" style="margin-top: 14px">
+              <button data-method="wind">Wind</button
+              ><button data-method="animals">Animals</button
+              ><button data-method="water">Water</button
+              ><button data-method="splitting">Explosive action</button>
+            </div>
+            <div class="status" id="dispersalStatus" role="status">
+              Choose a feature, then the dispersal method it supports.
+            </div>
+            <div class="controls">
+              <button id="dispersalNext">Next specimen →</button>
+            </div>
+          </div>
+          <div class="widget">
+            <div class="widget-label">Evidence → Function</div>
+            <table class="compare-table">
+              <thead>
+                <tr>
+                  <th>Method</th>
+                  <th>What helps?</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Wind</td>
+                  <td>
+                    Small, light seeds; wings or hairs keep them airborne.
+                    Maple, dandelion.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Animals</td>
+                  <td>
+                    Hooks catch on fur; fleshy fruits are eaten and seeds are
+                    carried, spat out or passed out. Burdock, tomato, mango.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Water</td>
+                  <td>
+                    Air trapped in a fibrous husk helps floating; waterproof
+                    covering protects. Pong pong, nipah.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Explosive action</td>
+                  <td>
+                    A dry fruit splits with force and scatters seeds. Saga,
+                    lupin, jewelweed.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="quick-mount" data-quick="dispersal"></div>
+      </section>
+
+      <section class="section" id="germination" data-section="germination">
+        <div class="section-head">
+          <div class="section-number">08 · A SEED STARTS GROWING</div>
+          <h2>Seed germination</h2>
+          <span class="source">Textbook pp. 20–21 · Learning notes</span>
+        </div>
+        <p class="notes">
+          A seed needs sufficient
+          <strong>water, oxygen and a suitable temperature</strong> to
+          germinate. Light and soil are not requirements for germination. A root
+          emerges before the leaves. Stored nutrients in seed leaves support
+          early growth; when true leaves appear, the young plant can begin
+          making food.
+        </p>
+        <div class="grid">
+          <div class="widget">
+            <div class="widget-label">Try it · Set up a comparison</div>
+            <p class="small">
+              Tray A has sufficient water and oxygen and a suitable temperature.
+              Change Tray B, then move time forward. Both start with the same
+              kind and number of viable seeds.
+            </p>
+            <label class="tick-label"
+              ><input id="water" type="checkbox" checked />Sufficient water in
+              B</label
+            ><label class="tick-label"
+              ><input id="oxygen" type="checkbox" checked />Oxygen available in
+              B</label
+            ><label class="tick-label"
+              ><input id="warm" type="checkbox" checked />Suitable temperature
+              in B</label
+            ><label class="tick-label"
+              ><input id="light" type="checkbox" checked />Light in B</label
+            ><label for="dayRange"
+              >Model day: <output id="dayValue">0</output></label
+            ><input id="dayRange" type="range" min="0" max="8" value="0" />
+            <div class="status" id="experimentStatus" role="status"></div>
+          </div>
+          <div class="widget">
+            <div class="widget-label">Observe · Compare · Explain</div>
+            <div class="tray">
+              <div>
+                <h3>Tray A</h3>
+                <div class="sprout" id="trayA">
+                  <span class="seed"></span><span class="root"></span
+                  ><span class="shoot"
+                    ><span class="leaf left"></span
+                    ><span class="leaf right"></span
+                  ></span>
+                </div>
+                <p class="small" id="trayAStatus"></p>
+              </div>
+              <div>
+                <h3>Tray B</h3>
+                <div class="sprout" id="trayB">
+                  <span class="seed"></span><span class="root"></span
+                  ><span class="shoot"
+                    ><span class="leaf left"></span
+                    ><span class="leaf right"></span
+                  ></span>
+                </div>
+                <p class="small" id="trayBStatus"></p>
+              </div>
+            </div>
+            <div class="status" id="germinationStatus" role="status"></div>
+            <div class="hint">
+              This is a simplified model, not a prediction of exact growth
+              times. A seed can germinate in darkness using stored food;
+              continued healthy growth later needs light.
+            </div>
+          </div>
+        </div>
+        <div class="quick-mount" data-quick="germination"></div>
+      </section>
+
+      <section class="section" id="spores" data-section="spores">
+        <div class="section-head">
+          <div class="section-number">09 · ANOTHER WAY</div>
+          <h2>Reproduction by spores</h2>
+          <span class="source">Textbook p. 21 · Learning notes</span>
+        </div>
+        <p class="notes">
+          Ferns and mosses reproduce by spores. Spores are different from seeds.
+          In a fern, spore bags occur on the underside of fronds. Mosses produce
+          spores in capsules. When mature spore bags or capsules open, spores
+          are released and can be carried by wind or water. In favourable
+          conditions they can develop into new plants.
+        </p>
+        <div class="grid">
+          <div class="widget">
+            <div class="widget-label">Try it · A fern's spore journey</div>
+            <div class="diagram">
+              <svg
+                viewBox="0 0 380 170"
+                role="img"
+                aria-label="Underside of a fern frond with clusters of spore bags, and spores released to the right"
+              >
+                <path
+                  d="M45 150 Q120 90 162 20"
+                  stroke="#5c8c60"
+                  stroke-width="5"
+                  fill="none"
+                />
+                <g fill="#9fc099" stroke="#5c8c60">
+                  <path d="M70 125 Q20 87 49 73 Q76 82 89 107Z" />
+                  <path d="M99 95 Q48 58 80 44 Q109 56 116 77Z" />
+                  <path d="M120 65 Q98 17 125 16 Q145 30 139 43Z" />
+                  <path d="M90 109 Q134 123 156 91 Q132 75 108 89Z" />
+                  <path d="M119 76 Q165 91 188 59 Q164 44 135 57Z" />
+                </g>
+                <g fill="#9c7048">
+                  <circle cx="64" cy="90" r="4" />
+                  <circle cx="77" cy="100" r="4" />
+                  <circle cx="93" cy="60" r="4" />
+                  <circle cx="103" cy="69" r="4" />
+                  <circle cx="127" cy="98" r="4" />
+                  <circle cx="145" cy="64" r="4" />
+                  <circle cx="158" cy="67" r="4" />
+                </g>
+                <g id="sporeCloud" fill="#a08458" hidden>
+                  <circle cx="225" cy="51" r="3" />
+                  <circle cx="248" cy="67" r="3" />
+                  <circle cx="268" cy="39" r="3" />
+                  <circle cx="287" cy="79" r="3" />
+                  <circle cx="310" cy="58" r="3" />
+                </g>
+                <text x="201" y="144">spores ≠ seeds</text>
+              </svg>
+            </div>
+            <button id="sporeNext" class="primary">Next stage →</button
+            ><button id="sporeRestart">Restart</button>
+            <div class="status" id="sporeStatus" role="status"></div>
+          </div>
+          <div class="widget">
+            <div class="widget-label">Be precise</div>
+            <h3>Which plants?</h3>
+            <p>
+              Ferns and mosses are useful examples of plants that reproduce by
+              spores.
+            </p>
+            <p>
+              Do not turn this into “all non-flowering plants reproduce by
+              spores”. Some other non-flowering plants, such as conifers,
+              produce seeds.
+            </p>
+            <p class="small">
+              The fern's complete life cycle has additional stages. This model
+              focuses on spore formation, release and growth, as in the chapter.
+            </p>
+          </div>
+        </div>
+        <div class="quick-mount" data-quick="spores"></div>
+      </section>
+
+      <section class="section" id="compare" data-section="compare">
+        <div class="section-head">
+          <div class="section-number">10 · CONNECT THE IDEAS</div>
+          <h2>Plants and humans</h2>
+          <span class="source">Textbook p. 22 · Learning notes</span>
+        </div>
+        <p class="notes">
+          Human and flowering-plant sexual reproduction both involve the fusion
+          of a male reproductive cell with a female reproductive cell. Their
+          structures and the ways the cells meet are different.
+        </p>
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Idea</th>
+              <th>Humans</th>
+              <th>Flowering plants</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Male reproductive cells</td>
+              <td>Sperm produced by testes</td>
+              <td>Contained in pollen grains in anthers</td>
+            </tr>
+            <tr>
+              <td>Female reproductive cells</td>
+              <td>Eggs produced by ovaries</td>
+              <td>Egg cells inside ovules in the ovary</td>
+            </tr>
+            <tr>
+              <td>Fusion of cells</td>
+              <td>Fertilisation</td>
+              <td>Fertilisation</td>
+            </tr>
+            <tr>
+              <td>Special plant process</td>
+              <td>No pollination</td>
+              <td>Pollination transfers pollen to the stigma</td>
+            </tr>
+            <tr>
+              <td>Development</td>
+              <td>Embryo and foetus develop in womb</td>
+              <td>Fertilised ovules develop into seeds</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="widget full">
+          <div class="widget-label">Try it · Which process?</div>
+          <div class="controls">
+            <button data-compare="fusion">Male and female cells fuse</button
+            ><button data-compare="pollen">Pollen reaches a stigma</button
+            ><button data-compare="seed">A fruit floats away</button>
+          </div>
+          <div class="status" id="compareStatus" role="status">
+            Select an event to connect it to a process.
+          </div>
+        </div>
+        <div class="quick-mount" data-quick="compare"></div>
+      </section>
+
+      <section class="section" id="apply" data-section="apply">
+        <div class="section-head">
+          <div class="section-number">11 · LET'S APPLY</div>
+          <h2>Use what you know</h2>
+          <p class="notes">
+            Answer these checks, adapted from the chapter's assessment ideas. A
+            correct answer shows the reasoning. You can retry any question.
+          </p>
+          <span class="source">Textbook pp. 23–27 · Adapted practice</span>
+        </div>
+        <div id="applyQuestions" class="apply-grid"></div>
+        <div class="widget full">
+          <div class="widget-label">
+            Try it · Follow the classification trail
+          </div>
+          <p>
+            A plant without flowers is W. A flowering plant without dry pods is
+            X. A plant with dry pods but no winged seeds is Y. A plant with dry
+            pods and winged seeds is Z.
+          </p>
+          <div class="controls">
+            <label for="classPlant">Investigate</label
+            ><select id="classPlant">
+              <option value="fern">Bird's nest fern</option>
+              <option value="tomato">Tomato</option>
+              <option value="saga">Saga</option>
+              <option value="tulip">African tulip tree</option></select
+            ><button id="classifyButton">Follow the trail →</button>
+          </div>
+          <div class="status" id="classificationStatus" role="status">
+            Choose a plant and follow its observable features.
+          </div>
+        </div>
+        <p id="applyStatus" class="feedback" aria-live="polite"></p>
+      </section>
+
+      <section class="section" id="learnt" data-section="learnt">
+        <div class="section-head">
+          <div class="section-number">12 · WHAT I HAVE LEARNT</div>
+          <h2>Build a flowering plant's life cycle</h2>
+          <span class="source"
+            >Textbook pp. 14, 28–29 · Consolidation activity</span
+          >
+        </div>
+        <p class="notes">
+          Start with a seed. Choose the next event or stage, one at a time.
+          Roots and a shoot emerge during germination; the young plant grows
+          into an adult with flowers. Follow the cycle all the way to seed
+          dispersal.
+        </p>
+        <div class="widget full">
+          <div class="widget-label">Try it · Put the cycle in order</div>
+          <div class="cycle-slots" id="cycleSlots"></div>
+          <div class="part-buttons" id="cyclePick"></div>
+          <div class="status" id="cycleStatus" role="status">
+            Choose the seed to begin.
+          </div>
+          <div class="controls">
+            <button id="resetCycle">Build it again</button>
+          </div>
+        </div>
+        <div class="hint">
+          Remember the four distinct processes:
+          <strong>pollination</strong> transfers pollen;
+          <strong>fertilisation</strong> fuses cells;
+          <strong>dispersal</strong> spreads seeds;
+          <strong>germination</strong> starts a seed growing.
+        </div>
+      </section>
+    </main>
+    <footer class="footer">
+      <div class="wrap footer-inner">
+        <div>
+          <a href="../">← Back to all topics</a><br />Polymath Interactive
+          Textbook · Reproduction · v1.0.0<br />Progress is saved in this
+          browser. On shared devices, use Reset progress for a fresh start.
+        </div>
+        <div>
+          <button id="resetProgress">Reset progress</button>
+          <p id="storageStatus" class="small" role="status"></p>
+        </div>
+      </div>
+    </footer>
+    <script>
+      (function () {
+        "use strict";
+        const $ = (id) => document.getElementById(id);
+        const sections = [
+          "continuity",
+          "human-systems",
+          "human-development",
+          "flowers",
+          "pollination",
+          "fertilisation",
+          "dispersal",
+          "germination",
+          "spores",
+          "compare",
+          "apply",
+          "learnt",
+        ];
+        const titles = [
+          "Why reproduce?",
+          "Human systems",
+          "Before birth",
+          "Flower parts",
+          "Pollination",
+          "Fruits & seeds",
+          "Dispersal",
+          "Germination",
+          "Spores",
+          "Compare",
+          "Let’s Apply",
+          "Life cycle",
+        ];
+        const key = "polymath_textbook_reproduction_progress";
+        let done = {};
+        let answered = {};
+        let applyAnswered = {};
+        try {
+          const value = JSON.parse(localStorage.getItem(key) || "{}");
+          if (value && typeof value === "object" && !Array.isArray(value))
+            done = value;
+        } catch (e) {
+          $("storageStatus").textContent =
+            "Saved progress could not be read. You can still use the lesson.";
+        }
+        function save() {
+          try {
+            localStorage.setItem(key, JSON.stringify(done));
+            $("storageStatus").textContent = "Progress saved in this browser.";
+          } catch (e) {
+            $("storageStatus").textContent =
+              "This browser cannot save progress. Keep this page open to retain this session.";
+          }
+        }
+        function paintProgress() {
+          const count = sections.filter((id) => !!done[id]).length;
+          $("progressLabel").textContent = count + " / 12 complete";
+          $("progressFill").style.width = (count / 12) * 100 + "%";
+          document.querySelectorAll(".nav-chip").forEach((a) => {
+            const complete = !!done[a.dataset.for];
+            a.classList.toggle("done", complete);
+            a.setAttribute(
+              "aria-label",
+              a.textContent + (complete ? " — complete" : ""),
+            );
+          });
+        }
+        function complete(id) {
+          if (!done[id]) {
+            done[id] = new Date().toISOString();
+            save();
+          }
+          paintProgress();
+        }
+        $("sectionNav").innerHTML = sections
+          .map(
+            (id, i) =>
+              '<a class="nav-chip" data-for="' +
+              id +
+              '" href="#' +
+              id +
+              '">' +
+              (i + 1) +
+              ". " +
+              titles[i] +
+              "</a>",
+          )
+          .join("");
+        const questions = [
+          {
+            id: "continuity",
+            prompt:
+              "Why can offspring have characteristics similar to their parents?",
+            choices: [
+              "They always live in the same place.",
+              "Information is passed through reproductive cells.",
+              "Every offspring is an identical copy.",
+            ],
+            correct: 1,
+            explanation:
+              "Reproductive cells carry information from parents. Offspring may be similar without being identical.",
+          },
+          {
+            id: "human-systems",
+            prompt: "Which organs produce sperm and eggs respectively?",
+            choices: [
+              "Testes and ovaries",
+              "Penis and womb",
+              "Stomach and vagina",
+            ],
+            correct: 0,
+            explanation:
+              "Testes produce sperm. Ovaries produce eggs. A reproductive cell and the organ that produces it are different things.",
+          },
+          {
+            id: "human-development",
+            prompt: "Where does a human embryo develop into a foetus?",
+            choices: ["In the stomach", "In an ovary", "In the womb"],
+            correct: 2,
+            explanation:
+              "The womb houses and protects the developing embryo and foetus. The stomach digests food.",
+          },
+          {
+            id: "flowers",
+            prompt: "Which statement describes an ovule correctly?",
+            choices: [
+              "It contains many anthers.",
+              "It contains a female reproductive cell (egg cell).",
+              "It carries pollen to another plant.",
+            ],
+            correct: 1,
+            explanation:
+              "The ovary contains ovules, and each ovule contains an egg cell. Pollen grains contain male reproductive cells.",
+          },
+          {
+            id: "pollination",
+            prompt: "Which movement is pollination?",
+            choices: [
+              "Pollen moves from anther to stigma.",
+              "A seed floats away from a parent plant.",
+              "A male cell fuses with an egg cell.",
+            ],
+            correct: 0,
+            explanation:
+              "Pollination transfers pollen grains from anther to stigma. Cell fusion is fertilisation; spreading seeds is dispersal.",
+          },
+          {
+            id: "fertilisation",
+            prompt:
+              "After successful fertilisation, what can the ovary and ovule become?",
+            choices: [
+              "Ovary → seed; ovule → fruit",
+              "Both become pollen grains",
+              "Ovary → fruit; ovule → seed",
+            ],
+            correct: 2,
+            explanation:
+              "The ovary develops into the fruit. A successfully fertilised ovule develops into a seed.",
+          },
+          {
+            id: "dispersal",
+            prompt: "Why does dispersal benefit young plants?",
+            choices: [
+              "It removes their need for water.",
+              "It reduces overcrowding and competition with the parent.",
+              "It turns every seed into a flower immediately.",
+            ],
+            correct: 1,
+            explanation:
+              "Dispersal reduces competition for light, water, mineral salts and space. A dispersed seed still needs suitable conditions to grow.",
+          },
+          {
+            id: "germination",
+            prompt: "Which set gives the requirements for germination?",
+            choices: [
+              "Water, oxygen and a suitable temperature",
+              "Soil, bright light and a large pot",
+              "Only sunlight and water",
+            ],
+            correct: 0,
+            explanation:
+              "Seeds need sufficient water, oxygen and a suitable temperature. Light and soil are not germination requirements.",
+          },
+          {
+            id: "spores",
+            prompt: "Which pair reproduces by spores?",
+            choices: ["Tomato and mango", "Maple and saga", "Fern and moss"],
+            correct: 2,
+            explanation:
+              "Ferns and mosses reproduce by spores. The other examples are flowering plants that produce seeds.",
+          },
+          {
+            id: "compare",
+            prompt:
+              "What happens during fertilisation in both humans and flowering plants?",
+            choices: [
+              "A seed is dispersed.",
+              "A male reproductive cell fuses with a female reproductive cell.",
+              "Pollen moves between two flowers.",
+            ],
+            correct: 1,
+            explanation:
+              "Fertilisation is the fusion of male and female reproductive cells in both. Humans do not undergo pollination.",
+          },
+        ];
+        const applyQuestions = [
+          {
+            id: "inheritance",
+            prompt:
+              "1. Which feature can be changed by cutting, rather than being inherited?",
+            choices: [
+              "Hair length",
+              "Earlobe attachment",
+              "Natural eye colour",
+            ],
+            correct: 0,
+            explanation:
+              "Hair length can change after a haircut. Do not infer simple inheritance patterns for all human characteristics.",
+          },
+          {
+            id: "pear",
+            prompt:
+              "2. A pear develops from a flower. Which two processes must occur first?",
+            choices: [
+              "Germination and dispersal",
+              "Pollination and fertilisation",
+              "Dispersal and pollination",
+            ],
+            correct: 1,
+            explanation:
+              "Pollination transfers pollen to the stigma. Fertilisation follows; the ovary can then develop into the fruit.",
+          },
+          {
+            id: "juicy",
+            prompt:
+              "3. A fruit has juicy, edible flesh. Which dispersal method does this support?",
+            choices: ["Wind", "Explosive action", "Animals"],
+            correct: 2,
+            explanation:
+              "Flesh attracts animals. Seeds may be carried, spat out, or passed out after the fruit is eaten.",
+          },
+          {
+            id: "experiment",
+            prompt:
+              "4. Identical seeds sit on moist cotton wool in A and dry cotton wool in B. Everything else is the same. What requirement is tested?",
+            choices: ["Water", "Light", "Container shape"],
+            correct: 0,
+            explanation:
+              "Only moisture is changed, so the comparison tests water. Seed kind, containers and location are kept the same.",
+          },
+          {
+            id: "fusion",
+            prompt:
+              "5. A sperm fuses with an egg. What is this process called?",
+            choices: ["Pollination", "Fertilisation", "Germination"],
+            correct: 1,
+            explanation:
+              "Fertilisation is cell fusion. Testes produce sperm and ovaries produce eggs.",
+          },
+          {
+            id: "wings",
+            prompt:
+              "6. In the chapter’s comparison, which feature supports seeds travelling farther than splitting alone?",
+            choices: [
+              "Being heavier",
+              "Having no wings",
+              "Wings that allow wind to carry seeds",
+            ],
+            correct: 2,
+            explanation:
+              "Wings can keep light seeds airborne so wind carries them farther in the illustrated conditions. Actual distances depend on conditions.",
+          },
+          {
+            id: "stored-food",
+            prompt:
+              "7. What supports a germinating seed before true leaves can make food?",
+            choices: [
+              "Stored nutrients in seed leaves",
+              "Food made by its roots",
+              "Food made by its flower petals",
+            ],
+            correct: 0,
+            explanation:
+              "Stored nutrients support early growth. Roots emerge before leaves; true leaves can later begin making food.",
+          },
+          {
+            id: "fair-test",
+            prompt:
+              "8. To test whether oxygen is needed, which comparison is most useful?",
+            choices: [
+              "Different seed kinds at different temperatures",
+              "Same kind of seeds, same water and temperature; oxygen differs",
+              "One dry seed in darkness and one moist seed in light",
+            ],
+            correct: 1,
+            explanation:
+              "Change oxygen availability only. Keeping other relevant conditions the same makes the comparison meaningful.",
+          },
+        ];
+        function createQuiz(q, isApply) {
+          const field = document.createElement("fieldset");
+          field.className = "quiz";
+          field.id = (isApply ? "apply-" : "quick-") + q.id;
+          field.dataset.question = q.id;
+          const legend = document.createElement("legend");
+          legend.textContent = (isApply ? "" : "Quick check · ") + q.prompt;
+          field.appendChild(legend);
+          const choices = document.createElement("div");
+          choices.className = "answers";
+          q.choices.forEach((choice, i) => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.dataset.answer = i;
+            b.textContent = choice;
+            b.addEventListener("click", () => {
+              const correct = i === q.correct;
+              choices.querySelectorAll("button").forEach((x) => {
+                x.classList.remove("wrong", "correct");
+                x.setAttribute("aria-pressed", "false");
+              });
+              b.classList.add(correct ? "correct" : "wrong");
+              b.setAttribute("aria-pressed", "true");
+              feedback.textContent =
+                (correct ? "Correct. " : "Try again. ") + q.explanation;
+              feedback.classList.toggle("good", correct);
+              if (correct) {
+                if (isApply) {
+                  applyAnswered[q.id] = true;
+                  const n = Object.keys(applyAnswered).length;
+                  $("applyStatus").textContent =
+                    n +
+                    " / " +
+                    applyQuestions.length +
+                    " practice checks correct.";
+                  if (n === applyQuestions.length) complete("apply");
+                } else {
+                  answered[q.id] = true;
+                  complete(q.id);
+                }
+              }
+            });
+            choices.appendChild(b);
+          });
+          field.appendChild(choices);
+          const feedback = document.createElement("p");
+          feedback.className = "feedback";
+          feedback.setAttribute("role", "status");
+          field.appendChild(feedback);
+          return field;
+        }
+        questions.forEach((q) =>
+          document
+            .querySelector('[data-quick="' + q.id + '"]')
+            .appendChild(createQuiz(q, false)),
+        );
+        applyQuestions.forEach((q) =>
+          $("applyQuestions").appendChild(createQuiz(q, true)),
+        );
+        function press(group, button) {
+          document
+            .querySelectorAll(group)
+            .forEach((b) =>
+              b.setAttribute("aria-pressed", String(b === button)),
+            );
+        }
+        document.querySelectorAll("[data-cell]").forEach(
+          (b) =>
+            (b.onclick = () => {
+              press("[data-cell]", b);
+              $("cellStatus").textContent = {
+                body: "A living thing has body parts made of cells. A microscope helps us see these tiny building blocks.",
+                cells:
+                  "Under a microscope, cells can be magnified. Different cells may have different shapes and perform different functions.",
+                information:
+                  "Reproductive cells carry information from parents to offspring. This is why offspring may share characteristics with their parents.",
+              }[b.dataset.cell];
+            }),
+        );
+        const humanParts = {
+          ovaries: "Ovaries produce eggs, the female reproductive cells.",
+          womb: "The womb houses and protects the developing embryo and foetus.",
+          vagina:
+            "The vagina receives sperm and forms the passage through which a baby can be born.",
+          testes: "Testes produce sperm, the male reproductive cells.",
+          penis:
+            "The penis delivers sperm into the female reproductive system.",
+        };
+        function system(view) {
+          $("femaleDiagram").hidden = view !== "female";
+          $("maleDiagram").hidden = view !== "male";
+          $("humanParts").innerHTML = "";
+          (view === "female"
+            ? ["ovaries", "womb", "vagina"]
+            : ["testes", "penis"]
+          ).forEach((id) => {
+            const b = document.createElement("button");
+            b.dataset.human = id;
+            b.textContent = id.charAt(0).toUpperCase() + id.slice(1);
+            b.onclick = () => {
+              $("humanInfo").textContent = humanParts[id];
+              press("[data-human]", b);
+            };
+            $("humanParts").appendChild(b);
+          });
+          $("humanInfo").textContent =
+            humanParts[view === "female" ? "ovaries" : "testes"];
+        }
+        document.querySelectorAll("[data-system]").forEach(
+          (b) =>
+            (b.onclick = () => {
+              press("[data-system]", b);
+              system(b.dataset.system);
+            }),
+        );
+        system("female");
+        let humanStage = 0;
+        const humanLabels = [
+          "Sperm + egg",
+          "Fertilised egg",
+          "Embryo → foetus",
+          "Birth",
+        ];
+        const humanNotes = [
+          "One sperm and one egg are reproductive cells. They must fuse for fertilisation to occur.",
+          "Fertilisation forms a fertilised egg. It begins dividing and developing.",
+          "The embryo develops into a foetus in the womb, which houses and protects it.",
+          "After development in the womb, usually about 40 weeks, the baby is born.",
+        ];
+        function renderHuman() {
+          $("humanStages").innerHTML = humanLabels
+            .map(
+              (t, i) =>
+                '<span class="stage-token ' +
+                (i === humanStage ? "active" : "") +
+                '">' +
+                (i + 1) +
+                ". " +
+                t +
+                "</span>",
+            )
+            .join("");
+          $("humanStage").textContent = humanNotes[humanStage];
+          $("humanStage").dataset.stage = humanStage;
+          $("humanNext").disabled = humanStage === 3;
+        }
+        $("humanNext").onclick = () => {
+          humanStage = Math.min(3, humanStage + 1);
+          renderHuman();
+        };
+        $("humanRestart").onclick = () => {
+          humanStage = 0;
+          renderHuman();
+        };
+        renderHuman();
+        function twins(kind) {
+          const identical = kind === "identical";
+          $("twinsVisual").innerHTML = identical
+            ? '<span class="stage-token">1 sperm + 1 egg</span><span class="stage-token">1 fertilised egg splits</span><span class="stage-token">2 babies</span>'
+            : '<span class="stage-token">2 sperm + 2 eggs</span><span class="stage-token">2 fertilised eggs</span><span class="stage-token">2 babies</span>';
+          $("twinsStatus").textContent = identical
+            ? "Identical twins develop when one fertilised egg splits into two. One sperm and one egg were involved."
+            : "Fraternal twins develop from two eggs, each fertilised by a different sperm. Two sperm and two eggs were involved.";
+        }
+        document.querySelectorAll("[data-twins]").forEach(
+          (b) =>
+            (b.onclick = () => {
+              press("[data-twins]", b);
+              twins(b.dataset.twins);
+            }),
+        );
+        twins("identical");
+        const flowerParts = {
+          anther:
+            "Anther: contains pollen grains. The pollen grains contain male reproductive cells.",
+          filament: "Filament: supports the anther.",
+          stigma:
+            "Stigma: receives pollen grains during pollination. Some stigmas are sticky.",
+          style:
+            "Style: connects the stigma to the ovary. A pollen tube grows through it.",
+          ovary:
+            "Ovary: contains ovules. After successful fertilisation it can develop into a fruit.",
+          ovule:
+            "Ovule: contains an egg cell. After successful fertilisation it can develop into a seed.",
+        };
+        Object.keys(flowerParts).forEach((id) => {
+          const b = document.createElement("button");
+          b.dataset.flower = id;
+          b.textContent = id.charAt(0).toUpperCase() + id.slice(1);
+          b.onclick = () => {
+            $("flowerInfo").textContent = flowerParts[id];
+            press("[data-flower]", b);
+          };
+          $("flowerParts").appendChild(b);
+        });
+        document.querySelectorAll("[data-filter]").forEach(
+          (b) =>
+            (b.onclick = () => {
+              press("[data-filter]", b);
+              $("flowerDiagram").className =
+                "diagram" +
+                (b.dataset.filter === "all"
+                  ? ""
+                  : " highlight-" + b.dataset.filter);
+              $("flowerInfo").textContent =
+                b.dataset.filter === "male"
+                  ? "Male parts: anther and filament. The anther contains pollen grains."
+                  : b.dataset.filter === "female"
+                    ? "Female parts: stigma, style and ovary. Ovules are inside the ovary."
+                    : "All parts are visible. Select any part below the diagram.";
+            }),
+        );
+        $("pollinateButton").onclick = () => {
+          const correct =
+            $("pollenSource").value === "anther" &&
+            $("pollenTarget").value === "stigma";
+          $("pollinationStatus").textContent = correct
+            ? "Pollination! Pollen moves from anther to stigma. This route is possible " +
+              $("pollenRoute").value.toLowerCase() +
+              ". Fertilisation has not happened yet."
+            : "Try again. Pollen comes from the anther and is received by a stigma. It is not transferred straight to an ovule.";
+          $("pollenDot").classList.remove("pollen-moving");
+          if (correct) {
+            void $("pollenDot").getBoundingClientRect();
+            $("pollenDot").classList.add("pollen-moving");
+          }
+        };
+        document.querySelectorAll("[data-carrier]").forEach(
+          (b) =>
+            (b.onclick = () => {
+              press("[data-carrier]", b);
+              $("carrierStatus").textContent =
+                b.dataset.carrier === "wind"
+                  ? "Anthers projecting outside a flower release pollen into moving air. Large, feathery stigmas provide more surface area to catch airborne pollen."
+                  : "Colourful petals, scent and nectar attract animals. Pollen sticks to their bodies and may be deposited on another stigma.";
+            }),
+        );
+        let plantStage = 0;
+        const plantNotes = [
+          "1. After pollination, a pollen grain rests on the stigma.",
+          "2. A pollen tube grows down the style towards an ovule.",
+          "3. A male reproductive cell travels through the tube and fuses with an egg cell in the ovule. This is fertilisation.",
+          "4. After successful fertilisation, the ovary develops into a fruit and the fertilised ovules develop into seeds.",
+        ];
+        function renderPlant() {
+          $("plantStage").textContent = plantNotes[plantStage];
+          $("plantStage").dataset.stage = plantStage;
+          $("pollenTube").toggleAttribute("hidden", plantStage < 1);
+          $("maleCell").toggleAttribute("hidden", plantStage < 2);
+          $("plantNext").disabled = plantStage === 3;
+        }
+        $("plantNext").onclick = () => {
+          plantStage = Math.min(3, plantStage + 1);
+          renderPlant();
+        };
+        $("plantRestart").onclick = () => {
+          plantStage = 0;
+          renderPlant();
+        };
+        renderPlant();
+        function seedCount(n) {
+          return Math.max(0, Math.floor(Number(n) || 0));
+        }
+        function countSeeds() {
+          const n = seedCount($("ovuleCount").value);
+          $("ovuleValue").textContent = n;
+          $("seedCount").textContent =
+            n +
+            " successfully fertilised ovules → " +
+            n +
+            " seeds inside one fruit.";
+        }
+        $("ovuleCount").oninput = countSeeds;
+        countSeeds();
+        const specimens = [
+          {
+            name: "Maple",
+            clue: "A small, light seed has a broad wing.",
+            method: "wind",
+            evidence: "wings",
+            kind: "wing",
+          },
+          {
+            name: "Mango",
+            clue: "A fruit has juicy, edible flesh around its seed.",
+            method: "animals",
+            evidence: "flesh",
+            kind: "fruit",
+          },
+          {
+            name: "Pong pong",
+            clue: "The fruit has a fibrous husk trapping air and a waterproof covering.",
+            method: "water",
+            evidence: "husk",
+            kind: "float",
+          },
+          {
+            name: "Saga",
+            clue: "A dry pod splits with force, scattering the seeds.",
+            method: "splitting",
+            evidence: "pod",
+            kind: "pod",
+          },
+          {
+            name: "Burdock",
+            clue: "Hooks on the fruit can catch on an animal’s fur.",
+            method: "animals",
+            evidence: "flesh",
+            kind: "hooks",
+          },
+          {
+            name: "Dandelion",
+            clue: "A small, light seed has fine hairs.",
+            method: "wind",
+            evidence: "wings",
+            kind: "hair",
+          },
+        ];
+        let specimen = 0;
+        function specimenSvg(kind) {
+          const art = {
+            wing: '<path d="M92 107 Q200 26 176 19 Q101 19 83 102Z" fill="#c5d89d" stroke="#6d8853" stroke-width="2"/><ellipse cx="83" cy="109" rx="18" ry="12" fill="#a88754"/>',
+            fruit:
+              '<path d="M84 26 Q159 15 151 86 Q144 135 92 128 Q42 125 45 80 Q50 36 84 26Z" fill="#e9b96b" stroke="#b4823e" stroke-width="2"/><ellipse cx="102" cy="82" rx="18" ry="29" fill="#b99357"/>',
+            float:
+              '<ellipse cx="100" cy="71" rx="49" ry="54" fill="#9ec078" stroke="#638b4f" stroke-width="2"/><path d="M15 125 Q50 113 90 125 T180 125" fill="none" stroke="#70a9d2" stroke-width="5"/><path d="M78 37 Q112 76 86 106 M101 30 Q135 71 113 110" fill="none" stroke="#789b58" stroke-width="3"/>',
+            pod: '<path d="M43 111 Q85 16 158 30 Q139 90 43 111Z" fill="#ba956d" stroke="#8a6848" stroke-width="3"/><path d="M48 112 Q83 88 159 31" fill="none" stroke="#f4e5cc" stroke-width="5"/><g fill="#b95047"><circle cx="82" cy="102" r="8"/><circle cx="132" cy="104" r="8"/><circle cx="166" cy="87" r="8"/></g>',
+            hooks:
+              '<circle cx="100" cy="76" r="34" fill="#a6b67c"/><g fill="none" stroke="#788a53" stroke-width="3"><path d="M71 50 L56 32 Q52 22 44 31 M93 43 L91 21 Q93 12 100 18 M124 52 L144 31 Q153 27 152 37 M132 79 L159 76 Q168 78 161 87 M119 104 L131 128 Q130 138 123 131 M80 104 L65 126 Q57 132 57 122 M68 80 L45 83 Q34 78 43 72"/></g>',
+            hair: '<path d="M99 111 L99 62" stroke="#8e805e" stroke-width="2"/><ellipse cx="99" cy="121" rx="5" ry="10" fill="#8e805e"/><g stroke="#a5b9b8" stroke-width="2"><path d="M99 66 L56 30 M99 66 L75 17 M99 66 V12 M99 66 L126 18 M99 66 L145 31 M99 66 L150 53 M99 66 L49 53"/></g>',
+          };
+          return (
+            '<svg viewBox="0 0 200 150" aria-hidden="true">' +
+            art[kind] +
+            "</svg>"
+          );
+        }
+        function renderSpecimen() {
+          const s = specimens[specimen];
+          $("specimenName").textContent =
+            s.name + " · " + (specimen + 1) + " / " + specimens.length;
+          $("specimenClue").textContent = s.clue;
+          $("specimenArt").innerHTML = specimenSvg(s.kind);
+          $("dispersalEvidence").value = "";
+          document
+            .querySelectorAll("[data-method]")
+            .forEach((b) => b.setAttribute("aria-pressed", "false"));
+          $("dispersalStatus").textContent =
+            "Choose a feature, then the dispersal method it supports.";
+        }
+        document.querySelectorAll("[data-method]").forEach(
+          (b) =>
+            (b.onclick = () => {
+              press("[data-method]", b);
+              const s = specimens[specimen];
+              const ok =
+                b.dataset.method === s.method &&
+                $("dispersalEvidence").value === s.evidence;
+              $("dispersalStatus").textContent = ok
+                ? "Correct. " +
+                  s.clue +
+                  " This supports dispersal by " +
+                  (s.method === "splitting" ? "explosive action" : s.method) +
+                  "."
+                : "Try again. Use the observed structure as evidence: " +
+                  s.clue;
+            }),
+        );
+        $("dispersalNext").onclick = () => {
+          specimen = (specimen + 1) % specimens.length;
+          renderSpecimen();
+        };
+        renderSpecimen();
+        function germinates(setup) {
+          return !!(setup.water && setup.oxygen && setup.warm);
+        }
+        function growTray(id, canGrow, day) {
+          const tray = $(id);
+          const growing = canGrow && day >= 2;
+          tray.querySelector(".root").style.height = growing
+            ? Math.min(34, (day - 1) * 6) + "px"
+            : "0";
+          tray.querySelector(".shoot").style.height =
+            canGrow && day >= 4 ? Math.min(62, (day - 3) * 13) + "px" : "0";
+          tray.classList.toggle("grown", canGrow && day >= 6);
+          const status = !canGrow
+            ? "No germination: a required condition is missing."
+            : day < 2
+              ? "Seed takes in water."
+              : day < 4
+                ? "Root emerges first."
+                : day < 6
+                  ? "Shoot begins growing."
+                  : "True leaves appear; stored food supported early growth.";
+          $(id + "Status").textContent = status;
+        }
+        function germination() {
+          const setup = {
+            water: $("water").checked,
+            oxygen: $("oxygen").checked,
+            warm: $("warm").checked,
+            light: $("light").checked,
+          };
+          const day = Number($("dayRange").value);
+          $("dayValue").textContent = day;
+          growTray("trayA", true, day);
+          growTray("trayB", germinates(setup), day);
+          const missing = ["water", "oxygen", "warm"].filter(
+            (id) => !setup[id],
+          );
+          $("germinationStatus").textContent = missing.length
+            ? "Tray B lacks " +
+              missing
+                .map((id) => (id === "warm" ? "a suitable temperature" : id))
+                .join(" and ") +
+              ". It cannot germinate in this model."
+            : !setup.light
+              ? "Tray B can germinate in darkness. It uses stored nutrients before its true leaves begin making food."
+              : "Both trays can germinate. Water, oxygen and a suitable temperature are available.";
+          const changes = ["water", "oxygen", "warm", "light"].filter(
+            (id) => !setup[id],
+          );
+          $("experimentStatus").textContent =
+            changes.length === 0
+              ? "The trays have the same conditions. Change one factor to investigate it."
+              : changes.length === 1
+                ? "One factor differs: " +
+                  {
+                    water: "water",
+                    oxygen: "oxygen",
+                    warm: "temperature",
+                    light: "light",
+                  }[changes[0]] +
+                  ". The other conditions are controlled for a fair comparison."
+                : "More than one factor differs. Change one factor at a time to identify its effect.";
+        }
+        ["water", "oxygen", "warm", "light", "dayRange"].forEach((id) =>
+          $(id).addEventListener("input", germination),
+        );
+        germination();
+        let sporeStage = 0;
+        const sporeNotes = [
+          "1. A fern produces spores in spore bags on the underside of its fronds.",
+          "2. Mature spore bags open and release spores, which wind or water can carry.",
+          "3. In favourable conditions, spores can develop through further stages into new fern plants.",
+        ];
+        function spores() {
+          $("sporeCloud").toggleAttribute("hidden", sporeStage === 0);
+          $("sporeStatus").textContent = sporeNotes[sporeStage];
+          $("sporeNext").disabled = sporeStage === 2;
+        }
+        $("sporeNext").onclick = () => {
+          sporeStage = Math.min(2, sporeStage + 1);
+          spores();
+        };
+        $("sporeRestart").onclick = () => {
+          sporeStage = 0;
+          spores();
+        };
+        spores();
+        document.querySelectorAll("[data-compare]").forEach(
+          (b) =>
+            (b.onclick = () => {
+              press("[data-compare]", b);
+              $("compareStatus").textContent = {
+                fusion:
+                  "Fertilisation: reproductive cells fuse. This happens in both humans and flowering plants.",
+                pollen:
+                  "Pollination: pollen is transferred to a stigma in flowering plants. Humans do not undergo pollination.",
+                seed: "Dispersal: a fruit or seed moves away from its parent plant. Floating supports water dispersal.",
+              }[b.dataset.compare];
+            }),
+        );
+        function classification(features) {
+          return !features.flowers
+            ? "W"
+            : !features.pods
+              ? "X"
+              : features.wings
+                ? "Z"
+                : "Y";
+        }
+        const plants = {
+          fern: {
+            flowers: false,
+            pods: false,
+            wings: false,
+            reason:
+              "No flowers → W. The bird’s nest fern reproduces by spores.",
+          },
+          tomato: {
+            flowers: true,
+            pods: false,
+            wings: false,
+            reason:
+              "Flowers → no dry pods → X. Its fleshy fruits support animal dispersal.",
+          },
+          saga: {
+            flowers: true,
+            pods: true,
+            wings: false,
+            reason:
+              "Flowers → dry pods → seeds without wings → Y. The pods split and scatter seeds.",
+          },
+          tulip: {
+            flowers: true,
+            pods: true,
+            wings: true,
+            reason:
+              "Flowers → dry pods → winged seeds → Z. Wind can carry the winged seeds after release.",
+          },
+        };
+        $("classifyButton").onclick = () => {
+          const p = plants[$("classPlant").value];
+          $("classificationStatus").textContent =
+            "Group " + classification(p) + ". " + p.reason;
+        };
+        const cycle = [
+          "seed",
+          "young",
+          "adult",
+          "pollination",
+          "fertilisation",
+          "fruit",
+          "dispersal",
+        ];
+        const cycleNames = {
+          seed: "Seed",
+          young: "Germination → young plant",
+          adult: "Adult plant with flowers",
+          pollination: "Pollination",
+          fertilisation: "Fertilisation",
+          fruit: "Fruit and seeds develop",
+          dispersal: "Seed dispersal",
+        };
+        let cycleIndex = 0;
+        function renderCycle() {
+          $("cycleSlots").innerHTML = cycle
+            .map(
+              (id, i) =>
+                '<span class="' +
+                (i < cycleIndex ? "filled" : "") +
+                '">' +
+                (i + 1) +
+                ". " +
+                (i < cycleIndex ? cycleNames[id] : "…") +
+                "</span>",
+            )
+            .join("");
+          document.querySelectorAll("#cyclePick button").forEach((b) => {
+            b.disabled = cycle.indexOf(b.dataset.stage) < cycleIndex;
+          });
+        }
+        [
+          "pollination",
+          "seed",
+          "dispersal",
+          "fruit",
+          "young",
+          "fertilisation",
+          "adult",
+        ].forEach((id) => {
+          const b = document.createElement("button");
+          b.dataset.stage = id;
+          b.textContent = cycleNames[id];
+          b.onclick = () => {
+            if (id !== cycle[cycleIndex]) {
+              $("cycleStatus").textContent =
+                "Try again. " +
+                (cycleIndex === 0
+                  ? "Start with a seed."
+                  : "After " +
+                    cycleNames[cycle[cycleIndex - 1]].toLowerCase() +
+                    ", consider what must happen next.");
+              return;
+            }
+            cycleIndex++;
+            renderCycle();
+            if (cycleIndex === cycle.length) {
+              $("cycleStatus").textContent =
+                "Cycle complete! Dispersed seeds can germinate in suitable conditions, beginning another cycle.";
+              complete("learnt");
+            } else
+              $("cycleStatus").textContent =
+                "Correct. Choose the next stage or event.";
+          };
+          $("cyclePick").appendChild(b);
+        });
+        $("resetCycle").onclick = () => {
+          cycleIndex = 0;
+          renderCycle();
+          $("cycleStatus").textContent = "Choose the seed to begin.";
+        };
+        renderCycle();
+        $("resetProgress").onclick = () => {
+          if (
+            !window.confirm(
+              "Reset the saved progress for this Reproduction lesson?",
+            )
+          )
+            return;
+          done = {};
+          answered = {};
+          applyAnswered = {};
+          save();
+          document.querySelectorAll(".answers button").forEach((b) => {
+            b.classList.remove("correct", "wrong");
+            b.setAttribute("aria-pressed", "false");
+          });
+          document.querySelectorAll(".quiz .feedback").forEach((p) => {
+            p.textContent = "";
+            p.classList.remove("good");
+          });
+          $("applyStatus").textContent = "";
+          cycleIndex = 0;
+          renderCycle();
+          $("cycleStatus").textContent = "Choose the seed to begin.";
+          paintProgress();
+        };
+        window.addEventListener("storage", (event) => {
+          if (event.key === key) {
+            try {
+              const value = JSON.parse(event.newValue || "{}");
+              done =
+                value && typeof value === "object" && !Array.isArray(value)
+                  ? value
+                  : {};
+              paintProgress();
+            } catch (e) {}
+          }
+        });
+        try {
+          if (window.top !== window.self) {
+            document.querySelector(".brand").target = "_top";
+          }
+        } catch (e) {
+          document.querySelector(".brand").target = "_top";
+        }
+        paintProgress();
+        window.ReproductionLesson = {
+          ready: true,
+          sections,
+          questions,
+          applyQuestions,
+          germinates,
+          seedCount,
+          classification,
+          progress: {
+            key,
+            sections,
+            isDone: (id) => !!done[id],
+            reset: () => {
+              $("resetProgress").click();
+            },
+          },
+        };
+      })();
+    </script>
+  </body>
+</html>
