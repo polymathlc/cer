@@ -282,6 +282,8 @@ footer.page-footer a { color: var(--text-secondary); }
   .topic-art { display: none; }
   .cascade > * { opacity: 1 !important; animation: none !important; }
 }
+/* Inside the portal the sidebar is already the way home. */
+.in-portal .btn-ghost[href="../"] { display: none; }
 </style>
 </head>
 <body>
@@ -500,6 +502,22 @@ footer.page-footer a { color: var(--text-secondary); }
   staggerCascade();
 
   window.InteractiveTextbook = { topics: TEXTBOOK_TOPICS };
+})();
+</script>
+<script>
+/* Opened inside the Science Learning Portal (its sidebar's 📘 Interactive
+   textbook page shows this folder in a frame): a link that LEAVES the
+   textbook must not load the whole site inside that frame, so it goes to
+   the top window instead. Links between topics stay in the frame. */
+(function () {
+  var framed = false;
+  try { framed = window.top !== window.self; } catch (e) { framed = true; }
+  if (!framed) return;
+  var out = ["../"];
+  Array.prototype.forEach.call(document.querySelectorAll('a[href]'), function (a) {
+    if (out.indexOf(a.getAttribute('href')) !== -1) a.setAttribute('target', '_top');
+  });
+  document.documentElement.classList.add('in-portal');
 })();
 </script>
 </body>

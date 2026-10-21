@@ -1,6 +1,6 @@
 # CER Science Learning Portal
 
-## Editable worksheet covers (v1.435.0)
+## Editable worksheet covers (v1.436.0)
 
 Use **Edit cover** in the worksheet builder, saved worksheets or print preview
 to review the cover before exporting. Titles, headers, subtitles, footers and

@@ -165,6 +165,7 @@ test('all cover-bearing export doors await editing before their export work begi
     assert.match(source, /if \(!await (?:_wsEditCover|cpbEditCovers|_wsPrepareContextCover)\(/, from);
   }
   assert.match(html, /id="wsPreviewCoverBtn"/);
-  assert.match(html, /worksheet-cover\.js\?v=1\.435\.0/);
+  const version = app.match(/const APP_VERSION = 'v([^']+)'/)[1];
+  assert.ok(html.includes('worksheet-cover.js?v=' + version), 'cover runtime must use the shipped release version');
   assert.ok(app.includes('window.cpbEditCovers = cpbEditCovers;'));
 });
