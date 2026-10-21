@@ -109,12 +109,15 @@
 .wc-cover.wc-m .wc-subtitle{max-width:100%;margin:2.64cqw 0 0;font-size:var(--wc-subtitle-size,2.93cqw);line-height:1.4;color:#4f6970;white-space:pre-line;overflow-wrap:anywhere}
 .wc-cover.wc-m .wc-gap{flex:1 1 0;min-height:4cqw}
 .wc-cover.wc-m .wc-tail{flex:0 0 28.4cqw}
-.wc-cover.wc-m .wc-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 22cqw;gap:2.93cqw 3.52cqw;box-sizing:border-box;width:auto;margin:0;padding:3.23cqw 3.81cqw;border:1.5px solid #bfd9dc;border-radius:2.64cqw;background:#fff;text-align:left}
+.wc-cover.wc-m .wc-fields{display:grid;grid-template-columns:minmax(0,1fr) 22cqw;gap:2.93cqw 3.52cqw;box-sizing:border-box;width:auto;margin:0;padding:3.23cqw 3.81cqw;border:1.5px solid #bfd9dc;border-radius:2.64cqw;background:#fff;text-align:left}
 .wc-cover.wc-m .wc-field{display:flex;flex-direction:column;gap:.88cqw;min-width:0}
-.wc-cover.wc-m .wc-field-name{grid-column:1/span 2}
+.wc-cover.wc-m .wc-field-name{grid-column:1;grid-row:1}
+.wc-cover.wc-m .wc-field-date{grid-column:1;grid-row:2}
+.wc-cover.wc-m .wc-fields.wc-no-score{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
+.wc-cover.wc-m .wc-no-score .wc-field-date{grid-column:2;grid-row:1}
 .wc-cover.wc-m .wc-field-label{font-family:inherit;font-size:max(7px,1.61cqw);font-weight:700;line-height:1.25;letter-spacing:.18em;text-transform:uppercase;color:#1c7880;white-space:pre-line;overflow-wrap:anywhere}
 .wc-cover.wc-m .wc-fields .wc-field-line{height:4.4cqw;border-bottom:1.5px solid #8fb7bc}
-.wc-cover.wc-m .wc-score{grid-column:3;grid-row:1/span 2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.47cqw;min-width:0;padding:2.05cqw 1.47cqw;border-radius:2.05cqw;background:#eef8f9;text-align:center}
+.wc-cover.wc-m .wc-score{grid-column:2;grid-row:1/span 2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.47cqw;min-width:0;padding:2.05cqw 1.47cqw;border-radius:2.05cqw;background:#eef8f9;text-align:center}
 .wc-cover.wc-m .wc-score-row{display:flex;align-items:flex-end;gap:.88cqw}
 .wc-cover.wc-m .wc-fields .wc-score-box{width:6.45cqw;height:5cqw}
 .wc-cover.wc-m .wc-score-slash{font-size:4.4cqw;line-height:1;color:#8fb7bc}
@@ -181,7 +184,7 @@
       return iconHtml(key, (n * 5) % 16, left, top, width, [-9,7,0,-5,11,4,-12][n%7]);
     }).join('')}</div>`;
   }
-  const FIELD_NAMES = {header:'Centre name',title:'Worksheet title',subheader:'Small heading above the title',subtitle:'Line under the title',footer:'Footer note',level:'Level',nameLabel:'Name label',classLabel:'Class label',dateLabel:'Date label',scoreLabel:'Score label'};
+  const FIELD_NAMES = {header:'Centre name',title:'Worksheet title',subheader:'Small heading above the title',subtitle:'Line under the title',footer:'Footer note',level:'Level',nameLabel:'Name label',dateLabel:'Date label',scoreLabel:'Score label'};
   // The Big M cover: logo and level/subject pills, a left-aligned title block
   // with the magenta bar, a student-fields card and a footer, over the faint
   // backdrop. Option keys are the ones saved worksheets already store:
@@ -198,7 +201,11 @@
     const titleSize = fitSize(title, M_TITLE_SIZES, M_TITLE_BUDGET, .62, 1.05);
     const subtitleSize = fitSize(options.subtitle, M_SUBTITLE_SIZES, M_SUBTITLE_BUDGET, .55, 1.4);
     const field = (name, fallback, extra = '') => `<div class="wc-field${extra}"><div class="wc-field-label"${editable(name)}>${text(name, fallback)}</div><div class="wc-field-line"></div></div>`;
-    const fields = options.fields === false ? '' : `<div class="wc-fields">${field('nameLabel','Name',' wc-field-name')}<div class="wc-score"><div class="wc-field-label"${editable('scoreLabel')}>${text('scoreLabel','Score')}</div><div class="wc-score-row"><div class="wc-field-line wc-score-box"></div><span class="wc-score-slash">/</span><div class="wc-field-line wc-score-box"></div></div></div>${field('classLabel','Class')}${field('dateLabel','Date')}</div>`;
+    // The card is Name and Date. The score box beside them can be switched off
+    // (`score: false`), and the two lines then share the card's one row.
+    const score = options.score !== false;
+    const scoreBox = score ? `<div class="wc-score"><div class="wc-field-label"${editable('scoreLabel')}>${text('scoreLabel','Score')}</div><div class="wc-score-row"><div class="wc-field-line wc-score-box"></div><span class="wc-score-slash">/</span><div class="wc-field-line wc-score-box"></div></div></div>` : '';
+    const fields = options.fields === false ? '' : `<div class="wc-fields${score ? '' : ' wc-no-score'}">${field('nameLabel','Name',' wc-field-name')}${scoreBox}${field('dateLabel','Date',' wc-field-date')}</div>`;
     const note = shown('footer') ? `<span class="wc-dot"> · </span><span class="wc-note"${editable('footer')}>${text('footer','')}</span>` : '';
     return `<div class="wc-cover wc-m${classes ? ' ' + classes : ''}" data-cover-subject="${key}" data-cover-design="${DESIGN}">
       ${bigMDecoration(key, artOf(options))}
@@ -214,7 +221,7 @@
     ensureStyles();
     return new Promise(resolve => {
       const art = artOf(options);
-      const value = {...options, subject:subject(options.subject), fields:options.fields !== false, coverDesign:DESIGN,
+      const value = {...options, subject:subject(options.subject), fields:options.fields !== false, score:options.score !== false, coverDesign:DESIGN,
         scale:art.scale, opacity:art.opacity, layout:['frame','minimal'].includes(art.layout) ? art.layout : 'scattered',
         textureOpacity:art.textureOpacity, facetOpacity:art.facetOpacity};
       const dialog = doc.createElement('dialog');
@@ -229,8 +236,9 @@
         <div class="wc-editor-grid"><label>Level pill<input data-wc-input="level" placeholder="e.g. P5"></label><label>Footer note<input data-wc-input="footer"></label></div>
         <label>Centre name (footer)<input data-wc-input="header"></label>
         <label class="wc-check"><input type="checkbox" data-wc-input="fields"> Include student fields</label>
-        <div class="wc-editor-grid"><label>Name label<input data-wc-input="nameLabel"></label><label>Class label<input data-wc-input="classLabel"></label>
-        <label>Date label<input data-wc-input="dateLabel"></label><label>Score label<input data-wc-input="scoreLabel"></label></div>
+        <label class="wc-check"><input type="checkbox" data-wc-input="score"> Include score box</label>
+        <div class="wc-editor-grid"><label>Name label<input data-wc-input="nameLabel"></label><label>Date label<input data-wc-input="dateLabel"></label>
+        <label>Score label<input data-wc-input="scoreLabel"></label></div>
         <label>Icon arrangement<select data-wc-input="layout"><option value="scattered">Sprinkled across the page</option><option value="frame">Edges only</option><option value="minimal">Light sprinkle</option></select></label>
         <label>Icon size<input type="range" data-wc-input="scale" min="0.6" max="1.4" step="0.05"></label>
         <label>Icon visibility<input type="range" data-wc-input="opacity" min="0.15" max="1" step="0.01"></label>
@@ -238,17 +246,20 @@
         <label>Big M corner<input type="range" data-wc-input="facetOpacity" min="0" max="1" step="0.05"></label>
         </div><div class="wc-editor-preview" aria-label="Editable cover preview"></div></div>
         <div class="wc-editor-actions"><button type="button" data-wc-cancel>Cancel</button><button type="submit">Use this cover</button></div></form>`;
-      const defaults = {title:'Worksheet',header:'Polymath Learning Centre',subheader:'Worksheet',subtitle:'',level:'',footer:'',nameLabel:'Name',classLabel:'Class',dateLabel:'Date',scoreLabel:'Score'};
+      const defaults = {title:'Worksheet',header:'Polymath Learning Centre',subheader:'Worksheet',subtitle:'',level:'',footer:'',nameLabel:'Name',dateLabel:'Date',scoreLabel:'Score'};
       Object.keys(defaults).forEach(key => { if (value[key] == null) value[key] = defaults[key]; });
       const inputs = [...dialog.querySelectorAll('[data-wc-input]')];
       if (options.subjectLocked) dialog.querySelector('[data-wc-input="subject"]').disabled = true;
-      const sync = () => inputs.forEach(input => { const key = input.dataset.wcInput; if(input.type === 'checkbox') input.checked = value[key]; else input.value = value[key] ?? ''; });
+      // The score box lives on the student-fields card, so it has nothing to
+      // switch while the card itself is off.
+      const sync = () => inputs.forEach(input => { const key = input.dataset.wcInput; if(input.type === 'checkbox') input.checked = value[key]; else input.value = value[key] ?? ''; if(key === 'score') input.disabled = !value.fields; });
       const preview = dialog.querySelector('.wc-editor-preview');
       const draw = () => { preview.innerHTML = render({...value,className:'',editable:true}); };
       sync(); draw();
       inputs.forEach(input => input.addEventListener('input', () => {
         const key = input.dataset.wcInput;
         value[key] = input.type === 'checkbox' ? input.checked : input.type === 'range' ? Number(input.value) : input.value;
+        if (key === 'fields') sync();
         draw();
       }));
       preview.addEventListener('input', event => {

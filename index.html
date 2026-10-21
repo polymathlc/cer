@@ -15,7 +15,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.438.0">
+  <link rel="modulepreload" href="app.js?v=1.439.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -2944,6 +2944,15 @@ option {
     print-color-adjust: exact;
   }
   .print-cover-page.wc-cover { min-height:252mm; height:252mm; width:100%; }
+  /* The worksheet / past-paper cover fills its A4 sheet edge to edge: a named
+     page with no margins, and the cover sized to the whole sheet. Half a
+     millimetre is left at the foot so rounding in the PDF backend can never
+     push it onto a second sheet. The pages after it keep the normal margins. */
+  @page polymath-cover { size: A4 portrait; margin: 0; }
+  /* Its padding is the design's 6.05% / 7.05% / 5.04% of the sheet width,
+     written in mm: a percentage would be taken from the parent's width, which
+     is the 178mm text column wherever the cover is laid out inside one. */
+  .print-cover-page.wc-cover.print-cover-bleed { page: polymath-cover; width:210mm; min-height:296.5mm; height:296.5mm; margin:0; padding:12.7mm 14.8mm 10.58mm; }
   .print-cover-deco { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .print-cover-head { position: relative; font-size: 8.5pt; font-weight: 500; letter-spacing: 0.32em; text-transform: uppercase; color: #111; padding-bottom: 7pt; border-bottom: 0.75pt solid #111; }
   .print-cover-center { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20pt; padding-bottom: 16mm; }
@@ -16095,7 +16104,7 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script src="worksheet-cover.js?v=1.438.0"></script>
-  <script type="module" src="app.js?v=1.438.0"></script>
+  <script src="worksheet-cover.js?v=1.439.0"></script>
+  <script type="module" src="app.js?v=1.439.0"></script>
 </body>
 </html>

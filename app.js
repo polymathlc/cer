@@ -4498,7 +4498,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.438.0';
+const APP_VERSION = 'v1.439.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -26032,7 +26032,6 @@ function doPrintWorksheetOpen(whyNotes) {
       <div class="print-student-info">
         <span>Name: ___________________________</span>
         <span>Date: _______________</span>
-        <span>Class: ___________</span>
       </div>`;
     }
 
@@ -26982,7 +26981,10 @@ function _printPlanIn(doc, root, opts) {
     budget, usable, zoomFor, footerNode
   }));
 
-  const frontSpans = fronts.map(f => Math.max(1, Math.ceil((f.getBoundingClientRect().height || 1) / PRINT_PAGE_PX)));
+  // An edge-to-edge cover is a whole sheet by definition: it is taller than
+  // the printable area because it ignores the margins, not because it flows.
+  const frontSpans = fronts.map(f => f.classList.contains('print-cover-bleed') ? 1
+    : Math.max(1, Math.ceil((f.getBoundingClientRect().height || 1) / PRINT_PAGE_PX)));
   stage.remove();
   return { groups, pageHs, pageTall, pageZoom, akPlans, frontSpans, tallFlags: cls.tallFlags, heights, footerH, sepH, numH };
 }
@@ -28620,7 +28622,7 @@ const CPB_ENHANCE_MAX = 80;
 //                 and Booklet B of open-ended, a cover for each, numbered
 //                 straight through, with an answer sheet to shade.
 //   📝 WORKSHEET  one numbered list on an ordinary worksheet: this app's own
-//                 worksheet header, the Name / Class / Date strip, and every
+//                 worksheet header, the Name / Date strip, and every
 //                 answer written on the sheet itself. No booklets, no covers,
 //                 no answer sheet — a worksheet is not an exam paper and must
 //                 not be dressed as one.
@@ -28646,7 +28648,7 @@ const CPB_MODES = {
   },
   worksheet: {
     key: 'worksheet', icon: '📝', label: 'Worksheet',
-    blurb: 'One numbered list on an ordinary worksheet — the usual header, a Name / Class / Date strip, and every answer written on the sheet.',
+    blurb: 'One numbered list on an ordinary worksheet — the usual header, a Name / Date strip, and every answer written on the sheet.',
   },
 };
 function cpbMode() { return _cpbMetaGet('mode') === 'worksheet' ? 'worksheet' : 'paper'; }
@@ -28737,7 +28739,7 @@ const CPB_META_DEFAULTS = {
   targetQuestions: CPB_TARGET_QUESTIONS,
   artwork: null,       // optional colour elements; stored with this paper
   wsIntro: '',         // one instruction line printed above question 1
-  wsFields: true,      // print the Name / Class / Date strip
+  wsFields: true,      // print the Name / Date strip
   coverScale: 1,
   coverOpacity: 0.72,
   coverTextureOpacity: 0.65,
@@ -30209,7 +30211,7 @@ function _cpbPaperOpts() {
 // `paper` option is passed at all, so it goes down byte-for-byte the path
 // every other worksheet print in this app goes down — a "Question N" heading
 // above each question, an answer bracket under every MCQ, the worksheet
-// header with its Name / Class / Date strip, no cover and no answer sheet.
+// header with its Name / Date strip, no cover and no answer sheet.
 //
 // That is what "not an exam paper" has to MEAN, and it is also the thing that
 // stops this mode becoming a second renderer to keep in step with the first:
@@ -30712,7 +30714,7 @@ function _cpbIntroHtml() {
     <p class="cpb-lead">Paste the questions in — a page of last year's prelim, a figure out of a textbook, one you wrote yourself. They are read <b>as one run</b>, ${CPB_BATCH} at a time, so a question spread over two or three screenshots comes out as one question and a screenshot holding three comes out as three.</p>
     <div class="cpb-modes">${modes}</div>
     <p class="cpb-lead">${ws
-      ? 'Every question goes on <b>one numbered list</b>, in the order you put them in, on an ordinary worksheet — the usual header, a Name / Class / Date strip, and the answer written on the sheet itself.'
+      ? 'Every question goes on <b>one numbered list</b>, in the order you put them in, on an ordinary worksheet — the usual header, a Name / Date strip, and the answer written on the sheet itself.'
       : 'Multiple-choice questions go into <b>Booklet A</b> and open-ended ones into <b>Booklet B</b>, each with its own cover, numbered straight through.'}
       Switching between the two throws nothing away.</p>
     <p class="cpb-lead cpb-lock">🔒 Everything sent from here goes into the bank <b>held back from students</b> — yours to print, edit and reuse, and served to nobody until you release it. That is the same in both modes.</p>
@@ -30787,7 +30789,7 @@ function _cpbWorksheetSetupHtml() {
   const fields = !!_cpbMetaGet('wsFields');
   return `<div class="cpb-card">
     <div class="cpb-head"><h3 class="cpb-h3">① The worksheet</h3></div>
-    <p class="cpb-lead">A worksheet prints with this app's own header — the title, the centre's name, and a Name / Class / Date strip — and nothing else. No cover, no booklets and no answer sheet: every answer is written on the sheet itself.</p>
+    <p class="cpb-lead">A worksheet prints with this app's own header — the title, the centre's name, and a Name / Date strip — and nothing else. No cover, no booklets and no answer sheet: every answer is written on the sheet itself.</p>
     <div class="cpb-fields">
       ${_cpbField('name', 'Worksheet name', 'e.g. P5 Heat — practice 3', '— printed as the title, stored on every question as its source, and what groups them for release')}
       ${_cpbField('subject', 'Subject', 'e.g. SCIENCE', '— used only when the worksheet has no name of its own')}
@@ -30798,7 +30800,7 @@ function _cpbWorksheetSetupHtml() {
     <div class="cpb-switches">
       <label class="cpb-switch">
         <input type="checkbox" ${fields ? 'checked' : ''} onchange="cpbSetMeta('wsFields', this.checked)">
-        <span>Print the <b>Name / Class / Date</b> strip at the top</span>
+        <span>Print the <b>Name / Date</b> strip at the top</span>
       </label>
       ${_cpbEnhanceSwitchHtml()}
     </div>
@@ -39987,8 +39989,22 @@ function _wsCoverDefaults(title, sub, foot, noFields) {
     subject: 'science', subjectLocked: true, header: 'Polymath Learning Centre', title: title || 'Worksheet',
     subheader: sub == null ? 'Worksheet' : sub,
     footer: foot == null ? 'Primary Science' : foot,
-    fields: !noFields, nameLabel: 'Name', dateLabel: 'Date'
+    fields: !noFields, nameLabel: 'Name', dateLabel: 'Date', score: _wsCoverScoreDefault()
   };
+}
+// The score box on the cover is the teacher's choice, and the last choice made
+// in the cover editor is what the next cover starts from. A past paper's cover
+// is only held for the session, so without this a teacher who never wants the
+// box would have to untick it before every print. A cover saved with its own
+// choice keeps it.
+const WS_COVER_SCORE_KEY = 'cer.coverScore';
+function _wsCoverScoreDefault() {
+  try { return typeof localStorage === 'undefined' || localStorage.getItem(WS_COVER_SCORE_KEY) !== 'off'; }
+  catch { return true; }
+}
+function _wsCoverRememberScore(on) {
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem(WS_COVER_SCORE_KEY, on === false ? 'off' : 'on'); }
+  catch { /* private window: the choice still applies to this cover */ }
 }
 function _wsCoverSettingsFor(where, id) {
   if (where === 'saved') return savedWorksheets.find(w => w.id === id)?.cover || {};
@@ -39997,7 +40013,9 @@ function _wsCoverSettingsFor(where, id) {
 }
 function _wsCoverHtml(title, sub, foot, noFields, settings) {
   return window.WorksheetCover.render(Object.assign(_wsCoverDefaults(title, sub, foot, noFields), settings || {}, {
-    className: 'print-front-page print-cover-page',
+    // print-cover-bleed: the cover is a whole A4 sheet, edge to edge (its own
+    // margin-free @page in the print CSS), not a box inside the page margins.
+    className: 'print-front-page print-cover-page print-cover-bleed',
     subject: 'science',
     fields: !noFields && settings?.fields !== false
   }));
@@ -40024,6 +40042,7 @@ async function _wsEditCover(title, options = {}) {
   ));
   if (!settings) return false;
   if ((currentUser?.uid || null) !== owner) { showToast('The account changed. Open the cover editor again.', 'error'); return false; }
+  _wsCoverRememberScore(settings.score);
   if (where === 'saved' || where === 'builder') {
     const checkbox = document.getElementById(where === 'saved' ? 'mwIncludeFields' : 'wsIncludeFields');
     if (checkbox) checkbox.checked = settings.fields !== false;
@@ -40094,7 +40113,9 @@ async function _wsPrepareContextCover(ctx) {
   return true;
 }
 
-// Blank Name / Date / Class lines print unless the teacher turns them off. Two
+// Blank Name / Date / Class lines print unless the teacher turns them off.
+// (The lines are Name and Date only now; the marker above is what the cover
+// tests cut on, so its wording stays.) Two
 // pages carry the switch — the worksheet builder and My Worksheets — so the
 // caller says which one it is rather than us guessing from what's on screen.
 // A page without the checkbox (a print path that never had one, such as the
@@ -40126,17 +40147,15 @@ async function printStudentWorksheet() {
   await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why, akxPrintOn('builder'), objBoxPrintOn('builder'), wsArtwork);
 }
 
-// Worksheet title banner + name/date/class strip printed at the top of page 1.
+// Worksheet title banner + name/date strip printed at the top of page 1.
 // With a cover sheet in front, the banner would just repeat the logo and title
-// the reader has already seen, so only the name/date/class strip is kept — and
-// the strip carries Class, which the cover has no field for.
+// the reader has already seen, so only the name/date strip is kept.
 // `noFields` drops the strip entirely — with a cover in front there is then
 // nothing left to print, so page 1 starts straight in on question 1.
 function _wsHeaderHtml(worksheetTitle, hasCover, noFields) {
   const strip = noFields ? '' : `<div class="print-student-info">
         <span>Name: ___________________________</span>
         <span>Date: _______________</span>
-        <span>Class: ___________</span>
       </div>`;
   if (hasCover) return strip;
   return `<div class="print-worksheet-header">
@@ -40966,6 +40985,7 @@ const WS_PREVIEW_CSS = `
   #wsMeasure{ position:absolute; left:-9999px; top:0; width:178mm; }
   #wsPages{ padding:22px 0; }
   .wspv-sheet{ position:relative; width:210mm; min-height:297mm; box-sizing:border-box; padding:18mm 16mm 20mm; background:#fff; margin:0 auto 20px; box-shadow:0 3px 16px rgba(0,0,0,.45); }
+  .wspv-sheet.wspv-bleed{ padding:0; overflow:hidden; }
   .wspv-content{ position:relative; }
   /* html2canvas parks its working iframe directly under <body>, and the app's
      print CSS (unwrapped above) hides EVERY child of body but #printOutput —
@@ -42351,10 +42371,10 @@ function _wsPreviewPack(doc, opts) {
   const akSpans = akSheets.map(s => s.p.tall ? spanOf(s.p.h || 1) : 1);
   const totalPages = frontSpans.reduce((a, b) => a + b, 0) + groupSpans.reduce((a, b) => a + b, 0) + akSpans.reduce((a, b) => a + b, 0);
   let pageNo = 0;
-  const addSheet = (span, build, zoom) => {
+  const addSheet = (span, build, zoom, bleed) => {
     const from = pageNo + 1;
     pageNo += span;
-    const sheet = doc.createElement('div'); sheet.className = 'wspv-sheet';
+    const sheet = doc.createElement('div'); sheet.className = 'wspv-sheet' + (bleed ? ' wspv-bleed' : '');
     const content = doc.createElement('div'); content.className = 'wspv-content';
     build(content);
     sheet.appendChild(content);
@@ -42370,9 +42390,10 @@ function _wsPreviewPack(doc, opts) {
   // booklet cover really lands rather than a second cover at the front.
   const pvFront = _printFrontPlacement(fronts, pageGroups, chunks);
   const frontSpanOf = f => frontSpans[fronts.indexOf(f)] || 1;
-  pvFront.leading.forEach(f => addSheet(frontSpanOf(f), content => content.appendChild(f), 0));
+  const bleedOf = f => f.classList.contains('print-cover-bleed');
+  pvFront.leading.forEach(f => addSheet(frontSpanOf(f), content => content.appendChild(f), 0, bleedOf(f)));
   pageGroups.forEach((group, gi) => {
-    (pvFront.before.get(gi) || []).forEach(f => addSheet(frontSpanOf(f), content => content.appendChild(f), 0));
+    (pvFront.before.get(gi) || []).forEach(f => addSheet(frontSpanOf(f), content => content.appendChild(f), 0, bleedOf(f)));
     addSheet(groupSpans[gi], content => {
     group.forEach((idx, pos) => {
       if (pos > 0) { const sep = doc.createElement('div'); sep.className = 'print-question-separator'; content.appendChild(sep); }

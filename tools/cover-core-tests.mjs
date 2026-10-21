@@ -83,8 +83,18 @@ assert.match(big,/<h1 class="wc-title" style="--wc-title-size:8.8cqw">Electrical
 assert.match(big,/<p class="wc-subtitle"[^>]*>Circuits &amp; insulators<\/p>/);
 assert.match(big,/<span class="wc-org">Polymath Learning Centre<\/span><span class="wc-dot"> · <\/span><span class="wc-note">Primary Science<\/span>/);
 assert.match(big,/polymathlc\.com\.sg/);
-for (const label of ['Name','Class','Date','Score']) assert.match(big,new RegExp(`class="wc-field-label">${label}<`));
-assert.equal((big.match(/class="wc-field-line[ "]/g)||[]).length,5,'Three writing lines and two score boxes');
+for (const label of ['Name','Date','Score']) assert.match(big,new RegExp(`class="wc-field-label">${label}<`));
+assert.ok(!/>Class</.test(big),'The cover asks for Name and Date only, never Class');
+assert.equal((big.match(/class="wc-field-line[ "]/g)||[]).length,4,'Two writing lines and two score boxes');
+assert.match(big,/<div class="wc-fields"><div class="wc-field wc-field-name">/);
+// The score box can be switched off; Name and Date then share the card's row.
+const noScore = cover.render({title:'Heat',score:false});
+assert.ok(!noScore.includes('wc-score') && !/>Score</.test(noScore),'No score box, label or slash when it is off');
+assert.match(noScore,/<div class="wc-fields wc-no-score">/);
+assert.equal((noScore.match(/class="wc-field-line[ "]/g)||[]).length,2,'Just the Name and Date lines');
+assert.ok(!cover.render({title:'Heat',score:false,editable:true}).includes('data-wc-field="scoreLabel"'));
+assert.match(cover.render({title:'Heat',score:true}),/class="wc-score"/);
+assert.match(cover.printStyles,/\.wc-no-score \.wc-field-date\{grid-column:2;grid-row:1\}/);
 // A missing level, subtitle or footer note leaves no empty pill, paragraph or stray dot.
 const bare = cover.render({title:'Heat',footer:''});
 assert.ok(!bare.includes('wc-pill-level') && !bare.includes('wc-subtitle') && !bare.includes('wc-dot'));
@@ -92,7 +102,7 @@ assert.match(bare,/wc-pill-subject">Science</);
 assert.match(cover.render({subject:'math'}),/wc-pill-subject">Mathematics</);
 // The editor shows every field, empty ones as placeholders to type into.
 const editable = cover.render({editable:true,title:'Heat'});
-for (const field of ['level','subheader','title','subtitle','header','footer','nameLabel','classLabel','dateLabel','scoreLabel']) assert.match(editable,new RegExp(`data-wc-field="${field}"`));
+for (const field of ['level','subheader','title','subtitle','header','footer','nameLabel','dateLabel','scoreLabel']) assert.match(editable,new RegExp(`data-wc-field="${field}"`));
 // Long titles step down so the title block stays within two full-size lines.
 const sizeOf = title => +cover.render({title}).match(/--wc-title-size:([\d.]+)cqw/)[1];
 assert.equal(sizeOf('Heat'),8.8);
