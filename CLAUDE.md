@@ -1923,6 +1923,38 @@ key is the authority there, not the notes).
 
 - Run **`node tools/teaching-notes-tests.mjs`** after touching any of it.
 
+## 🎨 The worksheet cover is the Big M design (v1.438.0)
+
+`DESIGN` / `M_ICONS` / `M_FRAME` / `M_AIRY` / `M_FACETS` / `fitSize` / `artOf` /
+`bigMDecoration` / `render` in `worksheet-cover.js`, the `.wc-cover.wc-m` rules in
+its `printStyles`, and `_wsCoverLevel` beside `_wsEditCover` in `app.js`.
+
+- **`render()` always draws it; `decoration()` does NOT unless asked.** Custom
+  Paper's booklets and the two standalone worksheet creators call `decoration()`
+  directly with their own text layout, so its legacy arrangements stay exactly
+  as they were. `decoration(subject, { design: 'big-m' })` opts in.
+- **The icons never sit on words, and three tests say so.** `M_ICONS` are the
+  approved A4 design's placements as percentages of the sheet. They only work
+  because the text scales with them: font sizes are `cqw` of the content width
+  and the padding is `%` of the width, so on any page of A4 proportions the
+  title block, the fields card and the footer land where the design put them.
+  The card is held above the footer by a fixed `.wc-tail`, so a long title only
+  eats the gap ABOVE the card, and `fitSize` steps a long title down so the
+  title block never grows past two full-size lines. Change any of those three
+  and run the core test (geometry) plus both browser tests (`clearBigMText`).
+- **Option keys did not change, their places did**: `subheader` is the small
+  heading above the title, `header` the bold centre name in the footer, `footer`
+  the note beside it. `subtitle`, `level`, `classLabel` and `scoreLabel` are new.
+  The level pill starts from the sheet's questions (`_wsCoverLevel`); a saved
+  cover's own level, even an empty one, wins.
+- **A cover saved before this design takes the faint backdrop.** The editor
+  stamps `coverDesign: 'big-m'`; `artOf` drops the stored icon and texture
+  intensities of anything without it (they were tuned for the old, stronger
+  backdrop) and keeps size and arrangement.
+- Run `node tools/cover-core-tests.mjs`, `node tools/cover-app-tests.mjs`,
+  `node tools/cover-editor-tests.mjs` and, with Playwright,
+  `tools/cover-browser-tests.mjs` and `tools/cover-layout-browser-tests.mjs`.
+
 ## Versioning convention — applies to EVERY change (do this every time)
 1. **Bump the version.** In `index.html`, update `const APP_VERSION = 'vX.Y.Z'` (search `APP_VERSION`). Patch bump for fixes/small tweaks, minor bump for new features.
 2. **Keep it visible.** The version renders in the sidebar footer for admins only (`#appVersionBadge`, class `admin-only`). This is how the user confirms the latest build is actually deployed.

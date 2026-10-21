@@ -100,14 +100,23 @@ async function clearStudentFields() {
   }
   assert.deepEqual(collisions, [], 'Small symbols leave student labels, writing lines and footer text clear');
 }
+// The Big M cover keeps every icon off its words, logo, pills and fields card.
+async function clearBigMText() {
+  const hits = await page.locator('.wc-cover.wc-m').evaluateAll(covers => covers.flatMap(cover => {
+    const areas = [...cover.querySelectorAll('.wc-logo,.wc-pill,.wc-fields,.wc-bar')].map(el => ({ part: el.className, box: el.getBoundingClientRect() }))
+      .concat([...cover.querySelectorAll('.wc-eyebrow,.wc-title,.wc-subtitle,.wc-footer')].flatMap(el => { const range = document.createRange(); range.selectNodeContents(el); return [...range.getClientRects()].map(box => ({ part: el.className, box })); }));
+    return [...cover.querySelectorAll('.wc-icon')].flatMap(icon => { const box = icon.getBoundingClientRect(); return areas.filter(a => Math.min(box.right, a.box.right) - Math.max(box.left, a.box.left) > 1 && Math.min(box.bottom, a.box.bottom) - Math.max(box.top, a.box.top) > 1).map(a => `${icon.dataset.icon} on ${a.part}`); });
+  }));
+  assert.deepEqual(hits, [], 'Big M cover icons stay off the logo, pills, title block, fields card and footer');
+}
 async function onePage(name) {
   const viewport = page.viewportSize();
   // Print-media DOM geometry needs the same 178mm content width as the PDF;
   // a desktop viewport would stretch width:100% while keeping a fixed mm height.
   await page.setViewportSize({ width: Math.round((210 - 32) * 96 / 25.4), height: 1200 });
   try {
-    await clearStudentFields();
-    assert.ok(await page.locator('.cover-artwork svg').isVisible(), 'Textures print without browser background graphics');
+    await clearStudentFields(); await clearBigMText();
+    for (const svg of await page.locator('.cover-artwork svg.wc-textures, .cover-artwork svg.wc-facets').all()) assert.ok(await svg.isVisible(), 'Textures and the faceted M print without browser background graphics');
     await page.screenshot({ path: path.join(output, `${name}-print.png`), fullPage: true });
     const pdf = await page.pdf({ path: path.join(output, `${name}.pdf`), format: 'A4', preferCSSPageSize: true, printBackground: false });
     assert.equal((pdf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length, 1, `${name} must fit one printed sheet`);
@@ -122,7 +131,7 @@ try {
   await page.evaluate(() => { document.querySelector('#printOutput').innerHTML = _wsCoverHtml('Photosynthesis, leaves\n& gas exchange', 'Primary Science', 'Past Year Paper', false); });
   await ready(); await clips();
   await inside('.wc-cover', ['.wc-title', '.wc-fields', '.wc-footer']);
-  await clearStudentFields();
+  await clearStudentFields(); await clearBigMText();
   await page.screenshot({ path: path.join(output, 'main-science-preview.png'), fullPage: true });
   await page.emulateMedia({ media: 'print' }); await onePage('main-science-cover'); await page.emulateMedia({ media: 'screen' });
   await previewRules.evaluate(el => el.remove());
@@ -178,5 +187,5 @@ try {
     await page.emulateMedia({ media: 'print' }); await onePage(`${subject}-standalone-cover`); await page.emulateMedia({ media: 'screen' });
   }
   assert.deepEqual(errors, []);
-  console.log('PASS main, Custom Paper editor/booklets and standalone generators: small scattered sixteen-icon atlases, bubble/polygon textures, mobile bounds, labels and one PDF page per cover');
+  console.log('PASS Big M main cover (icons clear of every word), main, Custom Paper editor/booklets and standalone generators: small scattered sixteen-icon atlases, bubble/polygon textures, mobile bounds, labels and one PDF page per cover');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
