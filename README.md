@@ -1,5 +1,18 @@
 # CER Science Learning Portal
 
+## Interactive textbook: Reproduction (v1.443.0)
+
+Open **Syllabus & Papers → Interactive textbook → Reproduction** for a
+Primary 5 learning app based on the supplied reproduction textbook. Students
+explore the concepts through interactive activities, then answer quick checks
+with explanations. Completed sections are saved on the current device and
+shown on the textbook topic list.
+
+The lesson is served from `interactive-textbook/reproduction/` and follows the
+same standalone, offline-friendly structure as Water and Heat. Run
+`node tools/interactive-textbook-browser.mjs` and
+`node tools/interactive-textbook-reproduction-browser.mjs` for the textbook browser checks.
+
 ## 🚨 Red Light Fixer and the 💲 AI cost meter (v1.440.0)
 
 **Questions → Red Light Fixer** (admin only) checks every question you own for a
