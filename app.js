@@ -4498,7 +4498,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.437.0';
+const APP_VERSION = 'v1.438.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -40002,11 +40002,23 @@ function _wsCoverHtml(title, sub, foot, noFields, settings) {
     fields: !noFields && settings?.fields !== false
   }));
 }
+// The cover's level pill starts from the questions on the sheet (the highest
+// level among them, read the way every level here is read). A saved cover's
+// own level — including one the teacher cleared — always wins.
+function _wsCoverLevel(where, id) {
+  try {
+    if (typeof _tsendLevelOf !== 'function') return '';
+    const questions = where === 'builder' ? questionBank.filter(q => wsSelectedIds.has(q.id))
+      : where === 'saved' ? _wsSavedQuestions(savedWorksheets.find(w => w.id === id) || {}) : [];
+    return _tsendLevelOf(questions) || '';
+  } catch { return ''; }
+}
 async function _wsEditCover(title, options = {}) {
   const where = options.where || 'builder';
   const owner = currentUser?.uid || null;
   const settings = await window.WorksheetCover.edit(Object.assign(
     _wsCoverDefaults(title, options.sub, options.foot, options.noFields),
+    { level: _wsCoverLevel(where, options.id) },
     _wsCoverSettingsFor(where, options.id),
     Object.assign({ subject: 'science', subjectLocked: true }, options.noFields == null ? {} : { fields: !options.noFields })
   ));

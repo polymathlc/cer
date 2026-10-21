@@ -1,4 +1,6 @@
-# Scattered worksheet cover artwork (v1.437.0)
+# Scattered worksheet cover artwork (v1.437.0, Big M cover v1.438.0)
+
+Since v1.438.0 the shared cover (`WorksheetCover.render`, used by every cover the main app prints) is the **Big M** design. It draws 31 icons from the same atlases at placements taken from the approved A4 design (`M_ICONS` in `worksheet-cover.js`, as percentages of the sheet), the same bubble/polygon textures minus the few that would sit under the M, and the faceted M as a printable SVG in the top-right band. Its defaults are faint: icons at 0.38, textures at 0.6, the M at full strength. `decoration()` without `design: 'big-m'` keeps the arrangements below for Custom Paper and the two worksheet creators.
 
 Generated with the built-in image generation tool on 22 October 2026. The unmodified 1254 × 1254 RGBA PNG files `science-icons-v2.png` and `math-icons-v2.png` have sixteen motifs each in a 4 × 4 arrangement. Every cover uses a deterministic scatter of 34 small icons by default, all sixteen motifs, plus separate printable SVG bubble, polygon and dot textures. Frame and airy options retain smaller icons. Custom exam covers place most icons in the lower whitespace.
 

@@ -34,7 +34,8 @@ try {
   const defaultCount=await page.locator('.wc-editor-preview .wc-icon').count();
   assert.ok(defaultCount>=30 && defaultCount<=38,'Default preview shows a generous scattering of small symbols');
   assert.equal(await page.locator('[data-wc-input=layout]').inputValue(),'scattered');
-  assert.equal(await page.locator('.wc-editor-preview .cover-artwork svg').count(),1);
+  assert.equal(await page.locator('.wc-editor-preview .cover-artwork svg.wc-textures').count(),1);
+  assert.equal(await page.locator('.wc-editor-preview .cover-artwork svg.wc-facets').count(),1,'The faceted M sits behind the preview');
   await page.locator('[data-wc-input=title]').fill('Photosynthesis\nand gas exchange');
   await page.locator('[data-wc-input=nameLabel]').fill('Student');
   await page.locator('[data-wc-input=dateLabel]').fill('Class');
@@ -112,7 +113,13 @@ try {
       }).map(icon=>icon.dataset.icon);
     });
     assert.deepEqual(overlaps,[],'Printed symbols leave student fields and footer text clear');
-    const textures=await page.locator('.cover-artwork svg').evaluate(el=>({visible:getComputedStyle(el).display!=='none',circles:el.querySelectorAll('circle').length,polygons:el.querySelectorAll('polygon').length,colours:[...el.querySelectorAll('circle,polygon')].map(shape=>getComputedStyle(shape).fill)}));
+    const onText=await page.locator('.wc-cover').evaluate(cover=>{
+      const areas=[...cover.querySelectorAll('.wc-logo,.wc-pill,.wc-fields,.wc-bar')].map(el=>({part:el.className,box:el.getBoundingClientRect()}))
+        .concat([...cover.querySelectorAll('.wc-eyebrow,.wc-title,.wc-subtitle,.wc-footer')].flatMap(el=>{const range=document.createRange();range.selectNodeContents(el);return [...range.getClientRects()].map(box=>({part:el.className,box}));}));
+      return [...cover.querySelectorAll('.wc-icon')].flatMap(icon=>{const box=icon.getBoundingClientRect();return areas.filter(a=>Math.min(box.right,a.box.right)-Math.max(box.left,a.box.left)>1&&Math.min(box.bottom,a.box.bottom)-Math.max(box.top,a.box.top)>1).map(a=>icon.dataset.icon+' on '+a.part);});
+    });
+    assert.deepEqual(onText,[],'Icons stay off the logo, pills, title block, fields card and footer');
+    const textures=await page.locator('.cover-artwork svg.wc-textures').evaluate(el=>({visible:getComputedStyle(el).display!=='none',circles:el.querySelectorAll('circle').length,polygons:el.querySelectorAll('polygon').length,colours:[...el.querySelectorAll('circle,polygon')].map(shape=>getComputedStyle(shape).fill)}));
     assert.ok(textures.visible && textures.circles>=6 && textures.polygons>=4,'Bubble and polygon textures remain visible in print');
     assert.ok(textures.colours.filter(fill=>fill!=='none' && fill!=='transparent' && fill!=='rgba(0, 0, 0, 0)').length>=10,'Textures contain coloured fills as well as outline rings');
     await page.screenshot({path:path.join(output,`${subject}-cover.png`),fullPage:true});
@@ -121,5 +128,5 @@ try {
     await page.setViewportSize({width:1100,height:1200});
   }
   assert.deepEqual(errors,[]);
-  console.log('PASS small scattered icons, clean transparent crop edges and source geometry, exact preview/export artwork, print-safe textures, live editing, subject separation, mobile and printed PDFs');
+  console.log('PASS Big M cover with icons clear of every word, small scattered icons, clean transparent crop edges and source geometry, exact preview/export artwork, print-safe textures, live editing, subject separation, mobile and printed PDFs');
 } finally {await browser.close();await new Promise(resolve=>server.close(resolve));}

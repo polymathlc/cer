@@ -1,29 +1,39 @@
 # CER Science Learning Portal
 
-## Editable worksheet covers (v1.437.0)
+## Editable worksheet covers (v1.438.0)
+
+Worksheet covers use the **Big M** design: the Polymath logo top left with a
+level pill and a subject pill top right, the faceted Polymath M in pastel teal
+and pink across the top-right corner, a small heading above a large left-aligned
+title with a magenta bar and an optional line underneath, a rounded
+Name / Class / Date / Score card, and a footer with the centre name, a note and
+polymathlc.com.sg. Faint pixel icons and pastel bubbles and polygons are
+sprinkled in the margins and the white space between those blocks, never on the
+words or the card. Long titles step down in size so the title block keeps its
+room.
 
 Use **Edit cover** in the worksheet builder, saved worksheets or print preview
-to review the cover before exporting. Titles, headers, subtitles, footers and
-student-field labels are editable. Change the pixel icons' arrangement, size
-and visibility in the same preview. Small icons are peppered across the page,
-with sixteen distinct motifs per subject and pastel bubble and polygon textures.
-A separate texture slider adjusts their intensity. Saved worksheets retain their cover settings.
-Past papers, learning-objective sheets and Study Buddy exports use the same
-cover artwork; Custom Paper keeps its editable exam metadata and separate
-Booklet A/B instructions.
+to review the cover before exporting. Every word is editable in the preview or
+the form, including the level pill (which starts from the sheet's questions) and
+the four field labels. The icon arrangement (sprinkled, edges only or light),
+icon size, icon visibility, texture intensity and the strength of the M corner
+are adjustable. Saved worksheets keep their cover settings; covers saved before
+this design keep their words, size and arrangement but take the new faint
+backdrop. Past papers, learning-objective sheets and Study Buddy exports use the
+same cover; Custom Paper keeps its editable exam metadata and separate Booklet
+A/B instructions.
 
 The math and science worksheet creators show editable covers directly in their
 preview and Design view. Their cover controls also save the field labels and
 artwork choices. Math covers contain mathematical symbols; science covers use
 atoms, test tubes, flasks, microscopes, DNA and seedlings. Transparent generated
 pixel artwork uses pastel colours from the Polymath logo and prints even with
-browser **Background graphics** turned off. The local brand logo receives a
-gentle pastel treatment without changing its original file.
+browser **Background graphics** turned off.
 
 Run `node tools/cover-core-tests.mjs`, `node tools/cover-app-tests.mjs`,
-`node tools/cover-editor-tests.mjs` and `node tools/cover-browser-tests.mjs`.
-Generated assets and their prompts are recorded in
-`assets/worksheet-covers/README-v2.md`.
+`node tools/cover-editor-tests.mjs`, `node tools/cover-browser-tests.mjs` and
+`node tools/cover-layout-browser-tests.mjs`. Generated assets and their prompts
+are recorded in `assets/worksheet-covers/README-v2.md`.
 
 ## Polymath Online, the student portal (online/, v1.2.0)
 
