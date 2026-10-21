@@ -15,7 +15,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.439.0">
+  <link rel="modulepreload" href="app.js?v=1.440.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -5216,6 +5216,94 @@ body.em-editing #printProgress { z-index: 470; }
   z-index: 2;
 }
 
+/* 🚨 Red Light Fixer + 💲 cost meter */
+.rlf-page { max-width: 1000px; }
+.rlf-cost {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm); padding: 12px 16px; margin-bottom: 16px;
+}
+.rlf-cost-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; flex: 1 1 320px; min-width: 0; }
+.rlf-cost-label { font-size: 0.8rem; font-weight: 700; color: var(--text-muted); }
+.rlf-cost-total { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); }
+.rlf-cost-stage { font-size: 0.8rem; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums; }
+.rlf-cost-sub { font-size: 0.78rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.rlf-cost-ctrl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rlf-budget { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--text-muted); }
+.rlf-budget input { width: 90px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; }
+.rlf-stop { background: var(--accent-red); color: #fff; border: none; }
+.rlf-stop:disabled { opacity: 0.6; }
+.rlf-cost-detail { flex-basis: 100%; font-size: 0.75rem; color: var(--text-muted); line-height: 1.6; overflow-wrap: anywhere; }
+.rlf-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 14px; }
+.rlf-card > summary { cursor: pointer; line-height: 1.6; }
+.rlf-muted { color: var(--text-muted); font-size: 0.8rem; }
+.rlf-scope-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin: 6px 0; font-size: 0.86rem; }
+.rlf-scope-row label { display: inline-flex; align-items: center; gap: 6px; }
+.rlf-scope-row input[type="checkbox"], .rlf-list-ctrl input[type="checkbox"], .rlf-tick { appearance: auto; -webkit-appearance: auto; width: 16px; height: 16px; margin: 0; }
+.rlf-scope-row select { max-width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; }
+.rlf-scope-est { font-size: 0.84rem; line-height: 1.7; margin: 10px 0; padding: 10px 12px; background: var(--surface-alt); border-radius: var(--radius-md); }
+.rlf-progress-head { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 8px; }
+.rlf-bar { height: 8px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+.rlf-bar > span { display: block; height: 100%; background: var(--accent-red); transition: width .3s ease; }
+.rlf-bar.fix > span { background: var(--primary); }
+.rlf-counts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; }
+.rlf-chip { font-size: 0.76rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-alt); font-variant-numeric: tabular-nums; }
+.rlf-chip.red { background: var(--accent-red-light); color: var(--accent-red); border-color: transparent; }
+.rlf-chip.amber { background: var(--accent-orange-light); color: var(--accent-orange); border-color: transparent; }
+.rlf-chip.green { background: var(--accent-green-light); color: var(--accent-green); border-color: transparent; }
+.rlf-chip.err { background: var(--surface-alt); color: var(--text-muted); }
+.rlf-list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.rlf-list-head h3 { font-size: 1rem; margin: 0; }
+.rlf-list-ctrl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rlf-list-ctrl label { display: inline-flex; align-items: center; gap: 6px; }
+.rlf-btn-est { font-weight: 600; opacity: 0.85; margin-left: 4px; }
+.rlf-again { border-color: var(--primary); color: var(--primary); font-weight: 700; }
+.rlf-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.rlf-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-alt); }
+.rlf-row.off { opacity: 0.55; }
+.rlf-row.busy { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.rlf-row > .tl-light, .rlf-row > .rlf-tick { margin-top: 3px; flex: 0 0 auto; }
+.rlf-row-main { flex: 1 1 auto; min-width: 0; }
+.rlf-row-title { font-size: 0.88rem; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.rlf-row-find { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: 0.78rem; color: var(--text-muted); line-height: 1.5; }
+.rlf-row-find > span { overflow-wrap: anywhere; }
+.rlf-row-msg { margin-top: 4px; font-size: 0.78rem; color: var(--text); font-style: italic; overflow-wrap: anywhere; }
+.rlf-fromto { flex: 0 0 auto; font-size: 0.9rem; margin-top: 1px; }
+.rlf-tag { flex: 0 0 auto; font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); white-space: nowrap; }
+.rlf-undo-rounds { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+.rlf-last { font-size: 0.84rem; margin: 0 0 14px; padding: 10px 14px; border-radius: var(--radius-md); background: var(--primary-light); color: var(--text); }
+.rlf-empty { font-size: 0.9rem; line-height: 1.7; }
+.rlf-hist { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.rlf-hist-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.rlf-hist-main { flex: 1 1 auto; min-width: 0; font-size: 0.86rem; overflow-wrap: anywhere; }
+.rlf-foot { display: flex; justify-content: flex-end; margin-bottom: 24px; }
+@media (max-width: 640px) {
+  .rlf-cost { padding: 10px 12px; }
+  .rlf-cost-total { font-size: 1.25rem; }
+  .rlf-row { flex-wrap: wrap; }
+  .rlf-row .btn { min-height: 40px; }
+  .rlf-list-ctrl { width: 100%; }
+  .rlf-list-ctrl .btn { flex: 1 1 auto; min-height: 44px; }
+  .rlf-scope-row .btn { width: 100%; min-height: 44px; }
+}
+.aip-panel { width: min(820px, 100%); }
+.aip-note { font-size: 0.84rem; line-height: 1.7; color: var(--text-muted); margin: 0 0 12px; }
+.aip-scroll { overflow-x: auto; }
+.aip-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+.aip-table th, .aip-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+.aip-table thead th { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.aip-table input { width: 90px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; }
+.aip-id { font-size: 0.72rem; font-weight: 400; color: var(--text-muted); margin-top: 2px; }
+.aip-na { color: var(--text-light); }
+.aip-ccy { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 14px 0; font-size: 0.84rem; }
+.aip-ccy label { display: inline-flex; align-items: center; gap: 6px; }
+.aip-ccy select, .aip-ccy input { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; }
+.aip-ccy input { width: 80px; }
+.aip-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+@media (max-width: 640px) { .aip-table input { width: 72px; } .aip-table th, .aip-table td { padding: 6px 4px; } }
+@media print { .aip-overlay { display: none !important; } }
+
 /* The panel behind a lamp. */
 .tl-overlay {
   display: none;
@@ -10188,6 +10276,10 @@ html { scroll-behavior:smooth; }
             Check Questions
             <span class="badge" id="cqBadge" style="display:none;">0</span>
           </div>
+          <div class="nav-item admin-only" data-page="redlights" onclick="navigateTo('redlights')" title="Red Light Fixer — check every question for a red light, then let the AI fix the reds round by round while a meter shows what it costs.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="7" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="17" r="1.6"/></svg>
+            Red Light Fixer
+          </div>
           <div class="nav-item admin-only" data-page="flagged" onclick="navigateTo('flagged')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
             Flagged Questions
@@ -11356,6 +11448,22 @@ html { scroll-behavior:smooth; }
           @media (max-width:640px){ .mk-grid, .mk-opts{ grid-template-columns:1fr; } .mk-del{ margin-left:0; } }
         </style>
         <div id="mkAdminBody"></div>
+      </div>
+    </div>
+
+    <div class="page" id="page-redlights">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>🚨 Red Light Fixer</h2>
+          </div>
+          <div class="subtitle">Check every question for a red light, then fix the reds round by round — with the cost on screen the whole time</div>
+        </div>
+      </div>
+      <div class="page-body rlf-page">
+        <div class="rlf-cost" id="rlfCost" role="status" aria-live="polite"></div>
+        <div id="rlfBody"></div>
       </div>
     </div>
 
@@ -13717,6 +13825,18 @@ html { scroll-behavior:smooth; }
 <!-- ==================== 🚦 THE TRAFFIC LIGHT — what a lamp is about ==================== -->
 <!-- ONE panel, opened from any traffic light anywhere: the bank's rows, its
      picture tiles and every question heading in editing mode. See `tl*`. -->
+<div class="tl-overlay aip-overlay" id="aiPriceOverlay" onclick="if(event.target===this)aiPriceDialogClose()">
+  <div class="tl-panel aip-panel" role="dialog" aria-modal="true" aria-labelledby="aiPriceTitle">
+    <div class="tl-panel-head">
+      <div>
+        <h3 id="aiPriceTitle">💲 AI prices</h3>
+        <div class="tl-panel-sub">What the cost meter charges for each model</div>
+      </div>
+      <button class="wse-close" type="button" onclick="aiPriceDialogClose()" aria-label="Close">✕</button>
+    </div>
+    <div class="tl-panel-body" id="aiPriceBody"></div>
+  </div>
+</div>
 <div class="tl-overlay" id="tlOverlay" onclick="if(event.target===this)tlClosePanel()">
   <div class="tl-panel" role="dialog" aria-modal="true" aria-labelledby="tlPanelTitle">
     <div class="tl-panel-head">
@@ -16104,7 +16224,7 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script src="worksheet-cover.js?v=1.439.0"></script>
-  <script type="module" src="app.js?v=1.439.0"></script>
+  <script src="worksheet-cover.js?v=1.440.0"></script>
+  <script type="module" src="app.js?v=1.440.0"></script>
 </body>
 </html>

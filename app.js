@@ -8,6 +8,7 @@ import { normalizeWhiteboard, whiteboardQuestionSnapshot, normalizeWhiteboardApp
 import { whiteboardSnapshotBytes, whiteboardDigest, whiteboardViewerUrl, validWhiteboardUrl, loadPublishedWhiteboard } from './whiteboard-share.mjs?v=1.430.0';
 import { cropSourcesFor, normalizeCropBox, cropPixelRect, cropSourceUpdate } from './question-crop-core.mjs?v=2';
 import { questionRepairTargets, normalizeQuestionRepairPlan, applyQuestionRepairPlan } from './question-repair-core.mjs?v=3';
+import { AI_DEFAULT_PRICES, AI_PRICES_AS_OF, AI_ROUTE_NAMES, mergePrices, priceFor, normalizeUsage, estimateUsage, costOf, createTally, tallyAdd, formatMoney, estimateCheckCost } from './ai-cost-core.mjs?v=1';
 import { measureCrop, figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, migrateDecisionsReviewState, DECISIONS_MAY_SKIP } from './decisions-review-core.mjs?v=2';
 import { findRapidDuplicates, rapidDuplicateThreshold, rapidDuplicateFingerprint, rapidDuplicatePairCurrent } from './rapid-duplicates.js';
 import { installHadesDisplay } from "./hades-display.js";
@@ -404,6 +405,9 @@ async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, js
     throw new Error('OpenAI API error ' + res.status + (detail ? ': ' + detail : ''));
   }
   const data = await res.json();
+  // 💲 Metered before anything can throw: a reply cut off at the token limit
+  // was still billed.
+  if (typeof _aiMeterText === 'function') _aiMeterText('openaiKey', (data && data.model) || model, 'openai', data && data.usage, prompt, media, data?.choices?.[0]?.message?.content, OPENAI_REASONING_RE.test(model));
   if (data?.choices?.[0]?.finish_reason === 'length') throw new Error('OpenAI response was incomplete: the token limit was reached.');
   const text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
   if (typeof text !== 'string' || !text.trim()) throw new Error('OpenAI returned an unexpected response shape.');
@@ -704,6 +708,10 @@ async function askOpenAiServer(prompt, media, { maxOutputTokens = 512, temperatu
     exactOutputBudget
   });
   const text = res && res.data && res.data.text;
+  // 💲 The callable returns the text and the model it used; if it ever
+  // returns `usage` too, that is read and the estimate stops.
+  const usedModel = (res && res.data && res.data.model) || modelOverride || getOpenAiModel();
+  if (typeof _aiMeterText === 'function') _aiMeterText('openai', usedModel, 'openai', res && res.data && res.data.usage, prompt, media, text, OPENAI_REASONING_RE.test(usedModel));
   if (typeof text !== 'string' || !text.trim()) throw new Error('The server backup returned an unexpected response shape.');
   return text.trim();
 }
@@ -772,6 +780,7 @@ async function askKimiDirect(prompt, media, { maxOutputTokens = 512, temperature
     throw new Error('Kimi API error ' + res.status + (detail ? ': ' + detail : ''));
   }
   const data = await res.json();
+  if (typeof _aiMeterText === 'function') _aiMeterText('kimiKey', (data && data.model) || model, 'openai', data && data.usage, text, media, data?.choices?.[0]?.message?.content, /^kimi-k3(?:-|$)/.test(model));
   if (data?.choices?.[0]?.finish_reason === 'length') throw new Error('Kimi response was incomplete.');
   const out = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
   if (typeof out !== 'string' || !out.trim()) throw new Error('Kimi returned an unexpected response shape.');
@@ -802,6 +811,8 @@ async function askKimiServer(prompt, media, { maxOutputTokens = 512, temperature
     exactOutputBudget
   });
   const text = res && res.data && res.data.text;
+  const usedKimi = (res && res.data && res.data.model) || getKimiModel();
+  if (typeof _aiMeterText === 'function') _aiMeterText('kimi', usedKimi, 'openai', res && res.data && res.data.usage, prompt, media, text, /^kimi-k3(?:-|$)/.test(usedKimi));
   if (typeof text !== 'string' || !text.trim()) throw new Error('The Kimi server route returned an unexpected response shape.');
   return text.trim();
 }
@@ -898,6 +909,9 @@ async function askGeminiDirect(prompt, media, { maxOutputTokens = 512, temperatu
   const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingLevel: ['high', 'xhigh', 'max'].includes(reasoningEffort) ? 'high' : reasoningEffort === 'medium' ? 'medium' : AI_THINK_MIN } };
   if (json) generationConfig.responseMimeType = 'application/json';
   const res = await geminiModel.generateContent({ contents: [{ role: 'user', parts }], generationConfig });
+  let replyText = '';
+  try { replyText = res.response.text() || ''; } catch (_) { /* metered from the reported usage alone */ }
+  if (typeof _aiMeterText === 'function') _aiMeterText('gemini', AI_MODEL, 'gemini', res && res.response && res.response.usageMetadata, prompt, media, replyText, true);
   if (res.response?.candidates?.some(c => c.finishReason === 'MAX_TOKENS')) throw new Error('Gemini response was incomplete: the token limit was reached.');
   const text = (res.response.text() || '').trim();
   if (!text) throw new Error('Gemini returned an empty response.');
@@ -1172,6 +1186,7 @@ async function _openAiImageRequest(path, body, isForm) {
     throw err;
   }
   const data = await res.json();
+  if (typeof _aiMeterImage === 'function') _aiMeterImage('imgKey', (isForm ? (body && body.get && body.get('model')) : (body && body.model)) || '', data && data.usage);
   const item = data && data.data && data.data[0];
   if (item && item.b64_json) return 'data:image/png;base64,' + item.b64_json;
   if (item && item.url) return await _urlToDataUrlRobust(item.url);
@@ -1280,6 +1295,7 @@ async function openAiImageServer(prompt, opts) {
     // refuses the parameter (see _imgFidelityFor). It decides what to send.
   });
   const d = res && res.data;
+  if (typeof _aiMeterImage === 'function') _aiMeterImage('imgServer', (d && d.model) || model, d && d.usage);
   if (!d || typeof d.b64 !== 'string' || !d.b64) throw new Error('The server image route returned no picture.');
   // The server says which model it really used — it may have fallen back to
   // Flare from a legacy pick — so that is what the badge names.
@@ -4498,7 +4514,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.439.0';
+const APP_VERSION = 'v1.440.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -6261,6 +6277,10 @@ function navigateTo(page) {
   // `mistakebank` is deliberately not on EMPLOYEE_PAGES, and this is the guard
   // for arriving any other way. `mkRender` gates on `_canAuthor()` instead.
   if (page === 'mistakebank' && !_isAdmin()) page = rpgHomePage();
+  // 🚨 The Red light fixer spends on the AI and rewrites live bank questions,
+  // so it is the admin's: `admin-only` on the nav item, deliberately not on
+  // EMPLOYEE_PAGES, and this guard for arriving any other way.
+  if (page === 'redlights' && !_isAdmin()) page = rpgHomePage();
   if (page === 'summarysheets' && !_canAuthor()) page = rpgHomePage();
   // Science Quest game pages: respect the "Hide game" toggle, and leaving
   // the dungeon abandons the current run (rewards are kept).
@@ -6343,6 +6363,7 @@ function navigateTo(page) {
   if (page === 'notes') renderNotesPage();
   if (page === 'vetting') renderVettingList();
   if (page === 'checkq') renderCheckQPage();
+  if (page === 'redlights') renderRedLightsPage();
   if (page === 'mistakebank') mkRender();
   if (page === 'mistakes') mkStudentRender();
   if (page === 'photoedit') _peStatus('');
@@ -12762,6 +12783,7 @@ async function generateImageDataUrlGemini(prompt, refDataUrls) {
     try {
       const result = await model.generateContent(parts);
       const img = extractInlineImage(result);
+      if (typeof _aiMeterImage === 'function') _aiMeterImage('imgGemini', AI_IMAGE_MODELS[i] || 'gemini-image', result && result.response && result.response.usageMetadata, 'gemini');
       if (img) {
         // `geminiImageModels` is built 1:1 from AI_IMAGE_MODELS, so the id
         // that answered is the same index — that is what the badge names.
@@ -33177,6 +33199,8 @@ function _xtWorkInFlight() {
   try { if (pvcBusy()) return true; } catch (e) {}
   // 🔧 Fix all: a repaired question exists only in memory until it is written.
   try { if (vbrBusy()) return true; } catch (e) {}
+  // 🚨 Red light fixer: the same, for a fix round or a check still stamping.
+  try { if (rlfBusy()) return true; } catch (e) {}
   return false;
 }
 
@@ -50161,10 +50185,14 @@ function tlRepairCurrent(s, { sync = true } = {}) {
   if (s?.sourceScope && !s.regeneratedCopy) return s === _tlRepairSession && s.epoch === _tlRepairEpoch && qregenSourceCurrent(s, sync);
   // A background (batch) repair has no panel, so it is judged on the account,
   // the document owner and the question itself — never on what is on screen.
+  // 🔧 Fix all repairs vetting cards; the 🚨 Red light fixer repairs bank
+  // questions too, so the scope it was started on decides which list and which
+  // owner are read. Anything that is not 'bank' stays the vetting card.
   if (s && s.headless) {
+    const scope = s.scope === 'bank' ? 'bank' : 'vet';
     if (s.cancelled || !_canAuthor() || !currentUser || currentUser.uid !== s.uid || auth.currentUser?.uid !== s.uid
-        || _bankOwnerUid() !== s.owner || _vOwner(s.id) !== s.writeOwner) return false;
-    const q = tlRepairRead('vet', s.id);
+        || _bankOwnerUid() !== s.owner || (scope === 'bank' ? _qOwner(s.id) : _vOwner(s.id)) !== s.writeOwner) return false;
+    const q = tlRepairRead(scope, s.id);
     return !!q && JSON.stringify(q) === s.signature;
   }
   if (!s || s !== _tlRepairSession || s.epoch !== _tlRepairEpoch || !_canAuthor()
@@ -50918,6 +50946,1210 @@ async function vbrStart() {
 }
 Object.assign(window, { vbrStart, vbrStop, vbrDismiss });
 // ── End fix all ──
+
+// =====================================================================
+// 💲 AI COST METER — what the AI is costing, call by call (`aiMeter*`)
+// =====================================================================
+// Every route that reaches a model reports what it used: the browser-key
+// routes and Gemini return their real token counts, the two server callables
+// return only text today and are ESTIMATED from the characters sent and
+// received (the total then wears a "≈"). The pricing is `ai-cost-core.mjs`;
+// this is the glue — the listeners, the admin's price overrides and the
+// dialog that edits them.
+//
+//  • NOBODY LISTENING COSTS NOTHING. A record is only built while a meter is
+//    open, so the routes pay one `Set.size` read on every other call.
+//  • A METER CAN NEVER BREAK A CALL. Every hook is wrapped: a price table that
+//    failed to parse is a missing line on a tally, never a failed check.
+//  • THE MODEL THAT ANSWERED IS THE MODEL THAT IS PRICED (see the core).
+//  • A METER COUNTS EVERY CALL THIS TAB MAKES WHILE IT IS OPEN. Calls are
+//    asynchronous and interleave, so there is no honest way to say which
+//    caller a reply belonged to; the fixer says so on screen rather than
+//    pretending to a precision it does not have.
+const AI_PRICE_STORE = 'sq_ai_price_overrides';
+const AI_COST_CCY_STORE = 'sq_ai_cost_currency';
+const _aiMeters = new Set();
+let _aiPriceCache = null;
+function aiPriceOverrides() {
+  try { const v = JSON.parse(localStorage.getItem(AI_PRICE_STORE) || '{}'); return v && typeof v === 'object' ? v : {}; }
+  catch (e) { return {}; }
+}
+function aiPrices() {
+  if (!_aiPriceCache) _aiPriceCache = mergePrices(aiPriceOverrides());
+  return _aiPriceCache;
+}
+function aiPriceSaveOverrides(o) {
+  try { localStorage.setItem(AI_PRICE_STORE, JSON.stringify(o || {})); } catch (e) { /* private browsing: this session only */ }
+  _aiPriceCache = null;
+}
+function aiCostCurrency() {
+  try {
+    const v = JSON.parse(localStorage.getItem(AI_COST_CCY_STORE) || 'null');
+    if (v && (v.currency === 'USD' || v.currency === 'SGD')) return { currency: v.currency, rate: Number(v.rate) > 0 ? Number(v.rate) : 1.35 };
+  } catch (e) { /* default below */ }
+  return { currency: 'USD', rate: 1.35 };
+}
+function aiCostSetCurrency(currency, rate) {
+  const cur = aiCostCurrency();
+  const next = { currency: currency === 'SGD' ? 'SGD' : 'USD', rate: Number(rate) > 0 ? Number(rate) : cur.rate };
+  try { localStorage.setItem(AI_COST_CCY_STORE, JSON.stringify(next)); } catch (e) {}
+  return next;
+}
+function aiMoney(usd) { return formatMoney(usd, aiCostCurrency()); }
+// Opens a meter. `onRecord(rec)` is called for every AI call while it is open.
+function aiMeterOpen(onRecord) {
+  const m = { onRecord };
+  _aiMeters.add(m);
+  return { close() { _aiMeters.delete(m); } };
+}
+function _aiMeterPush(rec) {
+  _aiMeters.forEach(m => { try { m.onRecord(rec); } catch (e) { console.warn('cost meter listener', e); } });
+}
+function _aiMeterText(route, model, usageKind, raw, prompt, media, reply, reasoning) {
+  try {
+    if (!_aiMeters.size) return;
+    const images = (media || []).filter(m => m && m.data).length;
+    const usage = normalizeUsage(usageKind, raw)
+      || estimateUsage({ promptChars: String(prompt == null ? '' : prompt).length, images, outChars: String(reply == null ? '' : reply).length, reasoning: !!reasoning });
+    _aiMeterPush({ kind: 'text', route, model: String(model || ''), usage, at: Date.now() });
+  } catch (e) { console.warn('cost meter', e); }
+}
+function _aiMeterImage(route, model, raw, usageKind = 'openaiImage') {
+  try {
+    if (!_aiMeters.size) return;
+    const usage = normalizeUsage(usageKind, raw) || { inTok: 0, imgInTok: 0, outTok: 0, images: 1, reported: false };
+    usage.images = 1;
+    _aiMeterPush({ kind: 'image', route, model: String(model || ''), usage, at: Date.now() });
+  } catch (e) { console.warn('cost meter', e); }
+}
+
+// ── 💲 The price dialog ─────────────────────────────────────────────────────
+// Prices are the admin's to correct: a supplier changes a rate, or the centre
+// negotiates one, and the meter must follow without a release.
+function aiPriceDialogOpen() {
+  const ov = document.getElementById('aiPriceOverlay');
+  if (!ov) return;
+  aiPriceDialogRender();
+  ov.classList.add('show');
+}
+function aiPriceDialogClose() {
+  const ov = document.getElementById('aiPriceOverlay');
+  if (ov) ov.classList.remove('show');
+}
+function aiPriceDialogRender() {
+  const host = document.getElementById('aiPriceBody');
+  if (!host) return;
+  const prices = aiPrices();
+  const ccy = aiCostCurrency();
+  const cell = (key, field, v) => v == null
+    ? '<td class="aip-na">—</td>'
+    : `<td><input type="number" min="0" step="0.001" inputmode="decimal" data-aip-key="${escapeHtml(key)}" data-aip-field="${field}" value="${escapeHtml(String(v))}" aria-label="${escapeHtml(prices[key].label + ' ' + field)}"></td>`;
+  const rows = Object.keys(AI_DEFAULT_PRICES).map(key => {
+    const r = prices[key];
+    return `<tr>
+      <th scope="row">${escapeHtml(r.label)}<div class="aip-id">${escapeHtml(key)}${r.assumed ? ' · <span title="No published rate was found for this model, so this is an assumption. Correct it from your bill.">assumed</span>' : ''}${r.edited ? ' · <b>edited</b>' : ''}</div></th>
+      ${cell(key, 'in', r.in)}${cell(key, 'out', r.out)}${cell(key, 'imgIn', r.imgIn)}${cell(key, 'perImage', r.perImage)}
+    </tr>`;
+  }).join('');
+  host.innerHTML = `
+    <p class="aip-note">US dollars per <b>million tokens</b> (per picture in the last column). These are the published rates found on ${escapeHtml(AI_PRICES_AS_OF)}; change any of them to match your bill and the meter follows at once. Reasoning ("thinking") tokens are billed as output.</p>
+    <div class="aip-scroll"><table class="aip-table">
+      <thead><tr><th>Model</th><th>Input</th><th>Output</th><th>Image input</th><th>Per picture</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div class="aip-ccy">
+      <label>Show costs in
+        <select id="aipCurrency"><option value="USD"${ccy.currency === 'USD' ? ' selected' : ''}>US dollars</option><option value="SGD"${ccy.currency === 'SGD' ? ' selected' : ''}>Singapore dollars</option></select>
+      </label>
+      <label>US$1 = S$ <input type="number" id="aipRate" min="0.5" max="3" step="0.01" value="${escapeHtml(String(ccy.rate))}"></label>
+    </div>
+    <div class="aip-actions">
+      <button type="button" class="btn btn-outline btn-sm" onclick="aiPriceDialogReset()">Reset to published rates</button>
+      <span style="flex:1"></span>
+      <button type="button" class="btn btn-outline btn-sm" onclick="aiPriceDialogClose()">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="aiPriceDialogSave()">Save prices</button>
+    </div>`;
+}
+function aiPriceDialogSave() {
+  const o = {};
+  document.querySelectorAll('#aiPriceBody input[data-aip-key]').forEach(el => {
+    const key = el.dataset.aipKey, field = el.dataset.aipField;
+    const def = AI_DEFAULT_PRICES[key] && AI_DEFAULT_PRICES[key][field];
+    const v = Number(el.value);
+    if (!Number.isFinite(v) || v < 0) return;
+    if (def != null && Math.abs(v - def) < 1e-12) return;   // only real changes are stored
+    (o[key] = o[key] || {})[field] = v;
+  });
+  aiPriceSaveOverrides(o);
+  const cur = document.getElementById('aipCurrency'), rate = document.getElementById('aipRate');
+  aiCostSetCurrency(cur ? cur.value : 'USD', rate ? rate.value : 1.35);
+  aiPriceDialogClose();
+  showToast('Prices saved — the meter uses them from now on', 'success');
+  try { rlfRecost(); } catch (e) { /* the fixer may not be open */ }
+}
+function aiPriceDialogReset() {
+  if (!confirm('Put every price back to the published rate?')) return;
+  aiPriceSaveOverrides({});
+  aiPriceDialogRender();
+  try { rlfRecost(); } catch (e) {}
+}
+Object.assign(window, { aiPriceDialogOpen, aiPriceDialogClose, aiPriceDialogSave, aiPriceDialogReset });
+// ── End cost meter ──
+
+
+// =====================================================================
+// 🚨 RED LIGHT FIXER — check the whole bank, then fix the reds in rounds (`rlf*`)
+// =====================================================================
+// The 🚦 traffic light answers "is THIS question all right?", 🔧 Fix all
+// repairs a vetting list, and the approved repair plan fixes ONE question with
+// the teacher reading the plan. None of them answers the question a bank of
+// two and a half thousand questions asks: *which of these are wrong, and can
+// the AI put them right while I watch what it costs?* That is this page:
+//
+//   1. 🚦 LAUNCH THE CHECKER — every question in scope gets a verdict, and only
+//      the 🔴 ones are listed.
+//   2. 🔧 FIX — each red gets the approved-repair plan, applied, saved, and
+//      checked again. Anything that comes back 🟡 or 🟢 leaves the list.
+//   3. 🔧 FIX AGAIN — another round on the reds that are left, as many rounds
+//      as the teacher wants. Each round is a press; there is no automatic loop.
+//   and through all of it a 💲 meter shows what has been spent, with ⏹ Stop
+//   and an optional budget that stops the run by itself.
+//
+// HOW IT STAYS CHEAP WITHOUT CHECKING ANY WORSE:
+//  • IT IS THE SAME CHECKER AND THE SAME REPAIR. Verdicts come from `tlRun`
+//    (✅ Check Questions' two layers) and repairs from `tlRepairPlan` /
+//    `tlRepairBuildNext` (the panel's Implement), so a lamp here means exactly
+//    what it means everywhere else. Nothing in this block writes a prompt.
+//  • A VERDICT THAT STANDS IS NEVER PAID FOR TWICE — and it now OUTLIVES THE
+//    TAB. A bank question checked here gets its verdict stamped on the
+//    document (`autoCheck`, the same stamp the auto-check writes, adopted by
+//    `tlStateOf` only while the signature matches), so the second launch only
+//    pays for questions added or edited since the first.
+//  • RED ON THE FREE CHECKS NEEDS NO AI. `tlVerdict` turns ANY high finding
+//    red, and the instant checks' high findings (no correct option, a blank
+//    model answer, nothing markable…) never depend on the AI's reply. So a
+//    question the instant checks already find red is red for certain, and is
+//    listed without a call. The fix's own re-check reads it in full.
+//  • ONLY REDS ARE FIXED, and the fix re-checks only what it changed.
+//  • PICTURES ARE OPTIONAL. A redrawn or new diagram is the dearest single
+//    action (≈ US$0.07 a picture); the "allow new pictures" box drops those
+//    actions from a plan, which then fixes everything else.
+//
+// HOW IT STAYS SAFE ON LIVE QUESTIONS:
+//  • THE BEFORE-COPY IS WRITTEN FIRST. A bank question is live — students are
+//    served it — and this app keeps no edit history, so every fix first saves
+//    the question as it was to `users/{owner}/questionRepairs`. If that copy
+//    cannot be written the question is LEFT ALONE. ↩ Undo puts it back, and
+//    only while the repaired question is still exactly as the fix left it.
+//  • A QUESTION THAT CHANGED UNDER IT IS LEFT ALONE. The headless repair
+//    session is judged on account, owner and a signature of the question
+//    (`tlRepairCurrent`), so an edit in another tab or the editor wins. A
+//    question open in the editor or its 🚦 panel is skipped up front.
+//  • ONLY WHAT THIS ACCOUNT OWNS IS TOUCHED (`qbulkOwned`'s rule).
+//  • QUIET WRITES. `_wkSuppress` is raised for the synchronous start of each
+//    save only, so fixes never land in a work-session log, and
+//    `_xtWorkInFlight` warns before the tab is closed mid-run.
+//
+// Run `node tools/red-light-fixer-tests.mjs` and `node tools/ai-cost-tests.mjs`
+// after touching any of it.
+const RLF_FIX_PAR = 2;            // questions being repaired at once (each is several AI calls)
+const RLF_STAMP_BATCH = 300;      // verdict stamps per Firestore batch
+const RLF_STAMP_MS = 2500;        // how long stamps wait to be batched
+const RLF_STORE = 'sq_rlf:';      // + uid → the list, so a reload keeps it
+const RLF_SPENT_STORE = 'sq_rlf_spent:'; // + uid → lifetime spend in this browser
+const RLF_AVG_STORE = 'sq_rlf_avg:';     // + uid → measured cost per check / per fix
+const RLF_HISTORY_COL = 'questionRepairs';
+const RLF_NOFIX_SKIP = 2;         // rounds with no safe fix before a row is unticked
+const RLF_PICTURE_ACTION = a => a && (a.kind === 'redraw_image' || a.kind === 'generate_image' || (a.kind === 'add_block' && a.target === 'new:image'));
+
+var _rlf = null;
+let _rlfPaintTimer = null, _rlfSaveTimer = null, _rlfStampTimer = null;
+const _rlfStampQueue = new Map();   // id → { where }
+
+function rlfBusy() { return !!(_rlf && (_rlf.stage === 'checking' || _rlf.stage === 'fixing')); }
+function _rlfUid() { return currentUser ? currentUser.uid : ''; }
+function _rlfBlank() {
+  return {
+    uid: _rlfUid(), stage: 'idle', stop: false, stopReason: '',
+    scope: { bank: true, vet: false, topic: '' },
+    budget: 0, pictures: true,
+    // the whole session (every launch and every round since the list was made)
+    tally: createTally(), records: [],
+    // the stage that is running now
+    stageTally: null, stageName: '',
+    check: null,
+    round: 0, roundStats: null,
+    items: [],      // the red list: { id, where, title, qno, topic, status, include, rounds, noFix, message, findings[] }
+    fixed: [],      // left the list: { id, where, title, qno, to, round, historyId, historyOwner, afterSig, actions[], undone }
+    errors: [],     // ids whose check could not run: { id, where, title, error }
+    startedAt: Date.now(),
+  };
+}
+
+// ── Which questions ─────────────────────────────────────────────────────────
+// Everything this account OWNS in the chosen lists, never another admin's.
+// A question with no blocks has nothing to check and is never a candidate:
+// the checker refuses to light an empty question rather than call it green.
+function rlfOwnedQuestions(scope) {
+  const sc = scope || (_rlf && _rlf.scope) || { bank: true, vet: false, topic: '' };
+  const uid = _rlfUid();
+  const out = [];
+  const take = (list, where) => (list || []).forEach(q => {
+    if (!q || q.id == null || !(q.blocks || []).length) return;
+    if ((where === 'vet' ? _vOwner(q.id) : _qOwner(q.id)) !== uid) return;
+    if (sc.topic && q.topic !== sc.topic && q.topic2 !== sc.topic) return;
+    out.push({ q, where });
+  });
+  if (sc.bank) take(questionBank, 'bank');
+  if (sc.vet) take(vettingList, 'vet');
+  return out;
+}
+function rlfQuestion(where, id) { return tlQuestionFor(where === 'vet' ? 'vet' : 'bank', String(id)); }
+function rlfTopics() {
+  const seen = new Map();
+  (questionBank || []).concat(vettingList || []).forEach(q => { if (q && q.topic) seen.set(q.topic, (seen.get(q.topic) || 0) + 1); });
+  return Array.from(seen.entries()).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+}
+
+// What a question would cost to check right now: nothing if a verdict stands
+// or the instant checks already find it red; one AI call otherwise.
+function rlfFreeVerdict(q) {
+  const st = tlStateOf(q);
+  if (['red', 'amber', 'green'].includes(st.state)) return { state: st.state, findings: st.findings || [], how: 'reused' };
+  let local = [];
+  try { local = _cqLocalFindings(q, false) || []; } catch (e) { local = []; }
+  if (local.some(f => f && f.severity === 'high')) return { state: 'red', findings: local, how: 'instant' };
+  return null;
+}
+function rlfPreview(scope) {
+  const all = rlfOwnedQuestions(scope);
+  const t = { total: all.length, reused: 0, instant: 0, needAi: 0, red: 0 };
+  all.forEach(({ q }) => {
+    const v = rlfFreeVerdict(q);
+    if (!v) { t.needAi++; return; }
+    if (v.how === 'reused') t.reused++; else t.instant++;
+    if (v.state === 'red') t.red++;
+  });
+  return t;
+}
+
+// ── Measured averages, so an estimate improves with use ─────────────────────
+function rlfAvg() {
+  try { const v = JSON.parse(localStorage.getItem(RLF_AVG_STORE + _rlfUid()) || 'null'); if (v && typeof v === 'object') return v; } catch (e) {}
+  return { checkUsd: 0, checkN: 0, fixUsd: 0, fixN: 0 };
+}
+function rlfAvgAdd(kind, usd, n) {
+  if (!(n > 0) || !(usd >= 0)) return;
+  const a = rlfAvg();
+  if (kind === 'check') { a.checkUsd += usd; a.checkN += n; } else { a.fixUsd += usd; a.fixN += n; }
+  try { localStorage.setItem(RLF_AVG_STORE + _rlfUid(), JSON.stringify(a)); } catch (e) {}
+}
+function rlfCheckEstimate(n) {
+  const a = rlfAvg();
+  const per = a.checkN >= 5 ? a.checkUsd / a.checkN : 0;
+  const route = aiEngineOrder()[0] || 'openai';
+  const model = route === 'gemini' ? AI_MODEL : /kimi/.test(route) ? getKimiModel() : getOpenAiModel();
+  return { usd: estimateCheckCost(n, per, model, route, aiPrices()), measured: per > 0 };
+}
+function rlfFixEstimate(n) {
+  const a = rlfAvg();
+  if (a.fixN >= 3) return { usd: n * a.fixUsd / a.fixN, measured: true };
+  // A plan (one long call with every picture), the re-check, and on average
+  // half a picture: three to four checks' worth plus ≈ US$0.035.
+  const one = rlfCheckEstimate(1).usd;
+  return { usd: n * (one * 3.5 + 0.035), measured: false };
+}
+
+// ── Lifetime spend in this browser ──────────────────────────────────────────
+function rlfSpent() {
+  try { const v = Number(localStorage.getItem(RLF_SPENT_STORE + _rlfUid()) || 0); return v > 0 ? v : 0; } catch (e) { return 0; }
+}
+function rlfSpentAdd(usd) {
+  if (!(usd > 0)) return;
+  try { localStorage.setItem(RLF_SPENT_STORE + _rlfUid(), String(rlfSpent() + usd)); } catch (e) {}
+}
+
+// ── The meter, as the fixer sees it ─────────────────────────────────────────
+function _rlfOnRecord(rec) {
+  const r = _rlf;
+  if (!r) return;
+  const c = tallyAdd(r.tally, rec, aiPrices(), r.stageName || 'other');
+  if (r.stageTally) tallyAdd(r.stageTally, rec, aiPrices(), r.stageName || 'other');
+  r.records.push(rec);
+  if (r.records.length > 5000) r.records.splice(0, r.records.length - 5000);
+  rlfSpentAdd(c.usd);
+  // 💲 THE BUDGET IS A STOP, not a warning. Checked on every record, so a run
+  // overshoots by at most the calls already in flight when it was reached.
+  if (r.budget > 0 && rlfBusy() && !r.stop && r.tally.usd >= r.budget) {
+    r.stop = true;
+    r.stopReason = 'budget';
+    showToast('💲 Budget of ' + aiMoney(r.budget) + ' reached — stopping after the calls already in flight', 'info');
+  }
+  rlfPaintCost();
+}
+// Prices changed: every total is worked out again from the records kept.
+function rlfRecost() {
+  const r = _rlf;
+  if (!r) return;
+  const t = createTally();
+  (r.records || []).forEach(rec => tallyAdd(t, rec, aiPrices(), rec.phase || 'other'));
+  r.tally = t;
+  rlfPaintCost();
+  rlfPaint();
+}
+function rlfCostHtml() {
+  const r = _rlf;
+  const t = r ? r.tally : createTally();
+  const approx = t.estimatedCalls ? '≈ ' : '';
+  const tip = t.estimatedCalls
+    ? t.estimatedCalls + ' of ' + t.calls + ' calls went through a server route that does not report its token count, so those are estimated from the text sent and received.'
+    : 'Every call reported its own token count.';
+  const models = Object.entries(t.byModel).sort((a, b) => b[1].usd - a[1].usd)
+    .map(([k, m]) => `${escapeHtml((AI_DEFAULT_PRICES[k] || {}).label || k)} ${aiMoney(m.usd)} (${m.calls})`).join(' · ');
+  const phases = Object.entries(t.byPhase).map(([k, p]) => `${escapeHtml(k)} ${aiMoney(p.usd)}`).join(' · ');
+  const stage = r && r.stageTally && rlfBusy() ? ` <span class="rlf-cost-stage">this ${escapeHtml(r.stageName.startsWith('fix') ? 'round' : 'check')}: ${approx}${aiMoney(r.stageTally.usd)}</span>` : '';
+  return `<div class="rlf-cost-main">
+      <span class="rlf-cost-label">💲 Spent</span>
+      <span class="rlf-cost-total" title="${escapeHtml(tip)}">${approx}${aiMoney(t.usd)}</span>${stage}
+      <span class="rlf-cost-sub">${t.calls} AI call${t.calls === 1 ? '' : 's'} · ${Math.round(t.inTok / 1000)}k tokens in · ${Math.round(t.outTok / 1000)}k out${t.images ? ' · ' + t.images + ' picture' + (t.images === 1 ? '' : 's') : ''}</span>
+    </div>
+    <div class="rlf-cost-ctrl">
+      <label class="rlf-budget" title="Stop the run by itself once this much has been spent. Leave empty for no limit.">Stop at
+        ${aiCostCurrency().currency === 'SGD' ? 'S$' : 'US$'}<input type="number" min="0" step="0.5" id="rlfBudget" value="${escapeHtml(rlfBudgetShown())}" placeholder="no limit" onchange="rlfSetBudget(this.value)">
+      </label>
+      ${rlfBusy() ? `<button type="button" class="btn btn-sm rlf-stop" onclick="rlfStop()"${r.stop ? ' disabled' : ''}>⏹ ${r.stop ? 'Stopping…' : 'Stop'}</button>` : ''}
+      <button type="button" class="btn btn-outline btn-sm" onclick="aiPriceDialogOpen()" title="See and change the price of each model">⚙ Prices</button>
+    </div>
+    ${t.calls ? `<div class="rlf-cost-detail">${models}${phases ? ' &nbsp;|&nbsp; ' + phases : ''} &nbsp;|&nbsp; all runs in this browser: ${aiMoney(rlfSpent())}${t.assumedCalls ? ' · some prices are assumed — check ⚙ Prices' : ''}</div>` : `<div class="rlf-cost-detail">Nothing spent yet${rlfSpent() ? ' · all runs in this browser: ' + aiMoney(rlfSpent()) : ''}. The meter counts every AI call this tab makes while a run is going.</div>`}`;
+}
+function rlfPaintCost() {
+  const el = document.getElementById('rlfCost');
+  if (!el) return;
+  // The budget box keeps its focus and caret while the total moves under it.
+  const active = document.activeElement && document.activeElement.id === 'rlfBudget';
+  if (active) {
+    const tot = el.querySelector('.rlf-cost-total'), sub = el.querySelector('.rlf-cost-sub'), det = el.querySelector('.rlf-cost-detail');
+    const tmp = document.createElement('div'); tmp.innerHTML = rlfCostHtml();
+    if (tot) tot.outerHTML = tmp.querySelector('.rlf-cost-total').outerHTML;
+    if (sub) sub.textContent = tmp.querySelector('.rlf-cost-sub').textContent;
+    if (det) det.innerHTML = tmp.querySelector('.rlf-cost-detail').innerHTML;
+    return;
+  }
+  el.innerHTML = rlfCostHtml();
+}
+// The budget is typed in the currency on screen and kept in US dollars, the
+// currency every price is in.
+function rlfSetBudget(v) {
+  if (!_rlf) _rlf = _rlfBlank();
+  const n = Number(v);
+  const ccy = aiCostCurrency();
+  _rlf.budget = Number.isFinite(n) && n > 0 ? (ccy.currency === 'SGD' ? n / ccy.rate : n) : 0;
+  rlfSaveSoon();
+}
+function rlfBudgetShown() {
+  const r = _rlf;
+  if (!r || !r.budget) return '';
+  const ccy = aiCostCurrency();
+  const v = ccy.currency === 'SGD' ? r.budget * ccy.rate : r.budget;
+  return String(Math.round(v * 100) / 100);
+}
+function rlfStop() {
+  if (!rlfBusy()) return;
+  _rlf.stop = true;
+  _rlf.stopReason = 'button';
+  showToast('Stopping after the calls already in flight — everything already done is kept', 'info');
+  rlfPaintCost();
+  rlfPaint();
+}
+
+// ── Keeping the list across a reload ────────────────────────────────────────
+function rlfSaveSoon() {
+  if (_rlfSaveTimer) return;
+  _rlfSaveTimer = setTimeout(() => { _rlfSaveTimer = null; rlfSaveNow(); }, 800);
+}
+function rlfSaveNow() {
+  const r = _rlf;
+  if (!r || !r.uid) return;
+  const keep = {
+    v: 1, scope: r.scope, budget: r.budget, pictures: r.pictures, round: r.round, startedAt: r.startedAt,
+    items: r.items.map(i => ({ id: i.id, where: i.where, include: i.include, rounds: i.rounds, noFix: i.noFix, message: i.message })),
+    fixed: r.fixed.slice(-300),
+    errors: r.errors.slice(0, 300).map(e => ({ id: e.id, where: e.where, error: e.error })),
+    records: r.records.slice(-2000),
+  };
+  try { localStorage.setItem(RLF_STORE + r.uid, JSON.stringify(keep)); }
+  catch (e) {
+    // Too big for this browser's storage: keep the list, drop the call log.
+    try { keep.records = []; localStorage.setItem(RLF_STORE + r.uid, JSON.stringify(keep)); } catch (_) {}
+  }
+}
+function rlfLoad() {
+  const uid = _rlfUid();
+  if (_rlf && _rlf.uid === uid) return _rlf;
+  const r = _rlfBlank();
+  try {
+    const v = JSON.parse(localStorage.getItem(RLF_STORE + uid) || 'null');
+    if (v && v.v === 1) {
+      r.scope = Object.assign(r.scope, v.scope || {});
+      r.budget = Number(v.budget) > 0 ? Number(v.budget) : 0;
+      r.pictures = v.pictures !== false;
+      r.round = Number(v.round) || 0;
+      r.startedAt = v.startedAt || Date.now();
+      r.items = (v.items || []).map(i => ({ id: String(i.id), where: i.where === 'vet' ? 'vet' : 'bank', include: i.include !== false, rounds: i.rounds || 0, noFix: i.noFix || 0, message: i.message || '', status: 'red', title: '', qno: '', topic: '', findings: [] }));
+      r.fixed = Array.isArray(v.fixed) ? v.fixed : [];
+      r.errors = (v.errors || []).map(e => ({ id: String(e.id), where: e.where === 'vet' ? 'vet' : 'bank', error: e.error || '', title: '' }));
+      r.records = Array.isArray(v.records) ? v.records : [];
+      (r.records || []).forEach(rec => tallyAdd(r.tally, rec, aiPrices(), rec.phase || 'other'));
+    }
+  } catch (e) { console.warn('red light fixer: the saved list could not be read', e); }
+  _rlf = r;
+  rlfRefreshItems();
+  return r;
+}
+function rlfClearList() {
+  if (rlfBusy()) return;
+  if (!confirm('Clear the red list, the fixed list and the cost so far?\n\nNothing is changed in any question, and verdicts already stamped on questions are kept — the next launch reuses them for free.')) return;
+  const keep = _rlf ? { scope: _rlf.scope, budget: _rlf.budget, pictures: _rlf.pictures } : {};
+  _rlf = Object.assign(_rlfBlank(), keep);
+  rlfSaveNow();
+  rlfPaint();
+  rlfPaintCost();
+}
+
+// Re-reads each listed question: its title and findings for the row, and
+// whether it is still red at all. A question fixed by hand since, deleted, or
+// re-checked green elsewhere leaves the list here, for free.
+function rlfRefreshItems() {
+  const r = _rlf;
+  if (!r) return;
+  r.items = r.items.filter(item => {
+    const q = rlfQuestion(item.where, item.id);
+    if (!q) return false;
+    item.title = q.title || 'Untitled question';
+    item.qno = (typeof qNoLabel === 'function' ? qNoLabel(q) : '') || '';
+    item.topic = q.topic || '';
+    const st = tlStateOf(q);
+    if (item.status === 'fixing') return true;
+    if (st.state === 'red') { item.findings = (st.findings || []).slice(0, 12); return true; }
+    if (st.state === 'amber' || st.state === 'green') return false;
+    // Edited since (stale) or never lit this session: keep the row, the
+    // next round checks it again before it pays for a plan.
+    return true;
+  });
+  r.errors.forEach(e => { const q = rlfQuestion(e.where, e.id); e.title = q ? (q.title || 'Untitled question') : '(no longer here)'; });
+}
+
+// ── Persisting a verdict on the question ────────────────────────────────────
+// The SAME stamp the auto-check writes (`autoChkStamp`), merged in as ONE
+// field so nothing else on the document is touched. `tlStateOf` adopts it
+// only while the question's signature still matches.
+function rlfStamp(where, q, rec) {
+  if (!q || !rec || !['red', 'amber', 'green'].includes(rec.verdict)) return;
+  try {
+    autoChkStamp(q, { state: rec.verdict, findings: rec.findings || [], tries: 1 });
+    _rlfStampQueue.set(String(q.id), { where });
+    if (_rlfStampQueue.size >= RLF_STAMP_BATCH) rlfFlushStamps();
+    else if (!_rlfStampTimer) _rlfStampTimer = setTimeout(rlfFlushStamps, RLF_STAMP_MS);
+  } catch (e) { console.warn('red light fixer: could not stamp the verdict', e); }
+}
+async function rlfFlushStamps() {
+  if (_rlfStampTimer) { clearTimeout(_rlfStampTimer); _rlfStampTimer = null; }
+  if (!_rlfStampQueue.size) return;
+  const todo = Array.from(_rlfStampQueue.entries());
+  _rlfStampQueue.clear();
+  for (let i = 0; i < todo.length; i += RLF_STAMP_BATCH) {
+    const batch = writeBatch(db);
+    let n = 0;
+    todo.slice(i, i + RLF_STAMP_BATCH).forEach(([id, { where }]) => {
+      const q = rlfQuestion(where, id);
+      if (!q || !q.autoCheck) return;
+      batch.set(where === 'vet' ? _vRef(id) : _qRef(id), { autoCheck: q.autoCheck }, { merge: true });
+      n++;
+    });
+    if (!n) continue;
+    // A stamp is a saving, never a requirement: a refused write costs only
+    // the next launch paying for that question again.
+    try { await batch.commit(); }
+    catch (e) { console.warn('red light fixer: verdicts could not be saved on the questions', e); }
+  }
+}
+
+// ── Stage bookkeeping ───────────────────────────────────────────────────────
+let _rlfMeter = null;
+function _rlfStageBegin(name) {
+  const r = _rlf;
+  r.stop = false; r.stopReason = '';
+  r.stageName = name;
+  r.stageTally = createTally();
+  if (_rlfMeter) _rlfMeter.close();
+  _rlfMeter = aiMeterOpen(rec => { rec.phase = name; _rlfOnRecord(rec); });
+}
+function _rlfStageEnd() {
+  if (_rlfMeter) { _rlfMeter.close(); _rlfMeter = null; }
+}
+
+// ── 1. 🚦 Launch the checker ────────────────────────────────────────────────
+async function rlfLaunch() {
+  if (!_isAdmin()) { showToast('Only an admin can run the red light fixer', 'error'); return; }
+  if (rlfBusy()) { showToast('The fixer is already running', 'info'); return; }
+  if (!(window.__aiReady && window.__aiReady())) { showToast('AI is not available on this device yet — the checker needs it', 'error'); return; }
+  const r = rlfLoad();
+  rlfReadScopeControls();
+  const all = rlfOwnedQuestions(r.scope);
+  if (!all.length) { showToast('There are no questions of yours in that scope', 'info'); return; }
+  const pv = rlfPreview(r.scope);
+  const est = rlfCheckEstimate(pv.needAi);
+  if (pv.needAi && !confirm('Check ' + all.length.toLocaleString() + ' question' + (all.length === 1 ? '' : 's') + ' for red lights?\n\n'
+      + '• ' + pv.reused.toLocaleString() + ' already have a verdict — reused, free\n'
+      + '• ' + pv.instant.toLocaleString() + ' are red on the instant checks — free\n'
+      + '• ' + pv.needAi.toLocaleString() + ' need the AI — about ' + aiMoney(est.usd) + (est.measured ? ' (from what checks have cost here so far)' : ' (a first estimate; it improves as checks are measured)') + '\n\n'
+      + 'The cost is shown live and you can stop at any point'
+      + (r.budget ? ', and it stops by itself at ' + aiMoney(r.budget) : '') + '. Every verdict is saved on its question, so a later launch only pays for new or edited ones.')) return;
+  const items = new Map(r.items.map(i => [i.where + ':' + i.id, i]));
+  r.stage = 'checking';
+  r.errors = [];
+  r.check = { total: all.length, done: 0, reused: 0, instant: 0, ai: 0, errors: 0, red: 0, amber: 0, green: 0, empty: 0, startedAt: Date.now() };
+  _rlfStageBegin('check');
+  rlfPaint(); rlfPaintCost();
+  const c = r.check;
+  const addRed = (where, q, findings) => {
+    const key = where + ':' + q.id;
+    let item = items.get(key);
+    if (!item) {
+      item = { id: String(q.id), where, include: true, rounds: 0, noFix: 0, message: '', status: 'red' };
+      items.set(key, item);
+      r.items.push(item);
+    }
+    item.title = q.title || 'Untitled question';
+    item.qno = (typeof qNoLabel === 'function' ? qNoLabel(q) : '') || '';
+    item.topic = q.topic || '';
+    item.findings = (findings || []).slice(0, 12);
+    if (item.status !== 'fixing') item.status = 'red';
+  };
+  const dropItem = (where, id) => {
+    const key = where + ':' + id;
+    if (!items.has(key)) return;
+    items.delete(key);
+    r.items = r.items.filter(i => !(i.where === where && i.id === String(id)));
+  };
+  let next = 0, aiUsd = 0;
+  const worker = async () => {
+    while (!r.stop) {
+      const i = next++;
+      if (i >= all.length) return;
+      const { q: listed, where } = all[i];
+      const q = rlfQuestion(where, listed.id) || listed;
+      try {
+        let verdict = rlfFreeVerdict(q);
+        if (verdict && verdict.how === 'instant') {
+          // Red for certain without a call. It goes on the lamp too, so the
+          // bank shows what the list shows — the findings are real ones.
+          _tlCache.set(String(q.id), { sig: tlSig(q), state: 'done', findings: verdict.findings, verdict: 'red', error: '', at: Date.now(), instant: true });
+          tlRepaint(String(q.id));
+          c.instant++;
+        } else if (verdict) {
+          c.reused++;
+        } else {
+          const before = r.stageTally.usd;
+          const rec = await tlRun(q);
+          aiUsd += Math.max(0, r.stageTally.usd - before);
+          if (!rec) { c.empty++; verdict = null; }
+          else if (rec.state === 'error') {
+            c.errors++;
+            r.errors.push({ id: String(q.id), where, title: q.title || 'Untitled question', error: rec.error || 'the check could not run' });
+            verdict = null;
+          } else {
+            c.ai++;
+            verdict = { state: rec.verdict, findings: rec.findings };
+            rlfStamp(where, rlfQuestion(where, q.id) || q, rec);
+          }
+        }
+        if (verdict) {
+          c[verdict.state] = (c[verdict.state] || 0) + 1;
+          if (verdict.state === 'red') addRed(where, q, verdict.findings);
+          else dropItem(where, q.id);
+        }
+      } catch (e) {
+        c.errors++;
+        r.errors.push({ id: String(q.id), where, title: q.title || 'Untitled question', error: (e && e.message) || 'unexpected error' });
+      }
+      c.done++;
+      rlfPaintSoon();
+    }
+  };
+  try { await Promise.all(Array.from({ length: Math.min(TL_PAR, all.length) }, worker)); }
+  finally {
+    _rlfStageEnd();
+    await rlfFlushStamps();
+    rlfAvgAdd('check', aiUsd, c.ai);
+    r.stage = 'idle';
+    c.endedAt = Date.now();
+    rlfSortItems();
+    rlfSaveNow();
+    rlfPaint(); rlfPaintCost();
+    try { renderQuestionBank(); } catch (e) {}
+    try { renderVettingList(); } catch (e) {}
+  }
+  const stopped = r.stop ? (r.stopReason === 'budget' ? 'Budget reached — ' : 'Stopped — ') + c.done + ' of ' + c.total + ' checked. ' : '';
+  showToast('🚦 ' + stopped + r.items.length + ' red question' + (r.items.length === 1 ? '' : 's') + ' listed' + (c.errors ? ' · ' + c.errors + ' could not be checked' : ''), r.items.length ? 'info' : 'success');
+}
+// Worst first: the most high findings at the top, then by question number.
+function rlfSortItems() {
+  const r = _rlf;
+  const highs = i => (i.findings || []).filter(f => f && f.severity === 'high').length;
+  r.items.sort((a, b) => highs(b) - highs(a) || String(a.qno).localeCompare(String(b.qno), undefined, { numeric: true }));
+}
+function rlfRetryErrors() {
+  const r = _rlf;
+  if (!r || rlfBusy() || !r.errors.length) return;
+  // The failed ones have no verdict, so a plain relaunch reuses everything
+  // else for free and reads exactly these again.
+  rlfLaunch();
+}
+
+// ── 2. 🔧 Fix the reds, one round at a time ─────────────────────────────────
+function rlfFixCandidates() {
+  const r = _rlf;
+  return r ? r.items.filter(i => i.include && i.status !== 'fixing') : [];
+}
+async function rlfFix() {
+  if (!_isAdmin()) { showToast('Only an admin can run the red light fixer', 'error'); return; }
+  if (rlfBusy()) { showToast('The fixer is already running', 'info'); return; }
+  const r = rlfLoad();
+  rlfReadScopeControls();
+  const list = rlfFixCandidates();
+  if (!list.length) { showToast('No ticked red questions to fix', 'info'); return; }
+  const round = r.round + 1;
+  const est = rlfFixEstimate(list.length);
+  const where = new Set(list.map(i => i.where));
+  if (!confirm('Fix ' + list.length + ' red question' + (list.length === 1 ? '' : 's') + ' (round ' + round + ')?\n\n'
+      + 'Each one gets the AI\'s repair plan applied WITHOUT you reading it first — wording, options, answers'
+      + (r.pictures ? ' and pictures' : ' (not pictures — that box is off)') + ' may change — and is then checked again. '
+      + 'Any that come back 🟡 or 🟢 leave the list.\n\n'
+      + (where.has('bank') ? 'These are LIVE bank questions. The question as it was is saved first, and ↩ Undo puts it back.\n\n' : '')
+      + 'About ' + aiMoney(est.usd) + (est.measured ? ' (from what fixes have cost here so far)' : ' (a first estimate)') + '. The cost is shown live and you can stop at any point.')) return;
+  r.round = round;
+  r.stage = 'fixing';
+  r.roundStats = { round, total: list.length, done: 0, fixed: 0, still: 0, nofix: 0, failed: 0, skipped: 0, startedAt: Date.now() };
+  _rlfStageBegin('fix round ' + round);
+  list.forEach(i => { i.status = 'queued'; });
+  rlfPaint(); rlfPaintCost();
+  const s = r.roundStats;
+  let next = 0, fixUsd = 0, fixN = 0;
+  const worker = async () => {
+    while (!r.stop) {
+      const i = next++;
+      if (i >= list.length) return;
+      const item = list[i];
+      const before = r.stageTally.usd;
+      item.status = 'fixing';
+      rlfPaintSoon();
+      try { await rlfRepairOne(item, round); }
+      catch (err) { item.status = 'failed'; item.message = (err && err.message) || 'unexpected error'; }
+      const spent = Math.max(0, r.stageTally.usd - before);
+      if (item.status !== 'skipped') { fixUsd += spent; fixN++; }
+      s.done++;
+      if (item.status === 'gone') s.fixed++;
+      else if (item.status === 'still') s.still++;
+      else if (item.status === 'nofix') s.nofix++;
+      else if (item.status === 'skipped') s.skipped++;
+      else s.failed++;
+      rlfPaintSoon();
+    }
+  };
+  try { await Promise.all(Array.from({ length: Math.min(RLF_FIX_PAR, list.length) }, worker)); }
+  finally {
+    _rlfStageEnd();
+    await rlfFlushStamps();
+    rlfAvgAdd('fix', fixUsd, fixN);
+    list.forEach(i => { if (i.status === 'queued' || i.status === 'fixing') { i.status = 'red'; i.message = i.message || 'not reached — stopped'; } });
+    // Anything that left the red list is taken off it now, in one go, so the
+    // list visibly shrinks at the end of a round rather than row by row.
+    r.items = r.items.filter(i => i.status !== 'gone');
+    r.items.forEach(i => { if (['still', 'nofix', 'failed', 'skipped'].includes(i.status)) i.status = 'red'; });
+    r.stage = 'idle';
+    s.endedAt = Date.now();
+    rlfSortItems();
+    rlfSaveNow();
+    rlfPaint(); rlfPaintCost();
+    try { renderQuestionBank(); } catch (e) {}
+    try { renderVettingList(); } catch (e) {}
+    try { updateCounts(); } catch (e) {}
+  }
+  const stopped = r.stop ? (r.stopReason === 'budget' ? 'Budget reached. ' : 'Stopped. ') : '';
+  showToast('🔧 Round ' + round + ': ' + stopped + s.fixed + ' left the red list, ' + r.items.length + ' still red', s.fixed ? 'success' : 'info');
+}
+
+// One question: plan → apply → save (before-copy first) → check again.
+async function rlfRepairOne(item, round) {
+  const r = _rlf;
+  const id = String(item.id);
+  const scope = item.where === 'vet' ? 'vet' : 'bank';
+  item.rounds = (item.rounds || 0) + 1;
+  if (String(currentEditingQuestion) === id) { item.status = 'skipped'; item.message = 'open in the editor — left alone'; item.rounds--; return; }
+  if (_tlPanelId === id) { item.status = 'skipped'; item.message = 'open in its 🚦 panel — left alone'; item.rounds--; return; }
+  let snapshot = tlRepairRead(scope, id);
+  if (!snapshot) { item.status = 'failed'; item.message = 'could not be read — it may have been deleted'; return; }
+  let st = tlStateOf(snapshot);
+  // A row whose verdict went stale (edited since the check) is read again
+  // before a plan is paid for: it may not be red any more.
+  if (!['red', 'amber', 'green'].includes(st.state)) {
+    const rec = await tlRun(snapshot);
+    if (rec && rec.state !== 'error') rlfStamp(item.where, rlfQuestion(item.where, id), rec);
+    snapshot = tlRepairRead(scope, id);
+    if (!snapshot) { item.status = 'failed'; item.message = 'could not be read'; return; }
+    st = tlStateOf(snapshot);
+  }
+  if (st.state === 'amber' || st.state === 'green') {
+    item.status = 'gone';
+    rlfAddFixed(item, { to: st.state, round, actions: [], note: 'no longer red when this round reached it — nothing was changed' });
+    return;
+  }
+  if (st.state !== 'red' || !(st.findings || []).length) { item.status = 'failed'; item.message = st.error || 'the check could not run, so it was not fixed'; return; }
+  const s = {
+    headless: true, id, scope, uid: currentUser.uid, owner: _bankOwnerUid(),
+    writeOwner: scope === 'vet' ? _vOwner(id) : _qOwner(id),
+    snapshot, signature: JSON.stringify(snapshot), findings: tlRepairClone(st.findings),
+    instruction: '', manualCrops: {}, plan: null, stop: false,
+  };
+  if (s.writeOwner !== currentUser.uid) { item.status = 'skipped'; item.message = 'belongs to another account — left alone'; item.rounds--; return; }
+  let result, droppedPictures = 0;
+  try {
+    s.plan = await tlRepairPlan(s);
+    if (!r.pictures) {
+      const keep = s.plan.actions.filter(a => !RLF_PICTURE_ACTION(a));
+      droppedPictures = s.plan.actions.length - keep.length;
+      if (droppedPictures) s.plan = normalizeQuestionRepairPlan({ actions: keep.map(({ id: _drop, ...rest }) => rest), notes: s.plan.notes }, snapshot);
+    }
+    if (!s.plan.actions.length) {
+      item.status = 'nofix';
+      item.noFix = (item.noFix || 0) + 1;
+      if (item.noFix >= RLF_NOFIX_SKIP) item.include = false;
+      item.message = (droppedPictures ? 'the only fix was a new picture, and pictures are switched off. ' : '')
+        + ((s.plan.notes || []).join(' ') || 'no safe automatic fix was found')
+        + (item.include ? '' : ' — unticked after ' + item.noFix + ' rounds with no fix');
+      return;
+    }
+    const before = tlRepairClone(snapshot);
+    result = await tlRepairBuildNext(s, before, { tolerant: true });
+    result.question = rlfCanonical(result.question);
+    // THE BEFORE-COPY GOES FIRST. If it cannot be written, nothing is replaced.
+    const history = await rlfSaveHistory(s, before, result.question, round);
+    await rlfCommitOne(s, result.question);
+    item.history = history;
+  } catch (err) {
+    item.status = 'failed';
+    item.message = (err && err.message) || 'the repair stopped — the question was not changed';
+    return;
+  }
+  const skipped = (result.skipped || []).length;
+  // The ordinary traffic-light check, on the saved question.
+  let after = 'error', findings = [];
+  try {
+    const fresh = rlfQuestion(item.where, id);
+    _tlCache.delete(id); tlRepaint(id);
+    const rec = await tlRun(fresh);
+    if (rec && rec.state !== 'error') { rlfStamp(item.where, rlfQuestion(item.where, id), rec); after = rec.verdict; findings = rec.findings || []; }
+  } catch (err) { after = 'error'; }
+  const changed = (s.plan.actions || []).map(a => a.reason || a.kind).filter(Boolean).slice(0, 6);
+  const extra = (skipped ? ` (${skipped} action${skipped === 1 ? '' : 's'} could not be done)` : '') + (droppedPictures ? ` (${droppedPictures} picture action${droppedPictures === 1 ? '' : 's'} left out)` : '');
+  if (after === 'amber' || after === 'green') {
+    item.status = 'gone';
+    rlfAddFixed(item, { to: after, round, actions: changed, note: extra.trim() });
+  } else if (after === 'red') {
+    item.status = 'still';
+    item.findings = findings.slice(0, 12);
+    item.message = 'changed in round ' + round + ', but the check still finds it red' + extra;
+    rlfAddFixed(item, { to: 'red', round, actions: changed, note: 'still red — kept on the list', keepListed: true });
+  } else {
+    item.status = 'still';
+    item.message = 'changed in round ' + round + ', but the follow-up check could not run — kept on the list' + extra;
+    rlfAddFixed(item, { to: 'error', round, actions: changed, note: 'follow-up check could not run', keepListed: true });
+  }
+}
+// Every change that was saved is recorded with its Undo — including the ones
+// that are still red, because a change was made to them all the same.
+function rlfAddFixed(item, o) {
+  const r = _rlf;
+  const q = rlfQuestion(item.where, item.id);
+  r.fixed.push({
+    id: item.id, where: item.where, title: item.title || (q && q.title) || 'Untitled question', qno: item.qno || '',
+    to: o.to, round: o.round, actions: o.actions || [], note: o.note || '', listed: !!o.keepListed,
+    historyId: item.history ? item.history.id : '', historyOwner: item.history ? item.history.owner : '',
+    afterSig: item.history && q ? tlSig(q) : '', undone: false, at: Date.now(),
+  });
+  item.history = null;
+}
+// Firestore hands maps back with their keys sorted, and `tlSig` signs the
+// blocks as JSON — so a repaired question kept in memory in the order the
+// repair built it would sign differently after the next reload, its fresh 🟢
+// stamp would read as stale, and the next launch would pay to check it again.
+// Sorting the keys here makes the copy in memory sign exactly as the copy
+// Firestore will return. Arrays keep their order; nothing else changes.
+function rlfCanonical(value) {
+  if (Array.isArray(value)) return value.map(rlfCanonical);
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(Object.keys(value).sort().map(k => [k, rlfCanonical(value[k])]));
+  }
+  return value;
+}
+// A Firestore-safe copy: tables are stored the way every save stores them.
+function rlfFirestoreCopy(q) {
+  const payload = tlRepairClone(q);
+  (payload.blocks || []).forEach(b => {
+    if (!b || b.type !== 'table') return;
+    if (Array.isArray(b.data)) b.data = tableDataToFirestore(b.data);
+    if (Array.isArray(b.colWidths)) b.colWidths = Object.fromEntries(b.colWidths.map((w, i) => [String(i), w]).filter(([, w]) => w != null));
+  });
+  return payload;
+}
+async function rlfSaveHistory(s, before, after, round) {
+  if (!tlRepairCurrent(s)) throw new Error('The question changed while it was being fixed, so it was left alone.');
+  const owner = s.writeOwner;
+  const ref = doc(collection(db, 'users', owner, RLF_HISTORY_COL));
+  const entry = {
+    qid: s.id, where: s.scope, title: String(before.title || '').slice(0, 300), qno: before.qno || null,
+    round, at: new Date().toISOString(), by: currentUser.uid,
+    findings: (s.findings || []).slice(0, 8).map(f => ({ severity: String(f.severity || ''), title: String(f.title || '').slice(0, 160) })),
+    actions: (s.plan.actions || []).slice(0, 20).map(a => ({ kind: a.kind, target: String(a.target || ''), reason: String(a.reason || '').slice(0, 300) })),
+    before: rlfFirestoreCopy(before),
+    afterSig: tlSig(after),
+    undone: false,
+  };
+  try { await setDoc(ref, entry); }
+  catch (e) {
+    const big = /size|too large|exceeds|maximum/i.test(String((e && e.message) || ''));
+    throw new Error(big
+      ? 'the question is too large to keep an undo copy of, so it was left alone — fix it from its 🚦 panel'
+      : 'the undo copy could not be saved (' + ((e && e.code) || (e && e.message) || 'refused') + '), so the question was left alone');
+  }
+  return { id: ref.id, owner };
+}
+async function rlfCommitOne(s, next) {
+  let pending;
+  // `_wkSuppress` is read synchronously, before the save's first await, so it
+  // is raised only for that synchronous start — a fix stays out of the
+  // work-session log without silencing anything the teacher authors meanwhile.
+  _wkSuppress++;
+  try {
+    pending = s.scope === 'vet'
+      ? saveVettingQuestion(rlfFirestoreCopy(next), { guard: () => tlRepairCurrent(s) })
+      : saveQuestion(tlRepairClone(next), { guard: () => tlRepairCurrent(s) });
+  } finally { _wkSuppress--; }
+  const saved = await pending;
+  if (!saved) throw new Error('the changes could not be saved, so the question was not replaced');
+  const list = s.scope === 'vet' ? vettingList : questionBank;
+  const i = list.findIndex(q => String(q.id) === s.id);
+  if (i < 0) throw new Error('the question left the list while it was being saved');
+  list[i] = tlRepairClone(next);
+  for (const b of next.blocks || []) {
+    const old = (s.snapshot.blocks || []).find(x => x.id === b.id);
+    if (old && old.url !== b.url) delete _imgEnhanceState[b.id];
+  }
+}
+
+// ── ↩ Undo ──────────────────────────────────────────────────────────────────
+// Only while the repaired question is still exactly as the fix left it: an
+// edit since is the teacher's, and putting an older copy over it would be
+// the fixer destroying work.
+async function rlfUndo(index) {
+  const r = _rlf;
+  const f = r && r.fixed[index];
+  if (!f || f.undone) return;
+  if (rlfBusy()) { showToast('Wait for the run to finish, then undo', 'info'); return; }
+  if (!f.historyId) { showToast('Nothing was changed on that question, so there is nothing to undo', 'info'); return; }
+  await rlfUndoEntry(f.where, f.id, f.historyOwner, f.historyId, f.afterSig, () => { f.undone = true; });
+  rlfSaveNow();
+  rlfPaint();
+}
+async function rlfUndoEntry(where, id, owner, historyId, afterSig, onDone) {
+  const q = rlfQuestion(where, id);
+  if (!q) { showToast('That question is no longer here', 'error'); return false; }
+  if (afterSig && tlSig(q) !== afterSig) { showToast('That question has been edited since it was fixed, so undo is not offered — your edits win', 'error'); return false; }
+  if ((where === 'vet' ? _vOwner(id) : _qOwner(id)) !== _rlfUid()) { showToast('That question belongs to another account', 'error'); return false; }
+  let snap;
+  try { snap = await getDoc(doc(db, 'users', owner, RLF_HISTORY_COL, historyId)); }
+  catch (e) { showToast('The undo copy could not be read: ' + ((e && e.message) || e), 'error'); return false; }
+  if (!snap.exists()) { showToast('The undo copy is gone', 'error'); return false; }
+  const h = snap.data() || {};
+  if (h.undone) { showToast('That fix was already undone', 'info'); if (onDone) onDone(); return false; }
+  const before = typeof normalizeLoadedQuestion === 'function' ? normalizeLoadedQuestion(tlRepairClone(h.before)) : tlRepairClone(h.before);
+  before.id = String(id);
+  let ok;
+  _wkSuppress++;
+  try { ok = where === 'vet' ? saveVettingQuestion(rlfFirestoreCopy(before)) : saveQuestion(before); }
+  finally { _wkSuppress--; }
+  if (!(await ok)) { showToast('The question could not be put back', 'error'); return false; }
+  const list = where === 'vet' ? vettingList : questionBank;
+  const i = list.findIndex(x => String(x.id) === String(id));
+  if (i >= 0) list[i] = before;
+  try { await setDoc(doc(db, 'users', owner, RLF_HISTORY_COL, historyId), { undone: true, undoneAt: new Date().toISOString() }, { merge: true }); }
+  catch (e) { console.warn('red light fixer: undo worked but the history entry was not marked', e); }
+  _tlCache.delete(String(id));
+  tlRepaint(String(id));
+  // Back on the red list, with the verdict it carried (the before-copy still
+  // wears the stamp it was checked under, so its lamp is red again for free).
+  const r = _rlf;
+  if (r && tlStateOf(before).state === 'red' && !r.items.some(x => x.id === String(id) && x.where === where)) {
+    r.items.push({ id: String(id), where, include: true, rounds: 0, noFix: 0, message: 'put back by ↩ Undo', status: 'red', title: before.title || '', qno: qNoLabel(before), topic: before.topic || '', findings: (tlStateOf(before).findings || []).slice(0, 12) });
+  }
+  if (onDone) onDone();
+  try { renderQuestionBank(); } catch (e) {}
+  try { renderVettingList(); } catch (e) {}
+  showToast('↩ The question is back as it was before the fix', 'success');
+  return true;
+}
+async function rlfUndoRound(round) {
+  const r = _rlf;
+  if (!r || rlfBusy()) return;
+  const todo = r.fixed.map((f, i) => ({ f, i })).filter(x => !x.f.undone && x.f.historyId && x.f.round === round);
+  if (!todo.length) { showToast('Nothing to undo in that round', 'info'); return; }
+  if (!confirm('Undo all ' + todo.length + ' change' + (todo.length === 1 ? '' : 's') + ' made in round ' + round + '?\n\nA question edited since its fix is left as it is.')) return;
+  let n = 0;
+  for (const { f } of todo) {
+    // eslint-disable-next-line no-await-in-loop
+    if (await rlfUndoEntry(f.where, f.id, f.historyOwner, f.historyId, f.afterSig, () => { f.undone = true; })) n++;
+  }
+  rlfSaveNow();
+  rlfPaint();
+  showToast('↩ ' + n + ' of ' + todo.length + ' put back', n === todo.length ? 'success' : 'info');
+}
+
+// ── 🕘 The fix history (from Firestore, every browser) ──────────────────────
+let _rlfHistory = null;   // null = not loaded; [] = loaded
+async function rlfHistoryLoad() {
+  const host = document.getElementById('rlfHistory');
+  if (host) host.innerHTML = '<p class="rlf-muted">Loading the fix history…</p>';
+  try {
+    const snap = await getDocs(query(collection(db, 'users', _bankOwnerUid(), RLF_HISTORY_COL), orderBy('at', 'desc'), limit(200)));
+    _rlfHistory = snap.docs.map(d => ({ hid: d.id, ...d.data() }));
+  } catch (e) {
+    _rlfHistory = [];
+    if (host) host.innerHTML = '<p class="rlf-muted">The history could not be read: ' + escapeHtml((e && e.message) || String(e)) + '</p>';
+    return;
+  }
+  rlfHistoryRender();
+}
+function rlfHistoryRender() {
+  const host = document.getElementById('rlfHistory');
+  if (!host || !_rlfHistory) return;
+  if (!_rlfHistory.length) { host.innerHTML = '<p class="rlf-muted">No fixes have been made yet.</p>'; return; }
+  host.innerHTML = '<div class="rlf-hist">' + _rlfHistory.map((h, i) => {
+    const q = rlfQuestion(h.where, h.qid);
+    const unchanged = q && h.afterSig && tlSig(q) === h.afterSig;
+    const when = h.at ? new Date(h.at).toLocaleString() : '';
+    const acts = (h.actions || []).map(a => escapeHtml(a.reason || a.kind)).slice(0, 4).join('; ');
+    const btn = h.undone ? '<span class="rlf-tag">undone</span>'
+      : !q ? '<span class="rlf-tag">question gone</span>'
+      : unchanged ? `<button type="button" class="btn btn-outline btn-sm" onclick="rlfHistoryUndo(${i})">↩ Undo</button>`
+      : '<span class="rlf-tag" title="Edited since the fix — undo is not offered, so those edits are never lost">edited since</span>';
+    return `<div class="rlf-hist-row">
+      <div class="rlf-hist-main"><b>${escapeHtml(h.qno ? '#' + h.qno + ' ' : '')}${escapeHtml(h.title || 'Untitled question')}</b>
+        <div class="rlf-muted">${escapeHtml(when)} · round ${escapeHtml(String(h.round || 1))} · ${h.where === 'vet' ? 'vetting' : 'bank'}${acts ? ' · ' + acts : ''}</div></div>
+      ${q ? `<button type="button" class="btn btn-outline btn-sm" onclick="tlClick('${h.where === 'vet' ? 'vet' : 'bank'}','${escapeHtml(String(h.qid))}')">🚦</button>` : ''}
+      ${btn}
+    </div>`;
+  }).join('') + '</div>';
+}
+async function rlfHistoryUndo(i) {
+  const h = _rlfHistory && _rlfHistory[i];
+  if (!h || h.undone) return;
+  if (rlfBusy()) { showToast('Wait for the run to finish, then undo', 'info'); return; }
+  const ok = await rlfUndoEntry(h.where === 'vet' ? 'vet' : 'bank', String(h.qid), _bankOwnerUid(), h.hid, h.afterSig, () => { h.undone = true; });
+  if (ok && _rlf) _rlf.fixed.forEach(f => { if (f.historyId === h.hid) f.undone = true; });
+  rlfSaveNow();
+  rlfHistoryRender();
+  rlfPaint();
+}
+
+// ── The page ────────────────────────────────────────────────────────────────
+function rlfReadScopeControls() {
+  const r = _rlf;
+  if (!r || rlfBusy()) return;
+  const b = document.getElementById('rlfScopeBank'), v = document.getElementById('rlfScopeVet'), t = document.getElementById('rlfScopeTopic'), p = document.getElementById('rlfPictures');
+  if (b) r.scope.bank = !!b.checked;
+  if (v) r.scope.vet = !!v.checked;
+  if (t) r.scope.topic = t.value || '';
+  if (p) r.pictures = !!p.checked;
+}
+function rlfScopeChanged() {
+  rlfReadScopeControls();
+  rlfSaveSoon();
+  rlfPaint();
+}
+function rlfToggle(index, on) {
+  const r = _rlf;
+  const item = r && r.items[index];
+  if (!item) return;
+  item.include = !!on;
+  rlfSaveSoon();
+  rlfPaintSoon();
+}
+function rlfToggleAll(on) {
+  const r = _rlf;
+  if (!r || rlfBusy()) return;
+  r.items.forEach(i => { i.include = !!on; });
+  rlfSaveSoon();
+  rlfPaint();
+}
+function rlfPaintSoon() {
+  if (_rlfPaintTimer) return;
+  _rlfPaintTimer = setTimeout(() => { _rlfPaintTimer = null; rlfPaint(); }, 400);
+}
+function rlfProgressHtml() {
+  const r = _rlf;
+  if (r.stage === 'checking' && r.check) {
+    const c = r.check;
+    const pct = c.total ? Math.round(c.done / c.total * 100) : 0;
+    return `<div class="rlf-card rlf-progress">
+      <div class="rlf-progress-head"><b>🚦 Checking ${c.done.toLocaleString()} of ${c.total.toLocaleString()}</b><span>${pct}%</span></div>
+      <div class="rlf-bar"><span style="width:${pct}%"></span></div>
+      <div class="rlf-counts">
+        <span class="rlf-chip red">🔴 ${c.red}</span><span class="rlf-chip amber">🟡 ${c.amber}</span><span class="rlf-chip green">🟢 ${c.green}</span>
+        ${c.errors ? `<span class="rlf-chip err">⚠ ${c.errors}</span>` : ''}
+        <span class="rlf-muted">${c.reused.toLocaleString()} reused free · ${c.instant} red on the instant checks (free) · ${c.ai} read by the AI</span>
+      </div>
+      ${r.stop ? '<p class="rlf-muted">Stopping after the checks already in flight…</p>' : ''}
+    </div>`;
+  }
+  if (r.stage === 'fixing' && r.roundStats) {
+    const s = r.roundStats;
+    const pct = s.total ? Math.round(s.done / s.total * 100) : 0;
+    return `<div class="rlf-card rlf-progress">
+      <div class="rlf-progress-head"><b>🔧 Round ${s.round}: ${s.done} of ${s.total} done</b><span>${pct}%</span></div>
+      <div class="rlf-bar fix"><span style="width:${pct}%"></span></div>
+      <div class="rlf-counts">
+        <span class="rlf-chip green">left the list ${s.fixed}</span><span class="rlf-chip red">still red ${s.still}</span>
+        ${s.nofix ? `<span class="rlf-chip">no safe fix ${s.nofix}</span>` : ''}${s.failed ? `<span class="rlf-chip err">failed ${s.failed}</span>` : ''}${s.skipped ? `<span class="rlf-chip">skipped ${s.skipped}</span>` : ''}
+      </div>
+      ${r.stop ? '<p class="rlf-muted">Stopping after the repairs already in flight…</p>' : ''}
+    </div>`;
+  }
+  return '';
+}
+function rlfFindingText(f) { return (f.severity === 'high' ? '🔴 ' : f.severity === 'low' ? '⚪ ' : '🟡 ') + (f.title || f.detail || 'Finding'); }
+function rlfRowHtml(item, index) {
+  const q = rlfQuestion(item.where, item.id);
+  const scope = item.where === 'vet' ? 'vet' : 'bank';
+  const highs = (item.findings || []).filter(f => f && f.severity === 'high');
+  const show = (highs.length ? highs : (item.findings || [])).slice(0, 3);
+  const more = (item.findings || []).length - show.length;
+  const busy = rlfBusy();
+  const statusTxt = { queued: 'waiting…', fixing: '🔧 fixing…' }[item.status] || '';
+  return `<div class="rlf-row${item.include ? '' : ' off'}${item.status === 'fixing' ? ' busy' : ''}">
+    <input type="checkbox" class="rlf-tick" ${item.include ? 'checked' : ''} ${busy ? 'disabled' : ''} onchange="rlfToggle(${index}, this.checked)" aria-label="Include in the next fix round">
+    ${q ? tlLightHtml(q, scope, { small: true }) : '<span class="tl-light sm idle">○</span>'}
+    <div class="rlf-row-main">
+      <div class="rlf-row-title">${item.qno ? `<span class="qb-qno">${escapeHtml(item.qno)}</span> ` : ''}${escapeHtml(item.title || 'Untitled question')}
+        <span class="rlf-muted"> · ${escapeHtml(item.topic || 'no topic')}${item.where === 'vet' ? ' · vetting' : ''}${item.rounds ? ' · ' + item.rounds + ' round' + (item.rounds === 1 ? '' : 's') : ''}</span></div>
+      <div class="rlf-row-find">${show.map(f => `<span>${escapeHtml(rlfFindingText(f))}</span>`).join('')}${more > 0 ? `<span class="rlf-muted">+${more} more</span>` : ''}</div>
+      ${statusTxt || item.message ? `<div class="rlf-row-msg">${escapeHtml(statusTxt || item.message)}</div>` : ''}
+    </div>
+    ${q ? `<button type="button" class="btn btn-outline btn-sm" onclick="tlClick('${scope}','${escapeHtml(String(item.id))}')" title="Open its 🚦 panel to read the findings or fix it by hand">Open</button>` : ''}
+  </div>`;
+}
+function rlfFixedHtml() {
+  const r = _rlf;
+  const shown = r.fixed.map((f, i) => ({ f, i })).filter(x => !x.f.listed || x.f.historyId).reverse();
+  if (!shown.length) return '';
+  const left = r.fixed.filter(f => !f.listed && !f.undone).length;
+  const rounds = Array.from(new Set(r.fixed.filter(f => f.historyId && !f.undone).map(f => f.round))).sort((a, b) => a - b);
+  const rows = shown.slice(0, 400).map(({ f, i }) => {
+    const to = f.to === 'green' ? '🟢' : f.to === 'amber' ? '🟡' : f.to === 'red' ? '🔴' : '⚠';
+    const q = rlfQuestion(f.where, f.id);
+    const scope = f.where === 'vet' ? 'vet' : 'bank';
+    return `<div class="rlf-row${f.undone ? ' off' : ''}">
+      <span class="rlf-fromto" title="Before → after">🔴→${to}</span>
+      <div class="rlf-row-main">
+        <div class="rlf-row-title">${f.qno ? `<span class="qb-qno">${escapeHtml(f.qno)}</span> ` : ''}${escapeHtml(f.title || 'Untitled question')} <span class="rlf-muted">· round ${f.round}${f.where === 'vet' ? ' · vetting' : ''}</span></div>
+        ${(f.actions || []).length ? `<div class="rlf-row-find">${f.actions.map(a => `<span>✎ ${escapeHtml(a)}</span>`).join('')}</div>` : ''}
+        ${f.note ? `<div class="rlf-row-msg">${escapeHtml(f.note)}</div>` : ''}
+      </div>
+      ${q ? `<button type="button" class="btn btn-outline btn-sm" onclick="tlClick('${scope}','${escapeHtml(String(f.id))}')">🚦</button>` : ''}
+      ${f.undone ? '<span class="rlf-tag">undone</span>' : f.historyId ? `<button type="button" class="btn btn-outline btn-sm" onclick="rlfUndo(${i})" ${rlfBusy() ? 'disabled' : ''}>↩ Undo</button>` : ''}
+    </div>`;
+  }).join('');
+  return `<details class="rlf-card rlf-fixed"${r.stage === 'idle' && r.round ? ' open' : ''}>
+    <summary><b>✅ ${left} left the red list</b> <span class="rlf-muted">· ${shown.length} change${shown.length === 1 ? '' : 's'} made in all, each with ↩ Undo</span></summary>
+    ${rounds.length ? `<div class="rlf-undo-rounds">${rounds.map(n => `<button type="button" class="btn btn-outline btn-sm" onclick="rlfUndoRound(${n})" ${rlfBusy() ? 'disabled' : ''}>↩ Undo round ${n}</button>`).join('')}</div>` : ''}
+    <div class="rlf-list">${rows}</div>
+  </details>`;
+}
+function rlfPaint() {
+  const host = document.getElementById('rlfBody');
+  if (!host || !_rlf) return;
+  const r = _rlf;
+  const busy = rlfBusy();
+  if (!busy) rlfRefreshItems();
+  const owned = rlfOwnedQuestions(r.scope);
+  const pv = busy ? null : rlfPreview(r.scope);
+  const est = pv ? rlfCheckEstimate(pv.needAi) : null;
+  const bankN = rlfOwnedQuestions({ bank: true, vet: false, topic: '' }).length;
+  const vetN = rlfOwnedQuestions({ bank: false, vet: true, topic: '' }).length;
+  const topics = rlfTopics();
+  const include = rlfFixCandidates().length;
+  const fixEst = include ? rlfFixEstimate(include) : null;
+  const scopeHtml = `<div class="rlf-card rlf-scope">
+    <div class="rlf-scope-row">
+      <label><input type="checkbox" id="rlfScopeBank" ${r.scope.bank ? 'checked' : ''} ${busy ? 'disabled' : ''} onchange="rlfScopeChanged()"> Question bank <span class="rlf-muted">(${bankN.toLocaleString()})</span></label>
+      <label><input type="checkbox" id="rlfScopeVet" ${r.scope.vet ? 'checked' : ''} ${busy ? 'disabled' : ''} onchange="rlfScopeChanged()"> Vetting list <span class="rlf-muted">(${vetN.toLocaleString()})</span></label>
+      <label>Topic <select id="rlfScopeTopic" ${busy ? 'disabled' : ''} onchange="rlfScopeChanged()"><option value="">All topics</option>${topics.map(([t, n]) => `<option value="${escapeHtml(t)}"${r.scope.topic === t ? ' selected' : ''}>${escapeHtml(t)} (${n})</option>`).join('')}</select></label>
+    </div>
+    ${pv ? `<div class="rlf-scope-est">
+        <b>${owned.length.toLocaleString()}</b> question${owned.length === 1 ? '' : 's'} in scope ·
+        ${pv.reused.toLocaleString()} already have a verdict (free) · ${pv.instant} red on the instant checks (free) ·
+        <b>${pv.needAi.toLocaleString()}</b> need the AI${pv.needAi ? ` — about <b>${aiMoney(est.usd)}</b>${est.measured ? '' : ' <span class="rlf-muted">(first estimate)</span>'}` : ''}
+      </div>` : ''}
+    <div class="rlf-scope-row">
+      <button type="button" class="btn btn-primary" onclick="rlfLaunch()" ${busy || !owned.length ? 'disabled' : ''}>🚦 Launch checker</button>
+      <span class="rlf-muted">Checks every question in scope and lists only the 🔴 ones. Verdicts are saved on the questions, so launching again only pays for new or edited ones.</span>
+    </div>
+  </div>`;
+  const listHead = r.items.length
+    ? `<div class="rlf-list-head">
+        <h3>🔴 ${r.items.length} red question${r.items.length === 1 ? '' : 's'}</h3>
+        <div class="rlf-list-ctrl">
+          <label class="rlf-muted" title="A redrawn or new diagram costs about US$0.07 each. Switched off, a plan fixes everything except pictures.">
+            <input type="checkbox" id="rlfPictures" ${r.pictures ? 'checked' : ''} ${busy ? 'disabled' : ''} onchange="rlfScopeChanged()"> allow new pictures</label>
+          <button type="button" class="btn btn-outline btn-sm" onclick="rlfToggleAll(true)" ${busy ? 'disabled' : ''}>Tick all</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="rlfToggleAll(false)" ${busy ? 'disabled' : ''}>Untick all</button>
+          <button type="button" class="btn ${r.round ? 'btn-outline rlf-again' : 'btn-primary'}" onclick="rlfFix()" ${busy || !include ? 'disabled' : ''}
+            title="Plan, apply, save and re-check each ticked red question. Any that come back yellow or green leave this list.">
+            🔧 ${r.round ? 'Fix further — round ' + (r.round + 1) + ' (' + include + ')' : 'Fix ' + include + ' red'} ${fixEst ? `<span class="rlf-btn-est">≈ ${aiMoney(fixEst.usd)}</span>` : ''}</button>
+        </div>
+      </div>`
+    : '';
+  let lastRound = '';
+  if (!busy && r.roundStats) {
+    const s = r.roundStats;
+    lastRound = `<div class="rlf-last">Round ${s.round}: <b>${s.fixed}</b> left the red list · ${s.still} changed but still red · ${s.nofix} had no safe fix · ${s.failed} failed${s.skipped ? ' · ' + s.skipped + ' skipped' : ''}${r.stopReason ? ' · stopped (' + (r.stopReason === 'budget' ? 'budget reached' : 'by you') + ')' : ''}</div>`;
+  }
+  const empty = !r.items.length && !busy
+    ? (r.check && r.check.endedAt
+      ? `<div class="rlf-card rlf-empty">🎉 No red questions${r.check.errors ? ', though ' + r.check.errors + ' could not be checked (below)' : ''}.</div>`
+      : `<div class="rlf-card rlf-empty">Press <b>🚦 Launch checker</b> to find the red questions.${rlfPreview(r.scope).red ? ' ' + rlfPreview(r.scope).red + ' are already known to be red from earlier checks.' : ''}</div>`)
+    : '';
+  const errors = r.errors.length && !busy
+    ? `<details class="rlf-card"><summary><b>⚠ ${r.errors.length} could not be checked</b> <span class="rlf-muted">· an AI route refused or timed out</span></summary>
+        <div class="rlf-scope-row"><button type="button" class="btn btn-outline btn-sm" onclick="rlfRetryErrors()">🔁 Check these again</button><span class="rlf-muted">Everything else is reused for free.</span></div>
+        <div class="rlf-list">${r.errors.slice(0, 200).map(e => `<div class="rlf-row"><div class="rlf-row-main"><div class="rlf-row-title">${escapeHtml(e.title || e.id)}</div><div class="rlf-row-msg">${escapeHtml(e.error)}</div></div>
+          <button type="button" class="btn btn-outline btn-sm" onclick="tlClick('${e.where === 'vet' ? 'vet' : 'bank'}','${escapeHtml(String(e.id))}')">🚦</button></div>`).join('')}</div></details>`
+    : '';
+  host.innerHTML = scopeHtml + rlfProgressHtml() + lastRound
+    + (r.items.length ? `<div class="rlf-card">${listHead}<div class="rlf-list">${r.items.map(rlfRowHtml).join('')}</div></div>` : empty)
+    + rlfFixedHtml() + errors
+    + `<details class="rlf-card" id="rlfHistoryBox" ontoggle="if(this.open)rlfHistoryLoad()"><summary><b>🕘 Fix history</b> <span class="rlf-muted">· every fix saved from any browser, with ↩ Undo</span></summary><div id="rlfHistory"></div></details>`
+    + (r.items.length || r.fixed.length ? `<div class="rlf-foot"><button type="button" class="btn btn-outline btn-sm" onclick="rlfClearList()" ${busy ? 'disabled' : ''}>Clear this list</button></div>` : '');
+  try { tlRepaint(); } catch (e) {}
+}
+function renderRedLightsPage() {
+  if (!_isAdmin()) return;
+  rlfLoad();
+  rlfPaintCost();
+  rlfPaint();
+}
+Object.assign(window, { rlfLaunch, rlfFix, rlfStop, rlfSetBudget, rlfToggle, rlfToggleAll, rlfScopeChanged, rlfUndo, rlfUndoRound, rlfRetryErrors, rlfClearList, rlfHistoryLoad, rlfHistoryUndo, renderRedLightsPage });
+// ── End red light fixer ──
 
 
 // 🚦 THE TRAFFIC LIGHT — one question's health at a glance (`tl*`)

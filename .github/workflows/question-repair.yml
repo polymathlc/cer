@@ -2,10 +2,10 @@ name: Question repair checks
 
 on:
   pull_request:
-    paths: ['app.js', 'index.html', 'question-repair-core.mjs', 'question-crop-core.mjs', 'tools/question-crop*.mjs', 'tools/question-regeneration*.mjs', 'tools/checker-image-audit-tests.mjs', 'tools/crop-provenance-tests.mjs', 'tools/question-repair*.mjs', 'tools/traffic-light-tests.mjs', 'tools/editing-mode-tests.mjs', 'tools/auto-check-tests.mjs', 'tools/ai-command-tests.mjs', '.github/workflows/question-repair.yml']
+    paths: ['app.js', 'index.html', 'question-repair-core.mjs', 'question-crop-core.mjs', 'tools/question-crop*.mjs', 'tools/question-regeneration*.mjs', 'tools/checker-image-audit-tests.mjs', 'tools/crop-provenance-tests.mjs', 'tools/question-repair*.mjs', 'tools/traffic-light-tests.mjs', 'tools/editing-mode-tests.mjs', 'tools/auto-check-tests.mjs', 'tools/ai-command-tests.mjs', 'ai-cost-core.mjs', 'tools/ai-cost-tests.mjs', 'tools/red-light-fixer*.mjs', '.github/workflows/question-repair.yml']
   push:
     branches: [main]
-    paths: ['app.js', 'index.html', 'question-repair-core.mjs', 'question-crop-core.mjs', 'tools/question-crop*.mjs', 'tools/question-regeneration*.mjs', 'tools/checker-image-audit-tests.mjs', 'tools/crop-provenance-tests.mjs', 'tools/question-repair*.mjs', 'tools/traffic-light-tests.mjs', 'tools/editing-mode-tests.mjs', 'tools/auto-check-tests.mjs', 'tools/ai-command-tests.mjs', '.github/workflows/question-repair.yml']
+    paths: ['app.js', 'index.html', 'question-repair-core.mjs', 'question-crop-core.mjs', 'tools/question-crop*.mjs', 'tools/question-regeneration*.mjs', 'tools/checker-image-audit-tests.mjs', 'tools/crop-provenance-tests.mjs', 'tools/question-repair*.mjs', 'tools/traffic-light-tests.mjs', 'tools/editing-mode-tests.mjs', 'tools/auto-check-tests.mjs', 'tools/ai-command-tests.mjs', 'ai-cost-core.mjs', 'tools/ai-cost-tests.mjs', 'tools/red-light-fixer*.mjs', '.github/workflows/question-repair.yml']
 
 permissions:
   contents: read
@@ -33,6 +33,8 @@ jobs:
           node tools/editing-mode-tests.mjs
           node tools/auto-check-tests.mjs
           node tools/ai-command-tests.mjs
+          node tools/ai-cost-tests.mjs
+          node tools/red-light-fixer-tests.mjs
       - name: Install browser test runtime
         run: |
           npm install --prefix "$RUNNER_TEMP/repair-browser" playwright@1.62.1
@@ -45,3 +47,4 @@ jobs:
           node tools/question-repair-browser.mjs
           node tools/question-regeneration-browser.mjs
           node tools/question-crop-repair-browser.mjs
+          RED_LIGHT_QA_DIR="$RUNNER_TEMP/red-light-screenshots" node tools/red-light-fixer-browser.mjs

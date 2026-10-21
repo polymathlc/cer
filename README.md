@@ -1,5 +1,41 @@
 # CER Science Learning Portal
 
+## 🚨 Red Light Fixer and the 💲 AI cost meter (v1.440.0)
+
+**Questions → Red Light Fixer** (admin only) checks every question you own for a
+🔴 traffic light, lists only the reds, and fixes them round by round:
+
+1. **🚦 Launch checker** reads every question in scope (question bank, vetting
+   list, or both; optionally one topic) and lists the reds, worst first.
+2. **🔧 Fix** gives each ticked red the same repair plan the 🚦 panel offers,
+   applies it, saves it and checks the question again. Anything that comes back
+   🟡 or 🟢 drops off the list.
+3. **🔧 Fix further — round 2, 3…** runs another round on the reds that are left,
+   one press per round.
+
+A **💲 Spent** bar stays at the top the whole time: the running cost of every AI
+call this tab makes during the run, worked out from the tokens each API reported
+and the price of the model that actually answered. Calls through the two server
+routes, which do not report tokens yet, are estimated from the text and marked
+with "≈". **⏹ Stop** ends a run between questions, and **Stop at** stops it by
+itself at a budget. **⚙ Prices** shows and edits the rate for every model
+(published rates as of 21 October 2026), and can show costs in S$.
+
+Keeping it cheap without checking any worse:
+- A verdict that stands is never paid for twice, and it is now **saved on the
+  question**, so the next launch only pays for questions added or edited since.
+- A question the free instant checks already find red (no correct option, a
+  blank model answer…) is listed without an AI call.
+- Only reds are fixed, and **allow new pictures** can be switched off to skip
+  diagram redraws (about US$0.07 each).
+- A red with no safe automatic fix in two rounds is unticked, so it stops costing.
+
+Keeping live questions safe: before a question is changed, the question as it was
+is saved to `users/{owner}/questionRepairs`. If that copy cannot be saved, the
+question is left alone. **↩ Undo** (per question, per round, or from **🕘 Fix
+history**) puts it back, but only while the question is still exactly as the fix
+left it. A question open in the editor or its 🚦 panel is skipped.
+
 ## Editable worksheet covers (v1.438.0)
 
 Worksheet covers use the **Big M** design: the Polymath logo top left with a

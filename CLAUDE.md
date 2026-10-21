@@ -4994,6 +4994,41 @@ of these was silent: the crop still came back, looking either perfectly clean
     by their MIDDLE instead of containment was tried in review 2 and read MCQ
     option rows and part lines under wide tables as labels.
 
+## 🚨 Red Light Fixer + 💲 AI cost meter (v1.440.0)
+
+`rlf*` / `RLF_*` (app.js, search `RED LIGHT FIXER`, right after `End fix all`), the 💲 meter just above it
+(`aiMeter*`, `_aiMeterText`, `_aiMeterImage`, `aiPrices`, `aiPriceDialog*`, search `AI COST METER`),
+the pure pricing in **`ai-cost-core.mjs`**, `#page-redlights` / `#aiPriceOverlay` / `.rlf-*` / `.aip-*` in index.html,
+and the **Red Light Fixer** nav item under Questions (admin only; not on `EMPLOYEE_PAGES`; `navigateTo` guards it).
+
+- **SAME CHECKER, SAME REPAIR.** Verdicts are `tlRun`; fixes are `tlRepairPlan` → `tlRepairBuildNext(…, {tolerant:true})`.
+  No prompt lives in the section (the harness fails on `askGemini` / `_aiAsk` there). The headless guard in
+  `tlRepairCurrent` now reads `s.scope` ('bank' or anything else = vetting) for the list and the owner.
+- **CHEAP WITHOUT CHECKING WORSE.** `rlfFreeVerdict`: a standing verdict (cache or `autoCheck` stamp) is reused;
+  a question whose `_cqLocalFindings` already has a HIGH finding is red for certain (`tlVerdict`) and needs no call.
+  Every AI verdict is stamped on the doc with `autoChkStamp` and a one-field `{autoCheck}` merge (`rlfStamp`,
+  batched by `rlfFlushStamps`), so the next launch only pays for new or edited questions.
+- **`rlfCanonical` sorts a repaired question's keys** before it is saved and kept in memory. Firestore returns maps
+  key-sorted and `tlSig` signs blocks as JSON; without it a fixed question's fresh stamp reads stale after reload.
+- **BEFORE-COPY FIRST.** `rlfSaveHistory` writes `users/{owner}/questionRepairs/{auto}` (`before`, `afterSig`,
+  `actions`, `findings`, `round`) BEFORE `rlfCommitOne` saves; if it fails the question is not touched. Undo
+  (`rlfUndoEntry`) only restores while `tlSig(current) === afterSig`, and marks the entry `undone`.
+- **Rounds are presses, never a loop.** Amber/green leave `_rlf.items` at the end of a round; reds stay with
+  `rounds`/`message`. `RLF_NOFIX_SKIP` rounds with no safe fix untick a row. "allow new pictures" off drops
+  `redraw_image` / `generate_image` / `add_block new:image` actions (`RLF_PICTURE_ACTION`).
+- **The meter.** Each route calls `_aiMeterText` / `_aiMeterImage` (guarded with `typeof`, so the ai-routes
+  harness still runs the block). Nothing is built while no meter is open. Reported usage wins; server callables
+  (`askOpenAi`, `askKimi` return only `{text, model}`) are estimated (`estimateUsage`, flagged, shown with "≈").
+  If those callables in polymathlc/math start returning `usage`, it is read with no change here. The meter counts
+  every call the tab makes while a run is open (calls interleave; there is no honest per-caller attribution).
+  Budget (`_rlf.budget`, USD) stops the run from `_rlfOnRecord`. Prices: `AI_DEFAULT_PRICES` + localStorage
+  overrides (`sq_ai_price_overrides`), editable in ⚙ Prices; `rlfRecost` reprices kept records.
+- The red list, fixed list, records and budget persist per uid in localStorage (`sq_rlf:`); lifetime spend in
+  `sq_rlf_spent:`; measured per-check / per-fix averages (for estimates) in `sq_rlf_avg:`.
+- Run `node tools/ai-cost-tests.mjs`, `node tools/red-light-fixer-tests.mjs` and
+  `PLAYWRIGHT_MODULE=… node tools/red-light-fixer-browser.mjs` (desktop + phone) after touching any of it,
+  plus the repair and traffic-light suites.
+
 ## 🔧 Fix all — repair every red/yellow vetting question in the background (v1.421.0)
 
 `vbr*` / `VBR_PAR` / `VBR_MAX` / `vbrCandidates` / `vbrStart` / `vbrStop` / `vbrRepairOne` /
