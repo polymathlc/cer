@@ -5025,6 +5025,13 @@ and the **Red Light Fixer** nav item under Questions (admin only; not on `EMPLOY
   overrides (`sq_ai_price_overrides`), editable in ⚙ Prices; `rlfRecost` reprices kept records.
 - The red list, fixed list, records and budget persist per uid in localStorage (`sq_rlf:`); lifetime spend in
   `sq_rlf_spent:`; measured per-check / per-fix averages (for estimates) in `sq_rlf_avg:`.
+- **📌 Pin, 🙈 Ignore, 🗑 Delete (v1.441.0).** 📌 pins one listed question's exported proof (`buildWorksheetHtml` →
+  `_wsWritePreview`, readOnly) in a fixed panel (`#rlfPin`) that follows fixes without leaving the page; `_rlf.pinned`
+  persists and is redrawn only when its `tlSig` changes. 🙈 Ignore writes ONE merged field, `redLightIgnore:{at,by}`, on
+  the question doc (rolled back if refused); ignored questions are never candidates here or in 🔧 Fix all
+  (`vbrCandidates`) and are listed apart with ↩ Un-ignore (`deleteField()`). It is deliberately NOT in
+  `EDITOR_OWNED_QUESTION_FIELDS`, so an edit keeps it. 🗑 Delete asks first (a bank delete is permanent), refuses during
+  a run, and drops the row only once the document really went. All three are admin-only in the handler.
 - Run `node tools/ai-cost-tests.mjs`, `node tools/red-light-fixer-tests.mjs` and
   `PLAYWRIGHT_MODULE=… node tools/red-light-fixer-browser.mjs` (desktop + phone) after touching any of it,
   plus the repair and traffic-light suites.
