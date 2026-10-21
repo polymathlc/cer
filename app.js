@@ -4514,7 +4514,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.441.0';
+const APP_VERSION = 'v1.442.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -51174,6 +51174,7 @@ function _rlfBlank() {
     uid: _rlfUid(), stage: 'idle', stop: false, stopReason: '',
     scope: { bank: true, vet: false, topic: '' },
     budget: 0, pictures: true,
+    prescan: false, // 🧭 Decisions orders the AI checks, most suspicious first (a shortlist)
     // the whole session (every launch and every round since the list was made)
     tally: createTally(), records: [],
     // the stage that is running now
@@ -51375,7 +51376,7 @@ function rlfSaveNow() {
   const r = _rlf;
   if (!r || !r.uid) return;
   const keep = {
-    v: 1, scope: r.scope, budget: r.budget, pictures: r.pictures, round: r.round, startedAt: r.startedAt,
+    v: 1, scope: r.scope, budget: r.budget, pictures: r.pictures, prescan: !!r.prescan, round: r.round, startedAt: r.startedAt,
     pinned: r.pinned || null,
     items: r.items.map(i => ({ id: i.id, where: i.where, include: i.include, rounds: i.rounds, noFix: i.noFix, message: i.message })),
     fixed: r.fixed.slice(-300),
@@ -51398,6 +51399,7 @@ function rlfLoad() {
       r.scope = Object.assign(r.scope, v.scope || {});
       r.budget = Number(v.budget) > 0 ? Number(v.budget) : 0;
       r.pictures = v.pictures !== false;
+      r.prescan = !!v.prescan;
       r.round = Number(v.round) || 0;
       r.startedAt = v.startedAt || Date.now();
       r.items = (v.items || []).map(i => ({ id: String(i.id), where: i.where === 'vet' ? 'vet' : 'bank', include: i.include !== false, rounds: i.rounds || 0, noFix: i.noFix || 0, message: i.message || '', status: 'red', title: '', qno: '', topic: '', findings: [] }));
@@ -51415,7 +51417,7 @@ function rlfLoad() {
 function rlfClearList() {
   if (rlfBusy()) return;
   if (!confirm('Clear the red list, the fixed list and the cost so far?\n\nNothing is changed in any question, and verdicts already stamped on questions are kept — the next launch reuses them for free.')) return;
-  const keep = _rlf ? { scope: _rlf.scope, budget: _rlf.budget, pictures: _rlf.pictures, pinned: _rlf.pinned } : {};
+  const keep = _rlf ? { scope: _rlf.scope, budget: _rlf.budget, pictures: _rlf.pictures, prescan: _rlf.prescan, pinned: _rlf.pinned } : {};
   _rlf = Object.assign(_rlfBlank(), keep);
   rlfSaveNow();
   rlfPaint();
@@ -51495,6 +51497,83 @@ function _rlfStageEnd() {
   if (_rlfMeter) { _rlfMeter.close(); _rlfMeter = null; }
 }
 
+// ── 🧭 The Decisions pre-scan ───────────────────────────────────────────────
+// Decisions is shown measured FACTS about a question (never the pictures,
+// never the science) and answers yes/no on its wording and its structure.
+// That cannot set a lamp — only the AI read does — but it is cheap and fast,
+// so it can decide which questions the AI reads FIRST. With a budget or a
+// Stop, the AI's money then goes on the most suspicious questions. It is a
+// SHORTLIST and says so: a red Decisions thought clean is still red, and is
+// simply checked later (or not at all, if the run stops first).
+const RLF_PRESCAN_PAR = 4;
+const RLF_PRESCAN_GAP_MS = 750;   // ≈ 80 a minute, under the server's 90
+const RLF_PRESCAN_MAX = 1500;     // well inside the server's daily allowance
+// 0 = Decisions is sure it is fine … higher = more suspicious. A question
+// Decisions could not judge sits in the middle, never at the bottom, and a
+// defect the code measured outranks any verdict.
+function rlfSuspicion(verdicts, hard) {
+  let s;
+  if (!verdicts) s = 0.5;
+  else {
+    s = 0;
+    ['wording', 'structure'].forEach(k => {
+      const v = verdicts[k];
+      const p = v && Number.isFinite(Number(v.pYes)) ? Number(v.pYes)
+        : v && typeof v.ok === 'boolean' ? (v.ok ? 0.9 : 0.1) : 0.5;
+      s = Math.max(s, 1 - Math.min(1, Math.max(0, p)));
+    });
+  }
+  const n = hard ? ((hard.wording || []).length + (hard.structure || []).length) : 0;
+  return s + n;
+}
+// Most suspicious first; equal scores keep the order they came in.
+function rlfPrescanOrder(entries) {
+  return entries.map((e, i) => [e, i])
+    .sort((a, b) => (Number(b[0].score) || 0) - (Number(a[0].score) || 0) || a[1] - b[1])
+    .map(x => x[0]);
+}
+async function _rlfPrescan(r, all) {
+  const free = [], rest = [];
+  all.forEach(e => {
+    const q = rlfQuestion(e.where, e.q.id) || e.q;
+    (rlfFreeVerdict(q) ? free : rest).push(e);
+  });
+  const p = r.check.prescan = { total: Math.min(rest.length, RLF_PRESCAN_MAX), scored: 0, unavailable: false, suspicious: 0 };
+  const scores = new Map();
+  rest.forEach(e => {
+    const q = rlfQuestion(e.where, e.q.id) || e.q;
+    let hard = null;
+    try { hard = questionHardIssues(questionFacts(q)); } catch (_) {}
+    scores.set(e, { hard, verdicts: null });
+  });
+  let next = 0, lastAt = 0, dead = false;
+  const worker = async () => {
+    while (!r.stop && !dead) {
+      const i = next++;
+      if (i >= p.total) return;
+      const wait = lastAt + RLF_PRESCAN_GAP_MS - Date.now();
+      lastAt = Math.max(Date.now(), lastAt + RLF_PRESCAN_GAP_MS);
+      if (wait > 0) await new Promise(res => setTimeout(res, wait));
+      if (r.stop || dead) return;
+      const e = rest[i];
+      const q = rlfQuestion(e.where, e.q.id) || e.q;
+      let verdicts = null;
+      try { verdicts = await decisionsReviewCall({ scope: 'question', question: questionFacts(q) }); } catch (_) {}
+      // A null is Decisions gone away (it backs itself off): stop asking, and
+      // the rest keep the middle score rather than being called clean.
+      if (!verdicts) { dead = true; p.unavailable = true; return; }
+      const sc = scores.get(e);
+      sc.verdicts = verdicts;
+      p.scored++;
+      if (rlfSuspicion(verdicts, sc.hard) >= 0.5) p.suspicious++;
+      rlfPaintSoon();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(RLF_PRESCAN_PAR, Math.max(1, p.total)) }, worker));
+  const ordered = rlfPrescanOrder(rest.map(e => { const sc = scores.get(e); return { e, score: rlfSuspicion(sc.verdicts, sc.hard) }; }));
+  return free.concat(ordered.map(o => o.e));
+}
+
 // ── 1. 🚦 Launch the checker ────────────────────────────────────────────────
 async function rlfLaunch() {
   if (!_isAdmin()) { showToast('Only an admin can run the red light fixer', 'error'); return; }
@@ -51502,23 +51581,34 @@ async function rlfLaunch() {
   if (!(window.__aiReady && window.__aiReady())) { showToast('AI is not available on this device yet — the checker needs it', 'error'); return; }
   const r = rlfLoad();
   rlfReadScopeControls();
-  const all = rlfOwnedQuestions(r.scope);
+  let all = rlfOwnedQuestions(r.scope);
   if (!all.length) { showToast('There are no questions of yours in that scope', 'info'); return; }
   const pv = rlfPreview(r.scope);
+  const usePrescan = !!r.prescan && pv.needAi > 0 && _decisionsReachable();
+  if (r.prescan && pv.needAi && !usePrescan) showToast('🧭 Decisions is not available (switched off, busy or not deployed) — checking in the usual order', 'info');
   const est = rlfCheckEstimate(pv.needAi);
   if (pv.needAi && !confirm('Check ' + all.length.toLocaleString() + ' question' + (all.length === 1 ? '' : 's') + ' for red lights?\n\n'
       + '• ' + pv.reused.toLocaleString() + ' already have a verdict — reused, free\n'
       + '• ' + pv.instant.toLocaleString() + ' are red on the instant checks — free\n'
       + '• ' + pv.needAi.toLocaleString() + ' need the AI — about ' + aiMoney(est.usd) + (est.measured ? ' (from what checks have cost here so far)' : ' (a first estimate; it improves as checks are measured)') + '\n\n'
       + 'The cost is shown live and you can stop at any point'
-      + (r.budget ? ', and it stops by itself at ' + aiMoney(r.budget) : '') + '. Every verdict is saved on its question, so a later launch only pays for new or edited ones.')) return;
+      + (r.budget ? ', and it stops by itself at ' + aiMoney(r.budget) : '') + '. Every verdict is saved on its question, so a later launch only pays for new or edited ones.'
+      + (usePrescan ? '\n\n🧭 Pre-scan on: Decisions first ranks the ' + Math.min(pv.needAi, RLF_PRESCAN_MAX).toLocaleString() + ' unchecked questions by how suspicious they look, and the AI reads the most suspicious first. If you stop early or hit the budget, the result is a SHORTLIST — it can miss reds that looked clean.' : ''))) return;
   const items = new Map(r.items.map(i => [i.where + ':' + i.id, i]));
   r.stage = 'checking';
   r.errors = [];
-  r.check = { total: all.length, done: 0, reused: 0, instant: 0, ai: 0, errors: 0, red: 0, amber: 0, green: 0, empty: 0, startedAt: Date.now() };
+  r.check = { total: all.length, done: 0, reused: 0, instant: 0, ai: 0, errors: 0, red: 0, amber: 0, green: 0, empty: 0, startedAt: Date.now(), prescan: null, prescanning: false };
   _rlfStageBegin('check');
   rlfPaint(); rlfPaintCost();
   const c = r.check;
+  if (usePrescan) {
+    c.prescanning = true;
+    rlfPaint();
+    try { all = await _rlfPrescan(r, all); }
+    catch (e) { console.warn('red light fixer: the pre-scan failed — usual order', e); }
+    c.prescanning = false;
+    rlfPaint();
+  }
   const addRed = (where, q, findings) => {
     const key = where + ':' + q.id;
     let item = items.get(key);
@@ -51598,7 +51688,8 @@ async function rlfLaunch() {
     try { renderVettingList(); } catch (e) {}
   }
   const stopped = r.stop ? (r.stopReason === 'budget' ? 'Budget reached — ' : 'Stopped — ') + c.done + ' of ' + c.total + ' checked. ' : '';
-  showToast('🚦 ' + stopped + r.items.length + ' red question' + (r.items.length === 1 ? '' : 's') + ' listed' + (c.errors ? ' · ' + c.errors + ' could not be checked' : ''), r.items.length ? 'info' : 'success');
+  const shortlist = r.stop && c.prescan && c.prescan.scored ? '(shortlist — the most suspicious were checked first; reds Decisions thought clean may be missed) ' : '';
+  showToast('🚦 ' + stopped + shortlist + r.items.length + ' red question' + (r.items.length === 1 ? '' : 's') + ' listed' + (c.errors ? ' · ' + c.errors + ' could not be checked' : ''), r.items.length ? 'info' : 'success');
 }
 // Worst first: the most high findings at the top, then by question number.
 function rlfSortItems() {
@@ -51982,6 +52073,8 @@ function rlfReadScopeControls() {
   if (v) r.scope.vet = !!v.checked;
   if (t) r.scope.topic = t.value || '';
   if (p) r.pictures = !!p.checked;
+  const ps = document.getElementById('rlfPrescan');
+  if (ps) r.prescan = !!ps.checked;
 }
 function rlfScopeChanged() {
   rlfReadScopeControls();
@@ -52012,6 +52105,16 @@ function rlfProgressHtml() {
   if (r.stage === 'checking' && r.check) {
     const c = r.check;
     const pct = c.total ? Math.round(c.done / c.total * 100) : 0;
+    if (c.prescanning && c.prescan) {
+      const ps = c.prescan;
+      const ppct = ps.total ? Math.round(ps.scored / ps.total * 100) : 0;
+      return `<div class="rlf-card rlf-progress">
+      <div class="rlf-progress-head"><b>🧭 Pre-scan: Decisions has ranked ${ps.scored.toLocaleString()} of ${ps.total.toLocaleString()}</b><span>${ppct}%</span></div>
+      <div class="rlf-bar"><span style="width:${ppct}%"></span></div>
+      <p class="rlf-muted">${ps.suspicious.toLocaleString()} look suspicious so far. Nothing is coloured yet — only the AI read sets a lamp, and it starts on the most suspicious next.</p>
+      ${r.stop ? '<p class="rlf-muted">Stopping…</p>' : ''}
+    </div>`;
+    }
     return `<div class="rlf-card rlf-progress">
       <div class="rlf-progress-head"><b>🚦 Checking ${c.done.toLocaleString()} of ${c.total.toLocaleString()}</b><span>${pct}%</span></div>
       <div class="rlf-bar"><span style="width:${pct}%"></span></div>
@@ -52020,6 +52123,7 @@ function rlfProgressHtml() {
         ${c.errors ? `<span class="rlf-chip err">⚠ ${c.errors}</span>` : ''}
         <span class="rlf-muted">${c.reused.toLocaleString()} reused free · ${c.instant} red on the instant checks (free) · ${c.ai} read by the AI</span>
       </div>
+      ${c.prescan ? `<p class="rlf-muted">🧭 Most suspicious first (Decisions ranked ${c.prescan.scored.toLocaleString()}${c.prescan.unavailable ? ', then became unavailable' : ''}). Stopped early, this is a shortlist and can miss reds.</p>` : ''}
       ${r.stop ? '<p class="rlf-muted">Stopping after the checks already in flight…</p>' : ''}
     </div>`;
   }
@@ -52121,6 +52225,10 @@ function rlfPaint() {
     <div class="rlf-scope-row">
       <button type="button" class="btn btn-primary" onclick="rlfLaunch()" ${busy || !owned.length ? 'disabled' : ''}>🚦 Launch checker</button>
       <span class="rlf-muted">Checks every question in scope and lists only the 🔴 ones. Verdicts are saved on the questions, so launching again only pays for new or edited ones.</span>
+    </div>
+    <div class="rlf-scope-row">
+      <label title="Decisions reads measured facts about each question (not the pictures, not the science) and ranks how suspicious it looks. The AI then reads the most suspicious first, so a budget or a Stop spends the money where reds are likeliest. Only the AI sets a lamp colour. Decisions calls are not on the cost meter."><input type="checkbox" id="rlfPrescan" ${r.prescan ? 'checked' : ''} ${busy ? 'disabled' : ''} onchange="rlfScopeChanged()"> 🧭 Pre-scan with Decisions — check the most suspicious first</label>
+      <span class="rlf-muted">A shortlist if you stop early or hit the budget: it can miss reds that looked clean.</span>
     </div>
   </div>`;
   const listHead = r.items.length

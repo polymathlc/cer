@@ -5032,6 +5032,12 @@ and the **Red Light Fixer** nav item under Questions (admin only; not on `EMPLOY
   (`vbrCandidates`) and are listed apart with ↩ Un-ignore (`deleteField()`). It is deliberately NOT in
   `EDITOR_OWNED_QUESTION_FIELDS`, so an edit keeps it. 🗑 Delete asks first (a bank delete is permanent), refuses during
   a run, and drops the row only once the document really went. All three are admin-only in the handler.
+- **🧭 Pre-scan with Decisions (v1.442.0)** is an opt-in tick on the scope card (`_rlf.prescan`, saved). It never sets a lamp:
+  `_rlfPrescan` scores each unread question's measured facts (`questionFacts` / `questionHardIssues` → `decisionsReviewCall`,
+  `rlfSuspicion`), `rlfPrescanOrder` puts the most suspicious first, and Sol (`tlRun`) still decides every colour. It is paced
+  (`RLF_PRESCAN_PAR` / `RLF_PRESCAN_GAP_MS`, about 80 a minute, under the server's per-admin limit), capped at `RLF_PRESCAN_MAX`,
+  not on the cost meter, and a null reply stops the scan (Decisions down → plain order). A run stopped early is called a SHORTLIST
+  in the confirm and the toast, because Decisions sees no picture and no science and can miss reds.
 - Run `node tools/ai-cost-tests.mjs`, `node tools/red-light-fixer-tests.mjs` and
   `PLAYWRIGHT_MODULE=… node tools/red-light-fixer-browser.mjs` (desktop + phone) after touching any of it,
   plus the repair and traffic-light suites.

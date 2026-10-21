@@ -153,10 +153,14 @@ function deleteField() { return { __del: true }; }
 async function deleteQuestionDocAwait(id) { (H.deleted = H.deleted || []).push(id); return !H.deleteFails; }
 async function deleteVettingDocAwait(id) { (H.deleted = H.deleted || []).push(id); return !H.deleteFails; }
 function previewOneQuestionPrint() {} function buildWorksheetHtml() { return '<p></p>'; } function _wsWritePreview() {}
+function _decisionsReachable() { return !!H.decisionsUp; }
+async function decisionsReviewCall(i) { (H.decisions = H.decisions || []).push(i); return H.decisionsUp ? { wording: { ok: true, pYes: 0.9 }, structure: { ok: true, pYes: 0.9 } } : null; }
+function questionFacts(q) { return q; }
+function questionHardIssues() { return { wording: [], structure: [] }; }
 function _wnyCachedNotes() { return {}; } function wnyPrintOn() { return false; } function akxPrintOn() { return false; } function objBoxPrintOn() { return false; }
 ` + section + `
 return { rlfLaunch, rlfFix, rlfStop, rlfUndo, rlfUndoRound, rlfLoad, rlfPreview, rlfFreeVerdict, rlfOwnedQuestions, rlfFlushStamps, rlfSetBudget, rlfToggle,
-  rlfCanonical, rlfBusy, rlfRecost, rlfIgnore, rlfUnignore, rlfDelete, rlfPin, rlfUnpin, rlfIsPinned, rlfIgnoredQuestions, rlfFixCandidates, rlfRefreshItems, aiMeterOpen, _aiMeterText, aiPriceSaveOverrides,
+  rlfCanonical, rlfBusy, rlfRecost, rlfIgnore, rlfUnignore, rlfDelete, rlfPin, rlfUnpin, rlfIsPinned, rlfIgnoredQuestions, rlfFixCandidates, rlfRefreshItems, rlfSuspicion, rlfPrescanOrder, aiMeterOpen, _aiMeterText, aiPriceSaveOverrides,
   get rlf() { return _rlf; }, set rlf(v) { _rlf = v; },
   rlfPaint, rlfPaintCost, aiPriceDialogOpen, renderRedLightsPage,
   setEditing(id) { currentEditingQuestion = id; }, setUser(u) { currentUser = u; } };`;
@@ -545,6 +549,31 @@ test('the tab guard knows about a run, and the buttons are exported', () => {
 test('the cost bar is sticky and the layout works at phone width', () => {
   assert.match(html, /\.rlf-cost \{\s*position: sticky;/);
   assert.match(html, /@media \(max-width: 640px\) \{\s*\.rlf-cost/);
+});
+
+test('🧭 pre-scan suspicion: unjudged sits in the middle, a confident yes is low, a no is high, a measured defect outranks all', () => {
+  const { api } = build();
+  assert.equal(api.rlfSuspicion(null, null), 0.5);
+  assert.ok(api.rlfSuspicion({ wording: { pYes: 0.95 }, structure: { pYes: 0.9 } }, null) < 0.15);
+  assert.ok(api.rlfSuspicion({ wording: { pYes: 0.95 }, structure: { pYes: 0.2 } }, null) >= 0.8);
+  assert.equal(api.rlfSuspicion({ wording: { ok: false }, structure: { ok: true } }, null), 0.9);
+  assert.ok(api.rlfSuspicion({ wording: { pYes: 0.99 }, structure: { pYes: 0.99 } }, { wording: ['cut off'], structure: [] }) > 1);
+});
+test('🧭 pre-scan order: most suspicious first, ties keep their order', () => {
+  const { api } = build();
+  const out = api.rlfPrescanOrder([{ id: 'a', score: 0.1 }, { id: 'b', score: 0.9 }, { id: 'c', score: 0.5 }, { id: 'd', score: 0.5 }]);
+  assert.deepEqual(out.map(x => x.id), ['b', 'c', 'd', 'a']);
+});
+test('🧭 pre-scan is opt-in, advisory, persisted and labelled a shortlist', () => {
+  assert.match(fixer, /prescan: false/);
+  assert.match(fixer, /prescan: !!r\.prescan/);
+  assert.match(fixer, /id="rlfPrescan"/);
+  assert.match(fixer, /!!r\.prescan && pv\.needAi > 0 && _decisionsReachable\(\)/);
+  assert.match(fixer, /SHORTLIST/);
+  const scan = fixer.slice(fixer.indexOf('async function _rlfPrescan('), fixer.indexOf('async function rlfLaunch('));
+  assert.ok(!/_tlCache|rlfStamp|autoChkStamp|tlRun/.test(scan), 'the pre-scan never sets a lamp');
+  assert.match(scan, /if \(!verdicts\) \{ dead = true;/);
+  assert.match(scan, /RLF_PRESCAN_MAX/);
 });
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
