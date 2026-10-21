@@ -4514,7 +4514,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.440.0';
+const APP_VERSION = 'v1.441.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -50791,6 +50791,7 @@ function vbrCandidates(list) {
   const src = list || (typeof qbulkUnlit === 'function' ? qbulkUnlit('vetting') : (vettingList || []));
   return (src || []).filter(q => {
     if (!q || !q.id || !(q.blocks || []).length) return false;
+    if (q.redLightIgnore) return false;
     const st = tlStateOf(q);
     return (st.state === 'red' || st.state === 'amber') && (st.findings || []).length > 0;
   });
@@ -51182,6 +51183,7 @@ function _rlfBlank() {
     items: [],      // the red list: { id, where, title, qno, topic, status, include, rounds, noFix, message, findings[] }
     fixed: [],      // left the list: { id, where, title, qno, to, round, historyId, historyOwner, afterSig, actions[], undone }
     errors: [],     // ids whose check could not run: { id, where, title, error }
+    pinned: null,   // 👁 the question whose exported sheet is pinned above the list: { id, where }
     startedAt: Date.now(),
   };
 }
@@ -51196,6 +51198,8 @@ function rlfOwnedQuestions(scope) {
   const out = [];
   const take = (list, where) => (list || []).forEach(q => {
     if (!q || q.id == null || !(q.blocks || []).length) return;
+    // 🙈 Ignored by the teacher: immune from every later red-light check.
+    if (q.redLightIgnore) return;
     if ((where === 'vet' ? _vOwner(q.id) : _qOwner(q.id)) !== uid) return;
     if (sc.topic && q.topic !== sc.topic && q.topic2 !== sc.topic) return;
     out.push({ q, where });
@@ -51372,6 +51376,7 @@ function rlfSaveNow() {
   if (!r || !r.uid) return;
   const keep = {
     v: 1, scope: r.scope, budget: r.budget, pictures: r.pictures, round: r.round, startedAt: r.startedAt,
+    pinned: r.pinned || null,
     items: r.items.map(i => ({ id: i.id, where: i.where, include: i.include, rounds: i.rounds, noFix: i.noFix, message: i.message })),
     fixed: r.fixed.slice(-300),
     errors: r.errors.slice(0, 300).map(e => ({ id: e.id, where: e.where, error: e.error })),
@@ -51399,6 +51404,7 @@ function rlfLoad() {
       r.fixed = Array.isArray(v.fixed) ? v.fixed : [];
       r.errors = (v.errors || []).map(e => ({ id: String(e.id), where: e.where === 'vet' ? 'vet' : 'bank', error: e.error || '', title: '' }));
       r.records = Array.isArray(v.records) ? v.records : [];
+      if (v.pinned && v.pinned.id) r.pinned = { id: String(v.pinned.id), where: v.pinned.where === 'vet' ? 'vet' : 'bank' };
       (r.records || []).forEach(rec => tallyAdd(r.tally, rec, aiPrices(), rec.phase || 'other'));
     }
   } catch (e) { console.warn('red light fixer: the saved list could not be read', e); }
@@ -51409,7 +51415,7 @@ function rlfLoad() {
 function rlfClearList() {
   if (rlfBusy()) return;
   if (!confirm('Clear the red list, the fixed list and the cost so far?\n\nNothing is changed in any question, and verdicts already stamped on questions are kept — the next launch reuses them for free.')) return;
-  const keep = _rlf ? { scope: _rlf.scope, budget: _rlf.budget, pictures: _rlf.pictures } : {};
+  const keep = _rlf ? { scope: _rlf.scope, budget: _rlf.budget, pictures: _rlf.pictures, pinned: _rlf.pinned } : {};
   _rlf = Object.assign(_rlfBlank(), keep);
   rlfSaveNow();
   rlfPaint();
@@ -51425,6 +51431,7 @@ function rlfRefreshItems() {
   r.items = r.items.filter(item => {
     const q = rlfQuestion(item.where, item.id);
     if (!q) return false;
+    if (q.redLightIgnore) return false;
     item.title = q.title || 'Untitled question';
     item.qno = (typeof qNoLabel === 'function' ? qNoLabel(q) : '') || '';
     item.topic = q.topic || '';
@@ -51610,7 +51617,11 @@ function rlfRetryErrors() {
 // ── 2. 🔧 Fix the reds, one round at a time ─────────────────────────────────
 function rlfFixCandidates() {
   const r = _rlf;
-  return r ? r.items.filter(i => i.include && i.status !== 'fixing') : [];
+  return r ? r.items.filter(i => {
+    if (!i.include || i.status === 'fixing') return false;
+    const q = rlfQuestion(i.where, i.id);
+    return !(q && q.redLightIgnore);
+  }) : [];
 }
 async function rlfFix() {
   if (!_isAdmin()) { showToast('Only an admin can run the red light fixer', 'error'); return; }
@@ -52036,7 +52047,9 @@ function rlfRowHtml(item, index) {
   const more = (item.findings || []).length - show.length;
   const busy = rlfBusy();
   const statusTxt = { queued: 'waiting…', fixing: '🔧 fixing…' }[item.status] || '';
-  return `<div class="rlf-row${item.include ? '' : ' off'}${item.status === 'fixing' ? ' busy' : ''}">
+  const pinned = rlfIsPinned(item.where, item.id);
+  const idq = escapeHtml(String(item.id));
+  return `<div class="rlf-row${item.include ? '' : ' off'}${item.status === 'fixing' ? ' busy' : ''}${pinned ? ' pinned' : ''}">
     <input type="checkbox" class="rlf-tick" ${item.include ? 'checked' : ''} ${busy ? 'disabled' : ''} onchange="rlfToggle(${index}, this.checked)" aria-label="Include in the next fix round">
     ${q ? tlLightHtml(q, scope, { small: true }) : '<span class="tl-light sm idle">○</span>'}
     <div class="rlf-row-main">
@@ -52045,7 +52058,12 @@ function rlfRowHtml(item, index) {
       <div class="rlf-row-find">${show.map(f => `<span>${escapeHtml(rlfFindingText(f))}</span>`).join('')}${more > 0 ? `<span class="rlf-muted">+${more} more</span>` : ''}</div>
       ${statusTxt || item.message ? `<div class="rlf-row-msg">${escapeHtml(statusTxt || item.message)}</div>` : ''}
     </div>
-    ${q ? `<button type="button" class="btn btn-outline btn-sm" onclick="tlClick('${scope}','${escapeHtml(String(item.id))}')" title="Open its 🚦 panel to read the findings or fix it by hand">Open</button>` : ''}
+    ${q ? `<div class="rlf-row-acts">
+      <button type="button" class="btn btn-outline btn-sm" onclick="tlClick('${scope}','${idq}')" title="Open its 🚦 panel to read the findings or fix it by hand">Open</button>
+      <button type="button" class="btn btn-outline btn-sm${pinned ? ' rlf-on' : ''}" onclick="${pinned ? 'rlfUnpin()' : `rlfPin('${scope}','${idq}')`}" title="${pinned ? 'Unpin the exported preview' : 'Pin the exported sheet above this list, to read it without leaving the page'}">👁 ${pinned ? 'Pinned' : 'Pin'}</button>
+      <button type="button" class="btn btn-outline btn-sm" onclick="rlfIgnore('${scope}','${idq}')" ${item.status === 'fixing' ? 'disabled' : ''} title="The question is fine: take it off the list and never check it for red lights again (↩ Un-ignore below)">🙈 Ignore</button>
+      <button type="button" class="btn btn-outline btn-sm rlf-del" onclick="rlfDelete('${scope}','${idq}')" ${busy ? 'disabled' : ''} title="${scope === 'vet' ? 'Delete this vetting question' : 'Delete this question from the bank for good'}">🗑</button>
+    </div>` : ''}
   </div>`;
 }
 function rlfFixedHtml() {
@@ -52137,10 +52155,11 @@ function rlfPaint() {
     : '';
   host.innerHTML = scopeHtml + rlfProgressHtml() + lastRound
     + (r.items.length ? `<div class="rlf-card">${listHead}<div class="rlf-list">${r.items.map(rlfRowHtml).join('')}</div></div>` : empty)
-    + rlfFixedHtml() + errors
+    + rlfFixedHtml() + errors + rlfIgnoredHtml()
     + `<details class="rlf-card" id="rlfHistoryBox" ontoggle="if(this.open)rlfHistoryLoad()"><summary><b>🕘 Fix history</b> <span class="rlf-muted">· every fix saved from any browser, with ↩ Undo</span></summary><div id="rlfHistory"></div></details>`
     + (r.items.length || r.fixed.length ? `<div class="rlf-foot"><button type="button" class="btn btn-outline btn-sm" onclick="rlfClearList()" ${busy ? 'disabled' : ''}>Clear this list</button></div>` : '');
   try { tlRepaint(); } catch (e) {}
+  try { rlfPinPaint(); } catch (e) { console.warn('red light fixer: pinned preview', e); }
 }
 function renderRedLightsPage() {
   if (!_isAdmin()) return;
@@ -52148,7 +52167,207 @@ function renderRedLightsPage() {
   rlfPaintCost();
   rlfPaint();
 }
-Object.assign(window, { rlfLaunch, rlfFix, rlfStop, rlfSetBudget, rlfToggle, rlfToggleAll, rlfScopeChanged, rlfUndo, rlfUndoRound, rlfRetryErrors, rlfClearList, rlfHistoryLoad, rlfHistoryUndo, renderRedLightsPage });
+
+// ── 👁 Pin the exported sheet · 🙈 Ignore · 🗑 Delete ───────────────────────
+// The pin is the SAME exported rendering the 👁 Vetting hover draws
+// (buildWorksheetHtml → _wsWritePreview, readOnly), held above the list so a
+// red question can be read as it prints without leaving the page. It is
+// redrawn only when the question itself changes (its tlSig), never on every
+// paint, or a fix round would rebuild the iframe on each tick.
+let _rlfPinSerial = 0;
+let _rlfPinKey = '';
+function rlfIsPinned(where, id) {
+  const p = _rlf && _rlf.pinned;
+  return !!(p && String(p.id) === String(id) && (p.where === 'vet' ? 'vet' : 'bank') === (where === 'vet' ? 'vet' : 'bank'));
+}
+function rlfPin(where, id) {
+  if (!_rlf) return;
+  _rlf.pinned = { id: String(id), where: where === 'vet' ? 'vet' : 'bank' };
+  _rlfPinKey = '';
+  rlfSaveNow();
+  rlfPaint();
+  const host = document.getElementById('rlfPin');
+  if (host && host.scrollIntoView) { try { host.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {} }
+}
+function rlfUnpin() {
+  if (!_rlf) return;
+  _rlf.pinned = null;
+  _rlfPinKey = '';
+  rlfSaveNow();
+  rlfPaint();
+}
+function rlfPinFull() {
+  const p = _rlf && _rlf.pinned;
+  if (!p) return;
+  try { previewOneQuestionPrint(p.id, p.where === 'vet' ? 'vetting' : 'bank'); }
+  catch (e) { showToast('Could not open the full preview', 'error'); }
+}
+function rlfPinPaint() {
+  const host = document.getElementById('rlfPin');
+  if (!host) return;
+  const p = _rlf && _rlf.pinned;
+  const q = p ? rlfQuestion(p.where, p.id) : null;
+  if (p && !q) { _rlf.pinned = null; rlfSaveNow(); }
+  if (!q) { host.innerHTML = ''; _rlfPinKey = ''; return; }
+  const scope = p.where === 'vet' ? 'vet' : 'bank';
+  let sig = '';
+  try { sig = tlSig(q); } catch (_) {}
+  const key = scope + ':' + p.id + ':' + sig;
+  const label = (typeof qNoLabel === 'function' ? qNoLabel(q) : '') || '';
+  if (key === _rlfPinKey && host.querySelector('iframe')) {
+    try { tlRepaint(); } catch (_) {}
+    return;
+  }
+  _rlfPinKey = key;
+  const idq = escapeHtml(String(p.id));
+  host.innerHTML = `<div class="rlf-pin">
+    <div class="rlf-pin-head">
+      ${tlLightHtml(q, scope, { small: true })}
+      <div class="rlf-pin-title">👁 ${label ? `<span class="qb-qno">${escapeHtml(label)}</span> ` : ''}${escapeHtml(q.title || 'Untitled question')}
+        <span class="rlf-muted">· exported preview${scope === 'vet' ? ' · vetting' : ''}</span></div>
+      <div class="rlf-pin-acts">
+        <button type="button" class="btn btn-outline btn-sm" onclick="tlClick('${scope}','${idq}')">🚦 Findings</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="rlfPinFull()">Open full preview</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="rlfIgnore('${scope}','${idq}')">🙈 Ignore</button>
+        <button type="button" class="btn btn-outline btn-sm rlf-del" onclick="rlfDelete('${scope}','${idq}')" ${rlfBusy() ? 'disabled' : ''}>🗑 Delete</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="rlfUnpin()">✕ Unpin</button>
+      </div>
+    </div>
+    <div class="rlf-pin-stage"><div class="rlf-pin-status">Building the exported preview…</div><iframe title="Exported preview" tabindex="0"></iframe></div>
+  </div>`;
+  const stage = host.querySelector('.rlf-pin-stage');
+  const frame = host.querySelector('iframe');
+  const status = host.querySelector('.rlf-pin-status');
+  const mySerial = ++_rlfPinSerial;
+  const scale = Math.min(1, (stage.clientWidth || 850) / 850);
+  frame.style.width = '850px';
+  frame.style.height = Math.ceil((stage.clientHeight || 600) / scale) + 'px';
+  frame.style.transform = 'scale(' + scale + ')';
+  try {
+    const copy = JSON.parse(JSON.stringify(q));
+    const html = buildWorksheetHtml([copy], q.title || 'Question', {
+      frontHtml: '', plainNumbers: true, noStudentFields: true,
+      whyNotes: _wnyCachedNotes([copy], wnyPrintOn('bank')),
+      answerKeyExtras: akxPrintOn('bank'),
+      objectivesBoxAll: objBoxPrintOn('bank'),
+      pvsPool: ''
+    });
+    _wsWritePreview(frame, html, { readOnly: true,
+      isCurrent: () => mySerial === _rlfPinSerial && host.isConnected,
+      onReady: () => { if (status) status.hidden = true; },
+      onError: () => { if (status) status.textContent = 'Preview could not load. Try Open full preview.'; }
+    });
+  } catch (e) {
+    console.warn('red light fixer: pinned preview', e);
+    if (status) status.textContent = 'Preview could not load. Try Open full preview.';
+    _rlfPinKey = '';
+  }
+}
+
+// 🙈 Ignore: the teacher has read it and it is fine. `redLightIgnore` is
+// stamped on the question itself (a one-field merge), so every later launch,
+// every fix round and Vetting's 🔧 Fix all skip it — on any device. It is
+// deliberately NOT in EDITOR_OWNED_QUESTION_FIELDS, so an edit keeps it.
+function rlfDropFromLists(where, id) {
+  const r = _rlf;
+  if (!r) return;
+  const w = where === 'vet' ? 'vet' : 'bank';
+  const same = x => String(x.id) === String(id) && (x.where === 'vet' ? 'vet' : 'bank') === w;
+  r.items = r.items.filter(i => !same(i));
+  r.errors = r.errors.filter(e => !same(e));
+  if (rlfIsPinned(w, id)) { r.pinned = null; _rlfPinKey = ''; }
+}
+async function rlfIgnore(where, id) {
+  if (!_isAdmin()) { showToast('Only the admin can ignore a red light', 'error'); return; }
+  const w = where === 'vet' ? 'vet' : 'bank';
+  const q = rlfQuestion(w, id);
+  if (!q) { showToast('That question is no longer here', 'error'); return; }
+  const item = _rlf && _rlf.items.find(i => String(i.id) === String(id) && i.where === w);
+  if (item && item.status === 'fixing') { showToast('It is being fixed right now — wait for the round to finish', 'error'); return; }
+  const prev = q.redLightIgnore;
+  const stamp = { at: Date.now(), by: _rlfUid() };
+  q.redLightIgnore = stamp;
+  try {
+    await setDoc(w === 'vet' ? _vRef(q.id) : _qRef(q.id), { redLightIgnore: stamp }, { merge: true });
+  } catch (e) {
+    if (prev === undefined) delete q.redLightIgnore; else q.redLightIgnore = prev;
+    showToast('Could not save the ignore: ' + ((e && e.code) || (e && e.message) || 'write refused'), 'error');
+    return;
+  }
+  rlfDropFromLists(w, id);
+  rlfSaveNow();
+  rlfPaint();
+  showToast('🙈 Ignored — it will not be checked for red lights again (↩ Un-ignore under "ignored")', 'success');
+}
+async function rlfUnignore(where, id) {
+  if (!_isAdmin()) return;
+  const w = where === 'vet' ? 'vet' : 'bank';
+  const q = rlfQuestion(w, id);
+  if (!q) { showToast('That question is no longer here', 'error'); return; }
+  const prev = q.redLightIgnore;
+  delete q.redLightIgnore;
+  try {
+    await setDoc(w === 'vet' ? _vRef(q.id) : _qRef(q.id), { redLightIgnore: deleteField() }, { merge: true });
+  } catch (e) {
+    q.redLightIgnore = prev;
+    showToast('Could not un-ignore: ' + ((e && e.code) || (e && e.message) || 'write refused'), 'error');
+    return;
+  }
+  rlfPaint();
+  showToast('↩ Un-ignored — the next launch checks it again', 'success');
+}
+function rlfIgnoredQuestions() {
+  const uid = _rlfUid();
+  const out = [];
+  (questionBank || []).forEach(q => { if (q && q.redLightIgnore && _qOwner(q.id) === uid) out.push({ q, where: 'bank' }); });
+  (vettingList || []).forEach(q => { if (q && q.redLightIgnore && _vOwner(q.id) === uid) out.push({ q, where: 'vet' }); });
+  return out;
+}
+function rlfIgnoredHtml() {
+  const list = rlfIgnoredQuestions();
+  if (!list.length) return '';
+  const rows = list.slice(0, 300).map(({ q, where }) => {
+    const idq = escapeHtml(String(q.id));
+    const label = (typeof qNoLabel === 'function' ? qNoLabel(q) : '') || '';
+    return `<div class="rlf-row">
+      <div class="rlf-row-main"><div class="rlf-row-title">${label ? `<span class="qb-qno">${escapeHtml(label)}</span> ` : ''}${escapeHtml(q.title || 'Untitled question')}
+        <span class="rlf-muted"> · ${escapeHtml(q.topic || 'no topic')}${where === 'vet' ? ' · vetting' : ''}</span></div></div>
+      <div class="rlf-row-acts">
+        <button type="button" class="btn btn-outline btn-sm" onclick="rlfPin('${where}','${idq}')">👁 Pin</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="rlfUnignore('${where}','${idq}')">↩ Un-ignore</button>
+      </div>
+    </div>`;
+  }).join('');
+  return `<details class="rlf-card"><summary><b>🙈 ${list.length} ignored</b> <span class="rlf-muted">· never checked for red lights · ↩ Un-ignore to check one again</span></summary>
+    <div class="rlf-list">${rows}</div></details>`;
+}
+
+// 🗑 Delete: the bank has NO bin here — deleteQuestionDoc is final — so the
+// confirm says so. The arrays are spliced only once the document really went.
+async function rlfDelete(where, id) {
+  if (!_isAdmin()) { showToast('Only the admin can delete a question here', 'error'); return; }
+  if (rlfBusy()) { showToast('Wait for the run to finish first', 'error'); return; }
+  const w = where === 'vet' ? 'vet' : 'bank';
+  const q = rlfQuestion(w, id);
+  if (!q) { rlfDropFromLists(w, id); rlfSaveNow(); rlfPaint(); return; }
+  const title = q.title || 'Untitled question';
+  const msg = w === 'vet'
+    ? `Delete "${title}" from the vetting list?\n\nThis is final — it does not go to a bin.`
+    : `Delete "${title}" from the question bank?\n\nThis is PERMANENT and cannot be undone. It also disappears from every worksheet, quest and game that uses it.`;
+  if (!confirm(msg)) return;
+  let ok = false;
+  try { ok = w === 'vet' ? await deleteVettingDocAwait(q.id) : await deleteQuestionDocAwait(q.id); }
+  catch (e) { ok = false; }
+  if (!ok) { showToast('Could not delete — the database refused. Nothing was removed.', 'error'); return; }
+  const arr = w === 'vet' ? vettingList : questionBank;
+  const at = (arr || []).findIndex(x => x && String(x.id) === String(id));
+  if (at >= 0) arr.splice(at, 1);
+  rlfDropFromLists(w, id);
+  rlfSaveNow();
+  rlfPaint();
+  showToast('🗑 Deleted "' + title + '"', 'success');
+}
+Object.assign(window, { rlfLaunch, rlfFix, rlfStop, rlfSetBudget, rlfToggle, rlfToggleAll, rlfScopeChanged, rlfUndo, rlfUndoRound, rlfRetryErrors, rlfClearList, rlfHistoryLoad, rlfHistoryUndo, renderRedLightsPage, rlfPin, rlfUnpin, rlfPinFull, rlfIgnore, rlfUnignore, rlfDelete });
 // ── End red light fixer ──
 
 

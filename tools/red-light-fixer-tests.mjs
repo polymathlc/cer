@@ -82,6 +82,11 @@ async function setDoc(ref, data, o) {
     H.histDocs[ref.id] = Object.assign(H.histDocs[ref.id] || {}, clone(data));
     return;
   }
+  if (ref.path.includes('/questions/') || ref.path.includes('/vetting/')) {
+    if (H.ignoreFails) { const e = new Error('Missing or insufficient permissions.'); e.code = 'permission-denied'; throw e; }
+    (H.qwrites = H.qwrites || []).push({ ref: ref.path, data: clone(data), merge: !!(o && o.merge) });
+    return;
+  }
   throw new Error('unexpected setDoc ' + ref.path);
 }
 async function getDoc(ref) { const d = H.histDocs[ref.id]; return { exists: () => !!d, data: () => clone(d) }; }
@@ -144,9 +149,14 @@ async function saveVettingQuestion(q, o) { if (o && o.guard && !o.guard()) retur
 function tableDataToFirestore(d) { return Object.fromEntries(d.map((r, i) => [String(i), r])); }
 function normalizeLoadedQuestion(q) { return q; }
 function renderQuestionBank() {} function renderVettingList() {} function updateCounts() {}
+function deleteField() { return { __del: true }; }
+async function deleteQuestionDocAwait(id) { (H.deleted = H.deleted || []).push(id); return !H.deleteFails; }
+async function deleteVettingDocAwait(id) { (H.deleted = H.deleted || []).push(id); return !H.deleteFails; }
+function previewOneQuestionPrint() {} function buildWorksheetHtml() { return '<p></p>'; } function _wsWritePreview() {}
+function _wnyCachedNotes() { return {}; } function wnyPrintOn() { return false; } function akxPrintOn() { return false; } function objBoxPrintOn() { return false; }
 ` + section + `
 return { rlfLaunch, rlfFix, rlfStop, rlfUndo, rlfUndoRound, rlfLoad, rlfPreview, rlfFreeVerdict, rlfOwnedQuestions, rlfFlushStamps, rlfSetBudget, rlfToggle,
-  rlfCanonical, rlfBusy, rlfRecost, aiMeterOpen, _aiMeterText, aiPriceSaveOverrides,
+  rlfCanonical, rlfBusy, rlfRecost, rlfIgnore, rlfUnignore, rlfDelete, rlfPin, rlfUnpin, rlfIsPinned, rlfIgnoredQuestions, rlfFixCandidates, rlfRefreshItems, aiMeterOpen, _aiMeterText, aiPriceSaveOverrides,
   get rlf() { return _rlf; }, set rlf(v) { _rlf = v; },
   rlfPaint, rlfPaintCost, aiPriceDialogOpen, renderRedLightsPage,
   setEditing(id) { currentEditingQuestion = id; }, setUser(u) { currentUser = u; } };`;
@@ -417,6 +427,91 @@ test('only an admin can launch or fix', async () => {
   await api.rlfFix();
   assert.equal(H.runs.length, 0);
   assert.ok(H.toasts.every(t => /admin/.test(t[0])));
+});
+
+// ── Pin, ignore, delete ─────────────────────────────────────────────────────
+test('an ignored question is never a candidate and is listed apart', () => {
+  const { api } = build({ bank: [mcq('q1', { redLightIgnore: { at: 1, by: 'teacher' } }), mcq('q2')], vet: [mcq('v1', { redLightIgnore: { at: 1 } })] });
+  api.rlfLoad();
+  assert.deepEqual(api.rlfOwnedQuestions({ bank: true, vet: true, topic: '' }).map(x => x.q.id), ['q2']);
+  assert.deepEqual(api.rlfIgnoredQuestions().map(x => x.q.id).sort(), ['q1', 'v1']);
+});
+const redsOnLaunch = () => build({ bank: [mcq('q1'), mcq('q2')], checkFor: () => ({ verdict: 'red', findings: [high('Wrong option marked')] }) });
+test('ignore writes ONE merged field, drops the red, and un-ignore deletes the field', async () => {
+  const { api, H } = redsOnLaunch();
+  api.rlfLoad(); H.confirmAnswer = true;
+  await api.rlfLaunch();
+  assert.deepEqual(api.rlf.items.map(i => i.id).sort(), ['q1', 'q2']);
+  api.rlfPin('bank', 'q1');
+  await api.rlfIgnore('bank', 'q1');
+  const w = H.qwrites[0];
+  assert.equal(w.ref, 'users/teacher/questions/q1');
+  assert.ok(w.merge);
+  assert.deepEqual(Object.keys(w.data), ['redLightIgnore']);
+  assert.ok(H.bank[0].redLightIgnore);
+  assert.deepEqual(api.rlf.items.map(i => i.id), ['q2']);
+  assert.ok(!api.rlfIsPinned('bank', 'q1'), 'ignoring the pinned question unpins it');
+  assert.ok(!api.rlfOwnedQuestions({ bank: true, vet: false, topic: '' }).some(x => x.q.id === 'q1'));
+  await api.rlfUnignore('bank', 'q1');
+  assert.deepEqual(H.qwrites[1].data, { redLightIgnore: { __del: true } });
+  assert.ok(!('redLightIgnore' in H.bank[0]));
+});
+test('an ignore the database refused is rolled back and the red stays', async () => {
+  const { api, H } = redsOnLaunch();
+  api.rlfLoad(); H.confirmAnswer = true;
+  await api.rlfLaunch();
+  H.ignoreFails = true;
+  await api.rlfIgnore('bank', 'q1');
+  assert.ok(!('redLightIgnore' in H.bank[0]));
+  assert.ok(api.rlf.items.some(i => i.id === 'q1'));
+  assert.ok(H.toasts.some(t => t[1] === 'error' && /permission-denied/.test(t[0])));
+});
+test('only the admin can ignore', async () => {
+  const { api, H } = redsOnLaunch();
+  api.rlfLoad();
+  api.setUser({ uid: 'teacher', role: 'employee' });
+  await api.rlfIgnore('bank', 'q1');
+  assert.ok(!H.qwrites);
+  assert.ok(!H.bank[0].redLightIgnore);
+});
+test('the pin survives a reload, and deleting the pinned question unpins it', async () => {
+  const { api, H } = redsOnLaunch();
+  api.rlfLoad(); H.confirmAnswer = true;
+  await api.rlfLaunch();
+  api.rlfPin('bank', 'q2');
+  api.rlf = null; api.rlfLoad();
+  assert.ok(api.rlfIsPinned('bank', 'q2'));
+  H.confirms.length = 0;
+  await api.rlfDelete('bank', 'q2');
+  assert.match(H.confirms[0], /PERMANENT/);
+  assert.deepEqual(H.deleted, ['q2']);
+  assert.deepEqual(H.bank.map(q => q.id), ['q1']);
+  assert.deepEqual(api.rlf.items.map(i => i.id), ['q1']);
+  assert.ok(!api.rlfIsPinned('bank', 'q2'));
+});
+test('a delete that is cancelled or refused removes nothing', async () => {
+  const { api, H } = redsOnLaunch();
+  api.rlfLoad(); H.confirmAnswer = true;
+  await api.rlfLaunch();
+  H.confirmAnswer = false;
+  await api.rlfDelete('bank', 'q1');
+  assert.ok(!H.deleted);
+  H.confirmAnswer = true; H.deleteFails = true;
+  await api.rlfDelete('bank', 'q1');
+  assert.deepEqual(H.deleted, ['q1']);
+  assert.equal(H.bank.length, 2, 'not spliced when the database refused');
+  assert.ok(api.rlf.items.some(i => i.id === 'q1'));
+});
+test('ignore, delete and pin are wired, and ignore is not an editor-owned field', () => {
+  for (const fn of ['rlfPin', 'rlfUnpin', 'rlfPinFull', 'rlfIgnore', 'rlfUnignore', 'rlfDelete']) {
+    assert.match(src, new RegExp('Object\\.assign\\(window, \\{[^}]*\\b' + fn + '\\b'), fn + ' is on window');
+  }
+  assert.match(html, /id="rlfPin"/);
+  const owned = src.match(/const EDITOR_OWNED_QUESTION_FIELDS = new Set\(\[([^\]]*)\]/);
+  assert.ok(owned, 'found the editor-owned list');
+  assert.ok(!/redLightIgnore/.test(owned[1]), 'an edit must keep an ignore');
+  const vbr = src.slice(src.indexOf('function vbrCandidates('), src.indexOf('function vbrCandidates(') + 1500);
+  assert.match(vbr, /redLightIgnore/, 'Fix all skips an ignored question too');
 });
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
