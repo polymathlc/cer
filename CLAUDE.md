@@ -210,6 +210,16 @@ Instagram or WhatsApp) or save all three sizes at once.
   the background, smaller words and the button ≥ 4.5:1, the QR ≥ 12:1 on white).
   A new look added to `SOCIAL_THEMES` is checked without being named.
 
+## 📖 Interactive textbook — polymathlc.com.sg/interactive-textbook (v1.434.0)
+
+`interactive-textbook/index.html` is the topic list, linked from the public home page header as "Interactive textbook" (after Products, `lp-page-link`). Each topic is its own folder with one self-contained page (no Firebase, no app.js, no external scripts), built in the Polymath webapp style (Century Gothic, science blue). It is mirrored to `polymathlc/website` by the website sync like `schedule/` and `products/`.
+- **Adding a topic**: add an entry to `TEXTBOOK_TOPICS` in `interactive-textbook/index.html` (`href`, `progressKey`, and `sections` with the same ids as the lesson's `data-section` blocks) and create `interactive-textbook/<topic>/index.html`. The list reads each topic's progress from localStorage under `progressKey`; the lesson writes it.
+- **Water and its 3 states** (`interactive-textbook/water-states/`) follows Chapter 2 "Cycles in Water" (textbook pp. 30–59) in 12 parts. Textbook wording is copied **word for word** into `.prose`, `.textbook-box`, the callouts, comic speech bubbles and Let's Apply (all 5 questions, with the textbook's hint bubbles). Polymath's own additions are labelled "Try it", "Quick check" or "Show an explanation". Do not paraphrase textbook text when editing.
+- Let's Apply answers: Q1 (1) A and B, Q2 (1) 40°C, Q3 (4) Evaporation, Q4 (4) (X dries fastest; curves level off above 0 g because the dry handkerchief has mass), Q5 (a) liquid, (b) warmer water vapour in the air loses heat to the cold air from the freezer and condenses into tiny water droplets. Q5(b) is self-marked against a model answer.
+- Each part is marked done when its quick check is answered correctly; Let's Apply when all five are answered; What I Have Learnt when the concept map is complete. The data-logger labs (`LAB_MODELS`) must keep the plateaus: melting holds 0°C while any ice is left, freezing holds 0°C while ice and water are mixed (salt makes it faster), boiling holds 100°C whatever the flame.
+- Everything is reachable from `window.WaterLesson` for the browser check. Hidden tooltips use `display:none` (not opacity), because a transparent tooltip near the edge widened the page on phones.
+- Run `node tools/interactive-textbook-browser.mjs` after touching either page (CI: `.github/workflows/interactive-textbook.yml`). It serves the shipped pages, refuses any outside request, drives every widget, answers every check and asserts 12 / 12 on the topic list, no sideways scroll at 360px, and key textbook sentences word for word.
+
 ## 🗓 The public schedule page — a weekly timetable, and trials booked 3 business days ahead (schedule v1.1.0)
 
 `schedule/index.html` is polymathlc.com.sg/schedule: the trial / enrolment booking page parents use. Like

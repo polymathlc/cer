@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interactive Textbook — Polymath Learning Centre</title>
+<meta name="description" content="Hands-on science lessons from Polymath Learning Centre. Play with the ideas in your textbook: melt ice, boil water, dry clothes and follow the water cycle.">
+<link rel="icon" href="../assets/branding/polymath-learning-centre.png">
+<style>
+/* ==========================================================================
+   Interactive Textbook — the topic list
+   Polymath design system: light, minimal, Century Gothic, one soft pastel
+   (science blue), layered shadows and a gentle cascade on load.
+   Add a topic by adding one entry to TEXTBOOK_TOPICS in the script below.
+   ========================================================================== */
+:root {
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #FAFAFA;
+  --bg-tertiary: #F3F3F0;
+  --border-subtle: #E8E8E4;
+  --border-medium: #D4D4CF;
+
+  --text-primary: #1A1A1A;
+  --text-secondary: #5C5C5C;
+  --text-tertiary: #8A8A8A;
+
+  --accent-light: #BBDEFB;
+  --accent-base: #64B5F6;
+  --accent-dark: #1E88E5;
+  --accent-ink: #0D47A1;
+  --accent-bg: #E3F2FD;
+
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-md: 0 2px 4px rgba(0,0,0,0.05), 0 6px 20px rgba(0,0,0,0.08);
+  --shadow-lg: 0 4px 6px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.1);
+  --shadow-button: 0 1px 2px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-button-hover: 0 2px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.12);
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+  --space-2xl: 64px;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  --font-family: 'Century Gothic', CenturyGothic, AppleGothic, sans-serif;
+  --transition-base: 0.25s ease;
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body {
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+img { max-width: 100%; display: block; }
+a { color: inherit; }
+button { font-family: inherit; }
+
+/* ---------- Header ---------- */
+.polymath-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+}
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+}
+.polymath-logo { height: 56px; width: auto; object-fit: contain; }
+.header-brand-name { font-weight: 700; line-height: 1.15; font-size: 0.95rem; }
+.header-brand-name span { display: block; font-weight: 400; color: var(--text-secondary); font-size: 0.85rem; }
+.header-actions { display: flex; align-items: center; gap: var(--space-sm); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: 10px 22px;
+  border-radius: var(--radius-full);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  text-decoration: none;
+  transition: background var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base), border-color var(--transition-base);
+  user-select: none;
+}
+.btn:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+.btn-primary { background: var(--accent-light); color: var(--text-primary); box-shadow: var(--shadow-button); }
+.btn-primary:hover { background: var(--accent-base); box-shadow: var(--shadow-button-hover); transform: translateY(-1px); }
+.btn-primary:active { transform: translateY(0.5px); box-shadow: var(--shadow-xs); }
+.btn-secondary { background: var(--bg-primary); color: var(--text-primary); border: 1.5px solid var(--border-medium); box-shadow: var(--shadow-xs); }
+.btn-secondary:hover { border-color: var(--accent-base); background: var(--accent-bg); box-shadow: var(--shadow-button); transform: translateY(-1px); }
+.btn-ghost { background: transparent; color: var(--text-secondary); padding: 8px 14px; }
+.btn-ghost:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+
+.print-button {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-subtle);
+  background: var(--bg-primary);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: box-shadow var(--transition-base), transform var(--transition-base), border-color var(--transition-base);
+}
+.print-button:hover { box-shadow: var(--shadow-button-hover); transform: translateY(-1px); border-color: var(--accent-base); }
+.print-button svg { width: 20px; height: 20px; stroke: var(--text-secondary); }
+
+/* ---------- Page ---------- */
+main { padding: var(--space-2xl) var(--space-lg) var(--space-2xl); }
+.page-intro { max-width: 720px; margin: 0 auto var(--space-xl); text-align: center; }
+.page-eyebrow {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  background: var(--accent-bg);
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  margin-bottom: var(--space-md);
+}
+.page-title { font-size: 2.3rem; font-weight: 700; letter-spacing: 0.01em; line-height: 1.2; margin-bottom: var(--space-sm); }
+.page-subtitle { font-size: 1.125rem; color: var(--text-secondary); }
+
+.toolbar {
+  max-width: 960px;
+  margin: 0 auto var(--space-lg);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  justify-content: space-between;
+}
+.subject-filters { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+.filter-chip {
+  border: 1.5px solid var(--border-subtle);
+  background: var(--bg-primary);
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+.filter-chip:hover { border-color: var(--accent-base); color: var(--text-primary); }
+.filter-chip[aria-pressed="true"] { background: var(--accent-light); border-color: var(--accent-light); color: var(--text-primary); box-shadow: var(--shadow-xs); }
+.search-box {
+  flex: 1 1 220px;
+  max-width: 320px;
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  padding: 8px 16px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: var(--bg-secondary);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+.search-box:focus { outline: none; border-color: var(--accent-base); box-shadow: 0 0 0 4px var(--accent-bg); background: var(--bg-primary); }
+
+.topic-grid {
+  max-width: 960px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: var(--space-lg);
+}
+.topic-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow var(--transition-base), transform var(--transition-base);
+}
+.topic-card:hover, .topic-card:focus-visible { box-shadow: var(--shadow-lg); transform: translateY(-3px); outline: none; }
+.topic-card:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 3px; }
+.topic-art { height: 170px; background: var(--accent-bg); position: relative; overflow: hidden; }
+.topic-art svg { width: 100%; height: 100%; display: block; }
+.topic-body { padding: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-sm); flex: 1; }
+.topic-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.topic-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  background: var(--accent-bg);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+}
+.topic-tag.neutral { color: var(--text-secondary); background: var(--bg-tertiary); }
+.topic-title { font-size: 1.3rem; font-weight: 700; line-height: 1.25; }
+.topic-summary { font-size: 0.95rem; color: var(--text-secondary); }
+.topic-sections { list-style: none; display: flex; flex-direction: column; gap: 4px; margin-top: var(--space-xs); }
+.topic-sections li { font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 8px; align-items: baseline; }
+.topic-sections li::before { content: '○'; color: var(--accent-base); font-size: 0.7rem; }
+.topic-sections li.done::before { content: '●'; color: var(--accent-dark); }
+.topic-footer { margin-top: auto; padding-top: var(--space-md); display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); }
+.progress-track { flex: 1; height: 8px; border-radius: var(--radius-full); background: var(--bg-tertiary); overflow: hidden; }
+.progress-fill { height: 100%; width: 0; border-radius: inherit; background: var(--accent-base); transition: width 0.8s var(--spring); }
+.progress-label { font-size: 0.8rem; color: var(--text-tertiary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.topic-cta { font-weight: 700; font-size: 0.9rem; color: var(--accent-ink); white-space: nowrap; }
+
+.empty-state {
+  max-width: 960px; margin: var(--space-xl) auto; text-align: center; color: var(--text-tertiary);
+  padding: var(--space-xl); border: 1.5px dashed var(--border-medium); border-radius: var(--radius-lg);
+}
+
+.how-it-works {
+  max-width: 960px;
+  margin: var(--space-2xl) auto 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-lg);
+}
+.how-card { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-lg); }
+.how-card .how-icon { font-size: 1.6rem; margin-bottom: var(--space-sm); }
+.how-card h3 { font-size: 1.05rem; margin-bottom: 4px; }
+.how-card p { font-size: 0.92rem; color: var(--text-secondary); }
+
+footer.page-footer {
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-lg);
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+}
+footer.page-footer a { color: var(--text-secondary); }
+
+/* ---------- Load animation ---------- */
+@keyframes fadeSlideUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+.cascade > * { opacity: 0; animation: fadeSlideUp 0.55s ease forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .cascade > * { animation: none; opacity: 1; }
+  .topic-card, .btn { transition: none; }
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 600px) {
+  .polymath-header { padding: 12px 16px; }
+  .polymath-logo { height: 44px; }
+  .header-brand-name { display: none; }
+  main { padding: var(--space-xl) 16px; }
+  .page-title { font-size: 1.8rem; }
+  .search-box { max-width: none; }
+}
+
+/* ---------- Print (A4) ---------- */
+@page { size: A4; margin: 15mm 20mm; }
+@media print {
+  body { background: #fff; color: #000; }
+  .print-button, .header-actions .btn, .toolbar, .how-it-works { display: none !important; }
+  .polymath-logo { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .topic-card { box-shadow: none; border: 1px solid #999; page-break-inside: avoid; break-inside: avoid; }
+  .topic-art { display: none; }
+  .cascade > * { opacity: 1 !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="polymath-header">
+  <a class="header-brand" href="../" aria-label="Polymath Learning Centre home">
+    <img class="polymath-logo" src="../assets/branding/polymath-learning-centre.png" alt="Polymath Learning Centre">
+    <span class="header-brand-name">Polymath <span>Learning Centre</span></span>
+  </a>
+  <div class="header-actions">
+    <a class="btn btn-ghost" href="../">← Home</a>
+    <button class="print-button" type="button" onclick="window.print()" aria-label="Print this page" title="Print">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <section class="page-intro cascade" aria-labelledby="pageTitle">
+    <span class="page-eyebrow">Interactive textbook</span>
+    <h1 class="page-title" id="pageTitle">Learn science by playing with it</h1>
+    <p class="page-subtitle">Each topic follows your textbook page by page. Read a little, then try it yourself: melt the ice, light the burner, hang out the washing and watch what happens.</p>
+  </section>
+
+  <div class="toolbar cascade">
+    <div class="subject-filters" id="subjectFilters" role="group" aria-label="Filter topics by subject"></div>
+    <label class="visually-hidden" for="topicSearch" style="position:absolute;left:-9999px;">Search topics</label>
+    <input class="search-box" id="topicSearch" type="search" placeholder="Search topics, e.g. boiling" autocomplete="off">
+  </div>
+
+  <section class="topic-grid cascade" id="topicGrid" aria-label="Topics"></section>
+  <p class="empty-state" id="emptyState" hidden>No topic matches that search yet.</p>
+
+  <section class="how-it-works cascade" aria-label="How the interactive textbook works">
+    <div class="how-card">
+      <div class="how-icon" aria-hidden="true">📖</div>
+      <h3>Read</h3>
+      <p>The words come straight from the textbook, so what you read here matches what you learn in class.</p>
+    </div>
+    <div class="how-card">
+      <div class="how-icon" aria-hidden="true">🧪</div>
+      <h3>Try it</h3>
+      <p>Every idea has something to touch: a slider, a burner, a data logger or a game.</p>
+    </div>
+    <div class="how-card">
+      <div class="how-icon" aria-hidden="true">✅</div>
+      <h3>Check yourself</h3>
+      <p>Quick checks along the way and the textbook's own questions at the end, with explanations.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="page-footer">
+  <a href="../">Polymath Learning Centre</a> · Interactive textbook
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ------------------------------------------------------------------
+     The catalogue. To add a topic, add an object here and create its
+     folder next to this page (e.g. interactive-textbook/heat/index.html).
+     `progressKey` is the localStorage key the lesson writes its finished
+     sections to; `sections` lists the lesson's section ids in order.
+     ------------------------------------------------------------------ */
+  var TEXTBOOK_TOPICS = [
+    {
+      id: 'water-states',
+      href: 'water-states/',
+      title: 'Water and its 3 states',
+      subject: 'Science',
+      chapter: 'Chapter 2 · Cycles in Water',
+      level: 'Primary',
+      summary: 'Ice, water and water vapour. Melt, freeze, boil, condense and evaporate water yourself, then follow it around the water cycle.',
+      keywords: 'water states solid liquid gas ice steam water vapour melting freezing boiling condensation evaporation water cycle pollution life processes',
+      art: 'water',
+      progressKey: 'polymath_textbook_water_states_progress',
+      sections: [
+        { id: 'states', title: 'The three states of water' },
+        { id: 'changes', title: 'How water changes state' },
+        { id: 'melting', title: 'Melting' },
+        { id: 'freezing', title: 'Freezing' },
+        { id: 'boiling', title: 'Boiling' },
+        { id: 'condensation', title: 'Condensation' },
+        { id: 'evaporation', title: 'Evaporation' },
+        { id: 'water-cycle', title: 'The water cycle' },
+        { id: 'life', title: 'Water and life processes' },
+        { id: 'pollution', title: 'Water pollution' },
+        { id: 'apply', title: "Let's Apply" },
+        { id: 'learnt', title: 'What I Have Learnt' }
+      ]
+    }
+  ];
+
+  var TOPIC_ART = {
+    water:
+      '<svg viewBox="0 0 320 170" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' +
+        '<defs>' +
+          '<linearGradient id="artSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E3F2FD"/><stop offset="1" stop-color="#F7FBFF"/></linearGradient>' +
+          '<linearGradient id="artSea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#90CAF9"/><stop offset="1" stop-color="#64B5F6"/></linearGradient>' +
+        '</defs>' +
+        '<rect width="320" height="170" fill="url(#artSky)"/>' +
+        '<circle cx="270" cy="34" r="16" fill="#FFE082"/>' +
+        '<g fill="#fff" stroke="#BBDEFB" stroke-width="1.5"><ellipse cx="120" cy="36" rx="34" ry="14"/><ellipse cx="146" cy="30" rx="24" ry="14"/><ellipse cx="96" cy="32" rx="18" ry="10"/></g>' +
+        '<g stroke="#64B5F6" stroke-width="2" stroke-linecap="round"><line x1="104" y1="56" x2="100" y2="68"/><line x1="122" y1="58" x2="118" y2="70"/><line x1="140" y1="56" x2="136" y2="68"/></g>' +
+        '<path d="M0 120 Q40 110 80 120 T160 120 T240 120 T320 120 V170 H0Z" fill="url(#artSea)"/>' +
+        '<g transform="translate(40 86)"><rect x="0" y="0" width="22" height="22" rx="4" fill="#fff" stroke="#90CAF9" stroke-width="2"/><rect x="14" y="10" width="22" height="22" rx="4" fill="#F5FBFF" stroke="#90CAF9" stroke-width="2"/></g>' +
+        '<g fill="none" stroke="#90CAF9" stroke-width="2" stroke-linecap="round"><path d="M220 112 q6 -10 0 -20 q-6 -10 0 -20"/><path d="M236 112 q6 -10 0 -20 q-6 -10 0 -20"/><path d="M252 112 q6 -10 0 -20 q-6 -10 0 -20"/></g>' +
+        '<path d="M160 76 a40 40 0 1 1 -1 0" fill="none" stroke="#1E88E5" stroke-width="2" stroke-dasharray="5 6" opacity="0.5"/>' +
+      '</svg>'
+  };
+
+  var subjectFilters = document.getElementById('subjectFilters');
+  var topicGrid = document.getElementById('topicGrid');
+  var topicSearch = document.getElementById('topicSearch');
+  var emptyState = document.getElementById('emptyState');
+  var activeSubject = 'All';
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, function (character) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character];
+    });
+  }
+
+  function readProgress(topic) {
+    try {
+      var stored = JSON.parse(localStorage.getItem(topic.progressKey) || '{}');
+      return stored && typeof stored === 'object' ? stored : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function renderFilters() {
+    var subjects = ['All'];
+    TEXTBOOK_TOPICS.forEach(function (topic) {
+      if (subjects.indexOf(topic.subject) === -1) subjects.push(topic.subject);
+    });
+    subjectFilters.innerHTML = subjects.map(function (subject) {
+      return '<button type="button" class="filter-chip" data-subject="' + escapeHtml(subject) + '" aria-pressed="' + (subject === activeSubject) + '">' + escapeHtml(subject) + '</button>';
+    }).join('');
+  }
+
+  function matchesSearch(topic, query) {
+    if (!query) return true;
+    var haystack = (topic.title + ' ' + topic.summary + ' ' + topic.keywords + ' ' + topic.chapter + ' ' +
+      topic.sections.map(function (section) { return section.title; }).join(' ')).toLowerCase();
+    return query.toLowerCase().split(/\s+/).every(function (word) { return haystack.indexOf(word) !== -1; });
+  }
+
+  function renderTopics() {
+    var query = topicSearch.value.trim();
+    var visibleTopics = TEXTBOOK_TOPICS.filter(function (topic) {
+      return (activeSubject === 'All' || topic.subject === activeSubject) && matchesSearch(topic, query);
+    });
+    emptyState.hidden = visibleTopics.length > 0;
+    topicGrid.innerHTML = visibleTopics.map(function (topic) {
+      var progress = readProgress(topic);
+      var doneCount = topic.sections.filter(function (section) { return progress[section.id]; }).length;
+      var percent = Math.round(doneCount / topic.sections.length * 100);
+      var ctaText = doneCount === 0 ? 'Start →' : (doneCount === topic.sections.length ? 'Review →' : 'Continue →');
+      return '' +
+        '<a class="topic-card" href="' + escapeHtml(topic.href) + '" data-topic="' + escapeHtml(topic.id) + '">' +
+          '<div class="topic-art">' + (TOPIC_ART[topic.art] || '') + '</div>' +
+          '<div class="topic-body">' +
+            '<div class="topic-meta">' +
+              '<span class="topic-tag">' + escapeHtml(topic.subject) + '</span>' +
+              '<span class="topic-tag neutral">' + escapeHtml(topic.chapter) + '</span>' +
+            '</div>' +
+            '<h2 class="topic-title">' + escapeHtml(topic.title) + '</h2>' +
+            '<p class="topic-summary">' + escapeHtml(topic.summary) + '</p>' +
+            '<ul class="topic-sections">' +
+              topic.sections.map(function (section) {
+                return '<li class="' + (progress[section.id] ? 'done' : '') + '">' + escapeHtml(section.title) + '</li>';
+              }).join('') +
+            '</ul>' +
+            '<div class="topic-footer">' +
+              '<div class="progress-track" aria-hidden="true"><div class="progress-fill" data-percent="' + percent + '"></div></div>' +
+              '<span class="progress-label">' + doneCount + ' / ' + topic.sections.length + '</span>' +
+              '<span class="topic-cta">' + ctaText + '</span>' +
+            '</div>' +
+          '</div>' +
+        '</a>';
+    }).join('');
+    // Let the bars grow in after the cards have painted.
+    requestAnimationFrame(function () {
+      Array.prototype.forEach.call(topicGrid.querySelectorAll('.progress-fill'), function (bar) {
+        bar.style.width = bar.getAttribute('data-percent') + '%';
+      });
+    });
+  }
+
+  function staggerCascade() {
+    Array.prototype.forEach.call(document.querySelectorAll('.cascade'), function (group, groupIndex) {
+      Array.prototype.forEach.call(group.children, function (child, childIndex) {
+        child.style.animationDelay = (groupIndex * 90 + childIndex * 70) + 'ms';
+      });
+    });
+  }
+
+  subjectFilters.addEventListener('click', function (event) {
+    var chip = event.target.closest('.filter-chip');
+    if (!chip) return;
+    activeSubject = chip.getAttribute('data-subject');
+    renderFilters();
+    renderTopics();
+  });
+  topicSearch.addEventListener('input', renderTopics);
+  window.addEventListener('pageshow', renderTopics);   // progress refreshes after the back button
+
+  renderFilters();
+  renderTopics();
+  staggerCascade();
+
+  window.InteractiveTextbook = { topics: TEXTBOOK_TOPICS };
+})();
+</script>
+</body>
+</html>
