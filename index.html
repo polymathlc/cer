@@ -15,7 +15,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.435.0">
+  <link rel="modulepreload" href="app.js?v=1.436.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -2943,6 +2943,7 @@ option {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+  .print-cover-page.wc-cover { min-height:252mm; height:252mm; width:100%; }
   .print-cover-deco { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .print-cover-head { position: relative; font-size: 8.5pt; font-weight: 500; letter-spacing: 0.32em; text-transform: uppercase; color: #111; padding-bottom: 7pt; border-bottom: 0.75pt solid #111; }
   .print-cover-center { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20pt; padding-bottom: 16mm; }
@@ -3131,7 +3132,12 @@ option {
     font-size: 10pt;
     line-height: 1.5;
     text-align: left;
+    isolation: isolate;
   }
+  .cpb-cover > :not(.cover-artwork) { position:relative; z-index:1; }
+  .cpb-cover > .cover-artwork { z-index:0; }
+  .cpb-cover .cpb-cv-logo { position:absolute; left:0; top:0; width:65pt; height:auto; max-height:34pt; object-fit:contain; filter:saturate(.5) opacity(.72); }
+  .cpb-cover .cpb-cv-head, .cpb-cover .cpb-cv-time, .cpb-cover .cpb-cv-ins, .cpb-cover .cpb-cv-foot { background:rgba(255,255,255,.94); }
   /* margin-left:auto rather than align-self, so the grid sits at the right in
      the flex column of a cover AND in the plain block of the answer sheet. */
   .cpb-cv-index {
@@ -7496,6 +7502,25 @@ body.practising-as .page-body { padding-bottom: 64px; }
 .cpb-new-line { margin: 14px 0 0; padding: 11px 14px; border-radius: 10px; background: #eff6ff; border: 1px solid #bfdbfe; font-size: 0.82rem; line-height: 1.6; color: #1e40af; }
 .cpb-link { background: none; border: none; padding: 0; color: var(--primary); font: inherit; text-decoration: underline; cursor: pointer; }
 
+.cpb-cover-editor { width:min(1040px,96vw); max-height:94vh; padding:0; border:1px solid #d5e1df; border-radius:18px; background:#fff; color:#183a3b; box-shadow:0 24px 90px #1234; }
+.cpb-cover-editor::backdrop { background:rgba(18,40,42,.58); }
+.cpb-cover-editor form { display:flex; flex-direction:column; max-height:94vh; }
+.cpb-cover-editor-head,.cpb-cover-editor-foot { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 22px; }
+.cpb-cover-editor-head { border-bottom:1px solid #e0e9e7; }
+.cpb-cover-editor-head h2 { font-size:20px; margin:0 0 5px; }
+.cpb-cover-editor-head p { margin:0; font-size:13px; color:#617a79; }
+.cpb-cover-editor-body { display:grid; grid-template-columns:minmax(240px,1fr) minmax(420px,1.15fr); min-height:0; overflow:auto; }
+.cpb-cover-editor-fields { padding:18px 22px; display:grid; gap:13px; align-content:start; }
+.cpb-cover-editor-fields label { display:grid; gap:6px; font-size:13px; font-weight:600; }
+.cpb-cover-editor-fields label span { font-size:11px; font-weight:400; color:#617a79; }
+.cpb-cover-editor-fields input,.cpb-cover-editor-fields textarea { width:100%; box-sizing:border-box; }
+.cpb-cover-editor-preview { background:#edf2f0; padding:12px; }
+.cpb-cover-editor-tabs { display:flex; justify-content:center; gap:8px; margin-bottom:8px; }
+.cpb-cover-editor-tabs [aria-pressed="true"] { background:#d7ece9; color:#183a3b; border-color:#8fbeb7; }
+.cpb-cover-editor-preview iframe { display:block; width:100%; height:610px; border:0; }
+.cpb-cover-editor-foot { justify-content:flex-end; border-top:1px solid #e0e9e7; }
+@media(max-width:760px) { .cpb-cover-editor-body { grid-template-columns:1fr; } .cpb-cover-editor-preview iframe { height:610px; } }
+
 /* The paper's own front matter — the fields that print on the two covers. */
 .cpb-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; margin-top: 18px; }
 .cpb-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -11689,10 +11714,11 @@ html { scroll-behavior:smooth; }
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;justify-content:center;margin:18px auto 14px;padding:16px 24px;border:1.5px solid var(--border);border-radius:12px;background:var(--surface);max-width:720px;">
           <span style="font-size:0.78rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">Extras</span>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Add an elegant Polymath cover page with the worksheet title and name / date fields as page 1">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Add a pastel science cover and edit its text and icons before exporting">
             <input type="checkbox" id="wsIncludeCover" style="width:16px;height:16px;accent-color:var(--primary);">
             📄 Cover page
           </label>
+          <button class="btn btn-outline" type="button" onclick="wsEditBuilderCover()" title="Edit the cover text, student fields and pastel science icons with a live preview">✎ Edit cover</button>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print the blank Name / Date / Class lines. Turn it off for a clean sheet with no student fields at all.">
             <input type="checkbox" id="wsIncludeFields" checked style="width:16px;height:16px;accent-color:var(--primary);">
             ✍️ Name / Date / Class fields
@@ -11819,7 +11845,7 @@ html { scroll-behavior:smooth; }
       <div class="page-body" style="max-width:780px;">
         <div class="mw-print-options">
           <div class="mw-print-options-title">Printing options</div>
-          <label title="Print an elegant Polymath cover page (with a blank sheet behind it) in front of the questions">
+          <label title="Edit a pastel science cover page before exporting (with a blank sheet behind it)">
             <input type="checkbox" id="mwIncludeCover" style="width:16px;height:16px;accent-color:var(--primary);">
             📄 Cover page when reprinting
           </label>
@@ -13593,6 +13619,7 @@ html { scroll-behavior:smooth; }
     </label>
     <button class="btn btn-outline" type="button" id="wsPreviewEmBtn" style="display:none;" onclick="emOpenFromPreview()" title="Editing mode — every question on this sheet in one scroll, each block condensed to a strip with its controls as tiny icons down the left. Fix what you find, then Save once.">✏️ Editing mode</button>
     <button class="btn btn-outline" type="button" id="wsPreviewEditBtn" style="display:none;" onclick="wseOpenFromPreview()" title="Add or remove questions on this saved worksheet">✎ Questions</button>
+    <button class="btn btn-outline" type="button" id="wsPreviewCoverBtn" onclick="wsEditPreviewCover()" title="Edit the cover text and artwork with a live preview">✎ Cover</button>
     <button class="btn btn-outline" type="button" onclick="tsendFromPreview()" title="Send these pages to Study Buddy as a PDF and open them there — to write on, get hints, be marked and keep a mistake book">📖 Study Buddy</button>
     <button class="btn btn-primary" type="button" onclick="printFromPreview()">🖨️ Print / Save PDF</button>
   </div>
@@ -16062,6 +16089,7 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script type="module" src="app.js?v=1.435.0"></script>
+  <script src="worksheet-cover.js?v=1.436.0"></script>
+  <script type="module" src="app.js?v=1.436.0"></script>
 </body>
 </html>

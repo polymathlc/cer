@@ -2797,6 +2797,14 @@
   }
   .toast-action:hover { background: rgba(255,255,255,0.35); }
 </style>
+<style>
+.cover-edit-help { margin: 3px 0 7px; color: var(--text-secondary); font-size: .8rem; line-height: 1.5; }
+.cover-label-settings { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.cover-label-settings label,.cover-art-setting { font-size:.8rem; color:var(--text-secondary); }
+.cover-art-setting { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.cover-art-setting select { width:auto; max-width:65%; }
+.cover-art-setting input[type="range"] { width:60%; accent-color:#81b8c1; }
+</style>
 </head>
 <body>
 
@@ -2826,9 +2834,17 @@
           <input type="checkbox" id="coverEnabledToggle" /> Include cover page in exports
         </label>
         <div class="cover-fields" id="coverFields">
-          <input type="text" id="coverHeaderInput" class="cover-field-input" placeholder="Cover header (top)" />
-          <input type="text" id="coverSubheaderInput" class="cover-field-input" placeholder="Cover subheader (italic, e.g. Worksheet)" />
-          <input type="text" id="coverFooterInput" class="cover-field-input" placeholder="Cover footer (bottom, optional)" />
+          <input type="text" id="coverHeaderInput" aria-label="Cover header" class="cover-field-input" placeholder="Cover header (top)" />
+          <input type="text" id="coverSubheaderInput" aria-label="Cover subtitle" class="cover-field-input" placeholder="Cover subheader (italic, e.g. Worksheet)" />
+          <input type="text" id="coverFooterInput" aria-label="Cover footer" class="cover-field-input" placeholder="Cover footer (bottom, optional)" />
+          <p class="cover-edit-help">Click any text on the cover preview to edit it before exporting. These settings save with the worksheet.</p>
+          <div class="cover-label-settings">
+            <label>First field label<input type="text" id="coverNameLabelInput" class="cover-field-input" /></label>
+            <label>Second field label<input type="text" id="coverDateLabelInput" class="cover-field-input" /></label>
+          </div>
+          <label class="cover-art-setting">Artwork layout<select id="coverArtworkLayout" class="cover-field-input"><option value="corners">Corner clusters</option><option value="frame">Around the border</option><option value="minimal">Minimal</option></select></label>
+          <label class="cover-art-setting">Icon size<input id="coverArtworkScale" type="range" min="60" max="140" step="5" aria-label="Cover icon size" /></label>
+          <label class="cover-art-setting">Pastel intensity<input id="coverArtworkOpacity" type="range" min="20" max="100" step="2" aria-label="Cover artwork opacity" /></label>
         </div>
         <label class="cover-toggle" style="margin-top:6px;">
           <input type="checkbox" id="contentsEnabledToggle" /> Include contents page in exports
@@ -2979,6 +2995,7 @@
   <iframe class="dv-frame" id="dvFrame" title="A4 design surface"></iframe>
 </div>
 
+<script src="worksheet-cover.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
@@ -3022,34 +3039,19 @@ let state = {
 };
 
 function defaultCover() {
-  return {
-    enabled: false,
-    header: 'Polymath Learning Centre',
-    subheader: 'Worksheet',
-    footer: '',
-    // Print the blank Name / Class / Date lines (on the cover when it's on,
-    // in the page header when it's off). Off = a clean worksheet with no
-    // student fields at all.
-    fields: true
-  };
+  return { enabled: false, header: 'Polymath Learning Centre', subheader: 'Worksheet', footer: '',
+    fields: true, nameLabel: 'Name', dateLabel: 'Date', artworkScale: 1, artworkOpacity: 0.72, artworkLayout: 'corners' };
 }
-// Older saved worksheets have no cover field. Reads through this helper so
-// every code path sees a populated object without needing a migration pass.
+// Fill missing options when an older saved worksheet is opened.
 function getCover() {
-  if (!state.cover) state.cover = defaultCover();
+  if (!state.cover || typeof state.cover !== 'object') state.cover = defaultCover();
+  for (const [key, value] of Object.entries(defaultCover())) {
+    if (state.cover[key] === undefined) state.cover[key] = value;
+  }
   return state.cover;
 }
-// Saved worksheets from before the toggle existed have no `fields` key —
-// treat anything but an explicit false as "show them", so old worksheets
-// keep printing exactly as they did.
-function coverFieldsOn() {
-  return getCover().fields !== false;
-}
+function coverFieldsOn() { return getCover().fields !== false; }
 
-/* The contents page: a "Contents" listing of the worksheet's sections /
-   questions, printed after the cover. `html` stores the user's edited list
-   (made editable in the Design view); empty means auto-generate from the
-   questions at export time. */
 function defaultContents() {
   return { enabled: false, html: '' };
 }
@@ -6331,95 +6333,38 @@ async function exportPdf() {
   });
 }
 
-/* Pastel decorations (circles, shapes & math symbols) layered behind the
+/* Pastel pixel artwork for the worksheet subject, layered behind the
    cover / contents page content. Shared by the in-app preview, the print &
    standalone exports and the Design view so they all match. */
 function coverDecoSvg() {
-  return `
-  <svg class="cover-deco" viewBox="0 0 210 297" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-
-    <!-- top-left cluster (turquoise, hints of pink) -->
-    <circle cx="8" cy="14" r="26" fill="#a5e3dd" opacity="0.5"/>
-    <circle cx="36" cy="6" r="13" fill="#cdf0ec" opacity="0.6"/>
-    <circle cx="6" cy="46" r="9" fill="#7fd6cd" opacity="0.4"/>
-    <circle cx="28" cy="32" r="4.5" fill="#f5c1d6" opacity="0.65"/>
-    <circle cx="52" cy="14" r="3" fill="#a5e3dd" opacity="0.7"/>
-    <polygon points="42,26 52,30 44,38" fill="#bdebe6" opacity="0.8"/>
-    <rect x="14" y="58" width="7" height="7" rx="1" fill="#f9d8e6" transform="rotate(20 17.5 61.5)"/>
-    <text x="40" y="54" font-size="11" font-weight="600" fill="#6cc9c0" opacity="0.75" transform="rotate(-12 40 54)">π</text>
-    <text x="24" y="78" font-size="9" font-weight="500" fill="#eb9bbf" opacity="0.7" transform="rotate(15 24 78)">+</text>
-
-    <!-- bottom-right cluster (pink, hints of turquoise) -->
-    <circle cx="202" cy="284" r="26" fill="#f5c1d6" opacity="0.5"/>
-    <circle cx="174" cy="292" r="13" fill="#fbe0eb" opacity="0.6"/>
-    <circle cx="204" cy="252" r="9" fill="#f0a8c8" opacity="0.4"/>
-    <circle cx="182" cy="266" r="4.5" fill="#a5e3dd" opacity="0.65"/>
-    <circle cx="156" cy="282" r="3" fill="#f5c1d6" opacity="0.7"/>
-    <polygon points="168,268 158,272 166,260" fill="#f9d8e6" opacity="0.8"/>
-    <rect x="190" y="232" width="7" height="7" rx="1" fill="#bdebe6" transform="rotate(-20 193.5 235.5)"/>
-    <text x="158" y="294" font-size="10" font-weight="600" fill="#eb9bbf" opacity="0.75" transform="rotate(10 158 294)">÷</text>
-    <text x="176" y="246" font-size="9" font-weight="500" fill="#6cc9c0" opacity="0.7" transform="rotate(-15 176 246)">×</text>
-
-    <!-- sprinkles: top edge -->
-    <polygon points="150,6 157,8 152,14" fill="#f9d8e6" opacity="0.75"/>
-    <circle cx="180" cy="10" r="4" fill="#bdebe6" opacity="0.6"/>
-    <text x="196" y="28" font-size="7" font-weight="500" fill="#eb9bbf" opacity="0.6" transform="rotate(18 196 28)">×</text>
-    <circle cx="203" cy="44" r="2.5" fill="#f5c1d6" opacity="0.6"/>
-
-    <!-- sprinkles: right edge -->
-    <text x="199" y="120" font-size="8" font-weight="500" fill="#6cc9c0" opacity="0.55" transform="rotate(-10 199 120)">+</text>
-    <circle cx="205" cy="160" r="3.5" fill="#fbe0eb" opacity="0.8"/>
-    <polygon points="202,196 208,199 203,205" fill="#bdebe6" opacity="0.65"/>
-
-    <!-- sprinkles: left edge -->
-    <circle cx="5" cy="120" r="3" fill="#f5c1d6" opacity="0.6"/>
-    <text x="3" y="166" font-size="8" font-weight="600" fill="#6cc9c0" opacity="0.55" transform="rotate(12 3 166)">=</text>
-    <polygon points="6,210 13,213 8,219" fill="#cdf0ec" opacity="0.8"/>
-    <text x="3" y="252" font-size="7" font-weight="500" fill="#eb9bbf" opacity="0.6" transform="rotate(-15 3 252)">%</text>
-
-    <!-- sprinkles: bottom edge -->
-    <circle cx="34" cy="290" r="4" fill="#a5e3dd" opacity="0.55"/>
-    <text x="58" y="294" font-size="8" font-weight="600" fill="#eb9bbf" opacity="0.6" transform="rotate(-8 58 294)">√</text>
-    <circle cx="100" cy="293" r="2.5" fill="#f9d8e6" opacity="0.8"/>
-    <polygon points="124,288 131,290 126,296" fill="#bdebe6" opacity="0.7"/>
-  </svg>`;
-}
-
-function buildCoverHtml() {
   const c = getCover();
-  if (!c.enabled) return '';
-  const title = escapeHtml((state.title || '').trim() || 'Worksheet');
-  const sub = (c.subheader || '').trim();
-  const hdr = (c.header || '').trim();
-  const ftr = (c.footer || '').trim();
-  return `
-<section class="cover-page">
-  ${coverDecoSvg()}
-  ${hdr ? `<div class="cover-header">${escapeHtml(hdr)}</div>` : '<div class="cover-header"></div>'}
-  <div class="cover-center">
-    <img class="cover-logo" src="https://www.dropbox.com/scl/fi/2wc1ulpjuiaqlxk5qhc07/polymath-logo-sticker-copy.png?rlkey=jhutxqmdbwe0jgoqcwdxzwt55&raw=1" alt="" />
-    <h1 class="cover-title">${title}</h1>
-    ${sub ? `<div class="cover-subtitle">${escapeHtml(sub)}</div>` : ''}
-    ${coverFieldsOn() ? `<div class="cover-fields-grid">
-      <div class="cover-field">
-        <div class="cover-field-label">Name</div>
-        <div class="cover-field-line"></div>
-      </div>
-      <div class="cover-field">
-        <div class="cover-field-label">Date</div>
-        <div class="cover-field-line"></div>
-      </div>
-    </div>` : ''}
-  </div>
-  <div class="cover-footer">${ftr ? escapeHtml(ftr) : ''}</div>
-</section>`;
+  return WorksheetCover.decoration('math', { scale: c.artworkScale, opacity: c.artworkOpacity, layout: c.artworkLayout });
 }
+function coverPageMarkup(className, editable) {
+  const c = getCover();
+  const field = (name, tag, cls) => {
+    const value = name === 'title' ? state.title : c[name];
+    const edit = editable ? ` contenteditable="true" spellcheck="false" data-cover-field="${name}" role="textbox" aria-label="${escapeHtml(COVER_FIELD_PLACEHOLDERS[name])}"` : '';
+    const text = name === 'title' && !editable ? ((value || '').trim() || 'Worksheet') : (value || '');
+    return `<${tag} class="${cls}"${edit}>${escapeHtml(text)}</${tag}>`;
+  };
+  return `<section class="${className} wc-cover" data-cover-subject="math" aria-label="Math cover page${editable ? ', click text to edit' : ''}">
+    ${coverDecoSvg()}
+    ${field('header', 'div', 'cover-header wc-header')}
+    <div class="cover-center wc-center">
+      <img class="cover-logo wc-logo" src="${WorksheetCover.logoUrl}" alt="Polymath Learning Centre" />
+      ${field('title', 'h1', 'cover-title wc-title')}
+      ${field('subheader', 'div', 'cover-subtitle wc-subheader')}
+      ${editable || coverFieldsOn() ? `<div class="cover-fields-grid wc-fields">
+        <div class="cover-field">${field('nameLabel', 'div', 'cover-field-label wc-field-label')}<div class="cover-field-line wc-field-line"></div></div>
+        <div class="cover-field">${field('dateLabel', 'div', 'cover-field-label wc-field-label')}<div class="cover-field-line wc-field-line"></div></div>
+      </div>` : ''}
+    </div>
+    ${field('footer', 'div', 'cover-footer wc-footer')}
+  </section>`;
+}
+function buildCoverHtml() { return getCover().enabled ? coverPageMarkup('cover-page', false) : ''; }
 
-/* ── Contents page ──
-   Auto-generates a "Contents" listing from the worksheet: instruction blocks
-   become section headings, questions are listed by number with their topic
-   (falling back to the first words of the stem). The Design view lets the
-   user edit the generated list; edits are kept in state.contents.html. */
 function contentsSnippet(s, max) {
   const t = (s || '').replace(/\s+/g, ' ').trim();
   return t.length > max ? t.slice(0, max - 1).trimEnd() + '…' : t;
@@ -6675,8 +6620,26 @@ function getCoverCss() {
   border-bottom: 1px dotted #999;
   transform: translateY(-0.25em);
 }
+` + WorksheetCover.printStyles + getCoverEditorCss();
+}
+
+
+function getCoverEditorCss() {
+  return `
+.cover-page.wc-cover::before,.cover-page.wc-cover::after,.cover-preview.wc-cover::before,.cover-preview.wc-cover::after{content:none}
+.cover-preview.wc-cover{width:min(100%,210mm);min-height:0;padding:8.6% 7.6%;aspect-ratio:210/297}
+.wc-cover .cover-center{flex:initial;min-width:0;width:100%;box-sizing:border-box}
+.wc-cover .cover-footer{margin-top:0}
+.wc-cover .cover-title,.wc-cover .cover-subtitle,.wc-cover .cover-field-label,.wc-cover .cover-header,.wc-cover .cover-footer{white-space:pre-line}
+.wc-cover .cover-fields-grid{max-width:none}
+@media print{.wc-cover [data-empty="true"]::before{content:none!important}}
 `;
 }
+(function installCoverEditorStyles() {
+  const style = document.createElement('style');
+  style.id = 'standalone-cover-styles'; style.textContent = getCoverEditorCss();
+  document.head.appendChild(style);
+})();
 
 function buildPrintableHtml() {
   const css = getEmbeddedPreviewCss() + getPrintCss() + getCoverCss();
@@ -7428,9 +7391,12 @@ function applyCoverEnabledClass() {
 function syncCoverInputs() {
   const c = getCover();
   document.getElementById('coverEnabledToggle').checked = !!c.enabled;
-  document.getElementById('coverHeaderInput').value = c.header || '';
-  document.getElementById('coverSubheaderInput').value = c.subheader || '';
-  document.getElementById('coverFooterInput').value = c.footer || '';
+  for (const [field, id] of [['header', 'coverHeaderInput'], ['subheader', 'coverSubheaderInput'], ['footer', 'coverFooterInput'], ['nameLabel', 'coverNameLabelInput'], ['dateLabel', 'coverDateLabelInput']]) {
+    document.getElementById(id).value = c[field] || '';
+  }
+  document.getElementById('coverArtworkLayout').value = c.artworkLayout;
+  document.getElementById('coverArtworkScale').value = Math.round(c.artworkScale * 100);
+  document.getElementById('coverArtworkOpacity').value = Math.round(c.artworkOpacity * 100);
   document.getElementById('contentsEnabledToggle').checked = !!getContents().enabled;
   document.getElementById('coverFieldsToggle').checked = coverFieldsOn();
   applyCoverEnabledClass();
@@ -7438,46 +7404,28 @@ function syncCoverInputs() {
   ensureContentsPreview();
 }
 document.getElementById('coverEnabledToggle').addEventListener('change', (e) => {
-  getCover().enabled = e.target.checked;
-  applyCoverEnabledClass();
-  ensureCoverPreview();
-  ensureContentsPreview();
-  scheduleAutoSave();
+  getCover().enabled = e.target.checked; applyCoverEnabledClass(); ensureCoverPreview(); ensureContentsPreview(); scheduleAutoSave();
 });
 document.getElementById('contentsEnabledToggle').addEventListener('change', (e) => {
-  getContents().enabled = e.target.checked;
-  ensureContentsPreview();
-  scheduleAutoSave();
+  getContents().enabled = e.target.checked; ensureContentsPreview(); scheduleAutoSave();
 });
 document.getElementById('coverFieldsToggle').addEventListener('change', (e) => {
-  getCover().fields = e.target.checked;
-  ensureCoverPreview();
-  scheduleAutoSave();
+  getCover().fields = e.target.checked; ensureCoverPreview(); scheduleAutoSave();
 });
-document.getElementById('coverHeaderInput').addEventListener('input', (e) => {
-  getCover().header = e.target.value;
-  refreshCoverPreviewField('header');
-  scheduleAutoSave();
-});
-document.getElementById('coverSubheaderInput').addEventListener('input', (e) => {
-  getCover().subheader = e.target.value;
-  refreshCoverPreviewField('subheader');
-  scheduleAutoSave();
-});
-document.getElementById('coverFooterInput').addEventListener('input', (e) => {
-  getCover().footer = e.target.value;
-  refreshCoverPreviewField('footer');
-  scheduleAutoSave();
-});
+for (const [field, id] of [['header', 'coverHeaderInput'], ['subheader', 'coverSubheaderInput'], ['footer', 'coverFooterInput'], ['nameLabel', 'coverNameLabelInput'], ['dateLabel', 'coverDateLabelInput']]) {
+  document.getElementById(id).addEventListener('input', (e) => {
+    getCover()[field] = e.target.value; refreshCoverPreviewField(field); ensureContentsPreview(); scheduleAutoSave();
+  });
+}
+for (const [field, id, numeric] of [['artworkLayout', 'coverArtworkLayout', false], ['artworkScale', 'coverArtworkScale', true], ['artworkOpacity', 'coverArtworkOpacity', true]]) {
+  document.getElementById(id).addEventListener('input', (e) => {
+    getCover()[field] = numeric ? Number(e.target.value) / 100 : e.target.value;
+    ensureCoverPreview(); ensureContentsPreview(); scheduleAutoSave();
+  });
+}
 
-// ── In-preview editable cover page ────────────────────────────────
-const COVER_LOGO_URL = 'https://www.dropbox.com/scl/fi/2wc1ulpjuiaqlxk5qhc07/polymath-logo-sticker-copy.png?rlkey=jhutxqmdbwe0jgoqcwdxzwt55&raw=1';
-const COVER_FIELD_PLACEHOLDERS = {
-  header: 'Cover header',
-  title: 'Worksheet title',
-  subheader: 'Subheader',
-  footer: 'Cover footer'
-};
+const COVER_LOGO_URL = WorksheetCover.logoUrl;
+const COVER_FIELD_PLACEHOLDERS = { header: 'Cover header', title: 'Worksheet title', subheader: 'Subheader', footer: 'Cover footer', nameLabel: 'First field label', dateLabel: 'Second field label' };
 function coverFieldValue(field) {
   if (field === 'title') return state.title || '';
   return getCover()[field] || '';
@@ -7501,30 +7449,9 @@ function refreshCoverPreviewField(field) {
   applyCoverPlaceholder(el);
 }
 function buildCoverPreviewMarkup() {
-  return `
-    <section class="cover-preview" aria-label="Cover page preview">
-      ${coverDecoSvg()}
-      <div class="cover-header" contenteditable="true" spellcheck="false" data-cover-field="header"></div>
-      <div class="cover-center">
-        <img class="cover-logo" src="${COVER_LOGO_URL}" alt="" />
-        <h1 class="cover-title" contenteditable="true" spellcheck="false" data-cover-field="title"></h1>
-        <div class="cover-subtitle" contenteditable="true" spellcheck="false" data-cover-field="subheader"></div>
-        <div class="cover-fields-grid">
-          <div class="cover-field">
-            <div class="cover-field-label">Name</div>
-            <div class="cover-field-line"></div>
-          </div>
-          <div class="cover-field">
-            <div class="cover-field-label">Date</div>
-            <div class="cover-field-line"></div>
-          </div>
-        </div>
-      </div>
-      <div class="cover-footer" contenteditable="true" spellcheck="false" data-cover-field="footer"></div>
-    </section>
-    <div class="cover-blank-page" aria-hidden="true"></div>
-  `;
+  return coverPageMarkup('cover-preview', true) + '<div class="cover-blank-page" aria-hidden="true"></div>';
 }
+
 function wireCoverPreviewEditing(wrap) {
   wrap.querySelectorAll('[data-cover-field]').forEach((el) => {
     el.addEventListener('focus', () => {
@@ -7534,7 +7461,7 @@ function wireCoverPreviewEditing(wrap) {
     el.addEventListener('blur', () => applyCoverPlaceholder(el));
     el.addEventListener('input', () => {
       const field = el.dataset.coverField;
-      const val = el.textContent;
+      const val = typeof el.innerText === 'string' ? el.innerText : el.textContent;
       if (field === 'title') {
         state.title = val;
         const ti = document.getElementById('worksheetTitle');
@@ -7545,7 +7472,9 @@ function wireCoverPreviewEditing(wrap) {
         const inputId =
           field === 'header' ? 'coverHeaderInput' :
           field === 'subheader' ? 'coverSubheaderInput' :
-          field === 'footer' ? 'coverFooterInput' : null;
+          field === 'footer' ? 'coverFooterInput' :
+          field === 'nameLabel' ? 'coverNameLabelInput' :
+          field === 'dateLabel' ? 'coverDateLabelInput' : null;
         const inp = inputId && document.getElementById(inputId);
         if (inp && document.activeElement !== inp) inp.value = val;
       }
@@ -7564,25 +7493,20 @@ function ensureCoverPreview() {
   if (!pane) return;
   const c = getCover();
   let wrap = document.getElementById('coverPreviewWrap');
-  if (!c.enabled) {
-    if (wrap) wrap.remove();
-    return;
-  }
+  if (!c.enabled) { if (wrap) wrap.remove(); return; }
   if (!wrap) {
-    wrap = document.createElement('div');
-    wrap.id = 'coverPreviewWrap';
-    wrap.innerHTML = buildCoverPreviewMarkup();
-    pane.insertBefore(wrap, pane.firstChild);
+    wrap = document.createElement('div'); wrap.id = 'coverPreviewWrap';
+    wrap.innerHTML = buildCoverPreviewMarkup(); pane.insertBefore(wrap, pane.firstChild);
     wireCoverPreviewEditing(wrap);
   }
-  // Mirror state into the editable fields, but never clobber a field the
-  // user is actively typing into.
-  ['header', 'title', 'subheader', 'footer'].forEach(refreshCoverPreviewField);
+  ['header', 'title', 'subheader', 'footer', 'nameLabel', 'dateLabel'].forEach(refreshCoverPreviewField);
+  const page = wrap.querySelector('.cover-preview');
+  const artwork = page.querySelector('.cover-artwork');
+  if (artwork) artwork.outerHTML = coverDecoSvg();
   const grid = wrap.querySelector('.cover-fields-grid');
   if (grid) grid.style.display = coverFieldsOn() ? '' : 'none';
 }
 
-// ── In-preview contents page (read-only — edit it in the Design view) ──
 function ensureContentsPreview() {
   const pane = document.querySelector('.preview-pane');
   if (!pane) return;
@@ -10062,12 +9986,13 @@ var DV_ENGINE = `
     var fieldEl=t.closest('[data-cover-field]');
     if(fieldEl){
       var f=fieldEl.getAttribute('data-cover-field');
+      var fieldText=typeof fieldEl.innerText==='string'?fieldEl.innerText:fieldEl.textContent;
       // The cover and contents pages share header / footer text — mirror the
       // edit into the other page's matching field.
       Array.prototype.forEach.call(document.querySelectorAll('[data-cover-field="'+f+'"]'), function(other){
-        if(other!==fieldEl && other.textContent!==fieldEl.textContent) other.textContent=fieldEl.textContent;
+        if(other!==fieldEl && other.textContent!==fieldText) other.textContent=fieldText;
       });
-      try{ parent.postMessage({ type:'dvCoverField', field:f, value:fieldEl.textContent }, '*'); }catch(_){}
+      try{ parent.postMessage({ type:'dvCoverField', field:f, value:fieldText }, '*'); }catch(_){}
       return;
     }
     var entries=t.closest('#dvContentsEntries');
@@ -10118,23 +10043,8 @@ var DV_ENGINE = `
    These mirror buildCoverHtml() / buildContentsHtml() but are always rendered
    (visibility is toggled in the iframe) and their text is contenteditable.
    Edits post back to the parent, which writes them into state. */
-function dvCoverPageHtml() {
-  var c = getCover();
-  return '<section class="cover-page">'
-    + coverDecoSvg()
-    + '<div class="cover-header" contenteditable="true" spellcheck="false" data-cover-field="header">' + escapeHtml((c.header || '').trim()) + '</div>'
-    + '<div class="cover-center">'
-      + '<img class="cover-logo" src="' + COVER_LOGO_URL + '" alt="" />'
-      + '<h1 class="cover-title" contenteditable="true" spellcheck="false" data-cover-field="title">' + escapeHtml((state.title || '').trim() || 'Worksheet') + '</h1>'
-      + '<div class="cover-subtitle" contenteditable="true" spellcheck="false" data-cover-field="subheader">' + escapeHtml((c.subheader || '').trim()) + '</div>'
-      + '<div class="cover-fields-grid">'
-        + '<div class="cover-field"><div class="cover-field-label">Name</div><div class="cover-field-line"></div></div>'
-        + '<div class="cover-field"><div class="cover-field-label">Date</div><div class="cover-field-line"></div></div>'
-      + '</div>'
-    + '</div>'
-    + '<div class="cover-footer" contenteditable="true" spellcheck="false" data-cover-field="footer">' + escapeHtml((c.footer || '').trim()) + '</div>'
-  + '</section>';
-}
+function dvCoverPageHtml() { return coverPageMarkup('cover-page', true); }
+
 function dvContentsPageHtml() {
   var c = getContents();
   var cover = getCover();
@@ -10163,7 +10073,7 @@ function dvBuildDoc() {
   var inject = 'window.__DV=' + jsStr({ scales: L.scales, breaks: L.breaks, gaps: L.gaps, firstPage: L.firstPage }) + ';'
     + 'window.__DV_FM=' + jsStr({ cover: coverOn, contents: contentsOn, fields: fieldsOn }) + ';'
     + 'window.__DV_CONTENTS_AUTO=' + jsStr(buildContentsListHtml()) + ';';
-  var logo = 'https://www.dropbox.com/scl/fi/2wc1ulpjuiaqlxk5qhc07/polymath-logo-sticker-copy.png?rlkey=jhutxqmdbwe0jgoqcwdxzwt55&raw=1';
+  var logo = WorksheetCover.logoUrl;
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
     + '<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">'
     + '<style>' + css + '</style></head><body>'
@@ -10249,7 +10159,7 @@ window.addEventListener('message', function (e) {
       var ti = document.getElementById('worksheetTitle');
       if (ti) ti.value = d.value;
       previewTitleEl.textContent = d.value || 'Untitled Worksheet';
-    } else if (d.field === 'header' || d.field === 'subheader' || d.field === 'footer') {
+    } else if (['header', 'subheader', 'footer', 'nameLabel', 'dateLabel'].includes(d.field)) {
       getCover()[d.field] = d.value;
     }
     syncCoverInputs();

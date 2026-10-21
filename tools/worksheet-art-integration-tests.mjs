@@ -27,7 +27,7 @@ function setup() {
       currentScript: null, getElementById: id => elements[id] || null,
       createElement: () => ({}), head: { appendChild() {} }, querySelectorAll: () => []
     },
-    wsArtwork: artwork, _wsArtworkOwner: 'owner', currentUser: { uid: 'owner' },
+    wsArtwork: artwork, wsCoverSettings: null, _wsArtworkOwner: 'owner', currentUser: { uid: 'owner' },
     wsSelectedIds: new Set(['q1', 'q2']), questionBank: [q1, q2],
     savedWorksheets: [{ id: 'saved', title: 'Saved worksheet', questionIds: ['q1', 'q2'], artwork: [artwork[1]] }],
     _wsPreviewSaved: null, _wsPreviewPaper: null, _wsPreviewAdhoc: null,

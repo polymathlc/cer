@@ -1,10 +1,10 @@
 name: Worksheet colour and characters
 on:
   pull_request:
-    paths: ['app.js', 'index.html', 'science-worksheet.html', 'worksheet-art*.js', 'assets/worksheet-characters/**', 'tools/worksheet-art*.mjs', 'tools/worksheet-creator-art-tests.mjs', '.github/workflows/worksheet-art.yml']
+    paths: ['app.js', 'index.html', 'math-worksheet.html', 'science-worksheet.html', 'worksheet-art*.js', 'worksheet-cover.js', 'assets/worksheet-characters/**', 'assets/worksheet-covers/**', 'tools/worksheet-art*.mjs', 'tools/worksheet-creator-art-tests.mjs', 'tools/cover-*.mjs', '.github/workflows/worksheet-art.yml']
   push:
     branches: [main]
-    paths: ['app.js', 'index.html', 'science-worksheet.html', 'worksheet-art*.js', 'assets/worksheet-characters/**', 'tools/worksheet-art*.mjs', 'tools/worksheet-creator-art-tests.mjs', '.github/workflows/worksheet-art.yml']
+    paths: ['app.js', 'index.html', 'math-worksheet.html', 'science-worksheet.html', 'worksheet-art*.js', 'worksheet-cover.js', 'assets/worksheet-characters/**', 'assets/worksheet-covers/**', 'tools/worksheet-art*.mjs', 'tools/worksheet-creator-art-tests.mjs', 'tools/cover-*.mjs', '.github/workflows/worksheet-art.yml']
 permissions:
   contents: read
 jobs:
@@ -22,7 +22,13 @@ jobs:
           node tools/worksheet-creator-art-tests.mjs
           node tools/custom-paper-tests.mjs
           node tools/worksheet-controls-tests.mjs
+          node tools/cover-core-tests.mjs
+          node tools/cover-app-tests.mjs
+          node tools/cover-editor-tests.mjs
       - run: npm install --no-save --package-lock=false playwright@1.62.1
       - run: npx playwright install --with-deps chromium
       - name: Check editor interactions and print layout
-        run: node tools/worksheet-art-browser-tests.mjs
+        run: |
+          node tools/worksheet-art-browser-tests.mjs
+          node tools/cover-browser-tests.mjs
+          node tools/cover-layout-browser-tests.mjs

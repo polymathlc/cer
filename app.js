@@ -4498,7 +4498,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.435.0';
+const APP_VERSION = 'v1.436.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5154,6 +5154,7 @@ onAuthStateChanged(auth, (user) => {
   grandLinePortal.close();
   rapidPreviewReset();
   wsArtResetForUser(user);
+  wsCoverResetForUser(user);
   if (_summarySheets) _summarySheets.resetForUser(user?.uid || '');
   if (_whiteboards) _whiteboards.resetForUser(user?.uid || '');
   wbStopAssignments();
@@ -28737,6 +28738,10 @@ const CPB_META_DEFAULTS = {
   artwork: null,       // optional colour elements; stored with this paper
   wsIntro: '',         // one instruction line printed above question 1
   wsFields: true,      // print the Name / Class / Date strip
+  coverScale: 1,
+  coverOpacity: 0.72,
+  coverInstructionsA: '',
+  coverInstructionsB: '',
 };
 let _cpbMeta = Object.assign({}, CPB_META_DEFAULTS);
 
@@ -29897,18 +29902,99 @@ function _cpbIndexGridHtml() {
   </div>`;
 }
 
+function _cpbCoverValue(key, values) {
+  return values && values[key] != null ? values[key] : _cpbMetaGet(key);
+}
+function _cpbCoverBrandHtml(values) {
+  return window.WorksheetCover.decoration(_cpbCoverValue('subject', values), {
+    scale: Number(_cpbCoverValue('coverScale', values)),
+    opacity: Number(_cpbCoverValue('coverOpacity', values)),
+    layout: 'corners'
+  }) + `<img class="cpb-cv-logo" src="${window.WorksheetCover.logoUrl}" alt="Polymath Learning Centre">`;
+}
+function _cpbCoverInstructions(booklet, defaults, values) {
+  const text = String(_cpbCoverValue('coverInstructions' + booklet, values) || '').trim();
+  return text ? text.split(/\r?\n/).map(line => line.trim()).filter(Boolean) : defaults;
+}
+
+// The paper keeps its index grid, marks and booklet anchors. This editor
+// changes the cover's text and artwork with both A4 booklets visible live.
+async function cpbEditCovers() {
+  if (cpbIsWorksheet()) return true;
+  window.WorksheetCover.ensureStyles(document);
+  const editedPaper = _cpbMeta;
+  const owner = currentUser?.uid || null;
+  const values = Object.assign({}, _cpbMeta);
+  const dialog = document.createElement('dialog');
+  dialog.className = 'cpb-cover-editor';
+  const textFields = [
+    ['org', 'Centre / school'], ['exam', 'Examination'], ['subject', 'Subject'],
+    ['level', 'Level line'], ['year', 'Year'], ['code', 'Paper code'], ['duration', 'Total time']
+  ];
+  dialog.innerHTML = `<form method="dialog">
+    <div class="cpb-cover-editor-head"><div><h2>Edit booklet covers</h2><p>Changes apply to both booklets and are kept with this paper.</p></div><button type="button" class="btn btn-outline" data-cancel aria-label="Close cover editor">✕</button></div>
+    <div class="cpb-cover-editor-body"><div class="cpb-cover-editor-fields">
+      ${textFields.map(([key, label]) => `<label>${label}<input class="form-input" name="${key}" value="${escapeHtml(String(_cpbCoverValue(key, values)))}" maxlength="120"></label>`).join('')}
+      <label>Booklet A instructions <span>(one per line; leave blank for the standard instructions)</span><textarea class="form-input" name="coverInstructionsA" rows="5" maxlength="3000">${escapeHtml(values.coverInstructionsA || '')}</textarea></label>
+      <label>Booklet B instructions <span>(one per line; leave blank for the standard instructions)</span><textarea class="form-input" name="coverInstructionsB" rows="5" maxlength="3000">${escapeHtml(values.coverInstructionsB || '')}</textarea></label>
+      <label>Icon size<input type="range" name="coverScale" min="0.65" max="1.4" step="0.05" value="${Number(values.coverScale) || 1}"></label>
+      <label>Icon opacity<input type="range" name="coverOpacity" min="0.25" max="1" step="0.05" value="${Number(values.coverOpacity) || 0.72}"></label>
+    </div><div class="cpb-cover-editor-preview"><div class="cpb-cover-editor-tabs"><button type="button" class="btn btn-outline" data-booklet="A">Booklet A</button><button type="button" class="btn btn-outline" data-booklet="B">Booklet B</button></div><iframe title="Live booklet cover preview"></iframe></div></div>
+    <div class="cpb-cover-editor-foot"><button type="button" class="btn btn-outline" data-cancel>Cancel</button><button type="submit" class="btn btn-primary">Use these covers</button></div>
+  </form>`;
+  document.body.appendChild(dialog);
+  const previousFocus = document.activeElement;
+  let booklet = 'A';
+  const draw = () => {
+    const marks = cpbMarks();
+    const lay = cpbLayout();
+    const html = booklet === 'A' ? _cpbCoverA(marks.a, lay.a.length, values)
+      : _cpbCoverB(marks.b, lay.a.length + 1, lay.list.length, '', values);
+    const css = _wsAppCssForPreview() + '\nhtml,body{margin:0;padding:0;background:#e8eceb;}#printOutput{display:block!important;width:178mm;margin:12px;transform:scale(.6);transform-origin:top left;} .cpb-cover{height:252mm;min-height:252mm;width:178mm;background:#fff;box-sizing:border-box;padding:7mm;}';
+    dialog.querySelector('iframe').srcdoc = '<!DOCTYPE html><html><head><meta charset="utf-8">' + _printFontLinksHtml() + '<style>' + css + '</style></head><body><div id="printOutput">' + html + '</div></body></html>';
+    dialog.querySelectorAll('[data-booklet]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.booklet === booklet)));
+  };
+  dialog.addEventListener('input', event => {
+    const key = event.target.name;
+    if (!key) return;
+    values[key] = key === 'coverScale' || key === 'coverOpacity' ? Number(event.target.value) : event.target.value;
+    draw();
+  });
+  dialog.querySelectorAll('[data-booklet]').forEach(button => button.addEventListener('click', () => { booklet = button.dataset.booklet; draw(); }));
+  return new Promise(resolve => {
+    let accepted = false;
+    dialog.querySelector('form').addEventListener('submit', event => {
+      event.preventDefault();
+      if (_cpbMeta !== editedPaper || (currentUser?.uid || null) !== owner) {
+        showToast('A different paper or account is open. Open its cover editor again.', 'error');
+        dialog.close();
+        return;
+      }
+      Object.assign(_cpbMeta, values);
+      _cpbDraftSave();
+      cpbRender();
+      accepted = true;
+      dialog.close();
+    });
+    dialog.querySelectorAll('[data-cancel]').forEach(button => button.addEventListener('click', () => dialog.close()));
+    dialog.addEventListener('close', () => { dialog.remove(); previousFocus?.focus(); resolve(accepted); }, { once: true });
+    dialog.showModal();
+    draw();
+  });
+}
+
 // The ruled identity box both covers open with.
-function _cpbCoverHeadHtml(booklet) {
-  const code = _cpbMetaGet('code');
-  const year = _cpbMetaGet('year');
+function _cpbCoverHeadHtml(booklet, values) {
+  const code = _cpbCoverValue('code', values);
+  const year = _cpbCoverValue('year', values);
   return `<div class="cpb-cv-head">
-    <div class="cpb-cv-org">${escapeHtml(_cpbMetaGet('org'))}</div>
-    <div class="cpb-cv-exam">${escapeHtml(_cpbMetaGet('exam'))}</div>
+    <div class="cpb-cv-org">${escapeHtml(_cpbCoverValue('org', values))}</div>
+    <div class="cpb-cv-exam">${escapeHtml(_cpbCoverValue('exam', values))}</div>
     <div class="cpb-cv-row">
       <span class="cpb-cv-code">${escapeHtml(code ? code + ' (' + booklet + ')' : '')}</span>
-      <span class="cpb-cv-level">${escapeHtml(_cpbMetaGet('level'))}<br><span class="cpb-cv-year">${escapeHtml(year)}</span></span>
+      <span class="cpb-cv-level">${escapeHtml(_cpbCoverValue('level', values))}<br><span class="cpb-cv-year">${escapeHtml(year)}</span></span>
     </div>
-    <div class="cpb-cv-subject">${escapeHtml(_cpbMetaGet('subject'))}</div>
+    <div class="cpb-cv-subject">${escapeHtml(_cpbCoverValue('subject', values))}</div>
     <div class="cpb-cv-booklet">(BOOKLET ${escapeHtml(booklet)})</div>
   </div>`;
 }
@@ -29917,16 +30003,16 @@ function _cpbCoverHeadHtml(booklet) {
 // booklet consists of N printed pages": the count is only known after the
 // planner has paginated, and a cover that states the wrong one is worse than a
 // cover that states none.
-function _cpbCoverFootHtml() {
+function _cpbCoverFootHtml(values) {
   return `<div class="cpb-cv-foot">
-    <div class="cpb-cv-seal">${escapeHtml(_cpbMetaGet('org'))}</div>
+    <div class="cpb-cv-seal">${escapeHtml(_cpbCoverValue('org', values))}</div>
   </div>`;
 }
 
 // Booklet A — multiple choice, answered on the answer sheet unless the teacher
 // asked for brackets on the paper itself.
-function _cpbCoverA(marks, nA) {
-  const onPaper = !!_cpbMetaGet('mcqOnPaper');
+function _cpbCoverA(marks, nA, values) {
+  const onPaper = !!_cpbCoverValue('mcqOnPaper', values);
   const extra = onPaper
     ? 'Additional Materials: Nil'
     : 'Additional Materials: Answer Sheet';
@@ -29940,25 +30026,26 @@ function _cpbCoverA(marks, nA) {
       : 'Use a 2B pencil to shade your answers on the Answer Sheet.',
   ];
   return `<div class="print-front-page print-cover-page cpb-cover">
+    ${_cpbCoverBrandHtml(values)}
     ${_cpbIndexGridHtml()}
-    ${_cpbCoverHeadHtml('A')}
+    ${_cpbCoverHeadHtml('A', values)}
     <div class="cpb-cv-time">
       <span>${escapeHtml(extra)}</span>
-      <span><b>Total Time for Booklets A and B : ${escapeHtml(_cpbMetaGet('duration'))}</b></span>
+      <span><b>Total Time for Booklets A and B : ${escapeHtml(_cpbCoverValue('duration', values))}</b></span>
     </div>
     <div class="cpb-cv-ins">
       <div class="cpb-cv-ins-h">INSTRUCTIONS TO CANDIDATES</div>
-      <ol class="cpb-cv-ins-list">${ins.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ol>
+      <ol class="cpb-cv-ins-list">${_cpbCoverInstructions('A', ins, values).map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ol>
       <div class="cpb-cv-ins-note">Questions 1 to ${escapeHtml(String(nA))} carry ${CPB_MCQ_MARKS} marks each. Booklet A is worth ${escapeHtml(String(marks))} marks.</div>
     </div>
-    ${_cpbCoverFootHtml()}
+    ${_cpbCoverFootHtml(values)}
   </div>`;
 }
 
 // Booklet B — written answers in the booklet. `anchor` is the chunk this sheet
 // must be printed immediately before; without it the printer would hoist it to
 // the very front and it would land on top of Booklet A's cover.
-function _cpbCoverB(marks, from, to, anchor) {
+function _cpbCoverB(marks, from, to, anchor, values) {
   const ins = [
     'Write your Index No. in the boxes at the top right hand corner.',
     'Do not turn over this page until you are told to do so.',
@@ -29969,15 +30056,16 @@ function _cpbCoverB(marks, from, to, anchor) {
     'Do not use highlighter on any part of your answers.',
   ];
   return `<div class="print-front-page print-cover-page cpb-cover" data-front-before="${escapeHtml(String(anchor || ''))}" data-front-restart="1">
+    ${_cpbCoverBrandHtml(values)}
     ${_cpbIndexGridHtml()}
-    ${_cpbCoverHeadHtml('B')}
+    ${_cpbCoverHeadHtml('B', values)}
     <div class="cpb-cv-time">
       <span>Additional Materials: Nil</span>
-      <span><b>Total Time for Booklets A and B : ${escapeHtml(_cpbMetaGet('duration'))}</b></span>
+      <span><b>Total Time for Booklets A and B : ${escapeHtml(_cpbCoverValue('duration', values))}</b></span>
     </div>
     <div class="cpb-cv-ins">
       <div class="cpb-cv-ins-h">INSTRUCTIONS TO CANDIDATES</div>
-      <ol class="cpb-cv-ins-list">${ins.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ol>
+      <ol class="cpb-cv-ins-list">${_cpbCoverInstructions('B', ins, values).map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ol>
       <div class="cpb-cv-ins-note">Questions ${escapeHtml(String(from))} to ${escapeHtml(String(to))} are worth ${escapeHtml(String(marks))} marks in total.</div>
     </div>
     <div class="cpb-cv-total">
@@ -29985,7 +30073,7 @@ function _cpbCoverB(marks, from, to, anchor) {
       <span class="cpb-cv-total-box"></span>
       <span>/ ${escapeHtml(String(marks))}</span>
     </div>
-    ${_cpbCoverFootHtml()}
+    ${_cpbCoverFootHtml(values)}
   </div>`;
 }
 
@@ -30194,6 +30282,7 @@ function _cpbReady() {
 
 async function cpbPrint() {
   if (!_cpbReady()) return;
+  if (!await cpbEditCovers()) return;
   // 🖨 …AND THE EXPORT KEEPS IT. Started HERE — before the image preload and
   // the layout, and deliberately not awaited — so the paper reaches the shelf
   // even if the print itself is cancelled, and so nothing about the export can
@@ -30718,7 +30807,7 @@ function _cpbSetupHtml() {
   const onPaper = !!_cpbMetaGet('mcqOnPaper');
   const sheet = !!_cpbMetaGet('answerSheet');
   return `<div class="cpb-card">
-    <div class="cpb-head"><h3 class="cpb-h3">① The paper</h3></div>
+    <div class="cpb-head"><h3 class="cpb-h3">① The paper</h3><button type="button" class="btn btn-outline" onclick="cpbEditCovers()">✎ Edit covers</button></div>
     <p class="cpb-lead">These print on the two covers. They are yours to fill in — nothing here is prefilled with an examination board's name, because this is your centre's paper and a cover that passes for an official one is not one to hand a class.</p>
     <div class="cpb-fields">
       ${_cpbField('name', 'Paper name', 'e.g. 2026 P6 Science Prelim Mock 1', '— stored on every question as its source, and what groups them for release')}
@@ -39316,6 +39405,7 @@ async function confirmSaveWorksheet() {
     id: 'ws_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     title: title,
     questionIds: Array.from(wsSelectedIds),
+    cover: wsCoverSettings ? Object.assign({}, wsCoverSettings) : null,
     artwork: window.WorksheetArtEditor.normalize(wsArtwork),
     format: 'open',
     createdAt: new Date().toISOString()
@@ -39396,6 +39486,7 @@ function renderSavedWorksheets() {
         <p>${ids.length} question${ids.length !== 1 ? 's' : ''}${shut.length ? ` &middot; <span style="color:#4338ca;" title="Held back until ${escapeHtml(qReleaseLabel(shutOn))}. They stay on this worksheet and appear by themselves on the day.">🔒 ${shut.length} not open yet</span>` : ''}${date ? ' &middot; ' + date : ''}</p>
       </div>
       <div class="ws-saved-actions">
+        <button class="btn btn-outline" onclick="wsEditSavedCover('${ws.id}')" title="Edit and preview this worksheet's cover before exporting">✎ Cover</button>
         <button class="btn btn-outline" onclick="wsArtEdit('saved','${ws.id}')">🎨 Colour &amp; characters</button>
         <button class="btn btn-outline" onclick="previewSavedWorksheet('${ws.id}')" title="Preview the printed pages — and edit any question from there">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -39454,10 +39545,12 @@ async function reprintWorksheet(id) {
   // saying nothing leaves a gap in the numbering that reads as a fault here.
   const shut = _wsLockedQuestions(ws);
   if (shut.length) showToast(qLockNote(shut) + ' — printing the other ' + selected.length + '.', 'info');
-  const noFields = !_wsStudentFieldsOn('saved');
+  let noFields = !_wsStudentFieldsOn('saved');
   const wantCover = !!document.getElementById('mwIncludeCover')?.checked;
+  if (wantCover && !await _wsEditCover(ws.title, { where: 'saved', id, noFields })) return;
+  noFields = !_wsStudentFieldsOn('saved');
   const why = await _wnyRunPrepare(selected, wnyPrintOn('saved'));
-  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields) : '', noFields, why, akxPrintOn('saved'), objBoxPrintOn('saved'), ws.artwork);
+  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields, ws.cover) : '', noFields, why, akxPrintOn('saved'), objBoxPrintOn('saved'), ws.artwork);
 }
 
 // The questions of a saved worksheet, in the order they were chosen — the ids
@@ -39874,62 +39967,116 @@ async function launchWorksheetPractice(questions, mode, feedOptions = {}) {
 // AI cheat sheet (summarises + categorises the selected questions by type
 // so students learn to recognise each pattern). Both print BEFORE Q1.
 // =====================================================================
-// Pastel decorative sprinkles for the cover (circles, shapes, science-y marks).
-function _wsCoverDecoSvg() {
-  return `<svg class="print-cover-deco" viewBox="0 0 210 297" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <circle cx="8" cy="14" r="26" fill="#a5e3dd" opacity="0.5"/>
-    <circle cx="36" cy="6" r="13" fill="#cdf0ec" opacity="0.6"/>
-    <circle cx="6" cy="46" r="9" fill="#7fd6cd" opacity="0.4"/>
-    <circle cx="28" cy="32" r="4.5" fill="#f5c1d6" opacity="0.65"/>
-    <circle cx="52" cy="14" r="3" fill="#a5e3dd" opacity="0.7"/>
-    <polygon points="42,26 52,30 44,38" fill="#bdebe6" opacity="0.8"/>
-    <rect x="14" y="58" width="7" height="7" rx="1" fill="#f9d8e6" transform="rotate(20 17.5 61.5)"/>
-    <text x="40" y="54" font-size="11" font-weight="600" fill="#6cc9c0" opacity="0.75" transform="rotate(-12 40 54)">π</text>
-    <text x="24" y="78" font-size="9" font-weight="500" fill="#eb9bbf" opacity="0.7" transform="rotate(15 24 78)">+</text>
-    <circle cx="202" cy="284" r="26" fill="#f5c1d6" opacity="0.5"/>
-    <circle cx="174" cy="292" r="13" fill="#fbe0eb" opacity="0.6"/>
-    <circle cx="204" cy="252" r="9" fill="#f0a8c8" opacity="0.4"/>
-    <circle cx="182" cy="266" r="4.5" fill="#a5e3dd" opacity="0.65"/>
-    <circle cx="156" cy="282" r="3" fill="#f5c1d6" opacity="0.7"/>
-    <polygon points="168,268 158,272 166,260" fill="#f9d8e6" opacity="0.8"/>
-    <rect x="190" y="232" width="7" height="7" rx="1" fill="#bdebe6" transform="rotate(-20 193.5 235.5)"/>
-    <text x="158" y="294" font-size="10" font-weight="600" fill="#eb9bbf" opacity="0.75" transform="rotate(10 158 294)">÷</text>
-    <text x="176" y="246" font-size="9" font-weight="500" fill="#6cc9c0" opacity="0.7" transform="rotate(-15 176 246)">×</text>
-    <polygon points="150,6 157,8 152,14" fill="#f9d8e6" opacity="0.75"/>
-    <circle cx="180" cy="10" r="4" fill="#bdebe6" opacity="0.6"/>
-    <text x="196" y="28" font-size="7" font-weight="500" fill="#eb9bbf" opacity="0.6" transform="rotate(18 196 28)">×</text>
-    <circle cx="203" cy="44" r="2.5" fill="#f5c1d6" opacity="0.6"/>
-    <text x="199" y="120" font-size="8" font-weight="500" fill="#6cc9c0" opacity="0.55" transform="rotate(-10 199 120)">+</text>
-    <circle cx="205" cy="160" r="3.5" fill="#fbe0eb" opacity="0.8"/>
-    <polygon points="202,196 208,199 203,205" fill="#bdebe6" opacity="0.65"/>
-    <circle cx="5" cy="120" r="3" fill="#f5c1d6" opacity="0.6"/>
-    <text x="3" y="166" font-size="8" font-weight="600" fill="#6cc9c0" opacity="0.55" transform="rotate(12 3 166)">=</text>
-    <polygon points="6,210 13,213 8,219" fill="#cdf0ec" opacity="0.8"/>
-    <text x="3" y="252" font-size="7" font-weight="500" fill="#eb9bbf" opacity="0.6" transform="rotate(-15 3 252)">%</text>
-    <circle cx="34" cy="290" r="4" fill="#a5e3dd" opacity="0.55"/>
-    <text x="58" y="294" font-size="8" font-weight="600" fill="#eb9bbf" opacity="0.6" transform="rotate(-8 58 294)">√</text>
-    <circle cx="100" cy="293" r="2.5" fill="#f9d8e6" opacity="0.8"/>
-    <polygon points="124,288 131,290 126,296" fill="#bdebe6" opacity="0.7"/>
-  </svg>`;
+// Cover settings travel with a saved worksheet; unsaved and past-paper drafts
+// stay in this tab so returning to the preview preserves the teacher's edits.
+let wsCoverSettings = null;
+const _wsCoverDrafts = new Map();
+let _wsCoverOwner = null;
+function wsCoverResetForUser(user) {
+  const uid = user?.uid || null;
+  if (_wsCoverOwner === uid) return;
+  _wsCoverOwner = uid;
+  wsCoverSettings = null;
+  _wsCoverDrafts.clear();
 }
-// The Polymath cover sheet. `sub` is the line under the big title and `foot`
-// the letter-spaced line at the foot of the page; both default to the
-// worksheet wording, and past-paper prints pass their own (see _ppCoverHtml).
-function _wsCoverHtml(title, sub, foot, noFields) {
-  return `<div class="print-front-page print-cover-page">
-    ${_wsCoverDecoSvg()}
-    <div class="print-cover-head">Polymath Learning Centre</div>
-    <div class="print-cover-center">
-      <img class="print-cover-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre logo" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2252%22 height=%2252%22 viewBox=%220 0 52 52%22%3E%3Crect width=%2252%22 height=%2252%22 rx=%2210%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2226%22 y=%2237%22 font-family=%22DM Sans,sans-serif%22 font-size=%2232%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
-      <h1 class="print-cover-title">${escapeHtml(title)}</h1>
-      <div class="print-cover-sub">${escapeHtml(sub == null ? 'Worksheet' : sub)}</div>
-      ${noFields ? '' : `<div class="print-cover-fields">
-        <div><div class="print-cover-field-label">Name</div><div class="print-cover-field-line"></div></div>
-        <div><div class="print-cover-field-label">Date</div><div class="print-cover-field-line"></div></div>
-      </div>`}
-    </div>
-    <div class="print-cover-foot">${escapeHtml(foot == null ? 'Primary Science' : foot)}</div>
-  </div>`;
+function _wsCoverDefaults(title, sub, foot, noFields) {
+  return {
+    subject: 'science', subjectLocked: true, header: 'Polymath Learning Centre', title: title || 'Worksheet',
+    subheader: sub == null ? 'Worksheet' : sub,
+    footer: foot == null ? 'Primary Science' : foot,
+    fields: !noFields, nameLabel: 'Name', dateLabel: 'Date'
+  };
+}
+function _wsCoverSettingsFor(where, id) {
+  if (where === 'saved') return savedWorksheets.find(w => w.id === id)?.cover || {};
+  if (where === 'builder') return wsCoverSettings || {};
+  return _wsCoverDrafts.get(where + ':' + (id || '')) || {};
+}
+function _wsCoverHtml(title, sub, foot, noFields, settings) {
+  return window.WorksheetCover.render(Object.assign(_wsCoverDefaults(title, sub, foot, noFields), settings || {}, {
+    className: 'print-front-page print-cover-page',
+    subject: 'science',
+    fields: !noFields && settings?.fields !== false
+  }));
+}
+async function _wsEditCover(title, options = {}) {
+  const where = options.where || 'builder';
+  const owner = currentUser?.uid || null;
+  const settings = await window.WorksheetCover.edit(Object.assign(
+    _wsCoverDefaults(title, options.sub, options.foot, options.noFields),
+    _wsCoverSettingsFor(where, options.id),
+    Object.assign({ subject: 'science', subjectLocked: true }, options.noFields == null ? {} : { fields: !options.noFields })
+  ));
+  if (!settings) return false;
+  if ((currentUser?.uid || null) !== owner) { showToast('The account changed. Open the cover editor again.', 'error'); return false; }
+  if (where === 'saved' || where === 'builder') {
+    const checkbox = document.getElementById(where === 'saved' ? 'mwIncludeFields' : 'wsIncludeFields');
+    if (checkbox) checkbox.checked = settings.fields !== false;
+  }
+  if (where === 'saved') {
+    const ws = savedWorksheets.find(w => w.id === options.id);
+    if (!ws) return false;
+    ws.cover = settings;
+    if (currentUser) {
+      try { await updateDoc(_wsRef(ws.id), { cover: settings }); }
+      catch (err) { console.warn('save worksheet cover:', err); showToast('Cover updated for this export. Cloud save failed — try editing the cover again to save it.', 'error'); }
+    }
+  } else if (where === 'builder') wsCoverSettings = settings;
+  else _wsCoverDrafts.set(where + ':' + (options.id || ''), settings);
+  return true;
+}
+async function wsEditBuilderCover() {
+  const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
+  if (!await _wsEditCover(title, { noFields: !_wsStudentFieldsOn('builder') })) return;
+  const checkbox = document.getElementById('wsIncludeCover');
+  if (checkbox) checkbox.checked = true;
+  if (document.getElementById('wsPreviewOverlay')?.classList.contains('show')) renderWsPreview();
+}
+async function wsEditSavedCover(id) {
+  const ws = savedWorksheets.find(w => w.id === id);
+  if (!ws || !await _wsEditCover(ws.title, { where: 'saved', id, noFields: !_wsStudentFieldsOn('saved') })) return;
+  const checkbox = document.getElementById('mwIncludeCover');
+  if (checkbox) checkbox.checked = true;
+  if (document.getElementById('wsPreviewOverlay')?.classList.contains('show')) renderWsPreview();
+}
+async function wsEditPreviewCover() {
+  if (_wsPreviewAdhoc?.source === 'custompaper') {
+    if (await cpbEditCovers()) cpbPreview();
+    return;
+  }
+  if (_wsPreviewAdhoc) return;
+  if (_wsPreviewSaved) { await wsEditSavedCover(_wsPreviewSaved.id); return; }
+  if (_wsPreviewPaper) {
+    const title = _wsPreviewPaper.coverTitle || _wsPreviewPaper.title || 'Past paper';
+    if (await _wsEditCover(title, { where: 'paper', id: title, sub: 'Primary Science', foot: 'Past Year Paper' })) renderWsPreview();
+    return;
+  }
+  await wsEditBuilderCover();
+}
+
+// Study Buddy photographs the exported pages too, so its export must use the
+// same editable cover and draft settings as printing or saving a PDF.
+async function _wsPrepareContextCover(ctx) {
+  if (ctx.source === 'custompaper' && !cpbIsWorksheet()) {
+    if (!await cpbEditCovers()) return false;
+    const paper = _cpbOutputOpts();
+    Object.assign(ctx, { frontHtml: paper.frontHtml, buildOpts: paper.buildOpts, forcedBreakIds: paper.forcedBreakIds });
+    return true;
+  }
+  if (!ctx.cover) return true;
+  if (ctx.paper) {
+    const title = ctx.coverTitle || ctx.title;
+    if (!await _wsEditCover(title, { where: 'paper', id: title, sub: 'Primary Science', foot: 'Past Year Paper' })) return false;
+    ctx.frontHtml = _ppCoverHtml(title);
+    return true;
+  }
+  const where = ctx.saved ? 'saved' : 'builder';
+  const id = ctx.savedId;
+  if (!await _wsEditCover(ctx.title, { where, id, noFields: ctx.noFields })) return false;
+  ctx.coverSettings = _wsCoverSettingsFor(where, id);
+  ctx.noFields = !_wsStudentFieldsOn(where);
+  ctx.frontHtml = _wsCoverHtml(ctx.title, undefined, undefined, ctx.noFields, ctx.coverSettings);
+  return true;
 }
 
 // Blank Name / Date / Class lines print unless the teacher turns them off. Two
@@ -39945,7 +40092,10 @@ function _wsStudentFieldsOn(where) {
 // Front matter (optional cover page) per the student's checkbox.
 async function _wsFrontHtml(selected, title) {
   const wantCover = !!document.getElementById('wsIncludeCover')?.checked;
-  return wantCover ? _wsCoverHtml(title, undefined, undefined, !_wsStudentFieldsOn('builder')) : '';
+  if (!wantCover) return '';
+  const noFields = !_wsStudentFieldsOn('builder');
+  if (!await _wsEditCover(title, { noFields })) return null;
+  return _wsCoverHtml(title, undefined, undefined, !_wsStudentFieldsOn('builder'), wsCoverSettings);
 }
 
 async function printStudentWorksheet() {
@@ -39956,6 +40106,7 @@ async function printStudentWorksheet() {
   const selected = questionBank.filter(q => wsSelectedIds.has(q.id));
   const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
   const frontHtml = await _wsFrontHtml(selected, title);
+  if (frontHtml === null) return;
   const why = await _wnyRunPrepare(selected, wnyPrintOn('builder'));
   await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why, akxPrintOn('builder'), objBoxPrintOn('builder'), wsArtwork);
 }
@@ -40726,6 +40877,8 @@ async function generateSyllabusPdf() {
   if (wsSelectedIds.size === 0) { showToast('Select at least one question', 'error'); return; }
   const selected = questionBank.filter(q => wsSelectedIds.has(q.id));
   const title = (document.getElementById('wsTitle')?.value || '').trim() || 'Science Worksheet';
+  const frontHtml = await _wsFrontHtml(selected, title);
+  if (frontHtml === null) return;
 
   _printProgressShow('Sorting by syllabus…', 'Matching your questions to learning objectives');
   let aiMap = {};
@@ -40759,11 +40912,10 @@ async function generateSyllabusPdf() {
   });
 
   _printProgressUpdate('Laying out pages…', 0.85, 'Building your syllabus worksheet');
-  const frontHtml = await _wsFrontHtml(selected, title);
   try { if (typeof _widgetEnsurePublished === 'function') await _widgetEnsurePublished(selected); }
   catch (e) { _printProgressHide(); showToast('Could not publish app QR: ' + (e.message || e), 'error'); return; }
   const output = document.getElementById('printOutput');
-  output.innerHTML = buildWorksheetHtml(orderedQs, title, { frontHtml, sectionHtmlById, plainNumbers: true, artwork: wsArtwork });
+  output.innerHTML = buildWorksheetHtml(orderedQs, title, { frontHtml, sectionHtmlById, plainNumbers: true, noStudentFields: !_wsStudentFieldsOn('builder'), artwork: wsArtwork });
   autoscaleAndPrint(output, { forcedBreakIds: forced });
 }
 
@@ -41056,6 +41208,7 @@ function _tsendCtxSaved(id) {
     artwork: ws.artwork || [],
     selected: _wsSavedQuestions(ws),
     title: ws.title || 'CER Worksheet',
+    coverSettings: ws.cover || {},
     cover: !!document.getElementById('mwIncludeCover')?.checked,
     noFields: !_wsStudentFieldsOn('saved'),
     where: 'saved',
@@ -41235,6 +41388,7 @@ async function tsendSend() {
   if (!ctx) { tsendClose(); return; }
   if (!currentUser) { showToast('Sign in first', 'error'); return; }
   if (_tsend && _tsend.busy) return;
+  if (!await _wsPrepareContextCover(ctx)) return;
   const name = (document.getElementById('tsendName')?.value || '').trim() || ctx.title || 'CER Worksheet';
   const level = document.getElementById('tsendLevel')?.value || '';
   const grade = (document.querySelector('input[name="tsendGrade"]:checked')?.value) || TSEND_GRADE_DEFAULT;
@@ -41417,6 +41571,7 @@ function _wsPreviewCtx() {
       saved: false, paper: true,
       selected: _wsPreviewPaper.selected || [],
       title: _wsPreviewPaper.title || 'Past paper',
+      coverTitle: _wsPreviewPaper.coverTitle || _wsPreviewPaper.title || 'Past paper',
       cover: true, noFields: true, where: 'paper',
       // A past paper always prints its explanations — it is a marking scheme,
       // not a worksheet — so there is no checkbox and nothing to read.
@@ -41431,6 +41586,7 @@ function _wsPreviewCtx() {
     const src = _wsPreviewAdhoc.source;
     return {
       saved: false, adhoc: true,
+      source: src,
       selected: _wsAdhocQuestions(_wsPreviewAdhoc),
       title: _wsPreviewAdhoc.title || 'Preview',
       // 🗂️ `custompaper` is the whole unsent paper and `cpbq` is one question
@@ -41459,9 +41615,11 @@ function _wsPreviewCtx() {
     const ws = savedWorksheets.find(w => w.id === _wsPreviewSaved.id);
     return {
       saved: true,
+      savedId: _wsPreviewSaved.id,
       artwork: ws && ws.artwork || [],
       selected: ws ? _wsSavedQuestions(ws) : [],
       title: (ws && ws.title) || _wsPreviewSaved.title || 'CER Worksheet',
+      coverSettings: ws && ws.cover || {},
       cover: !!document.getElementById('mwIncludeCover')?.checked,
       noFields: !_wsStudentFieldsOn('saved'),
       where: 'saved',
@@ -41474,6 +41632,7 @@ function _wsPreviewCtx() {
     artwork: wsArtwork,
     selected: questionBank.filter(q => wsSelectedIds.has(q.id)),
     title: (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet',
+    coverSettings: wsCoverSettings || {},
     cover: !!document.getElementById('wsIncludeCover')?.checked,
     noFields: !_wsStudentFieldsOn('builder'),
     where: 'builder',
@@ -41941,6 +42100,8 @@ function _wsShowPreviewOverlay() {
   // driven by the tick boxes on the page behind it.
   const editBtn = document.getElementById('wsPreviewEditBtn');
   if (editBtn) editBtn.style.display = _wsPreviewSaved ? '' : 'none';
+  const coverBtn = document.getElementById('wsPreviewCoverBtn');
+  if (coverBtn) coverBtn.style.display = _wsPreviewAdhoc && (_wsPreviewAdhoc.source !== 'custompaper' || cpbIsWorksheet()) ? 'none' : '';
   // ✏️ Editing mode works on either — a saved worksheet or a past paper. Both
   // are just an ordered list of bank questions.
   // ✏️ Editing mode works on either — a saved worksheet or a past paper — and on
@@ -42049,7 +42210,7 @@ function _wsPreviewBuildHtml(ctx, opts) {
   const title = ctx.title;
   // A past paper brings its own cover; a worksheet's is the checkbox's.
   const frontHtml = ctx.frontHtml != null ? ctx.frontHtml
-    : (ctx.cover ? _wsCoverHtml(title, undefined, undefined, ctx.noFields) : '');
+    : (ctx.cover ? _wsCoverHtml(title, undefined, undefined, ctx.noFields, ctx.coverSettings) : '');
   return buildWorksheetHtml(selected, title, Object.assign({
     frontHtml, plainNumbers: true, noStudentFields: ctx.noFields,
     whyNotes: _wnyCachedNotes(selected, wnyPrintOn(ctx.where)),
@@ -77489,7 +77650,7 @@ function ppCollectPrintable(hitIds){
 // Cover sheet for a past-paper print. `coverTitle` is the paper's own name
 // ("PSLE 2017 Science Paper"); the line under it names the subject.
 function _ppCoverHtml(coverTitle) {
-  return _wsCoverHtml(coverTitle, 'Primary Science', 'Past Year Paper');
+  return _wsCoverHtml(coverTitle, 'Primary Science', 'Past Year Paper', false, _wsCoverSettingsFor('paper', coverTitle));
 }
 // The questions a past-paper print is made of, titled by the paper reference
 // they came from. Its own function so the 👁 preview and the 🖨 print are
@@ -77505,6 +77666,8 @@ function _ppPrintQuestions(items){
 }
 async function ppDoPrint(items, missing, title, opts){
   if (!items.length) { showToast('Nothing to print — none of these questions have a bank question attached yet', 'error'); return; }
+  const coverTitle = (opts && opts.coverTitle) || title;
+  if (!await _wsEditCover(coverTitle, { where: 'paper', id: coverTitle, sub: 'Primary Science', foot: 'Past Year Paper' })) return;
   const selected = _ppPrintQuestions(items);
   const output = document.getElementById('printOutput');
   // Preload every image first (progress shown), so measurement is accurate
@@ -77527,7 +77690,7 @@ async function ppDoPrint(items, missing, title, opts){
     answerKeyExtras: true,
     plainNumbers: true,
     whyNotes: why,
-    frontHtml: _ppCoverHtml((opts && opts.coverTitle) || title),
+    frontHtml: _ppCoverHtml(coverTitle),
   });
   autoscaleAndPrint(output);
   if (missing.length) {
@@ -83852,6 +84015,7 @@ window.cpbSetMeta = cpbSetMeta;
 window.cpbSetMode = cpbSetMode;
 window.cpbPreview = cpbPreview;
 window.cpbPrint = cpbPrint;
+window.cpbEditCovers = cpbEditCovers;
 window.cpbSend = cpbSend;
 window.cpbDraftTake = tab => { cpbDraftTake(tab).catch(err => console.warn('custom paper draft restore:', err)); };
 window.cpbDraftDiscard = cpbDraftDiscard;
@@ -84176,6 +84340,9 @@ window.wsPreviewBack = wsPreviewBack;
 window.onWsCardClick = onWsCardClick;
 window.saveWorksheet = saveWorksheet;
 window.printStudentWorksheet = printStudentWorksheet;
+window.wsEditBuilderCover = wsEditBuilderCover;
+window.wsEditSavedCover = wsEditSavedCover;
+window.wsEditPreviewCover = wsEditPreviewCover;
 window.generateSyllabusPdf = generateSyllabusPdf;
 window.openWorksheetPreview = openWorksheetPreview;
 window.closeWorksheetPreview = closeWorksheetPreview;
@@ -84707,6 +84874,8 @@ async function loPrint(id) {
   const lo = loFind(id); if (!lo) return;
   const qs = loQuestions(id);
   if (!qs.length) { showToast('No questions in this objective yet', 'error'); return; }
+  const footer = lo.level + ' · ' + lo.theme;
+  if (!await _wsEditCover(lo.title, { where: 'objective', id, sub: 'Primary Science', foot: footer })) return;
   const output = document.getElementById('printOutput');
   if (!output) return;
   _printProgressShow('Preparing worksheet…', 'Starting…');
@@ -84722,7 +84891,7 @@ async function loPrint(id) {
   output.innerHTML = buildWorksheetHtml(qs, lo.title, {
     answerKeyExtras: true,
     plainNumbers: true,
-    frontHtml: _wsCoverHtml(lo.title, 'Primary Science', lo.level + ' · ' + lo.theme)
+    frontHtml: _wsCoverHtml(lo.title, 'Primary Science', footer, false, _wsCoverSettingsFor('objective', id))
   });
   autoscaleAndPrint(output);
 }
