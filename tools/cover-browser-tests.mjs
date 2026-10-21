@@ -13,7 +13,7 @@ const fixture = `<!doctype html><html><head><meta charset="utf-8"><meta name="vi
 const server = http.createServer((req,res) => {
   const pathname = new URL(req.url,'http://localhost').pathname;
   if(pathname === '/') {res.setHeader('Content-Type','text/html');res.end(fixture);return;}
-  if(pathname !== '/worksheet-cover.js' && !/^\/assets\/(worksheet-covers\/(math|science)-icons|branding\/polymath-learning-centre)\.png$/.test(pathname)) {res.writeHead(404).end();return;}
+  if(pathname !== '/worksheet-cover.js' && !/^\/assets\/(worksheet-covers\/(math|science)-icons-v2|branding\/polymath-learning-centre)\.png$/.test(pathname)) {res.writeHead(404).end();return;}
   res.setHeader('Content-Type',pathname.endsWith('.png')?'image/png':'text/javascript');
   res.end(fs.readFileSync(path.join(root,pathname.slice(1))));
 });
@@ -31,23 +31,32 @@ try {
   await page.locator('#edit').click();
   await page.locator('.wc-editor[open]').waitFor();
   await ready();
+  const defaultCount=await page.locator('.wc-editor-preview .wc-icon').count();
+  assert.ok(defaultCount>=30 && defaultCount<=38,'Default preview shows a generous scattering of small symbols');
+  assert.equal(await page.locator('[data-wc-input=layout]').inputValue(),'scattered');
+  assert.equal(await page.locator('.wc-editor-preview .cover-artwork svg').count(),1);
   await page.locator('[data-wc-input=title]').fill('Photosynthesis\nand gas exchange');
   await page.locator('[data-wc-input=nameLabel]').fill('Student');
   await page.locator('[data-wc-input=dateLabel]').fill('Class');
   await page.locator('[data-wc-input=layout]').selectOption('frame');
   await page.locator('[data-wc-input=scale]').fill('1.2');
   await page.locator('[data-wc-input=opacity]').fill('0.65');
+  await page.locator('[data-wc-input=textureOpacity]').fill('0.35');
   assert.equal(await page.locator('.wc-editor-preview .wc-title').textContent(),'Photosynthesis\nand gas exchange');
+  const previewArtwork=await page.locator('.wc-editor-preview .cover-artwork').evaluate(el=>el.outerHTML);
   await page.screenshot({path:path.join(output,'science-editor-desktop.png'),fullPage:true});
   await page.locator('.wc-editor [type=submit]').click();
   const saved=await page.evaluate(()=>window.result);
-  assert.equal(saved.title,'Photosynthesis\nand gas exchange');assert.equal(saved.nameLabel,'Student');assert.equal(saved.dateLabel,'Class');assert.equal(saved.artworkScale,1.2);assert.equal(saved.artworkLayout,'frame');
+  assert.equal(saved.title,'Photosynthesis\nand gas exchange');assert.equal(saved.nameLabel,'Student');assert.equal(saved.dateLabel,'Class');assert.equal(saved.artworkScale,1.2);assert.equal(saved.artworkLayout,'frame');assert.equal(saved.artworkTextureOpacity,.35);
   await page.evaluate(saved=>{window.settings=saved;document.querySelector('#covers').innerHTML=WorksheetCover.render(saved);},saved);
   await ready();
-  assert.equal(await page.locator('#covers .wc-icon').count(),6);
+  const frameCount=await page.locator('#covers .wc-icon').count();
+  assert.ok(frameCount>=16 && frameCount<defaultCount,'Frame arrangement remains small and varied');
+  assert.equal(await page.locator('#covers .cover-artwork').evaluate(el=>el.outerHTML),previewArtwork,'Export retains exactly the edited artwork');
   assert.equal(await page.locator('#covers .wc-title').textContent(),saved.title);
   await page.locator('#edit').click();
   assert.equal(await page.locator('[data-wc-input=nameLabel]').inputValue(),'Student');
+  assert.equal(await page.locator('[data-wc-input=textureOpacity]').inputValue(),'0.35');
   const title=page.locator('.wc-editor-preview .wc-title');
   await title.fill('Line one');await title.press('End');await title.press('Enter');await title.pressSequentially('Line two');
   assert.equal(await page.locator('[data-wc-input=title]').inputValue(),'Line one\nLine two');
@@ -67,13 +76,50 @@ try {
   for(const subject of ['science','math']) {
     await page.evaluate(subject=>{document.querySelector('#edit').style.display='none';document.querySelector('#covers').innerHTML=WorksheetCover.render({subject,title:subject==='math'?'Fractions, ratios\n& percentages':'Photosynthesis, leaves\n& gas exchange',subheader:subject==='math'?'Primary Mathematics':'Primary Science',footer:'Polymath worksheet'});},subject);
     await ready();
-    const clips=await page.locator('.wc-icon').evaluateAll(nodes=>nodes.map(el=>{const frame=el.getBoundingClientRect(),img=el.firstElementChild.getBoundingClientRect();return {w:frame.width,h:frame.height,iw:img.width,ih:img.height};}));
-    clips.forEach(x=>{assert.ok(Math.abs(x.w-x.h)<1);assert.ok(Math.abs(x.iw-x.w*3)<1);assert.ok(Math.abs(x.ih-x.h*2)<1);});
+    const clips=await page.locator('.wc-icon').evaluateAll(nodes=>{
+      const atlases=new Map();
+      return nodes.map(el=>{
+        const frame=getComputedStyle(el),image=el.firstElementChild,img=getComputedStyle(image),crop=(el.dataset.crop||'').split(',').map(Number);
+        if(!atlases.has(image.src)){const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);atlases.set(image.src,ctx.getImageData(0,0,canvas.width,canvas.height).data);}
+        const [x,y,cw,ch]=crop,pixels=atlases.get(image.src);let edgeAlpha=0;
+        const alpha=(px,py)=>pixels[4*(py*image.naturalWidth+px)+3]||0;
+        for(let px=x;px<x+cw;px++){edgeAlpha=Math.max(edgeAlpha,alpha(px,y),alpha(px,y+ch-1));}
+        for(let py=y;py<y+ch;py++){edgeAlpha=Math.max(edgeAlpha,alpha(x,py),alpha(x+cw-1,py));}
+        return {id:el.dataset.icon,crop,nw:image.naturalWidth,nh:image.naturalHeight,w:parseFloat(frame.width),h:parseFloat(frame.height),iw:parseFloat(img.width),ih:parseFloat(img.height),ix:parseFloat(img.left),iy:parseFloat(img.top),edgeAlpha,widthRatio:parseFloat(frame.width)/parseFloat(getComputedStyle(el.parentElement).width)};
+      });
+    });
+    assert.ok(clips.length>=30 && clips.length<=38);
+    assert.equal(new Set(clips.map(x=>x.id)).size,16);
+    assert.equal(new Set(clips.map(x=>x.crop.join(','))).size,16);
+    clips.forEach(item=>{
+      const [x,y,w,h]=item.crop;
+      assert.ok(item.crop.length===4 && item.crop.every(Number.isInteger) && x>=0 && y>=0 && w>0 && h>0 && x+w<=item.nw && y+h<=item.nh,'Crop metadata stays within the source atlas');
+      assert.ok(Math.abs(item.w*h/w-item.h)<1,'Crop preserves its source aspect ratio');
+      assert.ok(Math.abs(item.iw-item.w*item.nw/w)<1 && Math.abs(item.ih-item.h*item.nh/h)<1,'Rendered atlas scale matches crop metadata');
+      assert.ok(Math.abs(item.ix+item.w*x/w)<1 && Math.abs(item.iy+item.h*y/h)<1,'Rendered crop offsets match source pixels');
+      assert.ok(item.edgeAlpha<=64,`${item.id} crop crosses an opaque icon edge (alpha ${item.edgeAlpha})`);
+      assert.ok(item.widthRatio<=.08,'Symbol frames use at most eight percent of the page width');
+    });
+    await page.setViewportSize({width:Math.round((210-32)*96/25.4),height:1200});
     await page.emulateMedia({media:'print'});
+    const overlaps=await page.locator('.wc-cover').evaluate(cover=>{
+      const areas=[...cover.querySelectorAll('.wc-field-label,.wc-field-line,.wc-footer')].flatMap(el=>{
+        if(el.classList.contains('wc-field-line'))return [el.getBoundingClientRect()];
+        const range=document.createRange();range.selectNodeContents(el);return [...range.getClientRects()];
+      });
+      return [...cover.querySelectorAll('.wc-icon')].filter(icon=>{
+        const box=icon.getBoundingClientRect();return areas.some(area=>Math.min(box.right,area.right)-Math.max(box.left,area.left)>1&&Math.min(box.bottom,area.bottom)-Math.max(box.top,area.top)>1);
+      }).map(icon=>icon.dataset.icon);
+    });
+    assert.deepEqual(overlaps,[],'Printed symbols leave student fields and footer text clear');
+    const textures=await page.locator('.cover-artwork svg').evaluate(el=>({visible:getComputedStyle(el).display!=='none',circles:el.querySelectorAll('circle').length,polygons:el.querySelectorAll('polygon').length,colours:[...el.querySelectorAll('circle,polygon')].map(shape=>getComputedStyle(shape).fill)}));
+    assert.ok(textures.visible && textures.circles>=6 && textures.polygons>=4,'Bubble and polygon textures remain visible in print');
+    assert.ok(textures.colours.filter(fill=>fill!=='none' && fill!=='transparent' && fill!=='rgba(0, 0, 0, 0)').length>=10,'Textures contain coloured fills as well as outline rings');
     await page.screenshot({path:path.join(output,`${subject}-cover.png`),fullPage:true});
     await page.pdf({path:path.join(output,`${subject}-cover.pdf`),format:'A4',printBackground:false,preferCSSPageSize:true});
     await page.emulateMedia({media:'screen'});
+    await page.setViewportSize({width:1100,height:1200});
   }
   assert.deepEqual(errors,[]);
-  console.log('PASS generated atlas clipping, live text/edit/settings roundtrip, subject separation, cancel, mobile, printed PDF with background graphics disabled');
+  console.log('PASS small scattered icons, clean transparent crop edges and source geometry, exact preview/export artwork, print-safe textures, live editing, subject separation, mobile and printed PDFs');
 } finally {await browser.close();await new Promise(resolve=>server.close(resolve));}

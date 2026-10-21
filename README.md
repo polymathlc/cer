@@ -1,11 +1,13 @@
 # CER Science Learning Portal
 
-## Editable worksheet covers (v1.436.0)
+## Editable worksheet covers (v1.437.0)
 
 Use **Edit cover** in the worksheet builder, saved worksheets or print preview
 to review the cover before exporting. Titles, headers, subtitles, footers and
 student-field labels are editable. Change the pixel icons' arrangement, size
-and visibility in the same preview. Saved worksheets retain their cover settings.
+and visibility in the same preview. Small icons are peppered across the page,
+with sixteen distinct motifs per subject and pastel bubble and polygon textures.
+A separate texture slider adjusts their intensity. Saved worksheets retain their cover settings.
 Past papers, learning-objective sheets and Study Buddy exports use the same
 cover artwork; Custom Paper keeps its editable exam metadata and separate
 Booklet A/B instructions.
@@ -21,7 +23,7 @@ gentle pastel treatment without changing its original file.
 Run `node tools/cover-core-tests.mjs`, `node tools/cover-app-tests.mjs`,
 `node tools/cover-editor-tests.mjs` and `node tools/cover-browser-tests.mjs`.
 Generated assets and their prompts are recorded in
-`assets/worksheet-covers/README.md`.
+`assets/worksheet-covers/README-v2.md`.
 
 ## Polymath Online, the student portal (online/, v1.2.0)
 
