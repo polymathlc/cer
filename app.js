@@ -4498,7 +4498,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.433.2';
+const APP_VERSION = 'v1.434.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -38937,6 +38937,7 @@ window.wbAddBankQuestion = wbAddBankQuestion;
 // =====================================================================
 let wsSelectedIds = new Set();
 let wsArtwork = [];
+var wsCoverDesign = {};
 let _wsArtworkOwner = null;
 
 function wsArtResetForUser(user) {
@@ -38944,13 +38945,14 @@ function wsArtResetForUser(user) {
   if (uid === _wsArtworkOwner) return;
   _wsArtworkOwner = uid;
   wsArtwork = [];
+  wsCoverDesign = {};
   // Saved artwork is private to the worksheet owner; the next sign-in loads
   // its own documents asynchronously, so do not expose the old list meanwhile.
   savedWorksheets = [];
   const label = document.getElementById('wsArtworkCount');
   if (label) label.textContent = '';
   // A shared device must not leave the previous account's draft in a modal.
-  document.querySelectorAll('dialog.worksheet-art-editor').forEach(dialog => dialog.close());
+  document.querySelectorAll('dialog.worksheet-art-editor, dialog.pc-editor').forEach(dialog => dialog.close());
 }
 
 // Art belongs to a worksheet, never to its shared bank questions.
@@ -39317,6 +39319,7 @@ async function confirmSaveWorksheet() {
     title: title,
     questionIds: Array.from(wsSelectedIds),
     artwork: window.WorksheetArtEditor.normalize(wsArtwork),
+    coverDesign: window.WorksheetCover.normalize(wsCoverDesign),
     format: 'open',
     createdAt: new Date().toISOString()
   };
@@ -39457,7 +39460,7 @@ async function reprintWorksheet(id) {
   const noFields = !_wsStudentFieldsOn('saved');
   const wantCover = !!document.getElementById('mwIncludeCover')?.checked;
   const why = await _wnyRunPrepare(selected, wnyPrintOn('saved'));
-  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields) : '', noFields, why, akxPrintOn('saved'), objBoxPrintOn('saved'), ws.artwork);
+  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields, ws.coverDesign) : '', noFields, why, akxPrintOn('saved'), objBoxPrintOn('saved'), ws.artwork);
 }
 
 // The questions of a saved worksheet, in the order they were chosen — the ids
@@ -39874,63 +39877,50 @@ async function launchWorksheetPractice(questions, mode, feedOptions = {}) {
 // AI cheat sheet (summarises + categorises the selected questions by type
 // so students learn to recognise each pattern). Both print BEFORE Q1.
 // =====================================================================
-// Pastel decorative sprinkles for the cover (circles, shapes, science-y marks).
+// Pastel pixel artwork shares the logo's turquoise / magenta palette.
 function _wsCoverDecoSvg() {
-  return `<svg class="print-cover-deco" viewBox="0 0 210 297" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <circle cx="8" cy="14" r="26" fill="#a5e3dd" opacity="0.5"/>
-    <circle cx="36" cy="6" r="13" fill="#cdf0ec" opacity="0.6"/>
-    <circle cx="6" cy="46" r="9" fill="#7fd6cd" opacity="0.4"/>
-    <circle cx="28" cy="32" r="4.5" fill="#f5c1d6" opacity="0.65"/>
-    <circle cx="52" cy="14" r="3" fill="#a5e3dd" opacity="0.7"/>
-    <polygon points="42,26 52,30 44,38" fill="#bdebe6" opacity="0.8"/>
-    <rect x="14" y="58" width="7" height="7" rx="1" fill="#f9d8e6" transform="rotate(20 17.5 61.5)"/>
-    <text x="40" y="54" font-size="11" font-weight="600" fill="#6cc9c0" opacity="0.75" transform="rotate(-12 40 54)">π</text>
-    <text x="24" y="78" font-size="9" font-weight="500" fill="#eb9bbf" opacity="0.7" transform="rotate(15 24 78)">+</text>
-    <circle cx="202" cy="284" r="26" fill="#f5c1d6" opacity="0.5"/>
-    <circle cx="174" cy="292" r="13" fill="#fbe0eb" opacity="0.6"/>
-    <circle cx="204" cy="252" r="9" fill="#f0a8c8" opacity="0.4"/>
-    <circle cx="182" cy="266" r="4.5" fill="#a5e3dd" opacity="0.65"/>
-    <circle cx="156" cy="282" r="3" fill="#f5c1d6" opacity="0.7"/>
-    <polygon points="168,268 158,272 166,260" fill="#f9d8e6" opacity="0.8"/>
-    <rect x="190" y="232" width="7" height="7" rx="1" fill="#bdebe6" transform="rotate(-20 193.5 235.5)"/>
-    <text x="158" y="294" font-size="10" font-weight="600" fill="#eb9bbf" opacity="0.75" transform="rotate(10 158 294)">÷</text>
-    <text x="176" y="246" font-size="9" font-weight="500" fill="#6cc9c0" opacity="0.7" transform="rotate(-15 176 246)">×</text>
-    <polygon points="150,6 157,8 152,14" fill="#f9d8e6" opacity="0.75"/>
-    <circle cx="180" cy="10" r="4" fill="#bdebe6" opacity="0.6"/>
-    <text x="196" y="28" font-size="7" font-weight="500" fill="#eb9bbf" opacity="0.6" transform="rotate(18 196 28)">×</text>
-    <circle cx="203" cy="44" r="2.5" fill="#f5c1d6" opacity="0.6"/>
-    <text x="199" y="120" font-size="8" font-weight="500" fill="#6cc9c0" opacity="0.55" transform="rotate(-10 199 120)">+</text>
-    <circle cx="205" cy="160" r="3.5" fill="#fbe0eb" opacity="0.8"/>
-    <polygon points="202,196 208,199 203,205" fill="#bdebe6" opacity="0.65"/>
-    <circle cx="5" cy="120" r="3" fill="#f5c1d6" opacity="0.6"/>
-    <text x="3" y="166" font-size="8" font-weight="600" fill="#6cc9c0" opacity="0.55" transform="rotate(12 3 166)">=</text>
-    <polygon points="6,210 13,213 8,219" fill="#cdf0ec" opacity="0.8"/>
-    <text x="3" y="252" font-size="7" font-weight="500" fill="#eb9bbf" opacity="0.6" transform="rotate(-15 3 252)">%</text>
-    <circle cx="34" cy="290" r="4" fill="#a5e3dd" opacity="0.55"/>
-    <text x="58" y="294" font-size="8" font-weight="600" fill="#eb9bbf" opacity="0.6" transform="rotate(-8 58 294)">√</text>
-    <circle cx="100" cy="293" r="2.5" fill="#f9d8e6" opacity="0.8"/>
-    <polygon points="124,288 131,290 126,296" fill="#bdebe6" opacity="0.7"/>
-  </svg>`;
+  return window.WorksheetCover.decoration('science', 0);
 }
-// The Polymath cover sheet. `sub` is the line under the big title and `foot`
-// the letter-spaced line at the foot of the page; both default to the
-// worksheet wording, and past-paper prints pass their own (see _ppCoverHtml).
-function _wsCoverHtml(title, sub, foot, noFields) {
-  return `<div class="print-front-page print-cover-page">
-    ${_wsCoverDecoSvg()}
-    <div class="print-cover-head">Polymath Learning Centre</div>
-    <div class="print-cover-center">
-      <img class="print-cover-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre logo" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2252%22 height=%2252%22 viewBox=%220 0 52 52%22%3E%3Crect width=%2252%22 height=%2252%22 rx=%2210%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2226%22 y=%2237%22 font-family=%22DM Sans,sans-serif%22 font-size=%2232%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
-      <h1 class="print-cover-title">${escapeHtml(title)}</h1>
-      <div class="print-cover-sub">${escapeHtml(sub == null ? 'Worksheet' : sub)}</div>
-      ${noFields ? '' : `<div class="print-cover-fields">
-        <div><div class="print-cover-field-label">Name</div><div class="print-cover-field-line"></div></div>
-        <div><div class="print-cover-field-label">Date</div><div class="print-cover-field-line"></div></div>
-      </div>`}
-    </div>
-    <div class="print-cover-foot">${escapeHtml(foot == null ? 'Primary Science' : foot)}</div>
-  </div>`;
+function _wsCoverHtml(title, sub, foot, noFields, design) {
+  return window.WorksheetCover.render(Object.assign({}, design || {}, {
+    title: title || 'Science Worksheet'
+  }), {
+    className: 'print-front-page print-cover-page',
+    noFields: !!noFields,
+    defaults: { subject: 'science', subtitle: sub == null ? 'Worksheet' : sub,
+      footer: foot == null ? 'Primary Science · Stay curious' : foot }
+  });
 }
+// Cover edits belong to this worksheet, never to a shared bank question.
+function wsEditCover() {
+  const ctx = _wsPreviewCtx();
+  if (!currentUser || ctx.paper || ctx.adhoc || !ctx.cover) return;
+  const owner = currentUser.uid;
+  const saved = ctx.saved && savedWorksheets.find(w => w.id === _wsPreviewSaved?.id);
+  if (ctx.saved && !saved) return;
+  const design = saved ? saved.coverDesign : wsCoverDesign;
+  window.WorksheetCover.open(Object.assign({}, design || {}, { title: ctx.title }), {
+    defaults: { subject: 'science', subtitle: 'Worksheet', footer: 'Primary Science · Stay curious' },
+    noFields: ctx.noFields,
+    onSave: async next => {
+      if (currentUser?.uid !== owner) throw new Error('Your account changed. Reopen this worksheet');
+      if (saved) {
+        if (!savedWorksheets.includes(saved)) throw new Error('This worksheet is no longer open');
+        await setDoc(_wsRef(saved.id), { title: next.title, coverDesign: next, updatedAt: new Date().toISOString() }, { merge: true });
+        if (currentUser?.uid !== owner || !savedWorksheets.includes(saved)) return;
+        saved.title = next.title; saved.coverDesign = next;
+        renderSavedWorksheets();
+      } else {
+        wsCoverDesign = next;
+        const title = document.getElementById('wsTitle');
+        if (title) title.value = next.title;
+      }
+      renderWsPreview();
+      showToast(saved ? 'Cover saved to worksheet' : 'Cover updated — save the worksheet to keep it', 'success');
+    }
+  });
+}
+window.wsEditCover = wsEditCover;
 
 // Blank Name / Date / Class lines print unless the teacher turns them off. Two
 // pages carry the switch — the worksheet builder and My Worksheets — so the
@@ -39945,7 +39935,7 @@ function _wsStudentFieldsOn(where) {
 // Front matter (optional cover page) per the student's checkbox.
 async function _wsFrontHtml(selected, title) {
   const wantCover = !!document.getElementById('wsIncludeCover')?.checked;
-  return wantCover ? _wsCoverHtml(title, undefined, undefined, !_wsStudentFieldsOn('builder')) : '';
+  return wantCover ? _wsCoverHtml(title, undefined, undefined, !_wsStudentFieldsOn('builder'), wsCoverDesign) : '';
 }
 
 async function printStudentWorksheet() {
@@ -41054,6 +41044,7 @@ function _tsendCtxSaved(id) {
   return {
     saved: true, savedId: id,
     artwork: ws.artwork || [],
+    coverDesign: ws.coverDesign || {},
     selected: _wsSavedQuestions(ws),
     title: ws.title || 'CER Worksheet',
     cover: !!document.getElementById('mwIncludeCover')?.checked,
@@ -41455,6 +41446,7 @@ function _wsPreviewCtx() {
     return {
       saved: true,
       artwork: ws && ws.artwork || [],
+      coverDesign: ws && ws.coverDesign || {},
       selected: ws ? _wsSavedQuestions(ws) : [],
       title: (ws && ws.title) || _wsPreviewSaved.title || 'CER Worksheet',
       cover: !!document.getElementById('mwIncludeCover')?.checked,
@@ -41467,6 +41459,7 @@ function _wsPreviewCtx() {
   return {
     saved: false,
     artwork: wsArtwork,
+    coverDesign: wsCoverDesign,
     selected: questionBank.filter(q => wsSelectedIds.has(q.id)),
     title: (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet',
     cover: !!document.getElementById('wsIncludeCover')?.checked,
@@ -42029,6 +42022,11 @@ async function renderWsPreview() {
   const frame = document.getElementById('wsPreviewFrame');
   if (!frame) return;
   const ctx = _wsPreviewCtx();
+  const coverButton = document.getElementById('wsPreviewCoverBtn');
+  if (coverButton) {
+    const hidden = !currentUser || !ctx.cover || !!ctx.paper || !!ctx.adhoc;
+    coverButton.hidden = hidden; coverButton.style.display = hidden ? 'none' : '';
+  }
   const html = _wsPreviewBuildHtml(ctx);   // exactly what will print
   _wsWritePreview(frame, html, { ctxBreaks: ctx.forcedBreakIds || null });
 }
@@ -42044,7 +42042,7 @@ function _wsPreviewBuildHtml(ctx, opts) {
   const title = ctx.title;
   // A past paper brings its own cover; a worksheet's is the checkbox's.
   const frontHtml = ctx.frontHtml != null ? ctx.frontHtml
-    : (ctx.cover ? _wsCoverHtml(title, undefined, undefined, ctx.noFields) : '');
+    : (ctx.cover ? _wsCoverHtml(title, undefined, undefined, ctx.noFields, ctx.coverDesign) : '');
   return buildWorksheetHtml(selected, title, Object.assign({
     frontHtml, plainNumbers: true, noStudentFields: ctx.noFields,
     whyNotes: _wnyCachedNotes(selected, wnyPrintOn(ctx.where)),

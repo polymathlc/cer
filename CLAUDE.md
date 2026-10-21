@@ -2,6 +2,15 @@
 
 Guidance for Claude when working in this repo.
 
+## Editable worksheet covers (v1.434.0)
+
+`worksheet-cover.js` is shared, byte-for-byte, with `polymathlc/math`. It renders the official local logo, pastel pixel icons for the chosen subject, and editable text. Keep the SVG artwork decorative and the central text readable. `coverDesign` belongs to a worksheet; never put it on bank questions. Older worksheets without it use subject defaults.
+
+Use **Edit cover** in the generated worksheet preview. Saved cover changes await persistence before updating the preview; failures keep the draft open. Preserve the account/ownership guards, optional student fields, existing Maths inline header editing and QR codes. Cover settings must pass through preview, saved reprint and related exports.
+
+Validation: `node --test tools/worksheet-cover-tests.mjs`; `PW=/path/to/playwright/index.mjs BROWSER=/path/to/chrome node tools/worksheet-cover-browser.mjs`. The browser harness exercises the real save handlers with local persistence stubs, including failure/retry, reopen, phone layout and account changes; it does not call Firebase.
+
+
 ## 🔢 Question numbers (v1.433.0)
 
 - Every bank and vetting question carries `qno`, a whole number shown as `#123` (`.qb-qno` chip on the bank card, bank tile and vetting card, and in the "Editing:" toast). Search `#123` in any box that uses `parseSearchTokens` to find exactly that question (`qNoParseToken` turns `#12` into `#12#`, and `extractQuestionSearchText` carries `#N#`, so #12 never finds #123). A bare `123` stays a word search. Ans Key's question bank picker (`polymathlc/anskey`, `question-bank.js`) reads the same field and finds `#123` and `123` the same way.
