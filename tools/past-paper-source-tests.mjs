@@ -27,6 +27,7 @@ function harness(rows, bank) {
     showToast: (...args) => toasts.push(args),
     _printProgressShow() {}, _printProgressHide() {}, _printProgressUpdate() {},
     _preloadImageUrls: async () => {}, wnyPrintOn: () => false,
+    _wsEditCover: async () => true,
     autoscaleAndPrint: () => {},
     _ppCoverHtml: () => '<div class="print-front-page print-cover-page"></div>',
     _wsHeaderHtml: () => '', pvsPoolOf: () => '',

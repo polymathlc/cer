@@ -1,0 +1,133 @@
+// Real cover generators and their legacy styles, without Firebase or paid services.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import http from 'node:http';
+import vm from 'node:vm';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+const output = path.join(root, 'test-results', 'cover-layout');
+fs.mkdirSync(output, { recursive: true });
+const read = name => fs.readFileSync(path.join(root, name), 'utf8');
+const sources = { app: read('app.js'), index: read('index.html'), math: read('math-worksheet.html'), science: read('science-worksheet.html') };
+const css = html => [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map(match => match[1]).join('\n');
+// Ask the JS parser where a complete function ends; this handles template-string
+// CSS braces and the science creator's original minified source alike.
+function fn(source, name) {
+  const match = new RegExp(`function\\s+${name}\\s*\\(`).exec(source);
+  assert.ok(match, `Missing shipped function ${name}`);
+  let end = source.indexOf('}', match.index);
+  while (end !== -1) {
+    const candidate = source.slice(match.index, end + 1);
+    try { new vm.Script(`(${candidate})`); return candidate; } catch { end = source.indexOf('}', end + 1); }
+  }
+  throw new Error(`Unterminated function ${name}`);
+}
+const modulePath = process.env.WORKSHEET_PLAYWRIGHT_MODULE || process.env.PLAYWRIGHT_MODULE;
+const { chromium } = await import(modulePath ? pathToFileURL(modulePath).href : 'playwright');
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/') {
+    const kind = url.searchParams.get('kind') || 'index';
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.end(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css(sources[kind])}</style><script src="/worksheet-cover.js"></script></head><body><div id="printOutput"></div></body></html>`);
+    return;
+  }
+  if (url.pathname !== '/worksheet-cover.js' && !/^\/assets\/(worksheet-covers\/(math|science)-icons|branding\/polymath-learning-centre)\.png$/.test(url.pathname)) { res.writeHead(404).end(); return; }
+  res.setHeader('Content-Type', url.pathname.endsWith('.png') ? 'image/png' : 'text/javascript');
+  res.end(fs.readFileSync(path.join(root, url.pathname.slice(1))));
+});
+await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+const origin = `http://127.0.0.1:${server.address().port}`;
+const executablePath = process.env.WORKSHEET_BROWSER_EXECUTABLE || process.env.CHROME_PATH;
+const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : process.platform === 'win32' ? { channel: 'msedge' } : {}) });
+const page = await browser.newPage({ viewport: { width: 1280, height: 1100 } });
+const errors = [];
+page.on('pageerror', error => errors.push(error.message));
+await page.route('**/*', route => route.request().url().startsWith(origin) ? route.continue() : route.abort());
+const escapeSource = `function escapeHtml(value){return String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}`;
+async function ready() { await page.waitForFunction(() => [...document.images].every(img => img.complete && img.naturalWidth > 0)); }
+async function clips(scope = page) {
+  const items = await scope.locator('.wc-icon').evaluateAll(nodes => nodes.map(el => {
+    const box = el.getBoundingClientRect(), image = el.firstElementChild.getBoundingClientRect();
+    return { w: box.width, h: box.height, iw: image.width, ih: image.height, overflow: getComputedStyle(el).overflow };
+  }));
+  assert.equal(items.length, 6);
+  items.forEach(item => { assert.ok(item.w > 10); assert.ok(Math.abs(item.w - item.h) < 1); assert.ok(Math.abs(item.iw - item.w * 3) < 1); assert.ok(Math.abs(item.ih - item.h * 2) < 1); assert.equal(item.overflow, 'hidden'); });
+}
+async function inside(selector, parts) {
+  const bounds = await page.locator(selector).evaluate((cover, parts) => {
+    const parent = cover.getBoundingClientRect();
+    return parts.map(part => { const el = cover.querySelector(part); const box = el.getBoundingClientRect(); return { part, top: box.top - parent.top, bottom: box.bottom - parent.top, left: box.left - parent.left, right: box.right - parent.left, height: parent.height, width: parent.width }; });
+  }, parts);
+  bounds.forEach(box => { assert.ok(box.top >= -1 && box.bottom <= box.height + 1, `${box.part} spills vertically: ${JSON.stringify(box)}`); assert.ok(box.left >= -1 && box.right <= box.width + 1, `${box.part} spills horizontally`); });
+}
+async function onePage(name) {
+  const pdf = await page.pdf({ path: path.join(output, `${name}.pdf`), format: 'A4', preferCSSPageSize: true, printBackground: false });
+  assert.equal((pdf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length, 1, `${name} must fit one printed sheet`);
+}
+try {
+  await page.goto(origin + '/?kind=index');
+  const appFns = ['_wsCoverDefaults', '_wsCoverHtml', '_wsAppCssForPreview', '_cpbIndexGridHtml', '_cpbCoverValue', '_cpbCoverBrandHtml', '_cpbCoverInstructions', '_cpbCoverHeadHtml', '_cpbCoverFootHtml', '_cpbCoverA', '_cpbCoverB', 'cpbEditCovers'].map(name => fn(sources.app, name)).join('\n');
+  await page.addScriptTag({ content: `${escapeSource}\nconst currentUser={uid:'cover-layout-test'},CPB_MCQ_MARKS=2;let _cpbMeta={org:'Polymath Learning Centre',exam:'Practice paper',subject:'SCIENCE',level:'PRIMARY 6',year:'2026',code:'P6',duration:'1 hour 45 minutes',coverScale:1,coverOpacity:.72};function _cpbMetaGet(key){return _cpbMeta[key];}function cpbIsWorksheet(){return false;}function cpbMarks(){return {a:20,b:12};}function cpbLayout(){return {a:Array(10),list:Array(16)};}function _cpbDraftSave(){}function cpbRender(){}function _printFontLinksHtml(){return '';}\n${appFns}` });
+  const previewRules = await page.addStyleTag({ content: await page.evaluate(() => _wsAppCssForPreview()) });
+  await page.addStyleTag({ content: 'html,body{margin:0;padding:0}#printOutput{display:block!important;width:178mm;margin:0 auto}@media print{#printOutput{width:100%;margin:0}}' });
+  await page.evaluate(() => { document.querySelector('#printOutput').innerHTML = _wsCoverHtml('Photosynthesis, leaves\n& gas exchange', 'Primary Science', 'Past Year Paper', false); });
+  await ready(); await clips();
+  await inside('.wc-cover', ['.wc-title', '.wc-fields', '.wc-footer']);
+  await page.screenshot({ path: path.join(output, 'main-science-preview.png'), fullPage: true });
+  await page.emulateMedia({ media: 'print' }); await onePage('main-science-cover'); await page.emulateMedia({ media: 'screen' });
+  await previewRules.evaluate(el => el.remove());
+
+  await page.evaluate(() => { window._editedCovers = cpbEditCovers(); });
+  await page.locator('.cpb-cover-editor[open]').waitFor();
+  await page.locator('[name=org]').fill('Polymath Learning Centre');
+  await page.locator('[name=coverInstructionsA]').fill('Read every question carefully.\nShow your answer clearly.');
+  const frame = page.frameLocator('.cpb-cover-editor iframe');
+  await frame.locator('.cpb-cv-ins-list li').first().waitFor();
+  assert.equal(await frame.locator('.cpb-cv-ins-list li').count(), 2);
+  await clips(frame);
+  const frameSize = await page.locator('.cpb-cover-editor iframe').evaluate(el => ({ width: el.clientWidth, height: el.clientHeight }));
+  const previewSize = await frame.locator('.cpb-cover').boundingBox();
+  assert.ok(previewSize.width <= frameSize.width + 1 && previewSize.height <= frameSize.height + 1, 'Booklet preview fits the iframe');
+  await page.screenshot({ path: path.join(output, 'custom-cover-editor-a.png'), fullPage: true });
+  await page.locator('[data-booklet=B]').click();
+  assert.equal(await frame.locator('.cpb-cv-booklet').textContent(), '(BOOKLET B)');
+  assert.ok(await frame.locator('.cpb-cv-total').isVisible());
+  await page.screenshot({ path: path.join(output, 'custom-cover-editor-b.png'), fullPage: true });
+  await page.locator('.cpb-cover-editor [type=submit]').click();
+  assert.equal(await page.evaluate(() => window._editedCovers), true);
+  await page.addStyleTag({ content: await page.evaluate(() => _wsAppCssForPreview()) });
+  for (const booklet of ['A', 'B']) {
+    await page.evaluate(booklet => { document.querySelector('#printOutput').innerHTML = booklet === 'A' ? _cpbCoverA(20, 10) : _cpbCoverB(12, 11, 16, 'booklet-b-q1'); }, booklet);
+    await ready(); await clips();
+    await inside('.cpb-cover', ['.cpb-cv-head', '.cpb-cv-ins', '.cpb-cv-foot']);
+    if (booklet === 'B') assert.equal(await page.locator('.cpb-cover').getAttribute('data-front-before'), 'booklet-b-q1');
+    await page.emulateMedia({ media: 'print' }); await onePage(`custom-booklet-${booklet.toLowerCase()}`); await page.emulateMedia({ media: 'screen' });
+  }
+
+  for (const subject of ['math', 'science']) {
+    const source = sources[subject];
+    await page.goto(origin + '/?kind=' + subject);
+    const names = ['defaultCover', 'getCover', 'coverFieldsOn', 'coverDecoSvg', 'coverPageMarkup', 'buildCoverHtml', 'getCoverCss', 'getCoverEditorCss'];
+    const declarations = names.map(name => fn(source, name)).join('\n');
+    await page.addScriptTag({ content: `${escapeSource}\nlet state={title:'${subject === 'math' ? 'Fractions, ratios & percentages' : 'Photosynthesis, leaves & gas exchange'}',cover:{enabled:true,nameLabel:'Student',dateLabel:'Class'}};const COVER_FIELD_PLACEHOLDERS={header:'Cover header',title:'Worksheet title',subheader:'Subtitle',footer:'Footer',nameLabel:'Name label',dateLabel:'Date label'};\n${declarations}` });
+    await page.addStyleTag({ content: await page.evaluate(() => getCoverEditorCss()) });
+    await page.evaluate(() => { document.querySelector('#printOutput').innerHTML = coverPageMarkup('cover-preview', true); document.querySelector('#printOutput').style.cssText = 'display:block;width:min(794px,100%);margin:auto'; });
+    await ready(); await clips();
+    assert.equal(await page.locator('[data-cover-subject]').first().getAttribute('data-cover-subject'), subject);
+    await inside('.cover-preview', ['.cover-title', '.cover-fields-grid', '.cover-footer']);
+    await page.screenshot({ path: path.join(output, `${subject}-standalone-preview.png`), fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await inside('.cover-preview', ['.cover-title', '.cover-fields-grid', '.cover-footer']);
+    await page.setViewportSize({ width: 1280, height: 1100 });
+    const exportCss = await page.evaluate(() => getCoverCss());
+    await page.addStyleTag({ content: exportCss + '@page{size:A4;margin:18mm 16mm}html,body{margin:0;padding:0}#printOutput{width:100%!important;margin:0!important}' });
+    await page.evaluate(() => { document.querySelector('#printOutput').innerHTML = buildCoverHtml(); });
+    await ready(); await clips();
+    await page.emulateMedia({ media: 'print' }); await onePage(`${subject}-standalone-cover`); await page.emulateMedia({ media: 'screen' });
+  }
+  assert.deepEqual(errors, []);
+  console.log('PASS actual main, Custom Paper editor/booklets and standalone cover generators under their legacy CSS; six-cell clipping, mobile bounds, labels and one PDF page per cover');
+} finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
