@@ -17,7 +17,7 @@ jobs:
           node-version: '22'
       - run: npm install --no-save --package-lock=false playwright@1.62.1
       - run: npx playwright install --with-deps chromium
-      - name: Drive the topic list and the Water lesson at desktop and phone widths
+      - name: Drive the topic list, the Water lesson and the Heat lesson at desktop and phone widths
         run: node tools/interactive-textbook-browser.mjs
         env:
           TEXTBOOK_SCREENSHOTS: artifacts/textbook
