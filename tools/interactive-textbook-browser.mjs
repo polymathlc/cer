@@ -22,11 +22,18 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const shots = process.env.TEXTBOOK_SCREENSHOTS || '';
 if (shots) fs.mkdirSync(shots, { recursive: true });
 
-// ---- the home page links to the textbook (static check; the home page itself needs Firebase) ----
+// ---- the textbook lives in the APP's sidebar, never on the public home page
+// (static check; the portal itself needs Firebase) ----
 const home = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const appJs = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 const navLinks = home.slice(home.indexOf('<div class="lp-nav-links">'), home.indexOf('</div>', home.indexOf('<div class="lp-nav-links">')));
-assert.match(navLinks, /<a class="lp-page-link" href="interactive-textbook\/">Interactive textbook<\/a>/, 'home page header links to the Interactive textbook');
-assert.ok(navLinks.indexOf('products/') < navLinks.indexOf('interactive-textbook/'), 'Interactive textbook sits after Products');
+assert.ok(!navLinks.includes('interactive-textbook'), 'the public home page header does NOT link to the Interactive textbook');
+const learn = home.slice(home.indexOf('data-group="learn"'), home.indexOf('</details>', home.indexOf('data-group="learn"')));
+assert.match(learn, /<div class="nav-item" data-page="itextbook" onclick="navigateTo\('itextbook'\)"/, 'the sidebar (Syllabus & Papers, every role) has an Interactive textbook item');
+assert.ok(!/nav-item (admin|student)-only" data-page="itextbook"/.test(home), 'the sidebar item is not gated to one role');
+assert.match(home, /<div class="page app-embed-page" id="page-itextbook">/, 'the item opens a page inside the app');
+assert.ok(!/id="appEmbedFrame-itextbook"[^>]*\ssrc=/.test(home), 'the textbook frame has no src at first paint — it loads on first open');
+assert.match(appJs, /APP_EMBED_LOCAL = \{ itextbook: 'interactive-textbook\/' \}/, 'the frame points at the textbook folder');
 
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json' };
 const server = http.createServer((request, response) => {

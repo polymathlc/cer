@@ -4498,7 +4498,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.434.0';
+const APP_VERSION = 'v1.435.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -41373,11 +41373,16 @@ function collectionDocId() { return doc(collection(db, TSEND_COLLECTION)).id; }
 // `var`, not `const`: navigateTo runs during module evaluation and asks
 // appEmbedOnNavigate on every page, long before this line has been reached.
 var APP_EMBED_TOOLS = { tutor: 'tutor', anskey: 'anskey' };   // page → POLYMATH_TOOLS key
+// 📘 Pages of THIS site shown the same way: the Interactive textbook is a
+// folder beside index.html, not another app, so it has no POLYMATH_TOOLS row.
+var APP_EMBED_LOCAL = { itextbook: 'interactive-textbook/' };  // page → relative url
+function _appEmbedIs(page) { return !!((APP_EMBED_TOOLS && APP_EMBED_TOOLS[page]) || (APP_EMBED_LOCAL && APP_EMBED_LOCAL[page])); }
 function _appEmbedFrame(page) { return document.getElementById('appEmbedFrame-' + page); }
 function _appEmbedUrl(page, params) {
-  const tool = polymathToolFor(APP_EMBED_TOOLS[page]);
-  if (!tool) return '';
-  let url = tool.url;
+  const local = APP_EMBED_LOCAL && APP_EMBED_LOCAL[page];
+  const tool = local ? null : polymathToolFor(APP_EMBED_TOOLS[page]);
+  if (!local && !tool) return '';
+  let url = local || tool.url;
   const q = [];
   Object.keys(params || {}).forEach(k => { if (params[k] != null && params[k] !== '') q.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k])); });
   if (q.length) url += (url.includes('?') ? '&' : '?') + q.join('&');
@@ -41385,7 +41390,7 @@ function _appEmbedUrl(page, params) {
 }
 // Called from navigateTo for EVERY page: a page that is not an embed is a no-op.
 function appEmbedOnNavigate(page) {
-  if (!APP_EMBED_TOOLS || !APP_EMBED_TOOLS[page]) return;
+  if (!_appEmbedIs(page)) return;
   const frame = _appEmbedFrame(page);
   if (!frame) return;
   if (!frame.getAttribute('src')) frame.setAttribute('src', _appEmbedUrl(page));
