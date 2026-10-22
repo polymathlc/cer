@@ -1,5 +1,44 @@
 # CER Science Learning Portal
 
+## 🎮 Quest frame: worksheets as a Wheel Quest level (v1.444.0)
+
+Tick **🎮 Quest frame** and a printed worksheet becomes a level of Wheel Quest,
+the pixel RPG the class plays on the name wheel. The tick is in the worksheet
+builder's Extras, in My Worksheets' printing options, and beside **Print /
+Export PDF** in the Maths and Science worksheet creators.
+
+- **Only the teacher's account sees it.** Students, employee accounts,
+  "Practise as" and signed-out pages never see the tick box and can never
+  print a framed sheet. Every print path also checks the account again, so a
+  hidden box is not the only thing stopping them.
+- **It starts unticked every time and is never remembered.** A worksheet is
+  framed only when you tick the box before you print it. Reloading the page or
+  changing account (including handing the device to a student) clears it.
+
+- **A brick rampart round every sheet**, in one of ten worlds picked from the
+  worksheet's topic: Heat is Ember Caldera, food chains are Mistmire Marsh,
+  circuits are Gearspark Works, fractions are the Inkwell Library, and so on.
+  Its corner towers hold the world's runes and its side sockets hold loot.
+- **Page 1 opens the quest**: a gold banner with the logo, the title and the
+  world, the boss with **one heart per question** for the student to colour
+  in, and a hero card with Name, Class and Date and the four Wheel Quest heroes
+  to circle.
+- **Every question number is a loot gem.** In the portal its colour is the
+  question's marks: 1 mark common grey, 2 uncommon green, 3 rare blue, 4 epic
+  purple, 5 legendary gold.
+- **The creators print one Quest page per question**, with an XP trail and a
+  companion cheer in the footer and a treasure chest (score, three stars, a
+  seal for the teacher) on the last page. A question too tall for its page
+  prints the old way rather than being cut off.
+
+In the portal the rampart sits in each sheet's existing margins, so the page
+plan, the page numbers and the answer key are exactly what they were; the
+answer key itself stays plain. Everything prints with background graphics
+switched off. The art is Wheel Quest's own heroes, enemies, runes and loot
+(print-sized copies in `assets/quest-frames/`), Study Buddy's companions and
+this site's logo and subject icons. Run `node --test tools/quest-frames-tests.mjs`
+and `node tools/quest-frames-browser-check.mjs`.
+
 ## Interactive textbook: Reproduction (v1.443.0)
 
 Open **Syllabus & Papers → Interactive textbook → Reproduction** for a

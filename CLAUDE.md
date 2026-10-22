@@ -1926,6 +1926,78 @@ key is the authority there, not the notes).
 
 - Run **`node tools/teaching-notes-tests.mjs`** after touching any of it.
 
+## 🎮 Quest frame — a worksheet as a Wheel Quest level (v1.444.0)
+
+`quest-frames.js` / `quest-frames.css` (loaded by index.html and both creators),
+`assets/quest-frames/` (print-sized WebP copies of Wheel Quest art from
+`polymathlc/anskey`, with `manifest.json`), `_qfPrintCtx` / `_qfQuestionMarks`
+beside `_wsStudentFieldsOn` in `app.js`, the `questFrame` option of
+`buildWorksheetHtml` / `doPrintStudentWorksheet` / `autoscaleAndPrint`, and the
+`qfc` / `qfBody` lines in both creators' `buildPrintableHtml`.
+
+- **Both files are BUILT from the Polymath Quest Frames design system** (a
+  claude.ai Design System artifact): its `tokens.json` compiled to CSS, its
+  `components/bundle.css` without the Google Fonts import, and its
+  `components/bundle.js` (`window.QuestFrames`) verbatim, then this site's own
+  part at the end of each (`QuestFramesCer`: where the art lives, the switch,
+  the glue). Change a frame in the system and copy it across; change only the
+  tail here.
+- **ONE switch, the TEACHER's, NEVER REMEMBERED** (`QuestFramesCer.on()`,
+  every `input[data-quest-frame-toggle]` kept in step). Off, or
+  `quest-frames.js` missing, and every print path builds the sheet it always
+  did byte for byte: `_qfPrintCtx` returns null and every branch asks for it.
+  - **The page names the teacher** with `QuestFramesCer.teacher(fn)`. In the
+    portal that is `_isAdmin()`: an admin signed in as themselves. "Practise as"
+    runs as the student, and employees and students are refused. In the creators
+    it is `isAdmin()`, the one teacher e-mail. Until the page registers, or
+    while `fn()` says no or throws, every toggle's box (`[data-quest-frame-box]`,
+    else its `<label>`) is hidden and disabled and `on()` is false. **It fails
+    CLOSED**: a page that forgets to register prints the old sheet.
+  - **`roleChanged(who)` unticks it when the PERSON changes**, and only then.
+    The portal passes `uid:role` from `configureSidebarForRole` (every sign-in,
+    including "Practise as") and from the signed-out branch of
+    `onAuthStateChanged`. The creators pass the uid from `refreshAuthUi`, which
+    also re-registers `isAdmin`. A redraw for the same teacher keeps the tick.
+  - **Nothing is stored.** There is no localStorage key, so every visit starts
+    unticked and a sheet is framed only when the box was ticked before
+    printing. The harness fails if the site's glue touches any storage.
+  - **The print doors ask again.** `_qfPrintCtx` checks `!_isAdmin()` and the
+    creators' `buildPrintableHtml` checks `isAdmin() && QuestFramesCer.on()`:
+    hiding a toggle is never the lock.
+  - A box is hidden with an inline `display: none` and given back the inline
+    display the page drew it with (`data-qf-display`), because the builder's
+    label lays itself out with an inline flex.
+- **The portal never moves a measured pixel.** The page-1 header
+  (`QuestFramesCer.portalHeader`: banner + compact boss with hearts + hero card;
+  with a cover, just the hero card and boss) and the gem before "Question N"
+  are ordinary content, measured by the planner. The PREVIEW takes the same
+  header (`_wsPreviewBuildHtml`) so it paginates as the print does; the 📖
+  Study Buddy export (`noTags`) does NOT, because html2canvas never loads the
+  sprites inside an inline SVG and would photograph them blank. The rampart
+  goes on in `doScaleAndPrint` AFTER `_printApplyPageNumbers`
+  (`framePrintPages`): each ordinary question sheet becomes a margin-free
+  `@page qf-sheet`, 210 × 296mm and padded 18/16/20mm, so its content box is
+  the planner's 178 × 258mm. **296mm, never 297**: a sheet a hair over A4
+  spills a blank page after it. Tall pages and answer-key pages are left plain.
+- **`border({ fit: 'margins' })` must fit inside 16mm / 18mm / 20mm.**
+  `tools/quest-frames-tests.mjs` parses every rect and sprite and fails if one
+  enters the text column.
+- **SVG pictures are not in `document.images`**, so nothing in the old wait
+  covers them: the portal waits for `QuestFramesCer.ready(output)` before
+  `_printAndRestore`, and the creators' print windows wait for `qfReady()`.
+  Drop either and sprites print as blank squares on a slow network.
+- **Creators:** `creatorBody` makes one Quest page per printed question sheet
+  (an instruction rides on the next question's page), swaps
+  `.question-number` for a gem, and `qfFixOverflow()` (in the print window,
+  before `window.print()`) marks a page whose question is taller than the
+  frame's safe area `qf-overflow`, which prints it the old flowing way instead
+  of clipping it. The creators have no marks, so their gems are a plain rare blue.
+- Run `node --test tools/quest-frames-tests.mjs` and
+  `node tools/quest-frames-browser-check.mjs` (real Chromium, PDFs with
+  background graphics off, plus the switch in all three pages' real toggle
+  markup: hidden for a student, an employee and an unnamed teacher, unticked
+  on hand-over and after a reload; also in CI, `.github/workflows/quest-frames.yml`).
+
 ## 🎨 The worksheet cover is the Big M design (v1.438.0)
 
 `DESIGN` / `M_ICONS` / `M_FRAME` / `M_AIRY` / `M_FACETS` / `fitSize` / `artOf` /

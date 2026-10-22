@@ -15,7 +15,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.443.0">
+  <link rel="modulepreload" href="app.js?v=1.444.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -33,8 +33,12 @@
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=DM+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
 <!-- Crimson Pro is used by exactly two rules, both on the printed worksheet
      cover, so it is a genuine print-only sheet: 137 KB that a student reading
-     the screen never downloads. -->
-<link rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&display=swap">
+     the screen never downloads. Pixelify Sans rides in the same request: it is
+     the 🎮 Quest frame's pixel face, also only ever printed (the planner and the
+     preview copy these links with media="all"). quest-frames.css is loaded the
+     same non-blocking way. -->
+<link rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Pixelify+Sans:wght@400..700&display=swap">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.444.0">
 
 <!-- Tailwind, prebuilt. This used to be <script src="cdn.tailwindcss.com">:
      the Play CDN, which ships a full CSS compiler to the browser, scans the
@@ -11859,6 +11863,10 @@ html { scroll-behavior:smooth; }
             <input type="checkbox" id="wsIncludeFields" checked style="width:16px;height:16px;accent-color:var(--primary);">
             ✍️ Name / Date / Class fields
           </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print the worksheet as a Wheel Quest level: a pixel brick wall round every sheet, a quest banner, the boss with one heart per question to colour in, a hero card, and a loot gem on every question number. Teacher only, and never remembered: it starts unticked on every visit, so a sheet is framed only when you tick this before printing.">
+            <input type="checkbox" id="wsQuestFrame" data-quest-frame-toggle style="width:16px;height:16px;accent-color:var(--primary);">
+            🎮 Quest frame
+          </label>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment.">
             <input type="checkbox" id="wsIncludeWhy" style="width:16px;height:16px;accent-color:var(--primary);">
             &#9432; Why the other options are wrong
@@ -11988,6 +11996,10 @@ html { scroll-behavior:smooth; }
           <label title="Print the blank Name / Date / Class lines at the top of the sheet. Turn it off for a clean copy with no student fields.">
             <input type="checkbox" id="mwIncludeFields" checked style="width:16px;height:16px;accent-color:var(--primary);">
             ✍️ Name / Date / Class fields
+          </label>
+          <label title="Print the worksheet as a Wheel Quest level: a pixel brick wall round every sheet, a quest banner, the boss with one heart per question to colour in, a hero card, and a loot gem on every question number. Teacher only, and never remembered: it starts unticked on every visit, so a sheet is framed only when you tick this before printing.">
+            <input type="checkbox" id="mwQuestFrame" data-quest-frame-toggle style="width:16px;height:16px;accent-color:var(--primary);">
+            🎮 Quest frame
           </label>
           <label title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment.">
             <input type="checkbox" id="mwIncludeWhy" style="width:16px;height:16px;accent-color:var(--primary);">
@@ -16237,7 +16249,8 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script src="worksheet-cover.js?v=1.443.0"></script>
-  <script type="module" src="app.js?v=1.443.0"></script>
+  <script src="worksheet-cover.js?v=1.444.0"></script>
+  <script src="quest-frames.js?v=1.444.0"></script>
+  <script type="module" src="app.js?v=1.444.0"></script>
 </body>
 </html>

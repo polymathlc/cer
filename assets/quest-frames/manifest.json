@@ -1,0 +1,441 @@
+{
+ "version": 1,
+ "generated": "2026-10-22",
+ "note": "Print-sized WebP copies of Wheel Quest art for Quest Frames. Each keeps its source aspect ratio exactly, so the frame crops atlas cells in source pixels.",
+ "assets": [
+  {
+   "key": "hero-warrior",
+   "file": "hero-warrior.webp",
+   "width": 512,
+   "height": 512,
+   "bytes": 48096,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/warrior.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "fea6b9b6823688af51226733cb691bd2dc4b8628b7766bb2dd3ecd6296d79a03"
+   }
+  },
+  {
+   "key": "hero-mage",
+   "file": "hero-mage.webp",
+   "width": 512,
+   "height": 512,
+   "bytes": 42382,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/mage.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "1b7af23685da6cdf2eea579a36ddb17fe430f08460b94a047644c6af2c9c71e2"
+   }
+  },
+  {
+   "key": "hero-ranger",
+   "file": "hero-ranger.webp",
+   "width": 512,
+   "height": 512,
+   "bytes": 52628,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/ranger.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "81c2d5dbf26c719fd94249981cade7e782991ce14e3d19e08fd0e54af5e92040"
+   }
+  },
+  {
+   "key": "hero-cleric",
+   "file": "hero-cleric.webp",
+   "width": 512,
+   "height": 512,
+   "bytes": 59162,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/cleric.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "b1f1ab9fcd56bbc98c5006e92f18e882fa3c349dcd8ca43026124999fe37169d"
+   }
+  },
+  {
+   "key": "enemy-goblin",
+   "file": "enemy-goblin.webp",
+   "width": 512,
+   "height": 512,
+   "bytes": 37272,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/goblin.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "3bc0db1dbd8d565792bae1700a0259116d8f004f47e14aa0ac2d7a6ecb3d65bb"
+   }
+  },
+  {
+   "key": "enemy-goblin-shaman",
+   "file": "enemy-goblin-shaman.webp",
+   "width": 512,
+   "height": 512,
+   "bytes": 55388,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/goblin-shaman.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "938adfed8105100fd5375d24c6f09d0315e7c96298a1366976c2b3d732d760b4"
+   }
+  },
+  {
+   "key": "enemy-slime",
+   "file": "enemy-slime.webp",
+   "width": 512,
+   "height": 512,
+   "bytes": 24218,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/slime.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "97c264366592971c7d1a2887adc4b3d60271299918b0923954742df69e51278a"
+   }
+  },
+  {
+   "key": "enemy-golem",
+   "file": "enemy-golem.webp",
+   "width": 512,
+   "height": 512,
+   "bytes": 79434,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/golem.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "1c073bc70a9b2be8977c17686e858fa2d27ce9db6703c43c1142155fd9fbc2b4"
+   }
+  },
+  {
+   "key": "enemy-dragon",
+   "file": "enemy-dragon.webp",
+   "width": 512,
+   "height": 512,
+   "bytes": 92634,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/dragon.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "8faf4bf26134cb6ebefd9eb27e71705ccf75fa2083c438f440dd789899f05cf8"
+   }
+  },
+  {
+   "key": "enemy-lich",
+   "file": "enemy-lich.webp",
+   "width": 512,
+   "height": 512,
+   "bytes": 90862,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/lich.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "7d5bef51dbcf09922b222e0ee765bf9910cfe79c4e2361a182b12c951d4d603b"
+   }
+  },
+  {
+   "key": "bosses-01",
+   "file": "bosses-01.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 171094,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/bosses/atlas-01.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "b4ad40ea023aee83fe9e42aeb987595d1f5db53a0bdab0b660e35b48a3b23825"
+   }
+  },
+  {
+   "key": "bosses-02",
+   "file": "bosses-02.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 149544,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/bosses/atlas-02.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "ec6d14c95bf266f933eafa9fe1294fa1f6b7298c5d5dcd309e4c2337bf576386"
+   }
+  },
+  {
+   "key": "bosses-03",
+   "file": "bosses-03.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 281612,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/bosses/atlas-03.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "3cc6d949c65c43943430530fe2398a89bff348c641fa51cabed18925d28f68a2"
+   }
+  },
+  {
+   "key": "bosses-04",
+   "file": "bosses-04.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 178554,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/bosses/atlas-04.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "ed3aa03e4a470316898184f97c2f50571fa53442176ee60d2e304853e876c45f"
+   }
+  },
+  {
+   "key": "bosses-05",
+   "file": "bosses-05.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 184282,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/bosses/atlas-05.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "71860e134ee304448d97fea0b562c33b969cfecec9917dc056871e62ad6710fb"
+   }
+  },
+  {
+   "key": "bosses-06",
+   "file": "bosses-06.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 172022,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/bosses/atlas-06.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "e6b2d164972a3b821f8218ec067e88a8226d0904629ffd991301b6bcd3a07cc5"
+   }
+  },
+  {
+   "key": "bosses-07",
+   "file": "bosses-07.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 214192,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/bosses/atlas-07.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "16b72852632a18650ac499b7b7ce4b929515fa803c0facf07a113856c130907c"
+   }
+  },
+  {
+   "key": "bosses-08",
+   "file": "bosses-08.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 115396,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/bosses/atlas-08.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "b01bd3c79051615e1722bfca3c1bb890d6bb8fb8d0e851adc448b49b944bcb2d"
+   }
+  },
+  {
+   "key": "bosses-09",
+   "file": "bosses-09.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 195786,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/bosses/atlas-09.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "6b6262a425a2f34a4cbbc6a18d4fb34e8ffb3bf05dd8a45bfdc9e8fbf82be2c9"
+   }
+  },
+  {
+   "key": "bosses-10",
+   "file": "bosses-10.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 74398,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/bosses/atlas-10.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "f150631dc33173f9f57626d20ee6e1053310f84d4a07b02a3e6a20247af22917"
+   }
+  },
+  {
+   "key": "items-1",
+   "file": "items-1.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 128806,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/items/items-1.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "2de7239b5b94c55ed658f015f89c7dce0f486ef4bcf0c445b9cd303a0720d993"
+   }
+  },
+  {
+   "key": "items-2",
+   "file": "items-2.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 163634,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/items/items-2.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "6e4298feb34baf26e9f8155fd87fbdcf86fe34169273f05670b5a586d4a5c34d"
+   }
+  },
+  {
+   "key": "items-3",
+   "file": "items-3.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 102708,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/items/items-3.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "a7567675a50421d46b617f280ed7bac593dc2ecd2a9b61fdf3679f2b201ed9cf"
+   }
+  },
+  {
+   "key": "items-4",
+   "file": "items-4.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 169618,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/items/items-4.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "d850fc0b498a4dc6d4efe4b161112a9632436f9c2153fc5ded1fd61d5242cf31"
+   }
+  },
+  {
+   "key": "items-5",
+   "file": "items-5.webp",
+   "width": 1190,
+   "height": 476,
+   "bytes": 195996,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/items/items-5.png",
+    "width": 1983,
+    "height": 793,
+    "sha256": "41dfe75d89eff163e5614e35aab4b51b73b567feb36e0d0c9af74de15cd8fc73"
+   }
+  },
+  {
+   "key": "runes",
+   "file": "runes.webp",
+   "width": 752,
+   "height": 752,
+   "bytes": 257606,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/items/runes-1.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "cef9e8fd77db195037131435c76233c58d52a3d51a7c55a859b962e5b353a574"
+   }
+  },
+  {
+   "key": "chest",
+   "file": "chest.webp",
+   "width": 1086,
+   "height": 362,
+   "bytes": 81918,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/chest-sheet.png",
+    "width": 2172,
+    "height": 724,
+    "sha256": "c4292a5308af8ac85ba61fe39eabfd2332aa362951bf235f76600b473c7f5a8a"
+   }
+  },
+  {
+   "key": "scene-forest",
+   "file": "scene-forest.webp",
+   "width": 640,
+   "height": 360,
+   "bytes": 144276,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/adventure/forest.png",
+    "width": 640,
+    "height": 360,
+    "sha256": "a77ddaeccb74eb9472b3b4550f0dc28b5af0c094a77c3d9cdb5b92887008a59f"
+   }
+  },
+  {
+   "key": "scene-cavern",
+   "file": "scene-cavern.webp",
+   "width": 640,
+   "height": 360,
+   "bytes": 153938,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/adventure/cavern.png",
+    "width": 640,
+    "height": 360,
+    "sha256": "e0e4b3bc312cf32320a56b20fceaa36c6bc052ae6edee680f6906302e6e6b639"
+   }
+  },
+  {
+   "key": "scene-ruins",
+   "file": "scene-ruins.webp",
+   "width": 640,
+   "height": 360,
+   "bytes": 130620,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/adventure/ruins.png",
+    "width": 640,
+    "height": 360,
+    "sha256": "012d502cac243d771106346e7845d8adb6d8e8a5d215af9e6dc9b7c96069280e"
+   }
+  },
+  {
+   "key": "scene-volcano",
+   "file": "scene-volcano.webp",
+   "width": 640,
+   "height": 360,
+   "bytes": 130098,
+   "source": {
+    "repo": "polymathlc/anskey",
+    "path": "assets/battle-pixel/adventure/volcano.png",
+    "width": 640,
+    "height": 360,
+    "sha256": "003d6d5431fe4945627b75a838accd5e620d524703a93744589d9dc2a3d88e61"
+   }
+  }
+ ]
+}

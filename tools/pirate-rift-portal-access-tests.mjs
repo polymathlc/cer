@@ -39,7 +39,7 @@ test('authentication, navigation and learner changes dispose or invalidate the a
     assert.ok(listener, 'the main authentication listener exists');
     let callback;
     const events = [], summaryResets = [], whiteboardResets = [], coverResets = [], noop = () => {};
-    let whiteboardStops = 0;
+    let whiteboardStops = 0, questFrameResets = 0;
     vm.runInNewContext(listener, {
       auth: {}, onAuthStateChanged: (_auth, fn) => { callback = fn; },
       rapidPreviewReset: noop, pirateRiftPortal: { close: () => events.push('close') },
@@ -56,6 +56,7 @@ test('authentication, navigation and learner changes dispose or invalidate the a
         events.push('enter');
       }, currentUser: {uid: 'previous-account'},
       _hadesResetLearning: noop, interfaceStudio: {setUser: noop}, rpgOnSignOut: noop,
+      _qfRoleChanged: () => { questFrameResets++; },
       stopTeachingNotes: noop, stopAnswerStyle: noop, _fcGapSel: new Set(), fcPaintDueBadge: noop,
       signedOutEntryPage: () => 'login', showPage: () => {
         assert.equal(coverResets.at(-1), '', 'cover drafts clear before the signed-out page');
@@ -71,6 +72,7 @@ test('authentication, navigation and learner changes dispose or invalidate the a
     events.length = 0;
     callback(null);
     assert.deepEqual(events, ['close', 'signed-out'], 'sign-out disposes the frame before returning to login');
+    assert.equal(questFrameResets, 1, 'sign-out hides and unticks the teacher\'s Quest frame switch');
     assert.deepEqual(summaryResets, ['next-account', ''], 'summary-sheet state follows both authentication paths');
     assert.deepEqual(whiteboardResets, ['next-account', ''], 'whiteboard state follows both authentication paths');
     assert.deepEqual(coverResets, ['next-account', ''], 'cover state follows both authentication paths');

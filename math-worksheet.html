@@ -2881,6 +2881,7 @@
         <button class="btn admin-only" id="exportHtmlBtn">Download HTML</button>
         <button class="btn admin-only" id="designViewBtn" title="Open the A4 design surface: see page breaks, resize blocks, add manual breaks, then export the exact pages to PDF">🎨 Design view</button>
         <button class="btn" id="exportPdfBtn">Print / Export PDF</button>
+        <label class="btn preview-toggle admin-only" data-quest-frame-box style="cursor:pointer;" title="Print each question as a Wheel Quest page: a pixel brick wall, a quest banner and boss with a heart per question on page 1, a loot gem on each number and a treasure chest at the end. Teacher only, and never remembered: it starts unticked on every visit, so a sheet is framed only when you tick this before printing."><input type="checkbox" data-quest-frame-toggle style="margin-right:6px;" /> 🎮 Quest frame</label>
         <button class="btn" id="practiceModeBtn" title="Try the worksheet on screen — select answers and check your score">✏️ Practice mode</button>
         <span class="tb-sep admin-only" aria-hidden="true"></span>
         <button class="btn admin-only" id="saveJsonBtn">Save JSON</button>
@@ -2997,6 +2998,7 @@
 </div>
 
 <script src="worksheet-cover.js?v=1.438.0"></script>
+<script src="quest-frames.js?v=1.444.0"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
@@ -6644,8 +6646,20 @@ function getCoverEditorCss() {
 })();
 
 function buildPrintableHtml() {
-  const css = getEmbeddedPreviewCss() + getPrintCss() + getCoverCss();
-  const body = state.questions.map((q, qIndex) => questionToPrintHtml(q, qIndex)).join('\n');
+  // 🎮 Quest frame (quest-frames.js, the switch beside Print / Export PDF):
+  // every question sheet becomes a Wheel Quest page. Off — or the frame's
+  // script missing — and this builds byte for byte the document it always did.
+  // The teacher's alone: isAdmin() is asked HERE as well as by the switch,
+  // because hiding a toggle is never the lock.
+  const qfc = window.QuestFramesCer && isAdmin() && QuestFramesCer.on() ? QuestFramesCer : null;
+  const qfBody = qfc ? qfc.creatorBody({
+    subject: 'math',
+    title: state.title,
+    topics: state.questions.map(q => topicsOf(q)[0] || ''),
+    sections: state.questions.map((q, qIndex) => ({ html: questionToPrintHtml(q, qIndex), instruction: isInstruction(q) }))
+  }) : '';
+  const css = getEmbeddedPreviewCss() + getPrintCss() + getCoverCss() + (qfBody ? qfc.creatorCss() : '');
+  const body = qfBody || state.questions.map((q, qIndex) => questionToPrintHtml(q, qIndex)).join('\n');
   const coverOn = !!getCover().enabled;
   const cover = buildCoverHtml();
   const contents = buildContentsHtml();
@@ -6653,7 +6667,7 @@ function buildPrintableHtml() {
   // questions, and drop the old per-worksheet print header (the cover
   // already carries the title and Name/Date fields).
   const blankPage = coverOn ? `<section class="cover-blank-print" aria-hidden="true"></section>` : '';
-  const printHeader = coverOn ? '' : `
+  const printHeader = coverOn || qfBody ? '' : `
   <header class="print-header">
     <h2>${escapeHtml(state.title)}</h2>
     ${state.subtitle ? `<p>${escapeHtml(state.subtitle)}</p>` : ''}
@@ -6668,7 +6682,7 @@ function buildPrintableHtml() {
 <head>
 <meta charset="UTF-8" />
 <title>${escapeHtml(state.title)} — Print</title>
-<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">${qfBody ? qfc.printHead() : ''}
 <style>${css}</style>
 </head>
 <body>
@@ -6679,7 +6693,7 @@ ${contents}
   ${body}
 </div>
 <script>
-  function waitForImages() {
+${qfBody ? qfc.printScript() : ''}  function waitForImages() {
     const imgs = Array.from(document.images || []);
     if (imgs.length === 0) return Promise.resolve();
     return Promise.all(imgs.map(img => {
@@ -6692,7 +6706,7 @@ ${contents}
   }
   window.addEventListener('load', () => {
     const fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
-    Promise.all([waitForImages(), fontsReady]).then(() => setTimeout(() => window.print(), 200));
+    Promise.all([waitForImages(), fontsReady, window.qfReady ? qfReady() : null]).then(() => { if (window.qfFixOverflow) qfFixOverflow(); setTimeout(() => window.print(), 200); });
   });
 ${'<\/script>'}
 </body>
@@ -7616,6 +7630,13 @@ async function signOutUser() {
 }
 
 function refreshAuthUi() {
+  // 🎮 The Quest frame switch is the teacher's alone and never remembered:
+  // hidden and refused for a student or a signed-out page, and unticked
+  // whenever the account changes (quest-frames.js, QuestFramesCer.roleChanged).
+  if (window.QuestFramesCer) {
+    QuestFramesCer.teacher(isAdmin);
+    QuestFramesCer.roleChanged(currentUser ? currentUser.uid : '');
+  }
   const chip = document.getElementById('authChip');
   const signInBtn = document.getElementById('googleSignInBtn');
   const signOutBtn = document.getElementById('signOutBtn');

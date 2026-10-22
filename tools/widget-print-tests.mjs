@@ -37,6 +37,7 @@ function harness(block = appBlock) {
     const objBoxPrintOn = () => false, objBoxAutoHtml = () => '';
     const qPartMap = () => ({}), qPartOf = () => '';
     const _pushAnnotAnswerKey = () => {}, autoscaleAndPrint = () => {};
+    const _qfPrintCtx = () => null, _qfQuestionMarks = () => 0;
     const _qAnswerKeyExtraSection = () => null, _qFallbackKeySection = () => null;
     const _wsHeaderHtml = () => '<header>Worksheet</header>', pvsPoolOf = s => s || '';
     const pvoWrapOpen = () => '<div class="preview-order-wrap">';
