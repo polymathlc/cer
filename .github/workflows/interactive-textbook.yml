@@ -25,6 +25,10 @@ jobs:
         run: node tools/interactive-textbook-reproduction-browser.mjs
         env:
           TEXTBOOK_SCREENSHOTS: artifacts/textbook/reproduction
+      - name: Drive the Plant Transport, Respiratory and Circulatory Systems lesson at desktop and phone widths
+        run: node tools/interactive-textbook-respiratory-circulatory-browser.mjs
+        env:
+          TEXTBOOK_SCREENSHOTS: artifacts/textbook/respiratory-circulatory
       - uses: actions/upload-artifact@v4
         if: always()
         with:
