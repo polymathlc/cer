@@ -14,7 +14,10 @@ function cut(a, b) {
 const hover = cut('var _vetPrintPeek = null;', '// 🖨 the whole scoped set');
 class El {
   constructor(tag = 'div') {
-    this.tag = tag; this.children = []; this.style = {}; this.attrs = {};
+    this.tag = tag; this.children = []; this.attrs = {};
+    // A style that also takes custom properties, as _printSetContentZoom writes
+    // the fit-to-page zoom's --qf-pz beside the zoom itself.
+    this.style = { setProperty(k, v) { this[k] = String(v); }, removeProperty(k) { delete this[k]; } };
     this.dataset = {}; this.listeners = {}; this.isConnected = true;
     this.classList = { toggle() {} };
   }
@@ -231,6 +234,9 @@ function packHarness(readOnly) {
     // with it. Every front page here is unanchored, which is every front page
     // this app printed before booklets existed.
     ${cut('function _printFrontAnchor(f) {', 'function _printPlanIn(')}
+    // The REAL zoom setter the printer and the planner share (it also carries
+    // a 🎮 framed page 1's --qf-pz), so the preview's zoom is not a stub either.
+    ${cut('function _printSetContentZoom(', '\n// Plan the whole document')}
     ${cut('function _wsPreviewPack(', '// WORKSHEET QUICK EDIT')}
     return _wsPreviewPack;
   `)({getElementById:()=>count},(d,m,opts)=>{seen.push(opts);return {

@@ -2,7 +2,7 @@
 
 Guidance for Claude when working in this repo.
 
-## 🙋 Consults — shared with Study Buddy, Ans Key and the Maths portal (v1.445.0)
+## 🙋 Consults — shared with Study Buddy, Ans Key and the Maths portal (v1.446.0)
 
 `consult-answer.js` / `consult-answer.css` are byte for byte polymathlc/tutor's (copy fixes across, never
 re-derive); `consult-bridge.js` is byte for byte the Maths portal's. The bridge loads the SAME gstatic
@@ -222,7 +222,7 @@ Instagram or WhatsApp) or save all three sizes at once.
   the background, smaller words and the button ≥ 4.5:1, the QR ≥ 12:1 on white).
   A new look added to `SOCIAL_THEMES` is checked without being named.
 
-## 📖 Interactive textbook — polymathlc.com.sg/interactive-textbook (v1.443.0; Reproduction topic added)
+## 📖 Interactive textbook — polymathlc.com.sg/interactive-textbook (v1.443.0; Reproduction topic added; Plant Transport, Respiratory and Circulatory Systems added 2026-10-22)
 
 `interactive-textbook/index.html` is the topic list, opened from the **app's sidebar** (📘 Interactive textbook, in 📚 Syllabus & Papers, every role) as `#page-itextbook` — an `app-embed-page` whose frame is pointed at the folder on first open through `APP_EMBED_LOCAL` / `appEmbedOnNavigate`. **It is NOT linked from the public home page** — the owner asked for it in the app, not on polymathlc.com.sg's header. Framed, each page sends links that leave the textbook to `_top` (so the site never loads inside the frame) and hides the topic list's "← Home". Each topic is its own folder with one self-contained page (no Firebase, no app.js, no external scripts), built in the Polymath webapp style (Century Gothic, science blue). It is mirrored to `polymathlc/website` by the website sync like `schedule/` and `products/`.
 - **Adding a topic**: add an entry to `TEXTBOOK_TOPICS` in `interactive-textbook/index.html` (`href`, `progressKey`, and `sections` with the same ids as the lesson's `data-section` blocks) and create `interactive-textbook/<topic>/index.html`. The list reads each topic's progress from localStorage under `progressKey`; the lesson writes it.
@@ -233,9 +233,10 @@ Instagram or WhatsApp) or save all three sizes at once.
 - Heat Let's Apply answers: Q1 (3) the spoon gained heat from the hand / the hand lost heat to the spoon; Q2 B (the book's graph only shows B and C clearly, so it is redrawn from `COOLING_RATES` with four curves and B still slowest); Q3 (a) X (air in flask Q gains heat, expands and pushes the ink towards P), (b) self-marked against a model answer with 5 key-idea chips.
 - Heat widget models must stay true to the book: heat flows from hotter to colder until both are the same temperature (milk 10→30°C and water 60→45°C; metal cup and plastic box meet at 15 min); wax melts off metal, then glass, plastic, wood; the heated ball cannot pass the ring and passes again after cold water; the jar lid opens only after hot water; the road without gaps cracks. Widgets are split over four scripts (`initPartOne`/`Two`/`Three`), each started in a try/catch so one failure is reported in `HeatLesson.startErrors` instead of stopping the rest.
 - **Reproduction** (`interactive-textbook/reproduction/`) follows the supplied Primary 5 reproduction PDF in 12 parts: continuity, human-systems, human-development, flowers, pollination, fertilisation, dispersal, germination, spores, compare, apply, learnt. Progress key `polymath_textbook_reproduction_progress`; keep the catalogue section ids and lesson ids in step. The generated garden illustration is `reproduction/assets/reproduction-garden.webp`. Keep the distinctions clear: pollination transfers pollen from anther to stigma; fertilisation is the joining of male and female reproductive cells; the ovule becomes a seed and the ovary becomes a fruit. Seeds need water, air and suitable warmth to germinate; light is not a general requirement for germination.
-- Everything is reachable from `window.WaterLesson` / `window.HeatLesson` / `window.ReproductionLesson` for the browser checks. Hidden tooltips use `display:none` (not opacity), because a transparent tooltip near the edge widened the page on phones.
+- **Plant Transport, Respiratory and Circulatory Systems** (`interactive-textbook/respiratory-circulatory/`) follows Chapter 3 "Plant Transport System" and Chapter 4 "The Human Respiratory and Circulatory Systems" (textbook pp. 62–103; **pp. 90–91 were missing from the supplied scan**, so nothing from them is in the page) in 12 parts: plant-why, plant-tubes, plant-removed, air, respiratory, air-data, gas-exchange, circulatory, compare, systems, apply, learnt. Progress key `polymath_textbook_respiratory_circulatory_progress`. Same rules as Water and Heat: textbook wording word for word, own additions labelled. About 65 widgets in four scripts (core, plant, human part 1, human part 2), each started through `start(name, fn)` so a failure lands in `SystemsLesson.startErrors` instead of stopping the page. Pure models live on `SystemsLesson.models` (supply, dyeHeight, waterAbsorbed, ringModel, silica, airwayFlow, stomaRate, gillExchange, bloodOxygen ends at 98% like the comic's tracker, heartRate, runStep, vesselFlow…) and widget handles on `SystemsLesson.plant` / `SystemsLesson.human`. Science to keep: water and mineral salts travel from the roots in water-carrying tubes, food from the leaves in food-carrying tubes; a ring of bark removes only food-carrying tubes (stem above swells, plant lives), a deeper cut removes both (plant dies); nitrogen stays 78% in inhaled and exhaled air; plant tubes carry food and water but not oxygen or carbon dioxide. Let's Apply has all 9 textbook questions (p1–p4, h1–h5) and both concept maps must be complete for 'learnt'. A global `[hidden] { display: none !important; }` keeps the pie/bar/table views apart.
+- Everything is reachable from `window.WaterLesson` / `window.HeatLesson` / `window.ReproductionLesson` / `window.SystemsLesson` for the browser checks. Hidden tooltips use `display:none` (not opacity), because a transparent tooltip near the edge widened the page on phones.
 - Run `node tools/interactive-textbook-browser.mjs` after touching any textbook page (CI: `.github/workflows/interactive-textbook.yml`). It serves the shipped pages, refuses any outside request, drives every widget, answers every check and asserts 12 / 12 on the topic list, no sideways scroll at 360px, and key textbook sentences word for word.
-- Also run `node tools/interactive-textbook-reproduction-browser.mjs` for the Reproduction lesson; the same workflow runs both browser suites and saves their previews.
+- Also run `node tools/interactive-textbook-reproduction-browser.mjs` for the Reproduction lesson and `node tools/interactive-textbook-respiratory-circulatory-browser.mjs` for the Plant Transport, Respiratory and Circulatory Systems lesson; the same workflow runs all three browser suites and saves their previews. The topic list check expects 4 topics.
 - Reproduction v1.1.0 (2026-10-22) added plant labs in a second script (`ReproductionLesson.plant`, failures listed in `ReproductionLesson.startErrors`): petal and sepal in the flower explorer, a part detective, five sorters built by `makeSorter` (parts, insect/wind pollination, fruit or not, seeds or spores, name the process), the bee garden (`pollenRoute`: same flower and same plant are self-pollination, another plant of the same kind is cross-pollination, a different kind gives no seeds), a five-flower harvest (`harvest`: one ovary → at most one fruit, one fertilised ovule → one seed), 12 dispersal specimens, a wind tunnel lab (`windDistance`: slower-falling seeds go farther; it names a fair test when only one variable changed), seed anatomy, a predict-then-reveal seed-leaf mass graph (`seedLeafMass` never rises) and germination in order (root before shoot). Let's Apply has 14 questions, all needed to complete the section. None of the new widgets change progress.
 
 ## 🗓 The public schedule page — a weekly timetable, and trials booked 3 business days ahead (schedule v1.1.0)
@@ -1938,7 +1939,7 @@ key is the authority there, not the notes).
 
 - Run **`node tools/teaching-notes-tests.mjs`** after touching any of it.
 
-## 🎮 Quest frame — a worksheet as a Wheel Quest level (v1.444.0)
+## 🎮 Quest frame — a worksheet as a Wheel Quest level (v1.444.0, every sheet a quest page v1.445.0)
 
 `quest-frames.js` / `quest-frames.css` (loaded by index.html and both creators),
 `assets/quest-frames/` (print-sized WebP copies of Wheel Quest art from
@@ -1979,21 +1980,50 @@ beside `_wsStudentFieldsOn` in `app.js`, the `questFrame` option of
   - A box is hidden with an inline `display: none` and given back the inline
     display the page drew it with (`data-qf-display`), because the builder's
     label lays itself out with an inline flex.
-- **The portal never moves a measured pixel.** The page-1 header
-  (`QuestFramesCer.portalHeader`: banner + compact boss with hearts + hero card;
-  with a cover, just the hero card and boss) and the gem before "Question N"
-  are ordinary content, measured by the planner. The PREVIEW takes the same
-  header (`_wsPreviewBuildHtml`) so it paginates as the print does; the 📖
-  Study Buddy export (`noTags`) does NOT, because html2canvas never loads the
-  sprites inside an inline SVG and would photograph them blank. The rampart
-  goes on in `doScaleAndPrint` AFTER `_printApplyPageNumbers`
-  (`framePrintPages`): each ordinary question sheet becomes a margin-free
-  `@page qf-sheet`, 210 × 296mm and padded 18/16/20mm, so its content box is
-  the planner's 178 × 258mm. **296mm, never 297**: a sheet a hair over A4
-  spills a blank page after it. Tall pages and answer-key pages are left plain.
-- **`border({ fit: 'margins' })` must fit inside 16mm / 18mm / 20mm.**
-  `tools/quest-frames-tests.mjs` parses every rect and sprite and fails if one
-  enters the text column.
+- **Every portal question sheet is a QUEST PAGE (v1.445.0)**, dressed by the
+  design system's own `QF.decorate` through `QuestFramesCer.frameSheets` — the
+  ONE dresser the printer (`framePrintPages`, after `_printApplyPageNumbers` in
+  `doScaleAndPrint`) and the live preview (`_wsPreviewPack`) both call: the
+  rampart; a header band (slim banner, boss, one heart per question); a footer
+  band (a hero on the wall, the XP trail counting framed sheets, a companion's
+  cheer). `variantOf`: the sheet holding the START lead is the start page (full
+  banner with the logo, the boss with its rule of play, the hero card = the
+  name fields, Name and Date only via `PORTAL_FIELDS`), the last framed sheet
+  the FINALE (treasure chest scored out of `q.total`, the sheet's marks), the
+  rest the TRAIL. Page 1 without the name fields is a trail page and is handed
+  `CHEERS[0]` — the design system would cheer it "Almost at the treasure!".
+  Tall (flowing) pages and answer-key pages stay plain, on the ordinary margins.
+- **The planner plans a framed sheet to the box BETWEEN the bands**
+  (`QuestFramesCer.SHEET` / `contentPx()`: 296mm − 124px top − 164px bottom =
+  the finale's 150px safe line + `FOOT_GAP` 14, so the page number never sits
+  on the chest). quest-frames.css repeats those numbers as the framed sheet's
+  padding (print and `.wspv-sheet.qf-sheet`), and the unit test fails if they
+  disagree. Plan to the ordinary 258mm and the last question prints under the
+  hero and the chest.
+  - **The framing is read OFF THE MARKUP.** `_wsHeaderHtml` emits
+    `QuestFramesCer.portalLead` (in the first chunk, where the old header was):
+    a marker whose `data-qf` names the quest. `_printPagePxFor(root, opts)` finds
+    it in the HTML being planned, so the printer and the preview — which plan
+    the same HTML — cannot disagree; no lead (Study Buddy photograph, past
+    papers, bank proofs) is PRINT_PAGE_PX, byte for byte the old planner.
+    `_classifyPrintChunks` takes the same `pagePx` for its "half a page"; the
+    answer key is ALWAYS planned to PRINT_PAGE_PX, because it prints plain.
+  - **The START lead is the room the start header needs** (`SHEET.startExtra`,
+    92px) with its height divided by `--qf-pz`. Every fit-to-page zoom goes
+    through `_printSetContentZoom` (planner, printer, preview), which sets
+    `--qf-pz` beside the zoom, so a shrunk page 1 still keeps the full 92px and
+    the planner measured it that way. Set a zoom any other way and a shrunk
+    page 1's questions ride up under the hero card.
+- **`@page qf-sheet` is declared TWICE, and the one in index.html is the one
+  that works.** Chrome lets a LATER stylesheet's plain `@page` beat an EARLIER
+  one's named page, whatever the selector says; quest-frames.css loads before
+  index.html's inline styles, so its `@page qf-sheet { margin: 0 }` lost and
+  v1.444.0 printed every framed sheet SHRUNK inside the old 16/18/20mm margins
+  — on a sheet that measured perfectly in the DOM. index.html declares it again
+  right after `@page polymath-cover`, below the plain `@page`. Never remove it.
+  **296mm, never 297**: a sheet a hair over A4 spills a blank page after it.
+- The 📖 Study Buddy export (`noTags`) gets no lead and no frame: html2canvas
+  never loads the sprites inside an inline SVG and would photograph them blank.
 - **SVG pictures are not in `document.images`**, so nothing in the old wait
   covers them: the portal waits for `QuestFramesCer.ready(output)` before
   `_printAndRestore`, and the creators' print windows wait for `qfReady()`.
@@ -2006,9 +2036,16 @@ beside `_wsStudentFieldsOn` in `app.js`, the `questFrame` option of
   of clipping it. The creators have no marks, so their gems are a plain rare blue.
 - Run `node --test tools/quest-frames-tests.mjs` and
   `node tools/quest-frames-browser-check.mjs` (real Chromium, PDFs with
-  background graphics off, plus the switch in all three pages' real toggle
-  markup: hidden for a student, an employee and an unnamed teacher, unticked
-  on hand-over and after a reload; also in CI, `.github/workflows/quest-frames.yml`).
+  background graphics off; also in CI, `.github/workflows/quest-frames.yml`).
+  The portal half runs the SHIPPED planner, printer and preview cut out of
+  app.js on a framed worksheet, then RASTERISES the PDF with `pdftoppm`
+  (poppler-utils, installed in the workflow) and checks the wall reaches the
+  paper's edge on every framed sheet and the key keeps its margins — a DOM
+  measurement passed v1.444.0's shrunk print. It also checks every header and
+  footer piece stays out of the question box, the start lead keeps its room
+  under zoom, and the preview shows the same sheets. Plus the switch in all
+  three pages' real toggle markup: hidden for a student, an employee and an
+  unnamed teacher, unticked on hand-over and after a reload.
 
 ## 🎨 The worksheet cover is the Big M design (v1.438.0)
 
