@@ -685,6 +685,197 @@
         stroke: #c98c97;
         stroke-width: 2;
       }
+      /* Plant reproduction additions (v1.1.0) */
+      .flower-sepal {
+        fill: #b7d3a1;
+        stroke: #6f9461;
+        stroke-width: 2;
+      }
+      .highlight-male .flower-sepal,
+      .highlight-female .flower-sepal,
+      .highlight-male .flower-petal,
+      .highlight-female .flower-petal {
+        opacity: 0.35;
+      }
+      .sort-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .sort-item {
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px 12px;
+        min-width: 0;
+      }
+      .sort-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        justify-content: space-between;
+      }
+      .sort-row > span {
+        flex: 1 1 170px;
+        font-size: 0.88rem;
+        min-width: 0;
+      }
+      .sort-choices {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .sort-choices button {
+        font-size: 0.8rem;
+        padding: 6px 12px;
+        min-height: 40px;
+      }
+      .sort-item.right {
+        border-color: #9cc9ad;
+        background: #f2faf5;
+      }
+      .sort-item.miss {
+        border-color: #e2b089;
+        background: #fff7f0;
+      }
+      .sort-why {
+        font-size: 0.8rem;
+        color: var(--muted);
+        margin: 6px 0 0;
+      }
+      .sort-why:empty {
+        display: none;
+      }
+      .tally {
+        font-weight: bold;
+        color: var(--blue);
+        margin-top: 12px;
+        font-size: 0.9rem;
+      }
+      .table-scroll {
+        overflow-x: auto;
+        max-width: 100%;
+      }
+      .lab-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.82rem;
+        margin-top: 12px;
+        background: white;
+      }
+      .lab-table th,
+      .lab-table td {
+        border-bottom: 1px solid var(--line);
+        padding: 6px 8px;
+        text-align: left;
+      }
+      .lab-table th {
+        color: var(--muted);
+        font-weight: normal;
+      }
+      .lab-table tr.latest td {
+        background: var(--pale);
+        font-weight: bold;
+      }
+      .flower-bed {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .bed-flower {
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+        text-align: center;
+        font-size: 0.8rem;
+        min-width: 0;
+      }
+      .bed-flower svg {
+        max-width: 96px;
+        margin: 0 auto;
+      }
+      .bed-flower label {
+        display: block;
+        margin-top: 6px;
+      }
+      .bed-flower input[type="range"] {
+        width: 100%;
+      }
+      .bed-flower.withered {
+        opacity: 0.55;
+      }
+      .bee {
+        transition: transform 0.9s ease-in-out;
+      }
+      .garden-flower {
+        cursor: pointer;
+      }
+      .garden-flower.from circle.centre {
+        stroke: #cf781a;
+        stroke-width: 4;
+      }
+      .garden-flower.to circle.centre {
+        stroke: var(--blue);
+        stroke-width: 4;
+      }
+      .seed-part {
+        transition: opacity 0.2s ease;
+      }
+      .seed-diagram.focus .seed-part {
+        opacity: 0.25;
+      }
+      .seed-diagram.focus .seed-part.on {
+        opacity: 1;
+      }
+      .graph-readout {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .graph-readout span {
+        flex: 1 1 140px;
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 0.82rem;
+      }
+      .graph-hidden .graph-line {
+        visibility: hidden;
+      }
+      .wind-seed {
+        transition: transform 1.1s cubic-bezier(0.3, 0.1, 0.4, 1);
+      }
+      .seq-done {
+        display: grid;
+        gap: 6px;
+        margin: 12px 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: seq;
+      }
+      .seq-done li {
+        background: white;
+        border: 1px dashed #c7dbe9;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 0.85rem;
+        counter-increment: seq;
+      }
+      .seq-done li:before {
+        content: counter(seq) ". ";
+        font-weight: bold;
+        color: var(--blue);
+      }
+      .seq-done li.filled {
+        border-style: solid;
+        border-color: #9cc9ad;
+        background: #f2faf5;
+      }
       @media (max-width: 720px) {
         .hero {
           grid-template-columns: 1fr;
@@ -818,7 +1009,8 @@
           </p>
           <div>
             <span class="tag">12 learning stops</span
-            ><span class="tag">Explore · Experiment · Apply</span>
+            ><span class="tag">Explore · Experiment · Apply</span
+            ><span class="tag">New: plant labs</span>
           </div>
           <p class="small">
             An interactive learning guide based on
@@ -1163,9 +1355,13 @@
               <svg
                 viewBox="0 0 500 320"
                 role="img"
-                aria-label="Labelled flower cutaway: anther and filament are male structures; stigma, style, ovary and ovules are female structures"
+                aria-label="Labelled flower cutaway: anther and filament are male structures; stigma, style, ovary and ovules are female structures; petals and sepals are neither"
               >
                 <g transform="translate(50 0)">
+                  <g class="flower-sepal">
+                    <path d="M200 266 Q146 272 122 238 Q166 238 200 254Z" />
+                    <path d="M200 266 Q254 272 278 238 Q234 238 200 254Z" />
+                  </g>
                   <path
                     class="flower-petal"
                     d="M197 230 Q15 140 70 48 Q152 12 198 145 Q239 5 323 49 Q381 142 204 230Z"
@@ -1201,6 +1397,8 @@
                   <path d="M377 35 H320 L270 65" />
                   <path d="M378 119 H255" />
                   <path d="M377 244 H290" />
+                  <path d="M48 112 H112" />
+                  <path d="M378 296 H330 L310 262" />
                 </g>
                 <g style="font-size: 16px">
                   <text x="5" y="45">Anther</text>
@@ -1209,6 +1407,8 @@
                   <text x="385" y="40">Stigma</text>
                   <text x="385" y="124">Style</text>
                   <text x="385" y="249">Ovary</text>
+                  <text x="5" y="117">Petal</text>
+                  <text x="385" y="301">Sepal</text>
                 </g>
               </svg>
             </div>
@@ -1234,6 +1434,33 @@
               it carries. Petals may help attract pollinators, but they do not
               produce reproductive cells.
             </p>
+          </div>
+        </div>
+        <div class="grid">
+          <div class="widget">
+            <div class="widget-label">Try it · Part detective</div>
+            <h3>Which part does this job?</h3>
+            <p class="small">
+              Read the job, then choose the flower part that does it. Match all
+              eight jobs to crack the case.
+            </p>
+            <div class="status" id="jobCard" role="status"></div>
+            <div class="part-buttons" id="jobChoices"></div>
+            <p class="tally" id="jobScore" aria-live="polite"></p>
+            <div class="controls">
+              <button id="jobRestart">Shuffle the jobs</button>
+            </div>
+          </div>
+          <div class="widget">
+            <div class="widget-label">Try it · Male, female or neither?</div>
+            <h3>Sort the eight parts</h3>
+            <p class="small">
+              The anther and filament together are called the
+              <strong>stamen</strong>. The stigma, style and ovary together
+              are called the <strong>pistil</strong>.
+            </p>
+            <div class="sort-list" id="partSorter"></div>
+            <p class="tally" id="partSorterScore" aria-live="polite"></p>
           </div>
         </div>
         <div class="quick-mount" data-quick="flowers"></div>
@@ -1340,6 +1567,105 @@
             </p>
           </div>
         </div>
+        <div class="widget full">
+          <div class="widget-label">Try it · Follow the bee</div>
+          <h3>Where can the pollen go?</h3>
+          <p class="small">
+            Plants P and Q are the same kind of plant. Plant R is a different
+            kind. Choose where the bee picks up pollen and where it lands, then
+            send the bee. Tap a flower to choose it too.
+          </p>
+          <div class="diagram">
+            <svg
+              id="beeGarden"
+              viewBox="0 0 560 230"
+              role="img"
+              aria-label="A garden with plant P carrying flowers P1 and P2, plant Q carrying flower Q1 of the same kind, and plant R carrying flower R1 of a different kind"
+            >
+              <rect x="0" y="196" width="560" height="34" fill="#e6dccb" />
+              <g stroke="#5f8f66" stroke-width="6" fill="none" stroke-linecap="round">
+                <path d="M110 200 V70 M110 150 Q140 128 186 112" />
+                <path d="M320 200 V92" />
+                <path d="M470 200 V100" />
+              </g>
+              <g fill="#9cc79c">
+                <ellipse cx="88" cy="168" rx="20" ry="9" />
+                <ellipse cx="300" cy="170" rx="20" ry="9" />
+                <ellipse cx="492" cy="172" rx="18" ry="8" />
+              </g>
+              <g class="garden-flower" data-garden="P1" transform="translate(110 70)">
+                <g fill="#f4b9c0" stroke="#c98c97" stroke-width="2">
+                  <ellipse cx="0" cy="-22" rx="13" ry="20" /><ellipse cx="21" cy="-7" rx="13" ry="20" transform="rotate(72 21 -7)" /><ellipse cx="13" cy="18" rx="13" ry="20" transform="rotate(144 13 18)" /><ellipse cx="-13" cy="18" rx="13" ry="20" transform="rotate(216 -13 18)" /><ellipse cx="-21" cy="-7" rx="13" ry="20" transform="rotate(288 -21 -7)" />
+                </g>
+                <circle class="centre" r="10" fill="#f2d16b" />
+              </g>
+              <g class="garden-flower" data-garden="P2" transform="translate(186 112)">
+                <g fill="#f4b9c0" stroke="#c98c97" stroke-width="2">
+                  <ellipse cx="0" cy="-20" rx="12" ry="18" /><ellipse cx="19" cy="-6" rx="12" ry="18" transform="rotate(72 19 -6)" /><ellipse cx="12" cy="16" rx="12" ry="18" transform="rotate(144 12 16)" /><ellipse cx="-12" cy="16" rx="12" ry="18" transform="rotate(216 -12 16)" /><ellipse cx="-19" cy="-6" rx="12" ry="18" transform="rotate(288 -19 -6)" />
+                </g>
+                <circle class="centre" r="9" fill="#f2d16b" />
+              </g>
+              <g class="garden-flower" data-garden="Q1" transform="translate(320 92)">
+                <g fill="#f4b9c0" stroke="#c98c97" stroke-width="2">
+                  <ellipse cx="0" cy="-22" rx="13" ry="20" /><ellipse cx="21" cy="-7" rx="13" ry="20" transform="rotate(72 21 -7)" /><ellipse cx="13" cy="18" rx="13" ry="20" transform="rotate(144 13 18)" /><ellipse cx="-13" cy="18" rx="13" ry="20" transform="rotate(216 -13 18)" /><ellipse cx="-21" cy="-7" rx="13" ry="20" transform="rotate(288 -21 -7)" />
+                </g>
+                <circle class="centre" r="10" fill="#f2d16b" />
+              </g>
+              <g class="garden-flower" data-garden="R1" transform="translate(470 100)">
+                <g fill="#b9d3f2" stroke="#6f93bf" stroke-width="2">
+                  <path d="M0 -30 L9 -9 L30 0 L9 9 L0 30 L-9 9 L-30 0 L-9 -9Z" />
+                </g>
+                <circle class="centre" r="8" fill="#f7f0c8" />
+              </g>
+              <g style="font-size: 14px">
+                <text x="70" y="221">Plant P</text>
+                <text x="296" y="221">Plant Q</text>
+                <text x="446" y="221">Plant R</text>
+                <text x="82" y="36">P1</text>
+                <text x="206" y="88">P2</text>
+                <text x="344" y="62">Q1</text>
+                <text x="496" y="70">R1</text>
+              </g>
+              <g id="bee" class="bee" transform="translate(30 40)">
+                <ellipse cx="0" cy="0" rx="11" ry="8" fill="#f2c230" stroke="#3d3320" stroke-width="2" />
+                <path d="M-3 -7 V7 M3 -7 V7" stroke="#3d3320" stroke-width="2.5" />
+                <ellipse cx="-3" cy="-12" rx="7" ry="5" fill="#e8f4fb" stroke="#8fb4cc" />
+                <ellipse cx="6" cy="-11" rx="7" ry="5" fill="#e8f4fb" stroke="#8fb4cc" />
+                <circle id="beePollen" cx="0" cy="9" r="3.5" fill="#dca731" hidden />
+              </g>
+            </svg>
+          </div>
+          <div class="controls">
+            <label for="beeFrom">Pollen from</label
+            ><select id="beeFrom">
+              <option value="P1">P1</option>
+              <option value="P2">P2</option>
+              <option value="Q1">Q1</option>
+              <option value="R1">R1</option></select
+            ><label for="beeTo">to the stigma of</label
+            ><select id="beeTo">
+              <option value="P1">P1</option>
+              <option value="P2" selected>P2</option>
+              <option value="Q1">Q1</option>
+              <option value="R1">R1</option></select
+            ><button id="beeGo" class="primary">Send the bee →</button>
+          </div>
+          <div class="status" id="beeStatus" role="status">
+            Choose two flowers, then send the bee.
+          </div>
+          <p class="small" id="beeLog" aria-live="polite"></p>
+        </div>
+        <div class="widget full">
+          <div class="widget-label">Try it · Insect or wind?</div>
+          <h3>Read the clues in the flower</h3>
+          <p class="small">
+            A flower's structure is a clue to how its pollen travels. Decide
+            whether each feature belongs to a flower pollinated by insects or
+            by wind.
+          </p>
+          <div class="sort-list" id="pollinatorSorter"></div>
+          <p class="tally" id="pollinatorSorterScore" aria-live="polite"></p>
+        </div>
         <div class="quick-mount" data-quick="pollination"></div>
       </section>
 
@@ -1441,6 +1767,34 @@
             </p>
           </div>
         </div>
+        <div class="widget full">
+          <div class="widget-label">Try it · From flowers to a harvest</div>
+          <h3>How many fruits? How many seeds?</h3>
+          <p class="small">
+            One plant has five flowers. Each ovary holds six ovules. Decide
+            which flowers are pollinated and how many ovules are fertilised in
+            each, then count the harvest.
+          </p>
+          <div class="flower-bed" id="flowerBed"></div>
+          <div class="status" id="harvestStatus" role="status"></div>
+          <div class="hint">
+            One flower has one ovary, so it can become at most one fruit.
+            Each fertilised ovule can become one seed. A flower that is not
+            pollinated, or whose ovules are not fertilised, usually withers
+            and does not form a fruit.
+          </div>
+        </div>
+        <div class="widget full">
+          <div class="widget-label">Try it · Fruit or not?</div>
+          <h3>Is it really a fruit?</h3>
+          <p class="small">
+            A fruit develops from the ovary of a flower and usually contains
+            seeds. Some foods we call vegetables are fruits, and some are not
+            fruits at all.
+          </p>
+          <div class="sort-list" id="fruitSorter"></div>
+          <p class="tally" id="fruitSorterScore" aria-live="polite"></p>
+        </div>
         <div class="quick-mount" data-quick="fertilisation"></div>
       </section>
 
@@ -1500,31 +1854,123 @@
                   <td>Wind</td>
                   <td>
                     Small, light seeds; wings or hairs keep them airborne.
-                    Maple, dandelion.
+                    Maple, dandelion, angsana, lalang.
                   </td>
                 </tr>
                 <tr>
                   <td>Animals</td>
                   <td>
                     Hooks catch on fur; fleshy fruits are eaten and seeds are
-                    carried, spat out or passed out. Burdock, tomato, mango.
+                    carried, spat out or passed out. Burdock, love grass,
+                    tomato, mango, rambutan.
                   </td>
                 </tr>
                 <tr>
                   <td>Water</td>
                   <td>
                     Air trapped in a fibrous husk helps floating; waterproof
-                    covering protects. Pong pong, nipah.
+                    covering protects. Pong pong, nipah, coconut.
                   </td>
                 </tr>
                 <tr>
                   <td>Explosive action</td>
                   <td>
                     A dry fruit splits with force and scatters seeds. Saga,
-                    lupin, jewelweed.
+                    balsam, lupin, jewelweed.
                   </td>
                 </tr>
               </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="widget full">
+          <div class="widget-label">Try it · Wind tunnel lab</div>
+          <h3>Which seed travels farthest in the wind?</h3>
+          <p class="small">
+            Drop a model seed in front of a fan. Change one thing at a time and
+            compare your results. The model is simplified: a seed that falls
+            more slowly stays in the moving air for longer.
+          </p>
+          <div class="controls">
+            <label for="windSeed">Seed</label
+            ><select id="windSeed">
+              <option value="none">No wings</option>
+              <option value="small">Small wings</option>
+              <option value="large">Large wings</option>
+              <option value="hairs">Fine hairs (parachute)</option></select
+            ><label for="windFan">Fan</label
+            ><select id="windFan">
+              <option value="off">Off</option>
+              <option value="low">Low</option>
+              <option value="high" selected>High</option></select
+            ><label for="windHeight">Height</label
+            ><select id="windHeight">
+              <option value="1">1 m</option>
+              <option value="2" selected>2 m</option>
+            </select>
+          </div>
+          <div class="diagram">
+            <svg
+              id="windLab"
+              style="max-width: 680px; margin: 0 auto"
+              viewBox="0 0 560 210"
+              role="img"
+              aria-label="A fan blows air across the drop point. The model seed falls and lands some distance away along a ruler marked from 0 to 10 metres"
+            >
+              <rect x="0" y="0" width="560" height="210" fill="#f5fafe" />
+              <g id="windFanArt" transform="translate(28 70)">
+                <rect x="-6" y="40" width="12" height="90" fill="#9fb3c2" />
+                <circle r="34" fill="#dfeaf3" stroke="#7f98ab" stroke-width="3" />
+                <g id="windBlades" fill="#7f98ab">
+                  <ellipse cx="0" cy="-17" rx="7" ry="16" />
+                  <ellipse cx="15" cy="9" rx="7" ry="16" transform="rotate(120 15 9)" />
+                  <ellipse cx="-15" cy="9" rx="7" ry="16" transform="rotate(240 -15 9)" />
+                </g>
+              </g>
+              <g id="windArrows" stroke="#8fc0e6" stroke-width="2" fill="none" stroke-dasharray="6 6">
+                <path d="M70 50 H200" /><path d="M70 85 H230" /><path d="M70 120 H200" />
+              </g>
+              <path d="M80 20 V178" stroke="#c6d4de" stroke-dasharray="3 5" />
+              <rect x="0" y="178" width="560" height="32" fill="#e6dccb" />
+              <g stroke="#8a7a62" stroke-width="1.5">
+                <path d="M80 178 v10 M126 178 v6 M172 178 v10 M218 178 v6 M264 178 v10 M310 178 v6 M356 178 v10 M402 178 v6 M448 178 v10 M494 178 v6 M540 178 v10" />
+              </g>
+              <g style="font-size: 12px">
+                <text x="76" y="203">0</text>
+                <text x="168" y="203">2</text>
+                <text x="260" y="203">4</text>
+                <text x="352" y="203">6</text>
+                <text x="444" y="203">8</text>
+                <text x="526" y="203">10 m</text>
+              </g>
+              <g id="windSeedArt" class="wind-seed" transform="translate(80 30)">
+                <ellipse cx="0" cy="0" rx="6" ry="5" fill="#a88754" />
+                <path id="windWing" d="M2 -2 Q30 -18 34 -6 Q22 2 2 2Z" fill="#c5d89d" stroke="#6d8853" hidden />
+                <g id="windHairs" stroke="#a5b9b8" stroke-width="1.5" hidden>
+                  <path d="M0 -4 V-22 M0 -22 L-14 -32 M0 -22 L-6 -36 M0 -22 L6 -36 M0 -22 L14 -32 M0 -22 L18 -24 M0 -22 L-18 -24" />
+                </g>
+              </g>
+            </svg>
+          </div>
+          <div class="controls">
+            <button id="windDrop" class="primary">Drop the seed ↓</button
+            ><button id="windClear">Clear results</button>
+          </div>
+          <div class="status" id="windStatus" role="status">
+            Choose a seed, a fan setting and a height, then drop the seed.
+          </div>
+          <div class="table-scroll">
+            <table class="lab-table" id="windTable">
+              <thead>
+                <tr>
+                  <th>Drop</th>
+                  <th>Seed</th>
+                  <th>Fan</th>
+                  <th>Height</th>
+                  <th>Distance</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
             </table>
           </div>
         </div>
@@ -1603,6 +2049,116 @@
             </div>
           </div>
         </div>
+        <div class="grid">
+          <div class="widget">
+            <div class="widget-label">Try it · Inside a seed</div>
+            <h3>Open up a bean seed</h3>
+            <div class="diagram seed-diagram" id="seedDiagram">
+              <svg
+                viewBox="0 0 360 220"
+                role="img"
+                aria-label="A bean seed opened up: the seed coat around the outside, two seed leaves, and the embryo's young root and young shoot between them"
+              >
+                <path
+                  class="seed-part"
+                  data-seed-art="coat"
+                  d="M180 22 C270 18 330 70 326 122 C322 182 254 206 180 200 C104 206 36 182 34 122 C30 70 90 18 180 22Z"
+                  fill="#b98a5a"
+                  stroke="#7c5634"
+                  stroke-width="3"
+                />
+                <g class="seed-part" data-seed-art="leaves">
+                  <path d="M178 36 C112 34 54 74 54 120 C54 166 108 190 172 186 C160 140 160 80 178 36Z" fill="#efe1b5" stroke="#b49b5c" stroke-width="2" />
+                  <path d="M186 36 C252 34 308 74 308 120 C308 166 254 190 190 186 C202 140 202 80 186 36Z" fill="#f3e6be" stroke="#b49b5c" stroke-width="2" />
+                </g>
+                <g class="seed-part" data-seed-art="root">
+                  <path d="M182 104 Q176 140 170 166" stroke="#d7b46a" stroke-width="9" stroke-linecap="round" fill="none" />
+                </g>
+                <g class="seed-part" data-seed-art="shoot">
+                  <path d="M182 104 Q186 84 182 66" stroke="#8dbb6e" stroke-width="7" stroke-linecap="round" fill="none" />
+                  <path d="M182 68 Q166 56 172 46 Q186 52 182 68Z M182 68 Q198 56 194 46 Q180 52 182 68Z" fill="#8dbb6e" />
+                </g>
+                <g fill="none" stroke="#526575" stroke-width="1.5">
+                  <path d="M12 40 H64 L92 52" />
+                  <path d="M12 196 H70 L96 160" />
+                  <path d="M348 186 H232 L176 160" />
+                  <path d="M348 40 H234 L192 58" />
+                </g>
+                <g style="font-size: 14px">
+                  <text x="12" y="34">Seed coat</text>
+                  <text x="12" y="215">Seed leaf</text>
+                  <text x="268" y="206">Young root</text>
+                  <text x="262" y="34">Young shoot</text>
+                </g>
+              </svg>
+            </div>
+            <div class="part-buttons" id="seedParts"></div>
+            <div class="status" id="seedInfo" role="status">
+              Select a part of the seed to find out what it does.
+            </div>
+          </div>
+          <div class="widget">
+            <div class="widget-label">Try it · Predict, then reveal</div>
+            <h3>What happens to the seed leaves?</h3>
+            <p class="small">
+              A bean seed germinates over ten days. Predict how the mass of its
+              seed leaves changes, then reveal the model graph.
+            </p>
+            <div class="controls" id="leafPredict">
+              <button data-predict="up">It increases</button
+              ><button data-predict="same">It stays the same</button
+              ><button data-predict="down">It decreases</button>
+            </div>
+            <div class="diagram graph-hidden" id="leafGraph">
+              <svg
+                viewBox="0 0 340 200"
+                role="img"
+                aria-label="Line graph: the mass of the seed leaves falls over ten days while the height of the seedling rises"
+              >
+                <path d="M40 20 V170 H320" stroke="#526575" fill="none" stroke-width="1.5" />
+                <g style="font-size: 11px">
+                  <text x="36" y="186">0</text>
+                  <text x="172" y="186">5</text>
+                  <text x="304" y="186">10</text>
+                  <text x="132" y="198">Day</text>
+                  <text x="6" y="24">High</text>
+                  <text x="6" y="172">0</text>
+                </g>
+                <path id="leafMassLine" class="graph-line" fill="none" stroke="#c2862f" stroke-width="3" />
+                <path id="heightLine" class="graph-line" fill="none" stroke="#3f8a5c" stroke-width="3" stroke-dasharray="7 5" />
+                <line id="leafDayMarker" class="graph-line" y1="20" y2="170" stroke="#0d559c" stroke-width="1.5" stroke-dasharray="3 4" />
+                <g class="graph-line" style="font-size: 11px">
+                  <text x="200" y="36" fill="#3f8a5c">seedling height</text>
+                  <text x="48" y="118" fill="#c2862f">mass of seed leaves</text>
+                </g>
+              </svg>
+            </div>
+            <label for="leafDay">Day: <output id="leafDayValue">0</output></label
+            ><input id="leafDay" type="range" min="0" max="10" value="0" />
+            <div class="graph-readout">
+              <span id="leafMassRead"></span><span id="heightRead"></span>
+            </div>
+            <div class="status" id="leafStatus" role="status">
+              Make a prediction to reveal the graph.
+            </div>
+          </div>
+        </div>
+        <div class="widget full">
+          <div class="widget-label">Try it · Germination in order</div>
+          <h3>What happens first?</h3>
+          <p class="small">
+            Choose the stages of germination in order, starting with a dry
+            seed.
+          </p>
+          <ol class="seq-done" id="germSlots"></ol>
+          <div class="part-buttons" id="germPick"></div>
+          <div class="status" id="germOrderStatus" role="status">
+            Choose the first stage.
+          </div>
+          <div class="controls">
+            <button id="germReset">Start again</button>
+          </div>
+        </div>
         <div class="quick-mount" data-quick="germination"></div>
       </section>
 
@@ -1679,6 +2235,60 @@
             <p class="small">
               The fern's complete life cycle has additional stages. This model
               focuses on spore formation, release and growth, as in the chapter.
+            </p>
+          </div>
+        </div>
+        <div class="grid">
+          <div class="widget">
+            <div class="widget-label">Try it · Seeds or spores?</div>
+            <h3>How does each one reproduce?</h3>
+            <div class="sort-list" id="sporeSorter"></div>
+            <p class="tally" id="sporeSorterScore" aria-live="polite"></p>
+          </div>
+          <div class="widget">
+            <div class="widget-label">Compare</div>
+            <h3>Spores and seeds are different</h3>
+            <div class="table-scroll">
+              <table class="compare-table">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>Spores</th>
+                    <th>Seeds</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Made by</td>
+                    <td>Ferns and mosses (and fungi, which are not plants)</td>
+                    <td>Flowering plants and some non-flowering plants such as conifers</td>
+                  </tr>
+                  <tr>
+                    <td>Formed in</td>
+                    <td>Spore bags or capsules</td>
+                    <td>The ovary of a flower, from fertilised ovules (in flowering plants)</td>
+                  </tr>
+                  <tr>
+                    <td>Size and number</td>
+                    <td>Very tiny and light; made in very large numbers</td>
+                    <td>Larger; fewer are made</td>
+                  </tr>
+                  <tr>
+                    <td>Pollination needed?</td>
+                    <td>No</td>
+                    <td>Yes, in flowering plants</td>
+                  </tr>
+                  <tr>
+                    <td>Usually carried by</td>
+                    <td>Wind or water</td>
+                    <td>Wind, water, animals or explosive action</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="small" style="margin-top: 12px">
+              Fungi such as mushrooms and bread mould also reproduce by spores,
+              but fungi are not plants.
             </p>
           </div>
         </div>
@@ -1814,13 +2424,22 @@
           <strong>dispersal</strong> spreads seeds;
           <strong>germination</strong> starts a seed growing.
         </div>
+        <div class="widget full">
+          <div class="widget-label">Try it · Name the process</div>
+          <h3>Pollination, fertilisation, dispersal or germination?</h3>
+          <p class="small">
+            Each sentence describes one process. Name it.
+          </p>
+          <div class="sort-list" id="processSorter"></div>
+          <p class="tally" id="processSorterScore" aria-live="polite"></p>
+        </div>
       </section>
     </main>
     <footer class="footer">
       <div class="wrap footer-inner">
         <div>
           <a href="../">← Back to all topics</a><br />Polymath Interactive
-          Textbook · Reproduction · v1.0.0<br />Progress is saved in this
+          Textbook · Reproduction · v1.1.0<br />Progress is saved in this
           browser. On shared devices, use Reset progress for a fresh start.
         </div>
         <div>
@@ -2126,6 +2745,76 @@
             explanation:
               "Change oxygen availability only. Keeping other relevant conditions the same makes the comparison meaningful.",
           },
+          {
+            id: "seed-count",
+            prompt:
+              "9. The ovary of a flower contains 10 ovules. Only 6 ovules are fertilised. How many fruits and seeds can develop from this flower?",
+            choices: [
+              "10 fruits and 10 seeds",
+              "1 fruit and 6 seeds",
+              "6 fruits and 1 seed",
+            ],
+            correct: 1,
+            explanation:
+              "One ovary becomes one fruit. Each fertilised ovule can become a seed, so 6 seeds form. The 4 unfertilised ovules do not become seeds.",
+          },
+          {
+            id: "bees",
+            prompt:
+              "10. A farmer's insect-pollinated plants are grown in a closed greenhouse with no insects. Why do they produce very few fruits?",
+            choices: [
+              "The plants cannot absorb enough water.",
+              "Few flowers are pollinated, so few ovules are fertilised.",
+              "The seeds cannot be dispersed.",
+            ],
+            correct: 1,
+            explanation:
+              "Insects carry pollen from anthers to stigmas. Without them few flowers are pollinated, fertilisation cannot follow, and few ovaries develop into fruits.",
+          },
+          {
+            id: "wind-flower",
+            prompt:
+              "11. A flower has small, dull petals, no scent, and large feathery stigmas hanging outside it. How is it most likely pollinated?",
+            choices: ["By insects", "By wind", "By water"],
+            correct: 1,
+            explanation:
+              "Wind-pollinated flowers do not need to attract animals. Large feathery stigmas outside the flower catch pollen carried by the wind.",
+          },
+          {
+            id: "fruit-or-not",
+            prompt:
+              "12. Which of these is a fruit?",
+            choices: ["Carrot", "Potato", "Cucumber"],
+            correct: 2,
+            explanation:
+              "A cucumber develops from the ovary of a flower and contains seeds. A carrot is a root and a potato is an underground stem.",
+          },
+          {
+            id: "seed-leaves",
+            prompt:
+              "13. As a bean seedling grows, the mass of its seed leaves decreases. Why?",
+            choices: [
+              "The food stored in the seed leaves is used for growth.",
+              "The seed leaves absorb water from the soil.",
+              "The seed leaves make food for the seedling at night.",
+            ],
+            correct: 0,
+            explanation:
+              "Seed leaves store food. The young plant uses it to grow until its true leaves can make food, so the seed leaves shrink and later drop off.",
+          },
+          {
+            id: "boiled-water",
+            prompt:
+              "14. Set-up A: seeds on damp cotton wool. Set-up B: the same kind of seeds covered by water that was boiled and cooled, with a layer of oil on top. Both are kept at the same temperature. What is being tested?",
+            choices: [
+              "Whether seeds need light to germinate",
+              "Whether seeds need air (oxygen) to germinate",
+              "Whether seeds need warmth to germinate",
+            ],
+            correct: 1,
+            explanation:
+              "Boiling removes dissolved air from the water and the oil layer stops air from dissolving back in. The seeds in B have water but no air; the seeds in A have both.",
+          },
         ];
         function createQuiz(q, isApply) {
           const field = document.createElement("fieldset");
@@ -2311,6 +3000,10 @@
             "Ovary: contains ovules. After successful fertilisation it can develop into a fruit.",
           ovule:
             "Ovule: contains an egg cell. After successful fertilisation it can develop into a seed.",
+          petal:
+            "Petal: in many flowers it is large and brightly coloured to attract animals such as insects. It does not produce reproductive cells.",
+          sepal:
+            "Sepal: the green, leaf-like part that protects the flower when it is still a bud.",
         };
         Object.keys(flowerParts).forEach((id) => {
           const b = document.createElement("button");
@@ -2444,6 +3137,48 @@
             evidence: "wings",
             kind: "hair",
           },
+          {
+            name: "Angsana",
+            clue: "A flat, round, papery wing surrounds the seed.",
+            method: "wind",
+            evidence: "wings",
+            kind: "disc",
+          },
+          {
+            name: "Rambutan",
+            clue: "A fruit has sweet, juicy flesh that animals eat.",
+            method: "animals",
+            evidence: "flesh",
+            kind: "rambutan",
+          },
+          {
+            name: "Coconut",
+            clue: "A fibrous husk traps air and a waterproof outer covering keeps water out.",
+            method: "water",
+            evidence: "husk",
+            kind: "coconut",
+          },
+          {
+            name: "Balsam",
+            clue: "A ripe fruit splits open with force and flings out its seeds.",
+            method: "splitting",
+            evidence: "pod",
+            kind: "balsam",
+          },
+          {
+            name: "Love grass",
+            clue: "Its tiny fruits have hooks that catch on fur and clothes.",
+            method: "animals",
+            evidence: "flesh",
+            kind: "spike",
+          },
+          {
+            name: "Lalang",
+            clue: "A tiny, light fruit has a tuft of silky hairs.",
+            method: "wind",
+            evidence: "wings",
+            kind: "hair",
+          },
         ];
         let specimen = 0;
         function specimenSvg(kind) {
@@ -2457,6 +3192,15 @@
             hooks:
               '<circle cx="100" cy="76" r="34" fill="#a6b67c"/><g fill="none" stroke="#788a53" stroke-width="3"><path d="M71 50 L56 32 Q52 22 44 31 M93 43 L91 21 Q93 12 100 18 M124 52 L144 31 Q153 27 152 37 M132 79 L159 76 Q168 78 161 87 M119 104 L131 128 Q130 138 123 131 M80 104 L65 126 Q57 132 57 122 M68 80 L45 83 Q34 78 43 72"/></g>',
             hair: '<path d="M99 111 L99 62" stroke="#8e805e" stroke-width="2"/><ellipse cx="99" cy="121" rx="5" ry="10" fill="#8e805e"/><g stroke="#a5b9b8" stroke-width="2"><path d="M99 66 L56 30 M99 66 L75 17 M99 66 V12 M99 66 L126 18 M99 66 L145 31 M99 66 L150 53 M99 66 L49 53"/></g>',
+            disc: '<ellipse cx="100" cy="75" rx="62" ry="50" fill="#d9e4a8" stroke="#8a9a55" stroke-width="2"/><path d="M100 25 V59 M100 91 V125 M38 75 H78 M122 75 H162 M56 40 L84 63 M144 40 L116 63 M56 110 L84 87 M144 110 L116 87" stroke="#b6c482" stroke-width="2"/><ellipse cx="100" cy="75" rx="22" ry="16" fill="#a88754"/>',
+            rambutan:
+              '<g stroke="#a83a36" stroke-width="3" stroke-linecap="round" fill="none"><path d="M100 30 q4 -12 12 -14 M128 40 q10 -8 18 -6 M140 66 q12 0 18 6 M136 96 q12 6 14 14 M112 116 q4 12 0 18 M84 116 q-6 10 -14 14 M62 96 q-12 4 -18 12 M58 66 q-12 -4 -18 0 M70 40 q-8 -10 -16 -10 M86 30 q-2 -12 -10 -16"/></g><circle cx="100" cy="74" r="44" fill="#d9534f" stroke="#a83a36" stroke-width="2"/><ellipse cx="100" cy="78" rx="24" ry="28" fill="#f6f1e7" stroke="#d8cdb8"/><ellipse cx="100" cy="80" rx="9" ry="13" fill="#8a6a40"/>',
+            coconut:
+              '<path d="M15 134 Q50 122 90 134 T180 134" fill="none" stroke="#70a9d2" stroke-width="5"/><path d="M60 36 Q100 6 140 36 Q170 86 130 124 Q100 136 70 124 Q30 86 60 36Z" fill="#9b7a4c" stroke="#6d5233" stroke-width="2"/><path d="M76 50 Q100 28 124 50 Q140 88 118 110 Q100 118 82 110 Q60 88 76 50Z" fill="#c8a879"/><g stroke="#8a6a40" stroke-width="1.5"><path d="M80 58 L120 102 M120 58 L80 102 M100 42 V116 M72 80 H128"/></g><ellipse cx="100" cy="80" rx="15" ry="19" fill="#f6f1e7" stroke="#6d5233"/>',
+            balsam:
+              '<path d="M58 132 Q66 70 100 34" stroke="#7aa865" stroke-width="10" fill="none" stroke-linecap="round"/><path d="M100 34 Q150 22 142 62 Q132 84 112 66" stroke="#7aa865" stroke-width="8" fill="none" stroke-linecap="round"/><path d="M100 34 Q60 18 52 50" stroke="#93bb7d" stroke-width="7" fill="none" stroke-linecap="round"/><g stroke="#cf781a" stroke-width="2" stroke-dasharray="3 4"><path d="M114 66 L150 96 M124 52 L166 70 M54 52 L30 76"/></g><g fill="#5b4a35"><circle cx="154" cy="100" r="6"/><circle cx="172" cy="72" r="6"/><circle cx="26" cy="82" r="6"/></g>',
+            spike:
+              '<path d="M100 142 V14" stroke="#9a8a5a" stroke-width="3"/><g fill="#c9b77a" stroke="#8a7a4a" stroke-width="1.5"><ellipse cx="88" cy="30" rx="8" ry="5" transform="rotate(-30 88 30)"/><ellipse cx="112" cy="46" rx="8" ry="5" transform="rotate(30 112 46)"/><ellipse cx="88" cy="62" rx="8" ry="5" transform="rotate(-30 88 62)"/><ellipse cx="112" cy="78" rx="8" ry="5" transform="rotate(30 112 78)"/><ellipse cx="88" cy="94" rx="8" ry="5" transform="rotate(-30 88 94)"/><ellipse cx="112" cy="110" rx="8" ry="5" transform="rotate(30 112 110)"/></g><g stroke="#6d5f3a" stroke-width="1.5" fill="none"><path d="M80 26 q-6 -2 -6 4 M120 42 q6 -2 6 4 M80 58 q-6 -2 -6 4 M120 74 q6 -2 6 4 M80 90 q-6 -2 -6 4 M120 106 q6 -2 6 4"/></g>',
           };
           return (
             '<svg viewBox="0 0 200 150" aria-hidden="true">' +
@@ -2783,6 +3527,667 @@
             },
           },
         };
+      })();
+    </script>
+    <script>
+      /* Plant reproduction widgets (v1.1.0). Each widget starts in its own
+         try/catch so one failure is reported in
+         ReproductionLesson.startErrors instead of stopping the rest. */
+      (function () {
+        "use strict";
+        const $ = (id) => document.getElementById(id);
+        const lesson =
+          window.ReproductionLesson || (window.ReproductionLesson = {});
+        const plant = (lesson.plant = { sorters: {} });
+        lesson.startErrors = lesson.startErrors || [];
+        const reduceMotion = () =>
+          window.matchMedia &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        function start(name, fn) {
+          try {
+            fn();
+          } catch (e) {
+            lesson.startErrors.push(name + ": " + (e && e.message));
+          }
+        }
+        function press(group, button) {
+          document
+            .querySelectorAll(group)
+            .forEach((b) =>
+              b.setAttribute("aria-pressed", String(b === button)),
+            );
+        }
+        function shuffle(list) {
+          const copy = list.slice();
+          for (let i = copy.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const t = copy[i];
+            copy[i] = copy[j];
+            copy[j] = t;
+          }
+          return copy;
+        }
+
+        // A list of statements, each sorted into one of a few groups.
+        function makeSorter(name, mountId, scoreId, options, items) {
+          const mount = $(mountId);
+          const results = {};
+          function paintScore() {
+            const right = Object.keys(results).filter((k) => results[k])
+              .length;
+            $(scoreId).textContent =
+              right +
+              " / " +
+              items.length +
+              " sorted correctly" +
+              (right === items.length ? " · All correct!" : ".");
+          }
+          items.forEach((item, i) => {
+            const row = document.createElement("div");
+            row.className = "sort-item";
+            row.dataset.sortItem = i;
+            const line = document.createElement("div");
+            line.className = "sort-row";
+            const text = document.createElement("span");
+            text.textContent = item.text;
+            line.appendChild(text);
+            const group = document.createElement("div");
+            group.className = "sort-choices";
+            group.setAttribute("role", "group");
+            group.setAttribute("aria-label", item.text);
+            const why = document.createElement("p");
+            why.className = "sort-why";
+            why.setAttribute("role", "status");
+            options.forEach((option) => {
+              const b = document.createElement("button");
+              b.type = "button";
+              b.dataset.sort = option.value;
+              b.setAttribute("aria-pressed", "false");
+              b.textContent = option.label;
+              b.onclick = () => {
+                group
+                  .querySelectorAll("button")
+                  .forEach((x) =>
+                    x.setAttribute("aria-pressed", String(x === b)),
+                  );
+                const ok = option.value === item.answer;
+                results[i] = ok;
+                row.classList.toggle("right", ok);
+                row.classList.toggle("miss", !ok);
+                why.textContent = ok
+                  ? "Correct. " + item.why
+                  : "Not quite. " + (item.hint || "Look at the clue again.");
+                paintScore();
+              };
+              group.appendChild(b);
+            });
+            line.appendChild(group);
+            row.appendChild(line);
+            row.appendChild(why);
+            mount.appendChild(row);
+          });
+          paintScore();
+          plant.sorters[name] = {
+            mountId,
+            items,
+            options,
+            correct: () =>
+              Object.keys(results).filter((k) => results[k]).length,
+          };
+        }
+
+        // 04 · Part detective and the male / female / neither sorter.
+        start("flowers", () => {
+          const jobs = [
+            { part: "sepal", job: "Protects the flower while it is still a bud." },
+            { part: "petal", job: "Is often large and brightly coloured to attract insects." },
+            { part: "anther", job: "Produces pollen grains." },
+            { part: "filament", job: "Holds the anther up." },
+            { part: "stigma", job: "Receives pollen grains during pollination. It is often sticky." },
+            { part: "style", job: "Holds up the stigma. A pollen tube grows down through it." },
+            { part: "ovary", job: "Contains the ovules. It can develop into a fruit." },
+            { part: "ovule", job: "Contains an egg cell. It can develop into a seed." },
+          ];
+          const names = ["sepal", "petal", "anther", "filament", "stigma", "style", "ovary", "ovule"];
+          let order = [];
+          let index = 0;
+          let mistakes = 0;
+          function paint() {
+            if (index >= order.length) {
+              $("jobCard").textContent =
+                "Case closed! You matched all eight jobs" +
+                (mistakes ? " with " + mistakes + " wrong guess" + (mistakes === 1 ? "" : "es") + "." : " without a single wrong guess.");
+              $("jobScore").textContent = "8 / 8 jobs matched.";
+              $("jobChoices").querySelectorAll("button").forEach((b) => (b.disabled = true));
+              return;
+            }
+            $("jobCard").textContent = "Job " + (index + 1) + ": " + order[index].job;
+            $("jobScore").textContent = index + " / 8 jobs matched.";
+            $("jobChoices").querySelectorAll("button").forEach((b) => {
+              b.disabled = false;
+              b.classList.remove("wrong");
+            });
+          }
+          names.forEach((name) => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.dataset.job = name;
+            b.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+            b.onclick = () => {
+              if (index >= order.length) return;
+              if (name === order[index].part) {
+                index++;
+                paint();
+              } else {
+                mistakes++;
+                b.classList.add("wrong");
+                $("jobCard").textContent =
+                  "Job " + (index + 1) + ": " + order[index].job +
+                  " Not the " + name + ". Try another part.";
+              }
+            };
+            $("jobChoices").appendChild(b);
+          });
+          function restart() {
+            order = shuffle(jobs);
+            index = 0;
+            mistakes = 0;
+            paint();
+          }
+          $("jobRestart").onclick = restart;
+          restart();
+          plant.detective = {
+            current: () => (index < order.length ? order[index].part : null),
+            solved: () => index,
+            mistakes: () => mistakes,
+          };
+          makeSorter(
+            "parts",
+            "partSorter",
+            "partSorterScore",
+            [
+              { value: "male", label: "Male" },
+              { value: "female", label: "Female" },
+              { value: "neither", label: "Neither" },
+            ],
+            [
+              { text: "Anther", answer: "male", why: "The anther makes pollen grains, which contain male reproductive cells." },
+              { text: "Filament", answer: "male", why: "The filament holds up the anther. Together they form the stamen." },
+              { text: "Stigma", answer: "female", why: "The stigma receives pollen. It is part of the pistil." },
+              { text: "Style", answer: "female", why: "The style joins the stigma to the ovary." },
+              { text: "Ovary", answer: "female", why: "The ovary contains the ovules." },
+              { text: "Ovule", answer: "female", why: "Each ovule contains an egg cell, the female reproductive cell." },
+              { text: "Petal", answer: "neither", why: "Petals attract animals but make no reproductive cells.", hint: "Does it make or hold reproductive cells?" },
+              { text: "Sepal", answer: "neither", why: "Sepals protect the bud but make no reproductive cells.", hint: "Does it make or hold reproductive cells?" },
+            ],
+          );
+        });
+
+        // 05 · The bee garden and the insect / wind sorter.
+        const gardenKind = { P1: "A", P2: "A", Q1: "A", R1: "B" };
+        const gardenPlant = { P1: "P", P2: "P", Q1: "Q", R1: "R" };
+        function pollenRoute(from, to) {
+          if (!(from in gardenKind) || !(to in gardenKind)) return null;
+          if (gardenKind[from] !== gardenKind[to]) return "other-kind";
+          if (from === to) return "same-flower";
+          if (gardenPlant[from] === gardenPlant[to]) return "same-plant";
+          return "other-plant";
+        }
+        plant.pollenRoute = pollenRoute;
+        start("pollination", () => {
+          const spots = {
+            P1: [110, 70],
+            P2: [186, 112],
+            Q1: [320, 92],
+            R1: [470, 100],
+          };
+          const tried = {};
+          let pick = "from";
+          let timer = 0;
+          function paintFlowers() {
+            document.querySelectorAll("[data-garden]").forEach((g) => {
+              g.classList.toggle("from", g.dataset.garden === $("beeFrom").value);
+              g.classList.toggle("to", g.dataset.garden === $("beeTo").value);
+            });
+          }
+          function moveBee(spot, offset) {
+            $("bee").setAttribute(
+              "transform",
+              "translate(" + (spot[0] + offset) + " " + (spot[1] - 26) + ")",
+            );
+          }
+          const routeNames = {
+            "same-flower": "same flower",
+            "same-plant": "same plant",
+            "other-plant": "another plant of the same kind",
+            "other-kind": "a different kind of plant",
+          };
+          function send() {
+            const from = $("beeFrom").value;
+            const to = $("beeTo").value;
+            const route = pollenRoute(from, to);
+            tried[route] = true;
+            const plantFrom = gardenPlant[from];
+            const plantTo = gardenPlant[to];
+            $("beeStatus").dataset.route = route;
+            $("beeStatus").textContent = {
+              "same-flower":
+                "Pollination within the same flower: pollen from the anthers of " + from +
+                " lands on the stigma of " + from + ". Scientists call this self-pollination.",
+              "same-plant":
+                "Pollination between two flowers on the same plant: " + from + " → " + to +
+                ". Both flowers belong to plant " + plantFrom + ", so this is also self-pollination.",
+              "other-plant":
+                "Pollination between flowers on different plants of the same kind: plant " + plantFrom +
+                " → plant " + plantTo + ". Scientists call this cross-pollination.",
+              "other-kind":
+                "The bee carries pollen from " + from + " to " + to + ", but plants " + plantFrom + " and " + plantTo +
+                " are different kinds of plant. Pollen usually cannot fertilise a flower of a different kind, so no seeds form.",
+            }[route];
+            $("beeLog").textContent =
+              "Routes tried: " +
+              Object.keys(routeNames)
+                .filter((k) => tried[k])
+                .map((k) => routeNames[k])
+                .join(", ") +
+              " (" + Object.keys(tried).length + " / 4).";
+            window.clearTimeout(timer);
+            $("beePollen").setAttribute("hidden", "");
+            moveBee(spots[from], -6);
+            const land = () => {
+              $("beePollen").removeAttribute("hidden");
+              moveBee(spots[to], 6);
+            };
+            if (reduceMotion()) land();
+            else timer = window.setTimeout(land, 900);
+          }
+          $("beeGo").onclick = send;
+          ["beeFrom", "beeTo"].forEach((id) =>
+            $(id).addEventListener("change", paintFlowers),
+          );
+          document.querySelectorAll("[data-garden]").forEach((g) =>
+            g.addEventListener("click", () => {
+              $(pick === "from" ? "beeFrom" : "beeTo").value = g.dataset.garden;
+              pick = pick === "from" ? "to" : "from";
+              paintFlowers();
+            }),
+          );
+          paintFlowers();
+          plant.bee = { tried: () => Object.keys(tried) };
+          makeSorter(
+            "pollinators",
+            "pollinatorSorter",
+            "pollinatorSorterScore",
+            [
+              { value: "insect", label: "Insect" },
+              { value: "wind", label: "Wind" },
+            ],
+            [
+              { text: "Large, brightly coloured petals", answer: "insect", why: "Bright petals attract insects to the flower." },
+              { text: "Small, dull-coloured petals or no petals", answer: "wind", why: "The wind does not need to be attracted, so petals can be small or absent." },
+              { text: "Sweet scent", answer: "insect", why: "Scent attracts insects from a distance." },
+              { text: "Produces nectar", answer: "insect", why: "Nectar is food that rewards visiting insects." },
+              { text: "No scent and no nectar", answer: "wind", why: "Wind-pollinated flowers have no animals to reward." },
+              { text: "Sticky or spiky pollen grains", answer: "insect", why: "Sticky or spiky pollen clings to an insect's body." },
+              { text: "Large amounts of small, light, smooth pollen", answer: "wind", why: "Light pollen is easily blown, and much is wasted, so a lot is made." },
+              { text: "Anthers hang outside the flower on long filaments", answer: "wind", why: "Exposed anthers let the wind blow the pollen away." },
+              { text: "Large, feathery stigmas outside the flower", answer: "wind", why: "Feathery stigmas give a large surface to catch pollen from the air." },
+              { text: "Anthers and stigma inside the flower", answer: "insect", why: "An insect brushes against them as it reaches in for nectar." },
+            ],
+          );
+        });
+
+        // 06 · Five flowers become a harvest, and the fruit-or-not sorter.
+        function harvest(flowers) {
+          let fruits = 0;
+          let seeds = 0;
+          let withered = 0;
+          (flowers || []).forEach((f) => {
+            const n = f && f.pollinated ? Math.max(0, Math.min(6, Math.floor(Number(f.fertilised) || 0))) : 0;
+            if (n > 0) {
+              fruits++;
+              seeds += n;
+            } else withered++;
+          });
+          return { fruits, seeds, withered };
+        }
+        plant.harvest = harvest;
+        start("fertilisation", () => {
+          const bed = [
+            { pollinated: true, fertilised: 4 },
+            { pollinated: true, fertilised: 6 },
+            { pollinated: false, fertilised: 0 },
+            { pollinated: true, fertilised: 0 },
+            { pollinated: true, fertilised: 2 },
+          ];
+          function art(f) {
+            const n = f.pollinated ? f.fertilised : 0;
+            if (n > 0) {
+              let dots = "";
+              for (let i = 0; i < 6; i++) {
+                const x = 30 + i * 8;
+                dots += i < n
+                  ? '<ellipse cx="' + x + '" cy="52" rx="3.5" ry="5" fill="#7a5a32"/>'
+                  : '<ellipse cx="' + x + '" cy="52" rx="2" ry="3" fill="#d9cfa8"/>';
+              }
+              return '<svg viewBox="0 0 100 90" aria-hidden="true"><path d="M50 8 V24" stroke="#5f8f66" stroke-width="4"/><path d="M22 52 Q24 26 50 24 Q76 26 78 52 Q76 78 50 80 Q24 78 22 52Z" fill="#a7cf8e" stroke="#5f8f66" stroke-width="2"/>' + dots + "</svg>";
+            }
+            return '<svg viewBox="0 0 100 90" aria-hidden="true"><path d="M50 88 V46" stroke="#a49a7a" stroke-width="4"/><g fill="#d8cfc4" stroke="#a49a7a" stroke-width="2"><path d="M50 46 Q30 52 26 72 Q40 62 50 50Z"/><path d="M50 46 Q70 52 74 72 Q60 62 50 50Z"/><path d="M50 46 Q44 30 50 20 Q56 30 50 46Z"/></g></svg>';
+          }
+          function paint() {
+            bed.forEach((f, i) => {
+              const card = $("bedFlower" + i);
+              const n = f.pollinated ? f.fertilised : 0;
+              card.classList.toggle("withered", n === 0);
+              card.querySelector(".bed-art").innerHTML = art(f);
+              const range = card.querySelector("input[type=range]");
+              range.disabled = !f.pollinated;
+              range.value = n;
+              card.querySelector("output").textContent = n;
+              card.querySelector(".bed-result").textContent =
+                n > 0 ? "Fruit with " + n + " seed" + (n === 1 ? "" : "s") : f.pollinated ? "No ovules fertilised: withers" : "Not pollinated: withers";
+            });
+            const h = harvest(bed);
+            $("harvestStatus").textContent =
+              h.fruits + " fruit" + (h.fruits === 1 ? "" : "s") + " and " + h.seeds + " seed" + (h.seeds === 1 ? "" : "s") + ". " +
+              (h.withered ? h.withered + " flower" + (h.withered === 1 ? "" : "s") + " wither" + (h.withered === 1 ? "s" : "") + " without forming a fruit." : "Every flower forms a fruit.");
+            $("harvestStatus").dataset.fruits = h.fruits;
+            $("harvestStatus").dataset.seeds = h.seeds;
+          }
+          bed.forEach((f, i) => {
+            const card = document.createElement("div");
+            card.className = "bed-flower";
+            card.id = "bedFlower" + i;
+            card.innerHTML =
+              "<strong>Flower " + (i + 1) + '</strong><div class="bed-art"></div>' +
+              '<label><input type="checkbox" data-bed-pollinated="' + i + '"> Pollinated</label>' +
+              '<label for="bedRange' + i + '">Fertilised ovules: <output>0</output></label>' +
+              '<input id="bedRange' + i + '" data-bed-fertilised="' + i + '" type="range" min="0" max="6" value="0">' +
+              '<div class="bed-result small"></div>';
+            $("flowerBed").appendChild(card);
+            const box = card.querySelector("input[type=checkbox]");
+            box.checked = f.pollinated;
+            box.addEventListener("change", () => {
+              f.pollinated = box.checked;
+              if (!f.pollinated) f.fertilised = 0;
+              paint();
+            });
+            card.querySelector("input[type=range]").addEventListener("input", (e) => {
+              f.fertilised = Number(e.target.value);
+              paint();
+            });
+          });
+          paint();
+          makeSorter(
+            "fruits",
+            "fruitSorter",
+            "fruitSorterScore",
+            [
+              { value: "fruit", label: "Fruit" },
+              { value: "not", label: "Not a fruit" },
+            ],
+            [
+              { text: "Tomato", answer: "fruit", why: "It develops from an ovary and has many seeds inside." },
+              { text: "Cucumber", answer: "fruit", why: "It develops from an ovary and contains seeds." },
+              { text: "Chilli", answer: "fruit", why: "Cut it open and you find its seeds." },
+              { text: "Pea pod", answer: "fruit", why: "The pod is the fruit; the peas inside are its seeds." },
+              { text: "Lady's finger (okra)", answer: "fruit", why: "It develops from an ovary and contains rows of seeds." },
+              { text: "Carrot", answer: "not", why: "A carrot is a root that stores food. It has no seeds.", hint: "Which part of the plant grows underground and stores food?" },
+              { text: "Potato", answer: "not", why: "A potato is an underground stem that stores food.", hint: "Does it develop from an ovary and contain seeds?" },
+              { text: "Spinach", answer: "not", why: "We eat spinach leaves. Leaves do not develop from an ovary.", hint: "Which part of the plant do we eat?" },
+            ],
+          );
+        });
+
+        // 07 · Wind tunnel lab.
+        const fallSpeed = { none: 4, small: 1.6, large: 0.9, hairs: 0.6 };
+        const windSpeed = { off: 0, low: 1.5, high: 3 };
+        function windDistance(seed, fan, height) {
+          const v = fallSpeed[seed];
+          const w = windSpeed[fan];
+          const h = Number(height);
+          if (!v || w === undefined || !(h > 0)) return null;
+          return Math.min(10, Math.round(((w * h) / v) * 10) / 10);
+        }
+        plant.windDistance = windDistance;
+        start("dispersal", () => {
+          const seedNames = { none: "No wings", small: "Small wings", large: "Large wings", hairs: "Fine hairs" };
+          const fanNames = { off: "Off", low: "Low", high: "High" };
+          const rows = [];
+          function dress() {
+            const seed = $("windSeed").value;
+            const wing = $("windWing");
+            wing.toggleAttribute("hidden", seed !== "small" && seed !== "large");
+            wing.setAttribute("transform", seed === "large" ? "scale(1.7)" : "");
+            $("windHairs").toggleAttribute("hidden", seed !== "hairs");
+            $("windArrows").style.opacity = $("windFan").value === "off" ? "0" : $("windFan").value === "low" ? "0.5" : "1";
+          }
+          function placeSeed(x, y, animate) {
+            const art = $("windSeedArt");
+            if (!animate) {
+              art.style.transition = "none";
+              art.setAttribute("transform", "translate(" + x + " " + y + ")");
+              void art.getBoundingClientRect();
+              art.style.transition = "";
+            } else art.setAttribute("transform", "translate(" + x + " " + y + ")");
+          }
+          function paintTable() {
+            $("windTable").querySelector("tbody").innerHTML = rows
+              .map(
+                (r, i) =>
+                  '<tr class="' + (i === rows.length - 1 ? "latest" : "") + '"><td>' + r.n + "</td><td>" + seedNames[r.seed] + "</td><td>" +
+                  fanNames[r.fan] + "</td><td>" + r.height + " m</td><td>" + r.distance.toFixed(1) + " m</td></tr>",
+              )
+              .join("");
+          }
+          let count = 0;
+          $("windDrop").onclick = () => {
+            const seed = $("windSeed").value;
+            const fan = $("windFan").value;
+            const height = Number($("windHeight").value);
+            const distance = windDistance(seed, fan, height);
+            const previous = rows[rows.length - 1];
+            count++;
+            rows.push({ n: count, seed, fan, height, distance });
+            if (rows.length > 8) rows.shift();
+            paintTable();
+            dress();
+            placeSeed(80, height === 2 ? 30 : 100, false);
+            placeSeed(80 + distance * 46, 172, true);
+            let message = "Drop " + count + ": the seed landed " + distance.toFixed(1) + " m from the drop point.";
+            if (fan === "off") message += " With the fan off there is no wind, so it falls straight down.";
+            if (previous) {
+              const changed = ["seed", "fan", "height"].filter((k) => previous[k] !== { seed, fan, height }[k]);
+              const label = { seed: "the seed", fan: "the fan setting", height: "the height" };
+              if (changed.length === 0)
+                message += " Same set-up as drop " + previous.n + ". Repeating a test checks that the result is reliable.";
+              else if (changed.length === 1)
+                message += " Compared with drop " + previous.n + ", only " + label[changed[0]] + " changed, so it caused the difference (" +
+                  previous.distance.toFixed(1) + " m → " + distance.toFixed(1) + " m). That is a fair test.";
+              else
+                message += " Compared with drop " + previous.n + ", more than one thing changed, so you cannot tell which change caused the difference.";
+            }
+            $("windStatus").textContent = message;
+          };
+          $("windClear").onclick = () => {
+            rows.length = 0;
+            paintTable();
+            placeSeed(80, Number($("windHeight").value) === 2 ? 30 : 100, false);
+            $("windStatus").textContent = "Results cleared. Choose a seed, a fan setting and a height, then drop the seed.";
+          };
+          ["windSeed", "windFan", "windHeight"].forEach((id) =>
+            $(id).addEventListener("change", () => {
+              dress();
+              placeSeed(80, Number($("windHeight").value) === 2 ? 30 : 100, false);
+            }),
+          );
+          dress();
+          placeSeed(80, 30, false);
+          plant.wind = { rows: () => rows.slice() };
+        });
+
+        // 08 · Inside a seed, the seed-leaf graph and germination in order.
+        const leafMass = [100, 96, 88, 78, 66, 54, 42, 31, 22, 15, 10];
+        const seedlingHeight = [0, 0, 1, 2, 4, 7, 10, 13, 16, 19, 22];
+        function seedLeafMass(day) {
+          const d = Math.max(0, Math.min(10, Math.round(Number(day) || 0)));
+          return leafMass[d];
+        }
+        plant.seedLeafMass = seedLeafMass;
+        const germSteps = ["dry", "water", "split", "root", "shoot", "leaves"];
+        const germNames = {
+          dry: "A dry seed",
+          water: "The seed takes in water and swells",
+          split: "The seed coat splits",
+          root: "The young root grows out and downwards",
+          shoot: "The young shoot grows out and upwards",
+          leaves: "The first true leaves open and start making food",
+        };
+        plant.germSteps = germSteps;
+        start("germination", () => {
+          const seedParts = {
+            coat: "Seed coat: protects the parts inside the seed. It splits when the seed takes in water and swells.",
+            leaves: "Seed leaves: store food. The young plant uses this food to grow until its first true leaves can make food.",
+            root: "Young root: the first part to grow out of the seed. It grows downwards, holds the plant and takes in water. It is part of the embryo.",
+            shoot: "Young shoot: grows upwards and develops into the stem and the first true leaves. It is part of the embryo.",
+          };
+          const labels = { coat: "Seed coat", leaves: "Seed leaves", root: "Young root", shoot: "Young shoot" };
+          Object.keys(seedParts).forEach((id) => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.dataset.seedpart = id;
+            b.textContent = labels[id];
+            b.onclick = () => {
+              press("[data-seedpart]", b);
+              $("seedInfo").textContent = seedParts[id];
+              $("seedDiagram").classList.add("focus");
+              document.querySelectorAll("[data-seed-art]").forEach((g) =>
+                g.classList.toggle("on", g.dataset.seedArt === id),
+              );
+            };
+            $("seedParts").appendChild(b);
+          });
+          const x = (d) => 40 + d * 28;
+          $("leafMassLine").setAttribute("d", leafMass.map((m, d) => (d ? "L" : "M") + x(d) + " " + (170 - m * 1.4)).join(" "));
+          $("heightLine").setAttribute("d", seedlingHeight.map((h, d) => (d ? "L" : "M") + x(d) + " " + (170 - (h / 22) * 140)).join(" "));
+          let predicted = false;
+          function paintDay() {
+            const d = Number($("leafDay").value);
+            $("leafDayValue").textContent = d;
+            $("leafDayMarker").setAttribute("x1", x(d));
+            $("leafDayMarker").setAttribute("x2", x(d));
+            $("leafMassRead").textContent = "Seed leaves: " + seedLeafMass(d) + "% of their starting mass";
+            $("heightRead").textContent = "Seedling height: " + seedlingHeight[d] + " cm";
+            if (predicted)
+              $("leafStatus").textContent =
+                d === 0
+                  ? "Day 0: the seed leaves are full of stored food."
+                  : d < 5
+                    ? "Day " + d + ": the young root and shoot grow, using food stored in the seed leaves."
+                    : d < 9
+                      ? "Day " + d + ": the seedling keeps growing taller while its seed leaves shrink. True leaves are starting to make food."
+                      : "Day " + d + ": most stored food is used up. The shrivelled seed leaves may drop off; the true leaves now make food.";
+          }
+          document.querySelectorAll("[data-predict]").forEach((b) =>
+            b.addEventListener("click", () => {
+              press("[data-predict]", b);
+              predicted = true;
+              $("leafGraph").classList.remove("graph-hidden");
+              $("leafStatus").textContent =
+                b.dataset.predict === "down"
+                  ? "Good prediction. The mass of the seed leaves decreases, because their stored food is used for the seedling's growth. Move the day slider to follow it."
+                  : "Look at the graph: the mass of the seed leaves decreases, because their stored food is used for the seedling's growth. Move the day slider to follow it.";
+              $("leafStatus").dataset.prediction = b.dataset.predict;
+            }),
+          );
+          $("leafDay").addEventListener("input", paintDay);
+          paintDay();
+
+          let step = 0;
+          function paintOrder() {
+            $("germSlots").innerHTML = germSteps
+              .map((id, i) => '<li class="' + (i < step ? "filled" : "") + '">' + (i < step ? germNames[id] : "…") + "</li>")
+              .join("");
+            document.querySelectorAll("#germPick button").forEach((b) => {
+              b.disabled = germSteps.indexOf(b.dataset.germ) < step;
+            });
+          }
+          ["shoot", "split", "leaves", "dry", "root", "water"].forEach((id) => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.dataset.germ = id;
+            b.textContent = germNames[id];
+            b.onclick = () => {
+              if (id !== germSteps[step]) {
+                $("germOrderStatus").textContent =
+                  "Try again. " + (step === 0 ? "Start with a dry seed." : "After “" + germNames[germSteps[step - 1]].toLowerCase() + "”, what happens next?");
+                return;
+              }
+              step++;
+              paintOrder();
+              $("germOrderStatus").textContent =
+                step === germSteps.length
+                  ? "All in order! The root grows before the shoot, and the seed leaves feed the seedling until its true leaves make food."
+                  : "Correct. Choose the next stage.";
+            };
+            $("germPick").appendChild(b);
+          });
+          $("germReset").onclick = () => {
+            step = 0;
+            paintOrder();
+            $("germOrderStatus").textContent = "Choose the first stage.";
+          };
+          paintOrder();
+          plant.germOrder = { step: () => step };
+        });
+
+        // 09 · Seeds or spores?
+        start("spores", () =>
+          makeSorter(
+            "spores",
+            "sporeSorter",
+            "sporeSorterScore",
+            [
+              { value: "seeds", label: "Seeds" },
+              { value: "spores", label: "Spores" },
+            ],
+            [
+              { text: "Bird's nest fern", answer: "spores", why: "Ferns make spores in spore bags under their fronds." },
+              { text: "Moss", answer: "spores", why: "Mosses make spores in capsules." },
+              { text: "Staghorn fern", answer: "spores", why: "It is a fern, so it reproduces by spores." },
+              { text: "Mushroom (a fungus, not a plant)", answer: "spores", why: "Mushrooms release spores from their gills." },
+              { text: "Bread mould (a fungus, not a plant)", answer: "spores", why: "Bread mould makes spores in tiny round spore cases." },
+              { text: "Balsam", answer: "seeds", why: "Balsam is a flowering plant. Its fruits split to throw out seeds." },
+              { text: "Rambutan tree", answer: "seeds", why: "It is a flowering plant whose fruits contain seeds." },
+              { text: "Pine tree (a conifer, no flowers)", answer: "seeds", why: "Conifers have no flowers, but they make seeds in cones.", hint: "Not every plant without flowers uses spores. Think about cones." },
+            ],
+          ),
+        );
+
+        // 12 · Name the process.
+        start("learnt", () =>
+          makeSorter(
+            "processes",
+            "processSorter",
+            "processSorterScore",
+            [
+              { value: "pollination", label: "Pollination" },
+              { value: "fertilisation", label: "Fertilisation" },
+              { value: "dispersal", label: "Dispersal" },
+              { value: "germination", label: "Germination" },
+            ],
+            [
+              { text: "A bee carries pollen from one flower to the stigma of another.", answer: "pollination", why: "Pollen is transferred from an anther to a stigma." },
+              { text: "A male reproductive cell from a pollen grain fuses with an egg cell in an ovule.", answer: "fertilisation", why: "Fertilisation is the fusion of male and female reproductive cells." },
+              { text: "A coconut floats across the sea to another beach.", answer: "dispersal", why: "The fruit is carried away from the parent plant." },
+              { text: "A young root grows out of a bean seed on damp cotton wool.", answer: "germination", why: "A seed starting to grow is germinating." },
+              { text: "Wind blows pollen from hanging anthers onto feathery stigmas.", answer: "pollination", why: "Wind carries pollen from anthers to stigmas." },
+              { text: "A balsam fruit bursts and flings its seeds away.", answer: "dispersal", why: "Explosive action spreads the seeds." },
+              { text: "After this process, the ovule can develop into a seed.", answer: "fertilisation", why: "Only a fertilised ovule develops into a seed." },
+              { text: "A seed takes in water, swells and its seed coat splits.", answer: "germination", why: "These are the first stages of germination." },
+            ],
+          ),
+        );
       })();
     </script>
   </body>
