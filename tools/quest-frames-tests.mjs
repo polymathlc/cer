@@ -1,5 +1,5 @@
 // 🎮 Quest frames: the shared switch, the art this site serves, the portal's
-// header / gems / margin rampart and the creators' Quest pages. Runs the REAL
+// page-1 lead / gems / quest-page sheets and planner box, and the creators' Quest pages. Runs the REAL
 // quest-frames.js in a vm; the browser half is tools/quest-frames-browser-check.mjs.
 // Run: node --test tools/quest-frames-tests.mjs
 import test from 'node:test';
@@ -214,22 +214,53 @@ test('a worksheet\'s quest: world from its topics, boss seeded by its title, a h
   assert.equal(QC.mostCommon(['', 'Plants', 'Heat', 'Plants']), 'Plants');
 });
 
-test('the portal\'s page-1 header: banner + boss + hero card, and the cover variants', () => {
+test('the portal\'s page-1 lead: the quest it is on, and the room the start header needs', () => {
+  const { QF, QC } = load();
+  const q = QC.ctx({ subject: 'science', title: 'Food chains', topics: ['Food chains'], questions: 9, total: 23 });
+  assert.equal(q.total, 23, 'the chest is scored out of the marks the questions carry');
+  assert.equal(QC.ctx({ title: 'x', total: -4 }).total, 0, 'never a negative total');
+  const start = QC.portalLead(q, false, false);
+  assert.match(start, /^<div class="qf-print-lead qf-print-lead--start" aria-hidden="true" data-qf="/, 'with the name fields on, page 1 is a START page');
+  const extra = QF.PAGE.safeTop.start - QF.PAGE.safeTop.trail;
+  assert.equal(QC.SHEET.startExtra, extra);
+  assert.ok(start.includes('style="height:calc(' + extra + 'px / var(--qf-pz, 1))"'), 'its room is the start header\'s, at any fit-to-page zoom');
+  const plain = QC.portalLead(q, false, true);
+  assert.match(plain, /^<div class="qf-print-lead" aria-hidden="true" data-qf="/, 'with the fields off, page 1 is a trail page…');
+  assert.doesNotMatch(plain, /style=/, '…and the lead takes no room at all');
+  assert.equal(QC.portalLead(q, true, false), start, 'a cover in front changes nothing: the strip printed under a cover too');
+  assert.equal(QC.portalLead(null, false, false), '', 'no quest, no lead');
+  // It is markup the planner, the printer and the preview all read back.
+  const attr = start.match(/data-qf="([^"]*)"/)[1].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const el = { getAttribute: (k) => (k === 'data-qf' ? attr : null) };
+  assert.deepEqual({ ...QC.leadCtxOf(el) }, { subject: 'science', world: q.world, seed: 'Food chains', title: 'Food chains', questions: 9, total: 23, start: true });
+  assert.deepEqual({ ...QC.leadCtx({ querySelector: (sel) => (sel === '.qf-print-lead' ? el : null) }) }, { ...QC.leadCtxOf(el) }, 'found in the page it sits in');
+  assert.equal(QC.leadCtx({ querySelector: () => null }), null, 'an unframed page has no lead');
+  assert.equal(QC.leadCtxOf({ getAttribute: () => '{not json' }), null, 'a broken lead frames nothing');
+  const odd = QC.leadCtxOf({ getAttribute: () => JSON.stringify({ world: 'nowhere', title: '', questions: -3, total: 'lots' }) });
+  assert.ok(QF.pure.worldOf(odd.world), 'an unknown world becomes a real one');
+  assert.equal(odd.title, 'Worksheet');
+  assert.equal(odd.questions, 0);
+  assert.equal(odd.total, 0);
+  // A title carrying markup is data, never markup.
+  const sly = QC.portalLead(QC.ctx({ title: '"><img src=x onerror=alert(1)>' }), false, false);
+  assert.doesNotMatch(sly, /<img/, 'the title is escaped inside the attribute');
+});
+
+test('which page of the quest a sheet is: start, trail, finale', () => {
   const { QC } = load();
-  const q = QC.ctx({ subject: 'science', title: 'Food chains', topics: ['Food chains'], questions: 9 });
-  const plain = QC.portalHeader(q, false, false);
-  assert.match(plain, /class="qf-print-head qf-world-swamp"/);
-  assert.match(plain, /qf-banner/, 'banner without a cover');
-  assert.match(plain, /SCIENCE QUEST/, 'an unnumbered quest says SCIENCE QUEST, never a made-up number');
-  assert.match(plain, /Polymath Learning Centre/, 'the logo sticker is in the banner');
-  assert.equal((plain.match(/qf-px qf-heart/g) || []).length, 9, 'one heart per question');
-  assert.match(plain, /qf-herocard/);
-  assert.match(plain, /Colour a heart for each question\./, 'the rule of play is printed');
-  assert.doesNotMatch(QC.portalHeader(q, false, true), /qf-herocard/, 'no student fields → no hero card');
-  const cover = QC.portalHeader(q, true, false);
-  assert.match(cover, /qf-print-head--cover/);
-  assert.doesNotMatch(cover, /qf-banner/, 'a cover already carries the title and logo');
-  assert.match(cover, /qf-herocard/);
+  const sheet = (start) => ({ querySelector: (sel) => (start && sel === '.qf-print-lead--start' ? {} : null) });
+  assert.equal(QC.variantOf(sheet(true), 0, 4), 'start', 'the sheet holding the start lead');
+  assert.equal(QC.variantOf(sheet(false), 1, 4), 'trail');
+  assert.equal(QC.variantOf(sheet(false), 3, 4), 'finale', 'the last framed sheet holds the treasure');
+  assert.equal(QC.variantOf(sheet(false), 0, 4), 'trail', 'page 1 without the name fields is a trail page');
+  assert.equal(QC.variantOf(sheet(true), 0, 1), 'start', 'a one-sheet worksheet with the fields is a start page');
+  assert.equal(QC.variantOf(sheet(false), 0, 1), 'finale', 'and without them, the finale');
+  const tail = SRC.slice(SRC.indexOf('function frameSheets('), SRC.indexOf('function framePrintPages('));
+  assert.match(tail, /QF\.decorate\(sheet, \{/, 'every sheet is dressed by the design system\'s own page layout');
+  assert.match(tail, /fields: PORTAL_FIELDS/);
+  assert.match(SRC, /var PORTAL_FIELDS = \[\['HERO NAME', 'name'\], \['DATE', 'date'\]\];/, 'the hero card is Name and Date, like the portal\'s strip (Class went in v1.438.0)');
+  assert.match(tail, /cheer: i === 0 && variant === 'trail' \? QF\.CHEERS\[0\] : undefined/, 'page 1 is never told it is almost at the treasure');
+  assert.equal(QC.contentPx(), 296 * 96 / 25.4 - QC.SHEET.top - QC.SHEET.bottom);
 });
 
 test('gems: marks give the rarity; no marks is a plain rare gem with no pips', () => {
@@ -243,59 +274,51 @@ test('gems: marks give the rarity; no marks is a plain rare gem with no pips', (
   assert.match(bare, /aria-label="Question 7"/);
 });
 
-test('the margin rampart never reaches the 178 x 258mm text column', () => {
-  const { QF } = load();
-  const svg = QF.border({ world: 'forest', fit: 'margins', seed: 'x', variant: 'trail' });
-  // The text column on a 794 x 1123 sheet: 16mm sides, 18mm top, 20mm foot.
+test('the frame\'s walls and bands never reach the box the questions print in', () => {
+  const { QF, QC } = load();
   const px = (mm) => mm * 96 / 25.4;
-  const box = { l: px(16), t: px(18), r: 794 - px(16), b: 1123 - px(20) };
-  // Every drawn rect and sprite, with its translate() offsets resolved.
-  const shapes = [];
-  const re = /<(rect|svg)\b([^>]*?)\/?>|<g\b([^>]*)>|<\/g>/g;
-  const stack = [[0, 0]];
-  let m;
-  while ((m = re.exec(svg))) {
-    if (m[0] === '</g>') { stack.pop(); continue; }
-    if (m[3] != null) {
-      const [dx, dy] = stack[stack.length - 1];
-      const t = /translate\(([-\d.]+) ([-\d.]+)\)/.exec(m[3]);
-      stack.push(t ? [dx + +t[1], dy + +t[2]] : [dx, dy]);
-      continue;
-    }
-    const attrs = m[2];
-    if (/class="qf-border/.test(attrs)) continue;
-    const get = (n) => { const a = new RegExp(`\\b${n}="([-\\d.]+)"`).exec(attrs); return a ? +a[1] : null; };
-    const [dx, dy] = stack[stack.length - 1];
-    const x = get('x'), y = get('y'), w = get('width'), h = get('height');
-    if (x == null || y == null || w == null || h == null) continue;
-    if (/patternUnits|viewBox="0 0 84/.test(attrs)) continue;
-    shapes.push({ x: x + dx, y: y + dy, w, h });
-  }
-  assert.ok(shapes.length > 50, 'the parser found the wall\'s pieces');
-  const inside = shapes.filter((s) => s.x < box.r && s.x + s.w > box.l && s.y < box.b && s.y + s.h > box.t && s.w < 700 && s.h < 1000);
-  assert.deepEqual(inside, [], 'no bastion, socket, trim, sparkle or rune crosses into the text column');
-  // the bands and rims are paths: their inner edge must sit outside the column too
-  const g = QF.FITS.margins;
-  assert.ok(g.inset + g.band + 6 < box.l, 'side rim clear of the column');
-  assert.ok(g.inset + g.band + 6 < box.t, 'top rim clear of the column');
-  assert.ok(1123 - (g.inset + g.band + 6) > box.b, 'foot rim clear of the column');
+  const S = QC.SHEET;
+  const G = QF.FITS.frame;
+  // The box on a 794 x 1123 design page: the 16mm sides, under the header
+  // band's line, above the tallest footer.
+  const box = { l: px(S.sideMm), r: 794 - px(S.sideMm), t: S.top, b: px(S.heightMm) - S.bottom };
+  assert.ok(G.inset + G.band + 6 < box.l, 'the side walls and their rim end before the 16mm side');
+  assert.ok(box.r < 794 - (G.inset + G.band + 6), 'on both sides');
+  // Every header piece's top and every footer piece's top, as the design
+  // system's own stylesheet places them.
+  const tops = (re) => [...CSS.matchAll(re)].map((m) => +m[1]);
+  const foot = tops(/\.qf-foot-(?:hero|xp|cheer|chest)\s*\{[^}]*?top:\s*([\d.]+)px/g);
+  assert.equal(foot.length, 4, 'hero, XP trail, cheer and chest found');
+  foot.forEach((t) => assert.ok(t >= box.b + 10, `a footer piece at ${t}px starts clear of the box (its foot is ${box.b.toFixed(1)}px)`));
+  assert.equal(Math.min(...foot), 966, 'the chest is the tallest footer…');
+  assert.equal(S.bottom, Math.max(QF.PAGE.safeBottom.start, QF.PAGE.safeBottom.trail, QF.PAGE.safeBottom.finale) + 14, '…and the box keeps the finale\'s line plus a gap on every sheet');
+  assert.equal(S.top, QF.PAGE.safeTop.trail, 'the box starts on the trail header\'s line');
+  assert.equal(S.top + S.startExtra, QF.PAGE.safeTop.start, 'and page 1\'s lead takes it to the start header\'s line');
+  assert.ok(S.heightMm <= 296, 'never a hair over A4, or a blank sheet follows every page');
 });
 
-test('framed portal sheets: margin-free A4 padded by the old margins, 296mm tall', () => {
-  // The page box the planner measures is --print-page-h; the frame must keep it.
-  const pageH = parseFloat(INDEX.match(/--print-page-h:\s*([\d.]+)mm/)[1]);
-  const at = INDEX.match(/@page \{\s*size: A4 portrait;\s*margin: ([\d.]+)mm ([\d.]+)mm ([\d.]+)mm ([\d.]+)mm;/);
-  assert.ok(at, 'the portal\'s @page margins are where the test expects them');
+test('framed portal sheets: margin-free A4, padded down to the box the planner plans', () => {
+  const { QC } = load();
+  const S = QC.SHEET;
   const rule = CSS.match(/#printOutput > \.print-question-page\.qf-sheet \{([^}]*)\}/)[1];
   assert.match(CSS, /@page qf-sheet \{ size: A4 portrait; margin: 0; \}/);
   assert.match(rule, /page: qf-sheet/);
   assert.match(rule, /width: 210mm/);
-  const h = parseFloat(rule.match(/height: ([\d.]+)mm/)[1]);
-  const [pt, px, pb] = rule.match(/padding: ([\d.]+)mm ([\d.]+)mm ([\d.]+)mm/).slice(1).map(Number);
-  assert.ok(h <= 296, 'never a hair over A4, or a blank sheet follows every page');
-  assert.equal(pt, +at[1], 'top padding = the old top margin');
-  assert.equal(px, +at[2], 'side padding = the old side margins, so the column is the same 178mm');
-  assert.equal(h - pt - pb, pageH, 'content box = the planner\'s page box');
+  assert.equal(parseFloat(rule.match(/height: ([\d.]+)mm/)[1]), S.heightMm);
+  const pad = (r) => { const m = r.match(/padding: ([\d.]+)px ([\d.]+)mm ([\d.]+)px/); return m && m.slice(1).map(Number); };
+  assert.deepEqual(pad(rule), [S.top, S.sideMm, S.bottom], 'the printed sheet\'s padding IS quest-frames.js SHEET');
+  const preview = CSS.match(/\.wspv-sheet\.qf-sheet \{([^}]*)\}/)[1];
+  assert.deepEqual(pad(preview), [S.top, S.sideMm, S.bottom], 'and so is the live preview\'s');
+  assert.match(preview, /height: 296mm/);
+  // THE BUG v1.444.0 SHIPPED: Chrome lets a later stylesheet's plain @page beat
+  // an earlier one's named page, so the named page has to be declared in
+  // index.html too, AFTER its plain @page — or every framed sheet prints shrunk.
+  const plainAt = INDEX.search(/@page \{\s*size: A4 portrait;\s*margin: 18mm 16mm 20mm 16mm;/);
+  const namedAt = INDEX.indexOf('@page qf-sheet { size: A4 portrait; margin: 0; }');
+  assert.ok(plainAt > 0, 'the portal\'s plain @page is where the test expects it');
+  assert.ok(namedAt > plainAt, 'index.html declares @page qf-sheet AFTER its plain @page');
+  assert.ok(INDEX.indexOf('<link rel="stylesheet" media="print" onload="this.media=\'all\'" href="quest-frames.css') < plainAt, 'quest-frames.css loads before it, which is why');
+  assert.doesNotMatch(CSS, /qf-sheet-frame|qf-print-head/, 'the margin-only rampart and the in-column header are gone');
   assert.doesNotMatch(CSS, /@import/, 'no extra font request: index.html asks for Pixelify Sans in its print-only font link');
   assert.match(INDEX, /media="print" href="https:\/\/fonts\.googleapis\.com\/css2\?family=Crimson\+Pro[^"]*family=Pixelify\+Sans/);
   assert.match(INDEX, /<link rel="stylesheet" media="print" onload="this\.media='all'" href="quest-frames\.css\?v=/, 'non-blocking, like every other stylesheet the screen does not need');
@@ -303,10 +326,11 @@ test('framed portal sheets: margin-free A4 padded by the old margins, 296mm tall
 
 test('app.js: both print doors, the preview and the planner all carry the frame', () => {
   assert.match(APP, /function _qfPrintCtx\(selected, title\) \{\n  const QC = window\.QuestFramesCer;\n  if \(!QC \|\| !_isAdmin\(\) \|\| !QC\.on\(\)\) return null;/, 'off, missing or not the teacher → null → the old sheet');
+  assert.match(APP, /const total = qs\.reduce\(\(t, x\) => t \+ _qfQuestionMarks\(x\), 0\);\n  const q = QC\.ctx\(\{ subject: 'science', title, topics: qs\.map\(x => x && x\.topic\), questions: qs\.length, total \}\);/, 'the chest is scored out of the sheet\'s marks');
   assert.match(APP, /objBoxPrintOn\('builder'\), wsArtwork, _qfPrintCtx\(selected, title\)\);/, 'worksheet builder passes it');
   assert.match(APP, /objBoxPrintOn\('saved'\), ws\.artwork, _qfPrintCtx\(selected, ws\.title\)\);/, 'My Worksheets passes it');
-  assert.match(APP, /questFrame: \(!o\.noTags && \(ctx\.where === 'builder' \|\| ctx\.where === 'saved'\)\) \? _qfPrintCtx\(selected, title\) : null,/, 'the preview paginates with the same header; the Study Buddy photograph stays plain');
-  assert.match(APP, /function _wsHeaderHtml\(worksheetTitle, hasCover, noFields, questFrame\) \{\n  if \(questFrame && window\.QuestFramesCer\) return window\.QuestFramesCer\.portalHeader\(questFrame, hasCover, noFields\);/);
+  assert.match(APP, /questFrame: \(!o\.noTags && \(ctx\.where === 'builder' \|\| ctx\.where === 'saved'\)\) \? _qfPrintCtx\(selected, title\) : null,/, 'the preview paginates with the same lead; the Study Buddy photograph stays plain');
+  assert.match(APP, /function _wsHeaderHtml\(worksheetTitle, hasCover, noFields, questFrame\) \{\n(?:  \/\/[^\n]*\n)*  if \(questFrame && window\.QuestFramesCer\) return window\.QuestFramesCer\.portalLead\(questFrame, hasCover, noFields\);/);
   assert.equal((APP.match(/_wsHeaderHtml\(worksheetTitle, hasCover, noFields, questFrame\)/g) || []).length, 3, 'both header call sites pass it');
   assert.match(APP, /autoscaleAndPrint\(output, \{ forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp, questFrame: questFrame \|\| null \}\);/);
   const tail = APP.slice(APP.indexOf('function doScaleAndPrint('), APP.indexOf('// EXAM PAPER BUILDER'));
@@ -314,6 +338,66 @@ test('app.js: both print doors, the preview and the planner all carry the frame'
   const framed = tail.indexOf('QC.framePrintPages(output, questFrame);');
   assert.ok(numbered > 0 && framed > numbered, 'the frame goes on AFTER the sheets are planned and numbered');
   assert.ok(tail.indexOf('QC.ready(output, 8000).then(') > framed, 'and the print waits for the sprites');
+  // The planner plans a framed sheet to the box between the bands…
+  const plan = APP.slice(APP.indexOf('function _printPlanIn('), APP.indexOf('function _printFontLinksHtml('));
+  assert.match(plan, /const pagePx = _printPagePxFor\(root, opts\);\n  const usable = pagePx - numH - PRINT_FIT_SAFETY;/, 'the questions are planned to the framed box');
+  assert.match(plan, /_classifyPrintChunks\(heights, footerH, budget, usable, pagePx\)/, 'and classified against it');
+  assert.match(plan, /const akUsable = PRINT_PAGE_PX - numH - PRINT_FIT_SAFETY;/, 'the answer key prints plain, so it is planned to the ordinary sheet');
+  assert.match(plan, /_printSetContentZoom\(content, zoom\);/, 'the planner measures a shrunk page with the lead\'s room held');
+  // …and the printer and the preview paint the same zoom, and the preview the same frame.
+  assert.match(APP, /function _printApplyZoom\(page, z\) \{\n  page\.style\.zoom = '';\n  page\.style\.height = '';\n  const content = page\.querySelector\(':scope > \.print-page-content'\);\n  _printSetContentZoom\(content, z\);\n\}/);
+  const pv = APP.slice(APP.indexOf('function _wsPreviewPack('), APP.indexOf('// WORKSHEET QUICK EDIT'));
+  assert.match(pv, /questFrame = \(QC && typeof QC\.leadCtx === 'function'\) \? QC\.leadCtx\(measure\) : null;/, 'the preview reads the quest off the same lead');
+  assert.match(pv, /const framedHere = !!questFrame && !plan\.pageTall\[gi\];/, 'a tall (flowing) page stays plain, as it prints');
+  assert.match(pv, /QC\.frameSheets\(framedSheets, questFrame, \{ still: true \}\)/, 'and dresses its sheets through the printer\'s own frameSheets');
+  assert.equal((pv.match(/content\.style\.zoom = /g) || []).length, 0, 'every zoom in the preview goes through _printSetContentZoom');
+});
+
+// The planner's half, cut out of app.js and run.
+function planner(QuestFramesCer) {
+  const cut = (name, end) => { const i = APP.indexOf('function ' + name + '('); return APP.slice(i, APP.indexOf(end, i)); };
+  const src = [
+    APP.match(/\nconst PRINT_PAGE_PX = [^\n]*;/)[0],
+    APP.match(/\nconst PRINT_ZOOM_FLOOR = [^\n]*;/)[0],
+    cut('_classifyPrintChunks', '\n// ---- Accurate A4 print measurement'),
+    cut('_printPagePxFor', '\n// A page\'s fit-to-page zoom'),
+    cut('_printSetContentZoom', '\n// Plan the whole document'),
+    'this.out = { PRINT_PAGE_PX, _classifyPrintChunks, _printPagePxFor, _printSetContentZoom };'
+  ].join('\n');
+  const ctx = vm.createContext({ window: { QuestFramesCer } });
+  vm.runInContext(src, ctx);
+  return ctx.out;
+}
+
+test('the planner: a framed worksheet plans to the box between the bands, everything else to the sheet', () => {
+  const { QC } = load();
+  const root = (framed) => ({ querySelector: (sel) => (framed && sel === '.qf-print-lead' ? { getAttribute: () => JSON.stringify({ world: 'volcano', title: 'Heat', questions: 3 }) } : null) });
+  const P = planner(QC);
+  assert.equal(P._printPagePxFor(root(false), {}), P.PRINT_PAGE_PX, 'no lead: byte for byte the old planner');
+  assert.equal(P._printPagePxFor(root(true), {}), QC.contentPx(), 'a lead: the framed box');
+  assert.ok(QC.contentPx() < P.PRINT_PAGE_PX * 0.9, 'which is really shorter');
+  assert.equal(P._printPagePxFor(root(false), { pagePx: 700 }), 700, 'a caller that knows is honoured');
+  assert.equal(P._printPagePxFor(root(false), { pagePx: 5000 }), P.PRINT_PAGE_PX, 'never taller than a sheet');
+  assert.equal(planner(null)._printPagePxFor(root(true), {}), P.PRINT_PAGE_PX, 'no frame script: the old planner');
+  assert.equal(planner({ leadCtx: () => { throw new Error('x'); }, contentPx: () => 800 })._printPagePxFor(root(true), {}), P.PRINT_PAGE_PX, 'a lead that throws frames nothing');
+  assert.equal(planner({ leadCtx: () => ({}), contentPx: () => 200 })._printPagePxFor(root(true), {}), P.PRINT_PAGE_PX, 'an unbelievable box is refused');
+  // Two compact questions share a sheet when each is half a page: half of the SHEET they print on.
+  const ord = P._classifyPrintChunks([480], 30, 900, 930);
+  const framed = P._classifyPrintChunks([480], 30, 760, 790, QC.contentPx());
+  assert.equal(ord.half, Math.round(P.PRINT_PAGE_PX / 2));
+  assert.equal(ord.pairFlags[0], true, 'half an ordinary sheet');
+  assert.equal(framed.half, Math.round(QC.contentPx() / 2));
+  assert.equal(framed.pairFlags[0], false, 'is more than half a framed box');
+  // The zoom and the lead's room travel together, and clear together.
+  const style = { setProperty(k, v) { this[k] = v; }, removeProperty(k) { delete this[k]; } };
+  const content = { style };
+  P._printSetContentZoom(content, 0.82);
+  assert.equal(style.zoom, 0.82);
+  assert.equal(style['--qf-pz'], '0.82');
+  P._printSetContentZoom(content, 1);
+  assert.equal(style.zoom, '');
+  assert.equal(style['--qf-pz'], undefined);
+  P._printSetContentZoom(null, 0.5);
 });
 
 test('creators: one Quest page per question sheet, instructions ride along, gems replace the number', () => {

@@ -1927,7 +1927,7 @@ key is the authority there, not the notes).
 
 - Run **`node tools/teaching-notes-tests.mjs`** after touching any of it.
 
-## 🎮 Quest frame — a worksheet as a Wheel Quest level (v1.444.0)
+## 🎮 Quest frame — a worksheet as a Wheel Quest level (v1.444.0, every sheet a quest page v1.445.0)
 
 `quest-frames.js` / `quest-frames.css` (loaded by index.html and both creators),
 `assets/quest-frames/` (print-sized WebP copies of Wheel Quest art from
@@ -1968,21 +1968,50 @@ beside `_wsStudentFieldsOn` in `app.js`, the `questFrame` option of
   - A box is hidden with an inline `display: none` and given back the inline
     display the page drew it with (`data-qf-display`), because the builder's
     label lays itself out with an inline flex.
-- **The portal never moves a measured pixel.** The page-1 header
-  (`QuestFramesCer.portalHeader`: banner + compact boss with hearts + hero card;
-  with a cover, just the hero card and boss) and the gem before "Question N"
-  are ordinary content, measured by the planner. The PREVIEW takes the same
-  header (`_wsPreviewBuildHtml`) so it paginates as the print does; the 📖
-  Study Buddy export (`noTags`) does NOT, because html2canvas never loads the
-  sprites inside an inline SVG and would photograph them blank. The rampart
-  goes on in `doScaleAndPrint` AFTER `_printApplyPageNumbers`
-  (`framePrintPages`): each ordinary question sheet becomes a margin-free
-  `@page qf-sheet`, 210 × 296mm and padded 18/16/20mm, so its content box is
-  the planner's 178 × 258mm. **296mm, never 297**: a sheet a hair over A4
-  spills a blank page after it. Tall pages and answer-key pages are left plain.
-- **`border({ fit: 'margins' })` must fit inside 16mm / 18mm / 20mm.**
-  `tools/quest-frames-tests.mjs` parses every rect and sprite and fails if one
-  enters the text column.
+- **Every portal question sheet is a QUEST PAGE (v1.445.0)**, dressed by the
+  design system's own `QF.decorate` through `QuestFramesCer.frameSheets` — the
+  ONE dresser the printer (`framePrintPages`, after `_printApplyPageNumbers` in
+  `doScaleAndPrint`) and the live preview (`_wsPreviewPack`) both call: the
+  rampart; a header band (slim banner, boss, one heart per question); a footer
+  band (a hero on the wall, the XP trail counting framed sheets, a companion's
+  cheer). `variantOf`: the sheet holding the START lead is the start page (full
+  banner with the logo, the boss with its rule of play, the hero card = the
+  name fields, Name and Date only via `PORTAL_FIELDS`), the last framed sheet
+  the FINALE (treasure chest scored out of `q.total`, the sheet's marks), the
+  rest the TRAIL. Page 1 without the name fields is a trail page and is handed
+  `CHEERS[0]` — the design system would cheer it "Almost at the treasure!".
+  Tall (flowing) pages and answer-key pages stay plain, on the ordinary margins.
+- **The planner plans a framed sheet to the box BETWEEN the bands**
+  (`QuestFramesCer.SHEET` / `contentPx()`: 296mm − 124px top − 164px bottom =
+  the finale's 150px safe line + `FOOT_GAP` 14, so the page number never sits
+  on the chest). quest-frames.css repeats those numbers as the framed sheet's
+  padding (print and `.wspv-sheet.qf-sheet`), and the unit test fails if they
+  disagree. Plan to the ordinary 258mm and the last question prints under the
+  hero and the chest.
+  - **The framing is read OFF THE MARKUP.** `_wsHeaderHtml` emits
+    `QuestFramesCer.portalLead` (in the first chunk, where the old header was):
+    a marker whose `data-qf` names the quest. `_printPagePxFor(root, opts)` finds
+    it in the HTML being planned, so the printer and the preview — which plan
+    the same HTML — cannot disagree; no lead (Study Buddy photograph, past
+    papers, bank proofs) is PRINT_PAGE_PX, byte for byte the old planner.
+    `_classifyPrintChunks` takes the same `pagePx` for its "half a page"; the
+    answer key is ALWAYS planned to PRINT_PAGE_PX, because it prints plain.
+  - **The START lead is the room the start header needs** (`SHEET.startExtra`,
+    92px) with its height divided by `--qf-pz`. Every fit-to-page zoom goes
+    through `_printSetContentZoom` (planner, printer, preview), which sets
+    `--qf-pz` beside the zoom, so a shrunk page 1 still keeps the full 92px and
+    the planner measured it that way. Set a zoom any other way and a shrunk
+    page 1's questions ride up under the hero card.
+- **`@page qf-sheet` is declared TWICE, and the one in index.html is the one
+  that works.** Chrome lets a LATER stylesheet's plain `@page` beat an EARLIER
+  one's named page, whatever the selector says; quest-frames.css loads before
+  index.html's inline styles, so its `@page qf-sheet { margin: 0 }` lost and
+  v1.444.0 printed every framed sheet SHRUNK inside the old 16/18/20mm margins
+  — on a sheet that measured perfectly in the DOM. index.html declares it again
+  right after `@page polymath-cover`, below the plain `@page`. Never remove it.
+  **296mm, never 297**: a sheet a hair over A4 spills a blank page after it.
+- The 📖 Study Buddy export (`noTags`) gets no lead and no frame: html2canvas
+  never loads the sprites inside an inline SVG and would photograph them blank.
 - **SVG pictures are not in `document.images`**, so nothing in the old wait
   covers them: the portal waits for `QuestFramesCer.ready(output)` before
   `_printAndRestore`, and the creators' print windows wait for `qfReady()`.
@@ -1995,9 +2024,16 @@ beside `_wsStudentFieldsOn` in `app.js`, the `questFrame` option of
   of clipping it. The creators have no marks, so their gems are a plain rare blue.
 - Run `node --test tools/quest-frames-tests.mjs` and
   `node tools/quest-frames-browser-check.mjs` (real Chromium, PDFs with
-  background graphics off, plus the switch in all three pages' real toggle
-  markup: hidden for a student, an employee and an unnamed teacher, unticked
-  on hand-over and after a reload; also in CI, `.github/workflows/quest-frames.yml`).
+  background graphics off; also in CI, `.github/workflows/quest-frames.yml`).
+  The portal half runs the SHIPPED planner, printer and preview cut out of
+  app.js on a framed worksheet, then RASTERISES the PDF with `pdftoppm`
+  (poppler-utils, installed in the workflow) and checks the wall reaches the
+  paper's edge on every framed sheet and the key keeps its margins — a DOM
+  measurement passed v1.444.0's shrunk print. It also checks every header and
+  footer piece stays out of the question box, the start lead keeps its room
+  under zoom, and the preview shows the same sheets. Plus the switch in all
+  three pages' real toggle markup: hidden for a student, an employee and an
+  unnamed teacher, unticked on hand-over and after a reload.
 
 ## 🎨 The worksheet cover is the Big M design (v1.438.0)
 

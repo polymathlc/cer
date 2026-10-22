@@ -1,5 +1,33 @@
 # CER Science Learning Portal
 
+## 🎮 Quest frame: every sheet is a quest page (v1.445.0)
+
+The portal's framed worksheets now look like the Maths and Science creators'
+Quest pages. In v1.444.0 they only had the brick wall, and it printed shrunk.
+
+- **Every question sheet is a quest page.** Across the top: the quest banner
+  with the world's scene and the boss with one heart per question. Across the
+  foot: a hero standing on the wall, the XP trail ("PAGE 2 / 4 · +100 XP") and
+  a companion with a cheer (Orbit for Science).
+- **Page 1 opens the quest**: the full banner with the logo, the boss with its
+  rule of play, and the hero card (Hero name, Date and the four heroes to
+  circle), which replaces the Name / Date strip. With the name fields switched
+  off, page 1 is an ordinary quest page.
+- **The last question sheet holds the treasure chest**: a score out of the
+  worksheet's total marks, three stars to colour and a seal for the teacher.
+- **Fixed: framed sheets printed shrunk.** The wall was meant to run round the
+  edge of the paper, but every framed sheet came out scaled down inside the
+  old 16mm margins. The page setting that removes those margins was being
+  overridden; it is now declared where it cannot be.
+- The questions are planned to fit between the banner and the footer, so
+  nothing is ever printed under a character. A framed worksheet therefore
+  takes a few more sheets than a plain one. The live preview shows the same
+  framed sheets the PDF will have.
+- The answer key, and any question too tall for one sheet, still print plain.
+
+Run `node --test tools/quest-frames-tests.mjs` and
+`node tools/quest-frames-browser-check.mjs` (needs `pdftoppm`).
+
 ## 🎮 Quest frame: worksheets as a Wheel Quest level (v1.444.0)
 
 Tick **🎮 Quest frame** and a printed worksheet becomes a level of Wheel Quest,

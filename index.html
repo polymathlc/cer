@@ -15,7 +15,7 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.444.0">
+  <link rel="modulepreload" href="app.js?v=1.445.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -38,7 +38,7 @@
      preview copy these links with media="all"). quest-frames.css is loaded the
      same non-blocking way. -->
 <link rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Pixelify+Sans:wght@400..700&display=swap">
-<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.444.0">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.445.0">
 
 <!-- Tailwind, prebuilt. This used to be <script src="cdn.tailwindcss.com">:
      the Play CDN, which ships a full CSS compiler to the browser, scans the
@@ -2957,6 +2957,14 @@ option {
      written in mm: a percentage would be taken from the parent's width, which
      is the 178mm text column wherever the cover is laid out inside one. */
   .print-cover-page.wc-cover.print-cover-bleed { page: polymath-cover; width:210mm; min-height:296.5mm; height:296.5mm; margin:0; padding:12.7mm 14.8mm 10.58mm; }
+  /* 🎮 A Quest-framed sheet (quest-frames.css) is margin-free too. Declared
+     HERE, after the plain @page above, and not only in quest-frames.css:
+     Chrome lets a LATER stylesheet's plain @page beat an EARLIER one's named
+     page, whatever the page selector says. quest-frames.css loads first, so
+     its `@page qf-sheet` lost its margin:0 and every framed sheet printed
+     shrunk to fit inside the old margins (v1.444.0). The cover's named page
+     never had the problem because it sits below the plain one in this sheet. */
+  @page qf-sheet { size: A4 portrait; margin: 0; }
   .print-cover-deco { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .print-cover-head { position: relative; font-size: 8.5pt; font-weight: 500; letter-spacing: 0.32em; text-transform: uppercase; color: #111; padding-bottom: 7pt; border-bottom: 0.75pt solid #111; }
   .print-cover-center { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20pt; padding-bottom: 16mm; }
@@ -11863,7 +11871,7 @@ html { scroll-behavior:smooth; }
             <input type="checkbox" id="wsIncludeFields" checked style="width:16px;height:16px;accent-color:var(--primary);">
             ✍️ Name / Date / Class fields
           </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print the worksheet as a Wheel Quest level: a pixel brick wall round every sheet, a quest banner, the boss with one heart per question to colour in, a hero card, and a loot gem on every question number. Teacher only, and never remembered: it starts unticked on every visit, so a sheet is framed only when you tick this before printing.">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print the worksheet as a Wheel Quest level: every sheet a quest page, with a pixel brick wall, the quest banner, the boss with one heart per question to colour in, a hero, the XP trail and a companion cheering; the hero card on page 1, a loot gem on every question number and the treasure chest on the last sheet. Teacher only, and never remembered: it starts unticked on every visit, so a sheet is framed only when you tick this before printing.">
             <input type="checkbox" id="wsQuestFrame" data-quest-frame-toggle style="width:16px;height:16px;accent-color:var(--primary);">
             🎮 Quest frame
           </label>
@@ -11997,7 +12005,7 @@ html { scroll-behavior:smooth; }
             <input type="checkbox" id="mwIncludeFields" checked style="width:16px;height:16px;accent-color:var(--primary);">
             ✍️ Name / Date / Class fields
           </label>
-          <label title="Print the worksheet as a Wheel Quest level: a pixel brick wall round every sheet, a quest banner, the boss with one heart per question to colour in, a hero card, and a loot gem on every question number. Teacher only, and never remembered: it starts unticked on every visit, so a sheet is framed only when you tick this before printing.">
+          <label title="Print the worksheet as a Wheel Quest level: every sheet a quest page, with a pixel brick wall, the quest banner, the boss with one heart per question to colour in, a hero, the XP trail and a companion cheering; the hero card on page 1, a loot gem on every question number and the treasure chest on the last sheet. Teacher only, and never remembered: it starts unticked on every visit, so a sheet is framed only when you tick this before printing.">
             <input type="checkbox" id="mwQuestFrame" data-quest-frame-toggle style="width:16px;height:16px;accent-color:var(--primary);">
             🎮 Quest frame
           </label>
@@ -16249,8 +16257,8 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script src="worksheet-cover.js?v=1.444.0"></script>
-  <script src="quest-frames.js?v=1.444.0"></script>
-  <script type="module" src="app.js?v=1.444.0"></script>
+  <script src="worksheet-cover.js?v=1.445.0"></script>
+  <script src="quest-frames.js?v=1.445.0"></script>
+  <script type="module" src="app.js?v=1.445.0"></script>
 </body>
 </html>

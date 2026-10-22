@@ -1,4 +1,4 @@
-/* quest-frames.css — Polymath Quest Frames on the Science portal (v1.444.0).
+/* quest-frames.css — Polymath Quest Frames on the Science portal (v1.445.0).
    Built from the Polymath Quest Frames design system (claude.ai artifact): its tokens.json and
    components/bundle.css, then this site's own rules at the end. Change the system, then copy. */
 /* Polymath Quest Frames — generated from tokens.json */
@@ -663,7 +663,6 @@ svg.qf-sprite { display: block; overflow: hidden; }
   .qf-page:last-child { break-after: auto; page-break-after: auto; }
   .qf-toggle:focus-visible { outline: none; }
 }
-
 /* =====================================================================
    🎮 QUEST FRAMES ON THIS SITE (polymathlc/cer). Everything above is the
    Polymath Quest Frames design system (tokens, then components), unchanged
@@ -671,30 +670,37 @@ svg.qf-sprite { display: block; overflow: hidden; }
    in its print-only font request, and a print window asks in printHead().
    ===================================================================== */
 
-/* The portal's page-1 header on a framed worksheet: the banner and the boss
-   side by side, the hero card under them. It sits in the 178mm text column
-   and is measured by the print planner like the header it replaces. */
-.qf-print-head { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 12px 14px; align-items: center; margin: 4px 0 16px; font-family: var(--font-qf-label); color: var(--qf-ink); }
-.qf-print-head--cover { align-items: end; margin-top: 0; }
-.qf-print-hero { grid-column: 1 / -1; }
-.qf-print-head--cover .qf-print-hero { grid-column: auto; }
-.qf-print-boss { width: 210px; }
-.qf-print-head .qf-banner-title { white-space: normal; overflow: visible; text-overflow: clip; }
-.qf-print-head .qf-boss--compact .qf-boss-info { align-items: flex-end; }
-.qf-print-head .qf-boss--compact .qf-caption { text-align: right; }
-/* A printed sheet names its boss in full: wrap rather than cut off. */
-.qf-print-head .qf-boss--compact .qf-boss-name { white-space: normal; overflow: visible; text-overflow: clip; text-align: right; }
 /* "Question N" with its gem in front. */
 .print-q-header.qf-q-head { display: flex; align-items: center; gap: 10px; }
 .print-q-header.qf-q-head h2 { margin: 0; }
 
+/* Page 1's lead (quest-frames.js portalLead): a marker in the first question's
+   chunk, and with the name fields on, the room the START header needs. Its
+   height is set inline from SHEET.startExtra and divided by the page content's
+   fit-to-page zoom (--qf-pz), so it is the same room at any zoom. */
+.qf-print-lead { display: block; margin: 0; padding: 0; border: 0; height: 0; }
+
+/* A portal sheet dressed as a quest page (QF.decorate). The design system's
+   page layer was drawn for a .qf-page, which sets the label face, the ink and
+   border-box sizing; a dressed sheet is not one, so its layer sets them. */
+.qf-sheet > .qf-frame-layer--overlay { font-family: var(--font-qf-label); color: var(--qf-ink); }
+.qf-sheet > .qf-frame-layer--overlay *,
+.qf-sheet > .qf-frame-layer--overlay *::before,
+.qf-sheet > .qf-frame-layer--overlay *::after { box-sizing: border-box; }
+
+/* The live A4 preview (app.js _wsPreviewPack) shows a framed sheet as the same
+   box it prints as: 296mm tall, the questions between the bands. */
+.wspv-sheet.qf-sheet { height: 296mm; min-height: 0; padding: 124px 16mm 164px; overflow: hidden; }
+.wspv-sheet.qf-sheet > .wspv-pageno { position: absolute; left: 0; right: 0; top: 1.2mm; bottom: auto; z-index: 3; }
+
 @media print {
-  /* A framed sheet: margin-free A4, padded by the sheet's old margins so its
-     content box is the 178 x 258mm the planner measured. 296mm, not 297: a
-     sheet a hair over A4 spills a blank page after it. */
+  /* A framed sheet: margin-free A4, padded down to the box the planner planned
+     it to — 124px under the header band's line, 164px above the foot (the
+     tallest footer, the treasure chest, and a 14px gap), the 16mm sides every
+     sheet has — which is SHEET in
+     quest-frames.js. 296mm, not 297: a sheet a hair over A4 spills a blank page
+     after it. The named page is ALSO declared in index.html, after its plain
+     @page: Chrome lets a later stylesheet's plain @page beat this one. */
   @page qf-sheet { size: A4 portrait; margin: 0; }
-  #printOutput > .print-question-page.qf-sheet { page: qf-sheet; position: relative; box-sizing: border-box; width: 210mm; max-width: none; height: 296mm; padding: 18mm 16mm 20mm; }
-  #printOutput > .print-question-page.qf-sheet > .qf-sheet-frame { position: absolute; left: 0; top: 0; width: 210mm; height: 296mm; pointer-events: none; }
-  #printOutput > .print-question-page.qf-sheet > :not(.qf-sheet-frame) { position: relative; }
-  .qf-sheet-frame .qf-border { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+  #printOutput > .print-question-page.qf-sheet { page: qf-sheet; position: relative; box-sizing: border-box; width: 210mm; max-width: none; height: 296mm; padding: 124px 16mm 164px; }
 }
