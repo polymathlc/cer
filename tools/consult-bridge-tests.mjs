@@ -63,8 +63,8 @@ test('the compat wrappers turn the modular calls into the shape consult-answer.j
   const calls = [];
   const ref = (path) => ({ id: path.split('/').pop(), path });
   const F = {
-    collection: (base, name) => ({ id: name, path: (base.path ? base.path + '/' : '') + name }),
-    doc: (c, id) => ref(c.path + '/' + (id || 'AUTOID123456')),
+    collection: (_db, p) => ({ id: p.split('/').pop(), path: p }),
+    doc: (_db, p) => ref(p),
     query: (q, c) => ({ ...q, cs: (q.cs || []).concat([c]) }),
     where: (...a) => ['where', ...a], orderBy: (...a) => ['orderBy', ...a], limit: (n) => ['limit', n],
     getDoc: async (r) => ({ id: r.id, ref: r, exists: () => true, data: () => ({ path: r.path }) }),
@@ -78,18 +78,19 @@ test('the compat wrappers turn the modular calls into the shape consult-answer.j
       update: (r, d) => calls.push(['tx.update', r.path, d]), set: (r, d) => calls.push(['tx.set', r.path, d]), delete: (r) => calls.push(['tx.delete', r.path])
     })
   };
-  const ctx = { console, Promise, setTimeout, clearTimeout, setInterval, clearInterval, document: { getElementById: () => null, documentElement: { classList: { add() {} } } } };
+  const ctx = { console, Promise, Uint8Array, crypto: globalThis.crypto, setTimeout, clearTimeout, setInterval, clearInterval, document: { getElementById: () => null, documentElement: { classList: { add() {} } } } };
   ctx.window = ctx; ctx.globalThis = ctx;
   vm.createContext(ctx);
   vm.runInContext(BRIDGE.replace(/typeof window !== 'undefined' \? window : globalThis/, 'window'), ctx);
   const db = ctx.ConsultBridge._internals.wrapFirestore(F, { path: '' });
   const r = db.collection('tutorConsults').doc();
-  assert.equal(r.id, 'AUTOID123456', 'an id of its own, like the compat doc()');
+  assert.match(r.id, /^[A-Za-z0-9]{20}$/, 'an id of its own, like the compat doc()');
+  assert.equal(r.path, 'tutorConsults/' + r.id);
   const snap = await db.collection('tutorConsults').doc('abc').get();
   assert.equal(snap.exists, true, 'exists is a property, as in compat');
   assert.equal(snap.data().path, 'tutorConsults/abc');
   await r.collection('frames').doc('question').set({ img: 'data:image/jpeg;base64,x' });
-  assert.deepEqual(calls.pop(), ['set', 'tutorConsults/AUTOID123456/frames/question', { img: 'data:image/jpeg;base64,x' }]);
+  assert.deepEqual(J(calls.pop()), ['set', 'tutorConsults/' + r.id + '/frames/question', { img: 'data:image/jpeg;base64,x' }]);
   let seen = null;
   db.collection('tutorConsults').orderBy('at', 'desc').limit(300).onSnapshot((qs) => { seen = qs; });
   assert.equal(seen.docs[0].data().n, 2);
@@ -115,6 +116,9 @@ test('this page loads the shared files and attaches the bridge with its own app 
   const sdk = call.match(/sdk: '([\d.]+)'/)[1];
   assert.ok(HOST.code.includes('https://www.gstatic.com/firebasejs/' + sdk + '/firebase-firestore.js'), 'the bridge loads the very SDK files this page imported');
   assert.match(call, /appCheck: \w+AppCheck/);
+  // The bridge follows the page's own sign-in handler, never a listener of its own.
+  assert.match(HOST.code, /onAuthStateChanged\(auth, (async )?\(user\) => \{\n[^\n]*\n  try \{ if \(window\.ConsultBridge && window\.ConsultBridge\.authChanged\) window\.ConsultBridge\.authChanged\(user\); \} catch \(e\) \{\}/);
+  assert.ok(!/onAuthStateChanged/.test(BRIDGE.replace(/\/\*[\s\S]*?\*\//g, '')), 'no auth listener in the bridge');
 });
 
 test('the bridge never names a recipient and never writes on its own', () => {

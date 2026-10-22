@@ -35,8 +35,12 @@
    no way back to the answer (the server refuses them too).
 
    The portal calls `ConsultBridge.attach({...})` once, after its own
-   `initializeApp` and `initializeAppCheck`. Nothing here runs before that,
-   and a page where the scripts failed to load simply has no button.
+   `initializeApp` and `initializeAppCheck`, and `ConsultBridge.authChanged(user)`
+   from its OWN onAuthStateChanged handler with the signed-in Firebase user
+   (or null). The bridge never registers an auth listener of its own: the
+   portal's handler is the one place a sign-in is decided, and the test
+   stand-ins keep a single listener. Nothing here runs before attach, and a
+   page where the scripts failed to load simply has no button.
    ===================================================================== */
 (function (global) {
   'use strict';
@@ -99,27 +103,40 @@
   if (!global.document) { global.ConsultBridge = { pure: pure }; return; }
 
   /* ---- ② The compat-shaped wrappers ---- */
+  var ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  // A Firestore-style id: 20 characters, from crypto where there is one.
+  function newId() {
+    var out = '', bytes = null;
+    try { bytes = global.crypto.getRandomValues(new Uint8Array(20)); } catch (e) { bytes = null; }
+    for (var i = 0; i < 20; i++) out += ID_CHARS.charAt((bytes ? bytes[i] : Math.floor(Math.random() * 256)) % 62);
+    return out;
+  }
   function wrapFirestore(F, fs) {
     function docSnap(snap) {
       return {
         id: snap.id,
         exists: snap.exists(),
         data: function () { return snap.data(); },
-        ref: docRef(snap.ref)
+        ref: docRef(snap.ref.path)
       };
     }
     function querySnap(qs) {
       var docs = qs.docs.map(docSnap);
       return { docs: docs, size: docs.length, empty: !docs.length, forEach: function (f) { docs.forEach(f); } };
     }
-    function docRef(r) {
+    // Every reference is made from its FULL PATH on the database itself
+    // (`doc(db, 'a/b/c/d')`, `collection(db, 'a/b/c')`), never from a parent
+    // reference, and a new id is made here: one form the SDK and every test
+    // stand-in agree on.
+    function docRef(path) {
+      var r = F.doc(fs, path);
       return {
-        _r: r, id: r.id, path: r.path,
+        _r: r, id: path.split('/').pop(), path: path,
         get: function () { return F.getDoc(r).then(docSnap); },
         set: function (data, opts) { return opts ? F.setDoc(r, data, opts) : F.setDoc(r, data); },
         update: function (data) { return F.updateDoc(r, data); },
         delete: function () { return F.deleteDoc(r); },
-        collection: function (name) { return collRef(F.collection(r, name)); },
+        collection: function (name) { return collRef(path + '/' + name); },
         onSnapshot: function (next, err) {
           return F.onSnapshot(r, function (s) { next(docSnap(s)); }, err);
         }
@@ -137,14 +154,14 @@
         }
       };
     }
-    function collRef(c) {
-      var q = queryRef(c);
-      q.id = c.id; q.path = c.path;
-      q.doc = function (id) { return docRef(id ? F.doc(c, id) : F.doc(c)); };
+    function collRef(path) {
+      var q = queryRef(F.collection(fs, path));
+      q.id = path.split('/').pop(); q.path = path;
+      q.doc = function (id) { return docRef(path + '/' + (id || newId())); };
       return q;
     }
     return {
-      collection: function (path) { return collRef(F.collection(fs, path)); },
+      collection: function (path) { return collRef(path); },
       runTransaction: function (fn) {
         return F.runTransaction(fs, function (t) {
           return fn({
@@ -204,7 +221,7 @@
   }
 
   /* ---- ①③④ attach ---- */
-  var B = { attached: false, ready: false, app: '', auth: null, authUser: null, db: null, storage: null,
+  var B = { attached: false, ready: false, app: '', authUser: null, db: null, storage: null,
     F: null, AC: null, appCheck: null, toast: null, unsub: null, docs: [], role: '', tick: 0, gen: 0 };
 
   function btnEl() { return global.document.getElementById('consultLogBtn'); }
@@ -265,9 +282,10 @@
     if (role === 'teacher') ca.openLog({});
     else ca.openLibrary({});
   }
-  function onAuth(u) {
+  function authChanged(u) {
     var before = B.authUser && B.authUser.uid;
-    B.authUser = u || null;
+    B.authUser = u && u.uid ? u : null;
+    if (!B.ready) return;
     // Another account: everything the last one had open comes down.
     if (before && (!u || u.uid !== before)) { try { var ca = CA(); if (ca && ca.stop) ca.stop(); } catch (e) {} }
     watch();
@@ -290,14 +308,12 @@
     return Promise.all([
       import(base + 'firebase-firestore.js'),
       import(base + 'firebase-storage.js'),
-      import(base + 'firebase-auth.js'),
       B.appCheck ? import(base + 'firebase-app-check.js') : Promise.resolve(null)
     ]).then(function (m) {
-      var F = m[0], S = m[1], A = m[2];
-      B.F = F; B.AC = m[3];
+      var F = m[0], S = m[1];
+      B.F = F; B.AC = m[2];
       B.db = wrapFirestore(F, F.getFirestore(o.firebaseApp));
       B.storage = wrapStorage(S, S.getStorage(o.firebaseApp));
-      B.auth = A.getAuth(o.firebaseApp);
       global.ConsultEnv = {
         app: B.app,
         subject: function () { return APPS[B.app]; },
@@ -317,7 +333,8 @@
       };
       global.document.documentElement.classList.add('caPortal');
       B.ready = true;
-      A.onAuthStateChanged(B.auth, onAuth);
+      // Whoever signed in before the SDK files arrived.
+      watch();
       return true;
     }).catch(function (e) {
       console.warn('consult: the bridge could not load', e);
@@ -329,6 +346,7 @@
   global.ConsultBridge = {
     pure: pure,
     attach: attach,
+    authChanged: authChanged,
     open: onClick,
     _internals: { state: function () { return B; }, wrapFirestore: wrapFirestore, wrapStorage: wrapStorage, paint: paint }
   };

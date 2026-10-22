@@ -5181,6 +5181,8 @@ async function loadAdminQuestions() {
 }
 
 onAuthStateChanged(auth, (user) => {
+  // 🙋 Consults: the bridge follows THIS handler rather than keeping a listener of its own.
+  try { if (window.ConsultBridge && window.ConsultBridge.authChanged) window.ConsultBridge.authChanged(user); } catch (e) {}
   pirateRiftPortal.close();
   grandLinePortal.close();
   rapidPreviewReset();
