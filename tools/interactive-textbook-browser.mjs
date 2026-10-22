@@ -82,7 +82,7 @@ try {
     const { context, page, errors, outside } = await openPage(1280, 900);
     await page.goto(`${origin}/interactive-textbook/`);
     await page.waitForSelector('.topic-card[data-topic="water-states"]');
-    assert.equal(await page.locator('.topic-card').count(), 4, 'four topics: Water, Heat, Reproduction, and Plant Transport, Respiratory and Circulatory Systems');
+    assert.equal(await page.locator('.topic-card').count(), 5, 'five topics: Water, Heat, Reproduction, Plant Transport, Respiratory and Circulatory Systems, and Light and Shadows');
     assert.equal((await page.locator('.topic-card .topic-title').first().textContent()).trim(), 'Water and its 3 states');
     assert.equal((await page.locator('.topic-card[data-topic="heat"] .topic-title').textContent()).trim(), 'Heat');
     assert.equal((await page.locator('.progress-label').first().textContent()).trim(), '0 / 12');
