@@ -1514,7 +1514,7 @@
     try { return new URL('.', (script && script.src) || global.location.href).href; }
     catch (e) { return 'https://polymathlc.com.sg/'; }
   })();
-  var VERSION = '1.444.0';
+  var VERSION = '1.445.0';
 
   /* Art. The logo, the subject icons and the companions are already on this
      site; the Wheel Quest art is a print-sized copy in assets/quest-frames
@@ -1610,14 +1610,16 @@
 
   /* The quest a printed worksheet goes on: its world (from the topics, then
      the title), the boss (seeded by the title, so a reprint meets the same
-     one) and one heart per question. */
+     one), one heart per question, and the marks the treasure chest is scored
+     out of (0 when no question carries marks: the chest then has no total). */
   function ctx(o) {
     o = o || {};
     var subject = QF.pure.subjectOf(o.subject || 'science');
     var title = String(o.title || '').trim() || 'Worksheet';
     var topic = mostCommon(o.topics);
     var world = QF.worldFor(subject, topic ? topic + ' ' + title : title);
-    return { subject: subject, title: title, topic: topic, world: world.id, seed: title, questions: Math.max(0, Number(o.questions) || 0) };
+    var whole = function (v) { v = Math.floor(Number(v) || 0); return v > 0 ? v : 0; };
+    return { subject: subject, title: title, topic: topic, world: world.id, seed: title, questions: whole(o.questions), total: whole(o.total) };
   }
 
   /* Every picture a framed sheet will show, fetched before the print dialog
@@ -1650,28 +1652,98 @@
   function preload(q) {
     if (!q) return Promise.resolve();
     var w = QF.pure.worldOf(q.world) || QF.WORLDS[0];
-    var keys = ['logo', 'runes', 'chest', 'science-icons', 'math-icons', w.scene, 'hero-warrior', 'hero-mage', 'hero-ranger', 'hero-cleric', 'items-1', 'items-2', 'items-3', 'items-4', 'items-5'];
+    var c = QF.companionFor(q.subject).id;
+    var keys = ['logo', 'runes', 'chest', 'science-icons', 'math-icons', w.scene, 'hero-warrior', 'hero-mage', 'hero-ranger', 'hero-cleric', 'items-1', 'items-2', 'items-3', 'items-4', 'items-5',
+      c + '-welcome', c + '-encourage'];
     var b = QF.bossFor(w.id, null, { seed: q.seed });
     keys.push(b.atlas || b.art);
     return load(keys.filter(Boolean).map(function (k) { return QF.art.url(k); }), 8000);
   }
 
-  /* ---------------- the portal (index.html + app.js) ---------------- */
+  /* ---------------- the portal (index.html + app.js) ----------------
 
-  /* Page 1's header: the quest banner and the boss with its hearts, then the
-     hero card. With a cover in front, the cover already carries the logo and
-     the title, so the banner stays off. Laid out inside the 178mm text column
-     and MEASURED by the print planner like the header it replaces. */
-  function portalHeader(q, hasCover, noFields) {
-    var w = q.world;
-    var boss = '<div class="qf-print-boss">' + QF.bossBar({ world: w, seed: q.seed, questions: q.questions, compact: true, caption: true, still: true }) + '</div>';
-    var hero = noFields ? '' : '<div class="qf-print-hero">' + QF.heroCard({ world: w }) + '</div>';
-    if (hasCover) {
-      return '<div class="qf-print-head qf-print-head--cover qf-world-' + w + '">' + (hero || '<div></div>') + boss + '</div>';
-    }
-    return '<div class="qf-print-head qf-world-' + w + '">' +
-      '<div class="qf-print-banner">' + QF.banner({ subject: q.subject, title: q.title, world: w, headingLevel: 1 }) + '</div>' +
-      boss + hero + '</div>';
+     A framed portal sheet is a QUEST PAGE in the design system's own layout
+     (`QF.decorate`, the same header and footer the creators' pages carry):
+     the rampart round the sheet; a header band with the quest banner and the
+     boss with one heart per question; a footer band with a hero standing on
+     the wall, the XP trail and a companion's cheer, or on the last sheet the
+     treasure chest. Page 1 is the START page when the name fields are on: the
+     full banner with the logo, the boss with its rule of play, and the hero
+     card, which IS the name fields.
+
+     SHEET is the box the questions print in, between the two bands. The print
+     planner plans every framed sheet to `contentPx()` tall and 178mm wide (the
+     16mm sides every other sheet has), so a question can never run under a
+     band: the planner MEASURES what fits, it never assumes. quest-frames.css
+     repeats these numbers in the framed sheet's padding, and
+     tools/quest-frames-tests.mjs fails if the two disagree.
+       top     the trail header's safe line (the start page adds `startExtra`
+               in its own lead, below, so every sheet plans to ONE height);
+       bottom  the tallest footer — the finale's treasure chest — on every
+               sheet, so the last sheet needs no plan of its own, plus FOOT_GAP:
+               a portal sheet always ends on its copyright row and page number,
+               right at the foot of the box, where a creator's page rarely
+               reaches, and without the gap that number sits on the chest;
+       296mm   not 297: a sheet a hair over A4 spills a blank page after it. */
+  var FOOT_GAP = 14;
+  var SHEET = (function () {
+    var P = QF.PAGE;
+    var top = P.safeTop.trail;
+    var bottom = Math.max(P.safeBottom.start, P.safeBottom.trail, P.safeBottom.finale) + FOOT_GAP;
+    return Object.freeze({ heightMm: 296, sideMm: 16, top: top, bottom: bottom, startExtra: P.safeTop.start - top });
+  })();
+  var PX_PER_MM = 96 / 25.4;
+  function contentPx() { return SHEET.heightMm * PX_PER_MM - SHEET.top - SHEET.bottom; }
+
+  /* The hero card on page 1 is the sheet's name fields. Name and Date only,
+     like the portal's own strip and its cover: Class went in v1.438.0. */
+  var PORTAL_FIELDS = [['HERO NAME', 'name'], ['DATE', 'date']];
+
+  /* Page 1's LEAD, emitted where the old page-1 header was (inside the first
+     question's chunk, so the planner measures it with that question). It says
+     two things:
+       • which quest the worksheet is on (`data-qf`), so the planner, the
+         printer and the live preview all read the framing off the very markup
+         they lay out and can never disagree about it;
+       • with the name fields on, the room the START header needs below the
+         trail header's line. Its height is divided by `--qf-pz`, the
+         fit-to-page zoom the planner, the printer and the preview put on the
+         page content, so the room stays exactly `startExtra` px however the
+         questions under it are shrunk, and the planner measured it that way.
+     With the fields off, page 1 is an ordinary trail page and the lead is an
+     empty marker that takes no room at all. `hasCover` makes no difference:
+     the page-1 strip has always printed under a cover too. */
+  function portalLead(q, hasCover, noFields) {
+    if (!q) return '';
+    var start = !noFields;
+    var data = {
+      world: q.world, seed: q.seed, subject: q.subject, title: q.title,
+      questions: q.questions, total: q.total || 0, start: start
+    };
+    return '<div class="qf-print-lead' + (start ? ' qf-print-lead--start' : '') + '" aria-hidden="true" data-qf="' + QF.pure.esc(JSON.stringify(data)) + '"' +
+      (start ? ' style="height:calc(' + SHEET.startExtra + 'px / var(--qf-pz, 1))"' : '') + '></div>';
+  }
+
+  /* The quest a lead names, checked: an unknown world is the subject's first,
+     the numbers are whole and never negative, the title is never empty. */
+  function leadCtxOf(el) {
+    if (!el || typeof el.getAttribute !== 'function') return null;
+    var raw = el.getAttribute('data-qf');
+    if (!raw) return null;
+    var d;
+    try { d = JSON.parse(raw); } catch (e) { return null; }
+    if (!d || typeof d !== 'object') return null;
+    var subject = QF.pure.subjectOf(d.subject || 'science');
+    var world = QF.pure.worldOf(d.world) ? String(d.world) : QF.worldFor(subject, String(d.title || '')).id;
+    var whole = function (v) { v = Math.floor(Number(v) || 0); return v > 0 ? v : 0; };
+    return {
+      subject: subject, world: world, seed: d.seed == null ? String(d.title || '') : String(d.seed),
+      title: String(d.title || '').trim() || 'Worksheet', questions: whole(d.questions), total: whole(d.total), start: !!d.start
+    };
+  }
+  function leadCtx(root) {
+    if (!root || typeof root.querySelector !== 'function') return null;
+    return leadCtxOf(root.querySelector('.qf-print-lead'));
   }
 
   /* A question's number as a gem. With marks, the gem is that marks' loot
@@ -1681,26 +1753,58 @@
     return QF.questionGem({ n: n, marks: m || undefined, rarity: m ? undefined : 'rare', showMarks: !!m, size: size || 30, className: 'qf-print-gem' });
   }
 
-  /* After the planner has built and numbered every sheet: put the rampart in
-     each ordinary question sheet's margins. The sheet becomes a margin-free
-     A4 box padded by the old margins (quest-frames.css), so its content box
-     is the same 178 x 258mm the planner measured. Tall pages (one element
-     flowing over several sheets) and answer-key pages keep their plain look. */
-  function framePrintPages(output, q) {
-    if (!output || !q || !doc) return 0;
-    var n = 0;
-    Array.prototype.forEach.call(output.querySelectorAll(':scope > .print-question-page'), function (page, i) {
-      if (page.classList.contains('print-page-tall') || page.classList.contains('print-answer-key-page')) return;
-      if (page.querySelector(':scope > .qf-sheet-frame')) return;
-      page.classList.add('qf-sheet', 'qf-world-' + q.world);
-      var layer = doc.createElement('div');
-      layer.className = 'qf-sheet-frame';
-      layer.setAttribute('aria-hidden', 'true');
-      layer.innerHTML = QF.border({ world: q.world, fit: 'margins', seed: q.seed + ':' + i, variant: 'trail' });
-      page.insertBefore(layer, page.firstChild);
-      n++;
+  /* Which page of the quest a sheet is: the sheet holding the start lead is
+     the START, the last framed sheet the FINALE (the treasure), every other a
+     stretch of the TRAIL. A one-sheet worksheet with the name fields is a
+     start page; without them it is the finale. */
+  function variantOf(sheet, i, n) {
+    if (sheet && sheet.querySelector && sheet.querySelector('.qf-print-lead--start')) return 'start';
+    return i === n - 1 ? 'finale' : 'trail';
+  }
+
+  /* Dress a run of sheets as the quest's pages, in order. Shared by the
+     printer (framePrintPages) and the live preview (app.js _wsPreviewPack),
+     so the two put the same header, footer and treasure on the same sheet.
+     A sheet already dressed is redressed rather than given a second layer. */
+  function frameSheets(sheets, q, opts) {
+    opts = opts || {};
+    var list = Array.prototype.slice.call(sheets || []).filter(Boolean);
+    if (!q || !list.length || !doc) return 0;
+    var n = list.length;
+    list.forEach(function (sheet, i) {
+      var variant = variantOf(sheet, i, n);
+      sheet.classList.add('qf-sheet');
+      if (opts.still) sheet.classList.add('qf-still');
+      QF.decorate(sheet, {
+        subject: q.subject, title: q.title, world: q.world, seed: q.seed,
+        questions: q.questions, total: q.total || null,
+        page: i + 1, pages: n, variant: variant,
+        fields: PORTAL_FIELDS,
+        /* The design system cheers a TRAIL page by its number from page 2 on,
+           so a page 1 that is not a start page (the name fields are off) would
+           be told it is "almost at the treasure". The quest begins on page 1. */
+        cheer: i === 0 && variant === 'trail' ? QF.CHEERS[0] : undefined
+      });
     });
     return n;
+  }
+
+  /* After the planner has built and numbered every sheet: dress each ordinary
+     question sheet as a quest page. The sheet becomes a margin-free A4 box
+     (quest-frames.css; the named page is ALSO declared in index.html, after its
+     own plain @page — see there) padded down to SHEET, the very box the
+     planner planned it to. Tall pages (one question flowing over several
+     sheets) and answer-key pages keep their plain look and the ordinary
+     margins. The quest comes from the lead in the markup when the caller has
+     none to hand, so a reprint of the same HTML is framed the same way. */
+  function framePrintPages(output, q) {
+    if (!output || !doc) return 0;
+    q = q || leadCtx(output);
+    if (!q) return 0;
+    var sheets = Array.prototype.filter.call(output.querySelectorAll(':scope > .print-question-page'), function (page) {
+      return !page.classList.contains('print-page-tall') && !page.classList.contains('print-answer-key-page');
+    });
+    return frameSheets(sheets, q, { still: true });
   }
 
   /* ---------------- the Maths and Science creators ---------------- */
@@ -1773,8 +1877,14 @@
     ctx: ctx,
     preload: preload,
     ready: ready,
-    portalHeader: portalHeader,
+    SHEET: SHEET,
+    contentPx: contentPx,
+    portalLead: portalLead,
+    leadCtx: leadCtx,
+    leadCtxOf: leadCtxOf,
     gem: gem,
+    variantOf: variantOf,
+    frameSheets: frameSheets,
     framePrintPages: framePrintPages,
     creatorBody: creatorBody,
     creatorCss: creatorCss,

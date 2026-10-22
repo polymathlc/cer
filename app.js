@@ -4514,7 +4514,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.444.0';
+const APP_VERSION = 'v1.445.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -26589,8 +26589,11 @@ const PRINT_PAGE_RESERVE = 10;
 // `usable` is passed in rather than recomputed: it has to be the SAME ceiling
 // _printPlanIn checks assembled pages against (which reserves the page number),
 // or a chunk is classified as shrinkable here and then found unfittable there.
-function _classifyPrintChunks(heights, footerH, budget, usable) {
-  const half = Math.round(PRINT_PAGE_PX / 2);
+// `pagePx` is the sheet the chunks are being packed onto: PRINT_PAGE_PX for an
+// ordinary sheet, the shorter box between the bands for a 🎮 Quest-framed one
+// (absent → PRINT_PAGE_PX, which is every caller but the framed planner).
+function _classifyPrintChunks(heights, footerH, budget, usable, pagePx) {
+  const half = Math.round((pagePx > 0 ? pagePx : PRINT_PAGE_PX) / 2);
   const pairFlags = [], soloFlags = [], tallFlags = [], aloneFlags = [];
   heights.forEach((h, i) => {
     // budget already reserves the footer, so a lone chunk fits a normal page
@@ -26661,6 +26664,53 @@ function _printSeparatorHeightIn(doc, container) {
   const h = Math.max(0, holder.getBoundingClientRect().height - 2);
   holder.remove();
   return h;
+}
+
+// 🎮 How tall one sheet's question box is, in the planner's CSS px.
+//
+// An ordinary sheet is PRINT_PAGE_PX. A Quest-framed sheet is shorter inside:
+// its header band (the banner and the boss) and its footer band (the hero, the
+// XP trail, the companion, the treasure chest) take their room off the top and
+// the foot, and the questions print in the box between them — SHEET in
+// quest-frames.js, `contentPx()`. Planned to the ordinary height, a framed
+// page would put its last question under the footer's hero and chest.
+//
+// The framing is READ OFF THE MARKUP being planned: page 1's lead (the first
+// question's chunk carries it, see QuestFramesCer.portalLead) names the quest.
+// The printer and the live preview plan the very same HTML, so they cannot
+// disagree about which height a sheet is; and the Study Buddy photograph, a
+// past paper or a bank proof — none of which ever carries a lead — get
+// PRINT_PAGE_PX, byte for byte the old planner. `opts.pagePx` is honoured
+// first, for a caller that knows. A height that is not a believable share of
+// a sheet is refused, never trusted: a framed box taller than an ordinary
+// sheet, or half of one, is a broken frame script, not a page.
+function _printPagePxFor(root, opts) {
+  const asked = opts && Number(opts.pagePx);
+  if (asked > 0) return Math.min(asked, PRINT_PAGE_PX);
+  const QC = typeof window !== 'undefined' ? window.QuestFramesCer : null;
+  if (!QC || typeof QC.leadCtx !== 'function' || typeof QC.contentPx !== 'function') return PRINT_PAGE_PX;
+  let framed = null;
+  try { framed = root ? QC.leadCtx(root) : null; } catch (e) { framed = null; }
+  if (!framed) return PRINT_PAGE_PX;
+  const px = Number(QC.contentPx());
+  return isFinite(px) && px > PRINT_PAGE_PX / 2 && px < PRINT_PAGE_PX ? px : PRINT_PAGE_PX;
+}
+
+// A page's fit-to-page zoom, put on its question box. `--qf-pz` carries the
+// same number for the one thing inside that box which must NOT shrink with it:
+// a 🎮 framed page 1's lead, the room the start header needs (its height is
+// divided by it — quest-frames.js portalLead). The planner, the printer and the
+// preview all set the zoom through here, so all three measure and paint the
+// same room. Zoom 1 (or none) clears both.
+function _printSetContentZoom(content, z) {
+  if (!content) return;
+  if (z && z < 0.999) {
+    content.style.zoom = z;
+    content.style.setProperty('--qf-pz', String(z));
+  } else {
+    content.style.zoom = '';
+    content.style.removeProperty('--qf-pz');
+  }
 }
 
 // Plan the whole document inside a print-CSS context: pack the chunks into
@@ -26889,7 +26939,11 @@ function _printPlanIn(doc, root, opts) {
   // a box that is a fixed height with visible overflow, i.e. onto the next
   // sheet. Reserve the number explicitly and let PRINT_FIT_SAFETY be what its
   // name says — the cushion.
-  const usable = PRINT_PAGE_PX - numH - PRINT_FIT_SAFETY;
+  // A 🎮 Quest-framed worksheet's sheets are shorter inside (the box between
+  // the header and footer bands); every other sheet is PRINT_PAGE_PX, and then
+  // everything below is byte for byte the planner it always was.
+  const pagePx = _printPagePxFor(root, opts);
+  const usable = pagePx - numH - PRINT_FIT_SAFETY;
   // Fit-to-page scales the QUESTIONS only — the footer and page number are page
   // chrome and print at full size, on the same baseline as every other sheet.
   // So the ratio is measured against the room left once the chrome is taken
@@ -26912,7 +26966,7 @@ function _printPlanIn(doc, root, opts) {
   const merge = (opts && opts.mergeUpIds) || null;
   const forcedFlags = chunks.map(c => !!(forced && forced.has(c.dataset.qid)));
   const mergeFlags = chunks.map(c => !!(merge && merge.has(c.dataset.qid)));
-  const cls = _classifyPrintChunks(heights, footerH, budget, usable);
+  const cls = _classifyPrintChunks(heights, footerH, budget, usable, pagePx);
   chunks.forEach((c, i) => c.classList.toggle('print-chunk-tall', cls.tallFlags[i]));
   const groups = packChunkIndices(heights, forcedFlags, mergeFlags, budget, sepH, cls.pairFlags, cls.aloneFlags);
 
@@ -26931,7 +26985,7 @@ function _printPlanIn(doc, root, opts) {
     // being tried, since that is applied to this same wrapper at print time.
     const content = doc.createElement('div');
     content.className = 'print-page-content';
-    if (zoom && zoom < 0.999) content.style.zoom = zoom;
+    _printSetContentZoom(content, zoom);
     page.appendChild(content);
     group.forEach((idx, pos) => {
       if (pos > 0) {
@@ -27003,8 +27057,17 @@ function _printPlanIn(doc, root, opts) {
   // in the PDF a page box that is a fixed height with visible overflow. A
   // twenty-three-question key is the ordinary case, not an edge one, so the
   // rows are packed into sheets like everything else on the paper.
+  //
+  // The key is never framed — it prints plain, on the ordinary sheet — so it
+  // is planned to PRINT_PAGE_PX whatever the questions' sheets are. On an
+  // unframed worksheet these are the very numbers above.
+  const akUsable = PRINT_PAGE_PX - numH - PRINT_FIT_SAFETY;
+  const akContentSpace = akUsable - footerOnlyH;
   const akPlans = answerKeys.map(ak => _printPlanAkPages(doc, stage, ak, {
-    budget, usable, zoomFor, footerNode
+    budget: akContentSpace - PRINT_PAGE_RESERVE,
+    usable: akUsable,
+    zoomFor: (h) => akContentSpace / Math.max(1, h - footerOnlyH),
+    footerNode
   }));
 
   // An edge-to-edge cover is a whole sheet by definition: it is taller than
@@ -27012,7 +27075,7 @@ function _printPlanIn(doc, root, opts) {
   const frontSpans = fronts.map(f => f.classList.contains('print-cover-bleed') ? 1
     : Math.max(1, Math.ceil((f.getBoundingClientRect().height || 1) / PRINT_PAGE_PX)));
   stage.remove();
-  return { groups, pageHs, pageTall, pageZoom, akPlans, frontSpans, tallFlags: cls.tallFlags, heights, footerH, sepH, numH };
+  return { groups, pageHs, pageTall, pageZoom, akPlans, frontSpans, tallFlags: cls.tallFlags, heights, footerH, sepH, numH, pagePx };
 }
 
 // The webfont <link>s, rewritten so they actually apply inside a measuring
@@ -27099,9 +27162,7 @@ function _printApplyZoom(page, z) {
   page.style.zoom = '';
   page.style.height = '';
   const content = page.querySelector(':scope > .print-page-content');
-  if (content) content.style.zoom = '';
-  if (!z || z >= 0.999 || !content) return;
-  content.style.zoom = z;
+  _printSetContentZoom(content, z);
 }
 
 // Move everything that isn't chrome (footer / page number / padding) into the
@@ -27132,7 +27193,7 @@ function _printAndRestore(output) {
       p.style.zoom = '';
       p.style.height = '';
     });
-    Array.from(output.querySelectorAll('.print-page-content')).forEach(c => { c.style.zoom = ''; });
+    Array.from(output.querySelectorAll('.print-page-content')).forEach(c => _printSetContentZoom(c, 0));
   };
   window.addEventListener('afterprint', restore);
   setTimeout(restore, 60000); // in case afterprint never fires
@@ -40168,9 +40229,16 @@ function _wsStudentFieldsOn(where) {
   return el ? !!el.checked : true;
 }
 
-// 🎮 QUEST FRAME (v1.444.0) — the worksheet as a level of Wheel Quest: a quest
-// banner, the boss with one heart per question and a hero card on page 1, a
-// gem on every question number, and a brick rampart in every sheet's margins.
+// 🎮 QUEST FRAME (v1.444.0, every sheet a quest page since v1.445.0) — the
+// worksheet as a level of Wheel Quest. Every question sheet is dressed in the
+// design system's own page layout (quest-frames.js frameSheets): the rampart,
+// a header band with the quest banner and the boss with one heart per
+// question, a footer band with a hero on the wall, the XP trail and a
+// companion's cheer, the treasure chest on the last sheet, and on page 1 (with
+// the name fields on) the full start header with the logo and the hero card.
+// A gem on every question number. The planner plans each framed sheet to the
+// box between the bands (`_printPagePxFor`), reading the framing off page 1's
+// lead in the markup, so the printer and the preview cannot disagree.
 // ONE switch for the builder, My Worksheets and both creators
 // (`QuestFramesCer.on()`, quest-frames.js). Null when it is off or the frame's
 // script did not load, and then every print path builds byte for byte the
@@ -40194,7 +40262,10 @@ function _qfPrintCtx(selected, title) {
   const QC = window.QuestFramesCer;
   if (!QC || !_isAdmin() || !QC.on()) return null;
   const qs = Array.isArray(selected) ? selected : [];
-  const q = QC.ctx({ subject: 'science', title, topics: qs.map(x => x && x.topic), questions: qs.length });
+  // The treasure chest on the last sheet is scored out of the marks the
+  // questions carry; with none set anywhere it is 0 and the chest shows no total.
+  const total = qs.reduce((t, x) => t + _qfQuestionMarks(x), 0);
+  const q = QC.ctx({ subject: 'science', title, topics: qs.map(x => x && x.topic), questions: qs.length, total });
   QC.preload(q);
   return q;
 }
@@ -40230,7 +40301,10 @@ async function printStudentWorksheet() {
 // `noFields` drops the strip entirely — with a cover in front there is then
 // nothing left to print, so page 1 starts straight in on question 1.
 function _wsHeaderHtml(worksheetTitle, hasCover, noFields, questFrame) {
-  if (questFrame && window.QuestFramesCer) return window.QuestFramesCer.portalHeader(questFrame, hasCover, noFields);
+  // 🎮 Framed: the banner, the boss and the hero card (the name fields) are in
+  // the sheet's quest header, so page 1 carries only the frame's LEAD — the
+  // marker that names the quest, and the room the start header needs.
+  if (questFrame && window.QuestFramesCer) return window.QuestFramesCer.portalLead(questFrame, hasCover, noFields);
   const strip = noFields ? '' : `<div class="print-student-info">
         <span>Name: ___________________________</span>
         <span>Date: _______________</span>
@@ -42423,6 +42497,13 @@ function _wsPreviewPack(doc, opts) {
   const measure = doc.getElementById('wsMeasure');
   const pagesEl = doc.getElementById('wsPages');
   if (!measure || !pagesEl) return false;
+  // 🎮 A Quest-framed worksheet names its quest in page 1's lead. Read it NOW,
+  // before the chunks are moved onto sheets; the same lead tells the planner
+  // the framed sheet height, so this preview paginates as the print does.
+  const QC = typeof window !== 'undefined' ? window.QuestFramesCer : null;
+  let questFrame = null;
+  try { questFrame = (QC && typeof QC.leadCtx === 'function') ? QC.leadCtx(measure) : null; } catch (e) { questFrame = null; }
+  const framedSheets = [];
   const chunks = Array.from(measure.querySelectorAll('.print-question-chunk'));
   const answerKeys = Array.from(measure.querySelectorAll('.print-answer-key-page'));
   const fronts = Array.from(measure.querySelectorAll('.print-front-page'));
@@ -42473,9 +42554,10 @@ function _wsPreviewPack(doc, opts) {
     pno.textContent = (span > 1 ? 'Pages ' + from + '–' + pageNo : 'Page ' + pageNo) + ' of ' + totalPages;
     sheet.appendChild(pno);
     pagesEl.appendChild(sheet);
-    content.style.zoom = '';
-    if (span > 1) return;  // flows across sheets when printed — shown full-length here, never shrunk
-    if (zoom) content.style.zoom = zoom;  // exactly what the printer will apply
+    _printSetContentZoom(content, 0);
+    if (span > 1) return sheet;  // flows across sheets when printed — shown full-length here, never shrunk
+    _printSetContentZoom(content, zoom);  // exactly what the printer will apply
+    return sheet;
   };
   // The same placement the printer uses, so the preview shows where the
   // booklet cover really lands rather than a second cover at the front.
@@ -42485,7 +42567,10 @@ function _wsPreviewPack(doc, opts) {
   pvFront.leading.forEach(f => addSheet(frontSpanOf(f), content => content.appendChild(f), 0, bleedOf(f)));
   pageGroups.forEach((group, gi) => {
     (pvFront.before.get(gi) || []).forEach(f => addSheet(frontSpanOf(f), content => content.appendChild(f), 0, bleedOf(f)));
-    addSheet(groupSpans[gi], content => {
+    // A 🎮 framed print dresses every ordinary question sheet and leaves a
+    // tall (flowing) one plain, so the preview collects exactly those.
+    const framedHere = !!questFrame && !plan.pageTall[gi];
+    const groupSheet = addSheet(groupSpans[gi], content => {
     group.forEach((idx, pos) => {
       if (pos > 0) { const sep = doc.createElement('div'); sep.className = 'print-question-separator'; content.appendChild(sep); }
       const chunk = chunks[idx];
@@ -42537,7 +42622,14 @@ function _wsPreviewPack(doc, opts) {
       content.appendChild(chunk);
     });
     }, plan.pageZoom[gi]);
+    if (framedHere && groupSheet) framedSheets.push(groupSheet);
   });
+  // 🎮 Dressed through the SAME frameSheets the printer calls, so the start
+  // page, the trail and the treasure land on the same sheets in both.
+  if (questFrame && framedSheets.length && QC && typeof QC.frameSheets === 'function') {
+    try { QC.frameSheets(framedSheets, questFrame, { still: true }); }
+    catch (e) { console.warn('preview quest frame', e); }
+  }
   // ✏️ Every row of the printed answer key gets an edit button. The key is the
   // page a teacher MARKS from, so the preview is where a wrong answer or a
   // missing explanation is actually noticed — and noticing it used to be as far
