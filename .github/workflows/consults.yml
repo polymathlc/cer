@@ -1,0 +1,32 @@
+name: Consults
+
+on:
+  pull_request:
+    paths:
+      - 'consult-*.js'
+      - 'consult-*.css'
+      - 'index.html'
+      - 'app.js'
+      - 'tools/consult-bridge-tests.mjs'
+      - '.github/workflows/consults.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'consult-*.js'
+      - 'consult-*.css'
+      - 'tools/consult-bridge-tests.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check the 🙋 Consults bridge and the shared archive
+        run: node --test tools/consult-bridge-tests.mjs
