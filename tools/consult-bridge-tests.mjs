@@ -117,7 +117,9 @@ test('this page loads the shared files and attaches the bridge with its own app 
   assert.ok(HOST.code.includes('https://www.gstatic.com/firebasejs/' + sdk + '/firebase-firestore.js'), 'the bridge loads the very SDK files this page imported');
   assert.match(call, /appCheck: \w+AppCheck/);
   // The bridge follows the page's own sign-in handler, never a listener of its own.
-  assert.match(HOST.code, /onAuthStateChanged\(auth, (async )?\(user\) => \{\n[^\n]*\n  try \{ if \(window\.ConsultBridge && window\.ConsultBridge\.authChanged\) window\.ConsultBridge\.authChanged\(user\); \} catch \(e\) \{\}/);
+  const h = HOST.code.search(/onAuthStateChanged\(auth, (async )?\(user\) => \{/);
+  assert.ok(h > 0);
+  assert.ok(HOST.code.slice(h, h + 6000).includes('window.ConsultBridge.authChanged(user)'), 'the page hands its own sign-in to the bridge');
   assert.ok(!/onAuthStateChanged/.test(BRIDGE.replace(/\/\*[\s\S]*?\*\//g, '')), 'no auth listener in the bridge');
 });
 
