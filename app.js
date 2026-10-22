@@ -8,6 +8,7 @@ import { normalizeWhiteboard, whiteboardQuestionSnapshot, normalizeWhiteboardApp
 import { whiteboardSnapshotBytes, whiteboardDigest, whiteboardViewerUrl, validWhiteboardUrl, loadPublishedWhiteboard } from './whiteboard-share.mjs?v=1.430.0';
 import { cropSourcesFor, normalizeCropBox, cropPixelRect, cropSourceUpdate } from './question-crop-core.mjs?v=2';
 import { questionRepairTargets, normalizeQuestionRepairPlan, applyQuestionRepairPlan } from './question-repair-core.mjs?v=3';
+import { TUTOR_NAME, TUTOR_COLLECTION, TUTOR_MAX_DOC_CHARS, htmlToPlain, extractImages, normalizeTutorPaper, tutorPaperId, tutorUrl, tutorQrSvg } from './polymath-tutor-core.mjs?v=1';
 import { AI_DEFAULT_PRICES, AI_PRICES_AS_OF, AI_ROUTE_NAMES, mergePrices, priceFor, normalizeUsage, estimateUsage, costOf, createTally, tallyAdd, formatMoney, estimateCheckCost } from './ai-cost-core.mjs?v=1';
 import { measureCrop, figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, migrateDecisionsReviewState, DECISIONS_MAY_SKIP } from './decisions-review-core.mjs?v=2';
 import { findRapidDuplicates, rapidDuplicateThreshold, rapidDuplicateFingerprint, rapidDuplicatePairCurrent } from './rapid-duplicates.js';
@@ -4526,7 +4527,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.446.0';
+const APP_VERSION = 'v1.447.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -26233,17 +26234,21 @@ function doPrintWorksheetOpen(whyNotes) {
   // placeholders — but once it prints, EVERY question is listed, so a gap in
   // the numbering can only mean a question really has no answer on file.
   const hasAnySections = answerKeyData.some(d => d.sections.length > 0);
-  if (hasAnySections) {
+  // 🧠 …and The Polymath's codes, exactly as `buildWorksheetHtml` hangs them.
+  const tq = typeof _tqrKeyParts !== 'function' ? null : _tqrKeyParts(selected, answerKeyData, 'CER Worksheet', (typeof tqrOpts === 'function' ? tqrOpts('bank', true) : null));
+  if (hasAnySections || tq) {
     allHtml += `<div class="print-question-page print-answer-key-page">`;
     allHtml += `<h2>Answer Key</h2>`;
-    answerKeyData.forEach(qData => {
+    if (tq) allHtml += tq.paperRow;
+    answerKeyData.forEach((qData, i) => {
       // Carries its question id for the same reason the other print path's row
       // does — kept in step so the two keys stay identical.
-      allHtml += `<div class="print-ak-question" data-qid="${escapeHtml(String(qData.qid || ''))}">`;
+      allHtml += `<div class="print-ak-question${tq ? ' tqr-has' : ''}" data-qid="${escapeHtml(String(qData.qid || ''))}">`;
+      if (tq) allHtml += tq.rowQr(i);
       allHtml += `<h4>${escapeHtml(qData.title)}</h4>`;
       allHtml += `<div class="print-ak-fulltext">`;
       allHtml += _akSectionsHtml(_akQuestionSections(qData));
-      allHtml += `</div></div>`;
+      allHtml += `</div>${tq ? '<div style="clear:both"></div>' : ''}</div>`;
     });
     allHtml += `</div>`;
   }
@@ -30422,7 +30427,7 @@ async function cpbPrint() {
   });
   await _preloadImageUrls(urls, (done, tot) => _printProgressUpdate('Loading question images…', 0.05 + 0.75 * (done / tot), done + '/' + tot + ' images'));
   _printProgressUpdate('Laying out pages…', 0.85, 'Measuring each question at print size');
-  output.innerHTML = buildWorksheetHtml(selected, _cpbPaperTitle(), Object.assign({ frontHtml: o.frontHtml }, o.buildOpts));
+  output.innerHTML = buildWorksheetHtml(selected, _cpbPaperTitle(), Object.assign({ frontHtml: o.frontHtml, tutorQr: (typeof tqrOpts === 'function' ? tqrOpts('custompaper', true) : null) }, o.buildOpts));
   autoscaleAndPrint(output, { forcedBreakIds: o.forcedBreakIds });
 }
 
@@ -31130,6 +31135,7 @@ function _cpbPaperCardHtml() {
       <div class="cpb-head-tools">
         <button class="btn btn-outline btn-sm" onclick="cpbBankOpen()" ${_cpbBusy ? 'disabled' : ''} title="Pick questions the bank already has. They go on as they are — Send never writes to them.">📚 Add from the bank</button>
         ${missing ? `<button class="btn btn-outline btn-sm" onclick="cpbAssignMissingMarks()" ${_cpbBusy ? 'disabled' : ''} title="Give every question that prints no allocation the default for its kind — ${CPB_MCQ_MARKS} for multiple choice, ${CPB_OPEN_DEFAULT_MARKS} a part for open-ended. Nothing that already prints marks is touched.">🔢 Assign marks to ${missing}</button>` : ''}
+        ${tqrSwitchHtml('custompaper', 'cpb-tqr')}
         <button class="btn btn-outline btn-sm" onclick="cpbPreview()" ${_cpbBusy ? 'disabled' : ''}>👁 Preview</button>
         <button class="btn btn-outline btn-sm" onclick="cpbPrint()" ${_cpbBusy ? 'disabled' : ''}>🖨 Print / Save PDF</button>
         <button class="btn btn-primary btn-sm" onclick="cpbSend()" ${_cpbBusy ? 'disabled' : ''}>📤 Send to bank 🔒</button>
@@ -39673,7 +39679,7 @@ async function reprintWorksheet(id) {
   if (wantCover && !await _wsEditCover(ws.title, { where: 'saved', id, noFields })) return;
   noFields = !_wsStudentFieldsOn('saved');
   const why = await _wnyRunPrepare(selected, wnyPrintOn('saved'));
-  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields, ws.cover) : '', noFields, why, akxPrintOn('saved'), objBoxPrintOn('saved'), ws.artwork, _qfPrintCtx(selected, ws.title));
+  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields, ws.cover) : '', noFields, why, akxPrintOn('saved'), objBoxPrintOn('saved'), ws.artwork, _qfPrintCtx(selected, ws.title), (typeof tqrOpts === 'function' ? tqrOpts('saved', true) : null));
 }
 
 // The questions of a saved worksheet, in the order they were chosen — the ids
@@ -40306,7 +40312,7 @@ async function printStudentWorksheet() {
   const frontHtml = await _wsFrontHtml(selected, title);
   if (frontHtml === null) return;
   const why = await _wnyRunPrepare(selected, wnyPrintOn('builder'));
-  await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why, akxPrintOn('builder'), objBoxPrintOn('builder'), wsArtwork, _qfPrintCtx(selected, title));
+  await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why, akxPrintOn('builder'), objBoxPrintOn('builder'), wsArtwork, _qfPrintCtx(selected, title), (typeof tqrOpts === 'function' ? tqrOpts('builder', true) : null));
 }
 
 // Worksheet title banner + name/date strip printed at the top of page 1.
@@ -40332,6 +40338,208 @@ function _wsHeaderHtml(worksheetTitle, hasCover, noFields, questFrame) {
         </div>
       </div>
       ${strip}`;
+}
+
+// =====================================================================
+// 🧠 THE POLYMATH ON THE ANSWER KEY — a QR code per question (v1.447.0)
+// ---------------------------------------------------------------------
+// Ticked on an export surface, the printed answer key carries a small QR
+// code beside every question and one at the top for the whole paper.
+// Scanning one opens `polymath.html` (served beside this app), where the
+// student answers that question on their phone and The Polymath — Chung
+// GPT's engine under the name a student sees there — marks it, hints one
+// step at a time and talks it through. See `polymath-tutor-core.mjs` for
+// the shape of a paper and the URL, and "🧠 The Polymath" in CLAUDE.md.
+//
+// • OPT IN, PER SURFACE, NEVER REMEMBERED. Off on every visit, like 🎮 Quest
+//   frame: a code on paper is a promise that a page will answer it, so a
+//   paper only carries them when the teacher ticked the box for THAT print.
+//   Every surface has its own switch (`TQR_SURFACES`), for the reason
+//   WNY_SWITCHES does: a tick on one page must not decorate a print started
+//   from another. Copies of one surface's box (a toolbar that is re-rendered)
+//   stay in step through `data-tqr-switch`.
+// • THE PAPER IS WHAT WAS PRINTED. `_tqrPaper` is built inside
+//   `buildWorksheetHtml` from the very questions and the very key rows that
+//   sheet carries — the key text The Polymath marks against is the key the
+//   teacher printed. It is filed as ONE `polymathTutorPapers/{id}` document,
+//   whose id is a hash of its content: the same paper printed twice is one
+//   document and one set of codes, and an edited question gets new codes
+//   without breaking a sheet already handed out.
+// • ONLY A PRINT PUBLISHES. The live preview draws the same codes (so it
+//   paginates exactly as the PDF does) but writes nothing — every keystroke
+//   in ✏️ edit answer would otherwise file another paper. `publish: true`
+//   comes from the print paths, once per id per session.
+// • A PICTURE PASTED INTO A CUSTOM PAPER is a data: URL inside the question.
+//   It is uploaded to Storage (`uploadImageDataUrl`, content-addressed) and
+//   the document carries the link, or one screenshot would blow the 1 MiB
+//   document limit.
+// =====================================================================
+const TQR_SURFACES = ['builder', 'saved', 'bank', 'paper', 'objective', 'custompaper'];
+const _tqrOn = {};
+const TQR_QR_MM = 19;          // a code beside one answer: ~0.45mm modules for a ~70-character URL
+const TQR_PAPER_QR_MM = 30;    // the whole paper's code, at the top of the key
+function tqrPrintOn(where) { return !!_tqrOn[where]; }
+function tqrToggle(where, on) {
+  if (TQR_SURFACES.indexOf(where) < 0) return;
+  _tqrOn[where] = !!on;
+  try { document.querySelectorAll('[data-tqr-switch="' + where + '"]').forEach(box => { box.checked = !!on; }); } catch (e) { /* no DOM yet */ }
+}
+const TQR_SWITCH_TITLE = 'Put a QR code beside every question on the answer key, and one for the whole paper. Scanning one opens the question in The Polymath, where the student answers it on their phone and gets marking, hints and help — the centre\'s Chung GPT, under the name students see there. Never remembered: tick it for each print.';
+function tqrSwitchHtml(where, cls) {
+  return `<label class="${cls || ''}" title="${escapeHtml(TQR_SWITCH_TITLE)}"><input type="checkbox" data-tqr-switch="${where}" ${tqrPrintOn(where) ? 'checked' : ''} onchange="tqrToggle('${where}', this.checked)"> 🧠 The Polymath QR codes</label>`;
+}
+// What `buildWorksheetHtml` is handed. Null when the switch is off.
+function tqrOpts(where, publish) { return tqrPrintOn(where) ? { publish: !!publish } : null; }
+window.tqrToggle = tqrToggle;
+
+// Plain text out of a field that may be plain text OR HTML. A stem typed as
+// "a < b" is not a tag and must not lose its words to one.
+function _tqrPlain(s) {
+  const t = String(s == null ? '' : s);
+  return /<\/?[a-z][^>]*>|&[a-z#0-9]+;/i.test(t) ? htmlToPlain(t) : t.replace(/[ \t]+/g, ' ').trim();
+}
+function _tqrTableRows(block) {
+  try {
+    const b = JSON.parse(JSON.stringify(block));   // ensureTableMigrated writes to its block
+    if (!b.data) return [];
+    ensureTableMigrated(b);
+    const rows = [];
+    for (let r = 0; r < (b.rows || 0); r++) {
+      const c = [];
+      for (let col = 0; col < (b.cols || 0); col++) c.push(_tqrPlain((b.data[r] || [])[col] || '').replace(/\n+/g, ' '));
+      rows.push({ c });
+    }
+    return rows;
+  } catch (e) { return []; }
+}
+// One printed question → the plain items The Polymath page shows. `akRow` is
+// the row this sheet's answer key printed for it.
+function _tqrQuestion(q, akRow) {
+  const items = [], mcq = {}, key = [];
+  const blocks = (q && q.blocks) || [];
+  const qParts = qPartMap(blocks);
+  const lab = mcqLabelStyle(q);
+  let slot = 0, marks = 0;
+  const nextId = () => 's' + (++slot);
+  blocks.forEach(block => {
+    if (!block) return;
+    const part = qPartLabel(qPartOf(qParts, block));
+    const own = qBlockOpensKey(block, qParts);
+    const opens = own ? qPartLabel(own) : '';
+    marks += Number(qMarksOf(block)) || 0;
+    switch (block.type) {
+      case 'text': { const text = _tqrPlain(_qOwnMarkersOff(block)) + (qMarksOf(block) ? ' ' + qMarksBracket(qMarksOf(block)) : ''); if (text.trim()) items.push({ t: 'text', text, part: opens }); break; }
+      case 'part': { const text = _tqrPlain((block.label ? block.label + ' ' : '') + (block.content || '')); if (text) items.push({ t: 'text', text }); break; }
+      case 'image': {
+        if (block.url) items.push({ t: 'img', url: transformImageUrl(block.url), caption: block.caption || '', part: opens });
+        // A pad the student draws on: The Polymath can only read words, so it
+        // asks for them — but only where the key has something to mark against.
+        if (block.annotate !== false && (stripHtml(block.answerKey || '') || block.answerImg)) items.push({ t: 'write', id: nextId(), label: 'Describe what you would draw or label', lines: 3, part });
+        break;
+      }
+      case 'workingSpace': if (block.annotate && (stripHtml(block.answerKey || '') || block.answerImg)) items.push({ t: 'write', id: nextId(), label: 'Your working', lines: 4, part }); break;
+      case 'table': { const rows = _tqrTableRows(block); if (rows.length) items.push({ t: 'table', rows, part: opens }); break; }
+      case 'mcq': {
+        const id = nextId();
+        const opts = (block.options || []).map((o, i) => {
+          const raw = mcqOptionText((o && o.text) || '', i, lab);
+          return { label: mcqLabelOf(i, lab), text: _tqrPlain(raw), img: extractImages(raw)[0] ? transformImageUrl(extractImages(raw)[0]) : (o && o.url ? transformImageUrl(o.url) : '') };
+        });
+        if (!opts.length) break;
+        items.push({ t: 'mcq', id, options: opts, part });
+        const ci = (block.options || []).findIndex(o => o && o.id === block.correctId);
+        if (ci >= 0) mcq[id] = mcqLabelOf(ci, lab);
+        break;
+      }
+      case 'answer':
+        ['Claim', 'Evidence', 'Reasoning'].forEach(name => items.push({ t: 'write', id: nextId(), label: name, lines: printAnswerLines(block, block[name.toLowerCase()]), part }));
+        break;
+      case 'plainanswer': items.push({ t: 'write', id: nextId(), lines: printAnswerLines(block, block.content), part }); break;
+      case 'answerLine': items.push({ t: 'write', id: nextId(), label: stripHtml(block.label || '').trim(), lines: 1, part }); break;
+      case 'fillblank': {
+        if (_fbHasBlanks(block)) items.push({ t: 'fill', id: nextId(), part, segments: _fbSegments(block.text || '').map(s => s.type === 'blank' ? { blank: true } : { text: s.text }) });
+        else if (String(block.text || '').trim()) items.push({ t: 'text', text: _tqrPlain(block.text), part: opens });
+        break;
+      }
+      // The explanation is the key's, never the question's — but The Polymath
+      // gets it even when the printed key left it out, so it can teach.
+      case 'explanation': if (stripHtml(block.content || '')) key.push({ kind: 'explanation', label: 'Explanation', text: _tqrPlain(block.content), part }); break;
+      default: break;   // working space, a reflection box, a video, an app: nothing to answer here
+    }
+  });
+  (akRow && akRow.sections || []).forEach(sec => {
+    if (sec.kind === 'explanation') return;   // already taken from the blocks above
+    key.unshift({ label: sec.label || '', part: qPartLabel(sec.part), text: htmlToPlain(sec.content), imgs: extractImages(sec.content) });
+  });
+  return {
+    label: (akRow && akRow.title) || q.title || '',
+    source: q._ppPrintSource || '',
+    marks,
+    guide: String(q.markingGuide || ''),
+    items, mcq, key: key.sort((a, b) => (a.kind === 'explanation') - (b.kind === 'explanation')),
+  };
+}
+function _tqrPaper(selected, answerKeyData, title) {
+  return normalizeTutorPaper({
+    title: title || 'Worksheet',
+    subject: 'Science',
+    questions: (selected || []).map((q, i) => _tqrQuestion(q, answerKeyData[i] && String(answerKeyData[i].qid) === String(q.id) ? answerKeyData[i] : answerKeyData.find(r => String(r.qid) === String(q.id)))),
+  });
+}
+
+const _tqrPublished = new Map();
+// Data-URL pictures → Storage links, in place. Content-addressed, so a
+// picture shared by two questions uploads once.
+async function _tqrUploadDataImages(paper) {
+  const jobs = [];
+  const swap = (obj, k) => { if (/^data:image\//i.test(obj[k] || '')) jobs.push(uploadImageDataUrl(obj[k]).then(url => { obj[k] = url; })); };
+  paper.questions.forEach(q => {
+    q.items.forEach(it => { if (it.t === 'img') swap(it, 'url'); if (it.t === 'mcq') it.options.forEach(o => swap(o, 'img')); });
+    q.key.forEach(r => (r.imgs || []).forEach((u, i) => swap(r.imgs, i)));
+  });
+  await Promise.all(jobs);
+}
+function _tqrPublish(id, paper) {
+  if (_tqrPublished.has(id)) return _tqrPublished.get(id);
+  const job = (async () => {
+    const ref = doc(db, TUTOR_COLLECTION, id);
+    try { if ((await getDoc(ref)).exists()) return 'kept'; } catch (e) { /* offline: try the write */ }
+    const body = JSON.parse(JSON.stringify(paper));
+    await _tqrUploadDataImages(body);
+    if (JSON.stringify(body).length > TUTOR_MAX_DOC_CHARS) throw new Error('this paper is too large for one QR set — split it into two prints');
+    await setDoc(ref, Object.assign(body, { id, app: 'cer', appVersion: APP_VERSION, by: currentUser ? currentUser.uid : null, createdAt: serverTimestamp() }));
+    return 'new';
+  })();
+  _tqrPublished.set(id, job);
+  job.then(
+    how => { if (how === 'new') showToast('🧠 The Polymath is ready for these ' + paper.questions.length + ' question' + (paper.questions.length === 1 ? '' : 's') + ' — the QR codes are live', 'success'); },
+    e => { _tqrPublished.delete(id); console.warn('The Polymath publish', e); showToast('The Polymath QR codes could not be saved: ' + ((e && e.message) || e) + '. Print again to retry.', 'error'); }
+  );
+  return job;
+}
+
+// The markup the answer key carries. Inline styles only: the same HTML is
+// drawn by the printer, the A4 preview frame and the key-sheet planner, and a
+// class one of them lacks would change a measured height.
+function _tqrKeyParts(selected, answerKeyData, title, tq) {
+  if (!tq || typeof window.qrcode !== 'function') return null;
+  const paper = _tqrPaper(selected, answerKeyData, title);
+  if (!paper.questions.length) return null;
+  const id = tutorPaperId(paper);
+  if (tq.publish) _tqrPublish(id, paper);
+  const paperUrl = tutorUrl(id);
+  const paperRow = `<div class="print-ak-question tqr-paper" data-qid="__tqr_paper__" style="display:flex;align-items:center;gap:12pt;border:1pt solid #cbd5e1;border-radius:6pt;padding:8pt 10pt;break-inside:avoid;page-break-inside:avoid;">`
+    + `<div style="flex:none;">${tutorQrSvg(window.qrcode, paperUrl, TQR_PAPER_QR_MM, 'Scan to practise this whole paper with ' + TUTOR_NAME)}</div>`
+    + `<div style="min-width:0;"><div style="font-weight:700;font-size:12pt;">🧠 ${escapeHtml(TUTOR_NAME)} — practise this whole paper</div>`
+    + `<div style="font-size:9.5pt;margin-top:3pt;line-height:1.35;">Scan to answer every question on your phone. ${escapeHtml(TUTOR_NAME)} checks each answer, gives hints when you are stuck and explains what you missed. Each question below has its own code too.</div>`
+    + `<div style="font-size:7.5pt;color:#555;margin-top:4pt;word-break:break-all;">${escapeHtml(paperUrl)}</div></div></div>`;
+  const rowQr = i => {
+    const url = tutorUrl(id, i + 1);
+    return `<div class="tqr-q" style="float:right;width:${TQR_QR_MM + 2}mm;margin:0 0 3pt 8pt;text-align:center;break-inside:avoid;">`
+      + tutorQrSvg(window.qrcode, url, TQR_QR_MM, 'Scan to try question ' + (i + 1) + ' with ' + TUTOR_NAME)
+      + `<div style="font-size:6.5pt;line-height:1.1;color:#444;margin-top:1pt;">Try it with<br>${escapeHtml(TUTOR_NAME)}</div></div>`;
+  };
+  return { id, paper, paperRow, rowQr };
 }
 
 // Build the worksheet print HTML (question chunks + answer key). Shared by the
@@ -40601,14 +40809,20 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     // EVERY question is listed, so a numbering gap can only mean the question
     // really has no answer on file.
     const hasAny = answerKeyData.some(d => d.sections && d.sections.length > 0);
-    if (hasAny) {
+    // 🧠 The Polymath's codes, when this print asked for them — a row of its
+    // own at the top (a ROW, so the key-sheet planner carries it like any
+    // other) and one beside every question. A key with no answers still
+    // prints for them: the codes are the point of that sheet.
+    const tq = typeof _tqrKeyParts !== 'function' ? null : _tqrKeyParts(selected, answerKeyData, worksheetTitle, opts && opts.tutorQr);
+    if (hasAny || tq) {
       allHtml += `<div class="print-question-page print-answer-key-page"><h2>Answer Key</h2>`;
-      answerKeyData.forEach(qData => {
+      if (tq) allHtml += tq.paperRow;
+      answerKeyData.forEach((qData, i) => {
         // data-qid is what lets the LIVE PREVIEW hang an "✏️ edit answer"
         // button on this row. It prints nothing and changes no layout.
-        allHtml += `<div class="print-ak-question" data-qid="${escapeHtml(String(qData.qid || ''))}"><h4>${escapeHtml(qData.title)}</h4><div class="print-ak-fulltext">`;
+        allHtml += `<div class="print-ak-question${tq ? ' tqr-has' : ''}" data-qid="${escapeHtml(String(qData.qid || ''))}">${tq ? tq.rowQr(i) : ''}<h4>${escapeHtml(qData.title)}</h4><div class="print-ak-fulltext">`;
         allHtml += _akSectionsHtml(_akQuestionSections(qData));
-        allHtml += `</div></div>`;
+        allHtml += `</div>${tq ? '<div style="clear:both"></div>' : ''}</div>`;
       });
       allHtml += `</div>`;
     }
@@ -40630,14 +40844,14 @@ async function _wnyRunPrepare(selected, on) {
   return notes;
 }
 
-async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes, akExtras, objBoxAll, artwork, questFrame) {
+async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes, akExtras, objBoxAll, artwork, questFrame, tutorQr) {
   try { if (typeof _widgetEnsurePublished === 'function') await _widgetEnsurePublished(selected); }
   catch (e) { _printProgressHide(); showToast('Could not publish app QR: ' + (e.message || e), 'error'); return; }
   const output = document.getElementById('printOutput');
   // plainNumbers: a worksheet is numbered "Question 1, 2, 3…" for the student.
   // The bank's own title and its category/topic line are internal filing —
   // useful in the admin's bank, meaningless (and a giveaway) on a printed sheet.
-  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields, whyNotes: whyNotes || null, answerKeyExtras: !!akExtras, objectivesBoxAll: !!objBoxAll, artwork: artwork || [], questFrame: questFrame || null });
+  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields, whyNotes: whyNotes || null, answerKeyExtras: !!akExtras, objectivesBoxAll: !!objBoxAll, artwork: artwork || [], questFrame: questFrame || null, tutorQr: tutorQr || null });
   autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp, questFrame: questFrame || null });
 }
 
@@ -41121,7 +41335,7 @@ async function generateSyllabusPdf() {
   try { if (typeof _widgetEnsurePublished === 'function') await _widgetEnsurePublished(selected); }
   catch (e) { _printProgressHide(); showToast('Could not publish app QR: ' + (e.message || e), 'error'); return; }
   const output = document.getElementById('printOutput');
-  output.innerHTML = buildWorksheetHtml(orderedQs, title, { frontHtml, sectionHtmlById, plainNumbers: true, noStudentFields: !_wsStudentFieldsOn('builder'), artwork: wsArtwork });
+  output.innerHTML = buildWorksheetHtml(orderedQs, title, { frontHtml, sectionHtmlById, plainNumbers: true, noStudentFields: !_wsStudentFieldsOn('builder'), artwork: wsArtwork, tutorQr: (typeof tqrOpts === 'function' ? tqrOpts('builder', true) : null) });
   autoscaleAndPrint(output, { forcedBreakIds: forced });
 }
 
@@ -41174,6 +41388,8 @@ const WS_PREVIEW_CSS = `
      in this very document, so any rule that changed their WIDTH would show the
      teacher a page count the printed PDF does not reproduce. */
   .print-ak-question{ position:relative; }
+  /* 🧠 A row carrying a Polymath code keeps its ✏️ button clear of the code. */
+  .print-ak-question.tqr-has > .wspv-tools{ right:calc(21mm + 14px); }
   .wspv-tools{ position:absolute; top:5px; right:6px; z-index:9; display:flex; gap:6px; }
   .wspv-brk{ font:600 11px 'DM Sans',sans-serif; border:1px solid #cfcfcf; background:#fff; color:#555; border-radius:6px; padding:2px 9px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.2); }
   .wspv-brk.on{ background:#0b6b4f; color:#fff; border-color:#0b6b4f; }
@@ -41801,6 +42017,9 @@ function _wsPreviewCtx() {
       // must write there — never into the bank, which nothing on that page may
       // touch until Send.
       pool: (src === 'custompaper' || src === 'cpbq') ? PVS_POOL_CPB : '',
+      // 🧠 The whole Custom Paper reads ITS OWN Polymath switch; a proof of
+      // one bank question reads the print picker's.
+      tqrWhere: src === 'custompaper' ? 'custompaper' : 'bank',
       // No cover and no name/date/class strip: this is a proof of one question
       // or a handful, not a worksheet being handed out.
       cover: false, noFields: true,
@@ -42395,7 +42614,7 @@ async function printQuestionsDirect(questions, title) {
   const list = (questions || []).filter(Boolean);
   if (!list.length) { showToast('There is nothing to print', 'error'); return; }
   const why = await _wnyRunPrepare(list, wnyPrintOn('bank'));
-  await doPrintStudentWorksheet(list, title || 'Questions', '', true, why, akxPrintOn('bank'), objBoxPrintOn('bank'));
+  await doPrintStudentWorksheet(list, title || 'Questions', '', true, why, akxPrintOn('bank'), objBoxPrintOn('bank'), undefined, undefined, (typeof tqrOpts === 'function' ? tqrOpts('bank', true) : null));
 }
 
 async function renderWsPreview() {
@@ -42434,7 +42653,10 @@ function _wsPreviewBuildHtml(ctx, opts) {
     // ▲▼ the order tags — a preview-only wrapper that generates no box, so
     // the pagination is still exactly what will print. The export passes
     // `noTags`: nothing may be hung on a page that is about to be photographed.
-    blockTags: pvsAllowed() && !o.noTags
+    blockTags: pvsAllowed() && !o.noTags,
+    // 🧠 The Polymath's codes, drawn but never published from a preview —
+    // and never on the 📖 Study Buddy export, which photographs the sheet.
+    tutorQr: o.noTags ? null : (typeof tqrOpts === 'function' ? tqrOpts(ctx.tqrWhere || ctx.where, false) : null)
     // 🗂️ …and which pool the questions came out of, so a Custom Paper's own
     // question is edited on the PAPER rather than in the bank. It goes AFTER
     // `ctx.buildOpts`, which is assigned over this base: the pool decides which
@@ -42654,7 +42876,7 @@ function _wsPreviewPack(doc, opts) {
     answerKeys.forEach(ak => {
       Array.from(ak.querySelectorAll('.print-ak-question')).forEach(row => {
         const qid = row.dataset.qid;
-        if (!qid || qid.indexOf('__lo__') === 0) return;
+        if (!qid || qid.indexOf('__lo__') === 0 || qid.indexOf('__tqr') === 0) return;
         const tools = doc.createElement('div');
         tools.className = 'wspv-tools';
         const eb = doc.createElement('button');
@@ -78747,7 +78969,7 @@ function ppRenderBody(){
   // to carry its own state across the re-render or a tick set a moment ago is
   // silently undone before the teacher presses print.
   const whyOn = !!document.getElementById('ppIncludeWhy')?.checked;
-  const whyBox = !edit ? `<label class="pp-whybox" title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment."><input type="checkbox" id="ppIncludeWhy" ${whyOn ? 'checked' : ''}> \u24d8 Why the other options are wrong</label>` : '';
+  const whyBox = !edit ? `<label class="pp-whybox" title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment."><input type="checkbox" id="ppIncludeWhy" ${whyOn ? 'checked' : ''}> \u24d8 Why the other options are wrong</label>` + tqrSwitchHtml('paper', 'pp-whybox') : '';
   const formatAllBtn = (!edit && admin) ? `<button class="pp-add pp-format" title="Check every attached question on EVERY paper for the three things a paper needs: an explanation for every part, keywords assigned, and marks on every part. Instant, no AI — and each row takes you straight to the question." onclick="pfCheckAll()">📋 Format check — all papers</button>` : '';
   const printSelBtn = !edit ? `<button class="pp-add" id="ppPrintSelPrevBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Live A4 preview of the ticked concepts — check the sheet and fix any answer or explanation on the key before printing" onclick="ppPrintSelected('preview')">👁 Preview selected</button><button class="pp-add" id="ppEditSelBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Editing mode \u2014 every question on this paper in one scroll, each block condensed to a strip with its controls as icons down the left. Fix what you find, then Save once." onclick="ppPrintSelected('edit')">✏️ Edit selected</button><button class="pp-add" id="ppPrintSelBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Print every attached question from the concepts you ticked below as ONE worksheet — questions first, the full answer key on the last pages. Tick concepts with the checkbox at their top-right corner." onclick="ppPrintSelected()">🖨 Print selected${_ppPrintSel.size ? ' (' + _ppPrintSel.size + ')' : ''}</button>` : '';
 
@@ -79459,6 +79681,7 @@ async function ppDoPrint(items, missing, title, opts){
     plainNumbers: true,
     whyNotes: why,
     frontHtml: _ppCoverHtml(coverTitle),
+    tutorQr: (typeof tqrOpts === 'function' ? tqrOpts('paper', true) : null),
   });
   autoscaleAndPrint(output);
   if (missing.length) {
@@ -86659,7 +86882,8 @@ async function loPrint(id) {
   output.innerHTML = buildWorksheetHtml(qs, lo.title, {
     answerKeyExtras: true,
     plainNumbers: true,
-    frontHtml: _wsCoverHtml(lo.title, 'Primary Science', footer, false, _wsCoverSettingsFor('objective', id))
+    frontHtml: _wsCoverHtml(lo.title, 'Primary Science', footer, false, _wsCoverSettingsFor('objective', id)),
+    tutorQr: (typeof tqrOpts === 'function' ? tqrOpts('objective', true) : null)
   });
   autoscaleAndPrint(output);
 }
@@ -87181,6 +87405,7 @@ function loRenderBody() {
       <div class="lo-chiprow">${themeChips}</div>
       <div class="lo-filter-tail">
         <input class="lo-search" type="search" placeholder="Search objectives…" value="${escapeHtml(_loSearchTerm)}" oninput="loSetSearch(this.value)">
+        ${tqrSwitchHtml('objective', 'lo-tqr')}
         ${admin ? `<button type="button" class="lo-btn primary" onclick="loAddObjective()">＋ New objective</button>
         <button type="button" class="lo-btn" title="Replace the list with the current MOE syllabus objectives. Attached questions are kept wherever the objective still exists." onclick="loResetToSyllabus()">↻ Reset to syllabus</button>` : ''}
       </div>
@@ -87280,6 +87505,7 @@ function loStyles() {
   .lo-btn.primary:hover:not(:disabled) { filter:brightness(1.06); }
   .lo-btn.ai { background:#fdf4e3; border-color:#c08a2e; color:#7a5410; }
   .lo-btn:disabled { opacity:0.45; cursor:not-allowed; }
+  .lo-tqr { display:inline-flex; align-items:center; gap:6px; font-size:0.82rem; font-weight:600; cursor:pointer; white-space:nowrap; }
   .lo-empty { text-align:center; color:var(--text-muted); padding:40px 20px; font-size:0.9rem; line-height:1.7; }
   .lo-pick-row { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; margin-bottom:9px; cursor:pointer; }
   .lo-pick-row:hover { border-color:var(--primary,#0b6b4f); }

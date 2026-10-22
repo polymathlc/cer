@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#ffffff">
+<title>The Polymath</title>
+<link rel="icon" href="assets/branding/polymath-learning-centre.png">
+<!--
+  🧠 THE POLYMATH — where a QR code on an exported answer key lands.
+  The page is `polymath-tutor.js`; the rules are `polymath-tutor-core.mjs`.
+  This file is the look, and the three doors to the outside world (the
+  paper, the model, a picture), which are the only Firebase on the page.
+  See "🧠 The Polymath" in CLAUDE.md.
+-->
+<style>
+  :root {
+    --pt-bg: #F7F7F5;
+    --pt-surface: #FFFFFF;
+    --pt-text: #1A1A1A;
+    --pt-muted: #6B6B6B;
+    --pt-line: #E6E6E2;
+    --pt-accent: #BBDEFB;
+    --pt-accent-strong: #90CAF9;
+    --pt-accent-ink: #0D3C61;
+    --pt-good: #2E7D32; --pt-good-bg: #E8F5E9;
+    --pt-part: #F9A825; --pt-part-bg: #FFF8E1;
+    --pt-bad: #C62828; --pt-bad-bg: #FFEBEE;
+    --pt-shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+    --pt-shadow-btn: 0 1px 2px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.08);
+    --pt-shadow-btn-hover: 0 2px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.12);
+    --pt-radius: 16px;
+    --pt-font: 'Century Gothic', CenturyGothic, AppleGothic, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--pt-bg); color: var(--pt-text); font-family: var(--pt-font); font-size: 16px; line-height: 1.55; -webkit-text-size-adjust: 100%; }
+  button, input, textarea { font: inherit; color: inherit; }
+  #app { min-height: 100vh; }
+
+  .pt-header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: rgba(255,255,255,0.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--pt-line); }
+  .pt-brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+  .pt-logo { height: 40px; width: auto; flex: none; }
+  .pt-brand-text { display: flex; flex-direction: column; min-width: 0; }
+  .pt-brand-text strong { font-size: 1.05rem; letter-spacing: 0.02em; }
+  .pt-brand-text span { font-size: 0.8rem; color: var(--pt-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pt-score { flex: none; font-size: 0.82rem; background: var(--pt-accent); color: var(--pt-accent-ink); padding: 5px 11px; border-radius: 999px; }
+
+  .pt-main { max-width: 720px; margin: 0 auto; padding: 20px 16px 64px; }
+  .pt-card { background: var(--pt-surface); border-radius: var(--pt-radius); box-shadow: var(--pt-shadow-card); padding: 20px; margin: 0 0 16px; }
+  .pt-muted { color: var(--pt-muted); font-size: 0.88rem; }
+  h1 { font-size: 1.5rem; margin: 0 0 8px; letter-spacing: 0.01em; }
+  h2 { font-size: 1.1rem; margin: 0 0 10px; }
+
+  .pt-loading { text-align: center; padding: 40px 20px; }
+  .pt-spinner { width: 34px; height: 34px; margin: 0 auto 12px; border: 3px solid var(--pt-accent); border-top-color: var(--pt-accent-ink); border-radius: 50%; animation: pt-spin 0.8s linear infinite; }
+  @keyframes pt-spin { to { transform: rotate(360deg); } }
+  .pt-error h2 { color: var(--pt-bad); }
+
+  .pt-btn { appearance: none; border: 1px solid var(--pt-line); background: var(--pt-surface); border-radius: 12px; padding: 11px 16px; font-weight: 600; cursor: pointer; box-shadow: var(--pt-shadow-btn); transition: box-shadow 0.25s ease, transform 0.25s ease, background 0.2s ease; min-height: 44px; }
+  .pt-btn:hover:not(:disabled) { box-shadow: var(--pt-shadow-btn-hover); transform: translateY(-1px); }
+  .pt-btn:active:not(:disabled) { transform: translateY(0.5px); }
+  .pt-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .pt-primary { background: var(--pt-accent); border-color: var(--pt-accent-strong); color: var(--pt-accent-ink); }
+  .pt-primary:hover:not(:disabled) { background: var(--pt-accent-strong); }
+  .pt-link { appearance: none; border: 0; background: none; padding: 6px 0; color: var(--pt-accent-ink); font-weight: 600; cursor: pointer; }
+  .pt-icon-btn { appearance: none; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--pt-line); background: var(--pt-surface); font-size: 1.4rem; line-height: 1; cursor: pointer; box-shadow: var(--pt-shadow-btn); }
+  .pt-icon-btn:disabled { opacity: 0.35; cursor: default; }
+
+  .pt-progress { height: 8px; background: #EEF3F8; border-radius: 99px; overflow: hidden; margin: 14px 0 6px; }
+  .pt-progress span { display: block; height: 100%; background: var(--pt-accent-strong); border-radius: 99px; transition: width 0.4s ease; }
+  .pt-intro .pt-btn { margin-top: 10px; }
+  .pt-qlist { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .pt-qlist > li { min-width: 0; }
+  .pt-qrow { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; border: 1px solid transparent; background: var(--pt-surface); border-radius: 14px; padding: 12px 14px; cursor: pointer; box-shadow: var(--pt-shadow-btn); transition: box-shadow 0.25s ease, transform 0.25s ease; }
+  .pt-qrow:hover { box-shadow: var(--pt-shadow-btn-hover); transform: translateY(-1px); }
+  .pt-qdot { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: #F0F0EC; font-size: 0.9rem; }
+  .pt-qrow.pt-correct .pt-qdot { background: var(--pt-good-bg); color: var(--pt-good); }
+  .pt-qrow.pt-partial .pt-qdot { background: var(--pt-part-bg); color: #8D6E00; }
+  .pt-qrow.pt-incorrect .pt-qdot { background: var(--pt-bad-bg); color: var(--pt-bad); }
+  .pt-qrow-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .pt-qrow-text span { font-size: 0.85rem; color: var(--pt-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pt-qrow-state { flex: none; font-size: 0.78rem; color: var(--pt-muted); }
+
+  .pt-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .pt-nav-arrows { display: flex; gap: 8px; }
+  .pt-q-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+  .pt-q-head h1 { margin: 0 8px 0 0; }
+  .pt-chip { font-size: 0.75rem; background: #F0F0EC; color: var(--pt-muted); padding: 3px 9px; border-radius: 99px; }
+  .pt-part { display: inline-block; font-weight: 700; margin-right: 6px; color: var(--pt-accent-ink); }
+  .pt-text { margin: 10px 0; }
+  .pt-figure { margin: 12px 0; text-align: center; }
+  .pt-figure img { max-width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--pt-line); background: #fff; }
+  .pt-figure figcaption { font-size: 0.82rem; color: var(--pt-muted); margin-top: 4px; }
+  .pt-table-wrap { overflow-x: auto; margin: 12px 0; }
+  .pt-table { border-collapse: collapse; min-width: 100%; font-size: 0.92rem; }
+  .pt-table th, .pt-table td { border: 1px solid var(--pt-line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  .pt-table th { background: #F7F7F5; }
+
+  .pt-mcq { display: grid; gap: 8px; margin: 12px 0; }
+  .pt-option { display: flex; gap: 10px; align-items: flex-start; text-align: left; width: 100%; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--pt-line); background: var(--pt-surface); cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease; min-height: 48px; }
+  .pt-option:hover { border-color: var(--pt-accent-strong); }
+  .pt-option.pt-chosen { border-color: var(--pt-accent-ink); background: #EAF4FD; }
+  .pt-option-label { font-weight: 700; flex: none; }
+  .pt-option-body img { display: block; max-width: 100%; margin-top: 6px; border-radius: 8px; }
+  .pt-write-wrap { display: block; margin: 12px 0; }
+  .pt-write-label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 6px; }
+  .pt-write, .pt-chat-input { width: 100%; border: 1.5px solid var(--pt-line); border-radius: 12px; padding: 12px; resize: vertical; background: #FCFCFB; transition: border-color 0.2s ease; font-size: 16px; }
+  .pt-write:focus, .pt-chat-input:focus, .pt-blank:focus { outline: none; border-color: var(--pt-accent-ink); background: #fff; }
+  .pt-fill { line-height: 2.4; margin: 12px 0; }
+  .pt-blank { width: 8.5em; border: 0; border-bottom: 2px solid var(--pt-accent-strong); background: #F5FAFE; padding: 2px 6px; border-radius: 6px 6px 0 0; font-size: 16px; }
+
+  .pt-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 16px; }
+  .pt-actions .pt-btn { flex: 1 1 150px; }
+  .pt-feedback { border-left: 5px solid var(--pt-part); animation: pt-in 0.35s ease both; }
+  .pt-feedback.pt-correct { border-left-color: var(--pt-good); }
+  .pt-feedback.pt-incorrect { border-left-color: var(--pt-bad); animation: pt-in 0.35s ease both, pt-shake 0.4s ease 0.35s; }
+  .pt-verdict { display: flex; align-items: center; gap: 8px; font-size: 1.05rem; }
+  .pt-verdict-icon { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: var(--pt-part-bg); color: #8D6E00; }
+  .pt-correct .pt-verdict-icon { background: var(--pt-good-bg); color: var(--pt-good); }
+  .pt-incorrect .pt-verdict-icon { background: var(--pt-bad-bg); color: var(--pt-bad); }
+  .pt-next { font-weight: 600; color: var(--pt-accent-ink); }
+  .pt-hint { background: #FFFDF5; animation: pt-in 0.35s ease both; }
+  .pt-solution { background: #F5FAFE; animation: pt-in 0.35s ease both; }
+  .pt-inline-error { color: var(--pt-bad); font-size: 0.9rem; margin: -6px 0 14px; }
+  .pt-chat-log { display: grid; gap: 10px; margin-bottom: 12px; }
+  .pt-bubble { padding: 10px 14px; border-radius: 14px; max-width: 92%; }
+  .pt-bubble b { display: block; font-size: 0.75rem; color: var(--pt-muted); margin-bottom: 2px; }
+  .pt-bubble.pt-student { background: #EAF4FD; justify-self: end; }
+  .pt-bubble.pt-tutor { background: #F4F4F1; }
+  .pt-chat-form { display: flex; gap: 8px; align-items: flex-end; }
+  .pt-chat-form .pt-btn { flex: none; }
+  .pt-next-bar { display: flex; justify-content: flex-end; }
+
+  .pt-reveal > * { animation: pt-in 0.4s ease both; }
+  .pt-reveal > *:nth-child(2) { animation-delay: 0.06s; }
+  .pt-reveal > *:nth-child(3) { animation-delay: 0.12s; }
+  .pt-reveal > *:nth-child(4) { animation-delay: 0.18s; }
+  @keyframes pt-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @keyframes pt-shake { 0%,100% { transform: none; } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+  @media (max-width: 420px) { .pt-card { padding: 16px; } h1 { font-size: 1.3rem; } .pt-logo { height: 34px; } }
+  @media print { .pt-header { position: static; } .pt-actions, .pt-chat-form, .pt-nav-arrows, .pt-next-bar { display: none; } .pt-card { box-shadow: none; border: 1px solid #ccc; } }
+</style>
+</head>
+<body>
+<div id="app" aria-live="polite"></div>
+<noscript><p style="padding:20px">The Polymath needs JavaScript switched on.</p></noscript>
+<script type="module">
+import { mountPolymathTutor } from './polymath-tutor.js?v=1';
+import { TUTOR_COLLECTION, TUTOR_NAME } from './polymath-tutor-core.mjs?v=1';
+
+const root = document.getElementById('app');
+// The Firebase door is opened lazily and once: a broken CDN is a message on
+// the page, never a blank screen.
+let firebaseReady = null;
+function firebase() {
+  if (!firebaseReady) firebaseReady = (async () => {
+    const [{ initializeApp }, { initializeAppCheck, ReCaptchaV3Provider }, fs, ai] = await Promise.all([
+      import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js'),
+      import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js'),
+      import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js'),
+      import('https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js'),
+    ]);
+    // The shared Polymath project — the same config every app in the family uses.
+    const app = initializeApp({
+      apiKey: "AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo",
+      authDomain: "mathgen--app.firebaseapp.com",
+      projectId: "mathgen--app",
+      storageBucket: "mathgen--app.firebasestorage.app",
+      messagingSenderId: "165654161198",
+      appId: "1:165654161198:web:16c8bd60eb3a2aa7edbcbf",
+      measurementId: "G-0MWZFG211D"
+    });
+    // App Check is what lets an anonymous phone use the model without a key.
+    try { initializeAppCheck(app, { provider: new ReCaptchaV3Provider("6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH"), isTokenAutoRefreshEnabled: true }); }
+    catch (e) { console.warn('App Check could not start', e); }
+    const db = fs.getFirestore(app);
+    // The portal's own tutor engine, under The Polymath's name. Keep the model and its
+    // thinking floor in step with AI_MODEL / AI_THINK_MIN in app.js.
+    const model = ai.getGenerativeModel(ai.getAI(app, { backend: new ai.GoogleAIBackend() }), { model: 'gemini-3.8-flash' });
+    return { db, fs, model };
+  })();
+  return firebaseReady;
+}
+
+async function loadPaper(id) {
+  const { db, fs } = await firebase();
+  const snap = await fs.getDoc(fs.doc(db, TUTOR_COLLECTION, id));
+  return snap.exists() ? snap.data() : null;
+}
+
+async function ask(prompt, opts) {
+  const { model } = await firebase();
+  const parts = [{ text: prompt }];
+  ((opts && opts.images) || []).forEach(img => parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } }));
+  const generationConfig = { maxOutputTokens: 1600, temperature: 0.4, thinkingConfig: { thinkingLevel: 'low' } };
+  if (opts && opts.json) generationConfig.responseMimeType = 'application/json';
+  let res;
+  try { res = await model.generateContent({ contents: [{ role: 'user', parts }], generationConfig }); }
+  catch (e) {
+    const msg = String((e && e.message) || e);
+    if (/429|quota|exceeded/i.test(msg)) throw new Error(TUTOR_NAME + ' is very busy right now');
+    if (/app.?check|unauthenticated|permission/i.test(msg)) throw new Error(TUTOR_NAME + ' could not confirm this page — reload it');
+    throw new Error(TUTOR_NAME + ' could not be reached — check your connection');
+  }
+  return (res.response.text() || '').trim();
+}
+
+// A picture for the model, as base64. A picture the browser may not read
+// (no CORS) is simply left out: the words of the question still go.
+async function fetchImage(url) {
+  const m = /^data:(image\/[a-z+]+);base64,(.*)$/i.exec(url);
+  if (m) return { mimeType: m[1], data: m[2] };
+  const res = await fetch(url, { credentials: 'omit', referrerPolicy: 'no-referrer' });
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  if (!/^image\//.test(blob.type) || blob.size > 4 * 1024 * 1024) return null;
+  const data = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+  return data ? { mimeType: blob.type, data } : null;
+}
+
+mountPolymathTutor(root, { loadPaper, ask, fetchImage });
+</script>
+</body>
+</html>
