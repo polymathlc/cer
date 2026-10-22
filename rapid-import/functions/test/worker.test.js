@@ -12,10 +12,11 @@ let beforeSave=null;
 const db={doc:ref,collection:name=>({doc:id=>ref(name+'/'+id),where:()=>({get:async()=>({docs:[...docs].filter(([k])=>k.startsWith(name+'/')).map(([k])=>snap(k))})})}),
  runTransaction:async fn=>{
    const writes=[];
-   await fn({get:async r=>snap(r.path),create:(r,d)=>writes.push(['create',r.path,clone(d)]),update:(r,d)=>writes.push(['update',r.path,clone(d)])});
+   const result=await fn({get:async r=>snap(r.path),create:(r,d)=>writes.push(['create',r.path,clone(d)]),update:(r,d)=>writes.push(['update',r.path,clone(d)])});
    if(failCommit){failCommit=false;throw new Error('Simulated network failure before commit');}
    for(const [op,path] of writes) if(op==='create'&&docs.has(path)) throw new Error('already exists');
    for(const [op,path,value] of writes) docs.set(path,op==='update'?{...docs.get(path),...value}:value);
+   return result;
  }};
 const bucket={name:'test',file:path=>({save:async b=>{if(beforeSave)await beforeSave(path,b);files.set(path,Buffer.from(b));},download:async()=>{if(beforeDownload)await beforeDownload(path);if(!files.has(path))throw new Error('Missing upload');return [files.get(path)];}})};
 mock.module('firebase-admin/app',{namedExports:{initializeApp:()=>({})}});
@@ -394,7 +395,7 @@ test('unfaithful regeneration cannot replace the saved figure or lose the origin
   await assert.rejects(api.rapidVettingImage({auth,data:{questionId:q.id,blockId:'figure',mode:'colour',expectedUrl:url}}),/not verified/);
   assert.deepEqual(docs.get('users/teacher/vetting/'+q.id),q);
 });
-test('concurrent teacher changes abort regeneration instead of overwriting their question',async()=>{
+test('a teacher edit elsewhere in the question during regeneration is kept and the figure still lands',async()=>{
   const {q,url,bytes}=savedFigure();
   modelResponse=request=>{
     if(request.config.responseModalities) {
@@ -403,8 +404,55 @@ test('concurrent teacher changes abort regeneration instead of overwriting their
     }
     if(request.contents[0].parts[0].text.startsWith('Compare image 1'))return reply({faithful:true,differences:[]});
   };
+  const r=await api.rapidVettingImage({auth,data:{questionId:q.id,blockId:'figure',mode:'colour',expectedUrl:url}});
+  const saved=docs.get('users/teacher/vetting/'+q.id);
+  assert.match(saved.blocks[0].content,/Teacher changed/);assert.notEqual(saved.blocks[1].url,url);assert.equal(saved.blocks[1].originalCropUrl,url);
+  assert.equal(r.question.blocks[1].url,saved.blocks[1].url);assert.match(r.question.blocks[0].content,/Teacher changed/);
+  assert.equal(saved.autoCheck,undefined,'a check of the old wording is not stamped on the new wording');
+});
+test('a change to the figure itself during regeneration aborts instead of overwriting it',async()=>{
+  const {q,url,bytes}=savedFigure();
+  modelResponse=request=>{
+    if(request.config.responseModalities) {
+      docs.get('users/teacher/vetting/'+q.id).blocks[1].url=url+'&token=hand-cropped';
+      return imageModelReply(bytes);
+    }
+    if(request.contents[0].parts[0].text.startsWith('Compare image 1'))return reply({faithful:true,differences:[]});
+  };
   await assert.rejects(api.rapidVettingImage({auth,data:{questionId:q.id,blockId:'figure',mode:'colour',expectedUrl:url}}),e=>e.code==='aborted');
-  const saved=docs.get('users/teacher/vetting/'+q.id);assert.match(saved.blocks[0].content,/Teacher changed/);assert.equal(saved.blocks[1].url,url);
+  assert.equal(docs.get('users/teacher/vetting/'+q.id).blocks[1].url,url+'&token=hand-cropped');
+});
+test('two figures of one question regenerated at once both land',async()=>{
+  const {q,url,bytes}=savedFigure();
+  const second={...structuredClone(q.blocks[1]),id:'figure2'};
+  docs.get('users/teacher/vetting/'+q.id).blocks.splice(2,0,second);
+  let release,gate=new Promise(r=>release=r),started=0;
+  modelResponse=async request=>{
+    if(request.config.responseModalities) { if(++started===2) release(); await gate; return imageModelReply(bytes); }
+    if(request.contents[0].parts[0].text.startsWith('Compare image 1'))return reply({faithful:true,differences:[]});
+  };
+  await Promise.all(['figure','figure2'].map(blockId=>api.rapidVettingImage({auth,data:{questionId:q.id,blockId,mode:'colour',expectedUrl:url}})));
+  const saved=docs.get('users/teacher/vetting/'+q.id);
+  assert.notEqual(saved.blocks[1].url,url);assert.notEqual(saved.blocks[2].url,url);assert.notEqual(saved.blocks[1].url,saved.blocks[2].url);
+});
+test('an image returned without a STOP finish is still used, and an empty turn is asked again',async()=>{
+  const {q,url,bytes}=savedFigure();let generations=0;
+  modelResponse=request=>{
+    if(request.config.responseModalities) {
+      generations++;
+      if(generations===1) return {candidates:[{finishReason:'IMAGE_OTHER',content:{parts:[]}}]};
+      return {candidates:[{finishReason:'IMAGE_OTHER',content:{parts:[{inlineData:{mimeType:'image/jpeg',data:bytes.toString('base64')}}]}}]};
+    }
+    if(request.contents[0].parts[0].text.startsWith('Compare image 1'))return reply({faithful:true,differences:[]});
+  };
+  const r=await api.rapidVettingImage({auth,data:{questionId:q.id,blockId:'figure',mode:'colour',expectedUrl:url}});
+  assert.equal(generations,2);assert.notEqual(r.question.blocks[1].url,url);
+});
+test('three empty image turns fail with the reason and leave the figure untouched',async()=>{
+  const {q,url}=savedFigure();let generations=0;
+  modelResponse=request=>request.config.responseModalities?(generations++,{candidates:[{finishReason:'NO_IMAGE',content:{parts:[]}}]}):reply({faithful:true,differences:[]});
+  await assert.rejects(api.rapidVettingImage({auth,data:{questionId:q.id,blockId:'figure',mode:'colour',expectedUrl:url}}),/incomplete \(no image\)/);
+  assert.equal(generations,3);assert.deepEqual(docs.get('users/teacher/vetting/'+q.id),q);
 });
 test('resize guards role, owner, displayed URL and current scale',async()=>{
   const {q,url}=savedFigure();
