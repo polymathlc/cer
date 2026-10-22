@@ -4514,7 +4514,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.443.0';
+const APP_VERSION = 'v1.444.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -27252,6 +27252,21 @@ function doScaleAndPrint(output, opts) {
       frontPlace.leading.slice().reverse().forEach(f => output.insertBefore(f, output.firstChild));
 
       _printApplyPageNumbers(output);   // while it is still laid out and measurable
+      // 🎮 The quest frame goes on AFTER the sheets are planned and numbered.
+      // It lives in each sheet's margins (quest-frames.css), so nothing the
+      // planner measured moves; the print waits for its sprites, because an
+      // SVG picture is not in document.images and nothing else waits for it.
+      const questFrame = opts && opts.questFrame;
+      const QC = window.QuestFramesCer;
+      if (questFrame && QC) {
+        QC.framePrintPages(output, questFrame);
+        QC.ready(output, 8000).then(() => {
+          output.style.cssText = 'display:none;';
+          _printProgressHide();
+          _printAndRestore(output);
+        });
+        return;
+      }
       output.style.cssText = 'display:none;';
       _printProgressHide();
       _printAndRestore(output);
@@ -39579,7 +39594,7 @@ async function reprintWorksheet(id) {
   if (wantCover && !await _wsEditCover(ws.title, { where: 'saved', id, noFields })) return;
   noFields = !_wsStudentFieldsOn('saved');
   const why = await _wnyRunPrepare(selected, wnyPrintOn('saved'));
-  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields, ws.cover) : '', noFields, why, akxPrintOn('saved'), objBoxPrintOn('saved'), ws.artwork);
+  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields, ws.cover) : '', noFields, why, akxPrintOn('saved'), objBoxPrintOn('saved'), ws.artwork, _qfPrintCtx(selected, ws.title));
 }
 
 // The questions of a saved worksheet, in the order they were chosen — the ids
@@ -40149,6 +40164,26 @@ function _wsStudentFieldsOn(where) {
   return el ? !!el.checked : true;
 }
 
+// 🎮 QUEST FRAME (v1.444.0) — the worksheet as a level of Wheel Quest: a quest
+// banner, the boss with one heart per question and a hero card on page 1, a
+// gem on every question number, and a brick rampart in every sheet's margins.
+// ONE switch for the builder, My Worksheets and both creators
+// (`QuestFramesCer.on()`, quest-frames.js). Null when it is off or the frame's
+// script did not load, and then every print path builds byte for byte the
+// sheet it always did. The art is fetched now, while the planner works, so the
+// sprites are in hand before the print dialog opens.
+function _qfPrintCtx(selected, title) {
+  const QC = window.QuestFramesCer;
+  if (!QC || !QC.on()) return null;
+  const qs = Array.isArray(selected) ? selected : [];
+  const q = QC.ctx({ subject: 'science', title, topics: qs.map(x => x && x.topic), questions: qs.length });
+  QC.preload(q);
+  return q;
+}
+function _qfQuestionMarks(q) {
+  return (q && Array.isArray(q.blocks) ? q.blocks : []).reduce((t, b) => t + qMarksOf(b), 0);
+}
+
 // Front matter (optional cover page) per the student's checkbox.
 async function _wsFrontHtml(selected, title) {
   const wantCover = !!document.getElementById('wsIncludeCover')?.checked;
@@ -40168,7 +40203,7 @@ async function printStudentWorksheet() {
   const frontHtml = await _wsFrontHtml(selected, title);
   if (frontHtml === null) return;
   const why = await _wnyRunPrepare(selected, wnyPrintOn('builder'));
-  await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why, akxPrintOn('builder'), objBoxPrintOn('builder'), wsArtwork);
+  await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why, akxPrintOn('builder'), objBoxPrintOn('builder'), wsArtwork, _qfPrintCtx(selected, title));
 }
 
 // Worksheet title banner + name/date strip printed at the top of page 1.
@@ -40176,7 +40211,8 @@ async function printStudentWorksheet() {
 // the reader has already seen, so only the name/date strip is kept.
 // `noFields` drops the strip entirely — with a cover in front there is then
 // nothing left to print, so page 1 starts straight in on question 1.
-function _wsHeaderHtml(worksheetTitle, hasCover, noFields) {
+function _wsHeaderHtml(worksheetTitle, hasCover, noFields, questFrame) {
+  if (questFrame && window.QuestFramesCer) return window.QuestFramesCer.portalHeader(questFrame, hasCover, noFields);
   const strip = noFields ? '' : `<div class="print-student-info">
         <span>Name: ___________________________</span>
         <span>Date: _______________</span>
@@ -40250,6 +40286,10 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   // EVERY question that has not got one already. It is a RENDERING option and
   // writes nothing to any question, so ticking it changes no document.
   const objBoxAll = !!(opts && opts.objectivesBoxAll);
+  // 🎮 questFrame: the Quest header on page 1 and a gem on each "Question N"
+  // (_qfPrintCtx). Absent — every print but a framed worksheet — nothing here
+  // changes by a character.
+  const questFrame = (opts && opts.questFrame) || null;
   // A cover sheet already carries the logo, the title and the name/date
   // fields, so page 1's banner drops to just the student strip.
   const hasCover = frontHtml.indexOf('print-cover-page') >= 0;
@@ -40265,7 +40305,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     const secHtml = sectionById ? (sectionById[q.id] || '') : '';
     if (secHtml) {
       allHtml += `<div class="print-question-chunk print-lo-chunk" data-qid="__lo__${escapeHtml(String(q.id || ''))}">` +
-        (qIndex === 0 ? _wsHeaderHtml(worksheetTitle, hasCover, noFields) : '') + secHtml + `</div>`;
+        (qIndex === 0 ? _wsHeaderHtml(worksheetTitle, hasCover, noFields, questFrame) : '') + secHtml + `</div>`;
     }
     // MCQ-style questions (no writing boxes) are flagged so the packer can
     // pair two compact ones onto a single page.
@@ -40281,7 +40321,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     let qHtml = `<div class="print-question-chunk${paperNum ? ' print-q-paper' : ''}" data-qid="${escapeHtml(String(q.id || ''))}"${isMcq ? ' data-mcq="1"' : ''}>`;
 
     if (qIndex === 0 && !secHtml) {
-      qHtml += _wsHeaderHtml(worksheetTitle, hasCover, noFields);
+      qHtml += _wsHeaderHtml(worksheetTitle, hasCover, noFields, questFrame);
     }
 
     if (opts && Array.isArray(opts.artwork) && opts.artwork.length) {
@@ -40296,7 +40336,9 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     qHtml += paperNum
       ? `<span class="print-q-paper-num">${escapeHtml(paperNum)}</span>`
       : (plainNums
-        ? `<div class="print-q-header print-q-header-plain"><h2>${escapeHtml(numberedTitle)}</h2></div>`
+        ? (questFrame && window.QuestFramesCer
+          ? `<div class="print-q-header print-q-header-plain qf-q-head">${window.QuestFramesCer.gem(qIndex + 1, _qfQuestionMarks(q))}<h2>${escapeHtml(numberedTitle)}</h2></div>`
+          : `<div class="print-q-header print-q-header-plain"><h2>${escapeHtml(numberedTitle)}</h2></div>`)
         : `<div class="print-q-header">
       <h2>${escapeHtml(q.title)}</h2>
       <div class="print-q-meta">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</div>
@@ -40482,15 +40524,15 @@ async function _wnyRunPrepare(selected, on) {
   return notes;
 }
 
-async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes, akExtras, objBoxAll, artwork) {
+async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes, akExtras, objBoxAll, artwork, questFrame) {
   try { if (typeof _widgetEnsurePublished === 'function') await _widgetEnsurePublished(selected); }
   catch (e) { _printProgressHide(); showToast('Could not publish app QR: ' + (e.message || e), 'error'); return; }
   const output = document.getElementById('printOutput');
   // plainNumbers: a worksheet is numbered "Question 1, 2, 3…" for the student.
   // The bank's own title and its category/topic line are internal filing —
   // useful in the admin's bank, meaningless (and a giveaway) on a printed sheet.
-  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields, whyNotes: whyNotes || null, answerKeyExtras: !!akExtras, objectivesBoxAll: !!objBoxAll, artwork: artwork || [] });
-  autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp });
+  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields, whyNotes: whyNotes || null, answerKeyExtras: !!akExtras, objectivesBoxAll: !!objBoxAll, artwork: artwork || [], questFrame: questFrame || null });
+  autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp, questFrame: questFrame || null });
 }
 
 // =====================================================================
@@ -42276,6 +42318,13 @@ function _wsPreviewBuildHtml(ctx, opts) {
     answerKeyExtras: !!ctx.akExtras,
     objectivesBoxAll: !!ctx.objBoxAll,
     artwork: ctx.artwork || [],
+    // 🎮 the same Quest header and gems the print will carry, so the preview
+    // paginates exactly as the sheet does. Only the builder and My Worksheets
+    // have the switch; a past paper or a bank proof never takes the frame.
+    // The 📖 Study Buddy export (`noTags`) stays plain: html2canvas draws an
+    // inline SVG as a standalone image, which never loads the sprites inside
+    // it, so every gem and banner would be photographed blank.
+    questFrame: (!o.noTags && (ctx.where === 'builder' || ctx.where === 'saved')) ? _qfPrintCtx(selected, title) : null,
     // ▲▼ the order tags — a preview-only wrapper that generates no box, so
     // the pagination is still exactly what will print. The export passes
     // `noTags`: nothing may be hung on a page that is about to be photographed.

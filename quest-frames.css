@@ -1,0 +1,700 @@
+/* quest-frames.css — Polymath Quest Frames on the Science portal (v1.444.0).
+   Built from the Polymath Quest Frames design system (claude.ai artifact): its tokens.json and
+   components/bundle.css, then this site's own rules at the end. Change the system, then copy. */
+/* Polymath Quest Frames — generated from tokens.json */
+:root, [data-theme="paper"] {
+  --polymath-teal: #2d9ba5;
+  --polymath-cyan: #54c5d0;
+  --polymath-magenta: #ec008c;
+  --polymath-plum: #b71f6b;
+  --polymath-teal-deep: #056d75;
+  --polymath-plum-deep: #87174b;
+  --quest-night: #10192e;
+  --quest-deck: #1b2645;
+  --quest-line: #44547b;
+  --quest-steel: #7582b1;
+  --quest-gold: #eed18a;
+  --quest-gold-light: #fff0bd;
+  --quest-gold-deep: #a77c3c;
+  --quest-glow: #fff0ba;
+  --quest-shadow: #090f22;
+  --pixel-outline: #250136;
+  --qf-page: #ffffff;
+  --qf-parchment: #fff4d5;
+  --qf-ink: #250136;
+  --qf-ink-soft: #5b4770;
+  --qf-ink-on-gold: #250136;
+  --qf-field-line: #5b4770;
+  --qf-mark-line: var(--pixel-outline);
+  --qf-focus-ring: var(--polymath-teal-deep);
+  --qf-plate-gold: var(--quest-gold);
+  --qf-plate-gold-glint: var(--quest-gold-light);
+  --qf-plate-gold-deep: var(--quest-gold-deep);
+  --subject-math: var(--polymath-magenta);
+  --subject-science: var(--polymath-teal);
+  --subject-math-ink: var(--polymath-plum);
+  --subject-science-ink: var(--polymath-teal-deep);
+  --qf-heart: var(--polymath-magenta);
+  --qf-heart-empty: #ffffff;
+  --qf-hp: #86ccac;
+  --qf-xp: #549baf;
+  --qf-xp-glint: #a6e5ce;
+  --qf-mp: #5471cc;
+  --qf-mp-glint: #b3c5ff;
+  --qf-star: var(--world-desert-fill);
+  --rarity-common: #c6d0dc;
+  --rarity-uncommon: #85dfa1;
+  --rarity-rare: #83c7ff;
+  --rarity-epic: #be9aff;
+  --rarity-legendary: #ffc26f;
+  --rarity-mythical: #ff86bb;
+  --rarity-unique: #ffb965;
+  --companion-orbit: #33b0af;
+  --companion-pip: #fc9340;
+  --companion-nova: #763c5e;
+  --companion-cream: #faeddb;
+  --world-forest-wash: #eaf9e5;
+  --world-forest-glint: #a6e591;
+  --world-forest-fill: #61bf3a;
+  --world-forest-deep: #367c14;
+  --world-forest-ink: #164002;
+  --world-swamp-wash: #e1faf0;
+  --world-swamp-glint: #66e6ba;
+  --world-swamp-fill: #0db98e;
+  --world-swamp-deep: #057558;
+  --world-swamp-ink: #01402f;
+  --world-mountain-wash: #eef4ff;
+  --world-mountain-glint: #77a4f6;
+  --world-mountain-fill: #3672e9;
+  --world-mountain-deep: #0f3a90;
+  --world-mountain-ink: #173268;
+  --world-ocean-wash: #e7f6ff;
+  --world-ocean-glint: #60cbff;
+  --world-ocean-fill: #049fd6;
+  --world-ocean-deep: #066082;
+  --world-ocean-ink: #023b51;
+  --world-desert-wash: #fff1e5;
+  --world-desert-glint: #fed1aa;
+  --world-desert-fill: #f99003;
+  --world-desert-deep: #a45e02;
+  --world-desert-ink: #502b02;
+  --world-volcano-wash: #fef0ed;
+  --world-volcano-glint: #fea28f;
+  --world-volcano-fill: #f05940;
+  --world-volcano-deep: #9a2b19;
+  --world-volcano-ink: #5e1b10;
+  --world-ice-wash: #ddfafb;
+  --world-ice-glint: #8ef9ff;
+  --world-ice-fill: #07d0d8;
+  --world-ice-deep: #048b91;
+  --world-ice-ink: #003e41;
+  --world-clockwork-wash: #faf4dd;
+  --world-clockwork-glint: #ffe891;
+  --world-clockwork-fill: #eac503;
+  --world-clockwork-deep: #a28706;
+  --world-clockwork-ink: #403502;
+  --world-cosmic-wash: #f3f2ff;
+  --world-cosmic-glint: #a795ef;
+  --world-cosmic-fill: #805ddf;
+  --world-cosmic-deep: #482a89;
+  --world-cosmic-ink: #382863;
+  --world-library-wash: #ffeef9;
+  --world-library-glint: #ed96d4;
+  --world-library-fill: #d155b3;
+  --world-library-deep: #83276f;
+  --world-library-ink: #541c47;
+  --qf-pixel-drop: 3px 3px 0 #250136;
+  --qf-pixel-drop-lg: 6px 6px 0 #250136;
+}
+[data-theme="arcade"] {
+  --polymath-teal: #2d9ba5;
+  --polymath-cyan: #54c5d0;
+  --polymath-magenta: #ec008c;
+  --polymath-plum: #b71f6b;
+  --polymath-teal-deep: #056d75;
+  --polymath-plum-deep: #87174b;
+  --pixel-outline: #090f22;
+  --qf-page: var(--quest-night);
+  --qf-parchment: var(--quest-deck);
+  --qf-ink: #edf1ff;
+  --qf-ink-soft: #b5c5e3;
+  --qf-ink-on-gold: #192338;
+  --qf-field-line: var(--quest-steel);
+  --qf-mark-line: var(--quest-steel);
+  --qf-focus-ring: #a4ddff;
+  --qf-plate-gold: var(--quest-gold);
+  --qf-plate-gold-glint: var(--quest-gold-light);
+  --qf-plate-gold-deep: var(--quest-gold-deep);
+  --subject-math-ink: #ff86bb;
+  --subject-science-ink: var(--polymath-cyan);
+  --qf-heart: var(--polymath-magenta);
+  --qf-heart-empty: var(--quest-deck);
+  --qf-xp: #549baf;
+  --qf-xp-glint: #a6e5ce;
+  --qf-star: var(--world-desert-fill);
+  --rarity-common: #c6d0dc;
+  --rarity-uncommon: #85dfa1;
+  --rarity-rare: #83c7ff;
+  --rarity-epic: #be9aff;
+  --rarity-legendary: #ffc26f;
+  --rarity-mythical: #ff86bb;
+  --rarity-unique: #ffb965;
+  --companion-orbit: #33b0af;
+  --companion-pip: #fc9340;
+  --companion-nova: #763c5e;
+  --companion-cream: #faeddb;
+  --world-forest-wash: #1a2c13;
+  --world-forest-glint: #a6e591;
+  --world-forest-fill: #61bf3a;
+  --world-forest-deep: #367c14;
+  --world-forest-ink: #bee5b1;
+  --world-swamp-wash: #052e22;
+  --world-swamp-glint: #66e6ba;
+  --world-swamp-fill: #0db98e;
+  --world-swamp-deep: #057558;
+  --world-swamp-ink: #a3e9cd;
+  --world-mountain-wash: #19263f;
+  --world-mountain-glint: #77a4f6;
+  --world-mountain-fill: #3672e9;
+  --world-mountain-deep: #0f3a90;
+  --world-mountain-ink: #c3d8ff;
+  --world-ocean-wash: #052a3b;
+  --world-ocean-glint: #60cbff;
+  --world-ocean-fill: #049fd6;
+  --world-ocean-deep: #066082;
+  --world-ocean-ink: #a9e0fe;
+  --world-desert-wash: #382009;
+  --world-desert-glint: #fed1aa;
+  --world-desert-fill: #f99003;
+  --world-desert-deep: #a45e02;
+  --world-desert-ink: #ffcca1;
+  --world-volcano-wash: #3b1c17;
+  --world-volcano-glint: #fea28f;
+  --world-volcano-fill: #f05940;
+  --world-volcano-deep: #9a2b19;
+  --world-volcano-ink: #ffc9bd;
+  --world-ice-wash: #032d2f;
+  --world-ice-glint: #8ef9ff;
+  --world-ice-fill: #07d0d8;
+  --world-ice-deep: #048b91;
+  --world-ice-ink: #96e8ec;
+  --world-clockwork-wash: #2e2605;
+  --world-clockwork-glint: #ffe891;
+  --world-clockwork-fill: #eac503;
+  --world-clockwork-deep: #a28706;
+  --world-clockwork-ink: #e8d89b;
+  --world-cosmic-wash: #27223d;
+  --world-cosmic-glint: #a795ef;
+  --world-cosmic-fill: #805ddf;
+  --world-cosmic-deep: #482a89;
+  --world-cosmic-ink: #d8d1fe;
+  --world-library-wash: #361c2f;
+  --world-library-glint: #ed96d4;
+  --world-library-fill: #d155b3;
+  --world-library-deep: #83276f;
+  --world-library-ink: #fbc4ea;
+  --qf-pixel-drop: 3px 3px 0 #090f22;
+  --qf-pixel-drop-lg: 6px 6px 0 #090f22;
+}
+[data-theme="photocopy"] {
+  --polymath-teal: #6e6e6e;
+  --polymath-cyan: #a6a6a6;
+  --polymath-magenta: #6e6e6e;
+  --polymath-plum: #3d3d3d;
+  --polymath-teal-deep: #3d3d3d;
+  --polymath-plum-deep: #262626;
+  --pixel-outline: #000000;
+  --qf-page: #ffffff;
+  --qf-parchment: #ffffff;
+  --qf-ink: #000000;
+  --qf-ink-soft: #3d3d3d;
+  --qf-ink-on-gold: #000000;
+  --qf-field-line: #000000;
+  --qf-mark-line: #000000;
+  --qf-focus-ring: #000000;
+  --qf-plate-gold: #ffffff;
+  --qf-plate-gold-glint: #ffffff;
+  --qf-plate-gold-deep: #9a9a9a;
+  --subject-math-ink: #000000;
+  --subject-science-ink: #000000;
+  --qf-heart: #9a9a9a;
+  --qf-heart-empty: #ffffff;
+  --qf-xp: #9a9a9a;
+  --qf-xp-glint: #d9d9d9;
+  --qf-star: #6e6e6e;
+  --rarity-common: #ffffff;
+  --rarity-uncommon: #f2f2f2;
+  --rarity-rare: #e3e3e3;
+  --rarity-epic: #d4d4d4;
+  --rarity-legendary: #c6c6c6;
+  --rarity-mythical: #b8b8b8;
+  --rarity-unique: #aaaaaa;
+  --companion-orbit: #9a9a9a;
+  --companion-pip: #9a9a9a;
+  --companion-nova: #3d3d3d;
+  --companion-cream: #ffffff;
+  --world-forest-wash: #ffffff;
+  --world-forest-glint: #f4f4f4;
+  --world-forest-fill: #e2e2e2;
+  --world-forest-deep: #a6a6a6;
+  --world-forest-ink: #000000;
+  --world-swamp-wash: #ffffff;
+  --world-swamp-glint: #f4f4f4;
+  --world-swamp-fill: #e2e2e2;
+  --world-swamp-deep: #a6a6a6;
+  --world-swamp-ink: #000000;
+  --world-mountain-wash: #ffffff;
+  --world-mountain-glint: #f4f4f4;
+  --world-mountain-fill: #e2e2e2;
+  --world-mountain-deep: #a6a6a6;
+  --world-mountain-ink: #000000;
+  --world-ocean-wash: #ffffff;
+  --world-ocean-glint: #f4f4f4;
+  --world-ocean-fill: #e2e2e2;
+  --world-ocean-deep: #a6a6a6;
+  --world-ocean-ink: #000000;
+  --world-desert-wash: #ffffff;
+  --world-desert-glint: #f4f4f4;
+  --world-desert-fill: #e2e2e2;
+  --world-desert-deep: #a6a6a6;
+  --world-desert-ink: #000000;
+  --world-volcano-wash: #ffffff;
+  --world-volcano-glint: #f4f4f4;
+  --world-volcano-fill: #e2e2e2;
+  --world-volcano-deep: #a6a6a6;
+  --world-volcano-ink: #000000;
+  --world-ice-wash: #ffffff;
+  --world-ice-glint: #f4f4f4;
+  --world-ice-fill: #e2e2e2;
+  --world-ice-deep: #a6a6a6;
+  --world-ice-ink: #000000;
+  --world-clockwork-wash: #ffffff;
+  --world-clockwork-glint: #f4f4f4;
+  --world-clockwork-fill: #e2e2e2;
+  --world-clockwork-deep: #a6a6a6;
+  --world-clockwork-ink: #000000;
+  --world-cosmic-wash: #ffffff;
+  --world-cosmic-glint: #f4f4f4;
+  --world-cosmic-fill: #e2e2e2;
+  --world-cosmic-deep: #a6a6a6;
+  --world-cosmic-ink: #000000;
+  --world-library-wash: #ffffff;
+  --world-library-glint: #f4f4f4;
+  --world-library-fill: #e2e2e2;
+  --world-library-deep: #a6a6a6;
+  --world-library-ink: #000000;
+  --qf-pixel-drop: 3px 3px 0 #000000;
+  --qf-pixel-drop-lg: 6px 6px 0 #000000;
+}
+:root {
+  --qf-pixel: 3px;
+  --qf-space-1: 4px;
+  --qf-space-2: 8px;
+  --qf-space-3: 12px;
+  --qf-space-4: 16px;
+  --qf-space-6: 24px;
+  --qf-frame-inset: 20px;
+  --qf-frame-band: 30px;
+  --qf-safe-x: 64px;
+  --qf-safe-top-start: 216px;
+  --qf-safe-top-calm: 92px;
+  --qf-safe-top-trail: 124px;
+  --qf-safe-bottom: 128px;
+  --qf-safe-bottom-finale: 150px;
+  --qf-safe-bottom-calm: 92px;
+  --qf-radius-pixel: 0px;
+  --qf-radius-chip: 2px;
+  --qf-radius-card: 4px;
+  --qf-sprite-boss: 96px;
+  --qf-sprite-hero: 84px;
+  --qf-sprite-companion: 68px;
+  --qf-socket: 40px;
+  --qf-bastion: 60px;
+  --qf-gem: 36px;
+  --font-qf-display: "Pixelify Sans", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --font-qf-label: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-qf-question: RobotoQuestion, "Century Gothic", CenturyGothic, AppleGothic, "Trebuchet MS", sans-serif;
+}
+.qf-quest-title { font-family: var(--font-qf-display); font-size: 28px; line-height: 30px; font-weight: 700; }
+.qf-quest-title-sm { font-family: var(--font-qf-display); font-size: 18px; line-height: 22px; font-weight: 700; }
+.qf-eyebrow { font-family: var(--font-qf-display); font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0.12em; }
+.qf-boss-name { font-family: var(--font-qf-display); font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: 0.04em; }
+.qf-gem-number { font-family: var(--font-qf-display); font-size: 17px; line-height: 18px; font-weight: 700; }
+.qf-counter { font-family: var(--font-qf-display); font-size: 12px; line-height: 14px; font-weight: 600; letter-spacing: 0.06em; }
+.qf-field-label { font-family: var(--font-qf-label); font-size: 10px; line-height: 14px; font-weight: 700; letter-spacing: 0.12em; }
+.qf-tip-title { font-family: var(--font-qf-label); font-size: 12px; line-height: 16px; font-weight: 700; }
+.qf-tip-body { font-family: var(--font-qf-label); font-size: 13px; line-height: 19px; font-weight: 500; }
+.qf-caption { font-family: var(--font-qf-label); font-size: 10px; line-height: 14px; font-weight: 500; }
+.qf-question { font-family: var(--font-qf-question); font-size: 15px; line-height: 22px; font-weight: 400; }
+
+/* Polymath Quest Frames — component styles. Loaded after tokens.css.
+   Every colour is a token; every fill a student sees on paper is drawn
+   in SVG so it prints with "Background graphics" off. */
+
+/* ---------- worlds: each class hands its five tones to the frame ---------- */
+.qf-world-forest    { --qf-w-wash: var(--world-forest-wash);    --qf-w-glint: var(--world-forest-glint);    --qf-w-fill: var(--world-forest-fill);    --qf-w-deep: var(--world-forest-deep);    --qf-w-ink: var(--world-forest-ink); }
+.qf-world-swamp     { --qf-w-wash: var(--world-swamp-wash);     --qf-w-glint: var(--world-swamp-glint);     --qf-w-fill: var(--world-swamp-fill);     --qf-w-deep: var(--world-swamp-deep);     --qf-w-ink: var(--world-swamp-ink); }
+.qf-world-mountain  { --qf-w-wash: var(--world-mountain-wash);  --qf-w-glint: var(--world-mountain-glint);  --qf-w-fill: var(--world-mountain-fill);  --qf-w-deep: var(--world-mountain-deep);  --qf-w-ink: var(--world-mountain-ink); }
+.qf-world-ocean     { --qf-w-wash: var(--world-ocean-wash);     --qf-w-glint: var(--world-ocean-glint);     --qf-w-fill: var(--world-ocean-fill);     --qf-w-deep: var(--world-ocean-deep);     --qf-w-ink: var(--world-ocean-ink); }
+.qf-world-desert    { --qf-w-wash: var(--world-desert-wash);    --qf-w-glint: var(--world-desert-glint);    --qf-w-fill: var(--world-desert-fill);    --qf-w-deep: var(--world-desert-deep);    --qf-w-ink: var(--world-desert-ink); }
+.qf-world-volcano   { --qf-w-wash: var(--world-volcano-wash);   --qf-w-glint: var(--world-volcano-glint);   --qf-w-fill: var(--world-volcano-fill);   --qf-w-deep: var(--world-volcano-deep);   --qf-w-ink: var(--world-volcano-ink); }
+.qf-world-ice       { --qf-w-wash: var(--world-ice-wash);       --qf-w-glint: var(--world-ice-glint);       --qf-w-fill: var(--world-ice-fill);       --qf-w-deep: var(--world-ice-deep);       --qf-w-ink: var(--world-ice-ink); }
+.qf-world-clockwork { --qf-w-wash: var(--world-clockwork-wash); --qf-w-glint: var(--world-clockwork-glint); --qf-w-fill: var(--world-clockwork-fill); --qf-w-deep: var(--world-clockwork-deep); --qf-w-ink: var(--world-clockwork-ink); }
+.qf-world-cosmic    { --qf-w-wash: var(--world-cosmic-wash);    --qf-w-glint: var(--world-cosmic-glint);    --qf-w-fill: var(--world-cosmic-fill);    --qf-w-deep: var(--world-cosmic-deep);    --qf-w-ink: var(--world-cosmic-ink); }
+.qf-world-library   { --qf-w-wash: var(--world-library-wash);   --qf-w-glint: var(--world-library-glint);   --qf-w-fill: var(--world-library-fill);   --qf-w-deep: var(--world-library-deep);   --qf-w-ink: var(--world-library-ink); }
+
+.qf-subject-math    { --qf-s: var(--subject-math);    --qf-s-ink: var(--subject-math-ink); }
+.qf-subject-science { --qf-s: var(--subject-science); --qf-s-ink: var(--subject-science-ink); }
+
+.qf-r-common    { --qf-r: var(--rarity-common); }
+.qf-r-uncommon  { --qf-r: var(--rarity-uncommon); }
+.qf-r-rare      { --qf-r: var(--rarity-rare); }
+.qf-r-epic      { --qf-r: var(--rarity-epic); }
+.qf-r-legendary { --qf-r: var(--rarity-legendary); }
+.qf-r-mythical  { --qf-r: var(--rarity-mythical); }
+.qf-r-unique    { --qf-r: var(--rarity-unique); }
+
+.qf-comp-orbit { --qf-comp: var(--companion-orbit); --qf-comp-ink: var(--qf-ink-on-gold); }
+.qf-comp-pip   { --qf-comp: var(--companion-pip);   --qf-comp-ink: var(--qf-ink-on-gold); }
+.qf-comp-nova  { --qf-comp: var(--companion-nova);  --qf-comp-ink: var(--companion-cream); }
+
+/* ---------- pixel colour classes (SVG fills) ---------- */
+.qf-c-ol     { fill: var(--pixel-outline); }
+.qf-c-ml     { fill: var(--qf-mark-line); }
+.qf-c-ww     { fill: var(--qf-w-wash); }
+.qf-c-wg     { fill: var(--qf-w-glint); }
+.qf-c-wf     { fill: var(--qf-w-fill); }
+.qf-c-wd     { fill: var(--qf-w-deep); }
+.qf-c-wi     { fill: var(--qf-w-ink); }
+.qf-c-gold   { fill: var(--qf-plate-gold); }
+.qf-c-gold-l { fill: var(--qf-plate-gold-glint); }
+.qf-c-gold-d { fill: var(--qf-plate-gold-deep); }
+.qf-c-empty  { fill: var(--qf-heart-empty); }
+.qf-c-heart  { fill: var(--qf-heart); }
+.qf-c-star   { fill: var(--qf-star); }
+.qf-c-s      { fill: var(--qf-s, var(--subject-science)); }
+.qf-c-xp     { fill: var(--qf-xp); }
+.qf-c-xpg    { fill: var(--qf-xp-glint); }
+.qf-c-mp     { fill: var(--qf-mp); }
+.qf-c-mpg    { fill: var(--qf-mp-glint); }
+.qf-c-r      { fill: var(--qf-r, var(--rarity-common)); }
+.qf-c-page   { fill: var(--qf-page); }
+.qf-c-parch  { fill: var(--qf-parchment); }
+.qf-c-gemglint { fill: var(--qf-plate-gold-glint); fill-opacity: .6; }
+.qf-c-gemdeep  { fill: var(--pixel-outline); fill-opacity: .22; }
+.qf-shadow   { opacity: .9; }
+
+/* ---------- flat fills behind chips and tabs (SVG, so they print) ---------- */
+.qf-fill { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+.qf-fill rect { fill: var(--qf-fill-c, var(--qf-parchment)); }
+
+/* ---------- sprites ---------- */
+svg.qf-sprite { display: block; overflow: hidden; }
+.qf-crisp, .qf-crisp image { image-rendering: pixelated; }
+.qf-px { display: inline-block; vertical-align: middle; overflow: visible; }
+[data-theme="photocopy"] .qf-sprite,
+[data-theme="photocopy"] .qf-companion-img { filter: grayscale(1) contrast(1.15); }
+
+/* ---------- plates: a pixel panel drawn in SVG behind any text ---------- */
+.qf-plate {
+  --qf-step: polygon(3px 0, calc(100% - 3px) 0, calc(100% - 3px) 3px, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 3px calc(100% - 3px), 0 calc(100% - 3px), 0 3px, 3px 3px);
+  position: relative;
+  display: block;
+  color: var(--qf-ink);
+}
+.qf-plate-shadow, .qf-plate-face {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  overflow: visible;
+  clip-path: var(--qf-step);
+  pointer-events: none;
+}
+.qf-plate-shadow { transform: translate(3px, 3px); }
+.qf-plate-shadow rect { fill: var(--pixel-outline); }
+.qf-p-face  { fill: var(--qf-p-face); }
+.qf-p-glint { fill: var(--qf-p-glint); }
+.qf-p-deep  { fill: var(--qf-p-deep); }
+.qf-p-line  { fill: var(--pixel-outline); }
+.qf-plate-body { position: relative; padding: 10px 14px; }
+
+.qf-plate--gold      { --qf-p-face: var(--qf-plate-gold); --qf-p-glint: var(--qf-plate-gold-glint); --qf-p-deep: var(--qf-plate-gold-deep); color: var(--qf-ink-on-gold); }
+.qf-plate--parchment { --qf-p-face: var(--qf-parchment); --qf-p-glint: var(--qf-parchment); --qf-p-deep: var(--qf-w-glint, var(--qf-plate-gold-glint)); color: var(--qf-ink); }
+.qf-plate--world     { --qf-p-face: var(--qf-w-wash); --qf-p-glint: var(--qf-w-wash); --qf-p-deep: var(--qf-w-glint); color: var(--qf-w-ink); }
+
+/* ---------- shared text ---------- */
+.qf-eyebrow  { display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase; white-space: nowrap; }
+.qf-counter  { text-transform: uppercase; white-space: nowrap; }
+.qf-caption  { display: block; color: var(--qf-ink-soft); }
+.qf-field-label { display: block; text-transform: uppercase; color: var(--qf-ink-soft); white-space: nowrap; }
+
+/* ---------- the page ---------- */
+.qf-page {
+  position: relative;
+  box-sizing: border-box;
+  width: 794px; height: 1123px;
+  overflow: hidden;
+  background: var(--qf-page);
+  color: var(--qf-ink);
+  font-family: var(--font-qf-label);
+}
+.qf-page *, .qf-page *::before, .qf-page *::after { box-sizing: border-box; }
+.qf-frame-layer { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.qf-frame-layer .qf-toggle { pointer-events: auto; }
+.qf-border { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+.qf-content {
+  position: absolute;
+  top: var(--qf-at-top, 216px);
+  bottom: var(--qf-at-bottom, 128px);
+  left: var(--qf-at-x, 64px);
+  right: var(--qf-at-x, 64px);
+  overflow: hidden;
+  z-index: 2;
+  font-family: var(--font-qf-question);
+}
+.qf-decorated { position: relative; }
+.qf-decorated > :not(.qf-frame-layer) { position: relative; z-index: 2; }
+
+/* header: first page */
+.qf-head > span { position: absolute; display: block; }
+.qf-head--start .qf-head-banner { left: 64px; top: 60px; width: 456px; }
+.qf-head--start .qf-head-boss   { left: 532px; top: 26px; width: 210px; }
+.qf-head--start .qf-head-hero   { left: 64px; top: 164px; width: 456px; }
+/* header: later pages */
+.qf-head--slim .qf-head-banner  { left: 64px; top: 58px; width: 456px; }
+.qf-head--slim .qf-head-boss    { left: 532px; top: 54px; width: 210px; }
+
+/* footer */
+.qf-foot > span { position: absolute; display: block; }
+.qf-foot-hero   { left: 52px; top: 997px; width: 84px; height: 84px; }
+.qf-foot-hero .qf-sprite { width: 100%; height: 100%; }
+.qf-foot-xp     { left: 146px; top: 1010px; }
+.qf-foot-cheer  { left: 472px; top: 990px; width: 270px; height: 84px; }
+.qf-foot-chest  { left: 400px; top: 966px; width: 322px; }
+.qf-cheer-bubble { position: absolute; left: 0; top: 10px; width: 186px; }
+.qf-cheer-bubble .qf-plate-body { padding: 8px 12px; }
+.qf-cheer-text { display: block; }
+.qf-cheer-tail { position: absolute; right: -9px; top: 9px; overflow: visible; }
+.qf-cheer-tail rect.qf-c-ol { fill: var(--pixel-outline); }
+.qf-cheer-tail rect:not(.qf-c-ol) { fill: var(--qf-parchment); }
+.qf-cheer-bubble .qf-plate, .qf-tip-bubble .qf-plate { z-index: 0; }
+.qf-cheer-tail, .qf-tip-tail { z-index: 1; }
+.qf-foot-companion { position: absolute; right: 2px; top: 16px; width: 68px; height: 68px; }
+.qf-foot-companion .qf-sprite { width: 100%; height: 100%; }
+
+/* ---------- QuestBanner ---------- */
+.qf-banner { position: relative; }
+.qf-banner .qf-plate-body { display: flex; align-items: center; gap: 14px; padding: 10px 16px 12px 12px; }
+.qf-banner--slim .qf-plate-body { gap: 10px; padding: 6px 12px 7px 8px; }
+.qf-banner--slim .qf-banner-text { gap: 1px; }
+.qf-slim-window { flex: none; display: block; width: 48px; height: 38px; border: 3px solid var(--pixel-outline); overflow: hidden; }
+.qf-slim-window .qf-sprite { width: 100%; height: 100%; }
+.qf-logo { flex: none; width: 84px; height: 62px; }
+.qf-logo .qf-sprite { width: 100%; height: 100%; }
+.qf-banner-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.qf-banner-eyebrow { color: var(--qf-ink-on-gold); }
+.qf-banner-title { display: block; color: var(--qf-ink-on-gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qf-subject-tile { position: relative; display: inline-block; flex: none; width: 20px; height: 20px; }
+.qf-subject-tile .qf-sprite { width: 20px; height: 20px; }
+.qf-chain { position: absolute; top: -33px; z-index: 0; }
+.qf-chain--l { left: 15%; }
+.qf-chain--r { right: 15%; }
+.qf-chain rect.qf-c-ol { fill: var(--pixel-outline); }
+
+/* the world chip: a window onto the world's scene and its name */
+.qf-world-chip {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  border: 3px solid var(--pixel-outline);
+  color: var(--qf-w-ink);
+  padding: 0 8px 0 0;
+  font-family: var(--font-qf-display);
+  font-size: 11px; line-height: 18px; font-weight: 600; letter-spacing: .1em;
+  white-space: nowrap;
+  position: relative;
+}
+.qf-world-chip { --qf-fill-c: var(--qf-w-wash); z-index: 0; }
+.qf-chip-window { display: block; width: 40px; height: 18px; border-right: 3px solid var(--pixel-outline); overflow: hidden; }
+.qf-chip-window .qf-sprite { width: 40px; height: 18px; }
+.qf-chip-text { position: relative; }
+
+/* ---------- BossBar ---------- */
+.qf-boss { position: relative; display: flex; flex-direction: column; align-items: center; }
+.qf-boss-stage { position: relative; width: 96px; height: 96px; z-index: 1; }
+.qf-boss-stage > .qf-sprite { width: 100%; height: 100%; }
+.qf-boss-spark { position: absolute; }
+.qf-boss-spark   { left: -8px; top: 18px; }
+.qf-boss-spark--2 { left: auto; right: -10px; top: 50px; }
+.qf-boss-info { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100%; }
+.qf-boss-plate { margin-top: -6px; max-width: 100%; }
+.qf-boss-plate .qf-plate-body { display: flex; align-items: center; gap: 8px; padding: 5px 10px 6px; }
+.qf-boss-name { display: block; white-space: nowrap; color: var(--qf-ink); }
+.qf-rarity-chip {
+  display: inline-block; flex: none;
+  border: 2px solid var(--pixel-outline);
+  padding: 0 5px;
+  font-family: var(--font-qf-display); font-size: 9px; line-height: 14px; font-weight: 700; letter-spacing: .08em;
+  color: var(--qf-ink);
+  position: relative;
+}
+.qf-rarity-chip { --qf-fill-c: var(--qf-r); z-index: 0; }
+.qf-boss-plate .qf-rarity-chip { position: relative; z-index: 0; }
+.qf-hearts { display: grid; grid-template-columns: repeat(var(--qf-per-row, 12), max-content); gap: 3px; justify-content: center; }
+.qf-heart { display: block; }
+.qf-boss .qf-caption { text-align: center; }
+.qf-boss--compact { flex-direction: row-reverse; align-items: center; gap: 10px; justify-content: flex-start; }
+.qf-boss--compact .qf-boss-stage { width: 52px; height: 52px; flex: none; }
+.qf-boss--compact .qf-boss-info { align-items: flex-end; width: auto; flex: 1; min-width: 0; gap: 4px; }
+.qf-boss--compact .qf-boss-plate { margin-top: 0; max-width: 100%; }
+.qf-boss--compact .qf-boss-name { overflow: hidden; text-overflow: ellipsis; }
+.qf-boss--compact .qf-boss-plate .qf-plate-body { padding: 3px 8px 4px; }
+.qf-boss--compact .qf-hearts { justify-content: end; gap: 2px; }
+
+/* ---------- HeroCard ---------- */
+.qf-herocard .qf-plate-body { display: flex; align-items: flex-end; gap: 12px; padding: 7px 12px 8px; }
+.qf-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.qf-field--name  { flex: 1 1 140px; }
+.qf-field--class { flex: 0 1 76px; }
+.qf-field--date  { flex: 0 1 76px; }
+.qf-field-line { display: block; height: 22px; border-bottom: 2px solid var(--qf-field-line); }
+.qf-field-value { display: block; font-family: var(--font-qf-label); font-size: 14px; line-height: 20px; color: var(--qf-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qf-hero-picks { flex: none; }
+.qf-pick-row { display: flex; gap: 2px; height: 22px; align-items: flex-end; }
+.qf-pick { display: block; width: 22px; height: 22px; }
+.qf-pick .qf-sprite { width: 100%; height: 100%; }
+.qf-pick.is-chosen { outline: 2px solid var(--qf-focus-ring); outline-offset: 1px; }
+
+/* ---------- QuestionGem ---------- */
+.qf-gem { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; font-family: var(--font-qf-display); }
+.qf-gem-svg { display: block; flex: none; overflow: visible; filter: drop-shadow(2px 2px 0 var(--pixel-outline)); }
+.qf-gem-num { font-family: var(--font-qf-display); font-weight: 700; fill: var(--qf-ink-on-gold); }
+.qf-gem-marks { display: inline-flex; flex-direction: column; gap: 2px; }
+.qf-pips { display: inline-flex; gap: 1px; }
+.qf-gem-mark-text { font-size: 9px; line-height: 12px; font-weight: 700; letter-spacing: .1em; color: var(--qf-ink-soft); white-space: nowrap; }
+.qf-gem-boss {
+  font-size: 9px; line-height: 14px; font-weight: 700; letter-spacing: .12em;
+  padding: 0 5px; border: 2px solid var(--pixel-outline); color: var(--qf-ink);
+  position: relative;
+}
+.qf-gem-boss { --qf-fill-c: var(--rarity-unique); z-index: 0; }
+
+/* ---------- CompanionTip ---------- */
+.qf-tip { display: flex; align-items: flex-end; gap: 8px; max-width: 520px; }
+.qf-tip--right { flex-direction: row-reverse; }
+.qf-tip-who { flex: none; width: 68px; height: 68px; }
+.qf-tip--compact .qf-tip-who { width: 52px; height: 52px; }
+.qf-tip-who .qf-sprite { width: 100%; height: 100%; }
+.qf-tip-bubble { position: relative; flex: 1; min-width: 0; margin-bottom: 10px; }
+.qf-tip-bubble .qf-plate-body { display: flex; flex-direction: column; gap: 4px; padding: 0 14px 10px; }
+.qf-tip-tail { position: absolute; left: -9px; bottom: 12px; z-index: 1; overflow: visible; }
+.qf-tip--right .qf-tip-tail { left: auto; right: -9px; transform: scaleX(-1); }
+.qf-tip-tail rect.qf-c-ol { fill: var(--pixel-outline); }
+.qf-tip-tail rect:not(.qf-c-ol) { fill: var(--qf-parchment); }
+.qf-tip-tab {
+  align-self: flex-start;
+  margin: 0 0 2px -14px;
+  padding: 4px 12px 4px 14px;
+  border-right: 3px solid var(--pixel-outline);
+  border-bottom: 3px solid var(--pixel-outline);
+  color: var(--qf-comp-ink);
+  position: relative; z-index: 0;
+}
+.qf-tip-tab { --qf-fill-c: var(--qf-comp); }
+.qf-tip-text { display: block; color: var(--qf-ink); }
+
+/* ---------- XPTrack ---------- */
+.qf-xp { display: inline-flex; flex-direction: column; gap: 4px; }
+.qf-xp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; color: var(--qf-ink); }
+.qf-xp-head .qf-eyebrow { color: var(--qf-w-ink); }
+.qf-xp-bar { display: block; overflow: visible; }
+
+/* ---------- LootChest ---------- */
+.qf-chest .qf-plate-body { display: flex; align-items: center; gap: 12px; padding: 7px 12px 8px 8px; }
+.qf-chest-art { flex: none; width: 58px; height: 76px; }
+.qf-chest-art .qf-sprite { width: 100%; height: 100%; }
+.qf-chest-text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.qf-chest-text .qf-eyebrow { color: var(--qf-ink-on-gold); }
+.qf-chest-score { display: flex; align-items: flex-end; gap: 6px; white-space: nowrap; }
+.qf-chest-score .qf-field-label { color: var(--qf-ink-on-gold); }
+.qf-score-line { display: block; flex: none; width: 44px; height: 22px; border-bottom: 2px solid var(--qf-ink-on-gold); }
+.qf-score-total { font-family: var(--font-qf-display); font-size: 16px; line-height: 22px; font-weight: 700; color: var(--qf-ink-on-gold); }
+.qf-stars { display: flex; gap: 4px; }
+.qf-chest .qf-caption { color: var(--qf-ink-on-gold); }
+.qf-chest .qf-field-value { color: var(--qf-ink-on-gold); font-family: var(--font-qf-display); font-weight: 700; font-size: 16px; text-align: center; }
+.qf-chest .qf-star .qf-c-empty { fill: var(--qf-plate-gold-glint); }
+.qf-seal { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.qf-seal-text { font-family: var(--font-qf-display); font-size: 9px; line-height: 12px; font-weight: 700; letter-spacing: .14em; color: var(--qf-ink-on-gold); }
+
+/* ---------- interactive hearts and stars (on screen only) ---------- */
+.qf-toggle {
+  appearance: none; border: 0; margin: 0; padding: 0; background: none;
+  display: inline-grid; cursor: pointer; line-height: 0;
+}
+.qf-toggle > svg { grid-area: 1 / 1; }
+.qf-toggle[aria-pressed="false"] > .is-filled,
+.qf-toggle[aria-pressed="true"] > :not(.is-filled) { visibility: hidden; }
+.qf-toggle:focus-visible { outline: 3px solid var(--qf-focus-ring); outline-offset: 2px; }
+
+/* ---------- life: a two-frame bob and a twinkle, on screen only ---------- */
+@keyframes qf-bob { 0% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes qf-twinkle { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media screen and (prefers-reduced-motion: no-preference) {
+  .qf-bob { animation: qf-bob 1.2s steps(1, end) infinite; }
+  .qf-twinkle { animation: qf-twinkle 2.4s steps(2, end) infinite; }
+  .qf-still .qf-bob, .qf-still .qf-twinkle { animation: none; }
+}
+
+/* ---------- flowing print ---------- */
+.qf-flow { width: 100%; border-collapse: collapse; }
+.qf-flow > thead > tr > td, .qf-flow > tfoot > tr > td, .qf-flow > tbody > tr > td { padding: 0; border: 0; }
+.qf-flow-frame { display: none; }
+.qf-flow-top, .qf-flow-bottom { display: none; }
+.qf-flow-start { margin-bottom: 24px; }
+@media print {
+  .qf-flow-frame { display: block; position: fixed; left: 0; top: 0; width: 794px; height: 1123px; z-index: 0; }
+  .qf-flow-top { display: block; height: var(--qf-at-top, 112px); }
+  .qf-flow-bottom { display: block; height: var(--qf-at-bottom, 128px); }
+  .qf-flow { position: relative; z-index: 1; }
+  .qf-flow-cell { padding: 0 var(--qf-at-x, 64px) !important; }
+}
+
+/* ---------- paper ---------- */
+@media print {
+  /* 1123px is 297.1mm: a hair over A4, which spills a blank sheet after every
+     page. The sheet prints 296mm tall; the rampart scales by 0.3%. */
+  .qf-page { width: 210mm; height: 296mm; break-after: page; page-break-after: always; margin: 0; box-shadow: none; }
+  .qf-page:last-child { break-after: auto; page-break-after: auto; }
+  .qf-toggle:focus-visible { outline: none; }
+}
+
+/* =====================================================================
+   🎮 QUEST FRAMES ON THIS SITE (polymathlc/cer). Everything above is the
+   Polymath Quest Frames design system (tokens, then components), unchanged
+   apart from its Google Fonts import line: index.html asks for Pixelify Sans
+   in its print-only font request, and a print window asks in printHead().
+   ===================================================================== */
+
+/* The portal's page-1 header on a framed worksheet: the banner and the boss
+   side by side, the hero card under them. It sits in the 178mm text column
+   and is measured by the print planner like the header it replaces. */
+.qf-print-head { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 12px 14px; align-items: center; margin: 4px 0 16px; font-family: var(--font-qf-label); color: var(--qf-ink); }
+.qf-print-head--cover { align-items: end; margin-top: 0; }
+.qf-print-hero { grid-column: 1 / -1; }
+.qf-print-head--cover .qf-print-hero { grid-column: auto; }
+.qf-print-boss { width: 210px; }
+.qf-print-head .qf-banner-title { white-space: normal; overflow: visible; text-overflow: clip; }
+.qf-print-head .qf-boss--compact .qf-boss-info { align-items: flex-end; }
+.qf-print-head .qf-boss--compact .qf-caption { text-align: right; }
+/* A printed sheet names its boss in full: wrap rather than cut off. */
+.qf-print-head .qf-boss--compact .qf-boss-name { white-space: normal; overflow: visible; text-overflow: clip; text-align: right; }
+/* "Question N" with its gem in front. */
+.print-q-header.qf-q-head { display: flex; align-items: center; gap: 10px; }
+.print-q-header.qf-q-head h2 { margin: 0; }
+
+@media print {
+  /* A framed sheet: margin-free A4, padded by the sheet's old margins so its
+     content box is the 178 x 258mm the planner measured. 296mm, not 297: a
+     sheet a hair over A4 spills a blank page after it. */
+  @page qf-sheet { size: A4 portrait; margin: 0; }
+  #printOutput > .print-question-page.qf-sheet { page: qf-sheet; position: relative; box-sizing: border-box; width: 210mm; max-width: none; height: 296mm; padding: 18mm 16mm 20mm; }
+  #printOutput > .print-question-page.qf-sheet > .qf-sheet-frame { position: absolute; left: 0; top: 0; width: 210mm; height: 296mm; pointer-events: none; }
+  #printOutput > .print-question-page.qf-sheet > :not(.qf-sheet-frame) { position: relative; }
+  .qf-sheet-frame .qf-border { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+}

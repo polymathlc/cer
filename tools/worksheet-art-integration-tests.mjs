@@ -35,6 +35,7 @@ function setup() {
     _cpbMetaGet: key => state._cpbMeta[key], cpbLayout: () => ({ list: [q1, q2] }), cpbMarks: () => ({ total: 0 }),
     _wsSavedQuestions: () => [q1, q2], _wsAdhocQuestions: a => a.questions,
     _wsStudentFieldsOn: () => true, akxPrintOn: () => false, objBoxPrintOn: () => false,
+    _qfPrintCtx: () => null, _qfQuestionMarks: () => 0,
     _wnyCachedNotes: () => null, wnyPrintOn: () => false, _wsCoverHtml: () => '', _ppCoverHtml: () => '',
     pvsAllowed: () => true, pvsPoolOf: x => x || '', PVS_POOL_CPB: 'cpb',
     escapeHtml: value => String(value ?? '').replace(/[&<>"']/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[x])),

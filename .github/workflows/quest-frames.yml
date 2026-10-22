@@ -1,0 +1,35 @@
+name: Quest frames
+
+# 🎮 The Wheel Quest frame on printed worksheets: the portal's builder and My
+# Worksheets (a header on page 1, gems, a rampart in every sheet's margins) and
+# the Maths and Science creators (one Quest page per question). quest-frames.js
+# and quest-frames.css are built from the Polymath Quest Frames design system.
+on:
+  pull_request:
+    paths: ['quest-frames.js', 'quest-frames.css', 'assets/quest-frames/**', 'app.js', 'index.html', 'math-worksheet.html', 'science-worksheet.html', 'worksheet-art.js', 'tools/quest-frames-*', '.github/workflows/quest-frames.yml']
+  push:
+    branches: [main]
+    paths: ['quest-frames.js', 'quest-frames.css', 'assets/quest-frames/**', 'app.js', 'index.html', 'math-worksheet.html', 'science-worksheet.html', 'worksheet-art.js', 'tools/quest-frames-*', '.github/workflows/quest-frames.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  quest-frames:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax
+        run: |
+          node --check quest-frames.js
+          cp app.js "$RUNNER_TEMP/app.mjs" && node --check "$RUNNER_TEMP/app.mjs"
+      - name: Switch, art, portal header, margin rampart and creator pages
+        run: node --test tools/quest-frames-tests.mjs
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: Print to PDF in a real browser (background graphics off)
+        run: node tools/quest-frames-browser-check.mjs
