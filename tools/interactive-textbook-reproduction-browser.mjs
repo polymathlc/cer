@@ -143,7 +143,7 @@ try {
     assert.notEqual(await page.locator('#twinsStatus').innerText(), identicalStatus);
     assert.match(await page.locator('#twinsStatus').innerText(), /two|different|2/i);
 
-    for (const part of ['anther', 'filament', 'stigma', 'style', 'ovary', 'ovule']) {
+    for (const part of ['anther', 'filament', 'stigma', 'style', 'ovary', 'ovule', 'petal', 'sepal']) {
       await page.click(`[data-flower="${part}"]`);
       assert.match((await page.locator('#flowerInfo').innerText()).toLowerCase(), new RegExp(part), `flower explorer explains ${part}`);
     }
@@ -196,7 +196,9 @@ try {
 
     const specimens = [
       ['Maple', 'wings', 'wind'], ['Mango', 'flesh', 'animals'], ['Pong pong', 'husk', 'water'],
-      ['Saga', 'pod', 'splitting'], ['Burdock', 'flesh', 'animals'], ['Dandelion', 'wings', 'wind']
+      ['Saga', 'pod', 'splitting'], ['Burdock', 'flesh', 'animals'], ['Dandelion', 'wings', 'wind'],
+      ['Angsana', 'wings', 'wind'], ['Rambutan', 'flesh', 'animals'], ['Coconut', 'husk', 'water'],
+      ['Balsam', 'pod', 'splitting'], ['Love grass', 'flesh', 'animals'], ['Lalang', 'wings', 'wind']
     ];
     for (const [name, evidence, method] of specimens) {
       assert.match(await page.locator('#specimenName').innerText(), new RegExp(name));
@@ -258,6 +260,141 @@ try {
       assert.match(await page.locator('#classificationStatus').innerText(), new RegExp(`^Group ${group}\\.`), 'classification UI follows the observed features');
     }
 
+    // Plant reproduction labs (v1.1.0).
+    assert.deepEqual(await page.evaluate(() => window.ReproductionLesson.startErrors), [], 'every plant widget starts');
+    const plantModels = await page.evaluate(() => {
+      const p = window.ReproductionLesson.plant;
+      return {
+        routes: [['P1', 'P1'], ['P1', 'P2'], ['P2', 'Q1'], ['Q1', 'R1'], ['R1', 'P1'], ['X', 'P1']].map(([a, b]) => p.pollenRoute(a, b)),
+        harvest: [
+          p.harvest([{ pollinated: true, fertilised: 4 }, { pollinated: false, fertilised: 5 }, { pollinated: true, fertilised: 0 }, { pollinated: true, fertilised: 9 }]),
+          p.harvest([])
+        ],
+        wind: {
+          none: p.windDistance('none', 'high', 2), small: p.windDistance('small', 'high', 2), large: p.windDistance('large', 'high', 2),
+          hairs: p.windDistance('hairs', 'high', 2), off: p.windDistance('hairs', 'off', 2), low: p.windDistance('large', 'low', 2), short: p.windDistance('large', 'high', 1),
+          bad: p.windDistance('rock', 'high', 2)
+        },
+        leaf: [0, 3, 6, 10, 99].map((d) => p.seedLeafMass(d)),
+        germSteps: p.germSteps
+      };
+    });
+    assert.deepEqual(plantModels.routes, ['same-flower', 'same-plant', 'other-plant', 'other-kind', 'other-kind', null], 'pollen routes are classified by flower, plant and kind');
+    assert.deepEqual(plantModels.harvest[0], { fruits: 2, seeds: 10, withered: 2 }, 'one ovary makes one fruit, flowers without fertilised ovules wither, and at most six ovules count');
+    assert.deepEqual(plantModels.harvest[1], { fruits: 0, seeds: 0, withered: 0 });
+    const w = plantModels.wind;
+    assert.ok(w.none < w.small && w.small < w.large && w.large <= w.hairs, 'slower-falling seeds travel farther in the same wind');
+    assert.equal(w.off, 0, 'no wind, no sideways travel');
+    assert.ok(w.low < w.large && w.short < w.large, 'less wind or a lower drop gives a shorter distance');
+    assert.equal(w.bad, null);
+    for (let i = 1; i < plantModels.leaf.length; i++) assert.ok(plantModels.leaf[i] <= plantModels.leaf[i - 1], 'seed-leaf mass never rises as stored food is used');
+    assert.equal(plantModels.germSteps.indexOf('root') < plantModels.germSteps.indexOf('shoot'), true, 'the root emerges before the shoot');
+
+    // Part detective: a wrong part is rejected, then every job is matched.
+    const firstJob = await page.evaluate(() => window.ReproductionLesson.plant.detective.current());
+    const wrongPart = firstJob === 'petal' ? 'sepal' : 'petal';
+    await page.click(`[data-job="${wrongPart}"]`);
+    assert.equal(await page.evaluate(() => window.ReproductionLesson.plant.detective.solved()), 0, 'a wrong part does not solve the job');
+    assert.match(await page.locator('#jobCard').innerText(), /Try another part/);
+    for (let i = 0; i < 8; i++) {
+      const part = await page.evaluate(() => window.ReproductionLesson.plant.detective.current());
+      await page.click(`[data-job="${part}"]`);
+    }
+    assert.match(await page.locator('#jobCard').innerText(), /Case closed/);
+    assert.equal(await page.locator('#jobScore').innerText(), '8 / 8 jobs matched.');
+    await page.click('#jobRestart');
+    assert.equal(await page.evaluate(() => window.ReproductionLesson.plant.detective.solved()), 0, 'shuffle starts a new case');
+
+    // Every sorter accepts its right answers and rejects a wrong one with a hint.
+    const sorters = await page.evaluate(() => Object.entries(window.ReproductionLesson.plant.sorters).map(([name, s]) => ({ name, mountId: s.mountId, answers: s.items.map((i) => i.answer), options: s.options.map((o) => o.value) })));
+    assert.deepEqual(sorters.map((s) => s.name).sort(), ['fruits', 'parts', 'pollinators', 'processes', 'spores']);
+    for (const sorter of sorters) {
+      const rows = page.locator(`#${sorter.mountId} .sort-item`);
+      assert.equal(await rows.count(), sorter.answers.length);
+      const wrong = sorter.options.find((o) => o !== sorter.answers[0]);
+      await rows.nth(0).locator(`button[data-sort="${wrong}"]`).click();
+      assert.match(await rows.nth(0).locator('.sort-why').innerText(), /^Not quite\./, `${sorter.name}: a wrong group gets a hint`);
+      assert.equal(await rows.nth(0).evaluate((n) => n.classList.contains('miss')), true);
+      for (let i = 0; i < sorter.answers.length; i++) {
+        await rows.nth(i).locator(`button[data-sort="${sorter.answers[i]}"]`).click();
+        assert.match(await rows.nth(i).locator('.sort-why').innerText(), /^Correct\./);
+      }
+      assert.match(await page.locator(`#${sorter.mountId} + .tally`).innerText(), new RegExp(`^${sorter.answers.length} / ${sorter.answers.length} sorted correctly · All correct!`));
+    }
+    const sorterAnswers = await page.evaluate(() => {
+      const s = window.ReproductionLesson.plant.sorters;
+      const find = (name, text) => s[name].items.find((i) => i.text.startsWith(text)).answer;
+      return [find('fruits', 'Carrot'), find('fruits', 'Pea pod'), find('spores', 'Pine'), find('spores', 'Moss'), find('pollinators', 'Large, feathery'), find('parts', 'Petal'), find('processes', 'After this process')];
+    });
+    assert.deepEqual(sorterAnswers, ['not', 'fruit', 'seeds', 'spores', 'wind', 'neither', 'fertilisation'], 'sorter answers stay true to the science');
+
+    // The bee garden explains all four routes.
+    for (const [from, to, route, wording] of [['P1', 'P1', 'same-flower', /same flower/i], ['P1', 'P2', 'same-plant', /same plant/i], ['P2', 'Q1', 'other-plant', /different plants of the same kind/i], ['Q1', 'R1', 'other-kind', /different kinds/i]]) {
+      await page.selectOption('#beeFrom', from);
+      await page.selectOption('#beeTo', to);
+      await page.click('#beeGo');
+      assert.equal(await page.locator('#beeStatus').getAttribute('data-route'), route);
+      assert.match(await page.locator('#beeStatus').innerText(), wording);
+    }
+    assert.match(await page.locator('#beeLog').innerText(), /\(4 \/ 4\)/);
+    await page.locator('[data-garden="Q1"]').click();
+    assert.equal(await page.locator('#beeFrom').inputValue(), 'Q1', 'tapping a flower picks the pollen source');
+
+    // Five flowers become a harvest.
+    assert.equal(await page.locator('#flowerBed .bed-flower').count(), 5);
+    assert.equal(await page.locator('#harvestStatus').getAttribute('data-fruits'), '3');
+    assert.equal(await page.locator('#harvestStatus').getAttribute('data-seeds'), '12');
+    await page.check('[data-bed-pollinated="2"]');
+    await setRange(page, '[data-bed-fertilised="2"]', 5);
+    assert.equal(await page.locator('#harvestStatus').getAttribute('data-fruits'), '4');
+    assert.equal(await page.locator('#harvestStatus').getAttribute('data-seeds'), '17');
+    await page.uncheck('[data-bed-pollinated="1"]');
+    assert.equal(await page.locator('[data-bed-fertilised="1"]').isDisabled(), true, 'an unpollinated flower cannot have fertilised ovules');
+    assert.equal(await page.locator('#harvestStatus').getAttribute('data-seeds'), '11');
+    assert.match(await page.locator('#bedFlower1').innerText(), /Not pollinated: withers/);
+
+    // Wind tunnel: a fair test is recognised, an unfair one is flagged.
+    await page.selectOption('#windSeed', 'none');
+    await page.selectOption('#windFan', 'high');
+    await page.selectOption('#windHeight', '2');
+    await page.click('#windDrop');
+    await page.selectOption('#windSeed', 'large');
+    await page.click('#windDrop');
+    assert.match(await page.locator('#windStatus').innerText(), /only the seed changed.*fair test/i);
+    await page.selectOption('#windSeed', 'hairs');
+    await page.selectOption('#windFan', 'low');
+    await page.click('#windDrop');
+    assert.match(await page.locator('#windStatus').innerText(), /more than one thing changed/i);
+    await page.selectOption('#windFan', 'off');
+    await page.selectOption('#windSeed', 'hairs');
+    await page.click('#windDrop');
+    assert.match(await page.locator('#windStatus').innerText(), /0\.0 m.*straight down/);
+    assert.equal(await page.locator('#windTable tbody tr').count(), 4);
+    await page.click('#windClear');
+    assert.equal(await page.locator('#windTable tbody tr').count(), 0);
+
+    // Seed anatomy, the seed-leaf graph and germination order.
+    for (const [part, wording] of [['coat', /protects/i], ['leaves', /store food/i], ['root', /first part.*downwards/i], ['shoot', /upwards/i]]) {
+      await page.click(`[data-seedpart="${part}"]`);
+      assert.match(await page.locator('#seedInfo').innerText(), wording);
+      assert.equal(await page.locator(`[data-seed-art="${part}"]`).evaluate((n) => n.classList.contains('on')), true);
+    }
+    assert.equal(await page.locator('#leafGraph').evaluate((n) => n.classList.contains('graph-hidden')), true, 'the graph waits for a prediction');
+    await page.click('[data-predict="up"]');
+    assert.match(await page.locator('#leafStatus').innerText(), /^Look at the graph/);
+    await page.click('[data-predict="down"]');
+    assert.match(await page.locator('#leafStatus').innerText(), /^Good prediction/);
+    assert.equal(await page.locator('#leafMassLine').isVisible(), true);
+    await setRange(page, '#leafDay', 10);
+    assert.match(await page.locator('#leafMassRead').innerText(), /10%/);
+    assert.match(await page.locator('#leafStatus').innerText(), /drop off/);
+    await page.click('#germPick button[data-germ="root"]');
+    assert.match(await page.locator('#germOrderStatus').innerText(), /^Try again/);
+    for (const id of plantModels.germSteps) await page.click(`#germPick button[data-germ="${id}"]`);
+    assert.match(await page.locator('#germOrderStatus').innerText(), /All in order/);
+    await page.click('#germReset');
+    assert.equal(await page.evaluate(() => window.ReproductionLesson.plant.germOrder.step()), 0);
+
     // A wrong answer must supply feedback without marking the section complete.
     const checks = await page.evaluate(() => window.ReproductionLesson.questions.map(({ id, correct, choices }) => ({ id, correct, count: choices.length })));
     assert.deepEqual(checks.map((question) => question.id), sections.slice(0, 10));
@@ -273,7 +410,7 @@ try {
     }
 
     const apply = await page.evaluate(() => window.ReproductionLesson.applyQuestions.map(({ id, correct }) => ({ id, correct })));
-    assert.ok(apply.length >= 7, 'the textbook application questions and subparts are included');
+    assert.ok(apply.length >= 14, 'the application questions include the plant practice set');
     assert.equal(await page.locator('#applyQuestions fieldset[data-question]').count(), apply.length);
     for (const { id, correct } of apply) await page.click(`#applyQuestions fieldset[data-question="${id}"] button[data-answer="${correct}"]`);
     assert.equal(await page.evaluate(() => window.ReproductionLesson.progress.isDone('apply')), true, 'complete application work marks its section done');
@@ -289,7 +426,7 @@ try {
     if (shots) {
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({ path: path.join(shots, 'reproduction-desktop.png') });
-      for (const id of ['human-development', 'flowers', 'fertilisation', 'dispersal', 'germination', 'apply']) {
+      for (const id of ['human-development', 'flowers', 'pollination', 'fertilisation', 'dispersal', 'germination', 'spores', 'apply', 'learnt']) {
         await page.locator(`section[data-section="${id}"]`).screenshot({ path: path.join(shots, `reproduction-${id}.png`) });
       }
     }
@@ -328,10 +465,19 @@ try {
     assert.notEqual(await page.locator('#humanStage').innerText(), before, 'human development responds to touch');
     await page.locator('[data-flower="ovule"]').tap();
     assert.match(await page.locator('#flowerInfo').innerText(), /ovule/i);
+    await page.locator('#beeGo').tap();
+    assert.match(await page.locator('#beeStatus').innerText(), /same plant/i, 'the bee garden responds to touch');
+    await page.locator('#windDrop').tap();
+    assert.match(await page.locator('#windStatus').innerText(), /landed/, 'the wind tunnel responds to touch');
+    await page.locator('[data-seedpart="root"]').tap();
+    assert.match(await page.locator('#seedInfo').innerText(), /root/i);
     if (shots) {
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({ path: path.join(shots, 'reproduction-phone.png') });
       await page.locator('section[data-section="germination"]').screenshot({ path: path.join(shots, 'reproduction-phone-germination.png') });
+      for (const id of ['pollination', 'fertilisation', 'dispersal']) {
+        await page.locator(`section[data-section="${id}"]`).screenshot({ path: path.join(shots, `reproduction-phone-${id}.png`) });
+      }
     }
     await healthyPage(session, 'phone');
     await context.close();
@@ -359,4 +505,4 @@ try {
   await new Promise((resolve) => server.close(resolve));
 }
 
-console.log('Reproduction textbook: science models, chapter widgets, assessment, saved progress, catalogue, desktop, phone and reduced motion pass.');
+console.log('Reproduction textbook: science models, chapter widgets, plant labs and sorters, assessment, saved progress, catalogue, desktop, phone and reduced motion pass.');
