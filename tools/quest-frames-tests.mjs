@@ -327,8 +327,8 @@ test('framed portal sheets: margin-free A4, padded down to the box the planner p
 test('app.js: both print doors, the preview and the planner all carry the frame', () => {
   assert.match(APP, /function _qfPrintCtx\(selected, title\) \{\n  const QC = window\.QuestFramesCer;\n  if \(!QC \|\| !_isAdmin\(\) \|\| !QC\.on\(\)\) return null;/, 'off, missing or not the teacher → null → the old sheet');
   assert.match(APP, /const total = qs\.reduce\(\(t, x\) => t \+ _qfQuestionMarks\(x\), 0\);\n  const q = QC\.ctx\(\{ subject: 'science', title, topics: qs\.map\(x => x && x\.topic\), questions: qs\.length, total \}\);/, 'the chest is scored out of the sheet\'s marks');
-  assert.match(APP, /objBoxPrintOn\('builder'\), wsArtwork, _qfPrintCtx\(selected, title\)\);/, 'worksheet builder passes it');
-  assert.match(APP, /objBoxPrintOn\('saved'\), ws\.artwork, _qfPrintCtx\(selected, ws\.title\)\);/, 'My Worksheets passes it');
+  assert.match(APP, /objBoxPrintOn\('builder'\), wsArtwork, _qfPrintCtx\(selected, title\)(?:, [^;\n]+)?\);/, 'worksheet builder passes it');
+  assert.match(APP, /objBoxPrintOn\('saved'\), ws\.artwork, _qfPrintCtx\(selected, ws\.title\)(?:, [^;\n]+)?\);/, 'My Worksheets passes it');
   assert.match(APP, /questFrame: \(!o\.noTags && \(ctx\.where === 'builder' \|\| ctx\.where === 'saved'\)\) \? _qfPrintCtx\(selected, title\) : null,/, 'the preview paginates with the same lead; the Study Buddy photograph stays plain');
   assert.match(APP, /function _wsHeaderHtml\(worksheetTitle, hasCover, noFields, questFrame\) \{\n(?:  \/\/[^\n]*\n)*  if \(questFrame && window\.QuestFramesCer\) return window\.QuestFramesCer\.portalLead\(questFrame, hasCover, noFields\);/);
   assert.equal((APP.match(/_wsHeaderHtml\(worksheetTitle, hasCover, noFields, questFrame\)/g) || []).length, 3, 'both header call sites pass it');

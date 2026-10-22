@@ -1,0 +1,42 @@
+name: The Polymath (answer-key QR tutor)
+
+on:
+  pull_request:
+    paths: ['app.js', 'index.html', 'polymath.html', 'polymath-tutor.js', 'polymath-tutor-core.mjs', 'vendor/qrcode-generator.js', 'tools/polymath-tutor-*.mjs', '.github/workflows/polymath-tutor.yml']
+  push:
+    branches: [main]
+    paths: ['app.js', 'index.html', 'polymath.html', 'polymath-tutor.js', 'polymath-tutor-core.mjs', 'vendor/qrcode-generator.js', 'tools/polymath-tutor-*.mjs', '.github/workflows/polymath-tutor.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  polymath-tutor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Snapshot, URL, prompts and export wiring
+        run: |
+          node --check app.js
+          node --check polymath-tutor.js
+          node --test tools/polymath-tutor-tests.mjs
+          node tools/answer-key-tests.mjs
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/polymath-browser" playwright@1.62.1
+          "$RUNNER_TEMP/polymath-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: The shipped page on a phone, with a fake Firebase
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/polymath-browser/node_modules/playwright
+          POLYMATH_QA_DIR: ${{ runner.temp }}/polymath-qa
+        run: node tools/polymath-tutor-browser.mjs
+      - name: Keep the screenshots for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: polymath-tutor-qa
+          path: ${{ runner.temp }}/polymath-qa
+          if-no-files-found: ignore
