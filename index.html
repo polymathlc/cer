@@ -15,7 +15,9 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.445.0">
+  <link rel="modulepreload" href="app.js?v=1.446.0">
+<!-- 🙋 Consults (v1.446.0): the archive window shared with Study Buddy, Ans Key and the Maths portal. -->
+<link rel="stylesheet" href="consult-answer.css?v=1.446.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -38,7 +40,7 @@
      preview copy these links with media="all"). quest-frames.css is loaded the
      same non-blocking way. -->
 <link rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Pixelify+Sans:wght@400..700&display=swap">
-<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.445.0">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.446.0">
 
 <!-- Tailwind, prebuilt. This used to be <script src="cdn.tailwindcss.com">:
      the Play CDN, which ships a full CSS compiler to the browser, scans the
@@ -348,6 +350,19 @@ body {
 body.realm-embers .nav-group-head { color: rgba(240,205,122,0.72); }
 body.realm-embers .nav-group-head:hover { background: rgba(240,205,122,0.10); color: #fff6e2; }
 body.realm-embers .nav-group-body { border-left-color: rgba(240,205,122,0.18); }
+/* 🙋 CONSULTS (v1.445.0) — the sidebar button consult-bridge.js paints.
+   A <button>, not a .nav-item, so the role sweeps over .nav-item never
+   show or hide it: the bridge alone decides, from the signed-in account. */
+.nav-consult-btn {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 10px 14px; margin: 0 0 2px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: rgba(255,255,255,0.6);
+  font: inherit; font-size: 0.88rem; font-weight: 500; text-align: left; cursor: pointer;
+  transition: all var(--transition);
+}
+.nav-consult-btn:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.9); }
+.nav-consult-btn:focus-visible { outline: 2px solid rgba(255,255,255,0.4); outline-offset: -2px; }
+.nav-consult-btn.consultOn { color: #FFE0B2; background: rgba(255,204,128,0.12); font-weight: 700; }
 .nav-item {
   display: flex;
   align-items: center;
@@ -10276,6 +10291,9 @@ html { scroll-behavior:smooth; }
       <div class="nav-item" data-page="community" onclick="navigateTo('community')">
         <span class="ico">🏛️</span> Community
       </div>
+      <!-- 🙋 Consults (v1.446.0): the teacher's list of every call and question, or the student's
+           window to ask and to watch the video answers. consult-bridge.js shows it once signed in. -->
+      <button class="nav-consult-btn" id="consultLogBtn" type="button" hidden style="display:none;">🙋 Consults</button>
       <!-- COLLAPSIBLE GROUPS. Every group is a native <details>; navGroups* in app.js remembers which are open per account, opens the group holding the active page, and hides a group whose every item is hidden for this role. A nav item's own markup is unchanged — only where it sits. -->
       <!-- ✏️ Questions — everything about authoring and keeping the bank (admin / employee) -->
       <details class="nav-group admin-only" data-group="questions">
@@ -16257,8 +16275,10 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script src="worksheet-cover.js?v=1.445.0"></script>
-  <script src="quest-frames.js?v=1.445.0"></script>
-  <script type="module" src="app.js?v=1.445.0"></script>
+  <script src="worksheet-cover.js?v=1.446.0"></script>
+  <script src="quest-frames.js?v=1.446.0"></script>
+  <script defer src="consult-answer.js?v=1.446.0"></script>
+  <script defer src="consult-bridge.js?v=1.446.0"></script>
+  <script type="module" src="app.js?v=1.446.0"></script>
 </body>
 </html>

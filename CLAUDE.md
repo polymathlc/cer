@@ -2,6 +2,18 @@
 
 Guidance for Claude when working in this repo.
 
+## 🙋 Consults — shared with Study Buddy, Ans Key and the Maths portal (v1.446.0)
+
+`consult-answer.js` / `consult-answer.css` are byte for byte polymathlc/tutor's (copy fixes across, never
+re-derive); `consult-bridge.js` is byte for byte the Maths portal's. The bridge loads the SAME gstatic
+modular SDK files this app imports (the `sdk` passed to `ConsultBridge.attach` must match the imports), wraps
+them in the compat shape consult-answer.js reads, sets `window.ConsultEnv` and paints `#consultLogBtn`:
+the teacher (chungzhikai@gmail.com only — not every portal admin) gets the log of every call and question
+from all four apps with 📝 Answer / Join / 🗑; a student gets a box to ask (text + optional photo, emailed
+through Study Buddy's `studyBuddyConsult` endpoint) and every video answer. Anonymous guests get nothing.
+Run `node --test tools/consult-bridge-tests.mjs` after touching any of it.
+
+
 ## 🔢 Question numbers (v1.433.0)
 
 - Every bank and vetting question carries `qno`, a whole number shown as `#123` (`.qb-qno` chip on the bank card, bank tile and vetting card, and in the "Editing:" toast). Search `#123` in any box that uses `parseSearchTokens` to find exactly that question (`qNoParseToken` turns `#12` into `#12#`, and `extractQuestionSearchText` carries `#N#`, so #12 never finds #123). A bare `123` stays a word search. Ans Key's question bank picker (`polymathlc/anskey`, `question-bank.js`) reads the same field and finds `#123` and `123` the same way.

@@ -189,6 +189,18 @@ if (RECAPTCHA_SITE_KEY && !RECAPTCHA_SITE_KEY.startsWith("PASTE_")) {
   }
 }
 
+// 🙋 CONSULTS (v1.446.0) — the button shared with Study Buddy, Ans Key and the
+// Maths portal. consult-bridge.js loads the same modular SDK files this
+// module imported (same URLs, so the same Firestore, user and App Check) and
+// wraps them for consult-answer.js. The version here must match the imports
+// above; the bridge does nothing until it is attached.
+try {
+  if (window.ConsultBridge && typeof window.ConsultBridge.attach === 'function') {
+    window.ConsultBridge.attach({ app: 'cer', sdk: '11.10.0', firebaseApp: app, appCheck: ainsteinAppCheck,
+      toast: (msg) => { try { showToast(msg, 'info'); } catch (e) {} } });
+  }
+} catch (e) { console.warn('consult: the button could not start', e); }
+
 let geminiModel = null;
 let _aiInstance = null;
 // Image generation / editing models ("Nano Banana"). Tried in order; the
@@ -4514,7 +4526,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.445.0';
+const APP_VERSION = 'v1.446.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5205,6 +5217,8 @@ onAuthStateChanged(auth, (user) => {
     try { fcPaintDueBadge(); } catch (_) {}
     showPage(signedOutEntryPage());
   }
+  // 🙋 Consults: the bridge follows THIS handler rather than keeping a listener of its own.
+  try { if (window.ConsultBridge && window.ConsultBridge.authChanged) window.ConsultBridge.authChanged(user); } catch (e) {}
 });
 
 // =====================================================================
