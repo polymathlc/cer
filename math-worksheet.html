@@ -2881,7 +2881,7 @@
         <button class="btn admin-only" id="exportHtmlBtn">Download HTML</button>
         <button class="btn admin-only" id="designViewBtn" title="Open the A4 design surface: see page breaks, resize blocks, add manual breaks, then export the exact pages to PDF">🎨 Design view</button>
         <button class="btn" id="exportPdfBtn">Print / Export PDF</button>
-        <label class="btn preview-toggle" style="cursor:pointer;" title="Print each question as a Wheel Quest page: a pixel brick wall, a quest banner and boss with a heart per question on page 1, a loot gem on each number and a treasure chest at the end. Remembered on this device for every worksheet builder."><input type="checkbox" data-quest-frame-toggle style="margin-right:6px;" /> 🎮 Quest frame</label>
+        <label class="btn preview-toggle admin-only" data-quest-frame-box style="cursor:pointer;" title="Print each question as a Wheel Quest page: a pixel brick wall, a quest banner and boss with a heart per question on page 1, a loot gem on each number and a treasure chest at the end. Teacher only, and never remembered: it starts unticked on every visit, so a sheet is framed only when you tick this before printing."><input type="checkbox" data-quest-frame-toggle style="margin-right:6px;" /> 🎮 Quest frame</label>
         <button class="btn" id="practiceModeBtn" title="Try the worksheet on screen — select answers and check your score">✏️ Practice mode</button>
         <span class="tb-sep admin-only" aria-hidden="true"></span>
         <button class="btn admin-only" id="saveJsonBtn">Save JSON</button>
@@ -6649,7 +6649,9 @@ function buildPrintableHtml() {
   // 🎮 Quest frame (quest-frames.js, the switch beside Print / Export PDF):
   // every question sheet becomes a Wheel Quest page. Off — or the frame's
   // script missing — and this builds byte for byte the document it always did.
-  const qfc = window.QuestFramesCer && QuestFramesCer.on() ? QuestFramesCer : null;
+  // The teacher's alone: isAdmin() is asked HERE as well as by the switch,
+  // because hiding a toggle is never the lock.
+  const qfc = window.QuestFramesCer && isAdmin() && QuestFramesCer.on() ? QuestFramesCer : null;
   const qfBody = qfc ? qfc.creatorBody({
     subject: 'math',
     title: state.title,
@@ -7628,6 +7630,13 @@ async function signOutUser() {
 }
 
 function refreshAuthUi() {
+  // 🎮 The Quest frame switch is the teacher's alone and never remembered:
+  // hidden and refused for a student or a signed-out page, and unticked
+  // whenever the account changes (quest-frames.js, QuestFramesCer.roleChanged).
+  if (window.QuestFramesCer) {
+    QuestFramesCer.teacher(isAdmin);
+    QuestFramesCer.roleChanged(currentUser ? currentUser.uid : '');
+  }
   const chip = document.getElementById('authChip');
   const signInBtn = document.getElementById('googleSignInBtn');
   const signOutBtn = document.getElementById('signOutBtn');

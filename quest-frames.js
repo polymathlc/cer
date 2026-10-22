@@ -1501,8 +1501,8 @@
 /* =====================================================================
    🎮 QUEST FRAMES ON THIS SITE (polymathlc/cer).
    Everything above this line is the Polymath Quest Frames design system's
-   bundle, unchanged. Below: where this site keeps the art, the one switch
-   every worksheet builder shares, and the glue the builders call.
+   bundle, unchanged. Below: where this site keeps the art, the teacher's
+   one switch every worksheet builder shares, and the glue the builders call.
    ===================================================================== */
 (function (global) {
   'use strict';
@@ -1515,7 +1515,6 @@
     catch (e) { return 'https://polymathlc.com.sg/'; }
   })();
   var VERSION = '1.444.0';
-  var KEY = 'cer.questFrame';
 
   /* Art. The logo, the subject icons and the companions are already on this
      site; the Wheel Quest art is a print-sized copy in assets/quest-frames
@@ -1534,21 +1533,60 @@
   function abs(path) { return new URL(path, BASE).href; }
   QF.art.use({ resolve: function (e) { return abs(artPath(e)); } });
 
-  /* ONE switch for every builder on this device: the portal's worksheet
-     builder, My Worksheets, and the Maths and Science creators. Off until a
-     teacher ticks it, so nothing prints differently by surprise. */
-  var memory = null;
-  function on() {
-    try { var v = global.localStorage.getItem(KEY); if (v === '1' || v === '0') return v === '1'; } catch (e) { /* storage blocked */ }
-    return memory === true;
+  /* ONE switch for every builder on the page: the portal's worksheet
+     builder, My Worksheets, and the Maths and Science creators. It is the
+     TEACHER's alone, and it is NEVER REMEMBERED.
+     - The page says who the teacher is (`teacher(fn)`). Until it does, and
+       whenever `fn()` says no or throws, every toggle is hidden, disabled and
+       unticked and `on()` is false, so a student, an employee, "Practise as"
+       and a signed-out page can never print a framed sheet. It fails CLOSED:
+       a page that forgets to register prints the old sheet, never a frame.
+     - Nothing is stored. Every visit starts unticked, so a worksheet is framed
+       only when the teacher ticked the box before generating it.
+     - `roleChanged(who)` unticks it whenever the PERSON changes (a sign-in, a
+       sign-out, a hand-over to a student) and only then: a page that redraws
+       its sign-in strip for the same teacher keeps the tick just made.
+     - A toggle's box (its `[data-quest-frame-box]`, else its `<label>`) is
+       hidden with an inline display and given back the display the page drew
+       it with, because the portal lays its labels out with an inline flex. */
+  var ticked = false;
+  var teacherCheck = null;
+  var lastWho = null;
+  function teacher() {
+    if (typeof teacherCheck !== 'function') return false;
+    try { return !!teacherCheck(); } catch (e) { return false; }
+  }
+  function on() { return ticked && teacher(); }
+  function toggleBox(el) {
+    if (!el || typeof el.closest !== 'function') return null;
+    return el.closest('[data-quest-frame-box]') || el.closest('label');
+  }
+  function showBox(box, show) {
+    if (!box || !box.style || typeof box.getAttribute !== 'function') return;
+    if (box.getAttribute('data-qf-display') == null) box.setAttribute('data-qf-display', box.style.display || '');
+    box.style.display = show ? box.getAttribute('data-qf-display') : 'none';
   }
   function sync() {
+    var t = teacher();
+    if (!t) ticked = false;
     if (!doc) return;
-    Array.prototype.forEach.call(doc.querySelectorAll('input[data-quest-frame-toggle]'), function (el) { el.checked = on(); });
+    Array.prototype.forEach.call(doc.querySelectorAll('input[data-quest-frame-toggle]'), function (el) {
+      el.checked = ticked;
+      el.disabled = !t;
+      showBox(toggleBox(el), t);
+    });
   }
   function set(v) {
-    memory = !!v;
-    try { global.localStorage.setItem(KEY, v ? '1' : '0'); } catch (e) { /* memory keeps it for the visit */ }
+    ticked = !!v && teacher();
+    sync();
+  }
+  function setTeacher(fn) {
+    teacherCheck = typeof fn === 'function' ? fn : null;
+    sync();
+  }
+  function roleChanged(who) {
+    who = who == null ? '' : String(who);
+    if (who !== lastWho) { lastWho = who; ticked = false; }
     sync();
   }
   if (doc) {
@@ -1726,10 +1764,12 @@
 
   global.QuestFramesCer = {
     version: VERSION,
-    key: KEY,
     on: on,
     set: set,
     sync: sync,
+    teacher: setTeacher,
+    isTeacher: teacher,
+    roleChanged: roleChanged,
     ctx: ctx,
     preload: preload,
     ready: ready,

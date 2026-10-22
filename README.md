@@ -5,8 +5,15 @@
 Tick **🎮 Quest frame** and a printed worksheet becomes a level of Wheel Quest,
 the pixel RPG the class plays on the name wheel. The tick is in the worksheet
 builder's Extras, in My Worksheets' printing options, and beside **Print /
-Export PDF** in the Maths and Science worksheet creators. It is one switch for
-all of them, remembered on the device and off until you turn it on.
+Export PDF** in the Maths and Science worksheet creators.
+
+- **Only the teacher's account sees it.** Students, employee accounts,
+  "Practise as" and signed-out pages never see the tick box and can never
+  print a framed sheet. Every print path also checks the account again, so a
+  hidden box is not the only thing stopping them.
+- **It starts unticked every time and is never remembered.** A worksheet is
+  framed only when you tick the box before you print it. Reloading the page or
+  changing account (including handing the device to a student) clears it.
 
 - **A brick rampart round every sheet**, in one of ten worlds picked from the
   worksheet's topic: Heat is Ember Caldera, food chains are Mistmire Marsh,

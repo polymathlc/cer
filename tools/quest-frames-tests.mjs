@@ -17,10 +17,32 @@ const MATH = read('math-worksheet.html');
 const SCIENCE = read('science-worksheet.html');
 const APP_VERSION = APP.match(/const APP_VERSION = 'v([^']+)'/)[1];
 
+// A toggle as the page draws it: a checkbox inside a box (the portal's <label>
+// carries an inline flex, the creators' none) that the switch hides and gives back.
+function toggle(display) {
+  const attrs = new Map();
+  const box = {
+    style: { display },
+    getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null),
+    setAttribute: (k, v) => attrs.set(k, String(v))
+  };
+  const input = {
+    checked: false,
+    disabled: false,
+    matches: (sel) => sel === 'input[data-quest-frame-toggle]',
+    closest: (sel) => (sel === 'label' ? box : null)
+  };
+  return { input, box };
+}
+
 function load({ stored = null } = {}) {
+  // Storage is watched, never fed: the switch must neither read nor write it.
   const store = new Map(stored == null ? [] : [['cer.questFrame', stored]]);
+  const storageCalls = [];
   const listeners = [];
-  const inputs = [{ checked: false, matches: (s) => s === 'input[data-quest-frame-toggle]' }];
+  const toggles = [toggle('flex'), toggle('')];
+  const inputs = toggles.map((t) => t.input);
+  const boxes = toggles.map((t) => t.box);
   const document = {
     currentScript: { src: 'https://polymathlc.com.sg/quest-frames.js?v=' + APP_VERSION },
     readyState: 'complete',
@@ -31,11 +53,18 @@ function load({ stored = null } = {}) {
   const window = {
     document,
     location: { href: 'https://polymathlc.com.sg/index.html' },
-    localStorage: { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) }
+    localStorage: {
+      getItem: (k) => { storageCalls.push(['get', k]); return store.has(k) ? store.get(k) : null; },
+      setItem: (k, v) => { storageCalls.push(['set', k]); store.set(k, String(v)); }
+    }
   };
   const ctx = vm.createContext({ window, document, URL, Image: function () {}, setTimeout, Promise, console });
   vm.runInContext(SRC, ctx);
-  return { QF: window.QuestFrames, QC: window.QuestFramesCer, store, listeners, inputs };
+  const change = (i, checked) => {
+    inputs[i].checked = checked;
+    listeners.find(([type]) => type === 'change')[1]({ target: inputs[i] });
+  };
+  return { QF: window.QuestFrames, QC: window.QuestFramesCer, store, storageCalls, listeners, inputs, boxes, change };
 }
 
 test('the script carries the release version the pages load it with', () => {
@@ -49,22 +78,104 @@ test('the script carries the release version the pages load it with', () => {
   assert.ok(!/<\/script|<!--/i.test(SRC), 'no sequence that would end an inline copy early');
 });
 
-test('ONE switch, off until a teacher ticks it, remembered on the device', () => {
-  const off = load();
-  assert.equal(off.QC.on(), false, 'off by default: nothing prints differently by surprise');
-  off.QC.set(true);
-  assert.equal(off.store.get('cer.questFrame'), '1');
-  assert.equal(off.QC.on(), true);
-  assert.equal(off.inputs[0].checked, true, 'every toggle on the page is synced');
-  const change = off.listeners.find(([type]) => type === 'change')[1];
-  off.inputs[0].checked = false;
-  change({ target: off.inputs[0] });
-  assert.equal(off.QC.on(), false, 'unticking any toggle turns it off everywhere');
-  assert.equal(load({ stored: '1' }).QC.on(), true, 'a stored choice is read back');
+test('ONE switch, the TEACHER\'s alone: hidden and refused until the page names the teacher', () => {
+  const page = load();
+  // Fails CLOSED: before the page registers who the teacher is, nothing can frame a sheet.
+  assert.equal(page.QC.on(), false, 'off on arrival');
+  assert.equal(page.QC.isTeacher(), false, 'nobody is the teacher until the page says so');
+  assert.deepEqual(page.boxes.map((b) => b.style.display), ['none', 'none'], 'every toggle is hidden');
+  assert.deepEqual(page.inputs.map((i) => i.disabled), [true, true], 'and disabled');
+  page.QC.set(true);
+  assert.equal(page.QC.on(), false, 'a tick from code is refused');
+  page.change(0, true);
+  assert.equal(page.QC.on(), false, 'a tick from the page is refused');
+  assert.equal(page.inputs[0].checked, false, 'and the box is put back unticked');
+
+  let role = 'student';
+  page.QC.teacher(() => role === 'admin');
+  page.QC.roleChanged('kid:student');
+  assert.equal(page.boxes[0].style.display, 'none', 'a student never sees it');
+  page.change(0, true);
+  assert.equal(page.QC.on(), false, 'and cannot tick it');
+
+  role = 'employee';
+  page.QC.roleChanged('writer:employee');
+  assert.equal(page.boxes[0].style.display, 'none', 'nor an employee');
+
+  role = 'admin';
+  page.QC.roleChanged('teacher:admin');
+  assert.deepEqual(page.boxes.map((b) => b.style.display), ['flex', ''], 'the teacher sees each toggle laid out as the page drew it');
+  assert.deepEqual(page.inputs.map((i) => i.disabled), [false, false]);
+  assert.equal(page.QC.on(), false, 'unticked on arrival: a sheet is framed only when the box is ticked first');
+  page.change(1, true);
+  assert.equal(page.QC.on(), true, 'the teacher ticks it');
+  assert.deepEqual(page.inputs.map((i) => i.checked), [true, true], 'every toggle on the page follows');
+  page.QC.roleChanged('teacher:admin');
+  assert.equal(page.QC.on(), true, 'redrawing the page for the same teacher keeps the tick just made');
+  page.change(0, false);
+  assert.equal(page.QC.on(), false, 'unticking any toggle turns it off everywhere');
+  page.change(0, true);
+  page.QC.roleChanged('second-teacher:admin');
+  assert.equal(page.QC.on(), false, 'another teacher signing in on this device starts unticked too');
+  assert.deepEqual(page.boxes.map((b) => b.style.display), ['flex', ''], 'and still sees the toggles');
+  page.change(0, true);
+
+  // A hand-over: "Practise as" runs as the student, so the role check says no at once.
+  role = 'student';
+  assert.equal(page.QC.on(), false, 'the moment the person is not the teacher, the frame is off');
+  page.QC.roleChanged('kid:student');
+  assert.deepEqual(page.boxes.map((b) => b.style.display), ['none', 'none'], 'hidden again for the student');
+  assert.deepEqual(page.inputs.map((i) => i.checked), [false, false]);
+  role = 'admin';
+  page.QC.roleChanged('teacher:admin');
+  assert.equal(page.QC.on(), false, 'back to the teacher: unticked, the tick did not survive the hand-over');
+
+  const broken = load();
+  broken.QC.teacher(() => { throw new Error('signed-in state not ready'); });
+  broken.QC.set(true);
+  assert.equal(broken.QC.on(), false, 'a role check that throws is a no');
+  broken.QC.teacher(null);
+  assert.equal(broken.QC.isTeacher(), false, 'unregistering is a no');
+});
+
+test('the switch is NEVER REMEMBERED: every visit starts unticked', () => {
+  const page = load({ stored: '1' });
+  page.QC.teacher(() => true);
+  page.QC.roleChanged('teacher:admin');
+  assert.equal(page.QC.on(), false, 'a value left in storage by anything is ignored');
+  page.QC.set(true);
+  assert.equal(page.QC.on(), true);
+  assert.deepEqual(page.storageCalls, [], 'the switch never reads or writes storage');
+  const next = load();
+  next.QC.teacher(() => true);
+  next.QC.roleChanged('teacher:admin');
+  assert.equal(next.QC.on(), false, 'the next visit starts unticked');
+  const tail = SRC.slice(SRC.indexOf('QUEST FRAMES ON THIS SITE'));
+  assert.doesNotMatch(tail, /localStorage|sessionStorage|indexedDB/, 'nothing in this site\'s glue can remember it');
+  assert.equal(page.QC.key, undefined, 'no storage key is exported');
+});
+
+test('every page names the teacher, and every print door asks again', () => {
   for (const id of ['wsQuestFrame', 'mwQuestFrame']) {
     assert.match(INDEX, new RegExp(`id="${id}" data-quest-frame-toggle`), id + ' is a shared toggle');
   }
-  for (const page of [MATH, SCIENCE]) assert.match(page, /data-quest-frame-toggle/, 'each creator has the toggle beside Print / Export PDF');
+  assert.equal((INDEX.match(/Teacher only, and never remembered/g) || []).length, 2, 'both portal toggles say so');
+  assert.doesNotMatch(INDEX, /Remembered on this device for every worksheet builder/);
+  // The portal: _isAdmin() is the one test (an admin as themselves; "Practise as" runs as the student).
+  assert.match(APP, /function _isAdmin\(\) \{ return !!\(currentUser && currentUser\.role === 'admin'\); \}/);
+  assert.match(APP, /if \(typeof window !== 'undefined' && window\.QuestFramesCer\) window\.QuestFramesCer\.teacher\(_isAdmin\);/, 'the portal names the teacher');
+  assert.match(APP, /window\.QuestFramesCer\.roleChanged\(currentUser \? currentUser\.uid \+ ':' \+ currentUser\.role : ''\)/, 'the person is the account AND its role');
+  const sidebar = APP.slice(APP.indexOf('function configureSidebarForRole(role) {'), APP.indexOf('function configureSidebarForRole(role) {') + 600);
+  assert.match(sidebar, /_qfRoleChanged\(\);/, 'every sign-in (admin, employee, student, Practise as) re-asks');
+  assert.match(APP, /\} else \{\n    currentUser = null;\n    _qfRoleChanged\(\);/, 'a sign-out hides and unticks it');
+  assert.match(APP, /if \(!QC \|\| !_isAdmin\(\) \|\| !QC\.on\(\)\) return null;/, 'the print door asks _isAdmin() itself');
+  // The creators: isAdmin() (the one teacher e-mail) gates the switch and the print.
+  for (const [name, page] of [['math', MATH], ['science', SCIENCE]]) {
+    assert.match(page, /<label class="btn preview-toggle admin-only" data-quest-frame-box [^>]*title="[^"]*Teacher only, and never remembered[^"]*"><input type="checkbox" data-quest-frame-toggle/, name + ': the toggle is admin-only and says so');
+    assert.match(page, /QuestFramesCer\.teacher\(isAdmin\);\s*QuestFramesCer\.roleChanged\(currentUser \? currentUser\.uid : ['"]{2}\)|QuestFramesCer\.teacher\(isAdmin\);QuestFramesCer\.roleChanged\(currentUser\?currentUser\.uid:""\)/, name + ': names the teacher on every sign-in refresh');
+    assert.match(page, /window\.QuestFramesCer\s*&&\s*isAdmin\(\)\s*&&\s*QuestFramesCer\.on\(\)/, name + ': the print asks isAdmin() itself');
+    assert.match(page, /function isAdmin\(\)\s*\{\s*return currentUser\s*&&\s*\(currentUser\.email\s*\|\|\s*['"]{2}\)\.toLowerCase\(\)\s*===\s*ALLOWED_EMAIL;?\s*\}/, name + ': isAdmin() is the teacher e-mail');
+  }
 });
 
 test('every picture is served from this site, and every copy is on disk at its source ratio', () => {
@@ -191,7 +302,7 @@ test('framed portal sheets: margin-free A4 padded by the old margins, 296mm tall
 });
 
 test('app.js: both print doors, the preview and the planner all carry the frame', () => {
-  assert.match(APP, /function _qfPrintCtx\(selected, title\) \{\n  const QC = window\.QuestFramesCer;\n  if \(!QC \|\| !QC\.on\(\)\) return null;/, 'off or missing → null → the old sheet');
+  assert.match(APP, /function _qfPrintCtx\(selected, title\) \{\n  const QC = window\.QuestFramesCer;\n  if \(!QC \|\| !_isAdmin\(\) \|\| !QC\.on\(\)\) return null;/, 'off, missing or not the teacher → null → the old sheet');
   assert.match(APP, /objBoxPrintOn\('builder'\), wsArtwork, _qfPrintCtx\(selected, title\)\);/, 'worksheet builder passes it');
   assert.match(APP, /objBoxPrintOn\('saved'\), ws\.artwork, _qfPrintCtx\(selected, ws\.title\)\);/, 'My Worksheets passes it');
   assert.match(APP, /questFrame: \(!o\.noTags && \(ctx\.where === 'builder' \|\| ctx\.where === 'saved'\)\) \? _qfPrintCtx\(selected, title\) : null,/, 'the preview paginates with the same header; the Study Buddy photograph stays plain');

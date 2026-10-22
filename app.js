@@ -4794,6 +4794,9 @@ async function startPracticeAs(uid) {
 function configureSidebarForRole(role) {
   pirateRiftPortal.close();
   grandLinePortal.close();
+  // 🎮 The Quest frame switch follows the person: shown only to the teacher,
+  // unticked whenever the account changes (see _qfRoleChanged).
+  _qfRoleChanged();
   _hadesResetLearning("The signed-in profile changed. Start a new run.");
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -5179,6 +5182,7 @@ onAuthStateChanged(auth, (user) => {
     enterApp(user);
   } else {
     currentUser = null;
+    _qfRoleChanged();
     _hadesResetLearning("You signed out. Sign in again to start a new run.");
     interfaceStudio?.setUser(null);
     rpgOnSignOut();
@@ -40172,9 +40176,23 @@ function _wsStudentFieldsOn(where) {
 // script did not load, and then every print path builds byte for byte the
 // sheet it always did. The art is fetched now, while the planner works, so the
 // sprites are in hand before the print dialog opens.
+//
+// THE SWITCH IS THE TEACHER'S, AND IT IS NEVER REMEMBERED. `_isAdmin()` is the
+// one test: an admin signed in as themselves — never "Practise as" (that runs
+// as the student), an employee or a student. quest-frames.js hides the toggles
+// and refuses the frame until this registers, and `_qfRoleChanged` unticks it
+// whenever the account changes. Nothing is stored, so every visit starts
+// unticked and a sheet is framed only when the box was ticked before printing.
+// `_qfPrintCtx` asks `_isAdmin()` again itself: hiding a toggle is never the lock.
+if (typeof window !== 'undefined' && window.QuestFramesCer) window.QuestFramesCer.teacher(_isAdmin);
+function _qfRoleChanged() {
+  try {
+    if (window.QuestFramesCer) window.QuestFramesCer.roleChanged(currentUser ? currentUser.uid + ':' + currentUser.role : '');
+  } catch (e) { /* the frame is optional; a failure here must never stop a sign-in */ }
+}
 function _qfPrintCtx(selected, title) {
   const QC = window.QuestFramesCer;
-  if (!QC || !QC.on()) return null;
+  if (!QC || !_isAdmin() || !QC.on()) return null;
   const qs = Array.isArray(selected) ? selected : [];
   const q = QC.ctx({ subject: 'science', title, topics: qs.map(x => x && x.topic), questions: qs.length });
   QC.preload(q);

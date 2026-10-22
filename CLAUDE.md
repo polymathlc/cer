@@ -1942,10 +1942,31 @@ beside `_wsStudentFieldsOn` in `app.js`, the `questFrame` option of
   part at the end of each (`QuestFramesCer`: where the art lives, the switch,
   the glue). Change a frame in the system and copy it across; change only the
   tail here.
-- **ONE switch** (`QuestFramesCer.on()`, localStorage `cer.questFrame`, every
-  `input[data-quest-frame-toggle]` kept in step). It is off by default. Off, or
+- **ONE switch, the TEACHER's, NEVER REMEMBERED** (`QuestFramesCer.on()`,
+  every `input[data-quest-frame-toggle]` kept in step). Off, or
   `quest-frames.js` missing, and every print path builds the sheet it always
   did byte for byte: `_qfPrintCtx` returns null and every branch asks for it.
+  - **The page names the teacher** with `QuestFramesCer.teacher(fn)`. In the
+    portal that is `_isAdmin()`: an admin signed in as themselves. "Practise as"
+    runs as the student, and employees and students are refused. In the creators
+    it is `isAdmin()`, the one teacher e-mail. Until the page registers, or
+    while `fn()` says no or throws, every toggle's box (`[data-quest-frame-box]`,
+    else its `<label>`) is hidden and disabled and `on()` is false. **It fails
+    CLOSED**: a page that forgets to register prints the old sheet.
+  - **`roleChanged(who)` unticks it when the PERSON changes**, and only then.
+    The portal passes `uid:role` from `configureSidebarForRole` (every sign-in,
+    including "Practise as") and from the signed-out branch of
+    `onAuthStateChanged`. The creators pass the uid from `refreshAuthUi`, which
+    also re-registers `isAdmin`. A redraw for the same teacher keeps the tick.
+  - **Nothing is stored.** There is no localStorage key, so every visit starts
+    unticked and a sheet is framed only when the box was ticked before
+    printing. The harness fails if the site's glue touches any storage.
+  - **The print doors ask again.** `_qfPrintCtx` checks `!_isAdmin()` and the
+    creators' `buildPrintableHtml` checks `isAdmin() && QuestFramesCer.on()`:
+    hiding a toggle is never the lock.
+  - A box is hidden with an inline `display: none` and given back the inline
+    display the page drew it with (`data-qf-display`), because the builder's
+    label lays itself out with an inline flex.
 - **The portal never moves a measured pixel.** The page-1 header
   (`QuestFramesCer.portalHeader`: banner + compact boss with hearts + hero card;
   with a cover, just the hero card and boss) and the gem before "Question N"
@@ -1973,7 +1994,9 @@ beside `_wsStudentFieldsOn` in `app.js`, the `questFrame` option of
   of clipping it. The creators have no marks, so their gems are a plain rare blue.
 - Run `node --test tools/quest-frames-tests.mjs` and
   `node tools/quest-frames-browser-check.mjs` (real Chromium, PDFs with
-  background graphics off; also in CI, `.github/workflows/quest-frames.yml`).
+  background graphics off, plus the switch in all three pages' real toggle
+  markup: hidden for a student, an employee and an unnamed teacher, unticked
+  on hand-over and after a reload; also in CI, `.github/workflows/quest-frames.yml`).
 
 ## 🎨 The worksheet cover is the Big M design (v1.438.0)
 

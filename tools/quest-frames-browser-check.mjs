@@ -4,7 +4,10 @@
 //     sheet, the answer key unframed, every sprite fetched from this site;
 //   • the Maths and Science creators: their own print CSS and question markup,
 //     one Quest page per question, an over-tall question falling back to the
-//     old flowing print instead of being clipped.
+//     old flowing print instead of being clipped;
+//   • the switch, in the real toggle markup of all three pages: hidden until
+//     the page names the teacher, never shown to a student, unticked on every
+//     hand-over, and not remembered across a reload.
 // Run: node tools/quest-frames-browser-check.mjs
 // (WORKSHEET_PLAYWRIGHT_MODULE / WORKSHEET_BROWSER_EXECUTABLE as for the cover checks.)
 import assert from 'node:assert/strict';
@@ -41,11 +44,26 @@ const portalFixture = `<!doctype html><html><head><meta charset="utf-8">
 <script src="/quest-frames.js"></script></head>
 <body><div id="printOutput"></div></body></html>`;
 
+// Each page's own Quest frame toggle, cut out of the page exactly as shipped.
+function labelOf(html, marker) {
+  const m = new RegExp('<label\\b[^>]*>\\s*<input[^>]*' + marker + '[\\s\\S]*?<\\/label>').exec(html);
+  assert.ok(m, 'missing the Quest frame toggle ' + marker);
+  return m[0];
+}
+const MATH_PAGE = read('math-worksheet.html');
+const SCIENCE_PAGE = read('science-worksheet.html');
+const togglesFixture = `<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="/quest-frames.css">
+<style>${styleOf(INDEX)}</style>
+<script src="/quest-frames.js"></script></head>
+<body><div id="toggles">${labelOf(INDEX, 'id="wsQuestFrame"')}${labelOf(INDEX, 'id="mwQuestFrame"')}${labelOf(MATH_PAGE, 'data-quest-frame-toggle')}${labelOf(SCIENCE_PAGE, 'data-quest-frame-toggle')}</div></body></html>`;
+
 const types = { '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.html': 'text/html' };
 const served = [];
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/portal') { res.setHeader('Content-Type', 'text/html'); res.end(portalFixture); return; }
+  if (url.pathname === '/toggles') { res.setHeader('Content-Type', 'text/html'); res.end(togglesFixture); return; }
   if (url.pathname === '/blank') { res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><html><head><meta charset="utf-8"><script src="/worksheet-art.js"></script><script src="/quest-frames.js"></script></head><body></body></html>'); return; }
   const file = path.join(root, decodeURIComponent(url.pathname));
   if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404).end(); return; }
@@ -60,6 +78,58 @@ const browser = await chromium.launch({ headless: true, ...(executablePath ? { e
 const pdfPages = (buf) => (buf.toString('latin1').match(/\/Type\s*\/Page(?!s)/g) || []).length;
 
 try {
+  // ------------------------------------------------------------------ switch
+  {
+    const tp = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+    const terr = [];
+    tp.on('pageerror', (e) => terr.push(e.message));
+    await tp.route('**/*', (route) => (route.request().url().startsWith(origin) ? route.continue() : route.abort()));
+    await tp.goto(origin + '/toggles');
+    await tp.waitForFunction(() => window.QuestFramesCer);
+    const shown = () => tp.evaluate(() => [...document.querySelectorAll('#toggles label')].map((l) => getComputedStyle(l).display));
+    const ticks = () => tp.evaluate(() => [...document.querySelectorAll('#toggles input')].map((i) => i.checked));
+    const on = () => tp.evaluate(() => window.QuestFramesCer.on());
+    const as = (role, who) => tp.evaluate(([r, w]) => {
+      window.__role = r;
+      window.QuestFramesCer.teacher(() => window.__role === 'admin');
+      window.QuestFramesCer.roleChanged(w);
+    }, [role, who]);
+    assert.equal(await tp.locator('#toggles label').count(), 4, 'the portal\'s two toggles and one in each creator');
+    assert.deepEqual(await shown(), ['none', 'none', 'none', 'none'], 'hidden before the page names the teacher');
+    await as('student', 'kid:student');
+    assert.deepEqual(await shown(), ['none', 'none', 'none', 'none'], 'a student never sees a toggle');
+    await as('employee', 'writer:employee');
+    assert.deepEqual(await shown(), ['none', 'none', 'none', 'none'], 'nor an employee');
+    await as('admin', 'teacher:admin');
+    assert.ok((await shown()).every((d) => d !== 'none'), 'the teacher sees every toggle');
+    assert.deepEqual(await tp.evaluate(() => [...document.querySelectorAll('#toggles label')].map((l) => l.style.display)), ['flex', '', '', ''],
+      'each given back the inline display its page drew it with (the builder\'s label lays itself out with an inline flex)');
+    assert.deepEqual(await ticks(), [false, false, false, false], 'unticked on arrival');
+    assert.equal(await on(), false);
+    await tp.locator('#wsQuestFrame').click();
+    assert.equal(await on(), true, 'a real click ticks it');
+    assert.deepEqual(await ticks(), [true, true, true, true], 'every toggle follows');
+    await as('admin', 'teacher:admin');
+    assert.equal(await on(), true, 'redrawn for the same teacher, the tick stays');
+    await as('student', 'kid:student');
+    assert.equal(await on(), false, 'handed to a student: off');
+    assert.deepEqual(await shown(), ['none', 'none', 'none', 'none'], 'and hidden');
+    assert.deepEqual(await ticks(), [false, false, false, false], 'and unticked');
+    await as('admin', 'teacher:admin');
+    assert.equal(await on(), false, 'back to the teacher: still unticked');
+    await tp.locator('#mwQuestFrame').click();
+    assert.equal(await on(), true);
+    await tp.reload();
+    await tp.waitForFunction(() => window.QuestFramesCer);
+    await as('admin', 'teacher:admin');
+    assert.equal(await on(), false, 'never remembered: a reload starts unticked');
+    assert.deepEqual(await ticks(), [false, false, false, false]);
+    assert.equal(await tp.evaluate(() => localStorage.length + sessionStorage.length), 0, 'nothing was stored');
+    assert.deepEqual(terr, []);
+    await tp.close();
+    console.log('PASS switch: hidden for students, employees and an unnamed teacher; unticked on arrival, on hand-over and after a reload');
+  }
+
   // ------------------------------------------------------------------ portal
   const page = await browser.newPage({ viewport: { width: 1200, height: 1000 } });
   const failed = [], errors = [];
