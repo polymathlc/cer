@@ -174,6 +174,26 @@ async function storedImage(url, ownerUid) {
   if(bytes.length>16*1024*1024) throw new Error('The source image is too large to process safely.');
   return bytes;
 }
+// The image model sometimes ends a turn without a picture, or with a finish
+// reason other than STOP (IMAGE_OTHER, NO_IMAGE, a recitation flag...) while a
+// usable picture is still attached. Neither proves the figure is wrong: every
+// picture is verified against the original below, so any returned image is
+// kept and an empty turn is simply asked again.
+const FIGURE_ATTEMPTS = 3;
+async function generateFigure(instruction, sourceBase64) {
+  let reason='no image returned';
+  for(let attempt=0;attempt<FIGURE_ATTEMPTS;attempt++) {
+    const r=await new GoogleGenAI({apiKey:key.value()}).models.generateContent({model:imageModel.value(),
+      contents:[{role:'user',parts:[{text:instruction},{inlineData:{mimeType:'image/jpeg',data:sourceBase64}}]}],
+      config:{responseModalities:['IMAGE'],httpOptions:{timeout:120000}}});
+    const candidate=r.candidates?.[0];
+    const generated=candidate?.content?.parts?.find(p=>p.inlineData?.data)?.inlineData;
+    if(generated && ['image/png','image/jpeg','image/webp'].includes(generated.mimeType)) return generated;
+    reason=r.promptFeedback?.blockReason||candidate?.finishReason||(generated?'unsupported image type':'no image returned');
+    if(r.promptFeedback?.blockReason) break;   // the same request is refused again
+  }
+  throw new Error(`Figure enhancement was incomplete (${String(reason).toLowerCase().replace(/_/g,' ')}). Try again, or use ↩ Scan to keep the original.`);
+}
 async function enhanceImage(block, job, requested='colour', pageUrls=[]) {
   block=adoptOriginal(block,pageUrls);
   const original=originalImageUrl(block);
@@ -189,13 +209,7 @@ async function enhanceImage(block, job, requested='colour', pageUrls=[]) {
     if(!FIGURE_KINDS.includes(kind)) throw new Error('The figure type could not be determined safely.');
   }
   const mode=figureMode(kind,requested);
-  const r=await new GoogleGenAI({apiKey:key.value()}).models.generateContent({model:imageModel.value(),
-    contents:[{role:'user',parts:[{text:imageInstruction(kind,mode)},{inlineData:{mimeType:'image/jpeg',data:sourceBase64}}]}],
-    config:{responseModalities:['IMAGE'],httpOptions:{timeout:120000}}});
-  const candidate=r.candidates?.[0];
-  if(candidate?.finishReason!=='STOP') throw new Error('Figure enhancement was incomplete.');
-  const generated=candidate.content?.parts?.find(p=>p.inlineData?.data)?.inlineData;
-  if(!generated || !['image/png','image/jpeg','image/webp'].includes(generated.mimeType)) throw new Error('The enhancement service did not return an image.');
+  const generated=await generateFigure(imageInstruction(kind,mode),sourceBase64);
   const output=Buffer.from(generated.data,'base64');
   if(output.length>16*1024*1024) throw new Error('The enhanced image is too large.');
   const picture=await loadImage(output);
@@ -255,12 +269,25 @@ export const rapidVettingImage = onCall({...callOpts,secrets:[key,openaiKey],tim
     await checkQuestion(next,{...(importJob?.ownerUid===a.uid?importJob:{}),ownerUid:a.uid,autoCheck:true,maxCheckTries:1});
   } else if(next.autoCheck?.sig===signature(q)) next.autoCheck.sig=signature(next);
   next.updatedAt=new Date().toISOString();
-  await db.runTransaction(async tx=>{
+  // Only THIS figure has to be as it was. A regeneration takes a minute or
+  // two, and in that time another figure of the same question may finish its
+  // own regeneration, or the teacher may edit the text: those changes are kept
+  // and this figure is placed into the question as it is now. The check made
+  // above read the old question, so it is stamped only when nothing else moved.
+  const merged=await db.runTransaction(async tx=>{
     const latest=await tx.get(ref);
-    if(!latest.exists||fullRevision(latest.data())!==revision) throw new HttpsError('aborted','This question changed while the figure was processing. Refresh and try again.');
-    tx.update(ref,{blocks:next.blocks,...(next.autoCheck?{autoCheck:next.autoCheck}:{}),updatedAt:next.updatedAt});
+    if(!latest.exists) throw new HttpsError('aborted','This question was removed while the figure was processing.');
+    const now=latest.data(),at=now.blocks?.findIndex(b=>b.id===d.blockId&&b.type==='image');
+    if(at===undefined||at<0||fullRevision(now.blocks[at])!==fullRevision(block)) throw new HttpsError('aborted','This figure changed while it was processing. Refresh and try again.');
+    const out=structuredClone(now);
+    out.blocks[at]=next.blocks[index];
+    out.updatedAt=next.updatedAt;
+    if(fullRevision(now)===revision) { if(next.autoCheck) out.autoCheck=next.autoCheck; }
+    else if(resizing&&out.autoCheck?.sig===signature(now)) out.autoCheck={...out.autoCheck,sig:signature(out)};
+    tx.update(ref,{blocks:out.blocks,...(out.autoCheck?{autoCheck:out.autoCheck}:{}),updatedAt:out.updatedAt});
+    return out;
   });
-  return {question:next,changed:true};
+  return {question:merged,changed:true};
 });
 
 
