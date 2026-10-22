@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Interactive Textbook — Polymath Learning Centre</title>
-<meta name="description" content="Hands-on science lessons from Polymath Learning Centre. Explore water, heat, reproduction, and plant and human transport and respiration through interactive activities and quick checks.">
+<meta name="description" content="Hands-on science lessons from Polymath Learning Centre. Explore water, heat, reproduction, plant and human transport and respiration, and light and shadows through interactive activities and quick checks.">
 <link rel="icon" href="../assets/branding/polymath-learning-centre.png">
 <style>
 /* ==========================================================================
@@ -457,6 +457,32 @@ footer.page-footer a { color: var(--text-secondary); }
         { id: 'apply', title: "Let's Apply" },
         { id: 'learnt', title: 'What I Have Learnt' }
       ]
+    },
+    {
+      id: 'light',
+      href: 'light/',
+      title: 'Light and Shadows',
+      subject: 'Science',
+      chapter: 'Chapters 4–5 · Light, Shadows',
+      level: 'Primary 4',
+      summary: 'Find your way in the dark, sort natural and man-made sources of light, follow light into your eyes, then line up holes, cast shadows, change their size and shape, and track your shadow through the day.',
+      keywords: 'light shadows sources of light natural man-made sun stars fireflies glow-worms lightning lamp torch bulb fireworks see reflect reflected moon eyes opaque translucent transparent straight lines laser blocked shadow size shadow shape screen distance sundial puppet wayang kulit cone hand shadow shadow art',
+      art: 'light',
+      progressKey: 'polymath_textbook_light_progress',
+      sections: [
+        { id: 'light-help', title: 'How does light help us?' },
+        { id: 'natural', title: 'Natural sources of light' },
+        { id: 'man-made', title: 'Man-made sources of light' },
+        { id: 'seeing', title: 'How do we see things?' },
+        { id: 'shadows', title: 'What are shadows?' },
+        { id: 'straight-lines', title: 'Light travels in straight lines' },
+        { id: 'blocking', title: 'How are shadows formed?' },
+        { id: 'shadow-size', title: 'The size of shadows' },
+        { id: 'sun-shadows', title: 'Our shadows through the day' },
+        { id: 'shadow-shape', title: 'The shape of shadows' },
+        { id: 'apply', title: "Let's Apply" },
+        { id: 'learnt', title: 'What I Have Learnt' }
+      ]
     }
   ];
 
@@ -505,6 +531,18 @@ footer.page-footer a { color: var(--text-secondary); }
         '<path d="M232 110 C248 90 268 94 232 126 C196 94 216 90 232 110Z" fill="#D32F2F" stroke="#7F0000" stroke-width="2"/>' +
         '<g fill="none" stroke-width="3" stroke-linecap="round"><path d="M150 60 q20 -10 40 0" stroke="#7CB342"/><path d="M150 76 q20 10 40 0" stroke="#D64541"/></g>' +
         '<g><circle cx="150" cy="60" r="4" fill="#7CB342"/><circle cx="190" cy="76" r="4" fill="#D64541"/></g>' +
+      '</svg>',
+    light:
+      '<svg viewBox="0 0 320 170" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' +
+        '<rect width="320" height="170" fill="#FFF8E1"/>' +
+        '<path d="M70 85 L250 30 L250 150Z" fill="#FFF59D" opacity="0.85"/>' +
+        '<rect x="250" y="22" width="14" height="136" fill="#ECEFF1" stroke="#90A4AE" stroke-width="2"/>' +
+        '<rect x="250" y="56" width="14" height="58" fill="#37474F"/>' +
+        '<path d="M70 85 L250 56 M70 85 L250 114" stroke="#F9A825" stroke-width="2" stroke-dasharray="6 5"/>' +
+        '<circle cx="160" cy="85" r="15" fill="#FF8A65" stroke="#BF360C" stroke-width="2"/>' +
+        '<g transform="translate(70 85)"><rect x="-46" y="-9" width="34" height="18" rx="4" fill="#E53935"/><path d="M-14 -9 L0 -14 L0 14 L-14 9Z" fill="#B71C1C"/><rect x="-2" y="-13" width="3" height="26" fill="#FFF59D"/></g>' +
+        '<g fill="#FFB300"><circle cx="40" cy="30" r="12"/></g>' +
+        '<g stroke="#FFB300" stroke-width="3" stroke-linecap="round"><path d="M40 8 V12 M40 48 V52 M18 30 H22 M58 30 H62 M24 14 l3 3 M53 43 l3 3 M24 46 l3 -3 M53 17 l3 -3"/></g>' +
       '</svg>'
   };
 

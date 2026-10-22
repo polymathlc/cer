@@ -29,6 +29,10 @@ jobs:
         run: node tools/interactive-textbook-respiratory-circulatory-browser.mjs
         env:
           TEXTBOOK_SCREENSHOTS: artifacts/textbook/respiratory-circulatory
+      - name: Drive the Light and Shadows lesson at desktop and phone widths
+        run: node tools/interactive-textbook-light-browser.mjs
+        env:
+          TEXTBOOK_SCREENSHOTS: artifacts/textbook/light
       - uses: actions/upload-artifact@v4
         if: always()
         with:
