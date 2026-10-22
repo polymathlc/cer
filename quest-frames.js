@@ -797,6 +797,22 @@
     var fit = opts.fit === 'cover' ? 'xMidYMid slice' : (opts.align || 'xMidYMid') + ' meet';
     var pos = opts.x != null ? ' x="' + num(opts.x, 0) + '" y="' + num(opts.y, 0) + '"' : '';
     var cls = 'qf-sprite' + (opts.pixelated ? ' qf-crisp' : '') + (opts.className ? ' ' + opts.className : '');
+    if (opts.x != null && opts.width != null && opts.height != null) {
+      /* Inside another SVG (the rampart's runes and loot): no nested <svg>.
+         Chromium ignores a nested viewport when it repeats a position:fixed
+         layer on every printed page (QuestFrames.flow), and paints the whole
+         atlas across the sheet. Drawn this way it looks the same everywhere:
+         the cell is a rect filled with a pattern
+         holding the scaled sheet (patterns survive that repeat; a nested
+         viewport and a clip-path do not). Fit is "meet", centred in the box. */
+      var bx = num(opts.x, 0), by = num(opts.y, 0), bw = num(opts.width, 0), bh = num(opts.height, 0);
+      var k = Math.min(bw / vw, bh / vh), cw = vw * k, ch = vh * k;
+      var cx = bx + (bw - cw) / 2, cy = by + (bh - ch) / 2, clip = uid('qfc');
+      return '<g class="' + esc(cls) + '"' + aria + '>' +
+        '<pattern id="' + clip + '" patternUnits="userSpaceOnUse" x="' + round(cx - vx * k) + '" y="' + round(cy - vy * k) + '" width="' + round(e.w * k) + '" height="' + round(e.h * k) + '">' +
+        '<image href="' + esc(artUrl(e.key)) + '" x="0" y="0" width="' + round(e.w * k) + '" height="' + round(e.h * k) + '" preserveAspectRatio="none"' + (opts.pixelated ? ' style="image-rendering:pixelated"' : '') + '/></pattern>' +
+        '<rect x="' + round(cx) + '" y="' + round(cy) + '" width="' + round(cw) + '" height="' + round(ch) + '" fill="url(#' + clip + ')"/></g>';
+    }
     return '<svg class="' + esc(cls) + '"' + pos + size + ' viewBox="' + round(vx) + ' ' + round(vy) + ' ' + round(vw) + ' ' + round(vh) + '" preserveAspectRatio="' + fit + '"' + aria + '>' +
       (opts.title ? '<title>' + esc(opts.title) + '</title>' : '') +
       '<image href="' + esc(artUrl(e.key)) + '" x="0" y="0" width="' + e.w + '" height="' + e.h + '" preserveAspectRatio="none"' + (opts.pixelated ? ' style="image-rendering:pixelated"' : '') + '/></svg>';
