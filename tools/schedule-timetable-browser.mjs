@@ -202,6 +202,35 @@ try {
     await context.close();
   });
 
+  // 💬 The WhatsApp button and Contact Us sit at the top right and both open a chat with +65 9645 0588.
+  for (const size of [{ label: 'desktop', width: 1280 }, { label: 'phone', width: 390, height: 844, mobile: true }, { label: 'small phone', width: 320, height: 640, mobile: true }]) {
+    await check(size.label + ': WhatsApp and Contact Us sit at the top right and open WhatsApp', async () => {
+      const { context, page, errors } = await openPage(size);
+      for (const id of ['#whatsapp-btn', '#contact-us']) {
+        assert.equal(await page.getAttribute(id, 'href'), 'https://wa.me/6596450588', id + ' goes to the centre WhatsApp.');
+        assert.equal(await page.getAttribute(id, 'target'), '_blank');
+        assert.ok(await page.isVisible(id), id + ' is visible.');
+      }
+      assert.match(await page.textContent('#contact-us'), /Contact Us/);
+      const m = await page.evaluate(() => {
+        const bar = document.querySelector('.topbar-inner').getBoundingClientRect();
+        const box = id => document.querySelector(id).getBoundingClientRect();
+        const brand = box('.brand'), wa = box('#whatsapp-btn'), contact = box('#contact-us');
+        return { barRight: bar.right, barTop: bar.top, brandTop: brand.top, brandBottom: brand.bottom, waRight: wa.right, waTop: wa.top,
+          waW: wa.width, waH: wa.height, contactRight: contact.right, contactTop: contact.top, contactBottom: contact.bottom,
+          page: document.documentElement.scrollWidth, viewport: innerWidth };
+      });
+      assert.ok(m.page <= m.viewport, `${size.label}: the page scrolls sideways (${m.page}px in ${m.viewport}px).`);
+      assert.ok(m.barRight - m.waRight < 40, `${size.label}: the WhatsApp button is not at the right edge.`);
+      assert.ok(m.contactRight <= m.waRight, `${size.label}: Contact Us sits left of the WhatsApp button.`);
+      assert.ok(m.waTop < m.brandBottom && m.contactTop < m.brandBottom, `${size.label}: the contact is not on the top row beside the logo.`);
+      assert.ok(m.waW >= 40 && m.waH >= 36, `${size.label}: the WhatsApp button is too small to tap.`);
+      await shot(page, size.label.replace(' ', '-') + '-top-contact', { clip: { x: 0, y: 0, width: m.viewport, height: 140 } });
+      assert.deepEqual(errors, []);
+      await context.close();
+    });
+  }
+
   await check('desktop: the timetable lays every class out by day and time', async () => {
     const { context, page, errors } = await openPage();
     await page.click('#view-week');
@@ -359,7 +388,7 @@ try {
   await check('the teacher previews the timetable and sees the page version', async () => {
     const { context, page, errors } = await openPage({ admin: true });
     assert.equal(await page.getAttribute('#view-day', 'aria-pressed'), 'true', 'The teacher still starts on the editing view.');
-    assert.equal(await page.textContent('#page-version'), 'Schedule page v1.4.0');
+    assert.equal(await page.textContent('#page-version'), 'Schedule page v1.5.0');
     assert.ok(await page.isVisible('#page-version'));
     await page.click('#view-week');
     assert.match(await page.textContent('#schedule-grid'), /This is the weekly timetable parents see/);
