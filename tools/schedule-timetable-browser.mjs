@@ -64,7 +64,15 @@ const FIREBASE_STUB = `(function () {
       var data = function () { return name === 'schedule_config' ? fx.config : null; };
       return {
         id: id || 'doc',
-        onSnapshot: function (cb) { later(function () { cb(snap(data())); }); return function () {}; },
+        // fx.configLoad: 'never' (Firestore never answers) or 'error' (it refuses).
+        onSnapshot: function (cb, onErr) {
+          if (name === 'schedule_config' && fx.configLoad === 'never') return function () {};
+          if (name === 'schedule_config' && fx.configLoad === 'error') {
+            later(function () { onErr({ code: 'unavailable', message: 'Could not reach Cloud Firestore backend.' }); });
+            return function () {};
+          }
+          later(function () { cb(snap(data())); }); return function () {};
+        },
         get: function () { return Promise.resolve(snap(data())); },
         set: function () { return Promise.resolve(); },
         update: function () { return Promise.resolve(); },
@@ -127,9 +135,10 @@ async function check(name, fn) {
   catch (e) { console.error('FAIL ' + name + '\n' + (e && e.stack || e)); process.exitCode = 1; }
 }
 
-async function openPage({ width = 1280, height = 900, mobile = false, admin = false, hash = '', now = NOW } = {}) {
-  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile });
-  await context.route('**/*', route => {
+async function openPage({ width = 1280, height = 900, mobile = false, admin = false, hash = '', now = NOW,
+  configLoad = '', ready = true, context: given = null } = {}) {
+  const context = given || await browser.newContext({ viewport: { width, height }, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile });
+  if (!given) await context.route('**/*', route => {
     const u = new URL(route.request().url());
     if (u.origin === base) return route.continue();
     if (u.hostname === 'www.gstatic.com' && u.pathname.endsWith('/firebase-app-compat.js')) {
@@ -146,9 +155,10 @@ async function openPage({ width = 1280, height = 900, mobile = false, admin = fa
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
-  await page.addInitScript(fixture => { window.__SCHEDULE_FIXTURE__ = fixture; }, { config: CONFIG, admin });
+  await page.addInitScript(fixture => { window.__SCHEDULE_FIXTURE__ = fixture; }, { config: CONFIG, admin, configLoad });
   await page.clock.setFixedTime(new Date(now));
   await page.goto(base + '/schedule/' + hash);
+  if (!ready) return { context, page, errors };
   await page.waitForFunction(() => {
     const grid = document.getElementById('schedule-grid');
     return grid && !grid.querySelector('.empty') && document.querySelector('#trial-notice b');
@@ -388,7 +398,7 @@ try {
   await check('the teacher previews the timetable and sees the page version', async () => {
     const { context, page, errors } = await openPage({ admin: true });
     assert.equal(await page.getAttribute('#view-day', 'aria-pressed'), 'true', 'The teacher still starts on the editing view.');
-    assert.equal(await page.textContent('#page-version'), 'Schedule page v1.5.0');
+    assert.equal(await page.textContent('#page-version'), 'Schedule page v1.5.1');
     assert.ok(await page.isVisible('#page-version'));
     await page.click('#view-week');
     assert.match(await page.textContent('#schedule-grid'), /This is the weekly timetable parents see/);
@@ -408,6 +418,68 @@ try {
     assert.match(note, /3 business days in advance/);
     assert.doesNotMatch(note, /earliest possible trial/);
     assert.deepEqual(errors, []);
+    await context.close();
+  });
+
+  // ─── Before the schedule has loaded ───
+  // An unloaded schedule must never look like a deleted one: on 23 Oct 2026 a
+  // slow connection left a phone on "Our timetable is being prepared" over an
+  // empty grid while all 18 classes were safe in Firestore.
+  await check('while Firestore has not answered, the page says it is loading, not that there are no classes', async () => {
+    const { context, page, errors } = await openPage({ configLoad: 'never', ready: false, hash: '#timetable' });
+    await page.waitForSelector('#schedule-grid .sched-status');
+    const text = await page.textContent('#schedule-grid');
+    assert.match(text, /Loading the timetable…/);
+    assert.doesNotMatch(text, /being prepared|No classes/, 'Nothing may say the timetable is empty before it is known.');
+    assert.equal(await page.$('table.tt'), null, 'No empty grid while loading.');
+    await shot(page, 'timetable-loading');
+    // Past SCHEDULE_SLOW_MS it says so, and offers a way out.
+    await page.waitForFunction(() => /taking longer than usual/.test(document.getElementById('schedule-grid').textContent), null, { timeout: 15000 });
+    assert.ok(await page.isVisible('#schedule-grid .sched-status button'), 'A Try again button.');
+    assert.match(await page.textContent('#schedule-grid'), /WhatsApp us at \+65 9645 0588/);
+    assert.doesNotMatch(await page.textContent('#schedule-grid'), /being prepared|No classes/);
+    await shot(page, 'timetable-slow');
+    assert.deepEqual(errors, []);
+    await context.close();
+  });
+
+  await check('when Firestore refuses, the page says it could not load, with a Try again button', async () => {
+    const { context, page } = await openPage({ configLoad: 'error', ready: false, hash: '#timetable' });
+    await page.waitForSelector('#schedule-grid [role="alert"]');
+    const text = await page.textContent('#schedule-grid');
+    assert.match(text, /We couldn't load the timetable just now/);
+    assert.doesNotMatch(text, /being prepared|No classes/);
+    assert.equal(await page.$('table.tt'), null);
+    assert.ok(await page.isVisible('#schedule-grid [role="alert"] button'));
+    await shot(page, 'timetable-error');
+    await context.close();
+  });
+
+  await check('a returning visitor sees the last timetable at once, even if Firestore is down', async () => {
+    const first = await openPage({ hash: '#timetable' });
+    await first.page.waitForSelector('.tt-class[data-slot="MON-1"]');
+    const cached = await first.page.evaluate(() => JSON.parse(localStorage.getItem('pl_schedule_config_v1')));
+    assert.deepEqual(Object.keys(cached.data.slots).sort(), Object.keys(CONFIG.slots).sort(), 'The whole schedule is kept on the device.');
+    await first.page.close();
+    const { page } = await openPage({ context: first.context, configLoad: 'error', ready: false, hash: '#timetable' });
+    await page.waitForSelector('.tt-class[data-slot="MON-1"]');
+    assert.deepEqual(await page.$$eval('.tt-class', els => els.map(e => e.dataset.slot).sort()), LIVE.slice().sort(),
+      'Every published class comes back from the device\'s copy.');
+    assert.match(await page.textContent('#schedule-grid'), /this is the timetable as this device last saw it/i);
+    assert.doesNotMatch(await page.textContent('#schedule-grid'), /being prepared/);
+    await shot(page, 'timetable-cached');
+    await first.context.close();
+  });
+
+  await check('the teacher cannot edit or save until the live schedule has loaded', async () => {
+    const { context, page } = await openPage({ admin: true, configLoad: 'never', ready: false });
+    await page.waitForSelector('#schedule-grid .sched-status');
+    assert.equal(await page.$('#schedule-grid select, #schedule-grid input'), null, 'No slot editors over an unloaded schedule.');
+    await page.evaluate(() => saveSchedule());
+    assert.deepEqual(await page.evaluate(() => window.__store.bookings.length), 0);
+    const wrote = await page.evaluate(() => typeof draftSlots === 'undefined' ? null : draftSlots);
+    assert.equal(wrote, null, 'Nothing was staged for saving.');
+    assert.match(await page.textContent('body'), /has not loaded yet, so nothing was saved/);
     await context.close();
   });
 
