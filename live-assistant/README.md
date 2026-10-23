@@ -1,4 +1,4 @@
-# Ainstein live voice bridge
+# Ainstein and The Polymath live voice bridge
 
 This isolated Firebase codebase powers the administrator-only voice button in
 the Science Learning Portal. It reuses the proven WebRTC Live bridge from Ans Key
@@ -79,3 +79,31 @@ recovery, stop ownership, server cleanup, and provider protocol without paid
 calls. After deployment, validate a short administrator conversation, cancellation
 during connection, microphone shutdown, and a refused student/employee request.
 Automated mocks do not establish that a live microphone conversation passed.
+
+
+## 🎙 The Polymath's voice (`polymathLive`, v1.448.0)
+
+The same codebase serves the student-facing voice on the answer-key QR page
+(`polymath.html`). It is deployed on every merge to `main` that touches
+`live-assistant/**` by `.github/workflows/deploy-live-assistant.yml`, using the
+existing `FIREBASE_SERVICE_ACCOUNT` secret; the shared rules tool runs there
+read-only and never publishes.
+
+- Endpoint: `https://us-central1-mathgen--app.cloudfunctions.net/polymathLive`,
+  the same start/stop protocol as Ainstein. Allowed origins:
+  `https://polymathlc.github.io`, `https://www.polymathlc.com.sg`,
+  `https://polymathlc.com.sg` (and localhost for tests).
+- Accounts: an **anonymous** Firebase account (a phone that only scanned the
+  code) or a **Google** account (a Study Buddy student). Every request still
+  needs a non-revoked ID token and App Check for the family web app.
+- Limits (`POLYMATH_LIMITS`): one call per account, up to 15 minutes; 12 starts a
+  Singapore day signed in, 4 anonymous; centre-wide 10 at once and 300 a day.
+  A lock older than the call length plus a minute is released, so a crashed
+  phone is never locked out for the day.
+- Bookkeeping reuses `cerAinsteinLiveSessions` / `cerAinsteinLiveLimits` with a
+  `polymath-` key prefix and its own `_polymath` centre-wide document, so no new
+  rules are needed and `cerAinsteinLiveCleanup` sweeps both kinds of lease.
+- Instructions are fixed on the server ("You are The Polymath…"): delegate every
+  academic request to the page, stay silent while waiting, never reveal the key,
+  never name the company or model. Nothing is stored; the provider session asks
+  for `store: false`.

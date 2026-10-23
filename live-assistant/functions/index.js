@@ -12,6 +12,7 @@ const WebSocket = require('ws');
 const { createLiveService } = require('./live-service');
 const { createRepository } = require('./live-repository');
 const { createProvider } = require('./live-provider');
+const { createPolymathLiveService } = require('./polymath-live-service');
 
 initializeApp();
 const openaiKey = defineSecret('OPENAI_API_KEY');
@@ -34,3 +35,18 @@ exports.cerAinsteinLiveCleanup = onSchedule({
   timeZone: 'Asia/Singapore', timeoutSeconds: 180, maxInstances: 1,
   memory: '256MiB', retryCount: 3, minBackoffSeconds: 10, maxBackoffSeconds: 60
 }, service.sweep);
+
+// 🧠🎙 The Polymath's voice: the QR tutor on a student's phone (v1.448.0).
+// Same provider, same two server-only collections (under its own key prefix
+// and global document), so the shared rules need no new names. Its leases
+// carry their `globalId`, which is why the ONE sweeper above closes them too.
+const polymathService = createPolymathLiveService({
+  auth: getAuth(), appCheck: getAppCheck(),
+  repository: createRepository(getFirestore(), { prefix: 'polymath-', globalId: '_polymath', stale: true }),
+  provider: createProvider({ apiKey: () => openaiKey.value(), connect: (url, options) => new WebSocket(url, options) }),
+  report: code => logger.warn(code)
+});
+exports.polymathLive = onRequest({
+  region: 'us-central1', secrets: [openaiKey], timeoutSeconds: 60,
+  maxInstances: 4, concurrency: 20, memory: '256MiB', invoker: 'public'
+}, polymathService.handler);
