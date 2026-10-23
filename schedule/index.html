@@ -419,6 +419,16 @@
   .tt-key.full i { background:var(--danger-bg); border:1px solid var(--danger); }
   .tt-key.off i { background:repeating-linear-gradient(135deg,rgba(5,108,118,.35) 0 1px,transparent 1px 4px); border:1px solid var(--line); }
   .tt-empty-note { margin-bottom:12px; }
+  /* Shown until Firestore has answered, so an unloaded schedule never looks like a deleted one. */
+  .sched-status { display:flex; flex-direction:column; align-items:center; gap:12px; line-height:1.55; }
+  .sched-status b { color:var(--ink); font-size:15px; }
+  .sched-status a { color:var(--deep); font-weight:700; }
+  .sched-status .btn { margin-top:2px; }
+  .sched-spin { width:26px; height:26px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--deep); animation:sched-spin .9s linear infinite; }
+  @keyframes sched-spin { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .sched-spin { animation-duration:2.4s; } }
+  .sched-stale { font-size:13px; color:var(--gray-700); background:#fff8e6; border:1px solid #f3d27a; border-radius:12px; padding:10px 14px; margin-bottom:12px; line-height:1.5; }
+  .sched-stale .link-btn { font-weight:700; }
   .tt-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .tt { width:100%; table-layout:fixed; border-collapse:separate; border-spacing:6px; }
   .tt-col-time { width:104px; }
@@ -692,7 +702,7 @@
       </div>
     </div>
 
-    <div id="schedule-grid"><div class="empty">Loading schedule…</div></div>
+    <div id="schedule-grid"><div class="card empty sched-status" role="status"><span class="sched-spin" aria-hidden="true"></span>Loading the timetable…</div></div>
 
     <div id="admin-bookings-card" class="card hidden">
       <h2>Bookings &amp; enrolments <span id="bookings-count" class="badge pending">0</span></h2>
@@ -861,7 +871,7 @@ const auth = firebase.auth();
 
 // Shown to the signed-in teacher in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const SCHEDULE_PAGE_VERSION = 'v1.5.0';
+const SCHEDULE_PAGE_VERSION = 'v1.5.1';
 
 const ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // Every trial booking emails these addresses via the "Trigger Email"
@@ -990,6 +1000,53 @@ const DEFAULT_CONFIG = {
 
 let config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 let draftSlots = null;      // admin's unsaved edits
+
+// ─── Where the schedule on screen came from ───
+// Until Firestore first answers, config.slots is empty, and an empty timetable
+// reads to a parent (and to the teacher) as "every class has been deleted".
+// So the timetable is only drawn from a schedule that was actually loaded:
+//   'none'  nothing yet: a "Loading the timetable…" card instead of a grid
+//   'cache' the last schedule this browser saw, shown while Firestore answers
+//   'live'  Firestore's own copy
+// configError is set when Firestore refused or could not be reached, and
+// configSlow once the first answer is taking longer than SCHEDULE_SLOW_MS.
+// The teacher only ever edits the live copy, so a save can never write an old
+// or empty schedule back over the real one.
+const CONFIG_CACHE_KEY = 'pl_schedule_config_v1';
+const SCHEDULE_SLOW_MS = 8000;
+let configSource = 'none';
+let configError = '';
+let configSlow = false;
+
+// Firestore timestamps (updatedAt) are not plain data; the cache keeps only
+// what the page draws from.
+function plainConfig(data) {
+  return JSON.parse(JSON.stringify(data || {}, (k, v) =>
+    (v && typeof v === 'object' && typeof v.toDate === 'function') ? undefined : v));
+}
+function readCachedConfig() {
+  try {
+    const raw = localStorage.getItem(CONFIG_CACHE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    return saved && saved.data && saved.data.slots && typeof saved.data.slots === 'object' ? saved : null;
+  } catch (e) { return null; }
+}
+function writeCachedConfig(data) {
+  try { localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), data: plainConfig(data) })); } catch (e) {}
+}
+(function useCachedConfig() {
+  const saved = readCachedConfig();
+  if (!saved) return;
+  config = Object.assign(JSON.parse(JSON.stringify(DEFAULT_CONFIG)), saved.data);
+  configSource = 'cache';
+})();
+
+function scheduleReady() {
+  if (configSource === 'none') return false;
+  return !isAdmin || configSource === 'live';
+}
+function retryScheduleLoad() { location.reload(); }
 let products = [];
 let bookings = [];
 let isAdmin = false;
@@ -1773,11 +1830,49 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && ttOpenId) 
 
 function renderSchedule() {
   renderViewControls();
+  const grid = document.getElementById('schedule-grid');
+  if (!scheduleReady()) { grid.innerHTML = renderScheduleStatus(); return; }
   const view = currentView();
   if (view === 'level') document.getElementById('schedule-grid').innerHTML = renderLevelView();
   else if (view === 'week') document.getElementById('schedule-grid').innerHTML = renderTimetableView();
   else renderDayView();
+  if (configSource === 'cache' && (configError || configSlow)) grid.insertAdjacentHTML('afterbegin', renderStaleNote());
   ttRefreshOpen();
+}
+
+// The card shown in place of the timetable while there is no schedule to draw.
+// It never says the timetable is empty: that is only known once Firestore answers.
+function renderScheduleStatus() {
+  const wa = '<a href="' + WA_LINK + '" target="_blank" rel="noopener">WhatsApp us at +65 9645 0588</a>';
+  const retry = '<button type="button" class="btn small" onclick="retryScheduleLoad()">Try again</button>';
+  if (configError) {
+    return '<div class="card empty sched-status" role="alert">'
+      + '<b>We couldn\'t load the timetable just now.</b>'
+      + '<span>Your connection may have dropped. Check it, then try again. Or ' + wa + ' for the class times.</span>'
+      + retry
+      + (isAdmin ? '<span>Nothing has been changed or deleted. The saved schedule is safe and editing is paused until it loads.</span>' : '')
+      + '</div>';
+  }
+  if (configSlow) {
+    return '<div class="card empty sched-status" role="status">'
+      + '<span class="sched-spin" aria-hidden="true"></span>'
+      + '<b>The timetable is taking longer than usual to load.</b>'
+      + '<span>Please check your connection and try again, or ' + wa + '.</span>'
+      + retry
+      + '</div>';
+  }
+  return '<div class="card empty sched-status" role="status">'
+    + '<span class="sched-spin" aria-hidden="true"></span>'
+    + (isAdmin && configSource === 'cache' ? 'Loading the latest schedule before you can edit it…' : 'Loading the timetable…')
+    + '</div>';
+}
+
+// Above a schedule drawn from this browser's copy, once the live one is late or failed.
+function renderStaleNote() {
+  return '<div class="sched-stale" role="status">'
+    + (configError ? 'We couldn\'t reach the server, so this is the timetable as this device last saw it. '
+                   : 'Still fetching the latest timetable. This is the one this device last saw. ')
+    + '<button type="button" class="link-btn" onclick="retryScheduleLoad()">Try again</button></div>';
 }
 
 function renderDayView() {
@@ -1801,6 +1896,7 @@ function renderDayView() {
 }
 
 function editSlot(id, field, value) {
+  if (configSource !== 'live') { toast('The schedule is still loading. Please wait a moment before editing.', true); return; }
   if (!draftSlots) draftSlots = JSON.parse(JSON.stringify(config.slots || {}));
   const next = Object.assign(getSlot(id), { [field]: value });
   if (field === 'type' && value === 'master') next.mode = 'Physical';   // Master Class is physical only
@@ -1812,6 +1908,9 @@ function editSlot(id, field, value) {
 
 async function saveSchedule() {
   if (!requireAdmin()) return;
+  // Only ever save over the schedule Firestore actually sent: never the empty
+  // default the page starts with, nor this browser's older copy.
+  if (configSource !== 'live') { toast('The schedule has not loaded yet, so nothing was saved. Please try again in a moment.', true); return; }
   const btn = document.getElementById('save-schedule-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
@@ -1861,12 +1960,26 @@ async function saveTrialSettings() {
   finally { btn.disabled = false; }
 }
 
+const scheduleSlowTimer = setTimeout(() => {
+  if (configSource === 'live') return;
+  configSlow = true;
+  renderSchedule();
+}, SCHEDULE_SLOW_MS);
+
 CONFIG_DOC.onSnapshot(snap => {
-  config = Object.assign(JSON.parse(JSON.stringify(DEFAULT_CONFIG)), snap.exists ? snap.data() : {});
+  const data = snap.exists ? snap.data() : {};
+  config = Object.assign(JSON.parse(JSON.stringify(DEFAULT_CONFIG)), data);
+  configSource = 'live';
+  configError = '';
+  configSlow = false;
+  clearTimeout(scheduleSlowTimer);
+  writeCachedConfig(data);
   renderHero();
   if (!draftSlots) renderSchedule();
 }, err => {
   console.error('Schedule load failed', err);
+  configError = (err && (err.code || err.message)) || 'unavailable';
+  clearTimeout(scheduleSlowTimer);
   renderHero(); renderSchedule();
 });
 
