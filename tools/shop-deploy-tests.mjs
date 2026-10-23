@@ -2,7 +2,8 @@
 //   node tools/shop-deploy-tests.mjs
 import assert from 'node:assert/strict';
 import { readStripeKey, readWebhookSecret, envFileText, prepare, STRIPE_ACCOUNT, ENV_FILE } from './shop-deploy-setup.mjs';
-import { smokeProblems, CHECKOUT_ENDPOINT, STATUS_ENDPOINT, WEBHOOK_ENDPOINT, RECEIPT_ENDPOINT, REFUSED_PROBE } from './shop-smoke.mjs';
+import { smokeProblems, CHECKOUT_ENDPOINT, STATUS_ENDPOINT, WEBHOOK_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT,
+  REFUSED_PROBE } from './shop-smoke.mjs';
 import { SetupError } from './enquiry-deploy-setup.mjs';
 
 const LIVE = 'sk_live_' + 'A1b2C3d4E5'.repeat(4);
@@ -82,7 +83,7 @@ function liveService({ webhookStatus = 400, breakOrigin = '', noAuthHeader = fal
 await check('the smoke test passes a healthy service and only sends preflights', async () => {
   const live = liveService();
   assert.deepEqual(await smokeProblems({ fetchImpl: live.fetchImpl }), []);
-  assert.ok([CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT].every(endpoint => live.calls.some(([url]) => url === endpoint)));
+  assert.ok([CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT].every(endpoint => live.calls.some(([url]) => url === endpoint)));
   assert.deepEqual(await smokeProblems({ webhookExpected: false, fetchImpl: liveService({ webhookStatus: 503 }).fetchImpl }), []);
 });
 

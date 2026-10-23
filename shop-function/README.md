@@ -65,6 +65,31 @@ and the button is hidden for them.
    live endpoints answer. Until `STRIPE_SECRET_KEY` exists it skips the deploy
    and says so, and the page shows card payment as unavailable, offering PayNow.
 
+## Trial lessons and enrolments on /schedule
+
+The booking form on polymathlc.com.sg/schedule offers **Pay by card** (first) next to
+PayNow, through the same Stripe account, keys and webhook. Nothing new is needed in
+Stripe or in the GitHub secrets.
+
+1. The parent fills in the form and taps **Pay $X by card**. The page posts the
+   class (slot id), trial or enrol, how the child attends and the parent's details
+   to `createScheduleCheckout`. No price is sent.
+2. The function prices it from `schedule_config/main` with the page's own rules
+   (`functions/booking.js`: Online and Physical prices, the Master Class, a slot's
+   own fee first), refuses a class that is full, closed or has no price, saves the
+   checkout in `shop_checkouts/{code}` (`kind: 'booking'`) and opens a Stripe
+   Checkout Session marked `metadata.source: 'polymath-schedule'`.
+3. Stripe sends the parent back to `/schedule/?booking=CODE&session=cs_…`; the page
+   asks `scheduleCheckoutStatus`. Stripe's webhook (`stripeShopWebhook`) hands the
+   same session to the booking code too, so closing the tab after paying is fine.
+4. Either way, one transaction writes `schedule_bookings/{code}` in the shape a
+   PayNow booking has, with `payment: 'card'`, `paid: true` and the Stripe ids
+   (status stays `pending` until the admin confirms the date), and emails the
+   centre and the parent (`functions/booking-mail.js`) exactly once.
+
+The products page's **Hide card payment** switch (`shop_settings/config.cardPayments`)
+hides card payment on the booking form too, and the server refuses it.
+
 ## Firestore
 
 The functions use the Admin SDK, so `shop_checkouts` and `shop_checkout_limits`
@@ -79,6 +104,8 @@ because the deploy account cannot manage Cloud Scheduler jobs.)
 - `functions/stripe.js`: Stripe REST calls with `fetch` (no SDK) and webhook signature checks.
 - `functions/service.js`: validation, pricing and the four HTTP handlers.
 - `functions/receipt.js`: the receipt email (text and HTML).
+- `functions/booking.js`, `functions/booking-mail.js`: card-paid trials and enrolments on /schedule, and their emails.
+- `functions/test/booking.test.js`: the booking tests (`npm test` runs both).
 - `functions/repository.js`: Firestore reads and the transactions.
 - `functions/test/shop.test.js`: `npm test` (no network, no Firebase).
 - `../tools/shop-deploy-setup.mjs`, `../tools/shop-smoke.mjs`, `../tools/shop-deploy-tests.mjs`.

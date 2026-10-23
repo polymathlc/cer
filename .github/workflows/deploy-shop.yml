@@ -1,8 +1,9 @@
 name: Deploy shop card payments
 
 # Publishes ONLY the isolated polymath-shop Functions codebase (createShopCheckout,
-# shopCheckoutStatus and stripeShopWebhook) to mathgen--app,
-# then proves the live endpoints answer the pages that serve /products.
+# shopCheckoutStatus, stripeShopWebhook, sendShopReceipt, and the /schedule trial and
+# enrolment card payments createScheduleCheckout and scheduleCheckoutStatus) to
+# mathgen--app, then proves the live endpoints answer the pages that serve them.
 #
 # It runs by itself when the function's source changes on main, and on demand from
 # Actions → Deploy shop card payments → Run workflow, which is how to switch card
@@ -75,10 +76,10 @@ jobs:
 
       - name: Deploy the polymath-shop codebase
         if: steps.prepare.outputs.ready == 'true'
-        # Names the three functions, so the deploy never tries to delete anything else
+        # Names every function, so the deploy never tries to delete anything else
         # in the codebase: deleting the old scheduled cleanupShopCheckouts needs Cloud
         # Scheduler rights this service account does not have. Add a new export here.
-        run: firebase deploy --project "$FIREBASE_PROJECT" --config shop-function/firebase.json --non-interactive --only "functions:polymath-shop:createShopCheckout,functions:polymath-shop:shopCheckoutStatus,functions:polymath-shop:stripeShopWebhook,functions:polymath-shop:sendShopReceipt"
+        run: firebase deploy --project "$FIREBASE_PROJECT" --config shop-function/firebase.json --non-interactive --only "functions:polymath-shop:createShopCheckout,functions:polymath-shop:shopCheckoutStatus,functions:polymath-shop:stripeShopWebhook,functions:polymath-shop:sendShopReceipt,functions:polymath-shop:createScheduleCheckout,functions:polymath-shop:scheduleCheckoutStatus"
 
       - name: Prove the live endpoints answer the shop
         if: always() && steps.prepare.outputs.ready == 'true'

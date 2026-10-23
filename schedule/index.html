@@ -13,6 +13,11 @@
 <script>try{if(window.fetch){window.__ppEarly=fetch('https://us-central1-mathgen--app.cloudfunctions.net/studyBuddySample',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'questions',subject:'science'})}).then(function(r){return r.ok?r.json():null}).catch(function(){return null})}}catch(e){}</script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="../assets/branding/polymath-learning-centre.png">
+<!-- The timetable itself, asked for now over Firestore's plain REST address: a few KB that arrive
+     while the Firebase libraries below (several hundred KB) are still downloading, so a phone on a
+     slow connection sees the classes without waiting for them. The live listener takes over after. -->
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<script>try{if(window.fetch){window.__scheduleEarly=fetch('https://firestore.googleapis.com/v1/projects/mathgen--app/databases/(default)/documents/schedule_config/main',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).catch(function(){return null})}}catch(e){}</script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
@@ -429,6 +434,20 @@
   @media (prefers-reduced-motion: reduce) { .sched-spin { animation-duration:2.4s; } }
   .sched-stale { font-size:13px; color:var(--gray-700); background:#fff8e6; border:1px solid #f3d27a; border-radius:12px; padding:10px 14px; margin-bottom:12px; line-height:1.5; }
   .sched-stale .link-btn { font-weight:700; }
+  /* ─── Paying for a trial or enrolment: card (Stripe) or PayNow ─── */
+  .pay-choice { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .pay-choice button { display:flex; flex-direction:column; align-items:center; gap:2px; padding:12px 10px; border-radius:12px; border:2px solid var(--line); background:#fff; color:var(--ink); font:inherit; font-weight:800; font-size:15px; cursor:pointer; min-height:64px; }
+  .pay-choice button small { font-weight:600; font-size:12px; color:var(--gray-500); }
+  .pay-choice button[aria-pressed="true"] { border-color:var(--deep); background:#eef8f9; color:var(--deep); }
+  .pay-choice button:focus-visible { outline:3px solid var(--aqua); outline-offset:2px; }
+  .card-box { background:var(--gray-50); border:1px solid var(--gray-200); border-radius:var(--radius-sm); padding:16px; text-align:center; line-height:1.55; font-size:14px; color:var(--gray-700); }
+  .card-box .card-amount { font-size:26px; font-weight:800; color:var(--ink); display:block; margin:2px 0 6px; }
+  .card-box .card-brands { font-size:12px; color:var(--gray-500); margin-top:6px; }
+  .booking .card-paid { width:90px; height:120px; border-radius:6px; border:1px solid var(--success-border); background:var(--success-bg); color:var(--success); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-size:12px; font-weight:800; text-align:center; }
+  .booking .card-paid span { font-size:28px; }
+  .badge.card { background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; }
+  .confirm-wait { display:flex; flex-direction:column; align-items:center; gap:12px; padding:24px 8px; text-align:center; line-height:1.55; }
+  @media (max-width: 380px) { .pay-choice button { font-size:14px; padding:10px 6px; } }
   .tt-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .tt { width:100%; table-layout:fixed; border-collapse:separate; border-spacing:6px; }
   .tt-col-time { width:104px; }
@@ -793,7 +812,22 @@
           <div class="field"><label>WhatsApp number <span class="req">*</span></label><input id="b-wa" type="tel" placeholder="9123 4567"></div>
         </div>
 
-        <div class="pay-box">
+        <div class="field hidden" id="pay-choice-wrap">
+          <label id="pay-choice-label">How would you like to pay?</label>
+          <div class="pay-choice" role="group" aria-labelledby="pay-choice-label">
+            <button type="button" id="pay-card" aria-pressed="true" onclick="setPayMethod('card')">💳 Card<small>Visa, Mastercard &amp; more</small></button>
+            <button type="button" id="pay-paynow" aria-pressed="false" onclick="setPayMethod('paynow')">PayNow<small>Scan the QR code</small></button>
+          </div>
+        </div>
+
+        <div class="card-box hidden" id="card-box">
+          <span id="card-what">Trial fee</span>
+          <span class="card-amount" id="card-amount">—</span>
+          You pay on Stripe's secure page and come straight back here. Your booking is confirmed by email as soon as the payment goes through, with no screenshot to upload.
+          <div class="card-brands">Visa · Mastercard · American Express · Apple Pay · Google Pay</div>
+        </div>
+
+        <div class="pay-box" id="paynow-box">
           <div style="font-weight:700;margin-bottom:8px;" id="pay-title">Pay via PayNow</div>
           <div class="qr" id="booking-qr"></div>
           <div class="pay-info">
@@ -803,7 +837,7 @@
           </div>
         </div>
 
-        <div class="field">
+        <div class="field" id="paynow-upload">
           <label>Upload PayNow screenshot <span class="req">*</span></label>
           <div class="upload" id="b-upload" onclick="document.getElementById('b-file').click()">
             Tap to upload your payment screenshot
@@ -813,6 +847,12 @@
 
         <button class="btn" id="booking-submit" onclick="submitBooking()">Confirm booking</button>
       </div>
+    </div>
+    <div id="booking-confirming" class="confirm-wait hidden" role="status">
+      <span class="sched-spin" aria-hidden="true"></span>
+      <b id="booking-confirming-title">Confirming your payment…</b>
+      <span id="booking-confirming-text">This takes a few seconds. Please keep this page open.</span>
+      <button class="btn ghost small hidden" id="booking-confirming-close" onclick="closeModal('booking-modal')">Close</button>
     </div>
     <div id="booking-success" class="success-box hidden">
       <div class="tick">✓</div>
@@ -871,12 +911,23 @@ const auth = firebase.auth();
 
 // Shown to the signed-in teacher in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const SCHEDULE_PAGE_VERSION = 'v1.5.1';
+const SCHEDULE_PAGE_VERSION = 'v1.6.0';
 
 const ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // Every trial booking emails these addresses via the "Trigger Email"
 // extension (documents added to the `mail` collection are sent).
 const NOTIFICATION_EMAILS = ['chungzhikai@gmail.com', 'admin@polymathlc.com.sg'];
+
+// Card payments for trials and enrolments go through the products page's Stripe
+// account and functions (shop-function/functions/booking.js): the server prices the
+// booking from schedule_config itself, Stripe takes the card, and the booking is
+// written as paid by scheduleCheckoutStatus or Stripe's webhook, which also email
+// the centre and the parent. The products page's "Hide card payment" switch
+// (shop_settings/config.cardPayments === false) hides it here too.
+const SHOP_API = 'https://us-central1-mathgen--app.cloudfunctions.net/';
+const CARD_CHECKOUT_URL = SHOP_API + 'createScheduleCheckout';
+const CARD_STATUS_URL = SHOP_API + 'scheduleCheckoutStatus';
+const SHOP_SETTINGS = db.collection('shop_settings').doc('config');
 
 const PAYNOW_UEN = 'T16LL2365E';
 const MERCHANT_NAME = 'POLYMATH LEARNING';
@@ -1041,6 +1092,42 @@ function writeCachedConfig(data) {
   config = Object.assign(JSON.parse(JSON.stringify(DEFAULT_CONFIG)), saved.data);
   configSource = 'cache';
 })();
+
+// Firestore's REST answer (window.__scheduleEarly, asked for in <head>) as plain
+// data: every value arrives wrapped by type ({stringValue:'P5'}, {mapValue:{fields}}).
+function fromFirestoreValue(v) {
+  if (!v || typeof v !== 'object') return null;
+  if ('stringValue' in v) return v.stringValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return Number(v.doubleValue);
+  if ('booleanValue' in v) return !!v.booleanValue;
+  if ('nullValue' in v) return null;
+  if ('mapValue' in v) return fromFirestoreFields((v.mapValue && v.mapValue.fields) || {});
+  if ('arrayValue' in v) return ((v.arrayValue && v.arrayValue.values) || []).map(fromFirestoreValue);
+  return null;   // timestamps, references and the like: nothing the timetable draws
+}
+function fromFirestoreFields(fields) {
+  const out = {};
+  Object.keys(fields || {}).forEach(k => { const val = fromFirestoreValue(fields[k]); if (val !== null) out[k] = val; });
+  return out;
+}
+// Shown to parents straight away; the teacher still waits for the live copy
+// before editing, and the live listener replaces it the moment it answers.
+function useEarlySchedule() {
+  const early = window.__scheduleEarly;
+  if (!early || typeof early.then !== 'function') return;
+  early.then(doc => {
+    if (!doc || !doc.fields || configSource === 'live') return;
+    const data = fromFirestoreFields(doc.fields);
+    config = Object.assign(JSON.parse(JSON.stringify(DEFAULT_CONFIG)), data);
+    configSource = 'cache';
+    configError = '';
+    configSlow = false;
+    writeCachedConfig(data);
+    renderHero();
+    if (!draftSlots) renderSchedule();
+  }).catch(() => {});
+}
 
 function scheduleReady() {
   if (configSource === 'none') return false;
@@ -1960,6 +2047,8 @@ async function saveTrialSettings() {
   finally { btn.disabled = false; }
 }
 
+useEarlySchedule();
+
 const scheduleSlowTimer = setTimeout(() => {
   if (configSource === 'live') return;
   configSlow = true;
@@ -1989,6 +2078,33 @@ CONFIG_DOC.onSnapshot(snap => {
 let currentSlotId = null;
 let receiptFile = null;
 let bookingKind = 'trial';      // 'trial' or 'enrol' (straight in, first month paid)
+let cardEnabled = true;         // shop_settings/config.cardPayments; missing means on
+let payMethod = 'card';         // 'card' or 'paynow'
+
+SHOP_SETTINGS.onSnapshot(snap => {
+  cardEnabled = !(snap.exists && snap.data().cardPayments === false);
+  if (!cardEnabled && payMethod === 'card') payMethod = 'paynow';
+  if (currentSlotId && document.getElementById('booking-modal').classList.contains('show')) applyPayMethod();
+}, () => { /* unreadable settings: keep offering card, the server still enforces the switch */ });
+
+// Card is offered first whenever it is switched on; PayNow is always there too.
+function setPayMethod(m) {
+  payMethod = m === 'card' && cardEnabled ? 'card' : 'paynow';
+  applyPayMethod();
+}
+function applyPayMethod() {
+  if (!cardEnabled) payMethod = 'paynow';
+  const card = payMethod === 'card';
+  document.getElementById('pay-choice-wrap').classList.toggle('hidden', !cardEnabled);
+  document.getElementById('pay-card').setAttribute('aria-pressed', card ? 'true' : 'false');
+  document.getElementById('pay-paynow').setAttribute('aria-pressed', card ? 'false' : 'true');
+  document.getElementById('card-box').classList.toggle('hidden', !card);
+  document.getElementById('paynow-box').classList.toggle('hidden', card);
+  document.getElementById('paynow-upload').classList.toggle('hidden', card);
+  const btn = document.getElementById('booking-submit');
+  if (!btn.disabled) btn.textContent = submitLabel();
+  if (!card) refreshBookingQR();
+}
 
 function openBooking(id, kind) {
   const s = getSlot(id);
@@ -2027,13 +2143,23 @@ function openBooking(id, kind) {
   updateBookingPrice(true);
   document.getElementById('booking-form-wrap').classList.remove('hidden');
   document.getElementById('booking-success').classList.add('hidden');
+  document.getElementById('booking-confirming').classList.add('hidden');
   const btn = document.getElementById('booking-submit');
-  btn.disabled = false; btn.textContent = submitLabel();
+  btn.disabled = false;
+  payMethod = cardEnabled ? 'card' : 'paynow';
+  applyPayMethod();
+  btn.textContent = submitLabel();
   refreshBookingQR();
   document.getElementById('booking-modal').classList.add('show');
 }
 
-function submitLabel() { return bookingKind === 'enrol' ? 'Confirm enrolment' : 'Confirm booking'; }
+function submitLabel() {
+  if (payMethod === 'card' && cardEnabled && currentSlotId) {
+    const s = getSlot(currentSlotId);
+    return 'Pay ' + money(bookingAmount(s, bookingMode(s))) + ' by card';
+  }
+  return bookingKind === 'enrol' ? 'Confirm enrolment' : 'Confirm booking';
+}
 
 // What is being paid now: the trial fee, or the first month's fees.
 function bookingAmount(s, mode) {
@@ -2056,6 +2182,10 @@ function updateBookingPrice(skipQR) {
     (isMaster(s) ? '✦ Master Class · ' : '') + slotLabel(currentSlotId) + ' · ' + s.level.replace('P', 'Primary ') + ' ' + s.subject
     + ' · ' + mode + (fee ? ' · ' + money(fee) + (enrol ? '/month' : '/month after the trial') : '');
   document.getElementById('booking-amount').textContent = money(bookingAmount(s, mode));
+  document.getElementById('card-amount').textContent = money(bookingAmount(s, mode));
+  document.getElementById('card-what').textContent = enrol ? "First month's fees" : (isMaster(s) ? 'Master Class trial fee' : 'Trial fee');
+  const submit = document.getElementById('booking-submit');
+  if (!submit.disabled) submit.textContent = submitLabel();
   // A trial needs 3 business days' notice; enrolling has no trial to prepare.
   const trialNote = document.getElementById('trial-note');
   trialNote.classList.toggle('hidden', enrol);
@@ -2115,6 +2245,7 @@ async function submitBooking() {
   if (!childLevel2027) return toast("Please select your child's level in 2027", true);
   if (!EMAIL_RE.test(email)) return toast('Please enter a valid email', true);
   if (!isValidSgMobile(waRaw)) return toast('Please enter a valid 8-digit Singapore mobile number', true);
+  if (payMethod === 'card' && cardEnabled) return payBookingByCard({ s, parentName, childName, childLevel2027, email, waRaw, mode });
   if (!receiptFile) return toast('Please upload your PayNow screenshot', true);
   const enrol = bookingKind === 'enrol';
   const amount = bookingAmount(s, mode);
@@ -2167,6 +2298,116 @@ async function submitBooking() {
     toast((enrol ? 'Enrolment' : 'Booking') + ' failed: ' + (e.message || 'please try again'), true);
     btn.disabled = false; btn.textContent = submitLabel();
   }
+}
+
+// ─── Paying by card ───
+// The server answers with words the parent should see for every refusal it knows.
+const CARD_ERRORS = {
+  'class-full': 'Sorry, this class has just filled up. Please pick another class or WhatsApp us.',
+  'class-unavailable': 'Sorry, this class is no longer open for booking. Please pick another class or WhatsApp us.',
+  'mode-unavailable': 'This class is no longer offered that way. Please refresh the page and try again.',
+  'enrol-unavailable': 'Enrolling online is not available for this class just now. Please WhatsApp us.',
+  'price-not-set': 'The fee for this class is not set yet, so it cannot be paid by card. Please use PayNow or WhatsApp us.',
+  'invalid-whatsapp': 'Please enter a valid 8-digit Singapore mobile number.',
+  'invalid-email': 'Please enter a valid email.',
+  'too-many-checkouts': 'Too many attempts from this connection. Please try again in an hour, or pay by PayNow.',
+  'card-payments-off': 'Card payment is not available just now. Please pay by PayNow instead.'
+};
+
+async function payBookingByCard({ s, parentName, childName, childLevel2027, email, waRaw, mode }) {
+  const enrol = bookingKind === 'enrol';
+  const amount = bookingAmount(s, mode);
+  if (!(amount > 0)) return toast((enrol ? 'Enrolment' : 'Card payment') + ' is not available for this class — please WhatsApp us', true);
+  const bookedOn = sgDayKey();
+  const btn = document.getElementById('booking-submit');
+  btn.disabled = true; btn.textContent = 'Opening the secure card page…';
+  let answer = null;
+  try {
+    const res = await fetch(CARD_CHECKOUT_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slot: currentSlotId, kind: enrol ? 'enrol' : 'trial', mode,
+        parentName, childName, childLevel2027, email, whatsapp: normalizeSgMobile(waRaw),
+        earliestKey: enrol ? '' : earliestTrialFor(String(currentSlotId).split('-')[0], bookedOn),
+        returnUrl: location.origin + location.pathname, pageVersion: SCHEDULE_PAGE_VERSION
+      })
+    });
+    answer = await res.json().catch(() => null);
+    if (res.ok && answer && answer.ok && typeof answer.url === 'string' && /^https:\/\/checkout\.stripe\.com\//.test(answer.url)) {
+      location.assign(answer.url);
+      return;
+    }
+  } catch (e) { console.error('Card checkout failed', e); }
+  const code = answer && answer.error;
+  if (code === 'card-payments-off') { cardEnabled = false; setPayMethod('paynow'); }
+  toast(CARD_ERRORS[code] || 'Could not open the card payment page. Please check your connection and try again, or pay by PayNow.', true);
+  btn.disabled = false; btn.textContent = submitLabel();
+}
+
+// Stripe sends the parent back to /schedule/?booking=CODE&session=cs_… (paid or
+// still processing) or ?booking=CODE&cancelled=1. The booking is recorded by the
+// server; the page only asks whether it went through, and says so.
+function cardReturnParams() {
+  const q = new URLSearchParams(location.search);
+  const code = q.get('booking');
+  if (!code || !/^[A-Z0-9]{6}$/.test(code)) return null;
+  return { code, sessionId: q.get('session') || '', cancelled: q.get('cancelled') === '1' };
+}
+function tidyCardReturnUrl() {
+  try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
+}
+function showConfirming(title, text, closable) {
+  document.getElementById('booking-form-wrap').classList.add('hidden');
+  document.getElementById('booking-success').classList.add('hidden');
+  const box = document.getElementById('booking-confirming');
+  box.classList.remove('hidden');
+  document.getElementById('booking-confirming-title').textContent = title;
+  document.getElementById('booking-confirming-text').textContent = text;
+  box.querySelector('.sched-spin').classList.toggle('hidden', !!closable);
+  document.getElementById('booking-confirming-close').classList.toggle('hidden', !closable);
+  document.getElementById('booking-modal').classList.add('show');
+}
+function showCardSuccess(b) {
+  const enrol = b.kind === 'enrol';
+  const master = b.classType === 'master';
+  const earliest = !enrol && b.earliestKey ? fmtDayKey(b.earliestKey, true, sgDayKey()) : '';
+  document.getElementById('booking-success-title').textContent = enrol ? 'Enrolment paid and received!' : 'Trial booked and paid!';
+  document.getElementById('booking-success-text').textContent = enrol
+    ? 'Thank you, ' + b.parentName + '! Your card payment of ' + money(b.price) + ' for ' + b.childName + "'s first month in "
+      + (master ? 'the Master Class' : 'the class') + ' on ' + b.slotLabel + ' (' + b.subject + ', ' + b.mode + ') has gone through. '
+      + 'A confirmation is on its way to your email. ' + ENROL_ACROSS
+    : 'Thank you, ' + b.parentName + '! Your card payment of ' + money(b.price) + ' has gone through, and ' + b.childName + "'s "
+      + (master ? 'Master Class trial' : 'trial') + ' on ' + b.slotLabel + ' (' + b.subject + ', ' + b.mode + ') is booked. '
+      + 'A confirmation is on its way to your email, and we will WhatsApp you to confirm the date.'
+      + (earliest ? ' As trial slots need ' + TRIAL_NOTICE_DAYS + " business days' notice, the earliest possible trial date is " + earliest + '.' : '');
+  document.getElementById('booking-form-wrap').classList.add('hidden');
+  document.getElementById('booking-confirming').classList.add('hidden');
+  document.getElementById('booking-success').classList.remove('hidden');
+  document.getElementById('booking-modal').classList.add('show');
+}
+const CARD_STATUS_WAITS = [0, 1500, 2000, 3000, 4000, 5000, 6000];
+async function handleCardReturn() {
+  const back = cardReturnParams();
+  if (!back) return;
+  tidyCardReturnUrl();
+  if (back.cancelled || !back.sessionId) {
+    toast('Card payment cancelled. Nothing was charged, and you can book again any time.');
+    return;
+  }
+  showConfirming('Confirming your payment…', 'This takes a few seconds. Please keep this page open.', false);
+  for (const wait of CARD_STATUS_WAITS) {
+    if (wait) await new Promise(r => setTimeout(r, wait));
+    try {
+      const res = await fetch(CARD_STATUS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: back.code, sessionId: back.sessionId }) });
+      const answer = await res.json().catch(() => null);
+      if (res.ok && answer && answer.paid && answer.booking) { showCardSuccess(answer.booking); return; }
+      if (res.status === 404) break;
+    } catch (e) { /* a dropped connection: ask again */ }
+  }
+  showConfirming('We are still waiting for the payment to be confirmed',
+    'If your card was charged, your booking is safe: a confirmation email will reach you shortly. '
+    + 'If nothing arrives within 15 minutes, WhatsApp us at +65 9645 0588 with booking code ' + back.code + '.', true);
 }
 
 // `earliestKey` is the trial's earliest possible date under the 3-business-day
@@ -2246,8 +2487,11 @@ function renderBookings() {
   document.getElementById('bookings-count').textContent = bookings.filter(b => b.status !== 'confirmed').length + ' pending';
   if (!bookings.length) { list.innerHTML = '<div class="empty">No bookings or enrolments yet.</div>'; return; }
   list.innerHTML = bookings.map(b => {
+    const card = b.payment === 'card';
     const isImg = !/\.pdf$/i.test(b.receiptFilename || '');
-    const thumb = isImg
+    const thumb = card
+      ? '<div class="card-paid" title="Paid by card through Stripe"><span aria-hidden="true">💳</span>Paid by card</div>'
+      : isImg
       ? '<a href="' + escapeHtml(b.receiptURL) + '" target="_blank" rel="noopener"><img src="' + escapeHtml(b.receiptURL) + '" alt="Receipt"></a>'
       : '<a class="btn ghost small" href="' + escapeHtml(b.receiptURL) + '" target="_blank" rel="noopener">PDF</a>';
     return '<div class="booking">' + thumb
@@ -2255,11 +2499,14 @@ function renderBookings() {
       +   '<div><b>' + escapeHtml(b.childName) + '</b> (' + escapeHtml(b.childLevel2027) + ' in 2027) '
       +   '<span class="badge ' + (b.status === 'confirmed' ? 'confirmed' : 'pending') + '">' + escapeHtml(b.status || 'pending') + '</span>'
       +   (b.kind === 'enrol' ? ' <span class="badge enrol">Enrolment</span>' : ' <span class="badge trial">Trial</span>')
-      +   (b.classType === 'master' ? ' <span class="badge master">✦ Master Class</span>' : '') + '</div>'
+      +   (b.classType === 'master' ? ' <span class="badge master">✦ Master Class</span>' : '')
+      +   (b.payment === 'card' ? ' <span class="badge card">💳 Card</span>' : '') + '</div>'
       +   '<div>' + escapeHtml(b.slotLabel) + ' · ' + escapeHtml((b.classLevel || '') + ' ' + (b.subject || '')) + ' · ' + escapeHtml(b.mode) + '</div>'
       +   '<div>Parent: ' + escapeHtml(b.parentName) + ' · <a href="mailto:' + escapeHtml(b.email) + '">' + escapeHtml(b.email) + '</a> · '
       +   '<a href="https://wa.me/65' + escapeHtml(b.whatsapp) + '" target="_blank" rel="noopener">+65 ' + escapeHtml(fmtWa(b.whatsapp)) + '</a></div>'
-      +   '<div>' + money(b.price) + (b.kind === 'enrol' ? ' first month paid' : ' trial')
+      +   (b.payment === 'card' && b.paymentChecks && b.paymentChecks.length
+            ? '<div style="color:var(--danger);font-weight:700;">Check this payment in Stripe: ' + escapeHtml(b.paymentChecks.join(', ')) + '</div>' : '')
+      +   '<div>' + money(b.price) + (b.payment === 'card' ? ' paid by card for the' : '') + (b.kind === 'enrol' ? ' first month' + (b.payment === 'card' ? '' : ' paid') : ' trial')
       +     (b.monthlyFee ? ' · ' + money(b.monthlyFee) + '/month' : '')
       +     (b.kind === 'enrol' ? ' · collect from month 2' : '')
       +     ' · Ref ' + escapeHtml(b.paymentRef || '') + ' · ' + escapeHtml(fmtTime(b.createdAt)) + '</div>'
@@ -2267,7 +2514,7 @@ function renderBookings() {
       + '<div class="booking-actions">'
       +   (b.status === 'confirmed'
             ? '<button class="btn ghost small" onclick="setBookingStatus(\'' + b._id + '\',\'pending\')">Mark pending</button>'
-            : '<button class="btn small" onclick="setBookingStatus(\'' + b._id + '\',\'confirmed\')">Payment OK</button>')
+            : '<button class="btn small" onclick="setBookingStatus(\'' + b._id + '\',\'confirmed\')">' + (b.payment === 'card' ? 'Confirm' : 'Payment OK') + '</button>')
       +   '<button class="btn danger small" onclick="deleteBooking(\'' + b._id + '\')">Delete</button>'
       + '</div></div>';
   }).join('');
@@ -2570,6 +2817,7 @@ window.addEventListener('hashchange', () => {
 // A page left open overnight must not keep quoting yesterday's earliest trial date.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) renderTrialNotice(); });
 maybeAdminFromHash();
+handleCardReturn();
 renderHero();
 if (location.hash === '#timetable') openTimetableFromLink();
 else renderSchedule();
