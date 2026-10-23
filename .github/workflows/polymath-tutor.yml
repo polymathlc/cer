@@ -2,10 +2,10 @@ name: The Polymath (answer-key QR tutor)
 
 on:
   pull_request:
-    paths: ['app.js', 'index.html', 'polymath.html', 'polymath-tutor.js', 'polymath-tutor-core.mjs', 'vendor/qrcode-generator.js', 'tools/polymath-tutor-*.mjs', '.github/workflows/polymath-tutor.yml']
+    paths: ['app.js', 'index.html', 'polymath.html', 'polymath-tutor.js', 'polymath-tutor-core.mjs', 'polymath-voice.js', 'vendor/qrcode-generator.js', 'tools/polymath-tutor-*.mjs', '.github/workflows/polymath-tutor.yml']
   push:
     branches: [main]
-    paths: ['app.js', 'index.html', 'polymath.html', 'polymath-tutor.js', 'polymath-tutor-core.mjs', 'vendor/qrcode-generator.js', 'tools/polymath-tutor-*.mjs', '.github/workflows/polymath-tutor.yml']
+    paths: ['app.js', 'index.html', 'polymath.html', 'polymath-tutor.js', 'polymath-tutor-core.mjs', 'polymath-voice.js', 'vendor/qrcode-generator.js', 'tools/polymath-tutor-*.mjs', '.github/workflows/polymath-tutor.yml']
 
 permissions:
   contents: read
@@ -22,7 +22,8 @@ jobs:
         run: |
           node --check app.js
           node --check polymath-tutor.js
-          node --test tools/polymath-tutor-tests.mjs
+          node --check polymath-voice.js
+          node --test tools/polymath-tutor-tests.mjs tools/polymath-voice-tests.mjs
           node tools/answer-key-tests.mjs
       - name: Install browser test runtime
         run: |

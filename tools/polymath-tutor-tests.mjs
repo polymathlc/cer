@@ -343,3 +343,139 @@ test('the switches are per surface and start off', () => {
 test('the symbols a science paper uses survive', () => {
   assert.equal(core.htmlToPlain('0 &deg;C &times; 2 &rarr; x'), '0 °C × 2 → x');
 });
+
+/* ---------- 🎙 the voice tutor and 📕 the Study Buddy mistake book (v1.448.0) ---------- */
+const VOICE_SRC = readFileSync(new URL('polymath-voice.js', ROOT), 'utf8');
+const VQ = core.normalizeTutorPaper(SAMPLE).questions;
+
+test('the voice is told the screen, and only the delegated tutor sees the key', () => {
+  const q = VQ[0];
+  const said = core.voiceContext(q, { s1: '2' }, { verdict: 'incorrect' });
+  assert.match(said, /Which part of the plant takes in water\?/);
+  assert.match(said, /Chose option \(2\)/);
+  assert.match(said, /INCORRECT/);
+  assert.doesNotMatch(said, /ANSWER KEY|2\. Root/, 'the voice never holds the key');
+  assert.match(core.voiceContext(null), /whole paper/);
+  const prompt = core.buildVoicePrompt(q, { s1: '1' }, [{ role: 'user', text: 'Is it the leaf?' }, { role: 'assistant', text: 'Good thinking.' }, { role: 'user', text: 'So which part?' }], false);
+  assert.match(prompt, /You are The Polymath/);
+  assert.match(prompt, /TALKING to the student out loud/);
+  assert.match(prompt, /ANSWER KEY \(for you only\)/, 'the tutor that answers the voice does see the key');
+  assert.match(prompt, /Do NOT give the final answer/, 'and is held to the same rule as the typed chat');
+  assert.match(prompt, /Student: Is it the leaf\?\nThe Polymath: Good thinking\.\nStudent: So which part\?/);
+  assert.match(prompt, /press Check/);
+  assert.doesNotMatch(core.buildVoicePrompt(q, {}, [], true), /Do NOT give the final answer/, 'solved: the full answer may be talked through');
+  const paperOnly = core.buildVoicePrompt(null, {}, [{ role: 'user', text: 'Where do I start?' }], false);
+  assert.match(paperOnly, /has not opened one/);
+  assert.doesNotMatch(paperOnly, /ANSWER KEY/);
+  assert.doesNotMatch(prompt + said, /Chung GPT|Gemini|ChatGPT|OpenAI/);
+});
+
+test('the spoken transcript keeps the last ten turns and drops empty ones', () => {
+  const rows = Array.from({ length: 14 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: 'turn ' + i }));
+  const t = core.voiceTranscript(rows.concat([{ role: 'user', text: '   ' }]));
+  assert.equal(t.split('\n').length, 9, 'ten kept, the blank one dropped');
+  assert.match(t, /^The Polymath: turn 5/);
+  assert.equal(core.voiceTranscript(null), '');
+});
+
+test('a reply is made fit to be spoken', () => {
+  assert.equal(core.speakable('The Polymath: **Heat** flows\n\nfrom hot to cold. [smiles]'), 'Heat flows from hot to cold.');
+  const long = 'Heat moves from a hotter place to a colder place. '.repeat(30);
+  const s = core.speakable(long);
+  assert.ok(s.length <= core.TUTOR_VOICE_MAX_CHARS);
+  assert.match(s, /\.$/, 'a long reply ends on a whole sentence');
+  assert.ok(core.speakable('a'.repeat(900)).endsWith('…'));
+});
+
+test('the call clock trusts the server, within reason', () => {
+  assert.equal(core.voiceMaxSeconds({ maxDurationSeconds: 600 }), 600);
+  assert.equal(core.voiceMaxSeconds({ maxDurationSeconds: 5 }), core.TUTOR_LIVE_MAX_SECONDS);
+  assert.equal(core.voiceMaxSeconds({ maxDurationSeconds: 'x' }), 900);
+  assert.equal(core.voiceMaxSeconds(null), 900);
+  assert.equal(core.voiceClock(905), '15:05');
+  assert.equal(core.voiceClock(-3), '0:00');
+  assert.equal(core.TUTOR_LIVE_ENDPOINT, 'https://us-central1-mathgen--app.cloudfunctions.net/polymathLive');
+  assert.equal(core.TUTOR_VOICE_IDLE_MS, 120000);
+});
+
+test('the mistake book card is Study Buddy\'s shape, one per question per paper', () => {
+  const paper = core.normalizeTutorPaper(SAMPLE);
+  const id = core.tutorPaperId(paper);
+  assert.equal(core.mistakeDocId(id, 1), 'polymath-' + id + '-1');
+  assert.equal(core.mistakeDocId(id, 0), '');
+  assert.equal(core.mistakeDocId('../x', 1), '');
+  assert.equal(core.mistakeDocId(id, 9999), '');
+  const m = core.mistakeDoc(paper, id, paper.questions[0], { s1: '1' }, { verdict: 'incorrect', feedback: 'The leaf makes food.', nextStep: 'Which part is under the soil?' }, { level: 'P5', attempts: 2 });
+  assert.equal(m.source, 'polymath');
+  assert.equal(m.key, 'polymath|' + id + '|1');
+  assert.equal(m.polymathUrl, core.tutorUrl(id, 1));
+  assert.equal(m.docName, 'PSLE 2019 Science');
+  assert.equal(m.level, 'P5');
+  assert.equal(m.subject, 'science');
+  assert.equal(m.number, '1');
+  assert.equal(m.type, 'mcq');
+  assert.equal(m.option, '1');
+  assert.equal(m.options.length, 4);
+  assert.deepEqual(m.options[1], { label: '2', text: 'Root' });
+  assert.match(m.question, /Which part of the plant takes in water\?/);
+  assert.match(m.studentAnswer, /Chose option \(1\)/);
+  assert.match(m.answer, /Root/);
+  assert.equal(m.feedback, 'The leaf makes food. Which part is under the soil?');
+  assert.equal(m.verdict, 'wrong');
+  assert.equal(m.attempts, 2);
+  assert.equal(m.cleared, false);
+  assert.equal(m.skipped, false);
+  assert.deepEqual(m.blocks, []);
+  assert.equal(m.imagePath, '', 'a text card: Study Buddy\'s "text" tier');
+  assert.ok(!('createdAt' in m), 'the writer stamps it, once');
+  const open = core.mistakeDoc(paper, id, paper.questions[1], { s1: 'It got warm' }, { verdict: 'partial', feedback: 'Close.' }, {});
+  assert.equal(open.type, 'open');
+  assert.equal(open.verdict, 'partial');
+  assert.equal(open.level, '', 'no level is guessed');
+  assert.equal(open.marks, '2');
+  assert.deepEqual(open.options, []);
+});
+
+test('only a wrong or partly right answer is filed; levels and subjects are Study Buddy\'s', () => {
+  assert.equal(core.shouldFileMistake({ verdict: 'incorrect' }), true);
+  assert.equal(core.shouldFileMistake({ verdict: 'partial' }), true);
+  assert.equal(core.shouldFileMistake({ verdict: 'correct' }), false);
+  assert.equal(core.shouldFileMistake(null), false);
+  assert.equal(core.levelKey('P4'), 'P4');
+  assert.equal(core.levelKey('primary 6'), 'P6');
+  assert.equal(core.levelKey('Sec 1'), '');
+  assert.equal(core.levelKey('P2'), '');
+  assert.equal(core.subjectKey('Mathematics'), 'math');
+  assert.equal(core.subjectKey('PSLE Science'), 'science');
+  assert.equal(core.subjectKey(''), 'science');
+  assert.equal(core.questionNumber({ label: 'Question 12 — PSLE 2019 Q4', n: 3 }), '12');
+  assert.equal(core.questionNumber({ label: 'Q7b', n: 3 }), '7b');
+  assert.equal(core.questionNumber({ label: 'Untitled', n: 3 }), '3');
+  assert.deepEqual(core.emptyProgress().filed, {}, 'what was filed is remembered with the progress');
+});
+
+test('the page wires the voice, the account and the book, and builds no markup', () => {
+  assert.doesNotMatch(VOICE_SRC, /innerHTML|insertAdjacentHTML|outerHTML/);
+  assert.doesNotMatch(VOICE_SRC + UI + PAGE, /Chung GPT/);
+  assert.match(UI, /import \{ createPolymathVoice \} from '\.\/polymath-voice\.js\?v=\d+'/);
+  assert.match(UI, /from '\.\/polymath-tutor-core\.mjs\?v=2'/);
+  assert.match(VOICE_SRC, /from '\.\/polymath-tutor-core\.mjs\?v=2'/, 'one copy of the core on the page');
+  assert.match(PAGE, /from '\.\/polymath-tutor-core\.mjs\?v=2'/);
+  assert.match(PAGE, /firebase-auth\.js/);
+  assert.match(PAGE, /signInAnonymously/);
+  assert.match(PAGE, /GoogleAuthProvider/);
+  assert.match(PAGE, /'users', uid, 'mistakes', id/, 'the book is Study Buddy\'s collection');
+  assert.match(PAGE, /createdAt: stamp/);
+  assert.match(PAGE, /isAnonymous/, 'an anonymous phone has no book');
+  assert.match(PAGE, /studentProfiles/);
+  assert.match(PAGE, /getToken\(appCheck/);
+  assert.match(PAGE, /mountPolymathTutor\(root, \{ loadPaper, ask, fetchImage, account, mistakes, voice \}\)/);
+  assert.match(UI, /voiceContext\(/);
+  assert.match(UI, /buildVoicePrompt\(/);
+  assert.match(UI, /speakable\(/);
+  assert.match(UI, /shouldFileMistake\(/);
+  assert.match(UI, /voice\.stop\(\)/, 'a new paper ends the call');
+  assert.match(PAGE, /\.pm-voice\[data-phase="speaking"\]/);
+  assert.match(PAGE, /\.pm-voice\[data-phase="thinking"\]/);
+  assert.match(PAGE, /\.pm-voice\[data-phase="listening"\]/);
+});

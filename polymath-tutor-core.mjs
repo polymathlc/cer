@@ -383,7 +383,9 @@ export function stripMarkdown(text) {
 
 /* ---------- progress on this phone ---------- */
 export function progressKey(id) { return 'polymath-tutor:' + id; }
-export function emptyProgress() { return { answers: {}, results: {}, attempts: {}, hints: {}, chats: {}, solutions: {} }; }
+// `filed` is what this phone has put into the Study Buddy mistake book, per
+// question: 'filed' (a card is there) or 'cleared' (it was got right since).
+export function emptyProgress() { return { answers: {}, results: {}, attempts: {}, hints: {}, chats: {}, solutions: {}, filed: {} }; }
 export function readProgress(storage, id) {
   try {
     const raw = storage && storage.getItem(progressKey(id));
@@ -409,4 +411,177 @@ export function solutionUnlocked(progress, n) {
   const p = progress || {};
   const r = p.results && p.results[n];
   return !!(r && r.verdict === 'correct') || ((p.attempts && p.attempts[n]) || 0) >= TUTOR_SOLUTION_AFTER;
+}
+
+/* =====================================================================
+   🎙 THE POLYMATH, OUT LOUD — the pure half of the voice (v1.448.0)
+   ---------------------------------------------------------------------
+   The voice is Study Buddy's live tutor brought to the QR page: a live
+   voice model over WebRTC that DELEGATES every academic thing the student
+   says back to this page, where the same tutor engine that marks, hints and
+   chats answers it with the question and the key in front of it. These are
+   the words of that answer and the words of what the voice is told about
+   the screen. Neither ever carries the key to the VOICE: only the delegated
+   tutor sees it, and it is told the same "hints, not answers" rule as every
+   other prompt in this file.
+   ===================================================================== */
+export const TUTOR_LIVE_ENDPOINT = 'https://us-central1-mathgen--app.cloudfunctions.net/polymathLive';
+// The server's own call length is the truth (`maxDurationSeconds`); this is
+// only what the page assumes before the first call answers.
+export const TUTOR_LIVE_MAX_SECONDS = 900;
+// What a spoken reply may be: long enough for one step and a question back,
+// short enough that a child is not lectured at through a phone speaker.
+export const TUTOR_VOICE_MAX_CHARS = 700;
+// Two quiet minutes and the microphone is switched off by itself.
+export const TUTOR_VOICE_IDLE_MS = 120000;
+
+// What the VOICE model is told about the screen. The question as printed and
+// what the student has typed — never the key, which the voice must not have
+// to keep secret.
+export function voiceContext(question, answers, result) {
+  if (!question) return 'The student is looking at the whole paper and has not opened a question yet. Ask which question they want help with.';
+  const lines = ['THE QUESTION ON THE STUDENT\'S SCREEN (' + (question.label || 'Question') + '):', str(questionText(question), 2400),
+    '', 'WHAT THE STUDENT HAS TYPED OR CHOSEN SO FAR:', str(answerText(question, answers), 1200)];
+  if (result && result.verdict) lines.push('', 'The page last marked their answer: ' + result.verdict.toUpperCase() + '.');
+  lines.push('', 'Delegate every request about this question to the client tutor.');
+  return lines.join('\n');
+}
+
+// The conversation as the tutor reads it: the last few turns, labelled.
+export function voiceTranscript(rows) {
+  return (Array.isArray(rows) ? rows : []).slice(-10).map(r => (r && r.role === 'user' ? 'Student: ' : TUTOR_NAME + ': ') + str(r && r.text, 800).trim())
+    .filter(line => !/:\s*$/.test(line)).join('\n');
+}
+
+// The DELEGATED tutor's prompt: the same persona, question, key and rule as
+// the typed chat, with the spoken conversation in place of the typed one and
+// an answer shaped to be SAID.
+export function buildVoicePrompt(question, answers, rows, solved) {
+  const said = voiceTranscript(rows);
+  const rule = solved ? 'They have already worked through this question, so you may talk through the full answer.'
+    : 'Explaining an idea, giving a similar example with different details and checking their reasoning are all fine, but ' + NO_REVEAL;
+  const head = tutorPersona() + '\n\nYou are TALKING to the student out loud, through their phone. What you write is read aloud word for word.';
+  if (!question) {
+    return head + '\n\nThe student is on the paper\'s list of questions and has not opened one.\n\nCONVERSATION:\n' + (said || '(they have just started)')
+      + '\n\nReply in one or two short spoken sentences: help them pick a question to start with, or answer a general science question simply. '
+      + 'No lists, no symbols, nothing that only makes sense on a screen.\n' + TUTOR_NAME + ':';
+  }
+  return head + '\n\n' + questionBlock(question)
+    + '\n\nWHAT THE STUDENT HAS TYPED OR CHOSEN:\n' + answerText(question, answers)
+    + '\n\nTHE SPOKEN CONVERSATION SO FAR (the last line is what they just said):\n' + (said || '(nothing yet)')
+    + '\n\nReply to what they just said, in at most three short spoken sentences, then usually end with one small question that gets them thinking. '
+    + rule + ' If they tell you an answer out loud, say whether they are on the right track without reading the key out, and suggest they type it and press Check. '
+    + 'Write numbers and units the way you would say them (say "degrees Celsius", not the symbol). No lists, no brackets, no symbols, no markdown.\n'
+    + TUTOR_NAME + ':';
+}
+
+// A reply made fit to be spoken: no markdown, no stage directions, no
+// leading "The Polymath:", one paragraph, and a cap that ends on a sentence.
+export function speakable(text) {
+  let s = stripMarkdown(text).replace(new RegExp('^\\s*' + TUTOR_NAME + '\\s*:\\s*', 'i'), '')
+    .replace(/\[[^\]]{0,80}\]/g, ' ').replace(/\s*\n+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  if (s.length > TUTOR_VOICE_MAX_CHARS) {
+    const cut = s.slice(0, TUTOR_VOICE_MAX_CHARS);
+    const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
+    s = end > TUTOR_VOICE_MAX_CHARS / 2 ? cut.slice(0, end + 1) : cut.trim() + '…';
+  }
+  return s;
+}
+
+// How long a call may last, from the server's answer. A junk value never
+// SHRINKS the clock below what the page assumed.
+export function voiceMaxSeconds(answer) {
+  const n = answer && answer.maxDurationSeconds;
+  return Number.isFinite(n) && n >= 60 && n <= 14400 ? Math.floor(n) : TUTOR_LIVE_MAX_SECONDS;
+}
+export function voiceClock(seconds) {
+  const s = Math.max(0, Math.floor(Number(seconds) || 0));
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+
+/* =====================================================================
+   📕 THE STUDY BUDDY MISTAKE BOOK REMEMBERS (v1.448.0)
+   ---------------------------------------------------------------------
+   A student who has a Study Buddy account (polymathlc/tutor) can sign in
+   on this page with it, and every question The Polymath marks wrong or
+   partly right goes into THAT book: `users/{uid}/mistakes/{id}`, the very
+   collection Study Buddy files its own marked worksheets into, in its own
+   shape. So the next time they open Study Buddy, the question is there to
+   practise again, with what they wrote and what was wrong with it.
+
+   • ONE DOCUMENT PER QUESTION PER PAPER (`mistakeDocId`), so checking a
+     question three times is one card that keeps the latest try, never
+     three cards. Getting it right later marks that card `cleared` — Study
+     Buddy's own "Sorted".
+   • IT IS STUDY BUDDY'S SHAPE, field for field, with `source: 'polymath'`
+     on top. A card with no picture is Study Buddy's 'text' tier, which is
+     exactly what a question typed out on a phone is.
+   • ONLY THE STUDENT'S OWN UID, and only a real (Google) account. An
+     anonymous phone has no book to remember into.
+   ===================================================================== */
+export const MISTAKE_SOURCE = 'polymath';
+export function mistakeDocId(paperId, n) {
+  if (!validTutorId(paperId)) return '';
+  const k = Number(n);
+  return Number.isInteger(k) && k > 0 && k <= TUTOR_MAX_QUESTIONS ? MISTAKE_SOURCE + '-' + paperId + '-' + k : '';
+}
+// Study Buddy's subject values.
+export function subjectKey(subject) {
+  const s = String(subject || '').toLowerCase();
+  if (/math/.test(s)) return 'math';
+  if (/english/.test(s)) return 'english';
+  if (/chinese|中文|华文/.test(s)) return 'chinese';
+  return 'science';
+}
+// Study Buddy's levels are P3–P6; anything else is left blank rather than guessed.
+export function levelKey(level) {
+  const m = /^\s*p(?:rimary)?\s*([3-6])\s*$/i.exec(String(level || ''));
+  return m ? 'P' + m[1] : '';
+}
+// The question's own number, for the card's "Q4" chip.
+export function questionNumber(question) {
+  const m = /(?:^|\b)(?:Q(?:uestion)?\s*)(\d{1,3}[a-z]?)\b/i.exec((question && question.label) || '');
+  return m ? m[1] : String((question && question.n) || '');
+}
+export function shouldFileMistake(result) {
+  return !!(result && (result.verdict === 'incorrect' || result.verdict === 'partial'));
+}
+// The document, in Study Buddy's own field names. `createdAt` is added by
+// the writer (a server timestamp), and only on the FIRST write.
+export function mistakeDoc(paper, paperId, question, answers, result, opts) {
+  const o = opts || {};
+  const q = question || {};
+  const mcqSlots = answerSlots(q).filter(it => it.t === 'mcq');
+  const onlyMcq = mcqSlots.length === 1 && answerSlots(q).length === 1;
+  const it = onlyMcq ? mcqSlots[0] : null;
+  const a = answers || {};
+  const r = result || {};
+  return {
+    key: MISTAKE_SOURCE + '|' + paperId + '|' + (q.n || ''),
+    source: MISTAKE_SOURCE,
+    polymathPaper: paperId,
+    polymathQuestion: q.n || 0,
+    polymathUrl: tutorUrl(paperId, q.n),
+    docId: '',
+    docName: str(paper && paper.title, 200) || 'The Polymath',
+    level: levelKey(o.level),
+    subject: subjectKey(paper && paper.subject),
+    page: 0,
+    number: questionNumber(q),
+    question: str(questionText(q), 4000),
+    type: it ? 'mcq' : 'open',
+    options: it ? it.options.slice(0, 8).map(opt => ({ label: str(opt.label, 4), text: str(opt.text, 240) })) : [],
+    option: it ? str(a[it.id], 8) : '',
+    studentAnswer: str(answerText(q, a), 2000),
+    answer: str(keyText(q), 3000),
+    explanation: '',
+    feedback: str([r.feedback, r.nextStep].filter(Boolean).join(' '), 2000),
+    verdict: r.verdict === 'partial' ? 'partial' : 'wrong',
+    skipped: false,
+    marks: q.marks ? String(q.marks) : '',
+    topic: '', lo: '', sylTopic: '',
+    blocks: [], imagePath: '', shot: '',
+    attempts: Math.max(1, Number(o.attempts) || 1),
+    cleared: false
+  };
 }

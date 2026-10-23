@@ -1,5 +1,35 @@
 # CER Science Learning Portal
 
+## 🎙 The Polymath talks: a crystal, a microphone and the Study Buddy mistake book (v1.448.0)
+
+The QR codes on a 10-year-series answer key open The Polymath. Now a student
+can talk to it as well as type.
+
+- **Tap the crystal and talk.** The Polymath is a cut gem in teal and magenta
+  that breathes while it waits, glows blue while it listens, swirls while it
+  thinks and pulses with its own voice while it speaks. It hears the student,
+  answers out loud, and shows the conversation underneath.
+- **It is Chung GPT's live tutor, the same one Study Buddy uses.** The voice
+  only talks; every question is handed to The Polymath's tutor, which reads the
+  question, its pictures, the student's answer and the printed key, and gives
+  hints before answers. The voice itself never sees the key.
+- **The microphone is never left on.** End the call, leave the page, open
+  another paper or stay quiet for two minutes and it switches off. Calls last
+  up to 15 minutes. Nothing said is recorded or saved.
+- **Sign in with a Study Buddy account.** A student with a Study Buddy account
+  can sign in on The Polymath. Every question marked wrong or partly right then
+  goes into their Study Buddy mistake book, with what they wrote and what was
+  wrong, to practise again there. Getting it right later marks it sorted.
+  Questions already marked wrong on the phone are added the moment they sign in.
+- **No account is still fine.** A phone that only scanned the code can still
+  type, check, get hints and talk (a few calls a day).
+- The voice runs on a new `polymathLive` server endpoint with daily and
+  centre-wide limits, deployed automatically when this is merged.
+
+Run `node --test tools/polymath-tutor-tests.mjs tools/polymath-voice-tests.mjs`,
+`npm --prefix live-assistant/functions test` and
+`node tools/polymath-tutor-browser.mjs`.
+
 ## 🎮 Quest frame: every sheet is a quest page (v1.445.0)
 
 The portal's framed worksheets now look like the Maths and Science creators'
