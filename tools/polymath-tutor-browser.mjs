@@ -306,7 +306,7 @@ await check('🎙 the crystal: a real microphone, a live call, a delegated answe
   await page.waitForFunction(() => document.querySelector('.pm-voice').dataset.phase === 'listening');
   assert.ok(await page.getByRole('button', { name: 'End the call', exact: true }).isVisible());
   assert.ok(await page.getByRole('button', { name: '🔇 Mute me' }).isVisible());
-  assert.match(await page.locator('.pm-clock').textContent(), /1[45]:\d\d left/);
+  await page.waitForFunction(() => /1[45]:\d\d left/.test(document.querySelector('.pm-clock').textContent));
   // The voice is told what is on the screen — the question, never the key.
   await page.waitForFunction(() => window.__live.sent.some(m => m.type === 'session.thinking.append' && m.delegation_id === null));
   const told = await page.evaluate(() => window.__live.sent.find(m => m.type === 'session.thinking.append' && m.delegation_id === null).content);

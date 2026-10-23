@@ -472,6 +472,7 @@ export function createPolymathVoice(options) {
     const running = !!controller;
     startBtn.hidden = running; stopBtn.hidden = !running; muteBtn.hidden = !running || next === 'connecting';
     clock.hidden = !running || !startedAt;
+    if (running && startedAt) clock.textContent = ' · ' + voiceClock(Math.max(0, maxSeconds - Math.floor((Date.now() - startedAt) / 1000))) + ' left';
     crystal.setAttribute('aria-label', running ? 'End the call with ' + TUTOR_NAME : 'Talk to ' + TUTOR_NAME);
     crystal.setAttribute('aria-pressed', running ? 'true' : 'false');
     if (typeof o.onPhase === 'function') { try { o.onPhase(next); } catch (e) { /* the page's problem */ } }
