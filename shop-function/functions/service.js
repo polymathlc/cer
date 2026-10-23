@@ -269,16 +269,9 @@ async function adminFrom(req, verifyIdToken) {
   return claims.email;
 }
 
-function createService({ repository, stripe, webhookSecret, verifyIdToken = async () => { throw new Error('no auth'); },
-  now = Date.now, random = randomInt, report = () => {} }) {
-  let lastSweep = -Infinity;
-  async function sweep() {
-    const at = now();
-    if (at - lastSweep < SWEEP_EVERY_MS) return;
-    lastSweep = at;
-    // Never lets a cleanup problem cost a parent their checkout.
-    try { await repository.cleanup(at, SWEEP_PAGES); } catch { report('shop-sweep-failed'); }
-  }
+// The CORS gate and error answers every browser-facing endpoint shares, the shop's
+// and the schedule's (booking.js) alike.
+function createHttp(report = () => {}) {
   function cors(req, res) {
     res.set('Cache-Control', 'no-store');
     res.set('Vary', 'Origin');
@@ -309,6 +302,23 @@ function createService({ repository, stripe, webhookSecret, verifyIdToken = asyn
     report(fallback);
     return res.status(503).json({ ok: false, error: 'temporarily-unavailable' });
   }
+  return { cors, answerError };
+}
+
+// paidSessionHandlers: { [metadata.source]: async session => result } for paid
+// Stripe sessions that are not shop orders, such as schedule bookings (booking.js).
+// They share this one webhook endpoint and its signing secret.
+function createService({ repository, stripe, webhookSecret, verifyIdToken = async () => { throw new Error('no auth'); },
+  now = Date.now, random = randomInt, report = () => {}, paidSessionHandlers = {} }) {
+  let lastSweep = -Infinity;
+  async function sweep() {
+    const at = now();
+    if (at - lastSweep < SWEEP_EVERY_MS) return;
+    lastSweep = at;
+    // Never lets a cleanup problem cost a parent their checkout.
+    try { await repository.cleanup(at, SWEEP_PAGES); } catch { report('shop-sweep-failed'); }
+  }
+  const { cors, answerError } = createHttp(report);
 
   async function createCheckout(req, res) {
     if (!cors(req, res)) return;
@@ -376,6 +386,17 @@ function createService({ repository, stripe, webhookSecret, verifyIdToken = asyn
     // events that are not ours or not for a payment.
     if (!PAID_EVENTS.includes(event.type)) return res.status(200).json({ received: true, ignored: 'event-type' });
     const session = event.data && event.data.object;
+    const other = session && session.metadata && Object.prototype.hasOwnProperty.call(paidSessionHandlers, session.metadata.source)
+      ? paidSessionHandlers[session.metadata.source] : null;
+    if (other) {
+      if (!sessionIsPaid(session)) return res.status(200).json({ received: true, ignored: 'not-paid' });
+      try {
+        return res.status(200).json(Object.assign({ received: true }, await other(session)));
+      } catch {
+        report('stripe-webhook-storage-failed ' + session.metadata.source);
+        return res.status(500).json({ received: false });
+      }
+    }
     if (!sessionIsOurs(session)) return res.status(200).json({ received: true, ignored: 'not-shop' });
     if (!sessionIsPaid(session)) return res.status(200).json({ received: true, ignored: 'not-paid' });
     const code = sessionCode(session);
@@ -412,6 +433,6 @@ function createService({ repository, stripe, webhookSecret, verifyIdToken = asyn
 module.exports = {
   ORIGINS, RETURN_PATH, ADMIN_EMAIL, RECEIPT_GAP_MS, SWEEP_EVERY_MS, SWEEP_PAGES, CURRENCY, SOURCE, LIMITS, SESSION_MS, CHECKOUT_RETENTION_MS, ORDER_CODE_CHARS, PAID_EVENTS,
   CHECKOUT_COLLECTION, LIMIT_COLLECTION, ORDER_COLLECTION, PRODUCT_COLLECTION, SETTINGS_DOC,
-  ShopError, validateCheckout, priceCheckout, buildCheckout, sessionParams, publicOrder, paymentFromSession,
+  ShopError, createHttp, hash, validateCheckout, priceCheckout, buildCheckout, sessionParams, publicOrder, paymentFromSession,
   newOrderCode, validCode, referenceFor, toCents, unlimited, createService
 };

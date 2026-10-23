@@ -50,18 +50,23 @@ const FIREBASE_STUB = `(function () {
   var store = window.__store = { bookings: [], mail: [], uploads: [] };
   function later(fn) { setTimeout(fn, 0); }
   function snap(data) { return { exists: !!data, data: function () { return data; } }; }
-  function query() {
+  // fx.rows: { collectionName: [{ id, ...data }] } for the lists the admin sees.
+  function query(name) {
+    var rows = ((fx.rows || {})[name] || []).map(function (r) {
+      var copy = JSON.parse(JSON.stringify(r)); var id = copy.id; delete copy.id;
+      return { id: id, data: function () { return JSON.parse(JSON.stringify(copy)); } };
+    });
     var q = {
       orderBy: function () { return q; }, where: function () { return q; }, limit: function () { return q; },
-      onSnapshot: function (cb) { later(function () { cb({ docs: [], forEach: function () {} }); }); return function () {}; },
+      onSnapshot: function (cb) { later(function () { cb({ docs: rows, forEach: function (f) { rows.forEach(f); } }); }); return function () {}; },
       get: function () { return Promise.resolve({ docs: [], empty: true, forEach: function () {} }); }
     };
     return q;
   }
   function collection(name) {
-    var q = query();
+    var q = query(name);
     q.doc = function (id) {
-      var data = function () { return name === 'schedule_config' ? fx.config : null; };
+      var data = function () { return name === 'schedule_config' ? fx.config : name === 'shop_settings' ? (fx.shopSettings || null) : null; };
       return {
         id: id || 'doc',
         // fx.configLoad: 'never' (Firestore never answers) or 'error' (it refuses).
@@ -135,8 +140,11 @@ async function check(name, fn) {
   catch (e) { console.error('FAIL ' + name + '\n' + (e && e.stack || e)); process.exitCode = 1; }
 }
 
-async function openPage({ width = 1280, height = 900, mobile = false, admin = false, hash = '', now = NOW,
-  configLoad = '', ready = true, context: given = null } = {}) {
+// api: { createScheduleCheckout: body => ({ status, json }), … } answers the card
+// payment functions; every call is recorded on the returned `apiCalls`.
+async function openPage({ width = 1280, height = 900, mobile = false, admin = false, hash = '', query = '', now = NOW,
+  configLoad = '', ready = true, context: given = null, shopSettings = null, rows = null, api = {}, rest = null } = {}) {
+  const apiCalls = [];
   const context = given || await browser.newContext({ viewport: { width, height }, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile });
   if (!given) await context.route('**/*', route => {
     const u = new URL(route.request().url());
@@ -149,21 +157,34 @@ async function openPage({ width = 1280, height = 900, mobile = false, admin = fa
       return route.fulfill({ contentType: 'text/javascript', body: QR_STUB });
     }
     if (u.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
+    if (u.hostname === 'us-central1-mathgen--app.cloudfunctions.net' && api[u.pathname.slice(1)]) {
+      const req = route.request();
+      if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type' } });
+      const body = JSON.parse(req.postData() || 'null');
+      apiCalls.push({ name: u.pathname.slice(1), body });
+      const answer = api[u.pathname.slice(1)](body, apiCalls.filter(c => c.name === u.pathname.slice(1)).length);
+      return route.fulfill({ status: answer.status || 200, contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(answer.json) });
+    }
+    if (u.hostname === 'firestore.googleapis.com' && rest && u.pathname.endsWith('/documents/schedule_config/main')) {
+      return route.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(rest) });
+    }
+    if (u.hostname === 'checkout.stripe.com') return route.fulfill({ contentType: 'text/html', body: '<title>Stripe Checkout</title><h1>Stripe test page</h1>' });
     return route.abort();
   });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
-  await page.addInitScript(fixture => { window.__SCHEDULE_FIXTURE__ = fixture; }, { config: CONFIG, admin, configLoad });
+  await page.addInitScript(fixture => { window.__SCHEDULE_FIXTURE__ = fixture; }, { config: CONFIG, admin, configLoad, shopSettings, rows });
   await page.clock.setFixedTime(new Date(now));
-  await page.goto(base + '/schedule/' + hash);
-  if (!ready) return { context, page, errors };
+  await page.goto(base + '/schedule/' + query + hash);
+  if (!ready) return { context, page, errors, apiCalls };
   await page.waitForFunction(() => {
     const grid = document.getElementById('schedule-grid');
     return grid && !grid.querySelector('.empty') && document.querySelector('#trial-notice b');
   });
-  return { context, page, errors };
+  return { context, page, errors, apiCalls };
 }
 
 async function shot(page, name, opts = {}) {
@@ -348,7 +369,12 @@ try {
     await page.selectOption('#b-level', 'Primary 5');
     await page.fill('#b-email', 'parent@example.com');
     await page.fill('#b-wa', '9123 4567');
+    // Card is offered first; this parent pays by PayNow.
+    assert.equal(await page.isVisible('#paynow-upload'), false, 'No screenshot is asked for while card is chosen.');
+    await page.click('#pay-paynow');
+    assert.ok(await page.isVisible('#booking-qr'));
     await page.setInputFiles('#b-file', { name: 'paynow.png', mimeType: 'image/png', buffer: PNG });
+    assert.equal(await page.textContent('#booking-submit'), 'Confirm booking');
     await page.click('#booking-submit');
     await page.waitForSelector('#booking-success:not(.hidden)');
     assert.match(await page.textContent('#booking-success-text'),
@@ -398,7 +424,7 @@ try {
   await check('the teacher previews the timetable and sees the page version', async () => {
     const { context, page, errors } = await openPage({ admin: true });
     assert.equal(await page.getAttribute('#view-day', 'aria-pressed'), 'true', 'The teacher still starts on the editing view.');
-    assert.equal(await page.textContent('#page-version'), 'Schedule page v1.5.1');
+    assert.equal(await page.textContent('#page-version'), 'Schedule page v1.6.0');
     assert.ok(await page.isVisible('#page-version'));
     await page.click('#view-week');
     assert.match(await page.textContent('#schedule-grid'), /This is the weekly timetable parents see/);
@@ -421,6 +447,137 @@ try {
     await context.close();
   });
 
+  // ─── Paying by card ───
+  await check('desktop: a trial is paid by card on Stripe, priced by the server, with no screenshot', async () => {
+    const { context, page, errors, apiCalls } = await openPage({ api: {
+      createScheduleCheckout: () => ({ status: 201, json: { ok: true, code: 'ABC234', total: 30, url: 'https://checkout.stripe.com/c/pay/cs_test_abc' } })
+    } });
+    await page.click('#view-week');
+    await page.click('.tt-class[data-slot="MON-1"]');
+    await page.click('#tt-m-body .tt-m-actions .btn:not(.enrol)');
+    assert.ok(await page.isVisible('#pay-choice-wrap'), 'Card or PayNow is offered.');
+    assert.equal(await page.getAttribute('#pay-card', 'aria-pressed'), 'true', 'Card comes first.');
+    assert.ok(await page.isVisible('#card-box'));
+    assert.equal(await page.isVisible('#paynow-box'), false);
+    assert.equal(await page.isVisible('#paynow-upload'), false);
+    await page.selectOption('#b-mode', 'Physical');
+    assert.equal(await page.textContent('#card-amount'), '$30.00');
+    assert.equal(await page.textContent('#booking-submit'), 'Pay $30.00 by card');
+    await page.selectOption('#b-mode', 'Online');
+    assert.equal(await page.textContent('#card-amount'), '$25.00', 'The amount follows how the child attends.');
+    assert.equal(await page.textContent('#booking-submit'), 'Pay $25.00 by card');
+    await shot(page, 'booking-card-desktop');
+    await page.click('#booking-submit');
+    assert.match(await page.evaluate(() => document.getElementById('toast').textContent), /parent name/, 'The form is still checked first.');
+    await page.fill('#b-parent', 'Tan Mei Ling');
+    await page.fill('#b-child', 'Ethan');
+    await page.selectOption('#b-level', 'Primary 5');
+    await page.fill('#b-email', 'parent@example.com');
+    await page.fill('#b-wa', '+65 9123 4567');
+    await Promise.all([page.waitForURL(/checkout\.stripe\.com/), page.click('#booking-submit')]);
+    assert.equal(apiCalls.length, 1);
+    const sent = apiCalls[0].body;
+    assert.deepEqual(Object.keys(sent).sort(), ['childLevel2027', 'childName', 'earliestKey', 'email', 'kind', 'mode', 'pageVersion',
+      'parentName', 'returnUrl', 'slot', 'whatsapp'], 'No price is sent: the server works it out.');
+    assert.equal(sent.slot, 'MON-1');
+    assert.equal(sent.kind, 'trial');
+    assert.equal(sent.mode, 'Online');
+    assert.equal(sent.whatsapp, '91234567');
+    assert.equal(sent.earliestKey, '2026-10-19');
+    assert.equal(sent.returnUrl, base + '/schedule/');
+    const store = await page.evaluate(() => window.__store).catch(() => null);
+    assert.ok(!store || store.bookings.length === 0, 'Nothing is written from the browser for a card booking.');
+    assert.deepEqual(errors, []);
+    await context.close();
+  });
+
+  await check('a refused card checkout says why and keeps the form', async () => {
+    const { context, page, apiCalls } = await openPage({ api: {
+      createScheduleCheckout: () => ({ status: 409, json: { ok: false, error: 'class-full' } })
+    } });
+    await page.click('#view-week');
+    await page.click('.tt-class[data-slot="SAT-1"]');
+    await page.click('#tt-m-body .tt-m-actions .btn:not(.enrol)');
+    await page.fill('#b-parent', 'Tan Mei Ling');
+    await page.fill('#b-child', 'Ethan');
+    await page.selectOption('#b-level', 'Primary 5');
+    await page.fill('#b-email', 'parent@example.com');
+    await page.fill('#b-wa', '9123 4567');
+    await page.click('#booking-submit');
+    await page.waitForFunction(() => /just filled up/.test(document.getElementById('toast').textContent));
+    assert.equal(apiCalls.length, 1);
+    assert.ok(await page.isVisible('#booking-form-wrap'));
+    assert.equal(await page.isDisabled('#booking-submit'), false);
+    await context.close();
+  });
+
+  await check('coming back from Stripe paid: the page confirms the booking and tidies the address', async () => {
+    const booking = { code: 'ABC234', kind: 'trial', classType: 'regular', slot: 'MON-1', slotLabel: 'Monday 3:00pm – 4:45pm',
+      classLevel: 'P5', subject: 'Science', mode: 'Online', parentName: 'Tan Mei Ling', childName: 'Ethan', price: 25,
+      monthlyFee: 200, paymentRef: 'TRIAL MON1 ABC234', payment: 'card', earliestKey: '2026-10-19' };
+    const { context, page, errors, apiCalls } = await openPage({ mobile: true, width: 390, height: 844,
+      query: '?booking=ABC234&session=cs_test_abcdefghij', api: {
+        // Stripe is still finishing on the first ask, done on the second.
+        scheduleCheckoutStatus: (body, n) => (n === 1 ? { json: { ok: true, paid: false, state: 'open' } } : { json: { ok: true, paid: true, booking } })
+      } });
+    await page.waitForSelector('#booking-success:not(.hidden)', { timeout: 10000 });
+    assert.equal(await page.textContent('#booking-success-title'), 'Trial booked and paid!');
+    const text = await page.textContent('#booking-success-text');
+    assert.match(text, /card payment of \$25\.00 has gone through, and Ethan's trial on Monday 3:00pm – 4:45pm \(Science, Online\) is booked/);
+    assert.match(text, /earliest possible trial date is Monday 19 October\./);
+    assert.deepEqual(apiCalls.map(c => c.body), [{ code: 'ABC234', sessionId: 'cs_test_abcdefghij' }, { code: 'ABC234', sessionId: 'cs_test_abcdefghij' }]);
+    assert.equal(await page.evaluate(() => location.search), '', 'A refresh will not ask again.');
+    await shot(page, 'booking-card-paid-phone');
+    assert.deepEqual(errors, []);
+    await context.close();
+  });
+
+  await check('coming back from Stripe cancelled says nothing was charged', async () => {
+    const { context, page, apiCalls } = await openPage({ query: '?booking=ABC234&cancelled=1' });
+    await page.waitForFunction(() => /Nothing was charged/.test(document.getElementById('toast').textContent));
+    assert.equal(apiCalls.length, 0);
+    assert.equal(await page.isVisible('#booking-modal'), false);
+    assert.equal(await page.evaluate(() => location.search), '');
+    await context.close();
+  });
+
+  await check('with card payment hidden on the products page, the form is PayNow only', async () => {
+    const { context, page } = await openPage({ shopSettings: { cardPayments: false } });
+    await page.click('#view-week');
+    await page.click('.tt-class[data-slot="MON-1"]');
+    await page.click('#tt-m-body .tt-m-actions .btn:not(.enrol)');
+    assert.equal(await page.isVisible('#pay-choice-wrap'), false);
+    assert.equal(await page.isVisible('#card-box'), false);
+    assert.ok(await page.isVisible('#paynow-box'));
+    assert.ok(await page.isVisible('#paynow-upload'));
+    assert.equal(await page.textContent('#booking-submit'), 'Confirm booking');
+    await context.close();
+  });
+
+  await check('the teacher sees a card booking as paid by card, with no screenshot to check', async () => {
+    const rows = { schedule_bookings: [
+      { id: 'ABC234', slot: 'MON-1', slotLabel: 'Monday 3:00pm – 4:45pm', classLevel: 'P5', subject: 'Science', mode: 'Online',
+        kind: 'trial', classType: 'regular', parentName: 'Tan Mei Ling', childName: 'Ethan', childLevel2027: 'Primary 5',
+        email: 'parent@example.com', whatsapp: '91234567', price: 25, monthlyFee: 200, paymentRef: 'TRIAL MON1 ABC234',
+        receiptURL: '', receiptFilename: '', status: 'pending', payment: 'card', paid: true, paymentChecks: [] },
+      { id: 'pn1', slot: 'WED-2', slotLabel: 'Wednesday 5:00pm – 6:45pm', classLevel: 'P5', subject: 'Math', mode: 'Physical',
+        kind: 'trial', classType: 'regular', parentName: 'Lim', childName: 'Zoe', childLevel2027: 'Primary 5',
+        email: 'lim@example.com', whatsapp: '98765432', price: 30, paymentRef: 'TRIAL WED2 LIM',
+        receiptURL: 'https://receipts.invalid/x.png', receiptFilename: 'x.png', status: 'pending' }
+    ] };
+    const { context, page } = await openPage({ admin: true, rows });
+    await page.waitForSelector('#bookings-list .booking');
+    const items = await page.$$eval('#bookings-list .booking', els => els.map(e => e.textContent));
+    assert.match(items[0], /Paid by card/);
+    assert.match(items[0], /💳 Card/);
+    assert.match(items[0], /\$25\.00 paid by card for the trial/);
+    assert.match(items[0], /Confirm/);
+    assert.doesNotMatch(items[1], /Paid by card/);
+    assert.match(items[1], /Payment OK/);
+    assert.equal(await page.$$eval('#bookings-list .booking:first-child img', els => els.length), 0, 'No broken screenshot image.');
+    await context.close();
+  });
+
   // ─── Before the schedule has loaded ───
   // An unloaded schedule must never look like a deleted one: on 23 Oct 2026 a
   // slow connection left a phone on "Our timetable is being prepared" over an
@@ -439,6 +596,23 @@ try {
     assert.match(await page.textContent('#schedule-grid'), /WhatsApp us at \+65 9645 0588/);
     assert.doesNotMatch(await page.textContent('#schedule-grid'), /being prepared|No classes/);
     await shot(page, 'timetable-slow');
+    assert.deepEqual(errors, []);
+    await context.close();
+  });
+
+  await check('a phone sees the timetable from the quick REST answer before the Firebase library connects', async () => {
+    // Firestore's REST shape: every value wrapped by its type.
+    const wrap = v => typeof v === 'number' ? { integerValue: String(v) } : typeof v === 'string' ? { stringValue: v }
+      : { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, wrap(x)])) } };
+    const rest = { name: 'projects/mathgen--app/databases/(default)/documents/schedule_config/main',
+      fields: Object.assign(Object.fromEntries(Object.entries(CONFIG).map(([k, v]) => [k, wrap(v)])),
+        { updatedAt: { timestampValue: '2026-10-13T19:58:50.146917Z' } }) };
+    const { context, page, errors } = await openPage({ configLoad: 'never', ready: false, hash: '#timetable', rest,
+      mobile: true, width: 390, height: 844 });
+    await page.waitForSelector('.tt-class[data-slot="MON-1"]');
+    assert.deepEqual(await page.$$eval('.tt-class', els => els.map(e => e.dataset.slot).sort()), LIVE.slice().sort());
+    assert.doesNotMatch(await page.textContent('#schedule-grid'), /being prepared|Loading the timetable/);
+    assert.match(await page.textContent('.hero, body'), /\$25\.00/, 'The real prices, not the defaults.');
     assert.deepEqual(errors, []);
     await context.close();
   });

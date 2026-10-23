@@ -2,6 +2,8 @@
 const { ShopError, CHECKOUT_COLLECTION, LIMIT_COLLECTION, ORDER_COLLECTION, PRODUCT_COLLECTION, SETTINGS_DOC,
   unlimited } = require('./service');
 const { MAIL_COLLECTION, mailId, receiptMail } = require('./receipt');
+const { BOOKING_COLLECTION, SCHEDULE_DOC } = require('./booking');
+const { bookingMailId, adminBookingMail, parentBookingMail } = require('./booking-mail');
 
 const CODE_ATTEMPTS = 6;
 
@@ -11,6 +13,7 @@ function createRepository(db, Timestamp) {
   const orders = db.collection(ORDER_COLLECTION);
   const productsRef = db.collection(PRODUCT_COLLECTION);
   const mail = db.collection(MAIL_COLLECTION);
+  const bookings = db.collection(BOOKING_COLLECTION);
 
   return {
     async loadCatalogue(productIds) {
@@ -23,14 +26,26 @@ function createRepository(db, Timestamp) {
       return { products, settings: settingsSnapshot.exists ? settingsSnapshot.data() || {} : {} };
     },
 
-    // Saves the priced checkout under a fresh order code that is used by neither a
-    // checkout nor an order (PayNow orders take their codes in the browser), and
-    // counts it against the per-IP and daily limits, all in one transaction.
-    async reserveCheckout(build, generate) {
+    // The timetable and its prices as parents see them, and the shop's card switch.
+    async loadSchedule() {
+      const [scheduleSnapshot, settingsSnapshot] = await db.getAll(
+        db.collection(SCHEDULE_DOC[0]).doc(SCHEDULE_DOC[1]), db.collection(SETTINGS_DOC[0]).doc(SETTINGS_DOC[1]));
+      return {
+        config: scheduleSnapshot.exists ? scheduleSnapshot.data() || {} : {},
+        settings: settingsSnapshot.exists ? settingsSnapshot.data() || {} : {}
+      };
+    },
+
+    // Saves the priced checkout under a fresh code that is used by neither a
+    // checkout nor the document it will become (a shop order, or a schedule booking
+    // when `target` is schedule_bookings; PayNow orders take their codes in the
+    // browser), and counts it against the per-IP and daily limits, all in one
+    // transaction.
+    async reserveCheckout(build, generate, target = ORDER_COLLECTION) {
       for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt++) {
         const code = generate();
         const submission = build(code);
-        const checkoutRef = checkouts.doc(code), orderRef = orders.doc(code);
+        const checkoutRef = checkouts.doc(code), orderRef = db.collection(target).doc(code);
         const quotaRefs = submission.quotas.map(quota => db.collection(LIMIT_COLLECTION).doc(quota.id));
         const reserved = await db.runTransaction(async transaction => {
           const [checkoutSnapshot, orderSnapshot, ...quotas] = await transaction.getAll(checkoutRef, orderRef, ...quotaRefs);
@@ -65,6 +80,55 @@ function createRepository(db, Timestamp) {
     async getOrder(code) {
       const snapshot = await orders.doc(code).get();
       return snapshot.exists ? snapshot.data() : null;
+    },
+
+    async getBooking(code) {
+      const snapshot = await bookings.doc(code).get();
+      return snapshot.exists ? snapshot.data() : null;
+    },
+
+    // Turns a paid schedule checkout into schedule_bookings/{code}, once, in the
+    // shape the page's PayNow booking has, so the admin's bookings list shows it
+    // unchanged. It stays 'pending' until the admin confirms the date, as a PayNow
+    // booking does, but is marked payment:'card' with the Stripe ids, so there is
+    // no screenshot to check. The centre's and the parent's emails are written in
+    // the same transaction, so they go out exactly once however many times Stripe
+    // or the page call in; a leftover mail document never blocks the booking.
+    async finalizeBooking(code, payment, now) {
+      const checkoutRef = checkouts.doc(code), bookingRef = bookings.doc(code);
+      const adminMailRef = mail.doc(bookingMailId(code, 'admin')), parentMailRef = mail.doc(bookingMailId(code, 'parent'));
+      return db.runTransaction(async transaction => {
+        const [checkoutSnapshot, bookingSnapshot, adminMailSnapshot, parentMailSnapshot] =
+          await transaction.getAll(checkoutRef, bookingRef, adminMailRef, parentMailRef);
+        if (!checkoutSnapshot.exists) return { missing: true };
+        if (bookingSnapshot.exists) return { already: true, booking: bookingSnapshot.data() };
+        const checkout = checkoutSnapshot.data();
+        if (checkout.kind !== 'booking' || !checkout.booking) return { missing: true };
+        const at = timestamp(now);
+        const checks = [];
+        if (checkout.sessionId && payment.sessionId !== checkout.sessionId) checks.push('session-mismatch');
+        if (payment.amountTotal !== checkout.totalCents || payment.currency !== checkout.currency) checks.push('amount-mismatch');
+        const booking = Object.assign({}, checkout.booking, {
+          status: 'pending',
+          payment: 'card', paid: true,
+          stripeSessionId: payment.sessionId, stripePaymentIntent: payment.paymentIntent,
+          amountPaid: Math.round(payment.amountTotal) / 100, currency: payment.currency,
+          paymentChecks: checks,
+          pageVersion: checkout.pageVersion || '',
+          createdAt: checkout.createdAt || at, paidAt: at
+        });
+        const details = { code, earliestKey: checkout.earliestKey || '', stripeSessionId: payment.sessionId, paymentChecks: checks, now };
+        if (!adminMailSnapshot.exists) transaction.create(adminMailRef, adminBookingMail(booking, details));
+        const parentMail = parentMailSnapshot.exists ? null : parentBookingMail(booking, details);
+        if (parentMail) {
+          booking.confirmationSentAt = at;
+          booking.confirmationSentTo = parentMail.to[0];
+          transaction.create(parentMailRef, parentMail);
+        }
+        transaction.create(bookingRef, booking);
+        transaction.update(checkoutRef, { status: 'paid', paidAt: at });
+        return { booking };
+      });
     },
 
     // Turns a paid checkout into a paid order, once. Stock comes out exactly the
