@@ -27,9 +27,9 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.449.1">
+  <link rel="modulepreload" href="app.js?v=1.450.0">
 <!-- 🙋 Consults (v1.446.0): the archive window shared with Study Buddy, Ans Key and the Maths portal. -->
-<link rel="stylesheet" href="consult-answer.css?v=1.449.1">
+<link rel="stylesheet" href="consult-answer.css?v=1.450.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -52,7 +52,7 @@
      preview copy these links with media="all"). quest-frames.css is loaded the
      same non-blocking way. -->
 <link rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Pixelify+Sans:wght@400..700&display=swap">
-<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.449.1">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.450.0">
 
 <!-- Tailwind, prebuilt. This used to be <script src="cdn.tailwindcss.com">:
      the Play CDN, which ships a full CSS compiler to the browser, scans the
@@ -10468,6 +10468,9 @@ html { scroll-behavior:smooth; }
           <div class="nav-item" data-page="objectives" onclick="navigateTo('objectives')" title="Practice organised by the MOE syllabus learning objectives — attach questions to each objective and practise them on their own">
             <span class="ico">🎯</span> Learning Objectives
           </div>
+          <div class="nav-item" data-page="psle" onclick="navigateTo('psle')" title="Science PSLE made simple — pick a year or a topic, then practise it here, practise it in Study Buddy or export it as a PDF">
+            <span class="ico">🎓</span> Science PSLE
+          </div>
           <div class="nav-item nav-psle" data-page="papers" onclick="navigateTo('papers')" title="Real PSLE Science papers, question by question — analyse, practise and play them">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12.5V17c0 1.66 2.69 3 6 3s6-1.34 6-3v-4.5"/><path d="M22 10v6"/></svg>
             PSLE Papers
@@ -11654,6 +11657,22 @@ html { scroll-behavior:smooth; }
       </div>
       <div class="page-body">
         <div id="papersBody"></div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: 🎓 SCIENCE PSLE — the simple view (years and topics → practise / Study Buddy / PDF) ===== -->
+    <div class="page" id="page-psle">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>🎓 Science PSLE</h2>
+          </div>
+          <div class="subtitle">Pick a year or a topic, then practise it here, practise it in Study Buddy or export it as a PDF</div>
+        </div>
+      </div>
+      <div class="page-body">
+        <div id="psleBody"></div>
       </div>
     </div>
 
@@ -16001,6 +16020,78 @@ body.lore-reading { overflow: hidden; }
 .app-embed-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .app-embed-body { flex: 1 1 auto; min-height: 0; padding: 0; background: var(--surface-alt, #f4f4f2); }
 .app-embed-frame { display: block; width: 100%; height: 100%; min-height: calc(100vh - 92px); border: 0; background: #fff; }
+/* 🎓 Science PSLE — the simple view (#page-psle, v1.450.0). Two sets of big buttons (years,
+   topics); each opens a three-action sheet. Same data as 🎓 PSLE Papers — see app.js. */
+#page-psle .page-body { max-width: 1040px; }
+.psle-loading, .psle-empty { padding: 40px 12px; text-align: center; color: var(--text-muted); }
+.psle-section { margin: 0 0 36px; }
+.psle-section-head { margin: 0 0 16px; }
+.psle-section-head h3 { font-size: 1.12rem; font-weight: 700; letter-spacing: -0.01em; }
+.psle-section-head p { font-size: 0.88rem; color: var(--text-muted); margin-top: 4px; }
+.psle-grid { display: grid; gap: 12px; }
+.psle-grid-years { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
+.psle-grid-topics { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.psle-pick {
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px;
+  min-height: 92px; padding: 16px 18px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  font: inherit; text-align: left; cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.psle-pick:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--primary); }
+.psle-pick:active { transform: translateY(0); box-shadow: var(--shadow-sm); }
+.psle-pick:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.psle-pick-year { aspect-ratio: 1 / 1; min-height: 0; justify-content: flex-end; background: linear-gradient(160deg, var(--primary-light), var(--surface) 70%); }
+.psle-pick-eyebrow { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--primary); }
+.psle-pick-title { font-size: 1.05rem; font-weight: 700; line-height: 1.25; }
+.psle-pick-year .psle-pick-title { font-size: 1.9rem; letter-spacing: -0.03em; line-height: 1; }
+.psle-pick-meta { font-size: 0.78rem; color: var(--text-muted); }
+.psle-pick-topic { padding-left: 22px; }
+.psle-pick-topic::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 4px; border-radius: 0 4px 4px 0; background: var(--psle-theme, var(--primary)); }
+.psle-pick.is-empty { opacity: 0.55; cursor: default; box-shadow: none; }
+.psle-pick.is-empty:hover { transform: none; border-color: var(--border); box-shadow: none; }
+.psle-theme { margin: 0 0 20px; }
+.psle-theme-head { display: flex; align-items: center; gap: 8px; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 10px; }
+.psle-theme-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.psle-footnote { font-size: 0.82rem; color: var(--text-muted); margin-top: 8px; }
+.psle-footnote a { color: var(--primary); font-weight: 600; }
+/* The sheet */
+#psleOverlay .overlay-card { max-width: 480px; }
+.psle-sheet-sub { font-size: 0.86rem; color: var(--text-muted); margin: 0 0 14px; }
+.psle-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+.psle-chips[hidden] { display: none; }
+.psle-chip { font: inherit; font-size: 0.8rem; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.psle-chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.psle-actions { display: grid; gap: 10px; }
+.psle-action {
+  display: grid; grid-template-columns: 44px 1fr; align-items: center; gap: 4px 14px;
+  width: 100%; padding: 14px 16px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  font: inherit; text-align: left; cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.psle-action:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-md); border-color: var(--primary); background: var(--surface-alt); }
+.psle-action:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.psle-action:disabled { opacity: 0.5; cursor: default; }
+.psle-action-icon { grid-row: span 2; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 1.35rem; background: var(--primary-light); }
+.psle-action-title { font-weight: 700; font-size: 0.98rem; }
+.psle-action-blurb { font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; }
+.psle-action[data-action="tutor"] .psle-action-icon { background: #ede7f6; }
+.psle-action[data-action="pdf"] .psle-action-icon { background: #fff3e0; }
+@media (max-width: 600px) {
+  .psle-grid-years { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .psle-grid-topics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .psle-pick { padding: 12px 14px; min-height: 84px; }
+  .psle-pick-topic { padding-left: 18px; }
+  .psle-pick-year .psle-pick-title { font-size: 1.5rem; }
+  .psle-pick-title { font-size: 0.95rem; }
+}
+@media (prefers-reduced-motion: reduce) { .psle-pick, .psle-action { transition: none; } }
 /* 📖 Send to Study Buddy */
 .tsend-sub { font-size: 0.86rem; color: var(--text-muted); margin: 0 0 8px; }
 .tsend-note { font-size: 0.84rem; color: var(--text-muted); line-height: 1.55; margin: 0 0 16px; }
@@ -16114,6 +16205,34 @@ body.lore-reading { overflow: hidden; }
     <div class="overlay-head"><h3>🔍 Answer key cross-check</h3><button class="close" onclick="akcClose()" type="button">×</button></div>
     <div class="overlay-body" style="text-align:left;" id="akcBody"></div>
     <div class="overlay-foot" id="akcFoot"></div>
+  </div>
+</div>
+
+<!-- ==================== 🎓 SCIENCE PSLE — what to do with a year or a topic ==================== -->
+<div class="overlay" id="psleOverlay" onclick="if (event.target === this) psleClose()">
+  <div class="overlay-card" role="dialog" aria-modal="true" aria-labelledby="psleSheetTitle">
+    <div class="overlay-head"><h3 id="psleSheetTitle">PSLE</h3><button class="close" onclick="psleClose()" type="button" aria-label="Close">×</button></div>
+    <div class="overlay-body" style="text-align:left;">
+      <p class="psle-sheet-sub" id="psleSheetSub"></p>
+      <div class="psle-chips" id="psleSheetYears" hidden></div>
+      <div class="psle-actions">
+        <button type="button" class="psle-action" data-action="practice" onclick="psleDo('practice')">
+          <span class="psle-action-icon" aria-hidden="true">▶</span>
+          <span class="psle-action-title">Practice</span>
+          <span class="psle-action-blurb">Answer here in the Science portal, marked as you go</span>
+        </button>
+        <button type="button" class="psle-action" data-action="tutor" onclick="psleDo('tutor')">
+          <span class="psle-action-icon" aria-hidden="true">📖</span>
+          <span class="psle-action-title">Practice in Study Buddy</span>
+          <span class="psle-action-blurb">Opens the paper in your Study Buddy — write on it and get hints</span>
+        </button>
+        <button type="button" class="psle-action" data-action="pdf" onclick="psleDo('pdf')">
+          <span class="psle-action-icon" aria-hidden="true">📄</span>
+          <span class="psle-action-title">Export PDF</span>
+          <span class="psle-action-blurb">The paper and its answer key — print it or save it as a PDF</span>
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -16305,11 +16424,11 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-<script defer src="pwa-install.js?v=1.449.1"></script>
-  <script src="worksheet-cover.js?v=1.449.1"></script>
-  <script src="quest-frames.js?v=1.449.1"></script>
-  <script defer src="consult-answer.js?v=1.449.1"></script>
-  <script defer src="consult-bridge.js?v=1.449.1"></script>
-  <script type="module" src="app.js?v=1.449.1"></script>
+<script defer src="pwa-install.js?v=1.450.0"></script>
+  <script src="worksheet-cover.js?v=1.450.0"></script>
+  <script src="quest-frames.js?v=1.450.0"></script>
+  <script defer src="consult-answer.js?v=1.450.0"></script>
+  <script defer src="consult-bridge.js?v=1.450.0"></script>
+  <script type="module" src="app.js?v=1.450.0"></script>
 </body>
 </html>

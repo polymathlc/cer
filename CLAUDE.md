@@ -11,6 +11,71 @@ Guidance for Claude when working in this repo.
 - App Store / Play Store listings would need a wrapper (Bubblewrap TWA for Play, Capacitor or PWABuilder for iOS) and the centre's own developer accounts; nothing in this repo builds one yet.
 - Run `node --test tools/pwa-tests.mjs` and `PW=/path/to/playwright/index.mjs node tools/pwa-browser.mjs` after touching any of it (the browser check asks Chrome's DevTools whether the page is installable).
 
+## 🎓 Science PSLE — the simple view (`#page-psle`, v1.450.0)
+
+`PSLE_*` / `psleRowsFor` / `psleBankQs` / `psleYearSummaries` / `psleTopicSummaries` / `psleTitle` /
+`psleTutorSourceId` / `psleSameIds` / `renderPslePage` / `psleRender` / `psleOpen` / `psleSetYear` /
+`psleDo` / `psleRunPractice` / `psleRunPdf` / **`psleRunStudyBuddy`** / `_psleFindTutorCopy` (in `app.js`,
+search `SCIENCE PSLE — THE SIMPLE VIEW`), `#page-psle`, the 🎓 **Science PSLE** nav item (📚 Syllabus &
+Papers, every role, just above 🎓 PSLE Papers), the `#psleOverlay` sheet and the `.psle-*` CSS in `index.html`.
+
+The full 🎓 PSLE Papers page is an analysis desk. This page is two sets of big buttons — one per **year**
+(newest first) and one per **topic** (grouped by syllabus theme) — and each opens a sheet with exactly three
+actions: **▶ Practice** (Quick Practice here: `ppPracticeYear` for a year, `launchWorksheetPractice` with
+`allowRetired` for a topic — the full page's own doors), **📖 Practice in Study Buddy** and **📄 Export PDF**
+(`ppDoPrint`, the past-paper print with its key; the student picks "Save as PDF" in the print window).
+A topic's sheet carries year chips, so one topic can be narrowed to one paper.
+
+- **IT IS THE SAME DATA, NEVER A COPY.** `ppYears()`, `ppTopicOf()` over `ppQuestions()`, `ppBankQ` for what is
+  attached. A number on a button is the count of ATTACHED questions — exactly what each action serves. Nothing
+  on this page needs keeping in step with the full page; do not give it its own list.
+- **Reached from outside by `#psle`.** The student dashboard's Science PSLE tile links to `/cer/#psle`; after
+  sign-in the hash block (beside `#practice`) navigates there, and a signed-out visitor following `#psle` gets
+  the sign-in form (`signedOutEntryPage`), not the public home page — the hash survives sign-in.
+- **📖 Study Buddy looks before it writes.** `_psleFindTutorCopy` queries `tutorWorksheets` for this student's
+  copy with `sourceWorksheetId === psle:<year|topic>:<key>[:<year>]` AND `sourceQuestionIds` equal to the paper
+  now (same questions, same order — `psleSameIds`). Found → `appEmbedOpen('tutor', { ws })` with their work on
+  it. Not found (or the paper changed) → the 📖 export is driven straight through (`tsendOpen(ctx)` then
+  `tsendSend()`) with the context shaped like `_wsPreviewCtx`'s paper branch plus `savedId` = that source id.
+  The **"set for the class" tick is forced off** whoever presses it — this page only ever makes a student's own
+  copy. A look-up that fails costs at most a duplicate copy, never the button. Over
+  `PSLE_TUTOR_MAX_QUESTIONS` (45) the student is asked to pick a year instead (Study Buddy's 60-page limit).
+- **No cover dialog: `coverReady`.** Both `ppDoPrint` (`opts.coverReady`) and `_wsPrepareContextCover`
+  (`ctx.coverReady`) skip the cover editor when the caller hands a finished cover; everything else still asks.
+  The `if (!await _wsEditCover(` / `_wsPrepareContextCover(` shapes are what `tools/cover-app-tests.mjs` looks for —
+  keep the guard as an outer `if` around them, not folded into the same condition.
+- State is `var` (`_psleYears`, `_psleTopics`, `_psleSel`, `_psleBusy`) and buttons are index-addressed, never
+  topic names quoted into `onclick`.
+- Run `node --test tools/psle-simple-tests.mjs` (cuts the SHIPPED block out of app.js and runs it on a fake world)
+  and `PW=… node tools/psle-simple-browser.mjs` (index.html's real styles and markup + the shipped block + the real
+  `PP_SEED_Q` papers; computer and phone, the sheet, every action's door). CI: `.github/workflows/student-apps.yml`.
+
+## 🧭 My Polymath — the student dashboard (`student/`, v1.0.0) and the Polymath install kit (v2.0.0)
+
+`student/index.html` is **polymathlc.com.sg/student**: one page of square tiles — Science (`/cer/`), Science PSLE
+(`/cer/#psle`), Math, Answer Keys (`/anskey/`), Study Buddy (`/tutor/`), Rewards, Worksheets (`/online/`), Chinese,
+English — each a plain absolute link. No Firebase, no sign-in (every app signs the student in; one project, one
+origin), so it is complete the moment the HTML arrives. Tile icons are `student/assets/apps/<key>.png`. It reaches
+the domain root through the website sync like `online/` and `schedule/` — **edit it here**. The copy the sync
+also leaves at `/cer/student/` redirects to `/student/` on polymathlc.com.sg, so nobody installs two dashboards.
+A version badge (bottom left, everyone — there is no admin here) shows `DASHBOARD_VERSION`; bump it on every change.
+
+**Every student app is installable with ONE shared kit**: `pwa-install.js` (kit v2.0.0, byte for byte the same in
+`student/`, `online/` and in polymathlc/math, anskey, tutor, rewards, chinese and english), plus per app a
+`manifest.webmanifest` (relative `id`/`start_url`/`scope` `./`), `sw.js` (navigations only, network first,
+`offline.html` fallback, cache prefix `polymath-<key>-shell-` — every app shares one origin's Cache Storage, so a
+worker only ever touches its own prefix), `offline.html` and `assets/app-icons/` (192/512 any, 192/512 maskable,
+180 apple-touch, 32 favicon). The kit grew out of this portal's own `pwa-install.js` (v1.449.1, still the root
+app's installer — leave it alone) and keeps its rules; what it adds: the app's name/icon/accent come from the
+`<script>` tag's `data-*`, a page with no `[data-pwa-install]` control of its own gets a small floating
+"📲 Install app" button (bottom right, × hides it for 21 days per app), and controls are hidden inside frames as
+well as inside the installed app. **Change the kit in every copy together; never fork it.**
+`tools/pwa-install-tests.mjs` + `tools/pwa-install-browser.mjs` (`APP_DIRS = ['online', 'student']` here) are the
+kit's harnesses; the same two files ship in every repo with its own `APP_DIRS`.
+
+- Run `node --test tools/pwa-install-tests.mjs tools/student-dashboard-tests.mjs` and
+  `PW=… node tools/pwa-install-browser.mjs` after touching `student/` or the kit files in `online/`.
+
 ## 🙋 Consults — shared with Study Buddy, Ans Key and the Maths portal (v1.446.0)
 
 `consult-answer.js` / `consult-answer.css` are byte for byte polymathlc/tutor's (copy fixes across, never
@@ -57,6 +122,16 @@ Run `node --test tools/consult-bridge-tests.mjs` after touching any of it.
   - `render()` restores focus only for fields where `Core.keepsTyping(tag, type)` is true. Restoring a file input's value throws, which once froze uploads at "waiting".
   - Progress is repainted with `paintUploadBar`, not a full render.
   - Script tags carry `?v=` so a release reaches browsers at once; bump it with APP_VERSION.
+
+**v1.3.0: installable as "Worksheets", and tooltips that cannot widen the page.**
+- The install kit (see 🧭 My Polymath above): `online/manifest.webmanifest`, `online/sw.js` (scope `/online/`,
+  more specific than the root worker), `online/offline.html`, `online/assets/app-icons/`, `online/pwa-install.js`,
+  and a 📲 **Install app** button in the header (`.install-btn`, icon only under 640px), shown to everyone,
+  hidden inside the installed app and inside frames.
+- **A hidden tooltip is `display: none`, never just transparent.** The `[data-tooltip]::after` bubbles were
+  `opacity: 0` with `width: max-content` (up to 240px), so the header's tooltips stuck out past the right edge
+  of a phone and the layout viewport grew to fit them (408px on a 390px phone) — every fixed panel then ran off
+  the side. They now appear with a `tooltipIn` animation (a transition cannot start from `display: none`).
 
 **v1.1.0: student timeline.**
 - `timelineHtml(course)` renders `Core.timelineItems(course, state.docs, state.recordings)`. The edit date is `pdfAnnotator.updatedAt`, which Ans Key writes on every save. Renaming in the portal writes `renamedAt` rather than `updatedAt`, so that date stays "last edited in Ans Key".

@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My Polymath — Student Dashboard | Polymath Learning Centre</title>
+<meta name="description" content="Every Polymath Learning Centre app in one place: Science, Science PSLE, Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese and English.">
+<!--
+  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.0.0)
+  ------------------------------------------------------------------------
+  One page of square tiles, one per student app. Each tile is a plain link to
+  the app's own address on polymathlc.com.sg, so the page needs no sign-in, no
+  Firebase and no scripts to work: every app signs the student in itself (one
+  Firebase project, one origin, one session — signing in once is enough).
+
+  It lives in polymathlc/cer under student/ and reaches polymathlc.com.sg/student
+  through the website sync, exactly like online/ and schedule/. Edit it HERE.
+
+  It is an installable app of its own ("My Polymath"), with the Polymath
+  install kit (pwa-install.js, sw.js, manifest.webmanifest, offline.html,
+  assets/app-icons/) — the same kit, byte for byte, every other app carries.
+  Its scope is /student/: a tile opens its app at that app's own address, so
+  inside the installed dashboard the app opens in the browser's in-app view,
+  whose close button comes straight back here.
+
+  The tiles are written out below rather than drawn by script, so the page is
+  complete the moment the HTML arrives — on a slow school connection, and in
+  print. tools/student-dashboard-tests.mjs holds every tile to its address and
+  its icon.
+-->
+<script>
+  // One dashboard, one address: the copy the website sync also leaves at
+  // /cer/student/ steps over to /student/, so a student never installs two.
+  (function () {
+    try {
+      if (/(^|\.)polymathlc\.com\.sg$/i.test(location.hostname) && /^\/cer\/student(\/|$)/.test(location.pathname)) {
+        location.replace('/student/' + location.search + location.hash);
+      }
+    } catch (error) { /* stay where we are */ }
+  })();
+</script>
+
+<!-- 📲 Installable app (Polymath install kit v2.0.0): manifest + icons make "Install" / "Add to Home Screen"
+     work on PC, Android and iPhone/iPad. pwa-install.js registers sw.js and drives every [data-pwa-install] control. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/app-icons/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/app-icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="My Polymath">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>[data-pwa-install][data-pwa-hidden]{display:none!important}</style>
+
+<style>
+  /* The "?" is never drawn in Century Gothic (the house rule): it comes from Roboto or Arial. */
+  @font-face {
+    font-family: 'PolymathQuestion';
+    src: local('Roboto'), local('Roboto-Regular'), local('Arial'), local('Helvetica');
+    unicode-range: U+003F;
+  }
+
+  :root {
+    /* Surfaces */
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #FAFAFA;
+    --bg-tertiary: #F3F3F0;
+    --border-subtle: #E8E8E4;
+    --border-medium: #D4D4CF;
+
+    /* Text */
+    --text-primary: #1A1A1A;
+    --text-secondary: #5C5C5C;
+    --text-tertiary: #8A8A8A;
+
+    /* The dashboard's own accent: the Polymath green the Science portal wears */
+    --accent-light: #DCEFE7;
+    --accent-base: #2E8B6B;
+    --accent-dark: #0B6B4F;
+    --accent-bg: #F1F8F5;
+
+    /* Shadows */
+    --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+    --shadow-md: 0 2px 4px rgba(0,0,0,0.05), 0 6px 20px rgba(0,0,0,0.08);
+    --shadow-lg: 0 4px 6px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.1);
+    --shadow-button: 0 1px 2px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.08);
+    --shadow-button-hover: 0 2px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.12);
+
+    /* Spacing */
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 40px;
+    --space-2xl: 64px;
+
+    /* Radius */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-xl: 22px;
+    --radius-full: 999px;
+
+    /* Type */
+    --font-family: 'PolymathQuestion', 'Century Gothic', CenturyGothic, AppleGothic, sans-serif;
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.875rem;
+    --font-size-base: 1rem;
+    --font-size-md: 1.125rem;
+    --font-size-lg: 1.5rem;
+    --font-size-xl: 2rem;
+
+    /* Motion */
+    --transition-fast: 0.15s ease;
+    --transition-base: 0.25s ease;
+    --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html { font-size: 16px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  body {
+    font-family: var(--font-family);
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    line-height: 1.6;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  img { display: block; max-width: 100%; }
+  a { color: inherit; }
+  button { font-family: inherit; }
+
+  /* ───────── Header ───────── */
+  .polymath-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: max(var(--space-sm), env(safe-area-inset-top)) max(var(--space-lg), env(safe-area-inset-right)) var(--space-sm) max(var(--space-lg), env(safe-area-inset-left));
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: saturate(160%) blur(12px);
+    -webkit-backdrop-filter: saturate(160%) blur(12px);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; min-width: 0; }
+  .polymath-logo { height: 56px; width: auto; object-fit: contain; flex-shrink: 0; }
+  .brand-words { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+  .brand-name { font-weight: 700; font-size: 1.05rem; letter-spacing: 0.01em; white-space: nowrap; }
+  .brand-sub { font-size: var(--font-size-xs); color: var(--text-tertiary); white-space: nowrap; }
+  .header-actions { display: flex; align-items: center; gap: var(--space-sm); flex-shrink: 0; }
+  /* A phone keeps the logo and the two buttons; the words move out of the way. */
+  @media (max-width: 480px) {
+    .polymath-logo { height: 44px; }
+    .brand-sub { display: none; }
+  }
+  @media (max-width: 400px) {
+    .brand-words { display: none; }
+  }
+
+  .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    padding: 9px 14px;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    text-decoration: none;
+    box-shadow: var(--shadow-button);
+    transition: box-shadow var(--transition-base), transform var(--transition-base), background var(--transition-fast);
+  }
+  .button:hover { box-shadow: var(--shadow-button-hover); transform: translateY(-1px); }
+  .button:active { transform: translateY(0.5px); box-shadow: var(--shadow-xs); }
+  .button:focus-visible { outline: 3px solid var(--accent-dark); outline-offset: 2px; }
+  .button-accent { background: var(--accent-dark); border-color: var(--accent-dark); color: #FFFFFF; }
+  .button-accent:hover { background: #085740; }
+  .button-icon { width: 40px; height: 40px; padding: 0; justify-content: center; }
+  .button-icon svg { width: 18px; height: 18px; }
+
+  /* ───────── Greeting ───────── */
+  main {
+    flex: 1;
+    width: 100%;
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: var(--space-xl) max(var(--space-lg), env(safe-area-inset-right)) var(--space-2xl) max(var(--space-lg), env(safe-area-inset-left));
+  }
+  .greeting { margin-bottom: var(--space-lg); }
+  .greeting-eyebrow {
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent-dark);
+    margin-bottom: 6px;
+  }
+  .page-title { font-size: clamp(1.6rem, 4.4vw, 2.2rem); font-weight: 700; letter-spacing: 0.01em; line-height: 1.2; }
+  .page-subtitle { margin-top: 6px; color: var(--text-secondary); font-size: var(--font-size-md); max-width: 46ch; }
+
+  /* ───────── The tiles ───────── */
+  .tile-grid {
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+    gap: var(--space-md);
+  }
+  @media (max-width: 420px) {
+    .tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  }
+  .tile-grid > li { display: flex; }
+
+  .app-tile {
+    --tile-wash: #EEEEEE;
+    --tile-ink: #333333;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    padding: 18px;
+    border-radius: var(--radius-xl);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-sm);
+    text-decoration: none;
+    overflow: hidden;
+    isolation: isolate;
+    transition: box-shadow var(--transition-base), transform var(--transition-base), border-color var(--transition-base);
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* A soft wash of the app's own colour, from the top-right corner. */
+  .app-tile::before {
+    content: '';
+    position: absolute;
+    inset: auto -30% -45% auto;
+    width: 95%;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    background: var(--tile-wash);
+    opacity: 0.55;
+    z-index: -1;
+    transition: transform 0.4s ease, opacity 0.4s ease;
+  }
+  .app-tile:hover { box-shadow: var(--shadow-lg); transform: translateY(-3px); border-color: var(--tile-wash); }
+  .app-tile:hover::before { transform: scale(1.12); opacity: 0.75; }
+  .app-tile:active { transform: translateY(0) scale(0.985); box-shadow: var(--shadow-sm); }
+  .app-tile:focus-visible { outline: 3px solid var(--tile-ink); outline-offset: 3px; }
+
+  .tile-icon {
+    width: clamp(56px, 40%, 84px);
+    height: auto;
+    aspect-ratio: 1 / 1;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.06));
+  }
+  .tile-words { display: flex; flex-direction: column; gap: 2px; }
+  .tile-name {
+    font-size: clamp(1.02rem, 3.6vw, 1.22rem);
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+  }
+  .tile-blurb { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.35; }
+  @media (max-width: 420px) {
+    .app-tile { padding: 14px; border-radius: 18px; }
+    .tile-blurb { font-size: 0.78rem; }
+  }
+  .tile-go {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: var(--tile-ink);
+    background: rgba(255,255,255,0.85);
+    border: 1px solid var(--border-subtle);
+    font-size: 15px;
+    font-weight: 700;
+    opacity: 0;
+    transform: translateX(-6px);
+    transition: opacity var(--transition-base), transform var(--transition-base);
+  }
+  .app-tile:hover .tile-go, .app-tile:focus-visible .tile-go { opacity: 1; transform: none; }
+  .tile-badge {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--tile-ink);
+    background: rgba(255,255,255,0.9);
+    border: 1px solid var(--tile-wash);
+    padding: 3px 8px;
+    border-radius: var(--radius-full);
+  }
+  .tile-badge[hidden] { display: none; }
+  .app-tile:hover .tile-badge { opacity: 0; }
+
+  /* ───────── Install help ───────── */
+  .help-card {
+    margin-top: var(--space-xl);
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xs);
+  }
+  .help-card-icon {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    font-size: 22px;
+    background: var(--accent-bg);
+  }
+  .help-card h2 { font-size: var(--font-size-base); font-weight: 700; margin-bottom: 4px; }
+  .help-card p { color: var(--text-secondary); font-size: var(--font-size-sm); max-width: 62ch; }
+  .help-card .button { margin-top: 12px; }
+
+  /* ───────── Footer and version ───────── */
+  .site-footer {
+    padding: var(--space-lg) var(--space-lg) calc(var(--space-xl) + env(safe-area-inset-bottom));
+    text-align: center;
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+  }
+  .version-badge {
+    position: fixed;
+    left: max(10px, env(safe-area-inset-left));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    z-index: 5;
+    font-size: 0.68rem;
+    color: var(--text-tertiary);
+    background: rgba(255,255,255,0.85);
+    border: 1px solid var(--border-subtle);
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    pointer-events: none;
+  }
+
+  /* ───────── Arrival ───────── */
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .reveal { animation: fadeUp 0.5s ease both; }
+  .tile-grid > li { animation: fadeUp 0.5s ease both; animation-delay: calc(var(--order, 0) * 70ms + 120ms); }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal, .tile-grid > li { animation: none; }
+    .app-tile, .app-tile::before, .tile-go { transition: none; }
+  }
+
+  /* ───────── Print: a sheet of every app and its address, for the fridge ───────── */
+  .print-address { display: none; }
+  @page { size: A4; margin: 15mm 20mm; }
+  @media print {
+    body { background: #FFFFFF; color: #000000; }
+    .polymath-header { position: static; backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: 1px solid #BBBBBB; }
+    .header-actions, .help-card, .version-badge, .tile-go, .tile-badge, .pwa-fab { display: none !important; }
+    .polymath-logo { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    main { padding: 10mm 0 0; }
+    .tile-grid { grid-template-columns: repeat(3, 1fr); gap: 6mm; }
+    .tile-grid > li { animation: none; break-inside: avoid; page-break-inside: avoid; }
+    .app-tile { aspect-ratio: auto; min-height: 42mm; box-shadow: none; border: 1px solid #BBBBBB; }
+    .app-tile::before { display: none; }
+    .tile-icon { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .print-address { display: block; margin-top: 4px; font-size: 0.75rem; color: #333333; word-break: break-all; }
+    .reveal { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="polymath-header">
+  <a class="brand" href="./" aria-label="My Polymath — home">
+    <img class="polymath-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre" onerror="this.style.display='none'">
+    <span class="brand-words">
+      <span class="brand-name">My Polymath</span>
+      <span class="brand-sub">Student dashboard</span>
+    </span>
+  </a>
+  <div class="header-actions">
+    <button type="button" class="button button-accent" data-pwa-install data-pwa-hidden title="Install My Polymath as an app on this computer, phone or tablet — its own icon and window, no app store needed">
+      <span aria-hidden="true">📲</span><span>Install app</span>
+    </button>
+    <button type="button" class="button button-icon" id="printButton" aria-label="Print a list of your apps" title="Print a list of your apps and their addresses">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <section class="greeting reveal" aria-labelledby="pageTitle">
+    <div class="greeting-eyebrow" id="greetingLine">Welcome back</div>
+    <h1 class="page-title" id="pageTitle">Your Polymath apps</h1>
+    <p class="page-subtitle">Tap a tile to open it. You only need to sign in once — every app knows you.</p>
+  </section>
+
+  <nav aria-label="Polymath apps">
+    <ul class="tile-grid" id="tileGrid">
+      <li style="--order:0">
+        <a class="app-tile" data-app="science" href="/cer/" style="--tile-wash:#BBDEFB;--tile-ink:#1565C0">
+          <img class="tile-icon" src="assets/apps/science.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Science</span>
+            <span class="tile-blurb">Practice, textbooks and games</span>
+            <span class="print-address">polymathlc.com.sg/cer</span>
+          </span>
+        </a>
+      </li>
+      <li style="--order:1">
+        <a class="app-tile" data-app="psle" href="/cer/#psle" style="--tile-wash:#C5CAE9;--tile-ink:#283593">
+          <img class="tile-icon" src="assets/apps/psle.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Science PSLE</span>
+            <span class="tile-blurb">Past papers by year and by topic</span>
+            <span class="print-address">polymathlc.com.sg/cer/#psle</span>
+          </span>
+        </a>
+      </li>
+      <li style="--order:2">
+        <a class="app-tile" data-app="math" href="/math/" style="--tile-wash:#C8E6C9;--tile-ink:#2E7D32">
+          <img class="tile-icon" src="assets/apps/math.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Math</span>
+            <span class="tile-blurb">Practice and worksheets</span>
+            <span class="print-address">polymathlc.com.sg/math</span>
+          </span>
+        </a>
+      </li>
+      <li style="--order:3">
+        <a class="app-tile" data-app="anskey" href="/anskey/" style="--tile-wash:#FFE0B2;--tile-ink:#E65100">
+          <img class="tile-icon" src="assets/apps/anskey.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Answer Keys</span>
+            <span class="tile-blurb">Your worksheets and answer keys</span>
+            <span class="print-address">polymathlc.com.sg/anskey</span>
+          </span>
+        </a>
+      </li>
+      <li style="--order:4">
+        <a class="app-tile" data-app="tutor" href="/tutor/" style="--tile-wash:#D1C4E9;--tile-ink:#5E35B1">
+          <img class="tile-icon" src="assets/apps/tutor.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Study Buddy</span>
+            <span class="tile-blurb">Step-by-step help with problem sums</span>
+            <span class="print-address">polymathlc.com.sg/tutor</span>
+          </span>
+        </a>
+      </li>
+      <li style="--order:5">
+        <a class="app-tile" data-app="rewards" href="/rewards/" style="--tile-wash:#FFF59D;--tile-ink:#B26A00">
+          <img class="tile-icon" src="assets/apps/rewards.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Rewards</span>
+            <span class="tile-blurb">Your points and rewards</span>
+            <span class="print-address">polymathlc.com.sg/rewards</span>
+          </span>
+        </a>
+      </li>
+      <li style="--order:6">
+        <a class="app-tile" data-app="online" href="/online/" style="--tile-wash:#B2DFDB;--tile-ink:#00695C">
+          <img class="tile-icon" src="assets/apps/online.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Worksheets</span>
+            <span class="tile-blurb">Released as your lessons go</span>
+            <span class="print-address">polymathlc.com.sg/online</span>
+          </span>
+        </a>
+      </li>
+      <li style="--order:7">
+        <a class="app-tile" data-app="chinese" href="/chinese/" style="--tile-wash:#FFCDD2;--tile-ink:#C62828">
+          <img class="tile-icon" src="assets/apps/chinese.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">Chinese</span>
+            <span class="tile-blurb">华文 practice and worksheets</span>
+            <span class="print-address">polymathlc.com.sg/chinese</span>
+          </span>
+        </a>
+      </li>
+      <li style="--order:8">
+        <a class="app-tile" data-app="english" href="/english/" style="--tile-wash:#F8BBD0;--tile-ink:#AD1457">
+          <img class="tile-icon" src="assets/apps/english.png" alt="" width="84" height="84">
+          <span class="tile-badge" hidden>Last opened</span>
+          <span class="tile-go" aria-hidden="true">→</span>
+          <span class="tile-words">
+            <span class="tile-name">English</span>
+            <span class="tile-blurb">Practice and worksheets</span>
+            <span class="print-address">polymathlc.com.sg/english</span>
+          </span>
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <section class="help-card reveal" aria-labelledby="installHelpTitle" style="animation-delay: 0.8s">
+    <div class="help-card-icon" aria-hidden="true">📲</div>
+    <div>
+      <h2 id="installHelpTitle">Put your apps on your phone, tablet or computer</h2>
+      <p>Every app has its own <b>📲 Install app</b> button, so each one can sit on your home screen with its own icon. Or install this dashboard once and reach them all from here. No app store needed, and it works on Android, iPhone, iPad, Windows, Mac and Chromebook.</p>
+      <button type="button" class="button button-accent" data-pwa-install data-pwa-hidden>
+        <span aria-hidden="true">📲</span><span>Install My Polymath</span>
+      </button>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  © Polymath Learning Centre · polymathlc.com.sg
+</footer>
+
+<div class="version-badge" id="versionBadge" aria-hidden="true">v1.0.0</div>
+
+<script>
+  /* My Polymath — the little the page does with script. Everything works without it. */
+  (function () {
+    'use strict';
+
+    var DASHBOARD_VERSION = 'v1.0.0';
+    var LAST_OPENED_KEY = 'polymath-dashboard-last-opened';
+
+    var versionBadge = document.getElementById('versionBadge');
+    if (versionBadge) versionBadge.textContent = DASHBOARD_VERSION;
+
+    // A greeting for the time of day in Singapore, whatever the device's own clock zone says.
+    function singaporeHour(now) {
+      var utcHour = now.getUTCHours() + now.getUTCMinutes() / 60;
+      return (utcHour + 8) % 24;
+    }
+    function greetingFor(hour) {
+      if (hour >= 5 && hour < 12) return 'Good morning';
+      if (hour >= 12 && hour < 18) return 'Good afternoon';
+      return 'Good evening';
+    }
+    var greetingLine = document.getElementById('greetingLine');
+    if (greetingLine) greetingLine.textContent = greetingFor(singaporeHour(new Date()));
+
+    // Remember the last app opened, and mark its tile, so returning is one tap.
+    // Storage can be blocked (private mode, school policies): then nothing is remembered.
+    function readLastOpened() {
+      try { return window.localStorage.getItem(LAST_OPENED_KEY) || ''; } catch (error) { return ''; }
+    }
+    function writeLastOpened(appKey) {
+      try { window.localStorage.setItem(LAST_OPENED_KEY, appKey); } catch (error) { /* not remembered: fine */ }
+    }
+    var lastOpened = readLastOpened();
+    var tiles = document.querySelectorAll('.app-tile[data-app]');
+    Array.prototype.forEach.call(tiles, function (tile) {
+      var badge = tile.querySelector('.tile-badge');
+      if (badge && lastOpened && tile.getAttribute('data-app') === lastOpened) badge.hidden = false;
+      tile.addEventListener('click', function () { writeLastOpened(tile.getAttribute('data-app')); });
+    });
+
+    var printButton = document.getElementById('printButton');
+    if (printButton) printButton.addEventListener('click', function () { window.print(); });
+
+    window.MyPolymath = { version: DASHBOARD_VERSION, greetingFor: greetingFor, singaporeHour: singaporeHour };
+  })();
+</script>
+<script defer src="pwa-install.js?v=2.0.0" data-app-name="My Polymath" data-app-key="hub" data-app-icon="assets/app-icons/icon-192.png" data-accent="#0B6B4F" data-sw="sw.js" data-floating="auto"></script>
+</body>
+</html>
