@@ -3618,7 +3618,9 @@ function signedOutEntryPage() {
   // Respect a visitor who selected an auth form while Firebase was connecting.
   const selected = ['loginPage', 'registerPage'].find(id =>
     document.getElementById(id)?.style.display !== 'none');
-  return selected || ({ '#login': 'loginPage', '#register': 'registerPage' }[window.location.hash]) || 'landingPage';
+  // #psle (the student dashboard's Science PSLE tile) is a student on their way
+  // in, so it opens the sign-in form; the hash survives it and opens the page.
+  return selected || ({ '#login': 'loginPage', '#register': 'registerPage', '#psle': 'loginPage' }[window.location.hash]) || 'landingPage';
 }
 
 // =====================================================================
@@ -4505,6 +4507,9 @@ async function enterApp(user) {
     setTimeout(() => { try { navigateTo(hash); } catch (e) {} }, 300);
   } else if (hash === 'practice') {
     setTimeout(() => { try { navigateTo(rpgPracticePage()); } catch (e) {} }, 300);
+  } else if (hash === 'psle') {
+    // 🎓 The student dashboard's "Science PSLE" tile links to /cer/#psle.
+    setTimeout(() => { try { navigateTo('psle'); } catch (e) {} }, 300);
   }
 
   // Ai-nstein rides along on every page from here on.
@@ -4527,7 +4532,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.449.1';
+const APP_VERSION = 'v1.450.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -6379,6 +6384,7 @@ function navigateTo(page) {
   if (page === 'answerkeys') renderAnswerKeysPage();
   if (page === 'ansreview') renderAnswerReview();
   if (page === 'papers') renderPapersPage();
+  if (page === 'psle') renderPslePage();
   if (page === 'notes') renderNotesPage();
   if (page === 'vetting') renderVettingList();
   if (page === 'checkq') renderCheckQPage();
@@ -40215,6 +40221,9 @@ async function wsEditPreviewCover() {
 // Study Buddy photographs the exported pages too, so its export must use the
 // same editable cover and draft settings as printing or saving a PDF.
 async function _wsPrepareContextCover(ctx) {
+  // 🎓 The Science PSLE simple view hands over a finished front page and asks
+  // for no dialog — one tap, one paper.
+  if (ctx && ctx.coverReady) return true;
   if (ctx.source === 'custompaper' && !cpbIsWorksheet()) {
     if (!await cpbEditCovers()) return false;
     const paper = _cpbOutputOpts();
@@ -79657,7 +79666,10 @@ function _ppPrintQuestions(items){
 async function ppDoPrint(items, missing, title, opts){
   if (!items.length) { showToast('Nothing to print — none of these questions have a bank question attached yet', 'error'); return; }
   const coverTitle = (opts && opts.coverTitle) || title;
-  if (!await _wsEditCover(coverTitle, { where: 'paper', id: coverTitle, sub: 'Primary Science', foot: 'Past Year Paper' })) return;
+  // `coverReady` (the 🎓 Science PSLE simple view) prints the standard cover without the editor.
+  if (!(opts && opts.coverReady)) {
+    if (!await _wsEditCover(coverTitle, { where: 'paper', id: coverTitle, sub: 'Primary Science', foot: 'Past Year Paper' })) return;
+  }
   const selected = _ppPrintQuestions(items);
   const output = document.getElementById('printOutput');
   // Preload every image first (progress shown), so measurement is accurate
@@ -80018,6 +80030,356 @@ function ppTopicPractise(){
   ppTopicClose();
   launchWorksheetPractice(bqs, undefined, { allowRetired: true });
 }
+
+// =====================================================================
+// 🎓 SCIENCE PSLE — THE SIMPLE VIEW (v1.450.0)
+//
+// `#page-psle`, opened from the sidebar (📚 Syllabus & Papers → 🎓 Science
+// PSLE), from `/cer/#psle` and from the "Science PSLE" tile on the student
+// dashboard (polymathlc.com.sg/student). The full 🎓 PSLE Papers page is an
+// analysis desk — marks by topic, recurring concepts, attachments, games —
+// and a student who only wants "do the 2023 paper" had to read all of it
+// first. This page is two sets of buttons, one per YEAR and one per TOPIC,
+// and pressing one offers exactly three things:
+//
+//   ▶ Practice               Quick Practice here in the portal, marked as
+//                            usual (`ppPracticeYear` / `launchWorksheetPractice`
+//                            — the full page's own doors).
+//   📖 Practice in Study Buddy the paper as a PDF in the student's OWN Study
+//                            Buddy, opened straight away (the 📖 export:
+//                            `tsendOpen` → `tsendSend` → `appEmbedOpen`).
+//   📄 Export PDF            the printed paper with its answer key
+//                            (`ppDoPrint`), saved from the print window.
+//
+// IT IS THE SAME DATA, NEVER A COPY. Years come from `ppYears()`, topics from
+// `ppTopicOf()` over `ppQuestions()`, and every number on a button counts the
+// questions with a bank question attached (`ppBankQ`) — exactly the list each
+// action serves. Attach a question on the full page and it is here the next
+// time this page opens; there is nothing on this page to keep in step.
+//
+// STUDY BUDDY IS ASKED FIRST, THEN WRITTEN TO. A paper this student already
+// sent — same `sourceWorksheetId` (`psle:<kind>:<key>`), same questions in
+// the same order — opens again WITH THEIR WORK ON IT instead of as a blank
+// second copy; a paper whose questions have changed since goes across anew.
+// It is always the student's own copy: the "set for the class" tick is
+// forced off, even for an admin pressing the button here.
+//
+// NO EXTRA DIALOGS. The cover editor is skipped (`coverReady`): the paper
+// prints with its standard cover, Name and Date lines blank. Everything a
+// teacher wants to adjust is still on the full page.
+// =====================================================================
+var PSLE_THEME_ORDER = ['diversity', 'cycles', 'systems', 'interactions', 'energy'];
+var PSLE_TUTOR_MAX_QUESTIONS = 45;   // a sheet longer than this risks Study Buddy's page limit (TSEND_PAGES_MAX)
+var _psleYears = [];                  // the year rows as last drawn (index-addressed, never quoted into onclick)
+var _psleTopics = [];                 // the topic rows as last drawn
+var _psleSel = null;                  // { kind: 'year' | 'topic', key, year } while the sheet is open
+var _psleBusy = false;                // a Study Buddy look-up in flight
+
+// ── Pure helpers (tools/psle-simple-tests.mjs cuts these out and runs them) ──
+
+/** The past-paper rows a selection covers, in paper order (year, then question number). */
+function psleRowsFor(sel) {
+  if (!sel) return [];
+  return ppQuestions()
+    .filter(q => sel.kind === 'year'
+      ? String(q.year) === String(sel.key)
+      : ppTopicOf(q) === sel.key && (!sel.year || String(q.year) === String(sel.year)))
+    .sort((a, b) => String(a.year).localeCompare(String(b.year)) || (Number(a.n) || 0) - (Number(b.n) || 0));
+}
+
+/** Unique attached bank questions for a selection, in paper order — what Practice serves. */
+function psleBankQs(sel) {
+  const seen = new Set(); const out = [];
+  psleRowsFor(sel).forEach(q => { const bq = ppBankQ(q.id); if (bq && !seen.has(bq.id)) { seen.add(bq.id); out.push(bq); } });
+  return out;
+}
+
+/** One summary per year, newest first: how many questions, how many ready, how many marks. */
+function psleYearSummaries() {
+  return ppYears().slice().sort((a, b) => String(b).localeCompare(String(a))).map(year => {
+    const rows = psleRowsFor({ kind: 'year', key: year });
+    return {
+      year: String(year),
+      total: rows.length,
+      ready: psleBankQs({ kind: 'year', key: year }).length,
+      marks: rows.reduce((sum, q) => sum + (Number(q.marks) || 0), 0)
+    };
+  });
+}
+
+/** One summary per topic, grouped by the syllabus theme, then by name. Unlabelled rows are left out. */
+function psleTopicSummaries() {
+  const byTopic = new Map();
+  ppQuestions().forEach(q => {
+    const topic = ppTopicOf(q);
+    if (!topic) return;
+    if (!byTopic.has(topic)) byTopic.set(topic, []);
+    byTopic.get(topic).push(q);
+  });
+  const themeRank = topic => { const i = PSLE_THEME_ORDER.indexOf(ppTheme(topic)); return i < 0 ? PSLE_THEME_ORDER.length : i; };
+  return [...byTopic.keys()]
+    .sort((a, b) => themeRank(a) - themeRank(b) || a.localeCompare(b))
+    .map(topic => {
+      const rows = byTopic.get(topic);
+      return {
+        topic,
+        theme: ppTheme(topic),
+        total: rows.length,
+        ready: psleBankQs({ kind: 'topic', key: topic }).length,
+        years: [...new Set(rows.map(q => String(q.year)))].sort((a, b) => b.localeCompare(a))
+      };
+    });
+}
+
+/** The name a selection goes by — on the sheet, the PDF cover and in Study Buddy. */
+function psleTitle(sel) {
+  if (!sel) return '';
+  if (sel.kind === 'year') return 'PSLE ' + sel.key + ' Science Paper';
+  return sel.key + ' — ' + (sel.year ? 'PSLE ' + sel.year : 'PSLE past-paper questions');
+}
+
+/** The id Study Buddy files this selection under, so a second press finds the first copy. */
+function psleTutorSourceId(sel) {
+  if (!sel) return '';
+  return sel.kind === 'year' ? 'psle:year:' + sel.key : 'psle:topic:' + sel.key + (sel.year ? ':' + sel.year : '');
+}
+
+/** Two lists of question ids, same questions in the same order? */
+function psleSameIds(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+// ── The page ──
+
+async function renderPslePage() {
+  const body = document.getElementById('psleBody');
+  if (!body) return;
+  body.innerHTML = '<div class="psle-loading">Loading the PSLE papers…</div>';
+  try {
+    await Promise.all([loadPaperData(true), loadPaperMap(true)]);
+  } catch (e) {
+    console.warn('psle load', e);
+  }
+  psleRender();
+}
+
+function psleRender() {
+  const body = document.getElementById('psleBody');
+  if (!body) return;
+  _psleYears = psleYearSummaries();
+  _psleTopics = psleTopicSummaries();
+
+  // The number is what the student will get — the questions with a bank question attached.
+  const countLine = ready => ready ? ready + ' question' + (ready === 1 ? '' : 's') : 'Coming soon';
+
+  const yearButtons = _psleYears.map((y, i) => `
+      <button type="button" class="psle-pick psle-pick-year${y.ready ? '' : ' is-empty'}" onclick="psleOpen('year', ${i})" ${y.ready ? '' : 'aria-disabled="true"'}>
+        <span class="psle-pick-eyebrow">PSLE</span>
+        <span class="psle-pick-title">${escapeHtml(y.year)}</span>
+        <span class="psle-pick-meta">${escapeHtml(countLine(y.ready))}</span>
+      </button>`).join('');
+
+  const themes = [];
+  _psleTopics.forEach((t, i) => {
+    let group = themes.find(g => g.theme === t.theme);
+    if (!group) { group = { theme: t.theme, items: [] }; themes.push(group); }
+    group.items.push(Object.assign({ index: i }, t));
+  });
+  const topicGroups = themes.map(group => `
+      <div class="psle-theme">
+        <div class="psle-theme-head"><span class="psle-theme-dot" style="background:${PP_THEME_C[group.theme] || '#888'}"></span>${escapeHtml(PP_THEME_NAME[group.theme] || 'Other topics')}</div>
+        <div class="psle-grid psle-grid-topics">
+          ${group.items.map(t => `
+          <button type="button" class="psle-pick psle-pick-topic${t.ready ? '' : ' is-empty'}" style="--psle-theme:${PP_THEME_C[t.theme] || '#888'}" onclick="psleOpen('topic', ${t.index})" ${t.ready ? '' : 'aria-disabled="true"'}>
+            <span class="psle-pick-title">${escapeHtml(t.topic)}</span>
+            <span class="psle-pick-meta">${escapeHtml(countLine(t.ready))}${t.years.length ? ' · ' + t.years.length + ' year' + (t.years.length === 1 ? '' : 's') : ''}</span>
+          </button>`).join('')}
+        </div>
+      </div>`).join('');
+
+  body.innerHTML = `
+    <section class="psle-section">
+      <div class="psle-section-head">
+        <h3>📅 By year</h3>
+        <p>A whole PSLE Science paper, exactly as it was set.</p>
+      </div>
+      <div class="psle-grid psle-grid-years">${yearButtons || '<div class="psle-empty">No papers yet.</div>'}</div>
+    </section>
+    <section class="psle-section">
+      <div class="psle-section-head">
+        <h3>🧪 By topic</h3>
+        <p>Every PSLE question on one topic, from all the years — or just one.</p>
+      </div>
+      ${topicGroups || '<div class="psle-empty">No topics yet.</div>'}
+    </section>
+    <p class="psle-footnote">Want the analysis, the recurring concepts or the games? They are on the full <a href="#" onclick="navigateTo('papers');return false;">🎓 PSLE Papers</a> page.</p>`;
+}
+
+// ── The sheet: three things to do with a year or a topic ──
+
+function psleOpen(kind, index) {
+  const row = kind === 'year' ? _psleYears[index] : _psleTopics[index];
+  if (!row) return;
+  if (!row.ready) { showToast('Questions for this one are still being added — check back soon', 'info'); return; }
+  _psleSel = kind === 'year' ? { kind: 'year', key: row.year, year: '' } : { kind: 'topic', key: row.topic, year: '' };
+  psleSheetRender();
+  const overlay = document.getElementById('psleOverlay');
+  if (overlay) overlay.classList.add('show');
+  setTimeout(() => { try { document.querySelector('#psleOverlay .psle-action')?.focus(); } catch (_) {} }, 60);
+}
+
+function psleSetYear(year) {
+  if (!_psleSel || _psleSel.kind !== 'topic') return;
+  _psleSel.year = year || '';
+  psleSheetRender();
+}
+
+function psleSheetRender() {
+  const sel = _psleSel;
+  if (!sel) return;
+  const rows = psleRowsFor(sel);
+  const ready = psleBankQs(sel).length;
+  const marks = rows.reduce((sum, q) => sum + (Number(q.marks) || 0), 0);
+  const title = document.getElementById('psleSheetTitle');
+  if (title) title.textContent = sel.kind === 'year' ? 'PSLE ' + sel.key : sel.key;
+  const sub = document.getElementById('psleSheetSub');
+  if (sub) sub.textContent = ready + ' question' + (ready === 1 ? '' : 's') + (marks ? ' · ' + marks + ' marks' : '')
+    + (sel.kind === 'topic' ? (sel.year ? ' · from PSLE ' + sel.year : ' · from every year') : '');
+  const years = document.getElementById('psleSheetYears');
+  if (years) {
+    if (sel.kind === 'topic') {
+      const topic = _psleTopics.find(t => t.topic === sel.key);
+      const list = topic ? topic.years : [];
+      years.hidden = list.length < 2;
+      years.innerHTML = `<button type="button" class="psle-chip${sel.year ? '' : ' on'}" onclick="psleSetYear('')">All years</button>`
+        + list.map(y => `<button type="button" class="psle-chip${sel.year === y ? ' on' : ''}" onclick="psleSetYear('${escapeHtml(y)}')">${escapeHtml(y)}</button>`).join('');
+    } else {
+      years.hidden = true;
+      years.innerHTML = '';
+    }
+  }
+  document.querySelectorAll('#psleOverlay .psle-action').forEach(button => { button.disabled = !ready; });
+}
+
+function psleClose() {
+  if (_psleBusy) return;
+  const overlay = document.getElementById('psleOverlay');
+  if (overlay) overlay.classList.remove('show');
+  _psleSel = null;
+}
+
+// Escape closes the sheet, like every other overlay in the portal.
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  const overlay = document.getElementById('psleOverlay');
+  if (overlay && overlay.classList.contains('show')) psleClose();
+});
+
+/** ▶ Practice / 📖 Practice in Study Buddy / 📄 Export PDF on whatever the sheet holds. */
+function psleDo(action) {
+  const sel = _psleSel;
+  if (!sel) return;
+  if (action === 'practice') return psleRunPractice(sel);
+  if (action === 'tutor') return psleRunStudyBuddy(sel);
+  if (action === 'pdf') return psleRunPdf(sel);
+}
+
+function psleRunPractice(sel) {
+  psleClose();
+  if (sel.kind === 'year') { ppPracticeYear(sel.key); return; }
+  const bqs = psleBankQs(sel);
+  if (!bqs.length) { showToast('None of these questions are ready to practise yet', 'error'); return; }
+  launchWorksheetPractice(bqs, undefined, { allowRetired: true });
+}
+
+function psleRunPdf(sel) {
+  const { items, missing } = ppCollectPrintable(psleRowsFor(sel).map(q => q.id));
+  const title = psleTitle(sel);
+  psleClose();
+  showToast('📄 Choose “Save as PDF” (or your printer) in the print window', 'info');
+  ppDoPrint(items, missing, title, { coverTitle: title, coverReady: true });
+}
+
+/** This student's earlier copy of the selection in Study Buddy, if it still holds the same questions. */
+async function _psleFindTutorCopy(sourceId, questionIds) {
+  if (!currentUser || !db) return null;
+  try {
+    const snap = await getDocs(query(collection(db, TSEND_COLLECTION),
+      where('ownerUid', '==', currentUser.uid),
+      where('sourceWorksheetId', '==', sourceId),
+      limit(10)));
+    let best = null;
+    snap.forEach(d => {
+      const data = d.data() || {};
+      if (data.deleted || data.archived) return;
+      if (!psleSameIds(data.sourceQuestionIds || [], questionIds)) return;
+      const when = (data.updatedAt && typeof data.updatedAt.toMillis === 'function') ? data.updatedAt.toMillis() : 0;
+      if (!best || when > best.when) best = { id: d.id, when };
+    });
+    return best ? best.id : null;
+  } catch (e) {
+    // A refused or failed look-up only costs a duplicate copy, never the button.
+    console.warn('psle study buddy look-up', e);
+    return null;
+  }
+}
+
+async function psleRunStudyBuddy(sel) {
+  if (!currentUser) { showToast('Sign in first', 'error'); return; }
+  if (_psleBusy) return;
+  const { items } = ppCollectPrintable(psleRowsFor(sel).map(q => q.id));
+  if (!items.length) { showToast('None of these questions are ready yet', 'error'); return; }
+  if (items.length > PSLE_TUTOR_MAX_QUESTIONS) {
+    showToast('That is ' + items.length + ' questions — too many for one Study Buddy sheet. Pick a year above to send fewer.', 'info');
+    return;
+  }
+  const title = psleTitle(sel);
+  const selected = _ppPrintQuestions(items);
+  const questionIds = selected.map(q => q && q.id).filter(Boolean);
+  const sourceId = psleTutorSourceId(sel);
+  _psleBusy = true;
+  const tutorButton = document.querySelector('#psleOverlay .psle-action[data-action="tutor"] .psle-action-title');
+  const tutorLabel = tutorButton ? tutorButton.textContent : '';
+  if (tutorButton) tutorButton.textContent = '⏳ Looking for your copy…';
+  try {
+    const existing = await _psleFindTutorCopy(sourceId, questionIds);
+    if (existing) {
+      _psleBusy = false;
+      psleClose();
+      showToast('📖 Opening your copy of “' + title + '” in Study Buddy…', 'success');
+      appEmbedOpen('tutor', { ws: existing });
+      return;
+    }
+  } finally {
+    _psleBusy = false;
+    if (tutorButton) tutorButton.textContent = tutorLabel;
+  }
+  psleClose();
+  // The 📖 export's own door, with the paper's context shaped exactly as the
+  // A4 preview shapes a past paper (`_wsPreviewCtx`), so the sheet that goes
+  // across is the sheet the full page would send.
+  const ctx = {
+    saved: false, paper: true,
+    selected,
+    title,
+    coverTitle: title,
+    cover: true, coverReady: true,
+    noFields: true, where: 'paper',
+    akExtras: true, objBoxAll: false,
+    frontHtml: _ppCoverHtml(title),
+    savedId: sourceId
+  };
+  tsendOpen(ctx);
+  // Always the student's own copy from here, whoever is signed in.
+  const setBox = document.getElementById('tsendSet');
+  if (setBox) setBox.checked = false;
+  const setWrap = document.getElementById('tsendSetWrap');
+  if (setWrap) setWrap.style.display = 'none';
+  tsendSend();
+}
+// End Science PSLE simple view
 
 // -------- practise the papers (on the system + in the mini-games) --------
 // "Practice all" / per-year "Practice now" run the attached bank questions
@@ -81012,6 +81374,10 @@ window.notesEditClose = notesEditClose;
 window.notesEditSave = notesEditSave;
 window.notesDelete = notesDelete;
 window.ppTopicPractise = ppTopicPractise;
+window.psleOpen = psleOpen;
+window.psleClose = psleClose;
+window.psleSetYear = psleSetYear;
+window.psleDo = psleDo;
 window.ppPracticeYear = ppPracticeYear;
 window.ppGameMenuOpen = ppGameMenuOpen;
 window.ppGameLaunch = ppGameLaunch;

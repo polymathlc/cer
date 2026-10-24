@@ -1,0 +1,35 @@
+name: Student dashboard, Science PSLE and the install kit
+on:
+  pull_request:
+    paths: ['student/**', 'online/index.html', 'online/manifest.webmanifest', 'online/sw.js', 'online/offline.html', 'online/pwa-install.js', 'online/assets/app-icons/**', 'app.js', 'index.html', 'tools/pwa-install-*.mjs', 'tools/student-dashboard-tests.mjs', 'tools/psle-simple-*.mjs', '.github/workflows/student-apps.yml']
+  push:
+    branches: [main]
+    paths: ['student/**', 'online/index.html', 'online/manifest.webmanifest', 'online/sw.js', 'online/offline.html', 'online/pwa-install.js', 'online/assets/app-icons/**', 'app.js', 'index.html', 'tools/pwa-install-*.mjs', 'tools/student-dashboard-tests.mjs', 'tools/psle-simple-*.mjs', '.github/workflows/student-apps.yml']
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Dashboard tiles, Science PSLE logic and the install kit's static checks
+        run: node --test tools/student-dashboard-tests.mjs tools/psle-simple-tests.mjs tools/pwa-install-tests.mjs
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: Install buttons, offline pages and the install steps for student/ and online/
+        run: node tools/pwa-install-browser.mjs
+        env:
+          PWA_SCREENSHOTS: artifacts/student-apps
+      - name: Science PSLE on a computer and a phone
+        run: node tools/psle-simple-browser.mjs
+        env:
+          PSLE_SCREENSHOTS: artifacts/student-apps/psle
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: student-apps-previews
+          path: artifacts/student-apps
+          if-no-files-found: ignore

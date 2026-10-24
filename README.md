@@ -1,5 +1,23 @@
 # CER Science Learning Portal
 
+## 🎓 Science PSLE made simple, and 🧭 My Polymath — every app on one page (v1.450.0)
+
+- **🎓 Science PSLE** (sidebar → 📚 Syllabus & Papers, or `/cer/#psle`): big buttons for every PSLE
+  Science paper, newest first, and for every topic. Press one and choose **▶ Practice** (here, marked as
+  usual), **📖 Practice in Study Buddy** (the paper opens in the student's own Study Buddy — and opens
+  their existing copy, work and all, the second time) or **📄 Export PDF** (the paper with its answer
+  key). A topic can be narrowed to one year. It reads the same papers and attachments as the full
+  🎓 PSLE Papers page, so it is always in step with it.
+- **🧭 My Polymath** at **polymathlc.com.sg/student**: a page of square tiles for Science, Science PSLE,
+  Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese and English. It installs as its own app.
+- **📲 Every student app installs** on a computer, an iPhone/iPad or an Android phone with one shared
+  install kit: the dashboard, Polymath Online ("Worksheets", with a header button) here, and Math,
+  Answer Keys, Study Buddy, Rewards, Chinese and English in their own repositories.
+- Polymath Online v1.3.0 also stops its hidden tooltips making the page wider than a phone.
+
+Run `node --test tools/psle-simple-tests.mjs tools/student-dashboard-tests.mjs tools/pwa-install-tests.mjs`
+and, with Playwright, `tools/psle-simple-browser.mjs` and `tools/pwa-install-browser.mjs`.
+
 ## 🎙 The Polymath talks: a crystal, a microphone and the Study Buddy mistake book (v1.448.0)
 
 The QR codes on a 10-year-series answer key open The Polymath. Now a student

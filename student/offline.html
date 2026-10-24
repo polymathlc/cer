@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#FFFFFF">
+<title>You're offline | My Polymath</title>
+<!-- 📲 Shown by sw.js when the installed My Polymath app (or any page under it)
+     is opened with no connection. Self-contained: no fonts, scripts or styles
+     from elsewhere, because none of them can be fetched right now.
+     Polymath install kit v2.0.0. -->
+<style>
+  @font-face { font-family: 'OfflineQuestion'; src: local('Roboto'), local('Roboto-Regular'), local('Arial'), local('Helvetica'); unicode-range: U+003F; }
+  :root {
+    --ink: #1A1A1A;
+    --muted: #5C5C5C;
+    --paper: #FFFFFF;
+    --wash: #FAFAFA;
+    --line: #E8E8E4;
+    --accent: #0B6B4F;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: grid;
+    place-items: center;
+    padding: 24px 16px;
+    background: var(--wash);
+    color: var(--ink);
+    font: 16px/1.6 'OfflineQuestion', 'Century Gothic', CenturyGothic, AppleGothic, system-ui, sans-serif;
+  }
+  main {
+    max-width: 420px;
+    text-align: center;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 32px 24px 28px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+  }
+  img { width: 88px; height: 88px; border-radius: 20px; border: 1px solid var(--line); }
+  h1 { font-size: 1.35rem; margin: 18px 0 6px; letter-spacing: 0.01em; }
+  p { color: var(--muted); margin: 0 0 22px; }
+  button {
+    font: inherit;
+    font-weight: 700;
+    color: #fff;
+    background: var(--accent);
+    border: 0;
+    border-radius: 10px;
+    padding: 12px 22px;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.08);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  button:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.12); }
+  button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <img src="assets/app-icons/icon-192.png" alt="">
+  <h1>You're offline</h1>
+  <p>My Polymath needs the internet to load your lessons and progress. Check your Wi-Fi or mobile data, then try again.</p>
+  <button type="button" id="retry">Try again</button>
+</main>
+<script>
+  // Go back to the page that was asked for (the address bar still holds it); come back online → retry by itself.
+  document.getElementById('retry').addEventListener('click', function () { location.reload(); });
+  window.addEventListener('online', function () { location.reload(); });
+</script>
+</body>
+</html>
