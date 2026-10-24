@@ -6,8 +6,10 @@
  *   2. Turn every element marked [data-pwa-install] into an "Install app"
  *      control. It is shown only while the app is NOT already running
  *      installed, and is hidden again once the app is installed.
- *   3. When pressed: on Chrome / Edge / Android / Samsung Internet use the
- *      browser's own install prompt (beforeinstallprompt). Where there is no
+ *   3. When pressed: on Chrome / Edge (and Chrome on Android) use the
+ *      browser's own install prompt (beforeinstallprompt). Other Android
+ *      browsers are sent to Chrome, because their app packages trip Play
+ *      Protect's "older version of Android" warning. Where there is no
  *      prompt (every iPhone and iPad browser, Safari on a Mac, Firefox) show
  *      a short step-by-step card for that exact browser instead.
  *
@@ -74,6 +76,22 @@
     const browser = ctx.browser || 'other';
     if (ctx.standalone) {
       return { kind: 'installed', title: 'The Polymath app is installed', steps: ['You are already using the installed app. Find it on your home screen, dock or Start menu next time.'] };
+    }
+    // Android browsers other than Chrome (Samsung Internet, Edge, Opera, Firefox…) build their own
+    // app package, which Google Play Protect flags as "built for an older version of Android" /
+    // unsafe. Chrome's package comes signed through Google Play and installs cleanly, so steer to
+    // Chrome even when this browser offers its own prompt (v1.449.1).
+    if (platform === 'android' && browser !== 'chrome' && !ctx.inApp) {
+      return { kind: 'steps', title: 'Install Polymath with Chrome', steps: [
+        'This browser makes an app package that Android warns is "built for an older version of Android". It is not harmful, but Chrome installs Polymath cleanly with no warning.',
+        'Open this page in Google Chrome (copy the address, or tap ⋮ / ☰ → "Open in Chrome" if offered).',
+        'In Chrome, press "Install app" again (or tap ⋮ → "Install app") and tap Install.',
+        browser === 'samsung'
+          ? 'Prefer to stay in Samsung Internet? Tap ☰ → "Add page to" → "Home screen" for a plain shortcut instead, which shows no warning.'
+          : browser === 'firefox'
+          ? 'Prefer to stay in Firefox? Tap ⋮ → "Add to Home screen" and choose the shortcut, which shows no warning.'
+          : 'Prefer to stay in this browser? Add the page to your home screen as a shortcut instead, which shows no warning.'
+      ] };
     }
     if (ctx.hasPrompt) return { kind: 'prompt' };
     if (ctx.inApp) {

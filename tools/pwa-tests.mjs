@@ -142,7 +142,14 @@ test('what pressing Install does on each device', () => {
   assert.ok(ios.steps[0].includes('Share'));
   assert.ok(Core.plan({ platform: 'ios', browser: 'chrome' }).steps[0].includes('address bar'));
   assert.ok(Core.plan({ platform: 'ios', browser: 'safari', inApp: true }).steps.some(s => s.includes('Open in Safari')));
-  assert.ok(Core.plan({ platform: 'android', browser: 'samsung' }).steps[0].includes('Home screen'));
+  const samsung = Core.plan({ platform: 'android', browser: 'samsung', hasPrompt: true });
+  assert.equal(samsung.kind, 'steps', 'Samsung Internet is sent to Chrome even with its own prompt');
+  assert.ok(samsung.steps.some(s => s.includes('Chrome')));
+  assert.ok(samsung.steps.some(s => s.includes('Home screen')));
+  for (const b of ['edge', 'opera', 'firefox', 'other']) {
+    assert.equal(Core.plan({ platform: 'android', browser: b, hasPrompt: true }).kind, 'steps', `${b} on Android goes to Chrome`);
+  }
+  assert.ok(Core.plan({ platform: 'android', browser: 'whatever', inApp: true }).steps.some(s => s.includes('Open in Chrome')));
   assert.ok(Core.plan({ platform: 'desktop', browser: 'safari' }).steps[0].includes('Add to Dock'));
   assert.ok(Core.plan({ platform: 'desktop', browser: 'firefox' }).steps.some(s => s.includes('Chrome')));
   assert.ok(Core.plan({ platform: 'desktop', browser: 'chrome' }).steps[0].includes('address bar'));
