@@ -6,6 +6,18 @@
 <script>/* HTTPS UPGRADE — a page opened over plain http:// on the custom domain moves to https://, but only after a probe proves the secure address answers (a failed TLS handshake rejects; any HTTP reply, even a 404, resolves). If https is broken the page stays put rather than locking anybody out. */(function(){var l=location;if(l.protocol!=='http:'||!/(^|\.)polymathlc\.com\.sg$/i.test(l.hostname))return;try{fetch('https://'+l.host+'/?https-check='+Date.now(),{mode:'no-cors',cache:'no-store'}).then(function(){l.replace('https://'+l.host+l.pathname+l.search+l.hash)},function(){})}catch(e){}})();</script>
 <title>Primary Maths &amp; Science Tuition | Polymath Learning Centre</title>
 <meta name="description" content="Primary Maths and Science tuition at Polymath Learning Centre. Learn with Mr Chung's 20 years of teaching experience, our proprietary TCQ-CER approach, Heuristics and Thinking Skills, and a complimentary online learning suite.">
+<!-- 📲 Installable app (v1.449.0): the manifest + icons make "Install" / "Add to Home Screen" work on PC, Android and iPhone/iPad.
+     pwa-install.js registers sw.js and drives every [data-pwa-install] control. See CLAUDE.md → "Installable app". -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b6b4f">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/app-icons/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/app-icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Polymath">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="application-name" content="Polymath">
+<style>[data-pwa-install][data-pwa-hidden]{display:none!important}</style>
 <link rel="preconnect" href="https://dl.dropboxusercontent.com" crossorigin>
 <link rel="dns-prefetch" href="https://dl.dropboxusercontent.com">
 <link rel="preconnect" href="https://drive.google.com" crossorigin>
@@ -15,9 +27,9 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.448.0">
+  <link rel="modulepreload" href="app.js?v=1.449.0">
 <!-- 🙋 Consults (v1.446.0): the archive window shared with Study Buddy, Ans Key and the Maths portal. -->
-<link rel="stylesheet" href="consult-answer.css?v=1.448.0">
+<link rel="stylesheet" href="consult-answer.css?v=1.449.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -40,7 +52,7 @@
      preview copy these links with media="all"). quest-frames.css is loaded the
      same non-blocking way. -->
 <link rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Pixelify+Sans:wght@400..700&display=swap">
-<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.448.0">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.449.0">
 
 <!-- Tailwind, prebuilt. This used to be <script src="cdn.tailwindcss.com">:
      the Play CDN, which ships a full CSS compiler to the browser, scans the
@@ -10166,7 +10178,7 @@ html { scroll-behavior:smooth; }
     </section>
   </main>
   <footer class="lp-footer">
-    <div class="lp-wrap lp-footer-inner"><div><strong>Polymath Learning Centre</strong><p>© 2026 Polymath Learning Centre. A place for curious minds.</p></div><div class="lp-footer-links"><a href="#lp-why">Why Polymath</a><a href="#lp-about">About Us</a><a href="enquiry.html">Enquire</a><a href="#lp-features">Explore the experience</a><a href="#lp-demo">Try a sample</a><a href="#lp-faq">Common questions</a><a href="#landingPage">Back to top ↑</a></div></div>
+    <div class="lp-wrap lp-footer-inner"><div><strong>Polymath Learning Centre</strong><p>© 2026 Polymath Learning Centre. A place for curious minds.</p></div><div class="lp-footer-links"><a href="#lp-why">Why Polymath</a><a href="#lp-about">About Us</a><a href="enquiry.html">Enquire</a><a href="#lp-features">Explore the experience</a><a href="#lp-demo">Try a sample</a><a href="#lp-faq">Common questions</a><a href="#landingPage">Back to top ↑</a><a href="#install-app" data-pwa-install data-pwa-hidden>📲 Install the app</a></div></div>
   </footer>
   <noscript><p class="lp-noscript">Enable JavaScript to try the interactive sample, create an account, or sign in to the Science Learning Portal.</p></noscript>
 </div>
@@ -10584,6 +10596,11 @@ html { scroll-behavior:smooth; }
           </div>
         </div>
       </details>
+      <!-- 📲 Install app (pwa-install.js): the browser's own install prompt, or step-by-step help on iPhone / iPad / Safari. Hidden inside the installed app. -->
+      <div class="nav-item nav-install" data-pwa-install data-pwa-hidden role="button" tabindex="0" title="Install Polymath as an app on this computer, phone or tablet — its own icon and window, no app store needed">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 7v7"/><path d="M9 11l3 3 3-3"/><path d="M10 18h4"/></svg>
+        Install app
+      </div>
     </nav>
     <div class="rpg-side rpg-el" id="rpgSide" style="display:none;" title="Open your character page">
       <div class="rpg-side-top"><span class="rpg-side-level" id="rpgSideLevel">Lv 1</span><span class="rpg-side-gold" id="rpgSideGold">🪙 0</span></div>
@@ -16288,10 +16305,11 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-  <script src="worksheet-cover.js?v=1.448.0"></script>
-  <script src="quest-frames.js?v=1.448.0"></script>
-  <script defer src="consult-answer.js?v=1.448.0"></script>
-  <script defer src="consult-bridge.js?v=1.448.0"></script>
-  <script type="module" src="app.js?v=1.448.0"></script>
+<script defer src="pwa-install.js?v=1.449.0"></script>
+  <script src="worksheet-cover.js?v=1.449.0"></script>
+  <script src="quest-frames.js?v=1.449.0"></script>
+  <script defer src="consult-answer.js?v=1.449.0"></script>
+  <script defer src="consult-bridge.js?v=1.449.0"></script>
+  <script type="module" src="app.js?v=1.449.0"></script>
 </body>
 </html>

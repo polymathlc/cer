@@ -2,6 +2,15 @@
 
 Guidance for Claude when working in this repo.
 
+## 📲 Installable app: PC, Android, iPhone and iPad (v1.449.0)
+
+- **It is a Progressive Web App, not a store app.** `manifest.webmanifest` (relative `id`/`start_url`/`scope` = `./`, so the same file works at `polymathlc.github.io/cer/` and at the root of `polymathlc.com.sg` after the website sync), icons in `assets/app-icons/` (the Polymath M mark cut from `assets/branding/polymath-learning-centre.png` on white: 192/512 `any`, 192/512 `maskable`, 180 `apple-touch-icon`, 32 favicon), and the head tags in `index.html` (manifest, theme-color `#0b6b4f` = `--primary`, apple-touch-icon, apple-mobile-web-app-*).
+- **`sw.js` never caches the app.** It answers only same-origin GET navigations, network first, and shows `offline.html` when the network fails; scripts, Firebase, Storage, videos, POSTs and other origins get no `respondWith`. Releases still reach phones through `?v=`. Its scope covers every page under it on the custom domain (`/online/`, `/cs/`, `/schedule/`…), so keep it that harmless. `SW_VERSION` must equal `APP_VERSION` (a test checks) so each release replaces the worker and drops the old cache.
+- **`pwa-install.js`** (`<script defer>`, `?v=` the release) registers the worker (https or localhost, top window only, after `load`) and drives every `[data-pwa-install]` control: the app sidebar's 📲 Install app (outside the admin groups, for everyone) and the home page footer's "📲 Install the app" — never the public header. Controls start with `data-pwa-hidden` (the hiding rule is inline in the head) and are hidden inside the installed app. Pressing one uses `beforeinstallprompt` where the browser offers it (Chrome/Edge on PC, Android), else shows the steps from `PwaInstallCore.plan` for that platform/browser (iPhone/iPad Share → Add to Home Screen, Safari on Mac File → Add to Dock, in-app browsers → open in Safari/Chrome first). textContent only.
+- Google sign-in uses `signInWithPopup`; in an installed iPhone app it opens Safari's in-app sheet. If that ever fails there, email sign-in still works.
+- App Store / Play Store listings would need a wrapper (Bubblewrap TWA for Play, Capacitor or PWABuilder for iOS) and the centre's own developer accounts; nothing in this repo builds one yet.
+- Run `node --test tools/pwa-tests.mjs` and `PW=/path/to/playwright/index.mjs node tools/pwa-browser.mjs` after touching any of it (the browser check asks Chrome's DevTools whether the page is installable).
+
 ## 🙋 Consults — shared with Study Buddy, Ans Key and the Maths portal (v1.446.0)
 
 `consult-answer.js` / `consult-answer.css` are byte for byte polymathlc/tutor's (copy fixes across, never
