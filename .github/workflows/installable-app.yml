@@ -1,0 +1,31 @@
+name: Installable app checks
+on:
+  pull_request:
+    paths: ['manifest.webmanifest', 'sw.js', 'offline.html', 'pwa-install.js', 'assets/app-icons/**', 'index.html', 'app.js', 'tools/pwa-*.mjs', '.github/workflows/installable-app.yml']
+  push:
+    branches: [main]
+    paths: ['manifest.webmanifest', 'sw.js', 'offline.html', 'pwa-install.js', 'assets/app-icons/**', 'index.html', 'app.js', 'tools/pwa-*.mjs', '.github/workflows/installable-app.yml']
+permissions:
+  contents: read
+jobs:
+  pwa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Manifest, icons, service worker rules and the installer's core
+        run: node --test tools/pwa-tests.mjs
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: Install, offline page and the install help in a real browser
+        run: node tools/pwa-browser.mjs
+        env:
+          PWA_SCREENSHOTS: artifacts/pwa
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installable-app-previews
+          path: artifacts/pwa
+          if-no-files-found: ignore

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0b6b4f">
+<title>You're offline | Polymath Learning Centre</title>
+<!-- 📲 Shown by sw.js when the installed app (or any page under it) is opened
+     with no connection. Self-contained: no fonts, scripts or styles from
+     elsewhere, because none of them can be fetched right now. -->
+<style>
+  :root { color-scheme: light dark; --ink:#12302a; --muted:#5b6f69; --paper:#ffffff; --line:#d9e4e0; --green:#0b6b4f; }
+  @media (prefers-color-scheme: dark) { :root { --ink:#e8f1ee; --muted:#9db3ac; --paper:#0f1a17; --line:#24352f; --green:#3fbf94; } }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { display: grid; place-items: center; padding: 24px 16px; background: var(--paper); color: var(--ink);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 420px; text-align: center; }
+  img { width: 88px; height: 88px; border-radius: 20px; border: 1px solid var(--line); }
+  h1 { font-size: 1.35rem; margin: 18px 0 6px; }
+  p { color: var(--muted); margin: 0 0 20px; }
+  button { font: inherit; font-weight: 600; color: #fff; background: var(--green); border: 0; border-radius: 10px;
+           padding: 12px 22px; cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <img src="assets/app-icons/icon-192.png" alt="">
+  <h1>You're offline</h1>
+  <p>Polymath needs the internet to load your lessons, practice and progress. Check your Wi-Fi or mobile data, then try again.</p>
+  <button type="button" id="retry">Try again</button>
+</main>
+<script>
+  // Go back to the page that was asked for (the address bar still holds it); come back online → retry by itself.
+  document.getElementById('retry').addEventListener('click', function () { location.reload(); });
+  window.addEventListener('online', function () { location.reload(); });
+</script>
+</body>
+</html>
