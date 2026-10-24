@@ -60,6 +60,14 @@ the domain root through the website sync like `online/` and `schedule/` — **ed
 also leaves at `/cer/student/` redirects to `/student/` on polymathlc.com.sg, so nobody installs two dashboards.
 A version badge (bottom left, everyone — there is no admin here) shows `DASHBOARD_VERSION`; bump it on every change.
 
+- **🔒 Worksheets is LOCKED (v1.1.0)** until Mr Chung has uploaded every level's worksheets (the ones Polymath
+  Online releases into Ans Key). A locked tile is `class="app-tile is-locked"` with **no `href`** — so there is
+  nothing to follow even without script — its address kept in `data-href`, `aria-disabled="true"`, a
+  `data-locked` sentence that a tap shows (with a small shake), a 🔒 Coming soon pill, and "Coming soon" as its
+  printed address. **To open it**: `data-href` → `href`, drop `is-locked` / `data-locked` / `role` / `tabindex` /
+  `aria-disabled` and the pill, print its address again, and empty `LOCKED` in `tools/student-dashboard-tests.mjs`.
+  Only the TILE is locked: `/online/` itself is unchanged, so students already invited there keep their class.
+
 **Every student app is installable with ONE shared kit**: `pwa-install.js` (kit v2.0.0, byte for byte the same in
 `student/`, `online/` and in polymathlc/math, anskey, tutor, rewards, chinese and english), plus per app a
 `manifest.webmanifest` (relative `id`/`start_url`/`scope` `./`), `sw.js` (navigations only, network first,

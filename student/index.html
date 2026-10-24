@@ -6,7 +6,7 @@
 <title>My Polymath — Student Dashboard | Polymath Learning Centre</title>
 <meta name="description" content="Every Polymath Learning Centre app in one place: Science, Science PSLE, Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese and English.">
 <!--
-  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.0.0)
+  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.1.0)
   ------------------------------------------------------------------------
   One page of square tiles, one per student app. Each tile is a plain link to
   the app's own address on polymathlc.com.sg, so the page needs no sign-in, no
@@ -312,6 +312,53 @@
   .tile-badge[hidden] { display: none; }
   .app-tile:hover .tile-badge { opacity: 0; }
 
+  /* ───────── A locked tile (an app not open to students yet) ───────── */
+  .app-tile.is-locked { cursor: not-allowed; }
+  .app-tile.is-locked .tile-icon { filter: grayscale(0.85); opacity: 0.6; }
+  .app-tile.is-locked .tile-name, .app-tile.is-locked .tile-blurb { color: var(--text-tertiary); }
+  .app-tile.is-locked::before { opacity: 0.25; }
+  .app-tile.is-locked:hover { transform: none; box-shadow: var(--shadow-sm); border-color: var(--border-subtle); }
+  .app-tile.is-locked:hover::before { transform: none; opacity: 0.25; }
+  .app-tile.is-locked:active { transform: none; }
+  .app-tile.is-locked.is-nudged { animation: lockedNudge 0.4s ease; }
+  @keyframes lockedNudge { 0%, 100% { transform: none; } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+  .tile-lock {
+    align-self: flex-start;
+    margin-bottom: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    padding: 3px 8px;
+    border-radius: var(--radius-full);
+  }
+  .locked-note {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    z-index: 50;
+    width: fit-content;
+    max-width: 440px;
+    margin: 0 auto;
+    padding: 12px 18px;
+    border-radius: var(--radius-lg);
+    background: var(--text-primary);
+    color: #FFFFFF;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+    animation: fadeUp 0.25s ease both;
+  }
+  @media (prefers-reduced-motion: reduce) { .app-tile.is-locked.is-nudged, .locked-note { animation: none; } }
+
   /* ───────── Install help ───────── */
   .help-card {
     margin-top: var(--space-xl);
@@ -489,14 +536,16 @@
         </a>
       </li>
       <li style="--order:6">
-        <a class="app-tile" data-app="online" href="/online/" style="--tile-wash:#B2DFDB;--tile-ink:#00695C">
+        <!-- 🔒 LOCKED until Mr Chung has uploaded every level's worksheets (v1.1.0). To open it:
+             data-href → href, drop `is-locked`, data-locked, role, tabindex and aria-disabled,
+             and swap the 🔒 badge back for the two spans every other tile has. -->
+        <a class="app-tile is-locked" data-app="online" data-href="/online/" data-locked="Worksheets open soon — your teacher is still adding them for every level." role="link" tabindex="0" aria-disabled="true" style="--tile-wash:#B2DFDB;--tile-ink:#00695C">
           <img class="tile-icon" src="assets/apps/online.png" alt="" width="84" height="84">
-          <span class="tile-badge" hidden>Last opened</span>
-          <span class="tile-go" aria-hidden="true">→</span>
           <span class="tile-words">
+            <span class="tile-lock"><span aria-hidden="true">🔒</span> Coming soon</span>
             <span class="tile-name">Worksheets</span>
             <span class="tile-blurb">Released as your lessons go</span>
-            <span class="print-address">polymathlc.com.sg/online</span>
+            <span class="print-address">Coming soon</span>
           </span>
         </a>
       </li>
@@ -543,14 +592,14 @@
   © Polymath Learning Centre · polymathlc.com.sg
 </footer>
 
-<div class="version-badge" id="versionBadge" aria-hidden="true">v1.0.0</div>
+<div class="version-badge" id="versionBadge" aria-hidden="true">v1.1.0</div>
 
 <script>
   /* My Polymath — the little the page does with script. Everything works without it. */
   (function () {
     'use strict';
 
-    var DASHBOARD_VERSION = 'v1.0.0';
+    var DASHBOARD_VERSION = 'v1.1.0';
     var LAST_OPENED_KEY = 'polymath-dashboard-last-opened';
 
     var versionBadge = document.getElementById('versionBadge');
@@ -578,11 +627,37 @@
       try { window.localStorage.setItem(LAST_OPENED_KEY, appKey); } catch (error) { /* not remembered: fine */ }
     }
     var lastOpened = readLastOpened();
-    var tiles = document.querySelectorAll('.app-tile[data-app]');
+    var tiles = document.querySelectorAll('.app-tile[data-app][href]');
     Array.prototype.forEach.call(tiles, function (tile) {
       var badge = tile.querySelector('.tile-badge');
       if (badge && lastOpened && tile.getAttribute('data-app') === lastOpened) badge.hidden = false;
       tile.addEventListener('click', function () { writeLastOpened(tile.getAttribute('data-app')); });
+    });
+
+    // 🔒 A locked tile (an app not open to students yet) has no address to follow; tapping it
+    // says why, with a little shake, rather than doing nothing.
+    var noteTimer = null;
+    function showLockedNote(text) {
+      var old = document.querySelector('.locked-note');
+      if (old) old.remove();
+      var note = document.createElement('div');
+      note.className = 'locked-note';
+      note.setAttribute('role', 'status');
+      note.textContent = text;
+      document.body.appendChild(note);
+      clearTimeout(noteTimer);
+      noteTimer = setTimeout(function () { note.remove(); }, 3200);
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('.app-tile.is-locked'), function (tile) {
+      function explain(event) {
+        if (event) event.preventDefault();
+        tile.classList.remove('is-nudged');
+        void tile.offsetWidth;   // restart the shake
+        tile.classList.add('is-nudged');
+        showLockedNote(tile.getAttribute('data-locked') || 'This app opens soon.');
+      }
+      tile.addEventListener('click', explain);
+      tile.addEventListener('keydown', function (event) { if (event.key === 'Enter' || event.key === ' ') explain(event); });
     });
 
     var printButton = document.getElementById('printButton');

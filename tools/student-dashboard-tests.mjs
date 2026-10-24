@@ -1,4 +1,4 @@
-// 🧭 My Polymath — the student dashboard (student/, v1.0.0). Holds every tile
+// 🧭 My Polymath — the student dashboard (student/, v1.1.0). Holds every tile
 // to its app's address and its icon, so a renamed folder or a missing picture
 // is caught here rather than by a student tapping a tile that goes nowhere.
 //
@@ -28,14 +28,21 @@ const EXPECTED = [
   { app: 'english', name: 'English', href: '/english/' }
 ];
 
+// Apps not open to students yet: their tile has no href (nothing to follow, with or without script),
+// keeps its address in data-href and says why when tapped. Opening one is a markup change.
+const LOCKED = ['online'];
+
 function tiles() {
-  return [...page.matchAll(/<a class="app-tile" data-app="([^"]+)" href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)].map(match => ({
-    app: match[1],
-    href: match[2],
-    name: (match[3].match(/<span class="tile-name">([^<]+)<\/span>/) || [])[1],
-    blurb: (match[3].match(/<span class="tile-blurb">([^<]+)<\/span>/) || [])[1],
-    icon: (match[3].match(/<img class="tile-icon" src="([^"]+)"/) || [])[1],
-    address: (match[3].match(/<span class="print-address">([^<]+)<\/span>/) || [])[1],
+  return [...page.matchAll(/<a class="app-tile( is-locked)?" data-app="([^"]+)" (?:href|data-href)="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)].map(match => ({
+    locked: !!match[1],
+    tag: match[0].slice(0, match[0].indexOf('>') + 1),
+    app: match[2],
+    href: match[3],
+    name: (match[4].match(/<span class="tile-name">([^<]+)<\/span>/) || [])[1],
+    blurb: (match[4].match(/<span class="tile-blurb">([^<]+)<\/span>/) || [])[1],
+    icon: (match[4].match(/<img class="tile-icon" src="([^"]+)"/) || [])[1],
+    address: (match[4].match(/<span class="print-address">([^<]+)<\/span>/) || [])[1],
+    lockBadge: /<span class="tile-lock">/.test(match[4]),
     style: (match[0].match(/style="([^"]+)"/) || [])[1] || ''
   }));
 }
@@ -53,7 +60,25 @@ test('one square tile per app, in the owner\'s order, each going to that app', (
     assert.ok(tile.href.startsWith('/'), tile.name + ' links by its absolute address on polymathlc.com.sg');
     assert.ok(tile.blurb && tile.blurb.length <= 48, tile.name + ' has a short line under it');
     assert.match(tile.style, /--tile-wash:#[0-9A-F]{6};--tile-ink:#[0-9A-F]{6}/i, tile.name + ' has its colours');
+    if (tile.locked) continue;
     assert.equal(tile.address, 'polymathlc.com.sg' + tile.href.replace(/\/$/, ''), tile.name + ' prints its address');
+  }
+});
+
+test('🔒 Worksheets is locked until every level\'s worksheets are uploaded', () => {
+  const found = tiles();
+  assert.deepEqual(found.filter(tile => tile.locked).map(tile => tile.app), LOCKED, 'exactly these tiles are locked');
+  for (const tile of found) {
+    if (tile.locked) {
+      assert.ok(!/\shref="/.test(tile.tag), tile.name + ': no href, so there is nothing to follow even without script');
+      assert.ok(/data-href="\/online\/"/.test(tile.tag), tile.name + ': its address is kept for the day it opens');
+      assert.ok(/aria-disabled="true"/.test(tile.tag) && /data-locked="[^"]+"/.test(tile.tag), tile.name + ': says it is not open, and why');
+      assert.ok(tile.lockBadge, tile.name + ': wears the 🔒 Coming soon badge');
+      assert.equal(tile.address, 'Coming soon', tile.name + ': the printed sheet does not hand out an address that is shut');
+    } else {
+      assert.ok(/\shref="\//.test(tile.tag), tile.name + ': an open tile is a real link');
+      assert.ok(!tile.lockBadge, tile.name + ': no lock');
+    }
   }
 });
 
@@ -100,8 +125,8 @@ test('the greeting reads Singapore time, and the version is on the page', () => 
   };
   vm.runInNewContext(script[1], sandbox);
   const api = sandbox.window.MyPolymath;
-  assert.equal(api.version, 'v1.0.0');
-  assert.equal(elements.versionBadge.textContent, 'v1.0.0', 'the badge shows the version');
+  assert.equal(api.version, 'v1.1.0');
+  assert.equal(elements.versionBadge.textContent, 'v1.1.0', 'the badge shows the version');
   assert.equal(api.singaporeHour(new Date(Date.UTC(2026, 9, 25, 0, 0))), 8, '00:00 UTC is 8 am in Singapore');
   assert.equal(api.greetingFor(8), 'Good morning');
   assert.equal(api.greetingFor(14), 'Good afternoon');
