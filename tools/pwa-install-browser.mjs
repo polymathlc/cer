@@ -112,6 +112,7 @@ for (const dir of APP_DIRS) {
     await context.setOffline(true);
     await page.goto(base + folder + '?offline-check', { waitUntil: 'load' });
     assert.equal((await page.textContent('h1')).trim(), "You're offline", label + ': offline page');
+    assert.ok(await page.$eval('main img', image => image.complete && image.naturalWidth > 0), label + ': the offline page shows its icon with no connection');
     await shot(page, 'offline');
     await context.setOffline(false);
     await page.goto(base + folder, { waitUntil: 'load' });

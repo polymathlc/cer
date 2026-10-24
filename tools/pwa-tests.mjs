@@ -102,7 +102,8 @@ test('the fetch handler leaves everything it does not handle to the browser', ()
 test('offline.html stands on its own', () => {
   const html = read('offline.html');
   assert.ok(!/https?:\/\//.test(html.replace(/<!--[\s\S]*?-->/g, '')), 'loads nothing from the network');
-  assert.ok(html.includes('assets/app-icons/icon-192.png'), 'its one picture is precached');
+  // Its one picture is INSIDE the file: the worker answers page loads only, so an icon file could never arrive offline (v1.450.1).
+  assert.ok(/<img src="data:image\/png;base64,[A-Za-z0-9+/=]+"/.test(html), 'its one picture travels inside the file');
 });
 
 test('platform and browser detection', () => {

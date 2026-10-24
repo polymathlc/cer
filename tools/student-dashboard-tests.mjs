@@ -125,8 +125,8 @@ test('the greeting reads Singapore time, and the version is on the page', () => 
   };
   vm.runInNewContext(script[1], sandbox);
   const api = sandbox.window.MyPolymath;
-  assert.equal(api.version, 'v1.1.0');
-  assert.equal(elements.versionBadge.textContent, 'v1.1.0', 'the badge shows the version');
+  assert.equal(api.version, 'v1.1.1');
+  assert.equal(elements.versionBadge.textContent, 'v1.1.1', 'the badge shows the version');
   assert.equal(api.singaporeHour(new Date(Date.UTC(2026, 9, 25, 0, 0))), 8, '00:00 UTC is 8 am in Singapore');
   assert.equal(api.greetingFor(8), 'Good morning');
   assert.equal(api.greetingFor(14), 'Good afternoon');

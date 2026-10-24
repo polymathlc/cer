@@ -81,6 +81,12 @@ well as inside the installed app. **Change the kit in every copy together; never
 `tools/pwa-install-tests.mjs` + `tools/pwa-install-browser.mjs` (`APP_DIRS = ['online', 'student']` here) are the
 kit's harnesses; the same two files ship in every repo with its own `APP_DIRS`.
 
+- **The offline pages carry their icon inline (sw 2.0.1; My Polymath v1.1.1, Polymath Online v1.3.1).** A kit
+  `sw.js` answers page loads only, so an icon FILE beside `offline.html` could never arrive with no connection
+  (a broken picture). The icon is a `data:` URI inside `offline.html`, `PRECACHE` is just the offline page, and
+  `SW_VERSION` went to 2.0.1 so installed copies re-cache it; the browser harness checks the icon shows offline.
+  The root app's own installer had the same gap and got the same fix in v1.450.1 (`offline.html` inline icon,
+  `PRECACHE = [OFFLINE_URL]`, pinned by `tools/pwa-tests.mjs`).
 - Run `node --test tools/pwa-install-tests.mjs tools/student-dashboard-tests.mjs` and
   `PW=… node tools/pwa-install-browser.mjs` after touching `student/` or the kit files in `online/`.
 
