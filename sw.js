@@ -1,4 +1,4 @@
-// 📲 The installable app's service worker (v1.450.0). See CLAUDE.md → "Installable app".
+// 📲 The installable app's service worker (v1.450.1). See CLAUDE.md → "Installable app".
 //
 // It exists so the browser offers "Install" and so an installed app opened
 // without a connection shows offline.html instead of the browser's dinosaur.
@@ -14,11 +14,11 @@
 // harmless for every page under it — /online/, /cs/, /schedule/ included.
 'use strict';
 
-const SW_VERSION = '1.450.0';
+const SW_VERSION = '1.450.1';
 const CACHE = 'polymath-app-shell-' + SW_VERSION;
 const CACHE_PREFIX = 'polymath-app-shell-';
 const OFFLINE_URL = 'offline.html';
-const PRECACHE = [OFFLINE_URL, 'assets/app-icons/icon-192.png'];
+const PRECACHE = [OFFLINE_URL];   // offline.html carries its icon inline (v1.450.1)
 
 // Pure: should this request be answered by the worker? Only same-origin GET
 // page loads. Exported for tools/pwa-tests.mjs through `self.__pwaSw`.

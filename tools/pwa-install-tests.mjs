@@ -208,7 +208,7 @@ for (const dir of APP_DIRS) {
     const offline = readIn(dir, 'offline.html');
     assert.ok(!/<script[^>]+src=/.test(offline) && !/<link[^>]+stylesheet/.test(offline), 'no outside files (none can load offline)');
     const image = offline.match(/<img src="([^"]+)"/);
-    assert.ok(image && fs.existsSync(fileIn(dir, image[1])), 'its icon is a local file');
+    assert.ok(image && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(image[1]), 'its icon is inside the file — the worker answers page loads only, so an icon file could never arrive offline');
     assert.ok(offline.includes(manifest.name), 'it names the app');
   });
 }

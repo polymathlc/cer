@@ -1,4 +1,4 @@
-// 📲 My Polymath — the installable app's service worker (sw 2.0.0, Polymath install kit v2.0.0).
+// 📲 My Polymath — the installable app's service worker (sw 2.0.1, Polymath install kit v2.0.1).
 //
 // It exists so the browser offers "Install" and so the installed app, opened
 // without a connection, shows offline.html instead of the browser's dinosaur.
@@ -16,11 +16,11 @@
 // starts with its own CACHE_PREFIX, never anybody else's.
 'use strict';
 
-const SW_VERSION = '2.0.0';
+const SW_VERSION = '2.0.1';
 const CACHE_PREFIX = 'polymath-hub-shell-';
 const CACHE = CACHE_PREFIX + SW_VERSION;
 const OFFLINE_URL = 'offline.html';
-const PRECACHE = [OFFLINE_URL, 'assets/app-icons/icon-192.png'];
+const PRECACHE = [OFFLINE_URL];   // the offline page carries its own icon (kit v2.0.1)
 
 // Pure: should this request be answered by the worker? Only same-origin GET
 // page loads. Exported for tools/pwa-install-tests.mjs through `self.__pwaSw`.
