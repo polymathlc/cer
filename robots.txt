@@ -1,0 +1,54 @@
+# 🔎 polymathlc.com.sg — Polymath Learning Centre (Oct 2026)
+# Every public page may be crawled, by search engines and AI assistants alike.
+# App, game and tool pages carry <meta name="robots" content="noindex"> instead
+# of a Disallow here, because a crawler must be able to fetch a page to see noindex.
+# Server code folders are not web pages, so they are skipped.
+
+User-agent: *
+Allow: /
+Disallow: /shop-function/
+Disallow: /visualise-function/
+Disallow: /docs/
+
+# Search engines
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# AI assistants and answer engines (ChatGPT, Claude, Perplexity, Gemini, Apple, Copilot)
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+Sitemap: https://polymathlc.com.sg/sitemap.xml

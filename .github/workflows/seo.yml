@@ -1,0 +1,19 @@
+name: Search and AI visibility checks
+on:
+  pull_request:
+    paths: ['robots.txt', 'sitemap.xml', 'llms.txt', 'index.html', 'enquiry.html', 'enquiry-core.mjs', 'schedule/index.html', 'products/index.html', 'cs/index.html', 'interactive-textbook/**', '*.html', '*/index.html', 'tools/seo-tests.mjs', '.github/workflows/seo.yml']
+  push:
+    branches: [main]
+    paths: ['robots.txt', 'sitemap.xml', 'llms.txt', 'index.html', 'enquiry.html', 'enquiry-core.mjs', 'schedule/index.html', 'products/index.html', 'cs/index.html', 'interactive-textbook/**', '*.html', '*/index.html', 'tools/seo-tests.mjs', '.github/workflows/seo.yml']
+permissions:
+  contents: read
+jobs:
+  seo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check robots.txt, the sitemap, llms.txt, structured data and noindex pages
+        run: node --test tools/seo-tests.mjs
