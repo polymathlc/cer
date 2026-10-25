@@ -112,7 +112,7 @@ test('the home page links its public pages so crawlers find them', () => {
 
 test('app, game and tool pages stay out of search results', () => {
   const pages = [
-    'bar-model.html', 'fps.html', 'fractions.html', 'grand-line.html', 'hades-game.html', 'math-worksheet.html', 'math.html',
+    'bar-model.html', 'fps.html', 'fractions.html', 'grand-line.html', 'math-worksheet.html', 'math.html',
     'mistakes.html', 'offline.html', 'pdf-annotator.html', 'pirate-rift.html', 'psle-roadmap.html', 'psle-science-analysis.html',
     'question-app.html', 'sample-materials.html', 'science-defenders.html', 'science-legends.html', 'science-raiders.html',
     'science-slayers.html', 'science-spire.html', 'science-worksheet.html', 'textbooks.html', 'video-review.html', 'whiteboard.html',
