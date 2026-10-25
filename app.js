@@ -4532,7 +4532,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.450.1';
+const APP_VERSION = 'v1.450.2';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -80068,7 +80068,12 @@ function ppTopicPractise(){
 // prints with its standard cover, Name and Date lines blank. Everything a
 // teacher wants to adjust is still on the full page.
 // =====================================================================
-var PSLE_THEME_ORDER = ['diversity', 'cycles', 'systems', 'interactions', 'energy'];
+// TOPICS ARE GROUPED BY LEVEL (v1.450.2), not by syllabus theme: P3, P4, P5,
+// P6, then S1, then "Other topics". A student revising for the PSLE thinks in
+// the year they learnt a topic, and the level is what the rest of the app files
+// a topic under. The level is the app's OWN topic → level map
+// (`psleTopicLevel`), never a second list kept here.
+var PSLE_OTHER_LABEL = 'Other topics';
 var PSLE_TUTOR_MAX_QUESTIONS = 45;   // a sheet longer than this risks Study Buddy's page limit (TSEND_PAGES_MAX)
 var _psleYears = [];                  // the year rows as last drawn (index-addressed, never quoted into onclick)
 var _psleTopics = [];                 // the topic rows as last drawn
@@ -80107,7 +80112,27 @@ function psleYearSummaries() {
   });
 }
 
-/** One summary per topic, grouped by the syllabus theme, then by name. Unlabelled rows are left out. */
+/**
+ * The level a topic is taught at: the admin's custom topics first (students
+ * receive those at sign-in), then the app's own `topicLevelMap`. A topic
+ * neither knows is '' and sits under "Other topics" at the end. It deliberately
+ * does NOT borrow `getTopicLevel`'s P6 default: a "Primary 6" heading over a
+ * topic nobody filed at P6 is a claim this page has no grounds to make.
+ */
+function psleTopicLevel(topic) {
+  if (!topic) return '';
+  const custom = (customTopics && typeof customTopics === 'object') ? customTopics[topic] : '';
+  const level = custom || topicLevelMap[topic] || '';
+  return isLevelCode(level) ? level : '';
+}
+
+/** Where a level sorts: the ladder's own order (P3 → S1), with no level last. */
+function psleLevelRank(level) {
+  const i = TOPIC_LEVELS.indexOf(level);
+  return i < 0 ? TOPIC_LEVELS.length : i;
+}
+
+/** One summary per topic, grouped by the level it is taught at, then by name. Unlabelled rows are left out. */
 function psleTopicSummaries() {
   const byTopic = new Map();
   ppQuestions().forEach(q => {
@@ -80116,14 +80141,14 @@ function psleTopicSummaries() {
     if (!byTopic.has(topic)) byTopic.set(topic, []);
     byTopic.get(topic).push(q);
   });
-  const themeRank = topic => { const i = PSLE_THEME_ORDER.indexOf(ppTheme(topic)); return i < 0 ? PSLE_THEME_ORDER.length : i; };
   return [...byTopic.keys()]
-    .sort((a, b) => themeRank(a) - themeRank(b) || a.localeCompare(b))
-    .map(topic => {
+    .map(topic => ({ topic, level: psleTopicLevel(topic) }))
+    .sort((a, b) => psleLevelRank(a.level) - psleLevelRank(b.level) || a.topic.localeCompare(b.topic))
+    .map(({ topic, level }) => {
       const rows = byTopic.get(topic);
       return {
         topic,
-        theme: ppTheme(topic),
+        level,
         total: rows.length,
         ready: psleBankQs({ kind: 'topic', key: topic }).length,
         years: [...new Set(rows.map(q => String(q.year)))].sort((a, b) => b.localeCompare(a))
@@ -80181,18 +80206,22 @@ function psleRender() {
         <span class="psle-pick-meta">${escapeHtml(countLine(y.ready))}</span>
       </button>`).join('');
 
-  const themes = [];
+  // One group per level, in the order the summaries already sort them. Each
+  // level wears its own colour (`levelColors`, the one the rest of the app
+  // uses for that level); a topic with no level gets a neutral grey.
+  const accent = level => (level && levelColors[level] && levelColors[level].fg) || '#888';
+  const groups = [];
   _psleTopics.forEach((t, i) => {
-    let group = themes.find(g => g.theme === t.theme);
-    if (!group) { group = { theme: t.theme, items: [] }; themes.push(group); }
+    let group = groups.find(g => g.level === t.level);
+    if (!group) { group = { level: t.level, items: [] }; groups.push(group); }
     group.items.push(Object.assign({ index: i }, t));
   });
-  const topicGroups = themes.map(group => `
-      <div class="psle-theme">
-        <div class="psle-theme-head"><span class="psle-theme-dot" style="background:${PP_THEME_C[group.theme] || '#888'}"></span>${escapeHtml(PP_THEME_NAME[group.theme] || 'Other topics')}</div>
+  const topicGroups = groups.map(group => `
+      <div class="psle-group" data-level="${escapeHtml(group.level || 'other')}">
+        <div class="psle-group-head"><span class="psle-group-dot" style="background:${accent(group.level)}"></span>${escapeHtml(group.level ? levelGroupLabel(group.level) : PSLE_OTHER_LABEL)}</div>
         <div class="psle-grid psle-grid-topics">
           ${group.items.map(t => `
-          <button type="button" class="psle-pick psle-pick-topic${t.ready ? '' : ' is-empty'}" style="--psle-theme:${PP_THEME_C[t.theme] || '#888'}" onclick="psleOpen('topic', ${t.index})" ${t.ready ? '' : 'aria-disabled="true"'}>
+          <button type="button" class="psle-pick psle-pick-topic${t.ready ? '' : ' is-empty'}" style="--psle-accent:${accent(t.level)}" onclick="psleOpen('topic', ${t.index})" ${t.ready ? '' : 'aria-disabled="true"'}>
             <span class="psle-pick-title">${escapeHtml(t.topic)}</span>
             <span class="psle-pick-meta">${escapeHtml(countLine(t.ready))}${t.years.length ? ' · ' + t.years.length + ' year' + (t.years.length === 1 ? '' : 's') : ''}</span>
           </button>`).join('')}
@@ -80210,7 +80239,7 @@ function psleRender() {
     <section class="psle-section">
       <div class="psle-section-head">
         <h3>🧪 By topic</h3>
-        <p>Every PSLE question on one topic, from all the years — or just one.</p>
+        <p>Every PSLE question on one topic, from all the years — or just one. Topics are grouped by the level they are taught at.</p>
       </div>
       ${topicGroups || '<div class="psle-empty">No topics yet.</div>'}
     </section>

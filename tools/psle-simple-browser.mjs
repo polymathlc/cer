@@ -43,6 +43,9 @@ const pageHtml = markup('<div class="page" id="page-psle">', '<!-- ===== PAGE: T
 const overlayHtml = markup('<div class="overlay" id="psleOverlay"', '<!-- ==================== 📖 SEND TO STUDY BUDDY');
 const seedAndThemes = slice('const PP_SEED_Q = [', 'let ppData = null;');
 const simpleView = slice('// 🎓 SCIENCE PSLE — THE SIMPLE VIEW', '// End Science PSLE simple view');
+// The REAL topic → level map and level colours: the topics are grouped by level (v1.450.2).
+const literal = from => { const start = APP.indexOf(from); assert.ok(start >= 0, 'app.js still has ' + from); return APP.slice(start, APP.indexOf('\n};', start) + 3); };
+const levelMaps = literal('const topicLevelMap = {') + '\n' + literal('const levelColors = {');
 
 const script = `
 ${seedAndThemes}
@@ -52,6 +55,11 @@ const ppQuestions = () => rows;
 const ppYears = () => [...new Set(rows.map(q => String(q.year)))].sort();
 const ppTopicOf = q => q.topic || '';
 const ppTheme = topic => PP_THEME[topic] || 'diversity';
+${levelMaps}
+const TOPIC_LEVELS = ['P3', 'P4', 'P5', 'P6', 'S1'];
+const isLevelCode = v => /^(?:P[3-6]|S1)$/.test(String(v || ''));
+const levelGroupLabel = lv => (lv === 'S1' ? 'Secondary ' : 'Primary ') + String(lv || '').slice(1);
+const customTopics = {};
 const ppBankQ = id => /_40$/.test(id) ? null : { id: 'bank_' + id, title: id };   // one question per paper left unattached
 const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const showToast = (message, kind) => window.calls.toasts.push(message);
@@ -108,6 +116,12 @@ const shot = async (page, name) => { if (screenshots) await page.screenshot({ pa
   ok(expectedYears >= 5, 'the shipped papers give several years (' + expectedYears + ')');
   ok(await page.locator('.psle-pick-year').count() === expectedYears, 'a button per year');
   ok(await page.locator('.psle-pick-topic').count() === expectedTopics, 'a button per topic');
+  const heads = (await page.locator('.psle-group-head').allTextContents()).map(t => t.trim());
+  const ladder = ['Primary 3', 'Primary 4', 'Primary 5', 'Primary 6', 'Secondary 1', 'Other topics'];
+  ok(heads.length >= 4 && heads.every(h => ladder.includes(h)), 'topics are grouped under level headings (' + heads.join(', ') + ')');
+  ok(heads.every((h, i) => i === 0 || ladder.indexOf(heads[i - 1]) < ladder.indexOf(h)), 'the level groups run P3 → S1, in order');
+  ok(await page.locator('.psle-group[data-level="P3"] .psle-pick-topic').count() > 0, 'Primary 3 holds its topics');
+  ok(!(await page.textContent('#psleBody')).match(/\b(DIVERSITY|Diversity|Interactions)\b/), 'no syllabus-theme headings');
   const firstYear = await page.locator('.psle-pick-year .psle-pick-title').first().textContent();
   const years = await page.evaluate(() => psleYearSummaries().map(y => y.year));
   ok(firstYear.trim() === years[0] && years[0] > years[years.length - 1], 'newest year first');

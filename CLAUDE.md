@@ -20,12 +20,18 @@ search `SCIENCE PSLE — THE SIMPLE VIEW`), `#page-psle`, the 🎓 **Science PSL
 Papers, every role, just above 🎓 PSLE Papers), the `#psleOverlay` sheet and the `.psle-*` CSS in `index.html`.
 
 The full 🎓 PSLE Papers page is an analysis desk. This page is two sets of big buttons — one per **year**
-(newest first) and one per **topic** (grouped by syllabus theme) — and each opens a sheet with exactly three
+(newest first) and one per **topic** (grouped by the LEVEL it is taught at, v1.450.2) — and each opens a sheet with exactly three
 actions: **▶ Practice** (Quick Practice here: `ppPracticeYear` for a year, `launchWorksheetPractice` with
 `allowRetired` for a topic — the full page's own doors), **📖 Practice in Study Buddy** and **📄 Export PDF**
 (`ppDoPrint`, the past-paper print with its key; the student picks "Save as PDF" in the print window).
 A topic's sheet carries year chips, so one topic can be narrowed to one paper.
 
+- **Topics are grouped by LEVEL, not by syllabus theme** (`psleTopicLevel` / `psleLevelRank`, v1.450.2): Primary 3,
+  4, 5, 6, then Secondary 1, then **Other topics**, alphabetical inside each, every group in its `levelColors` colour.
+  The level is the admin's custom topic level first (students receive it at sign-in), then `topicLevelMap` — the app's
+  own map, never a second list here. **A topic neither knows goes under Other topics, NOT under P6**: `getTopicLevel`
+  defaults unknown topics to P6 for serving, but a "Primary 6" heading over a topic nobody filed there is a claim
+  this page cannot make. To move one out of Other topics, give it a level in ⚙ Manage topics.
 - **IT IS THE SAME DATA, NEVER A COPY.** `ppYears()`, `ppTopicOf()` over `ppQuestions()`, `ppBankQ` for what is
   attached. A number on a button is the count of ATTACHED questions — exactly what each action serves. Nothing
   on this page needs keeping in step with the full page; do not give it its own list.

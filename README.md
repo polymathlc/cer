@@ -1,5 +1,14 @@
 # CER Science Learning Portal
 
+## 🎓 Science PSLE topics by level (v1.450.2)
+
+- The **By topic** buttons on 🎓 Science PSLE are grouped by the level each topic is taught at — **Primary 3, 4, 5,
+  6, then Secondary 1** — instead of by syllabus theme. Each level wears its own colour.
+- A topic with no level in the topic list (a custom topic the admin never gave a level) sits under **Other topics**
+  at the end rather than being claimed for Primary 6. Give it a level in ⚙ Manage topics to move it.
+
+Run `node --test tools/psle-simple-tests.mjs` and `PW=… node tools/psle-simple-browser.mjs`.
+
 ## 📲 My Polymath v1.3.0 — the installed app wears the Polymath logo
 
 - **The My Polymath app icon is now the Polymath Learning Centre logo** — the official sticker on a tile in the
