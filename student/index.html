@@ -6,7 +6,7 @@
 <title>My Polymath — Student Dashboard | Polymath Learning Centre</title>
 <meta name="description" content="Every Polymath Learning Centre app in one place: Science, Science PSLE, Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese and English.">
 <!--
-  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.2.0)
+  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.3.0)
   ------------------------------------------------------------------------
   One page of square tiles, one per student app. Each tile is a plain link to
   the app's own published address, so the page needs no sign-in, no Firebase
@@ -38,6 +38,15 @@
   Its scope is /student/: a tile opens its app at that app's own address, so
   inside the installed dashboard the app opens in the browser's in-app view,
   whose close button comes straight back here.
+
+  ITS ICON IS THE POLYMATH LOGO (v1.3.0). The home-screen / dock / install
+  dialog icon is the official sticker (assets/branding/polymath-learning-centre.png
+  at the repo root, unchanged) on a tile in the logo's own two teals — not the
+  four-squares grid the kit drew in v1.0–v1.2, and not the bare M mark the
+  Science portal installs with, so the two never sit side by side looking
+  identical. The 32 px tab icon is the M mark alone (no wordmark survives 32 px).
+  All six files in assets/app-icons/ and the inline icon in offline.html are
+  made by tools/my-polymath-icons.py — redraw them with that, never by hand.
 
   The tiles are written out below rather than drawn by script, so the page is
   complete the moment the HTML arrives — on a slow school connection, and in
@@ -619,14 +628,14 @@
   © Polymath Learning Centre · polymathlc.com.sg
 </footer>
 
-<div class="version-badge" id="versionBadge" aria-hidden="true">v1.2.0</div>
+<div class="version-badge" id="versionBadge" aria-hidden="true">v1.3.0</div>
 
 <script>
   /* My Polymath — the little the page does with script. Everything works without it. */
   (function () {
     'use strict';
 
-    var DASHBOARD_VERSION = 'v1.2.0';
+    var DASHBOARD_VERSION = 'v1.3.0';
     var LAST_OPENED_KEY = 'polymath-dashboard-last-opened';
 
     var versionBadge = document.getElementById('versionBadge');

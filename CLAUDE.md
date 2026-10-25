@@ -52,7 +52,7 @@ A topic's sheet carries year chips, so one topic can be narrowed to one paper.
   and `PW=… node tools/psle-simple-browser.mjs` (index.html's real styles and markup + the shipped block + the real
   `PP_SEED_Q` papers; computer and phone, the sheet, every action's door). CI: `.github/workflows/student-apps.yml`.
 
-## 🧭 My Polymath — the student dashboard (`student/`, v1.2.0) and the Polymath install kit (v2.0.0)
+## 🧭 My Polymath — the student dashboard (`student/`, v1.3.0) and the Polymath install kit (v2.0.0)
 
 `student/index.html` is **polymathlc.com.sg/student**: one page of square tiles — Science, Science PSLE, Math,
 Answer Keys, Study Buddy, Rewards, Worksheets, Chinese, English — each a plain ABSOLUTE link to where that app is
@@ -104,6 +104,27 @@ through the website sync like `online/` and `schedule/` — **edit it here**. Th
   printed address. **To open it**: `data-href` → `href`, drop `is-locked` / `data-locked` / `role` / `tabindex` /
   `aria-disabled` and the pill, print its address again, and empty `LOCKED` in `tools/student-dashboard-tests.mjs`.
   Only the TILE is locked: `/online/` itself is unchanged, so students already invited there keep their class.
+- **📲 Its install icon is the Polymath logo (v1.3.0).** Home screen, dock, Start menu, the kit's install sheet
+  (`data-app-icon`) and the offline page all show the official sticker (`assets/branding/polymath-learning-centre.png`,
+  unchanged — never redrawn or re-lettered) on a tile blended between the logo's own two teals (#57C4D0 → #2E9CA6).
+  v1.0–v1.2 installed with the four-squares grid the kit's `make-icons.mjs` drew; **do not rerun the kit's icon maker
+  on `student/`** — that puts the grid back. Two deliberate choices:
+  - **The whole sticker, not the bare M.** The Science portal (repo root, `assets/app-icons/`) installs with the M mark
+    on white; a student with both installed would otherwise see two identical icons. A test fails if any of the
+    dashboard's icons is byte-identical to the portal's or sits on white.
+  - **The 32 px tab icon is the M mark alone** (cut by colour from the same artwork: the block holding the bright
+    magenta face #EC008C), because no wordmark survives 32 px.
+  - **`tools/my-polymath-icons.py` makes all six files AND the inline `data:` icon in `student/offline.html`** (which
+    must be `icon-192.png` byte for byte — the test checks). Pillow + NumPy + SciPy. The maskable pair keeps EVERY
+    visible pixel of the sticker, shadow included, inside the 40 % safe circle (measured on the artwork's own pixels,
+    not its bounding box). `tools/student-dashboard-tests.mjs` decodes the PNGs with its own small decoder and READS
+    the colours, blend and safe radius out of the generator, so the two cannot drift: opaque, the tile in the corners,
+    the white sticker and the magenta M in the middle, a 4 % band of plain tile round an "any" icon, and nothing but
+    tile outside a maskable icon's safe circle. Changing the offline page means bumping `SW_VERSION` in
+    `student/sw.js` (2.0.2 for this) so installed copies re-cache it.
+  - Installed copies pick the new icon up on their own on Android (Chrome refreshes the WebAPK when the manifest's
+    icons change) and on desktop Chrome/Edge (which may ask once to confirm the new icon). **iPhone/iPad never
+    refresh a Home Screen icon** — a student who added it before v1.3.0 removes it and adds it again.
 
 **Every student app is installable with ONE shared kit**: `pwa-install.js` (kit v2.0.0, byte for byte the same in
 `student/`, `online/` and in polymathlc/math, anskey, tutor, rewards, chinese and english), plus per app a

@@ -1,4 +1,4 @@
-// 🧭 My Polymath — the student dashboard (student/, v1.2.0) and the site's 404
+// 🧭 My Polymath — the student dashboard (student/, v1.3.0) and the site's 404
 // forwarder (404.html, forward v1.0.0). Holds every tile to the address its app
 // is ACTUALLY published at and to its icon, and every short address the
 // dashboard prints to the tile it belongs to — so a renamed folder, a missing
@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -364,9 +365,9 @@ test('the greeting reads Singapore time, and the version is on the page', () => 
   };
   vm.runInNewContext(script[1], sandbox);
   const api = sandbox.window.MyPolymath;
-  assert.equal(api.version, 'v1.2.0');
-  assert.equal(elements.versionBadge.textContent, 'v1.2.0', 'the badge shows the version');
-  assert.ok(page.includes('id="versionBadge" aria-hidden="true">v1.2.0<'), 'the badge is right before script runs too');
+  assert.equal(api.version, 'v1.3.0');
+  assert.equal(elements.versionBadge.textContent, 'v1.3.0', 'the badge shows the version');
+  assert.ok(page.includes('id="versionBadge" aria-hidden="true">v1.3.0<'), 'the badge is right before script runs too');
   assert.equal(api.singaporeHour(new Date(Date.UTC(2026, 9, 25, 0, 0))), 8, '00:00 UTC is 8 am in Singapore');
   assert.equal(api.greetingFor(8), 'Good morning');
   assert.equal(api.greetingFor(14), 'Good afternoon');
@@ -381,4 +382,255 @@ test('the dashboard is an installable app of its own, and says how to install th
   const controls = page.match(/<button[^>]*data-pwa-install[^>]*>/g) || [];
   assert.ok(controls.length >= 2, 'an Install button in the header and in the help card');
   assert.ok(/Every app has its own <b>📲 Install app<\/b> button/.test(page), 'the help card says every app has its own');
+});
+
+// ───────────── 📲 the install icon is the Polymath logo (My Polymath v1.3.0) ─────────────
+//
+// The dashboard installs as "My Polymath" with the official Polymath sticker
+// (assets/branding/polymath-learning-centre.png) on a tile in the logo's own two
+// teals, drawn by tools/my-polymath-icons.py. v1.0–v1.2 installed with a grid of
+// four coloured squares the kit drew; rerunning the kit's icon maker would put
+// that grid straight back, and nothing else would notice — so these tests decode
+// the PNGs and hold them to the generator's rules. The colours and the safe-zone
+// radius are READ from the generator, so the two can never drift apart.
+
+const ICON_DIR = path.join(dashboardDir, 'assets', 'app-icons');
+const GENERATOR = fs.readFileSync(path.join(root, 'tools', 'my-polymath-icons.py'), 'utf8');
+
+/** A Python constant from the generator: a number, or an (r, g, b) tuple of hex/decimal ints. */
+function generatorConstant(name) {
+  const line = GENERATOR.match(new RegExp('^' + name + '\\s*=\\s*(.+?)\\s*(?:#.*)?$', 'm'));
+  assert.ok(line, 'tools/my-polymath-icons.py defines ' + name);
+  const value = line[1].trim();
+  if (value.startsWith('(')) return value.slice(1, -1).split(',').map(part => Number(part.trim()));
+  return Number(value);
+}
+const TEAL_LIGHT = generatorConstant('TEAL_LIGHT');
+const TEAL_DEEP = generatorConstant('TEAL_DEEP');
+const BLEND_DOWN = generatorConstant('BLEND_DOWN');
+const BLEND_ACROSS = generatorConstant('BLEND_ACROSS');
+const SAFE_RADIUS = generatorConstant('SAFE_RADIUS');
+const WORK = generatorConstant('WORK');
+
+/**
+ * A small, dependency-free PNG decoder: 8-bit, non-interlaced, any colour type,
+ * all five row filters. Returns RGBA pixels. Enough for the icons this repo
+ * writes (Pillow's optimize=True keeps RGB / RGBA), and strict about anything else.
+ */
+function decodePng(file) {
+  const bytes = fs.readFileSync(file);
+  assert.equal(bytes.toString('latin1', 1, 4), 'PNG', path.basename(file) + ' is a PNG');
+  let offset = 8;
+  let header = null;
+  let palette = null;
+  let transparency = null;
+  const data = [];
+  while (offset < bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    const type = bytes.toString('latin1', offset + 4, offset + 8);
+    const body = bytes.subarray(offset + 8, offset + 8 + length);
+    if (type === 'IHDR') {
+      header = { width: body.readUInt32BE(0), height: body.readUInt32BE(4), depth: body[8], colourType: body[9], interlace: body[12] };
+    } else if (type === 'PLTE') {
+      palette = body;
+    } else if (type === 'tRNS') {
+      transparency = body;
+    } else if (type === 'IDAT') {
+      data.push(body);
+    } else if (type === 'IEND') {
+      break;
+    }
+    offset += 12 + length;
+  }
+  assert.ok(header, path.basename(file) + ' has a header');
+  assert.equal(header.depth, 8, path.basename(file) + ' is 8 bits a channel');
+  assert.equal(header.interlace, 0, path.basename(file) + ' is not interlaced');
+  const channels = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[header.colourType];
+  assert.ok(channels, path.basename(file) + ' has a known colour type');
+  const { width, height } = header;
+  const raw = zlib.inflateSync(Buffer.concat(data));
+  const stride = width * channels;
+  assert.equal(raw.length, height * (stride + 1), path.basename(file) + ' holds exactly its pixels');
+  const rows = Buffer.alloc(height * stride);
+  let previous = Buffer.alloc(stride);
+  for (let y = 0; y < height; y++) {
+    const filter = raw[y * (stride + 1)];
+    const line = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
+    const current = rows.subarray(y * stride, (y + 1) * stride);
+    for (let i = 0; i < stride; i++) {
+      const left = i >= channels ? current[i - channels] : 0;
+      const up = previous[i];
+      const upLeft = i >= channels ? previous[i - channels] : 0;
+      let value = line[i];
+      if (filter === 1) value += left;
+      else if (filter === 2) value += up;
+      else if (filter === 3) value += (left + up) >> 1;
+      else if (filter === 4) {
+        const estimate = left + up - upLeft;
+        const toLeft = Math.abs(estimate - left);
+        const toUp = Math.abs(estimate - up);
+        const toUpLeft = Math.abs(estimate - upLeft);
+        value += toLeft <= toUp && toLeft <= toUpLeft ? left : toUp <= toUpLeft ? up : upLeft;
+      } else assert.equal(filter, 0, path.basename(file) + ': row filter ' + filter + ' is one of the five');
+      current[i] = value & 255;
+    }
+    previous = current;
+  }
+  const rgba = Buffer.alloc(width * height * 4);
+  for (let p = 0; p < width * height; p++) {
+    const source = rows.subarray(p * channels, (p + 1) * channels);
+    let pixel;
+    if (header.colourType === 6) pixel = [source[0], source[1], source[2], source[3]];
+    else if (header.colourType === 2) pixel = [source[0], source[1], source[2], 255];
+    else if (header.colourType === 4) pixel = [source[0], source[0], source[0], source[1]];
+    else if (header.colourType === 0) pixel = [source[0], source[0], source[0], 255];
+    else {
+      const index = source[0];
+      pixel = [palette[index * 3], palette[index * 3 + 1], palette[index * 3 + 2], transparency && index < transparency.length ? transparency[index] : 255];
+    }
+    rgba.set(pixel, p * 4);
+  }
+  return {
+    width,
+    height,
+    colourType: header.colourType,
+    rgba,
+    at: (x, y) => [...rgba.subarray((y * width + x) * 4, (y * width + x) * 4 + 4)]
+  };
+}
+
+/** What the tile alone looks like at (x, y) of a size × size icon: the generator's blend, sampled at the pixel's centre. */
+function tileColour(x, y, size) {
+  const toWork = coordinate => Math.min(WORK - 1, Math.max(0, (coordinate + 0.5) * WORK / size - 0.5));
+  const t = (toWork(y) / (WORK - 1)) * BLEND_DOWN + (toWork(x) / (WORK - 1)) * BLEND_ACROSS;
+  return TEAL_LIGHT.map((light, channel) => light * (1 - t) + TEAL_DEEP[channel] * t);
+}
+
+const TILE_TOLERANCE = 4;          // per channel: a downsampled linear blend is still the blend, give or take rounding
+const isTile = (pixel, x, y, size) => tileColour(x, y, size).every((value, channel) => Math.abs(pixel[channel] - value) <= TILE_TOLERANCE);
+const isStickerWhite = pixel => pixel[0] >= 235 && pixel[1] >= 235 && pixel[2] >= 235;
+// The M mark's bright magenta face (#EC008C). The wordmark's magenta is the darker #B5196A, so this is the mark itself.
+const isLogoMagenta = pixel => pixel[0] >= 200 && pixel[1] <= 60 && pixel[2] >= 100 && pixel[2] <= 180;
+
+const LOGO_ICONS = [
+  { file: 'icon-192.png', size: 192, purpose: 'any' },
+  { file: 'icon-512.png', size: 512, purpose: 'any' },
+  { file: 'maskable-192.png', size: 192, purpose: 'maskable' },
+  { file: 'maskable-512.png', size: 512, purpose: 'maskable' },
+  { file: 'apple-touch-icon.png', size: 180, purpose: 'apple' }
+];
+
+/** Count pixels matching a predicate, and the bounding box of those that do. */
+function survey(image, predicate) {
+  let count = 0;
+  let left = image.width, right = -1, top = image.height, bottom = -1;
+  for (let y = 0; y < image.height; y++) {
+    for (let x = 0; x < image.width; x++) {
+      if (!predicate(image.at(x, y), x, y)) continue;
+      count++;
+      if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+    }
+  }
+  return { count, share: count / (image.width * image.height), left, right, top, bottom };
+}
+
+test('the install icons are the Polymath logo on the teal tile — every size, opaque, edge to edge', () => {
+  for (const icon of LOGO_ICONS) {
+    const image = decodePng(path.join(ICON_DIR, icon.file));
+    assert.deepEqual([image.width, image.height], [icon.size, icon.size], icon.file + ' is ' + icon.size + ' × ' + icon.size);
+    // Opaque everywhere: iOS paints a transparent pixel black, and a maskable icon must be full-bleed.
+    const seeThrough = survey(image, pixel => pixel[3] !== 255);
+    assert.equal(seeThrough.count, 0, icon.file + ' is opaque');
+    // The tile shows in all four corners (the v1.0–v1.2 grid sat on white, so this alone tells them apart).
+    for (const [x, y] of [[1, 1], [icon.size - 2, 1], [1, icon.size - 2], [icon.size - 2, icon.size - 2]]) {
+      assert.ok(isTile(image.at(x, y), x, y, icon.size), `${icon.file}: the teal tile at (${x}, ${y}), got ${image.at(x, y).slice(0, 3)} for ${tileColour(x, y, icon.size).map(Math.round)}`);
+    }
+    // The sticker: its white body, and the M mark's bright magenta, in the middle of the tile.
+    const white = survey(image, isStickerWhite);
+    const magenta = survey(image, isLogoMagenta);
+    assert.ok(white.share >= (icon.purpose === 'maskable' ? 0.12 : 0.2), `${icon.file}: the white sticker covers ${(white.share * 100).toFixed(1)} % of the tile`);
+    assert.ok(magenta.share >= 0.004, `${icon.file}: the logo's magenta is there (${(magenta.share * 100).toFixed(2)} %)`);
+    const middle = (white.left + white.right) / 2;
+    assert.ok(Math.abs(middle - (icon.size - 1) / 2) <= icon.size * 0.03, icon.file + ': the sticker is centred left to right');
+    assert.ok(magenta.left > white.left && magenta.right < white.right && magenta.top > white.top && magenta.bottom < white.bottom, icon.file + ': the M sits on the sticker');
+  }
+});
+
+test('an "any" icon fills the tile with the logo, and keeps an edge of plain tile round it', () => {
+  for (const icon of LOGO_ICONS.filter(entry => entry.purpose !== 'maskable')) {
+    const image = decodePng(path.join(ICON_DIR, icon.file));
+    const white = survey(image, isStickerWhite);
+    assert.ok((white.right - white.left + 1) / icon.size >= 0.8, `${icon.file}: the sticker spans ${(((white.right - white.left + 1) / icon.size) * 100).toFixed(0)} % of the width — big enough to read POLYMATH on a home screen`);
+    // A band of plain tile 4 % deep all the way round: the logo never touches the edge, and iOS's rounded corners never clip it.
+    const band = Math.max(2, Math.round(icon.size * 0.04));
+    const offTile = survey(image, (pixel, x, y) => (x < band || y < band || x >= icon.size - band || y >= icon.size - band) && !isTile(pixel, x, y, icon.size));
+    assert.equal(offTile.count, 0, `${icon.file}: only tile in the outer ${band} px (first stray pixel at ${offTile.left},${offTile.top})`);
+  }
+});
+
+test('a maskable icon keeps the whole sticker inside the safe circle, so no launcher can crop the logo', () => {
+  for (const icon of LOGO_ICONS.filter(entry => entry.purpose === 'maskable')) {
+    const image = decodePng(path.join(ICON_DIR, icon.file));
+    const centre = icon.size / 2;
+    // One pixel of slack for the resampling's soft edge; everything beyond it is tile and nothing else.
+    const limit = SAFE_RADIUS * icon.size + 1;
+    const outside = survey(image, (pixel, x, y) => Math.hypot(x + 0.5 - centre, y + 0.5 - centre) > limit && !isTile(pixel, x, y, icon.size));
+    assert.equal(outside.count, 0, `${icon.file}: nothing but tile outside the ${SAFE_RADIUS * 100} % safe circle (first stray pixel at ${outside.left},${outside.top})`);
+    const white = survey(image, isStickerWhite);
+    assert.ok((white.right - white.left + 1) / icon.size >= 0.55, icon.file + ': and the sticker still uses the circle, not a corner of it');
+  }
+  assert.equal(SAFE_RADIUS, 0.4, 'the W3C maskable safe zone is a circle of radius 40 %');
+});
+
+test('the tab icon is the M mark alone, on transparent', () => {
+  const image = decodePng(path.join(ICON_DIR, 'favicon-32.png'));
+  assert.deepEqual([image.width, image.height], [32, 32]);
+  for (const [x, y] of [[0, 0], [31, 0], [0, 31], [31, 31]]) assert.equal(image.at(x, y)[3], 0, `favicon-32.png: corner (${x}, ${y}) is see-through`);
+  assert.ok(survey(image, isLogoMagenta).count >= 8, 'favicon-32.png: the magenta face of the M');
+  assert.ok(survey(image, pixel => pixel[3] > 200 && pixel[2] > pixel[0] + 40 && pixel[1] > pixel[0] + 40).count >= 8, 'favicon-32.png: the teal face of the M');
+  assert.equal(survey(image, pixel => pixel[3] > 200 && isStickerWhite(pixel)).count, 0, 'favicon-32.png: no white sticker body (no wordmark survives 32 px)');
+});
+
+test('the offline page carries the very same icon, and the install dialog and iPhone use the logo files', () => {
+  const offline = fs.readFileSync(path.join(dashboardDir, 'offline.html'), 'utf8');
+  const inline = offline.match(/<img src="data:image\/png;base64,([A-Za-z0-9+/=]+)"/);
+  assert.ok(inline, 'offline.html has its inline icon');
+  assert.ok(Buffer.from(inline[1], 'base64').equals(fs.readFileSync(path.join(ICON_DIR, 'icon-192.png'))), 'offline.html shows icon-192.png byte for byte — rerun tools/my-polymath-icons.py, which writes both');
+  assert.ok(/<script defer src="pwa-install\.js[^"]*"[^>]*data-app-icon="assets\/app-icons\/icon-192\.png"/.test(page), 'the install dialog shows the logo icon');
+  assert.ok(/<link rel="apple-touch-icon" href="assets\/app-icons\/apple-touch-icon\.png">/.test(page), 'the iPhone / iPad icon is the logo icon');
+  assert.ok(/<link rel="icon" type="image\/png" sizes="32x32" href="assets\/app-icons\/favicon-32\.png">/.test(page), 'the tab icon');
+  const manifest = JSON.parse(fs.readFileSync(path.join(dashboardDir, 'manifest.webmanifest'), 'utf8'));
+  assert.deepEqual(
+    manifest.icons.map(icon => icon.src + ' ' + icon.purpose).sort(),
+    LOGO_ICONS.filter(icon => icon.purpose !== 'apple').map(icon => 'assets/app-icons/' + icon.file + ' ' + (icon.purpose === 'maskable' ? 'maskable' : 'any')).sort(),
+    'the manifest lists exactly the four logo icons'
+  );
+  const sw = fs.readFileSync(path.join(dashboardDir, 'sw.js'), 'utf8');
+  assert.match(sw, /^const SW_VERSION = '2\.0\.2';/m, 'the worker moved on with the offline page, so installed copies re-cache the new icon');
+});
+
+test('My Polymath never installs with the Science portal\'s icon (a student with both would see two identical icons)', () => {
+  for (const file of ['icon-192.png', 'icon-512.png', 'maskable-512.png', 'apple-touch-icon.png']) {
+    const ours = fs.readFileSync(path.join(ICON_DIR, file));
+    const science = path.join(root, 'assets', 'app-icons', file);
+    if (fs.existsSync(science)) assert.ok(!ours.equals(fs.readFileSync(science)), file + ' differs from the Science portal\'s');
+  }
+  const science = decodePng(path.join(root, 'assets', 'app-icons', 'icon-512.png'));
+  const ours = decodePng(path.join(ICON_DIR, 'icon-512.png'));
+  assert.ok(!isTile(science.at(1, 1), 1, 1, 512), 'the Science portal sits on white');
+  assert.ok(isTile(ours.at(1, 1), 1, 1, 512), 'My Polymath sits on the teal tile');
+});
+
+test('the icons are made by tools/my-polymath-icons.py from the official logo, which is still there', () => {
+  assert.ok(fs.existsSync(path.join(root, 'assets', 'branding', 'polymath-learning-centre.png')), 'the official logo the icons are cut from');
+  assert.match(GENERATOR, /LOGO = REPO \/ 'assets' \/ 'branding' \/ 'polymath-learning-centre\.png'/, 'the generator reads the official logo');
+  assert.match(HTML, /tools\/my-polymath-icons\.py/, 'the page says where its icon comes from');
+  for (const colour of [TEAL_LIGHT, TEAL_DEEP]) {
+    assert.equal(colour.length, 3);
+    for (const channel of colour) assert.ok(Number.isInteger(channel) && channel >= 0 && channel <= 255);
+  }
+  assert.ok(Math.abs(BLEND_DOWN + BLEND_ACROSS - 1) < 1e-9, 'the blend runs corner to corner');
 });
