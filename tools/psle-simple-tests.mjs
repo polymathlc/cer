@@ -25,6 +25,20 @@ const same = (actual, expected, message) => assert.deepEqual(JSON.parse(JSON.str
 
 // ───────── a small fake world ─────────
 
+// The REAL topic → level map and level colours, cut out of app.js, so the
+// grouping is tested against the levels students actually see (v1.450.2).
+const evalLiteral = (from) => {
+  const start = APP.indexOf(from);
+  assert.ok(start > 0, 'app.js still has ' + from);
+  const open = APP.indexOf('{', start);
+  const end = APP.indexOf('\n};', open);
+  return vm.runInNewContext('(' + APP.slice(open, end + 2) + ')');
+};
+const TOPIC_LEVEL_MAP = evalLiteral('const topicLevelMap = {');
+const LEVEL_COLORS = evalLiteral('const levelColors = {');
+const TOPIC_LEVELS = ['P3', 'P4', 'P5', 'P6', 'S1'];
+assert.ok(APP.includes("const TOPIC_LEVELS = ['P3', 'P4', 'P5', 'P6', 'S1'];"), 'the fake ladder is the app\'s own');
+
 const PP_THEME = { 'Heat': 'energy', 'Light': 'energy', 'Magnets': 'interactions', 'Plant Systems': 'systems', 'Living and non-living things': 'diversity' };
 const PP_THEME_C = { diversity: '#2d6ca8', cycles: '#0f7a5a', systems: '#a8762c', interactions: '#6b4fa0', energy: '#b55a2b' };
 const PP_THEME_NAME = { diversity: 'Diversity', cycles: 'Cycles', systems: 'Systems', interactions: 'Interactions', energy: 'Energy' };
@@ -84,6 +98,12 @@ function makeWorld(options = {}) {
     showToast: (message, kind) => calls.toasts.push({ message, kind }),
     PP_THEME_C, PP_THEME_NAME,
     ppTheme: topic => PP_THEME[topic] || 'diversity',
+    TOPIC_LEVELS,
+    isLevelCode: v => /^(?:P[3-6]|S1)$/.test(String(v || '')),
+    levelGroupLabel: lv => (lv === 'S1' ? 'Secondary ' : 'Primary ') + String(lv || '').slice(1),
+    levelColors: LEVEL_COLORS,
+    topicLevelMap: TOPIC_LEVEL_MAP,
+    customTopics: options.customTopics || {},
     ppQuestions: () => rows,
     ppYears: () => [...new Set(rows.map(q => String(q.year)))].sort(),
     ppTopicOf: q => q.topic || '',
@@ -123,7 +143,7 @@ function makeWorld(options = {}) {
     }
   };
   vm.createContext(context);
-  vm.runInContext(BLOCK + '\n;globalThis.__psle = { psleRowsFor, psleBankQs, psleYearSummaries, psleTopicSummaries, psleTitle, psleTutorSourceId, psleSameIds, renderPslePage, psleRender, psleOpen, psleSetYear, psleSheetRender, psleClose, psleDo, psleRunStudyBuddy, PSLE_TUTOR_MAX_QUESTIONS, get sel() { return _psleSel; } };', context);
+  vm.runInContext(BLOCK + '\n;globalThis.__psle = { psleRowsFor, psleBankQs, psleYearSummaries, psleTopicSummaries, psleTopicLevel, psleTitle, psleTutorSourceId, psleSameIds, renderPslePage, psleRender, psleOpen, psleSetYear, psleSheetRender, psleClose, psleDo, psleRunStudyBuddy, PSLE_TUTOR_MAX_QUESTIONS, get sel() { return _psleSel; } };', context);
   return { api: context.__psle, calls, element };
 }
 
@@ -138,16 +158,46 @@ test('years: newest first, with how many questions are ready and the marks', () 
   assert.equal(years[2].ready, 0, 'a year with nothing attached is counted as not ready');
 });
 
-test('topics: grouped by syllabus theme, then by name; unlabelled questions have no button', () => {
+test('topics: grouped by the level they are taught at (P3 → S1), then by name; unlabelled questions have no button', () => {
   const { api } = makeWorld();
   const topics = api.psleTopicSummaries();
-  same(topics.map(t => t.topic), ['Living and non-living things', 'Plant Systems', 'Magnets', 'Heat', 'Light'],
-    'Diversity, Systems, Interactions, Energy — the theme order the full page uses');
+  same(topics.map(t => t.topic), ['Living and non-living things', 'Magnets', 'Heat', 'Light', 'Plant Systems'],
+    'P3 first, then P4 — the ladder\'s own order, alphabetical inside a level');
+  same(topics.map(t => t.level), ['P3', 'P3', 'P4', 'P4', 'P4'], 'each topic carries the level it was grouped under');
   const heat = topics.find(t => t.topic === 'Heat');
   assert.equal(heat.total, 3);
   assert.equal(heat.ready, 3);
   same(heat.years, ['2024', '2023'], 'its years, newest first');
   assert.equal(topics.find(t => t.topic === 'Light').ready, 0);
+});
+
+test('a custom topic is filed at the admin\'s level, an unknown one under Other topics at the end, S1 after P6', async () => {
+  const rows = paperRows().concat([
+    { id: 'x_2024_10', year: '2024', n: 10, marks: 2, topic: 'Adaptations' },                 // the admin's custom topic, P5
+    { id: 'x_2024_11', year: '2024', n: 11, marks: 2, topic: 'Experiment-Based Questions' },  // no level anywhere
+    { id: 'x_2024_12', year: '2024', n: 12, marks: 2, topic: 'Forces' },                      // P6
+    { id: 'x_2024_13', year: '2024', n: 13, marks: 2, topic: 'Separation Techniques' }        // S1
+  ]);
+  const bank = Object.assign(bankFor(), {
+    x_2024_10: { id: 'b_ad' }, x_2024_11: { id: 'b_ex' }, x_2024_12: { id: 'b_fo' }, x_2024_13: { id: 'b_se' }
+  });
+  const { api, element } = makeWorld({ rows, bank, customTopics: { Adaptations: 'P5', 'Experiment-Based Questions': 'not a level' } });
+  assert.equal(api.psleTopicLevel('Adaptations'), 'P5', 'the admin\'s custom level wins');
+  assert.equal(api.psleTopicLevel('Experiment-Based Questions'), '', 'a junk custom level is no level');
+  assert.equal(api.psleTopicLevel('Heat'), 'P4', 'the app\'s own map');
+  assert.equal(api.psleTopicLevel(''), '');
+  const topics = api.psleTopicSummaries();
+  same(topics.map(t => t.level), ['P3', 'P3', 'P4', 'P4', 'P4', 'P5', 'P6', 'S1', ''], 'the ladder, then no level last');
+  assert.equal(topics[topics.length - 1].topic, 'Experiment-Based Questions');
+  await api.renderPslePage();
+  const html = element('psleBody').innerHTML;
+  const order = ['>Primary 3<', '>Primary 4<', '>Primary 5<', '>Primary 6<', '>Secondary 1<', '>Other topics<'].map(h => html.indexOf(h));
+  assert.ok(order.every(i => i > 0), 'every group has a heading');
+  same(order.slice().sort((a, b) => a - b), order, 'headings in ladder order, Other topics last');
+  assert.ok(!html.includes('Primary 6<') || html.indexOf('Experiment-Based Questions') > html.indexOf('>Other topics<'),
+    'an unknown topic is never claimed for Primary 6');
+  assert.ok(html.includes('data-level="other"'), 'the no-level group is tagged');
+  assert.ok(html.includes('--psle-accent:var(--accent-orange)'), 'a P5 topic wears the P5 colour');
 });
 
 test('a selection covers its rows in paper order, and practice serves each bank question once', () => {
@@ -185,7 +235,9 @@ test('the page draws a button per year and per topic, and a not-ready one says s
   assert.equal((html.match(/psle-pick-topic/g) || []).length, 5, 'five topics');
   assert.ok(html.includes("psleOpen('year', 0)") && html.includes('>2024<'), 'the newest year is the first button');
   assert.ok(/psle-pick-year is-empty[^>]*>[\s\S]*?2022[\s\S]*?Coming soon/.test(html), '2022 has nothing attached: Coming soon');
-  assert.ok(html.includes('Energy') && html.includes('Interactions'), 'topics sit under their theme');
+  assert.ok(html.includes('>Primary 3<') && html.includes('>Primary 4<'), 'topics sit under their level');
+  assert.ok(html.indexOf('>Primary 3<') < html.indexOf('>Primary 4<'), 'Primary 3 comes before Primary 4');
+  assert.ok(!/>(Diversity|Cycles|Systems|Interactions|Energy)</.test(html), 'no syllabus-theme headings any more');
   assert.ok(!html.includes("psleOpen('topic', 5)"), 'no button for the unlabelled question');
   assert.ok(html.includes("navigateTo('papers')"), 'a way to the full page');
 });

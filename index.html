@@ -27,9 +27,9 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.450.1">
+  <link rel="modulepreload" href="app.js?v=1.450.2">
 <!-- 🙋 Consults (v1.446.0): the archive window shared with Study Buddy, Ans Key and the Maths portal. -->
-<link rel="stylesheet" href="consult-answer.css?v=1.450.1">
+<link rel="stylesheet" href="consult-answer.css?v=1.450.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -52,7 +52,7 @@
      preview copy these links with media="all"). quest-frames.css is loaded the
      same non-blocking way. -->
 <link rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Pixelify+Sans:wght@400..700&display=swap">
-<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.450.1">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.450.2">
 
 <!-- Tailwind, prebuilt. This used to be <script src="cdn.tailwindcss.com">:
      the Play CDN, which ships a full CSS compiler to the browser, scans the
@@ -16020,7 +16020,7 @@ body.lore-reading { overflow: hidden; }
 .app-embed-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .app-embed-body { flex: 1 1 auto; min-height: 0; padding: 0; background: var(--surface-alt, #f4f4f2); }
 .app-embed-frame { display: block; width: 100%; height: 100%; min-height: calc(100vh - 92px); border: 0; background: #fff; }
-/* 🎓 Science PSLE — the simple view (#page-psle, v1.450.1). Two sets of big buttons (years,
+/* 🎓 Science PSLE — the simple view (#page-psle, v1.450.2). Two sets of big buttons (years,
    topics); each opens a three-action sheet. Same data as 🎓 PSLE Papers — see app.js. */
 #page-psle .page-body { max-width: 1040px; }
 .psle-loading, .psle-empty { padding: 40px 12px; text-align: center; color: var(--text-muted); }
@@ -16051,12 +16051,12 @@ body.lore-reading { overflow: hidden; }
 .psle-pick-year .psle-pick-title { font-size: 1.9rem; letter-spacing: -0.03em; line-height: 1; }
 .psle-pick-meta { font-size: 0.78rem; color: var(--text-muted); }
 .psle-pick-topic { padding-left: 22px; }
-.psle-pick-topic::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 4px; border-radius: 0 4px 4px 0; background: var(--psle-theme, var(--primary)); }
+.psle-pick-topic::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 4px; border-radius: 0 4px 4px 0; background: var(--psle-accent, var(--primary)); }
 .psle-pick.is-empty { opacity: 0.55; cursor: default; box-shadow: none; }
 .psle-pick.is-empty:hover { transform: none; border-color: var(--border); box-shadow: none; }
-.psle-theme { margin: 0 0 20px; }
-.psle-theme-head { display: flex; align-items: center; gap: 8px; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 10px; }
-.psle-theme-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.psle-group { margin: 0 0 20px; }
+.psle-group-head { display: flex; align-items: center; gap: 8px; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 10px; }
+.psle-group-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .psle-footnote { font-size: 0.82rem; color: var(--text-muted); margin-top: 8px; }
 .psle-footnote a { color: var(--primary); font-weight: 600; }
 /* The sheet */
@@ -16424,11 +16424,11 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-<script defer src="pwa-install.js?v=1.450.1"></script>
-  <script src="worksheet-cover.js?v=1.450.1"></script>
-  <script src="quest-frames.js?v=1.450.1"></script>
-  <script defer src="consult-answer.js?v=1.450.1"></script>
-  <script defer src="consult-bridge.js?v=1.450.1"></script>
-  <script type="module" src="app.js?v=1.450.1"></script>
+<script defer src="pwa-install.js?v=1.450.2"></script>
+  <script src="worksheet-cover.js?v=1.450.2"></script>
+  <script src="quest-frames.js?v=1.450.2"></script>
+  <script defer src="consult-answer.js?v=1.450.2"></script>
+  <script defer src="consult-bridge.js?v=1.450.2"></script>
+  <script type="module" src="app.js?v=1.450.2"></script>
 </body>
 </html>
