@@ -63,8 +63,8 @@ function submissionError(kind) {
 // past, never instead of the server's confirmation.
 export const DIRECT_CONTACT = Object.freeze({
   lead: 'If this keeps happening, you can also reach us directly on',
-  label: 'WhatsApp +65 9022 3314',
-  href: 'https://wa.me/6590223314'
+  label: 'WhatsApp +65 9645 0588',
+  href: 'https://wa.me/6596450588'
 });
 
 // What the parent is told for each failure kind. Only `offline` may mention their
