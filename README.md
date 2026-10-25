@@ -1,5 +1,18 @@
 # CER Science Learning Portal
 
+## 📲 My Polymath v1.3.0 — the installed app wears the Polymath logo
+
+- **The My Polymath app icon is now the Polymath Learning Centre logo** — the official sticker on a tile in the
+  logo's own teals — on the Home Screen, the dock / Start menu, the install sheet and the offline page. It replaces
+  the four-coloured-squares icon, and it is deliberately not the bare M the Science app installs with, so the two
+  never look the same side by side. The browser tab shows the M mark (a wordmark can't be read at 32 px).
+- Android and computers update an already-installed My Polymath by themselves. **On iPhone/iPad, remove the old
+  icon and add it again** — iOS never refreshes a Home Screen icon.
+- The icons are made from `assets/branding/polymath-learning-centre.png` by `python3 tools/my-polymath-icons.py`;
+  `tools/student-dashboard-tests.mjs` checks every size is still the logo on the teal tile.
+
+Run `node --test tools/student-dashboard-tests.mjs tools/pwa-install-tests.mjs`.
+
 ## 🧭 My Polymath v1.2.0 — every tile opens its app again, and the short addresses work
 
 - **The tiles on polymathlc.com.sg/student opened GitHub's "404 File not found".** They linked to

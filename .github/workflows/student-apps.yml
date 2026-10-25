@@ -1,10 +1,10 @@
 name: Student dashboard, Science PSLE and the install kit
 on:
   pull_request:
-    paths: ['student/**', '404.html', 'math.html', 'online/index.html', 'online/manifest.webmanifest', 'online/sw.js', 'online/offline.html', 'online/pwa-install.js', 'online/assets/app-icons/**', 'app.js', 'index.html', 'tools/pwa-install-*.mjs', 'tools/student-dashboard-tests.mjs', 'tools/student-dashboard-browser.mjs', 'tools/psle-simple-*.mjs', '.github/workflows/student-apps.yml']
+    paths: ['student/**', '404.html', 'math.html', 'online/index.html', 'online/manifest.webmanifest', 'online/sw.js', 'online/offline.html', 'online/pwa-install.js', 'online/assets/app-icons/**', 'app.js', 'index.html', 'tools/pwa-install-*.mjs', 'tools/student-dashboard-tests.mjs', 'tools/student-dashboard-browser.mjs', 'tools/my-polymath-icons.py', 'tools/psle-simple-*.mjs', '.github/workflows/student-apps.yml']
   push:
     branches: [main]
-    paths: ['student/**', '404.html', 'math.html', 'online/index.html', 'online/manifest.webmanifest', 'online/sw.js', 'online/offline.html', 'online/pwa-install.js', 'online/assets/app-icons/**', 'app.js', 'index.html', 'tools/pwa-install-*.mjs', 'tools/student-dashboard-tests.mjs', 'tools/student-dashboard-browser.mjs', 'tools/psle-simple-*.mjs', '.github/workflows/student-apps.yml']
+    paths: ['student/**', '404.html', 'math.html', 'online/index.html', 'online/manifest.webmanifest', 'online/sw.js', 'online/offline.html', 'online/pwa-install.js', 'online/assets/app-icons/**', 'app.js', 'index.html', 'tools/pwa-install-*.mjs', 'tools/student-dashboard-tests.mjs', 'tools/student-dashboard-browser.mjs', 'tools/my-polymath-icons.py', 'tools/psle-simple-*.mjs', '.github/workflows/student-apps.yml']
 permissions:
   contents: read
 jobs:

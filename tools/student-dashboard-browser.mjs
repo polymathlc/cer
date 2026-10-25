@@ -1,4 +1,4 @@
-// 🧭 My Polymath (student/, v1.2.0) and the site's 404 forwarder (404.html) — in a real Chromium,
+// 🧭 My Polymath (student/, v1.3.0) and the site's 404 forwarder (404.html) — in a real Chromium,
 // on a stand-in for GitHub Pages that answers BOTH domains the way they really answer:
 //
 //   https://polymathlc.com.sg/…        this repository (the website mirror), with GitHub Pages' rules:
@@ -133,7 +133,7 @@ const same = (actual, expected, message) => { assert.equal(actual, expected, mes
   const { context, page, errors } = await open();
   await page.goto(SITE + '/student/');
   await page.waitForSelector('#tileGrid .app-tile');
-  same(await page.textContent('#versionBadge'), 'v1.2.0', 'the dashboard is the new version');
+  same(await page.textContent('#versionBadge'), 'v1.3.0', 'the dashboard is the new version');
   await shot(page, 'dashboard-computer');
 
   const tiles = await page.$$eval('#tileGrid .app-tile', links => links.map(link => ({
