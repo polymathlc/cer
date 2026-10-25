@@ -1,5 +1,20 @@
 # CER Science Learning Portal
 
+## 🧭 My Polymath v1.2.0 — every tile opens its app again, and the short addresses work
+
+- **The tiles on polymathlc.com.sg/student opened GitHub's "404 File not found".** They linked to
+  `/math/`, `/cer/`, `/anskey/` … on polymathlc.com.sg, but that domain only serves this site's mirror;
+  each app is published by its own repository at **polymathlc.github.io/&lt;app&gt;/**. Every tile now
+  links there — one address for all seven apps, so signing in once really is enough.
+- **The short addresses on the printed sheet work too.** A new `404.html` at the site's root sends
+  `polymathlc.com.sg/math`, `/cer/#psle`, `/anskey`, `/tutor`, `/rewards`, `/chinese` and `/english` (and
+  `/science`, `/psle`, `/maths`, `/studybuddy` …) straight to the app, deep links and `#hash` included.
+  Any other missing page now gets a friendly "page not found" with a way back, instead of GitHub's.
+- `math.html` (the older Math Practice page) steps over to the Math app only when reached as the bare
+  `polymathlc.com.sg/math`; opened as `math.html` it is unchanged.
+
+Run `node --test tools/student-dashboard-tests.mjs`.
+
 ## 🎓 Science PSLE made simple, and 🧭 My Polymath — every app on one page (v1.450.0)
 
 - **🎓 Science PSLE** (sidebar → 📚 Syllabus & Papers, or `/cer/#psle`): big buttons for every PSLE

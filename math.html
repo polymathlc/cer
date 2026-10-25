@@ -2,6 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script>
+  // 🔀 polymathlc.com.sg/math is the MATH APP's short address (My Polymath prints it on the students' sheet),
+  // but GitHub Pages answers a bare /math with this file before 404.html is ever asked. So: reached by exactly
+  // that address on the custom domain → step over to the Math app, keeping ?query and #hash. Reached as
+  // math.html (how math-worksheet.html links here), or anywhere on polymathlc.github.io → stay on this page.
+  // 404.html forwards every other short address; tools/student-dashboard-tests.mjs keeps the two in step.
+  (function () {
+    try {
+      if (/^(www\.)?polymathlc\.com\.sg\.?$/i.test(location.hostname) && /^\/math\/?$/i.test(location.pathname)) {
+        location.replace('https://polymathlc.github.io/math/' + location.search + location.hash);
+      }
+    } catch (error) { /* stay on this page */ }
+  })();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Math Practice — Polymath Learning Centre</title>
 <link rel="preconnect" href="https://dl.dropboxusercontent.com" crossorigin>

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#FFFFFF">
+<title>Page not found | Polymath Learning Centre</title>
+<!--
+  🔀 THE SITE'S 404 PAGE, AND THE SHORT ADDRESSES OF EVERY STUDENT APP  (forward v1.0.0)
+  ------------------------------------------------------------------------------------
+  GitHub Pages serves this file for ANY address on polymathlc.com.sg that has no
+  file behind it. It lives at the root of polymathlc/cer and reaches the root of
+  the polymathlc/website mirror through the website sync (sync-website.yml), so
+  edit it HERE — a copy changed only in the mirror is erased by the next push.
+
+  Why it forwards. polymathlc.com.sg is the custom domain of the website mirror
+  only; the student apps are each published by their OWN repository at
+  https://polymathlc.github.io/<repo>/. So polymathlc.com.sg/math/ has no file
+  behind it and used to end on GitHub's bare "404 File not found" — which is
+  exactly what every My Polymath tile opened until v1.2.0, and what every short
+  address on the dashboard's printed sheet still opens without this page.
+
+  What it decides in <head>, before anything is drawn (it LEAVES once the page is parsed, so a slow
+  connection shows "Opening Math…" with a button rather than a blank page — see the script):
+    • on polymathlc.com.sg (or www.) an address that starts with one of the
+      APP_REPOS — /cer, /math, /anskey, /tutor, /rewards, /chinese, /english —
+      goes to the same path on https://polymathlc.github.io, with its ?query and
+      #hash (so /cer/#psle still opens Science PSLE, and a deep link such as
+      /cer/polymath.html#abc still opens that paper);
+    • a few spoken names do the same (/science, /psle, /maths, /studybuddy …,
+      APP_ALIASES) because that is what a child types;
+    • /cer/student/ steps over to /student/ on this same domain: the dashboard
+      has ONE address, so nobody installs two;
+    • anything else, and EVERYTHING on polymathlc.github.io, is a plain "page not
+      found" with a way back. It never forwards off github.io: there the next 404
+      would be this page again, and the student would be bounced round forever.
+
+  It is self-contained (no fonts, scripts, styles or pictures from elsewhere) and
+  every link in it is ABSOLUTE, because it is served at whatever depth the missing
+  address had — a relative link here would point somewhere different on every
+  404. forwardTarget is pure and exported on window.PolymathForward;
+  tools/student-dashboard-tests.mjs runs it and holds every short address the
+  dashboard prints to the tile it belongs to.
+-->
+<script>
+  (function (root) {
+    'use strict';
+
+    var FORWARD_VERSION = '1.0.0';
+    var SITE_HOST_RE = /^(www\.)?polymathlc\.com\.sg\.?$/i;
+    var APP_ORIGIN = 'https://polymathlc.github.io';
+
+    // Every repository that publishes a student app, and the name a student knows it by.
+    var APP_REPOS = {
+      cer: 'Science',
+      math: 'Math',
+      anskey: 'Answer Keys',
+      tutor: 'Study Buddy',
+      rewards: 'Rewards',
+      chinese: 'Chinese',
+      english: 'English'
+    };
+
+    // The names a child actually types. Each is a repository plus, at most, the #hash it opens on.
+    var APP_ALIASES = {
+      science: { repo: 'cer' },
+      psle: { repo: 'cer', hash: '#psle', name: 'Science PSLE' },
+      maths: { repo: 'math' },
+      answers: { repo: 'anskey' },
+      answerkey: { repo: 'anskey' },
+      answerkeys: { repo: 'anskey' },
+      'answer-keys': { repo: 'anskey' },
+      studybuddy: { repo: 'tutor' },
+      'study-buddy': { repo: 'tutor' },
+      reward: { repo: 'rewards' }
+    };
+
+    function own(map, key) {
+      return Object.prototype.hasOwnProperty.call(map, key);
+    }
+
+    // Pure: where should this missing address go? → { url, name, sameSite } or null (stay: show "not found").
+    function forwardTarget(hostname, pathname, search, hash) {
+      if (!SITE_HOST_RE.test(String(hostname || ''))) return null;
+      var path = String(pathname || '/');
+      var query = String(search || '');
+      var fragment = String(hash || '');
+      var match = /^\/([^\/]+)(\/.*)?$/.exec(path);
+      if (!match) return null;
+      var first = match[1].toLowerCase();
+      var rest = match[2] || '';
+
+      // The dashboard's second copy (the sync also leaves it under /cer/student/) → its one address.
+      if (first === 'cer' && /^\/student(\/|$)/i.test(rest)) {
+        var after = rest.replace(/^\/student/i, '');
+        return { url: '/student' + (after || '/') + query + fragment, name: 'My Polymath', sameSite: true };
+      }
+
+      if (own(APP_REPOS, first)) {
+        return { url: APP_ORIGIN + '/' + first + (rest || '/') + query + fragment, name: APP_REPOS[first], sameSite: false };
+      }
+
+      if (own(APP_ALIASES, first)) {
+        var alias = APP_ALIASES[first];
+        // An alias names an app, not a page inside one: anything after it would be a guess, so it goes to the front door.
+        return {
+          url: APP_ORIGIN + '/' + alias.repo + '/' + query + (fragment || alias.hash || ''),
+          name: alias.name || APP_REPOS[alias.repo],
+          sameSite: false
+        };
+      }
+      return null;
+    }
+
+    var api = {
+      version: FORWARD_VERSION,
+      appOrigin: APP_ORIGIN,
+      appRepos: APP_REPOS,
+      appAliases: APP_ALIASES,
+      forwardTarget: forwardTarget,
+      target: null,
+      go: function () { /* nothing to do: this page stays */ }
+    };
+    root.PolymathForward = api;
+
+    // Decide HERE, before anything is drawn (so the "not found" words never flash up on the way to an app),
+    // but LEAVE only once the page is parsed: a navigation started from <head> makes the browser abandon the rest
+    // of this document, and on a slow school connection the student would stare at a blank page instead of
+    // "Opening Math…". The script at the end of <body> fills the card in and calls go(); DOMContentLoaded is the
+    // net under it. go() runs once.
+    try {
+      var loc = root.location;
+      var doc = root.document;
+      var target = forwardTarget(loc.hostname, loc.pathname, loc.search, loc.hash);
+      if (target && target.url !== loc.pathname + loc.search + loc.hash) {
+        var gone = false;
+        api.target = target;
+        api.go = function () {
+          if (gone) return;
+          gone = true;
+          try { loc.replace(target.url); } catch (error) { /* the button on the card still works */ }
+        };
+        if (doc && doc.documentElement) doc.documentElement.className += ' is-forwarding';
+        if (doc && doc.addEventListener) doc.addEventListener('DOMContentLoaded', api.go);
+        else api.go();
+      }
+    } catch (error) { /* stay, and show "page not found" */ }
+  })(window);
+</script>
+<style>
+  /* The "?" is never drawn in Century Gothic (the house rule): it comes from Roboto or Arial. */
+  @font-face { font-family: 'NotFoundQuestion'; src: local('Roboto'), local('Roboto-Regular'), local('Arial'), local('Helvetica'); unicode-range: U+003F; }
+  :root {
+    --ink: #1A1A1A;
+    --muted: #5C5C5C;
+    --faint: #8A8A8A;
+    --paper: #FFFFFF;
+    --wash: #FAFAFA;
+    --line: #E8E8E4;
+    --accent: #0B6B4F;
+    --accent-hover: #085740;
+    --accent-bg: #F1F8F5;
+  }
+  * { box-sizing: border-box; }
+  html, body { min-height: 100%; margin: 0; }
+  body {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    background: var(--wash);
+    color: var(--ink);
+    font: 16px/1.6 'NotFoundQuestion', 'Century Gothic', CenturyGothic, AppleGothic, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card {
+    width: 100%;
+    max-width: 440px;
+    text-align: center;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 32px 24px 28px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+    animation: fadeUp 0.35s ease both;
+  }
+  .mark { width: 72px; height: 72px; border-radius: 18px; border: 1px solid var(--line); display: block; margin: 0 auto; }
+  .code {
+    display: inline-block;
+    margin-top: 16px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-bg);
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+  h1 { font-size: 1.35rem; line-height: 1.3; margin: 12px 0 6px; letter-spacing: 0.01em; }
+  p { color: var(--muted); margin: 0 0 22px; }
+  .where { font-size: 0.85rem; color: var(--faint); word-break: break-all; margin: -12px 0 22px; }
+  .actions { display: flex; flex-direction: column; gap: 10px; }
+  .button {
+    display: block;
+    font-weight: 700;
+    text-decoration: none;
+    color: var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 18px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.08);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.15s ease;
+  }
+  .button:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.12); }
+  .button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .button-accent { color: #FFFFFF; background: var(--accent); border-color: var(--accent); }
+  .button-accent:hover { background: var(--accent-hover); }
+
+  /* Forwarding: the page is only on screen for the moment the next one takes to load, and says where it is going. */
+  .forwarding { display: none; }
+  .is-forwarding .forwarding { display: block; }
+  .is-forwarding .not-found { display: none; }
+  .spinner {
+    width: 28px;
+    height: 28px;
+    margin: 18px auto 4px;
+    border-radius: 50%;
+    border: 3px solid var(--accent-bg);
+    border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .card, .spinner { animation: none; } }
+</style>
+</head>
+<body>
+<main class="card">
+  <!-- The mark is INSIDE this file (a data: URI): the page is served at any depth, and on a missing address
+       a relative picture would be missing too. -->
+  <img class="mark" src="data:image/png;base64,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" alt="" width="72" height="72">
+
+  <section class="forwarding" aria-live="polite">
+    <div class="spinner" aria-hidden="true"></div>
+    <h1>Opening <span id="forwardName">your app</span>…</h1>
+    <p>If nothing happens in a moment, use the button below.</p>
+    <div class="actions">
+      <a class="button button-accent" id="forwardLink" href="https://polymathlc.com.sg/student/">Open it now</a>
+    </div>
+  </section>
+
+  <section class="not-found">
+    <span class="code">404</span>
+    <h1>We couldn't find that page</h1>
+    <p>The address may have a typing mistake, or the page has moved. Every Polymath app is one tap away from My Polymath.</p>
+    <div class="where" id="missingAddress"></div>
+    <div class="actions">
+      <a class="button button-accent" href="https://polymathlc.com.sg/student/">My Polymath — all your apps</a>
+      <a class="button" href="https://polymathlc.com.sg/">Polymath Learning Centre home</a>
+    </div>
+  </section>
+</main>
+<script>
+  (function () {
+    'use strict';
+    // textContent and href only: the address is the visitor's own, never markup.
+    var api = window.PolymathForward || {};
+    try {
+      if (api.target) {
+        document.getElementById('forwardName').textContent = api.target.name;
+        document.getElementById('forwardLink').href = api.target.url;
+      } else {
+        document.getElementById('missingAddress').textContent = location.host + location.pathname;
+      }
+    } catch (error) { /* the buttons still work */ }
+    // The card says where we are going; now go.
+    if (typeof api.go === 'function') api.go();
+  })();
+</script>
+</body>
+</html>

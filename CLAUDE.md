@@ -29,7 +29,9 @@ A topic's sheet carries year chips, so one topic can be narrowed to one paper.
 - **IT IS THE SAME DATA, NEVER A COPY.** `ppYears()`, `ppTopicOf()` over `ppQuestions()`, `ppBankQ` for what is
   attached. A number on a button is the count of ATTACHED questions — exactly what each action serves. Nothing
   on this page needs keeping in step with the full page; do not give it its own list.
-- **Reached from outside by `#psle`.** The student dashboard's Science PSLE tile links to `/cer/#psle`; after
+- **Reached from outside by `#psle`.** The student dashboard's Science PSLE tile links to
+  `https://polymathlc.github.io/cer/#psle` (and the short `polymathlc.com.sg/cer/#psle` / `/psle` are forwarded
+  there by `404.html` — see 🧭 My Polymath below); after
   sign-in the hash block (beside `#practice`) navigates there, and a signed-out visitor following `#psle` gets
   the sign-in form (`signedOutEntryPage`), not the public home page — the hash survives sign-in.
 - **📖 Study Buddy looks before it writes.** `_psleFindTutorCopy` queries `tutorWorksheets` for this student's
@@ -50,16 +52,51 @@ A topic's sheet carries year chips, so one topic can be narrowed to one paper.
   and `PW=… node tools/psle-simple-browser.mjs` (index.html's real styles and markup + the shipped block + the real
   `PP_SEED_Q` papers; computer and phone, the sheet, every action's door). CI: `.github/workflows/student-apps.yml`.
 
-## 🧭 My Polymath — the student dashboard (`student/`, v1.0.0) and the Polymath install kit (v2.0.0)
+## 🧭 My Polymath — the student dashboard (`student/`, v1.2.0) and the Polymath install kit (v2.0.0)
 
-`student/index.html` is **polymathlc.com.sg/student**: one page of square tiles — Science (`/cer/`), Science PSLE
-(`/cer/#psle`), Math, Answer Keys (`/anskey/`), Study Buddy (`/tutor/`), Rewards, Worksheets (`/online/`), Chinese,
-English — each a plain absolute link. No Firebase, no sign-in (every app signs the student in; one project, one
-origin), so it is complete the moment the HTML arrives. Tile icons are `student/assets/apps/<key>.png`. It reaches
-the domain root through the website sync like `online/` and `schedule/` — **edit it here**. The copy the sync
-also leaves at `/cer/student/` redirects to `/student/` on polymathlc.com.sg, so nobody installs two dashboards.
-A version badge (bottom left, everyone — there is no admin here) shows `DASHBOARD_VERSION`; bump it on every change.
+`student/index.html` is **polymathlc.com.sg/student**: one page of square tiles — Science, Science PSLE, Math,
+Answer Keys, Study Buddy, Rewards, Worksheets, Chinese, English — each a plain ABSOLUTE link to where that app is
+really published. No Firebase, no sign-in (every app signs the student in; one project, one origin), so it is
+complete the moment the HTML arrives. Tile icons are `student/assets/apps/<key>.png`. It reaches the domain root
+through the website sync like `online/` and `schedule/` — **edit it here**. The copy the sync also leaves at
+`/cer/student/` redirects to `/student/` on polymathlc.com.sg, so nobody installs two dashboards. A version badge
+(bottom left, everyone — there is no admin here) shows `DASHBOARD_VERSION`; bump it on every change.
 
+- **🌐 Where each app actually lives (v1.2.0 — read this before touching a tile).** `polymathlc.com.sg` is the
+  custom domain of ONE repository, `polymathlc/website` (this repo's mirror). It is NOT the organisation's Pages
+  domain — there is no `polymathlc.github.io` repository — so the other repositories are NOT served under it:
+  `polymathlc.com.sg/math/` has never existed. The v1.0–v1.1 tiles linked `/cer/`, `/math/`, `/anskey/` … and every
+  one of them opened GitHub's "404 File not found". Each app is published by its own repository at
+  **`https://polymathlc.github.io/<repo>/`** (`cer`, `math`, `anskey`, `tutor`, `rewards`, `chinese`, `english`;
+  Science PSLE is `…/cer/#psle`), and that is what the tiles link to. That is also ONE origin for all seven apps,
+  which is what makes "sign in once" true. **Never make a tile root-relative**; the test fails on it. Worksheets
+  (`https://polymathlc.com.sg/online/`) is the exception because Polymath Online IS published on the domain by the
+  website sync, and the class invitations send students there.
+- **🔀 The short addresses still work — `404.html`** (this repo's root → the website's root, forward v1.0.0).
+  GitHub Pages serves it for any missing address on polymathlc.com.sg, and its first inline script forwards
+  `/cer`, `/math`, `/anskey`, `/tutor`, `/rewards`, `/chinese`, `/english` (`APP_REPOS`, any case, with or without a
+  trailing slash, deep paths, `?query` and `#hash` kept) to the same path on polymathlc.github.io, the names a child
+  types (`/science`, `/psle`, `/maths`, `/studybuddy` … — `APP_ALIASES`, front door only) likewise, and
+  `/cer/student/…` to `/student/…` on the domain. Anything else is a friendly "page not found" with a way back.
+  - **It never forwards on polymathlc.github.io.** This file is also `/cer/`'s own 404 there, and the next 404 would be
+    this page again — a loop. The host is never taken from the address, so no path can make it an open redirect.
+  - **Every link and picture in it is absolute or inline** (the mark is a `data:` URI): it is served at whatever depth
+    the missing address had. The visitor's address only ever reaches the page as `textContent`.
+  - **A real file wins over the 404 page**, so a forwarded name must not exist at the top of this repo — except
+    `math.html` (an older Math Practice page, linked from `math-worksheet.html`), which GitHub Pages hands a bare
+    `/math` before any 404. It therefore carries its own two-line guard: reached as exactly `/math` on the custom
+    domain it steps over to the Math app; reached as `math.html`, or on github.io, it stays.
+  - The printed sheet's addresses stay short (`polymathlc.com.sg/math`), and the test proves each one lands on its
+    tile's own href through whichever file GitHub Pages would really serve.
+  - **It decides in `<head>` but LEAVES once the page is parsed** (`PolymathForward.go`, called by the script at the
+    end of `<body>`, with `DOMContentLoaded` as the net; it runs once). A navigation started from `<head>` makes the
+    browser abandon the rest of the document, so the "Opening Math…" card and its button were never drawn and a
+    slow connection showed a blank page. Do not move the `replace` back up.
+  - Run `node --test tools/student-dashboard-tests.mjs` and `PW=… node tools/student-dashboard-browser.mjs` after
+    touching any tile, `404.html` or the guard in `math.html` (CI: `.github/workflows/student-apps.yml`, which now
+    also triggers on those two files). The browser harness answers BOTH domains the way GitHub Pages does (folder →
+    301, bare `/name` → `name.html`, else `404.html` with status 404; github.io's `/cer/<missing>` is this 404 again),
+    taps every tile, types every printed address, and checks the github.io 404 does not loop.
 - **🔒 Worksheets is LOCKED (v1.1.0)** until Mr Chung has uploaded every level's worksheets (the ones Polymath
   Online releases into Ans Key). A locked tile is `class="app-tile is-locked"` with **no `href`** — so there is
   nothing to follow even without script — its address kept in `data-href`, `aria-disabled="true"`, a
