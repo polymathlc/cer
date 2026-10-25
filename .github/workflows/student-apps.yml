@@ -1,10 +1,10 @@
 name: Student dashboard, Science PSLE and the install kit
 on:
   pull_request:
-    paths: ['student/**', 'online/index.html', 'online/manifest.webmanifest', 'online/sw.js', 'online/offline.html', 'online/pwa-install.js', 'online/assets/app-icons/**', 'app.js', 'index.html', 'tools/pwa-install-*.mjs', 'tools/student-dashboard-tests.mjs', 'tools/psle-simple-*.mjs', '.github/workflows/student-apps.yml']
+    paths: ['student/**', '404.html', 'math.html', 'online/index.html', 'online/manifest.webmanifest', 'online/sw.js', 'online/offline.html', 'online/pwa-install.js', 'online/assets/app-icons/**', 'app.js', 'index.html', 'tools/pwa-install-*.mjs', 'tools/student-dashboard-tests.mjs', 'tools/student-dashboard-browser.mjs', 'tools/psle-simple-*.mjs', '.github/workflows/student-apps.yml']
   push:
     branches: [main]
-    paths: ['student/**', 'online/index.html', 'online/manifest.webmanifest', 'online/sw.js', 'online/offline.html', 'online/pwa-install.js', 'online/assets/app-icons/**', 'app.js', 'index.html', 'tools/pwa-install-*.mjs', 'tools/student-dashboard-tests.mjs', 'tools/psle-simple-*.mjs', '.github/workflows/student-apps.yml']
+    paths: ['student/**', '404.html', 'math.html', 'online/index.html', 'online/manifest.webmanifest', 'online/sw.js', 'online/offline.html', 'online/pwa-install.js', 'online/assets/app-icons/**', 'app.js', 'index.html', 'tools/pwa-install-*.mjs', 'tools/student-dashboard-tests.mjs', 'tools/student-dashboard-browser.mjs', 'tools/psle-simple-*.mjs', '.github/workflows/student-apps.yml']
 permissions:
   contents: read
 jobs:
@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Dashboard tiles, Science PSLE logic and the install kit's static checks
+      - name: Dashboard tiles and their real addresses, the 404 forwarder, Science PSLE logic and the install kit's static checks
         run: node --test tools/student-dashboard-tests.mjs tools/psle-simple-tests.mjs tools/pwa-install-tests.mjs
       - run: npm install --no-save --package-lock=false playwright@1.62.1
       - run: npx playwright install --with-deps chromium
@@ -23,6 +23,10 @@ jobs:
         run: node tools/pwa-install-browser.mjs
         env:
           PWA_SCREENSHOTS: artifacts/student-apps
+      - name: Every tile opens its app, every printed address works, and the 404 page never loops
+        run: node tools/student-dashboard-browser.mjs
+        env:
+          STUDENT_SCREENSHOTS: artifacts/student-apps/dashboard
       - name: Science PSLE on a computer and a phone
         run: node tools/psle-simple-browser.mjs
         env:

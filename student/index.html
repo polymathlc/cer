@@ -6,12 +6,28 @@
 <title>My Polymath — Student Dashboard | Polymath Learning Centre</title>
 <meta name="description" content="Every Polymath Learning Centre app in one place: Science, Science PSLE, Math, Answer Keys, Study Buddy, Rewards, Worksheets, Chinese and English.">
 <!--
-  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.1.0)
+  MY POLYMATH — the student dashboard at polymathlc.com.sg/student  (v1.2.0)
   ------------------------------------------------------------------------
   One page of square tiles, one per student app. Each tile is a plain link to
-  the app's own address on polymathlc.com.sg, so the page needs no sign-in, no
-  Firebase and no scripts to work: every app signs the student in itself (one
-  Firebase project, one origin, one session — signing in once is enough).
+  the app's own published address, so the page needs no sign-in, no Firebase
+  and no scripts to work: every app signs the student in itself.
+
+  WHERE THE APPS ACTUALLY LIVE (v1.2.0 — this is the bug it fixes).
+  polymathlc.com.sg is the custom domain of ONE repository, polymathlc/website,
+  the mirror of this repo. It is not the domain of the organisation's Pages
+  site, so the other repositories are NOT served under it: polymathlc.com.sg/math/
+  has never existed, and the v1.1 tiles (href="/math/", "/cer/" …) all opened
+  GitHub's "404 File not found". Each app is published by its own repository at
+      https://polymathlc.github.io/<repo>/      cer, math, anskey, tutor,
+                                                 rewards, chinese, english
+  so that is what every tile links to — ABSOLUTE, never root-relative. It is
+  also ONE origin for all seven, which is what makes "sign in once" true: the
+  apps share one Firebase project and one browser session there.
+  The short addresses printed on the fridge sheet (polymathlc.com.sg/math …)
+  still work: the site's 404.html (cer root → website root) forwards
+  /cer, /math, /anskey, /tutor, /rewards, /chinese and /english, deep paths,
+  queries and #hashes included, to the same place. The forwarder's APP_REPOS
+  and the tiles are held to each other by tools/student-dashboard-tests.mjs.
 
   It lives in polymathlc/cer under student/ and reaches polymathlc.com.sg/student
   through the website sync, exactly like online/ and schedule/. Edit it HERE.
@@ -51,6 +67,9 @@
 <meta name="apple-mobile-web-app-title" content="My Polymath">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>[data-pwa-install][data-pwa-hidden]{display:none!important}</style>
+
+<!-- Every open tile goes to the apps' own origin, so the connection is warmed while the student picks one. -->
+<link rel="preconnect" href="https://polymathlc.github.io">
 
 <style>
   /* The "?" is never drawn in Century Gothic (the house rule): it comes from Roboto or Arial. */
@@ -338,6 +357,11 @@
     padding: 3px 8px;
     border-radius: var(--radius-full);
   }
+  /* On a narrow phone (two tiles across) the pill stays on ONE line, or it wraps and pushes the words out of the tile. */
+  @media (max-width: 420px) {
+    .tile-lock { white-space: nowrap; font-size: 0.6rem; letter-spacing: 0.02em; padding: 2px 7px; gap: 3px; }
+    .app-tile.is-locked .tile-icon { width: clamp(44px, 32%, 84px); }   /* the pill's line has to come from somewhere */
+  }
   .locked-note {
     position: fixed;
     left: 16px;
@@ -464,7 +488,7 @@
   <nav aria-label="Polymath apps">
     <ul class="tile-grid" id="tileGrid">
       <li style="--order:0">
-        <a class="app-tile" data-app="science" href="/cer/" style="--tile-wash:#BBDEFB;--tile-ink:#1565C0">
+        <a class="app-tile" data-app="science" href="https://polymathlc.github.io/cer/" style="--tile-wash:#BBDEFB;--tile-ink:#1565C0">
           <img class="tile-icon" src="assets/apps/science.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
           <span class="tile-go" aria-hidden="true">→</span>
@@ -476,7 +500,7 @@
         </a>
       </li>
       <li style="--order:1">
-        <a class="app-tile" data-app="psle" href="/cer/#psle" style="--tile-wash:#C5CAE9;--tile-ink:#283593">
+        <a class="app-tile" data-app="psle" href="https://polymathlc.github.io/cer/#psle" style="--tile-wash:#C5CAE9;--tile-ink:#283593">
           <img class="tile-icon" src="assets/apps/psle.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
           <span class="tile-go" aria-hidden="true">→</span>
@@ -488,7 +512,7 @@
         </a>
       </li>
       <li style="--order:2">
-        <a class="app-tile" data-app="math" href="/math/" style="--tile-wash:#C8E6C9;--tile-ink:#2E7D32">
+        <a class="app-tile" data-app="math" href="https://polymathlc.github.io/math/" style="--tile-wash:#C8E6C9;--tile-ink:#2E7D32">
           <img class="tile-icon" src="assets/apps/math.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
           <span class="tile-go" aria-hidden="true">→</span>
@@ -500,7 +524,7 @@
         </a>
       </li>
       <li style="--order:3">
-        <a class="app-tile" data-app="anskey" href="/anskey/" style="--tile-wash:#FFE0B2;--tile-ink:#E65100">
+        <a class="app-tile" data-app="anskey" href="https://polymathlc.github.io/anskey/" style="--tile-wash:#FFE0B2;--tile-ink:#E65100">
           <img class="tile-icon" src="assets/apps/anskey.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
           <span class="tile-go" aria-hidden="true">→</span>
@@ -512,7 +536,7 @@
         </a>
       </li>
       <li style="--order:4">
-        <a class="app-tile" data-app="tutor" href="/tutor/" style="--tile-wash:#D1C4E9;--tile-ink:#5E35B1">
+        <a class="app-tile" data-app="tutor" href="https://polymathlc.github.io/tutor/" style="--tile-wash:#D1C4E9;--tile-ink:#5E35B1">
           <img class="tile-icon" src="assets/apps/tutor.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
           <span class="tile-go" aria-hidden="true">→</span>
@@ -524,7 +548,7 @@
         </a>
       </li>
       <li style="--order:5">
-        <a class="app-tile" data-app="rewards" href="/rewards/" style="--tile-wash:#FFF59D;--tile-ink:#B26A00">
+        <a class="app-tile" data-app="rewards" href="https://polymathlc.github.io/rewards/" style="--tile-wash:#FFF59D;--tile-ink:#B26A00">
           <img class="tile-icon" src="assets/apps/rewards.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
           <span class="tile-go" aria-hidden="true">→</span>
@@ -538,8 +562,11 @@
       <li style="--order:6">
         <!-- 🔒 LOCKED until Mr Chung has uploaded every level's worksheets (v1.1.0). To open it:
              data-href → href, drop `is-locked`, data-locked, role, tabindex and aria-disabled,
-             and swap the 🔒 badge back for the two spans every other tile has. -->
-        <a class="app-tile is-locked" data-app="online" data-href="/online/" data-locked="Worksheets open soon — your teacher is still adding them for every level." role="link" tabindex="0" aria-disabled="true" style="--tile-wash:#B2DFDB;--tile-ink:#00695C">
+             and swap the 🔒 badge back for the two spans every other tile has.
+             Its address is Polymath Online's published home, polymathlc.com.sg/online/ (the
+             website sync puts online/ at the domain root) — the address the class invitations
+             send students to, so it stays absolute and on that domain, unlike the other tiles. -->
+        <a class="app-tile is-locked" data-app="online" data-href="https://polymathlc.com.sg/online/" data-locked="Worksheets open soon — your teacher is still adding them for every level." role="link" tabindex="0" aria-disabled="true" style="--tile-wash:#B2DFDB;--tile-ink:#00695C">
           <img class="tile-icon" src="assets/apps/online.png" alt="" width="84" height="84">
           <span class="tile-words">
             <span class="tile-lock"><span aria-hidden="true">🔒</span> Coming soon</span>
@@ -550,7 +577,7 @@
         </a>
       </li>
       <li style="--order:7">
-        <a class="app-tile" data-app="chinese" href="/chinese/" style="--tile-wash:#FFCDD2;--tile-ink:#C62828">
+        <a class="app-tile" data-app="chinese" href="https://polymathlc.github.io/chinese/" style="--tile-wash:#FFCDD2;--tile-ink:#C62828">
           <img class="tile-icon" src="assets/apps/chinese.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
           <span class="tile-go" aria-hidden="true">→</span>
@@ -562,7 +589,7 @@
         </a>
       </li>
       <li style="--order:8">
-        <a class="app-tile" data-app="english" href="/english/" style="--tile-wash:#F8BBD0;--tile-ink:#AD1457">
+        <a class="app-tile" data-app="english" href="https://polymathlc.github.io/english/" style="--tile-wash:#F8BBD0;--tile-ink:#AD1457">
           <img class="tile-icon" src="assets/apps/english.png" alt="" width="84" height="84">
           <span class="tile-badge" hidden>Last opened</span>
           <span class="tile-go" aria-hidden="true">→</span>
@@ -592,14 +619,14 @@
   © Polymath Learning Centre · polymathlc.com.sg
 </footer>
 
-<div class="version-badge" id="versionBadge" aria-hidden="true">v1.1.1</div>
+<div class="version-badge" id="versionBadge" aria-hidden="true">v1.2.0</div>
 
 <script>
   /* My Polymath — the little the page does with script. Everything works without it. */
   (function () {
     'use strict';
 
-    var DASHBOARD_VERSION = 'v1.1.1';
+    var DASHBOARD_VERSION = 'v1.2.0';
     var LAST_OPENED_KEY = 'polymath-dashboard-last-opened';
 
     var versionBadge = document.getElementById('versionBadge');
