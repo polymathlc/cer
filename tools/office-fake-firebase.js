@@ -99,6 +99,7 @@
     onSnapshot(cb) { const run = () => { const docs = this._docs(); cb({ docs, size: docs.length, empty: !docs.length }); }; listeners.add(run); run(); return () => listeners.delete(run); }
   }
   const db = {
+    settings() {},
     collection: name => new Query(name),
     batch() {
       const ops = [];

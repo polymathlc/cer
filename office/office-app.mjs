@@ -45,6 +45,8 @@ firebase.initializeApp({
 });
 const auth = firebase.auth();
 const db = firebase.firestore();
+// A field left undefined anywhere must never make a whole save fail.
+try { db.settings({ ignoreUndefinedProperties: true, merge: true }); } catch (e) { /* already configured */ }
 const fns = firebase.app().functions('us-central1');
 const FV = firebase.firestore.FieldValue;
 const COL = C.COLLECTIONS;
