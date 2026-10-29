@@ -117,7 +117,7 @@ test('app, game and tool pages stay out of search results', () => {
     'question-app.html', 'sample-materials.html', 'science-defenders.html', 'science-legends.html', 'science-raiders.html',
     'science-slayers.html', 'science-spire.html', 'science-worksheet.html', 'textbooks.html', 'video-review.html', 'whiteboard.html',
     'online/index.html', 'online/offline.html', 'student/index.html', 'student/offline.html', 'handbook/index.html',
-    'polymath.html', '404.html',
+    'polymath.html', '404.html', 'office/index.html', 'pay/index.html',
   ];
   for (const rel of pages) {
     assert.match(head(read(rel)), /<meta name="robots" content="noindex">/, `${rel} is noindex`);

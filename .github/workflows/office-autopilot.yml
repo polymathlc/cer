@@ -1,0 +1,65 @@
+name: Polymath Office autopilot
+
+# Every morning at 09:07 Singapore time (01:07 UTC) — tools/office-autopilot.mjs.
+# It does nothing unless Settings → Autopilot is switched on at
+# polymathlc.com.sg/office; then, on the invoice day only (with a 3-day catch-up
+# window, once a month), it prepares every family's invoice and either emails the
+# office to check them ("Prepare, then ask me") or emails the parents ("Prepare
+# and email parents"). Its heartbeat shows on the office's Settings page.
+#
+# Run workflow by hand to test it: "dry run" (ticked by default) reads everything
+# and writes nothing. Needs the FIREBASE_SERVICE_ACCOUNT repository secret with
+# read/write access to Firestore (the same key the rules and deploy workflows use).
+
+on:
+  schedule:
+    - cron: '7 1 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run — read and report, write nothing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: polymath-office-autopilot
+  cancel-in-progress: false
+
+jobs:
+  autopilot:
+    if: github.repository == 'polymathlc/cer'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check the autopilot first
+        run: node --test tools/office-autopilot-tests.mjs tools/office-core-tests.mjs
+
+      - name: Install the Admin SDK and the QR maker
+        run: npm install --prefix "$RUNNER_TEMP/office-deps" --no-save --no-audit --no-fund firebase-admin@12 qrcode@1.5.4
+
+      - name: Prepare the service-account key
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node tools/office-rules.mjs --setup
+
+      - name: Run the autopilot
+        env:
+          OFFICE_DEPS: ${{ runner.temp }}/office-deps
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then node tools/office-autopilot.mjs --dry-run; else node tools/office-autopilot.mjs; fi
+
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"
