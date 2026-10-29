@@ -513,6 +513,70 @@ sync like everything else, so edit it HERE**; a change made only in the mirror i
   tools/schedule-timetable-browser.mjs` after touching any of it (CI: `.github/workflows/schedule-page.yml`). The browser
   harness serves the real page with Firebase stubbed and the clock fixed, so nothing is ever booked or emailed.
 
+## 🏢 Polymath Office — students, invoices and payments (`office/`, `pay/`, office v1.0.0)
+
+**polymathlc.com.sg/office** is the centre's admin app for families, students, the class timetable, monthly
+invoices, PayNow and bank-statement matching; **polymathlc.com.sg/pay/?i=<token>** is the page every invoice email
+and WhatsApp links to. Both are STANDALONE (no `app.js`) and reach the domain through the website sync like
+`schedule/` — **edit them here**. The whole point is that the monthly fee chase is mostly clicking "yes": prepare →
+email → drop the bank statement → apply → remind whoever is left.
+
+- **Files.** `office/office-core.mjs` (pure: fees, references, PayNow, invoices, statement reading, matching,
+  emails, WhatsApp texts, the importer — imported by the page, `pay/` and the autopilot, and tested under Node),
+  `office/office-app.mjs` (screens, Firestore, QR drawing, clipboard, pdf.js / SheetJS loaded on demand),
+  `office/index.html` (markup + CSS), `pay/index.html` (the parent's page: reads ONE `officeLinks` document over
+  Firestore REST, no Firebase SDK). `OFFICE_VERSION` (app, bottom-left badge) and `PAY_PAGE_VERSION` — bump on every
+  change, and keep the `?v=` on the module imports in step.
+- **Data (CER project `mathgen--app`).** `officeFamilies/{id}` (parent: name, email, email2, whatsapp — stored as
+  digits with country code, address, signUpDate, status, credit, discount, payerNames, **code**; `students[]`
+  embedded, each with `classes[] = {slotId, mode, rate}` or a custom `{custom, label, rate}`, or an own
+  `monthlyFee`), `officeInvoices/{familyId}_{YYYY-MM}` (one per family per month — the id is what makes a second
+  invoice impossible), `officePayments/{txKey}` (the ledger; the key is the bank line's fingerprint, so a statement
+  uploaded twice is skipped), `officeStatements`, `officeSettings/config` + `/autopilot` (heartbeat),
+  `officeLinks/{24-char token}` (what `/pay` shows: names, lines, amounts, reference — **never an email, phone or
+  address**), and `mail/polymath-office-*` for the Trigger Email extension (sent as admin@polymathlc.com.sg).
+- **🔒 The rules must be published before any family is stored.** The shared catch-all is OPEN, so
+  `tools/office-rules.mjs` adds the `polymath-office-v1` block (admins only: `OFFICE_ADMINS` = chungzhikai@gmail.com,
+  admin@polymathlc.com.sg, elsielcr@gmail.com, email verified; `officeLinks` GET-only by token, never listed;
+  office mail create/get by admins only) and one predicate on the catch-all. Applied ONLY by a manual
+  *Polymath Office rules* run with **apply** ticked (`.github/workflows/office-rules.yml`). The page itself checks:
+  a signed-out REST read of `officeSettings/config` must come back 403, and until it does a red banner shows and
+  `requireProtected()` refuses every write. `OFFICE_ADMINS` in the core and the tool are held equal by a test.
+- **Fees are the schedule's.** `monthlyFeeFor` is `schedule/index.html`'s function with the config passed in; a
+  test cuts the original out of the schedule page and compares every slot × mode × default. A class's per-student
+  `rate` overrides it; a student's `monthlyFee` replaces their class prices (packages). An unpriced class is an
+  `issue` shown on the prepare screen — never a silent $0 to a parent.
+- **References.** Each family gets a permanent 6-character `code` from the products page's alphabet with at least
+  one letter AND one digit (so no word or surname can ever look like one in a bank line). Invoice reference =
+  `PLC <code> <MON><YY>` (e.g. `PLC K7M2QX NOV26`), invoice number `PLC-YYMM-<code>`. `buildPayNow` is byte for byte
+  `products/index.html`'s encoder (a test compares them): UEN T16LL2365E, amount locked, reference in field 62/05.
+- **Sending.** Email: the QR is an inline `cid:paynowqr` image AND an attachment, plus a "Save the QR to my phone"
+  button to `/pay/?i=…&save=1`. WhatsApp: `whatsappInvoice` copies the invoice PICTURE (lines + QR + reference) to
+  the clipboard and opens `web.whatsapp.com/send?phone=…&text=…` in one reused tab — the admin pastes (Ctrl+V) and
+  sends; on a phone the share sheet carries picture + text into WhatsApp. The WhatsApp queue walks the families
+  with Enter / → / S. Before the due date the invoice is what goes out again; after it, a reminder.
+- **Statements.** PDF: text by pdf.js 3.11.174 (`pdfLines` keeps column gaps as ` | `), read by ChatGPT through
+  polymathlc/math's `askOpenAi` callable (the server key; long text is chunked; a scan is sent as the PDF itself),
+  with `parseStatementLines` (columns by heading position, else by the running balance) as the free fallback.
+  Excel/CSV: `parseStatementRows` by header names (DBS's Transaction Ref1–3 included); ChatGPT only when no
+  header is found. **An AI amount not printed in the statement text is `unverified` and never auto-ticked.**
+- **Matching** (`matchTransactions`, in order): the family code in the line (`findCodes`, tolerant of squeezed or
+  re-spaced references) → a payer name that family's bank has shown before (`payerNames`, learned on apply) →
+  full names + exact amount → amount alone; then ChatGPT is shown everything that is not certain and may fill a
+  gap, confirm a guess, or overrule it (the guess stays a candidate). Only certain matches, and a ChatGPT match
+  ≥ 0.85 for exactly what is owed, are pre-ticked. `allocatePayment` pays the month in the reference first, then
+  the oldest; anything over becomes `credit`, which the next invoice uses up. Undo reverses it exactly.
+- **Autopilot** (`tools/office-autopilot.mjs`, `.github/workflows/office-autopilot.yml`, 09:07 SGT daily). Off by
+  default; on the invoice day only (plus a 3-day catch-up window, once per month via `autopilot.lastPeriod`) it
+  prepares every billable family and either emails the office to review or emails the parents. It never reminds,
+  never touches payments, and only sends invoices it created on that run. Manual runs default to `--dry-run`.
+- **App Check is not used** by these pages; if `askOpenAi` ever enforces it, the office's ChatGPT steps fail and
+  the quick reader takes over — wire App Check in then.
+- Run `node --test tools/office-core-tests.mjs tools/office-rules-tests.mjs tools/office-autopilot-tests.mjs` and
+  `PW=…/playwright/index.mjs OFFICE_LIBS=<node_modules with qrcodejs, jsqr, pdfjs-dist@3.11.174, xlsx, pdf-lib,
+  pngjs> node tools/office-browser.mjs` (the whole month in Chromium on `tools/office-fake-firebase.js`, decoding
+  every QR) after touching any of it. CI: `.github/workflows/office.yml`.
+
 ## Apps
 - `index.html` + `app.js` — **"Science Learning Portal"** (the product name shown in the sidebar, the `<title>` and the footer; it was "Keywords Learning Portal" until v1.181.0). "Science Quest" is NOT the portal — it is the RPG/dungeon game layer inside it, and the name used in the login / password-reset / prize emails. Keep the two distinct. The CER science-quiz app: admin question authoring (block editor, AI build-from-screenshot, image crop/touch-up, vetting → bank) + student practice + an RPG/dungeon game layer. **The markup and CSS live in `index.html`; ALL of the application JavaScript lives in `app.js`**, loaded as `<script type="module" src="app.js">`. They ship together — `index.html` is useless without `app.js` next to it, so deploy the directory, never the single file.
   - Functions referenced from inline `onclick`/`on*` handlers MUST be assigned to `window` near the bottom of `app.js` (search `window.navigateTo =`), because the module has its own scope.

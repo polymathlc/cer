@@ -1,0 +1,90 @@
+name: Polymath Office rules
+
+# Locks Polymath Office's families, invoices, payments, statements, settings,
+# parents' invoice links and office emails in the SHARED Firestore rules of
+# mathgen--app, with tools/office-rules.mjs. The tool only adds its own block and
+# one predicate to the catch-all; every other app keeps its permissions, and it
+# refuses rules it does not recognise.
+#
+#   pull request        offline checks only
+#   push to main        offline checks, then every permission case is tested
+#                       against the LIVE rules through the Rules API (nothing changes)
+#   Run workflow        the same, and with "apply" ticked it publishes the change
+#
+# polymathlc.com.sg/office refuses to save a single family until a signed-out
+# read of officeSettings is refused — i.e. until this has been applied.
+#
+# Needs the FIREBASE_SERVICE_ACCOUNT repository secret (also used by the enquiry,
+# Online and /cs rules) with permission to read, test and release Firestore rules.
+
+on:
+  pull_request:
+    paths: ['tools/office-rules*', '.github/workflows/office-rules.yml']
+  push:
+    branches: [main]
+    paths: ['tools/office-rules*', '.github/workflows/office-rules.yml']
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Publish the Polymath Office protection to the shared Firestore rules'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: polymath-shared-rules
+  cancel-in-progress: false
+
+jobs:
+  office-rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Offline checks
+        run: |
+          node --check tools/office-rules.mjs
+          node --test tools/office-rules-tests.mjs
+
+      - name: Prepare the service-account key
+        if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node tools/office-rules.mjs --setup
+
+      - name: Install the Firebase CLI
+        if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: npm install -g firebase-tools --no-audit --no-fund
+
+      - name: Test every permission against the live rules (changes nothing)
+        if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !inputs.apply
+        run: |
+          set -euo pipefail
+          out=$(node tools/office-rules.mjs --firebase-tools "$(npm root -g)/firebase-tools")
+          echo "$out"
+          if [ "$(jq -r '.changeNeeded' <<<"$out")" = "true" ]; then
+            echo "Polymath Office protection: **not installed yet**; all $(jq -r '.validated' <<<"$out") permission cases pass. Run this workflow with apply ticked to publish it." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Polymath Office protection: installed; all $(jq -r '.validated' <<<"$out") permission cases pass." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Publish the protection (only when asked)
+        if: github.repository == 'polymathlc/cer' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.apply
+        run: |
+          set -euo pipefail
+          out=$(node tools/office-rules.mjs --firebase-tools "$(npm root -g)/firebase-tools" --apply)
+          echo "$out"
+          echo "Polymath Office protection: published=$(jq -r '.changed' <<<"$out"), $(jq -r '.validated' <<<"$out") permission cases pass, ruleset $(jq -r '.ruleset' <<<"$out")." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"

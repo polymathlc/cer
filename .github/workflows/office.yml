@@ -1,0 +1,53 @@
+name: Polymath Office
+
+# polymathlc.com.sg/office (the admin app) and /pay (the parent's invoice page):
+# the shared core, the autopilot, and the whole month driven in Chromium with
+# Firebase replaced by tools/office-fake-firebase.js — import, prepare, email,
+# WhatsApp, a PDF and a CSV bank statement, reminders, the parent's page. Every
+# PayNow QR met on the way is decoded and held against its payload. Nothing is
+# sent anywhere.
+
+on:
+  pull_request:
+    paths: ['office/**', 'pay/**', 'tools/office-*', '.github/workflows/office.yml', 'schedule/index.html', 'products/index.html']
+  push:
+    branches: [main]
+    paths: ['office/**', 'pay/**', 'tools/office-*', '.github/workflows/office.yml', 'schedule/index.html', 'products/index.html']
+
+permissions:
+  contents: read
+
+jobs:
+  office:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Core, rules and autopilot tests
+        run: |
+          node --check office/office-app.mjs
+          node --test tools/office-core-tests.mjs tools/office-rules-tests.mjs tools/office-autopilot-tests.mjs
+
+      - name: Install the page libraries and Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/office-libs" --no-save --no-audit --no-fund qrcodejs@1.0.0 jsqr@1.4.0 pdfjs-dist@3.11.174 xlsx@0.18.5 pdf-lib@1.17.1 pngjs@7.0.0 playwright@1.62.1
+          "$RUNNER_TEMP/office-libs/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: The whole month in a browser
+        env:
+          PW: ${{ runner.temp }}/office-libs/node_modules/playwright/index.mjs
+          OFFICE_LIBS: ${{ runner.temp }}/office-libs/node_modules
+          OFFICE_SHOTS: artifacts/office
+        run: node tools/office-browser.mjs
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: office-screens
+          path: artifacts/office
+          if-no-files-found: ignore
