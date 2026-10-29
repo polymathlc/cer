@@ -297,9 +297,9 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.450.2">
+  <link rel="modulepreload" href="app.js?v=1.451.0">
 <!-- 🙋 Consults (v1.446.0): the archive window shared with Study Buddy, Ans Key and the Maths portal. -->
-<link rel="stylesheet" href="consult-answer.css?v=1.450.2">
+<link rel="stylesheet" href="consult-answer.css?v=1.451.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -322,7 +322,7 @@
      preview copy these links with media="all"). quest-frames.css is loaded the
      same non-blocking way. -->
 <link rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Pixelify+Sans:wght@400..700&display=swap">
-<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.450.2">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.451.0">
 
 <!-- Tailwind, prebuilt. This used to be <script src="cdn.tailwindcss.com">:
      the Play CDN, which ships a full CSS compiler to the browser, scans the
@@ -627,6 +627,117 @@ body {
 .nav-group-body { padding: 2px 0 4px 8px; margin: 0 0 0 10px; border-left: 1px solid rgba(255,255,255,0.08); }
 .nav-group-body .nav-item { font-size: 0.85rem; }
 .nav-group.nav-group-empty { display: none !important; }
+/* 🧩 Sidebar layout (v1.451.0): what the admin hides is hidden by CLASS, so no
+   inline display written by the role code or a late show can bring it back. */
+.sidebar-nav .nav-layout-hidden { display: none !important; }
+.nav-link-custom { text-decoration: none; color: inherit; }
+.nav-link-custom .nav-link-out { margin-left: auto; opacity: 0.45; font-size: 0.75rem; }
+.nav-link-custom:hover .nav-link-out { opacity: 0.85; }
+/* 🧩 The Sidebar Layout editor (#page-navlayout). Breathing space: cards at a
+   sensible width, rows with room, the preview beside on a computer and below
+   on a phone. */
+.nl-page-body { max-width: 1180px; }
+#nlRoot { display: flex; flex-direction: column; gap: 16px; }
+.nl-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; box-shadow: var(--shadow-sm); line-height: 1.6; }
+.nl-intro p { margin: 0; color: var(--text-muted); font-size: 0.9rem; }
+.nl-warn { border-color: var(--accent-red); background: var(--accent-red-light); color: var(--accent-red); font-size: 0.86rem; }
+.nl-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; }
+.nl-seg { display: inline-flex; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 999px; padding: 4px; gap: 4px; }
+.nl-seg button { border: 0; background: transparent; border-radius: 999px; padding: 8px 16px; font: inherit; font-size: 0.88rem; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: background var(--transition), color var(--transition); }
+.nl-seg button.on { background: var(--primary); color: #fff; box-shadow: var(--shadow-sm); }
+.nl-seg button:not(.on):hover { background: var(--primary-light); color: var(--primary-dark); }
+.nl-status { display: inline-flex; align-items: center; gap: 8px; font-size: 0.84rem; color: var(--text-muted); }
+.nl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green); flex-shrink: 0; }
+.nl-dot-warn { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+.nl-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.nl-tools .btn { font-size: 0.85rem; padding: 8px 14px; }
+.nl-lock { display: flex; gap: 12px; align-items: flex-start; font-size: 0.86rem; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 16px; line-height: 1.55; cursor: pointer; }
+.nl-lock input { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--primary); flex-shrink: 0; }
+.nl-lock strong { color: var(--text); }
+.nl-note { font-size: 0.86rem; color: var(--text-muted); background: var(--primary-light); border-radius: var(--radius-md); padding: 12px 16px; line-height: 1.55; }
+.nl-form { background: var(--surface); border: 1px solid var(--primary); border-radius: var(--radius-lg); padding: 16px 20px; box-shadow: var(--shadow-md); display: flex; flex-direction: column; gap: 12px; }
+.nl-form-title { font-weight: 700; font-size: 0.95rem; }
+.nl-form-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.nl-field { display: flex; flex-direction: column; gap: 6px; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); flex: 1 1 180px; min-width: 0; }
+.nl-field-ico { flex: 0 0 72px; }
+.nl-field-wide { flex: 2 1 260px; }
+.nl-field input, .nl-field select { font: inherit; font-size: 0.9rem; font-weight: 400; color: var(--text); padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); min-width: 0; }
+.nl-field-ico input { text-align: center; font-size: 1.1rem; padding: 7px 6px; }
+.nl-form-err { color: var(--accent-red); font-size: 0.84rem; }
+.nl-form-btns { display: flex; justify-content: flex-end; gap: 8px; }
+.nl-cols { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; align-items: start; }
+.nl-top { display: flex; flex-direction: column; gap: 10px; min-height: 40px; }
+.nl-group { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; transition: opacity var(--transition), border-color var(--transition); }
+.nl-group.is-custom { border-color: rgba(11,107,79,0.35); }
+.nl-group.is-hidden { opacity: 0.62; border-style: dashed; }
+.nl-group-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 10px 8px; background: var(--surface-alt); border-bottom: 1px solid var(--border); flex-wrap: nowrap; }
+.nl-items { display: flex; flex-direction: column; padding: 6px 8px 8px; gap: 2px; min-height: 44px; }
+.nl-items[hidden] { display: none; }
+.nl-empty { font-size: 0.82rem; color: var(--text-light); padding: 12px 14px; border: 1px dashed var(--border); border-radius: var(--radius-sm); line-height: 1.5; }
+.nl-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 4px; border-radius: var(--radius-sm); background: var(--surface); flex-wrap: nowrap; transition: background var(--transition), opacity var(--transition); }
+.nl-top > .nl-row { border: 1px solid var(--border); box-shadow: var(--shadow-sm); padding: 8px 12px 8px 8px; border-radius: var(--radius-md); }
+.nl-row:hover { background: var(--surface-alt); }
+.nl-row.is-hidden { opacity: 0.55; }
+.nl-row.is-hidden .nl-label-in, .nl-row.is-hidden .nl-label-fixed { text-decoration: line-through; text-decoration-color: rgba(0,0,0,0.3); }
+.nl-grip { cursor: grab; color: var(--text-light); font-size: 0.8rem; letter-spacing: -2px; padding: 4px 4px; user-select: none; flex-shrink: 0; }
+.nl-ico { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--text-muted); font-size: 1rem; }
+.nl-ico svg { width: 18px; height: 18px; }
+.nl-label-in, .nl-name-in, .nl-ico-in { font: inherit; color: var(--text); border: 1px solid transparent; background: transparent; border-radius: var(--radius-sm); padding: 6px 8px; min-width: 0; transition: border-color var(--transition), background var(--transition); }
+.nl-label-in { flex: 1 1 140px; width: 140px; min-width: 120px; font-size: 0.9rem; }
+.nl-name-in { flex: 1 1 140px; width: 140px; font-size: 0.95rem; font-weight: 700; }
+.nl-ico-in { width: 44px; text-align: center; font-size: 1.05rem; padding: 4px; }
+.nl-label-in:hover, .nl-name-in:hover, .nl-ico-in:hover { border-color: var(--border); background: var(--surface); }
+.nl-label-in:focus, .nl-name-in:focus, .nl-ico-in:focus { outline: none; border-color: var(--border-focus); background: var(--surface); box-shadow: 0 0 0 3px var(--primary-light); }
+.nl-label-fixed { flex: 1 1 120px; min-width: 0; font-size: 0.9rem; padding: 6px 8px; color: var(--text); }
+.nl-tags { display: inline-flex; gap: 4px; flex-wrap: wrap; min-width: 0; flex-shrink: 1; }
+.nl-tag { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; color: var(--text-muted); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.nl-tag-link { color: var(--accent-blue); border-color: rgba(45,108,168,0.3); background: var(--accent-blue-light); }
+.nl-count { font-size: 0.76rem; color: var(--text-light); white-space: nowrap; }
+.nl-row-btns { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; flex-shrink: 0; }
+.nl-btn { border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); border-radius: var(--radius-sm); min-width: 30px; height: 30px; padding: 0 6px; font-size: 0.8rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background var(--transition), color var(--transition), border-color var(--transition); }
+.nl-btn:hover:not(:disabled) { background: var(--primary-light); color: var(--primary-dark); border-color: rgba(11,107,79,0.35); }
+.nl-btn:disabled { opacity: 0.35; cursor: default; }
+.nl-btn.nl-eye.off { background: var(--accent-red-light); border-color: rgba(178,59,54,0.3); }
+.nl-btn.nl-danger:hover:not(:disabled) { background: var(--accent-red-light); color: var(--accent-red); border-color: rgba(178,59,54,0.35); }
+.nl-fold { border: 0; background: transparent; min-width: 24px; }
+.nl-move { font: inherit; font-size: 0.8rem; color: var(--text-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); padding: 5px 8px; width: 170px; height: 30px; }
+.nl-dragging { opacity: 0.4; }
+.nl-drop-before { box-shadow: inset 0 3px 0 var(--primary); }
+.nl-drop-after { box-shadow: inset 0 -3px 0 var(--primary); }
+.nl-drop-into { outline: 2px dashed var(--primary); outline-offset: -2px; background: var(--primary-light); }
+.nl-preview { position: sticky; top: 16px; background: var(--text); color: #fff; border-radius: var(--radius-lg); padding: 16px 14px; box-shadow: var(--shadow-md); }
+.nl-preview-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 2px; padding: 0 6px; }
+.nl-preview-sum { font-size: 0.74rem; color: rgba(255,255,255,0.6); margin-bottom: 12px; padding: 0 6px; }
+.nl-pv { display: flex; flex-direction: column; gap: 2px; max-height: 62vh; overflow-y: auto; }
+.nl-pv-item, .nl-pv-head { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; font-size: 0.82rem; color: rgba(255,255,255,0.82); }
+.nl-pv-head { color: rgba(255,255,255,0.95); font-weight: 600; }
+.nl-pv-group > .nl-pv-item { margin-left: 14px; padding-left: 12px; border-left: 1px solid rgba(255,255,255,0.1); border-radius: 0 8px 8px 0; font-size: 0.78rem; }
+.nl-pv-ico { width: 18px; text-align: center; flex-shrink: 0; }
+.nl-pv-n { margin-left: auto; font-size: 0.68rem; color: rgba(255,255,255,0.5); }
+.nl-pv-none { font-size: 0.82rem; color: rgba(255,255,255,0.6); padding: 8px; }
+.nl-preview-foot { margin-top: 12px; font-size: 0.72rem; color: rgba(255,255,255,0.55); line-height: 1.5; padding: 0 6px; }
+.nl-savebar { position: sticky; bottom: 12px; display: flex; align-items: center; gap: 10px; justify-content: flex-end; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px 16px; box-shadow: var(--shadow-lg); z-index: 5; }
+.nl-savebar.is-dirty { border-color: var(--accent); }
+.nl-savebar-text { margin-right: auto; font-size: 0.86rem; color: var(--text-muted); }
+.nl-savebar.is-dirty .nl-savebar-text { color: var(--text); font-weight: 600; }
+@media (max-width: 900px) {
+  .nl-cols { grid-template-columns: minmax(0, 1fr); }
+  .nl-preview { position: static; }
+  .nl-pv { max-height: none; }
+}
+.nl-main, .nl-preview { min-width: 0; }
+@media (max-width: 760px) {
+  .nl-row, .nl-group-head { flex-wrap: wrap; }
+  .nl-label-in { min-width: 0; }
+}
+@media (max-width: 560px) {
+  .nl-seg { display: flex; width: 100%; }
+  .nl-seg button { flex: 1 1 0; min-width: 0; padding: 8px 10px; font-size: 0.82rem; }
+  .nl-status { width: 100%; }
+  .nl-row-btns { margin-left: 0; width: 100%; justify-content: flex-end; }
+  .nl-move { width: auto; flex: 1; min-width: 0; }
+  .nl-count { width: 100%; padding-left: 36px; }
+}
 .nav-group.nav-flat > .nav-group-head { display: none; }
 .nav-group.nav-flat > .nav-group-body { padding: 0; margin: 0; border: 0; }
 body.realm-embers .nav-group-head { color: rgba(240,205,122,0.72); }
@@ -10867,6 +10978,11 @@ html { scroll-behavior:smooth; }
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
             Photo Editor
           </div>
+          <!-- 🧩 Sidebar Layout (v1.451.0): hide, rename, add tabs and links, and put the menu in order — for the students and for the admin. One save reaches every student. -->
+          <div class="nav-item admin-only" data-page="navlayout" onclick="navigateTo('navlayout')" title="Sidebar Layout — choose what the left-hand menu holds, for the students and for you: hide any tab or function, rename it, add tabs and links, file functions under tabs. One save updates every student straight away.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1.5"/><path d="M14 4h7"/><path d="M14 9h7"/><path d="M14 14h7"/><path d="M14 19h4"/></svg>
+            Sidebar Layout
+          </div>
         </div>
       </details>
       <!-- 📲 Install app (pwa-install.js): the browser's own install prompt, or step-by-step help on iPhone / iPad / Safari. Hidden inside the installed app. -->
@@ -11553,6 +11669,22 @@ html { scroll-behavior:smooth; }
          instant; the AI reads the question WITH its diagrams, because the
          headline problem here — options that merely repeat what the table or
          picture already shows — cannot be seen in the text alone. -->
+    <!-- 🧩 Sidebar Layout (v1.451.0) — drawn by nlRender() in app.js (search SIDEBAR LAYOUT) -->
+    <div class="page" id="page-navlayout">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>🧩 Sidebar Layout</h2>
+          </div>
+          <div class="subtitle">Choose what the left-hand menu holds — hide, rename, add tabs, and put everything where it belongs</div>
+        </div>
+      </div>
+      <div class="page-body nl-page-body">
+        <div id="nlRoot"></div>
+      </div>
+    </div>
+
     <div class="page" id="page-photoedit">
       <div class="page-header">
         <div>
@@ -16694,11 +16826,11 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-<script defer src="pwa-install.js?v=1.450.2"></script>
-  <script src="worksheet-cover.js?v=1.450.2"></script>
-  <script src="quest-frames.js?v=1.450.2"></script>
-  <script defer src="consult-answer.js?v=1.450.2"></script>
-  <script defer src="consult-bridge.js?v=1.450.2"></script>
-  <script type="module" src="app.js?v=1.450.2"></script>
+<script defer src="pwa-install.js?v=1.451.0"></script>
+  <script src="worksheet-cover.js?v=1.451.0"></script>
+  <script src="quest-frames.js?v=1.451.0"></script>
+  <script defer src="consult-answer.js?v=1.451.0"></script>
+  <script defer src="consult-bridge.js?v=1.451.0"></script>
+  <script type="module" src="app.js?v=1.451.0"></script>
 </body>
 </html>

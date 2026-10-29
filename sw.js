@@ -1,4 +1,4 @@
-// 📲 The installable app's service worker (v1.450.2). See CLAUDE.md → "Installable app".
+// 📲 The installable app's service worker (v1.451.0). See CLAUDE.md → "Installable app".
 //
 // It exists so the browser offers "Install" and so an installed app opened
 // without a connection shows offline.html instead of the browser's dinosaur.
@@ -14,7 +14,7 @@
 // harmless for every page under it — /online/, /cs/, /schedule/ included.
 'use strict';
 
-const SW_VERSION = '1.450.2';
+const SW_VERSION = '1.451.0';
 const CACHE = 'polymath-app-shell-' + SW_VERSION;
 const CACHE_PREFIX = 'polymath-app-shell-';
 const OFFLINE_URL = 'offline.html';

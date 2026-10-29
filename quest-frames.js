@@ -1514,7 +1514,7 @@
     try { return new URL('.', (script && script.src) || global.location.href).href; }
     catch (e) { return 'https://polymathlc.com.sg/'; }
   })();
-  var VERSION = '1.450.2';
+  var VERSION = '1.451.0';
 
   /* Art. The logo, the subject icons and the companions are already on this
      site; the Wheel Quest art is a print-sized copy in assets/quest-frames

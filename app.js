@@ -10,6 +10,7 @@ import { cropSourcesFor, normalizeCropBox, cropPixelRect, cropSourceUpdate } fro
 import { questionRepairTargets, normalizeQuestionRepairPlan, applyQuestionRepairPlan } from './question-repair-core.mjs?v=3';
 import { TUTOR_NAME, TUTOR_COLLECTION, TUTOR_MAX_DOC_CHARS, htmlToPlain, extractImages, normalizeTutorPaper, tutorPaperId, tutorUrl, tutorQrSvg } from './polymath-tutor-core.mjs?v=1';
 import { AI_DEFAULT_PRICES, AI_PRICES_AS_OF, AI_ROUTE_NAMES, mergePrices, priceFor, normalizeUsage, estimateUsage, costOf, createTally, tallyAdd, formatMoney, estimateCheckCost } from './ai-cost-core.mjs?v=1';
+import { NAV_LAYOUT_VERSION, NAV_LAYOUT_TOP, NAV_LAYOUT_LIMITS, cleanText, emptyLayout, emptyAudienceLayout, isEmptyAudienceLayout, normalizeLayout, planSidebar, canonicalLayout, sameLayout, planSummary, layoutMove, layoutNudge, layoutSetHidden, layoutShowAll, layoutSetLabel, layoutSetIcon, layoutAddGroup, layoutRemoveGroup, layoutAddLink, layoutUpdateLink, layoutRemoveLink, layoutSetLockHidden } from './sidebar-layout-core.mjs?v=1.451.0';
 import { measureCrop, figureFacts, figureHardIssues, questionFacts, questionHardIssues, decideReview, failuresToFindings, recropReasons, migrateDecisionsReviewState, DECISIONS_MAY_SKIP } from './decisions-review-core.mjs?v=2';
 import { findRapidDuplicates, rapidDuplicateThreshold, rapidDuplicateFingerprint, rapidDuplicatePairCurrent } from './rapid-duplicates.js';
 import { installHadesDisplay } from "./hades-display.js";
@@ -3820,6 +3821,7 @@ async function handleLogout() {
   // Down with the account, or one account's engine setting goes on governing
   // the next person to sign in on this device.
   aiEngineStopShared();
+  navLayoutStopWatch();
   try {
     _practiceAsClear();          // never hand a practice session to the next person
     _practiceAs = null;
@@ -4532,7 +4534,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.450.2';
+const APP_VERSION = 'v1.451.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -4847,6 +4849,9 @@ function configureSidebarForRole(role) {
     // than leave a heading standing over nothing.
     document.querySelectorAll('.nav-section-label').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    // 🧩 An employee always gets index.html's own menu — this undoes a layout
+    // an admin left on this page before signing out.
+    try { navLayoutInit(); } catch (e) { console.warn('sidebar layout', e); }
     try { navBookmarksInit(); } catch (e) { console.warn('bookmarks', e); }
     try { navGroupsRestore(); navGroupsWatch(); } catch (e) { console.warn('nav groups', e); }
     navigateTo('create');
@@ -4873,6 +4878,10 @@ function configureSidebarForRole(role) {
     const homePage = document.getElementById('page-home');
     if (homePage) homePage.classList.add('active');
   }
+  // 🧩 The admin's sidebar layout goes on after the role (a role gate always
+  // wins over a layout) and before the stars and the groups, which both read
+  // where the items now sit and which are hidden.
+  try { navLayoutInit(); } catch (e) { console.warn('sidebar layout', e); }
   // Stars go on AFTER the role has decided which items exist, so a bookmark can
   // never resurrect an item this account isn't allowed to see.
   try { navBookmarksInit(); } catch (e) { console.warn('bookmarks', e); }
@@ -4941,7 +4950,7 @@ function navBookmarksRender() {
   // through the bookmark band.
   const sources = saved
     .map(p => ({ page: p, el: _navOriginal(p) }))
-    .filter(x => x.el && x.el.style.display !== 'none');
+    .filter(x => x.el && x.el.style.display !== 'none' && !x.el.closest('.nav-layout-hidden'));
 
   list.innerHTML = '';
   sources.forEach(({ page, el }) => {
@@ -4995,7 +5004,7 @@ function _navOriginals() {
 // student's Create Worksheet, say), so the one this role can SEE wins.
 function _navOriginal(page) {
   const all = _navOriginals().filter(el => el.getAttribute('data-page') === page);
-  return all.find(el => el.style.display !== 'none') || all[0] || null;
+  return all.find(el => el.style.display !== 'none' && !el.closest('.nav-layout-hidden')) || all.find(el => el.style.display !== 'none') || all[0] || null;
 }
 
 // =====================================================================
@@ -5053,7 +5062,8 @@ function navGroupsSync() {
     const flat = (typeof _isEmployee === 'function') && _isEmployee();
     navGroupsAll().forEach(g => {
       const items = Array.from(g.querySelectorAll('.nav-item'));
-      const visible = items.filter(el => el.style.display !== 'none');
+      // 🧩 An item the sidebar layout hides counts as hidden too.
+      const visible = items.filter(el => el.style.display !== 'none' && !(el.closest && el.closest('.nav-layout-hidden')));
       const empty = visible.length === 0;
       if (g.classList.contains('nav-group-empty') !== empty) g.classList.toggle('nav-group-empty', empty);
       if (g.classList.contains('nav-flat') !== flat) g.classList.toggle('nav-flat', flat);
@@ -5109,6 +5119,791 @@ function navGroupsWatch() {
     _navGroupsRaf = requestAnimationFrame(() => { _navGroupsRaf = 0; navGroupsSync(); });
   });
   mo.observe(nav, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['style', 'class'] });
+}
+
+// =====================================================================
+// 🧩 SIDEBAR LAYOUT (v1.451.0)
+//
+// The admin decides what the left menu holds — for the STUDENTS' menu and
+// for their OWN — on 🧩 Sidebar Layout (⚙️ Tools & Settings): hide any tab or
+// function, rename it, add new tabs, file functions under them, add link
+// tabs, and put everything in order. One save writes `config/sidebarLayout`
+// and every signed-in student's menu rearranges on the spot (onSnapshot).
+//
+// - THE PURE HALF IS sidebar-layout-core.mjs: inventory + layout → plan, and
+//   every editor operation. This block only reads the DOM and moves it.
+// - THE INVENTORY IS READ ONCE, from index.html's own markup, before anything
+//   is moved (`_navLayoutInventory`). Every apply starts again from it, so a
+//   layout can never compound on a previous one, and "back to the original"
+//   is simply the empty layout.
+// - AN ITEM'S OWN MARKUP NEVER CHANGES, only where it sits (the same promise
+//   the collapsible groups made). Hiding is the CLASS `nav-layout-hidden`
+//   with `display:none !important` — never inline style, which the role code,
+//   rpgApplyVisibility, the Realm of Embers and Science Strike doors and the
+//   consult bridge all write, late. A role gate still wins: an admin-only
+//   item a layout "shows" is still hidden from a student by its own class.
+// - A HIDDEN PAGE IS SWITCHED OFF for students too (`lockHidden`, on unless
+//   the admin unticks it): navigateTo sends a student who follows a link or a
+//   home tile to a hidden page back home. Home and Community are never
+//   switched off. The admin is never blocked.
+// - THE EDITOR'S OWN DOOR CANNOT BE HIDDEN from the admin's menu
+//   (NAV_LAYOUT_LOCKED), and it moves out of a tab the admin hides.
+// - An employee always gets index.html's menu, flattened as before.
+// =====================================================================
+const NAV_LAYOUT_CACHE_KEY = 'navLayout:v1';
+const NAV_LAYOUT_FIXED_LABEL = ['id:consultLogBtn', 'id:rpgHideToggle'];   // their words are rewritten live by their owners
+let _navLayoutInv = null;          // what index.html's sidebar holds, read once
+let _navLayoutSaved = null;        // the centre's layout as last read (normalized)
+let _navLayoutPreview = null;      // { audience, layout } — the editor's unsaved draft, shown on THIS sidebar
+let _navLayoutBlocked = new Set(); // pages switched off for this account
+let _navLayoutStop = null;
+let _navLayoutErr = '';
+function _navLayoutRef() { return doc(db, 'config', 'sidebarLayout'); }
+function _navLayoutAudience() {
+  if (!currentUser || _isEmployee()) return null;
+  return _isAdmin() ? 'admin' : 'student';
+}
+function _navLayoutKeyOf(el) {
+  if (!el || el.nodeType !== 1) return '';
+  if (el.id === 'navTcgWrap') return 'page:tcg';
+  if (el.id) return 'id:' + el.id;
+  const page = el.getAttribute('data-page');
+  const role = el.classList.contains('admin-only') ? '@admin' : el.classList.contains('student-only') ? '@student' : '';
+  if (page) return 'page:' + page + role;
+  if (el.hasAttribute('data-pwa-install')) return 'install';
+  const m = /^\s*([A-Za-z_$][\w$]*)\s*\(/.exec(el.getAttribute('onclick') || '');
+  if (m) return 'fn:' + m[1] + role;
+  return '';
+}
+function _navLayoutAudienceOf(el, group) {
+  const has = (n, c) => !!(n && n.classList && n.classList.contains(c));
+  if (has(el, 'admin-only') || has(group, 'admin-only')) return 'admin';
+  if (has(el, 'student-only') || has(group, 'student-only')) return 'student';
+  return 'both';
+}
+function _navLayoutLabelOf(el) {
+  if (el.id === 'consultLogBtn') return 'Consults';
+  if (el.id === 'rpgHideToggle') return 'Hide / show game';
+  const c = el.cloneNode(true);
+  c.querySelectorAll('.badge, .nav-star, .nav-beta, .nav-tcg-sub, .nav-sub-prize, svg, .ico').forEach(n => n.remove());
+  return String(c.textContent || '').replace(/\s+/g, ' ').trim();
+}
+function _navLayoutIconOf(el) {
+  if (el.id === 'consultLogBtn') return '🙋';
+  const ico = el.querySelector('.ico');
+  return ico ? String(ico.textContent || '').trim() : '';
+}
+// The text node that carries an item's words — the one a rename rewrites.
+function _navLayoutTextNode(el) {
+  const host = el.id === 'navTcgWrap' ? document.getElementById('navTcg') : el;
+  if (!host) return null;
+  for (const n of host.childNodes) if (n.nodeType === 3 && n.nodeValue.trim()) return n;
+  return null;
+}
+function _navLayoutInventory() {
+  if (_navLayoutInv) return _navLayoutInv;
+  const nav = document.querySelector('.sidebar-nav');
+  if (!nav) return null;
+  const inv = { groups: [], items: [], top: [], el: new Map(), groupEl: new Map(), text: new Map(), start: null };
+  const units = Array.from(nav.children).filter(c => c.matches('.nav-item, details.nav-group, #consultLogBtn'));
+  if (!units.length) return null;
+  // Everything the layout places goes after this marker, in order; what sits
+  // before it (the ⭐ Bookmarks band) and after the last unit (the motion
+  // switch interface-studio adds) is left where it is.
+  const start = document.createElement('span');
+  start.id = 'navLayoutStart';
+  start.hidden = true;
+  nav.insertBefore(start, units[0]);
+  inv.start = start;
+  const addItem = (el, group) => {
+    const key = _navLayoutKeyOf(el);
+    if (!key || inv.el.has(key)) return;
+    inv.el.set(key, el);
+    const page = el.id === 'navTcgWrap' ? 'tcg' : (el.getAttribute('data-page') || '');
+    inv.items.push({ key, label: _navLayoutLabelOf(el) || key, icon: _navLayoutIconOf(el), audience: _navLayoutAudienceOf(el, group), group: group ? group.dataset.group : null, page });
+    const tn = NAV_LAYOUT_FIXED_LABEL.includes(key) ? null : _navLayoutTextNode(el);
+    if (tn) inv.text.set(key, { node: tn, value: tn.nodeValue });
+    if (!group) inv.top.push('i:' + key);
+  };
+  units.forEach(u => {
+    if (u.matches('details.nav-group')) {
+      const id = u.dataset.group || '';
+      if (!id) return;
+      const head = u.querySelector(':scope > summary');
+      inv.groupEl.set(id, u);
+      inv.groups.push({
+        id,
+        label: String((head && head.querySelector('.nav-group-label') || {}).textContent || id).trim(),
+        icon: String((head && head.querySelector('.ico') || {}).textContent || '').trim(),
+        audience: _navLayoutAudienceOf(u, null),
+        defaultLabelText: String((head && head.querySelector('.nav-group-label') || {}).textContent || ''),
+        defaultIconText: String((head && head.querySelector('.ico') || {}).textContent || '')
+      });
+      inv.top.push('g:' + id);
+      const body = u.querySelector(':scope > .nav-group-body');
+      if (body) Array.from(body.children).forEach(c => { if (c.id !== 'navTcgHome') addItem(c, u); });
+    } else addItem(u, null);
+  });
+  _navLayoutInv = inv;
+  return inv;
+}
+// The inventory as the pure half wants it (no elements).
+function _navLayoutInvData() {
+  const inv = _navLayoutInventory();
+  return inv ? { groups: inv.groups.map(g => ({ id: g.id, label: g.label, icon: g.icon, audience: g.audience })), items: inv.items, top: inv.top } : null;
+}
+function _navLayoutMakeGroup(id) {
+  const d = document.createElement('details');
+  d.className = 'nav-group nav-group-custom';
+  d.dataset.group = id;
+  const s = document.createElement('summary');
+  s.className = 'nav-group-head';
+  const ico = document.createElement('span'); ico.className = 'ico';
+  const lab = document.createElement('span'); lab.className = 'nav-group-label';
+  const badge = document.createElement('span'); badge.className = 'badge nav-group-badge'; badge.style.display = 'none'; badge.textContent = '0';
+  const chev = document.createElement('span'); chev.className = 'nav-group-chev'; chev.setAttribute('aria-hidden', 'true');
+  s.append(ico, document.createTextNode(' '), lab, badge, chev);
+  const body = document.createElement('div');
+  body.className = 'nav-group-body';
+  d.append(s, body);
+  return d;
+}
+function _navLayoutMakeLink(id) {
+  const a = document.createElement('a');
+  a.className = 'nav-item nav-link-custom';
+  a.dataset.navLink = id;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  const ico = document.createElement('span'); ico.className = 'ico';
+  const txt = document.createTextNode('');
+  const out = document.createElement('span'); out.className = 'nav-link-out'; out.setAttribute('aria-hidden', 'true'); out.textContent = '↗';
+  a.append(ico, document.createTextNode(' '), txt, out);
+  return a;
+}
+function _navLayoutSetLink(a, k) {
+  const ico = a.querySelector('.ico');
+  if (ico && ico.textContent !== k.icon) ico.textContent = k.icon;
+  const txt = a.childNodes[2];
+  if (txt && txt.nodeValue !== k.label) txt.nodeValue = k.label;
+  if (a.getAttribute('href') !== k.url) a.setAttribute('href', k.url);
+  a.title = k.label + ' — opens ' + k.url + ' in a new tab';
+}
+function _navLayoutSetText(node, original, label) {
+  const m = /^(\s*)[\s\S]*?(\s*)$/.exec(original);
+  const v = (m ? m[1] : '') + label + (m ? m[2] : '');
+  if (node.nodeValue !== v) node.nodeValue = v;
+}
+// The layout this account's menu follows right now.
+function _navLayoutCurrent(aud) {
+  if (!aud) return null;
+  if (_navLayoutPreview && _navLayoutPreview.audience === aud) return _navLayoutPreview.layout;
+  return _navLayoutSaved ? _navLayoutSaved[aud] : null;
+}
+function navLayoutApply() {
+  const inv = _navLayoutInventory();
+  if (!inv) return;
+  const aud = _navLayoutAudience();
+  const layout = _navLayoutCurrent(aud);
+  const plan = aud ? planSidebar(_navLayoutInvData(), layout || emptyAudienceLayout(), aud) : null;
+  const links = plan ? plan.links : {};
+  // Where every unit goes: the plan for what this audience sees, then — at
+  // the end of their own container — everything it never sees.
+  const top = plan ? plan.top.slice() : [];
+  const groups = {};
+  if (plan) Object.keys(plan.groups).forEach(id => { groups[id] = plan.groups[id].items.slice(); });
+  const seen = new Set([...top, ...Object.values(groups).flat()]);
+  inv.groups.forEach(g => { if (!groups[g.id]) groups[g.id] = []; });
+  inv.top.forEach(r => { if (!seen.has(r)) { top.push(r); seen.add(r); } });
+  inv.items.forEach(it => {
+    const r = 'i:' + it.key;
+    if (seen.has(r)) return;
+    (it.group ? groups[it.group] : top).push(r);
+    seen.add(r);
+  });
+  // Custom tabs and link tabs come and go with the layout.
+  let created = false;
+  const nav = inv.start.parentNode;
+  const groupEl = id => {
+    if (inv.groupEl.has(id)) return inv.groupEl.get(id);
+    let g = nav.querySelector(':scope > details.nav-group-custom[data-group="' + CSS.escape(id) + '"]');
+    if (!g) { g = _navLayoutMakeGroup(id); created = true; }
+    return g;
+  };
+  const linkEl = id => nav.querySelector('a.nav-link-custom[data-nav-link="' + CSS.escape(id) + '"]') || _navLayoutMakeLink(id);
+  const elsOf = ref => {
+    const t = ref[0], id = ref.slice(2);
+    if (t === 'g') return [groupEl(id)];
+    if (t === 'l') { const a = linkEl(id); if (links[id]) _navLayoutSetLink(a, links[id]); return [a]; }
+    const el = inv.el.get(id);
+    if (!el) return [];
+    if (id === 'page:tcg') { const home = document.getElementById('navTcgHome'); return home ? [home, el] : [el]; }
+    return [el];
+  };
+  const keep = new Set();
+  let cursor = inv.start;
+  top.forEach(r => elsOf(r).forEach(el => {
+    keep.add(el);
+    if (cursor.nextElementSibling !== el) cursor.after(el);
+    cursor = el;
+  }));
+  Object.keys(groups).forEach(id => {
+    if (!(plan && plan.groups[id]) && !inv.groupEl.has(id)) return;
+    const g = groupEl(id);
+    const body = g.querySelector(':scope > .nav-group-body');
+    if (!body) return;
+    const want = groups[id].flatMap(elsOf);
+    want.forEach(el => keep.add(el));
+    const have = Array.from(body.children);
+    if (have.length !== want.length || have.some((el, i) => el !== want[i])) want.forEach(el => body.append(el));
+  });
+  // Tabs and links the layout no longer has.
+  nav.querySelectorAll('details.nav-group-custom, a.nav-link-custom').forEach(el => { if (!keep.has(el)) el.remove(); });
+  // Words, icons and what is hidden.
+  inv.groups.forEach(g => {
+    const el = inv.groupEl.get(g.id);
+    const p = plan && plan.groups[g.id];
+    const lab = el.querySelector(':scope > summary .nav-group-label');
+    const ico = el.querySelector(':scope > summary .ico');
+    const wantLab = p ? p.label : g.defaultLabelText;
+    const wantIco = p ? p.icon : g.defaultIconText;
+    if (lab && lab.textContent !== wantLab) lab.textContent = wantLab;
+    if (ico && ico.textContent !== wantIco) ico.textContent = wantIco;
+    el.classList.toggle('nav-layout-hidden', !!(p && p.hidden));
+  });
+  if (plan) Object.keys(plan.groups).forEach(id => {
+    const p = plan.groups[id];
+    if (!p.custom) return;
+    const el = groupEl(id);
+    const lab = el.querySelector(':scope > summary .nav-group-label');
+    const ico = el.querySelector(':scope > summary .ico');
+    if (lab && lab.textContent !== p.label) lab.textContent = p.label;
+    if (ico && ico.textContent !== p.icon) ico.textContent = p.icon;
+    el.classList.toggle('nav-layout-hidden', !!p.hidden);
+  });
+  inv.items.forEach(it => {
+    const el = inv.el.get(it.key);
+    const p = plan && plan.items[it.key];
+    el.classList.toggle('nav-layout-hidden', !!(p && p.hidden));
+    const t = inv.text.get(it.key);
+    if (t) _navLayoutSetText(t.node, t.value, p ? p.label : t.value.trim());
+  });
+  Object.keys(links).forEach(id => linkEl(id).classList.toggle('nav-layout-hidden', !!links[id].hidden));
+  _navLayoutBlocked = new Set(plan ? plan.blockedPages : []);
+  document.body.classList.toggle('nav-layout-custom', !!(plan && layout && !isEmptyAudienceLayout(layout)));
+  if (created) { try { navGroupsRestore(); } catch (_) {} }
+  try { navGroupsSync(); } catch (_) {}
+  try { navBookmarksRender(); } catch (_) {}
+}
+// navigateTo asks this: a student cannot walk into a page the admin switched off.
+function navLayoutBlocks(page) {
+  return !!page && !_isAdmin() && !_isEmployee() && _navLayoutBlocked.has(page);
+}
+function _navLayoutTake(raw, from) {
+  // Drafts nobody has touched follow the new layout; worked-on ones are kept.
+  let untouched = [];
+  try { untouched = ['student', 'admin'].filter(a => _nl.drafts[a] && !_nlDirty(a)); } catch (_) {}
+  _navLayoutSaved = normalizeLayout(raw);
+  untouched.forEach(a => { _nl.drafts[a] = null; });
+  try { localStorage.setItem(NAV_LAYOUT_CACHE_KEY, JSON.stringify(_navLayoutSaved)); } catch (_) {}
+  try { navLayoutApply(); } catch (e) { console.warn('sidebar layout', from, e); }
+  // A student already standing on a page that has just been switched off is
+  // taken home, the same as one who tries to open it.
+  try {
+    const cur = document.querySelector('.page.active');
+    const page = cur && cur.id ? cur.id.replace(/^page-/, '') : '';
+    if (navLayoutBlocks(page)) navigateTo(rpgHomePage());
+  } catch (_) {}
+  try { if (document.getElementById('page-navlayout')?.classList.contains('active')) nlRender(); } catch (_) {}
+}
+// Every signed-in path comes through configureSidebarForRole, which calls
+// this: the last layout this device saw is applied at once (no flash of the
+// full menu), and the live document replaces it the moment it arrives.
+function navLayoutInit() {
+  if (!_navLayoutSaved) {
+    try {
+      const c = localStorage.getItem(NAV_LAYOUT_CACHE_KEY);
+      if (c) _navLayoutSaved = normalizeLayout(JSON.parse(c));
+    } catch (_) {}
+  }
+  try { navLayoutApply(); } catch (e) { console.warn('sidebar layout', e); }
+  navLayoutWatch();
+}
+function navLayoutWatch() {
+  if (_navLayoutStop || !currentUser) return;
+  try {
+    _navLayoutStop = onSnapshot(_navLayoutRef(), snap => {
+      _navLayoutErr = '';
+      _navLayoutTake(snap.exists() ? snap.data() : null, 'live');
+    }, err => {
+      // A denied read leaves the last layout this device saw in place; the
+      // editor says why it cannot see the centre's.
+      _navLayoutErr = String((err && err.message) || err || '');
+      _navLayoutStop = null;
+      try { nlRender(); } catch (_) {}
+    });
+  } catch (e) { _navLayoutErr = String((e && e.message) || e || ''); }
+}
+function navLayoutStopWatch() {
+  if (_navLayoutStop) { try { _navLayoutStop(); } catch (_) {} }
+  _navLayoutStop = null;
+  _navLayoutPreview = null;
+}
+
+// ---------------------------------------------------------------------
+// 🧩 The editor (#page-navlayout, admin only)
+//
+// Works on a DRAFT per audience — the canonical, everything-named form of
+// the saved layout — and only a save writes. While the admin edits their OWN
+// menu the draft is shown live on their sidebar (_navLayoutPreview); the
+// students' menu is drawn in the preview column instead. Rows and tabs are
+// addressed by their ref in data attributes, never names quoted into onclick.
+// ---------------------------------------------------------------------
+const _nl = { aud: 'student', drafts: { student: null, admin: null }, form: null, formErr: '', busy: false, err: '', drag: null, open: {} };
+function _nlSavedFor(aud) {
+  const inv = _navLayoutInvData();
+  return inv ? canonicalLayout(inv, _navLayoutSaved ? _navLayoutSaved[aud] : emptyAudienceLayout(), aud) : emptyAudienceLayout();
+}
+function _nlDraft(aud) {
+  if (!_nl.drafts[aud]) _nl.drafts[aud] = _nlSavedFor(aud);
+  return _nl.drafts[aud];
+}
+function _nlDirty(aud) { return !!_nl.drafts[aud] && !sameLayout(_nl.drafts[aud], _nlSavedFor(aud)); }
+function _nlSet(aud, layout) {
+  const inv = _navLayoutInvData();
+  _nl.drafts[aud] = inv ? canonicalLayout(inv, layout, aud) : layout;
+  if (aud === 'admin' && _isAdmin()) {
+    _navLayoutPreview = _nlDirty('admin') ? { audience: 'admin', layout: _nl.drafts.admin } : null;
+    try { navLayoutApply(); } catch (e) { console.warn('sidebar layout preview', e); }
+  }
+}
+function _nlPlan(aud) {
+  const inv = _navLayoutInvData();
+  return inv ? planSidebar(inv, _nlDraft(aud), aud) : null;
+}
+function nlOpen() {
+  if (!_isAdmin()) return;
+  ['student', 'admin'].forEach(aud => { if (!_nlDirty(aud)) _nl.drafts[aud] = null; });
+  _nl.form = null; _nl.formErr = ''; _nl.err = '';
+  nlRender();
+  _nlBind();
+}
+function _nlGroupOptions(plan, current) {
+  const opts = [`<option value="${NAV_LAYOUT_TOP}"${current === null ? ' selected' : ''}>⬆ Top of the menu (no tab)</option>`];
+  plan.top.filter(r => r[0] === 'g').forEach(r => {
+    const g = plan.groups[r.slice(2)];
+    opts.push(`<option value="${escapeHtml(g.id)}"${current === g.id ? ' selected' : ''}>${escapeHtml((g.icon ? g.icon + ' ' : '') + g.label)}${g.hidden ? ' (hidden tab)' : ''}</option>`);
+  });
+  return opts.join('');
+}
+function _nlRowHtml(plan, ref, index, count) {
+  const t = ref[0], id = ref.slice(2);
+  const x = t === 'i' ? plan.items[id] : plan.links[id];
+  if (!x) return '';
+  const fixed = t === 'i' && NAV_LAYOUT_FIXED_LABEL.includes(id);
+  const renamable = t === 'l' || (!fixed && _navLayoutInv && _navLayoutInv.text.has(id));
+  const tags = [];
+  if (t === 'l') tags.push('<span class="nl-tag nl-tag-link" title="Opens in a new browser tab">link</span>');
+  if (x.locked) tags.push('<span class="nl-tag" title="This is the door back into this page, so it cannot be hidden from your menu">always shown</span>');
+  if (t === 'i' && /^(page:(character|leaderboard|adventure|arcade|tcg)$|id:navFps$|id:rpgHideToggle$)/.test(id)) tags.push('<span class="nl-tag" title="Students only see this while their game is switched on">game</span>');
+  const hiddenBtn = x.locked
+    ? `<button type="button" class="nl-btn nl-eye" disabled title="Always shown">👁</button>`
+    : `<button type="button" class="nl-btn nl-eye${x.hidden ? ' off' : ''}" data-nl-act="hide" title="${x.hidden ? 'Hidden — click to show it again' : 'Shown — click to hide it'}" aria-pressed="${x.hidden ? 'true' : 'false'}">${x.hidden ? '🚫' : '👁'}</button>`;
+  return `<div class="nl-row${x.effectiveHidden ? ' is-hidden' : ''}" data-nl-ref="${escapeHtml(ref)}" draggable="true">
+    <span class="nl-grip" title="Drag to move" aria-hidden="true">⋮⋮</span>
+    <span class="nl-ico" data-nl-ico="${escapeHtml(ref)}">${t === 'l' ? escapeHtml(x.icon) : ''}</span>
+    ${renamable
+      ? `<input class="nl-label-in" type="text" maxlength="${NAV_LAYOUT_LIMITS.label}" data-nl-input="label" value="${escapeHtml(x.label)}" placeholder="${escapeHtml(t === 'i' ? x.defaultLabel : 'Link name')}" aria-label="Name in the menu"${t === 'i' && x.label !== x.defaultLabel ? ` title="Renamed — originally “${escapeHtml(x.defaultLabel)}”. Clear the box to put the original name back."` : ' title="Type to rename it in the menu"'}>`
+      : `<span class="nl-label-fixed">${escapeHtml(x.label)}</span>`}
+    <span class="nl-tags">${tags.join('')}</span>
+    <span class="nl-row-btns">
+      <select class="nl-move" data-nl-input="move" aria-label="Which tab it sits in" title="Which tab it sits in">${_nlGroupOptions(plan, x.container)}</select>
+      <button type="button" class="nl-btn" data-nl-act="up" title="Move up"${index === 0 ? ' disabled' : ''}>▲</button>
+      <button type="button" class="nl-btn" data-nl-act="down" title="Move down"${index === count - 1 ? ' disabled' : ''}>▼</button>
+      ${t === 'l' ? `<button type="button" class="nl-btn" data-nl-act="editlink" title="Change the link">✎</button><button type="button" class="nl-btn nl-danger" data-nl-act="dellink" title="Remove the link">🗑</button>` : ''}
+      ${hiddenBtn}
+    </span>
+  </div>`;
+}
+function _nlGroupHtml(plan, id, index, count) {
+  const g = plan.groups[id];
+  const refs = g.items;
+  const shown = refs.filter(r => { const x = r[0] === 'i' ? plan.items[r.slice(2)] : plan.links[r.slice(2)]; return x && !x.hidden; }).length;
+  const open = _nl.open[id] !== false;
+  return `<section class="nl-group${g.hidden ? ' is-hidden' : ''}${g.custom ? ' is-custom' : ''}" data-nl-ref="g:${escapeHtml(id)}" draggable="true">
+    <header class="nl-group-head">
+      <span class="nl-grip" title="Drag to move this tab" aria-hidden="true">⋮⋮</span>
+      <button type="button" class="nl-btn nl-fold" data-nl-act="fold" aria-expanded="${open ? 'true' : 'false'}" title="${open ? 'Fold' : 'Unfold'}">${open ? '▾' : '▸'}</button>
+      <input class="nl-ico-in" type="text" maxlength="8" data-nl-input="gicon" value="${escapeHtml(g.icon)}" aria-label="Tab icon" title="Tab icon — any emoji">
+      <input class="nl-name-in" type="text" maxlength="${NAV_LAYOUT_LIMITS.label}" data-nl-input="glabel" value="${escapeHtml(g.label)}" placeholder="${escapeHtml(g.defaultLabel || 'Tab name')}" aria-label="Tab name">
+      <span class="nl-count">${shown} of ${refs.length} shown${g.custom ? ' · your tab' : ''}</span>
+      <span class="nl-row-btns">
+        <button type="button" class="nl-btn" data-nl-act="up" title="Move this tab up"${index === 0 ? ' disabled' : ''}>▲</button>
+        <button type="button" class="nl-btn" data-nl-act="down" title="Move this tab down"${index === count - 1 ? ' disabled' : ''}>▼</button>
+        ${g.custom ? `<button type="button" class="nl-btn nl-danger" data-nl-act="delgroup" title="Remove this tab — its functions go back to their original tab">🗑</button>` : ''}
+        <button type="button" class="nl-btn nl-eye${g.hidden ? ' off' : ''}" data-nl-act="hide" title="${g.hidden ? 'Hidden tab — click to show it' : 'Shown — click to hide the whole tab'}" aria-pressed="${g.hidden ? 'true' : 'false'}">${g.hidden ? '🚫' : '👁'}</button>
+      </span>
+    </header>
+    <div class="nl-items" data-nl-container="${escapeHtml(id)}"${open ? '' : ' hidden'}>
+      ${refs.length ? refs.map((r, i) => _nlRowHtml(plan, r, i, refs.length)).join('') : '<div class="nl-empty">Empty tab — drag functions here, or pick this tab in a function’s “Which tab” box. An empty tab is not shown in the menu.</div>'}
+    </div>
+  </section>`;
+}
+function _nlPreviewHtml(plan) {
+  const row = (ico, label) => `<div class="nl-pv-item"><span class="nl-pv-ico">${escapeHtml(ico || '•')}</span>${escapeHtml(label)}</div>`;
+  const out = [];
+  plan.top.forEach(r => {
+    const t = r[0], id = r.slice(2);
+    if (t === 'g') {
+      const g = plan.groups[id];
+      if (g.hidden) return;
+      const kids = g.items.map(k => k[0] === 'i' ? plan.items[k.slice(2)] : plan.links[k.slice(2)]).filter(x => x && !x.hidden);
+      if (!kids.length) return;
+      out.push(`<div class="nl-pv-group"><div class="nl-pv-head"><span class="nl-pv-ico">${escapeHtml(g.icon || '•')}</span>${escapeHtml(g.label)}<span class="nl-pv-n">${kids.length}</span></div>${kids.map(x => row(x.icon, x.label)).join('')}</div>`);
+    } else {
+      const x = t === 'i' ? plan.items[id] : plan.links[id];
+      if (x && !x.hidden) out.push(row(x.icon, x.label));
+    }
+  });
+  return out.join('') || '<div class="nl-pv-none">Nothing is shown.</div>';
+}
+function nlRender() {
+  const root = document.getElementById('nlRoot');
+  if (!root || !_isAdmin()) return;
+  const aud = _nl.aud;
+  const plan = _nlPlan(aud);
+  if (!plan) { root.innerHTML = '<div class="nl-card">The menu could not be read on this page.</div>'; return; }
+  const sum = planSummary(plan);
+  const dirty = _nlDirty(aud), otherDirty = _nlDirty(aud === 'admin' ? 'student' : 'admin');
+  const saved = _navLayoutSaved || emptyLayout();
+  const when = saved.updatedAt ? new Date(saved.updatedAt) : null;
+  const status = dirty
+    ? '<span class="nl-dot nl-dot-warn"></span>Unsaved changes — press Save to send them out'
+    : `<span class="nl-dot"></span>Saved${when && !isNaN(when) ? ' · ' + escapeHtml(when.toLocaleString()) : ''}${saved.updatedBy ? ' · by ' + escapeHtml(saved.updatedBy) : ''}`;
+  const topCount = plan.top.length;
+  const blocks = plan.top.map((r, i) => r[0] === 'g' ? _nlGroupHtml(plan, r.slice(2), i, topCount) : _nlRowHtml(plan, r, i, topCount)).join('');
+  let form = '';
+  if (_nl.form) {
+    const f = _nl.form;
+    const isLink = f.kind === 'link' || f.kind === 'editlink';
+    form = `<div class="nl-form" data-nl-form="${escapeHtml(f.kind)}">
+      <div class="nl-form-title">${f.kind === 'group' ? '➕ New tab' : f.kind === 'link' ? '🔗 Add a link' : '✎ Change the link'}</div>
+      <div class="nl-form-row">
+        <label class="nl-field nl-field-ico"><span>Icon</span><input type="text" maxlength="8" id="nlFormIcon" value="${escapeHtml(f.icon || '')}" placeholder="${isLink ? '🔗' : '📁'}"></label>
+        <label class="nl-field"><span>Name</span><input type="text" maxlength="${NAV_LAYOUT_LIMITS.label}" id="nlFormLabel" value="${escapeHtml(f.label || '')}" placeholder="${isLink ? 'e.g. Class Google Drive' : 'e.g. Revision'}"></label>
+        ${isLink ? `<label class="nl-field nl-field-wide"><span>Web address</span><input type="url" maxlength="${NAV_LAYOUT_LIMITS.url}" id="nlFormUrl" value="${escapeHtml(f.url || '')}" placeholder="https://…"></label>` : ''}
+        ${f.kind === 'link' ? `<label class="nl-field"><span>Put it in</span><select id="nlFormWhere">${_nlGroupOptions(plan, f.where || null)}</select></label>` : ''}
+      </div>
+      ${_nl.formErr ? `<div class="nl-form-err">${escapeHtml(_nl.formErr)}</div>` : ''}
+      <div class="nl-form-btns"><button type="button" class="btn btn-outline" data-nl-act="formcancel">Cancel</button><button type="button" class="btn btn-primary" data-nl-act="formok">${f.kind === 'editlink' ? 'Save link' : 'Add'}</button></div>
+    </div>`;
+  }
+  const scrollY = root.querySelector('.nl-main') ? window.scrollY : null;
+  const focus = document.activeElement && root.contains(document.activeElement) ? { id: document.activeElement.id, ref: document.activeElement.closest('[data-nl-ref]')?.getAttribute('data-nl-ref'), input: document.activeElement.getAttribute('data-nl-input'), pos: document.activeElement.selectionStart } : null;
+  root.innerHTML = `
+    <div class="nl-card nl-intro">
+      <p>Choose what is in the left-hand menu. <strong>Hide</strong> anything with 👁, <strong>rename</strong> it by typing over its name, <strong>file</strong> it under a different tab with its “Which tab” box (or drag it there), and add <strong>new tabs</strong> and <strong>links</strong> of your own. Nothing changes for anyone until you press <strong>Save</strong>; then every student’s menu rearranges straight away, even if they are already signed in.</p>
+    </div>
+    <div class="nl-bar">
+      <div class="nl-seg" role="tablist" aria-label="Whose menu">
+        <button type="button" role="tab" class="${aud === 'student' ? 'on' : ''}" aria-selected="${aud === 'student'}" data-nl-act="aud" data-nl-aud="student">🎒 Students’ menu${_nlDirty('student') ? ' •' : ''}</button>
+        <button type="button" role="tab" class="${aud === 'admin' ? 'on' : ''}" aria-selected="${aud === 'admin'}" data-nl-act="aud" data-nl-aud="admin">🧑‍🏫 My admin menu${_nlDirty('admin') ? ' •' : ''}</button>
+      </div>
+      <div class="nl-status">${status}</div>
+    </div>
+    ${_navLayoutErr ? `<div class="nl-card nl-warn">The saved layout could not be read live (${escapeHtml(_navLayoutErr)}). You are seeing the last copy this browser had.</div>` : ''}
+    ${_nl.err ? `<div class="nl-card nl-warn">${escapeHtml(_nl.err)}</div>` : ''}
+    <div class="nl-tools">
+      <button type="button" class="btn btn-outline" data-nl-act="addgroup">➕ New tab</button>
+      <button type="button" class="btn btn-outline" data-nl-act="addlink">🔗 Add a link</button>
+      <button type="button" class="btn btn-outline" data-nl-act="foldall">${Object.values(_nl.open).some(v => v === false) ? '▾ Unfold all' : '▸ Fold all'}</button>
+      <button type="button" class="btn btn-outline" data-nl-act="showall" title="Show every tab and function again (names and order are kept)">👁 Show everything</button>
+      <button type="button" class="btn btn-outline" data-nl-act="reset" title="Put this menu back exactly as the app ships it — your own tabs and links are removed">↺ Original layout</button>
+    </div>
+    ${aud === 'student' ? `<label class="nl-lock"><input type="checkbox" data-nl-input="lock"${plan.lockHidden ? ' checked' : ''}> <span><strong>Hidden means switched off.</strong> A student cannot open a hidden page from a link or a Home tile either — they are taken back to Home. Untick to only tidy the menu.</span></label>` : `<div class="nl-note">This is your own menu as admin. It changes on your screen as you edit, so you can see it before you save. 🧩 Sidebar Layout always stays on it.</div>`}
+    ${form}
+    <div class="nl-cols">
+      <div class="nl-main">
+        <div class="nl-top" data-nl-container="${NAV_LAYOUT_TOP}">${blocks}</div>
+      </div>
+      <aside class="nl-preview" aria-label="Preview">
+        <div class="nl-preview-title">${aud === 'student' ? 'What students will see' : 'Your menu'}</div>
+        <div class="nl-preview-sum">${sum.tabs} tab${sum.tabs === 1 ? '' : 's'} · ${sum.shown} shown · ${sum.hidden} hidden</div>
+        <div class="nl-pv">${_nlPreviewHtml(plan)}</div>
+        ${aud === 'student' ? '<div class="nl-preview-foot">Game items only appear while a student’s game is switched on, and a tab with nothing in it is left out.</div>' : ''}
+      </aside>
+    </div>
+    <div class="nl-savebar${dirty || otherDirty ? ' is-dirty' : ''}">
+      <span class="nl-savebar-text">${dirty || otherDirty ? 'You have unsaved changes' + (otherDirty && !dirty ? ' on the other menu' : '') + '.' : 'Everything is saved.'}</span>
+      <button type="button" class="btn btn-outline" data-nl-act="discard"${dirty || otherDirty ? '' : ' disabled'}>Discard changes</button>
+      <button type="button" class="btn btn-primary" data-nl-act="save"${(dirty || otherDirty) && !_nl.busy ? '' : ' disabled'}>${_nl.busy ? 'Saving…' : '💾 Save for everyone'}</button>
+    </div>`;
+  // Icons: the SVG or emoji each item really carries in the sidebar, cloned
+  // from index.html's own markup (never from saved text).
+  root.querySelectorAll('[data-nl-ico]').forEach(slot => {
+    const ref = slot.getAttribute('data-nl-ico');
+    if (ref[0] !== 'i' || !_navLayoutInv) return;
+    const el = _navLayoutInv.el.get(ref.slice(2));
+    if (!el) return;
+    const src = el.id === 'navTcgWrap' ? (el.querySelector('.ico') || null) : (el.querySelector(':scope > svg') || el.querySelector(':scope > .ico'));
+    if (src) slot.append(src.cloneNode(true));
+    else slot.textContent = _navLayoutIconOf(el) || '•';
+  });
+  if (scrollY !== null) window.scrollTo(0, scrollY);
+  if (focus) {
+    let el = focus.id ? document.getElementById(focus.id) : null;
+    if (!el && focus.ref && focus.input) el = root.querySelector(`[data-nl-ref="${CSS.escape(focus.ref)}"] [data-nl-input="${CSS.escape(focus.input)}"]`);
+    if (el) { el.focus(); try { if (focus.pos != null && el.setSelectionRange) el.setSelectionRange(focus.pos, focus.pos); } catch (_) {} }
+  }
+}
+function _nlRefOf(target) {
+  const row = target && target.closest ? target.closest('[data-nl-ref]') : null;
+  return row ? row.getAttribute('data-nl-ref') : '';
+}
+function _nlChange(fn) {
+  const aud = _nl.aud;
+  _nlSet(aud, fn(_nlDraft(aud)));
+  nlRender();
+}
+function _nlOnClick(ev) {
+  const b = ev.target.closest('[data-nl-act]');
+  if (!b || b.disabled) return;
+  const act = b.getAttribute('data-nl-act');
+  const ref = _nlRefOf(b);
+  const aud = _nl.aud;
+  const plan = _nlPlan(aud);
+  switch (act) {
+    case 'aud': _nl.aud = b.getAttribute('data-nl-aud') === 'admin' ? 'admin' : 'student'; _nl.form = null; _nl.formErr = ''; nlRender(); return;
+    case 'up': case 'down': _nlChange(L => layoutNudge(L, ref, act === 'up' ? -1 : 1)); return;
+    case 'hide': {
+      const t = ref[0], id = ref.slice(2);
+      const now = t === 'g' ? plan.groups[id].hidden : t === 'i' ? plan.items[id].hidden : plan.links[id].hidden;
+      _nlChange(L => layoutSetHidden(L, ref, !now));
+      return;
+    }
+    case 'fold': { const id = ref.slice(2); _nl.open[id] = _nl.open[id] === false; nlRender(); return; }
+    case 'foldall': {
+      const anyClosed = Object.values(_nl.open).some(v => v === false);
+      Object.keys(plan.groups).forEach(id => { _nl.open[id] = anyClosed ? true : false; });
+      nlRender();
+      return;
+    }
+    case 'delgroup': {
+      const g = plan.groups[ref.slice(2)];
+      if (!g || !confirm('Remove the tab “' + g.label + '”?\n\nThe functions in it go back to the tab they came from' + (g.items.some(r => r[0] === 'l') ? ', and its links move to the top of the menu' : '') + '.')) return;
+      _nlChange(L => layoutRemoveGroup(L, g.id));
+      return;
+    }
+    case 'dellink': {
+      const k = plan.links[ref.slice(2)];
+      if (!k || !confirm('Remove the link “' + k.label + '”?')) return;
+      _nlChange(L => layoutRemoveLink(L, ref.slice(2)));
+      return;
+    }
+    case 'editlink': {
+      const k = plan.links[ref.slice(2)];
+      if (!k) return;
+      _nl.form = { kind: 'editlink', id: ref.slice(2), label: k.label, icon: k.icon, url: k.url };
+      _nl.formErr = ''; nlRender();
+      document.getElementById('nlFormLabel')?.focus();
+      return;
+    }
+    case 'addgroup': _nl.form = { kind: 'group' }; _nl.formErr = ''; nlRender(); document.getElementById('nlFormLabel')?.focus(); return;
+    case 'addlink': _nl.form = { kind: 'link' }; _nl.formErr = ''; nlRender(); document.getElementById('nlFormLabel')?.focus(); return;
+    case 'formcancel': _nl.form = null; _nl.formErr = ''; nlRender(); return;
+    case 'formok': _nlFormSubmit(); return;
+    case 'showall': _nlChange(L => layoutShowAll(L)); showToast('Every tab and function is shown again — press Save to send it out', 'info'); return;
+    case 'reset':
+      if (!confirm('Put the ' + (aud === 'admin' ? 'admin' : 'students’') + ' menu back to the original layout?\n\nYour own tabs and links on it are removed, and every name and position goes back to how the app ships. Nothing is sent out until you press Save.')) return;
+      _nlChange(() => emptyAudienceLayout());
+      return;
+    case 'discard':
+      if (!confirm('Throw away the changes you have not saved?')) return;
+      _nl.drafts = { student: null, admin: null };
+      _nl.form = null;
+      _navLayoutPreview = null;
+      try { navLayoutApply(); } catch (_) {}
+      nlRender();
+      return;
+    case 'save': nlSave(); return;
+  }
+}
+function _nlFormSubmit() {
+  const f = _nl.form;
+  if (!f) return;
+  const label = document.getElementById('nlFormLabel')?.value || '';
+  const icon = document.getElementById('nlFormIcon')?.value || '';
+  const url = document.getElementById('nlFormUrl')?.value || '';
+  const where = document.getElementById('nlFormWhere')?.value || NAV_LAYOUT_TOP;
+  const aud = _nl.aud;
+  if (f.kind === 'group') {
+    if (!cleanText(label, NAV_LAYOUT_LIMITS.label)) { _nl.form = { ...f, label, icon }; _nl.formErr = 'Give the tab a name.'; nlRender(); return; }
+    const r = layoutAddGroup(_nlDraft(aud), { label, icon });
+    if (!r.id) { _nl.formErr = 'There are already ' + NAV_LAYOUT_LIMITS.groups + ' tabs of your own.'; nlRender(); return; }
+    _nl.open[r.id] = true;
+    _nl.form = null; _nl.formErr = '';
+    _nlSet(aud, r.layout);
+    nlRender();
+    showToast('➕ Tab added at the bottom of the menu — move functions into it with their “Which tab” box', 'success');
+    return;
+  }
+  if (f.kind === 'link') {
+    const r = layoutAddLink(_nlDraft(aud), { label, icon, url }, where);
+    if (r.error) { _nl.form = { ...f, label, icon, url, where }; _nl.formErr = r.error; nlRender(); return; }
+    _nl.form = null; _nl.formErr = '';
+    _nlSet(aud, r.layout);
+    nlRender();
+    return;
+  }
+  if (f.kind === 'editlink') {
+    const r = layoutUpdateLink(_nlDraft(aud), f.id, { label, icon, url });
+    if (r.error) { _nl.form = { ...f, label, icon, url }; _nl.formErr = r.error; nlRender(); return; }
+    _nl.form = null; _nl.formErr = '';
+    _nlSet(aud, r.layout);
+    nlRender();
+  }
+}
+// Typing a name re-draws only the preview (and, for the admin's own menu,
+// the sidebar) so the box being typed in keeps its caret.
+let _nlTypeT = 0;
+function _nlOnInput(ev) {
+  const inp = ev.target.closest('[data-nl-input]');
+  if (!inp) return;
+  const kind = inp.getAttribute('data-nl-input');
+  const ref = _nlRefOf(inp);
+  const aud = _nl.aud;
+  if (kind === 'label' || kind === 'glabel') _nlSet(aud, layoutSetLabel(_nlDraft(aud), ref, inp.value));
+  else if (kind === 'gicon') _nlSet(aud, layoutSetIcon(_nlDraft(aud), ref, inp.value));
+  else return;
+  clearTimeout(_nlTypeT);
+  _nlTypeT = setTimeout(() => {
+    const pv = document.querySelector('#nlRoot .nl-pv');
+    const plan = _nlPlan(aud);
+    if (pv && plan) pv.innerHTML = _nlPreviewHtml(plan);
+    const bar = document.querySelector('#nlRoot .nl-savebar');
+    if (bar && !bar.classList.contains('is-dirty')) nlRender();
+  }, 120);
+}
+function _nlOnChange(ev) {
+  const inp = ev.target.closest('[data-nl-input]');
+  if (!inp) return;
+  const kind = inp.getAttribute('data-nl-input');
+  const ref = _nlRefOf(inp);
+  if (kind === 'move') {
+    const to = inp.value;
+    _nlChange(L => layoutMove(L, ref, to, Infinity));
+    if (to !== NAV_LAYOUT_TOP) _nl.open[to] = true;
+    nlRender();
+    return;
+  }
+  if (kind === 'lock') { _nlChange(L => layoutSetLockHidden(L, inp.checked)); return; }
+  if (kind === 'label' || kind === 'glabel' || kind === 'gicon') nlRender();   // tidy the words once the box is left
+}
+// Drag and drop: a function or link can be dropped on any row (before or
+// after it, by which half of the row the pointer is over) or into an empty
+// tab; a tab can only be dropped among the top level.
+function _nlDropTarget(ev) {
+  const drag = _nl.drag;
+  if (!drag) return null;
+  const isGroup = drag[0] === 'g';
+  let row = ev.target.closest('[data-nl-ref]');
+  if (row && row.getAttribute('data-nl-ref') === drag) return null;
+  if (row && isGroup && row.parentElement && row.parentElement.getAttribute('data-nl-container') !== NAV_LAYOUT_TOP) row = row.closest('.nl-group');
+  if (row) {
+    const box = row.parentElement && row.parentElement.closest('[data-nl-container]');
+    const container = box ? box.getAttribute('data-nl-container') : NAV_LAYOUT_TOP;
+    if (isGroup && container !== NAV_LAYOUT_TOP) return null;
+    const r = row.getBoundingClientRect();
+    const head = row.classList.contains('nl-group') ? row.querySelector('.nl-group-head').getBoundingClientRect() : r;
+    // Over a tab's head with a function: drop INTO the tab, at its end.
+    if (!isGroup && row.classList.contains('nl-group') && ev.clientY <= head.bottom && ev.clientY >= head.top) {
+      return { el: row, mode: 'into', container: row.getAttribute('data-nl-ref').slice(2), index: Infinity };
+    }
+    const after = ev.clientY > r.top + r.height / 2;
+    const list = Array.from(box ? box.children : []).filter(c => c.hasAttribute('data-nl-ref'));
+    const idx = list.indexOf(row);
+    return { el: row, mode: after ? 'after' : 'before', container, index: idx + (after ? 1 : 0) };
+  }
+  const box = ev.target.closest('[data-nl-container]');
+  if (!box) return null;
+  const container = box.getAttribute('data-nl-container');
+  if (isGroup && container !== NAV_LAYOUT_TOP) return null;
+  return { el: box, mode: 'into', container, index: Infinity };
+}
+function _nlClearDrop() {
+  document.querySelectorAll('#nlRoot .nl-drop-before, #nlRoot .nl-drop-after, #nlRoot .nl-drop-into').forEach(el => el.classList.remove('nl-drop-before', 'nl-drop-after', 'nl-drop-into'));
+}
+let _nlBound = false;
+function _nlBind() {
+  if (_nlBound) return;
+  const root = document.getElementById('nlRoot');
+  if (!root) return;
+  _nlBound = true;
+  root.addEventListener('click', _nlOnClick);
+  root.addEventListener('input', _nlOnInput);
+  root.addEventListener('change', _nlOnChange);
+  root.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter' && ev.target.closest('.nl-form')) { ev.preventDefault(); _nlFormSubmit(); }
+    if (ev.key === 'Escape' && _nl.form) { _nl.form = null; _nl.formErr = ''; nlRender(); }
+  });
+  root.addEventListener('dragstart', ev => {
+    const row = ev.target.closest && ev.target.closest('[data-nl-ref]');
+    // Typing in a box must not start a drag.
+    if (!row || ev.target.closest('input, select, button')) { ev.preventDefault(); return; }
+    _nl.drag = row.getAttribute('data-nl-ref');
+    row.classList.add('nl-dragging');
+    try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', _nl.drag); } catch (_) {}
+  });
+  root.addEventListener('dragover', ev => {
+    const t = _nlDropTarget(ev);
+    _nlClearDrop();
+    if (!t) return;
+    ev.preventDefault();
+    t.el.classList.add(t.mode === 'into' ? 'nl-drop-into' : t.mode === 'after' ? 'nl-drop-after' : 'nl-drop-before');
+  });
+  root.addEventListener('dragleave', ev => { if (!root.contains(ev.relatedTarget)) _nlClearDrop(); });
+  root.addEventListener('drop', ev => {
+    const t = _nlDropTarget(ev);
+    _nlClearDrop();
+    if (!t) return;
+    ev.preventDefault();
+    const ref = _nl.drag;
+    _nl.drag = null;
+    if (t.container !== NAV_LAYOUT_TOP) _nl.open[t.container] = true;
+    _nlChange(L => layoutMove(L, ref, t.container, t.index));
+  });
+  root.addEventListener('dragend', () => { _nl.drag = null; _nlClearDrop(); root.querySelectorAll('.nl-dragging').forEach(el => el.classList.remove('nl-dragging')); });
+}
+async function nlSave() {
+  if (!_isAdmin() || _nl.busy) return;
+  const inv = _navLayoutInvData();
+  if (!inv) return;
+  const out = {
+    version: NAV_LAYOUT_VERSION,
+    student: canonicalLayout(inv, _nlDraft('student'), 'student'),
+    admin: canonicalLayout(inv, _nlDraft('admin'), 'admin'),
+    updatedAt: new Date().toISOString(),
+    updatedBy: (currentUser && currentUser.email) || ''
+  };
+  // An untouched default menu is stored as no layout at all, so it keeps
+  // following index.html as the app grows.
+  if (sameLayout(out.student, canonicalLayout(inv, emptyAudienceLayout(), 'student'))) out.student = emptyAudienceLayout();
+  if (sameLayout(out.admin, canonicalLayout(inv, emptyAudienceLayout(), 'admin'))) out.admin = emptyAudienceLayout();
+  _nl.busy = true; _nl.err = '';
+  nlRender();
+  try {
+    await setDoc(_navLayoutRef(), out);
+    _nl.drafts = { student: null, admin: null };
+    _navLayoutPreview = null;
+    _navLayoutTake(out, 'save');
+    const s = planSummary(planSidebar(inv, out.student, 'student'));
+    showToast(`💾 Saved — every student now sees ${s.shown} item${s.shown === 1 ? '' : 's'} in ${s.tabs} tab${s.tabs === 1 ? '' : 's'}`, 'success');
+  } catch (e) {
+    _nl.err = 'Could not save: ' + ((e && e.message) || e) + '. Nothing was changed for the students.';
+    showToast('Could not save the menu', 'error');
+  } finally {
+    _nl.busy = false;
+    nlRender();
+  }
 }
 
 // Every admin account's uid, primary admin (config/admin) first. Approved
@@ -6281,6 +7076,11 @@ function navigateTo(page) {
   if (_isEmployee() && EMPLOYEE_PAGES.indexOf(page) < 0) page = 'create';
   if (page === 'pirate-rift') { openPirateRift(); return; }
   if (page === 'grand-line') { grandLinePortal.open(); return; }
+  // 🧩 A page the admin hid on the students' menu is switched off for them,
+  // however they arrive (a Home tile, a link, #psle). Home is never blocked.
+  if (navLayoutBlocks(page)) { showToast('That page is switched off at the moment.', 'info'); page = rpgHomePage(); }
+  // 🧩 Sidebar Layout decides every student's menu, so it is the admin's.
+  if (page === 'navlayout' && !_isAdmin()) page = rpgHomePage();
   // 🎨 The Photo Editor is an admin tool. The nav item carries `admin-only` so
   // nobody else sees it, and an employee has already been sent to `create` by
   // the line above — this is the guard for arriving at the page any other way,
@@ -6392,6 +7192,7 @@ function navigateTo(page) {
   if (page === 'mistakebank') mkRender();
   if (page === 'mistakes') mkStudentRender();
   if (page === 'photoedit') _peStatus('');
+  if (page === 'navlayout') nlOpen();
   if (page === 'student') {
     populateStudentSelect();
     renderStudentView();
@@ -86306,6 +87107,7 @@ function _mkLogQuiz(e, right, ms) {
 function mkStudentReload() { _mkStudent.loaded = false; _mkSess = null; mkStudentRender(); }
 
 window.navigateTo = navigateTo;
+window.nlRender = nlRender;
 // 🐾 Mistake Bank and Learn from Mistakes — both pages are built from inline on* handlers.
 window.mkRender = mkRender;
 window.mkReload = mkReload;

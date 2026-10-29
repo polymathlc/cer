@@ -2,6 +2,54 @@
 
 Guidance for Claude when working in this repo.
 
+## 🧩 Sidebar layout — the admin decides what the menu holds (v1.451.0)
+
+`sidebar-layout-core.mjs` (pure: inventory + layout → plan, and every editor operation), the `SIDEBAR LAYOUT`
+block in `app.js` (`_navLayoutInventory` / `navLayoutApply` / `navLayoutInit` / `navLayoutWatch` /
+`navLayoutBlocks`, then the editor `_nl*` / `nlOpen` / `nlRender` / `nlSave`), the 🧩 **Sidebar Layout** nav item
+(⚙️ Tools & Settings, admin only), `#page-navlayout` / `#nlRoot` and the `.nl-*` / `.nav-layout-hidden` /
+`.nav-link-custom` CSS in `index.html`.
+
+The owner found the menu too complicated. On 🧩 Sidebar Layout the admin edits TWO menus — **🎒 Students' menu**
+and **🧑‍🏫 My admin menu** — and can hide any tab or function (👁), rename it (type over the name), file a function
+under another tab (its "Which tab" box, or drag it), reorder (▲▼ or drag), add tabs of their own (➕ New tab) and
+link tabs (🔗 Add a link, http(s) only, opens in a new tab), "👁 Show everything" and "↺ Original layout". Nothing
+changes until 💾 Save; the save writes ONE document, **`config/sidebarLayout`** (`{ version, student, admin,
+updatedAt, updatedBy }`, never `config/admin` — that is the bank pointer), and every signed-in student's sidebar
+rearranges at once through `onSnapshot`. The last layout a device saw is cached (`navLayout:v1`) and applied at
+sign-in before the live read lands, so there is no flash of the full menu.
+
+- **THE INVENTORY IS READ ONCE FROM index.html'S MARKUP**, before anything moves, and every apply starts again from
+  it. Item keys: `page:<data-page>[@admin|@student]` (role class), `id:<id>` (`navFps`, `rpgHideToggle`,
+  `consultLogBtn`), `page:tcg` for the Realm of Embers wrap (moved together with its `#navTcgHome` anchor, so
+  `_tcgPlaceNavItem` keeps working), `fn:<onclick function>@admin` for the AI guides, `install`. **Renaming a
+  `data-page`, an id or an onclick function orphans saved settings for that item** — it simply goes back to its
+  index.html place, nothing breaks, but the admin's hide/rename on it is lost. A layout that does not mention an
+  item (a new release's item) puts it where index.html has it, beside its neighbour.
+- **HIDING IS THE CLASS `nav-layout-hidden` (`display:none !important`), NEVER INLINE STYLE.** The role code,
+  `rpgApplyVisibility`, the TCG / Strike doors and the consult bridge all write inline `display`, late; a class
+  survives them. `navGroupsSync` and the bookmark band both treat `.nav-layout-hidden` as hidden (a hidden tab
+  with no visible items gets `nav-group-empty`; a bookmark cannot bring a hidden item back).
+- **A ROLE GATE ALWAYS WINS.** The layout goes on in `configureSidebarForRole` AFTER the role gates and BEFORE the
+  stars and the groups. Each audience's plan only contains what that audience can see (an admin-only item can
+  never be filed onto the students' menu). **An employee always gets index.html's menu** (no layout applied).
+- **HIDDEN MEANS SWITCHED OFF for students** (`lockHidden`, on by default, a tick box on the students' menu):
+  `navLayoutBlocks(page)` in `navigateTo` sends a student to Home when every item opening that page is hidden —
+  a Home tile, a link or `#psle` included — and a student already on a page that a live save switches off is
+  taken home. Home and Community are never switched off; admins are never blocked. The guard sits AFTER the
+  pirate-rift / grand-line lines in `navigateTo` (two harnesses slice the function up to them), so those two
+  overlays are hidden from the menu but not blocked.
+- **THE EDITOR'S DOOR CANNOT BE HIDDEN** from the admin's menu (`NAV_LAYOUT_LOCKED`); hide ⚙️ Tools & Settings
+  and it moves to the top level. While the admin edits their OWN menu the draft is shown live on their sidebar
+  (`_navLayoutPreview`); the students' menu is drawn in the preview column. An untouched default menu is stored
+  as an empty layout so it keeps following index.html.
+- Labels of `consultLogBtn` and `rpgHideToggle` are rewritten live by their owners, so they cannot be renamed.
+- **`polymathlc/math` carries the collapsible groups but NOT this yet.**
+- Run `node --test tools/sidebar-layout-tests.mjs`, `node tools/nav-groups-tests.mjs` and
+  `PW=… node tools/sidebar-layout-browser.mjs` (index.html's real sidebar + the shipped block + a fake live
+  Firestore: the admin edits/drags/saves, a student signs in, a save arrives live, an employee, a cached layout,
+  computer and phone). CI: `.github/workflows/sidebar-layout.yml`.
+
 ## 📲 Installable app: PC, Android, iPhone and iPad (v1.449.0)
 
 - **It is a Progressive Web App, not a store app.** `manifest.webmanifest` (relative `id`/`start_url`/`scope` = `./`, so the same file works at `polymathlc.github.io/cer/` and at the root of `polymathlc.com.sg` after the website sync), icons in `assets/app-icons/` (the Polymath M mark cut from `assets/branding/polymath-learning-centre.png` on white: 192/512 `any`, 192/512 `maskable`, 180 `apple-touch-icon`, 32 favicon), and the head tags in `index.html` (manifest, theme-color `#0b6b4f` = `--primary`, apple-touch-icon, apple-mobile-web-app-*).
