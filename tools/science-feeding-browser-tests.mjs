@@ -240,9 +240,17 @@ try{
   assert.notEqual(currentFamily(selected.id),firstFamily);
   assert.ok(selected.pool.every(id=>currentFamily(id)!==firstFamily));
   selected=await gameNext(game);assert.equal(selected.id,'electrical-revision');
-  selected=await gameNext(game);assert.equal(selected.id,null);
-  assert.match(await game.locator('#question').innerText(),/No suitable unseen questions/);
-  pass('fresh embedded requests space question families, use nearby revision next and pause before basic P3 fallback');
+  // 🔁 Endless cycle: the fresh pool is spent, so the game keeps going with
+  // suitable questions again — never the unsuitable P3 / P4 work.
+  const suitable=[...currentIds,'electrical-revision'],round=[];
+  for(let index=0;index<suitable.length;index++){
+    selected=await gameNext(game);
+    assert.ok(suitable.includes(selected.id),'a recycled question must still be suitable: '+selected.id);
+    round.push(selected.id);
+  }
+  assert.equal(new Set(round).size,suitable.length,'one recycled round serves every suitable question once before any repeats');
+  for(let index=0;index<6;index++){selected=await gameNext(game);assert.ok(suitable.includes(selected.id),'the cycle never ends');}
+  pass('fresh embedded requests space question families, use nearby revision next, then cycle suitable questions endlessly without basic P3 fallback');
 
   await setup(mixedGrades,'P6','Same child');game=await openGame();
   assert.ok(currentIds.includes((await gameNext(game)).id));
@@ -255,7 +263,7 @@ try{
 
   await setup([tooBasic],'P6','Older child');game=await openGame();
   assert.equal((await gameNext(game)).id,null);
-  assert.match(await game.locator('#question').innerText(),/No suitable unseen questions/);
+  assert.match(await game.locator('#question').innerText(),/No suitable questions are set for your level yet/);
   pass('a P3-only database pauses a P6 game instead of filling the run with unsuitable easy questions');
 
   await setup(mixedGrades,'P6','Older child');
@@ -292,7 +300,10 @@ try{
     }
     assert.equal(new Set(sequence).size,peers.length,'repeated requests must exhaust distinct P6 peers before easier revision');
     assert.equal((await gameNext(game)).id,'electrical-revision');
-    assert.equal((await gameNext(game)).id,null,'random ordering must never revive unsuitable basic work');
+    for(let index=0;index<peers.length+2;index++){
+      const again=(await gameNext(game)).id;
+      assert.ok(peerIds.has(again)||again==='electrical-revision','the endless cycle must never revive unsuitable basic work: '+again);
+    }
   }
   pass('all five embedded modes randomise suitable peers without repeats and keep P6 ahead of P5/P3');
 

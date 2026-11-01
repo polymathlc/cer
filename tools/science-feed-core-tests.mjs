@@ -314,3 +314,56 @@ test('combined-topic concepts keep their category instead of sharing a split top
   const fit=evaluateScienceFit(challenge,opts(bank,{progress}));
   assert.equal(fit.eligible,false); assert.equal(fit.diagnostic.evidenceCount,0);
 });
+
+// 🔁 Arcade endless cycle (v1.451.1): games recycle seen questions instead of
+// stopping, while practice keeps its never-repeat rule.
+const mcq = (id, extra = {}) => q(id, { blocks: [{ id: 'stem', type: 'text', content: `<p>Which part of the plant in set ${id} takes in water?</p>` },
+  { id: 'c', type: 'mcq', correctId: 'a', options: [{ id: 'a', text: 'Roots' }, { id: 'b', text: 'Petals' }] }], ...extra });
+
+test('a game with every suitable question seen recycles them instead of stopping', () => {
+  const bank = ['a', 'b', 'c', 'd'].map(id => mcq(id)), seen = Object.fromEntries(bank.map(item => [item.id, now - 1000]));
+  assert.deepEqual(ids(planScienceQuestions(bank, opts(bank, { seen, randomize: true, game: true }))), []);
+  const plan = planScienceQuestions(bank, opts(bank, { seen, randomize: true, game: true, recycle: true, limit: 1, random: seededRandom(3) }));
+  assert.equal(plan.questions.length, 1);
+  assert.deepEqual(plan.recycled, ids(plan));
+  const all = planScienceQuestions(bank, opts(bank, { seen, randomize: true, game: true, recycle: true, limit: Infinity, random: seededRandom(3) }));
+  assert.deepEqual(ids(all).slice().sort(), ['a', 'b', 'c', 'd']);
+});
+
+test('recycling never serves unsuitable, broken, retired or above-level questions', () => {
+  const good = mcq('good'), above = mcq('above', { topic: 'Cells' }), broken = mcq('broken', { blocks: [] }),
+    retired = mcq('retired', { notInSyllabus: true }), quarantined = mcq('quarantined', { practiceQuarantined: true });
+  const bank = [good, above, broken, retired, quarantined], seen = Object.fromEntries(bank.map(item => [item.id, now - 1000]));
+  for (let seed = 0; seed < 16; seed++) {
+    const plan = planScienceQuestions(bank, opts(bank, { seen, randomize: true, game: true, recycle: true, limit: Infinity, random: seededRandom(seed) }));
+    assert.deepEqual(ids(plan), ['good']);
+  }
+});
+
+test('a recycle round brings back each question once, freshest-shuffled, before any repeat', () => {
+  const bank = ['a', 'b', 'c', 'd', 'e'].map(id => mcq(id)), seen = Object.fromEntries(bank.map(item => [item.id, now - 1000]));
+  const cycle = { a: now - 50, c: now - 90 };
+  for (let seed = 0; seed < 24; seed++) {
+    const picked = ids(planScienceQuestions(bank, opts(bank, { seen, randomize: true, game: true, recycle: true, cycle, limit: Infinity, random: seededRandom(seed) })));
+    assert.deepEqual(picked.slice(0, 3).sort(), ['b', 'd', 'e']);
+    assert.deepEqual(picked.slice(3), ['c', 'a']);
+  }
+  const starts = new Set();
+  for (let seed = 0; seed < 32; seed++) starts.add(ids(planScienceQuestions(bank, opts(bank, { seen, randomize: true, game: true, recycle: true, limit: 1, random: seededRandom(seed) })))[0]);
+  assert.ok(starts.size > 2, 'each round is reshuffled, not a fixed order');
+});
+
+test('fresh questions always come before recycled ones and top up a full set', () => {
+  const bank = ['a', 'b', 'c', 'fresh'].map(id => mcq(id)), seen = { a: now - 1000, b: now - 1000, c: now - 1000 };
+  assert.deepEqual(ids(planScienceQuestions(bank, opts(bank, { seen, randomize: true, game: true, recycle: true, limit: 1 }))), ['fresh']);
+  const set = planScienceQuestions(bank, opts(bank, { seen, randomize: true, game: true, recycle: true, limit: 3 }));
+  assert.equal(ids(set)[0], 'fresh'); assert.equal(set.questions.length, 3); assert.equal(set.recycled.length, 2);
+  assert.ok(!set.recycled.includes('fresh'));
+});
+
+test('practice never recycles: the cycle is for games only', () => {
+  const bank = ['a', 'b'].map(id => mcq(id)), seen = { a: now - 1000, b: now - 1000 };
+  assert.deepEqual(ids(planScienceQuestions(bank, opts(bank, { seen }))), []);
+  assert.deepEqual(ids(planScienceQuestions(bank, opts(bank, { seen, recycle: true, manual: true }))), ['a', 'b']);
+  assert.deepEqual(planScienceQuestions(bank, opts(bank, { seen, manual: true, recycle: true })).recycled, []);
+});

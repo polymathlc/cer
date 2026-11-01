@@ -61,6 +61,10 @@ test('a stale repeated parent ID cannot immediately cycle in a child game',async
   const f=bridgeFixture();let pending=f.bridge.refresh();f.reply();await pending;assert.equal(f.bridge.take().id,'a');
   pending=f.bridge.refresh();f.reply();await pending;assert.equal(f.bridge.take(),null);
 });
+test('a question the portal recycled (endless arcade cycle) passes the 15-minute repeat guard',async()=>{
+  const f=bridgeFixture();let pending=f.bridge.refresh();f.reply();await pending;assert.equal(f.bridge.take().id,'a');
+  pending=f.bridge.refresh();f.reply({questions:[{...row(),recycled:true}]});await pending;assert.equal(f.bridge.take().id,'a');
+});
 test('an observed diagram failure withdraws the question without recording a wrong answer',async()=>{
   const f=bridgeFixture(),pending=f.bridge.refresh();f.reply();await pending;const q=f.bridge.stamp(f.bridge.take());
   f.bridge.fail(q,'https://school.example/missing.png');assert.equal(f.bridge.current(q),false);assert.equal(f.bridge.take(),null);

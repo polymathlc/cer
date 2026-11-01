@@ -15,7 +15,10 @@ history identity. Hashes contain no answer keys or question text. Saved local
 exposures and existing cloud attempts are unioned into the ledger before new
 questions are delivered. Past exposures that were never saved cannot be
 reconstructed. Explicitly chosen revision can reopen a question and still
-records its exposure; automatic feeds never fall back to seen questions.
+records its exposure; automatic practice feeds never fall back to seen questions.
+Games are the exception: when a game's fresh pool is spent it recycles seen
+questions in shuffled rounds (claimed with `allowSeen`, so the ledger keeps its
+first marker) rather than stopping — see docs/student-feeding.md.
 
 An unavailable server or incomplete migration blocks new automatic delivery and
 shows a retry message. A cloud listener refreshes other tabs/devices, while the

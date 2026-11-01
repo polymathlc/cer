@@ -45,7 +45,9 @@
         },
         take: function (predicate) {
           var now = Date.now();
-          var q = pool.find(function (item) { return (!predicate || predicate(item)) && now - (shown.get(key + ':' + item.id) || 0) >= 900000; });
+          // A question the portal RECYCLED (the arcade's endless cycle) is
+          // due again by design, so the 15-minute repeat guard lets it through.
+          var q = pool.find(function (item) { return (!predicate || predicate(item)) && (item.recycled === true || now - (shown.get(key + ':' + item.id) || 0) >= 900000); });
           pool = []; // Another question always asks the parent to re-evaluate.
           if (q) shown.set(key + ':' + q.id, now);
           return q || null;
