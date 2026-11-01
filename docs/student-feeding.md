@@ -54,7 +54,12 @@ modes, waiting for an old review date or using another device never resets this
 history. Exact visible copies under different IDs are excluded as well; private
 answer corrections cannot turn an old question into a fresh one. Truly new
 numerical variants retain the separate fifteen-minute family spacing rule.
-A depleted suitable pool stops instead of cycling or falling back to samples.
+A depleted suitable pool never falls back to samples. Practice, worksheets and
+quests stop; **games cycle instead** (v1.451.1): once nothing fresh is left, the
+planner tops a game's request up from questions the learner has already seen,
+still grade-, quality-, syllabus- and image-checked. A per-learner round
+(`scienceFeed:gameCycle:<learner>`) brings every suitable question back once, in
+a fresh shuffle, before any comes back twice, then starts a new shuffled round.
 
 The portal and standalone Science Strike wait for account history before
 automatic feeding. Existing per-child served caches and completed attempts are

@@ -215,7 +215,7 @@ function randomizeGameRows(rows, context, options) {
 export function planScienceQuestions(candidates, options = {}) {
   const source = (Array.isArray(candidates) ? candidates : []).filter(Boolean);
   const context = options.context || buildScienceFeedContext({ ...options, bank: options.bank || source });
-  const rows = [], blocked = []; let reviewCount = 0;
+  const rows = [], blocked = [], recyclable = []; let reviewCount = 0;
   source.forEach((q, order) => {
     const id = str(q.id), fit = evaluateScienceFit(q, { context, manual: options.manual });
     const quality = context.qualityById.get(id) || evaluateQuestionQuality(q, context.options.qualityOptions?.(q) || {});
@@ -225,7 +225,13 @@ export function planScienceQuestions(candidates, options = {}) {
       : retired && !(options.manual && options.allowRetired) ? 'outside-syllabus'
       : !quality.eligible || context.unavailableImageIds.has(id)
         ? 'question-blocked' : !options.manual && quality.tier !== 'sound' ? 'question-review' : '';
-    if (reason) { blocked.push({ id, reason }); return; }
+    if (reason) {
+      blocked.push({ id, reason });
+      // A seen question is still a GOOD question: it passed grade, quality and
+      // syllabus. Only the arcade's endless cycle (options.recycle) uses it.
+      if (reason === 'already-seen' && quality.tier === 'sound' && !retired) recyclable.push({ q, order, fit });
+      return;
+    }
     if (quality.tier !== 'sound') reviewCount++;
     rows.push({ q, order, fit });
   });
@@ -254,6 +260,70 @@ export function planScienceQuestions(candidates, options = {}) {
   const originals = new Map(source.map(q => [str(q.id), q]));
   if (available) blocked.push(...available.blocked);
   blocked.push(...scheduled.blocked);
-  return { questions: scheduled.questions.map(q => originals.get(str(q.id))).filter(Boolean), blocked,
+  const questions = scheduled.questions.map(q => originals.get(str(q.id))).filter(Boolean);
+  // 🔁 Arcade endless cycle. When the fresh pool cannot fill the request, the
+  // games top it up from questions this learner has ALREADY seen, so a game
+  // never stops with "no more questions". Grade, quality, syllabus and image
+  // checks still apply; only the "seen" ledger and the repeat spacing are
+  // waived. See recycleScienceGameRows for the order.
+  const recycled = [];
+  if (options.recycle && !options.manual) {
+    const want = Number.isFinite(options.limit) ? Math.max(0, options.limit) : 1;
+    if (questions.length < want) {
+      const chosen = new Set(questions.map(q => str(q.id)));
+      const room = Number.isFinite(options.limit) ? options.limit - questions.length : Infinity;
+      for (const row of recycleScienceGameRows(rows.concat(recyclable).filter(row => !chosen.has(str(row.q.id))), context, options)) {
+        if (recycled.length >= room) break;
+        const original = originals.get(str(row.q.id));
+        if (original) recycled.push(original);
+      }
+    }
+  }
+  return { questions: questions.concat(recycled), recycled: recycled.map(q => str(q.id)), blocked,
     reasons: [...new Set(blocked.map(row => row.reason))], reviewCount, nextReviewAt: available?.nextReviewAt || scheduled.nextReviewAt };
+}
+
+// The endless cycle's order, for a pool that has run out of fresh questions.
+// options.cycle maps a question id to when it was last recycled IN THE CURRENT
+// ROUND (the app keeps it per learner and starts a new round once every
+// question in it has come back once). So:
+//   1. questions not yet recycled this round come first, in a fresh shuffle
+//      (best grade tier first, then a random order inside each tier), one per
+//      family before any second variant of the same story;
+//   2. then questions already recycled this round, the longest-ago first —
+//      the app sees that and opens a new round, reshuffled.
+// Nothing here repeats the question that was just served unless it is the
+// only suitable question left.
+export function recycleScienceGameRows(rows, context, options = {}) {
+  const random = typeof options.random === 'function' ? options.random : Math.random;
+  const cycle = options.cycle && typeof options.cycle === 'object' ? options.cycle : {};
+  const unique = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const id = str(row?.q?.id);
+    if (id && !unique.has(id)) unique.set(id, row);
+  }
+  const lastAt = id => { const at = Number(cycle[id]); return Number.isFinite(at) && at > 0 ? at : 0; };
+  const fresh = [], again = [];
+  for (const [id, row] of unique) (lastAt(id) ? again : fresh).push(row);
+  const keyed = fresh.map(row => {
+    const sample = Number(random());
+    return { row, key: Number.isFinite(sample) ? sample : 0.5 };
+  });
+  keyed.sort((a, b) => a.row.fit.diagnostic.priorityTier - b.row.fit.diagnostic.priorityTier || a.key - b.key);
+  again.sort((a, b) => lastAt(str(a.q.id)) - lastAt(str(b.q.id)) || a.order - b.order);
+  const freshOrdered = keyed.map(item => item.row);
+  if (options.onePerFamily === false) return freshOrdered.concat(again);
+  // One per family first inside each group, so twenty copies of one story
+  // cannot fill a round, and every fresh question still comes before any
+  // question that has already been recycled this round.
+  const spread = group => {
+    const families = new Set(), first = [], rest = [];
+    for (const row of group) {
+      const id = str(row.q.id), family = context?.catalog?.families?.get(id) || id;
+      if (families.has(family)) rest.push(row);
+      else { families.add(family); first.push(row); }
+    }
+    return first.concat(rest);
+  };
+  return spread(freshOrdered).concat(spread(again));
 }

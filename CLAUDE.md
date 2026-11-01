@@ -2,6 +2,28 @@
 
 Guidance for Claude when working in this repo.
 
+## 🔁 Arcade games never run out of questions (v1.451.1)
+
+Students who had seen every suitable question were told "No suitable unseen questions are available" and the arcade
+game stopped. The owner wants questions sent in **infinite cycles**. Games (every `game: true` plan — the five embedded
+iframes via `_sdQuestionsPayload`, Hades, Crew Defense, and the in-app `_scienceFeedNextGame` quizzes) now recycle;
+practice, worksheets and quests still never repeat.
+
+- `planScienceQuestions(…, { recycle: true, cycle })` in `science-feed-core.js`: when the fresh plan cannot fill the
+  request, it tops it up from rows blocked only as `already-seen` or by repeat spacing (grade, quality, syllabus,
+  retired and failed-image gates still apply) in the order `recycleScienceGameRows` gives: not-yet-recycled this round
+  first (best grade tier, then shuffled, one per family first), then already-recycled, oldest first. Returns `recycled`.
+- `_scienceFeedPlan` turns it on for `opts.game && !manual` (`opts.recycle === false` opts out) and remembers recycled
+  ids in `_scienceFeedRecycled`; `_scienceFeedClaim` claims those with `allowSeen` and records the round in
+  `_scienceFeedCycleNote` (localStorage `scienceFeed:gameCycle:<learner key>`, memory fallback). A recycled id already
+  in the round means the round is complete, so it starts a new one (new shuffle).
+- `_sdQuestionsPayload` flags recycled rows `recycled: true`, and `science-feed-bridge.js`'s 15-minute repeat guard lets
+  those through (otherwise a tiny bank would still stall inside the iframe).
+- Science Strike (`fps.html`, `science-strike-feed.js`) is NOT in the arcade and still stops when its pool is spent.
+- Tests: `tools/science-feed-core-tests.mjs` (recycle cases), `tools/science-feeding-integration-tests.mjs`,
+  `tools/science-feed-standalone-tests.mjs`, `tools/science-feeding-browser-tests.mjs` (all five embedded games keep
+  cycling suitable work and never revive unsuitable P3 work).
+
 ## 🧩 Sidebar layout — the admin decides what the menu holds (v1.451.0)
 
 `sidebar-layout-core.mjs` (pure: inventory + layout → plan, and every editor operation), the `SIDEBAR LAYOUT`

@@ -192,7 +192,8 @@ test('a served exact copy cannot repeat through a new title, mode or freshly bui
   const {api,state}=harness([original,copy]);
   api.queue([original,copy]);await api.next();await api.next();
   assert.equal(state.renders.length,1);assert.deepEqual(api.build(),[]);
-  assert.equal((await api.nextGame({pool:[{id:'copy',feedSource:copy}]})),null);
+  // 🔁 Practice never repeats; a GAME with nothing fresh left cycles instead.
+  assert.equal((await api.nextGame({pool:[{id:'copy',feedSource:copy}]}))?.id,'copy');
 });
 
 test('blocked browser storage still remembers game questions, family copies and results across game runs', async () => {
@@ -201,7 +202,8 @@ test('blocked browser storage still remembers game questions, family copies and 
   const makeRun=()=>({pool:[{id:'original',feedSource:original},{id:'copy',feedSource:copy}]});
   const picked=(await api.nextGame(makeRun()));assert.ok(['original','copy'].includes(picked.id));
   api.result(picked.id,1,1);
-  assert.equal((await api.nextGame(makeRun())),null);
+  // 🔁 Endless cycle: with nothing fresh left the game recycles, never stops.
+  const again=(await api.nextGame(makeRun()));assert.ok(again&&['original','copy'].includes(again.id));
   assert.ok(api.store('served')[picked.id]>0);
   assert.equal(api.store('history')[picked.id].latestFrac,1);
   assert.equal(state.storage.size,0);
@@ -245,7 +247,10 @@ test('a P6 admin game preview follows its selected school level and shared fresh
   assert.deepEqual(api.gameRows().map(row=>row.id),['p6']);
   assert.deepEqual(api.plan().questions.map(row=>row.id),['p3','p6','s1'],'question authoring retains unrestricted visibility');
   const row=(await api.nextGame({pool:[{id:'p3',feedSource:low},{id:'p6',feedSource:near},{id:'s1',feedSource:high}]}));
-  assert.equal(row.id,'p6');assert.deepEqual(api.gameRows(),[]);
+  assert.equal(row.id,'p6');
+  // 🔁 Seen, so it comes back only through the endless cycle — and the level
+  // gate still holds: never the P3 or S1 question.
+  assert.deepEqual(api.gameRows().map(row=>row.id),['p6']);
 });
 
 test('an admin game preview needs an actual selected school level instead of silently assuming S1', async () => {

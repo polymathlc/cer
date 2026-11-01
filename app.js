@@ -76,7 +76,7 @@ import { SCIENCE_COACH_INSTRUCTIONS } from "./science-coach-core.js";
 // marking call, same motion preference, one card after the coach.
 import { mountMistakeAnalysis, resetMistakeAnalysis } from "./science-mistakes.js";
 import { renderMistakeAnimalAvatar } from "./science-mistake-art.js";
-import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit, scienceQuestionLevel, scienceQuestionContentKey } from "./science-feed-core.js?v=question-history-1";
+import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit, scienceQuestionLevel, scienceQuestionContentKey } from "./science-feed-core.js?v=arcade-cycle-1";
 import { createStudentQuestionHistory } from "./student-question-history.js?v=1";
 import { evaluateQuestionQuality, questionQualitySignature, buildQuestionQualitySummary, questionHasUnresolvedStudentFlag } from "./science-feed-quality.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -4534,7 +4534,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.451.0';
+const APP_VERSION = 'v1.451.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -35379,8 +35379,13 @@ async function _scienceFeedClaim(questions, profile, manual = false) {
   const identity = JSON.stringify(_scienceFeedHistoryIdentity(profile)), generation = _scienceHistoryGeneration;
   if (!await _scienceFeedEnsure(profile) || identity !== JSON.stringify(_scienceFeedHistoryIdentity(profile))) return false;
   try {
-    const accepted = await _scienceFeedHistoryClient(profile).claimMany(questions.map(q => ({ id: String(q.id), contentKey: scienceQuestionContentKey(q), at: Date.now() })), { allowSeen: manual });
-    return accepted && identity === JSON.stringify(_scienceFeedHistoryIdentity(profile));
+    // A recycled arcade question was seen before by design, so its claim must
+    // not be refused for that (the ledger keeps its first marker unchanged).
+    const recycled = questions.filter(q => _scienceFeedIsRecycled(q.id, profile)).map(q => String(q.id));
+    const accepted = await _scienceFeedHistoryClient(profile).claimMany(questions.map(q => ({ id: String(q.id), contentKey: scienceQuestionContentKey(q), at: Date.now() })), { allowSeen: manual || recycled.length > 0 });
+    const ok = accepted && identity === JSON.stringify(_scienceFeedHistoryIdentity(profile));
+    if (ok && !manual && recycled.length) _scienceFeedCycleNote(recycled, profile);
+    return ok;
   } catch (error) { if (generation === _scienceHistoryGeneration) _scienceHistoryErrors.set(identity, 'Your question history could not sync. Check your connection and try again.'); console.warn('Question history claim', error); return false; }
 }
 async function _scienceFeedTake(candidates, opts = {}) {
@@ -35427,7 +35432,7 @@ function _scienceFeedGameLevel(profile) {
 function _scienceFeedGameMessage() {
   if (!_scienceFeedHistoryReady()) return _scienceFeedHistoryError() || 'Loading your question history. Please try again in a moment.';
   return !_scienceFeedGameLevel() ? 'Choose your current school level in Settings before starting a game.'
-    : 'No suitable unseen questions are available. Try another topic or choose a worksheet for revision.';
+    : 'No suitable questions are set for your level yet. Ask your teacher to add some, then try again.';
 }
 function _scienceFeedMeta() {
   if (_scienceFeedMetaCache) return _scienceFeedMetaCache;
@@ -35523,9 +35528,56 @@ function _scienceFeedPlan(candidates, opts = {}) {
   }
   if (!_scienceFeedHistoryReady(opts.profile)) { _scienceFeedEnsure(opts.profile); return { questions: [], blocked: [], reviewCount: 0, reasons: ['history-loading'] }; }
   const ready = (candidates || []).filter(q => q && (opts.allowRetired || qInSyllabus(q)) && qAvailableToViewer(q));
-  return planScienceQuestions(ready, { ...opts, manual, context: opts.context || _scienceFeedContext(opts.profile,
+  // 🔁 Games never run dry: once the fresh pool is spent they cycle the
+  // learner's suitable questions again, reshuffled (_scienceFeedCycle*).
+  const recycle = !!opts.game && !manual && opts.recycle !== false;
+  const plan = planScienceQuestions(ready, { ...opts, manual, recycle, cycle: recycle ? _scienceFeedCycleRead(opts.profile) : undefined,
+    context: opts.context || _scienceFeedContext(opts.profile,
     opts.game ? _scienceFeedGameLevel(opts.profile) : _scienceFeedLevel(opts.profile)) });
+  if (recycle) (plan.recycled || []).forEach(id => _scienceFeedRecycled.add(_scienceFeedRecycleTag(id, opts.profile)));
+  return plan;
 }
+// ---- 🔁 Arcade endless cycle (v1.451.1) ----
+// The permanent history means a learner who has played through every suitable
+// question used to be told "No suitable unseen questions are available" and
+// the game stopped. Games now cycle instead: the planner tops the request up
+// from questions already seen (still grade-, quality- and syllabus-checked),
+// and this per-learner ROUND remembers which of them came back already, so
+// every suitable question returns once, in a fresh shuffle, before any returns
+// twice. When the round is complete it starts again with a new shuffle.
+// Practice, worksheets and quests are untouched: they still never repeat.
+const _scienceFeedRecycled = new Set();
+const _scienceFeedCycleMemory = new Map();
+function _scienceFeedRecycleTag(id, profile) { return _scienceFeedKey(profile) + '|' + String(id); }
+function _scienceFeedCycleKey(profile) { return 'scienceFeed:gameCycle:' + _scienceFeedKey(profile); }
+function _scienceFeedCycleRead(profile) {
+  const key = _scienceFeedCycleKey(profile);
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) {}
+  const value = stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : (_scienceFeedCycleMemory.get(key) || {});
+  const clean = {};
+  for (const [id, at] of Object.entries(value)) if (Number(at) > 0) clean[id] = Number(at);
+  return clean;
+}
+function _scienceFeedCycleWrite(map, profile) {
+  const key = _scienceFeedCycleKey(profile);
+  _scienceFeedCycleMemory.set(key, map);
+  try { localStorage.setItem(key, JSON.stringify(map)); } catch (_) {}
+}
+// Called once a recycled question is really handed to a game. A question that
+// is already in the round means every other one has come back too, so a new
+// round begins (with this question as its first entry, so it is not served
+// again straight away).
+function _scienceFeedCycleNote(ids, profile) {
+  const list = (ids || []).map(String).filter(Boolean);
+  if (!list.length) return;
+  let round = _scienceFeedCycleRead(profile);
+  if (list.some(id => Object.hasOwn(round, id))) round = {};
+  const now = Date.now();
+  list.forEach((id, i) => { round[id] = now + i; });
+  _scienceFeedCycleWrite(round, profile);
+}
+function _scienceFeedIsRecycled(id, profile) { return _scienceFeedRecycled.has(_scienceFeedRecycleTag(id, profile)); }
 function _scienceFeedMessage(profile) {
   if (!_scienceFeedHistoryReady(profile)) return _scienceFeedHistoryError(profile) || 'Loading your question history. Please try again in a moment.';
   return !_scienceFeedLevel(profile) ? 'Choose your current school level in Settings before starting practice.'
@@ -62746,7 +62798,10 @@ async function _sdQuestionsPayload(source) {
   if (questions.length) {
     const bank = new Map(_scienceFeedSources().map(q => [String(q.id), q]));
     const selected = await _scienceFeedTake(questions.map(q => bank.get(String(q.id))).filter(Boolean), { game: true, randomize: true, limit: 1 });
-    questions = selected.flatMap(q => questions.filter(row => String(row.id) === String(q.id)));
+    questions = selected.flatMap(q => questions.filter(row => String(row.id) === String(q.id)))
+      // The game's own 15-minute repeat guard steps aside for a recycled
+      // question — the endless cycle already decided it is due again.
+      .map(row => _scienceFeedIsRecycled(row.id) ? { ...row, recycled: true } : row);
   }
   if (feedKey !== _scienceFeedKey() || feedLevel !== _scienceFeedGameLevel()) questions = [];
   return {
