@@ -181,7 +181,7 @@
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
     padding: 10px 18px; border-radius: var(--radius-md);
-    border: 1px solid var(--border-subtle); background: var(--bg-primary);
+    border: 1px solid var(--border-subtle); background: var(--bg-primary); color: var(--text-primary);
     font-weight: 600; font-size: var(--font-size-sm); letter-spacing: 0.01em;
     box-shadow: var(--shadow-button);
     transition: box-shadow var(--transition-base), transform var(--transition-base), background var(--transition-fast), border-color var(--transition-fast);
@@ -305,6 +305,8 @@
     padding: 12px 18px; margin-bottom: var(--space-lg);
     border-radius: var(--radius-md); background: #1A1A1A; color: #fff; font-size: var(--font-size-sm);
   }
+  /* v1.3.2: buttons always set their own dark text. They used to inherit, so inside this dark bar
+     the level picker, subject choices and Back to admin came out white on white. */
   .preview-bar .btn { box-shadow: none; }
   .class-card { padding: 0; overflow: hidden; }
   .class-card + .class-card { margin-top: var(--space-lg); }
@@ -405,7 +407,7 @@
   .form-grid .span-4 { grid-column: 1 / -1; }
   .choice-row { display: flex; gap: 6px; flex-wrap: wrap; }
   .choice {
-    padding: 9px 14px; border-radius: 10px; border: 1px solid var(--border-medium); background: #fff;
+    padding: 9px 14px; border-radius: 10px; border: 1px solid var(--border-medium); background: #fff; color: var(--text-primary);
     font-weight: 600; font-size: var(--font-size-sm); transition: all var(--transition-fast);
   }
   .choice:hover { border-color: var(--accent-dark); }
