@@ -197,3 +197,44 @@ test('a batch of uploads reads as one line and one bar', () => {
   assert.equal(Core.uploadStateLabel('added'), '✓ added');
   assert.equal(Core.uploadStateLabel('failed: x'), 'failed: x');
 });
+
+/* ---- 📌 Current worksheet / Next worksheet: what Ans Key shows (portal v1.4.0) ---- */
+test('Ans Key shows worksheet 1 as current and 2 as next before the first lesson', () => {
+  const c = course();
+  assert.equal(Core.ansKeyAt(c), 0);
+  assert.equal(Core.ansKeyState(c, 0), 'current');
+  assert.equal(Core.ansKeyState(c, 1), 'next');
+  assert.equal(Core.ansKeyState(c, 2), 'queued');
+  assert.equal(Core.ansKeyAt(course({ worksheetIds: [] })), -1, 'an empty class has nothing to show');
+});
+
+test('on worksheet 3: 1 and 2 are done, 3 is current, 4 is next, the rest are queued', () => {
+  const c = course({ currentIndex: 2, releasedThrough: 7 });
+  assert.deepEqual(c.worksheetIds.map((_, i) => Core.ansKeyState(c, i)),
+    ['done', 'done', 'current', 'next', 'queued', 'queued', 'queued', 'queued', 'queued', 'queued']);
+  assert.equal(Core.ansKeyState(c, 10), '');
+  assert.equal(Core.ansKeyState(c, -1), '');
+  assert.equal(Core.ansKeyAt(course({ worksheetIds: ['a', 'b'], currentIndex: 6 })), 1, 'a shortened list keeps a real place');
+});
+
+test('Finished moves the class one step and releases like opening the next sheet', () => {
+  const c = course({ currentIndex: 2, releasedThrough: 7 });
+  assert.deepEqual(Core.finishUpdate(c), { currentIndex: 3, currentDocId: 'd', releasedThrough: 8, lastFinishedIndex: 2, lastFinishedDocId: 'c' });
+  const fresh = course();
+  assert.deepEqual(Core.finishUpdate(fresh), { currentIndex: 1, currentDocId: 'b', releasedThrough: 6, lastFinishedIndex: 0, lastFinishedDocId: 'a' },
+    'finishing worksheet 1 before the class opened anything');
+  assert.equal(Core.finishUpdate(course({ currentIndex: 9, releasedThrough: 9 })), null, 'nothing after the last one');
+  assert.equal(Core.finishUpdate(course({ worksheetIds: [] })), null);
+  const after = course(Core.finishUpdate(c));
+  assert.equal(Core.ansKeyState(after, 3), 'current', 'the old Next is now Current');
+  assert.equal(Core.ansKeyState(after, 4), 'next', 'and the one after it is loaded as Next');
+  assert.equal(Core.ansKeyState(after, 2), 'done');
+});
+
+test('the labels stay with their worksheets when the list is reordered', () => {
+  const c = course({ currentIndex: 2, releasedThrough: 7 });
+  const moved = Core.moveItem(c.worksheetIds, 2, 0);
+  const after = course(Object.assign({ worksheetIds: moved }, Core.remapProgress(c, moved)));
+  assert.equal(after.worksheetIds[Core.ansKeyAt(after)], 'c', 'the class is still on the same worksheet');
+  assert.equal(Core.ansKeyState(after, 1), 'next');
+});

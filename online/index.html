@@ -52,6 +52,15 @@
     The Ans Key app moves a class along: when the teacher opens worksheet n,
     the class is on n and everything up to n + 5 is released (worksheet 3 →
     up to 8). Released stays released. Admins can also set both numbers here.
+
+  Current worksheet / Next worksheet (portal v1.4.0, anskey v1.176.0)
+    The class list is a queue. In the teacher's Ans Key list each class shows
+    only its Current worksheet (the one it is on and has yet to finish;
+    worksheet 1 before the first lesson) and its Next worksheet; the rest
+    wait in Ans Key's "Queued in class lists" band. The next one loads by
+    itself when the class moves on: the teacher opens the Next worksheet, or
+    presses "Finished" (in Ans Key under the Current card, or here in the
+    class's "Class is on" card). Core.ansKeyState mirrors Ans Key's rule.
     The portal itself only ever READS releases for students.
 -->
 <style>
@@ -247,6 +256,9 @@
   .chip-warn { background: var(--warn-bg); color: var(--warn-ink); }
   .chip-danger { background: var(--danger-bg); color: var(--danger-ink); }
   .chip-dark { background: var(--text-primary); color: #fff; }
+  /* 📌 What Ans Key shows: the Current worksheet and the Next one it has loaded. */
+  .chip-current { background: #EAF8F2; color: #0B6B4F; border: 1px solid #9ED9C3; }
+  .chip-next { background: #F0F2FD; color: #3346A8; border: 1px solid #C3CBF2; }
   .chip-outline { background: transparent; border: 1px solid var(--border-medium); }
 
   /* ===== Sign-in / states ===== */
@@ -453,6 +465,12 @@
   .seq-row .ws-num { width: 36px; height: 36px; font-size: 0.82rem; border-radius: 10px; }
   .seq-row.is-current .ws-num { background: var(--text-primary); color: #fff; }
   .seq-row.is-released .ws-num { background: var(--accent-light); color: var(--accent-ink); }
+  .seq-row.ak-current { background: linear-gradient(90deg, #F2FBF7, transparent 70%); }
+  .seq-row.ak-next { background: linear-gradient(90deg, #F5F7FE, transparent 70%); }
+  .btn-finish { margin-top: 10px; width: 100%; justify-content: center; border: 1px dashed #9ED9C3; background: #F5FCF9; color: #0B6B4F; }
+  .btn-finish:hover { background: #EAF8F2; }
+  .finish-note { margin-top: 10px; }
+  .tile-next { margin-top: 2px; color: var(--text-secondary); }
   .seq-row .name-edit { border: 1px solid transparent; background: transparent; padding: 6px 8px; border-radius: 8px; width: 100%; font-weight: 600; font-size: 0.92rem; }
   .seq-row .name-edit:hover { border-color: var(--border-subtle); }
   .seq-row .name-edit:focus { outline: none; border-color: var(--accent-dark); background: #fff; box-shadow: 0 0 0 3px var(--accent-bg); }
@@ -680,8 +698,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="portal-core.js?v=1.3.1"></script>
-<script src="portal.js?v=1.3.1"></script>
+<script src="portal-core.js?v=1.4.0"></script>
+<script src="portal.js?v=1.4.0"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="Polymath Worksheets" data-app-key="online" data-app-icon="assets/app-icons/icon-192.png" data-accent="#00695C" data-sw="sw.js" data-floating="auto"></script>
 </body>
 </html>

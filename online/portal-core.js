@@ -135,6 +135,43 @@
     }
     return out;
   }
+  /* ---- 📌 What Ans Key shows: Current worksheet and Next worksheet ----
+     The same rule as the Ans Key app's `onlineQueueState` (anskey v1.176.0).
+     The class list here is the queue. Ans Key shows each class's CURRENT
+     worksheet (the one the class is on and has yet to finish; worksheet 1
+     before the first lesson) and its NEXT worksheet in the lesson, and keeps
+     the rest queued. The next one loads by itself when the class moves on:
+     the teacher opens the Next worksheet, or taps Finished. */
+  function ansKeyAt(course) {
+    var ids = courseIds(course);
+    if (!ids.length) return -1;
+    var cur = num(course && course.currentIndex, -1);
+    if (cur < 0) return 0;
+    return Math.min(Math.floor(cur), ids.length - 1);
+  }
+  // 'done' | 'current' | 'next' | 'queued', or '' outside the list.
+  function ansKeyState(course, index) {
+    var ids = courseIds(course);
+    if (!(index >= 0 && index < ids.length)) return '';
+    var at = ansKeyAt(course);
+    if (index === at) return 'current';
+    if (index === at + 1) return 'next';
+    if (index < at) return 'done';
+    return 'queued';
+  }
+  // "Finished": the class moves from its current worksheet to the next one,
+  // releasing as far ahead as opening it in Ans Key would. Null on the last.
+  function finishUpdate(course) {
+    var ids = courseIds(course);
+    var at = ansKeyAt(course);
+    if (at < 0 || at + 1 >= ids.length) return null;
+    var update = progressUpdate(course, at + 1);
+    if (!update) return null;
+    update.lastFinishedIndex = at;
+    update.lastFinishedDocId = ids[at];
+    return update;
+  }
+
   // The same arithmetic the Ans Key app uses when the teacher opens a sheet.
   function progressUpdate(course, seq, options) {
     var ids = courseIds(course);
@@ -398,6 +435,7 @@
     naturalCompare: naturalCompare, worksheetNameFromFile: worksheetNameFromFile,
     courseIds: courseIds, currentIndex: currentIndex, releasedThrough: releasedThrough, releasedCount: releasedCount, lockedCount: lockedCount,
     worksheetState: worksheetState, releasedWorksheets: releasedWorksheets, nextWorksheets: nextWorksheets, progressUpdate: progressUpdate, percent: percent,
+    ansKeyAt: ansKeyAt, ansKeyState: ansKeyState, finishUpdate: finishUpdate,
     memberSees: memberSees, coursesForMember: coursesForMember, compareCourses: compareCourses,
     moveItem: moveItem, remapProgress: remapProgress,
     toMillis: toMillis, editedMillis: editedMillis, formatDay: formatDay, formatClock: formatClock, parseAnnotations: parseAnnotations,

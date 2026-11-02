@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.3.2';
+  var APP_VERSION = 'v1.4.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -806,7 +806,14 @@
       '<div class="title">' + h(Core.courseTitle(course)) + '</div>' +
       '<div class="progress" aria-hidden="true"><div class="released" style="width:' + Core.percent(rel, total) + '%"></div><div class="done" style="width:' + Core.percent(cur + 1, total) + '%"></div></div>' +
       '<div class="small muted">' + (total ? (cur >= 0 ? 'On worksheet ' + (cur + 1) + ' of ' + total : 'Not started · ' + total + ' worksheets') + ' · ' + rel + ' released' : 'No worksheets yet') + '</div>' +
+      (total ? '<div class="small muted tile-next">' + h(nextInAnsKeyText(course)) + '</div>' : '') +
       '</button>';
+  }
+  // 📌 What Ans Key has loaded for this class right now, in one line.
+  function nextInAnsKeyText(course) {
+    var at = Core.ansKeyAt(course), total = Core.courseIds(course).length;
+    if (at < 0) return '';
+    return 'In Ans Key: current ' + (at + 1) + (at + 1 < total ? ' · next ' + (at + 2) : ' · the last one');
   }
   function classesTabHtml() {
     var courses = courseList();
@@ -827,7 +834,7 @@
       '<button class="back-link" type="button" data-action="close-course">← All classes</button>' +
       '<div class="course-head"><div><div class="row">' + levelChip(course.level) + subjectChip(course.subject) + dayChip(course) + '</div>' +
         '<h1 class="page-title" style="margin-top:10px">' + h(Core.courseTitle(course)) + '</h1>' +
-        '<p class="page-subtitle">' + total + ' worksheet' + (total === 1 ? '' : 's') + ' in teaching order. Opening one in Ans Key moves the class there.</p></div>' +
+        '<p class="page-subtitle">' + total + ' worksheet' + (total === 1 ? '' : 's') + ' in teaching order. Ans Key shows the current worksheet and loads the next one by itself; the rest wait their turn here.</p></div>' +
         '<div class="row"><button class="btn btn-sm" type="button" data-action="edit-course">Edit class</button>' +
         '<button class="btn btn-sm btn-danger" type="button" data-action="delete-course">Delete class</button></div></div>' +
       '<div class="control-strip">' +
@@ -836,7 +843,8 @@
           '<input id="currentInput" type="number" min="1" max="' + Math.max(1, total) + '" value="' + Math.max(1, cur + 1) + '" aria-label="Worksheet the class is on">' +
           '<button class="btn btn-xs" type="button" data-action="step" data-target="currentInput" data-delta="1" aria-label="Later">+</button>' +
           '<button class="btn btn-xs btn-primary" type="button" data-action="set-current"' + (total ? '' : ' disabled') + '>Set</button></div>' +
-          '<div class="small muted" style="margin-top:8px">Releases up to ' + Core.RELEASE_AHEAD + ' ahead, as Ans Key does.</div></div>' +
+          '<div class="small muted" style="margin-top:8px">Releases up to ' + Core.RELEASE_AHEAD + ' ahead, as Ans Key does.</div>' +
+          finishControlHtml(course) + '</div>' +
         '<div class="card control"><div class="label">Released to students</div><div class="big">' + (rel >= 0 ? 'Up to ' + (rel + 1) : 'None yet') + '</div>' +
           '<div class="stepper"><button class="btn btn-xs" type="button" data-action="step" data-target="releaseInput" data-delta="-1" aria-label="Fewer">−</button>' +
           '<input id="releaseInput" type="number" min="0" max="' + total + '" value="' + (rel + 1) + '" aria-label="Release up to worksheet">' +
@@ -860,8 +868,9 @@
       html += '<div class="card seq-list">';
       ids.forEach(function (id, i) {
         var st = Core.worksheetState(course, i);
-        var status = st === 'current' ? '<span class="chip chip-dark">Class is here</span>' : i <= rel ? '<span class="chip chip-ok">Released</span>' : '<span class="chip">Waiting</span>';
-        html += '<div class="seq-row' + (st === 'current' ? ' is-current' : i <= rel ? ' is-released' : '') + '">' +
+        var status = seqStatusHtml(course, i);
+        var ak = Core.ansKeyState(course, i);
+        html += '<div class="seq-row' + (st === 'current' ? ' is-current' : i <= rel ? ' is-released' : '') + (ak === 'current' ? ' ak-current' : ak === 'next' ? ' ak-next' : '') + '">' +
           '<div class="ws-num">' + (i + 1) + '</div>' +
           '<div><input class="name-edit" id="name-' + h(id) + '" type="text" value="' + h(docName(id)) + '" data-action-change="rename" data-id="' + h(id) + '" aria-label="Name of worksheet ' + (i + 1) + '">' +
             '<div class="ws-sub" style="padding-left:8px">' + (pagesLabel(id) ? h(pagesLabel(id)) : '') + '</div></div>' +
@@ -877,6 +886,54 @@
       html += '</div>';
     }
     return html + '</div></div>';
+  }
+  /* 📌 The labels in the teaching order say what Ans Key shows: the
+     worksheet the class has yet to finish is the Current worksheet, the one
+     after it is loaded into Ans Key as the Next worksheet, and the rest are
+     queued here (released to students or still waiting). */
+  function seqStatusHtml(course, i) {
+    var ak = Core.ansKeyState(course, i);
+    var rel = Core.releasedThrough(course);
+    var started = Core.currentIndex(course) >= 0;
+    if (ak === 'current') return '<span class="chip chip-current" data-tooltip="' + (started ? 'The class is on this one and has yet to finish it' : 'The first lesson starts here') + '">▶ Current worksheet</span>';
+    if (ak === 'next') return '<span class="chip chip-next" data-tooltip="Loaded into Ans Key, ready for the next lesson">⏭ Next worksheet</span>';
+    if (ak === 'done') return '<span class="chip chip-ok">✓ Done</span>';
+    return i <= rel ? '<span class="chip chip-ok">Released · queued</span>' : '<span class="chip">Queued</span>';
+  }
+  // ✓ Finished: the same move as opening the Next worksheet in Ans Key.
+  function finishControlHtml(course) {
+    var total = Core.courseIds(course).length;
+    if (!total) return '';
+    var at = Core.ansKeyAt(course);
+    if (at + 1 >= total) return '<div class="small muted finish-note">The class is on the last worksheet in its list.</div>';
+    return '<button class="btn btn-xs btn-finish" type="button" data-action="finish-current" data-tooltip="Worksheet ' + (at + 2) + ' becomes current and worksheet ' + (at + 3 <= total ? at + 3 : at + 2) + ' loads into Ans Key as next">' +
+      '✓ Worksheet ' + (at + 1) + ' finished · load the next</button>';
+  }
+  async function finishCurrent(button) {
+    var course = state.courses[state.courseId];
+    if (!course) return;
+    var update = Core.finishUpdate(course);
+    if (!update) { toast('The class is already on the last worksheet.'); return; }
+    busy(button, true);
+    try {
+      // A transaction, so two devices pressing at once move the class one step, not two.
+      var ref = db.collection(COURSES).doc(course.id);
+      var moved = await db.runTransaction(async function (tx) {
+        var snap = await tx.get(ref);
+        if (!snap.exists) return null;
+        var live = Object.assign({ id: course.id }, snap.data());
+        if (Core.ansKeyAt(live) !== update.lastFinishedIndex) return null;
+        var fresh = Core.finishUpdate(live);
+        if (!fresh) return null;
+        tx.set(ref, Object.assign({}, fresh, { progressAt: FieldValue.serverTimestamp(), finishedAt: FieldValue.serverTimestamp(), progressBy: state.user.email }), { merge: true });
+        return fresh;
+      });
+      busy(button, false);
+      if (!moved) { toast('The class had already moved on.'); return; }
+      var total = Core.courseIds(course).length;
+      toast('Worksheet ' + (moved.lastFinishedIndex + 1) + ' finished. Worksheet ' + (moved.currentIndex + 1) + ' is now current' +
+        (moved.currentIndex + 1 < total ? ' and worksheet ' + (moved.currentIndex + 2) + ' is loaded into Ans Key as next.' : ', the last one.'));
+    } catch (err) { busy(button, false); fail('Could not move the class on', err); }
   }
   function countSeeing(course) {
     var n = state.members.filter(function (m) { return !m.revoked && Core.memberSees(m, course); }).length;
@@ -1520,6 +1577,7 @@
         break;
       }
       case 'set-current': setCurrent(el); break;
+      case 'finish-current': finishCurrent(el); break;
       case 'set-release': setRelease(el); break;
       case 'draft-role': inviteDraft.role = el.dataset.role; render(); break;
       case 'draft-level':
