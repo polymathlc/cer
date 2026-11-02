@@ -99,6 +99,31 @@ let db;
   await page.waitForFunction(() => /Up to 8/.test(document.querySelector('.control-strip').textContent));
   check('admin: putting the class on worksheet 3 releases up to 8', true);
 
+  // 📌 What Ans Key shows: worksheet 3 is current, 4 is loaded as next, the rest queued.
+  const chips = () => page.$$eval('.seq-row .seq-status', (els) => els.map((e) => e.textContent.trim()));
+  let labels = await chips();
+  check('admin: worksheets 1 and 2 are done', labels[0] === '✓ Done' && labels[1] === '✓ Done');
+  check('admin: worksheet 3 is the Current worksheet', labels[2] === '▶ Current worksheet');
+  check('admin: worksheet 4 is the Next worksheet', labels[3] === '⏭ Next worksheet');
+  check('admin: released ones after it are queued, the rest wait', labels[4] === 'Released · queued' && labels[9] === 'Queued');
+  check('admin: the Finished button names the worksheet', /Worksheet 3 finished · load the next/.test(await page.textContent('[data-action="finish-current"]')));
+  await page.screenshot({ path: path.join(shots, '02b-current-next.png'), fullPage: true });
+  await page.click('[data-action="finish-current"]');
+  await page.waitForFunction(() => /Worksheet 4/.test(document.querySelector('.control-strip .big').textContent), null, { timeout: 10000 });
+  labels = await chips();
+  check('admin: after Finished, 4 is current and 5 is loaded as next', labels[2] === '✓ Done' && labels[3] === '▶ Current worksheet' && labels[4] === '⏭ Next worksheet');
+  db = await page.evaluate(() => window.__fake.db);
+  const classAfterFinish = Object.entries(db).find(([p]) => p.startsWith('onlineCourses/'))[1];
+  check('admin: Finished saves the move and what was finished', classAfterFinish.currentIndex === 3 && classAfterFinish.releasedThrough === 8 && classAfterFinish.lastFinishedIndex === 2);
+  // Back to worksheet 3, released up to 8, for the student checks below.
+  await page.fill('#currentInput', '3');
+  await page.click('[data-action="set-current"]');
+  await page.waitForFunction(() => /Worksheet 3/.test(document.querySelector('.control-strip .big').textContent));
+  await page.fill('#releaseInput', '8');
+  await page.click('[data-action="set-release"]');
+  await page.waitForFunction(() => /Up to 8/.test(document.querySelector('.control-strip').textContent));
+  check('admin: the class can be put back by hand', true);
+
   // Invite a student.
   await page.click('[data-action="close-course"]');
   await page.click('[data-action="tab"][data-tab="people"]');
