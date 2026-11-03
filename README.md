@@ -236,7 +236,15 @@ Run `node tools/cover-core-tests.mjs`, `node tools/cover-app-tests.mjs`,
 `node tools/cover-layout-browser-tests.mjs`. Generated assets and their prompts
 are recorded in `assets/worksheet-covers/README-v2.md`.
 
-## Polymath Online, the student portal (online/, v1.5.0)
+## Polymath Online, the student portal (online/, v1.6.0)
+- **Replace PDF** (v1.6.0) fixes a mistake in a worksheet already uploaded.
+  Each worksheet in a class's teaching order has a Replace button; drop in the
+  corrected PDF and it takes the old file's place. The answer key, name, place
+  in the class and release stay as they are, and a changed page count is
+  pointed out first. Copies of the worksheet made by Duplicate class are found
+  and ticked, so the fix reaches every time slot in one go (untick any to leave
+  it). Students and Ans Key (v1.177.0) get the new file the next time they open
+  it, never a kept old copy.
 
 **polymathlc.com.sg/online** is where students and parents find their class's
 worksheets and answer keys. It is published by the website sync, like every

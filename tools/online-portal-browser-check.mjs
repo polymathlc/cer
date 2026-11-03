@@ -330,5 +330,75 @@ let studentDb = null;
   await context.close();
 }
 
+/* ---- Admin: replace one worksheet's PDF (fixing a mistake) ---- */
+{
+  const docs = JSON.parse(JSON.stringify(db));
+  const [coursePath, original] = Object.entries(docs).find(([p]) => p.startsWith('onlineCourses/'));
+  const courseId = coursePath.split('/')[1];
+  const thirdId = original.worksheetIds[2];
+  const key = JSON.stringify([{ id: 'ink-3', type: 'pen', page: 2, points: [[1, 1], [2, 2]] }]);
+  docs['pdfAnnotator/' + thirdId].annotations = key;
+  docs['pdfAnnotator/' + thirdId].pageCount = 4;
+  // The same worksheet copied into a Saturday class by Duplicate class.
+  docs['onlineCourses/sat'] = { title: 'P5 Mathematics · Saturday', level: 'P5', subject: 'math', day: 'Saturday', slot: 0, worksheetIds: ['copy3'], currentIndex: -1, releasedThrough: -1 };
+  docs['pdfAnnotator/copy3'] = { name: 'Worksheet 3', level: 'P5', subject: 'math', storagePath: 'pdf-annotator/copy3.pdf', pageCount: 4, annotations: key, onlineCourseId: 'sat', onlineSeq: 0, onlineCopiedFrom: thirdId };
+  const { page, context, errors } = await open({ user: admin, docs });
+  await page.waitForSelector('.tabs');
+  await page.click(`[data-action="open-course"][data-id="${courseId}"]`);
+  await page.waitForSelector(`[data-action="replace-pdf"][data-id="${thirdId}"]`);
+  check('replace: every worksheet row has a Replace button', (await page.locator('.seq-row [data-action="replace-pdf"]').count()) === 10);
+  await page.click(`[data-action="replace-pdf"][data-id="${thirdId}"]`);
+  await page.waitForSelector('.modal #replaceInput', { state: 'attached' });
+  const ask = await page.textContent('.modal');
+  check('replace: the window says the answer key, name and place stay', /answer key, name and place in the class stay/.test(ask) && /worksheet 3 in this class/.test(ask));
+  check('replace: nothing happens until a PDF is chosen', await page.locator('.modal [data-m="replace"]').isDisabled());
+  await page.waitForSelector('.modal .replace-copy');
+  check('replace: the copy in the Saturday class is found and ticked', /P5 Mathematics · Saturday · worksheet 1/.test(await page.textContent('.modal .replace-copies')) &&
+    await page.locator('.modal [data-copy="copy3"]').isChecked());
+  await page.setInputFiles('#replaceInput', { name: 'Worksheet 3 fixed.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await page.waitForSelector('.modal .replace-warn');
+  check('replace: a different page count is pointed out', /new PDF has 3 pages and the old one 4 pages/.test(await page.textContent('.modal .replace-warn')));
+  check('replace: the chosen file is named, and the button counts both worksheets', /Worksheet 3 fixed\.pdf/.test(await page.textContent('.modal .replace-drop')) &&
+    (await page.textContent('.modal [data-m="replace"]')).trim() === 'Replace in 2 worksheets');
+  await page.screenshot({ path: path.join(shots, '12-replace-ask.png') });
+  await page.click('.modal [data-m="replace"]');
+  await page.waitForSelector('.modal-back', { state: 'detached', timeout: 10000 });
+  const after = await page.evaluate(() => ({ db: window.__fake.db, files: window.__fake.files }));
+  const a = after.db['pdfAnnotator/' + thirdId], b = after.db['pdfAnnotator/copy3'];
+  check('replace: the new file goes to the same place, in this class and the copy', after.files[a.storagePath].name === 'Worksheet 3 fixed.pdf' && a.storagePath === docs['pdfAnnotator/' + thirdId].storagePath &&
+    after.files['pdf-annotator/copy3.pdf'].name === 'Worksheet 3 fixed.pdf' && b.storagePath === 'pdf-annotator/copy3.pdf');
+  check('replace: both carry the same new pdfVersion, so Ans Key and students fetch the new file', a.pdfVersion > 0 && a.pdfVersion === b.pdfVersion);
+  check('replace: the answer keys, names and classes are untouched', a.annotations === key && b.annotations === key && a.name === docs['pdfAnnotator/' + thirdId].name && a.onlineCourseId === courseId && b.onlineCourseId === 'sat');
+  check('replace: the page count follows the new file', a.pageCount === 3 && b.pageCount === 3);
+  check('replace: the class list and release are unchanged', JSON.stringify(after.db[coursePath].worksheetIds) === JSON.stringify(original.worksheetIds) && after.db[coursePath].releasedThrough === original.releasedThrough);
+  check('replace: no other worksheet changes', original.worksheetIds.filter((w) => w !== thirdId).every((w) => !after.db['pdfAnnotator/' + w].pdfVersion));
+  check('replace: a message says it is done', /PDF replaced in 2 worksheets/.test(await page.textContent('body')));
+  // Again, this class only.
+  await page.click(`[data-action="replace-pdf"][data-id="${thirdId}"]`);
+  await page.waitForSelector('.modal [data-copy="copy3"]');
+  await page.click('.modal [data-copy="copy3"]');
+  await page.setInputFiles('#replaceInput', { name: 'Worksheet 3 v3.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await page.waitForFunction(() => { const b = document.querySelector('.modal [data-m="replace"]'); return b && !b.disabled; });
+  check('replace: unticking the copy leaves one worksheet', (await page.textContent('.modal [data-m="replace"]')).trim() === 'Replace PDF');
+  await page.click('.modal [data-m="replace"]');
+  await page.waitForSelector('.modal-back', { state: 'detached', timeout: 10000 });
+  const last = await page.evaluate(() => ({ db: window.__fake.db, files: window.__fake.files }));
+  check('replace: only this class gets the newer file', last.files[a.storagePath].name === 'Worksheet 3 v3.pdf' && last.files['pdf-annotator/copy3.pdf'].name === 'Worksheet 3 fixed.pdf' &&
+    last.db['pdfAnnotator/' + thirdId].pdfVersion > a.pdfVersion && last.db['pdfAnnotator/copy3'].pdfVersion === b.pdfVersion);
+  check('replace: no script errors', errors.length === 0 || (console.log(errors), false));
+  await context.close();
+  // On a phone the row's buttons wrap instead of running off the screen.
+  const phone = await open({ user: admin, docs, width: 390 });
+  await phone.page.waitForSelector('.tabs');
+  await phone.page.click(`[data-action="open-course"][data-id="${courseId}"]`);
+  await phone.page.waitForSelector(`[data-action="replace-pdf"][data-id="${thirdId}"]`);
+  check('replace: on a phone the Replace button is on screen and the page does not scroll sideways', await phone.page.evaluate((id) => {
+    const r = document.querySelector('[data-action="replace-pdf"][data-id="' + id + '"]').getBoundingClientRect();
+    return r.right <= window.innerWidth && document.documentElement.scrollWidth <= window.innerWidth + 1;
+  }, thirdId));
+  await phone.page.locator('.seq-list').screenshot({ path: path.join(shots, '13-replace-phone.png') });
+  await phone.context.close();
+}
+
 await browser.close();
 console.log(`Passed ${checks} Polymath Online browser checks.`);

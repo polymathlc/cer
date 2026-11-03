@@ -265,6 +265,11 @@ Run `node --test tools/consult-bridge-tests.mjs` after touching any of it.
 
 ## 🎓 Polymath Online: the student portal (`online/`, v1.0.0)
 
+- Replace PDF (v1.6.0), handled by `replacePdf(id)` in portal.js:
+  - The corrected file is put at the SAME `storagePath`: Ans Key's save writes `pdf-annotator/<id>.pdf` back every time, so a new path would be undone.
+  - Each doc gets `Core.replacementUpdate` (`pdfVersion` ms, `pdfFileName`, `pdfReplacedBy`, `pageCount`) plus `pdfReplacedAt` and `updatedAt`. Annotations are never touched.
+  - Every PDF cache keys on `Core.pdfCacheKey` (path + `#v<pdfVersion>`): the portal's pdfUrl/pdfBlob, and Ans Key v1.177.0's `onlinePdfBytes(path, version)`.
+  - `loadCopyFamily` walks `onlineCopiedFrom` up to the first original, then queries copies down; `Core.copyTargets` lists them, ticked by default.
 - Duplicate class (v1.5.0), handled by `duplicateCourse(course)` in portal.js:
   - It creates the course from `Core.duplicateCourseData`: `day: ''`, `slot: null`, nothing released, `copiedFrom`.
   - It then copies each worksheet, 3 at a time, with `copyWorksheet`:

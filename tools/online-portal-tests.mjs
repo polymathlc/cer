@@ -262,3 +262,55 @@ test('a copied worksheet keeps its answer key but not the lesson recordings', ()
   assert.equal(ws.annotations, undefined, 'the answer key is filled in by the portal after stripping');
   assert.deepEqual(plainList(ws.starPages), [2]);
 });
+
+test('🔁 a replaced PDF keeps its path and is told apart by pdfVersion', () => {
+  assert.equal(Core.pdfCacheKey({ storagePath: 'pdf-annotator/a.pdf' }), 'pdf-annotator/a.pdf', 'never replaced: as before');
+  assert.equal(Core.pdfCacheKey({ storagePath: 'pdf-annotator/a.pdf', pdfVersion: 17 }), 'pdf-annotator/a.pdf#v17');
+  assert.equal(Core.pdfCacheKey({}), '');
+  assert.equal(Core.pdfCacheKey(null), '');
+  const u = Core.replacementUpdate({ version: 1762150000000, fileName: 'WS 3 fixed.pdf', by: 'a@x', pageCount: 5 });
+  assert.deepEqual(plainList(u), { pdfVersion: 1762150000000, pdfFileName: 'WS 3 fixed.pdf', pdfReplacedBy: 'a@x', pageCount: 5 });
+  assert.equal(u.storagePath, undefined, 'the path is never changed (Ans Key writes it back on every save)');
+  assert.equal(u.annotations, undefined, 'the answer key is never touched');
+  assert.equal(Core.replacementUpdate({ version: 1, pageCount: null }).pageCount, undefined, 'an unknown page count leaves the old one');
+});
+
+test('🔁 the copies made by Duplicate class are found, wherever the replace starts', () => {
+  const docs = {
+    orig: { storagePath: 'p/orig.pdf', onlineCourseId: 'thu' },
+    c1: { storagePath: 'p/c1.pdf', onlineCourseId: 'sat', onlineCopiedFrom: 'orig' },
+    c2: { storagePath: 'p/c2.pdf', onlineCourseId: 'sun', onlineCopiedFrom: 'orig' },
+    cc: { storagePath: 'p/cc.pdf', onlineCourseId: 'wed', onlineCopiedFrom: 'c1' },
+    other: { storagePath: 'p/other.pdf', onlineCourseId: 'thu' },
+    lost: { missing: true }
+  };
+  assert.equal(Core.copyRoot('cc', docs), 'orig');
+  assert.deepEqual(plainList(Core.copyFamily('orig', docs)), ['orig', 'c1', 'c2', 'cc']);
+  assert.deepEqual(plainList(Core.copyFamily('cc', docs)).sort(), ['c1', 'c2', 'cc', 'orig']);
+  assert.equal(Core.copyFamily('cc', docs)[0], 'cc', 'the one being replaced comes first');
+  assert.deepEqual(plainList(Core.copyFamily('other', docs)), ['other'], 'an unrelated worksheet has no copies');
+  // The original deleted: its copies still belong together.
+  const orphan = { a: { storagePath: 'p/a.pdf', onlineCopiedFrom: 'gone' }, b: { storagePath: 'p/b.pdf', onlineCopiedFrom: 'gone' }, gone: { missing: true } };
+  assert.deepEqual(plainList(Core.copyFamily('a', orphan)), ['a', 'b']);
+  // A loop never hangs.
+  const loop = { x: { storagePath: 'x', onlineCopiedFrom: 'y' }, y: { storagePath: 'y', onlineCopiedFrom: 'x' } };
+  assert.ok(Core.copyFamily('x', loop).length === 2);
+  const courses = { sat: { id: 'sat', title: 'P5 Maths · Saturday', worksheetIds: ['z', 'c1'] } };
+  const targets = Core.copyTargets('orig', docs, courses);
+  assert.equal(targets.length, 3);
+  assert.equal(targets.find((t) => t.id === 'c1').where, 'P5 Maths · Saturday · worksheet 2');
+  assert.equal(targets.find((t) => t.id === 'c2').where, 'A class no longer listed');
+});
+
+test('🔁 the Replace window warns when the page count changes, and sums up', () => {
+  assert.equal(Core.pageChangeNote(4, 4), '');
+  assert.equal(Core.pageChangeNote(0, 4), '', 'nothing known: nothing said');
+  assert.equal(Core.pageChangeNote(4, null), '');
+  assert.match(Core.pageChangeNote(5, 3), /new PDF has 3 pages and the old one 5 pages\. Answers written on page 4 to 5 will have no page/);
+  assert.match(Core.pageChangeNote(5, 4), /on page 5 will have/);
+  assert.match(Core.pageChangeNote(3, 4), /same page numbers/);
+  assert.equal(Core.replaceSummary(['a'], []), 'Worksheet PDF replaced. Answer keys are kept.');
+  assert.equal(Core.replaceSummary(['a', 'b', 'c'], []), 'PDF replaced in 3 worksheets. Answer keys are kept.');
+  assert.equal(Core.replaceSummary(['a'], ['Saturday: offline']), 'Worksheet PDF replaced. 1 could not be replaced. Saturday: offline');
+  assert.equal(Core.replaceSummary([], ['This class: offline']), 'The PDF could not be replaced. This class: offline');
+});
