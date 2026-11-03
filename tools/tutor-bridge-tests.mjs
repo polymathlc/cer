@@ -42,6 +42,12 @@ ok('the 🧭 Polymath Apps group exists and is open to every role', apps.length 
 ok('Study Buddy and Ans Key are pages of this portal', /data-page="tutor"/.test(apps) && /data-page="anskey"/.test(apps));
 ok('both embedded pages exist', /id="page-tutor"/.test(html) && /id="page-anskey"/.test(html));
 ok('the frames carry NO src at first paint — they load on first open', !/id="appEmbedFrame-tutor"[^>]*\ssrc=/.test(html) && !/id="appEmbedFrame-anskey"[^>]*\ssrc=/.test(html));
+// v1.451.2: the embedded app must end AT the bottom of the window. The old
+// "min-height: calc(100vh - 92px)" under a header taller than 92px pushed
+// Study Buddy's bottom off screen (worse in the installed taskbar app).
+ok('an embedded page is exactly the window tall (100dvh) and the frame flexes into what the header leaves',
+  /\.app-embed-page\.active \{[^}]*height: 100dvh/.test(html) && /\.app-embed-frame \{[^}]*flex: 1 1 auto[^}]*min-height: 0/.test(html));
+ok('no embed frame is sized from 100vh minus a guessed header height', !/\.app-embed-frame \{[^}]*calc\(100vh/.test(html));
 ok('navigateTo points the frame on every navigation', /appEmbedOnNavigate\(page\)/.test(cut('function navigateTo(page) {', '\n}', 'navigateTo')));
 ok('the embed url is derived from the tools table, never typed twice', /function _appEmbedUrl\(page, params\)[\s\S]{0,200}polymathToolFor\(/.test(js));
 

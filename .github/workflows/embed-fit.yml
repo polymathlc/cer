@@ -1,0 +1,24 @@
+name: Embedded apps fit the window
+on:
+  pull_request:
+    paths: ['index.html', 'tools/embed-fit-browser-check.mjs', 'tools/tutor-bridge-tests.mjs', '.github/workflows/embed-fit.yml']
+  push:
+    branches: [main]
+    paths: ['index.html', 'tools/embed-fit-browser-check.mjs', 'tools/tutor-bridge-tests.mjs', '.github/workflows/embed-fit.yml']
+permissions:
+  contents: read
+jobs:
+  embed-fit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Study Buddy bridge checks (static)
+        run: node tools/tutor-bridge-tests.mjs
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: Study Buddy, Ans Key and the textbook end at the bottom of the window at every size
+        run: node tools/embed-fit-browser-check.mjs
