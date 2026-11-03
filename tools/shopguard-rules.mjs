@@ -126,7 +126,10 @@ export const SHOPGUARD_DOC_PATHS = [
   'shopguard/cc-collectibles/diagnostics/last-test',
   'shopguard/another-shop/alerts/probe'
 ];
-export const SHOPGUARD_LISTS = ['shopguard', 'shopguard/cc-collectibles/alerts', 'shopguard/cc-collectibles/segments', 'shopguard/cc-collectibles/cameras'];
+// Lists the page makes (its queries are all inside one shop). The top-level
+// shopguard collection is never listed by the page; the Rules API answers that
+// with DENY even for the owner, so only the refusal for everyone else is pinned.
+export const SHOPGUARD_LISTS = ['shopguard/cc-collectibles/alerts', 'shopguard/cc-collectibles/segments', 'shopguard/cc-collectibles/cameras', 'shopguard/cc-collectibles/activity'];
 
 export function shopGuardRuleTests() {
   const cases = [];
@@ -141,6 +144,7 @@ export function shopGuardRuleTests() {
     for (const uid of OTHER_UIDS) cases.push(shopGuardCase(path, 'list', 'DENY', uid));
     for (const uid of OWNER_UIDS) cases.push(shopGuardCase(path, 'list', 'ALLOW', uid));
   }
+  for (const uid of OTHER_UIDS) cases.push(shopGuardCase('shopguard', 'list', 'DENY', uid));
   return cases;
 }
 
