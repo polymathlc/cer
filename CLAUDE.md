@@ -8121,6 +8121,20 @@ PDF and opened there, to be written on, hinted, marked and filed into a mistake 
 - **`_tsendLevelOf` reads the level off the questions** the way every level here is read
   (`qLevelNum` → `levelFromNumber`); a sheet whose questions declare none is filed at none, and
   Study Buddy shows an unlevelled worksheet to its owner regardless.
+- **THE PHOTOGRAPH IS THE PRINTED SHEET** (v1.451.3). Two faults made the export look misaligned in
+  Study Buddy. (1) html2canvas measures each font's baseline in a bare `<div>` it appends to `<body>`;
+  the print rule `body > *:not(#printOutput)` hid it, the baseline came back 0, and EVERY line of text
+  was drawn an ascent too high (MCQ options on their boxes' top edge, "Answer:" above its box).
+  `WS_PREVIEW_CSS` lifts `body > div:not([id]):not([class])` like the container rule — nothing else in
+  that frame's body is a bare div, keep it so. It also hides `.mcq-block input[type="radio"]`
+  (invisible on paper; html2canvas paints its own grey circle). (2) A question too tall for one sheet
+  is ONE long `.wspv-sheet` (`data-span`, "Pages 3–4"); pinned to one A4 it lost everything past the
+  first sheet and wore its number over the answer box. **`_tsendSplitTallSheets`** cuts it into whole
+  A4 sheets (`.tsend-slice` windows onto copies of the content, ≤ `A4_CONTENT_PX`, cut by
+  `_tsendSliceStarts` above lines of text, pictures, table rows and labels), and **`_tsendNumberSheets`**
+  renumbers what goes into the PDF "Page N of M". The cuts are copies: read `_tsendKeyRows` BEFORE
+  splitting. Check: `tools/tsend-photo-browser-check.mjs` (CI `tsend-photo.yml`; needs playwright and
+  html2canvas 1.4.1 — `H2C=` a local min.js, else node_modules, else the CDN).
 - **AN EMBED PAGE IS EXACTLY THE WINDOW TALL** (v1.451.2). `.app-embed-page.active` is
   `height: 100dvh` (column flex) and `.app-embed-frame` flexes into what the header leaves
   (`flex: 1 1 auto; min-height: 0`). It used to be the header PLUS a frame of

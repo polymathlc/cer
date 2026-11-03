@@ -4534,7 +4534,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.451.2';
+const APP_VERSION = 'v1.451.3';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -42243,6 +42243,18 @@ const WS_PREVIEW_CSS = `
      over the print rule's own :not(#printOutput). Harmless on the live
      preview, which never photographs anything. */
   body > .html2canvas-container:not(#h2c-a):not(#h2c-b){ display:block !important; visibility:hidden; }
+  /* …and it measures every font's baseline in a bare <div> it appends to
+     <body> (no id, no class — nothing else in this frame is one). Hidden by
+     the same print rule, that div measured 0, every line of text was drawn a
+     whole ascent too high, and in Study Buddy the MCQ options sat on their
+     boxes' top edge and "Answer:" floated above its box. Lifted the same way;
+     it is visibility:hidden itself, so it still paints nothing. */
+  body > div:not([id]):not([class]):not(#h2c-a):not(#h2c-b){ display:block !important; }
+  /* A printed MCQ's radio is invisible (Tailwind's preflight strips its
+     appearance), but html2canvas paints its own grey circle for every radio,
+     half a line below the option it belongs to. The photograph keeps the
+     paper's look; visibility changes no layout, so the planner is unmoved. */
+  .mcq-block input[type="radio"]{ visibility:hidden; }
   .wspv-pageno{ position:absolute; left:0; right:0; bottom:7mm; text-align:center; font-size:8pt; color:#b3b3b3; }
   .print-question-chunk{ position:relative; }
   /* The answer-key rows carry an ✏️ button too, so they need to be a
@@ -42600,6 +42612,100 @@ async function _tsendSheetToJpeg(win, sheet) {
   });
   return canvas;
 }
+// ✂ A TALL SHEET IS CUT INTO A4s (v1.451.3). The packer shows a question too
+// tall to shrink readably as ONE long sheet labelled "Pages 3–4", because the
+// printer lets it flow; the photograph pins every sheet to one A4, so the long
+// one lost everything past its first sheet and wore its page number over the
+// answer box. Each cut is a whole A4 sheet showing one window of the content,
+// cut at a gap between lines, picture edges and table rows — never through a
+// line of text — and at most A4_CONTENT_PX tall, the box an ordinary sheet's
+// content has. The cuts are copies, so read the key rows before calling this.
+function _tsendSliceStarts(content, sliceH) {
+  const box = content.getBoundingClientRect();
+  const total = box.height;
+  const starts = [0];
+  if (!(total > sliceH + 1)) return starts;
+  const spans = [];
+  const add = r => { if (r && r.height > 0.5 && r.height < sliceH) spans.push([r.top - box.top, r.bottom - box.top]); };
+  content.querySelectorAll('img,svg,canvas,video,input,textarea,tr,label,.print-mcq-answer,.print-q-header').forEach(el => add(el.getBoundingClientRect()));
+  try {
+    const doc = content.ownerDocument;
+    const walker = doc.createTreeWalker(content, 4 /* NodeFilter.SHOW_TEXT */);
+    const range = doc.createRange();
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!n.nodeValue || !n.nodeValue.trim()) continue;
+      range.selectNodeContents(n);
+      Array.from(range.getClientRects()).forEach(add);
+    }
+  } catch (e) { /* no line boxes: cut on the elements alone */ }
+  let at = 0;
+  for (let guard = 0; total - at > sliceH + 1 && guard < 200; guard++) {
+    const limit = at + sliceH;
+    let y = limit;
+    // Back the cut up to the top of whatever it would go through, until it
+    // goes through nothing — but never so far that a sheet is left mostly empty.
+    for (let k = 0; k < 400; k++) {
+      const hit = spans.find(sp => sp[0] < y - 0.5 && sp[1] > y + 0.5);
+      if (!hit) break;
+      y = hit[0];
+    }
+    if (y <= at + sliceH * 0.4) y = limit;
+    starts.push(y);
+    at = y;
+  }
+  return starts;
+}
+function _tsendSplitTallSheet(sheet) {
+  const content = sheet.querySelector(':scope > .wspv-content');
+  if (!content || !(parseInt(sheet.dataset.span || '1', 10) > 1)) return [sheet];
+  const doc = sheet.ownerDocument;
+  const sliceH = A4_CONTENT_PX;
+  const total = content.getBoundingClientRect().height;
+  const starts = _tsendSliceStarts(content, sliceH);
+  if (starts.length < 2) { delete sheet.dataset.span; return [sheet]; }
+  const out = starts.map((y, i) => {
+    const end = i + 1 < starts.length ? starts[i + 1] : total;
+    const s = doc.createElement('div');
+    s.className = sheet.className;
+    if (sheet.dataset.kind) s.dataset.kind = sheet.dataset.kind;
+    s.dataset.slice = (i + 1) + '/' + starts.length;
+    const view = doc.createElement('div');
+    view.className = 'tsend-slice';
+    // Floored, so the window ends ON the cut and never shows a sliver of the
+    // line the next sheet starts with.
+    view.style.cssText = 'position:relative;overflow:hidden;height:' + Math.max(1, Math.floor(Math.min(end - y, sliceH))) + 'px;';
+    const copy = content.cloneNode(true);
+    copy.style.marginTop = (-y) + 'px';
+    view.appendChild(copy);
+    s.appendChild(view);
+    const pno = doc.createElement('div');
+    pno.className = 'wspv-pageno';
+    s.appendChild(pno);
+    return s;
+  });
+  sheet.replaceWith(...out);
+  return out;
+}
+async function _tsendSplitTallSheets(win, sheets) {
+  const out = [];
+  sheets.forEach(sh => out.push(..._tsendSplitTallSheet(sh)));
+  // The copies' pictures are the same files, already fetched, but a fresh
+  // <img> still decodes on its own time — photograph none before it has.
+  const imgs = [];
+  out.forEach(sh => { if (sh.dataset.slice) imgs.push(...sh.querySelectorAll('img')); });
+  await Promise.all(imgs.map(im => (im.complete ? Promise.resolve() : new Promise(res => {
+    im.addEventListener('load', res, { once: true });
+    im.addEventListener('error', res, { once: true });
+    setTimeout(res, 5000);
+  }))));
+  return out;
+}
+function _tsendNumberSheets(sheets) {
+  sheets.forEach((sh, i) => {
+    const pno = sh.querySelector(':scope > .wspv-pageno');
+    if (pno) pno.textContent = 'Page ' + (i + 1) + ' of ' + sheets.length;
+  });
+}
 function _tsendCanvasToJpegBytes(canvas, q) {
   // A canvas with no pixels answers toDataURL with "data:," — no bytes at all —
   // and pdf-lib then dies on its first read with a message about a DataView
@@ -42700,11 +42806,19 @@ async function tsendSend() {
     const win = frame.contentWindow;
     let sheets = Array.from(rdoc.querySelectorAll('#wsPages .wspv-sheet'));
     if (!sheets.length) throw new Error('no pages came out of the layout');
+    // The key rows are read BEFORE a tall sheet is cut up: every cut is a copy
+    // of the sheet's content, and a key row read twice is a question marked twice.
+    const keyRows = includeKey ? _tsendKeyRows(rdoc) : [];
+    // A question too tall for one sheet flows over several when PRINTED; one
+    // photograph pinned to one A4 kept its first sheet and cut the rest off,
+    // with "Pages 3–4" printed over the answer box. Cut it into real A4s first.
+    sheets = await _tsendSplitTallSheets(win, sheets);
     if (!includeKey) sheets = sheets.filter(sh => sh.dataset.kind !== 'key');
     if (sheets.length > TSEND_PAGES_MAX) throw new Error('that is ' + sheets.length + ' pages — Study Buddy takes up to ' + TSEND_PAGES_MAX + ' at once');
+    // Numbered as the PDF Study Buddy gets: page 3 of the file says "Page 3".
+    _tsendNumberSheets(sheets);
     const keyPages = [];
     sheets.forEach((sh, i) => { if (sh.dataset.kind === 'key') keyPages.push(i + 1); });
-    const keyRows = includeKey ? _tsendKeyRows(rdoc) : [];
     await _tsendLoadScript(win, TSEND_LIBS.html2canvas, 'html2canvas');
     // Every sheet is prepared BEFORE the first photograph: a transform on one
     // sheet must not reflow its neighbour half way through the run.
@@ -43645,6 +43759,7 @@ function _wsPreviewPack(doc, opts) {
     const from = pageNo + 1;
     pageNo += span;
     const sheet = doc.createElement('div'); sheet.className = 'wspv-sheet' + (bleed ? ' wspv-bleed' : '');
+    if (span > 1) sheet.dataset.span = String(span);  // 📖 the Study Buddy export cuts it into this many A4s
     const content = doc.createElement('div'); content.className = 'wspv-content';
     build(content);
     sheet.appendChild(content);

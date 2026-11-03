@@ -1,0 +1,22 @@
+name: Study Buddy export photographs the sheet as printed
+on:
+  pull_request:
+    paths: ['app.js', 'index.html', 'tools/tsend-photo-browser-check.mjs', '.github/workflows/tsend-photo.yml']
+  push:
+    branches: [main]
+    paths: ['app.js', 'index.html', 'tools/tsend-photo-browser-check.mjs', '.github/workflows/tsend-photo.yml']
+permissions:
+  contents: read
+jobs:
+  tsend-photo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --package-lock=false playwright@1.62.1 html2canvas@1.4.1
+      - run: npx playwright install --with-deps chromium
+      - name: Text where the browser lays it out, no radio circles, a tall question cut into whole A4 sheets
+        run: node tools/tsend-photo-browser-check.mjs
