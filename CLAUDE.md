@@ -548,6 +548,36 @@ sync like everything else, so edit it HERE**; a change made only in the mirror i
   tools/schedule-timetable-browser.mjs` after touching any of it (CI: `.github/workflows/schedule-page.yml`). The browser
   harness serves the real page with Firebase stubbed and the clock fixed, so nothing is ever booked or emailed.
 
+## 📹 Shop Guard — the CC Collectibles shop camera (`shopguard/`, v1.0.0)
+
+**polymathlc.com.sg/shopguard** records the shop's webcam to Firebase Storage in clips and has Gemini watch it.
+STANDALONE single file (no `app.js`), reaches the domain through the website sync like `office/` — **edit it
+here**. `APP_VERSION` near the top shows under the logo; bump it on every change.
+
+- **Roles per device.** *Camera station* (the shop PC: camera, `MediaRecorder` clips, upload queue in IndexedDB,
+  local motion check, AI checks, alarm) or *Owner console* (phone: every camera's heartbeat thumbnail, remote
+  start/stop/check, alerts, recordings). Each tab remembers its own camera, so two webcams = two tabs.
+- **AI.** Firebase AI Logic + App Check with the CER app's `RECAPTCHA_SITE_KEY` (a test holds them equal). Only
+  when the 64×36 motion check sees movement (or every `idleCheckSec`) are 1–4 480p JPEGs sent, with the owner's
+  zones and a timestamp burned in. `screenModel` (gemini-3.5-flash-lite) scores; at or above `watchThreshold` a
+  `confirmModel` (gemini-3.8-flash) second look decides. A missing model falls back to `FALLBACK_MODEL`, which a
+  test keeps equal to `app.js`'s `AI_MODEL`; thinking levels are LOW/MEDIUM (3.7+ reject MINIMAL) and a 400 on
+  thinking retries without it. House rules the AI can't talk round: anyone inside after hours scores ≥ 85.
+- **Data (`mathgen--app`).** Firestore `shopguard/{SHOP_ID}` (settings incl. the Telegram bot token) with
+  `cameras`, `alerts`, `segments`, `activity`, `daily`, `diagnostics` beneath; Storage `shopguard/{SHOP_ID}/video/…`
+  and `/alerts/…`. Queries are single-field only (dayKey ==, atMs desc), so no composite index is needed.
+- **🔒 Privacy before anything is stored.** The shared Firestore AND Storage catch-alls are open, so
+  `tools/shopguard-rules.mjs` (Firestore, Office-style block + `!isShopGuardPath()`) and
+  `tools/shopguard-storage-rules.mjs` (Storage, the /cs tool's record-then-patch method) close `shopguard/` to all
+  but `SHOPGUARD_OWNERS` (verified email). Published only by a *Shop Guard rules* run with **apply** ticked
+  (`.github/workflows/shopguard-rules.yml`). The page probes both as a signed-out visitor; while either answers
+  200/404 it shows a red banner and `requirePrivate()` refuses to start guarding, save settings or raise a test
+  alert. `ALLOWED_EMAILS` in the page and both tools' owners are held equal by a test — add a staff account in all
+  three, then re-run the workflow with apply.
+- **Retention.** The station deletes clips older than `retentionDays` and alerts older than `alertRetentionDays`,
+  never touching clips near an alert marked real or kept.
+- Run `node --test tools/shopguard-rules-tests.mjs` after touching any of it. CI: `.github/workflows/shopguard-rules.yml`.
+
 ## 🏢 Polymath Office — students, invoices and payments (`office/`, `pay/`, office v1.0.0)
 
 **polymathlc.com.sg/office** is the centre's admin app for families, students, the class timetable, monthly
