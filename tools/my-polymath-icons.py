@@ -29,6 +29,14 @@ and the offline page's inline icon (student/offline.html, a data: URI, because
 the kit's service worker answers page loads only — an icon FILE could never
 arrive with no connection) is replaced with the new 192 px icon, byte for byte.
 
+Since November 2026 the same script also draws the Worksheets app's icons
+(online/, polymathlc.com.sg/online, installed as "Polymath Worksheets"). Until
+then Worksheets installed with a plain clipboard on mint, so a student's
+taskbar showed no Polymath logo at all. Its icons are the SAME sticker, cut the
+same way, on a tile in Worksheets' own deep green (its accent #00695C), so the
+two installed apps both read as Polymath and still never look identical side
+by side. Files: online/assets/app-icons/ (same six names) and online/offline.html.
+
 Run from anywhere after changing the logo or the tile colours:
 
     python3 tools/my-polymath-icons.py
@@ -62,6 +70,7 @@ LOGO = REPO / 'assets' / 'branding' / 'polymath-learning-centre.png'
 STUDENT = REPO / 'student'
 OUT = STUDENT / 'assets' / 'app-icons'
 OFFLINE = STUDENT / 'offline.html'
+ONLINE = REPO / 'online'
 
 # The tile: a diagonal blend between the logo's own two teals — the light face
 # of the M (#57C4D0) at the top left, its shaded top face (#2E9CA6) at the
@@ -69,6 +78,11 @@ OFFLINE = STUDENT / 'offline.html'
 # tools/student-dashboard-tests.mjs repeats these two colours and the blend; keep them in step.
 TEAL_LIGHT = (0x57, 0xC4, 0xD0)
 TEAL_DEEP = (0x2E, 0x9C, 0xA6)
+# Worksheets (online/): the same logo on a tile in that app's own greens — a
+# lighter green at the top left, its accent #00695C at the bottom right.
+# tools/student-dashboard-tests.mjs reads these two as well.
+WORKSHEETS_LIGHT = (0x1E, 0x8E, 0x7E)
+WORKSHEETS_DEEP = (0x00, 0x69, 0x5C)
 BLEND_DOWN = 0.6      # share of the blend that runs top → bottom
 BLEND_ACROSS = 0.4    # share that runs left → right
 
@@ -133,13 +147,13 @@ def cut_mark(logo: Image.Image) -> Image.Image:
     return Image.fromarray(crop, 'RGBA')
 
 
-def teal_tile(size: int) -> Image.Image:
-    """The tile: an opaque diagonal blend between the logo's two teals."""
+def teal_tile(size: int, light=TEAL_LIGHT, deep=TEAL_DEEP) -> Image.Image:
+    """The tile: an opaque diagonal blend between two colours (the logo's two teals by default)."""
     ramp = np.linspace(0.0, 1.0, size, dtype=np.float64)
     t = ramp[:, None] * BLEND_DOWN + ramp[None, :] * BLEND_ACROSS
     tile = np.empty((size, size, 4), dtype=np.uint8)
     for channel in range(3):
-        tile[..., channel] = np.round(TEAL_LIGHT[channel] * (1 - t) + TEAL_DEEP[channel] * t).astype(np.uint8)
+        tile[..., channel] = np.round(light[channel] * (1 - t) + deep[channel] * t).astype(np.uint8)
     tile[..., 3] = 255
     return Image.fromarray(tile, 'RGBA')
 
@@ -182,8 +196,8 @@ def fit_circle(image: Image.Image, radius: float, size: int) -> float:
     return radius * size / farthest_visible(image) * 0.98
 
 
-def render(logo: Image.Image, size: int, maskable: bool) -> Image.Image:
-    tile = teal_tile(WORK)
+def render(logo: Image.Image, size: int, maskable: bool, light=TEAL_LIGHT, deep=TEAL_DEEP) -> Image.Image:
+    tile = teal_tile(WORK, light, deep)
     scale = fit_circle(logo, SAFE_RADIUS, WORK) if maskable else fit_span(logo, ANY_SPAN, WORK)
     big = centred(tile, scaled(logo, scale))
     # Opaque everywhere: iOS paints alpha black, and a maskable icon must be full-bleed.
@@ -202,37 +216,50 @@ def png_bytes(image: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
-def write(name: str, image: Image.Image) -> bytes:
+def write(name: str, image: Image.Image, out: Path = OUT) -> bytes:
     data = png_bytes(image)
-    (OUT / name).write_bytes(data)
-    print(f'  {name:22s} {image.width}x{image.height}  {len(data):>7,d} bytes')
+    (out / name).write_bytes(data)
+    print(f'  {out.parent.parent.name}/{name:22s} {image.width}x{image.height}  {len(data):>7,d} bytes')
     return data
 
 
-def inline_offline_icon(icon192: bytes) -> None:
+def inline_offline_icon(icon192: bytes, offline: Path = OFFLINE) -> None:
     """Swap the offline page's inline icon for the new 192 px one (same <img>, same size attributes)."""
-    page = OFFLINE.read_text(encoding='utf-8')
+    page = offline.read_text(encoding='utf-8')
     pattern = re.compile(r'(<img src=")data:image/png;base64,[A-Za-z0-9+/=]+(")')
     found = pattern.findall(page)
     if len(found) != 1:
-        sys.exit(f'offline.html: expected exactly one inline PNG icon, found {len(found)}')
+        sys.exit(f'{offline}: expected exactly one inline PNG icon, found {len(found)}')
     uri = 'data:image/png;base64,' + base64.b64encode(icon192).decode('ascii')
-    OFFLINE.write_text(pattern.sub(lambda match: match.group(1) + uri + match.group(2), page), encoding='utf-8')
-    print(f'  offline.html           inline icon replaced ({len(uri):,d} characters)')
+    offline.write_text(pattern.sub(lambda match: match.group(1) + uri + match.group(2), page), encoding='utf-8')
+    print(f'  {offline.parent.name}/offline.html           inline icon replaced ({len(uri):,d} characters)')
+
+
+# Every installable app whose icon is the Polymath sticker: (folder, tile light, tile deep).
+APPS = (
+    (STUDENT, TEAL_LIGHT, TEAL_DEEP),               # My Polymath, /student
+    (ONLINE, WORKSHEETS_LIGHT, WORKSHEETS_DEEP),    # Polymath Worksheets, /online
+)
+
+
+def draw_app(folder: Path, light, deep, logo: Image.Image, mark: Image.Image) -> None:
+    out = folder / 'assets' / 'app-icons'
+    out.mkdir(parents=True, exist_ok=True)
+    icon192 = write('icon-192.png', render(logo, 192, False, light, deep), out)
+    write('icon-512.png', render(logo, 512, False, light, deep), out)
+    write('maskable-192.png', render(logo, 192, True, light, deep), out)
+    write('maskable-512.png', render(logo, 512, True, light, deep), out)
+    write('apple-touch-icon.png', render(logo, 180, False, light, deep), out)
+    write('favicon-32.png', render_favicon(mark), out)
+    inline_offline_icon(icon192, folder / 'offline.html')
 
 
 def main() -> None:
-    OUT.mkdir(parents=True, exist_ok=True)
     logo = load_logo()
     mark = cut_mark(logo)
     print(f'logo {logo.width}x{logo.height}, M mark {mark.width}x{mark.height}')
-    icon192 = write('icon-192.png', render(logo, 192, maskable=False))
-    write('icon-512.png', render(logo, 512, maskable=False))
-    write('maskable-192.png', render(logo, 192, maskable=True))
-    write('maskable-512.png', render(logo, 512, maskable=True))
-    write('apple-touch-icon.png', render(logo, 180, maskable=False))
-    write('favicon-32.png', render_favicon(mark))
-    inline_offline_icon(icon192)
+    for folder, light, deep in APPS:
+        draw_app(folder, light, deep, logo, mark)
 
 
 if __name__ == '__main__':
