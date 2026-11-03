@@ -236,7 +236,7 @@ Run `node tools/cover-core-tests.mjs`, `node tools/cover-app-tests.mjs`,
 `node tools/cover-layout-browser-tests.mjs`. Generated assets and their prompts
 are recorded in `assets/worksheet-covers/README-v2.md`.
 
-## Polymath Online, the student portal (online/, v1.2.0)
+## Polymath Online, the student portal (online/, v1.5.0)
 
 **polymathlc.com.sg/online** is where students and parents find their class's
 worksheets and answer keys. It is published by the website sync, like every
@@ -250,6 +250,13 @@ other page here.
   which also fixed uploads that stuck at "waiting"). You can also add
   worksheets already in Ans Key, and reorder, rename or remove them. Each PDF
   becomes an ordinary Ans Key worksheet, ready for its answer key.
+- **Duplicate class** (v1.5.0) copies a class for another time slot. The
+  copy keeps the level, the subject and every worksheet in order, with its
+  answer key. Each copy gets its own PDF file, so the two classes move along
+  and release on their own. The copy starts with no day or time, not started
+  and with nothing released. Lesson recordings stay with the original. The
+  class form opens straight away to choose the time slot, which refiles all
+  the copied worksheets in Ans Key at once.
 - **Releases follow the lessons.** When the teacher opens worksheet *n* of a
   class in Ans Key, the class moves to *n* and everything up to *n* + 5 is
   released, so worksheet 3 releases up to 8. An admin can also set the class

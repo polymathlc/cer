@@ -265,6 +265,14 @@ Run `node --test tools/consult-bridge-tests.mjs` after touching any of it.
 
 ## 🎓 Polymath Online: the student portal (`online/`, v1.0.0)
 
+- Duplicate class (v1.5.0), handled by `duplicateCourse(course)` in portal.js:
+  - It creates the course from `Core.duplicateCourseData`: `day: ''`, `slot: null`, nothing released, `copiedFrom`.
+  - It then copies each worksheet, 3 at a time, with `copyWorksheet`:
+    - The PDF is re-uploaded to `pdf-annotator/<newId>.pdf`. Ans Key saves `storagePath` from the doc id and deletes it with the doc, so it can never be shared.
+    - The annotations are copied with `Core.stripLessonRecordings` applied. Anything over 600 KB goes to `<newId>.annotations.json`.
+    - `onlineCopiedFrom` is set on the copy.
+  - It saves the order with `saveOrder`, then opens `courseForm` on the copy. Setting the day/slot runs `syncDocsDaySlot` on every copied worksheet.
+
 - Uploads (v1.2.0):
   - `uploadFiles` runs 3 at a time (`UPLOAD_AT_ONCE`). Each batch is added to the class in name order through `saveOrder`.
   - `render()` restores focus only for fields where `Core.keepsTyping(tag, type)` is true. Restoring a file input's value throws, which once froze uploads at "waiting".

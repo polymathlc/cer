@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.4.0';
+  var APP_VERSION = 'v1.5.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -16,6 +16,7 @@
   var ANSKEY_URL = '../anskey/';
   var WORKSHEETS = 'pdfAnnotator';
   var STORAGE_DIR = 'pdf-annotator';
+  var ANN_INLINE_LIMIT = 600000;   // as Ans Key: an answer key bigger than this sits in Storage
   var COURSES = 'onlineCourses';
   var INVITES = 'onlineInvites';
   var MEMBERS = 'onlineMembers';
@@ -836,6 +837,7 @@
         '<h1 class="page-title" style="margin-top:10px">' + h(Core.courseTitle(course)) + '</h1>' +
         '<p class="page-subtitle">' + total + ' worksheet' + (total === 1 ? '' : 's') + ' in teaching order. Ans Key shows the current worksheet and loads the next one by itself; the rest wait their turn here.</p></div>' +
         '<div class="row"><button class="btn btn-sm" type="button" data-action="edit-course">Edit class</button>' +
+        '<button class="btn btn-sm" type="button" data-action="duplicate-course" data-tooltip="A copy with the same level, subject and worksheets, ready for another time slot">Duplicate class</button>' +
         '<button class="btn btn-sm btn-danger" type="button" data-action="delete-course">Delete class</button></div></div>' +
       '<div class="control-strip">' +
         '<div class="card control"><div class="label">Class is on</div><div class="big">' + (cur >= 0 ? 'Worksheet ' + (cur + 1) : 'Not started') + '</div>' +
@@ -1243,6 +1245,107 @@
       if (input) input.addEventListener('input', function () { titleTouched = true; draft.title = input.value; });
     });
   }
+  /* ---- Duplicating a class ----
+     Every worksheet is copied (its PDF, name, pages and answer key), so the
+     two classes move along and release on their own, and editing the copy's
+     time slot refiles all of its worksheets in Ans Key at once. */
+  var COPY_AT_ONCE = 3;
+  async function readAnnotationsText(d) {
+    if (!d.annotationsPath) return d.annotations || '[]';
+    var url = await storage.ref(d.annotationsPath).getDownloadURL();
+    var resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('the answer key could not be read (HTTP ' + resp.status + ')');
+    return resp.text();
+  }
+  async function copyWorksheet(fromId, courseId, course, seq) {
+    var snap = await db.collection(WORKSHEETS).doc(fromId).get();
+    if (!snap.exists) throw new Error('it is no longer in Ans Key');
+    var d = snap.data();
+    if (!d.storagePath) throw new Error('it has no PDF');
+    var ref = db.collection(WORKSHEETS).doc();
+    var url = await storage.ref(d.storagePath).getDownloadURL();
+    var resp = await fetch(url);
+    if (!resp.ok) throw new Error('its PDF could not be read (HTTP ' + resp.status + ')');
+    var pdf = await resp.blob();
+    var payload = Core.worksheetCopy(d, { id: ref.id, storageDir: STORAGE_DIR, courseId: courseId, seq: seq, fromId: fromId,
+      level: course.level, subject: course.subject, by: state.user.email, teacherEmail: TEACHER_EMAIL });
+    await storage.ref(payload.storagePath).put(pdf, { contentType: 'application/pdf' });
+    var answers = Core.stripLessonRecordings(await readAnnotationsText(d));
+    if (new Blob([answers.json]).size <= ANN_INLINE_LIMIT) payload.annotations = answers.json;
+    else {
+      // As Ans Key does: an answer key too big for the document sits beside the PDF.
+      var annPath = STORAGE_DIR + '/' + ref.id + '.annotations.json';
+      await storage.ref(annPath).put(new Blob([answers.json], { type: 'application/json' }), { contentType: 'application/json', cacheControl: 'no-cache' });
+      payload.annotations = ''; payload.annotationsPath = annPath; payload.annotationsStamp = String(Date.now());
+    }
+    payload.createdAt = FieldValue.serverTimestamp();
+    payload.updatedAt = FieldValue.serverTimestamp();
+    await ref.set(payload);
+    state.docs[ref.id] = payload;
+    return ref.id;
+  }
+  function duplicateCourse(course) {
+    if (!course) return;
+    var ids = Core.courseIds(course);
+    var job = { phase: 'ask', done: 0, failed: [], total: ids.length };
+    var modal = openModal(function () {
+      var head = '<div class="modal-head"><div><div class="eyebrow">Duplicate class</div><h2>' + h(Core.courseTitle(course)) + '</h2></div>' +
+        (job.phase === 'copying' ? '' : '<button class="btn btn-ghost btn-icon" type="button" data-modal-close aria-label="Close">✕</button>') + '</div>';
+      if (job.phase === 'ask') {
+        return head + '<p>The copy keeps the level (' + h(course.level) + '), the subject (' + h(Core.subjectLabel(course.subject)) + ') and ' +
+          (ids.length ? 'all ' + ids.length + ' worksheet' + (ids.length === 1 ? '' : 's') + ' in the same order, with their answer keys.' : 'no worksheets yet.') + '</p>' +
+          '<ul class="small muted" style="margin:10px 0 0 18px;line-height:1.7">' +
+            '<li>It has no day or time yet. You choose the time slot next.</li>' +
+            '<li>It starts not started, with nothing released to students.</li>' +
+            '<li>Lesson recordings stay with this class.</li></ul>' +
+          '<div class="modal-foot"><button class="btn btn-ghost" type="button" data-modal-close>Cancel</button>' +
+          '<button class="btn btn-primary" type="button" data-m="go">Duplicate</button></div>';
+      }
+      var pct = job.total ? Math.round(100 * (job.done + job.failed.length) / job.total) : 100;
+      return head + '<p><b>' + (job.phase === 'copying' ? 'Copying worksheet ' + Math.min(job.total, job.done + job.failed.length + 1) + ' of ' + job.total + '…' : 'Copied') + '</b></p>' +
+        '<div class="progress" style="margin-top:10px"><div class="done" style="width:' + pct + '%"></div></div>' +
+        '<p class="small muted" style="margin-top:8px">Keep this page open until it finishes.</p>';
+    }, function (e, rerender, close) {
+      var t = e.target.closest('[data-m="go"]');
+      if (!t || job.phase !== 'ask') return;
+      job.phase = 'copying'; rerender();
+      run(rerender, close);
+    });
+    async function run(rerender, close) {
+      var ref = db.collection(COURSES).doc();
+      var data = Core.duplicateCourseData(course, state.user.email);
+      data.createdAt = FieldValue.serverTimestamp();
+      try { await ref.set(data); }
+      catch (err) { close(); fail('Could not duplicate the class', err); return; }
+      var made = new Array(ids.length), next = 0;
+      async function worker() {
+        while (next < ids.length) {
+          var i = next++;
+          try { made[i] = await copyWorksheet(ids[i], ref.id, course, i); job.done++; }
+          catch (err) { job.failed.push((docName(ids[i]) || 'A worksheet') + ': ' + ((err && err.message) || err)); console.error('Copy failed', ids[i], err); }
+          rerender();
+        }
+      }
+      var workers = [];
+      for (var w = 0; w < Math.min(COPY_AT_ONCE, ids.length); w++) workers.push(worker());
+      await Promise.all(workers);
+      var copied = made.filter(Boolean);
+      try {
+        if (copied.length) await saveOrder(ref.id, function () { return copied; }, { quiet: true });
+      } catch (err) { fail('The worksheets were copied, but the new class list could not be saved', err); }
+      job.phase = 'done'; rerender();
+      close();
+      state.courseId = ref.id; state.adminTab = 'classes'; state.uploads = [];
+      render();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (job.failed.length) toast(job.failed.length + ' worksheet' + (job.failed.length === 1 ? '' : 's') + ' could not be copied. ' + job.failed[0], { error: true, ms: 9000 });
+      else toast('Class duplicated with ' + copied.length + ' worksheet' + (copied.length === 1 ? '' : 's') + '. Now choose its day and time.');
+      // Straight on to the time slot, which is why the copy was made.
+      var fresh = Object.assign({ id: ref.id }, data, { worksheetIds: copied });
+      courseForm(state.courses[ref.id] && Core.courseIds(state.courses[ref.id]).length === copied.length ? state.courses[ref.id] : fresh);
+    }
+    return modal;
+  }
   function syncDocsDaySlot(course, data) {
     if (course.day === data.day && course.slot === data.slot) return Promise.resolve();
     var ids = Core.courseIds(course);
@@ -1567,6 +1670,7 @@
       case 'open-course': state.courseId = id; state.uploads = []; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); break;
       case 'close-course': state.courseId = null; render(); break;
       case 'edit-course': courseForm(state.courses[state.courseId]); break;
+      case 'duplicate-course': duplicateCourse(state.courses[state.courseId]); break;
       case 'delete-course': deleteCourse(state.courses[state.courseId]); break;
       case 'move': moveWorksheet(Number(el.dataset.index), Number(el.dataset.delta)); break;
       case 'remove-ws': removeWorksheet(Number(el.dataset.index)); break;
