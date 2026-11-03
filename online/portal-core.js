@@ -469,6 +469,86 @@
     return out;
   }
 
+  /* ---- 🔁 Replacing a worksheet's PDF ----
+     The new file goes to the SAME storage path: Ans Key writes that path back
+     on every save, so a new path would be undone by the next save. What
+     changes is `pdfVersion` (milliseconds), and every cache of the file (this
+     portal's and Ans Key's) keys on path plus version, so nobody is handed the
+     old file. The answer key, name and place in the class stay as they are. */
+  function pdfCacheKey(doc) {
+    if (!doc || !doc.storagePath) return '';
+    return doc.storagePath + (doc.pdfVersion ? '#v' + doc.pdfVersion : '');
+  }
+  // Worksheets copied by Duplicate class point back at their original
+  // (`onlineCopiedFrom`). The family is every worksheet that leads back to the
+  // same first original, wherever it sits; a missing original still ties its
+  // copies together by its id.
+  function copyRoot(id, docs) {
+    var path = [], at = id;
+    while (at && path.indexOf(at) < 0 && path.length < 50) {
+      path.push(at);
+      var d = docs && docs[at];
+      if (!d || !d.onlineCopiedFrom) return at;
+      at = d.onlineCopiedFrom;
+    }
+    // A loop (which Duplicate class never makes) still gives one answer
+    // for every worksheet on it: the smallest id in the loop.
+    var loop = at ? path.slice(path.indexOf(at)) : path;
+    return loop.slice().sort()[0] || id;
+  }
+  function copyFamily(id, docs) {
+    if (!docs || !docs[id]) return [id];
+    var root = copyRoot(id, docs);
+    var out = Object.keys(docs).filter(function (other) {
+      var d = docs[other];
+      return other !== id && d && !d.missing && d.storagePath && copyRoot(other, docs) === root;
+    }).sort(function (a, b) {
+      return naturalCompare(String(docs[a].onlineCourseId || ''), String(docs[b].onlineCourseId || '')) || naturalCompare(a, b);
+    });
+    return [id].concat(out);
+  }
+  // One line per copy for the Replace window: its class and place in it.
+  function copyTargets(id, docs, courses) {
+    return copyFamily(id, docs).slice(1).map(function (other) {
+      var d = docs[other] || {};
+      var course = courses && d.onlineCourseId ? courses[d.onlineCourseId] : null;
+      var at = course ? courseIds(course).indexOf(other) : -1;
+      return {
+        id: other,
+        name: d.name || 'Untitled worksheet',
+        courseId: d.onlineCourseId || '',
+        where: course ? courseTitle(course) + (at >= 0 ? ' · worksheet ' + (at + 1) : '') : (d.onlineCourseId ? 'A class no longer listed' : 'Ans Key only, in no class')
+      };
+    });
+  }
+  // What a replacement writes on each worksheet it reaches. `updatedAt` moves
+  // too: the student timeline's date is "last changed", and this is a change.
+  function replacementUpdate(opts) {
+    var o = opts || {};
+    var out = {
+      pdfVersion: Number(o.version) || Date.now(),
+      pdfFileName: String(o.fileName || '').slice(0, 160),
+      pdfReplacedBy: o.by || ''
+    };
+    if (o.pageCount > 0) out.pageCount = o.pageCount;
+    return out;
+  }
+  // A plain sentence when the page count changes, as the answer key is
+  // written on page numbers. '' when it does not, or nothing is known.
+  function pageChangeNote(oldCount, newCount) {
+    var a = Number(oldCount) || 0, b = Number(newCount) || 0;
+    if (!a || !b || a === b) return '';
+    var pages = function (n) { return n + (n === 1 ? ' page' : ' pages'); };
+    if (b < a) return 'The new PDF has ' + pages(b) + ' and the old one ' + pages(a) + '. Answers written on page ' + (b + 1) + (a - b > 1 ? ' to ' + a : '') + ' will have no page to sit on.';
+    return 'The new PDF has ' + pages(b) + ' and the old one ' + pages(a) + '. The answer key stays on the same page numbers, so check that the pages are still in the same order.';
+  }
+  function replaceSummary(done, failed) {
+    var n = done.length;
+    if (!n && failed.length) return 'The PDF could not be replaced. ' + failed[0];
+    var text = n === 1 ? 'Worksheet PDF replaced.' : 'PDF replaced in ' + n + ' worksheets.';
+    return failed.length ? text + ' ' + failed.length + ' could not be replaced. ' + failed[0] : text + ' Answer keys are kept.';
+  }
+
   var api = {
     RELEASE_AHEAD: RELEASE_AHEAD, NEXT_COUNT: NEXT_COUNT, LEVELS: LEVELS, SUBJECTS: SUBJECTS, DAYS: DAYS, ROLES: ROLES,
     SLOTS_WEEKDAY: SLOTS_WEEKDAY, SLOTS_WEEKEND: SLOTS_WEEKEND,
@@ -487,7 +567,9 @@
     inviteLink: inviteLink, inviteEmail: inviteEmail, mailtoLink: mailtoLink, inviteStatusLabel: inviteStatusLabel,
     timeAgo: timeAgo, chunk: chunk, safeFileName: safeFileName,
     keepsTyping: keepsTyping, uploadStateLabel: uploadStateLabel, uploadSummary: uploadSummary,
-    duplicateCourseData: duplicateCourseData, stripLessonRecordings: stripLessonRecordings, worksheetCopy: worksheetCopy
+    duplicateCourseData: duplicateCourseData, stripLessonRecordings: stripLessonRecordings, worksheetCopy: worksheetCopy,
+    pdfCacheKey: pdfCacheKey, copyRoot: copyRoot, copyFamily: copyFamily, copyTargets: copyTargets,
+    replacementUpdate: replacementUpdate, pageChangeNote: pageChangeNote, replaceSummary: replaceSummary
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.PolymathOnlineCore = api;

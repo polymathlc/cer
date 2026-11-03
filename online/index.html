@@ -475,6 +475,13 @@
   .seq-row .name-edit:hover { border-color: var(--border-subtle); }
   .seq-row .name-edit:focus { outline: none; border-color: var(--accent-dark); background: #fff; box-shadow: 0 0 0 3px var(--accent-bg); }
   .seq-tools { display: flex; gap: 4px; }
+  .seq-tools { flex-wrap: wrap; justify-content: flex-end; }
+  /* 🔁 Replace PDF window */
+  .replace-drop { padding: var(--space-md) var(--space-lg); }
+  .replace-warn { margin-top: 12px; padding: 10px 14px; border-radius: var(--radius-md); background: #FFF8E1; color: #6D4C00; font-size: var(--font-size-sm); line-height: 1.5; }
+  .replace-copies { margin-top: 14px; padding: 12px 14px; border-radius: var(--radius-md); background: var(--bg-secondary, #FAFAFA); border: 1px solid var(--border-subtle); }
+  .replace-copy { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; cursor: pointer; font-size: var(--font-size-sm); }
+  .replace-copy input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--accent-dark); flex: none; }
   .seq-list { padding: 0; }
   .pick-list { max-height: 50vh; overflow: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
   .pick-row { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); cursor: pointer; }
@@ -643,6 +650,7 @@
     .anskey-head .muted { display: none; }
     .seq-row { grid-template-columns: 36px 1fr; }
     .seq-row .seq-status, .seq-row .seq-tools { grid-column: 2; }
+    .seq-row .seq-tools { grid-column: 1 / -1; }
     .page-title { font-size: 1.6rem; }
     .modal { padding: var(--space-lg); }
     .upload-item { grid-template-columns: 1fr 90px; }
@@ -698,8 +706,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="portal-core.js?v=1.5.0"></script>
-<script src="portal.js?v=1.5.0"></script>
+<script src="portal-core.js?v=1.6.0"></script>
+<script src="portal.js?v=1.6.0"></script>
 <script defer src="pwa-install.js?v=2.0.0" data-app-name="Polymath Worksheets" data-app-key="online" data-app-icon="assets/app-icons/icon-192.png" data-accent="#00695C" data-sw="sw.js" data-floating="auto"></script>
 </body>
 </html>

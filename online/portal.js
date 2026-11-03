@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 'v1.5.0';
+  var APP_VERSION = 'v1.6.0';
   var Core = window.PolymathOnlineCore;
 
   // Who runs the portal. Anyone else signs in as a student or a parent.
@@ -230,23 +230,26 @@
   function pdfUrl(id) {
     var d = state.docs[id];
     if (!d || !d.storagePath) return Promise.reject(new Error('This worksheet has no PDF yet.'));
-    if (!pdfUrlCache[d.storagePath]) {
-      pdfUrlCache[d.storagePath] = storage.ref(d.storagePath).getDownloadURL();
-      pdfUrlCache[d.storagePath].catch(function () { delete pdfUrlCache[d.storagePath]; });
+    // 🔁 Keyed on path + pdfVersion: a replaced PDF is fetched afresh.
+    var key = Core.pdfCacheKey(d);
+    if (!pdfUrlCache[key]) {
+      pdfUrlCache[key] = storage.ref(d.storagePath).getDownloadURL();
+      pdfUrlCache[key].catch(function () { delete pdfUrlCache[key]; });
     }
-    return pdfUrlCache[d.storagePath];
+    return pdfUrlCache[key];
   }
   function pdfBlob(id) {
     var d = state.docs[id];
     if (!d || !d.storagePath) return Promise.reject(new Error('This worksheet has no PDF yet.'));
-    if (!pdfBlobCache[d.storagePath]) {
-      pdfBlobCache[d.storagePath] = pdfUrl(id).then(function (url) { return fetch(url); }).then(function (resp) {
+    var key = Core.pdfCacheKey(d);
+    if (!pdfBlobCache[key]) {
+      pdfBlobCache[key] = pdfUrl(id).then(function (url) { return fetch(url, d.pdfVersion ? { cache: 'no-cache' } : undefined); }).then(function (resp) {
         if (!resp.ok) throw new Error('download failed (HTTP ' + resp.status + ')');
         return resp.blob();
       }).then(function (blob) { return new Blob([blob], { type: 'application/pdf' }); });
-      pdfBlobCache[d.storagePath].catch(function () { delete pdfBlobCache[d.storagePath]; });
+      pdfBlobCache[key].catch(function () { delete pdfBlobCache[key]; });
     }
-    return pdfBlobCache[d.storagePath];
+    return pdfBlobCache[key];
   }
   function viewWorksheet(id, button) {
     // Opened synchronously so a phone's pop-up blocker lets it through.
@@ -882,6 +885,7 @@
             '<button class="btn btn-xs" type="button" data-action="move" data-index="' + i + '" data-delta="1" aria-label="Move down"' + (i === total - 1 ? ' disabled' : '') + '>↓</button>' +
             '<a class="btn btn-xs" href="' + h(answerKeyUrl(id)) + '" target="_blank" rel="noopener" data-tooltip="Open in Ans Key">Ans Key</a>' +
             '<button class="btn btn-xs" type="button" data-action="view" data-id="' + h(id) + '" aria-label="View PDF">PDF</button>' +
+            '<button class="btn btn-xs" type="button" data-action="replace-pdf" data-id="' + h(id) + '" aria-label="Replace the PDF of worksheet ' + (i + 1) + '" data-tooltip="Upload a corrected PDF. The answer key stays.">Replace</button>' +
             '<button class="btn btn-xs btn-danger" type="button" data-action="remove-ws" data-index="' + i + '" aria-label="Remove from class">✕</button>' +
           '</div></div>';
       });
@@ -1450,6 +1454,203 @@
     } catch (err) { busy(button, false); fail('Could not change the release', err); }
   }
 
+  /* ---- 🔁 Replacing one worksheet's PDF ----
+     For fixing a mistake in a worksheet already uploaded. The corrected PDF
+     goes to the same storage path, so the answer key, name, place in the
+     class and release all stay; `pdfVersion` tells every cache (here and in
+     Ans Key) that the file is new. Copies made by Duplicate class can be
+     replaced in the same go, as they are the same worksheet in other classes. */
+  var REPLACE_AT_ONCE = 3;
+  async function loadCopyFamily(id) {
+    var known = {};
+    known[id] = state.docs[id];
+    // Up to the first original…
+    var at = id, guard = 0;
+    while (known[at] && known[at].onlineCopiedFrom && guard++ < 20) {
+      var parent = known[at].onlineCopiedFrom;
+      if (!(parent in known)) {
+        var snap = await db.collection(WORKSHEETS).doc(parent).get();
+        known[parent] = snap.exists ? snap.data() : { missing: true };
+      }
+      if (known[parent].missing) { at = parent; break; }
+      at = parent;
+    }
+    // …then down through every copy of it, and copies of copies.
+    var frontier = [at], seen = {};
+    seen[at] = true;
+    guard = 0;
+    while (frontier.length && guard++ < 10) {
+      var nextRound = [];
+      for (var g = 0, groups = Core.chunk(frontier, 10); g < groups.length; g++) {
+        var found = await db.collection(WORKSHEETS).where('onlineCopiedFrom', 'in', groups[g]).get();
+        found.forEach(function (doc) {
+          if (seen[doc.id]) return;
+          seen[doc.id] = true;
+          known[doc.id] = doc.data();
+          nextRound.push(doc.id);
+        });
+      }
+      frontier = nextRound;
+    }
+    return known;
+  }
+  function replacePdf(id) {
+    var d = state.docs[id];
+    if (!d || d.missing) { toast('That worksheet is not in Ans Key any more.', { error: true }); return; }
+    if (!d.storagePath) { toast('That worksheet has no PDF to replace.', { error: true }); return; }
+    var course = state.courses[state.courseId];
+    var place = course ? Core.courseIds(course).indexOf(id) : -1;
+    var job = {
+      phase: 'pick', file: null, pages: null, counting: false,
+      copies: null, copiesError: '', include: {},
+      done: [], failed: [], total: 0, pct: 0
+    };
+    loadCopyFamily(id).then(function (known) {
+      job.copies = Core.copyTargets(id, known, state.courses);
+      job.copies.forEach(function (c) { job.include[c.id] = true; });
+      job.known = known;
+      if (modal) modal.rerender();
+    }).catch(function (err) {
+      console.warn('Copies could not be looked up', err);
+      job.copies = []; job.copiesError = 'Copies in other classes could not be looked up, so only this one will change.';
+      if (modal) modal.rerender();
+    });
+    function chosenTargets() {
+      var list = [{ id: id, data: d }];
+      (job.copies || []).forEach(function (c) {
+        if (job.include[c.id] && job.known && job.known[c.id] && job.known[c.id].storagePath) list.push({ id: c.id, data: job.known[c.id] });
+      });
+      return list;
+    }
+    function pickHtml() {
+      var html = '<p>Upload the corrected PDF for <b>' + h(d.name || 'this worksheet') + '</b>' + (place >= 0 ? ' (worksheet ' + (place + 1) + ' in this class)' : '') + '.</p>' +
+        '<ul class="small muted" style="margin:10px 0 0 18px;line-height:1.7">' +
+          '<li>The answer key, name and place in the class stay as they are.</li>' +
+          '<li>Students and Ans Key get the new file the next time they open it.</li>' +
+          '<li>Keep the pages in the same order so the answers still line up.</li></ul>' +
+        '<label class="dropzone replace-drop" id="replaceDrop" for="replaceInput" style="margin-top:14px">' +
+          '<input id="replaceInput" type="file" accept="application/pdf,.pdf" class="visually-hidden">' +
+          (job.file
+            ? '<div style="font-size:1.4rem">📄</div><div style="margin-top:4px"><b>' + h(job.file.name) + '</b></div>' +
+              '<div class="small muted" style="margin-top:2px">' + h([job.file.size < 102400 ? Math.max(1, Math.round(job.file.size / 1024)) + ' KB' : (job.file.size / 1048576).toFixed(1) + ' MB',
+                job.counting ? 'counting pages…' : (job.pages ? job.pages + (job.pages === 1 ? ' page' : ' pages') : '')].filter(Boolean).join(' · ')) +
+              ' · <u>choose another</u></div>'
+            : '<div style="font-size:1.4rem">📄</div><div style="margin-top:4px"><b>Drop the corrected PDF here</b>, or click to choose it</div>' +
+              '<div class="small muted" style="margin-top:2px">Now: ' + h(pagesLabel(id) || 'page count unknown') + '</div>') +
+        '</label>';
+      var note = job.file && !job.counting ? Core.pageChangeNote(d.pageCount, job.pages) : '';
+      if (note) html += '<div class="replace-warn" role="note">⚠ ' + h(note) + '</div>';
+      if (job.copies === null) html += '<p class="small muted" style="margin-top:12px">Looking for copies of this worksheet in other classes…</p>';
+      else if (job.copiesError) html += '<p class="small muted" style="margin-top:12px">' + h(job.copiesError) + '</p>';
+      else if (job.copies.length) {
+        html += '<div class="replace-copies"><div class="small" style="font-weight:600;margin-bottom:6px">Also replace it in ' +
+          (job.copies.length === 1 ? 'its copy' : 'its ' + job.copies.length + ' copies') + ' made by Duplicate class:</div>' +
+          job.copies.map(function (c) {
+            return '<label class="replace-copy"><input type="checkbox" data-copy="' + h(c.id) + '"' + (job.include[c.id] ? ' checked' : '') + '>' +
+              '<span><b>' + h(c.where) + '</b><span class="small muted"> · ' + h(c.name) + '</span></span></label>';
+          }).join('') + '</div>';
+      }
+      var count = chosenTargets().length;
+      return html + '<div class="modal-foot"><button class="btn btn-ghost" type="button" data-modal-close>Cancel</button>' +
+        '<button class="btn btn-primary" type="button" data-m="replace"' + (job.file && !job.counting ? '' : ' disabled') + '>' +
+        (count > 1 ? 'Replace in ' + count + ' worksheets' : 'Replace PDF') + '</button></div>';
+    }
+    function progressHtml() {
+      var finished = job.done.length + job.failed.length;
+      return '<p><b>' + (job.phase === 'uploading' ? (job.total > 1 ? 'Replacing ' + Math.min(job.total, finished + 1) + ' of ' + job.total + '…' : 'Uploading the corrected PDF…') : 'Replaced') + '</b></p>' +
+        '<div class="progress" style="margin-top:10px"><div class="done" id="replaceBar" style="width:' + job.pct + '%"></div></div>' +
+        '<p class="small muted" style="margin-top:8px">Keep this page open until it finishes.</p>';
+    }
+    var modal = openModal(function () {
+      var head = '<div class="modal-head"><div><div class="eyebrow">Replace PDF</div><h2>' + h(d.name || 'Worksheet') + '</h2></div>' +
+        (job.phase === 'uploading' ? '' : '<button class="btn btn-ghost btn-icon" type="button" data-modal-close aria-label="Close">✕</button>') + '</div>';
+      return head + (job.phase === 'pick' ? pickHtml() : progressHtml());
+    }, function (e, rerender, close) {
+      var go = e.target.closest('[data-m="replace"]');
+      if (!go || job.phase !== 'pick' || !job.file || job.counting) return;
+      job.phase = 'uploading'; rerender();
+      run(rerender, close);
+    }, function () {
+      var input = $('replaceInput'), zone = $('replaceDrop');
+      if (input) input.addEventListener('change', function () {
+        var f = input.files && input.files[0];
+        input.value = '';
+        if (f) choose(f);
+      });
+      if (zone) {
+        ['dragenter', 'dragover'].forEach(function (t) { zone.addEventListener(t, function (e) { e.preventDefault(); zone.classList.add('is-over'); }); });
+        ['dragleave', 'drop'].forEach(function (t) { zone.addEventListener(t, function (e) { e.preventDefault(); zone.classList.remove('is-over'); }); });
+        zone.addEventListener('drop', function (e) {
+          var list = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+          if (list.length > 1) toast('One PDF at a time here. The first one is used.');
+          if (list[0]) choose(list[0]);
+        });
+      }
+      Array.prototype.forEach.call(document.querySelectorAll('.modal [data-copy]'), function (box) {
+        box.addEventListener('change', function () {
+          job.include[box.dataset.copy] = box.checked;
+          if (modal) modal.rerender();
+        });
+      });
+    });
+    async function choose(file) {
+      if (!(/\.pdf$/i.test(file.name) || file.type === 'application/pdf')) { toast(file.name + ' is not a PDF.', { error: true }); return; }
+      if (file.size > MAX_PDF_BYTES) { toast(file.name + ' is larger than 60 MB.', { error: true }); return; }
+      job.file = file; job.pages = null; job.counting = true;
+      modal.rerender();
+      var pages = await countPages(file);
+      if (job.file !== file) return;   // another file was chosen meanwhile
+      job.pages = pages; job.counting = false;
+      modal.rerender();
+    }
+    async function run(rerender, close) {
+      var targets = chosenTargets();
+      var file = job.file;
+      var version = Date.now();
+      var update = Core.replacementUpdate({ version: version, fileName: file.name, by: state.user.email, pageCount: job.pages });
+      job.total = targets.length;
+      var shares = targets.map(function () { return 0; });
+      function paint() {
+        job.pct = Math.round(shares.reduce(function (a, b) { return a + b; }, 0) / targets.length);
+        var bar = $('replaceBar');
+        if (bar) bar.style.width = job.pct + '%';
+      }
+      var next = 0;
+      async function one(i) {
+        var t = targets[i];
+        try {
+          await new Promise(function (resolve, reject) {
+            var task = storage.ref(t.data.storagePath).put(file, { contentType: 'application/pdf', cacheControl: 'no-cache' });
+            task.on('state_changed', function (snap) {
+              shares[i] = snap.totalBytes ? Math.round(95 * snap.bytesTransferred / snap.totalBytes) : 50;
+              paint();
+            }, reject, resolve);
+          });
+          var payload = Object.assign({}, update, { pdfReplacedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+          await db.collection(WORKSHEETS).doc(t.id).set(payload, { merge: true });
+          if (state.docs[t.id]) Object.assign(state.docs[t.id], update);
+          shares[i] = 100; paint();
+          job.done.push(t.id);
+        } catch (err) {
+          shares[i] = 100; paint();
+          var where = t.id === id ? 'This class' : ((job.copies || []).filter(function (c) { return c.id === t.id; })[0] || {}).where || 'A copy';
+          job.failed.push(where + ': ' + ((err && err.message) || err));
+          console.error('Replace failed', t.id, err);
+        }
+        rerender();
+      }
+      async function worker() { while (next < targets.length) await one(next++); }
+      var workers = [];
+      for (var w = 0; w < Math.min(REPLACE_AT_ONCE, targets.length); w++) workers.push(worker());
+      await Promise.all(workers);
+      job.phase = 'done'; rerender();
+      close();
+      render();
+      var text = Core.replaceSummary(job.done, job.failed);
+      toast(text, job.failed.length ? { error: true, ms: 9000 } : undefined);
+    }
+  }
+
   /* ---- Uploading the whole list ---- */
   var pdfjsPromise = null;
   function loadPdfJs() {
@@ -1660,6 +1861,7 @@
       case 'sign-out': signOut(); break;
       case 'reload': location.reload(); break;
       case 'view': viewWorksheet(id, el); break;
+      case 'replace-pdf': replacePdf(id); break;
       case 'download': downloadWorksheet(id, el); break;
       case 'print': printWorksheet(id, el); break;
       case 'answer-key': openAnskey(id, 'view'); break;
