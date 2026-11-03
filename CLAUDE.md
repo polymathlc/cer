@@ -8091,6 +8091,14 @@ PDF and opened there, to be written on, hinted, marked and filed into a mistake 
 - **`_tsendLevelOf` reads the level off the questions** the way every level here is read
   (`qLevelNum` → `levelFromNumber`); a sheet whose questions declare none is filed at none, and
   Study Buddy shows an unlevelled worksheet to its owner regardless.
+- **AN EMBED PAGE IS EXACTLY THE WINDOW TALL** (v1.451.2). `.app-embed-page.active` is
+  `height: 100dvh` (column flex) and `.app-embed-frame` flexes into what the header leaves
+  (`flex: 1 1 auto; min-height: 0`). It used to be the header PLUS a frame of
+  `min-height: calc(100vh - 92px)`; the header is 92px only on a wide window with a one-line
+  subtitle, so on a laptop, a phone or the installed taskbar app the frame ran 30–150px below
+  the window and the bottom of a worksheet sent to Study Buddy was cut off. Never size the frame
+  from 100vh minus a guessed header. `node tools/embed-fit-browser-check.mjs` (CI:
+  `embed-fit.yml`) measures it in Chromium at six window sizes.
 - Run **`node tools/tutor-bridge-tests.mjs`** after touching any of it — and
   `node tools/preview-picture-size-tests.mjs`, which pins that `blockTags` is asked for by the
   two previews and nothing else, and `node tools/nav-groups-tests.mjs`.

@@ -297,9 +297,9 @@
 <!-- Start fetching the app module immediately. Without this the browser only
      discovers app.js once it has parsed its way down to the <script> tag near
      the end of the document, so the download would start hundreds of ms late. -->
-  <link rel="modulepreload" href="app.js?v=1.451.1">
+  <link rel="modulepreload" href="app.js?v=1.451.2">
 <!-- 🙋 Consults (v1.446.0): the archive window shared with Study Buddy, Ans Key and the Maths portal. -->
-<link rel="stylesheet" href="consult-answer.css?v=1.451.1">
+<link rel="stylesheet" href="consult-answer.css?v=1.451.2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The "Your next lightbulb moment" card (practice-preview.js) asks the sample service for its
@@ -322,7 +322,7 @@
      preview copy these links with media="all"). quest-frames.css is loaded the
      same non-blocking way. -->
 <link rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Pixelify+Sans:wght@400..700&display=swap">
-<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.451.1">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="quest-frames.css?v=1.451.2">
 
 <!-- Tailwind, prebuilt. This used to be <script src="cdn.tailwindcss.com">:
      the Play CDN, which ships a full CSS compiler to the browser, scans the
@@ -16416,12 +16416,19 @@ body.lore-reading { overflow: hidden; }
   font-weight: 700; white-space: nowrap; }   /* nowrap: wrapped onto two lines it squeezes the subject's own name */
 .subject-menu-title-tools { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 10px; }
 /* 🧭 An embedded app fills the page below its header — the frame IS the page. */
+/* The page is EXACTLY the window tall and the frame takes what the header
+   leaves (v1.451.2). It used to be "header + (100vh - 92px)": the header is
+   92px only on a wide window with a one-line subtitle, so on a laptop or the
+   installed taskbar app (a shorter window, the subtitle on two lines) the
+   frame ran 30-150px past the bottom of the window and Study Buddy's
+   worksheet, toolbar and buddy dock were cut off there. dvh after vh so a
+   phone's browser bar is not counted either. */
 .app-embed-page { display: none; flex-direction: column; }
-.app-embed-page.active { display: flex; }
+.app-embed-page.active { display: flex; height: 100vh; height: 100dvh; min-height: 360px; }
 .app-embed-page .page-header { flex: 0 0 auto; }
 .app-embed-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.app-embed-body { flex: 1 1 auto; min-height: 0; padding: 0; background: var(--surface-alt, #f4f4f2); }
-.app-embed-frame { display: block; width: 100%; height: 100%; min-height: calc(100vh - 92px); border: 0; background: #fff; }
+.app-embed-body { flex: 1 1 auto; min-height: 0; padding: 0; display: flex; flex-direction: column; background: var(--surface-alt, #f4f4f2); }
+.app-embed-frame { display: block; flex: 1 1 auto; width: 100%; height: auto; min-height: 0; border: 0; background: #fff; }
 /* 🎓 Science PSLE — the simple view (#page-psle, v1.450.2). Two sets of big buttons (years,
    topics); each opens a three-action sheet. Same data as 🎓 PSLE Papers — see app.js. */
 #page-psle .page-body { max-width: 1040px; }
@@ -16510,7 +16517,7 @@ body.lore-reading { overflow: hidden; }
 .tsend-check input { width: 15px; height: 15px; accent-color: var(--primary); -webkit-appearance: auto; appearance: auto; vertical-align: -2px; margin-right: 4px; }
 .tsend-check-sub { margin-left: 24px; margin-top: 6px; }
 .tsend-status { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: var(--primary-light); color: var(--primary-dark, var(--primary)); font-size: 0.84rem; font-weight: 600; }
-@media (max-width: 640px) { .tsend-grades { grid-template-columns: 1fr; } .app-embed-frame { min-height: calc(100vh - 120px); } }
+@media (max-width: 640px) { .tsend-grades { grid-template-columns: 1fr; } }
 .subject-menu-foot {
   padding: 9px 11px 5px;
   margin-top: 4px;
@@ -16826,11 +16833,11 @@ body.lore-reading { overflow: hidden; }
 <script defer src="rpg-hero-svg.js"></script>
 <script defer src="spire-svg-art.js"></script>
 <script defer src="shape-snap.js"></script>
-<script defer src="pwa-install.js?v=1.451.1"></script>
-  <script src="worksheet-cover.js?v=1.451.1"></script>
-  <script src="quest-frames.js?v=1.451.1"></script>
-  <script defer src="consult-answer.js?v=1.451.1"></script>
-  <script defer src="consult-bridge.js?v=1.451.1"></script>
-  <script type="module" src="app.js?v=1.451.1"></script>
+<script defer src="pwa-install.js?v=1.451.2"></script>
+  <script src="worksheet-cover.js?v=1.451.2"></script>
+  <script src="quest-frames.js?v=1.451.2"></script>
+  <script defer src="consult-answer.js?v=1.451.2"></script>
+  <script defer src="consult-bridge.js?v=1.451.2"></script>
+  <script type="module" src="app.js?v=1.451.2"></script>
 </body>
 </html>
