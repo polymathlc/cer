@@ -238,3 +238,27 @@ test('the labels stay with their worksheets when the list is reordered', () => {
   assert.equal(after.worksheetIds[Core.ansKeyAt(after)], 'c', 'the class is still on the same worksheet');
   assert.equal(Core.ansKeyState(after, 1), 'next');
 });
+
+test('a duplicated class keeps level and subject, drops the time, and starts from nothing', () => {
+  const copy = Core.duplicateCourseData(course({ id: 'orig', day: 'Thursday', slot: 0, title: 'P5 Mathematics · Thursday 3:00pm', currentIndex: 4, releasedThrough: 9 }), 'zk@example.com');
+  assert.deepEqual(plainList(copy), { title: 'P5 Mathematics', level: 'P5', subject: 'math', day: '', slot: null,
+    worksheetIds: [], currentIndex: -1, releasedThrough: -1, copiedFrom: 'orig', createdBy: 'zk@example.com' });
+});
+
+test('a copied worksheet keeps its answer key but not the lesson recordings', () => {
+  const json = JSON.stringify([{ id: 'a', type: 'pen' }, { id: 'r', type: 'video', lessonRecording: { version: 1 } }, { id: 't', type: 'text', text: 'Ans: 42' }]);
+  const out = Core.stripLessonRecordings(json);
+  assert.deepEqual(JSON.parse(out.json).map((a) => a.id), ['a', 't']);
+  assert.equal(out.removed, 1);
+  assert.equal(Core.stripLessonRecordings('not json').json, '[]');
+  assert.equal(Core.stripLessonRecordings('').json, '[]');
+  const ws = Core.worksheetCopy({ name: 'WS 3', level: 'P5', subject: 'math', wsDay: 'Monday', wsSlot: 1, hidden: true, storagePath: 'pdf-annotator/old.pdf',
+    starPages: [2], pageCount: 4, ownerUid: 'u1', ownerEmail: 't@x', share: { mode: 'edit' }, onlineCourseId: 'old', annotations: '[]' },
+  { id: 'new', storageDir: 'pdf-annotator', courseId: 'k2', seq: 2, fromId: 'old', by: 'a@x' });
+  assert.equal(ws.storagePath, 'pdf-annotator/new.pdf', 'its own PDF, never the original\'s');
+  assert.equal(ws.wsDay, ''); assert.equal(ws.wsSlot, null); assert.equal(ws.hidden, false);
+  assert.equal(ws.onlineCourseId, 'k2'); assert.equal(ws.onlineSeq, 2); assert.equal(ws.onlineCopiedFrom, 'old');
+  assert.equal(ws.share, undefined, 'share links are not copied');
+  assert.equal(ws.annotations, undefined, 'the answer key is filled in by the portal after stripping');
+  assert.deepEqual(plainList(ws.starPages), [2]);
+});

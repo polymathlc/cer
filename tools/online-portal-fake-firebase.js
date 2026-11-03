@@ -11,6 +11,8 @@
   var docs = window.__initialDocs ? JSON.parse(JSON.stringify(window.__initialDocs)) : {};
   var listeners = [];
   var files = {};
+  // Every PDF a seeded worksheet points at is in Storage.
+  Object.keys(docs).forEach(function (k) { if (docs[k] && docs[k].storagePath) files[docs[k].storagePath] = { size: 15, name: 'seed.pdf' }; });
   var authListeners = [];
   var currentUser = window.__initialUser || null;
   var seq = 0;
@@ -145,11 +147,12 @@
                   complete();
                 }, 10);
               },
-              then: function (a, b) { return new Promise(function (res) { setTimeout(res, 20); }).then(a, b); }
+              // Awaiting the task, as a real UploadTask allows, stores the file too.
+              then: function (a, b) { return new Promise(function (res) { setTimeout(function () { files[path] = files[path] || { size: file.size, name: file.name }; res(); }, 20); }).then(a, b); }
             };
             return task;
           },
-          getDownloadURL: function () { return files[path] || path.indexOf('seed') >= 0 ? Promise.resolve('data:application/pdf;base64,JVBERi0xLjQK') : Promise.reject(new Error('object-not-found')); }
+          getDownloadURL: function () { return files[path] || path.indexOf('seed') >= 0 ? Promise.resolve(files[path] && files[path].url ? files[path].url : 'data:application/pdf;base64,JVBERi0xLjQK') : Promise.reject(new Error('object-not-found')); }
         };
       }
     };

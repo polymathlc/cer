@@ -274,5 +274,61 @@ let studentDb = null;
   await context.close();
 }
 
+/* ---- Admin: duplicate a class for another time slot ---- */
+{
+  const docs = JSON.parse(JSON.stringify(db));
+  const [coursePath, original] = Object.entries(docs).find(([p]) => p.startsWith('onlineCourses/'));
+  const firstId = original.worksheetIds[0];
+  docs['pdfAnnotator/' + firstId].annotations = JSON.stringify([
+    { id: 'ink-1', type: 'pen', page: 1, points: [[1, 1], [2, 2]] },
+    { id: 'rec-1', type: 'video', page: 1, url: 'https://example.invalid/lesson.m4a', lessonRecording: { version: 1, duration: 60000 } }
+  ]);
+  const { page, context, errors } = await open({ user: admin, docs });
+  await page.waitForSelector('.tabs');
+  await page.click('[data-action="open-course"] >> nth=0');
+  await page.waitForSelector('[data-action="duplicate-course"]');
+  check('duplicate: a Duplicate class button sits beside Edit class', await page.locator('[data-action="duplicate-course"]').isVisible());
+  await page.click('[data-action="duplicate-course"]');
+  await page.waitForSelector('.modal [data-m="go"]');
+  const ask = await page.textContent('.modal');
+  check('duplicate: the window says what is kept and what is not', /all 10 worksheets/.test(ask) && /no day or time/.test(ask) && /nothing released/.test(ask) && /recordings stay/.test(ask));
+  await page.screenshot({ path: path.join(shots, '10-duplicate-ask.png') });
+  await page.click('.modal [data-m="go"]');
+  await page.waitForSelector('.modal #courseTitle', { timeout: 20000 });
+  check('duplicate: it goes straight on to choosing the time slot', /Edit class/.test(await page.textContent('.modal .eyebrow')));
+  const after = await page.evaluate(() => window.__fake.db);
+  const courses = Object.entries(after).filter(([p]) => p.startsWith('onlineCourses/'));
+  const [copyPath, copy] = courses.find(([p]) => p !== coursePath);
+  const copyId = copyPath.split('/')[1];
+  check('duplicate: a second class with the same level and subject', courses.length === 2 && copy.level === original.level && copy.subject === original.subject);
+  check('duplicate: the copy has no day or time, and its name is just level and subject', copy.day === '' && copy.slot === null && copy.title === 'P5 Mathematics');
+  check('duplicate: the copy is not started and releases nothing', copy.currentIndex === -1 && copy.releasedThrough === -1);
+  check('duplicate: the original class is untouched', JSON.stringify(after[coursePath].worksheetIds) === JSON.stringify(original.worksheetIds) && after[coursePath].releasedThrough === original.releasedThrough);
+  const copies = copy.worksheetIds.map((id) => after['pdfAnnotator/' + id]);
+  check('duplicate: all 10 worksheets are copied, in the same order, as new worksheets', copy.worksheetIds.length === 10 &&
+    copy.worksheetIds.every((id) => original.worksheetIds.indexOf(id) < 0) &&
+    copies.map((d) => d.name).join('|') === original.worksheetIds.map((id) => docs['pdfAnnotator/' + id].name).join('|'));
+  check('duplicate: each copy belongs to the new class, in its place', copies.every((d, i) => d.onlineCourseId === copyId && d.onlineSeq === i));
+  check('duplicate: each copy has its own PDF file', copy.worksheetIds.every((id) => after['pdfAnnotator/' + id].storagePath === 'pdf-annotator/' + id + '.pdf') &&
+    await page.evaluate((ids) => ids.every((id) => !!window.__fake.files['pdf-annotator/' + id + '.pdf']), copy.worksheetIds));
+  const copiedKey = JSON.parse(copies[0].annotations);
+  check('duplicate: the answer key is copied, the lesson recording is not', copiedKey.length === 1 && copiedKey[0].id === 'ink-1');
+  check('duplicate: the copies have no day or time yet', copies.every((d) => d.wsDay === '' && d.wsSlot === null && d.hidden === false));
+  // Choosing the time slot names the class and refiles every copied worksheet.
+  await page.click('.modal [data-m="day"][data-v="Thursday"]');
+  await page.click('.modal [data-m="slot"][data-v="0"]');
+  const title = await page.inputValue('#courseTitle');
+  check('duplicate: choosing a day names the class after it', /^P5 Mathematics · Thursday/.test(title));
+  await page.click('.modal [data-m="save"]');
+  await page.waitForFunction((id) => { const d = window.__fake.db['onlineCourses/' + id]; return d && d.day === 'Thursday'; }, copyId);
+  await page.waitForFunction((id) => { const c = window.__fake.db['onlineCourses/' + id]; return c.worksheetIds.every((w) => window.__fake.db['pdfAnnotator/' + w].wsDay === 'Thursday'); }, copyId);
+  const final = await page.evaluate(() => window.__fake.db);
+  check('duplicate: setting the time slot refiles all the copied worksheets at once', final['onlineCourses/' + copyId].worksheetIds.every((w) => final['pdfAnnotator/' + w].wsDay === 'Thursday' && final['pdfAnnotator/' + w].wsSlot === 0));
+  check('duplicate: the original worksheets keep their own day', original.worksheetIds.every((w) => final['pdfAnnotator/' + w].wsDay === docs['pdfAnnotator/' + w].wsDay));
+  await page.screenshot({ path: path.join(shots, '11-duplicate-done.png') });
+  check('duplicate: no script errors', errors.length === 0 || (console.log(errors), false));
+  await context.close();
+}
+
 await browser.close();
 console.log(`Passed ${checks} Polymath Online browser checks.`);

@@ -426,6 +426,49 @@
     return { total: n, added: added, failed: failed, pct: pct, label: label };
   }
 
+  /* ---- Duplicating a class ---- */
+  // The new class: same level and subject, no day or session yet (so its name
+  // follows the day once one is chosen), not started and nothing released.
+  function duplicateCourseData(course, by) {
+    return {
+      title: autoCourseTitle(course.level, course.subject, '', null),
+      level: course.level, subject: course.subject,
+      day: '', slot: null,
+      worksheetIds: [], currentIndex: -1, releasedThrough: -1,
+      copiedFrom: course.id || '', createdBy: by || ''
+    };
+  }
+  // A copied worksheet keeps the teacher's answer key but not the lesson
+  // recordings: those are the original class's lessons, and Ans Key only
+  // replays a recording on the worksheet it was made on.
+  function stripLessonRecordings(json) {
+    var list;
+    try { list = JSON.parse(json || '[]'); } catch (e) { return { json: '[]', removed: 0, kept: 0 }; }
+    if (!Array.isArray(list)) return { json: '[]', removed: 0, kept: 0 };
+    var kept = list.filter(function (a) { return !(a && a.lessonRecording); });
+    return { json: JSON.stringify(kept), removed: list.length - kept.length, kept: kept.length };
+  }
+  // The fields of a copied worksheet, apart from its PDF, annotations and
+  // timestamps, which the portal fills in as it copies them.
+  function worksheetCopy(doc, opts) {
+    var d = doc || {}, o = opts || {};
+    var out = {
+      name: String(d.name || 'Worksheet').slice(0, 120),
+      level: o.level || d.level || '', subject: o.subject || d.subject || '',
+      wsDay: '', wsSlot: null,
+      hidden: false,
+      storagePath: o.storageDir + '/' + o.id + '.pdf',
+      starPages: Array.isArray(d.starPages) ? d.starPages.slice() : [],
+      onlineCourseId: o.courseId, onlineSeq: o.seq, listOrder: o.seq,
+      onlineCopiedFrom: o.fromId || '',
+      onlineUploadedBy: o.by || '',
+      ownerEmail: d.ownerEmail || o.teacherEmail || ''
+    };
+    if (d.ownerUid) out.ownerUid = d.ownerUid;
+    if (d.pageCount) out.pageCount = d.pageCount;
+    return out;
+  }
+
   var api = {
     RELEASE_AHEAD: RELEASE_AHEAD, NEXT_COUNT: NEXT_COUNT, LEVELS: LEVELS, SUBJECTS: SUBJECTS, DAYS: DAYS, ROLES: ROLES,
     SLOTS_WEEKDAY: SLOTS_WEEKDAY, SLOTS_WEEKEND: SLOTS_WEEKEND,
@@ -443,7 +486,8 @@
     SENDER_EMAIL: SENDER_EMAIL, SENDER_NAME: SENDER_NAME, portalMail: portalMail,
     inviteLink: inviteLink, inviteEmail: inviteEmail, mailtoLink: mailtoLink, inviteStatusLabel: inviteStatusLabel,
     timeAgo: timeAgo, chunk: chunk, safeFileName: safeFileName,
-    keepsTyping: keepsTyping, uploadStateLabel: uploadStateLabel, uploadSummary: uploadSummary
+    keepsTyping: keepsTyping, uploadStateLabel: uploadStateLabel, uploadSummary: uploadSummary,
+    duplicateCourseData: duplicateCourseData, stripLessonRecordings: stripLessonRecordings, worksheetCopy: worksheetCopy
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.PolymathOnlineCore = api;
