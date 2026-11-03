@@ -634,3 +634,55 @@ test('the icons are made by tools/my-polymath-icons.py from the official logo, w
   }
   assert.ok(Math.abs(BLEND_DOWN + BLEND_ACROSS - 1) < 1e-9, 'the blend runs corner to corner');
 });
+
+// ───────────── 📲 Worksheets (online/) installs with the Polymath logo too (Nov 2026) ─────────────
+// Until November 2026 the installed Worksheets app showed a plain clipboard on mint, so a student's
+// taskbar had no Polymath logo on it at all. The same generator now draws it: the same sticker, on
+// Worksheets' own deep green tile, so it is clearly Polymath and still never identical to My Polymath.
+
+const ONLINE_DIR = path.join(root, 'online');
+const ONLINE_ICON_DIR = path.join(ONLINE_DIR, 'assets', 'app-icons');
+const WORKSHEETS_LIGHT = generatorConstant('WORKSHEETS_LIGHT');
+const WORKSHEETS_DEEP = generatorConstant('WORKSHEETS_DEEP');
+function worksheetsTile(x, y, size) {
+  const toWork = coordinate => Math.min(WORK - 1, Math.max(0, (coordinate + 0.5) * WORK / size - 0.5));
+  const t = (toWork(y) / (WORK - 1)) * BLEND_DOWN + (toWork(x) / (WORK - 1)) * BLEND_ACROSS;
+  return WORKSHEETS_LIGHT.map((light, channel) => light * (1 - t) + WORKSHEETS_DEEP[channel] * t);
+}
+const isWorksheetsTile = (pixel, x, y, size) => worksheetsTile(x, y, size).every((value, channel) => Math.abs(pixel[channel] - value) <= TILE_TOLERANCE);
+
+test('Worksheets installs with the Polymath logo on its own green tile — every size, opaque, logo in the middle', () => {
+  for (const icon of LOGO_ICONS) {
+    const image = decodePng(path.join(ONLINE_ICON_DIR, icon.file));
+    assert.deepEqual([image.width, image.height], [icon.size, icon.size], 'online ' + icon.file + ' is ' + icon.size + ' × ' + icon.size);
+    assert.equal(survey(image, pixel => pixel[3] !== 255).count, 0, 'online ' + icon.file + ' is opaque');
+    for (const [x, y] of [[1, 1], [icon.size - 2, 1], [1, icon.size - 2], [icon.size - 2, icon.size - 2]]) {
+      assert.ok(isWorksheetsTile(image.at(x, y), x, y, icon.size), `online ${icon.file}: the green tile at (${x}, ${y}), got ${image.at(x, y).slice(0, 3)}`);
+    }
+    const white = survey(image, isStickerWhite);
+    const magenta = survey(image, isLogoMagenta);
+    assert.ok(white.share >= (icon.purpose === 'maskable' ? 0.12 : 0.2), `online ${icon.file}: the white sticker covers ${(white.share * 100).toFixed(1)} %`);
+    assert.ok(magenta.share >= 0.004, `online ${icon.file}: the logo's magenta is there`);
+    assert.ok(magenta.left > white.left && magenta.right < white.right && magenta.top > white.top && magenta.bottom < white.bottom, 'online ' + icon.file + ': the M sits on the sticker');
+    if (icon.purpose === 'maskable') {
+      const centre = icon.size / 2;
+      const limit = SAFE_RADIUS * icon.size + 1;
+      const outside = survey(image, (pixel, x, y) => Math.hypot(x + 0.5 - centre, y + 0.5 - centre) > limit && !isWorksheetsTile(pixel, x, y, icon.size));
+      assert.equal(outside.count, 0, `online ${icon.file}: nothing but tile outside the safe circle`);
+    }
+    const mine = fs.readFileSync(path.join(ICON_DIR, icon.file));
+    assert.ok(!mine.equals(fs.readFileSync(path.join(ONLINE_ICON_DIR, icon.file))), icon.file + ': Worksheets and My Polymath never look identical');
+  }
+  const favicon = decodePng(path.join(ONLINE_ICON_DIR, 'favicon-32.png'));
+  assert.ok(survey(favicon, isLogoMagenta).count >= 8, 'online favicon-32.png: the M mark');
+});
+
+test('Worksheets\' offline page, manifest and worker carry the logo icon', () => {
+  const offline = fs.readFileSync(path.join(ONLINE_DIR, 'offline.html'), 'utf8');
+  const inline = offline.match(/<img src="data:image\/png;base64,([A-Za-z0-9+/=]+)"/);
+  assert.ok(inline && Buffer.from(inline[1], 'base64').equals(fs.readFileSync(path.join(ONLINE_ICON_DIR, 'icon-192.png'))), 'online/offline.html shows icon-192.png byte for byte');
+  const manifest = JSON.parse(fs.readFileSync(path.join(ONLINE_DIR, 'manifest.webmanifest'), 'utf8'));
+  assert.deepEqual(manifest.icons.map(icon => icon.src).sort(), ['assets/app-icons/icon-192.png', 'assets/app-icons/icon-512.png', 'assets/app-icons/maskable-192.png', 'assets/app-icons/maskable-512.png']);
+  assert.match(fs.readFileSync(path.join(ONLINE_DIR, 'sw.js'), 'utf8'), /^const SW_VERSION = '2\.0\.2';/m, 'the worker moved on, so installed copies re-cache the offline page');
+  assert.match(GENERATOR, /\(ONLINE, WORKSHEETS_LIGHT, WORKSHEETS_DEEP\)/, 'the generator draws Worksheets too');
+});

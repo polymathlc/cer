@@ -16,7 +16,7 @@
 // starts with its own CACHE_PREFIX, never anybody else's.
 'use strict';
 
-const SW_VERSION = '2.0.1';
+const SW_VERSION = '2.0.2';   // 2.0.2: offline.html carries the Polymath logo icon (Worksheets icon, Nov 2026) — a new version re-caches it
 const CACHE_PREFIX = 'polymath-online-shell-';
 const CACHE = CACHE_PREFIX + SW_VERSION;
 const OFFLINE_URL = 'offline.html';
