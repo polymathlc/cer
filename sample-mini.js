@@ -33,8 +33,22 @@
     const response = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body), signal: AbortSignal.timeout(body.action === 'check' ? 110000 : 60000) });
     let result; try { result = await response.json(); } catch { throw new Error('The sample service did not reply. Please try again.'); }
-    if (!response.ok) throw new Error(result.message || result.error?.message || 'The sample is unavailable right now. Please try again.');
+    if (!response.ok) { const error = new Error(result.message || result.error?.message || 'The sample is unavailable right now. Please try again.'); error.code = result.error?.code || ''; throw error; }
     return result;
+  }
+  // The sample questions never run out. If an older sample service says the guest pass has
+  // ended, fetch a fresh pass and mark the same answer again, so the visitor never sees it.
+  const sessionEnded = error => ['trial_expired', 'trial_required', 'question_trial_used'].includes(error?.code)
+    || /session has ended|open (this|the) sample again|finished this sample/i.test(String(error?.message || ''));
+  async function checkWithFreshPass(body) {
+    try { return await request({ ...body, token }); }
+    catch (error) {
+      if (!sessionEnded(error)) throw error;
+      const renewed = await request({ action: 'questions', subject });
+      token = typeof renewed.token === 'string' ? renewed.token : '';
+      try { return await request({ ...body, token }); }
+      catch (again) { if (sessionEnded(again)) throw new Error('Your answer could not be checked just now. Please tap Check again.'); throw again; }
+    }
   }
   function attempt(q) {
     if (!attempts.has(q.id)) attempts.set(q.id, { responses: {}, result: null, annotations: {} });
@@ -247,7 +261,7 @@
     pending = true; render();
     try {
       for (const [id, pad] of pads) { const png = await pad.exportPNG(); if (png) state.responses[id] = png; else delete state.responses[id]; }
-      state.result = await request({ action: 'check', subject, token, questionId: q.id, responses: { ...state.responses } });
+      state.result = await checkWithFreshPass({ action: 'check', subject, questionId: q.id, responses: { ...state.responses } });
     }
     catch (error) { state.result = { verdict: 'uncertain', feedback: error.message }; }
     finally {
