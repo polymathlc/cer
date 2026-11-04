@@ -166,6 +166,40 @@ test('checkAnswer asks the service exactly as Sample Materials does', async () =
   } finally { globalThis.fetch = saved; PP._reset(); }
 });
 
+test('an ended sample session never stops the visitor: a fresh pass is fetched and the answer is marked', async () => {
+  const saved = globalThis.fetch;
+  try {
+    PP._reset();
+    const bodies = []; let passes = 0;
+    globalThis.fetch = async (url, init) => {
+      const body = JSON.parse(init.body); bodies.push(body);
+      if (body.action === 'questions') { passes += 1; return { ok: true, json: async () => ({ token: 'tok' + passes, questions: [LIVE] }) }; }
+      if (body.token === 'tok1') return { ok: false, status: 401, json: async () => ({ error: { code: 'trial_expired', message: 'Your sample session has ended. Open the sample again to continue.' } }) };
+      return { ok: true, json: async () => ({ verdict: 'correct', review: REVIEW }) };
+    };
+    const r = await PP.checkAnswer(LIVE, { m1: 'b' });
+    assert.equal(r.verdict, 'correct');
+    const checks = bodies.filter(b => b.action === 'check');
+    assert.deepEqual(checks.map(b => b.token), ['tok1', 'tok2']);
+    // Later answers use the fresh pass straight away.
+    await PP.checkAnswer(LIVE, { m1: 'a' });
+    assert.equal(bodies.filter(b => b.action === 'check').pop().token, 'tok2');
+  } finally { globalThis.fetch = saved; PP._reset(); }
+});
+
+test('the ended-session message is never shown, even if renewal keeps failing', async () => {
+  const saved = globalThis.fetch;
+  try {
+    PP._reset();
+    globalThis.fetch = async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.action === 'questions') return { ok: true, json: async () => ({ token: 'tok', questions: [LIVE] }) };
+      return { ok: false, status: 401, json: async () => ({ error: { code: 'trial_expired', message: 'Your sample session has ended. Open the sample again to continue.' } }) };
+    };
+    await assert.rejects(PP.checkAnswer(LIVE, { m1: 'b' }), err => !/session has ended/i.test(err.message));
+  } finally { globalThis.fetch = saved; PP._reset(); }
+});
+
 test('the questions are remembered in the browser for an instant next visit', async () => {
   const savedFetch = globalThis.fetch, savedLs = globalThis.localStorage;
   const store = {};

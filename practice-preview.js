@@ -525,6 +525,7 @@
           var message = d && (d.message || (d.error && d.error.message));
           var err = new Error(message || 'The sample questions are unavailable right now. Please try again.');
           err.status = r.status;
+          err.code = d && d.error && typeof d.error.code === 'string' ? d.error.code : '';
           throw err;
         }
         if (!d || typeof d !== 'object') throw new Error('The sample service did not reply. Please try again.');
@@ -631,10 +632,41 @@
     });
   }
 
+  // The sample questions never run out. An older sample service hands out a guest pass that
+  // ends after a while ("Your sample session has ended…"); when it says so, quietly fetch a fresh
+  // pass and mark the same answer again, so the visitor never sees that message.
+  var SESSION_ENDED = ['trial_expired', 'trial_required', 'question_trial_used'];
+
+  function sessionEnded(err) {
+    if (!err) return false;
+    if (SESSION_ENDED.indexOf(err.code) >= 0) return true;
+    return /session has ended|open (this|the) sample again|finished this sample/i.test(String(err.message || ''));
+  }
+
+  function renewSet(subject) {
+    return post({ action: 'questions', subject: subject }, TIMEOUT_MS).then(function (d) {
+      var set = { subject: subject, token: typeof d.token === 'string' ? d.token : '', questions: usable(d.questions), fresh: true };
+      if (set.questions.length) { live = set; cached = set; writeCache(set); }
+      return set;
+    });
+  }
+
+  function markWith(set, q, responses) {
+    return post({ action: 'check', subject: set.subject, token: set.token, questionId: q.id, responses: responses }, CHECK_TIMEOUT_MS);
+  }
+
   // Ask the service to mark one answer, exactly as the Sample Materials player does.
   function checkAnswer(q, responses) {
     return markingSet(q).then(function (set) {
-      return post({ action: 'check', subject: set.subject, token: set.token, questionId: q.id, responses: responses }, CHECK_TIMEOUT_MS);
+      return markWith(set, q, responses).catch(function (err) {
+        if (!sessionEnded(err)) throw err;
+        return renewSet(set.subject).then(function (fresh) {
+          return markWith(fresh, q, responses);
+        }, function () { throw new Error('Your answer could not be checked just now. Please tap Check again.'); }).catch(function (again) {
+          if (sessionEnded(again)) throw new Error('Your answer could not be checked just now. Please tap Check again.');
+          throw again;
+        });
+      });
     });
   }
 
