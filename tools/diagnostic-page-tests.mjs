@@ -41,7 +41,7 @@ const LIVE = { slots: {
 
 test('the page and the server agree on the rules', () => {
   assert.equal(page.DIAGNOSTIC_FIRST_DAY, server.DIAGNOSTIC_FIRST_DAY);
-  assert.equal(page.DIAGNOSTIC_FIRST_DAY, '2026-12-01', 'sessions start in December 2026');
+  assert.equal(page.DIAGNOSTIC_FIRST_DAY, '2026-12-07', 'sessions start on 7 December 2026');
   assert.equal(page.DIAGNOSTIC_NOTICE_DAYS, server.DIAGNOSTIC_NOTICE_DAYS);
   assert.equal(page.DIAGNOSTIC_HORIZON_DAYS, server.DIAGNOSTIC_HORIZON_DAYS);
   assert.deepEqual(plain(page.SG_PUBLIC_HOLIDAYS), plain(server.SG_PUBLIC_HOLIDAYS));

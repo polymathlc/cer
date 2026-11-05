@@ -28,7 +28,7 @@ const CONFIG = {
 };
 const seed = () => ({ 'schedule_config/main': structuredClone(CONFIG) });
 const form = (overrides = {}) => ({
-  slot: 'TUE-1', date: '2026-12-01',
+  slot: 'TUE-1', date: '2026-12-08',
   parentName: 'Test Parent', email: 'Parent@Example.test', studentName: 'Ava Tan',
   subject: 'Science', level: 'Primary 5', pageVersion: 'v1.0.0',
   ...overrides
@@ -66,7 +66,7 @@ test('day keys read as words, in Singapore time', () => {
   assert.equal(bookingWindow(Date.UTC(2026, 10, 30, 16, 30)).today, '2026-12-01');
 });
 
-test('the booking window opens on 1 December, or two days ahead once December has begun', () => {
+test('the booking window opens on 7 December, or two days ahead after that', () => {
   assert.equal(bookingWindow(NOW).first, DIAGNOSTIC_FIRST_DAY);
   assert.equal(bookingWindow(Date.UTC(2026, 11, 10, 3)).first, '2026-12-12');
   assert.equal(bookingWindow(NOW).last, '2027-05-06');
@@ -112,7 +112,9 @@ test('the session is checked against the timetable as it is now', () => {
   };
   assert.equal(codeOf({}), 'ok');
   assert.equal(codeOf({ date: '2026-11-24' }), 'before-december');
-  assert.equal(codeOf({ date: '2026-12-02' }), 'session-unavailable', 'a Tuesday class on a Wednesday');
+  assert.equal(codeOf({ date: '2026-12-01' }), 'before-december', 'sessions start on 7 December');
+  assert.equal(codeOf({ date: '2026-12-07', slot: 'MON-3' }), 'session-unavailable', 'the first day itself is allowed; MON-3 is regular');
+  assert.equal(codeOf({ date: '2026-12-09' }), 'session-unavailable', 'a Tuesday class on a Wednesday');
   assert.equal(codeOf({ slot: 'MON-3', date: '2026-12-07' }), 'session-unavailable', 'a regular class');
   assert.equal(codeOf({ slot: 'FRI-2', date: '2026-12-04' }), 'session-unavailable', 'a closed Master Class');
   assert.equal(codeOf({ slot: 'SAT-1', date: '2026-12-05' }), 'session-unavailable');
@@ -134,7 +136,7 @@ test('a booking is written for the admin, and both emails go out once', async ()
   assert.equal(res.body.already, false);
   const shown = res.body.booking;
   assert.match(shown.code, /^[A-Z2-9]{6}$/);
-  assert.equal(shown.sessionLabel, 'Tuesday 1 December 2026, 3:00pm – 4:45pm');
+  assert.equal(shown.sessionLabel, 'Tuesday 8 December 2026, 3:00pm – 4:45pm');
   assert.equal(shown.studentName, 'Ava Tan');
   assert.equal(shown.worth, 100);
   assert.equal(shown.confirmationSent, true);
@@ -147,7 +149,7 @@ test('a booking is written for the admin, and both emails go out once', async ()
   assert.equal(booking.status, 'pending');
   assert.equal(booking.payment, 'free');
   assert.equal(booking.price, 0);
-  assert.equal(booking.diagnosticDate, '2026-12-01');
+  assert.equal(booking.diagnosticDate, '2026-12-08');
   assert.equal(booking.slotLabel, 'Tuesday 3:00pm – 4:45pm');
   assert.equal(booking.classType, 'master');
   assert.equal(booking.classLevel, 'P5');
@@ -170,7 +172,7 @@ test('a booking is written for the admin, and both emails go out once', async ()
   assert.match(admin.message.subject, /^New FREE DIAGNOSTIC: Ava Tan \(Primary 5 Science\)/);
   assert.deepEqual(parent.to, ['parent@example.test']);
   assert.equal(parent.replyTo, SENDER_EMAIL);
-  assert.match(parent.message.subject, /^Free diagnostic test booked — Tuesday 1 December 2026/);
+  assert.match(parent.message.subject, /^Free diagnostic test booked — Tuesday 8 December 2026/);
   assert.match(parent.message.text, /worth \$100/);
   assert.match(parent.message.text, new RegExp(shown.code));
 });
@@ -205,7 +207,8 @@ test('refusals reach the page as codes, and nothing is written', async () => {
   const h = harness();
   const cases = [
     [form({ date: '2026-11-24' }), 409, 'before-december'],
-    [form({ date: '2026-12-02' }), 409, 'session-unavailable'],
+    [form({ date: '2026-12-01' }), 409, 'before-december'],
+    [form({ date: '2026-12-09' }), 409, 'session-unavailable'],
     [form({ email: 'bad' }), 400, 'invalid-email'],
     [form({ level: 'K2' }), 400, 'invalid-level']
   ];

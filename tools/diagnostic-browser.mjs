@@ -66,7 +66,7 @@ async function openPage(viewport, answer) {
   return { context, page, posts, errors };
 }
 const booked = body => [201, { ok: true, already: false, booking: { code: 'ABC234', slot: body.slot, date: body.date,
-  sessionLabel: 'Tuesday 1 December 2026, 3:00pm – 4:45pm', parentName: body.parentName, studentName: body.studentName,
+  sessionLabel: 'Tuesday 8 December 2026, 3:00pm – 4:45pm', parentName: body.parentName, studentName: body.studentName,
   email: body.email, subject: body.subject, level: body.level, worth: 100, confirmationSent: true } }];
 
 for (const [label, viewport] of [['desktop', { width: 1280, height: 900 }], ['phone', { width: 390, height: 844 }]]) {
@@ -76,10 +76,10 @@ for (const [label, viewport] of [['desktop', { width: 1280, height: 900 }], ['ph
     const months = await page.$$eval('.month-tab', els => els.map(e => e.textContent));
     assert.equal(months[0], 'December 2026', 'the first month is December');
     const days = await page.$$eval('.session-day h4', els => els.map(e => e.textContent));
-    assert.equal(days[0], 'Tuesday 1 December 2026', 'the first session is 1 December');
+    assert.equal(days[0], 'Tuesday 8 December 2026', 'the first session is the first Master Class from 7 December');
     assert.ok(!days.some(d => /Monday/.test(d)), 'regular classes are not offered');
     const first = await page.$$eval('.session', els => els.map(e => e.dataset.slot + ' ' + e.dataset.date).slice(0, 4));
-    assert.deepEqual(first, ['TUE-1 2026-12-01', 'TUE-3 2026-12-01', 'WED-3 2026-12-02', 'THU-3 2026-12-03']);
+    assert.deepEqual(first, ['TUE-1 2026-12-08', 'TUE-3 2026-12-08', 'WED-3 2026-12-09', 'THU-3 2026-12-10']);
     if (SHOTS) { await mkdir(SHOTS, { recursive: true }); await page.screenshot({ path: join(SHOTS, 'diagnostic-' + label + '.png'), fullPage: true }); }
 
     // Submitting without a subject is refused in words.
@@ -92,14 +92,14 @@ for (const [label, viewport] of [['desktop', { width: 1280, height: 900 }], ['ph
     const matching = await page.$$eval('.session', els => [...new Set(els.map(e => e.dataset.slot))]);
     assert.deepEqual(matching, ['TUE-1'], 'only Primary 5 Science Master Classes when asked');
     await page.uncheck('#match-only');
-    await page.click('.session[data-slot="TUE-1"][data-date="2026-12-01"]');
-    assert.match(await page.textContent('#chosen'), /Tuesday 1 December 2026, 3:00pm – 4:45pm/);
+    await page.click('.session[data-slot="TUE-1"][data-date="2026-12-08"]');
+    assert.match(await page.textContent('#chosen'), /Tuesday 8 December 2026, 3:00pm – 4:45pm/);
     await page.fill('#f-parent', 'Test Parent');
     await page.fill('#f-email', 'parent@example.test');
     await page.fill('#f-student', 'Ava Tan');
     await page.click('#submit-btn');
     await page.waitForSelector('#book-success:not(.hidden)');
-    assert.deepEqual(posts[0], { slot: 'TUE-1', date: '2026-12-01', parentName: 'Test Parent', email: 'parent@example.test',
+    assert.deepEqual(posts[0], { slot: 'TUE-1', date: '2026-12-08', parentName: 'Test Parent', email: 'parent@example.test',
       studentName: 'Ava Tan', subject: 'Science', level: 'Primary 5', pageVersion: posts[0].pageVersion });
     assert.match(posts[0].pageVersion, /^v\d+\.\d+\.\d+$/);
     assert.match(await page.textContent('#success-summary'), /ABC234/);
