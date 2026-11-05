@@ -20,6 +20,8 @@ export const RECEIPT_ENDPOINT = BASE + 'sendShopReceipt';
 // Trial lessons and enrolments paid by card on /schedule, served from the same origins.
 export const SCHEDULE_CHECKOUT_ENDPOINT = BASE + 'createScheduleCheckout';
 export const SCHEDULE_STATUS_ENDPOINT = BASE + 'scheduleCheckoutStatus';
+// Free diagnostic test bookings on /diagnostic, served from the same origins.
+export const DIAGNOSTIC_ENDPOINT = BASE + 'bookDiagnostic';
 export const REFUSED_PROBE = 'https://shop-smoke.invalid';
 export const SMOKE_ATTEMPTS = 6;
 export const SMOKE_WAIT_MS = 10000;
@@ -33,7 +35,7 @@ async function preflight(endpoint, origin, fetchImpl) {
 
 export async function smokeProblems({ webhookExpected = true, fetchImpl = globalThis.fetch } = {}) {
   const problems = [];
-  for (const endpoint of [CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT]) {
+  for (const endpoint of [CHECKOUT_ENDPOINT, STATUS_ENDPOINT, RECEIPT_ENDPOINT, SCHEDULE_CHECKOUT_ENDPOINT, SCHEDULE_STATUS_ENDPOINT, DIAGNOSTIC_ENDPOINT]) {
     const name = endpoint.slice(BASE.length);
     for (const origin of ORIGINS) {
       try {

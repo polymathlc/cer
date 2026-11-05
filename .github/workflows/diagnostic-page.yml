@@ -1,0 +1,31 @@
+name: Diagnostic page checks
+on:
+  pull_request:
+    paths: ['diagnostic/**', 'shop-function/functions/diagnostic.js', 'tools/diagnostic-*.mjs', 'schedule/index.html', '.github/workflows/diagnostic-page.yml']
+  push:
+    branches: [main]
+    paths: ['diagnostic/**', 'shop-function/functions/diagnostic.js', 'tools/diagnostic-*.mjs', 'schedule/index.html', '.github/workflows/diagnostic-page.yml']
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: The page lists exactly the sessions bookDiagnostic accepts
+        run: node --test tools/diagnostic-page-tests.mjs
+      - run: npm install --no-save --package-lock=false playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - name: Book a diagnostic test at desktop and phone widths
+        run: node tools/diagnostic-browser.mjs
+        env:
+          DIAGNOSTIC_SCREENSHOTS: artifacts/diagnostic
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostic-page-previews
+          path: artifacts/diagnostic
+          if-no-files-found: ignore

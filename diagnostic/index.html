@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* HTTPS UPGRADE — a page opened over plain http:// on the custom domain moves to https://, but only after a probe proves the secure address answers. If https is broken the page stays put. */(function(){var l=location;if(l.protocol!=='http:'||!/(^|\.)polymathlc\.com\.sg$/i.test(l.hostname))return;try{fetch('https://'+l.host+'/?https-check='+Date.now(),{mode:'no-cors',cache:'no-store'}).then(function(){l.replace('https://'+l.host+l.pathname+l.search+l.hash)},function(){})}catch(e){}})();</script>
+<title>Free Diagnostic Test (worth $100) | Primary Maths &amp; Science | Polymath Learning Centre</title>
+<!-- 🩺 Free diagnostic test booking (Nov 2026): parents book a free diagnostic test at any
+     Master Class session on the /schedule timetable, from 1 December 2026 onwards. -->
+<link rel="canonical" href="https://polymathlc.com.sg/diagnostic/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Polymath Learning Centre">
+<meta property="og:locale" content="en_SG">
+<meta property="og:title" content="Free Diagnostic Test (worth $100) | Polymath Learning Centre">
+<meta property="og:description" content="Book a free Primary Maths or Science diagnostic test, worth $100, at Polymath Learning Centre in Clementi. Choose any Master Class session from December onwards and find out where your child stands.">
+<meta property="og:url" content="https://polymathlc.com.sg/diagnostic/">
+<meta property="og:image" content="https://polymathlc.com.sg/assets/branding/polymath-learning-centre.png">
+<meta property="og:image:alt" content="Polymath Learning Centre logo">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Free Diagnostic Test (worth $100) | Polymath Learning Centre">
+<meta name="twitter:description" content="Book a free Primary Maths or Science diagnostic test, worth $100, at Polymath Learning Centre in Clementi. Choose any Master Class session from December onwards.">
+<meta name="twitter:image" content="https://polymathlc.com.sg/assets/branding/polymath-learning-centre.png">
+<meta name="description" content="Book a free Primary Maths or Science diagnostic test, worth $100, at Polymath Learning Centre in Clementi. Choose any Master Class session from December onwards and find out where your child stands.">
+<link rel="icon" href="../assets/branding/polymath-learning-centre.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- The timetable, asked for now over Firestore's plain REST address, so a phone on a slow
+     connection sees the sessions before the Firebase libraries (for the admin) have loaded. -->
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://us-central1-mathgen--app.cloudfunctions.net" crossorigin>
+<script>try{if(window.fetch){window.__scheduleEarly=fetch('https://firestore.googleapis.com/v1/projects/mathgen--app/databases/(default)/documents/schedule_config/main',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).catch(function(){return null})}}catch(e){}</script>
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --white:#fff; --gray-50:#fafafa; --gray-100:#f5f5f5; --gray-200:#e5e5e5; --gray-300:#d4d4d4; --gray-400:#a3a3a3;
+    --gray-500:#737373; --gray-600:#525252; --gray-700:#404040; --gray-900:#171717;
+    --success:#16a34a; --success-bg:#f0fdf4; --success-border:#bbf7d0;
+    --danger:#dc2626; --danger-bg:#fef2f2; --danger-border:#fecaca;
+    --warn:#b45309; --warn-bg:#fffbeb; --warn-border:#fde68a;
+    --ink:#10303a; --teal:#2e9ca6; --deep:#056c76; --aqua:#56c4d0; --pink:#ec008c; --plum:#b51f6b; --paper:#f2f9fa; --line:#d1eaee;
+    --font:'DM Sans',system-ui,sans-serif;
+    --radius:14px; --radius-sm:9px;
+  }
+  body { font-family:var(--font); background:var(--paper); color:var(--ink); line-height:1.6; -webkit-font-smoothing:antialiased; }
+  button, input, select, textarea { font-family:inherit; font-size:15px; }
+  a { color:var(--deep); }
+  .hidden { display:none !important; }
+
+  /* ─── Top bar ─── */
+  .topbar { position:sticky; top:0; z-index:50; background:var(--white); box-shadow:0 2px 14px rgba(5,108,118,.08);
+    border-bottom:3px solid transparent; border-image:linear-gradient(90deg,var(--teal),var(--aqua),var(--pink)) 1; }
+  .topbar-inner { max-width:980px; margin:0 auto; padding:0 16px; display:flex; align-items:center; gap:16px; min-height:62px; }
+  .brand { display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--ink); }
+  .brand img { width:52px; height:40px; object-fit:contain; }
+  .brand-name { font-size:14px; line-height:1.25; font-weight:700; }
+  .brand-name span { display:block; font-size:11px; font-weight:400; color:#5e6d6f; letter-spacing:.3px; }
+  .topbar-contact { display:flex; align-items:center; gap:10px; margin-left:auto; }
+  .contact-link { color:var(--deep); font-weight:700; font-size:14px; text-decoration:none; padding:8px 4px; white-space:nowrap; }
+  .contact-link:hover { color:var(--pink); text-decoration:underline; }
+  .wa-btn { display:inline-flex; align-items:center; gap:7px; background:#25d366; color:#fff; border-radius:999px; padding:8px 14px;
+    font-weight:700; font-size:14px; text-decoration:none; white-space:nowrap; box-shadow:0 2px 8px rgba(37,211,102,.28); }
+  .wa-btn:hover { background:#1ebe5b; }
+  .wa-btn svg { width:18px; height:18px; fill:currentColor; flex:0 0 auto; }
+
+  .wrap { max-width:980px; margin:0 auto; padding:24px 16px 80px; }
+
+  /* ─── Hero ─── */
+  .hero { position:relative; overflow:hidden; color:#fff; border-radius:20px; padding:44px 36px; margin-bottom:22px;
+    background:radial-gradient(circle at 92% 8%,rgba(236,0,140,.38),transparent 46%),linear-gradient(135deg,var(--deep),var(--teal) 60%,var(--aqua));
+    box-shadow:0 14px 34px rgba(5,108,118,.24); }
+  .hero::after { content:""; position:absolute; right:-50px; bottom:-70px; width:240px; height:240px; border-radius:50%; background:rgba(255,255,255,.08); }
+  .hero .eyebrow { display:inline-block; font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; background:rgba(255,255,255,.16);
+    border:1px solid rgba(255,255,255,.3); border-radius:999px; padding:4px 12px; margin-bottom:14px; }
+  .hero h1 { font-size:36px; line-height:1.15; letter-spacing:-.6px; margin-bottom:10px; max-width:640px; }
+  .hero p { color:rgba(255,255,255,.92); max-width:600px; font-size:16px; }
+  .hero-pills { display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; position:relative; z-index:1; }
+  .pill { display:inline-flex; align-items:center; gap:8px; background:#fff; color:var(--plum); font-weight:700; font-size:15px; padding:8px 18px;
+    border-radius:999px; box-shadow:0 4px 12px rgba(0,0,0,.12); }
+  .pill s { color:var(--gray-500); font-weight:500; }
+  .pill.ghost { background:rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.35); box-shadow:none; }
+  .hero .cta { position:relative; z-index:1; display:inline-flex; margin-top:22px; background:var(--pink); color:#fff; font-weight:700; font-size:16px;
+    padding:13px 24px; border-radius:12px; text-decoration:none; box-shadow:0 6px 16px rgba(236,0,140,.35); }
+  .hero .cta:hover { background:var(--plum); }
+
+  /* ─── Cards ─── */
+  .card { background:var(--white); border:1px solid var(--line); border-radius:var(--radius); padding:24px; margin-bottom:20px; box-shadow:0 2px 10px rgba(5,108,118,.05); }
+  .card h2 { font-size:20px; color:var(--deep); margin-bottom:6px; letter-spacing:-.2px; }
+  .card .lead { color:var(--gray-600); font-size:14px; margin-bottom:16px; }
+  .benefits { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .benefit { border:1px solid var(--line); border-radius:12px; padding:18px; background:linear-gradient(180deg,#fff,#f7fcfd); }
+  .benefit .icon { font-size:26px; line-height:1; margin-bottom:10px; }
+  .benefit h3 { font-size:15px; margin-bottom:4px; }
+  .benefit p { font-size:13px; color:var(--gray-600); }
+  .steps { list-style:none; display:grid; grid-template-columns:repeat(3,1fr); gap:14px; counter-reset:step; }
+  .steps li { counter-increment:step; position:relative; padding:16px 16px 16px 56px; border-radius:12px; background:var(--paper); font-size:14px; }
+  .steps li::before { content:counter(step); position:absolute; left:16px; top:16px; width:28px; height:28px; border-radius:50%; background:var(--deep); color:#fff;
+    font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px; }
+  .steps b { display:block; color:var(--ink); }
+  .steps span { color:var(--gray-600); font-size:13px; }
+
+  /* ─── Booking ─── */
+  .book-step { border-top:1px solid var(--line); padding-top:18px; margin-top:18px; }
+  .book-step:first-of-type { border-top:none; padding-top:0; margin-top:0; }
+  .step-title { display:flex; align-items:center; gap:10px; font-size:16px; font-weight:700; margin-bottom:12px; }
+  .step-num { width:26px; height:26px; border-radius:50%; background:var(--pink); color:#fff; font-size:13px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .field label { display:block; font-size:13px; font-weight:700; color:var(--gray-700); margin-bottom:5px; }
+  .field input, .field select { width:100%; padding:11px 12px; border:1px solid var(--gray-300); border-radius:var(--radius-sm); background:var(--white); color:var(--gray-900); }
+  .field input:focus, .field select:focus { outline:none; border-color:var(--deep); box-shadow:0 0 0 3px rgba(5,108,118,.12); }
+  .field .hint { font-size:12px; color:var(--gray-500); margin-top:4px; }
+  .req { color:var(--danger); }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { border:1px solid var(--gray-300); background:#fff; color:var(--ink); border-radius:999px; padding:8px 16px; cursor:pointer; font-weight:600; font-size:14px; }
+  .chip:hover { border-color:var(--deep); }
+  .chip.on { background:var(--deep); border-color:var(--deep); color:#fff; }
+  .chip:focus-visible { outline:2px solid var(--pink); outline-offset:2px; }
+
+  .session-tools { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+  .month-tabs { display:flex; flex-wrap:wrap; gap:6px; }
+  .month-tab { border:1px solid var(--line); background:#fff; color:var(--deep); border-radius:999px; padding:6px 14px; cursor:pointer; font-weight:700; font-size:13px; }
+  .month-tab.on { background:var(--deep); color:#fff; border-color:var(--deep); }
+  .match-toggle { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--gray-700); cursor:pointer; user-select:none; }
+  .match-toggle input { width:16px; height:16px; accent-color:var(--deep); }
+  .session-day { margin-bottom:14px; }
+  .session-day h4 { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--deep); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+  .session-day h4::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--pink); }
+  .session-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; }
+  .session { text-align:left; border:1.5px solid var(--line); border-top:4px solid var(--aqua); background:#fff; border-radius:12px; padding:12px 14px; cursor:pointer;
+    display:flex; flex-direction:column; gap:4px; transition:transform .12s, box-shadow .12s, border-color .12s; color:var(--ink); }
+  .session:hover { transform:translateY(-1px); box-shadow:0 6px 16px rgba(5,108,118,.12); }
+  .session.on { border-color:var(--pink); border-top-color:var(--pink); box-shadow:0 0 0 3px rgba(236,0,140,.14); }
+  .session .time { font-weight:700; font-size:15px; }
+  .session .what { font-size:13px; color:var(--gray-600); }
+  .tag { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; background:var(--gray-100); border:1px solid var(--gray-200); color:var(--gray-700); margin-right:4px; }
+  .tag.math { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
+  .tag.sci { background:#f0fdf4; border-color:#bbf7d0; color:#15803d; }
+  .tag.match { background:#fdf2f8; border-color:#fbcfe8; color:var(--plum); }
+  .more-row { text-align:center; margin-top:6px; }
+  .state { text-align:center; color:var(--gray-500); padding:28px 12px; font-size:14px; border:1px dashed var(--line); border-radius:12px; }
+  .spin { display:inline-block; width:20px; height:20px; border:3px solid var(--line); border-top-color:var(--deep); border-radius:50%; animation:spin .8s linear infinite; vertical-align:middle; margin-right:8px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .chosen { display:flex; align-items:center; gap:10px; background:#fdf2f8; border:1px solid #fbcfe8; color:var(--plum); border-radius:10px; padding:10px 14px; font-weight:700; font-size:14px; margin-bottom:14px; }
+
+  .btn { display:inline-flex; justify-content:center; align-items:center; gap:6px; background:var(--deep); color:#fff; border:1px solid var(--deep); padding:11px 16px;
+    border-radius:var(--radius-sm); font-weight:700; cursor:pointer; text-decoration:none; }
+  .btn:hover { background:#04565e; }
+  .btn:disabled { opacity:.55; cursor:not-allowed; }
+  .btn.big { width:100%; padding:15px; font-size:16px; background:var(--pink); border-color:var(--pink); }
+  .btn.big:hover { background:var(--plum); border-color:var(--plum); }
+  .btn.ghost { background:#fff; color:var(--deep); border-color:var(--gray-300); }
+  .btn.ghost:hover { background:var(--gray-100); }
+  .btn.danger { background:#fff; color:var(--danger); border-color:var(--danger-border); }
+  .btn.small { padding:6px 10px; font-size:12px; }
+  .fineprint { font-size:12px; color:var(--gray-500); margin-top:10px; text-align:center; }
+  .success { text-align:center; padding:12px 4px; }
+  .success .tick { width:64px; height:64px; border-radius:50%; background:var(--success-bg); color:var(--success); font-size:34px; display:flex; align-items:center; justify-content:center; margin:0 auto 12px; border:2px solid var(--success-border); }
+  .success h3 { font-size:22px; color:var(--deep); margin-bottom:6px; }
+  .success p { color:var(--gray-700); max-width:520px; margin:0 auto 10px; font-size:15px; }
+  .summary { text-align:left; max-width:460px; margin:16px auto; border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:14px; }
+  .summary div { display:grid; grid-template-columns:140px 1fr; border-top:1px solid var(--line); }
+  .summary div:first-child { border-top:none; }
+  .summary dt { background:var(--paper); padding:8px 12px; font-weight:700; color:var(--gray-700); }
+  .summary dd { padding:8px 12px; }
+
+  /* ─── FAQ ─── */
+  details { border-top:1px solid var(--line); padding:12px 0; }
+  details:first-of-type { border-top:none; }
+  summary { cursor:pointer; font-weight:700; }
+  details p { color:var(--gray-600); font-size:14px; margin-top:6px; }
+
+  /* ─── Admin ─── */
+  .admin-banner { background:var(--warn-bg); border:1px solid var(--warn-border); color:var(--warn); padding:10px 14px; border-radius:var(--radius-sm); font-size:13px; margin-bottom:16px;
+    display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .admin-tools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; }
+  .admin-tools input { padding:8px 10px; border:1px solid var(--gray-300); border-radius:8px; min-width:200px; font-size:14px; }
+  .admin-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+  .stat { background:var(--paper); border-radius:10px; padding:12px; }
+  .stat b { display:block; font-size:22px; color:var(--deep); }
+  .stat span { font-size:12px; color:var(--gray-600); }
+  .admin-session { border:1px solid var(--line); border-radius:12px; margin-bottom:12px; overflow:hidden; }
+  .admin-session > header { background:var(--paper); padding:10px 14px; font-weight:700; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:14px; }
+  .admin-row { display:grid; grid-template-columns:1fr auto; gap:12px; padding:12px 14px; border-top:1px solid var(--line); font-size:13px; align-items:start; }
+  .admin-row .who b { font-size:14px; }
+  .admin-row .acts { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  .badge { font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; border:1px solid; }
+  .badge.pending { background:var(--warn-bg); color:var(--warn); border-color:var(--warn-border); }
+  .badge.confirmed { background:var(--success-bg); color:var(--success); border-color:var(--success-border); }
+  .badge.attended { background:#eef2ff; color:#4338ca; border-color:#c7d2fe; }
+  .badge.cancelled { background:var(--gray-100); color:var(--gray-500); border-color:var(--gray-200); }
+
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(140px); background:var(--deep); color:#fff; padding:12px 18px; border-radius:var(--radius-sm);
+    font-size:14px; transition:transform .25s ease; z-index:200; max-width:92vw; box-shadow:0 8px 20px rgba(0,0,0,.18); }
+  .toast.show { transform:translateX(-50%) translateY(0); }
+  .toast.err { background:var(--danger); }
+  .footer { text-align:center; font-size:12px; color:var(--gray-500); margin-top:32px; padding-top:20px; border-top:1px solid var(--line); }
+  .link-btn { background:none; border:none; color:var(--gray-600); text-decoration:underline; cursor:pointer; font-size:12px; }
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:150; padding:16px; }
+  .modal { background:#fff; border-radius:var(--radius); max-width:360px; width:100%; padding:24px; text-align:center; }
+  .modal h2 { font-size:18px; margin-bottom:6px; }
+  .modal p { color:var(--gray-600); font-size:14px; margin-bottom:14px; }
+
+  @media (max-width:760px) {
+    .benefits, .steps, .grid-3 { grid-template-columns:1fr; }
+    .grid-2 { grid-template-columns:1fr; }
+    .admin-stats { grid-template-columns:1fr 1fr; }
+    .admin-row { grid-template-columns:1fr; }
+    .admin-row .acts { justify-content:flex-start; }
+    .hero { padding:30px 22px; }
+    .hero h1 { font-size:27px; }
+    .brand-name { display:none; }
+    .card { padding:18px; }
+    .summary div { grid-template-columns:110px 1fr; }
+  }
+  @media (max-width:420px) { .contact-link { display:none; } }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="../"><img src="../assets/branding/polymath-learning-centre.png" alt="Polymath Learning Centre logo"><div class="brand-name">Polymath<span>Learning Centre</span></div></a>
+    <div class="topbar-contact">
+      <a class="contact-link" href="../schedule/">Class schedule</a>
+      <a class="wa-btn" href="https://wa.me/6596450588" target="_blank" rel="noopener" aria-label="WhatsApp us at +65 9645 0588" title="WhatsApp +65 9645 0588">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.07-.3-.15-1.25-.46-2.38-1.47-.88-.79-1.47-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.09 1.75-.72 2-1.41.25-.69.25-1.29.17-1.41-.07-.12-.27-.2-.57-.35zM12.04 21.5h-.01a9.46 9.46 0 0 1-4.82-1.32l-.35-.21-3.58.94.96-3.49-.23-.36a9.44 9.44 0 0 1-1.45-5.03c0-5.22 4.25-9.47 9.49-9.47a9.4 9.4 0 0 1 6.7 2.78 9.41 9.41 0 0 1 2.77 6.7c0 5.23-4.25 9.47-9.48 9.47zm8.06-17.53A11.33 11.33 0 0 0 12.04.63C5.76.63.65 5.74.65 12.02c0 2 .52 3.96 1.52 5.69L.55 23.6l6.04-1.58a11.36 11.36 0 0 0 5.44 1.39h.01c6.28 0 11.39-5.11 11.39-11.39 0-3.04-1.18-5.9-3.33-8.05z"/></svg>
+        <span>WhatsApp</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ═════════════════ ADMIN (shown only to the signed-in teacher) ═════════════════ -->
+  <section id="admin-section" class="hidden">
+    <div class="admin-banner">
+      <span id="admin-who">Admin</span>
+      <span>
+        <button class="btn small ghost" onclick="downloadCsv()">Download CSV</button>
+        <button class="btn small ghost" onclick="adminSignOut()">Sign out</button>
+      </span>
+    </div>
+    <div class="card">
+      <h2>Diagnostic test bookings</h2>
+      <p class="lead">Every booking made on this page. They also appear in the bookings list on the <a href="../schedule/">schedule page</a> admin.</p>
+      <div class="admin-stats" id="admin-stats"></div>
+      <div class="admin-tools">
+        <div class="chips" id="admin-filter">
+          <button class="chip on" data-filter="upcoming">Upcoming</button>
+          <button class="chip" data-filter="past">Past</button>
+          <button class="chip" data-filter="all">All</button>
+        </div>
+        <input type="search" id="admin-search" placeholder="Search name, email or code" oninput="renderAdmin()">
+      </div>
+      <div id="admin-list"><div class="state"><span class="spin"></span>Loading bookings…</div></div>
+    </div>
+  </section>
+
+  <!-- ═════════════════ PUBLIC PAGE ═════════════════ -->
+  <section id="public-section">
+    <div class="hero">
+      <span class="eyebrow">Limited sessions · From December</span>
+      <h1>Book a free diagnostic test for your child</h1>
+      <p>Find out exactly where your child stands in Primary Maths or Science before the new school year. Your child sits a short diagnostic test at our Clementi centre, during one of our Master Class sessions, and we tell you what to work on next.</p>
+      <div class="hero-pills">
+        <span class="pill">FREE <s>$100</s></span>
+        <span class="pill ghost">Maths or Science · Primary 3 to 6</span>
+      </div>
+      <a class="cta" href="#book">Choose a session</a>
+    </div>
+
+    <div class="card">
+      <h2>What your child gets</h2>
+      <p class="lead">A diagnostic test worth $100, free for every student who books.</p>
+      <div class="benefits">
+        <div class="benefit"><div class="icon">🎯</div><h3>Find the gaps</h3><p>See which topics are strong and which need work, so revision time goes where it matters.</p></div>
+        <div class="benefit"><div class="icon">📝</div><h3>Exam-style questions</h3><p>A paper set at your child's level, in the style of school and PSLE questions.</p></div>
+        <div class="benefit"><div class="icon">🧭</div><h3>Clear next steps</h3><p>We get in touch after the test to share how your child did and where to focus next.</p></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>How it works</h2>
+      <ol class="steps" style="margin-top:12px">
+        <li><b>Pick a session</b><span>Any Master Class session from 1 December onwards.</span></li>
+        <li><b>Come to the centre</b><span>Your child sits the test at our Clementi centre during that session.</span></li>
+        <li><b>Hear the results</b><span>We follow up with you on how your child did.</span></li>
+      </ol>
+    </div>
+
+    <div class="card" id="book">
+      <h2>Book your free diagnostic test</h2>
+      <p class="lead">It takes a minute. No payment needed.</p>
+
+      <div id="book-form">
+        <div class="book-step">
+          <div class="step-title"><span class="step-num">1</span>Which subject and level?</div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Subject <span class="req">*</span></label>
+              <div class="chips" id="subject-chips" role="radiogroup" aria-label="Subject">
+                <button type="button" class="chip" data-subject="Math" role="radio" aria-checked="false">Maths</button>
+                <button type="button" class="chip" data-subject="Science" role="radio" aria-checked="false">Science</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="f-level">Student's level in 2027 <span class="req">*</span></label>
+              <select id="f-level">
+                <option value="">Select level</option>
+                <option value="Primary 3">Primary 3</option>
+                <option value="Primary 4">Primary 4</option>
+                <option value="Primary 5">Primary 5</option>
+                <option value="Primary 6">Primary 6</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="book-step">
+          <div class="step-title"><span class="step-num">2</span>Choose a session</div>
+          <div class="session-tools">
+            <div class="month-tabs" id="month-tabs"></div>
+            <label class="match-toggle hidden" id="match-toggle-wrap"><input type="checkbox" id="match-only"> <span id="match-label">Only sessions for my child's class</span></label>
+          </div>
+          <div id="sessions"><div class="state"><span class="spin"></span>Loading sessions…</div></div>
+        </div>
+
+        <div class="book-step">
+          <div class="step-title"><span class="step-num">3</span>Your details</div>
+          <div class="chosen hidden" id="chosen"></div>
+          <div class="grid-3">
+            <div class="field"><label for="f-parent">Parent's name <span class="req">*</span></label><input id="f-parent" autocomplete="name" maxlength="80"></div>
+            <div class="field"><label for="f-email">Email <span class="req">*</span></label><input id="f-email" type="email" autocomplete="email" maxlength="120" inputmode="email"><div class="hint">We send the confirmation here.</div></div>
+            <div class="field"><label for="f-student">Student's name <span class="req">*</span></label><input id="f-student" maxlength="80" autocomplete="off"></div>
+          </div>
+          <div style="margin-top:16px">
+            <button class="btn big" id="submit-btn" onclick="submitDiagnostic()">Book free diagnostic test</button>
+            <p class="fineprint">Free of charge. One test per student per session. Questions? WhatsApp <a href="https://wa.me/6596450588" target="_blank" rel="noopener">+65 9645 0588</a>.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="book-success" class="success hidden" aria-live="polite">
+        <div class="tick">✓</div>
+        <h3 id="success-title">You're booked!</h3>
+        <p id="success-text"></p>
+        <dl class="summary" id="success-summary"></dl>
+        <button class="btn ghost" onclick="bookAnother()">Book for another child</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Questions parents ask</h2>
+      <details><summary>Is it really free?</summary><p>Yes. The diagnostic test is worth $100 and is free. There is nothing to pay and no obligation to sign up for classes.</p></details>
+      <details><summary>Where and when is the test?</summary><p>At our Clementi centre, during the Master Class session you choose. Sessions run from 1 December 2026 onwards.</p></details>
+      <details><summary>Can my child sit the test in a session for a different class?</summary><p>Yes. You can choose any session. Tell us the subject and level the test should be for, and we prepare the right paper.</p></details>
+      <details><summary>How do I change my date?</summary><p>Reply to your confirmation email, or WhatsApp us at +65 9645 0588 with your booking code.</p></details>
+    </div>
+  </section>
+
+  <div class="footer">
+    Polymath Learning Centre · Clementi · WhatsApp +65 9645 0588 ·
+    <button class="link-btn" id="admin-login-link" onclick="adminSignIn()">Teacher login</button>
+    <span class="hidden" id="page-version"></span>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════
+// 🩺 Free diagnostic test — polymathlc.com.sg/diagnostic
+// ═══════════════════════════════════════════════════════════
+// Parents book a free diagnostic test (worth $100) at any open Master Class
+// session on the /schedule timetable (schedule_config/main, slots of type
+// 'master'), on a date from 1 December 2026 onwards. The booking is made by the
+// bookDiagnostic function (shop-function/functions/diagnostic.js), which checks the
+// session again, writes schedule_bookings/{code} with kind:'diagnostic' and emails
+// the centre and the parent. The admin sees the bookings at /diagnostic/#admin and
+// in the /schedule bookings list.
+
+// Shown to the signed-in teacher in the footer, so a deploy can be checked.
+// Bump it on every change to this page.
+const DIAGNOSTIC_PAGE_VERSION = 'v1.0.0';
+const ADMIN_EMAIL = 'chungzhikai@gmail.com';
+const BOOK_URL = 'https://us-central1-mathgen--app.cloudfunctions.net/bookDiagnostic';
+const CONFIG_CACHE_KEY = 'pl_diagnostic_schedule_v1';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const WEEKS_PER_PAGE = 13;
+
+// BEGIN DIAGNOSTIC DATES — pure date maths, a copy of shop-function/functions/diagnostic.js,
+// cut out and checked against it by tools/diagnostic-page-tests.mjs
+const DIAGNOSTIC_FIRST_DAY = '2026-12-01';
+const DIAGNOSTIC_NOTICE_DAYS = 2;
+const DIAGNOSTIC_HORIZON_DAYS = 182;
+const SG_PUBLIC_HOLIDAYS = {
+  2026: ['2026-01-01', '2026-02-17', '2026-02-18', '2026-03-21', '2026-04-03', '2026-05-01', '2026-05-27',
+         '2026-05-31', '2026-06-01', '2026-08-09', '2026-08-10', '2026-11-08', '2026-11-09', '2026-12-25'],
+  2027: ['2027-01-01', '2027-02-06', '2027-02-07', '2027-02-08', '2027-03-10', '2027-03-26', '2027-05-01',
+         '2027-05-17', '2027-05-20', '2027-08-09', '2027-10-28', '2027-12-25']
+};
+const WEEKDAY_OF_CODE = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
+const WEEKDAY_TIMES = ['3:00pm – 4:45pm', '5:00pm – 6:45pm', '7:00pm – 8:45pm'];
+const SATURDAY_TIMES = ['9:00am – 10:45am', '11:00am – 12:45pm', '1:00pm – 2:45pm'];
+const WD_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const SLOT_RE = /^(MON|TUE|WED|THU|FRI|SAT)-([123])$/;
+const DAY_MS = 86400000, SG_OFFSET_MS = 8 * 3600000;
+
+function sgDayKey(ms) { return new Date((ms == null ? Date.now() : ms) + SG_OFFSET_MS).toISOString().slice(0, 10); }
+function dayKeyTime(key) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key || '');
+  if (!m) return NaN;
+  const t = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  const d = new Date(t);
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] ? t : NaN;
+}
+function addDays(key, n) { return new Date(dayKeyTime(key) + n * DAY_MS).toISOString().slice(0, 10); }
+function weekdayOfKey(key) { return new Date(dayKeyTime(key)).getUTCDay(); }
+function isPublicHoliday(key) { const l = SG_PUBLIC_HOLIDAYS[String(key).slice(0, 4)]; return !!l && l.indexOf(key) > -1; }
+function fmtDayKey(key) {
+  if (!isFinite(dayKeyTime(key))) return '';
+  const p = key.split('-').map(Number);
+  return WD_LONG[weekdayOfKey(key)] + ' ' + p[2] + ' ' + MONTH_LONG[p[1] - 1] + ' ' + p[0];
+}
+function slotTime(id) {
+  const m = SLOT_RE.exec(id);
+  return m ? (m[1] === 'SAT' ? SATURDAY_TIMES : WEEKDAY_TIMES)[Number(m[2]) - 1] : '';
+}
+function sessionLabel(slot, date) { return fmtDayKey(date) + ', ' + slotTime(slot); }
+function bookingWindow(now) {
+  const today = sgDayKey(now);
+  const soonest = addDays(today, DIAGNOSTIC_NOTICE_DAYS);
+  return { today, first: soonest > DIAGNOSTIC_FIRST_DAY ? soonest : DIAGNOSTIC_FIRST_DAY, last: addDays(today, DIAGNOSTIC_HORIZON_DAYS) };
+}
+function readSlot(config, id) {
+  const slots = config && config.slots && typeof config.slots === 'object' ? config.slots : {};
+  return Object.assign({ level: '', subject: '', mode: 'Both', status: 'closed', note: '', type: 'regular' }, slots[id] || {});
+}
+function diagnosticSlot(config, id) {
+  if (!SLOT_RE.test(id)) return null;
+  const s = readSlot(config, id);
+  return s.type === 'master' && s.status === 'open' && s.level && s.subject ? s : null;
+}
+function diagnosticSessions(config, from, to) {
+  const slots = config && config.slots && typeof config.slots === 'object' ? Object.keys(config.slots) : [];
+  const ids = slots.filter(id => diagnosticSlot(config, id)).sort((a, b) =>
+    (WEEKDAY_OF_CODE[a.split('-')[0]] - WEEKDAY_OF_CODE[b.split('-')[0]]) || a.localeCompare(b));
+  const out = [];
+  if (!isFinite(dayKeyTime(from)) || !isFinite(dayKeyTime(to)) || from > to) return out;
+  for (let key = from; key <= to; key = addDays(key, 1)) {
+    if (isPublicHoliday(key)) continue;
+    const wd = weekdayOfKey(key);
+    for (const id of ids) {
+      if (WEEKDAY_OF_CODE[id.split('-')[0]] !== wd) continue;
+      const s = readSlot(config, id);
+      out.push({ slot: id, date: key, label: sessionLabel(id, key), level: s.level, subject: s.subject });
+    }
+  }
+  return out;
+}
+// END DIAGNOSTIC DATES
+
+// ─── Helpers ───
+function escapeHtml(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function toast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 4200);
+}
+function levelName(code) { return String(code || '').replace(/^P(\d)$/, 'Primary $1'); }
+function subjectName(s) { return s === 'Math' ? 'Maths' : s; }
+function monthKey(key) { return key.slice(0, 7); }
+function monthName(mk) { const p = mk.split('-').map(Number); return MONTH_LONG[p[1] - 1] + ' ' + p[0]; }
+function storageGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function storageSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+// Firestore's REST answer → plain values.
+function fromRest(v) {
+  if (!v || typeof v !== 'object') return null;
+  if ('stringValue' in v) return v.stringValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return v.doubleValue;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('nullValue' in v) return null;
+  if ('timestampValue' in v) return v.timestampValue;
+  if ('mapValue' in v) { const o = {}; const f = v.mapValue.fields || {}; for (const k in f) o[k] = fromRest(f[k]); return o; }
+  if ('arrayValue' in v) return (v.arrayValue.values || []).map(fromRest);
+  return null;
+}
+function configFromRest(doc) {
+  if (!doc || !doc.fields) return null;
+  const o = {}; for (const k in doc.fields) o[k] = fromRest(doc.fields[k]);
+  return { slots: o.slots || {} };
+}
+
+// ═══════════════════════════════════════════════════════════
+// Public booking
+// ═══════════════════════════════════════════════════════════
+let config = null;
+let configState = 'loading';     // loading | ready | error
+let chosenSubject = '';
+let chosenSession = null;        // { slot, date, label, level, subject }
+let activeMonth = '';
+let weeksShown = WEEKS_PER_PAGE;
+let submitting = false;
+
+function currentWindow() {
+  const w = bookingWindow(Date.now());
+  const shownLast = addDays(w.first, weeksShown * 7 - 1);
+  return { first: w.first, last: shownLast < w.last ? shownLast : w.last, horizon: w.last };
+}
+
+function chosenLevelCode() {
+  const v = document.getElementById('f-level').value;
+  return v ? 'P' + v.slice(-1) : '';
+}
+function sessionMatches(s) {
+  const lvl = chosenLevelCode();
+  return !!chosenSubject && !!lvl && s.subject === chosenSubject && s.level === lvl;
+}
+
+function renderSessions() {
+  const box = document.getElementById('sessions');
+  const tabs = document.getElementById('month-tabs');
+  const toggleWrap = document.getElementById('match-toggle-wrap');
+  if (configState === 'loading' && !config) {
+    box.innerHTML = '<div class="state"><span class="spin"></span>Loading sessions…</div>'; tabs.innerHTML = ''; return;
+  }
+  if (!config) {
+    box.innerHTML = '<div class="state">We could not load the sessions just now. <button class="btn small ghost" onclick="loadConfig(true)">Try again</button>'
+      + '<br><br>Or WhatsApp us at <a href="https://wa.me/6596450588" target="_blank" rel="noopener">+65 9645 0588</a> to book.</div>';
+    tabs.innerHTML = ''; return;
+  }
+  const w = currentWindow();
+  let sessions = diagnosticSessions(config, w.first, w.last);
+  const lvl = chosenLevelCode();
+  const canMatch = !!chosenSubject && !!lvl;
+  toggleWrap.classList.toggle('hidden', !canMatch);
+  if (canMatch) document.getElementById('match-label').textContent = 'Only ' + levelName(lvl) + ' ' + subjectName(chosenSubject) + ' Master Class sessions';
+  const matchOnly = canMatch && document.getElementById('match-only').checked;
+  let note = '';
+  if (matchOnly) {
+    const matching = sessions.filter(sessionMatches);
+    if (matching.length) sessions = matching;
+    else note = '<div class="state" style="margin-bottom:12px">There is no ' + escapeHtml(levelName(lvl) + ' ' + subjectName(chosenSubject))
+      + ' Master Class session. Your child can still sit the ' + escapeHtml(subjectName(chosenSubject)) + ' test at any session below.</div>';
+  }
+  if (!sessions.length) {
+    box.innerHTML = '<div class="state">No sessions are open for booking right now. Please WhatsApp us at '
+      + '<a href="https://wa.me/6596450588" target="_blank" rel="noopener">+65 9645 0588</a> and we will find a time.</div>';
+    tabs.innerHTML = ''; return;
+  }
+  const months = [...new Set(sessions.map(s => monthKey(s.date)))];
+  if (!months.includes(activeMonth)) activeMonth = chosenSession && months.includes(monthKey(chosenSession.date)) ? monthKey(chosenSession.date) : months[0];
+  tabs.innerHTML = months.map(mk => '<button type="button" class="month-tab' + (mk === activeMonth ? ' on' : '') + '" data-month="' + mk + '">'
+    + escapeHtml(monthName(mk)) + '</button>').join('');
+  const inMonth = sessions.filter(s => monthKey(s.date) === activeMonth);
+  const byDay = new Map();
+  inMonth.forEach(s => { if (!byDay.has(s.date)) byDay.set(s.date, []); byDay.get(s.date).push(s); });
+  let html = note;
+  byDay.forEach((list, date) => {
+    html += '<div class="session-day"><h4>' + escapeHtml(fmtDayKey(date)) + '</h4><div class="session-list">'
+      + list.map(s => {
+        const on = chosenSession && chosenSession.slot === s.slot && chosenSession.date === s.date;
+        const subjTag = s.subject === 'Math' ? 'math' : 'sci';
+        return '<button type="button" class="session' + (on ? ' on' : '') + '" data-slot="' + s.slot + '" data-date="' + s.date + '" aria-pressed="' + (on ? 'true' : 'false') + '">'
+          + '<span class="time">' + escapeHtml(slotTime(s.slot)) + '</span>'
+          + '<span class="what">During the ' + escapeHtml(levelName(s.level) + ' ' + subjectName(s.subject)) + ' Master Class</span>'
+          + '<span><span class="tag ' + subjTag + '">' + escapeHtml(subjectName(s.subject)) + '</span><span class="tag">' + escapeHtml(s.level) + '</span>'
+          + (sessionMatches(s) ? '<span class="tag match">Matches your child</span>' : '') + '</span>'
+          + '</button>';
+      }).join('') + '</div></div>';
+  });
+  const lastMonth = months[months.length - 1];
+  if (activeMonth === lastMonth && w.last < w.horizon) {
+    html += '<div class="more-row"><button type="button" class="btn ghost small" onclick="showMoreWeeks()">Show later dates</button></div>';
+  }
+  box.innerHTML = html;
+}
+
+function showMoreWeeks() { weeksShown += WEEKS_PER_PAGE; renderSessions(); }
+
+function renderChosen() {
+  const el = document.getElementById('chosen');
+  if (!chosenSession) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.innerHTML = '📅 ' + escapeHtml(chosenSession.label) + ' <button type="button" class="link-btn" style="margin-left:auto" onclick="clearSession()">Change</button>';
+}
+function clearSession() { chosenSession = null; renderChosen(); renderSessions(); document.getElementById('sessions').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+
+document.getElementById('month-tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-month]'); if (!b) return;
+  activeMonth = b.dataset.month; renderSessions();
+});
+document.getElementById('sessions').addEventListener('click', e => {
+  const b = e.target.closest('.session'); if (!b) return;
+  const w = currentWindow();
+  const s = diagnosticSessions(config, b.dataset.date, b.dataset.date).find(x => x.slot === b.dataset.slot);
+  if (!s || s.date < w.first) return;
+  chosenSession = s;
+  renderSessions(); renderChosen();
+  if (!document.getElementById('f-parent').value) document.getElementById('f-parent').focus({ preventScroll: true });
+  document.getElementById('chosen').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+document.getElementById('subject-chips').addEventListener('click', e => {
+  const b = e.target.closest('[data-subject]'); if (!b) return;
+  chosenSubject = b.dataset.subject;
+  document.querySelectorAll('#subject-chips .chip').forEach(c => {
+    const on = c.dataset.subject === chosenSubject;
+    c.classList.toggle('on', on); c.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+  renderSessions();
+});
+document.getElementById('f-level').addEventListener('change', renderSessions);
+document.getElementById('match-only').addEventListener('change', () => { activeMonth = ''; renderSessions(); });
+
+// The timetable: the early REST fetch from <head>, a cached copy while it is on its
+// way, and a fresh fetch when the parent comes back to the tab.
+async function fetchConfig() {
+  const r = await fetch('https://firestore.googleapis.com/v1/projects/mathgen--app/databases/(default)/documents/schedule_config/main', { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return configFromRest(await r.json());
+}
+async function loadConfig(retry) {
+  if (retry) { configState = 'loading'; renderSessions(); }
+  let fresh = null;
+  try {
+    const early = !retry && window.__scheduleEarly ? await window.__scheduleEarly : null;
+    fresh = early ? configFromRest(early) : await fetchConfig();
+  } catch (e) { console.error('Schedule load failed', e); }
+  if (fresh) {
+    config = fresh; configState = 'ready';
+    storageSet(CONFIG_CACHE_KEY, JSON.stringify({ at: Date.now(), config: fresh }));
+  } else if (!config) {
+    configState = 'error';
+  }
+  // A session chosen from an old copy that has since gone is let go.
+  if (chosenSession && config && !diagnosticSlot(config, chosenSession.slot)) { chosenSession = null; renderChosen(); }
+  renderSessions();
+}
+(function useCachedConfig() {
+  const raw = storageGet(CONFIG_CACHE_KEY);
+  if (!raw) return;
+  try { const c = JSON.parse(raw); if (c && c.config && c.config.slots) config = c.config; } catch (e) {}
+})();
+
+const BOOK_ERRORS = {
+  'session-unavailable': 'Sorry, that session is no longer available. Please choose another one.',
+  'before-december': 'Diagnostic tests start on 1 December 2026. Please choose a later session.',
+  'too-soon': 'That session is too soon for us to prepare the test. Please choose a later date.',
+  'too-far': 'That session is too far ahead to book yet. Please choose an earlier date.',
+  'public-holiday': 'The centre is closed on that day for a public holiday. Please choose another session.',
+  'unknown-session': 'Please choose a session.',
+  'invalid-email': 'Please enter a valid email.',
+  'invalid-subject': 'Please choose Maths or Science.',
+  'invalid-level': "Please select your child's level.",
+  'too-many-bookings': 'Too many bookings from this connection. Please try again in an hour, or WhatsApp us.',
+  'origin-not-allowed': 'Please book from polymathlc.com.sg/diagnostic.'
+};
+
+async function submitDiagnostic() {
+  if (submitting) return;
+  const parentName = document.getElementById('f-parent').value.trim();
+  const email = document.getElementById('f-email').value.trim();
+  const studentName = document.getElementById('f-student').value.trim();
+  const level = document.getElementById('f-level').value;
+  if (!chosenSubject) { toast('Please choose Maths or Science', true); document.getElementById('subject-chips').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  if (!level) { toast("Please select your child's level", true); document.getElementById('f-level').focus(); return; }
+  if (!chosenSession) { toast('Please choose a session', true); document.getElementById('sessions').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  if (!parentName) { toast("Please enter the parent's name", true); document.getElementById('f-parent').focus(); return; }
+  if (!EMAIL_RE.test(email)) { toast('Please enter a valid email', true); document.getElementById('f-email').focus(); return; }
+  if (!studentName) { toast("Please enter the student's name", true); document.getElementById('f-student').focus(); return; }
+
+  submitting = true;
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'Booking…';
+  let answer = null, status = 0;
+  try {
+    const res = await fetch(BOOK_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slot: chosenSession.slot, date: chosenSession.date, parentName, email, studentName,
+        subject: chosenSubject, level, pageVersion: DIAGNOSTIC_PAGE_VERSION })
+    });
+    status = res.status;
+    answer = await res.json().catch(() => null);
+  } catch (e) { console.error('Booking failed', e); }
+  submitting = false;
+  btn.disabled = false; btn.textContent = 'Book free diagnostic test';
+  if (answer && answer.ok && answer.booking) { showSuccess(answer.booking, !!answer.already); return; }
+  const code = answer && answer.error;
+  if (code === 'session-unavailable' || code === 'public-holiday') { chosenSession = null; renderChosen(); loadConfig(true); }
+  toast(BOOK_ERRORS[code] || (status ? 'Booking failed. Please try again, or WhatsApp us at +65 9645 0588.'
+    : 'Could not reach us. Please check your connection and try again.'), true);
+}
+
+function showSuccess(b, already) {
+  document.getElementById('book-form').classList.add('hidden');
+  document.getElementById('book-success').classList.remove('hidden');
+  document.getElementById('success-title').textContent = already ? 'You were already booked!' : "You're booked!";
+  document.getElementById('success-text').textContent = (already
+    ? b.studentName + ' already has a free diagnostic test booked for this session, so nothing more is needed. '
+    : 'Thank you, ' + b.parentName + '! ' + b.studentName + "'s free diagnostic test is booked. ")
+    + (b.confirmationSent ? 'A confirmation is on its way to ' + b.email + '. ' : '')
+    + 'To change the date, WhatsApp us at +65 9645 0588 with your booking code.';
+  const rows = [['Booking code', b.code], ['Session', b.sessionLabel], ['Where', 'Polymath Learning Centre, Clementi'],
+    ['Student', b.studentName], ['Test', b.level + ' ' + subjectName(b.subject)], ['Fee', 'Free (worth $' + (b.worth || 100) + ')']];
+  document.getElementById('success-summary').innerHTML = rows.map(([k, v]) => '<div><dt>' + escapeHtml(k) + '</dt><dd>' + escapeHtml(v) + '</dd></div>').join('');
+  document.getElementById('book').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function bookAnother() {
+  chosenSession = null;
+  document.getElementById('f-student').value = '';
+  document.getElementById('book-success').classList.add('hidden');
+  document.getElementById('book-form').classList.remove('hidden');
+  renderChosen(); renderSessions();
+  document.getElementById('book').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ═══════════════════════════════════════════════════════════
+// Admin: /diagnostic/#admin, Google sign-in as ADMIN_EMAIL only
+// ═══════════════════════════════════════════════════════════
+let auth = null, db = null, adminUnsub = null, adminRows = [], adminFilter = 'upcoming';
+function firebaseReady() {
+  if (auth) return true;
+  if (!window.firebase || !firebase.initializeApp) return false;
+  firebase.initializeApp({
+    apiKey: "AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo",
+    authDomain: "mathgen--app.firebaseapp.com",
+    projectId: "mathgen--app",
+    storageBucket: "mathgen--app.firebasestorage.app",
+    messagingSenderId: "165654161198",
+    appId: "1:165654161198:web:16c8bd60eb3a2aa7edbcbf"
+  });
+  auth = firebase.auth();
+  db = firebase.firestore();
+  auth.onAuthStateChanged(onAuth);
+  return true;
+}
+function isAdminUser(u) { return !!(u && u.email === ADMIN_EMAIL); }
+
+async function adminSignIn() {
+  if (!firebaseReady()) { toast('Sign-in is still loading. Please try again in a moment.', true); return; }
+  try {
+    const res = await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    if (!isAdminUser(res.user)) {
+      const who = res.user ? res.user.email : 'unknown';
+      await auth.signOut();
+      alert('Access denied. ' + who + ' is not an admin account.');
+    }
+  } catch (e) {
+    if (e && (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request')) return;
+    if (e && e.code === 'auth/popup-blocked') { showAdminPrompt(); return; }
+    alert('Sign-in failed: ' + (e.message || e));
+  }
+}
+function showAdminPrompt() {
+  if (document.getElementById('admin-prompt')) return;
+  const d = document.createElement('div');
+  d.id = 'admin-prompt'; d.className = 'modal-bg';
+  d.innerHTML = '<div class="modal"><h2>Teacher login</h2><p>Sign in with your Google account to see the diagnostic bookings.</p>'
+    + '<button class="btn" id="admin-prompt-go">Continue with Google</button> <button class="btn ghost" id="admin-prompt-x">Cancel</button></div>';
+  document.body.appendChild(d);
+  d.querySelector('#admin-prompt-go').onclick = () => { d.remove(); adminSignIn(); };
+  d.querySelector('#admin-prompt-x').onclick = () => d.remove();
+}
+async function adminSignOut() { if (auth) await auth.signOut(); }
+
+function onAuth(user) {
+  const admin = isAdminUser(user);
+  document.getElementById('admin-section').classList.toggle('hidden', !admin);
+  document.getElementById('admin-login-link').classList.toggle('hidden', admin);
+  const v = document.getElementById('page-version');
+  v.textContent = 'Diagnostic page ' + DIAGNOSTIC_PAGE_VERSION;
+  v.classList.toggle('hidden', !admin);
+  document.getElementById('admin-who').textContent = admin ? 'Admin: ' + user.email : '';
+  if (adminUnsub) { adminUnsub(); adminUnsub = null; }
+  adminRows = [];
+  if (admin) {
+    adminUnsub = db.collection('schedule_bookings').where('kind', '==', 'diagnostic').onSnapshot(snap => {
+      adminRows = snap.docs.map(d => Object.assign({ _id: d.id }, d.data()));
+      renderAdmin();
+    }, err => {
+      console.error(err);
+      document.getElementById('admin-list').innerHTML = '<div class="state">Could not load bookings: ' + escapeHtml(err.message) + '</div>';
+    });
+  }
+}
+
+async function maybeAdminFromHash() {
+  if (location.hash !== '#admin') return;
+  history.replaceState(null, '', location.pathname + location.search);
+  if (!firebaseReady()) return;
+  await new Promise(r => { const off = auth.onAuthStateChanged(() => { off(); r(); }); });
+  if (!isAdminUser(auth.currentUser)) adminSignIn();
+}
+window.addEventListener('hashchange', maybeAdminFromHash);
+
+function fmtCreated(ts) {
+  const d = ts && ts.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
+  return d && !isNaN(d) ? d.toLocaleString('en-SG', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+}
+const STATUS_ORDER = ['pending', 'confirmed', 'attended', 'cancelled'];
+
+function filteredAdminRows() {
+  const today = sgDayKey();
+  const q = document.getElementById('admin-search').value.trim().toLowerCase();
+  return adminRows.filter(b => {
+    const date = b.diagnosticDate || '';
+    if (adminFilter === 'upcoming' && date < today) return false;
+    if (adminFilter === 'past' && date >= today) return false;
+    if (!q) return true;
+    return [b.childName, b.parentName, b.email, b.code, b._id, b.subject, b.level].some(x => String(x || '').toLowerCase().includes(q));
+  }).sort((a, b) => adminFilter === 'past'
+    ? (b.diagnosticDate || '').localeCompare(a.diagnosticDate || '') || (b.slot || '').localeCompare(a.slot || '')
+    : (a.diagnosticDate || '').localeCompare(b.diagnosticDate || '') || (a.slot || '').localeCompare(b.slot || ''));
+}
+
+function renderAdmin() {
+  const today = sgDayKey();
+  const upcoming = adminRows.filter(b => (b.diagnosticDate || '') >= today && b.status !== 'cancelled');
+  const stats = [
+    [adminRows.length, 'bookings in all'],
+    [upcoming.length, 'upcoming'],
+    [adminRows.filter(b => (b.status || 'pending') === 'pending').length, 'to confirm'],
+    [adminRows.filter(b => b.status === 'attended').length, 'attended']
+  ];
+  document.getElementById('admin-stats').innerHTML = stats.map(([n, l]) => '<div class="stat"><b>' + n + '</b><span>' + l + '</span></div>').join('');
+  const rows = filteredAdminRows();
+  const list = document.getElementById('admin-list');
+  if (!rows.length) { list.innerHTML = '<div class="state">No ' + (adminFilter === 'all' ? '' : adminFilter + ' ') + 'diagnostic bookings yet.</div>'; return; }
+  const groups = new Map();
+  rows.forEach(b => { const k = (b.diagnosticDate || '') + '|' + (b.slot || ''); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(b); });
+  let html = '';
+  groups.forEach(list => {
+    const first = list[0];
+    const live = list.filter(b => b.status !== 'cancelled').length;
+    html += '<div class="admin-session"><header><span>📅 ' + escapeHtml(first.sessionLabel || first.diagnosticDate || '') + '</span>'
+      + '<span>' + escapeHtml(levelName(first.classLevel) + ' ' + subjectName(first.classSubject || '')) + ' Master Class · '
+      + live + ' student' + (live === 1 ? '' : 's') + '</span></header>'
+      + list.map(b => {
+        const status = STATUS_ORDER.includes(b.status) ? b.status : 'pending';
+        const act = (s, label, cls) => status === s ? '' : '<button class="btn small ' + (cls || 'ghost') + '" onclick="setStatus(\'' + b._id + '\',\'' + s + '\')">' + label + '</button>';
+        return '<div class="admin-row"><div class="who">'
+          + '<b>' + escapeHtml(b.childName) + '</b> · ' + escapeHtml((b.level || '') + ' ' + subjectName(b.subject || '')) + ' '
+          + '<span class="badge ' + status + '">' + status + '</span>'
+          + '<div>Parent: ' + escapeHtml(b.parentName) + ' · <a href="mailto:' + escapeHtml(b.email) + '">' + escapeHtml(b.email) + '</a></div>'
+          + '<div style="color:var(--gray-500)">Code ' + escapeHtml(b.code || b._id) + ' · booked ' + escapeHtml(fmtCreated(b.createdAt))
+          + (b.confirmationSentTo ? ' · confirmation emailed' : '') + '</div></div>'
+          + '<div class="acts">' + act('confirmed', 'Confirm', ' ') + act('attended', 'Attended') + act('pending', 'Mark pending') + act('cancelled', 'Cancel')
+          + '<button class="btn small danger" onclick="deleteDiagnostic(\'' + b._id + '\')">Delete</button></div></div>';
+      }).join('') + '</div>';
+  });
+  list.innerHTML = html;
+}
+document.getElementById('admin-filter').addEventListener('click', e => {
+  const b = e.target.closest('[data-filter]'); if (!b) return;
+  adminFilter = b.dataset.filter;
+  document.querySelectorAll('#admin-filter .chip').forEach(c => c.classList.toggle('on', c === b));
+  renderAdmin();
+});
+
+function requireAdmin() {
+  if (!auth || !isAdminUser(auth.currentUser)) { alert('Admin sign-in required.'); return false; }
+  return true;
+}
+async function setStatus(id, status) {
+  if (!requireAdmin()) return;
+  try { await db.collection('schedule_bookings').doc(id).update({ status }); toast('Marked ' + status); }
+  catch (e) { toast('Update failed: ' + (e.message || e), true); }
+}
+async function deleteDiagnostic(id) {
+  if (!requireAdmin()) return;
+  const b = adminRows.find(x => x._id === id);
+  if (!b || !confirm('Delete the diagnostic booking for ' + b.childName + ' (' + (b.sessionLabel || '') + ')? This cannot be undone.')) return;
+  try { await db.collection('schedule_bookings').doc(id).delete(); toast('Booking deleted'); }
+  catch (e) { toast('Delete failed: ' + (e.message || e), true); }
+}
+function downloadCsv() {
+  const head = ['Code', 'Session date', 'Session', 'Master Class', 'Student', 'Subject', 'Level in 2027', 'Parent', 'Email', 'Status', 'Booked at'];
+  const cell = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) || /^[=+\-@]/.test(s) ? '"' + s.replace(/^([=+\-@])/, "'$1").replace(/"/g, '""') + '"' : s; };
+  const rows = filteredAdminRows().map(b => [b.code || b._id, b.diagnosticDate, b.sessionLabel, levelName(b.classLevel) + ' ' + subjectName(b.classSubject || ''),
+    b.childName, subjectName(b.subject), b.level, b.parentName, b.email, b.status || 'pending', fmtCreated(b.createdAt)]);
+  const csv = [head].concat(rows).map(r => r.map(cell).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
+  a.download = 'diagnostic-bookings-' + sgDayKey() + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ─── Init ───
+document.addEventListener('visibilitychange', () => { if (!document.hidden && configState !== 'loading') loadConfig(true); });
+renderSessions();
+loadConfig(false);
+firebaseReady();
+maybeAdminFromHash();
+</script>
+</body>
+</html>
