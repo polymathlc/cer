@@ -424,7 +424,7 @@ try {
   await check('the teacher previews the timetable and sees the page version', async () => {
     const { context, page, errors } = await openPage({ admin: true });
     assert.equal(await page.getAttribute('#view-day', 'aria-pressed'), 'true', 'The teacher still starts on the editing view.');
-    assert.equal(await page.textContent('#page-version'), 'Schedule page v1.6.0');
+    assert.equal(await page.textContent('#page-version'), 'Schedule page v1.6.1');
     assert.ok(await page.isVisible('#page-version'));
     await page.click('#view-week');
     assert.match(await page.textContent('#schedule-grid'), /This is the weekly timetable parents see/);

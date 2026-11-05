@@ -926,7 +926,7 @@ const auth = firebase.auth();
 
 // Shown to the signed-in teacher in the footer, so a deploy can be checked.
 // Bump it on every change to this page.
-const SCHEDULE_PAGE_VERSION = 'v1.6.0';
+const SCHEDULE_PAGE_VERSION = 'v1.6.1';
 
 const ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // Every trial booking emails these addresses via the "Trigger Email"
@@ -2499,9 +2499,10 @@ async function sendBookingEmails(b, earliestKey) {
 // ─── Admin: bookings list ───
 function renderBookings() {
   const list = document.getElementById('bookings-list');
-  document.getElementById('bookings-count').textContent = bookings.filter(b => b.status !== 'confirmed').length + ' pending';
+  document.getElementById('bookings-count').textContent = bookings.filter(b => !b.status || b.status === 'pending').length + ' pending';
   if (!bookings.length) { list.innerHTML = '<div class="empty">No bookings or enrolments yet.</div>'; return; }
   list.innerHTML = bookings.map(b => {
+    if (b.kind === 'diagnostic') return diagnosticBookingHtml(b);
     const card = b.payment === 'card';
     const isImg = !/\.pdf$/i.test(b.receiptFilename || '');
     const thumb = card
@@ -2533,6 +2534,29 @@ function renderBookings() {
       +   '<button class="btn danger small" onclick="deleteBooking(\'' + b._id + '\')">Delete</button>'
       + '</div></div>';
   }).join('');
+}
+
+// Free diagnostic tests booked on /diagnostic (bookDiagnostic in shop-function) land in
+// this same collection with kind:'diagnostic'. They have no payment or WhatsApp, and
+// carry the session date; /diagnostic/#admin has the full list.
+function diagnosticBookingHtml(b) {
+  const status = ['pending', 'confirmed', 'attended', 'cancelled'].includes(b.status) ? b.status : 'pending';
+  return '<div class="booking"><div class="card-paid" title="Free diagnostic test"><span aria-hidden="true">🩺</span>Free test</div>'
+    + '<div class="meta">'
+    +   '<div><b>' + escapeHtml(b.childName) + '</b> (' + escapeHtml(b.level || b.childLevel2027 || '') + ' in 2027) '
+    +   '<span class="badge ' + (status === 'pending' ? 'pending' : 'confirmed') + '">' + escapeHtml(status) + '</span>'
+    +   ' <span class="badge trial">Diagnostic</span> <span class="badge master">✦ Master Class session</span></div>'
+    +   '<div>' + escapeHtml(b.sessionLabel || b.slotLabel || '') + ' · ' + escapeHtml((b.subject === 'Math' ? 'Maths' : b.subject || '') + ' test') + '</div>'
+    +   '<div>Parent: ' + escapeHtml(b.parentName) + ' · <a href="mailto:' + escapeHtml(b.email) + '">' + escapeHtml(b.email) + '</a></div>'
+    +   '<div>Free (worth $' + escapeHtml(b.worth || 100) + ') · Code ' + escapeHtml(b.code || b._id) + ' · ' + escapeHtml(fmtTime(b.createdAt))
+    +     ' · <a href="../diagnostic/#admin">All diagnostic bookings</a></div>'
+    + '</div>'
+    + '<div class="booking-actions">'
+    +   (status === 'pending'
+          ? '<button class="btn small" onclick="setBookingStatus(\'' + b._id + '\',\'confirmed\')">Confirm</button>'
+          : '<button class="btn ghost small" onclick="setBookingStatus(\'' + b._id + '\',\'pending\')">Mark pending</button>')
+    +   '<button class="btn danger small" onclick="deleteBooking(\'' + b._id + '\')">Delete</button>'
+    + '</div></div>';
 }
 
 async function setBookingStatus(id, status) {

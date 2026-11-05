@@ -4,6 +4,7 @@ const { ShopError, CHECKOUT_COLLECTION, LIMIT_COLLECTION, ORDER_COLLECTION, PROD
 const { MAIL_COLLECTION, mailId, receiptMail } = require('./receipt');
 const { BOOKING_COLLECTION, SCHEDULE_DOC } = require('./booking');
 const { bookingMailId, adminBookingMail, parentBookingMail } = require('./booking-mail');
+const { DIAGNOSTIC_COLLECTION, diagnosticMailId, adminDiagnosticMail, parentDiagnosticMail } = require('./diagnostic');
 
 const CODE_ATTEMPTS = 6;
 
@@ -66,6 +67,53 @@ function createRepository(db, Timestamp) {
         if (reserved) return { code, record: submission.record };
       }
       throw new Error('Could not find a free order code');
+    },
+
+    // Writes a free diagnostic booking to schedule_bookings/{code}, under a fresh
+    // code, with the centre's and the parent's emails, all in one transaction. The
+    // per-IP and daily limits are counted in the same transaction. The same
+    // student booked again for the same session gets the first booking back
+    // ({ already: true }) and nothing new is written or emailed.
+    async reserveDiagnostic(build, generate) {
+      for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt++) {
+        const code = generate();
+        const submission = build(code);
+        const bookingRef = db.collection(DIAGNOSTIC_COLLECTION).doc(code);
+        const duplicateRef = db.collection(LIMIT_COLLECTION).doc(submission.duplicate.id);
+        const adminMailRef = mail.doc(diagnosticMailId(code, 'admin')), parentMailRef = mail.doc(diagnosticMailId(code, 'parent'));
+        const quotaRefs = submission.quotas.map(quota => db.collection(LIMIT_COLLECTION).doc(quota.id));
+        const result = await db.runTransaction(async transaction => {
+          const [duplicateSnapshot, bookingSnapshot, adminMailSnapshot, parentMailSnapshot, ...quotas] =
+            await transaction.getAll(duplicateRef, bookingRef, adminMailRef, parentMailRef, ...quotaRefs);
+          if (duplicateSnapshot.exists) {
+            const first = duplicateSnapshot.data();
+            const firstSnapshot = first && first.code ? await transaction.get(db.collection(DIAGNOSTIC_COLLECTION).doc(first.code)) : null;
+            // A first booking the admin has since deleted no longer blocks booking again.
+            if (firstSnapshot && firstSnapshot.exists) return { already: true, booking: firstSnapshot.data() };
+          }
+          if (bookingSnapshot.exists) return null;
+          const counts = quotas.map(snapshot => snapshot.exists ? Number(snapshot.data().count) || 0 : 0);
+          if (counts.some((count, index) => count >= submission.quotas[index].maximum))
+            throw new ShopError(429, 'too-many-bookings');
+          submission.quotas.forEach((quota, index) => transaction.set(quotaRefs[index], {
+            count: counts[index] + 1, expiresAt: timestamp(quota.expiresAt)
+          }));
+          const at = timestamp(submission.now);
+          const booking = Object.assign({}, submission.booking, { createdAt: at });
+          if (!adminMailSnapshot.exists) transaction.create(adminMailRef, adminDiagnosticMail(booking));
+          const parentMail = parentMailSnapshot.exists ? null : parentDiagnosticMail(booking);
+          if (parentMail) {
+            booking.confirmationSentAt = at;
+            booking.confirmationSentTo = parentMail.to[0];
+            transaction.create(parentMailRef, parentMail);
+          }
+          transaction.set(duplicateRef, { code, expiresAt: timestamp(submission.duplicate.expiresAt) });
+          transaction.create(bookingRef, booking);
+          return { booking };
+        });
+        if (result) return result;
+      }
+      throw new Error('Could not find a free booking code');
     },
 
     async attachSession(code, sessionId) {

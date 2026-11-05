@@ -6,6 +6,7 @@ const { onRequest } = require('firebase-functions/v2/https');
 const logger = require('firebase-functions/logger');
 const { createService, createHttp, hash } = require('./service');
 const { createBookingService, BOOKING_SOURCE } = require('./booking');
+const { createDiagnosticService } = require('./diagnostic');
 const { createRepository } = require('./repository');
 const { createStripe } = require('./stripe');
 initializeApp();
@@ -19,6 +20,8 @@ const stripe = createStripe({ secretKey: process.env.STRIPE_SECRET_KEY });
 const report = code => logger.warn(code);
 // Trial lessons and enrolments on /schedule, paid by card with the same account.
 const bookings = createBookingService({ repository, stripe, http: createHttp(report), hashIp: hash, report });
+// Free diagnostic tests on /diagnostic, at the Master Class sessions on /schedule.
+const diagnostics = createDiagnosticService({ repository, http: createHttp(report), hashIp: hash, report });
 const service = createService({
   repository, stripe,
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
@@ -34,3 +37,4 @@ exports.stripeShopWebhook = onRequest(web, service.webhook);
 exports.sendShopReceipt = onRequest(web, service.sendReceipt);
 exports.createScheduleCheckout = onRequest(web, bookings.createCheckout);
 exports.scheduleCheckoutStatus = onRequest(web, bookings.checkoutStatus);
+exports.bookDiagnostic = onRequest(web, diagnostics.bookDiagnostic);
