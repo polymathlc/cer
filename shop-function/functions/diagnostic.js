@@ -4,7 +4,7 @@
 //
 // A parent books a free diagnostic test (worth $100) for their child at any open
 // Master Class session on the /schedule timetable (schedule_config/main, slots of
-// type 'master'), on a date from 1 December 2026 onwards. The test is sat at the
+// type 'master'), on a date from 7 December 2026 onwards. The test is sat at the
 // centre during that session.
 //
 //   bookDiagnostic   the page posts the session (slot id + date), the parent's
@@ -31,7 +31,7 @@ const { SENDER_EMAIL, SENDER_NAME, escapeHtml, validEmail } = require('./receipt
 
 const DIAGNOSTIC_KIND = 'diagnostic';
 const DIAGNOSTIC_COLLECTION = 'schedule_bookings';
-const DIAGNOSTIC_FIRST_DAY = '2026-12-01';
+const DIAGNOSTIC_FIRST_DAY = '2026-12-07';
 // What the test would cost; it is free. Shown on the page and in the emails.
 const DIAGNOSTIC_WORTH = 100;
 // A booking must be made at least this many days before the session (Singapore days),
@@ -170,7 +170,7 @@ function validateDiagnostic(body) {
 
 // Checks the session against the timetable as it is now. A Master Class that has
 // closed, filled or stopped being a Master Class since the page loaded, a date
-// on the wrong weekday, a holiday, a date before December or too soon, are each
+// on the wrong weekday, a holiday, a date before 7 December or too soon, are each
 // refused with a code the page turns into words.
 function checkSession(request, config, now) {
   const slot = diagnosticSlot(config || {}, request.slot);
