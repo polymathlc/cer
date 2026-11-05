@@ -368,6 +368,23 @@
   .qr-box .q img, .qr-box .q canvas { display:block; width:200px !important; height:200px !important; }
   .qr-box .amt { font-family:var(--head); font-size:26px; font-weight:800; margin-bottom:8px; }
   .qr-box .ref { font-size:13px; color:var(--ink-2); margin-top:8px; }
+  .qr-box.none .ref { color:var(--muted); }
+  .tag-custom { display:inline-block; vertical-align:middle; font-size:10.5px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#7a1f5c; background:#fde7f3; border:1px solid #f6c3df; border-radius:999px; padding:1px 7px; margin-left:4px; }
+  /* ─── QR choice and the invoice editor ─── */
+  .qr-modes { display:flex; flex-direction:column; gap:8px; }
+  .qr-mode { display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1.5px solid var(--line); border-radius:12px; cursor:pointer; background:#fff; }
+  .qr-mode.on { border-color:var(--deep); background:var(--paper); }
+  .qr-mode input { margin-top:3px; accent-color:var(--deep); }
+  .qr-mode b { display:block; font-size:13.5px; }
+  .qr-mode small { display:block; font-size:12px; color:var(--muted); margin-top:2px; }
+  .ed-split { grid-template-columns:minmax(0,1.35fr) minmax(0,1fr) !important; align-items:start; }
+  .ed-preview { position:sticky; top:0; }
+  .ed-preview .qr-box .q img, .ed-preview .qr-box .q canvas { width:170px !important; height:170px !important; }
+  .ed-lines { display:flex; flex-direction:column; gap:10px; }
+  .ed-line { display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.4fr) minmax(0,1fr) 110px 72px; gap:8px; align-items:end; padding:10px; border:1px solid var(--line-2); border-radius:12px; background:var(--paper); }
+  .ed-line .field { margin:0; }
+  .ed-line input.money { text-align:right; }
+  .ed-line-x { display:flex; gap:4px; padding-bottom:4px; justify-content:flex-end; }
   .side-actions { display:flex; flex-direction:column; gap:10px; }
   .side-actions .btn { justify-content:flex-start; }
   .history { font-size:13px; display:flex; flex-direction:column; gap:7px; }
@@ -393,6 +410,11 @@
   @media (max-width:900px) {
     .stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .grid.two, .grid.three, .split, .waq { grid-template-columns:1fr; }
+    .ed-split { grid-template-columns:1fr !important; }
+    .ed-preview { position:static; }
+    .ed-line { grid-template-columns:1fr 1fr; }
+    .ed-line .grow { grid-column:1 / -1; }
+    .ed-line-x { justify-content:flex-end; }
     .inv { grid-template-columns:minmax(0,1fr) auto; gap:8px 14px; }
     .inv > .pill { grid-column:1; grid-row:1; justify-self:start; }
     .inv .who { grid-column:1; grid-row:2; }
@@ -477,6 +499,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="version hidden" id="version"></div>
 
-<script type="module" src="office-app.mjs?v=1.0.0"></script>
+<script type="module" src="office-app.mjs?v=1.1.0"></script>
 </body>
 </html>

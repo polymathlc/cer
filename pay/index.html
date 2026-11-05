@@ -87,9 +87,9 @@
 <main class="wrap" id="main"><div class="card msg"><div class="big">⏳</div><b>Opening your invoice…</b></div></main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script type="module">
-import * as C from '../office/office-core.mjs?v=1.0.0';
+import * as C from '../office/office-core.mjs?v=1.1.0';
 
-const PAY_PAGE_VERSION = 'v1.0.0';
+const PAY_PAGE_VERSION = 'v1.1.0';
 const $ = id => document.getElementById(id);
 const esc = C.escapeHtml;
 const params = new URLSearchParams(location.search);
@@ -141,17 +141,25 @@ function draw() {
   const paid = inv.status === 'paid' || !(owe > 0);
   const voided = inv.status === 'void';
   const late = !paid && !voided && C.isDayKey(inv.dueDate) && C.sgDayKey() > inv.dueDate;
-  const payload = !paid && !voided ? C.buildPayNow(owe, inv.reference, { uen: inv.uen, merchant: inv.merchant }) : '';
+  // The invoice's own QR choice: the amount filled in, a generic QR to the
+  // centre (the parent types the amount), or no QR at all.
+  const mode = C.invoiceQrMode(inv);
+  const generic = mode === 'generic';
+  const what = inv.title || ((inv.periodLabel || C.periodLabel(inv.period)) + ' fees');
+  const payload = !paid && !voided ? C.invoiceQrPayload(Object.assign({}, inv, { status: 'due' }), { uen: inv.uen, merchant: inv.merchant }) : '';
   const status = voided ? '<div class="status void"><span class="i">✕</span><div>This invoice was cancelled. Nothing needs to be paid on it.</div></div>'
-    : paid ? '<div class="status paid"><span class="i">✅</span><div><b>Paid — thank you!</b><br>We have received ' + C.money(inv.paid || inv.total) + ' for ' + esc(inv.periodLabel || C.periodLabel(inv.period)) + '.</div></div>'
+    : paid ? '<div class="status paid"><span class="i">✅</span><div><b>Paid — thank you!</b><br>We have received ' + C.money(inv.paid || inv.total) + ' for ' + esc(inv.title || inv.periodLabel || C.periodLabel(inv.period)) + '.</div></div>'
       : late ? '<div class="status late"><span class="i">⚠️</span><div>This was due on <b>' + esc(C.prettyDate(inv.dueDate)) + '</b>. If you have just paid, thank you — it can take a day to show here.</div></div>'
         : '<div class="status due"><span class="i">📅</span><div>Please pay by <b>' + esc(C.prettyDate(inv.dueDate)) + '</b>.</div></div>';
   const lines = (inv.lines || []).map(l => '<tr><td>' + (l.studentName ? '<b>' + esc(l.studentName) + '</b> · ' : '') + esc(l.desc) + (l.detail ? '<small>' + esc(l.detail) + '</small>' : '') + '</td><td class="r"' + (l.amount < 0 ? ' style="color:#15803d"' : '') + '>' + C.money(l.amount) + '</td></tr>').join('');
   $('main').innerHTML = status
-    + (payload ? '<div class="card"><div class="what">PayNow · ' + esc(inv.periodLabel || C.periodLabel(inv.period)) + ' fees</div>'
+    + (!payload && !paid && !voided ? '<div class="card"><div class="what">' + esc(what) + '</div>'
+      + '<div class="amount">' + C.money(owe) + '</div><div class="for">for ' + esc(inv.parentName || '') + '</div>'
+      + '<div class="filled">Please quote <b>' + esc(inv.number || inv.reference || '') + '</b> when you pay. WhatsApp us if you would like to pay another way.</div></div>' : '')
+    + (payload ? '<div class="card"><div class="what">PayNow · ' + esc(what) + '</div>'
       + '<div class="amount">' + C.money(owe) + '</div><div class="for">for ' + esc(inv.parentName || '') + '</div>'
       + '<div class="qr"><div class="q" id="qr"></div></div>'
-      + '<div class="filled">The amount and the reference are already filled in.</div>'
+      + '<div class="filled">' + (generic ? 'The reference is filled in. <b>Type the amount, ' + C.money(owe) + ',</b> in your banking app.' : 'The amount and the reference are already filled in.') + '</div>'
       + '<button class="btn main' + (wantSave ? ' pulse' : '') + '" id="save">⬇&nbsp; Save the QR to my phone</button>'
       + '<div class="rows">'
       + '<div class="row"><span>Pay to</span><b>' + esc(inv.merchant || C.MERCHANT_NAME) + '</b></div>'
@@ -162,12 +170,12 @@ function draw() {
       + '<div class="card"><h2>How to pay</h2><ol class="steps">'
       + (TOUCH ? '<li><span>Tap <b>Save the QR to my phone</b> above (choose <b>Save image</b>).</span></li><li><span>Open your banking app → <b>Scan QR</b> → choose the picture from your <b>gallery / photos</b>.</span></li>'
         : '<li><span>Open your banking app on your phone and choose <b>Scan QR</b>.</span></li><li><span>Point it at the QR on this screen — or save the QR and scan it from your gallery.</span></li>')
-      + '<li><span>Check the amount is <b>' + C.money(owe) + '</b> and the reference is <b>' + esc(inv.reference) + '</b>, then pay. That is all — the reference tells us it is from you.</span></li></ol></div>' : '')
-    + '<div class="card"><h2>Invoice ' + esc(inv.number || '') + '</h2><table><tbody>' + lines
+      + '<li><span>' + (generic ? 'Type the amount, <b>' + C.money(owe) + '</b>, check' : 'Check the amount is <b>' + C.money(owe) + '</b> and') + ' the reference is <b>' + esc(inv.reference) + '</b>, then pay. That is all — the reference tells us it is from you.</span></li></ol></div>' : '')
+    + '<div class="card"><h2>Invoice ' + esc(inv.number || '') + '</h2>' + (inv.title ? '<p style="margin:-4px 0 8px;font-weight:700;">' + esc(inv.title) + '</p>' : '') + '<table><tbody>' + lines
     + '<tr class="total"><td>Total</td><td class="r">' + C.money(inv.total) + '</td></tr>'
     + (inv.paid > 0 && !paid ? '<tr><td>Received</td><td class="r" style="color:#15803d">' + C.money(inv.paid) + '</td></tr><tr><td><b>Still to pay</b></td><td class="r"><b>' + C.money(owe) + '</b></td></tr>' : '')
     + '</tbody></table>' + (inv.issueDate ? '<p class="foot" style="text-align:left;margin-top:10px;">Issued ' + esc(C.prettyDate(inv.issueDate)) + '</p>' : '') + '</div>'
-    + (inv.note ? '<div class="card"><p>' + esc(inv.note) + '</p></div>' : '')
+    + (inv.note ? '<div class="card"><p style="white-space:pre-wrap;">' + esc(inv.note) + '</p></div>' : '')
     + '<div class="card"><a class="btn wa" href="https://wa.me/' + esc(inv.centreWhatsapp || C.CENTRE_WHATSAPP) + '?text=' + encodeURIComponent('Hi Polymath, about invoice ' + (inv.number || '') + ' (' + (inv.reference || '') + ')') + '">💬 Questions? WhatsApp us</a></div>'
     + '<p class="foot">Polymath Learning Centre · <a href="https://polymathlc.com.sg/">polymathlc.com.sg</a> · ' + PAY_PAGE_VERSION + '</p>';
   if (payload) {
@@ -198,7 +206,8 @@ function qrCanvas(payload, size) {
 }
 async function cardImage(payload, owe) {
   const W = 720, P = 48, QR = 420, BOX = 470;
-  const rows = [['Pay to', inv.merchant || C.MERCHANT_NAME], ['UEN', inv.uen], ['Amount', C.money(owe)], ['Reference', inv.reference]];
+  const generic = C.invoiceQrMode(inv) === 'generic';
+  const rows = [['Pay to', inv.merchant || C.MERCHANT_NAME], ['UEN', inv.uen], ['Amount', C.money(owe) + (generic ? ' (type it in)' : '')], ['Reference', inv.reference]];
   const H = 110 + 120 + BOX + 40 + rows.length * 44 + 100;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
@@ -208,7 +217,7 @@ async function cardImage(payload, owe) {
   const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, '#2e9ca6'); g.addColorStop(.5, '#56c4d0'); g.addColorStop(1, '#ec008c');
   ctx.fillStyle = g; ctx.fillRect(0, 104, W, 6);
   ctx.fillStyle = '#fff'; ctx.font = font('bold', 26); ctx.fillText('POLYMATH LEARNING CENTRE', P, 50);
-  ctx.fillStyle = '#b8e4e8'; ctx.font = font('500', 20); ctx.fillText('PayNow · ' + (inv.periodLabel || C.periodLabel(inv.period)) + ' fees', P, 82);
+  ctx.fillStyle = '#b8e4e8'; ctx.font = font('500', 20); ctx.fillText('PayNow · ' + (inv.title || ((inv.periodLabel || C.periodLabel(inv.period)) + ' fees')), P, 82);
   ctx.fillStyle = '#056c76'; ctx.font = font('bold', 58); ctx.fillText(C.money(owe), P, 196);
   let y = 230; const bx = (W - BOX) / 2;
   ctx.strokeStyle = '#d1eaee'; ctx.lineWidth = 3;

@@ -22,6 +22,9 @@
         invoice are the same kind of thing.
      4. Invoices — lines from each student's classes, a standing family
         discount, credit carried over from an overpayment, due dates, states.
+        Custom invoices too: one written by hand (any parent, any lines, any
+        dates), and the choice of QR every invoice carries — the exact amount
+        and reference, a generic PayNow QR to the centre, or none at all.
      5. Bank statements — rows from Excel/CSV, positioned text from a PDF, the
         ChatGPT prompts and the checks run on what ChatGPT answers.
      6. Matching — reference code first, a remembered payer name second, names
@@ -32,7 +35,7 @@
      8. Importing a spreadsheet of families and students.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const OFFICE_CORE_VERSION = '1.0.0';
+export const OFFICE_CORE_VERSION = '1.1.0';
 
 /* ─────────────────────────── The centre ─────────────────────────── */
 export const SITE = 'https://polymathlc.com.sg';
@@ -423,7 +426,10 @@ export function findCodes(text, knownCodes) {
    Byte for byte products/index.html's encoder: a static PayNow QR to the
    centre's UEN, the amount NOT editable (01 = 2 means "UEN"; 03 = 0 means the
    payer cannot change the amount), the reference in the bill-number field 62/05.
-   The amount and the reference are therefore filled in for the parent. */
+   The amount and the reference are therefore filled in for the parent.
+   opts.editable (a "generic" QR) is the one exception: 03 = 1, so the parent
+   types the amount in their banking app, and with no amount there is no tag 54
+   at all — the centre's UEN and the reference are still filled in. */
 export function tlv(tag, value) { return tag + String(value.length).padStart(2, '0') + value; }
 export function crc16(str) {
   let crc = 0xFFFF;
@@ -438,9 +444,12 @@ export function buildPayNow(amount, reference, opts) {
   const o = opts || {};
   const uen = o.uen || PAYNOW_UEN;
   const merchant = (o.merchant || MERCHANT_NAME).slice(0, 25);
-  const mai = tlv('00', 'SG.PAYNOW') + tlv('01', '2') + tlv('02', uen) + tlv('03', '0');
-  const p = tlv('00', '01') + tlv('01', '12') + tlv('26', mai) + tlv('52', '0000') + tlv('53', '702')
-    + tlv('54', Number(amount).toFixed(2)) + tlv('58', 'SG') + tlv('59', merchant) + tlv('60', 'Singapore')
+  const editable = !!o.editable;
+  const amt = Number(amount);
+  const withAmount = !editable || (isFinite(amt) && amt > 0);
+  const mai = tlv('00', 'SG.PAYNOW') + tlv('01', '2') + tlv('02', uen) + tlv('03', editable ? '1' : '0');
+  const p = tlv('00', '01') + tlv('01', editable && !withAmount ? '11' : '12') + tlv('26', mai) + tlv('52', '0000') + tlv('53', '702')
+    + (withAmount ? tlv('54', amt.toFixed(2)) : '') + tlv('58', 'SG') + tlv('59', merchant) + tlv('60', 'Singapore')
     + tlv('62', tlv('05', cleanRef(reference) || 'POLYMATH')) + '6304';
   return p + crc16(p);
 }
@@ -645,6 +654,8 @@ export function publicInvoiceDoc(inv, settings) {
   const st = normalizeSettings(settings);
   return {
     invoiceId: inv.id, number: inv.number, period: inv.period, periodLabel: periodLabel(inv.period),
+    // A title only when the invoice has its own (a monthly one keeps "<Month> fees").
+    title: inv.custom || String(inv.title || '').trim() ? invoiceTitle(inv) : '', custom: !!inv.custom, qrMode: invoiceQrMode(inv),
     parentName: inv.parentName,
     // The child's full name: the parent knows it, and a first word is often a surname.
     lines: (inv.lines || []).map(l => ({ studentName: String(l.studentName || ''), desc: l.desc, detail: l.detail || '', amount: round2(l.amount) })),
@@ -652,7 +663,167 @@ export function publicInvoiceDoc(inv, settings) {
     reference: inv.reference, uen: st.uen, merchant: st.merchant,
     dueDate: inv.dueDate, issueDate: inv.issueDate,
     status: invoiceOutstanding(inv) <= 0 && inv.total > 0 ? 'paid' : (inv.status === 'void' ? 'void' : 'due'),
-    centreWhatsapp: st.centreWhatsapp, note: st.payNote || ''
+    centreWhatsapp: st.centreWhatsapp, note: String(inv.note || '').trim() || st.payNote || ''
+  };
+}
+
+/* ─── The QR an invoice carries, and custom invoices ───
+   Every invoice (monthly or custom) carries one of three QRs, chosen on the
+   invoice itself and honoured everywhere it is shown — the office, the picture
+   pasted into WhatsApp, the email and the parent's /pay page:
+     exact    the amount still owed and the reference, both filled in (the default)
+     generic  a PayNow QR to Polymath Learning Centre's UEN with the reference;
+              the parent types the amount (for deposits, part payments, or a
+              parent whose bank app will not take a fixed-amount QR)
+     none     no QR at all (cash, cheque, or an invoice that is only a record) */
+export const QR_MODES = ['exact', 'generic', 'none'];
+export const QR_MODE_META = Object.freeze({
+  exact: { label: 'PayNow QR with the amount filled in', hint: 'The amount still owed and the reference are filled in for the parent.', short: 'QR with amount' },
+  generic: { label: 'Generic PayNow QR to Polymath Learning Centre', hint: 'Pays the centre\'s UEN with the reference filled in; the parent types the amount.', short: 'Generic QR' },
+  none: { label: 'No QR on this invoice', hint: 'Nothing to scan — for cash, cheque, or a record of something already arranged.', short: 'No QR' }
+});
+export function invoiceQrMode(inv) {
+  const m = inv && inv.qrMode;
+  return QR_MODES.includes(m) ? m : 'exact';
+}
+// What the invoice is for, in a few words: a custom invoice's own title, or the month's fees.
+export function invoiceTitle(inv) {
+  const t = String((inv && inv.title) || '').trim();
+  if (t) return t.slice(0, 120);
+  return isPeriod(inv && inv.period) ? periodLabel(inv.period) + ' tuition fees' : 'Invoice';
+}
+// The PayNow payload to print on this invoice, or '' when there is none to show
+// (nothing owed, cancelled, or the invoice says "no QR").
+export function invoiceQrPayload(inv, settings) {
+  const s = normalizeSettings(settings);
+  const owe = invoiceOutstanding(inv);
+  const mode = invoiceQrMode(inv);
+  if (!(owe > 0) || mode === 'none') return '';
+  if (mode === 'generic') return buildPayNow(0, inv.reference, { uen: s.uen, merchant: s.merchant, editable: true });
+  return buildPayNow(owe, inv.reference, { uen: s.uen, merchant: s.merchant });
+}
+// The centre's own PayNow QR with nothing filled in but the UEN (and a
+// reference if one is given) — the one to print on a poster or a notice.
+export function genericPayNow(settings, reference) {
+  const s = normalizeSettings(settings);
+  return buildPayNow(0, reference || 'POLYMATH', { uen: s.uen, merchant: s.merchant, editable: true });
+}
+
+// A custom invoice's own short tag: 5 characters from the codes' alphabet, so
+// it can never be mistaken for a 6-character family code inside a bank line.
+export const CUSTOM_TAG_LENGTH = 5;
+export function newCustomTag(random, taken) {
+  const used = taken instanceof Set ? taken : new Set(taken || []);
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const tag = Array.from(random(CUSTOM_TAG_LENGTH), n => CODE_CHARS[n % CODE_CHARS.length]).join('');
+    if (/\d/.test(tag) && /[A-Z]/.test(tag) && !used.has(tag)) return tag;
+  }
+  throw new Error('Could not find a free invoice tag.');
+}
+export function customInvoiceDocId(tag) { return 'custom_' + tag; }
+export function isCustomInvoiceId(id) { return /^custom_[A-Z0-9]{3,12}$/.test(String(id || '')); }
+export function customInvoiceNumber(tag, issueDate) {
+  const d = isDayKey(issueDate) ? issueDate : sgDayKey();
+  return REF_PREFIX + '-' + d.slice(2, 4) + d.slice(5, 7) + '-' + tag;
+}
+// A family's custom invoice still starts with the family's code, so a payment
+// with this reference is matched to the family like any other; the tag after it
+// is not a month, so the payment is not pulled towards one month's invoice.
+export function customInvoiceReference(tag, familyCode) {
+  return cleanRef(REF_PREFIX + ' ' + (isCode(familyCode) ? familyCode + ' ' : '') + tag);
+}
+// A fresh custom invoice for the editor. `family` (optional) fills in the
+// parent's name, contacts, code and children; every field stays editable.
+export function blankCustomInvoice(ctx) {
+  const c = ctx || {};
+  const s = normalizeSettings(c.settings);
+  const issueDate = isDayKey(c.today) ? c.today : sgDayKey();
+  const tag = c.tag;
+  const f = c.family ? normalizeFamily(c.family) : null;
+  const kids = f ? activeStudents(f).map(st => st.name).filter(Boolean) : [];
+  return {
+    id: customInvoiceDocId(tag), tag, custom: true,
+    familyId: f ? f.id : '', code: f ? f.code : '',
+    parentName: f ? f.parentName : '',
+    emails: f ? familyEmails(f).join(', ') : '',
+    whatsapp: f && f.whatsapp ? displayPhone(f.whatsapp) : '',
+    title: '',
+    number: customInvoiceNumber(tag, issueDate),
+    reference: customInvoiceReference(tag, f ? f.code : ''),
+    issueDate, dueDate: addDays(issueDate, s.dueDays), period: issueDate.slice(0, 7),
+    lines: [{ studentName: kids.length === 1 ? kids[0] : '', desc: '', detail: '', amount: '' }],
+    note: '', qrMode: 'exact'
+  };
+}
+// The editor's draft → the stored fields, or the reasons it cannot be saved.
+// Used for new custom invoices AND for editing any invoice, monthly or custom.
+export function invoiceFromDraft(draft) {
+  const d = draft || {};
+  const errors = [];
+  const parentName = String(d.parentName || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  if (!parentName) errors.push('Type the parent\'s name (who the invoice is for).');
+  const emailText = Array.isArray(d.emails) ? d.emails.join(', ') : String(d.emails || '');
+  const emails = splitEmails(emailText);
+  const badEmails = emailText.split(/[\s,;/]+/).map(e => e.trim()).filter(Boolean).filter(e => !isEmail(e));
+  if (badEmails.length) errors.push('This email does not look right: ' + badEmails[0]);
+  const waText = String(d.whatsapp || '').trim();
+  const whatsapp = normalizeWhatsapp(waText);
+  if (waText && !whatsapp) errors.push('The WhatsApp number does not look right.');
+  const number = String(d.number || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (!number) errors.push('Give the invoice a number.');
+  const issueDate = String(d.issueDate || '');
+  if (!isDayKey(issueDate)) errors.push('Choose the invoice date.');
+  const dueDate = String(d.dueDate || '');
+  if (!isDayKey(dueDate)) errors.push('Choose the due date.');
+  else if (isDayKey(issueDate) && dueDate < issueDate) errors.push('The due date is before the invoice date.');
+  const period = isPeriod(d.period) ? d.period : (isDayKey(issueDate) ? issueDate.slice(0, 7) : sgMonthKey());
+  const qrMode = QR_MODES.includes(d.qrMode) ? d.qrMode : 'exact';
+  const reference = cleanRef(d.reference);
+  if (qrMode !== 'none' && !reference) errors.push('Give the PayNow reference (it is how the payment is matched).');
+  const lines = [];
+  (d.lines || []).forEach((l, i) => {
+    const desc = String(l.desc || '').trim().slice(0, 160);
+    const studentName = String(l.studentName || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const detail = String(l.detail || '').trim().slice(0, 160);
+    const rawAmt = l.amount;
+    const blankAmt = rawAmt === '' || rawAmt == null;
+    if (!desc && !studentName && !detail && (blankAmt || Number(rawAmt) === 0)) return;   // an empty row is just dropped
+    const amount = blankAmt ? 0 : parseMoney(rawAmt);
+    if (!isFinite(amount)) { errors.push('Line ' + (i + 1) + ': the amount is not a number.'); return; }
+    if (!desc) errors.push('Line ' + (i + 1) + ': say what it is for.');
+    lines.push(Object.assign({}, l, { studentName, desc, detail, amount: round2(amount), kind: l.kind || 'custom' }));
+  });
+  if (!lines.length) errors.push('Add at least one line.');
+  const sum = round2(lines.reduce((s, l) => s + l.amount, 0));
+  if (lines.length && !(sum > 0)) errors.push('The total must be more than $0.00.');
+  const total = Math.max(0, sum);
+  const subtotal = round2(lines.filter(l => l.amount > 0).reduce((s, l) => s + l.amount, 0));
+  const students = lines.map(l => l.studentName).filter(Boolean).filter((n, i, a) => a.indexOf(n) === i);
+  const fields = {
+    parentName, emails, whatsapp, number, reference: reference || cleanRef(number), issueDate, dueDate, period,
+    title: String(d.title || '').replace(/\s+/g, ' ').trim().slice(0, 120),
+    note: String(d.note || '').trim().slice(0, 600),
+    qrMode, lines, total, subtotal, students, issues: []
+  };
+  return { ok: !errors.length, errors, fields };
+}
+// An existing invoice with the editor's fields laid over it: the money already
+// received stays, and the state follows the new total.
+export function applyInvoiceEdit(inv, fields) {
+  const next = Object.assign({}, inv, fields);
+  next.status = inv.status === 'void' ? 'void' : invoiceStatusField(next);
+  return next;
+}
+// The editor's starting point for an invoice that already exists.
+export function draftFromInvoice(inv) {
+  return {
+    id: inv.id, custom: !!inv.custom, familyId: inv.familyId || '', code: inv.code || '',
+    parentName: inv.parentName || '', emails: (inv.emails || []).join(', '),
+    whatsapp: inv.whatsapp ? displayPhone(inv.whatsapp) : '',
+    title: inv.title || '', number: inv.number || '', reference: inv.reference || '',
+    issueDate: inv.issueDate || '', dueDate: inv.dueDate || '', period: inv.period || '',
+    lines: (inv.lines || []).map(l => Object.assign({}, l)), note: inv.note || '', qrMode: invoiceQrMode(inv),
+    ownContacts: !!inv.ownContacts
   };
 }
 export function payLink(token, opts) {
@@ -1153,12 +1324,24 @@ function linesTableHtml(inv) {
     + '</table>';
 }
 function qrBlockHtml(inv, o, amount) {
+  const mode = invoiceQrMode(inv);
+  if (mode === 'none' || !(amount > 0)) {
+    // No QR on this invoice: just say how much, and how to ask.
+    return '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:18px 0 6px;"><tr><td align="center" style="padding:18px;background:#f2f9fa;border:1px solid #d1eaee;border-radius:14px;">'
+      + '<div style="font-size:13px;color:#056c76;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px;">Amount to pay</div>'
+      + '<div style="font-size:28px;font-weight:800;color:#10303a;">' + money(amount) + '</div>'
+      + '<div style="font-size:13px;color:#3d5a61;margin-top:10px;line-height:1.6;">Please quote <b>' + escapeHtml(inv.number || inv.reference || '') + '</b> when you pay.</div>'
+      + '</td></tr></table>';
+  }
+  const generic = mode === 'generic';
   const save = o.payUrl ? payLinkFrom(o.payUrl, true) : '';
   return '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:18px 0 6px;"><tr><td align="center" style="padding:20px;background:#f2f9fa;border:1px solid #d1eaee;border-radius:14px;">'
     + '<div style="font-size:13px;color:#056c76;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px;">Scan to pay with PayNow</div>'
     + '<div style="font-size:28px;font-weight:800;color:#10303a;margin-bottom:12px;">' + money(amount) + '</div>'
-    + (o.qrCid ? '<img src="cid:' + escapeHtml(o.qrCid) + '" width="220" height="220" alt="PayNow QR code for ' + money(amount) + ', reference ' + escapeHtml(inv.reference) + '" style="display:block;margin:0 auto;width:220px;height:220px;border:8px solid #ffffff;border-radius:8px;">' : '')
-    + '<div style="font-size:13px;color:#3d5a61;margin-top:12px;line-height:1.6;">The amount and the reference <b>' + escapeHtml(inv.reference) + '</b> are already filled in.<br>'
+    + (o.qrCid ? '<img src="cid:' + escapeHtml(o.qrCid) + '" width="220" height="220" alt="PayNow QR code' + (generic ? ' for Polymath Learning Centre' : ' for ' + money(amount)) + ', reference ' + escapeHtml(inv.reference) + '" style="display:block;margin:0 auto;width:220px;height:220px;border:8px solid #ffffff;border-radius:8px;">' : '')
+    + '<div style="font-size:13px;color:#3d5a61;margin-top:12px;line-height:1.6;">'
+    + (generic ? 'The reference <b>' + escapeHtml(inv.reference) + '</b> is already filled in — please type the amount, <b>' + money(amount) + '</b>.<br>'
+      : 'The amount and the reference <b>' + escapeHtml(inv.reference) + '</b> are already filled in.<br>')
     + 'PayNow to UEN <b>' + escapeHtml(o.uen || PAYNOW_UEN) + '</b> (' + escapeHtml(o.merchant || MERCHANT_NAME) + ')</div>'
     + (save ? '<div style="margin-top:16px;"><a href="' + escapeHtml(save) + '" style="display:inline-block;background:#056c76;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 22px;border-radius:10px;">⬇&nbsp; Save the QR to my phone</a></div>'
       + '<div style="font-size:12px;color:#6b7f85;margin-top:10px;">On a phone? Save the QR, open your banking app, then <b>Scan QR → choose from gallery</b>.</div>' : '')
@@ -1182,27 +1365,48 @@ function emailShell(title, inner, s) {
 function plainLines(inv) {
   return (inv.lines || []).map(l => '  ' + (l.studentName ? l.studentName + ' — ' : '') + l.desc + (l.detail ? ' (' + l.detail + ')' : '') + ': ' + money(l.amount)).join('\n');
 }
+// The PayNow lines of a plain-text email or a WhatsApp message, by QR choice.
+function payTextLines(inv, s, owe, payUrl, short) {
+  const mode = invoiceQrMode(inv);
+  if (mode === 'none') return ['Amount to pay: ' + money(owe) + ' — please quote ' + (inv.number || inv.reference) + '.'];
+  if (mode === 'generic') {
+    return ['PayNow ' + money(owe) + ' to UEN ' + s.uen + ' (' + s.merchant + ')', 'Reference: ' + inv.reference + ' — please type the amount yourself.',
+      payUrl ? (short ? 'Save the PayNow QR: ' : 'Save the PayNow QR (reference filled in): ') + payLinkFrom(payUrl, true) : ''];
+  }
+  return ['PayNow ' + money(owe) + ' to UEN ' + s.uen + ' (' + s.merchant + ')', 'Reference: ' + inv.reference,
+    payUrl ? (short ? 'Save the PayNow QR: ' : 'Save the PayNow QR (amount and reference filled in): ') + payLinkFrom(payUrl, true) : ''];
+}
+// "tuition fees for <b>November 2026</b>" for a monthly invoice; a custom one's own title.
+function invoiceWhatHtml(inv, kids) {
+  if (inv.custom || String(inv.title || '').trim()) return '<b>' + escapeHtml(invoiceTitle(inv)) + '</b>';
+  return (kids ? escapeHtml(kids) + '\'s ' : '') + 'tuition fees for <b>' + escapeHtml(periodLabel(inv.period)) + '</b>';
+}
+function invoiceWhatText(inv, kids) {
+  if (inv.custom || String(inv.title || '').trim()) return invoiceTitle(inv);
+  return (kids ? kids + '\'s ' : '') + 'tuition fees for ' + periodLabel(inv.period);
+}
 // opts: { payUrl, qrCid, today }
 export function invoiceEmail(inv, settings, opts) {
   const s = normalizeSettings(settings), o = Object.assign({ uen: s.uen, merchant: s.merchant }, opts || {});
+  const titled = !!(inv.custom || String(inv.title || '').trim());
   const month = periodLabel(inv.period);
   const owe = invoiceOutstanding(inv);
-  const subject = 'Polymath tuition fees — ' + month + ' (' + money(owe) + ')';
+  const subject = titled ? 'Polymath invoice — ' + invoiceTitle(inv) + ' (' + money(owe) + ')' : 'Polymath tuition fees — ' + month + ' (' + money(owe) + ')';
   const kids = listJoin(inv.students || []);
-  const html = emailShell('Invoice ' + inv.number + ' · ' + month,
+  const note = String(inv.note || '').trim() || s.invoiceNote;
+  const html = emailShell('Invoice ' + inv.number + ' · ' + (titled ? invoiceTitle(inv) : month),
     '<p style="font-size:15px;line-height:1.6;margin:0 0 10px;">Dear ' + escapeHtml(inv.parentName || 'Parent') + ',</p>'
-    + '<p style="font-size:15px;line-height:1.6;margin:0 0 6px;">Here is the invoice for ' + (kids ? escapeHtml(kids) + '\'s ' : '') + 'tuition fees for <b>' + escapeHtml(month) + '</b>.'
+    + '<p style="font-size:15px;line-height:1.6;margin:0 0 6px;">Here is the invoice for ' + invoiceWhatHtml(inv, kids) + '.'
     + (isDayKey(inv.dueDate) ? ' Kindly pay by <b>' + escapeHtml(prettyDate(inv.dueDate)) + '</b>.' : '') + '</p>'
     + linesTableHtml(inv) + qrBlockHtml(inv, o, owe)
     + (o.payUrl ? '<p style="font-size:13px;color:#3d5a61;text-align:center;margin:6px 0 0;"><a href="' + escapeHtml(o.payUrl) + '" style="color:#056c76;">View this invoice online</a></p>' : '')
-    + (s.invoiceNote ? '<p style="font-size:14px;line-height:1.6;margin:18px 0 0;">' + escapeHtml(s.invoiceNote) + '</p>' : ''), s);
+    + (note ? '<p style="font-size:14px;line-height:1.6;margin:18px 0 0;">' + escapeHtml(note).replace(/\n/g, '<br>') + '</p>' : ''), s);
   const text = [
     'Dear ' + (inv.parentName || 'Parent') + ',', '',
-    'Here is the invoice for ' + (kids ? kids + '\'s ' : '') + 'tuition fees for ' + month + '.' + (isDayKey(inv.dueDate) ? ' Kindly pay by ' + prettyDate(inv.dueDate) + '.' : ''), '',
+    'Here is the invoice for ' + invoiceWhatText(inv, kids) + '.' + (isDayKey(inv.dueDate) ? ' Kindly pay by ' + prettyDate(inv.dueDate) + '.' : ''), '',
     'Invoice ' + inv.number, plainLines(inv), '  Total: ' + money(inv.total), (Number(inv.paid) > 0 ? '  Still to pay: ' + money(owe) : ''), '',
-    'PayNow ' + money(owe) + ' to UEN ' + s.uen + ' (' + s.merchant + ')', 'Reference: ' + inv.reference,
-    o.payUrl ? 'Save the PayNow QR (amount and reference filled in): ' + payLinkFrom(o.payUrl, true) : '', '',
-    s.invoiceNote, '', s.signature
+    ...payTextLines(inv, s, owe, o.payUrl, false), '',
+    note, '', s.signature
   ].filter(v => v !== null).join('\n').replace(/\n{3,}/g, '\n\n');
   return { subject, html, text };
 }
@@ -1210,12 +1414,15 @@ export function invoiceEmail(inv, settings, opts) {
 export function reminderEmail(inv, settings, opts) {
   const s = normalizeSettings(settings), o = Object.assign({ uen: s.uen, merchant: s.merchant }, opts || {});
   const level = Math.max(1, Number(o.level) || ((inv.reminders || []).length + 1));
-  const month = periodLabel(inv.period);
+  const titled = !!(inv.custom || String(inv.title || '').trim());
+  const month = titled ? invoiceTitle(inv) : periodLabel(inv.period);
+  const what = titled ? 'the invoice for <b>' + escapeHtml(month) + '</b> (' + escapeHtml(inv.number || '') + ')' : 'the tuition fees for <b>' + escapeHtml(month) + '</b>';
+  const What = what.charAt(0).toUpperCase() + what.slice(1);
   const owe = invoiceOutstanding(inv);
-  const tone = level === 1 ? { title: 'A friendly reminder', open: 'This is a friendly reminder that the tuition fees for <b>' + escapeHtml(month) + '</b> are still outstanding.' }
-    : level === 2 ? { title: 'Second reminder', open: 'We have not yet received the tuition fees for <b>' + escapeHtml(month) + '</b>. We would be grateful if you could arrange payment soon.' }
-      : { title: 'Final reminder', open: 'The tuition fees for <b>' + escapeHtml(month) + '</b> remain unpaid. Please arrange payment as soon as possible, or WhatsApp us if there is anything we should know.' };
-  const subject = (level >= 3 ? 'Final reminder' : 'Reminder') + ': ' + month + ' tuition fees (' + money(owe) + ' outstanding)';
+  const tone = level === 1 ? { title: 'A friendly reminder', open: 'This is a friendly reminder that ' + what + (titled ? ' is' : ' are') + ' still outstanding.' }
+    : level === 2 ? { title: 'Second reminder', open: 'We have not yet received ' + what + '. We would be grateful if you could arrange payment soon.' }
+      : { title: 'Final reminder', open: What + (titled ? ' remains' : ' remain') + ' unpaid. Please arrange payment as soon as possible, or WhatsApp us if there is anything we should know.' };
+  const subject = (level >= 3 ? 'Final reminder' : 'Reminder') + ': ' + month + (titled ? '' : ' tuition fees') + ' (' + money(owe) + ' outstanding)';
   const html = emailShell(tone.title + ' · ' + month,
     '<p style="font-size:15px;line-height:1.6;margin:0 0 10px;">Dear ' + escapeHtml(inv.parentName || 'Parent') + ',</p>'
     + '<p style="font-size:15px;line-height:1.6;margin:0 0 6px;">' + tone.open
@@ -1225,8 +1432,10 @@ export function reminderEmail(inv, settings, opts) {
   const text = [
     'Dear ' + (inv.parentName || 'Parent') + ',', '',
     tone.open.replace(/<[^>]+>/g, ''), '',
-    'Still to pay: ' + money(owe), 'PayNow to UEN ' + s.uen + ', reference ' + inv.reference,
-    o.payUrl ? 'Save the PayNow QR: ' + payLinkFrom(o.payUrl, true) : '', '',
+    'Still to pay: ' + money(owe),
+    ...(invoiceQrMode(inv) === 'exact'
+      ? ['PayNow to UEN ' + s.uen + ', reference ' + inv.reference, o.payUrl ? 'Save the PayNow QR: ' + payLinkFrom(o.payUrl, true) : '']
+      : payTextLines(inv, s, owe, o.payUrl, true).slice(invoiceQrMode(inv) === 'generic' ? 1 : 0)), '',
     s.reminderNote, '', s.signature
   ].join('\n').replace(/\n{3,}/g, '\n\n');
   return { subject, html, text, level };
@@ -1234,7 +1443,8 @@ export function reminderEmail(inv, settings, opts) {
 // payment: { amount, date }, allocations: [{ inv, amount }]
 export function receiptEmail(family, payment, allocations, settings) {
   const s = normalizeSettings(settings);
-  const rows = (allocations || []).map(a => '<tr><td style="padding:8px 12px;border-bottom:1px solid #e7eef0;">' + escapeHtml(periodLabel(a.period)) + ' fees'
+  const forWhat = a => a.title ? String(a.title) : periodLabel(a.period) + ' fees';
+  const rows = (allocations || []).map(a => '<tr><td style="padding:8px 12px;border-bottom:1px solid #e7eef0;">' + escapeHtml(forWhat(a))
     + (a.left > 0 ? '<br><span style="color:#b45309;font-size:12px;">' + money(a.left) + ' still to pay</span>' : '<br><span style="color:#16a34a;font-size:12px;">Fully paid ✓</span>')
     + '</td><td style="padding:8px 12px;border-bottom:1px solid #e7eef0;text-align:right;">' + money(a.amount) + '</td></tr>').join('');
   const credit = round2(payment.credit || 0);
@@ -1246,7 +1456,7 @@ export function receiptEmail(family, payment, allocations, settings) {
     + (credit > 0 ? '<tr><td style="padding:8px 12px;">Kept as credit for your next invoice</td><td style="padding:8px 12px;text-align:right;color:#16a34a;">' + money(credit) + '</td></tr>' : '')
     + '</table>', s);
   const text = ['Dear ' + (family.parentName || 'Parent') + ',', '', 'Thank you — we have received your payment of ' + money(payment.amount) + (isDayKey(payment.date) ? ' on ' + prettyDate(payment.date) : '') + '.', '',
-    ...(allocations || []).map(a => periodLabel(a.period) + ' fees: ' + money(a.amount) + (a.left > 0 ? ' (' + money(a.left) + ' still to pay)' : ' (fully paid)')),
+    ...(allocations || []).map(a => forWhat(a) + ': ' + money(a.amount) + (a.left > 0 ? ' (' + money(a.left) + ' still to pay)' : ' (fully paid)')),
     credit > 0 ? 'Kept as credit for your next invoice: ' + money(credit) : '', '', s.signature].join('\n').replace(/\n{3,}/g, '\n\n');
   return { subject: 'Payment received — thank you (' + money(payment.amount) + ')', html, text };
 }
@@ -1286,15 +1496,21 @@ export function qrAttachment(base64Png, reference, cid) {
 export function whatsappInvoiceText(inv, settings, payUrl) {
   const s = normalizeSettings(settings);
   const owe = invoiceOutstanding(inv);
+  const mode = invoiceQrMode(inv);
+  const by = isDayKey(inv.dueDate) ? ' Kindly pay by ' + prettyDate(inv.dueDate) + '.' : '';
+  const titled = !!(inv.custom || String(inv.title || '').trim());
+  const note = String(inv.note || '').trim();
   return [
     'Hi ' + (inv.parentName || '') + ', this is Polymath Learning Centre 😊',
     '',
-    '*' + periodLabel(inv.period) + ' tuition fees: ' + money(owe) + '*',
+    '*' + (titled ? invoiceTitle(inv) : periodLabel(inv.period) + ' tuition fees') + ': ' + money(owe) + '*',
     plainLines(inv).replace(/^ {2}/gm, '• '),
     '',
-    'PayNow to UEN ' + s.uen + ' — the QR in the picture has the amount and reference *' + inv.reference + '* filled in.'
-      + (isDayKey(inv.dueDate) ? ' Kindly pay by ' + prettyDate(inv.dueDate) + '.' : ''),
-    payUrl ? '⬇ Save the QR to your phone: ' + payLinkFrom(payUrl, true) : '',
+    mode === 'none' ? 'Invoice ' + (inv.number || '') + '.' + by
+      : mode === 'generic' ? 'PayNow ' + money(owe) + ' to UEN ' + s.uen + ' — scan the QR in the picture (the reference *' + inv.reference + '* is filled in) and type the amount.' + by
+        : 'PayNow to UEN ' + s.uen + ' — the QR in the picture has the amount and reference *' + inv.reference + '* filled in.' + by,
+    payUrl && mode !== 'none' ? '⬇ Save the QR to your phone: ' + payLinkFrom(payUrl, true) : (payUrl ? '🔗 The invoice online: ' + payUrl : ''),
+    note ? '\n' + note : '',
     '',
     'Thank you!'
   ].filter(v => v !== null).join('\n').replace(/\n{3,}/g, '\n\n');
@@ -1305,9 +1521,12 @@ export function whatsappReminderText(inv, settings, payUrl) {
   return [
     'Hi ' + (inv.parentName || '') + ', a gentle reminder from Polymath Learning Centre 😊',
     '',
-    'The ' + periodLabel(inv.period) + ' tuition fees of *' + money(owe) + '* are still outstanding.',
-    'PayNow to UEN ' + s.uen + ', reference *' + inv.reference + '*.',
-    payUrl ? '⬇ Save the QR: ' + payLinkFrom(payUrl, true) : '',
+    (inv.custom || String(inv.title || '').trim())
+      ? 'Invoice ' + (inv.number || '') + ' (' + invoiceTitle(inv) + ') of *' + money(owe) + '* is still outstanding.'
+      : 'The ' + periodLabel(inv.period) + ' tuition fees of *' + money(owe) + '* are still outstanding.',
+    invoiceQrMode(inv) === 'none' ? 'Please quote ' + (inv.number || inv.reference) + ' when you pay.'
+      : 'PayNow to UEN ' + s.uen + ', reference *' + inv.reference + '*' + (invoiceQrMode(inv) === 'generic' ? ' (please type the amount).' : '.'),
+    payUrl ? (invoiceQrMode(inv) === 'none' ? '🔗 The invoice: ' + payUrl : '⬇ Save the QR: ' + payLinkFrom(payUrl, true)) : '',
     '',
     s.reminderNote
   ].join('\n').replace(/\n{3,}/g, '\n\n');

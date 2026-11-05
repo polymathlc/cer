@@ -10,7 +10,8 @@
 //   import a sheet of families → fix a class → prepare November invoices → email
 //   them (QR inline + attached) → WhatsApp the family without email → upload a PDF
 //   bank statement (read by a stand-in ChatGPT) → apply → upload it AGAIN (all
-//   skipped) → a CSV statement → reminders → the parent's /pay page on a phone.
+//   skipped) → a CSV statement → reminders → a custom invoice written by hand
+//   (generic QR, edited, no QR, copied, marked paid) → the parent's /pay page.
 // Every PayNow QR it meets is decoded with jsQR and held against the payload.
 // Screenshots go to OFFICE_SHOTS (default artifacts/office).
 import { createServer } from 'node:http';
@@ -418,6 +419,124 @@ try {
   await page.waitForFunction(() => /answered|✕/.test(document.getElementById('ai-test-out').textContent));
   await shot(page, '17-settings');
 
+  /* ════════ A custom invoice, written by hand ════════ */
+  await page.click('#tabs [data-view="invoices"]');
+  await page.click('[data-act="newCustomInvoice"]');
+  await page.waitForSelector('text=＋ Custom invoice');
+  await page.fill('.modal [data-in="ed"][data-k="parentName"]', 'Mdm Goh Siew Lan');
+  await page.fill('.modal [data-in="ed"][data-k="emails"]', 'goh@example.com');
+  await page.fill('.modal [data-in="ed"][data-k="whatsapp"]', '9111 0009');
+  await page.fill('.modal [data-in="ed"][data-k="title"]', 'December holiday programme');
+  await page.fill('.modal [data-in="edLine"][data-i="0"][data-k="studentName"]', 'Goh Jia En');
+  await page.fill('.modal [data-in="edLine"][data-i="0"][data-k="desc"]', 'Holiday Science camp');
+  await page.fill('.modal [data-in="edLine"][data-i="0"][data-k="amount"]', '150');
+  await page.click('.modal [data-act="edLineAdd"]:not([data-neg])');
+  await page.fill('.modal [data-in="edLine"][data-i="1"][data-k="desc"]', 'Workbook');
+  await page.fill('.modal [data-in="edLine"][data-i="1"][data-k="amount"]', '25.50');
+  await page.click('.modal [data-act="edLineAdd"][data-neg]');
+  await page.fill('.modal [data-in="edLine"][data-i="2"][data-k="amount"]', '-10');
+  await page.check('.modal input[name="ed-qr"][value="generic"]');
+  await settle(page);
+  assert.equal(await page.locator('#ed-total').innerText(), '$165.50', 'the preview adds up the lines, discount included');
+  await page.waitForSelector('.modal .ed-preview .qr-box img');
+  await shot(page, '23-custom-invoice-editor');
+  // A missing name is explained, not saved.
+  await page.fill('.modal [data-in="ed"][data-k="parentName"]', '');
+  await page.click('.modal [data-act="saveInvoiceEdit"]');
+  await page.waitForSelector('.modal .banner.red >> text=Type the parent');
+  await page.fill('.modal [data-in="ed"][data-k="parentName"]', 'Mdm Goh Siew Lan');
+  await page.click('.modal [data-act="saveInvoiceEdit"]');
+  await page.waitForSelector('.modal >> text=December holiday programme');
+  await page.waitForSelector('.modal .qr-box img');
+  all = await store(page);
+  let custom = docsIn(all, 'officeInvoices').find(i => i.custom);
+  assert.ok(custom && C.isCustomInvoiceId(custom._id), 'stored as custom_<tag>');
+  assert.deepEqual([custom.parentName, custom.total, custom.qrMode, custom.period, custom.issueDate, custom.dueDate, custom.status, custom.familyId],
+    ['Mdm Goh Siew Lan', 165.5, 'generic', '2026-11', '2026-11-03', '2026-11-10', 'draft', '']);
+  assert.deepEqual(custom.emails, ['goh@example.com']);
+  assert.equal(custom.whatsapp, '6591110009');
+  assert.deepEqual(custom.lines.map(l => [l.desc, l.amount]), [['Holiday Science camp', 150], ['Workbook', 25.5], ['Discount', -10]]);
+  let customLink = docsIn(all, 'officeLinks').find(l => l.invoiceId === custom._id);
+  assert.deepEqual([customLink.title, customLink.qrMode, customLink.outstanding, customLink.custom], ['December holiday programme', 'generic', 165.5, true]);
+  assert.ok(!JSON.stringify(customLink).includes('goh@example.com'), 'no contacts on the parent link');
+  await shot(page, '24-custom-invoice');
+  // A monthly invoice for the same family-less parent never blocks the month.
+  assert.equal(await page.evaluate(() => window.PolymathOffice.S.invoices.filter(i => i.custom).length), 1);
+
+  // Emailed: the generic QR pays the centre with the reference, and no amount.
+  await page.click('.modal [data-act="emailInvoice"]');
+  await page.waitForSelector('text=/Emailed to goh@example.com/');
+  all = await store(page);
+  let customMail = docsIn(all, 'mail').filter(m => m.polymathOffice.invoiceId === custom._id);
+  assert.equal(customMail.length, 1);
+  assert.match(customMail[0].message.subject, /^Polymath invoice — December holiday programme \(\$165\.50\)$/);
+  assert.ok(customMail[0].message.html.includes('please type the amount') || customMail[0].message.html.includes('type the amount'), 'the email says to type the amount');
+  const genericPayload = decodePng(customMail[0].message.attachments[0].content);
+  assert.equal(genericPayload, C.buildPayNow(0, custom.reference, { editable: true }), 'the emailed generic QR scans');
+  const readBack = C.readPayNow(genericPayload);
+  assert.deepEqual([readBack.uen, readBack.editable, readBack.amount, readBack.reference, readBack.crcOk], ['T16LL2365E', true, 0, custom.reference, true]);
+
+  // Every field can be changed afterwards.
+  await page.click('.modal [data-act="editInvoice"]');
+  await page.waitForSelector('text=Edit invoice');
+  await page.fill('.modal [data-in="ed"][data-k="parentName"]', 'Mdm Goh S. L.');
+  await page.fill('.modal [data-in="edLine"][data-i="1"][data-k="amount"]', '30');
+  await page.fill('.modal [data-in="ed"][data-k="number"]', 'PLC-HOL-001');
+  await page.fill('.modal [data-in="ed"][data-k="dueDate"]', '2026-11-20');
+  await page.fill('.modal [data-in="ed"][data-k="note"]', 'Camp runs 1–5 December.');
+  await page.click('.modal [data-act="saveInvoiceEdit"]');
+  await page.waitForSelector('.modal >> text=Mdm Goh S. L.');
+  all = await store(page);
+  custom = docsIn(all, 'officeInvoices').find(i => i.custom);
+  assert.deepEqual([custom.parentName, custom.total, custom.number, custom.dueDate, custom.note, custom.status], ['Mdm Goh S. L.', 170, 'PLC-HOL-001', '2026-11-20', 'Camp runs 1–5 December.', 'sent']);
+  customLink = docsIn(all, 'officeLinks').find(l => l.invoiceId === custom._id);
+  assert.deepEqual([customLink.parentName, customLink.total, customLink.number, customLink.note], ['Mdm Goh S. L.', 170, 'PLC-HOL-001', 'Camp runs 1–5 December.'], 'the parent\'s page follows the edit');
+
+  // No QR: the email has no picture and no attachment.
+  await page.check('.modal input[name="qr-' + custom._id + '"][value="none"]');
+  await page.waitForFunction(id => (window.PolymathOffice.S.invoices.find(i => i.id === id) || {}).qrMode === 'none', custom._id);
+  await page.waitForSelector('.modal .qr-box.none');
+  await page.click('.modal [data-act="emailInvoice"]');
+  // (The test clock stands still, so the second email reuses the first one's id.)
+  await page.waitForFunction(id => [...window.__fakeStore.entries()].some(([k, v]) => k.startsWith('mail/') && v.polymathOffice.invoiceId === id && !v.message.attachments), custom._id);
+  all = await store(page);
+  customMail = docsIn(all, 'mail').filter(m => m.polymathOffice.invoiceId === custom._id);
+  const noQr = customMail.find(m => !m.message.attachments);
+  assert.ok(noQr && !noQr.message.html.includes('cid:'), 'no QR picture when the invoice says none');
+  // …and back to the generic QR for the parent's page below.
+  await page.check('.modal input[name="qr-' + custom._id + '"][value="generic"]');
+  await page.waitForFunction(id => (window.PolymathOffice.S.invoices.find(i => i.id === id) || {}).qrMode === 'generic', custom._id);
+  await page.waitForSelector('.modal .qr-box img');
+
+  // Copied into a second custom invoice, which is then marked paid by hand.
+  await page.click('.modal [data-act="duplicateInvoice"]');
+  await page.waitForSelector('text=＋ Custom invoice');
+  assert.equal(await page.inputValue('.modal [data-in="ed"][data-k="parentName"]'), 'Mdm Goh S. L.');
+  await page.check('.modal input[name="ed-qr"][value="exact"]');
+  await page.click('.modal [data-act="saveInvoiceEdit"]');
+  await page.waitForFunction(() => window.PolymathOffice.S.invoices.filter(i => i.custom).length === 2);
+  const second = await page.evaluate(() => window.PolymathOffice.S.modal.id);
+  assert.notEqual(second, custom._id);
+  await page.waitForSelector('.modal [data-act="markPaidDirect"]');
+  await page.click('.modal [data-act="markPaidDirect"]');
+  await page.waitForFunction(id => (window.PolymathOffice.S.invoices.find(i => i.id === id) || {}).status === 'paid', second);
+  all = await store(page);
+  const secondDoc = docsIn(all, 'officeInvoices').find(i => i._id === second);
+  assert.deepEqual([secondDoc.total, secondDoc.paid, secondDoc.qrMode], [170, 170, 'exact']);
+  await page.click('.modal [data-act="undoPaidDirect"]');
+  await page.waitForFunction(id => (window.PolymathOffice.S.invoices.find(i => i.id === id) || {}).paid === 0, second);
+  await page.click('.modal [data-act="deleteCustomInvoice"]');
+  await page.waitForFunction(() => window.PolymathOffice.S.invoices.filter(i => i.custom).length === 1);
+  await page.waitForSelector('.inv >> text=Custom');
+  await shot(page, '25-invoices-with-custom');
+
+  // The centre's generic QR, from the Invoices tab.
+  await page.click('[data-act="openGenericQr"]');
+  await page.waitForSelector('text=Generic PayNow QR');
+  await page.waitForSelector('.modal .qr-box img');
+  await page.keyboard.press('Escape');
+  await page.click('#tabs [data-view="settings"]');
+
   // An office whose rules are NOT published refuses to save.
   lockStatus = 404;
   await page.click('[data-act="recheckLock"]');
@@ -439,6 +558,11 @@ try {
   await settle(page);
   await shot(page, '19-phone-invoices');
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no sideways scroll on a phone');
+  await page.click('[data-act="newCustomInvoice"]');
+  await page.waitForSelector('.modal .ed-line');
+  assert.ok(await page.evaluate(() => { const b = document.getElementById('modal-box'); return b.scrollWidth <= b.clientWidth + 1; }), 'the invoice editor fits a phone');
+  await shot(page, '19b-phone-custom-editor');
+  await page.keyboard.press('Escape');
   await page.click('#tabs [data-view="home"]');
   await settle(page);
   await shot(page, '20-phone-home');
@@ -464,6 +588,15 @@ try {
   await pp.goto(BASE + '/pay/?i=' + tanToken);
   await pp.waitForSelector('text=Paid — thank you!');
   await shot(pp, '22-pay-paid');
+  // A custom invoice with the generic QR: its title, and a QR with no amount.
+  const customInv = docsIn(await store(page), 'officeInvoices').find(i => i.custom);
+  await pp.goto(BASE + '/pay/?i=' + customInv.linkToken);
+  await pp.waitForSelector('#qr img');
+  assert.match(await pp.locator('.what').first().innerText(), /December holiday programme/i);
+  assert.match(await pp.locator('.filled').innerText(), /Type the amount/);
+  const customQr = await pp.evaluate(() => document.querySelector('#qr canvas').toDataURL('image/png').split(',')[1]);
+  assert.equal(decodePng(customQr), C.buildPayNow(0, customInv.reference, { editable: true }), 'the parent\'s generic QR scans');
+  await shot(pp, '26-pay-custom-generic');
   await pp.goto(BASE + '/pay/?i=NotARealTokenButLongEnough123');
   await pp.waitForSelector('text=Invoice not found');
   await pp.goto(BASE + '/pay/?i=short');

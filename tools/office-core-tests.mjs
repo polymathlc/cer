@@ -532,3 +532,120 @@ test('the office admins are the same accounts the rules tool installs', async ()
   assert.deepEqual(rules.OFFICE_COLLECTIONS.slice().sort(), Object.values(C.COLLECTIONS).slice().sort());
   assert.equal(rules.OFFICE_MAIL_PREFIX, C.MAIL_PREFIX);
 });
+
+/* ─── Custom invoices and the QR each invoice carries ─── */
+const fixedRandom = seq => n => Array.from({ length: n }, (_, i) => seq[i % seq.length]);
+
+test('a generic PayNow QR pays the centre with the reference and lets the parent type the amount', () => {
+  const p = C.buildPayNow(0, 'PLC AB3CD', { editable: true });
+  const r = C.readPayNow(p);
+  assert.deepEqual([r.uen, r.editable, r.amount, r.reference, r.crcOk], ['T16LL2365E', true, 0, 'PLC AB3CD', true]);
+  assert.ok(!p.includes('5406') && !/54\d\d\d/.test(p.slice(0, p.indexOf('5802'))), 'no amount tag at all');
+  assert.ok(p.startsWith('000201010211'), 'a static QR (01 = 11)');
+  // A suggested amount can still ride along on an editable QR.
+  assert.equal(C.readPayNow(C.buildPayNow(50, 'X', { editable: true })).amount, 50);
+  // The fixed-amount QR is unchanged, byte for byte.
+  assert.ok(C.buildPayNow(220, 'PLC K7M2QX NOV26').startsWith('000201010212'));
+  assert.equal(C.readPayNow(C.genericPayNow({})).reference, 'POLYMATH');
+});
+
+test('every invoice carries the QR it chose: amount filled in, generic, or none', () => {
+  const inv = { total: 300, paid: 100, reference: 'PLC K7M2QX NOV26', status: 'sent' };
+  assert.equal(C.invoiceQrMode(inv), 'exact', 'an invoice from before the choice keeps the exact QR');
+  assert.equal(C.invoiceQrPayload(inv, {}), C.buildPayNow(200, inv.reference), 'what is still owed');
+  assert.equal(C.invoiceQrPayload(Object.assign({}, inv, { qrMode: 'generic' }), {}), C.buildPayNow(0, inv.reference, { editable: true }));
+  assert.equal(C.invoiceQrPayload(Object.assign({}, inv, { qrMode: 'none' }), {}), '');
+  assert.equal(C.invoiceQrPayload(Object.assign({}, inv, { paid: 300 }), {}), '', 'nothing owed, nothing to scan');
+  assert.equal(C.invoiceQrPayload(Object.assign({}, inv, { status: 'void' }), {}), '');
+  assert.equal(C.invoiceQrMode({ qrMode: 'nonsense' }), 'exact');
+});
+
+test('a custom invoice: its own tag, number and reference, and the family code when it has one', () => {
+  const tag = C.newCustomTag(fixedRandom([0, 26, 1, 27, 2]));
+  assert.equal(tag.length, 5);
+  assert.ok(/\d/.test(tag) && /[A-Z]/.test(tag));
+  assert.ok(!C.isCode(tag), 'never mistaken for a 6-character family code');
+  assert.equal(C.customInvoiceDocId(tag), 'custom_' + tag);
+  assert.ok(C.isCustomInvoiceId('custom_' + tag) && !C.isCustomInvoiceId('fam_2026-11'));
+  assert.equal(C.customInvoiceNumber('AB3CD', '2026-12-05'), 'PLC-2612-AB3CD');
+  assert.equal(C.customInvoiceReference('AB3CD', ''), 'PLC AB3CD');
+  assert.equal(C.customInvoiceReference('AB3CD', 'K7M2QX'), 'PLC K7M2QX AB3CD');
+  const found = C.findCodes('OTHR PLC K7M2QX AB3CD', ['K7M2QX']);
+  assert.deepEqual(found, [{ code: 'K7M2QX', period: '' }], 'a payment is matched to the family, not pulled to a month');
+  const taken = new Set([tag]);
+  let call = 0;
+  const stepping = n => Array.from({ length: n }, (_, i) => [0, 26, 1, 27, 2][i % 5] + (call++ >= n ? 3 : 0));
+  assert.notEqual(C.newCustomTag(stepping, taken), tag, 'a taken tag is never reused');
+});
+
+test('a blank custom invoice is filled from a family, and stays editable', () => {
+  const family = { id: 'f1', code: 'K7M2QX', parentName: 'Tan Mei Ling', email: 'tan@example.com', whatsapp: '6591110001', status: 'active', students: [{ id: 's1', name: 'Tan Jun Wei', status: 'active', classes: [] }] };
+  const d = C.blankCustomInvoice({ tag: 'AB3CD', today: '2026-11-03', settings: { dueDays: 7 }, family });
+  assert.deepEqual([d.id, d.custom, d.familyId, d.parentName, d.emails, d.whatsapp, d.number, d.reference, d.issueDate, d.dueDate, d.period, d.qrMode],
+    ['custom_AB3CD', true, 'f1', 'Tan Mei Ling', 'tan@example.com', '+65 9111 0001', 'PLC-2611-AB3CD', 'PLC K7M2QX AB3CD', '2026-11-03', '2026-11-10', '2026-11', 'exact']);
+  assert.equal(d.lines[0].studentName, 'Tan Jun Wei', 'an only child is filled in');
+  const blank = C.blankCustomInvoice({ tag: 'AB3CD', today: '2026-11-03', settings: {} });
+  assert.deepEqual([blank.familyId, blank.parentName, blank.reference], ['', '', 'PLC AB3CD']);
+});
+
+test('the invoice editor: every field checked, empty rows dropped, discounts allowed, the total never below zero', () => {
+  const ok = C.invoiceFromDraft({
+    parentName: '  Mdm   Goh ', emails: 'goh@example.com, GOH2@example.com', whatsapp: '9111 0009', number: 'PLC-HOL-001', reference: 'plc hol-001!',
+    issueDate: '2026-11-03', dueDate: '2026-11-20', period: '2026-12', title: ' December camp ', note: 'See you!', qrMode: 'generic',
+    lines: [{ studentName: 'Goh Jia En', desc: 'Camp', amount: '150' }, { desc: '', amount: '' }, { desc: 'Workbook', amount: '$25.50' }, { desc: 'Discount', amount: '-10' }]
+  });
+  assert.ok(ok.ok, ok.errors.join('; '));
+  const f = ok.fields;
+  assert.deepEqual([f.parentName, f.emails, f.whatsapp, f.reference, f.period, f.title, f.qrMode, f.total, f.subtotal, f.students],
+    ['Mdm Goh', ['goh@example.com', 'goh2@example.com'], '6591110009', 'PLC HOL 001', '2026-12', 'December camp', 'generic', 165.5, 175.5, ['Goh Jia En']]);
+  assert.equal(f.lines.length, 3, 'the empty row is dropped');
+  const bad = C.invoiceFromDraft({ parentName: '', emails: 'not-an-email', whatsapp: '12', number: '', issueDate: '2026-11-10', dueDate: '2026-11-01', qrMode: 'exact', reference: '', lines: [{ desc: '', amount: 'abc' }] });
+  assert.ok(!bad.ok);
+  const all = bad.errors.join(' | ');
+  ['parent', 'email', 'WhatsApp', 'number', 'due date is before', 'reference', 'not a number'].forEach(w => assert.ok(all.includes(w), 'explains: ' + w + ' — ' + all));
+  assert.ok(!C.invoiceFromDraft({ parentName: 'A', number: 'N', reference: 'R', issueDate: '2026-11-01', dueDate: '2026-11-02', lines: [{ desc: 'Refund', amount: -5 }] }).ok, 'a total of $0 or less is refused');
+  const noQr = C.invoiceFromDraft({ parentName: 'A', number: 'N-1', reference: '', issueDate: '2026-11-01', dueDate: '2026-11-02', qrMode: 'none', lines: [{ desc: 'Cash lesson', amount: 40 }] });
+  assert.ok(noQr.ok, 'no QR needs no reference');
+  assert.equal(noQr.fields.reference, 'N 1');
+});
+
+test('editing an invoice keeps the money received and moves its state with the new total', () => {
+  const inv = { id: 'f1_2026-11', total: 300, paid: 300, status: 'paid', sends: [{ via: 'email' }], payments: [{ amount: 300 }] };
+  const more = C.applyInvoiceEdit(inv, { total: 350, lines: [{ desc: 'x', amount: 350 }] });
+  assert.deepEqual([more.paid, more.status, C.invoiceOutstanding(more)], [300, 'part', 50]);
+  const voided = C.applyInvoiceEdit(Object.assign({}, inv, { status: 'void' }), { total: 10 });
+  assert.equal(voided.status, 'void');
+  const d = C.draftFromInvoice({ id: 'x', parentName: 'P', emails: ['a@b.co', 'c@d.co'], whatsapp: '6591110001', lines: [{ desc: 'L', amount: 1 }], qrMode: 'none' });
+  assert.deepEqual([d.emails, d.whatsapp, d.qrMode, d.custom], ['a@b.co, c@d.co', '+65 9111 0001', 'none', false]);
+});
+
+test('custom invoices in words: the email, the reminder, WhatsApp, the parent\'s link and the receipt', () => {
+  const inv = {
+    id: 'custom_AB3CD', custom: true, title: 'December holiday programme', number: 'PLC-2611-AB3CD', reference: 'PLC AB3CD', period: '2026-11',
+    parentName: 'Mdm Goh', students: ['Goh Jia En'], lines: [{ studentName: 'Goh Jia En', desc: 'Camp', amount: 150 }], total: 150, paid: 0,
+    issueDate: '2026-11-03', dueDate: '2026-11-10', status: 'sent', qrMode: 'generic', note: 'Camp runs 1–5 Dec.'
+  };
+  const mail = C.invoiceEmail(inv, {}, { payUrl: 'https://polymathlc.com.sg/pay/?i=T', qrCid: 'paynowqr' });
+  assert.equal(mail.subject, 'Polymath invoice — December holiday programme ($150.00)');
+  assert.ok(mail.html.includes('<b>December holiday programme</b>') && mail.html.includes('type the amount') && mail.html.includes('Camp runs 1–5 Dec.'));
+  assert.ok(mail.text.includes('please type the amount yourself') && !mail.text.includes('tuition fees for'));
+  const none = C.invoiceEmail(Object.assign({}, inv, { qrMode: 'none' }), {}, { payUrl: 'https://polymathlc.com.sg/pay/?i=T' });
+  assert.ok(!none.html.includes('Scan to pay') && none.html.includes('Amount to pay') && none.text.includes('please quote PLC-2611-AB3CD'));
+  const rem = C.reminderEmail(inv, {}, { level: 1 });
+  assert.match(rem.subject, /^Reminder: December holiday programme \(\$150\.00 outstanding\)$/);
+  assert.ok(rem.html.includes('the invoice for <b>December holiday programme</b>'));
+  const wa = C.whatsappInvoiceText(inv, {}, 'https://polymathlc.com.sg/pay/?i=T');
+  assert.ok(wa.includes('*December holiday programme: $150.00*') && wa.includes('type the amount') && wa.includes('Camp runs'));
+  const waNone = C.whatsappInvoiceText(Object.assign({}, inv, { qrMode: 'none' }), {}, 'https://polymathlc.com.sg/pay/?i=T');
+  assert.ok(!waNone.includes('Save the QR') && waNone.includes('The invoice online'));
+  const link = C.publicInvoiceDoc(inv, {});
+  assert.deepEqual([link.title, link.custom, link.qrMode, link.note], ['December holiday programme', true, 'generic', 'Camp runs 1–5 Dec.']);
+  const monthly = C.publicInvoiceDoc({ id: 'f_2026-11', period: '2026-11', lines: [], total: 1, paid: 0 }, { payNote: 'Thanks' });
+  assert.deepEqual([monthly.title, monthly.custom, monthly.qrMode, monthly.note], ['', false, 'exact', 'Thanks'], 'a monthly link looks as before');
+  const receipt = C.receiptEmail({ parentName: 'Mdm Goh' }, { amount: 150, date: '2026-11-04' }, [{ period: '2026-11', amount: 150, left: 0, title: 'December holiday programme' }], {});
+  assert.ok(receipt.html.includes('December holiday programme') && !receipt.text.includes('November 2026 fees'));
+  // A monthly invoice's words are exactly as before.
+  const m = C.invoiceEmail({ number: 'PLC-2611-K7M2QX', reference: 'PLC K7M2QX NOV26', period: '2026-11', parentName: 'Tan', students: ['Jun'], lines: [], total: 220, paid: 0, dueDate: '2026-11-10' }, {}, {});
+  assert.equal(m.subject, 'Polymath tuition fees — November 2026 ($220.00)');
+  assert.ok(m.html.includes('Jun\'s tuition fees for <b>November 2026</b>'));
+});
