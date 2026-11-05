@@ -8,7 +8,10 @@
      🗓️ Timetable  the /schedule timetable with how many students sit in each class
      📋 Students   every student, filtered by level, subject, mode, day, payment
      🧾 Invoices   prepared from each student's classes and the schedule's fees;
-                   sent by email (QR inside) or WhatsApp Web (invoice picture pasted)
+                   sent by email (QR inside) or WhatsApp Web (invoice picture pasted).
+                   Custom invoices are written by hand — any parent, any lines,
+                   any dates, every field editable — and every invoice chooses
+                   its QR: amount filled in, a generic PayNow QR, or none.
      🏦 Payments   drop a bank statement (PDF, Excel, CSV): read, matched to
                    families by reference code / known payer / name / amount /
                    ChatGPT, applied in one click; reminders to whoever still owes
@@ -22,6 +25,7 @@
    Data (Firestore, CER project mathgen--app, locked by tools/office-rules.mjs):
      officeFamilies/{id}       a parent and their students (embedded)
      officeInvoices/{fam_YYYY-MM}  one invoice per family per month
+     officeInvoices/custom_{TAG}   a custom invoice (custom: true), linked to a family or not
      officePayments/{txKey}    every bank credit (or cash) applied — the ledger
      officeStatements/{id}     each uploaded statement and how it was read
      officeSettings/config     the settings; officeSettings/autopilot its heartbeat
@@ -29,9 +33,9 @@
      mail/polymath-office-*    emails for the Trigger Email extension
    Reads: schedule_config/main (the /schedule page's own document).
    ═══════════════════════════════════════════════════════════════════════════ */
-import * as C from './office-core.mjs?v=1.0.0';
+import * as C from './office-core.mjs?v=1.1.0';
 
-const OFFICE_VERSION = 'v1.0.0';
+const OFFICE_VERSION = 'v1.1.0';
 
 /* ═══════════════ Firebase — the CER project ═══════════════ */
 firebase.initializeApp({
@@ -173,7 +177,9 @@ function reindex() {
 }
 const famById = id => IX.fam.get(id) || null;
 const invoicesOf = id => IX.invByFam.get(id) || [];
-const invoiceFor = (famId, period) => invoicesOf(famId).find(i => i.period === period) || null;
+// The family's MONTHLY invoice for a month — a custom invoice in the same month
+// is extra, never the month's bill, so it never stops the month being prepared.
+const invoiceFor = (famId, period) => invoicesOf(famId).find(i => i.period === period && !i.custom) || null;
 const periodInvoices = period => S.invoices.filter(i => i.period === period);
 const familyOwing = id => C.round2(invoicesOf(id).reduce((s, i) => s + C.invoiceOutstanding(i), 0));
 const stateOf = inv => C.invoiceState(inv, today());
@@ -616,7 +622,7 @@ VIEWS.invoices = function () {
     if (!ok) return false;
     if (!q) return true;
     const f = famById(i.familyId);
-    return C.normText([i.parentName, i.number, i.reference, ...(i.students || []), f && f.whatsapp, f && f.email].join(' ')).includes(q);
+    return C.normText([i.parentName, i.number, i.reference, i.title, ...(i.students || []), f && f.whatsapp, f && f.email, ...(i.emails || [])].join(' ')).includes(q);
   }).sort((a, b) => {
     const order = { overdue: 0, part: 1, waiting: 2, draft: 3, paid: 4, free: 5, void: 6 };
     return (order[stateOf(a).key] - order[stateOf(b).key]) || String(a.parentName).localeCompare(String(b.parentName));
@@ -638,8 +644,10 @@ VIEWS.invoices = function () {
     bulk = '<div class="bulkbar"><div class="txt"><b>' + C.plural(sum.overdue, 'family is', 'families are') + ' overdue</b><span>Upload the latest bank statement first so nobody who paid is reminded.</span></div>'
       + '<button class="btn ghost big" data-act="pickStatement">🏦 Upload statement</button><button class="btn white big" data-act="openReminders">🔔 Send reminders</button></div>';
   }
-  return '<div class="page-head"><div><h1>Invoices</h1><p>One invoice per family per month, with a PayNow QR that fills in the amount and the family\'s reference.</p></div>'
+  return '<div class="page-head"><div><h1>Invoices</h1><p>One invoice per family per month, with a PayNow QR that fills in the amount and the family\'s reference. Custom invoices can be written for anyone, for anything.</p></div>'
     + '<div class="actions"><div class="monthnav"><button data-act="period" data-d="-1" aria-label="Previous month">◀</button><b>' + esc(label) + '</b><button data-act="period" data-d="1" aria-label="Next month">▶</button></div>'
+    + '<button class="btn" data-act="newCustomInvoice">＋ Custom invoice</button>'
+    + '<button class="btn ghost" data-act="openGenericQr" title="The centre\'s PayNow QR, with no amount">📱 Generic QR</button>'
     + '<button class="btn ghost" data-act="openReminders">🔔 Reminders</button></div></div>'
     + '<div class="stats" style="margin-bottom:18px;">'
     + '<div class="stat deep"><div class="label">Billed</div><div class="value">' + money(sum.billed) + '</div><div class="hint">' + C.plural(sum.count, 'invoice') + '</div></div>'
@@ -653,11 +661,17 @@ VIEWS.invoices = function () {
       : !list.length ? '<div class="card">' + emptyHtml('🔍', 'Nothing here', 'Try another filter.') + '</div>'
         : '<div class="inv-list">' + list.map(invRowHtml).join('') + '</div>');
 };
+// A custom invoice (or one whose contacts were changed on the invoice) goes to
+// the contacts written on it; a monthly invoice follows the family's current ones.
 function recipientsFor(inv) {
+  const own = inv.custom || inv.ownContacts;
   const f = famById(inv.familyId);
-  return f ? C.familyEmails(f) : (inv.emails || []).filter(C.isEmail);
+  return !own && f ? C.familyEmails(f) : (inv.emails || []).filter(C.isEmail);
 }
-function phoneFor(inv) { const f = famById(inv.familyId); return (f && f.whatsapp) || inv.whatsapp || ''; }
+function phoneFor(inv) {
+  if (inv.custom || inv.ownContacts) return inv.whatsapp || '';
+  const f = famById(inv.familyId); return (f && f.whatsapp) || inv.whatsapp || '';
+}
 function invRowHtml(inv) {
   const st = stateOf(inv);
   const owe = C.invoiceOutstanding(inv);
@@ -672,7 +686,7 @@ function invRowHtml(inv) {
   const remind = ['overdue', 'part'].includes(st.key);
   return '<div class="inv ' + st.tone + '" data-act="openInvoice" data-id="' + esc(inv.id) + '" role="button" tabindex="0">'
     + pill(st)
-    + '<div class="who"><b>' + esc(inv.parentName) + '</b><span>' + esc(kids) + '</span></div>'
+    + '<div class="who"><b>' + esc(inv.parentName) + (inv.custom ? ' <span class="tag-custom">Custom</span>' : '') + '</b><span>' + esc(inv.custom || inv.title ? C.invoiceTitle(inv) + (kids ? ' · ' + kids : '') : kids) + '</span></div>'
     + '<div class="amt">' + money(inv.total) + (owe > 0 && owe < inv.total ? '<small>owes ' + money(owe) + '</small>' : '') + '</div>'
     + '<div class="meta">' + esc(inv.number) + '<br>Due ' + esc(C.prettyDateShort(inv.dueDate)) + '<div class="sent">'
     + '<span class="sentmark ' + (emailed ? 'on' : '') + '">✉ ' + (emailed ? 'sent' : canEmail ? '—' : 'no email') + '</span>'
@@ -753,7 +767,7 @@ VIEWS.settings = function () {
     + '<div class="full">' + f('signature', 'Signature', 'textarea') + '</div></div></div>'
     + '<div class="card"><h2>📱 PayNow</h2><div class="sub">Every QR pays this UEN, with the amount locked and the family\'s reference filled in.</div><div class="form">'
     + f('uen', 'UEN') + f('merchant', 'Name shown in the banking app') + f('centreWhatsapp', 'Centre WhatsApp number', 'tel')
-    + '<div class="full actions"><button class="btn ghost" data-act="qrSelfTest">🔍 Test a QR</button><span class="small muted" id="qr-test-out"></span></div></div>'
+    + '<div class="full actions"><button class="btn ghost" data-act="qrSelfTest">🔍 Test a QR</button><button class="btn ghost" data-act="openGenericQr">📱 Generic PayNow QR</button><span class="small muted" id="qr-test-out"></span></div></div>'
     + '<h2 style="margin-top:22px;">🧠 ChatGPT</h2><div class="sub">Reads bank statements and suggests who paid, through the centre\'s own server key (the same one the Science portal uses).</div>'
     + '<label class="check"><input type="checkbox" data-ch="settingBool" data-k="useAi" ' + (s.useAi ? 'checked' : '') + '> Use ChatGPT for bank statements</label>'
     + '<div class="actions" style="margin-top:12px;"><button class="btn ghost" data-act="aiTest">Test ChatGPT</button><span class="small muted" id="ai-test-out"></span></div></div>'
@@ -881,6 +895,7 @@ MODALS.family = function (m) {
     body,
     foot: (isNew ? '' : '<button class="btn danger left" data-act="deleteFamily">Delete family</button>')
       + (f.whatsapp ? '<a class="btn wa" href="' + esc(C.whatsappLink(f.whatsapp, 'Hi ' + (f.parentName || ''), !TOUCH)) + '" target="polymath_whatsapp" rel="noopener" data-act="noop">💬 WhatsApp</a>' : '')
+      + (isNew ? '' : '<button class="btn ghost" data-act="newCustomInvoice" data-fam="' + esc(f.id) + '" title="Write an invoice by hand for this family">＋ Custom invoice</button>')
       + '<button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn" data-act="saveFamily">' + (isNew ? 'Add family' : 'Save changes') + '</button>'
   };
 };
@@ -963,26 +978,45 @@ MODALS.prepare = function (m) {
 };
 
 /* ─── One invoice ─── */
+// The QR box shown on an invoice, by the invoice's own QR choice.
+function qrBoxHtml(inv, owe, opts) {
+  const o = opts || {};
+  const mode = C.invoiceQrMode(inv);
+  const payload = C.invoiceQrPayload(inv, S.settings);
+  if (!payload) {
+    if (!(owe > 0)) return '';
+    return '<div class="qr-box none"><div class="amt">' + money(owe) + '</div><div class="ref">No QR on this invoice · quote <b>' + esc(inv.number) + '</b></div></div>';
+  }
+  return '<div class="qr-box"><div class="amt">' + money(owe) + '</div>'
+    + (mode === 'generic' ? '<div class="small muted" style="margin-bottom:6px;">Generic QR — the parent types the amount</div>' : '')
+    + '<div class="q" data-qr="' + esc(payload) + '" data-size="' + (o.size || 200) + '"></div><div class="ref">Reference <b>' + esc(inv.reference) + '</b> · UEN ' + esc(S.settings.uen) + '</div>'
+    + (o.buttons === false ? '' : '<div class="actions" style="justify-content:center;margin-top:12px;"><button class="btn sm" data-act="saveInvoiceQr">⬇ Save QR</button><button class="btn sm ghost" data-act="saveInvoiceImage">⬇ Save invoice picture</button></div>')
+    + '</div>';
+}
+// The three QR choices as radio cards (used on the invoice and in the editor).
+function qrModePicker(current, act, name) {
+  return '<div class="qr-modes" role="radiogroup" aria-label="QR on this invoice">' + C.QR_MODES.map(k => {
+    const meta = C.QR_MODE_META[k];
+    return '<label class="qr-mode ' + (current === k ? 'on' : '') + '"><input type="radio" name="' + esc(name || 'qrmode') + '" value="' + k + '" data-ch="' + act + '" ' + (current === k ? 'checked' : '') + '>'
+      + '<span><b>' + (k === 'exact' ? '🔒 ' : k === 'generic' ? '📱 ' : '🚫 ') + esc(meta.label) + '</b><small>' + esc(meta.hint) + '</small></span></label>';
+  }).join('') + '</div>';
+}
 MODALS.invoice = function (m) {
   const inv = IX.invById.get(m.id);
   if (!inv) return { title: 'Invoice', body: emptyHtml('🧾', 'This invoice is gone', 'It may have been deleted.') };
   const st = stateOf(inv);
   const owe = C.invoiceOutstanding(inv);
   const fam = famById(inv.familyId);
-  const editing = !!m.edit;
-  const lines = editing ? m.edit : inv.lines;
-  const payload = owe > 0 ? C.buildPayNow(owe, inv.reference, { uen: S.settings.uen, merchant: S.settings.merchant }) : '';
-  const linesHtml = '<table class="inv-lines"><tbody>' + lines.map((l, i) => editing
-    ? '<tr><td><input type="text" value="' + esc(l.studentName || '') + '" placeholder="Student" data-in="line" data-i="' + i + '" data-k="studentName" data-keep="ls' + i + '"><input type="text" value="' + esc(l.desc) + '" data-in="line" data-i="' + i + '" data-k="desc" data-keep="ld' + i + '" style="margin-top:4px;"></td>'
-      + '<td class="r"><input class="money" type="number" step="0.01" value="' + esc(l.amount) + '" data-in="line" data-i="' + i + '" data-k="amount" data-keep="la' + i + '"><br><button class="linkbtn small" data-act="delLine" data-i="' + i + '">remove</button></td></tr>'
-    : '<tr><td>' + (l.studentName ? '<b>' + esc(l.studentName) + '</b><br>' : '') + esc(l.desc) + (l.detail ? '<div class="det">' + esc(l.detail) + '</div>' : '') + '</td><td class="r" style="' + (l.amount < 0 ? 'color:var(--green)' : '') + '">' + money(l.amount) + '</td></tr>').join('')
-    + (editing ? '<tr><td colspan="2"><button class="btn xs ghost" data-act="addLine">＋ Add a line</button></td></tr>' : '')
-    + '<tr class="total"><td>Total</td><td class="r">' + money(editing ? Math.max(0, lines.reduce((s, l) => s + (Number(l.amount) || 0), 0)) : inv.total) + '</td></tr>'
-    + (!editing && inv.paid > 0 ? '<tr><td class="muted">Received</td><td class="r" style="color:var(--green)">' + money(inv.paid) + '</td></tr><tr><td><b>Still to pay</b></td><td class="r"><b>' + money(owe) + '</b></td></tr>' : '')
+  const lines = inv.lines || [];
+  const linesHtml = '<table class="inv-lines"><tbody>' + lines.map(l =>
+    '<tr><td>' + (l.studentName ? '<b>' + esc(l.studentName) + '</b><br>' : '') + esc(l.desc) + (l.detail ? '<div class="det">' + esc(l.detail) + '</div>' : '') + '</td><td class="r" style="' + (l.amount < 0 ? 'color:var(--green)' : '') + '">' + money(l.amount) + '</td></tr>').join('')
+    + '<tr class="total"><td>Total</td><td class="r">' + money(inv.total) + '</td></tr>'
+    + (inv.paid > 0 ? '<tr><td class="muted">Received</td><td class="r" style="color:var(--green)">' + money(inv.paid) + '</td></tr><tr><td><b>Still to pay</b></td><td class="r"><b>' + money(owe) + '</b></td></tr>' : '')
     + '</tbody></table>';
   const hist = [];
-  if (inv.createdAt) hist.push([tsMs(inv.createdAt), 'Prepared' + (inv.createdBy === 'autopilot' ? ' by the autopilot' : '')]);
-  (inv.sends || []).forEach(s => hist.push([s.at, (s.via === 'email' ? '✉ Emailed' : '💬 WhatsApp opened') + (s.to ? ' to ' + s.to.join(', ') : '') + (s.mailId && S.mailState[s.mailId] ? ' — ' + S.mailState[s.mailId] : '')]));
+  if (inv.createdAt) hist.push([tsMs(inv.createdAt), (inv.custom ? 'Written by hand' : 'Prepared') + (inv.createdBy === 'autopilot' ? ' by the autopilot' : '')]);
+  if (inv.editedAt) hist.push([tsMs(inv.editedAt), '✏️ Edited' + (inv.editedBy ? ' by ' + inv.editedBy : '')]);
+  (inv.sends || []).forEach(s => hist.push([s.at, (s.via === 'email' ? '✉ Emailed' : s.via === 'whatsapp' ? '💬 WhatsApp opened' : '✓ Marked as sent') + (s.to ? ' to ' + s.to.join(', ') : '') + (s.mailId && S.mailState[s.mailId] ? ' — ' + S.mailState[s.mailId] : '')]));
   (inv.reminders || []).forEach(r => hist.push([r.at, '🔔 Reminder ' + (r.level || '') + ' by ' + (r.via === 'email' ? 'email' : 'WhatsApp') + (r.mailId && S.mailState[r.mailId] ? ' — ' + S.mailState[r.mailId] : '')]));
   (inv.payments || []).forEach(p => hist.push([p.at || 0, '💰 ' + money(p.amount) + ' received ' + (p.date ? C.prettyDate(p.date) : '') + (p.how ? ' (' + howLabel(p.how) + ')' : '')]));
   hist.sort((a, b) => a[0] - b[0]);
@@ -991,30 +1025,141 @@ MODALS.invoice = function (m) {
   // Before the due date the invoice itself is what goes out again; after it (or
   // once part is paid) it is a reminder.
   const remind = ['overdue', 'part'].includes(st.key);
+  const mode = C.invoiceQrMode(inv);
+  const directPaid = (inv.payments || []).some(p => String(p.paymentId || '').startsWith('direct-'));
+  const noContact = inv.custom || inv.ownContacts
+    ? '<div class="banner amber" style="margin:0;padding:10px 12px;"><div>✉ No email on this invoice — <button class="linkbtn" data-act="editInvoice" data-id="' + esc(inv.id) + '">add one</button>.</div></div>'
+    : '<div class="banner amber" style="margin:0;padding:10px 12px;"><div>✉ No email for this family — <button class="linkbtn" data-act="openFamily" data-id="' + esc(inv.familyId) + '">add one</button>.</div></div>';
   return {
-    size: 'wide', title: esc(inv.parentName) + ' · ' + esc(C.periodLabel(inv.period)), sub: esc(inv.number) + ' · ' + pill(st) + (isFinite(Date.parse(inv.dueDate)) ? ' · due ' + esc(C.prettyDate(inv.dueDate)) : ''),
+    size: 'wide', title: esc(inv.parentName) + ' · ' + esc(inv.custom || inv.title ? C.invoiceTitle(inv) : C.periodLabel(inv.period)), sub: esc(inv.number) + ' · ' + pill(st) + (inv.custom ? ' <span class="tag-custom">Custom</span>' : '') + (isFinite(Date.parse(inv.dueDate)) ? ' · due ' + esc(C.prettyDate(inv.dueDate)) : ''),
     body: '<div class="split" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);"><div><div class="inv-paper"><div class="hd"><b>POLYMATH LEARNING CENTRE</b><span>Invoice ' + esc(inv.number) + '</span></div><div class="bar"></div><div class="bd">'
-      + '<div class="small muted" style="margin-bottom:6px;">For ' + esc(inv.parentName) + ' · issued ' + esc(C.prettyDate(inv.issueDate)) + '</div>' + linesHtml
-      + (payload && !editing ? '<div class="qr-box"><div class="amt">' + money(owe) + '</div><div class="q" data-qr="' + esc(payload) + '" data-size="200"></div><div class="ref">Reference <b>' + esc(inv.reference) + '</b> · UEN ' + esc(S.settings.uen) + '</div>'
-        + '<div class="actions" style="justify-content:center;margin-top:12px;"><button class="btn sm" data-act="saveInvoiceQr">⬇ Save QR</button><button class="btn sm ghost" data-act="saveInvoiceImage">⬇ Save invoice picture</button></div></div>' : '')
+      + '<div class="small muted" style="margin-bottom:6px;">For ' + esc(inv.parentName) + ' · issued ' + esc(C.prettyDate(inv.issueDate)) + '</div>'
+      + (inv.custom || inv.title ? '<div style="font-weight:700;margin-bottom:6px;">' + esc(C.invoiceTitle(inv)) + '</div>' : '')
+      + linesHtml
+      + qrBoxHtml(inv, owe)
+      + (inv.note ? '<div class="small" style="margin-top:12px;white-space:pre-wrap;">' + esc(inv.note) + '</div>' : '')
       + (inv.issues && inv.issues.length ? '<div class="banner amber" style="margin-top:12px;"><div class="big">⚠️</div><div><b>Check these</b>' + inv.issues.map(esc).join('<br>') + '</div></div>' : '')
-      + '</div></div></div>'
+      + '</div></div>'
+      + (inv.status !== 'void' && owe > 0 ? '<div class="section-title" style="margin-top:16px;">QR on this invoice</div>' + qrModePicker(mode, 'invQrMode', 'qr-' + inv.id)
+        + '<div class="small muted" style="margin-top:6px;">Changes the office, the parent\'s page and anything sent from now on.</div>' : '')
+      + '</div>'
       + '<div><div class="section-title">Send</div><div class="side-actions">'
-      + (editing ? '<button class="btn" data-act="saveLines">Save the changes</button><button class="btn ghost" data-act="cancelLines">Cancel editing</button>'
-        : (live ? (canEmail ? '<button class="btn" data-act="emailInvoice" data-id="' + esc(inv.id) + '">✉ ' + ((inv.sends || []).some(s => s.via === 'email') ? 'Email the invoice again' : 'Email the invoice') + '</button>' : '<div class="banner amber" style="margin:0;padding:10px 12px;"><div>✉ No email for this family — <button class="linkbtn" data-act="openFamily" data-id="' + esc(inv.familyId) + '">add one</button>.</div></div>')
-          + (remind && canEmail ? '<button class="btn ghost" data-act="remindOne" data-id="' + esc(inv.id) + '">🔔 Email a reminder' + ((inv.reminders || []).length ? ' (#' + ((inv.reminders || []).length + 1) + ')' : '') + '</button>' : '')
-          + (canWa ? '<button class="btn wa" data-act="waOne" data-id="' + esc(inv.id) + '" data-kind="' + (remind ? 'reminder' : 'invoice') + '">💬 WhatsApp ' + (remind ? 'a reminder' : 'the invoice') + '</button><div class="small muted">Copies the invoice picture (with the QR) and opens the chat — press Ctrl+V there, then Enter.</div>' : '')
-          + '<button class="btn ghost" data-act="copyPayLink" data-id="' + esc(inv.id) + '">🔗 Copy the parent\'s pay link</button>'
-          + (st.key === 'draft' ? '<button class="btn ghost" data-act="markSent" data-id="' + esc(inv.id) + '">✓ I sent it myself — mark as sent</button>' : '') : '')
-          + '<div class="section-title" style="margin-top:12px;">Money</div>'
-          + (live ? '<button class="btn ghost" data-act="recordPayment" data-fam="' + esc(inv.familyId) + '" data-amt="' + owe + '">💵 Record a payment</button>' : '')
-          + (inv.status !== 'void' && !(inv.paid > 0) ? '<button class="btn ghost" data-act="editLines">✏️ Change the lines</button>' : '')
-          + (inv.status !== 'void' && !(inv.paid > 0) ? '<button class="btn danger" data-act="voidInvoice" data-id="' + esc(inv.id) + '">✕ Cancel this invoice</button>' : '')
-          + (inv.status === 'void' ? '<button class="btn ghost" data-act="unvoidInvoice" data-id="' + esc(inv.id) + '">↩ Restore this invoice</button>' : ''))
+      + (live ? (canEmail ? '<button class="btn" data-act="emailInvoice" data-id="' + esc(inv.id) + '">✉ ' + ((inv.sends || []).some(s => s.via === 'email') ? 'Email the invoice again' : 'Email the invoice') + '</button>' : noContact)
+        + (remind && canEmail ? '<button class="btn ghost" data-act="remindOne" data-id="' + esc(inv.id) + '">🔔 Email a reminder' + ((inv.reminders || []).length ? ' (#' + ((inv.reminders || []).length + 1) + ')' : '') + '</button>' : '')
+        + (canWa ? '<button class="btn wa" data-act="waOne" data-id="' + esc(inv.id) + '" data-kind="' + (remind ? 'reminder' : 'invoice') + '">💬 WhatsApp ' + (remind ? 'a reminder' : 'the invoice') + '</button><div class="small muted">Copies the invoice picture' + (mode === 'none' ? '' : ' (with the QR)') + ' and opens the chat — press Ctrl+V there, then Enter.</div>' : '')
+        + '<button class="btn ghost" data-act="copyPayLink" data-id="' + esc(inv.id) + '">🔗 Copy the parent\'s pay link</button>'
+        + (st.key === 'draft' ? '<button class="btn ghost" data-act="markSent" data-id="' + esc(inv.id) + '">✓ I sent it myself — mark as sent</button>' : '') : '')
+      + '<div class="section-title" style="margin-top:12px;">Money</div>'
+      + (live && fam ? '<button class="btn ghost" data-act="recordPayment" data-fam="' + esc(inv.familyId) + '" data-amt="' + owe + '">💵 Record a payment</button>' : '')
+      + (live && !fam ? '<button class="btn ghost" data-act="markPaidDirect" data-id="' + esc(inv.id) + '">✓ Mark as paid (' + money(owe) + ')</button>' : '')
+      + (directPaid && !fam ? '<button class="btn ghost" data-act="undoPaidDirect" data-id="' + esc(inv.id) + '">↩ Undo "marked as paid"</button>' : '')
+      + (inv.status !== 'void' ? '<button class="btn ghost" data-act="editInvoice" data-id="' + esc(inv.id) + '">✏️ Edit the invoice</button>' : '')
+      + (inv.custom ? '<button class="btn ghost" data-act="duplicateInvoice" data-id="' + esc(inv.id) + '">⧉ Copy into a new custom invoice</button>' : '')
+      + (inv.status !== 'void' && !(inv.paid > 0) ? '<button class="btn danger" data-act="voidInvoice" data-id="' + esc(inv.id) + '">✕ Cancel this invoice</button>' : '')
+      + (inv.custom && !(inv.paid > 0) && !(inv.sends || []).length ? '<button class="btn danger ghost" data-act="deleteCustomInvoice" data-id="' + esc(inv.id) + '">🗑 Delete this custom invoice</button>' : '')
+      + (inv.status === 'void' ? '<button class="btn ghost" data-act="unvoidInvoice" data-id="' + esc(inv.id) + '">↩ Restore this invoice</button>' : '')
       + '</div><div class="section-title" style="margin-top:22px;">History</div><div class="history">'
       + (hist.length ? hist.map(([at, txt]) => '<div><time>' + (at ? esc(new Date(at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })) : '') + '</time><span>' + esc(txt) + '</span></div>').join('') : '<div class="muted">Nothing yet.</div>')
       + '</div>' + (fam ? '<div style="margin-top:16px;"><button class="linkbtn" data-act="openFamily" data-id="' + esc(fam.id) + '">Open the family →</button></div>' : '') + '</div></div>',
     foot: ''
+  };
+};
+
+/* ─── The invoice editor: a new custom invoice, or any invoice changed ───
+   Every field a parent sees is here: who it is for and their contacts, the
+   number, title, dates, the month it is listed under, every line, the
+   reference, a note, and which QR it carries. The preview on the right is the
+   invoice exactly as the parent will see it. */
+function editorPreview(d) {
+  const res = C.invoiceFromDraft(d);
+  const f = res.fields;
+  const base = d.id ? IX.invById.get(d.id) : null;
+  const preview = Object.assign({}, base || {}, f, { custom: d.custom || (base && base.custom), paid: base ? Number(base.paid) || 0 : 0, status: base && base.status === 'void' ? 'void' : 'draft' });
+  const owe = C.invoiceOutstanding(preview);
+  return { res, preview, owe };
+}
+function editorLinesHtml(d) {
+  return '<div class="ed-lines">' + (d.lines || []).map((l, i) =>
+    '<div class="ed-line">'
+    + '<div class="field"><label>Student</label><input type="text" value="' + esc(l.studentName || '') + '" placeholder="optional" data-in="edLine" data-i="' + i + '" data-k="studentName" data-keep="es' + i + '"></div>'
+    + '<div class="field grow"><label>What it is for</label><input type="text" value="' + esc(l.desc || '') + '" placeholder="e.g. P5 Math — November" data-in="edLine" data-i="' + i + '" data-k="desc" data-keep="ed' + i + '"></div>'
+    + '<div class="field grow"><label>Detail</label><input type="text" value="' + esc(l.detail || '') + '" placeholder="optional, e.g. 4 lessons" data-in="edLine" data-i="' + i + '" data-k="detail" data-keep="et' + i + '"></div>'
+    + '<div class="field amt"><label>Amount ($)</label><input class="money" type="text" inputmode="decimal" value="' + esc(l.amount === '' || l.amount == null ? '' : String(l.amount)) + '" placeholder="0.00" data-in="edLine" data-i="' + i + '" data-k="amount" data-keep="ea' + i + '"></div>'
+    + '<div class="ed-line-x">'
+    + (i > 0 ? '<button class="iconbtn" data-act="edLineUp" data-i="' + i + '" title="Move up" aria-label="Move line ' + (i + 1) + ' up">↑</button>' : '')
+    + '<button class="iconbtn" data-act="edLineDel" data-i="' + i + '" title="Remove this line" aria-label="Remove line ' + (i + 1) + '">✕</button></div></div>').join('')
+    + '</div><div class="actions" style="margin-top:8px;"><button class="btn xs ghost" data-act="edLineAdd">＋ Add a line</button><button class="btn xs ghost" data-act="edLineAdd" data-neg="1">＋ Add a discount</button></div>'
+    + '<div class="small muted" style="margin-top:6px;">A discount is a line with a minus amount, e.g. -20.</div>';
+}
+MODALS.invEdit = function (m) {
+  const d = m.draft;
+  const isNew = !m.editing;
+  const base = d.id ? IX.invById.get(d.id) : null;
+  const { res, preview, owe } = editorPreview(d);
+  const famOpts = '<option value="">— Not linked to a family —</option>' + S.families.slice().sort(by('parentName')).map(f => '<option value="' + esc(f.id) + '" ' + (f.id === d.familyId ? 'selected' : '') + '>' + esc(C.familyDisplayName(f)) + ' · ' + esc(C.familyReference(f.code)) + '</option>').join('');
+  const field = (k, label, opts) => {
+    const o = opts || {};
+    const v = d[k] == null ? '' : d[k];
+    const input = o.textarea
+      ? '<textarea data-in="ed" data-k="' + k + '" data-keep="ef-' + k + '" placeholder="' + esc(o.ph || '') + '">' + esc(v) + '</textarea>'
+      : '<input type="' + (o.type || 'text') + '" value="' + esc(v) + '" data-in="ed" data-k="' + k + '" data-keep="ef-' + k + '" placeholder="' + esc(o.ph || '') + '"' + (o.attrs ? ' ' + o.attrs : '') + '>';
+    return '<div class="field' + (o.full ? ' full' : '') + '"><label>' + label + '</label>' + input + (o.hint ? '<div class="small muted">' + o.hint + '</div>' : '') + '</div>';
+  };
+  const months = [];
+  for (let k = -6; k <= 6; k++) months.push(C.addMonths(C.sgMonthKey(), k));
+  if (C.isPeriod(d.period) && !months.includes(d.period)) months.push(d.period);
+  months.sort();
+  const left = '<div class="ed-form">'
+    + '<div class="section-title">Who it is for</div><div class="form">'
+    + '<div class="field full"><label>Link to a family (optional)</label><select data-ch="edFamily">' + famOpts + '</select><div class="small muted">Linking fills in the details below and lets a bank payment with this reference be matched to the family. You can still change every field.</div></div>'
+    + field('parentName', 'Parent\'s name', { ph: 'e.g. Mrs Tan Mei Ling', full: true })
+    + field('emails', 'Email(s)', { ph: 'parent@example.com, second@example.com', hint: 'Separate two addresses with a comma.' })
+    + field('whatsapp', 'WhatsApp number', { type: 'tel', ph: '9123 4567' })
+    + '</div>'
+    + '<div class="section-title" style="margin-top:16px;">The invoice</div><div class="form">'
+    + field('title', 'Title', { ph: preview.custom || d.custom ? 'e.g. Holiday programme — December 2026' : C.periodLabel(d.period) + ' tuition fees', full: true, hint: 'Shown at the top of the invoice and in the email subject.' })
+    + field('number', 'Invoice number')
+    + field('reference', 'PayNow reference', { hint: 'Up to 25 letters and digits. It is printed in the QR and on the bank statement.' })
+    + field('issueDate', 'Invoice date', { type: 'date' })
+    + field('dueDate', 'Due date', { type: 'date' })
+    + '<div class="field"><label>Listed under</label><select data-ch="edPeriod">' + months.map(p => '<option value="' + p + '" ' + (p === d.period ? 'selected' : '') + '>' + esc(C.periodLabel(p)) + '</option>').join('') + '</select><div class="small muted">The month this invoice shows in on the Invoices tab.</div></div>'
+    + '</div>'
+    + '<div class="section-title" style="margin-top:16px;">Lines</div>' + editorLinesHtml(d)
+    + '<div class="section-title" style="margin-top:16px;">QR on the invoice</div>' + qrModePicker(d.qrMode, 'edQrMode', 'ed-qr')
+    + '<div class="form" style="margin-top:12px;">' + field('note', 'Note at the end of the invoice', { textarea: true, full: true, ph: S.settings.invoiceNote || 'optional', hint: 'Left empty, the usual line from Settings is used.' }) + '</div>'
+    + (base && base.paid > 0 ? '<div class="banner amber" style="margin-top:12px;"><div class="big">💰</div><div><b>' + money(base.paid) + ' has already been received on this invoice.</b>It stays recorded; what is still owed follows the new total.</div></div>' : '')
+    + '</div>';
+  const right = '<div class="ed-preview"><div class="section-title">Preview</div><div class="inv-paper"><div class="hd"><b>POLYMATH LEARNING CENTRE</b><span>Invoice ' + esc(res.fields.number || '—') + '</span></div><div class="bar"></div><div class="bd">'
+    + '<div class="small muted" style="margin-bottom:6px;">For ' + esc(res.fields.parentName || '…') + (C.isDayKey(res.fields.issueDate) ? ' · issued ' + esc(C.prettyDate(res.fields.issueDate)) : '') + '</div>'
+    + '<div style="font-weight:700;margin-bottom:6px;">' + esc(C.invoiceTitle(preview)) + '</div>'
+    + '<table class="inv-lines"><tbody>' + res.fields.lines.map(l => '<tr><td>' + (l.studentName ? '<b>' + esc(l.studentName) + '</b><br>' : '') + esc(l.desc) + (l.detail ? '<div class="det">' + esc(l.detail) + '</div>' : '') + '</td><td class="r" style="' + (l.amount < 0 ? 'color:var(--green)' : '') + '">' + money(l.amount) + '</td></tr>').join('')
+    + '<tr class="total"><td>Total</td><td class="r" id="ed-total">' + money(res.fields.total) + '</td></tr>'
+    + (preview.paid > 0 ? '<tr><td class="muted">Received</td><td class="r" style="color:var(--green)">' + money(preview.paid) + '</td></tr><tr><td><b>Still to pay</b></td><td class="r"><b>' + money(owe) + '</b></td></tr>' : '')
+    + '</tbody></table>'
+    + qrBoxHtml(preview, owe, { buttons: false, size: 170 })
+    + (C.isDayKey(res.fields.dueDate) ? '<div class="small muted" style="margin-top:10px;">Due ' + esc(C.prettyDate(res.fields.dueDate)) + '</div>' : '')
+    + ((res.fields.note || S.settings.invoiceNote) ? '<div class="small" style="margin-top:8px;white-space:pre-wrap;">' + esc(res.fields.note || S.settings.invoiceNote) + '</div>' : '')
+    + '</div></div>'
+    + (!res.ok && m.tried ? '<div class="banner red" style="margin-top:12px;"><div class="big">⚠️</div><div><b>Not saved yet</b>' + res.errors.map(esc).join('<br>') + '</div></div>' : '')
+    + '</div>';
+  return {
+    size: 'wide', title: isNew ? '＋ Custom invoice' : '✏️ Edit invoice ' + esc((base && base.number) || ''),
+    sub: isNew ? 'Write any invoice by hand. Nothing is sent until you press Email or WhatsApp afterwards.' : 'Every field can be changed. The parent\'s page updates when you save.',
+    body: '<div class="split ed-split">' + left + right + '</div>',
+    foot: (m.back ? '<button class="btn ghost left" data-act="closeModal">← Back</button>' : '<button class="btn ghost left" data-act="closeModal">Cancel</button>')
+      + '<span class="muted" id="ed-foot-total">' + C.plural(res.fields.lines.length, 'line') + ' · ' + money(res.fields.total) + '</span>'
+      + '<button class="btn" data-act="saveInvoiceEdit">' + (isNew ? 'Create the invoice' : 'Save the changes') + '</button>'
+  };
+};
+
+/* ─── The centre's generic PayNow QR ─── */
+MODALS.genericQr = function (m) {
+  const payload = C.genericPayNow(S.settings, m.reference || '');
+  return {
+    size: 'narrow', title: '📱 Generic PayNow QR', sub: 'Pays ' + esc(S.settings.merchant) + ' (UEN ' + esc(S.settings.uen) + '). The parent types the amount.',
+    body: '<div class="field"><label>Reference (optional)</label><input type="text" value="' + esc(m.reference || '') + '" placeholder="POLYMATH" maxlength="25" data-in="genericRef" data-keep="genref"><div class="small muted">Left empty, the reference is POLYMATH. Payers can change it in their banking app.</div></div>'
+      + '<div class="qr-box"><div class="amt">Any amount</div><div class="q" data-qr="' + esc(payload) + '" data-size="220"></div><div class="ref">' + esc(S.settings.merchant) + ' · UEN ' + esc(S.settings.uen) + ' · reference <b>' + esc(C.cleanRef(m.reference) || 'POLYMATH') + '</b></div></div>',
+    foot: '<button class="btn ghost" data-act="closeModal">Close</button><button class="btn" data-act="saveGenericQr">⬇ Save the QR</button>'
   };
 };
 
@@ -1132,7 +1277,11 @@ async function invoiceImage(inv) {
   const owe = C.invoiceOutstanding(inv);
   const W = 760, P = 44, QR = 380;
   const lines = inv.lines || [];
-  const H = 128 + 96 + lines.length * 54 + 70 + (owe > 0 ? QR + 120 + 4 * 42 + 80 : 120);
+  const payload = C.invoiceQrPayload(inv, S.settings);
+  const mode = C.invoiceQrMode(inv);
+  const titled = !!(inv.custom || String(inv.title || '').trim());
+  const noteLines = String(inv.note || '').trim() ? String(inv.note).trim().split(/\n/).slice(0, 4) : [];
+  const H = 128 + 96 + lines.length * 54 + 70 + (owe > 0 ? (payload ? QR + 120 + 4 * 42 + 80 : 3 * 42 + 90) : 120) + noteLines.length * 26 + (noteLines.length ? 20 : 0);
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
   const font = (w, s) => w + ' ' + s + 'px "DM Sans","Plus Jakarta Sans",Arial,sans-serif';
@@ -1141,12 +1290,12 @@ async function invoiceImage(inv) {
   const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, '#2e9ca6'); g.addColorStop(.5, '#56c4d0'); g.addColorStop(1, '#ec008c');
   ctx.fillStyle = g; ctx.fillRect(0, 108, W, 6);
   ctx.fillStyle = '#fff'; ctx.font = font('bold', 26); ctx.fillText('POLYMATH LEARNING CENTRE', P, 52);
-  ctx.fillStyle = '#b8e4e8'; ctx.font = font('500', 19); ctx.fillText('Invoice ' + inv.number + ' · ' + C.periodLabel(inv.period), P, 84);
+  ctx.fillStyle = '#b8e4e8'; ctx.font = font('500', 19); ctx.fillText(fitText(ctx, 'Invoice ' + inv.number + ' · ' + (titled ? C.prettyDate(inv.issueDate) : C.periodLabel(inv.period)), W - P * 2), P, 84);
   let y = 158;
   ctx.fillStyle = '#6b7f85'; ctx.font = font('500', 18); ctx.fillText('For ' + (inv.parentName || ''), P, y);
   y += 30;
   ctx.fillStyle = '#10303a'; ctx.font = font('bold', 24);
-  ctx.fillText(C.periodLabel(inv.period) + ' tuition fees', P, y);
+  ctx.fillText(fitText(ctx, C.invoiceTitle(inv), W - P * 2), P, y);
   y += 26;
   lines.forEach(l => {
     y += 40;
@@ -1160,15 +1309,27 @@ async function invoiceImage(inv) {
   ctx.textAlign = 'left'; ctx.fillStyle = '#10303a'; ctx.font = font('bold', 22); ctx.fillText(inv.paid > 0 && owe > 0 ? 'Still to pay' : 'Total', P, y);
   ctx.textAlign = 'right'; ctx.fillStyle = '#056c76'; ctx.font = font('bold', 30); ctx.fillText(money(owe > 0 ? owe : inv.total), W - P, y);
   ctx.textAlign = 'left';
-  if (owe > 0) {
+  if (owe > 0 && !payload) {
+    // No QR on this invoice: the amount, the number and the due date.
+    y += 30;
+    [['Pay to', C.CENTRE_NAME], ['Amount', money(owe)], ['Quote', inv.number]].forEach(([k, v]) => {
+      y += 42;
+      ctx.textAlign = 'left'; ctx.fillStyle = '#6b7f85'; ctx.font = font('500', 18); ctx.fillText(k, P, y);
+      ctx.textAlign = 'right'; ctx.fillStyle = '#10303a'; ctx.font = font('bold', 20); ctx.fillText(v, W - P, y);
+      ctx.strokeStyle = '#eef3f4'; ctx.beginPath(); ctx.moveTo(P, y + 14); ctx.lineTo(W - P, y + 14); ctx.stroke();
+    });
+    ctx.textAlign = 'center'; ctx.fillStyle = '#6b7f85'; ctx.font = font('500', 15);
+    if (C.isDayKey(inv.dueDate)) ctx.fillText('Due ' + C.prettyDate(inv.dueDate) + '.', W / 2, y + 50);
+    y += 60;
+  } else if (owe > 0) {
     y += 34;
     const box = QR + 40, bx = (W - box) / 2;
     ctx.fillStyle = '#f2f9fa'; roundRect(ctx, bx, y, box, box, 20); ctx.fill();
     ctx.strokeStyle = '#d1eaee'; ctx.lineWidth = 2; roundRect(ctx, bx, y, box, box, 20); ctx.stroke();
-    const qr = await qrCanvas(C.buildPayNow(owe, inv.reference, { uen: S.settings.uen, merchant: S.settings.merchant }), QR - 30);
+    const qr = await qrCanvas(payload, QR - 30);
     ctx.drawImage(qr, bx + 20, y + 20, QR, QR);
     y += box + 46;
-    [['Pay to', S.settings.merchant], ['UEN', S.settings.uen], ['Amount', money(owe)], ['Reference', inv.reference]].forEach(([k, v]) => {
+    [['Pay to', S.settings.merchant], ['UEN', S.settings.uen], ['Amount', money(owe) + (mode === 'generic' ? ' (type it in)' : '')], ['Reference', inv.reference]].forEach(([k, v]) => {
       ctx.textAlign = 'left'; ctx.fillStyle = '#6b7f85'; ctx.font = font('500', 18); ctx.fillText(k, P, y);
       ctx.textAlign = 'right'; ctx.fillStyle = '#10303a'; ctx.font = font('bold', 20); ctx.fillText(v, W - P, y);
       ctx.strokeStyle = '#eef3f4'; ctx.beginPath(); ctx.moveTo(P, y + 14); ctx.lineTo(W - P, y + 14); ctx.stroke();
@@ -1177,9 +1338,14 @@ async function invoiceImage(inv) {
     ctx.textAlign = 'center'; ctx.fillStyle = '#3d5a61'; ctx.font = font('500', 17);
     ctx.fillText('Save this picture → open your banking app → Scan QR → choose from gallery', W / 2, y + 22);
     ctx.fillStyle = '#6b7f85'; ctx.font = font('500', 15);
-    ctx.fillText('The amount and the reference are already filled in. Due ' + C.prettyDate(inv.dueDate) + '.', W / 2, y + 48);
+    ctx.fillText((mode === 'generic' ? 'The reference is filled in — type the amount, ' + money(owe) + '.' : 'The amount and the reference are already filled in.') + (C.isDayKey(inv.dueDate) ? ' Due ' + C.prettyDate(inv.dueDate) + '.' : ''), W / 2, y + 48);
+    y += 60;
   } else {
     y += 60; ctx.textAlign = 'center'; ctx.fillStyle = '#15803d'; ctx.font = font('bold', 24); ctx.fillText('Paid — thank you!', W / 2, y);
+  }
+  if (noteLines.length) {
+    y += 28; ctx.textAlign = 'center'; ctx.fillStyle = '#3d5a61'; ctx.font = font('500', 16);
+    noteLines.forEach(t => { ctx.fillText(fitText(ctx, t, W - P * 2), W / 2, y); y += 26; });
   }
   return cv.toDataURL('image/png');
 }
@@ -1304,10 +1470,12 @@ async function emailInvoice(inv, kind) {
   if (!(owe > 0)) throw new Error('nothing is owed on this invoice');
   const token = await ensureLink(inv);
   const payUrl = C.payLink(token);
-  const png = await qrPngBase64(C.buildPayNow(owe, inv.reference, { uen: S.settings.uen, merchant: S.settings.merchant }));
+  // The invoice's own QR choice: none means no picture and no attachment at all.
+  const payload = C.invoiceQrPayload(inv, S.settings);
+  const qrCid = payload ? 'paynowqr' : '';
   const level = (inv.reminders || []).length + 1;
-  const msg = kind === 'reminder' ? C.reminderEmail(inv, S.settings, { payUrl, qrCid: 'paynowqr', level }) : C.invoiceEmail(inv, S.settings, { payUrl, qrCid: 'paynowqr' });
-  msg.attachments = [C.qrAttachment(png, inv.reference, 'paynowqr')];
+  const msg = kind === 'reminder' ? C.reminderEmail(inv, S.settings, { payUrl, qrCid, level }) : C.invoiceEmail(inv, S.settings, { payUrl, qrCid });
+  if (payload) msg.attachments = [C.qrAttachment(await qrPngBase64(payload), inv.reference, 'paynowqr')];
   const id = C.mailDocId(kind, inv.id);
   await db.collection('mail').doc(id).set(C.officeMail(to, msg, { kind, invoiceId: inv.id, familyId: inv.familyId, period: inv.period, sentBy: S.user.email }, S.settings));
   const upd = { updatedAt: ts() };
@@ -1404,7 +1572,7 @@ async function applyPayment(tx, opts) {
       const next = C.invoiceWithPayment(inv, a.amount, { paymentId: pRef.id, amount: a.amount, date: tx.date || today(), how, at: Date.now() });
       t.update(invRef(inv.id), { paid: next.paid, payments: next.payments, status: next.status, updatedAt: ts(), ...(next.status === 'paid' ? { paidAt: ts() } : {}) });
       if (inv.linkToken) t.set(linkRef(inv.linkToken), Object.assign(C.publicInvoiceDoc(next, S.settings), { updatedAt: ts() }), { merge: true });
-      after.push({ period: inv.period, amount: a.amount, left: C.invoiceOutstanding(next) });
+      after.push({ period: inv.period, amount: a.amount, left: C.invoiceOutstanding(next), title: inv.custom || inv.title ? C.invoiceTitle(inv) : '' });
     });
     const fam = fSnap.data();
     const fu = { updatedAt: ts() };
@@ -1812,28 +1980,69 @@ const ACT = {
   waSkip() { S.modal.i++; S.modal.skipped = (S.modal.skipped || 0) + 1; S.modal.last = null; renderModal(); },
   copyPayLink: async el => { const inv = IX.invById.get(el.dataset.id); if (!inv) return; try { const t = await ensureLink(inv); copyText(C.payLink(t), 'Pay link copied'); } catch (e) { fail('Could not make the link', e); } },
   async markSent(el) { const inv = IX.invById.get(el.dataset.id); if (!inv) return; await markSent(inv, 'other'); toast('Marked as sent', 'ok'); },
-  async saveInvoiceQr() { const inv = IX.invById.get(S.modal.id); const owe = C.invoiceOutstanding(inv); savePng(await qrPngBase64(C.buildPayNow(owe, inv.reference, { uen: S.settings.uen, merchant: S.settings.merchant })), C.qrFileName(inv.reference)); },
+  async saveInvoiceQr() { const inv = IX.invById.get(S.modal.id); const payload = inv && C.invoiceQrPayload(inv, S.settings); if (!payload) { toast('This invoice has no QR.', 'err'); return; } savePng(await qrPngBase64(payload), C.qrFileName(inv.reference)); },
   async saveInvoiceImage() { const inv = IX.invById.get(S.modal.id); savePng(await invoiceImage(inv), 'Polymath-' + inv.number + '.png'); },
-  editLines() { const inv = IX.invById.get(S.modal.id); S.modal.edit = clone(inv.lines || []); renderModal(); },
-  cancelLines() { S.modal.edit = null; renderModal(); },
-  addLine() { S.modal.edit.push({ studentId: '', studentName: '', desc: 'Materials', detail: '', amount: 0, kind: 'extra' }); renderModal(); },
-  delLine(el) { S.modal.edit.splice(+el.dataset.i, 1); renderModal(); },
-  async saveLines() {
-    if (!requireProtected()) return;
-    const inv = IX.invById.get(S.modal.id);
-    const next = C.recomputeInvoice(Object.assign({}, inv, { lines: S.modal.edit.filter(l => l.desc || Number(l.amount)) }));
-    try {
-      await invRef(inv.id).update({ lines: next.lines, total: next.total, subtotal: next.subtotal, issues: [], updatedAt: ts() });
-      if (inv.linkToken) await linkRef(inv.linkToken).set(Object.assign(C.publicInvoiceDoc(next, S.settings), { updatedAt: ts() }));
-      S.modal.edit = null; toast('Invoice updated', 'ok');
-    } catch (e) { fail('Could not save', e); }
+  // The invoice editor (custom invoices, and changing any invoice)
+  newCustomInvoice(el) { openCustomEditor(el && el.dataset.fam ? famById(el.dataset.fam) : null); },
+  editInvoice(el) {
+    const inv = IX.invById.get(el.dataset.id || (S.modal && S.modal.id)); if (!inv) return;
+    openModal({ type: 'invEdit', editing: true, draft: C.draftFromInvoice(inv), start: C.draftFromInvoice(inv), autoDue: false, back: S.modal && S.modal.type === 'invoice' ? S.modal : null });
   },
+  editLines(el) { ACT.editInvoice(el); },
+  duplicateInvoice(el) {
+    const inv = IX.invById.get(el.dataset.id); if (!inv) return;
+    const tag = C.newCustomTag(rnd, customTags());
+    const fresh = C.blankCustomInvoice({ tag, today: today(), settings: S.settings, family: famById(inv.familyId) });
+    const copy = C.draftFromInvoice(inv);
+    const draft = Object.assign({}, fresh, {
+      parentName: copy.parentName, emails: copy.emails, whatsapp: copy.whatsapp, title: copy.title,
+      lines: copy.lines.map(l => ({ studentName: l.studentName || '', desc: l.desc || '', detail: l.detail || '', amount: l.amount })),
+      note: copy.note, qrMode: copy.qrMode
+    });
+    openModal({ type: 'invEdit', editing: false, draft, autoDue: true });
+  },
+  edLineAdd(el) { S.modal.draft.lines.push({ studentName: '', desc: el && el.dataset.neg ? 'Discount' : '', detail: '', amount: el && el.dataset.neg ? '-' : '' }); renderModal(); focusLastLine(el && el.dataset.neg ? 'ea' : 'ed'); },
+  edLineDel(el) { const ls = S.modal.draft.lines; ls.splice(+el.dataset.i, 1); if (!ls.length) ls.push({ studentName: '', desc: '', detail: '', amount: '' }); renderModal(); },
+  edLineUp(el) { const ls = S.modal.draft.lines, i = +el.dataset.i; if (i > 0) { const t = ls[i - 1]; ls[i - 1] = ls[i]; ls[i] = t; } renderModal(); },
+  saveInvoiceEdit() { return saveInvoiceEdit(); },
+  async deleteCustomInvoice(el) {
+    if (!requireProtected()) return;
+    const inv = IX.invById.get(el.dataset.id); if (!inv || !inv.custom) return;
+    if ((inv.paid > 0) || (inv.sends || []).length) { toast('This invoice was sent or paid — cancel it instead, so it stays on record.', 'err'); return; }
+    if (!confirm('Delete custom invoice ' + inv.number + ' for ' + inv.parentName + '? This cannot be undone.')) return;
+    try {
+      const batch = db.batch();
+      batch.delete(invRef(inv.id));
+      if (inv.linkToken) batch.delete(linkRef(inv.linkToken));
+      await batch.commit();
+      S.modal = null; closeModal(); toast('Deleted', 'ok');
+    } catch (e) { fail('Could not delete', e); }
+  },
+  async markPaidDirect(el) {
+    if (!requireProtected()) return;
+    const inv = IX.invById.get(el.dataset.id); if (!inv) return;
+    const owe = C.invoiceOutstanding(inv);
+    if (!(owe > 0)) return;
+    if (!confirm('Mark ' + inv.number + ' as paid (' + money(owe) + ' received today)?')) return;
+    busy(el, true);
+    try { await payInvoiceDirect(inv.id, owe); toast('Marked as paid', 'ok'); } catch (e) { fail('Could not mark it paid', e); } finally { busy(el, false); }
+  },
+  async undoPaidDirect(el) {
+    if (!requireProtected()) return;
+    const inv = IX.invById.get(el.dataset.id); if (!inv) return;
+    if (!confirm('Undo the payment you marked on ' + inv.number + '? It becomes unpaid again.')) return;
+    try { await unpayInvoiceDirect(inv.id); toast('Payment undone', 'ok'); } catch (e) { fail('Could not undo', e); }
+  },
+  openGenericQr() { openModal({ type: 'genericQr', reference: '', back: S.modal || null }); },
+  async saveGenericQr() { const ref = C.cleanRef(S.modal.reference) || 'POLYMATH'; savePng(await qrPngBase64(C.genericPayNow(S.settings, ref)), 'PayNow-Polymath-generic' + (ref === 'POLYMATH' ? '' : '-' + ref.replace(/\s+/g, '-')) + '.png'); },
   async voidInvoice(el) {
     const inv = IX.invById.get(el.dataset.id);
     if (!inv || !requireProtected() || !confirm('Cancel ' + inv.number + ' for ' + inv.parentName + '?' + (inv.creditUsed > 0 ? ' The ' + money(inv.creditUsed) + ' credit it used goes back to the family.' : ''))) return;
     try {
       await db.runTransaction(async t => {
-        const s = await t.get(invRef(inv.id)), f = await t.get(famRef(inv.familyId));
+        const s = await t.get(invRef(inv.id));
+        // A custom invoice need not belong to a family.
+        const f = inv.familyId ? await t.get(famRef(inv.familyId)) : { exists: false };
         if (!s.exists || s.data().paid > 0) throw new Error('it has payments — undo them first');
         t.update(invRef(inv.id), { status: 'void', updatedAt: ts() });
         if (s.data().linkToken) t.set(linkRef(s.data().linkToken), { status: 'void', updatedAt: ts() }, { merge: true });
@@ -1924,10 +2133,123 @@ const ACT = {
   },
   exportInvoices() {
     const p = C.sgMonthKey();
-    downloadText(C.toCsv([['Number', 'Parent', 'Students', 'Month', 'Total', 'Paid', 'Owes', 'Status', 'Due', 'Reference'],
-      ...periodInvoices(p).map(i => [i.number, i.parentName, (i.students || []).join('; '), C.periodLabel(i.period), i.total, i.paid || 0, C.invoiceOutstanding(i), stateOf(i).label, i.dueDate, i.reference])]), 'polymath-invoices-' + p + '.csv', 'text/csv');
+    downloadText(C.toCsv([['Number', 'Parent', 'Students', 'Month', 'For', 'Custom', 'Total', 'Paid', 'Owes', 'Status', 'Due', 'Reference', 'QR'],
+      ...periodInvoices(p).map(i => [i.number, i.parentName, (i.students || []).join('; '), C.periodLabel(i.period), C.invoiceTitle(i), i.custom ? 'yes' : '', i.total, i.paid || 0, C.invoiceOutstanding(i), stateOf(i).label, i.dueDate, i.reference, C.QR_MODE_META[C.invoiceQrMode(i)].short])]), 'polymath-invoices-' + p + '.csv', 'text/csv');
   }
 };
+
+/* ═══════════════ Custom invoices and the invoice editor ═══════════════ */
+function customTags() { return new Set(S.invoices.filter(i => i.custom).map(i => String(i.id).replace(/^custom_/, ''))); }
+function openCustomEditor(family) {
+  const tag = C.newCustomTag(rnd, customTags());
+  openModal({ type: 'invEdit', editing: false, draft: C.blankCustomInvoice({ tag, today: today(), settings: S.settings, family }), autoDue: true });
+}
+function focusLastLine(prefix) {
+  const n = S.modal.draft.lines.length - 1;
+  const el = document.querySelector('[data-keep="' + prefix + n + '"]');
+  if (el) { el.focus(); try { const v = el.value.length; el.setSelectionRange(v, v); } catch (e) { /* not a text box */ } }
+}
+// Linking a family fills the parent's details (and, on a new custom invoice,
+// the reference with the family's code); unlinking leaves what was typed.
+function editorLinkFamily(famId) {
+  const d = S.modal.draft;
+  const f = famById(famId);
+  d.familyId = f ? f.id : '';
+  d.code = f ? f.code : '';
+  if (f) {
+    d.parentName = f.parentName || d.parentName;
+    d.emails = C.familyEmails(f).join(', ');
+    d.whatsapp = f.whatsapp ? C.displayPhone(f.whatsapp) : '';
+    const kids = C.activeStudents(f).map(s => s.name).filter(Boolean);
+    if (kids.length === 1) d.lines.forEach(l => { if (!l.studentName) l.studentName = kids[0]; });
+  }
+  if (!S.modal.editing && d.custom) d.reference = C.customInvoiceReference(d.tag || String(d.id).replace(/^custom_/, ''), d.code);
+  renderModal();
+}
+async function saveInvoiceEdit() {
+  if (!requireProtected()) return;
+  const m = S.modal;
+  const d = m.draft;
+  const res = C.invoiceFromDraft(d);
+  m.tried = true;
+  if (!res.ok) { renderModal(); toast(res.errors[0], 'err'); return; }
+  const btn = document.querySelector('[data-act="saveInvoiceEdit"]');
+  busy(btn, true);
+  try {
+    if (!m.editing) {
+      const ref = invRef(d.id);
+      const token = C.newToken(rnd);
+      const inv = Object.assign({
+        id: d.id, custom: true, familyId: d.familyId || '', code: d.code || '', ownContacts: true,
+        paid: 0, status: 'draft', payments: [], reminders: [], sends: [], creditUsed: 0
+      }, res.fields);
+      await db.runTransaction(async t => {
+        const snap = await t.get(ref);
+        if (snap.exists) throw new Error('an invoice with this tag already exists — close and try again');
+        t.set(ref, Object.assign({}, inv, { linkToken: token, createdAt: ts(), updatedAt: ts(), createdBy: S.user.email }));
+        t.set(linkRef(token), Object.assign(C.publicInvoiceDoc(inv, S.settings), { updatedAt: ts() }));
+      });
+      toast('Custom invoice ' + inv.number + ' created', 'ok');
+      S.modal = null;
+      // Show it in its month, then open it so it can be sent.
+      S.period = inv.period;
+      if (S.view !== 'invoices') go('invoices'); else render();
+      openModal({ type: 'invoice', id: inv.id });
+      return;
+    }
+    const start = m.start || {};
+    const ownContacts = !!(d.custom || start.ownContacts || String(d.emails || '') !== String(start.emails || '') || String(d.whatsapp || '') !== String(start.whatsapp || ''));
+    await db.runTransaction(async t => {
+      const snap = await t.get(invRef(d.id));
+      if (!snap.exists) throw new Error('the invoice is gone');
+      const cur = Object.assign({}, snap.data(), { id: snap.id });
+      const next = C.applyInvoiceEdit(cur, Object.assign({}, res.fields, { ownContacts, familyId: d.familyId || '', code: d.code || cur.code || '' }));
+      const upd = Object.assign({}, res.fields, { ownContacts, familyId: next.familyId, code: next.code, status: next.status, updatedAt: ts(), editedAt: ts(), editedBy: S.user.email });
+      t.update(invRef(d.id), upd);
+      if (cur.linkToken) t.set(linkRef(cur.linkToken), Object.assign(C.publicInvoiceDoc(next, S.settings), { updatedAt: ts() }));
+    });
+    toast('Invoice saved', 'ok');
+    const back = m.back;
+    S.modal = null;
+    if (back) openModal(Object.assign({}, back, { type: 'invoice', id: d.id })); else closeModal();
+  } catch (e) { fail('Could not save the invoice', e); } finally { busy(btn, false); }
+}
+// The QR choice straight from the invoice dialog.
+async function setInvoiceQrMode(id, mode) {
+  if (!requireProtected()) return;
+  if (!C.QR_MODES.includes(mode)) return;
+  const inv = IX.invById.get(id); if (!inv) return;
+  try {
+    const next = Object.assign({}, inv, { qrMode: mode });
+    await invRef(id).update({ qrMode: mode, updatedAt: ts() });
+    if (inv.linkToken) await linkRef(inv.linkToken).set(Object.assign(C.publicInvoiceDoc(next, S.settings), { updatedAt: ts() }));
+    toast(C.QR_MODE_META[mode].short + ' on ' + inv.number, 'ok');
+  } catch (e) { fail('Could not change the QR', e); }
+}
+// An invoice with no family (a custom one) is paid straight on the invoice:
+// there is no family to hold credit or to match a bank line to.
+async function payInvoiceDirect(id, amount) {
+  await db.runTransaction(async t => {
+    const snap = await t.get(invRef(id));
+    if (!snap.exists) throw new Error('the invoice is gone');
+    const inv = Object.assign({}, snap.data(), { id: snap.id });
+    const take = C.round2(Math.min(amount, C.invoiceOutstanding(inv)));
+    if (!(take > 0)) return;
+    const next = C.invoiceWithPayment(inv, take, { paymentId: 'direct-' + Date.now(), amount: take, date: today(), how: 'manual', at: Date.now(), by: S.user.email });
+    t.update(invRef(id), { paid: next.paid, payments: next.payments, status: next.status, updatedAt: ts(), ...(next.status === 'paid' ? { paidAt: ts() } : {}) });
+    if (inv.linkToken) t.set(linkRef(inv.linkToken), Object.assign(C.publicInvoiceDoc(next, S.settings), { updatedAt: ts() }), { merge: true });
+  });
+}
+async function unpayInvoiceDirect(id) {
+  await db.runTransaction(async t => {
+    const snap = await t.get(invRef(id));
+    if (!snap.exists) return;
+    let inv = Object.assign({}, snap.data(), { id: snap.id });
+    (inv.payments || []).filter(p => String(p.paymentId || '').startsWith('direct-')).forEach(p => { inv = C.invoiceWithPayment(inv, -p.amount, { paymentId: p.paymentId }); });
+    t.update(invRef(id), { paid: inv.paid, payments: inv.payments, status: inv.status, updatedAt: ts() });
+    if (inv.linkToken) t.set(linkRef(inv.linkToken), Object.assign(C.publicInvoiceDoc(inv, S.settings), { updatedAt: ts() }), { merge: true });
+  });
+}
 async function refreshMailState(invId, ids) {
   const inv = IX.invById.get(invId); if (!inv) return;
   const want = ids || [...(inv.sends || []), ...(inv.reminders || [])].map(s => s.mailId).filter(Boolean).slice(-3);
@@ -1952,7 +2274,10 @@ const INP = {
   disc(el) { const d = S.modal.draft.discount || (S.modal.draft.discount = { kind: '', value: '', label: 'Sibling discount' }); d[el.dataset.k] = el.value; },
   qrAmount(el) { S.modal.amount = el.value; renderModal(); },
   importPaste(el) { S.modal.paste = el.value; const b = document.querySelector('[data-act="importPreview"]'); if (b) b.disabled = !el.value.trim(); },
-  line(el) { const l = S.modal.edit[+el.dataset.i]; l[el.dataset.k] = el.dataset.k === 'amount' ? Number(el.value) : el.value; },
+  // The invoice editor: every keystroke updates the preview (focus is kept).
+  ed(el) { S.modal.draft[el.dataset.k] = el.value; if (el.dataset.k === 'issueDate' && S.modal.autoDue && C.isDayKey(el.value)) { S.modal.draft.dueDate = C.addDays(el.value, S.settings.dueDays); S.modal.draft.period = el.value.slice(0, 7); } if (el.dataset.k === 'dueDate') S.modal.autoDue = false; renderModal(); },
+  edLine(el) { S.modal.draft.lines[+el.dataset.i][el.dataset.k] = el.value; renderModal(); },
+  genericRef(el) { S.modal.reference = el.value; renderModal(); },
   payM(el) { S.modal[el.dataset.k] = el.value; if (el.dataset.k === 'amount') { const b = document.querySelector('[data-act="payCommit"]'); if (b) { b.disabled = !(S.modal.familyId && Number(el.value) > 0); b.textContent = 'Record ' + (Number(el.value) > 0 ? money(el.value) : 'payment'); } } },
   setting(el) { const d = S.settingsDraft || (S.settingsDraft = clone(S.settings)); d[el.dataset.k] = el.value; }
 };
@@ -1989,6 +2314,10 @@ const CHG = {
   },
   rvReceipts(el) { S.review.receipts = el.checked; },
   rvRemember(el) { S.review.remember = el.checked; },
+  edFamily(el) { editorLinkFamily(el.value); },
+  edPeriod(el) { S.modal.draft.period = el.value; renderModal(); },
+  edQrMode(el) { S.modal.draft.qrMode = el.value; renderModal(); },
+  invQrMode(el) { setInvoiceQrMode(S.modal.id, el.value); },
   payFam(el) { S.modal.familyId = el.value; if (!S.modal.amount && el.value) S.modal.amount = familyOwing(el.value) || ''; renderModal(); },
   payM(el) { S.modal[el.dataset.k] = el.value; },
   useAi(el) { S.settings.useAi = el.checked; db.collection(COL.settings).doc('config').set({ useAi: el.checked }, { merge: true }).catch(() => {}); },
