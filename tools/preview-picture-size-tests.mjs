@@ -162,8 +162,8 @@ function harness(opts) {
     return { pvsFind, pvsBarHtml, pvsWrapAttrs, pvsStep, pvsReset, pvsFlush, pvsFlushSettled, pvsDecorateDoc, pvsPaint, dirty: _pvsDirty,
       pvcRun, pvcRevert, pvcState, pvcBusy, pvcPaint, jobs: _pvcJobs,
       pvoWrapOpen, pvoMove, pvoRemove, pvoUndo, pvoKeydown, pvoSelect, pvoDecorateDoc, get sel() { return _pvoSel; }, set sel(v) { _pvoSel = v; }, set hover(v) { _pvoHover = v; }, get undo() { return _pvoUndo; }, get kw() { return editorKeywords; },
-      pvsPoolOf, PVS_POOL_CPB,
-      set author(v) { state.author = v; }, set editing(v) { currentEditingQuestion = v.id; blocks = v.blocks; }, get blocks() { return blocks; } };
+      pvsPoolOf, PVS_POOL_CPB, PVS_POOL_EDITOR,
+      set author(v) { state.author = v; }, set editing(v) { currentEditingQuestion = v.id; blocks = v.blocks; }, set em(v) { state.em = v; }, get blocks() { return blocks; } };
   `);
   const api = f(doc, { addEventListener() {} },
     (cb, ms) => { const id = ++seq; timers.set(id, { cb, ms }); return id; }, id => timers.delete(id),
@@ -955,8 +955,8 @@ test('the Custom Paper surfaces name the pool, and every other preview still doe
   // The pool is declared where the sheet is BUILT, by the surface that knows
   // which list it read — not guessed from an id that two pools can share.
   const ctx = cut('function _wsPreviewCtx() {', '\nfunction _wsShowPreviewOverlay', '_wsPreviewCtx');
-  ok(/pool: \(src === 'custompaper' \|\| src === 'cpbq'\) \? PVS_POOL_CPB : ''/.test(ctx),
-    'the ad-hoc preview no longer names the Custom Paper pool — its pill would write into the bank');
+  ok(/pool: \(src === 'custompaper' \|\| src === 'cpbq'\) \? PVS_POOL_CPB\s*(?:\/\/[^\n]*\s*)*: \(src === 'editor' && !_wsPreviewAdhoc\.ainsteinAdmin\) \? PVS_POOL_EDITOR : ''/.test(ctx),
+    'the ad-hoc preview no longer names the Custom Paper pool (or the editor’s draft) — its pill would write into the bank');
   const build = cut('function _wsPreviewBuildHtml(ctx, opts) {', '\nfunction _wsWritePreview(', '_wsPreviewBuildHtml');
   ok(/pvsPool: ctx\.pool \|\| ''/.test(build), 'the one preview builder does not pass the pool on');
   // …AFTER ctx.buildOpts, which is assigned over the base. The pool decides
@@ -1041,6 +1041,56 @@ test('deployed imported-image editing uses the server revision guard and saved c
   ok(call.options.timeout === 540000, 'the browser gives up before the server enhancement can finish');
   ok(h.state.vetting[0].blocks[0].url === 'server-bw.png' && h.state.vetting[0].autoCheck.state === 'green', 'the server-saved checked question was not adopted');
   ok(h.saves.length === 0, 'the browser overwrites the authoritative server check with a second whole-question save');
+});
+
+// ---- ✏️ the editor's draft (v1.452.1) --------------------------------------
+// 🖨 Preview exported from the question editor previews the DRAFT, which is
+// not in the bank in the shape the sheet shows (or at all: `__editor_draft__`).
+// Its picture came up with no pill — no size, no ✨ / 🎨, no ↩ Scan.
+test('an editor-draft preview resolves its picture to the editor’s own blocks', () => {
+  const h = harness({ bank: [] });
+  const draft = Q('__editor_draft__');
+  h.api.editing = { id: null, blocks: draft.blocks };
+  ok(h.api.pvsPoolOf('editor') === h.api.PVS_POOL_EDITOR && h.api.PVS_POOL_EDITOR === 'editor', 'the editor pool is not a pool');
+  const found = h.api.pvsFind('__editor_draft__', 'editor');
+  ok(found && found.where === 'editor' && found.q.blocks === draft.blocks, 'an unsaved draft has no picture pill to resolve');
+  ok(h.api.pvsFind('__editor_draft__', '') === null, 'the bank chain started answering for a draft');
+  ok(/data-pvs-pool="editor"/.test(h.api.pvsWrapAttrs(draft, draft.blocks[0], 'editor')), 'the sheet does not say its pictures are the editor’s');
+  const html = h.api.pvsBarHtml(draft, draft.blocks[0], 'editor');
+  ok(/pvsStep\('__editor_draft__','b1',1,'editor'\)/.test(html) && /pvcRun\('__editor_draft__','b1',true,'editor'\)/.test(html), 'the draft pill is not wired to the editor pool');
+  ok(/press Save/.test(html), 'the draft pill claims a write it does not make');
+  h.api.editing = { id: 'other', blocks: Q('other').blocks };
+  ok(h.api.pvsFind('__editor_draft__', 'editor') === null, 'a press reached a question the editor has since moved on from');
+  h.api.editing = { id: 'saved1', blocks: Q('saved1').blocks };
+  ok(h.api.pvsFind('saved1', 'editor')?.where === 'editor', 'a saved question open in the editor does not resolve to the editor');
+  h.api.em = true;
+  ok(h.api.pvsFind('saved1', 'editor') === null, 'in ✏️ editing mode `blocks` is the whole paper, never one draft');
+});
+
+test('a size pressed on an editor draft goes into the editor and writes nothing', async () => {
+  const h = harness({ bank: [] });
+  const draft = Q('__editor_draft__');
+  h.api.editing = { id: null, blocks: draft.blocks };
+  h.api.pvsStep('__editor_draft__', 'b1', 1, 'editor');
+  ok(typeof draft.blocks[0].scale === 'number', 'the editor’s block did not take the size');
+  ok(h.api.dirty.size === 0, 'a draft size was queued for a bank write');
+  h.fire(); await h.api.pvsFlush();
+  ok(h.saves.length === 0, 'a draft size was written to the database');
+  h.api.pvsReset('__editor_draft__', 'b1', 'editor');
+  ok(draft.blocks[0].scale == null, 'Auto did not clear the draft’s size');
+});
+
+test('✨ and 🎨 on an editor draft redraw into the editor, keep the scan, and save nothing', async () => {
+  const h = harness({ bank: [], newUrl: 'drawn.png' });
+  const draft = Q('__editor_draft__');
+  h.api.editing = { id: null, blocks: draft.blocks };
+  h.api.pvcRun('__editor_draft__', 'b1', false, 'editor'); await tick(); await tick(); await tick();
+  ok(h.state.gen.length === 1 && h.state.gen[0].prompt.includes('colour=false'), 'the draft picture was not sent to the image engine');
+  ok(draft.blocks[0].url === 'drawn.png' && draft.blocks[0].preColourUrl === 'x.png', 'the redrawn picture did not land on the editor’s block with its scan kept');
+  ok(h.saves.length === 0 && draft.recheck == null, 'a draft redraw wrote to the bank or queued a check');
+  ok(h.api.pvcState('__editor_draft__', 'b1', 'editor') === 'done', 'the job did not finish');
+  await h.api.pvcRevert('__editor_draft__', 'b1', 'editor');
+  ok(draft.blocks[0].url === 'x.png' && draft.blocks[0].preColourUrl == null && h.saves.length === 0, '↩ Scan on a draft did not restore the scan in the editor');
 });
 
 runAll();
