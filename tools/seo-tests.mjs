@@ -22,6 +22,9 @@ function fileFor(url) {
   return path === '' || path.endsWith('/') ? path + 'index.html' : path;
 }
 
+// Parent landing pages (Oct 2026): plain HTML + assets/landing/tuition.css, no app code.
+const LANDING = ['primary-science-tuition', 'primary-maths-tuition', 'online-tuition', 'psle-science-open-ended-answers'];
+
 const sitemapUrls = [...read('sitemap.xml').matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
 
 function homeGraph() {
@@ -105,7 +108,7 @@ test('one phone number everywhere parents can see it', () => {
 
 test('the home page links its public pages so crawlers find them', () => {
   const footer = read('index.html').match(/<footer class="lp-footer">[\s\S]*?<\/footer>/)[0];
-  for (const href of ['schedule/', 'products/', 'interactive-textbook/', 'cs/', 'enquiry.html']) {
+  for (const href of ['schedule/', 'products/', 'interactive-textbook/', 'cs/', 'enquiry.html', ...LANDING.map(slug => slug + '/')]) {
     assert.ok(footer.includes(`href="${href}"`), `footer links ${href}`);
   }
 });
@@ -134,4 +137,47 @@ test('llms.txt summarises the centre and links only real pages', () => {
   const links = [...llms.matchAll(/\]\((https:\/\/polymathlc\.com\.sg[^)]*)\)/g)].map(m => m[1]);
   assert.ok(links.length >= 6);
   for (const url of links) assert.ok(sitemapUrls.includes(url), `${url} is a sitemap page`);
+});
+
+test('the parent landing pages are in the sitemap, light, and their FAQ schema matches the page', () => {
+  const decode = s => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;/g, "'");
+  for (const slug of LANDING) {
+    const rel = `${slug}/index.html`;
+    const html = read(rel);
+    assert.ok(sitemapUrls.includes(`${SITE}/${slug}/`), `${slug} is in the sitemap`);
+    assert.ok(Buffer.byteLength(html) < 60_000, `${slug} stays a light page`);
+    assert.doesNotMatch(html, /app\.js|tailwind/i, `${slug} loads no app code`);
+    assert.ok(html.includes('href="../assets/landing/tuition.css"'), `${slug} uses the shared stylesheet`);
+    assert.equal((html.match(/<h1[\s>]/g) || []).length, 1, `${slug} has one h1`);
+    assert.ok(html.includes('href="https://wa.me/6596450588"'), `${slug} links WhatsApp`);
+    const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
+    assert.equal(blocks.length, 1);
+    const graph = JSON.parse(blocks[0][1])['@graph'];
+    const org = graph.find(n => [].concat(n['@type']).includes('LocalBusiness'));
+    assert.equal(org['@id'], `${SITE}/#organization`, `${slug} points at the same centre as the home page`);
+    assert.equal(org.telephone, PHONE);
+    const crumbs = graph.find(n => n['@type'] === 'BreadcrumbList').itemListElement;
+    assert.equal(crumbs.at(-1).item, `${SITE}/${slug}/`);
+    const shown = [...html.matchAll(/<details><summary>([^<]+)<\/summary><p>([\s\S]*?)<\/p><\/details>/g)].map(([, q, a]) => [decode(q), decode(a)]);
+    const schema = graph.find(n => n['@type'] === 'FAQPage').mainEntity.map(q => [q.name, q.acceptedAnswer.text]);
+    assert.ok(shown.length >= 4, `${slug} shows its FAQ`);
+    assert.deepEqual(schema, shown, `${slug} FAQ schema matches the page`);
+  }
+  assert.ok(exists('assets/landing/tuition.css'));
+});
+
+test('link previews use a real 1200×630 share card and pages show the small logo', () => {
+  const png = readFileSync(new URL('../assets/branding/share-card.png', import.meta.url));
+  assert.equal(png.readUInt32BE(16), 1200);
+  assert.equal(png.readUInt32BE(20), 630);
+  const small = readFileSync(new URL('../assets/branding/polymath-learning-centre-320.png', import.meta.url));
+  assert.equal(small.readUInt32BE(16), 320);
+  assert.ok(small.length < 40_000, 'the web logo stays small');
+  for (const url of sitemapUrls) {
+    const rel = fileFor(url);
+    if (rel === 'cs/index.html') continue;   // the free-resources page keeps its own logo and preview (cs-page-tests)
+    const h = head(read(rel));
+    assert.match(h, /<meta property="og:image" content="https:\/\/polymathlc\.com\.sg\/assets\/branding\/share-card\.png">/, `${rel} previews with the share card`);
+    assert.doesNotMatch(read(rel), /<img[^>]+src="[^"]*polymath-learning-centre\.png"/, `${rel} does not download the 500 KB logo`);
+  }
 });
