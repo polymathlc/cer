@@ -4562,7 +4562,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.452.0';
+const APP_VERSION = 'v1.452.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -11247,13 +11247,72 @@ function pvsAllowed() { try { return !!_canAuthor(); } catch (_) { return false;
 // that question, by the surface that knows which pool it was reading. Absent
 // means the bank chain, which is every preview that existed before this.
 const PVS_POOL_CPB = 'cpb';
-function pvsPoolOf(v) { return String(v == null ? '' : v) === PVS_POOL_CPB ? PVS_POOL_CPB : ''; }
+// ✏️ THE EDITOR'S OWN POOL (v1.452.1). 🖨 Preview exported from the question
+// editor is a sheet built from the DRAFT — a question that may never have been
+// saved (`__editor_draft__`), or a saved one carrying edits nobody has saved
+// yet. Neither is in the bank in the shape the sheet shows, so `pvsFind`
+// answered null and the picture on that preview came up bare: no − / + / Auto,
+// no ✨ / 🎨, no ↩ Scan — the very buttons the editor itself has on the block.
+// The pill now writes into the editor's live `blocks`, and nothing else: no
+// bank write, no ✅ Check Questions queue. The author's own Save is the write,
+// exactly as it is for the editor's own +/− and ✨ Enhance.
+const PVS_POOL_EDITOR = 'editor';
+function pvsPoolOf(v) {
+  const s = String(v == null ? '' : v);
+  return s === PVS_POOL_CPB ? PVS_POOL_CPB : (s === PVS_POOL_EDITOR ? PVS_POOL_EDITOR : '');
+}
+// The question the block editor is holding, as the editor pool sees it: the id
+// the 🖨 preview stamped (`previewEditorPrint` — the saved id, or
+// `__editor_draft__` for a question never saved) and the LIVE `blocks` array,
+// so a press lands on the very objects Save will write. Null when the editor
+// has moved on to another question since the sheet was drawn, and in ✏️
+// editing mode, where `blocks` is the whole paper rather than one question.
+function _pvsEditorFind(id) {
+  try {
+    if (typeof emActive === 'function' && emActive()) return null;
+    const holding = currentEditingQuestion ? String(currentEditingQuestion) : '__editor_draft__';
+    if (holding !== String(id) || !Array.isArray(blocks)) return null;
+    return { q: { id: holding, blocks }, where: PVS_POOL_EDITOR };
+  } catch (_) { return null; }
+}
+// The preview's own copy of that question. `previewEditorPrint` deep-copies the
+// draft, so a size or picture chosen on the sheet has to be carried onto the
+// copy as well, or the next re-plan of the A4 pages redraws the old one.
+function _pvsEditorPreviewBlock(qid, bid) {
+  try {
+    const a = _wsPreviewAdhoc;
+    if (!a || a.source !== 'editor' || a.ainsteinAdmin) return null;
+    const q = (a.questions || []).find(x => x && String(x.id) === String(qid));
+    return q ? _pvsBlock({ q }, bid) : null;
+  } catch (_) { return null; }
+}
+// Carry a change made through the editor pool onto the preview's copy and onto
+// the editor's own block card (its size label, its URL box, its picture).
+function _pvsEditorSync(qid, bid, block) {
+  if (!block) return;
+  const copy = _pvsEditorPreviewBlock(qid, bid);
+  if (copy && copy !== block) {
+    ['scale', 'url', 'preColourUrl', 'originalCropUrl'].forEach(k => {
+      if (block[k] == null) delete copy[k]; else copy[k] = JSON.parse(JSON.stringify(block[k]));
+    });
+  }
+  try {
+    const label = document.getElementById('imgSizeLabel_' + block.id);
+    if (label) label.textContent = imgSizeLabelText(block);
+    const input = document.getElementById('imgUrlInput_' + block.id);
+    if (input && input.value !== (block.url || '')) input.value = block.url || '';
+    const img = document.querySelector('#imgPreview_' + block.id + ' img');
+    if (img && block.url && img.getAttribute('src') !== transformImageUrl(block.url)) previewImage(block.id, block.url);
+    else if (img) img.setAttribute('style', imgSizeStyle(block));
+  } catch (_) {}
+}
 // The ONE resolver. `pool` 'cpb' is an unsent 🗂️ Custom Paper's own question
 // list; anything else is bank first, then the vetting list — byte-for-byte what
 // it always was. An editor draft is in none of them and still gets no pill.
 function pvsFind(qid, pool) {
   const id = String(qid == null ? '' : qid);
   if (!id) return null;
+  if (pvsPoolOf(pool) === PVS_POOL_EDITOR) return _pvsEditorFind(id);
   if (pvsPoolOf(pool) === PVS_POOL_CPB) {
     // `_cpbQuestions` is a `let` declared far below this block, so it is in its
     // temporal dead zone during module evaluation — and `typeof` on a `let` in
@@ -11273,12 +11332,14 @@ function pvsFind(qid, pool) {
 // A wrapper selector that cannot cross pools: the attribute is absent for the
 // bank chain, so the default half has to be a `:not()` rather than a match.
 function _pvsPoolSel(pool, attr) {
-  return pvsPoolOf(pool) === PVS_POOL_CPB ? '[' + attr + '="cpb"]' : ':not([' + attr + '])';
+  const p = pvsPoolOf(pool);
+  return p ? '[' + attr + '="' + p + '"]' : ':not([' + attr + '])';
 }
 // Whether the block editor is holding THIS question out of THIS pool. Both ids
 // can be the same string, so the id alone would let a size chosen on the paper
 // be written into an editor that is holding the bank's copy of it.
 function _pvsEditorHolds(qid, pool) {
+  if (pvsPoolOf(pool) === PVS_POOL_EDITOR) return false;   // it IS the editor's block — see _pvsEditorSync
   try {
     if (typeof currentEditingQuestion === 'undefined' || !currentEditingQuestion) return false;
     if (String(currentEditingQuestion) !== String(qid)) return false;
@@ -11300,6 +11361,12 @@ function pvsEnsureCss(doc) {
     d.head.appendChild(st);
   } catch (_) {}
 }
+function _pvsBarTip(pool) {
+  const p = pvsPoolOf(pool);
+  return p === PVS_POOL_CPB ? 'Picture size — kept on this paper (nothing is written to the question bank until you press Send)'
+    : p === PVS_POOL_EDITOR ? 'Picture size — goes into the question open in the editor; press Save there to keep it'
+    : 'Picture size — saved to the question bank when this preview closes';
+}
 function _pvsButtonsHtml(qid, bid, block, pool) {
   const q = escapeHtml(String(qid)), b = escapeHtml(String(bid)), p = escapeHtml(pvsPoolOf(pool));
   return `<button type="button" class="pvs-btn" data-pvs-act="minus" aria-label="Smaller picture" title="Smaller (−5%)" onclick="event.stopPropagation();pvsStep('${q}','${b}',-1,'${p}')">−</button>
@@ -11314,9 +11381,7 @@ function _pvsButtonsHtml(qid, bid, block, pool) {
 function pvsBarHtml(q, block, pool) {
   if (!q || q.id == null || q.id === '' || !block || !block.id || !pvsAllowed()) return '';
   pvsEnsureCss(document);
-  const cpb = pvsPoolOf(pool) === PVS_POOL_CPB;
-  const tip = cpb ? 'Picture size — kept on this paper (nothing is written to the question bank until you press Send)'
-                  : 'Picture size — saved to the question bank when this preview closes';
+  const tip = _pvsBarTip(pool);
   return `<div class="pvs-bar" data-pvs-bar="1" onclick="event.stopPropagation()" title="${escapeHtml(tip)}">${_pvsButtonsHtml(q.id, block.id, block, pool)}</div>`;
 }
 // `data-pvs-q` / `data-pvs-b` on the wrapper is what lets every copy of a
@@ -11359,6 +11424,8 @@ function pvsPaint(qid, bid, block, pool) {
     }
     wrap.querySelectorAll('.pvs-label').forEach(l => { l.textContent = imgSizeLabelText(block); });
   });
+  // ✏️ A draft's picture: the preview's copy and the editor's own card.
+  if (pvsPoolOf(pool) === PVS_POOL_EDITOR) _pvsEditorSync(qid, bid, block);
   // The editor, if this very question is open in it: the block card's own
   // label and preview, so Save there does not put the old size back.
   try {
@@ -11383,12 +11450,16 @@ function _pvsLocked(qid, pool) {
   return pvsPoolOf(pool) !== PVS_POOL_CPB && _pvsSaving.has('vetting|' + qid);
 }
 function _pvsMark(found) {
-  // Keyed by pool AND id: a bank question and a 🗂️ Custom Paper's copy of it
-  // share an id, and one entry for the two would flush whichever was written
-  // last into whichever pool was recorded first.
-  _pvsDirty.set(found.where + '|' + String(found.q.id), found.where);
-  clearTimeout(_pvsIdleTimer);
-  _pvsIdleTimer = setTimeout(() => { pvsFlush(); }, PVS_IDLE_MS);
+  // ✏️ The editor's draft has no write here: the change is already on the
+  // editor's own blocks, and the author's Save is what writes them.
+  if (found.where !== PVS_POOL_EDITOR) {
+    // Keyed by pool AND id: a bank question and a 🗂️ Custom Paper's copy of it
+    // share an id, and one entry for the two would flush whichever was written
+    // last into whichever pool was recorded first.
+    _pvsDirty.set(found.where + '|' + String(found.q.id), found.where);
+    clearTimeout(_pvsIdleTimer);
+    _pvsIdleTimer = setTimeout(() => { pvsFlush(); }, PVS_IDLE_MS);
+  }
   // The A4 preview measured its pages before the picture changed size, so it
   // is re-planned — a moment later, so a run of presses is one re-plan.
   try {
@@ -11459,6 +11530,7 @@ async function _pvsFlushRun() {
     const qid = key.slice(String(where).length + 1);
     const found = pvsFind(qid, where);
     if (!found) { _pvsBefore.delete(key); continue; }   // deleted since — nothing left to write
+    if (where === PVS_POOL_EDITOR) continue;             // the editor's Save writes a draft, never this
     // 🗂️ A Custom Paper's question is NOT in the bank and must not be put
     // there: `_cpbCommit` is the only writer that page has, and it is what
     // stamps `holdBack` on Send. The edit is already on `_cpbQuestions` — the
@@ -11510,9 +11582,7 @@ function pvsDecorateDoc(doc) {
       const bar = doc.createElement('div');
       bar.className = 'pvs-bar pvs-over';
       bar.setAttribute('data-pvs-bar', '1');
-      bar.title = pool === PVS_POOL_CPB
-        ? 'Picture size — kept on this paper (nothing is written to the question bank until you press Send)'
-        : 'Picture size — saved to the question bank when this preview closes';
+      bar.title = _pvsBarTip(pool);
       bar.innerHTML = _pvsButtonsHtml(qid, bid, block, pool);
       // The inline onclick above resolves against the IFRAME's window, which
       // has no pvsStep — so the handlers are bound here, to this document's.
@@ -11697,8 +11767,12 @@ function _pvcOneButtonHtml(qid, bid, colour, pool) {
             : 'This picture is already being regenerated — wait for that to finish')
     // 🗂️ On a Custom Paper the picture is kept on the PAPER, so neither the
     // "saved" nor the ✅ Check Questions half of that wording is true there.
-    : (mine && st === 'done') ? (colour ? 'Colourised' : 'Enhanced') + (pvsPoolOf(pool) === PVS_POOL_CPB ? ' — kept on this paper' : ' and saved — it is waiting at the top of ✅ Check Questions')
+    : (mine && st === 'done') ? (colour ? 'Colourised' : 'Enhanced') + (pvsPoolOf(pool) === PVS_POOL_CPB ? ' — kept on this paper'
+      : pvsPoolOf(pool) === PVS_POOL_EDITOR ? ' — in the editor; press Save there to keep it' : ' and saved — it is waiting at the top of ✅ Check Questions')
     : (mine && st === 'error') ? 'That ' + what.toLowerCase() + ' failed — press to try again'
+    : pvsPoolOf(pool) === PVS_POOL_EDITOR
+      ? (colour ? 'Regenerate this picture in colour with ChatGPT Images. It goes into the question open in the editor — press Save there to keep it.'
+                : 'Regenerate this picture as a clean black-and-white line diagram with ChatGPT Images. It goes into the question open in the editor — press Save there to keep it.')
     : pvsPoolOf(pool) === PVS_POOL_CPB
       ? (colour ? 'Regenerate this picture in colour. It runs in the background and is kept on this paper — nothing reaches the question bank until you press Send.'
                 : 'Regenerate this picture as a clean black-and-white line diagram — no colour. It runs in the background and is kept on this paper — nothing reaches the question bank until you press Send.')
@@ -11823,6 +11897,14 @@ async function _pvcWork(job) {
     showToast((job.colour === true ? '🎨 Colourised' : '✨ Enhanced') + ' — kept on this paper', 'success');
     return;
   }
+  // ✏️ The editor's draft: the new picture is on the editor's own block now,
+  // and Save writes it — the same as the editor's own ✨ Enhance.
+  if (found.where === PVS_POOL_EDITOR) {
+    try { pvsPaint(job.qid, job.bid, block, job.pool); } catch (_) {}
+    try { _pvcSwapImages(job.qid, job.bid, url, job.pool); } catch (_) {}
+    showToast((job.colour === true ? '🎨 Colourised' : '✨ Enhanced') + ' — press Save in the editor to keep it', 'success');
+    return;
+  }
 
   _pvcMarkRecheck(found.q, job.colour === true ? 'colour' : 'enhance');
 
@@ -11929,8 +12011,9 @@ async function pvcRevert(qid, bid, pool) {
   const colourised = block.url, original = _pvcOriginalUrl(block), earlier = block.preColourUrl;
   block.url = original;
   delete block.preColourUrl;
-  if (found.where === PVS_POOL_CPB) {
-    try { _cpbDraftSave(); } catch (e) { console.warn('custom paper draft:', e); }
+  if (found.where === PVS_POOL_CPB || found.where === PVS_POOL_EDITOR) {
+    if (found.where === PVS_POOL_CPB) { try { _cpbDraftSave(); } catch (e) { console.warn('custom paper draft:', e); } }
+    else _pvsEditorSync(qid, bid, block);
     _pvcJobs.delete(_pvcKey(qid, bid, pool));
     try { pvcPaint(qid, bid, pool); _pvcSwapImages(qid, bid, block.url, pool); } catch (_) {}
     showToast('Original picture restored', 'success');
@@ -12301,6 +12384,7 @@ function pvoDecorateDoc(doc) {
     doc.querySelectorAll('[data-pvo-q][data-pvo-b]').forEach(wrap => {
       const qid = wrap.getAttribute('data-pvo-q'), bid = wrap.getAttribute('data-pvo-b');
       const pool = pvsPoolOf(wrap.getAttribute('data-pvo-pool'));
+      if (pool === PVS_POOL_EDITOR) return;   // a draft is reordered in the editor itself
       const host = wrap.firstElementChild;
       if (!host || host.querySelector('[data-pvo-bar]')) return;
       const found = pvsFind(qid, pool);
@@ -43020,7 +43104,10 @@ function _wsPreviewCtx() {
       // off it; both are drawn from `_cpbQuestions`, so the pill and the bars
       // must write there — never into the bank, which nothing on that page may
       // touch until Send.
-      pool: (src === 'custompaper' || src === 'cpbq') ? PVS_POOL_CPB : '',
+      pool: (src === 'custompaper' || src === 'cpbq') ? PVS_POOL_CPB
+        // ✏️ The editor's draft writes into the editor. Ainstein's admin preview
+        // also says 'editor' but shows BANK copies, so it stays on the bank chain.
+        : (src === 'editor' && !_wsPreviewAdhoc.ainsteinAdmin) ? PVS_POOL_EDITOR : '',
       // 🧠 The whole Custom Paper reads ITS OWN Polymath switch; a proof of
       // one bank question reads the print picker's.
       tqrWhere: src === 'custompaper' ? 'custompaper' : 'bank',
@@ -43109,13 +43196,13 @@ function _wsAdhocQuestions(a) {
     return found ? found.q : q;
   });
 }
-function previewQuestionsPrint(questions, title, source) {
+function previewQuestionsPrint(questions, title, source, extra) {
   const list = (questions || []).filter(Boolean);
   if (!list.length) { showToast('There is nothing to preview', 'error'); return; }
   _wsPreviewSaved = null;
   _wsPreviewPaper = null;
-  _wsPreviewAdhoc = { questions: list, title: title || 'Preview',
-                      source: source === 'vetting' || source === 'editor' || source === 'cpbq' ? source : 'bank' };
+  _wsPreviewAdhoc = Object.assign({}, extra || {}, { questions: list, title: title || 'Preview',
+                      source: source === 'vetting' || source === 'editor' || source === 'cpbq' ? source : 'bank' });
   _wsShowPreviewOverlay();
 }
 // 🖨 PREVIEW EXPORTED — the question open in the EDITOR, as it prints.
@@ -84780,7 +84867,9 @@ function _ainsteinAdminPreview(questions, title, ctx) {
   if ((typeof emActive === 'function' && emActive()) ||
       (existing && !_wsPreviewAdhoc?.ainsteinAdmin)) return false;
   // An editor-source snapshot hides controls that write back to the bank.
-  previewQuestionsPrint(JSON.parse(JSON.stringify(questions)), title, 'editor');
+  // Flagged BEFORE the sheet is drawn: the flag is what keeps these bank
+  // copies' picture pills on the bank chain rather than the editor's draft.
+  previewQuestionsPrint(JSON.parse(JSON.stringify(questions)), title, 'editor', { ainsteinAdmin: true });
   if (_wsPreviewAdhoc) _wsPreviewAdhoc.ainsteinAdmin = true;
   return true;
 }
