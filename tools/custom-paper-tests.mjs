@@ -554,7 +554,7 @@ ok('qIsMcqOnly takes a QUESTION as well as a block list — both call sites pass
   const snap = cut('  if (_wsPreviewAdhoc) {', '  if (wsSelectedIds.size)', 'snapshot');
   ok('…and there is nothing to come back to', /a\.source === 'cpbq'[\s\S]{0,30}return null/.test(snap),
      'its questions are not in any list to re-resolve from');
-  const allowed = cut('function previewQuestionsPrint(questions, title, source) {', '\n// 🖨 PREVIEW EXPORTED', 'sources');
+  const allowed = cut('function previewQuestionsPrint(questions, title, source', '\n// 🖨 PREVIEW EXPORTED', 'sources');
   ok('the source really reaches the preview', /source === 'cpbq'/.test(allowed),
      'an unrecognised source falls back to bank, which would offer ✏️ Editing mode on a question the bank does not have');
 
