@@ -2,6 +2,26 @@
 
 Guidance for Claude when working in this repo.
 
+
+## 🖼 ChatGPT Images 2.6 — every picture moves up a generation (v1.452.0)
+
+OpenAI's Images 2.6 (4–5 Nov 2026) shipped **`gpt-image-2.6-flare`** (fast iteration) and **`gpt-image-2.6-sunburst`**
+(detailed images, most precise edits). Same published rates for both: text in US$5, image in US$8, image out US$30 per
+1M tokens. They serve `/images/generations` and `/images/edits` only (the Responses image tool is still 2.5; unused here).
+
+- `OPENAI_IMAGE_DEFAULT_MODEL` / `OPENAI_IMAGE_EDUCATION_MODEL` are the 2.6 Flare / Sunburst, so Automatic routes by
+  purpose exactly as before, on 2.6. The dropdown offers 2.6 in place of 2.5. `OPENAI_IMAGE_26_RE` is the family;
+  `OPENAI_IMAGE_25_RE` is kept only to recognise old picks.
+- Lift `images26-purpose-v1`: a bare 2.5 Flare never lifted before goes to Automatic; any other 2.5 pick (Sunburst, a
+  snapshot, a Flare re-pick after the purpose lift) goes to its twin via `openAiImageTwin26`; legacy ids go to Automatic
+  only if no earlier lift ran.
+- `mistakes.html` Try-again cleaner asks for `gpt-image-2.6-sunburst`; `visualise-function` edits with
+  `gpt-image-2.6-flare` (redeployed by `deploy-visualise.yml`).
+- 💲 Cost meter (`ai-cost-core.mjs`, prices as of 2026-11-06): new `gpt-image-2.6` row ($5 / $8 / $30, `perImage`
+  $0.054 fallback = ~1,790 output tokens, an estimate; OpenAI sets no per-picture price and 2.6 uses more output tokens
+  at low/medium). Unknown `gpt-image*` ids and both image routes default to the 2.6 row; the 2.5 row stays for old calls.
+- The shared `openAiImage` callable (polymathlc/math) moves 2.5 requests up to 2.6; Anskey moved in the same change.
+
 ## 🔁 Arcade games never run out of questions (v1.451.1)
 
 Students who had seen every suitable question were told "No suitable unseen questions are available" and the arcade

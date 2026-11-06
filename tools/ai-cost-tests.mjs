@@ -19,7 +19,7 @@ const test = (name, fn) => cases.push({ name, fn });
 const near = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg}: ${a} vs ${b}`);
 
 test('every model the app calls has a published price row', () => {
-  for (const id of ['gpt-6.1-sol', 'gpt-6-luna', 'gemini-3.8-flash', 'kimi-k3', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst']) {
+  for (const id of ['gpt-6.1-sol', 'gpt-6-luna', 'gemini-3.8-flash', 'kimi-k3', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst']) {
     const p = core.priceFor(id, '');
     assert.ok(p.row && p.row.out > 0, id + ' has a price');
   }
@@ -33,6 +33,9 @@ test('every model the app calls has a published price row', () => {
 test('a dated snapshot or variant is priced as its family', () => {
   assert.equal(core.priceKeyFor('gpt-6.1-sol-2026-09-01').key, 'gpt-6.1-sol');
   assert.equal(core.priceKeyFor('gpt-image-2.5-sunburst-2026-09-08').key, 'gpt-image-2.5');
+  assert.equal(core.priceKeyFor('gpt-image-2.6-sunburst').key, 'gpt-image-2.6');
+  assert.equal(core.priceKeyFor('gpt-image-2.6-flare-2026-11-04').key, 'gpt-image-2.6');
+  assert.equal(core.priceKeyFor('gpt-image-1').key, 'gpt-image-2.6', 'an older id is priced on the current generation');
   assert.equal(core.priceKeyFor('gemini-3.1-flash-image-preview').key, 'gemini-image');
   assert.equal(core.priceKeyFor('kimi-k3-turbo').key, 'kimi-k3');
 });
@@ -66,10 +69,12 @@ test('Gemini thinking tokens are billed as output', () => {
 test('image usage prices text, image input and output separately; no usage falls back per picture', () => {
   const u = core.normalizeUsage('openaiImage', { input_tokens: 600, output_tokens: 1760, input_tokens_details: { text_tokens: 100, image_tokens: 500 } });
   assert.deepEqual(u, { inTok: 100, imgInTok: 500, outTok: 1760, images: 1, reported: true });
-  const c = core.costOf({ kind: 'image', route: 'imgServer', model: 'gpt-image-2.5-flare', usage: u });
-  near(c.usd, 100 * 6.25 / 1e6 + 500 * 10 / 1e6 + 1760 * 37.5 / 1e6, 'image cost');
-  const fallback = core.costOf({ kind: 'image', route: 'imgKey', model: 'gpt-image-2.5-flare', usage: { images: 1, reported: false } });
-  near(fallback.usd, 0.067, 'per picture');
+  const c = core.costOf({ kind: 'image', route: 'imgServer', model: 'gpt-image-2.6-flare', usage: u });
+  near(c.usd, 100 * 5 / 1e6 + 500 * 8 / 1e6 + 1760 * 30 / 1e6, 'image cost on 2.6');
+  const old = core.costOf({ kind: 'image', route: 'imgServer', model: 'gpt-image-2.5-flare', usage: u });
+  near(old.usd, 100 * 6.25 / 1e6 + 500 * 10 / 1e6 + 1760 * 37.5 / 1e6, 'a 2.5 picture keeps its own rate');
+  const fallback = core.costOf({ kind: 'image', route: 'imgKey', model: 'gpt-image-2.6-flare', usage: { images: 1, reported: false } });
+  near(fallback.usd, 0.054, 'per picture');
   assert.equal(fallback.estimated, true);
 });
 
@@ -104,7 +109,7 @@ test('a tally adds by model and by phase and counts estimates', () => {
   const t = core.createTally();
   core.tallyAdd(t, { kind: 'text', route: 'openai', model: 'gpt-6.1-sol', usage: core.estimateUsage({ promptChars: 4000, outChars: 400 }) }, null, 'check');
   core.tallyAdd(t, { kind: 'text', route: 'gemini', model: 'gemini-3.8-flash', usage: { inTok: 1000, outTok: 100, reported: true } }, null, 'check');
-  core.tallyAdd(t, { kind: 'image', route: 'imgServer', model: 'gpt-image-2.5-flare', usage: { images: 1, reported: false } }, null, 'fix round 1');
+  core.tallyAdd(t, { kind: 'image', route: 'imgServer', model: 'gpt-image-2.6-flare', usage: { images: 1, reported: false } }, null, 'fix round 1');
   assert.equal(t.calls, 3);
   assert.equal(t.estimatedCalls, 2);
   assert.equal(t.images, 1);
@@ -189,7 +194,7 @@ test('a listener gets the reported usage, or an estimate marked as one', () => {
   const h = api.aiMeterOpen(r => got.push(r));
   api._aiMeterText('openaiKey', 'gpt-6.1-sol', 'openai', { prompt_tokens: 10, completion_tokens: 5 }, 'p', [], 'r', true);
   api._aiMeterText('openai', 'gpt-6.1-sol', 'openai', undefined, 'x'.repeat(400), [{ data: 'a' }, null], 'y'.repeat(40), false);
-  api._aiMeterImage('imgServer', 'gpt-image-2.5-flare', null);
+  api._aiMeterImage('imgServer', 'gpt-image-2.6-flare', null);
   h.close();
   api._aiMeterText('openaiKey', 'gpt-6.1-sol', 'openai', { prompt_tokens: 10, completion_tokens: 5 }, 'p', [], 'r', true);
   assert.equal(got.length, 3, 'nothing after close');

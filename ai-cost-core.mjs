@@ -22,7 +22,7 @@
 //  • PRICES ARE DATA. Every number below is a default the admin can change in
 //    the price dialog; the overrides are merged over these, never replace them.
 
-export const AI_PRICES_AS_OF = '2026-10-21';
+export const AI_PRICES_AS_OF = '2026-11-06';
 
 // USD per million tokens. `perImage` is the fallback for a picture whose
 // tokens were not reported. Image models price input text, input images and
@@ -33,6 +33,14 @@ export const AI_DEFAULT_PRICES = {
   'gpt-6-astra':        { label: 'GPT-6 Astra',            in: 2.00, out: 10.00, assumed: true },
   'gemini-3.8-flash':   { label: 'Gemini 3.8 Flash',       in: 0.75, out: 3.75 },
   'kimi-k3':            { label: 'Kimi K3',                in: 3.00, out: 15.00 },
+  // ChatGPT Images 2.6 (gpt-image-2.6-flare / -sunburst, November 2026): the
+  // published rates are the same for both models. OpenAI sets no per-picture
+  // price, and 2.6 spends more output tokens than 2.5 at low/medium quality,
+  // so `perImage` (used only when a call reports no usage) is an estimate:
+  // the ~1,790 output tokens a 2.5 high-quality picture took, at 2.6's rate.
+  'gpt-image-2.6':      { label: 'ChatGPT Images 2.6',     in: 5.00, imgIn: 8.00, out: 30.00, perImage: 0.054 },
+  // The previous generation, kept so a total that still holds 2.5 pictures
+  // (a cached page, a saved tally) is priced as it was billed.
   'gpt-image-2.5':      { label: 'ChatGPT Images 2.5',     in: 6.25, imgIn: 10.00, out: 37.50, perImage: 0.067 },
   'gemini-image':       { label: 'Gemini image model',     in: 0.30, out: 30.00, perImage: 0.039, assumed: true },
 };
@@ -40,8 +48,9 @@ export const AI_DEFAULT_PRICES = {
 // Which table row a model id belongs to. Longest-first prefixes, so a dated
 // snapshot (gpt-6.1-sol-2026-09-01) or a size variant lands on its family.
 const FAMILY_RULES = [
+  [/^gpt-image-2\.6/i, 'gpt-image-2.6'],
   [/^gpt-image-2\.5/i, 'gpt-image-2.5'],
-  [/^gpt-image/i, 'gpt-image-2.5'],
+  [/^gpt-image/i, 'gpt-image-2.6'],
   [/^gemini-.*image/i, 'gemini-image'],
   [/^gpt-6\.1-sol/i, 'gpt-6.1-sol'],
   [/^gpt-6-luna/i, 'gpt-6-luna'],
@@ -53,7 +62,7 @@ const FAMILY_RULES = [
 const ROUTE_DEFAULT = {
   gemini: 'gemini-3.8-flash', openai: 'gpt-6.1-sol', openaiKey: 'gpt-6.1-sol',
   kimi: 'kimi-k3', kimiKey: 'kimi-k3',
-  imgServer: 'gpt-image-2.5', imgKey: 'gpt-image-2.5', imgGemini: 'gemini-image',
+  imgServer: 'gpt-image-2.6', imgKey: 'gpt-image-2.6', imgGemini: 'gemini-image',
 };
 
 export const AI_ROUTE_NAMES = {
@@ -79,7 +88,7 @@ function num(v) { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 
 export function priceKeyFor(model, route) {
   const id = String(model || '').trim();
   for (const [re, key] of FAMILY_RULES) if (re.test(id)) return { key, known: true };
-  const fallback = ROUTE_DEFAULT[route] || (/image/i.test(id) ? 'gpt-image-2.5' : /gemini/i.test(id) ? 'gemini-3.8-flash' : /kimi|moonshot/i.test(id) ? 'kimi-k3' : 'gpt-6.1-sol');
+  const fallback = ROUTE_DEFAULT[route] || (/image/i.test(id) ? 'gpt-image-2.6' : /gemini/i.test(id) ? 'gemini-3.8-flash' : /kimi|moonshot/i.test(id) ? 'kimi-k3' : 'gpt-6.1-sol');
   return { key: fallback, known: false };
 }
 
