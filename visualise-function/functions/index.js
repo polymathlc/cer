@@ -31,10 +31,10 @@ const openaiModel = defineString('VISUALISE_OPENAI_MODEL', { default: DEFAULT_MO
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_IMAGE_EDIT_URL = 'https://api.openai.com/v1/images/edits';
-// The 2.5 image family reads the reference at high fidelity by itself and
+// The 2.x image family (2.6 since November 2026) reads the reference at high fidelity by itself and
 // REFUSES input_fidelity, so it is never sent; no size either (the default
 // keeps the figure's own shape).
-const IMAGE_MODEL = 'gpt-image-2.5-flare';
+const IMAGE_MODEL = 'gpt-image-2.6-flare';
 const OPENAI_IMAGE_TIMEOUT_MS = 150000;
 const OPENAI_TIMEOUT_MS = 100000;
 const OPENAI_WEBAPP_TIMEOUT_MS = 170000;

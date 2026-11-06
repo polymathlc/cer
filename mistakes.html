@@ -298,7 +298,7 @@ try {
   const ai = getAI(app, { backend: new GoogleAIBackend() });
   imageModels = AI_IMAGE_MODELS.map(m => getGenerativeModel(ai, { model: m }));
 } catch (e) { console.warn('Firebase AI init failed (clean-up disabled):', e); }
-/* THE IMAGE ENGINE IS CHATGPT IMAGES 2.5 (portal v1.372.0), reached through
+/* THE IMAGE ENGINE IS CHATGPT IMAGES 2.6 (portal v1.372.0), reached through
    the `openAiImage` callable in polymathlc/math/functions — the key is a
    Firebase secret on the server, which is the only way a STUDENT's phone can
    draw with it, and this page runs on nothing but students' phones. Gemini's
@@ -404,8 +404,8 @@ function inlineImageOf(result) {
   }
   return null;
 }
-/* ChatGPT Images 2.5 by the server's key. The crop goes up as the ONE
-   reference picture of an EDIT — the 2.5 family reads it at high fidelity by
+/* ChatGPT Images 2.6 by the server's key. The crop goes up as the ONE
+   reference picture of an EDIT — the 2.x family reads it at high fidelity by
    itself and REFUSES an `input_fidelity` field, so none is sent (v1.6.1) —
    and `size: auto` keeps the crop's own shape rather than squaring it off. */
 async function cleanFigureChatGpt(dataUrl, kind) {
@@ -413,7 +413,7 @@ async function cleanFigureChatGpt(dataUrl, kind) {
   const mime = (/^data:([^;,]+)/.exec(dataUrl) || [])[1] || 'image/jpeg';
   const res = await httpsCallable(fns, 'openAiImage', { timeout: 240000 })({
     prompt: cleanPrompt(kind),
-    model: 'gpt-image-2.5-sunburst',
+    model: 'gpt-image-2.6-sunburst',
     images: [{ mimeType: mime, data: dataUrl.split(',')[1] || '' }],
     size: 'auto',
     quality: 'high',
@@ -422,7 +422,7 @@ async function cleanFigureChatGpt(dataUrl, kind) {
   const d = res && res.data;
   if (!d || typeof d.b64 !== 'string' || !d.b64) throw new Error('the server image route returned no picture');
   // The server names the model it really drew with — that is what the badge says.
-  imageAnnounce('ChatGPT Images · ' + ((typeof d.model === 'string' && d.model) || 'gpt-image-2.5-sunburst') + ' · server key');
+  imageAnnounce('ChatGPT Images · ' + ((typeof d.model === 'string' && d.model) || 'gpt-image-2.6-sunburst') + ' · server key');
   return 'data:' + (d.mimeType || 'image/png') + ';base64,' + d.b64;
 }
 /* 🖼 THE GREEN BOX — bottom right, every time a figure is cleaned up here,
