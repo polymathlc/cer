@@ -21,7 +21,7 @@ function fixture({ obstacle = () => null } = {}) {
       mods: {}, pProj: [], enemies: [], particles: [], casings: [] },
     skillLv: () => 0, classMods: () => ({ dmg: 1, rof: 1, range: 24, spread: 1, critMult: 2 }),
     obstacleAt: obstacle, lineOfSight: () => true, updateHud() {}, magSize: () => 1000,
-    mouseDown: false, sfx: new Proxy({}, { get: (_, key) => () => sounds.push(key) }),
+    mouseDown: false, adsHeld: false, strikeSettings: { crosshair: 1, invertY: false }, sfx: new Proxy({}, { get: (_, key) => () => sounds.push(key) }),
     wrapAngle: angle => Math.atan2(Math.sin(angle), Math.cos(angle)),
     spawnBeam: (...args) => beams.push(args),
     damageEnemy: (e, dmg, w, effects, crit) => { e.hp -= dmg; hits.push({ e, dmg, crit }); },
@@ -227,4 +227,20 @@ test('aim assist leaves a clean hit alone, bends a near miss and ignores a wild 
   const bent = c.aimAssist(miss);
   assert.ok(Math.abs(bent) < miss * 0.5, 'a near miss is bent toward the target');
   assert.equal(c.aimAssist(4 * Math.PI / 180), 4 * Math.PI / 180, 'a wild miss stays a miss');
+});
+
+test('a quiet low magazine tops itself up, and pulling the trigger cancels that top-up', () => {
+  const { c, weapon } = fixture();
+  c.magSize = () => 10; weapon.mag = 10; c.G.ammo = 2; c.G.sinceShot = 5;
+  c.strikeUpdateWeapon(1 / 60);
+  assert.ok(c.G.reloading > 0 && c.G.tacReload, 'auto reload starts when safe');
+  c.G.triggerQueued = 0.16; c.strikeUpdateWeapon(1 / 60);
+  assert.equal(c.G.ammo, 1, 'the queued shot fired instead of waiting for the reload');
+});
+
+test('auto reload never starts with a shot queued, while aiming, or with an enemy close', () => {
+  const { c, target } = fixture();
+  c.magSize = () => 10; c.G.ammo = 2;
+  c.G.sinceShot = 5; c.adsHeld = true; c.strikeUpdateWeapon(1 / 60); assert.equal(c.G.reloading, 0);
+  c.adsHeld = false; target(3); c.G.sinceShot = 5; c.strikeUpdateWeapon(1 / 60); assert.equal(c.G.reloading, 0);
 });

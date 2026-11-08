@@ -1780,7 +1780,8 @@ function spawnWave() {
   const idle = () => skillLv('ghost') ? 'idle' : 'chase';
   // the swarm: lots of fodder to mow down
   // waves 1–2 are a warm-up: fewer bugs while a new player finds the controls
-  const swarmN = wv === 1 ? 6 : wv === 2 ? 8 : wv === 3 ? 10 : Math.min(22, 8 + Math.floor(wv * 1.4));
+  let swarmN = wv === 1 ? 6 : wv === 2 ? 8 : wv === 3 ? 10 : wv === 4 ? 11 : Math.min(22, 8 + Math.floor(wv * 1.4));
+  if (isBossWave) swarmN = Math.round(swarmN * 0.6);   // the Warden is the fight; keep the fodder light
   for (let i = 0; i < swarmN; i++) {
     const pos = findSpawn(rng);
     const e = makeMinion(rng, pos.x, pos.y, wv);
@@ -1793,7 +1794,7 @@ function spawnWave() {
   for (let i = 0; i < coreN; i++) {
     const pos = findSpawn(rng);
     const e = makeEnemy(rng, pos.x, pos.y, hpScale, wv);
-    if (wv < 3) e.dmg *= 0.6; else if (wv === 3) e.dmg *= 0.8;   // ramp, not a cliff
+    if (wv < 3) e.dmg *= 0.6; else if (wv === 3) e.dmg *= 0.8; else if (wv === 4) e.dmg *= 0.9;   // ramp, not a cliff
     e.state = idle();
     G.enemies.push(e);
     spawnPoof(pos.x, pos.y);
@@ -2020,31 +2021,44 @@ window.addEventListener('pagehide', suspendCombat);
 
 function readStrikeSettings() {
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const clamp = (v, lo, hi, d) => { v = Number(v); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
   try {
     const saved = JSON.parse(localStorage.getItem('scienceStrike:controls') || '{}');
-    const sensitivity = Number(saved.sensitivity);
-    return { sensitivity: Number.isFinite(sensitivity) ? Math.min(2, Math.max(.4, sensitivity)) : 1,
-      reducedMotion: typeof saved.reducedMotion === 'boolean' ? saved.reducedMotion : reducedMotion };
-  } catch { return { sensitivity: 1, reducedMotion }; }
+    return { sensitivity: clamp(saved.sensitivity, .4, 2, 1),
+      reducedMotion: typeof saved.reducedMotion === 'boolean' ? saved.reducedMotion : reducedMotion,
+      invertY: saved.invertY === true,
+      crosshair: clamp(saved.crosshair, .75, 1.5, 1) };
+  } catch { return { sensitivity: 1, reducedMotion, invertY: false, crosshair: 1 }; }
 }
 const strikeSettings = readStrikeSettings();
 function paintStrikeSettings() {
   document.body.classList.toggle('reduce-motion', strikeSettings.reducedMotion);
   document.querySelectorAll('.strike-settings').forEach((host, i) => {
-    host.innerHTML = '<label for="strikeSensitivity' + i + '">Aim speed <input id="strikeSensitivity' + i + '" type="range" min="0.4" max="2" step="0.1" value="' + strikeSettings.sensitivity + '"><output>' + strikeSettings.sensitivity.toFixed(1) + '×</output></label>'
-      + '<label><input type="checkbox" ' + (strikeSettings.reducedMotion ? 'checked' : '') + '> Reduce screen shake and weapon sway</label>';
-    const range = host.querySelector('input[type=range]'), checkbox = host.querySelector('input[type=checkbox]');
-    range.addEventListener('input', () => { strikeSettings.sensitivity = Number(range.value); syncStrikeSettings(); });
-    checkbox.addEventListener('change', () => { strikeSettings.reducedMotion = checkbox.checked; syncStrikeSettings(); });
+    host.innerHTML = '<label for="strikeSensitivity' + i + '">Aim speed <input id="strikeSensitivity' + i + '" data-set="sensitivity" type="range" min="0.4" max="2" step="0.1" value="' + strikeSettings.sensitivity + '"><output data-out="sensitivity">' + strikeSettings.sensitivity.toFixed(1) + '×</output></label>'
+      + '<label for="strikeCrosshair' + i + '">Crosshair size <input id="strikeCrosshair' + i + '" data-set="crosshair" type="range" min="0.75" max="1.5" step="0.05" value="' + strikeSettings.crosshair + '"><output data-out="crosshair">' + strikeSettings.crosshair.toFixed(2) + '×</output></label>'
+      + '<label><input type="checkbox" data-set="reducedMotion" ' + (strikeSettings.reducedMotion ? 'checked' : '') + '> Reduce screen shake and weapon sway</label>'
+      + '<label><input type="checkbox" data-set="invertY" ' + (strikeSettings.invertY ? 'checked' : '') + '> Invert mouse up/down</label>';
+    host.querySelectorAll('[data-set]').forEach(input => {
+      const key = input.dataset.set;
+      input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => {
+        strikeSettings[key] = input.type === 'checkbox' ? input.checked : Number(input.value);
+        syncStrikeSettings();
+      });
+    });
   });
 }
 function syncStrikeSettings() {
   try { localStorage.setItem('scienceStrike:controls', JSON.stringify(strikeSettings)); } catch {}
   document.body.classList.toggle('reduce-motion', strikeSettings.reducedMotion);
   document.querySelectorAll('.strike-settings').forEach(host => {
-    host.querySelector('input[type=range]').value = strikeSettings.sensitivity;
-    host.querySelector('output').textContent = strikeSettings.sensitivity.toFixed(1) + '×';
-    host.querySelector('input[type=checkbox]').checked = strikeSettings.reducedMotion;
+    host.querySelectorAll('[data-set]').forEach(input => {
+      const v = strikeSettings[input.dataset.set];
+      if (input.type === 'checkbox') input.checked = !!v; else input.value = v;
+    });
+    host.querySelectorAll('output[data-out]').forEach(out => {
+      const v = strikeSettings[out.dataset.out];
+      out.textContent = v.toFixed(out.dataset.out === 'crosshair' ? 2 : 1) + '×';
+    });
   });
 }
 paintStrikeSettings();
@@ -2052,7 +2066,7 @@ document.addEventListener('mousemove', e => {
   if (!combatReady()) return;
   const adsSens = (1 - .5 * (G.ads || 0)) * strikeSettings.sensitivity;
   G.player.dir += e.movementX * .0026 * adsSens;
-  G.player.pitch = Math.max(-150, Math.min(180, (G.player.pitch || 0) - e.movementY * 1.4 * adsSens));   // same angular speed as yaw (focal 540px)
+  G.player.pitch = Math.max(-150, Math.min(180, (G.player.pitch || 0) - e.movementY * (strikeSettings.invertY ? -1.4 : 1.4) * adsSens));   // same angular speed as yaw (focal 540px)
   swayVX += e.movementX * .9; swayVY += e.movementY * .6;
 });
 function strikeTypingTarget(target) { return !!(target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))); }
@@ -2246,8 +2260,12 @@ function strikeUpdateWeapon(dt) {
   }
   // Tactical reload: after a quiet moment with a low magazine and nobody close, top up automatically.
   G.sinceShot = (G.sinceShot || 0) + dt;
-  if (!mouseDown && !(G.reloading > 0) && G.sinceShot > 1.2 && G.ammo < 0.4 * magSize()
-      && !G.enemies.some(e => e.hp > 0 && Math.hypot(e.x - G.player.x, e.y - G.player.y) < 5)) startReload();
+  if (!mouseDown && !(G.triggerQueued > 0) && !adsHeld && !(G.reloading > 0) && G.ammo < 0.4 * magSize()
+      && G.sinceShot > Math.max(1.2, 2.5 / effRof(G.weapon))
+      && !G.enemies.some(e => e.hp > 0 && Math.hypot(e.x - G.player.x, e.y - G.player.y) < 5)) { startReload(); if (G.reloading > 0) G.tacReload = true; }
+  // pulling the trigger cancels an automatic top-up while rounds remain: the player's shot always wins
+  if ((mouseDown || G.triggerQueued > 0) && G.tacReload && G.reloading > 0 && G.ammo > 0) { G.reloading = 0; G.tacReload = false; }
+  if (!(G.reloading > 0)) G.tacReload = false;
   if (mouseDown || G.triggerQueued > 0) {
     for (let n = 0; n < 6 && G.fireCd <= 1e-8 && G.reloading <= 0; n++) {
       if (!shoot()) break;
@@ -2938,6 +2956,7 @@ async function openQuestion() {
   if (!q) { G.qTimerMs=QUESTION_INTERVAL;pauseRun(studentLevelCap ? 'No fresh database MCQs match your level and progress right now. Return to the portal for another activity.' : 'Set your school level in the Science Learning Portal before answering questions.');return; }
   G.activeQ = q;
   G.questionAnswered = false;
+  $('hudQTimer').classList.remove('q-soon');
   suspendCombat();
   G.qOpenedAt = performance.now();
   sfx.qPop();
@@ -3282,9 +3301,14 @@ function tick(now) {
     if (e.state === 'chase') {
       const ang = Math.atan2(P.y - e.y, P.x - e.x);
       // melee stops at arm's length so it stays on screen and shootable (it still swings at d < 1.0)
-      if ((!e.ranged || d > 4.5) && d > STRIKE_MELEE_STOP) {
+      // a shooter only plants its feet when it can actually see the player; otherwise it keeps
+      // closing in, side-stepping around whatever blocks it, so no wave can stall behind a tree
+      if ((!e.ranged || d > 4.5 || !sees) && d > STRIKE_MELEE_STOP) {
         const sp = e.speed * slowMult * wdt;
-        tryMove(e, e.x + Math.cos(ang) * sp, e.y + Math.sin(ang) * sp, 0.34);
+        const side = e.ranged && !sees && d <= 4.5 ? (e.wanderDir > Math.PI ? 1.2 : -1.2) : 0;
+        const before = e.x + e.y;
+        tryMove(e, e.x + Math.cos(ang + side) * sp, e.y + Math.sin(ang + side) * sp, 0.34);
+        if (side && e.x + e.y === before) e.wanderDir = (e.wanderDir + Math.PI) % (Math.PI * 2);   // blocked: try the other way
       }
       if (e.ranged) {
         e.fireCd -= wdt;
@@ -3308,6 +3332,8 @@ function tick(now) {
   }
   G.enemies = G.enemies.filter(e => e.hp > 0);
   strikeSeparateEnemies(wdt);
+  // stragglers: once a wave is down to its last two for a while, point the player at them
+  G.fewT = G.enemies.length && G.enemies.length <= 2 && !(G.breakT > 0) ? (G.fewT || 0) + dt : 0;
 
   // enemy projectiles (world time)
   for (const pr of G.projectiles) {
@@ -4855,6 +4881,33 @@ function drawCrosshair() {
     ctx.beginPath(); ctx.arc(cx, cy, Math.min(cx, cy) - 26, sa - 0.22, sa + 0.22); ctx.stroke();
     ctx.restore();
   }
+  // straggler beacons: amber arrows at the edge toward the last enemies of a long wave
+  if (G.fewT > 12) {
+    for (const e of G.enemies) {
+      const rel = wrapAngle(Math.atan2(e.y - G.player.y, e.x - G.player.x) - G.player.dir);
+      if (Math.abs(rel) < 20 * Math.PI / 180) continue;
+      const sa = rel - Math.PI / 2, r = Math.min(cx, cy) - 40;
+      const ax = cx + Math.cos(sa) * r, ay = cy + Math.sin(sa) * r;
+      ctx.save();
+      ctx.translate(ax, ay); ctx.rotate(sa);
+      ctx.globalAlpha = 0.6 + 0.3 * Math.sin((G.playSeconds || 0) * 6);
+      ctx.fillStyle = '#ffd76a'; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, -10); ctx.lineTo(-8, 10); ctx.closePath();
+      ctx.stroke(); ctx.fill();
+      ctx.restore();
+    }
+  }
+  // boss bar: the Warden's health stays readable at the top of the screen
+  const boss = G.enemies.find(e => e.boss && e.hp > 0);
+  if (boss) {
+    const bw = 360, bx = cx - bw / 2, by = 18, k = Math.max(0, boss.hp / boss.maxHp);
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx - 3, by - 3, bw + 6, 16);
+    ctx.fillStyle = '#ff4b57'; ctx.fillRect(bx, by, bw * k, 10);
+    ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe1e4';
+    ctx.fillText('WARDEN', cx, by + 26);
+    ctx.restore();
+  }
   // question heads-up under the crosshair in the last three seconds
   if (G.qTimerMs > 0 && G.qTimerMs < 3000 && !G.activeQ) {
     ctx.save();
@@ -4870,11 +4923,11 @@ function drawCrosshair() {
     ctx.textAlign = 'center'; ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.75)';
     ctx.font = 'bold 26px monospace'; ctx.fillStyle = '#ffd76a';
     const nt = 'NEXT WAVE IN ' + Math.ceil(G.breakT);
-    ctx.strokeText(nt, cx, REND_H * 0.2); ctx.fillText(nt, cx, REND_H * 0.2);
+    ctx.strokeText(nt, cx, REND_H * 0.26); ctx.fillText(nt, cx, REND_H * 0.26);
     if (G.loots.some(l => l.kind === 'chest')) {
       ctx.font = 'bold 15px monospace'; ctx.fillStyle = '#e9f2ff';
-      ctx.strokeText('📦 Walk to the chest and press [E]', cx, REND_H * 0.2 + 26);
-      ctx.fillText('📦 Walk to the chest and press [E]', cx, REND_H * 0.2 + 26);
+      ctx.strokeText('📦 Walk to the chest and press [E]', cx, REND_H * 0.26 + 26);
+      ctx.fillText('📦 Walk to the chest and press [E]', cx, REND_H * 0.26 + 26);
     }
     ctx.restore();
   }
@@ -4922,7 +4975,7 @@ function drawCrosshair() {
     if (kill || k.kind === 'crit') {
       ctx.fillStyle = kill ? '#ff8b80' : '#ffe49a';
       ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
-      ctx.fillText(kill ? 'ELIMINATED' : 'CRITICAL', cx, cy + 45);
+      ctx.fillText(kill ? 'ELIMINATED' : 'CRITICAL', cx, cy + 52);
     }
     ctx.restore();
   }
@@ -4931,8 +4984,9 @@ function drawCrosshair() {
   if (G.ads > 0.7 && G.weapon.arch.scope >= 3) return;
   // CS-style crosshair: the gap mirrors the live spread — wide while moving
   // and firing (recoil bloom), snapping tight when you stand still.
-  const gap = Math.round(5 + currentSpreadDeg() * 8);
-  const len = 13, t = 3;
+  const gap = Math.round((5 + currentSpreadDeg() * 8) * (strikeSettings.crosshair || 1));
+  const xs = strikeSettings.crosshair || 1;
+  const len = Math.round(13 * xs), t = Math.max(2, Math.round(3 * xs));
   // tinted by the current weapon's element (plain bone when elementless)
   const col = G.weapon.element !== 'none' ? ELEMENTS[G.weapon.element].color : '#e8e0cc';
   const arm = (x, y, w2, h2) => {
@@ -4949,7 +5003,7 @@ function drawCrosshair() {
   if (G.reloading > 0) {
     ctx.fillStyle = '#ffb347';
     ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('RELOADING', cx, cy + 34);
+    ctx.fillText('RELOADING', cx, cy - 34);
   }
 }
 
