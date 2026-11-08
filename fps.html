@@ -501,7 +501,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v2.0.0 · Reactor Frontier</div>
+<div id="versionBadge">Science Strike v2.0.1 · Reactor Frontier</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -1941,33 +1941,58 @@ function fpsCancelRunForIdentityChange(showMenu = true) {
   $('dmgVignette').classList.remove('lowhp');
   if (showMenu && currentUser) enterMenu();
 }
-function pauseRun(reason = 'Click Resume when you are ready. Enemies and the science countdown are paused.') {
+const PAUSE_DEFAULT = 'Click Resume when you are ready. Enemies and the science countdown are paused.';
+const LOCK_WAIT_TEXT = 'Taking mouse control… if nothing happens, click Resume again.';
+const LOCK_RETRY_MS = 1500;
+let lockWatchT = 0;
+// A question (or the one loading), the weapon draft or the skill tree owns the screen.
+// The pause card must never sit on top of one of those: its Resume can't resume
+// combat until that dialog is finished, which looked like a dead button.
+function strikeModalPending() { return !!(G && (G.activeQ || G.questionLoading || G.draftOpen || skillsOpen)); }
+function strikeShowPendingModal() {
+  $('pauseOverlay').classList.remove('active');
+  if (!G) return;
+  if (G.activeQ) { $('questionOverlay').classList.add('active'); (G.questionAnswered ? $('qContinue') : $('qStem')).focus?.(); }
+  else if (G.draftOpen) $('draftOverlay').classList.add('active');
+  else if (skillsOpen) $('skillOverlay').classList.add('active');
+}
+function pauseRun(reason = PAUSE_DEFAULT) {
   if (!G || G.over) return;
-  suspendCombat();
+  suspendCombat(); clearTimeout(lockWatchT);
   $('pauseReason').textContent = reason;
-  if (G.activeQ || G.draftOpen || skillsOpen) return;
+  if (strikeModalPending()) { strikeShowPendingModal(); return; }
   $('pauseOverlay').classList.add('active');
   $('resumeBtn').focus();
 }
 function finishLock() {
   pointerLocked = document.pointerLockElement === canvas;
   if (pointerLocked && combatReady()) return; // browsers may report a confirmed grant twice
-  if (pointerLocked && lockWanted && G && !G.over && !G.activeQ && !G.questionLoading && !G.draftOpen && !skillsOpen && !document.hidden && document.hasFocus()) {
-    lockWanted = false; G.paused = false;
+  if (pointerLocked && lockWanted && G && !G.over && !strikeModalPending() && !document.hidden) {
+    lockWanted = false; G.paused = false; clearTimeout(lockWatchT);
     resetCombatInput(); lastT = performance.now();
     $('pauseOverlay').classList.remove('active');
     canvas.focus();
-  } else if (!pointerLocked) pauseRun(G?.paused ? $('pauseReason').textContent || undefined : undefined);
-  else suspendCombat();
+  } else if (!pointerLocked) {
+    if (!G || G.over) return;
+    // Keep a deliberate explanation (empty question pool, tab switch) but never a stale "taking control" line.
+    const shown = $('pauseReason').textContent;
+    pauseRun(G.paused && shown && shown !== LOCK_WAIT_TEXT ? shown : undefined);
+  } else suspendCombat();
 }
 function requestLock() {
-  if (!G || G.over || G.activeQ || G.draftOpen || skillsOpen || document.hidden || !document.hasFocus()) return;
+  if (!G || G.over) return;
+  if (strikeModalPending()) { strikeShowPendingModal(); return; }
+  if (document.hidden) return;
+  if (document.pointerLockElement === canvas) { lockWanted = true; finishLock(); return; }
   G.paused = true; resetCombatInput();
-  $('pauseReason').textContent = 'Waiting for mouse control. If it does not connect, click Resume again.';
+  $('pauseReason').textContent = LOCK_WAIT_TEXT;
   $('pauseOverlay').classList.add('active');
   lockWanted = true;
   const ticket = ++lockTicket;
-  const failed = () => { if (ticket === lockTicket) pauseRun('Mouse control was not allowed. Click Resume to try again, or return to the menu. Your run is safely paused.'); };
+  const failed = () => { if (ticket === lockTicket && lockWanted) pauseRun('Mouse control did not connect. Click Resume to try again. (Browsers block it for about a second after you press Esc.) Your run is safely paused.'); };
+  clearTimeout(lockWatchT);
+  // Never wait silently: if the browser neither grants nor refuses, hand the button back.
+  lockWatchT = setTimeout(() => { if (ticket === lockTicket && lockWanted && document.pointerLockElement !== canvas) failed(); }, LOCK_RETRY_MS);
   try {
     if (typeof canvas.requestPointerLock !== 'function') { failed(); return; }
     const pending = canvas.requestPointerLock();
@@ -1977,7 +2002,7 @@ function requestLock() {
 }
 document.addEventListener('pointerlockchange', finishLock);
 document.addEventListener('pointerlockerror', () => {
-  if (lockWanted) pauseRun('Mouse control was not allowed. Click Resume to try again.');
+  if (lockWanted) pauseRun('Mouse control did not connect. Click Resume to try again. (Browsers block it for about a second after you press Esc.)');
 });
 window.addEventListener('blur', () => pauseRun('You left the game window. Click Resume when you are ready.'));
 document.addEventListener('visibilitychange', () => { if (document.hidden) pauseRun('You switched tabs. Click Resume when you are ready.'); });

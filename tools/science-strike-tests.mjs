@@ -92,7 +92,7 @@ test('intentional question-feed pause keeps its explanation after mouse capture 
 test('FPS module remains syntactically valid and versioned', () => {
   const script = source.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
   new vm.Script(script.replace(/^import .*;\n/gm, ''));
-  assert.match(source, /Science Strike v2\.0\.0/);
+  assert.match(source, /Science Strike v2\.0\.1/);
 });
 
 test('combat waits for confirmed pointer lock; duplicate confirmations are harmless', () => {
@@ -107,8 +107,43 @@ test('a denied pointer lock keeps the run paused with a retry action', async () 
   const f = fixture(); f.canvas.requestPointerLock = () => Promise.reject(new Error('blocked'));
   f.c.requestLock(); await Promise.resolve();
   assert.equal(f.c.G.paused, true); assert.equal(f.c.combatReady(), false);
-  assert.match(f.element('pauseReason').textContent, /not allowed/);
+  assert.match(f.element('pauseReason').textContent, /did not connect/);
   assert.equal(f.element('pauseOverlay').classList.contains('active'), true);
+});
+
+test('regression: a question loading while mouse is released never leaves a dead "waiting" pause card', () => {
+  const f = fixture(); f.c.requestLock(); f.grant();
+  // openQuestion(): loading starts, combat suspends, the browser reports the lock loss
+  f.c.G.questionLoading = true; f.c.suspendCombat(); f.emit('document', 'pointerlockchange');
+  assert.equal(f.element('pauseOverlay').classList.contains('active'), false);
+  f.c.G.questionLoading = false; f.c.G.activeQ = f.q;
+  // even if a stale card were showing, Resume must hand the player to the question
+  f.element('pauseOverlay').classList.add('active');
+  f.emit('resumeBtn', 'click');
+  assert.equal(f.element('pauseOverlay').classList.contains('active'), false);
+  assert.equal(f.element('questionOverlay').classList.contains('active'), true);
+  assert.doesNotMatch(f.element('pauseReason').textContent, /Waiting/);
+});
+
+test('regression: lock released mid-request shows a usable pause, not the stale "taking control" line', () => {
+  const f = fixture(); f.c.requestLock();
+  f.document.pointerLockElement = null; f.emit('document', 'pointerlockchange');
+  assert.equal(f.element('pauseOverlay').classList.contains('active'), true);
+  assert.match(f.element('pauseReason').textContent, /Click Resume/);
+  assert.doesNotMatch(f.element('pauseReason').textContent, /Taking mouse control/);
+});
+
+test('regression: a lock request the browser silently ignores hands Resume back after a moment', () => {
+  const f = fixture(); f.c.requestLock();
+  assert.match(f.element('pauseReason').textContent, /Taking mouse control/);
+  for (const fn of [...f.timers.values()]) fn();
+  assert.match(f.element('pauseReason').textContent, /did not connect/);
+  f.c.requestLock(); f.grant(); assert.equal(f.c.combatReady(), true);
+});
+
+test('Resume while the browser already holds the lock resumes immediately', () => {
+  const f = fixture(); f.document.pointerLockElement = f.canvas; f.c.G.paused = true;
+  f.emit('resumeBtn', 'click'); assert.equal(f.c.combatReady(), true);
 });
 
 test('a lock granted after switching tabs cannot resume combat', () => {
