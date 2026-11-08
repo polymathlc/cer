@@ -123,6 +123,13 @@ test('R26 volatile elite has a visible identity, delayed one-shot hazard and a c
   const capped={...variety.definitions.hexer,kind:'hexer',hp:40,maxHp:40,elite:true,x:0,y:0};
   variety.initialize(capped,{enemies:Array.from({length:3},()=>({hp:10,varietyAffix:'volatile'}))});assert.equal(capped.varietyAffix,undefined);
 });
+test('R26 retired or paused run contexts cannot create death hazards or late hatchlings',()=>{
+  for(const flag of ['paused','ended'])for(const kind of ['warden','broodling']){
+    const f=scene(kind,{elite:true});f.enemy.dead=true;f.enemy.hp=0;f.ctx[flag]=true;
+    const result=variety.onDeath(f.enemy,f.ctx);assert.equal(result.children,0);assert.equal(result.volatile,false);
+    assert.equal(f.hazards.length,0);assert.equal(f.children.length,0);assert.equal(f.enemy.variety.phase,'dead');
+  }
+});
 
 test('R27 Tyrant enrage is one-way and changes one locked strike into a three-circle pattern',()=>{
   const f=scene('boss',{boss:true});f.target.x=260;f.until('windup');f.tick(.91);

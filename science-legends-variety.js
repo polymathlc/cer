@@ -161,6 +161,7 @@
     if(!e||e.varietyDeathHandled||!e.dead&&e.hp>0)return {children:0,volatile:false,disarmed:false};
     e.varietyDeathHandled=true;ctx=ctx||{};var disarmed=e.frozen>0||e.stun>0,children=0,volatile=false;
     if(e.variety){e.variety.phase='dead';e.variety.timer=0;e.variety.target=null;}
+    if(ctx.paused||ctx.ended)return {children:0,volatile:false,disarmed:disarmed};
     if(e.kind==='broodling'&&!disarmed&&ctx.spawnChild){
       var fx=e.fx||1,fy=e.fy||0;
       for(var i=-1;i<=1;i+=2){var child=ctx.spawnChild({kind:'mite',x:e.x-fy*i*14,y:e.y+fx*i*14,noLoot:true,noXP:true,grace:.7,parentKind:'broodling'});if(child)children++;}
