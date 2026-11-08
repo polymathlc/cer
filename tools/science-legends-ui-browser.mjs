@@ -10,10 +10,10 @@ try{
   const context=await browser.newContext({viewport:{width,height:900}}),page=await context.newPage(),errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/*',route=>{const url=new URL(route.request().url());if(url.hostname!=='ui.test')return route.abort();const f=path.join(root,decodeURIComponent(url.pathname));return fs.existsSync(f)&&fs.statSync(f).isFile()?route.fulfill({path:f}):route.abort();});
-  await page.goto('http://ui.test/science-legends.html');await page.waitForFunction(()=>document.querySelectorAll('.class-card').length===5&&LegendsModels.ready());
+  await page.goto('http://ui.test/science-legends.html');await page.waitForFunction(()=>document.querySelectorAll('.class-card').length===5&&LegendsModels.allReady());
   await page.screenshot({path:path.join(output,`menu-${width}.png`),animations:'disabled'});
   await page.locator('.class-card').nth(1).click();await page.locator('#startBtn').click();await page.waitForFunction(()=>G&&G.time>.05);
-  await page.evaluate(()=>{G.spawnT=999;G.qTimer=-1000;G.enemies=[];G.pets=[];G.player.hp=G.player.maxHp=100000;});
+  await page.evaluate(()=>{G.spawnT=999;G.qTimer=7;G.enemies=[];G.pets=[];G.player.hp=G.player.maxHp=CLASSES[G.cls].hp+G.stats.hpAdd+(G.player.levelHp||0);});
   await page.keyboard.press('t');await page.locator('#treeOverlay').waitFor({state:'visible'});
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${width}: illustrated tree does not make the page wider than the screen`);
   check(await page.locator('#treeOverlay').getAttribute('role')==='dialog',`${width}: tree remains a named modal dialog`);
