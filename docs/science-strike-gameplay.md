@@ -1,6 +1,35 @@
-# Science Strike v1.9.3
+# Science Strike v2.0.0 — Reactor Frontier
 
-Released with the Science portal v1.382.3.
+## Combat and art overhaul
+
+The battlefield now uses an original generated research-valley panorama with
+directional parallax and scope-aware framing, twilight mineral terrain, marked
+outpost roads and survey beacons. Generated sentinel and stalker enemy families
+have cached animation frames, color variants, hit flashes and critical zones
+matched to their visible heads. Other species retain their distinct silhouettes.
+
+Four generated first-person weapon models cover the twelve weapon archetypes;
+the same art appears on ground loot and in the menu armory. Barrel flashes use
+measured anchors and follow recoil and reload motion. The HUD shows magazine
+capacity, low-ammo warnings and continuous reload progress. Weapon families
+have distinct synthesized reports. Art lives locally in
+`assets/science-strike/`; its README and `prompts.json` document every asset and
+the complete built-in image-generation prompt set. Failed image downloads
+retain the procedural renderer.
+
+Ballistic rounds travel 3.5 times faster. Swept collision finds the nearest
+enemy along a bullet's path, so a small minion cannot be skipped between frames.
+Piercing applies once per victim in depth order, trunks stop bullets, and range
+ends exactly at the weapon limit. Bullets and beams share the current camera
+projection for body/head hits. Brief impact trails and stronger critical/kill
+confirmations keep fast shots readable.
+
+Automatic fire preserves fractional cooldown at 30, 60 and 144 fps. A short
+click between frames is buffered for 160 ms, and held fire resumes when a reload
+finishes. Movement and repeated-fire bloom recover faster, recoil recenters,
+and shotgun pellets form a stratified fan. Right-click braces every weapon;
+scoped weapons retain their magnification. Loot, skills, science checks and
+portal rewards continue to use the existing systems.
 
 ## Playing
 
@@ -69,6 +98,12 @@ reward values and portal accounting remain in place.
 handlers. `tools/science-strike-browser-tests.mjs` loads the actual game page,
 scripts, canvas renderer and question policy with isolated Firebase and browser
 API boundaries. Its test accounts, question bank and writes are synthetic.
+`tools/science-strike-combat-tests.mjs` covers swept collisions, aim snapshots,
+range, piercing, firing cadence and reload/tap buffering. Artwork tests cover
+decode failures, cached sprite installation, critical geometry and panorama
+framing. The browser suite also verifies actual generated image decoding,
+transparency, use by the production renderer, all twelve weapon archetypes,
+distinct weapon renders, ADS, reload and asset-network failure fallback.
 The existing Science feeding checks continue to cover year limits, mastery,
 duplicate spacing, broken images and mixed-question restrictions.
 

@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Science Strike — Roguelite FPS</title>
 <!--
-  SCIENCE STRIKE — roguelite first-person dungeon shooter
+  SCIENCE STRIKE v2.0.0 — Reactor Frontier roguelite FPS
 
   Part of the Polymath Science Quest family (index.html). Shares the same
   Firebase project ("mathgen--app"), Google sign-in, App Check (reCAPTCHA v3)
@@ -23,9 +23,9 @@
 
   Game design:
   - Pure-canvas open-world FPS (no external engine): WASD + mouse look
-    (pointer lock), an infinite procedural Minecraft-style overworld —
-    blocky grass with wildflowers, a grid of dashed roads, scattered
-    solid trees/rocks, parallax mountain ridges, sun and drifting clouds.
+    (pointer lock), an infinite research outpost with mineral terrain,
+    marked roads, solid trees/rocks, survey beacons and a generated
+    directionally anchored panorama (procedural sky as download fallback).
     Enemies come in INFINITE WAVES that scale forever (Warden boss every
     5th wave); a rotating minimap radar shows enemy blips (rim-clamped
     when far), roads, loot and props.
@@ -53,18 +53,18 @@
   - Bullet physics: every non-laser shot is a real projectile that leaves
     the muzzle with a glowing tracer trail and flies until it hits an
     enemy, a tree TRUNK (only the trunk blocks — not the whole tile), or
-    max range. Vertical aim is frozen at fire time; each of the 25 enemy
+    max range. Swept collision catches fast rounds between frames. Each enemy
     types has its own crit band matched to where its head really is.
-  - Weapons: 9 archetypes incl. scoped assault rifle + sniper rail
+  - Weapons: 12 archetypes incl. scoped assault rifle + sniper rail
     (right-click ADS with real zoom + scope overlay), crossbow bolts,
-    piercing laser beam, plasma stream. ONE drawGunModel() renders both
-    the big first-person viewmodel and the full gun model that tumbles
-    onto the grass when enemies drop loot.
+    piercing laser beam, plasma stream. Four generated model families appear
+    in first person and as loot, with procedural fallback when art is missing.
   - Grenades on Q: frag / incendiary (fire field) / cryo (ice field) /
     shock / shrapnel types drop from enemies.
   - Rendering: enemies are pre-rendered detailed sprite canvases (2-frame
     walk cycle + white hit-flash silhouette), occluded by walls at 1px
-    column resolution. Guns are procedural per-archetype viewmodels with
+    column resolution. Generated enemies use image-aligned headshot bands.
+    Generated guns have measured muzzle anchors and
     walk bob, recoil kickback and muzzle flash; firing also kicks the
     camera (horizon shift + horizontal aim drift) CS-style.
 -->
@@ -300,6 +300,25 @@
   .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation: none !important; transition: none !important; }
   .reduce-motion #dmgVignette.lowhp { opacity: .25; }
   @media (max-width: 760px) { #hudTop { left: 8px; top: 8px; transform: none; gap: 5px; } .hud-chip { padding: 6px 8px; font-size: .75rem; } #qTimer { top: 51px; right: 8px; } #skillBtn { top: 92px; right: 8px; } #hudObjective { top: 138px; right: 8px; max-width: 240px; } .card { padding: 24px 18px; } }
+  /* Reactor Frontier: the same generated world introduces the run and surrounds it. */
+  #authScreen, #menuScreen {
+    background: linear-gradient(180deg, rgba(4,15,24,.38), rgba(4,12,20,.94)), url('assets/science-strike/reactor-panorama.webp') center / cover fixed;
+  }
+  #menuScreen > .card, #authScreen > .card {
+    background: rgba(9,23,34,.94); border-color: #355c68; border-radius: 14px;
+    box-shadow: 0 28px 90px #02090ed9, inset 0 1px 0 #9cfff016;
+  }
+  .strike-kicker { color: #6cddcf; font: 700 .68rem monospace; letter-spacing: .24em; margin-bottom: 12px; }
+  #menuScreen h1, #authScreen h1 { font-size: clamp(2rem, 6vw, 3rem); font-weight: 900; letter-spacing: -.04em; text-transform: uppercase; }
+  .strike-armory { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin: 20px 0; text-align: left; }
+  .strike-armory figure { overflow: hidden; background: linear-gradient(140deg,#25465660,#07151f); border: 1px solid #34545e; border-radius: 8px; }
+  .strike-armory img { display: block; width: 100%; height: 76px; object-fit: contain; }
+  .strike-armory figcaption { padding: 5px 8px 9px; color: #b9ced6; font: 600 .61rem monospace; letter-spacing: .06em; }
+  #hudBottomRight { padding: 14px 18px; background: linear-gradient(110deg,#071720db,#112b35f2); border: 1px solid #476c78; border-right: 3px solid #70e4d0; border-radius: 8px; min-width: 230px; }
+  #wpnStatus { color: #a0c5cf; font: 600 11px monospace; margin-top: 5px; letter-spacing: .06em; }
+  #wpnMagTrack { height: 3px; margin-top: 10px; background: #35505b; border-radius: 2px; overflow: hidden; }
+  #wpnMagFill { height: 100%; background: #72dfcd; width: 100%; }
+  @media (max-width: 480px) { .strike-armory { grid-template-columns: repeat(2,1fr); } #hudBottomRight { min-width: 180px; } }
 </style>
 </head>
 <body>
@@ -307,7 +326,8 @@
 <!-- ========== AUTH ========== -->
 <div class="screen active" id="authScreen">
   <div class="card">
-    <h1>🔫 Science Strike</h1>
+    <div class="strike-kicker">REACTOR FRONTIER / ROGUELITE FPS</div>
+    <h1>Science Strike</h1>
     <p class="sub">A roguelite open-world shooter. Survive infinite waves under an open sky, grab rarer and rarer loot — and keep your science streak alive to boost your luck.</p>
     <button class="btn" id="signInBtn">Sign in with Google</button>
     <p class="sub" style="margin-top:18px;font-size:0.8rem;">Same account as Science Quest.</p>
@@ -317,9 +337,16 @@
 
 <!-- ========== MENU ========== -->
 <div class="screen" id="menuScreen">
-  <div class="card" style="max-width:620px;">
-    <h1>🔫 Science Strike</h1>
+  <div class="card" style="max-width:700px;">
+    <div class="strike-kicker">REACTOR FRONTIER / FIELD OPERATIONS</div>
+    <h1>Science Strike</h1>
     <p class="sub" id="menuHello">Open world. Infinite waves. Every 15 seconds, science decides your luck.</p>
+    <div class="strike-armory" aria-label="Discover these weapon families as you collect loot">
+      <figure><img src="assets/science-strike/weapon-blaster.png" alt="Ivory and teal energy blaster"><figcaption>01 / BLASTER</figcaption></figure>
+      <figure><img src="assets/science-strike/weapon-assault.png" alt="Research carbine with orange magazine"><figcaption>02 / AUTOMATIC</figcaption></figure>
+      <figure><img src="assets/science-strike/weapon-scatter.png" alt="Heavy double barrel scattergun"><figcaption>03 / SCATTER</figcaption></figure>
+      <figure><img src="assets/science-strike/weapon-rail.png" alt="Cyan coil precision rail rifle"><figcaption>04 / PRECISION</figcaption></figure>
+    </div>
     <div class="mission-card">
       <p><b>Your mission:</b> clear each wave, collect a better weapon and choose an upgrade. A science check pauses the action every 15 seconds of play.</p>
       <p>Move with <b>W A S D</b>, aim with the <b>mouse</b>, click to shoot. <b>Shift</b> quicksteps out of danger. <b>Esc</b> pauses safely. Take your time with questions — enemies wait.</p>
@@ -404,6 +431,8 @@
   <div class="hud" id="hudBottomRight">
     <div id="wpnName">Blaster</div>
     <div id="wpnAmmo">12 <span class="rl">/ ∞</span></div>
+    <div id="wpnStatus">BLASTER · R RELOAD</div>
+    <div id="wpnMagTrack"><div id="wpnMagFill"></div></div>
   </div>
 
   <div class="hud" id="pickupBar"></div>
@@ -472,7 +501,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v1.9.4</div>
+<div id="versionBadge">Science Strike v2.0.0 · Reactor Frontier</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -1440,11 +1469,19 @@ function noiseBurst(dur, vol, filterFreq, endFreq, delay) {
 }
 let lastHitSfx = 0;
 const sfx = {
-  shoot(kind) {
+  shoot(kind, weaponKey) {
     if (kind === 'bolt') { blip(430, 0.12, 'triangle', 0.3, 130); noiseBurst(0.05, 0.12, 2500); }
     else if (kind === 'beam') { blip(920, 0.15, 'sawtooth', 0.22, 190); }
     else if (kind === 'stream') { blip(210, 0.08, 'sine', 0.16, 110); }
-    else { noiseBurst(0.09, 0.4, 3200); blip(170, 0.06, 'square', 0.22, 60); }
+    else if (weaponKey === 'scatter') {
+      noiseBurst(0.22, 0.48, 2400, 180); blip(94, 0.17, 'triangle', 0.35, 32);
+      blip(540, 0.035, 'square', 0.1, 210, 0.16);
+    } else if (weaponKey === 'rail' || weaponKey === 'dmr') {
+      noiseBurst(0.14, 0.4, 5200, 450); blip(460, 0.16, 'sawtooth', 0.18, 80);
+      blip(78, 0.2, 'triangle', 0.25, 30);
+    } else if (weaponKey === 'pulse') {
+      noiseBurst(0.045, 0.26, 4200, 1200); blip(270, 0.045, 'square', 0.16, 120);
+    } else { noiseBurst(0.075, 0.36, 3600, 680); blip(155, 0.08, 'triangle', 0.26, 45); }
   },
   hit() {   // short tick — throttled so plasma streams don't machine-gun it
     const n = performance.now();
@@ -1632,7 +1669,7 @@ function startRun() {
     wave: 1, breakT: 0,
     cls,
     player: {
-      x: 1, y: 1, dir: -Math.PI / 4, pitch: 0,   // start on a road crossing, looking into the world
+      x: 1.5, y: 1.5, dir: 0, pitch: 0,   // face along the clear outpost road
       hp: 1, maxHp: 1,
       speedMult: 1, dmgMult: 1, magMult: 1,
     },
@@ -1688,6 +1725,8 @@ function equipWeapon(w) {
   G.weapon = w;
   G.ammo = magSize();
   G.reloading = 0;
+  G.fireCd = 0;
+  G.triggerQueued = 0;
   updateHud();
 }
 function magSize() { return Math.max(1, Math.round(G.weapon.mag * G.player.magMult * (1 + (G.mods.mag || 0) * 0.25))); }
@@ -1879,7 +1918,7 @@ let lockWanted = false, lockTicket = 0;
 let mouseDown = false, adsHeld = false;
 let swayX = 0, swayY = 0, swayVX = 0, swayVY = 0;
 function resetCombatInput() {
-  if (G) { G.dodgeT = 0; G.dodgeVector = null; }
+  if (G) { G.dodgeT = 0; G.dodgeVector = null; G.triggerQueued = 0; }
   for (const code of Object.keys(keys)) delete keys[code];
   mouseDown = false; adsHeld = false;
   swayX = swayY = swayVX = swayVY = 0;
@@ -2022,7 +2061,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => { delete keys[e.code]; });
 canvas.addEventListener('mousedown', e => {
   if (!combatReady()) return;
-  if (e.button === 0) mouseDown = true;
+  if (e.button === 0) { mouseDown = true; G.triggerQueued = 0.16; }
   if (e.button === 2) adsHeld = true;
 });
 document.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; if (e.button === 2) adsHeld = false; });
@@ -2068,7 +2107,11 @@ function critMult() {
 }
 function pierceCount(w) { return (w.arch.pierce || 0) + skillLv('piercing'); }
 function abilityCdMult() { return Math.max(0.4, 1 - skillLv('gadgeteer') * 0.05 - skillLv('cap_warlord') * 0.2); }
-function bulletSpeed(w) { return (w.arch.speed || 34) * (1 + skillLv('ballistics') * 0.08); }
+function bulletSpeed(w) {
+  // Ballistic rounds feel immediate at arena distances. Bolts and plasma keep
+  // their slower, readable travel and remain distinct from the instant laser.
+  return (w.arch.speed || 34) * (w.arch.proj === 'bullet' ? 3.5 : 1) * (1 + skillLv('ballistics') * 0.08);
+}
 
 function startReload() {
   if (G.reloading > 0 || G.ammo >= magSize()) return;
@@ -2085,46 +2128,92 @@ function currentSpreadDeg() {
   s *= 1 - Math.min(0.92, 0.65 + skillLv('breathcontrol') * 0.03) * (G.ads || 0);
   return Math.max(0.05, s);
 }
+// Capture the camera at the trigger, rather than borrowing HOR/ZOOM from the
+// previous render. Mouse movement and recoil between frames must aim where the
+// next frame's crosshair points. All shot types use this same projection.
+function strikeShotAim() {
+  const P = G.player;
+  const scope = G.weapon.arch.scope ? G.weapon.arch.scope + skillLv('scopemaster') * 0.5 : 1;
+  const dir = P.dir + (G.yawKick || 0);
+  return { x: P.x, y: P.y, dir, zoom: 1 + (scope - 1) * (G.ads || 0),
+    hor: Math.max(70, Math.min(REND_H - 40, REND_H / 2 + (P.pitch || 0) + Math.min(70, G.viewKick || 0))) };
+}
+function strikeShotBand(e, aim) {
+  const depth = (e.x - aim.x) * Math.cos(aim.dir) + (e.y - aim.y) * Math.sin(aim.dir);
+  if (depth <= 0.05) return null;
+  const scale = REND_H * aim.zoom / depth;
+  const height = scale * 0.95 * e.size;
+  const fraction = (REND_H / 2 - (aim.hor + scale * 0.48 - height)) / height;
+  if (fraction < 0 || fraction > 1) return null;
+  const band = critBand(e);
+  return { crit: fraction >= band[0] && fraction <= band[1] };
+}
+function strikeShotHeight(aim, x, y) {
+  const depth = (x - aim.x) * Math.cos(aim.dir) + (y - aim.y) * Math.sin(aim.dir);
+  return 0.48 + (aim.hor - REND_H / 2) * depth / (REND_H * aim.zoom);
+}
 function shoot() {
   const w = G.weapon;
-  if (G.fireCd > 0 || G.reloading > 0) return;
-  if (G.ammo <= 0) { startReload(); return; }
+  if (G.fireCd > 1e-8 || G.reloading > 0) return false;
+  if (G.ammo <= 0) { startReload(); return false; }
   G.ammo--;
-  G.fireCd = 1 / effRof(w);
+  G.fireCd += 1 / effRof(w);
+  const aim = strikeShotAim();
   const shots = (w.special && w.special.key === 'twin') ? 2 : 1;
   for (let s = 0; s < shots; s++) {
     for (let p = 0; p < w.pellets; p++) {
       const sp = currentSpreadDeg() * Math.PI / 180;
-      const a = G.player.dir + (Math.random() - 0.5) * 2 * sp;
-      if (w.arch.proj === 'beam') fireBeam(a, w);
-      else spawnBullet(a, w, w.arch.proj);   // bullet / bolt / stream — all real projectiles
+      // A stratified fan stops shotgun pellets randomly bunching into one ray.
+      const spread = w.pellets > 1 ? ((p + Math.random()) / w.pellets * 2 - 1) : (Math.random() - 0.5) * 2;
+      const a = aim.dir + spread * sp;
+      if (w.arch.proj === 'beam') fireBeam(a, w, aim);
+      else spawnBullet(a, w, w.arch.proj, aim);
     }
   }
   // drafted +1 PROJECTILE: one extra round per stack, fired with a slight angle
   // offset (on a scattergun this simply reads as one more pellet)
   for (let x = 0; x < (G.mods.projectile || 0); x++) {
     const sp = currentSpreadDeg() * Math.PI / 180;
-    const a = G.player.dir + (Math.random() - 0.5) * 2 * sp + 0.035;
-    if (w.arch.proj === 'beam') fireBeam(a, w);
-    else spawnBullet(a, w, w.arch.proj);
+    const a = aim.dir + (Math.random() - 0.5) * 2 * sp + 0.035;
+    if (w.arch.proj === 'beam') fireBeam(a, w, aim);
+    else spawnBullet(a, w, w.arch.proj, aim);
   }
   // recoil: crosshair bloom + camera view-kick (muzzle climb) + aim drift + gun kickback
   const adsCalm = 1 - 0.6 * (G.ads || 0);   // scoping in soaks most of the kick
   const wind = 1 - skillLv('windreader') * 0.08;
-  G.bloomNow = Math.min(G.bloomNow + w.kick * w.bloom * 0.8 * adsCalm, 10);
-  G.viewKick = Math.min(70, (G.viewKick || 0) + w.kick * 4.5 * adsCalm * wind);
-  // small random YAW kick too — applied to the camera as a decaying offset
-  // (G.yawKick recenters on its own, unlike the permanent CS-style drift below)
+  G.bloomNow = Math.min(G.bloomNow + w.kick * w.bloom * 0.38 * adsCalm, 6);
+  G.viewKick = Math.min(36, (G.viewKick || 0) + w.kick * 2.2 * adsCalm * wind);
+  // Small yaw kick recenters on its own so precise taps return to the same aim.
   G.yawKick = (G.yawKick || 0) + (Math.random() - 0.5) * w.kick * 0.002 * adsCalm * wind;
   G.gunKick = 1;
-  G.player.dir += (Math.random() - 0.5) * 0.004 * w.kick * adsCalm * wind;
   G.flash = 0.07;
-  sfx.shoot(w.arch.proj);
+  sfx.shoot(w.arch.proj, w.arch.key);
   // eject a brass casing — screen-space, arcs right off the viewmodel
   G.casings.push({ x: REND_W / 2 + 150 + Math.random() * 22, y: REND_H - 118, vx: 130 + Math.random() * 90, vy: -150 - Math.random() * 70, rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 22, t: 0.6 });
   if (G.casings.length > 24) G.casings.shift();
   if (G.ammo <= 0) startReload();
   updateHud();
+  return true;
+}
+// Keep fractional cooldown debt across frames. Holding an SMG at 30fps now has
+// the same cadence as 144fps; a quick press/release is buffered for 160ms.
+function strikeUpdateWeapon(dt) {
+  G.fireCd = G.fireCd > 0 ? G.fireCd - dt : 0;
+  if (G.reloading > 0) {
+    G.reloading -= dt;
+    if (G.reloading <= 0) {
+      G.fireCd = Math.max(G.fireCd, G.reloading);
+      G.reloading = 0; G.ammo = magSize(); sfx.reloadEnd(); updateHud();
+    }
+  }
+  if (mouseDown || G.triggerQueued > 0) {
+    for (let n = 0; n < 6 && G.fireCd <= 1e-8 && G.reloading <= 0; n++) {
+      if (!shoot()) break;
+      G.triggerQueued = 0;
+      if (!mouseDown) break;
+    }
+  } else G.fireCd = Math.max(0, G.fireCd);
+  G.triggerQueued = Math.max(0, (G.triggerQueued || 0) - dt);
 }
 // One shot's damage to one victim, with crit + finisher skills applied.
 function playerShotDamage(w, crit, victim) {
@@ -2147,7 +2236,8 @@ function solidShot(x, y) {
 // actually is in the art), widened by the sniper's Hollow Point skill.
 function critBand(e) {
   const t = ENEMY_INDEX[e.type];
-  const b = (t && t.crit) || [0.08, 0.22];
+  const artBand = typeof strikeEnemyArtBand === 'function' ? strikeEnemyArtBand(e) : null;
+  const b = artBand || (t && t.crit) || [0.08, 0.22];
   const wdn = skillLv('hollowpoint') * 0.012;
   return [Math.max(0.02, b[0] - wdn), Math.min(0.9, b[1] + wdn)];
 }
@@ -2160,8 +2250,8 @@ function critBand(e) {
 // training-wheels aim assist: bullet/bolt shots whose ray passes within ~0.6°
 // of an enemy's crit band snap onto the crit. Deliberately tiny and silent —
 // NOT applied to beams (already instant) or plasma streams.
-function aimAssist(angle) {
-  const P = G.player;
+function aimAssist(angle, aim = strikeShotAim()) {
+  const P = aim;
   const win = 0.6 * Math.PI / 180;
   let best = null, bestD = 1e9;
   for (const e of G.enemies) {
@@ -2173,22 +2263,19 @@ function aimAssist(angle) {
     if (!lineOfSight(P.x, P.y, e.x, e.y)) continue;
     // the snap only helps if the frozen vertical aim actually crosses the
     // crit band at this range (same geometry updatePProj uses)
-    const sizeS = REND_H * ZOOM / d0;
-    const eh = sizeS * 0.95 * e.size;
-    const top = HOR + sizeS * 0.48 - eh;
-    const band = critBand(e);
-    const aimY = REND_H / 2;
-    if (aimY < top + eh * band[0] || aimY > top + eh * band[1]) continue;
+    if (!strikeShotBand(e, aim)?.crit) continue;
     if (d0 < bestD) { bestD = d0; best = e; }
   }
   return best ? Math.atan2(best.y - P.y, best.x - P.x) : angle;
 }
-function spawnBullet(angle, w, kind) {
-  const P = G.player;
-  if (kind === 'bullet' || kind === 'bolt') angle = aimAssist(angle);
+function spawnBullet(angle, w, kind, aim = strikeShotAim()) {
+  const P = aim;
+  if (kind === 'bullet' || kind === 'bolt') angle = aimAssist(angle, aim);
   const sp = bulletSpeed(w);
   const range = kind === 'stream' ? (w.arch.range || 6) : effRange();
-  const ox = P.x + Math.cos(angle) * 0.4, oy = P.y + Math.sin(angle) * 0.4;   // leaves the nozzle
+  // Start at the camera so nearby enemies and tree trunks cannot be skipped by
+  // placing the projectile on the far side of them.
+  const ox = P.x, oy = P.y;
   G.pProj.push({
     kind, x: ox, y: oy, ox, oy,
     dx: Math.cos(angle) * sp, dy: Math.sin(angle) * sp,
@@ -2196,59 +2283,86 @@ function spawnBullet(angle, w, kind) {
     pierce: 1 + (kind === 'stream' ? 0 : pierceCount(w)),
     falloff: 1,
     hitSet: new Set(),
-    hor0: HOR, zoom0: ZOOM,          // aim geometry frozen at the muzzle
+    aim,                            // camera geometry frozen at the trigger
     trail: [],                       // recent world positions — the visible tracer
   });
 }
 function bulletImpact(p) {
   // 2–3 spark chips wherever the bullet stops (enemy or tree trunk)
   const col = p.kind === 'stream' ? '#8ee6ff' : '#ffd9a0';
+  const z = strikeShotHeight(p.aim, p.x, p.y);
+  // Fast rounds may hit and leave the projectile list within one frame. Keep
+  // their final path briefly so the firing feedback survives at every fps.
+  if (p.kind === 'bullet') G.particles.push({ kind: 'ballisticTrace', x0: p.ox, y0: p.oy,
+    x1: p.x, y1: p.y, aim: p.aim, t: 0.09, color: col });
   const n = 2 + (Math.random() < 0.5 ? 1 : 0);
   for (let i = 0; i < n; i++) {
-    G.particles.push({ kind: 'spark', x: p.x + (Math.random() - 0.5) * 0.22, y: p.y + (Math.random() - 0.5) * 0.22, t: 0.13 + Math.random() * 0.07, color: col });
+    G.particles.push({ kind: 'spark', x: p.x + (Math.random() - 0.5) * 0.22, y: p.y + (Math.random() - 0.5) * 0.22, z, t: 0.13 + Math.random() * 0.07, color: col });
   }
-  sfx.hit();
+}
+// Earliest intersection of a moving projectile and an enemy's circular body.
+// Sweeping the complete segment prevents fast rail slugs missing small minions.
+function strikeSegmentHit(x, y, nx, ny, cx, cy, radius) {
+  const dx = nx - x, dy = ny - y, ox = x - cx, oy = y - cy;
+  const a = dx * dx + dy * dy, c = ox * ox + oy * oy - radius * radius;
+  if (c <= 0) return 0;
+  if (a <= 1e-12) return null;
+  const b = ox * dx + oy * dy, disc = b * b - a * c;
+  if (disc < 0) return null;
+  const t = (-b - Math.sqrt(disc)) / a;
+  return t >= 0 && t <= 1 ? t : null;
 }
 function updatePProj(dt) {
-  const aimY = REND_H / 2;
   for (const p of G.pProj) {
     if (p.t <= 0) continue;
-    p.t -= dt;
+    const travel = Math.min(dt, p.t);
+    p.t -= travel;
     p.trail.push({ x: p.x, y: p.y });   // breadcrumb for the tracer trail
     if (p.trail.length > 7) p.trail.shift();
-    const steps = 3;   // sub-step so 60 u/s rail slugs can't tunnel through enemies
-    outer:
-    for (let s = 0; s < steps; s++) {
-      p.x += p.dx * dt / steps; p.y += p.dy * dt / steps;
-      if (solidShot(p.x, p.y)) { bulletImpact(p); p.t = 0; break; }
-      for (const e of G.enemies) {
-        if (e.hp <= 0 || p.hitSet.has(e)) continue;
-        if (Math.hypot(e.x - p.x, e.y - p.y) >= 0.4 * e.size) continue;
-        // vertical check: the bullet flies along the crosshair line — the aim
-        // captured at the muzzle decides head/body/miss at this distance
-        const d0 = Math.max(0.25, Math.hypot(e.x - p.ox, e.y - p.oy));
-        const sizeS = REND_H * (p.zoom0 || 1) / d0;
-        const eh = sizeS * 0.95 * e.size;
-        const top = (p.hor0 || REND_H / 2) + sizeS * 0.48 - eh;
-        if (aimY < top || aimY > top + eh) continue;     // sails over / under this one
-        p.hitSet.add(e);
-        const band = critBand(e);
-        const crit = p.kind !== 'stream'
-          && aimY > top + eh * band[0] && aimY < top + eh * band[1]
-          && Math.hypot(e.x - p.x, e.y - p.y) < 0.2 * e.size;
-        const dmg = Math.round(playerShotDamage(p.w, crit, e) * p.falloff * (p.kind === 'stream' ? 0.9 : 1));
-        damageEnemy(e, dmg, p.w, true, crit);
-        if (p.kind === 'stream' && e.hp > 0) { e.burn = Math.max(e.burn, 1.5); e.burnDps = Math.max(e.burnDps || 0, dmg * 0.4); }
-        p.pierce--; p.falloff *= 0.7;
-        if (p.pierce <= 0) { bulletImpact(p); p.t = 0; break outer; }
-      }
+    const x = p.x, y = p.y, nx = x + p.dx * travel, ny = y + p.dy * travel;
+    const length = Math.hypot(nx - x, ny - y);
+    let wallT = 1;
+    let hitWall = false;
+    // Trunk sampling is distance-based, independent of velocity or frame rate.
+    const steps = Math.max(1, Math.ceil(length / 0.1));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      if (solidShot(x + (nx - x) * t, y + (ny - y) * t)) { wallT = t; hitWall = true; break; }
     }
+    const hits = [];
+    for (const e of G.enemies) {
+      if (e.hp <= 0 || p.hitSet.has(e)) continue;
+      const t = strikeSegmentHit(x, y, nx, ny, e.x, e.y, 0.4 * e.size);
+      if (t === null || t > wallT || hitWall && t === wallT) continue;
+      const band = strikeShotBand(e, p.aim);
+      if (!band) continue;
+      // Headshots use the shot's lateral distance to the head centre, rather
+      // than where a simulation step happened to end inside the body.
+      const speed = Math.hypot(p.dx, p.dy);
+      const perp = Math.abs((e.x - p.aim.x) * p.dy - (e.y - p.aim.y) * p.dx) / speed;
+      hits.push({ e, t, crit: p.kind !== 'stream' && band.crit && perp < 0.2 * e.size });
+    }
+    hits.sort((a, b) => a.t - b.t);
+    for (const hit of hits) {
+      const e = hit.e;
+      if (e.hp <= 0) continue;
+      p.x = x + (nx - x) * hit.t; p.y = y + (ny - y) * hit.t;
+      p.hitSet.add(e);
+      const dmg = Math.round(playerShotDamage(p.w, hit.crit, e) * p.falloff * (p.kind === 'stream' ? 0.9 : 1));
+      damageEnemy(e, dmg, p.w, true, hit.crit);
+      if (p.kind === 'stream' && e.hp > 0) { e.burn = Math.max(e.burn, 1.5); e.burnDps = Math.max(e.burnDps || 0, dmg * 0.4); }
+      p.pierce--; p.falloff *= 0.7;
+      if (p.pierce <= 0) { bulletImpact(p); p.t = 0; break; }
+    }
+    if (p.pierce <= 0) continue;
+    p.x = x + (nx - x) * wallT; p.y = y + (ny - y) * wallT;
+    if (hitWall) { bulletImpact(p); p.t = 0; }
   }
   G.pProj = G.pProj.filter(p => p.t > 0);
 }
 // Laser: the one instant weapon — a piercing light beam.
-function fireBeam(angle, w) {
-  const px = G.player.x, py = G.player.y;
+function fireBeam(angle, w, aim = strikeShotAim()) {
+  const px = aim.x, py = aim.y;
   const dx = Math.cos(angle), dy = Math.sin(angle);
   const range = effRange();
   let wallD = range;
@@ -2263,26 +2377,21 @@ function fireBeam(angle, w) {
     if (perp < 0.36 * e.size) cands.push({ e, t, perp });
   }
   cands.sort((a, b) => a.t - b.t);
-  const aimY = REND_H / 2;
   let remaining = 1 + pierceCount(w);
   let falloff = 1;
   let hitD = wallD;
   const victims = [];
   for (const c of cands) {
     if (remaining <= 0) break;
-    const size = REND_H * ZOOM / c.t;
-    const eh = size * 0.95 * c.e.size;
-    const top = HOR + size * 0.48 - eh;
-    if (aimY < top || aimY > top + eh) continue;
-    const band = critBand(c.e);
-    const crit = aimY > top + eh * band[0] && aimY < top + eh * band[1] && c.perp < 0.16 * c.e.size;
+    const band = strikeShotBand(c.e, aim);
+    if (!band) continue;
+    const crit = band.crit && c.perp < 0.2 * c.e.size;
     victims.push({ e: c.e, crit, falloff });
     hitD = c.t;
     remaining--;
     falloff *= 0.7;
   }
-  spawnBeam(px, py, px + dx * (victims.length ? hitD : wallD), py + dy * (victims.length ? hitD : wallD), w);
-  if (victims.length) sfx.hit();
+  spawnBeam(px, py, px + dx * (victims.length ? hitD : wallD), py + dy * (victims.length ? hitD : wallD), w, aim);
   for (const v of victims) {
     damageEnemy(v.e, Math.round(playerShotDamage(w, v.crit, v.e) * v.falloff), w, true, v.crit);
   }
@@ -2299,8 +2408,11 @@ function damageEnemy(e, dmg, w, applyEffects, crit) {
   tryMove(e, e.x + Math.cos(pa) * 0.12, e.y + Math.sin(pa) * 0.12, 0.34);
   addFloater(e, dmg, crit ? '#ffd24d' : (w && w.element !== 'none' ? ELEMENTS[w.element].color : '#fff'), crit);
   if (applyEffects) {   // direct player hits flash the crosshair hitmarker
-    G.hitmark = { t: crit ? 0.22 : 0.15, kind: crit ? 'crit' : 'hit' };
-    if (crit) sfx.crit();
+    // Preserve the strongest recent confirmation across shotgun pellets and
+    // piercing hits instead of replacing an elimination with a white body hit.
+    if (!(G.hitmark?.t > 0.12 && (G.hitmark.kind === 'kill' || G.hitmark.kind === 'crit' && !crit)))
+      G.hitmark = { t: crit ? 0.28 : 0.18, kind: crit ? 'crit' : 'hit' };
+    if (crit) sfx.crit(); else sfx.hit();
   }
   if (applyEffects && G.mods.lifesteal) healPlayer(dmg * 0.04 * G.mods.lifesteal);   // drafted: Vampiric Rounds
   if (w && applyEffects) {
@@ -2564,7 +2676,7 @@ function updateDeployables(dt) {
 
 /* ---------- effects ---------- */
 function spawnTracer(x0, y0, x1, y1, color) { G.particles.push({ kind: 'tracer', x0, y0, x1, y1, t: 0.09, color: color || '#ffd9a0' }); }
-function spawnBeam(x0, y0, x1, y1, w) { G.particles.push({ kind: 'beam', x0, y0, x1, y1, t: 0.13, color: w.element !== 'none' ? ELEMENTS[w.element].color : '#ff5ce1' }); }
+function spawnBeam(x0, y0, x1, y1, w, aim) { G.particles.push({ kind: 'beam', x0, y0, x1, y1, aim, t: 0.13, color: w.element !== 'none' ? ELEMENTS[w.element].color : '#ff5ce1' }); }
 function spawnBoom(x, y, color) {
   G.particles.push({ kind: 'boom', x, y, t: 0.4, color: color || '#ff9a3c' });
   // every explosion: distance-scaled boom sfx + screen-shake trauma
@@ -2987,7 +3099,7 @@ function tick(now) {
     else if (Math.ceil(G.cdF) !== prevSec) updateHud();
   }
   // aim-down-sights lerp (right mouse on scoped weapons)
-  const wantAds = adsHeld && G.weapon.arch.scope ? 1 : 0;
+  const wantAds = adsHeld ? 1 : 0;
   G.ads += (wantAds - G.ads) * Math.min(1, dt * 9);
   if (G.ads < 0.01 && !wantAds) G.ads = 0;
 
@@ -3010,7 +3122,7 @@ function tick(now) {
   G.dodgeT = Math.max(0, (G.dodgeT || 0) - dt);
   paintStrikeQuickstep();
   // crosshair bloom: movement raises the floor, firing spikes it, stillness settles it
-  const moveBloom = moving ? 3.2 : 0;
+  const moveBloom = moving ? (G.dodgeT > 0 ? 1.8 : 0.75) : 0;
   G.bloomNow = Math.max(moveBloom, G.bloomNow - dt * 9 * (1 + skillLv('steadyaim') * 0.06));
   // recoil recovery + weapon bob
   G.viewKick = (G.viewKick || 0) * Math.exp(-dt * 8);
@@ -3024,12 +3136,7 @@ function tick(now) {
   swayVY *= Math.exp(-dt * 12);
   if (G.flash > 0) G.flash -= dt;
   if (moving) bobT += dt;
-  if (mouseDown) shoot();
-  if (G.fireCd > 0) G.fireCd -= dt;
-  if (G.reloading > 0) {
-    G.reloading -= dt;
-    if (G.reloading <= 0) { G.reloading = 0; G.ammo = magSize(); sfx.reloadEnd(); updateHud(); }
-  }
+  strikeUpdateWeapon(dt);
 
   // infinite waves: wave wipe → upgrade draft + supply chest, THEN the 5s
   // breather (breakT is set in closeDraft so the countdown never runs behind
@@ -3162,6 +3269,7 @@ function tick(now) {
 
   renderPickupBar();
   updateQTimerHud();
+  paintStrikeWeaponHud();
   render();
 }
 
@@ -3283,9 +3391,13 @@ function ridgeNoise(a, s1, s2, s3) {
   return (Math.sin(a * 3 + s1) + Math.sin(a * 7 + s2) * 0.5 + Math.sin(a * 13 + s3) * 0.25 + 1.75) / 3.5;
 }
 function drawSky(P) {
+  if (strikeWorldArt.panorama) {
+    drawStrikePanorama(P);
+    return;
+  }
   const grd = ctx.createLinearGradient(0, 0, 0, HOR);
-  grd.addColorStop(0, '#5fb2ff');
-  grd.addColorStop(1, '#d9eeff');
+  grd.addColorStop(0, '#102b42');
+  grd.addColorStop(1, '#aec7c9');
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, REND_W, HOR);
   // sun at a fixed compass bearing — a landmark for navigation
@@ -3319,6 +3431,33 @@ function drawSky(P) {
   ctx.fillStyle = hz;
   ctx.fillRect(0, HOR - 26, REND_W, 26);
 }
+// A compass-anchored research valley. Mirrored repetitions hide the panorama's
+// outer seam; pitch and scope change framing rather than stretching the sky.
+function drawStrikePanorama(P) {
+  const img = strikeWorldArt.panorama;
+  const h = Math.max(REND_H * 0.82 * ZOOM, HOR + 90);
+  const w = h * img.naturalWidth / img.naturalHeight;
+  const span = w * 2;
+  const bearing = ((P.dir / (Math.PI * 2)) % 1 + 1) % 1;
+  const origin = -bearing * span - w;
+  const top = HOR - h * 0.92;
+  ctx.save();
+  ctx.fillStyle = '#123146'; ctx.fillRect(0, 0, REND_W, HOR);
+  for (let i = -1; i <= Math.ceil(REND_W / w) + 3; i++) {
+    const x = origin + i * w;
+    if (x + w < 0 || x > REND_W) continue;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(Math.max(0, x), 0, Math.min(REND_W, x + w) - Math.max(0, x), HOR); ctx.clip();
+    if (i % 2 === 0) { ctx.translate(x + w, 0); ctx.scale(-1, 1); ctx.drawImage(img, 0, top, w, h); }
+    else ctx.drawImage(img, x, top, w, h);
+    ctx.restore();
+  }
+  const haze = ctx.createLinearGradient(0, HOR - 75, 0, HOR);
+  haze.addColorStop(0, 'rgba(96,132,145,0)');
+  haze.addColorStop(1, 'rgba(96,132,145,0.88)');
+  ctx.fillStyle = haze; ctx.fillRect(0, Math.max(0, HOR - 75), REND_W, 75);
+  ctx.restore();
+}
 function drawRidge(P, freq, base, amp, color, s1, s2, s3, snow) {
   for (let x = 0; x < REND_W; x += 4) {
     const rel = Math.atan(((2 * x / REND_W) - 1) * TAN_HALF);
@@ -3348,24 +3487,34 @@ function drawGround(P) {
       const wx = fx + rxs * tOff, wy = fy + rys * tOff;
       const ix = Math.floor(wx), iy = Math.floor(wy);
       let r, g2, b;
-      if (isRoad(ix, iy)) {
+      const road = isRoad(ix, iy);
+      if (road) {
         const rxm = ((ix % ROAD_EVERY) + ROAD_EVERY) % ROAD_EVERY;
         const rym = ((iy % ROAD_EVERY) + ROAD_EVERY) % ROAD_EVERY;
         const dash = (rxm === 1 && rym >= 2 && ((iy % 6) + 6) % 6 < 2)
                   || (rym === 1 && rxm >= 2 && ((ix % 6) + 6) % 6 < 2);
-        if (dash) { r = 222; g2 = 214; b = 160; }              // painted centre dashes
-        else { const v = 84 + cellHash(ix, iy) * 22; r = v; g2 = v + 3; b = v + 8; }
+        if (dash) { r = 91; g2 = 203; b = 198; }              // luminous outpost wayfinding
+        else { const v = 51 + cellHash(ix, iy) * 13; r = v; g2 = v + 12; b = v + 17; }
       } else {
         const h = cellHash(ix, iy);
-        if (h > 0.976 && h < 0.988) { r = 228; g2 = 202; b = 84; }   // wildflowers
-        else if (h > 0.988) { r = 214; g2 = 224; b = 232; }          // white clover
-        else { const v = 0.8 + h * 0.35; r = 74 * v; g2 = 152 * v; b = 58 * v; }
+        if (h > 0.976 && h < 0.988) { r = 77; g2 = 172; b = 161; }   // bioluminescent moss
+        else if (h > 0.988) { r = 155; g2 = 166; b = 155; }          // mineral chips
+        else { const v = 0.8 + h * 0.35; r = 66 * v; g2 = 91 * v; b = 73 * v; }
       }
       // sub-cell micro-texture: 3×3 grain inside each block for an HD feel
       const m = 0.92 + cellHash(Math.floor(wx * 3), Math.floor(wy * 3)) * 0.16;
       r *= m; g2 *= m; b *= m;
+      // Fine seams and shoulder strips give the road a manufactured scale.
+      if (road) {
+        const fxCell = wx - ix, fyCell = wy - iy;
+        if (fxCell < 0.025 || fyCell < 0.025) { r *= 0.55; g2 *= 0.55; b *= 0.55; }
+        const rxm = ((ix % ROAD_EVERY) + ROAD_EVERY) % ROAD_EVERY;
+        const rym = ((iy % ROAD_EVERY) + ROAD_EVERY) % ROAD_EVERY;
+        if ((rxm === 0 && fxCell < 0.07) || (rxm === 1 && fxCell > 0.93)
+          || (rym === 0 && fyCell < 0.07) || (rym === 1 && fyCell > 0.93)) { r = 135; g2 = 173; b = 168; }
+      }
       // fade to the horizon sky colour with distance
-      r += (214 - r) * fog; g2 += (235 - g2) * fog; b += (250 - b) * fog;
+      r += (96 - r) * fog; g2 += (132 - g2) * fog; b += (145 - b) * fog;
       d[o] = r; d[o + 1] = g2; d[o + 2] = b; d[o + 3] = 255;
       o += 4;
     }
@@ -3502,12 +3651,13 @@ function drawTracers() {
         ctx.save(); ctx.shadowColor = p.color; ctx.shadowBlur = 10;
         ctx.fillStyle = p.color;
         ctx.globalAlpha = Math.max(0, p.t / 0.18);
-        ctx.beginPath(); ctx.arc(pt.x, HOR + Math.min(40, pt.perp), r, 0, 7); ctx.fill();
+        const sy = Number.isFinite(p.z) ? HOR + REND_H * ZOOM / pt.perp * (0.48 - p.z) : HOR + Math.min(40, pt.perp);
+        ctx.beginPath(); ctx.arc(pt.x, sy, r, 0, 7); ctx.fill();
         ctx.globalAlpha = 1; ctx.restore();
       }
       continue;
     }
-    if (p.kind !== 'tracer' && p.kind !== 'beam') continue;
+    if (p.kind !== 'tracer' && p.kind !== 'beam' && p.kind !== 'ballisticTrace') continue;
     const end = projectPoint(p.x1, p.y1);
     if (!end) continue;
     // from roughly the viewmodel muzzle toward the impact point
@@ -3515,7 +3665,8 @@ function drawTracers() {
     ctx.globalAlpha = Math.max(0, p.t / life) * 0.85;
     ctx.beginPath();
     ctx.moveTo(REND_W / 2 + 70, REND_H - 150);
-    ctx.lineTo(end.x, HOR + Math.min(40, end.perp));
+    const endY = p.aim ? HOR + REND_H * ZOOM / end.perp * (0.48 - strikeShotHeight(p.aim, p.x1, p.y1)) : HOR + Math.min(40, end.perp);
+    ctx.lineTo(end.x, endY);
     if (p.kind === 'beam') {
       ctx.save(); ctx.shadowColor = p.color; ctx.shadowBlur = 14;
       ctx.strokeStyle = p.color; ctx.lineWidth = 6; ctx.stroke();
@@ -3664,7 +3815,8 @@ function drawSprite(s) {
       const pt = projectPoint(wx, wy);
       if (!pt) return null;
       const frac = Math.min(1, Math.hypot(wx - p.ox, wy - p.oy) / 6);
-      return { x: pt.x, y: my + (REND_H / 2 - my) * frac, perp: pt.perp };
+      const shotY = HOR + REND_H * ZOOM / pt.perp * (0.48 - strikeShotHeight(p.aim, wx, wy));
+      return { x: pt.x, y: my + (shotY - my) * frac, perp: pt.perp };
     };
     const pts = [];
     for (const tp of p.trail) { const q = project(tp.x, tp.y); if (q) pts.push(q); }
@@ -3722,7 +3874,7 @@ function drawSprite(s) {
   if (s.kind === 'corpse') {
     // fallen monster: tips over, sinks into the grass and fades (visual only)
     const c = s.c, ce = c.e;
-    const cspr = enemySprites[ce.type] || enemySprites.crawler;
+    const cspr = strikeEnemySprite(ce);
     const ceh = size * 0.95 * ce.size;
     const cew = ceh * (SPR_W / SPR_H);
     const prog = 1 - c.t / 1.2;                      // 0 → 1 over the corpse's life
@@ -3740,7 +3892,7 @@ function drawSprite(s) {
   }
   // enemy — pre-rendered detailed sprite: 2-frame walk cycle, white flash on hit
   const e = s.e;
-  const spr = enemySprites[e.type] || enemySprites.crawler;
+  const spr = strikeEnemySprite(e);
   // spawn-in: scales up from 0.2 over e.spawnT; hit-flash adds a squash pulse
   let scaleM = 1;
   if ((e.spawnT || 0) > 0) scaleM = 0.2 + 0.8 * (1 - e.spawnT / 0.35);
@@ -3835,6 +3987,64 @@ function drawClipped(screenX, w, perp, drawFn) {
 /* ---------- pre-rendered enemy sprites (proper monsters, not blobs) ---------- */
 const SPR_W = 96, SPR_H = 128;
 const enemySprites = {};
+// Generated art is optional at runtime: procedural sprites remain available
+// immediately and are also the fallback if a local asset cannot be decoded.
+const strikeWorldArt = { loaded: [], failed: [], enemies: {} };
+const STRIKE_ENEMY_ART = {
+  sentinel: ['sentinel', 0], hunterdroid: ['sentinel', 34], scrapwalker: ['sentinel', 185],
+  pylonmech: ['sentinel', 250], siegegolem: ['sentinel', 315],
+  crawler: ['stalker', 0], voltspider: ['stalker', 55],
+};
+function strikeEnemySprite(e) {
+  return strikeWorldArt.enemies[e.type] || enemySprites[e.type] || enemySprites.crawler;
+}
+function strikeEnemyArtBand(e) {
+  return strikeWorldArt.enemies[e.type]?.crit || null;
+}
+function strikeLoadWorldImage(key, src, ready) {
+  const image = new Image();
+  image.decoding = 'async';
+  image.onload = () => {
+    try { ready(image); strikeWorldArt.loaded.push(key); }
+    catch (_) { strikeWorldArt.failed.push(key); }
+  };
+  image.onerror = () => strikeWorldArt.failed.push(key);
+  image.src = src;
+}
+function strikeGeneratedEnemy(source, hue, family) {
+  // Work at four times the old sprite resolution. All color variants and hit
+  // flashes are baked once, so the combat renderer only needs drawImage.
+  const W = 384, H = 512;
+  const fit = Math.min((W - 12) / source.naturalWidth, (H - 8) / source.naturalHeight);
+  const w = source.naturalWidth * fit, h = source.naturalHeight * fit;
+  const make = draw => {
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    draw(c.getContext('2d')); return c;
+  };
+  const frames = [0, 1].map(frame => make(g => {
+    g.filter = hue ? 'hue-rotate(' + hue + 'deg)' : 'none';
+    g.translate(W / 2, H - 4);
+    g.transform(1, 0, frame ? 0.012 : -0.012, 1, 0, 0);
+    g.drawImage(source, -w / 2, -h, w, h);
+  }));
+  const white = frames.map(src => make(g => {
+    g.drawImage(src, 0, 0); g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = 'rgba(219,255,255,0.78)'; g.fillRect(0, 0, W, H);
+  }));
+  // Measured from the generated files: the sentinel visor is near 8% of the
+  // portrait, while the stalker's paired eyes sit around 43% of its image.
+  const sourceBand = family === 'stalker' ? [0.36, 0.49] : [0.035, 0.14];
+  // The source may be square or portrait. Include its actual letterboxing in
+  // hit geometry so eyes and critical hits stay together at every distance.
+  const crit = sourceBand.map(y => (H - 4 - h + h * y) / H);
+  return { frames, white, generated: true, crit };
+}
+function strikeInstallEnemyArt(family, image) {
+  for (const [type, [base, hue]] of Object.entries(STRIKE_ENEMY_ART)) {
+    if (base === family) strikeWorldArt.enemies[type] = strikeGeneratedEnemy(image, hue, family);
+  }
+  strikeWorldArt[family] = strikeWorldArt.enemies[family === 'stalker' ? 'crawler' : 'sentinel'];
+}
 function sprCanvas(draw) { const c = document.createElement('canvas'); c.width = SPR_W; c.height = SPR_H; draw(c.getContext('2d')); return c; }
 // crisp dark outline around every monster so they pop against the terrain
 function outlined(src) {
@@ -4082,12 +4292,33 @@ function drawEnemyArt(g, type, f) {
   }
 }
 buildEnemySprites();
+strikeLoadWorldImage('panorama', 'assets/science-strike/reactor-panorama.webp', image => { strikeWorldArt.panorama = image; });
+strikeLoadWorldImage('sentinel', 'assets/science-strike/enemy-sentinel.png', image => strikeInstallEnemyArt('sentinel', image));
+strikeLoadWorldImage('stalker', 'assets/science-strike/enemy-stalker.png', image => strikeInstallEnemyArt('stalker', image));
 
-/* ---------- blocky Minecraft-style world props (12×16 pixel grid) ---------- */
+/* ---------- cached research-outpost props and valley vegetation ---------- */
 const obstacleSprites = {};
 function buildObstacleSprites() {
   const palettes = [['#244d3f','#347654','#589363','#8ab875'], ['#203e42','#2f6155','#468673','#81b79b'], ['#395339','#627d45','#89a657','#c1c780']];
   obstacleSprites.tree = palettes.map((colors, variant) => sprCanvas(g => {
+    if (variant === 1) {
+      // Survey beacons share the tree cell and collision radius, keeping the
+      // original safe road grid while giving the valley recognizable landmarks.
+      g.fillStyle = '#182a35'; g.beginPath(); g.moveTo(19,126); g.lineTo(28,112); g.lineTo(67,112); g.lineTo(77,126); g.closePath(); g.fill();
+      g.fillStyle = '#5d747d'; g.fillRect(33,29,30,86);
+      g.fillStyle = '#92a6a8'; g.fillRect(33,29,3,86);
+      g.fillStyle = '#273b48'; g.fillRect(60,29,3,86);
+      g.fillStyle = '#172833'; g.fillRect(37,36,22,61);
+      g.fillStyle = '#507480'; g.fillRect(29,26,38,9); g.fillRect(29,101,38,10);
+      g.fillStyle = '#77e9de'; g.fillRect(42,43,11,40);
+      g.fillStyle = '#caffef'; g.fillRect(42,43,4,40);
+      for (let y = 88; y < 101; y += 4) { g.fillStyle = '#263b49'; g.fillRect(38,y,20,2); }
+      g.fillStyle = '#213d4d'; g.beginPath(); g.moveTo(25,25); g.lineTo(32,13); g.lineTo(64,13); g.lineTo(71,25); g.closePath(); g.fill();
+      g.fillStyle = '#b0d0ce'; g.fillRect(35,13,26,3);
+      g.fillStyle = '#2f5961'; g.fillRect(46,3,4,10);
+      g.fillStyle = '#f3be6e'; g.fillRect(45,2,6,4);
+      return;
+    }
     g.fillStyle = '#45382c'; g.fillRect(42, 61, 12, 65);
     g.fillStyle = variant === 2 ? '#c9c5ae' : '#876c49'; g.fillRect(43, 62, 5, 62);
     for (let y = 71; y < 120; y += 11) { g.fillStyle = '#493d30'; g.fillRect(43 + y % 3, y, 7, 2); }
@@ -4103,6 +4334,10 @@ function buildObstacleSprites() {
       const x=21+cellHash(k,variant)*52, y=14+cellHash(variant+8,k)*52;
       g.fillStyle=colors[k%3===0?3:2]; g.fillRect(x,y,3+k%4,2);
     }
+    if (variant === 2) {
+      g.fillStyle = '#75cbb4';
+      for (let k = 0; k < 5; k++) { g.beginPath(); g.arc(28 + k * 10, 50 + Math.sin(k * 2) * 11, 2.4, 0, 7); g.fill(); }
+    }
   }));
   obstacleSprites.rock = palettes.map((_,variant) => sprCanvas(g => {
     const top=variant===1?70:83;
@@ -4111,6 +4346,10 @@ function buildObstacleSprites() {
     g.fillStyle='#71868b'; g.beginPath(); g.moveTo(17,99); g.lineTo(57,108); g.lineTo(50,126); g.lineTo(12,124); g.closePath(); g.fill();
     g.strokeStyle='#d0d7bb'; g.lineWidth=1.5; g.beginPath(); g.moveTo(35,top+2); g.lineTo(53,top+6); g.stroke();
     g.fillStyle='#6b8452'; for(let k=0;k<8;k++)g.fillRect(16+cellHash(k,variant)*54,118+cellHash(variant,k+2)*8,5,2);
+    if (variant === 1) {
+      g.strokeStyle = '#7fdfd5'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(35,top+6); g.lineTo(44,94); g.lineTo(35,104); g.lineTo(44,119); g.stroke();
+    }
   }));
 }
 buildObstacleSprites();
@@ -4120,7 +4359,37 @@ buildObstacleSprites();
 let bobT = 0;   // walk-bob clock — advances only while moving
 // Draws the whole gun pointing left from a grip at the origin into ctx g.
 // Returns the muzzle x offset (for flash placement).
+// Generated models are decoded once, shared by the held gun and ground loot.
+// Keep procedural models available while loading or when an asset cannot load.
+const strikeWeaponArt = {};
+function strikeWeaponFamily(key) {
+  if (key === 'blaster') return 'blaster';
+  if (['scatter', 'plasma', 'arc'].includes(key)) return 'scatter';
+  if (['rail', 'dmr', 'laser', 'crossbow'].includes(key)) return 'rail';
+  return 'assault';
+}
+for (const key of ['blaster', 'assault', 'scatter', 'rail']) {
+  const image = new Image();
+  const muzzle = ({ blaster: [.137, .188], assault: [.089, .111], scatter: [.083, .125], rail: [.141, .235] })[key];
+  const entry = strikeWeaponArt[key] = { image, muzzle, ready: false, width: 0, height: 0 };
+  image.decoding = 'async';
+  image.onload = () => {
+    entry.width = image.naturalWidth; entry.height = image.naturalHeight;
+    entry.ready = entry.width > 0 && entry.height > 0;
+    gunModelCache.clear();
+  };
+  image.src = 'assets/science-strike/weapon-' + key + '.png';
+}
 function drawGunModel(g, w) {
+  const model = strikeWeaponArt[strikeWeaponFamily(w.arch.key)];
+  if (model?.ready) {
+    g.save();
+    g.drawImage(model.image, -225, -89, 245, 245 * model.height / model.width);
+    g.fillStyle = w.rarity.color;
+    g.fillRect(-94, 28, 33, 3);
+    g.restore();
+    return -181;
+  }
   const rc = w.rarity.color;
   const el = w.element !== 'none' ? ELEMENTS[w.element].color : null;
   const body = '#262c38', dark = '#161b23', mid = '#333c4d', steel = '#49556c', wood = '#7a5a36';
@@ -4318,6 +4587,36 @@ function chestSprite(color) {
   }
   return c;
 }
+function drawGeneratedViewWeapon(w, bobX, bobY, brX, brY, swX, swY, relDip) {
+  const family = strikeWeaponFamily(w.arch.key), model = strikeWeaponArt[family];
+  if (!model?.ready) return false;
+  const ads = G.ads || 0, comfort = strikeSettings.reducedMotion ? 0 : 1;
+  const kick = (G.gunKick || 0) * comfort;
+  const width = ({ blaster: 500, assault: 560, scatter: 580, rail: 610 })[family];
+  const height = width * model.height / model.width;
+  // Anchors are measured on the generated sprites so flashes meet the barrel.
+  const tipX = REND_W * (.55 - ads * .04) + bobX + brX + swX + kick * 20;
+  const tipY = REND_H * (.59 - ads * .05) + bobY + brY + swY + kick * 34 + relDip * 145;
+  ctx.save();
+  ctx.translate(tipX, tipY);
+  ctx.rotate(-kick * .075 + relDip * .25);
+  const muzzle = model.muzzle || [.18, .25];
+  ctx.drawImage(model.image, -width * muzzle[0], -height * muzzle[1], width, height);
+  // Element light and the actual barrel flash stay attached through recoil/reload.
+  const color = w.element !== 'none' ? ELEMENTS[w.element].color : '#a0fff0';
+  if (G.flash > 0) {
+    ctx.save(); ctx.globalCompositeOperation = 'screen';
+    const glow = ctx.createRadialGradient(0, 0, 1, 0, 0, 52);
+    glow.addColorStop(0, '#ffffff'); glow.addColorStop(.18, color); glow.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow; ctx.fillRect(-52, -52, 104, 104);
+    ctx.fillStyle = '#f2ffff';
+    ctx.beginPath(); ctx.moveTo(-34, -19); ctx.lineTo(-8, -6); ctx.lineTo(-20, -28);
+    ctx.lineTo(6, -5); ctx.lineTo(17, 15); ctx.lineTo(-7, 5); ctx.lineTo(-23, 14); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+  return true;
+}
 function drawViewModel() {
   const w = G.weapon;
   const kick = G.gunKick || 0;
@@ -4339,7 +4638,11 @@ function drawViewModel() {
     const pr = Math.max(0, Math.min(1, 1 - G.reloading / (G.reloadTotal || 1)));
     relDip = Math.sin(pr * Math.PI);
   }
+  // Full magnification uses the scope's sight picture, fading out the held gun.
+  const scopeFade = w.arch.scope >= 3 ? 1 - Math.max(0, Math.min(1, (ads - .55) / .35)) : 1;
+  ctx.save(); ctx.globalAlpha = scopeFade;
   // Models point left from the grip: positive rotation lifts the barrel into view.
+  if (!drawGeneratedViewWeapon(w, bobX, bobY, brX, brY, swX, swY, relDip)) {
   const hipX = REND_W / 2 + 175, hipY = REND_H - 24, hipR = 0.40;
   const adsX = REND_W / 2 + 88, adsY = REND_H - 28, adsR = 0.30;
   ctx.save();
@@ -4363,6 +4666,8 @@ function drawViewModel() {
     }
     ctx.closePath(); ctx.fill();
     ctx.restore();
+  }
+  ctx.restore();
   }
   ctx.restore();
   // ejected shell casings: screen-space brass tumbling off to the right
@@ -4468,10 +4773,16 @@ function drawCrosshair() {
       ctx.lineTo(cx + sx * (g2 + armL), cy + sy * (g2 + armL));
       ctx.stroke();
     }
+    if (kill || k.kind === 'crit') {
+      ctx.fillStyle = kill ? '#ff8b80' : '#ffe49a';
+      ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+      ctx.fillText(kill ? 'ELIMINATED' : 'CRITICAL', cx, cy + 45);
+    }
     ctx.restore();
   }
-  // scoped weapons hide the hip crosshair once fully aimed (scope reticle instead)
-  if (G.ads > 0.7 && G.weapon.arch.scope) return;
+  // Only magnified sniper scopes supply their own reticle. Low-power optics
+  // still need the central crosshair when braced fully into ADS.
+  if (G.ads > 0.7 && G.weapon.arch.scope >= 3) return;
   // CS-style crosshair: the gap mirrors the live spread — wide while moving
   // and firing (recoil bloom), snapping tight when you stand still.
   const gap = Math.round(5 + currentSpreadDeg() * 8);
@@ -4543,7 +4854,7 @@ function updateHud() {
   if (w) {   // startRun derives player stats before the first weapon is equipped
     $('wpnName').innerHTML = mfrTag(w) + (w.element !== 'none' ? ELEMENTS[w.element].icon + ' ' : '') + w.name + (w.special ? ' ★' : '');
     $('wpnName').style.color = w.rarity.color;
-    $('wpnAmmo').innerHTML = (G.reloading > 0 ? '…' : G.ammo) + ' <span class="rl">/ ∞</span>';
+    paintStrikeWeaponHud();
   }
   paintStrikeQuickstep();
   $('hudCores').textContent = '⚛ ' + meta.cores;
@@ -4554,6 +4865,18 @@ function updateHud() {
   $('hudAbility').textContent = (alv
     ? (G.cdF > 0 ? '⏳ ' + cInfo.activeName + ' ' + Math.ceil(G.cdF) + 's' : '✨ ' + cInfo.activeName + ' ready')
     : '🔒 ' + cInfo.activeName + ' (skill tree)') + ' [F]';
+}
+function paintStrikeWeaponHud() {
+  if (!G?.weapon) return;
+  const w = G.weapon, loading = G.reloading > 0, size = magSize();
+  const ammo = (loading ? '…' : G.ammo) + ' <span class="rl">/ ' + size + '</span>';
+  if ($('wpnAmmo').innerHTML !== ammo) $('wpnAmmo').innerHTML = ammo;
+  const status = loading ? 'RELOADING · ' + Math.max(.1, G.reloading).toFixed(1) + 's'
+    : w.arch.name.toUpperCase() + ' · ' + (G.ammo <= Math.ceil(size * .25) ? 'LOW AMMO · R RELOAD' : 'R RELOAD · RMB AIM');
+  if ($('wpnStatus').textContent !== status) $('wpnStatus').textContent = status;
+  const fill = $('wpnMagFill');
+  fill.style.width = (loading ? Math.max(0, 1 - G.reloading / (G.reloadTotal || 1)) : G.ammo / size) * 100 + '%';
+  fill.style.background = loading ? '#ffbf69' : G.ammo <= Math.ceil(size * .25) ? '#ff996e' : '#72dfcd';
 }
 function updateQTimerHud() {
   $('hudQTimer').textContent = '🧪 next question ' + Math.max(0, Math.ceil(G.qTimerMs / 1000)) + 's';
