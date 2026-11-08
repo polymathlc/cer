@@ -73,6 +73,10 @@ try{
  for(const slug of ['legends','slayers','defenders','raiders','spire']){
   const t=await setup(slug);
   check(await t.frame.locator('.q-pressure-rule').innerText().then(s=>/Five in a row|Five.*row/i.test(s)),slug+': learner sees the rule before grading');
+  await ask(t);const invalidBefore=await snapshot(t);
+  const invalidAnswered=await t.frame.evaluate(()=>{for(const i of [null,undefined,NaN,-1,99,1.5,'1'])answerQuestion(i);return qState.answered;});
+  const invalidAfter=await snapshot(t);
+  check(!invalidAnswered&&invalidAfter.hp===invalidBefore.hp&&invalidAfter.streak===invalidBefore.streak&&invalidAfter.answered===invalidBefore.answered,slug+': invalid indices never grade, damage, reward or change the streak');
   // First prove reset semantics with two misses then a correct answer.
   for(let n=1;n<=2;n++){
    await ask(t);await refill(t);const before=await snapshot(t),after=await grade(t,false);

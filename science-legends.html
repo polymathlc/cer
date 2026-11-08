@@ -531,11 +531,11 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
 body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:none!important;transition:none!important}
 @media(max-width:700px){.hint-bar{display:none}.battle-status{top:52px;max-width:calc(100% - 145px);font-size:.67rem;padding:6px 8px}.battle-map{width:116px;height:140px}.battle-map canvas{width:104px;height:104px}.qtimer{font-size:.7rem;white-space:nowrap}.pbars,body.touch .pbars{bottom:166px;width:165px}.skillbar{bottom:18px;left:calc(50% + 42px);gap:6px}.skill-slot{width:43px;height:46px;font-size:21px}.evade-btn{right:15px;bottom:85px;min-width:86px;min-height:44px}.hint-bar{bottom:127px}.sksel-btn,body.touch .sksel-btn{bottom:140px;right:15px;left:auto;transform:none}.joy{left:12px;bottom:18px;width:96px;height:96px}.battle-map span{font-size:9px}.descend-btn{top:145px;font-size:.75rem}}
 </style>
-<link rel="stylesheet" href="science-legends-premium.css?v=1.456.0">
-<link rel="stylesheet" href="science-legends-sanctum.css?v=1.456.0">
-<link rel="stylesheet" href="science-legends-icons.css?v=1.456.0">
-<link rel="stylesheet" href="science-expedition-accessibility.css?v=1.456.0">
-<script defer src="science-expedition-accessibility.js?v=1.456.0"></script>
+<link rel="stylesheet" href="science-legends-premium.css?v=1.457.0">
+<link rel="stylesheet" href="science-legends-sanctum.css?v=1.457.0">
+<link rel="stylesheet" href="science-legends-icons.css?v=1.457.0">
+<link rel="stylesheet" href="science-expedition-accessibility.css?v=1.457.0">
+<script defer src="science-expedition-accessibility.js?v=1.457.0"></script>
 </head>
 <body>
 <div id="app">
@@ -730,19 +730,19 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
   </div>
 </div>
 
-<script src="science-feed-bridge.js?v=1.456.0"></script>
+<script src="science-feed-bridge.js?v=1.457.0"></script>
 <script src="game-question-pressure.js?v=1.457.0"></script>
-<script src="science-legends-art.js?v=1.456.0"></script>
-<script src="science-legends-view.js?v=1.456.0"></script>
-<script src="science-legends-atlas.js?v=1.456.0"></script>
-<script src="science-legends-models.js?v=1.456.0"></script>
-<script src="science-legends-actions.js?v=1.456.0"></script>
-<script src="science-legends-ai.js?v=1.456.0"></script>
-<script src="science-legends-tree.js?v=1.456.0"></script>
-<script src="science-legends-icons.js?v=1.456.0"></script>
-<script src="science-legends-feedback.js?v=1.456.0"></script>
-<script src="science-legends-gestures.js?v=1.456.0"></script>
-<script src="science-legends-combat.js?v=1.456.0"></script>
+<script src="science-legends-art.js?v=1.457.0"></script>
+<script src="science-legends-view.js?v=1.457.0"></script>
+<script src="science-legends-atlas.js?v=1.457.0"></script>
+<script src="science-legends-models.js?v=1.457.0"></script>
+<script src="science-legends-actions.js?v=1.457.0"></script>
+<script src="science-legends-ai.js?v=1.457.0"></script>
+<script src="science-legends-tree.js?v=1.457.0"></script>
+<script src="science-legends-icons.js?v=1.457.0"></script>
+<script src="science-legends-feedback.js?v=1.457.0"></script>
+<script src="science-legends-gestures.js?v=1.457.0"></script>
+<script src="science-legends-combat.js?v=1.457.0"></script>
 <script>
 /* ============================================================================
  * SCIENCE LEGENDS (BETA) — top-down horde-action RPG with a science-MCQ pulse.
@@ -4568,6 +4568,7 @@ async function openQuestion(){
 function answerQuestion(idx){
   if(!G || G.state!=='play' || !qState.active) return;
   if(!scienceFeed.current(qState.current)) return;
+  if(!Number.isInteger(idx) || idx<0 || idx>=qState.current.options.length)return;
   if (qState.answered) return;
   if (performance.now() < (qState.lockT || 0)) return; // anti-misclick lock
   qState.answered = true;

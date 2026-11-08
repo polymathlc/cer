@@ -2468,6 +2468,7 @@ function tickTimer(){
 function answerQuestion(idx, btnEl){
   if(!G.running || !qState.active)return;
   if(!scienceFeed.current(qState.current)) return;
+  if(!Number.isInteger(idx) || idx<0 || idx>=qState.current.options.length)return;
   if(qState.answered) return;
   qState.answered = true;
   cancelAnimationFrame(qState.raf);

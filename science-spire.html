@@ -809,6 +809,7 @@ async function askQuestion(){
 function answerQuestion(idx, btn){
   if(!G || G.state!=='question' || !spireRunCurrent()) return;
   if(!scienceFeed.current(qState.current)) return;
+  if(!Number.isInteger(idx) || idx<0 || idx>=qState.current.options.length)return;
   var run=G;
   if (qState.answered) return; qState.answered=true;
   var q=qState.current; var correct = (idx===q.answer);

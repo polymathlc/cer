@@ -723,7 +723,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
   </div>
 </div>
 
-<script src="science-feed-bridge.js?v=1.456.0"></script>
+<script src="science-feed-bridge.js?v=1.457.0"></script>
 <script src="game-question-pressure.js?v=1.457.0"></script>
 <script>
 /* ============================================================================
@@ -4676,6 +4676,7 @@ async function openQuestion(){
 function answerQuestion(idx){
   if(!G || G.state!=='play' || !qState.active) return;
   if(!scienceFeed.current(qState.current)) return;
+  if(!Number.isInteger(idx) || idx<0 || idx>=qState.current.options.length)return;
   if (qState.answered) return;
   if (performance.now() < (qState.lockT || 0)) return; // anti-misclick lock
   qState.answered = true;
