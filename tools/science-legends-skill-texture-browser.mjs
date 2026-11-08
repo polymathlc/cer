@@ -1,0 +1,62 @@
+// Real cast/projectile/collision paths with isolated account and question feeds.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright');
+const root=fileURLToPath(new URL('../',import.meta.url));
+const output=process.env.GAME_SCREENSHOTS||path.join(root,'test-results/legends-skill-textures');fs.mkdirSync(output,{recursive:true});
+const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_BROWSER_CHANNEL?{channel:process.env.PLAYWRIGHT_BROWSER_CHANNEL}:{})});
+let checks=0;const check=(value,message)=>{assert.ok(value,message);checks++;};
+async function open(fail=false,reduced=false){
+  const context=await browser.newContext({viewport:{width:1280,height:900},reducedMotion:reduced?'reduce':'no-preference'}),page=await context.newPage(),errors=[];
+  await context.addInitScript(()=>{window.requestAnimationFrame=()=>0;});page.on('pageerror',e=>errors.push(e.message));
+  await page.route('**/*',route=>{const u=new URL(route.request().url());if(u.hostname!=='skill-textures.test')return route.abort();if(fail&&u.pathname.includes('/assets/science-legends/'))return route.abort();
+    if(u.pathname==='/')return route.fulfill({contentType:'text/html',body:'<!doctype html><meta charset="utf-8"><style>html,body,iframe{width:100%;height:100%;margin:0;border:0;display:block}</style><iframe src="/science-legends.html"></iframe><script>addEventListener("message",e=>{if(e.source!==document.querySelector("iframe").contentWindow)return;if(e.data.type==="SD_REQUEST_QUESTIONS")e.source.postMessage({type:"SD_QUESTIONS",requestId:e.data.requestId,feedPolicyVersion:1,studentKey:"skill-textures",studentLevel:"P4",playsLeft:{legends:20},questions:[{id:"glass",q:"Which material lets light pass?",options:["Clear glass","Wood"],answer:0,topic:"Light"}]},location.origin);if(e.data.type==="LEGENDS_REQUEST_META")e.source.postMessage({type:"LEGENDS_META",meta:{inv:[],eq:{},loadout:{}},gold:0},location.origin);});</script>'});
+    const file=path.join(root,decodeURIComponent(u.pathname));return fs.existsSync(file)&&fs.statSync(file).isFile()?route.fulfill({path:file}):route.abort();});
+  await page.goto('http://skill-textures.test/');const game=page.frames().find(f=>f.url().includes('science-legends.html'));await game.waitForFunction(()=>typeof _gameCreditsReady==='function'&&_gameCreditsReady());await game.locator('#startBtn').click();
+  await game.waitForFunction(()=>G?.state==='play');if(!fail)await game.waitForFunction(()=>['barb','sorc','beast','pala','ama'].every(c=>LegendsActions.ready('fx-'+c))&&LegendsActions.ready('whirlwind'));
+  await game.evaluate(()=>{
+    window.__textureQA={
+      prepare(cls,sid,cast=true){['menuOverlay','treeOverlay','questionOverlay','pauseOverlay','overOverlay','armoryOverlay','skillSelOverlay'].forEach(hide);newGame(cls);G.view=LegendsView.create(G.player.x,G.player.y,VW,VH,WORLD.w,WORLD.h);G.spawnT=1e6;G.qTimer=-1e6;G.enemies=[];G.pets=[];G.eprojs=[];G.slots=[sid,null,null,null];G.stats.unlocked[sid]=true;G.stats.rank[sid]=5;G.player.hp=G.player.maxHp=1e6;mouse.active=true;mouse.wx=G.player.x+250;mouse.wy=G.player.y;mouse.sx=VW/2+100;mouse.sy=VH/2;mouse.lDown=mouse.rDown=false;if(cast)castSkill(0);return G.actions.find(a=>a.sid===sid);},
+      paint(action,time){const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d'),images=[],rotations=[],translates=[];const image=g.drawImage.bind(g),rotate=g.rotate.bind(g),translate=g.translate.bind(g);g.drawImage=(source,...args)=>{images.push({source:source.src||'canvas',args});return image(source,...args);};g.rotate=a=>{rotations.push(a);return rotate(a);};g.translate=(x,y)=>{translates.push([x,y]);return translate(x,y);};const a={...action,x:128,y:128};const before=JSON.stringify(action);LegendsActions.draw(g,a,time,lowMotion,G.presentation.actions);const data=g.getImageData(0,0,256,256).data;let ink=0;for(let i=3;i<data.length;i+=4)if(data[i]>8)ink++;return {images,rotations,translates,ink,mutated:before!==JSON.stringify(action),canvas:c};},
+      tick(n){for(let i=0;i<n;i++)update(1/120);},
+      foes(n,x){for(let i=0;i<n;i++){const e=spawnEnemy('brute',false);e.x=G.player.x+x;e.y=G.player.y;e.hp=e.maxHp=1e7;e.speed=e.dmg=0;}},
+      channel(channel,time){const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d'),images=[];const image=g.drawImage.bind(g);g.drawImage=(s,...args)=>{images.push(s.src||'canvas');return image(s,...args);};LegendsActions.drawChannel(g,{...channel,x:128,y:128},time,lowMotion,G.presentation.actions);return {canvas:c,images};}
+    };
+  });return {context,page,game,errors};
+}
+try{
+  const t=await open();
+  const headings=await t.game.evaluate(()=>['javelin','plague','fireball','icebolt','sting','charge'].map(sid=>{const cls=Object.keys(CLASSES).find(c=>CLASSES[c].skills.includes(sid)),a=__textureQA.prepare(cls,sid),paint=__textureQA.paint(a,.15);return {sid,ang:a.ang,heading:LegendsActions.recipe(sid).sourceHeading,rotation:paint.rotations[0],ink:paint.ink,images:paint.images.length,mutated:paint.mutated};}));
+  for(const h of headings){check(Math.abs(h.rotation+h.heading-h.ang)<1e-6,h.sid+' authored generated heading matches actual aim');check(h.ink>20&&h.images===1&&!h.mutated,h.sid+' compact generated cast remains visible and pure');}
+  const flight=await t.game.evaluate(()=>['multishot','axes','stampede','javelin','fireball','icebolt'].map(sid=>{
+    const cls=Object.keys(CLASSES).find(c=>CLASSES[c].skills.includes(sid));__textureQA.prepare(cls,sid);const projs=G.projs.filter(p=>p.sid===sid),traces=[],images=[],before=projs.map(p=>({x:p.x,y:p.y,life:p.life}));
+    const oldChannel=LegendsActions.drawChannel,oldImage=ctx.drawImage.bind(ctx);LegendsActions.drawChannel=function(g,c,...rest){traces.push({sid:c.sid,owned:c.bodyOwned});return oldChannel.call(this,g,c,...rest);};ctx.drawImage=function(s,...args){images.push(s.src||'canvas');return oldImage(s,...args);};
+    G.time=.3;projs.forEach(drawProjectile);LegendsActions.drawChannel=oldChannel;ctx.drawImage=oldImage;
+    const a={sid,phase:'flight',channel:true,start:0,life:1.4};const samples=[.001,.7,1.39].map(time=>LegendsActions.sampleSkill(a,time,lowMotion));
+    return {sid,count:projs.length,traces,atlasImages:images.filter(s=>s.includes('/v3/fx-')).length,stable:JSON.stringify(before)===JSON.stringify(projs.map(p=>({x:p.x,y:p.y,life:p.life}))),samples};
+  }));
+  for(const f of flight){check(f.count>0&&f.traces.length===f.count&&f.traces.every(x=>x.owned===true),f.sid+' actual runtime owns one body per physics projectile: '+JSON.stringify(f));check(f.atlasImages===0&&f.stable,f.sid+' does not multiply whole-fan art or mutate flight');check(f.samples.every(s=>s.frame===1&&s.alpha>.7),f.sid+' active wake remains visible until actual removal');}
+  const contacts=await t.game.evaluate(()=>{
+    __textureQA.prepare('ama','javelin',false);__textureQA.foes(10,85);castSkill(0);G.projs.forEach(p=>{p.pierce=999;});__textureQA.tick(30);
+    const hit=G.actions.filter(a=>a.sid==='javelin'&&a.phase==='impact'),damage=G.enemies.filter(e=>e.hp<e.maxHp).length;
+    return {hits:hit.length,damage,coalesced:hit.some(a=>a.contacts>1),rendered:hit.map(a=>__textureQA.paint(a,G.time)).map(p=>({images:p.images.length,ink:p.ink,mutated:p.mutated}))};
+  });
+  check(contacts.damage===10,'ten real stacked targets still receive swept projectile damage');check(contacts.hits>0&&contacts.hits<10&&contacts.coalesced,'same-skill simultaneous contacts coalesce visually');check(contacts.rendered.every(p=>p.images===0&&p.ink>10&&!p.mutated),'actual contacts paint material sparks without recreating volleys');
+  const burst=await t.game.evaluate(()=>{__textureQA.prepare('sorc','fireball',false);__textureQA.foes(1,100);castSkill(0);__textureQA.tick(26);const a=G.actions.find(a=>a.sid==='fireball'&&a.phase==='burst');return a&&{r:a.r,paint:__textureQA.paint(a,G.time).images.length};});
+  check(burst&&burst.r>24&&burst.paint===1,'real fireball collision keeps generated area burst at its actual radius');
+  const targeted=await t.game.evaluate(()=>['meteor','hawk','fist','rain'].map(sid=>{const cls=Object.keys(CLASSES).find(c=>CLASSES[c].skills.includes(sid));__textureQA.prepare(cls,sid);const f=G.fx.find(f=>f.kind==='meteor'&&f.strike?.sid===sid);const c=document.createElement('canvas');c.width=c.height=512;const g=c.getContext('2d'),draws=[],moves=[],image=g.drawImage.bind(g),translate=g.translate.bind(g);g.drawImage=(s,...args)=>{draws.push(args);return image(s,...args);};g.translate=(x,y)=>{moves.push([x,y]);return translate(x,y);};for(const progress of [.1,.9])LegendsActions.drawAnticipation(g,{sid,x:f.x,y:f.y,r:f.r,progress},false,G.presentation.actions);const rec=LegendsActions.recipe(sid),w=G.presentation.actions['fx-'+rec.cls].naturalWidth/8;return {sid,latched:Math.abs(f.x-G.player.x-250)<1,frames:draws.map(a=>Math.round(a[0]/w)%4),moves};}));
+  for(const x of targeted){check(x.latched&&x.frames.join(',')==='0,1',x.sid+' latched anticipation uses no impact/fade frames');check(x.moves[1][1]<x.moves[3][1],x.sid+' descent follows actual simulation progress');}
+  const arrival=await t.game.evaluate(()=>['charge','teleport','stag','bash','roll'].map(sid=>{const cls=Object.keys(CLASSES).find(c=>CLASSES[c].skills.includes(sid));__textureQA.prepare(cls,sid);const from={x:G.player.x,y:G.player.y};__textureQA.tick(35);const a=G.actions.find(a=>a.sid===sid&&a.phase==='arrival');return {sid,found:!!a,from:a&&[a.fromX,a.fromY],expected:[from.x,from.y],to:a&&[a.x,a.y],actual:[G.player.x,G.player.y]};}));
+  for(const a of arrival){check(a.found&&JSON.stringify(a.from)===JSON.stringify(a.expected),a.sid+' arrival retains actual departure');check(JSON.stringify(a.to)===JSON.stringify(a.actual),a.sid+' arrival ends at actual swept destination');}
+  const retention=await t.game.evaluate(()=>{__textureQA.prepare('sorc','meteor');__textureQA.tick(125);const meteor=G.actions.find(a=>a.sid==='meteor'&&a.phase!=='cast');if(!meteor)return {found:false};for(let i=0;i<100;i++)LegendsActions.emitSkill(G,'multishot',G.player.x+400+i*20,G.player.y,24,0,.25,{phase:'impact'});return {found:true,retained:G.actions.includes(meteor),length:G.actions.length,rendered:__textureQA.paint(meteor,G.time).images.length};});
+  check(retention.found&&retention.retained&&retention.length<=24&&retention.rendered===1,'a real Meteor area remains painted after a hundred small impacts');
+  const board=await t.game.evaluate(()=>{const board=document.createElement('canvas');board.width=840;board.height=560;board.id='texture-skill-board';board.style.cssText='position:fixed;inset:0;z-index:999999;width:840px;height:560px;background:#0b1926';const b=board.getContext('2d');b.fillStyle='#e7ddbd';b.font='16px system-ui';for(const [index,sid]of ['javelin','multishot','fireball','icebolt','stampede','holybolt'].entries()){const cls=Object.keys(CLASSES).find(c=>CLASSES[c].skills.includes(sid));const a=__textureQA.prepare(cls,sid);const p=__textureQA.paint(a,.15);b.drawImage(p.canvas,index%3*280,Math.floor(index/3)*280);b.fillText(SKILLS[sid].name,index%3*280+18,Math.floor(index/3)*280+260);}document.body.append(board);return board.id;});
+  await t.game.locator('#'+board).screenshot({path:path.join(output,'skill-cast-materials.png')});await t.game.locator('#'+board).evaluate(e=>e.remove());check(t.errors.length===0,'normal real game has no runtime errors: '+t.errors.join('; '));await t.context.close();
+  for(const mode of [{fail:true,reduced:false},{fail:false,reduced:true}]){
+    const r=await open(mode.fail,mode.reduced);const result=await r.game.evaluate(()=>{const samples=[];for(const cls of CLASS_ORDER)for(const sid of CLASSES[cls].skills){const a=__textureQA.prepare(cls,sid),paint=__textureQA.paint(a,.16);samples.push({sid,ink:paint.ink,mutated:paint.mutated});}return samples;});
+    check(result.length===60&&result.every(x=>x.ink>10&&!x.mutated),(mode.fail?'missing art':'reduced motion')+' retains all60 visible pure skill gestures');check(r.errors.length===0,'fallback mode has no runtime errors: '+r.errors.join('; '));await r.context.close();
+  }
+  console.log('Science Legends skill texture browser: '+checks+' checks passed for rounds41–50');
+}finally{await browser.close();}
