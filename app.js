@@ -20,7 +20,7 @@ let ainsteinVoiceEpoch = 0;
 let ainsteinVoiceReady = false;
 import { createAinsteinAdminAgent } from './ainstein-admin-agent.js?v=1';
 import { installPirateRiftPortal } from "./pirate-rift-portal.js?v=1.0.0";
-import { installGrandLinePortal } from "./grand-line-portal.js?v=3.5.0";
+import { installGrandLinePortal } from "./grand-line-portal.js?v=3.5.2";
 import { createGrandLineScienceAdapter } from "./grand-line-science-adapter.js?v=question-history-1";
 import { createGrandLineEconomy, createGrandLineRpgCommit, createGrandLineRpgSaveGate } from "./grand-line-economy.js?v=3.5.0";
 const grandLineRpgSaveGate = createGrandLineRpgSaveGate({getUser:()=>currentUser,flush:()=>rpgSave()});
@@ -55,7 +55,7 @@ const pirateRiftPortal = installPirateRiftPortal({
     else _hadesResetLearning('Pirate Rift was opened.');
   }
 });
-import { installHadesLearningParent } from "./hades-learning-parent.js?v=2.2.2";
+import { installHadesLearningParent } from "./hades-learning-parent.js?v=2.2.3";
 import { scienceTcgIdentity, scienceTcgIdentityText, scienceTcgSkillPath } from './science-tcg-identity.js';
 import { applyScienceTcgSignature, scienceTcgBrandedDamage, scienceTcgAbsorbBarrier } from './science-tcg-runtime.js';
 import { createTcgMedia } from './tcg-media.js';
@@ -4562,7 +4562,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.456.0';
+const APP_VERSION = 'v1.457.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -7276,26 +7276,26 @@ function navigateTo(page) {
   }
   if (page === 'defenders') {
     const f = document.getElementById('defendersFrame');
-    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html');
+    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.457.0');
   }
   if (page === 'raiders') {
     const f = document.getElementById('raidersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html'); f.addEventListener('load', pushRaidersAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.457.0'); f.addEventListener('load', pushRaidersAssets); }
     else pushRaidersAssets();
   }
   if (page === 'spire') {
     const f = document.getElementById('spireFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html'); f.addEventListener('load', pushSpireAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.457.0'); f.addEventListener('load', pushSpireAssets); }
     else pushSpireAssets();
   }
   if (page === 'legends') {
     const f = document.getElementById('legendsFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.456.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.457.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'slayers') {
     const f = document.getElementById('slayersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.456.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.457.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'hades') _hadesInit();
@@ -62435,7 +62435,7 @@ function _hadesInit() {
   const ready = !!_hadesPreviewLevel();
   if (note && !_isAdmin()) note.textContent = ready ? 'BETA · '+_hadesPreviewLevel()+' · Answer five Science questions between chambers to heal and earn stronger boons.' : 'Set your school level in your profile to start Hades.';
   else if (note) note.textContent = ready ? 'Administrator beta · Five fresh science MCQs between rooms determine healing and boon tier. Preview answers stay separate from student records.' : 'Choose the school level to test the same question selection used for students.';
-  if (frame) { frame.hidden = !ready; if (ready && !frame.getAttribute('src')) frame.setAttribute('src','hades-game.html?learning=1&subject=science&v=2.2.2'); }
+  if (frame) { frame.hidden = !ready; if (ready && !frame.getAttribute('src')) frame.setAttribute('src','hades-game.html?learning=1&subject=science&v=2.2.3'); }
 }
 
 function buildDefenderQuestions() {
@@ -63480,7 +63480,7 @@ function loadLegendsThumbs(){
       f = document.createElement('iframe');
       f.id = 'legendsThumbFrame';
       f.style.cssText = 'position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:-9999px;top:-9999px;';
-      f.src = 'science-legends.html?v=1.456.0';
+      f.src = 'science-legends.html?v=1.457.0';
       document.body.appendChild(f);
     }
     let tries = 0;
@@ -64837,7 +64837,7 @@ function openFpsGame() {
     showToast(`🎮 No game credits left today — answer ${need} more question${need === 1 ? '' : 's'} in practice to earn one`, 'error');
     return;
   }
-  window.location.href = 'fps.html';
+  window.location.href = 'fps.html?v=1.457.0';
 }
 // ---- Release announcement banner (top of screen, dismissible per device) ----
 const FPS_ANNOUNCE_KEY = 'fpsAnnounceDismissed_v1';
@@ -69926,7 +69926,7 @@ function tcgTrainCard(id) {
   // Shuffle for a random tie-break, then serve least-recently-trained first.
   const servedMap = _tcgServedLoad();
   const ordered = _tcgShuffle(pool).sort((a, b) => (servedMap[a.id] || 0) - (servedMap[b.id] || 0));
-  _tcgQuiz = { id, pool: ordered, i: 0, answered: false, cur: null };
+  _tcgQuiz = { id, pool: ordered, i: 0, answered: false, cur: null, focus: 100, over: false };
   const c = TCG_BY_ID[id];
   const o = document.createElement('div');
   o.className = 'tcg-overlay'; o.id = 'tcgTrainOverlay';
@@ -69934,6 +69934,7 @@ function tcgTrainCard(id) {
   o.innerHTML = '<div class="tcg-train-modal">'
     + '<div class="tcg-train-topbar"><div class="tcg-train-title">🎓 Training <b>' + escapeHtml(tcgShortName(c)) + '</b></div>'
     + '<button type="button" class="tcg-train-x" onclick="tcgCloseTrain()">✕</button></div>'
+    + '<p class="tcg-quiz-count">Training focus: 100. ' + escapeHtml(GameQuestionPressure.rules) + ' Training ends if focus reaches zero; your card keeps its earned levels.</p>'
     + '<div class="tcg-train-status" id="tcgqStatus"></div>'
     + '<div class="tcg-quiz" id="tcgqBody"></div>'
     + '</div>';
@@ -69951,7 +69952,7 @@ function _tcgQuizStatus(flash) {
   if (flash) { st.classList.remove('flash'); void st.offsetWidth; st.classList.add('flash'); }
 }
 async function _tcgQuizRender() {
-  const body = document.getElementById('tcgqBody'); if (!body || !_tcgQuiz) return;
+  const body = document.getElementById('tcgqBody'); if (!body || !_tcgQuiz || _tcgQuiz.over) return;
   const run = _tcgQuiz, identity = _scienceFeedKey();
   if (run.loading) return;
   run.loading = true;
@@ -69978,10 +69979,13 @@ async function _tcgQuizRender() {
   } finally { run.loading = false; }
 }
 function _tcgQuizAnswer(idx) {
-  if (!_tcgQuiz || _tcgQuiz.answered) return;
+  if (!_tcgQuiz || _tcgQuiz.over || _tcgQuiz.loading || _tcgQuiz.answered || !_tcgQuiz.cur || !Number.isInteger(idx) || idx < 0 || idx >= _tcgQuiz.cur.opts.length) return;
   _tcgQuiz.answered = true;
   const q = _tcgQuiz.cur;
   const correct = idx === q.a;
+  const pressure = tcgQuestionPressure(_tcgQuiz, correct, 100);
+  _tcgQuiz.focus = pressure.fatal ? 0 : Math.max(0, _tcgQuiz.focus - pressure.damage);
+  _tcgQuiz.over = _tcgQuiz.focus <= 0;
   // Training answers on real bank questions count as attempts everywhere else:
   // stamp the shared game rotation and write the teacher-visible attempt log,
   // so practice/quests/games stop re-serving trainer-grinded questions as new.
@@ -70007,14 +70011,15 @@ function _tcgQuizAnswer(idx) {
       msg = '<div class="tcg-fb-ok">✅ Correct! ' + (res ? res.progress : 0) + ' / ' + TCG_LVL_STEP + ' toward the next level.' + ptsBit + '</div>';
     }
   } else {
-    msg = '<div class="tcg-fb-no">❌ Not quite — the correct answer is <b>(' + escapeHtml(_gameLab(q, q.a)) + ')</b>. Keep going, the next one counts!' + ptsBit + '</div>';
+    msg = '<div class="tcg-fb-no">❌ Not quite — the correct answer is <b>(' + escapeHtml(_gameLab(q, q.a)) + ')</b>.' + ptsBit + '</div>';
   }
   if (q.ex) msg += '<div class="tcg-fb-ex">' + escapeHtml(q.ex) + '</div>';
-  msg += '<div style="margin-top:14px;text-align:center;"><button class="btn btn-primary" type="button" onclick="_tcgQuizNext()">Next question ▶</button></div>';
+  msg += '<p role="status">' + escapeHtml(pressure.message) + ' Training focus: ' + _tcgQuiz.focus + '/100.' + (_tcgQuiz.over ? ' Training over — your earned levels are kept.' : '') + '</p>';
+  msg += '<div style="margin-top:14px;text-align:center;"><button class="btn btn-primary" type="button" onclick="' + (_tcgQuiz.over ? 'tcgCloseTrain()' : '_tcgQuizNext()') + '">' + (_tcgQuiz.over ? 'End training' : 'Next question ▶') + '</button></div>';
   const fb = document.getElementById('tcgqFb');
   if (fb) fb.innerHTML = msg;
 }
-function _tcgQuizNext() { if (!_tcgQuiz) return; _tcgQuizRender(); }
+function _tcgQuizNext() { if (!_tcgQuiz || _tcgQuiz.over || !_tcgQuiz.answered) return; _tcgQuizRender(); }
 function _tcgLevelUpBurst() {
   const modal = document.querySelector('.tcg-train-modal'); if (!modal) return;
   const d = document.createElement('div'); d.className = 'tcg-levelup-burst'; d.textContent = 'LEVEL UP!';
@@ -70969,6 +70974,14 @@ function tcgGuideHtml() {
 
 // ---- Release gate (admin-only until the teacher presses Launch) ------------
 function duelReleased() { return !!(_tcgConfig && _tcgConfig.duelReleased); }
+function tcgQuestionPressure(run, correct, maxHealth) {
+  const state = run.questionPressure || (run.questionPressure = GameQuestionPressure.create());
+  return GameQuestionPressure.answer(state, correct, maxHealth);
+}
+function tcgQuestionLossHtml(run) {
+  const loss = run && run.questionLoss;
+  return loss ? '<div class="tcg-fb-no" role="status"><b>' + escapeHtml(loss.message) + '</b><p>The correct answer was ' + escapeHtml(loss.answer) + '.</p>' + (loss.explanation ? '<p>' + escapeHtml(loss.explanation) + '</p>' : '') + '</div>' : '';
+}
 function duelAccessAllowed() { return _isAdmin() || duelReleased(); }
 async function duelSetReleased(v) {
   if (!_isAdmin()) return;                       // the role check lives in the HANDLER, not just the button
@@ -73629,6 +73642,7 @@ function duelOverHtml() {
   const rec = s.duel || { wins: 0, losses: 0 };
   return '<div class="duel-over"><div class="duel-over-card">'
     + '<div class="duel-over-em">' + (r.won ? '🏆' : '💀') + '</div>'
+    + tcgQuestionLossHtml(r)
     + '<h3>' + (r.won ? 'You won the duel!' : 'Your rival wins this one') + '</h3>'
     + '<p>' + (r.won
         ? 'Your hero finished on <b>' + Math.max(0, r.p.hp) + '</b> life. Every question you answered in there trained the monsters on your board — those levels are yours to keep.'
@@ -73974,6 +73988,7 @@ async function duelOpenQuiz() {
   box.className = 'duel-quiz'; box.id = 'duelQuiz';
   box.innerHTML = '<div class="duel-quiz-card">'
     + '<div class="duel-quiz-head">⚡ Ember Insight <span>answer it right to draw a card and get a mana crystal back</span></div>'
+    + '<p class="duel-quiz-ex">' + escapeHtml(GameQuestionPressure.rules) + '</p>'
     + '<div class="duel-quiz-q">' + q.html + '</div>'
     + '<div class="duel-quiz-opts">'
     + q.opts.map((o, i) => '<button type="button" class="duel-quiz-opt" onclick="duelAnswer(' + i + ')">'
@@ -73985,10 +74000,12 @@ async function duelOpenQuiz() {
   duelRender();
 }
 function duelAnswer(i) {
-  const r = duelRun; if (!r || !r.quiz || r.quiz.answered) return;
+  const r = duelRun; if (!r || r.over || !r.quiz || r.quiz.answered || !Number.isInteger(i) || i < 0 || i >= r.quiz.q.opts.length) return;
   r.quiz.answered = true;
   const q = r.quiz.q;
   const correct = (i | 0) === (q.a | 0);
+  const pressure = tcgQuestionPressure(r, correct, r.p.maxHp);
+  r.p.hp = pressure.fatal ? 0 : Math.max(0, r.p.hp - pressure.damage);
   duelSfxPlay(correct ? 'right' : 'wrong');
   const ms = Math.max(0, Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - r.quiz.at));
   try { rpgAwardGameQuestion(q.id, correct, ms); } catch (_) {}
@@ -74015,9 +74032,15 @@ function duelAnswer(i) {
   } else {
     note = '<b class="no">❌ Not this time.</b> The right answer is <b>' + escapeHtml(_gameLab(q, q.a | 0)) + '</b>.';
   }
+  if (pressure.message) note += '<p role="status">' + escapeHtml(pressure.message) + '</p>';
   if (q.ex) note += '<div class="duel-quiz-ex">💡 ' + escapeHtml(q.ex) + '</div>';
   const foot = document.getElementById('duelQuizFoot');
   if (foot) foot.innerHTML = note + '<button type="button" class="btn btn-primary" onclick="duelCloseQuiz()">Back to the duel</button>';
+  if (r.p.hp <= 0) {
+    r.questionLoss = { message: pressure.message, answer: _gameLab(q, q.a), explanation: q.ex || '' };
+    duelCloseQuiz();
+    duelGameOver(false);
+  } else duelRender();
 }
 function duelCloseQuiz() {
   const r = duelRun;
@@ -74888,6 +74911,7 @@ function emsGameOver() {
   box.className = 'ems-result';
   box.innerHTML = '<div class="ems-result-card">'
     + '<h3>🏰 The gate has fallen</h3>'
+    + tcgQuestionLossHtml(r)
     + '<div class="ems-result-wave">You cleared <b>' + (r.cleared | 0) + ' wave' + ((r.cleared | 0) === 1 ? '' : 's') + '</b> and fell on wave <b>' + r.wave + '</b></div>'
     + '<div class="ems-result-grid">'
     +   '<div><b>' + r.correct + ' / ' + r.answered + '</b><span>questions right</span></div>'
@@ -75251,7 +75275,7 @@ function emsCloseQuiz() {
   if (wasRound && emsRun && !emsRun.paused && !emsRun.over) emsBanner('▶ Battle resumed!', 1400);
 }
 async function emsNextQuestion() {
-  const r = emsRun; if (!r) return;
+  const r = emsRun; if (!r || r.over) return;
   if (r.feedLoading) return;
   r.feedLoading = true;
   const identity = _scienceFeedKey();
@@ -75267,6 +75291,7 @@ async function emsNextQuestion() {
     + q.opts.map((o, i) => '<button type="button" class="ems-quiz-opt" data-i="' + i + '" onclick="emsAnswer(' + i + ')">'
         + '<span class="ems-quiz-let">' + escapeHtml(_gameLab(q, i)) + '</span>' + (q.optsHtml?.[i] || escapeHtml(o)) + '</button>').join('')
     + '</div>'
+    + '<p>' + escapeHtml(GameQuestionPressure.rules) + '</p>'
     + '<div class="ems-quiz-fb" id="emsQuizFb">' + (r.roundTotal
         ? '⏸ The battle is paused and there is no timer — read carefully, every correct answer pays full mana.'
         : 'No timer — take the time to read it. Every correct answer pays ⚡ ' + EMS_MANA_CORRECT + ' mana, but the horde keeps walking while you think.') + '</div>';
@@ -75285,10 +75310,12 @@ function emsQuizStreakHud() {
 function emsStreakMult(streak) { return streak >= 5 ? 1.5 : streak >= 3 ? 1.25 : 1; }
 function emsAnswer(i) {
   const r = emsRun;
-  if (!r || !r.quiz || r.quiz.answered) return;
+  if (!r || r.over || !r.quiz || r.quiz.answered || !Number.isInteger(i) || i < 0 || i >= r.quiz.q.opts.length) return;
   r.quiz.answered = true;
   const q = r.quiz.q;
   const correct = i === q.a;
+  const pressure = tcgQuestionPressure(r, correct, EMS_GATE_HP);
+  r.gate = pressure.fatal ? 0 : Math.max(0, r.gate - pressure.damage);
   const ms = performance.now() - r.quiz.at;
   r.answered++;
   let gain;
@@ -75331,7 +75358,14 @@ function emsAnswer(i) {
   if (fb) fb.innerHTML = correct
     ? '<span class="ok">✅ Correct — <b>⚡ +' + gain + ' mana</b>' + ptsBit + trainBit + '</span>'
     : '<span class="no">❌ The answer was <b>(' + escapeHtml(_gameLab(q, q.a)) + ')</b> — only ⚡ +' + gain + ' mana' + ptsBit + '. Streak reset.</span>';
+  if (fb && pressure.message) fb.innerHTML += '<p role="status">' + escapeHtml(pressure.message) + '</p>';
   emsQuizStreakHud();
+  if (r.gate <= 0) {
+    r.questionLoss = { message: pressure.message, answer: _gameLab(q, q.a), explanation: q.ex || '' };
+    emsCloseQuiz();
+    emsGameOver();
+    return;
+  }
   // A fixed round ends itself (with a small bonus for finishing all five);
   // the open-ended panel just rolls on to the next question.
   if (r.roundTotal) {
@@ -75341,11 +75375,11 @@ function emsAnswer(i) {
       emsSyncHud(); emsManaPop(EMS_ROUND_BONUS); emsRefreshDeckState();
       const done = document.getElementById('emsQuizFb');
       if (done) done.innerHTML += '<div class="ok" style="margin-top:8px;">🧪 Mana round complete — <b>⚡ +' + EMS_ROUND_BONUS + ' bonus</b>. Back to the battle!</div>';
-      setTimeout(() => { if (emsRun && emsRun.roundTotal && emsRun.roundDone >= emsRun.roundTotal) emsCloseQuiz(); }, 1800);
+      setTimeout(() => { if (emsRun === r && !r.over && r.roundTotal && r.roundDone >= r.roundTotal) emsCloseQuiz(); }, 1800);
       return;
     }
   }
-  setTimeout(() => { if (emsRun && emsRun.quiz && emsRun.quiz.answered && document.getElementById('emsQuiz')) emsNextQuestion(); }, correct ? 900 : 1900);
+  setTimeout(() => { if (emsRun === r && !r.over && r.quiz && r.quiz.answered && document.getElementById('emsQuiz')) emsNextQuestion(); }, correct ? 900 : 1900);
 }
 // Siege answers count like every other attempt in the app: same shared
 // rotation, same teacher-visible attempt log.
@@ -76643,7 +76677,7 @@ function elgCloseQuiz() {
   if (r) { r.quiz = null; if (!document.getElementById('elgTree')) r.qPause = false; }
 }
 async function elgNextQuestion() {
-  const r = elgRun; if (!r) return;
+  const r = elgRun; if (!r || r.over) return;
   if (r.feedLoading) return;
   r.feedLoading = true;
   const identity = _scienceFeedKey();
@@ -76655,6 +76689,7 @@ async function elgNextQuestion() {
   const box = document.getElementById('elgQuiz'); if (!box) return;
   box.innerHTML = '<div class="elg-quiz-card">'
     + '<div class="elg-quiz-head">⏸ Battle paused · answer for <b>✦ ' + ELG_SP_CORRECT + ' skill point</b></div>'
+    + '<p class="elg-quiz-ex">' + escapeHtml(GameQuestionPressure.rules) + '</p>'
     + '<div class="elg-quiz-q">' + (q.html || escapeHtml(q.q || '')) + '</div>'
     + '<div class="elg-quiz-opts">' + q.opts.map((o, i) =>
         '<button type="button" class="elg-quiz-opt" data-i="' + i + '" onclick="elgAnswer(' + i + ')"><span>' + escapeHtml(_gameLab(q, i)) + '</span>' + (q.optsHtml?.[i] || escapeHtml(o)) + '</button>').join('')
@@ -76663,10 +76698,12 @@ async function elgNextQuestion() {
     + '</div>';
 }
 function elgAnswer(i) {
-  const r = elgRun; if (!r || !r.quiz || r.quiz.answered) return;
+  const r = elgRun; if (!r || r.over || !r.quiz || r.quiz.answered || !Number.isInteger(i) || i < 0 || i >= r.quiz.q.opts.length) return;
   r.quiz.answered = true;
   const q = r.quiz.q;
   const correct = i === q.a;
+  const pressure = tcgQuestionPressure(r, correct, r.maxHp);
+  r.hp = pressure.fatal ? 0 : Math.max(0, r.hp - pressure.damage);
   const ms = performance.now() - r.quiz.at;
   r.answered++;
   const pts = rpgAwardGameQuestion(q && q.id, correct, ms);
@@ -76692,7 +76729,13 @@ function elgAnswer(i) {
     : '<span class="no">❌ The answer was <b>(' + escapeHtml(_gameLab(q, q.a)) + ')</b>' + (pts ? ' · 🪙 +' + pts : '') + '</span>')
     + (q.ex ? '<div class="elg-quiz-ex">' + escapeHtml(q.ex) + '</div>' : '')
     + '<button type="button" class="btn btn-primary elg-quiz-go" onclick="elgCloseQuiz()">▶ Back to the fight</button>';
+  if (fb && pressure.message) fb.innerHTML += '<p role="status">' + escapeHtml(pressure.message) + '</p>';
   elgHud();
+  if (r.hp <= 0) {
+    r.questionLoss = { message: pressure.message, answer: _gameLab(q, q.a), explanation: q.ex || '' };
+    elgCloseQuiz();
+    elgGameOver();
+  }
 }
 
 // ---- Rendering ------------------------------------------------------------
@@ -76908,6 +76951,7 @@ function elgGameOver() {
   box.className = 'elg-result';
   box.innerHTML = '<div class="elg-result-card">'
     + '<h3>☠️ ' + escapeHtml(tcgShortName(r.card)) + ' has fallen</h3>'
+    + tcgQuestionLossHtml(r)
     + '<div class="elg-result-wave">You survived to <b>wave ' + r.wave + '</b></div>'
     + '<div class="elg-result-grid">'
     +   '<div><b>' + r.kills + '</b><span>enemies felled</span></div>'

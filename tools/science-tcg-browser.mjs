@@ -27,7 +27,10 @@ const rpgState={tcg:model,gold:0,gameScores:{}};
 const tcgState=()=>model, escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const tcgAvatarUrl=id=>assets['battle-avatars:'+id]||null,tcgArtUrl=id=>assets['card-art:'+id]||tcgAvatarUrl(id),tcgHeroArtUrl=id=>assets['hero:'+id]||null,duelFxFrames=()=>null,tcgSlotArt=()=>null,tcgLoadArt=async()=>{},tcgLoadConfig=async()=>{};
 const tcgEyeHtml=()=>'',_isAdmin=()=>false,tcgRenderBody=()=>{},showToast=()=>{},tcgConfetti=()=>{},rpgSave=()=>{},rpgPublishLeaderboard=()=>{},rpgEnsureGameScores=()=>{},rpgApplyGameLevel=()=>{},rpgSyncTopbar=()=>{},rpgLogGameRun=()=>{},_spendCredit=()=>true;
-const _tcgQuizPool=()=>[],_tcgServedLoad=()=>({}),_tcgShuffle=a=>a.slice(),_tcgSyncProgress=()=>{},rpgLevel=()=>1;
+const _tcgQuizPool=()=>window.__qaQuestionPool||[],_tcgServedLoad=()=>({}),_tcgShuffle=a=>a.slice(),_tcgSyncProgress=()=>{},rpgLevel=()=>1;
+const tcgClosePreview=()=>{},_tcgServedMark=()=>{},_scienceFeedKey=()=>'test';
+const _scienceFeedNextGame=async r=>r.pool[(r.poolI=(r.poolI||0)+1)%r.pool.length];
+const rpgAwardGameQuestion=()=>0,logGameAttempt=()=>{},_scienceFeedMessage=()=>'',_scienceFeedEmptyHtml=()=>'',_gameLab=(q,i)=>String(i+1);
 const doc=(...a)=>a,setDoc=async()=>{},getDoc=async()=>({exists:()=>false}),serverTimestamp=()=>null;
 const _htmlPlainText=s=>String(s||'').replace(/<[^>]*>/g,''), qIsRetired=()=>false;
 const rpgTouch=()=>{},rpgRender=()=>{},rpgModeId='tcg';
@@ -35,14 +38,16 @@ ${slice('const TCG_ELEMENTS =','// ---- Booster packs')}
 ${slice('const TCG_FX_PHASES =','// \'fx:cosmic:fly2\'')}
 ${slice('const DUEL_FX_SHAPES =','function duelFxSlotId')}
 ${slice('function _tcgTargetByStrat','let _tcgConfig')}
+${slice('let _tcgQuiz = null;', '// -- ⚡ Energy:')}
 ${slice('function duelReleased()','// Inline handlers on the TCG page/overlays')}
 TCG_CARDS.forEach(c=>{model.cards[c.id]=1;model.levels[c.id]=10;model.merges[c.id]=1;});
-Object.assign(window,{elgStart,elgClose,elgTogglePause,elgOpenTree,elgCloseTree,elgTreeSelect,elgBuy,elgCast,emsLaunch,emsClose,emsSelect,emsPlace,emsTogglePause,emsOpenQuiz,emsCloseQuiz,duelOpen,duelStart,duelClose,duelEndTurn,duelTap,duelPlayCard,duelToggleSfx,tcgBattleSpeed,tcgCloseBattle,tcgSkipBattle});
+Object.assign(window,{tcgTrainCard,_tcgQuizNext,_tcgQuizAnswer,tcgCloseTrain,elgCloseQuiz,duelCloseQuiz,elgOpenQuiz,elgAnswer,emsNextQuestion,emsAnswer,duelOpenQuiz,duelAnswer,elgStart,elgClose,elgTogglePause,elgOpenTree,elgCloseTree,elgTreeSelect,elgBuy,elgCast,emsLaunch,emsClose,emsSelect,emsPlace,emsTogglePause,emsOpenQuiz,emsCloseQuiz,duelOpen,duelStart,duelClose,duelEndTurn,duelTap,duelPlayCard,duelToggleSfx,tcgBattleSpeed,tcgCloseBattle,tcgSkipBattle});
 window.qa={get elg(){return elgRun},get ems(){return emsRun},get duel(){return duelRun},cards:TCG_CARDS,media:tcgMedia,elgUpdate,elgRender,elgDamage,elgHeal,elgHurt,elgPassives,tcgSignatureLegends,emsUpdate,emsRender,tcgSignatureSiege,tcgSignatureDuel,duelSummon,duelMakeHandCard,duelRender,duelBeginTurn,duelCommitPlay,duelAttack,duelPeekHtml,tcgRunBattle,get arena(){return _tcgBattle},model,ELG_TREES,ELG_NODE_BY_ID};
 window.__ready=true;
+Object.defineProperty(window.qa,'training',{get:()=>_tcgQuiz});
 `;
 const styles=[...fs.readFileSync(path.join(root,'index.html'),'utf8').matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m=>m[0]).join('\n');
-const html='<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'+styles+'<link rel="stylesheet" href="/tcg-upgrade.css"><body><button id="start">Start test battle</button><script type="module" src="/fixture.js"></script></body>';
+const html='<!doctype html><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+styles+'<link rel="stylesheet" href="/tcg-upgrade.css"><body><button id="start">Start test battle</button><script src="/game-question-pressure.js"></script><script type="module" src="/fixture.js"></script></body>';
 const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_BROWSER_CHANNEL?{channel:process.env.PLAYWRIGHT_BROWSER_CHANNEL}:{})});
 const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
 await page.route('**/*',async route=>{const u=new URL(route.request().url());if(u.hostname!=='tcg.test')return route.abort();if(u.pathname==='/')return route.fulfill({contentType:'text/html',body:html});if(u.pathname==='/fixture.js')return route.fulfill({contentType:'text/javascript',body:fixture});const p=path.join(root,decodeURIComponent(u.pathname));if(!p.startsWith(root)||!fs.existsSync(p))return route.fulfill({status:404,body:''});return route.fulfill({contentType:p.endsWith('.js')?'text/javascript':p.endsWith('.css')?'text/css':p.endsWith('.webp')?'image/webp':'application/octet-stream',body:fs.readFileSync(p)});});
@@ -99,6 +104,57 @@ try{
   ok(await page.evaluate(()=>qa.duel.p.board.at(-1)._signature.casts===2),'Iron Capacitor discharge is reachable through the first actual attack');
   await page.evaluate(()=>{const r=qa.duel;const friend=qa.duelSummon(qa.duelMakeHandCard('c147','P',1),'P');friend.frozen=1;friend.canAttack=false;friend.hp=1;friend.maxHp=100;r.p.board=[friend];r.e.board=[];qa.duelBeginTurn('P');r.p.mana=10;r.p.hand=[qa.duelMakeHandCard('c145','P',1)];qa.duelCommitPlay('P',0,null);const before=r.e.hp;qa.duelAttack(friend.uid,'hero',false);window.__cleanseAttack={attacked:friend.attacked,dealt:before-r.e.hp};});
   ok(await page.evaluate(()=>window.__cleanseAttack.attacked&&window.__cleanseAttack.dealt>0),'Duel purification restores an actual attack after turn start consumed the freeze counter');
+  await page.evaluate(()=>{
+    duelClose();
+    window.__qaQuestionPool=Array.from({length:6},(_,i)=>({id:'roots-'+i,a:0,opts:['Roots','Flowers'],html:'Which plant part absorbs water?',q:'Which plant part absorbs water?',ex:'Roots absorb water.'}));
+    tcgTrainCard('c149');
+  });
+  await page.waitForFunction(()=>qa.training?.cur&&!qa.training.loading);
+  ok(await page.locator('#tcgTrainOverlay').innerText().then(t=>t.includes('fifth ends the run')),'Training explains escalating focus loss before an answer');
+  for(let i=0;i<5;i++){
+    await page.evaluate(()=>_tcgQuizAnswer(1));
+    ok(await page.evaluate(()=>qa.training.focus)===[92,76,48,3,0][i],'Training applies escalating loss '+(i+1));
+    if(i<4){await page.evaluate(()=>_tcgQuizNext());await page.waitForFunction(()=>qa.training?.cur&&!qa.training.loading&&!qa.training.answered);}
+  }
+  ok(await page.evaluate(()=>qa.training.over),'Fifth wrong answer ends real Training session');
+  ok(await page.locator('#tcgqFb').innerText().then(t=>t.includes('Roots absorb water')&&t.includes('Training over')),'Training end retains explanation and earned progress notice');
+  await page.evaluate(()=>{_tcgQuizNext();_tcgQuizAnswer(0);});
+  ok(await page.evaluate(()=>qa.training.focus===0&&qa.training.over),'Training controls cannot revive an ended session');
+  await shot('08-training-question-defeat');
+  await page.evaluate(()=>{tcgCloseTrain();document.body.insertAdjacentHTML('beforeend','<div class="elg-overlay" id="elgOverlay"></div>');elgStart('c201');cancelAnimationFrame(qa.elg.raf);qa.elg.shield=99999;qa.elg.legend.revive=true;});
+  for(let i=0;i<5;i++){
+    await page.evaluate(()=>{qa.elg.hp=qa.elg.maxHp;elgOpenQuiz();});
+    await page.waitForFunction(()=>qa.elg.quiz&&!qa.elg.feedLoading);
+    if(i===0)ok(await page.locator('#elgQuiz').innerText().then(t=>t.includes('fifth ends the run')),'Ember Legends explains pressure before answering');
+    await page.evaluate(()=>elgAnswer(1));
+    if(i<4)await page.evaluate(()=>elgCloseQuiz());
+  }
+  ok(await page.evaluate(()=>qa.elg.over&&qa.elg.hp===0&&!qa.elg.revived),'Fifth wrong answer bypasses Ember Legends shield/healing/revive');
+  ok(await page.locator('.elg-result').innerText().then(t=>t.includes('Five wrong')&&t.includes('Roots absorb water')),'Ember Legends defeat retains the correct answer and explanation');
+  await shot('09-legends-question-defeat');
+  await page.evaluate(()=>{elgClose();emsLaunch();});await page.waitForFunction(()=>qa.ems);
+  await page.evaluate(()=>cancelAnimationFrame(qa.ems.raf));
+  for(let i=0;i<5;i++){
+    await page.evaluate(()=>{qa.ems.gate=100;qa.ems.quiz=null;emsOpenQuiz(5);});
+    await page.waitForFunction(()=>qa.ems.quiz&&!qa.ems.feedLoading);
+    if(i===0)ok(await page.locator('#emsQuiz').innerText().then(t=>t.includes('fifth ends the run')),'Siege explains pressure before its paused mana round');
+    await page.evaluate(()=>emsAnswer(1));
+    if(i<4)await page.evaluate(()=>emsCloseQuiz());
+  }
+  ok(await page.evaluate(()=>qa.ems.over&&qa.ems.gate===0),'Siege wrong streak survives closing/reopening mana rounds and kills gate on fifth miss');
+  ok(await page.locator('.ems-result').innerText().then(t=>t.includes('Five wrong')&&t.includes('Roots absorb water')),'Siege result retains the learning feedback');
+  await shot('10-siege-question-defeat');
+  await page.evaluate(()=>{emsClose();duelOpen();});await page.waitForFunction(()=>qa.duel);
+  for(let i=0;i<5;i++){
+    await page.evaluate(async()=>{const r=qa.duel;r.p.hp=r.p.maxHp;r.p.armor=9999;r.insightUsed=false;await duelOpenQuiz();});
+    await page.waitForFunction(()=>qa.duel.quiz&&!qa.duel.feedLoading);
+    if(i===0)ok(await page.locator('#duelQuiz').innerText().then(t=>t.includes('fifth ends the run')),'Duel explains pressure before Insight answer');
+    await page.evaluate(()=>{duelAnswer(1);});
+    if(i<4)await page.evaluate(()=>duelCloseQuiz());
+  }
+  ok(await page.evaluate(()=>qa.duel.over&&!qa.duel.won&&qa.duel.p.hp===0&&qa.duel.p.armor===9999),'Duel fifth wrong answer directly defeats hero through armor and refills');
+  ok(await page.locator('.duel-over-card').innerText().then(t=>t.includes('Five wrong')&&t.includes('Roots absorb water')),'Duel terminal UI shows correct answer and explanation');
+  await shot('11-duel-question-defeat');
   await page.evaluate(()=>{duelClose();void qa.tcgRunBattle(['c149','c150','c151','c200','c201'],{name:'P6 learner'},{name:'Local sparring squad',tcgTeam:['c141','c142','c143','c144','c145'],ghost:true});});
   await page.waitForSelector('#tcgbStage',{timeout:6000}).catch(e=>{throw Error(errors.join('; ')||e.message)});await page.waitForTimeout(2350);await shot('07-arena');
   ok(await page.locator('#tcgbStage .tcgb-unit').count()===10,'Arena renders original ten-card match with upgrade controls');
