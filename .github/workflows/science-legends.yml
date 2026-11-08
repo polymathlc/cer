@@ -1,0 +1,40 @@
+name: Science Legends combat and learning checks
+on:
+  pull_request:
+    paths: ['science-legends*', 'science-slayers.html', 'science-expedition-*', 'science-feed-*.js', 'assets/science-legends/**', 'app.js', 'index.html', 'quest-frames.js', 'tools/science-legends-*', 'tools/science-expedition-*', 'tools/game-legends-slayers-*', 'tools/science-feed*', '.github/workflows/science-legends.yml']
+  push:
+    branches: [main]
+    paths: ['science-legends*', 'science-slayers.html', 'science-expedition-*', 'science-feed-*.js', 'assets/science-legends/**', 'app.js', 'index.html', 'quest-frames.js', 'tools/science-legends-*', 'tools/science-expedition-*', 'tools/game-legends-slayers-*', 'tools/science-feed*', '.github/workflows/science-legends.yml']
+permissions:
+  contents: read
+jobs:
+  expedition:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Verify mechanics, deterministic combat and endless question safeguards
+        run: node --test tools/game-legends-slayers-tests.mjs tools/science-legends-combat-tests.mjs tools/science-feed-core-tests.mjs tools/science-feed-standalone-tests.mjs tools/science-feed-payload-tests.mjs tools/science-feeding-integration-tests.mjs
+      - name: Install isolated browser runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/legends-browser" --no-audit --no-fund playwright@1.62.1
+          "$RUNNER_TEMP/legends-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify desktop, touch, accessibility, generated art and every skill variant
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/legends-browser/node_modules/playwright/index.mjs
+          GAME_SCREENSHOTS: ${{ runner.temp }}/legends-qa
+        run: |
+          node tools/game-legends-slayers-browser.mjs
+          node tools/science-expedition-accessibility-browser.mjs
+          node tools/science-legends-premium-browser.mjs
+          node tools/science-legends-skills-browser.mjs
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: failure()
+        with:
+          name: legends-qa
+          path: ${{ runner.temp }}/legends-qa
+          if-no-files-found: ignore
+          retention-days: 7

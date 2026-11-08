@@ -111,8 +111,8 @@ for(const file of ['science-defenders.html','science-raiders.html','science-lege
   assert.match(source,/<script src="science-feed-bridge\.js"><\/script>/);
   assert.match(source,/await scienceFeed\.refresh\(\)/);
   assert.match(source,/if\(!scienceFeed\.current\(qState\.current\)\) return;/);
-  const selected=row('safe'),c=vm.createContext({ScienceFeedBridge:{},scienceFeed:{take:()=>selected,stamp:q=>q},G:{topic:'mixed'},
-    [bank]:[row('old')],usingBank:false,usingBankQuestions:false,rebuildTopicOptions(){},$:()=>({})});
+  const selected=row('safe'),c=vm.createContext({ScienceFeedBridge:{},scienceFeed:{take:()=>selected,stamp:q=>q,message:()=> 'Connecting to your class question stream…'},G:{topic:'mixed'},
+    [bank]:[row('old')],usingBank:false,usingBankQuestions:false,embedded:()=>true,rebuildTopicOptions(){},$:()=>({})});
   vm.runInContext(cut(source,'function pickQuestion(){','\n}\n')+'\n}\n'+cut(source,`function ${apply}(list){`,'\n}\n')+'\n}\n',c);
   assert.equal(c.pickQuestion().id,'safe');c[apply]([]);assert.equal(c[bank].length,0);
 });
