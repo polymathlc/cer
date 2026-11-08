@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="application-version" content="2.2.1" />
+  <meta name="application-version" content="2.2.2" />
   <meta name="theme-color" content="#08131b" />
   <title>HADES II: Chronos Fall — Endless Descent</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -662,7 +662,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #89eddd; outline-
         <div id="runtime-toolbar"><button id="runtime-pause" type="button" aria-label="Pause game and open settings">Ⅱ <span>Pause</span></button></div>
         <section id="runtime-overlay" role="dialog" aria-modal="true" aria-labelledby="runtime-title">
           <div class="runtime-panel">
-            <div class="runtime-eyebrow">CHRONOS FALL · UNDERWORLD ODYSSEY · v2.2.1 · BETA</div><h1 id="runtime-title">Defy the Titan of Time</h1>
+            <div class="runtime-eyebrow">CHRONOS FALL · UNDERWORLD ODYSSEY · v2.2.2 · BETA</div><h1 id="runtime-title">Defy the Titan of Time</h1>
             <p id="runtime-description">Descend through shifting chambers, forge a divine build and challenge the endless depths beyond Chronos.</p>
             <div class="runtime-help"><span><b>MOVE</b> WASD / Arrows</span><span><b>STRIKE</b> Hold click / J</span><span><b>SPECIAL</b> Right click / K</span><span><b>DASH</b> Space / Shift</span><span><b>CAST</b> Aim cursor · Q / E<br>Press again to burst</span><span><b>HEX</b> F when charged</span></div>
             <p class="runtime-touch-hint">Touch: move with the left pad and use the ability buttons. Attacks aim at the nearest foe.</p>
@@ -4237,8 +4237,10 @@ function installHadesLearning() {
     let codexPreviousPause = false;
     function openSkillCodex() {
       if (document.getElementById('codex-modal').style.display === 'flex') return;
+      // Remember the underlying pause, but only pause once the codex is
+      // actually visible: an error while building cards must never leave the
+      // run frozen behind a modal that did not open.
       codexPreviousPause = gameState.isPaused;
-      gameState.isPaused = true;
       const modal = document.getElementById('codex-modal');
       const container = document.getElementById('codex-cards-container');
       container.innerHTML = '';
@@ -4310,8 +4312,9 @@ function installHadesLearning() {
           `;
 
           const canvasEl = card.querySelector('canvas');
-          if (canvasEl && godDef && godDef.portraitIndex !== undefined) {
-            renderGodPortraitToCanvas(canvasEl, godDef.portraitIndex, godDef.color);
+          if (canvasEl) {
+            try { renderGodPortraitToCanvas(canvasEl, isDuo ? null : godDef.portraitIndex, godDef ? godDef.color : '#d4af37'); }
+            catch (error) { console.warn('Codex portrait failed', error); }
           }
 
           container.appendChild(card);
@@ -4319,6 +4322,30 @@ function installHadesLearning() {
       }
 
       modal.style.display = 'flex';
+      gameState.isPaused = true;
+    }
+
+    // Small round god portrait for each codex card, cut from the same
+    // 5×2 god sheet the boon reward modal uses. Duo boons and missing
+    // artwork fall back to a coloured sigil so the codex always opens.
+    function renderGodPortraitToCanvas(canvasEl, portraitIndex, color = '#d4af37') {
+      const pctx = canvasEl.getContext('2d');
+      if (!pctx) return;
+      const w = canvasEl.width, h = canvasEl.height, r = Math.min(w, h) / 2;
+      pctx.clearRect(0, 0, w, h);
+      pctx.save();
+      pctx.beginPath(); pctx.arc(w / 2, h / 2, r, 0, Math.PI * 2); pctx.clip();
+      const godsImg = loadedImages['all_10_gods'];
+      if (Number.isInteger(portraitIndex) && godsImg && godsImg.complete && godsImg.naturalWidth > 0) {
+        pctx.drawImage(godsImg, (portraitIndex % 5) * 256, Math.floor(portraitIndex / 5) * 256, 256, 256, 0, 0, w, h);
+      } else {
+        const glow = pctx.createRadialGradient(w / 2, h / 2, 2, w / 2, h / 2, r);
+        glow.addColorStop(0, '#fff7e1'); glow.addColorStop(0.35, color); glow.addColorStop(1, '#0c1924');
+        pctx.fillStyle = glow; pctx.fillRect(0, 0, w, h);
+      }
+      pctx.restore();
+      pctx.strokeStyle = color; pctx.lineWidth = 2;
+      pctx.beginPath(); pctx.arc(w / 2, h / 2, r - 1, 0, Math.PI * 2); pctx.stroke();
     }
 
     function closeSkillCodex() {

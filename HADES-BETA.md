@@ -23,7 +23,7 @@ The iframe receives the completed score only. Answer keys remain in the portal. 
 
 Validation: `node --test tools/hades-learning-tests.mjs tools/hades-remote-grading-tests.mjs` checks protocol, scoring, idempotency, access and Science bank integration. `tools/hades-learning-browser.mjs` checks the rendered sanctuary, mobile layout, diagrams, tables, fractions, failed-image behavior, retries and account changes. The workflow also checks fullscreen controls and student history/profile cleanup. `node tools/hades-cursor-browser.mjs` tests real mouse, keyboard and touch controls in the bundled game, including camera movement, screen shake, canvas scaling and layout changes with a stationary cursor.
 
-Release bundle: **Hades 2.2.1**, Science **v1.386.2**. The generated game and shared bridge are verified against `hades-game.manifest.json` in CI. Tests exercise all six scores, rendered reward summaries and duplicate-request protection.
+Release bundle: **Hades 2.2.2** (Boons codex freeze fix, Science v1.452.2; previously 2.2.1 with Science v1.386.2). The generated game and shared bridge are verified against `hades-game.manifest.json` in CI. Tests exercise all six scores, rendered reward summaries and duplicate-request protection.
 
 Pressing Q or E places the SVG summoning circle at the floor position beneath the mouse cursor at that instant. It stays fixed in the world as the player and camera move; pressing Cast again detonates it there. Keyboard-only and touch players retain assisted targeting. Its boundary matches the spell's reach, with rune bands that stop in reduced-motion mode.
 
