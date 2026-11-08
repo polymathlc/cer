@@ -2278,7 +2278,7 @@ function screenToWorld(x,y){
 (function(){
   function pos(e){
     var r = canvas.getBoundingClientRect();
-    mouse.sx = e.clientX - r.left; mouse.sy = e.clientY - r.top;
+    mouse.sx = (e.clientX - r.left) * VW / Math.max(1,r.width); mouse.sy = (e.clientY - r.top) * VH / Math.max(1,r.height);
   }
   canvas.addEventListener('pointermove', function(e){
     if (e.pointerType !== 'mouse') return;
