@@ -3640,6 +3640,14 @@ function drawSpriteOr(id, sheet, x, y, size, flip){
   ctx.drawImage(im, -size / 2, -size / 2, size, size);
   ctx.restore();
 }
+/* Actors remain upright on one fixed ground plane. Only weapons/effects rotate. */
+function drawActorModel(id,sheet,actor,size,flip){
+  drawSpriteOr(id,sheet,actor.x,actor.y+actor.r-size/2,size,flip);
+}
+function drawHeroModel(){
+  var p=G.player,frame=p.moving?((p.animT*2|0)%2):0;
+  drawActorModel('hero_'+G.cls,heroSheets[0][frame],p,52,p.fx<0);
+}
 
 /* ============================================================================
  * PROJECTILE ART — every projectile is drawn as what it IS: javelins with
@@ -4013,15 +4021,8 @@ function draw(){
     ctx.beginPath(); ctx.arc(p.x, p.y, 24, 0, Math.PI * 2); ctx.stroke();
     ctx.globalAlpha = 1;
   }
-  var dirIdx = Math.abs(p.fx) > Math.abs(p.fy) ? (p.fx < 0 ? 2 : 3) : (p.fy < 0 ? 1 : 0);
-  var hframe = p.moving ? ((p.animT * 2 | 0) % 2) : 0;
+  drawHeroModel();
   if (G.spin){
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(G.time * 14);
-    ctx.translate(-p.x, -p.y);
-    drawSpriteOr('hero_' + G.cls, heroSheets[dirIdx][hframe], p.x, p.y, 52, ovr('hero_' + G.cls) ? p.fx < 0 : false);
-    ctx.restore();
     var flame = G.stats.mods['pw.flamespin'];
     ctx.globalAlpha = 0.35; ctx.strokeStyle = flame ? '#FF5722' : '#FFCC80'; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.arc(p.x, p.y, G.spin.radius * G.stats.area, 0, Math.PI * 2); ctx.stroke();
@@ -4030,8 +4031,6 @@ function draw(){
       ctx.beginPath(); ctx.arc(p.x, p.y, G.spin.radius * G.stats.area * 0.7 + Math.sin(G.time * 20) * 6, 0, Math.PI * 2); ctx.stroke();
     }
     ctx.globalAlpha = 1;
-  } else {
-    drawSpriteOr('hero_' + G.cls, heroSheets[dirIdx][hframe], p.x, p.y, 52, ovr('hero_' + G.cls) ? p.fx < 0 : false);
   }
   // melee weapon swing: eased sweep with a motion trail, weapon on top
   if (G.swing && !G.spin){
