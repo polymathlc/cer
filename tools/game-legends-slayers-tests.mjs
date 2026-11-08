@@ -19,7 +19,7 @@ function world(slug, functions){
   const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{hidden:true,style:{},classList:{add(){},remove(){},contains(){return false;}},getContext(){return {fillRect(){},beginPath(){},arc(){},fill(){}}},width:150,height:150});return nodes.get(id);};
   const state={G:{state:'play',player:{x:100,y:100,r:16,fx:0,fy:1,dashT:0,hp:100},evadeTrail:[],enemies:[],ap:10},
     keys:{w:true},joyVec:{on:true,x:1,y:0},mouse:{lDown:true,rDown:true},lowMotion:false,
-    $:node,overlayOpen:()=>false,moveInput:()=>({x:3,y:4}),ringFx(){},sfx(){},Event:class{},window:{dispatchEvent(){}},
+    $:node,activeGameSurface:()=>true,failedCastFeedback:()=>{},overlayOpen:()=>false,moveInput:()=>({x:3,y:4}),ringFx(){},sfx(){},Event:class{},window:{dispatchEvent(){}},
     noteAction(n){state.G.ap-=n;if(state.G.ap===0)state.G.state='feed-loading';},
     nextDepth(){state.G.wave=(state.G.wave||1)+1;state.G.stairs=null;},
     clamp:(n,a,b)=>Math.max(a,Math.min(b,n)),dist2:(x,y,a,b)=>(x-a)**2+(y-b)**2,

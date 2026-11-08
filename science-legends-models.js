@@ -28,11 +28,14 @@
     for(var fy=Math.max(0,bottom-Math.floor(height*.09));fy<=bottom;fy++)for(var fx=0;fx<width;fx++){var a=pixels[(fy*width+fx)*4+3];if(a>64){sumX+=fx*a;sum+=a;}}
     return {x:sum?sumX/sum/width:.5,y:bottom/height};
   }
-  function enemyColumn(kind){return kind==='boss'?3:ENEMIES.indexOf(kind);}
+  function varietyModel(kind){return root.LegendsVariety&&root.LegendsVariety.model(kind);}
+  function enemyColumn(kind){var extra=varietyModel(kind);return extra?extra.column:kind==='boss'?3:ENEMIES.indexOf(kind);}
+  var enemyPoses=Object.create(null);
+  function enemyPose(actor,profile){var extra=varietyModel(actor.kind),elite=extra&&getSheet('enemyElite',profile),key=(elite?'elite:':'base:')+actor.kind;return enemyPoses[key]||(enemyPoses[key]=Object.freeze(elite?{kind:'enemyElite',column:extra.column}:{kind:'enemy',column:extra?ENEMIES.indexOf(extra.fallback):enemyColumn(actor.kind)}));}
   function sortActors(entries,inPlace){return (inPlace?entries:entries.slice()).sort(function(a,b){return (a.actor.y+(a.actor.r||0))-(b.actor.y+(b.actor.r||0))||a.order-b.order;});}
   function bodyBounds(actor,size,anchor){anchor=anchor||{x:.5,y:.96};return {x:actor.x-(actor.fx<0?1-anchor.x:anchor.x)*size,y:actor.y+(actor.r||0)-anchor.y*size,w:size,h:size};}
   function frameBounds(actor,size,frame,mirror){var w=frame.w/frame.nominalWidth*size,h=frame.h/frame.nominalHeight*size;mirror=mirror==null?actor.fx<0:mirror;return {x:actor.x-(mirror?1-frame.anchor.x:frame.anchor.x)*w,y:actor.y+(actor.r||0)-frame.anchor.y*h,w:w,h:h};}
-  function enemyBounds(actor,time,reduced,size,profile){var column=enemyColumn(actor.kind),row=enemyFrame(actor,time,reduced),pose=orientation('enemy',actor,profile),frame=pose.sheet&&column>=0&&pose.sheet.frames[column][row];return frame?frameBounds(actor,size,frame,pose.mirror):bodyBounds(actor,size,{x:.5,y:1});}
+  function enemyBounds(actor,time,reduced,size,profile){var model=enemyPose(actor,profile),column=model.column,row=enemyFrame(actor,time,reduced),pose=orientation(model.kind,actor,profile),frame=pose.sheet&&column>=0&&pose.sheet.frames[column][row];return frame?frameBounds(actor,size,frame,pose.mirror):bodyBounds(actor,size,{x:.5,y:1});}
   function companionBounds(actor,time,reduced,size,cls,profile){var model=companionModel(actor.kind,cls),pose=model&&orientation(model.sheet,actor,profile),frame=pose&&pose.sheet&&pose.sheet.frames[model.column][stateFrame(actor,time,reduced)];return frame?frameBounds(actor,size,frame,pose.mirror):bodyBounds(actor,size,{x:.5,y:1});}
   function pick(enemies,x,y,bounds){var best=null,depth=-Infinity,order=-1;for(var i=0;i<enemies.length;i++){var actor=enemies[i];if(actor.dead||actor.hp<=0)continue;var z=actor.y+(actor.r||0);if(z<depth||z===depth&&i<order)continue;var box=bounds(actor);if(x>=box.x&&x<=box.x+box.w&&y>=box.y&&y<=box.y+box.h){best=actor;depth=z;order=i;}}return best;}
   function statuses(actor){
@@ -44,6 +47,7 @@
     return list;
   }
   function enemyFrame(actor,time,reduced){
+    if(actor.variety&&actor.variety.phase==='windup')return 3;
     if(actor.chargeSt===1)return 3;
     if(actor.spitWindup>0)return 3;
     if(actor.heavyWindup>0)return 3;
@@ -51,11 +55,11 @@
     if((actor.modelAttackUntil||0)>time)return 3;
     return actor.moving?(reduced?1:1+(Math.floor((time+(actor.modelPhase||0))*7)%2)):0;
   }
-  var sheets={hero:{columns:5,file:'heroes',image:null,frames:[],prepared:false},enemy:{columns:6,file:'enemies-clean',image:null,frames:[],prepared:false},companion:{columns:4,file:'companions',image:null,frames:[],prepared:false},heroRear:{columns:5,file:'heroes-rear',image:null,frames:[],prepared:false},enemyRear:{columns:6,file:'enemies-rear',image:null,frames:[],prepared:false},companionRear:{columns:4,file:'companions-rear',image:null,frames:[],prepared:false}};
+  var sheets={hero:{columns:5,file:'heroes',image:null,frames:[],prepared:false},enemy:{columns:6,file:'enemies-clean',image:null,frames:[],prepared:false},companion:{columns:4,file:'companions',image:null,frames:[],prepared:false},heroRear:{columns:5,file:'heroes-rear',image:null,frames:[],prepared:false},enemyRear:{columns:6,file:'enemies-rear',image:null,frames:[],prepared:false},companionRear:{columns:4,file:'companions-rear',image:null,frames:[],prepared:false},enemyElite:{columns:4,file:'enemies-elite',optional:true,image:null,frames:[],prepared:false},enemyEliteRear:{columns:4,file:'enemies-elite-rear',optional:true,image:null,frames:[],prepared:false}};
   function getSheet(kind,profile){var sheet=profile?profile[kind]:sheets[kind];return sheet&&sheet.prepared?sheet:null;}
   function orientation(kind,actor,profile){var front=getSheet(kind,profile),back=front&&rearFacing(actor)&&getSheet(kind+'Rear',profile);return {sheet:back||front,rear:!!back,mirror:back?actor.fx>0:actor.fx<0};}
   function ready(kind){return !!getSheet(kind||'hero');}
-  function allReady(){return Object.keys(sheets).every(ready);}
+  function allReady(){return ['hero','enemy','companion','heroRear','enemyRear','companionRear'].every(ready);}
   function snapshot(){var profile={};Object.keys(sheets).forEach(function(kind){profile[kind]=getSheet(kind);});return Object.freeze(profile);}
   function frameInfo(kind,column,row){var sheet=getSheet(kind),frame=sheet&&sheet.frames[column]&&sheet.frames[column][row];if(!frame)return null;return Object.freeze({x:frame.x,y:frame.y,w:frame.w,h:frame.h,anchor:Object.freeze({x:frame.anchor.x,y:frame.anchor.y}),nominalWidth:frame.nominalWidth,nominalHeight:frame.nominalHeight,pixels:frame.pixels,visiblePixels:frame.visiblePixels,core:Object.freeze(Object.assign({},frame.core))});}
   var atlasWorker=null,workerDisabled=false,workerRequests=new Map(),workerSequence=0,workerIdleTimer=null;
@@ -135,10 +139,15 @@
     ctx.restore();return true;
   }
   function drawHero(ctx,cls,actor,time,reduced,size,profile){return drawModel(ctx,'hero',HEROES.indexOf(cls),stateFrame(actor,time,reduced),actor,size,profile);}
-  function drawEnemy(ctx,actor,time,reduced,size,profile){return drawModel(ctx,'enemy',enemyColumn(actor.kind),enemyFrame(actor,time,reduced),actor,size,profile);}
+  function drawEnemy(ctx,actor,time,reduced,size,profile){var model=enemyPose(actor,profile);return drawModel(ctx,model.kind,model.column,enemyFrame(actor,time,reduced),actor,size,profile);}
   function drawCompanion(ctx,actor,time,reduced,size,cls,profile){var model=companionModel(actor.kind,cls);if(!model)return false;ctx.save();if(actor.kind==='decoy')ctx.globalAlpha=.55;var drawn=drawModel(ctx,model.sheet,model.column,stateFrame(actor,time,reduced),actor,size,profile);ctx.restore();return drawn;}
-  var api={ready:ready,allReady:allReady,snapshot:snapshot,frameInfo:frameInfo,advanceFacing:advanceFacing,rearFacing:rearFacing,drawHero:drawHero,drawEnemy:drawEnemy,drawCompanion:drawCompanion,companionModel:companionModel,companionRole:companionRole,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,sourceRect:sourceRect,footAnchor:footAnchor,sortActors:sortActors,statuses:statuses,bodyBounds:bodyBounds,frameBounds:frameBounds,enemyBounds:enemyBounds,companionBounds:companionBounds,pick:pick};
+  var api={ready:ready,allReady:allReady,snapshot:snapshot,frameInfo:frameInfo,advanceFacing:advanceFacing,rearFacing:rearFacing,drawHero:drawHero,drawEnemy:drawEnemy,drawCompanion:drawCompanion,companionModel:companionModel,companionRole:companionRole,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,enemyPose:enemyPose,sourceRect:sourceRect,footAnchor:footAnchor,sortActors:sortActors,statuses:statuses,bodyBounds:bodyBounds,frameBounds:frameBounds,enemyBounds:enemyBounds,companionBounds:companionBounds,pick:pick};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.LegendsModels=api;
-  if(typeof root.Image==='function'&&root.document)Object.keys(sheets).forEach(function(kind){var sheet=sheets[kind];sheet.image=new root.Image();sheet.image.onload=function(){prepare(sheet);};sheet.image.src='assets/science-legends/v2/'+sheet.file+'.webp';});
+  function loadSheet(kind){var sheet=sheets[kind];if(sheet.image)return;sheet.image=new root.Image();sheet.image.onload=function(){prepare(sheet);};sheet.image.src='assets/science-legends/'+(sheet.optional?'v4/':'v2/')+sheet.file+'.webp';}
+  var optionalScheduled=false;
+  function warmOptional(){if(optionalScheduled)return;optionalScheduled=true;var warm=function(){loadSheet('enemyElite');loadSheet('enemyEliteRear');};if(typeof root.requestIdleCallback==='function')root.requestIdleCallback(warm,{timeout:3000});else root.setTimeout(warm,100);}
+  api.warmOptional=warmOptional;
+  if(typeof root.Image==='function'&&root.document){Object.keys(sheets).forEach(function(kind){if(!sheets[kind].optional)loadSheet(kind);});root.addEventListener('legendsmodelsready',function(){if(allReady())warmOptional();});}
+
 })(typeof window==='object'?window:globalThis);
