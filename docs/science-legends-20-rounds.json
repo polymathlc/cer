@@ -90,7 +90,8 @@
         "Evaluator reviewed one-time alpha baseline measurement and fixed source-cell sizing.",
         "Evaluator independently ran3 model/animation/foot-anchor tests: passed.",
         "Implementer passed35 real premium-page browser checks and inspected a generated Sorcerer attack pose.",
-        "Evaluator independently passed92 real-page generated-model matrix/crop/pose checks and inspected renderer screenshot."
+        "Evaluator independently passed92 real-page generated-model matrix/crop/pose checks and inspected renderer screenshot.",
+        "Independent art QA547dad4 passed17 real-page assertions including distinct generated frames, source proportions, pause and render purity."
       ],
       "status": "verified"
     },
@@ -109,7 +110,8 @@
         "Evaluator reviewed enemy action integration and atlas cache.",
         "Evaluator independently ran all4 model tests, including unique columns and control-effect frames: passed.",
         "Implementer ran240 skill/ultimate stress combinations successfully.",
-        "Evaluator inspected all6 generated enemy silhouettes in a real renderer screenshot."
+        "Evaluator inspected all6 generated enemy silhouettes in a real renderer screenshot.",
+        "Independent art QA547dad4 passed17 real-page assertions including distinct generated frames, source proportions, pause and render purity."
       ],
       "status": "verified"
     },
@@ -128,7 +130,96 @@
         "Implementer passed38 premium browser checks including actual back-to-front ordering at1280/390/320px."
       ],
       "status": "verified"
+    },
+    {
+      "round": 6,
+      "idea": "Animate real attack events without letting rendering deal damage",
+      "finding": "Melee, elemental contact and cast effects lacked a shared multi-frame visual sequence lifecycle.",
+      "change": "A bounded simulation-timed atlas adapter now animates4-frame melee, fire, frost and arcane events at actual cast/contact locations. Drawing has no damage callbacks and effects expire.",
+      "commit": "3180dcc",
+      "sources": [
+        "diablo4-vfx",
+        "diablo2-alpha"
+      ],
+      "verification": [
+        "Evaluator independently ran19 action/model/combat tests: allpassed.",
+        "Reviewed real slash/explosion/nova/cast/impact emission and bounded visual-only queue.",
+        "Implementer passed240 skill/ultimate stress combinations.",
+        "Independent art QA547dad4 passed17 real-page assertions including distinct generated frames, source proportions, pause and render purity."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 7,
+      "idea": "Give elemental attacks their own readable identities",
+      "finding": "Poison, holy, lightning and arrows shared generic fire or purple contact effects, and a nonsquare atlas risked vertical stretching.",
+      "change": "Actual elemental events carry explicit families and play the cleaned4-frame elemental sheet. Source frame aspect ratios are preserved and existing lightning path cues remain.",
+      "commit": "1fbdd3a",
+      "sources": [
+        "diablo4-vfx",
+        "diablo2-alpha"
+      ],
+      "verification": [
+        "Evaluator independently ran16 action/contact/combat tests: allpassed.",
+        "Reviewed actual poison explosion, holy contact, lightning and Amazon release integration.",
+        "QA identified4:3 frame proportions; implementation preserves source aspect.",
+        "Independent art QA547dad4 passed17 real-page assertions including distinct generated frames, source proportions, pause and render purity."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 8,
+      "idea": "Make crowd-control and damage-over-time states visible and accurate",
+      "finding": "Effects were hard to distinguish from body color, and an expired high damage-over-time magnitude could survive a weaker later application.",
+      "change": "Deterministic shape/text badges distinguish FROZEN, STUN, SLOW, BLEED and VENOM at model-head height. Expired DoT strength/type clears; later applications use the correct winning source and remaining duration.",
+      "commit": "987b94e",
+      "sources": [
+        "grim-dawn-combat",
+        "diablo2-alpha"
+      ],
+      "verification": [
+        "Evaluator independently ran10 model/action/status tests: allpassed.",
+        "Reviewed poison source metadata and remaining-duration integration.",
+        "Fire DoT was additionally tagged BURN with its own shape/text badge."
+      ],
+      "status": "verified",
+      "follow_up_commits": [
+        "9044ee8"
+      ]
+    },
+    {
+      "round": 9,
+      "idea": "Make ranged enemy attacks commit before release",
+      "finding": "Spitter projectiles appeared instantly when cooldown expired, offering no readable preparation or dodge decision.",
+      "change": "A locked-direction0.4s cast braces the Spitter, shows a dashed path/progress ring/SPIT label above player effects, emits exactly one shot, and follows with recovery. Control effects pause safely and death cancels release.",
+      "commit": "9044ee8",
+      "sources": [
+        "diablo4-vfx",
+        "grim-dawn-monsters"
+      ],
+      "verification": [
+        "Evaluator independently ran10 AI/model tests: allpassed.",
+        "Production updateEnemies regression proves bracing, no early shot, no launch retarget, freeze safety and one release."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 10,
+      "idea": "Give heavy melee attacks anticipation, commitment and recovery",
+      "finding": "Brutes and bosses applied contact damage instantly, with no meaningful heavy-attack preparation or dodge window.",
+      "change": "Heavy foes lock a target footprint, brace for0.45s, resolve one contact only if that target remains inside, and recover for0.65s. SMASH/progress and RECOVER cues remain above player effects; smaller foe behavior stays intact.",
+      "commit": "a2b138c",
+      "sources": [
+        "diablo4-vfx",
+        "grim-dawn-monsters"
+      ],
+      "verification": [
+        "Evaluator independently ran5 AI tests: allpassed.",
+        "Production updateEnemies regression proves no early damage, exactly one contact and enforced recovery.",
+        "Reviewed control/death cancellation and safe committed pet targeting."
+      ],
+      "status": "verified"
     }
   ],
-  "current_round": 6
+  "current_round": 11
 }
