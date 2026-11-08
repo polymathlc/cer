@@ -114,6 +114,8 @@ function harness(bank = [], random = () => 0.5, cloud = null) {
     const stripHtmlToText=v=>String(v||'').replace(/<[^>]*>/g,'');
     const _htmlPlainText=stripHtmlToText;
     const _sdBreakStatements=v=>v,_sdZoomBtns=()=>'',imgSizeStyle=()=>'',_sdSeedElo=()=>1200;
+    const _hadesAllowed=()=>true,_hadesPreviewLevel=()=>_scienceFeedLevel(),_hadesPreviewProfile=()=>undefined;
+    const _hadesUnavailableContent=new Map(),qReleased=qAvailableToViewer;
     const renderTableReadonly=b=>'<table>'+Object.values(b.data).map(row=>'<tr>'+Object.values(row).map(cell=>'<td>'+cell+'</td>').join('')+'</tr>').join('')+'</table>';
     ${mcqLabelSrc(source)}
     ${helpers}
@@ -142,6 +144,7 @@ function harness(bank = [], random = () => 0.5, cloud = null) {
     ${fn('_sdStemHtml')}
     ${fn('_sdExtractMcq')}
     ${fn('_tcgBankQuestions')}
+    ${fn('_hadesScienceQuestions',true)}
     return {
       plan:(qs=questionBank,opts)=>_scienceFeedPlan(qs,opts),
       ensure:_scienceFeedEnsure,claim:_scienceFeedClaim,close:_scienceFeedCloseHistory,
@@ -161,6 +164,7 @@ function harness(bank = [], random = () => 0.5, cloud = null) {
       reports:rows=>{flaggedQuestions=rows;_scienceFeedFlagsLoadedUid=currentUser.uid;},
       image:_scienceFeedImageResult,gameRows:()=>_scienceFeedGameRows(_tcgBankQuestions()),nextGame:_scienceFeedNextGame,
       refresh:_scienceFeedRefreshFrames,
+      hadesQuestions:_hadesScienceQuestions,
       active:q=>{_openQStore['#question']=q;_openSurfaceCfg['#question']={mode:'practice'};qpQueue=[q];},
       activeState:()=>({questions:_openQStore,queue:qpQueue}),
       profilePractice:async student=>{students=[student];activeStudentIndex=0;await loadRandomPracticeQuestion();},
@@ -521,6 +525,24 @@ test('Grand Line selects exactly three actual Science records through the shared
   api.grandLine.recordAnswer({question:rows[0],correct:true,ms:2000},ctx);assert.equal(state.writes[0].mode,'grand-line');assert.equal(state.gameAwards.length,1);assert.deepEqual(state.gameAwards[0],[rows[0].id,true,2000]);
   const before=state.writes.length;api.grandLine.recordAnswer({question:rows[1],correct:false,ms:2000},{...ctx,admin:true});assert.equal(state.writes.length,before,'preview never writes a student attempt');assert.equal(state.gameAwards.length,1,'preview never awards student points');
   assert.equal((await harness([]).api.grandLine.getQuestions(ctx)).length,0);
+});
+
+test('Hades and Grand Line keep recycling minimum-size banks while preserving distinct complete rounds',async()=>{
+  const names=['Copper spoon','Wooden roof','Woollen blanket','Metal pan','Glass flask'];
+  const bank=names.map((title,i)=>q('endless-'+i,{title}));
+  const hades=harness(bank),grandLine=harness(bank.slice(0,3));
+  const ctx={admin:false,level:'P4'};
+  for(let round=0;round<8;round++){
+    const chamber=await hades.api.hadesQuestions();
+    assert.equal(chamber.length,5,'Hades remains fed after the entire five-question bank is seen');
+    assert.equal(new Set(chamber.map(row=>row.id)).size,5,'every sanctuary still has five distinct records');
+    const battle=await grandLine.api.grandLine.getQuestions(ctx);
+    assert.equal(battle.length,3,'Grand Line remains fed after the entire three-question bank is seen');
+    assert.equal(new Set(battle.map(row=>row.id)).size,3,'every battle still has three distinct records');
+    battle.forEach(row=>grandLine.api.grandLine.markShown(row,ctx));
+  }
+  assert.equal((await harness(bank.slice(0,4)).api.hadesQuestions()).length,0,'Hades never fabricates a fifth row');
+  assert.equal((await harness(bank.slice(0,2)).api.grandLine.getQuestions(ctx)).length,0,'Grand Line never duplicates a row to fill a round');
 });
 
 test('deliberate Home Review and teacher-picked quests retain revision without reopening automatic history', async () => {
