@@ -556,6 +556,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
   <!-- ===== STAGE ===== -->
   <div class="stage" id="stage">
     <canvas id="game"></canvas>
+    <div class="hurt-vignette" id="hurtVignette" aria-hidden="true"></div>
     <div class="battle-status" id="battleStatus" style="display:none"></div>
     <div class="target-panel" id="targetPanel" hidden role="region" aria-label="Enemy target"><div class="target-name" id="targetName"></div><div class="target-type" id="targetType"></div><div class="target-hp"><span id="targetHpFill"></span></div><div class="target-numbers" id="targetHp"></div><div class="target-effects" id="targetEffects"></div></div>
     <button class="evade-btn" id="evadeBtn" type="button" style="display:none">Evade<small>Space · READY</small></button>
@@ -563,8 +564,9 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
     <div class="qtimer" id="qTimer" style="display:none;"><span class="dot"></span> Next question in <b id="qTimerN" style="margin-left:2px;">20</b>s</div>
     <div class="pbars" id="pBars" style="display:none;">
       <div class="plevel" id="pLevel">Lv 1 · Barbarian</div>
-      <div class="pbar"><div class="fill" id="hpFill"></div><div class="txt" id="hpTxt">100 / 100</div></div>
+      <div class="pbar" id="healthBar" role="progressbar" aria-label="Health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div class="damage-trail" id="hpTrail"></div><div class="fill" id="hpFill"></div><div class="txt" id="hpTxt">100 / 100</div></div>
       <div class="pbar xp"><div class="fill" id="xpFill" style="transform:scaleX(0);"></div></div>
+      <div class="resource-details"><span id="healthState"></span><span id="shieldState" hidden></span><span id="insightState" hidden></span></div>
     </div>
     <div class="skillbar" id="skillBar" style="display:none;"></div>
     <button class="sksel-btn" id="skillSelBtn" type="button" style="display:none;" title="Choose which 4 of your 12 skills sit on the bar (K)">🎯 Select Skill</button>
@@ -731,6 +733,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 <script src="science-legends-ai.js?v=1.455.0"></script>
 <script src="science-legends-tree.js?v=1.455.0"></script>
 <script src="science-legends-icons.js?v=1.455.0"></script>
+<script src="science-legends-feedback.js?v=1.455.0"></script>
 <script src="science-legends-combat.js?v=1"></script>
 <script>
 /* ============================================================================
@@ -2171,6 +2174,7 @@ function evade(){
 }
 function updateCombatReadability(dt){
   var p=G.player;
+  LegendsFeedback.update(G,dt,lowMotion);
   LegendsActions.expire(G);
   G.impactCooldown=Math.max(0,(G.impactCooldown||0)-dt);
   G.impacts=(G.impacts||[]).filter(function(f){f.t+=dt;return f.t<f.life;});
@@ -2556,7 +2560,9 @@ function gainXp(n){
 }
 function healPlayer(n){
   var p = G.player;
+  var before=p.hp;
   p.hp = clamp(p.hp + n, 0, p.maxHp);
+  if(p.hp>before)LegendsFeedback.heal(G);updateBars();
 }
 function hurtPlayer(raw){
   var p = G.player;
@@ -2572,8 +2578,10 @@ function hurtPlayer(raw){
     }
     if (p.shield <= 0) p.thorns = 0;
   }
-  if (dmg <= 0) return;
+  if (dmg <= 0){updateBars();return;}
+  LegendsFeedback.damage(G,p.hp);
   p.hp -= dmg;
+  updateBars();
   G.shake = Math.max(G.shake, 0.18);
   sfx('hurt');
   if (p.hp <= 0){
@@ -2582,6 +2590,7 @@ function hurtPlayer(raw){
     else if (!G.phoenixUsed && G.stats.mods['pw.phoenix']){ G.phoenixUsed = true; revive = true; note = '🐦‍🔥 Phoenix Soul — reborn in flame!'; }
     if (revive){
       p.hp = p.maxHp * 0.5;
+      LegendsFeedback.heal(G);updateBars();
       G.enemies.forEach(function(e){
         if (dist2(e.x, e.y, p.x, p.y) < 340 * 340) dealDamage(e, 220 * G.stats.dmg, { color: '#EA80FC' });
         if (freezeAll) e.frozen = Math.max(e.frozen, 4);
@@ -4050,7 +4059,8 @@ function drawActors(camX,camY){
   queue.forEach(function(entry){var actor=entry.actor;if(entry.kind==='hero')return;var width=actor.r*2.2,y=actor.y+actor.r-actorHeight(entry)-8;
     if(actor.hp<actor.maxHp){ctx.fillStyle='#07121be6';ctx.fillRect(actor.x-width/2-1,y-1,width+2,6);ctx.fillStyle=entry.kind==='pet'?'#81c784':actor.boss?'#ce93d8':'#ef7770';ctx.fillRect(actor.x-width/2,y,width*clamp(actor.hp/actor.maxHp,0,1),4);}
     if(entry.kind==='pet'&&LegendsModels.companionRole(actor.kind)){ctx.save();ctx.fillStyle='#071c1cf0';ctx.fillRect(actor.x-30,y-17,60,11);ctx.fillStyle='#a7f4da';ctx.font='700 8px system-ui';ctx.textAlign='center';ctx.fillText(LegendsModels.companionRole(actor.kind),actor.x,y-9);ctx.restore();}
-    LegendsModels.statuses(actor).forEach(function(status,index){var bx=actor.x+(index%2?25:-25),by=y-13-Math.floor(index/2)*14;ctx.save();ctx.fillStyle='#07121bf0';ctx.fillRect(bx-24,by-7,48,12);ctx.strokeStyle=status.color;ctx.lineWidth=1;ctx.strokeRect(bx-24,by-7,48,12);ctx.fillStyle=status.color;ctx.font='700 8px system-ui';ctx.textAlign='center';ctx.fillText(status.glyph+' '+status.label,bx,by+2);ctx.restore();});
+    var statuses=LegendsModels.statuses(actor),important=actor.elite||actor.boss||actor===G.atkTarget||actor===mouse.over||actor.heavyWindup>0||actor.spitWindup>0;
+    statuses.forEach(function(status,index){var bx=important?actor.x+(index%2?25:-25):actor.x+(index-(statuses.length-1)/2)*16,by=important?y-13-Math.floor(index/2)*14:y-12,w=important?48:14;ctx.save();ctx.fillStyle='#07121bf0';ctx.fillRect(bx-w/2,by-7,w,12);ctx.strokeStyle=status.color;ctx.lineWidth=1;ctx.strokeRect(bx-w/2,by-7,w,12);ctx.fillStyle=status.color;ctx.font='700 '+(important?8:10)+'px system-ui';ctx.textAlign='center';ctx.fillText(status.glyph+(important?' '+status.label:''),bx,by+2);ctx.restore();});
   });
 }
 function drawHeroGround(){
@@ -4072,6 +4082,7 @@ function drawEnemyTelegraphs(){
     ctx.fillStyle='#0a1321';ctx.fillRect(e.x-24,e.y+e.r+6,48,16);ctx.fillStyle='#ffd3ff';ctx.font='800 10px system-ui';ctx.textAlign='center';ctx.fillText('SPIT',e.x,e.y+e.r+18);ctx.restore();
   });
 }
+function drawPlayerLocator(){var p=G.player;ctx.save();ctx.strokeStyle='#04101e';ctx.lineWidth=5;ctx.beginPath();ctx.ellipse(p.x,p.y+p.r,22,9,0,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='#fff1c9';ctx.lineWidth=1.7;ctx.stroke();ctx.fillStyle='#fff1c9';ctx.strokeStyle='#04101e';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(p.x-5,p.y+p.r-78);ctx.lineTo(p.x+5,p.y+p.r-78);ctx.lineTo(p.x,p.y+p.r-71);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();}
 function draw(){
   var p = G ? G.player : null;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -4246,6 +4257,7 @@ function draw(){
     ctx.fillText(t.txt, t.x, t.y);
     ctx.globalAlpha = 1;
   });
+  drawPlayerLocator();
   ctx.restore();
   drawAtmosphere();
   // ---- crosshair (screen space): attack symbol over an enemy, cross otherwise
@@ -4302,8 +4314,14 @@ function updateHud(){
 }
 function updateBars(){
   var p = G.player;
+  var visual=LegendsFeedback.update(G,0,lowMotion),critical=p.hp>0&&p.hp/p.maxHp<=.25;
   $('hpFill').style.transform = 'scaleX(' + clamp(p.hp / p.maxHp, 0, 1) + ')';
-  $('hpTxt').textContent = Math.ceil(p.hp) + ' / ' + Math.round(p.maxHp);
+  $('hpTrail').style.transform='scaleX('+clamp(visual.trail/p.maxHp,0,1)+')';
+  $('hpTxt').textContent = Math.max(0,Math.round(p.hp*10)/10) + ' / ' + Math.round(p.maxHp*10)/10;
+  $('healthBar').setAttribute('aria-valuemax',p.maxHp);$('healthBar').setAttribute('aria-valuenow',Math.max(0,p.hp));
+  $('stage').classList.toggle('health-critical',critical);$('healthState').textContent=critical?'LOW HEALTH':'';$('hurtVignette').style.opacity=visual.flash;
+  $('shieldState').hidden=!(p.shield>0);$('shieldState').textContent=p.shield>0?'Shield '+Math.round(p.shield*10)/10:'';
+  $('insightState').hidden=!(G.insightT>0);$('insightState').textContent=G.insightT>0?'Insight '+Math.ceil(G.insightT)+'s':'';
   $('xpFill').style.transform = 'scaleX(' + clamp(G.xp / G.xpNext, 0, 1) + ')';
   $('pLevel').textContent = 'Lv ' + G.level + ' · ' + CLASSES[G.cls].name + ' · ' + FOLLOWERS[META.follower].icon;
 }
