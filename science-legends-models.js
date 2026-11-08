@@ -28,6 +28,7 @@
     if(actor.frozen>0||actor.stun>0)return 0;
     if(actor.chargeSt===1)return 3;
     if(actor.spitWindup>0)return 3;
+    if(actor.heavyWindup>0)return 3;
     if((actor.modelAttackUntil||0)>time)return 3;
     return actor.moving?(reduced?1:1+(Math.floor((time+(actor.modelPhase||0))*7)%2)):0;
   }

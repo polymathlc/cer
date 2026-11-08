@@ -3262,7 +3262,7 @@ function updateEnemies(dt){
     var tgt = nearestTarget(e);
     var dx = tgt.x - e.x, dy = tgt.y - e.y;
     var d = Math.hypot(dx, dy) || 1;
-    e.fx=dx/d;
+    if(!(e.spitWindup>0)&&!(e.heavyWindup>0)&&!(e.chargeSt>0)){e.fx=dx/d;e.fy=dy/d;}
     var slowMult = e.slowT > 0 ? 0.55 : 1;
     for (var ai = 0; ai < G.auras.length; ai++){
       if (G.auras[ai].slow && dist2(e.x, e.y, p.x, p.y) < G.auras[ai].radius * G.auras[ai].radius){ slowMult = Math.min(slowMult, 0.65); break; }
@@ -3303,6 +3303,16 @@ function updateEnemies(dt){
         e.x += e.cvx * dt; e.y += e.cvy * dt;
         if (e.chargeT <= 0){ e.chargeSt = 0; e.chargeT = 2.2; }
       }
+    } else if(e.kind==='brute'||e.boss){
+      if(e.heavyWindup>0){var strike=LegendsAI.advanceHeavy(e,dt);if(strike){
+        actionFx(0,strike.x,strike.y,strike.r,Math.atan2(strike.y-e.y,strike.x-e.x),.28);
+        if(LegendsAI.heavyHits(strike)){
+          if(strike.target===p){hurtPlayer(e.dmg);if(p.thorns>0)dealDamage(e,p.thorns,{noSplash:true,color:'#4fc3f7'});}
+          else if(G.pets.indexOf(strike.target)>=0)strike.target.hp-=e.dmg;
+        }
+      }}else if(e.heavyRecovery>0)e.heavyRecovery=Math.max(0,e.heavyRecovery-dt);
+      else if(d<=e.r+tgt.r+20)LegendsAI.beginHeavy(e,tgt);
+      else{e.x+=dx/d*e.speed*slowMult*dt;e.y+=dy/d*e.speed*slowMult*dt;}
     } else {
       e.x += dx / d * e.speed * slowMult * dt;
       e.y += dy / d * e.speed * slowMult * dt;
@@ -3310,7 +3320,7 @@ function updateEnemies(dt){
     e.x = clamp(e.x, 20, WORLD.w - 20); e.y = clamp(e.y, 20, WORLD.h - 20);
     separate(e);
     e.moving=dist2(oldX,oldY,e.x,e.y)>.001;
-    if (e.hitCd <= 0 && dist2(e.x, e.y, p.x, p.y) < (e.r + p.r) * (e.r + p.r)){
+    if (e.kind!=='brute'&&!e.boss&&e.hitCd <= 0 && dist2(e.x, e.y, p.x, p.y) < (e.r + p.r) * (e.r + p.r)){
       e.hitCd = 0.9;
       e.modelAttackUntil=G.time+.24;
       hurtPlayer(e.dmg);
@@ -3318,7 +3328,7 @@ function updateEnemies(dt){
     }
     for (var pi = 0; pi < G.pets.length; pi++){
       var pt2 = G.pets[pi];
-      if (e.hitCd <= 0 && dist2(e.x, e.y, pt2.x, pt2.y) < (e.r + pt2.r) * (e.r + pt2.r)){
+      if (e.kind!=='brute'&&!e.boss&&e.hitCd <= 0 && dist2(e.x, e.y, pt2.x, pt2.y) < (e.r + pt2.r) * (e.r + pt2.r)){
         e.hitCd = 0.9;
         e.modelAttackUntil=G.time+.24;
         pt2.hp -= e.dmg;
@@ -3990,6 +4000,10 @@ function drawHeroGround(){
   ctx.restore();
 }
 function drawEnemyTelegraphs(){
+  G.enemies.forEach(function(e){if(e.dead||e.hp<=0)return;
+    if(e.heavyWindup>0){ctx.save();ctx.fillStyle='#e8a45b22';ctx.beginPath();ctx.arc(e.heavyX,e.heavyY,e.heavyRadius,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#08131f';ctx.lineWidth=7;ctx.stroke();ctx.strokeStyle='#ffcf83';ctx.lineWidth=3;ctx.stroke();ctx.strokeStyle='#fff3d6';ctx.beginPath();ctx.arc(e.heavyX,e.heavyY,e.heavyRadius+5,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-e.heavyWindup/.45));ctx.stroke();ctx.fillStyle='#0a1321';ctx.fillRect(e.heavyX-26,e.heavyY-8,52,16);ctx.fillStyle='#ffe5b6';ctx.font='800 9px system-ui';ctx.textAlign='center';ctx.fillText('SMASH',e.heavyX,e.heavyY+3);ctx.restore();}
+    else if(e.heavyRecovery>0){ctx.save();ctx.fillStyle='#d3c6a4';ctx.font='700 8px system-ui';ctx.textAlign='center';ctx.fillText('RECOVER',e.x,e.y+e.r+13);ctx.restore();}
+  });
   G.enemies.forEach(function(e){if(e.dead||e.hp<=0||!(e.spitWindup>0))return;var dx=e.spitVX/260,dy=e.spitVY/260,length=340;
     ctx.save();ctx.strokeStyle='#09111dec';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(e.x,e.y);ctx.lineTo(e.x+dx*length,e.y+dy*length);ctx.stroke();
     ctx.setLineDash([9,6]);ctx.strokeStyle='#f6b6ff';ctx.lineWidth=2;ctx.stroke();ctx.setLineDash([]);
