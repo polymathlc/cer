@@ -27,16 +27,22 @@ const fn=name=>{
 const css=[...html.slice(0,html.indexOf('</head>')).matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map(m=>m[1]).join('\n');
 const markup=section(html,'    <div class="page" id="page-quickpractice">','    <!-- ===== PAGE: TOPICAL PRACTICE');
 const feed=section(source,'// ---- Student feeding: one local policy','function getQuestionsForLevel(');
-const gameMessages=section(source,"window.addEventListener('message', function (ev) {\n  const d = ev && ev.data;\n  if (!d) return;\n  if (d.type === 'SD_REQUEST_QUESTIONS')",'\n\n// =====================================================================\n// SCIENCE LEGENDS');
+// Locate the complete production listener by the branch this suite exercises.
+// Independent game-start branches may precede it without changing feeding.
+const gameListeners=[...source.matchAll(/^window\.addEventListener\(\s*(['"])message\1,\s*function\s*\(\s*ev\s*\)\s*\{[\s\S]*?^\}\);/gm)]
+  .map(match=>match[0]).filter(listener=>listener.includes("d.type === 'SD_REQUEST_QUESTIONS'"));
+assert.equal(gameListeners.length,1,'Exactly one production game-question message listener exists');
+const gameMessages=gameListeners[0];
 const functions=[
   'buildOpenBody','renderImportedBlockStudent','renderTableReadonly','ensureTableMigrated','_tblCellCss','markMcqChoice',
   'buildQpQueue','qpHasWritten','qpHasMcq','qpMatchesType','qpFilters','startQuickPractice','loadNextQpQuestion','renderQpQuestion',
   'updateQpProgress','_qpAllPartsMarked','_recordQpResult','renderQpSummary','renderPracticeReport','_reportColor','_fmtScore',
   'qLevelNum','qWithinStudentLevel','qInLevelBand','levelBandMin','studentCapLevel','studentCapNum',
-  'famApplyActiveStudent','_hadesResetLearning','_tcgBankQuestions','_sdExtractMcq','_sdStemHtml','_sdBreakStatements','_sdZoomBtns','_sdSeedElo',
+  'famApplyActiveStudent','_hadesAllowed','_hadesPreviewLevel','_hadesResetLearning','recordGameStart','recordGameStartMessage',
+  '_tcgBankQuestions','_sdExtractMcq','_sdStemHtml','_sdBreakStatements','_sdZoomBtns','_sdSeedElo',
   'buildDefenderQuestions','_sdSeenStats','_sdQuestionsPayload','_gqKey','_gqLoad','_gqSave','_gqRealId','_gqMark','_gqFilterPool'
 ].map(fn).join('\n');
-const moduleFiles=new Set(['student-question-history.js','science-feed-core.js','science-feed-variety.js','science-feed-mastery.js','science-feed-quality.js','science-feed-bridge.js']);
+const moduleFiles=new Set(['student-question-history.js','science-feed-core.js','science-feed-variety.js','science-feed-mastery.js','science-feed-quality.js','science-feed-bridge.js','game-usage.js']);
 const errors=[],network=[];
 const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_BROWSER_CHANNEL?{channel:process.env.PLAYWRIGHT_BROWSER_CHANNEL}:{})});
 const page=await browser.newPage({viewport:{width:1120,height:920}});
@@ -48,7 +54,10 @@ body{display:block;overflow:auto}main{max-width:940px;margin:20px auto;padding:0
 import {buildScienceFeedContext,planScienceQuestions,evaluateScienceFit,scienceQuestionLevel,scienceQuestionContentKey} from '/science-feed-core.js';
 import {createStudentQuestionHistory} from '/student-question-history.js';
 import {evaluateQuestionQuality,buildQuestionQualitySummary,questionQualitySignature,questionHasUnresolvedStudentFlag} from '/science-feed-quality.js';
+import {createGameUsageRecorder,createGameUsageWriter} from '/game-usage.js';
 let currentUser={uid:'fixture-family',name:'Older child',role:'student',level:'P6',adminLevel:'P6'};
+const _practiceAs=null;
+var _gameUsageRecorder;
 let child={name:'Older child',level:'P6'},questionBank=[],customTopics={},loData={objectives:[],map:{}};
 const topicLevelMap={'Plant Systems':'P4','Electrical Systems':'P5','Forces':'P6','Magnets':'P3','Cells':'S1'};
 const TOPIC_LEVELS=['P3','P4','P5','P6','S1'],LEVEL_MAX='S1',LEVEL_MIN='P3',LEVEL_SECONDARY_MIN='S1',LEVEL_DEFAULT_CAP='P6';
@@ -94,6 +103,8 @@ const COMMON_MISTAKE_COLORS={teal:'#15837b'},_wsBlockLines=(value,fallback)=>Num
 const cloud=new Map(),watchers=new Map();
 const doc=(base,...parts)=>({path:[base?.path,...parts].filter(Boolean).join('/')});
 const collection=doc,query=ref=>ref,where=(...args)=>args;
+const getDoc=async ref=>({exists:()=>cloud.has(ref.path),data:()=>cloud.get(ref.path)});
+const increment=value=>({fixtureIncrement:value}),deleteField=()=>({fixtureDelete:true}),serverTimestamp=()=>Date.now();
 const cloudSnap=path=>({forEach:visit=>{for(const [key,value] of cloud)if(key.startsWith(path+'/'))visit({data:()=>value});}});
 const getDocs=async ref=>cloudSnap(ref.path);
 const onSnapshot=(ref,next)=>{watchers.set(ref.path,next);queueMicrotask(()=>next(cloudSnap(ref.path)));return()=>watchers.delete(ref.path);};
