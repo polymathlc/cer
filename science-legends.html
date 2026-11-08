@@ -720,6 +720,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 <script src="science-feed-bridge.js"></script>
 <script src="science-legends-art.js?v=1.454.0"></script>
 <script src="science-legends-view.js?v=1.455.0"></script>
+<script src="science-legends-models.js?v=1.455.0"></script>
 <script src="science-legends-combat.js?v=1"></script>
 <script>
 /* ============================================================================
@@ -2790,6 +2791,7 @@ function castSkill(idx){
   var area = G.stats.area * (1 + skillSm(sid).area);
   var cdMult = (G.stats.mods['cap.echo'] && Math.random() < 0.2) ? 0.5 : 1;
   G.cds[sid] = skillCd(sid) * cdMult;
+  p.modelAttackUntil=G.time+.32;
   if (cdMult < 1) addText(p.x, p.y - 26, 'ECHO!', '#CE93D8');
   sfx('skill');
   // Skills fire AT / TOWARD the crosshair (mouse) — or the way the hero is
@@ -3004,6 +3006,7 @@ function fireBasic(dx, dy){
   var p = G.player, c = CLASSES[G.cls];
   var mult = G.stats.dmg * buffDmg();
   p.atkCd = c.atk.rate / buffAspd();
+  p.modelAttackUntil=G.time+.24;
   p.fx = dx; p.fy = dy;
   var didHit = false;
   if (c.atk.kind === 'melee'){
@@ -3646,7 +3649,9 @@ function drawActorModel(id,sheet,actor,size,flip){
 }
 function drawHeroModel(){
   var p=G.player,frame=p.moving?((p.animT*2|0)%2):0;
-  drawActorModel('hero_'+G.cls,heroSheets[0][frame],p,52,p.fx<0);
+  var custom=_ovrImgs['hero_'+G.cls];
+  if(!(custom&&custom.complete&&custom.naturalWidth)&&window.LegendsModels&&LegendsModels.drawHero(ctx,G.cls,p,G.time,lowMotion,72))return;
+  drawActorModel('hero_'+G.cls,heroSheets[0][frame],p,72,p.fx<0);
 }
 
 /* ============================================================================
@@ -4698,11 +4703,14 @@ function classPreview(cls){
   var c = document.createElement('canvas');
   c.width = 48; c.height = 48;
   var g = c.getContext('2d');
+  var custom=_ovrImgs['hero_'+cls];
+  if(!(custom&&custom.complete&&custom.naturalWidth)&&window.LegendsModels&&LegendsModels.drawHero(g,cls,{x:24,y:47,r:0,fx:1,moving:false},0,true,48))return c;
   var im = ovr('hero_' + cls);
   g.imageSmoothingEnabled = !!im;
   g.drawImage(im || buildHeroSprites(CLASSES[cls].sprite)[0][0], 0, 0, 48, 48);
   return c;
 }
+window.addEventListener('legendsmodelsready',function(){if($('menuOverlay').classList.contains('show'))renderClassCards();});
 function renderClassCards(){
   var wrap = $('classCards'); wrap.innerHTML = '';
   CLASS_ORDER.forEach(function(key){
