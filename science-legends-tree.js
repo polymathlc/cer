@@ -8,5 +8,7 @@
     var direction={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[key];if(!direction)return id;
     var best=null,score=Infinity;nodes.forEach(function(node){var dx=node.col-from.col,dy=node.row-from.row,forward=dx*direction[0]+dy*direction[1],side=Math.abs(dx*direction[1]-dy*direction[0]);if(forward<=0)return;var value=forward+side*4+Math.hypot(dx,dy)*.01;if(value<score||(value===score&&node.id<(best||''))){score=value;best=node.id;}});return best||id;
   }
-  var api={order:order,next:next};if(typeof module==='object'&&module.exports)module.exports=api;root.LegendsTree=api;
+  function search(nodes,query){var literal=String(query||'').trim().toLowerCase();return nodes.filter(function(node){return !literal||[node.id,node.name,node.desc,node.kind].join(' ').toLowerCase().includes(literal);}).map(function(node){return node.id;});}
+  function ancestors(nodes,id){var byId=new Map(nodes.map(function(node){return [node.id,node];})),seen=new Set(),result=[];function visit(key){if(seen.has(key))return;seen.add(key);var node=byId.get(key);if(!node)return;(node.req||[]).forEach(visit);result.push(key);}visit(id);return result;}
+  var api={order:order,next:next,search:search,ancestors:ancestors};if(typeof module==='object'&&module.exports)module.exports=api;root.LegendsTree=api;
 })(typeof window==='object'?window:globalThis);

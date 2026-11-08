@@ -613,6 +613,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
         <div class="tree-state-legend" aria-label="Skill tree states"><span><i class="state-locked">–</i> Locked</span><span><i class="state-ready">+</i> Available</span><span><i class="state-done">✓</i> Learned / max</span><span><i class="state-cap">◆</i> Capstone</span></div>
         <p id="treeNavHelp" class="tree-keyboard-help">Arrow keys browse · Home / End jump · Enter inspects · Escape closes details · T returns to battle</p>
         <div id="treeFeedback" class="tree-feedback" role="status" aria-live="polite">Inspect a node to read its requirements.</div>
+        <div class="tree-search"><label for="treeSearch">Find a skill or bonus</label><div class="tree-search-row"><input id="treeSearch" type="search" maxlength="80" placeholder="Name, skill or description"><button class="btn btn-outline" id="treeSearchNext" type="button">Next match</button><button class="btn btn-outline" id="treeSearchClear" type="button">Clear</button></div><div id="treeSearchCount" role="status" aria-live="polite"></div><div id="treeSearchResults" class="tree-search-results"></div></div>
         <div class="tree-board-wrap" id="treeBoardWrap">
           <div class="tree-board" id="treeBoard"></div>
         </div>
@@ -1822,7 +1823,7 @@ function skillCd(id){
 }
 
 /* ---- Tree UI: hover = tooltip, click = floating popover with "+ Add point" ---- */
-var treeSel = null,treeFocus=null;
+var treeSel = null,treeFocus=null,treeQuery='',treeMatches=[],treeResultCursor=0;
 var TREE_W = 1000;
 function treeNodeState(nd){
   var r = nodeRank(nd.id);
@@ -1885,6 +1886,9 @@ function renderTree(){
   var board = $('treeBoard');
   var oldFocus=document.activeElement,restoreFocus=board.contains(oldFocus),restoreId=oldFocus&&oldFocus.id;
   var tree = TREES[G.cls];
+  treeMatches=LegendsTree.search(tree,treeQuery);var route=new Set();
+  (treeSel?[treeSel]:treeQuery?treeMatches:[]).forEach(function(id){LegendsTree.ancestors(tree,id).forEach(function(key){route.add(key);});});
+  var navTree=treeQuery?tree.filter(function(node){return route.has(node.id);}):tree;
   if(!tree.some(function(node){return node.id===treeFocus;}))treeFocus=LegendsTree.order(tree)[0].id;
   board.setAttribute('role','group');board.setAttribute('aria-label','Skill paths');board.setAttribute('aria-describedby','treeNavHelp');
   board.onkeydown=function(event){if(event.key==='Escape'&&treeSel){event.preventDefault();event.stopPropagation();treeSel=null;renderTree();focusTreeNode(treeFocus);}};
@@ -1899,7 +1903,8 @@ function renderTree(){
       var pn = nodeById(G.cls, rid); if (!pn) return;
       var b = nodeXY(pn);
       var on = nodeRank(nd.id) > 0 && nodeRank(rid) > 0;
-      svg += '<line x1="' + b.x + '" y1="' + b.y + '" x2="' + a.x + '" y2="' + a.y + '" stroke="' + (on ? '#f1c879' : '#7c9bad') + '" stroke-width="' + (on ? 4 : 2) + '" stroke-linecap="round"' + (on ? '' : ' stroke-dasharray="5 5"') + '/>';
+      var path=route.has(nd.id)&&route.has(rid);
+      svg += '<line class="'+(path?'tree-route-edge':'')+'" x1="' + b.x + '" y1="' + b.y + '" x2="' + a.x + '" y2="' + a.y + '" stroke="' + (path?'#8ce5ec':on ? '#f1c879' : '#7c9bad') + '" stroke-width="' + (path?4:on ? 4 : 2) + '" stroke-linecap="round"' + (on||path ? '' : ' stroke-dasharray="5 5"') + '/>';
     });
   });
   svg += '</svg>';
@@ -1912,7 +1917,7 @@ function renderTree(){
   }
   tree.forEach(function(nd){
     var p = nodeXY(nd), st = treeNodeState(nd), r = nodeRank(nd.id);
-    html += '<button type="button" class="tnode ' + st + ' k-' + nd.kind + (nd.kind === 'cap' ? ' capstone' : '') + (treeSel === nd.id ? ' selq' : '') + '" style="left:' + p.x + 'px;top:' + p.y + 'px;" data-node="' + nd.id + '">' +
+    html += '<button type="button" class="tnode ' + st + ' k-' + nd.kind + (nd.kind === 'cap' ? ' capstone' : '') + (treeSel === nd.id ? ' selq' : '')+(route.has(nd.id)?' tree-route':'')+(treeQuery&&!route.has(nd.id)?' search-muted':'') + '" style="left:' + p.x + 'px;top:' + p.y + 'px;" data-node="' + nd.id + '">' +
       nd.icon + '<span class="rank">' + (nd.max > 1 ? (r + '/' + nd.max) : (r ? '✓' : nd.kind === 'cap' ? 'CAP' : nd.kind === 'ult' ? 'ULT' : '·')) + '</span></button>';
   });
   if (treeSel){
@@ -1924,13 +1929,13 @@ function renderTree(){
   var tip = $('treeTip');
   Array.prototype.forEach.call(board.querySelectorAll('.tnode'), function(btn){
     var nd = nodeById(G.cls, btn.getAttribute('data-node'));
-    btn.tabIndex=nd.id===treeFocus?0:-1;btn.setAttribute('aria-label',nd.name+', '+nodeKindLabel(nd)+', rank '+nodeRank(nd.id)+' of '+nd.max+'. '+(treeNodeState(nd)==='locked'?'Locked. ':'')+nodeReqMsgs(nd).join('. '));btn.setAttribute('aria-expanded',treeSel===nd.id?'true':'false');
+    btn.tabIndex=nd.id===treeFocus&&(!treeQuery||route.has(nd.id))?0:-1;btn.setAttribute('aria-label',nd.name+', '+nodeKindLabel(nd)+', rank '+nodeRank(nd.id)+' of '+nd.max+'. '+(treeNodeState(nd)==='locked'?'Locked. ':'')+nodeReqMsgs(nd).join('. '));btn.setAttribute('aria-expanded',treeSel===nd.id?'true':'false');
     btn.addEventListener('focus',function(){treeFocus=nd.id;board.querySelectorAll('.tnode').forEach(function(node){node.tabIndex=node===btn?0:-1;});});
     btn.addEventListener('click', function(){ treeFocus=nd.id;treeSel = nd.id; renderTree(); });
     btn.addEventListener('keydown',function(event){
       if(event.key==='Escape'&&treeSel){event.preventDefault();event.stopPropagation();treeSel=null;renderTree();focusTreeNode(treeFocus);return;}
       if(!/^(ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Home|End)$/.test(event.key))return;
-      event.preventDefault();event.stopPropagation();var id=LegendsTree.next(tree,nd.id,event.key);treeSel=null;treeFocus=id;renderTree();focusTreeNode(id);
+      event.preventDefault();event.stopPropagation();var id=LegendsTree.next(navTree,nd.id,event.key);treeSel=null;treeFocus=id;renderTree();focusTreeNode(id);
     });
     btn.addEventListener('mouseenter', function(){
       if (treeSel === nd.id) return;                    // popover already shows it
@@ -1958,6 +1963,19 @@ function renderTree(){
   $('treeTitle').textContent = '🌳 ' + CLASSES[G.cls].name + ' Skill Tree';
   $('treePtsBig').textContent = G.points + ' point' + (G.points === 1 ? '' : 's');
   renderTreeStats();
+  renderTreeSearch();
+}
+function activateTreeResult(id){if(!id)return;treeResultCursor=Math.max(0,treeMatches.indexOf(id));treeFocus=id;treeSel=id;focusTreeNode(id);renderTree();focusTreeNode(id);}
+function renderTreeSearch(){
+  var results=$('treeSearchResults');results.replaceChildren();$('treeSearchClear').disabled=!treeQuery;$('treeSearchNext').disabled=!treeQuery||!treeMatches.length;
+  $('treeSearchCount').textContent=treeQuery?(treeMatches.length?treeMatches.length+' matches · highlighted lines show prerequisite routes.':'No matches. Try a skill name or bonus such as damage.'):'Search all '+TREES[G.cls].length+' nodes. Prerequisites may offer alternative routes.';
+  if(!treeQuery)return;treeMatches.slice(0,4).forEach(function(id){var node=nodeById(G.cls,id),button=document.createElement('button');button.type='button';button.className='tree-result';button.textContent=node.name;button.addEventListener('click',function(){activateTreeResult(id);});results.appendChild(button);});
+}
+function wireTreeSearch(){
+  $('treeSearch').addEventListener('input',function(){treeQuery=this.value.trim();treeResultCursor=0;treeSel=null;renderTree();});
+  $('treeSearch').addEventListener('keydown',function(event){if(event.key==='Enter'||event.key==='ArrowDown'){event.preventDefault();event.stopPropagation();activateTreeResult(treeMatches[0]);}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();$('treeSearchClear').click();}});
+  $('treeSearchClear').addEventListener('click',function(){treeQuery='';$('treeSearch').value='';treeSel=null;renderTree();$('treeSearch').focus();});
+  $('treeSearchNext').addEventListener('click',function(){treeResultCursor=(treeResultCursor+1)%treeMatches.length;activateTreeResult(treeMatches[treeResultCursor]);});
 }
 function focusTreeNode(id,scroll){var button=$('treeBoard').querySelector('[data-node="'+id+'"]');if(!button)return;button.focus({preventScroll:true});if(scroll!==false)button.scrollIntoView({block:'nearest',inline:'nearest',behavior:'auto'});}
 function selectNode(id){ treeSel = id; renderTree(); }
@@ -2115,7 +2133,7 @@ function newGame(cls){
     impacts: [], actions:[], accumulator: 0, hitStop: 0, impactCooldown: 0
   };
   computeStats();
-  treeSel = null;
+  treeSel = null;treeFocus=null;treeQuery='';$('treeSearch').value='';
   spawnFollower();
 }
 
@@ -4885,6 +4903,7 @@ document.addEventListener('visibilitychange', function(){
 /* ---------------- WIRING ---------------- */
 function init(){
   wireCombatPolish();
+  wireTreeSearch();
   resize();
   buildGround();
   metaLoadLocal();
