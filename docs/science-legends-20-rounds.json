@@ -431,6 +431,16 @@
       "skill_ultimate_combinations": 240,
       "platform": "Windows Edge via Playwright; CI uses Chromium",
       "all_passed": true
+    },
+    "post_merge_validation": {
+      "integrated_upstream": "d323bba",
+      "merge_commit": "e3e33d0",
+      "unit_tests": 196,
+      "selected_game_browser_checks": 179,
+      "embedded_feed_games": 5,
+      "endless_feed_cycles_per_game": 5,
+      "all_passed": true,
+      "note": "Preserved the newer unlimited/prefetch/last-resort feed behavior. Selected start, gesture, projection and delayed-art suites passed after integration; shared feed fixture serves guarded repo-owned runtime dependencies."
     }
   }
 }
