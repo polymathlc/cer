@@ -387,18 +387,20 @@ try {
   await feed.page.evaluate(async({copied,available})=>{window.__mock.bank.push({...copied,variantOf:'saved-mcq'},available);await window.__mock.emit('users/teacher/questions');},{copied,available});
   check(await feed.page.evaluate(()=>window.__strikeQA.candidate()?.id)==='other-saved','A renamed copy cannot follow the original question');
   await feed.page.evaluate(async()=>{window.__mock.attempts=[{questionId:'other-saved',displayName:'Test Learner',score:1,totalBlanks:1,timestamp:{seconds:Date.now()/1000},mode:'practice'}];await window.__mock.emit('questionAttempts');});
-  check(await feed.page.evaluate(()=>window.__strikeQA.candidate())===null,'Fresh practice history from the database blocks cross-mode repetition immediately');
+  // 🔁 v1.453.0: Strike never runs dry. Fresh history still blocks it as FRESH
+  // work at once; it can only come back as a recycled question.
+  check(await feed.page.evaluate(()=>window.__strikeQA.candidate()?.fpsRecycled===true),'Fresh practice history from the database blocks fresh repetition immediately; only the endless cycle may bring it back');
   await feed.page.locator('#resumeBtn').click();await feed.page.waitForFunction(()=>!window.__strikeQA.run.paused);await feed.page.evaluate(()=>{window.__strikeQA.run.qTimerMs=0;});
-  await feed.page.waitForFunction(()=>window.__strikeQA.run.paused);
-  check(/No fresh database MCQs/.test(await feed.page.locator('#pauseReason').innerText()),'Exhausted suitable MCQs pause the game without invented questions');
-  check(await feed.page.evaluate(()=>!window.__strikeQA.run.activeQ),'No fallback science question is displayed');
+  await feed.page.waitForFunction(()=>window.__strikeQA.run.activeQ);
+  check(await feed.page.evaluate(()=>window.__strikeQA.run.activeQ.fpsRecycled===true)&&!/No fresh database MCQs/.test(await feed.page.locator('#pauseReason').innerText()),'A spent pool keeps the game going with a recycled database MCQ instead of pausing');
+  check(await feed.page.evaluate(()=>window.__mock.bank.some(q=>q.id===window.__strikeQA.run.activeQ.id)),'Only real database questions are recycled, never invented ones');
   await checkClean(feed);await feed.context.close();
 
   const memory=await pageFor({bankRows:[fresh,copied,available]});
   await memory.page.evaluate(()=>{Storage.prototype.getItem=()=>{throw Error('Storage blocked');};Storage.prototype.setItem=()=>{throw Error('Storage blocked');};});
   const selected=await memory.page.evaluate(async()=>[(await window.__strikeQA.take())?.id,(await window.__strikeQA.take())?.id,await window.__strikeQA.take()]);
   const selectedFamilies=selected.slice(0,2).map(id=>['saved-mcq','copied-mcq'].includes(id)?'fruit':id);
-  check(new Set(selectedFamilies).size===2&&selectedFamilies.includes('fruit')&&selectedFamilies.includes('other-saved')&&selected[2]===null,'Blocked browser storage cannot cause repeated questions or copies');
+  check(new Set(selectedFamilies).size===2&&selectedFamilies.includes('fruit')&&selectedFamilies.includes('other-saved')&&selected[2]!==null,'Blocked browser storage cannot cause repeated fresh questions or copies; a spent pool then recycles');
   await memory.page.evaluate(()=>{const entries=window.__mock.listeners['questionAttempts'].filter(e=>e.active);entries[0].onError(new Error('test history unavailable'));});
   check(await memory.page.evaluate(()=>!window.__strikeQA.ready&&!window.__strikeQA.candidate()),'A history read failure stops feeding rather than using an unchecked pool');
   await memory.page.evaluate(()=>window.__strikeQA.clearFeed());
@@ -423,7 +425,9 @@ try {
     openingSets.push(sequence.slice(0,2).sort().join(','));
     check(sequence.slice(0,peers.length).every(id=>peerIds.has(id)),'Random standalone questions stay in the current-grade tier before revision');
     check(new Set(sequence.slice(0,peers.length)).size===peers.length,'Repeated standalone requests visit every suitable peer without repeats');
-    check(sequence[peers.length]==='p5-revision'&&sequence[peers.length+1]===null,'P5 revision follows P6 work and randomisation cannot revive P3 fallback');
+    // 🔁 v1.453.0: once fresh work is spent the run recycles suitable work
+    // (P6/P5) rather than stopping — and still never reaches for the P3 one.
+    check(sequence[peers.length]==='p5-revision'&&sequence[peers.length+1]!==null&&sequence[peers.length+1]!=='p3-basic','P5 revision follows P6 work and randomisation cannot revive P3 fallback');
     await checkClean(variety);await variety.context.close();
   }
   check(new Set(openers).size>1,'Different controlled fresh starts vary the first database MCQ in Science Strike');

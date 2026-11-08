@@ -307,7 +307,7 @@ export function planScienceQuestions(candidates, options = {}) {
   // nothing (a small level bank, a learner far above or below the usual
   // difficulty, topics without level metadata). Games now fall back to the
   // nearest usable questions instead of stopping: same level first, then the
-  // levels just below, then unlabelled ones, then the levels just above. Only
+  // levels just below, then unlabelled ones, then ONE level above. Only
   // SOUND questions: quality checks, student reports, retired topics, failed
   // images and Sec 1 are never relaxed.
   const fallback = [];
@@ -318,7 +318,7 @@ export function planScienceQuestions(candidates, options = {}) {
     const have = questions.length + recycled.length;
     if (have < want) {
       const chosen = new Set(questions.concat(recycled).map(q => str(q.id)));
-      const rowsToRank = fallbackable.filter(row => !chosen.has(str(row.q.id)))
+      const rowsToRank = fallbackable.filter(row => !chosen.has(str(row.q.id)) && scienceFallbackRank(row, context) != null)
         .map(row => ({ q: row.q, order: row.order, fit: { ...row.fit,
           diagnostic: { ...(row.fit.diagnostic || {}), priorityTier: scienceFallbackRank(row, context) } } }));
       for (const row of recycleScienceGameRows(rowsToRank, context, options)) {
@@ -380,12 +380,14 @@ export function recycleScienceGameRows(rows, context, options = {}) {
 
 // How far a fallback question sits from what the learner should be doing.
 // Lower is better. 0 = their own level (only the mastery window turned it
-// away); 1, 2… = that many levels below; 5 = no level metadata; 10 + n = n
-// levels ABOVE the learner (a last resort).
+// away); 1, 2… = that many levels below; 5 = no level metadata; 11 = one level
+// ABOVE the learner (a last resort). Two or more levels above, or across the
+// primary/secondary line, is never served (null).
 export function scienceFallbackRank(row, context) {
   const student = context?.mastery?.studentLevel || {};
   const level = row?.fit?.diagnostic?.level || {};
   if (!level.known || level.invalid) return 5;
   const gap = student.max - level.max;
-  return gap >= 0 ? gap : 10 - gap;
+  if (gap >= 0) return gap;
+  return gap === -1 && level.max < 7 ? 11 : null;
 }

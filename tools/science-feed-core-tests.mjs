@@ -165,7 +165,7 @@ test('🚫 Sec 1 is retired: no planner serves a Sec 1 question, even manually o
 test('🎮 game fallback: an empty strict window serves the nearest usable level instead of nothing', () => {
   // A P6 learner whose bank holds only P3 and P4 work: strictly none fits
   // (P5 would — one level below is ordinary revision).
-  const bank=[q('p3',{level:'P3'}),q('p4',{level:'P4'})];
+  const bank=[q('p3',{level:'P3',topic:'Magnets'}),q('p4',{level:'P4'})];
   const strict=planScienceQuestions(bank,opts(bank,{studentLevel:'P6',randomize:true,limit:1}));
   const fell=planScienceQuestions(bank,opts(bank,{studentLevel:'P6',randomize:true,limit:1,recycle:true,fallback:true}));
   assert.ok(ids(fell).length===1);
@@ -175,9 +175,11 @@ test('🎮 game fallback: an empty strict window serves the nearest usable level
   const roomy=[...bank,q('p6',{level:'P6'})];
   assert.deepEqual(planScienceQuestions(roomy,opts(roomy,{studentLevel:'P6',randomize:true,limit:1,recycle:true,fallback:true})).fallback,[],'never used while the strict plan has something');
   // Above-level work is the very last resort.
-  const up=[q('p6-only',{level:'P6'})];
-  assert.deepEqual(ids(planScienceQuestions(up,opts(up,{studentLevel:'P4',limit:1,recycle:true,fallback:true}))),['p6-only']);
+  const up=[q('p5-only',{level:'P5'})];
+  assert.deepEqual(ids(planScienceQuestions(up,opts(up,{studentLevel:'P4',limit:1,recycle:true,fallback:true}))),['p5-only'],'one level up as a last resort');
   assert.deepEqual(ids(planScienceQuestions(up,opts(up,{studentLevel:'P4',limit:1}))),[],'practice keeps the strict ceiling');
+  const far=[q('p6-only',{level:'P6'})];
+  assert.deepEqual(ids(planScienceQuestions(far,opts(far,{studentLevel:'P4',limit:1,recycle:true,fallback:true}))),[],'never two levels above');
   // Unknown learner level and unsound questions still fail closed.
   assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{studentLevel:'',limit:1,recycle:true,fallback:true}))),[]);
   const broken=[q('broken',{level:'P3',status:'flagged'})];

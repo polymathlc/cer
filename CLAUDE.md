@@ -24,7 +24,7 @@ The owner asked to remove every Sec 1 question from the system and to make sure 
 often held nothing, so games showed "No suitable questions are set for your level yet". `planScienceQuestions(…,
 { fallback: true })` now, when fresh + recycled rows still cannot fill the request, serves SOUND questions turned away
 only for grade fit, ranked by `scienceFallbackRank`: same level (difficulty window) 0, n levels below = n, unknown level
-5, n levels above = 10 + n; shuffled and round-aware via `recycleScienceGameRows`. Returned in `fallback` and also in
+5, ONE level above = 11 (never two above, never across into secondary); shuffled and round-aware via `recycleScienceGameRows`. Returned in `fallback` and also in
 `recycled` (so claims use `allowSeen` and the 15-minute iframe guard lets them through). Quality blocks, suspect
 questions, student reports, retired topics, failed images and Sec 1 are never relaxed; a learner with NO level still
 fails closed. `_scienceFeedPlan` turns it on with `recycle` (every `game: true` plan; `opts.fallback === false` opts out).

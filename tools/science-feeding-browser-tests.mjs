@@ -53,7 +53,7 @@ let child={name:'Older child',level:'P6'},questionBank=[],customTopics={},loData
 const topicLevelMap={'Plant Systems':'P4','Electrical Systems':'P5','Forces':'P6','Magnets':'P3','Cells':'S1'};
 const TOPIC_LEVELS=['P3','P4','P5','P6','S1'],LEVEL_MAX='S1',LEVEL_MIN='P3',LEVEL_SECONDARY_MIN='S1',LEVEL_DEFAULT_CAP='P6';
 const LEVEL_ORDER={P3:3,P4:4,P5:5,P6:6,S1:7};
-const isLevelCode=l=>TOPIC_LEVELS.includes(l),isSecondaryLevel=l=>String(l).startsWith('S'),getLevelNumber=l=>LEVEL_ORDER[l]||6;
+const liveLevel=l=>l,isLevelCode=l=>TOPIC_LEVELS.includes(l),isSecondaryLevel=l=>String(l).startsWith('S'),getLevelNumber=l=>LEVEL_ORDER[l]||6;
 const getTopicLevel=t=>topicLevelMap[t]||LEVEL_MAX,famActive=()=>child;
 let _qAttemptStats={},_qAttemptStatsUid='',_qAttemptStatsAt=0,flaggedQuestions=[];
 let _scienceQpLoading=false,_scienceTpLoading=false;
@@ -262,9 +262,13 @@ try{
   pass('changing the same child’s level invalidates an open game and selects the new current grade');
 
   await setup([tooBasic],'P6','Older child');game=await openGame();
-  assert.equal((await gameNext(game)).id,null);
-  assert.match(await game.locator('#question').innerText(),/No suitable questions are set for your level yet/);
-  pass('a P3-only database pauses a P6 game instead of filling the run with unsuitable easy questions');
+  // 🎮 v1.453.0: the owner wants every game fed. A P3-only database no longer
+  // stops a P6 game with "No suitable questions are set for your level yet";
+  // the fallback serves the nearest usable level (and keeps cycling it).
+  assert.equal((await gameNext(game)).id,'magnets-basic');
+  assert.equal((await gameNext(game)).id,'magnets-basic','and keeps cycling it rather than stopping');
+  assert.doesNotMatch(await game.locator('#question').innerText(),/No suitable questions are set for your level yet/);
+  pass('a P3-only database still feeds a P6 game through the nearest-level fallback instead of pausing');
 
   await setup(mixedGrades,'P6','Older child');
   await page.evaluate(()=>{Storage.prototype.getItem=Storage.prototype.setItem=()=>{throw new DOMException('Storage blocked','SecurityError');};});
