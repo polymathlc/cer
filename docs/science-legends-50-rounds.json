@@ -1,0 +1,443 @@
+{
+  "schemaVersion": 1,
+  "targetRounds": 50,
+  "completedRounds": 11,
+  "task": "Science Legends measured lag, UX, animation, enemy variety and skill texture improvements",
+  "baseline": {
+    "captured": "2026-11-09",
+    "artifact": "docs/science-legends-50-baseline.json",
+    "conditions": "Local real production page with generated art, headless Edge, desktop 1280×900/DPR1 and mobile 390×844/DPR2; mobile CPU throttled 4×. Instrumented work counts are controlled comparisons, not a claim about every device or universal FPS.",
+    "denseMobile": {
+      "windowMs": 2013.5,
+      "simulationSteps": 245,
+      "drawCpuMs": 662,
+      "imageDraws": 22533,
+      "radialGradients": 1456,
+      "attributeMutations": 2959,
+      "childMutations": 1754
+    },
+    "pausedMobile": {
+      "windowMs": 1207.9,
+      "worldPaints": 146,
+      "drawCpuMs": 335,
+      "imageDraws": 14600
+    },
+    "treeMobile": {
+      "windowMs": 1209.9,
+      "worldPaints": 144,
+      "drawCpuMs": 347
+    },
+    "startupMobile": {
+      "allArtReadyMs": 2712.2,
+      "longTaskMaxMs": 358,
+      "imageBytes": 14471568
+    },
+    "hitStop": {
+      "wallSeconds": 3.0073,
+      "simulationSeconds": 2.375,
+      "ratio": 0.78974495,
+      "reducedMotionRatio": 0.99976672
+    }
+  },
+  "rounds": [
+    {
+      "number": 1,
+      "area": "Health and experience HUD",
+      "feedback": "Stable health and experience are rewritten every120 Hz step; mobile baseline logged4713DOM mutations in2seconds.",
+      "acceptance": [
+        "Stable health/XP/status produces no repeated DOM mutations.",
+        "Damage/healing remain immediate and accessible."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Added cached HUD nodes and value-diffed health, experience, status and ARIA updates."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 2,
+      "area": "Skill cooldown HUD",
+      "feedback": "Every substep queries cooldown elements, traversesclosest parents, and rewrites ready names/ARIA.",
+      "acceptance": [
+        "No cooldown DOM rediscovery during simulation substeps.",
+        "Ready skills produce no redundant mutations; real cooldown values remain accurate."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Cached cooldown node records when the hotbar is rendered and stopped rediscovering or rewriting unchanged labels."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 3,
+      "area": "Timers and battle status",
+      "feedback": "Question/wave/evade labels and battleStatus innerHTML are rewritten even when the displayed value is unchanged.",
+      "acceptance": [
+        "No mutations when displayed timersecond/wave/ready state is unchanged.",
+        "Transitions update at their actual displayed boundary."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Only writes question seconds, wave status and evade display when the actual displayed value changes."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 4,
+      "area": "Target panel",
+      "feedback": "Target visibility/name/type/HP/effects are rewritten repeatedly even when the target has not changed.",
+      "acceptance": [
+        "Unchanged target panel causes zero mutation in thirty refreshes.",
+        "Damage, statuses and target switches refresh immediately."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Value-diffed target visibility, name, type, health and effects while preserving immediate target transitions."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 5,
+      "area": "Depth-correct pointer picking",
+      "feedback": "Every hover pick maps and sorts the full enemy array to identify the frontmost body.",
+      "acceptance": [
+        "Pick preserves frontmost depth and original tie order.",
+        "No map/sort allocation occurs within a pick."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends-models.js"
+        ],
+        "change": "Replaced map/sort picking with a linear frontmost-depth selection that preserves original tie order."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 6,
+      "area": "Hover sampling",
+      "feedback": "Mouseover picking occurs in each120Hz simulation substep rather than once per paint.",
+      "acceptance": [
+        "Eighty substeps produce at most one hover pick.",
+        "Pointer-down selects a newly pointed actor immediately."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Moved hover picking to the render loop while retaining immediate pointer-down picking."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 7,
+      "area": "Frozen overlay rendering",
+      "feedback": "Paused dense and tree scenes repaint roughly145times/1.2s, costing335–347ms mobile CPU despite frozen simulation.",
+      "acceptance": [
+        "Frozen pause/tree scenes paint at most once after settling.",
+        "Explicit draw(), resize, resume and input redraw remain correct."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Added scene invalidation so frozen pause, menu, hidden and opaque-overlay scenes stop repeated world paints."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 8,
+      "area": "Courtyard decoration cache",
+      "feedback": "Visible landmark lights create approximatelyseven gradients per paint on mobile andsixteen ondesktop.",
+      "acceptance": [
+        "Twenty landmark paints create at most two gradients total.",
+        "Tiles remain anchored in world coordinates; flames may animate independently."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Cached a DPR-scoped static courtyard decoration tile; animated flames remain separate and world anchored."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 9,
+      "area": "Atmosphere cache",
+      "feedback": "The full-viewport vignette gradient is recreated everypaint.",
+      "acceptance": [
+        "Twenty atmosphere paints create at most one gradient.",
+        "Viewport size andDPR changes invalidate the cache."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Cached the atmosphere gradient by viewport dimensions and DPR."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 10,
+      "area": "Visible actor work",
+      "feedback": "Actor queues/entries are rebuilt everypaint andpets are drawn even far beyond the viewport.",
+      "acceptance": [
+        "Offscreen pets are culled before model rendering.",
+        "Stable actors reuse queue work without changing foot-depth order or labels."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "34adef8",
+        "files": [
+          "science-legends.html",
+          "science-legends-performance.js"
+        ],
+        "change": "Reused actor queue entries and render-order storage and culled offscreen companions."
+      },
+      "verification": {
+        "command": "node tools/science-legends-performance-browser.mjs",
+        "result": "23 independent observed-work assertions passed across rounds 1–10. Existing health, target, gesture, projection, facing, late-source and all-skill visual browser regressions also passed; 36 model/combat/view/action unit tests passed.",
+        "benchmark": "docs/science-legends-50-after-r10.json"
+      }
+    },
+    {
+      "number": 11,
+      "area": "Impact pause budget",
+      "feedback": "Normal-motion forced-crit Whirlwind advances 2.375 simulation seconds / 3.007 wall seconds (79% speed); reduced-motion runs at100%.",
+      "acceptance": [
+        "Sustained critical channel maintains at least95% simulation/wall progress.",
+        "Heavy hits remain visibly impactful; fixedstep damage/collisions stay correct."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "8bd601f",
+        "files": [
+          "science-legends-combat.js",
+          "science-legends.html"
+        ],
+        "change": "Continuous channel ticks keep visible impacts without repeated hit-stop; dramatic stops have a global cooldown. The fixed-step clock now consumes remaining wall time when a stop is requested midframe instead of discarding that time and charging it again."
+      },
+      "verification": {
+        "command": "node tools/science-legends-impact-budget-browser.mjs; node --test tools/science-legends-combat-tests.mjs",
+        "result": "Six real-game browser checks and16combat unit tests passed. All30nearby foes still receive sustained critical damage.",
+        "before": {
+          "normalRatio": 0.78974495,
+          "reducedRatio": 0.99976672
+        },
+        "after": {
+          "normalWallSeconds": 2.5017,
+          "normalSimulationSeconds": 2.5,
+          "normalRatio": 0.99932046,
+          "reducedRatio": 1.00029244
+        }
+      }
+    },
+    {
+      "number": 12,
+      "area": "Responsive atlas preparation",
+      "feedback": "Preparing all actor atlases synchronously caused startup long tasks up to 358 ms in the throttled-mobile baseline.",
+      "acceptance": [
+        "Prepare complete actor frames off the main thread with bounded queued work.",
+        "A tested synchronous failure fallback and run-pinned sources remain correct."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 13,
+      "area": "Precise actor visibility",
+      "feedback": "After the first ten fixes, actor drawing still consumes 429 of 639 ms of dense draw CPU; the broad 180px center margin draws many fully offscreen bodies.",
+      "acceptance": [
+        "Fully offscreen model/contact bounds issue no model draw.",
+        "Edge-crossing limbs, feet and shadows remain visible and correctly depth sorted."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 14,
+      "area": "Offscreen visual effects",
+      "feedback": "Eighty fully offscreen projectiles raised dense draw work to 718 ms in a 1.6-second synthetic stress window.",
+      "acceptance": [
+        "Skip fully offscreen projectiles, trails, effects, texts and impacts.",
+        "Any warning or large blast intersecting the viewport still draws."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 15,
+      "area": "Spatial combat queries",
+      "feedback": "Homing and swept collisions scan every enemy for every projectile; 80 projectiles against 140 foes consumed 112–146 ms per 1.6-second controlled window.",
+      "acceptance": [
+        "Use a shared bounded spatial broadphase for swept, homing and area queries.",
+        "Results agree with brute force for fast sweeps, moving/large targets, dead entries and tie order."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 16,
+      "area": "Smooth cooldown presentation",
+      "feedback": "After the first ten fixes, the dense scene still emits 1063 attribute mutations per two seconds, chiefly continuously changing cooldown shade transforms.",
+      "acceptance": [
+        "Reduce active shade DOM update frequency while retaining smooth visible progress.",
+        "Readiness, direct refreshes, labels and accessible values remain immediate and truthful."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 17,
+      "area": "Impact audio budget",
+      "feedback": "A real Frost Nova hitting 100 surviving foes constructed 101 WebAudio oscillators in a single cast, taking 13.6 ms on the desktop baseline.",
+      "acceptance": [
+        "Bound simultaneous hit voices and repeated hit cues, and disconnect ended audio nodes.",
+        "Skill, defeat, level and question feedback cues remain available."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 18,
+      "area": "Readable rapid damage",
+      "feedback": "Rapid multi-hit channels continually replace floating numbers, producing overlapping tick piles instead of a readable per-enemy result.",
+      "acceptance": [
+        "Coalesce rapid per-enemy callouts into readable totals.",
+        "Actual health loss and critical emphasis remain truthful; rendering applies no damage."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 19,
+      "area": "Crowd health and status readability",
+      "feedback": "Ordinary tiny or almost-full health bars and status labels cover dense groups and add work while selected threats need stronger priority.",
+      "acceptance": [
+        "Retain selected, boss and elite health/status cues.",
+        "Ordinary near-player damage/status feedback stays readable with bounded clutter."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 20,
+      "area": "Mobile threat captions",
+      "feedback": "The 390px baseline shows the SPIT caption underneath the bottom hotbar and overlapping resource controls.",
+      "acceptance": [
+        "Keep imminent threat captions in the visible combat area above controls.",
+        "Warning geometry still points at the actual source/impact and is not hidden by skill effects."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    }
+  ],
+  "notes": [
+    "Only implemented and independently verified rounds count toward completedRounds.",
+    "Remaining rounds will be added from concrete evaluation feedback after earlier batches are rechecked; a list of assertions does not itself constitute fifty improvement rounds.",
+    "Wall-time benchmarks are advisory and controlled before/after comparisons; deterministic regressions check redundant work and behavior instead of machine-specific millisecond limits."
+  ],
+  "afterRound10": {
+    "artifact": "docs/science-legends-50-after-r10.json",
+    "denseMobile": {
+      "windowMs": 2005.4,
+      "simulationSteps": 245,
+      "updateCpuMs": 302,
+      "drawCpuMs": 639,
+      "attributeMutations": 1063,
+      "childMutations": 14,
+      "radialGradients": 0
+    },
+    "pausedMobile": {
+      "worldPaints": 0,
+      "drawCpuMs": 0
+    },
+    "treeMobile": {
+      "worldPaints": 0,
+      "drawCpuMs": 0
+    },
+    "menuMobile": {
+      "worldPaints": 0,
+      "attributeMutations": 0
+    },
+    "interpretation": "Frozen-world and redundant UI work was removed. Dense actor rendering remains the largest cost. Host refresh cadence varied between captures, so no universal FPS percentage is inferred."
+  }
+}
