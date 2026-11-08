@@ -70,6 +70,12 @@ try {
     check(await page.evaluate(() => G.impacts.length <= 48), `${width}: real explosion resolves with bounded impact effects`);
     await page.evaluate(() => { G.player.hp=G.player.maxHp; G.qTimer=0; draw(); });
     await page.screenshot({ path: path.join(output, `legends-combat-${width}.png`) });
+    await page.keyboard.press('t');await page.locator('#treeOverlay').waitFor({state:'visible'});
+    const points=await page.evaluate(()=>G.points);await page.locator('#treeBoard .tnode').first().click();
+    check(await page.evaluate(()=>getComputedStyle($('treeBoard')).backgroundImage.includes('skill-tree.webp')), `${width}: real skill tree uses generated decorative art`);
+    check(await page.evaluate(()=>{const panel=$('treeOverlay').querySelector('.panel').getBoundingClientRect(),wrap=$('treeBoardWrap').getBoundingClientRect(),pop=$('treePop').getBoundingClientRect();return panel.left>=0&&panel.right<=innerWidth+1&&pop.left>=wrap.left&&pop.right<=wrap.right+1;}), `${width}: tree and readable popover fit the viewport`);
+    check(await page.evaluate(n=>G.points===n,points), `${width}: tree visual inspection never spends points`);
+    await page.screenshot({path:path.join(output,`legends-tree-${width}.png`)});await page.locator('#treeCloseBtn').click();
     check(errors.length === 0, `${width}: no runtime errors: ${errors.join(', ')}`);
     check(missing.length === 0, `${width}: all shipped local resources exist: ${missing.join(', ')}`);
     await context.close();

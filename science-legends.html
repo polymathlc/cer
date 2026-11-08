@@ -532,6 +532,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 @media(max-width:700px){.hint-bar{display:none}.battle-status{top:52px;max-width:calc(100% - 145px);font-size:.67rem;padding:6px 8px}.battle-map{width:116px;height:140px}.battle-map canvas{width:104px;height:104px}.qtimer{font-size:.7rem;white-space:nowrap}.pbars,body.touch .pbars{bottom:166px;width:165px}.skillbar{bottom:18px;left:calc(50% + 42px);gap:6px}.skill-slot{width:43px;height:46px;font-size:21px}.evade-btn{right:15px;bottom:85px;min-width:86px;min-height:44px}.hint-bar{bottom:127px}.sksel-btn,body.touch .sksel-btn{bottom:140px;right:15px;left:auto;transform:none}.joy{left:12px;bottom:18px;width:96px;height:96px}.battle-map span{font-size:9px}.descend-btn{top:145px;font-size:.75rem}}
 </style>
 <link rel="stylesheet" href="science-legends-premium.css?v=1.454.0">
+<link rel="stylesheet" href="science-legends-sanctum.css?v=1.455.0">
 <link rel="stylesheet" href="science-expedition-accessibility.css?v=1">
 <script defer src="science-expedition-accessibility.js?v=1"></script>
 </head>
@@ -609,6 +610,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
           <button class="btn btn-outline" id="treeResetBtn" type="button">↺ Reset (free in beta)</button>
           <button class="btn btn-primary" id="treeCloseBtn" type="button">✓ Done</button>
         </div>
+        <div class="tree-state-legend" aria-label="Skill tree states"><span><i class="state-locked">–</i> Locked</span><span><i class="state-ready">+</i> Available</span><span><i class="state-done">✓</i> Learned / max</span><span><i class="state-cap">◆</i> Capstone</span></div>
         <div class="tree-board-wrap" id="treeBoardWrap">
           <div class="tree-board" id="treeBoard"></div>
         </div>
@@ -1850,7 +1852,7 @@ function nodeReqMsgs(nd){
 }
 function buildPopHtml(nd){
   var p = nodeXY(nd);
-  var W = 290;
+  var W = Math.min(290,Math.max(220,$('treeBoardWrap').clientWidth-16));
   var px = p.x + 46;
   if (px + W > TREE_W - 8) px = p.x - W - 46;
   px = clamp(px, 8, TREE_W - W - 8);
@@ -1859,7 +1861,7 @@ function buildPopHtml(nd){
   var msgs = nodeReqMsgs(nd);
   var ok = canLearn(nd);
   var full = r >= nd.max;
-  return '<div class="tree-pop" id="treePop" style="left:' + px + 'px;top:' + py + 'px;">' +
+  return '<div class="tree-pop" id="treePop" style="width:'+W+'px;max-height:'+Math.max(180,$('treeBoardWrap').clientHeight-20)+'px;overflow:auto;left:' + px + 'px;top:' + py + 'px;">' +
     '<button type="button" class="tp-x" id="tpClose">✕</button>' +
     '<div class="tp-head"><span class="tp-ico">' + nd.icon + '</span><div>' +
     '<div class="tp-name">' + nd.name + '</div>' +
@@ -1890,7 +1892,7 @@ function renderTree(){
       var pn = nodeById(G.cls, rid); if (!pn) return;
       var b = nodeXY(pn);
       var on = nodeRank(nd.id) > 0 && nodeRank(rid) > 0;
-      svg += '<line x1="' + b.x + '" y1="' + b.y + '" x2="' + a.x + '" y2="' + a.y + '" stroke="' + (on ? '#43A047' : '#D4D4CF') + '" stroke-width="' + (on ? 4 : 2) + '" stroke-linecap="round"' + (on ? '' : ' stroke-dasharray="5 5"') + '/>';
+      svg += '<line x1="' + b.x + '" y1="' + b.y + '" x2="' + a.x + '" y2="' + a.y + '" stroke="' + (on ? '#f1c879' : '#7c9bad') + '" stroke-width="' + (on ? 4 : 2) + '" stroke-linecap="round"' + (on ? '' : ' stroke-dasharray="5 5"') + '/>';
     });
   });
   svg += '</svg>';
@@ -1937,6 +1939,7 @@ function renderTree(){
   var tpClose = $('tpClose');
   if (tpClose) tpClose.addEventListener('click', function(e){ e.stopPropagation(); treeSel = null; renderTree(); });
   wrap.scrollLeft = sx; wrap.scrollTop = sy;
+  var pop=$('treePop');if(pop){pop.style.left=clamp(parseFloat(pop.style.left),sx+8,sx+Math.max(8,wrap.clientWidth-pop.offsetWidth-8))+'px';pop.style.top=clamp(parseFloat(pop.style.top),sy+8,sy+Math.max(8,wrap.clientHeight-pop.offsetHeight-8))+'px';}
   $('treeTitle').textContent = '🌳 ' + CLASSES[G.cls].name + ' Skill Tree';
   $('treePtsBig').textContent = G.points + ' point' + (G.points === 1 ? '' : 's');
   renderTreeStats();

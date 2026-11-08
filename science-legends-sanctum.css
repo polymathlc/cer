@@ -1,0 +1,29 @@
+/* Decorative generated surfaces stay scoped away from school question content. */
+#treeOverlay{--bg-primary:#142736;--bg-secondary:#101f2c;--bg-tertiary:#1c3241;--border-subtle:#526675;--border-medium:#6c7e88;--text-primary:#f1ead9;--text-secondary:#c5d2d8;--text-tertiary:#a7bcc8;--accent-bg:#4a3b25;--accent-base:#d6a65e;--accent-dark:#ffe0a3;color:var(--text-primary);padding:12px;background:#06101be8;}
+#treeOverlay .panel{max-width:1100px;background:#132636;border:12px solid #6f5736;border-image:url('assets/science-legends/v2/interface.webp') 80 stretch;box-shadow:0 24px 90px #000b;}
+#treeOverlay .panel-pad{padding:18px 18px 16px;}
+#treeOverlay .tree-head{gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+#treeTitle{font-size:1.1rem;letter-spacing:.02em;color:#ffe3ad;}
+#treeOverlay .tree-pts{background:#e6bd77;color:#241b10;}
+#treeOverlay .btn-outline{background:#203746;border-color:#889ca74d;color:#dfebef;}
+#treeOverlay .btn-primary{background:linear-gradient(#edca88,#c68b43);color:#241b10;}
+#treeOverlay .tree-board-wrap{background:#0d1a25;border-color:#748a9759;height:57vh;min-height:300px;}
+#treeOverlay .tree-board{background-image:linear-gradient(#081621c9,#081621e8),url('assets/science-legends/v2/skill-tree.webp');background-position:center top;background-size:100% auto;background-repeat:repeat-y;}
+#treeOverlay .tier-label{background:#102536e8;border-color:#8aabbd55;color:#d1e5ef;letter-spacing:.05em;box-shadow:0 2px 8px #0008;font-size:.65rem;}
+#treeOverlay .tnode{background:radial-gradient(circle at 35% 20%,#496072,#172b39 70%);border-color:#78909f;color:#fff4df;box-shadow:0 3px 12px #000a;}
+#treeOverlay .tnode.locked{opacity:.72;filter:grayscale(.8);border-style:dashed;border-color:#7e8d97;}
+#treeOverlay .tnode.avail{border-color:#f6cf83;outline:1px solid #fff0b94d;outline-offset:4px;box-shadow:0 0 20px #d7a75a44,0 4px 12px #000a;}
+#treeOverlay .tnode.done{background:radial-gradient(circle at 30% 20%,#326451,#173c36);border-color:#a3dfbd;border-style:double;border-width:5px;}
+#treeOverlay .tnode.part{background:radial-gradient(circle at 30% 20%,#6e5836,#302d27);border-color:#e4bc78;}
+#treeOverlay .tnode.capstone{border-radius:14px;border-color:#c7a9ed;}
+#treeOverlay .tnode.selq{outline:3px solid #f0e3bc;outline-offset:5px;}
+#treeOverlay .tnode .rank{background:#0b1722;border:1px solid #8eaaaf77;color:#e7f3ee;min-width:24px;}
+#treeOverlay .tree-pop{background:linear-gradient(145deg,#223b4c,#102331);border-color:#d0ab70;box-shadow:0 10px 28px #000a;}
+#treeOverlay .tree-pop .tp-kind{color:#ffe1a7;background:#77532155;}
+#treeOverlay .tree-tip{border:1px solid #a9c1ce55;background:#0d1c28f5;}
+#treeOverlay .tree-stats{color:#bed3df;border-top:1px solid #8fa8b444;padding-top:12px;line-height:1.7;font-size:.7rem;}
+.tree-state-legend{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin:0 0 12px;font-size:.68rem;color:#bdd1dd;}
+.tree-state-legend span{display:inline-flex;gap:6px;align-items:center;}
+.tree-state-legend i{display:inline-grid;place-items:center;width:16px;height:16px;border:2px solid #8298a6;border-radius:50%;font-style:normal;font-size:.55rem;color:#dcedf2;}
+.tree-state-legend .state-locked{border-style:dashed;}.tree-state-legend .state-ready{border-color:#f3c97c;color:#ffe4a6;}.tree-state-legend .state-done{border-style:double;border-width:3px;border-color:#a3dfbd;color:#c8f5de;}.tree-state-legend .state-cap{border-radius:4px;border-color:#c7a9ed;}
+@media(max-width:600px){#treeOverlay{padding:7px;}#treeOverlay .panel{border-width:7px;}#treeOverlay .panel-pad{padding:12px 9px;}#treeOverlay .tree-head .spacer{display:none;}#treeTitle{flex-basis:100%;font-size:1rem;}#treeOverlay .tree-head .btn{padding:7px 9px;font-size:.72rem;}#treeOverlay .tree-board-wrap{height:49vh;min-height:260px;}.tree-state-legend{font-size:.61rem;gap:6px 10px;}#treeOverlay .tree-stats{font-size:.64rem;}}
