@@ -286,6 +286,7 @@
   .settings summary, .howto summary { cursor: pointer; font-weight: 700; color: var(--text); }
   .settings label { display: flex; align-items: center; gap: 10px; margin: 15px 0; line-height: 1.5; }
   .settings input[type=range] { flex: 1; min-width: 60px; accent-color: #8fb4ff; }
+  .settings label > .set-name { flex: 0 0 7.5em; }
   .settings input[type=checkbox] { width: 19px; height: 19px; accent-color: #8fb4ff; }
   .settings output { min-width: 3em; color: var(--text); }
   .howto[open] summary { margin-bottom: 16px; }
@@ -504,7 +505,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v2.0.1 · Reactor Frontier</div>
+<div id="versionBadge">Science Strike v2.1.0 · Reactor Frontier</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -2034,8 +2035,8 @@ const strikeSettings = readStrikeSettings();
 function paintStrikeSettings() {
   document.body.classList.toggle('reduce-motion', strikeSettings.reducedMotion);
   document.querySelectorAll('.strike-settings').forEach((host, i) => {
-    host.innerHTML = '<label for="strikeSensitivity' + i + '">Aim speed <input id="strikeSensitivity' + i + '" data-set="sensitivity" type="range" min="0.4" max="2" step="0.1" value="' + strikeSettings.sensitivity + '"><output data-out="sensitivity">' + strikeSettings.sensitivity.toFixed(1) + '×</output></label>'
-      + '<label for="strikeCrosshair' + i + '">Crosshair size <input id="strikeCrosshair' + i + '" data-set="crosshair" type="range" min="0.75" max="1.5" step="0.05" value="' + strikeSettings.crosshair + '"><output data-out="crosshair">' + strikeSettings.crosshair.toFixed(2) + '×</output></label>'
+    host.innerHTML = '<label for="strikeSensitivity' + i + '"><span class="set-name">Aim speed</span> <input id="strikeSensitivity' + i + '" data-set="sensitivity" type="range" min="0.4" max="2" step="0.1" value="' + strikeSettings.sensitivity + '"><output data-out="sensitivity">' + strikeSettings.sensitivity.toFixed(1) + '×</output></label>'
+      + '<label for="strikeCrosshair' + i + '"><span class="set-name">Crosshair size</span> <input id="strikeCrosshair' + i + '" data-set="crosshair" type="range" min="0.75" max="1.5" step="0.05" value="' + strikeSettings.crosshair + '"><output data-out="crosshair">' + strikeSettings.crosshair.toFixed(2) + '×</output></label>'
       + '<label><input type="checkbox" data-set="reducedMotion" ' + (strikeSettings.reducedMotion ? 'checked' : '') + '> Reduce screen shake and weapon sway</label>'
       + '<label><input type="checkbox" data-set="invertY" ' + (strikeSettings.invertY ? 'checked' : '') + '> Invert mouse up/down</label>';
     host.querySelectorAll('[data-set]').forEach(input => {
@@ -3308,7 +3309,10 @@ function tick(now) {
         const side = e.ranged && !sees && d <= 4.5 ? (e.wanderDir > Math.PI ? 1.2 : -1.2) : 0;
         const before = e.x + e.y;
         tryMove(e, e.x + Math.cos(ang + side) * sp, e.y + Math.sin(ang + side) * sp, 0.34);
-        if (side && e.x + e.y === before) e.wanderDir = (e.wanderDir + Math.PI) % (Math.PI * 2);   // blocked: try the other way
+        if (side && e.x + e.y === before) {   // blocked: head straight for a step, and try the other side next frame
+          e.wanderDir = (e.wanderDir + Math.PI) % (Math.PI * 2);
+          tryMove(e, e.x + Math.cos(ang) * sp, e.y + Math.sin(ang) * sp, 0.34);
+        }
       }
       if (e.ranged) {
         e.fireCd -= wdt;
@@ -4900,12 +4904,12 @@ function drawCrosshair() {
   // boss bar: the Warden's health stays readable at the top of the screen
   const boss = G.enemies.find(e => e.boss && e.hp > 0);
   if (boss) {
-    const bw = 360, bx = cx - bw / 2, by = 18, k = Math.max(0, boss.hp / boss.maxHp);
+    const bw = 360, bx = cx - bw / 2, by = 46, k = Math.max(0, boss.hp / boss.maxHp);
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx - 3, by - 3, bw + 6, 16);
     ctx.fillStyle = '#ff4b57'; ctx.fillRect(bx, by, bw * k, 10);
-    ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe1e4';
-    ctx.fillText('WARDEN', cx, by + 26);
+    ctx.font = 'bold 12px monospace'; ctx.textAlign = 'right'; ctx.fillStyle = '#ffe1e4';
+    ctx.fillText('WARDEN', bx - 8, by + 9);
     ctx.restore();
   }
   // question heads-up under the crosshair in the last three seconds
