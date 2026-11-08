@@ -11,7 +11,7 @@ try{
   page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/*',route=>{const url=new URL(route.request().url());if(url.hostname!=='ui.test')return route.abort();const f=path.join(root,decodeURIComponent(url.pathname));return fs.existsSync(f)&&fs.statSync(f).isFile()?route.fulfill({path:f}):route.abort();});
   await page.goto('http://ui.test/science-legends.html');await page.waitForFunction(()=>document.querySelectorAll('.class-card').length===5&&LegendsModels.ready());
-  await page.screenshot({path:path.join(output,`menu-${width}.png`)});
+  await page.screenshot({path:path.join(output,`menu-${width}.png`),animations:'disabled'});
   await page.locator('.class-card').nth(1).click();await page.locator('#startBtn').click();await page.waitForFunction(()=>G&&G.time>.05);
   await page.evaluate(()=>{G.spawnT=999;G.qTimer=-1000;G.enemies=[];G.pets=[];G.player.hp=G.player.maxHp=100000;});
   await page.keyboard.press('t');await page.locator('#treeOverlay').waitFor({state:'visible'});
@@ -22,7 +22,7 @@ try{
   await page.locator('#treePop').waitFor({state:'visible'});
   const contained=await page.locator('#treePop').evaluate(node=>{const r=node.getBoundingClientRect(),w=document.getElementById('treeBoardWrap').getBoundingClientRect();return r.left>=w.left-1&&r.right<=w.right+1&&r.top>=w.top-1&&r.bottom<=w.bottom+1;});
   check(contained,`${width}: selected skill details and Add point control stay inside the visible graph viewport`);
-  await page.screenshot({path:path.join(output,`skill-tree-${width}.png`)});
+  await page.screenshot({path:path.join(output,`skill-tree-${width}.png`),animations:'disabled'});
   await page.locator('#tpAdd').click();
   const learned=await page.evaluate(id=>({rank:nodeRank(id),points:G.points}),initial.id);
   check(learned.rank===initial.rank+1&&learned.points===initial.points-1,`${width}: one Add point press learns exactly one rank and spends one point`);
@@ -37,9 +37,9 @@ try{
    LegendsActions.emit(G,2,p.x-115,p.y+45,82,0,.7).start=G.time-.2;
    LegendsActions.emitElement(G,'lightning',p.x+25,p.y-110,70,0,.7).start=G.time-.2;
    if(LegendsAI){const brute=G.enemies.find(e=>e.kind==='brute');LegendsAI.beginHeavy(brute,p);const spitter=G.enemies.find(e=>e.kind==='spitter');LegendsAI.beginSpit(spitter,p.x-spitter.x,p.y-spitter.y);}
-   updateHud();updateBars();draw();G.state='qa-still';
+   $('toastWrap').innerHTML='';updateCombatReadability(0);updateHud();updateBars();draw();G.state='qa-still';
   });
-  await page.screenshot({path:path.join(output,`combat-${width}.png`)});
+  await page.screenshot({path:path.join(output,`combat-${width}.png`),animations:'disabled'});
   check(errors.length===0,`${width}: tree and illustrated combat render without browser errors: ${errors.join(', ')}`);
   await context.close();
  }

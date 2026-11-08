@@ -86,6 +86,17 @@ try {
       check(aimed.selected&&close(aimed.x,aimed.ex)&&close(aimed.y,aimed.ey),`${label}: ${scaled?'CSS-scaled':'normal'} canvas targets the visibly clicked enemy during impact`);
     }
     await page.evaluate(()=>{canvas.style.width='100%';canvas.style.height='100%';G.enemies=[];G.shake=0;});
+    const bodyHit=await page.evaluate(()=>{
+      G.enemies=[];const p=G.player,e=spawnEnemy('brute',false);Object.assign(e,{x:p.x+80,y:p.y,speed:0,hp:10000,maxHp:10000});
+      const m=__readProjection(),r=canvas.getBoundingClientRect(),headY=e.y-42;
+      const sx=m.a*e.x+m.c*headY+m.e,sy=m.b*e.x+m.d*headY+m.f;
+      canvas.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'mouse',button:0,clientX:r.left+sx/VW*r.width,clientY:r.top+sy/VH*r.height}));
+      window.dispatchEvent(new PointerEvent('pointerup',{pointerType:'mouse',button:0}));
+      return {selected:G.atkTarget===e,walking:G.moveTarget!==null,panel:!$('targetPanel').hidden,name:$('targetName').textContent};
+    });
+    check(bodyHit.selected&&!bodyHit.walking,`${label}: clicking a visible Brute head selects the body instead of walking through it`);
+    check(bodyHit.panel&&/brute/i.test(bodyHit.name),`${label}: visible-body selection exposes the actual target identity`);
+    await page.evaluate(()=>{G.enemies=[];clearCombatInput();});
     const retained=await page.evaluate(()=>({x:G.player.x,y:G.player.y,time:G.time,cls:G.cls}));
     const resized=width<600?{width:844,height:390}:{width:960,height:740};
     await page.setViewportSize(resized);
@@ -93,6 +104,16 @@ try {
     const resizedState=await page.evaluate(()=>({x:G.player.x,y:G.player.y,time:G.time,cls:G.cls,m:__readProjection()}));
     check(close(resizedState.x,retained.x)&&close(resizedState.y,retained.y)&&resizedState.cls===retained.cls&&resizedState.time>=retained.time,`${label}: resize/orientation preserves the current hero and world position`);
     check(close(resizedState.m.a,1)&&close(resizedState.m.d,1)&&close(resizedState.m.b,0)&&close(resizedState.m.c,0),`${label}: live resize/orientation changes the viewport without changing perspective`);
+    const wrapped=await page.evaluate(()=>{
+      clearCombatInput();const hud=document.querySelector('.hud'),before={x:G.player.x,y:G.player.y};
+      hud.style.minHeight=(hud.getBoundingClientRect().height+47)+'px';
+      return before;
+    });
+    await page.waitForFunction(()=>canvas.width===Math.round($('stage').clientWidth*DPR)&&canvas.height===Math.round($('stage').clientHeight*DPR)&&G.view.width===$('stage').clientWidth&&G.view.height===$('stage').clientHeight,null,{timeout:2500});
+    const afterWrap=await page.evaluate(()=>({x:G.player.x,y:G.player.y,m:__readProjection()}));
+    check(close(afterWrap.x,wrapped.x)&&close(afterWrap.y,wrapped.y)&&close(afterWrap.m.a,1)&&close(afterWrap.m.d,1),`${label}: internal HUD reflow resizes the backing canvas and view without a window resize or hero movement`);
+    await page.evaluate(()=>{document.querySelector('.hud').style.minHeight='';});
+    await page.waitForFunction(()=>canvas.height===Math.round($('stage').clientHeight*DPR)&&G.view.height===$('stage').clientHeight,null,{timeout:2500});
     const before=await page.evaluate(()=>({x:G.player.x,y:G.player.y}));
     await page.keyboard.down('d');await page.waitForTimeout(160);await page.keyboard.up('d');
     const moved=await page.evaluate(()=>({x:G.player.x,m:__readProjection()}));
