@@ -125,7 +125,7 @@ async function pageFor({ bankRows = bank, pending = false, lock = 'success', mob
       if (artUnavailable) return route.abort();
       return route.fulfill({ contentType: file.endsWith('.webp') ? 'image/webp' : 'image/png', body: fs.readFileSync(new URL(file, root)) });
     }
-    if (/^(?:science-feed-(core|mastery|variety|quality)|science-strike-feed|student-question-history)\.js$/.test(file))
+    if (/^(?:science-feed-(core|mastery|variety|quality)|science-strike-feed|student-question-history|game-question-pressure)\.js$/.test(file))
       return route.fulfill({ contentType: 'application/javascript', body: fs.readFileSync(new URL(file, root), 'utf8') });
     return route.abort();
   });
@@ -296,6 +296,33 @@ try {
   await checkClean(denied);
   await denied.context.close();
   console.log('PASS denied pointer lock: frozen combat, recovery guidance and retry without another charge');
+
+  const pressureBank = Array.from({length:8},(_,i)=>question('pressure-'+i,'Plant Systems','In investigation '+(i+1)+', which plant part takes up water from the soil?','Roots','Flowers'));
+  const pressure = await pageFor({bankRows:pressureBank});
+  await pressure.page.locator('#playBtn').click();
+  await pressure.page.waitForFunction(()=>window.__strikeQA.run&&!window.__strikeQA.run.paused);
+  for(let i=0;i<5;i++){
+    await pressure.page.evaluate(()=>{const r=window.__strikeQA.run;r.player.hp=r.player.maxHp;r.enemies=[];r.breakT=99999;r.invuln=9999;r.qTimerMs=0;});
+    await pressure.page.waitForFunction(()=>!!window.__strikeQA.run.activeQ);
+    if(i===0)check((await pressure.page.locator('#qHelp').innerText()).includes('fifth ends the run'),'Strike explains escalating penalties before an answer');
+    await pressure.page.waitForTimeout(850);
+    const wrong=await pressure.page.evaluate(()=>{const q=window.__strikeQA.run.activeQ;return(q.answer+1)%q.options.length;});
+    await pressure.page.locator('#qOptions .qopt').nth(wrong).click();
+    check(await pressure.page.evaluate(({i})=>{const r=window.__strikeQA.run;const damage=i===4?r.player.maxHp:Math.ceil(r.player.maxHp*[8,16,28,45][i]/100);return r.questionPressure.wrongStreak===i+1&&r.player.hp===Math.max(0,r.player.maxHp-damage);},{i}),'Real Strike question '+(i+1)+' applies escalating damage');
+    if(i<4){await pressure.page.locator('#qContinue').click();await pressure.page.waitForFunction(()=>!window.__strikeQA.run.activeQ&&!window.__strikeQA.run.paused);}
+  }
+  check(await pressure.page.evaluate(()=>window.__strikeQA.run.over&&window.__strikeQA.run.player.hp===0),'Fifth wrong answer ends healed/invulnerable Strike run');
+  check(await pressure.page.locator('#deathOverlay').isVisible(),'Strike shows actual game-over screen on terminal answer');
+  check((await pressure.page.locator('#deathStats').innerText()).includes('Five wrong')&&(await pressure.page.locator('#deathStats').innerText()).includes('supported by the observation'),'Strike game over retains correct-answer explanation');
+  const attempted=await pressure.page.evaluate(()=>window.__mock.writes.filter(w=>w.path==='questionAttempts').length);
+  await pressure.page.evaluate(()=>window.__strikeQA.answerQuestion(0,document.querySelector('#qOptions .qopt')));
+  check(await pressure.page.evaluate(()=>window.__mock.writes.filter(w=>w.path==='questionAttempts').length)===attempted,'Late answer cannot pay or revive after Strike game over');
+  await shot(pressure.page,'08-question-pressure-game-over');
+  await pressure.page.locator('#againBtn').click();await pressure.page.locator('#playBtn').click();
+  await pressure.page.waitForFunction(()=>window.__strikeQA.run&&!window.__strikeQA.run.paused);
+  check(await pressure.page.evaluate(()=>window.__strikeQA.run.questionPressure.wrongStreak===0),'A new paid Strike run resets its wrong-answer streak');
+  await checkClean(pressure);await pressure.context.close();
+  console.log('PASS escalating Strike consequences:5 real answers, armor/heal bypass, terminal feedback and fresh-run reset');
 
   const pending = await pageFor({ pending: true });
   await pending.page.locator('#playBtn').evaluate(button => button.click());

@@ -507,6 +507,7 @@
 
 <div id="versionBadge">Science Strike v2.1.0 · Reactor Frontier</div>
 
+<script src="game-question-pressure.js?v=1.457.0"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
@@ -1706,7 +1707,7 @@ function startRun() {
     grenadeEnts: [], fields: [], deployables: [],
     cdF: 0, timeSlow: 0,
     totalKills: 0, coresEarned: 0,
-    streak: 0, bestStreak: 0, qCorrect: 0, qTotal: 0, fpsAskedIds: [],
+    streak: 0, bestStreak: 0, qCorrect: 0, qTotal: 0, fpsAskedIds: [], questionPressure: GameQuestionPressure.create(),
     nextDropFloorTier: 0,     // guaranteed min rarity for the NEXT drop (streak milestones)
     mods: {}, modsTaken: [],  // run-scoped drafted upgrades: key → stacks, names for the death recap
     combo: 0, comboT: 0,      // kill combo: chained kills within 3s of each other
@@ -2981,7 +2982,7 @@ async function openQuestion() {
   G.qOpenedAt = performance.now();
   sfx.qPop();
   document.exitPointerLock && document.exitPointerLock();
-  $('qHelp').textContent = 'Action paused. Read the question, then click an answer or press its number. There is no time limit.';
+  $('qHelp').textContent = 'Action paused. There is no time limit. ' + GameQuestionPressure.rules;
   $('qTopic').textContent = q.topic;
   $('qSource').textContent = q.title || 'Science question bank';
   $('qStreakNow').textContent = G.streak;
@@ -3018,6 +3019,8 @@ function answerQuestion(i, btn) {
   G.questionAnswered = true; // settle once before any rewards or asynchronous writes
   const ms = performance.now() - G.qOpenedAt;
   const correct = i === q.answer;
+  const pressure = GameQuestionPressure.answer(G.questionPressure || (G.questionPressure = GameQuestionPressure.create()), correct, G.player.maxHp);
+  G.player.hp = pressure.fatal ? 0 : Math.max(0, G.player.hp - pressure.damage);
   document.querySelectorAll('#qOptions .qopt').forEach((b, idx) => {
     b.disabled = true;
     if (idx === q.answer) b.classList.add('correct');
@@ -3054,6 +3057,7 @@ function answerQuestion(i, btn) {
     verdict.style.color = 'var(--bad)';
   }
   explain.textContent = q.explain || '';
+  if (pressure.message) verdict.textContent += ' ' + pressure.message;
   fb.style.display = 'block';
   $('qContinue').style.display = 'inline-block';
   fb.focus();
@@ -3062,6 +3066,10 @@ function answerQuestion(i, btn) {
   const pts = bankPortalPoints(q, correct, ms);
   if (pts) verdict.textContent += '  🪙 +' + pts + ' points';
   updateHud();
+  if (G.player.hp <= 0) {
+    G.questionLoss = { message: pressure.message, answer: (q.labels && q.labels[q.answer]) || q.answer + 1, explanation: q.explain || '' };
+    endRun();
+  }
 }
 /* ---- 🪙 Portal points for the questions answered in here ----
    Every game mode in the portal pays points for a question, and this is a
@@ -3088,7 +3096,7 @@ function bankPortalPoints(q, correct, ms) {
   } catch (e) { console.warn('portal points bank', e); return 0; }
 }
 $('qContinue').addEventListener('click', () => {
-  if (!G || !G.activeQ || !G.questionAnswered || G.activeQ.feedKey!==fpsFeedKey()) return;
+  if (!G || G.over || G.player.hp <= 0 || !G.activeQ || !G.questionAnswered || G.activeQ.feedKey!==fpsFeedKey()) return;
   G.activeQ = null;
   G.qTimerMs = QUESTION_INTERVAL;
   $('questionOverlay').classList.remove('active');
@@ -3119,6 +3127,13 @@ function endRun() {
     + '<div><div class="k">Run time</div><div class="v">' + mins.toFixed(1) + ' min</div></div>'
     + '<div style="grid-column:1/-1;"><div class="k">Upgrades drafted</div><div class="v" style="font-size:0.85rem;font-weight:600;">'
     + (G.modsTaken.length ? G.modsTaken.map(n => '<span class="mod-chip">' + n + '</span>').join('') : '—') + '</div></div>';
+  if (G.questionLoss) {
+    const feedback = document.createElement('p');
+    feedback.setAttribute('role', 'status');
+    feedback.style.gridColumn = '1 / -1';
+    feedback.textContent = G.questionLoss.message + ' The correct answer was ' + G.questionLoss.answer + '. ' + G.questionLoss.explanation;
+    $('deathStats').appendChild(feedback);
+  }
   $('deathCores').textContent = '⚛ ' + cores;
   $('deathPoints').textContent = '🪙 ' + _strikeRunPoints.toLocaleString() + ' point' + (_strikeRunPoints === 1 ? '' : 's');
   hideOverlays();

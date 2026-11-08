@@ -17,6 +17,7 @@ markShown:q=>window.marked.push(q.id),recordAnswer:r=>window.records.push(r),onI
 const pendingImages=[];
 const server=http.createServer((req,res)=>{
   if(req.url==='/'){res.setHeader('content-type','text/html');res.end(fixture);}
+  else if(new URL(req.url,'http://localhost').pathname==='/game-question-pressure.js'){res.setHeader('content-type','text/javascript');res.end(fs.readFileSync(path.join(root,'game-question-pressure.js')));}
   else if(req.url==='/hades-learning-parent.js'){res.setHeader('content-type','text/javascript');res.end(fs.readFileSync(path.join(root,'hades-learning-parent.js')));}
   else if(req.url==='/frame.html'){res.setHeader('content-type','text/html');res.end('<!doctype html><script>window.messages=[];addEventListener("message",e=>messages.push(e.data));window.send=d=>parent.postMessage(d,location.origin);</script>');}
   else if(req.url==='/diagram.svg'){res.setHeader('content-type','image/svg+xml');res.end('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="110" viewBox="0 0 360 110"><path d="M25 75Q70 12 145 77" fill="none" stroke="#29583a" stroke-width="8"/><circle cx="95" cy="57" r="28" fill="#73846c"/><text x="155" y="65" font-size="25">A · dull green fruit</text></svg>');}

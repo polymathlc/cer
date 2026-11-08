@@ -1,0 +1,44 @@
+name: Escalating game question penalties
+on:
+  pull_request:
+    paths: ['game-question-pressure.js', 'app.js', 'index.html', 'fps.html', 'science-*.html', 'hades-*', 'grand-line*', 'tools/game-question-pressure*', '.github/workflows/game-question-pressure.yml']
+  push:
+    branches: [main]
+    paths: ['game-question-pressure.js', 'app.js', 'index.html', 'fps.html', 'science-*.html', 'hades-*', 'grand-line*', 'tools/game-question-pressure*', '.github/workflows/game-question-pressure.yml']
+permissions:
+  contents: read
+jobs:
+  pressure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Verify escalation, all grading paths and terminal run guards
+        run: node --test tools/game-question-pressure*-tests.mjs
+      - name: Verify bundled Hades uses the canonical policy
+        run: node tools/hades-artifact-check.mjs
+      - name: Install isolated browser runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pressure-browser" --no-audit --no-fund playwright@1.62.1
+          "$RUNNER_TEMP/pressure-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Play repeated wrong answers through the real games
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/pressure-browser/node_modules/playwright/index.mjs
+          GAME_SCREENSHOTS: ${{ runner.temp }}/game-question-pressure
+          TCG_SCREENSHOTS: ${{ runner.temp }}/game-question-pressure/tcg
+          HADES_SCREENSHOTS: ${{ runner.temp }}/game-question-pressure/hades
+          SCIENCE_STRIKE_SCREENSHOTS: ${{ runner.temp }}/game-question-pressure/strike
+        run: |
+          for script in tools/game-question-pressure-*-browser.mjs; do
+            node "$script"
+          done
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: failure()
+        with:
+          name: game-question-pressure-qa
+          path: ${{ runner.temp }}/game-question-pressure
+          if-no-files-found: ignore
+          retention-days: 7

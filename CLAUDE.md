@@ -2,6 +2,24 @@
 
 Guidance for Claude when working in this repo.
 
+## All question games: escalating wrong-answer consequences (v1.457.0)
+
+`game-question-pressure.js` owns the shared run-local policy: consecutive misses
+remove 8%, 16%, 28%, then 45% of maximum health; the fifth forces defeat. A correct
+grade resets the streak. Question penalties bypass combat armor, shields, block
+and invulnerability. Only final grades count, with each game's duplicate,
+identity and run guards applied first. Keep pressure separate from mastery and
+ordinary practice/reward accounting. A defeated run cannot resume through stale
+Continue buttons, delayed healing, or incomplete-round rewards.
+
+The policy covers all twelve question-driven games/modes. Training uses session
+focus and retains earned card levels when it ends. Hades and Grand Line forward
+each verified answer in order, keeping their existing five/three-question round
+and grading safeguards. Games without question loops have no wrong-answer streak.
+See `docs/game-question-pressure.md` for the census, policy and validation. The
+shared helper is loaded before the portal application and before standalone game
+scripts; its changes trigger each affected game workflow.
+
 ## Science Legends: sixty skill portraits and animated skill effects (v1.456.0)
 
 Each of the sixty skills has a unique class/cell mapping in

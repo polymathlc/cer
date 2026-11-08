@@ -32,7 +32,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost'); res.setHeader('Cache-Control', 'no-store');
   if (url.pathname === '/') { res.setHeader('Content-Type', 'text/html; charset=utf-8'); return res.end(fixture); }
   if (url.pathname === '/grand-line.html' || url.pathname === '/rift.html') { res.setHeader('Content-Type', 'text/html; charset=utf-8'); return res.end(childHtml); }
-  if (/^\/(grand-line-(portal|learning-parent|economy|core|data)|pirate-rift-portal)\.js$/.test(url.pathname)) {
+  if (/^\/(grand-line-(portal|learning-parent|economy|core|data)|pirate-rift-portal|game-question-pressure)\.js$/.test(url.pathname)) {
     res.setHeader('Content-Type', 'text/javascript'); return res.end(fs.readFileSync(path.join(root, path.basename(url.pathname))));
   }
   res.writeHead(404).end();
@@ -56,7 +56,7 @@ try {
     const initial = await open(), url = new URL(await page.locator('iframe').getAttribute('src'));
     assert.equal(initial.questionCount, 3); assert.equal(initial.available, true); assert.match(initial.profileKey, /^p[0-9a-f]{16}$/);
     assert.equal(url.searchParams.get('profile'), initial.profileKey); assert.equal(url.searchParams.get('subject'), subject.toLowerCase()); assert.ok(!url.href.includes('private-account'));
-    assert.equal(url.searchParams.get('v'), '3.5.0');
+    assert.equal(url.searchParams.get('v'), '3.5.2');
     assert.equal(await page.locator('.grand-line-portal').getAttribute('aria-label'), 'Crew Defense');
     assert.match(await page.locator('.grand-line-stage iframe').getAttribute('title'), /Crew Defense/);
     assert.match(await page.locator('.grand-line-status').textContent(), /three questions after every wave/);

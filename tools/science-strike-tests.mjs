@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
+const GameQuestionPressure = createRequire(import.meta.url)('../game-question-pressure.js');
 
 // Exercise the shipped handlers, not a parallel model of the game state.
 const source = fs.readFileSync(new URL('../fps.html', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
@@ -48,7 +50,7 @@ function fixture() {
   };
   const q = { id: 'plant', topic: 'Plant Systems', feedKey: 'child', options: ['Roots', 'Flowers'], answer: 0, explain: 'Roots absorb water.' };
   const c = vm.createContext({
-    console, Math, Number, String, Object, Array, JSON, Promise,
+    console, Math, Number, String, Object, Array, JSON, Promise, GameQuestionPressure,
     window, document, canvas, $: element, keys: {}, pointerLocked: false, skillsOpen: false, skillsFromPause: false,
     G: { paused: false, over: false, activeQ: null, draftOpen: false, playSeconds: 0, qTimerMs: 15000,
       qOpenedAt: 0, questionAnswered: false, qCorrect: 0, qTotal: 0, streak: 0, bestStreak: 0, nextDropFloorTier: 0,
@@ -226,6 +228,29 @@ test('wrong-answer feedback identifies the correct numbered option and settles o
   f.c.G.activeQ = f.q; f.c.answerQuestion(1, f.options[1]); f.c.answerQuestion(0, f.options[0]);
   assert.match(f.element('verdict').textContent, /correct choice is 1/);
   assert.equal(f.c.G.qCorrect, 0); assert.equal(f.c.G.qTotal, 1); assert.equal(f.counts.bank, 1);
+  assert.equal(f.c.G.player.hp, 22); assert.equal(f.c.G.questionPressure.wrongStreak, 1);
+});
+
+test('consecutive wrong answers bypass damage defenses and the fifth defeats even a healed Strike run', () => {
+  const f = fixture(); vm.runInContext(cut('function answerQuestion(i, btn)', '/* ---- 🪙 Portal points'), f.c);
+  let defeats = 0; f.c.endRun = () => { defeats++; f.c.G.over = true; };
+  f.c.G.shield = 9999; f.c.G.invuln = 9999; f.c.G.mods = { armor: 9999 };
+  for (let i = 0; i < 5; i++) {
+    f.c.G.player.hp = 100; f.c.G.activeQ = f.q; f.c.G.questionAnswered = false;
+    f.c.answerQuestion(1, f.options[1]);
+    assert.equal(f.c.G.player.hp, [92, 84, 72, 55, 0][i]);
+  }
+  assert.equal(defeats, 1); assert.equal(f.counts.record, 5); assert.equal(f.c.G.over, true);
+  f.c.answerQuestion(0, f.options[0]); assert.equal(f.c.G.player.hp, 0); assert.equal(f.counts.record, 5);
+  assert.match(f.c.G.questionLoss.explanation, /Roots/);
+});
+
+test('a correct Strike answer resets wrong-answer pressure before the next miss', () => {
+  const f = fixture(); vm.runInContext(cut('function answerQuestion(i, btn)', '/* ---- 🪙 Portal points'), f.c);
+  f.c.G.player.hp = 100;
+  for (const i of [1, 1, 0, 1]) { f.c.G.activeQ = f.q; f.c.G.questionAnswered = false; f.c.answerQuestion(i, f.options[i]); }
+  assert.equal(f.c.G.player.hp, 68); assert.equal(f.c.G.questionPressure.wrongStreak, 1);
+  assert.match(f.element('verdict').textContent, /streak 1\/5/);
 });
 
 test('answer window, stale child, invalid option and dead run produce no result', () => {

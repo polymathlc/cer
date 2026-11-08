@@ -1,5 +1,6 @@
+import './game-question-pressure.js?v=1.457.0';
 // Shared Hades learning bridge. The portal owns the question bank, answer keys,
-// grading and history. The embedded game receives only a completed round score.
+// grading and history. The game receives ordered final boolean grades and completed round scores; answer keys stay here.
 export const HADES_QUESTION_COUNT = 5;
 const token = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
 const validRound = value => Number.isSafeInteger(value) && value > 0;
@@ -55,12 +56,25 @@ export function createHadesLearningController(config) {
       return true;
     }
     const s = session;
-    if (!s || d.type !== 'HADES_ROUND_REQUEST' || d.sessionId !== s.id || !validRound(d.round)) return false;
+    if (!s || d.sessionId !== s.id) return false;
+    if (d.type === 'HADES_PRESSURE_DEFEAT') {
+      const active = s.activePressure;
+      if (!active || d.requestId !== active.requestId || d.round !== active.round) return false;
+      active.ended = true; config.cancelPresentation?.(); return true;
+    }
+    if (d.type !== 'HADES_ROUND_REQUEST' || !validRound(d.round)) return false;
     if (s.completed.has(d.round)) {
       send(event.source, { ...s.completed.get(d.round), requestId: d.requestId }); return true;
     }
     if (s.busy || d.round !== s.nextRound) return false;
     s.busy = true; const revision = generation;
+    const pressureEnabled = d.pressure === 1;
+    const runId = s.helloId;
+    if (pressureEnabled && s.pressureRunId !== runId) {
+      s.pressureRunId = runId; s.pressure = globalThis.GameQuestionPressure.create();
+    }
+    const activePressure = pressureEnabled ? { requestId: d.requestId, round: d.round, ended: false } : null;
+    s.activePressure = activePressure;
     const blocked = message => send(s.source, { type: 'HADES_ROUND_BLOCKED', requestId: d.requestId,
       sessionId: s.id, round: d.round, message });
     try {
@@ -76,7 +90,7 @@ export function createHadesLearningController(config) {
       let index = 0, correct = 0, marking = false;
       const graded = new Map();
       const grade = async (questionIndex, choice, ms) => {
-        if (marking || !current(s) || revision !== generation || questionIndex !== index || !Number.isInteger(choice)) return null;
+        if (marking || activePressure?.ended || !current(s) || revision !== generation || questionIndex !== index || !Number.isInteger(choice)) return null;
         const q = questions[index]; if (!q || choice < 0 || choice >= q.options.length) return null;
         if (graded.has(index)) return graded.get(index);
         let result;
@@ -91,17 +105,30 @@ export function createHadesLearningController(config) {
         } else result = { correct: choice === q.answer, answer: q.answer, explainHtml: q.explainHtml || '' };
         // Claim before the write: rapid clicks cannot double-count history.
         graded.set(index, result); if (result.correct) correct++;
-        index++;
+        const gradedIndex = index++;
+        if (pressureEnabled) {
+          const pressure = globalThis.GameQuestionPressure.answer(s.pressure, result.correct, 100);
+          const summary = pressure.correct ? (pressure.reset ? 'Correct — wrong-answer streak reset.' : '')
+            : pressure.fatal ? 'Five wrong answers in a row — game over.'
+            : `Wrong-answer streak ${pressure.streak}/5: lose ${Math.round(pressure.rate * 100)}% of maximum life. `
+              + (pressure.streak === 4 ? 'The next wrong answer ends the run.' : 'A correct answer resets the streak.');
+          result = { ...result, pressure: { streak: pressure.streak, fatal: pressure.fatal, message: summary } };
+          graded.set(gradedIndex, result);
+          if (pressure.fatal) activePressure.ended = true;
+          send(s.source, { type: 'HADES_QUESTION_RESULT', requestId: d.requestId, sessionId: s.id,
+            round: d.round, questionIndex: gradedIndex, correct: result.correct });
+        }
         try { await config.recordAnswer?.({ question: q, correct: result.correct, choice,
           ms: Math.max(0, Math.min(3600000, Math.round(Number(ms) || 0))), round: d.round, sessionId: s.id }); }
         catch (error) { config.onRecordError?.(error); }
         return result;
       };
-      const finished = await config.presentQuestions({ subject: config.subject, questions, grade,
+      const finished = await config.presentQuestions({ subject: config.subject, questions, grade, pressureEnabled,
         isCurrent: () => current(s) && revision === generation,
         imageFailed: (q, url) => { if (current(s) && revision === generation) config.onImageFailure?.(q, url); },
         questionUnavailable: (q, reason) => { if (current(s) && revision === generation) config.onQuestionUnavailable?.(q, reason); } });
       if (!current(s) || revision !== generation) return false;
+      if (activePressure?.ended) return true;
       if (!finished || index !== HADES_QUESTION_COUNT) { blocked('The round is paused. Complete five available questions to continue.'); return true; }
       const result = { type: 'HADES_ROUND_RESULT', requestId: d.requestId, sessionId: s.id, round: d.round,
         ...hadesLearningReward(correct) };
@@ -186,7 +213,7 @@ export function installHadesLearningParent(config) {
     if (previousFocus?.isConnected) previousFocus.focus(); previousFocus = null;
   }
   function make(tag, cls, text) { const node = doc.createElement(tag); if (cls) node.className = cls; if (text != null) node.textContent = text; return node; }
-  async function presentQuestions({ subject, questions, grade, isCurrent, imageFailed, questionUnavailable }) {
+  async function presentQuestions({ subject, questions, grade, pressureEnabled, isCurrent, imageFailed, questionUnavailable }) {
     close(); previousFocus = doc.activeElement;
     if (!doc.getElementById('hades-learning-style')) { const style = make('style'); style.id = 'hades-learning-style'; style.textContent = DIALOG_CSS; doc.head.append(style); }
     overlay = make('div', 'hades-learning-overlay');
@@ -202,6 +229,7 @@ export function installHadesLearningParent(config) {
       const top = make('div','hades-learning-top'); top.append(make('span','',subject + ' sanctuary'), make('span','',`Question ${index + 1} of 5`));
       const heading = make('h2','',q.topic || subject + ' question'); heading.id = 'hades-learning-title';
       const copy = make('p','hades-learning-copy','Every correct answer improves your reward. 0/5: tiny consolation, no healing or boon upgrade. 5/5: restore 40% life and unlock Heroic rewards — a scalable boon at Lv 8 or +8 Pom levels.');
+      if (pressureEnabled) copy.textContent += ' ' + globalThis.GameQuestionPressure.rules;
       const stem = make('div','hades-learning-stem'); stem.innerHTML = sanitizeHadesQuestionHtml(q.html,doc);
       const options = make('div','hades-learning-options');
       const feedback = make('div','hades-learning-feedback'); feedback.setAttribute('aria-live','polite');
@@ -233,6 +261,8 @@ export function installHadesLearningParent(config) {
           if (answer.correct) score++;
           buttons[answer.answer].dataset.correct = 'true'; if (!answer.correct) button.dataset.wrong = 'true';
           feedback.textContent = answer.correct ? 'Correct. ' : `The correct answer is ${answer.answer + 1}. `;
+          if (answer.pressure?.message) feedback.append(make('p','hades-learning-pressure',answer.pressure.message));
+          if (answer.pressure?.fatal) { next.textContent = 'Return to game'; next.onclick = () => close(); }
           if (answer.explainHtml) { const explanation = make('div'); explanation.innerHTML = sanitizeHadesQuestionHtml(answer.explainHtml,doc); feedback.append(explanation); }
           if (index === 4) feedback.append(make('p','hades-learning-reward',hadesLearningRewardSummary(score)));
           next.hidden = false; next.focus();
