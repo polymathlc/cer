@@ -8,8 +8,8 @@
 <style>
 /* ============================================================================
    POLYMATH SCIENCE LEGENDS — Diablo-style top-down action RPG science MCQ game.
-   BETA build. Single file, procedurally-drawn pixel art (no external blobs).
-   3 classes (Barbarian / Sorcerer / Beast Master), 4 active skills each,
+   BETA build. Generated spell art with a procedural/vector fallback.
+   5 classes, 12 skills each with four equipped at a time,
    an extensive per-class skill tree, hordes of enemies, and a science
    question every 20 seconds pulled live from the class question bank.
    Shares the SD_* question bridge with Science Defenders / Raiders / Spire.
@@ -3922,6 +3922,7 @@ function draw(){
   ctx.translate(-camX, -camY);
   ctx.fillStyle = groundPat || '#3E4A3D';
   ctx.fillRect(camX - 260, camY - 260, VW + 520, VH + 520);
+  if(!ovr('ground') && window.LegendsArt && window.LegendsArt.drawGround) window.LegendsArt.drawGround(ctx,camX,camY,VW,VH);
   ctx.strokeStyle = '#1A1D21'; ctx.lineWidth = 22;
   ctx.strokeRect(11, 11, WORLD.w - 22, WORLD.h - 22);
   ctx.strokeStyle = '#5A5148'; ctx.lineWidth = 6;

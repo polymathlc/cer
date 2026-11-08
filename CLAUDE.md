@@ -2,6 +2,33 @@
 
 Guidance for Claude when working in this repo.
 
+## Science Legends: Emberwild combat and resilient question streams (v1.454.0)
+
+Science Legends uses `science-legends-combat.js` for a bounded 120 Hz simulation,
+swept projectile/dash collisions and damped knockback. Piercing and orbit hits track
+enemy objects rather than mutable array positions. Impact flashes, directional
+bursts, trails and brief strong-hit stops are bounded and respect reduced motion.
+`science-legends-art.js` consumes generated assets in `assets/science-legends/`;
+their provenance and exact prompts are in `manifest.json`. Vector art remains the
+fallback if images fail. `science-legends-premium.css` owns the Emberwild menu/HUD.
+Both expedition games use `science-expedition-accessibility.js/.css` for dialog
+focus, background isolation, keyboard selection and feedback announcements.
+
+The shared `ScienceFeedBridge` automatically retries an empty startup response or
+timeout with 1–15 second backoff, reconnects after invalidation and never substitutes
+demo questions. Parent-authorized recycling continues through tiny eligible banks.
+An asynchronous `_sdQuestionsPayload` must recheck learner identity before selecting
+or claiming questions and discard old history metadata after a switch. Hades and
+Grand Line still require 5 and 3 distinct usable records per learning round.
+
+CI: `.github/workflows/science-legends.yml`. Local checks: `node --test
+tools/game-legends-slayers-tests.mjs tools/science-legends-combat-tests.mjs
+tools/science-feed-payload-tests.mjs`; browser checks: `tools/game-legends-slayers-browser.mjs`,
+`tools/science-expedition-accessibility-browser.mjs`, `tools/science-legends-premium-browser.mjs`
+and `tools/science-legends-skills-browser.mjs`. The skill sweep exercises all 60
+skills with their base and three ultimate configurations. Five agent improvement
+rounds covered feeds, combat, accessibility, race/recycling review and final stress/CI.
+
 
 ## 🚫 Sec 1 retired + 🎮 games never say "no questions for your level" (v1.453.0)
 
