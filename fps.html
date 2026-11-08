@@ -1669,7 +1669,7 @@ function startRun() {
     wave: 1, breakT: 0,
     cls,
     player: {
-      x: 1.5, y: 1.5, dir: 0, pitch: 0,   // face along the clear outpost road
+      x: 1.5, y: 1.5, dir: 0, pitch: -15,   // face along the clear outpost road, sights a touch low for small bugs
       hp: 1, maxHp: 1,
       speedMult: 1, dmgMult: 1, magMult: 1,
     },
@@ -1776,7 +1776,8 @@ function spawnWave() {
   const hpScale = 1 + wv * 0.18;
   const idle = () => skillLv('ghost') ? 'idle' : 'chase';
   // the swarm: lots of fodder to mow down
-  const swarmN = Math.min(22, 8 + Math.floor(wv * 1.4));
+  // waves 1–2 are a warm-up: fewer bugs while a new player finds the controls
+  const swarmN = wv === 1 ? 6 : wv === 2 ? 8 : Math.min(22, 8 + Math.floor(wv * 1.4));
   for (let i = 0; i < swarmN; i++) {
     const pos = findSpawn(rng);
     const e = makeMinion(rng, pos.x, pos.y, wv);
@@ -1785,10 +1786,11 @@ function spawnWave() {
     spawnPoof(pos.x, pos.y);
   }
   // the core: a handful of real enemies
-  const coreN = Math.min(9, 2 + Math.floor(wv * 0.7));
+  const coreN = wv < 3 ? wv : Math.min(9, 2 + Math.floor(wv * 0.7));
   for (let i = 0; i < coreN; i++) {
     const pos = findSpawn(rng);
     const e = makeEnemy(rng, pos.x, pos.y, hpScale, wv);
+    if (wv < 3) e.dmg *= 0.6;
     e.state = idle();
     G.enemies.push(e);
     spawnPoof(pos.x, pos.y);
@@ -1970,7 +1972,10 @@ function finishLock() {
   if (pointerLocked && combatReady()) return; // browsers may report a confirmed grant twice
   if (pointerLocked && lockWanted && G && !G.over && !strikeModalPending() && !document.hidden) {
     lockWanted = false; G.paused = false; clearTimeout(lockWatchT);
-    G.resumeGrace = STRIKE_RESUME_GRACE;   // a beat to re-aim before the world is back at full speed
+    // a beat to re-aim before the world is back at full speed; pausing again soon only buys a short one
+    const nowMs = performance.now();
+    G.resumeGrace = nowMs - (G.graceAt || -1e9) > 8000 ? STRIKE_RESUME_GRACE : 0.3;
+    G.graceAt = nowMs;
     resetCombatInput(); lastT = performance.now();
     $('pauseOverlay').classList.remove('active');
     canvas.focus();
@@ -2172,7 +2177,8 @@ function strikeShotBand(e, aim) {
   const scale = REND_H * aim.zoom / depth;
   const height = scale * 0.95 * e.size;
   const fraction = (REND_H / 2 - (aim.hor + scale * 0.48 - height)) / height;
-  if (fraction < 0 || fraction > 1) return null;
+  // a level shot just over a small bug's back still counts as a body hit (never a crit)
+  if (fraction < -0.35 || fraction > 1) return null;
   const band = critBand(e);
   return { crit: fraction >= band[0] && fraction <= band[1] };
 }
@@ -2291,7 +2297,8 @@ function aimAssist(angle, aim = strikeShotAim()) {
     const rel = wrapAngle(Math.atan2(e.y - P.y, e.x - P.x) - angle);
     if (Math.abs(rel) > Math.max(win, bodyWin)) continue;
     if (!lineOfSight(P.x, P.y, e.x, e.y)) continue;
-    if (Math.abs(rel) <= bodyWin && strikeShotBand(e, aim) && d0 < bodyD) { bodyD = d0; body = e; }
+    // pick the enemy closest to the crosshair (not the nearest one), so a good shot is never stolen
+    if (Math.abs(rel) <= bodyWin && strikeShotBand(e, aim) && Math.abs(rel) < bodyD) { bodyD = Math.abs(rel); body = e; }
     if (Math.abs(rel) > win) continue;
     // the snap only helps if the frozen vertical aim actually crosses the
     // crit band at this range (same geometry updatePProj uses)
@@ -2299,8 +2306,9 @@ function aimAssist(angle, aim = strikeShotAim()) {
     if (d0 < bestD) { bestD = d0; best = e; }
   }
   if (best) return Math.atan2(best.y - P.y, best.x - P.x);
-  if (body) {   // bend halfway, so a wild shot still misses and good aim still matters
+  if (body) {   // bend part-way, so a wild shot still misses and good aim still matters
     const rel = wrapAngle(Math.atan2(body.y - P.y, body.x - P.x) - angle);
+    if (Math.abs(rel) < Math.atan2(0.4 * (body.size || 1), Math.hypot(body.x - P.x, body.y - P.y))) return angle;   // already a clean hit
     return angle + rel * 0.6;
   }
   return angle;
@@ -3106,10 +3114,17 @@ function strikeReleaseCharge(enemy) {
 }
 
 // Enemies shoulder each other apart instead of stacking into one unreadable blob.
+const STRIKE_MELEE_STOP = 0.8, STRIKE_PLAYER_SPACE = 0.75;
 function strikeSeparateEnemies(wdt) {
-  const list = G.enemies, push = 1.5 * wdt;
+  const list = G.enemies, push = 1.5 * wdt, P = G.player;
   for (let i = 0; i < list.length; i++) {
     const a = list[i];
+    // never let the crowd shove anyone into the camera, where it can't be seen or shot
+    const pdx = a.x - P.x, pdy = a.y - P.y, pd = Math.hypot(pdx, pdy);
+    if (pd < STRIKE_PLAYER_SPACE) {
+      const ux = pd > 1e-4 ? pdx / pd : Math.cos(i), uy = pd > 1e-4 ? pdy / pd : Math.sin(i);
+      tryMove(a, P.x + ux * STRIKE_PLAYER_SPACE, P.y + uy * STRIKE_PLAYER_SPACE, 0.34);
+    }
     for (let j = i + 1; j < list.length; j++) {
       const b = list[j];
       const min = 0.5 * ((a.size || 1) + (b.size || 1)) * 0.6;
@@ -3134,6 +3149,7 @@ function tick(now) {
     render(); return;
   }
   G.playSeconds += dt;
+  if (!G.firstTip && G.wave === 1 && G.playSeconds > 2) { G.firstTip = true; toast('🎯 Aim a little low at small bugs — click to shoot, Space to dodge'); }
 
   const P = G.player;
   // question countdown runs only while actually playing
@@ -3249,7 +3265,8 @@ function tick(now) {
     }
     if (e.state === 'chase') {
       const ang = Math.atan2(P.y - e.y, P.x - e.x);
-      if (!e.ranged || d > 4.5) {
+      // melee stops at arm's length so it stays on screen and shootable (it still swings at d < 1.0)
+      if ((!e.ranged || d > 4.5) && d > STRIKE_MELEE_STOP) {
         const sp = e.speed * slowMult * wdt;
         tryMove(e, e.x + Math.cos(ang) * sp, e.y + Math.sin(ang) * sp, 0.34);
       }
@@ -4807,6 +4824,21 @@ function buildDeployableSprites() {
 buildDeployableSprites();
 function drawCrosshair() {
   const cx = REND_W / 2, cy = REND_H / 2;
+  // close threats out of view: a pulsing red wedge at the edge before they land a hit
+  const pulse = 0.45 + 0.35 * Math.sin((G.playSeconds || 0) * 9);
+  for (const e of G.enemies) {
+    if (e.hp <= 0) continue;
+    const d = Math.hypot(e.x - G.player.x, e.y - G.player.y);
+    if (d > 1.5) continue;
+    const rel = wrapAngle(Math.atan2(e.y - G.player.y, e.x - G.player.x) - G.player.dir);
+    if (Math.abs(rel) < 35 * Math.PI / 180) continue;
+    const sa = rel - Math.PI / 2;
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = '#ff5a3c'; ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.arc(cx, cy, Math.min(cx, cy) - 26, sa - 0.22, sa + 0.22); ctx.stroke();
+    ctx.restore();
+  }
   // resume grace: a shrinking ring tells the player the world is easing back in
   if (G.resumeGrace > 0) {
     const k = G.resumeGrace / STRIKE_RESUME_GRACE;

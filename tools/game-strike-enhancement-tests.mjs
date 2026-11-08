@@ -128,9 +128,19 @@ test('crowded enemies are pushed apart but never through walls', () => {
   const { c } = setup();
   const moved = [];
   c.tryMove = (e, x, y) => { moved.push(e); e.x = x; e.y = y; };
+  c.G.player.x = 0; c.G.player.y = 0;
   c.G.enemies = [{ x: 5, y: 5, size: 1 }, { x: 5.01, y: 5, size: 1 }, { x: 9, y: 9, size: 1 }];
   for (let i = 0; i < 60; i++) c.strikeSeparateEnemies(1 / 60);
   const [a, b, far] = c.G.enemies;
   assert.ok(Math.hypot(a.x - b.x, a.y - b.y) >= 0.59, 'stacked pair separates');
   assert.deepEqual([far.x, far.y], [9, 9], 'a lone enemy is untouched');
+});
+
+test('the crowd never shoves an enemy into the camera', () => {
+  const { c } = setup();
+  c.tryMove = (e, x, y) => { e.x = x; e.y = y; };
+  c.G.player.x = 3; c.G.player.y = 3;
+  c.G.enemies = [{ x: 3.1, y: 3, size: 1 }, { x: 3, y: 3, size: 1 }];
+  c.strikeSeparateEnemies(1 / 60);
+  for (const e of c.G.enemies) assert.ok(Math.hypot(e.x - 3, e.y - 3) >= 0.74);
 });
