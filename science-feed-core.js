@@ -212,14 +212,37 @@ function randomizeGameRows(rows, context, options) {
   return result;
 }
 
+// 🚫 Secondary 1 is retired (v1.453.0). The owner removed every Sec 1 question
+// from the system, so no planner — practice, worksheets, quests, the arcade or
+// Science Strike — may ever serve one. Nothing is deleted from the database:
+// set this to false (and SEC1_RETIRED in app.js / fps.html) to bring them back.
+export const SCIENCE_SEC1_RETIRED = true;
+const SECONDARY_STAGE = 7;
+// Is this question Secondary 1 work? Its HIGHEST filed level decides (a P6
+// question with a Sec 1 second topic teaches Sec 1 material too).
+export function scienceQuestionIsSec1(question, options = {}) {
+  const level = scienceQuestionLevel(question, options);
+  return !!level && level.known && !level.invalid && level.max >= SECONDARY_STAGE;
+}
+
 export function planScienceQuestions(candidates, options = {}) {
   const source = (Array.isArray(candidates) ? candidates : []).filter(Boolean);
   const context = options.context || buildScienceFeedContext({ ...options, bank: options.bank || source });
-  const rows = [], blocked = [], recyclable = []; let reviewCount = 0;
+  const sec1Retired = options.sec1Retired ?? SCIENCE_SEC1_RETIRED;
+  const rows = [], blocked = [], recyclable = [], fallbackable = []; let reviewCount = 0;
   source.forEach((q, order) => {
     const id = str(q.id), fit = evaluateScienceFit(q, { context, manual: options.manual });
     const quality = context.qualityById.get(id) || evaluateQuestionQuality(q, context.options.qualityOptions?.(q) || {});
     const retired = retiredQuestion(q);
+    const qLevel = fit.diagnostic?.level;
+    const sec1 = sec1Retired && !!qLevel && qLevel.known && !qLevel.invalid && qLevel.max >= SECONDARY_STAGE;
+    if (sec1) { blocked.push({ id, reason: 'sec1-retired' }); return; }
+    // 🎮 Games-only safety net: a question turned away ONLY for its grade fit
+    // (above/below the learner, outside the mastery window, unknown level…)
+    // is still a usable question. options.fallback serves these, nearest
+    // level first, when nothing suitable is left (see the end of this plan).
+    if (options.fallback && !options.manual && id && !fit.eligible && !retired && quality.tier === 'sound'
+        && !context.unavailableImageIds.has(id)) fallbackable.push({ q, order, fit });
     const reason = !id ? 'question-id-required' : !fit.eligible ? fit.reason
       : !options.manual && (context.seenIds.has(id) || context.seenContentKeys.has(scienceQuestionContentKey(q))) ? 'already-seen'
       : retired && !(options.manual && options.allowRetired) ? 'outside-syllabus'
@@ -279,7 +302,34 @@ export function planScienceQuestions(candidates, options = {}) {
       }
     }
   }
-  return { questions: questions.concat(recycled), recycled: recycled.map(q => str(q.id)), blocked,
+  // 🎮 Arcade safety net (v1.453.0). Students saw "No suitable questions are
+  // set for your level yet" whenever the strict grade-and-mastery window held
+  // nothing (a small level bank, a learner far above or below the usual
+  // difficulty, topics without level metadata). Games now fall back to the
+  // nearest usable questions instead of stopping: same level first, then the
+  // levels just below, then unlabelled ones, then the levels just above. Only
+  // SOUND questions: quality checks, student reports, retired topics, failed
+  // images and Sec 1 are never relaxed.
+  const fallback = [];
+  // A learner with no school level set still fails closed: the game asks for
+  // the level instead of guessing which school year to serve.
+  if (options.fallback && !options.manual && context.mastery?.studentLevel?.known) {
+    const want = Number.isFinite(options.limit) ? Math.max(0, options.limit) : 1;
+    const have = questions.length + recycled.length;
+    if (have < want) {
+      const chosen = new Set(questions.concat(recycled).map(q => str(q.id)));
+      const rowsToRank = fallbackable.filter(row => !chosen.has(str(row.q.id)))
+        .map(row => ({ q: row.q, order: row.order, fit: { ...row.fit,
+          diagnostic: { ...(row.fit.diagnostic || {}), priorityTier: scienceFallbackRank(row, context) } } }));
+      for (const row of recycleScienceGameRows(rowsToRank, context, options)) {
+        if (have + fallback.length >= want) break;
+        const original = originals.get(str(row.q.id));
+        if (original) fallback.push(original);
+      }
+    }
+  }
+  return { questions: questions.concat(recycled, fallback), recycled: recycled.concat(fallback).map(q => str(q.id)),
+    fallback: fallback.map(q => str(q.id)), blocked,
     reasons: [...new Set(blocked.map(row => row.reason))], reviewCount, nextReviewAt: available?.nextReviewAt || scheduled.nextReviewAt };
 }
 
@@ -326,4 +376,16 @@ export function recycleScienceGameRows(rows, context, options = {}) {
     return first.concat(rest);
   };
   return spread(freshOrdered).concat(spread(again));
+}
+
+// How far a fallback question sits from what the learner should be doing.
+// Lower is better. 0 = their own level (only the mastery window turned it
+// away); 1, 2… = that many levels below; 5 = no level metadata; 10 + n = n
+// levels ABOVE the learner (a last resort).
+export function scienceFallbackRank(row, context) {
+  const student = context?.mastery?.studentLevel || {};
+  const level = row?.fit?.diagnostic?.level || {};
+  if (!level.known || level.invalid) return 5;
+  const gap = student.max - level.max;
+  return gap >= 0 ? gap : 10 - gap;
 }

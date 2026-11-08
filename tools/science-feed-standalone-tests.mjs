@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {buildScienceFeedContext,planScienceQuestions,scienceQuestionContentKey} from '../science-feed-core.js';
+import {buildScienceFeedContext,planScienceQuestions,scienceQuestionContentKey,scienceQuestionIsSec1} from '../science-feed-core.js';
 import {strikeQuestionQualityOptions,strikeAttemptProgress} from '../science-strike-feed.js';
 const read = name => fs.readFileSync(new URL('../'+name,import.meta.url),'utf8').replace(/\r\n/g,'\n');
 const bridgeSource=read('science-feed-bridge.js'), fps=read('fps.html');
@@ -88,7 +88,7 @@ function fpsFixture(bank,random=()=>0.5){
   const el=id=>{if(!elements.has(id))elements.set(id,{classList:{remove:noop}});return elements.get(id);};
   const ledgers=new Map();
   const ledger=()=>{const key=c.fpsFeedKey();if(!ledgers.has(key))ledgers.set(key,{seen:{},contentKeys:new Set()});return ledgers.get(key);};
-  const c=vm.createContext({scienceQuestionContentKey, fpsHistoryOpening:null,loadQuestions:()=>{c.fpsFeedReady=true;},fpsHistory:{isReady:()=>true,close(){},snapshot:()=>({seen:ledger().seen,contentKeys:[...ledger().contentKeys]}),async claimMany(rows){const data=ledger();if(rows.some(r=>data.seen[r.id]||data.contentKeys.has(r.contentKey)))return false;rows.forEach(r=>{data.seen[r.id]=r.at||1;if(r.contentKey)data.contentKeys.add(r.contentKey);});return true;}},buildScienceFeedContext,planScienceQuestions:(qs,opts)=>planScienceQuestions(qs,{random,...opts}),strikeQuestionQualityOptions,strikeAttemptProgress,console,currentUser:{uid:'u',name:'Ada',authName:'Parent',role:'student'},
+  const c=vm.createContext({scienceQuestionContentKey,scienceQuestionIsSec1, fpsHistoryOpening:null,loadQuestions:()=>{c.fpsFeedReady=true;},fpsHistory:{isReady:()=>true,close(){},snapshot:()=>({seen:ledger().seen,contentKeys:[...ledger().contentKeys]}),async claimMany(rows,opts={}){const data=ledger();if(!opts.allowSeen&&rows.some(r=>data.seen[r.id]||data.contentKeys.has(r.contentKey)))return false;rows.forEach(r=>{data.seen[r.id]=r.at||1;if(r.contentKey)data.contentKeys.add(r.contentKey);});return true;}},buildScienceFeedContext,planScienceQuestions:(qs,opts)=>planScienceQuestions(qs,{random,...opts}),strikeQuestionQualityOptions,strikeAttemptProgress,console,currentUser:{uid:'u',name:'Ada',authName:'Parent',role:'student'},
     studentLevelCap:4,studentLevelFloor:0,fpsProfileSignature:'',fpsAssignedFallback:'',fpsFeedAttempts:[],fpsFeedReady:true,fpsFeedBank:bank,
     fpsFeedLoad:0,fpsProfileStop:null,fpsFailedImages:new Map(),questions:bank.map(q=>({id:q.id,feedSource:q})),customTopicLevels:{},
     fpsServedMemory:new Map(),fpsFeedFlags:[],fpsFeedObjectives:[],fpsFeedObjectiveMap:{},
@@ -108,8 +108,12 @@ function fpsFixture(bank,random=()=>0.5){
 }
 test('Science Strike uses real school, mastery, quality and repetition policies', async () => {
   const bank=[question('p6','Forces'),question('hard','Plant Systems',{difficulty:5}),question('broken','Plant Systems',{status:'flagged'}),question('p4')];
-  const {c}=fpsFixture(bank);assert.equal((await c.nextQuestion()).id,'p4');assert.equal((await c.nextQuestion()),null);
-  c.studentLevelCap=0;assert.equal((await c.nextQuestion()),null);
+  const {c}=fpsFixture(bank);assert.equal((await c.nextQuestion()).id,'p4');
+  // 🔁 v1.453.0: the strict window is spent, so the game keeps going — it
+  // recycles the suitable question — and never serves the broken one or the
+  // above-level P6 one while a P4 question exists.
+  for(let i=0;i<5;i++)assert.ok(['p4','hard'].includes((await c.nextQuestion())?.id),'keeps cycling sound questions, never the flagged one');
+  c.studentLevelCap=0;assert.equal((await c.nextQuestion()),null,'no school level still fails closed');
 });
 
 test('Science Strike prioritizes fresh P6 then P5 instead of legacy-rated P3 for a P6 account', async () => {
@@ -118,7 +122,9 @@ test('Science Strike prioritizes fresh P6 then P5 instead of legacy-rated P3 for
   const {c}=fpsFixture(bank);c.studentLevelCap=6;
   assert.deepEqual(new Set([(await c.nextQuestion()).id,(await c.nextQuestion()).id]),new Set(['p6','p6-easy']));
   assert.equal((await c.nextQuestion()).id,'p5');
-  assert.equal((await c.nextQuestion()),null,'running out does not reopen old or recently served questions');
+  // 🔁 v1.453.0: running out recycles this level's questions (this run's
+  // oldest first) before ever falling back to the legacy P3 one.
+  assert.ok(['p6','p6-easy','p5'].includes((await c.nextQuestion()).id),'running out recycles suitable questions instead of stopping');
 });
 
 test('Science Strike changes the sampled database question set while retaining P6-first difficulty and run spacing', async () => {
@@ -150,15 +156,17 @@ test('Science Strike never repeats a question family during a run even after its
   const {c}=fpsFixture([first,copy,other]);c.localStorage.getItem=()=>{throw Error('blocked storage');};c.localStorage.setItem=()=>{throw Error('blocked storage');};
   const picked=[(await c.nextQuestion()).id];
   c.fpsServedMemory.clear(); // Even losing the timed cache must not reopen a run's family.
-  picked.push((await c.nextQuestion()).id);assert.equal((await c.nextQuestion()),null);
+  picked.push((await c.nextQuestion()).id);
   assert.equal(picked.filter(id=>['original','copy'].includes(id)).length,1);assert.ok(picked.includes('other'));
+  assert.ok((await c.nextQuestion()),'once fresh families are spent the run recycles instead of stopping');
 });
 
 test('Science Strike respects custom objective mappings and current teacher checks', async () => {
   const higher=question('mapped-high'),bad=question('review'),valid=question('valid');
   bad.autoCheck={state:'red',sig:strikeQuestionQualityOptions(bad).importSignature};
   const {c}=fpsFixture([higher,bad,valid]);c.fpsFeedObjectives=[{id:'higher',level:'P6'}];c.fpsFeedObjectiveMap={higher:['mapped-high']};
-  assert.equal((await c.nextQuestion()).id,'valid');assert.equal((await c.nextQuestion()),null);
+  assert.equal((await c.nextQuestion()).id,'valid');
+  assert.notEqual((await c.nextQuestion())?.id,'review','a red teacher check is never served, even when the pool runs dry');
 });
 
 test('Science Strike skips malformed documents and preserves sparse database tables and header labels', async () => {
@@ -172,16 +180,30 @@ test('Science Strike skips malformed documents and preserves sparse database tab
 test('Science Strike takes the active child level, not a younger sibling; secondary requires teacher authority', async () => {
   const {c}=fpsFixture([]);
   c.fpsApplyProfile({level:'P6',activeStudent:1,students:[{name:'Young',level:'P3'},{name:'Ada',level:'P4'}]});assert.equal(c.studentLevelCap,4);assert.equal(c.currentUser.name,'Ada');
-  c.fpsApplyProfile({students:[{name:'Ada',level:'S1'}]});assert.equal(c.studentLevelCap,0);
-  c.fpsApplyProfile({level:'S1',students:[{name:'Ada',level:'S1'}]});assert.equal(c.studentLevelCap,7);assert.equal(c.studentLevelFloor,7);
+  // 🚫 v1.453.0: Sec 1 is retired, so a Sec 1 account is served P6 questions.
+  c.fpsApplyProfile({students:[{name:'Ada',level:'S1'}]});assert.equal(c.studentLevelCap,6);assert.equal(c.studentLevelFloor,0);
+  c.fpsApplyProfile({level:'S1',students:[{name:'Ada',level:'S1'}]});assert.equal(c.studentLevelCap,6);assert.equal(c.studentLevelFloor,0);
   c.fpsApplyProfile({});assert.equal(c.studentLevelCap,0);
 });
 test('Science Strike respects topic2, retired topics, per-child history and cross-mode cooldown', async () => {
   const bank=[question('mixed','Plant Systems',{topic2:'Forces'}),question('retired','Plant Systems',{topic2:'Cell Systems'}),question('a'),question('b')];
   const {c,storage}=fpsFixture(bank);const key=c.fpsFeedKey();
   storage.set('scienceFeed:served:'+key,JSON.stringify({a:Date.now()}));
-  storage.set('scienceFeed:history:'+key,JSON.stringify({b:{last:Date.now(),latestFrac:1}}));assert.equal((await c.nextQuestion()),null);
+  storage.set('scienceFeed:history:'+key,JSON.stringify({b:{last:Date.now(),latestFrac:1}}));
+  assert.ok(['a','b'].includes((await c.nextQuestion()).id),'a spent pool recycles suitable questions, never the retired or above-level one');
   c.currentUser.name='Other child';assert.ok(['a','b'].includes((await c.nextQuestion()).id),'child histories stay separate');
+});
+test('🎮 Science Strike falls back to the nearest level instead of "no questions" (v1.453.0)', async () => {
+  // A P6 account whose bank holds only P3 work used to get nothing at all.
+  const {c}=fpsFixture([question('p3-only','Magnets')]);c.studentLevelCap=6;
+  assert.equal((await c.nextQuestion())?.id,'p3-only');
+  assert.equal((await c.nextQuestion())?.id,'p3-only','and keeps cycling it rather than stopping');
+});
+test('🚫 Science Strike never loads a Sec 1 question (v1.453.0)', () => {
+  const {c}=fpsFixture([]);
+  assert.equal(c.fpsIsSec1(question('cells','Cells — The Basic Unit of Life')),true);
+  assert.equal(c.fpsIsSec1({...question('tagged'),level:'S1'}),true);
+  assert.equal(c.fpsIsSec1(question('p4')),false);
 });
 test('Science Strike clears the old run on a live child or level change', async () => {
   const {c}=fpsFixture([question('a')]);c.fpsApplyProfile({students:[{name:'Ada',level:'P4'}]});

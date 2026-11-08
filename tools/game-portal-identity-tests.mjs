@@ -20,7 +20,7 @@ function fixture() {
     window: { addEventListener: (_, listener) => state.listeners.push(listener) },
     _scienceFeedKey: () => state.key, _scienceFeedLevel: () => state.level,
     currentUser: { get role() { return state.role; }, get level() { return state.level; } },
-    isLevelCode: value => /^(P[3-6]|S1)$/.test(value || ''), famActive: () => null,
+    isLevelCode: value => /^(P[3-6]|S1)$/.test(value || ''), liveLevel: value => value === 'S1' ? 'P6' : value, famActive: () => null,
     _spendCredit: () => { state.spent++; return true; },
     _sdRecordScore: data => state.scores.push(data), _gamePtsReset: () => state.resets++,
     _playsLeftPayload: () => ({ defenders: 2 }), _sdQuestionsPayload: async () => ({ type: 'SD_QUESTIONS' }),

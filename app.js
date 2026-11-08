@@ -76,7 +76,7 @@ import { SCIENCE_COACH_INSTRUCTIONS } from "./science-coach-core.js";
 // marking call, same motion preference, one card after the coach.
 import { mountMistakeAnalysis, resetMistakeAnalysis } from "./science-mistakes.js";
 import { renderMistakeAnimalAvatar } from "./science-mistake-art.js";
-import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit, scienceQuestionLevel, scienceQuestionContentKey } from "./science-feed-core.js?v=arcade-cycle-1";
+import { buildScienceFeedContext, planScienceQuestions, evaluateScienceFit, scienceQuestionLevel, scienceQuestionContentKey, scienceQuestionIsSec1 } from "./science-feed-core.js?v=sec1-retired-1";
 import { createStudentQuestionHistory } from "./student-question-history.js?v=1";
 import { evaluateQuestionQuality, questionQualitySignature, buildQuestionQualitySummary, questionHasUnresolvedStudentFlag } from "./science-feed-quality.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -4562,7 +4562,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.452.2';
+const APP_VERSION = 'v1.453.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5998,6 +5998,7 @@ async function loadAdminQuestions() {
         });
       } catch (e) { console.warn('bank load for admin', uid, e); }
     }
+    _sec1StripLoaded();   // 🚫 Sec 1 is retired — keep it out of every screen
     updateCounts();
     populateWsTopicFilter();
     loadMarkingSettings(); // pick up the teacher's rubric for student practice
@@ -19766,7 +19767,7 @@ function _rapidLevelOptions() {
   const cur = rapidLevel();
   sel.innerHTML =
     `<option value="">Any level — let the AI choose the topic</option>` +
-    TOPIC_LEVELS.map(lv => `<option value="${escapeHtml(lv)}">${escapeHtml(lv)} — file every question in this batch at ${escapeHtml(lv)}</option>`).join('');
+    LIVE_LEVELS.map(lv => `<option value="${escapeHtml(lv)}">${escapeHtml(lv)} — file every question in this batch at ${escapeHtml(lv)}</option>`).join('');
   sel.value = cur;
 }
 function _rapidLevelPaint() {
@@ -31809,7 +31810,7 @@ function _cpbLevelFieldHtml() {
     <span class="cpb-field-label">File the questions at <span class="cpb-dim">— narrows the topics the AI may choose from</span></span>
     <select class="form-input" onchange="cpbSetMeta('qLevel', this.value)">
       <option value="">Any level — let the AI choose the topic</option>
-      ${TOPIC_LEVELS.map(l => `<option value="${escapeHtml(l)}"${l === lv ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('')}
+      ${LIVE_LEVELS.map(l => `<option value="${escapeHtml(l)}"${l === lv ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('')}
     </select>
   </label>`;
 }
@@ -34339,6 +34340,7 @@ async function loadFromStorage() {
     console.error('loadFromStorage failed:', err);
     showToast('⚠ Could not load questions — working with local data', 'error');
   }
+  _sec1StripLoaded();   // 🚫 Sec 1 is retired — not in the bank, vetting or any game
   updateCounts();
   populateTopicFilter();
   try { autoFixSweepSoon(); } catch (e) { /* the sweep is a convenience */ }
@@ -34689,6 +34691,62 @@ const topicLevelMap = {
 const TOPIC_LEVELS = ['P3', 'P4', 'P5', 'P6', 'S1'];
 const LEVEL_ORDER = { P3: 3, P4: 4, P5: 5, P6: 6, S1: 7 };
 const LEVEL_CODE_RE = /^(?:P[3-6]|S1)$/;
+// ── 🚫 SECONDARY 1 IS RETIRED (v1.453.0) ─────────────────────────────────────
+// The owner removed every Sec 1 question from the system. Nothing is deleted
+// from Firestore: Sec 1 questions are simply kept out of questionBank and
+// vettingList when they load (_sec1Strip, parked in _sec1Hidden), every level
+// picker drops the S1 rung (LIVE_LEVELS / _sec1HideOptions), and a Sec 1
+// account is served as P6 (liveLevel). The planners in science-feed-core.js
+// refuse Sec 1 work on their own too (SCIENCE_SEC1_RETIRED). To undo it, set
+// this and SCIENCE_SEC1_RETIRED (science-feed-core.js) and SEC1_RETIRED
+// (fps.html) back to false — the questions come back on the next load.
+// TOPIC_LEVELS itself keeps S1 so old data (topics, accounts) still parses.
+const SEC1_RETIRED = true;
+const SEC1_FALLBACK_LEVEL = 'P6';
+// The rungs any picker may OFFER. Logic that maps or buckets existing data
+// keeps using TOPIC_LEVELS.
+const LIVE_LEVELS = TOPIC_LEVELS.filter(lv => !(SEC1_RETIRED && lv === 'S1'));
+// The level a person is actually SERVED at: a Sec 1 account plays P6 work.
+function liveLevel(lv) { return SEC1_RETIRED && lv === 'S1' ? SEC1_FALLBACK_LEVEL : lv; }
+let _sec1Hidden = [];
+function _isSec1Question(q) {
+  if (!q) return false;
+  if (String(q.level || '').trim().toUpperCase() === 'S1') return true;
+  try { return scienceQuestionIsSec1(q, _scienceFeedMeta()); } catch (_) { return false; }
+}
+// Take every Sec 1 question out of a loaded list (returns the kept ones).
+function _sec1Strip(list) {
+  if (!SEC1_RETIRED || !Array.isArray(list)) return list;
+  const keep = [];
+  for (const q of list) {
+    if (_isSec1Question(q)) { if (!_sec1Hidden.some(h => h.id === q.id)) _sec1Hidden.push(q); }
+    else keep.push(q);
+  }
+  return keep;
+}
+function _sec1StripLoaded() {
+  if (!SEC1_RETIRED) return;
+  try { questionBank = _sec1Strip(questionBank); } catch (e) { console.warn('sec1 strip bank', e); }
+  try { vettingList = _sec1Strip(vettingList); } catch (e) { console.warn('sec1 strip vetting', e); }
+}
+// The static <select>s in index.html list S1 by hand; drop that rung from them
+// (and any S1 optgroup) so nobody can pick or file anything at Sec 1.
+function _sec1HideOptions(root) {
+  if (!SEC1_RETIRED) return;
+  try {
+    (root || document).querySelectorAll('option[value="S1"]').forEach(o => {
+      const sel = o.parentElement && o.parentElement.closest('select');
+      const was = sel && sel.value === 'S1';
+      o.remove();
+      if (was) sel.value = SEC1_FALLBACK_LEVEL;
+    });
+    (root || document).querySelectorAll('optgroup').forEach(g => { if (/\bS1\b/.test(g.label || '')) g.remove(); });
+  } catch (_) {}
+}
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => _sec1HideOptions());
+  else _sec1HideOptions();
+}
 // The top of the ladder. Used to CLAMP a rung, and as the cap for anyone who
 // is not a student at all (an admin sees every question there is).
 const LEVEL_MAX = TOPIC_LEVELS[TOPIC_LEVELS.length - 1];
@@ -34765,7 +34823,7 @@ function levelFromNumber(n) {
 // appears in all of them rather than in whichever ones somebody remembered.
 function levelOptionsHtml(selected, blankLabel) {
   const head = blankLabel == null ? '' : `<option value=""${selected ? '' : ' selected'}>${escapeHtml(blankLabel)}</option>`;
-  return head + TOPIC_LEVELS.map(lv =>
+  return head + LIVE_LEVELS.map(lv =>
     `<option value="${lv}"${lv === selected ? ' selected' : ''}>${lv}</option>`).join('');
 }
 let customTopics = {};   // { 'Topic name': 'P3'|'P4'|'P5'|'P6'|'S1' }
@@ -34822,6 +34880,7 @@ function rebuildTopicSelect() {
   const byLevel = currentTopicsByLevel();
   let html = '';
   TOPIC_LEVELS.forEach(lv => {
+    if (!LIVE_LEVELS.includes(lv)) return;
     html += `<optgroup label="── ${lv} ──">`;
     byLevel[lv].forEach(t => { html += `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`; });
     html += `</optgroup>`;
@@ -34836,6 +34895,7 @@ function rebuildTopicSelect() {
     const cur2 = sel2.value || '';
     let html2 = '<option value="">+ Add 2nd topic (optional)</option>';
     TOPIC_LEVELS.forEach(lv => {
+      if (!LIVE_LEVELS.includes(lv)) return;
       html2 += `<optgroup label="── ${lv} ──">`;
       byLevel[lv].forEach(t => { html2 += `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`; });
       html2 += `</optgroup>`;
@@ -34857,7 +34917,7 @@ function renderManageTopicsList() {
   const wrap = document.getElementById('manageTopicsList');
   if (!wrap) return;
   const byLevel = currentTopicsByLevel();
-  wrap.innerHTML = TOPIC_LEVELS.map(lv => {
+  wrap.innerHTML = LIVE_LEVELS.map(lv => {
     const rows = byLevel[lv].map(t => {
       const isCustom = !!customTopics[t];
       const safe = escapeHtml(t).replace(/'/g, "\\'");
@@ -34875,7 +34935,7 @@ function addCustomTopic() {
   const name = (nameEl ? nameEl.value : '').trim();
   const lvl = lvlEl ? lvlEl.value : 'P5';
   if (!name) { showToast('Type a topic name first', 'error'); return; }
-  if (!TOPIC_LEVELS.includes(lvl)) return;
+  if (!LIVE_LEVELS.includes(lvl)) return;
   if (currentTopics().includes(name)) { showToast('That topic already exists', 'info'); return; }
   customTopics[name] = lvl;
   removedTopics = removedTopics.filter(t => t !== name); // un-hide if it was a removed default
@@ -35525,21 +35585,21 @@ function _scienceFeedKey(profile) {
   return JSON.stringify([identity.uid || 'guest', identity.profile]);
 }
 function _scienceFeedLevel(profile) {
-  if (profile && (!currentUser || currentUser.role !== 'student')) return isLevelCode(profile.level) ? profile.level : '';
-  if (!currentUser || currentUser.role !== 'student') return LEVEL_MAX;
-  const own = isLevelCode(currentUser.level) ? currentUser.level : '';
+  if (profile && (!currentUser || currentUser.role !== 'student')) return isLevelCode(profile.level) ? liveLevel(profile.level) : '';
+  if (!currentUser || currentUser.role !== 'student') return liveLevel(LEVEL_MAX);
+  const own = isLevelCode(currentUser.level) ? liveLevel(currentUser.level) : '';
   if (!own) return '';
-  const teacher = isLevelCode(currentUser.adminLevel) ? currentUser.adminLevel : '';
+  const teacher = isLevelCode(currentUser.adminLevel) ? liveLevel(currentUser.adminLevel) : '';
   if (isSecondaryLevel(own) && !isSecondaryLevel(teacher)) return '';
   let cap = teacher && getLevelNumber(teacher) < getLevelNumber(own) ? teacher : own;
-  if (profile && isLevelCode(profile.level) && getLevelNumber(profile.level) < getLevelNumber(cap)) cap = profile.level;
+  if (profile && isLevelCode(profile.level) && getLevelNumber(liveLevel(profile.level)) < getLevelNumber(cap)) cap = liveLevel(profile.level);
   return cap;
 }
 function _scienceFeedGameLevel(profile) {
   if (profile || currentUser?.role === 'student') return _scienceFeedLevel(profile);
-  if (isLevelCode(currentUser?.level)) return currentUser.level;
+  if (isLevelCode(currentUser?.level)) return liveLevel(currentUser.level);
   const child = typeof famActive === 'function' ? famActive() : null;
-  return isLevelCode(child?.level) ? child.level : '';
+  return isLevelCode(child?.level) ? liveLevel(child.level) : '';
 }
 function _scienceFeedGameMessage() {
   if (!_scienceFeedHistoryReady()) return _scienceFeedHistoryError() || 'Loading your question history. Please try again in a moment.';
@@ -35643,7 +35703,10 @@ function _scienceFeedPlan(candidates, opts = {}) {
   // 🔁 Games never run dry: once the fresh pool is spent they cycle the
   // learner's suitable questions again, reshuffled (_scienceFeedCycle*).
   const recycle = !!opts.game && !manual && opts.recycle !== false;
-  const plan = planScienceQuestions(ready, { ...opts, manual, recycle, cycle: recycle ? _scienceFeedCycleRead(opts.profile) : undefined,
+  // 🎮 …and never show "no questions for your level": when the strict grade
+  // window is empty they fall back to the nearest usable level (v1.453.0).
+  const plan = planScienceQuestions(ready, { ...opts, manual, recycle, fallback: recycle && opts.fallback !== false,
+    cycle: recycle ? _scienceFeedCycleRead(opts.profile) : undefined,
     context: opts.context || _scienceFeedContext(opts.profile,
     opts.game ? _scienceFeedGameLevel(opts.profile) : _scienceFeedLevel(opts.profile)) });
   if (recycle) (plan.recycled || []).forEach(id => _scienceFeedRecycled.add(_scienceFeedRecycleTag(id, opts.profile)));
@@ -40094,7 +40157,7 @@ async function wbPrintBoard({ board }) {
 function wbTool() {
   return _whiteboards || (_whiteboards = installWhiteboards({
     getUser: () => currentUser, getAuthUid: () => auth.currentUser?.uid || '', canAuthor: _canAuthor, canAssign: _isAdmin,
-    getProfileKey: _scienceFeedKey, getLevels: () => TOPIC_LEVELS.map(value => ({ value, label: value })),
+    getProfileKey: _scienceFeedKey, getLevels: () => LIVE_LEVELS.map(value => ({ value, label: value })),
     getBank: () => questionBank, isQuestionEligible: q => qInSyllabus(q), questionTopics: qTopicList,
     sourceContext: ssSourceContext, imageUrl: transformImageUrl,
     loadBoards: wbLoadBoards, loadReceivedBoards: wbLoadReceivedBoards, saveBoard: wbSaveBoard, deleteBoard: wbDeleteBoard,
@@ -42557,7 +42620,7 @@ const TSEND_GRADES = [
   { key: 'answer',   label: 'Full answers',        blurb: 'The full worked answer, once everything else has been tried.' }
 ];
 const TSEND_GRADE_DEFAULT = 'method';               // its HINT_DEFAULT
-const TSEND_LEVELS = ['P3', 'P4', 'P5', 'P6', 'S1']; // its LEVELS
+const TSEND_LEVELS = LIVE_LEVELS.slice(); // its LEVELS
 const TSEND_LIBS = {
   html2canvas: ['https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
                 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'],
@@ -45392,8 +45455,8 @@ function qpMarkServed(qid) {
 // student on primary, which costs a real Sec 1 student some questions until the
 // read succeeds — the other direction serves Sec 1 science to a nine-year-old.
 function studentCapLevel() {
-  if (!currentUser || currentUser.role !== 'student') return LEVEL_MAX;
-  const lvl = isLevelCode(currentUser.level || '') ? currentUser.level : LEVEL_DEFAULT_CAP;
+  if (!currentUser || currentUser.role !== 'student') return liveLevel(LEVEL_MAX);
+  const lvl = isLevelCode(currentUser.level || '') ? liveLevel(currentUser.level) : LEVEL_DEFAULT_CAP;
   if (isSecondaryLevel(lvl) && !isSecondaryLevel(currentUser.adminLevel || '')) return LEVEL_DEFAULT_CAP;
   return lvl;
 }
@@ -55191,7 +55254,7 @@ function qbulkTopicsRender() {
       <label class="qbt-lab">Level
         <select class="qbt-sel" onchange="qbulkTopicsLevel(this.value)">
           <option value=""${level ? '' : ' selected'}>— any level —</option>
-          ${TOPIC_LEVELS.map(l => `<option value="${escapeHtml(l)}"${l === level ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('')}
+          ${LIVE_LEVELS.map(l => `<option value="${escapeHtml(l)}"${l === level ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('')}
         </select>
       </label>
       <button class="btn btn-primary btn-sm" onclick="qbulkTopicsRun()" ${run ? 'disabled' : ''}
@@ -62345,7 +62408,7 @@ function _hadesInit() {
   if (select) { select.disabled = !_isAdmin(); select.closest('.card').hidden = !_isAdmin(); }
   if (select && !select.dataset.ready) {
     select.dataset.ready = '1';
-    select.innerHTML = '<option value="">Choose a school level</option>' + TOPIC_LEVELS.map(level => '<option value="'+level+'">'+level+'</option>').join('');
+    select.innerHTML = '<option value="">Choose a school level</option>' + LIVE_LEVELS.map(level => '<option value="'+level+'">'+level+'</option>').join('');
     if (isLevelCode(currentUser?.level)) select.value = currentUser.level;
     select.addEventListener('change',() => { _hadesResetLearning('The school level changed. Start a new run with suitable questions.'); _hadesInit(); });
   }
