@@ -4562,7 +4562,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.454.0';
+const APP_VERSION = 'v1.454.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -35596,10 +35596,16 @@ function _scienceFeedLevel(profile) {
   return cap;
 }
 function _scienceFeedGameLevel(profile) {
-  if (profile || currentUser?.role === 'student') return _scienceFeedLevel(profile);
+  // 🎮 Games are never left without a level (v1.454.1). An empty level made
+  // every game frame drop its whole pool and sit on "Connecting to your class
+  // question stream…" forever — an admin/teacher previewing a game, or a
+  // learner whose level is not set yet. Games now serve at the top live rung
+  // instead (P6 while Sec 1 is retired); the planner's nearest-level fallback
+  // then reaches lower levels when needed. Practice keeps its strict level.
+  if (profile || currentUser?.role === 'student') return _scienceFeedLevel(profile) || liveLevel(LEVEL_MAX);
   if (isLevelCode(currentUser?.level)) return liveLevel(currentUser.level);
   const child = typeof famActive === 'function' ? famActive() : null;
-  return isLevelCode(child?.level) ? liveLevel(child.level) : '';
+  return isLevelCode(child?.level) ? liveLevel(child.level) : liveLevel(LEVEL_MAX);
 }
 function _scienceFeedGameMessage() {
   if (!_scienceFeedHistoryReady()) return _scienceFeedHistoryError() || 'Loading your question history. Please try again in a moment.';
@@ -63073,6 +63079,71 @@ function _gqFilterPool(pool) {
   return _scienceFeedGameRows(pool);
 }
 
+// ---- 🎮 Last-resort game pool (v1.454.1) ----
+// The games' own safety net under _sdQuestionsPayload. Every usable MCQ the
+// viewer may see, best first: inside the learner's level band, then the rest.
+// Quality is still checked (unsound questions only when nothing sound exists)
+// and anything a student reported stays out.
+function _sdLastResortRows(source) {
+  let rows = [];
+  if (_ppGameFrameMatches(source)) {
+    try { rows = ppGamePool(_ppGameSel.year) || []; } catch (_) { rows = []; }
+    return rows.map(row => ({ row, band: true, sound: true }));
+  }
+  let flags = {};
+  try { flags = _scienceFeedStoreRead('flags') || {}; } catch (_) { flags = {}; }
+  const out = [];
+  for (const q of (questionBank || [])) {
+    if (!q || q.status === 'pending' || q.status === 'flagged') continue;
+    try {
+      if (!qInSyllabus(q) || !qAvailableToViewer(q)) continue;
+      if (SEC1_RETIRED && _isSec1Question(q)) continue;
+    } catch (_) { continue; }
+    const row = _sdExtractMcq(q);
+    if (!row) continue;
+    let eligible = true, sound = true;
+    try {
+      const quality = evaluateQuestionQuality(q, { ..._scienceFeedQualityOptions(q),
+        studentFlagged: questionHasUnresolvedStudentFlag(q, flags[String(q.id)]),
+        failedImageUrls: _scienceFeedImageFailures.get(String(q.id)) });
+      eligible = !!quality.eligible; sound = quality.tier === 'sound';
+    } catch (_) {}
+    if (!eligible) continue;
+    let band = true;
+    try { band = qWithinStudentLevel(q); } catch (_) { band = true; }
+    out.push({ row, band, sound });
+  }
+  // Best tier first: sound + in band, sound, in band, anything usable.
+  for (const test of [x => x.sound && x.band, x => x.sound, x => x.band, () => true]) {
+    const tier = out.filter(test);
+    if (tier.length) return tier;
+  }
+  return [];
+}
+// Per-learner memory of what the safety net served this sitting, so it walks
+// the whole pool (least recently served first, random among ties) instead of
+// repeating one question.
+const _sdLastResortServed = new Map();
+function _sdLastResortPick(entries, feedKey) {
+  if (!Array.isArray(entries) || !entries.length) return null;
+  const key = String(feedKey || 'guest');
+  if (!_sdLastResortServed.has(key)) _sdLastResortServed.set(key, new Map());
+  const served = _sdLastResortServed.get(key);
+  let gq = {};
+  try { gq = _gqLoad() || {}; } catch (_) { gq = {}; }
+  const lastOf = id => Math.max(served.get(String(id)) || 0, Number(gq[String(id)]) || 0);
+  let oldest = Infinity, ties = [];
+  for (const entry of entries) {
+    const at = lastOf(entry.row.id);
+    if (at < oldest) { oldest = at; ties = [entry]; }
+    else if (at === oldest) ties.push(entry);
+  }
+  const chosen = ties[Math.floor(Math.random() * ties.length)];
+  if (!chosen) return null;
+  served.set(String(chosen.row.id), Date.now());
+  return { ...chosen.row, recycled: true };
+}
+
 // Build the SD_QUESTIONS payload for a game frame: bank (or past-paper pool)
 // → hidden no-repeat rotation → cross-mode attempt stats. Reused by the
 // initial frame request AND every run start, so long sittings never play from
@@ -63096,6 +63167,19 @@ async function _sdQuestionsPayload(source) {
       // The game's own 15-minute repeat guard steps aside for a recycled
       // question — the endless cycle already decided it is due again.
       .map(row => _scienceFeedIsRecycled(row.id) ? { ...row, recycled: true } : row);
+  }
+  // 🎮 Never a dry stream (v1.454.1). If the strict, ledger-backed pick came
+  // back empty — the question history could not sync, the claim was refused,
+  // the level window and its fallback were empty — the game is still fed:
+  // a sound MCQ from the live bank, least-recently served first. It is marked
+  // recycled so the frame's 15-minute guard lets it through. Sec 1, retired
+  // topics, unreleased, pending/flagged and student-reported questions are
+  // still never served.
+  if (!questions.length && current()) {
+    try {
+      const pick = _sdLastResortPick(_sdLastResortRows(source), feedKey);
+      if (pick) questions = [pick];
+    } catch (e) { console.warn('SD last-resort pick failed', e); }
   }
   // A delayed initial request can outlive a sibling/level switch. It must not
   // reserve the new learner's questions or carry the old learner's history
