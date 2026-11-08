@@ -9,7 +9,7 @@
   function extract(pixels, width, height, columns, rows, options) {
     rows = rows == null ? 4 : rows; options = options || {};
     if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 ||
-        !Number.isInteger(columns) || !Number.isInteger(rows) || columns < 1 || rows < 1 ||
+        !Number.isInteger(columns) || !Number.isInteger(rows) || columns < 1 || rows < 1 || columns > width || rows > height ||
         width * height > 16777216 || !pixels || pixels.length < width * height * 4) {
       throw new RangeError('Invalid actor atlas dimensions or pixel buffer');
     }

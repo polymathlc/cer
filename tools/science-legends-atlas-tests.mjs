@@ -58,5 +58,6 @@ test('invalid dimensions and invalid frame coverage are rejected before allocati
  assert.throws(()=>atlas.extract(image(2,2),3,3,1,1),RangeError);
  assert.throws(()=>atlas.extract([],0,2,1,1),RangeError);
  assert.throws(()=>atlas.extract(image(2,2),2,2,0,1),RangeError);
+ assert.throws(()=>atlas.extract(image(2,2),2,2,3,1),RangeError);
  assert.throws(()=>atlas.cropPixels(image(2,2),2,2,{x:0,y:0,w:2,h:2,coverage:new Uint8Array(1)}),RangeError);
 });
