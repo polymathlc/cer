@@ -531,9 +531,10 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
 body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:none!important;transition:none!important}
 @media(max-width:700px){.hint-bar{display:none}.battle-status{top:52px;max-width:calc(100% - 145px);font-size:.67rem;padding:6px 8px}.battle-map{width:116px;height:140px}.battle-map canvas{width:104px;height:104px}.qtimer{font-size:.7rem;white-space:nowrap}.pbars,body.touch .pbars{bottom:166px;width:165px}.skillbar{bottom:18px;left:calc(50% + 42px);gap:6px}.skill-slot{width:43px;height:46px;font-size:21px}.evade-btn{right:15px;bottom:85px;min-width:86px;min-height:44px}.hint-bar{bottom:127px}.sksel-btn,body.touch .sksel-btn{bottom:140px;right:15px;left:auto;transform:none}.joy{left:12px;bottom:18px;width:96px;height:96px}.battle-map span{font-size:9px}.descend-btn{top:145px;font-size:.75rem}}
 </style>
-<link rel="stylesheet" href="science-legends-premium.css?v=1.454.1">
-<link rel="stylesheet" href="science-expedition-accessibility.css?v=1">
-<script defer src="science-expedition-accessibility.js?v=1"></script>
+<link rel="stylesheet" href="science-legends-premium.css?v=1.455.0">
+<link rel="stylesheet" href="science-legends-sanctum.css?v=1.455.0">
+<link rel="stylesheet" href="science-expedition-accessibility.css?v=1.455.0">
+<script defer src="science-expedition-accessibility.js?v=1.455.0"></script>
 </head>
 <body>
 <div id="app">
@@ -555,16 +556,20 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
   <!-- ===== STAGE ===== -->
   <div class="stage" id="stage">
     <canvas id="game"></canvas>
+    <div class="hurt-vignette" id="hurtVignette" aria-hidden="true"></div>
     <div class="battle-status" id="battleStatus" style="display:none"></div>
+    <div class="target-panel" id="targetPanel" hidden role="region" aria-label="Enemy target"><div class="target-name" id="targetName"></div><div class="target-type" id="targetType"></div><div class="target-hp"><span id="targetHpFill"></span></div><div class="target-numbers" id="targetHp"></div><div class="target-effects" id="targetEffects"></div></div>
     <button class="evade-btn" id="evadeBtn" type="button" style="display:none">Evade<small>Space · READY</small></button>
     <div class="beta-ribbon">Beta</div>
     <div class="qtimer" id="qTimer" style="display:none;"><span class="dot"></span> Next question in <b id="qTimerN" style="margin-left:2px;">20</b>s</div>
     <div class="pbars" id="pBars" style="display:none;">
       <div class="plevel" id="pLevel">Lv 1 · Barbarian</div>
-      <div class="pbar"><div class="fill" id="hpFill"></div><div class="txt" id="hpTxt">100 / 100</div></div>
+      <div class="pbar" id="healthBar" role="progressbar" aria-label="Health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div class="damage-trail" id="hpTrail"></div><div class="fill" id="hpFill"></div><div class="txt" id="hpTxt">100 / 100</div></div>
       <div class="pbar xp"><div class="fill" id="xpFill" style="transform:scaleX(0);"></div></div>
+      <div class="resource-details"><span id="healthState"></span><span id="shieldState" hidden></span><span id="insightState" hidden></span></div>
     </div>
     <div class="skillbar" id="skillBar" style="display:none;"></div>
+    <div class="touch-aim-hint">Hold a skill + drag to aim.<br>Return to its button to cancel.</div>
     <button class="sksel-btn" id="skillSelBtn" type="button" style="display:none;" title="Choose which 4 of your 12 skills sit on the bar (K)">🎯 Select Skill</button>
     <div class="hint-bar" id="hintBar"><b>Space</b> evade · Move: <b>WASD</b> or <b>click</b> the ground · <b>Click an enemy</b> / hold <b>right-click</b> to attack · Skills <b>1–4</b> fire at the crosshair · <b>T</b> tree · <b>K</b> skills · <b>B</b> armory</div>
     <div class="joy" id="joy"><div class="base"></div><div class="knob" id="joyKnob"></div></div>
@@ -583,6 +588,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
         <details class="legends-guide"><summary>Controls &amp; how to play</summary><ul class="how">
           <li data-ico="💨"><strong>Space / Evade</strong>: dodge in your movement direction (5-second cooldown). Step out of the <strong>orange charge lane</strong> before its ring fills. Leaving the game pauses combat.</li>
           <li data-ico="🕹️">Move with <strong>WASD / arrows</strong>, or <strong>click the ground</strong> to walk there. <strong>Click an enemy</strong> to attack it, hold <strong>right-click</strong> to fire at the crosshair, and skills <strong>1–4 fire at the crosshair</strong>.</li>
+          <li data-ico="🎯">On touch screens, <strong>hold a skill and drag</strong> to preview its aim. <strong>Release to cast</strong>, or return to the skill button to cancel. Your other thumb can keep moving.</li>
           <li data-ico="✨">Each class knows <strong>12 skills</strong> — unlock, rank, branch and crown them with 1-of-3 <strong>ULTIMATES</strong> in a huge <strong>skill tree (T)</strong>, then pick your <strong>4</strong> with 🎯 <strong>Select Skill (K)</strong>.</li>
           <li data-ico="🧪">Every <strong>20s</strong>: a science MCQ. Correct = <strong>+1 skill point</strong>, a heal and an Insight damage surge.</li>
           <li data-ico="🎁">Spend app points on <strong>loot boxes</strong> in the <strong>Armory (B)</strong> — permanent helm, armour, gloves, greaves, rings &amp; amulet. Unique and Mythic gear carries <strong>skill-changing powers</strong>.</li>
@@ -609,6 +615,10 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
           <button class="btn btn-outline" id="treeResetBtn" type="button">↺ Reset (free in beta)</button>
           <button class="btn btn-primary" id="treeCloseBtn" type="button">✓ Done</button>
         </div>
+        <div class="tree-state-legend" aria-label="Skill tree states"><span><i class="state-locked">–</i> Locked</span><span><i class="state-ready">+</i> Available</span><span><i class="state-done">✓</i> Learned / max</span><span><i class="state-cap">◆</i> Capstone</span></div>
+        <p id="treeNavHelp" class="tree-keyboard-help">Arrow keys browse · Home / End jump · Enter inspects · Escape closes details · T returns to battle</p>
+        <div id="treeFeedback" class="tree-feedback" role="status" aria-live="polite">Inspect a node to read its requirements.</div>
+        <div class="tree-search"><label for="treeSearch">Find a skill or bonus</label><div class="tree-search-row"><input id="treeSearch" type="search" maxlength="80" placeholder="Name, skill or description"><button class="btn btn-outline" id="treeSearchNext" type="button">Next match</button><button class="btn btn-outline" id="treeSearchClear" type="button">Clear</button></div><div id="treeSearchCount" role="status" aria-live="polite"></div><div id="treeSearchResults" class="tree-search-results"></div></div>
         <div class="tree-board-wrap" id="treeBoardWrap">
           <div class="tree-board" id="treeBoard"></div>
         </div>
@@ -717,9 +727,18 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
   </div>
 </div>
 
-<script src="science-feed-bridge.js"></script>
-<script src="science-legends-art.js?v=1.454.1"></script>
-<script src="science-legends-combat.js?v=1"></script>
+<script src="science-feed-bridge.js?v=1.455.0"></script>
+<script src="science-legends-art.js?v=1.455.0"></script>
+<script src="science-legends-view.js?v=1.455.0"></script>
+<script src="science-legends-atlas.js?v=1.455.0"></script>
+<script src="science-legends-models.js?v=1.455.0"></script>
+<script src="science-legends-actions.js?v=1.455.0"></script>
+<script src="science-legends-ai.js?v=1.455.0"></script>
+<script src="science-legends-tree.js?v=1.455.0"></script>
+<script src="science-legends-icons.js?v=1.455.0"></script>
+<script src="science-legends-feedback.js?v=1.455.0"></script>
+<script src="science-legends-gestures.js?v=1.455.0"></script>
+<script src="science-legends-combat.js?v=1.455.0"></script>
 <script>
 /* ============================================================================
  * SCIENCE LEGENDS (BETA) — top-down horde-action RPG with a science-MCQ pulse.
@@ -1813,7 +1832,7 @@ function skillCd(id){
 }
 
 /* ---- Tree UI: hover = tooltip, click = floating popover with "+ Add point" ---- */
-var treeSel = null;
+var treeSel = null,treeFocus=null,treeQuery='',treeMatches=[],treeResultCursor=0;
 var TREE_W = 1000;
 function treeNodeState(nd){
   var r = nodeRank(nd.id);
@@ -1827,6 +1846,8 @@ function nodeKindLabel(nd){
   return nd.kind === 'cap' ? 'Capstone' : nd.kind === 'ult' ? 'Ultimate' : nd.kind === 'enh' ? 'Enhancement'
     : nd.kind === 'branch' ? 'Branch' : nd.kind === 'unlock' ? 'New skill' : nd.kind === 'rank' ? 'Skill rank' : 'Passive';
 }
+function skillIconHtml(sid){return LegendsIcons.markup(sid,SKILLS[sid]);}
+function treeIconHtml(node){var sid=node.fx&&(node.fx.unlock||node.fx.skill)||node.ultInfo&&node.ultInfo.sid||node.sm&&node.sm.sid||node.mod&&node.mod.split('.')[0];return sid&&SKILLS[sid]?skillIconHtml(sid):node.icon;}
 function nodeReqMsgs(nd){
   var r = nodeRank(nd.id);
   var msgs = [];
@@ -1846,7 +1867,7 @@ function nodeReqMsgs(nd){
 }
 function buildPopHtml(nd){
   var p = nodeXY(nd);
-  var W = 290;
+  var W = Math.min(290,Math.max(220,$('treeBoardWrap').clientWidth-16));
   var px = p.x + 46;
   if (px + W > TREE_W - 8) px = p.x - W - 46;
   px = clamp(px, 8, TREE_W - W - 8);
@@ -1855,9 +1876,9 @@ function buildPopHtml(nd){
   var msgs = nodeReqMsgs(nd);
   var ok = canLearn(nd);
   var full = r >= nd.max;
-  return '<div class="tree-pop" id="treePop" style="left:' + px + 'px;top:' + py + 'px;">' +
+  return '<div class="tree-pop" id="treePop" style="width:'+W+'px;max-height:'+Math.max(180,$('treeBoardWrap').clientHeight-20)+'px;overflow:auto;left:' + px + 'px;top:' + py + 'px;">' +
     '<button type="button" class="tp-x" id="tpClose">✕</button>' +
-    '<div class="tp-head"><span class="tp-ico">' + nd.icon + '</span><div>' +
+    '<div class="tp-head"><span class="tp-ico">' + treeIconHtml(nd) + '</span><div>' +
     '<div class="tp-name">' + nd.name + '</div>' +
     '<div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><span class="tp-kind">' + nodeKindLabel(nd) + '</span>' +
     (nd.max > 1 ? '<span style="font-size:0.66rem;font-weight:800;color:var(--text-tertiary);">Rank ' + r + '/' + nd.max + '</span>' : (r ? '<span style="font-size:0.66rem;font-weight:800;color:var(--good);">Learned ✓</span>' : '')) +
@@ -1874,7 +1895,14 @@ function renderTree(){
   var wrap = $('treeBoardWrap');
   var sx = wrap.scrollLeft, sy = wrap.scrollTop;
   var board = $('treeBoard');
+  var oldFocus=document.activeElement,restoreFocus=board.contains(oldFocus),restoreId=oldFocus&&oldFocus.id;
   var tree = TREES[G.cls];
+  treeMatches=LegendsTree.search(tree,treeQuery);var route=new Set();
+  (treeSel?[treeSel]:treeQuery?treeMatches:[]).forEach(function(id){LegendsTree.ancestors(tree,id).forEach(function(key){route.add(key);});});
+  var navTree=treeQuery?tree.filter(function(node){return route.has(node.id);}):tree;
+  if(!tree.some(function(node){return node.id===treeFocus;}))treeFocus=LegendsTree.order(tree)[0].id;
+  board.setAttribute('role','group');board.setAttribute('aria-label','Skill paths');board.setAttribute('aria-describedby','treeNavHelp');
+  board.onkeydown=function(event){if(event.key==='Escape'&&treeSel){event.preventDefault();event.stopPropagation();treeSel=null;renderTree();focusTreeNode(treeFocus);}};
   var maxRow = 0;
   tree.forEach(function(nd){ if (nd.row > maxRow) maxRow = nd.row; });
   var H = 70 + (maxRow + 1) * 112 + 40;
@@ -1886,7 +1914,8 @@ function renderTree(){
       var pn = nodeById(G.cls, rid); if (!pn) return;
       var b = nodeXY(pn);
       var on = nodeRank(nd.id) > 0 && nodeRank(rid) > 0;
-      svg += '<line x1="' + b.x + '" y1="' + b.y + '" x2="' + a.x + '" y2="' + a.y + '" stroke="' + (on ? '#43A047' : '#D4D4CF') + '" stroke-width="' + (on ? 4 : 2) + '" stroke-linecap="round"' + (on ? '' : ' stroke-dasharray="5 5"') + '/>';
+      var path=route.has(nd.id)&&route.has(rid);
+      svg += '<line class="'+(path?'tree-route-edge':'')+'" x1="' + b.x + '" y1="' + b.y + '" x2="' + a.x + '" y2="' + a.y + '" stroke="' + (path?'#8ce5ec':on ? '#f1c879' : '#7c9bad') + '" stroke-width="' + (path?4:on ? 4 : 2) + '" stroke-linecap="round"' + (on||path ? '' : ' stroke-dasharray="5 5"') + '/>';
     });
   });
   svg += '</svg>';
@@ -1899,8 +1928,8 @@ function renderTree(){
   }
   tree.forEach(function(nd){
     var p = nodeXY(nd), st = treeNodeState(nd), r = nodeRank(nd.id);
-    html += '<button type="button" class="tnode ' + st + ' k-' + nd.kind + (nd.kind === 'cap' ? ' capstone' : '') + (treeSel === nd.id ? ' selq' : '') + '" style="left:' + p.x + 'px;top:' + p.y + 'px;" data-node="' + nd.id + '">' +
-      nd.icon + '<span class="rank">' + (nd.max > 1 ? (r + '/' + nd.max) : (r ? '✓' : nd.kind === 'cap' ? 'CAP' : nd.kind === 'ult' ? 'ULT' : '·')) + '</span></button>';
+    html += '<button type="button" class="tnode ' + st + ' k-' + nd.kind + (nd.kind === 'cap' ? ' capstone' : '') + (treeSel === nd.id ? ' selq' : '')+(route.has(nd.id)?' tree-route':'')+(treeQuery&&!route.has(nd.id)?' search-muted':'') + '" style="left:' + p.x + 'px;top:' + p.y + 'px;" data-node="' + nd.id + '">' +
+      treeIconHtml(nd) + '<span class="rank">' + (nd.max > 1 ? (r + '/' + nd.max) : (r ? '✓' : nd.kind === 'cap' ? 'CAP' : nd.kind === 'ult' ? 'ULT' : '·')) + '</span></button>';
   });
   if (treeSel){
     var selNd = nodeById(G.cls, treeSel);
@@ -1911,7 +1940,14 @@ function renderTree(){
   var tip = $('treeTip');
   Array.prototype.forEach.call(board.querySelectorAll('.tnode'), function(btn){
     var nd = nodeById(G.cls, btn.getAttribute('data-node'));
-    btn.addEventListener('click', function(){ treeSel = nd.id; renderTree(); });
+    btn.tabIndex=nd.id===treeFocus&&(!treeQuery||route.has(nd.id))?0:-1;btn.setAttribute('aria-label',nd.name+', '+nodeKindLabel(nd)+', rank '+nodeRank(nd.id)+' of '+nd.max+'. '+(treeNodeState(nd)==='locked'?'Locked. ':'')+nodeReqMsgs(nd).join('. '));btn.setAttribute('aria-expanded',treeSel===nd.id?'true':'false');
+    btn.addEventListener('focus',function(){treeFocus=nd.id;board.querySelectorAll('.tnode').forEach(function(node){node.tabIndex=node===btn?0:-1;});});
+    btn.addEventListener('click', function(){ treeFocus=nd.id;treeSel = nd.id; renderTree(); });
+    btn.addEventListener('keydown',function(event){
+      if(event.key==='Escape'&&treeSel){event.preventDefault();event.stopPropagation();treeSel=null;renderTree();focusTreeNode(treeFocus);return;}
+      if(!/^(ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Home|End)$/.test(event.key))return;
+      event.preventDefault();event.stopPropagation();var id=LegendsTree.next(navTree,nd.id,event.key);treeSel=null;treeFocus=id;renderTree();focusTreeNode(id);
+    });
     btn.addEventListener('mouseenter', function(){
       if (treeSel === nd.id) return;                    // popover already shows it
       var p = nodeXY(nd), r = nodeRank(nd.id);
@@ -1931,12 +1967,28 @@ function renderTree(){
   var tpAdd = $('tpAdd');
   if (tpAdd) tpAdd.addEventListener('click', function(e){ e.stopPropagation(); learnSelected(); });
   var tpClose = $('tpClose');
-  if (tpClose) tpClose.addEventListener('click', function(e){ e.stopPropagation(); treeSel = null; renderTree(); });
+  if (tpClose) tpClose.addEventListener('click', function(e){ e.stopPropagation(); treeSel = null; renderTree();focusTreeNode(treeFocus); });
   wrap.scrollLeft = sx; wrap.scrollTop = sy;
+  var pop=$('treePop');if(pop){pop.style.left=clamp(parseFloat(pop.style.left),sx+8,sx+Math.max(8,wrap.clientWidth-pop.offsetWidth-8))+'px';pop.style.top=clamp(parseFloat(pop.style.top),sy+8,sy+Math.max(8,wrap.clientHeight-pop.offsetHeight-8))+'px';}
+  if(restoreFocus){var replacement=restoreId&&$(restoreId);if(replacement&&!replacement.disabled)replacement.focus({preventScroll:true});else focusTreeNode(treeFocus,false);}
   $('treeTitle').textContent = '🌳 ' + CLASSES[G.cls].name + ' Skill Tree';
   $('treePtsBig').textContent = G.points + ' point' + (G.points === 1 ? '' : 's');
   renderTreeStats();
+  renderTreeSearch();
 }
+function activateTreeResult(id){if(!id)return;treeResultCursor=Math.max(0,treeMatches.indexOf(id));treeFocus=id;treeSel=id;focusTreeNode(id);renderTree();focusTreeNode(id);}
+function renderTreeSearch(){
+  var results=$('treeSearchResults');results.replaceChildren();$('treeSearchClear').disabled=!treeQuery;$('treeSearchNext').disabled=!treeQuery||!treeMatches.length;
+  $('treeSearchCount').textContent=treeQuery?(treeMatches.length?treeMatches.length+' matches · highlighted lines show prerequisite routes.':'No matches. Try a skill name or bonus such as damage.'):'Search all '+TREES[G.cls].length+' nodes. Prerequisites may offer alternative routes.';
+  if(!treeQuery)return;treeMatches.slice(0,4).forEach(function(id){var node=nodeById(G.cls,id),button=document.createElement('button');button.type='button';button.className='tree-result';button.textContent=node.name;button.addEventListener('click',function(){activateTreeResult(id);});results.appendChild(button);});
+}
+function wireTreeSearch(){
+  $('treeSearch').addEventListener('input',function(){treeQuery=this.value.trim();treeResultCursor=0;treeSel=null;renderTree();});
+  $('treeSearch').addEventListener('keydown',function(event){if(event.key==='Enter'||event.key==='ArrowDown'){event.preventDefault();event.stopPropagation();activateTreeResult(treeMatches[0]);}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();$('treeSearchClear').click();}});
+  $('treeSearchClear').addEventListener('click',function(){treeQuery='';$('treeSearch').value='';treeSel=null;renderTree();$('treeSearch').focus();});
+  $('treeSearchNext').addEventListener('click',function(){treeResultCursor=(treeResultCursor+1)%treeMatches.length;activateTreeResult(treeMatches[treeResultCursor]);});
+}
+function focusTreeNode(id,scroll){var button=$('treeBoard').querySelector('[data-node="'+id+'"]');if(!button)return;button.focus({preventScroll:true});if(scroll!==false)button.scrollIntoView({block:'nearest',inline:'nearest',behavior:'auto'});}
 function selectNode(id){ treeSel = id; renderTree(); }
 function renderTreeStats(){
   var S = G.stats; if (!S) return;
@@ -1975,6 +2027,7 @@ function learnSelected(){
   if (nd.mod === 'cap.bear' && G.state !== 'menu' && !G.pets.some(function(p){ return p.kind === 'bear'; })) spawnPet('bear');
   renderTree();
   updateHud();
+  $('treeFeedback').textContent=nd.name+' is rank '+nodeRank(nd.id)+'. '+G.points+' skill point'+(G.points===1?'':'s')+' remaining.';
 }
 function resetTree(){
   var refund = pointsSpent();
@@ -2020,7 +2073,7 @@ function renderSkillSel(){
     var sid = G.slots[i];
     slotsHtml += '<button type="button" class="sel-slot' + (selSlotIdx === i ? ' active' : '') + '" data-slot="' + i + '">' +
       '<span class="key">' + (i + 1) + '</span>' +
-      '<span class="ss-ico">' + (sid ? SKILLS[sid].icon : '·') + '</span>' +
+      '<span class="ss-ico">' + (sid ? skillIconHtml(sid) : '·') + '</span>' +
       '<span class="ss-name">' + (sid ? SKILLS[sid].name : 'Empty') + '</span></button>';
   }
   $('selSlots').innerHTML = slotsHtml;
@@ -2032,7 +2085,7 @@ function renderSkillSel(){
     var unlocked = skillUnlocked(sid);
     var inSlot = G.slots.indexOf(sid);
     grid += '<button type="button" class="sel-skill' + (unlocked ? '' : ' locked') + (inSlot >= 0 ? ' slotted' : '') + '" data-skill="' + sid + '">' +
-      '<span class="ssk-ico">' + SKILLS[sid].icon + '</span>' +
+      '<span class="ssk-ico">' + skillIconHtml(sid) + '</span>' +
       '<div class="ssk-body"><div class="ssk-name">' + SKILLS[sid].name + (unlocked ? ' <span class="ssk-rank">Rk ' + skillRank(sid) + '</span>' : '') + (inSlot >= 0 ? ' <span class="ssk-slot">slot ' + (inSlot + 1) + '</span>' : '') + '</div>' +
       '<div class="ssk-desc">' + (unlocked ? SKILLS[sid].desc : '🔒 Unlock in the skill tree (T)') + '</div></div></button>';
   });
@@ -2065,10 +2118,11 @@ var chosenClass = 'barb';
 var G = null;
 
 function newGame(cls){
+  cancelSkillGesture();
   var c = CLASSES[cls];
   var feedOwner=JSON.stringify(scienceFeed.context());
   G = {
-    state: 'play', cls: cls, feedOwner:feedOwner,
+    state: 'play', cls: cls, feedOwner:feedOwner, presentation:snapshotPresentation(),
     player: {
       x: WORLD.w / 2, y: WORLD.h / 2, r: 16,
       hp: c.hp, maxHp: c.hp, levelHp: 0,
@@ -2088,10 +2142,10 @@ function newGame(cls){
     pwT: { stormcall: 0, cataclysm: 0, starfall: 0, avatar: 0 },
     followerRespawn: 0,
     cheatUsed: false, phoenixUsed: false, hitEnemies: null, shake: 0,
-    impacts: [], accumulator: 0, hitStop: 0, impactCooldown: 0
+    impacts: [], actions:[], accumulator: 0, hitStop: 0, impactCooldown: 0
   };
   computeStats();
-  treeSel = null;
+  treeSel = null;treeFocus=null;treeQuery='';$('treeSearch').value='';
   spawnFollower();
 }
 
@@ -2101,6 +2155,7 @@ var COMBAT_BUILD = 'expedition-2';
 var lowMotion = false;
 try { var motionPref=localStorage.getItem('science_expedition_motion'); lowMotion=motionPref===null ? !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) : motionPref==='1'; } catch(e){}
 function clearCombatInput(){
+  cancelSkillGesture();
   keys={};
   if(typeof joyVec!=='undefined'){joyVec.on=false;joyVec.x=0;joyVec.y=0;}
   if(typeof mouse!=='undefined' && mouse){mouse.lDown=false;mouse.rDown=false;}
@@ -2125,12 +2180,15 @@ function evade(){
 }
 function updateCombatReadability(dt){
   var p=G.player;
+  LegendsFeedback.update(G,dt,lowMotion);
+  LegendsActions.expire(G);
   G.impactCooldown=Math.max(0,(G.impactCooldown||0)-dt);
   G.impacts=(G.impacts||[]).filter(function(f){f.t+=dt;return f.t<f.life;});
   p.evadeCd=Math.max(0,(p.evadeCd||0)-dt);
   G.evadeTrail=(G.evadeTrail||[]).filter(function(t){t.life-=dt;return t.life>0;});
   G.enemies.forEach(function(e){e.hitFlash=Math.max(0,(e.hitFlash||0)-dt);e.impactCd=Math.max(0,(e.impactCd||0)-dt);});
   G.readabilityT=(G.readabilityT||0)-dt;if(G.readabilityT>0)return;G.readabilityT=.1;
+  updateTargetPanel();
   var b=$('evadeBtn');b.style.display='';b.disabled=p.evadeCd>0;
   b.innerHTML=p.evadeCd>0 ? 'Evade '+p.evadeCd.toFixed(1)+'s<small>Recharging</small>' : 'Evade<small>Space · READY</small>';
   var status=$('battleStatus');status.style.display='';
@@ -2145,6 +2203,7 @@ function moveEvade(p,dt){
 function lockCharge(e,dx,dy){
   var mag=Math.hypot(dx,dy)||1;
   e.chargeSt=1;e.chargeT=.7;e.cvx=dx/mag*e.speed*4.6;e.cvy=dy/mag*e.speed*4.6;
+  e.fx=dx/mag;e.fy=dy/mag;
 }
 function drawCombatCues(){
   ctx.save();
@@ -2200,7 +2259,9 @@ window.addEventListener('keydown', function(e){
   var k=e.key.toLowerCase();
   if(e.repeat)return;
   if(qState && qState.active){if(k>='1'&&k<='8'){e.preventDefault();var qi=parseInt(k,10)-1;if(qState.current && qi<qState.current.options.length)answerQuestion(qi);}return;}
+  if(k==='escape'&&skillGesture){e.preventDefault();cancelSkillGesture();return;}
   if(k==='p'||k==='escape'){e.preventDefault();togglePause();return;}
+  if(k==='t'&&$('treeOverlay').classList.contains('show')){e.preventDefault();toggleTree();return;}
   if(overlayOpen())return;
   if(e.target.closest('button')&&(k===' '||k==='enter'))return;
   if(['arrowup','arrowdown','arrowleft','arrowright',' '].indexOf(k)>=0)e.preventDefault();
@@ -2270,33 +2331,73 @@ function moveInput(){
  * attack symbol): chase & auto-attack it. RIGHT-click (hold): fire your basic
  * attack at the crosshair. Skills 1-4 fire at / toward the crosshair. */
 var mouse = { sx: -200, sy: -200, wx: 0, wy: 0, active: false, over: null, lDown: false, rDown: false };
+var skillGesture=null;
+function cancelSkillGesture(){skillGesture=null;}
+function beginSkillGesture(event,index,button){var sid=G&&G.slots[index];if(!G||G.state!=='play'||overlayOpen()||!sid||!skillUnlocked(sid)||(G.cds[sid]||0)>0){castSkill(index);return;}cancelSkillGesture();skillGesture=LegendsGestures.begin(G,index,sid,event.pointerId,event.clientX,event.clientY);skillGesture.button=button;try{button.setPointerCapture(event.pointerId);}catch(_){} }
+function gestureWorldPoint(gesture){var rect=canvas.getBoundingClientRect();return screenToWorld((gesture.x-rect.left)*VW/Math.max(1,rect.width),(gesture.y-rect.top)*VH/Math.max(1,rect.height));}
+function finishSkillGesture(event){var gesture=skillGesture;if(!gesture||event.pointerId!==gesture.pointerId)return;LegendsGestures.move(gesture,event.clientX,event.clientY);var button=$('skillBar').querySelector('[data-skill="'+gesture.slot+'"]')||gesture.button,stage=$('stage').getBoundingClientRect();
+  var mode=LegendsGestures.finish(gesture,{owner:G||{},sid:G&&G.slots[gesture.slot],pointerId:event.pointerId,running:!!G&&G.state==='play',blocked:overlayOpen()||document.hidden||qState.active,stage:stage,button:button.getBoundingClientRect()});cancelSkillGesture();if(mode==='cancel')return;
+  if(mode==='tap'){castSkill(gesture.slot);return;}var point=gestureWorldPoint(gesture),old={active:mouse.active,sx:mouse.sx,sy:mouse.sy,wx:mouse.wx,wy:mouse.wy};
+  var screen=LegendsView.worldToScreen(G.view,point.x,point.y);Object.assign(mouse,{active:true,sx:screen.x,sy:screen.y,wx:point.x,wy:point.y});try{castSkill(gesture.slot);}finally{Object.assign(mouse,old);}
+}
+window.addEventListener('pointermove',function(event){if(skillGesture&&event.pointerId===skillGesture.pointerId){event.preventDefault();LegendsGestures.move(skillGesture,event.clientX,event.clientY);}});
+window.addEventListener('pointerup',finishSkillGesture);
+window.addEventListener('pointercancel',function(event){if(skillGesture&&event.pointerId===skillGesture.pointerId)cancelSkillGesture();});
+function skillGestureGeometry(){
+  if(!skillGesture||skillGesture.owner!==G||overlayOpen())return null;var sid=skillGesture.sid,def=SKILLS[sid],p=G.player,sp=def.p,u=ultN(sid),area=G.stats.area*(1+skillSm(sid).area),point=skillGesture.dragged?gestureWorldPoint(skillGesture):{x:p.x+p.fx*180,y:p.y+p.fy*180},dx=point.x-p.x,dy=point.y-p.y,d=Math.hypot(dx,dy)||1;
+  var geometry={type:def.type,sid:sid,x:p.x,y:p.y,r:p.r+10,ang:Math.atan2(dy,dx),label:'SELF'};
+  if(def.type==='target'||def.type==='zone'&&sp.at!=='self'){var range=def.type==='target'?sp.seek:520;geometry.x=p.x+dx/d*Math.min(d,range);geometry.y=p.y+dy/d*Math.min(d,range);geometry.r=sp.radius*area*(def.type==='zone'&&hasEnh(sid,1)?1.3:1);geometry.label='TARGET';}
+  else if(def.type==='arc'){geometry.r=sp.range*area*(hasEnh(sid,2)?1.3:1)*(u===2?1.4:1);geometry.arc=sp.arc*(hasEnh(sid,2)?1.3:1);geometry.label='DIRECTION';}
+  else if(def.type==='dash'||def.type==='proj'){geometry.range=def.type==='dash'?sp.dist:Math.min(500,(sp.speed||420)*1.4);geometry.label='DIRECTION';}
+  else if(def.type==='nova'){geometry.r=sp.radius*area*(hasEnh(sid,(sid==='nova'||sid==='net')?2:1)?1.3:1)*(u===1?1.5:1);if((sid==='slam'||sid==='judgement')&&G.stats.mods['pw.titan'])geometry.r*=1.5;if(sid==='nova'&&G.stats.mods['pw.frostking'])geometry.r*=1.4;}
+  else if(def.type==='spin')geometry.r=sp.radius*(u===2?1.4:1)*(1+skillSm(sid).area);
+  else if(def.type==='aura')geometry.r=sp.radius*area*(((hasEnh(sid,1)&&/^(storm|retribution|bladestorm)$/.test(sid))||(hasEnh(sid,2)&&/^(ravens|locusts)$/.test(sid)))?1.3:1);
+  else if(def.type==='orbit')geometry.r=sp.radius*area*(hasEnh(sid,2)?1.3:1)*(u===3?1.35:1);
+  else if(def.type==='chain')geometry.r=sp.range*area;else if(sp.radius)geometry.r=sp.radius*area;else if(sp.stunR)geometry.r=sp.stunR*area;
+  var rect=($('skillBar').querySelector('[data-skill="'+skillGesture.slot+'"]')||skillGesture.button).getBoundingClientRect();geometry.cancel=skillGesture.dragged&&LegendsGestures.inside(skillGesture.x,skillGesture.y,rect);return geometry;
+}
+function drawSkillGesture(){var geometry=skillGestureGeometry();if(!geometry)return;var p=G.player;ctx.save();ctx.strokeStyle=geometry.cancel?'#ffb69e':'#fff0bd';ctx.fillStyle=geometry.cancel?'#e9856b22':'#fff0bd12';ctx.lineWidth=2.5;ctx.setLineDash([8,5]);
+  ctx.beginPath();if(geometry.range){ctx.moveTo(p.x,p.y);ctx.lineTo(p.x+Math.cos(geometry.ang)*geometry.range,p.y+Math.sin(geometry.ang)*geometry.range);}else if(geometry.arc){ctx.moveTo(p.x,p.y);ctx.arc(p.x,p.y,geometry.r,geometry.ang-geometry.arc/2,geometry.ang+geometry.arc/2);ctx.closePath();}else ctx.arc(geometry.x,geometry.y,geometry.r,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.setLineDash([]);
+  ctx.font='800 10px system-ui';ctx.textAlign='center';ctx.fillStyle='#071522';ctx.fillRect(p.x-85,p.y+p.r+22,170,18);ctx.fillStyle=geometry.cancel?'#ffb69e':'#fff0bd';ctx.fillText(geometry.cancel?'RETURNED TO SKILL · CANCEL':SKILLS[geometry.sid].name+' · '+geometry.label,p.x,p.y+p.r+35);ctx.restore();}
+function screenToWorld(x,y){
+  var view=G&&G.view?G.view:LegendsView.create(G?G.player.x:0,G?G.player.y:0,VW,VH,WORLD.w,WORLD.h);
+  return LegendsView.screenToWorld(view,x,y);
+}
+function pickEnemyAt(x,y){if(!G)return null;return LegendsModels.pick(G.enemies,x,y,function(enemy){var size=Math.max(40,enemy.r*4);return customImage(enemy.kind)?LegendsModels.bodyBounds(enemy,size,{x:.5,y:1}):LegendsModels.enemyBounds(enemy,G.time,lowMotion,size,G.presentation.models);});}
+function updateTargetPanel(){
+  var panel=$('targetPanel');if(!G||G.state!=='play'){panel.hidden=true;return;}
+  if(G.atkTarget&&(G.atkTarget.dead||G.atkTarget.hp<=0||G.enemies.indexOf(G.atkTarget)<0))G.atkTarget=null;
+  var target=G.atkTarget||mouse.over;if(!target||target.dead||target.hp<=0||G.enemies.indexOf(target)<0){panel.hidden=true;return;}
+  panel.hidden=false;$('targetName').textContent={slime:'Mire Slime',imp:'Ash Imp',mite:'Rift Mite',brute:'Stone Brute',spitter:'Venom Spitter',charger:'Iron Charger',boss:'Core Tyrant'}[target.kind]||'Unknown foe';
+  $('targetType').textContent=target.boss?'BOSS · HEAVY':(target.elite?'ELITE · ':'')+({brute:'Heavy melee',spitter:'Ranged caster',charger:'Charging attacker',mite:'Swarm',imp:'Skirmisher',slime:'Melee'}[target.kind]||'Enemy');
+  $('targetHp').textContent=Math.max(0,Math.round(target.hp*10)/10)+' / '+Math.round(target.maxHp*10)/10+' HP';$('targetHpFill').style.transform='scaleX('+clamp(target.hp/target.maxHp,0,1)+')';
+  $('targetEffects').textContent=LegendsModels.statuses(target).map(function(status){return status.glyph+' '+status.label;}).join(' · ')||'No active effects';
+}
 (function(){
   function pos(e){
     var r = canvas.getBoundingClientRect();
-    mouse.sx = e.clientX - r.left; mouse.sy = e.clientY - r.top;
+    mouse.sx = (e.clientX - r.left) * VW / Math.max(1,r.width); mouse.sy = (e.clientY - r.top) * VH / Math.max(1,r.height);
   }
   canvas.addEventListener('pointermove', function(e){
     if (e.pointerType !== 'mouse') return;
     pos(e);
     if (!mouse.active){ mouse.active = true; canvas.style.cursor = 'none'; }
-    if (mouse.lDown && G && !G.atkTarget) G.moveTarget = { x: (G.camX || 0) + mouse.sx, y: (G.camY || 0) + mouse.sy };
+    if (mouse.lDown && G && !G.atkTarget) G.moveTarget = screenToWorld(mouse.sx,mouse.sy);
   });
   canvas.addEventListener('pointerdown', function(e){
     if (e.pointerType !== 'mouse') return;
     pos(e);
     mouse.active = true; canvas.style.cursor = 'none';
     if (!G || G.state !== 'play' || overlayOpen()) return;
-    mouse.wx = (G.camX || 0) + mouse.sx; mouse.wy = (G.camY || 0) + mouse.sy;
+    var worldPoint=screenToWorld(mouse.sx,mouse.sy);mouse.wx=worldPoint.x;mouse.wy=worldPoint.y;
     if (e.button === 2){ mouse.rDown = true; return; }
     if (e.button !== 0) return;
     mouse.lDown = true;
-    var over = null;
-    for (var i = 0; i < G.enemies.length; i++){
-      var en = G.enemies[i];
-      if (dist2(mouse.wx, mouse.wy, en.x, en.y) < (en.r + 14) * (en.r + 14)){ over = en; break; }
-    }
+    var over = pickEnemyAt(mouse.wx,mouse.wy);
+    mouse.over=over;
     if (over){ G.atkTarget = over; G.moveTarget = null; }
     else { G.moveTarget = { x: mouse.wx, y: mouse.wy }; G.atkTarget = null; }
+    updateTargetPanel();
   });
   window.addEventListener('pointerup', function(e){
     if (e.button === 2) mouse.rDown = false;
@@ -2347,7 +2448,7 @@ function spawnEnemy(kind, elite){
     xp: t.xp * (elite ? 5 : 1), elite: !!elite, boss: false,
     hitCd: 0, stun: 0, frozen: 0, slow: 0, bleed: 0, bleedT: 0,
     shootCd: rand(1, 2.5), chargeSt: 0, chargeT: 0, cvx: 0, cvy: 0,
-    animT: rand(0, 1), kx: 0, ky: 0, kt: 0
+    animT: rand(0, 1), modelPhase:rand(0,.5), moving:false, fx:1, kx: 0, ky: 0, kt: 0
   };
   G.enemies.push(e);
   return e;
@@ -2437,6 +2538,9 @@ function combatImpact(e, amount, opts){
   if(!Number.isFinite(dx)||!Number.isFinite(dy)){dx=e.x-G.player.x;dy=e.y-G.player.y;}
   var d=Math.hypot(dx,dy)||1,ang=Math.atan2(dy,dx),strong=!!(opts.crit||e.hp<=0||opts.knock);
   var color=opts.color||(opts.crit?'#ffe4a1':'#b5efff');
+  if(opts.element)elementFx(opts.element,e.x,e.y,30,ang,.28);
+  if(/^(#80deea|#81d4fa|#70dbff)$/i.test(color))actionFx(2,e.x,e.y,26,ang,.24);
+  else if(/^(#b388ff|#ba94ff|#ce93d8)$/i.test(color))actionFx(3,e.x,e.y,28,ang,.3);
   var impacts=G.impacts||(G.impacts=[]);
   if(impacts.length>=48)impacts.shift();
   impacts.push({x:e.x-dx/d*e.r*.5,y:e.y-dy/d*e.r*.5,ang:ang,r:strong?34:21,t:0,life:strong?.3:.19,color:color,strong:strong});
@@ -2450,10 +2554,12 @@ function combatImpact(e, amount, opts){
     G.shake=Math.max(G.shake,opts.crit?.15:.08);
   }
 }
-function applyBleed(e, total, dur){
+function applyBleed(e, total, dur, kind){
   var mult = G.stats.poisonMult || 1;
-  e.bleed = Math.max(e.bleed, (total * mult) / dur);
-  e.bleedT = Math.max(e.bleedT, dur);
+  var current=e.bleedT>0?(e.bleed||0):0,incoming=(total*mult)/dur;
+  if(incoming>=current)e.dotKind=kind||'bleed';
+  e.bleed=Math.max(current,incoming);
+  e.bleedT=Math.max(e.bleedT||0,dur);
 }
 function killEnemy(e, opts){
   e.hp = 0; e.dead = true;
@@ -2490,7 +2596,9 @@ function gainXp(n){
 }
 function healPlayer(n){
   var p = G.player;
+  var before=p.hp;
   p.hp = clamp(p.hp + n, 0, p.maxHp);
+  if(p.hp>before)LegendsFeedback.heal(G);updateBars();
 }
 function hurtPlayer(raw){
   var p = G.player;
@@ -2506,8 +2614,10 @@ function hurtPlayer(raw){
     }
     if (p.shield <= 0) p.thorns = 0;
   }
-  if (dmg <= 0) return;
+  if (dmg <= 0){updateBars();return;}
+  LegendsFeedback.damage(G,p.hp);
   p.hp -= dmg;
+  updateBars();
   G.shake = Math.max(G.shake, 0.18);
   sfx('hurt');
   if (p.hp <= 0){
@@ -2516,6 +2626,7 @@ function hurtPlayer(raw){
     else if (!G.phoenixUsed && G.stats.mods['pw.phoenix']){ G.phoenixUsed = true; revive = true; note = '🐦‍🔥 Phoenix Soul — reborn in flame!'; }
     if (revive){
       p.hp = p.maxHp * 0.5;
+      LegendsFeedback.heal(G);updateBars();
       G.enemies.forEach(function(e){
         if (dist2(e.x, e.y, p.x, p.y) < 340 * 340) dealDamage(e, 220 * G.stats.dmg, { color: '#EA80FC' });
         if (freezeAll) e.frozen = Math.max(e.frozen, 4);
@@ -2586,6 +2697,7 @@ function updatePets(dt){
   var frenzyAspd = 1 + buffStat('petAspd');
   for (var i = G.pets.length - 1; i >= 0; i--){
     var pet = G.pets[i];
+    var oldX=pet.x,oldY=pet.y;pet.moving=false;
     pet.animT += dt * 3;
     pet.cd -= dt;
     if (pet.life > 0){ pet.life -= dt; if (pet.life <= 0){ burst(pet.x, pet.y, 8, '#FFCC80'); G.pets.splice(i, 1); continue; } }
@@ -2595,6 +2707,7 @@ function updatePets(dt){
       if (pet.healT >= pet.healer.every){
         pet.healT = 0;
         if (p.hp < p.maxHp){
+          pet.modelAttackUntil=G.time+.32;
           healPlayer(p.maxHp * pet.healer.pct);
           addText(p.x, p.y - 24, '+' + Math.round(p.maxHp * pet.healer.pct), '#81C784');
           G.fx.push({ kind: 'ring', x: p.x, y: p.y, r: 50, t: 0, life: 0.35, color: '#A5D6A7' });
@@ -2620,6 +2733,7 @@ function updatePets(dt){
         pet.x += (best.x - pet.x) / dd0 * pet.speed * dt;
         pet.y += (best.y - pet.y) / dd0 * pet.speed * dt;
       } else if (pet.cd <= 0 && dd0 <= pet.ranged.range){
+        pet.modelAttackUntil=G.time+.28;pet.fx=(best.x-pet.x)/dd0;pet.fy=(best.y-pet.y)/dd0;
         pet.cd = pet.rate / (G.stats.petAspd * frenzyAspd);
         var dmgR = pet.dmg * petDmgMult(pet);
         G.projs.push({ kind: 'petbolt', src: pet.kind, x: pet.x, y: pet.y, vx: (best.x - pet.x) / dd0 * pet.ranged.speed, vy: (best.y - pet.y) / dd0 * pet.ranged.speed, r: 5, dmg: dmgR, life: pet.ranged.range / pet.ranged.speed + 0.15, pierce: 0, pet: true, healOwner: !!(PET_SKILL[pet.kind] && ultN(PET_SKILL[pet.kind]) === 3) });
@@ -2632,6 +2746,7 @@ function updatePets(dt){
         pet.x += (best.x - pet.x) / dd * spd * dt;
         pet.y += (best.y - pet.y) / dd * spd * dt;
       } else if (pet.cd <= 0 && dd <= reach + 4){
+        pet.modelAttackUntil=G.time+.24;pet.fx=(best.x-pet.x)/dd;pet.fy=(best.y-pet.y)/dd;
         pet.cd = pet.rate / (G.stats.petAspd * frenzyAspd);
         var dmg = pet.dmg * petDmgMult(pet);
         var cr = ((pet.kind === 'wolf' && hasEnh('wolf', 1)) || pet.kind === 'valkyrie') ? rollCrit() : { mult: 1, crit: false };
@@ -2642,6 +2757,7 @@ function updatePets(dt){
         slashFx(best.x, best.y, Math.atan2(best.y - pet.y, best.x - pet.x), 30, '#B0BEC5');
       }
     }
+    pet.moving=dist2(oldX,oldY,pet.x,pet.y)>.001;if(pet.moving){pet.fx=pet.x-oldX;pet.fy=pet.y-oldY;}
     if (pet.hp <= 0){
       if (pet.kind === 'decoy' && hasEnh('decoy', 1)){
         ringFx(pet.x, pet.y, 170, '#FF8A65');
@@ -2671,8 +2787,10 @@ function burst(x, y, n, color){
     G.fx.push({ kind: 'p', x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: 0, life: rand(0.25, 0.55), color: color });
   }
 }
-function slashFx(x, y, ang, r, color){ G.fx.push({ kind: 'slash', x: x, y: y, ang: ang, r: r, t: 0, life: 0.18, color: color || '#FFE082' }); }
-function ringFx(x, y, r, color){ G.fx.push({ kind: 'ring', x: x, y: y, r: r, t: 0, life: 0.4, color: color || '#80DEEA' }); }
+function actionFx(row,x,y,r,ang,duration){if(window.LegendsActions)LegendsActions.emit(G,row,x,y,r,ang,duration);}
+function elementFx(family,x,y,r,ang,duration){if(window.LegendsActions)LegendsActions.emitElement(G,family,x,y,r,ang,duration);}
+function slashFx(x, y, ang, r, color){ actionFx(0,x,y,r,ang,.24);G.fx.push({ kind: 'slash', x: x, y: y, ang: ang, r: r, t: 0, life: 0.18, color: color || '#FFE082' }); }
+function ringFx(x, y, r, color){ if(/^(#80deea|#81d4fa)$/i.test(color||''))actionFx(2,x,y,r,0,.4);G.fx.push({ kind: 'ring', x: x, y: y, r: r, t: 0, life: 0.4, color: color || '#80DEEA' }); }
 function boltFx(pts, color){ G.fx.push({ kind: 'bolt', pts: pts, t: 0, life: 0.22, color: color || '#FFF176' }); }
 
 /* ---------------- TARGETING ---------------- */
@@ -2748,7 +2866,7 @@ function doChain(fromX, fromY, dmg, bounces, range, jump, fork, stunS){
     hit[bi] = true;
     pts.push({ x: best.x, y: best.y });
     var cr = rollCrit();
-    dealDamage(best, dmg * cr.mult, { crit: cr.crit, color: '#FFF176' });
+    dealDamage(best, dmg * cr.mult, { crit: cr.crit, color: '#FFF176',element:'lightning' });
     if (stunS) best.stun = Math.max(best.stun, stunS);
     if (cr.crit && fork){
       var forks = 0;
@@ -2759,7 +2877,7 @@ function doChain(fromX, fromY, dmg, bounces, range, jump, fork, stunS){
           hit[k] = true; forks++;
           boltFx([{ x: best.x, y: best.y }, { x: fe.x, y: fe.y }], '#FFF176');
           var c2 = rollCrit();
-          dealDamage(fe, dmg * 0.7 * c2.mult, { crit: c2.crit, noSplash: true, color: '#FFF176' });
+          dealDamage(fe, dmg * 0.7 * c2.mult, { crit: c2.crit, noSplash: true, color: '#FFF176',element:'lightning' });
         }
       }
     }
@@ -2785,6 +2903,7 @@ function castSkill(idx){
   var area = G.stats.area * (1 + skillSm(sid).area);
   var cdMult = (G.stats.mods['cap.echo'] && Math.random() < 0.2) ? 0.5 : 1;
   G.cds[sid] = skillCd(sid) * cdMult;
+  p.modelAttackUntil=G.time+.32;
   if (cdMult < 1) addText(p.x, p.y - 26, 'ECHO!', '#CE93D8');
   sfx('skill');
   // Skills fire AT / TOWARD the crosshair (mouse) — or the way the hero is
@@ -2796,7 +2915,10 @@ function castSkill(idx){
     fd = al > 4 ? { x: adx / al, y: ady / al } : faceDir();
     p.fx = fd.x; p.fy = fd.y;
   } else fd = faceDir();
+  LegendsModels.advanceFacing(p);
   var ang = Math.atan2(fd.y, fd.x);
+  if(sid==='orb'||sid==='teleport')actionFx(3,p.x,p.y,38,ang,.32);
+  if(LegendsActions.familyForSkill(sid)==='arrow')elementFx('arrow',p.x+fd.x*30,p.y+fd.y*30,26,ang,.18);
   switch (def.type) {
     case 'arc': {
       var range = sp.range * area * (hasEnh(sid, 2) ? 1.3 : 1) * (u === 2 ? 1.4 : 1);
@@ -2807,7 +2929,7 @@ function castSkill(idx){
         slashFx(p.x + fd.x * 40, p.y + fd.y * 40, ang, range, sid === 'smite' ? '#FFF59D' : '#FFB74D');
         enemiesInArc(p.x, p.y, ang, range, arcW).forEach(function(e){
           var cr = rollCrit();
-          dealDamage(e, aDmg * k * cr.mult, { crit: cr.crit, knock: { x: p.x, y: p.y, f: 160 } });
+          dealDamage(e, aDmg * k * cr.mult, { crit: cr.crit, element:LegendsActions.familyForSkill(sid),knock: { x: p.x, y: p.y, f: 160 } });
           if (hasEnh(sid, 1)) applyBleed(e, aDmg * k * (sid === 'execute' ? 0.8 : 0.4), 3);
           if (sp.stun) e.stun = Math.max(e.stun, sp.stun);
         });
@@ -2999,7 +3121,9 @@ function fireBasic(dx, dy){
   var p = G.player, c = CLASSES[G.cls];
   var mult = G.stats.dmg * buffDmg();
   p.atkCd = c.atk.rate / buffAspd();
+  p.modelAttackUntil=G.time+.24;
   p.fx = dx; p.fy = dy;
+  LegendsModels.advanceFacing(p);
   var didHit = false;
   if (c.atk.kind === 'melee'){
     var ang = Math.atan2(p.fy, p.fx);
@@ -3010,14 +3134,16 @@ function fireBasic(dx, dy){
     }
     var range = c.atk.range * (slam ? 1.6 * G.stats.area : 1);
     startSwing(ang, c.atk.arc * (slam ? 1.5 : 1), slam ? 1.5 : 1);
+    actionFx(0,p.x+p.fx*30,p.y+p.fy*30,range,ang,.24);
     if (slam){ slashFx(p.x + p.fx * 34, p.y + p.fy * 34, ang, range, '#FF7043'); G.shake = 0.3; sfx('boom'); }
     enemiesInArc(p.x, p.y, ang, range, c.atk.arc * (slam ? 1.5 : 1)).forEach(function(e){
       var cr = rollCrit();
-      dealDamage(e, c.atk.dmg * mult * (slam ? 3 : 1) * cr.mult, { crit: cr.crit, basic: true, knock: slam ? { x: p.x, y: p.y, f: 220 } : null });
+      dealDamage(e, c.atk.dmg * mult * (slam ? 3 : 1) * cr.mult, { crit: cr.crit, basic: true,element:G.cls==='pala'?'holy':null, knock: slam ? { x: p.x, y: p.y, f: 220 } : null });
       didHit = true;
     });
   } else {
     var sp2 = 520;
+    if(G.cls==='ama')elementFx('arrow',p.x+p.fx*28,p.y+p.fy*28,24,Math.atan2(p.fy,p.fx),.18);
     var emp = false;
     if (G.stats.mods['cap.empower'] && G.empowerT <= 0){ emp = true; G.empowerT = 4; }
     var pierce = (emp ? 999 : 0) + (G.stats.mods['cap.windforce'] ? 1 : 0) + (G.stats.basicPierce || 0);
@@ -3061,6 +3187,10 @@ function basicAttack(dt){
 /* ---------------- PROJECTILES, ZONES, ORBS ---------------- */
 function explode(x, y, radius, dmg, opts){
   opts = opts || {};
+  var element=opts.poison?'poison':opts.element||'fire';
+  if(element==='poison')elementFx('poison',x,y,radius,0,.4);else actionFx(element==='arcane'?3:1,x,y,radius,0,.36);
+  if(element==='poison'&&!opts.color)opts.color='#a0d65d';
+  if(element==='arcane'&&!opts.color)opts.color='#ba94ff';
   ringFx(x, y, radius, opts.color || '#FF8A65');
   burst(x, y, 14, opts.color || '#FFAB91');
   sfx('boom');
@@ -3068,8 +3198,8 @@ function explode(x, y, radius, dmg, opts){
     var cr = rollCrit();
     dealDamage(e, dmg * cr.mult, { crit: cr.crit, color: opts.color || '#FFAB91', impactX:e.x-x,impactY:e.y-y,
       knock:{x:x,y:y,f:Math.min(210,70+radius*.5)} });
-    if (opts.burn) applyBleed(e, dmg * 0.4, 3);
-    if (opts.poison) applyBleed(e, dmg * (opts.poisonStrong ? 1 : 0.5), 3);
+    if (opts.burn) applyBleed(e, dmg * 0.4, 3,'burn');
+    if (opts.poison) applyBleed(e, dmg * (opts.poisonStrong ? 1 : 0.5), 3,'poison');
     if (opts.slow) e.slowT = Math.max(e.slowT || 0, 2);
     if (opts.bleed) applyBleed(e, dmg * 0.4, 3);
     if (opts.stun) e.stun = Math.max(e.stun, 1);
@@ -3111,7 +3241,7 @@ function updateProjectiles(dt){
       if (pr.kind === 'fire'){
         pr.exploded = true;
         var burn2 = pr.sid === 'fireball' && hasEnh('fireball', 1);
-        explode(pr.x, pr.y, pr.radius, pr.dmg, { burn: burn2, poison: pr.poison, poisonStrong: pr.sid === 'plague' && hasEnh('plague', 1), slow: pr.sid === 'orb' && hasEnh('orb', 1) });
+        explode(pr.x, pr.y, pr.radius, pr.dmg, { element:LegendsActions.familyForSkill(pr.sid),burn: burn2, poison: pr.poison, poisonStrong: pr.sid === 'plague' && hasEnh('plague', 1), slow: pr.sid === 'orb' && hasEnh('orb', 1) });
         if (pr.sid === 'fireball' && hasEnh('fireball', 2)){
           for (var s = 0; s < 3; s++){
             var sa = rand(0, Math.PI * 2);
@@ -3123,11 +3253,11 @@ function updateProjectiles(dt){
       }
       var cr = pr.pet ? { mult: 1, crit: false } : rollCrit();
       if (pr.healOwner) healPlayer(1);
-      dealDamage(e, pr.dmg * cr.mult, { crit: cr.crit || pr.emp, basic: pr.basic, pet: pr.pet, impactX:pr.vx,impactY:pr.vy,
+      dealDamage(e, pr.dmg * cr.mult, { crit: cr.crit || pr.emp, basic: pr.basic, pet: pr.pet,element:pr.poison?'poison':pr.basic&&G.cls==='ama'?'arrow':LegendsActions.familyForSkill(pr.sid),impactX:pr.vx,impactY:pr.vy,
         color: pr.kind === 'boar' ? '#BCAAA4' : pr.sid==='icebolt'?'#94e7ff':pr.sid==='holybolt'?'#fff4a1':'#B39DDB', knock: pr.kind === 'boar' ? { x: pr.x - pr.vx, y: pr.y - pr.vy, f: 190 } : null });
       if (pr.stunHit) e.stun = Math.max(e.stun, pr.stunHit);
       if (pr.slow) e.slowT = Math.max(e.slowT || 0, pr.slow);
-      if (pr.poison) applyBleed(e, pr.dmg * (hasEnh(pr.sid || '', 2) && pr.sid === 'sting' ? 1.2 : 0.6), 3);
+      if (pr.poison) applyBleed(e, pr.dmg * (hasEnh(pr.sid || '', 2) && pr.sid === 'sting' ? 1.2 : 0.6), 3,'poison');
       if (pr.kind === 'boar' && G.stats.mods['pw.thunderhooves']){
         boltFx([{ x: e.x, y: e.y - 60 }, { x: e.x, y: e.y }], '#FFF176');
         dealDamage(e, 15 * G.stats.dmg, { noSplash: true, color: '#FFF176' });
@@ -3137,7 +3267,7 @@ function updateProjectiles(dt){
     }
     if(!dead){pr.x=nextX;pr.y=nextY;dead=pr.life<=0||pr.x<10||pr.y<10||pr.x>WORLD.w-10||pr.y>WORLD.h-10;}
     if (dead){
-      if (pr.kind === 'fire' && !pr.exploded) explode(pr.x, pr.y, pr.radius, pr.dmg, { poison: pr.poison, poisonStrong: pr.sid === 'plague' && hasEnh('plague', 1) });
+      if (pr.kind === 'fire' && !pr.exploded) explode(pr.x, pr.y, pr.radius, pr.dmg, { element:LegendsActions.familyForSkill(pr.sid),poison: pr.poison, poisonStrong: pr.sid === 'plague' && hasEnh('plague', 1) });
       G.projs.splice(i, 1);
     }
   }
@@ -3220,12 +3350,14 @@ function updateEnemies(dt){
   for (var i = G.enemies.length - 1; i >= 0; i--){
     var e = G.enemies[i];
     if (e.dead){ G.enemies.splice(i, 1); continue; }
+    var oldX=e.x,oldY=e.y;e.moving=false;
     e.animT += dt * 2.5;
     e.hitCd -= dt;
     if (e.slowT > 0) e.slowT -= dt;
     if (e.bleedT > 0){
-      e.bleedT -= dt;
-      e.hp -= e.bleed * dt;
+      e.hp -= e.bleed * Math.min(dt,e.bleedT);
+      e.bleedT = Math.max(0,e.bleedT-dt);
+      if(e.bleedT<=0){e.bleed=0;e.dotKind=null;}
       if (e.hp <= 0){ killEnemy(e, {}); G.enemies.splice(i, 1); continue; }
     }
     if (e.frozen > 0){ e.frozen -= dt; continue; }
@@ -3234,6 +3366,7 @@ function updateEnemies(dt){
     var tgt = nearestTarget(e);
     var dx = tgt.x - e.x, dy = tgt.y - e.y;
     var d = Math.hypot(dx, dy) || 1;
+    if(!(e.spitWindup>0)&&!(e.heavyWindup>0)&&!(e.chargeSt>0)){e.fx=dx/d;e.fy=dy/d;}
     var slowMult = e.slowT > 0 ? 0.55 : 1;
     for (var ai = 0; ai < G.auras.length; ai++){
       if (G.auras[ai].slow && dist2(e.x, e.y, p.x, p.y) < G.auras[ai].radius * G.auras[ai].radius){ slowMult = Math.min(slowMult, 0.65); break; }
@@ -3243,6 +3376,7 @@ function updateEnemies(dt){
       e.slamCd -= dt; e.addCd -= dt;
       if (e.slamCd <= 0 && d < 260){
         e.slamCd = 6;
+        e.modelAttackUntil=G.time+.9;
         G.fx.push({ kind: 'meteor', x: e.x, y: e.y, r: 170, t: 0, life: 0.9, dmg: 0, evil: true });
       }
       if (e.addCd <= 0){
@@ -3252,12 +3386,13 @@ function updateEnemies(dt){
       }
     }
     if (t && t.ranged){
-      e.shootCd -= dt;
-      if (d > 300) { e.x += dx / d * e.speed * slowMult * dt; e.y += dy / d * e.speed * slowMult * dt; }
-      else if (d < 190) { e.x -= dx / d * e.speed * 0.8 * slowMult * dt; e.y -= dy / d * e.speed * 0.8 * slowMult * dt; }
-      if (e.shootCd <= 0 && d < 340){
-        e.shootCd = 2.3;
-        G.eprojs.push({ x: e.x, y: e.y, vx: dx / d * 260, vy: dy / d * 260, r: 6, dmg: e.dmg, life: 1.8 });
+      if(e.spitWindup>0){var shot=LegendsAI.advanceSpit(e,dt);if(shot)G.eprojs.push({x:e.x,y:e.y,vx:shot.vx,vy:shot.vy,r:6,dmg:e.dmg,life:1.8});}
+      else if(e.spitRecovery>0)e.spitRecovery=Math.max(0,e.spitRecovery-dt);
+      else{
+        e.shootCd-=dt;
+        if(d>300){e.x+=dx/d*e.speed*slowMult*dt;e.y+=dy/d*e.speed*slowMult*dt;}
+        else if(d<190){e.x-=dx/d*e.speed*.8*slowMult*dt;e.y-=dy/d*e.speed*.8*slowMult*dt;}
+        if(e.shootCd<=0&&d<340)LegendsAI.beginSpit(e,dx,dy);
       }
     } else if (t && t.charges){
       if (e.chargeSt === 0){
@@ -3272,21 +3407,34 @@ function updateEnemies(dt){
         e.x += e.cvx * dt; e.y += e.cvy * dt;
         if (e.chargeT <= 0){ e.chargeSt = 0; e.chargeT = 2.2; }
       }
+    } else if(e.kind==='brute'||e.boss){
+      if(e.heavyWindup>0){var strike=LegendsAI.advanceHeavy(e,dt);if(strike){
+        actionFx(0,strike.x,strike.y,strike.r,Math.atan2(strike.y-e.y,strike.x-e.x),.28);
+        if(LegendsAI.heavyHits(strike)){
+          if(strike.target===p){hurtPlayer(e.dmg);if(p.thorns>0)dealDamage(e,p.thorns,{noSplash:true,color:'#4fc3f7'});}
+          else if(G.pets.indexOf(strike.target)>=0)strike.target.hp-=e.dmg;
+        }
+      }}else if(e.heavyRecovery>0)e.heavyRecovery=Math.max(0,e.heavyRecovery-dt);
+      else if(d<=e.r+tgt.r+20)LegendsAI.beginHeavy(e,tgt);
+      else{e.x+=dx/d*e.speed*slowMult*dt;e.y+=dy/d*e.speed*slowMult*dt;}
     } else {
       e.x += dx / d * e.speed * slowMult * dt;
       e.y += dy / d * e.speed * slowMult * dt;
     }
     e.x = clamp(e.x, 20, WORLD.w - 20); e.y = clamp(e.y, 20, WORLD.h - 20);
     separate(e);
-    if (e.hitCd <= 0 && dist2(e.x, e.y, p.x, p.y) < (e.r + p.r) * (e.r + p.r)){
+    e.moving=dist2(oldX,oldY,e.x,e.y)>.001;
+    if (e.kind!=='brute'&&!e.boss&&e.hitCd <= 0 && dist2(e.x, e.y, p.x, p.y) < (e.r + p.r) * (e.r + p.r)){
       e.hitCd = 0.9;
+      e.modelAttackUntil=G.time+.24;
       hurtPlayer(e.dmg);
       if (p.thorns > 0) dealDamage(e, p.thorns, { noSplash: true, color: '#4FC3F7' });
     }
     for (var pi = 0; pi < G.pets.length; pi++){
       var pt2 = G.pets[pi];
-      if (e.hitCd <= 0 && dist2(e.x, e.y, pt2.x, pt2.y) < (e.r + pt2.r) * (e.r + pt2.r)){
+      if (e.kind!=='brute'&&!e.boss&&e.hitCd <= 0 && dist2(e.x, e.y, pt2.x, pt2.y) < (e.r + pt2.r) * (e.r + pt2.r)){
         e.hitCd = 0.9;
+        e.modelAttackUntil=G.time+.24;
         pt2.hp -= e.dmg;
         break;
       }
@@ -3303,14 +3451,10 @@ function update(dt){
   G.time += dt;
   updateCombatReadability(dt);
   if (mouse.active){
-    mouse.wx = (G.camX || 0) + mouse.sx;
-    mouse.wy = (G.camY || 0) + mouse.sy;
+    var worldPoint=screenToWorld(mouse.sx,mouse.sy);mouse.wx=worldPoint.x;mouse.wy=worldPoint.y;
     mouse.over = null;
     if (mouse.sx >= 0){
-      for (var moi = 0; moi < G.enemies.length; moi++){
-        var moe = G.enemies[moi];
-        if (dist2(mouse.wx, mouse.wy, moe.x, moe.y) < (moe.r + 14) * (moe.r + 14)){ mouse.over = moe; break; }
-      }
+      mouse.over=pickEnemyAt(mouse.wx,mouse.wy);
     }
   }
   G.insightT = Math.max(0, G.insightT - dt);
@@ -3440,7 +3584,7 @@ function update(dt){
       enemiesInRadius(p.x, p.y, wr).forEach(function(e){
         var cr = rollCrit();
         dealDamage(e, sn.dps * 0.16 * wm * cr.mult, { crit: cr.crit, color: flame ? '#FF7043' : '#FFCC80' });
-        if (flame) applyBleed(e, sn.dps * 0.1 * wm, 2);
+        if (flame) applyBleed(e, sn.dps * 0.1 * wm, 2,'burn');
         if (sn.pull){
           var m = Math.hypot(e.x - p.x, e.y - p.y) || 1;
           e.x -= (e.x - p.x) / m * 90 * dt * 6; e.y -= (e.y - p.y) / m * 90 * dt * 6;
@@ -3468,7 +3612,7 @@ function update(dt){
     if (A.tick <= 0){
       A.tick = 0.3 / (G.stats.mods['pw.swarmqueen'] ? 2 : 1);
       enemiesInRadius(p.x, p.y, A.radius).forEach(function(e){
-        dealDamage(e, A.dps * 0.3, { color: A.visual === 'storm' ? '#FFF176' : A.visual === 'holy' ? '#FFF59D' : '#90A4AE' });
+        dealDamage(e, A.dps * 0.3, { element:LegendsActions.familyForSkill(A.sid),color: A.visual === 'storm' ? '#FFF176' : A.visual === 'holy' ? '#FFF59D' : '#90A4AE' });
       });
     }
     if (A.t <= 0) G.auras.splice(au, 1);
@@ -3487,7 +3631,7 @@ function update(dt){
         if (dist2(hx, hy, he.x, he.y) < (16 + he.r) * (16 + he.r)){
           O.hitCd.set(he,G.time + 0.5);
           var hcr = rollCrit();
-          dealDamage(he, O.dmg * hcr.mult, { crit: hcr.crit, color: '#FFF59D' });
+          dealDamage(he, O.dmg * hcr.mult, { crit: hcr.crit, color: '#FFF59D',element:'holy' });
         }
       }
     }
@@ -3498,6 +3642,7 @@ function update(dt){
   updateEnemies(dt);
   updateProjectiles(dt);
   doSpawning(dt);
+  updateModelFacings();
   // fx lifetimes + strike resolution
   for (var fi = G.fx.length - 1; fi >= 0; fi--){
     var f = G.fx[fi];
@@ -3538,11 +3683,23 @@ function update(dt){
   updateSkillCds();
 }
 
+function updateModelFacings(){
+  LegendsModels.advanceFacing(G.player);
+  G.pets.forEach(function(pet){LegendsModels.advanceFacing(pet);});
+  G.enemies.forEach(function(enemy){
+    if(enemy.chargeSt>0)LegendsModels.advanceFacing(enemy,enemy.cvx,enemy.cvy);
+    else if(enemy.spitWindup>0)LegendsModels.advanceFacing(enemy,enemy.spitVX,enemy.spitVY);
+    else if(enemy.heavyWindup>0)LegendsModels.advanceFacing(enemy,enemy.heavyX-enemy.x,enemy.heavyY-enemy.y);
+    else LegendsModels.advanceFacing(enemy);
+  });
+  G.projs.forEach(function(projectile){if(projectile.kind==='boar')LegendsModels.advanceFacing(projectile,projectile.vx,projectile.vy);});
+}
+
 
 /* ---------------- RENDER ---------------- */
 var groundPat = null, _groundTileC = null;
 function buildGround(){
-  var im = ovr('ground');
+  var im = ovr('ground',true);
   if (im){ groundPat = ctx.createPattern(im, 'repeat'); return; }
   var c = _groundTileC;
   if (c){ groundPat = ctx.createPattern(c, 'repeat'); return; }
@@ -3636,6 +3793,27 @@ function drawSpriteOr(id, sheet, x, y, size, flip){
   ctx.drawImage(im, -size / 2, -size / 2, size, size);
   ctx.restore();
 }
+/* Actors remain upright on one fixed ground plane. Only weapons/effects rotate. */
+function drawActorModel(id,sheet,actor,size,flip){
+  drawSpriteOr(id,sheet,actor.x,actor.y+actor.r-size/2,size,flip);
+}
+function drawHeroModel(){
+  var p=G.player,frame=p.moving?((p.animT*2|0)%2):0;
+  var custom=customImage('hero_'+G.cls);
+  if(!custom&&window.LegendsModels&&LegendsModels.drawHero(ctx,G.cls,p,G.time,lowMotion,72,G.presentation.models))return;
+  drawActorModel('hero_'+G.cls,heroSheets[0][frame],p,72,p.fx<0);
+}
+function drawEnemyModel(e,size){
+  var custom=customImage(e.kind);
+  if(!custom&&window.LegendsModels&&LegendsModels.drawEnemy(ctx,e,G.time,lowMotion,size,G.presentation.models))return;
+  var sprites=MOB_SPRITES[e.kind]||MOB_SPRITES.slime;
+  drawActorModel(e.kind,sprites[(e.animT*2|0)%2],e,size,e.fx<0);
+}
+function drawPetModel(pet,size){
+  var id=pet.kind==='boarpet'?'boar':pet.kind,custom=customImage(id);
+  if(!custom&&LegendsModels.drawCompanion(ctx,pet,G.time,lowMotion,size,G.cls,G.presentation.models))return;
+  drawActorModel(id,petSprite(id)[(pet.animT*2|0)%2],pet,size,pet.fx<0);
+}
 
 /* ============================================================================
  * PROJECTILE ART — every projectile is drawn as what it IS: javelins with
@@ -3693,7 +3871,7 @@ function drawProjectileTrail(pr,st){
 function drawImpacts(){
   (G.impacts||[]).forEach(function(f){
     var k=clamp(f.t/f.life,0,1);
-    if(window.LegendsArt&&window.LegendsArt.drawImpact&&window.LegendsArt.drawImpact(ctx,f,k))return;
+    if(G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawImpact&&window.LegendsArt.drawImpact(ctx,f,k))return;
     ctx.save();ctx.translate(f.x,f.y);ctx.rotate(f.ang);
     ctx.strokeStyle=f.color;ctx.fillStyle=f.color;
     ctx.globalAlpha=(1-k)*.8;ctx.lineWidth=(1-k)*2+1;
@@ -3710,12 +3888,13 @@ function drawImpacts(){
 }
 function drawProjectile(pr){
   if (pr.kind === 'boar'){
-    drawSpriteOr('boar', MOB_SPRITES.boar[(G.time * 8 | 0) % 2], pr.x, pr.y, 44, pr.vx < 0);
+    var boar={kind:'boarpet',x:pr.x,y:pr.y,r:0,fx:pr.vx,fy:pr.vy,modelRear:pr.modelRear,moving:true,animT:G.time};
+    drawPetModel(boar,52);
     return;
   }
   var st = projStyle(pr);
   drawProjectileTrail(pr,st);
-  if(window.LegendsArt&&window.LegendsArt.drawProjectile&&window.LegendsArt.drawProjectile(ctx,pr,st,G.time))return;
+  if(G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawProjectile&&window.LegendsArt.drawProjectile(ctx,pr,st,G.time))return;
   var ang = Math.atan2(pr.vy, pr.vx);
   ctx.save();
   ctx.translate(pr.x, pr.y);
@@ -3909,20 +4088,67 @@ function petSprite(kind){
   if (MOB_SPRITES[kind]) return MOB_SPRITES[kind];
   return MOB_SPRITES.wolf;
 }
+function actorHeight(entry){return entry.kind==='hero'?72:entry.kind==='enemy'?Math.max(40,entry.actor.r*4):entry.actor.kind==='decoy'?72:entry.actor.follower||entry.actor.kind==='valkyrie'?64:entry.actor.r*3.8;}
+function drawActors(camX,camY){
+  var p=G.player,queue=[{kind:'hero',actor:p,order:0}];
+  G.enemies.forEach(function(e,i){if(!e.dead&&e.hp>0&&e.x>camX-180&&e.x<camX+VW+180&&e.y>camY-180&&e.y<camY+VH+180)queue.push({kind:'enemy',actor:e,order:i+1});});
+  G.pets.forEach(function(pt,i){if(pt.hp>0)queue.push({kind:'pet',actor:pt,order:1000+i});});
+  // Ground contacts always sit below every upright model.
+  queue.forEach(function(entry){var actor=entry.actor;ctx.save();ctx.globalAlpha=.28;ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(actor.x,actor.y+actor.r,actor.r*.95,actor.r*.38,0,0,Math.PI*2);ctx.fill();ctx.restore();
+    if(entry.kind==='enemy'&&actor.elite){ctx.save();ctx.strokeStyle=actor.boss?'#e1acff':'#ffd674';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(actor.x,actor.y+actor.r,actor.r+6,(actor.r+6)*.45,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
+    if(entry.kind==='pet'){ctx.save();ctx.strokeStyle='#84ebc9';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(actor.x,actor.y+actor.r,actor.r+4,(actor.r+4)*.4,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
+  });
+  drawHeroGround();
+  var sorted=LegendsModels.sortActors(queue);G.renderOrder=sorted.map(function(entry){return entry.actor;});
+  sorted.forEach(function(entry){var actor=entry.actor,size=actorHeight(entry);
+    if(entry.kind==='hero')drawHeroModel();
+    else if(entry.kind==='enemy'){
+      drawEnemyModel(actor,size);
+      if(actor.frozen>0){ctx.save();ctx.globalAlpha=.28;ctx.fillStyle='#80deea';ctx.beginPath();ctx.ellipse(actor.x,actor.y-actor.r*.2,actor.r+4,size*.44,0,0,Math.PI*2);ctx.fill();ctx.restore();}
+    }else drawPetModel(actor,size);
+  });
+  // Labels are a final pass, never covered by a nearer body sprite.
+  queue.forEach(function(entry){var actor=entry.actor;if(entry.kind==='hero')return;var width=actor.r*2.2,y=actor.y+actor.r-actorHeight(entry)-8;
+    if(actor.hp<actor.maxHp){ctx.fillStyle='#07121be6';ctx.fillRect(actor.x-width/2-1,y-1,width+2,6);ctx.fillStyle=entry.kind==='pet'?'#81c784':actor.boss?'#ce93d8':'#ef7770';ctx.fillRect(actor.x-width/2,y,width*clamp(actor.hp/actor.maxHp,0,1),4);}
+    if(entry.kind==='pet'&&LegendsModels.companionRole(actor.kind)){ctx.save();ctx.fillStyle='#071c1cf0';ctx.fillRect(actor.x-30,y-17,60,11);ctx.fillStyle='#a7f4da';ctx.font='700 8px system-ui';ctx.textAlign='center';ctx.fillText(LegendsModels.companionRole(actor.kind),actor.x,y-9);ctx.restore();}
+    var statuses=LegendsModels.statuses(actor),important=actor.elite||actor.boss||actor===G.atkTarget||actor===mouse.over||actor.heavyWindup>0||actor.spitWindup>0;
+    statuses.forEach(function(status,index){var bx=important?actor.x+(index%2?25:-25):actor.x+(index-(statuses.length-1)/2)*16,by=important?y-13-Math.floor(index/2)*14:y-12,w=important?48:14;ctx.save();ctx.fillStyle='#07121bf0';ctx.fillRect(bx-w/2,by-7,w,12);ctx.strokeStyle=status.color;ctx.lineWidth=1;ctx.strokeRect(bx-w/2,by-7,w,12);ctx.fillStyle=status.color;ctx.font='700 '+(important?8:10)+'px system-ui';ctx.textAlign='center';ctx.fillText(status.glyph+(important?' '+status.label:''),bx,by+2);ctx.restore();});
+  });
+}
+function drawHeroGround(){
+  var p=G.player;ctx.save();
+  if(G.abuffs.length||G.insightT>0){ctx.globalAlpha=.35;ctx.strokeStyle=G.insightT>0?'#ffd54f':'#ff8a65';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(p.x,p.y+12,26,12,0,0,Math.PI*2);ctx.stroke();}
+  if(p.shield>0){ctx.globalAlpha=.4;ctx.strokeStyle='#4fc3f7';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(p.x,p.y+7,27,19,0,0,Math.PI*2);ctx.stroke();}
+  if(G.spin){var flame=G.stats.mods['pw.flamespin'];ctx.globalAlpha=.45;ctx.strokeStyle=flame?'#ff5722':'#ffcc80';ctx.lineWidth=4;ctx.beginPath();ctx.ellipse(p.x,p.y,G.spin.radius,G.spin.radius,0,0,Math.PI*2);ctx.stroke();}
+  ctx.restore();
+}
+function drawEnemyTelegraphs(){
+  G.enemies.forEach(function(e){if(e.dead||e.hp<=0)return;
+    if(e.heavyWindup>0){ctx.save();ctx.fillStyle='#e8a45b22';ctx.beginPath();ctx.arc(e.heavyX,e.heavyY,e.heavyRadius,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#08131f';ctx.lineWidth=7;ctx.stroke();ctx.strokeStyle='#ffcf83';ctx.lineWidth=3;ctx.stroke();ctx.strokeStyle='#fff3d6';ctx.beginPath();ctx.arc(e.heavyX,e.heavyY,e.heavyRadius+5,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-e.heavyWindup/.45));ctx.stroke();ctx.fillStyle='#0a1321';ctx.fillRect(e.heavyX-26,e.heavyY-8,52,16);ctx.fillStyle='#ffe5b6';ctx.font='800 9px system-ui';ctx.textAlign='center';ctx.fillText('SMASH',e.heavyX,e.heavyY+3);ctx.restore();}
+    else if(e.heavyRecovery>0){ctx.save();ctx.fillStyle='#d3c6a4';ctx.font='700 8px system-ui';ctx.textAlign='center';ctx.fillText('RECOVER',e.x,e.y+e.r+13);ctx.restore();}
+  });
+  G.enemies.forEach(function(e){if(e.dead||e.hp<=0||!(e.spitWindup>0))return;var dx=e.spitVX/260,dy=e.spitVY/260,length=340;
+    ctx.save();ctx.strokeStyle='#09111dec';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(e.x,e.y);ctx.lineTo(e.x+dx*length,e.y+dy*length);ctx.stroke();
+    ctx.setLineDash([9,6]);ctx.strokeStyle='#f6b6ff';ctx.lineWidth=2;ctx.stroke();ctx.setLineDash([]);
+    ctx.strokeStyle='#fff1ff';ctx.lineWidth=3;ctx.beginPath();ctx.arc(e.x,e.y,e.r+8,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-e.spitWindup/.4));ctx.stroke();
+    ctx.fillStyle='#0a1321';ctx.fillRect(e.x-24,e.y+e.r+6,48,16);ctx.fillStyle='#ffd3ff';ctx.font='800 10px system-ui';ctx.textAlign='center';ctx.fillText('SPIT',e.x,e.y+e.r+18);ctx.restore();
+  });
+}
+function drawPlayerLocator(){var p=G.player;ctx.save();ctx.strokeStyle='#04101e';ctx.lineWidth=5;ctx.beginPath();ctx.ellipse(p.x,p.y+p.r,22,9,0,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='#fff1c9';ctx.lineWidth=1.7;ctx.stroke();ctx.fillStyle='#fff1c9';ctx.strokeStyle='#04101e';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(p.x-5,p.y+p.r-78);ctx.lineTo(p.x+5,p.y+p.r-78);ctx.lineTo(p.x,p.y+p.r-71);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();}
 function draw(){
   var p = G ? G.player : null;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = '#23262B';
   ctx.fillRect(0, 0, VW, VH);
-  if (!G || !p) return;
-  var camX = clamp(p.x - VW / 2, 0, WORLD.w - VW), camY = clamp(p.y - VH / 2, 0, WORLD.h - VH);
+  if (!G || !p){updateTargetPanel();return;}
+  var view=G.view=LegendsView.create(p.x,p.y,VW,VH,WORLD.w,WORLD.h);
+  var camX=view.x,camY=view.y;
   G.camX = camX; G.camY = camY;
-  if (G.shake > 0 && !lowMotion){ camX += rand(-1, 1) * G.shake * 14; camY += rand(-1, 1) * G.shake * 14; }
   ctx.save();
   ctx.translate(-camX, -camY);
-  ctx.fillStyle = groundPat || '#3E4A3D';
+  ctx.fillStyle = G.presentation.groundPattern || '#3E4A3D';
   ctx.fillRect(camX - 260, camY - 260, VW + 520, VH + 520);
-  if(!ovr('ground') && window.LegendsArt && window.LegendsArt.drawGround) window.LegendsArt.drawGround(ctx,camX,camY,VW,VH);
+  if(G.presentation.generatedGround && window.LegendsArt && window.LegendsArt.drawGround) window.LegendsArt.drawGround(ctx,camX,camY,VW,VH);
   ctx.strokeStyle = '#1A1D21'; ctx.lineWidth = 22;
   ctx.strokeRect(11, 11, WORLD.w - 22, WORLD.h - 22);
   ctx.strokeStyle = '#5A5148'; ctx.lineWidth = 6;
@@ -3952,83 +4178,7 @@ function draw(){
     ctx.fillStyle = '#fff'; ctx.fillRect(o.x - 1.5, o.y + Math.sin(o.t * 5) * 3 - 4, 3, 8); ctx.fillRect(o.x - 4, o.y + Math.sin(o.t * 5) * 3 - 1.5, 8, 3);
   });
   var m0 = camX - 80, m1 = camX + VW + 80, n0 = camY - 80, n1 = camY + VH + 80;
-  G.enemies.forEach(function(e){
-    if (e.x < m0 || e.x > m1 || e.y < n0 || e.y > n1) return;
-    var size = e.r * 3.4;
-    ctx.globalAlpha = 0.25;
-    ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.ellipse(e.x, e.y + e.r * 0.9, e.r * 0.9, e.r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 1;
-    var frame = (e.animT * 2 | 0) % 2;
-    drawSpriteOr(e.kind, MOB_SPRITES[e.kind][frame], e.x, e.y, size, false);
-    if (e.frozen > 0){
-      ctx.globalAlpha = 0.45; ctx.fillStyle = '#80DEEA';
-      ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 4, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-    if (e.elite && !e.boss){
-      ctx.strokeStyle = '#FFD54F'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 5, 0, Math.PI * 2); ctx.stroke();
-    }
-    if (e.hp < e.maxHp){
-      var w = e.r * 2.2;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w, 4);
-      ctx.fillStyle = e.boss ? '#CE93D8' : '#EF5350'; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w * clamp(e.hp / e.maxHp, 0, 1), 4);
-    }
-  });
-  G.pets.forEach(function(pt){
-    ctx.globalAlpha = 0.25; ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.ellipse(pt.x, pt.y + pt.r * 0.9, pt.r * 0.9, pt.r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 1;
-    var petId = pt.kind === 'boarpet' ? 'boar' : pt.kind;
-    drawSpriteOr(petId, petSprite(petId)[(pt.animT * 2 | 0) % 2], pt.x, pt.y, pt.r * 3.4, false);
-    if (pt.kind === 'wolf' && (G.stats.mods['pw.packlord'] || G.stats.mods['pw.beastgod'])){
-      ctx.globalAlpha = 0.3; ctx.strokeStyle = '#FF7043'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r + 4, 0, Math.PI * 2); ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-    if (pt.hp < pt.maxHp){
-      var w2 = pt.r * 2;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(pt.x - w2 / 2, pt.y - pt.r - 10, w2, 3);
-      ctx.fillStyle = '#81C784'; ctx.fillRect(pt.x - w2 / 2, pt.y - pt.r - 10, w2 * clamp(pt.hp / pt.maxHp, 0, 1), 3);
-    }
-  });
-  // hero
-  ctx.globalAlpha = 0.3; ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.ellipse(p.x, p.y + 16, 15, 6, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.globalAlpha = 1;
-  if (G.abuffs.length || G.insightT > 0){
-    ctx.globalAlpha = 0.35;
-    ctx.strokeStyle = G.insightT > 0 ? '#FFD54F' : '#FF8A65';
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(p.x, p.y, 26 + Math.sin(G.time * 6) * 3, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1;
-  }
-  if (p.shield > 0){
-    ctx.globalAlpha = 0.4; ctx.strokeStyle = '#4FC3F7'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(p.x, p.y, 24, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1;
-  }
-  var dirIdx = Math.abs(p.fx) > Math.abs(p.fy) ? (p.fx < 0 ? 2 : 3) : (p.fy < 0 ? 1 : 0);
-  var hframe = p.moving ? ((p.animT * 2 | 0) % 2) : 0;
-  if (G.spin){
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(G.time * 14);
-    ctx.translate(-p.x, -p.y);
-    drawSpriteOr('hero_' + G.cls, heroSheets[dirIdx][hframe], p.x, p.y, 52, ovr('hero_' + G.cls) ? p.fx < 0 : false);
-    ctx.restore();
-    var flame = G.stats.mods['pw.flamespin'];
-    ctx.globalAlpha = 0.35; ctx.strokeStyle = flame ? '#FF5722' : '#FFCC80'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.arc(p.x, p.y, G.spin.radius * G.stats.area, 0, Math.PI * 2); ctx.stroke();
-    if (flame){
-      ctx.strokeStyle = '#FFAB91'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(p.x, p.y, G.spin.radius * G.stats.area * 0.7 + Math.sin(G.time * 20) * 6, 0, Math.PI * 2); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-  } else {
-    drawSpriteOr('hero_' + G.cls, heroSheets[dirIdx][hframe], p.x, p.y, 52, ovr('hero_' + G.cls) ? p.fx < 0 : false);
-  }
+  drawActors(camX,camY);
   // melee weapon swing: eased sweep with a motion trail, weapon on top
   if (G.swing && !G.spin){
     var sw = G.swing;
@@ -4092,7 +4242,7 @@ function draw(){
     for (var h = 0; h < O.count; h++){
       var ha = O.ang + h * (Math.PI * 2 / O.count);
       var hx = p.x + Math.cos(ha) * oR, hy = p.y + Math.sin(ha) * oR;
-      if(window.LegendsArt&&window.LegendsArt.drawHammer&&window.LegendsArt.drawHammer(ctx,{x:hx,y:hy,ang:ha},G.time))continue;
+      if(G.presentation.legacyArt&&window.LegendsArt&&window.LegendsArt.drawHammer&&window.LegendsArt.drawHammer(ctx,{x:hx,y:hy,ang:ha},G.time))continue;
       ctx.save();
       ctx.translate(hx, hy);
       ctx.rotate(ha);
@@ -4104,6 +4254,7 @@ function draw(){
   G.projs.forEach(drawProjectile);
   G.eprojs.forEach(drawEnemyGlob);
   drawImpacts();
+  (G.actions||[]).forEach(function(action){LegendsActions.draw(ctx,action,G.time,lowMotion,G.presentation.actions);});
   G.fx.forEach(function(f){
     var k = f.t / f.life;
     if (f.kind === 'p'){
@@ -4147,6 +4298,8 @@ function draw(){
       }
     }
   });
+  drawSkillGesture();
+  drawEnemyTelegraphs();
   G.texts.forEach(function(t){
     ctx.globalAlpha = 1 - t.t / 0.8;
     ctx.fillStyle = t.color;
@@ -4157,6 +4310,7 @@ function draw(){
     ctx.fillText(t.txt, t.x, t.y);
     ctx.globalAlpha = 1;
   });
+  drawPlayerLocator();
   ctx.restore();
   drawAtmosphere();
   // ---- crosshair (screen space): attack symbol over an enemy, cross otherwise
@@ -4213,8 +4367,14 @@ function updateHud(){
 }
 function updateBars(){
   var p = G.player;
+  var visual=LegendsFeedback.update(G,0,lowMotion),critical=p.hp>0&&p.hp/p.maxHp<=.25;
   $('hpFill').style.transform = 'scaleX(' + clamp(p.hp / p.maxHp, 0, 1) + ')';
-  $('hpTxt').textContent = Math.ceil(p.hp) + ' / ' + Math.round(p.maxHp);
+  $('hpTrail').style.transform='scaleX('+clamp(visual.trail/p.maxHp,0,1)+')';
+  $('hpTxt').textContent = Math.max(0,Math.round(p.hp*10)/10) + ' / ' + Math.round(p.maxHp*10)/10;
+  $('healthBar').setAttribute('aria-valuemax',p.maxHp);$('healthBar').setAttribute('aria-valuenow',Math.max(0,p.hp));
+  $('stage').classList.toggle('health-critical',critical);$('healthState').textContent=critical?'LOW HEALTH':'';$('hurtVignette').style.opacity=visual.flash;
+  $('shieldState').hidden=!(p.shield>0);$('shieldState').textContent=p.shield>0?'Shield '+Math.round(p.shield*10)/10:'';
+  $('insightState').hidden=!(G.insightT>0);$('insightState').textContent=G.insightT>0?'Insight '+Math.ceil(G.insightT)+'s':'';
   $('xpFill').style.transform = 'scaleX(' + clamp(G.xp / G.xpNext, 0, 1) + ')';
   $('pLevel').textContent = 'Lv ' + G.level + ' · ' + CLASSES[G.cls].name + ' · ' + FOLLOWERS[META.follower].icon;
 }
@@ -4225,24 +4385,28 @@ function renderSkillBar(){
   for (var i = 0; i < 4; i++){
     var sid = G.slots[i];
     var unlocked = sid && skillUnlocked(sid);
-    html += '<div class="skill-slot' + (sid ? (unlocked ? '' : ' locked') : ' empty') + '" data-skill="' + i + '" title="' + (sid ? SKILLS[sid].name + ' — ' + SKILLS[sid].desc.replace(/"/g, '&quot;') : 'Empty — tap 🎯 Select Skill') + '">' +
-      '<span class="key">' + (i + 1) + '</span>' + (sid ? SKILLS[sid].icon : '·') +
-      (sid ? (unlocked ? '<div class="cd" data-cd="' + sid + '" style="display:none;"></div>' : '<span class="lock">🔒</span>') : '') +
-      '</div>';
+    html += '<button type="button" class="skill-slot' + (sid ? (unlocked ? '' : ' locked') : ' empty') + '" data-skill="' + i + '" aria-keyshortcuts="'+(i+1)+'" title="' + (sid ? SKILLS[sid].name + ' — ' + SKILLS[sid].desc.replace(/"/g, '&quot;') : 'Empty — tap 🎯 Select Skill') + '">' +
+      '<span class="key">' + (i + 1) + '</span>' + (sid ? skillIconHtml(sid) : '·') +'<span class="skill-name">'+(sid?SKILLS[sid].name:'Empty')+'</span>'+
+      (sid ? (unlocked ? '<span class="cd" data-cd="' + sid + '" style="display:none;"><span class="cd-shade"></span><b class="cd-value"></b></span>' : '<span class="lock">🔒</span>') : '') +
+      '</button>';
   }
   bar.innerHTML = html;
   Array.prototype.forEach.call(bar.querySelectorAll('.skill-slot'), function(el){
-    el.addEventListener('pointerdown', function(e){ e.preventDefault(); castSkill(parseInt(el.getAttribute('data-skill'), 10)); });
+    var index=parseInt(el.getAttribute('data-skill'),10),sid=G.slots[index];el.setAttribute('aria-label',sid?SKILLS[sid].name+(skillUnlocked(sid)?' ready':' locked'):'Empty skill slot '+(index+1));
+    el.addEventListener('pointerdown', function(e){ e.preventDefault();el.focus({preventScroll:true});if(e.pointerType==='touch'||e.pointerType==='pen')beginSkillGesture(e,index,el);else castSkill(index); });
+    el.addEventListener('click',function(e){if(e.detail===0)castSkill(index);});
   });
+  updateSkillCds();
 }
 function updateSkillCds(){
   Array.prototype.forEach.call(document.querySelectorAll('#skillBar .cd'), function(el){
     var sid = el.getAttribute('data-cd');
     var left = G.cds[sid] || 0;
+    var button=el.closest('.skill-slot');button.classList.toggle('ready',left<=0);button.setAttribute('aria-label',SKILLS[sid].name+(left<=0?' ready':', '+left.toFixed(1)+' seconds remaining'));
     if (left <= 0){ el.style.display = 'none'; return; }
     el.style.display = 'grid';
-    el.textContent = left >= 1 ? Math.ceil(left) : left.toFixed(1);
-    el.style.transform = 'scaleY(' + clamp(left / skillCd(sid), 0, 1) + ')';
+    el.querySelector('.cd-value').textContent=left>=1?Math.ceil(left):left.toFixed(1);
+    el.querySelector('.cd-shade').style.transform='scaleY('+clamp(left/skillCd(sid),0,1)+')';
   });
 }
 
@@ -4641,10 +4805,19 @@ var _ovrImgs = {};
 var BARB_BUILTIN_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAFACAYAAADNkKWqAAAII0lEQVR42u3dMW4TURCAYR+Aio40ENEgkIKEUlAg0VCZlo7IouIMyAWVqxS4c5MmvoFzA1ofwaeBKwzK4Dc7+/3StLvel31fqqddLCRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ6V08ffKnw/hLSgKgJAFQkgAoSQCUJABKEgAlARCAkgAIQEkABKCk/mC9efGsxQBVAiAAASgBEIAAlAAIQABKAAQgACUAAhCAEgABCEAJgAAEoARAAAJQAiAAJdWDLRuO5fvXoely32xQvbkSAAEoCYAAlARAAEoCIAAlARCAkgAIQEkABKAkAAJQAiAAASgBsP/RtS5H67y5EgABKAmAAJQEQABKAiAAJQEQgJIACEBJAASgJAACUAIgAAEoAfDxAJ72m1kNACUAAhCAEgABCEAJgAAEoARAAAJQAiAAASgBEIAAlAAIQABKAAQgACUAAhCAUn8Ao/fNBmvUfQEoARCAAJQACEAASgAEIAAlAAIQgBIAAQhACYAABKAEQAACUAIgAAEoARCAkqYLYPYc1qvQVD8yB0AJgAAEoARAAAJQAiAAASgBEIAAlAAIQEkABKAkAAJQEgABKAmAAJR0PgCzocy+b/XfB0AJgAAEoARAAAJQAiAAASgBEIAAlAAIQEkABKAkAAJQEgABKAmAAJRUD0ADQAmABoASAA0AJQACEIASAAEIQAmAAASgBEAAAlACIAAlARCAkgAIQEmgBJskAAJQEgABKAmAAJQEQABKAiAAJQEQgJIACEBJAASgJAACUPrfcBwftqkz6jnmBmX2umT/PX69fTlkgC8AAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABKAACEIAAFAABCEAACoAABCAABUAAAhCA6g3bdn0Tmuj1sjfmab9JnepQVl+XKES/l+9Ckw3gcXcVGlACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAAKgAAEIAAFQAACEIACIAABCEABEIAABKCmCduojZR931HPUR38UQCOGgACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAASgagGY/eIf1qvQjNqY99evQpN93+X1ZWiqw5a9fuF/1EGI0if5yCaZAAhAAAJQAAQgAAEoAAIQgAAUAAEIQAAKgAAEIAAFQAACEIACIAABCEABEIAABKAACEAAAhBsj9sg2S90dQC7gBX9fdXXOR3KIFjZR0ABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABKAACEIAAFAABCEAACoAABCAABUAAAhCAqnXErctHjLocSasO5agjh6M+PkUmAAIQgAAUAAEIQAAKgAAEIAAFQAACEIACIAABCEABEIAABKAACEAAAlAABCAAASgAAhCAANR5AMw+upb9wnSBLXvDjfp91Y/gZb9/0ev9+PIhNEAFIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAUAAEIQAAKgAAEIAAFQAACEIAABCAAAQhAAJ7no0hRKEe9gNU33O12F5qv376HJnq9uX20CYAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIwGkCGAWr+lG4LgBmwxa9XvX1i75/2UcdAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAArAXgz+cXoYkehcv+qE8XAEd9FKnLulQ/Yrm7uw9NFMDo9UAJQAACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAoDwPWNXBj85xdxWa7PuOmlHPWx22UQCCEoAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgANUb8o+fPocm+tGh6PWy71v992XfF4AAFAABCEAACoAABCAABUAAAhCAAiAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAJwuiDM7TlGbWAfRRIAAQhAAAqAAAQgAAVAAAIQgAIgAAEIQAEQgAAEoAAIQAACUAAEIAABKAACEIAAFAABCEAAagoAOgrX+yjcqPcvCiDYBEAAAhCAAiAAAQhAARCAAASgAAhAAAJQAAQgACUAAhCAAiAAAQhAARCAAASgAAhAAAJQWgw8Mje3+3aBbdT7Z6cKgAAEoARAAAJQAiAAASgBEIAAlAAIQABKAAQgACUAAhCAEgABCEAJgAAEoPQvL+BhvQrNab8JTfWP+kSfI7ouNroEQAACUAIgAAEoARCAAJQACEAASgAEoCQAAlASAAEoCYAAlARAAEoCAvAlARCAkgAIQEkABKAkAAJQEgABKAmAAJQEQABKAAQgACUAAhCA0nxgOz5sQ7Nd34Qmer3qAM5tXSQAAhCAEgABCEAJgAAEoARAAAJQAiAAASgBEIAAlAAIQABKAAQgACUAAhCAUicAs6cLgF3WRQIgAAEoARCAAJQACEAASgAEIAAlAAIQgBIAAQhACYAABKAEQAACUAIgAAEodYIye6wL2CQb3boAULLRrQsAJRvdukiy0a2LJBvdukiy0a2LJBvdukiy0a2LJBvdumgC/QXPi1JgQ2LUOwAAAABJRU5ErkJggg==';
 var _barbBuiltin = new Image();
 _barbBuiltin.src = BARB_BUILTIN_SRC;
-function ovr(id){
-  var im = _ovrImgs[id];
-  if ((!im || !im.complete || !im.naturalWidth) && id === 'hero_barb') im = _barbBuiltin;
-  return (im && im.complete && im.naturalWidth) ? im : null;
+function validImage(im){return im&&im.complete&&im.naturalWidth>0?im:null;}
+function customImage(id,live){return live||!G||!G.presentation?validImage(_ovrImgs[id]):G.presentation.overrides[id]||null;}
+function ovr(id,live){
+  var im=customImage(id,live);
+  if(!im&&id==='hero_barb')im=live||!G||!G.presentation?validImage(_barbBuiltin):G.presentation.builtin;
+  return im;
+}
+/* Image decoding never changes an active arena. A new run adopts ready art. */
+function snapshotPresentation(){
+  buildGround();
+  var overrides={};Object.keys(_ovrImgs).forEach(function(id){var im=validImage(_ovrImgs[id]);if(im)overrides[id]=im;});
+  return Object.freeze({overrides:Object.freeze(overrides),builtin:validImage(_barbBuiltin),models:LegendsModels.snapshot(),groundPattern:groundPat,
+    generatedGround:!overrides.ground&&!!(window.LegendsArt&&LegendsArt.groundReady()),legacyArt:!!(window.LegendsArt&&LegendsArt.ready()),actions:LegendsActions.snapshot()});
 }
 function applyLegendsAssets(overrides){
   if (!overrides || typeof overrides !== 'object') return;
@@ -4703,11 +4876,14 @@ function classPreview(cls){
   var c = document.createElement('canvas');
   c.width = 48; c.height = 48;
   var g = c.getContext('2d');
-  var im = ovr('hero_' + cls);
+  var custom=_ovrImgs['hero_'+cls];
+  if(!(custom&&custom.complete&&custom.naturalWidth)&&window.LegendsModels&&LegendsModels.drawHero(g,cls,{x:24,y:47,r:0,fx:1,moving:false},0,true,48))return c;
+  var im = ovr('hero_' + cls,true);
   g.imageSmoothingEnabled = !!im;
   g.drawImage(im || buildHeroSprites(CLASSES[cls].sprite)[0][0], 0, 0, 48, 48);
   return c;
 }
+window.addEventListener('legendsmodelsready',function(){if($('menuOverlay').classList.contains('show'))renderClassCards();});
 function renderClassCards(){
   var wrap = $('classCards'); wrap.innerHTML = '';
   CLASS_ORDER.forEach(function(key){
@@ -4717,7 +4893,7 @@ function renderClassCards(){
     el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-pressed',key===chosenClass?'true':'false');
     el.addEventListener('keydown',function(ev){if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();chosenClass=key;renderClassCards();}});
     var skillsHtml = c.skills.slice(0, 4).map(function(sid){
-      return '<div class="sk">' + SKILLS[sid].icon + ' <b>' + SKILLS[sid].name + '</b></div>';
+      return '<div class="sk">' + skillIconHtml(sid) + ' <b>' + SKILLS[sid].name + '</b></div>';
     }).join('');
     el.innerHTML = '<div class="chead"><span class="cico"></span>' + c.icon + ' ' + c.name + '</div>' +
       '<div class="cdesc">' + c.desc + '</div>' +
@@ -4806,10 +4982,10 @@ function togglePause(){
 /* ---------------- SIZE / LOOP ---------------- */
 function resize(){
   var stage = $('stage');
-  DPR = Math.min(2, window.devicePixelRatio || 1);
-  VW = stage.clientWidth; VH = stage.clientHeight;
-  canvas.width = Math.round(VW * DPR);
-  canvas.height = Math.round(VH * DPR);
+  var width=stage.clientWidth,height=stage.clientHeight,dpr=Math.min(2,window.devicePixelRatio||1);if(width<=0||height<=0)return;
+  VW=width;VH=height;DPR=dpr;var pixelWidth=Math.round(VW*DPR),pixelHeight=Math.round(VH*DPR);
+  if(canvas.width!==pixelWidth)canvas.width=pixelWidth;if(canvas.height!==pixelHeight)canvas.height=pixelHeight;
+  if(G&&G.player){G.view=LegendsView.create(G.player.x,G.player.y,VW,VH,WORLD.w,WORLD.h);G.camX=G.view.x;G.camY=G.view.y;}
 }
 window.addEventListener('resize', resize);
 var lastT = 0;
@@ -4829,7 +5005,9 @@ document.addEventListener('visibilitychange', function(){
 /* ---------------- WIRING ---------------- */
 function init(){
   wireCombatPolish();
+  wireTreeSearch();
   resize();
+  if(typeof ResizeObserver==='function'){var stageObserver=new ResizeObserver(resize);stageObserver.observe($('stage'));}
   buildGround();
   metaLoadLocal();
   renderClassCards();

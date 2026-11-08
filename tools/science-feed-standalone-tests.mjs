@@ -108,7 +108,7 @@ test('an observed diagram failure withdraws the question without recording a wro
 for(const file of ['science-defenders.html','science-raiders.html','science-legends.html','science-slayers.html','science-spire.html'])test(file+' uses the guarded picker and accepts empty banks', async () => {
   const source=read(file),spire=file.includes('spire'),bank=spire?'QBANK':'QUESTION_BANK',apply=spire?'applyBank':'applyBankQuestions';
   for(const match of source.matchAll(/<script>([\s\S]*?)<\/script>/g))new vm.Script(match[1]);
-  assert.match(source,/<script src="science-feed-bridge\.js"><\/script>/);
+  assert.match(source,/<script src="science-feed-bridge\.js(?:\?v=[\w.-]+)?"><\/script>/);
   assert.match(source,/await scienceFeed\.(?:refresh|ready)\(\)/);
   assert.match(source,/if\(!scienceFeed\.current\(qState\.current\)\) return;/);
   const selected=row('safe'),c=vm.createContext({ScienceFeedBridge:{},scienceFeed:{take:()=>selected,stamp:q=>q,message:()=> 'Connecting to your class question stream…'},G:{topic:'mixed'},

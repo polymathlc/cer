@@ -1,0 +1,446 @@
+{
+  "project": "Science Legends — 20-round visual and combat review",
+  "method": "Twenty sequential evaluator-to-implementer rounds. A round is verified only after its change and acceptance evidence are reviewed.",
+  "sources": [
+    {
+      "id": "diablo4-vfx",
+      "url": "https://news.blizzard.com/en-us/article/23746639/diablo-iv-quarterly-updatedecember-2021",
+      "lesson": "Keep dangerous enemy actions readable; match effect timing and impact direction to the underlying attack. Reserve the largest effects for stronger abilities."
+    },
+    {
+      "id": "diablo2-alpha",
+      "url": "https://news.blizzard.com/en-us/article/23695734/technical-alpha-learnings",
+      "lesson": "Preserve coherent hero and monster identities while improving spell silhouettes, status colors and icon contrast."
+    },
+    {
+      "id": "diablo2-accessibility",
+      "url": "https://news.blizzard.com/en-gb/article/23700733/how-were-making-diablo-ii-resurrectedtm-more-accessible-to-everyone",
+      "lesson": "A richer presentation should remain accessible through clear controls and modern usability improvements."
+    },
+    {
+      "id": "grim-dawn-monsters",
+      "url": "https://www.grimdawn.com/guide/gameplay/monsters/",
+      "lesson": "Enemy archetypes and elite identities can communicate different combat problems through distinct silhouettes, names and behavior."
+    },
+    {
+      "id": "grim-dawn-combat",
+      "url": "https://www.grimdawn.com/guide/gameplay/combat/",
+      "lesson": "Freeze, stun, slow and damage-over-time effects have different mechanical meanings and need distinguishable presentation."
+    },
+    {
+      "id": "hades-nighty-night",
+      "url": "https://www.supergiantgames.com/blog/hades-the-nighty-night-update-patch-notes/",
+      "lesson": "Combat clarity benefits from many small, deliberate improvements in animation, feedback and presentation."
+    },
+    {
+      "id": "hades-welcome",
+      "url": "https://www.supergiantgames.com/blog/hades-welcome-to-hell-update-patch-notes/",
+      "lesson": "Keep codex and upgrade-screen feedback clear, and avoid interrupting combat with secondary information."
+    }
+  ],
+  "art_policy": "Original generated artwork and original implementation; no extracted commercial-game assets.",
+  "verified_rounds": [
+    {
+      "round": 1,
+      "idea": "Lock the view and align pointing with rendering",
+      "finding": "The renderer added random camera offsets after saving an unshaken input camera; oversized viewports also had invalid clamp bounds.",
+      "change": "A pure fixed orthographic view and shared inverse coordinate functions now drive rendering and mouse aim. Oversized viewports center the arena.",
+      "commit": "1bed334",
+      "sources": [
+        "diablo4-vfx"
+      ],
+      "verification": [
+        "Evaluator reviewed camera/input integration.",
+        "Evaluator independently ran all3 view mapping/bounds/determinism tests: passed.",
+        "Independent QA passed32 real-page camera/input checks with DPR1/2, CSS scaling, resize and oversized viewports."
+      ],
+      "status": "verified",
+      "follow_up_commits": [
+        "a5171d3",
+        "f60c02f"
+      ]
+    },
+    {
+      "round": 2,
+      "idea": "Keep hero models upright and grounded through every skill",
+      "finding": "Whirlwind rotated the entire hero image and duplicated spin/nonspin rendering, visually changing its elevation and orientation.",
+      "change": "One actor contract keeps fixed52px hero size and a foot anchor; only horizontal facing changes, while weapon/ring effects still spin.",
+      "commit": "9285a66",
+      "sources": [
+        "diablo2-alpha",
+        "diablo4-vfx"
+      ],
+      "verification": [
+        "Evaluator independently ran all5classes×4facings×spin/idle anchor/size regression: passed.",
+        "Reviewed whole-hero rotation removal and preserved override path."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 3,
+      "idea": "Bring every hero class to life with coherent generated model poses",
+      "finding": "The game used two-frame pixel sprites and one static override, without a coherent high-fidelity action animation set.",
+      "change": "All5 heroes now use premeasured generated idle, alternating stride and attack cells at a constant72px size; previews refresh after atlas load and custom overrides keep priority.",
+      "commit": "0c06ae9",
+      "sources": [
+        "diablo2-alpha",
+        "hades-nighty-night"
+      ],
+      "verification": [
+        "Evaluator reviewed one-time alpha baseline measurement and fixed source-cell sizing.",
+        "Evaluator independently ran3 model/animation/foot-anchor tests: passed.",
+        "Implementer passed35 real premium-page browser checks and inspected a generated Sorcerer attack pose.",
+        "Evaluator independently passed92 real-page generated-model matrix/crop/pose checks and inspected renderer screenshot.",
+        "Independent art QA547dad4 passed17 real-page assertions including distinct generated frames, source proportions, pause and render purity."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 4,
+      "idea": "Give every enemy archetype a coherent animated model",
+      "finding": "Enemy identities were simple two-frame pixel forms without action or crowd-control animation states.",
+      "change": "All6 archetypes now use generated fixed-view atlas models with measured ground anchors, real movement and attack poses, frozen/stunned holds, charge bracing and safe override fallback.",
+      "commit": "c24b11c",
+      "sources": [
+        "diablo2-alpha",
+        "grim-dawn-monsters",
+        "grim-dawn-combat"
+      ],
+      "verification": [
+        "Evaluator reviewed enemy action integration and atlas cache.",
+        "Evaluator independently ran all4 model tests, including unique columns and control-effect frames: passed.",
+        "Implementer ran240 skill/ultimate stress combinations successfully.",
+        "Evaluator inspected all6 generated enemy silhouettes in a real renderer screenshot.",
+        "Independent art QA547dad4 passed17 real-page assertions including distinct generated frames, source proportions, pause and render purity.",
+        "Independent productionQA17bfe38 confirmed complete debris-free models and correctcachedframe textures afterR19integration."
+      ],
+      "status": "verified",
+      "visual_acceptance": "verified-round-19-production-whole-silhouette-renderer"
+    },
+    {
+      "round": 5,
+      "idea": "Make occlusion follow ground position",
+      "finding": "The old renderer drew every foe and companion behind the hero regardless of ground position, contradicting the apparent fixed view.",
+      "change": "Hero, enemies and companions share a stable foot-y queue; ground contacts/shadows render beneath bodies and actor health labels render above them.",
+      "commit": "d718af2",
+      "sources": [
+        "diablo4-vfx",
+        "diablo2-alpha"
+      ],
+      "verification": [
+        "Evaluator independently ran5 model/depth tests and92 real-page model matrix checks: passed.",
+        "Implementer passed38 premium browser checks including actual back-to-front ordering at1280/390/320px."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 6,
+      "idea": "Animate real attack events without letting rendering deal damage",
+      "finding": "Melee, elemental contact and cast effects lacked a shared multi-frame visual sequence lifecycle.",
+      "change": "A bounded simulation-timed atlas adapter now animates4-frame melee, fire, frost and arcane events at actual cast/contact locations. Drawing has no damage callbacks and effects expire.",
+      "commit": "3180dcc",
+      "sources": [
+        "diablo4-vfx",
+        "diablo2-alpha"
+      ],
+      "verification": [
+        "Evaluator independently ran19 action/model/combat tests: allpassed.",
+        "Reviewed real slash/explosion/nova/cast/impact emission and bounded visual-only queue.",
+        "Implementer passed240 skill/ultimate stress combinations.",
+        "Independent art QA547dad4 passed17 real-page assertions including distinct generated frames, source proportions, pause and render purity."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 7,
+      "idea": "Give elemental attacks their own readable identities",
+      "finding": "Poison, holy, lightning and arrows shared generic fire or purple contact effects, and a nonsquare atlas risked vertical stretching.",
+      "change": "Actual elemental events carry explicit families and play the cleaned4-frame elemental sheet. Source frame aspect ratios are preserved and existing lightning path cues remain.",
+      "commit": "1fbdd3a",
+      "sources": [
+        "diablo4-vfx",
+        "diablo2-alpha"
+      ],
+      "verification": [
+        "Evaluator independently ran16 action/contact/combat tests: allpassed.",
+        "Reviewed actual poison explosion, holy contact, lightning and Amazon release integration.",
+        "QA identified4:3 frame proportions; implementation preserves source aspect.",
+        "Independent art QA547dad4 passed17 real-page assertions including distinct generated frames, source proportions, pause and render purity."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 8,
+      "idea": "Make crowd-control and damage-over-time states visible and accurate",
+      "finding": "Effects were hard to distinguish from body color, and an expired high damage-over-time magnitude could survive a weaker later application.",
+      "change": "Deterministic shape/text badges distinguish FROZEN, STUN, SLOW, BLEED and VENOM at model-head height. Expired DoT strength/type clears; later applications use the correct winning source and remaining duration.",
+      "commit": "987b94e",
+      "sources": [
+        "grim-dawn-combat",
+        "diablo2-alpha"
+      ],
+      "verification": [
+        "Evaluator independently ran10 model/action/status tests: allpassed.",
+        "Reviewed poison source metadata and remaining-duration integration.",
+        "Fire DoT was additionally tagged BURN with its own shape/text badge."
+      ],
+      "status": "verified",
+      "follow_up_commits": [
+        "9044ee8"
+      ]
+    },
+    {
+      "round": 9,
+      "idea": "Make ranged enemy attacks commit before release",
+      "finding": "Spitter projectiles appeared instantly when cooldown expired, offering no readable preparation or dodge decision.",
+      "change": "A locked-direction0.4s cast braces the Spitter, shows a dashed path/progress ring/SPIT label above player effects, emits exactly one shot, and follows with recovery. Control effects pause safely and death cancels release.",
+      "commit": "9044ee8",
+      "sources": [
+        "diablo4-vfx",
+        "grim-dawn-monsters"
+      ],
+      "verification": [
+        "Evaluator independently ran10 AI/model tests: allpassed.",
+        "Production updateEnemies regression proves bracing, no early shot, no launch retarget, freeze safety and one release."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 10,
+      "idea": "Give heavy melee attacks anticipation, commitment and recovery",
+      "finding": "Brutes and bosses applied contact damage instantly, with no meaningful heavy-attack preparation or dodge window.",
+      "change": "Heavy foes lock a target footprint, brace for0.45s, resolve one contact only if that target remains inside, and recover for0.65s. SMASH/progress and RECOVER cues remain above player effects; smaller foe behavior stays intact.",
+      "commit": "a2b138c",
+      "sources": [
+        "diablo4-vfx",
+        "grim-dawn-monsters"
+      ],
+      "verification": [
+        "Evaluator independently ran5 AI tests: allpassed.",
+        "Production updateEnemies regression proves no early damage, exactly one contact and enforced recovery.",
+        "Reviewed control/death cancellation and safe committed pet targeting."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 11,
+      "idea": "Make the companion roster visually coherent with the new heroes",
+      "finding": "Animals and humanoid followers still used old pixel forms beside the newly generated actors.",
+      "change": "Four beast companions use generated action cells; Defender, Mage, healer, Valkyrie and decoy reuse matching hero models with explicit friendly role badges and ground contacts. Actual movement, attacks and healing drive animation; override aliases remain.",
+      "commit": "be05c9c",
+      "sources": [
+        "diablo2-alpha",
+        "grim-dawn-monsters"
+      ],
+      "verification": [
+        "Evaluator independently ran8 model/status/companion mapping tests: allpassed.",
+        "Reviewed real pet movement/attack/heal pose tracking and preserved gameplay rules.",
+        "Cross-cell source fragments are tracked as an open asset-quality follow-up for round19.",
+        "Independent actual-renderer QAea86591 passed20 art checks including all16 beast cells,5 humanoid roles and real boar override priority.",
+        "Independent productionQA17bfe38 confirmed complete debris-free models and correctcachedframe textures afterR19integration."
+      ],
+      "status": "verified",
+      "visual_acceptance": "verified-round-19-production-whole-silhouette-renderer"
+    },
+    {
+      "round": 12,
+      "idea": "Build a readable illustrated skill sanctum",
+      "finding": "The large skill graph retained a flat white surface and lacked a clear visual state legend.",
+      "change": "Generated tree art and interface ornaments now frame a scoped dark skill surface with brighter functional edges, readable states/popovers/stats, a shape/text legend and viewport-aware popovers.",
+      "commit": "0df0b5c",
+      "sources": [
+        "diablo2-alpha",
+        "diablo2-accessibility",
+        "hades-welcome"
+      ],
+      "verification": [
+        "Evaluator independently ran47 real premium browser checks: allpassed.",
+        "Evaluator visually inspected390px tree screenshot: actual decorative art, clear activegraph and bounded popover.",
+        "Implementer passed24 accessibility and88 existing gameplay browser checks."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 13,
+      "idea": "Make a large skill graph navigable without hundreds of Tab presses",
+      "finding": "Node buttons lacked descriptive names and stable spatial keyboard browsing; rerendering could lose focus.",
+      "change": "One logical Tab entry supports arrows/Home/End, named ranks/requirements, inspect-only Enter/Space, visible focus scrolling, retained allocation focus, popover-first Escape and clean T close. Learn feedback is announced.",
+      "commit": "a62a3f8",
+      "sources": [
+        "diablo2-accessibility",
+        "hades-welcome"
+      ],
+      "verification": [
+        "Evaluator independently ran24 real-page keyboard/allocation/focus checks at1280/390px: allpassed.",
+        "Independent full-page UI18checks also passed.",
+        "Reviewed navigation as inspection only, preserving explicit point allocation."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 14,
+      "idea": "Find skills and understand prerequisite routes",
+      "finding": "Locating advanced abilities in a176-node graph required manually scanning and panning without branch context.",
+      "change": "Literal local search provides live counts/results and next-match navigation. Activation focuses the real node and highlights its prerequisite ancestry/edges while preserving rank and point rules; clear/no-result states are explicit.",
+      "commit": "0bd5097",
+      "sources": [
+        "diablo2-accessibility",
+        "hades-welcome"
+      ],
+      "verification": [
+        "Evaluator independently ran38 real browser search/navigation/locked-node checks: allpassed.",
+        "Evaluator independently ran2 spatial/literal-search/ancestry unit tests: allpassed.",
+        "Reviewed literal matching and unchanged canLearn/allocation semantics."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 15,
+      "idea": "Let players target the visible model rather than a hidden small circle",
+      "finding": "Clicking the visible head of a large brute missed its collision-circle picker and issued a movement command.",
+      "change": "Hover and click now share cached rendered-body bounds and frontmost-foot-depth picking. A generated-frame target readout shows enemy identity, elite/boss rank, numeric health and statuses, clearing stale targets without altering combat radii.",
+      "commit": "c87f815",
+      "sources": [
+        "diablo4-vfx",
+        "grim-dawn-monsters"
+      ],
+      "verification": [
+        "Evaluator independently ran30 real targetbrowser checks at1280/390/320: allpassed.",
+        "Evaluator independently ran9 model/status/body-picking tests: allpassed.",
+        "Visible headclick, overlap order, groundwalk, all6 archetypes and boss/death readouts covered."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 16,
+      "idea": "Make skills readable while keeping HUD reflow from stretching the game",
+      "finding": "Skills used inconsistent emoji-only presentation, and internal HUD wrapping could change stage size without updating the canvas/view.",
+      "change": "All60 skills now map to generated named archetype icons with fallback, framed controls and truthful cooldown numbers/progress. A guarded stage ResizeObserver keeps backing dimensions and fixed projection synchronized after internal layout changes.",
+      "commit": "74b152f",
+      "sources": [
+        "diablo2-alpha",
+        "diablo2-accessibility"
+      ],
+      "verification": [
+        "Evaluator independently ran41 real projection/resize browser checks: allpassed.",
+        "Evaluator independently ran explicit all60-skill icon mapping test: passed.",
+        "Implementer passed57 premium browser checks,38 tree checks and240 skill variants."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 17,
+      "idea": "Show truthful health and keep the player readable in effect-heavy fights",
+      "finding": "Damage/defense feedback lacked a readable trail and the player could disappear beneath central effects and repeated status plates.",
+      "change": "Immediate HP and aria values are paired with a separate decorative trail, actual shield/Insight details, restrained hit/critical cues and generated resource framing. A static post-effect player locator and compact ordinary status glyphs preserve combat focus.",
+      "commit": "fb53e7f",
+      "sources": [
+        "diablo4-vfx",
+        "diablo2-alpha",
+        "hades-nighty-night"
+      ],
+      "verification": [
+        "Evaluator independently ran30 realhealth browser checks at1280/390/320: allpassed.",
+        "Evaluator independently ran2 health/trail/heal/reduced-motion state tests: allpassed.",
+        "Reviewed post-effect static locator and unchanged authoritative HP/defense rules.",
+        "Independent dense66-foe/5-companion/4-skill capture passed8checks; locator and danger warnings remained readable."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 18,
+      "idea": "Make touch skill aiming deliberate and safely cancellable",
+      "finding": "Phone users lacked intentional direction/ground previews, and native multipointer panning could cancel combat controls.",
+      "change": "Touch/pen gestures now support matching preview, drag/release casting and quicktap behavior with run/skill/pointer ownership. Returning, cancellation, Escape, blur or overlay prevents latecasts; nativecompatibility click cannot duplicate a release. Gameplay hints/selectors match the dark UI.",
+      "commit": "d8bf06d",
+      "sources": [
+        "diablo2-accessibility",
+        "grim-dawn-monsters"
+      ],
+      "verification": [
+        "Evaluator independently ran30 real/native gesturebrowser checks at390/320: allpassed.",
+        "Evaluator independently ran2 gesture ownership/cancellation tests: allpassed.",
+        "Native two-touch joystick/aim and interruption safety covered; existing88 gameplay browser checks passed."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 19,
+      "idea": "Recover complete model silhouettes and keep an active run visually stable",
+      "finding": "Fixed cell crops clipped real anatomy and imported neighboring fragments; late models/admin overrides/ground could change an active character style and visible size.",
+      "change": "One-time global silhouette extraction builds bounded fullbody textures with nominalsource scale and correctfeet/picking. Immutable per-run generated/custom/builtin/ground/VFX profiles prevent late swaps; next run adoptsreadyart. Stampede uses the premiumboar with preserved override/fallback.",
+      "commit": "00d97a9",
+      "sources": [
+        "diablo2-alpha",
+        "diablo4-vfx"
+      ],
+      "verification": [
+        "Evaluator independently passed94 actualmodel/source checks,20 strictlate-source scenarios,15 atlas checks and17 model/extractor units.",
+        "Independent productionQA17bfe38 passed22 actualart,41 projection,18 UI,8dense and15atlas checks; complete120state contact sheets reviewed.",
+        "Latecustom actor/ground, next-run adoption, all-model failure, cachedtextures and premiumStampede/renderpurity verified."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 20,
+      "idea": "Turn actors naturally while retaining one fixed camera and stable presentation",
+      "finding": "A southeast-only model looked like backpedaling when travelling north; a naive rear swap could mirror the actor opposite its direction or flicker during idle jitter.",
+      "change": "All actor categories use matched cached front/rear states selected in simulation with normalized direction, idle guard and hysteresis. Native rear/front mirror rules differ correctly, committed attacks keep facing, missing pinned rear uses the samefront presentation, and picking follows the chosen frame.",
+      "commit": "6df19cc",
+      "sources": [
+        "diablo2-alpha",
+        "diablo4-vfx",
+        "grim-dawn-monsters"
+      ],
+      "verification": [
+        "Evaluator independently passed161 actualfacing browser checks.",
+        "Evaluator independently passed18 model/AI tests including tinyvectors, hysteresis, committed facing and Stampede simulation.",
+        "Front/rear sheets remain in immutable per-run profiles; no draw mutation or camera basis change.",
+        "Final complete browser sweep passed163 facing checks including actual WASD-driven model source selection."
+      ],
+      "visual_acceptance": "verified-independent-front-rear-renderer-and-profile-tests",
+      "status": "verified"
+    }
+  ],
+  "current_round": null,
+  "asset_quality_followups": [
+    {
+      "rounds": [
+        4,
+        11,
+        20
+      ],
+      "finding": "Some globally separate sprites cross nominal atlas cell boundaries, creating clipped anatomy and foreign fragments under fixed grid cropping.",
+      "planned_round": 19,
+      "status": "resolved",
+      "evidence": "Independent QA found exact expected component counts; extraction benchmark12–22ms/atlas. Fullsprite bounds rarely overlap; one frontbrute pair overlaps2px and needs masking.",
+      "resolved_by": [
+        "00d97a9",
+        "17bfe38"
+      ]
+    }
+  ],
+  "completed_rounds": 20,
+  "final_acceptance": {
+    "status": "complete",
+    "note": "All twenty evaluator-to-implementer rounds implemented and independently reviewed. Atlas source-quality follow-ups resolved by production extraction and visual inspection.",
+    "validation": {
+      "unit_tests": 187,
+      "browser_suites": 16,
+      "browser_checks": 691,
+      "skill_ultimate_combinations": 240,
+      "platform": "Windows Edge via Playwright; CI uses Chromium",
+      "all_passed": true
+    },
+    "post_merge_validation": {
+      "integrated_upstream": "d323bba",
+      "merge_commit": "e3e33d0",
+      "unit_tests": 196,
+      "selected_game_browser_checks": 179,
+      "embedded_feed_games": 5,
+      "endless_feed_cycles_per_game": 5,
+      "all_passed": true,
+      "note": "Preserved the newer unlimited/prefetch/last-resort feed behavior. Selected start, gesture, projection and delayed-art suites passed after integration; shared feed fixture serves guarded repo-owned runtime dependencies."
+    }
+  }
+}

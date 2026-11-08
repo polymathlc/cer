@@ -2,6 +2,45 @@
 
 Guidance for Claude when working in this repo.
 
+## Science Legends: stable view, animated models and the skill sanctum (v1.455.0)
+
+The view uses `science-legends-view.js` for deterministic camera bounds and the
+inverse pointer mapping. Keep world scale fixed: hits never move the camera,
+Whirlwind rotates its effects while the actor stays upright, and the stage's
+ResizeObserver keeps the canvas aligned when the HUD wraps. CSS-scaled canvases,
+DPR changes, oversized viewports and internal layout changes have browser coverage.
+
+`science-legends-models.js` consumes the original front/rear hero, enemy and
+companion atlases in `assets/science-legends/v2/`. Forward art faces southeast;
+rear art faces northwest, so their horizontal mirror rules differ. Keep body
+scale and planted feet stable when turning. `science-legends-atlas.js` unpacks
+whole connected silhouettes once, preserving limbs/weapons that cross nominal
+grid boundaries and excluding neighboring fragments from cached frame textures.
+Source PNGs remain intact; runtime WebP copies preserve their alpha exactly.
+Each run captures its presentation sources so late downloads and overrides do
+not replace its models or floor during combat. New runs can adopt newly ready art.
+
+`science-legends-actions.js` supplies bounded, simulation-timed attack sequences;
+`science-legends-ai.js` owns the telegraphed Spitter and heavy melee phases.
+Rendering applies no damage. Ground warnings and the static player locator remain
+readable above spell effects. `science-legends-feedback.js` supplies truthful
+health/defense feedback; `science-legends-gestures.js` binds touch release to the
+run, learner owner, pointer and skill that began the gesture.
+
+`science-legends-tree.js` provides keyboard navigation, literal search and real
+prerequisite-route highlights for the illustrated tree. Generated skill icons,
+cooldowns and panel materials live in the scoped premium/sanctum styles. Keep
+school-question content independently readable. The portal requests the game at
+`science-legends.html?v=1.455.0`; app, worker and quest-frame release keys agree.
+
+The twenty evaluator-to-implementer passes and primary RPG design references are
+tracked in `docs/science-legends-20-rounds.json`. Exact image prompts and runtime
+encoding metadata are in `assets/science-legends/v2/manifest.json` and its linked
+direction variants. `.github/workflows/science-legends.yml` runs the unit and real
+browser suites, including camera, all skill variants, models, atlas isolation,
+tree/UI, touch, late-image stability and dense fights. Use `GAME_SCREENSHOTS` under
+`test-results/` for local browser artifacts.
+
 ## 🎮 Unlimited game questions, no "Connecting…" wait (v1.454.1)
 
 Owner report: Science Legends sat on "Connecting to your class question stream… Retrying automatically."

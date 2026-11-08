@@ -2,9 +2,9 @@
 (function (root) {
   'use strict';
   var atlas = new Image();
-  atlas.src = 'assets/science-legends/arcane-atlas.png';
+  atlas.src = 'assets/science-legends/arcane-atlas.webp';
   var ground = new Image(), groundPatterns = new WeakMap();
-  ground.src = 'assets/science-legends/courtyard-slate.png';
+  ground.src = 'assets/science-legends/courtyard-slate.webp';
   function ready() { return atlas.complete && atlas.naturalWidth > 0 && atlas.naturalHeight > 0; }
   function groundReady() { return ground.complete && ground.naturalWidth > 0; }
   function cell(ctx, index, size, xAnchor) {

@@ -1,0 +1,163 @@
+{
+  "release": "1.455.0",
+  "generator": "Built-in image_gen tool",
+  "generatedDate": "2026-11-09",
+  "artDirection": "Original fantasy artwork. Fixed steep three-quarter orthographic actor and effect projection; flat straight-on UI materials.",
+  "assets": [
+    {
+      "file": "heroes.png",
+      "transparent": true,
+      "columns": 5,
+      "rows": 4,
+      "columnOrder": [
+        "barbarian",
+        "sorcerer",
+        "beast master",
+        "paladin",
+        "amazon"
+      ],
+      "rowOrder": [
+        "idle",
+        "walk phase1",
+        "walk phase2",
+        "attack"
+      ],
+      "prompt": "Use case: stylized-concept. Asset type: production transparent 2D character animation sprite atlas for an original fantasy overhead action RPG. Create exactly FIVE COLUMNS and FOUR ROWS, 20 equal rectangular cells, invisible clean grid. Each column is the SAME original character in four different animation poses, preserving exact outfit, weapon, body proportions and scale. Columns left to right: rugged axe-wielding barbarian in fur and bronze armor; violet-robed sorcerer with glowing crystal staff; green leather beast warden carrying a short spear; gold-and-steel paladin with sword and shield; crimson-cloaked amazon huntress with bow. Rows top to bottom: idle ready stance; walking stride with left leg forward; walking stride with right leg forward; powerful class-appropriate attack or spell-cast pose. CRITICAL fixed steep three-quarter overhead ORTHOGRAPHIC game camera in EVERY CELL, looking down at heads/shoulders, all characters face southeast toward bottom-right. Camera must NEVER change angle between cells, no front portraits, no cinematic angle. Feet remain at consistent same baseline and character centered within each cell; full body and full weapons wholly inside its cell, generous transparent margin. Clean isolated transparent background. Style: premium painterly 3D-rendered fantasy game sprites, detailed believable armor, elegant materials, bold readable silhouettes, realistic but stylized proportions, no pixel art. Soft consistent lighting from upper left, dark teal shadows and warm metal highlights. Each figure takes 70 percent of cell height. No floor, no scenery, no cast-shadow blob, no visual-effects explosion, no UI, no lines, no labels, no letters, no logos, no watermark. A landscape atlas with aspect ratio 5:4 and no visible grid.",
+      "runtimeFile": "heroes.webp"
+    },
+    {
+      "file": "enemies.png",
+      "transparent": true,
+      "columns": 6,
+      "rows": 4,
+      "columnOrder": [
+        "slime",
+        "imp",
+        "mite",
+        "brute",
+        "spitter",
+        "charger"
+      ],
+      "rowOrder": [
+        "idle",
+        "walk phase1",
+        "walk phase2",
+        "attack anticipation"
+      ],
+      "prompt": "Use case: stylized-concept. Asset type: transparent enemy animation atlas for an original premium fantasy overhead action RPG. Exactly SIX COLUMNS by FOUR ROWS, 24 equal square cells in a landscape 3:2 sheet, no visible grid. Same creature design repeated consistently down each column. Columns left to right: emerald slime blob with a bright core and dark moss shell; small rust-red horned imp with charcoal claws; small violet armored scuttling insect mite; massive stone-and-bronze brute with a broad club and square shoulders; pale spitter creature with a green venom sac and long mouth; blue-grey armored horned charging beast with a low heavy silhouette. These are original enemies, readable fantasy creatures appropriate for a school game, no gore. Rows top to bottom: alert idle stance; first walking/squash stride phase; opposite walking/squash stride phase; a clearly distinct attack anticipation pose (imp reaching, mite rearing, brute raising club, spitter swollen venom sac, charger lowering horns, slime compressing to lunge). CRITICAL exactly the SAME steep three-quarter overhead orthographic camera in ALL24 cells, always looking down on head/shoulders, all face southeast bottom-right; no front portraits and no perspective changes. Full body and weapons inside each cell with transparent margins. Foot or slime contact baseline identical in each cell. Creature centered, roughly70percent cell height; relative shape/silhouette differences preserved. Premium painterly3D fantasy game sprite materials, crisp details, strong silhouettes at small scale, soft consistent lighting upper-left and darkteal ambient shadows. No pixel art, no labels, no lines, no text, no floor, no scenery, no castshadow blobs, no detached VFX, no logo, no watermark. True transparent background.",
+      "runtimeFile": "enemies.webp",
+      "activeRuntime": false,
+      "replacedBy": "enemies-clean.png"
+    },
+    {
+      "file": "attacks.png",
+      "transparent": true,
+      "columns": 4,
+      "rows": 4,
+      "columnOrder": [
+        "anticipation",
+        "release",
+        "impact",
+        "fade"
+      ],
+      "rowOrder": [
+        "melee",
+        "fire",
+        "frost",
+        "arcane"
+      ],
+      "prompt": "Use case: stylized-concept. Asset type: production game attack-animation VFX sprite sheet on TRUE transparent background, square4columns4rows,16 equal square cells with invisible grid and wide clear transparent gutters. Four DIFFERENT attack families across rows, each row shows exactly four successive animation frames LEFT TO RIGHT: anticipation spark, fully extended attack, breaking impact, dissipating trails. Row1: warm gold-and-steel MELEE CRESCENT sword sweep, elliptical arc on the ground plane, bright leading edge and sparks, progressively swinging clockwise. Row2: orange FIRE EXPLOSION opening from compact whitehot spark into layered round fire burst then scattering embers and fading wisps. Row3: cyan FROST NOVA opening from small icy sigil into expanding elliptical crystal shockwave then scattered shards and fading mist. Row4: violet ARCANE STORM opening from charged point into branching electrical vortex, energetic impact then fading electric arcs. Camera: SAME fixed steep three-quarter overhead orthographic projection for every cell, ground rings compressed into coherent ellipses. Style premium hand-painted luminous fantasy game VFX, detailed sharp textures and beautiful controlled gradients, strong silhouettes at small size. Fire is orange, frost is cyan, arcane is violet, melee is warm white/gold. Each frame is isolated and entirely within its own cell; effect cannot touch adjacent cell or edge. No characters, no monsters, no weapons except abstract melee light arc, no environment, no grey background, no glow outside cell, no grid lines, no borders, no labels, no letters, no logos, no watermark. Actual transparent alpha background and transparent gutters; no colored plate behind effects.",
+      "runtimeFile": "attacks.webp"
+    },
+    {
+      "file": "elements-clean.png",
+      "transparent": true,
+      "columns": 4,
+      "rows": 4,
+      "columnOrder": [
+        "anticipation",
+        "release",
+        "impact",
+        "fade"
+      ],
+      "rowOrder": [
+        "lightning",
+        "poison",
+        "holy",
+        "arrows"
+      ],
+      "prompt": "Use case: stylized-concept. Asset type: premium transparent game VFX animation atlas. Exactly4columns by4rows of equal square cells, invisible grid, true alpha background and generous transparent gutters. Each row is one original fantasy attack with4consecutive frames left to right: anticipation, energetic release, impact breakup, final fade. Row1 lightning: bright white-blue branching electric chain and small sparks extending horizontally toward right, then cracking impact and fading branches. Row2 poison: emerald venom plume and toxic magical ring expanding outward on the ground, then vapor and small fading motes. Row3 holy: warmgold radiant pillar and ground sigil becoming a bright elegant consecration burst, then breaking gold shards and dim motes. Row4 arrows: a small fan of three metallic arrow streaks flying toward right, then an impact spray of steel-white and amber sparks, then fading trails. All effects have SAME fixed steep three-quarter overhead orthographic view, ground rings are elliptical. No shift in camera or perspective between frames. Beautiful detailed handpainted fantasy game VFX, controlled glow, crisp readable at small size, consistent style. Every sprite wholly inside its own cell and separate from adjacent cells. No creatures, no hands, no characters, no environment, no opaque background, no checkered pattern, no border, no grid lines, no labels, no text, no logo, no watermark.",
+      "editPrompt": "Edit target: the supplied16cell game VFX atlas. Remove ONLY the pale white/grey translucent background haze and colored background plates. Make ALL empty canvas and ALL gutters fully alpha0 transparent. Preserve the exact4columns×4rows layout, exact position, scale, camera projection, identity and colors of every lightning/poison/holy/arrow effect. Preserve clean luminous effect cores and their localized glow, but remove broad haze covering the entire cells. No newly drawn objects, no labels, no border, no replacement background, no white matte, no checkerboard. This is a precise background extraction for game sprite compositing on dark stone, not a redesign. Every cell must have genuinely transparent corners and clear transparent margins. Keep original canvas aspect ratio and full resolution.",
+      "editPurpose": "Remove broad background haze while preserving every frame and its layout.",
+      "runtimeFile": "elements-clean.webp"
+    },
+    {
+      "file": "companions.png",
+      "transparent": true,
+      "columns": 4,
+      "rows": 4,
+      "columnOrder": [
+        "wolf",
+        "bear",
+        "boar",
+        "hydra"
+      ],
+      "rowOrder": [
+        "idle",
+        "walk phase1",
+        "walk phase2",
+        "attack"
+      ],
+      "prompt": "Use case: stylized-concept. Asset type: original premium fantasy game companion animation sprite sheet on TRUE transparent background. Exactly FOUR COLUMNS by FOUR ROWS,16 equal square cells in square atlas, no visible grid. Columns left to right: loyal silver-grey wolf with a small green leather harness; broad brown bear with simple bronze shoulder plates; russet armored boar with ivory tusks and green cloth trim; friendly dangerous three-headed emerald hydra with bronze scales and short sturdy body. Same creature and same outfit repeated down each column. Rows top to bottom: idle alert; walking stride phase1; opposite walking stride phase2; attacking pose (wolf lunge,bear raised paws,boar lowered tusks,hydra heads exhaling tiny orange sparks). CRITICAL all16 figures use exact SAME fixed steep three-quarter overhead ORTHOGRAPHIC camera facing southeast/bottom-right, looking down at head and shoulders. Camera angle and model proportions never change across animation frames. Full body inside each cell with generous transparent margins. Contact/feet baseline identical per cell. High-end handpainted3D fantasy game sprite style matching polished character models, detailed fur and metal but clear silhouettes when small, soft upper-left lighting and teal ambient shadows, grounded anatomy, no pixel art. Different creature silhouettes obvious. No human rider, no scenery, no opaque plate or background, no floor, no shadows, no grid lines, no text, no symbols, no labels, no logos, no watermark. True alpha transparency in every gutter.",
+      "runtimeFile": "companions.webp"
+    },
+    {
+      "file": "skill-icons.png",
+      "transparent": true,
+      "columns": 6,
+      "rows": 2,
+      "columnOrder": [
+        "sword",
+        "fire",
+        "frost",
+        "lightning",
+        "poison",
+        "holy",
+        "shield",
+        "bow",
+        "wolf",
+        "meteor",
+        "arcane",
+        "dash"
+      ],
+      "prompt": "Use case: stylized-concept. Asset type: premium fantasy game skill-icon atlas on transparent background. Exactly SIX COLUMNS by TWO ROWS,12equal square cells. Each cell contains one consistent circular darkslate icon medallion with a thin agedbronze rim, centered with transparent margins, perfectly straight-on camera. Icon subjects row1 lefttoright: sweeping silver sword; orange fireball; cyan icecrystal; white-blue lightning bolt; emerald poison vial; golden holy sunburst. Row2 lefttoright: blue steel shield; crimson bow and arrow; green wolf silhouette; orange falling meteor; violet arcane rune made of abstract shapes with no letters; teal winged boot for dash. Premium handpainted fantasy RPG inventory illustration, distinct readable silhouettes, beautifully crafted materials, restrained highlights, no pixel art. Same scale and circular border in all12cells, each wholly inside cell and none overlap. No interface screenshot, no labels, no words, no numbers, no letters, no background panels, no logos, no watermark. True transparent alpha background and transparent grid gutters.",
+      "runtimeFile": "skill-icons.webp"
+    },
+    {
+      "file": "skill-tree.png",
+      "transparent": false,
+      "prompt": "Use case: stylized-concept. Asset type: premium fantasy RPG skill-tree background painting, portrait3:4, no UI or text. Original atmospheric engraved dark slate tablet with a faint branching celestial tree etched in aged bronze; graceful rootlike filigree connects subtle circular geometric motifs across a tall stone surface. The design is quiet and lowcontrast, intended behind REAL interactive skill nodes and tooltips. Broad mostlyempty darknavy centralfield with subtle stonegrain and tealshadows. Ornamental agedgold corners, soft amberglow around outeredges, tiny dimdust specks. Surface seen perfectly straight-on, flat orthographic UI artwork, no tilted perspective, no depicted room, no frame shadow, no characters. Elegant highquality handpainted material detail, rich bronze and blueblack palette. Important: no lettering, no words, no numbers, no actual game icons, no buttons, no interface screenshots, no central logo, no bright focalpoint, no watermark. All details remain subdued enough for white text and colored nodes to stand out.",
+      "runtimeFile": "skill-tree.webp"
+    },
+    {
+      "file": "interface.png",
+      "transparent": false,
+      "prompt": "Use case: stylized-concept. Asset type: reusable premium fantasy RPG userinterface panel material, landscape2:1 rectangle, opaque. One flat crafted panel viewed perfectly straight-on with no perspective tilt. Dark navyblack hammered steel central inset with subtle leathergrain, quiet and smooth, intended as background behind real HTML controls. Thin beautifully carved agedbronze double bevel around allfouredges, understated corner engravings and subtle teal inlay, warmgold topedge highlights. Broad darkempty centralarea covering85percent, no dividing lines inside. Refined tactile artdirection and crisp material detail, restrained fantasy luxury. Corners not excessively ornate. No buttons, no icons, no labels, no words, no numerals, no circular medallion, no symbols in center, no screenshots, no logos, no watermark. No outer scenery or drop shadow, panel fills canvas edgetoedge.",
+      "runtimeFile": "interface.webp"
+    }
+  ],
+  "runtimeEncoding": {
+    "format": "WebP",
+    "quality": 90,
+    "alphaQuality": 100,
+    "dimensions": "unchanged",
+    "alphaVerification": "exact match to source PNG for all transparent assets",
+    "sourceBytes": 18445728,
+    "baseRuntimeBytes": 4092986,
+    "selectedSourceBytes": 24869575,
+    "selectedRuntimeBytes": 5591450,
+    "selectedTextureCount": 11
+  },
+  "variants": "direction-variants.json",
+  "sampling": "Nominal grid identifies each pose; runtime unpacks complete alpha-connected silhouettes to preserve full anatomy and reject neighboring fragments. Source artwork stays unchanged."
+}
