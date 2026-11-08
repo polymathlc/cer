@@ -259,9 +259,12 @@ test('a P6 admin game preview follows its selected school level and shared fresh
   assert.deepEqual(api.gameRows().map(row=>row.id),['p6']);
 });
 
-test('an admin game preview needs an actual selected school level instead of silently assuming S1', async () => {
+test('an admin game preview without a school level is still fed (top live rung, never Sec 1)', async () => {
   const question=q('p4');const {api}=harness([question]);api.user({role:'admin',level:''});api.family({students:[],activeStudent:0});
-  assert.equal(api.gameLevel(),'');assert.deepEqual(api.gameRows(),[]);assert.match(api.gameMessage(),/Choose your current school level/);
+  // v1.454.1: an empty level used to leave the game on "Connecting to your
+  // class question stream…" forever. Games now serve at the top live rung
+  // (P6 in production while Sec 1 is retired; this harness keeps S1 live).
+  assert.ok(api.gameLevel(),'a game level is always set');assert.equal(api.gameRows().length,1);
   assert.equal(api.plan().questions.length,1);
   api.family({students:[{name:'Selected pupil',level:'P4'}],activeStudent:0});
   assert.equal(api.gameLevel(),'P4');assert.equal(api.gameRows().length,1);

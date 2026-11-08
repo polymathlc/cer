@@ -531,7 +531,7 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
 body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:none!important;transition:none!important}
 @media(max-width:700px){.hint-bar{display:none}.battle-status{top:52px;max-width:calc(100% - 145px);font-size:.67rem;padding:6px 8px}.battle-map{width:116px;height:140px}.battle-map canvas{width:104px;height:104px}.qtimer{font-size:.7rem;white-space:nowrap}.pbars,body.touch .pbars{bottom:166px;width:165px}.skillbar{bottom:18px;left:calc(50% + 42px);gap:6px}.skill-slot{width:43px;height:46px;font-size:21px}.evade-btn{right:15px;bottom:85px;min-width:86px;min-height:44px}.hint-bar{bottom:127px}.sksel-btn,body.touch .sksel-btn{bottom:140px;right:15px;left:auto;transform:none}.joy{left:12px;bottom:18px;width:96px;height:96px}.battle-map span{font-size:9px}.descend-btn{top:145px;font-size:.75rem}}
 </style>
-<link rel="stylesheet" href="science-legends-premium.css?v=1.454.0">
+<link rel="stylesheet" href="science-legends-premium.css?v=1.454.1">
 <link rel="stylesheet" href="science-expedition-accessibility.css?v=1">
 <script defer src="science-expedition-accessibility.js?v=1"></script>
 </head>
@@ -718,7 +718,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 </div>
 
 <script src="science-feed-bridge.js"></script>
-<script src="science-legends-art.js?v=1.454.0"></script>
+<script src="science-legends-art.js?v=1.454.1"></script>
 <script src="science-legends-combat.js?v=1"></script>
 <script>
 /* ============================================================================
@@ -4339,8 +4339,12 @@ function syncCombatLearner(){
 // The portal owns level, mastery, quality and shared repetition decisions.
 var acceptedFeedEvent=null;
 var scienceFeed = ScienceFeedBridge.create({
+  // Look-ahead: the next question is fetched while the current one is on
+  // screen, so a run never pauses to wait for the portal.
+  prefetch: true,
   onPool: function(rows, event){ acceptedFeedEvent=event||null; applyBankQuestions(rows); syncCombatLearner(); },
   onInvalidate: function(){
+    applyBankQuestions.connected=false;
     syncCombatLearner();
     if(typeof qState !== 'undefined' && qState){ qState.active=false; qState.current=null; qState.answered=true; }
     var overlay=document.getElementById('questionOverlay'); if(overlay) overlay.classList.remove('show');
@@ -4351,7 +4355,7 @@ async function openQuestion(){
   if(scienceFeedOpening || qState.active || !G || G.state!=='play') return;
   scienceFeedOpening=true;
   var waitingGame=G; G.state='feed-loading';
-  try { await scienceFeed.refresh(); } finally { scienceFeedOpening=false; }
+  try { await scienceFeed.ready(); } finally { scienceFeedOpening=false; }
   if(G!==waitingGame)return;
   if(G.state==='feed-loading')G.state='play';
   if (qState.active || !G || G.state !== 'play') return;
@@ -4477,7 +4481,11 @@ function applyBankQuestions(list){
   var cleaned=Array.isArray(list)?list:[];
   QUESTION_BANK.length=0; Array.prototype.push.apply(QUESTION_BANK,cleaned);
   usingBankQuestions=true;
-  $('menuFoot').textContent=cleaned.length ? 'Class question stream connected · Questions refresh throughout your run.' : (embedded() ? 'Connecting to your class question stream… Retrying automatically.' : 'Open Science Legends from the Science Learning Portal to receive your class questions.');
+  // Once this learner's stream has delivered, a momentary empty slot (the
+  // look-ahead being refilled, a question just taken) is not "connecting".
+  if(cleaned.length)applyBankQuestions.connected=true;
+  if(!cleaned.length && applyBankQuestions.connected && embedded())return;
+  $('menuFoot').textContent=(cleaned.length || applyBankQuestions.connected) ? 'Class question stream connected · Unlimited questions throughout your run.' : (embedded() ? 'Loading your class questions…' : 'Open Science Legends from the Science Learning Portal to receive your class questions.');
 }
 var _bankReqTries = 0;
 function requestBankQuestions(){
