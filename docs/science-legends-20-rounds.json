@@ -1,0 +1,134 @@
+{
+  "project": "Science Legends — Emberwild Ascendant",
+  "method": "Twenty sequential evaluator-to-implementer rounds. A round is verified only after its change and acceptance evidence are reviewed.",
+  "sources": [
+    {
+      "id": "diablo4-vfx",
+      "url": "https://news.blizzard.com/en-us/article/23746639/diablo-iv-quarterly-updatedecember-2021",
+      "lesson": "Keep dangerous enemy actions readable; match effect timing and impact direction to the underlying attack. Reserve the largest effects for stronger abilities."
+    },
+    {
+      "id": "diablo2-alpha",
+      "url": "https://news.blizzard.com/en-us/article/23695734/technical-alpha-learnings",
+      "lesson": "Preserve coherent hero and monster identities while improving spell silhouettes, status colors and icon contrast."
+    },
+    {
+      "id": "diablo2-accessibility",
+      "url": "https://news.blizzard.com/en-gb/article/23700733/how-were-making-diablo-ii-resurrectedtm-more-accessible-to-everyone",
+      "lesson": "A richer presentation should remain accessible through clear controls and modern usability improvements."
+    },
+    {
+      "id": "grim-dawn-monsters",
+      "url": "https://www.grimdawn.com/guide/gameplay/monsters/",
+      "lesson": "Enemy archetypes and elite identities can communicate different combat problems through distinct silhouettes, names and behavior."
+    },
+    {
+      "id": "grim-dawn-combat",
+      "url": "https://www.grimdawn.com/guide/gameplay/combat/",
+      "lesson": "Freeze, stun, slow and damage-over-time effects have different mechanical meanings and need distinguishable presentation."
+    },
+    {
+      "id": "hades-nighty-night",
+      "url": "https://www.supergiantgames.com/blog/hades-the-nighty-night-update-patch-notes/",
+      "lesson": "Combat clarity benefits from many small, deliberate improvements in animation, feedback and presentation."
+    },
+    {
+      "id": "hades-welcome",
+      "url": "https://www.supergiantgames.com/blog/hades-welcome-to-hell-update-patch-notes/",
+      "lesson": "Keep codex and upgrade-screen feedback clear, and avoid interrupting combat with secondary information."
+    }
+  ],
+  "art_policy": "Original generated artwork and original implementation; no extracted commercial-game assets.",
+  "verified_rounds": [
+    {
+      "round": 1,
+      "idea": "Lock the view and align pointing with rendering",
+      "finding": "The renderer added random camera offsets after saving an unshaken input camera; oversized viewports also had invalid clamp bounds.",
+      "change": "A pure fixed orthographic view and shared inverse coordinate functions now drive rendering and mouse aim. Oversized viewports center the arena.",
+      "commit": "1bed334",
+      "sources": [
+        "diablo4-vfx"
+      ],
+      "verification": [
+        "Evaluator reviewed camera/input integration.",
+        "Evaluator independently ran all3 view mapping/bounds/determinism tests: passed.",
+        "Independent QA passed32 real-page camera/input checks with DPR1/2, CSS scaling, resize and oversized viewports."
+      ],
+      "status": "verified",
+      "follow_up_commits": [
+        "a5171d3",
+        "f60c02f"
+      ]
+    },
+    {
+      "round": 2,
+      "idea": "Keep hero models upright and grounded through every skill",
+      "finding": "Whirlwind rotated the entire hero image and duplicated spin/nonspin rendering, visually changing its elevation and orientation.",
+      "change": "One actor contract keeps fixed52px hero size and a foot anchor; only horizontal facing changes, while weapon/ring effects still spin.",
+      "commit": "9285a66",
+      "sources": [
+        "diablo2-alpha",
+        "diablo4-vfx"
+      ],
+      "verification": [
+        "Evaluator independently ran all5classes×4facings×spin/idle anchor/size regression: passed.",
+        "Reviewed whole-hero rotation removal and preserved override path."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 3,
+      "idea": "Bring every hero class to life with coherent generated model poses",
+      "finding": "The game used two-frame pixel sprites and one static override, without a coherent high-fidelity action animation set.",
+      "change": "All5 heroes now use premeasured generated idle, alternating stride and attack cells at a constant72px size; previews refresh after atlas load and custom overrides keep priority.",
+      "commit": "0c06ae9",
+      "sources": [
+        "diablo2-alpha",
+        "hades-nighty-night"
+      ],
+      "verification": [
+        "Evaluator reviewed one-time alpha baseline measurement and fixed source-cell sizing.",
+        "Evaluator independently ran3 model/animation/foot-anchor tests: passed.",
+        "Implementer passed35 real premium-page browser checks and inspected a generated Sorcerer attack pose.",
+        "Evaluator independently passed92 real-page generated-model matrix/crop/pose checks and inspected renderer screenshot."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 4,
+      "idea": "Give every enemy archetype a coherent animated model",
+      "finding": "Enemy identities were simple two-frame pixel forms without action or crowd-control animation states.",
+      "change": "All6 archetypes now use generated fixed-view atlas models with measured ground anchors, real movement and attack poses, frozen/stunned holds, charge bracing and safe override fallback.",
+      "commit": "c24b11c",
+      "sources": [
+        "diablo2-alpha",
+        "grim-dawn-monsters",
+        "grim-dawn-combat"
+      ],
+      "verification": [
+        "Evaluator reviewed enemy action integration and atlas cache.",
+        "Evaluator independently ran all4 model tests, including unique columns and control-effect frames: passed.",
+        "Implementer ran240 skill/ultimate stress combinations successfully.",
+        "Evaluator inspected all6 generated enemy silhouettes in a real renderer screenshot."
+      ],
+      "status": "verified"
+    },
+    {
+      "round": 5,
+      "idea": "Make occlusion follow ground position",
+      "finding": "The old renderer drew every foe and companion behind the hero regardless of ground position, contradicting the apparent fixed view.",
+      "change": "Hero, enemies and companions share a stable foot-y queue; ground contacts/shadows render beneath bodies and actor health labels render above them.",
+      "commit": "d718af2",
+      "sources": [
+        "diablo4-vfx",
+        "diablo2-alpha"
+      ],
+      "verification": [
+        "Evaluator independently ran5 model/depth tests and92 real-page model matrix checks: passed.",
+        "Implementer passed38 premium browser checks including actual back-to-front ordering at1280/390/320px."
+      ],
+      "status": "verified"
+    }
+  ],
+  "current_round": 6
+}
