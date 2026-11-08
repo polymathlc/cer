@@ -1,5 +1,5 @@
 diff --git a/README.md b/README.md
-index c7ce1b9..56ffd4c 100644
+index c7ce1b9..844259b 100644
 --- a/README.md
 +++ b/README.md
 @@ -12,7 +12,7 @@ Play at [polymathlc.github.io/hades](https://polymathlc.github.io/hades/).
@@ -11,7 +11,7 @@ index c7ce1b9..56ffd4c 100644
  | Dash | Space or Shift | Dash |
  | Hex | F | Hex |
  | Boons | Tab or B | Boons button |
-@@ -69,3 +69,15 @@ Tests include real parent/iframe checkpoints, five-question grading, actual heal
+@@ -69,3 +69,19 @@ Tests include real parent/iframe checkpoints, five-question grading, actual heal
  ## Release 2.1.2: Ground summoning circle
  
  Cast places a detailed SVG inscription on the floor: concentric engraved rings, varied runes, cardinal anchors and a geometric central sigil. The boundary matches the spell’s reach and stays fixed while the inner rune bands counter-rotate. Scenery and combat actors render above the cast and its circular detonation. Reduced motion freezes the rune animation.
@@ -21,6 +21,10 @@ index c7ce1b9..56ffd4c 100644
 +Etched stonework, animated pillar lights, orbiting reward-gate rings, spectral dash silhouettes and metallic menu treatments add depth without changing combat hitboxes. Cosmetic work is bounded; environmental animation uses simulation time and freezes with reduced motion.
 +
 +Hades is available to signed-in students in Science and Math with the BETA label retained. Student rounds use the active learner’s school level and separate account history; administrators retain level-selectable previews. Science records bank attempts through its existing game history. Math top-level MCQs are marked by the portal’s existing authenticated `markAttempt` service: private keys are never loaded by the student client or sent to the iframe. Existing block MCQs remain parent-graded. Failed, stale or malformed remote results cannot advance a sanctuary round.
++
++## Release 2.2.2: Boons codex no longer freezes the run
++
++Pressing Tab, B or the Boons button with any boon equipped used to pause the run and then fail while drawing the card portraits, so the codex never appeared and the game stayed frozen. The codex now draws each god's portrait from the god sheet (Duo boons get a gold sigil), only pauses once it is actually showing, and a portrait problem can no longer block it. A gameplay regression opens and closes the codex with god and Duo boons equipped.
 +
 +## Release 2.2.1: Precise casting and combat feedback
 +
@@ -113,33 +117,33 @@ index 181b393..0f9f27a 100644
            if (answer.correct) score++;
            buttons[answer.answer].dataset.correct = 'true'; if (!answer.correct) button.dataset.wrong = 'true';
 diff --git a/package-lock.json b/package-lock.json
-index 08b0b24..56d9f3d 100644
+index 08b0b24..c7373c3 100644
 --- a/package-lock.json
 +++ b/package-lock.json
 @@ -1,12 +1,12 @@
  {
    "name": "chronos-fall",
 -  "version": "2.1.2",
-+  "version": "2.2.1",
++  "version": "2.2.2",
    "lockfileVersion": 3,
    "requires": true,
    "packages": {
      "": {
        "name": "chronos-fall",
 -      "version": "2.1.2",
-+      "version": "2.2.1",
++      "version": "2.2.2",
        "devDependencies": {
          "playwright": "1.62.1"
        }
 diff --git a/package.json b/package.json
-index bd98723..bd463f8 100644
+index bd98723..db8d951 100644
 --- a/package.json
 +++ b/package.json
 @@ -1,13 +1,13 @@
  {
    "name": "chronos-fall",
 -  "version": "2.1.2",
-+  "version": "2.2.1",
++  "version": "2.2.2",
    "private": true,
    "type": "module",
    "scripts": {
@@ -227,8 +231,67 @@ index 7b20724..6c2148c 100644
        }
  
        takeDamage(amount, source = 'normal', silent = false) {
+diff --git a/src/flow.js b/src/flow.js
+index a4d3f35..402d514 100644
+--- a/src/flow.js
++++ b/src/flow.js
+@@ -635,8 +635,10 @@
+     let codexPreviousPause = false;
+     function openSkillCodex() {
+       if (document.getElementById('codex-modal').style.display === 'flex') return;
++      // Remember the underlying pause, but only pause once the codex is
++      // actually visible: an error while building cards must never leave the
++      // run frozen behind a modal that did not open.
+       codexPreviousPause = gameState.isPaused;
+-      gameState.isPaused = true;
+       const modal = document.getElementById('codex-modal');
+       const container = document.getElementById('codex-cards-container');
+       container.innerHTML = '';
+@@ -708,8 +710,9 @@
+           `;
+ 
+           const canvasEl = card.querySelector('canvas');
+-          if (canvasEl && godDef && godDef.portraitIndex !== undefined) {
+-            renderGodPortraitToCanvas(canvasEl, godDef.portraitIndex, godDef.color);
++          if (canvasEl) {
++            try { renderGodPortraitToCanvas(canvasEl, isDuo ? null : godDef.portraitIndex, godDef ? godDef.color : '#d4af37'); }
++            catch (error) { console.warn('Codex portrait failed', error); }
+           }
+ 
+           container.appendChild(card);
+@@ -717,6 +720,30 @@
+       }
+ 
+       modal.style.display = 'flex';
++      gameState.isPaused = true;
++    }
++
++    // Small round god portrait for each codex card, cut from the same
++    // 5×2 god sheet the boon reward modal uses. Duo boons and missing
++    // artwork fall back to a coloured sigil so the codex always opens.
++    function renderGodPortraitToCanvas(canvasEl, portraitIndex, color = '#d4af37') {
++      const pctx = canvasEl.getContext('2d');
++      if (!pctx) return;
++      const w = canvasEl.width, h = canvasEl.height, r = Math.min(w, h) / 2;
++      pctx.clearRect(0, 0, w, h);
++      pctx.save();
++      pctx.beginPath(); pctx.arc(w / 2, h / 2, r, 0, Math.PI * 2); pctx.clip();
++      const godsImg = loadedImages['all_10_gods'];
++      if (Number.isInteger(portraitIndex) && godsImg && godsImg.complete && godsImg.naturalWidth > 0) {
++        pctx.drawImage(godsImg, (portraitIndex % 5) * 256, Math.floor(portraitIndex / 5) * 256, 256, 256, 0, 0, w, h);
++      } else {
++        const glow = pctx.createRadialGradient(w / 2, h / 2, 2, w / 2, h / 2, r);
++        glow.addColorStop(0, '#fff7e1'); glow.addColorStop(0.35, color); glow.addColorStop(1, '#0c1924');
++        pctx.fillStyle = glow; pctx.fillRect(0, 0, w, h);
++      }
++      pctx.restore();
++      pctx.strokeStyle = color; pctx.lineWidth = 2;
++      pctx.beginPath(); pctx.arc(w / 2, h / 2, r - 1, 0, Math.PI * 2); pctx.stroke();
+     }
+ 
+     function closeSkillCodex() {
 diff --git a/src/index.template.html b/src/index.template.html
-index 047ec26..1a5f610 100644
+index 047ec26..4d1c1e1 100644
 --- a/src/index.template.html
 +++ b/src/index.template.html
 @@ -3,7 +3,7 @@
@@ -236,7 +299,7 @@ index 047ec26..1a5f610 100644
    <meta charset="UTF-8" />
    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 -  <meta name="application-version" content="2.1.2" />
-+  <meta name="application-version" content="2.2.1" />
++  <meta name="application-version" content="2.2.2" />
    <meta name="theme-color" content="#08131b" />
    <title>HADES II: Chronos Fall — Endless Descent</title>
    <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -531,7 +594,7 @@ index 63601b7..e28838b 100644
  @media (pointer: coarse) {
    .runtime-help { display: none; } .runtime-touch-hint { display: block; }
 diff --git a/src/runtime.js b/src/runtime.js
-index 1687f96..2ba942b 100644
+index 1687f96..088982e 100644
 --- a/src/runtime.js
 +++ b/src/runtime.js
 @@ -19,7 +19,7 @@
@@ -603,7 +666,7 @@ index 1687f96..2ba942b 100644
          <section id="runtime-overlay" role="dialog" aria-modal="true" aria-labelledby="runtime-title">
            <div class="runtime-panel">
 -            <div class="runtime-eyebrow">CHRONOS FALL · UNDERWORLD ODYSSEY · v2.1.2</div><h1 id="runtime-title">Defy the Titan of Time</h1>
-+            <div class="runtime-eyebrow">CHRONOS FALL · UNDERWORLD ODYSSEY · v2.2.1 · BETA</div><h1 id="runtime-title">Defy the Titan of Time</h1>
++            <div class="runtime-eyebrow">CHRONOS FALL · UNDERWORLD ODYSSEY · v2.2.2 · BETA</div><h1 id="runtime-title">Defy the Titan of Time</h1>
              <p id="runtime-description">Descend through shifting chambers, forge a divine build and challenge the endless depths beyond Chronos.</p>
 -            <div class="runtime-help"><span><b>MOVE</b> WASD / Arrows</span><span><b>STRIKE</b> Hold click / J</span><span><b>SPECIAL</b> Right click / K</span><span><b>DASH</b> Space / Shift</span><span><b>CAST</b> Q / E</span><span><b>HEX</b> F when charged</span></div>
 +            <div class="runtime-help"><span><b>MOVE</b> WASD / Arrows</span><span><b>STRIKE</b> Hold click / J</span><span><b>SPECIAL</b> Right click / K</span><span><b>DASH</b> Space / Shift</span><span><b>CAST</b> Aim cursor · Q / E<br>Press again to burst</span><span><b>HEX</b> F when charged</span></div>
@@ -941,10 +1004,40 @@ index f218a5b..b46678a 100644
      ctx: {clearRect() {}, save() {}, translate() {}, restore() {}},
      canvas: {width: 1440, height: 900},
 diff --git a/tools/test-gameplay.cjs b/tools/test-gameplay.cjs
-index 5901f72..68a2c80 100644
+index 5901f72..89ab3c6 100644
 --- a/tools/test-gameplay.cjs
 +++ b/tools/test-gameplay.cjs
-@@ -217,3 +217,66 @@ console.log('Gameplay regressions passed: progression, rewards, saving, pause, A
+@@ -18,7 +18,7 @@ function fixture(saved = null, blockedStorage = false, realEffects = false) {
+     document: { getElementById(id) { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); }, createElement: element },
+     localStorage: { getItem(key) { if (blockedStorage) throw Error('blocked'); return storage.get(key) || null; }, setItem(key, value) { if (blockedStorage) throw Error('blocked'); storage.set(key, value); } },
+     window: { addEventListener() {} }, loadedImages: {}, canvas: { width: 1280, height: 800 }, mouse: { x: 640, y: 400 }, keys: {},
+-    sound: new Proxy({}, { get: () => () => {} }), renderGodPortraitToCanvas() {},
++    sound: new Proxy({}, { get: () => () => {} }),
+     scheduleGameAction(delay, callback) { context.pending.push({ delay, callback }); }, pending: [],
+   });
+   const effectClasses = ['Particle', 'FloatingText', 'Shockwave', 'AnimatedFireExplosion', 'AnimatedLightningStrike', 'AnimatedWaterWave', 'AnimatedAttackSweep', 'HitSpark', 'LunarRayEffect', 'FireTrail', 'IceShardTrap', 'CharmBurst', 'Projectile'];
+@@ -86,6 +86,20 @@ function fixture(saved = null, blockedStorage = false, realEffects = false) {
+   f.elements.get('leave-shop-btn').onclick();
+   assert.equal(f.run('gameState.isPaused'), false);
+ }
++{
++  // Regression: Tab with equipped boons used to throw (missing portrait
++  // helper) after pausing, leaving the run frozen with no codex visible.
++  const f = fixture();
++  assert.equal(f.run("typeof renderGodPortraitToCanvas"), 'function', 'codex portrait helper exists');
++  f.run("gameState.equippedBoons=[{id:'zeus_strike', level:2}, {id:'poseidon_dash'}, {id:'duo_sea_storm'}]; gameState.isPaused=false;");
++  f.run('openSkillCodex();');
++  assert.equal(f.elements.get('codex-modal').style.display, 'flex', 'codex opens with equipped boons');
++  assert.equal(f.elements.get('codex-cards-container').children.length, 3, 'one card per equipped boon');
++  assert.equal(f.run('gameState.isPaused'), true, 'codex pauses while open');
++  f.run('toggleSkillCodex();');
++  assert.equal(f.elements.get('codex-modal').style.display, 'none', 'Tab again closes the codex');
++  assert.equal(f.run('gameState.isPaused'), false, 'closing the codex resumes the run');
++}
+ {
+   const f = fixture();
+   f.run("gameState.ashes=123; gameState.upgrades.damage=7; gameState.bestChamber=130; savePermanentProgress();");
+@@ -217,3 +231,66 @@ console.log('Gameplay regressions passed: progression, rewards, saving, pause, A
    assert.equal(f.run('gameState.roomsCleared'), 1, 'chain reactions award the room clear once');
  }
  console.log('Independent boon review passed: real upgrade effects, Hex replacement, combo animation, lethal retaliation, bounded fields, synergies, and every boon combat smoke.');

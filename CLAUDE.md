@@ -3,6 +3,16 @@
 Guidance for Claude when working in this repo.
 
 
+## 🗡️ Hades 2.2.2 — the Boons codex no longer freezes the run (v1.452.2)
+
+Pressing Tab / B / BOONS with any boon equipped froze Hades: `openSkillCodex` set `gameState.isPaused` and then
+threw `renderGodPortraitToCanvas is not defined`, so the modal never showed and Tab kept re-throwing. The upstream
+gameplay test stubbed that helper, which hid it. Fixed in the portal-owned source patch (`src/flow.js`): the helper now
+exists (god-sheet portrait, gold sigil for Duo boons), the codex pauses only after it is visible, and a portrait error is
+caught. Regression in the patched `tools/test-gameplay.cjs`. To change the game, follow `hades-release.md`: rebuild from
+`upstreamCommit` + `hades-game.source.patch`, then update `hades-game.html`, the patch and both hashes in the manifest,
+and the `?v=` keys in `app.js` (`tools/hades-artifact-check.mjs` checks all of it).
+
 ## 🖼 ChatGPT Images 2.6 — every picture moves up a generation (v1.452.0)
 
 OpenAI's Images 2.6 (4–5 Nov 2026) shipped **`gpt-image-2.6-flare`** (fast iteration) and **`gpt-image-2.6-sunburst`**
