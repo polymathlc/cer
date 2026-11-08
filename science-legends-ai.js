@@ -3,7 +3,7 @@
   'use strict';
   function beginSpit(enemy,dx,dy){
     if(enemy.dead||enemy.hp<=0||enemy.spitWindup>0)return false;
-    var distance=Math.hypot(dx,dy)||1;enemy.spitVX=dx/distance*260;enemy.spitVY=dy/distance*260;
+    var distance=Math.hypot(dx,dy)||1;enemy.spitVX=dx/distance*260;enemy.spitVY=dy/distance*260;enemy.fx=dx/distance;enemy.fy=dy/distance;
     enemy.spitWindup=.4;enemy.spitPending=true;return true;
   }
   function advanceSpit(enemy,dt){
@@ -17,6 +17,7 @@
   function beginHeavy(enemy,target){
     if(enemy.dead||enemy.hp<=0||enemy.heavyWindup>0||enemy.heavyRecovery>0||!target||target.hp<=0)return false;
     var dx=target.x-enemy.x,dy=target.y-enemy.y,distance=Math.hypot(dx,dy)||1;
+    enemy.fx=dx/distance;enemy.fy=dy/distance;
     enemy.heavyTarget=target;enemy.heavyX=enemy.x+dx/distance*(enemy.r+target.r);enemy.heavyY=enemy.y+dy/distance*(enemy.r+target.r);
     enemy.heavyRadius=Math.max(28,enemy.r+10);enemy.heavyWindup=.45;enemy.heavyPending=true;return true;
   }

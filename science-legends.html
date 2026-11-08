@@ -2203,6 +2203,7 @@ function moveEvade(p,dt){
 function lockCharge(e,dx,dy){
   var mag=Math.hypot(dx,dy)||1;
   e.chargeSt=1;e.chargeT=.7;e.cvx=dx/mag*e.speed*4.6;e.cvy=dy/mag*e.speed*4.6;
+  e.fx=dx/mag;e.fy=dy/mag;
 }
 function drawCombatCues(){
   ctx.save();
@@ -2914,6 +2915,7 @@ function castSkill(idx){
     fd = al > 4 ? { x: adx / al, y: ady / al } : faceDir();
     p.fx = fd.x; p.fy = fd.y;
   } else fd = faceDir();
+  LegendsModels.advanceFacing(p);
   var ang = Math.atan2(fd.y, fd.x);
   if(sid==='orb'||sid==='teleport')actionFx(3,p.x,p.y,38,ang,.32);
   if(LegendsActions.familyForSkill(sid)==='arrow')elementFx('arrow',p.x+fd.x*30,p.y+fd.y*30,26,ang,.18);
@@ -3121,6 +3123,7 @@ function fireBasic(dx, dy){
   p.atkCd = c.atk.rate / buffAspd();
   p.modelAttackUntil=G.time+.24;
   p.fx = dx; p.fy = dy;
+  LegendsModels.advanceFacing(p);
   var didHit = false;
   if (c.atk.kind === 'melee'){
     var ang = Math.atan2(p.fy, p.fx);
@@ -3639,6 +3642,7 @@ function update(dt){
   updateEnemies(dt);
   updateProjectiles(dt);
   doSpawning(dt);
+  updateModelFacings();
   // fx lifetimes + strike resolution
   for (var fi = G.fx.length - 1; fi >= 0; fi--){
     var f = G.fx[fi];
@@ -3677,6 +3681,18 @@ function update(dt){
   }
   updateBars();
   updateSkillCds();
+}
+
+function updateModelFacings(){
+  LegendsModels.advanceFacing(G.player);
+  G.pets.forEach(function(pet){LegendsModels.advanceFacing(pet);});
+  G.enemies.forEach(function(enemy){
+    if(enemy.chargeSt>0)LegendsModels.advanceFacing(enemy,enemy.cvx,enemy.cvy);
+    else if(enemy.spitWindup>0)LegendsModels.advanceFacing(enemy,enemy.spitVX,enemy.spitVY);
+    else if(enemy.heavyWindup>0)LegendsModels.advanceFacing(enemy,enemy.heavyX-enemy.x,enemy.heavyY-enemy.y);
+    else LegendsModels.advanceFacing(enemy);
+  });
+  G.projs.forEach(function(projectile){if(projectile.kind==='boar')LegendsModels.advanceFacing(projectile,projectile.vx,projectile.vy);});
 }
 
 
@@ -3872,7 +3888,7 @@ function drawImpacts(){
 }
 function drawProjectile(pr){
   if (pr.kind === 'boar'){
-    var boar={kind:'boarpet',x:pr.x,y:pr.y,r:0,fx:pr.vx,fy:pr.vy,moving:true,animT:G.time};
+    var boar={kind:'boarpet',x:pr.x,y:pr.y,r:0,fx:pr.vx,fy:pr.vy,modelRear:pr.modelRear,moving:true,animT:G.time};
     drawPetModel(boar,52);
     return;
   }

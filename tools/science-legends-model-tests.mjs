@@ -33,6 +33,9 @@ test('six enemy archetypes select unique columns and halt locomotion under contr
   assert.equal(models.enemyFrame({moving:true,frozen:1},.15,false),0);
   assert.equal(models.enemyFrame({moving:true,stun:1},.15,false),0);
   assert.equal(models.enemyFrame({moving:true,chargeSt:1},.15,false),3);
+  assert.equal(models.enemyFrame({moving:true,chargeSt:1,frozen:1},.15,false),3);
+  assert.equal(models.enemyFrame({moving:true,spitWindup:.4,stun:1},.15,false),3);
+  assert.equal(models.enemyFrame({moving:true,heavyWindup:.4,frozen:1},.15,false),3);
   assert.equal(models.enemyFrame({moving:true,modelAttackUntil:1},.15,false),3);
 });
 test('actor depth follows planted feet, remains stable at ties and never mutates simulation arrays',()=>{
@@ -78,4 +81,21 @@ test('presentation snapshots exclude unavailable images and cannot adopt later l
   const profile=w.snapshotPresentation();w.G={presentation:profile};w._ovrImgs.brute={complete:true,naturalWidth:32};w.groundPat='late';late.complete=true;late.naturalWidth=16;
   assert.equal(w.ovr('brute'),first);assert.equal(w.ovr('brute',true),w._ovrImgs.brute);assert.equal(w.ovr('slime'),null);assert.equal(w.ovr('hero_barb'),builtin);assert.equal(profile.groundPattern,'first');assert.equal(profile.generatedGround,false);assert.ok(Object.isFrozen(profile)&&Object.isFrozen(profile.overrides));
   const next=w.snapshotPresentation();assert.equal(next.overrides.brute,w._ovrImgs.brute);assert.equal(next.overrides.slime,late);assert.equal(next.groundPattern,'late');
+});
+test('direction changes use normalized hysteresis and preserve idle, frozen and stunned facing',()=>{
+  const actor={fx:-10,fy:-10};assert.equal(models.advanceFacing(actor),true);
+  for(const fy of [-.01,0,.01,.2,-.2]){actor.fx=1;actor.fy=fy;assert.equal(models.advanceFacing(actor),true);}
+  actor.fy=1;assert.equal(models.advanceFacing(actor),false);
+  actor.fx=actor.fy=0;assert.equal(models.advanceFacing(actor),false);
+  actor.fx=.000001;actor.fy=-.000002;assert.equal(models.advanceFacing(actor),false);
+  actor.fx=0;actor.fy=-1;actor.frozen=1;assert.equal(models.advanceFacing(actor),false);actor.frozen=0;actor.stun=1;assert.equal(models.advanceFacing(actor),false);
+  actor.stun=0;assert.equal(models.advanceFacing(actor),true);
+  assert.equal(models.advanceFacing(actor,300,300),false);assert.equal(models.advanceFacing(actor,-300,-300),true);
+});
+test('actual simulation facing follows committed attack vectors and Stampede velocity',()=>{
+  const charge={fx:1,fy:1,chargeSt:1,cvx:-100,cvy:-100},spit={fx:1,fy:1,spitWindup:.4,spitVX:-50,spitVY:-50},heavy={x:100,y:100,fx:1,fy:1,heavyWindup:.4,heavyX:70,heavyY:70},frozen={fx:1,fy:-1,modelRear:false,frozen:1};
+  const boar={kind:'boar',vx:1,vy:-1};const w={LegendsModels:models,G:{player:{fx:0,fy:1},pets:[{fx:0,fy:-1}],enemies:[charge,spit,heavy,frozen],projs:[boar]}};
+  vm.createContext(w);vm.runInContext(fn('updateModelFacings'),w);w.updateModelFacings();
+  assert.equal(w.G.player.modelRear,false);assert.equal(w.G.pets[0].modelRear,true);for(const actor of [charge,spit,heavy,boar])assert.equal(actor.modelRear,true);assert.equal(frozen.modelRear,false);
+  for(const actor of [charge,spit,heavy]){actor.fx=1;actor.fy=1;}w.updateModelFacings();for(const actor of [charge,spit,heavy])assert.equal(actor.modelRear,true);
 });
