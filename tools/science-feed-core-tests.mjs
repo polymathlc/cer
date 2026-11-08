@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildScienceFeedContext, evaluateScienceFit, planScienceQuestions, scienceQuestionLevel, scienceQuestionContentKey } from '../science-feed-core.js';
+import { buildScienceFeedContext, evaluateScienceFit, planScienceQuestions, scienceQuestionLevel, scienceQuestionContentKey, scienceQuestionIsSec1, SCIENCE_SEC1_RETIRED } from '../science-feed-core.js';
 const now = Date.parse('2026-09-14T03:00:00Z');
 const topicLevels = { 'Plant life': 'P4', 'Electricity': 'P5', 'Forces': 'P6', 'Cells': 'S1', 'Magnets': 'P3' };
 const q = (id, extra = {}) => ({ id, title: 'Question', topic: 'Plant life', category: 'Explanation',
@@ -146,8 +146,44 @@ test('unknown student and malformed/unknown question metadata fail closed', () =
 
 test('secondary uses its own syllabus band and primary never receives secondary', () => {
   const bank=[q('p4'),q('p6',{level:'P6'}),q('s1',{topic:'Cells'})];
-  assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{studentLevel:'S1',manual:true}))),['s1']);
+  assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{studentLevel:'S1',manual:true,sec1Retired:false}))),['s1']);
   assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{studentLevel:'P6',manual:true}))),['p4','p6']);
+});
+
+test('🚫 Sec 1 is retired: no planner serves a Sec 1 question, even manually or as a game fallback', () => {
+  assert.equal(SCIENCE_SEC1_RETIRED,true);
+  const bank=[q('p6',{level:'P6'}),q('s1',{topic:'Cells'}),q('s1-level',{level:'S1'}),q('mixed',{level:'P6',topic2:'Cells'})];
+  for(const extra of [{studentLevel:'S1',manual:true},{studentLevel:'S1'},{studentLevel:'P6',recycle:true,fallback:true,limit:4},{studentLevel:'S1',recycle:true,fallback:true,limit:4}]){
+    const plan=planScienceQuestions(bank,opts(bank,extra));
+    assert.ok(!ids(plan).some(id=>id.startsWith('s1')||id==='mixed'),JSON.stringify(extra));
+  }
+  assert.ok(planScienceQuestions(bank,opts(bank,{studentLevel:'P6'})).blocked.some(row=>row.id==='s1'&&row.reason==='sec1-retired'));
+  assert.equal(scienceQuestionIsSec1(bank[1],{topicLevels:{Cells:'S1'}}),true);
+  assert.equal(scienceQuestionIsSec1(bank[0],{topicLevels:{Cells:'S1'}}),false);
+});
+
+test('🎮 game fallback: an empty strict window serves the nearest usable level instead of nothing', () => {
+  // A P6 learner whose bank holds only P3 and P4 work: strictly none fits
+  // (P5 would — one level below is ordinary revision).
+  const bank=[q('p3',{level:'P3',topic:'Magnets'}),q('p4',{level:'P4'})];
+  const strict=planScienceQuestions(bank,opts(bank,{studentLevel:'P6',randomize:true,limit:1}));
+  const fell=planScienceQuestions(bank,opts(bank,{studentLevel:'P6',randomize:true,limit:1,recycle:true,fallback:true}));
+  assert.ok(ids(fell).length===1);
+  assert.deepEqual(ids(strict),[],'the strict window really is empty');
+  assert.equal(ids(fell)[0],'p4','nearest level below first');
+  assert.deepEqual(fell.fallback,['p4']);assert.ok(fell.recycled.includes('p4'),'fallback rows are claimed like recycled ones');
+  const roomy=[...bank,q('p6',{level:'P6'})];
+  assert.deepEqual(planScienceQuestions(roomy,opts(roomy,{studentLevel:'P6',randomize:true,limit:1,recycle:true,fallback:true})).fallback,[],'never used while the strict plan has something');
+  // Above-level work is the very last resort.
+  const up=[q('p5-only',{level:'P5'})];
+  assert.deepEqual(ids(planScienceQuestions(up,opts(up,{studentLevel:'P4',limit:1,recycle:true,fallback:true}))),['p5-only'],'one level up as a last resort');
+  assert.deepEqual(ids(planScienceQuestions(up,opts(up,{studentLevel:'P4',limit:1}))),[],'practice keeps the strict ceiling');
+  const far=[q('p6-only',{level:'P6'})];
+  assert.deepEqual(ids(planScienceQuestions(far,opts(far,{studentLevel:'P4',limit:1,recycle:true,fallback:true}))),[],'never two levels above');
+  // Unknown learner level and unsound questions still fail closed.
+  assert.deepEqual(ids(planScienceQuestions(bank,opts(bank,{studentLevel:'',limit:1,recycle:true,fallback:true}))),[]);
+  const broken=[q('broken',{level:'P3',status:'flagged'})];
+  assert.deepEqual(ids(planScienceQuestions(broken,opts(broken,{studentLevel:'P6',limit:1,recycle:true,fallback:true}))),[]);
 });
 
 test('unknown secondary topics cannot ride behind a known primary topic or level', () => {

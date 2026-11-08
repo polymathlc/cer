@@ -14,7 +14,7 @@
 // harmless for every page under it — /online/, /cs/, /schedule/ included.
 'use strict';
 
-const SW_VERSION = '1.452.2';
+const SW_VERSION = '1.453.0';
 const CACHE = 'polymath-app-shell-' + SW_VERSION;
 const CACHE_PREFIX = 'polymath-app-shell-';
 const OFFLINE_URL = 'offline.html';

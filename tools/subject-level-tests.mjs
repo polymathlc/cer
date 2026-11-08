@@ -25,7 +25,7 @@
 //    both ways: too loose and an off-level topic is kept while the author was
 //    promised a level, too eager and it overwrites a topic that was right.
 import fs from 'fs';
-import { scienceQuestionLevel } from '../science-feed-core.js';
+import { scienceQuestionLevel, scienceQuestionIsSec1 } from '../science-feed-core.js';
 
 const APP = new URL('../app.js', import.meta.url);
 const src = fs.readFileSync(APP, 'utf8');
@@ -108,8 +108,16 @@ const section = [
   FIXTURE
 ].join('\n');
 
-const M = new Function('scienceQuestionLevel', section +
-  '\nreturn { SUBJECT_KEY, SUBJECT_APPS, subjectCurrent, _rapidApplyLevel, _aiBuildQuestionPrompt, currentTopicsByLevel,\n  TOPIC_LEVELS, LEVEL_ORDER, LEVEL_MAX, LEVEL_MIN, isLevelCode, isSecondaryLevel, getLevelNumber, levelFromNumber, audienceFor, schoolFor, levelOptionsHtml,\n  topicLevelMap, topicsByLevel, levelColors, topicEmojis,\n  LEVEL_DEFAULT_CAP, LEVEL_SECONDARY_MIN, levelBandMin, qInLevelBand, levelsInBand, studentBandMinNum,\n  _emptyLevelBuckets, levelGroupLabel, realTopicsByLevel, studentCapLevel, studentCapNum, qLevelNum, qWithinStudentLevel, clampToStudentLevel, rosterEffectiveCap,\n  setUser: u => { currentUser = u; } };')(scienceQuestionLevel);
+// 🚫 Sec 1 is retired in the shipped app (SEC1_RETIRED, v1.453.0). The ladder
+// tests below run with the flag turned OFF, which is exactly what undoing the
+// retirement does — so they prove S1 still works the day it comes back. The
+// retired behaviour has its own tests at the end (R).
+if (!section.includes('const SEC1_RETIRED = true;')) throw new Error('SEC1_RETIRED flag not found in the ladder');
+const build = retired => new Function('scienceQuestionLevel', 'scienceQuestionIsSec1',
+  section.replace('const SEC1_RETIRED = true;', 'const SEC1_RETIRED = ' + retired + ';') +
+  '\nreturn { SUBJECT_KEY, SUBJECT_APPS, subjectCurrent, _rapidApplyLevel, _aiBuildQuestionPrompt, currentTopicsByLevel,\n  TOPIC_LEVELS, LEVEL_ORDER, LEVEL_MAX, LEVEL_MIN, isLevelCode, isSecondaryLevel, getLevelNumber, levelFromNumber, audienceFor, schoolFor, levelOptionsHtml,\n  topicLevelMap, topicsByLevel, levelColors, topicEmojis,\n  LEVEL_DEFAULT_CAP, LEVEL_SECONDARY_MIN, levelBandMin, qInLevelBand, levelsInBand, studentBandMinNum,\n  _emptyLevelBuckets, levelGroupLabel, realTopicsByLevel, studentCapLevel, studentCapNum, qLevelNum, qWithinStudentLevel, clampToStudentLevel, rosterEffectiveCap,\n  LIVE_LEVELS, liveLevel, _isSec1Question, _sec1Strip, _scienceFeedLevel, _scienceFeedGameLevel,\n  setUser: u => { currentUser = u; } };')(scienceQuestionLevel, scienceQuestionIsSec1);
+const M = build(false);
+const R = build(true);
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -640,6 +648,30 @@ test('the snap survives a question with no topic at all', () => {
   const q = {};
   M._rapidApplyLevel(q, 'P5');
   eq(q.topic, 'Electrical Systems', 'a topicless question was left topicless');
+});
+
+// ── 🚫 Sec 1 retired (v1.453.0) ───────────────────────────────────────
+
+test('retired: no level picker offers S1, but old S1 data still parses', () => {
+  eq(R.LIVE_LEVELS, ['P3', 'P4', 'P5', 'P6'], 'pickers');
+  ok(!R.levelOptionsHtml('').includes('S1'), 'a level dropdown still offers S1');
+  ok(R.isLevelCode('S1'), 'an old S1 account must still parse');
+  ok(R.TOPIC_LEVELS.includes('S1'), 'the ladder keeps the S1 rung for old data');
+});
+test('retired: a Sec 1 account is served P6, never an empty feed', () => {
+  R.setUser({ role: 'student', level: 'S1', adminLevel: 'S1' });
+  eq(R.studentCapLevel(), 'P6', 'cap'); eq(R._scienceFeedLevel(), 'P6', 'feed level'); eq(R._scienceFeedGameLevel(), 'P6', 'game level');
+  R.setUser({ role: 'student', level: 'S1' });
+  eq(R._scienceFeedLevel(), 'P6', 'a self-declared S1 is not left without a level');
+  R.setUser({ role: 'admin' });
+  eq(R.studentCapLevel(), 'P6', 'admin cap');
+  R.setUser(null);
+});
+test('retired: Sec 1 questions are stripped from a loaded bank and parked', () => {
+  const bank = [{ id: 'a', topic: 'Heat' }, { id: 'b', topic: 'Atoms and Molecules' }, { id: 'c', topic: 'Heat', level: 'S1' },
+    { id: 'd', topic: 'Heat', topic2: 'Separation Techniques' }, { id: 'e', topic: 'Forces' }];
+  eq(R._sec1Strip(bank).map(q => q.id), ['a', 'e'], 'kept');
+  eq(M._sec1Strip(bank).map(q => q.id), ['a', 'b', 'c', 'd', 'e'], 'undoing the flag brings them all back');
 });
 
 // ── runner ───────────────────────────────────────────────────────────────────

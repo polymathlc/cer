@@ -48,6 +48,8 @@ function harness(bank = [], random = () => 0.5, cloud = null) {
     const isLevelCode=v=>/^(P[3-6]|S1)$/.test(v||'');
     const getLevelNumber=v=>v==='S1'?7:Number(String(v).replace('P',''))||3;
     const isSecondaryLevel=v=>v==='S1';
+    // The ladder logic is tested with S1 live; the Sec 1 retirement has its own tests.
+    const liveLevel=v=>v;
     const levelBandMin=v=>v==='S1'?7:3;
     const getTopicLevel=t=>topicLevelMap[t]||'P6';
     const qTopicList=q=>[q.topic,q.topic2].filter(Boolean);

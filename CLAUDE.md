@@ -3,6 +3,38 @@
 Guidance for Claude when working in this repo.
 
 
+## 🚫 Sec 1 retired + 🎮 games never say "no questions for your level" (v1.453.0)
+
+The owner asked to remove every Sec 1 question from the system and to make sure every game is always fed.
+
+**Sec 1 is retired, reversibly — nothing in Firestore was deleted.** Three flags, all `true`:
+`SEC1_RETIRED` (app.js, beside the level ladder), `SCIENCE_SEC1_RETIRED` (science-feed-core.js) and `SEC1_RETIRED`
+(fps.html). Set all three to `false` to bring Sec 1 back on the next load.
+- `_sec1StripLoaded()` runs at the end of `loadAdminQuestions` (students) and `loadFromStorage` (admin): Sec 1
+  questions (`level: 'S1'`, or any topic/topic2 that resolves to S1 via `scienceQuestionIsSec1`) leave `questionBank`
+  and `vettingList` and are parked in `_sec1Hidden`. So the bank, vetting, practice, worksheets and games never see them.
+- `planScienceQuestions` blocks Sec 1 by itself too (reason `sec1-retired`, never relaxed, even manual).
+- Pickers: `LIVE_LEVELS` (P3–P6) feeds `levelOptionsHtml`, the topic `<optgroup>`s, Manage Topics, the batch level
+  select, TSEND levels, the school-level choosers; `_sec1HideOptions()` removes the hand-written `option[value=S1]`
+  and S1 optgroups in index.html at startup. `TOPIC_LEVELS` keeps the S1 rung so old topics/accounts still parse.
+- `liveLevel()` serves a Sec 1 account as **P6** (`studentCapLevel`, `_scienceFeedLevel`, `_scienceFeedGameLevel`);
+  Science Strike does the same in `fpsApplyProfile`.
+
+**Game fallback.** The strict grade + mastery window (`evaluatePracticeFit`: ±1 level, difficulty floor/ceiling)
+often held nothing, so games showed "No suitable questions are set for your level yet". `planScienceQuestions(…,
+{ fallback: true })` now, when fresh + recycled rows still cannot fill the request, serves SOUND questions turned away
+only for grade fit, ranked by `scienceFallbackRank`: same level (difficulty window) 0, n levels below = n, unknown level
+5, ONE level above = 11 (never two above, never across into secondary); shuffled and round-aware via `recycleScienceGameRows`. Returned in `fallback` and also in
+`recycled` (so claims use `allowSeen` and the 15-minute iframe guard lets them through). Quality blocks, suspect
+questions, student reports, retired topics, failed images and Sec 1 are never relaxed; a learner with NO level still
+fails closed. `_scienceFeedPlan` turns it on with `recycle` (every `game: true` plan; `opts.fallback === false` opts out).
+Science Strike now also uses `recycle` + `fallback` (its in-run asked ids go last via `cycle`, claims pass `allowSeen`).
+Practice, worksheets and quests are unchanged (strict, never repeat).
+
+Tests: `tools/science-feed-core-tests.mjs` (retired + fallback cases), `tools/science-feed-standalone-tests.mjs`
+(Strike fallback, Sec 1 filter, S1 account → P6), `tools/subject-level-tests.mjs` (ladder tests run with the flag OFF
+to prove undo works; `R` = retired module).
+
 ## 🗡️ Hades 2.2.2 — the Boons codex no longer freezes the run (v1.452.2)
 
 Pressing Tab / B / BOONS with any boon equipped froze Hades: `openSkillCodex` set `gameState.isPaused` and then

@@ -13,7 +13,7 @@ const markup=html.slice(html.indexOf('<div class="page" id="page-hades">'),html.
 const fixture=`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${markup}<script type="module">
 import {installHadesDisplay} from './hades-display.js';import {installHadesLearningParent} from './hades-learning-parent.js';
 window.currentUser={uid:'family',role:'student',level:'P6',name:'Older child'};window.records=[];window.shown=[];
-const _isAdmin=()=>currentUser?.role==='admin',isLevelCode=l=>['P3','P4','P5','P6'].includes(l),TOPIC_LEVELS=['P3','P4','P5','P6'];
+const _isAdmin=()=>currentUser?.role==='admin',liveLevel=l=>l,isLevelCode=l=>['P3','P4','P5','P6'].includes(l),TOPIC_LEVELS=['P3','P4','P5','P6'],LIVE_LEVELS=TOPIC_LEVELS;
 const _scienceFeedLevel=()=>currentUser.level,_scienceFeedKey=()=>currentUser.uid+':'+currentUser.name;
 const questionBank=Array.from({length:10},(_,i)=>({id:'bank-'+i,title:'Science bank question '+i,html:'<p>Which part absorbs water?</p>',options:['Root','Leaf'],answer:0}));
 const qReleased=()=>true,qInSyllabus=()=>true,questionQualitySignature=q=>q.id,_sdExtractMcq=q=>q;
