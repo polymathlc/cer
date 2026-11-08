@@ -2353,7 +2353,7 @@ function spawnEnemy(kind, elite){
     xp: t.xp * (elite ? 5 : 1), elite: !!elite, boss: false,
     hitCd: 0, stun: 0, frozen: 0, slow: 0, bleed: 0, bleedT: 0,
     shootCd: rand(1, 2.5), chargeSt: 0, chargeT: 0, cvx: 0, cvy: 0,
-    animT: rand(0, 1), kx: 0, ky: 0, kt: 0
+    animT: rand(0, 1), modelPhase:rand(0,.5), moving:false, fx:1, kx: 0, ky: 0, kt: 0
   };
   G.enemies.push(e);
   return e;
@@ -3228,6 +3228,7 @@ function updateEnemies(dt){
   for (var i = G.enemies.length - 1; i >= 0; i--){
     var e = G.enemies[i];
     if (e.dead){ G.enemies.splice(i, 1); continue; }
+    var oldX=e.x,oldY=e.y;e.moving=false;
     e.animT += dt * 2.5;
     e.hitCd -= dt;
     if (e.slowT > 0) e.slowT -= dt;
@@ -3242,6 +3243,7 @@ function updateEnemies(dt){
     var tgt = nearestTarget(e);
     var dx = tgt.x - e.x, dy = tgt.y - e.y;
     var d = Math.hypot(dx, dy) || 1;
+    e.fx=dx/d;
     var slowMult = e.slowT > 0 ? 0.55 : 1;
     for (var ai = 0; ai < G.auras.length; ai++){
       if (G.auras[ai].slow && dist2(e.x, e.y, p.x, p.y) < G.auras[ai].radius * G.auras[ai].radius){ slowMult = Math.min(slowMult, 0.65); break; }
@@ -3251,6 +3253,7 @@ function updateEnemies(dt){
       e.slamCd -= dt; e.addCd -= dt;
       if (e.slamCd <= 0 && d < 260){
         e.slamCd = 6;
+        e.modelAttackUntil=G.time+.9;
         G.fx.push({ kind: 'meteor', x: e.x, y: e.y, r: 170, t: 0, life: 0.9, dmg: 0, evil: true });
       }
       if (e.addCd <= 0){
@@ -3265,6 +3268,7 @@ function updateEnemies(dt){
       else if (d < 190) { e.x -= dx / d * e.speed * 0.8 * slowMult * dt; e.y -= dy / d * e.speed * 0.8 * slowMult * dt; }
       if (e.shootCd <= 0 && d < 340){
         e.shootCd = 2.3;
+        e.modelAttackUntil=G.time+.28;
         G.eprojs.push({ x: e.x, y: e.y, vx: dx / d * 260, vy: dy / d * 260, r: 6, dmg: e.dmg, life: 1.8 });
       }
     } else if (t && t.charges){
@@ -3286,8 +3290,10 @@ function updateEnemies(dt){
     }
     e.x = clamp(e.x, 20, WORLD.w - 20); e.y = clamp(e.y, 20, WORLD.h - 20);
     separate(e);
+    e.moving=dist2(oldX,oldY,e.x,e.y)>.001;
     if (e.hitCd <= 0 && dist2(e.x, e.y, p.x, p.y) < (e.r + p.r) * (e.r + p.r)){
       e.hitCd = 0.9;
+      e.modelAttackUntil=G.time+.24;
       hurtPlayer(e.dmg);
       if (p.thorns > 0) dealDamage(e, p.thorns, { noSplash: true, color: '#4FC3F7' });
     }
@@ -3295,6 +3301,7 @@ function updateEnemies(dt){
       var pt2 = G.pets[pi];
       if (e.hitCd <= 0 && dist2(e.x, e.y, pt2.x, pt2.y) < (e.r + pt2.r) * (e.r + pt2.r)){
         e.hitCd = 0.9;
+        e.modelAttackUntil=G.time+.24;
         pt2.hp -= e.dmg;
         break;
       }
@@ -3653,6 +3660,12 @@ function drawHeroModel(){
   if(!(custom&&custom.complete&&custom.naturalWidth)&&window.LegendsModels&&LegendsModels.drawHero(ctx,G.cls,p,G.time,lowMotion,72))return;
   drawActorModel('hero_'+G.cls,heroSheets[0][frame],p,72,p.fx<0);
 }
+function drawEnemyModel(e,size){
+  var custom=_ovrImgs[e.kind];
+  if(!(custom&&custom.complete&&custom.naturalWidth)&&window.LegendsModels&&LegendsModels.drawEnemy(ctx,e,G.time,lowMotion,size))return;
+  var sprites=MOB_SPRITES[e.kind]||MOB_SPRITES.slime;
+  drawActorModel(e.kind,sprites[(e.animT*2|0)%2],e,size,e.fx<0);
+}
 
 /* ============================================================================
  * PROJECTILE ART — every projectile is drawn as what it IS: javelins with
@@ -3971,13 +3984,12 @@ function draw(){
   var m0 = camX - 80, m1 = camX + VW + 80, n0 = camY - 80, n1 = camY + VH + 80;
   G.enemies.forEach(function(e){
     if (e.x < m0 || e.x > m1 || e.y < n0 || e.y > n1) return;
-    var size = e.r * 3.4;
+    var size = Math.max(40,e.r * 4);
     ctx.globalAlpha = 0.25;
     ctx.fillStyle = '#000';
     ctx.beginPath(); ctx.ellipse(e.x, e.y + e.r * 0.9, e.r * 0.9, e.r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
-    var frame = (e.animT * 2 | 0) % 2;
-    drawSpriteOr(e.kind, MOB_SPRITES[e.kind][frame], e.x, e.y, size, false);
+    drawEnemyModel(e,size);
     if (e.frozen > 0){
       ctx.globalAlpha = 0.45; ctx.fillStyle = '#80DEEA';
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 4, 0, Math.PI * 2); ctx.fill();

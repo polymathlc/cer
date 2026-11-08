@@ -26,3 +26,12 @@ test('foot measurement ignores transparent padding and never rescales raised-wea
   const pixels=new Uint8Array(100*100*4);for(let y=10;y<90;y++)for(let x=30;x<70;x++)pixels[(y*100+x)*4+3]=255;
   const anchor=models.footAnchor(pixels,100,100);assert.equal(anchor.y,.89);assert.equal(anchor.x,.495);
 });
+test('six enemy archetypes select unique columns and halt locomotion under control effects',()=>{
+  ['slime','imp','mite','brute','spitter','charger'].forEach((kind,index)=>assert.equal(models.enemyColumn(kind),index));
+  assert.equal(models.enemyColumn('boss'),3);assert.equal(models.enemyColumn('unknown'),-1);
+  assert.equal(models.enemyFrame({moving:true},.15,false),2);
+  assert.equal(models.enemyFrame({moving:true,frozen:1},.15,false),0);
+  assert.equal(models.enemyFrame({moving:true,stun:1},.15,false),0);
+  assert.equal(models.enemyFrame({moving:true,chargeSt:1},.15,false),3);
+  assert.equal(models.enemyFrame({moving:true,modelAttackUntil:1},.15,false),3);
+});
