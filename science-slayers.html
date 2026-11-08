@@ -531,6 +531,8 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
 body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:none!important;transition:none!important}
 @media(max-width:700px){.hint-bar{display:none}.battle-status{top:52px;max-width:calc(100% - 145px);font-size:.67rem;padding:6px 8px}.battle-map{width:116px;height:140px}.battle-map canvas{width:104px;height:104px}.qtimer{font-size:.7rem;white-space:nowrap}.pbars,body.touch .pbars{bottom:166px;width:165px}.skillbar{bottom:18px;left:calc(50% + 42px);gap:6px}.skill-slot{width:43px;height:46px;font-size:21px}.evade-btn{right:15px;bottom:85px;min-width:86px;min-height:44px}.hint-bar{bottom:127px}.sksel-btn,body.touch .sksel-btn{bottom:140px;right:15px;left:auto;transform:none}.joy{left:12px;bottom:18px;width:96px;height:96px}.battle-map span{font-size:9px}.descend-btn{top:145px;font-size:.75rem}}
 </style>
+<link rel="stylesheet" href="science-expedition-accessibility.css?v=1">
+<script defer src="science-expedition-accessibility.js?v=1"></script>
 </head>
 <body>
 <div id="app">
@@ -4746,7 +4748,7 @@ function applyBankQuestions(list){
   var cleaned=Array.isArray(list)?list:[];
   QUESTION_BANK.length=0; Array.prototype.push.apply(QUESTION_BANK,cleaned);
   usingBankQuestions=true;
-  $('menuFoot').textContent=cleaned.length+' suitable questions available from your class bank.';
+  $('menuFoot').textContent=cleaned.length ? 'Question stream ready — fresh questions first, then revision rounds.' : (typeof scienceFeed!=='undefined' && scienceFeed ? scienceFeed.message() : 'Connecting to your class question stream…');
 }
 var _bankReqTries = 0;
 function requestBankQuestions(){

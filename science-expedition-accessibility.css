@@ -1,0 +1,11 @@
+/* Keyboard focus remains visible against the battlefield and every panel. */
+:where(button,a,input,textarea,select,[tabindex]):focus-visible {
+  outline: 3px solid #137fba;
+  outline-offset: 3px;
+}
+.overlay:focus { outline: none; }
+.panel { scrollbar-gutter: stable; }
+.panel :where(button,[role="button"]) { scroll-margin-block: 20px; }
+@media (prefers-reduced-motion: reduce) {
+  .overlay *, .toastmsg { animation: none !important; transition: none !important; }
+}

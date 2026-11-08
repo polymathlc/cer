@@ -316,7 +316,7 @@
       "@font-face{font-family:'PwaKitQuestion';src:local('Roboto'),local('Roboto-Regular'),local('Arial'),local('Helvetica');unicode-range:U+003F}",
       ':root{--pwa-accent:' + config.accent + '}',
       '[data-pwa-install][data-pwa-hidden]{display:none!important}',
-      '.pwa-sheet-backdrop{position:fixed;inset:0;z-index:100000;background:rgba(20,24,22,.45);display:flex;align-items:flex-end;justify-content:center;padding:16px;animation:pwaKitFade .18s ease-out}',
+      '.pwa-sheet-backdrop{position:fixed;inset:0;width:100vw;height:100vh;z-index:100000;background:rgba(20,24,22,.45);display:flex;align-items:flex-end;justify-content:center;padding:16px;animation:pwaKitFade .18s ease-out}',
       '@media (min-width:640px){.pwa-sheet-backdrop{align-items:center}}',
       ".pwa-sheet{width:100%;max-width:440px;max-height:calc(100vh - 32px);overflow:auto;background:#fff;color:#1A1A1A;border-radius:16px;box-shadow:0 4px 6px rgba(0,0,0,.05),0 10px 30px rgba(0,0,0,.14);padding:22px 20px 18px;font:15px/1.55 'PwaKitQuestion','Century Gothic',CenturyGothic,AppleGothic,system-ui,sans-serif;animation:pwaKitRise .22s ease-out;text-align:left}",
       '.pwa-sheet-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}',

@@ -4562,7 +4562,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.453.0';
+const APP_VERSION = 'v1.454.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -63079,16 +63079,17 @@ function _gqFilterPool(pool) {
 // a stale pool snapshot.
 async function _sdQuestionsPayload(source) {
   const feedKey = _scienceFeedKey(), feedLevel = _scienceFeedGameLevel();
-  const seenStats = await _sdSeenStats();
+  const current = () => feedKey === _scienceFeedKey() && feedLevel === _scienceFeedGameLevel();
+  let seenStats = await _sdSeenStats();
   await _scienceFeedEnsure();
   let questions = [];
   // Past-paper mode: the game launched from the Past Papers page gets ONLY
   // the selected portion's attached questions (MCQ + OEQ self-check).
   const ppMode = _ppGameFrameMatches(source);
-  try { questions = ppMode ? ppGamePool(_ppGameSel.year) : buildDefenderQuestions(); } catch (e) { console.warn('SD bank extract failed', e); }
+  try { if (current()) questions = ppMode ? ppGamePool(_ppGameSel.year) : buildDefenderQuestions(); } catch (e) { console.warn('SD bank extract failed', e); }
   // Current-grade fit first, with shared quality and repetition safeguards.
   try { questions = _gqFilterPool(questions); } catch (e) { questions = []; console.warn('gq filter', e); }
-  if (questions.length) {
+  if (questions.length && current()) {
     const bank = new Map(_scienceFeedSources().map(q => [String(q.id), q]));
     const selected = await _scienceFeedTake(questions.map(q => bank.get(String(q.id))).filter(Boolean), { game: true, randomize: true, limit: 1 });
     questions = selected.flatMap(q => questions.filter(row => String(row.id) === String(q.id)))
@@ -63096,7 +63097,10 @@ async function _sdQuestionsPayload(source) {
       // question — the endless cycle already decided it is due again.
       .map(row => _scienceFeedIsRecycled(row.id) ? { ...row, recycled: true } : row);
   }
-  if (feedKey !== _scienceFeedKey() || feedLevel !== _scienceFeedGameLevel()) questions = [];
+  // A delayed initial request can outlive a sibling/level switch. It must not
+  // reserve the new learner's questions or carry the old learner's history
+  // into a response labelled with the current identity.
+  if (!current()) { questions = []; seenStats = {}; }
   return {
     type: 'SD_QUESTIONS',
     questions,

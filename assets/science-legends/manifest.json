@@ -1,0 +1,22 @@
+{
+  "generator": "Built-in image_gen tool",
+  "release": "1.454.0",
+  "assets": [
+    {
+      "file": "arcane-atlas.png",
+      "layout": "4 columns, 2 rows; row 1 firebolt, ice lance, blessed hammer, poison javelin; row 2 fire, frost, holy, arcane impacts",
+      "transparent": true,
+      "prompt": "Use case: stylized-concept. Asset type: production transparent game VFX sprite atlas for a top-down fantasy science action RPG called Science Legends. Create ONE square sprite atlas with exactly 4 columns by 2 rows, 8 equal square cells, each isolated sprite centered in its own cell with generous transparent padding, nothing overlapping cell edges. Row 1 left to right: a blazing orange firebolt with white-hot round core and trailing flame pointing LEFT (projectile travels RIGHT); an icy cyan crystal lance pointing RIGHT with frost vapor tail to LEFT; a bright golden blessed spinning hammer seen from overhead; an emerald poison javelin pointing RIGHT with green vapor tail LEFT. Row 2 left to right: a circular orange explosive hit burst with a white core and jagged sparks; a circular cyan icy shatter impact with crystal shards; a circular gold holy impact starburst; a circular purple arcane shock ring. Style: premium hand-painted 2.5D fantasy game effects, luminous, crisp readable silhouettes at small sizes, rich color gradients and detailed material highlights. True transparent background including cell gutters. No grid lines, no labels, no text, no border, no watermark, no characters, no environment. All sprites centered with consistent scale. Projectiles horizontally oriented; impacts radially symmetric."
+    },
+    {
+      "file": "courtyard-slate.png",
+      "transparent": false,
+      "prompt": "Use case: stylized-concept. Asset type: seamless top-down 2D game ground texture tile, square. Primary request: premium hand-painted fantasy ruined courtyard floor texture for an overhead action RPG. Strict orthographic directly overhead view, completely flat, seamless repeating on all four edges. Many irregular medium-sized worn blue slate paving stones in varied shapes, fine cracks, tiny moss in a few crevices, subtle earth-filled joins. Muted dark desaturated blue-grey and blue-green palette, quiet mid-dark tonal range so bright projectiles and small characters read clearly on top. Soft neutral diffuse ambient lighting, no directional cast shadows, subtle painterly material detail, no shiny highlights. Continuous paving texture covering entire image edge to edge. No objects, no raised obstacles, no holes, no stairs, no borders, no symbols, no text, no people, no props, no grass tufts, no vignette, no perspective, no watermarks."
+    },
+    {
+      "file": "expedition-cover.png",
+      "transparent": false,
+      "prompt": "Use case: stylized-concept. Asset type: wide fantasy game title-screen environment painting, landscape 3:2, no text. Primary request: premium atmospheric art for a top-down action RPG expedition into an enchanted ruined courtyard. Cinematic painterly fantasy game key art. Crumbling stone archway and old rune-carved pillars, winding worn flagstones, moss and teal mist, warm golden braziers, distant glowing amber portal on the RIGHT HALF. A few bright drifting embers. Beautiful layered depth, polished hand-painted stone textures, readable dramatic lighting. Most detailed focal composition in right half; left half darker quiet blue-black foliage and soft shadows so real HTML title text can overlay it legibly. Navy slate, muted teal and rich warm amber. Inviting adventurous mood suitable for a school science game. No people, no creatures, no weapons, no text, no logo, no watermark, no interface, no frame."
+    }
+  ]
+}

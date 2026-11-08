@@ -10,14 +10,17 @@ const cut=(source,start,end)=>{const i=source.indexOf(start),j=source.indexOf(en
 const row=(id='a')=>({id,q:'A science question '+id,options:['One','Two'],answer:0});
 function bridgeFixture(embedded=true){
   const messages=[],pools=[],acceptedEvents=[],listeners=[];let invalidated=0;
+  const timers=new Map();let timerId=0;
+  const clock={setTimeout(fn,delay){const id=++timerId;timers.set(id,{fn,delay});return id;},clearTimeout:id=>timers.delete(id)};
   const parent={postMessage:data=>messages.push(data)};
   const window={parent,location:{origin:'https://school.example'},addEventListener:(name,fn)=>listeners.push(fn)};
   if(!embedded)window.parent=window;
-  const c=vm.createContext({window,Map,Date,Promise,Number,String,Array,setTimeout,clearTimeout});vm.runInContext(bridgeSource,c);
+  const c=vm.createContext({window,Map,Date,Promise,Number,String,Array,...clock});vm.runInContext(bridgeSource,c);
   const bridge=window.ScienceFeedBridge.create({onPool:(rows,event)=>{pools.push(rows);acceptedEvents.push(event);},onInvalidate:()=>invalidated++});
   const event=(data,extra={})=>{const incoming={data,source:parent,origin:window.location.origin,...extra};listeners.forEach(fn=>fn(incoming));return incoming;};
   const reply=(extra={})=>event({type:'SD_QUESTIONS',feedPolicyVersion:1,requestId:messages.at(-1)?.requestId,studentKey:'child-a',studentLevel:'P4',questions:[row()],...extra});
-  return {bridge,messages,pools,acceptedEvents,event,reply,get invalidated(){return invalidated;}};
+  const tick=delay=>{const entry=[...timers].find(([,t])=>t.delay===delay);assert.ok(entry,'scheduled timer '+delay);timers.delete(entry[0]);entry[1].fn();};
+  return {bridge,messages,pools,acceptedEvents,event,reply,timers,tick,get invalidated(){return invalidated;}};
 }
 test('standalone game cannot substitute unlevelled built-in samples',async()=>{const f=bridgeFixture(false);assert.equal(await f.bridge.refresh(),false);assert.equal(f.bridge.take(),null);assert.equal(f.messages.length,0);});
 test('embedded games await current policy and preserve parent ranking',async()=>{
@@ -30,6 +33,37 @@ test('empty and unknown-level responses clear the previous game bank',async()=>{
   pending=f.bridge.refresh();f.reply({questions:[]});await pending;assert.equal(f.bridge.take(),null);assert.equal(f.pools.at(-1).length,0);
   f.event({type:'SD_FEED_INVALIDATE',studentKey:'child-a',studentLevel:''});
   pending=f.bridge.refresh();f.reply({studentLevel:''});await pending;assert.equal(f.bridge.take(),null);
+});
+
+test('an empty startup bank reconnects until the class questions finish loading',async()=>{
+  const f=bridgeFixture(),pending=f.bridge.refresh();
+  f.reply({questions:[],feedMessage:'Loading your class bank…'});await pending;
+  assert.equal(f.bridge.take(),null);
+  f.tick(1000);const request=f.messages.at(-1).requestId;
+  assert.equal(f.messages.length,2,'empty startup responses do not strand the menu');
+  f.reply({requestId:request,questions:[row('loaded')]});
+  assert.equal(f.bridge.take().id,'loaded');assert.equal(f.timers.size,0,'success cancels recovery timers');
+});
+
+test('recovery backs off and request timeouts retry without accepting expired replies',async()=>{
+  const f=bridgeFixture(),pending=f.bridge.refresh(),oldRequest=f.messages.at(-1).requestId;
+  f.tick(8000);assert.equal(await pending,false);f.tick(1000);
+  f.reply({requestId:oldRequest,questions:[row('expired')]});assert.equal(f.pools.at(-1).length,0);
+  f.reply({questions:[]});f.tick(2000);f.reply({questions:[]});f.tick(4000);
+  f.reply({questions:[row('recovered')]});assert.equal(f.bridge.take().id,'recovered');
+  assert.equal(f.timers.size,0);
+});
+
+test('bank and learner invalidations automatically request the current identity again',async()=>{
+  const f=bridgeFixture(),pending=f.bridge.refresh();f.reply();await pending;
+  f.event({type:'SD_FEED_INVALIDATE',studentKey:'child-b',studentLevel:'P3'});
+  assert.equal(f.bridge.context().studentKey,'child-b');assert.equal(f.bridge.take(),null);
+  // A consumer asking immediately joins the same request rather than causing
+  // concurrent deliveries; the stale learner response remains rejected.
+  f.tick(250);const again=f.bridge.refresh();assert.equal(f.messages.length,2);
+  f.reply({questions:[row('old-child')]});assert.equal(f.pools.at(-1).length,0);
+  f.reply({studentKey:'child-b',studentLevel:'P3',questions:[row('new-child')]});await again;
+  assert.equal(f.bridge.take().id,'new-child');assert.equal(f.timers.size,0);
 });
 test('untrusted, unversioned and stale request responses cannot feed a question',async()=>{
   const f=bridgeFixture(),pending=f.bridge.refresh();
@@ -77,8 +111,8 @@ for(const file of ['science-defenders.html','science-raiders.html','science-lege
   assert.match(source,/<script src="science-feed-bridge\.js"><\/script>/);
   assert.match(source,/await scienceFeed\.refresh\(\)/);
   assert.match(source,/if\(!scienceFeed\.current\(qState\.current\)\) return;/);
-  const selected=row('safe'),c=vm.createContext({ScienceFeedBridge:{},scienceFeed:{take:()=>selected,stamp:q=>q},G:{topic:'mixed'},
-    [bank]:[row('old')],usingBank:false,usingBankQuestions:false,rebuildTopicOptions(){},$:()=>({})});
+  const selected=row('safe'),c=vm.createContext({ScienceFeedBridge:{},scienceFeed:{take:()=>selected,stamp:q=>q,message:()=> 'Connecting to your class question stream…'},G:{topic:'mixed'},
+    [bank]:[row('old')],usingBank:false,usingBankQuestions:false,embedded:()=>true,rebuildTopicOptions(){},$:()=>({})});
   vm.runInContext(cut(source,'function pickQuestion(){','\n}\n')+'\n}\n'+cut(source,`function ${apply}(list){`,'\n}\n')+'\n}\n',c);
   assert.equal(c.pickQuestion().id,'safe');c[apply]([]);assert.equal(c[bank].length,0);
 });

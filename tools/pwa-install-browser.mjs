@@ -155,8 +155,8 @@ for (const dir of APP_DIRS) {
   }
 
   // 5. iPhone Safari: Share → Add to Home Screen.
-  {
-    const { context, page, errors } = await open(IPHONE);
+  for (const phoneWidth of [320, 390]) {
+    const { context, page, errors } = await open({ ...IPHONE, viewport: { width: phoneWidth, height: 844 } });
     const which = await visibleControl(page);
     assert.ok(which, label + ': an Install app control on the iPhone');
     await page.locator('[data-pwa-test-target]').scrollIntoViewIfNeeded();
@@ -166,8 +166,8 @@ for (const dir of APP_DIRS) {
     assert.ok(steps[0].includes('Share'), label + ': starts at the Share button');
     assert.ok(steps.some(step => step.includes('Add to Home Screen')), label + ': Add to Home Screen');
     const box = await page.$eval('.pwa-sheet', element => { const rect = element.getBoundingClientRect(); return { left: rect.left, right: rect.right, bottom: rect.bottom }; });
-    assert.ok(box.left >= 0 && box.right <= 390 && box.bottom <= 844, label + ': the card fits the phone');
-    await shot(page, 'iphone-steps');
+    assert.ok(box.left >= 0 && box.right <= phoneWidth && box.bottom <= 844, label + ': the card fits the ' + phoneWidth + 'px phone');
+    await shot(page, 'iphone-' + phoneWidth + '-steps');
     await page.click('.pwa-sheet-actions button');
     assert.equal(await page.$('.pwa-sheet'), null, label + ': Got it closes the card');
     assert.deepEqual(errors, []);

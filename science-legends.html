@@ -8,8 +8,8 @@
 <style>
 /* ============================================================================
    POLYMATH SCIENCE LEGENDS — Diablo-style top-down action RPG science MCQ game.
-   BETA build. Single file, procedurally-drawn pixel art (no external blobs).
-   3 classes (Barbarian / Sorcerer / Beast Master), 4 active skills each,
+   BETA build. Generated spell art with a procedural/vector fallback.
+   5 classes, 12 skills each with four equipped at a time,
    an extensive per-class skill tree, hordes of enemies, and a science
    question every 20 seconds pulled live from the class question bank.
    Shares the SD_* question bridge with Science Defenders / Raiders / Spire.
@@ -531,6 +531,9 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
 body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:none!important;transition:none!important}
 @media(max-width:700px){.hint-bar{display:none}.battle-status{top:52px;max-width:calc(100% - 145px);font-size:.67rem;padding:6px 8px}.battle-map{width:116px;height:140px}.battle-map canvas{width:104px;height:104px}.qtimer{font-size:.7rem;white-space:nowrap}.pbars,body.touch .pbars{bottom:166px;width:165px}.skillbar{bottom:18px;left:calc(50% + 42px);gap:6px}.skill-slot{width:43px;height:46px;font-size:21px}.evade-btn{right:15px;bottom:85px;min-width:86px;min-height:44px}.hint-bar{bottom:127px}.sksel-btn,body.touch .sksel-btn{bottom:140px;right:15px;left:auto;transform:none}.joy{left:12px;bottom:18px;width:96px;height:96px}.battle-map span{font-size:9px}.descend-btn{top:145px;font-size:.75rem}}
 </style>
+<link rel="stylesheet" href="science-legends-premium.css?v=1.454.0">
+<link rel="stylesheet" href="science-expedition-accessibility.css?v=1">
+<script defer src="science-expedition-accessibility.js?v=1"></script>
 </head>
 <body>
 <div id="app">
@@ -570,26 +573,29 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
     <!-- MENU / CLASS SELECT -->
     <div class="overlay show" id="menuOverlay">
       <div class="panel wide"><div class="panel-pad">
-        <span class="tag">Top-Down Action RPG</span> <span class="beta-chip" style="vertical-align:2px;">🧪 Beta</span>
-        <h1>⚔️ Science Legends</h1>
-        <p class="sub">Hold back the horde! Fight off <b>waves of monsters</b>, level up, and sink points into a <b>Diablo-style skill tree</b>. Every <b>20 seconds</b> a science question appears — answer correctly for a bonus skill point and a burst of power.</p>
+        <div class="legends-hero">
+          <span class="tag">The Emberwild Expedition</span>
+          <h1>Science Legends</h1>
+          <p class="sub">Five heroes. An endless horde. Turn your science knowledge into powerful skills and carve your own path through the Emberwild.</p>
+          <div class="legends-features"><span>5 hero classes</span><span>60 active skills</span><span>Science powers your run</span></div>
+        </div>
         <div class="beta-note">🧪 <span><b>Beta build</b> — no Science Legends leaderboard yet. Questions you answer here <b>still count</b> toward the main leaderboard and your monthly questions total.</span></div>
-        <ul class="how">
+        <details class="legends-guide"><summary>Controls &amp; how to play</summary><ul class="how">
           <li data-ico="💨"><strong>Space / Evade</strong>: dodge in your movement direction (5-second cooldown). Step out of the <strong>orange charge lane</strong> before its ring fills. Leaving the game pauses combat.</li>
           <li data-ico="🕹️">Move with <strong>WASD / arrows</strong>, or <strong>click the ground</strong> to walk there. <strong>Click an enemy</strong> to attack it, hold <strong>right-click</strong> to fire at the crosshair, and skills <strong>1–4 fire at the crosshair</strong>.</li>
           <li data-ico="✨">Each class knows <strong>12 skills</strong> — unlock, rank, branch and crown them with 1-of-3 <strong>ULTIMATES</strong> in a huge <strong>skill tree (T)</strong>, then pick your <strong>4</strong> with 🎯 <strong>Select Skill (K)</strong>.</li>
           <li data-ico="🧪">Every <strong>20s</strong>: a science MCQ. Correct = <strong>+1 skill point</strong>, a heal and an Insight damage surge.</li>
           <li data-ico="🎁">Spend app points on <strong>loot boxes</strong> in the <strong>Armory (B)</strong> — permanent helm, armour, gloves, greaves, rings &amp; amulet. Unique and Mythic gear carries <strong>skill-changing powers</strong>.</li>
-        </ul>
-        <div style="font-weight:800;font-size:var(--font-size-sm);margin-bottom:8px;">Choose your legend</div>
+        </ul></details>
+        <div class="legends-section-title">01 · Choose your legend</div>
         <div class="classes" id="classCards"></div>
-        <div style="font-weight:800;font-size:var(--font-size-sm);margin-bottom:8px;">Choose your follower <span style="font-weight:600;color:var(--text-tertiary);">(fights beside you every run)</span></div>
+        <div class="legends-section-title">02 · Choose your companion</div>
         <div class="followers" id="followerPills"></div>
-        <div class="row">
+        <div class="legends-launch"><div class="row">
           <button class="btn btn-outline" id="menuArmoryBtn" type="button" style="font-size:0.95rem;padding:12px 18px;">🎁 Armory &amp; Loot Boxes</button>
           <button class="btn btn-primary" id="startBtn" type="button" style="flex:1;justify-content:center;font-size:1rem;padding:12px;">⚔️ Begin the hunt</button>
         </div>
-        <p class="center" style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin:12px 0 0;" id="menuFoot">Questions are pulled live from your class question bank.</p>
+        <p class="center" style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin:12px 0 0;" id="menuFoot" role="status" aria-live="polite">Connecting to your class question stream…</p></div>
       </div></div>
     </div>
 
@@ -712,6 +718,8 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 </div>
 
 <script src="science-feed-bridge.js"></script>
+<script src="science-legends-art.js?v=1.454.0"></script>
+<script src="science-legends-combat.js?v=1"></script>
 <script>
 /* ============================================================================
  * SCIENCE LEGENDS (BETA) — top-down horde-action RPG with a science-MCQ pulse.
@@ -2079,7 +2087,8 @@ function newGame(cls){
     insightT: 0, empowerT: 0, slamN: 0, tempestN: 0,
     pwT: { stormcall: 0, cataclysm: 0, starfall: 0, avatar: 0 },
     followerRespawn: 0,
-    cheatUsed: false, phoenixUsed: false, hitEnemies: null, shake: 0
+    cheatUsed: false, phoenixUsed: false, hitEnemies: null, shake: 0,
+    impacts: [], accumulator: 0, hitStop: 0, impactCooldown: 0
   };
   computeStats();
   treeSel = null;
@@ -2116,9 +2125,11 @@ function evade(){
 }
 function updateCombatReadability(dt){
   var p=G.player;
+  G.impactCooldown=Math.max(0,(G.impactCooldown||0)-dt);
+  G.impacts=(G.impacts||[]).filter(function(f){f.t+=dt;return f.t<f.life;});
   p.evadeCd=Math.max(0,(p.evadeCd||0)-dt);
   G.evadeTrail=(G.evadeTrail||[]).filter(function(t){t.life-=dt;return t.life>0;});
-  G.enemies.forEach(function(e){e.hitFlash=Math.max(0,(e.hitFlash||0)-dt);});
+  G.enemies.forEach(function(e){e.hitFlash=Math.max(0,(e.hitFlash||0)-dt);e.impactCd=Math.max(0,(e.impactCd||0)-dt);});
   G.readabilityT=(G.readabilityT||0)-dt;if(G.readabilityT>0)return;G.readabilityT=.1;
   var b=$('evadeBtn');b.style.display='';b.disabled=p.evadeCd>0;
   b.innerHTML=p.evadeCd>0 ? 'Evade '+p.evadeCd.toFixed(1)+'s<small>Recharging</small>' : 'Evade<small>Space · READY</small>';
@@ -2396,10 +2407,11 @@ function addText(x, y, txt, color, big){
 }
 function dealDamage(e, amount, opts){
   opts = opts || {};
-  if (e.hp <= 0) return;
+  if (e.hp <= 0 || !Number.isFinite(amount) || amount <= 0) return;
   e.hitFlash=.12;
   var crit = opts.crit;
   e.hp -= amount;
+  combatImpact(e, amount, opts);
   addText(e.x, e.y, Math.round(amount), crit ? '#FFD54F' : (opts.color || '#FFFFFF'), crit);
   if (crit && !opts.noSplash && (G.stats.mods['pw.executioner'] || G.stats.mods['pw.starforge'])){
     var pct = G.stats.mods['pw.starforge'] ? 0.5 : 0.3;
@@ -2412,10 +2424,31 @@ function dealDamage(e, amount, opts){
   if (opts.basic && G.stats.mods['pw.vampire']) healPlayer(1);
   if (opts.knock){
     var m = Math.hypot(e.x - opts.knock.x, e.y - opts.knock.y) || 1;
-    e.kx = (e.x - opts.knock.x) / m * opts.knock.f; e.ky = (e.y - opts.knock.y) / m * opts.knock.f; e.kt = 0.22;
+    var mass = e.boss ? .28 : e.elite ? .7 : 1;
+    e.kx = (e.x - opts.knock.x) / m * opts.knock.f * mass; e.ky = (e.y - opts.knock.y) / m * opts.knock.f * mass; e.kt = 0.22;
   }
   if (e.hp <= 0) killEnemy(e, opts);
   else sfx('hit');
+}
+function combatImpact(e, amount, opts){
+  if(e.impactCd>0)return;
+  e.impactCd=.045;
+  var dx=opts.impactX,dy=opts.impactY;
+  if(!Number.isFinite(dx)||!Number.isFinite(dy)){dx=e.x-G.player.x;dy=e.y-G.player.y;}
+  var d=Math.hypot(dx,dy)||1,ang=Math.atan2(dy,dx),strong=!!(opts.crit||e.hp<=0||opts.knock);
+  var color=opts.color||(opts.crit?'#ffe4a1':'#b5efff');
+  var impacts=G.impacts||(G.impacts=[]);
+  if(impacts.length>=48)impacts.shift();
+  impacts.push({x:e.x-dx/d*e.r*.5,y:e.y-dy/d*e.r*.5,ang:ang,r:strong?34:21,t:0,life:strong?.3:.19,color:color,strong:strong});
+  if(!opts.knock&&!opts.noSplash){
+    var impulse=(opts.crit?120:42)*(e.boss?.28:e.elite?.7:1);
+    e.kx=dx/d*impulse;e.ky=dy/d*impulse;e.kt=.16;
+  }
+  if(!lowMotion&&strong&&G.impactCooldown<=0){
+    G.hitStop=Math.max(G.hitStop||0,opts.crit?.035:.022);
+    G.impactCooldown=.11;
+    G.shake=Math.max(G.shake,opts.crit?.15:.08);
+  }
 }
 function applyBleed(e, total, dur){
   var mult = G.stats.poisonMult || 1;
@@ -2793,7 +2826,7 @@ function castSkill(idx){
       if (u === 1) G.cds[sid] *= 0.6;
       p.dashT = 0.28; p.dashX = fd.x; p.dashY = fd.y; p.dashSid = sid;
       p.dashDmgMult = (u === 2 ? 2 : 1);
-      G.hitEnemies = {};
+      G.hitEnemies = new WeakSet();
       var dashShield = (sid === 'charge' && hasEnh(sid, 1)) || ((sid === 'teleport' || sid === 'stag' || sid === 'roll') && hasEnh(sid, 2)) || (sid === 'bash' && hasEnh(sid, 1));
       if (dashShield){ p.shield = 30 * G.stats.shieldMult; p.shieldT = 3; }
       break;
@@ -2952,7 +2985,7 @@ function castSkill(idx){
     case 'orbit': {
       var ocount = sp.count + (hasEnh(sid, 1) ? 2 : 0) + (u === 1 ? 2 : 0);
       var oradius = sp.radius * area * (hasEnh(sid, 2) ? 1.3 : 1);
-      G.orbits.push({ sid: sid, t: sp.dur, dmg: sp.dmg * mult * (u === 2 ? 1.6 : 1), count: ocount, radius: oradius, ang: 0, hitCd: {}, pulse: u === 3 });
+      G.orbits.push({ sid: sid, t: sp.dur, dmg: sp.dmg * mult * (u === 2 ? 1.6 : 1), count: ocount, radius: oradius, ang: 0, hitCd: new WeakMap(), pulse: u === 3 });
       break;
     }
   }
@@ -3033,7 +3066,8 @@ function explode(x, y, radius, dmg, opts){
   sfx('boom');
   enemiesInRadius(x, y, radius).forEach(function(e){
     var cr = rollCrit();
-    dealDamage(e, dmg * cr.mult, { crit: cr.crit, color: opts.color || '#FFAB91' });
+    dealDamage(e, dmg * cr.mult, { crit: cr.crit, color: opts.color || '#FFAB91', impactX:e.x-x,impactY:e.y-y,
+      knock:{x:x,y:y,f:Math.min(210,70+radius*.5)} });
     if (opts.burn) applyBleed(e, dmg * 0.4, 3);
     if (opts.poison) applyBleed(e, dmg * (opts.poisonStrong ? 1 : 0.5), 3);
     if (opts.slow) e.slowT = Math.max(e.slowT || 0, 2);
@@ -3044,11 +3078,12 @@ function explode(x, y, radius, dmg, opts){
 function updateProjectiles(dt){
   for (var i = G.projs.length - 1; i >= 0; i--){
     var pr = G.projs[i];
+    if(!pr.hitTargets)pr.hitTargets=new WeakSet();
     if (pr.homing){
       var tb = null, tbd = 260 * 260;
       for (var q2 = 0; q2 < G.enemies.length; q2++){
-        if (pr.hitSet && pr.hitSet[q2]) continue;
         var te = G.enemies[q2];
+        if(te.dead||te.hp<=0||pr.hitTargets.has(te))continue;
         var td = dist2(pr.x, pr.y, te.x, te.y);
         if (td < tbd){ tbd = td; tb = te; }
       }
@@ -3056,18 +3091,23 @@ function updateProjectiles(dt){
         var spd0 = Math.hypot(pr.vx, pr.vy) || 1;
         var ddx = tb.x - pr.x, ddy = tb.y - pr.y;
         var dm0 = Math.hypot(ddx, ddy) || 1;
-        pr.vx += (ddx / dm0 * spd0 - pr.vx) * 6 * dt;
-        pr.vy += (ddy / dm0 * spd0 - pr.vy) * 6 * dt;
+        var steer=1-Math.exp(-6*dt);
+        pr.vx += (ddx / dm0 * spd0 - pr.vx) * steer;
+        pr.vy += (ddy / dm0 * spd0 - pr.vy) * steer;
         var vn0 = Math.hypot(pr.vx, pr.vy) || 1;
         pr.vx = pr.vx / vn0 * spd0; pr.vy = pr.vy / vn0 * spd0;
       }
     }
-    pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.life -= dt;
-    var dead = pr.life <= 0 || pr.x < 10 || pr.y < 10 || pr.x > WORLD.w - 10 || pr.y > WORLD.h - 10;
-    for (var j = 0; j < G.enemies.length && !dead; j++){
-      var e = G.enemies[j];
-      if (pr.hitSet && pr.hitSet[j]) continue;
-      if (dist2(pr.x, pr.y, e.x, e.y) > (pr.r + e.r) * (pr.r + e.r)) continue;
+    var travel=Math.min(dt,Math.max(0,pr.life)),oldX=pr.x,oldY=pr.y;
+    var nextX=pr.x+pr.vx*travel,nextY=pr.y+pr.vy*travel;
+    pr.life-=dt;
+    projectileTrail(pr,dt);
+    var dead=false,hits=LegendsCombat.sweepHits(pr,nextX,nextY,G.enemies);
+    for (var j = 0; j < hits.length && !dead; j++){
+      var e = hits[j].enemy;
+      if(e.dead||e.hp<=0)continue;
+      pr.x=oldX+(nextX-oldX)*hits[j].t;pr.y=oldY+(nextY-oldY)*hits[j].t;
+      pr.hitTargets.add(e);
       if (pr.kind === 'fire'){
         pr.exploded = true;
         var burn2 = pr.sid === 'fireball' && hasEnh('fireball', 1);
@@ -3083,7 +3123,8 @@ function updateProjectiles(dt){
       }
       var cr = pr.pet ? { mult: 1, crit: false } : rollCrit();
       if (pr.healOwner) healPlayer(1);
-      dealDamage(e, pr.dmg * cr.mult, { crit: cr.crit || pr.emp, basic: pr.basic, pet: pr.pet, color: pr.kind === 'boar' ? '#BCAAA4' : '#B39DDB', knock: pr.kind === 'boar' ? { x: pr.x - pr.vx, y: pr.y - pr.vy, f: 190 } : null });
+      dealDamage(e, pr.dmg * cr.mult, { crit: cr.crit || pr.emp, basic: pr.basic, pet: pr.pet, impactX:pr.vx,impactY:pr.vy,
+        color: pr.kind === 'boar' ? '#BCAAA4' : pr.sid==='icebolt'?'#94e7ff':pr.sid==='holybolt'?'#fff4a1':'#B39DDB', knock: pr.kind === 'boar' ? { x: pr.x - pr.vx, y: pr.y - pr.vy, f: 190 } : null });
       if (pr.stunHit) e.stun = Math.max(e.stun, pr.stunHit);
       if (pr.slow) e.slowT = Math.max(e.slowT || 0, pr.slow);
       if (pr.poison) applyBleed(e, pr.dmg * (hasEnh(pr.sid || '', 2) && pr.sid === 'sting' ? 1.2 : 0.6), 3);
@@ -3091,9 +3132,10 @@ function updateProjectiles(dt){
         boltFx([{ x: e.x, y: e.y - 60 }, { x: e.x, y: e.y }], '#FFF176');
         dealDamage(e, 15 * G.stats.dmg, { noSplash: true, color: '#FFF176' });
       }
-      if (pr.pierce > 0){ pr.pierce--; if (pr.hitSet) pr.hitSet[j] = true; }
+      if (pr.pierce > 0){ pr.pierce--; }
       else dead = true;
     }
+    if(!dead){pr.x=nextX;pr.y=nextY;dead=pr.life<=0||pr.x<10||pr.y<10||pr.x>WORLD.w-10||pr.y>WORLD.h-10;}
     if (dead){
       if (pr.kind === 'fire' && !pr.exploded) explode(pr.x, pr.y, pr.radius, pr.dmg, { poison: pr.poison, poisonStrong: pr.sid === 'plague' && hasEnh('plague', 1) });
       G.projs.splice(i, 1);
@@ -3102,12 +3144,13 @@ function updateProjectiles(dt){
   var p = G.player;
   for (var k = G.eprojs.length - 1; k >= 0; k--){
     var ep = G.eprojs[k];
-    ep.x += ep.vx * dt; ep.y += ep.vy * dt; ep.life -= dt;
-    if (ep.life <= 0){ G.eprojs.splice(k, 1); continue; }
-    if (dist2(ep.x, ep.y, p.x, p.y) < (ep.r + p.r) * (ep.r + p.r)){
+    var epStep=Math.min(dt,Math.max(0,ep.life)),ex=ep.x+ep.vx*epStep,ey=ep.y+ep.vy*epStep;
+    var contact=LegendsCombat.sweepCircle(ep.x,ep.y,ex,ey,p.x,p.y,ep.r+p.r);
+    ep.x=ex;ep.y=ey;ep.life-=dt;
+    if (contact!==null){
       hurtPlayer(ep.dmg);
       G.eprojs.splice(k, 1);
-    }
+    }else if(ep.life<=0)G.eprojs.splice(k,1);
   }
   for (var z = G.zones.length - 1; z >= 0; z--){
     var zn = G.zones[z];
@@ -3187,7 +3230,7 @@ function updateEnemies(dt){
     }
     if (e.frozen > 0){ e.frozen -= dt; continue; }
     if (e.stun > 0){ e.stun -= dt; continue; }
-    if (e.kt > 0){ e.kt -= dt; e.x += e.kx * dt; e.y += e.ky * dt; }
+    if (e.kt > 0) LegendsCombat.knockback(e,dt);
     var tgt = nearestTarget(e);
     var dx = tgt.x - e.x, dy = tgt.y - e.y;
     var d = Math.hypot(dx, dy) || 1;
@@ -3333,19 +3376,19 @@ function update(dt){
   p.moving = !!(mv.x || mv.y);
   if(p.evadeT>0){moveEvade(p,dt);}
   else if (p.dashT > 0){
-    p.dashT -= dt;
+    var dashStep=Math.min(dt,p.dashT);p.dashT=Math.max(0,p.dashT-dt);
     var dashDef = p.dashSid ? SKILLS[p.dashSid] : null;
     var dashDist = dashDef ? dashDef.p.dist : 300;
     var ds = dashDist / 0.28;
     var oldX = p.x, oldY = p.y;
-    p.x += p.dashX * ds * dt; p.y += p.dashY * ds * dt;
+    p.x += p.dashX * ds * dashStep; p.y += p.dashY * ds * dashStep;
     if (dashDef && dashDef.p.dmg > 0){
       var chMult = skillDmgMult(p.dashSid) * buffDmg();
       for (var ci = 0; ci < G.enemies.length; ci++){
         var ce = G.enemies[ci];
-        if (G.hitEnemies[ci]) continue;
-        if (dist2(p.x, p.y, ce.x, ce.y) < (p.r + ce.r + 14) * (p.r + ce.r + 14)){
-          G.hitEnemies[ci] = true;
+        if (ce.dead||G.hitEnemies.has(ce)) continue;
+        if (LegendsCombat.sweepCircle(oldX,oldY,p.x,p.y,ce.x,ce.y,p.r+ce.r+14)!==null){
+          G.hitEnemies.add(ce);
           var cr = rollCrit();
           dealDamage(ce, dashDef.p.dmg * chMult * (p.dashDmgMult || 1) * cr.mult, { crit: cr.crit, knock: { x: p.x, y: p.y, f: 260 } });
           if (dashDef.p.stun) ce.stun = Math.max(ce.stun, dashDef.p.stun);
@@ -3440,10 +3483,9 @@ function update(dt){
       var hx = p.x + Math.cos(ha) * oR, hy = p.y + Math.sin(ha) * oR;
       for (var ei = 0; ei < G.enemies.length; ei++){
         var he = G.enemies[ei];
-        var cdKey = ei;
-        if ((O.hitCd[cdKey] || 0) > G.time) continue;
+        if (he.dead||(O.hitCd.get(he) || 0) > G.time) continue;
         if (dist2(hx, hy, he.x, he.y) < (16 + he.r) * (16 + he.r)){
-          O.hitCd[cdKey] = G.time + 0.5;
+          O.hitCd.set(he,G.time + 0.5);
           var hcr = rollCrit();
           dealDamage(he, O.dmg * hcr.mult, { crit: hcr.crit, color: '#FFF59D' });
         }
@@ -3629,12 +3671,51 @@ function _trail(n, gap, r, color){
   }
   ctx.globalAlpha = 1;
 }
+function projectileTrail(pr,dt){
+  if(lowMotion||pr.kind==='boar'){pr.trail=[];return;}
+  var trail=pr.trail||(pr.trail=[]);
+  for(var i=trail.length-1;i>=0;i--){trail[i].age+=dt;if(trail[i].age>.15)trail.splice(i,1);}
+  pr.trailT=(pr.trailT||0)-dt;
+  if(pr.trailT<=0){pr.trailT=1/60;trail.push({x:pr.x,y:pr.y,age:0});if(trail.length>9)trail.shift();}
+}
+function drawProjectileTrail(pr,st){
+  if(lowMotion||!pr.trail||pr.trail.length<2)return;
+  var color=/fire|ember|flame/.test(st)?'#ff944d':/shard|mage/.test(st)?'#70dbff':/holy|wave/.test(st)?'#ffe7a1':/venom|dart/.test(st)?'#afe47d':/arrow|javelin|axe|blade/.test(st)?'#e3eafa':'#ba94ff';
+  ctx.save();ctx.lineCap='round';ctx.strokeStyle=color;
+  for(var i=1;i<pr.trail.length;i++){
+    var a=pr.trail[i-1],b=pr.trail[i],fade=Math.max(0,1-a.age/.15);
+    ctx.globalAlpha=fade*.42;ctx.lineWidth=Math.max(1,pr.r*1.6*fade);
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  }
+  var tail=pr.trail[pr.trail.length-1];ctx.globalAlpha=.65;ctx.lineWidth=Math.max(1,pr.r*.65);
+  ctx.beginPath();ctx.moveTo(tail.x,tail.y);ctx.lineTo(pr.x,pr.y);ctx.stroke();ctx.restore();
+}
+function drawImpacts(){
+  (G.impacts||[]).forEach(function(f){
+    var k=clamp(f.t/f.life,0,1);
+    if(window.LegendsArt&&window.LegendsArt.drawImpact&&window.LegendsArt.drawImpact(ctx,f,k))return;
+    ctx.save();ctx.translate(f.x,f.y);ctx.rotate(f.ang);
+    ctx.strokeStyle=f.color;ctx.fillStyle=f.color;
+    ctx.globalAlpha=(1-k)*.8;ctx.lineWidth=(1-k)*2+1;
+    ctx.beginPath();ctx.ellipse(0,0,f.r*(.2+k),f.r*(.2+k)*.65,0,0,Math.PI*2);ctx.stroke();
+    var rays=lowMotion?3:f.strong?9:5;
+    for(var i=0;i<rays;i++){
+      var a=(i/rays*Math.PI*2)+.21,length=f.r*(.2+k*.9),outer=length+(1-k)*(f.strong?16:9);
+      ctx.globalAlpha=(1-k)*(i%2?.55:.9);ctx.lineWidth=i%2?1.5:2.5;
+      ctx.beginPath();ctx.moveTo(Math.cos(a)*length,Math.sin(a)*length*.75);ctx.lineTo(Math.cos(a)*outer,Math.sin(a)*outer*.75);ctx.stroke();
+    }
+    if(k<.35){ctx.globalAlpha=(1-k/.35)*.9;ctx.fillStyle='#fffbed';ctx.beginPath();ctx.ellipse(0,0,7*(1-k),4*(1-k),0,0,Math.PI*2);ctx.fill();}
+    ctx.restore();
+  });
+}
 function drawProjectile(pr){
   if (pr.kind === 'boar'){
     drawSpriteOr('boar', MOB_SPRITES.boar[(G.time * 8 | 0) % 2], pr.x, pr.y, 44, pr.vx < 0);
     return;
   }
   var st = projStyle(pr);
+  drawProjectileTrail(pr,st);
+  if(window.LegendsArt&&window.LegendsArt.drawProjectile&&window.LegendsArt.drawProjectile(ctx,pr,st,G.time))return;
   var ang = Math.atan2(pr.vy, pr.vx);
   ctx.save();
   ctx.translate(pr.x, pr.y);
@@ -3841,6 +3922,7 @@ function draw(){
   ctx.translate(-camX, -camY);
   ctx.fillStyle = groundPat || '#3E4A3D';
   ctx.fillRect(camX - 260, camY - 260, VW + 520, VH + 520);
+  if(!ovr('ground') && window.LegendsArt && window.LegendsArt.drawGround) window.LegendsArt.drawGround(ctx,camX,camY,VW,VH);
   ctx.strokeStyle = '#1A1D21'; ctx.lineWidth = 22;
   ctx.strokeRect(11, 11, WORLD.w - 22, WORLD.h - 22);
   ctx.strokeStyle = '#5A5148'; ctx.lineWidth = 6;
@@ -4010,6 +4092,7 @@ function draw(){
     for (var h = 0; h < O.count; h++){
       var ha = O.ang + h * (Math.PI * 2 / O.count);
       var hx = p.x + Math.cos(ha) * oR, hy = p.y + Math.sin(ha) * oR;
+      if(window.LegendsArt&&window.LegendsArt.drawHammer&&window.LegendsArt.drawHammer(ctx,{x:hx,y:hy,ang:ha},G.time))continue;
       ctx.save();
       ctx.translate(hx, hy);
       ctx.rotate(ha);
@@ -4020,6 +4103,7 @@ function draw(){
   });
   G.projs.forEach(drawProjectile);
   G.eprojs.forEach(drawEnemyGlob);
+  drawImpacts();
   G.fx.forEach(function(f){
     var k = f.t / f.life;
     if (f.kind === 'p'){
@@ -4393,7 +4477,7 @@ function applyBankQuestions(list){
   var cleaned=Array.isArray(list)?list:[];
   QUESTION_BANK.length=0; Array.prototype.push.apply(QUESTION_BANK,cleaned);
   usingBankQuestions=true;
-  $('menuFoot').textContent=cleaned.length+' suitable questions available from your class bank.';
+  $('menuFoot').textContent=cleaned.length ? 'Class question stream connected · Questions refresh throughout your run.' : (embedded() ? 'Connecting to your class question stream… Retrying automatically.' : 'Open Science Legends from the Science Learning Portal to receive your class questions.');
 }
 var _bankReqTries = 0;
 function requestBankQuestions(){
@@ -4723,9 +4807,11 @@ window.addEventListener('resize', resize);
 var lastT = 0;
 function loop(t){
   requestAnimationFrame(loop);
-  var dt = Math.min(0.05, (t - lastT) / 1000 || 0.016);
+  var dt = lastT ? Math.max(0,(t-lastT)/1000) : 1/60;
   lastT = t;
-  if (G && G.state === 'play' && !overlayOpen() && !document.hidden) update(dt);
+  if(G)LegendsCombat.advance(G,dt,G.state==='play'&&!overlayOpen()&&!document.hidden,function(step){
+    update(step);return G.state==='play'&&!overlayOpen();
+  });
   draw();
 }
 document.addEventListener('visibilitychange', function(){
