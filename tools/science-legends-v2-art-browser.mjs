@@ -16,7 +16,7 @@ async function open(failModels=false){
   await page.route('**/*',route=>{
     const url=new URL(route.request().url());
     if(url.hostname!=='v2.test')return route.abort();
-    if(failModels&&/v2\/(?:heroes|enemies)(?:-clean|-rear)?\.(?:png|webp)$/.test(url.pathname))return route.abort();
+    if(failModels&&/v2\/(?:heroes|enemies|companions)(?:-clean|-rear)?\.(?:png|webp)$/.test(url.pathname))return route.abort();
     const review=/v2\/enemies(?:-clean)?\.(?:png|webp)$/.test(url.pathname)?process.env.LEGENDS_QA_ENEMY_ASSET:/v2\/heroes\.(?:png|webp)$/.test(url.pathname)?process.env.LEGENDS_QA_HERO_ASSET:null;
     const filename=path.join(root,review||decodeURIComponent(url.pathname));
     return fs.existsSync(filename)&&fs.statSync(filename).isFile()?route.fulfill({path:filename}):route.abort();
@@ -40,10 +40,13 @@ try{
     for(const [column,cls] of CLASS_ORDER.entries())for(const [row,cfg] of configs.entries()){
       g.clearRect(0,0,180,180);
       const actor={x:90,y:100,r:16,fx:1,...cfg};
-      const handled=LegendsModels.drawHero(g,cls,actor,cfg.time,false,72),data=g.getImageData(0,0,180,180).data;
+      const original=g.drawImage;let texture=null;
+      g.drawImage=function(...args){texture={w:args[0].width,h:args[0].height};return original.apply(this,args);};
+      const handled=LegendsModels.drawHero(g,cls,actor,cfg.time,false,72);g.drawImage=original;
+      const data=g.getImageData(0,0,180,180).data,info=LegendsModels.frameInfo('hero',column,row);
       let count=0,bottom=-1,hash=0;
       for(let i=3;i<data.length;i+=4)if(data[i]>64){count++;bottom=Math.floor((i/4)/180);hash=(hash+data[i-3]*(i%7919)+data[i-2])%2147483647;}
-      results.push({cls,row,handled,count,bottom,hash});
+      results.push({cls,row,handled,count,bottom,hash,cached:texture&&info&&texture.w===info.w&&texture.h===info.h});
       const bx=column*195+100,by=row*140+110;
       bg.fillStyle='#77afaa';bg.fillRect(bx-45,by+16,90,1);
       LegendsModels.drawHero(bg,cls,{...actor,x:bx,y:by},cfg.time,false,90);
@@ -55,6 +58,7 @@ try{
   check(actors.length===20&&actors.every(a=>a.handled&&a.count>100), 'All five heroes paint all four generated animation states');
   check(actors.every(a=>Math.abs(a.bottom-116)<=3), 'All hero animation frames share a stable painted ground anchor');
   check(['barb','sorc','beast','pala','ama'].every(cls=>new Set(actors.filter(a=>a.cls===cls).map(a=>a.hash)).size>=3), 'Every hero has visibly distinct generated idle, walk and attack frames');
+  check(actors.every(a=>a.cached),'Actual hero draws use the already isolated per-frame texture dimensions');
   await page.locator('#qaActorBoard').screenshot({path:path.join(output,'hero-state-contact-sheet.png')});
   await page.evaluate(()=>$('qaActorBoard').remove());
   const enemies=await page.evaluate(()=>{
@@ -94,10 +98,19 @@ try{
     const original=ctx.drawImage,adapter=LegendsModels.drawCompanion;let seen=0,adapterCalls=0;
     ctx.drawImage=function(...args){if(args[0]===image)seen++;return original.apply(this,args);};
     LegendsModels.drawCompanion=function(...args){adapterCalls++;return adapter.apply(this,args);};
-    try{drawPetModel({kind:'boarpet',x:G.player.x,y:G.player.y,r:16,animT:0,fx:1},60);}finally{ctx.drawImage=original;LegendsModels.drawCompanion=adapter;delete _ovrImgs.boar;G=previousGame;heroSheets=previousSheets;}
-    return seen===1&&adapterCalls===0;
+    try{drawPetModel({kind:'boarpet',x:G.player.x,y:G.player.y,r:16,animT:0,fx:1},60);drawProjectile({kind:'boar',x:G.player.x,y:G.player.y,vx:500,vy:125,r:15});}finally{ctx.drawImage=original;LegendsModels.drawCompanion=adapter;delete _ovrImgs.boar;G=previousGame;heroSheets=previousSheets;}
+    return seen===2&&adapterCalls===0;
   });
   check(override,'A boarpet respects the boar administrator override that was ready when its run started');
+  const stampede=await page.evaluate(()=>{
+    const previousGame=G,previousSheets=heroSheets;newGame(G.cls);heroSheets=buildHeroSprites(CLASSES[G.cls].sprite);
+    const p=G.player,pr={kind:'boar',sid:'stampede',x:p.x+40,y:p.y,vx:500,vy:125,r:15,life:1.5,dmg:20,pierce:99};
+    const before=JSON.stringify(pr),original=ctx.drawImage;let expected=null,actual=null,phase='expected';
+    ctx.drawImage=function(...args){if(phase==='expected')expected=args[0];else actual=args[0];return original.apply(this,args);};
+    try{LegendsModels.drawCompanion(ctx,{kind:'boarpet',x:pr.x,y:pr.y,r:0,fx:pr.vx,fy:pr.vy,moving:true,animT:G.time},G.time,lowMotion,52,G.cls,G.presentation.models);phase='actual';drawProjectile(pr);}finally{ctx.drawImage=original;G=previousGame;heroSheets=previousSheets;}
+    return {premium:expected&&actual===expected,unchanged:before===JSON.stringify(pr)};
+  });
+  check(stampede.premium&&stampede.unchanged,'Stampede draws the premium animated boar texture without changing projectile physics state');
   const skills=await page.evaluate(()=>{
     const result=[];
     for(const [cls,sid] of [['barb','cleave'],['sorc','fireball'],['sorc','nova'],['sorc','orb'],['sorc','chain'],['ama','plague'],['pala','holybolt'],['ama','multishot']]){
@@ -153,7 +166,7 @@ try{
   check(errors.length===0,'Generated actors and all VFX families run without browser errors: '+errors.join(', '));
   await context.close();
   const fallback=await open(true);
-  const safe=await fallback.page.evaluate(()=>{G.spin={t:1,radius:100};draw();return !LegendsModels.ready('hero')&&!LegendsModels.ready('enemy')&&G.player.hp>0;});
+  const safe=await fallback.page.evaluate(()=>{G.pets=[];spawnPet('wolf',{});spawnPet('boarpet',{});G.spin={t:1,radius:100};draw();return !LegendsModels.ready('hero')&&!LegendsModels.ready('enemy')&&!LegendsModels.ready('companion')&&G.player.hp>0;});
   check(safe&&fallback.errors.length===0,'Missing model atlases retain the upright gameplay fallback');
   await fallback.context.close();
   console.log(`Science Legends v2 art browser: ${checks} checks passed`);
