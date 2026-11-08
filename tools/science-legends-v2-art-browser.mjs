@@ -90,13 +90,14 @@ try{
   const override=await page.evaluate(async()=>{
     const tile=document.createElement('canvas');tile.width=tile.height=16;const g=tile.getContext('2d');g.fillStyle='#d334e7';g.fillRect(0,0,16,16);
     const image=new Image();image.src=tile.toDataURL();await image.decode();_ovrImgs.boar=image;
+    const previousGame=G,previousSheets=heroSheets;newGame(G.cls);heroSheets=buildHeroSprites(CLASSES[G.cls].sprite);
     const original=ctx.drawImage,adapter=LegendsModels.drawCompanion;let seen=0,adapterCalls=0;
     ctx.drawImage=function(...args){if(args[0]===image)seen++;return original.apply(this,args);};
     LegendsModels.drawCompanion=function(...args){adapterCalls++;return adapter.apply(this,args);};
-    try{drawPetModel({kind:'boarpet',x:G.player.x,y:G.player.y,r:16,animT:0,fx:1},60);}finally{ctx.drawImage=original;LegendsModels.drawCompanion=adapter;delete _ovrImgs.boar;}
+    try{drawPetModel({kind:'boarpet',x:G.player.x,y:G.player.y,r:16,animT:0,fx:1},60);}finally{ctx.drawImage=original;LegendsModels.drawCompanion=adapter;delete _ovrImgs.boar;G=previousGame;heroSheets=previousSheets;}
     return seen===1&&adapterCalls===0;
   });
-  check(override,'A boarpet respects the existing boar admin override instead of silently replacing it');
+  check(override,'A boarpet respects the boar administrator override that was ready when its run started');
   const skills=await page.evaluate(()=>{
     const result=[];
     for(const [cls,sid] of [['barb','cleave'],['sorc','fireball'],['sorc','nova'],['sorc','orb'],['sorc','chain'],['ama','plague'],['pala','holybolt'],['ama','multishot']]){
