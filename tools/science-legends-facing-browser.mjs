@@ -34,6 +34,7 @@ try{
   });
   const board=document.createElement('canvas');board.id='qaFacingBoard';board.width=1000;board.height=650;board.style.cssText='position:fixed;left:0;top:0;width:1000px;height:650px;z-index:999999';const bg=board.getContext('2d');bg.fillStyle='#14212b';bg.fillRect(0,0,1000,650);bg.font='12px sans-serif';
   CLASS_ORDER.forEach((cls,row)=>{[['SE',1,1],['SW',-1,1],['NW',-1,-1],['NE',1,-1]].forEach(([label,fx,fy],column)=>{const actor={x:column*245+123,y:row*125+95,r:16,fx,fy,moving:false};LegendsModels.advanceFacing(actor);LegendsModels.drawHero(bg,cls,actor,0,false,96);bg.fillStyle='#77afaa';bg.fillRect(actor.x-45,actor.y+16,90,1);bg.fillStyle='#e7d5af';bg.fillText(cls+' · '+label,column*245+65,row*125+124);});});document.body.appendChild(board);
+  window.__facingSourceImages=images;
   return results;
  });
  for(const result of results){
@@ -48,6 +49,17 @@ try{
   check(result.animated.every(p=>p.handled&&Math.abs(p.sx-q.SE.sx)<.001&&Math.abs(p.sy-q.SE.sy)<.001&&Math.abs(p.bottom-116)<=4),`${label}: walking and attacking keep the same source scale and ground anchor in both views`);
  }
  await page.locator('#qaFacingBoard').screenshot({path:path.join(output,'hero-facing-contact-sheet.png')});
+ await page.locator('#qaFacingBoard').evaluate(n=>n.remove());
+ await page.locator('.class-card').nth(1).click();await page.locator('#startBtn').click();await page.waitForFunction(()=>G&&G.time>.05);
+ await page.evaluate(()=>{
+  G.enemies=[];G.pets=[];G.spawnT=999;G.qTimer=7;
+  window.__capturePlayingHero=function(){const original=ctx.drawImage,hero=drawHeroModel;let inHero=false,source=null;drawHeroModel=function(){inHero=true;hero();inHero=false;};ctx.drawImage=function(...args){if(inHero)source=__facingSourceImages.indexOf(args[0])+':'+(args.length===9?args.slice(1,5).join(','):'full');return original.apply(this,args);};try{draw();}finally{ctx.drawImage=original;drawHeroModel=hero;}return {source,rear:G.player.modelRear,scale:G.view.scale,angle:G.view.angle};};
+ });
+ const sorc=results.find(r=>r.spec.kind==='hero'&&r.spec.key==='sorc');
+ await page.keyboard.down('w');await page.waitForTimeout(160);const north=await page.evaluate(()=>__capturePlayingHero());await page.keyboard.up('w');
+ check(north.rear===true&&sorc.animated.slice(4).some(p=>p.source===north.source)&&north.scale===1&&north.angle===0,'Real north movement advances simulation facing and paints the rear model without changing perspective');
+ await page.keyboard.down('s');await page.waitForTimeout(160);const south=await page.evaluate(()=>__capturePlayingHero());await page.keyboard.up('s');
+ check(south.rear===false&&sorc.animated.slice(0,4).some(p=>p.source===south.source)&&south.scale===1&&south.angle===0,'Real south movement returns to the front model with the same fixed camera');
  check(errors.length===0,'Directional models produce no browser errors: '+errors.join(', '));
  console.log(`Science Legends facing browser: ${checks} checks passed`);
 }finally{await browser.close();}
