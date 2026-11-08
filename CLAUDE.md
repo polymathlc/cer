@@ -2,6 +2,30 @@
 
 Guidance for Claude when working in this repo.
 
+## Science Legends: sixty skill portraits and animated skill effects (v1.456.0)
+
+Each of the sixty skills has a unique class/cell mapping in
+`science-legends-icons.js`. Five 4×3 atlases supply distinct artwork throughout
+the menu, tree, loadout and hotbar; enhancements and ultimates retain parent art
+with their own visible badges. Missing artwork falls back independently by class.
+`science-legends-icons.css` overrides the earlier grouped icon sheet.
+
+`science-legends-actions.js` defines sixty immutable visual recipes, each with
+its own four-phase generated sequence and native motif. Actual projectiles,
+collisions and target strikes supply skill identity and geometry. Buffs, shields,
+zones, auras and orbit effects animate for their simulation lifetimes. Whirlwind
+uses eight generated frames at 24fps plus separate counter-rotating weapon sweeps,
+glints and dust; the hero and camera remain upright. Renderers apply no damage,
+cap their visual work, respect reduced motion and use the run's pinned sources.
+
+New generated PNGs and alpha-preserving runtime WebP copies live in
+`assets/science-legends/v3/`. Its manifest records exact built-in image-generation
+prompts, matte-removal edits and layouts. Do not reuse twelve archetype cells as
+sixty unique skills. `tools/science-legends-skill-visual-browser.mjs` checks the
+actual sixty painted tree icons, all 240 effect cells, eight Whirlwind cells,
+live sustained motion, fixed actor/camera transforms, pause and fallback states.
+The portal, game dependency URLs, worker and quest release keys are 1.456.0.
+
 ## Science Legends: stable view, animated models and the skill sanctum (v1.455.0)
 
 The view uses `science-legends-view.js` for deterministic camera bounds and the
