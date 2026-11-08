@@ -4589,7 +4589,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.457.0';
+const APP_VERSION = 'v1.458.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -7307,26 +7307,26 @@ function navigateTo(page) {
   }
   if (page === 'defenders') {
     const f = document.getElementById('defendersFrame');
-    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.457.0');
+    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html?v=1.458.0');
   }
   if (page === 'raiders') {
     const f = document.getElementById('raidersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.457.0'); f.addEventListener('load', pushRaidersAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html?v=1.458.0'); f.addEventListener('load', pushRaidersAssets); }
     else pushRaidersAssets();
   }
   if (page === 'spire') {
     const f = document.getElementById('spireFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.457.0'); f.addEventListener('load', pushSpireAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html?v=1.458.0'); f.addEventListener('load', pushSpireAssets); }
     else pushSpireAssets();
   }
   if (page === 'legends') {
     const f = document.getElementById('legendsFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.457.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html?v=1.458.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'slayers') {
     const f = document.getElementById('slayersFrame');
-    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.457.0'); f.addEventListener('load', pushLegendsAssets); }
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html?v=1.458.0'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'hades') _hadesInit();
@@ -63602,7 +63602,7 @@ function loadLegendsThumbs(){
       f = document.createElement('iframe');
       f.id = 'legendsThumbFrame';
       f.style.cssText = 'position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:-9999px;top:-9999px;';
-      f.src = 'science-legends.html?v=1.457.0';
+      f.src = 'science-legends.html?v=1.458.0';
       document.body.appendChild(f);
     }
     let tries = 0;
@@ -64959,7 +64959,7 @@ function openFpsGame() {
     showToast(`🎮 No game credits left today — answer ${need} more question${need === 1 ? '' : 's'} in practice to earn one`, 'error');
     return;
   }
-  window.location.href = 'fps.html?v=1.457.0';
+  window.location.href = 'fps.html?v=1.458.0';
 }
 // ---- Release announcement banner (top of screen, dismissible per device) ----
 const FPS_ANNOUNCE_KEY = 'fpsAnnounceDismissed_v1';
