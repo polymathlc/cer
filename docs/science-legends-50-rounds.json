@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "targetRounds": 50,
-  "completedRounds": 11,
+  "completedRounds": 20,
   "task": "Science Legends measured lag, UX, animation, enemy variety and skill texture improvements",
   "baseline": {
     "captured": "2026-11-09",
@@ -309,9 +309,20 @@
         "Prepare complete actor frames off the main thread with bounded queued work.",
         "A tested synchronous failure fallback and run-pinned sources remain correct."
       ],
-      "status": "proposed",
-      "implementation": null,
-      "verification": null
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends-atlas-worker.js",
+          "science-legends-models.js"
+        ],
+        "change": "Transferred bitmap decoding/readback and whole-silhouette extraction into one reusable worker with RGBA and synchronous fallbacks, idle retirement and per-run source pinning."
+      },
+      "verification": {
+        "command": "node tools/science-legends-worker-browser.mjs",
+        "result": "39 independent browser checks: zero normal-path main-thread extraction/readbacks; exact120-frame pixel/anchor parity across normal, unsupported, blocked, postMessage throw, bitmap reject/throw and RGBA fallback paths; idle retirement and late-ready run pinning pass.",
+        "artifact": "test-results/legends-50-worker-r12/worker-preparation.json"
+      }
     },
     {
       "number": 13,
@@ -321,9 +332,19 @@
         "Fully offscreen model/contact bounds issue no model draw.",
         "Edge-crossing limbs, feet and shadows remain visible and correctly depth sorted."
       ],
-      "status": "proposed",
-      "implementation": null,
-      "verification": null
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html",
+          "science-legends-models.js"
+        ],
+        "change": "Culled enemy and companion bodies from actual extracted model/contact bounds while retaining edge-crossing feet and limbs."
+      },
+      "verification": {
+        "command": "node tools/science-legends-culling-browser.mjs",
+        "result": "156 combined actor/FX checks at1280/DPR1 and390/DPR2 trace native painted image quads for six legacy enemies, front/rear and idle/walk/attack. Fully outside actors make0modelcalls; crossing silhouettes remain."
+      }
     },
     {
       "number": 14,
@@ -333,9 +354,18 @@
         "Skip fully offscreen projectiles, trails, effects, texts and impacts.",
         "Any warning or large blast intersecting the viewport still draws."
       ],
-      "status": "proposed",
-      "implementation": null,
-      "verification": null
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Skipped offscreen projectile, complete-trail, effect, impact, text, orb, hammer and zone paint work while conservatively retaining crossing chains and large warnings."
+      },
+      "verification": {
+        "command": "node tools/science-legends-culling-browser.mjs",
+        "result": "80 fully offscreen projectiles make0channel/image/stroke calls. Crossing trails/chains and large warnings centered outside the viewport remain painted; drawing changes no HP/kills/question/time state."
+      }
     },
     {
       "number": 15,
@@ -345,9 +375,19 @@
         "Use a shared bounded spatial broadphase for swept, homing and area queries.",
         "Results agree with brute force for fast sweeps, moving/large targets, dead entries and tie order."
       ],
-      "status": "proposed",
-      "implementation": null,
-      "verification": null
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends-spatial.js",
+          "science-legends.html"
+        ],
+        "change": "Added lazy dirty spatial broadphase for actual swept, homing, radius and arc queries, preserving original hit order and invalidating before movement-triggered retaliation."
+      },
+      "verification": {
+        "command": "node tools/science-legends-spatial-browser.mjs",
+        "result": "7 real integration checks:250radius and250arc queries match brute-force order,20fast sweeps hit the same first targets, homing ties preserved; mean candidates2.05/max5 versus140enemies. Independent Guardian retaliation repro caught stale index during movement and now damages the moved mite to940HP."
+      }
     },
     {
       "number": 16,
@@ -357,9 +397,18 @@
         "Reduce active shade DOM update frequency while retaining smooth visible progress.",
         "Readiness, direct refreshes, labels and accessible values remain immediate and truthful."
       ],
-      "status": "proposed",
-      "implementation": null,
-      "verification": null
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Paused compositor cooldown animations seek actual simulation progress once per paint; reduced-motion/unsupported fallback quantizes inline shading to10Hz and old loadout animations cancel."
+      },
+      "verification": {
+        "command": "node tools/science-legends-feedback-browser.mjs",
+        "result": "Independent native animation/style checks at1280/390/320: four active cooldowns produce0inline shade mutations across120steps; progress matches actual cooldown, pause stays exact, loadout replacement cancels old animations, fallback is bounded and ready states update immediately. R20 caption acceptance remains separate."
+      }
     },
     {
       "number": 17,
@@ -369,9 +418,18 @@
         "Bound simultaneous hit voices and repeated hit cues, and disconnect ended audio nodes.",
         "Skill, defeat, level and question feedback cues remain available."
       ],
-      "status": "proposed",
-      "implementation": null,
-      "verification": null
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Gated overlapping combat cues, bounded total/combat audio voices, retained important feedback, disconnected ended nodes and removed gameplay random consumption from pitch."
+      },
+      "verification": {
+        "command": "node tools/science-legends-audio-browser.mjs",
+        "result": "9 native audio checks: actual100-target Frost Nova schedules2voices rather than101 and damages all100; total peak12, correct/wrong/death/level survive saturation, muted creates0nodes, pitch consumes0gameplay random, all41oscillator and41gain nodes actually disconnect."
+      }
     },
     {
       "number": 18,
@@ -381,9 +439,18 @@
         "Coalesce rapid per-enemy callouts into readable totals.",
         "Actual health loss and critical emphasis remain truthful; rendering applies no damage."
       ],
-      "status": "proposed",
-      "implementation": null,
-      "verification": null
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Coalesced rapid same-target damage callouts over220ms without changing damage; retained critical emphasis and capped active text with safe eviction/expiry references."
+      },
+      "verification": {
+        "command": "node tools/science-legends-feedback-browser.mjs",
+        "result": "Actual21hits sum27HPdamage into1accurate critical-emphasized callout; later batch starts separately,60text cap and expired/evicted/restarted references do not corrupt newer callouts at1280/390/320."
+      }
     },
     {
       "number": 19,
@@ -393,9 +460,18 @@
         "Retain selected, boss and elite health/status cues.",
         "Ordinary near-player damage/status feedback stays readable with bounded clutter."
       ],
-      "status": "proposed",
-      "implementation": null,
-      "verification": null
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Prioritized important threat labels and bounded ordinary crowd health/status bars to12mobile/24desktop with local overlap suppression."
+      },
+      "verification": {
+        "command": "node tools/science-legends-feedback-browser.mjs",
+        "result": "Native fillRect tracing verifies ordinary bar budget and actual painted selected/hovered/elite/boss/committed-attack bars at1280/390/320; no reliance on internal selection counters."
+      }
     },
     {
       "number": 20,
@@ -404,6 +480,345 @@
       "acceptance": [
         "Keep imminent threat captions in the visible combat area above controls.",
         "Warning geometry still points at the actual source/impact and is not hidden by skill effects."
+      ],
+      "status": "verified",
+      "implementation": {
+        "commit": "853bbe4",
+        "files": [
+          "science-legends.html"
+        ],
+        "change": "Replaced mobile warning-label three-pass bouncing with a nearest obstacle-free horizontal/vertical interval solver, preserving the true world anchor and leader."
+      },
+      "verification": {
+        "command": "node tools/science-legends-feedback-browser.mjs",
+        "result": "45 combined feedback checks across1280x900,390x844 and320x568. All38 actual canvas-painted captions stay in the viewport and avoid real visible HUD controls; the initial320px overlap was reproduced and fixed. Source anchors remain exact."
+      }
+    },
+    {
+      "number": 21,
+      "area": "Warden guard counterplay",
+      "feedback": "The legacy roster has no directional defender or timed guard-break opening.",
+      "acceptance": [
+        "A real frontal guard reduces damage; flanks, heavy breaks and recovery expose it."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 22,
+      "area": "Hexer committed curse",
+      "feedback": "Ranged variety needs an avoidable locked ground attack with a meaningful interrupt.",
+      "acceptance": [
+        "Lock the target location during windup; moving avoids it and stun/freeze retires it."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 23,
+      "area": "Broodling hatching",
+      "feedback": "Enemy deaths need a distinct crowd-control decision without recursive or reward-farming offspring.",
+      "acceptance": [
+        "Spawn at most two rewardless nonrecursive mites; frozen/stunned death prevents hatch and global cap holds."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 24,
+      "area": "Sentinel projectile commitment",
+      "feedback": "Existing spitters do not offer a committed crossbow burst with a clear recovery window.",
+      "acceptance": [
+        "Telegraph locked burst geometry, preserve dodge timing and interruption, and avoid instant hits."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 25,
+      "area": "Staged encounter composition",
+      "feedback": "Adding roles without bounded composition would produce clutter and unbounded ranged pressure.",
+      "acceptance": [
+        "Weighted progression introduces roles in stages with role/ranged/global caps including adds."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 26,
+      "area": "Volatile elite counterplay",
+      "feedback": "Elite variety needs an actual mechanic rather than only larger stats or tinted sprites.",
+      "acceptance": [
+        "A capped delayed death warning can be disarmed; pause/end/frozen death cannot produce late unfair damage."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 27,
+      "area": "Tyrant second phase",
+      "feedback": "The boss lacks a health-triggered change in attack rhythm and geometry.",
+      "acceptance": [
+        "One-way55% transition uses three locked impact circles, readable recovery and bounded adds."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 28,
+      "area": "Optional role model art",
+      "feedback": "The four new enemy roles need distinct premium silhouettes without blocking startup or changing feet/picking mid-run.",
+      "acceptance": [
+        "Load optional front/rear four-pose atlases outside critical readiness; pin each run, preserve planted feet, fallback and picking."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 29,
+      "area": "Role transition feedback",
+      "feedback": "New AI phases require visual feedback that corresponds to real guard breaks, interruption and recovery.",
+      "acceptance": [
+        "Bounded cues and telegraphs match actual state transitions and never mutate combat from drawing."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 30,
+      "area": "Enemy intelligence guide",
+      "feedback": "Players need actionable names, tells and counters for the expanded roster.",
+      "acceptance": [
+        "Expose a usable keyboard/mobile guide covering the four roles, affix and boss phases with actual counterplay."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 31,
+      "area": "Presentation random isolation",
+      "feedback": "Lightning draw jitter consumes the same random stream as combat, so extra paints can change later crit/spawn/drop outcomes.",
+      "acceptance": [
+        "Identical seeded inputs and simulation ticks yield identical HP/crit/drop/spawn decisions across extra draws, mute and reduced motion."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 32,
+      "area": "Inactive portal surface",
+      "feedback": "A CSS-hidden game iframe kept painting and simulating with W held:36 extra paints in350ms and document.hidden remainedfalse.",
+      "acceptance": [
+        "Real parent messages and IO fallback stop hidden update/paint, clear input, preserve manual pause and resume without catch-up."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 33,
+      "area": "Explicit paint cadence",
+      "feedback": "The renderer paints at host refresh even though costly actor drawing dominates dense mobile CPU.",
+      "acceptance": [
+        "Offer bounded60/120Hz presentation independent of120Hz physics, with stable camera, aim, collision and truthful quality controls."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 34,
+      "area": "Incremental skill-tree navigation",
+      "feedback": "Eight ArrowDown presses rebuilt the whole graph eight times:5840 mutations and1472 removed top-level nodes.",
+      "acceptance": [
+        "Selecting and navigating reuse graph nodes, preserve focus and update only changed selection/detail state."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 35,
+      "area": "Mobile skill-tree space",
+      "feedback": "The390px tree header consumes289px and tooltips use graph-wide rather than visible-viewport clamping.",
+      "acceptance": [
+        "Compact controls leave usable graph height and tooltips stay visible at320/390px without covering the selected action."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 36,
+      "area": "Stable class and follower menu",
+      "feedback": "Selecting a class rebuilds all cards and portrait canvases, losing the focused button.",
+      "acceptance": [
+        "Reuse menu card and portrait nodes while preserving keyboard focus and selected class/follower semantics."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 37,
+      "area": "Learn and equip journey",
+      "feedback": "The locked-skill picker only toasts and a newly learned skill with four occupied slots has no direct equip path.",
+      "acceptance": [
+        "Show actual prerequisites and route learning into an explicit slot choice without silently replacing a chosen skill or spending twice."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 38,
+      "area": "Persistent combat status",
+      "feedback": "Active buff lifetimes, follower respawn and dangerous wrong-answer pressure have no persistent battle readout.",
+      "acceptance": [
+        "Show bounded truthful status/timers for actual effects, follower state and wrong-answer streak without per-step DOM churn."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 39,
+      "area": "Readable hotbar and cast response",
+      "feedback": "Mobile hints compete for combat space, cooldown labels obscure names, and casting a cooling skill silently returns.",
+      "acceptance": [
+        "Keep skill states legible and controls usable; failed casts give throttled actionable feedback and hints can recede."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 40,
+      "area": "Actionable run summary",
+      "feedback": "The end screen lacks elapsed time, accuracy percentage and equipped build; abandonment can use an inaccurate defeat cause.",
+      "acceptance": [
+        "Report actual elapsed/accuracy/build/endcause and preserve replay/menu/reward flows."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 41,
+      "area": "Authored directional heading",
+      "feedback": "Generated javelin art points northeast while the renderer assumes east before applying travel rotation.",
+      "acceptance": [
+        "Explicit recipe source headings align real texture transforms with actual projectile travel."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 42,
+      "area": "One visible projectile body",
+      "feedback": "Each Multishot/Strafe/axes/Stampede projectile redraws a full multi-object atlas motif, multiplying apparent bodies beyond physics.",
+      "acceptance": [
+        "Keep generated cast bursts but render one physical body with one material wake per actual projectile."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 43,
+      "area": "Flight texture lifetime",
+      "feedback": "A live flying projectile cycles anticipation/impact/fade frames and fades during its final220ms before removal.",
+      "acceptance": [
+        "Hold active flight appearance until actual removal; preserve reduced-motion and source pinning."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 44,
+      "area": "Phase-correct caster gestures",
+      "feedback": "Generic cast effects can draw a full target zone, shield or heal motif at the caster before that effect exists.",
+      "acceptance": [
+        "Use compact class/skill cast sigils at the caster and reserve actual area motifs for their real sites."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 45,
+      "area": "Lightning path honesty",
+      "feedback": "A generic forked atlas at the origin can suggest branches beyond actual victim segments.",
+      "acceptance": [
+        "Draw only copied actual chain segments with layered lightning and local contact sparks."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 46,
+      "area": "Contact-specific impacts",
+      "feedback": "Small projectile collisions reuse complete weapon or cast motifs, including multi-arrow fans.",
+      "acceptance": [
+        "Explicit contact/burst metadata selects compact local impacts versus true area explosion artwork."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 47,
+      "area": "Generated targeted descent",
+      "feedback": "Targeted Meteor/Hawk/Fist/Rain warning phases use basic placeholders before generated impact artwork.",
+      "acceptance": [
+        "Use generated anticipation/release textures at the latched target with simulation-progress descent and no early impact frame."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 48,
+      "area": "Actual dash arrival path",
+      "feedback": "Arrival effects can show an abstract additional burst rather than the movement actually completed.",
+      "acceptance": [
+        "Use bounded wake/footprints from recorded start to actual endpoint without extending or changing swept collision."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 49,
+      "area": "Sustained duration cues",
+      "feedback": "Buff, shield and aura textures do not communicate their remaining simulation lifetime.",
+      "acceptance": [
+        "Subtle nonstrobing remaining-duration runes follow actual lifetime, with functional reduced-motion expiry cues."
+      ],
+      "status": "proposed",
+      "implementation": null,
+      "verification": null
+    },
+    {
+      "number": 50,
+      "area": "Important impact retention",
+      "feedback": "A visible long-lived Meteor/AoE can be evicted from the FIFO effect queue by24small projectile contacts while almost its full lifetime remains.",
+      "acceptance": [
+        "Bound the queue while retaining important arrivals/AoE during contact floods; coalesce nearby same-skill contact sparks without suppressing distinct distant hits or changing damage."
       ],
       "status": "proposed",
       "implementation": null,
