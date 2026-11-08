@@ -722,6 +722,7 @@ body.low-motion *,body.low-motion *::before,body.low-motion *::after{animation:n
 <script src="science-legends-view.js?v=1.455.0"></script>
 <script src="science-legends-models.js?v=1.455.0"></script>
 <script src="science-legends-actions.js?v=1.455.0"></script>
+<script src="science-legends-ai.js?v=1.455.0"></script>
 <script src="science-legends-combat.js?v=1"></script>
 <script>
 /* ============================================================================
@@ -3093,7 +3094,7 @@ function explode(x, y, radius, dmg, opts){
     var cr = rollCrit();
     dealDamage(e, dmg * cr.mult, { crit: cr.crit, color: opts.color || '#FFAB91', impactX:e.x-x,impactY:e.y-y,
       knock:{x:x,y:y,f:Math.min(210,70+radius*.5)} });
-    if (opts.burn) applyBleed(e, dmg * 0.4, 3);
+    if (opts.burn) applyBleed(e, dmg * 0.4, 3,'burn');
     if (opts.poison) applyBleed(e, dmg * (opts.poisonStrong ? 1 : 0.5), 3,'poison');
     if (opts.slow) e.slowT = Math.max(e.slowT || 0, 2);
     if (opts.bleed) applyBleed(e, dmg * 0.4, 3);
@@ -3281,13 +3282,13 @@ function updateEnemies(dt){
       }
     }
     if (t && t.ranged){
-      e.shootCd -= dt;
-      if (d > 300) { e.x += dx / d * e.speed * slowMult * dt; e.y += dy / d * e.speed * slowMult * dt; }
-      else if (d < 190) { e.x -= dx / d * e.speed * 0.8 * slowMult * dt; e.y -= dy / d * e.speed * 0.8 * slowMult * dt; }
-      if (e.shootCd <= 0 && d < 340){
-        e.shootCd = 2.3;
-        e.modelAttackUntil=G.time+.28;
-        G.eprojs.push({ x: e.x, y: e.y, vx: dx / d * 260, vy: dy / d * 260, r: 6, dmg: e.dmg, life: 1.8 });
+      if(e.spitWindup>0){var shot=LegendsAI.advanceSpit(e,dt);if(shot)G.eprojs.push({x:e.x,y:e.y,vx:shot.vx,vy:shot.vy,r:6,dmg:e.dmg,life:1.8});}
+      else if(e.spitRecovery>0)e.spitRecovery=Math.max(0,e.spitRecovery-dt);
+      else{
+        e.shootCd-=dt;
+        if(d>300){e.x+=dx/d*e.speed*slowMult*dt;e.y+=dy/d*e.speed*slowMult*dt;}
+        else if(d<190){e.x-=dx/d*e.speed*.8*slowMult*dt;e.y-=dy/d*e.speed*.8*slowMult*dt;}
+        if(e.shootCd<=0&&d<340)LegendsAI.beginSpit(e,dx,dy);
       }
     } else if (t && t.charges){
       if (e.chargeSt === 0){
@@ -3472,7 +3473,7 @@ function update(dt){
       enemiesInRadius(p.x, p.y, wr).forEach(function(e){
         var cr = rollCrit();
         dealDamage(e, sn.dps * 0.16 * wm * cr.mult, { crit: cr.crit, color: flame ? '#FF7043' : '#FFCC80' });
-        if (flame) applyBleed(e, sn.dps * 0.1 * wm, 2);
+        if (flame) applyBleed(e, sn.dps * 0.1 * wm, 2,'burn');
         if (sn.pull){
           var m = Math.hypot(e.x - p.x, e.y - p.y) || 1;
           e.x -= (e.x - p.x) / m * 90 * dt * 6; e.y -= (e.y - p.y) / m * 90 * dt * 6;
@@ -3988,6 +3989,14 @@ function drawHeroGround(){
   if(G.spin){var flame=G.stats.mods['pw.flamespin'];ctx.globalAlpha=.45;ctx.strokeStyle=flame?'#ff5722':'#ffcc80';ctx.lineWidth=4;ctx.beginPath();ctx.ellipse(p.x,p.y,G.spin.radius*G.stats.area,G.spin.radius*G.stats.area*.7,0,0,Math.PI*2);ctx.stroke();}
   ctx.restore();
 }
+function drawEnemyTelegraphs(){
+  G.enemies.forEach(function(e){if(e.dead||e.hp<=0||!(e.spitWindup>0))return;var dx=e.spitVX/260,dy=e.spitVY/260,length=340;
+    ctx.save();ctx.strokeStyle='#09111dec';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(e.x,e.y);ctx.lineTo(e.x+dx*length,e.y+dy*length);ctx.stroke();
+    ctx.setLineDash([9,6]);ctx.strokeStyle='#f6b6ff';ctx.lineWidth=2;ctx.stroke();ctx.setLineDash([]);
+    ctx.strokeStyle='#fff1ff';ctx.lineWidth=3;ctx.beginPath();ctx.arc(e.x,e.y,e.r+8,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-e.spitWindup/.4));ctx.stroke();
+    ctx.fillStyle='#0a1321';ctx.fillRect(e.x-24,e.y+e.r+6,48,16);ctx.fillStyle='#ffd3ff';ctx.font='800 10px system-ui';ctx.textAlign='center';ctx.fillText('SPIT',e.x,e.y+e.r+18);ctx.restore();
+  });
+}
 function draw(){
   var p = G ? G.player : null;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -4151,6 +4160,7 @@ function draw(){
       }
     }
   });
+  drawEnemyTelegraphs();
   G.texts.forEach(function(t){
     ctx.globalAlpha = 1 - t.t / 0.8;
     ctx.fillStyle = t.color;

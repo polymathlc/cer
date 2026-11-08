@@ -21,12 +21,13 @@
     if(actor.frozen>0)list.push({kind:'frozen',label:'FROZEN',glyph:'❄',color:'#9eefff'});
     if(actor.stun>0)list.push({kind:'stun',label:'STUN',glyph:'✦',color:'#ffe197'});
     if(actor.slowT>0)list.push({kind:'slow',label:'SLOW',glyph:'◷',color:'#b4d9f0'});
-    if(actor.bleedT>0)list.push(actor.dotKind==='poison'?{kind:'poison',label:'VENOM',glyph:'◆',color:'#bce87f'}:{kind:'bleed',label:'BLEED',glyph:'♦',color:'#ffa49c'});
+    if(actor.bleedT>0)list.push(actor.dotKind==='poison'?{kind:'poison',label:'VENOM',glyph:'◆',color:'#bce87f'}:actor.dotKind==='burn'?{kind:'burn',label:'BURN',glyph:'♨',color:'#ffbd84'}:{kind:'bleed',label:'BLEED',glyph:'♦',color:'#ffa49c'});
     return list;
   }
   function enemyFrame(actor,time,reduced){
     if(actor.frozen>0||actor.stun>0)return 0;
     if(actor.chargeSt===1)return 3;
+    if(actor.spitWindup>0)return 3;
     if((actor.modelAttackUntil||0)>time)return 3;
     return actor.moving?(reduced?1:1+(Math.floor((time+(actor.modelPhase||0))*7)%2)):0;
   }

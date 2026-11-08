@@ -45,6 +45,7 @@ test('actor depth follows planted feet, remains stable at ties and never mutates
 test('status badges have deterministic text/shape identities and omit expired effects',()=>{
   assert.deepEqual(models.statuses({frozen:1,stun:1,slowT:1,bleedT:1,dotKind:'poison'}).map(s=>s.kind),['frozen','stun','slow','poison']);
   assert.equal(models.statuses({bleedT:1}).at(0).label,'BLEED');
+  assert.equal(models.statuses({bleedT:1,dotKind:'burn'}).at(0).label,'BURN');
   assert.deepEqual(models.statuses({frozen:0,stun:-1,slowT:0,bleedT:0}),[]);
 });
 test('expired strong damage-over-time does not survive a later weaker application',()=>{
