@@ -1,10 +1,10 @@
 name: Science TCG combat checks
 on:
   pull_request:
-    paths: ["index.html","app.js","tcg-*.js","tcg-*.css","tools/tcg-*.mjs",".github/workflows/tcg-combat.yml","science-tcg*.js","tools/science-tcg*.mjs"]
+    paths: ["index.html","app.js","game-question-pressure.js","tcg-*.js","tcg-*.css","tools/tcg-*.mjs",".github/workflows/tcg-combat.yml","science-tcg*.js","tools/science-tcg*.mjs"]
   push:
     branches: [main]
-    paths: ["index.html","app.js","tcg-*.js","tcg-*.css","tools/tcg-*.mjs",".github/workflows/tcg-combat.yml","science-tcg*.js","tools/science-tcg*.mjs"]
+    paths: ["index.html","app.js","game-question-pressure.js","tcg-*.js","tcg-*.css","tools/tcg-*.mjs",".github/workflows/tcg-combat.yml","science-tcg*.js","tools/science-tcg*.mjs"]
 permissions:
   contents: read
 jobs:
