@@ -3,6 +3,13 @@
   'use strict';
   var HEROES=['barb','sorc','beast','pala','ama'];
   var ENEMIES=['slime','imp','mite','brute','spitter','charger'];
+  var COMPANIONS=['wolf','bear','boarpet','hydra'];
+  function companionModel(kind,cls){
+    var column=COMPANIONS.indexOf(kind==='boar'?'boarpet':kind);if(column>=0)return {sheet:'companion',column:column};
+    var hero={fdef:'pala',fmag:'sorc',fpri:'sorc',valkyrie:'pala',decoy:cls||'ama'}[kind];
+    return hero?{sheet:'hero',column:HEROES.indexOf(hero)}:null;
+  }
+  function companionRole(kind){return {fdef:'DEFENDER',fmag:'MAGE',fpri:'HEALER',valkyrie:'VALKYRIE',decoy:'DECOY'}[kind]||'';}
   function stateFrame(actor,time,reduced){
     if((actor.modelAttackUntil||0)>time)return 3;
     return actor.moving?(reduced?1:1+(Math.floor(time*7)%2)):0;
@@ -32,7 +39,7 @@
     if((actor.modelAttackUntil||0)>time)return 3;
     return actor.moving?(reduced?1:1+(Math.floor((time+(actor.modelPhase||0))*7)%2)):0;
   }
-  var sheets={hero:{columns:5,image:null,metadata:[],prepared:false},enemy:{columns:6,image:null,metadata:[],prepared:false}};
+  var sheets={hero:{columns:5,image:null,metadata:[],prepared:false},enemy:{columns:6,image:null,metadata:[],prepared:false},companion:{columns:4,image:null,metadata:[],prepared:false}};
   function ready(kind){var sheet=sheets[kind||'hero'];return !!sheet&&!!sheet.image&&sheet.prepared&&sheet.image.complete&&sheet.image.naturalWidth>0;}
   function prepare(sheet){
     if(sheet.prepared)return;
@@ -53,8 +60,9 @@
   }
   function drawHero(ctx,cls,actor,time,reduced,size){return drawModel(ctx,'hero',HEROES.indexOf(cls),stateFrame(actor,time,reduced),actor,size);}
   function drawEnemy(ctx,actor,time,reduced,size){return drawModel(ctx,'enemy',enemyColumn(actor.kind),enemyFrame(actor,time,reduced),actor,size);}
-  var api={ready:ready,drawHero:drawHero,drawEnemy:drawEnemy,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,sourceRect:sourceRect,footAnchor:footAnchor,sortActors:sortActors,statuses:statuses};
+  function drawCompanion(ctx,actor,time,reduced,size,cls){var model=companionModel(actor.kind,cls);if(!model)return false;ctx.save();if(actor.kind==='decoy')ctx.globalAlpha=.55;var drawn=drawModel(ctx,model.sheet,model.column,stateFrame(actor,time,reduced),actor,size);ctx.restore();return drawn;}
+  var api={ready:ready,drawHero:drawHero,drawEnemy:drawEnemy,drawCompanion:drawCompanion,companionModel:companionModel,companionRole:companionRole,stateFrame:stateFrame,enemyFrame:enemyFrame,enemyColumn:enemyColumn,sourceRect:sourceRect,footAnchor:footAnchor,sortActors:sortActors,statuses:statuses};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.LegendsModels=api;
-  if(typeof root.Image==='function'&&root.document)Object.keys(sheets).forEach(function(kind){var sheet=sheets[kind];sheet.image=new root.Image();sheet.image.onload=function(){prepare(sheet);};sheet.image.src='assets/science-legends/v2/'+(kind==='hero'?'heroes':'enemies')+'.png';});
+  if(typeof root.Image==='function'&&root.document)Object.keys(sheets).forEach(function(kind){var sheet=sheets[kind];sheet.image=new root.Image();sheet.image.onload=function(){prepare(sheet);};sheet.image.src='assets/science-legends/v2/'+({hero:'heroes',enemy:'enemies',companion:'companions'}[kind])+'.png';});
 })(typeof window==='object'?window:globalThis);

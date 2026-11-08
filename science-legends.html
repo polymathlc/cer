@@ -2600,6 +2600,7 @@ function updatePets(dt){
   var frenzyAspd = 1 + buffStat('petAspd');
   for (var i = G.pets.length - 1; i >= 0; i--){
     var pet = G.pets[i];
+    var oldX=pet.x,oldY=pet.y;pet.moving=false;
     pet.animT += dt * 3;
     pet.cd -= dt;
     if (pet.life > 0){ pet.life -= dt; if (pet.life <= 0){ burst(pet.x, pet.y, 8, '#FFCC80'); G.pets.splice(i, 1); continue; } }
@@ -2609,6 +2610,7 @@ function updatePets(dt){
       if (pet.healT >= pet.healer.every){
         pet.healT = 0;
         if (p.hp < p.maxHp){
+          pet.modelAttackUntil=G.time+.32;
           healPlayer(p.maxHp * pet.healer.pct);
           addText(p.x, p.y - 24, '+' + Math.round(p.maxHp * pet.healer.pct), '#81C784');
           G.fx.push({ kind: 'ring', x: p.x, y: p.y, r: 50, t: 0, life: 0.35, color: '#A5D6A7' });
@@ -2634,6 +2636,7 @@ function updatePets(dt){
         pet.x += (best.x - pet.x) / dd0 * pet.speed * dt;
         pet.y += (best.y - pet.y) / dd0 * pet.speed * dt;
       } else if (pet.cd <= 0 && dd0 <= pet.ranged.range){
+        pet.modelAttackUntil=G.time+.28;pet.fx=(best.x-pet.x)/dd0;pet.fy=(best.y-pet.y)/dd0;
         pet.cd = pet.rate / (G.stats.petAspd * frenzyAspd);
         var dmgR = pet.dmg * petDmgMult(pet);
         G.projs.push({ kind: 'petbolt', src: pet.kind, x: pet.x, y: pet.y, vx: (best.x - pet.x) / dd0 * pet.ranged.speed, vy: (best.y - pet.y) / dd0 * pet.ranged.speed, r: 5, dmg: dmgR, life: pet.ranged.range / pet.ranged.speed + 0.15, pierce: 0, pet: true, healOwner: !!(PET_SKILL[pet.kind] && ultN(PET_SKILL[pet.kind]) === 3) });
@@ -2646,6 +2649,7 @@ function updatePets(dt){
         pet.x += (best.x - pet.x) / dd * spd * dt;
         pet.y += (best.y - pet.y) / dd * spd * dt;
       } else if (pet.cd <= 0 && dd <= reach + 4){
+        pet.modelAttackUntil=G.time+.24;pet.fx=(best.x-pet.x)/dd;pet.fy=(best.y-pet.y)/dd;
         pet.cd = pet.rate / (G.stats.petAspd * frenzyAspd);
         var dmg = pet.dmg * petDmgMult(pet);
         var cr = ((pet.kind === 'wolf' && hasEnh('wolf', 1)) || pet.kind === 'valkyrie') ? rollCrit() : { mult: 1, crit: false };
@@ -2656,6 +2660,7 @@ function updatePets(dt){
         slashFx(best.x, best.y, Math.atan2(best.y - pet.y, best.x - pet.x), 30, '#B0BEC5');
       }
     }
+    pet.moving=dist2(oldX,oldY,pet.x,pet.y)>.001;if(pet.moving){pet.fx=pet.x-oldX;pet.fy=pet.y-oldY;}
     if (pet.hp <= 0){
       if (pet.kind === 'decoy' && hasEnh('decoy', 1)){
         ringFx(pet.x, pet.y, 170, '#FF8A65');
@@ -3695,6 +3700,11 @@ function drawEnemyModel(e,size){
   var sprites=MOB_SPRITES[e.kind]||MOB_SPRITES.slime;
   drawActorModel(e.kind,sprites[(e.animT*2|0)%2],e,size,e.fx<0);
 }
+function drawPetModel(pet,size){
+  var id=pet.kind==='boarpet'?'boar':pet.kind,custom=_ovrImgs[id];
+  if(!(custom&&custom.complete&&custom.naturalWidth)&&LegendsModels.drawCompanion(ctx,pet,G.time,lowMotion,size,G.cls))return;
+  drawActorModel(id,petSprite(id)[(pet.animT*2|0)%2],pet,size,pet.fx<0);
+}
 
 /* ============================================================================
  * PROJECTILE ART — every projectile is drawn as what it IS: javelins with
@@ -3968,7 +3978,7 @@ function petSprite(kind){
   if (MOB_SPRITES[kind]) return MOB_SPRITES[kind];
   return MOB_SPRITES.wolf;
 }
-function actorHeight(entry){return entry.kind==='hero'?72:entry.kind==='enemy'?Math.max(40,entry.actor.r*4):entry.actor.r*3.4;}
+function actorHeight(entry){return entry.kind==='hero'?72:entry.kind==='enemy'?Math.max(40,entry.actor.r*4):entry.actor.kind==='decoy'?72:entry.actor.follower||entry.actor.kind==='valkyrie'?64:entry.actor.r*3.8;}
 function drawActors(camX,camY){
   var p=G.player,queue=[{kind:'hero',actor:p,order:0}];
   G.enemies.forEach(function(e,i){if(!e.dead&&e.hp>0&&e.x>camX-180&&e.x<camX+VW+180&&e.y>camY-180&&e.y<camY+VH+180)queue.push({kind:'enemy',actor:e,order:i+1});});
@@ -3976,6 +3986,7 @@ function drawActors(camX,camY){
   // Ground contacts always sit below every upright model.
   queue.forEach(function(entry){var actor=entry.actor;ctx.save();ctx.globalAlpha=.28;ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(actor.x,actor.y+actor.r,actor.r*.95,actor.r*.38,0,0,Math.PI*2);ctx.fill();ctx.restore();
     if(entry.kind==='enemy'&&actor.elite){ctx.save();ctx.strokeStyle=actor.boss?'#e1acff':'#ffd674';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(actor.x,actor.y+actor.r,actor.r+6,(actor.r+6)*.45,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
+    if(entry.kind==='pet'){ctx.save();ctx.strokeStyle='#84ebc9';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(actor.x,actor.y+actor.r,actor.r+4,(actor.r+4)*.4,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
   });
   drawHeroGround();
   var sorted=LegendsModels.sortActors(queue);G.renderOrder=sorted.map(function(entry){return entry.actor;});
@@ -3984,11 +3995,12 @@ function drawActors(camX,camY){
     else if(entry.kind==='enemy'){
       drawEnemyModel(actor,size);
       if(actor.frozen>0){ctx.save();ctx.globalAlpha=.28;ctx.fillStyle='#80deea';ctx.beginPath();ctx.ellipse(actor.x,actor.y-actor.r*.2,actor.r+4,size*.44,0,0,Math.PI*2);ctx.fill();ctx.restore();}
-    }else{var petId=actor.kind==='boarpet'?'boar':actor.kind;drawActorModel(petId,petSprite(petId)[(actor.animT*2|0)%2],actor,size,false);}
+    }else drawPetModel(actor,size);
   });
   // Labels are a final pass, never covered by a nearer body sprite.
   queue.forEach(function(entry){var actor=entry.actor;if(entry.kind==='hero')return;var width=actor.r*2.2,y=actor.y+actor.r-actorHeight(entry)-8;
     if(actor.hp<actor.maxHp){ctx.fillStyle='#07121be6';ctx.fillRect(actor.x-width/2-1,y-1,width+2,6);ctx.fillStyle=entry.kind==='pet'?'#81c784':actor.boss?'#ce93d8':'#ef7770';ctx.fillRect(actor.x-width/2,y,width*clamp(actor.hp/actor.maxHp,0,1),4);}
+    if(entry.kind==='pet'&&LegendsModels.companionRole(actor.kind)){ctx.save();ctx.fillStyle='#071c1cf0';ctx.fillRect(actor.x-30,y-17,60,11);ctx.fillStyle='#a7f4da';ctx.font='700 8px system-ui';ctx.textAlign='center';ctx.fillText(LegendsModels.companionRole(actor.kind),actor.x,y-9);ctx.restore();}
     LegendsModels.statuses(actor).forEach(function(status,index){var bx=actor.x+(index%2?25:-25),by=y-13-Math.floor(index/2)*14;ctx.save();ctx.fillStyle='#07121bf0';ctx.fillRect(bx-24,by-7,48,12);ctx.strokeStyle=status.color;ctx.lineWidth=1;ctx.strokeRect(bx-24,by-7,48,12);ctx.fillStyle=status.color;ctx.font='700 8px system-ui';ctx.textAlign='center';ctx.fillText(status.glyph+' '+status.label,bx,by+2);ctx.restore();});
   });
 }

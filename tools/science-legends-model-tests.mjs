@@ -54,3 +54,8 @@ test('expired strong damage-over-time does not survive a later weaker applicatio
   w.applyBleed(enemy,6,3,'poison');assert.equal(enemy.bleed,4);assert.equal(enemy.dotKind,'bleed');
   w.applyBleed(enemy,30,3,'poison');assert.equal(enemy.bleed,10);assert.equal(enemy.dotKind,'poison');
 });
+test('beast and humanoid companions map to premium sheets with explicit friendly roles',()=>{
+  ['wolf','bear','boarpet','hydra'].forEach((kind,index)=>assert.deepEqual(models.companionModel(kind),{sheet:'companion',column:index}));
+  assert.deepEqual(models.companionModel('fdef'),{sheet:'hero',column:3});assert.deepEqual(models.companionModel('fmag'),{sheet:'hero',column:1});assert.deepEqual(models.companionModel('decoy','barb'),{sheet:'hero',column:0});
+  assert.equal(models.companionRole('fpri'),'HEALER');assert.equal(models.companionModel('unknown'),null);
+});
